@@ -41,7 +41,8 @@ add_executable(latva_tests
   golden/fit_theta_golden_test.cpp
   golden/inference_golden_test.cpp
   golden/observed_inference_golden_test.cpp
-  golden/multigroup_inference_golden_test.cpp)
+  golden/multigroup_inference_golden_test.cpp
+  golden/fit_measures_golden_test.cpp)
 
 target_link_libraries(latva_tests
   PRIVATE
