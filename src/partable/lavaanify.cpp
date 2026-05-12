@@ -262,43 +262,13 @@ void apply_fixed_x(const VarSets& v, std::vector<PendingRow>& rows) {
   }
 }
 
-// === Step 7: synthesize auto-equality constraint rows ======================
+// === Step 7: (no rows here) =================================================
 //
-// After all rows have label[] populated, find labels appearing on multiple
-// rows. For each such label, anchor on the first row and emit one `==`
-// constraint row per additional row, referencing the two `plabel`s.
-//
-// We also need plabels assigned by this point (id-driven). The caller
-// assigns plabels just before calling this function.
-void add_auto_equality_constraints(const std::vector<PendingRow>& rows,
-                                   const std::vector<std::string>& plabels,
-                                   std::vector<PendingRow>& out_eq_rows) {
-  // Map from label text → list of indices into `rows` where it occurs.
-  std::unordered_map<std::string, std::vector<std::size_t>> by_label;
-  for (std::size_t i = 0; i < rows.size(); ++i) {
-    if (rows[i].label.empty()) continue;
-    by_label[rows[i].label].push_back(i);
-  }
-  for (const auto& [lbl, idxs] : by_label) {
-    if (idxs.size() < 2) continue;
-    // If any row in the group is fixed, lavaan does NOT add a constraint
-    // (all parameters are then trivially fixed). Mirror that.
-    bool any_fixed = false;
-    for (auto i : idxs) if (rows[i].user_fixed_value) any_fixed = true;
-    if (any_fixed) continue;
-    const std::size_t ref = idxs.front();
-    for (std::size_t k = 1; k < idxs.size(); ++k) {
-      PendingRow eq;
-      eq.user  = 2;                           // auto-equality
-      eq.lhs   = plabels[ref];
-      eq.op    = parse::Op::EqConstraint;
-      eq.rhs   = plabels[idxs[k]];
-      eq.block = 0;
-      eq.group = 0;
-      out_eq_rows.push_back(std::move(eq));
-    }
-  }
-}
+// Auto-equality from a shared user label used to be a synthesized `==` row
+// (`user=2`) referencing two `.pN.` plabels. It isn't stored anymore — the
+// equality lives in `LatentStructure.eq_groups` (computed by `compute_eq_groups`,
+// which scans shared labels directly). `to_lavaan_partable()` re-synthesizes
+// the lavaan-shaped `.pN.`-pair rows from the labels for display / round-trip.
 
 // === Step 9: append user constraint rows ===================================
 //
@@ -566,26 +536,15 @@ partable_expected<LatentStructure> lavaanify(const parse::FlatPartable& flat,
     }
   }
 
-  // Plabels are unique globally so equality constraints can reference any
-  // row across all groups.
-  std::vector<std::string> plabels(rows.size());
-  for (std::size_t i = 0; i < rows.size(); ++i) {
-    plabels[i] = ".p" + std::to_string(i + 1) + ".";
-  }
-  // Step 7: auto-equality constraints. Scans all rows; when the same user
-  // label appears in two rows (within or across groups) it emits a `==`
-  // constraint linking their plabels.
-  std::vector<PendingRow> eq_rows;
-  add_auto_equality_constraints(rows, plabels, eq_rows);
-
   // Step 9: user constraint rows.
   std::vector<PendingRow> user_constraint_rows;
   append_user_constraints(flat, user_constraint_rows);
 
-  // Step 10: row ordering — formula/auto rows first (already grouped),
-  // then user constraints, then auto-equality constraints.
+  // Step 10: row ordering — formula/auto rows first (already grouped), then
+  // user constraints. Auto-equality from shared labels is NOT a row anymore;
+  // it's `eq_groups` (below) and `to_lavaan_partable` re-synthesizes the
+  // lavaan-shaped `.pN.`-pair rows from the labels when projecting.
   for (auto& r : user_constraint_rows) rows.push_back(std::move(r));
-  for (auto& r : eq_rows)              rows.push_back(std::move(r));
 
   // Final pass: id/plabel/free assignment + fixed_value / start-hint split +
   // var-id columns + the LatentNames companion.
@@ -645,20 +604,23 @@ void compute_eq_groups(LatentStructure& s, const LatentNames& names) {
   for (std::int32_t k = 0; k < npar; ++k) s.eq_groups[static_cast<std::size_t>(k)] = k;
   s.has_unenforced_constraints = false;
 
-  // `.pN.` plabel → 1-based free index, and `label` → 1-based free index,
-  // over free (free > 0), non-constraint rows. Plabels/labels live on `names`.
-  std::unordered_map<std::string, std::int32_t> plabel_to_free, label_to_free;
+  // Over free (free > 0), non-constraint rows: `.pN.` plabel → 1-based free
+  // index (first wins), and user label → list of 1-based free indices, in row
+  // order. Plabels/labels live on `names`.
+  std::unordered_map<std::string, std::int32_t> plabel_to_free;
+  std::unordered_map<std::string, std::vector<std::int32_t>> free_by_label;
   for (std::size_t i = 0; i < s.size(); ++i) {
     if (s.free[i] <= 0) continue;
     if (i < names.row_plabel.size() && !names.row_plabel[i].empty())
       plabel_to_free.try_emplace(names.row_plabel[i], s.free[i]);
     if (i < names.row_label.size() && !names.row_label[i].empty())
-      label_to_free.try_emplace(names.row_label[i], s.free[i]);
+      free_by_label[names.row_label[i]].push_back(s.free[i]);
   }
   auto resolve = [&](const std::string& tok) -> std::int32_t {
     if (!is_bare_identifier(tok)) return -1;
     if (auto it = plabel_to_free.find(tok); it != plabel_to_free.end()) return it->second;
-    if (auto it = label_to_free.find(tok);  it != label_to_free.end())  return it->second;
+    if (auto it = free_by_label.find(tok); it != free_by_label.end() && !it->second.empty())
+      return it->second.front();
     return -1;
   };
 
@@ -677,6 +639,15 @@ void compute_eq_groups(LatentStructure& s, const LatentNames& names) {
     a = find(a); b = find(b);
     if (a != b) parent[static_cast<std::size_t>(std::max(a, b))] = std::min(a, b);
   };
+
+  // Shared-label equality: every free row carrying the same user label is one
+  // group. (Lavaan also synthesizes the `.pN.`-pair `==` rows for this — those
+  // are projected back by `to_lavaan_partable`, not stored here.) A label group
+  // with a fixed member had the fix propagated to all of them, so none are free
+  // and the group simply doesn't show up here.
+  for (const auto& [lbl, idxs] : free_by_label) {
+    for (std::size_t k = 1; k < idxs.size(); ++k) unite(idxs.front(), idxs[k]);
+  }
 
   for (std::size_t i = 0; i < s.size(); ++i) {
     const parse::Op op = s.op[i];
