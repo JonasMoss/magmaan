@@ -9,7 +9,8 @@
 #include <vector>
 
 #include "latva/parse/op.hpp"
-#include "latva/partable/lavaanify.hpp"   // compute_eq_groups
+#include "latva/partable/lavaanify.hpp"        // compute_eq_groups
+#include "latva/partable/lin_constraints.hpp"  // resolve_lin_constraints
 #include "latva/partable/partable.hpp"
 
 #include "classify.hpp"
@@ -226,9 +227,13 @@ ParsedLavaanParTable from_lavaan_partable(const LavaanParTable& pt) {
       dst.push_back(keep[j] < v.size() ? v[keep[j]] : std::string{});
   }
 
-  // Resolve the equality-constraint reparameterization (shared labels, explicit
-  // `a == b`) into `s.eq_groups`; flag `<` / `>` / non-bare `==` as unenforced.
+  // Resolve the equality-constraint reparameterization: `compute_eq_groups`
+  // folds shared labels + bare `a == b` into `s.eq_groups`; `resolve_lin_constraints`
+  // re-parses every flagged *linear* `==` row (`a == 2*b+c`, …) into a
+  // `lin_constraint_R` row — symmetric with `lavaanify`, so a hand-edited
+  // partable round-trips through here with its general-linear constraints intact.
   compute_eq_groups(s, names);
+  resolve_lin_constraints(s, names);
   return out;
 }
 

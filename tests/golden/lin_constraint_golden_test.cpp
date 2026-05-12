@@ -1,0 +1,165 @@
+#include <doctest/doctest.h>
+
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <string>
+#include <vector>
+
+#include <Eigen/Core>
+#include <nlohmann/json.hpp>
+
+#include "../oracle.hpp"
+#include "latva/fit/fit.hpp"
+#include "latva/fit/inference.hpp"
+#include "latva/fit/sample_stats.hpp"
+#include "latva/model/matrix_rep.hpp"
+#include "latva/model/model_evaluator.hpp"
+#include "latva/parse/parser.hpp"
+#include "latva/partable/lavaanify.hpp"
+
+// P9 phase 2 — general *linear* `==` equality constraints. These goldens pin a
+// 1-factor CFA fitted with `b2 + b3 == 1.5` (lavaan enforces it via its
+// Lagrange path; latva by an affine reparam θ = θ₀ + Kα) against
+// `lavaan::cfa(model, data)`. Fixtures live under tests/fixtures/fit_lincon/,
+// produced by the dedicated section in tools/regen_oracle.R (kept out of the
+// shared corpus, like fit_stdlv/).
+
+namespace {
+
+const std::vector<std::string> kLinConFixtures = {
+    "0001_loading_sum_hs",
+};
+
+latva::fit::SampleStats sample_from_fixture(const nlohmann::json& exp) {
+  latva::fit::SampleStats samp;
+  const auto& blocks = exp["sample_cov"];
+  for (std::size_t b = 0; b < blocks.size(); ++b) {
+    const auto& M = blocks[b]["matrix"];
+    const Eigen::Index p = static_cast<Eigen::Index>(M.size());
+    Eigen::MatrixXd S(p, p);
+    for (Eigen::Index r = 0; r < p; ++r)
+      for (Eigen::Index c = 0; c < p; ++c)
+        S(r, c) = M[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)].get<double>();
+    samp.S.push_back(std::move(S));
+    samp.n_obs.push_back(exp["n_obs"].get<std::int64_t>());
+  }
+  return samp;
+}
+
+// Free index of Λ[row, 0] (loading of the `row`-th observed variable on the
+// sole latent), or -1.
+Eigen::Index lambda_free_idx(const latva::model::ModelEvaluator& ev, std::int16_t row) {
+  const auto locs = ev.param_locations();
+  for (std::size_t k = 0; k < locs.size(); ++k)
+    if (locs[k].mat == latva::model::MatId::Lambda && locs[k].row == row)
+      return static_cast<Eigen::Index>(k);
+  return -1;
+}
+
+}  // namespace
+
+TEST_CASE("linear-constraint goldens — θ̂/SE/χ²/df match lavaan(+ `==`)") {
+  const std::string dir = latva::test::fixtures_dir() + "/fit_lincon";
+
+  int total = 0, passed = 0;
+  std::vector<std::string> failures;
+
+  for (const auto& id : kLinConFixtures) {
+    const std::string path = dir + "/" + id + ".fit.json";
+    auto raw = latva::test::read_fixture(path);
+    if (!raw.has_value()) { failures.push_back(id + ": missing fixture"); continue; }
+    auto exp = nlohmann::json::parse(*raw, nullptr, /*allow_exceptions=*/false);
+    if (exp.is_discarded()) { failures.push_back(id + ": invalid JSON"); continue; }
+    ++total;
+
+    const std::string model = exp["input"].get<std::string>();
+    auto fp = latva::parse::Parser::parse(model);
+    if (!fp.has_value()) { failures.push_back(id + ": parse"); continue; }
+    auto pt = latva::partable::lavaanify(*fp);
+    if (!pt.has_value()) { failures.push_back(id + ": lavaanify — " + pt.error().detail); continue; }
+    auto mr = latva::model::build_matrix_rep(*pt);
+    if (!mr.has_value()) { failures.push_back(id + ": matrix_rep — " + mr.error().detail); continue; }
+
+    const latva::fit::SampleStats samp = sample_from_fixture(exp);
+
+    auto est_or = latva::fit::fit(*pt, *mr, samp);
+    if (!est_or.has_value()) { failures.push_back(id + ": fit — " + est_or.error().detail); continue; }
+    const auto& est = *est_or;
+
+    latva::fit::ExpectedInfoSE se_method;
+    auto inf_or = se_method.compute(*pt, *mr, samp, est);
+    if (!inf_or.has_value()) { failures.push_back(id + ": inference — " + inf_or.error().detail); continue; }
+    const auto& inf = *inf_or;
+
+    bool ok = true;
+    char buf[256];
+
+    // θ̂ — same comparable-optimizer tolerance as the std.lv / 3F goldens.
+    const auto& th = exp["theta_hat"];
+    if (static_cast<std::size_t>(est.theta.size()) != th.size()) {
+      failures.push_back(id + ": n_free mismatch"); continue;
+    }
+    double max_th = 0.0;
+    for (Eigen::Index k = 0; k < est.theta.size(); ++k)
+      max_th = std::max(max_th, std::abs(est.theta(k) - th[static_cast<std::size_t>(k)].get<double>()));
+    if (max_th > 5e-6) {
+      std::snprintf(buf, sizeof(buf), "max |θ̂ - lavaan| = %.3e", max_th);
+      failures.push_back(id + ": " + buf); ok = false;
+    }
+
+    // df — exact, and one more than the unconstrained model.
+    const int df_lavaan = exp["df"].get<int>();
+    if (inf.df != df_lavaan) {
+      std::snprintf(buf, sizeof(buf), "df = %d, lavaan = %d", inf.df, df_lavaan);
+      failures.push_back(id + ": " + buf); ok = false;
+    }
+    if (exp.contains("unconstrained_df") && !exp["unconstrained_df"].is_null()) {
+      const int u = exp["unconstrained_df"].get<int>();
+      if (inf.df != u + 1) {
+        std::snprintf(buf, sizeof(buf), "df %d != unconstrained_df %d + 1", inf.df, u);
+        failures.push_back(id + ": " + buf); ok = false;
+      }
+    }
+
+    // χ² — ≤ 1e-3 absolute.
+    const double chi2_lavaan = exp["chi2"].get<double>();
+    if (std::abs(inf.chi2 - chi2_lavaan) > 1e-3) {
+      std::snprintf(buf, sizeof(buf), "|χ² - lavaan| = %.3e (ours=%.6f, lavaan=%.6f)",
+                    std::abs(inf.chi2 - chi2_lavaan), inf.chi2, chi2_lavaan);
+      failures.push_back(id + ": " + buf); ok = false;
+    }
+
+    // SE — max abs diff ≤ 1e-4.
+    const auto& se_arr = exp["se"];
+    if (static_cast<std::size_t>(inf.se.size()) != se_arr.size()) {
+      failures.push_back(id + ": se length mismatch"); continue;
+    }
+    double max_se = 0.0;
+    for (Eigen::Index k = 0; k < inf.se.size(); ++k)
+      max_se = std::max(max_se, std::abs(inf.se(k) - se_arr[static_cast<std::size_t>(k)].get<double>()));
+    if (max_se > 1e-4) {
+      std::snprintf(buf, sizeof(buf), "max |se - lavaan| = %.3e", max_se);
+      failures.push_back(id + ": " + buf); ok = false;
+    }
+
+    // The constraint actually binds: λ_x2 + λ_x3 ≈ 1.5.
+    auto ev = latva::model::ModelEvaluator::build(*pt, *mr);
+    if (ev.has_value()) {
+      const Eigen::Index k2 = lambda_free_idx(*ev, 1);
+      const Eigen::Index k3 = lambda_free_idx(*ev, 2);
+      if (k2 >= 0 && k3 >= 0 &&
+          std::abs(est.theta(k2) + est.theta(k3) - 1.5) > 1e-5) {
+        std::snprintf(buf, sizeof(buf), "λ_x2 + λ_x3 = %.6f, expected 1.5",
+                      est.theta(k2) + est.theta(k3));
+        failures.push_back(id + ": " + buf); ok = false;
+      }
+    }
+
+    if (ok) ++passed;
+  }
+
+  MESSAGE("linear-constraint goldens: " << passed << " / " << total << " pass");
+  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+  CHECK(passed == total);
+}

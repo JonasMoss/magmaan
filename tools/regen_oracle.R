@@ -612,3 +612,128 @@ for (m in models) {
 }
 
 cat("regenerated", length(regenerated_fit), "fit fixtures under", fit_dir, "\n")
+
+# === std.lv fit fixtures ===================================================
+# Stage D of the ParTable split refactor adds the `std_lv` knob to
+# LavaanifyOptions. These fixtures pin a CFA fitted with `std.lv = TRUE`
+# (latent variances fixed at 1, all loadings free) — the bijective
+# alternate parameterization of the marker fits above. Deliberately kept
+# OUT of corpus.json so the marker-mode golden layers (lexer/parser/flat/
+# ptable/matrix_rep/fit/inference) aren't affected; the C++ side lives in
+# tests/golden/std_lv_golden_test.cpp. Single-group, no mean structure.
+stdlv_dir <- file.path(fixtures, "fit_stdlv")
+dir.create(stdlv_dir, showWarnings = FALSE, recursive = TRUE)
+
+stdlv_models <- list(
+  list(id    = "0001_three_factor_hs",
+       model = paste("visual =~ x1 + x2 + x3",
+                     "textual =~ x4 + x5 + x6",
+                     "speed =~ x7 + x8 + x9", sep = "\n"))
+)
+
+regenerated_stdlv <- character(0)
+for (m in stdlv_models) {
+  id <- m$id; model <- m$model
+  fit <- tryCatch(cfa(model, data = HolzingerSwineford1939, std.lv = TRUE),
+                  error = function(e) e)
+  if (inherits(fit, "error") || !lavInspect(fit, "converged")) {
+    cat("  skip ", id, " (std.lv cfa error / no convergence)\n", sep = "")
+    next
+  }
+  pt_fitted <- parTable(fit)
+  free_rows <- pt_fitted[pt_fitted$free > 0, ]
+  free_rows <- free_rows[order(free_rows$free), ]
+  fm       <- fitMeasures(fit)
+  sampstat <- lavInspect(fit, "sampstat")
+
+  payload <- list(
+    `_meta` = list(
+      format_version = 1L,
+      fixture_kind   = "fit.stdlv",
+      corpus_id      = id,
+      tool           = "lavaan::cfa(std.lv=TRUE)",
+      lavaan_version = installed
+    ),
+    input      = model,
+    std_lv     = TRUE,
+    n_obs      = as.integer(lavInspect(fit, "ntotal")),
+    # Free parameter estimates / SEs in partable-free-index order (1..n_free).
+    theta_hat  = as.numeric(free_rows$est),
+    se         = as.numeric(free_rows$se),
+    chi2       = as.numeric(fm["chisq"]),
+    df         = as.integer(fm["df"]),
+    sample_cov = list(list(block  = 0L,
+                           matrix = unname(as.matrix(sampstat$cov))))
+  )
+
+  out_path <- file.path(stdlv_dir, paste0(id, ".fit.json"))
+  write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
+             null = "null", na = "null", digits = NA)
+  regenerated_stdlv <- c(regenerated_stdlv, out_path)
+}
+
+cat("regenerated", length(regenerated_stdlv), "std.lv fit fixtures under",
+    stdlv_dir, "\n")
+
+# === linear-equality constraint fit fixtures ===============================
+# P9 phase 2 — general *linear* `==` constraints (here `b2 + b3 == 1.5` on a
+# 1-factor CFA: the loadings of x2 and x3 sum to 1.5, x1 is the marker). lavaan
+# enforces it via its Lagrange / analytic-Jacobian path; latva by an affine
+# reparameterization `θ = θ₀ + Kα`. Point estimates, χ²/df, and (expected-info)
+# SEs match. Kept OUT of corpus.json (like the std.lv fixtures); C++ side lives
+# in tests/golden/lin_constraint_golden_test.cpp. Single-group, no mean structure.
+lincon_dir <- file.path(fixtures, "fit_lincon")
+dir.create(lincon_dir, showWarnings = FALSE, recursive = TRUE)
+
+lincon_models <- list(
+  list(id          = "0001_loading_sum_hs",
+       model       = "visual =~ x1 + b2*x2 + b3*x3\nb2 + b3 == 1.5",
+       model_uncon = "visual =~ x1 + b2*x2 + b3*x3")
+)
+
+regenerated_lincon <- character(0)
+for (m in lincon_models) {
+  id <- m$id; model <- m$model
+  fit <- tryCatch(cfa(model, data = HolzingerSwineford1939),
+                  error = function(e) e)
+  if (inherits(fit, "error") || !lavInspect(fit, "converged")) {
+    cat("  skip ", id, " (constrained cfa error / no convergence)\n", sep = "")
+    next
+  }
+  fit_u    <- tryCatch(cfa(m$model_uncon, data = HolzingerSwineford1939),
+                       error = function(e) e)
+  uncon_df <- if (!inherits(fit_u, "error")) as.integer(fitMeasures(fit_u)["df"]) else NA_integer_
+
+  pt_fitted <- parTable(fit)
+  free_rows <- pt_fitted[pt_fitted$free > 0, ]
+  free_rows <- free_rows[order(free_rows$free), ]
+  fm       <- fitMeasures(fit)
+  sampstat <- lavInspect(fit, "sampstat")
+
+  payload <- list(
+    `_meta` = list(
+      format_version = 1L,
+      fixture_kind   = "fit.lincon",
+      corpus_id      = id,
+      tool           = "lavaan::cfa(+ linear == constraint)",
+      lavaan_version = installed
+    ),
+    input            = model,
+    n_obs            = as.integer(lavInspect(fit, "ntotal")),
+    theta_hat        = as.numeric(free_rows$est),
+    se               = as.numeric(free_rows$se),
+    chi2             = as.numeric(fm["chisq"]),
+    df               = as.integer(fm["df"]),
+    unconstrained_df = uncon_df,
+    sample_cov       = list(list(block  = 0L,
+                                 matrix = unname(as.matrix(sampstat$cov))))
+  )
+
+  out_path <- file.path(lincon_dir, paste0(id, ".fit.json"))
+  write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
+             null = "null", na = "null", digits = NA)
+  regenerated_lincon <- c(regenerated_lincon, out_path)
+}
+
+cat("regenerated", length(regenerated_lincon), "linear-constraint fit fixtures under",
+    lincon_dir, "\n")

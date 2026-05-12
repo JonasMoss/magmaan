@@ -27,6 +27,7 @@ add_executable(latva_tests
   unit/model_evaluator_test.cpp
   unit/ml_test.cpp
   unit/constraints_test.cpp
+  unit/lin_constraints_test.cpp
   unit/inference_test.cpp
   unit/effects_test.cpp
   unit/standardized_test.cpp
@@ -42,7 +43,9 @@ add_executable(latva_tests
   golden/inference_golden_test.cpp
   golden/observed_inference_golden_test.cpp
   golden/multigroup_inference_golden_test.cpp
-  golden/fit_measures_golden_test.cpp)
+  golden/fit_measures_golden_test.cpp
+  golden/std_lv_golden_test.cpp
+  golden/lin_constraint_golden_test.cpp)
 
 target_link_libraries(latva_tests
   PRIVATE

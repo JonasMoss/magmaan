@@ -9,8 +9,8 @@ latva_parse <- function(syntax) {
     .Call(`_latva_latva_parse`, syntax)
 }
 
-latva_lavaanify <- function(syntax, auto_var = TRUE, auto_cov_lv_x = TRUE, auto_cov_y = FALSE, auto_fix_first = TRUE, fixed_x = TRUE, meanstructure = FALSE, n_groups = 1L, group_var = "", group_labels = NULL) {
-    .Call(`_latva_latva_lavaanify`, syntax, auto_var, auto_cov_lv_x, auto_cov_y, auto_fix_first, fixed_x, meanstructure, n_groups, group_var, group_labels)
+latva_lavaanify <- function(syntax, auto_var = TRUE, auto_cov_lv_x = TRUE, auto_cov_y = FALSE, auto_fix_first = TRUE, std_lv = FALSE, effect_coding = FALSE, fixed_x = TRUE, meanstructure = FALSE, n_groups = 1L, group_var = "", group_labels = NULL) {
+    .Call(`_latva_latva_lavaanify`, syntax, auto_var, auto_cov_lv_x, auto_cov_y, auto_fix_first, std_lv, effect_coding, fixed_x, meanstructure, n_groups, group_var, group_labels)
 }
 
 latva_matrix_rep <- function(partable) {

@@ -47,6 +47,7 @@ add_library(latva STATIC
   src/parse/parser.cpp
   src/partable/lavaanify.cpp
   src/partable/lavaan_view.cpp
+  src/partable/lin_constraints.cpp
   src/model/matrix_rep.cpp
   src/model/model_evaluator.cpp
   src/fit/ml.cpp

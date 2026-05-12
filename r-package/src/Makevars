@@ -1,10 +1,11 @@
 # Repo root = two levels up from this Makevars. During an R build the cwd is
 # <repo>/r-package/src, so $(CURDIR)/../.. is the latva repo root.
 LATVA_ROOT := $(abspath $(CURDIR)/../..)
+LATVA_LIB  := $(LATVA_ROOT)/build/default/liblatva.a
 
 CXX_STD       = CXX23
 PKG_CPPFLAGS  = -I$(LATVA_ROOT)/include -DEIGEN_MAX_ALIGN_BYTES=64
-PKG_LIBS      = $(LATVA_ROOT)/build/default/liblatva.a
+PKG_LIBS      = $(LATVA_LIB)
 
 # Make sure liblatva.a (Debug/default preset) is current before linking the
 # R glue. Incremental: a no-op (~1s) when nothing changed in the C++ tree.
@@ -14,3 +15,12 @@ $(SHLIB): latva_lib
 latva_lib:
 	@cmake --build "$(LATVA_ROOT)/build/default" --target latva 2>/dev/null || \
 	  ( cd "$(LATVA_ROOT)" && cmake --preset default && cmake --build --preset default --target latva )
+
+# R's auto-generated package Makefile only tracks .cpp -> .o; it has no idea
+# the R-glue objects also depend on the latva headers liblatva.a was built
+# from. So a header change in the C++ tree re-links liblatva.a (above) but
+# would otherwise leave a stale .o linked against the now-incompatible archive
+# (-> "undefined symbol" at load time, the exact footgun this guards). Make the
+# package objects depend on liblatva.a: when `latva_lib` re-links it, they
+# rebuild. Cheap (a handful of small TUs); a no-op when nothing changed.
+$(OBJECTS): $(LATVA_LIB)

@@ -17,9 +17,11 @@
 #include "latva/parse/expr_format.hpp"
 #include "latva/parse/flat_partable.hpp"
 #include "latva/parse/op.hpp"
+#include "latva/partable/lin_constraints.hpp"
 #include "latva/partable/partable.hpp"
 
 #include "classify.hpp"
+#include "detail_constraint_text.hpp"
 
 namespace latva::partable {
 
@@ -196,6 +198,41 @@ void apply_auto_fix_first(const VarSets& v, std::vector<PendingRow>& rows) {
         row.auto_fixed       = true;
       }
       break;  // only the first matching row, even if we didn't fix it
+    }
+  }
+}
+
+// === Step 5 (std.lv variant) ===============================================
+//
+// `std.lv` identification: instead of fixing a marker loading, scale each
+// latent by fixing its `~~`-self variance to 1.0 — but only if the user
+// didn't already speak about that row (Free / StartValue / FixedValue), in
+// which case the user wins (and the latent may then be unidentified, exactly
+// as in lavaan). auto.var has normally already added the `lv ~~ lv` row by
+// the time we run; if not (auto.var off and the user didn't write one), we
+// append one fixed at 1.0 so the latent is still scaled. The first loading is
+// left free — `lavaanify` does not call `apply_auto_fix_first` under std.lv.
+void apply_std_lv(const VarSets& v, std::vector<PendingRow>& rows) {
+  for (const auto& lv : v.lv.items) {
+    PendingRow* var_row = nullptr;
+    for (auto& row : rows) {
+      if (row.op == parse::Op::Covariance && row.lhs == lv && row.rhs == lv) {
+        var_row = &row;
+        break;
+      }
+    }
+    if (var_row != nullptr) {
+      if (!var_row->user_explicit) {
+        var_row->user_fixed_value = true;
+        var_row->fixed_value      = 1.0;
+        var_row->auto_fixed       = true;
+      }
+    } else {
+      PendingRow p = make_pending(/*user=*/0, lv, parse::Op::Covariance, lv);
+      p.user_fixed_value = true;
+      p.fixed_value      = 1.0;
+      p.auto_fixed       = true;
+      rows.push_back(std::move(p));
     }
   }
 }
@@ -447,7 +484,16 @@ build_group_template(const parse::FlatPartable& flat,
       }
     }
   }
-  if (opts.auto_fix_first) {
+  // Latent scaling — three mutually-exclusive conventions. `std.lv`: fix each
+  // LV variance at 1 (auto.fix.first forced off, lavaan-style). `effect_coding`:
+  // leave *everything* free (loadings + LV variance) — the scale is set instead
+  // by the `Σλ == #indicators` constraint rows synthesized in `lavaanify()`.
+  // Otherwise: the marker convention (fix the first loading per latent at 1).
+  if (opts.std_lv) {
+    apply_std_lv(v, rows);
+  } else if (opts.effect_coding) {
+    // nothing: all loadings free, `lv ~~ lv` free (from auto.var).
+  } else if (opts.auto_fix_first) {
     apply_auto_fix_first(v, rows);
   }
   propagate_fix_via_labels(rows);
@@ -508,6 +554,11 @@ partable_expected<LatentStructure> lavaanify(const parse::FlatPartable& flat,
         PartableError::Kind::EmptyModel,
         "model contains no formulas or constraints"));
   }
+  if (opts.effect_coding && opts.std_lv) {
+    return std::unexpected(make_err(
+        PartableError::Kind::BadGroupSpec,
+        "effect_coding and std_lv are mutually exclusive identification conventions"));
+  }
 
   // Step 2: classify variables (same set across groups in v0 — no
   // group-specific variable structure yet) and build the name-free inventory
@@ -536,14 +587,48 @@ partable_expected<LatentStructure> lavaanify(const parse::FlatPartable& flat,
     }
   }
 
-  // Step 9: user constraint rows.
+  // Step 9: constraint rows. First the `effect.coding` rows synthesized below,
+  // then the user's `==` / `<` / `>` / `:=` statements. (Auto-equality from
+  // shared labels is NOT a row anymore — it's `eq_groups`.)
   std::vector<PendingRow> user_constraint_rows;
+
+  // effect.coding: one linear-equality row per (latent, group),
+  // `Σ (loading plabels) == #indicators`. The `=~` rows are all already in
+  // `rows` at their final positions (the constraint rows below are appended
+  // after them), so `.p<i+1>.` for the i-th row of `rows` is its plabel.
+  if (opts.effect_coding) {
+    struct Bucket { std::string lhs; std::int32_t group = 0; std::vector<std::size_t> plabel_idx; };
+    std::vector<Bucket> buckets;
+    for (std::size_t i = 0; i < rows.size(); ++i) {
+      if (rows[i].op != parse::Op::Measurement) continue;
+      std::size_t b = 0;
+      for (; b < buckets.size(); ++b)
+        if (buckets[b].lhs == rows[i].lhs && buckets[b].group == rows[i].group) break;
+      if (b == buckets.size()) buckets.push_back(Bucket{rows[i].lhs, rows[i].group, {}});
+      buckets[b].plabel_idx.push_back(i + 1);  // 1-based ⇒ `.p<i+1>.`
+    }
+    for (const auto& bk : buckets) {
+      std::string lhs_txt;
+      for (std::size_t j = 0; j < bk.plabel_idx.size(); ++j) {
+        if (j != 0) lhs_txt += '+';
+        lhs_txt += ".p" + std::to_string(bk.plabel_idx[j]) + ".";
+      }
+      PendingRow p;
+      p.user  = 1;
+      p.op    = parse::Op::EqConstraint;
+      p.block = 0;
+      p.group = 0;
+      p.lhs   = std::move(lhs_txt);
+      p.rhs   = std::to_string(bk.plabel_idx.size());
+      user_constraint_rows.push_back(std::move(p));
+    }
+  }
+
   append_user_constraints(flat, user_constraint_rows);
 
   // Step 10: row ordering — formula/auto rows first (already grouped), then
-  // user constraints. Auto-equality from shared labels is NOT a row anymore;
-  // it's `eq_groups` (below) and `to_lavaan_partable` re-synthesizes the
-  // lavaan-shaped `.pN.`-pair rows from the labels when projecting.
+  // the constraint rows. `to_lavaan_partable` re-synthesizes the lavaan-shaped
+  // shared-label `.pN.`-pair rows from the labels when projecting.
   for (auto& r : user_constraint_rows) rows.push_back(std::move(r));
 
   // Final pass: id/plabel/free assignment + fixed_value / start-hint split +
@@ -572,31 +657,17 @@ partable_expected<LatentStructure> lavaanify(const parse::FlatPartable& flat,
     names.group_labels = opts.group_labels;     // 0 or 1 entries
   }
 
-  // Resolve the linear-equality reparameterization (shared labels, explicit
-  // `a == b`) into `out.eq_groups`; flag `<` / `>` / non-bare `==` as
-  // unenforced (fit() errors on those). Needs the verbal columns on `names`.
+  // Resolve the linear-equality reparameterization. `compute_eq_groups` folds
+  // shared labels + bare `a == b` into `out.eq_groups` and flags `<`/`>` /
+  // non-bare `==` as unenforced; `resolve_lin_constraints` then reduces every
+  // *linear* non-bare `==` row (`a == 2*b+c`, …) to a `lin_constraint_R` row and
+  // clears the flag if only those remained (fit() still errors on `<`/`>` /
+  // genuinely-nonlinear `==`). Both need the verbal columns on `names`.
   compute_eq_groups(out, names);
+  resolve_lin_constraints(out, names);
   if (out_names) *out_names = std::move(names);
   return out;
 }
-
-namespace {
-
-// A canonical Expr text uses no whitespace; a bare identifier therefore has
-// no operator/paren characters. (`a`, `.p3.` are bare; `2*b`, `(a+b)`, `-1`
-// are not.)
-bool is_bare_identifier(const std::string& s) noexcept {
-  if (s.empty()) return false;
-  for (char c : s) {
-    if (c == '+' || c == '-' || c == '*' || c == '/' || c == '^' ||
-        c == '(' || c == ')' || c == ' ' || c == '\t') {
-      return false;
-    }
-  }
-  return true;
-}
-
-}  // namespace
 
 void compute_eq_groups(LatentStructure& s, const LatentNames& names) {
   const std::int32_t npar = s.n_free();
@@ -617,7 +688,7 @@ void compute_eq_groups(LatentStructure& s, const LatentNames& names) {
       free_by_label[names.row_label[i]].push_back(s.free[i]);
   }
   auto resolve = [&](const std::string& tok) -> std::int32_t {
-    if (!is_bare_identifier(tok)) return -1;
+    if (!detail::is_bare_identifier(tok)) return -1;
     if (auto it = plabel_to_free.find(tok); it != plabel_to_free.end()) return it->second;
     if (auto it = free_by_label.find(tok); it != free_by_label.end() && !it->second.empty())
       return it->second.front();
