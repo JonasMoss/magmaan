@@ -177,6 +177,7 @@ eval(const parse::Expr& e, std::size_t n_free,
 post_expected<DefinedParams>
 compute_defined(const parse::FlatPartable& flat,
                 const partable::LatentStructure&  pt,
+                const partable::LatentNames&      names,
                 const Estimates&           est,
                 const Eigen::MatrixXd&     vcov) {
   const std::size_t n_free = static_cast<std::size_t>(est.theta.size());
@@ -186,23 +187,20 @@ compute_defined(const parse::FlatPartable& flat,
         "vcov shape doesn't match Estimates.theta size"));
   }
 
-  // Build label → free-θ-index and label → fixed-value maps from pt.
+  // Build label → free-θ-index and label → fixed-value maps from the model.
   // First-row-wins for both — same-label rows are equality-constrained by
   // convention, so any matching index is acceptable. Constraint rows are
-  // excluded (their labels name defined params, not free θ).
+  // excluded (their labels name defined params, not free θ). The map keys are
+  // string_views into `names.row_label`, which outlives this call.
   LabelMap label_to_free;
   FixedMap label_to_fixed;
   for (std::size_t i = 0; i < pt.size(); ++i) {
-    const bool is_constraint =
-        (pt.op[i] == parse::Op::EqConstraint ||
-         pt.op[i] == parse::Op::LtConstraint ||
-         pt.op[i] == parse::Op::GtConstraint ||
-         pt.op[i] == parse::Op::DefineParam);
-    if (is_constraint || pt.label[i].empty()) continue;
+    if (pt.is_constraint_row(i)) continue;
+    if (i >= names.row_label.size() || names.row_label[i].empty()) continue;
     if (pt.free[i] > 0) {
-      label_to_free.try_emplace(pt.label[i], pt.free[i]);
+      label_to_free.try_emplace(names.row_label[i], pt.free[i]);
     } else if (std::isfinite(pt.fixed_value[i])) {
-      label_to_fixed.try_emplace(pt.label[i], pt.fixed_value[i]);
+      label_to_fixed.try_emplace(names.row_label[i], pt.fixed_value[i]);
     }
   }
 

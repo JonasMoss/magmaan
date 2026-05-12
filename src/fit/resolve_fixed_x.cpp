@@ -29,6 +29,7 @@ resolve_fixed_x_from_sample(partable::LatentStructure&      pt,
     return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
         "MatrixRep cell count doesn't match LatentStructure"));
   }
+  const std::size_t n_lv_ext = pt.lv_ext_order.size();
   for (std::size_t i = 0; i < pt.size(); ++i) {
     if (pt.exo[i] != 1) continue;          // only fixed.x rows
     if (pt.free[i] != 0) continue;
@@ -41,34 +42,28 @@ resolve_fixed_x_from_sample(partable::LatentStructure&      pt,
           "block " + std::to_string(b) + " missing from SampleStats"));
     }
     const auto& S = samp.S[b];
-    // Fixed.x cells live in Psi under the Reduced form; row/col are
-    // lv_ext indices, but since the phantom-Λ row identifies ov_idx
-    // directly via name, we look up the sample S via the rep's
-    // ov_names: lv_ext name == ov name for these rows.
-    if (b >= rep.lv_names.size() || b >= rep.ov_names.size()) {
-      return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
-          "MatrixRep block dims missing"));
-    }
-    const auto& lv_n = rep.lv_names[b];
-    const auto& ov_n = rep.ov_names[b];
+    // A fixed.x cell lives in Ψ (the Reduced form promotes exogenous observed
+    // to phantom latents): c.row / c.col are lv_ext positions. Map them to var
+    // ids via lv_ext_order, then to observed positions via ov_pos — for a
+    // phantom-promoted ov.x the lv_ext slot and the observed slot are the same
+    // variable — and read the sample covariance there.
     if (c.row < 0 || c.col < 0 ||
-        c.row >= static_cast<std::int16_t>(lv_n.size()) ||
-        c.col >= static_cast<std::int16_t>(lv_n.size())) {
+        static_cast<std::size_t>(c.row) >= n_lv_ext ||
+        static_cast<std::size_t>(c.col) >= n_lv_ext) {
       return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
           "fixed.x cell indices out of range"));
     }
-    // Find ov index of these names. (For phantom-promoted ov.x, the
-    // lv_ext name equals the ov name.)
-    auto find_ov = [&](const std::string& n) -> int {
-      for (std::size_t k = 0; k < ov_n.size(); ++k)
-        if (ov_n[k] == n) return static_cast<int>(k);
-      return -1;
-    };
-    const int r = find_ov(lv_n[static_cast<std::size_t>(c.row)]);
-    const int s = find_ov(lv_n[static_cast<std::size_t>(c.col)]);
-    if (r < 0 || s < 0) {
+    const std::int32_t v_r = pt.lv_ext_order[static_cast<std::size_t>(c.row)];
+    const std::int32_t v_c = pt.lv_ext_order[static_cast<std::size_t>(c.col)];
+    const std::int32_t r = (v_r >= 0 && v_r < pt.n_vars)
+                               ? pt.ov_pos[static_cast<std::size_t>(v_r)] : -1;
+    const std::int32_t s = (v_c >= 0 && v_c < pt.n_vars)
+                               ? pt.ov_pos[static_cast<std::size_t>(v_c)] : -1;
+    if (r < 0 || s < 0 ||
+        r >= static_cast<std::int32_t>(S.rows()) ||
+        s >= static_cast<std::int32_t>(S.cols())) {
       return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
-          "fixed.x lv_ext name not found in ov_names"));
+          "fixed.x variable not found in the observed ordering"));
     }
     pt.fixed_value[i] = S(r, s);
   }

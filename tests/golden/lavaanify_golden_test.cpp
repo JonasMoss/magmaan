@@ -9,22 +9,20 @@
 #include "../oracle.hpp"
 #include "latva/parse/op.hpp"
 #include "latva/parse/parser.hpp"
+#include "latva/partable/lavaan_view.hpp"
 #include "latva/partable/lavaanify.hpp"
 #include "latva/partable/partable.hpp"
 #include "latva/partable/start_hints.hpp"
 
 namespace {
 
-// Translate our LatentStructure to the same JSON shape that
-// tools/regen_oracle.R writes for the `ptable` layer (one row per object,
+// Translate the lavaan-shaped projection of our model to the same JSON shape
+// that tools/regen_oracle.R writes for the `ptable` layer (one row per object,
 // fields: id, user, lhs, op, rhs, block, group, free, exo, ustart, label,
 // plabel). NaN is written as JSON null to match the R `na = "null"` choice.
-// lavaan's `ustart` column is reconstructed from latva's split representation:
-// a fixed row's `fixed_value`, or a free row's start hint (`starts.hint[free-1]`).
 nlohmann::json ptable_to_json(std::string_view input,
                               std::string_view corpus_id,
-                              const latva::partable::LatentStructure& pt,
-                              const latva::partable::Starts& starts) {
+                              const latva::partable::LavaanParTable& pt) {
   using latva::test::op_to_lavaan_string;
   nlohmann::json j;
   j["_meta"] = {
@@ -33,13 +31,6 @@ nlohmann::json ptable_to_json(std::string_view input,
       {"corpus_id",      std::string(corpus_id)},
       {"tool",           "latva::lavaanify"}};
   j["input"] = std::string(input);
-
-  auto ustart_of = [&](std::size_t i) -> double {
-    if (pt.free[i] == 0) return pt.fixed_value[i];
-    const std::size_t k = static_cast<std::size_t>(pt.free[i] - 1);
-    return (k < starts.hint.size()) ? starts.hint[k]
-                                    : std::numeric_limits<double>::quiet_NaN();
-  };
 
   nlohmann::json rows = nlohmann::json::array();
   for (std::size_t i = 0; i < pt.size(); ++i) {
@@ -53,7 +44,7 @@ nlohmann::json ptable_to_json(std::string_view input,
     row["group"]  = pt.group[i];
     row["free"]   = pt.free[i];
     row["exo"]    = static_cast<int>(pt.exo[i]);
-    const double u = ustart_of(i);
+    const double u = pt.ustart[i];
     if (std::isnan(u)) row["ustart"] = nullptr;
     else               row["ustart"] = u;
     row["label"]  = pt.label[i];
@@ -136,13 +127,15 @@ TEST_CASE("ptable goldens — every corpus entry that lavaanify can handle") {
       continue;
     }
     latva::partable::Starts starts;
-    auto pt = latva::partable::lavaanify(*fp, {}, &starts);
+    latva::partable::LatentNames names;
+    auto pt = latva::partable::lavaanify(*fp, {}, &starts, &names);
     if (!pt.has_value()) {
       failures.push_back(e.id + ": lavaanify failed — " + pt.error().detail);
       continue;
     }
 
-    auto got = ptable_to_json(e.model, e.id, *pt, starts);
+    auto got = ptable_to_json(e.model, e.id,
+                              latva::partable::to_lavaan_partable(*pt, names, starts));
     auto d = diff_ptable(latva::test::strip_meta(got),
                          latva::test::strip_meta(exp));
     if (d.empty()) ++passed;

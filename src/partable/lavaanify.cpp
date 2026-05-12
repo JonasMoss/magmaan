@@ -19,149 +19,22 @@
 #include "latva/parse/op.hpp"
 #include "latva/partable/partable.hpp"
 
+#include "classify.hpp"
+
 namespace latva::partable {
 
 namespace {
+
+using detail::OrderedSet;
+using detail::VarSets;
+using detail::VarInventory;
+using detail::classify_vars;
+using detail::build_var_inventory;
 
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 
 PartableError make_err(PartableError::Kind k, std::string detail) {
   return PartableError{k, std::move(detail)};
-}
-
-// Insertion-order-preserving set of strings. We need this because lavaan's
-// variable ordering follows order of appearance in the model syntax.
-struct OrderedSet {
-  std::vector<std::string> items;
-
-  bool contains(std::string_view s) const noexcept {
-    for (const auto& it : items) if (it == s) return true;
-    return false;
-  }
-  void insert(std::string_view s) {
-    if (!contains(s)) items.emplace_back(s);
-  }
-};
-
-// === Step 2: variable classification ========================================
-//
-//   lv     : LHS of `=~`
-//   ov_ind : RHS of `=~` (observed indicators)
-//   ov_y   : LHS of `~` (endogenous observed) — minus latents
-//   ov_x   : RHS of `~` (exogenous observed) — minus latents, indicators, ov.y
-struct VarSets {
-  OrderedSet lv;
-  OrderedSet ov_ind;
-  OrderedSet ov_y;
-  OrderedSet ov_x;
-  OrderedSet ov_misc;   // observed mentioned only in ~~ rows (no other role)
-};
-
-VarSets classify_vars(const parse::FlatPartable& flat) {
-  VarSets v;
-  // Pass 1: collect lv (LHS of =~) and ov_ind (RHS of =~).
-  for (const auto& r : flat.rows) {
-    if (r.op == parse::Op::Measurement) {
-      v.lv.insert(r.lhs);
-      v.ov_ind.insert(r.rhs);
-    }
-  }
-  // Pass 2: ov_y (LHS of ~ or ~1 minus latents), ov_x (RHS of ~ minus the rest).
-  for (const auto& r : flat.rows) {
-    if (r.op == parse::Op::Regression || r.op == parse::Op::Intercept) {
-      if (!v.lv.contains(r.lhs)) v.ov_y.insert(r.lhs);
-    }
-  }
-  for (const auto& r : flat.rows) {
-    if (r.op == parse::Op::Regression) {
-      if (!v.lv.contains(r.rhs) &&
-          !v.ov_ind.contains(r.rhs) &&
-          !v.ov_y.contains(r.rhs)) {
-        v.ov_x.insert(r.rhs);
-      }
-    }
-  }
-  // Pass 3: any observed variable mentioned only in ~~ rows. Lavaan still
-  // wants its variance auto-added.
-  for (const auto& r : flat.rows) {
-    if (r.op != parse::Op::Covariance) continue;
-    for (auto name : {r.lhs, r.rhs}) {
-      if (!v.lv.contains(name) && !v.ov_ind.contains(name) &&
-          !v.ov_y.contains(name) && !v.ov_x.contains(name)) {
-        v.ov_misc.insert(name);
-      }
-    }
-  }
-  return v;
-}
-
-// === Variable inventory =====================================================
-//
-// Assigns a stable id to every distinct variable (id = order of first
-// appearance scanning [ov.ind, ov.y, ov.x, ov.misc, lv]) and builds the
-// canonical observed / extended-latent orderings (var ids) that `matrix_rep`
-// otherwise re-derives by name. `reduced` = "the model has any `~` row" (the
-// Reduced LISREL form): then ov.y and ov.x are promoted into the extended
-// latent set (phantom latents).
-struct VarInventory {
-  std::vector<std::string>    names;        // id → name
-  std::vector<VarRole>        roles;        // id → first-bucket role
-  std::vector<std::int8_t>    is_user_lv;   // id → 1 if in the `lv` set
-  std::vector<std::int32_t>   ov_order;     // ids, canonical observed order
-  std::vector<std::int32_t>   lv_ext_order; // ids, extended-latent order
-  std::unordered_map<std::string, std::int32_t> id_of;
-
-  std::int32_t lookup(std::string_view name) const {
-    auto it = id_of.find(std::string(name));
-    return (it == id_of.end()) ? -1 : it->second;
-  }
-};
-
-VarInventory build_var_inventory(const VarSets& v, bool reduced) {
-  VarInventory inv;
-  auto ensure = [&](const std::string& name, VarRole role) -> std::int32_t {
-    auto it = inv.id_of.find(name);
-    if (it != inv.id_of.end()) return it->second;
-    const std::int32_t id = static_cast<std::int32_t>(inv.names.size());
-    inv.names.push_back(name);
-    inv.roles.push_back(role);
-    inv.is_user_lv.push_back(0);
-    inv.id_of.emplace(name, id);
-    return id;
-  };
-  for (const auto& s : v.ov_ind.items)  ensure(s, VarRole::Indicator);
-  for (const auto& s : v.ov_y.items)    ensure(s, VarRole::EndoOv);
-  for (const auto& s : v.ov_x.items)    ensure(s, VarRole::ExoOv);
-  for (const auto& s : v.ov_misc.items) ensure(s, VarRole::MiscOv);
-  for (const auto& s : v.lv.items) {
-    const std::int32_t id = ensure(s, VarRole::Latent);
-    inv.is_user_lv[static_cast<std::size_t>(id)] = 1;
-  }
-
-  auto append_unique = [&](std::vector<std::int32_t>& dst, const std::string& name) {
-    const std::int32_t id = inv.id_of.at(name);
-    for (auto x : dst) if (x == id) return;
-    dst.push_back(id);
-  };
-  // Observed order — mirrors matrix_rep::classify():
-  //   Reduced & no user latents : ov.y, then ov.x.
-  //   else                      : ov.ind, ov.y, ov.x, ov.misc.
-  if (reduced && v.lv.items.empty()) {
-    for (const auto& s : v.ov_y.items) append_unique(inv.ov_order, s);
-    for (const auto& s : v.ov_x.items) append_unique(inv.ov_order, s);
-  } else {
-    for (const auto& s : v.ov_ind.items)  append_unique(inv.ov_order, s);
-    for (const auto& s : v.ov_y.items)    append_unique(inv.ov_order, s);
-    for (const auto& s : v.ov_x.items)    append_unique(inv.ov_order, s);
-    for (const auto& s : v.ov_misc.items) append_unique(inv.ov_order, s);
-  }
-  // Extended-latent order: user latents, then (Reduced only) ov.y, ov.x.
-  for (const auto& s : v.lv.items) append_unique(inv.lv_ext_order, s);
-  if (reduced) {
-    for (const auto& s : v.ov_y.items) append_unique(inv.lv_ext_order, s);
-    for (const auto& s : v.ov_x.items) append_unique(inv.lv_ext_order, s);
-  }
-  return inv;
 }
 
 // === LatentStructure row builder ===================================================
@@ -458,30 +331,25 @@ void append_user_constraints(const parse::FlatPartable& flat,
   }
 }
 
-// === Final pass: assign id, plabel, free; split fixed_value / start hints ==
+// === Final pass: assign free indices; split fixed_value / start hints =======
 //
-// Walks rows in order. Each row gets a 1-based id. Non-constraint rows
-// also get a plabel (`.pN.`). 1-based free indices go to rows where
-// `auto_fixed == false` AND the user didn't fix the value AND op is not a
-// constraint. The old `ustart` column is split: a fixed row's value lands in
-// `out.fixed_value[i]`; a free row's `start(v)`/`v?x` hint lands in
-// `starts.hint[free-1]` (sized n_free, NaN where unspecified). The name-free
-// var-id columns + the `LatentNames` companion are filled here too, from `inv`.
+// Walks rows in order. 1-based free indices go to rows where `auto_fixed ==
+// false` AND the user didn't fix the value AND op is not a constraint. The old
+// `ustart` is split: a fixed row's value lands in `out.fixed_value[i]`; a free
+// row's `start(v)`/`v?x` hint lands in `starts.hint[free-1]` (sized n_free, NaN
+// where unspecified). The name-free var-id columns (from `inv`) fill the
+// `LatentStructure`; the verbal columns (`lhs`/`rhs`/`label`/`plabel`/`user`) +
+// the var-name table + the group metadata fill the `LatentNames` companion.
+// `id` (= row position) and `plabel` (= `.p<id>.`) are no longer stored — they
+// are pure functions of position, materialized in `to_lavaan_partable`.
 void finalize(const std::vector<PendingRow>& src, const VarInventory& inv,
               LatentStructure& out, Starts& starts, LatentNames& names) {
   const std::size_t n = src.size();
-  out.id.resize(n);
-  out.user.resize(n);
-  out.lhs.resize(n);
   out.op.resize(n);
-  out.rhs.resize(n);
-  out.block.resize(n);
   out.group.resize(n);
   out.free.resize(n);
   out.exo.resize(n);
   out.fixed_value.resize(n);
-  out.label.resize(n);
-  out.plabel.resize(n);
   out.lhs_var.resize(n);
   out.rhs_var.resize(n);
   starts.hint.clear();
@@ -509,12 +377,7 @@ void finalize(const std::vector<PendingRow>& src, const VarInventory& inv,
   std::int32_t free_idx = 0;
   for (std::size_t i = 0; i < n; ++i) {
     const PendingRow& r = src[i];
-    out.id[i]    = static_cast<std::int32_t>(i + 1);
-    out.user[i]  = r.user;
-    out.lhs[i]   = r.lhs;
     out.op[i]    = r.op;
-    out.rhs[i]   = r.rhs;
-    out.block[i] = r.block;
     out.group[i] = r.group;
     out.exo[i]   = r.exo;
 
@@ -551,18 +414,13 @@ void finalize(const std::vector<PendingRow>& src, const VarInventory& inv,
       starts.hint.push_back(r.user_start_value ? r.start_value : kNaN);
     }
 
-    out.label[i]  = r.label;
-    // plabel: ".pN." for non-constraint rows; empty for constraint rows
-    // (lavaan does the same except for Define rows which get ".p." — TODO
-    // confirm; deferring exact match for now).
-    if (is_constraint) out.plabel[i] = "";
-    else               out.plabel[i] = ".p" + std::to_string(out.id[i]) + ".";
-
     // LatentNames companion (verbal model — display / round-trip only).
+    // plabel: ".p<position>." for non-constraint rows; "" for constraint rows.
     names.row_lhs[i]    = r.lhs;
     names.row_rhs[i]    = r.rhs;
     names.row_label[i]  = r.label;
-    names.row_plabel[i] = out.plabel[i];
+    names.row_plabel[i] = is_constraint ? std::string{}
+                                        : (".p" + std::to_string(i + 1) + ".");
     names.row_user[i]   = r.user;
   }
 }
@@ -684,7 +542,7 @@ partable_expected<LatentStructure> lavaanify(const parse::FlatPartable& flat,
   // Step 2: classify variables (same set across groups in v0 — no
   // group-specific variable structure yet) and build the name-free inventory
   // (var ids, roles, canonical orderings) that matrix_rep otherwise re-derives.
-  const VarSets v = classify_vars(flat);
+  const VarSets v = classify_vars(flat.rows);
   bool has_regression = false;
   for (const auto& r : flat.rows)
     if (r.op == parse::Op::Regression) { has_regression = true; break; }
@@ -737,30 +595,29 @@ partable_expected<LatentStructure> lavaanify(const parse::FlatPartable& flat,
   finalize(rows, inv, out, starts, names);
   if (out_starts) *out_starts = std::move(starts);
 
-  // Group identity (pure metadata — nothing downstream branches on it).
-  // Single-group: leave both empty (the "no groups == one group" sentinel).
+  // Group identity (verbal metadata — lives on `LatentNames`; nothing on the
+  // numeric path branches on it). Single-group: leave both empty (the "no
+  // groups == one group" sentinel).
   if (opts.n_groups > 1) {
-    out.group_var = opts.group_var.empty() ? "group" : opts.group_var;
+    names.group_var = opts.group_var.empty() ? "group" : opts.group_var;
     if (static_cast<std::int32_t>(opts.group_labels.size()) == opts.n_groups) {
-      out.group_labels = opts.group_labels;
+      names.group_labels = opts.group_labels;
     } else {
-      out.group_labels.reserve(static_cast<std::size_t>(opts.n_groups));
+      names.group_labels.reserve(static_cast<std::size_t>(opts.n_groups));
       for (std::int32_t g = 1; g <= opts.n_groups; ++g) {
-        out.group_labels.push_back(std::to_string(g));
+        names.group_labels.push_back(std::to_string(g));
       }
     }
   } else {
-    out.group_var = opts.group_var;          // may be a user-named single group
-    out.group_labels = opts.group_labels;    // 0 or 1 entries
+    names.group_var    = opts.group_var;        // may be a user-named single group
+    names.group_labels = opts.group_labels;     // 0 or 1 entries
   }
-  names.group_var    = out.group_var;
-  names.group_labels = out.group_labels;
-  if (out_names) *out_names = std::move(names);
 
   // Resolve the linear-equality reparameterization (shared labels, explicit
   // `a == b`) into `out.eq_groups`; flag `<` / `>` / non-bare `==` as
-  // unenforced (fit() errors on those).
-  compute_eq_groups(out);
+  // unenforced (fit() errors on those). Needs the verbal columns on `names`.
+  compute_eq_groups(out, names);
+  if (out_names) *out_names = std::move(names);
   return out;
 }
 
@@ -782,19 +639,21 @@ bool is_bare_identifier(const std::string& s) noexcept {
 
 }  // namespace
 
-void compute_eq_groups(LatentStructure& s) {
+void compute_eq_groups(LatentStructure& s, const LatentNames& names) {
   const std::int32_t npar = s.n_free();
   s.eq_groups.assign(static_cast<std::size_t>(npar < 0 ? 0 : npar), 0);
   for (std::int32_t k = 0; k < npar; ++k) s.eq_groups[static_cast<std::size_t>(k)] = k;
   s.has_unenforced_constraints = false;
 
   // `.pN.` plabel → 1-based free index, and `label` → 1-based free index,
-  // over free (free > 0), non-constraint rows.
+  // over free (free > 0), non-constraint rows. Plabels/labels live on `names`.
   std::unordered_map<std::string, std::int32_t> plabel_to_free, label_to_free;
   for (std::size_t i = 0; i < s.size(); ++i) {
     if (s.free[i] <= 0) continue;
-    if (!s.plabel[i].empty()) plabel_to_free.try_emplace(s.plabel[i], s.free[i]);
-    if (!s.label[i].empty())  label_to_free.try_emplace(s.label[i], s.free[i]);
+    if (i < names.row_plabel.size() && !names.row_plabel[i].empty())
+      plabel_to_free.try_emplace(names.row_plabel[i], s.free[i]);
+    if (i < names.row_label.size() && !names.row_label[i].empty())
+      label_to_free.try_emplace(names.row_label[i], s.free[i]);
   }
   auto resolve = [&](const std::string& tok) -> std::int32_t {
     if (!is_bare_identifier(tok)) return -1;
@@ -826,8 +685,10 @@ void compute_eq_groups(LatentStructure& s) {
       continue;
     }
     if (op != parse::Op::EqConstraint) continue;
-    const std::int32_t li = resolve(s.lhs[i]);
-    const std::int32_t ri = resolve(s.rhs[i]);
+    const std::string lhs_txt = i < names.row_lhs.size() ? names.row_lhs[i] : std::string{};
+    const std::string rhs_txt = i < names.row_rhs.size() ? names.row_rhs[i] : std::string{};
+    const std::int32_t li = resolve(lhs_txt);
+    const std::int32_t ri = resolve(rhs_txt);
     if (li < 0 || ri < 0) { s.has_unenforced_constraints = true; continue; }
     unite(li, ri);
   }

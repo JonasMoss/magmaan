@@ -697,8 +697,8 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   // (a) LatentStructure structure
   std::int32_t n_b1 = 0, n_b2 = 0;
   for (std::size_t i = 0; i < pt->size(); ++i) {
-    if (pt->block[i] == 1) ++n_b1;
-    if (pt->block[i] == 2) ++n_b2;
+    if (pt->group[i] == 1) ++n_b1;
+    if (pt->group[i] == 2) ++n_b2;
   }
   CHECK(n_b1 == 7);          // 3 =~ + 3 θ + 1 ψ
   CHECK(n_b2 == 7);
@@ -901,25 +901,25 @@ TwoBlockHandles duplicate_two_blocks(const ModelHandles& src) {
       static_cast<std::int32_t>(src.pt->n_free());
   const std::size_t  orig_size  = src.pt->size();
 
-  // Append block-1 LatentStructure rows: independent free indices, block=2 in
-  // lavaan-style 1-based numbering, separate plabels.
+  // Append block-1 LatentStructure rows: independent free indices, group = 2.
+  // The variable table (n_vars / var_role / orderings) is shared — already
+  // copied above — so the appended rows reuse the same var ids.
   for (std::size_t i = 0; i < orig_size; ++i) {
-    s_pt.id.push_back(src.pt->id[i] +
-                      static_cast<std::int32_t>(orig_size));
-    s_pt.user.push_back(src.pt->user[i]);
-    s_pt.lhs.push_back(src.pt->lhs[i]);
     s_pt.op.push_back(src.pt->op[i]);
-    s_pt.rhs.push_back(src.pt->rhs[i]);
-    s_pt.block.push_back(2);
     s_pt.group.push_back(2);
     s_pt.free.push_back(src.pt->free[i] > 0
                             ? src.pt->free[i] + n_free_single
                             : 0);
     s_pt.exo.push_back(src.pt->exo[i]);
     s_pt.fixed_value.push_back(src.pt->fixed_value[i]);
-    s_pt.label.push_back("");
-    s_pt.plabel.push_back(src.pt->plabel[i] + "_b1");
+    s_pt.lhs_var.push_back(src.pt->lhs_var[i]);
+    s_pt.rhs_var.push_back(src.pt->rhs_var[i]);
   }
+  // Identity equality reparameterization over the doubled free set.
+  s_pt.eq_groups.resize(static_cast<std::size_t>(2 * n_free_single));
+  for (std::int32_t k = 0; k < 2 * n_free_single; ++k)
+    s_pt.eq_groups[static_cast<std::size_t>(k)] = k;
+  s_pt.has_unenforced_constraints = false;
 
   // Mirror MatrixRep: block-1 cells point at the same (mat, row, col)
   // but with block index 1 so ModelEvaluator writes to a separate

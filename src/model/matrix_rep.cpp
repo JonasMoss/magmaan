@@ -35,23 +35,26 @@ RepForm decide_form(const partable::LatentStructure& pt) noexcept {
   return RepForm::PureCFA;
 }
 
-// Recover var-id → name from the partable's (still-present) string columns:
-// every variable appears as the lhs or rhs of at least one formula row.
-std::vector<std::string> var_names_of(const partable::LatentStructure& pt) {
-  std::vector<std::string> names(static_cast<std::size_t>(pt.n_vars));
-  for (std::size_t i = 0; i < pt.size(); ++i) {
-    if (pt.is_constraint_row(i)) continue;
-    const std::int32_t l = pt.lhs_var[i];
-    const std::int32_t r = pt.rhs_var[i];
-    if (l >= 0 && l < pt.n_vars) names[static_cast<std::size_t>(l)] = pt.lhs[i];
-    if (r >= 0 && r < pt.n_vars) names[static_cast<std::size_t>(r)] = pt.rhs[i];
+// Var id → name. Real names when a `LatentNames` is supplied; otherwise a
+// deterministic `"v<id>"` placeholder (the numeric path indexes by id, never
+// by name, so the placeholder is only ever seen in inspection / error text).
+std::vector<std::string> var_names_of(const partable::LatentStructure& pt,
+                                      const partable::LatentNames* names) {
+  std::vector<std::string> out(static_cast<std::size_t>(pt.n_vars));
+  for (std::int32_t v = 0; v < pt.n_vars; ++v) {
+    const std::size_t vi = static_cast<std::size_t>(v);
+    out[vi] = (names != nullptr && vi < names->var_name.size())
+                  ? names->var_name[vi]
+                  : ("v" + std::to_string(v));
   }
-  return names;
+  return out;
 }
 
 }  // namespace
 
-model_expected<MatrixRep> build_matrix_rep(const partable::LatentStructure& pt) {
+model_expected<MatrixRep>
+build_matrix_rep(const partable::LatentStructure& pt,
+                 const partable::LatentNames* names) {
   MatrixRep out;
   out.cell_for_row.resize(pt.size());
   out.form = decide_form(pt);
@@ -64,12 +67,16 @@ model_expected<MatrixRep> build_matrix_rep(const partable::LatentStructure& pt) 
   // The canonical orderings + classification are precomputed by lavaanify and
   // ride on the partable's variable inventory — matrix_rep no longer re-derives
   // them. In v0 multi-group, every block has the same variable set; broadcast.
-  const std::vector<std::string> names = var_names_of(pt);
+  const std::vector<std::string> var_names = var_names_of(pt, names);
+  auto var_label = [&](std::int32_t v) -> std::string {
+    return (v >= 0 && v < pt.n_vars) ? var_names[static_cast<std::size_t>(v)]
+                                     : ("#" + std::to_string(v));
+  };
   std::vector<std::string> ov_names_b, lv_names_b;
   ov_names_b.reserve(pt.ov_order.size());
   lv_names_b.reserve(pt.lv_ext_order.size());
-  for (auto v : pt.ov_order)     ov_names_b.push_back(names[static_cast<std::size_t>(v)]);
-  for (auto v : pt.lv_ext_order) lv_names_b.push_back(names[static_cast<std::size_t>(v)]);
+  for (auto v : pt.ov_order)     ov_names_b.push_back(var_label(v));
+  for (auto v : pt.lv_ext_order) lv_names_b.push_back(var_label(v));
   for (std::size_t b = 0; b < nb; ++b) {
     out.ov_names[b] = ov_names_b;
     out.lv_names[b] = lv_names_b;
@@ -117,11 +124,11 @@ model_expected<MatrixRep> build_matrix_rep(const partable::LatentStructure& pt) 
 
     const std::int32_t L = pt.lhs_var[i];
     const std::int32_t R = pt.rhs_var[i];
-    Cell c; c.block = static_cast<std::int8_t>(pt.block[i] - 1);  // 1-based → 0-based
+    Cell c; c.block = static_cast<std::int8_t>(pt.group[i] - 1);  // 1-based → 0-based
 
-    auto unknown_var = [&](std::string_view s) {
+    auto unknown_var = [&](std::int32_t v) {
       return std::unexpected(make_err(ModelError::Kind::UnknownVariable,
-          std::string("row references unknown variable: '") + std::string(s) + "'"));
+          std::string("row references unknown variable: '") + var_label(v) + "'"));
     };
 
     switch (op) {
@@ -129,8 +136,8 @@ model_expected<MatrixRep> build_matrix_rep(const partable::LatentStructure& pt) 
         // Λ[ind, lat] regardless of form.
         const auto row_idx = ov_idx(R);
         const auto col_idx = lv_ext_idx(L);
-        if (row_idx < 0) return unknown_var(pt.rhs[i]);
-        if (col_idx < 0) return unknown_var(pt.lhs[i]);
+        if (row_idx < 0) return unknown_var(R);
+        if (col_idx < 0) return unknown_var(L);
         c.mat = MatId::Lambda; c.row = row_idx; c.col = col_idx; c.used = true;
         break;
       }
@@ -155,11 +162,11 @@ model_expected<MatrixRep> build_matrix_rep(const partable::LatentStructure& pt) 
           } else {
             return std::unexpected(make_err(ModelError::Kind::UnsupportedRowKind,
                 std::string("~~ between latent and observed not supported in "
-                            "PureCFA: lhs='") + pt.lhs[i] + "', rhs='" + pt.rhs[i] + "'"));
+                            "PureCFA: lhs='") + var_label(L) + "', rhs='" + var_label(R) + "'"));
           }
         }
-        if (c.row < 0) return unknown_var(pt.lhs[i]);
-        if (c.col < 0) return unknown_var(pt.rhs[i]);
+        if (c.row < 0) return unknown_var(L);
+        if (c.col < 0) return unknown_var(R);
         c.used = true;
         break;
       }
@@ -171,8 +178,8 @@ model_expected<MatrixRep> build_matrix_rep(const partable::LatentStructure& pt) 
         }
         const auto row_idx = lv_ext_idx(L);
         const auto col_idx = lv_ext_idx(R);
-        if (row_idx < 0) return unknown_var(pt.lhs[i]);
-        if (col_idx < 0) return unknown_var(pt.rhs[i]);
+        if (row_idx < 0) return unknown_var(L);
+        if (col_idx < 0) return unknown_var(R);
         c.mat = MatId::Beta; c.row = row_idx; c.col = col_idx; c.used = true;
         break;
       }
@@ -182,11 +189,11 @@ model_expected<MatrixRep> build_matrix_rep(const partable::LatentStructure& pt) 
         // when ov was promoted to a phantom latent in Reduced form.
         if (is_user_lv(L)) {
           const auto row_idx = lv_ext_idx(L);
-          if (row_idx < 0) return unknown_var(pt.lhs[i]);
+          if (row_idx < 0) return unknown_var(L);
           c.mat = MatId::Alpha; c.row = row_idx; c.col = 0; c.used = true;
         } else {
           const auto row_idx = ov_idx(L);
-          if (row_idx < 0) return unknown_var(pt.lhs[i]);
+          if (row_idx < 0) return unknown_var(L);
           c.mat = MatId::Nu; c.row = row_idx; c.col = 0; c.used = true;
         }
         break;

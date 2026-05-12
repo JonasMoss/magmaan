@@ -19,9 +19,10 @@ namespace {
 MatrixRep must_build(std::string_view src) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  latva::partable::LatentNames names;
+  auto pt = lavaanify(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
-  auto mr = build_matrix_rep(*pt);
+  auto mr = build_matrix_rep(*pt, &names);
   REQUIRE_MESSAGE(mr.has_value(),
                   "build_matrix_rep failed: " << mr.error().detail);
   return std::move(*mr);

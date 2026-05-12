@@ -41,7 +41,8 @@ TEST_CASE("Effects: := value and delta-method SE on a^2 of a labeled loading") {
   const std::string src = "f =~ x1 + a*x2 + x3\na_sq := a^2";
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  latva::partable::LatentNames names;
+  auto pt = lavaanify(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -57,7 +58,7 @@ TEST_CASE("Effects: := value and delta-method SE on a^2 of a labeled loading") {
   // Find a's free index — the row labeled "a" in pt.
   Eigen::Index a_idx = -1;
   for (std::size_t i = 0; i < pt->size(); ++i) {
-    if (pt->label[i] == "a" && pt->free[i] > 0) {
+    if (names.row_label[i] == "a" && pt->free[i] > 0) {
       a_idx = pt->free[i] - 1;
       break;
     }
@@ -67,7 +68,7 @@ TEST_CASE("Effects: := value and delta-method SE on a^2 of a labeled loading") {
   const double a_se    = inf.se(a_idx);
   const double a_var   = inf.vcov(a_idx, a_idx);
 
-  auto defs_or = compute_defined(*fp, *pt, est, inf.vcov);
+  auto defs_or = compute_defined(*fp, *pt, names, est, inf.vcov);
   REQUIRE(defs_or.has_value());
   REQUIRE(defs_or->entries.size() == 1);
   const auto& dp = defs_or->entries[0];
@@ -90,7 +91,8 @@ TEST_CASE("Effects: := with a product of two labeled loadings") {
       "f =~ x1 + a*x2 + b*x3\nprod := a * b";
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  latva::partable::LatentNames names;
+  auto pt = lavaanify(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -106,15 +108,15 @@ TEST_CASE("Effects: := with a product of two labeled loadings") {
   Eigen::Index a_idx = -1, b_idx = -1;
   for (std::size_t i = 0; i < pt->size(); ++i) {
     if (pt->free[i] == 0) continue;
-    if (pt->label[i] == "a") a_idx = pt->free[i] - 1;
-    if (pt->label[i] == "b") b_idx = pt->free[i] - 1;
+    if (names.row_label[i] == "a") a_idx = pt->free[i] - 1;
+    if (names.row_label[i] == "b") b_idx = pt->free[i] - 1;
   }
   REQUIRE(a_idx >= 0);
   REQUIRE(b_idx >= 0);
   const double a_hat = est.theta(a_idx);
   const double b_hat = est.theta(b_idx);
 
-  auto defs = compute_defined(*fp, *pt, est, inf.vcov).value();
+  auto defs = compute_defined(*fp, *pt, names, est, inf.vcov).value();
   REQUIRE(defs.entries.size() == 1);
   CHECK(defs.entries[0].name == "prod");
   CHECK(defs.entries[0].value ==
@@ -135,7 +137,8 @@ TEST_CASE("Effects: := referencing an unknown label errors clearly") {
   const std::string src = "f =~ x1 + a*x2 + x3\nbad := a + missing";
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  latva::partable::LatentNames names;
+  auto pt = lavaanify(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -147,7 +150,7 @@ TEST_CASE("Effects: := referencing an unknown label errors clearly") {
   auto est = latva::fit::fit(*pt, *mr, samp).value();
   auto inf = ExpectedInfoSE{}.compute(*pt, *mr, samp, est).value();
 
-  auto defs_or = compute_defined(*fp, *pt, est, inf.vcov);
+  auto defs_or = compute_defined(*fp, *pt, names, est, inf.vcov);
   REQUIRE_FALSE(defs_or.has_value());
   CHECK(defs_or.error().kind == latva::PostError::Kind::NumericIssue);
 }
