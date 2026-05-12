@@ -103,7 +103,7 @@ struct Constraint {
 
 // === Flat partable ==========================================================
 // The direct output of the parser. The lavaanify step turns this into a
-// full ParTable (defaults inserted, free indices assigned, etc.). source_text
+// full LatentStructure (defaults inserted, free indices assigned, etc.). source_text
 // owns the bytes that all string_views in `rows` and `mods` point into.
 //
 // source_text is std::vector<char> rather than std::string because moving a

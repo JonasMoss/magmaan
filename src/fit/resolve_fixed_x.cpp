@@ -22,12 +22,12 @@ FitError make_err(FitError::Kind k, std::string detail) {
 }  // namespace
 
 fit_expected<void>
-resolve_fixed_x_from_sample(partable::ParTable&      pt,
+resolve_fixed_x_from_sample(partable::LatentStructure&      pt,
                             const model::MatrixRep&  rep,
                             const SampleStats&       samp) {
   if (rep.cell_for_row.size() != pt.size()) {
     return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
-        "MatrixRep cell count doesn't match ParTable"));
+        "MatrixRep cell count doesn't match LatentStructure"));
   }
   for (std::size_t i = 0; i < pt.size(); ++i) {
     if (pt.exo[i] != 1) continue;          // only fixed.x rows

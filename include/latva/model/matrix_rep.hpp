@@ -32,7 +32,7 @@ constexpr std::string_view to_string(MatId m) noexcept {
   return "?";
 }
 
-// One Cell per ParTable row. `used == false` means the partable row does
+// One Cell per LatentStructure row. `used == false` means the partable row does
 // not correspond to a matrix entry (constraint rows, define-param, and
 // rows the current build does not yet know how to place).
 struct Cell {
@@ -69,7 +69,7 @@ struct StructuralCell {
 //             structural_cells); Σ = Λ (I−B)⁻¹ Ψ (I−B)⁻ᵀ Λᵀ + Θ.
 enum class RepForm : std::uint8_t { PureCFA, Reduced };
 
-// Static map from a ParTable to LISREL matrix layout. Built once per
+// Static map from a LatentStructure to LISREL matrix layout. Built once per
 // partable; consumed by ModelEvaluator. No floating-point math here —
 // just integer indexing and variable orderings.
 struct MatrixRep {
@@ -92,6 +92,6 @@ struct MatrixRep {
 //               representation including phantom-latent regressions
 //               lands in P5.2.
 model_expected<MatrixRep>
-build_matrix_rep(const partable::ParTable& pt);
+build_matrix_rep(const partable::LatentStructure& pt);
 
 }  // namespace latva::model

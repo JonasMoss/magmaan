@@ -24,7 +24,7 @@ struct StandardizedSolution {
 // SEs come from the delta method: SE_std = √diag(J · vcov · Jᵀ) where
 // J is the (n_free × n_free) Jacobian of the transformation.
 post_expected<StandardizedSolution>
-standardize_lv(const partable::ParTable& pt,
+standardize_lv(const partable::LatentStructure& pt,
                const model::MatrixRep&   rep,
                const Estimates&          est,
                const Eigen::MatrixXd&    vcov);
@@ -46,7 +46,7 @@ standardize_lv(const partable::ParTable& pt,
 // includes terms from ∂σ_ii/∂θ (from `dsigma_dtheta`) for the indicator
 // scale, plus the ψ-only terms shared with `std.lv`.
 post_expected<StandardizedSolution>
-standardize_all(const partable::ParTable& pt,
+standardize_all(const partable::LatentStructure& pt,
                 const model::MatrixRep&   rep,
                 const Estimates&          est,
                 const Eigen::MatrixXd&    vcov);

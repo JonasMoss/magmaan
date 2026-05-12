@@ -29,11 +29,11 @@ using latva::model::MatId;
 using latva::model::ModelEvaluator;
 using latva::parse::Parser;
 using latva::partable::lavaanify;
-using latva::partable::ParTable;
+using latva::partable::LatentStructure;
 
 namespace {
 
-ParTable must_lavaanify(std::string_view src) {
+LatentStructure must_lavaanify(std::string_view src) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
   auto pt = lavaanify(*fp);

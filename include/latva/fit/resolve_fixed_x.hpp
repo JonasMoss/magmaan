@@ -14,7 +14,7 @@ namespace latva::fit {
 //
 // Mutates `pt` in place. Idempotent — safe to call more than once.
 fit_expected<void>
-resolve_fixed_x_from_sample(partable::ParTable&     pt,
+resolve_fixed_x_from_sample(partable::LatentStructure&     pt,
                             const model::MatrixRep& rep,
                             const SampleStats&      samp);
 

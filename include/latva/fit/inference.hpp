@@ -39,9 +39,9 @@ struct ExpectedInfoSE {
   static constexpr std::string_view name = "expected";
 
   // `pt` is taken by value because we resolve fixed.x `fixed_value`s from
-  // `samp` internally — symmetric with `fit()`. The caller's ParTable is untouched.
+  // `samp` internally — symmetric with `fit()`. The caller's LatentStructure is untouched.
   post_expected<Inference>
-  compute(partable::ParTable        pt,
+  compute(partable::LatentStructure        pt,
           const model::MatrixRep&   rep,
           const SampleStats&        samp,
           const Estimates&          est) const;
@@ -62,7 +62,7 @@ struct FdObservedInfoSE {
   double h_step = 1e-4;
 
   post_expected<Inference>
-  compute(partable::ParTable        pt,
+  compute(partable::LatentStructure        pt,
           const model::MatrixRep&   rep,
           const SampleStats&        samp,
           const Estimates&          est) const;
@@ -81,7 +81,7 @@ struct AnalyticObservedInfoSE {
   static constexpr std::string_view name = "observed.analytic";
 
   post_expected<Inference>
-  compute(partable::ParTable        pt,
+  compute(partable::LatentStructure        pt,
           const model::MatrixRep&   rep,
           const SampleStats&        samp,
           const Estimates&          est) const;
@@ -174,7 +174,7 @@ rls_chi2(const SampleStats&            samp,
 // block, with the μ-part of `Γ_NT` equal to `Σ_b` (so `Γ⁻¹·x_μ = Σ_b⁻¹·x_μ`,
 // no diagonal halving).
 post_expected<double>
-browne_residual_nt(partable::ParTable        pt,
+browne_residual_nt(partable::LatentStructure        pt,
                    const model::MatrixRep&   rep,
                    const SampleStats&        samp,
                    const Estimates&          est);

@@ -87,7 +87,7 @@ Eigen::MatrixXd symm_product_eigbasis(const Eigen::MatrixXd& Mtilde,
 // `fixed_value`s from the sample (matches `fit()` pattern), then builds and
 // shape-checks the evaluator.
 post_expected<model::ModelEvaluator>
-prepare_evaluator(partable::ParTable&       pt,
+prepare_evaluator(partable::LatentStructure&       pt,
                   const model::MatrixRep&   rep,
                   const SampleStats&        samp,
                   const Estimates&          est) {
@@ -120,7 +120,7 @@ prepare_evaluator(partable::ParTable&       pt,
 // ============================================================================
 
 post_expected<UFactor>
-build_u_factor(partable::ParTable        pt,
+build_u_factor(partable::LatentStructure        pt,
                const model::MatrixRep&   rep,
                const SampleStats&        samp,
                const Estimates&          est,
@@ -673,7 +673,7 @@ struct RobustSetup {
 };
 
 post_expected<RobustSetup>
-robust_setup(partable::ParTable pt, const model::MatrixRep& rep,
+robust_setup(partable::LatentStructure pt, const model::MatrixRep& rep,
              const SampleStats& samp, const Estimates& est,
              InferenceSpec spec, bool gamma_hat_overload) {
   if (spec.cov == ScoreCovariance::BrowneUnbiased) {
@@ -837,7 +837,7 @@ sandwich_finish(const RobustSetup& s, const Eigen::MatrixXd& meat) {
 }  // namespace
 
 post_expected<RobustSeResult>
-robust_se(partable::ParTable        pt,
+robust_se(partable::LatentStructure        pt,
           const model::MatrixRep&   rep,
           const SampleStats&        samp,
           const Estimates&          est,
@@ -859,7 +859,7 @@ robust_se(partable::ParTable        pt,
 }
 
 post_expected<RobustSeResult>
-robust_se(partable::ParTable        pt,
+robust_se(partable::LatentStructure        pt,
           const model::MatrixRep&   rep,
           const SampleStats&        samp,
           const Estimates&          est,

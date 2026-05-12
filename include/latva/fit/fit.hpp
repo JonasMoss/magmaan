@@ -19,7 +19,7 @@
 
 namespace latva::fit {
 
-// Estimation results — pure data, NO back-pointer to the ParTable.
+// Estimation results — pure data, NO back-pointer to the LatentStructure.
 // (See plan: separation of concerns. Caller composes pt + Estimates.)
 struct Estimates {
   Eigen::VectorXd theta;     // size = pt.n_free()
@@ -40,7 +40,7 @@ struct Estimates {
 // adding them in P9 / extensibility cleanup).
 template <class D = ML, class O = LbfgsOptimizer>
 fit_expected<Estimates>
-fit(partable::ParTable         pt,         // by value — we may resolve fixed.x
+fit(partable::LatentStructure         pt,         // by value — we may resolve fixed.x
     const model::MatrixRep&    rep,
     const SampleStats&         samp,
     D discrepancy = {},

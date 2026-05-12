@@ -30,7 +30,7 @@ struct ParseError {
   friend bool operator==(const ParseError&, const ParseError&) = default;
 };
 
-// Errors raised while turning a FlatPartable into a complete ParTable.
+// Errors raised while turning a FlatPartable into a complete LatentStructure.
 struct PartableError {
   enum class Kind : std::uint8_t {
     BadGroupSpec,             // n_groups < 1, c(...) arity ≠ n_groups, group.label arity ≠ n_groups
@@ -69,7 +69,7 @@ struct FitError {
 struct ModelError {
   enum class Kind : std::uint8_t {
     UnsupportedRowKind,       // a partable row isn't representable yet (e.g. ~ in v0.5.1)
-    UnknownVariable,          // ParTable row references a name not in any block
+    UnknownVariable,          // LatentStructure row references a name not in any block
     NonPositiveDefinite,      // P6+: implied Σ has bad eigenvalues
     EmptyMatrix,              // partable has no estimable moments
     EigenAssertion,           // re-thrown from EIGEN_NO_EXCEPTIONS path

@@ -15,7 +15,7 @@
 
 namespace {
 
-// Translate our ParTable to the same JSON shape that
+// Translate our LatentStructure to the same JSON shape that
 // tools/regen_oracle.R writes for the `ptable` layer (one row per object,
 // fields: id, user, lhs, op, rhs, block, group, free, exo, ustart, label,
 // plabel). NaN is written as JSON null to match the R `na = "null"` choice.
@@ -23,7 +23,7 @@ namespace {
 // a fixed row's `fixed_value`, or a free row's start hint (`starts.hint[free-1]`).
 nlohmann::json ptable_to_json(std::string_view input,
                               std::string_view corpus_id,
-                              const latva::partable::ParTable& pt,
+                              const latva::partable::LatentStructure& pt,
                               const latva::partable::Starts& starts) {
   using latva::test::op_to_lavaan_string;
   nlohmann::json j;

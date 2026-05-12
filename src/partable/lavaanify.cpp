@@ -164,10 +164,10 @@ VarInventory build_var_inventory(const VarSets& v, bool reduced) {
   return inv;
 }
 
-// === ParTable row builder ===================================================
+// === LatentStructure row builder ===================================================
 //
 // Every step appends to a single PartableBuilder. After all steps run we
-// emit the final ParTable, assigning id / plabel / free in a single sweep.
+// emit the final LatentStructure, assigning id / plabel / free in a single sweep.
 struct PendingRow {
   std::int8_t      user;
   std::string      lhs;
@@ -429,7 +429,7 @@ void add_auto_equality_constraints(const std::vector<PendingRow>& rows,
 
 // === Step 9: append user constraint rows ===================================
 //
-// Each constraint in flat.constraints becomes a ParTable row with op set
+// Each constraint in flat.constraints becomes a LatentStructure row with op set
 // to its constraint kind, lhs/rhs filled from the canonical text of the
 // Expr trees (or for Define, lhs is the new param name).
 void append_user_constraints(const parse::FlatPartable& flat,
@@ -468,7 +468,7 @@ void append_user_constraints(const parse::FlatPartable& flat,
 // `starts.hint[free-1]` (sized n_free, NaN where unspecified). The name-free
 // var-id columns + the `LatentNames` companion are filled here too, from `inv`.
 void finalize(const std::vector<PendingRow>& src, const VarInventory& inv,
-              ParTable& out, Starts& starts, LatentNames& names) {
+              LatentStructure& out, Starts& starts, LatentNames& names) {
   const std::size_t n = src.size();
   out.id.resize(n);
   out.user.resize(n);
@@ -659,7 +659,7 @@ build_group_template(const parse::FlatPartable& flat,
 
 }  // namespace
 
-partable_expected<ParTable> lavaanify(const parse::FlatPartable& flat,
+partable_expected<LatentStructure> lavaanify(const parse::FlatPartable& flat,
                                       const LavaanifyOptions& opts,
                                       Starts* out_starts,
                                       LatentNames* out_names) {
@@ -731,7 +731,7 @@ partable_expected<ParTable> lavaanify(const parse::FlatPartable& flat,
 
   // Final pass: id/plabel/free assignment + fixed_value / start-hint split +
   // var-id columns + the LatentNames companion.
-  ParTable out;
+  LatentStructure out;
   Starts starts;
   LatentNames names;
   finalize(rows, inv, out, starts, names);

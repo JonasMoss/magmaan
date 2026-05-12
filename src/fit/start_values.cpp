@@ -32,7 +32,7 @@ bool is_constraint_op(parse::Op op) noexcept {
 }  // namespace
 
 fit_expected<Eigen::VectorXd>
-simple_start_values(const partable::ParTable& pt,
+simple_start_values(const partable::LatentStructure& pt,
                     const model::MatrixRep& rep,
                     const SampleStats& samp,
                     const partable::Starts& starts) {

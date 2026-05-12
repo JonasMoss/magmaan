@@ -24,7 +24,7 @@ namespace latva::fit {
 // shorter-than-n_free `hint` simply means "no hints"). Multi-block extension
 // is straightforward; v0 is single-block.
 fit_expected<Eigen::VectorXd>
-simple_start_values(const partable::ParTable& pt,
+simple_start_values(const partable::LatentStructure& pt,
                     const model::MatrixRep& rep,
                     const SampleStats& samp,
                     const partable::Starts& starts = {});

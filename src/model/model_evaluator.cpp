@@ -44,7 +44,7 @@ inline Eigen::Index vech_len(Eigen::Index p) noexcept {
 }  // namespace
 
 model_expected<ModelEvaluator>
-ModelEvaluator::build(const partable::ParTable& pt, const MatrixRep& rep) {
+ModelEvaluator::build(const partable::LatentStructure& pt, const MatrixRep& rep) {
   if (rep.dims.empty()) {
     return std::unexpected(make_err(
         ModelError::Kind::EmptyMatrix,
@@ -53,7 +53,7 @@ ModelEvaluator::build(const partable::ParTable& pt, const MatrixRep& rep) {
   if (rep.cell_for_row.size() != pt.size()) {
     return std::unexpected(make_err(
         ModelError::Kind::UnknownVariable,
-        "cell_for_row length doesn't match ParTable size"));
+        "cell_for_row length doesn't match LatentStructure size"));
   }
 
   ModelEvaluator out;

@@ -26,7 +26,7 @@ namespace latva::partable {
 //   Latent    : LHS of `=~`                          (lv)
 enum class VarRole : std::uint8_t { Indicator, EndoOv, ExoOv, MiscOv, Latent };
 
-// Names that go with a `ParTable` — the *verbal* model. Everything in here is
+// Names that go with a `LatentStructure` — the *verbal* model. Everything in here is
 // for display / round-tripping / parsing; nothing on the model's numeric path
 // (matrix_rep, evaluator, fit, inference) reads it. Sizes: `var_name` is
 // `n_vars`; `row_*` are `n_rows`; `group_labels` is `n_groups`.
@@ -43,18 +43,18 @@ struct LatentNames {
   std::vector<std::string>  group_labels; // per-group level labels ("1".."n" if unsupplied)
 };
 
-// Lavaanified ParTable: model description in struct-of-arrays form.
+// Lavaanified LatentStructure: model description in struct-of-arrays form.
 //
 // Mirrors lavaan's parTable() columns, but only the model-description ones.
 // Estimation outputs (est, se, vcov) and the user's start *hints* live on
 // separate types (`Estimates`, `Starts`, ...) and are composed by the user,
-// not stored here. The one start-flavored thing the ParTable does carry is
+// not stored here. The one start-flavored thing the LatentStructure does carry is
 // `fixed_value`: the value at which a *fixed* parameter sits — that's a model
 // fact (`f =~ 1*x1`, a `std.lv` variance fix, a `fixed.x` covariance), not an
 // optimization hint. See docs/agents/rules.md (or the project plan) for the
 // rationale on the model/estimation split.
 //
-// Constraint statements (==, <, >, :=) are real ParTable rows just like in
+// Constraint statements (==, <, >, :=) are real LatentStructure rows just like in
 // lavaan, with `block=0` and `group=0`. Auto-equality from a shared user
 // label is encoded as a synthesized `==` row with `user=2` referencing two
 // `plabel`s; the source rows keep distinct `free` indices.
@@ -73,7 +73,7 @@ struct LatentNames {
 // re-derives. The string columns and `LatentNames`-bound columns (`label`,
 // `plabel`, `user`, `group_var`, `group_labels`) still live here for now;
 // a later stage moves them to `LatentNames` and renames this type.
-struct ParTable {
+struct LatentStructure {
   // Identity
   std::vector<std::int32_t> id;     // 1-based, matches lavaan
   std::vector<std::int8_t>  user;   // 0=auto, 1=user-supplied, 2=auto-equality
@@ -150,7 +150,7 @@ struct ParTable {
 
 // Lightweight const view into a single row.
 struct RowView {
-  const ParTable* pt;
+  const LatentStructure* pt;
   std::size_t     i;
   std::int32_t     id()     const noexcept { return pt->id[i]; }
   std::int8_t      user()   const noexcept { return pt->user[i]; }

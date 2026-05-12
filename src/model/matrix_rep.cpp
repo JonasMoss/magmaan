@@ -28,7 +28,7 @@ bool is_constraint_op(parse::Op op) noexcept {
 // Decide which form to use: PureCFA when there are no `~` regressions,
 // else Reduced. `~1` (mean structure) does NOT force Reduced — intercepts
 // live in Nu / Alpha and don't require phantom latents to represent.
-RepForm decide_form(const partable::ParTable& pt) noexcept {
+RepForm decide_form(const partable::LatentStructure& pt) noexcept {
   for (std::size_t i = 0; i < pt.size(); ++i) {
     if (pt.op[i] == parse::Op::Regression) return RepForm::Reduced;
   }
@@ -37,7 +37,7 @@ RepForm decide_form(const partable::ParTable& pt) noexcept {
 
 // Recover var-id → name from the partable's (still-present) string columns:
 // every variable appears as the lhs or rhs of at least one formula row.
-std::vector<std::string> var_names_of(const partable::ParTable& pt) {
+std::vector<std::string> var_names_of(const partable::LatentStructure& pt) {
   std::vector<std::string> names(static_cast<std::size_t>(pt.n_vars));
   for (std::size_t i = 0; i < pt.size(); ++i) {
     if (pt.is_constraint_row(i)) continue;
@@ -51,7 +51,7 @@ std::vector<std::string> var_names_of(const partable::ParTable& pt) {
 
 }  // namespace
 
-model_expected<MatrixRep> build_matrix_rep(const partable::ParTable& pt) {
+model_expected<MatrixRep> build_matrix_rep(const partable::LatentStructure& pt) {
   MatrixRep out;
   out.cell_for_row.resize(pt.size());
   out.form = decide_form(pt);

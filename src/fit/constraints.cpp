@@ -80,7 +80,7 @@ Eigen::MatrixXd EqConstraints::K() const {
 }
 
 post_expected<EqConstraints>
-build_eq_constraints(const partable::ParTable& pt) {
+build_eq_constraints(const partable::LatentStructure& pt) {
   const std::int32_t npar = pt.n_free();
   EqConstraints out;
   out.npar = npar;

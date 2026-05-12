@@ -176,7 +176,7 @@ eval(const parse::Expr& e, std::size_t n_free,
 
 post_expected<DefinedParams>
 compute_defined(const parse::FlatPartable& flat,
-                const partable::ParTable&  pt,
+                const partable::LatentStructure&  pt,
                 const Estimates&           est,
                 const Eigen::MatrixXd&     vcov) {
   const std::size_t n_free = static_cast<std::size_t>(est.theta.size());
