@@ -172,6 +172,8 @@ Rcpp::DataFrame latva_lavaanify(std::string syntax,
                                 bool auto_cov_lv_x = true,
                                 bool auto_cov_y = false,
                                 bool auto_fix_first = true,
+                                bool std_lv = false,
+                                bool effect_coding = false,
                                 bool fixed_x = true,
                                 bool meanstructure = false,
                                 int n_groups = 1,
@@ -185,6 +187,8 @@ Rcpp::DataFrame latva_lavaanify(std::string syntax,
   opts.auto_cov_lv_x  = auto_cov_lv_x;
   opts.auto_cov_y     = auto_cov_y;
   opts.auto_fix_first = auto_fix_first;
+  opts.std_lv         = std_lv;        // when true, forces auto.fix.first off (lavaan parity)
+  opts.effect_coding  = effect_coding; // free all loadings + LV var; adds `Σλ == #indicators`
   opts.fixed_x        = fixed_x;
   opts.meanstructure  = meanstructure;
   opts.n_groups       = n_groups;

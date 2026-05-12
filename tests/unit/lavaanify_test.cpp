@@ -81,6 +81,63 @@ TEST_CASE("lavaanify: 1-factor CFA produces 4 rows (3 loadings + 1 var auto.fix.
   CHECK(pt.n_free() == 6);
 }
 
+TEST_CASE("lavaanify: std_lv frees the first loading and fixes the LV variance at 1") {
+  // f =~ x1 + x2 + x3, std.lv = TRUE
+  //   → all three loadings free; f ~~ f fixed at 1.0 (auto-added)
+  LavaanifyOptions opts;
+  opts.std_lv = true;
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
+  REQUIRE(pt.size() == 7);
+
+  // Row 0: f =~ x1 — now FREE (no marker fix under std.lv)
+  CHECK(pt.lhs[0]  == "f");
+  CHECK(pt.op[0]   == Op::Measurement);
+  CHECK(pt.rhs[0]  == "x1");
+  CHECK(pt.free[0] > 0);
+  CHECK(std::isnan(pt.ustart[0]));
+  CHECK(pt.free[1] > 0);
+  CHECK(pt.free[2] > 0);
+
+  // Row 6: f ~~ f — FIXED at 1.0, auto-added (user=0)
+  CHECK(pt.lhs[6]    == "f");
+  CHECK(pt.op[6]     == Op::Covariance);
+  CHECK(pt.rhs[6]    == "f");
+  CHECK(pt.user[6]   == 0);
+  CHECK(pt.free[6]   == 0);
+  CHECK(pt.ustart[6] == 1.0);
+
+  // 3 free loadings + 3 residual variances; LV variance fixed → 6 free params.
+  CHECK(pt.n_free() == 6);
+
+  // Same model under the (default) marker convention: same #rows, same
+  // #free params — a bijective reparameterization.
+  auto marker = must_lavaanify("f =~ x1 + x2 + x3");
+  CHECK(marker.size()   == pt.size());
+  CHECK(marker.n_free() == pt.n_free());
+  CHECK(marker.free[0]  == 0);   // marker fixes the first loading...
+  CHECK(pt.free[0]      != 0);   // ...std.lv does not.
+}
+
+TEST_CASE("lavaanify: std_lv ignores auto_fix_first and leaves a user-fixed LV variance alone") {
+  // f =~ x1 + x2 + x3; f ~~ 2*f, std.lv = TRUE (auto_fix_first left on — std.lv wins)
+  LavaanifyOptions opts;
+  opts.std_lv = true;
+  opts.auto_fix_first = true;   // forced off by std_lv
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3\nf ~~ 2*f", opts);
+
+  CHECK(pt.free[0] > 0);   // first loading still free
+
+  bool found = false;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] == Op::Covariance && pt.lhs[i] == "f" && pt.rhs[i] == "f") {
+      found = true;
+      CHECK(pt.free[i]   == 0);
+      CHECK(pt.ustart[i] == 2.0);   // the user's value, not std.lv's 1.0
+    }
+  }
+  CHECK(found);
+}
+
 TEST_CASE("lavaanify: ids are 1-based, plabels match ids") {
   auto pt = must_lavaanify("f =~ x1 + x2 + x3");
   for (std::size_t i = 0; i < pt.size(); ++i) {

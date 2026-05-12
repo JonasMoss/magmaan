@@ -33,7 +33,8 @@ struct ParseError {
 // Errors raised while turning a FlatPartable into a complete LatentStructure.
 struct PartableError {
   enum class Kind : std::uint8_t {
-    BadGroupSpec,             // n_groups < 1, c(...) arity ≠ n_groups, group.label arity ≠ n_groups
+    BadGroupSpec,             // n_groups < 1, c(...) arity ≠ n_groups, group.label arity ≠ n_groups,
+                              // or incompatible identification options (std_lv + effect_coding)
     UnknownLabelInConstraint, // referenced label has no source row
     InconsistentModifiers,    // e.g. start(0.5) AND fixed value on same row
     EmptyModel,               // no formula rows, no constraints

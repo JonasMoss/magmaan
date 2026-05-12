@@ -4,8 +4,11 @@ Status: P0–P8 done (parser → partable → matrix rep → evaluator → ML/LB
 χ², df) plus post-P8 extensions (multi-group — configural *and* measurement invariance via shared
 labels / `c(...)` per-group modifiers / cross-group equality constraints, with the grouping variable
 + labels stored in the partable; robust SEs / UΓ / Satorra-Bentler family — multi-group for the
-cov-only `Expected`-bread path; mean structure `~1`; `:=` defined parameters; standardized
-`std.lv`/`std.all`; CFI/TLI/RMSEA; LR/Wald/z tests; Browne residual tests). Golden-tested against
+cov-only `Expected`-bread path; mean structure `~1`; `:=` defined parameters; equality constraints —
+simple (`a == b`, shared labels) *and* general linear (`a == 2*b+c`, `b2+b3 == 1.5`) via an affine
+reparam `θ = θ_0 + Kα`; identification conventions `std.lv` / `effect.coding` (`LavaanifyOptions::std_lv`
+/ `::effect_coding`; marker stays default); standardized `std.lv`/`std.all`; CFI/TLI/RMSEA; LR/Wald/z
+tests; Browne residual tests). Golden-tested against
 lavaan (`tests/golden/`). This file tracks what's left to make **full-data (complete-data)
 normal-theory ML estimation feature-complete vs. lavaan's `cfa()`/`sem()`/`lavaan()` with
 `estimator = "ML"`.** Out of scope (other tracks): FIML/missing data, ordinal/DWLS/polychoric,
@@ -187,7 +190,7 @@ Smaller not-on-roadmap items noticed along the way:
 
 ---
 
-## P9 — constraint enforcement (phase 1 done; phases 2–3 pending)
+## P9 — constraint enforcement (phases 1–2 done; phase 3 out of scope)
 
 **Phase 1 ✅: simple equality, `θ_i = θ_j`.** Covers shared-label equality (`f =~ x1 + a*x2 +
 a*x3`), measurement invariance (shared loading labels across groups → cross-group `==` rows), equal
@@ -210,15 +213,37 @@ all three `*InfoSE::compute`), `CMakeLists.txt` (new TU). `build_eq_constraints`
 `<`/`>` rows present (inequalities → phase 3); an `==` side that isn't a bare identifier (arbitrary
 linear expressions like `a == 2*b` → phase 2); an `==` side referencing a fixed (free==0) param.
 
-**Phase 2 (later): general linear equality** (`a == 2*b + c`, `a == 0`). Needs the constraint Expr
-ASTs (from the `FlatPartable` — same pattern as `compute_defined()` which takes both `flat` and `pt`)
-+ the forward-mode AD in `src/fit/effects.cpp`'s `eval()` to get each `==` row's gradient (= a row of
-`R`) and check linearity. General null-space reparam `θ = θ_0 + Kα` (K = orthonormal basis of
-`ker(R)`, θ_0 a particular solution). `fit()` and the SE methods would take the `FlatPartable` too.
+**Phase 2 ✅: general linear equality** (`a == 2*b + c`, `b2 + b3 == 1.5`, `d == 0`). Solver-free —
+still a reparameterization, just affine: `θ = θ_0 + Kα` where `K` (npar × n_alpha) is an orthonormal
+basis of `ker(R_full)` and `θ_0` a min-norm solution of `R_full · θ = d` (`R_full` stacks the
+`eq_groups` "merge" rows `θ_i − θ_j = 0` above the general-linear rows). Inference stays standard
+(`df += rank R_full`, `vcov = K(KᵀIK)⁻¹Kᵀ` — basis-independent so it matches lavaan's). Implemented
+*structurally* (no AD): `src/partable/lin_constraints.cpp` `analyze_linear()` reduces each `==`-row
+side to an affine `Σ coef·θ + cst` or `nullopt` (genuinely nonlinear ⇒ stays flagged → fit() errors);
+`resolve_lin_constraints()` (called by `lavaanify` and `from_lavaan_partable`, re-parsing the rows'
+canonical text) fills `LatentStructure.lin_constraint_R`/`_d` and clears `has_unenforced_constraints`
+if only linear rows remained. `build_eq_constraints` then does one `JacobiSVD(R_full)` for `K`/`θ_0`/rank
+and the feasibility check; the no-general-linear path stays byte-identical to phase 1's 0/1-`K` code.
+`fit.hpp` projects start values onto the surface and short-circuits the fully-pinned (`n_alpha == 0`)
+case; `inference.cpp`/`robust.cpp`/`fit_measures.cpp` unchanged (already generic in `K`). New TUs in
+`CMakeLists.txt`. `LavaanifyOptions::effect_coding` rides on top: skips auto.fix.first/std.lv (all
+loadings + LV var free) and synthesizes a `.p…+.p… == #indicators` row per (latent, group) — mutually
+exclusive with `std_lv`. Golden: `tests/golden/lin_constraint_golden_test.cpp` + `tests/fixtures/fit_lincon/`
+(`cfa("visual =~ x1 + b2*x2 + b3*x3 ; b2 + b3 == 1.5", HS)`: θ̂ ≤ 5e-6, se ≤ 1e-4, χ²/df exact,
+`df == unconstrained_df + 1`). Unit: `tests/unit/constraints_test.cpp` (general/infeasible/nonlinear/effect-coding),
+`tests/unit/lin_constraints_test.cpp` (`analyze_linear`). R: `effect_coding` param on `latva_lavaanify`;
+`r-package/examples/linear_equality_constraint.R`. Not built: mean-structure effect coding (`Σν == 0`).
 
-**Phase 3 (later): nonlinear equality + inequality `<`/`>`** (`a == b*c`, `a > 0`). Augmented-Lagrangian
-(or penalty) outer loop around the existing LBFGS, evaluating constraint functions + Jacobians each
-outer iteration (again via `effects.cpp`'s `eval()`). lavaan's `nlminb`-with-`eval_g` path.
+**Phase 3 — nonlinear equality + inequality `<`/`>` (`a == b*c`, `(...)^2`, `exp(...)`, `a > 0`, `L1 > L2`):
+out of scope.** Two blockers: (1) can't reparameterize away — needs an augmented-Lagrangian/penalty
+outer loop around LBFGS or a switch to a constrained optimizer (the deferred "v0.5 constrained
+optimizer"); (2) **inference** — an active inequality at θ̂ puts the truth on a boundary, so the LRT
+→ chi-bar-squared (a χ² mixture with active-cone-geometry weights, often needing Monte Carlo) and Wald
+SEs are non-standard. Shipping `fit()` under inequalities with ordinary-theory SEs/χ²/df would be
+silently wrong exactly where it matters, and doing the inference right is a separate research-grade
+module. Keep the current clear error. (Nonlinear *equality* alone is asymptotically fine, but travels
+with phase 3 computationally.) If Heywood cases ever bite, the honest fix is the detector in **G5**
+(flag a parameter that hit its bound, mark its SE untrustworthy) — not constraint enforcement.
 
 ### Verification (P9 phase 1)
 

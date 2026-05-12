@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -29,15 +30,17 @@ using latva::model::MatId;
 using latva::model::ModelEvaluator;
 using latva::parse::Parser;
 using latva::partable::lavaanify;
+using latva::partable::LavaanifyOptions;
 using latva::partable::LatentStructure;
 
 namespace {
 
-LatentStructure must_lavaanify(std::string_view src) {
+LatentStructure must_lavaanify(std::string_view src, LavaanifyOptions opts = {}) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
-  REQUIRE(pt.has_value());
+  auto pt = lavaanify(*fp, opts);
+  REQUIRE_MESSAGE(pt.has_value(),
+      "lavaanify failed: " << (pt.has_value() ? "" : pt.error().detail));
   return std::move(*pt);
 }
 
@@ -173,4 +176,161 @@ TEST_CASE("build_eq_constraints: inequality (`<` / `>`) rows error out — not y
   auto con_or = build_eq_constraints(pt);
   REQUIRE_FALSE(con_or.has_value());
   CHECK(con_or.error().kind == latva::PostError::Kind::NumericIssue);
+}
+
+// === P9 phase 2 — general LINEAR equality constraints ======================
+
+TEST_CASE("build_eq_constraints: pure-merge path unchanged — no lin_constraint rows, 0/1 K") {
+  auto pt = must_lavaanify("f =~ x1 + a*x2 + a*x3");
+  CHECK(pt.lin_constraint_R.empty());
+  CHECK(pt.lin_constraint_d.empty());
+  auto con = build_eq_constraints(pt).value();
+  CHECK(con.active());
+  CHECK_FALSE(con.group.empty());                 // pure-merge ⇒ diagnostic group filled
+  CHECK(con.Kmat.rows() == pt.n_free());
+  CHECK(con.Kmat.cols() == con.n_alpha);
+  CHECK(con.theta0.isZero());                      // θ₀ = 0 in the merge case
+  // K is the 0/1 group-membership matrix.
+  for (std::int32_t k = 0; k < con.npar; ++k) {
+    for (std::int32_t g = 0; g < con.n_alpha; ++g) {
+      const double want = (con.group[static_cast<std::size_t>(k)] == g) ? 1.0 : 0.0;
+      CHECK(con.Kmat(k, g) == want);
+    }
+  }
+}
+
+TEST_CASE("build_eq_constraints: general linear `a == 2*b + c`") {
+  // x0 is the marker (fixed), so a/b/c (loadings of x1/x2/x3) are all free.
+  auto pt = must_lavaanify("f =~ x0 + a*x1 + b*x2 + c*x3\na == 2*b + c");
+  CHECK_FALSE(pt.has_unenforced_constraints);     // linear ⇒ resolved, not flagged
+  CHECK(pt.lin_constraint_d.size() == 1);
+  auto con = build_eq_constraints(pt).value();
+  CHECK(con.active());
+  CHECK(con.rank == 1);
+  CHECK(con.npar == pt.n_free());
+  CHECK(con.n_alpha == pt.n_free() - 1);
+  CHECK(con.Kmat.cols() == con.n_alpha);
+  CHECK(con.group.empty());                        // general path ⇒ no merge partition
+  // K's columns are orthonormal (an SVD kernel basis).
+  Eigen::MatrixXd KtK = con.Kmat.transpose() * con.Kmat;
+  CHECK(KtK.isApprox(Eigen::MatrixXd::Identity(con.n_alpha, con.n_alpha), 1e-9));
+}
+
+TEST_CASE("fit: a linear equality constraint `b2 + b3 == 1.5` is enforced") {
+  auto samp = fixture_samp_3();
+  auto pt   = must_lavaanify("f =~ x1 + b2*x2 + b3*x3\nb2 + b3 == 1.5");
+  CHECK_FALSE(pt.has_unenforced_constraints);
+  auto rep  = build_matrix_rep(pt).value();
+
+  auto est_or = latva::fit::fit(pt, rep, samp);
+  REQUIRE_MESSAGE(est_or.has_value(),
+      "constrained fit failed: " << (est_or.has_value() ? "" : est_or.error().detail));
+  const auto& est = *est_or;
+  CHECK(static_cast<std::int32_t>(est.theta.size()) == pt.n_free());
+
+  auto ev = ModelEvaluator::build(pt, rep).value();
+  const Eigen::Index k_x2 = lambda_free_idx(ev, 1);
+  const Eigen::Index k_x3 = lambda_free_idx(ev, 2);
+  REQUIRE(k_x2 >= 0);
+  REQUIRE(k_x3 >= 0);
+  CHECK(est.theta(k_x2) + est.theta(k_x3) == doctest::Approx(1.5).epsilon(1e-9));
+
+  // df increases by 1 vs the unconstrained model.
+  auto pt_u  = must_lavaanify("f =~ x1 + b2*x2 + b3*x3");
+  auto rep_u = build_matrix_rep(pt_u).value();
+  auto est_u = latva::fit::fit(pt_u, rep_u, samp).value();
+  auto inf_u = ExpectedInfoSE{}.compute(pt_u, rep_u, samp, est_u).value();
+  auto inf_c = ExpectedInfoSE{}.compute(pt, rep, samp, est).value();
+  CHECK(inf_c.df == inf_u.df + 1);
+  CHECK(inf_c.chi2 >= inf_u.chi2 - 1e-9);
+  CHECK(inf_c.se.size() == pt.n_free());           // full n_free-length SEs
+}
+
+TEST_CASE("fit: `d == 0` pins a loading to zero") {
+  auto samp = fixture_samp_3();
+  auto pt   = must_lavaanify("f =~ x1 + d*x2 + x3\nd == 0");
+  CHECK_FALSE(pt.has_unenforced_constraints);
+  auto rep  = build_matrix_rep(pt).value();
+  auto est  = latva::fit::fit(pt, rep, samp).value();
+  auto ev   = ModelEvaluator::build(pt, rep).value();
+  const Eigen::Index k_x2 = lambda_free_idx(ev, 1);
+  REQUIRE(k_x2 >= 0);
+  CHECK(std::abs(est.theta(k_x2)) < 1e-8);
+}
+
+TEST_CASE("build_eq_constraints: an infeasible linear system errors out") {
+  auto pt = must_lavaanify("f =~ x1 + d*x2 + x3\nd == 1\nd == 2");
+  CHECK_FALSE(pt.has_unenforced_constraints);       // both rows ARE linear...
+  auto con_or = build_eq_constraints(pt);           // ...but jointly infeasible
+  REQUIRE_FALSE(con_or.has_value());
+  CHECK(con_or.error().kind == latva::PostError::Kind::NumericIssue);
+  CHECK(con_or.error().detail.find("infeasible") != std::string::npos);
+}
+
+TEST_CASE("build_eq_constraints: a genuinely nonlinear `==` is still rejected") {
+  auto pt = must_lavaanify("f =~ x1 + a*x2 + b*x3\na == b*b");
+  CHECK(pt.has_unenforced_constraints);             // b*b ⇒ not affine ⇒ stays flagged
+  auto con_or = build_eq_constraints(pt);
+  REQUIRE_FALSE(con_or.has_value());
+  CHECK(con_or.error().kind == latva::PostError::Kind::NumericIssue);
+}
+
+// === effect coding =========================================================
+
+TEST_CASE("lavaanify: effect_coding synthesizes `Σλ == #indicators` and frees everything") {
+  LavaanifyOptions opts; opts.effect_coding = true;
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
+  CHECK_FALSE(pt.has_unenforced_constraints);
+  CHECK(pt.lin_constraint_d.size() == 1);           // one latent, one group
+  CHECK(pt.lin_constraint_d[0] == doctest::Approx(3.0));
+  // The R row has a 1 on each of the three loading columns and 0 elsewhere.
+  REQUIRE(pt.lin_constraint_R.size() == static_cast<std::size_t>(pt.n_free()));
+  double rowsum = 0.0; int ones = 0;
+  for (double v : pt.lin_constraint_R) { rowsum += v; if (v == 1.0) ++ones; }
+  CHECK(rowsum == doctest::Approx(3.0));
+  CHECK(ones == 3);
+  CHECK(pt.free[0] > 0);                             // first loading is free, not the marker
+
+  // f ~~ f stays free under effect coding.
+  auto rep = build_matrix_rep(pt).value();
+  auto ev  = ModelEvaluator::build(pt, rep).value();
+  bool psi_free = false;
+  for (const auto& loc : ev.param_locations())
+    if (loc.mat == MatId::Psi && loc.row == loc.col) psi_free = true;
+  CHECK(psi_free);
+}
+
+TEST_CASE("lavaanify: effect_coding and std_lv are mutually exclusive") {
+  LavaanifyOptions opts; opts.effect_coding = true; opts.std_lv = true;
+  auto fp = Parser::parse("f =~ x1 + x2 + x3");
+  REQUIRE(fp.has_value());
+  auto pt = lavaanify(*fp, opts);
+  REQUIRE_FALSE(pt.has_value());
+  CHECK(pt.error().kind == latva::PartableError::Kind::BadGroupSpec);
+}
+
+TEST_CASE("fit: effect_coding — loadings sum to #indicators; χ²/df match the marker fit") {
+  auto samp = fixture_samp_3();
+  LavaanifyOptions opts; opts.effect_coding = true;
+  auto pt  = must_lavaanify("f =~ x1 + x2 + x3", opts);
+  auto rep = build_matrix_rep(pt).value();
+  auto est_or = latva::fit::fit(pt, rep, samp);
+  REQUIRE_MESSAGE(est_or.has_value(),
+      "effect-coding fit failed: " << (est_or.has_value() ? "" : est_or.error().detail));
+  const auto& est = *est_or;
+
+  auto ev = ModelEvaluator::build(pt, rep).value();
+  const double lsum = est.theta(lambda_free_idx(ev, 0)) +
+                      est.theta(lambda_free_idx(ev, 1)) +
+                      est.theta(lambda_free_idx(ev, 2));
+  CHECK(lsum == doctest::Approx(3.0).epsilon(1e-7));
+
+  auto inf_ec = ExpectedInfoSE{}.compute(pt, rep, samp, est).value();
+  // Marker fit of the same model — bijective reparam ⇒ identical χ² and df.
+  auto pt_m  = must_lavaanify("f =~ x1 + x2 + x3");
+  auto rep_m = build_matrix_rep(pt_m).value();
+  auto est_m = latva::fit::fit(pt_m, rep_m, samp).value();
+  auto inf_m = ExpectedInfoSE{}.compute(pt_m, rep_m, samp, est_m).value();
+  CHECK(inf_ec.df == inf_m.df);
+  CHECK(inf_ec.chi2 == doctest::Approx(inf_m.chi2).epsilon(1e-6));
 }

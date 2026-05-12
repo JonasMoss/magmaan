@@ -12,7 +12,15 @@
 * We might separate the table in two: One for the actual structure (independent of names), one for names and labels. Maybe better separation?
 
 ## Optimization
-* [ ] Use unit variance for identification, not setting arbitrary params to 1.
+* [x] Use unit variance for identification, not setting arbitrary params to 1.
+  * `LavaanifyOptions::std_lv` (≙ lavaan's `std.lv = TRUE`): free the first loading
+    per latent, fix each latent's `~~`-self variance at 1.0.
+  * `LavaanifyOptions::effect_coding` (≙ lavaan's `effect.coding = "loadings"`):
+    free all loadings + LV variances, add `Σλ == #indicators` per latent (rides on
+    P9 phase-2 general linear-equality constraints). Mutually exclusive with `std_lv`.
+  * Marker stays the default (oracle contract). R: `latva_lavaanify(m, std_lv=TRUE)` /
+    `latva_lavaanify(m, effect_coding=TRUE)`. Mean-structure effect coding (`Σν == 0`)
+    not yet built.
 
 ## Estimation methods
 * GLS family: Figure out a setup for this; do we supply a weighting matrix or make separate functions?

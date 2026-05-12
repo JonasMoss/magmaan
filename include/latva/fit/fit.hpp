@@ -63,10 +63,11 @@ fit(partable::LatentStructure         pt,         // by value — we may resolve
   auto x0_or = simple_start_values(pt, rep, samp, starts);
   if (!x0_or.has_value()) return std::unexpected(x0_or.error());
 
-  // Linear equality constraints (shared labels, explicit `a == b`) are
-  // enforced by reparameterizing θ = K·α — merging equality-constrained
-  // free params into one. The unconstrained case is the identity reparam,
-  // so it stays on the zero-overhead branch below.
+  // Linear equality constraints (shared labels, explicit `a == b`, general
+  // linear `a == 2*b+c` / `Σλ == k`) are enforced by reparameterizing
+  // θ = θ₀ + K·α — over the reduced α (size n_alpha ≤ npar). The unconstrained
+  // case is the identity reparam (θ₀ = 0, K = I, active() == false), so it
+  // stays on the zero-overhead branch below.
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) {
     return std::unexpected(FitError{
@@ -113,9 +114,19 @@ fit(partable::LatentStructure         pt,         // by value — we may resolve
                      out_or->iterations};
   }
 
-  // Reparameterized: optimize over α (size n_alpha < npar); θ = K·α,
-  // ∇_α = K'·∇_θ. Start α from the per-group mean of the simple start values.
-  Eigen::VectorXd alpha0 = con.contract_mean(*x0_or);
+  // Fully constrained (n_alpha == 0): the constraints pin θ entirely — nothing
+  // to optimize. Return θ₀ and its objective value directly.
+  if (con.n_alpha == 0) {
+    Eigen::VectorXd theta = con.expand(Eigen::VectorXd(0));
+    Eigen::VectorXd scratch(theta.size());
+    const double f = eval_at(theta, scratch);
+    return Estimates{std::move(theta), f, 0};
+  }
+
+  // Reparameterized: optimize over α (size n_alpha < npar); θ = θ₀ + K·α,
+  // ∇_α = K'·∇_θ. Start α by projecting the simple start values onto the
+  // constraint surface (per-group mean for the pure-merge case).
+  Eigen::VectorXd alpha0 = con.contract(*x0_or);
   auto objective_alpha = [&](const Eigen::VectorXd& a,
                              Eigen::VectorXd&       grad_a) -> double {
     const Eigen::VectorXd x = con.expand(a);

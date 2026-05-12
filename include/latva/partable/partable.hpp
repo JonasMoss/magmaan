@@ -103,11 +103,24 @@ struct LatentStructure {
   // Linear-equality reparameterization, precomputed by lavaanify (or
   // `compute_eq_groups`): `eq_groups[k]` (0-based) is the merged-parameter
   // group of the (k+1)-th free param — free params in the same group are equal
-  // (shared label, explicit `a == b`, cross-group invariance). Empty ⇒ identity
-  // (every param its own group). `has_unenforced_constraints` is set when the
-  // model carries an `<` / `>` row or a non-bare `==` expression (`a == 2*b`):
-  // `fit()` then errors (those phases aren't implemented). See fit/constraints.
+  // (shared label, explicit bare `a == b`, cross-group invariance). Empty ⇒
+  // identity (every param its own group).
   std::vector<std::int32_t> eq_groups;
+
+  // General-*linear* equality constraints that can't be expressed as a mere
+  // parameter merge (`a == 2*b + c`, `b2 + b3 == 1.5`, `Σλ == k` for effect
+  // coding): `R·θ = d` over the `n_free()` free params. `lin_constraint_R` is
+  // row-major, `(lin_constraint_d.size()) × n_free()`. Filled by
+  // `resolve_lin_constraints` (which re-parses the `==` rows `compute_eq_groups`
+  // left flagged); empty in the common case. `build_eq_constraints` stacks these
+  // on top of the `eq_groups` merge rows to form the affine reparam `θ = θ₀ + Kα`.
+  std::vector<double>       lin_constraint_R;
+  std::vector<double>       lin_constraint_d;
+
+  // Set when the model carries an `<` / `>` row or a genuinely *nonlinear* `==`
+  // expression (`a == b*c`) — `fit()` then errors (those phases aren't
+  // implemented). Cleared by `resolve_lin_constraints` once every non-bare `==`
+  // row has been reduced to a `lin_constraint_R` row (and no `<`/`>` remain).
   bool                      has_unenforced_constraints = false;
 
   // Methods-developer extensibility — for columns latva itself doesn't ship.

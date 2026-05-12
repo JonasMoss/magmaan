@@ -61,6 +61,17 @@ ctest --preset asan
 
 `asan` is the canonical CI build (combines AddressSanitizer + UBSan).
 
+There's a `justfile` at the repo root wrapping the common loops — `just build`,
+`just test` (build + ctest), `just r-install`, `just r-check` (reinstall the R
+bindings + run `r-package/examples/*.R` vs lavaan), `just regen-oracle`,
+`just check` (everything). `just` with no recipe lists them.
+
+The R bindings (`r-package/`) link the prebuilt Debug-preset `liblatva.a`;
+`src/Makevars` makes the package objects depend on it, so a C++ *header* change
+correctly forces the R glue to recompile against the new ABI. If you ever see an
+`undefined symbol` at R load time anyway, `just r-clean` (or `rm -f
+r-package/src/*.o`) and reinstall.
+
 ## Conventions
 
 - Lowercase `snake_case` for filenames and free functions; `CamelCase`

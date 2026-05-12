@@ -21,6 +21,21 @@ struct LavaanifyOptions {
   bool auto_cov_lv_x  = true;   // covariances among exogenous latents
   bool auto_cov_y     = false;  // covariances among endogenous LV/OV (for SEM with multiple y)
   bool auto_fix_first = true;   // fix first loading per LV to 1.0 (marker indicator)
+  // `std.lv` identification: scale each latent by fixing its `~~`-self
+  // variance at 1.0 instead of fixing a marker loading. When true,
+  // auto.fix.first is forced off regardless of `auto_fix_first` (lavaan does
+  // the same: `if (std.lv) auto.fix.first <- FALSE`) and the first loading
+  // stays free. Marker (`auto_fix_first`) remains the default — the oracle
+  // contract is that bare `cfa(model, data)` is the marker parameterization.
+  bool std_lv         = false;  // fix each LV variance at 1.0 instead of a marker loading
+  // `effect.coding` identification (Little/Slegers/Card 2006; ≙ lavaan
+  // `cfa(…, effect.coding = "loadings")`): leave *everything* free — every
+  // loading and the LV variance — and add one linear-equality row per latent,
+  // `Σλ == #indicators`, so the loadings average to 1 and the latent's metric
+  // is the average of its indicators'. Forces auto.fix.first and std.lv off;
+  // mutually exclusive with `std_lv` (lavaanify errors on both). Mean-structure
+  // effect coding (`Σν == 0`) is a future sub-step, not yet implemented.
+  bool effect_coding  = false;  // free all loadings + LV var; add `Σλ == #indicators`
   bool fixed_x        = true;   // mirror lavaan: data-given exogenous OV moments
   bool meanstructure  = false;  // auto-add ν (free) for OV and α (fixed at 0) for LV
   // Group identity. `n_groups` (≙ lavaan `ngroups`) drives row replication;
@@ -36,7 +51,8 @@ struct LavaanifyOptions {
 // production: lavaanify (the P3 pipeline; see project plan for steps)
 //
 // Turns a parsed FlatPartable into a complete LatentStructure: classifies variables,
-// applies user modifiers, auto-adds default rows, fixes marker indicators,
+// applies user modifiers, auto-adds default rows, applies the chosen latent
+// scaling (marker indicator via auto.fix.first, or `std.lv` LV-variance fix),
 // fixed.x mirrors, synthesizes auto-equality constraints, assigns id /
 // plabel / free indices, appends user constraints as LatentStructure rows, and
 // stamps `group_var` / `group_labels` onto the result.
