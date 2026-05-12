@@ -4,7 +4,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -26,8 +25,8 @@ namespace latva::partable {
 //   Latent    : LHS of `=~`                          (lv)
 enum class VarRole : std::uint8_t { Indicator, EndoOv, ExoOv, MiscOv, Latent };
 
-// Names that go with a `LatentStructure` — the *verbal* model. Everything in here is
-// for display / round-tripping / parsing; nothing on the model's numeric path
+// Names that go with a `LatentStructure` — the *verbal* model. Everything in here
+// is for display / round-tripping / parsing; nothing on the model's numeric path
 // (matrix_rep, evaluator, fit, inference) reads it. Sizes: `var_name` is
 // `n_vars`; `row_*` are `n_rows`; `group_labels` is `n_groups`.
 struct LatentNames {
@@ -43,49 +42,39 @@ struct LatentNames {
   std::vector<std::string>  group_labels; // per-group level labels ("1".."n" if unsupplied)
 };
 
-// Lavaanified LatentStructure: model description in struct-of-arrays form.
+// Lavaanified model structure — what to estimate, in struct-of-arrays form,
+// *modulo* estimator (ML/GLS/WLS/polychorics), identification convention
+// (marker / std.lv / effect coding), and names. It carries integer variable
+// ids + per-variable roles + the canonical orderings, so `matrix_rep` reads
+// the variable classification rather than re-deriving it from name strings.
 //
-// Mirrors lavaan's parTable() columns, but only the model-description ones.
-// Estimation outputs (est, se, vcov) and the user's start *hints* live on
-// separate types (`Estimates`, `Starts`, ...) and are composed by the user,
-// not stored here. The one start-flavored thing the LatentStructure does carry is
-// `fixed_value`: the value at which a *fixed* parameter sits — that's a model
-// fact (`f =~ 1*x1`, a `std.lv` variance fix, a `fixed.x` covariance), not an
-// optimization hint. See docs/agents/rules.md (or the project plan) for the
-// rationale on the model/estimation split.
+// Estimation outputs (est, se, vcov) live on `Estimates` / `Inference`; the
+// user's start *hints* live on `Starts`; the verbal model (names, user labels,
+// group var + level labels, `.pN.` plabels) lives on `LatentNames`. A
+// lavaan-shaped projection (`LavaanParTable`, see `lavaan_view.hpp`) bundles
+// them back up for display and round-tripping. The one start-flavored thing
+// the structure *does* carry is `fixed_value`: the value at which a *fixed*
+// parameter sits — a model fact (`f =~ 1*x1`, a `std.lv` variance fix, a
+// `fixed.x` covariance), not an optimization hint.
 //
-// Constraint statements (==, <, >, :=) are real LatentStructure rows just like in
-// lavaan, with `block=0` and `group=0`. Auto-equality from a shared user
-// label is encoded as a synthesized `==` row with `user=2` referencing two
-// `plabel`s; the source rows keep distinct `free` indices.
+// Constraint statements (==, <, >, :=) are real rows just like in lavaan, with
+// `group = 0`. Auto-equality from a shared user label is encoded as a
+// synthesized `==` row referencing two `.pN.` plabels (held on `LatentNames`);
+// the source rows keep distinct `free` indices. The resolved equality groups
+// are precomputed into `eq_groups`.
 //
-// Group identity is part of the model: `n_groups()` ≥ 1 always; the
-// single-group case is just `n_groups()==1` with `group_var` empty — not a
-// different shape. `group_var` / `group_labels` are pure metadata (no code
-// path branches on them); they round-trip the grouping variable's name and
-// per-group level labels (lavaan keeps these on `@Data`, but latva treats
-// them as belonging to the model).
-//
-// NOTE (refactor in progress, stage B1): the structural columns below are
-// being migrated to a name-free form — `var_role` / `ov_order` / `lv_ext_order`
-// / `ov_pos` / `lv_ext_pos` / `lhs_var` / `rhs_var` mirror the string columns
-// `lhs` / `rhs` and the variable classification that `matrix_rep` currently
-// re-derives. The string columns and `LatentNames`-bound columns (`label`,
-// `plabel`, `user`, `group_var`, `group_labels`) still live here for now;
-// a later stage moves them to `LatentNames` and renames this type.
+// Group identity is part of the model only as `n_groups()` ≥ 1 plus the
+// per-row `group` index; the *named* part (which variable, what the level
+// labels are) is a `LatentNames` concern. The single-group case is just
+// `n_groups() == 1`.
 struct LatentStructure {
-  // Identity
-  std::vector<std::int32_t> id;     // 1-based, matches lavaan
-  std::vector<std::int8_t>  user;   // 0=auto, 1=user-supplied, 2=auto-equality
-
-  // Statement (strings — being migrated to the var-id columns below)
-  std::vector<std::string>  lhs;
+  // Statement kind, per row.
   std::vector<parse::Op>    op;
-  std::vector<std::string>  rhs;
 
-  // Variable table (name-free mirror of the model — populated by lavaanify;
-  // consumed by matrix_rep). `lhs_var` / `rhs_var` are var ids (or -1 for a
-  // `~1` rhs / a constraint-row side that isn't a variable).
+  // Variable table — name-free mirror of the model, populated by `lavaanify`
+  // (or `from_lavaan_partable`) and consumed by `matrix_rep`. `lhs_var` /
+  // `rhs_var` are var ids (or -1 for a `~1` rhs and for constraint-row sides,
+  // which are expressions, not variables).
   std::int32_t              n_vars = 0;
   std::vector<VarRole>      var_role;        // size n_vars: first-bucket role
   std::vector<std::int8_t>  is_user_latent;  // size n_vars: 1 if LHS of some `=~`
@@ -98,14 +87,10 @@ struct LatentStructure {
   std::vector<std::int32_t> lhs_var;         // size n_rows: var id of lhs, or -1
   std::vector<std::int32_t> rhs_var;         // size n_rows: var id of rhs, or -1
 
-  // Block / group context. `block`/`group` are 1-based per row (always equal
-  // — no multilevel yet); 0 for constraint rows. `group_var` is the grouping
-  // variable name ("" ⇒ unnamed single group); `group_labels[g-1]` is the
-  // label of group `g` (empty ⇒ trivial single group).
-  std::vector<std::int32_t> block;
+  // Per-row group index — 1-based (matches lavaan); 0 for constraint rows.
+  // (No multilevel yet: lavaan's `block` equals `group` here. When multilevel
+  // lands, re-add a `block` column alongside.)
   std::vector<std::int32_t> group;
-  std::string               group_var;
-  std::vector<std::string>  group_labels;
 
   // Estimation contract
   std::vector<std::int32_t> free;        // 0=fixed (or constraint row); else 1-based θ index
@@ -125,16 +110,12 @@ struct LatentStructure {
   std::vector<std::int32_t> eq_groups;
   bool                      has_unenforced_constraints = false;
 
-  // Naming
-  std::vector<std::string>  label;  // user-supplied or empty
-  std::vector<std::string>  plabel; // .pN. synthetic; empty for constraint rows
-
   // Methods-developer extensibility — for columns latva itself doesn't ship.
   std::unordered_map<std::string, std::vector<double>>      extra_real;
   std::unordered_map<std::string, std::vector<std::int32_t>> extra_int;
   std::unordered_map<std::string, std::vector<std::string>>  extra_str;
 
-  std::size_t size() const noexcept { return id.size(); }
+  std::size_t size() const noexcept { return op.size(); }
 
   // Number of free parameters (the largest `free` index, or 0 if all fixed).
   std::int32_t n_free() const noexcept {
@@ -156,24 +137,6 @@ struct LatentStructure {
     return o == parse::Op::EqConstraint || o == parse::Op::LtConstraint ||
            o == parse::Op::GtConstraint || o == parse::Op::DefineParam;
   }
-};
-
-// Lightweight const view into a single row.
-struct RowView {
-  const LatentStructure* pt;
-  std::size_t     i;
-  std::int32_t     id()     const noexcept { return pt->id[i]; }
-  std::int8_t      user()   const noexcept { return pt->user[i]; }
-  std::string_view lhs()    const noexcept { return pt->lhs[i]; }
-  parse::Op        op()     const noexcept { return pt->op[i]; }
-  std::string_view rhs()    const noexcept { return pt->rhs[i]; }
-  std::int32_t     block()  const noexcept { return pt->block[i]; }
-  std::int32_t     group()  const noexcept { return pt->group[i]; }
-  std::int32_t     free()        const noexcept { return pt->free[i]; }
-  std::int8_t      exo()         const noexcept { return pt->exo[i]; }
-  double           fixed_value() const noexcept { return pt->fixed_value[i]; }
-  std::string_view label()  const noexcept { return pt->label[i]; }
-  std::string_view plabel() const noexcept { return pt->plabel[i]; }
 };
 
 }  // namespace latva::partable

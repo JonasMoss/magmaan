@@ -77,6 +77,9 @@ struct MatrixRep {
   std::vector<Cell>      cell_for_row;     // cell_for_row.size() == ptable.size()
   std::vector<StructuralCell> structural_cells;  // phantom-Λ identity, etc.
   std::vector<BlockDims> dims;             // dims.size() == n_blocks (1 in v0)
+  // Variable names per block, in `ov_order` / `lv_ext_order`. Real names when
+  // `build_matrix_rep` is handed a `LatentNames`; otherwise `"v<id>"`
+  // placeholders (the numeric path uses var ids / orderings, never the names).
   std::vector<std::vector<std::string>> ov_names;   // per block
   std::vector<std::vector<std::string>> lv_names;   // per block (extended)
 };
@@ -91,7 +94,12 @@ struct MatrixRep {
 //               by row but the cell is a sentinel. The full LISREL
 //               representation including phantom-latent regressions
 //               lands in P5.2.
+//
+// `names` (optional): supplies the variable names for `ov_names` / `lv_names`
+// and for the "unknown variable" error messages. Pass it when the result is
+// inspected by name (R, golden tests); leave it null for the pure numeric path.
 model_expected<MatrixRep>
-build_matrix_rep(const partable::LatentStructure& pt);
+build_matrix_rep(const partable::LatentStructure& pt,
+                 const partable::LatentNames* names = nullptr);
 
 }  // namespace latva::model

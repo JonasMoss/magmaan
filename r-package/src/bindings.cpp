@@ -17,6 +17,7 @@
 #include "latva/parse/parser.hpp"
 #include "latva/parse/flat_partable.hpp"
 #include "latva/partable/lavaanify.hpp"
+#include "latva/partable/lavaan_view.hpp"
 
 namespace {
 
@@ -192,12 +193,14 @@ Rcpp::DataFrame latva_lavaanify(std::string syntax,
     opts.group_labels = Rcpp::as<std::vector<std::string>>(group_labels.get());
 
   latva::partable::Starts starts;
-  auto pt_or = latva::partable::lavaanify(*p, opts, &starts);
+  latva::partable::LatentNames names;
+  auto pt_or = latva::partable::lavaanify(*p, opts, &starts, &names);
   if (!pt_or.has_value()) {
     Rcpp::stop("latva lavaanify error [%s]: %s",
                partable_error_kind(pt_or.error().kind), pt_or.error().detail);
   }
-  const latva::partable::LatentStructure& pt = *pt_or;
+  const latva::partable::LavaanParTable pt =
+      latva::partable::to_lavaan_partable(*pt_or, names, starts);
 
   const R_xlen_t n = static_cast<R_xlen_t>(pt.size());
   Rcpp::IntegerVector id(n), user(n), block(n), group(n), free(n), exo(n);
@@ -216,15 +219,7 @@ Rcpp::DataFrame latva_lavaanify(std::string syntax,
     rhs[i]    = pt.rhs[k];
     label[i]  = pt.label[k];
     plabel[i] = pt.plabel[k];
-    // Reconstruct lavaan's `ustart` column from latva's split representation:
-    // a fixed row's `fixed_value`, or a free row's start hint. NaN → R NaN.
-    if (pt.free[k] == 0) {
-      ustart[i] = pt.fixed_value[k];
-    } else {
-      const std::size_t fi = static_cast<std::size_t>(pt.free[k] - 1);
-      ustart[i] = (fi < starts.hint.size()) ? starts.hint[fi]
-                                             : std::numeric_limits<double>::quiet_NaN();
-    }
+    ustart[i] = pt.ustart[k];   // NaN → R NaN
   }
 
   Rcpp::List cols = Rcpp::List::create(
@@ -255,7 +250,7 @@ Rcpp::DataFrame latva_lavaanify(std::string syntax,
   cols.attr("class") = "data.frame";
   Rcpp::DataFrame df(cols);
   // Group identity rides as data.frame attributes (table-level metadata,
-  // mirrored back into LatentStructure.group_var / .group_labels by parse_partable_df).
+  // mirrored back into LatentNames.group_var / .group_labels by parse_partable_df).
   Rf_setAttrib(df, Rf_install("latva.group_var"), Rf_mkString(pt.group_var.c_str()));
   Rcpp::CharacterVector gl(static_cast<R_xlen_t>(pt.group_labels.size()));
   for (std::size_t j = 0; j < pt.group_labels.size(); ++j)

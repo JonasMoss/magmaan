@@ -57,11 +57,12 @@ partable_expected<LatentStructure>
 lavaanify(const parse::FlatPartable& flat, const LavaanifyOptions& opts = {},
           Starts* out_starts = nullptr, LatentNames* out_names = nullptr);
 
-// Recompute `s.eq_groups` / `s.has_unenforced_constraints` from the structure's
+// Recompute `s.eq_groups` / `s.has_unenforced_constraints` from the model's
 // `==` rows (auto-equality via `.pN.` plabel pairs, explicit `a == b` via row
-// labels) and `<` / `>` rows. `lavaanify` calls this; callers that build a
-// LatentStructure from outside (e.g. a hand-edited partable data.frame) call it
-// too so equality constraints are honored. Safe to call repeatedly.
-void compute_eq_groups(LatentStructure& s);
+// labels — both resolved through `names`) and `<` / `>` rows. `lavaanify` calls
+// this; callers that build a `LatentStructure` from outside (e.g. via
+// `from_lavaan_partable` on a hand-edited partable) call it too so equality
+// constraints are honored. Safe to call repeatedly.
+void compute_eq_groups(LatentStructure& s, const LatentNames& names);
 
 }  // namespace latva::partable

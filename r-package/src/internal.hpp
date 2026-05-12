@@ -18,7 +18,8 @@
 #include "latva/parse/op.hpp"
 #include "latva/partable/partable.hpp"
 #include "latva/partable/start_hints.hpp"
-#include "latva/partable/lavaanify.hpp"   // compute_eq_groups
+#include "latva/partable/lavaanify.hpp"     // compute_eq_groups
+#include "latva/partable/lavaan_view.hpp"   // LavaanParTable / to_/from_lavaan_partable
 #include "latva/model/matrix_rep.hpp"
 #include "latva/model/model_evaluator.hpp"
 #include "latva/fit/sample_stats.hpp"
@@ -99,28 +100,31 @@ inline lv::parse::Op op_from_string(const std::string& s) {
 // data.frame as attributes (`latva.group_var` / `latva.group_labels`) — it's
 // table-level, not per-row. `attach_group_attrs` sets them; `read_group_attrs`
 // reads them back (tolerating absence — `n_groups()` still works off `group`).
-inline void attach_group_attrs(SEXP df, const lvp::LatentStructure& pt) {
-  Rf_setAttrib(df, Rf_install("latva.group_var"),
-               Rf_mkString(pt.group_var.c_str()));
-  Rcpp::CharacterVector gl(static_cast<R_xlen_t>(pt.group_labels.size()));
-  for (std::size_t i = 0; i < pt.group_labels.size(); ++i)
-    gl[static_cast<R_xlen_t>(i)] = pt.group_labels[i];
+inline void attach_group_attrs(SEXP df, const std::string& group_var,
+                               const std::vector<std::string>& group_labels) {
+  Rf_setAttrib(df, Rf_install("latva.group_var"), Rf_mkString(group_var.c_str()));
+  Rcpp::CharacterVector gl(static_cast<R_xlen_t>(group_labels.size()));
+  for (std::size_t i = 0; i < group_labels.size(); ++i)
+    gl[static_cast<R_xlen_t>(i)] = group_labels[i];
   Rf_setAttrib(df, Rf_install("latva.group_labels"), gl);
 }
-inline void read_group_attrs(SEXP df, lvp::LatentStructure& pt) {
+inline void read_group_attrs(SEXP df, std::string& group_var,
+                             std::vector<std::string>& group_labels) {
   SEXP gv = Rf_getAttrib(df, Rf_install("latva.group_var"));
   if (!Rf_isNull(gv) && TYPEOF(gv) == STRSXP && Rf_length(gv) >= 1)
-    pt.group_var = Rcpp::as<std::string>(STRING_ELT(gv, 0));
+    group_var = Rcpp::as<std::string>(STRING_ELT(gv, 0));
   SEXP gl = Rf_getAttrib(df, Rf_install("latva.group_labels"));
   if (!Rf_isNull(gl) && TYPEOF(gl) == STRSXP)
-    pt.group_labels = Rcpp::as<std::vector<std::string>>(gl);
+    group_labels = Rcpp::as<std::vector<std::string>>(gl);
 }
 
-// `out_starts` (optional): if non-null, receives the user start *hints* read
-// off the `ustart` column for free rows (sized n_free, NaN where the column is
-// NA). For fixed rows the `ustart` column is the parameter's `fixed_value`.
-inline lvp::LatentStructure parse_partable_df(Rcpp::DataFrame df,
-                                       lvp::Starts* out_starts = nullptr) {
+// Parse a (possibly hand-edited) lavaan-shaped partable data.frame back into
+// the in-memory model triple: read the columns into a `LavaanParTable`, then
+// `from_lavaan_partable` re-derives the variable inventory + equality groups +
+// `LatentNames`. The data.frame's `ustart` column is split inside
+// `from_lavaan_partable` (a fixed row's value → `fixed_value`; a free row's
+// value → a start hint on `.starts`).
+inline lvp::ParsedLavaanParTable parse_partable_df(Rcpp::DataFrame df) {
   auto col = [&](const char* nm) -> SEXP {
     if (!df.containsElementNamed(nm))
       Rcpp::stop("latva: partable data.frame is missing required column '%s'", nm);
@@ -136,44 +140,27 @@ inline lvp::LatentStructure parse_partable_df(Rcpp::DataFrame df,
   std::vector<std::string> plab  = Rcpp::as<std::vector<std::string>>(col("plabel"));
 
   const std::size_t m = static_cast<std::size_t>(id.size());
-  lvp::LatentStructure pt;
-  pt.id.resize(m); pt.user.resize(m); pt.lhs.resize(m); pt.op.resize(m); pt.rhs.resize(m);
-  pt.block.resize(m); pt.group.resize(m); pt.free.resize(m); pt.exo.resize(m);
-  pt.fixed_value.resize(m); pt.label.resize(m); pt.plabel.resize(m);
-  std::int32_t n_free = 0;
+  lvp::LavaanParTable lvpt;
+  lvpt.id.resize(m); lvpt.user.resize(m); lvpt.lhs.resize(m); lvpt.op.resize(m);
+  lvpt.rhs.resize(m); lvpt.block.resize(m); lvpt.group.resize(m); lvpt.free.resize(m);
+  lvpt.exo.resize(m); lvpt.ustart.resize(m); lvpt.label.resize(m); lvpt.plabel.resize(m);
   for (std::size_t i = 0; i < m; ++i) {
     const R_xlen_t ri = static_cast<R_xlen_t>(i);
-    pt.id[i]     = id[ri];
-    pt.user[i]   = static_cast<std::int8_t>(user[ri]);
-    pt.lhs[i]    = lhs[i];
-    pt.op[i]     = op_from_string(opstr[i]);
-    pt.rhs[i]    = rhs[i];
-    pt.block[i]  = block[ri];
-    pt.group[i]  = group[ri];
-    pt.free[i]   = freev[ri];
-    pt.exo[i]    = static_cast<std::int8_t>(exo[ri]);
-    pt.label[i]  = label[i];
-    pt.plabel[i] = plab[i];
-    if (pt.free[i] > n_free) n_free = pt.free[i];
-    // The `ustart` column is split: a fixed row's value is `fixed_value`; a
-    // free row's value (if any) is a start hint, kept on `out_starts`.
-    if (pt.free[i] == 0) pt.fixed_value[i] = ustart[ri];   // NaN passes through
-    else                 pt.fixed_value[i] = std::numeric_limits<double>::quiet_NaN();
+    lvpt.id[i]     = id[ri];
+    lvpt.user[i]   = static_cast<std::int8_t>(user[ri]);
+    lvpt.lhs[i]    = lhs[i];
+    lvpt.op[i]     = op_from_string(opstr[i]);
+    lvpt.rhs[i]    = rhs[i];
+    lvpt.block[i]  = block[ri];
+    lvpt.group[i]  = group[ri];
+    lvpt.free[i]   = freev[ri];
+    lvpt.exo[i]    = static_cast<std::int8_t>(exo[ri]);
+    lvpt.ustart[i] = ustart[ri];   // NaN passes through
+    lvpt.label[i]  = label[i];
+    lvpt.plabel[i] = plab[i];
   }
-  if (out_starts) {
-    out_starts->hint.assign(static_cast<std::size_t>(n_free),
-                            std::numeric_limits<double>::quiet_NaN());
-    for (std::size_t i = 0; i < m; ++i) {
-      if (pt.free[i] <= 0) continue;
-      const double u = ustart[static_cast<R_xlen_t>(i)];
-      if (std::isfinite(u)) out_starts->hint[static_cast<std::size_t>(pt.free[i] - 1)] = u;
-    }
-  }
-  read_group_attrs(df, pt);
-  // Recompute the equality-constraint reparameterization from the (possibly
-  // hand-edited) `==` / `<` / `>` rows so fit() honors it.
-  lvp::compute_eq_groups(pt);
-  return pt;
+  read_group_attrs(df, lvpt.group_var, lvpt.group_labels);
+  return lvp::from_lavaan_partable(lvpt);
 }
 
 inline bool has_meanstructure(const lvp::LatentStructure& pt) {
@@ -190,11 +177,15 @@ inline bool has_constraint_rows(const lvp::LatentStructure& pt) {
   return false;
 }
 
-// LatentStructure + fitted estimates -> data.frame (lavaanify columns + est).
+// The model triple + fitted estimates -> data.frame (lavaanify columns + est).
 // `starts` (optional): the user start hints, so the reconstructed `ustart`
 // column carries free-row hints (not just fixed-row values). NaN ⇒ R NA.
-inline Rcpp::DataFrame partable_df(const lvp::LatentStructure& pt, const lvf::Estimates& est,
+inline Rcpp::DataFrame partable_df(const lvp::LatentStructure& structure,
+                                   const lvp::LatentNames& names,
+                                   const lvf::Estimates& est,
                                    const lvp::Starts* starts = nullptr) {
+  const lvp::LavaanParTable pt =
+      lvp::to_lavaan_partable(structure, names, starts ? *starts : lvp::Starts{});
   const R_xlen_t nrow = static_cast<R_xlen_t>(pt.size());
   Rcpp::IntegerVector id(nrow), user(nrow), block(nrow), group(nrow), freev(nrow), exo(nrow);
   Rcpp::CharacterVector lhs(nrow), op(nrow), rhs(nrow), label(nrow), plabel(nrow);
@@ -212,17 +203,9 @@ inline Rcpp::DataFrame partable_df(const lvp::LatentStructure& pt, const lvf::Es
     rhs[i]    = pt.rhs[k];
     label[i]  = pt.label[k];
     plabel[i] = pt.plabel[k];
+    ustart[i] = pt.ustart[k];
     const std::int32_t f = pt.free[k];
-    if (f <= 0) {
-      ustart[i] = pt.fixed_value[k];
-      est_c[i]  = pt.fixed_value[k];
-    } else {
-      const std::size_t fi = static_cast<std::size_t>(f - 1);
-      ustart[i] = (starts && fi < starts->hint.size())
-                      ? starts->hint[fi]
-                      : std::numeric_limits<double>::quiet_NaN();
-      est_c[i]  = est.theta(static_cast<Eigen::Index>(f) - 1);
-    }
+    est_c[i]  = (f <= 0) ? pt.ustart[k] : est.theta(static_cast<Eigen::Index>(f) - 1);
   }
   Rcpp::List cols = Rcpp::List::create(
       Rcpp::_["id"] = id, Rcpp::_["lhs"] = lhs, Rcpp::_["op"] = op, Rcpp::_["rhs"] = rhs,
@@ -232,7 +215,7 @@ inline Rcpp::DataFrame partable_df(const lvp::LatentStructure& pt, const lvf::Es
   cols.attr("row.names") = Rcpp::IntegerVector::create(NA_INTEGER, -static_cast<int>(nrow));
   cols.attr("class") = "data.frame";
   Rcpp::DataFrame out(cols);
-  attach_group_attrs(out, pt);
+  attach_group_attrs(out, names.group_var, names.group_labels);
   return out;
 }
 
@@ -251,7 +234,8 @@ inline lvf::LbfgsOptions lbfgs_opts_from(Rcpp::Nullable<Rcpp::List> lbfgs) {
 // ---- model context ----------------------------------------------------------
 
 struct Ctx {
-  lvp::LatentStructure            pt;
+  lvp::LatentStructure     pt;
+  lvp::LatentNames         names;
   lvm::MatrixRep           rep;
   lvf::SampleStats         samp;
   std::vector<std::string> ov_names;     // observed-variable order latva uses (block 0)
@@ -354,9 +338,9 @@ inline Rcpp::NumericMatrix block_matrix(SEXP M, std::size_t b, std::size_t n_blo
 //                  column name (the `make_ctx` entry point — user-supplied
 //                  data); false → take them as already in model order (the
 //                  fit-object entry point).
-inline Ctx ctx_from_parts(lvp::LatentStructure pt, SEXP S, SEXP nobs, SEXP sample_mean,
-                          bool reorder) {
-  auto rep_or = lvm::build_matrix_rep(pt);
+inline Ctx ctx_from_parts(lvp::LatentStructure pt, lvp::LatentNames names,
+                          SEXP S, SEXP nobs, SEXP sample_mean, bool reorder) {
+  auto rep_or = lvm::build_matrix_rep(pt, &names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
   lvm::MatrixRep rep = std::move(*rep_or);
   if (rep.ov_names.empty() || rep.ov_names[0].empty())
@@ -402,6 +386,7 @@ inline Ctx ctx_from_parts(lvp::LatentStructure pt, SEXP S, SEXP nobs, SEXP sampl
 
   Ctx ctx;
   ctx.pt = std::move(pt);
+  ctx.names = std::move(names);
   ctx.rep = std::move(rep);
   ctx.samp = std::move(samp);
   ctx.ov_names = ctx.rep.ov_names[0];
@@ -414,18 +399,19 @@ inline Ctx ctx_from_parts(lvp::LatentStructure pt, SEXP S, SEXP nobs, SEXP sampl
 }
 
 // User-supplied data: S/nobs/mean are reordered to the model's variable order.
-inline Ctx make_ctx(lvp::LatentStructure pt, SEXP S, SEXP n, SEXP sample_mean) {
-  return ctx_from_parts(std::move(pt), S, n, sample_mean, /*reorder=*/true);
+inline Ctx make_ctx(lvp::LatentStructure pt, lvp::LatentNames names,
+                    SEXP S, SEXP n, SEXP sample_mean) {
+  return ctx_from_parts(std::move(pt), std::move(names), S, n, sample_mean,
+                        /*reorder=*/true);
 }
 
-inline lvp::LatentStructure partable_from_arg(SEXP partable, const char* fn,
-                                       lvp::Starts* out_starts = nullptr) {
+inline lvp::ParsedLavaanParTable partable_from_arg(SEXP partable, const char* fn) {
   if (TYPEOF(partable) == STRSXP)
     Rcpp::stop("latva: %s() takes a partable data.frame (e.g. from latva_lavaanify()), "
                "not a model-syntax string — call latva_lavaanify() first", fn);
   if (!Rf_inherits(partable, "data.frame"))
     Rcpp::stop("latva: %s(): `partable` must be a data.frame (e.g. from latva_lavaanify())", fn);
-  return parse_partable_df(Rcpp::DataFrame(partable), out_starts);
+  return parse_partable_df(Rcpp::DataFrame(partable));
 }
 
 // Pull the {S, nobs, mean} sample-stats bundle out of `latva_fit`'s `arg` —
@@ -433,13 +419,15 @@ inline lvp::LatentStructure partable_from_arg(SEXP partable, const char* fn,
 // form; `latva_sample_stats_from_raw()` returns exactly this) or, lenient
 // for the hand-built single-group case, a bare covariance matrix is *not*
 // accepted (nobs is required) — the caller passes a `list(S = , nobs = )`.
-inline Ctx ctx_from_sample_stats(lvp::LatentStructure pt, Rcpp::List ss) {
+inline Ctx ctx_from_sample_stats(lvp::LatentStructure pt, lvp::LatentNames names,
+                                 Rcpp::List ss) {
   if (!ss.containsElementNamed("S") || !ss.containsElementNamed("nobs"))
     Rcpp::stop("latva: `sample_stats` must be a list with $S (a covariance matrix "
                "or list of them) and $nobs (a per-group n vector) — e.g. the result "
                "of latva_sample_stats_from_raw(), or list(S = , nobs = )");
   SEXP sm = ss.containsElementNamed("mean") ? SEXP(ss["mean"]) : R_NilValue;
-  return ctx_from_parts(std::move(pt), ss["S"], ss["nobs"], sm, /*reorder=*/true);
+  return ctx_from_parts(std::move(pt), std::move(names), ss["S"], ss["nobs"], sm,
+                        /*reorder=*/true);
 }
 
 // Rebuild a Ctx from a fit object. `fit$S` is a list of per-group covariances
@@ -450,7 +438,8 @@ inline Ctx ctx_from_fit(Rcpp::List fit) {
       !fit.containsElementNamed("nobs"))
     Rcpp::stop("latva: not a fit object (need partable/S/nobs) — pass the result of latva_fit()");
   SEXP sm = fit.containsElementNamed("sample_mean") ? SEXP(fit["sample_mean"]) : R_NilValue;
-  return ctx_from_parts(parse_partable_df(Rcpp::DataFrame(fit["partable"])),
+  auto parsed = parse_partable_df(Rcpp::DataFrame(fit["partable"]));
+  return ctx_from_parts(std::move(parsed.structure), std::move(parsed.names),
                         fit["S"], fit["nobs"], sm, /*reorder=*/false);
 }
 

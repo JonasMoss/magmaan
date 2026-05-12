@@ -279,8 +279,8 @@ Rcpp::List latva_scaled_shifted(double t_ml, int df, Rcpp::NumericVector eigvals
 //
 // [[Rcpp::export]]
 Rcpp::NumericMatrix latva_casewise_contributions(SEXP partable, SEXP X) {
-  lvp::LatentStructure pt = partable_from_arg(partable, "latva_casewise_contributions");
-  auto rep_or = lvm::build_matrix_rep(pt);
+  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "latva_casewise_contributions");
+  auto rep_or = lvm::build_matrix_rep(parsed.structure, &parsed.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
   if (rep_or->ov_names.empty() || rep_or->ov_names[0].empty())
     Rcpp::stop("latva: model has no observed variables");

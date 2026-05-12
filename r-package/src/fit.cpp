@@ -86,8 +86,8 @@ Rcpp::DataFrame structural_cells_df(const std::vector<lvm::StructuralCell>& sc) 
 //
 // [[Rcpp::export]]
 Rcpp::List latva_matrix_rep(SEXP partable) {
-  lvp::LatentStructure pt = partable_from_arg(partable, "latva_matrix_rep");
-  auto rep_or = lvm::build_matrix_rep(pt);
+  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "latva_matrix_rep");
+  auto rep_or = lvm::build_matrix_rep(parsed.structure, &parsed.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
   const lvm::MatrixRep& rep = *rep_or;
   return Rcpp::List::create(
@@ -121,9 +121,10 @@ Rcpp::List latva_fit(SEXP partable, Rcpp::List sample_stats,
   // `==` / shared-label equality rows are enforced by fit() (reparam θ = K·α);
   // `<` / `>` rows and arbitrary-expression `==` rows make fit() error with a
   // clear message; `:=` rows are ignored during the fit (post-fit quantities).
-  lvp::Starts starts;
-  lvp::LatentStructure pt = partable_from_arg(partable, "latva_fit", &starts);
-  Ctx ctx = ctx_from_sample_stats(std::move(pt), sample_stats);
+  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "latva_fit");
+  lvp::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
 
   auto e_or = lvf::fit<lvf::ML, lvf::LbfgsOptimizer>(
       ctx.pt, ctx.rep, ctx.samp, lvf::ML{},
@@ -160,11 +161,11 @@ Rcpp::List latva_fit(SEXP partable, Rcpp::List sample_stats,
       Rcpp::_["npar"]          = static_cast<int>(ctx.pt.n_free()),
       Rcpp::_["ngroups"]       = static_cast<int>(nb),
       Rcpp::_["ntotal"]        = static_cast<int>(ntotal),
-      Rcpp::_["group_var"]     = ctx.pt.group_var,
-      Rcpp::_["group_labels"]  = Rcpp::wrap(ctx.pt.group_labels),
+      Rcpp::_["group_var"]     = ctx.names.group_var,
+      Rcpp::_["group_labels"]  = Rcpp::wrap(ctx.names.group_labels),
       Rcpp::_["theta"]         = Rcpp::wrap(est.theta),
       Rcpp::_["ov_names"]      = Rcpp::wrap(ctx.ov_names),
-      Rcpp::_["partable"]      = partable_df(ctx.pt, est, &starts),  // lavaanify cols + est
+      Rcpp::_["partable"]      = partable_df(ctx.pt, ctx.names, est, &starts),  // lavaanify cols + est
       Rcpp::_["S"]             = S_out,
       Rcpp::_["nobs"]          = nobs_out,
       Rcpp::_["sample_mean"]   = mean_out,
@@ -177,9 +178,10 @@ Rcpp::List latva_fit(SEXP partable, Rcpp::List sample_stats,
 //
 // [[Rcpp::export]]
 Rcpp::NumericVector latva_start_values(SEXP partable, Rcpp::List sample_stats) {
-  lvp::Starts starts;
-  lvp::LatentStructure pt = partable_from_arg(partable, "latva_start_values", &starts);
-  Ctx ctx = ctx_from_sample_stats(std::move(pt), sample_stats);
+  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "latva_start_values");
+  lvp::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
   auto sv_or = lvf::simple_start_values(ctx.pt, ctx.rep, ctx.samp, starts);
   if (!sv_or.has_value()) stop_fit(sv_or.error());
   return Rcpp::wrap(*sv_or);
@@ -254,9 +256,10 @@ Rcpp::List latva_baseline(Rcpp::List fit) {
   return Rcpp::List::create(Rcpp::_["chi2"] = bl.chi2, Rcpp::_["df"] = bl.df);
 }
 
-// latva_fit_measures() — mirrors fit_measures(inf, baseline, samp). `se` is a
-// latva_se_*() result (only chi2/df used); `baseline` is a latva_baseline()
-// result.
+// latva_fit_measures() — mirrors fit_measures(inf, baseline, samp) plus
+// fit_extras(pt, rep, samp, est) (the logl-based information criteria + SRMR).
+// `se` is a latva_se_*() result (only chi2/df used); `baseline` is a
+// latva_baseline() result.
 //
 // [[Rcpp::export]]
 Rcpp::List latva_fit_measures(Rcpp::List fit, Rcpp::List se, Rcpp::List baseline) {
@@ -268,8 +271,21 @@ Rcpp::List latva_fit_measures(Rcpp::List fit, Rcpp::List se, Rcpp::List baseline
   bl.chi2 = Rcpp::as<double>(baseline["chi2"]);
   bl.df   = Rcpp::as<int>(baseline["df"]);
   const lvf::FitMeasures fm = lvf::fit_measures(inf, bl, ctx.samp);
-  return Rcpp::List::create(Rcpp::_["cfi"] = fm.cfi, Rcpp::_["tli"] = fm.tli,
-                            Rcpp::_["rmsea"] = fm.rmsea);
+  const lvf::Estimates   est = est_from_fit(fit);
+  auto fx = lvf::fit_extras(ctx.pt, ctx.rep, ctx.samp, est);
+  const bool have = fx.has_value();
+  return Rcpp::List::create(
+      Rcpp::_["cfi"]               = fm.cfi,
+      Rcpp::_["tli"]               = fm.tli,
+      Rcpp::_["rmsea"]             = fm.rmsea,
+      Rcpp::_["srmr"]              = have ? fx->srmr              : NA_REAL,
+      Rcpp::_["logl"]              = have ? fx->logl              : NA_REAL,
+      Rcpp::_["unrestricted.logl"] = have ? fx->unrestricted_logl : NA_REAL,
+      Rcpp::_["aic"]               = have ? fx->aic               : NA_REAL,
+      Rcpp::_["bic"]               = have ? fx->bic               : NA_REAL,
+      Rcpp::_["bic2"]              = have ? fx->bic2              : NA_REAL,
+      Rcpp::_["npar"]              = have ? fx->npar              : NA_INTEGER,
+      Rcpp::_["ntotal"]            = have ? static_cast<double>(fx->ntotal) : NA_REAL);
 }
 
 // latva_z_test() — mirrors z_test(est, inf). `se` is a latva_se_*() result

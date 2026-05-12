@@ -20,9 +20,15 @@ Read it before structural changes.
   χ² match `external/lavaan/` outputs to documented tolerances. New
   fixtures are regenerated via `tools/regen_oracle.R`; CI itself never
   invokes R.
-- **The ParTable is the contract.** SoA struct mirroring lavaan's columns.
-  Adding a feature means deciding what columns to add and what existing
-  columns to honor.
+- **The lavaanified model is the contract.** Held in memory as a triple:
+  `LatentStructure` (what to estimate — name-free, modulo estimator and
+  identification convention), `LatentNames` (the verbal model — variable
+  names, user labels, group var/levels, `.pN.` plabels), and `Starts`
+  (free-param start hints). `to_lavaan_partable()` / `from_lavaan_partable()`
+  (`partable/lavaan_view.hpp`) project to/from the familiar lavaan-shaped
+  SoA (`LavaanParTable`) — that's what the R data.frame and the golden
+  `parTable()` fixtures compare against. Adding a feature means deciding
+  what each of the three carries and what `matrix_rep` / `fit` honor.
 - **`docs/grammar/` is the parser source of truth.** `grammar.ebnf` is
   normative; if the parser disagrees with the EBNF, the parser is wrong.
   Every parser/lexer function carries a `// production: name = ...`

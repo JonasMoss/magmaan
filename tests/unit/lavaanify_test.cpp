@@ -7,6 +7,7 @@
 #include "latva/error.hpp"
 #include "latva/parse/op.hpp"
 #include "latva/parse/parser.hpp"
+#include "latva/partable/lavaan_view.hpp"
 #include "latva/partable/lavaanify.hpp"
 #include "latva/partable/partable.hpp"
 
@@ -15,18 +16,28 @@ using latva::parse::Op;
 using latva::parse::Parser;
 using latva::partable::lavaanify;
 using latva::partable::LavaanifyOptions;
+using latva::partable::LavaanParTable;
+using latva::partable::LatentNames;
 using latva::partable::LatentStructure;
+using latva::partable::Starts;
+using latva::partable::to_lavaan_partable;
 
 namespace {
 
-LatentStructure must_lavaanify(std::string_view src, LavaanifyOptions opts = {}) {
+// The tests inspect the lavaan-shaped projection (`lhs` / `rhs` / `user` /
+// `block` / `label` / `plabel` / `ustart`) — it's the most direct view of
+// what lavaanify produced. The structure + names + starts are bundled back
+// up via to_lavaan_partable.
+LavaanParTable must_lavaanify(std::string_view src, LavaanifyOptions opts = {}) {
   auto fp = Parser::parse(src);
   REQUIRE_MESSAGE(fp.has_value(), "parser failed: " << fp.error().detail);
-  auto pt = lavaanify(*fp, opts);
+  Starts starts;
+  LatentNames names;
+  auto pt = lavaanify(*fp, opts, &starts, &names);
   REQUIRE_MESSAGE(pt.has_value(),
                   "lavaanify failed: kind=" << static_cast<int>(pt.error().kind)
                   << " — " << pt.error().detail);
-  return std::move(*pt);
+  return to_lavaan_partable(*pt, names, starts);
 }
 
 }  // namespace
@@ -45,12 +56,12 @@ TEST_CASE("lavaanify: 1-factor CFA produces 4 rows (3 loadings + 1 var auto.fix.
   CHECK(pt.rhs[0]    == "x1");
   CHECK(pt.user[0]   == 1);
   CHECK(pt.free[0]   == 0);
-  CHECK(pt.fixed_value[0] == 1.0);
+  CHECK(pt.ustart[0] == 1.0);
 
   // Rows 1, 2: free loadings
   CHECK(pt.free[1] > 0);
   CHECK(pt.free[2] > 0);
-  CHECK(std::isnan(pt.fixed_value[1]));
+  CHECK(std::isnan(pt.ustart[1]));
 
   // Rows 3-5: residual variances (auto-added, free)
   CHECK(pt.lhs[3] == "x1");
@@ -172,28 +183,25 @@ TEST_CASE("lavaanify: explicit constraint rows have block=0, group=0") {
 }
 
 TEST_CASE("lavaanify: meanstructure auto-adds ν (free) and α (fixed) rows") {
-  auto fp = Parser::parse("f =~ x1 + x2 + x3");
-  REQUIRE(fp.has_value());
   LavaanifyOptions opts;
   opts.meanstructure = true;
-  auto pt = lavaanify(*fp, opts);
-  REQUIRE(pt.has_value());
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
 
   // Should now contain ν rows (one per ov) plus α row (one per lv).
   // Original 7 rows (3 =~ + 3 θ + 1 ψ) → +3 ν + 1 α = 11 rows.
-  CHECK(pt->size() == 11);
+  CHECK(pt.size() == 11);
 
   int n_nu = 0, n_alpha = 0;
-  for (std::size_t i = 0; i < pt->size(); ++i) {
-    if (pt->op[i] != latva::parse::Op::Intercept) continue;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != Op::Intercept) continue;
     // Intercept rows for ov (x1/x2/x3) are free; for lv (f) fixed at 0.
-    if (pt->lhs[i] == "f") {
+    if (pt.lhs[i] == "f") {
       ++n_alpha;
-      CHECK(pt->free[i] == 0);          // fixed
-      CHECK(pt->fixed_value[i] == doctest::Approx(0.0));
+      CHECK(pt.free[i] == 0);          // fixed
+      CHECK(pt.ustart[i] == doctest::Approx(0.0));
     } else {
       ++n_nu;
-      CHECK(pt->free[i] > 0);           // free
+      CHECK(pt.free[i] > 0);           // free
     }
   }
   CHECK(n_nu    == 3);
@@ -201,26 +209,23 @@ TEST_CASE("lavaanify: meanstructure auto-adds ν (free) and α (fixed) rows") {
 }
 
 TEST_CASE("lavaanify: meanstructure does not duplicate user-supplied ~1 rows") {
-  auto fp = Parser::parse("f =~ x1 + x2 + x3\nx1 ~ 1\nf ~ 1");
-  REQUIRE(fp.has_value());
   LavaanifyOptions opts;
   opts.meanstructure = true;
-  auto pt = lavaanify(*fp, opts);
-  REQUIRE(pt.has_value());
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3\nx1 ~ 1\nf ~ 1", opts);
 
   // x1 ~ 1 was user-supplied → keep as user row (free).
   // f ~ 1 was user-supplied → user wants α free (no auto-fix).
   // x2 ~ 1 and x3 ~ 1 are auto-added free.
   int x1_count = 0, f_count = 0;
-  for (std::size_t i = 0; i < pt->size(); ++i) {
-    if (pt->op[i] != latva::parse::Op::Intercept) continue;
-    if (pt->lhs[i] == "x1") {
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != Op::Intercept) continue;
+    if (pt.lhs[i] == "x1") {
       ++x1_count;
-      CHECK(pt->free[i] > 0);   // user free, not auto-fixed
+      CHECK(pt.free[i] > 0);   // user free, not auto-fixed
     }
-    if (pt->lhs[i] == "f") {
+    if (pt.lhs[i] == "f") {
       ++f_count;
-      CHECK(pt->free[i] > 0);   // user explicitly freed
+      CHECK(pt.free[i] > 0);   // user explicitly freed
     }
   }
   CHECK(x1_count == 1);   // not duplicated
@@ -239,18 +244,15 @@ TEST_CASE("lavaanify: c(...) modifier with wrong arity is rejected") {
 TEST_CASE("lavaanify: c(...) modifier indexes per group with n_groups = 2") {
   // c(1, NA) on the marker means: group 1's λ_1 fixed at 1, group 2's free.
   // c(NA, NA) on x2's loading means: both groups free.
-  auto fp = Parser::parse("f =~ c(1, NA)*x1 + c(NA, NA)*x2 + x3");
-  REQUIRE(fp.has_value());
   LavaanifyOptions opts;  opts.n_groups = 2;
-  auto pt = lavaanify(*fp, opts);
-  REQUIRE(pt.has_value());
+  auto pt = must_lavaanify("f =~ c(1, NA)*x1 + c(NA, NA)*x2 + x3", opts);
 
   // Find the two `f =~ x1` rows (one per block) and confirm their fixed-ness.
   int group1_x1_free = -1, group2_x1_free = -1;
-  for (std::size_t i = 0; i < pt->size(); ++i) {
-    if (pt->lhs[i] == "f" && pt->rhs[i] == "x1") {
-      if (pt->block[i] == 1) group1_x1_free = pt->free[i];
-      if (pt->block[i] == 2) group2_x1_free = pt->free[i];
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.lhs[i] == "f" && pt.rhs[i] == "x1") {
+      if (pt.block[i] == 1) group1_x1_free = pt.free[i];
+      if (pt.block[i] == 2) group2_x1_free = pt.free[i];
     }
   }
   REQUIRE(group1_x1_free >= 0);
@@ -260,20 +262,17 @@ TEST_CASE("lavaanify: c(...) modifier indexes per group with n_groups = 2") {
 }
 
 TEST_CASE("lavaanify: n_groups = 2 replicates rows with block / group set") {
-  auto fp = Parser::parse("f =~ x1 + x2 + x3");
-  REQUIRE(fp.has_value());
   LavaanifyOptions opts;
   opts.n_groups = 2;
-  auto pt = lavaanify(*fp, opts);
-  REQUIRE(pt.has_value());
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
 
   // Each group gets the same template (3 =~ rows + 3 auto.var Θ + 1 auto.var Ψ
   // = 7 rows). Two groups → 14 rows total. No constraint rows for this model.
-  CHECK(pt->size() == 14);
+  CHECK(pt.size() == 14);
   std::int32_t n_b1 = 0, n_b2 = 0;
-  for (std::size_t i = 0; i < pt->size(); ++i) {
-    if (pt->block[i] == 1) ++n_b1;
-    if (pt->block[i] == 2) ++n_b2;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.block[i] == 1) ++n_b1;
+    if (pt.block[i] == 2) ++n_b2;
   }
   CHECK(n_b1 == 7);
   CHECK(n_b2 == 7);
@@ -281,9 +280,7 @@ TEST_CASE("lavaanify: n_groups = 2 replicates rows with block / group set") {
   // Each group's marker indicator (λ_1) is auto-fixed; the other 6 rows
   // per group are free. Total n_free = 12 (no cross-group equality since
   // no labels were used).
-  std::int32_t max_free = 0;
-  for (auto f : pt->free) if (f > max_free) max_free = f;
-  CHECK(max_free == 12);
+  CHECK(pt.n_free() == 12);
 }
 
 TEST_CASE("lavaanify: n_groups < 1 is rejected") {
@@ -296,10 +293,10 @@ TEST_CASE("lavaanify: n_groups < 1 is rejected") {
   CHECK(pt.error().kind == PartableError::Kind::BadGroupSpec);
 }
 
-TEST_CASE("lavaanify: group identity is stored on the LatentStructure") {
+TEST_CASE("lavaanify: group identity rides on LatentNames / the lavaan view") {
   // Single group: n_groups() == 1, no group_var / group_labels.
   {
-    LatentStructure pt = must_lavaanify("f =~ x1 + x2 + x3");
+    auto pt = must_lavaanify("f =~ x1 + x2 + x3");
     CHECK(pt.n_groups() == 1);
     CHECK(pt.group_var.empty());
     CHECK(pt.group_labels.empty());
@@ -310,7 +307,7 @@ TEST_CASE("lavaanify: group identity is stored on the LatentStructure") {
     opts.n_groups     = 2;
     opts.group_var    = "school";
     opts.group_labels = {"Pasteur", "Grant-White"};
-    LatentStructure pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
+    auto pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
     CHECK(pt.n_groups() == 2);
     CHECK(pt.group_var == "school");
     REQUIRE(pt.group_labels.size() == 2);
@@ -320,7 +317,7 @@ TEST_CASE("lavaanify: group identity is stored on the LatentStructure") {
   // Two groups, name omitted ⇒ defaults to "group"; labels auto-generated.
   {
     LavaanifyOptions opts;  opts.n_groups = 2;
-    LatentStructure pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
+    auto pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
     CHECK(pt.n_groups() == 2);
     CHECK(pt.group_var == "group");
     REQUIRE(pt.group_labels.size() == 2);
@@ -342,13 +339,13 @@ TEST_CASE("lavaanify: c(...) supplies per-group fixed values") {
   // c(0.8, 1.2) on x2's loading ⇒ group-1 loading fixed at 0.8, group-2 at
   // 1.2 (both rows fixed, distinct values).
   LavaanifyOptions opts;  opts.n_groups = 2;  opts.group_var = "school";
-  LatentStructure pt = must_lavaanify("f =~ x1 + c(0.8, 1.2)*x2 + x3", opts);
+  auto pt = must_lavaanify("f =~ x1 + c(0.8, 1.2)*x2 + x3", opts);
   double g1 = std::nan(""), g2 = std::nan("");
   std::int32_t f1 = -1, f2 = -1;
   for (std::size_t i = 0; i < pt.size(); ++i) {
     if (pt.lhs[i] == "f" && pt.rhs[i] == "x2") {
-      if (pt.block[i] == 1) { g1 = pt.fixed_value[i]; f1 = pt.free[i]; }
-      if (pt.block[i] == 2) { g2 = pt.fixed_value[i]; f2 = pt.free[i]; }
+      if (pt.block[i] == 1) { g1 = pt.ustart[i]; f1 = pt.free[i]; }
+      if (pt.block[i] == 2) { g2 = pt.ustart[i]; f2 = pt.free[i]; }
     }
   }
   REQUIRE(!std::isnan(g1));
