@@ -115,6 +115,16 @@ struct LatentStructure {
                                           // fixed.x moments (filled from the sample later).
                                           // Free-param start *hints* live on `Starts`, not here.
 
+  // Linear-equality reparameterization, precomputed by lavaanify (or
+  // `compute_eq_groups`): `eq_groups[k]` (0-based) is the merged-parameter
+  // group of the (k+1)-th free param — free params in the same group are equal
+  // (shared label, explicit `a == b`, cross-group invariance). Empty ⇒ identity
+  // (every param its own group). `has_unenforced_constraints` is set when the
+  // model carries an `<` / `>` row or a non-bare `==` expression (`a == 2*b`):
+  // `fit()` then errors (those phases aren't implemented). See fit/constraints.
+  std::vector<std::int32_t> eq_groups;
+  bool                      has_unenforced_constraints = false;
+
   // Naming
   std::vector<std::string>  label;  // user-supplied or empty
   std::vector<std::string>  plabel; // .pN. synthetic; empty for constraint rows

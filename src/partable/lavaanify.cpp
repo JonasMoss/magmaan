@@ -756,7 +756,93 @@ partable_expected<LatentStructure> lavaanify(const parse::FlatPartable& flat,
   names.group_var    = out.group_var;
   names.group_labels = out.group_labels;
   if (out_names) *out_names = std::move(names);
+
+  // Resolve the linear-equality reparameterization (shared labels, explicit
+  // `a == b`) into `out.eq_groups`; flag `<` / `>` / non-bare `==` as
+  // unenforced (fit() errors on those).
+  compute_eq_groups(out);
   return out;
+}
+
+namespace {
+
+// A canonical Expr text uses no whitespace; a bare identifier therefore has
+// no operator/paren characters. (`a`, `.p3.` are bare; `2*b`, `(a+b)`, `-1`
+// are not.)
+bool is_bare_identifier(const std::string& s) noexcept {
+  if (s.empty()) return false;
+  for (char c : s) {
+    if (c == '+' || c == '-' || c == '*' || c == '/' || c == '^' ||
+        c == '(' || c == ')' || c == ' ' || c == '\t') {
+      return false;
+    }
+  }
+  return true;
+}
+
+}  // namespace
+
+void compute_eq_groups(LatentStructure& s) {
+  const std::int32_t npar = s.n_free();
+  s.eq_groups.assign(static_cast<std::size_t>(npar < 0 ? 0 : npar), 0);
+  for (std::int32_t k = 0; k < npar; ++k) s.eq_groups[static_cast<std::size_t>(k)] = k;
+  s.has_unenforced_constraints = false;
+
+  // `.pN.` plabel → 1-based free index, and `label` → 1-based free index,
+  // over free (free > 0), non-constraint rows.
+  std::unordered_map<std::string, std::int32_t> plabel_to_free, label_to_free;
+  for (std::size_t i = 0; i < s.size(); ++i) {
+    if (s.free[i] <= 0) continue;
+    if (!s.plabel[i].empty()) plabel_to_free.try_emplace(s.plabel[i], s.free[i]);
+    if (!s.label[i].empty())  label_to_free.try_emplace(s.label[i], s.free[i]);
+  }
+  auto resolve = [&](const std::string& tok) -> std::int32_t {
+    if (!is_bare_identifier(tok)) return -1;
+    if (auto it = plabel_to_free.find(tok); it != plabel_to_free.end()) return it->second;
+    if (auto it = label_to_free.find(tok);  it != label_to_free.end())  return it->second;
+    return -1;
+  };
+
+  // Union-find over 1-based free indices (index 0 unused).
+  std::vector<std::int32_t> parent(static_cast<std::size_t>(npar) + 1);
+  for (std::int32_t k = 0; k <= npar; ++k) parent[static_cast<std::size_t>(k)] = k;
+  auto find = [&parent](std::int32_t x) -> std::int32_t {
+    while (parent[static_cast<std::size_t>(x)] != x) {
+      parent[static_cast<std::size_t>(x)] =
+          parent[static_cast<std::size_t>(parent[static_cast<std::size_t>(x)])];
+      x = parent[static_cast<std::size_t>(x)];
+    }
+    return x;
+  };
+  auto unite = [&](std::int32_t a, std::int32_t b) {
+    a = find(a); b = find(b);
+    if (a != b) parent[static_cast<std::size_t>(std::max(a, b))] = std::min(a, b);
+  };
+
+  for (std::size_t i = 0; i < s.size(); ++i) {
+    const parse::Op op = s.op[i];
+    if (op == parse::Op::LtConstraint || op == parse::Op::GtConstraint) {
+      s.has_unenforced_constraints = true;
+      continue;
+    }
+    if (op != parse::Op::EqConstraint) continue;
+    const std::int32_t li = resolve(s.lhs[i]);
+    const std::int32_t ri = resolve(s.rhs[i]);
+    if (li < 0 || ri < 0) { s.has_unenforced_constraints = true; continue; }
+    unite(li, ri);
+  }
+  if (npar == 0) return;
+
+  // Compact union-find roots into contiguous 0-based group indices, ascending
+  // in free-index order.
+  std::unordered_map<std::int32_t, std::int32_t> root_to_group;
+  std::int32_t next_group = 0;
+  for (std::int32_t k = 1; k <= npar; ++k) {
+    const std::int32_t r = find(k);
+    auto [it, inserted] = root_to_group.try_emplace(r, next_group);
+    if (inserted) ++next_group;
+    s.eq_groups[static_cast<std::size_t>(k - 1)] = it->second;
+  }
 }
 
 }  // namespace latva::partable

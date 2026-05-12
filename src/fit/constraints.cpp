@@ -19,20 +19,6 @@ PostError err(std::string detail) {
   return PostError{PostError::Kind::NumericIssue, std::move(detail)};
 }
 
-// Canonical Expr text uses no whitespace; a single identifier therefore
-// contains no operator/paren characters. (`a`, `.p3.` are identifiers;
-// `2*b`, `(a+b)`, `-1` are not.)
-bool is_bare_identifier(const std::string& s) noexcept {
-  if (s.empty()) return false;
-  for (char c : s) {
-    if (c == '+' || c == '-' || c == '*' || c == '/' || c == '^' ||
-        c == '(' || c == ')' || c == ' ' || c == '\t') {
-      return false;
-    }
-  }
-  return true;
-}
-
 }  // namespace
 
 Eigen::VectorXd
@@ -81,85 +67,36 @@ Eigen::MatrixXd EqConstraints::K() const {
 
 post_expected<EqConstraints>
 build_eq_constraints(const partable::LatentStructure& pt) {
+  // `<` / `>` rows and arbitrary-expression `==` rows are flagged by lavaanify
+  // (or `compute_eq_groups`); those phases aren't enforced yet.
+  if (pt.has_unenforced_constraints) {
+    bool has_ineq = false;
+    for (parse::Op op : pt.op)
+      if (op == parse::Op::LtConstraint || op == parse::Op::GtConstraint) has_ineq = true;
+    return std::unexpected(err(has_ineq
+        ? "inequality constraints (`<` / `>`) are not yet enforced by fit()"
+        : "this constraint kind (arbitrary linear / nonlinear `==`) is not yet "
+          "enforced by fit(); only `a == b` / shared-label equality is supported"));
+  }
+
   const std::int32_t npar = pt.n_free();
   EqConstraints out;
   out.npar = npar;
-  out.group.resize(static_cast<std::size_t>(std::max<std::int32_t>(npar, 0)));
-  for (std::int32_t k = 0; k < npar; ++k) {
-    out.group[static_cast<std::size_t>(k)] = k;   // each free param its own group
-  }
-  out.n_alpha = npar;
-  out.rank = 0;
-  if (npar == 0) return out;
+  out.group.assign(static_cast<std::size_t>(std::max<std::int32_t>(npar, 0)), 0);
+  if (npar == 0) { out.n_alpha = 0; out.rank = 0; return out; }
 
-  // `.pN.` plabel → 1-based free index, and `label` → 1-based free index,
-  // restricted to free (free > 0), non-constraint rows.
-  std::unordered_map<std::string, std::int32_t> plabel_to_free;
-  std::unordered_map<std::string, std::int32_t> label_to_free;
-  for (std::size_t i = 0; i < pt.size(); ++i) {
-    if (pt.free[i] <= 0) continue;
-    if (!pt.plabel[i].empty()) plabel_to_free.try_emplace(pt.plabel[i], pt.free[i]);
-    if (!pt.label[i].empty())  label_to_free.try_emplace(pt.label[i], pt.free[i]);
-  }
-  auto resolve = [&](const std::string& tok, const char* side)
-      -> post_expected<std::int32_t> {
-    if (!is_bare_identifier(tok)) {
-      return std::unexpected(err(
-          std::string("constraint ") + side + " '" + tok +
-          "' is an expression; only `a == b` / shared-label equality is enforced "
-          "(arbitrary linear/nonlinear constraints are not yet implemented)"));
-    }
-    if (auto it = plabel_to_free.find(tok); it != plabel_to_free.end()) return it->second;
-    if (auto it = label_to_free.find(tok);  it != label_to_free.end())  return it->second;
-    return std::unexpected(err(
-        std::string("constraint ") + side + " '" + tok +
-        "' does not name a free parameter (fixed/defined parameter or unknown label)"));
-  };
-
-  // Union-find over 1-based free indices (index 0 unused).
-  std::vector<std::int32_t> parent(static_cast<std::size_t>(npar) + 1);
-  for (std::int32_t k = 0; k <= npar; ++k) parent[static_cast<std::size_t>(k)] = k;
-  auto find = [&parent](std::int32_t x) -> std::int32_t {
-    while (parent[static_cast<std::size_t>(x)] != x) {
-      parent[static_cast<std::size_t>(x)] =
-          parent[static_cast<std::size_t>(parent[static_cast<std::size_t>(x)])];
-      x = parent[static_cast<std::size_t>(x)];
-    }
-    return x;
-  };
-  auto unite = [&](std::int32_t a, std::int32_t b) {
-    a = find(a);
-    b = find(b);
-    if (a != b) {
-      // Keep the smaller index as the root so the eventual group numbering
-      // follows free-index order.
-      parent[static_cast<std::size_t>(std::max(a, b))] = std::min(a, b);
-    }
-  };
-
-  for (std::size_t i = 0; i < pt.size(); ++i) {
-    const parse::Op op = pt.op[i];
-    if (op == parse::Op::LtConstraint || op == parse::Op::GtConstraint) {
-      return std::unexpected(err(
-          "inequality constraints (`<` / `>`) are not yet enforced by fit()"));
-    }
-    if (op != parse::Op::EqConstraint) continue;
-    auto li = resolve(pt.lhs[i], "lhs");
-    if (!li.has_value()) return std::unexpected(li.error());
-    auto ri = resolve(pt.rhs[i], "rhs");
-    if (!ri.has_value()) return std::unexpected(ri.error());
-    unite(*li, *ri);
-  }
-
-  // Compact the union-find roots into contiguous 0-based group indices,
-  // ascending in free-index order.
-  std::unordered_map<std::int32_t, std::int32_t> root_to_group;
+  // `pt.eq_groups` is the precomputed merged-parameter partition (identity if
+  // empty). Re-derive the group count / rank from it; `pt.eq_groups` already
+  // numbers groups contiguously in free-index order, but re-compact defensively
+  // in case it was edited by hand.
+  std::unordered_map<std::int32_t, std::int32_t> compact;
   std::int32_t next_group = 0;
-  for (std::int32_t k = 1; k <= npar; ++k) {
-    const std::int32_t r = find(k);
-    auto [it, inserted] = root_to_group.try_emplace(r, next_group);
+  const bool have = static_cast<std::int32_t>(pt.eq_groups.size()) == npar;
+  for (std::int32_t k = 0; k < npar; ++k) {
+    const std::int32_t raw = have ? pt.eq_groups[static_cast<std::size_t>(k)] : k;
+    auto [it, inserted] = compact.try_emplace(raw, next_group);
     if (inserted) ++next_group;
-    out.group[static_cast<std::size_t>(k - 1)] = it->second;
+    out.group[static_cast<std::size_t>(k)] = it->second;
   }
   out.n_alpha = next_group;
   out.rank = npar - next_group;

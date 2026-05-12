@@ -18,6 +18,7 @@
 #include "latva/parse/op.hpp"
 #include "latva/partable/partable.hpp"
 #include "latva/partable/start_hints.hpp"
+#include "latva/partable/lavaanify.hpp"   // compute_eq_groups
 #include "latva/model/matrix_rep.hpp"
 #include "latva/model/model_evaluator.hpp"
 #include "latva/fit/sample_stats.hpp"
@@ -169,6 +170,9 @@ inline lvp::LatentStructure parse_partable_df(Rcpp::DataFrame df,
     }
   }
   read_group_attrs(df, pt);
+  // Recompute the equality-constraint reparameterization from the (possibly
+  // hand-edited) `==` / `<` / `>` rows so fit() honors it.
+  lvp::compute_eq_groups(pt);
   return pt;
 }
 
