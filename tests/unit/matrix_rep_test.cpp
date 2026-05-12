@@ -104,9 +104,9 @@ TEST_CASE("matrix_rep: residual covariance lands in Theta off-diagonal") {
 }
 
 TEST_CASE("matrix_rep: constraint rows are sentinel cells") {
-  auto mr = must_build("f =~ x1 + a*x2 + a*x3");
-  // The shared label triggers an auto-equality `==` row at the end.
-  // That row should have used == false.
+  // An explicit `a == b` line is a constraint row — it has no matrix cell, so
+  // its `cell_for_row` entry stays a sentinel (used == false).
+  auto mr = must_build("f =~ x1 + a*x2 + b*x3\na == b");
   bool found_unused = false;
   for (const auto& c : mr.cell_for_row) {
     if (!c.used) { found_unused = true; break; }

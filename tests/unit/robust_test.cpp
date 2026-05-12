@@ -126,17 +126,18 @@ TEST_CASE("U·Γ_NT eigenvalues = 1 on 1F CFA (saturated has df=0; skipped)") {
 
 TEST_CASE("build_u_factor: constraint-aware (Δ → Δ·K), df = p* − n_alpha") {
   // The 1F 3-indicator CFA is saturated (df = 0) unconstrained — but tying
-  // the two non-marker loadings (shared label `a`) frees one moment, so the
-  // reparameterized model has df = 1. build_u_factor must see the `==` row,
-  // use Δ·K (n_alpha columns), and report df = p* − n_alpha.
+  // the two non-marker loadings (shared label `a`) merges one free parameter,
+  // so the reparameterized model has df = 1. build_u_factor must consume the
+  // model's `eq_groups`, use Δ·K (n_alpha columns), and report df = p* − n_alpha.
   auto ctx = load_and_fit(
       "f =~ x1 + a*x2 + a*x3",
       std::string(LATVA_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
-  const std::int32_t npar = ctx.handles.pt->n_free();   // 6
-  std::int32_t n_eq = 0;
-  for (auto op : ctx.handles.pt->op)
-    if (op == latva::parse::Op::EqConstraint) ++n_eq;   // 1
-  const std::int32_t n_alpha = npar - n_eq;             // 5
+  REQUIRE(ctx.handles.pt->n_free() == 6);
+  // n_alpha = # distinct merged-parameter groups (eq_groups numbers them
+  // contiguously from 0, so it's max + 1).
+  const std::int32_t n_alpha =
+      1 + *std::max_element(ctx.handles.pt->eq_groups.begin(),
+                            ctx.handles.pt->eq_groups.end());  // 5
   const Eigen::Index p     = ctx.samp.S[0].rows();      // 3
   const Eigen::Index pstar = p * (p + 1) / 2;           // 6
 
