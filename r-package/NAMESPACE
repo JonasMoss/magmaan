@@ -1,0 +1,3 @@
+useDynLib(latva, .registration = TRUE)
+importFrom(Rcpp, sourceCpp)
+exportPattern("^latva_")

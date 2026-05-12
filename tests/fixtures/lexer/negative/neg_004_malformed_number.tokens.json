@@ -1,0 +1,5 @@
+{
+  "_meta": {"format_version": 1, "fixture_kind": "lexer.tokens", "corpus_id": "neg_004_malformed_number", "tool": "regen-from-lexer"},
+  "input": "1e",
+  "expected_error": {"kind":"MalformedNumber","begin":1,"end":2,"line":1,"col":2}
+}

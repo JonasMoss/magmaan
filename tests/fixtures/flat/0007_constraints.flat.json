@@ -1,0 +1,28 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "flat.partable",
+    "corpus_id": "0007_constraints",
+    "tool": "lavaan::lavParseModelString",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "a == b ; c > 0 ; d < 1",
+  "rows": [],
+  "constraints": [
+    {
+      "op": "==",
+      "lhs": "a",
+      "rhs": "b"
+    },
+    {
+      "op": ">",
+      "lhs": "c",
+      "rhs": "0"
+    },
+    {
+      "op": "<",
+      "lhs": "d",
+      "rhs": "1"
+    }
+  ]
+}

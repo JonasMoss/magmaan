@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "flat.partable",
+    "corpus_id": "0005_labeled_equality",
+    "tool": "lavaan::lavParseModelString",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "f =~ a*x1 + a*x2 + b*x3",
+  "rows": [
+    {
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x1",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "a"
+      }
+    },
+    {
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x2",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "a"
+      }
+    },
+    {
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x3",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "b"
+      }
+    }
+  ],
+  "constraints": []
+}

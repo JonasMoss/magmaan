@@ -1,0 +1,49 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "flat.partable",
+    "corpus_id": "0016_group_vec",
+    "tool": "lavaan::lavParseModelString",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "f =~ c(1, 1) * x1 + c(NA, NA) * x2",
+  "rows": [
+    {
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x1",
+      "block": 1,
+      "modifier": {
+        "kind": "group",
+        "atoms": [
+          {
+            "kind": "fixed",
+            "value": 1
+          },
+          {
+            "kind": "fixed",
+            "value": 1
+          }
+        ]
+      }
+    },
+    {
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x2",
+      "block": 1,
+      "modifier": {
+        "kind": "group",
+        "atoms": [
+          {
+            "kind": "free"
+          },
+          {
+            "kind": "free"
+          }
+        ]
+      }
+    }
+  ],
+  "constraints": []
+}

@@ -1,0 +1,5 @@
+{
+  "_meta": {"format_version": 1, "fixture_kind": "lexer.tokens", "corpus_id": "neg_001_unknown_op", "tool": "regen-from-lexer"},
+  "input": "a = b",
+  "expected_error": {"kind":"UnknownOperator","begin":2,"end":3,"line":1,"col":3}
+}

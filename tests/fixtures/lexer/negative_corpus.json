@@ -1,0 +1,29 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "lexer.negative_corpus",
+    "description": "Lexer-level negative cases. Each entry should produce a ParseError of the named Kind during scan_all(input). Lives separately from the main corpus because these inputs are not meaningful at higher fixture layers (parser, partable, fit)."
+  },
+  "cases": [
+    {
+      "id":            "neg_001_unknown_op",
+      "input":         "a = b",
+      "expected_kind": "UnknownOperator"
+    },
+    {
+      "id":            "neg_002_unexpected_char",
+      "input":         "f & g",
+      "expected_kind": "UnexpectedChar"
+    },
+    {
+      "id":            "neg_003_unterminated_string",
+      "input":         "\"open",
+      "expected_kind": "UnterminatedString"
+    },
+    {
+      "id":            "neg_004_malformed_number",
+      "input":         "1e",
+      "expected_kind": "MalformedNumber"
+    }
+  ]
+}

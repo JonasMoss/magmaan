@@ -1,0 +1,14 @@
+{
+  "_meta": {"format_version": 1, "fixture_kind": "lexer.tokens", "corpus_id": "0019_path_hs", "tool": "regen-from-lexer"},
+  "input": "x9 ~ x1 + x2 + x3",
+  "tokens": [
+    {"kind":"Identifier","text":"x9","begin":0,"end":2,"line":1,"col":1},
+    {"kind":"Op","text":"~","begin":3,"end":4,"line":1,"col":4},
+    {"kind":"Identifier","text":"x1","begin":5,"end":7,"line":1,"col":6},
+    {"kind":"Plus","text":"+","begin":8,"end":9,"line":1,"col":9},
+    {"kind":"Identifier","text":"x2","begin":10,"end":12,"line":1,"col":11},
+    {"kind":"Plus","text":"+","begin":13,"end":14,"line":1,"col":14},
+    {"kind":"Identifier","text":"x3","begin":15,"end":17,"line":1,"col":16},
+    {"kind":"EndOfFile","text":"","begin":17,"end":17,"line":1,"col":18}
+  ]
+}

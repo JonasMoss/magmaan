@@ -1,0 +1,110 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "ptable",
+    "corpus_id": "0001_one_factor_cfa",
+    "tool": "lavaan::lavaanify",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "f =~ x1 + x2 + x3",
+  "rows": [
+    {
+      "id": 1,
+      "user": 1,
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x1",
+      "block": 1,
+      "group": 1,
+      "free": 0,
+      "exo": 0,
+      "ustart": 1,
+      "label": "",
+      "plabel": ".p1."
+    },
+    {
+      "id": 2,
+      "user": 1,
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x2",
+      "block": 1,
+      "group": 1,
+      "free": 1,
+      "exo": 0,
+      "ustart": null,
+      "label": "",
+      "plabel": ".p2."
+    },
+    {
+      "id": 3,
+      "user": 1,
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x3",
+      "block": 1,
+      "group": 1,
+      "free": 2,
+      "exo": 0,
+      "ustart": null,
+      "label": "",
+      "plabel": ".p3."
+    },
+    {
+      "id": 4,
+      "user": 0,
+      "lhs": "x1",
+      "op": "~~",
+      "rhs": "x1",
+      "block": 1,
+      "group": 1,
+      "free": 3,
+      "exo": 0,
+      "ustart": null,
+      "label": "",
+      "plabel": ".p4."
+    },
+    {
+      "id": 5,
+      "user": 0,
+      "lhs": "x2",
+      "op": "~~",
+      "rhs": "x2",
+      "block": 1,
+      "group": 1,
+      "free": 4,
+      "exo": 0,
+      "ustart": null,
+      "label": "",
+      "plabel": ".p5."
+    },
+    {
+      "id": 6,
+      "user": 0,
+      "lhs": "x3",
+      "op": "~~",
+      "rhs": "x3",
+      "block": 1,
+      "group": 1,
+      "free": 5,
+      "exo": 0,
+      "ustart": null,
+      "label": "",
+      "plabel": ".p6."
+    },
+    {
+      "id": 7,
+      "user": 0,
+      "lhs": "f",
+      "op": "~~",
+      "rhs": "f",
+      "block": 1,
+      "group": 1,
+      "free": 6,
+      "exo": 0,
+      "ustart": null,
+      "label": "",
+      "plabel": ".p7."
+    }
+  ]
+}

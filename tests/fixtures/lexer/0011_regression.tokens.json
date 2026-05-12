@@ -1,0 +1,14 @@
+{
+  "_meta": {"format_version": 1, "fixture_kind": "lexer.tokens", "corpus_id": "0011_regression", "tool": "regen-from-lexer"},
+  "input": "y ~ x1 + x2 + x3",
+  "tokens": [
+    {"kind":"Identifier","text":"y","begin":0,"end":1,"line":1,"col":1},
+    {"kind":"Op","text":"~","begin":2,"end":3,"line":1,"col":3},
+    {"kind":"Identifier","text":"x1","begin":4,"end":6,"line":1,"col":5},
+    {"kind":"Plus","text":"+","begin":7,"end":8,"line":1,"col":8},
+    {"kind":"Identifier","text":"x2","begin":9,"end":11,"line":1,"col":10},
+    {"kind":"Plus","text":"+","begin":12,"end":13,"line":1,"col":13},
+    {"kind":"Identifier","text":"x3","begin":14,"end":16,"line":1,"col":15},
+    {"kind":"EndOfFile","text":"","begin":16,"end":16,"line":1,"col":17}
+  ]
+}

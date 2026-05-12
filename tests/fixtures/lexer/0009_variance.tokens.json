@@ -1,0 +1,10 @@
+{
+  "_meta": {"format_version": 1, "fixture_kind": "lexer.tokens", "corpus_id": "0009_variance", "tool": "regen-from-lexer"},
+  "input": "f ~~ f",
+  "tokens": [
+    {"kind":"Identifier","text":"f","begin":0,"end":1,"line":1,"col":1},
+    {"kind":"Op","text":"~~","begin":2,"end":4,"line":1,"col":3},
+    {"kind":"Identifier","text":"f","begin":5,"end":6,"line":1,"col":6},
+    {"kind":"EndOfFile","text":"","begin":6,"end":6,"line":1,"col":7}
+  ]
+}

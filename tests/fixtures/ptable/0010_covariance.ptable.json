@@ -1,0 +1,54 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "ptable",
+    "corpus_id": "0010_covariance",
+    "tool": "lavaan::lavaanify",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "x1 ~~ x2",
+  "rows": [
+    {
+      "id": 1,
+      "user": 1,
+      "lhs": "x1",
+      "op": "~~",
+      "rhs": "x2",
+      "block": 1,
+      "group": 1,
+      "free": 1,
+      "exo": 0,
+      "ustart": null,
+      "label": "",
+      "plabel": ".p1."
+    },
+    {
+      "id": 2,
+      "user": 0,
+      "lhs": "x1",
+      "op": "~~",
+      "rhs": "x1",
+      "block": 1,
+      "group": 1,
+      "free": 2,
+      "exo": 0,
+      "ustart": null,
+      "label": "",
+      "plabel": ".p2."
+    },
+    {
+      "id": 3,
+      "user": 0,
+      "lhs": "x2",
+      "op": "~~",
+      "rhs": "x2",
+      "block": 1,
+      "group": 1,
+      "free": 3,
+      "exo": 0,
+      "ustart": null,
+      "label": "",
+      "plabel": ".p3."
+    }
+  ]
+}

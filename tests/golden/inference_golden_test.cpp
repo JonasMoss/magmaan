@@ -1,0 +1,325 @@
+#include <doctest/doctest.h>
+
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <set>
+#include <string>
+#include <vector>
+
+#include <Eigen/Core>
+#include <nlohmann/json.hpp>
+
+#include "../oracle.hpp"
+#include "latva/fit/fit.hpp"
+#include "latva/fit/inference.hpp"
+#include "latva/fit/robust.hpp"
+#include "latva/fit/sample_stats.hpp"
+#include "latva/model/matrix_rep.hpp"
+#include "latva/parse/parser.hpp"
+#include "latva/partable/lavaanify.hpp"
+
+namespace {
+
+// Mirror the skip list from fit_theta_golden_test.cpp — under-identified
+// models lavaan itself can't produce SEs for ("information matrix could
+// not be inverted"), so there's no oracle to compare against.
+const std::set<std::string> kSkipForInferenceGoldens = {
+    "0010_covariance",
+    "0013_string_label",
+    "0015_start_call",
+    "0018_na_modifier",
+};
+
+}  // namespace
+
+TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
+  const auto corpus = latva::test::load_corpus();
+  const std::string fit_dir = latva::test::fixtures_dir() + "/fit";
+
+  int total = 0, passed = 0;
+  std::vector<std::string> failures;
+  std::vector<std::string> skipped;
+  std::vector<std::string> needs_regen;
+
+  for (const auto& e : corpus) {
+    const std::string path = fit_dir + "/" + e.id + ".fit.json";
+    auto raw = latva::test::read_fixture(path);
+    if (!raw.has_value()) continue;
+    if (e.n_groups > 1) continue;   // multi-group has its own golden
+    if (kSkipForInferenceGoldens.count(e.id)) {
+      skipped.push_back(e.id);
+      continue;
+    }
+
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    if (exp.is_discarded()) {
+      failures.push_back(e.id + ": fixture not valid JSON");
+      continue;
+    }
+    if (!exp.contains("se") || !exp.contains("chi2") || !exp.contains("df")) {
+      // Fixture predates the inference-oracle regen. Skip until the R
+      // script has been re-run.
+      needs_regen.push_back(e.id);
+      continue;
+    }
+    ++total;
+
+    auto fp = latva::parse::Parser::parse(e.model);
+    if (!fp.has_value()) { failures.push_back(e.id + ": parse"); continue; }
+    auto pt = latva::partable::lavaanify(*fp);
+    if (!pt.has_value()) { failures.push_back(e.id + ": lavaanify"); continue; }
+    auto mr = latva::model::build_matrix_rep(*pt);
+    if (!mr.has_value()) { failures.push_back(e.id + ": matrix_rep"); continue; }
+
+    // Sample S from lavaan's lavInspect(fit, "sampstat")$cov — same
+    // as fit_theta_golden_test.cpp.
+    const auto& sample_blocks = exp["sample_cov"];
+    REQUIRE(sample_blocks.is_array());
+    latva::fit::SampleStats samp;
+    for (std::size_t b = 0; b < sample_blocks.size(); ++b) {
+      const auto& M = sample_blocks[b]["matrix"];
+      const Eigen::Index p = static_cast<Eigen::Index>(M.size());
+      Eigen::MatrixXd S(p, p);
+      for (Eigen::Index r = 0; r < p; ++r)
+        for (Eigen::Index c = 0; c < p; ++c)
+          S(r, c) = M[static_cast<std::size_t>(r)]
+                     [static_cast<std::size_t>(c)].get<double>();
+      samp.S.push_back(std::move(S));
+      samp.n_obs.push_back(exp["n_obs"].get<std::int64_t>());
+    }
+
+    auto est_or = latva::fit::fit(*pt, *mr, samp);
+    if (!est_or.has_value()) {
+      failures.push_back(e.id + ": fit failed — kind=" +
+                         std::to_string(static_cast<int>(est_or.error().kind)) +
+                         " " + est_or.error().detail);
+      continue;
+    }
+    const auto& est = *est_or;
+
+    latva::fit::ExpectedInfoSE method;
+    auto inf_or = method.compute(*pt, *mr, samp, est);
+    if (!inf_or.has_value()) {
+      failures.push_back(e.id + ": inference failed — kind=" +
+                         std::to_string(static_cast<int>(inf_or.error().kind)) +
+                         " " + inf_or.error().detail);
+      continue;
+    }
+    const auto& inf = *inf_or;
+
+    // 1) df — exact integer match.
+    const int df_lavaan = exp["df"].get<int>();
+    if (inf.df != df_lavaan) {
+      char buf[128];
+      std::snprintf(buf, sizeof(buf), "df = %d, lavaan = %d", inf.df, df_lavaan);
+      failures.push_back(e.id + ": " + buf);
+      continue;
+    }
+
+    // 2) chi² — ≤ 1e-3 absolute. For saturated models lavaan reports
+    // ~1e-13; (n-1)·fmin is the same order of magnitude. 1e-3 covers it.
+    const double chi2_lavaan = exp["chi2"].get<double>();
+    const double chi2_diff   = std::abs(inf.chi2 - chi2_lavaan);
+    if (chi2_diff > 1e-3) {
+      char buf[160];
+      std::snprintf(buf, sizeof(buf),
+                    "|chi2 - lavaan| = %.3e (ours=%.6f, lavaan=%.6f)",
+                    chi2_diff, inf.chi2, chi2_lavaan);
+      failures.push_back(e.id + ": " + buf);
+      continue;
+    }
+
+    // 3) SE — max absolute diff ≤ 1e-4 over all free params.
+    const auto& se_arr = exp["se"];
+    if (static_cast<std::size_t>(inf.se.size()) != se_arr.size()) {
+      failures.push_back(e.id + ": se length mismatch");
+      continue;
+    }
+    double max_se_diff = 0.0;
+    for (Eigen::Index k = 0; k < inf.se.size(); ++k) {
+      const double d = std::abs(inf.se(k) -
+          se_arr[static_cast<std::size_t>(k)].get<double>());
+      if (d > max_se_diff) max_se_diff = d;
+    }
+    if (max_se_diff > 1e-4) {
+      char buf[160];
+      std::snprintf(buf, sizeof(buf),
+                    "max |se - lavaan| = %.3e (df=%d, chi2_diff=%.3e)",
+                    max_se_diff, inf.df, chi2_diff);
+      failures.push_back(e.id + ": " + buf);
+      continue;
+    }
+
+    // 4) Robust normal-theory tests (SB, mean.var.adjusted, scaled.shifted)
+    //    via the reduced-symmetric eigenvalue path. Only checked when the
+    //    fixture carries oracle values AND the model is non-saturated
+    //    (df > 0 in the χ² sense).
+    if (inf.df > 0 && exp.contains("sb_chi2") && !exp["sb_chi2"].is_null()) {
+      auto uf_or = latva::fit::build_u_factor(*pt, *mr, samp, est);
+      if (!uf_or.has_value()) {
+        failures.push_back(e.id + ": build_u_factor — " +
+                           uf_or.error().detail);
+        continue;
+      }
+      auto M_nt_or = latva::fit::reduced_gamma_nt(*uf_or);
+      if (!M_nt_or.has_value()) {
+        failures.push_back(e.id + ": reduced_gamma_nt — " +
+                           M_nt_or.error().detail);
+        continue;
+      }
+      auto ev_or = latva::fit::ugamma_eigenvalues(*M_nt_or);
+      if (!ev_or.has_value()) {
+        failures.push_back(e.id + ": ugamma_eigenvalues — " +
+                           ev_or.error().detail);
+        continue;
+      }
+      // Sanity smoke: U·Γ_NT has all eigenvalues = 1 (rank-df projector).
+      const double max_dev_from_one =
+          (ev_or->array() - 1.0).abs().maxCoeff();
+      if (max_dev_from_one > 1e-9) {
+        char buf[160];
+        std::snprintf(buf, sizeof(buf),
+                      "U·Γ_NT eigenvalue deviation = %.3e (expected 0)",
+                      max_dev_from_one);
+        failures.push_back(e.id + ": " + buf);
+        continue;
+      }
+      // The SB / mean.var / scaled.shifted *wrapper formulas* are
+      // verified independently against lavaan: feed lavaan's stored
+      // UΓ̂ eigenvalues (which lavaan computed using empirical Γ̂ from
+      // raw data — not Γ_NT(Σ̂)) into our wrapper functions and confirm
+      // we recover lavaan's reported stats to 1e-3.
+      //
+      // Why this split: our reduced_gamma_nt produces all-1 eigenvalues
+      // (correct under Γ_NT), while lavaan uses Γ̂_empirical so its
+      // eigenvalues sum to roughly df + sampling drift. Both are
+      // correct in their own setting; the wrapper formulas should
+      // produce identical chi² statistics given the same eigenvalues.
+      if (exp.contains("ugamma_eigvals_nt") &&
+          !exp["ugamma_eigvals_nt"].is_null()) {
+        const auto& ev_arr = exp["ugamma_eigvals_nt"];
+        Eigen::VectorXd ev_lavaan(static_cast<Eigen::Index>(ev_arr.size()));
+        for (Eigen::Index k = 0; k < ev_lavaan.size(); ++k)
+          ev_lavaan(k) = ev_arr[static_cast<std::size_t>(k)].get<double>();
+        auto sb  = latva::fit::satorra_bentler(inf.chi2, inf.df, ev_lavaan);
+        auto mv  = latva::fit::mean_var_adjusted(inf.chi2, inf.df, ev_lavaan);
+        auto ss  = latva::fit::scaled_shifted(inf.chi2, inf.df, ev_lavaan);
+        const double sb_lavaan = exp["sb_chi2"].get<double>();
+        const double mv_lavaan = exp["mean_var_chi2"].get<double>();
+        const double ss_lavaan = exp["scaled_shifted_chi2"].get<double>();
+        if (std::abs(sb.chi2_scaled - sb_lavaan) > 1e-3) {
+          char buf[160];
+          std::snprintf(buf, sizeof(buf),
+                        "SB ours=%.6f, lavaan=%.6f (diff=%.3e)",
+                        sb.chi2_scaled, sb_lavaan,
+                        std::abs(sb.chi2_scaled - sb_lavaan));
+          failures.push_back(e.id + ": " + buf);
+          continue;
+        }
+        if (std::abs(mv.chi2_adj - mv_lavaan) > 1e-3) {
+          char buf[160];
+          std::snprintf(buf, sizeof(buf),
+                        "mean.var ours=%.6f, lavaan=%.6f (diff=%.3e)",
+                        mv.chi2_adj, mv_lavaan,
+                        std::abs(mv.chi2_adj - mv_lavaan));
+          failures.push_back(e.id + ": " + buf);
+          continue;
+        }
+        if (std::abs(ss.chi2_adj - ss_lavaan) > 1e-3) {
+          char buf[160];
+          std::snprintf(buf, sizeof(buf),
+                        "scaled.shifted ours=%.6f, lavaan=%.6f (diff=%.3e)",
+                        ss.chi2_adj, ss_lavaan,
+                        std::abs(ss.chi2_adj - ss_lavaan));
+          failures.push_back(e.id + ": " + buf);
+          continue;
+        }
+      }
+
+      // Robust ("sandwich") SEs vs lavaan's `estimator = "MLM"`
+      // (= se = "robust.sem"). Uses lavaan's stored empirical Γ̂
+      // (`gamma_hat`) as the meat so the moments match exactly. Single-
+      // group only (the robust-SE v1 surface is single-block).
+      if (exp.contains("gamma_hat") && !exp["gamma_hat"].is_null() &&
+          exp.contains("se_robust_sem") && !exp["se_robust_sem"].is_null()) {
+        const auto& Gj = exp["gamma_hat"];
+        const Eigen::Index pstar = static_cast<Eigen::Index>(Gj.size());
+        Eigen::MatrixXd Gamma_hat(pstar, pstar);
+        for (Eigen::Index r = 0; r < pstar; ++r)
+          for (Eigen::Index c = 0; c < pstar; ++c)
+            Gamma_hat(r, c) = Gj[static_cast<std::size_t>(r)]
+                               [static_cast<std::size_t>(c)].get<double>();
+        auto rob_or = latva::fit::robust_se(
+            *pt, *mr, samp, est, Gamma_hat,
+            {latva::fit::Information::Expected,
+             latva::fit::WeightMoments::Structured,
+             latva::fit::ScoreCovariance::Empirical});
+        if (!rob_or.has_value()) {
+          failures.push_back(e.id + ": robust_se — " + rob_or.error().detail);
+          continue;
+        }
+        const auto& se_arr_r = exp["se_robust_sem"];
+        if (static_cast<std::size_t>(rob_or->se.size()) != se_arr_r.size()) {
+          failures.push_back(e.id + ": robust se length mismatch");
+          continue;
+        }
+        double max_rob_diff = 0.0;
+        for (Eigen::Index k = 0; k < rob_or->se.size(); ++k) {
+          const double d = std::abs(rob_or->se(k) -
+              se_arr_r[static_cast<std::size_t>(k)].get<double>());
+          if (d > max_rob_diff) max_rob_diff = d;
+        }
+        if (max_rob_diff > 1e-4) {
+          char buf[160];
+          std::snprintf(buf, sizeof(buf),
+                        "max |robust.sem se - lavaan| = %.3e", max_rob_diff);
+          failures.push_back(e.id + ": " + buf);
+          continue;
+        }
+
+        // Huber-White (`estimator = "MLR"`, `se = "robust.huber.white"`):
+        // same meat, Observed (Hessian) bread.
+        if (exp.contains("se_robust_huberwhite") &&
+            !exp["se_robust_huberwhite"].is_null()) {
+          auto hw_or = latva::fit::robust_se(
+              *pt, *mr, samp, est, Gamma_hat,
+              {latva::fit::Information::Observed,
+               latva::fit::WeightMoments::Structured,
+               latva::fit::ScoreCovariance::Empirical});
+          if (!hw_or.has_value()) {
+            failures.push_back(e.id + ": robust_se (observed) — " +
+                               hw_or.error().detail);
+            continue;
+          }
+          const auto& se_hw = exp["se_robust_huberwhite"];
+          double max_hw_diff = 0.0;
+          for (Eigen::Index k = 0; k < hw_or->se.size(); ++k) {
+            const double d = std::abs(hw_or->se(k) -
+                se_hw[static_cast<std::size_t>(k)].get<double>());
+            if (d > max_hw_diff) max_hw_diff = d;
+          }
+          if (max_hw_diff > 1e-4) {
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                          "max |robust.huber.white se - lavaan| = %.3e",
+                          max_hw_diff);
+            failures.push_back(e.id + ": " + buf);
+            continue;
+          }
+        }
+      }
+    }
+
+    ++passed;
+  }
+
+  MESSAGE("inference goldens: " << passed << " / " << total << " pass"
+          << " (+ " << skipped.size() << " skipped under-identified, "
+          << needs_regen.size() << " awaiting fixture regen)");
+  for (const auto& s : skipped)     MESSAGE("  SKIP    " << s);
+  for (const auto& s : needs_regen) MESSAGE("  NO-SE   " << s);
+  for (const auto& f : failures)    MESSAGE("  FAIL    " << f);
+
+  CHECK(passed == total);
+}

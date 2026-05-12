@@ -1,0 +1,125 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "lavaan_version": "0.6-22.2560",
+    "description": "Canonical model corpus. Single source of truth for fixtures across all layers (lexer, flat, ptable, matrix_rep, fit). Models grow as later phases land."
+  },
+  "models": [
+    {
+      "id":    "0001_one_factor_cfa",
+      "model": "f =~ x1 + x2 + x3",
+      "notes": "Minimal 1-factor CFA. Exercises =~, +, identifiers."
+    },
+    {
+      "id":    "0002_three_factor_hs",
+      "model": "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9",
+      "notes": "Holzinger-Swineford 3-factor structure. Exercises multi-statement bodies separated by newlines."
+    },
+    {
+      "id":    "0003_multi_line_continuation",
+      "model": "f =~ x1 + x2 +\n     x3 + x4",
+      "notes": "Trailing '+' continues across newline."
+    },
+    {
+      "id":    "0004_fixed_marker",
+      "model": "f =~ 1*x1 + x2 + x3",
+      "notes": "Marker indicator fixed to 1 via numeric*identifier modifier."
+    },
+    {
+      "id":    "0005_labeled_equality",
+      "model": "f =~ a*x1 + a*x2 + b*x3",
+      "notes": "Equality across loadings via shared label modifier."
+    },
+    {
+      "id":    "0006_start_shorthand",
+      "model": "f =~ 1*x1 + 0.7?x2 + x3",
+      "notes": "Mixes '*' (fix) and '?' (start-value shorthand) modifiers."
+    },
+    {
+      "id":    "0007_constraints",
+      "model": "a == b ; c > 0 ; d < 1",
+      "notes": "Equality and inequality constraints separated by ';'."
+    },
+    {
+      "id":    "0008_defined_param",
+      "model": "indirect := a * b",
+      "notes": "Defined parameter via :=. Exercises Pratt-parsed expr in P4."
+    },
+    {
+      "id":    "0009_variance",
+      "model": "f ~~ f",
+      "notes": "Latent variance via ~~ on the same variable."
+    },
+    {
+      "id":    "0010_covariance",
+      "model": "x1 ~~ x2",
+      "notes": "Residual covariance between two indicators."
+    },
+    {
+      "id":    "0011_regression",
+      "model": "y ~ x1 + x2 + x3",
+      "notes": "Simple multi-predictor regression."
+    },
+    {
+      "id":    "0012_intercept",
+      "model": "y ~ 1",
+      "notes": "Intercept form. The parser treats `~ 1` specially; the lexer does not."
+    },
+    {
+      "id":    "0013_string_label",
+      "model": "f =~ \"loading_1\" * x1 + x2",
+      "notes": "Quoted-string label modifier."
+    },
+    {
+      "id":    "0014_semicolon_multi_stmt",
+      "model": "f =~ x1 + x2 + x3; y ~ f",
+      "notes": "Two statements separated by ';' on a single line."
+    },
+    {
+      "id":    "0015_start_call",
+      "model": "f =~ start(0.5) * x1 + start(0.7) * x2",
+      "notes": "Modifier function start(v)."
+    },
+    {
+      "id":    "0016_group_vec",
+      "model": "f =~ c(1, 1) * x1 + c(NA, NA) * x2",
+      "notes": "Multi-group per-row modifier via c(...)."
+    },
+    {
+      "id":    "0017_comments_interleaved",
+      "model": "f =~ x1 # marker indicator\n     + x2 ! second loading\n     + x3",
+      "notes": "Comments using both # and !, interleaved with multi-line continuation."
+    },
+    {
+      "id":    "0018_na_modifier",
+      "model": "f =~ NA * x1 + x2 + x3",
+      "notes": "Explicit NA modifier (free with no fixed value)."
+    },
+    {
+      "id":    "0019_path_hs",
+      "model": "x9 ~ x1 + x2 + x3",
+      "notes": "Pure path analysis on HolzingerSwineford1939 — exercises Reduced LISREL with no user latents (everything in Β/Ψ)."
+    },
+    {
+      "id":    "0020_cfa_plus_structural_hs",
+      "model": "visual =~ x1 + x2 + x3\nx9 ~ visual",
+      "notes": "CFA + structural on HolzingerSwineford1939 — exercises Mixed form (Λ + phantom-Λ identity for x9 + Β)."
+    },
+    {
+      "id":            "0021_multigroup_1f_hs",
+      "model":         "f =~ x1 + x2 + x3",
+      "n_groups":      2,
+      "group_var":     "school",
+      "meanstructure": true,
+      "notes":         "Multi-group 1F CFA across HolzingerSwineford1939 `school`. Lavaan auto-adds intercepts (ν free, α fixed at 0). Saturated → df = 0."
+    },
+    {
+      "id":            "0022_multigroup_3f_hs",
+      "model":         "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9",
+      "n_groups":      2,
+      "group_var":     "school",
+      "meanstructure": true,
+      "notes":         "Multi-group 3F CFA across HolzingerSwineford1939 `school` (configural). Lavaan auto-enables meanstructure for multi-group, so meanstructure=true here to match. Over-identified: df = 48. Reference for multi-group Browne residual NT and RLS chi²."
+    }
+  ]
+}

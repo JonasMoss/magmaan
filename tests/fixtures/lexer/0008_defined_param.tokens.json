@@ -1,0 +1,12 @@
+{
+  "_meta": {"format_version": 1, "fixture_kind": "lexer.tokens", "corpus_id": "0008_defined_param", "tool": "regen-from-lexer"},
+  "input": "indirect := a * b",
+  "tokens": [
+    {"kind":"Identifier","text":"indirect","begin":0,"end":8,"line":1,"col":1},
+    {"kind":"Op","text":":=","begin":9,"end":11,"line":1,"col":10},
+    {"kind":"Identifier","text":"a","begin":12,"end":13,"line":1,"col":13},
+    {"kind":"Star","text":"*","begin":14,"end":15,"line":1,"col":15},
+    {"kind":"Identifier","text":"b","begin":16,"end":17,"line":1,"col":17},
+    {"kind":"EndOfFile","text":"","begin":17,"end":17,"line":1,"col":18}
+  ]
+}

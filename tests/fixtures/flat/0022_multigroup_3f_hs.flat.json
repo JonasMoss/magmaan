@@ -1,0 +1,67 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "flat.partable",
+    "corpus_id": "0022_multigroup_3f_hs",
+    "tool": "lavaan::lavParseModelString",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9",
+  "rows": [
+    {
+      "lhs": "visual",
+      "op": "=~",
+      "rhs": "x1",
+      "block": 1
+    },
+    {
+      "lhs": "visual",
+      "op": "=~",
+      "rhs": "x2",
+      "block": 1
+    },
+    {
+      "lhs": "visual",
+      "op": "=~",
+      "rhs": "x3",
+      "block": 1
+    },
+    {
+      "lhs": "textual",
+      "op": "=~",
+      "rhs": "x4",
+      "block": 1
+    },
+    {
+      "lhs": "textual",
+      "op": "=~",
+      "rhs": "x5",
+      "block": 1
+    },
+    {
+      "lhs": "textual",
+      "op": "=~",
+      "rhs": "x6",
+      "block": 1
+    },
+    {
+      "lhs": "speed",
+      "op": "=~",
+      "rhs": "x7",
+      "block": 1
+    },
+    {
+      "lhs": "speed",
+      "op": "=~",
+      "rhs": "x8",
+      "block": 1
+    },
+    {
+      "lhs": "speed",
+      "op": "=~",
+      "rhs": "x9",
+      "block": 1
+    }
+  ],
+  "constraints": []
+}

@@ -1,0 +1,17 @@
+{
+  "_meta": {"format_version": 1, "fixture_kind": "lexer.tokens", "corpus_id": "0003_multi_line_continuation", "tool": "regen-from-lexer"},
+  "input": "f =~ x1 + x2 +\n     x3 + x4",
+  "tokens": [
+    {"kind":"Identifier","text":"f","begin":0,"end":1,"line":1,"col":1},
+    {"kind":"Op","text":"=~","begin":2,"end":4,"line":1,"col":3},
+    {"kind":"Identifier","text":"x1","begin":5,"end":7,"line":1,"col":6},
+    {"kind":"Plus","text":"+","begin":8,"end":9,"line":1,"col":9},
+    {"kind":"Identifier","text":"x2","begin":10,"end":12,"line":1,"col":11},
+    {"kind":"Plus","text":"+","begin":13,"end":14,"line":1,"col":14},
+    {"kind":"Newline","text":"\n","begin":14,"end":15,"line":1,"col":15},
+    {"kind":"Identifier","text":"x3","begin":20,"end":22,"line":2,"col":6},
+    {"kind":"Plus","text":"+","begin":23,"end":24,"line":2,"col":9},
+    {"kind":"Identifier","text":"x4","begin":25,"end":27,"line":2,"col":11},
+    {"kind":"EndOfFile","text":"","begin":27,"end":27,"line":2,"col":13}
+  ]
+}

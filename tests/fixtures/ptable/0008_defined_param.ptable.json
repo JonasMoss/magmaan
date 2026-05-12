@@ -1,0 +1,40 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "ptable",
+    "corpus_id": "0008_defined_param",
+    "tool": "lavaan::lavaanify",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "indirect := a * b",
+  "rows": [
+    {
+      "id": 1,
+      "user": 1,
+      "lhs": "indirect",
+      "op": ":=",
+      "rhs": "a*b",
+      "block": 0,
+      "group": 0,
+      "free": 0,
+      "exo": 0,
+      "ustart": null,
+      "label": "indirect",
+      "plabel": ".p."
+    },
+    {
+      "id": 1,
+      "user": 1,
+      "lhs": "indirect",
+      "op": ":=",
+      "rhs": "a*b",
+      "block": 0,
+      "group": 0,
+      "free": 0,
+      "exo": 0,
+      "ustart": null,
+      "label": "indirect",
+      "plabel": ""
+    }
+  ]
+}

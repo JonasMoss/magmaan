@@ -1,0 +1,16 @@
+# Repo root = two levels up from this Makevars. During an R build the cwd is
+# <repo>/r-package/src, so $(CURDIR)/../.. is the latva repo root.
+LATVA_ROOT := $(abspath $(CURDIR)/../..)
+
+CXX_STD       = CXX23
+PKG_CPPFLAGS  = -I$(LATVA_ROOT)/include -DEIGEN_MAX_ALIGN_BYTES=64
+PKG_LIBS      = $(LATVA_ROOT)/build/default/liblatva.a
+
+# Make sure liblatva.a (Debug/default preset) is current before linking the
+# R glue. Incremental: a no-op (~1s) when nothing changed in the C++ tree.
+$(SHLIB): latva_lib
+
+.PHONY: latva_lib
+latva_lib:
+	@cmake --build "$(LATVA_ROOT)/build/default" --target latva 2>/dev/null || \
+	  ( cd "$(LATVA_ROOT)" && cmake --preset default && cmake --build --preset default --target latva )
