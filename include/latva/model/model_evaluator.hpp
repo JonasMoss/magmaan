@@ -70,11 +70,11 @@ struct ParamLocation {
 // returns Eigen views.
 class ModelEvaluator {
  public:
-  // Borrows ParTable + MatrixRep references — caller must keep them alive
+  // Borrows LatentStructure + MatrixRep references — caller must keep them alive
   // for the lifetime of the evaluator. Build is fallible because some
   // partables (mismatched MatrixRep, missing variables) can't be evaluated.
   static model_expected<ModelEvaluator>
-  build(const partable::ParTable& pt, const MatrixRep& rep);
+  build(const partable::LatentStructure& pt, const MatrixRep& rep);
 
   // Number of free parameters this evaluator expects in θ.
   std::size_t n_free() const noexcept { return n_free_; }
@@ -137,7 +137,7 @@ class ModelEvaluator {
     mutable Eigen::VectorXd Mu;     // p × 1, μ = ν + Λ A α — output buffer
   };
 
-  // For each ParTable row, the (mat, row, col, block) cell + its source:
+  // For each LatentStructure row, the (mat, row, col, block) cell + its source:
   // either a free θ index (1-based) or a fixed value.
   struct CellWrite {
     std::uint8_t  mat;        // matches MatId enum value

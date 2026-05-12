@@ -27,7 +27,7 @@ struct LavaanifyOptions {
   // `group_var` (≙ `group`) names the grouping variable — defaults to "group"
   // when n_groups > 1 and left empty; `group_labels` (≙ `group.label`) names
   // the levels — auto-generated as "1".."n_groups" when empty/wrong-arity.
-  // All three are stored verbatim into the resulting ParTable.
+  // All three are stored verbatim into the resulting LatentStructure.
   std::int32_t             n_groups = 1;   // 1 = single-group; >1 replicates rows per group
   std::string              group_var;      // "" ⇒ "group" (if n_groups>1) or unnamed (if ==1)
   std::vector<std::string> group_labels;   // size must be 0 or n_groups
@@ -35,10 +35,10 @@ struct LavaanifyOptions {
 
 // production: lavaanify (the P3 pipeline; see project plan for steps)
 //
-// Turns a parsed FlatPartable into a complete ParTable: classifies variables,
+// Turns a parsed FlatPartable into a complete LatentStructure: classifies variables,
 // applies user modifiers, auto-adds default rows, fixes marker indicators,
 // fixed.x mirrors, synthesizes auto-equality constraints, assigns id /
-// plabel / free indices, appends user constraints as ParTable rows, and
+// plabel / free indices, appends user constraints as LatentStructure rows, and
 // stamps `group_var` / `group_labels` onto the result.
 //
 // `c(v1,…,vk)*x` per-group modifiers are applied (the g-th atom for group g);
@@ -48,12 +48,12 @@ struct LavaanifyOptions {
 // `out_starts` (optional): if non-null, receives the user's start *hints* —
 // the `start(v)*x` / `v?x` modifiers on free parameters — sized `n_free`
 // (NaN where no hint was given). Pass it through to `simple_start_values` /
-// `fit`. Left null when the caller only needs the structural ParTable.
+// `fit`. Left null when the caller only needs the structural LatentStructure.
 //
 // `out_names` (optional): if non-null, receives the `LatentNames` companion —
 // the verbal model (variable names by id, per-row labels/plabels, group var +
-// level labels). Left null when the caller only needs the structural ParTable.
-partable_expected<ParTable>
+// level labels). Left null when the caller only needs the structural LatentStructure.
+partable_expected<LatentStructure>
 lavaanify(const parse::FlatPartable& flat, const LavaanifyOptions& opts = {},
           Starts* out_starts = nullptr, LatentNames* out_names = nullptr);
 

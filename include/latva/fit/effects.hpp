@@ -35,7 +35,7 @@ struct DefinedParams {
 // params via their `plabel` aren't supported yet.
 post_expected<DefinedParams>
 compute_defined(const parse::FlatPartable& flat,
-                const partable::ParTable&  pt,
+                const partable::LatentStructure&  pt,
                 const Estimates&           est,
                 const Eigen::MatrixXd&     vcov);
 

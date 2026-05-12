@@ -171,7 +171,7 @@ struct UFactor {
 // `PostError::InfoMatrixSingular` if Γ_NT(M_b) is non-PD, Δ is
 // rank-deficient (Expected), or H_obs is non-invertible (Observed).
 post_expected<UFactor>
-build_u_factor(partable::ParTable        pt,
+build_u_factor(partable::LatentStructure        pt,
                const model::MatrixRep&   rep,
                const SampleStats&        samp,
                const Estimates&          est,
@@ -378,7 +378,7 @@ struct RobustSeResult {
 // or lavaan's NACOV).  meat = (WΔ)ᵀ·Γ̂·(WΔ). Single-block only (for multi-group
 // the per-block weighting is implicit — use the raw-data overload).
 post_expected<RobustSeResult>
-robust_se(partable::ParTable        pt,
+robust_se(partable::LatentStructure        pt,
           const model::MatrixRep&   rep,
           const SampleStats&        samp,
           const Estimates&          est,
@@ -392,7 +392,7 @@ robust_se(partable::ParTable        pt,
 // multi-group for the `Expected` bread (the per-block n_b/N weighting falls
 // out of the block-diagonal Z_c · WΔ); the `Observed` bread is single-block.
 post_expected<RobustSeResult>
-robust_se(partable::ParTable        pt,
+robust_se(partable::LatentStructure        pt,
           const model::MatrixRep&   rep,
           const SampleStats&        samp,
           const Estimates&          est,

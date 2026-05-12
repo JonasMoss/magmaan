@@ -86,7 +86,7 @@ Rcpp::DataFrame structural_cells_df(const std::vector<lvm::StructuralCell>& sc) 
 //
 // [[Rcpp::export]]
 Rcpp::List latva_matrix_rep(SEXP partable) {
-  lvp::ParTable pt = partable_from_arg(partable, "latva_matrix_rep");
+  lvp::LatentStructure pt = partable_from_arg(partable, "latva_matrix_rep");
   auto rep_or = lvm::build_matrix_rep(pt);
   if (!rep_or.has_value()) stop_model(rep_or.error());
   const lvm::MatrixRep& rep = *rep_or;
@@ -122,7 +122,7 @@ Rcpp::List latva_fit(SEXP partable, Rcpp::List sample_stats,
   // `<` / `>` rows and arbitrary-expression `==` rows make fit() error with a
   // clear message; `:=` rows are ignored during the fit (post-fit quantities).
   lvp::Starts starts;
-  lvp::ParTable pt = partable_from_arg(partable, "latva_fit", &starts);
+  lvp::LatentStructure pt = partable_from_arg(partable, "latva_fit", &starts);
   Ctx ctx = ctx_from_sample_stats(std::move(pt), sample_stats);
 
   auto e_or = lvf::fit<lvf::ML, lvf::LbfgsOptimizer>(
@@ -178,7 +178,7 @@ Rcpp::List latva_fit(SEXP partable, Rcpp::List sample_stats,
 // [[Rcpp::export]]
 Rcpp::NumericVector latva_start_values(SEXP partable, Rcpp::List sample_stats) {
   lvp::Starts starts;
-  lvp::ParTable pt = partable_from_arg(partable, "latva_start_values", &starts);
+  lvp::LatentStructure pt = partable_from_arg(partable, "latva_start_values", &starts);
   Ctx ctx = ctx_from_sample_stats(std::move(pt), sample_stats);
   auto sv_or = lvf::simple_start_values(ctx.pt, ctx.rep, ctx.samp, starts);
   if (!sv_or.has_value()) stop_fit(sv_or.error());

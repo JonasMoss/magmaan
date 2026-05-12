@@ -15,11 +15,11 @@ using latva::parse::Op;
 using latva::parse::Parser;
 using latva::partable::lavaanify;
 using latva::partable::LavaanifyOptions;
-using latva::partable::ParTable;
+using latva::partable::LatentStructure;
 
 namespace {
 
-ParTable must_lavaanify(std::string_view src, LavaanifyOptions opts = {}) {
+LatentStructure must_lavaanify(std::string_view src, LavaanifyOptions opts = {}) {
   auto fp = Parser::parse(src);
   REQUIRE_MESSAGE(fp.has_value(), "parser failed: " << fp.error().detail);
   auto pt = lavaanify(*fp, opts);
@@ -296,10 +296,10 @@ TEST_CASE("lavaanify: n_groups < 1 is rejected") {
   CHECK(pt.error().kind == PartableError::Kind::BadGroupSpec);
 }
 
-TEST_CASE("lavaanify: group identity is stored on the ParTable") {
+TEST_CASE("lavaanify: group identity is stored on the LatentStructure") {
   // Single group: n_groups() == 1, no group_var / group_labels.
   {
-    ParTable pt = must_lavaanify("f =~ x1 + x2 + x3");
+    LatentStructure pt = must_lavaanify("f =~ x1 + x2 + x3");
     CHECK(pt.n_groups() == 1);
     CHECK(pt.group_var.empty());
     CHECK(pt.group_labels.empty());
@@ -310,7 +310,7 @@ TEST_CASE("lavaanify: group identity is stored on the ParTable") {
     opts.n_groups     = 2;
     opts.group_var    = "school";
     opts.group_labels = {"Pasteur", "Grant-White"};
-    ParTable pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
+    LatentStructure pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
     CHECK(pt.n_groups() == 2);
     CHECK(pt.group_var == "school");
     REQUIRE(pt.group_labels.size() == 2);
@@ -320,7 +320,7 @@ TEST_CASE("lavaanify: group identity is stored on the ParTable") {
   // Two groups, name omitted ⇒ defaults to "group"; labels auto-generated.
   {
     LavaanifyOptions opts;  opts.n_groups = 2;
-    ParTable pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
+    LatentStructure pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
     CHECK(pt.n_groups() == 2);
     CHECK(pt.group_var == "group");
     REQUIRE(pt.group_labels.size() == 2);
@@ -342,7 +342,7 @@ TEST_CASE("lavaanify: c(...) supplies per-group fixed values") {
   // c(0.8, 1.2) on x2's loading ⇒ group-1 loading fixed at 0.8, group-2 at
   // 1.2 (both rows fixed, distinct values).
   LavaanifyOptions opts;  opts.n_groups = 2;  opts.group_var = "school";
-  ParTable pt = must_lavaanify("f =~ x1 + c(0.8, 1.2)*x2 + x3", opts);
+  LatentStructure pt = must_lavaanify("f =~ x1 + c(0.8, 1.2)*x2 + x3", opts);
   double g1 = std::nan(""), g2 = std::nan("");
   std::int32_t f1 = -1, f2 = -1;
   for (std::size_t i = 0; i < pt.size(); ++i) {

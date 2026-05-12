@@ -37,7 +37,7 @@ ModelEvaluator must_build(std::string_view src) {
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
-  static thread_local latva::partable::ParTable s_pt;
+  static thread_local latva::partable::LatentStructure s_pt;
   static thread_local latva::model::MatrixRep   s_mr;
   s_pt = std::move(*pt);
   s_mr = std::move(*mr);

@@ -17,7 +17,7 @@
 
 namespace {
 
-// Models whose ParTable has rows our P6.1 evaluator doesn't yet handle
+// Models whose LatentStructure has rows our P6.1 evaluator doesn't yet handle
 // (e.g., latent regression Beta). The fit fixture exists, but there's no
 // matching evaluator surface yet.
 const std::set<std::string> kDeferred = {

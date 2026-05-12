@@ -35,7 +35,7 @@ std::string diff_cells(const latva::model::MatrixRep& mr,
 
   for (std::size_t i = 0; i < mr.cell_for_row.size(); ++i) {
     const auto& got = mr.cell_for_row[i];
-    const int row_id = static_cast<int>(i + 1);  // mirrors ParTable.id
+    const int row_id = static_cast<int>(i + 1);  // mirrors LatentStructure.id
     if (!exp_by_id.count(row_id)) {
       return "cell row_id=" + std::to_string(row_id) +
              " missing from fixture (got mat=" +

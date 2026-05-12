@@ -38,7 +38,7 @@ inline Eigen::Index vech_index(Eigen::Index p, Eigen::Index r,
 // in ExpectedInfoSE::compute (kept in sync).
 struct Chi2Df { double chi2; int df; };
 
-Chi2Df compute_chi2_df(const partable::ParTable& pt,
+Chi2Df compute_chi2_df(const partable::LatentStructure& pt,
                        const SampleStats&        samp,
                        const Estimates&          est) {
   double n_total = 0.0;
@@ -122,7 +122,7 @@ finalize_inference(Eigen::MatrixXd info, double chi2, int df,
 // gets its fixed.x `fixed_value`s filled — each method owns its own copy of
 // pt (the public API takes pt by value).
 post_expected<model::ModelEvaluator>
-prepare_evaluator(partable::ParTable&       pt,
+prepare_evaluator(partable::LatentStructure&       pt,
                   const model::MatrixRep&   rep,
                   const SampleStats&        samp,
                   const Estimates&          est) {
@@ -151,7 +151,7 @@ prepare_evaluator(partable::ParTable&       pt,
 }  // namespace
 
 post_expected<Inference>
-ExpectedInfoSE::compute(partable::ParTable        pt,
+ExpectedInfoSE::compute(partable::LatentStructure        pt,
                         const model::MatrixRep&   rep,
                         const SampleStats&        samp,
                         const Estimates&          est) const {
@@ -333,7 +333,7 @@ ExpectedInfoSE::compute(partable::ParTable        pt,
 // ----------------------------------------------------------------------------
 
 post_expected<Inference>
-FdObservedInfoSE::compute(partable::ParTable        pt,
+FdObservedInfoSE::compute(partable::LatentStructure        pt,
                           const model::MatrixRep&   rep,
                           const SampleStats&        samp,
                           const Estimates&          est) const {
@@ -502,7 +502,7 @@ inline double h2_beta_beta(const model::ParamLocation& ba,
 }  // namespace
 
 post_expected<Inference>
-AnalyticObservedInfoSE::compute(partable::ParTable        pt,
+AnalyticObservedInfoSE::compute(partable::LatentStructure        pt,
                                 const model::MatrixRep&   rep,
                                 const SampleStats&        samp,
                                 const Estimates&          est) const {
@@ -799,7 +799,7 @@ rls_chi2(const SampleStats&            samp,
 }
 
 post_expected<double>
-browne_residual_nt(partable::ParTable        pt,
+browne_residual_nt(partable::LatentStructure        pt,
                    const model::MatrixRep&   rep,
                    const SampleStats&        samp,
                    const Estimates&          est) {

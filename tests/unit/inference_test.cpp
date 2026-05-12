@@ -30,7 +30,7 @@ using latva::model::build_matrix_rep;
 using latva::model::MatrixRep;
 using latva::parse::Parser;
 using latva::partable::lavaanify;
-using latva::partable::ParTable;
+using latva::partable::LatentStructure;
 
 namespace {
 
@@ -39,7 +39,7 @@ namespace {
 // ml_test.cpp's must_build, but we need pt/rep handles here, not the
 // evaluator (which inference.compute() rebuilds itself).
 struct ModelHandles {
-  ParTable* pt;
+  LatentStructure* pt;
   MatrixRep* rep;
 };
 
@@ -50,7 +50,7 @@ ModelHandles must_model(std::string_view src) {
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
-  static thread_local ParTable  s_pt;
+  static thread_local LatentStructure  s_pt;
   static thread_local MatrixRep s_mr;
   s_pt = std::move(*pt);
   s_mr = std::move(*mr);
@@ -694,7 +694,7 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   auto mr = latva::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
 
-  // (a) ParTable structure
+  // (a) LatentStructure structure
   std::int32_t n_b1 = 0, n_b2 = 0;
   for (std::size_t i = 0; i < pt->size(); ++i) {
     if (pt->block[i] == 1) ++n_b1;
@@ -884,7 +884,7 @@ namespace {
 // built (pt, rep) into a 2-block version: block 0 = original, block 1 =
 // identical structure with a fresh slice of free-parameter indices.
 struct TwoBlockHandles {
-  latva::partable::ParTable* pt;
+  latva::partable::LatentStructure* pt;
   latva::model::MatrixRep*   rep;
   std::size_t                n_free_single;
 };
@@ -892,7 +892,7 @@ struct TwoBlockHandles {
 TwoBlockHandles duplicate_two_blocks(const ModelHandles& src) {
   using namespace latva::partable;
   using namespace latva::model;
-  static thread_local ParTable  s_pt;
+  static thread_local LatentStructure  s_pt;
   static thread_local MatrixRep s_rep;
   s_pt  = *src.pt;
   s_rep = *src.rep;
@@ -901,7 +901,7 @@ TwoBlockHandles duplicate_two_blocks(const ModelHandles& src) {
       static_cast<std::int32_t>(src.pt->n_free());
   const std::size_t  orig_size  = src.pt->size();
 
-  // Append block-1 ParTable rows: independent free indices, block=2 in
+  // Append block-1 LatentStructure rows: independent free indices, block=2 in
   // lavaan-style 1-based numbering, separate plabels.
   for (std::size_t i = 0; i < orig_size; ++i) {
     s_pt.id.push_back(src.pt->id[i] +

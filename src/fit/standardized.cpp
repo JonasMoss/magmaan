@@ -23,7 +23,7 @@ PostError make_err(PostError::Kind k, std::string detail) {
 }  // namespace
 
 post_expected<StandardizedSolution>
-standardize_lv(const partable::ParTable& pt,
+standardize_lv(const partable::LatentStructure& pt,
                const model::MatrixRep&   rep,
                const Estimates&          est,
                const Eigen::MatrixXd&    vcov) {
@@ -147,7 +147,7 @@ inline Eigen::Index vech_len(Eigen::Index p) noexcept {
 }  // namespace
 
 post_expected<StandardizedSolution>
-standardize_all(const partable::ParTable& pt,
+standardize_all(const partable::LatentStructure& pt,
                 const model::MatrixRep&   rep,
                 const Estimates&          est,
                 const Eigen::MatrixXd&    vcov) {

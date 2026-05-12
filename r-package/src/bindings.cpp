@@ -197,7 +197,7 @@ Rcpp::DataFrame latva_lavaanify(std::string syntax,
     Rcpp::stop("latva lavaanify error [%s]: %s",
                partable_error_kind(pt_or.error().kind), pt_or.error().detail);
   }
-  const latva::partable::ParTable& pt = *pt_or;
+  const latva::partable::LatentStructure& pt = *pt_or;
 
   const R_xlen_t n = static_cast<R_xlen_t>(pt.size());
   Rcpp::IntegerVector id(n), user(n), block(n), group(n), free(n), exo(n);
@@ -255,7 +255,7 @@ Rcpp::DataFrame latva_lavaanify(std::string syntax,
   cols.attr("class") = "data.frame";
   Rcpp::DataFrame df(cols);
   // Group identity rides as data.frame attributes (table-level metadata,
-  // mirrored back into ParTable.group_var / .group_labels by parse_partable_df).
+  // mirrored back into LatentStructure.group_var / .group_labels by parse_partable_df).
   Rf_setAttrib(df, Rf_install("latva.group_var"), Rf_mkString(pt.group_var.c_str()));
   Rcpp::CharacterVector gl(static_cast<R_xlen_t>(pt.group_labels.size()));
   for (std::size_t j = 0; j < pt.group_labels.size(); ++j)

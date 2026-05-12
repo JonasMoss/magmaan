@@ -49,7 +49,7 @@ struct EqConstraints {
   Eigen::MatrixXd K() const;
 };
 
-// Build the equality-constraint reparameterization from a ParTable. Scans
+// Build the equality-constraint reparameterization from a LatentStructure. Scans
 // rows with `op == EqConstraint`; resolves each side (a single identifier —
 // a `.pN.` plabel for the auto-synthesized rows, or a row `label` for an
 // explicit `a == b`) to a 1-based free θ index and unions the two indices.
@@ -61,6 +61,6 @@ struct EqConstraints {
 //   - an `==` side that doesn't name a free parameter (fixed param, defined
 //     param, or unknown label).
 post_expected<EqConstraints>
-build_eq_constraints(const partable::ParTable& pt);
+build_eq_constraints(const partable::LatentStructure& pt);
 
 }  // namespace latva::fit
