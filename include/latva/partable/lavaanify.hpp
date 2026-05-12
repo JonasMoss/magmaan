@@ -49,8 +49,12 @@ struct LavaanifyOptions {
 // the `start(v)*x` / `v?x` modifiers on free parameters — sized `n_free`
 // (NaN where no hint was given). Pass it through to `simple_start_values` /
 // `fit`. Left null when the caller only needs the structural ParTable.
+//
+// `out_names` (optional): if non-null, receives the `LatentNames` companion —
+// the verbal model (variable names by id, per-row labels/plabels, group var +
+// level labels). Left null when the caller only needs the structural ParTable.
 partable_expected<ParTable>
 lavaanify(const parse::FlatPartable& flat, const LavaanifyOptions& opts = {},
-          Starts* out_starts = nullptr);
+          Starts* out_starts = nullptr, LatentNames* out_names = nullptr);
 
 }  // namespace latva::partable
