@@ -16,10 +16,10 @@ struct StandardizedSolution {
   Eigen::VectorXd se;
 };
 
-// `std.lv` standardization: factor variances are scaled to 1 and Λ
-// loadings are rescaled by √ψ_jj. Other parameter kinds are left
-// alone in v0 (Θ, Β, Nu, Alpha, Ψ off-diagonals all pass through as
-// identity transforms).
+// `std.lv` standardization: factor variances are scaled to 1, Λ loadings
+// are rescaled by √ψ_jj, and factor covariances become factor correlations
+// (ψ_jk → ψ_jk / √(ψ_jj·ψ_kk)). Indicator-side parameter kinds (Θ, Β, Nu)
+// pass through as identity transforms (that's the difference vs `std.all`).
 //
 // SEs come from the delta method: SE_std = √diag(J · vcov · Jᵀ) where
 // J is the (n_free × n_free) Jacobian of the transformation.

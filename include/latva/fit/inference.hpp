@@ -1,7 +1,9 @@
 #pragma once
 
 #include <limits>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include <Eigen/Core>
 
@@ -21,12 +23,16 @@ namespace latva::fit {
 //   chi2 : N · F_ML(θ̂) — model fit test statistic (lavaan's `likelihood
 //          = "normal"` default; Wishart variant would be (N−1) · F_ML)
 //   df   : Σ_b p_b(p_b + 1)/2 − n_free
+//   warnings : post-fit diagnostics — currently negative variance estimates
+//          ("Heywood cases"). Empty for a clean solution. lavaan emits the
+//          analogous `lavaan WARNING: ... negative variances` message.
 struct Inference {
-  Eigen::MatrixXd info;
-  Eigen::MatrixXd vcov;
-  Eigen::VectorXd se;
-  double          chi2 = 0.0;
-  int             df   = 0;
+  Eigen::MatrixXd          info;
+  Eigen::MatrixXd          vcov;
+  Eigen::VectorXd          se;
+  double                   chi2 = 0.0;
+  int                      df   = 0;
+  std::vector<std::string> warnings;
 };
 
 // Expected-information SEs for the ML discrepancy.

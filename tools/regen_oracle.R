@@ -403,6 +403,48 @@ for (m in models) {
   bic2_v  <- as.numeric(fm["bic2"])
   npar_v  <- as.integer(fm["npar"])
 
+  # Per-parameter z / two-sided p-value from parameterEstimates(), aligned to
+  # the free-index order. lavaan's z = est/se, pvalue = 2·pnorm(-|z|); our
+  # `z_test` computes z_k = θ̂_k/SE_k and p_k = P(χ²(1) > z_k²) — the same value.
+  pe     <- parameterEstimates(fit)
+  pe_grp <- if (!is.null(pe$group))        pe$group        else rep(1L, nrow(pe))
+  fr_grp <- if (!is.null(free_rows$group)) free_rows$group else rep(1L, nrow(free_rows))
+  pe_z   <- numeric(nrow(free_rows))
+  pe_pv  <- numeric(nrow(free_rows))
+  for (i in seq_len(nrow(free_rows))) {
+    hit <- which(pe$lhs == free_rows$lhs[i] & pe$op == free_rows$op[i] &
+                 pe$rhs == free_rows$rhs[i] & pe_grp == fr_grp[i])
+    if (length(hit) == 1L) { pe_z[i] <- pe$z[hit]; pe_pv[i] <- pe$pvalue[hit] }
+    else                   { pe_z[i] <- NA_real_; pe_pv[i] <- NA_real_ }
+  }
+
+  # Wald test (`lavTestWald`): for the 3F Holzinger fixture only, restrict the
+  # first free loading row's parameter to 0 and dump χ²(1) / df / p-value plus
+  # the constrained row's (lhs, op, rhs) so the C++ side can pick the right θ
+  # index and build R = e_kᵀ.
+  wald_l1_eq0_chi2 <- NULL; wald_l1_eq0_df  <- NULL; wald_l1_eq0_pvalue   <- NULL
+  wald_l1_eq0_lhs  <- NULL; wald_l1_eq0_op  <- NULL; wald_l1_eq0_rhs      <- NULL
+  wald_l1_eq0_free_idx <- NULL
+  if (identical(id, "0002_three_factor_hs")) {
+    pl <- parTable(fit)
+    lr <- which(pl$op == "=~" & pl$free > 0)
+    if (length(lr) >= 1L) {
+      r1   <- lr[1]
+      plab <- pl$plabel[r1]
+      lt   <- tryCatch(lavTestWald(fit, constraints = paste0(plab, " == 0")),
+                       error = function(e) NULL)
+      if (!is.null(lt)) {
+        wald_l1_eq0_chi2     <- as.numeric(lt$stat)
+        wald_l1_eq0_df       <- as.integer(lt$df)
+        wald_l1_eq0_pvalue   <- as.numeric(lt$p.value)
+        wald_l1_eq0_lhs      <- as.character(pl$lhs[r1])
+        wald_l1_eq0_op       <- as.character(pl$op[r1])
+        wald_l1_eq0_rhs      <- as.character(pl$rhs[r1])
+        wald_l1_eq0_free_idx <- as.integer(pl$free[r1])   # 1-based free-param ordinal
+      }
+    }
+  }
+
   # Observed-info SEs: re-fit with `information = "observed"` for
   # lavaan's H_obs⁻¹-based SEs. Reuse cfa_args so multi-group / mean
   # structure carry through.
@@ -582,6 +624,17 @@ for (m in models) {
     bic               = bic_v,
     bic2              = bic2_v,
     npar              = npar_v,
+    # Per-parameter z / two-sided p-value (free-index order) + a canned Wald
+    # restriction (3F Holzinger only). NA / null elsewhere.
+    pe_z               = pe_z,
+    pe_pvalue          = pe_pv,
+    wald_l1_eq0_chi2     = wald_l1_eq0_chi2,
+    wald_l1_eq0_df       = wald_l1_eq0_df,
+    wald_l1_eq0_pvalue   = wald_l1_eq0_pvalue,
+    wald_l1_eq0_lhs      = wald_l1_eq0_lhs,
+    wald_l1_eq0_op       = wald_l1_eq0_op,
+    wald_l1_eq0_rhs      = wald_l1_eq0_rhs,
+    wald_l1_eq0_free_idx = wald_l1_eq0_free_idx,
     # Browne residual NT family — both flavors. Layered on the same fit,
     # so they're cheap to dump alongside the standard chi².
     browne_residual_nt = browne_nt_chi2,
@@ -737,3 +790,127 @@ for (m in lincon_models) {
 
 cat("regenerated", length(regenerated_lincon), "linear-constraint fit fixtures under",
     lincon_dir, "\n")
+
+# === standardized-solution fit fixtures ====================================
+# Post-hoc `standardizedSolution()` parity — distinct from the std.lv
+# *identification convention* fixtures (`fit_stdlv/`) above. These pin the
+# std.lv / std.all transforms (values + delta-method SEs) per free θ index,
+# against lavaan::standardizedSolution(fit, type=...). Covers a cov-only CFA
+# with free factor covariances (the std.lv Ψ-off-diagonal surface), a
+# mean-structure CFA (ν/α rescaling under std.all), and a configural 2-group
+# CFA. Kept OUT of corpus.json; C++ side: tests/golden/standardized_golden_test.cpp.
+std_dir <- file.path(fixtures, "fit_std")
+dir.create(std_dir, showWarnings = FALSE, recursive = TRUE)
+
+std_models <- list(
+  list(id = "0001_three_factor_hs",
+       model = paste("visual =~ x1 + x2 + x3",
+                     "textual =~ x4 + x5 + x6",
+                     "speed =~ x7 + x8 + x9", sep = "\n"),
+       meanstructure = FALSE, n_groups = 1L, group = NULL),
+  # Configural 2-group + meanstructure — exercises the free ν intercepts'
+  # std.all rescaling (and the factor covariances' std.lv → correlation in
+  # both groups). A single-group 3F + meanstructure variant is intentionally
+  # omitted: our LBFGS line search currently fails on it (the 2-group fit is
+  # fine), and chasing that convergence corner is out of scope for this pass.
+  list(id = "0002_three_factor_hs_2group",
+       model = paste("visual =~ x1 + x2 + x3",
+                     "textual =~ x4 + x5 + x6",
+                     "speed =~ x7 + x8 + x9", sep = "\n"),
+       meanstructure = TRUE, n_groups = 2L, group = "school")
+)
+
+regenerated_std <- character(0)
+for (m in std_models) {
+  id <- m$id; model <- m$model
+  cfa_args <- list(model = model, data = HolzingerSwineford1939, std.lv = FALSE)
+  if (!is.null(m$group)) cfa_args$group <- m$group
+  if (isTRUE(m$meanstructure)) cfa_args$meanstructure <- TRUE
+  fit <- tryCatch(do.call(cfa, cfa_args), error = function(e) e)
+  if (inherits(fit, "error") || !lavInspect(fit, "converged")) {
+    cat("  skip ", id, " (std cfa error / no convergence)\n", sep = "")
+    next
+  }
+
+  pt_fitted <- parTable(fit)
+  free_rows <- pt_fitted[pt_fitted$free > 0, ]
+  free_rows <- free_rows[order(free_rows$free), ]
+  fm        <- fitMeasures(fit)
+
+  slv  <- standardizedSolution(fit, type = "std.lv")
+  sall <- standardizedSolution(fit, type = "std.all")
+  fr_grp   <- if (!is.null(free_rows$group)) free_rows$group else rep(1L, nrow(free_rows))
+  slv_grp  <- if (!is.null(slv$group))       slv$group       else rep(1L, nrow(slv))
+  sall_grp <- if (!is.null(sall$group))      sall$group      else rep(1L, nrow(sall))
+
+  n_free   <- nrow(free_rows)
+  lhs_v    <- character(n_free); op_v <- character(n_free); rhs_v <- character(n_free)
+  blk_v    <- integer(n_free)
+  slv_est  <- numeric(n_free);  slv_se  <- numeric(n_free)
+  sall_est <- numeric(n_free);  sall_se <- numeric(n_free)
+  for (i in seq_len(n_free)) {
+    lhs_v[i] <- as.character(free_rows$lhs[i])
+    op_v[i]  <- as.character(free_rows$op[i])
+    rhs_v[i] <- as.character(free_rows$rhs[i])
+    blk_v[i] <- as.integer(if (!is.null(free_rows$block)) free_rows$block[i] else 1L) - 1L
+    h1 <- which(slv$lhs == free_rows$lhs[i] & slv$op == free_rows$op[i] &
+                slv$rhs == free_rows$rhs[i] & slv_grp == fr_grp[i])
+    h2 <- which(sall$lhs == free_rows$lhs[i] & sall$op == free_rows$op[i] &
+                sall$rhs == free_rows$rhs[i] & sall_grp == fr_grp[i])
+    stopifnot(length(h1) == 1L, length(h2) == 1L)
+    slv_est[i]  <- slv$est.std[h1];  slv_se[i]  <- slv$se[h1]
+    sall_est[i] <- sall$est.std[h2]; sall_se[i] <- sall$se[h2]
+  }
+
+  # Per-block sample stats so the C++ side can re-fit.
+  sampstat <- lavInspect(fit, "sampstat")
+  sample_cov_list <- list(); sample_mean_list <- list()
+  if (m$n_groups <= 1) {
+    sample_cov_list[[1]] <- list(block = 0L, matrix = unname(as.matrix(sampstat$cov)))
+    if (!is.null(sampstat$mean))
+      sample_mean_list[[1]] <- list(block = 0L, vector = as.numeric(sampstat$mean))
+  } else {
+    for (b in seq_len(m$n_groups)) {
+      sample_cov_list[[b]] <- list(block = as.integer(b - 1L),
+                                   matrix = unname(as.matrix(sampstat[[b]]$cov)))
+      if (!is.null(sampstat[[b]]$mean))
+        sample_mean_list[[b]] <- list(block = as.integer(b - 1L),
+                                      vector = as.numeric(sampstat[[b]]$mean))
+    }
+  }
+  if (length(sample_mean_list) == 0) sample_mean_list <- NULL
+
+  payload <- list(
+    `_meta` = list(format_version = 1L, fixture_kind = "fit.std",
+                   corpus_id = id, tool = "lavaan::standardizedSolution",
+                   lavaan_version = installed),
+    input           = model,
+    meanstructure   = isTRUE(m$meanstructure),
+    n_groups        = as.integer(m$n_groups),
+    group_var       = if (!is.null(m$group)) m$group else "",
+    n_obs           = as.integer(lavInspect(fit, "ntotal")),
+    n_obs_per_block = as.integer(lavInspect(fit, "nobs")),
+    chi2            = as.numeric(fm["chisq"]),
+    df              = as.integer(fm["df"]),
+    # Per free θ index, in free-index order (matches Estimates::theta /
+    # ModelEvaluator::param_locations() ordering):
+    par_lhs     = I(lhs_v),
+    par_op      = I(op_v),
+    par_rhs     = I(rhs_v),
+    par_block   = I(blk_v),
+    std_lv_est  = I(slv_est),
+    std_lv_se   = I(slv_se),
+    std_all_est = I(sall_est),
+    std_all_se  = I(sall_se),
+    sample_cov  = sample_cov_list,
+    sample_mean = sample_mean_list
+  )
+
+  out_path <- file.path(std_dir, paste0(id, ".fit.json"))
+  write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
+             null = "null", na = "null", digits = NA)
+  regenerated_std <- c(regenerated_std, out_path)
+}
+
+cat("regenerated", length(regenerated_std), "std-solution fit fixtures under",
+    std_dir, "\n")

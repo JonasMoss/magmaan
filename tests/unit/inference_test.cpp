@@ -1052,3 +1052,73 @@ TEST_CASE("Observed info: FD ≈ analytic on CFA + structural (Reduced)") {
                               an_or->se.array().abs();
   CHECK(rel.maxCoeff() < 1e-4);
 }
+
+TEST_CASE("Inference: Heywood detection — negative residual variance flagged") {
+  // A just-identified 3-indicator 1-factor CFA whose sample covariance
+  // implies a communality > 1 for x1, so its residual variance comes out
+  // negative: ψ̂ = cov(x1,x2)·cov(x1,x3)/cov(x2,x3) = 0.8·0.8/0.5 = 1.28
+  // > var(x1) = 1  ⇒  θ̂_x1 = 1 − 1.28 < 0. The implied Σ̂ exactly reproduces
+  // the (PD) sample S, so the fit still converges — lavaan would report this
+  // estimate too, with its "some estimated ov variances are negative" warning.
+  auto h = must_model("f =~ x1 + x2 + x3");
+
+  Eigen::MatrixXd S(3, 3);
+  S << 1.0, 0.8, 0.8,
+       0.8, 1.0, 0.5,
+       0.8, 0.5, 1.0;
+  SampleStats samp;
+  samp.S.push_back(S);
+  samp.n_obs.push_back(200);
+
+  auto est_or = latva::fit::fit(*h.pt, *h.rep, samp);
+  REQUIRE(est_or.has_value());
+  const auto& est = *est_or;
+  CHECK(est.theta.minCoeff() < 0.0);   // the fit really did land a Heywood case
+
+  ExpectedInfoSE method;
+  auto inf_or = method.compute(*h.pt, *h.rep, samp, est);
+  REQUIRE(inf_or.has_value());
+  CHECK_FALSE(inf_or->warnings.empty());
+  bool flagged = false;
+  for (const auto& w : inf_or->warnings)
+    if (w.find("negative") != std::string::npos &&
+        w.find("Heywood") != std::string::npos)
+      flagged = true;
+  CHECK(flagged);
+
+  // The observed-info path surfaces the same diagnostic.
+  FdObservedInfoSE fd;
+  auto inf_fd = fd.compute(*h.pt, *h.rep, samp, est);
+  REQUIRE(inf_fd.has_value());
+  CHECK_FALSE(inf_fd->warnings.empty());
+}
+
+TEST_CASE("Inference: clean fit has no Heywood warnings (3F Holzinger)") {
+  auto h = must_model(
+      "visual =~ x1 + x2 + x3\n"
+      "textual =~ x4 + x5 + x6\n"
+      "speed =~ x7 + x8 + x9");
+
+  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
+                   "/fit/0002_three_factor_hs.fit.json");
+  REQUIRE(in.is_open());
+  std::stringstream ss; ss << in.rdbuf();
+  auto j = nlohmann::json::parse(ss.str(), nullptr, false);
+  REQUIRE(!j.is_discarded());
+  const auto& M = j["sample_cov"][0]["matrix"];
+  const Eigen::Index p = static_cast<Eigen::Index>(M.size());
+  Eigen::MatrixXd S(p, p);
+  for (Eigen::Index r = 0; r < p; ++r)
+    for (Eigen::Index c = 0; c < p; ++c)
+      S(r, c) = M[static_cast<std::size_t>(r)]
+                 [static_cast<std::size_t>(c)].get<double>();
+  SampleStats samp;
+  samp.S.push_back(std::move(S));
+  samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
+
+  auto est = latva::fit::fit(*h.pt, *h.rep, samp).value();
+  ExpectedInfoSE method;
+  auto inf_or = method.compute(*h.pt, *h.rep, samp, est);
+  REQUIRE(inf_or.has_value());
+  CHECK(inf_or->warnings.empty());
+}

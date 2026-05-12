@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
 #include <string>
 #include <utility>
 #include <vector>
@@ -99,12 +100,14 @@ Eigen::VectorXd se_from_vcov(const Eigen::MatrixXd& vcov) {
 // info⁻¹). Shared by all three SE methods.
 post_expected<Inference>
 finalize_inference(Eigen::MatrixXd info, double chi2, int df,
-                   const EqConstraints& con) {
+                   const EqConstraints& con,
+                   std::vector<std::string> warnings = {}) {
   if (!con.active()) {
     auto vcov_or = invert_spd(info, "information matrix");
     if (!vcov_or.has_value()) return std::unexpected(vcov_or.error());
     Eigen::VectorXd se = se_from_vcov(*vcov_or);
-    return Inference{std::move(info), std::move(*vcov_or), std::move(se), chi2, df};
+    return Inference{std::move(info), std::move(*vcov_or), std::move(se),
+                     chi2, df, std::move(warnings)};
   }
   const Eigen::MatrixXd K = con.K();                            // npar × n_alpha (0/1)
   const Eigen::MatrixXd info_alpha = K.transpose() * info * K;  // n_alpha × n_alpha
@@ -114,7 +117,7 @@ finalize_inference(Eigen::MatrixXd info, double chi2, int df,
   Eigen::MatrixXd vcov_full = K * (*vcov_alpha_or) * K.transpose();  // npar × npar
   Eigen::VectorXd se = se_from_vcov(vcov_full);
   return Inference{std::move(info), std::move(vcov_full), std::move(se),
-                   chi2, df + con.rank};
+                   chi2, df + con.rank, std::move(warnings)};
 }
 
 // Resolve fixed.x fixed_values, build the evaluator, and validate shapes.
@@ -146,6 +149,53 @@ prepare_evaluator(partable::LatentStructure&       pt,
         "SampleStats and evaluator have different block counts"));
   }
   return ev;
+}
+
+// Post-fit Heywood / improper-solution diagnostics: a free *diagonal*
+// Ψ (latent) or Θ (residual) parameter that came out negative. lavaan
+// emits the equivalent "some estimated ov variances are negative" /
+// "some estimated lv variances are negative" warning. v0 scope (per the
+// roadmap's G5): just the negative-variance check at θ̂ — no box constraints,
+// no implied-correlation > 1 check (a non-PD implied Σ is already a hard
+// error upstream; a negative implied variance can only come from a negative
+// Ψ/Θ diagonal, which this catches). Never fails — returns an empty vector
+// for a clean solution.
+std::vector<std::string>
+heywood_warnings(const model::ModelEvaluator& ev,
+                 const model::MatrixRep&      rep,
+                 const Estimates&             est) {
+  std::vector<std::string> out;
+  const auto locs = ev.param_locations();
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    const auto& L = locs[k];
+    if (L.row != L.col) continue;            // off-diagonal: a covariance, not a variance
+    if (L.mat != model::MatId::Psi && L.mat != model::MatId::Theta) continue;
+    if (!(est.theta(static_cast<Eigen::Index>(k)) < 0.0)) continue;
+    const std::size_t blk = static_cast<std::size_t>(L.block);
+    const auto idx        = static_cast<std::size_t>(L.row);
+    std::string vname;
+    if (L.mat == model::MatId::Theta) {
+      if (blk < rep.ov_names.size() && idx < rep.ov_names[blk].size())
+        vname = rep.ov_names[blk][idx];
+    } else {
+      if (blk < rep.lv_names.size() && idx < rep.lv_names[blk].size())
+        vname = rep.lv_names[blk][idx];
+    }
+    if (vname.empty()) vname = std::to_string(idx + 1);
+    const char* what = (L.mat == model::MatId::Theta)
+                           ? "residual variance"
+                           : "latent variance";
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%.6g",
+                  est.theta(static_cast<Eigen::Index>(k)));
+    std::string msg = "negative " + std::string(what) + " estimate (Heywood "
+        "case): " + vname;
+    if (rep.dims.size() > 1)
+      msg += " (block " + std::to_string(blk + 1) + ")";
+    msg += " = " + std::string(buf);
+    out.push_back(std::move(msg));
+  }
+  return out;
 }
 
 }  // namespace
@@ -324,7 +374,8 @@ ExpectedInfoSE::compute(partable::LatentStructure        pt,
   // rank. Trivial (K = I, rank = 0) when there are none.
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
-  return finalize_inference(std::move(info), chi2, df, *con_or);
+  return finalize_inference(std::move(info), chi2, df, *con_or,
+                            heywood_warnings(ev, rep, est));
 }
 
 // ----------------------------------------------------------------------------
@@ -403,7 +454,8 @@ FdObservedInfoSE::compute(partable::LatentStructure        pt,
   const auto [chi2, df] = compute_chi2_df(pt, samp, est);
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
-  return finalize_inference(std::move(info), chi2, df, *con_or);
+  return finalize_inference(std::move(info), chi2, df, *con_or,
+                            heywood_warnings(ev, rep, est));
 }
 
 // ----------------------------------------------------------------------------
@@ -668,7 +720,8 @@ AnalyticObservedInfoSE::compute(partable::LatentStructure        pt,
   const auto [chi2, df] = compute_chi2_df(pt, samp, est);
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
-  return finalize_inference(std::move(info), chi2, df, *con_or);
+  return finalize_inference(std::move(info), chi2, df, *con_or,
+                            heywood_warnings(ev, rep, est));
 }
 
 // ----------------------------------------------------------------------------
