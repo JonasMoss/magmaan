@@ -95,6 +95,75 @@ VarSets classify_vars(const parse::FlatPartable& flat) {
   return v;
 }
 
+// === Variable inventory =====================================================
+//
+// Assigns a stable id to every distinct variable (id = order of first
+// appearance scanning [ov.ind, ov.y, ov.x, ov.misc, lv]) and builds the
+// canonical observed / extended-latent orderings (var ids) that `matrix_rep`
+// otherwise re-derives by name. `reduced` = "the model has any `~` row" (the
+// Reduced LISREL form): then ov.y and ov.x are promoted into the extended
+// latent set (phantom latents).
+struct VarInventory {
+  std::vector<std::string>    names;        // id → name
+  std::vector<VarRole>        roles;        // id → first-bucket role
+  std::vector<std::int8_t>    is_user_lv;   // id → 1 if in the `lv` set
+  std::vector<std::int32_t>   ov_order;     // ids, canonical observed order
+  std::vector<std::int32_t>   lv_ext_order; // ids, extended-latent order
+  std::unordered_map<std::string, std::int32_t> id_of;
+
+  std::int32_t lookup(std::string_view name) const {
+    auto it = id_of.find(std::string(name));
+    return (it == id_of.end()) ? -1 : it->second;
+  }
+};
+
+VarInventory build_var_inventory(const VarSets& v, bool reduced) {
+  VarInventory inv;
+  auto ensure = [&](const std::string& name, VarRole role) -> std::int32_t {
+    auto it = inv.id_of.find(name);
+    if (it != inv.id_of.end()) return it->second;
+    const std::int32_t id = static_cast<std::int32_t>(inv.names.size());
+    inv.names.push_back(name);
+    inv.roles.push_back(role);
+    inv.is_user_lv.push_back(0);
+    inv.id_of.emplace(name, id);
+    return id;
+  };
+  for (const auto& s : v.ov_ind.items)  ensure(s, VarRole::Indicator);
+  for (const auto& s : v.ov_y.items)    ensure(s, VarRole::EndoOv);
+  for (const auto& s : v.ov_x.items)    ensure(s, VarRole::ExoOv);
+  for (const auto& s : v.ov_misc.items) ensure(s, VarRole::MiscOv);
+  for (const auto& s : v.lv.items) {
+    const std::int32_t id = ensure(s, VarRole::Latent);
+    inv.is_user_lv[static_cast<std::size_t>(id)] = 1;
+  }
+
+  auto append_unique = [&](std::vector<std::int32_t>& dst, const std::string& name) {
+    const std::int32_t id = inv.id_of.at(name);
+    for (auto x : dst) if (x == id) return;
+    dst.push_back(id);
+  };
+  // Observed order — mirrors matrix_rep::classify():
+  //   Reduced & no user latents : ov.y, then ov.x.
+  //   else                      : ov.ind, ov.y, ov.x, ov.misc.
+  if (reduced && v.lv.items.empty()) {
+    for (const auto& s : v.ov_y.items) append_unique(inv.ov_order, s);
+    for (const auto& s : v.ov_x.items) append_unique(inv.ov_order, s);
+  } else {
+    for (const auto& s : v.ov_ind.items)  append_unique(inv.ov_order, s);
+    for (const auto& s : v.ov_y.items)    append_unique(inv.ov_order, s);
+    for (const auto& s : v.ov_x.items)    append_unique(inv.ov_order, s);
+    for (const auto& s : v.ov_misc.items) append_unique(inv.ov_order, s);
+  }
+  // Extended-latent order: user latents, then (Reduced only) ov.y, ov.x.
+  for (const auto& s : v.lv.items) append_unique(inv.lv_ext_order, s);
+  if (reduced) {
+    for (const auto& s : v.ov_y.items) append_unique(inv.lv_ext_order, s);
+    for (const auto& s : v.ov_x.items) append_unique(inv.lv_ext_order, s);
+  }
+  return inv;
+}
+
 // === ParTable row builder ===================================================
 //
 // Every step appends to a single PartableBuilder. After all steps run we
@@ -396,9 +465,10 @@ void append_user_constraints(const parse::FlatPartable& flat,
 // `auto_fixed == false` AND the user didn't fix the value AND op is not a
 // constraint. The old `ustart` column is split: a fixed row's value lands in
 // `out.fixed_value[i]`; a free row's `start(v)`/`v?x` hint lands in
-// `starts.hint[free-1]` (sized n_free, NaN where unspecified).
-void finalize(const std::vector<PendingRow>& src, ParTable& out,
-              Starts& starts) {
+// `starts.hint[free-1]` (sized n_free, NaN where unspecified). The name-free
+// var-id columns + the `LatentNames` companion are filled here too, from `inv`.
+void finalize(const std::vector<PendingRow>& src, const VarInventory& inv,
+              ParTable& out, Starts& starts, LatentNames& names) {
   const std::size_t n = src.size();
   out.id.resize(n);
   out.user.resize(n);
@@ -412,7 +482,29 @@ void finalize(const std::vector<PendingRow>& src, ParTable& out,
   out.fixed_value.resize(n);
   out.label.resize(n);
   out.plabel.resize(n);
+  out.lhs_var.resize(n);
+  out.rhs_var.resize(n);
   starts.hint.clear();
+
+  names.var_name   = inv.names;
+  names.row_lhs.resize(n);
+  names.row_rhs.resize(n);
+  names.row_label.resize(n);
+  names.row_plabel.resize(n);
+  names.row_user.resize(n);
+
+  // Variable table.
+  out.n_vars       = static_cast<std::int32_t>(inv.names.size());
+  out.var_role     = inv.roles;
+  out.is_user_latent = inv.is_user_lv;
+  out.ov_order     = inv.ov_order;
+  out.lv_ext_order = inv.lv_ext_order;
+  out.ov_pos.assign(static_cast<std::size_t>(out.n_vars), -1);
+  out.lv_ext_pos.assign(static_cast<std::size_t>(out.n_vars), -1);
+  for (std::size_t k = 0; k < inv.ov_order.size(); ++k)
+    out.ov_pos[static_cast<std::size_t>(inv.ov_order[k])] = static_cast<std::int32_t>(k);
+  for (std::size_t k = 0; k < inv.lv_ext_order.size(); ++k)
+    out.lv_ext_pos[static_cast<std::size_t>(inv.lv_ext_order[k])] = static_cast<std::int32_t>(k);
 
   std::int32_t free_idx = 0;
   for (std::size_t i = 0; i < n; ++i) {
@@ -429,6 +521,17 @@ void finalize(const std::vector<PendingRow>& src, ParTable& out,
     const bool is_constraint =
         (r.op == parse::Op::EqConstraint || r.op == parse::Op::LtConstraint ||
          r.op == parse::Op::GtConstraint || r.op == parse::Op::DefineParam);
+
+    // Var-id columns: only formula rows have variable lhs/rhs. `~1` rows have
+    // an empty rhs. Constraint rows have neither (their sides are expressions).
+    if (is_constraint) {
+      out.lhs_var[i] = -1;
+      out.rhs_var[i] = -1;
+    } else {
+      out.lhs_var[i] = inv.lookup(r.lhs);
+      out.rhs_var[i] = (r.op == parse::Op::Intercept || r.rhs.empty())
+                           ? -1 : inv.lookup(r.rhs);
+    }
 
     // free: 0 if user-fixed, auto-fixed, exo, or constraint; else assign.
     if (is_constraint || r.user_fixed_value || r.exo == 1) {
@@ -454,6 +557,13 @@ void finalize(const std::vector<PendingRow>& src, ParTable& out,
     // confirm; deferring exact match for now).
     if (is_constraint) out.plabel[i] = "";
     else               out.plabel[i] = ".p" + std::to_string(out.id[i]) + ".";
+
+    // LatentNames companion (verbal model — display / round-trip only).
+    names.row_lhs[i]    = r.lhs;
+    names.row_rhs[i]    = r.rhs;
+    names.row_label[i]  = r.label;
+    names.row_plabel[i] = out.plabel[i];
+    names.row_user[i]   = r.user;
   }
 }
 
@@ -551,7 +661,8 @@ build_group_template(const parse::FlatPartable& flat,
 
 partable_expected<ParTable> lavaanify(const parse::FlatPartable& flat,
                                       const LavaanifyOptions& opts,
-                                      Starts* out_starts) {
+                                      Starts* out_starts,
+                                      LatentNames* out_names) {
   if (opts.n_groups < 1) {
     return std::unexpected(make_err(
         PartableError::Kind::BadGroupSpec,
@@ -571,8 +682,13 @@ partable_expected<ParTable> lavaanify(const parse::FlatPartable& flat,
   }
 
   // Step 2: classify variables (same set across groups in v0 — no
-  // group-specific variable structure yet).
+  // group-specific variable structure yet) and build the name-free inventory
+  // (var ids, roles, canonical orderings) that matrix_rep otherwise re-derives.
   const VarSets v = classify_vars(flat);
+  bool has_regression = false;
+  for (const auto& r : flat.rows)
+    if (r.op == parse::Op::Regression) { has_regression = true; break; }
+  const VarInventory inv = build_var_inventory(v, has_regression);
 
   // Steps 1-6 per group, then concatenate. block / group are 1-based per
   // lavaan convention. Each group gets its own copy of formula + auto-*
@@ -613,10 +729,12 @@ partable_expected<ParTable> lavaanify(const parse::FlatPartable& flat,
   for (auto& r : user_constraint_rows) rows.push_back(std::move(r));
   for (auto& r : eq_rows)              rows.push_back(std::move(r));
 
-  // Final pass: id/plabel/free assignment + fixed_value / start-hint split.
+  // Final pass: id/plabel/free assignment + fixed_value / start-hint split +
+  // var-id columns + the LatentNames companion.
   ParTable out;
   Starts starts;
-  finalize(rows, out, starts);
+  LatentNames names;
+  finalize(rows, inv, out, starts, names);
   if (out_starts) *out_starts = std::move(starts);
 
   // Group identity (pure metadata — nothing downstream branches on it).
@@ -635,6 +753,9 @@ partable_expected<ParTable> lavaanify(const parse::FlatPartable& flat,
     out.group_var = opts.group_var;          // may be a user-named single group
     out.group_labels = opts.group_labels;    // 0 or 1 entries
   }
+  names.group_var    = out.group_var;
+  names.group_labels = out.group_labels;
+  if (out_names) *out_names = std::move(names);
   return out;
 }
 
