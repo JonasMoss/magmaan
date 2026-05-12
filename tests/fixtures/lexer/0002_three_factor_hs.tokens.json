@@ -1,0 +1,30 @@
+{
+  "_meta": {"format_version": 1, "fixture_kind": "lexer.tokens", "corpus_id": "0002_three_factor_hs", "tool": "regen-from-lexer"},
+  "input": "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9",
+  "tokens": [
+    {"kind":"Identifier","text":"visual","begin":0,"end":6,"line":1,"col":1},
+    {"kind":"Op","text":"=~","begin":7,"end":9,"line":1,"col":8},
+    {"kind":"Identifier","text":"x1","begin":10,"end":12,"line":1,"col":11},
+    {"kind":"Plus","text":"+","begin":13,"end":14,"line":1,"col":14},
+    {"kind":"Identifier","text":"x2","begin":15,"end":17,"line":1,"col":16},
+    {"kind":"Plus","text":"+","begin":18,"end":19,"line":1,"col":19},
+    {"kind":"Identifier","text":"x3","begin":20,"end":22,"line":1,"col":21},
+    {"kind":"Newline","text":"\n","begin":22,"end":23,"line":1,"col":23},
+    {"kind":"Identifier","text":"textual","begin":23,"end":30,"line":2,"col":1},
+    {"kind":"Op","text":"=~","begin":31,"end":33,"line":2,"col":9},
+    {"kind":"Identifier","text":"x4","begin":34,"end":36,"line":2,"col":12},
+    {"kind":"Plus","text":"+","begin":37,"end":38,"line":2,"col":15},
+    {"kind":"Identifier","text":"x5","begin":39,"end":41,"line":2,"col":17},
+    {"kind":"Plus","text":"+","begin":42,"end":43,"line":2,"col":20},
+    {"kind":"Identifier","text":"x6","begin":44,"end":46,"line":2,"col":22},
+    {"kind":"Newline","text":"\n","begin":46,"end":47,"line":2,"col":24},
+    {"kind":"Identifier","text":"speed","begin":47,"end":52,"line":3,"col":1},
+    {"kind":"Op","text":"=~","begin":53,"end":55,"line":3,"col":7},
+    {"kind":"Identifier","text":"x7","begin":56,"end":58,"line":3,"col":10},
+    {"kind":"Plus","text":"+","begin":59,"end":60,"line":3,"col":13},
+    {"kind":"Identifier","text":"x8","begin":61,"end":63,"line":3,"col":15},
+    {"kind":"Plus","text":"+","begin":64,"end":65,"line":3,"col":18},
+    {"kind":"Identifier","text":"x9","begin":66,"end":68,"line":3,"col":20},
+    {"kind":"EndOfFile","text":"","begin":68,"end":68,"line":3,"col":22}
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "_meta": {"format_version": 1, "fixture_kind": "lexer.tokens", "corpus_id": "0010_covariance", "tool": "regen-from-lexer"},
+  "input": "x1 ~~ x2",
+  "tokens": [
+    {"kind":"Identifier","text":"x1","begin":0,"end":2,"line":1,"col":1},
+    {"kind":"Op","text":"~~","begin":3,"end":5,"line":1,"col":4},
+    {"kind":"Identifier","text":"x2","begin":6,"end":8,"line":1,"col":7},
+    {"kind":"EndOfFile","text":"","begin":8,"end":8,"line":1,"col":9}
+  ]
+}

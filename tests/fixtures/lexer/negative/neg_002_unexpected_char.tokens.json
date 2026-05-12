@@ -1,0 +1,5 @@
+{
+  "_meta": {"format_version": 1, "fixture_kind": "lexer.tokens", "corpus_id": "neg_002_unexpected_char", "tool": "regen-from-lexer"},
+  "input": "f & g",
+  "expected_error": {"kind":"UnexpectedChar","begin":2,"end":3,"line":1,"col":3}
+}

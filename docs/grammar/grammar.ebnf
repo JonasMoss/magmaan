@@ -1,0 +1,113 @@
+(* ===========================================================================
+   latva model syntax — v0 grammar
+   ---------------------------------------------------------------------------
+   Source of truth for the lexer + recursive-descent parser. Every production
+   below corresponds 1:1 to a function in the C++ implementation; functions
+   carry a `// production: <name>` back-reference comment so this file and
+   the code can be cross-checked.
+
+   Notation: W3C-style EBNF.
+     A ::= B            definition
+     A | B              alternation
+     A B                concatenation
+     A?  A*  A+         optional / zero-or-more / one-or-more
+     ( ... )            grouping
+     'literal'          terminal
+     [a-z]              character class
+     A - B              set difference
+     /* ... */          comment
+
+   v0 scope: see docs/grammar/grammar.md for what is intentionally rejected.
+   ===========================================================================*)
+
+
+(* === Top level ============================================================= *)
+
+model               ::= statement_sep* statement (statement_sep+ statement)*
+                        statement_sep*
+statement_sep       ::= NEWLINE | ';'
+statement           ::= formula | constraint | define_param
+
+
+(* === Formulas ============================================================== *)
+
+formula             ::= lhs_list operator rhs_list
+lhs_list            ::= identifier ('+' identifier)*       /* multi-LHS only meaningful for `~` */
+operator            ::= measurement | regression | covariance | rejected_operator
+measurement         ::= '=~'
+regression          ::= '~'
+covariance          ::= '~~'
+
+(* The intercept form `y ~ 1` is recognized by the parser when `regression`
+   is followed by an `intercept_rhs`. We do NOT lex `~1` as a single token
+   to keep tokenization context-free. *)
+rhs_list            ::= intercept_rhs | rhs_term ('+' rhs_term)*
+intercept_rhs       ::= '1'                                /* only valid after `~` */
+
+rhs_term            ::= modifier modifier_sep identifier
+                      | identifier
+modifier_sep        ::= '*' | '?'                          /* '?' forces start-value interpretation */
+
+
+(* === Modifiers ============================================================= *)
+
+modifier            ::= modifier_atom | group_vec | start_call
+modifier_atom       ::= num_lit | NA | identifier | string_lit
+group_vec           ::= 'c' '(' modifier_atom (',' modifier_atom)* ')'
+start_call          ::= 'start' '(' num_lit ')'
+
+
+(* === Constraints =========================================================== *)
+
+constraint          ::= expr constraint_op expr
+constraint_op       ::= '==' | '<' | '>'
+define_param        ::= identifier ':=' expr
+
+
+(* === Expression sublanguage ================================================
+   Used for both `:=` definitions and `==` / `<` / `>` constraints. Functions
+   only enter the AST in v0 if/when O1 (modifier arithmetic) is reopened.
+   ============================================================================*)
+
+expr                ::= term (('+' | '-') term)*
+term                ::= factor (('*' | '/') factor)*
+factor              ::= power
+power               ::= unary ('^' power)?                 /* right-associative */
+unary               ::= ('+' | '-') unary | primary
+primary             ::= num_lit | identifier | '(' expr ')'
+
+
+(* === Rejected operators ====================================================
+   These tokenize as their own kinds so the parser can produce a precise
+   `ParseError::Kind::UnsupportedOperator` with the offending span, rather
+   than a generic "expected operator" message.
+   ============================================================================*)
+
+rejected_operator   ::= '|' | '|~' | '~*~' | '<~'
+
+
+(* === Lexical (terminals) ===================================================
+   These are also documented with full character predicates in
+   docs/grammar/lexer.md. The forms below are the normative grammar.
+   ============================================================================*)
+
+NEWLINE             ::= '\n' | '\r' '\n' | '\r'
+WS                  ::= ' ' | '\t'                          /* between tokens; never significant */
+comment             ::= ('#' | '!') (CHAR - NEWLINE)* (NEWLINE | EOF)
+
+identifier          ::= id_start id_cont*
+id_start            ::= [A-Za-z_.]
+id_cont             ::= [A-Za-z0-9_.]
+
+num_lit             ::= digit+ ('.' digit*)? exponent?
+                      | '.' digit+ exponent?
+exponent            ::= ('e' | 'E') ('+' | '-')? digit+
+digit               ::= [0-9]
+
+(* `NA` is not an identifier in lavaan's modifier evaluator. We tokenize it
+   as a distinct keyword so the parser can detect it without a string compare. *)
+NA                  ::= 'NA'
+
+string_lit          ::= '"' (CHAR - ('"' | NEWLINE))* '"'
+
+(* === End of v0 grammar ==================================================== *)

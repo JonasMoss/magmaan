@@ -1,0 +1,19 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "flat.partable",
+    "corpus_id": "0012_intercept",
+    "tool": "lavaan::lavParseModelString",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "y ~ 1",
+  "rows": [
+    {
+      "lhs": "y",
+      "op": "~1",
+      "rhs": "",
+      "block": 1
+    }
+  ],
+  "constraints": []
+}

@@ -1,0 +1,75 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "matrix_rep",
+    "corpus_id": "0021_multigroup_1f_hs",
+    "tool": "lavaan::lavMatrixRepresentation",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "f =~ x1 + x2 + x3",
+  "blocks": [
+    {
+      "block": 0,
+      "ov_names": ["x1", "x2", "x3"],
+      "lv_names": "f"
+    }
+  ],
+  "cells": [
+    {
+      "row_id": 1,
+      "mat": "Lambda",
+      "row": 0,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 2,
+      "mat": "Lambda",
+      "row": 1,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 3,
+      "mat": "Lambda",
+      "row": 2,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 4,
+      "mat": "Theta",
+      "row": 0,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 5,
+      "mat": "Theta",
+      "row": 1,
+      "col": 1,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 6,
+      "mat": "Theta",
+      "row": 2,
+      "col": 2,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 7,
+      "mat": "Psi",
+      "row": 0,
+      "col": 0,
+      "block": 0,
+      "used": true
+    }
+  ]
+}

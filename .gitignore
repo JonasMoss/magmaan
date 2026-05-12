@@ -1,0 +1,19 @@
+build/
+build-*/
+.cache/
+compile_commands.json
+
+# Reference-only material with its own VCS (lavaan source, semTests, …).
+external/
+
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+.vscode/
+.idea/
+*.swp
+.DS_Store

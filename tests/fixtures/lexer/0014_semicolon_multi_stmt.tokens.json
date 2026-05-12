@@ -1,0 +1,18 @@
+{
+  "_meta": {"format_version": 1, "fixture_kind": "lexer.tokens", "corpus_id": "0014_semicolon_multi_stmt", "tool": "regen-from-lexer"},
+  "input": "f =~ x1 + x2 + x3; y ~ f",
+  "tokens": [
+    {"kind":"Identifier","text":"f","begin":0,"end":1,"line":1,"col":1},
+    {"kind":"Op","text":"=~","begin":2,"end":4,"line":1,"col":3},
+    {"kind":"Identifier","text":"x1","begin":5,"end":7,"line":1,"col":6},
+    {"kind":"Plus","text":"+","begin":8,"end":9,"line":1,"col":9},
+    {"kind":"Identifier","text":"x2","begin":10,"end":12,"line":1,"col":11},
+    {"kind":"Plus","text":"+","begin":13,"end":14,"line":1,"col":14},
+    {"kind":"Identifier","text":"x3","begin":15,"end":17,"line":1,"col":16},
+    {"kind":"Semicolon","text":";","begin":17,"end":18,"line":1,"col":18},
+    {"kind":"Identifier","text":"y","begin":19,"end":20,"line":1,"col":20},
+    {"kind":"Op","text":"~","begin":21,"end":22,"line":1,"col":22},
+    {"kind":"Identifier","text":"f","begin":23,"end":24,"line":1,"col":24},
+    {"kind":"EndOfFile","text":"","begin":24,"end":24,"line":1,"col":25}
+  ]
+}

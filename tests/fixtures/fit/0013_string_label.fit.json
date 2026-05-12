@@ -1,0 +1,51 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "fit",
+    "corpus_id": "0013_string_label",
+    "tool": "lavaan::cfa",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "f =~ \"loading_1\" * x1 + x2",
+  "n_obs": 301,
+  "n_obs_per_block": 301,
+  "theta_hat": [0.66728385800597, 0.74787800651148, 1.10995155324094, 0.610491863566939],
+  "se": [null, null, null, null],
+  "se_observed": null,
+  "se_robust_sem": null,
+  "se_robust_huberwhite": null,
+  "gamma_hat": null,
+  "chi2": null,
+  "df": -1,
+  "browne_residual_nt": null,
+  "rls_chi2": null,
+  "sb_chi2": null,
+  "sb_scale": null,
+  "mean_var_chi2": null,
+  "mean_var_df_adj": null,
+  "scaled_shifted_chi2": null,
+  "scaled_shifted_a": null,
+  "scaled_shifted_b": null,
+  "ugamma_eigvals_nt": null,
+  "ugamma_eigvals_sum": null,
+  "ugamma_eigvals_sumsq": null,
+  "implied_sigma": [
+    {
+      "block": 0,
+      "matrix": [
+        [1.35836987007842, 0.407371366002202],
+        [0.407371366002202, 1.38178388998805]
+      ]
+    }
+  ],
+  "sample_cov": [
+    {
+      "block": 0,
+      "matrix": [
+        [1.35836984551274, 0.407371330152702],
+        [0.407371330152702, 1.38178386552025]
+      ]
+    }
+  ],
+  "sample_mean": null
+}

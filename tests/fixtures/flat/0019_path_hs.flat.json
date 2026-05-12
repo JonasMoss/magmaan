@@ -1,0 +1,31 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "flat.partable",
+    "corpus_id": "0019_path_hs",
+    "tool": "lavaan::lavParseModelString",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "x9 ~ x1 + x2 + x3",
+  "rows": [
+    {
+      "lhs": "x9",
+      "op": "~",
+      "rhs": "x1",
+      "block": 1
+    },
+    {
+      "lhs": "x9",
+      "op": "~",
+      "rhs": "x2",
+      "block": 1
+    },
+    {
+      "lhs": "x9",
+      "op": "~",
+      "rhs": "x3",
+      "block": 1
+    }
+  ],
+  "constraints": []
+}

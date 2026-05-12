@@ -1,0 +1,37 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "flat.partable",
+    "corpus_id": "0020_cfa_plus_structural_hs",
+    "tool": "lavaan::lavParseModelString",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "visual =~ x1 + x2 + x3\nx9 ~ visual",
+  "rows": [
+    {
+      "lhs": "visual",
+      "op": "=~",
+      "rhs": "x1",
+      "block": 1
+    },
+    {
+      "lhs": "visual",
+      "op": "=~",
+      "rhs": "x2",
+      "block": 1
+    },
+    {
+      "lhs": "visual",
+      "op": "=~",
+      "rhs": "x3",
+      "block": 1
+    },
+    {
+      "lhs": "x9",
+      "op": "~",
+      "rhs": "visual",
+      "block": 1
+    }
+  ],
+  "constraints": []
+}

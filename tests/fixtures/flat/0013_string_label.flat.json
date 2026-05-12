@@ -1,0 +1,29 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "flat.partable",
+    "corpus_id": "0013_string_label",
+    "tool": "lavaan::lavParseModelString",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "f =~ \"loading_1\" * x1 + x2",
+  "rows": [
+    {
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x1",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "loading_1"
+      }
+    },
+    {
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x2",
+      "block": 1
+    }
+  ],
+  "constraints": []
+}

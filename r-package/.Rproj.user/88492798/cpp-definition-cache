@@ -1,0 +1,26 @@
+[
+    {
+        "file": "/home/jmoss/work/projects/cpp/latva/r-package/src/bindings.cpp",
+        "file_last_write": 1778584438.0,
+        "definitions": [],
+        "hidden": false
+    },
+    {
+        "file": "/home/jmoss/work/projects/cpp/latva/r-package/src/fit.cpp",
+        "file_last_write": 1778584337.0,
+        "definitions": [],
+        "hidden": false
+    },
+    {
+        "file": "/home/jmoss/work/projects/cpp/latva/r-package/src/internal.hpp",
+        "file_last_write": 1778584774.0,
+        "definitions": [],
+        "hidden": false
+    },
+    {
+        "file": "/home/jmoss/work/projects/cpp/latva/r-package/src/robust.cpp",
+        "file_last_write": 1778584412.0,
+        "definitions": [],
+        "hidden": false
+    }
+]

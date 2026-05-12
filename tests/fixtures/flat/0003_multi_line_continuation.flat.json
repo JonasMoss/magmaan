@@ -1,0 +1,37 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "flat.partable",
+    "corpus_id": "0003_multi_line_continuation",
+    "tool": "lavaan::lavParseModelString",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "f =~ x1 + x2 +\n     x3 + x4",
+  "rows": [
+    {
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x1",
+      "block": 1
+    },
+    {
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x2",
+      "block": 1
+    },
+    {
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x3",
+      "block": 1
+    },
+    {
+      "lhs": "f",
+      "op": "=~",
+      "rhs": "x4",
+      "block": 1
+    }
+  ],
+  "constraints": []
+}
