@@ -98,4 +98,54 @@ TEST_CASE("fit_measures: CFI, TLI, RMSEA on a known nontrivial fit") {
   CHECK(fm.cfi   == doctest::Approx(0.9305).epsilon(1e-3));
   CHECK(fm.tli   == doctest::Approx(0.8959).epsilon(1e-3));
   CHECK(fm.rmsea == doctest::Approx(0.0921).epsilon(1e-3));
+
+  // fit_extras: SRMR + log-likelihood + AIC/BIC. Lavaan reports
+  //   srmr ≈ 0.06520, logl ≈ -3737.745, AIC ≈ 7517.490, BIC ≈ 7595.339,
+  //   BIC2 ≈ 7528.739, npar = 21.
+  auto fx = latva::fit::fit_extras(*pt, *mr, samp, est).value();
+  CHECK(fx.npar   == 21);
+  CHECK(fx.ntotal == 301);
+  CHECK(fx.srmr   == doctest::Approx(0.0652050571843865).epsilon(1e-4));
+  CHECK(fx.logl   == doctest::Approx(-3737.7449266262).epsilon(1e-5));
+  CHECK(fx.unrestricted_logl == doctest::Approx(-3695.09216574121).epsilon(1e-6));
+  // Algebraic identities — independent of lavaan.
+  CHECK(fx.aic  == doctest::Approx(-2.0 * fx.logl + 2.0 * fx.npar).epsilon(1e-12));
+  CHECK(fx.bic  == doctest::Approx(-2.0 * fx.logl + fx.npar * std::log(301.0)).epsilon(1e-12));
+  CHECK(fx.bic2 == doctest::Approx(-2.0 * fx.logl + fx.npar * std::log((301.0 + 2.0) / 24.0)).epsilon(1e-12));
+  // logl ≡ unrestricted_logl − χ²/2 (cov-only model).
+  CHECK(fx.logl == doctest::Approx(fx.unrestricted_logl - inf.chi2 / 2.0).epsilon(1e-9));
+}
+
+TEST_CASE("fit_extras: saturated 1F model — SRMR ≈ 0, logl == unrestricted_logl") {
+  // A just-identified one-factor model (3 indicators) — df = 0, Σ̂ = S, so
+  // every residual vanishes: SRMR ≈ 0, F_ML ≈ 0, logl ≈ saturated logl.
+  auto fp = latva::parse::Parser::parse("f =~ x1 + x2 + x3");
+  REQUIRE(fp.has_value());
+  auto pt = latva::partable::lavaanify(*fp);  REQUIRE(pt.has_value());
+  auto mr = latva::model::build_matrix_rep(*pt); REQUIRE(mr.has_value());
+
+  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
+                   "/fit/0001_one_factor_cfa.fit.json");
+  REQUIRE(in.is_open());
+  std::stringstream ss; ss << in.rdbuf();
+  auto j = nlohmann::json::parse(ss.str(), nullptr, false);
+  REQUIRE(!j.is_discarded());
+  const auto& M = j["sample_cov"][0]["matrix"];
+  const Eigen::Index p = static_cast<Eigen::Index>(M.size());
+  Eigen::MatrixXd S(p, p);
+  for (Eigen::Index r = 0; r < p; ++r)
+    for (Eigen::Index c = 0; c < p; ++c)
+      S(r, c) = M[static_cast<std::size_t>(r)]
+                 [static_cast<std::size_t>(c)].get<double>();
+  latva::fit::SampleStats samp;
+  samp.S = {S}; samp.n_obs = {j["n_obs"].get<std::int64_t>()};
+
+  auto est = latva::fit::fit(*pt, *mr, samp).value();
+  CHECK(std::abs(est.fmin) < 1e-8);                   // F_ML ≈ 0
+
+  auto fx = latva::fit::fit_extras(*pt, *mr, samp, est).value();
+  CHECK(fx.npar == 6);
+  CHECK(std::abs(fx.srmr) < 1e-6);
+  CHECK(fx.logl == doctest::Approx(fx.unrestricted_logl).epsilon(1e-9));
+  CHECK(fx.aic  == doctest::Approx(-2.0 * fx.logl + 12.0).epsilon(1e-12));
 }

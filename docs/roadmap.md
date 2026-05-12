@@ -62,9 +62,17 @@ detailed P8 plan is `docs/p8_inference.md`. "v0.5: constrained optimizer" there 
 
 ## Tier 2 — standard reporting
 
-- **G6 — SRMR + AIC + BIC in `fit_measures`**. `src/fit/fit_measures.cpp` has CFI/TLI/RMSEA; SRMR
-  needs the standardized residuals of `S − Σ̂` (+ a mean-residual term with meanstructure); AIC/BIC
-  need the log-likelihood (`ll = −½ N (F_ML + log|S| + p + p·log 2π)`).
+- **G6 — SRMR + AIC + BIC in `fit_measures`** — ✅ **done**. `src/fit/fit_measures.cpp` adds
+  `fit_extras(pt, rep, samp, est) → post_expected<FitExtras>` carrying `logl` /
+  `unrestricted_logl` / `aic` / `bic` / `bic2` (SABIC) / `srmr` / `npar` / `ntotal`; `fit_measures()`
+  still owns CFI/TLI/RMSEA (now with the lavaan `√G` multi-group RMSEA correction). `logl` is the
+  full normal-theory log-likelihood (`−½ Σ_b n_b[p_b log 2π + log|Σ̂_b| + tr(S_b Σ̂_b⁻¹) + mahal_b]`),
+  *conditional* on `fixed.x` observed exogenous variables (lavaan's convention); `srmr` is the
+  Bentler/correlation-residual type, sample-size-pooled over groups. Golden-tested
+  (`tests/golden/fit_measures_golden_test.cpp` vs `fitMeasures()`) + unit tests
+  (`tests/unit/fit_measures_test.cpp`); wired through R (`latva_fit_measures`). Remaining G6
+  follow-up: **RMSEA confidence interval** (`rmsea.ci.lower/upper` — needs a noncentral-χ² quantile
+  root-find on top of the existing `chi2_pvalue` machinery).
 - **G7 — standardized Ψ off-diagonals**. `standardize_lv()` passes Ψ off-diagonals through unscaled;
   should rescale `ψ_jk → ψ_jk / √(ψ_jj ψ_kk)` with the delta-method Jacobian.
 - **G8 — `:=` chained references + `plabel`/fixed-param references** in `compute_defined()`.
@@ -75,6 +83,90 @@ detailed P8 plan is `docs/p8_inference.md`. "v0.5: constrained optimizer" there 
   for each currently-fixed / equality-constrained parameter at θ̂ + expected parameter change. Needs
   the gradient of F w.r.t. each fixed parameter and the full (including-fixed-params) information
   matrix. Not present at all. Decide whether it's "estimation feature-complete" or a separate track.
+
+---
+
+## Test-coverage gaps (supported but under-tested)
+
+Most of the estimation surface above is golden-tested vs lavaan, but several "supposedly supported"
+code paths have *no* test or only a smoke test. Closing these is as much "feature completeness" as
+the G-items.
+
+- [ ] **Robust SE / Satorra–Bentler / mean-var-adjusted / scaled-shifted χ²** — golden parity vs
+      lavaan `cfa(..., estimator="MLM"/"MLMV"/"MLMVS"/"MLR")`. Today: UΓ-eigenvalue *sanity* smoke
+      checks in `tests/unit/robust_test.cpp`; the `.fit.json` fixtures carry `sb_chi2` / `sb_scale` /
+      `mean_var_chi2` / `scaled_shifted_*` but no test compares our `robust_se` / wrapper output to
+      lavaan's SEs and stats.
+- [ ] **`browne_residual_nt` / `rls_chi2`** (`include/latva/fit/inference.hpp`) — no test calls
+      these; fixtures have `browne_residual_nt` / `rls_chi2`. Add golden vs lavaan
+      `test="browne.residual.nt"` / `"browne.residual.nt.model"`.
+- [ ] **`wald_test`** — no test; unit test (fix a loading → known χ²(1)) + golden vs `lavTestWald`.
+- [ ] **`lr_test` / `z_test` / `chi2_pvalue`** — no direct test; `chi2_pvalue` vs
+      `pchisq(x, df, lower.tail=FALSE)`, `z_test` vs lavaan's `parameterEstimates` z/pvalue columns.
+- [ ] **Standardized solution `std.lv` / `std.all`** — only formula smoke tests; golden vs lavaan
+      `parameterEstimates(fit, standardized=TRUE)` (single + multi-group, with/without `~1`).
+- [ ] **`std.lv` Ψ off-diagonal rescaling** — currently passed through unscaled
+      (`src/fit/standardized.cpp`); = **G7**. Fix to `ψ_jk/√(ψ_jj ψ_kk)` with the delta-method
+      Jacobian (`std.all` already does this) + test.
+- [ ] **Path analysis (`0019_path_hs`) and CFA+structural (`0020_cfa_plus_structural_hs`)** — fitted
+      by `fit_theta_golden_test.cpp` but no `implied`/`fit_measures` golden for the reduced-form
+      Β path beyond θ̂. Extend coverage (and note where `AnalyticObservedInfoSE` still errors on Β).
+- [ ] **Multi-group depth** — only `0021`/`0022`. Add scalar invariance
+      (`group.equal="loadings,intercepts"`), partial invariance via `c(...)`, unequal group sizes.
+- [ ] **`:=` chained references / `.pN.` plabel references** in `compute_defined()`
+      (`src/fit/effects.cpp`) — header says unsupported; = remainder of **G8**. Implement + test, or
+      document the limitation and test the error path.
+- [ ] **`AnalyticObservedInfoSE` for mean-structure / reduced-form Β** — currently
+      `PostError::NumericIssue` (= **G4**); meanwhile test that `FdObservedInfoSE` matches lavaan for
+      those cases (it's only golden-tested on cov-only CFA today).
+- [ ] **Heywood / negative-variance warnings** — no `warnings` vector on `Inference` (= **G5**); add
+      one + a post-fit negative-variance check, with a known-Heywood test model.
+- [ ] **`fit_extras` conditional logl for `fixed.x` observed exogenous** — handled for the
+      single-block case via `pt.exo` / `pt.ov_pos`; verify multi-group fixed.x once such a fixture
+      exists, and the meanstructure × fixed.x interaction.
+
+## Other complete-data estimators (GLS / ULS / WLS / ADF) — readiness
+
+Verdict: **architecturally ready.** `fit<D = ML, O = LbfgsOptimizer>()`
+(`include/latva/fit/fit.hpp`) is already templated on the discrepancy and only ever calls
+`discrepancy.value(SampleStats, ImpliedMoments)` and `discrepancy.gradient(SampleStats,
+ImpliedMoments, J, Jmu)` — where `J = ∂vech(Σ)/∂θ` and `Jmu = ∂μ/∂θ` come from `ModelEvaluator`, so
+the model Jacobian is a reusable building block independent of ML. `SampleStats` carries
+`S` / `mean` / `n_obs` per block; `gamma_nt(Σ)` and `empirical_gamma(X)` (`src/fit/raw_data.cpp`)
+already build the fourth-moment matrix a WLS weight needs; the SE machinery (`src/fit/inference.cpp`
+info-trace, `src/fit/robust.cpp`'s `A1 = ΔᵀWΔ`, `B1 = ΔᵀWΓWΔ` sandwich with `W = Γ_NT(M)⁻¹`) is
+already Δ-generic — ML already *uses* the GLS-form weight, so ML and GLS share that path. No `fit()`
+API change, no new optimizer, no partable/lavaanify change. (The "MLM/MLR/MLMV/MLMVS" *scaled
+tests/SEs* are already done, cov-only — they aren't separate estimators, just post-fit corrections on
+the ML estimates.)
+
+Prep before adding GLS/ULS/WLS:
+- [ ] Formalize the `Discrepancy` concept (`include/latva/fit/concepts.hpp`): require
+      `value(SampleStats, ImpliedMoments) -> fit_expected<double>` and
+      `gradient(SampleStats, ImpliedMoments, MatrixXd J, MatrixXd Jmu) -> fit_expected<VectorXd>`;
+      constrain the `fit<D,O>` template on it. (~30 lines; AGENTS.md already promises this.)
+- [ ] Factor the `vech` / `vech_unpack` / duplication helpers out of `src/fit/robust.cpp` into a
+      shared `src/fit/detail_vech.hpp` so GLS/ULS/WLS reuse them.
+- [ ] Decide how the WLS weight enters: carry it on the discrepancy (`struct WLS { Eigen::MatrixXd
+      gamma_inv; ... };`, built by the caller from `gamma_nt`/`empirical_gamma`) rather than as a new
+      `fit()` argument — keeps the `fit()` signature stable.
+- [ ] Generalize `robust.cpp`'s `A1 = ΔᵀWΔ` / `B1 = ΔᵀWΓWΔ` builder to take an arbitrary `W` so
+      GLS/ULS/WLS "expected"/sandwich SEs reuse it (ULS: `W = I`; GLS: `W = Γ_NT(Σ̂)⁻¹` = the ML
+      path; WLS: `W = Γ⁻¹`).
+- [ ] Multi-group: discrepancies and inference already loop over blocks; GLS/ULS/WLS just need
+      per-block weight application (~5–10 lines each) — not a blocker for a single-block first cut.
+
+Then the estimators (each modeled on `include/latva/fit/ml.hpp` + `src/fit/ml.cpp`), with golden
+parity vs `lavaan::cfa(..., estimator=...)`:
+- [ ] `ULS` (`uls.hpp`/`uls.cpp`, ~80 lines): `F = ½·vech(S−Σ)ᵀvech(S−Σ)`, `∇ = Δᵀvech(S−Σ)`.
+- [ ] `GLS` (`gls.hpp`/`gls.cpp`, ~120 lines): `F = ½·tr((Σ⁻¹(S−Σ))²)`, `∇ = Δᵀ·vech-doubled(Σ⁻¹(S−Σ)Σ⁻¹)`.
+- [ ] `WLS`/ADF (`wls.hpp`/`wls.cpp`, ~160 lines): `F = ½·vech(S−Σ)ᵀΓ⁻¹vech(S−Σ)`,
+      `∇ = ΔᵀΓ⁻¹vech(S−Σ)`; constructor PD-checks `Γ⁻¹`.
+
+Smaller not-on-roadmap items noticed along the way:
+- [ ] Sample-moments-only input path (fit from `S` + `n` with no raw data) — `SampleStats` already
+      models exactly this; needs an R/API entry point + a test.
+- [ ] `se = "none"` / `test = "none"` skip-inference shortcuts (trivial).
 
 ---
 

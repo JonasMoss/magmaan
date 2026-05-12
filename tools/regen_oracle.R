@@ -389,6 +389,19 @@ for (m in models) {
   fm     <- fitMeasures(fit)
   chi2_v <- as.numeric(fm["chisq"])
   df_v   <- as.integer(fm["df"])
+  # Practical fit indices + log-likelihood-based information criteria + SRMR.
+  # All come straight out of fitMeasures(); `npar` is lavaan's free-parameter
+  # count (= our build_eq_constraints n_alpha for shared-label models).
+  cfi_v   <- as.numeric(fm["cfi"])
+  tli_v   <- as.numeric(fm["tli"])
+  rmsea_v <- as.numeric(fm["rmsea"])
+  srmr_v  <- as.numeric(fm["srmr"])
+  logl_v  <- as.numeric(fm["logl"])
+  ulogl_v <- as.numeric(fm["unrestricted.logl"])
+  aic_v   <- as.numeric(fm["aic"])
+  bic_v   <- as.numeric(fm["bic"])
+  bic2_v  <- as.numeric(fm["bic2"])
+  npar_v  <- as.integer(fm["npar"])
 
   # Observed-info SEs: re-fit with `information = "observed"` for
   # lavaan's H_obs⁻¹-based SEs. Reuse cfa_args so multi-group / mean
@@ -556,6 +569,19 @@ for (m in models) {
     gamma_hat            = gamma_hat,
     chi2              = chi2_v,
     df                = df_v,
+    # Practical fit indices + log-likelihood-based information criteria +
+    # SRMR (Bentler type). All from fitMeasures(fit); `npar` is lavaan's
+    # free-parameter count.
+    cfi               = cfi_v,
+    tli               = tli_v,
+    rmsea             = rmsea_v,
+    srmr              = srmr_v,
+    logl              = logl_v,
+    unrestricted_logl = ulogl_v,
+    aic               = aic_v,
+    bic               = bic_v,
+    bic2              = bic2_v,
+    npar              = npar_v,
     # Browne residual NT family — both flavors. Layered on the same fit,
     # so they're cheap to dump alongside the standard chi².
     browne_residual_nt = browne_nt_chi2,
