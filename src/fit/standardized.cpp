@@ -104,10 +104,29 @@ standardize_lv(const partable::LatentStructure& pt,
           // ψ_jj → 1: constant transform.
           theta_std(ki) = 1.0;
           J.row(ki).setZero();
+        } else {
+          // Factor covariance → factor correlation: ψ_rc / √(ψ_rr·ψ_cc),
+          // with the delta-method cross-terms wrt the (possibly free)
+          // ψ_rr / ψ_cc — same transform std.all applies.
+          const double psi_rr = bm.Psi(L.row, L.row);
+          const double psi_cc = bm.Psi(L.col, L.col);
+          if (psi_rr <= 0.0 || psi_cc <= 0.0) {
+            return std::unexpected(make_err(PostError::Kind::NumericIssue,
+                "standardize_lv: non-positive ψ_rr or ψ_cc for off-diagonal Ψ;"
+                " cannot standardize"));
+          }
+          const double psi_rc = est.theta(ki);
+          const double prod   = std::sqrt(psi_rr * psi_cc);
+          theta_std(ki) = psi_rc / prod;
+          J.row(ki).setZero();
+          J(ki, ki) = 1.0 / prod;
+          if (auto pk = psi_diag_free[b][static_cast<std::size_t>(L.row)]; pk > 0) {
+            J(ki, pk - 1) -= psi_rc / (2.0 * psi_rr * prod);
+          }
+          if (auto pk = psi_diag_free[b][static_cast<std::size_t>(L.col)]; pk > 0) {
+            J(ki, pk - 1) -= psi_rc / (2.0 * psi_cc * prod);
+          }
         }
-        // Ψ off-diagonals (factor covariances) pass through as identity
-        // for now — a full implementation would rescale them as
-        // ψ_jk / √(ψ_jj·ψ_kk), but that's not yet wired up here.
         break;
       case model::MatId::Theta:
       case model::MatId::Beta:

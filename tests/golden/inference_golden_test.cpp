@@ -13,9 +13,11 @@
 #include "../oracle.hpp"
 #include "latva/fit/fit.hpp"
 #include "latva/fit/inference.hpp"
+#include "latva/fit/resolve_fixed_x.hpp"
 #include "latva/fit/robust.hpp"
 #include "latva/fit/sample_stats.hpp"
 #include "latva/model/matrix_rep.hpp"
+#include "latva/model/model_evaluator.hpp"
 #include "latva/parse/parser.hpp"
 #include "latva/partable/lavaanify.hpp"
 
@@ -151,6 +153,59 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
       continue;
     }
 
+    // 3b) Browne residual-based normal-theory test (`test = "browne.residual.nt"`)
+    //     — full quadratic form with the model space projected out. ≈ 0 for
+    //     saturated models, distinct from χ²_ML in finite samples otherwise.
+    if (exp.contains("browne_residual_nt") && !exp["browne_residual_nt"].is_null()) {
+      auto br_or = latva::fit::browne_residual_nt(*pt, *mr, samp, est);
+      if (!br_or.has_value()) {
+        failures.push_back(e.id + ": browne_residual_nt — " + br_or.error().detail);
+        continue;
+      }
+      const double br_lavaan = exp["browne_residual_nt"].get<double>();
+      if (std::abs(*br_or - br_lavaan) > 1e-3) {
+        char buf[160];
+        std::snprintf(buf, sizeof(buf),
+                      "browne.residual.nt ours=%.6f, lavaan=%.6f (diff=%.3e)",
+                      *br_or, br_lavaan, std::abs(*br_or - br_lavaan));
+        failures.push_back(e.id + ": " + buf);
+        continue;
+      }
+    }
+
+    // 3c) RLS / model-based Browne residual (`test = "browne.residual.nt.model"`).
+    //     Build the implied Σ̂ from our θ̂ via the evaluator (mirroring fit()'s
+    //     fixed.x resolution) and feed it to rls_chi2.
+    if (exp.contains("rls_chi2") && !exp["rls_chi2"].is_null()) {
+      latva::partable::LatentStructure pt_res = *pt;
+      (void)latva::fit::resolve_fixed_x_from_sample(pt_res, *mr, samp);
+      auto ev_or = latva::model::ModelEvaluator::build(pt_res, *mr);
+      if (!ev_or.has_value()) {
+        failures.push_back(e.id + ": rls_chi2 build_evaluator — " +
+                           ev_or.error().detail);
+        continue;
+      }
+      auto im_or = ev_or->sigma(est.theta);
+      if (!im_or.has_value()) {
+        failures.push_back(e.id + ": rls_chi2 sigma — " + im_or.error().detail);
+        continue;
+      }
+      auto rls_or = latva::fit::rls_chi2(samp, *im_or);
+      if (!rls_or.has_value()) {
+        failures.push_back(e.id + ": rls_chi2 — " + rls_or.error().detail);
+        continue;
+      }
+      const double rls_lavaan = exp["rls_chi2"].get<double>();
+      if (std::abs(*rls_or - rls_lavaan) > 1e-3) {
+        char buf[160];
+        std::snprintf(buf, sizeof(buf),
+                      "browne.residual.nt.model ours=%.6f, lavaan=%.6f (diff=%.3e)",
+                      *rls_or, rls_lavaan, std::abs(*rls_or - rls_lavaan));
+        failures.push_back(e.id + ": " + buf);
+        continue;
+      }
+    }
+
     // 4) Robust normal-theory tests (SB, mean.var.adjusted, scaled.shifted)
     //    via the reduced-symmetric eigenvalue path. Only checked when the
     //    fixture carries oracle values AND the model is non-saturated
@@ -235,6 +290,32 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
           failures.push_back(e.id + ": " + buf);
           continue;
         }
+        // Scaling-factor / shift / Satterthwaite-df *outputs* (not just the
+        // resulting χ²): pure functions of Σλ, Σλ², df — tighter tolerance.
+        // Note: lavaan's `scaled.shifted` `scaling.factor` is the *divisor*
+        // applied as `T/c + b`, i.e. the reciprocal of our `scale_a` (which is
+        // the multiplier in `T·a + b`); the shift parameter `b` is the same.
+        struct ScaleCheck { const char* name; double ours; double lavaan; };
+        const ScaleCheck scale_checks[] = {
+            {"sb_scale",        sb.scale_c,     exp["sb_scale"].get<double>()},
+            {"mean_var_df_adj", mv.df_adj,      exp["mean_var_df_adj"].get<double>()},
+            {"scaled_shifted_a", 1.0/ss.scale_a, exp["scaled_shifted_a"].get<double>()},
+            {"scaled_shifted_b", ss.shift_b,    exp["scaled_shifted_b"].get<double>()},
+        };
+        bool scale_ok = true;
+        for (const auto& sc : scale_checks) {
+          if (std::abs(sc.ours - sc.lavaan) > 1e-4) {
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                          "%s ours=%.8f, lavaan=%.8f (diff=%.3e)",
+                          sc.name, sc.ours, sc.lavaan,
+                          std::abs(sc.ours - sc.lavaan));
+            failures.push_back(e.id + ": " + buf);
+            scale_ok = false;
+            break;
+          }
+        }
+        if (!scale_ok) continue;
       }
 
       // Robust ("sandwich") SEs vs lavaan's `estimator = "MLM"`

@@ -1,9 +1,13 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <fstream>
 #include <random>
+#include <sstream>
+#include <string>
 
 #include <Eigen/Core>
+#include <nlohmann/json.hpp>
 
 #include "latva/fit/fit.hpp"
 #include "latva/fit/inference.hpp"
@@ -142,4 +146,87 @@ TEST_CASE("standardize_all: 1F CFA — ν_i rescaled by 1/√σ̂_ii, λ by √�
       CHECK(sol.se(static_cast<Eigen::Index>(k)) == doctest::Approx(0.0));
     }
   }
+}
+
+TEST_CASE("standardize_lv: 2F CFA — factor covariance → correlation, with delta-method SE") {
+  // Two correlated factors over the first six Holzinger indicators. lavaan's
+  // `auto.cov.lv.x` adds a free `f1 ~~ f2`; the marker convention frees both
+  // factor variances. std.lv must rescale that covariance to a correlation
+  // (the G7 fix — it used to pass through unscaled).
+  auto fp = Parser::parse(
+      "f1 =~ x1 + x2 + x3\n"
+      "f2 =~ x4 + x5 + x6");
+  REQUIRE(fp.has_value());
+  auto pt = lavaanify(*fp);  REQUIRE(pt.has_value());
+  auto mr = build_matrix_rep(*pt); REQUIRE(mr.has_value());
+
+  // Use the [x1..x6] submatrix of lavaan's Holzinger sample covariance so the
+  // fit has a genuine factor structure (positive factor variances).
+  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
+                   "/fit/0002_three_factor_hs.fit.json");
+  REQUIRE(in.is_open());
+  std::stringstream ss; ss << in.rdbuf();
+  auto j = nlohmann::json::parse(ss.str(), nullptr, false);
+  REQUIRE(!j.is_discarded());
+  const auto& M = j["sample_cov"][0]["matrix"];
+  Eigen::MatrixXd S(6, 6);
+  for (Eigen::Index r = 0; r < 6; ++r)
+    for (Eigen::Index c = 0; c < 6; ++c)
+      S(r, c) = M[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)]
+                    .get<double>();
+  SampleStats samp;  samp.S = {S};  samp.n_obs = {301};
+
+  auto est = latva::fit::fit(*pt, *mr, samp).value();
+  auto inf = ExpectedInfoSE{}.compute(*pt, *mr, samp, est).value();
+  auto sol_or = standardize_lv(*pt, *mr, est, inf.vcov);
+  REQUIRE_MESSAGE(sol_or.has_value(),
+      "standardize_lv failed: " << (sol_or.has_value() ? "" : sol_or.error().detail));
+  const auto& sol = *sol_or;
+
+  auto ev = ModelEvaluator::build(*pt, *mr).value();
+  const auto locs = ev.param_locations();
+  Eigen::Index cov_idx = -1, v0_idx = -1, v1_idx = -1;
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    const auto& L = locs[k];
+    if (L.mat != latva::model::MatId::Psi) continue;
+    if (L.row == L.col) {
+      if (L.row == 0) v0_idx = static_cast<Eigen::Index>(k);
+      if (L.row == 1) v1_idx = static_cast<Eigen::Index>(k);
+    } else {
+      cov_idx = static_cast<Eigen::Index>(k);
+    }
+  }
+  REQUIRE(cov_idx >= 0);
+  REQUIRE(v0_idx >= 0);
+  REQUIRE(v1_idx >= 0);
+
+  const double psi_rr = est.theta(v0_idx);
+  const double psi_cc = est.theta(v1_idx);
+  const double psi_rc = est.theta(cov_idx);
+  const double prod   = std::sqrt(psi_rr * psi_cc);
+
+  // (a) value = ψ̂_rc / √(ψ̂_rr·ψ̂_cc) — a genuine correlation in (-1, 1).
+  CHECK(sol.theta(cov_idx) == doctest::Approx(psi_rc / prod).epsilon(1e-10));
+  CHECK(std::abs(sol.theta(cov_idx)) < 1.0);
+
+  // (b) delta-method SE: grad = [1/prod at cov, -ψ_rc/(2·ψ_rr·prod) at v0,
+  //     -ψ_rc/(2·ψ_cc·prod) at v1].
+  const double g_cov = 1.0 / prod;
+  const double g_v0  = -psi_rc / (2.0 * psi_rr * prod);
+  const double g_v1  = -psi_rc / (2.0 * psi_cc * prod);
+  const double var =
+      g_cov * g_cov * inf.vcov(cov_idx, cov_idx) +
+      g_v0  * g_v0  * inf.vcov(v0_idx, v0_idx) +
+      g_v1  * g_v1  * inf.vcov(v1_idx, v1_idx) +
+      2.0 * g_cov * g_v0 * inf.vcov(cov_idx, v0_idx) +
+      2.0 * g_cov * g_v1 * inf.vcov(cov_idx, v1_idx) +
+      2.0 * g_v0  * g_v1 * inf.vcov(v0_idx, v1_idx);
+  CHECK(sol.se(cov_idx) == doctest::Approx(std::sqrt(var)).epsilon(1e-10));
+
+  // (c) std.all reduces to the same transform on a latent-latent covariance
+  //     (the extra 1/√σ_rr factors only touch indicators).
+  auto sol_all = standardize_all(*pt, *mr, est, inf.vcov);
+  REQUIRE(sol_all.has_value());
+  CHECK(sol_all->theta(cov_idx) == doctest::Approx(sol.theta(cov_idx)).epsilon(1e-12));
+  CHECK(sol_all->se(cov_idx)    == doctest::Approx(sol.se(cov_idx)).epsilon(1e-12));
 }

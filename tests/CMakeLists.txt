@@ -45,6 +45,8 @@ add_executable(latva_tests
   golden/multigroup_inference_golden_test.cpp
   golden/fit_measures_golden_test.cpp
   golden/std_lv_golden_test.cpp
+  golden/standardized_golden_test.cpp
+  golden/test_stats_golden_test.cpp
   golden/lin_constraint_golden_test.cpp)
 
 target_link_libraries(latva_tests

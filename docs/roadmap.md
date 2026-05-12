@@ -59,9 +59,21 @@ detailed P8 plan is `docs/p8_inference.md`. "v0.5: constrained optimizer" there 
 - **G4 — analytic observed-info SE for mean-structure models**. `AnalyticObservedInfoSE::compute`
   returns `PostError::Kind::NumericIssue` for mean-structure models (the comment lists the missing
   `∂²μ/∂θ²` cases — Λ×α, Λ×Β, α×Β, Β×Β + η/∂²μ cross-terms). `FdObservedInfoSE` is a correct fallback.
-- **G5 — parameter bounds / Heywood detection**. No bounds anywhere; LBFGS can land negative
-  variances (the `+∞`-when-non-PD objective is a soft barrier, not a real bound). Minimal: an
-  `Inference::warnings` vector + a negative-variance check at θ̂. (Box constraints later.)
+- **G5 — parameter bounds / Heywood detection** — ✅ **partial** (the warnings half). `Inference`
+  now carries a `warnings` vector; `src/fit/inference.cpp`'s `heywood_warnings()` flags free
+  diagonal Ψ/Θ parameters that came out negative (Heywood cases), wired into all three
+  `*InfoSE::compute`. Tested (`tests/unit/inference_test.cpp`). Remaining: actual **box constraints**
+  (the `+∞`-when-non-PD objective is a soft barrier, not a real bound) — see **G5b**.
+- **G5b — optimizer robustness / vendored optimizers**. LBFGS++ throws `"the line search routine
+  failed"` on at least one well-behaved model — a *single-group* 3F CFA + meanstructure on the
+  Holzinger sample (the **2-group** version of the same model converges fine; lavaan's nlminb
+  converges on both). The throw escapes the `-fexceptions` LBFGS TU into `-fno-exceptions` code →
+  `std::terminate`, so `fit()` crashes rather than returning an error. Bound + box-constraint support
+  (G5) needs a more capable optimizer anyway. Hand-rolling line-search fixes isn't what this library
+  is about — likelier resolution is to **`FetchContent` / vendor a robust optimizer** (a trust-region
+  / box-constrained solver; possibly several behind the `Optimizer` concept) rather than patch
+  LBFGS++. Until then: `tests/fixtures/fit_std/` deliberately omits a single-group 3F+meanstructure
+  fixture; the corpus avoids the failing combo.
 
 ## Tier 2 — standard reporting
 
@@ -95,22 +107,33 @@ Most of the estimation surface above is golden-tested vs lavaan, but several "su
 code paths have *no* test or only a smoke test. Closing these is as much "feature completeness" as
 the G-items.
 
-- [ ] **Robust SE / Satorra–Bentler / mean-var-adjusted / scaled-shifted χ²** — golden parity vs
-      lavaan `cfa(..., estimator="MLM"/"MLMV"/"MLMVS"/"MLR")`. Today: UΓ-eigenvalue *sanity* smoke
-      checks in `tests/unit/robust_test.cpp`; the `.fit.json` fixtures carry `sb_chi2` / `sb_scale` /
-      `mean_var_chi2` / `scaled_shifted_*` but no test compares our `robust_se` / wrapper output to
-      lavaan's SEs and stats.
-- [ ] **`browne_residual_nt` / `rls_chi2`** (`include/latva/fit/inference.hpp`) — no test calls
-      these; fixtures have `browne_residual_nt` / `rls_chi2`. Add golden vs lavaan
-      `test="browne.residual.nt"` / `"browne.residual.nt.model"`.
-- [ ] **`wald_test`** — no test; unit test (fix a loading → known χ²(1)) + golden vs `lavTestWald`.
-- [ ] **`lr_test` / `z_test` / `chi2_pvalue`** — no direct test; `chi2_pvalue` vs
-      `pchisq(x, df, lower.tail=FALSE)`, `z_test` vs lavaan's `parameterEstimates` z/pvalue columns.
-- [ ] **Standardized solution `std.lv` / `std.all`** — only formula smoke tests; golden vs lavaan
-      `parameterEstimates(fit, standardized=TRUE)` (single + multi-group, with/without `~1`).
-- [ ] **`std.lv` Ψ off-diagonal rescaling** — currently passed through unscaled
-      (`src/fit/standardized.cpp`); = **G7**. Fix to `ψ_jk/√(ψ_jj ψ_kk)` with the delta-method
-      Jacobian (`std.all` already does this) + test.
+- [x] **Robust SE / Satorra–Bentler / mean-var-adjusted / scaled-shifted χ²** — `robust_se`
+      `{Expected,…}`/`{Observed,…}` golden vs `se_robust_sem`/`se_robust_huberwhite` and the
+      SB / mean.var.adjusted / scaled.shifted χ² + scaling-factor / shift / Satterthwaite-df
+      *outputs* now checked in `tests/golden/inference_golden_test.cpp` (1e-4 / 1e-3). Note: lavaan's
+      `scaled.shifted` `scaling.factor` is the *reciprocal* of our `ScaledShiftedResult::scale_a`
+      (divisor `T/c+b` vs multiplier `T·a+b`); the shift `b` is identical. Still open: the
+      `MLMV`/`MLMVS` *SE* variants (only the χ² family is checked); the empirical-Γ̂ UΓ eigenvalue
+      path (needs raw data, not in the fixtures).
+- [x] **`browne_residual_nt` / `rls_chi2`** — golden vs `test="browne.residual.nt"` /
+      `"browne.residual.nt.model"` in `tests/golden/inference_golden_test.cpp` (1e-3), in addition to
+      the existing hard-coded-number unit tests.
+- [x] **`wald_test`** — unit test in `tests/unit/inference_test.cpp` (single restriction → `(θ̂_k/SE_k)²`,
+      rank-deficient → error) **and** golden vs `lavTestWald(fit, "<plabel> == 0")` on the first free
+      loading of 3F HS in `tests/golden/test_stats_golden_test.cpp`.
+- [x] **`lr_test` / `z_test` / `chi2_pvalue`** — `z_test` golden vs `parameterEstimates(fit)` z/pvalue
+      and `chi2_pvalue` via the Wald p-value, in `tests/golden/test_stats_golden_test.cpp`; unit
+      coverage for all three in `tests/unit/inference_test.cpp`. (`lr_test` = subtraction of two
+      already-golden `Inference`s — no separate golden.)
+- [x] **Standardized solution `std.lv` / `std.all`** — golden vs `standardizedSolution(fit, type=...)`
+      in `tests/golden/standardized_golden_test.cpp` (value 1e-4, SE 1e-3); fixtures under
+      `tests/fixtures/fit_std/` — `0001_three_factor_hs` (cov-only, the std.lv Ψ-off-diagonal surface)
+      and `0002_three_factor_hs_2group` (configural 2-group + meanstructure, ν rescaling under std.all).
+      Open: a single-group + meanstructure variant (blocked on **G5b** — LBFGS crashes on the natural
+      3F+means model); free latent-mean (`α`) rescaling under std.all (needs a scalar-invariance fit).
+- [x] **`std.lv` Ψ off-diagonal rescaling** (= **G7**) — done. `standardize_lv` now rescales
+      `ψ_jk → ψ_jk/√(ψ_jj ψ_kk)` with the delta-method Jacobian (mirrors `standardize_all`); unit +
+      golden coverage.
 - [ ] **Path analysis (`0019_path_hs`) and CFA+structural (`0020_cfa_plus_structural_hs`)** — fitted
       by `fit_theta_golden_test.cpp` but no `implied`/`fit_measures` golden for the reduced-form
       Β path beyond θ̂. Extend coverage (and note where `AnalyticObservedInfoSE` still errors on Β).
@@ -122,8 +145,8 @@ the G-items.
 - [ ] **`AnalyticObservedInfoSE` for mean-structure / reduced-form Β** — currently
       `PostError::NumericIssue` (= **G4**); meanwhile test that `FdObservedInfoSE` matches lavaan for
       those cases (it's only golden-tested on cov-only CFA today).
-- [ ] **Heywood / negative-variance warnings** — no `warnings` vector on `Inference` (= **G5**); add
-      one + a post-fit negative-variance check, with a known-Heywood test model.
+- [x] **Heywood / negative-variance warnings** (= **G5**, warnings half) — `Inference::warnings` +
+      `heywood_warnings()` + unit tests done; box constraints / the LBFGS crash remain (**G5b**).
 - [ ] **`fit_extras` conditional logl for `fixed.x` observed exogenous** — handled for the
       single-block case via `pt.exo` / `pt.ov_pos`; verify multi-group fixed.x once such a fixture
       exists, and the meanstructure × fixed.x interaction.
