@@ -824,6 +824,32 @@ ordinal_fit_json <- function(fit) {
        srmr = as.numeric(fm["srmr"]))
 }
 
+ordinal_robust_json <- function(fit) {
+  pt <- parTable(fit)
+  free <- pt[pt$free > 0, ]
+  free <- free[order(free$free), ]
+  sb <- lavTest(fit, "satorra.bentler")
+  mv <- lavTest(fit, "mean.var.adjusted")
+  ss <- lavTest(fit, "scaled.shifted")
+  UG <- lavInspect(fit, "UGamma")
+  ev <- Re(eigen(UG, only.values = TRUE)$values)
+  ev <- sort(ev[is.finite(ev) & ev > 1e-8])
+  list(se = as.numeric(free$se),
+       eigvals = as.numeric(ev),
+       chisq_standard = as.numeric(sb$scaled.test.stat),
+       df = as.integer(sb$df),
+       satorra_bentler = list(chisq = as.numeric(sb$stat),
+                              scale = as.numeric(sb$scaling.factor),
+                              df = as.integer(sb$df)),
+       mean_var_adjusted = list(chisq = as.numeric(mv$stat),
+                                df_adj = as.numeric(mv$df),
+                                scale = as.numeric(mv$scaling.factor)),
+       scaled_shifted = list(chisq = as.numeric(ss$stat),
+                             scale = as.numeric(ss$scaling.factor),
+                             shift = as.numeric(ss$shift.parameter),
+                             df = as.integer(ss$df)))
+}
+
 ordinal_cases <- list(
   list(id = "0001_3cat_cfa",
        model = ordinal_model_4,
@@ -962,8 +988,20 @@ for (oc in ordinal_cases) {
                                       parameterization = "delta"),
                                  if (nzchar(group_var)) list(group = group_var) else list()))
       fits$DWLS <- ordinal_fit_json(fit_dwls)
+      fit_dwls_robust <- do.call(cfa, c(list(model = oc$model, data = df,
+                                             ordered = ov, estimator = "DWLS",
+                                             parameterization = "delta",
+                                             se = "robust.sem",
+                                             test = c("standard",
+                                                      "satorra.bentler",
+                                                      "mean.var.adjusted",
+                                                      "scaled.shifted")),
+                                        if (nzchar(group_var)) list(group = group_var) else list()))
+      fits$DWLS$robust <- ordinal_robust_json(fit_dwls_robust)
     }
-    if ("WLS" %in% estimators) fits$WLS <- ordinal_fit_json(fit_for_stats)
+    if ("WLS" %in% estimators) {
+      fits$WLS <- ordinal_fit_json(fit_for_stats)
+    }
   }
 
   payload <- list(

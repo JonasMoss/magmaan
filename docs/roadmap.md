@@ -46,8 +46,11 @@ The core parser-to-fit pipeline is in place:
   boundary. A first explicit post-fit robust ordinal reporting path now returns
   sandwich SEs plus Satorra-Bentler, mean/variance-adjusted, and scaled/shifted
   test statistics from the same threshold-plus-polychoric moment vector and
-  `NACOV`/DWLS/WLS weights. Theta parameterization, mixed polyserial
-  statistics, ordinal SNLLS, and lavaan robust-reporting goldens remain open.
+  `NACOV`/DWLS/WLS weights. DWLS robust ordinal reporting is now checked
+  against lavaan robust SEM scaled-test goldens for representative single- and
+  multi-group delta fixtures. Theta parameterization, mixed polyserial
+  statistics, ordinal SNLLS, and public WLS robust-reporting targets remain
+  open.
 - Separable nonlinear least squares (SNLLS) profiling for LS estimators where
   conditionally linear parameters can be profiled out.
 - Expected information, finite-difference observed information, analytic
@@ -147,10 +150,13 @@ Open work:
   (WLSMVS/ULSMVS). The implemented first slice is explicit post-fit reporting
   for delta all-ordinal DWLS/WLS and consumes the threshold-plus-polychoric
   `NACOV`/`WLS.V` layout, not raw continuous-data casewise Gamma helpers.
-  Remaining work is lavaan robust-statistic fixture parity, multi-group robust
-  edge cases, and any naming/presentation polish in the R boundary. Plain
-  categorical DWLS should continue to fit only; WLSMV-style reporting must
-  stay an explicit post-fit call.
+  DWLS robust-statistic fixtures now cover lavaan robust SEM SEs plus
+  Satorra-Bentler, mean/variance-adjusted, and scaled/shifted statistics,
+  including a multi-group case. Remaining work is deciding whether the WLS
+  robust C++ path should stay shape-only or get a non-lavaan reference target,
+  plus naming/presentation polish in the R boundary. Plain categorical DWLS
+  should continue to fit only; WLSMV-style reporting must stay an explicit
+  post-fit call.
 
 Validation targets:
 
