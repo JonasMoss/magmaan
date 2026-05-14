@@ -40,6 +40,10 @@ The core parser-to-fit pipeline is in place:
 - Exploratory R bindings for lavaanify, fitting, sample-stat bundles, robust
   inference, fit measures, model implied moments, LS estimators, SNLLS, Ceres
   paths when enabled, and data-frame-to-model sample statistics.
+- The intended R boundary is thin wrappers over C++ plus small composition
+  helpers. A future `magmaan(model, data, estimator, groups)` convenience should
+  perform estimation only; SEs, tests, robust corrections, fit measures, and
+  defined parameters stay explicit post-fit steps.
 - Transitional public namespaces exist (`spec`, `lavaan`, `estimate`, `optim`,
   `nt`, `gls`, `data`) as aliases over remaining canonical definitions in
   `fit` and `partable`.
@@ -104,12 +108,25 @@ The C++ surface is ahead of the R boundary in several places.
 
 Open items:
 
+- Add `magmaan(model, data, estimator, groups)` as the single high-level R
+  convenience for parse/lavaanify plus sample-stat construction plus parameter
+  estimation. Keep it estimate-only; do not automatically compute SEs, robust
+  MLM/Satorra-Bentler tests, fit measures, defined parameters, or nested tests.
+- Keep the rest of the R API as thin wrappers around C++ entry points plus
+  small R-side composition helpers. Avoid R implementations of SEM behavior
+  that can drift away from the C++ oracle path.
 - Expose `compute_defined()` through R and add a golden comparison against
   lavaan `parameterEstimates()` for chained `:=` rows and `.pN.` references.
 - Add high-level shortcuts equivalent to `se = "none"` and `test = "none"` so
   callers can skip post-fit inference when they only need point estimates.
+- Make fitted-object partables round-trip to the same lavaan-shaped table that
+  the corresponding lavaan call would return when constructed through the R
+  helpers. The known suspect is mean-structure handling: fixed-zero intercept
+  or mean rows may currently be retained or reconstructed differently from
+  lavaan.
 - Add lavaan partable comparison helpers that compare by semantic row keys
-  rather than raw row position.
+  rather than raw row position, so parity failures identify whether the issue is
+  missing rows, extra fixed-zero rows, labels/plabels, groups, or estimates.
 - Tighten the sample-moment R path around validation and documentation. The
   binding already accepts `list(S = , nobs = , mean = )`; it should be easier
   to discover and harder to mis-shape.
