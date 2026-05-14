@@ -225,10 +225,10 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
 
       // U_rows = D_rows · D_g   (n_g × m); S += (weight_g / n_g) · U·Uᵀ
       // (`n_g` not `n_g − 1` — matches magmaan's existing `empirical_gamma`
-      // and lavaan's `likelihood = "normal"` convention; the Satorra-2000
-      // GPT-5.5 derivation in notes.md uses n_g − 1, but the choice cancels
-      // in the scaling factor c = tr(C⁻¹S)/m as long as S and the test
-      // statistic T agree, and we standardise on the n divisor everywhere.)
+      // and lavaan's `likelihood = "normal"` convention. Some derivations use
+      // n_g - 1, but the choice cancels in the scaling factor c = tr(C^-1 S)/m
+      // as long as S and the test statistic T agree; standardize on the n
+      // divisor everywhere.
       const Eigen::MatrixXd U_rows = D_rows * D_g;           // n_g × m
       const double scale = gr.weight / static_cast<double>(gr.n_g);
       S.noalias() += scale * (U_rows.transpose() * U_rows);
