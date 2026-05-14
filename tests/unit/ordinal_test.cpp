@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <limits>
+#include <random>
 #include <vector>
 
 #include <Eigen/Core>
@@ -226,4 +227,58 @@ TEST_CASE("Ordinal delta preparation fixes response variances and compacts free 
     }
   }
   CHECK(fixed_response_variances == 3);
+}
+
+TEST_CASE("Ordinal robust reporting returns sandwich SEs and scaled-test eigenvalues") {
+  std::mt19937 rng(20240514);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(800, 4);
+  const double loading[4] = {0.95, 0.85, 0.75, 0.65};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.7) + (y > 0.0) + (y > 0.7);
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2 + t3\n"
+      "x2 | t1 + t2 + t3\n"
+      "x3 | t1 + t2 + t3\n"
+      "x4 | t1 + t2 + t3\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::lavaanify(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  auto fit = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(fit.has_value());
+  auto rob = magmaan::estimate::robust_ordinal(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(rob.has_value());
+
+  CHECK(rob->vcov.rows() == fit->theta.size());
+  CHECK(rob->vcov.cols() == fit->theta.size());
+  CHECK(rob->se.size() == fit->theta.size());
+  CHECK(rob->se.allFinite());
+  CHECK(rob->df == 2);
+  CHECK(rob->eigvals.size() == rob->df);
+  CHECK(rob->eigvals.minCoeff() > 0.0);
+  CHECK(rob->chisq_standard == doctest::Approx(800.0 * fit->fmin));
+  CHECK(rob->satorra_bentler.df == rob->df);
+  CHECK(std::isfinite(rob->satorra_bentler.scale_c));
+  CHECK(std::isfinite(rob->mean_var_adjusted.df_adj));
+  CHECK(std::isfinite(rob->scaled_shifted.scale_a));
 }

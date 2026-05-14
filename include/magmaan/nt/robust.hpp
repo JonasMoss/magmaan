@@ -5,6 +5,7 @@
 #include "magmaan/fit/robust.hpp"
 #include "magmaan/fit/satorra2000.hpp"
 #include "magmaan/fit/weighted_chisq.hpp"
+#include "magmaan/estimate/ordinal.hpp"
 
 namespace magmaan::nt::robust {
 
@@ -38,5 +39,8 @@ using fit::robust_se;
 using fit::satorra_bentler;
 using fit::scaled_shifted;
 using fit::ugamma_eigenvalues;
+using estimate::OrdinalRobustResult;
+using estimate::OrdinalWeightKind;
+using estimate::robust_ordinal;
 
 }  // namespace magmaan::nt::robust

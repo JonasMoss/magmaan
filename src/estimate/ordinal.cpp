@@ -6,11 +6,13 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
@@ -32,6 +34,14 @@ namespace {
 
 FitError make_err(FitError::Kind k, std::string detail) {
   return FitError{k, std::move(detail), 0, 0.0};
+}
+
+PostError make_post_err(PostError::Kind k, std::string detail) {
+  return PostError{k, std::move(detail)};
+}
+
+PostError fit_to_post(FitError e) {
+  return make_post_err(PostError::Kind::NumericIssue, std::move(e.detail));
 }
 
 Eigen::Index vech_index(Eigen::Index p, Eigen::Index r, Eigen::Index c) noexcept {
@@ -407,6 +417,69 @@ ordinal_jacobian(const data::OrdinalStats& stats,
   return out;
 }
 
+Eigen::Index ordinal_moment_rows(const data::OrdinalStats& stats) {
+  Eigen::Index n_total = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    n_total += stats.thresholds[b].size() + p * (p - 1) / 2;
+  }
+  return n_total;
+}
+
+Eigen::MatrixXd ordinal_moment_jacobian(const data::OrdinalStats& stats,
+                                        const ThresholdLayout& layout,
+                                        const model::ImpliedMoments& moments,
+                                        const Eigen::MatrixXd& J_sigma) {
+  Eigen::MatrixXd out(ordinal_moment_rows(stats), J_sigma.cols());
+  Eigen::Index out_off = 0;
+  Eigen::Index sigma_off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index nth = stats.thresholds[b].size();
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    Eigen::MatrixXd Jb(nth + ncorr, J_sigma.cols());
+    Jb.setZero();
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+      if (fr > 0) Jb(k, fr - 1) = 1.0;
+    }
+    Jb.bottomRows(ncorr) = corr_jacobian(moments.sigma[b], J_sigma, sigma_off);
+    out.block(out_off, 0, Jb.rows(), Jb.cols()) = Jb;
+    out_off += Jb.rows();
+    sigma_off += vech_len(p);
+  }
+  return out;
+}
+
+post_expected<Eigen::MatrixXd> inverse_sym_pd(const Eigen::MatrixXd& A,
+                                              std::string_view what) {
+  Eigen::LDLT<Eigen::MatrixXd> ldlt(A);
+  if (ldlt.info() != Eigen::Success || !ldlt.isPositive()) {
+    return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
+        std::string(what) + " is not positive definite"));
+  }
+  return ldlt.solve(Eigen::MatrixXd::Identity(A.rows(), A.cols()));
+}
+
+post_expected<Eigen::MatrixXd> symmetric_sqrt_psd(const Eigen::MatrixXd& A,
+                                                  std::string_view what) {
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(A);
+  if (es.info() != Eigen::Success) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(what) + " eigendecomposition failed"));
+  }
+  const double tol = 1e-10 * std::max<double>(1.0, A.cwiseAbs().maxCoeff());
+  Eigen::VectorXd vals = es.eigenvalues();
+  for (Eigen::Index i = 0; i < vals.size(); ++i) {
+    if (vals(i) < -tol) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          std::string(what) + " is not positive semidefinite"));
+    }
+    vals(i) = std::sqrt(std::max(0.0, vals(i)));
+  }
+  return es.eigenvectors() * vals.asDiagonal() * es.eigenvectors().transpose();
+}
+
 fit::SampleStats sample_stats_for_starts(const data::OrdinalStats& stats) {
   fit::SampleStats samp;
   samp.S = stats.R;
@@ -455,6 +528,136 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
     pt.fixed_value[i] = 1.0;
   }
   return compact_free_set(pt, remove_free, starts);
+}
+
+post_expected<OrdinalRobustResult>
+robust_ordinal(spec::LatentStructure pt,
+               const model::MatrixRep& rep,
+               const data::OrdinalStats& stats,
+               const Estimates& est,
+               OrdinalWeightKind weights) {
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (stats.NACOV.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "OrdinalStats NACOV block count does not match MatrixRep"));
+  }
+  const auto N_or = total_n_obs(stats);
+  if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
+  const double N_total = static_cast<double>(*N_or);
+
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal: fitted theta length does not match ordinal delta partable"));
+  }
+
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::build failed: " + ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, false);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal: fitted evaluation failed: " + eval.error().detail));
+  }
+
+  const Eigen::MatrixXd Delta_full =
+      ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma);
+
+  auto con_or = fit::build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != Delta_full.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal: constraint reparameterization has incompatible shape"));
+  }
+  const Eigen::MatrixXd Delta_alpha = Delta_full * K;
+
+  const Eigen::Index total_rows = Delta_alpha.rows();
+  const Eigen::Index n_alpha = Delta_alpha.cols();
+  const int df = static_cast<int>(total_rows - n_alpha);
+  if (df < 0) {
+    return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
+        "robust_ordinal: model has more reduced parameters than ordinal moments"));
+  }
+
+  Eigen::MatrixXd Dtilde(total_rows, n_alpha);
+  Eigen::MatrixXd W = Eigen::MatrixXd::Zero(total_rows, total_rows);
+  Eigen::MatrixXd Gamma = Eigen::MatrixXd::Zero(total_rows, total_rows);
+  const auto& Ws = weights == OrdinalWeightKind::DWLS ? stats.W_dwls : stats.W_wls;
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index mb = stats.thresholds[b].size() + p * (p - 1) / 2;
+    if (stats.NACOV[b].rows() != mb || stats.NACOV[b].cols() != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "OrdinalStats NACOV dimension mismatch in block " + std::to_string(b)));
+    }
+    const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) / N_total);
+    Dtilde.block(off, 0, mb, n_alpha) =
+        sw * Delta_alpha.block(off, 0, mb, n_alpha);
+    W.block(off, off, mb, mb) = Ws[b];
+    Gamma.block(off, off, mb, mb) = stats.NACOV[b];
+    off += mb;
+  }
+
+  Eigen::MatrixXd A = Dtilde.transpose() * W * Dtilde;
+  A = 0.5 * (A + A.transpose());
+  auto A_inv_or = inverse_sym_pd(A, "robust_ordinal bread");
+  if (!A_inv_or.has_value()) return std::unexpected(A_inv_or.error());
+  const Eigen::MatrixXd& A_inv = *A_inv_or;
+
+  Eigen::MatrixXd B = Dtilde.transpose() * W * Gamma * W * Dtilde;
+  B = 0.5 * (B + B.transpose());
+  Eigen::MatrixXd V_alpha = (A_inv * B * A_inv) / N_total;
+  V_alpha = 0.5 * (V_alpha + V_alpha.transpose());
+
+  OrdinalRobustResult out;
+  out.vcov = K * V_alpha * K.transpose();
+  out.vcov = 0.5 * (out.vcov + out.vcov.transpose());
+  out.se.resize(out.vcov.rows());
+  const double diag_tol = 1e-12 * std::max<double>(1.0, out.vcov.cwiseAbs().maxCoeff());
+  for (Eigen::Index i = 0; i < out.se.size(); ++i) {
+    const double v = out.vcov(i, i);
+    out.se(i) = v >= -diag_tol ? std::sqrt(std::max(0.0, v))
+                               : std::numeric_limits<double>::quiet_NaN();
+  }
+
+  out.chisq_standard = N_total * est.fmin;
+  out.df = df;
+
+  if (df > 0) {
+    Eigen::MatrixXd U = W - W * Dtilde * A_inv * Dtilde.transpose() * W;
+    U = 0.5 * (U + U.transpose());
+    auto sqrtG_or = symmetric_sqrt_psd(Gamma, "robust_ordinal NACOV");
+    if (!sqrtG_or.has_value()) return std::unexpected(sqrtG_or.error());
+    Eigen::MatrixXd M = (*sqrtG_or) * U * (*sqrtG_or);
+    M = 0.5 * (M + M.transpose());
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(M, Eigen::EigenvaluesOnly);
+    if (es.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_ordinal: U-Gamma eigendecomposition failed"));
+    }
+    out.eigvals = es.eigenvalues().tail(df);
+    for (Eigen::Index i = 0; i < out.eigvals.size(); ++i) {
+      if (out.eigvals(i) < 0.0 && out.eigvals(i) > -1e-10) out.eigvals(i) = 0.0;
+    }
+  } else {
+    out.eigvals.resize(0);
+  }
+
+  out.satorra_bentler = fit::satorra_bentler(out.chisq_standard, out.df, out.eigvals);
+  out.mean_var_adjusted = fit::mean_var_adjusted(out.chisq_standard, out.df, out.eigvals);
+  out.scaled_shifted = fit::scaled_shifted(out.chisq_standard, out.df, out.eigvals);
+  return out;
 }
 
 template <optim::LsBoundedOptimizer O>

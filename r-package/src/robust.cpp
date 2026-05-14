@@ -9,6 +9,7 @@
 #include "internal.hpp"
 
 #include "magmaan/nt/robust.hpp"
+#include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
 
 // [[Rcpp::depends(RcppEigen)]]
@@ -53,6 +54,72 @@ magmaan::nt::robust::InferenceSpec spec_from(const std::string& bread, const std
   magmaan::nt::robust::InferenceSpec s = spec_from(bread, moments);
   s.cov = cov_from_string(cov);
   return s;
+}
+
+magmaan::estimate::OrdinalWeightKind ordinal_weight_from_string(const std::string& s) {
+  if (s == "DWLS" || s == "dwls") return magmaan::estimate::OrdinalWeightKind::DWLS;
+  if (s == "WLS" || s == "wls") return magmaan::estimate::OrdinalWeightKind::WLS;
+  Rcpp::stop("magmaan: `weight` must be 'DWLS' or 'WLS' (got '%s')", s);
+}
+
+magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
+  const char* what = "ordinal_stats";
+  for (const char* nm : {"R", "thresholds", "threshold_ov", "threshold_level",
+                         "NACOV", "W_dwls", "W_wls", "nobs", "n_levels"}) {
+    if (!x.containsElementNamed(nm)) Rcpp::stop("magmaan: %s is missing $%s", what, nm);
+  }
+  Rcpp::List Rl(x["R"]), thl(x["thresholds"]), ovl(x["threshold_ov"]),
+      levl(x["threshold_level"]), NAl(x["NACOV"]),
+      Wdl(x["W_dwls"]), Wfl(x["W_wls"]), nlevl(x["n_levels"]);
+  Rcpp::IntegerVector nobs(x["nobs"]);
+  const R_xlen_t nb = Rl.size();
+  magmaan::data::OrdinalStats out;
+  out.R.reserve(static_cast<std::size_t>(nb));
+  out.thresholds.reserve(static_cast<std::size_t>(nb));
+  out.threshold_ov.reserve(static_cast<std::size_t>(nb));
+  out.threshold_level.reserve(static_cast<std::size_t>(nb));
+  out.NACOV.reserve(static_cast<std::size_t>(nb));
+  out.W_dwls.reserve(static_cast<std::size_t>(nb));
+  out.W_wls.reserve(static_cast<std::size_t>(nb));
+  out.n_obs.reserve(static_cast<std::size_t>(nb));
+  out.n_levels.reserve(static_cast<std::size_t>(nb));
+  for (R_xlen_t b = 0; b < nb; ++b) {
+    out.R.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Rl[b])));
+    out.thresholds.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(thl[b])));
+    Rcpp::IntegerVector ov(ovl[b]), lev(levl[b]);
+    std::vector<std::int32_t> ov0(static_cast<std::size_t>(ov.size()));
+    std::vector<std::int32_t> lev0(static_cast<std::size_t>(lev.size()));
+    for (R_xlen_t k = 0; k < ov.size(); ++k) {
+      ov0[static_cast<std::size_t>(k)] = ov[k] - 1;
+      lev0[static_cast<std::size_t>(k)] = lev[k];
+    }
+    out.threshold_ov.push_back(std::move(ov0));
+    out.threshold_level.push_back(std::move(lev0));
+    out.NACOV.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(NAl[b])));
+    out.W_dwls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wdl[b])));
+    out.W_wls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wfl[b])));
+    out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
+    out.n_levels.push_back(Rcpp::as<std::vector<std::int32_t>>(Rcpp::IntegerVector(nlevl[b])));
+  }
+  return out;
+}
+
+Rcpp::List satorra_bentler_to_list(const magmaan::fit::SatorraBentlerResult& r) {
+  return Rcpp::List::create(Rcpp::_["chi2_scaled"] = r.chi2_scaled,
+                            Rcpp::_["scale_c"] = r.scale_c,
+                            Rcpp::_["df"] = r.df);
+}
+
+Rcpp::List mean_var_to_list(const magmaan::fit::MeanVarAdjustedResult& r) {
+  return Rcpp::List::create(Rcpp::_["chi2_adj"] = r.chi2_adj,
+                            Rcpp::_["df_adj"] = r.df_adj);
+}
+
+Rcpp::List scaled_shifted_to_list(const magmaan::fit::ScaledShiftedResult& r) {
+  return Rcpp::List::create(Rcpp::_["chi2_adj"] = r.chi2_adj,
+                            Rcpp::_["df"] = r.df,
+                            Rcpp::_["scale_a"] = r.scale_a,
+                            Rcpp::_["shift_b"] = r.shift_b);
 }
 
 // ---- UFactor <-> R list ----------------------------------------------------
@@ -365,6 +432,41 @@ Rcpp::NumericMatrix infer_gamma_nt(Rcpp::NumericMatrix Sigma) {
   auto g_or = magmaan::data::gamma_nt(Seig);
   if (!g_or.has_value()) stop_post(g_or.error());
   return Rcpp::wrap(*g_or);
+}
+
+// =============================================================================
+// Robust ordinal DWLS/WLS reporting
+// =============================================================================
+
+// infer_ordinal_robust() — post-fit categorical sandwich SEs and SB-family
+// scaled tests for the delta all-ordinal LS path. `ordinal_stats` is the
+// list returned by data_ordinal_stats_from_df()/data_ordinal_stats_from_raw_impl().
+// Empty `weight` means reuse fit$estimator ("DWLS" or "WLS").
+//
+// [[Rcpp::export]]
+Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
+                                std::string weight = "") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  if (weight.empty()) {
+    if (!fit.containsElementNamed("estimator"))
+      Rcpp::stop("magmaan: infer_ordinal_robust() needs `weight` when fit$estimator is absent");
+    weight = Rcpp::as<std::string>(fit["estimator"]);
+  }
+  auto r_or = magmaan::estimate::robust_ordinal(
+      ctx.pt, ctx.rep, stats, est, ordinal_weight_from_string(weight));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  const magmaan::estimate::OrdinalRobustResult& r = *r_or;
+  return Rcpp::List::create(
+      Rcpp::_["vcov"] = Rcpp::wrap(r.vcov),
+      Rcpp::_["se"] = Rcpp::wrap(r.se),
+      Rcpp::_["df"] = r.df,
+      Rcpp::_["eigvals"] = Rcpp::wrap(r.eigvals),
+      Rcpp::_["chisq_standard"] = r.chisq_standard,
+      Rcpp::_["satorra_bentler"] = satorra_bentler_to_list(r.satorra_bentler),
+      Rcpp::_["mean_var_adjusted"] = mean_var_to_list(r.mean_var_adjusted),
+      Rcpp::_["scaled_shifted"] = scaled_shifted_to_list(r.scaled_shifted));
 }
 
 // =============================================================================
