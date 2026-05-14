@@ -730,6 +730,26 @@ make_ord_df <- function(n, cuts_by_var, seed = 1L, two_factor = FALSE) {
   out
 }
 
+df_from_counts <- function(tab) {
+  stopifnot(length(dim(tab)) == 2L)
+  rows <- vector("list", sum(tab))
+  k <- 1L
+  for (i in seq_len(nrow(tab))) {
+    for (j in seq_len(ncol(tab))) {
+      n <- tab[i, j]
+      if (n > 0L) {
+        rows[[k]] <- data.frame(x1 = rep(i, n), x2 = rep(j, n))
+        k <- k + 1L
+      }
+    }
+  }
+  out <- do.call(rbind, rows[seq_len(k - 1L)])
+  out$x1 <- ordered(out$x1, levels = seq_len(nrow(tab)))
+  out$x2 <- ordered(out$x2, levels = seq_len(ncol(tab)))
+  row.names(out) <- seq_len(nrow(out))
+  out
+}
+
 ordered_to_int_matrix <- function(df, ov) {
   mat <- matrix(NA_integer_, nrow(df), length(ov), dimnames = list(NULL, ov))
   for (j in seq_along(ov)) mat[, j] <- as.integer(df[[ov[[j]]]])
@@ -864,7 +884,39 @@ ordinal_cases <- list(
        ordered = paste0("x", 1:5),
        group = NULL,
        fit = TRUE,
-       fit_estimators = c("DWLS"))
+       fit_estimators = c("DWLS")),
+  list(id = "0007_binary_cfa",
+       model = ordinal_model_4,
+       data = make_ord_df(520, list(c(-0.25), c(0.10), c(-0.45), c(0.35)),
+                          seed = 71L),
+       ordered = paste0("x", 1:4),
+       group = NULL,
+       fit = TRUE),
+  list(id = "0008_mixed_levels_cfa",
+       model = ordinal_model_4,
+       data = make_ord_df(620, list(c(-0.20),
+                                    c(-0.80, 0.50),
+                                    c(-1.10, -0.15, 0.90),
+                                    c(-1.70, -0.40, 0.30, 1.45)),
+                          seed = 83L),
+       ordered = paste0("x", 1:4),
+       group = NULL,
+       fit = TRUE),
+  list(id = "0009_sparse_binary_pair",
+       model = NULL,
+       data = df_from_counts(matrix(c(18L, 3L,
+                                      11L, 0L), nrow = 2L, byrow = TRUE)),
+       ordered = c("x1", "x2"),
+       group = NULL,
+       fit = FALSE),
+  list(id = "0010_near_perfect_pair",
+       model = NULL,
+       data = df_from_counts(matrix(c(34L, 2L, 1L,
+                                      2L, 31L, 2L,
+                                      1L, 2L, 35L), nrow = 3L, byrow = TRUE)),
+       ordered = c("x1", "x2"),
+       group = NULL,
+       fit = FALSE)
 )
 
 regenerated_ord <- character(0)

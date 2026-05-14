@@ -42,6 +42,8 @@ TEST_CASE("Ordinal stats: thresholds, polychoric R, and weights have expected sh
   CHECK(stats->thresholds[0](1) == doctest::Approx(0.0).epsilon(1e-12));
   CHECK(stats->thresholds[0](2) == doctest::Approx(0.67448975).epsilon(1e-7));
   CHECK(stats->threshold_ov[0].size() == 9);
+  CHECK(stats->threshold_ov[0] == std::vector<std::int32_t>({0, 0, 0, 1, 1, 1, 2, 2, 2}));
+  CHECK(stats->threshold_level[0] == std::vector<std::int32_t>({1, 2, 3, 1, 2, 3, 1, 2, 3}));
   CHECK(stats->NACOV[0].rows() == 12);
   CHECK(stats->NACOV[0].cols() == 12);
   CHECK(stats->W_dwls[0].rows() == 12);
@@ -54,6 +56,40 @@ TEST_CASE("Ordinal stats: thresholds, polychoric R, and weights have expected sh
     CHECK(stats->W_dwls[0](k, k) == doctest::Approx(1.0 / stats->NACOV[0](k, k)));
   }
   CHECK(stats->n_obs[0] == 320);
+}
+
+TEST_CASE("Ordinal stats: metadata and moments use documented order") {
+  Eigen::MatrixXd X(24, 3);
+  Eigen::Index r = 0;
+  for (int rep = 0; rep < 4; ++rep) {
+    for (int c = 1; c <= 3; ++c) {
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((c + rep) % 3);
+      X(r, 2) = 1 + ((2 * c + rep) % 3);
+      ++r;
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((2 * c + rep) % 3);
+      X(r, 2) = 1 + ((c + rep) % 3);
+      ++r;
+    }
+  }
+
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  CHECK(stats->n_obs[0] == 24);
+  CHECK(stats->n_levels[0] == std::vector<std::int32_t>({3, 3, 3}));
+  CHECK(stats->threshold_ov[0] == std::vector<std::int32_t>({0, 0, 1, 1, 2, 2}));
+  CHECK(stats->threshold_level[0] == std::vector<std::int32_t>({1, 2, 1, 2, 1, 2}));
+
+  Eigen::VectorXd moments(9);
+  moments.head(6) = stats->thresholds[0];
+  moments(6) = stats->R[0](1, 0);
+  moments(7) = stats->R[0](2, 0);
+  moments(8) = stats->R[0](2, 1);
+  CHECK(moments.allFinite());
+  CHECK(stats->NACOV[0].rows() == moments.size());
+  CHECK(stats->W_dwls[0].rows() == moments.size());
+  CHECK(stats->W_wls[0].rows() == moments.size());
 }
 
 TEST_CASE("Ordinal stats: empty marginal categories are explicit errors") {
