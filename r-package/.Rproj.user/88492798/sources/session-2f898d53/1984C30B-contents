@@ -38,5 +38,6 @@ Zc <- latva::latva_casewise_contributions(fit, data)        # N x p*  centred ve
 M  <- latva::latva_reduced_gamma_sample(uf, Zc, nrow(Zc))   # df x df ;  denom = N_total
 ev <- latva::latva_ugamma_eigenvalues(M)                 # ascending eigenvalues of UΓ̂
 
-se <- latva::latva_se_expected(fit)                      # supplies T_ML and df
-latva::latva_satorra_bentler(se$chi2, se$df, ev)         # -> list(chi2_scaled, scale_c, df)
+T_ml  <- latva::latva_chi2(fit)                          # N · F_ML(θ̂)
+df_ml <- latva::latva_df(fit)                            # Σ p(p+1)/2 - fixed_x - n_free + con.rank
+latva::latva_satorra_bentler(T_ml, df_ml, ev)            # -> list(chi2_scaled, scale_c, df)

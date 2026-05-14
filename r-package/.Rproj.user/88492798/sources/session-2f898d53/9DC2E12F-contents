@@ -50,19 +50,19 @@ cat(sprintf("Holzinger-Swineford, grouped by school: %s  (n = %s, N = %d)\n\n",
 ## ===========================================================================
 pt   <- latva_lavaanify(m, n_groups = 2L, group_var = "school")
 fit  <- latva_fit(pt, ssg)                  # the {S, nobs, mean} bundle, straight in
-se   <- latva_se_expected(fit)
+T_ml <- latva_chi2(fit);  df_ml <- latva_df(fit)
 
 cat("--- two-group configural CFA (latva) ---\n")
 cat(sprintf("  ngroups = %d (%s), npar = %d, df = %d, T_ML = χ² = %.4f  (p %.4g)\n\n",
-            fit$ngroups, paste(fit$group_labels, collapse = "/"), fit$npar, se$df, se$chi2,
-            latva_chi2_pvalue(se$chi2, se$df)))
+            fit$ngroups, paste(fit$group_labels, collapse = "/"), fit$npar, df_ml, T_ml,
+            latva_chi2_pvalue(T_ml, df_ml)))
 
 lav  <- lavaan::cfa(m, data = df_hs, group = "school", estimator = "MLM")
 cat("--- cross-check vs lavaan::cfa(group = \"school\") ---\n")
 cat(sprintf("  lavaan: df = %g, χ² = %.4f\n", fitMeasures(lav, "df"), fitMeasures(lav, "chisq")))
 cat(sprintf("  match: df %s | T_ML %s\n\n",
-            ok(as.integer(se$df), as.integer(fitMeasures(lav, "df")), 0),
-            ok(se$chi2, fitMeasures(lav, "chisq"))))
+            ok(as.integer(df_ml), as.integer(fitMeasures(lav, "df")), 0),
+            ok(T_ml, fitMeasures(lav, "chisq"))))
 
 ## ===========================================================================
 ## 2. pooled (multi-group) Satorra-Bentler scaled χ²
@@ -71,13 +71,13 @@ uf <- latva_build_u_factor(fit)                          # blocks = 2; B is (p*_
 Zc <- latva_casewise_contributions(pt, Xg)               # N × (p*_1 + p*_2), block-diagonal layout
 M  <- latva_reduced_gamma_sample(uf, Zc, fit$nobs)       # Σ_g B_gᵀΓ̂_gB_g, each Γ̂_g divided by n_g
 ev <- latva_ugamma_eigenvalues(M)
-sb <- latva_satorra_bentler(se$chi2, se$df, ev)
+sb <- latva_satorra_bentler(T_ml, df_ml, ev)
 
 cat("--- pooled Satorra-Bentler scaled χ² (both groups) ---\n")
 cat(sprintf("  UΓ̂ spectrum: %d eigenvalues, mean %.4f (= scaling c), range [%.4f, %.4f]\n",
             length(ev), mean(ev), min(ev), max(ev)))
 cat(sprintf("  T_ML = %.4f (df %d)  →  c = %.4f,  T_SB = %.4f  (p %.4g)\n",
-            se$chi2, se$df, sb$scale_c, sb$chi2_scaled, latva_chi2_pvalue(sb$chi2_scaled, sb$df)))
+            T_ml, df_ml, sb$scale_c, sb$chi2_scaled, latva_chi2_pvalue(sb$chi2_scaled, sb$df)))
 cat(sprintf("  lavaan MLM (group = \"school\"): c = %.4f, T_SB = %.4f\n",
             fitMeasures(lav, "chisq.scaling.factor"), fitMeasures(lav, "chisq.scaled")))
 cat(sprintf("  match: c %s | T_SB %s\n\n",
@@ -92,22 +92,22 @@ m_met <- "visual  =~ x1 + L1*x2 + L2*x3
           speed   =~ x7 + L5*x8 + L6*x9"   # bare loading labels ⇒ cross-group ==  ≙ group.equal="loadings"
 pt_met <- latva_lavaanify(m_met, n_groups = 2L, group_var = "school")
 fit_met <- latva_fit(pt_met, ssg)
-se_met  <- latva_se_expected(fit_met)
+T_met   <- latva_chi2(fit_met);  df_met <- latva_df(fit_met)
 uf_met  <- latva_build_u_factor(fit_met)                 # Δ → Δ·K internally; df = p* − n_alpha
 ev_met  <- latva_ugamma_eigenvalues(
              latva_reduced_gamma_sample(uf_met, latva_casewise_contributions(pt_met, Xg), fit_met$nobs))
-sb_met  <- latva_satorra_bentler(se_met$chi2, se_met$df, ev_met)
-lr_stat <- se_met$chi2 - se$chi2;  lr_df <- se_met$df - se$df
+sb_met  <- latva_satorra_bentler(T_met, df_met, ev_met)
+lr_stat <- T_met - T_ml;  lr_df <- df_met - df_ml
 
 cat("--- metric invariance (loadings equal across groups) ---\n")
 cat(sprintf("  df = %d, T_ML = %.4f  →  c = %.4f,  T_SB = %.4f   |  invariance LR: Δχ² = %.4f, Δdf = %d, p = %.4g\n",
-            se_met$df, se_met$chi2, sb_met$scale_c, sb_met$chi2_scaled, lr_stat, lr_df,
+            df_met, T_met, sb_met$scale_c, sb_met$chi2_scaled, lr_stat, lr_df,
             latva_chi2_pvalue(lr_stat, lr_df)))
 lav_met <- lavaan::cfa(m, data = df_hs, group = "school", group.equal = "loadings", estimator = "MLM")
 cat(sprintf("  lavaan group.equal=\"loadings\" MLM: df = %g, c = %.4f, T_SB = %.4f\n",
             fitMeasures(lav_met, "df"), fitMeasures(lav_met, "chisq.scaling.factor"), fitMeasures(lav_met, "chisq.scaled")))
 cat(sprintf("  match: df %s | c %s | T_SB %s\n\n",
-            ok(as.integer(se_met$df), as.integer(fitMeasures(lav_met, "df")), 0),
+            ok(as.integer(df_met), as.integer(fitMeasures(lav_met, "df")), 0),
             ok(sb_met$scale_c,     fitMeasures(lav_met, "chisq.scaling.factor")),
             ok(sb_met$chi2_scaled, fitMeasures(lav_met, "chisq.scaled"))))
 
