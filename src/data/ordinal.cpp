@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
@@ -19,6 +20,8 @@ namespace magmaan::data {
 namespace {
 
 constexpr double kInf = std::numeric_limits<double>::infinity();
+constexpr double kProbFloor = 1.4901161193847656e-8;
+constexpr double kPi = 3.14159265358979323846;
 
 PostError make_err(PostError::Kind k, std::string detail) {
   return PostError{k, std::move(detail)};
@@ -31,6 +34,7 @@ double normal_cdf(double x) noexcept {
 }
 
 double normal_pdf(double x) noexcept {
+  if (!std::isfinite(x)) return 0.0;
   constexpr double inv_sqrt_2pi = 0.39894228040143267794;
   return inv_sqrt_2pi * std::exp(-0.5 * x * x);
 }
@@ -122,14 +126,33 @@ double bvn_cdf(double h, double k, double rho) noexcept {
   return std::clamp(half * sum, 0.0, 1.0);
 }
 
-double rect_prob(double lo1, double hi1, double lo2, double hi2,
-                 double rho) noexcept {
-  const double p = bvn_cdf(hi1, hi2, rho) - bvn_cdf(lo1, hi2, rho) -
-                   bvn_cdf(hi1, lo2, rho) + bvn_cdf(lo1, lo2, rho);
-  return std::max(1e-12, p);
+double bvn_pdf(double x, double y, double rho) noexcept {
+  if (!std::isfinite(x) || !std::isfinite(y)) return 0.0;
+  const double one_minus = std::max(1e-12, 1.0 - rho * rho);
+  const double z = x * x - 2.0 * rho * x * y + y * y;
+  constexpr double inv_2pi = 0.15915494309189533577;
+  return inv_2pi / std::sqrt(one_minus) * std::exp(-0.5 * z / one_minus);
 }
 
-double neglog_pair(const Eigen::MatrixXi& tab,
+double rect_prob_raw(double lo1, double hi1, double lo2, double hi2,
+                     double rho) noexcept {
+  const double p = bvn_cdf(hi1, hi2, rho) - bvn_cdf(lo1, hi2, rho) -
+                   bvn_cdf(hi1, lo2, rho) + bvn_cdf(lo1, lo2, rho);
+  return p;
+}
+
+double rect_prob(double lo1, double hi1, double lo2, double hi2,
+                 double rho) noexcept {
+  return std::max(kProbFloor, rect_prob_raw(lo1, hi1, lo2, hi2, rho));
+}
+
+double rect_drho(double lo1, double hi1, double lo2, double hi2,
+                 double rho) noexcept {
+  return bvn_pdf(hi1, hi2, rho) - bvn_pdf(lo1, hi2, rho) -
+         bvn_pdf(hi1, lo2, rho) + bvn_pdf(lo1, lo2, rho);
+}
+
+double neglog_pair(const Eigen::MatrixXd& tab,
                    const Eigen::VectorXd& th1,
                    const Eigen::VectorXd& th2,
                    double rho) noexcept {
@@ -140,19 +163,59 @@ double neglog_pair(const Eigen::MatrixXi& tab,
     const double lo1 = (a == 0) ? -kInf : th1(a - 1);
     const double hi1 = (a + 1 == k1) ? kInf : th1(a);
     for (int b = 0; b < k2; ++b) {
-      const int n = tab(a, b);
-      if (n == 0) continue;
+      const double n = tab(a, b);
+      if (n <= 0.0) continue;
       const double lo2 = (b == 0) ? -kInf : th2(b - 1);
       const double hi2 = (b + 1 == k2) ? kInf : th2(b);
-      out -= static_cast<double>(n) * std::log(rect_prob(lo1, hi1, lo2, hi2, rho));
+      out -= n * std::log(rect_prob(lo1, hi1, lo2, hi2, rho));
     }
   }
   return out;
 }
 
-double estimate_polychoric(const Eigen::MatrixXi& tab,
+Eigen::MatrixXd adjusted_polychoric_table(const Eigen::MatrixXd& tab) {
+  Eigen::MatrixXd out = tab;
+  if (out.rows() == 2 && out.cols() == 2) {
+    std::vector<Eigen::Index> zeros;
+    for (Eigen::Index r = 0; r < 2; ++r) {
+      for (Eigen::Index c = 0; c < 2; ++c) {
+        if (out(r, c) == 0.0) zeros.push_back(r * 2 + c);
+      }
+    }
+    if (zeros.size() == 1) {
+      const Eigen::Index z = zeros[0];
+      if (z == 0 || z == 3) {
+        out(0, 0) += 0.5;
+        out(1, 1) += 0.5;
+        out(1, 0) -= 0.5;
+        out(0, 1) -= 0.5;
+      } else {
+        out(0, 0) -= 0.5;
+        out(1, 1) -= 0.5;
+        out(1, 0) += 0.5;
+        out(0, 1) += 0.5;
+      }
+    }
+  }
+  return out.cwiseMax(0.0);
+}
+
+double estimate_polychoric(const Eigen::MatrixXd& tab_in,
                            const Eigen::VectorXd& th1,
                            const Eigen::VectorXd& th2) noexcept {
+  const Eigen::MatrixXd tab = adjusted_polychoric_table(tab_in);
+  if (tab.rows() == 2 && tab.cols() == 2) {
+    const double ad = tab(0, 0) * tab(1, 1);
+    const double bc = tab(0, 1) * tab(1, 0);
+    if (std::abs(ad - bc) <= 1e-12 * std::max(1.0, std::abs(ad) + std::abs(bc))) {
+      return 0.0;
+    }
+    if (th1.size() == 1 && th2.size() == 1 &&
+        std::abs(th1(0)) <= 1e-12 && std::abs(th2(0)) <= 1e-12) {
+      return std::clamp(-std::cos(2.0 * kPi * tab(0, 0) / tab.sum()),
+                        -0.999, 0.999);
+    }
+  }
   double lo = -0.999;
   double hi = 0.999;
   constexpr double gr = 0.6180339887498948482;
@@ -178,6 +241,79 @@ double estimate_polychoric(const Eigen::MatrixXi& tab,
   return 0.5 * (lo + hi);
 }
 
+struct PairScores {
+  Eigen::VectorXd rho;
+  Eigen::MatrixXd th_i;
+  Eigen::MatrixXd th_j;
+};
+
+PairScores pair_scores(const Eigen::MatrixXi& Xcat,
+                       Eigen::Index i,
+                       Eigen::Index j,
+                       double rho,
+                       const Eigen::VectorXd& th_i,
+                       const Eigen::VectorXd& th_j) {
+  const Eigen::Index n = Xcat.rows();
+  const Eigen::Index ni = th_i.size();
+  const Eigen::Index nj = th_j.size();
+  PairScores out{
+      Eigen::VectorXd::Zero(n),
+      Eigen::MatrixXd::Zero(n, ni),
+      Eigen::MatrixXd::Zero(n, nj)};
+  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
+
+  for (Eigen::Index r = 0; r < n; ++r) {
+    const int ci = Xcat(r, i);
+    const int cj = Xcat(r, j);
+    const double lo_i = (ci == 0) ? -kInf : th_i(ci - 1);
+    const double hi_i = (ci == ni) ? kInf : th_i(ci);
+    const double lo_j = (cj == 0) ? -kInf : th_j(cj - 1);
+    const double hi_j = (cj == nj) ? kInf : th_j(cj);
+    const double lik = rect_prob(lo_i, hi_i, lo_j, hi_j, rho);
+    out.rho(r) = rect_drho(lo_i, hi_i, lo_j, hi_j, rho) / lik;
+
+    for (Eigen::Index a = 0; a < ni; ++a) {
+      const double t = th_i(a);
+      const double z = normal_pdf(t) *
+          (normal_cdf((hi_j - rho * t) / sd) -
+           normal_cdf((lo_j - rho * t) / sd));
+      if (ci == a) out.th_i(r, a) += z / lik;
+      if (ci == a + 1) out.th_i(r, a) -= z / lik;
+    }
+    for (Eigen::Index a = 0; a < nj; ++a) {
+      const double t = th_j(a);
+      const double z = normal_pdf(t) *
+          (normal_cdf((hi_i - rho * t) / sd) -
+           normal_cdf((lo_i - rho * t) / sd));
+      if (cj == a) out.th_j(r, a) += z / lik;
+      if (cj == a + 1) out.th_j(r, a) -= z / lik;
+    }
+  }
+  return out;
+}
+
+post_expected<Eigen::MatrixXd> symmetric_inverse_pd(const Eigen::MatrixXd& A,
+                                                    std::string what) {
+  if (A.rows() != A.cols() || !A.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::move(what) + " is not a finite square matrix"));
+  }
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(
+      0.5 * (A + A.transpose()));
+  if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::move(what) + " eigendecomposition failed"));
+  }
+  const double max_eval = es.eigenvalues().maxCoeff();
+  const double tol = 1e-10 * std::max(1.0, max_eval);
+  if (es.eigenvalues().minCoeff() <= tol) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::move(what) + " is not positive definite"));
+  }
+  Eigen::VectorXd inv = es.eigenvalues().cwiseInverse();
+  return es.eigenvectors() * inv.asDiagonal() * es.eigenvectors().transpose();
+}
+
 }  // namespace
 
 post_expected<OrdinalStats>
@@ -192,6 +328,7 @@ ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs) {
   out.thresholds.reserve(Xs.size());
   out.threshold_ov.reserve(Xs.size());
   out.threshold_level.reserve(Xs.size());
+  out.NACOV.reserve(Xs.size());
   out.W_dwls.reserve(Xs.size());
   out.W_wls.reserve(Xs.size());
   out.n_obs.reserve(Xs.size());
@@ -206,6 +343,7 @@ ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs) {
           "ordinal_stats_from_integer_data: block " + std::to_string(b) +
               " must have at least 2 rows and 1 column"));
     }
+    Eigen::MatrixXi Xcat(n, p);
     std::vector<std::int32_t> levels(static_cast<std::size_t>(p), 0);
     std::vector<std::vector<int>> counts(static_cast<std::size_t>(p));
     for (Eigen::Index j = 0; j < p; ++j) {
@@ -228,6 +366,14 @@ ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs) {
       for (Eigen::Index i = 0; i < n; ++i) {
         const int lvl = static_cast<int>(X(i, j));
         counts[static_cast<std::size_t>(j)][static_cast<std::size_t>(lvl - 1)] += 1;
+        Xcat(i, j) = lvl - 1;
+      }
+      for (int c = 0; c < max_level; ++c) {
+        if (counts[static_cast<std::size_t>(j)][static_cast<std::size_t>(c)] == 0) {
+          return std::unexpected(make_err(PostError::Kind::NumericIssue,
+              "ordinal_stats_from_integer_data: block " + std::to_string(b) +
+                  " variable " + std::to_string(j) + " has an empty category"));
+        }
       }
       levels[static_cast<std::size_t>(j)] = max_level;
     }
@@ -237,6 +383,7 @@ ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs) {
     const Eigen::Index ncorr = p * (p - 1) / 2;
     const Eigen::Index mdim = nth + ncorr;
     Eigen::VectorXd th(nth);
+    std::vector<Eigen::Index> th_start(static_cast<std::size_t>(p), 0);
     std::vector<std::int32_t> th_ov;
     std::vector<std::int32_t> th_level;
     th_ov.reserve(static_cast<std::size_t>(nth));
@@ -245,6 +392,7 @@ ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs) {
     std::vector<Eigen::VectorXd> th_by_var(static_cast<std::size_t>(p));
     Eigen::Index off = 0;
     for (Eigen::Index j = 0; j < p; ++j) {
+      th_start[static_cast<std::size_t>(j)] = off;
       const int k = levels[static_cast<std::size_t>(j)];
       th_by_var[static_cast<std::size_t>(j)].resize(k - 1);
       int cum = 0;
@@ -267,43 +415,110 @@ ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs) {
       }
     }
 
-    Eigen::MatrixXd R = Eigen::MatrixXd::Identity(p, p);
-    Eigen::Index corr_off = nth;
-    Eigen::VectorXd var = Eigen::VectorXd::Ones(mdim);
-    for (Eigen::Index k = 0; k < nth; ++k) {
-      const double q = normal_cdf(th(k));
-      const double ph = std::max(1e-8, normal_pdf(th(k)));
-      var(k) = std::max(1e-8, q * (1.0 - q) /
-                                  (static_cast<double>(n) * ph * ph));
+    Eigen::MatrixXd SC_TH = Eigen::MatrixXd::Zero(n, nth);
+    for (Eigen::Index r = 0; r < n; ++r) {
+      for (Eigen::Index j = 0; j < p; ++j) {
+        const int c = Xcat(r, j);
+        const auto& thj = th_by_var[static_cast<std::size_t>(j)];
+        const double lo = (c == 0) ? -kInf : thj(c - 1);
+        const double hi = (c == thj.size()) ? kInf : thj(c);
+        const double pr = std::max(kProbFloor, normal_cdf(hi) - normal_cdf(lo));
+        const Eigen::Index base = th_start[static_cast<std::size_t>(j)];
+        if (c < thj.size()) SC_TH(r, base + c) += normal_pdf(thj(c)) / pr;
+        if (c > 0) SC_TH(r, base + c - 1) -= normal_pdf(thj(c - 1)) / pr;
+      }
     }
+
+    Eigen::MatrixXd R = Eigen::MatrixXd::Identity(p, p);
+    Eigen::MatrixXd SC_COR = Eigen::MatrixXd::Zero(n, ncorr);
+    Eigen::MatrixXd A21 = Eigen::MatrixXd::Zero(ncorr, nth);
+    Eigen::Index corr_idx = 0;
     for (Eigen::Index j = 0; j < p; ++j) {
       for (Eigen::Index i = j + 1; i < p; ++i) {
-        Eigen::MatrixXi tab(levels[static_cast<std::size_t>(i)],
+        Eigen::MatrixXd tab(levels[static_cast<std::size_t>(i)],
                             levels[static_cast<std::size_t>(j)]);
         tab.setZero();
         for (Eigen::Index r = 0; r < n; ++r) {
-          const int li = static_cast<int>(X(r, i)) - 1;
-          const int lj = static_cast<int>(X(r, j)) - 1;
-          tab(li, lj) += 1;
+          tab(Xcat(r, i), Xcat(r, j)) += 1.0;
         }
         const double rho = estimate_polychoric(
             tab, th_by_var[static_cast<std::size_t>(i)],
             th_by_var[static_cast<std::size_t>(j)]);
         R(i, j) = R(j, i) = rho;
-        var(corr_off) = std::max(1e-8, (1.0 - rho * rho) * (1.0 - rho * rho) /
-                                         static_cast<double>(n));
-        ++corr_off;
+        PairScores ps = pair_scores(
+            Xcat, i, j, rho, th_by_var[static_cast<std::size_t>(i)],
+            th_by_var[static_cast<std::size_t>(j)]);
+        SC_COR.col(corr_idx) = ps.rho;
+        const Eigen::Index si = th_start[static_cast<std::size_t>(i)];
+        const Eigen::Index sj = th_start[static_cast<std::size_t>(j)];
+        A21.block(corr_idx, si, 1, ps.th_i.cols()) =
+            ps.rho.transpose() * ps.th_i;
+        A21.block(corr_idx, sj, 1, ps.th_j.cols()) =
+            ps.rho.transpose() * ps.th_j;
+        ++corr_idx;
       }
     }
 
-    Eigen::MatrixXd W = Eigen::MatrixXd::Zero(mdim, mdim);
-    for (Eigen::Index k = 0; k < mdim; ++k) W(k, k) = 1.0 / var(k);
+    Eigen::MatrixXd SC(n, mdim);
+    SC.leftCols(nth) = SC_TH;
+    SC.rightCols(ncorr) = SC_COR;
+    const Eigen::MatrixXd INNER = SC.transpose() * SC;
+
+    Eigen::MatrixXd A11 = Eigen::MatrixXd::Zero(nth, nth);
+    const Eigen::MatrixXd INNER_TH = SC_TH.transpose() * SC_TH;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const Eigen::Index start = th_start[static_cast<std::size_t>(j)];
+      const Eigen::Index len = static_cast<Eigen::Index>(
+          levels[static_cast<std::size_t>(j)] - 1);
+      A11.block(start, start, len, len) =
+          INNER_TH.block(start, start, len, len);
+    }
+    auto A11_inv_or = symmetric_inverse_pd(
+        A11, "ordinal threshold information matrix");
+    if (!A11_inv_or.has_value()) return std::unexpected(A11_inv_or.error());
+
+    Eigen::VectorXd A22_diag(ncorr);
+    for (Eigen::Index k = 0; k < ncorr; ++k) {
+      A22_diag(k) = SC_COR.col(k).squaredNorm();
+      if (A22_diag(k) <= 1e-12 || !std::isfinite(A22_diag(k))) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "ordinal_stats_from_integer_data: block " + std::to_string(b) +
+                " has a singular polychoric score block"));
+      }
+    }
+    const Eigen::MatrixXd A22_inv = A22_diag.cwiseInverse().asDiagonal();
+
+    Eigen::MatrixXd B_inv = Eigen::MatrixXd::Zero(mdim, mdim);
+    B_inv.block(0, 0, nth, nth) = *A11_inv_or;
+    B_inv.block(nth, 0, ncorr, nth).noalias() =
+        -A22_inv * A21 * (*A11_inv_or);
+    B_inv.block(nth, nth, ncorr, ncorr) = A22_inv;
+
+    Eigen::MatrixXd NACOV = static_cast<double>(n) *
+        (B_inv * INNER * B_inv.transpose());
+    NACOV = 0.5 * (NACOV + NACOV.transpose());
+
+    Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(mdim, mdim);
+    for (Eigen::Index k = 0; k < mdim; ++k) {
+      const double v = NACOV(k, k);
+      if (!std::isfinite(v) || v <= 0.0) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "ordinal_stats_from_integer_data: block " + std::to_string(b) +
+                " has a non-positive NACOV diagonal"));
+      }
+      W_dwls(k, k) = 1.0 / v;
+    }
+    auto W_wls_or = symmetric_inverse_pd(
+        NACOV, "ordinal NACOV matrix");
+    if (!W_wls_or.has_value()) return std::unexpected(W_wls_or.error());
+
     out.R.push_back(std::move(R));
     out.thresholds.push_back(std::move(th));
     out.threshold_ov.push_back(std::move(th_ov));
     out.threshold_level.push_back(std::move(th_level));
-    out.W_dwls.push_back(W);
-    out.W_wls.push_back(std::move(W));
+    out.NACOV.push_back(std::move(NACOV));
+    out.W_dwls.push_back(std::move(W_dwls));
+    out.W_wls.push_back(std::move(*W_wls_or));
     out.n_obs.push_back(static_cast<std::int64_t>(n));
     out.n_levels.push_back(std::move(levels));
   }

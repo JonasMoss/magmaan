@@ -15,6 +15,7 @@ struct OrdinalStats {
   std::vector<Eigen::VectorXd> thresholds;
   std::vector<std::vector<std::int32_t>> threshold_ov;
   std::vector<std::vector<std::int32_t>> threshold_level;
+  std::vector<Eigen::MatrixXd> NACOV;
   std::vector<Eigen::MatrixXd> W_dwls;
   std::vector<Eigen::MatrixXd> W_wls;
   std::vector<std::int64_t> n_obs;
