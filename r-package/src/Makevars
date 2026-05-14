@@ -1,21 +1,22 @@
 # Repo root = two levels up from this Makevars. During an R build the cwd is
 # <repo>/r-package/src, so $(CURDIR)/../.. is the magmaan repo root.
 MAGMAAN_ROOT := $(abspath $(CURDIR)/../..)
-MAGMAAN_LIB  := $(MAGMAAN_ROOT)/build/opt/libmagmaan.a
+MAGMAAN_BUILD := $(MAGMAAN_ROOT)/build/ceres
+MAGMAAN_LIB  := $(MAGMAAN_BUILD)/libmagmaan.a
 
 CXX_STD       = CXX23
-PKG_CPPFLAGS  = -I$(MAGMAAN_ROOT)/include -DEIGEN_MAX_ALIGN_BYTES=64
+PKG_CPPFLAGS  = -I$(MAGMAAN_ROOT)/include -DEIGEN_MAX_ALIGN_BYTES=64 -DMAGMAAN_WITH_CERES
 override CXXFLAGS += -O3 -DNDEBUG -march=native
-PKG_LIBS      = $(MAGMAAN_LIB)
+PKG_LIBS      = $(MAGMAAN_LIB) -lceres -lglog -lgflags
 
-# Make sure libmagmaan.a (optimized opt preset) is current before linking the
+# Make sure libmagmaan.a (optimized Ceres preset) is current before linking the
 # R glue. Incremental: a no-op (~1s) when nothing changed in the C++ tree.
 $(SHLIB): magmaan_lib
 
 .PHONY: magmaan_lib
 magmaan_lib:
-	@cmake --build "$(MAGMAAN_ROOT)/build/opt" --target magmaan 2>/dev/null || \
-	  ( cd "$(MAGMAAN_ROOT)" && cmake --preset opt && cmake --build --preset opt --target magmaan )
+	@cmake --build "$(MAGMAAN_BUILD)" --target magmaan 2>/dev/null || \
+	  ( cd "$(MAGMAAN_ROOT)" && cmake --preset ceres && cmake --build --preset ceres --target magmaan )
 
 # R's auto-generated package Makefile only tracks .cpp -> .o; it has no idea
 # the R-glue objects also depend on the magmaan headers libmagmaan.a was built

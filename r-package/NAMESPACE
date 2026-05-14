@@ -1,5 +1,7 @@
 useDynLib(magmaan, .registration = TRUE)
 importFrom(Rcpp, sourceCpp)
 exportPattern("^(parse|lavaan|model|fit|infer|measures|data)_|^version$")
+export(df_to_data)
+export(model_spec)
 export(nestedTest)
 S3method(print, magmaan_nested_test)
