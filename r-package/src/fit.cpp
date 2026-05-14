@@ -448,10 +448,12 @@ Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   Ctx ctx;
   ctx.pt = std::move(parsed.structure);
   ctx.names = std::move(parsed.names);
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(ctx.pt, stats, &starts);
+  if (!prep_or.has_value()) stop_fit(prep_or.error());
   auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
   ctx.rep = std::move(*rep_or);
-  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
   ctx.samp.S = stats.R;
   ctx.samp.n_obs = stats.n_obs;
   ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];
@@ -474,10 +476,12 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   Ctx ctx;
   ctx.pt = std::move(parsed.structure);
   ctx.names = std::move(parsed.names);
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(ctx.pt, stats, &starts);
+  if (!prep_or.has_value()) stop_fit(prep_or.error());
   auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
   ctx.rep = std::move(*rep_or);
-  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
   ctx.samp.S = stats.R;
   ctx.samp.n_obs = stats.n_obs;
   ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];

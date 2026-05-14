@@ -37,12 +37,12 @@ The core parser-to-fit pipeline is in place:
   full WLS weights, bounded ordinal LS fitting, and thin R wrappers for ordinal
   sample stats plus DWLS/WLS fits. Checked-in ordinal fixtures now validate
   thresholds, polychoric `R`, `NACOV`, `WLS.V`, `WLS.VD`, and DWLS/WLS
-  convergence. The C++ ordinal fitter shares the bounded LS optimizer surface,
-  with LBFGS-B as the default and Ceres objective parity coverage in Ceres
-  builds. This path currently implements lavaan's delta-style response scale
-  boundary; lavaan ordinal fit parameter/statistic parity, theta
-  parameterization, mixed polyserial statistics, ordinal SNLLS, and robust
-  ordinal reporting remain open.
+  delta-parameterization free sets, point estimates, degrees of freedom, and
+  chi-square statistics. The C++ ordinal fitter shares the bounded LS optimizer
+  surface, with LBFGS-B as the default and Ceres objective parity coverage in
+  Ceres builds. This path currently implements lavaan's delta-style response
+  scale boundary; theta parameterization, mixed polyserial statistics, ordinal
+  SNLLS, and robust ordinal reporting remain open.
 - Separable nonlinear least squares (SNLLS) profiling for LS estimators where
   conditionally linear parameters can be profiled out.
 - Expected information, finite-difference observed information, analytic
@@ -108,14 +108,12 @@ Open work:
   single-group, multi-group, skewed, and sparse-but-nonempty cases. Keep
   numeric tolerances documented separately for threshold estimates,
   bivariate-normal integration, optimizer convergence, and weight inversion.
-- Decide how far to support lavaan's `parameterization = "theta"` at this
-  stage. The current R helper accepts only `"delta"` and emits fixed response
-  scale rows, which is the conservative first boundary.
-- Close ordinal DWLS/WLS fit parity. The fixtures now include lavaan fit
-  outputs and C++ convergence checks for `fit_ordinal_bounded()`, but estimate
-  and fit-statistic parity are not asserted because the current delta boundary
-  and free-parameter contract do not yet match lavaan's ordinal
-  parameterization closely enough.
+- Keep `parameterization = "delta"` as the asserted ordinal boundary for now.
+  The R helper accepts only `"delta"` and emits fixed response-scale rows;
+  lavaan's `parameterization = "theta"` remains a later compatibility slice.
+- Maintain ordinal DWLS/WLS fit parity. The fixtures include lavaan fit outputs
+  and now assert `fit_ordinal_bounded()` free-parameter counts, estimates,
+  degrees of freedom, and chi-square statistics under lavaan's delta contract.
 - Add R-boundary fit tests for `data_ordinal_stats_from_df()`,
   `fit_dwls_ordinal()`, and `fit_wls_ordinal()`. Direct C++ fit convergence
   coverage exists; the R path still needs explicit coverage around sample-stat
@@ -155,9 +153,9 @@ Validation targets:
   coverage so finite adjustments, convergence, and NACOV conditioning are
   visible instead of accidental.
 - Backend parity for ordinal LS if Ceres is enabled: LBFGS-B and Ceres already
-  agree on objective values for representative DWLS/WLS cases. Do not require
-  theta equality or expose a public Ceres ordinal wrapper until the lavaan
-  delta/free-parameter contract is fixed.
+  agree on objective values for representative DWLS/WLS cases. Do not expose a
+  public Ceres ordinal wrapper until the remaining ordinal reporting surface is
+  stable.
 
 ### 3. Close remaining inference and robust gaps
 

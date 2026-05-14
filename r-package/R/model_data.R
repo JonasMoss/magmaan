@@ -161,10 +161,46 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
 }
 
 augment_ordinal_partable <- function(model, ordinal_stats) {
+  fix_delta_variances <- function(pt, ov_by_group) {
+    for (b in seq_along(ov_by_group)) {
+      idx <- pt$op == "~~" &
+        pt$lhs == pt$rhs &
+        pt$lhs %in% ov_by_group[[b]] &
+        pt$group == b
+      pt$free[idx] <- 0L
+      pt$ustart[idx] <- 1.0
+    }
+    free_old <- pt$free
+    vals <- sort(unique(free_old[free_old > 0L]))
+    if (length(vals)) {
+      map <- setNames(seq_along(vals), vals)
+      pt$free[free_old > 0L] <- unname(map[as.character(free_old[free_old > 0L])])
+    }
+    pt
+  }
+  reorder_delta_free <- function(pt) {
+    append_unique <- function(ids, add) unique(c(ids, add[!is.na(add) & add > 0L]))
+    ids <- integer()
+    groups <- sort(unique(pt$group[pt$group > 0L]))
+    for (g in groups) {
+      in_group <- pt$group == g
+      ids <- append_unique(ids, pt$free[in_group & pt$op == "=~"])
+      ids <- append_unique(ids, pt$free[in_group & pt$op == "|"])
+      ids <- append_unique(ids, pt$free[in_group & !(pt$op %in% c("=~", "|"))])
+    }
+    if (length(ids)) {
+      map <- setNames(seq_along(ids), ids)
+      old <- pt$free
+      pt$free[old > 0L] <- unname(map[as.character(old[old > 0L])])
+    }
+    pt
+  }
+
   pt <- partable_arg(model)
-  if (any(pt$op == "|")) return(pt)
   ov_by_group <- ordinal_stats$ov_names
   if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
+  pt <- fix_delta_variances(pt, ov_by_group)
+  if (any(pt$op == "|")) return(reorder_delta_free(pt))
   required <- names(pt)
   n_new <- sum(vapply(ordinal_stats$n_levels, function(z) sum(as.integer(z) - 1L) + length(z), integer(1)))
   rows <- pt[rep(NA_integer_, n_new), required, drop = FALSE]
@@ -210,7 +246,7 @@ augment_ordinal_partable <- function(model, ordinal_stats) {
       rows$plabel[rr] <- ""
     }
   }
-  out <- rbind(pt, rows)
+  out <- reorder_delta_free(rbind(pt, rows))
   attr(out, "magmaan.group_var") <- attr(pt, "magmaan.group_var", exact = TRUE)
   attr(out, "magmaan.group_labels") <- attr(pt, "magmaan.group_labels", exact = TRUE)
   attr(out, "magmaan.ordered") <- ordinal_stats$ordered

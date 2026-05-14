@@ -1,10 +1,12 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <limits>
 
 #include <Eigen/Core>
 
 #include "magmaan/data/ordinal.hpp"
+#include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/lavaanify.hpp"
@@ -93,4 +95,80 @@ TEST_CASE("Ordinal rows round-trip through lavaan-shaped partables and matrix_re
   }
   CHECK(threshold_rows == 6);
   CHECK(scale_rows == 3);
+}
+
+TEST_CASE("Ordinal delta preparation fixes response variances and compacts free indices") {
+  Eigen::MatrixXd X(320, 3);
+  Eigen::Index r = 0;
+  for (int rep = 0; rep < 5; ++rep) {
+    for (int x1 = 1; x1 <= 4; ++x1) {
+      for (int x2 = 1; x2 <= 4; ++x2) {
+        for (int x3 = 1; x3 <= 4; ++x3) {
+          X(r, 0) = x1;
+          X(r, 1) = x2;
+          X(r, 2) = x3;
+          ++r;
+        }
+      }
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3\n"
+      "x1 | t1 + t2 + t3\n"
+      "x2 | t1 + t2 + t3\n"
+      "x3 | t1 + t2 + t3\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  magmaan::spec::Starts starts;
+  auto pt = magmaan::spec::lavaanify(*fp, {}, &starts);
+  REQUIRE(pt.has_value());
+  const std::int32_t old_n = pt->n_free();
+  starts.hint.resize(static_cast<std::size_t>(old_n),
+                     std::numeric_limits<double>::quiet_NaN());
+  for (std::int32_t k = 1; k <= old_n; ++k) {
+    starts.hint[static_cast<std::size_t>(k - 1)] = static_cast<double>(k);
+  }
+
+  std::int32_t old_latent_var_free = 0;
+  for (std::size_t i = 0; i < pt->size(); ++i) {
+    if (pt->op[i] == magmaan::parse::Op::Covariance &&
+        pt->lhs_var[i] == pt->rhs_var[i] && pt->lhs_var[i] >= 0 &&
+        pt->is_user_latent[static_cast<std::size_t>(pt->lhs_var[i])] != 0) {
+      old_latent_var_free = pt->free[i];
+    }
+  }
+  REQUIRE(old_latent_var_free > 0);
+
+  auto prep = magmaan::estimate::prepare_ordinal_delta_partable(*pt, *stats, &starts);
+  REQUIRE(prep.has_value());
+  CHECK(pt->n_free() == old_n - 3);
+  CHECK(starts.hint.size() == static_cast<std::size_t>(pt->n_free()));
+  CHECK(starts.hint.back() == doctest::Approx(static_cast<double>(old_latent_var_free)));
+
+  int fixed_response_variances = 0;
+  for (std::size_t i = 0; i < pt->size(); ++i) {
+    if (pt->op[i] != magmaan::parse::Op::Covariance ||
+        pt->lhs_var[i] != pt->rhs_var[i] || pt->lhs_var[i] < 0) {
+      continue;
+    }
+    const bool is_observed =
+        pt->ov_pos[static_cast<std::size_t>(pt->lhs_var[i])] >= 0;
+    const bool is_latent =
+        pt->is_user_latent[static_cast<std::size_t>(pt->lhs_var[i])] != 0;
+    if (is_observed) {
+      ++fixed_response_variances;
+      CHECK(pt->free[i] == 0);
+      CHECK(pt->fixed_value[i] == doctest::Approx(1.0));
+    }
+    if (is_latent) {
+      CHECK(pt->free[i] == pt->n_free());
+    }
+  }
+  CHECK(fixed_response_variances == 3);
 }
