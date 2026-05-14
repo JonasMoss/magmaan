@@ -142,7 +142,9 @@ df_stat(const partable::LatentStructure& pt,
   }
   int fixed_x_moments = 0;
   for (std::size_t i = 0; i < pt.size(); ++i) {
-    if (pt.op[i] == parse::Op::Covariance && pt.exo[i] == 1 && pt.free[i] == 0) {
+    if ((pt.op[i] == parse::Op::Covariance ||
+         pt.op[i] == parse::Op::Intercept) &&
+        pt.exo[i] == 1 && pt.free[i] == 0) {
       ++fixed_x_moments;
     }
   }

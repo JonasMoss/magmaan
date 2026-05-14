@@ -185,9 +185,11 @@ build_matrix_rep(const partable::LatentStructure& pt,
       }
       case parse::Op::Intercept: {
         // `lhs ~ 1`: indicator intercept (Nu) if lhs is observed, latent mean
-        // (Alpha) if lhs is a user latent. An `ov ~ 1` still maps to Nu even
-        // when ov was promoted to a phantom latent in Reduced form.
-        if (is_user_lv(L)) {
+        // (Alpha) if lhs is a user latent or a phantom-promoted observed
+        // variable in Reduced form. The latter is what makes observed
+        // regression intercepts conditional on predictor means.
+        if (is_user_lv(L) ||
+            (out.form == RepForm::Reduced && lv_ext_idx(L) >= 0)) {
           const auto row_idx = lv_ext_idx(L);
           if (row_idx < 0) return unknown_var(L);
           c.mat = MatId::Alpha; c.row = row_idx; c.col = 0; c.used = true;

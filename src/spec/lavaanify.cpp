@@ -90,6 +90,18 @@ bool variance_already_present(const std::vector<PendingRow>& rows,
   return false;
 }
 
+bool covariance_already_present(const std::vector<PendingRow>& rows,
+                                std::string_view lhs,
+                                std::string_view rhs) {
+  for (const auto& r : rows) {
+    if (r.op != parse::Op::Covariance) continue;
+    if ((r.lhs == lhs && r.rhs == rhs) || (r.lhs == rhs && r.rhs == lhs)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // === Step 3: user modifier application =====================================
 //
 // Helper: pick the effective ModifierAtom for group `group_idx` (0-based).
@@ -299,6 +311,22 @@ void apply_fixed_x(const VarSets& v, std::vector<PendingRow>& rows) {
   }
 }
 
+void apply_random_x(const VarSets& v, std::vector<PendingRow>& rows) {
+  for (std::size_t i = 0; i < v.ov_x.items.size(); ++i) {
+    if (!variance_already_present(rows, v.ov_x.items[i])) {
+      rows.push_back(make_pending(0, v.ov_x.items[i],
+                                  parse::Op::Covariance, v.ov_x.items[i]));
+    }
+    for (std::size_t j = i + 1; j < v.ov_x.items.size(); ++j) {
+      if (covariance_already_present(rows, v.ov_x.items[i], v.ov_x.items[j])) {
+        continue;
+      }
+      rows.push_back(make_pending(0, v.ov_x.items[i],
+                                  parse::Op::Covariance, v.ov_x.items[j]));
+    }
+  }
+}
+
 // === Step 7: (no rows here) =================================================
 //
 // Auto-equality from a shared user label used to be a synthesized `==` row
@@ -465,6 +493,7 @@ build_group_template(const parse::FlatPartable& flat,
     for (const auto& ov : v.ov_y.items)    add_var(ov);
     for (const auto& ov : v.ov_misc.items) add_var(ov);
     for (const auto& lv : v.lv.items)      add_var(lv);
+    if (!opts.fixed_x) apply_random_x(v, rows);
   }
   if (opts.auto_cov_lv_x) {
     OrderedSet endo_lv;
@@ -500,10 +529,10 @@ build_group_template(const parse::FlatPartable& flat,
   if (opts.fixed_x) {
     apply_fixed_x(v, rows);
   }
-  // meanstructure: auto-add ν (free) for every observed variable that
-  // doesn't already have an `~1` row, and α (fixed at 0) for every user
-  // latent that doesn't either. Matches lavaan's `meanstructure = TRUE`
-  // default — α is auto-fixed for identification while ν stays free.
+  // meanstructure: auto-add ν for every observed variable that doesn't already
+  // have an `~1` row, and α (fixed at 0) for every user latent that doesn't
+  // either. Fixed.x observed exogenous means are data-given; other observed
+  // intercepts stay free.
   if (opts.meanstructure) {
     auto intercept_present = [&](std::string_view name) {
       for (const auto& r : rows) {
@@ -511,11 +540,17 @@ build_group_template(const parse::FlatPartable& flat,
       }
       return false;
     };
-    auto add_intercept = [&](std::string_view name, bool fix_at_zero) {
+    auto add_intercept = [&](std::string_view name, bool fix_at_zero,
+                             bool fixed_x_exo = false) {
       if (intercept_present(name)) return;
       PendingRow p = make_pending(/*user=*/0, std::string(name),
                                   parse::Op::Intercept, std::string());
-      if (fix_at_zero) {
+      if (fixed_x_exo) {
+        p.exo = 1;
+        p.user_fixed_value = true;
+        p.fixed_value      = kNaN;
+        p.auto_fixed       = true;
+      } else if (fix_at_zero) {
         p.user_fixed_value = true;
         p.fixed_value      = 0.0;
         p.user_explicit    = true;
@@ -524,7 +559,8 @@ build_group_template(const parse::FlatPartable& flat,
     };
     for (const auto& ov : v.ov_ind.items)  add_intercept(ov, false);
     for (const auto& ov : v.ov_y.items)    add_intercept(ov, false);
-    for (const auto& ov : v.ov_x.items)    add_intercept(ov, false);
+    for (const auto& ov : v.ov_x.items)
+      add_intercept(ov, false, opts.fixed_x);
     for (const auto& ov : v.ov_misc.items) add_intercept(ov, false);
     for (const auto& lv : v.lv.items)      add_intercept(lv, true);
   }

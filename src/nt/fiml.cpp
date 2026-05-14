@@ -129,6 +129,58 @@ fixed_x_observed_indices(const partable::LatentStructure& pt) {
   return out;
 }
 
+std::vector<Eigen::Index>
+observed_exogenous_indices(const partable::LatentStructure& pt) {
+  std::vector<Eigen::Index> out;
+  for (std::int32_t v = 0; v < pt.n_vars; ++v) {
+    if (static_cast<std::size_t>(v) >= pt.var_role.size() ||
+        pt.var_role[static_cast<std::size_t>(v)] != partable::VarRole::ExoOv ||
+        static_cast<std::size_t>(v) >= pt.ov_pos.size()) {
+      continue;
+    }
+    const std::int32_t pos = pt.ov_pos[static_cast<std::size_t>(v)];
+    if (pos >= 0) out.push_back(static_cast<Eigen::Index>(pos));
+  }
+  std::sort(out.begin(), out.end());
+  return out;
+}
+
+post_expected<double>
+fixed_x_saturated_logl(const partable::LatentStructure& pt,
+                       const SampleStats& samp) {
+  const std::vector<Eigen::Index> exo_idx = fixed_x_observed_indices(pt);
+  if (exo_idx.empty()) return 0.0;
+
+  double logl = 0.0;
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const Eigen::MatrixXd& S = samp.S[b];
+    const Eigen::Index p = S.rows();
+    if (exo_idx.back() >= p) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fixed.x exogenous sub-block index out of range"));
+    }
+    const Eigen::Index px = static_cast<Eigen::Index>(exo_idx.size());
+    Eigen::MatrixXd Sxx(px, px);
+    for (Eigen::Index r = 0; r < px; ++r) {
+      for (Eigen::Index c = 0; c < px; ++c) {
+        Sxx(r, c) = S(exo_idx[static_cast<std::size_t>(r)],
+                      exo_idx[static_cast<std::size_t>(c)]);
+      }
+    }
+    Eigen::LLT<Eigen::MatrixXd> llt_xx(Sxx);
+    if (llt_xx.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fixed.x exogenous sub-block for block " + std::to_string(b) +
+              " is not positive definite"));
+    }
+    const double n_b = static_cast<double>(samp.n_obs[b]);
+    logl += -0.5 * n_b *
+        (static_cast<double>(px) * std::log(two_pi) +
+         log_det_from_llt(llt_xx) + static_cast<double>(px));
+  }
+  return logl;
+}
+
 double observed_constant(const FIMLCache& cache) {
   double c = 0.0;
   for (const FIMLPattern& pat : cache.patterns) {
@@ -856,12 +908,16 @@ independence_moments_from_raw(const RawData& raw,
 post_expected<double>
 independence_value_from_patterns(const FIMLCache& cache,
                                  const std::vector<Eigen::VectorXd>& means,
-                                 const std::vector<Eigen::VectorXd>& vars) {
+                                 const std::vector<Eigen::VectorXd>& vars,
+                                 const std::vector<Eigen::MatrixXd>& covs,
+                                 const std::vector<Eigen::Index>& exo_idx) {
   if (cache.n_total <= 0) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "FIML baseline: cache has no observations"));
   }
-  if (means.size() != cache.block_p.size() || vars.size() != cache.block_p.size()) {
+  if (means.size() != cache.block_p.size() ||
+      vars.size() != cache.block_p.size() ||
+      covs.size() != cache.block_p.size()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "FIML baseline: moment block count mismatch"));
   }
@@ -870,19 +926,53 @@ independence_value_from_patterns(const FIMLCache& cache,
   for (const FIMLPattern& pat : cache.patterns) {
     const auto& mu = means[pat.block];
     const auto& var = vars[pat.block];
-    double log_det = 0.0;
-    double quad = 0.0;
-    for (Eigen::Index j = 0;
-         j < static_cast<Eigen::Index>(pat.observed.size()); ++j) {
+    Eigen::MatrixXd Sigma =
+        Eigen::MatrixXd::Zero(pat.mean.size(), pat.mean.size());
+    for (Eigen::Index j = 0; j < pat.mean.size(); ++j) {
       const Eigen::Index c = pat.observed[static_cast<std::size_t>(j)];
-      const double v = var(c);
-      if (!(v > 0.0) || !std::isfinite(v)) {
+      Sigma(j, j) = var(c);
+    }
+    for (Eigen::Index a = 0;
+         a < static_cast<Eigen::Index>(exo_idx.size()); ++a) {
+      const Eigen::Index ca = exo_idx[static_cast<std::size_t>(a)];
+      auto ia = std::find(pat.observed.begin(), pat.observed.end(), ca);
+      if (ia == pat.observed.end()) continue;
+      const Eigen::Index ja = static_cast<Eigen::Index>(
+          std::distance(pat.observed.begin(), ia));
+      for (Eigen::Index b = a + 1;
+           b < static_cast<Eigen::Index>(exo_idx.size()); ++b) {
+        const Eigen::Index cb = exo_idx[static_cast<std::size_t>(b)];
+        auto ib = std::find(pat.observed.begin(), pat.observed.end(), cb);
+        if (ib == pat.observed.end()) continue;
+        const Eigen::Index jb = static_cast<Eigen::Index>(
+            std::distance(pat.observed.begin(), ib));
+        Sigma(ja, jb) = covs[pat.block](ca, cb);
+        Sigma(jb, ja) = covs[pat.block](cb, ca);
+      }
+    }
+    Eigen::LLT<Eigen::MatrixXd> llt(0.5 * (Sigma + Sigma.transpose()));
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "FIML baseline: covariance is not positive definite"));
+    }
+    const double log_det = log_det_from_llt(llt);
+    Eigen::VectorXd d(pat.mean.size());
+    for (Eigen::Index j = 0; j < pat.mean.size(); ++j) {
+      const Eigen::Index c = pat.observed[static_cast<std::size_t>(j)];
+      if (!(Sigma(j, j) > 0.0) || !std::isfinite(Sigma(j, j))) {
         return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
             "FIML baseline: non-positive variance"));
       }
-      const double d = pat.mean(j) - mu(c);
-      log_det += std::log(v);
-      quad += (pat.cov(j, j) + d * d) / v;
+      d(j) = pat.mean(j) - mu(c);
+    }
+    const double quad = (pat.cov + d * d.transpose())
+                            .cwiseProduct(llt.solve(
+                                Eigen::MatrixXd::Identity(Sigma.rows(),
+                                                          Sigma.cols())))
+                            .sum();
+    if (!std::isfinite(log_det) || !std::isfinite(quad)) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "FIML baseline: non-finite pattern contribution"));
     }
     const double scale = static_cast<double>(pat.n_obs) /
                          static_cast<double>(cache.n_total);
@@ -1287,6 +1377,10 @@ fiml_extras(partable::LatentStructure pt,
   const double N = static_cast<double>(cache.n_total);
   out.logl = -0.5 * (N * (*h0_or) + c);
   out.unrestricted_logl = -0.5 * (N * (*h1_or) + c);
+  auto fixed_x_marg_or = fixed_x_saturated_logl(pt, start_samp);
+  if (!fixed_x_marg_or.has_value()) return std::unexpected(fixed_x_marg_or.error());
+  out.logl -= *fixed_x_marg_or;
+  out.unrestricted_logl -= *fixed_x_marg_or;
   out.chi2 = -2.0 * (out.logl - out.unrestricted_logl);
   out.aic = -2.0 * out.logl + 2.0 * static_cast<double>(npar);
   out.bic = -2.0 * out.logl + static_cast<double>(npar) * std::log(N);
@@ -1415,9 +1509,12 @@ fiml_robust_mlr(partable::LatentStructure pt,
   return out;
 }
 
+namespace {
+
 post_expected<BaselineFit>
-fiml_baseline_chi2(const RawData& raw,
-                   FIML discrepancy) {
+fiml_baseline_chi2_impl(const RawData& raw,
+                        const std::vector<Eigen::Index>& exo_idx,
+                        FIML discrepancy) {
   auto cache_or = discrepancy.prepare(raw);
   if (!cache_or.has_value()) {
     return std::unexpected(fit_to_post(cache_or.error(), "FIML::prepare"));
@@ -1442,7 +1539,8 @@ fiml_baseline_chi2(const RawData& raw,
     return std::unexpected(ok.error());
   }
 
-  auto baseline_or = independence_value_from_patterns(cache, means, vars);
+  auto baseline_or = independence_value_from_patterns(cache, means, vars,
+                                                      start_samp.S, exo_idx);
   if (!baseline_or.has_value()) {
     return std::unexpected(baseline_or.error());
   }
@@ -1452,8 +1550,26 @@ fiml_baseline_chi2(const RawData& raw,
   if (out.chi2 < 0.0 && out.chi2 > -1e-8) out.chi2 = 0.0;
   for (Eigen::Index p : cache.block_p) {
     out.df += static_cast<int>(p) * (static_cast<int>(p) - 1) / 2;
+    const int px = static_cast<int>(exo_idx.size());
+    out.df -= px * (px - 1) / 2;
   }
   return out;
+}
+
+}  // namespace
+
+post_expected<BaselineFit>
+fiml_baseline_chi2(const RawData& raw,
+                   FIML discrepancy) {
+  return fiml_baseline_chi2_impl(raw, {}, discrepancy);
+}
+
+post_expected<BaselineFit>
+fiml_baseline_chi2(const partable::LatentStructure& pt,
+                   const RawData& raw,
+                   FIML discrepancy) {
+  return fiml_baseline_chi2_impl(raw, observed_exogenous_indices(pt),
+                                 discrepancy);
 }
 
 }  // namespace magmaan::fit
