@@ -31,13 +31,14 @@ The core parser-to-fit pipeline is in place:
   automatic nonnegative variance bounds and equality-penalty residuals on the
   LS path.
 - First-pass ordinal LS support: parser and partable projection for threshold
-  (`|`) and response-scale (`~*~`) rows, integer ordinal sample statistics,
-  pairwise polychoric correlations, Muthen-style all-ordinal NACOV construction
-  for thresholds plus polychorics, DWLS diagonal weights, full WLS weights,
-  bounded ordinal LS fitting, and thin R wrappers for ordinal sample stats plus
-  DWLS/WLS fits. This path currently implements lavaan's delta-style response
-  scale boundary; theta parameterization, mixed polyserial statistics, and
-  checked-in ordinal lavaan fit-statistic parity remain open.
+  (`|`) and response-scale (`~*~`) rows, integer all-ordinal complete/listwise
+  sample statistics, pairwise polychoric correlations, Muthen-style all-ordinal
+  NACOV construction for thresholds plus polychorics, DWLS diagonal weights,
+  full WLS weights, bounded ordinal LS fitting, and thin R wrappers for ordinal
+  sample stats plus DWLS/WLS fits. This path currently implements lavaan's
+  delta-style response scale boundary; theta parameterization, mixed
+  polyserial statistics, and checked-in ordinal lavaan fit-statistic parity
+  remain open.
 - Separable nonlinear least squares (SNLLS) profiling for LS estimators where
   conditionally linear parameters can be profiled out.
 - Expected information, finite-difference observed information, analytic
@@ -99,12 +100,22 @@ Open work:
 
 - Validate the new full ordinal asymptotic covariance weights against checked-in
   lavaan `NACOV`, `WLS.V`, and `WLS.VD` fixtures for representative models.
+- Promote the polychoric sample-stat path from shape/unit coverage to lavaan
+  parity coverage. Add fixtures that compare thresholds, polychoric `R`,
+  `NACOV`, `WLS.V`, and `WLS.VD` for 2x2 pairs, three-or-more-category
+  indicators, skewed marginals, sparse-but-nonempty tables, and multi-group
+  data. Document numeric tolerances separately for threshold estimates,
+  bivariate-normal integration, optimizer convergence, and weight inversion.
 - Decide how far to support lavaan's `parameterization = "theta"` at this
   stage. The current R helper accepts only `"delta"` and emits fixed response
   scale rows, which is the conservative first boundary.
 - Add checked-in lavaan golden fixtures for ordinal CFA/regression models under
   `estimator = "DWLS"` and `"WLS"`, including threshold rows, response-scale
   rows, partable reconstruction, estimates, and fit statistics.
+- Keep polychoric construction internal to `ordinal_stats_from_integer_data()`
+  until the sample-stat contract is stable. A public polychoric API should
+  expose the moment-vector ordering, category metadata, sample-size scaling,
+  and error policy explicitly rather than returning only a correlation matrix.
 - Extend the data path beyond all-ordinal complete/listwise indicators only
   when the mixed continuous/ordinal contract is clear. Polyserial correlations
   and mixed thresholds should not be inferred ad hoc in R.
@@ -119,6 +130,9 @@ Validation targets:
 - Equality constraints involving loadings while thresholds remain free.
 - Threshold-heavy edge cases with empty or near-empty categories, where the
   current sample-stat builder must return explicit errors instead of infinities.
+  Empty categories should stay hard errors; near-empty categories need fixture
+  coverage so finite adjustments, convergence, and NACOV conditioning are
+  visible instead of accidental.
 
 ### 3. Close remaining inference and robust gaps
 
