@@ -1189,6 +1189,39 @@ fiml_cases <- list(
          df$x3[seq(6L, nrow(df), by = 10L)] <- NA_real_
          df$x1[seq(13L, nrow(df), by = 16L)] <- NA_real_
          df
+       }),
+  list(id = "0004_multigroup_1f_school_fiml",
+       model = "f =~ x1 + x2 + x3",
+       ov = paste0("x", 1:3),
+       group_var = "school",
+       mask = function(df) {
+         df$x2[seq(4L, nrow(df), by = 11L)] <- NA_real_
+         df$x3[seq(7L, nrow(df), by = 13L)] <- NA_real_
+         df$x1[seq(10L, nrow(df), by = 17L)] <- NA_real_
+         df
+       }),
+  list(id = "0005_multigroup_3f_school_fiml",
+       model = paste("visual =~ x1 + x2 + x3",
+                     "textual =~ x4 + x5 + x6",
+                     "speed =~ x7 + x8 + x9", sep = "\n"),
+       ov = paste0("x", 1:9),
+       group_var = "school",
+       mask = function(df) {
+         df$x2[seq(5L, nrow(df), by = 10L)] <- NA_real_
+         df$x5[seq(8L, nrow(df), by = 12L)] <- NA_real_
+         df$x8[seq(11L, nrow(df), by = 14L)] <- NA_real_
+         df$x3[seq(17L, nrow(df), by = 19L)] <- NA_real_
+         df
+       }),
+  list(id = "0006_multigroup_equal_loading_school_fiml",
+       model = "visual =~ x1 + a*x2 + a*x3",
+       ov = paste0("x", 1:3),
+       group_var = "school",
+       mask = function(df) {
+         df$x2[seq(3L, nrow(df), by = 9L)] <- NA_real_
+         df$x3[seq(6L, nrow(df), by = 10L)] <- NA_real_
+         df$x1[seq(13L, nrow(df), by = 16L)] <- NA_real_
+         df
        })
 )
 
@@ -1201,16 +1234,20 @@ raw_block_json <- function(df, ov) {
 regenerated_fiml <- character(0)
 for (m in fiml_cases) {
   id <- m$id; model <- m$model; ov <- m$ov
+  group_var <- if (!is.null(m$group_var)) m$group_var else NULL
   df <- HolzingerSwineford1939
   df <- m$mask(df)
-  block <- raw_block_json(df, ov)
 
-  fit <- tryCatch(cfa(model, data = df, missing = "fiml",
-                      meanstructure = TRUE, std.lv = FALSE),
+  cfa_args <- list(model = model, data = df, missing = "fiml",
+                   meanstructure = TRUE, std.lv = FALSE)
+  if (!is.null(group_var) && nchar(group_var) > 0) {
+    cfa_args$group <- group_var
+  }
+
+  fit <- tryCatch(do.call(cfa, cfa_args),
                   error = function(e) e, warning = function(w) w)
   if (inherits(fit, "warning")) {
-    fit <- tryCatch(suppressWarnings(cfa(model, data = df, missing = "fiml",
-                                          meanstructure = TRUE, std.lv = FALSE)),
+    fit <- tryCatch(suppressWarnings(do.call(cfa, cfa_args)),
                     error = function(e) e)
   }
   if (inherits(fit, "error") || !lavInspect(fit, "converged")) {
@@ -1223,6 +1260,30 @@ for (m in fiml_cases) {
   free_rows <- free_rows[order(free_rows$free), ]
   fm <- fitMeasures(fit)
 
+  if (is.null(group_var) || !nchar(group_var)) {
+    block <- raw_block_json(df, ov)
+    raw_blocks <- list(list(block = 0L,
+                            X     = block$X,
+                            mask  = block$mask))
+    ov_names <- list(ov)
+    n_groups <- 1L
+    group_out <- ""
+  } else {
+    group_labels <- as.character(lavInspect(fit, "group.label"))
+    n_groups <- length(group_labels)
+    raw_blocks <- vector("list", n_groups)
+    ov_names <- rep(list(ov), n_groups)
+    for (b in seq_along(group_labels)) {
+      block <- raw_block_json(
+          df[as.character(df[[group_var]]) == group_labels[[b]], , drop = FALSE],
+          ov)
+      raw_blocks[[b]] <- list(block = as.integer(b - 1L),
+                              X     = block$X,
+                              mask  = block$mask)
+    }
+    group_out <- group_var
+  }
+
   payload <- list(
     `_meta` = list(
       format_version = 1L,
@@ -1233,14 +1294,12 @@ for (m in fiml_cases) {
     ),
     input           = model,
     meanstructure   = TRUE,
-    n_groups        = 1L,
-    group_var       = "",
-    ov_names        = list(ov),
+    n_groups        = as.integer(n_groups),
+    group_var       = group_out,
+    ov_names        = ov_names,
     n_obs           = as.integer(lavInspect(fit, "ntotal")),
     n_obs_per_block = as.integer(lavInspect(fit, "nobs")),
-    raw             = list(list(block = 0L,
-                                X     = block$X,
-                                mask  = block$mask)),
+    raw             = raw_blocks,
     theta_hat       = as.numeric(free_rows$est),
     converged       = isTRUE(lavInspect(fit, "converged")),
     logl            = as.numeric(fm["logl"]),

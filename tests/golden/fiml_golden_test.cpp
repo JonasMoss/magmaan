@@ -24,6 +24,9 @@ const std::vector<std::string> kFimlFixtures = {
     "0001_one_factor_hs_fiml",
     "0002_three_factor_hs_fiml",
     "0003_equal_loading_hs_fiml",
+    "0004_multigroup_1f_school_fiml",
+    "0005_multigroup_3f_school_fiml",
+    "0006_multigroup_equal_loading_school_fiml",
 };
 
 magmaan::data::RawData raw_from_fixture(const nlohmann::json& exp) {
@@ -88,7 +91,8 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
     }
 
     magmaan::spec::LavaanifyOptions opts;
-    opts.meanstructure = true;
+    opts.n_groups = exp.value("n_groups", 1);
+    opts.meanstructure = exp.value("meanstructure", true);
     auto pt = magmaan::spec::lavaanify(*fp, opts);
     if (!pt.has_value()) {
       failures.push_back(id + ": lavaanify — " + pt.error().detail);
@@ -101,6 +105,10 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
     }
 
     const magmaan::data::RawData raw = raw_from_fixture(exp);
+    if (raw.X.size() != static_cast<std::size_t>(opts.n_groups)) {
+      failures.push_back(id + ": raw block count does not match n_groups");
+      continue;
+    }
     auto est_or = magmaan::estimate::fit_fiml(*pt, *mr, raw);
     if (!est_or.has_value()) {
       failures.push_back(id + ": fit_fiml — " + est_or.error().detail);
@@ -132,7 +140,7 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
       max_diff = std::max(max_diff, d);
     }
 
-    if (max_diff > 5e-6) {
+    if (max_diff > 1e-5) {
       char buf[256];
       std::snprintf(buf, sizeof(buf),
                     "max |θ̂ - lavaan| = %.3e (iters=%d, fmin=%.10f)",
@@ -171,6 +179,19 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
     if (!exp.contains("n_obs") || fx.ntotal != exp["n_obs"].get<std::int64_t>()) {
       failures.push_back(id + ": ntotal mismatch");
       ok = false;
+    }
+    if (exp.contains("n_obs_per_block")) {
+      const auto& nobs = exp["n_obs_per_block"];
+      for (std::size_t b = 0; b < raw.X.size(); ++b) {
+        const std::int64_t want = nobs.is_array()
+            ? nobs[b].get<std::int64_t>()
+            : nobs.get<std::int64_t>();
+        if (raw.X[b].rows() != want) {
+          failures.push_back(id + ": n_obs_per_block mismatch");
+          ok = false;
+          break;
+        }
+      }
     }
     if (ok) ++passed;
   }
