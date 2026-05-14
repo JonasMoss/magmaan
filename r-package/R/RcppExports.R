@@ -25,6 +25,10 @@ fit_ml_impl <- function(partable, sample_stats, lbfgs = NULL) {
     .Call(`_magmaan_fit_ml_impl`, partable, sample_stats, lbfgs)
 }
 
+fit_fiml_impl <- function(partable, raw_data, lbfgs = NULL) {
+    .Call(`_magmaan_fit_fiml_impl`, partable, raw_data, lbfgs)
+}
+
 fit_uls_impl <- function(partable, sample_stats, lbfgsb = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_uls_impl`, partable, sample_stats, lbfgsb, bounds)
 }
