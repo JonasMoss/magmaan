@@ -39,7 +39,10 @@ stopifnot(identical(attr(m$partable, "magmaan.parameterization"), "delta"))
 stopifnot(identical(d$threshold_ov[[1]], rep(seq_along(ordered), each = 2L)))
 stopifnot(identical(d$threshold_level[[1]], rep(1:2, times = length(ordered))))
 moments <- c(d$thresholds[[1]], d$R[[1]][lower.tri(d$R[[1]])])
+stopifnot(is.list(d$moments), max(abs(d$moments[[1]] - moments)) < 1e-12)
 stopifnot(length(moments) == nrow(d$NACOV[[1]]))
+stopifnot(length(moments) == nrow(d$W_dwls[[1]]))
+stopifnot(length(moments) == nrow(d$W_wls[[1]]))
 
 fit_dwls <- fit_dwls_ordinal(
   m, d, lbfgsb = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))

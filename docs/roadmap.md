@@ -118,9 +118,10 @@ Open work:
   and now assert `fit_ordinal_bounded()` free-parameter counts, estimates,
   degrees of freedom, and chi-square statistics under lavaan's delta contract.
 - Maintain R-boundary coverage for `data_ordinal_stats_from_df()`,
-  `fit_dwls_ordinal()`, and `fit_wls_ordinal()`. The example smoke tests now
-  cover sample-stat construction, result reconstruction, lavaan chi-square
-  parity, and empty-category validation.
+  `fit_dwls_ordinal()`, and `fit_wls_ordinal()`. The R README and example
+  smoke tests now cover delta-only sample-stat construction, result
+  reconstruction, moment-vector metadata, lavaan chi-square parity, and
+  empty-category validation.
 - Keep polychoric construction internal to `ordinal_stats_from_integer_data()`
   until the sample-stat contract is stable. A public polychoric API should
   expose the moment-vector ordering, category metadata, sample-size scaling,
@@ -214,10 +215,10 @@ Open items:
 - Tighten the sample-moment R path around validation and documentation. The
   binding already accepts `list(S = , nobs = , mean = )`; it should be easier
   to discover and harder to mis-shape.
-- Document the ordinal R boundary around `model_spec(..., ordered = ,
-  parameterization = "delta")`, `data_ordinal_stats_from_df()`, and
-  `fit_dwls_ordinal()` / `fit_wls_ordinal()` once the first lavaan fixtures
-  lock down behavior.
+- Keep the ordinal R boundary documentation current around
+  `model_spec(..., ordered = , parameterization = "delta")`,
+  `data_ordinal_stats_from_df()`, and `fit_dwls_ordinal()` /
+  `fit_wls_ordinal()`.
 - Keep fit-list extraction helpers as R boundary conveniences, while keeping
   C++ APIs explicit over primitive values.
 
