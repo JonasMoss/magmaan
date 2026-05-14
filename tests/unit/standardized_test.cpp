@@ -9,24 +9,24 @@
 #include <Eigen/Core>
 #include <nlohmann/json.hpp>
 
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/inference.hpp"
-#include "magmaan/fit/sample_stats.hpp"
-#include "magmaan/fit/standardized.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/nt/infer.hpp"
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/nt/standardize.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 #include "../inference_bundle.hpp"
 
-using magmaan::fit::SampleStats;
+using magmaan::data::SampleStats;
 using magmaan::test::expected_inference;
-using magmaan::fit::standardize_all;
-using magmaan::fit::standardize_lv;
+using magmaan::nt::standardize::standardize_all;
+using magmaan::nt::standardize::standardize_lv;
 using magmaan::model::build_matrix_rep;
 using magmaan::model::ModelEvaluator;
 using magmaan::parse::Parser;
-using magmaan::partable::lavaanify;
+using magmaan::spec::lavaanify;
 
 namespace {
 
@@ -50,7 +50,7 @@ TEST_CASE("standardize_lv: 1F CFA — ψ_ff → 1, λs scaled by √ψ̂_ff") {
   SampleStats samp;
   samp.S = {random_pd(rng, 3)};
   samp.n_obs = {300};
-  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   auto std_or = standardize_lv(*pt, *mr, est, inf.vcov);
@@ -111,7 +111,7 @@ TEST_CASE("standardize_all: 1F CFA — ν_i rescaled by 1/√σ̂_ii, λ by √�
   Eigen::VectorXd mean(3);  mean << 3.0, 4.0, 5.0;
   SampleStats samp;  samp.S = {S};  samp.mean = {mean};  samp.n_obs = {300};
 
-  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   auto std_or = standardize_all(*pt, *mr, est, inf.vcov);
@@ -178,7 +178,7 @@ TEST_CASE("standardize_lv: 2F CFA — factor covariance → correlation, with de
                     .get<double>();
   SampleStats samp;  samp.S = {S};  samp.n_obs = {301};
 
-  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
   auto sol_or = standardize_lv(*pt, *mr, est, inf.vcov);
   REQUIRE_MESSAGE(sol_or.has_value(),

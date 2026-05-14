@@ -11,7 +11,7 @@
 #include "../oracle.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 namespace {
 
@@ -101,7 +101,7 @@ TEST_CASE("matrix_rep goldens — pure-CFA scope (P5.1)") {
       failures.push_back(e.id + ": parse failed");
       continue;
     }
-    auto pt = magmaan::partable::lavaanify(*fp);
+    auto pt = magmaan::spec::lavaanify(*fp);
     if (!pt.has_value()) {
       failures.push_back(e.id + ": lavaanify failed — " + pt.error().detail);
       continue;

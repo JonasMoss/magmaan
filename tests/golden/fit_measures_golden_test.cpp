@@ -11,13 +11,13 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/fit_measures.hpp"
-#include "magmaan/fit/inference.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/nt/measures.hpp"
+#include "magmaan/nt/infer.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 namespace {
 
@@ -71,10 +71,10 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
 
     auto fp = magmaan::parse::Parser::parse(e.model);
     if (!fp.has_value()) { failures.push_back(e.id + ": parse"); continue; }
-    magmaan::partable::LavaanifyOptions opts;
+    magmaan::spec::LavaanifyOptions opts;
     opts.n_groups      = e.n_groups;
     opts.meanstructure = e.meanstructure;
-    auto pt = magmaan::partable::lavaanify(*fp, opts);
+    auto pt = magmaan::spec::lavaanify(*fp, opts);
     if (!pt.has_value()) {
       failures.push_back(e.id + ": lavaanify — " + pt.error().detail);
       continue;
@@ -89,7 +89,7 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
     const auto& sample_blocks = exp["sample_cov"];
     REQUIRE(sample_blocks.is_array());
     const std::size_t n_blocks = sample_blocks.size();
-    magmaan::fit::SampleStats samp;
+    magmaan::data::SampleStats samp;
     for (std::size_t b = 0; b < n_blocks; ++b) {
       const auto& M = sample_blocks[b]["matrix"];
       const Eigen::Index p = static_cast<Eigen::Index>(M.size());
@@ -114,24 +114,24 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
       }
     }
 
-    auto est_or = magmaan::fit::fit(*pt, *mr, samp);
+    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
     if (!est_or.has_value()) {
       failures.push_back(e.id + ": fit — " + est_or.error().detail);
       continue;
     }
     const auto& est = *est_or;
 
-    const double chi2 = magmaan::fit::chi2_stat(samp, est);
-    auto df_or = magmaan::fit::df_stat(*pt, samp);
+    const double chi2 = magmaan::nt::infer::chi2_stat(samp, est);
+    auto df_or = magmaan::nt::infer::df_stat(*pt, samp);
     if (!df_or.has_value()) {
       failures.push_back(e.id + ": df_stat — " + df_or.error().detail);
       continue;
     }
     const int df = *df_or;
-    const auto bl = magmaan::fit::baseline_chi2(samp);
-    const auto fm = magmaan::fit::fit_measures(chi2, df, bl, samp);
+    const auto bl = magmaan::nt::measures::baseline_chi2(samp);
+    const auto fm = magmaan::nt::measures::fit_measures(chi2, df, bl, samp);
 
-    auto fx_or = magmaan::fit::fit_extras(*pt, *mr, samp, est);
+    auto fx_or = magmaan::nt::measures::fit_extras(*pt, *mr, samp, est);
     if (!fx_or.has_value()) {
       failures.push_back(e.id + ": fit_extras — " + fx_or.error().detail);
       continue;

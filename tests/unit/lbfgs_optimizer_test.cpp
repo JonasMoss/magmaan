@@ -3,11 +3,11 @@
 #include <Eigen/Core>
 
 #include "magmaan/error.hpp"
-#include "magmaan/fit/lbfgs_optimizer.hpp"
+#include "magmaan/optim/lbfgs_optimizer.hpp"
 
 using magmaan::FitError;
-using magmaan::fit::LbfgsOptimizer;
-using magmaan::fit::LbfgsOptions;
+using magmaan::optim::LbfgsOptimizer;
+using magmaan::optim::LbfgsOptions;
 
 TEST_CASE("LbfgsOptimizer — minimizes a well-behaved quadratic") {
   // f(x) = ||x - c||^2, minimum at x = c.

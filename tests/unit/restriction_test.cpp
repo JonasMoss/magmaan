@@ -3,19 +3,18 @@
 #include <Eigen/Core>
 #include <Eigen/QR>
 
-#include "magmaan/fit/constraints.hpp"
-#include "magmaan/fit/restriction.hpp"
+#include "magmaan/estimate/constraints.hpp"
+#include "magmaan/nt/robust.hpp"
 
-namespace lf = magmaan::fit;
 
 namespace {
 
 // Hand-build an EqConstraints struct from a K matrix (and optional θ₀).
 // Skips the `build_eq_constraints` pipeline so tests can express arbitrary
 // nested pairs without spinning up a full lavaanify.
-lf::EqConstraints make_eq(const Eigen::MatrixXd& K,
+magmaan::estimate::EqConstraints make_eq(const Eigen::MatrixXd& K,
                           const Eigen::VectorXd& theta0 = {}) {
-  lf::EqConstraints eq;
+  magmaan::estimate::EqConstraints eq;
   eq.Kmat   = K;
   eq.theta0 = theta0.size() == K.rows() ? theta0
                                         : Eigen::VectorXd::Zero(K.rows());
@@ -48,7 +47,7 @@ TEST_CASE("restriction_alpha_from_K: unconstrained H1, single equality in H0") {
         1, 0,
         0, 1;
 
-  auto r = lf::restriction_alpha_from_K(make_eq(K1), make_eq(K0));
+  auto r = magmaan::nt::robust::restriction_alpha_from_K(make_eq(K1), make_eq(K0));
   REQUIRE(r.has_value());
   CHECK(r->A.rows() == 1);
   CHECK(r->A.cols() == 3);
@@ -83,7 +82,7 @@ TEST_CASE("restriction_alpha_from_K: nested chain — H0 strictly inside H1") {
   K1 = qr_orthonormalise(K1);
   K0 = qr_orthonormalise(K0);
 
-  auto r = lf::restriction_alpha_from_K(make_eq(K1), make_eq(K0));
+  auto r = magmaan::nt::robust::restriction_alpha_from_K(make_eq(K1), make_eq(K0));
   REQUIRE(r.has_value());
   CHECK(r->A.rows() == 1);
   CHECK(r->A.cols() == 3);
@@ -100,7 +99,7 @@ TEST_CASE("restriction_alpha_from_K: nested chain — H0 strictly inside H1") {
 
 TEST_CASE("restriction_alpha_from_K: H0 ≡ H1 returns an empty restriction") {
   const Eigen::MatrixXd K = Eigen::MatrixXd::Identity(5, 3);
-  auto r = lf::restriction_alpha_from_K(make_eq(K), make_eq(K));
+  auto r = magmaan::nt::robust::restriction_alpha_from_K(make_eq(K), make_eq(K));
   REQUIRE(r.has_value());
   CHECK(r->A.rows() == 0);
   CHECK(r->A.cols() == 3);
@@ -124,7 +123,7 @@ TEST_CASE("restriction_alpha_from_K: rejects non-nested pair") {
   // to exercise the inclusion check.
   Eigen::MatrixXd K0_lower(3, 1);
   K0_lower << 0, 0, 1;
-  auto r = lf::restriction_alpha_from_K(make_eq(K1), make_eq(K0_lower));
+  auto r = magmaan::nt::robust::restriction_alpha_from_K(make_eq(K1), make_eq(K0_lower));
   CHECK_FALSE(r.has_value());
 }
 
@@ -133,7 +132,7 @@ TEST_CASE("restriction_alpha_from_K: rejects non-nested pair") {
 TEST_CASE("restriction_alpha_from_K: rejects wrong-direction nesting") {
   const Eigen::MatrixXd K1 = Eigen::MatrixXd::Identity(3, 2);  // r1 = 2
   const Eigen::MatrixXd K0 = Eigen::MatrixXd::Identity(3, 3);  // r0 = 3 > r1
-  auto r = lf::restriction_alpha_from_K(make_eq(K1), make_eq(K0));
+  auto r = magmaan::nt::robust::restriction_alpha_from_K(make_eq(K1), make_eq(K0));
   CHECK_FALSE(r.has_value());
 }
 
@@ -148,7 +147,7 @@ TEST_CASE("restriction_alpha_from_K: random K_H1·M = K_H0 round-trip") {
   Eigen::MatrixXd M    = Eigen::MatrixXd::Random(5, 3);
   Eigen::MatrixXd K0   = qr_orthonormalise(K1 * M);
 
-  auto r = lf::restriction_alpha_from_K(make_eq(K1), make_eq(K0));
+  auto r = magmaan::nt::robust::restriction_alpha_from_K(make_eq(K1), make_eq(K0));
   REQUIRE(r.has_value());
   CHECK(r->A.rows() == 2);  // m = r1 − r0 = 5 − 3
   CHECK(r->A.cols() == 5);

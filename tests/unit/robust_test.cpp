@@ -14,33 +14,33 @@
 
 #include <nlohmann/json.hpp>
 
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/inference.hpp"
-#include "magmaan/fit/raw_data.hpp"
-#include "magmaan/fit/robust.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/nt/infer.hpp"
+#include "magmaan/data/raw_data.hpp"
+#include "magmaan/nt/robust.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 #include "../inference_bundle.hpp"
 
 namespace {
 
 struct ModelHandles {
-  magmaan::partable::LatentStructure* pt;
+  magmaan::spec::LatentStructure* pt;
   magmaan::model::MatrixRep*   rep;
 };
 
 ModelHandles must_model(std::string_view src) {
   auto fp = magmaan::parse::Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = magmaan::partable::lavaanify(*fp);
+  auto pt = magmaan::spec::lavaanify(*fp);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
-  static thread_local magmaan::partable::LatentStructure s_pt;
+  static thread_local magmaan::spec::LatentStructure s_pt;
   static thread_local magmaan::model::MatrixRep   s_mr;
   s_pt = std::move(*pt);
   s_mr = std::move(*mr);
@@ -49,8 +49,8 @@ ModelHandles must_model(std::string_view src) {
 
 struct FitCtx {
   ModelHandles            handles;
-  magmaan::fit::SampleStats samp;
-  magmaan::fit::Estimates   est;
+  magmaan::data::SampleStats samp;
+  magmaan::estimate::Estimates   est;
 };
 
 // Load S, n_obs, and θ̂ from a fit fixture; refit to settle θ̂ exactly.
@@ -73,7 +73,7 @@ FitCtx load_and_fit(std::string_view model_src,
   ctx.samp.S.push_back(std::move(S));
   ctx.samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
-  auto est_or = magmaan::fit::fit(*ctx.handles.pt, *ctx.handles.rep, ctx.samp);
+  auto est_or = magmaan::estimate::fit(*ctx.handles.pt, *ctx.handles.rep, ctx.samp);
   REQUIRE(est_or.has_value());
   ctx.est = std::move(*est_or);
   return ctx;
@@ -121,7 +121,7 @@ TEST_CASE("U·Γ_NT eigenvalues = 1 on 1F CFA (saturated has df=0; skipped)") {
   auto ctx = load_and_fit(
       "f =~ x1 + x2 + x3",
       std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
-  auto uf_or = magmaan::fit::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
+  auto uf_or = magmaan::nt::robust::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
                                           ctx.samp, ctx.est);
   CHECK_FALSE(uf_or.has_value());
 }
@@ -143,7 +143,7 @@ TEST_CASE("build_u_factor: constraint-aware (Δ → Δ·K), df = p* − n_alpha"
   const Eigen::Index p     = ctx.samp.S[0].rows();      // 3
   const Eigen::Index pstar = p * (p + 1) / 2;           // 6
 
-  auto uf_or = magmaan::fit::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
+  auto uf_or = magmaan::nt::robust::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
                                           ctx.samp, ctx.est);
   REQUIRE_MESSAGE(uf_or.has_value(), "build_u_factor: " << uf_or.error().detail);
   CHECK(uf_or->pstar == pstar);
@@ -152,9 +152,9 @@ TEST_CASE("build_u_factor: constraint-aware (Δ → Δ·K), df = p* − n_alpha"
   CHECK(uf_or->B.cols() == uf_or->df);
 
   // Projector sanity still holds under the K-reparameterization.
-  auto M_nt_or = magmaan::fit::reduced_gamma_nt(*uf_or);
+  auto M_nt_or = magmaan::nt::robust::reduced_gamma_nt(*uf_or);
   REQUIRE(M_nt_or.has_value());
-  auto ev_or = magmaan::fit::ugamma_eigenvalues(*M_nt_or);
+  auto ev_or = magmaan::nt::robust::ugamma_eigenvalues(*M_nt_or);
   REQUIRE(ev_or.has_value());
   CHECK((ev_or->array() - 1.0).abs().maxCoeff() < 1e-8);
 }
@@ -166,7 +166,7 @@ TEST_CASE("U·Γ_NT eigenvalues all 1 on 3F Holzinger (over-identified, df=24)")
       "speed =~ x7 + x8 + x9",
       std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
 
-  auto uf_or = magmaan::fit::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
+  auto uf_or = magmaan::nt::robust::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
                                           ctx.samp, ctx.est);
   REQUIRE(uf_or.has_value());
   const auto& uf = *uf_or;
@@ -176,13 +176,13 @@ TEST_CASE("U·Γ_NT eigenvalues all 1 on 3F Holzinger (over-identified, df=24)")
   CHECK(uf.B.rows() == 45);
   CHECK(uf.B.cols() == 24);
 
-  auto M_nt_or = magmaan::fit::reduced_gamma_nt(uf);
+  auto M_nt_or = magmaan::nt::robust::reduced_gamma_nt(uf);
   REQUIRE(M_nt_or.has_value());
   const auto& M = *M_nt_or;
   CHECK(M.rows() == 24);
   CHECK(M.cols() == 24);
 
-  auto ev_or = magmaan::fit::ugamma_eigenvalues(M);
+  auto ev_or = magmaan::nt::robust::ugamma_eigenvalues(M);
   REQUIRE(ev_or.has_value());
   const auto& ev = *ev_or;
   CHECK(ev.size() == 24);
@@ -226,16 +226,16 @@ TEST_CASE("U·Γ_NT eigenvalues all 1 on 2F+meanstructure (G3b)") {
   Eigen::VectorXd mean(6);
   mean << 1.0, -0.5, 2.3, 0.8, -1.2, 0.4;
 
-  magmaan::fit::SampleStats samp;
+  magmaan::data::SampleStats samp;
   samp.S     = {S};
   samp.mean  = {mean};
   samp.n_obs = {300};
 
-  auto est_or = magmaan::fit::fit(*h.pt, *h.rep, samp);
+  auto est_or = magmaan::estimate::fit(*h.pt, *h.rep, samp);
   REQUIRE(est_or.has_value());
   const auto& est = *est_or;
 
-  auto uf_or = magmaan::fit::build_u_factor(*h.pt, *h.rep, samp, est);
+  auto uf_or = magmaan::nt::robust::build_u_factor(*h.pt, *h.rep, samp, est);
   REQUIRE(uf_or.has_value());
   const auto& uf = *uf_or;
   CHECK(uf.has_means);
@@ -250,12 +250,12 @@ TEST_CASE("U·Γ_NT eigenvalues all 1 on 2F+meanstructure (G3b)") {
   CHECK(uf.blocks[0].row_offset == 6);
   CHECK(uf.blocks[0].pstar      == 21);
 
-  auto M_nt_or = magmaan::fit::reduced_gamma_nt(uf);
+  auto M_nt_or = magmaan::nt::robust::reduced_gamma_nt(uf);
   REQUIRE(M_nt_or.has_value());
   CHECK(M_nt_or->rows() == 8);
   CHECK(M_nt_or->cols() == 8);
 
-  auto ev_or = magmaan::fit::ugamma_eigenvalues(*M_nt_or);
+  auto ev_or = magmaan::nt::robust::ugamma_eigenvalues(*M_nt_or);
   REQUIRE(ev_or.has_value());
   CHECK(ev_or->size() == 8);
   // Rank-df projector ⇒ all 8 eigenvalues = 1.
@@ -275,25 +275,25 @@ TEST_CASE("build_u_factor: unstructured weight (h1.information=unstructured)") {
       "speed =~ x7 + x8 + x9",
       std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
 
-  auto uf_s_or = magmaan::fit::build_u_factor(
+  auto uf_s_or = magmaan::nt::robust::build_u_factor(
       *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est,
-      {magmaan::fit::Information::Expected, magmaan::fit::WeightMoments::Structured});
-  auto uf_u_or = magmaan::fit::build_u_factor(
+      {magmaan::nt::robust::Information::Expected, magmaan::nt::robust::WeightMoments::Structured});
+  auto uf_u_or = magmaan::nt::robust::build_u_factor(
       *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est,
-      {magmaan::fit::Information::Expected, magmaan::fit::WeightMoments::Unstructured});
+      {magmaan::nt::robust::Information::Expected, magmaan::nt::robust::WeightMoments::Unstructured});
   REQUIRE(uf_s_or.has_value());
   REQUIRE(uf_u_or.has_value());
 
   CHECK(uf_u_or->df    == 24);
   CHECK(uf_u_or->pstar == 45);
-  CHECK(uf_u_or->moments == magmaan::fit::WeightMoments::Unstructured);
+  CHECK(uf_u_or->moments == magmaan::nt::robust::WeightMoments::Unstructured);
   // The two B factors genuinely differ (Σ̂ ≠ S for an over-identified fit).
   CHECK((uf_s_or->B - uf_u_or->B).cwiseAbs().maxCoeff() > 1e-3);
 
   // Each U-factor's matching NT meat still gives the projector spectrum.
-  auto M_u_or = magmaan::fit::reduced_gamma_nt(*uf_u_or);
+  auto M_u_or = magmaan::nt::robust::reduced_gamma_nt(*uf_u_or);
   REQUIRE(M_u_or.has_value());
-  auto ev_u_or = magmaan::fit::ugamma_eigenvalues(*M_u_or);
+  auto ev_u_or = magmaan::nt::robust::ugamma_eigenvalues(*M_u_or);
   REQUIRE(ev_u_or.has_value());
   CHECK((ev_u_or->array() - 1.0).abs().maxCoeff() < 1e-10);
 }
@@ -308,12 +308,12 @@ TEST_CASE("build_u_factor: Observed bread → ObservedHessian U-factor") {
       "textual =~ x4 + x5 + x6\n"
       "speed =~ x7 + x8 + x9",
       std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
-  auto uf_or = magmaan::fit::build_u_factor(
+  auto uf_or = magmaan::nt::robust::build_u_factor(
       *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est,
-      {magmaan::fit::Information::Observed, magmaan::fit::WeightMoments::Structured});
+      {magmaan::nt::robust::Information::Observed, magmaan::nt::robust::WeightMoments::Structured});
   REQUIRE(uf_or.has_value());
   const auto& uf = *uf_or;
-  CHECK(uf.kind == magmaan::fit::UFactor::Kind::ObservedHessian);
+  CHECK(uf.kind == magmaan::nt::robust::UFactor::Kind::ObservedHessian);
   CHECK(uf.df    == 24);          // p* − q = 45 − 21
   CHECK(uf.pstar == 45);
   CHECK(uf.A.rows() == 45);
@@ -321,10 +321,10 @@ TEST_CASE("build_u_factor: Observed bread → ObservedHessian U-factor") {
   CHECK(uf.H_obs_inv.rows() == 21);
   CHECK(uf.B.size() == 0);        // no B for this kind
 
-  auto M_nt_or = magmaan::fit::reduced_gamma_nt(uf);
+  auto M_nt_or = magmaan::nt::robust::reduced_gamma_nt(uf);
   REQUIRE(M_nt_or.has_value());
   CHECK(M_nt_or->rows() == 45);   // p* × p*, not df × df
-  auto ev_or = magmaan::fit::ugamma_eigenvalues(*M_nt_or);
+  auto ev_or = magmaan::nt::robust::ugamma_eigenvalues(*M_nt_or);
   REQUIRE(ev_or.has_value());
   CHECK(ev_or->size() == 45);
   // The 3F model has substantial misfit (χ² = 85 on df = 24), so the
@@ -349,29 +349,29 @@ TEST_CASE("build_u_factor Observed: reduced path matches brute-force UΓ̂") {
   // Empirical Γ̂ from a moderate MVN sample (any PD Γ̂ exercises the path).
   std::mt19937 rng(7);
   const Eigen::Index n = 600;
-  magmaan::fit::RawData raw;
+  magmaan::data::RawData raw;
   raw.X.push_back(mvn_sample(rng, n, Eigen::VectorXd::Zero(9), Sigma_hat));
-  auto samp_or = magmaan::fit::sample_stats_from_raw(raw);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
-  auto G_or = magmaan::fit::empirical_gamma(raw.X[0]);
+  auto G_or = magmaan::data::empirical_gamma(raw.X[0]);
   REQUIRE(G_or.has_value());
   const Eigen::MatrixXd& Gamma_hat = *G_or;
 
   // Reduced path: build U-factor (Observed bread), feed Γ̂ via the
   // synthetic-Zc trick (Zc = √n · chol(Γ̂)ᵀ ⇒ Zcᵀ Zc / n = Γ̂).
-  auto uf_or = magmaan::fit::build_u_factor(
+  auto uf_or = magmaan::nt::robust::build_u_factor(
       *ctx.handles.pt, *ctx.handles.rep, *samp_or, ctx.est,
-      {magmaan::fit::Information::Observed, magmaan::fit::WeightMoments::Structured});
+      {magmaan::nt::robust::Information::Observed, magmaan::nt::robust::WeightMoments::Structured});
   REQUIRE(uf_or.has_value());
   Eigen::LLT<Eigen::MatrixXd> llt_G(Gamma_hat);
   REQUIRE(llt_G.info() == Eigen::Success);
   const Eigen::MatrixXd Zc_synth =
       std::sqrt(static_cast<double>(n)) *
       Eigen::MatrixXd(llt_G.matrixL()).transpose();
-  auto M_or = magmaan::fit::reduced_gamma_sample(*uf_or, Zc_synth,
+  auto M_or = magmaan::nt::robust::reduced_gamma_sample(*uf_or, Zc_synth,
                                                static_cast<double>(n));
   REQUIRE(M_or.has_value());
-  auto ev_reduced_or = magmaan::fit::ugamma_eigenvalues(*M_or);
+  auto ev_reduced_or = magmaan::nt::robust::ugamma_eigenvalues(*M_or);
   REQUIRE(ev_reduced_or.has_value());
 
   // Brute force: W = Γ_NT(Σ̂)⁻¹, H = analytic-observed info / n,
@@ -385,7 +385,7 @@ TEST_CASE("build_u_factor Observed: reduced path matches brute-force UΓ̂") {
   // gives that, but rebuild for clarity).
   auto sigma_or = ev->sigma(ctx.est.theta);
   REQUIRE(sigma_or.has_value());
-  auto Gnt_or = magmaan::fit::gamma_nt(sigma_or->sigma[0]);
+  auto Gnt_or = magmaan::data::gamma_nt(sigma_or->sigma[0]);
   REQUIRE(Gnt_or.has_value());
   Eigen::LLT<Eigen::MatrixXd> llt_Gnt(*Gnt_or);
   REQUIRE(llt_Gnt.info() == Eigen::Success);
@@ -420,12 +420,12 @@ TEST_CASE("U·Γ_NT eigenvalues all 1 on path model (Reduced LISREL)") {
       std::string(MAGMAAN_FIXTURES_DIR) +
           "/fit/0020_cfa_plus_structural_hs.fit.json");
 
-  auto uf_or = magmaan::fit::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
+  auto uf_or = magmaan::nt::robust::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
                                           ctx.samp, ctx.est);
   REQUIRE(uf_or.has_value());
-  auto M_or  = magmaan::fit::reduced_gamma_nt(*uf_or);
+  auto M_or  = magmaan::nt::robust::reduced_gamma_nt(*uf_or);
   REQUIRE(M_or.has_value());
-  auto ev_or = magmaan::fit::ugamma_eigenvalues(*M_or);
+  auto ev_or = magmaan::nt::robust::ugamma_eigenvalues(*M_or);
   REQUIRE(ev_or.has_value());
   const double max_deviation = (ev_or->array() - 1.0).abs().maxCoeff();
   CHECK(max_deviation < 1e-10);
@@ -461,26 +461,26 @@ TEST_CASE("UΓ̂_sample → ones on large MVN sample for 3F Holzinger") {
   REQUIRE(sigma_or.has_value());
   const Eigen::MatrixXd Sigma_hat = sigma_or->sigma[0];
 
-  magmaan::fit::RawData raw;
+  magmaan::data::RawData raw;
   raw.X.push_back(mvn_sample(rng, n, mu, Sigma_hat));
 
   // Use the simulated data's actual sample stats so the residual at θ̂
   // is small (the model isn't refit; we just exercise the Γ̂ path).
-  auto samp_or = magmaan::fit::sample_stats_from_raw(raw);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
 
   // Build B from the original fit (which is what users would do — B is
   // built once at θ̂, reused across Γ flavors).
-  auto uf_or = magmaan::fit::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
+  auto uf_or = magmaan::nt::robust::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
                                           ctx.samp, ctx.est);
   REQUIRE(uf_or.has_value());
-  auto Zc_or = magmaan::fit::casewise_contributions(raw, *samp_or);
+  auto Zc_or = magmaan::nt::robust::casewise_contributions(raw, *samp_or);
   REQUIRE(Zc_or.has_value());
-  auto M_sample_or = magmaan::fit::reduced_gamma_sample(
+  auto M_sample_or = magmaan::nt::robust::reduced_gamma_sample(
       *uf_or, *Zc_or, static_cast<double>(n));
   REQUIRE(M_sample_or.has_value());
 
-  auto eigvals_or = magmaan::fit::ugamma_eigenvalues(*M_sample_or);
+  auto eigvals_or = magmaan::nt::robust::ugamma_eigenvalues(*M_sample_or);
   REQUIRE(eigvals_or.has_value());
   const auto& eigvals = *eigvals_or;
   CHECK(eigvals.size() == 24);
@@ -522,17 +522,17 @@ TEST_CASE("UΓ̂_sample → ones on large MVN+means sample for 2F+means HS (G3b)
 
   std::mt19937 rng(2026);
   const Eigen::Index n = 20000;
-  magmaan::fit::RawData raw;
+  magmaan::data::RawData raw;
   raw.X.push_back(mvn_sample(rng, n, sigma_or->mu[0], sigma_or->sigma[0]));
 
-  auto samp_or = magmaan::fit::sample_stats_from_raw(raw);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
   REQUIRE(samp_or->mean.size() == 1);
 
   // Build the U-factor at the converged θ̂ on the original lavaan-fixture
   // moments (the typical workflow). G3b path: uf.has_means = true,
   // total_rows = 27, df = 8.
-  auto uf_or = magmaan::fit::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
+  auto uf_or = magmaan::nt::robust::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
                                           ctx.samp, ctx.est);
   REQUIRE(uf_or.has_value());
   REQUIRE(uf_or->has_means);
@@ -540,16 +540,16 @@ TEST_CASE("UΓ̂_sample → ones on large MVN+means sample for 2F+means HS (G3b)
   REQUIRE(uf_or->df == 8);
 
   // Means-aware Zc: 27 columns = 6 μ + 21 vech(Σ) per block.
-  auto Zc_or = magmaan::fit::casewise_contributions(raw, *samp_or,
+  auto Zc_or = magmaan::nt::robust::casewise_contributions(raw, *samp_or,
                                                   /*include_means=*/true);
   REQUIRE(Zc_or.has_value());
   CHECK(Zc_or->cols() == 27);
   CHECK(Zc_or->rows() == n);
 
-  auto M_sample_or = magmaan::fit::reduced_gamma_sample(
+  auto M_sample_or = magmaan::nt::robust::reduced_gamma_sample(
       *uf_or, *Zc_or, static_cast<double>(n));
   REQUIRE(M_sample_or.has_value());
-  auto eigvals_or = magmaan::fit::ugamma_eigenvalues(*M_sample_or);
+  auto eigvals_or = magmaan::nt::robust::ugamma_eigenvalues(*M_sample_or);
   REQUIRE(eigvals_or.has_value());
   CHECK(eigvals_or->size() == 8);
   // Under MVN, every eigenvalue → 1. n=20000 leaves the deviation O(1/√n)
@@ -564,11 +564,11 @@ TEST_CASE("UΓ̂_sample → ones on large MVN+means sample for 2F+means HS (G3b)
   auto exp_or = magmaan::test::expected_inference(
       *ctx.handles.pt, *ctx.handles.rep, *samp_or, ctx.est);
   REQUIRE(exp_or.has_value());
-  auto rob_or = magmaan::fit::robust_se(
+  auto rob_or = magmaan::nt::robust::robust_se(
       *ctx.handles.pt, *ctx.handles.rep, *samp_or, ctx.est, raw,
-      {magmaan::fit::Information::Expected,
-       magmaan::fit::WeightMoments::Structured,
-       magmaan::fit::ScoreCovariance::Empirical});
+      {magmaan::nt::robust::Information::Expected,
+       magmaan::nt::robust::WeightMoments::Structured,
+       magmaan::nt::robust::ScoreCovariance::Empirical});
   REQUIRE(rob_or.has_value());
   CHECK(rob_or->se.size() == exp_or->se.size());
   const double max_rel =
@@ -600,25 +600,25 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B") {
   REQUIRE(ev.has_value());
   auto sigma_or = ev->sigma(ctx.est.theta);
   REQUIRE(sigma_or.has_value());
-  magmaan::fit::RawData raw;
+  magmaan::data::RawData raw;
   raw.X.push_back(mvn_sample(rng, n, mu, sigma_or->sigma[0]));
 
-  auto samp_or = magmaan::fit::sample_stats_from_raw(raw);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
 
-  auto uf_or = magmaan::fit::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
+  auto uf_or = magmaan::nt::robust::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
                                           ctx.samp, ctx.est);
   REQUIRE(uf_or.has_value());
 
   // Path 1: reduced via casewise.
-  auto Zc_or = magmaan::fit::casewise_contributions(raw, *samp_or);
+  auto Zc_or = magmaan::nt::robust::casewise_contributions(raw, *samp_or);
   REQUIRE(Zc_or.has_value());
-  auto M_a_or = magmaan::fit::reduced_gamma_sample(
+  auto M_a_or = magmaan::nt::robust::reduced_gamma_sample(
       *uf_or, *Zc_or, static_cast<double>(n));
   REQUIRE(M_a_or.has_value());
 
   // Path 2: explicit Γ̂ then B'Γ̂B.
-  auto G_or = magmaan::fit::empirical_gamma(raw.X[0]);
+  auto G_or = magmaan::data::empirical_gamma(raw.X[0]);
   REQUIRE(G_or.has_value());
   const Eigen::MatrixXd M_b =
       uf_or->B.transpose() * (*G_or) * uf_or->B;
@@ -629,12 +629,12 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B") {
   // single block, so it must match the scalar overload bit-for-bit. A
   // length-n vector with n ≠ {1, n_blocks} is rejected.
   Eigen::VectorXd one(1);  one << static_cast<double>(n);
-  auto M_vec_or = magmaan::fit::reduced_gamma_sample(*uf_or, *Zc_or, one);
+  auto M_vec_or = magmaan::nt::robust::reduced_gamma_sample(*uf_or, *Zc_or, one);
   REQUIRE(M_vec_or.has_value());
   CHECK((*M_vec_or - *M_a_or).cwiseAbs().maxCoeff() == 0.0);
 
   Eigen::VectorXd bad(3);  bad << 1.0, 2.0, 3.0;   // n_blocks == 1
-  auto M_bad_or = magmaan::fit::reduced_gamma_sample(*uf_or, *Zc_or, bad);
+  auto M_bad_or = magmaan::nt::robust::reduced_gamma_sample(*uf_or, *Zc_or, bad);
   CHECK_FALSE(M_bad_or.has_value());
 }
 
@@ -662,10 +662,10 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B with mean structure (G3
   };
   Eigen::MatrixXd S0 = random_pd(6);
   Eigen::VectorXd mu0(6); mu0 << 1.0, -0.5, 2.3, 0.8, -1.2, 0.4;
-  magmaan::fit::SampleStats samp_seed;
+  magmaan::data::SampleStats samp_seed;
   samp_seed.S = {S0};  samp_seed.mean = {mu0};  samp_seed.n_obs = {500};
 
-  auto est_or = magmaan::fit::fit(*h.pt, *h.rep, samp_seed);
+  auto est_or = magmaan::estimate::fit(*h.pt, *h.rep, samp_seed);
   REQUIRE(est_or.has_value());
 
   // Now build raw data from the fitted Σ̂, μ̂ to construct the empirical Γ̂.
@@ -675,25 +675,25 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B with mean structure (G3
   REQUIRE(sigma_or.has_value());
 
   const Eigen::Index n = 500;
-  magmaan::fit::RawData raw;
+  magmaan::data::RawData raw;
   raw.X.push_back(mvn_sample(rng, n, sigma_or->mu[0], sigma_or->sigma[0]));
 
-  auto samp_or = magmaan::fit::sample_stats_from_raw(raw);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
   REQUIRE(samp_or->mean.size() == 1);
   REQUIRE(samp_or->mean[0].size() == 6);
 
-  auto uf_or = magmaan::fit::build_u_factor(*h.pt, *h.rep, samp_seed, *est_or);
+  auto uf_or = magmaan::nt::robust::build_u_factor(*h.pt, *h.rep, samp_seed, *est_or);
   REQUIRE(uf_or.has_value());
   REQUIRE(uf_or->has_means);
   REQUIRE(uf_or->total_rows == 27);
 
   // Path 1: reduced via casewise (include_means=true).
-  auto Zc_or = magmaan::fit::casewise_contributions(raw, *samp_or, /*include_means=*/true);
+  auto Zc_or = magmaan::nt::robust::casewise_contributions(raw, *samp_or, /*include_means=*/true);
   REQUIRE(Zc_or.has_value());
   CHECK(Zc_or->cols() == 27);                       // p + p* = 6 + 21
   CHECK(Zc_or->rows() == n);
-  auto M_a_or = magmaan::fit::reduced_gamma_sample(
+  auto M_a_or = magmaan::nt::robust::reduced_gamma_sample(
       *uf_or, *Zc_or, static_cast<double>(n));
   REQUIRE(M_a_or.has_value());
 
@@ -706,10 +706,10 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B with mean structure (G3
 
   // Shape-mismatch path: σ-only Zc against a means-aware UFactor is rejected
   // with the dedicated "rebuild Zc" message (not the generic shape error).
-  auto Zc_sigma_or = magmaan::fit::casewise_contributions(raw, *samp_or, /*include_means=*/false);
+  auto Zc_sigma_or = magmaan::nt::robust::casewise_contributions(raw, *samp_or, /*include_means=*/false);
   REQUIRE(Zc_sigma_or.has_value());
   CHECK(Zc_sigma_or->cols() == 21);
-  auto M_bad_or = magmaan::fit::reduced_gamma_sample(
+  auto M_bad_or = magmaan::nt::robust::reduced_gamma_sample(
       *uf_or, *Zc_sigma_or, static_cast<double>(n));
   CHECK_FALSE(M_bad_or.has_value());
 }
@@ -728,7 +728,7 @@ TEST_CASE("reduced_gamma_unbiased matches the Browne closed-form") {
       "speed =~ x7 + x8 + x9",
       std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
 
-  auto uf_or = magmaan::fit::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
+  auto uf_or = magmaan::nt::robust::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
                                           ctx.samp, ctx.est);
   REQUIRE(uf_or.has_value());
 
@@ -738,21 +738,21 @@ TEST_CASE("reduced_gamma_unbiased matches the Browne closed-form") {
   REQUIRE(ev.has_value());
   auto sigma_or = ev->sigma(ctx.est.theta);
   REQUIRE(sigma_or.has_value());
-  magmaan::fit::RawData raw;
+  magmaan::data::RawData raw;
   raw.X.push_back(mvn_sample(rng, n, Eigen::VectorXd::Zero(9), sigma_or->sigma[0]));
 
-  auto samp_or = magmaan::fit::sample_stats_from_raw(raw);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
 
-  auto Zc_or       = magmaan::fit::casewise_contributions(raw, *samp_or);
+  auto Zc_or       = magmaan::nt::robust::casewise_contributions(raw, *samp_or);
   REQUIRE(Zc_or.has_value());
-  auto M_sample_or = magmaan::fit::reduced_gamma_sample(*uf_or, *Zc_or,
+  auto M_sample_or = magmaan::nt::robust::reduced_gamma_sample(*uf_or, *Zc_or,
                                                      static_cast<double>(n));
   REQUIRE(M_sample_or.has_value());
-  auto M_nt_or     = magmaan::fit::reduced_gamma_nt(*uf_or);
+  auto M_nt_or     = magmaan::nt::robust::reduced_gamma_nt(*uf_or);
   REQUIRE(M_nt_or.has_value());
 
-  auto M_u_or = magmaan::fit::reduced_gamma_unbiased(
+  auto M_u_or = magmaan::nt::robust::reduced_gamma_unbiased(
       *uf_or, *samp_or, *M_sample_or, *M_nt_or);
   REQUIRE(M_u_or.has_value());
 
@@ -780,7 +780,7 @@ TEST_CASE("reduced_gamma_unbiased matches the Browne closed-form") {
 
 TEST_CASE("satorra_bentler: c = 1 → T_SB = T_ML exactly") {
   Eigen::VectorXd eigvals = Eigen::VectorXd::Ones(24);
-  auto r = magmaan::fit::satorra_bentler(85.30552, 24, eigvals);
+  auto r = magmaan::nt::robust::satorra_bentler(85.30552, 24, eigvals);
   CHECK(r.scale_c     == doctest::Approx(1.0).epsilon(1e-12));
   CHECK(r.chi2_scaled == doctest::Approx(85.30552).epsilon(1e-12));
   CHECK(r.df          == 24);
@@ -788,14 +788,14 @@ TEST_CASE("satorra_bentler: c = 1 → T_SB = T_ML exactly") {
 
 TEST_CASE("mean_var_adjusted: λ = 1's reduces to (T_ML, df)") {
   Eigen::VectorXd eigvals = Eigen::VectorXd::Ones(24);
-  auto r = magmaan::fit::mean_var_adjusted(85.30552, 24, eigvals);
+  auto r = magmaan::nt::robust::mean_var_adjusted(85.30552, 24, eigvals);
   CHECK(r.df_adj   == doctest::Approx(24.0).epsilon(1e-12));
   CHECK(r.chi2_adj == doctest::Approx(85.30552).epsilon(1e-12));
 }
 
 TEST_CASE("scaled_shifted: λ = 1's reduces to (T_ML, df)") {
   Eigen::VectorXd eigvals = Eigen::VectorXd::Ones(24);
-  auto r = magmaan::fit::scaled_shifted(85.30552, 24, eigvals);
+  auto r = magmaan::nt::robust::scaled_shifted(85.30552, 24, eigvals);
   // Σλ = 24, Σλ² = 24. a = √(24/24) = 1, b = 24 − 1·24 = 0. T = T_ML·1 + 0.
   CHECK(r.scale_a  == doctest::Approx(1.0).epsilon(1e-12));
   CHECK(r.shift_b  == doctest::Approx(0.0).epsilon(1e-12));
@@ -805,7 +805,7 @@ TEST_CASE("scaled_shifted: λ = 1's reduces to (T_ML, df)") {
 
 TEST_CASE("satorra_bentler: c = 2 halves T_ML") {
   Eigen::VectorXd eigvals(4); eigvals << 1.5, 2.0, 2.5, 2.0;  // mean = 2
-  auto r = magmaan::fit::satorra_bentler(50.0, 4, eigvals);
+  auto r = magmaan::nt::robust::satorra_bentler(50.0, 4, eigvals);
   CHECK(r.scale_c     == doctest::Approx(2.0).epsilon(1e-12));
   CHECK(r.chi2_scaled == doctest::Approx(25.0).epsilon(1e-12));
 }
@@ -814,7 +814,7 @@ TEST_CASE("mean_var_adjusted: Satterthwaite formulas hold") {
   // λ = (1, 2, 3, 4): Σλ = 10, Σλ² = 30. df_adj = 100/30 = 10/3.
   // T_adj = T_ML · 10/30 = T_ML/3.
   Eigen::VectorXd eigvals(4); eigvals << 1.0, 2.0, 3.0, 4.0;
-  auto r = magmaan::fit::mean_var_adjusted(30.0, 4, eigvals);
+  auto r = magmaan::nt::robust::mean_var_adjusted(30.0, 4, eigvals);
   CHECK(r.df_adj   == doctest::Approx(10.0 / 3.0).epsilon(1e-12));
   CHECK(r.chi2_adj == doctest::Approx(10.0).epsilon(1e-12));
 }
@@ -823,7 +823,7 @@ TEST_CASE("scaled_shifted: a/b formulas hold") {
   // λ = (1, 2, 3, 4): Σλ = 10, Σλ² = 30. df = 4.
   // a = √(4/30), b = 4 − a·10. T_adj = T_ML·a + b.
   Eigen::VectorXd eigvals(4); eigvals << 1.0, 2.0, 3.0, 4.0;
-  auto r = magmaan::fit::scaled_shifted(30.0, 4, eigvals);
+  auto r = magmaan::nt::robust::scaled_shifted(30.0, 4, eigvals);
   const double a_expect = std::sqrt(4.0 / 30.0);
   const double b_expect = 4.0 - a_expect * 10.0;
   CHECK(r.scale_a  == doctest::Approx(a_expect).epsilon(1e-12));
@@ -884,13 +884,13 @@ TEST_CASE("robust_se: collapses to expected info when Γ̂ = Γ_NT(Σ̂)") {
       std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
 
   const Eigen::MatrixXd Sigma_hat = implied_sigma(ctx.handles, ctx.est.theta);
-  auto G_or = magmaan::fit::gamma_nt(Sigma_hat);
+  auto G_or = magmaan::data::gamma_nt(Sigma_hat);
   REQUIRE(G_or.has_value());
 
-  auto rob_or = magmaan::fit::robust_se(
+  auto rob_or = magmaan::nt::robust::robust_se(
       *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est, *G_or,
-      {magmaan::fit::Information::Expected, magmaan::fit::WeightMoments::Structured,
-       magmaan::fit::ScoreCovariance::Empirical});
+      {magmaan::nt::robust::Information::Expected, magmaan::nt::robust::WeightMoments::Structured,
+       magmaan::nt::robust::ScoreCovariance::Empirical});
   REQUIRE(rob_or.has_value());
 
   auto exp_or = magmaan::test::expected_inference(
@@ -924,15 +924,15 @@ TEST_CASE("robust_se: collapses to expected info when Γ̂ = Γ_NT(Σ̂), mean s
   };
   Eigen::MatrixXd S = random_pd(6);
   Eigen::VectorXd mean(6); mean << 1.0, -0.5, 2.3, 0.8, -1.2, 0.4;
-  magmaan::fit::SampleStats samp;
+  magmaan::data::SampleStats samp;
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {300};
 
-  auto est_or = magmaan::fit::fit(*h.pt, *h.rep, samp);
+  auto est_or = magmaan::estimate::fit(*h.pt, *h.rep, samp);
   REQUIRE(est_or.has_value());
 
   // Model-implied Σ̂ at θ̂ (M_b for `Structured` moments).
   const Eigen::MatrixXd Sigma_hat = implied_sigma(h, est_or->theta);
-  auto G_sigma_or = magmaan::fit::gamma_nt(Sigma_hat);
+  auto G_sigma_or = magmaan::data::gamma_nt(Sigma_hat);
   REQUIRE(G_sigma_or.has_value());
 
   // Assemble the block-diagonal means-aware Γ_NT — single block.
@@ -944,10 +944,10 @@ TEST_CASE("robust_se: collapses to expected info when Γ̂ = Γ_NT(Σ̂), mean s
   Gamma_full.block(0, 0, 6, 6)  = Sigma_hat;       // μ block (mu_off = 0)
   Gamma_full.block(6, 6, 21, 21) = *G_sigma_or;    // σ block (row_offset = 6)
 
-  auto rob_or = magmaan::fit::robust_se(
+  auto rob_or = magmaan::nt::robust::robust_se(
       *h.pt, *h.rep, samp, *est_or, Gamma_full,
-      {magmaan::fit::Information::Expected, magmaan::fit::WeightMoments::Structured,
-       magmaan::fit::ScoreCovariance::Empirical});
+      {magmaan::nt::robust::Information::Expected, magmaan::nt::robust::WeightMoments::Structured,
+       magmaan::nt::robust::ScoreCovariance::Empirical});
   REQUIRE(rob_or.has_value());
 
   auto exp_or = magmaan::test::expected_inference(
@@ -971,9 +971,9 @@ TEST_CASE("robust_se: → expected SE on a large MVN sample (RawData overload)")
 
   std::mt19937 rng(2026);
   const Eigen::Index n = 20000;
-  magmaan::fit::RawData raw;
+  magmaan::data::RawData raw;
   raw.X.push_back(mvn_sample(rng, n, Eigen::VectorXd::Zero(9), Sigma_hat));
-  auto samp_or = magmaan::fit::sample_stats_from_raw(raw);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
 
   // Build the U-factor's expected vcov for *these* data (the simulated S,
@@ -982,10 +982,10 @@ TEST_CASE("robust_se: → expected SE on a large MVN sample (RawData overload)")
   auto exp_or = magmaan::test::expected_inference(
       *ctx.handles.pt, *ctx.handles.rep, *samp_or, ctx.est);
   REQUIRE(exp_or.has_value());
-  auto rob_or = magmaan::fit::robust_se(
+  auto rob_or = magmaan::nt::robust::robust_se(
       *ctx.handles.pt, *ctx.handles.rep, *samp_or, ctx.est, raw,
-      {magmaan::fit::Information::Expected, magmaan::fit::WeightMoments::Structured,
-       magmaan::fit::ScoreCovariance::Empirical});
+      {magmaan::nt::robust::Information::Expected, magmaan::nt::robust::WeightMoments::Structured,
+       magmaan::nt::robust::ScoreCovariance::Empirical});
   REQUIRE(rob_or.has_value());
 
   // Relative SE difference under ~5% (O(1/√n) sampling noise on Γ̂).
@@ -1005,21 +1005,21 @@ TEST_CASE("robust_se: gamma_hat and RawData overloads agree") {
 
   std::mt19937 rng(99);
   const Eigen::Index n = 500;
-  magmaan::fit::RawData raw;
+  magmaan::data::RawData raw;
   raw.X.push_back(mvn_sample(rng, n, Eigen::VectorXd::Zero(9), Sigma_hat));
-  auto samp_or = magmaan::fit::sample_stats_from_raw(raw);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
-  auto G_or = magmaan::fit::empirical_gamma(raw.X[0]);
+  auto G_or = magmaan::data::empirical_gamma(raw.X[0]);
   REQUIRE(G_or.has_value());
 
-  auto rob_g_or = magmaan::fit::robust_se(
+  auto rob_g_or = magmaan::nt::robust::robust_se(
       *ctx.handles.pt, *ctx.handles.rep, *samp_or, ctx.est, *G_or,
-      {magmaan::fit::Information::Expected, magmaan::fit::WeightMoments::Structured,
-       magmaan::fit::ScoreCovariance::Empirical});
-  auto rob_r_or = magmaan::fit::robust_se(
+      {magmaan::nt::robust::Information::Expected, magmaan::nt::robust::WeightMoments::Structured,
+       magmaan::nt::robust::ScoreCovariance::Empirical});
+  auto rob_r_or = magmaan::nt::robust::robust_se(
       *ctx.handles.pt, *ctx.handles.rep, *samp_or, ctx.est, raw,
-      {magmaan::fit::Information::Expected, magmaan::fit::WeightMoments::Structured,
-       magmaan::fit::ScoreCovariance::Empirical});
+      {magmaan::nt::robust::Information::Expected, magmaan::nt::robust::WeightMoments::Structured,
+       magmaan::nt::robust::ScoreCovariance::Empirical});
   REQUIRE(rob_g_or.has_value());
   REQUIRE(rob_r_or.has_value());
   CHECK((rob_g_or->vcov - rob_r_or->vcov).cwiseAbs().maxCoeff() < 1e-10);
@@ -1039,20 +1039,20 @@ TEST_CASE("robust_se: Observed bread collapses to expected SE on MVN data") {
   const Eigen::MatrixXd Sigma_hat = implied_sigma(ctx.handles, ctx.est.theta);
   std::mt19937 rng(31);
   const Eigen::Index n = 20000;
-  magmaan::fit::RawData raw;
+  magmaan::data::RawData raw;
   raw.X.push_back(mvn_sample(rng, n, Eigen::VectorXd::Zero(9), Sigma_hat));
-  auto samp_or = magmaan::fit::sample_stats_from_raw(raw);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
-  auto est_mvn_or = magmaan::fit::fit(*ctx.handles.pt, *ctx.handles.rep, *samp_or);
+  auto est_mvn_or = magmaan::estimate::fit(*ctx.handles.pt, *ctx.handles.rep, *samp_or);
   REQUIRE(est_mvn_or.has_value());
 
   auto exp_or = magmaan::test::expected_inference(
       *ctx.handles.pt, *ctx.handles.rep, *samp_or, *est_mvn_or);
   REQUIRE(exp_or.has_value());
-  auto rob_or = magmaan::fit::robust_se(
+  auto rob_or = magmaan::nt::robust::robust_se(
       *ctx.handles.pt, *ctx.handles.rep, *samp_or, *est_mvn_or, raw,
-      {magmaan::fit::Information::Observed, magmaan::fit::WeightMoments::Structured,
-       magmaan::fit::ScoreCovariance::Empirical});
+      {magmaan::nt::robust::Information::Observed, magmaan::nt::robust::WeightMoments::Structured,
+       magmaan::nt::robust::ScoreCovariance::Empirical});
   REQUIRE(rob_or.has_value());
   const double max_rel =
       ((rob_or->se - exp_or->se).cwiseAbs().array() /
@@ -1067,12 +1067,12 @@ TEST_CASE("robust_se: ScoreCovariance::BrowneUnbiased errors cleanly") {
       "speed =~ x7 + x8 + x9",
       std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
   const Eigen::MatrixXd Sigma_hat = implied_sigma(ctx.handles, ctx.est.theta);
-  auto G_or = magmaan::fit::gamma_nt(Sigma_hat);
+  auto G_or = magmaan::data::gamma_nt(Sigma_hat);
   REQUIRE(G_or.has_value());
-  CHECK_FALSE(magmaan::fit::robust_se(
+  CHECK_FALSE(magmaan::nt::robust::robust_se(
       *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est, *G_or,
-      {magmaan::fit::Information::Expected, magmaan::fit::WeightMoments::Structured,
-       magmaan::fit::ScoreCovariance::BrowneUnbiased}).has_value());
+      {magmaan::nt::robust::Information::Expected, magmaan::nt::robust::WeightMoments::Structured,
+       magmaan::nt::robust::ScoreCovariance::BrowneUnbiased}).has_value());
 }
 
 TEST_CASE("reduced_gamma_sample_streaming matches reduced_gamma_sample") {
@@ -1081,7 +1081,7 @@ TEST_CASE("reduced_gamma_sample_streaming matches reduced_gamma_sample") {
       "textual =~ x4 + x5 + x6\n"
       "speed =~ x7 + x8 + x9",
       std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
-  auto uf_or = magmaan::fit::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
+  auto uf_or = magmaan::nt::robust::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
                                           ctx.samp, ctx.est);
   REQUIRE(uf_or.has_value());
 
@@ -1091,15 +1091,15 @@ TEST_CASE("reduced_gamma_sample_streaming matches reduced_gamma_sample") {
   REQUIRE(ev.has_value());
   auto sigma_or = ev->sigma(ctx.est.theta);
   REQUIRE(sigma_or.has_value());
-  magmaan::fit::RawData raw;
+  magmaan::data::RawData raw;
   raw.X.push_back(mvn_sample(rng, n, Eigen::VectorXd::Zero(9), sigma_or->sigma[0]));
 
-  auto samp_or = magmaan::fit::sample_stats_from_raw(raw);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
-  auto Zc_or = magmaan::fit::casewise_contributions(raw, *samp_or);
+  auto Zc_or = magmaan::nt::robust::casewise_contributions(raw, *samp_or);
   REQUIRE(Zc_or.has_value());
 
-  auto M_batch_or = magmaan::fit::reduced_gamma_sample(*uf_or, *Zc_or,
+  auto M_batch_or = magmaan::nt::robust::reduced_gamma_sample(*uf_or, *Zc_or,
                                                     static_cast<double>(n));
   REQUIRE(M_batch_or.has_value());
 
@@ -1107,7 +1107,7 @@ TEST_CASE("reduced_gamma_sample_streaming matches reduced_gamma_sample") {
   rows.reserve(static_cast<std::size_t>(Zc_or->rows()));
   for (Eigen::Index i = 0; i < Zc_or->rows(); ++i)
     rows.push_back(Zc_or->row(i).transpose());
-  auto M_stream_or = magmaan::fit::reduced_gamma_sample_streaming(
+  auto M_stream_or = magmaan::nt::robust::reduced_gamma_sample_streaming(
       *uf_or, rows, static_cast<double>(n));
   REQUIRE(M_stream_or.has_value());
 

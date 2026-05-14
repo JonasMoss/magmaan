@@ -13,20 +13,20 @@
 
 #include "../oracle.hpp"
 
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/ml.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/nt/ml.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
-using magmaan::fit::ML;
-using magmaan::fit::SampleStats;
+using magmaan::nt::ml::ML;
+using magmaan::data::SampleStats;
 using magmaan::model::build_matrix_rep;
 using magmaan::model::ModelEvaluator;
 using magmaan::parse::Parser;
-using magmaan::partable::lavaanify;
+using magmaan::spec::lavaanify;
 
 namespace {
 
@@ -37,7 +37,7 @@ ModelEvaluator must_build(std::string_view src) {
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
-  static thread_local magmaan::partable::LatentStructure s_pt;
+  static thread_local magmaan::spec::LatentStructure s_pt;
   static thread_local magmaan::model::MatrixRep   s_mr;
   s_pt = std::move(*pt);
   s_mr = std::move(*mr);
@@ -255,7 +255,7 @@ TEST_CASE("ML: fit() recovers ν̂_i ≈ m̄_i on saturated mean-structure CFA")
   auto fp = magmaan::parse::Parser::parse(
       "f =~ x1 + x2 + x3\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::partable::lavaanify(*fp);
+  auto pt = magmaan::spec::lavaanify(*fp);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -269,7 +269,7 @@ TEST_CASE("ML: fit() recovers ν̂_i ≈ m̄_i on saturated mean-structure CFA")
   samp.mean = {mean};
   samp.n_obs = {301};
 
-  auto est_or = magmaan::fit::fit(*pt, *mr, samp);
+  auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
   REQUIRE(est_or.has_value());
   const auto& est = *est_or;
 

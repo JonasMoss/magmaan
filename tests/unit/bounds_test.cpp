@@ -2,24 +2,24 @@
 
 #include <limits>
 
-#include "magmaan/fit/bounds.hpp"
+#include "magmaan/estimate/bounds.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
-using magmaan::fit::Bounds;
-using magmaan::fit::bounds_from_partable;
+using magmaan::estimate::Bounds;
+using magmaan::estimate::bounds_from_partable;
 
 namespace {
 
-magmaan::partable::LatentStructure must_parse(std::string_view src,
+magmaan::spec::LatentStructure must_parse(std::string_view src,
                                             int n_groups = 1) {
   auto fp = magmaan::parse::Parser::parse(src);
   REQUIRE(fp.has_value());
-  magmaan::partable::LavaanifyOptions opts;
+  magmaan::spec::LavaanifyOptions opts;
   opts.n_groups = n_groups;
-  auto pt = magmaan::partable::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::lavaanify(*fp, opts);
   REQUIRE(pt.has_value());
   return std::move(*pt);
 }
@@ -77,7 +77,7 @@ TEST_CASE("bounds_from_partable: counts match Ψ + Θ free diagonals") {
 TEST_CASE("bounds_from_partable: empty partable returns empty Bounds") {
   // Edge case — a parser-valid but parameter-free model is unusual but
   // bounds_from_partable must handle n_free == 0 cleanly.
-  magmaan::partable::LatentStructure pt;
+  magmaan::spec::LatentStructure pt;
   auto b_or = bounds_from_partable(pt);
   REQUIRE(b_or.has_value());
   CHECK(b_or->empty());

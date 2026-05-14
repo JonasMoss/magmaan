@@ -6,11 +6,11 @@
 #include <Eigen/Core>
 
 #include "magmaan/error.hpp"
-#include "magmaan/fit/concepts.hpp"
-#include "magmaan/fit/lbfgsb_optimizer.hpp"
+#include "magmaan/optim/concepts.hpp"
+#include "magmaan/optim/lbfgsb_optimizer.hpp"
 
 using magmaan::FitError;
-using magmaan::fit::LbfgsBOptimizer;
+using magmaan::optim::LbfgsBOptimizer;
 
 // ============================================================================
 // Concept conformance — LbfgsBOptimizer models both Optimizer (via the
@@ -19,9 +19,9 @@ using magmaan::fit::LbfgsBOptimizer;
 // ============================================================================
 
 TEST_CASE("LbfgsBOptimizer satisfies Optimizer and BoundedOptimizer concepts") {
-  static_assert(magmaan::fit::Optimizer<LbfgsBOptimizer>,
+  static_assert(magmaan::optim::Optimizer<LbfgsBOptimizer>,
                 "LbfgsBOptimizer must model Optimizer");
-  static_assert(magmaan::fit::BoundedOptimizer<LbfgsBOptimizer>,
+  static_assert(magmaan::optim::BoundedOptimizer<LbfgsBOptimizer>,
                 "LbfgsBOptimizer must model BoundedOptimizer");
   CHECK(true);
 }

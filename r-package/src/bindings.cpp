@@ -16,8 +16,8 @@
 #include "magmaan/parse/op.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/parse/flat_partable.hpp"
-#include "magmaan/partable/lavaanify.hpp"
-#include "magmaan/partable/lavaan_view.hpp"
+#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/lavaan/partable_view.hpp"
 
 namespace {
 
@@ -182,7 +182,7 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   auto p = magmaan::parse::Parser::parse(syntax);
   if (!p.has_value()) stop_parse(p.error());
 
-  magmaan::partable::LavaanifyOptions opts;
+  magmaan::spec::LavaanifyOptions opts;
   opts.auto_var       = auto_var;
   opts.auto_cov_lv_x  = auto_cov_lv_x;
   opts.auto_cov_y     = auto_cov_y;
@@ -196,15 +196,15 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   if (group_labels.isNotNull())
     opts.group_labels = Rcpp::as<std::vector<std::string>>(group_labels.get());
 
-  magmaan::partable::Starts starts;
-  magmaan::partable::LatentNames names;
-  auto pt_or = magmaan::partable::lavaanify(*p, opts, &starts, &names);
+  magmaan::spec::Starts starts;
+  magmaan::spec::LatentNames names;
+  auto pt_or = magmaan::spec::lavaanify(*p, opts, &starts, &names);
   if (!pt_or.has_value()) {
     Rcpp::stop("magmaan lavaanify error [%s]: %s",
                partable_error_kind(pt_or.error().kind), pt_or.error().detail);
   }
-  const magmaan::partable::LavaanParTable pt =
-      magmaan::partable::to_lavaan_partable(*pt_or, names, starts);
+  const magmaan::lavaan::LavaanParTable pt =
+      magmaan::lavaan::to_lavaan_partable(*pt_or, names, starts);
 
   const R_xlen_t n = static_cast<R_xlen_t>(pt.size());
   Rcpp::IntegerVector id(n), user(n), block(n), group(n), free(n), exo(n);

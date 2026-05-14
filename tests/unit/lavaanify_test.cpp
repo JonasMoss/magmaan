@@ -7,20 +7,20 @@
 #include "magmaan/error.hpp"
 #include "magmaan/parse/op.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaan_view.hpp"
-#include "magmaan/partable/lavaanify.hpp"
-#include "magmaan/partable/partable.hpp"
+#include "magmaan/lavaan/partable_view.hpp"
+#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/partable.hpp"
 
 using magmaan::PartableError;
 using magmaan::parse::Op;
 using magmaan::parse::Parser;
-using magmaan::partable::lavaanify;
-using magmaan::partable::LavaanifyOptions;
-using magmaan::partable::LavaanParTable;
-using magmaan::partable::LatentNames;
-using magmaan::partable::LatentStructure;
-using magmaan::partable::Starts;
-using magmaan::partable::to_lavaan_partable;
+using magmaan::spec::lavaanify;
+using magmaan::spec::LavaanifyOptions;
+using magmaan::lavaan::LavaanParTable;
+using magmaan::spec::LatentNames;
+using magmaan::spec::LatentStructure;
+using magmaan::spec::Starts;
+using magmaan::lavaan::to_lavaan_partable;
 
 namespace {
 

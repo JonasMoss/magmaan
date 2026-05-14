@@ -7,7 +7,7 @@
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
 
-#include "magmaan/fit/raw_data.hpp"
+#include "magmaan/data/raw_data.hpp"
 
 namespace {
 
@@ -46,10 +46,10 @@ TEST_CASE("sample_stats_from_raw: N-divisor cov + sample mean") {
   Eigen::VectorXd mu(p); mu << 1.0, 2.0, 3.0, 4.0;
   const Eigen::MatrixXd Sigma = random_pd(rng, p, 5.0);
 
-  magmaan::fit::RawData raw;
+  magmaan::data::RawData raw;
   raw.X.push_back(mvn_sample(rng, n, mu, Sigma));
 
-  auto samp_or = magmaan::fit::sample_stats_from_raw(raw);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
   const auto& samp = *samp_or;
 
@@ -73,7 +73,7 @@ TEST_CASE("gamma_nt: closed-form formula σ_ik·σ_jl + σ_il·σ_jk") {
   const Eigen::MatrixXd Sigma = random_pd(rng, p, 3.0);
   const Eigen::Index pstar = p * (p + 1) / 2;
 
-  auto G_or = magmaan::fit::gamma_nt(Sigma);
+  auto G_or = magmaan::data::gamma_nt(Sigma);
   REQUIRE(G_or.has_value());
   const auto& G = *G_or;
 
@@ -104,8 +104,8 @@ TEST_CASE("empirical_gamma → gamma_nt on large MVN sample") {
   const Eigen::MatrixXd Sigma = random_pd(rng, p, 4.0);
 
   const Eigen::MatrixXd X = mvn_sample(rng, n, mu, Sigma);
-  auto G_emp_or = magmaan::fit::empirical_gamma(X);
-  auto G_nt_or  = magmaan::fit::gamma_nt(Sigma);
+  auto G_emp_or = magmaan::data::empirical_gamma(X);
+  auto G_nt_or  = magmaan::data::gamma_nt(Sigma);
   REQUIRE(G_emp_or.has_value());
   REQUIRE(G_nt_or.has_value());
 
@@ -116,23 +116,23 @@ TEST_CASE("empirical_gamma → gamma_nt on large MVN sample") {
 
 TEST_CASE("empirical_gamma: error on degenerate input") {
   Eigen::MatrixXd X(1, 3);  X << 1.0, 2.0, 3.0;
-  auto out = magmaan::fit::empirical_gamma(X);
+  auto out = magmaan::data::empirical_gamma(X);
   CHECK_FALSE(out.has_value());
 
   Eigen::MatrixXd Y(5, 0);
-  auto out2 = magmaan::fit::empirical_gamma(Y);
+  auto out2 = magmaan::data::empirical_gamma(Y);
   CHECK_FALSE(out2.has_value());
 }
 
 TEST_CASE("sample_stats_from_raw: error on degenerate / missingness") {
-  magmaan::fit::RawData raw;
+  magmaan::data::RawData raw;
   raw.X.push_back(Eigen::MatrixXd::Zero(1, 3));   // n=1 — covariance undefined
-  CHECK_FALSE(magmaan::fit::sample_stats_from_raw(raw).has_value());
+  CHECK_FALSE(magmaan::data::sample_stats_from_raw(raw).has_value());
 
   raw.X.clear();
   raw.X.push_back(Eigen::MatrixXd::Zero(10, 3));
   raw.mask.push_back(
       Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>::Ones(10, 3));
   // Mask present → FIML-phase territory, not yet supported.
-  CHECK_FALSE(magmaan::fit::sample_stats_from_raw(raw).has_value());
+  CHECK_FALSE(magmaan::data::sample_stats_from_raw(raw).has_value());
 }

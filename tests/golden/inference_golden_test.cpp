@@ -11,15 +11,15 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/inference.hpp"
-#include "magmaan/fit/resolve_fixed_x.hpp"
-#include "magmaan/fit/robust.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/nt/infer.hpp"
+#include "magmaan/estimate/resolve_fixed_x.hpp"
+#include "magmaan/nt/robust.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 namespace {
 
@@ -71,9 +71,9 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
     if (!fp.has_value()) { failures.push_back(e.id + ": parse"); continue; }
     // Pass meanstructure through so explicit `~ 1` rows + the auto-add
     // semantics (ν free, α fixed at 0) match lavaan's cfa(meanstructure=TRUE).
-    magmaan::partable::LavaanifyOptions opts;
+    magmaan::spec::LavaanifyOptions opts;
     opts.meanstructure = e.meanstructure;
-    auto pt = magmaan::partable::lavaanify(*fp, opts);
+    auto pt = magmaan::spec::lavaanify(*fp, opts);
     if (!pt.has_value()) { failures.push_back(e.id + ": lavaanify"); continue; }
     auto mr = magmaan::model::build_matrix_rep(*pt);
     if (!mr.has_value()) { failures.push_back(e.id + ": matrix_rep"); continue; }
@@ -83,7 +83,7 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
     // it (single-group meanstructure fixtures populate this).
     const auto& sample_blocks = exp["sample_cov"];
     REQUIRE(sample_blocks.is_array());
-    magmaan::fit::SampleStats samp;
+    magmaan::data::SampleStats samp;
     for (std::size_t b = 0; b < sample_blocks.size(); ++b) {
       const auto& M = sample_blocks[b]["matrix"];
       const Eigen::Index p = static_cast<Eigen::Index>(M.size());
@@ -103,7 +103,7 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
       }
     }
 
-    auto est_or = magmaan::fit::fit(*pt, *mr, samp);
+    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
     if (!est_or.has_value()) {
       failures.push_back(e.id + ": fit failed — kind=" +
                          std::to_string(static_cast<int>(est_or.error().kind)) +
@@ -112,21 +112,21 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
     }
     const auto& est = *est_or;
 
-    auto info_or = magmaan::fit::information_expected(*pt, *mr, samp, est);
+    auto info_or = magmaan::nt::infer::information_expected(*pt, *mr, samp, est);
     if (!info_or.has_value()) {
       failures.push_back(e.id + ": information_expected failed — kind=" +
                          std::to_string(static_cast<int>(info_or.error().kind)) +
                          " " + info_or.error().detail);
       continue;
     }
-    auto vcov_or = magmaan::fit::vcov(*info_or, *pt);
+    auto vcov_or = magmaan::nt::infer::vcov(*info_or, *pt);
     if (!vcov_or.has_value()) {
       failures.push_back(e.id + ": vcov failed — " + vcov_or.error().detail);
       continue;
     }
-    const Eigen::VectorXd se_v = magmaan::fit::se(*vcov_or);
-    const double          chi2 = magmaan::fit::chi2_stat(samp, est);
-    auto df_or = magmaan::fit::df_stat(*pt, samp);
+    const Eigen::VectorXd se_v = magmaan::nt::infer::se(*vcov_or);
+    const double          chi2 = magmaan::nt::infer::chi2_stat(samp, est);
+    auto df_or = magmaan::nt::infer::df_stat(*pt, samp);
     if (!df_or.has_value()) {
       failures.push_back(e.id + ": df_stat failed — " + df_or.error().detail);
       continue;
@@ -180,7 +180,7 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
     //     — full quadratic form with the model space projected out. ≈ 0 for
     //     saturated models, distinct from χ²_ML in finite samples otherwise.
     if (exp.contains("browne_residual_nt") && !exp["browne_residual_nt"].is_null()) {
-      auto br_or = magmaan::fit::browne_residual_nt(*pt, *mr, samp, est);
+      auto br_or = magmaan::nt::infer::browne_residual_nt(*pt, *mr, samp, est);
       if (!br_or.has_value()) {
         failures.push_back(e.id + ": browne_residual_nt — " + br_or.error().detail);
         continue;
@@ -200,8 +200,8 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
     //     Build the implied Σ̂ from our θ̂ via the evaluator (mirroring fit()'s
     //     fixed.x resolution) and feed it to rls_chi2.
     if (exp.contains("rls_chi2") && !exp["rls_chi2"].is_null()) {
-      magmaan::partable::LatentStructure pt_res = *pt;
-      (void)magmaan::fit::resolve_fixed_x_from_sample(pt_res, *mr, samp);
+      magmaan::spec::LatentStructure pt_res = *pt;
+      (void)magmaan::estimate::resolve_fixed_x_from_sample(pt_res, *mr, samp);
       auto ev_or = magmaan::model::ModelEvaluator::build(pt_res, *mr);
       if (!ev_or.has_value()) {
         failures.push_back(e.id + ": rls_chi2 build_evaluator — " +
@@ -213,7 +213,7 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
         failures.push_back(e.id + ": rls_chi2 sigma — " + im_or.error().detail);
         continue;
       }
-      auto rls_or = magmaan::fit::rls_chi2(samp, *im_or);
+      auto rls_or = magmaan::nt::infer::rls_chi2(samp, *im_or);
       if (!rls_or.has_value()) {
         failures.push_back(e.id + ": rls_chi2 — " + rls_or.error().detail);
         continue;
@@ -234,19 +234,19 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
     //    fixture carries oracle values AND the model is non-saturated
     //    (df > 0 in the χ² sense).
     if (df > 0 && exp.contains("sb_chi2") && !exp["sb_chi2"].is_null()) {
-      auto uf_or = magmaan::fit::build_u_factor(*pt, *mr, samp, est);
+      auto uf_or = magmaan::nt::robust::build_u_factor(*pt, *mr, samp, est);
       if (!uf_or.has_value()) {
         failures.push_back(e.id + ": build_u_factor — " +
                            uf_or.error().detail);
         continue;
       }
-      auto M_nt_or = magmaan::fit::reduced_gamma_nt(*uf_or);
+      auto M_nt_or = magmaan::nt::robust::reduced_gamma_nt(*uf_or);
       if (!M_nt_or.has_value()) {
         failures.push_back(e.id + ": reduced_gamma_nt — " +
                            M_nt_or.error().detail);
         continue;
       }
-      auto ev_or = magmaan::fit::ugamma_eigenvalues(*M_nt_or);
+      auto ev_or = magmaan::nt::robust::ugamma_eigenvalues(*M_nt_or);
       if (!ev_or.has_value()) {
         failures.push_back(e.id + ": ugamma_eigenvalues — " +
                            ev_or.error().detail);
@@ -280,9 +280,9 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
         Eigen::VectorXd ev_lavaan(static_cast<Eigen::Index>(ev_arr.size()));
         for (Eigen::Index k = 0; k < ev_lavaan.size(); ++k)
           ev_lavaan(k) = ev_arr[static_cast<std::size_t>(k)].get<double>();
-        auto sb  = magmaan::fit::satorra_bentler(chi2, df, ev_lavaan);
-        auto mv  = magmaan::fit::mean_var_adjusted(chi2, df, ev_lavaan);
-        auto ss  = magmaan::fit::scaled_shifted(chi2, df, ev_lavaan);
+        auto sb  = magmaan::nt::robust::satorra_bentler(chi2, df, ev_lavaan);
+        auto mv  = magmaan::nt::robust::mean_var_adjusted(chi2, df, ev_lavaan);
+        auto ss  = magmaan::nt::robust::scaled_shifted(chi2, df, ev_lavaan);
         const double sb_lavaan = exp["sb_chi2"].get<double>();
         const double mv_lavaan = exp["mean_var_chi2"].get<double>();
         const double ss_lavaan = exp["scaled_shifted_chi2"].get<double>();
@@ -354,11 +354,11 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
           for (Eigen::Index c = 0; c < pstar; ++c)
             Gamma_hat(r, c) = Gj[static_cast<std::size_t>(r)]
                                [static_cast<std::size_t>(c)].get<double>();
-        auto rob_or = magmaan::fit::robust_se(
+        auto rob_or = magmaan::nt::robust::robust_se(
             *pt, *mr, samp, est, Gamma_hat,
-            {magmaan::fit::Information::Expected,
-             magmaan::fit::WeightMoments::Structured,
-             magmaan::fit::ScoreCovariance::Empirical});
+            {magmaan::nt::robust::Information::Expected,
+             magmaan::nt::robust::WeightMoments::Structured,
+             magmaan::nt::robust::ScoreCovariance::Empirical});
         if (!rob_or.has_value()) {
           failures.push_back(e.id + ": robust_se — " + rob_or.error().detail);
           continue;
@@ -386,11 +386,11 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
         // same meat, Observed (Hessian) bread.
         if (exp.contains("se_robust_huberwhite") &&
             !exp["se_robust_huberwhite"].is_null()) {
-          auto hw_or = magmaan::fit::robust_se(
+          auto hw_or = magmaan::nt::robust::robust_se(
               *pt, *mr, samp, est, Gamma_hat,
-              {magmaan::fit::Information::Observed,
-               magmaan::fit::WeightMoments::Structured,
-               magmaan::fit::ScoreCovariance::Empirical});
+              {magmaan::nt::robust::Information::Observed,
+               magmaan::nt::robust::WeightMoments::Structured,
+               magmaan::nt::robust::ScoreCovariance::Empirical});
           if (!hw_or.has_value()) {
             failures.push_back(e.id + ": robust_se (observed) — " +
                                hw_or.error().detail);

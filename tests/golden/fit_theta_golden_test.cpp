@@ -10,11 +10,11 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 namespace {
 
@@ -70,9 +70,9 @@ TEST_CASE("fit goldens — θ̂ matches lavaan on real data (≤1e-6)") {
 
     auto fp = magmaan::parse::Parser::parse(e.model);
     if (!fp.has_value()) { failures.push_back(e.id + ": parse"); continue; }
-    magmaan::partable::LavaanifyOptions opts;
+    magmaan::spec::LavaanifyOptions opts;
     opts.meanstructure = e.meanstructure;
-    auto pt = magmaan::partable::lavaanify(*fp, opts);
+    auto pt = magmaan::spec::lavaanify(*fp, opts);
     if (!pt.has_value()) { failures.push_back(e.id + ": lavaanify"); continue; }
     auto mr = magmaan::model::build_matrix_rep(*pt);
     if (!mr.has_value()) { failures.push_back(e.id + ": matrix_rep"); continue; }
@@ -83,7 +83,7 @@ TEST_CASE("fit goldens — θ̂ matches lavaan on real data (≤1e-6)") {
     // meanstructure fixtures).
     const auto& sample_blocks = exp["sample_cov"];
     REQUIRE(sample_blocks.is_array());
-    magmaan::fit::SampleStats samp;
+    magmaan::data::SampleStats samp;
     for (std::size_t b = 0; b < sample_blocks.size(); ++b) {
       const auto& M = sample_blocks[b]["matrix"];
       const Eigen::Index p = static_cast<Eigen::Index>(M.size());
@@ -103,7 +103,7 @@ TEST_CASE("fit goldens — θ̂ matches lavaan on real data (≤1e-6)") {
       }
     }
 
-    auto est_or = magmaan::fit::fit(*pt, *mr, samp);
+    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
     if (!est_or.has_value()) {
       failures.push_back(e.id + ": fit failed — kind=" +
                          std::to_string(static_cast<int>(est_or.error().kind)) +

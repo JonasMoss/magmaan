@@ -5,21 +5,21 @@
 
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 using magmaan::model::build_matrix_rep;
 using magmaan::model::Cell;
 using magmaan::model::MatId;
 using magmaan::model::MatrixRep;
 using magmaan::parse::Parser;
-using magmaan::partable::lavaanify;
+using magmaan::spec::lavaanify;
 
 namespace {
 
 MatrixRep must_build(std::string_view src) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  magmaan::partable::LatentNames names;
+  magmaan::spec::LatentNames names;
   auto pt = lavaanify(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt, &names);

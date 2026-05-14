@@ -15,17 +15,16 @@
 #include <RcppEigen.h>
 
 #include "internal.hpp"
-#include "magmaan/fit/constraints.hpp"
-#include "magmaan/fit/lr_test_satorra.hpp"
-#include "magmaan/fit/satorra2000.hpp"
+#include "magmaan/estimate/constraints.hpp"
+#include "magmaan/nt/robust.hpp"
+#include "magmaan/nt/robust.hpp"
 
-namespace lvf = magmaan::fit;
 
 namespace {
 
-lvf::GammaSource parse_gamma(const std::string& s) {
-  if (s == "NT" || s == "nt") return lvf::GammaSource::NT;
-  return lvf::GammaSource::Empirical;
+magmaan::nt::robust::GammaSource parse_gamma(const std::string& s) {
+  if (s == "NT" || s == "nt") return magmaan::nt::robust::GammaSource::NT;
+  return magmaan::nt::robust::GammaSource::Empirical;
 }
 
 }  // namespace
@@ -61,14 +60,14 @@ Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
                                      std::string          gamma = "empirical") {
   // ── Build the H1 context (pt, rep, samp) and pull θ̂_H1 ─────────────────
   magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
-  const lvf::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
 
   // ── Re-derive both K matrices from each fit's partable ────────────────
-  auto K_H1_or = lvf::build_eq_constraints(ctx_H1.pt);
+  auto K_H1_or = magmaan::estimate::build_eq_constraints(ctx_H1.pt);
   if (!K_H1_or.has_value()) magmaanr::stop_post(K_H1_or.error());
   auto parsed_H0 = magmaanr::partable_from_arg(fit_H0["partable"],
                                               "infer_lr_test_satorra2000");
-  auto K_H0_or = lvf::build_eq_constraints(parsed_H0.structure);
+  auto K_H0_or = magmaan::estimate::build_eq_constraints(parsed_H0.structure);
   if (!K_H0_or.has_value()) magmaanr::stop_post(K_H0_or.error());
 
   // ── Per-group raw data, means, n_g, weights ───────────────────────────
@@ -96,14 +95,14 @@ Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
   }
 
   // ── Run the orchestrator ──────────────────────────────────────────────
-  auto r_or = lvf::lr_test_satorra2000_from_data(
+  auto r_or = magmaan::nt::robust::lr_test_satorra2000_from_data(
       ctx_H1.pt, ctx_H1.rep, est_H1.theta,
       *K_H1_or, *K_H0_or,
       Xs, means, n_g, w_g,
       T_H0, T_H1, df_H0, df_H1,
       parse_gamma(gamma));
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
-  const lvf::LRSatorra2000Result& r = *r_or;
+  const magmaan::nt::robust::LRSatorra2000Result& r = *r_or;
 
   Rcpp::CharacterVector warns(static_cast<R_xlen_t>(r.warnings.size()));
   for (std::size_t k = 0; k < r.warnings.size(); ++k) {

@@ -13,20 +13,21 @@
 
 #include "../oracle.hpp"
 
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/sample_stats.hpp"
-#include "magmaan/fit/uls.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/gls/uls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
-using magmaan::fit::SampleStats;
-using magmaan::fit::ULS;
+using magmaan::data::SampleStats;
+using magmaan::gls::ULS;
 using magmaan::model::build_matrix_rep;
 using magmaan::model::ModelEvaluator;
 using magmaan::parse::Parser;
-using magmaan::partable::lavaanify;
+using magmaan::spec::lavaanify;
 
 namespace {
 
@@ -37,7 +38,7 @@ ModelEvaluator must_build(std::string_view src) {
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
-  static thread_local magmaan::partable::LatentStructure s_pt;
+  static thread_local magmaan::spec::LatentStructure s_pt;
   static thread_local magmaan::model::MatrixRep          s_mr;
   s_pt = std::move(*pt);
   s_mr = std::move(*mr);
@@ -258,7 +259,7 @@ TEST_CASE("ULS: fit<ULS>() recovers ground-truth on 1F + meanstructure (in-manif
   auto fp = magmaan::parse::Parser::parse(
       "f =~ x1 + x2 + x3\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::partable::lavaanify(*fp);
+  auto pt = magmaan::spec::lavaanify(*fp);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -276,9 +277,9 @@ TEST_CASE("ULS: fit<ULS>() recovers ground-truth on 1F + meanstructure (in-manif
   samp.mean = {nu_true};  // α = 0 ⇒ μ = ν, so sample mean ≡ ν_true.
   samp.n_obs = {301};
 
-  magmaan::fit::LbfgsOptimizer opt(magmaan::fit::LbfgsOptions{
+  magmaan::optim::LbfgsOptimizer opt(magmaan::optim::LbfgsOptions{
       .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9});
-  auto est_or = magmaan::fit::fit(*pt, *mr, samp, ULS{}, opt);
+  auto est_or = magmaan::estimate::fit(*pt, *mr, samp, ULS{}, opt);
   if (!est_or.has_value()) {
     MESSAGE("fit<ULS>() failed: kind=" << static_cast<int>(est_or.error().kind)
             << " detail=" << est_or.error().detail
@@ -430,7 +431,7 @@ TEST_CASE("ULS: fit<ULS>() recovers ground-truth Σ on a 1F-feasible covariance"
   // λ_iλ_jψ. Generate S INSIDE this manifold so the optimum is F = 0.
   auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::partable::lavaanify(*fp);
+  auto pt = magmaan::spec::lavaanify(*fp);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -449,9 +450,9 @@ TEST_CASE("ULS: fit<ULS>() recovers ground-truth Σ on a 1F-feasible covariance"
 
   // ULS is shallower than ML near the optimum (no log-det curvature) —
   // LBFGS needs more iterations than the default 1000.
-  magmaan::fit::LbfgsOptimizer opt(magmaan::fit::LbfgsOptions{
+  magmaan::optim::LbfgsOptimizer opt(magmaan::optim::LbfgsOptions{
       .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9});
-  auto est_or = magmaan::fit::fit(*pt, *mr, samp, ULS{}, opt);
+  auto est_or = magmaan::estimate::fit(*pt, *mr, samp, ULS{}, opt);
   if (!est_or.has_value()) {
     MESSAGE("fit<ULS>() failed: kind=" << static_cast<int>(est_or.error().kind)
             << " detail=" << est_or.error().detail

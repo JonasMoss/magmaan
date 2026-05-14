@@ -9,10 +9,10 @@
 #include "../oracle.hpp"
 #include "magmaan/parse/op.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaan_view.hpp"
-#include "magmaan/partable/lavaanify.hpp"
-#include "magmaan/partable/partable.hpp"
-#include "magmaan/partable/start_hints.hpp"
+#include "magmaan/lavaan/partable_view.hpp"
+#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/partable.hpp"
+#include "magmaan/spec/start_hints.hpp"
 
 namespace {
 
@@ -22,7 +22,7 @@ namespace {
 // plabel). NaN is written as JSON null to match the R `na = "null"` choice.
 nlohmann::json ptable_to_json(std::string_view input,
                               std::string_view corpus_id,
-                              const magmaan::partable::LavaanParTable& pt) {
+                              const magmaan::lavaan::LavaanParTable& pt) {
   using magmaan::test::op_to_lavaan_string;
   nlohmann::json j;
   j["_meta"] = {
@@ -137,16 +137,16 @@ TEST_CASE("ptable goldens — every corpus entry that lavaanify can handle") {
       failures.push_back(e.id + ": parse failed — " + fp.error().detail);
       continue;
     }
-    magmaan::partable::Starts starts;
-    magmaan::partable::LatentNames names;
-    auto pt = magmaan::partable::lavaanify(*fp, {}, &starts, &names);
+    magmaan::spec::Starts starts;
+    magmaan::spec::LatentNames names;
+    auto pt = magmaan::spec::lavaanify(*fp, {}, &starts, &names);
     if (!pt.has_value()) {
       failures.push_back(e.id + ": lavaanify failed — " + pt.error().detail);
       continue;
     }
 
     auto got = ptable_to_json(e.model, e.id,
-                              magmaan::partable::to_lavaan_partable(*pt, names, starts));
+                              magmaan::lavaan::to_lavaan_partable(*pt, names, starts));
     auto d = diff_ptable(magmaan::test::strip_meta(got),
                          magmaan::test::strip_meta(exp));
     if (d.empty()) ++passed;

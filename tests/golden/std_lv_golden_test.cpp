@@ -10,12 +10,12 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/inference.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/nt/infer.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 // Stage D of the ParTable split refactor: the `std_lv` knob on
 // LavaanifyOptions. These goldens pin a CFA fitted with `std.lv = TRUE`
@@ -34,8 +34,8 @@ const std::vector<std::string> kStdLvFixtures = {
     "0001_three_factor_hs",
 };
 
-magmaan::fit::SampleStats sample_from_fixture(const nlohmann::json& exp) {
-  magmaan::fit::SampleStats samp;
+magmaan::data::SampleStats sample_from_fixture(const nlohmann::json& exp) {
+  magmaan::data::SampleStats samp;
   const auto& sample_blocks = exp["sample_cov"];
   for (std::size_t b = 0; b < sample_blocks.size(); ++b) {
     const auto& M = sample_blocks[b]["matrix"];
@@ -71,9 +71,9 @@ TEST_CASE("std.lv goldens — θ̂/SE/χ²/df match lavaan(std.lv=TRUE)") {
     auto fp = magmaan::parse::Parser::parse(model);
     if (!fp.has_value()) { failures.push_back(id + ": parse"); continue; }
 
-    magmaan::partable::LavaanifyOptions opts;
+    magmaan::spec::LavaanifyOptions opts;
     opts.std_lv = true;
-    auto pt = magmaan::partable::lavaanify(*fp, opts);
+    auto pt = magmaan::spec::lavaanify(*fp, opts);
     if (!pt.has_value()) {
       failures.push_back(id + ": lavaanify — " + pt.error().detail);
       continue;
@@ -84,28 +84,28 @@ TEST_CASE("std.lv goldens — θ̂/SE/χ²/df match lavaan(std.lv=TRUE)") {
       continue;
     }
 
-    const magmaan::fit::SampleStats samp = sample_from_fixture(exp);
+    const magmaan::data::SampleStats samp = sample_from_fixture(exp);
 
-    auto est_or = magmaan::fit::fit(*pt, *mr, samp);
+    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
     if (!est_or.has_value()) {
       failures.push_back(id + ": fit — " + est_or.error().detail);
       continue;
     }
     const auto& est = *est_or;
 
-    auto info_or = magmaan::fit::information_expected(*pt, *mr, samp, est);
+    auto info_or = magmaan::nt::infer::information_expected(*pt, *mr, samp, est);
     if (!info_or.has_value()) {
       failures.push_back(id + ": information_expected — " + info_or.error().detail);
       continue;
     }
-    auto vcov_or = magmaan::fit::vcov(*info_or, *pt);
+    auto vcov_or = magmaan::nt::infer::vcov(*info_or, *pt);
     if (!vcov_or.has_value()) {
       failures.push_back(id + ": vcov — " + vcov_or.error().detail);
       continue;
     }
-    const Eigen::VectorXd se_v = magmaan::fit::se(*vcov_or);
-    const double          chi2 = magmaan::fit::chi2_stat(samp, est);
-    auto df_or = magmaan::fit::df_stat(*pt, samp);
+    const Eigen::VectorXd se_v = magmaan::nt::infer::se(*vcov_or);
+    const double          chi2 = magmaan::nt::infer::chi2_stat(samp, est);
+    auto df_or = magmaan::nt::infer::df_stat(*pt, samp);
     if (!df_or.has_value()) {
       failures.push_back(id + ": df_stat — " + df_or.error().detail);
       continue;
@@ -168,13 +168,13 @@ TEST_CASE("std.lv goldens — θ̂/SE/χ²/df match lavaan(std.lv=TRUE)") {
     // 5) Bijectivity: the same model under the (default) marker convention
     //    must reach the same #df and the same χ² — marker and std.lv are
     //    bijective reparameterizations of one fit.
-    auto pt_m = magmaan::partable::lavaanify(*fp);   // marker (default)
+    auto pt_m = magmaan::spec::lavaanify(*fp);   // marker (default)
     auto mr_m = magmaan::model::build_matrix_rep(*pt_m);
     if (pt_m.has_value() && mr_m.has_value()) {
-      auto est_m = magmaan::fit::fit(*pt_m, *mr_m, samp);
+      auto est_m = magmaan::estimate::fit(*pt_m, *mr_m, samp);
       if (est_m.has_value()) {
-        const double chi2_m = magmaan::fit::chi2_stat(samp, *est_m);
-        auto df_m_or = magmaan::fit::df_stat(*pt_m, samp);
+        const double chi2_m = magmaan::nt::infer::chi2_stat(samp, *est_m);
+        auto df_m_or = magmaan::nt::infer::df_stat(*pt_m, samp);
         if (df_m_or.has_value()) {
           if (*df_m_or != df) {
             failures.push_back(id + ": marker/std.lv df disagree"); ok = false;

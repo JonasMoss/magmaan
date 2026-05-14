@@ -10,13 +10,13 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/inference.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/nt/infer.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 // P9 phase 2 — general *linear* `==` equality constraints. These goldens pin a
 // 1-factor CFA fitted with `b2 + b3 == 1.5` (lavaan enforces it via its
@@ -31,8 +31,8 @@ const std::vector<std::string> kLinConFixtures = {
     "0001_loading_sum_hs",
 };
 
-magmaan::fit::SampleStats sample_from_fixture(const nlohmann::json& exp) {
-  magmaan::fit::SampleStats samp;
+magmaan::data::SampleStats sample_from_fixture(const nlohmann::json& exp) {
+  magmaan::data::SampleStats samp;
   const auto& blocks = exp["sample_cov"];
   for (std::size_t b = 0; b < blocks.size(); ++b) {
     const auto& M = blocks[b]["matrix"];
@@ -76,24 +76,24 @@ TEST_CASE("linear-constraint goldens — θ̂/SE/χ²/df match lavaan(+ `==`)") 
     const std::string model = exp["input"].get<std::string>();
     auto fp = magmaan::parse::Parser::parse(model);
     if (!fp.has_value()) { failures.push_back(id + ": parse"); continue; }
-    auto pt = magmaan::partable::lavaanify(*fp);
+    auto pt = magmaan::spec::lavaanify(*fp);
     if (!pt.has_value()) { failures.push_back(id + ": lavaanify — " + pt.error().detail); continue; }
     auto mr = magmaan::model::build_matrix_rep(*pt);
     if (!mr.has_value()) { failures.push_back(id + ": matrix_rep — " + mr.error().detail); continue; }
 
-    const magmaan::fit::SampleStats samp = sample_from_fixture(exp);
+    const magmaan::data::SampleStats samp = sample_from_fixture(exp);
 
-    auto est_or = magmaan::fit::fit(*pt, *mr, samp);
+    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
     if (!est_or.has_value()) { failures.push_back(id + ": fit — " + est_or.error().detail); continue; }
     const auto& est = *est_or;
 
-    auto info_or = magmaan::fit::information_expected(*pt, *mr, samp, est);
+    auto info_or = magmaan::nt::infer::information_expected(*pt, *mr, samp, est);
     if (!info_or.has_value()) { failures.push_back(id + ": information_expected — " + info_or.error().detail); continue; }
-    auto vcov_or = magmaan::fit::vcov(*info_or, *pt);
+    auto vcov_or = magmaan::nt::infer::vcov(*info_or, *pt);
     if (!vcov_or.has_value()) { failures.push_back(id + ": vcov — " + vcov_or.error().detail); continue; }
-    const Eigen::VectorXd se_v = magmaan::fit::se(*vcov_or);
-    const double          chi2 = magmaan::fit::chi2_stat(samp, est);
-    auto df_or = magmaan::fit::df_stat(*pt, samp);
+    const Eigen::VectorXd se_v = magmaan::nt::infer::se(*vcov_or);
+    const double          chi2 = magmaan::nt::infer::chi2_stat(samp, est);
+    auto df_or = magmaan::nt::infer::df_stat(*pt, samp);
     if (!df_or.has_value()) { failures.push_back(id + ": df_stat — " + df_or.error().detail); continue; }
     const int df = *df_or;
 

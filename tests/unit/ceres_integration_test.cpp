@@ -6,27 +6,27 @@
 
 #include <Eigen/Core>
 
-#include "magmaan/fit/bounds.hpp"
-#include "magmaan/fit/ceres_optimizer.hpp"
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/lbfgsb_optimizer.hpp"
-#include "magmaan/fit/sample_stats.hpp"
-#include "magmaan/fit/uls.hpp"
+#include "magmaan/estimate/bounds.hpp"
+#include "magmaan/optim/ceres_optimizer.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/optim/lbfgsb_optimizer.hpp"
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/gls/uls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
-using magmaan::fit::Bounds;
-using magmaan::fit::CeresBoundedOptimizer;
-using magmaan::fit::CeresOptions;
-using magmaan::fit::LbfgsBOptimizer;
-using magmaan::fit::LbfgsBOptions;
-using magmaan::fit::SampleStats;
-using magmaan::fit::ULS;
+using magmaan::estimate::Bounds;
+using magmaan::optim::CeresBoundedOptimizer;
+using magmaan::optim::CeresOptions;
+using magmaan::optim::LbfgsBOptimizer;
+using magmaan::optim::LbfgsBOptions;
+using magmaan::data::SampleStats;
+using magmaan::gls::ULS;
 using magmaan::model::build_matrix_rep;
 using magmaan::parse::Parser;
-using magmaan::partable::lavaanify;
+using magmaan::spec::lavaanify;
 
 // ============================================================================
 // `CeresBoundedOptimizer + ULS` end-to-end via the LS path. Both test cases
@@ -78,7 +78,7 @@ TEST_CASE("CeresBoundedOptimizer + ULS — multi-residual LS adapter converges "
   samp.n_obs = {301};
 
   CeresBoundedOptimizer opt;  // default opts; max_iter=500
-  auto est_or = magmaan::fit::fit_bounded(*pt, *mr, samp, Bounds{},
+  auto est_or = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{},
                                         ULS{}, opt);
   if (!est_or.has_value()) {
     MESSAGE("fit_bounded<ULS, CeresBoundedOptimizer> failed: "
@@ -126,7 +126,7 @@ TEST_CASE("LbfgsBOptimizer + ULS — Heywood-prone S: LS-adapter path honors "
   // bounded path's tolerance combo (see `uls_test.cpp` cov+mean recovery).
   LbfgsBOptimizer opt(LbfgsBOptions{
       .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9});
-  auto est_or = magmaan::fit::fit_bounded(*pt, *mr, samp, Bounds{},
+  auto est_or = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{},
                                         ULS{}, opt);
   if (!est_or.has_value()) {
     MESSAGE("fit_bounded<ULS, LbfgsBOptimizer> failed: "
