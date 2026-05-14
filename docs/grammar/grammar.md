@@ -34,6 +34,8 @@ subset of operators.
 | `=~` | latent definition (loadings) | `f =~ x1 + x2 + x3` |
 | `~`  | regression | `y ~ x1 + x2` |
 | `~~` | (residual) covariance / variance | `x1 ~~ x2`, `f ~~ f` |
+| `\|` | ordinal threshold | `x1 \| t1 + t2` |
+| `~*~` | latent response scale (delta parameterization) | `x1 ~*~ 1*x1` |
 | `~ 1` | intercept (parser-level, not a single token) | `y ~ 1` |
 | `:=` | defined parameter | `indirect := a * b` |
 | `==` | equality constraint | `a == 0.5` |
@@ -62,9 +64,7 @@ operator:
 
 | Operator | Why deferred |
 |---|---|
-| `\|` | Ordinal thresholds — out until ordinal indicator support. |
-| `\|~` | Ordinal slope syntax — same. |
-| `~*~` | Latent response scale (delta parameters) — ordinal again. |
+| `\|~` | Ordinal slope syntax — not needed for the first ordinal LS path. |
 | `<~` | Composite indicators — out of v0 linear-SEM scope. |
 
 The following modifiers are not parsed and produce
@@ -87,6 +87,8 @@ A `statement` is one of:
 - A **formula**: `lhs_list operator rhs_list`. The LHS is one or more
   identifiers joined by `+`; in v0 the multi-LHS form is only meaningful
   for `~` (regression). The RHS is one or more `rhs_term`s joined by `+`.
+  Threshold formulas use ordinary RHS identifiers such as `t1`, `t2`, and
+  response-scale formulas use the `~*~` operator.
 - A **constraint**: `expr (==|<|>) expr`.
 - A **define-param**: `identifier := expr`.
 

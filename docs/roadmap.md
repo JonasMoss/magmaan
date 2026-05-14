@@ -4,9 +4,9 @@ This is the live roadmap for complete-data linear SEM work. It is the source of
 truth for current implementation state and near-term work; old phase notes should
 be folded here or deleted when they stop being actionable.
 
-Out of scope for this track: FIML/missing data, ordinal/DWLS/polychoric,
-Bayesian, multilevel, latent interactions/mixtures, EFA, and end-user
-`cfa(model, data)` ergonomics.
+Out of scope for this track: FIML/missing data beyond listwise handling for
+the ordinal LS path, Bayesian, multilevel, latent interactions/mixtures, EFA,
+and end-user `cfa(model, data)` ergonomics.
 
 ## Current State
 
@@ -30,6 +30,12 @@ The core parser-to-fit pipeline is in place:
 - Bounded least-squares fitting through LBFGS-B and optional Ceres, including
   automatic nonnegative variance bounds and equality-penalty residuals on the
   LS path.
+- First-pass ordinal LS support: parser and partable projection for threshold
+  (`|`) and response-scale (`~*~`) rows, integer ordinal sample statistics,
+  pairwise polychoric correlations, diagonal DWLS/WLS weights, bounded ordinal
+  LS fitting, and thin R wrappers for ordinal sample stats plus DWLS/WLS fits.
+  This path currently implements lavaan's delta-style response scale boundary;
+  theta parameterization and full ordinal ACOV/NACOV parity remain open.
 - Separable nonlinear least squares (SNLLS) profiling for LS estimators where
   conditionally linear parameters can be profiled out.
 - Expected information, finite-difference observed information, analytic
@@ -79,7 +85,40 @@ Validation targets:
 - Multi-group LS weighting and equality constraints.
 - Mean-structure LS models with Ceres and SNLLS backends.
 
-### 2. Close remaining inference and robust gaps
+### 2. Make ordinal LS lavaan-parity-grade
+
+The first implementation path is intentionally narrow: complete/listwise
+ordinal indicators, threshold starts from marginal proportions, pairwise
+polychorics, diagonal weights, and bounded LS over model-implied correlations
+plus thresholds. It is enough for methods exploration, but not yet a claim of
+lavaan ordinal estimator parity.
+
+Open work:
+
+- Replace the placeholder WLS diagonal weights with lavaan-compatible full
+  ordinal asymptotic covariance weights for thresholds and polychorics.
+- Decide how far to support lavaan's `parameterization = "theta"` at this
+  stage. The current R helper accepts only `"delta"` and emits fixed response
+  scale rows, which is the conservative first boundary.
+- Add checked-in lavaan golden fixtures for ordinal CFA/regression models under
+  `estimator = "DWLS"` and `"WLS"`, including threshold rows, response-scale
+  rows, partable reconstruction, estimates, and fit statistics.
+- Extend the data path beyond all-ordinal complete/listwise indicators only
+  when the mixed continuous/ordinal contract is clear. Polyserial correlations
+  and mixed thresholds should not be inferred ad hoc in R.
+- Connect robust ordinal reporting deliberately. WLSMV, scaled/shifted tests,
+  robust SEs, and NACOV-dependent corrections are not implied by the first
+  DWLS/WLS point-estimate path.
+
+Validation targets:
+
+- Single-group ordinal CFA with three or more categories per indicator.
+- Multi-group ordinal models with group-specific thresholds.
+- Equality constraints involving loadings while thresholds remain free.
+- Threshold-heavy edge cases with empty or near-empty categories, where the
+  current sample-stat builder must return explicit errors instead of infinities.
+
+### 3. Close remaining inference and robust gaps
 
 Expected-info inference, finite-difference observed inference, covariance-only
 analytic observed inference, robust SEs, U-Gamma/Satorra-Bentler families,
@@ -102,7 +141,7 @@ Open gaps:
 - Generalize robust/inference helpers that assume the normal-theory ML weight
   so ULS/GLS/WLS can share sandwich paths with arbitrary per-block weights.
 
-### 3. Finish R/API parity polish
+### 4. Finish R/API parity polish
 
 The C++ surface is ahead of the R boundary in several places.
 
@@ -130,10 +169,14 @@ Open items:
 - Tighten the sample-moment R path around validation and documentation. The
   binding already accepts `list(S = , nobs = , mean = )`; it should be easier
   to discover and harder to mis-shape.
+- Document the ordinal R boundary around `model_spec(..., ordered = ,
+  parameterization = "delta")`, `data_ordinal_stats_from_df()`, and
+  `fit_dwls_ordinal()` / `fit_wls_ordinal()` once the first lavaan fixtures
+  lock down behavior.
 - Keep fit-list extraction helpers as R boundary conveniences, while keeping
   C++ APIs explicit over primitive values.
 
-### 4. Finish namespace cleanup opportunistically
+### 5. Finish namespace cleanup opportunistically
 
 The target public namespaces exist and are covered by
 `tests/unit/namespace_alias_test.cpp`:

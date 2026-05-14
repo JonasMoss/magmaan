@@ -10,8 +10,10 @@
 #include "internal.hpp"
 
 #include "magmaan/estimate/bounds.hpp"
+#include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/snlls.hpp"
 #include "magmaan/estimate/start_values.hpp"
+#include "magmaan/data/ordinal.hpp"
 #include "magmaan/gls/gls.hpp"
 #include "magmaan/gls/uls.hpp"
 #include "magmaan/gls/wls.hpp"
@@ -175,6 +177,110 @@ magmaan::gls::WLS wls_from_arg(SEXP W, std::size_t n_blocks) {
   return magmaan::gls::WLS(std::move(weights));
 }
 
+Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
+  const R_xlen_t nb = static_cast<R_xlen_t>(s.R.size());
+  Rcpp::List R(nb), thresholds(nb), threshold_ov(nb), threshold_level(nb),
+      W_dwls(nb), W_wls(nb), n_levels(nb);
+  Rcpp::IntegerVector nobs(nb);
+  for (R_xlen_t b = 0; b < nb; ++b) {
+    const std::size_t bi = static_cast<std::size_t>(b);
+    R[b] = Rcpp::wrap(s.R[bi]);
+    thresholds[b] = Rcpp::wrap(s.thresholds[bi]);
+    Rcpp::IntegerVector ov(static_cast<R_xlen_t>(s.threshold_ov[bi].size()));
+    Rcpp::IntegerVector lev(static_cast<R_xlen_t>(s.threshold_level[bi].size()));
+    for (R_xlen_t k = 0; k < ov.size(); ++k) {
+      ov[k] = s.threshold_ov[bi][static_cast<std::size_t>(k)] + 1;
+      lev[k] = s.threshold_level[bi][static_cast<std::size_t>(k)];
+    }
+    threshold_ov[b] = ov;
+    threshold_level[b] = lev;
+    W_dwls[b] = Rcpp::wrap(s.W_dwls[bi]);
+    W_wls[b] = Rcpp::wrap(s.W_wls[bi]);
+    nobs[b] = static_cast<int>(s.n_obs[bi]);
+    n_levels[b] = Rcpp::wrap(s.n_levels[bi]);
+  }
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["R"] = R,
+      Rcpp::_["thresholds"] = thresholds,
+      Rcpp::_["threshold_ov"] = threshold_ov,
+      Rcpp::_["threshold_level"] = threshold_level,
+      Rcpp::_["W_dwls"] = W_dwls,
+      Rcpp::_["W_wls"] = W_wls,
+      Rcpp::_["nobs"] = nobs,
+      Rcpp::_["n_levels"] = n_levels);
+  out.attr("class") = Rcpp::CharacterVector::create("magmaan_ordinal_data", "list");
+  return out;
+}
+
+magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
+  const char* what = "ordinal_stats";
+  for (const char* nm : {"R", "thresholds", "threshold_ov", "threshold_level",
+                         "W_dwls", "W_wls", "nobs", "n_levels"}) {
+    if (!x.containsElementNamed(nm)) Rcpp::stop("magmaan: %s is missing $%s", what, nm);
+  }
+  Rcpp::List Rl(x["R"]), thl(x["thresholds"]), ovl(x["threshold_ov"]),
+      levl(x["threshold_level"]), Wdl(x["W_dwls"]), Wfl(x["W_wls"]),
+      nlevl(x["n_levels"]);
+  Rcpp::IntegerVector nobs(x["nobs"]);
+  const R_xlen_t nb = Rl.size();
+  magmaan::data::OrdinalStats out;
+  out.R.reserve(static_cast<std::size_t>(nb));
+  out.thresholds.reserve(static_cast<std::size_t>(nb));
+  out.threshold_ov.reserve(static_cast<std::size_t>(nb));
+  out.threshold_level.reserve(static_cast<std::size_t>(nb));
+  out.W_dwls.reserve(static_cast<std::size_t>(nb));
+  out.W_wls.reserve(static_cast<std::size_t>(nb));
+  out.n_obs.reserve(static_cast<std::size_t>(nb));
+  out.n_levels.reserve(static_cast<std::size_t>(nb));
+  for (R_xlen_t b = 0; b < nb; ++b) {
+    out.R.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Rl[b])));
+    out.thresholds.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(thl[b])));
+    Rcpp::IntegerVector ov(ovl[b]), lev(levl[b]);
+    std::vector<std::int32_t> ov0(static_cast<std::size_t>(ov.size()));
+    std::vector<std::int32_t> lev0(static_cast<std::size_t>(lev.size()));
+    for (R_xlen_t k = 0; k < ov.size(); ++k) {
+      ov0[static_cast<std::size_t>(k)] = ov[k] - 1;
+      lev0[static_cast<std::size_t>(k)] = lev[k];
+    }
+    out.threshold_ov.push_back(std::move(ov0));
+    out.threshold_level.push_back(std::move(lev0));
+    out.W_dwls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wdl[b])));
+    out.W_wls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wfl[b])));
+    out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
+    out.n_levels.push_back(Rcpp::as<std::vector<std::int32_t>>(Rcpp::IntegerVector(nlevl[b])));
+  }
+  return out;
+}
+
+std::vector<Eigen::MatrixXd> matrix_blocks_from_arg(SEXP X) {
+  std::vector<Eigen::MatrixXd> blocks;
+  if (Rf_isMatrix(X)) {
+    blocks.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(X)));
+    return blocks;
+  }
+  if (TYPEOF(X) != VECSXP) {
+    Rcpp::stop("magmaan: X must be a matrix or list of matrices");
+  }
+  Rcpp::List xl(X);
+  blocks.reserve(static_cast<std::size_t>(xl.size()));
+  for (R_xlen_t b = 0; b < xl.size(); ++b) {
+    blocks.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(xl[b])));
+  }
+  return blocks;
+}
+
+Rcpp::List ordinal_fit_result(Ctx& ctx,
+                              const magmaan::data::OrdinalStats& stats,
+                              const magmaan::estimate::Estimates& est,
+                              const magmaan::spec::Starts* starts,
+                              const char* estimator) {
+  Rcpp::List out = fit_result(ctx, est, starts, estimator);
+  out["ordinal"] = true;
+  out["thresholds"] = ordinal_stats_to_r(stats)["thresholds"];
+  out["polychoric"] = ordinal_stats_to_r(stats)["R"];
+  return out;
+}
+
 #ifdef MAGMAAN_WITH_CERES
 magmaan::optim::CeresOptions ceres_opts_from(Rcpp::Nullable<Rcpp::List> ceres) {
   magmaan::optim::CeresOptions o;
@@ -318,6 +424,66 @@ Rcpp::List fit_wls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "WLS");
+}
+
+// [[Rcpp::export]]
+Rcpp::List data_ordinal_stats_from_raw_impl(SEXP X) {
+  auto blocks = matrix_blocks_from_arg(X);
+  auto out_or = magmaan::data::ordinal_stats_from_integer_data(blocks);
+  if (!out_or.has_value()) stop_post(out_or.error());
+  return ordinal_stats_to_r(*out_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
+                                 Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
+                                 Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_dwls_ordinal");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.names = std::move(parsed.names);
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  ctx.samp.S = stats.R;
+  ctx.samp.n_obs = stats.n_obs;
+  ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];
+  ctx.meanstructure = false;
+  auto e_or = magmaan::estimate::fit_ordinal_bounded(
+      ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
+      magmaan::estimate::OrdinalWeightKind::DWLS,
+      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return ordinal_fit_result(ctx, stats, est, &starts, "DWLS");
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
+                                Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
+                                Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_ordinal");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.names = std::move(parsed.names);
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  ctx.samp.S = stats.R;
+  ctx.samp.n_obs = stats.n_obs;
+  ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];
+  ctx.meanstructure = false;
+  auto e_or = magmaan::estimate::fit_ordinal_bounded(
+      ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
+      magmaan::estimate::OrdinalWeightKind::WLS,
+      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return ordinal_fit_result(ctx, stats, est, &starts, "WLS");
 }
 
 // [[Rcpp::export]]

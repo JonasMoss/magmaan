@@ -70,13 +70,14 @@ parse_expected<std::vector<Token>> tokenize(std::string_view src) noexcept {
 
 // === Operator text → Op enum ================================================
 //
-// Returns std::nullopt for tokens whose text is not a recognized operator
-// (or is a deferred operator). Caller decides whether that's a parse error
-// or an "unsupported in this slice" error.
+// Returns std::nullopt for tokens whose text is not a recognized operator.
+// Caller decides whether that's a parse error or an unsupported operator.
 std::optional<Op> op_from_text(std::string_view t) noexcept {
   if (t == "=~") return Op::Measurement;
   if (t == "~~") return Op::Covariance;
   if (t == "~")  return Op::Regression;
+  if (t == "|")  return Op::Threshold;
+  if (t == "~*~") return Op::ResponseScale;
   if (t == ":=") return Op::DefineParam;
   if (t == "==") return Op::EqConstraint;
   if (t == "<")  return Op::LtConstraint;
@@ -85,7 +86,7 @@ std::optional<Op> op_from_text(std::string_view t) noexcept {
 }
 
 bool is_rejected_op(std::string_view t) noexcept {
-  return t == "<~" || t == "|~" || t == "~*~" || t == "|";
+  return t == "<~" || t == "|~";
 }
 
 // Parse a numeric literal token's text into a double. The lexer guarantees
@@ -507,6 +508,8 @@ StatementShape classify_statement(const State& st) noexcept {
           case Op::Measurement:
           case Op::Regression:
           case Op::Covariance:
+          case Op::Threshold:
+          case Op::ResponseScale:
             out.kind = StatementShape::Kind::Formula; break;
           case Op::EqConstraint:
           case Op::LtConstraint:
