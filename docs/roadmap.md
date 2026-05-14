@@ -36,9 +36,9 @@ The core parser-to-fit pipeline is in place:
   NACOV construction for thresholds plus polychorics, DWLS diagonal weights,
   full WLS weights, bounded ordinal LS fitting, and thin R wrappers for ordinal
   sample stats plus DWLS/WLS fits. This path currently implements lavaan's
-  delta-style response scale boundary; theta parameterization, mixed
-  polyserial statistics, and checked-in ordinal lavaan fit-statistic parity
-  remain open.
+  delta-style response scale boundary and uses LBFGS-B for ordinal fitting;
+  theta parameterization, mixed polyserial statistics, ordinal Ceres/SNLLS
+  variants, and checked-in ordinal lavaan fit-statistic parity remain open.
 - Separable nonlinear least squares (SNLLS) profiling for LS estimators where
   conditionally linear parameters can be profiled out.
 - Expected information, finite-difference observed information, analytic
@@ -112,16 +112,33 @@ Open work:
 - Add checked-in lavaan golden fixtures for ordinal CFA/regression models under
   `estimator = "DWLS"` and `"WLS"`, including threshold rows, response-scale
   rows, partable reconstruction, estimates, and fit statistics.
+- Add direct C++ and R-boundary fit tests for `fit_ordinal_bounded()`,
+  `fit_dwls_ordinal()`, and `fit_wls_ordinal()`. Current tests cover ordinal
+  sample-stat shape/error behavior and threshold/response-scale partable rows,
+  but not ordinal fit convergence, estimate parity, or fit-statistic parity.
 - Keep polychoric construction internal to `ordinal_stats_from_integer_data()`
   until the sample-stat contract is stable. A public polychoric API should
   expose the moment-vector ordering, category metadata, sample-size scaling,
   and error policy explicitly rather than returning only a correlation matrix.
+- Decide whether ordinal fitting should share the generic LS backend surface.
+  Normal-theory LS already has LBFGS-B, optional Ceres, and SNLLS profiling for
+  ULS/GLS/WLS; ordinal DWLS/WLS currently expose only the LBFGS-B path.
+  If added, template the ordinal residual/Jacobian path over bounded LS
+  optimizers first, then consider an ordinal SNLLS variant only after the
+  conditionally linear block remains valid with threshold residuals included.
 - Extend the data path beyond all-ordinal complete/listwise indicators only
   when the mixed continuous/ordinal contract is clear. Polyserial correlations
   and mixed thresholds should not be inferred ad hoc in R.
-- Connect robust ordinal reporting deliberately. WLSMV, scaled/shifted tests,
-  robust SEs, and NACOV-dependent corrections are not implied by the first
-  DWLS/WLS point-estimate path.
+- Connect robust ordinal reporting deliberately, reusing the existing
+  continuous-data robust vocabulary where the algebra matches but validating
+  the categorical moment vector separately. Lavaan's relevant LS-family targets
+  are `se = "robust.sem"` / `"robust.sem.nt"` and tests
+  `satorra.bentler` (WLSM/ULSM), `scaled.shifted` (WLSMV/ULSMV), and
+  `mean.var.adjusted` (WLSMVS/ULSMVS). Plain categorical DWLS keeps a
+  standard test by default in lavaan, so WLSMV-style reporting should be an
+  explicit post-fit call, not silently implied by the DWLS point estimator.
+  Robust ordinal SEs and scaled tests must consume the threshold-plus-polychoric
+  `NACOV`/`WLS.V` layout, not raw continuous-data casewise Gamma helpers.
 
 Validation targets:
 
@@ -133,6 +150,9 @@ Validation targets:
   Empty categories should stay hard errors; near-empty categories need fixture
   coverage so finite adjustments, convergence, and NACOV conditioning are
   visible instead of accidental.
+- Backend parity for ordinal LS if Ceres is enabled: LBFGS-B and Ceres should
+  agree on estimates/objectives for representative DWLS/WLS cases before any
+  public Ceres ordinal wrapper is recommended.
 
 ### 3. Close remaining inference and robust gaps
 
