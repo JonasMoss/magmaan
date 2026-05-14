@@ -1,161 +1,174 @@
 # magmaan roadmap
 
-This is the live roadmap for complete-data normal-theory SEM work. Finished
-phase plans are removed or folded into this file so there is only one active
-roadmap.
+This is the live roadmap for complete-data linear SEM work. It is the source of
+truth for current implementation state and near-term work; old phase notes should
+be folded here or deleted when they stop being actionable.
 
 Out of scope for this track: FIML/missing data, ordinal/DWLS/polychoric,
-bootstrap SE, Bayesian, multilevel, and end-user `cfa(model, data)` ergonomics.
+Bayesian, multilevel, latent interactions/mixtures, EFA, and end-user
+`cfa(model, data)` ergonomics.
+
+## Current State
+
+The core parser-to-fit pipeline is in place:
+
+- C++23 library built under `-fno-exceptions -fno-rtti`, with fallible APIs
+  returning `std::expected<T, Error>`.
+- Lavaan-style syntax parser, normative EBNF in `docs/grammar/`, checked-in
+  lexer/parser/partable/matrix/fit oracle fixtures, and R-only fixture
+  regeneration through `tools/regen_oracle.R`.
+- The lavaanified model contract is the triple `LatentStructure`,
+  `LatentNames`, and `Starts`, with `LavaanParTable` as the boundary projection
+  for R and oracle comparison.
+- Single- and multi-group LISREL matrix representation, fixed.x resolution,
+  mean structures, marker/std.lv/effect-coding identification, start hints, and
+  linear equality constraints.
+- ML fitting through LBFGS, including affine reparameterization for linear
+  equalities.
+- ULS, GLS, and explicit-weight WLS discrepancies, each with scalar
+  value/gradient and least-squares residual/Jacobian interfaces.
+- Bounded least-squares fitting through LBFGS-B and optional Ceres, including
+  automatic nonnegative variance bounds and equality-penalty residuals on the
+  LS path.
+- Separable nonlinear least squares (SNLLS) profiling for LS estimators where
+  conditionally linear parameters can be profiled out.
+- Expected information, finite-difference observed information, analytic
+  observed information for covariance-only models, vcov/SE, Wald/z tests,
+  chi-square/df helpers, LR/Satorra-2000 nested tests, robust U-Gamma
+  machinery, Satorra-Bentler-family statistics, robust SEs, Browne residual NT,
+  fit measures, standardization, and C++ defined-parameter evaluation.
+- Exploratory R bindings for lavaanify, fitting, sample-stat bundles, robust
+  inference, fit measures, model implied moments, LS estimators, SNLLS, Ceres
+  paths when enabled, and data-frame-to-model sample statistics.
+- Transitional public namespaces exist (`spec`, `lavaan`, `estimate`, `optim`,
+  `nt`, `gls`, `data`) as aliases over remaining canonical definitions in
+  `fit` and `partable`.
 
 ## Immediate Priorities
 
-### 1. Stabilize bounded optimization
+### 1. Turn LS estimator support into lavaan-parity fixtures
 
-The current soft barrier catches non-PD regions but does not impose real box
-constraints. Heywood warnings exist; bounded estimation is still incomplete.
+ULS/GLS/WLS are implemented as discrepancies and exercise the bounded LS path
+in unit/integration tests. The next step is parity work, not basic
+implementation.
 
-Active work:
+Open work:
 
-- Finish the bounded optimizer path around variance lower bounds.
-- Keep equality-constrained models on the existing reparameterized path until
-  bounded optimization and affine constraints are composed deliberately.
-- Replace the Ceres single-residual `sqrt(F)` least-squares trick for LS
-  discrepancies. It produces a rank-1 Jacobian and stalls on shallow ULS
-  objectives.
-- Add per-discrepancy multi-residual Ceres cost functions for LS estimators:
-  ULS first, then GLS/WLS.
-- Restore the single-group 3F + meanstructure fit fixture once the bounded
-  multi-residual path can fit it reliably.
+- Add checked-in lavaan golden fixtures for `estimator = "ULS"`, `"GLS"`, and
+  `"WLS"` across single-group CFA, multi-group CFA, equality constraints,
+  fixed.x, and mean-structure cases.
+- Decide which LS backend is the default public recommendation for each
+  estimator: LBFGS-B, Ceres, or SNLLS. ULS landscapes are shallow enough that
+  backend defaults matter.
+- Promote the Ceres preset into the regular validation loop where relevant
+  (`cmake --preset ceres`, `ctest --preset ceres`) without making the default
+  build pay the Ceres dependency cost.
+- Restore or add the Holzinger 3-factor mean-structure fixture once the chosen
+  bounded LS path fits it reliably.
+- Compare LS fit statistics against lavaan's estimator-specific reporting,
+  especially Browne residual tests versus raw LS objective statistics.
 
 Validation targets:
 
-- Holzinger 3F + means, where the current LBFGS defaults fail.
-- Saturated 1F ULS, which exposes shallow-landscape conditioning.
-- Heywood-prone ULS, where lower bounds must be enforced.
+- Saturated one-factor ULS, which exposes shallow-landscape conditioning.
+- Heywood-prone ULS/GLS/WLS, where lower bounds must be enforced.
+- Multi-group LS weighting and equality constraints.
+- Mean-structure LS models with Ceres and SNLLS backends.
 
-### 2. Keep namespace cleanup opportunistic
+### 2. Close remaining inference and robust gaps
 
-The package identity rename to `magmaan` is complete, and public transition
-headers exist for the target domains:
-
-- `spec`: model specification, lavaanify options, equality groups, linear
-  constraints, starts.
-- `lavaan`: lavaan-shaped partable projections and compatibility views.
-- `estimate`: estimates, fitting orchestration, bounds, fixed.x resolution,
-  equality reparameterization.
-- `optim`: optimizer concepts and implementations.
-- `nt`: complete-data normal-theory ML, inference, robust tests, measures,
-  standardization, and defined parameters.
-- `gls`: GLS-family discrepancy functions such as ULS.
-- `data`: sample statistics, raw data, and moment/gamma helpers.
-
-What remains:
-
-- Move primary definitions out of the old `magmaan::fit` and
-  `magmaan::partable` namespaces into the target namespaces.
-- Convert repo code and R binding internals to include and call the target
-  headers/namespaces directly.
-- Keep old `include/magmaan/fit/*` and `include/magmaan/partable/*` headers as
-  compatibility shims for one transition window.
-- Keep one focused compatibility test that includes representative old headers
-  and verifies the aliases still compile.
-- Update stale source references in docs after the code migration lands.
-
-This migration is API organization work, not a statistical feature. The public
-`optim` facade already looks good; its headers currently alias definitions that
-still live in `magmaan::fit`. Moving those canonical definitions into
-`magmaan::optim` would clean up symbols and documentation, but it is not the
-next functional blocker. Defer it unless touching optimizer code anyway.
-
-### 3. Close the remaining observed/robust inference gaps
-
-Expected-info inference, finite-difference observed inference, robust SEs,
-UΓ/Satorra-Bentler families, Browne residual NT, Wald/LR/z tests, fit measures,
-standardization, and Satorra (2000) nested tests are implemented and covered.
+Expected-info inference, finite-difference observed inference, covariance-only
+analytic observed inference, robust SEs, U-Gamma/Satorra-Bentler families,
+Browne residual NT, Wald/LR/z tests, fit measures, standardization, and
+Satorra-2000 nested tests are implemented and covered.
 
 Open gaps:
 
-- Implement `AnalyticObservedInfoSE` for mean-structure models. The missing
-  terms are the `dmu` and `d2mu` contributions involving Λ×α, Λ×B, α×B, and
-  B×B pairs.
-- Generalize observed-bread robust SE / U-factor handling to multi-block
-  models. The expected-bread path is multi-block; the observed-bread path still
-  has single-block assumptions.
-- Generalize `reduced_gamma_unbiased` to multi-block models, likely by
-  carrying per-block reduced moment matrices instead of consuming only the
-  already-summed form.
-- Add Browne residual ADF by swapping empirical Γ into the existing Browne
+- Extend `information_observed_analytic()` to mean-structure models. The
+  missing terms are the `dmu` and `d2mu` contributions involving Lambda-alpha,
+  Lambda-Beta, alpha-Beta, and Beta-Beta pairs.
+- Generalize observed-bread robust SE and observed-Hessian U-factor handling to
+  multi-block models. The expected-bread path is multi-block; observed bread is
+  still single-block.
+- Generalize Browne's unbiased reduced gamma correction to multi-block models.
+- Add Browne residual ADF by swapping empirical gamma into the existing Browne
   residual projection machinery.
-- Verify `fit_extras` conditional log-likelihood for multi-group `fixed.x` and
-  for meanstructure × `fixed.x` once fixtures exist.
+- Verify `fit_extras()` conditional log-likelihood for multi-group `fixed.x`
+  and meanstructure times `fixed.x` once targeted fixtures exist.
+- Generalize robust/inference helpers that assume the normal-theory ML weight
+  so ULS/GLS/WLS can share sandwich paths with arbitrary per-block weights.
 
-### 4. Finish R/API parity polish
+### 3. Finish R/API parity polish
 
 The C++ surface is ahead of the R boundary in several places.
 
 Open items:
 
 - Expose `compute_defined()` through R and add a golden comparison against
-  `parameterEstimates()` for chained `:=` rows and `.pN.` references.
-- Add a sample-moments-only input path for R/API users who already have `S`,
-  `mean`, and `n`. The C++ `SampleStats` type already models this.
-- Add `se = "none"` / `test = "none"` shortcuts to skip post-fit inference
-  when callers only need point estimates.
+  lavaan `parameterEstimates()` for chained `:=` rows and `.pN.` references.
+- Add high-level shortcuts equivalent to `se = "none"` and `test = "none"` so
+  callers can skip post-fit inference when they only need point estimates.
 - Add lavaan partable comparison helpers that compare by semantic row keys
   rather than raw row position.
-- Keep fit-list extraction helpers as R boundary conveniences, but keep C++
-  APIs explicit over primitive values.
+- Tighten the sample-moment R path around validation and documentation. The
+  binding already accepts `list(S = , nobs = , mean = )`; it should be easier
+  to discover and harder to mis-shape.
+- Keep fit-list extraction helpers as R boundary conveniences, while keeping
+  C++ APIs explicit over primitive values.
 
-## Estimator Track
+### 4. Finish namespace cleanup opportunistically
 
-### ULS
+The target public namespaces exist and are covered by
+`tests/unit/namespace_alias_test.cpp`:
 
-ULS is implemented and unit-tested as a discrepancy. Remaining work:
+- `spec`: model specification, lavaanify options, equality groups, linear
+  constraints, starts.
+- `lavaan`: lavaan-shaped partable projections and compatibility views.
+- `estimate`: estimates, fitting orchestration, bounds, fixed.x resolution,
+  equality reparameterization, SNLLS.
+- `optim`: optimizer concepts and implementations.
+- `nt`: complete-data normal-theory ML, inference, robust tests, measures,
+  standardization, and defined parameters.
+- `gls`: ULS/GLS/WLS discrepancy functions.
+- `data`: sample statistics, raw data, and moment/gamma helpers.
 
-- Add lavaan golden fixtures for `estimator = "ULS"`.
-- Re-check multi-group weighting against lavaan once ULS goldens exist.
-- Use ULS as the first consumer of multi-residual bounded optimization.
+What remains:
 
-### GLS and WLS/ADF
+- Move primary definitions out of the old `magmaan::fit` and
+  `magmaan::partable` namespaces into the target namespaces.
+- Convert repo code and R binding internals to include and call target
+  headers/namespaces directly.
+- Keep old `include/magmaan/fit/*` and `include/magmaan/partable/*` headers as
+  compatibility shims for one transition window.
+- Keep one focused compatibility test for representative old headers.
+- Update stale source references in docs after the migration lands.
 
-The architecture is ready: `fit<D, O>()` is discrepancy-generic, model
-Jacobians are reusable, `SampleStats` is per-block, and Γ helpers already
-exist.
-
-Remaining work:
-
-- Add `GLS`: `F = 1/2 tr((Σ^-1(S-Σ))^2)` with the corresponding analytic
-  gradient.
-- Add `WLS`/ADF: `F = 1/2 vech(S-Σ)' Γ^-1 vech(S-Σ)`, with constructor-time
-  checks for the supplied weight matrix.
-- Generalize robust/inference helpers currently hard-coded around
-  `W = Γ_NT(M)^-1` so ULS/GLS/WLS can reuse the sandwich paths with arbitrary
-  per-block weights.
+This is API organization work, not the next statistical blocker.
 
 ## Reporting and Exploration
 
-These are lavaan-parity features that sit above the core estimator.
+These are lavaan-parity features above the core estimator:
 
 - Modification indices, univariate score tests, and EPC are not implemented.
   They need scores and information for fixed or equality-constrained
-  parameters at θ̂.
+  parameters at the optimum.
 - RMSEA close-fit p-value (`rmsea.pvalue`, H0: RMSEA <= 0.05) is not computed.
-- `std.all` beta-coefficient rescaling remains to be checked/implemented for
-  structural regressions.
-- Add more targeted goldens for scalar-invariance latent mean rescaling once
-  the bounded optimizer can fit the needed meanstructure models reliably.
+- `std.all` beta-coefficient rescaling remains to be checked for structural
+  regressions.
+- Add targeted goldens for scalar-invariance latent mean rescaling once the
+  bounded optimizer reliably fits the needed mean-structure models.
 
 ## Constraint Boundary
 
-Linear equality constraints are implemented through affine
-reparameterization. Effect coding for loadings is implemented. The current
-boundary is intentional:
+Linear equality constraints are implemented through affine reparameterization
+for ML and penalty residuals on the bounded LS path. Effect coding for loadings
+is implemented. The current boundary is intentional:
 
 - Nonlinear equality constraints remain unsupported.
 - Inequality constraints remain unsupported.
-- Active bound/inequality inference must not silently report ordinary χ²/SE
-  theory; boundary cases need explicit warnings or chi-bar-square style
-  treatment before being presented as regular inference.
+- Active bound/inequality inference must not silently report ordinary
+  chi-square/SE theory; boundary cases need explicit warnings or
+  chi-bar-square style treatment before being presented as regular inference.
 
 ## Design Invariants
 

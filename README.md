@@ -1,30 +1,46 @@
-# magmaan <img src="docs/figures/logo_compact.png" align="right" height="170" /></a>
+# magmaan <img src="docs/logo/logo_compact.png" align="right" height="170" /></a>
 
 > "This world ever was, and is, and shall be, an ever-living Fire."
-> — Heraclitus
+> - Heraclitus
 
-`magmaan` is the subterranean cousin of `lavaan`. It has a modular, simple design, and is made for methods researchers.
+`magmaan` is a C++23 toolkit for methods developers working on linear SEM. Its
+near-term contract is lavaan-equivalent behavior for complete-data
+normal-theory estimators, with explicit extension points for discrepancies,
+optimizers, inference methods, fit measures, and R boundary experiments.
 
-**Status:** Proto-type
-**Language:** C++17
-**Scope:** Non-Bayesian structural equation modeling with linear constraints
-**Philosophy:** Make everything explicit and modular, don't prioritize user-friendliness, avoid object-oriented programing, don't change state, stay functional, work with composition, strict separation of concerns
+**Status:** active prototype
+**Language:** C++23, built with `-fno-exceptions -fno-rtti`
+**Scope:** complete-data linear SEM under normal-theory ML plus ULS/GLS/WLS work
+**Philosophy:** lavaan is the oracle; failures are values; APIs stay explicit and composable
 
 ## Roadmap
 
-1. Complete data normal theory with robustness
-2. Generalized least squars (AFD, "GLS", ULS)
-3. C++17 without OO, structs only, no concepts, minimal abstractions, no exceptions
-4. Threshold model
-5. Incomplete data normal theory (FIML)
-6. Variety of optimizers, RAM and LISREL representations
+The live roadmap is [docs/roadmap.md](docs/roadmap.md). In short:
 
-## In scope
+1. Turn ULS/GLS/WLS support into lavaan-parity fixture coverage.
+2. Close the remaining observed-information and robust multi-block gaps.
+3. Finish R/API parity polish around defined parameters, inference shortcuts,
+   and semantic partable comparisons.
+4. Complete the namespace cleanup from transitional `fit`/`partable` headers to
+   target public domains.
 
-1. Any kind of weird estimation of SEM models, such as t-distributed residuals or pairwise likelihood.
-2. Any kind of weird 
+## Build
 
-## Not in scope
+```sh
+cmake --preset dev
+cmake --build --preset dev
+ctest --preset dev
 
-1. IRT models.
-2. Other kinds of factor analysis such as EFA.
+cmake --preset opt
+cmake --build --preset opt
+ctest --preset opt
+```
+
+`just` wraps the usual loops: `just build`, `just test`, `just opt`,
+`just test-opt`, `just r-check`, and `just check`.
+
+## Scope Boundary
+
+Currently out of scope: FIML/missing data, ordinal/DWLS/polychoric, Bayesian,
+multilevel, latent interactions/mixtures, EFA, and end-user `cfa(model, data)`
+ergonomics.
