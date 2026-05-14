@@ -125,10 +125,10 @@ fiml_extras(partable::LatentStructure pt,
             const Estimates& est,
             FIML discrepancy = {});
 
-// First robust missing-data reporting slice: lavaan's continuous FIML MLR
-// corner (`missing = "fiml", estimator = "MLR"`), single block only. The
-// sandwich meat is built from observed-pattern casewise deviance gradients,
-// and the bread is a finite-difference observed FIML Hessian.
+// Robust missing-data reporting for lavaan's continuous FIML MLR corner
+// (`missing = "fiml", estimator = "MLR"`). The sandwich meat is built from
+// observed-pattern casewise deviance gradients, and the bread is a
+// finite-difference observed FIML Hessian.
 post_expected<FIMLRobustMLR>
 fiml_robust_mlr(partable::LatentStructure pt,
                 const model::MatrixRep& rep,

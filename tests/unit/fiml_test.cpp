@@ -27,11 +27,12 @@ struct BuiltModel {
   magmaan::model::ModelEvaluator ev;
 };
 
-BuiltModel build_mean_model(std::string_view src) {
+BuiltModel build_mean_model(std::string_view src, int n_groups = 1) {
   auto fp = magmaan::parse::Parser::parse(src);
   REQUIRE(fp.has_value());
   magmaan::spec::LavaanifyOptions opts;
   opts.meanstructure = true;
+  opts.n_groups = n_groups;
   auto pt = magmaan::spec::lavaanify(*fp, opts);
   REQUIRE(pt.has_value());
   auto rep = magmaan::model::build_matrix_rep(*pt);
@@ -92,6 +93,22 @@ magmaan::data::RawData well_conditioned_missing_raw() {
        1, 1, 1;
   raw.mask.push_back(M);
   return raw;
+}
+
+Eigen::MatrixXd deterministic_z(Eigen::Index n, Eigen::Index p) {
+  Eigen::MatrixXd Z(n, p);
+  for (Eigen::Index r = 0; r < n; ++r) {
+    for (Eigen::Index c = 0; c < p; ++c) {
+      const double rr = static_cast<double>(r + 1);
+      const double cc = static_cast<double>(c + 1);
+      Z(r, c) = std::sin(0.37 * rr * cc) +
+                std::cos(0.19 * (rr + 1.0) * (cc + 2.0));
+    }
+  }
+  for (Eigen::Index c = 0; c < p; ++c) {
+    Z.col(c).array() -= Z.col(c).mean();
+  }
+  return Z;
 }
 
 }  // namespace
@@ -296,6 +313,49 @@ TEST_CASE("fiml_baseline_chi2: complete data matches SampleStats baseline") {
 
   CHECK(fiml_bl->chi2 == doctest::Approx(ml_bl.chi2).epsilon(1e-10));
   CHECK(fiml_bl->df == ml_bl.df);
+}
+
+TEST_CASE("fiml_robust_mlr: multi-block H1 trace handles unequal row counts") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4", /*n_groups=*/2);
+
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto truth = built.ev.sigma(theta0);
+  REQUIRE(truth.has_value());
+  REQUIRE(truth->sigma.size() == 2);
+
+  magmaan::data::RawData raw;
+  for (std::size_t b = 0; b < truth->sigma.size(); ++b) {
+    Eigen::LLT<Eigen::MatrixXd> llt(truth->sigma[b]);
+    REQUIRE(llt.info() == Eigen::Success);
+    const Eigen::MatrixXd L = llt.matrixL();
+    const Eigen::Index n = (b == 0) ? 24 : 19;
+    Eigen::MatrixXd Z = deterministic_z(n, truth->sigma[b].rows());
+    if (b == 1) Z.array() *= 1.15;
+    raw.X.push_back((Z * L.transpose()).rowwise() +
+                    truth->mu[b].transpose());
+  }
+
+  magmaan::estimate::Estimates est;
+  est.theta = theta0;
+
+  constexpr int df = 4;
+  auto rob = magmaan::nt::fiml::fiml_robust_mlr(*built.pt, *built.rep, raw,
+                                                est, df, /*chisq=*/8.0);
+  REQUIRE_MESSAGE(rob.has_value(),
+      "fiml_robust_mlr failed: " <<
+      (rob.has_value() ? "" : rob.error().detail));
+
+  CHECK(rob->ntotal == 43);
+  CHECK(rob->df == df);
+  CHECK(rob->se.size() == theta0.size());
+  CHECK(rob->vcov.rows() == theta0.size());
+  CHECK(rob->vcov.cols() == theta0.size());
+  CHECK(std::isfinite(rob->trace_ugamma_h1));
+  CHECK(std::isfinite(rob->trace_ugamma_h0));
+  CHECK(std::isfinite(rob->trace_ugamma));
+  CHECK(std::isfinite(rob->scaling_factor));
+  CHECK(std::isfinite(rob->chisq_scaled));
 }
 
 TEST_CASE("fiml_baseline_chi2: missing data produces finite baseline") {

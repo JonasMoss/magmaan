@@ -37,14 +37,14 @@ The core parser-to-fit pipeline is in place:
   log-likelihood, chi-square, and information criteria match lavaan on that
   fixture tranche. FIML baseline/independence likelihood accounting now feeds
   the existing CFI/TLI/RMSEA helpers, with lavaan fixture parity on the same
-  tranche. A first single-group robust FIML MLR post-fit path computes
-  observed-pattern casewise sandwich SEs plus Yuan-Bentler Mplus scaled-test
-  traces from the direct FIML objective, with lavaan `estimator = "MLR"`
-  fixture parity on the non-saturated single-group FIML cases. The current
-  fixed.x policy rejects missing observed exogenous variables rather than
-  guessing lavaan's conditional likelihood behavior. Broader missing-data
-  parity cases, robust missing-data corrections beyond single-group MLR, and
-  R wrappers remain open.
+  tranche. The robust FIML MLR post-fit path computes observed-pattern
+  casewise sandwich SEs plus Yuan-Bentler Mplus scaled-test traces from the
+  direct FIML objective, with lavaan `estimator = "MLR"` fixture parity on the
+  non-saturated single- and multi-group FIML cases in the current tranche. The
+  current fixed.x policy rejects missing observed exogenous variables rather
+  than guessing lavaan's conditional likelihood behavior. Broader missing-data
+  parity cases, robust missing-data corrections beyond this MLR slice, and R
+  wrappers remain open.
 - ULS, GLS, and explicit-weight WLS discrepancies, each with scalar
   value/gradient and least-squares residual/Jacobian interfaces.
 - Bounded least-squares fitting through LBFGS-B and optional Ceres, including
@@ -106,10 +106,10 @@ Open work:
 - Maintain FIML baseline/independence likelihood and fit-index parity as new
   raw missing-data cases are added. User-model, saturated/H1, and baseline
   likelihood accounting are implemented for the current CFA fixture tranche.
-- Extend robust FIML beyond the first single-group MLR slice only with fixture
-  backing. Multi-group MLR, conditional fixed.x behavior, and any robust
-  missing-data tests other than lavaan's Yuan-Bentler Mplus correction remain
-  out of the current public contract.
+- Extend robust FIML beyond the current fixture-backed MLR slice only with
+  fixture backing. Conditional fixed.x behavior and any robust missing-data
+  tests other than lavaan's Yuan-Bentler Mplus correction remain out of the
+  current public contract.
 - Keep the first public `fixed.x` policy narrow: missing observed exogenous
   variables are rejected in FIML until conditional fixed.x likelihood behavior
   is implemented and fixture-backed.
