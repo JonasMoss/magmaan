@@ -11,30 +11,30 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
-// latva_version
-std::string latva_version();
-RcppExport SEXP _latva_latva_version() {
+// version
+std::string version();
+RcppExport SEXP _magmaan_version() {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(latva_version());
+    rcpp_result_gen = Rcpp::wrap(version());
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_parse
-Rcpp::List latva_parse(std::string syntax);
-RcppExport SEXP _latva_latva_parse(SEXP syntaxSEXP) {
+// parse_parse
+Rcpp::List parse_parse(std::string syntax);
+RcppExport SEXP _magmaan_parse_parse(SEXP syntaxSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< std::string >::type syntax(syntaxSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_parse(syntax));
+    rcpp_result_gen = Rcpp::wrap(parse_parse(syntax));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_lavaanify
-Rcpp::DataFrame latva_lavaanify(std::string syntax, bool auto_var, bool auto_cov_lv_x, bool auto_cov_y, bool auto_fix_first, bool std_lv, bool effect_coding, bool fixed_x, bool meanstructure, int n_groups, std::string group_var, Rcpp::Nullable<Rcpp::CharacterVector> group_labels);
-RcppExport SEXP _latva_latva_lavaanify(SEXP syntaxSEXP, SEXP auto_varSEXP, SEXP auto_cov_lv_xSEXP, SEXP auto_cov_ySEXP, SEXP auto_fix_firstSEXP, SEXP std_lvSEXP, SEXP effect_codingSEXP, SEXP fixed_xSEXP, SEXP meanstructureSEXP, SEXP n_groupsSEXP, SEXP group_varSEXP, SEXP group_labelsSEXP) {
+// lavaan_lavaanify
+Rcpp::DataFrame lavaan_lavaanify(std::string syntax, bool auto_var, bool auto_cov_lv_x, bool auto_cov_y, bool auto_fix_first, bool std_lv, bool effect_coding, bool fixed_x, bool meanstructure, int n_groups, std::string group_var, Rcpp::Nullable<Rcpp::CharacterVector> group_labels);
+RcppExport SEXP _magmaan_lavaan_lavaanify(SEXP syntaxSEXP, SEXP auto_varSEXP, SEXP auto_cov_lv_xSEXP, SEXP auto_cov_ySEXP, SEXP auto_fix_firstSEXP, SEXP std_lvSEXP, SEXP effect_codingSEXP, SEXP fixed_xSEXP, SEXP meanstructureSEXP, SEXP n_groupsSEXP, SEXP group_varSEXP, SEXP group_labelsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -50,216 +50,282 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type n_groups(n_groupsSEXP);
     Rcpp::traits::input_parameter< std::string >::type group_var(group_varSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type group_labels(group_labelsSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_lavaanify(syntax, auto_var, auto_cov_lv_x, auto_cov_y, auto_fix_first, std_lv, effect_coding, fixed_x, meanstructure, n_groups, group_var, group_labels));
+    rcpp_result_gen = Rcpp::wrap(lavaan_lavaanify(syntax, auto_var, auto_cov_lv_x, auto_cov_y, auto_fix_first, std_lv, effect_coding, fixed_x, meanstructure, n_groups, group_var, group_labels));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_matrix_rep
-Rcpp::List latva_matrix_rep(SEXP partable);
-RcppExport SEXP _latva_latva_matrix_rep(SEXP partableSEXP) {
+// model_matrix_rep
+Rcpp::List model_matrix_rep(SEXP partable);
+RcppExport SEXP _magmaan_model_matrix_rep(SEXP partableSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_matrix_rep(partable));
+    rcpp_result_gen = Rcpp::wrap(model_matrix_rep(partable));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_fit
-Rcpp::List latva_fit(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> lbfgs);
-RcppExport SEXP _latva_latva_fit(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP lbfgsSEXP) {
+// fit_fit
+Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> lbfgs);
+RcppExport SEXP _magmaan_fit_fit(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP lbfgsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgs(lbfgsSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_fit(partable, sample_stats, lbfgs));
+    rcpp_result_gen = Rcpp::wrap(fit_fit(partable, sample_stats, lbfgs));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_start_values
-Rcpp::NumericVector latva_start_values(SEXP partable, Rcpp::List sample_stats);
-RcppExport SEXP _latva_latva_start_values(SEXP partableSEXP, SEXP sample_statsSEXP) {
+// fit_start_values
+Rcpp::NumericVector fit_start_values(SEXP partable, Rcpp::List sample_stats);
+RcppExport SEXP _magmaan_fit_start_values(SEXP partableSEXP, SEXP sample_statsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_start_values(partable, sample_stats));
+    rcpp_result_gen = Rcpp::wrap(fit_start_values(partable, sample_stats));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_implied
-Rcpp::List latva_implied(Rcpp::List fit);
-RcppExport SEXP _latva_latva_implied(SEXP fitSEXP) {
+// model_implied
+Rcpp::List model_implied(Rcpp::List fit);
+RcppExport SEXP _magmaan_model_implied(SEXP fitSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_implied(fit));
+    rcpp_result_gen = Rcpp::wrap(model_implied(fit));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_se_expected
-Rcpp::List latva_se_expected(Rcpp::List fit);
-RcppExport SEXP _latva_latva_se_expected(SEXP fitSEXP) {
+// infer_information_expected
+Rcpp::NumericMatrix infer_information_expected(Rcpp::List fit);
+RcppExport SEXP _magmaan_infer_information_expected(SEXP fitSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_se_expected(fit));
+    rcpp_result_gen = Rcpp::wrap(infer_information_expected(fit));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_se_observed_fd
-Rcpp::List latva_se_observed_fd(Rcpp::List fit, double h_step);
-RcppExport SEXP _latva_latva_se_observed_fd(SEXP fitSEXP, SEXP h_stepSEXP) {
+// infer_information_observed_fd
+Rcpp::NumericMatrix infer_information_observed_fd(Rcpp::List fit, double h_step);
+RcppExport SEXP _magmaan_infer_information_observed_fd(SEXP fitSEXP, SEXP h_stepSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< double >::type h_step(h_stepSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_se_observed_fd(fit, h_step));
+    rcpp_result_gen = Rcpp::wrap(infer_information_observed_fd(fit, h_step));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_se_observed_analytic
-Rcpp::List latva_se_observed_analytic(Rcpp::List fit);
-RcppExport SEXP _latva_latva_se_observed_analytic(SEXP fitSEXP) {
+// infer_information_observed_analytic
+Rcpp::NumericMatrix infer_information_observed_analytic(Rcpp::List fit);
+RcppExport SEXP _magmaan_infer_information_observed_analytic(SEXP fitSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_se_observed_analytic(fit));
+    rcpp_result_gen = Rcpp::wrap(infer_information_observed_analytic(fit));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_baseline
-Rcpp::List latva_baseline(Rcpp::List fit);
-RcppExport SEXP _latva_latva_baseline(SEXP fitSEXP) {
+// infer_vcov
+Rcpp::NumericMatrix infer_vcov(Rcpp::NumericMatrix info, Rcpp::List fit);
+RcppExport SEXP _magmaan_infer_vcov(SEXP infoSEXP, SEXP fitSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type info(infoSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_vcov(info, fit));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_se
+Rcpp::NumericVector infer_se(Rcpp::NumericMatrix vcov);
+RcppExport SEXP _magmaan_infer_se(SEXP vcovSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type vcov(vcovSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_se(vcov));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_chi2_stat
+double infer_chi2_stat(Rcpp::List sample_stats, double fmin);
+RcppExport SEXP _magmaan_infer_chi2_stat(SEXP sample_statsSEXP, SEXP fminSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< double >::type fmin(fminSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_chi2_stat(sample_stats, fmin));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_df_stat
+int infer_df_stat(SEXP partable, Rcpp::List sample_stats);
+RcppExport SEXP _magmaan_infer_df_stat(SEXP partableSEXP, SEXP sample_statsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_df_stat(partable, sample_stats));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_baseline
+Rcpp::List infer_baseline(Rcpp::List sample_stats);
+RcppExport SEXP _magmaan_infer_baseline(SEXP sample_statsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_baseline(sample_stats));
+    return rcpp_result_gen;
+END_RCPP
+}
+// measures_fit
+Rcpp::List measures_fit(Rcpp::List fit, double chi2, int df, Rcpp::List baseline);
+RcppExport SEXP _magmaan_measures_fit(SEXP fitSEXP, SEXP chi2SEXP, SEXP dfSEXP, SEXP baselineSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_baseline(fit));
-    return rcpp_result_gen;
-END_RCPP
-}
-// latva_fit_measures
-Rcpp::List latva_fit_measures(Rcpp::List fit, Rcpp::List se, Rcpp::List baseline);
-RcppExport SEXP _latva_latva_fit_measures(SEXP fitSEXP, SEXP seSEXP, SEXP baselineSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type se(seSEXP);
+    Rcpp::traits::input_parameter< double >::type chi2(chi2SEXP);
+    Rcpp::traits::input_parameter< int >::type df(dfSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type baseline(baselineSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_fit_measures(fit, se, baseline));
+    rcpp_result_gen = Rcpp::wrap(measures_fit(fit, chi2, df, baseline));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_z_test
-Rcpp::List latva_z_test(Rcpp::List fit, Rcpp::List se);
-RcppExport SEXP _latva_latva_z_test(SEXP fitSEXP, SEXP seSEXP) {
+// infer_z_test
+Rcpp::List infer_z_test(Rcpp::List fit, Rcpp::NumericVector se);
+RcppExport SEXP _magmaan_infer_z_test(SEXP fitSEXP, SEXP seSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type se(seSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_z_test(fit, se));
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type se(seSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_z_test(fit, se));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_chi2_pvalue
-Rcpp::NumericVector latva_chi2_pvalue(Rcpp::NumericVector chi2, Rcpp::IntegerVector df);
-RcppExport SEXP _latva_latva_chi2_pvalue(SEXP chi2SEXP, SEXP dfSEXP) {
+// infer_chi2_pvalue
+Rcpp::NumericVector infer_chi2_pvalue(Rcpp::NumericVector chi2, Rcpp::IntegerVector df);
+RcppExport SEXP _magmaan_infer_chi2_pvalue(SEXP chi2SEXP, SEXP dfSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type chi2(chi2SEXP);
     Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type df(dfSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_chi2_pvalue(chi2, df));
+    rcpp_result_gen = Rcpp::wrap(infer_chi2_pvalue(chi2, df));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_wald_test
-Rcpp::List latva_wald_test(Rcpp::List fit, Rcpp::NumericMatrix R, Rcpp::List se, Rcpp::Nullable<Rcpp::NumericVector> q);
-RcppExport SEXP _latva_latva_wald_test(SEXP fitSEXP, SEXP RSEXP, SEXP seSEXP, SEXP qSEXP) {
+// infer_wald_test
+Rcpp::List infer_wald_test(Rcpp::List fit, Rcpp::NumericMatrix R, Rcpp::NumericMatrix vcov, Rcpp::Nullable<Rcpp::NumericVector> q);
+RcppExport SEXP _magmaan_infer_wald_test(SEXP fitSEXP, SEXP RSEXP, SEXP vcovSEXP, SEXP qSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type R(RSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type se(seSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type vcov(vcovSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type q(qSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_wald_test(fit, R, se, q));
+    rcpp_result_gen = Rcpp::wrap(infer_wald_test(fit, R, vcov, q));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_browne_residual_nt
-Rcpp::List latva_browne_residual_nt(Rcpp::List fit);
-RcppExport SEXP _latva_latva_browne_residual_nt(SEXP fitSEXP) {
+// infer_browne_residual_nt
+Rcpp::List infer_browne_residual_nt(Rcpp::List fit);
+RcppExport SEXP _magmaan_infer_browne_residual_nt(SEXP fitSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_browne_residual_nt(fit));
+    rcpp_result_gen = Rcpp::wrap(infer_browne_residual_nt(fit));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_rls_chi2
-Rcpp::List latva_rls_chi2(Rcpp::List fit, Rcpp::List implied);
-RcppExport SEXP _latva_latva_rls_chi2(SEXP fitSEXP, SEXP impliedSEXP) {
+// infer_rls_chi2
+Rcpp::List infer_rls_chi2(Rcpp::List fit, Rcpp::List implied);
+RcppExport SEXP _magmaan_infer_rls_chi2(SEXP fitSEXP, SEXP impliedSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type implied(impliedSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_rls_chi2(fit, implied));
+    rcpp_result_gen = Rcpp::wrap(infer_rls_chi2(fit, implied));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_build_u_factor
-Rcpp::List latva_build_u_factor(Rcpp::List fit, std::string bread, std::string moments);
-RcppExport SEXP _latva_latva_build_u_factor(SEXP fitSEXP, SEXP breadSEXP, SEXP momentsSEXP) {
+// infer_lr_test_satorra2000
+Rcpp::List infer_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, double T_H1, int df_H1, double T_H0, int df_H0, std::string gamma);
+RcppExport SEXP _magmaan_infer_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP T_H1SEXP, SEXP df_H1SEXP, SEXP T_H0SEXP, SEXP df_H0SEXP, SEXP gammaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type X_per_group(X_per_groupSEXP);
+    Rcpp::traits::input_parameter< double >::type T_H1(T_H1SEXP);
+    Rcpp::traits::input_parameter< int >::type df_H1(df_H1SEXP);
+    Rcpp::traits::input_parameter< double >::type T_H0(T_H0SEXP);
+    Rcpp::traits::input_parameter< int >::type df_H0(df_H0SEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_lr_test_satorra2000(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_build_u_factor
+Rcpp::List infer_build_u_factor(Rcpp::List fit, std::string bread, std::string moments);
+RcppExport SEXP _magmaan_infer_build_u_factor(SEXP fitSEXP, SEXP breadSEXP, SEXP momentsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
     Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_build_u_factor(fit, bread, moments));
+    rcpp_result_gen = Rcpp::wrap(infer_build_u_factor(fit, bread, moments));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_reduced_gamma_nt
-Rcpp::NumericMatrix latva_reduced_gamma_nt(Rcpp::List uf);
-RcppExport SEXP _latva_latva_reduced_gamma_nt(SEXP ufSEXP) {
+// infer_reduced_gamma_nt
+Rcpp::NumericMatrix infer_reduced_gamma_nt(Rcpp::List uf);
+RcppExport SEXP _magmaan_infer_reduced_gamma_nt(SEXP ufSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type uf(ufSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_reduced_gamma_nt(uf));
+    rcpp_result_gen = Rcpp::wrap(infer_reduced_gamma_nt(uf));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_reduced_gamma_sample
-Rcpp::NumericMatrix latva_reduced_gamma_sample(Rcpp::List uf, Rcpp::NumericMatrix Zc, Rcpp::NumericVector denom);
-RcppExport SEXP _latva_latva_reduced_gamma_sample(SEXP ufSEXP, SEXP ZcSEXP, SEXP denomSEXP) {
+// infer_reduced_gamma_sample
+Rcpp::NumericMatrix infer_reduced_gamma_sample(Rcpp::List uf, Rcpp::NumericMatrix Zc, Rcpp::NumericVector denom);
+RcppExport SEXP _magmaan_infer_reduced_gamma_sample(SEXP ufSEXP, SEXP ZcSEXP, SEXP denomSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type uf(ufSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type Zc(ZcSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type denom(denomSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_reduced_gamma_sample(uf, Zc, denom));
+    rcpp_result_gen = Rcpp::wrap(infer_reduced_gamma_sample(uf, Zc, denom));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_reduced_gamma_unbiased
-Rcpp::NumericMatrix latva_reduced_gamma_unbiased(Rcpp::List uf, int n, Rcpp::NumericMatrix M_sample, Rcpp::NumericMatrix M_nt);
-RcppExport SEXP _latva_latva_reduced_gamma_unbiased(SEXP ufSEXP, SEXP nSEXP, SEXP M_sampleSEXP, SEXP M_ntSEXP) {
+// infer_reduced_gamma_unbiased
+Rcpp::NumericMatrix infer_reduced_gamma_unbiased(Rcpp::List uf, int n, Rcpp::NumericMatrix M_sample, Rcpp::NumericMatrix M_nt);
+RcppExport SEXP _magmaan_infer_reduced_gamma_unbiased(SEXP ufSEXP, SEXP nSEXP, SEXP M_sampleSEXP, SEXP M_ntSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -267,108 +333,108 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type n(nSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type M_sample(M_sampleSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type M_nt(M_ntSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_reduced_gamma_unbiased(uf, n, M_sample, M_nt));
+    rcpp_result_gen = Rcpp::wrap(infer_reduced_gamma_unbiased(uf, n, M_sample, M_nt));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_ugamma_eigenvalues
-Rcpp::NumericVector latva_ugamma_eigenvalues(Rcpp::NumericMatrix M);
-RcppExport SEXP _latva_latva_ugamma_eigenvalues(SEXP MSEXP) {
+// infer_ugamma_eigenvalues
+Rcpp::NumericVector infer_ugamma_eigenvalues(Rcpp::NumericMatrix M);
+RcppExport SEXP _magmaan_infer_ugamma_eigenvalues(SEXP MSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type M(MSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_ugamma_eigenvalues(M));
+    rcpp_result_gen = Rcpp::wrap(infer_ugamma_eigenvalues(M));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_satorra_bentler
-Rcpp::List latva_satorra_bentler(double t_ml, int df, Rcpp::NumericVector eigvals);
-RcppExport SEXP _latva_latva_satorra_bentler(SEXP t_mlSEXP, SEXP dfSEXP, SEXP eigvalsSEXP) {
+// infer_satorra_bentler
+Rcpp::List infer_satorra_bentler(double t_ml, int df, Rcpp::NumericVector eigvals);
+RcppExport SEXP _magmaan_infer_satorra_bentler(SEXP t_mlSEXP, SEXP dfSEXP, SEXP eigvalsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< double >::type t_ml(t_mlSEXP);
     Rcpp::traits::input_parameter< int >::type df(dfSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eigvals(eigvalsSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_satorra_bentler(t_ml, df, eigvals));
+    rcpp_result_gen = Rcpp::wrap(infer_satorra_bentler(t_ml, df, eigvals));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_mean_var_adjusted
-Rcpp::List latva_mean_var_adjusted(double t_ml, int df, Rcpp::NumericVector eigvals);
-RcppExport SEXP _latva_latva_mean_var_adjusted(SEXP t_mlSEXP, SEXP dfSEXP, SEXP eigvalsSEXP) {
+// infer_mean_var_adjusted
+Rcpp::List infer_mean_var_adjusted(double t_ml, int df, Rcpp::NumericVector eigvals);
+RcppExport SEXP _magmaan_infer_mean_var_adjusted(SEXP t_mlSEXP, SEXP dfSEXP, SEXP eigvalsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< double >::type t_ml(t_mlSEXP);
     Rcpp::traits::input_parameter< int >::type df(dfSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eigvals(eigvalsSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_mean_var_adjusted(t_ml, df, eigvals));
+    rcpp_result_gen = Rcpp::wrap(infer_mean_var_adjusted(t_ml, df, eigvals));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_scaled_shifted
-Rcpp::List latva_scaled_shifted(double t_ml, int df, Rcpp::NumericVector eigvals);
-RcppExport SEXP _latva_latva_scaled_shifted(SEXP t_mlSEXP, SEXP dfSEXP, SEXP eigvalsSEXP) {
+// infer_scaled_shifted
+Rcpp::List infer_scaled_shifted(double t_ml, int df, Rcpp::NumericVector eigvals);
+RcppExport SEXP _magmaan_infer_scaled_shifted(SEXP t_mlSEXP, SEXP dfSEXP, SEXP eigvalsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< double >::type t_ml(t_mlSEXP);
     Rcpp::traits::input_parameter< int >::type df(dfSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eigvals(eigvalsSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_scaled_shifted(t_ml, df, eigvals));
+    rcpp_result_gen = Rcpp::wrap(infer_scaled_shifted(t_ml, df, eigvals));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_casewise_contributions
-Rcpp::NumericMatrix latva_casewise_contributions(SEXP partable, SEXP X);
-RcppExport SEXP _latva_latva_casewise_contributions(SEXP partableSEXP, SEXP XSEXP) {
+// infer_casewise_contributions
+Rcpp::NumericMatrix infer_casewise_contributions(SEXP partable, SEXP X);
+RcppExport SEXP _magmaan_infer_casewise_contributions(SEXP partableSEXP, SEXP XSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_casewise_contributions(partable, X));
+    rcpp_result_gen = Rcpp::wrap(infer_casewise_contributions(partable, X));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_sample_stats_from_raw
-Rcpp::List latva_sample_stats_from_raw(SEXP X);
-RcppExport SEXP _latva_latva_sample_stats_from_raw(SEXP XSEXP) {
+// data_sample_stats_from_raw
+Rcpp::List data_sample_stats_from_raw(SEXP X);
+RcppExport SEXP _magmaan_data_sample_stats_from_raw(SEXP XSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_sample_stats_from_raw(X));
+    rcpp_result_gen = Rcpp::wrap(data_sample_stats_from_raw(X));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_empirical_gamma
-Rcpp::NumericMatrix latva_empirical_gamma(Rcpp::NumericMatrix X);
-RcppExport SEXP _latva_latva_empirical_gamma(SEXP XSEXP) {
+// infer_empirical_gamma
+Rcpp::NumericMatrix infer_empirical_gamma(Rcpp::NumericMatrix X);
+RcppExport SEXP _magmaan_infer_empirical_gamma(SEXP XSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X(XSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_empirical_gamma(X));
+    rcpp_result_gen = Rcpp::wrap(infer_empirical_gamma(X));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_gamma_nt
-Rcpp::NumericMatrix latva_gamma_nt(Rcpp::NumericMatrix Sigma);
-RcppExport SEXP _latva_latva_gamma_nt(SEXP SigmaSEXP) {
+// infer_gamma_nt
+Rcpp::NumericMatrix infer_gamma_nt(Rcpp::NumericMatrix Sigma);
+RcppExport SEXP _magmaan_infer_gamma_nt(SEXP SigmaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type Sigma(SigmaSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_gamma_nt(Sigma));
+    rcpp_result_gen = Rcpp::wrap(infer_gamma_nt(Sigma));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_robust_se
-Rcpp::List latva_robust_se(Rcpp::List fit, Rcpp::NumericMatrix gamma_hat, std::string bread, std::string moments, std::string cov);
-RcppExport SEXP _latva_latva_robust_se(SEXP fitSEXP, SEXP gamma_hatSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP) {
+// infer_robust_se
+Rcpp::List infer_robust_se(Rcpp::List fit, Rcpp::NumericMatrix gamma_hat, std::string bread, std::string moments, std::string cov);
+RcppExport SEXP _magmaan_infer_robust_se(SEXP fitSEXP, SEXP gamma_hatSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -377,13 +443,13 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
     Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
     Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_robust_se(fit, gamma_hat, bread, moments, cov));
+    rcpp_result_gen = Rcpp::wrap(infer_robust_se(fit, gamma_hat, bread, moments, cov));
     return rcpp_result_gen;
 END_RCPP
 }
-// latva_robust_se_raw
-Rcpp::List latva_robust_se_raw(Rcpp::List fit, SEXP X, std::string bread, std::string moments, std::string cov);
-RcppExport SEXP _latva_latva_robust_se_raw(SEXP fitSEXP, SEXP XSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP) {
+// infer_robust_se_raw
+Rcpp::List infer_robust_se_raw(Rcpp::List fit, SEXP X, std::string bread, std::string moments, std::string cov);
+RcppExport SEXP _magmaan_infer_robust_se_raw(SEXP fitSEXP, SEXP XSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -392,47 +458,52 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
     Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
     Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
-    rcpp_result_gen = Rcpp::wrap(latva_robust_se_raw(fit, X, bread, moments, cov));
+    rcpp_result_gen = Rcpp::wrap(infer_robust_se_raw(fit, X, bread, moments, cov));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_latva_latva_version", (DL_FUNC) &_latva_latva_version, 0},
-    {"_latva_latva_parse", (DL_FUNC) &_latva_latva_parse, 1},
-    {"_latva_latva_lavaanify", (DL_FUNC) &_latva_latva_lavaanify, 12},
-    {"_latva_latva_matrix_rep", (DL_FUNC) &_latva_latva_matrix_rep, 1},
-    {"_latva_latva_fit", (DL_FUNC) &_latva_latva_fit, 3},
-    {"_latva_latva_start_values", (DL_FUNC) &_latva_latva_start_values, 2},
-    {"_latva_latva_implied", (DL_FUNC) &_latva_latva_implied, 1},
-    {"_latva_latva_se_expected", (DL_FUNC) &_latva_latva_se_expected, 1},
-    {"_latva_latva_se_observed_fd", (DL_FUNC) &_latva_latva_se_observed_fd, 2},
-    {"_latva_latva_se_observed_analytic", (DL_FUNC) &_latva_latva_se_observed_analytic, 1},
-    {"_latva_latva_baseline", (DL_FUNC) &_latva_latva_baseline, 1},
-    {"_latva_latva_fit_measures", (DL_FUNC) &_latva_latva_fit_measures, 3},
-    {"_latva_latva_z_test", (DL_FUNC) &_latva_latva_z_test, 2},
-    {"_latva_latva_chi2_pvalue", (DL_FUNC) &_latva_latva_chi2_pvalue, 2},
-    {"_latva_latva_wald_test", (DL_FUNC) &_latva_latva_wald_test, 4},
-    {"_latva_latva_browne_residual_nt", (DL_FUNC) &_latva_latva_browne_residual_nt, 1},
-    {"_latva_latva_rls_chi2", (DL_FUNC) &_latva_latva_rls_chi2, 2},
-    {"_latva_latva_build_u_factor", (DL_FUNC) &_latva_latva_build_u_factor, 3},
-    {"_latva_latva_reduced_gamma_nt", (DL_FUNC) &_latva_latva_reduced_gamma_nt, 1},
-    {"_latva_latva_reduced_gamma_sample", (DL_FUNC) &_latva_latva_reduced_gamma_sample, 3},
-    {"_latva_latva_reduced_gamma_unbiased", (DL_FUNC) &_latva_latva_reduced_gamma_unbiased, 4},
-    {"_latva_latva_ugamma_eigenvalues", (DL_FUNC) &_latva_latva_ugamma_eigenvalues, 1},
-    {"_latva_latva_satorra_bentler", (DL_FUNC) &_latva_latva_satorra_bentler, 3},
-    {"_latva_latva_mean_var_adjusted", (DL_FUNC) &_latva_latva_mean_var_adjusted, 3},
-    {"_latva_latva_scaled_shifted", (DL_FUNC) &_latva_latva_scaled_shifted, 3},
-    {"_latva_latva_casewise_contributions", (DL_FUNC) &_latva_latva_casewise_contributions, 2},
-    {"_latva_latva_sample_stats_from_raw", (DL_FUNC) &_latva_latva_sample_stats_from_raw, 1},
-    {"_latva_latva_empirical_gamma", (DL_FUNC) &_latva_latva_empirical_gamma, 1},
-    {"_latva_latva_gamma_nt", (DL_FUNC) &_latva_latva_gamma_nt, 1},
-    {"_latva_latva_robust_se", (DL_FUNC) &_latva_latva_robust_se, 5},
-    {"_latva_latva_robust_se_raw", (DL_FUNC) &_latva_latva_robust_se_raw, 5},
+    {"_magmaan_version", (DL_FUNC) &_magmaan_version, 0},
+    {"_magmaan_parse_parse", (DL_FUNC) &_magmaan_parse_parse, 1},
+    {"_magmaan_lavaan_lavaanify", (DL_FUNC) &_magmaan_lavaan_lavaanify, 12},
+    {"_magmaan_model_matrix_rep", (DL_FUNC) &_magmaan_model_matrix_rep, 1},
+    {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 3},
+    {"_magmaan_fit_start_values", (DL_FUNC) &_magmaan_fit_start_values, 2},
+    {"_magmaan_model_implied", (DL_FUNC) &_magmaan_model_implied, 1},
+    {"_magmaan_infer_information_expected", (DL_FUNC) &_magmaan_infer_information_expected, 1},
+    {"_magmaan_infer_information_observed_fd", (DL_FUNC) &_magmaan_infer_information_observed_fd, 2},
+    {"_magmaan_infer_information_observed_analytic", (DL_FUNC) &_magmaan_infer_information_observed_analytic, 1},
+    {"_magmaan_infer_vcov", (DL_FUNC) &_magmaan_infer_vcov, 2},
+    {"_magmaan_infer_se", (DL_FUNC) &_magmaan_infer_se, 1},
+    {"_magmaan_infer_chi2_stat", (DL_FUNC) &_magmaan_infer_chi2_stat, 2},
+    {"_magmaan_infer_df_stat", (DL_FUNC) &_magmaan_infer_df_stat, 2},
+    {"_magmaan_infer_baseline", (DL_FUNC) &_magmaan_infer_baseline, 1},
+    {"_magmaan_measures_fit", (DL_FUNC) &_magmaan_measures_fit, 4},
+    {"_magmaan_infer_z_test", (DL_FUNC) &_magmaan_infer_z_test, 2},
+    {"_magmaan_infer_chi2_pvalue", (DL_FUNC) &_magmaan_infer_chi2_pvalue, 2},
+    {"_magmaan_infer_wald_test", (DL_FUNC) &_magmaan_infer_wald_test, 4},
+    {"_magmaan_infer_browne_residual_nt", (DL_FUNC) &_magmaan_infer_browne_residual_nt, 1},
+    {"_magmaan_infer_rls_chi2", (DL_FUNC) &_magmaan_infer_rls_chi2, 2},
+    {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 8},
+    {"_magmaan_infer_build_u_factor", (DL_FUNC) &_magmaan_infer_build_u_factor, 3},
+    {"_magmaan_infer_reduced_gamma_nt", (DL_FUNC) &_magmaan_infer_reduced_gamma_nt, 1},
+    {"_magmaan_infer_reduced_gamma_sample", (DL_FUNC) &_magmaan_infer_reduced_gamma_sample, 3},
+    {"_magmaan_infer_reduced_gamma_unbiased", (DL_FUNC) &_magmaan_infer_reduced_gamma_unbiased, 4},
+    {"_magmaan_infer_ugamma_eigenvalues", (DL_FUNC) &_magmaan_infer_ugamma_eigenvalues, 1},
+    {"_magmaan_infer_satorra_bentler", (DL_FUNC) &_magmaan_infer_satorra_bentler, 3},
+    {"_magmaan_infer_mean_var_adjusted", (DL_FUNC) &_magmaan_infer_mean_var_adjusted, 3},
+    {"_magmaan_infer_scaled_shifted", (DL_FUNC) &_magmaan_infer_scaled_shifted, 3},
+    {"_magmaan_infer_casewise_contributions", (DL_FUNC) &_magmaan_infer_casewise_contributions, 2},
+    {"_magmaan_data_sample_stats_from_raw", (DL_FUNC) &_magmaan_data_sample_stats_from_raw, 1},
+    {"_magmaan_infer_empirical_gamma", (DL_FUNC) &_magmaan_infer_empirical_gamma, 1},
+    {"_magmaan_infer_gamma_nt", (DL_FUNC) &_magmaan_infer_gamma_nt, 1},
+    {"_magmaan_infer_robust_se", (DL_FUNC) &_magmaan_infer_robust_se, 5},
+    {"_magmaan_infer_robust_se_raw", (DL_FUNC) &_magmaan_infer_robust_se_raw, 5},
     {NULL, NULL, 0}
 };
 
-RcppExport void R_init_latva(DllInfo *dll) {
+RcppExport void R_init_magmaan(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
 }

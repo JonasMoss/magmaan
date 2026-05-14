@@ -4,7 +4,7 @@
 // public surface stays narrow. ASCII-only; non-ASCII bytes are explicitly
 // rejected upstream (UnexpectedChar).
 
-namespace latva::parse::detail {
+namespace magmaan::parse::detail {
 
 constexpr bool is_digit(char c) noexcept {
   return c >= '0' && c <= '9';

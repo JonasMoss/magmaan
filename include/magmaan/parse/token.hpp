@@ -1,0 +1,62 @@
+#pragma once
+
+#include <cstdint>
+#include <string_view>
+
+#include "magmaan/source_span.hpp"
+
+namespace magmaan::parse {
+
+enum class TokenKind : std::uint8_t {
+  Identifier,   // [A-Za-z_.][A-Za-z0-9_.]* (with `.<digit>` disambiguation)
+  NumLit,       // numeric literal; sign is never part of it
+  StringLit,    // "..."
+  Op,           // =~ ~~ ~ := == < >  and rejected: <~ |~ ~*~ |
+  NA,           // the literal `NA`
+  Plus,         // +
+  Minus,        // -   (binary subtraction or unary negation in expressions)
+  Star,         // *
+  Slash,        // /   (binary division in expressions)
+  Caret,        // ^   (binary power in expressions, right-associative)
+  Question,     // ?
+  Comma,        // ,
+  LParen,       // (
+  RParen,       // )
+  Semicolon,    // ;
+  Newline,      // \n  \r  \r\n
+  EndOfFile,
+};
+
+struct Token {
+  TokenKind        kind = TokenKind::EndOfFile;
+  SourceSpan       span = {};
+  std::string_view text = {};   // empty for EndOfFile and (synthetically) for Newline
+
+  friend bool operator==(const Token&, const Token&) = default;
+};
+
+// Human-readable name, e.g. for diagnostics. Stable identifier; safe in tests.
+constexpr std::string_view to_string(TokenKind k) noexcept {
+  switch (k) {
+    case TokenKind::Identifier: return "Identifier";
+    case TokenKind::NumLit:     return "NumLit";
+    case TokenKind::StringLit:  return "StringLit";
+    case TokenKind::Op:         return "Op";
+    case TokenKind::NA:         return "NA";
+    case TokenKind::Plus:       return "Plus";
+    case TokenKind::Minus:      return "Minus";
+    case TokenKind::Star:       return "Star";
+    case TokenKind::Slash:      return "Slash";
+    case TokenKind::Caret:      return "Caret";
+    case TokenKind::Question:   return "Question";
+    case TokenKind::Comma:      return "Comma";
+    case TokenKind::LParen:     return "LParen";
+    case TokenKind::RParen:     return "RParen";
+    case TokenKind::Semicolon:  return "Semicolon";
+    case TokenKind::Newline:    return "Newline";
+    case TokenKind::EndOfFile:  return "EndOfFile";
+  }
+  return "?";
+}
+
+}

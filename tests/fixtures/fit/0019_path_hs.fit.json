@@ -31,6 +31,8 @@
   "cfi": 1,
   "tli": 1,
   "rmsea": 0,
+  "rmsea_ci_lower": 0,
+  "rmsea_ci_upper": 0,
   "srmr": 2.63312510143253e-17,
   "logl": -398.432782420684,
   "unrestricted_logl": -398.432782420684,

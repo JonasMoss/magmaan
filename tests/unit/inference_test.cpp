@@ -12,25 +12,27 @@
 
 #include <nlohmann/json.hpp>
 
-#include "latva/fit/fit.hpp"
-#include "latva/fit/inference.hpp"
-#include "latva/fit/sample_stats.hpp"
-#include "latva/model/matrix_rep.hpp"
-#include "latva/model/model_evaluator.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaanify.hpp"
+#include "magmaan/fit/fit.hpp"
+#include "magmaan/fit/inference.hpp"
+#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaanify.hpp"
 
-using latva::fit::AnalyticObservedInfoSE;
-using latva::fit::Estimates;
-using latva::fit::ExpectedInfoSE;
-using latva::fit::FdObservedInfoSE;
-using latva::fit::Inference;
-using latva::fit::SampleStats;
-using latva::model::build_matrix_rep;
-using latva::model::MatrixRep;
-using latva::parse::Parser;
-using latva::partable::lavaanify;
-using latva::partable::LatentStructure;
+#include "../inference_bundle.hpp"
+
+using magmaan::fit::Estimates;
+using magmaan::fit::SampleStats;
+using magmaan::model::build_matrix_rep;
+using magmaan::model::MatrixRep;
+using magmaan::parse::Parser;
+using magmaan::partable::lavaanify;
+using magmaan::partable::LatentStructure;
+using magmaan::test::analytic_observed_inference;
+using magmaan::test::expected_inference;
+using magmaan::test::fd_observed_inference;
+using magmaan::test::InferenceBundle;
 
 namespace {
 
@@ -84,16 +86,16 @@ Eigen::VectorXd theta_from_fixture(const std::string& fixture_path) {
 
 }  // namespace
 
-TEST_CASE("ExpectedInfoSE: shapes, symmetry, PSD at θ̂ (1F CFA)") {
+TEST_CASE("expected_inference: shapes, symmetry, PSD at θ̂ (1F CFA)") {
   // 1-factor CFA — load lavaan's θ̂ so we evaluate at a real estimate.
   auto h = must_model("f =~ x1 + x2 + x3");
   const Eigen::VectorXd theta = theta_from_fixture(
-      std::string(LATVA_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
 
   // S = lavaan's sample S from the same fixture so n and the moments are
   // self-consistent. The inference math doesn't depend on S beyond
   // (n − 1)/2 weighting, but reuse it for cleanliness.
-  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
                    "/fit/0001_one_factor_cfa.fit.json");
   std::stringstream ss; ss << in.rdbuf();
   auto j = nlohmann::json::parse(ss.str(), nullptr, false);
@@ -114,8 +116,7 @@ TEST_CASE("ExpectedInfoSE: shapes, symmetry, PSD at θ̂ (1F CFA)") {
   est.theta = theta;
   est.fmin  = 0.0;  // not used by the shape checks below
 
-  ExpectedInfoSE method;
-  auto inf_or = method.compute(*h.pt, *h.rep, samp, est);
+  auto inf_or = expected_inference(*h.pt, *h.rep, samp, est);
   REQUIRE(inf_or.has_value());
   const auto& inf = *inf_or;
 
@@ -147,14 +148,14 @@ TEST_CASE("ExpectedInfoSE: shapes, symmetry, PSD at θ̂ (1F CFA)") {
   CHECK(inf.df == expected_df);
 }
 
-TEST_CASE("ExpectedInfoSE: df = 24 for 3F Holzinger") {
+TEST_CASE("df_stat: df = 24 for 3F Holzinger") {
   // The flagship df sanity check from the plan: 9 indicators × 10 / 2 − 21 = 24.
   auto h = must_model(
       "visual =~ x1 + x2 + x3\n"
       "textual =~ x4 + x5 + x6\n"
       "speed =~ x7 + x8 + x9");
   const Eigen::VectorXd theta = theta_from_fixture(
-      std::string(LATVA_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
   REQUIRE(theta.size() == 21);
 
   // S can be anything PD with the right dimension; the df formula is
@@ -166,8 +167,7 @@ TEST_CASE("ExpectedInfoSE: df = 24 for 3F Holzinger") {
 
   Estimates est;  est.theta = theta;  est.fmin = 0.0;
 
-  ExpectedInfoSE method;
-  auto inf_or = method.compute(*h.pt, *h.rep, samp, est);
+  auto inf_or = expected_inference(*h.pt, *h.rep, samp, est);
   REQUIRE(inf_or.has_value());
   CHECK(inf_or->df == 24);
   CHECK(inf_or->info.rows() == 21);
@@ -185,7 +185,7 @@ TEST_CASE("rls_chi2: matches lavaan browne.residual.nt.model on 3F Holzinger") {
       "textual =~ x4 + x5 + x6\n"
       "speed =~ x7 + x8 + x9");
 
-  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
                    "/fit/0002_three_factor_hs.fit.json");
   REQUIRE(in.is_open());
   std::stringstream ss; ss << in.rdbuf();
@@ -204,18 +204,18 @@ TEST_CASE("rls_chi2: matches lavaan browne.residual.nt.model on 3F Holzinger") {
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
   // Fit so we have Σ̂; reuse the converged θ̂ to compute implied moments.
-  auto est = latva::fit::fit(*h.pt, *h.rep, samp).value();
-  auto ev  = latva::model::ModelEvaluator::build(*h.pt, *h.rep).value();
+  auto est = magmaan::fit::fit(*h.pt, *h.rep, samp).value();
+  auto ev  = magmaan::model::ModelEvaluator::build(*h.pt, *h.rep).value();
   auto im_or = ev.sigma(est.theta);
   REQUIRE(im_or.has_value());
   // Copy out of the evaluator's internal buffer — rls_chi2 doesn't mutate
   // it but the API contract is "view into ev"; the copy keeps the test
   // resilient if implementation details shift later.
-  latva::model::ImpliedMoments im;
+  magmaan::model::ImpliedMoments im;
   im.sigma.assign(im_or->sigma.begin(), im_or->sigma.end());
   im.mu.assign(im_or->mu.begin(), im_or->mu.end());
 
-  auto t_rls = latva::fit::rls_chi2(samp, im);
+  auto t_rls = magmaan::fit::rls_chi2(samp, im);
   REQUIRE(t_rls.has_value());
   CHECK(*t_rls == doctest::Approx(81.3677).epsilon(1e-3));
 }
@@ -225,7 +225,7 @@ TEST_CASE("rls_chi2: zero on saturated 1F CFA") {
   // F_RLS = 0. Numerically expect ~0 up to LLT/solve roundoff.
   auto h = must_model("f =~ x1 + x2 + x3");
 
-  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
                    "/fit/0001_one_factor_cfa.fit.json");
   REQUIRE(in.is_open());
   std::stringstream ss; ss << in.rdbuf();
@@ -243,15 +243,15 @@ TEST_CASE("rls_chi2: zero on saturated 1F CFA") {
   samp.S.push_back(std::move(S));
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
-  auto est = latva::fit::fit(*h.pt, *h.rep, samp).value();
-  auto ev  = latva::model::ModelEvaluator::build(*h.pt, *h.rep).value();
+  auto est = magmaan::fit::fit(*h.pt, *h.rep, samp).value();
+  auto ev  = magmaan::model::ModelEvaluator::build(*h.pt, *h.rep).value();
   auto im_or = ev.sigma(est.theta);
   REQUIRE(im_or.has_value());
-  latva::model::ImpliedMoments im;
+  magmaan::model::ImpliedMoments im;
   im.sigma.assign(im_or->sigma.begin(), im_or->sigma.end());
   im.mu.assign(im_or->mu.begin(), im_or->mu.end());
 
-  auto t_rls = latva::fit::rls_chi2(samp, im);
+  auto t_rls = magmaan::fit::rls_chi2(samp, im);
   REQUIRE(t_rls.has_value());
   CHECK(std::abs(*t_rls) < 1e-6);
 }
@@ -265,7 +265,7 @@ TEST_CASE("browne_residual_nt: matches lavaan on 3F Holzinger") {
       "textual =~ x4 + x5 + x6\n"
       "speed =~ x7 + x8 + x9");
 
-  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
                    "/fit/0002_three_factor_hs.fit.json");
   REQUIRE(in.is_open());
   std::stringstream ss; ss << in.rdbuf();
@@ -283,8 +283,8 @@ TEST_CASE("browne_residual_nt: matches lavaan on 3F Holzinger") {
   samp.S.push_back(std::move(S));
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
-  auto est = latva::fit::fit(*h.pt, *h.rep, samp).value();
-  auto t_or = latva::fit::browne_residual_nt(*h.pt, *h.rep, samp, est);
+  auto est = magmaan::fit::fit(*h.pt, *h.rep, samp).value();
+  auto t_or = magmaan::fit::browne_residual_nt(*h.pt, *h.rep, samp, est);
   REQUIRE(t_or.has_value());
   CHECK(*t_or == doctest::Approx(77.9034).epsilon(1e-3));
 }
@@ -293,7 +293,7 @@ TEST_CASE("browne_residual_nt: zero on saturated 1F CFA") {
   // At saturation, res = 0 so term1 = term2 = 0 and T = 0.
   auto h = must_model("f =~ x1 + x2 + x3");
 
-  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
                    "/fit/0001_one_factor_cfa.fit.json");
   REQUIRE(in.is_open());
   std::stringstream ss; ss << in.rdbuf();
@@ -311,31 +311,26 @@ TEST_CASE("browne_residual_nt: zero on saturated 1F CFA") {
   samp.S.push_back(std::move(S));
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
-  auto est = latva::fit::fit(*h.pt, *h.rep, samp).value();
-  auto t_or = latva::fit::browne_residual_nt(*h.pt, *h.rep, samp, est);
+  auto est = magmaan::fit::fit(*h.pt, *h.rep, samp).value();
+  auto t_or = magmaan::fit::browne_residual_nt(*h.pt, *h.rep, samp, est);
   REQUIRE(t_or.has_value());
   CHECK(std::abs(*t_or) < 1e-6);
 }
 
-TEST_CASE("ExpectedInfoSE: chi2 = n · fmin") {
-  // Pure arithmetic on the fmin → chi2 plumbing. The math of `info`
-  // doesn't affect chi2 — verify the formula in isolation. N (not N−1)
-  // matches lavaan's `likelihood = "normal"` default.
-  auto h = must_model("f =~ x1 + x2 + x3");
-  const Eigen::VectorXd theta = theta_from_fixture(
-      std::string(LATVA_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
-
-  std::mt19937 rng(7);
+TEST_CASE("chi2_stat: chi2 = n · fmin") {
+  // Pure arithmetic on the fmin → chi2 plumbing. N (not N−1) matches
+  // lavaan's `likelihood = "normal"` default. Doesn't depend on any
+  // information matrix — `chi2_stat` reads samp.n_obs and est.fmin only.
   SampleStats samp;
-  samp.S.push_back(random_pd(rng, 3));
+  samp.S.push_back(Eigen::MatrixXd::Identity(3, 3));   // not used by chi2_stat
   samp.n_obs.push_back(301);
 
-  Estimates est;  est.theta = theta;  est.fmin = 0.04321;
+  Estimates est;
+  est.theta = Eigen::VectorXd::Zero(3);                // unused
+  est.fmin  = 0.04321;
 
-  ExpectedInfoSE method;
-  auto inf_or = method.compute(*h.pt, *h.rep, samp, est);
-  REQUIRE(inf_or.has_value());
-  CHECK(inf_or->chi2 == doctest::Approx(301.0 * 0.04321).epsilon(1e-12));
+  CHECK(magmaan::fit::chi2_stat(samp, est) ==
+        doctest::Approx(301.0 * 0.04321).epsilon(1e-12));
 }
 
 // ----------------------------------------------------------------------------
@@ -382,12 +377,11 @@ FixtureCtx load_fit_fixture(std::string_view model, const std::string& fixture_p
 
 }  // namespace
 
-TEST_CASE("FdObservedInfoSE: shape, symmetry, PSD at saturated 1F CFA") {
+TEST_CASE("fd_observed_inference: shape, symmetry, PSD at saturated 1F CFA") {
   auto ctx = load_fit_fixture("f =~ x1 + x2 + x3",
-      std::string(LATVA_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
 
-  FdObservedInfoSE method;
-  auto inf_or = method.compute(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
+  auto inf_or = fd_observed_inference(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
   REQUIRE(inf_or.has_value());
   const auto& inf = *inf_or;
   const Eigen::Index n_free = ctx.est.theta.size();
@@ -404,12 +398,11 @@ TEST_CASE("FdObservedInfoSE: shape, symmetry, PSD at saturated 1F CFA") {
   for (Eigen::Index k = 0; k < n_free; ++k) CHECK(inf.se(k) > 0.0);
 }
 
-TEST_CASE("AnalyticObservedInfoSE: shape, symmetry, PSD at saturated 1F CFA") {
+TEST_CASE("analytic_observed_inference: shape, symmetry, PSD at saturated 1F CFA") {
   auto ctx = load_fit_fixture("f =~ x1 + x2 + x3",
-      std::string(LATVA_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
 
-  AnalyticObservedInfoSE method;
-  auto inf_or = method.compute(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
+  auto inf_or = analytic_observed_inference(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
   REQUIRE(inf_or.has_value());
   const auto& inf = *inf_or;
   const Eigen::Index n_free = ctx.est.theta.size();
@@ -427,12 +420,10 @@ TEST_CASE("Observed info: FD ≈ analytic on 1F CFA (saturated)") {
   // At a saturated, converged fit the analytic Hessian is exact and the FD
   // approximation should agree to FD truncation/roundoff (~1e-5 with h=1e-4).
   auto ctx = load_fit_fixture("f =~ x1 + x2 + x3",
-      std::string(LATVA_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
 
-  auto fd_or  = FdObservedInfoSE{}.compute(
-      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
-  auto an_or  = AnalyticObservedInfoSE{}.compute(
-      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
+  auto fd_or = fd_observed_inference(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
+  auto an_or = analytic_observed_inference(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
   REQUIRE(fd_or.has_value());
   REQUIRE(an_or.has_value());
 
@@ -452,12 +443,10 @@ TEST_CASE("Observed info: FD ≈ analytic on 3F Holzinger (non-saturated)") {
       "visual =~ x1 + x2 + x3\n"
       "textual =~ x4 + x5 + x6\n"
       "speed =~ x7 + x8 + x9",
-      std::string(LATVA_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
 
-  auto fd_or = FdObservedInfoSE{}.compute(
-      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
-  auto an_or = AnalyticObservedInfoSE{}.compute(
-      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
+  auto fd_or = fd_observed_inference(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
+  auto an_or = analytic_observed_inference(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
   REQUIRE_MESSAGE(fd_or.has_value(),
       "FD failed: " << (fd_or.has_value() ? "" : fd_or.error().detail));
   REQUIRE_MESSAGE(an_or.has_value(),
@@ -477,12 +466,10 @@ TEST_CASE("Observed info ≈ Expected info at saturated fit (1F CFA)") {
   // so F_ML ≈ 1.3e-15 and ‖S − Σ̂‖ ≈ √F_ML ≈ 4e-8. Info entries with N/2
   // scaling drift by ~ N · √F_ML, SEs by relative ~ √F_ML.
   auto ctx = load_fit_fixture("f =~ x1 + x2 + x3",
-      std::string(LATVA_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
 
-  auto exp_or = ExpectedInfoSE{}.compute(
-      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
-  auto an_or  = AnalyticObservedInfoSE{}.compute(
-      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
+  auto exp_or = expected_inference(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
+  auto an_or  = analytic_observed_inference(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
   REQUIRE(exp_or.has_value());
   REQUIRE(an_or.has_value());
 
@@ -498,29 +485,28 @@ TEST_CASE("z_test: per-parameter z = θ̂_k / SE_k and chi²(1) p-value") {
   Estimates est;
   est.theta = Eigen::VectorXd(3);
   est.theta << 1.0, 0.5, -2.0;
-  Inference inf;
-  inf.se = Eigen::VectorXd(3);
-  inf.se << 0.25, 0.0, 1.0;
-  const auto zt = latva::fit::z_test(est, inf);
+  Eigen::VectorXd se_v(3);
+  se_v << 0.25, 0.0, 1.0;
+  const auto zt = magmaan::fit::z_test(est, se_v);
   CHECK(zt.z(0) == doctest::Approx(4.0));
   CHECK(zt.p_value(0) ==
-        doctest::Approx(latva::fit::chi2_pvalue(16.0, 1)).epsilon(1e-12));
+        doctest::Approx(magmaan::fit::chi2_pvalue(16.0, 1)).epsilon(1e-12));
   CHECK(std::isnan(zt.z(1)));        // SE = 0
   CHECK(std::isnan(zt.p_value(1)));
   CHECK(zt.z(2) == doctest::Approx(-2.0));
   CHECK(zt.p_value(2) ==
-        doctest::Approx(latva::fit::chi2_pvalue(4.0, 1)).epsilon(1e-12));
+        doctest::Approx(magmaan::fit::chi2_pvalue(4.0, 1)).epsilon(1e-12));
 }
 
 TEST_CASE("wald_test: single-parameter restriction matches (θ̂_k / SE_k)²") {
   // For a single linear restriction `θ_k = 0`, the Wald statistic
   // reduces to (θ̂_k / SE_k)². Verify on the 1F CFA saturated fit.
-  auto fp = latva::parse::Parser::parse("f =~ x1 + x2 + x3");
+  auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = latva::partable::lavaanify(*fp);  REQUIRE(pt.has_value());
-  auto mr = latva::model::build_matrix_rep(*pt); REQUIRE(mr.has_value());
+  auto pt = magmaan::partable::lavaanify(*fp);  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt); REQUIRE(mr.has_value());
 
-  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
                    "/fit/0001_one_factor_cfa.fit.json");
   REQUIRE(in.is_open());
   std::stringstream ss; ss << in.rdbuf();
@@ -535,8 +521,8 @@ TEST_CASE("wald_test: single-parameter restriction matches (θ̂_k / SE_k)²") {
                  [static_cast<std::size_t>(c)].get<double>();
   SampleStats samp;
   samp.S = {S}; samp.n_obs = {j["n_obs"].get<std::int64_t>()};
-  auto est = latva::fit::fit(*pt, *mr, samp).value();
-  auto inf = latva::fit::ExpectedInfoSE{}.compute(*pt, *mr, samp, est).value();
+  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   // Test θ_0 = 0 (first free param). R = [1, 0, 0, ...], q = [0].
   const Eigen::Index n_free = est.theta.size();
@@ -544,7 +530,7 @@ TEST_CASE("wald_test: single-parameter restriction matches (θ̂_k / SE_k)²") {
   R(0, 0) = 1.0;
   Eigen::VectorXd q(1); q(0) = 0.0;
 
-  auto wald_or = latva::fit::wald_test(R, q, est, inf.vcov);
+  auto wald_or = magmaan::fit::wald_test(R, q, est, inf.vcov);
   REQUIRE(wald_or.has_value());
   CHECK(wald_or->df == 1);
   const double expected = (est.theta(0) / inf.se(0)) * (est.theta(0) / inf.se(0));
@@ -560,12 +546,12 @@ TEST_CASE("wald_test: rank-deficient R errors out") {
   R << 1, 0, 0,
        1, 0, 0;
   Eigen::VectorXd q = Eigen::VectorXd::Zero(2);
-  auto w = latva::fit::wald_test(R, q, est, vcov);
+  auto w = magmaan::fit::wald_test(R, q, est, vcov);
   REQUIRE_FALSE(w.has_value());
 }
 
 TEST_CASE("chi2_pvalue: classic spot checks against R's pchisq") {
-  using latva::fit::chi2_pvalue;
+  using magmaan::fit::chi2_pvalue;
   // pchisq(3.84, 1, lower.tail=FALSE) ≈ 0.05
   CHECK(chi2_pvalue(3.8414588, 1) == doctest::Approx(0.05).epsilon(1e-5));
   // pchisq(7.815, 3, lower.tail=FALSE) ≈ 0.05
@@ -580,15 +566,42 @@ TEST_CASE("chi2_pvalue: classic spot checks against R's pchisq") {
   CHECK(chi2_pvalue(100.0, 5) < 1e-15);
 }
 
-TEST_CASE("lr_test: T_diff and df_diff are simple subtraction of nested fits") {
-  // Two synthetic inference results; verify the LR T and Δdf are
-  // straightforward subtractions.
-  using latva::fit::Inference;
-  Inference restricted;   restricted.chi2 = 50.0;   restricted.df = 27;
-  Inference unrestricted; unrestricted.chi2 = 40.0; unrestricted.df = 24;
-  const auto lr = latva::fit::lr_test(restricted, unrestricted);
-  CHECK(lr.chi2_diff == doctest::Approx(10.0));
-  CHECK(lr.df_diff   == 3);
+TEST_CASE("noncentral_chisq_cdf: spot checks against R's pchisq(x, df, ncp)") {
+  using magmaan::fit::chi2_pvalue;
+  using magmaan::fit::noncentral_chisq_cdf;
+
+  // ncp == 0 ⇒ central χ²(df) CDF (= 1 − chi2_pvalue) for several (x, df).
+  for (auto [x, df] : {std::pair{2.0, 3}, std::pair{12.5, 7},
+                       std::pair{40.0, 24}, std::pair{0.7, 1}}) {
+    CHECK(noncentral_chisq_cdf(x, static_cast<double>(df), 0.0) ==
+          doctest::Approx(1.0 - chi2_pvalue(x, df)).epsilon(1e-12));
+  }
+
+  // pchisq(x, df, ncp) — values from R 4.x.
+  CHECK(noncentral_chisq_cdf(5.0, 3.0, 0.0)   == doctest::Approx(0.828202855703).epsilon(1e-9));
+  CHECK(noncentral_chisq_cdf(10.0, 3.0, 4.0)  == doctest::Approx(0.775921995699).epsilon(1e-9));
+  CHECK(noncentral_chisq_cdf(20.0, 5.0, 10.0) == doctest::Approx(0.781070388285).epsilon(1e-9));
+  CHECK(noncentral_chisq_cdf(2.5, 7.0, 12.0)  == doctest::Approx(0.000741366913154).epsilon(1e-7));
+  CHECK(noncentral_chisq_cdf(0.001, 2.0, 3.0) == doctest::Approx(0.000111579021642).epsilon(1e-7));
+  // Large ncp: the mode-centered summation must stay accurate (the j=0
+  // Poisson weight underflows here).
+  CHECK(noncentral_chisq_cdf(2010.0, 10.0, 2000.0) == doctest::Approx(0.504451319691).epsilon(1e-7));
+  CHECK(noncentral_chisq_cdf(100.0, 10.0, 2000.0)  < 1e-200);
+
+  // Monotone decreasing in ncp; in [0, 1].
+  const double a = noncentral_chisq_cdf(15.0, 5.0, 1.0);
+  const double b = noncentral_chisq_cdf(15.0, 5.0, 8.0);
+  const double c = noncentral_chisq_cdf(15.0, 5.0, 30.0);
+  CHECK(a > b);
+  CHECK(b > c);
+  CHECK(c >= 0.0);
+  CHECK(a <= 1.0);
+
+  // Bad / boundary inputs.
+  CHECK(std::isnan(noncentral_chisq_cdf(5.0, 0.0, 1.0)));
+  CHECK(std::isnan(noncentral_chisq_cdf(5.0, 3.0, -1.0)));
+  CHECK(noncentral_chisq_cdf(0.0, 3.0, 4.0) == 0.0);
+  CHECK(noncentral_chisq_cdf(-2.0, 3.0, 4.0) == 0.0);
 }
 
 TEST_CASE("Multi-group + mean structure: θ̂/SE match lavaan on HS × school") {
@@ -638,17 +651,17 @@ TEST_CASE("Multi-group + mean structure: θ̂/SE match lavaan on HS × school") 
       0.1487605952885, 0.1571313388695, 0.0953630858746, 0.0919662358609,
       0.0860378840252;
 
-  auto fp = latva::parse::Parser::parse("f =~ x1 + x2 + x3");
+  auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  latva::partable::LavaanifyOptions opts;
+  magmaan::partable::LavaanifyOptions opts;
   opts.n_groups      = 2;
   opts.meanstructure = true;
-  auto pt = latva::partable::lavaanify(*fp, opts);
+  auto pt = magmaan::partable::lavaanify(*fp, opts);
   REQUIRE(pt.has_value());
-  auto mr = latva::model::build_matrix_rep(*pt);
+  auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
 
-  auto est_or = latva::fit::fit(*pt, *mr, samp);
+  auto est_or = magmaan::fit::fit(*pt, *mr, samp);
   REQUIRE_MESSAGE(est_or.has_value(),
       "fit failed: " << (est_or.has_value() ? "" : est_or.error().detail));
   const auto& est = *est_or;
@@ -659,10 +672,10 @@ TEST_CASE("Multi-group + mean structure: θ̂/SE match lavaan on HS × school") 
       (est.theta - theta_lavaan).cwiseAbs().maxCoeff();
   CHECK(max_theta_diff < 1e-5);
 
-  // ExpectedInfoSE — SEs within 1e-4 of lavaan.
-  auto inf_or = latva::fit::ExpectedInfoSE{}.compute(*pt, *mr, samp, est);
+  // expected info → SEs within 1e-4 of lavaan.
+  auto inf_or = expected_inference(*pt, *mr, samp, est);
   REQUIRE_MESSAGE(inf_or.has_value(),
-      "ExpectedInfoSE failed: " <<
+      "expected_inference failed: " <<
       (inf_or.has_value() ? "" : inf_or.error().detail));
   const double max_se_diff =
       (inf_or->se - se_lavaan).cwiseAbs().maxCoeff();
@@ -682,16 +695,16 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   //   (a) lavaanify produces 2 blocks of rows with separate free indices.
   //   (b) build_matrix_rep produces 2 blocks of dims/ov_names/lv_names.
   //   (c) fit() converges and each block's θ̂ matches the single-block fit.
-  //   (d) Both ExpectedInfoSE and FdObservedInfoSE return PD info matrices.
+  //   (d) Both expected and FD-observed information return PD info matrices.
 
-  auto fp = latva::parse::Parser::parse("f =~ x1 + x2 + x3");
+  auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
 
-  latva::partable::LavaanifyOptions opts;
+  magmaan::partable::LavaanifyOptions opts;
   opts.n_groups = 2;
-  auto pt = latva::partable::lavaanify(*fp, opts);
+  auto pt = magmaan::partable::lavaanify(*fp, opts);
   REQUIRE(pt.has_value());
-  auto mr = latva::model::build_matrix_rep(*pt);
+  auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
 
   // (a) LatentStructure structure
@@ -713,7 +726,7 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
 
   // Build a 2-block SampleStats from the saturated 1F CFA fixture: same
   // S in both blocks → both groups should land at the same θ̂.
-  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
                    "/fit/0001_one_factor_cfa.fit.json");
   REQUIRE(in.is_open());
   std::stringstream ss; ss << in.rdbuf();
@@ -732,7 +745,7 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   samp_mg.S     = {S, S};
   samp_mg.n_obs = {n, n};
 
-  auto est_mg_or = latva::fit::fit(*pt, *mr, samp_mg);
+  auto est_mg_or = magmaan::fit::fit(*pt, *mr, samp_mg);
   REQUIRE_MESSAGE(est_mg_or.has_value(),
       "multi-group fit failed: " <<
       (est_mg_or.has_value() ? "" : est_mg_or.error().detail));
@@ -740,15 +753,15 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   CHECK(est_mg.theta.size() == 12);
 
   // (c) Each group's 6 params should match the single-block θ̂.
-  auto fp_single = latva::parse::Parser::parse("f =~ x1 + x2 + x3");
+  auto fp_single = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp_single.has_value());
-  auto pt_single = latva::partable::lavaanify(*fp_single);
+  auto pt_single = magmaan::partable::lavaanify(*fp_single);
   REQUIRE(pt_single.has_value());
-  auto mr_single = latva::model::build_matrix_rep(*pt_single);
+  auto mr_single = magmaan::model::build_matrix_rep(*pt_single);
   REQUIRE(mr_single.has_value());
   SampleStats samp_single;
   samp_single.S = {S};  samp_single.n_obs = {n};
-  auto est_single = latva::fit::fit(*pt_single, *mr_single, samp_single).value();
+  auto est_single = magmaan::fit::fit(*pt_single, *mr_single, samp_single).value();
 
   const double max_g1 = (est_mg.theta.head(6) - est_single.theta).cwiseAbs().maxCoeff();
   const double max_g2 = (est_mg.theta.tail(6) - est_single.theta).cwiseAbs().maxCoeff();
@@ -756,9 +769,9 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   CHECK(max_g2 < 1e-5);
 
   // (d) Inference on multi-group fit
-  auto exp_or = ExpectedInfoSE{}.compute(*pt, *mr, samp_mg, est_mg);
+  auto exp_or = expected_inference(*pt, *mr, samp_mg, est_mg);
   REQUIRE_MESSAGE(exp_or.has_value(),
-      "ExpectedInfoSE failed: " <<
+      "expected_inference failed: " <<
       (exp_or.has_value() ? "" : exp_or.error().detail));
   CHECK(exp_or->info.rows() == 12);
   // Block-diagonal structure: parameters in different groups have zero info
@@ -766,14 +779,14 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   const auto top_right = exp_or->info.topRightCorner(6, 6);
   CHECK(top_right.cwiseAbs().maxCoeff() < 1e-10);
 
-  auto fd_or = FdObservedInfoSE{}.compute(*pt, *mr, samp_mg, est_mg);
+  auto fd_or = fd_observed_inference(*pt, *mr, samp_mg, est_mg);
   REQUIRE_MESSAGE(fd_or.has_value(),
-      "FdObservedInfoSE failed: " <<
+      "fd_observed_inference failed: " <<
       (fd_or.has_value() ? "" : fd_or.error().detail));
   CHECK(fd_or->info.rows() == 12);
 }
 
-TEST_CASE("Inference: ExpectedInfoSE on mean-structure CFA — ν SEs match closed form") {
+TEST_CASE("expected_inference on mean-structure CFA: ν SEs match closed form") {
   // 1F CFA + intercepts, saturated fit (ν̂_i = m̄_i, df = 0).
   // Closed-form expected-info result for ν: I[ν, ν] = n · Σ̂⁻¹.
   // vcov[ν, ν] = Σ̂ / n, so SE(ν_i) = √(Σ̂_ii / n).
@@ -785,13 +798,12 @@ TEST_CASE("Inference: ExpectedInfoSE on mean-structure CFA — ν SEs match clos
   SampleStats samp;
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {301};
 
-  auto est_or = latva::fit::fit(*h.pt, *h.rep, samp);
+  auto est_or = magmaan::fit::fit(*h.pt, *h.rep, samp);
   REQUIRE(est_or.has_value());
 
-  ExpectedInfoSE method;
-  auto inf_or = method.compute(*h.pt, *h.rep, samp, *est_or);
+  auto inf_or = expected_inference(*h.pt, *h.rep, samp, *est_or);
   REQUIRE_MESSAGE(inf_or.has_value(),
-      "ExpectedInfoSE failed: " <<
+      "expected_inference failed: " <<
           (inf_or.has_value() ? "" : inf_or.error().detail));
   const auto& inf = *inf_or;
   const Eigen::Index n_free = est_or->theta.size();
@@ -799,10 +811,10 @@ TEST_CASE("Inference: ExpectedInfoSE on mean-structure CFA — ν SEs match clos
   CHECK((inf.info - inf.info.transpose()).cwiseAbs().maxCoeff() < 1e-10);
 
   // ν params: SE = √(Σ̂_ii / n). At the saturated fit Σ̂ = S exactly.
-  auto ev = latva::model::ModelEvaluator::build(*h.pt, *h.rep).value();
+  auto ev = magmaan::model::ModelEvaluator::build(*h.pt, *h.rep).value();
   const auto locs = ev.param_locations();
   for (std::size_t k = 0; k < locs.size(); ++k) {
-    if (locs[k].mat == latva::model::MatId::Nu) {
+    if (locs[k].mat == magmaan::model::MatId::Nu) {
       const auto i = locs[k].row;
       const double se_expected = std::sqrt(S(i, i) / 301.0);
       CHECK(inf.se(static_cast<Eigen::Index>(k)) ==
@@ -811,10 +823,10 @@ TEST_CASE("Inference: ExpectedInfoSE on mean-structure CFA — ν SEs match clos
   }
 }
 
-TEST_CASE("Inference: FdObservedInfoSE on mean-structure ≈ ExpectedInfoSE at saturated") {
+TEST_CASE("fd_observed_inference on mean-structure ≈ expected_inference at saturated") {
   // At a saturated fit (S = Σ̂, m̄ = μ̂), d = 0 so the H1 cov term reduces
   // to tr(WMaWMb) and the mean Hessian to 2·ν_a' W ν_b — exactly what
-  // ExpectedInfoSE returns. FD and expected should match to FD truncation.
+  // expected information returns. FD and expected should match to FD truncation.
   auto h = must_model("f =~ x1 + x2 + x3\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1");
 
   std::mt19937 rng(99);
@@ -823,12 +835,12 @@ TEST_CASE("Inference: FdObservedInfoSE on mean-structure ≈ ExpectedInfoSE at s
   SampleStats samp;
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {200};
 
-  auto est = latva::fit::fit(*h.pt, *h.rep, samp).value();
+  auto est = magmaan::fit::fit(*h.pt, *h.rep, samp).value();
 
-  auto exp_or = ExpectedInfoSE{}.compute(*h.pt, *h.rep, samp, est);
-  auto fd_or  = FdObservedInfoSE{}.compute(*h.pt, *h.rep, samp, est);
+  auto exp_or = expected_inference(*h.pt, *h.rep, samp, est);
+  auto fd_or  = fd_observed_inference(*h.pt, *h.rep, samp, est);
   REQUIRE_MESSAGE(exp_or.has_value(),
-      "ExpectedInfoSE failed: " <<
+      "expected_inference failed: " <<
           (exp_or.has_value() ? "" : exp_or.error().detail));
   REQUIRE_MESSAGE(fd_or.has_value(),
       "FD failed: " << (fd_or.has_value() ? "" : fd_or.error().detail));
@@ -838,7 +850,7 @@ TEST_CASE("Inference: FdObservedInfoSE on mean-structure ≈ ExpectedInfoSE at s
   CHECK(rel.maxCoeff() < 1e-4);
 }
 
-TEST_CASE("Inference: AnalyticObservedInfoSE rejects mean structure (for now)") {
+TEST_CASE("information_observed_analytic rejects mean structure (for now)") {
   // Until the ∂²μ/∂θ² closed-form cases are wired up, analytic observed
   // info on a mean-structure model is incorrect. We error out clearly so
   // callers know to switch to FD.
@@ -850,10 +862,10 @@ TEST_CASE("Inference: AnalyticObservedInfoSE rejects mean structure (for now)") 
   SampleStats samp;
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {100};
 
-  auto est = latva::fit::fit(*h.pt, *h.rep, samp).value();
-  auto an_or = AnalyticObservedInfoSE{}.compute(*h.pt, *h.rep, samp, est);
+  auto est = magmaan::fit::fit(*h.pt, *h.rep, samp).value();
+  auto an_or = magmaan::fit::information_observed_analytic(*h.pt, *h.rep, samp, est);
   REQUIRE_FALSE(an_or.has_value());
-  CHECK(an_or.error().kind == latva::PostError::Kind::NumericIssue);
+  CHECK(an_or.error().kind == magmaan::PostError::Kind::NumericIssue);
 }
 
 TEST_CASE("Observed info: FD ≈ analytic on path analysis (Reduced LISREL)") {
@@ -861,12 +873,10 @@ TEST_CASE("Observed info: FD ≈ analytic on path analysis (Reduced LISREL)") {
   // cases of analytic ∂²Σ — none of which fire for Pure CFA. Cross-check
   // that the closed-form Reduced cases agree with FD.
   auto ctx = load_fit_fixture("x9 ~ x1 + x2 + x3",
-      std::string(LATVA_FIXTURES_DIR) + "/fit/0019_path_hs.fit.json");
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0019_path_hs.fit.json");
 
-  auto fd_or = FdObservedInfoSE{}.compute(
-      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
-  auto an_or = AnalyticObservedInfoSE{}.compute(
-      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
+  auto fd_or = fd_observed_inference(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
+  auto an_or = analytic_observed_inference(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
   REQUIRE_MESSAGE(fd_or.has_value(),
       "FD failed: " << (fd_or.has_value() ? "" : fd_or.error().detail));
   REQUIRE_MESSAGE(an_or.has_value(),
@@ -884,14 +894,14 @@ namespace {
 // built (pt, rep) into a 2-block version: block 0 = original, block 1 =
 // identical structure with a fresh slice of free-parameter indices.
 struct TwoBlockHandles {
-  latva::partable::LatentStructure* pt;
-  latva::model::MatrixRep*   rep;
+  magmaan::partable::LatentStructure* pt;
+  magmaan::model::MatrixRep*   rep;
   std::size_t                n_free_single;
 };
 
 TwoBlockHandles duplicate_two_blocks(const ModelHandles& src) {
-  using namespace latva::partable;
-  using namespace latva::model;
+  using namespace magmaan::partable;
+  using namespace magmaan::model;
   static thread_local LatentStructure  s_pt;
   static thread_local MatrixRep s_rep;
   s_pt  = *src.pt;
@@ -954,7 +964,7 @@ TEST_CASE("Inference: multi-block infrastructure (synthetic 2-block 1F CFA)") {
   auto two    = duplicate_two_blocks(single);
 
   // Load single-block S and n_obs from the saturated fixture.
-  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
                    "/fit/0001_one_factor_cfa.fit.json");
   REQUIRE(in.is_open());
   std::stringstream ss; ss << in.rdbuf();
@@ -976,17 +986,15 @@ TEST_CASE("Inference: multi-block infrastructure (synthetic 2-block 1F CFA)") {
 
   // θ̂ for both blocks = lavaan's single-block θ̂.
   const Eigen::VectorXd theta_single = theta_from_fixture(
-      std::string(LATVA_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0001_one_factor_cfa.fit.json");
   Estimates est_two;
   est_two.theta.resize(2 * theta_single.size());
   est_two.theta.head(theta_single.size()) = theta_single;
   est_two.theta.tail(theta_single.size()) = theta_single;
   est_two.fmin = 0.0;
 
-  auto an_or = AnalyticObservedInfoSE{}.compute(
-      *two.pt, *two.rep, samp_two, est_two);
-  auto fd_or = FdObservedInfoSE{}.compute(
-      *two.pt, *two.rep, samp_two, est_two);
+  auto an_or = analytic_observed_inference(*two.pt, *two.rep, samp_two, est_two);
+  auto fd_or = fd_observed_inference(*two.pt, *two.rep, samp_two, est_two);
   REQUIRE_MESSAGE(an_or.has_value(),
       "analytic failed: " << (an_or.has_value() ? "" : an_or.error().detail));
   REQUIRE_MESSAGE(fd_or.has_value(),
@@ -1012,8 +1020,7 @@ TEST_CASE("Inference: multi-block infrastructure (synthetic 2-block 1F CFA)") {
   est_single.theta = theta_single;
   est_single.fmin  = 0.0;
   SampleStats samp_single;  samp_single.S = {S};  samp_single.n_obs = {n};
-  auto an_single_or = AnalyticObservedInfoSE{}.compute(
-      *single.pt, *single.rep, samp_single, est_single);
+  auto an_single_or = analytic_observed_inference(*single.pt, *single.rep, samp_single, est_single);
   REQUIRE(an_single_or.has_value());
 
   const auto& info_2 = an_or->info;
@@ -1037,12 +1044,10 @@ TEST_CASE("Observed info: FD ≈ analytic on CFA + structural (Reduced)") {
   // the full LISREL machinery and every nonzero (·,·) ∂²Σ case.
   auto ctx = load_fit_fixture(
       "visual =~ x1 + x2 + x3\nx9 ~ visual",
-      std::string(LATVA_FIXTURES_DIR) + "/fit/0020_cfa_plus_structural_hs.fit.json");
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0020_cfa_plus_structural_hs.fit.json");
 
-  auto fd_or = FdObservedInfoSE{}.compute(
-      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
-  auto an_or = AnalyticObservedInfoSE{}.compute(
-      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
+  auto fd_or = fd_observed_inference(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
+  auto an_or = analytic_observed_inference(*ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est);
   REQUIRE_MESSAGE(fd_or.has_value(),
       "FD failed: " << (fd_or.has_value() ? "" : fd_or.error().detail));
   REQUIRE_MESSAGE(an_or.has_value(),
@@ -1053,72 +1058,3 @@ TEST_CASE("Observed info: FD ≈ analytic on CFA + structural (Reduced)") {
   CHECK(rel.maxCoeff() < 1e-4);
 }
 
-TEST_CASE("Inference: Heywood detection — negative residual variance flagged") {
-  // A just-identified 3-indicator 1-factor CFA whose sample covariance
-  // implies a communality > 1 for x1, so its residual variance comes out
-  // negative: ψ̂ = cov(x1,x2)·cov(x1,x3)/cov(x2,x3) = 0.8·0.8/0.5 = 1.28
-  // > var(x1) = 1  ⇒  θ̂_x1 = 1 − 1.28 < 0. The implied Σ̂ exactly reproduces
-  // the (PD) sample S, so the fit still converges — lavaan would report this
-  // estimate too, with its "some estimated ov variances are negative" warning.
-  auto h = must_model("f =~ x1 + x2 + x3");
-
-  Eigen::MatrixXd S(3, 3);
-  S << 1.0, 0.8, 0.8,
-       0.8, 1.0, 0.5,
-       0.8, 0.5, 1.0;
-  SampleStats samp;
-  samp.S.push_back(S);
-  samp.n_obs.push_back(200);
-
-  auto est_or = latva::fit::fit(*h.pt, *h.rep, samp);
-  REQUIRE(est_or.has_value());
-  const auto& est = *est_or;
-  CHECK(est.theta.minCoeff() < 0.0);   // the fit really did land a Heywood case
-
-  ExpectedInfoSE method;
-  auto inf_or = method.compute(*h.pt, *h.rep, samp, est);
-  REQUIRE(inf_or.has_value());
-  CHECK_FALSE(inf_or->warnings.empty());
-  bool flagged = false;
-  for (const auto& w : inf_or->warnings)
-    if (w.find("negative") != std::string::npos &&
-        w.find("Heywood") != std::string::npos)
-      flagged = true;
-  CHECK(flagged);
-
-  // The observed-info path surfaces the same diagnostic.
-  FdObservedInfoSE fd;
-  auto inf_fd = fd.compute(*h.pt, *h.rep, samp, est);
-  REQUIRE(inf_fd.has_value());
-  CHECK_FALSE(inf_fd->warnings.empty());
-}
-
-TEST_CASE("Inference: clean fit has no Heywood warnings (3F Holzinger)") {
-  auto h = must_model(
-      "visual =~ x1 + x2 + x3\n"
-      "textual =~ x4 + x5 + x6\n"
-      "speed =~ x7 + x8 + x9");
-
-  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
-                   "/fit/0002_three_factor_hs.fit.json");
-  REQUIRE(in.is_open());
-  std::stringstream ss; ss << in.rdbuf();
-  auto j = nlohmann::json::parse(ss.str(), nullptr, false);
-  REQUIRE(!j.is_discarded());
-  const auto& M = j["sample_cov"][0]["matrix"];
-  const Eigen::Index p = static_cast<Eigen::Index>(M.size());
-  Eigen::MatrixXd S(p, p);
-  for (Eigen::Index r = 0; r < p; ++r)
-    for (Eigen::Index c = 0; c < p; ++c)
-      S(r, c) = M[static_cast<std::size_t>(r)]
-                 [static_cast<std::size_t>(c)].get<double>();
-  SampleStats samp;
-  samp.S.push_back(std::move(S));
-  samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
-
-  auto est = latva::fit::fit(*h.pt, *h.rep, samp).value();
-  ExpectedInfoSE method;
-  auto inf_or = method.compute(*h.pt, *h.rep, samp, est);
-  REQUIRE(inf_or.has_value());
-  CHECK(inf_or->warnings.empty());
-}

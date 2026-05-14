@@ -11,12 +11,12 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
-#include "latva/fit/fit.hpp"
-#include "latva/fit/inference.hpp"
-#include "latva/fit/sample_stats.hpp"
-#include "latva/model/matrix_rep.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaanify.hpp"
+#include "magmaan/fit/fit.hpp"
+#include "magmaan/fit/inference.hpp"
+#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaanify.hpp"
 
 namespace {
 
@@ -30,30 +30,40 @@ const std::set<std::string> kSkipForObservedGoldens = {
     "0018_na_modifier",
 };
 
-// Run a single SE method on one fixture, comparing to `se_observed` in the
-// fixture. Appends a `<id>: <message>` entry to `failures` on disagreement
-// and increments `passed` on success. Returns false if the fixture wasn't
-// run at all (skipped or missing oracle), true otherwise.
-template <class Method>
-bool run_one(const latva::test::CorpusEntry&   e,
+// Mean-structure fixtures: information_observed_analytic errors out cleanly
+// until the ∂²μ/∂θ² closed-form cases land (= G4, deferred).
+// information_observed_fd handles them via numerical differentiation of the
+// gradient, so the FD path runs on these fixtures and the analytic path is
+// skipped.
+const std::set<std::string> kSkipAnalyticOnly = {
+    "0026_two_factor_meanstructure_hs",
+};
+
+// Run a single information_* function on one fixture, comparing the derived
+// SEs to `se_observed` in the fixture. Appends a `<id>: <message>` entry to
+// `failures` on disagreement and increments `passed` on success.
+template <class InfoFn>
+bool run_one(const magmaan::test::CorpusEntry&   e,
              const nlohmann::json&             exp,
-             Method                            method,
+             InfoFn                            info_fn,
              std::string_view                  method_name,
              std::vector<std::string>&         failures,
              int&                              passed,
              int&                              total) {
   ++total;
 
-  auto fp = latva::parse::Parser::parse(e.model);
+  auto fp = magmaan::parse::Parser::parse(e.model);
   if (!fp.has_value()) { failures.push_back(e.id + ": parse"); return true; }
-  auto pt = latva::partable::lavaanify(*fp);
+  magmaan::partable::LavaanifyOptions opts;
+  opts.meanstructure = e.meanstructure;
+  auto pt = magmaan::partable::lavaanify(*fp, opts);
   if (!pt.has_value()) { failures.push_back(e.id + ": lavaanify"); return true; }
-  auto mr = latva::model::build_matrix_rep(*pt);
+  auto mr = magmaan::model::build_matrix_rep(*pt);
   if (!mr.has_value()) { failures.push_back(e.id + ": matrix_rep"); return true; }
 
   const auto& sample_blocks = exp["sample_cov"];
   REQUIRE(sample_blocks.is_array());
-  latva::fit::SampleStats samp;
+  magmaan::fit::SampleStats samp;
   for (std::size_t b = 0; b < sample_blocks.size(); ++b) {
     const auto& M = sample_blocks[b]["matrix"];
     const Eigen::Index p = static_cast<Eigen::Index>(M.size());
@@ -64,31 +74,45 @@ bool run_one(const latva::test::CorpusEntry&   e,
                    [static_cast<std::size_t>(c)].get<double>();
     samp.S.push_back(std::move(S));
     samp.n_obs.push_back(exp["n_obs"].get<std::int64_t>());
+    if (exp.contains("sample_mean") && !exp["sample_mean"].is_null()) {
+      const auto& v = exp["sample_mean"][b]["vector"];
+      Eigen::VectorXd mean(static_cast<Eigen::Index>(v.size()));
+      for (Eigen::Index i = 0; i < mean.size(); ++i)
+        mean(i) = v[static_cast<std::size_t>(i)].get<double>();
+      samp.mean.push_back(std::move(mean));
+    }
   }
 
-  auto est_or = latva::fit::fit(*pt, *mr, samp);
+  auto est_or = magmaan::fit::fit(*pt, *mr, samp);
   if (!est_or.has_value()) {
     failures.push_back(e.id + " [" + std::string(method_name) +
                        "]: fit failed — " + est_or.error().detail);
     return true;
   }
 
-  auto inf_or = method.compute(*pt, *mr, samp, *est_or);
-  if (!inf_or.has_value()) {
+  auto info_or = info_fn(*pt, *mr, samp, *est_or);
+  if (!info_or.has_value()) {
     failures.push_back(e.id + " [" + std::string(method_name) +
-                       "]: inference failed — " + inf_or.error().detail);
+                       "]: information failed — " + info_or.error().detail);
     return true;
   }
+  auto vcov_or = magmaan::fit::vcov(*info_or, *pt);
+  if (!vcov_or.has_value()) {
+    failures.push_back(e.id + " [" + std::string(method_name) +
+                       "]: vcov failed — " + vcov_or.error().detail);
+    return true;
+  }
+  const Eigen::VectorXd se_v = magmaan::fit::se(*vcov_or);
 
   const auto& se_arr = exp["se_observed"];
-  if (static_cast<std::size_t>(inf_or->se.size()) != se_arr.size()) {
+  if (static_cast<std::size_t>(se_v.size()) != se_arr.size()) {
     failures.push_back(e.id + " [" + std::string(method_name) +
                        "]: se length mismatch");
     return true;
   }
   double max_diff = 0.0;
-  for (Eigen::Index k = 0; k < inf_or->se.size(); ++k) {
-    const double d = std::abs(inf_or->se(k) -
+  for (Eigen::Index k = 0; k < se_v.size(); ++k) {
+    const double d = std::abs(se_v(k) -
         se_arr[static_cast<std::size_t>(k)].get<double>());
     if (d > max_diff) max_diff = d;
   }
@@ -108,8 +132,8 @@ bool run_one(const latva::test::CorpusEntry&   e,
 }  // namespace
 
 TEST_CASE("observed inference goldens — FD + analytic vs lavaan") {
-  const auto corpus = latva::test::load_corpus();
-  const std::string fit_dir = latva::test::fixtures_dir() + "/fit";
+  const auto corpus = magmaan::test::load_corpus();
+  const std::string fit_dir = magmaan::test::fixtures_dir() + "/fit";
 
   int total_fd = 0, passed_fd = 0;
   int total_an = 0, passed_an = 0;
@@ -119,7 +143,7 @@ TEST_CASE("observed inference goldens — FD + analytic vs lavaan") {
 
   for (const auto& e : corpus) {
     const std::string path = fit_dir + "/" + e.id + ".fit.json";
-    auto raw = latva::test::read_fixture(path);
+    auto raw = magmaan::test::read_fixture(path);
     if (!raw.has_value()) continue;
     if (e.n_groups > 1) continue;   // multi-group has its own golden
     if (kSkipForObservedGoldens.count(e.id)) {
@@ -137,10 +161,16 @@ TEST_CASE("observed inference goldens — FD + analytic vs lavaan") {
       continue;
     }
 
-    run_one(e, exp, latva::fit::FdObservedInfoSE{},
-            "FD",       failures, passed_fd, total_fd);
-    run_one(e, exp, latva::fit::AnalyticObservedInfoSE{},
-            "analytic", failures, passed_an, total_an);
+    auto fd_fn = [](auto&&... args) {
+      return magmaan::fit::information_observed_fd(std::forward<decltype(args)>(args)...);
+    };
+    auto an_fn = [](auto&&... args) {
+      return magmaan::fit::information_observed_analytic(std::forward<decltype(args)>(args)...);
+    };
+    run_one(e, exp, fd_fn, "FD",       failures, passed_fd, total_fd);
+    if (kSkipAnalyticOnly.count(e.id) == 0) {
+      run_one(e, exp, an_fn, "analytic", failures, passed_an, total_an);
+    }
   }
 
   MESSAGE("observed inference goldens: FD " << passed_fd << "/" << total_fd

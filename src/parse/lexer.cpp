@@ -1,17 +1,17 @@
-#include "latva/parse/lexer.hpp"
+#include "magmaan/parse/lexer.hpp"
 
 #include <cstdint>
 #include <string>
 #include <string_view>
 #include <utility>
 
-#include "latva/error.hpp"
-#include "latva/expected.hpp"
-#include "latva/parse/token.hpp"
-#include "latva/source_span.hpp"
+#include "magmaan/error.hpp"
+#include "magmaan/expected.hpp"
+#include "magmaan/parse/token.hpp"
+#include "magmaan/source_span.hpp"
 #include "parse/detail_charclass.hpp"
 
-namespace latva::parse {
+namespace magmaan::parse {
 
 namespace {
 
@@ -337,4 +337,4 @@ parse_expected<Token> Lexer::next() noexcept {
   return scan_operator_or_punct(cur);
 }
 
-}  // namespace latva::parse
+}  // namespace magmaan::parse

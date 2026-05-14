@@ -1,9 +1,9 @@
-Package: latva
-Title: Exploratory R bindings for the latva C++ SEM library
+Package: magmaan
+Title: Exploratory R bindings for the magmaan C++ SEM library
 Version: 0.0.0.9000
 Encoding: UTF-8
 LinkingTo: Rcpp, RcppEigen
 Imports: Rcpp
-SystemRequirements: C++23, cmake (to (re)build liblatva.a)
-Description: Thin Rcpp wrappers exposing latva's C++ functions for
-    interactive use. Not CRAN-bound; consumes the prebuilt liblatva.a.
+SystemRequirements: C++23, cmake (to (re)build libmagmaan.a)
+Description: Thin Rcpp wrappers exposing magmaan's C++ functions for
+    interactive use. Not CRAN-bound; consumes the prebuilt libmagmaan.a.

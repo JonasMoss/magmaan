@@ -1,5 +1,5 @@
-// Shared internal plumbing for the latva R bindings. Header-only helpers in
-// namespace `latvar` — no // [[Rcpp::export]] here. Included by fit.cpp and
+// Shared internal plumbing for the magmaan R bindings. Header-only helpers in
+// namespace `magmaanr` — no // [[Rcpp::export]] here. Included by fit.cpp and
 // robust.cpp; bindings.cpp (parse/lavaanify only) does not need it.
 
 #pragma once
@@ -13,26 +13,26 @@
 #include <unordered_map>
 #include <vector>
 
-#include "latva/error.hpp"
-#include "latva/expected.hpp"
-#include "latva/parse/op.hpp"
-#include "latva/partable/partable.hpp"
-#include "latva/partable/start_hints.hpp"
-#include "latva/partable/lavaanify.hpp"     // compute_eq_groups
-#include "latva/partable/lavaan_view.hpp"   // LavaanParTable / to_/from_lavaan_partable
-#include "latva/model/matrix_rep.hpp"
-#include "latva/model/model_evaluator.hpp"
-#include "latva/fit/sample_stats.hpp"
-#include "latva/fit/fit.hpp"              // Estimates
-#include "latva/fit/inference.hpp"        // Inference
-#include "latva/fit/lbfgs_optimizer.hpp"  // LbfgsOptions
+#include "magmaan/error.hpp"
+#include "magmaan/expected.hpp"
+#include "magmaan/parse/op.hpp"
+#include "magmaan/partable/partable.hpp"
+#include "magmaan/partable/start_hints.hpp"
+#include "magmaan/partable/lavaanify.hpp"     // compute_eq_groups
+#include "magmaan/partable/lavaan_view.hpp"   // LavaanParTable / to_/from_lavaan_partable
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/fit/fit.hpp"              // Estimates
+#include "magmaan/fit/inference.hpp"        // information_*, vcov, se, chi2_stat, df_stat
+#include "magmaan/fit/lbfgs_optimizer.hpp"  // LbfgsOptions
 
-namespace lv  = latva;
-namespace lvf = latva::fit;
-namespace lvm = latva::model;
-namespace lvp = latva::partable;
+namespace lv  = magmaan;
+namespace lvf = magmaan::fit;
+namespace lvm = magmaan::model;
+namespace lvp = magmaan::partable;
 
-namespace latvar {
+namespace magmaanr {
 
 // ---- error -> R error -------------------------------------------------------
 
@@ -71,14 +71,14 @@ inline const char* post_error_kind(lv::PostError::Kind k) {
 }
 
 [[noreturn]] inline void stop_model(const lv::ModelError& e) {
-  Rcpp::stop("latva model error [%s]: %s", model_error_kind(e.kind), e.detail);
+  Rcpp::stop("magmaan model error [%s]: %s", model_error_kind(e.kind), e.detail);
 }
 [[noreturn]] inline void stop_fit(const lv::FitError& e) {
-  Rcpp::stop("latva fit error [%s] after %d iters, f=%g: %s", fit_error_kind(e.kind),
+  Rcpp::stop("magmaan fit error [%s] after %d iters, f=%g: %s", fit_error_kind(e.kind),
              e.iterations, e.f_value, e.detail);
 }
 [[noreturn]] inline void stop_post(const lv::PostError& e) {
-  Rcpp::stop("latva inference error [%s]: %s", post_error_kind(e.kind), e.detail);
+  Rcpp::stop("magmaan inference error [%s]: %s", post_error_kind(e.kind), e.detail);
 }
 
 // ---- partable <-> data.frame ------------------------------------------------
@@ -93,27 +93,27 @@ inline lv::parse::Op op_from_string(const std::string& s) {
   if (s == "==") return O::EqConstraint;
   if (s == "<")  return O::LtConstraint;
   if (s == ">")  return O::GtConstraint;
-  Rcpp::stop("latva: unrecognized operator '%s' in partable data.frame", s);
+  Rcpp::stop("magmaan: unrecognized operator '%s' in partable data.frame", s);
 }
 
 // Group identity (n_groups, group_var, group_labels) rides on the partable
-// data.frame as attributes (`latva.group_var` / `latva.group_labels`) — it's
+// data.frame as attributes (`magmaan.group_var` / `magmaan.group_labels`) — it's
 // table-level, not per-row. `attach_group_attrs` sets them; `read_group_attrs`
 // reads them back (tolerating absence — `n_groups()` still works off `group`).
 inline void attach_group_attrs(SEXP df, const std::string& group_var,
                                const std::vector<std::string>& group_labels) {
-  Rf_setAttrib(df, Rf_install("latva.group_var"), Rf_mkString(group_var.c_str()));
+  Rf_setAttrib(df, Rf_install("magmaan.group_var"), Rf_mkString(group_var.c_str()));
   Rcpp::CharacterVector gl(static_cast<R_xlen_t>(group_labels.size()));
   for (std::size_t i = 0; i < group_labels.size(); ++i)
     gl[static_cast<R_xlen_t>(i)] = group_labels[i];
-  Rf_setAttrib(df, Rf_install("latva.group_labels"), gl);
+  Rf_setAttrib(df, Rf_install("magmaan.group_labels"), gl);
 }
 inline void read_group_attrs(SEXP df, std::string& group_var,
                              std::vector<std::string>& group_labels) {
-  SEXP gv = Rf_getAttrib(df, Rf_install("latva.group_var"));
+  SEXP gv = Rf_getAttrib(df, Rf_install("magmaan.group_var"));
   if (!Rf_isNull(gv) && TYPEOF(gv) == STRSXP && Rf_length(gv) >= 1)
     group_var = Rcpp::as<std::string>(STRING_ELT(gv, 0));
-  SEXP gl = Rf_getAttrib(df, Rf_install("latva.group_labels"));
+  SEXP gl = Rf_getAttrib(df, Rf_install("magmaan.group_labels"));
   if (!Rf_isNull(gl) && TYPEOF(gl) == STRSXP)
     group_labels = Rcpp::as<std::vector<std::string>>(gl);
 }
@@ -127,7 +127,7 @@ inline void read_group_attrs(SEXP df, std::string& group_var,
 inline lvp::ParsedLavaanParTable parse_partable_df(Rcpp::DataFrame df) {
   auto col = [&](const char* nm) -> SEXP {
     if (!df.containsElementNamed(nm))
-      Rcpp::stop("latva: partable data.frame is missing required column '%s'", nm);
+      Rcpp::stop("magmaan: partable data.frame is missing required column '%s'", nm);
     return df[nm];
   };
   Rcpp::IntegerVector id(col("id")), user(col("user")), block(col("block")), group(col("group")),
@@ -238,7 +238,7 @@ struct Ctx {
   lvp::LatentNames         names;
   lvm::MatrixRep           rep;
   lvf::SampleStats         samp;
-  std::vector<std::string> ov_names;     // observed-variable order latva uses (block 0)
+  std::vector<std::string> ov_names;     // observed-variable order magmaan uses (block 0)
   bool                     meanstructure = false;
 };
 
@@ -264,7 +264,7 @@ inline std::vector<int> perm_for_cols(Rcpp::NumericMatrix M,
         for (int k = 0; k < p; ++k) {
           auto it = idx.find(ov[static_cast<std::size_t>(k)]);
           if (it == idx.end())
-            Rcpp::stop("latva: %s has no column named '%s' (a model observed variable)",
+            Rcpp::stop("magmaan: %s has no column named '%s' (a model observed variable)",
                        what, ov[static_cast<std::size_t>(k)]);
           perm[static_cast<std::size_t>(k)] = it->second;
         }
@@ -273,7 +273,7 @@ inline std::vector<int> perm_for_cols(Rcpp::NumericMatrix M,
     }
   }
   if (M.ncol() != p)
-    Rcpp::stop("latva: %s has %d columns but the model has %d observed variables; "
+    Rcpp::stop("magmaan: %s has %d columns but the model has %d observed variables; "
                "give it column names to match by name", what, M.ncol(), p);
   for (int k = 0; k < p; ++k) perm[static_cast<std::size_t>(k)] = k;
   return perm;
@@ -281,7 +281,7 @@ inline std::vector<int> perm_for_cols(Rcpp::NumericMatrix M,
 
 inline Eigen::MatrixXd reorder_cov(Rcpp::NumericMatrix S, const std::vector<int>& perm) {
   if (S.nrow() != S.ncol())
-    Rcpp::stop("latva: a sample covariance must be square (got %dx%d)", S.nrow(), S.ncol());
+    Rcpp::stop("magmaan: a sample covariance must be square (got %dx%d)", S.nrow(), S.ncol());
   const int p = static_cast<int>(perm.size());
   Eigen::MatrixXd out(p, p);
   for (int a = 0; a < p; ++a)
@@ -301,7 +301,7 @@ inline Eigen::MatrixXd reorder_data_cols(Rcpp::NumericMatrix X, const std::vecto
 inline Eigen::VectorXd reorder_vec(Rcpp::NumericVector v, const std::vector<int>& perm) {
   const int p = static_cast<int>(perm.size());
   if (static_cast<int>(v.size()) != p)
-    Rcpp::stop("latva: a sample-mean vector has length %d but the block has %d variables",
+    Rcpp::stop("magmaan: a sample-mean vector has length %d but the block has %d variables",
                static_cast<int>(v.size()), p);
   Eigen::VectorXd out(p);
   for (int k = 0; k < p; ++k) out(k) = v[perm[static_cast<std::size_t>(k)]];
@@ -315,16 +315,16 @@ inline Rcpp::NumericMatrix block_matrix(SEXP M, std::size_t b, std::size_t n_blo
                                         const char* what) {
   if (Rf_isMatrix(M)) {
     if (n_blocks != 1)
-      Rcpp::stop("latva: the model has %d groups; pass a list of %d per-group %s matrices",
+      Rcpp::stop("magmaan: the model has %d groups; pass a list of %d per-group %s matrices",
                  static_cast<int>(n_blocks), static_cast<int>(n_blocks), what);
     return Rcpp::NumericMatrix(M);
   }
   if (TYPEOF(M) != VECSXP)
-    Rcpp::stop("latva: %s must be a matrix (single-group) or a list of per-group matrices "
+    Rcpp::stop("magmaan: %s must be a matrix (single-group) or a list of per-group matrices "
                "(multi-group)", what);
   Rcpp::List Ml(M);
   if (static_cast<std::size_t>(Ml.size()) != n_blocks)
-    Rcpp::stop("latva: %s is a list of %d matrices but the model has %d groups",
+    Rcpp::stop("magmaan: %s is a list of %d matrices but the model has %d groups",
                what, static_cast<int>(Ml.size()), static_cast<int>(n_blocks));
   return Rcpp::NumericMatrix(Ml[static_cast<R_xlen_t>(b)]);
 }
@@ -344,12 +344,12 @@ inline Ctx ctx_from_parts(lvp::LatentStructure pt, lvp::LatentNames names,
   if (!rep_or.has_value()) stop_model(rep_or.error());
   lvm::MatrixRep rep = std::move(*rep_or);
   if (rep.ov_names.empty() || rep.ov_names[0].empty())
-    Rcpp::stop("latva: model has no observed variables");
+    Rcpp::stop("magmaan: model has no observed variables");
   const std::size_t n_blocks = rep.dims.size();
 
   Rcpp::IntegerVector nv = Rcpp::as<Rcpp::IntegerVector>(nobs);
   if (static_cast<std::size_t>(nv.size()) != n_blocks)
-    Rcpp::stop("latva: nobs has length %d but the model has %d group(s)",
+    Rcpp::stop("magmaan: nobs has length %d but the model has %d group(s)",
                static_cast<int>(nv.size()), static_cast<int>(n_blocks));
 
   const bool has_means = !Rf_isNull(sample_mean);
@@ -359,7 +359,7 @@ inline Ctx ctx_from_parts(lvp::LatentStructure pt, lvp::LatentNames names,
               ? Rcpp::List(sample_mean)
               : Rcpp::List::create(Rcpp::NumericVector(sample_mean));
     if (static_cast<std::size_t>(sml.size()) != n_blocks)
-      Rcpp::stop("latva: sample mean has %d entries but the model has %d group(s)",
+      Rcpp::stop("magmaan: sample mean has %d entries but the model has %d group(s)",
                  static_cast<int>(sml.size()), static_cast<int>(n_blocks));
   }
 
@@ -374,7 +374,7 @@ inline Ctx ctx_from_parts(lvp::LatentStructure pt, lvp::LatentNames names,
             reorder_vec(Rcpp::NumericVector(sml[static_cast<R_xlen_t>(b)]), perm));
     } else {
       if (Sb.nrow() != Sb.ncol())
-        Rcpp::stop("latva: a sample covariance must be square (got %dx%d)",
+        Rcpp::stop("magmaan: a sample covariance must be square (got %dx%d)",
                    Sb.nrow(), Sb.ncol());
       samp.S.push_back(Rcpp::as<Eigen::MatrixXd>(Sb));
       if (has_means)
@@ -407,24 +407,24 @@ inline Ctx make_ctx(lvp::LatentStructure pt, lvp::LatentNames names,
 
 inline lvp::ParsedLavaanParTable partable_from_arg(SEXP partable, const char* fn) {
   if (TYPEOF(partable) == STRSXP)
-    Rcpp::stop("latva: %s() takes a partable data.frame (e.g. from latva_lavaanify()), "
-               "not a model-syntax string — call latva_lavaanify() first", fn);
+    Rcpp::stop("magmaan: %s() takes a partable data.frame (e.g. from lavaan_lavaanify()), "
+               "not a model-syntax string — call lavaan_lavaanify() first", fn);
   if (!Rf_inherits(partable, "data.frame"))
-    Rcpp::stop("latva: %s(): `partable` must be a data.frame (e.g. from latva_lavaanify())", fn);
+    Rcpp::stop("magmaan: %s(): `partable` must be a data.frame (e.g. from lavaan_lavaanify())", fn);
   return parse_partable_df(Rcpp::DataFrame(partable));
 }
 
-// Pull the {S, nobs, mean} sample-stats bundle out of `latva_fit`'s `arg` —
+// Pull the {S, nobs, mean} sample-stats bundle out of `fit_fit`'s `arg` —
 // either the bundle `list(S = …, nobs = …, mean = …|NULL)` (the canonical
-// form; `latva_sample_stats_from_raw()` returns exactly this) or, lenient
+// form; `data_sample_stats_from_raw()` returns exactly this) or, lenient
 // for the hand-built single-group case, a bare covariance matrix is *not*
 // accepted (nobs is required) — the caller passes a `list(S = , nobs = )`.
 inline Ctx ctx_from_sample_stats(lvp::LatentStructure pt, lvp::LatentNames names,
                                  Rcpp::List ss) {
   if (!ss.containsElementNamed("S") || !ss.containsElementNamed("nobs"))
-    Rcpp::stop("latva: `sample_stats` must be a list with $S (a covariance matrix "
+    Rcpp::stop("magmaan: `sample_stats` must be a list with $S (a covariance matrix "
                "or list of them) and $nobs (a per-group n vector) — e.g. the result "
-               "of latva_sample_stats_from_raw(), or list(S = , nobs = )");
+               "of data_sample_stats_from_raw(), or list(S = , nobs = )");
   SEXP sm = ss.containsElementNamed("mean") ? SEXP(ss["mean"]) : R_NilValue;
   return ctx_from_parts(std::move(pt), std::move(names), ss["S"], ss["nobs"], sm,
                         /*reorder=*/true);
@@ -436,7 +436,7 @@ inline Ctx ctx_from_sample_stats(lvp::LatentStructure pt, lvp::LatentNames names
 inline Ctx ctx_from_fit(Rcpp::List fit) {
   if (!fit.containsElementNamed("partable") || !fit.containsElementNamed("S") ||
       !fit.containsElementNamed("nobs"))
-    Rcpp::stop("latva: not a fit object (need partable/S/nobs) — pass the result of latva_fit()");
+    Rcpp::stop("magmaan: not a fit object (need partable/S/nobs) — pass the result of fit_fit()");
   SEXP sm = fit.containsElementNamed("sample_mean") ? SEXP(fit["sample_mean"]) : R_NilValue;
   auto parsed = parse_partable_df(Rcpp::DataFrame(fit["partable"]));
   return ctx_from_parts(std::move(parsed.structure), std::move(parsed.names),
@@ -445,7 +445,7 @@ inline Ctx ctx_from_fit(Rcpp::List fit) {
 
 inline lvf::Estimates est_from_fit(Rcpp::List fit) {
   if (!fit.containsElementNamed("theta"))
-    Rcpp::stop("latva: not a fit object (missing theta) — pass the result of latva_fit()");
+    Rcpp::stop("magmaan: not a fit object (missing theta) — pass the result of fit_fit()");
   lvf::Estimates e;
   e.theta = Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(fit["theta"]));
   e.fmin = fit.containsElementNamed("fmin") ? Rcpp::as<double>(fit["fmin"])
@@ -454,13 +454,4 @@ inline lvf::Estimates est_from_fit(Rcpp::List fit) {
   return e;
 }
 
-inline Rcpp::List inference_to_list(const lvf::Inference& inf) {
-  return Rcpp::List::create(
-      Rcpp::_["se"]   = Rcpp::wrap(inf.se),
-      Rcpp::_["vcov"] = Rcpp::wrap(inf.vcov),
-      Rcpp::_["info"] = Rcpp::wrap(inf.info),
-      Rcpp::_["chi2"] = inf.chi2,
-      Rcpp::_["df"]   = inf.df);
-}
-
-}  // namespace latvar
+}  // namespace magmaanr

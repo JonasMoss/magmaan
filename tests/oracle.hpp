@@ -4,7 +4,7 @@
 // JSON files, and diffs C++ pipeline output against expected output with
 // field-pointing error messages.
 //
-// Regen mode: when the LATVA_REGEN_FIXTURES environment variable is set,
+// Regen mode: when the MAGMAAN_REGEN_FIXTURES environment variable is set,
 // the diff functions instead WRITE the current pipeline output to the
 // fixture path and report a non-fatal "regenerated" message. This is the
 // supported way to update fixtures after an intentional grammar change.
@@ -22,21 +22,22 @@
 #include <string_view>
 #include <vector>
 
+#include <Eigen/Core>
 #include <nlohmann/json.hpp>
 
-#include "latva/error.hpp"
-#include "latva/parse/expr_format.hpp"
-#include "latva/parse/flat_partable.hpp"
-#include "latva/parse/lexer.hpp"
-#include "latva/parse/op.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/parse/token.hpp"
-#include "latva/source_span.hpp"
+#include "magmaan/error.hpp"
+#include "magmaan/parse/expr_format.hpp"
+#include "magmaan/parse/flat_partable.hpp"
+#include "magmaan/parse/lexer.hpp"
+#include "magmaan/parse/op.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/parse/token.hpp"
+#include "magmaan/source_span.hpp"
 
-namespace latva::test {
+namespace magmaan::test {
 
 inline std::string fixtures_dir() {
-  return LATVA_FIXTURES_DIR;
+  return MAGMAAN_FIXTURES_DIR;
 }
 
 struct CorpusEntry {
@@ -100,7 +101,7 @@ inline std::vector<CorpusEntry> load_corpus() {
 }
 
 inline bool regen_mode() {
-  const char* v = std::getenv("LATVA_REGEN_FIXTURES");
+  const char* v = std::getenv("MAGMAAN_REGEN_FIXTURES");
   return v != nullptr && v[0] != '\0' && std::string_view(v) != "0";
 }
 
@@ -216,6 +217,83 @@ inline std::optional<std::string> read_fixture(const std::string& path) {
   std::stringstream ss;
   ss << in.rdbuf();
   return ss.str();
+}
+
+// Read a fixture's `gamma_hat` field as one block-diagonal Eigen::MatrixXd of
+// size `Σ_b block_sizes[b]` × itself.
+//
+// Layouts (G3b, Tranche C):
+//   • single-group: JSON value is a flat 2D matrix (array of rows). The
+//     result is exactly that matrix (one block, fills the entire output).
+//   • multi-group: JSON value is an array of {block:int, matrix:[[...]]}
+//     objects. The output stacks each block on the diagonal in `block`
+//     order, with `block_sizes[b]` giving the expected per-block size
+//     (= p_b + p_b* when has_means, p_b* when cov-only). Off-diagonal
+//     entries between blocks stay zero (lavaan's `gamma_hat` is per-group
+//     so the block-diagonal lift is the natural global-frame embedding).
+//
+// Returns `std::nullopt` if `gamma_hat` is missing/null, or `std::expected`-
+// style error message on shape mismatch. The bool overload returns success
+// only — callers use the `errorMessage` to surface mismatches.
+inline std::optional<Eigen::MatrixXd>
+read_gamma_hat_blockdiag(const nlohmann::json&             gamma_hat,
+                         const std::vector<Eigen::Index>&  block_sizes,
+                         std::string*                      err = nullptr) {
+  auto set_err = [&](const std::string& m) {
+    if (err) *err = m;
+    return std::optional<Eigen::MatrixXd>{};
+  };
+  if (gamma_hat.is_null()) return std::nullopt;
+  Eigen::Index total = 0;
+  for (auto sz : block_sizes) total += sz;
+  if (total <= 0) return set_err("read_gamma_hat_blockdiag: zero total size");
+
+  if (gamma_hat.is_array() && !gamma_hat.empty() &&
+      gamma_hat[0].is_object() && gamma_hat[0].contains("matrix")) {
+    // Multi-group: array of {block, matrix}.
+    if (gamma_hat.size() != block_sizes.size())
+      return set_err("read_gamma_hat_blockdiag: gamma_hat has " +
+                     std::to_string(gamma_hat.size()) + " blocks, expected " +
+                     std::to_string(block_sizes.size()));
+    Eigen::MatrixXd out = Eigen::MatrixXd::Zero(total, total);
+    Eigen::Index offset = 0;
+    for (std::size_t b = 0; b < gamma_hat.size(); ++b) {
+      const auto& M = gamma_hat[b]["matrix"];
+      const Eigen::Index n = static_cast<Eigen::Index>(M.size());
+      if (n != block_sizes[b])
+        return set_err("read_gamma_hat_blockdiag: block " + std::to_string(b) +
+                       " size " + std::to_string(n) + " ≠ expected " +
+                       std::to_string(block_sizes[b]));
+      for (Eigen::Index r = 0; r < n; ++r) {
+        const auto& row = M[static_cast<std::size_t>(r)];
+        for (Eigen::Index c = 0; c < n; ++c) {
+          out(offset + r, offset + c) =
+              row[static_cast<std::size_t>(c)].get<double>();
+        }
+      }
+      offset += n;
+    }
+    return out;
+  }
+
+  // Single-group: flat 2D matrix.
+  if (block_sizes.size() != 1)
+    return set_err("read_gamma_hat_blockdiag: gamma_hat is single-block but "
+                   "block_sizes has " + std::to_string(block_sizes.size()) +
+                   " entries");
+  const Eigen::Index n = static_cast<Eigen::Index>(gamma_hat.size());
+  if (n != block_sizes[0])
+    return set_err("read_gamma_hat_blockdiag: gamma_hat is " +
+                   std::to_string(n) + "×… ≠ expected " +
+                   std::to_string(block_sizes[0]));
+  Eigen::MatrixXd out(n, n);
+  for (Eigen::Index r = 0; r < n; ++r) {
+    const auto& row = gamma_hat[static_cast<std::size_t>(r)];
+    for (Eigen::Index c = 0; c < n; ++c) {
+      out(r, c) = row[static_cast<std::size_t>(c)].get<double>();
+    }
+  }
+  return out;
 }
 
 // === Lexer-stage helpers ====================================================
@@ -399,7 +477,7 @@ inline nlohmann::json modifier_to_json(const parse::Modifier& m) {
 }
 
 // (expr_to_canonical / format_number_canonical / binop_prec / binop_char are
-// provided by latva/parse/expr_format.hpp — public header so lavaanify and
+// provided by magmaan/parse/expr_format.hpp — public header so lavaanify and
 // other layers can use the same canonicalization.)
 
 using parse::expr_to_canonical;
@@ -448,7 +526,7 @@ inline nlohmann::json flat_partable_to_json(std::string_view input,
       {"format_version", 1},
       {"fixture_kind",   "flat.partable"},
       {"corpus_id",      std::string(corpus_id)},
-      {"tool",           "latva::Parser"},
+      {"tool",           "magmaan::Parser"},
       // intentionally omit lavaan_version on our side; the oracle owns it
   };
   j["input"] = std::string(input);
@@ -479,4 +557,4 @@ inline nlohmann::json strip_meta(nlohmann::json j) {
   return j;
 }
 
-}  // namespace latva::test
+}  // namespace magmaan::test

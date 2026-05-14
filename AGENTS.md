@@ -1,8 +1,8 @@
 # AGENTS.md
 
-Working rules for coding agents in the latva repo.
+Working rules for coding agents in the magmaan repo.
 
-## What latva is
+## What magmaan is
 
 A C++23 library that ports lavaan's behavior for **linear SEM under
 normal-theory ML**. The audience is methods developers, not end users.
@@ -37,7 +37,7 @@ Read it before structural changes.
 
 ## Where things live
 
-- `include/latva/` — public headers (stable surface).
+- `include/magmaan/` — public headers (stable surface).
 - `src/` — implementations + private `detail_*.hpp`.
 - `tests/unit/` — focused unit tests.
 - `tests/golden/` — fixture-based parity checks against lavaan.
@@ -49,24 +49,32 @@ Read it before structural changes.
   (the Tier 1/2/3 gap list); `docs/p8_inference.md` — the detailed P8/inference plan.
 - `external/lavaan/` — reference source, never built.
 - `r-package/` — exploratory R bindings (Rcpp); consumes the prebuilt
-  `liblatva.a`, separate from and not part of the C++ build.
+  `libmagmaan.a`, separate from and not part of the C++ build.
 
 ## Build
 
 ```sh
-cmake --preset asan
-cmake --build --preset asan
-ctest --preset asan
+cmake --preset dev
+cmake --build --preset dev
+ctest --preset dev
+
+cmake --preset opt
+cmake --build --preset opt
+ctest --preset opt
 ```
 
-`asan` is the canonical CI build (combines AddressSanitizer + UBSan).
+`dev` is the local debug build (clang++, AddressSanitizer + UBSan). `opt` is
+the local performance-comparison build (Release, no sanitizers,
+`-O3 -DNDEBUG -march=native`). Existing presets such as `asan`, `release`,
+`ubsan`, and `ceres` remain available for compatibility.
 
 There's a `justfile` at the repo root wrapping the common loops — `just build`,
-`just test` (build + ctest), `just r-install`, `just r-check` (reinstall the R
-bindings + run `r-package/examples/*.R` vs lavaan), `just regen-oracle`,
-`just check` (everything). `just` with no recipe lists them.
+`just test` (aliases for the `dev` build + ctest), `just opt`, `just test-opt`,
+`just r-install`, `just r-check` (reinstall the R bindings + run
+`r-package/examples/*.R` vs lavaan), `just regen-oracle`, `just check`
+(everything). `just` with no recipe lists them.
 
-The R bindings (`r-package/`) link the prebuilt Debug-preset `liblatva.a`;
+The R bindings (`r-package/`) link the prebuilt non-sanitized `opt` `libmagmaan.a`;
 `src/Makevars` makes the package objects depend on it, so a C++ *header* change
 correctly forces the R glue to recompile against the new ABI. If you ever see an
 `undefined symbol` at R load time anyway, `just r-clean` (or `rm -f
@@ -77,10 +85,12 @@ r-package/src/*.o`) and reinstall.
 - Lowercase `snake_case` for filenames and free functions; `CamelCase`
   for types; `kCamelCase` is **not** used; constants are `snake_case`
   (`version_major`, etc.).
-- Public headers include with `#include "latva/foo.hpp"`.
+- Public headers include with `#include "magmaan/foo.hpp"`.
 - Private headers under `src/.../detail_*.hpp` include with relative paths.
 - Comments only when the *why* is non-obvious. The plan and the lavaan
   reference together cover the *what*.
+- Commit coherent completed changes when there is a natural checkpoint; keep
+  work on the current branch unless explicitly asked to branch.
 
 ## Working with the lavaan reference
 

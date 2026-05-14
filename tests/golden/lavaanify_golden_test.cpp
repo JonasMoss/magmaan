@@ -7,12 +7,12 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
-#include "latva/parse/op.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaan_view.hpp"
-#include "latva/partable/lavaanify.hpp"
-#include "latva/partable/partable.hpp"
-#include "latva/partable/start_hints.hpp"
+#include "magmaan/parse/op.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaan_view.hpp"
+#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/partable/partable.hpp"
+#include "magmaan/partable/start_hints.hpp"
 
 namespace {
 
@@ -22,14 +22,14 @@ namespace {
 // plabel). NaN is written as JSON null to match the R `na = "null"` choice.
 nlohmann::json ptable_to_json(std::string_view input,
                               std::string_view corpus_id,
-                              const latva::partable::LavaanParTable& pt) {
-  using latva::test::op_to_lavaan_string;
+                              const magmaan::partable::LavaanParTable& pt) {
+  using magmaan::test::op_to_lavaan_string;
   nlohmann::json j;
   j["_meta"] = {
       {"format_version", 1},
       {"fixture_kind",   "ptable"},
       {"corpus_id",      std::string(corpus_id)},
-      {"tool",           "latva::lavaanify"}};
+      {"tool",           "magmaan::lavaanify"}};
   j["input"] = std::string(input);
 
   nlohmann::json rows = nlohmann::json::array();
@@ -84,9 +84,9 @@ std::string diff_ptable(const nlohmann::json& got, const nlohmann::json& exp) {
 }
 
 TEST_CASE("ptable goldens — every corpus entry that lavaanify can handle") {
-  const auto corpus = latva::test::load_corpus();
+  const auto corpus = magmaan::test::load_corpus();
   REQUIRE(!corpus.empty());
-  const std::string ptable_dir = latva::test::fixtures_dir() + "/ptable";
+  const std::string ptable_dir = magmaan::test::fixtures_dir() + "/ptable";
 
   // Lavaan oddities we deliberately do not mirror, with rationale. These
   // are skipped from the strict pass/fail count but still surface as
@@ -95,6 +95,17 @@ TEST_CASE("ptable goldens — every corpus entry that lavaanify can handle") {
       {"0008_defined_param",
        "lavaan emits two identical `:=` rows differing only in plabel "
        "(internal quirk in lavaanify); we emit one."},
+      {"0026_two_factor_meanstructure_hs",
+       "lavaan's `lavaanify(...)` auto-adds LV α=0 rows when explicit OV "
+       "`~1` rows are present; our `lavaanify({})` only adds them when "
+       "`opts.meanstructure=true` is passed. The inference goldens pass "
+       "the option explicitly; this single-group ptable round-trip uses "
+       "the no-options form."},
+      {"0023_scalar_invariance_3f_hs",
+       "Same auto-α divergence as 0026 (3F variant). The multi-group "
+       "inference goldens pass the option and exercise the full scalar-"
+       "invariance + meanstructure path; this single-group ptable round-"
+       "trip can't."},
   };
   auto is_tolerated = [&](std::string_view id) {
     for (const auto& [tid, why] : tolerated_divergences) if (tid == id) return true;
@@ -107,7 +118,7 @@ TEST_CASE("ptable goldens — every corpus entry that lavaanify can handle") {
 
   for (const auto& e : corpus) {
     const std::string path = ptable_dir + "/" + e.id + ".ptable.json";
-    auto raw = latva::test::read_fixture(path);
+    auto raw = magmaan::test::read_fixture(path);
     if (!raw.has_value()) continue;        // no oracle for this corpus entry
     if (is_tolerated(e.id)) {
       tolerated.push_back(e.id);
@@ -121,23 +132,23 @@ TEST_CASE("ptable goldens — every corpus entry that lavaanify can handle") {
       continue;
     }
 
-    auto fp = latva::parse::Parser::parse(e.model);
+    auto fp = magmaan::parse::Parser::parse(e.model);
     if (!fp.has_value()) {
       failures.push_back(e.id + ": parse failed — " + fp.error().detail);
       continue;
     }
-    latva::partable::Starts starts;
-    latva::partable::LatentNames names;
-    auto pt = latva::partable::lavaanify(*fp, {}, &starts, &names);
+    magmaan::partable::Starts starts;
+    magmaan::partable::LatentNames names;
+    auto pt = magmaan::partable::lavaanify(*fp, {}, &starts, &names);
     if (!pt.has_value()) {
       failures.push_back(e.id + ": lavaanify failed — " + pt.error().detail);
       continue;
     }
 
     auto got = ptable_to_json(e.model, e.id,
-                              latva::partable::to_lavaan_partable(*pt, names, starts));
-    auto d = diff_ptable(latva::test::strip_meta(got),
-                         latva::test::strip_meta(exp));
+                              magmaan::partable::to_lavaan_partable(*pt, names, starts));
+    auto d = diff_ptable(magmaan::test::strip_meta(got),
+                         magmaan::test::strip_meta(exp));
     if (d.empty()) ++passed;
     else           failures.push_back(e.id + ": " + d);
   }

@@ -1,4 +1,4 @@
-#include "latva/model/matrix_rep.hpp"
+#include "magmaan/model/matrix_rep.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -7,12 +7,12 @@
 #include <utility>
 #include <vector>
 
-#include "latva/error.hpp"
-#include "latva/expected.hpp"
-#include "latva/parse/op.hpp"
-#include "latva/partable/partable.hpp"
+#include "magmaan/error.hpp"
+#include "magmaan/expected.hpp"
+#include "magmaan/parse/op.hpp"
+#include "magmaan/partable/partable.hpp"
 
-namespace latva::model {
+namespace magmaan::model {
 
 namespace {
 
@@ -207,4 +207,4 @@ build_matrix_rep(const partable::LatentStructure& pt,
   return out;
 }
 
-}  // namespace latva::model
+}  // namespace magmaan::model

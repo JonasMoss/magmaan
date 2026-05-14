@@ -12,26 +12,28 @@
 
 #include <nlohmann/json.hpp>
 
-#include "latva/error.hpp"
-#include "latva/fit/constraints.hpp"
-#include "latva/fit/fit.hpp"
-#include "latva/fit/inference.hpp"
-#include "latva/fit/sample_stats.hpp"
-#include "latva/model/matrix_rep.hpp"
-#include "latva/model/model_evaluator.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaanify.hpp"
+#include "magmaan/error.hpp"
+#include "magmaan/fit/constraints.hpp"
+#include "magmaan/fit/fit.hpp"
+#include "magmaan/fit/inference.hpp"
+#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaanify.hpp"
 
-using latva::fit::build_eq_constraints;
-using latva::fit::ExpectedInfoSE;
-using latva::fit::SampleStats;
-using latva::model::build_matrix_rep;
-using latva::model::MatId;
-using latva::model::ModelEvaluator;
-using latva::parse::Parser;
-using latva::partable::lavaanify;
-using latva::partable::LavaanifyOptions;
-using latva::partable::LatentStructure;
+#include "../inference_bundle.hpp"
+
+using magmaan::fit::build_eq_constraints;
+using magmaan::fit::SampleStats;
+using magmaan::test::expected_inference;
+using magmaan::model::build_matrix_rep;
+using magmaan::model::MatId;
+using magmaan::model::ModelEvaluator;
+using magmaan::parse::Parser;
+using magmaan::partable::lavaanify;
+using magmaan::partable::LavaanifyOptions;
+using magmaan::partable::LatentStructure;
 
 namespace {
 
@@ -46,7 +48,7 @@ LatentStructure must_lavaanify(std::string_view src, LavaanifyOptions opts = {})
 
 // 3×3 sample covariance (x1,x2,x3) + n from the saturated 1F-CFA fixture.
 SampleStats fixture_samp_3() {
-  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
                    "/fit/0001_one_factor_cfa.fit.json");
   REQUIRE(in.is_open());
   std::stringstream ss; ss << in.rdbuf();
@@ -117,7 +119,7 @@ TEST_CASE("fit: an equality constraint is actually enforced (the tied loadings c
   auto pt   = must_lavaanify("f =~ x1 + a*x2 + a*x3");
   auto rep  = build_matrix_rep(pt).value();
 
-  auto est_or = latva::fit::fit(pt, rep, samp);
+  auto est_or = magmaan::fit::fit(pt, rep, samp);
   REQUIRE_MESSAGE(est_or.has_value(),
       "constrained fit failed: " << (est_or.has_value() ? "" : est_or.error().detail));
   const auto& est = *est_or;
@@ -139,18 +141,18 @@ TEST_CASE("Inference under an equality constraint: df += 1, tied SEs, χ² refle
   // Unconstrained baseline: saturated 1F CFA, df = 0, χ² ≈ 0.
   auto pt_u  = must_lavaanify("f =~ x1 + x2 + x3");
   auto rep_u = build_matrix_rep(pt_u).value();
-  auto est_u = latva::fit::fit(pt_u, rep_u, samp).value();
-  auto inf_u = ExpectedInfoSE{}.compute(pt_u, rep_u, samp, est_u).value();
+  auto est_u = magmaan::fit::fit(pt_u, rep_u, samp).value();
+  auto inf_u = expected_inference(pt_u, rep_u, samp, est_u).value();
   CHECK(inf_u.df == 0);
   CHECK(inf_u.chi2 < 1e-6);
 
   // Constrained: x2 & x3 loadings tied → one fewer effective free param.
   auto pt_c  = must_lavaanify("f =~ x1 + a*x2 + a*x3");
   auto rep_c = build_matrix_rep(pt_c).value();
-  auto est_c = latva::fit::fit(pt_c, rep_c, samp).value();
-  auto inf_or = ExpectedInfoSE{}.compute(pt_c, rep_c, samp, est_c);
+  auto est_c = magmaan::fit::fit(pt_c, rep_c, samp).value();
+  auto inf_or = expected_inference(pt_c, rep_c, samp, est_c);
   REQUIRE_MESSAGE(inf_or.has_value(),
-      "constrained ExpectedInfoSE failed: " <<
+      "constrained expected_inference failed: " <<
           (inf_or.has_value() ? "" : inf_or.error().detail));
   const auto& inf = *inf_or;
 
@@ -175,7 +177,7 @@ TEST_CASE("build_eq_constraints: inequality (`<` / `>`) rows error out — not y
   auto pt = must_lavaanify("f =~ x1 + x2 + x3\nf ~~ b*f\nb > 0");
   auto con_or = build_eq_constraints(pt);
   REQUIRE_FALSE(con_or.has_value());
-  CHECK(con_or.error().kind == latva::PostError::Kind::NumericIssue);
+  CHECK(con_or.error().kind == magmaan::PostError::Kind::NumericIssue);
 }
 
 // === P9 phase 2 — general LINEAR equality constraints ======================
@@ -222,7 +224,7 @@ TEST_CASE("fit: a linear equality constraint `b2 + b3 == 1.5` is enforced") {
   CHECK_FALSE(pt.has_unenforced_constraints);
   auto rep  = build_matrix_rep(pt).value();
 
-  auto est_or = latva::fit::fit(pt, rep, samp);
+  auto est_or = magmaan::fit::fit(pt, rep, samp);
   REQUIRE_MESSAGE(est_or.has_value(),
       "constrained fit failed: " << (est_or.has_value() ? "" : est_or.error().detail));
   const auto& est = *est_or;
@@ -238,9 +240,9 @@ TEST_CASE("fit: a linear equality constraint `b2 + b3 == 1.5` is enforced") {
   // df increases by 1 vs the unconstrained model.
   auto pt_u  = must_lavaanify("f =~ x1 + b2*x2 + b3*x3");
   auto rep_u = build_matrix_rep(pt_u).value();
-  auto est_u = latva::fit::fit(pt_u, rep_u, samp).value();
-  auto inf_u = ExpectedInfoSE{}.compute(pt_u, rep_u, samp, est_u).value();
-  auto inf_c = ExpectedInfoSE{}.compute(pt, rep, samp, est).value();
+  auto est_u = magmaan::fit::fit(pt_u, rep_u, samp).value();
+  auto inf_u = expected_inference(pt_u, rep_u, samp, est_u).value();
+  auto inf_c = expected_inference(pt, rep, samp, est).value();
   CHECK(inf_c.df == inf_u.df + 1);
   CHECK(inf_c.chi2 >= inf_u.chi2 - 1e-9);
   CHECK(inf_c.se.size() == pt.n_free());           // full n_free-length SEs
@@ -251,7 +253,7 @@ TEST_CASE("fit: `d == 0` pins a loading to zero") {
   auto pt   = must_lavaanify("f =~ x1 + d*x2 + x3\nd == 0");
   CHECK_FALSE(pt.has_unenforced_constraints);
   auto rep  = build_matrix_rep(pt).value();
-  auto est  = latva::fit::fit(pt, rep, samp).value();
+  auto est  = magmaan::fit::fit(pt, rep, samp).value();
   auto ev   = ModelEvaluator::build(pt, rep).value();
   const Eigen::Index k_x2 = lambda_free_idx(ev, 1);
   REQUIRE(k_x2 >= 0);
@@ -263,7 +265,7 @@ TEST_CASE("build_eq_constraints: an infeasible linear system errors out") {
   CHECK_FALSE(pt.has_unenforced_constraints);       // both rows ARE linear...
   auto con_or = build_eq_constraints(pt);           // ...but jointly infeasible
   REQUIRE_FALSE(con_or.has_value());
-  CHECK(con_or.error().kind == latva::PostError::Kind::NumericIssue);
+  CHECK(con_or.error().kind == magmaan::PostError::Kind::NumericIssue);
   CHECK(con_or.error().detail.find("infeasible") != std::string::npos);
 }
 
@@ -272,7 +274,7 @@ TEST_CASE("build_eq_constraints: a genuinely nonlinear `==` is still rejected") 
   CHECK(pt.has_unenforced_constraints);             // b*b ⇒ not affine ⇒ stays flagged
   auto con_or = build_eq_constraints(pt);
   REQUIRE_FALSE(con_or.has_value());
-  CHECK(con_or.error().kind == latva::PostError::Kind::NumericIssue);
+  CHECK(con_or.error().kind == magmaan::PostError::Kind::NumericIssue);
 }
 
 // === effect coding =========================================================
@@ -306,7 +308,7 @@ TEST_CASE("lavaanify: effect_coding and std_lv are mutually exclusive") {
   REQUIRE(fp.has_value());
   auto pt = lavaanify(*fp, opts);
   REQUIRE_FALSE(pt.has_value());
-  CHECK(pt.error().kind == latva::PartableError::Kind::BadGroupSpec);
+  CHECK(pt.error().kind == magmaan::PartableError::Kind::BadGroupSpec);
 }
 
 TEST_CASE("fit: effect_coding — loadings sum to #indicators; χ²/df match the marker fit") {
@@ -314,7 +316,7 @@ TEST_CASE("fit: effect_coding — loadings sum to #indicators; χ²/df match the
   LavaanifyOptions opts; opts.effect_coding = true;
   auto pt  = must_lavaanify("f =~ x1 + x2 + x3", opts);
   auto rep = build_matrix_rep(pt).value();
-  auto est_or = latva::fit::fit(pt, rep, samp);
+  auto est_or = magmaan::fit::fit(pt, rep, samp);
   REQUIRE_MESSAGE(est_or.has_value(),
       "effect-coding fit failed: " << (est_or.has_value() ? "" : est_or.error().detail));
   const auto& est = *est_or;
@@ -325,12 +327,12 @@ TEST_CASE("fit: effect_coding — loadings sum to #indicators; χ²/df match the
                       est.theta(lambda_free_idx(ev, 2));
   CHECK(lsum == doctest::Approx(3.0).epsilon(1e-7));
 
-  auto inf_ec = ExpectedInfoSE{}.compute(pt, rep, samp, est).value();
+  auto inf_ec = expected_inference(pt, rep, samp, est).value();
   // Marker fit of the same model — bijective reparam ⇒ identical χ² and df.
   auto pt_m  = must_lavaanify("f =~ x1 + x2 + x3");
   auto rep_m = build_matrix_rep(pt_m).value();
-  auto est_m = latva::fit::fit(pt_m, rep_m, samp).value();
-  auto inf_m = ExpectedInfoSE{}.compute(pt_m, rep_m, samp, est_m).value();
+  auto est_m = magmaan::fit::fit(pt_m, rep_m, samp).value();
+  auto inf_m = expected_inference(pt_m, rep_m, samp, est_m).value();
   CHECK(inf_ec.df == inf_m.df);
   CHECK(inf_ec.chi2 == doctest::Approx(inf_m.chi2).epsilon(1e-6));
 }

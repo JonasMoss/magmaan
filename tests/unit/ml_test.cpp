@@ -13,20 +13,20 @@
 
 #include "../oracle.hpp"
 
-#include "latva/fit/fit.hpp"
-#include "latva/fit/ml.hpp"
-#include "latva/fit/sample_stats.hpp"
-#include "latva/model/matrix_rep.hpp"
-#include "latva/model/model_evaluator.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaanify.hpp"
+#include "magmaan/fit/fit.hpp"
+#include "magmaan/fit/ml.hpp"
+#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaanify.hpp"
 
-using latva::fit::ML;
-using latva::fit::SampleStats;
-using latva::model::build_matrix_rep;
-using latva::model::ModelEvaluator;
-using latva::parse::Parser;
-using latva::partable::lavaanify;
+using magmaan::fit::ML;
+using magmaan::fit::SampleStats;
+using magmaan::model::build_matrix_rep;
+using magmaan::model::ModelEvaluator;
+using magmaan::parse::Parser;
+using magmaan::partable::lavaanify;
 
 namespace {
 
@@ -37,8 +37,8 @@ ModelEvaluator must_build(std::string_view src) {
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
-  static thread_local latva::partable::LatentStructure s_pt;
-  static thread_local latva::model::MatrixRep   s_mr;
+  static thread_local magmaan::partable::LatentStructure s_pt;
+  static thread_local magmaan::model::MatrixRep   s_mr;
   s_pt = std::move(*pt);
   s_mr = std::move(*mr);
   auto ev = ModelEvaluator::build(s_pt, s_mr);
@@ -136,6 +136,29 @@ TEST_CASE("ML: gradient matches finite differences (1F CFA)") {
   CHECK(diff < 1e-5);
 }
 
+TEST_CASE("ML: cached fused value_gradient matches separate value and gradient") {
+  auto ev = must_build("f =~ x1 + x2 + x3");
+  std::mt19937 rng(17);
+  SampleStats samp;
+  samp.S.push_back(random_pd(rng, 3));
+  samp.n_obs.push_back(100);
+
+  Eigen::VectorXd theta(ev.n_free());
+  std::uniform_real_distribution<double> d(0.5, 1.2);
+  for (Eigen::Index k = 0; k < theta.size(); ++k) theta(k) = d(rng);
+
+  ML ml;
+  auto sm = ev.sigma(theta).value();
+  auto J  = ev.dsigma_dtheta(theta).value();
+  auto cache = ml.prepare(samp).value();
+  auto f_sep = ml.value(samp, sm).value();
+  auto g_sep = ml.gradient(samp, sm, J).value();
+  auto vg = ml.value_gradient(samp, cache, sm, J).value();
+
+  CHECK(vg.value == doctest::Approx(f_sep).epsilon(1e-14));
+  CHECK((vg.gradient - g_sep).cwiseAbs().maxCoeff() < 1e-12);
+}
+
 TEST_CASE("ML: mean-structure F formula matches hand calculation") {
   // 1F CFA + intercepts. At an arbitrary θ, verify
   //   F_b = log|Σ| + tr(SΣ⁻¹) - log|S| - p + (m̄-μ)'Σ⁻¹(m̄-μ)
@@ -157,10 +180,10 @@ TEST_CASE("ML: mean-structure F formula matches hand calculation") {
       static_cast<Eigen::Index>(ev.n_free()));
   for (Eigen::Index k = 0; k < theta.size(); ++k) {
     const auto m = locs[static_cast<std::size_t>(k)].mat;
-    if (m == latva::model::MatId::Lambda)      theta(k) = 0.8;
-    else if (m == latva::model::MatId::Theta)  theta(k) = 0.5;
-    else if (m == latva::model::MatId::Psi)    theta(k) = 1.0;
-    else if (m == latva::model::MatId::Nu)     theta(k) = 3.5;  // ν entries
+    if (m == magmaan::model::MatId::Lambda)      theta(k) = 0.8;
+    else if (m == magmaan::model::MatId::Theta)  theta(k) = 0.5;
+    else if (m == magmaan::model::MatId::Psi)    theta(k) = 1.0;
+    else if (m == magmaan::model::MatId::Nu)     theta(k) = 3.5;  // ν entries
   }
 
   auto sm = ev.sigma(theta);
@@ -229,12 +252,12 @@ TEST_CASE("ML: fit() recovers ν̂_i ≈ m̄_i on saturated mean-structure CFA")
   // 1F CFA + indicator intercepts: the indicator-mean side is saturated
   // (one ν per indicator, no constraint), so ν̂_i must equal the sample
   // mean m̄_i exactly at the optimum.
-  auto fp = latva::parse::Parser::parse(
+  auto fp = magmaan::parse::Parser::parse(
       "f =~ x1 + x2 + x3\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1");
   REQUIRE(fp.has_value());
-  auto pt = latva::partable::lavaanify(*fp);
+  auto pt = magmaan::partable::lavaanify(*fp);
   REQUIRE(pt.has_value());
-  auto mr = latva::model::build_matrix_rep(*pt);
+  auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
 
   std::mt19937 rng(2026);
@@ -246,7 +269,7 @@ TEST_CASE("ML: fit() recovers ν̂_i ≈ m̄_i on saturated mean-structure CFA")
   samp.mean = {mean};
   samp.n_obs = {301};
 
-  auto est_or = latva::fit::fit(*pt, *mr, samp);
+  auto est_or = magmaan::fit::fit(*pt, *mr, samp);
   REQUIRE(est_or.has_value());
   const auto& est = *est_or;
 
@@ -254,7 +277,7 @@ TEST_CASE("ML: fit() recovers ν̂_i ≈ m̄_i on saturated mean-structure CFA")
   const auto locs = ev.param_locations();
   std::array<Eigen::Index, 3> nu_idx = {-1, -1, -1};
   for (std::size_t k = 0; k < locs.size(); ++k) {
-    if (locs[k].mat == latva::model::MatId::Nu) {
+    if (locs[k].mat == magmaan::model::MatId::Nu) {
       nu_idx[static_cast<std::size_t>(locs[k].row)] =
           static_cast<Eigen::Index>(k);
     }
@@ -276,7 +299,7 @@ TEST_CASE("ML: gradient matches finite differences (3F Holzinger at lavaan θ̂)
       "textual =~ x4 + x5 + x6\n"
       "speed =~ x7 + x8 + x9");
 
-  const std::string path = std::string(LATVA_FIXTURES_DIR) +
+  const std::string path = std::string(MAGMAAN_FIXTURES_DIR) +
                            "/fit/0002_three_factor_hs.fit.json";
   std::ifstream in(path);
   REQUIRE(in.is_open());

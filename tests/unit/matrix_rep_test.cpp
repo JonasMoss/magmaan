@@ -3,23 +3,23 @@
 #include <string>
 #include <string_view>
 
-#include "latva/model/matrix_rep.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaanify.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaanify.hpp"
 
-using latva::model::build_matrix_rep;
-using latva::model::Cell;
-using latva::model::MatId;
-using latva::model::MatrixRep;
-using latva::parse::Parser;
-using latva::partable::lavaanify;
+using magmaan::model::build_matrix_rep;
+using magmaan::model::Cell;
+using magmaan::model::MatId;
+using magmaan::model::MatrixRep;
+using magmaan::parse::Parser;
+using magmaan::partable::lavaanify;
 
 namespace {
 
 MatrixRep must_build(std::string_view src) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  latva::partable::LatentNames names;
+  magmaan::partable::LatentNames names;
   auto pt = lavaanify(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt, &names);

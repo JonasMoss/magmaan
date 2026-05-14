@@ -1,37 +1,30 @@
-# latva
+# magmaan <img src="docs/figures/logo_compact.png" align="right" height="170" /></a>
 
-A C++23 toolkit for **linear structural equation modeling** under
-normal-theory ML. Built to match
-[lavaan](https://lavaan.ugent.be/) numerically while exposing every
-extension seam (estimator, optimizer, SE method, fit index) as
-first-class API for methods developers.
+> "This world ever was, and is, and shall be, an ever-living Fire."
+> — Heraclitus
 
-> **Status:** pre-alpha. The skeleton builds; the parser is being written.
+`magmaan` is the subterranean cousin of `lavaan`. It has a modular, simple design, and is made for methods researchers.
 
-## What it is and isn't
+**Status:** Proto-type
+**Language:** C++17
+**Scope:** Non-Bayesian structural equation modeling with linear constraints
+**Philosophy:** Make everything explicit and modular, don't prioritize user-friendliness, avoid object-oriented programing, don't change state, stay functional, work with composition, strict separation of concerns
 
-- **Is:** a C++ core for SEM tool builders — parser, partable, ML fit, SEs.
-  No exceptions, no RTTI, `std::expected` everywhere fallible.
-- **Isn't:** an end-user tool. There is no `cfa(model, data)` facade in C++.
-  R / Python bindings are out of scope for v0.
+## Roadmap
 
-## Building
+1. Complete data normal theory with robustness
+2. Generalized least squars (AFD, "GLS", ULS)
+3. C++17 without OO, structs only, no concepts, minimal abstractions, no exceptions
+4. Threshold model
+5. Incomplete data normal theory (FIML)
+6. Variety of optimizers, RAM and LISREL representations
 
-Requirements: CMake ≥ 3.28, GCC ≥ 13 / Clang ≥ 17 / MSVC ≥ 19.37.
+## In scope
 
-```sh
-cmake --preset asan
-cmake --build --preset asan
-ctest --preset asan
-```
+1. Any kind of weird estimation of SEM models, such as t-distributed residuals or pairwise likelihood.
+2. Any kind of weird 
 
-Other presets: `default` (Debug), `release`, `ubsan`.
+## Not in scope
 
-## Layout
-
-See [`AGENTS.md`](AGENTS.md). The design rationale is in the planning
-document referenced from there.
-
-## License
-
-TBD.
+1. IRT models.
+2. Other kinds of factor analysis such as EFA.

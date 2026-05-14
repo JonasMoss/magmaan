@@ -23,7 +23,7 @@ Computational trick: for each free parameter k, materialize `M_k = ∂Σ/∂θ_k
 
 ## API
 
-New types in `include/latva/fit/inference.hpp`:
+New types in `include/magmaan/fit/inference.hpp`:
 
 ```cpp
 struct Inference {
@@ -52,7 +52,7 @@ Add an overload to `fit()` (optional) that runs ML + LBFGS + ExpectedInfoSE in o
 
 | File | Purpose |
 |---|---|
-| `include/latva/fit/inference.hpp` | `Inference`, `ExpectedInfoSE` |
+| `include/magmaan/fit/inference.hpp` | `Inference`, `ExpectedInfoSE` |
 | `src/fit/inference.cpp` | `compute()` implementation |
 | `tests/unit/inference_test.cpp` | Shape, SE positivity, I≈Iᵀ, df formula |
 | `tests/golden/inference_golden_test.cpp` | SE / χ² / df vs lavaan |
@@ -86,7 +86,7 @@ Reuse the existing skip list for under-identified models (`0010`, `0013`, `0015`
 
 ## Implementation order
 
-1. Add `post_expected<T>` alias in `include/latva/expected.hpp` if missing.
+1. Add `post_expected<T>` alias in `include/magmaan/expected.hpp` if missing.
 2. Write `inference.hpp` + `inference.cpp`. Use existing `ModelEvaluator::sigma` and `dsigma_dtheta` — DON'T duplicate the Σ/J machinery; `compute()` should take a `ModelEvaluator&` or call `build(pt, rep)` internally.
 3. Unit tests; iterate until shape + positivity + df work.
 4. Extend R script; regenerate fit fixtures.
@@ -97,10 +97,10 @@ Reuse the existing skip list for under-identified models (`0010`, `0013`, `0015`
 
 - **All current state**: 91/91 tests green under asan + default. 18 lexer fixtures, 18 parser fixtures, 15 ptable fixtures (+1 tolerated divergence), 14 matrix_rep fixtures (+1 deferred for mean structure), 13 implied-Σ fixtures, 9 fit-θ̂ fixtures (+4 under-identified skips).
 - **Reduced LISREL form** (P5.2/P6.2) just landed. `MatrixRep::form` is `PureCFA` or `Reduced`; `ModelEvaluator` uses `Σ = Λ (I−B)⁻¹ Ψ (I−B)⁻ᵀ Λᵀ + Θ` always. Phantom-Λ identity columns are inserted as `StructuralCell`s for ov.y/ov.x in Reduced form.
-- **`resolve_fixed_x_from_sample`** (`include/latva/fit/resolve_fixed_x.hpp`) fills `pt.ustart` for fixed.x rows from sample S. The `fit()` template calls it automatically; the golden test for implied Σ also calls it.
-- **LBFGS-on-GCC gotcha**: `src/fit/lbfgs_optimizer.cpp` is built with `-fexceptions` (set in CMakeLists.txt via `set_source_files_properties`) because LBFGS++ has a `throw` in its param check that GCC refuses to compile under `-fno-exceptions`. The throw path is unreachable with our default params.
+- **`resolve_fixed_x_from_sample`** (`include/magmaan/fit/resolve_fixed_x.hpp`) fills `pt.ustart` for fixed.x rows from sample S. The `fit()` template calls it automatically; the golden test for implied Σ also calls it.
+- **LBFGS-on-GCC gotcha**: `src/fit/lbfgs_optimizer.cpp` is built with `-fexceptions` (set in CMakeLists.txt via `set_source_files_properties`) because LBFGS++ has a `throw` in its param check that GCC refuses to compile under `-fno-exceptions`. We exploit that same `-fexceptions` setting to wrap `solver.minimize` in a `try/catch (const std::exception&)` and turn LBFGS++'s line-search/param throws into a `FitError::Kind::LineSearchFailed` value (the throw site is outside any objective-callback frame, so unwinding stays inside this TU). This *is* reached on some models — see roadmap G5b.
 - **Test convention**: `must_build(model_str)` helpers in unit tests use `static thread_local` slots to keep partable/matrix_rep alive across `ModelEvaluator::build` calls — the build borrows references. Production code owns them at the call site.
-- **Tolerance lesson** (P7 epilogue): On 21-param 3F Holzinger, LBFGS and lavaan's nlminb land within 1.03e-6 of each other — they converge to different points on a flat section of the ML surface. The fit-θ̂ golden uses 2e-6 tolerance (with comment); tightening LBFGS past 1e-7 trips line-search aborts under `-fno-exceptions`. **For SEs/χ² this matters less** because both quantities are smooth at the optimum — expect cleaner parity.
+- **Tolerance lesson** (P7 epilogue): On 21-param 3F Holzinger, LBFGS and lavaan's nlminb land within 1.03e-6 of each other — they converge to different points on a flat section of the ML surface. The fit-θ̂ golden uses 2e-6 tolerance (with comment); tightening LBFGS past 1e-7 trips line-search failures (now surfaced as `FitError::LineSearchFailed`, no longer a `-fno-exceptions` abort). **For SEs/χ² this matters less** because both quantities are smooth at the optimum — expect cleaner parity.
 
 ## Status — what's done
 
@@ -242,20 +242,20 @@ enough. NT estimation and inference, by contrast, work entirely from sample
 moments.
 
 ### Foundations ✓
-- **`RawData`** ✓ — per-block raw observations type in `include/latva/fit/raw_data.hpp`. Carries `X[b]` per-block `(n_b × p_b)` matrices plus a reserved (v0-unused) `mask` for the FIML phase. NT consumers (`fit`, `ExpectedInfoSE`, `browne_residual_nt`) keep consuming `SampleStats` directly and ignore `RawData`.
+- **`RawData`** ✓ — per-block raw observations type in `include/magmaan/fit/raw_data.hpp`. Carries `X[b]` per-block `(n_b × p_b)` matrices plus a reserved (v0-unused) `mask` for the FIML phase. NT consumers (`fit`, `ExpectedInfoSE`, `browne_residual_nt`) keep consuming `SampleStats` directly and ignore `RawData`.
 - **`sample_stats_from_raw(raw) → SampleStats`** ✓ — derives per-block `m̄_b = (1/n_b)·Σ x_i`, `S_b = (1/n_b)·Σ (x_i−m̄_b)(x_i−m̄_b)ᵀ` (lavaan's `likelihood = "normal"` N-divisor convention).
 - **`empirical_gamma(X) → MatrixXd`** ✓ — `Γ̂ = (1/n)·Σ (d_i − vech(S))(d_i − vech(S))ᵀ` with `d_i = vech((x_i − m̄)(x_i − m̄)ᵀ)`. The empirical 4th-moment ACOV of vech(S); the building block that swaps in for `Γ_NT` to unlock robust-SE / SB-scaling.
 - **`gamma_nt(Sigma) → MatrixXd`** ✓ — analytic `Γ_NT[ij, kl] = σ_ik·σ_jl + σ_il·σ_jk`. Built directly in (p* × p*) without forming the duplication-matrix pseudoinverse. Convergence test: `empirical_gamma → gamma_nt` on `n = 20 000` MVN draws within 5% relative error.
 
 ### The information-matrix vocabulary (`Information` / `WeightMoments` / `ScoreCovariance`) ✓
-Three orthogonal knobs in `include/latva/fit/robust.hpp`, shared by the SE path (`robust_se`, plus the existing naive-SE classes) and the UΓ test path (`build_u_factor` + `reduced_gamma_*`). Mirrors lavaan's `information` / `h1.information` **minus** `first.order` — for ML the gradient-outer-product `K` is not a distinct quantity, it equals `ΔᵀWΓ̂WΔ` (the empirical meat below), so it's exposed only as a meat choice, never inverted-as-a-bread.
+Three orthogonal knobs in `include/magmaan/fit/robust.hpp`, shared by the SE path (`robust_se`, plus the existing naive-SE classes) and the UΓ test path (`build_u_factor` + `reduced_gamma_*`). Mirrors lavaan's `information` / `h1.information` **minus** `first.order` — for ML the gradient-outer-product `K` is not a distinct quantity, it equals `ΔᵀWΓ̂WΔ` (the empirical meat below), so it's exposed only as a meat choice, never inverted-as-a-bread.
 - **`Information { Expected, Observed }`** — the q×q "bread" that gets inverted. `Expected` = `J = ΔᵀWΔ` (the GLS/Fisher form; for the test keeps `U` a rank-`df` projector — also ≈ lavaan `observed.information = "h1"` for the ML discrepancy). `Observed` = `H = H1+H2` (the actual ML Hessian — the `H2` term makes it ≠ `J`; for the test `U` is non-idempotent; the MLR convention).
 - **`WeightMoments { Structured, Unstructured }`** — which moments build `W = Γ_NT(M)⁻¹` (= lavaan `h1.information`). `Structured` = Σ̂ (model-implied, default); `Unstructured` = S (sample, the weight `browne_residual_nt` uses).
 - **`ScoreCovariance { ModelImplied, Empirical, BrowneUnbiased }`** — the "meat" ACOV of vech(S). `ModelImplied` = `Γ_NT` (SE collapses to bread⁻¹ = the naive SE; test `U` is a projector, no χ² scaling); `Empirical` = `Γ̂` 4th-moment (needs raw data; SE = full sandwich; test = the SB-family χ² scaling); `BrowneUnbiased` = the distribution-free correction.
 - Lavaan estimator-shorthand mapping: naive `se = "standard"` ≡ `ExpectedInfoSE` (= `{Expected, Structured, ModelImplied}`); `information = "observed"` naive ≡ `Fd`/`AnalyticObservedInfoSE` (= `{Observed, Structured, ModelImplied}`); `estimator = "MLM"` ≡ `{Expected, Structured, Empirical}` (robust.sem SE + SB χ²); `estimator = "MLR"` ≡ `{Observed, Structured, Empirical}` (robust.huber.white SE + YB χ²).
 
 ### Eigenvalues + robust statistics + robust SEs ✓
-`include/latva/fit/robust.hpp` exposes the reduced eigenvalue path for `UΓ`, three lavaan-compatible robust χ² wrappers, and the sandwich SE. For the `Expected` bread the core trick (via GPT-5.5, verified) is `U = B·Bᵀ` with `B = L·N`, `L = Cholesky(Γ_NT⁻¹)`, `N = orthonormal basis of ker((LᵀΔ)ᵀ)` ⇒ `eigvals(UΓ) = eigvals(BᵀΓB)` (`df × df` symmetric eigenproblem). For the `Observed` bread `U = L_Γ⁻ᵀ·(I − A·H_obs⁻¹·Aᵀ)·L_Γ⁻¹` (non-idempotent) ⇒ `eigvals(UΓ) = eigvals(R̃ᵀ·(I − A·H_obs⁻¹·Aᵀ)·R̃)` where `R̃·R̃ᵀ = L_Γ⁻¹·Γ·L_Γ⁻ᵀ` (`p* × p*`; the spectrum is genuinely indefinite — negative eigenvalues — when the model is misspecified). Never forms `UΓ`; never forms `Γ` when structure permits.
+`include/magmaan/fit/robust.hpp` exposes the reduced eigenvalue path for `UΓ`, three lavaan-compatible robust χ² wrappers, and the sandwich SE. For the `Expected` bread the core trick (via GPT-5.5, verified) is `U = B·Bᵀ` with `B = L·N`, `L = Cholesky(Γ_NT⁻¹)`, `N = orthonormal basis of ker((LᵀΔ)ᵀ)` ⇒ `eigvals(UΓ) = eigvals(BᵀΓB)` (`df × df` symmetric eigenproblem). For the `Observed` bread `U = L_Γ⁻ᵀ·(I − A·H_obs⁻¹·Aᵀ)·L_Γ⁻¹` (non-idempotent) ⇒ `eigvals(UΓ) = eigvals(R̃ᵀ·(I − A·H_obs⁻¹·Aᵀ)·R̃)` where `R̃·R̃ᵀ = L_Γ⁻¹·Γ·L_Γ⁻ᵀ` (`p* × p*`; the spectrum is genuinely indefinite — negative eigenvalues — when the model is misspecified). Never forms `UΓ`; never forms `Γ` when structure permits.
 
 - **`build_u_factor(pt, rep, samp, est, spec={}) → UFactor`** ✓ — `spec.bread == Expected` ⇒ `kind = ProjectionExpected` (LLT(`Γ_NT(M)`) + `A = L_Γ⁻¹Δ` + QR → `N` + `B = L_Γ⁻ᵀN`); `spec.bread == Observed` ⇒ `kind = ObservedHessian` (single-block; `A`, `H_obs⁻¹` via `AnalyticObservedInfoSE` with FD fallback). Caches per-block `L_Γ`, `Σ̂_b`, `S_b`. The `Expected` projection path stacks per block (multi-block); `Observed` is single-block in v1. Mean structure gated off in v0.
 - **Three Γ flavors** ✓ — `reduced_gamma_{sample,nt,unbiased}(uf, …)` produce the M-matrix `ugamma_eigenvalues` then eigensolves. For `ProjectionExpected`: `M = BᵀΓB` (`df × df`; `reduced_gamma_nt` is operator-only `vech(M) ↦ vech(2·Σ̂·M_½·Σ̂)`, eigenvalues exactly `(1,…,1)`). For `ObservedHessian`: `M = R̃ᵀ·(I − A·H_obs⁻¹·Aᵀ)·R̃` (`p* × p*`; `reduced_gamma_nt` short-circuits since `M̃ = I`). `reduced_gamma_unbiased` is `ProjectionExpected`-only; `reduced_gamma_sample_streaming` likewise.

@@ -1,4 +1,4 @@
-#include "latva/parse/parser.hpp"
+#include "magmaan/parse/parser.hpp"
 
 #include <charconv>
 #include <cstddef>
@@ -9,15 +9,15 @@
 #include <utility>
 #include <vector>
 
-#include "latva/error.hpp"
-#include "latva/expected.hpp"
-#include "latva/parse/flat_partable.hpp"
-#include "latva/parse/lexer.hpp"
-#include "latva/parse/op.hpp"
-#include "latva/parse/token.hpp"
-#include "latva/source_span.hpp"
+#include "magmaan/error.hpp"
+#include "magmaan/expected.hpp"
+#include "magmaan/parse/flat_partable.hpp"
+#include "magmaan/parse/lexer.hpp"
+#include "magmaan/parse/op.hpp"
+#include "magmaan/parse/token.hpp"
+#include "magmaan/source_span.hpp"
 
-namespace latva::parse {
+namespace magmaan::parse {
 
 namespace {
 
@@ -284,7 +284,8 @@ parse_expected<ParsedRhsTerm> parse_rhs_term_with_mod(State& st) noexcept {
               std::string(to_string(sep.kind))));
     }
     st.consume();
-    Modifier mod = std::move(*mod_or);
+    Modifier mod;
+    std::swap(mod, *mod_or);
     if (sep.kind == TokenKind::Question) {
       // ? forces start-value interpretation. The atom must be a plain
       // FixedValue — labels, free, c(...), and start(...) are nonsensical
@@ -296,6 +297,16 @@ parse_expected<ParsedRhsTerm> parse_rhs_term_with_mod(State& st) noexcept {
             "'?' separator requires a numeric start value on the left"));
       }
       mod = Modifier{StartValue{fixed->value}};
+    }
+    // Allow `modifier*1` for label-on-intercept (`x1 ~ n1*1`) — the upstream
+    // formula path checks `op==Regression && is_numlit_one && modifier.has_value()`
+    // and emits an Op::Intercept row with the modifier preserved.
+    if (st.peek().kind == TokenKind::NumLit && st.peek().text == "1") {
+      const Token& one = st.consume();
+      out.is_numlit_one = true;
+      out.span = SourceSpan{out.span.begin, one.span.end,
+                            out.span.line, out.span.col};
+      return ParsedRhsTerm{out, std::optional<Modifier>{std::move(mod)}};
     }
     if (st.peek().kind != TokenKind::Identifier) {
       return std::unexpected(make_err(
@@ -435,7 +446,8 @@ parse_expected<Expr> parse_unary_or_primary(State& st) noexcept {
 parse_expected<Expr> parse_expr(State& st, std::uint8_t min_bp) noexcept {
   auto lhs_or = parse_unary_or_primary(st);
   if (!lhs_or.has_value()) return std::unexpected(lhs_or.error());
-  Expr lhs = std::move(*lhs_or);
+  Expr lhs;
+  std::swap(lhs, *lhs_or);
 
   for (;;) {
     const auto bop = expr_binop_for(st.peek().kind);
@@ -600,7 +612,7 @@ parse_formula(State& st, FlatPartable& flat) noexcept {
     return std::unexpected(make_err(
         ParseError::Kind::UnsupportedOperator, op_tok.span,
         std::string("operator '") + std::string(op_tok.text) +
-            "' is not supported in latva v0"));
+            "' is not supported in magmaan v0"));
   }
   auto op_opt = op_from_text(op_tok.text);
   if (!op_opt.has_value()) {
@@ -616,12 +628,20 @@ parse_formula(State& st, FlatPartable& flat) noexcept {
   if (!rhs_or.has_value()) return std::unexpected(rhs_or.error());
   std::vector<ParsedRhsTerm>& rhs = *rhs_or;
 
-  // Intercept detection: `lhs ~ 1` with exactly one bare-NumLit-one term.
-  if (op == Op::Regression && rhs.size() == 1 &&
-      rhs[0].term.is_numlit_one && !rhs[0].modifier.has_value()) {
+  // Intercept detection: `lhs ~ 1` or `lhs ~ label*1` / `lhs ~ val*1` /
+  // `lhs ~ c(...)*1` — exactly one bare-NumLit-one term, with an optional
+  // modifier (label, fixed value, per-group `c(...)`) attached. The modifier
+  // is preserved into the Intercept row so scalar-invariance models can
+  // express shared-label intercepts (`x1 ~ n1*1` ≙ ν_x1 shared across
+  // groups via union-find on `n1`).
+  if (op == Op::Regression && rhs.size() == 1 && rhs[0].term.is_numlit_one) {
+    std::uint32_t mi = 0;
+    if (rhs[0].modifier.has_value()) {
+      mi = flat.add_modifier(std::move(*rhs[0].modifier));
+    }
     flat.rows.push_back(FlatRow{
         lhs_text, Op::Intercept, std::string_view{}, /*block=*/1,
-        /*mod_idx=*/0, rhs[0].term.span});
+        mi, rhs[0].term.span});
     return {};
   }
 
@@ -710,4 +730,4 @@ parse_expected<FlatPartable> Parser::parse(std::string_view src) {
   return flat;
 }
 
-}  // namespace latva::parse
+}  // namespace magmaan::parse

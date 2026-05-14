@@ -6,16 +6,16 @@
 
 #include <Eigen/Core>
 
-#include "latva/model/matrix_rep.hpp"
-#include "latva/model/model_evaluator.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaanify.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaanify.hpp"
 
-using latva::model::build_matrix_rep;
-using latva::model::ImpliedMoments;
-using latva::model::ModelEvaluator;
-using latva::parse::Parser;
-using latva::partable::lavaanify;
+using magmaan::model::build_matrix_rep;
+using magmaan::model::ImpliedMoments;
+using magmaan::model::ModelEvaluator;
+using magmaan::parse::Parser;
+using magmaan::partable::lavaanify;
 
 namespace {
 
@@ -29,8 +29,8 @@ ModelEvaluator must_build(std::string_view src) {
   // LatentStructure and MatrixRep need to outlive the evaluator. Stash them in
   // statics with std::move so the references in the evaluator stay valid.
   // (Tests are single-threaded; this is safe.)
-  static thread_local latva::partable::LatentStructure s_pt;
-  static thread_local latva::model::MatrixRep   s_mr;
+  static thread_local magmaan::partable::LatentStructure s_pt;
+  static thread_local magmaan::model::MatrixRep   s_mr;
   s_pt = std::move(*pt);
   s_mr = std::move(*mr);
   auto ev = ModelEvaluator::build(s_pt, s_mr);
@@ -193,7 +193,7 @@ TEST_CASE("ModelEvaluator: mean structure — μ = ν (+ Λ·α) at θ") {
   // Find each ν_i's index by location: Nu, row=i.
   std::array<std::ptrdiff_t, 3> nu_idx = {-1, -1, -1};
   for (std::size_t k = 0; k < locs.size(); ++k) {
-    if (locs[k].mat == latva::model::MatId::Nu) {
+    if (locs[k].mat == magmaan::model::MatId::Nu) {
       REQUIRE(locs[k].row >= 0);
       REQUIRE(locs[k].row < 3);
       nu_idx[static_cast<std::size_t>(locs[k].row)] = static_cast<std::ptrdiff_t>(k);
@@ -204,11 +204,11 @@ TEST_CASE("ModelEvaluator: mean structure — μ = ν (+ Λ·α) at θ") {
   // Construct θ with arbitrary covariance entries and recognizable mean values.
   Eigen::VectorXd theta = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(ev.n_free()));
   for (Eigen::Index k = 0; k < theta.size(); ++k) {
-    if (locs[static_cast<std::size_t>(k)].mat == latva::model::MatId::Lambda)
+    if (locs[static_cast<std::size_t>(k)].mat == magmaan::model::MatId::Lambda)
       theta(k) = 0.8;
-    else if (locs[static_cast<std::size_t>(k)].mat == latva::model::MatId::Theta)
+    else if (locs[static_cast<std::size_t>(k)].mat == magmaan::model::MatId::Theta)
       theta(k) = 0.5;
-    else if (locs[static_cast<std::size_t>(k)].mat == latva::model::MatId::Psi)
+    else if (locs[static_cast<std::size_t>(k)].mat == magmaan::model::MatId::Psi)
       theta(k) = 1.0;
   }
   theta(nu_idx[0]) = 3.0;
@@ -243,7 +243,7 @@ TEST_CASE("ModelEvaluator: mean structure — μ depends on Λ·α when latent m
   const auto locs = ev.param_locations();
   std::ptrdiff_t alpha_idx = -1;
   for (std::size_t k = 0; k < locs.size(); ++k) {
-    if (locs[k].mat == latva::model::MatId::Alpha) {
+    if (locs[k].mat == magmaan::model::MatId::Alpha) {
       alpha_idx = static_cast<std::ptrdiff_t>(k);
     }
   }
@@ -251,11 +251,11 @@ TEST_CASE("ModelEvaluator: mean structure — μ depends on Λ·α when latent m
 
   Eigen::VectorXd theta = Eigen::VectorXd::Zero(static_cast<Eigen::Index>(ev.n_free()));
   for (Eigen::Index k = 0; k < theta.size(); ++k) {
-    if (locs[static_cast<std::size_t>(k)].mat == latva::model::MatId::Lambda)
+    if (locs[static_cast<std::size_t>(k)].mat == magmaan::model::MatId::Lambda)
       theta(k) = 0.7;
-    else if (locs[static_cast<std::size_t>(k)].mat == latva::model::MatId::Theta)
+    else if (locs[static_cast<std::size_t>(k)].mat == magmaan::model::MatId::Theta)
       theta(k) = 0.5;
-    else if (locs[static_cast<std::size_t>(k)].mat == latva::model::MatId::Psi)
+    else if (locs[static_cast<std::size_t>(k)].mat == magmaan::model::MatId::Psi)
       theta(k) = 1.0;
   }
   theta(alpha_idx) = 2.0;

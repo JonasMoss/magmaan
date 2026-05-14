@@ -9,22 +9,24 @@
 #include <Eigen/Core>
 #include <nlohmann/json.hpp>
 
-#include "latva/fit/fit.hpp"
-#include "latva/fit/inference.hpp"
-#include "latva/fit/sample_stats.hpp"
-#include "latva/fit/standardized.hpp"
-#include "latva/model/matrix_rep.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaanify.hpp"
+#include "magmaan/fit/fit.hpp"
+#include "magmaan/fit/inference.hpp"
+#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/fit/standardized.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaanify.hpp"
 
-using latva::fit::ExpectedInfoSE;
-using latva::fit::SampleStats;
-using latva::fit::standardize_all;
-using latva::fit::standardize_lv;
-using latva::model::build_matrix_rep;
-using latva::model::ModelEvaluator;
-using latva::parse::Parser;
-using latva::partable::lavaanify;
+#include "../inference_bundle.hpp"
+
+using magmaan::fit::SampleStats;
+using magmaan::test::expected_inference;
+using magmaan::fit::standardize_all;
+using magmaan::fit::standardize_lv;
+using magmaan::model::build_matrix_rep;
+using magmaan::model::ModelEvaluator;
+using magmaan::parse::Parser;
+using magmaan::partable::lavaanify;
 
 namespace {
 
@@ -48,8 +50,8 @@ TEST_CASE("standardize_lv: 1F CFA — ψ_ff → 1, λs scaled by √ψ̂_ff") {
   SampleStats samp;
   samp.S = {random_pd(rng, 3)};
   samp.n_obs = {300};
-  auto est = latva::fit::fit(*pt, *mr, samp).value();
-  auto inf = ExpectedInfoSE{}.compute(*pt, *mr, samp, est).value();
+  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   auto std_or = standardize_lv(*pt, *mr, est, inf.vcov);
   REQUIRE(std_or.has_value());
@@ -63,11 +65,11 @@ TEST_CASE("standardize_lv: 1F CFA — ψ_ff → 1, λs scaled by √ψ̂_ff") {
   Eigen::Index psi_idx = -1;
   std::vector<Eigen::Index> lambda_idx;
   for (std::size_t k = 0; k < locs.size(); ++k) {
-    if (locs[k].mat == latva::model::MatId::Psi &&
+    if (locs[k].mat == magmaan::model::MatId::Psi &&
         locs[k].row == 0 && locs[k].col == 0) {
       psi_idx = static_cast<Eigen::Index>(k);
     }
-    if (locs[k].mat == latva::model::MatId::Lambda) {
+    if (locs[k].mat == magmaan::model::MatId::Lambda) {
       lambda_idx.push_back(static_cast<Eigen::Index>(k));
     }
   }
@@ -109,8 +111,8 @@ TEST_CASE("standardize_all: 1F CFA — ν_i rescaled by 1/√σ̂_ii, λ by √�
   Eigen::VectorXd mean(3);  mean << 3.0, 4.0, 5.0;
   SampleStats samp;  samp.S = {S};  samp.mean = {mean};  samp.n_obs = {300};
 
-  auto est = latva::fit::fit(*pt, *mr, samp).value();
-  auto inf = ExpectedInfoSE{}.compute(*pt, *mr, samp, est).value();
+  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   auto std_or = standardize_all(*pt, *mr, est, inf.vcov);
   REQUIRE_MESSAGE(std_or.has_value(),
@@ -126,7 +128,7 @@ TEST_CASE("standardize_all: 1F CFA — ν_i rescaled by 1/√σ̂_ii, λ by √�
 
   // For ν params: std value = ν̂ / √σ̂_ii. (Saturated → σ̂_ii = S_ii.)
   for (std::size_t k = 0; k < locs.size(); ++k) {
-    if (locs[k].mat != latva::model::MatId::Nu) continue;
+    if (locs[k].mat != magmaan::model::MatId::Nu) continue;
     const auto i = locs[k].row;
     const double sigma_ii = sm.sigma[0](i, i);
     const double expected = est.theta(static_cast<Eigen::Index>(k)) /
@@ -139,7 +141,7 @@ TEST_CASE("standardize_all: 1F CFA — ν_i rescaled by 1/√σ̂_ii, λ by √�
   }
   // For ψ (the lone diagonal Psi free param) — std value is 1, SE is 0.
   for (std::size_t k = 0; k < locs.size(); ++k) {
-    if (locs[k].mat == latva::model::MatId::Psi &&
+    if (locs[k].mat == magmaan::model::MatId::Psi &&
         locs[k].row == locs[k].col) {
       CHECK(sol.theta(static_cast<Eigen::Index>(k)) ==
             doctest::Approx(1.0));
@@ -162,7 +164,7 @@ TEST_CASE("standardize_lv: 2F CFA — factor covariance → correlation, with de
 
   // Use the [x1..x6] submatrix of lavaan's Holzinger sample covariance so the
   // fit has a genuine factor structure (positive factor variances).
-  std::ifstream in(std::string(LATVA_FIXTURES_DIR) +
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
                    "/fit/0002_three_factor_hs.fit.json");
   REQUIRE(in.is_open());
   std::stringstream ss; ss << in.rdbuf();
@@ -176,8 +178,8 @@ TEST_CASE("standardize_lv: 2F CFA — factor covariance → correlation, with de
                     .get<double>();
   SampleStats samp;  samp.S = {S};  samp.n_obs = {301};
 
-  auto est = latva::fit::fit(*pt, *mr, samp).value();
-  auto inf = ExpectedInfoSE{}.compute(*pt, *mr, samp, est).value();
+  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto inf = expected_inference(*pt, *mr, samp, est).value();
   auto sol_or = standardize_lv(*pt, *mr, est, inf.vcov);
   REQUIRE_MESSAGE(sol_or.has_value(),
       "standardize_lv failed: " << (sol_or.has_value() ? "" : sol_or.error().detail));
@@ -188,7 +190,7 @@ TEST_CASE("standardize_lv: 2F CFA — factor covariance → correlation, with de
   Eigen::Index cov_idx = -1, v0_idx = -1, v1_idx = -1;
   for (std::size_t k = 0; k < locs.size(); ++k) {
     const auto& L = locs[k];
-    if (L.mat != latva::model::MatId::Psi) continue;
+    if (L.mat != magmaan::model::MatId::Psi) continue;
     if (L.row == L.col) {
       if (L.row == 0) v0_idx = static_cast<Eigen::Index>(k);
       if (L.row == 1) v1_idx = static_cast<Eigen::Index>(k);

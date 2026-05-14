@@ -4,23 +4,23 @@
 #include <string>
 #include <string_view>
 
-#include "latva/error.hpp"
-#include "latva/parse/op.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaan_view.hpp"
-#include "latva/partable/lavaanify.hpp"
-#include "latva/partable/partable.hpp"
+#include "magmaan/error.hpp"
+#include "magmaan/parse/op.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaan_view.hpp"
+#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/partable/partable.hpp"
 
-using latva::PartableError;
-using latva::parse::Op;
-using latva::parse::Parser;
-using latva::partable::lavaanify;
-using latva::partable::LavaanifyOptions;
-using latva::partable::LavaanParTable;
-using latva::partable::LatentNames;
-using latva::partable::LatentStructure;
-using latva::partable::Starts;
-using latva::partable::to_lavaan_partable;
+using magmaan::PartableError;
+using magmaan::parse::Op;
+using magmaan::parse::Parser;
+using magmaan::partable::lavaanify;
+using magmaan::partable::LavaanifyOptions;
+using magmaan::partable::LavaanParTable;
+using magmaan::partable::LatentNames;
+using magmaan::partable::LatentStructure;
+using magmaan::partable::Starts;
+using magmaan::partable::to_lavaan_partable;
 
 namespace {
 
@@ -416,7 +416,7 @@ TEST_CASE("lavaanify: c(...) supplies per-group fixed values") {
 TEST_CASE("lavaanify: empty model rejected") {
   // An empty parse would actually fail at the parser level, so we craft a
   // FlatPartable manually with no rows and no constraints.
-  latva::parse::FlatPartable fp;
+  magmaan::parse::FlatPartable fp;
   auto pt = lavaanify(fp);
   REQUIRE_FALSE(pt.has_value());
   CHECK(pt.error().kind == PartableError::Kind::EmptyModel);

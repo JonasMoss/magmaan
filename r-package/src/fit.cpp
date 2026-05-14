@@ -1,21 +1,21 @@
-// Rcpp glue for latva's fitting + post-fit-inference layer. Composition-first:
-// one thin wrapper per C++ entry point, no convenience bundling. latva_fit()
+// Rcpp glue for magmaan's fitting + post-fit-inference layer. Composition-first:
+// one thin wrapper per C++ entry point, no convenience bundling. fit_fit()
 // mirrors fit() and returns a "fit object" (a transparent base-R list carrying
 // the partable / sample stats / theta needed downstream); the other functions
 // each take a fit object (and, where the C++ signature does, the upstream
 // results — an se result, a baseline result, implied moments) and mirror one
-// C++ function. Errors -> Rcpp::stop with latva's error kind + detail. Eigen
+// C++ function. Errors -> Rcpp::stop with magmaan's error kind + detail. Eigen
 // <-> R via RcppEigen. Shared plumbing lives in internal.hpp.
 
 #include "internal.hpp"
 
-#include "latva/fit/start_values.hpp"
-#include "latva/fit/ml.hpp"
-#include "latva/fit/fit_measures.hpp"
+#include "magmaan/fit/start_values.hpp"
+#include "magmaan/fit/ml.hpp"
+#include "magmaan/fit/fit_measures.hpp"
 
 // [[Rcpp::depends(RcppEigen)]]
 
-using namespace latvar;
+using namespace magmaanr;
 
 namespace {
 
@@ -74,7 +74,7 @@ Rcpp::DataFrame structural_cells_df(const std::vector<lvm::StructuralCell>& sc) 
 
 // =============================================================================
 
-// latva_matrix_rep() — mirrors build_matrix_rep(pt). A function of the partable
+// model_matrix_rep() — mirrors build_matrix_rep(pt). A function of the partable
 // alone (no fit / data / θ̂): the LISREL layout that downstream evaluation uses.
 // `partable` a partable data.frame. Returns list(form = "PureCFA"|"Reduced",
 // dims = list(list(n_observed, n_latent), ...) per block, ov_names = list(<chr>,
@@ -85,8 +85,8 @@ Rcpp::DataFrame structural_cells_df(const std::vector<lvm::StructuralCell>& sc) 
 // mat, row, col, block, value)).
 //
 // [[Rcpp::export]]
-Rcpp::List latva_matrix_rep(SEXP partable) {
-  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "latva_matrix_rep");
+Rcpp::List model_matrix_rep(SEXP partable) {
+  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "model_matrix_rep");
   auto rep_or = lvm::build_matrix_rep(parsed.structure, &parsed.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
   const lvm::MatrixRep& rep = *rep_or;
@@ -101,27 +101,28 @@ Rcpp::List latva_matrix_rep(SEXP partable) {
 
 // =============================================================================
 
-// latva_fit() — mirrors fit(pt, rep, samp, ML{}, LbfgsOptimizer{lbfgs}). `partable`
-// is a partable data.frame (e.g. from latva_lavaanify(), possibly hand-edited).
+// fit_fit() — mirrors fit(pt, rep, samp, ML{}, LbfgsOptimizer{lbfgs}). `partable`
+// is a partable data.frame (e.g. from lavaan_lavaanify(), possibly hand-edited).
 // `sample_stats` is the {S, nobs, mean} bundle — exactly what
-// latva_sample_stats_from_raw() returns, or a hand-built list(S = , nobs = ):
+// data_sample_stats_from_raw() returns, or a hand-built list(S = , nobs = ):
 //   $S    a covariance matrix (single group) or a list of per-group ones;
 //   $nobs the matching sample size (scalar or per-group vector);
 //   $mean (optional) NULL, a vector, or a list of vectors — used only when the
 //         model has mean structure. Values used verbatim (no rescaling).
 // `lbfgs` is a named list read for max_iter/ftol/gtol/history. Returns a fit
-// object: a transparent list carrying everything the latva_se_* / latva_*_test
-// / latva_baseline / latva_fit_measures / latva_implied / robust functions need
-// to recompose, plus convenient views (theta, partable+est). Always uniform:
+// object: a transparent list carrying everything the infer_information_* /
+// infer_chi2_stat / infer_df_stat / infer_*_test / infer_baseline / measures_fit /
+// model_implied / robust functions need to recompose, plus convenient views
+// (theta, partable+est). Always uniform:
 // $S / $sample_mean are per-group lists (length ngroups ≥ 1); $nobs a vector.
 //
 // [[Rcpp::export]]
-Rcpp::List latva_fit(SEXP partable, Rcpp::List sample_stats,
+Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats,
                      Rcpp::Nullable<Rcpp::List> lbfgs = R_NilValue) {
   // `==` / shared-label equality rows are enforced by fit() (reparam θ = K·α);
   // `<` / `>` rows and arbitrary-expression `==` rows make fit() error with a
   // clear message; `:=` rows are ignored during the fit (post-fit quantities).
-  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "latva_fit");
+  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_fit");
   lvp::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
@@ -172,13 +173,13 @@ Rcpp::List latva_fit(SEXP partable, Rcpp::List sample_stats,
       Rcpp::_["meanstructure"] = ctx.meanstructure);
 }
 
-// latva_start_values() — mirrors simple_start_values(pt, rep, samp). Returns the
-// theta-ordered start vector (length npar). `sample_stats` as in latva_fit();
+// fit_start_values() — mirrors simple_start_values(pt, rep, samp). Returns the
+// theta-ordered start vector (length npar). `sample_stats` as in fit_fit();
 // values used verbatim.
 //
 // [[Rcpp::export]]
-Rcpp::NumericVector latva_start_values(SEXP partable, Rcpp::List sample_stats) {
-  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "latva_start_values");
+Rcpp::NumericVector fit_start_values(SEXP partable, Rcpp::List sample_stats) {
+  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_start_values");
   lvp::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
@@ -187,12 +188,12 @@ Rcpp::NumericVector latva_start_values(SEXP partable, Rcpp::List sample_stats) {
   return Rcpp::wrap(*sv_or);
 }
 
-// latva_implied() — mirrors ModelEvaluator::build(pt, rep).sigma(est.theta).
+// model_implied() — mirrors ModelEvaluator::build(pt, rep).sigma(est.theta).
 // Returns list(sigma = list of per-block p x p matrices, mu = list of per-block
 // vectors — empty unless the model has mean structure).
 //
 // [[Rcpp::export]]
-Rcpp::List latva_implied(Rcpp::List fit) {
+Rcpp::List model_implied(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
   const lvf::Estimates est = est_from_fit(fit);
   auto ev_or = lvm::ModelEvaluator::build(ctx.pt, ctx.rep);
@@ -211,66 +212,133 @@ Rcpp::List latva_implied(Rcpp::List fit) {
   return Rcpp::List::create(Rcpp::_["sigma"] = sigma, Rcpp::_["mu"] = mu);
 }
 
-// latva_se_expected() — mirrors ExpectedInfoSE::compute(pt, rep, samp, est).
+// infer_information_expected() — mirrors information_expected(pt, rep, samp, est).
+// Returns the (n_free × n_free) expected Fisher information matrix at θ̂.
 //
 // [[Rcpp::export]]
-Rcpp::List latva_se_expected(Rcpp::List fit) {
+Rcpp::NumericMatrix infer_information_expected(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
   const lvf::Estimates est = est_from_fit(fit);
-  auto r = lvf::ExpectedInfoSE{}.compute(ctx.pt, ctx.rep, ctx.samp, est);
+  auto r = lvf::information_expected(ctx.pt, ctx.rep, ctx.samp, est);
   if (!r.has_value()) stop_post(r.error());
-  return inference_to_list(*r);
+  return Rcpp::wrap(*r);
 }
 
-// latva_se_observed_fd() — mirrors FdObservedInfoSE{h_step}::compute(...).
+// infer_information_observed_fd() — mirrors information_observed_fd(...).
+// Observed-information matrix via central-difference Hessian of the analytic
+// ML gradient.
 //
 // [[Rcpp::export]]
-Rcpp::List latva_se_observed_fd(Rcpp::List fit, double h_step = 1e-4) {
+Rcpp::NumericMatrix infer_information_observed_fd(Rcpp::List fit,
+                                                  double h_step = 1e-4) {
   Ctx ctx = ctx_from_fit(fit);
   const lvf::Estimates est = est_from_fit(fit);
-  lvf::FdObservedInfoSE m;
-  m.h_step = h_step;
-  auto r = m.compute(ctx.pt, ctx.rep, ctx.samp, est);
+  auto r = lvf::information_observed_fd(ctx.pt, ctx.rep, ctx.samp, est, h_step);
   if (!r.has_value()) stop_post(r.error());
-  return inference_to_list(*r);
+  return Rcpp::wrap(*r);
 }
 
-// latva_se_observed_analytic() — mirrors AnalyticObservedInfoSE::compute(...).
+// infer_information_observed_analytic() — mirrors information_observed_analytic(...).
+// Closed-form observed-information matrix; rejects mean-structure models (use
+// the FD variant there).
 //
 // [[Rcpp::export]]
-Rcpp::List latva_se_observed_analytic(Rcpp::List fit) {
+Rcpp::NumericMatrix infer_information_observed_analytic(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
   const lvf::Estimates est = est_from_fit(fit);
-  auto r = lvf::AnalyticObservedInfoSE{}.compute(ctx.pt, ctx.rep, ctx.samp, est);
+  auto r = lvf::information_observed_analytic(ctx.pt, ctx.rep, ctx.samp, est);
   if (!r.has_value()) stop_post(r.error());
-  return inference_to_list(*r);
+  return Rcpp::wrap(*r);
 }
 
-// latva_baseline() — mirrors baseline_chi2(samp). Takes a fit object (uses its
-// sample stats).
+// infer_vcov() — mirrors vcov(info, pt). Inverts the information matrix,
+// applying the constraint projection K·(KᵀIK)⁻¹·Kᵀ when shared labels /
+// invariance / general-linear equalities are active. Takes `fit` so the
+// partable comes along (constraints live on pt). The `info` matrix is the
+// only numerical input — caller chooses which information variant.
 //
 // [[Rcpp::export]]
-Rcpp::List latva_baseline(Rcpp::List fit) {
+Rcpp::NumericMatrix infer_vcov(Rcpp::NumericMatrix info, Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
-  const lvf::BaselineFit bl = lvf::baseline_chi2(ctx.samp);
+  const Eigen::MatrixXd info_m = Rcpp::as<Eigen::MatrixXd>(info);
+  auto r = lvf::vcov(info_m, ctx.pt);
+  if (!r.has_value()) stop_post(r.error());
+  return Rcpp::wrap(*r);
+}
+
+// infer_se() — mirrors se(vcov). Returns √diag(vcov); NaN for negative
+// diagonal entries (Heywood case). Never errors.
+//
+// [[Rcpp::export]]
+Rcpp::NumericVector infer_se(Rcpp::NumericMatrix vcov) {
+  const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
+  return Rcpp::wrap(lvf::se(vcov_m));
+}
+
+// infer_chi2_stat() — mirrors chi2_stat(samp, est). Returns N_total · F_ML(θ̂).
+// This primitive does not need a fit object: sample_stats supplies nobs and
+// fmin is the optimizer's final discrepancy value (fit$fmin when called after
+// fit_fit()).
+//
+// [[Rcpp::export]]
+double infer_chi2_stat(Rcpp::List sample_stats, double fmin) {
+  if (!sample_stats.containsElementNamed("nobs"))
+    Rcpp::stop("magmaan: sample_stats must contain $nobs");
+  lvf::SampleStats samp;
+  Rcpp::IntegerVector nv = Rcpp::as<Rcpp::IntegerVector>(sample_stats["nobs"]);
+  for (R_xlen_t i = 0; i < nv.size(); ++i)
+    samp.n_obs.push_back(static_cast<std::int64_t>(nv[i]));
+  lvf::Estimates est;
+  est.fmin = fmin;
+  return lvf::chi2_stat(samp, est);
+}
+
+// infer_df_stat() — mirrors df_stat(pt, samp). Returns Σ_b p_b(p_b+1)/2 (+ means)
+// − fixed_x − n_free + constraint.rank. Pure function of the model and the
+// data dimensions; doesn't depend on θ̂. Errors on unenforced constraints.
+//
+// [[Rcpp::export]]
+int infer_df_stat(SEXP partable, Rcpp::List sample_stats) {
+  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "infer_df_stat");
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  auto r = lvf::df_stat(ctx.pt, ctx.samp);
+  if (!r.has_value()) stop_post(r.error());
+  return *r;
+}
+
+// infer_baseline() — mirrors baseline_chi2(samp). Takes sample stats directly.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_baseline(Rcpp::List sample_stats) {
+  if (!sample_stats.containsElementNamed("S") || !sample_stats.containsElementNamed("nobs"))
+    Rcpp::stop("magmaan: sample_stats must contain $S and $nobs");
+  lvf::SampleStats samp;
+  Rcpp::List Sl(sample_stats["S"]);
+  Rcpp::IntegerVector nv = Rcpp::as<Rcpp::IntegerVector>(sample_stats["nobs"]);
+  if (Sl.size() != nv.size())
+    Rcpp::stop("magmaan: sample_stats$S and sample_stats$nobs must have the same length");
+  for (R_xlen_t b = 0; b < Sl.size(); ++b) {
+    samp.S.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Sl[b])));
+    samp.n_obs.push_back(static_cast<std::int64_t>(nv[b]));
+  }
+  const lvf::BaselineFit bl = lvf::baseline_chi2(samp);
   return Rcpp::List::create(Rcpp::_["chi2"] = bl.chi2, Rcpp::_["df"] = bl.df);
 }
 
-// latva_fit_measures() — mirrors fit_measures(inf, baseline, samp) plus
+// measures_fit() — mirrors fit_measures(chi2, df, baseline, samp) plus
 // fit_extras(pt, rep, samp, est) (the logl-based information criteria + SRMR).
-// `se` is a latva_se_*() result (only chi2/df used); `baseline` is a
-// latva_baseline() result.
+// `chi2` and `df` are scalars from infer_chi2_stat() / infer_df_stat() (or any
+// equivalent statistic / dof); `baseline` is a infer_baseline() result.
 //
 // [[Rcpp::export]]
-Rcpp::List latva_fit_measures(Rcpp::List fit, Rcpp::List se, Rcpp::List baseline) {
+Rcpp::List measures_fit(Rcpp::List fit, double chi2, int df,
+                              Rcpp::List baseline) {
   Ctx ctx = ctx_from_fit(fit);
-  lvf::Inference inf;
-  inf.chi2 = Rcpp::as<double>(se["chi2"]);
-  inf.df   = Rcpp::as<int>(se["df"]);
   lvf::BaselineFit bl;
   bl.chi2 = Rcpp::as<double>(baseline["chi2"]);
   bl.df   = Rcpp::as<int>(baseline["df"]);
-  const lvf::FitMeasures fm = lvf::fit_measures(inf, bl, ctx.samp);
+  const lvf::FitMeasures fm = lvf::fit_measures(chi2, df, bl, ctx.samp);
   const lvf::Estimates   est = est_from_fit(fit);
   auto fx = lvf::fit_extras(ctx.pt, ctx.rep, ctx.samp, est);
   const bool have = fx.has_value();
@@ -278,6 +346,8 @@ Rcpp::List latva_fit_measures(Rcpp::List fit, Rcpp::List se, Rcpp::List baseline
       Rcpp::_["cfi"]               = fm.cfi,
       Rcpp::_["tli"]               = fm.tli,
       Rcpp::_["rmsea"]             = fm.rmsea,
+      Rcpp::_["rmsea.ci.lower"]    = fm.rmsea_ci_lower,
+      Rcpp::_["rmsea.ci.upper"]    = fm.rmsea_ci_upper,
       Rcpp::_["srmr"]              = have ? fx->srmr              : NA_REAL,
       Rcpp::_["logl"]              = have ? fx->logl              : NA_REAL,
       Rcpp::_["unrestricted.logl"] = have ? fx->unrestricted_logl : NA_REAL,
@@ -288,26 +358,25 @@ Rcpp::List latva_fit_measures(Rcpp::List fit, Rcpp::List se, Rcpp::List baseline
       Rcpp::_["ntotal"]            = have ? static_cast<double>(fx->ntotal) : NA_REAL);
 }
 
-// latva_z_test() — mirrors z_test(est, inf). `se` is a latva_se_*() result
-// (only its `se` vector is used).
+// infer_z_test() — mirrors z_test(est, se). `se` is the SE vector from
+// infer_se(infer_vcov(info, fit)).
 //
 // [[Rcpp::export]]
-Rcpp::List latva_z_test(Rcpp::List fit, Rcpp::List se) {
+Rcpp::List infer_z_test(Rcpp::List fit, Rcpp::NumericVector se) {
   const lvf::Estimates est = est_from_fit(fit);
-  lvf::Inference inf;
-  inf.se = Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(se["se"]));
-  const lvf::ZTestResult zt = lvf::z_test(est, inf);
+  const Eigen::VectorXd se_v = Rcpp::as<Eigen::VectorXd>(se);
+  const lvf::ZTestResult zt = lvf::z_test(est, se_v);
   return Rcpp::List::create(Rcpp::_["z"] = Rcpp::wrap(zt.z),
                             Rcpp::_["pvalue"] = Rcpp::wrap(zt.p_value));
 }
 
-// latva_chi2_pvalue() — mirrors chi2_pvalue(chi2, df), vectorized over `chi2`
+// infer_chi2_pvalue() — mirrors chi2_pvalue(chi2, df), vectorized over `chi2`
 // (recycles `df` if length 1); NA/NaN in -> NA out. Also the LR-test primitive
 // (subtract test statistics / dfs of two nested fits, call this).
 //
 // [[Rcpp::export]]
-Rcpp::NumericVector latva_chi2_pvalue(Rcpp::NumericVector chi2, Rcpp::IntegerVector df) {
-  if (df.size() == 0) Rcpp::stop("latva: df must have length >= 1");
+Rcpp::NumericVector infer_chi2_pvalue(Rcpp::NumericVector chi2, Rcpp::IntegerVector df) {
+  if (df.size() == 0) Rcpp::stop("magmaan: df must have length >= 1");
   const R_xlen_t n = chi2.size();
   Rcpp::NumericVector out(n);
   for (R_xlen_t i = 0; i < n; ++i) {
@@ -318,12 +387,13 @@ Rcpp::NumericVector latva_chi2_pvalue(Rcpp::NumericVector chi2, Rcpp::IntegerVec
   return out;
 }
 
-// latva_wald_test() — mirrors wald_test(R, q, est, vcov). `R` is k x npar
-// (columns indexed by partable$free); `q` defaults to zeros. `se` is a
-// latva_se_*() result (its `vcov` is used).
+// infer_wald_test() — mirrors wald_test(R, q, est, vcov). `R` is k x npar
+// (columns indexed by partable$free); `q` defaults to zeros; `vcov` is the
+// parameter covariance matrix (from infer_vcov()).
 //
 // [[Rcpp::export]]
-Rcpp::List latva_wald_test(Rcpp::List fit, Rcpp::NumericMatrix R, Rcpp::List se,
+Rcpp::List infer_wald_test(Rcpp::List fit, Rcpp::NumericMatrix R,
+                           Rcpp::NumericMatrix vcov,
                            Rcpp::Nullable<Rcpp::NumericVector> q = R_NilValue) {
   const lvf::Estimates est = est_from_fit(fit);
   Eigen::MatrixXd Rmat = Rcpp::as<Eigen::MatrixXd>(R);
@@ -333,25 +403,25 @@ Rcpp::List latva_wald_test(Rcpp::List fit, Rcpp::NumericMatrix R, Rcpp::List se,
     int npar = 0;
     for (R_xlen_t i = 0; i < freev.size(); ++i) if (freev[i] > npar) npar = freev[i];
     if (static_cast<int>(Rmat.cols()) != npar)
-      Rcpp::stop("latva: R must have %d columns (one per free parameter)", npar);
+      Rcpp::stop("magmaan: R must have %d columns (one per free parameter)", npar);
   }
   Eigen::VectorXd qv = q.isNotNull() ? Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(q.get()))
                                      : Eigen::VectorXd::Zero(Rmat.rows());
   if (qv.size() != Rmat.rows())
-    Rcpp::stop("latva: q must have length %d (= nrow(R))", static_cast<int>(Rmat.rows()));
-  Eigen::MatrixXd vcov = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(se["vcov"]));
-  auto w_or = lvf::wald_test(Rmat, qv, est, vcov);
+    Rcpp::stop("magmaan: q must have length %d (= nrow(R))", static_cast<int>(Rmat.rows()));
+  Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
+  auto w_or = lvf::wald_test(Rmat, qv, est, vcov_m);
   if (!w_or.has_value()) stop_post(w_or.error());
   return Rcpp::List::create(Rcpp::_["chi2"] = w_or->chi2, Rcpp::_["df"] = w_or->df,
                             Rcpp::_["pvalue"] = lvf::chi2_pvalue(w_or->chi2, w_or->df));
 }
 
-// latva_browne_residual_nt() — mirrors browne_residual_nt(pt, rep, samp, est).
-// Returns just the statistic (the model df is latva_se_*(fit)$df; the p-value
-// is latva_chi2_pvalue(statistic, df)).
+// infer_browne_residual_nt() — mirrors browne_residual_nt(pt, rep, samp, est).
+// Returns just the statistic (the model df is infer_df_stat(); the p-value
+// is infer_chi2_pvalue(statistic, df)).
 //
 // [[Rcpp::export]]
-Rcpp::List latva_browne_residual_nt(Rcpp::List fit) {
+Rcpp::List infer_browne_residual_nt(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
   const lvf::Estimates est = est_from_fit(fit);
   auto s_or = lvf::browne_residual_nt(ctx.pt, ctx.rep, ctx.samp, est);
@@ -359,11 +429,11 @@ Rcpp::List latva_browne_residual_nt(Rcpp::List fit) {
   return Rcpp::List::create(Rcpp::_["statistic"] = *s_or);
 }
 
-// latva_rls_chi2() — mirrors rls_chi2(samp, implied). `implied` is a
-// latva_implied() result. Returns just the statistic.
+// infer_rls_chi2() — mirrors rls_chi2(samp, implied). `implied` is a
+// model_implied() result. Returns just the statistic.
 //
 // [[Rcpp::export]]
-Rcpp::List latva_rls_chi2(Rcpp::List fit, Rcpp::List implied) {
+Rcpp::List infer_rls_chi2(Rcpp::List fit, Rcpp::List implied) {
   Ctx ctx = ctx_from_fit(fit);
   lvm::ImpliedMoments im;
   Rcpp::List sig(implied["sigma"]);
