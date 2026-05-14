@@ -12,6 +12,7 @@
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/nt/measures.hpp"
 #include "magmaan/nt/fiml.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -180,4 +181,55 @@ TEST_CASE("fit_fiml: complete-data path fits a saturated mean CFA near zero grad
     return;
   }
   CHECK(vg->gradient.cwiseAbs().maxCoeff() < 1e-4);
+}
+
+TEST_CASE("fiml_extras: complete data matches SampleStats fit_extras") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3");
+
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  for (Eigen::Index k = 0; k < theta0.size(); ++k) theta0(k) = 0.7;
+  theta0.tail(3) << 1.0, 2.0, 3.0;
+  auto truth = built.ev.sigma(theta0);
+  REQUIRE(truth.has_value());
+  Eigen::LLT<Eigen::MatrixXd> llt(truth->sigma[0]);
+  REQUIRE(llt.info() == Eigen::Success);
+  const Eigen::MatrixXd L = llt.matrixL();
+  const double a = std::sqrt(3.0);
+  Eigen::MatrixXd Z(6, 3);
+  Z <<  a, 0.0, 0.0,
+       -a, 0.0, 0.0,
+       0.0,  a, 0.0,
+       0.0, -a, 0.0,
+       0.0, 0.0,  a,
+       0.0, 0.0, -a;
+
+  magmaan::data::RawData raw;
+  raw.X.push_back((Z * L.transpose()).rowwise() + truth->mu[0].transpose());
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+
+  magmaan::partable::Starts starts;
+  starts.hint.resize(static_cast<std::size_t>(theta0.size()));
+  for (Eigen::Index k = 0; k < theta0.size(); ++k) {
+    starts.hint[static_cast<std::size_t>(k)] = theta0(k);
+  }
+
+  magmaan::optim::LbfgsOptions opts;
+  opts.max_iter = 100;
+  magmaan::optim::LbfgsOptimizer opt(opts);
+  auto est = magmaan::estimate::fit_fiml(*built.pt, *built.rep, raw,
+                                         magmaan::nt::fiml::FIML{}, opt,
+                                         std::move(starts));
+  REQUIRE(est.has_value());
+
+  auto fiml_fx = magmaan::nt::fiml::fiml_extras(*built.pt, *built.rep, raw, *est);
+  REQUIRE(fiml_fx.has_value());
+  auto ml_fx = magmaan::nt::measures::fit_extras(*built.pt, *built.rep, *samp, *est);
+  REQUIRE(ml_fx.has_value());
+
+  CHECK(fiml_fx->logl == doctest::Approx(ml_fx->logl).epsilon(1e-9));
+  CHECK(fiml_fx->unrestricted_logl ==
+        doctest::Approx(ml_fx->unrestricted_logl).epsilon(1e-9));
+  CHECK(fiml_fx->npar == ml_fx->npar);
+  CHECK(fiml_fx->ntotal == ml_fx->ntotal);
 }

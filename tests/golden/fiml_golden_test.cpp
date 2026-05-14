@@ -108,6 +108,13 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
     }
     const auto& est = *est_or;
 
+    auto fx_or = magmaan::estimate::fiml_extras(*pt, *mr, raw, est);
+    if (!fx_or.has_value()) {
+      failures.push_back(id + ": fiml_extras — " + fx_or.error().detail);
+      continue;
+    }
+    const auto& fx = *fx_or;
+
     const auto& th = exp["theta_hat"];
     if (static_cast<std::size_t>(est.theta.size()) != th.size()) {
       char buf[160];
@@ -125,15 +132,47 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
       max_diff = std::max(max_diff, d);
     }
 
-    if (max_diff <= 5e-6) {
-      ++passed;
-    } else {
+    if (max_diff > 5e-6) {
       char buf[256];
       std::snprintf(buf, sizeof(buf),
                     "max |θ̂ - lavaan| = %.3e (iters=%d, fmin=%.10f)",
                     max_diff, est.iterations, est.fmin);
       failures.push_back(id + ": " + buf);
+      continue;
     }
+
+    auto cmp = [&](const char* name, double got, double tol) {
+      if (!exp.contains(name)) {
+        failures.push_back(id + ": missing " + std::string(name));
+        return false;
+      }
+      const double want = exp[name].get<double>();
+      const double d = std::abs(got - want);
+      if (d <= tol) return true;
+      char buf[256];
+      std::snprintf(buf, sizeof(buf),
+                    "%s mismatch: got %.12g, want %.12g, |diff| %.3e",
+                    name, got, want, d);
+      failures.push_back(id + ": " + buf);
+      return false;
+    };
+    bool ok = true;
+    ok = cmp("logl", fx.logl, 2e-5) && ok;
+    ok = cmp("unrestricted_logl", fx.unrestricted_logl, 2e-5) && ok;
+    ok = cmp("chisq", fx.chi2, 2e-5) && ok;
+    ok = cmp("aic", fx.aic, 5e-5) && ok;
+    ok = cmp("bic", fx.bic, 5e-5) && ok;
+    ok = cmp("bic2", fx.bic2, 5e-5) && ok;
+
+    if (!exp.contains("npar") || fx.npar != exp["npar"].get<int>()) {
+      failures.push_back(id + ": npar mismatch");
+      ok = false;
+    }
+    if (!exp.contains("n_obs") || fx.ntotal != exp["n_obs"].get<std::int64_t>()) {
+      failures.push_back(id + ": ntotal mismatch");
+      ok = false;
+    }
+    if (ok) ++passed;
   }
 
   MESSAGE("FIML goldens: " << passed << " / " << total << " pass");

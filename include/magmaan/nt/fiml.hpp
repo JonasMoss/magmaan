@@ -6,8 +6,10 @@ namespace magmaan::nt::fiml {
 
 using fit::FIML;
 using fit::FIMLCache;
+using fit::FIMLExtras;
 using fit::FIMLPattern;
 using fit::FIMLValueGradient;
+using fit::fiml_extras;
 using fit::fiml_start_sample_stats;
 
 }  // namespace magmaan::nt::fiml

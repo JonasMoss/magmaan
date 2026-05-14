@@ -1244,6 +1244,11 @@ for (m in fiml_cases) {
     theta_hat       = as.numeric(free_rows$est),
     converged       = isTRUE(lavInspect(fit, "converged")),
     logl            = as.numeric(fm["logl"]),
+    unrestricted_logl = as.numeric(fm["unrestricted.logl"]),
+    chisq           = as.numeric(fm["chisq"]),
+    aic             = as.numeric(fm["aic"]),
+    bic             = as.numeric(fm["bic"]),
+    bic2            = as.numeric(fm["bic2"]),
     npar            = as.integer(fm["npar"])
   )
 
