@@ -38,11 +38,13 @@ The core parser-to-fit pipeline is in place:
   sample stats plus DWLS/WLS fits. Checked-in ordinal fixtures now validate
   thresholds, polychoric `R`, `NACOV`, `WLS.V`, `WLS.VD`, and DWLS/WLS
   delta-parameterization free sets, point estimates, degrees of freedom, and
-  chi-square statistics. The C++ ordinal fitter shares the bounded LS optimizer
-  surface, with LBFGS-B as the default and Ceres objective parity coverage in
-  Ceres builds. This path currently implements lavaan's delta-style response
-  scale boundary; theta parameterization, mixed polyserial statistics, ordinal
-  SNLLS, and robust ordinal reporting remain open.
+  chi-square statistics across single-group, multi-group, skewed, near-empty
+  category, and sparse nonempty ordinal cases, with equality-constrained DWLS
+  fit coverage. The C++ ordinal fitter shares the bounded LS optimizer surface,
+  with LBFGS-B as the default and Ceres objective parity coverage in Ceres
+  builds. This path currently implements lavaan's delta-style response scale
+  boundary; theta parameterization, mixed polyserial statistics, ordinal SNLLS,
+  and robust ordinal reporting remain open.
 - Separable nonlinear least squares (SNLLS) profiling for LS estimators where
   conditionally linear parameters can be profiled out.
 - Expected information, finite-difference observed information, analytic
@@ -105,19 +107,20 @@ Open work:
 - Extend the checked-in ordinal sample-stat fixtures as new edge cases are
   added. Current fixtures compare thresholds, polychoric `R`, `NACOV`,
   `WLS.V`, and `WLS.VD` against lavaan for representative all-ordinal
-  single-group, multi-group, skewed, and sparse-but-nonempty cases. Keep
-  numeric tolerances documented separately for threshold estimates,
-  bivariate-normal integration, optimizer convergence, and weight inversion.
+  single-group, multi-group, skewed, sparse-but-nonempty, near-empty category,
+  and equality-constrained cases. Keep numeric tolerances documented
+  separately for threshold estimates, bivariate-normal integration, optimizer
+  convergence, and weight inversion.
 - Keep `parameterization = "delta"` as the asserted ordinal boundary for now.
   The R helper accepts only `"delta"` and emits fixed response-scale rows;
   lavaan's `parameterization = "theta"` remains a later compatibility slice.
 - Maintain ordinal DWLS/WLS fit parity. The fixtures include lavaan fit outputs
   and now assert `fit_ordinal_bounded()` free-parameter counts, estimates,
   degrees of freedom, and chi-square statistics under lavaan's delta contract.
-- Add R-boundary fit tests for `data_ordinal_stats_from_df()`,
-  `fit_dwls_ordinal()`, and `fit_wls_ordinal()`. Direct C++ fit convergence
-  coverage exists; the R path still needs explicit coverage around sample-stat
-  construction, result reconstruction, and error surfaces.
+- Maintain R-boundary coverage for `data_ordinal_stats_from_df()`,
+  `fit_dwls_ordinal()`, and `fit_wls_ordinal()`. The example smoke tests now
+  cover sample-stat construction, result reconstruction, lavaan chi-square
+  parity, and empty-category validation.
 - Keep polychoric construction internal to `ordinal_stats_from_integer_data()`
   until the sample-stat contract is stable. A public polychoric API should
   expose the moment-vector ordering, category metadata, sample-size scaling,

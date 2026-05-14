@@ -15,6 +15,7 @@
 #include "../oracle.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/estimate/ordinal.hpp"
+#include "magmaan/fit/constraints.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
@@ -28,6 +29,8 @@ const std::vector<std::string> kOrdinalFixtures = {
     "0002_4cat_skewed_cfa",
     "0003_sparse_nonempty_pairs",
     "0004_2group_3cat_cfa",
+    "0005_near_empty_5cat_cfa",
+    "0006_equal_loading_3cat_cfa",
 };
 
 Eigen::MatrixXd matrix_from_json(const nlohmann::json& j) {
@@ -245,11 +248,15 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
     const magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
         .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8});
 
-    for (const auto kind : {magmaan::estimate::OrdinalWeightKind::DWLS,
-                            magmaan::estimate::OrdinalWeightKind::WLS}) {
-      const std::string name = kind == magmaan::estimate::OrdinalWeightKind::DWLS
-          ? "DWLS"
-          : "WLS";
+    for (const auto& fit_item : exp["fits"].items()) {
+      const std::string name = fit_item.key();
+      if (name != "DWLS" && name != "WLS") {
+        failures.push_back(id + ": unknown ordinal fit kind " + name);
+        continue;
+      }
+      const auto kind = name == "DWLS"
+          ? magmaan::estimate::OrdinalWeightKind::DWLS
+          : magmaan::estimate::OrdinalWeightKind::WLS;
       ++total;
       auto est_or = magmaan::estimate::fit_ordinal_bounded(
           h->pt, h->rep, h->stats, magmaan::estimate::Bounds{}, kind, opt);
@@ -269,7 +276,21 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
         const Eigen::Index p = h->stats.R[b].rows();
         n_moments += h->stats.thresholds[b].size() + p * (p - 1) / 2;
       }
-      const int df = static_cast<int>(n_moments - est_or->theta.size());
+      auto pt_for_df = h->pt;
+      auto prep_for_df =
+          magmaan::estimate::prepare_ordinal_delta_partable(pt_for_df, h->stats);
+      if (!prep_for_df.has_value()) {
+        failures.push_back(id + " " + name + ": df prep — " +
+                           prep_for_df.error().detail);
+        continue;
+      }
+      auto con_or = magmaan::fit::build_eq_constraints(pt_for_df);
+      if (!con_or.has_value()) {
+        failures.push_back(id + " " + name + ": df constraints — " +
+                           con_or.error().detail);
+        continue;
+      }
+      const int df = static_cast<int>(n_moments - con_or->n_alpha);
       const double chisq = static_cast<double>(n_total) * est_or->fmin;
       const double d_chisq = std::abs(chisq - lavaan_chisq);
       const double d_theta = max_abs_diff(est_or->theta, lavaan_theta);
@@ -335,11 +356,15 @@ TEST_CASE("ordinal fixtures: Ceres and LBFGS-B bounded fits agree") {
         magmaan::optim::CeresOptions{.max_iter = 1000, .ftol = 1e-12,
                                      .gtol = 1e-8, .ptol = 1e-10});
 
-    for (const auto kind : {magmaan::estimate::OrdinalWeightKind::DWLS,
-                            magmaan::estimate::OrdinalWeightKind::WLS}) {
-      const char* name = kind == magmaan::estimate::OrdinalWeightKind::DWLS
-          ? "DWLS"
-          : "WLS";
+    for (const auto& fit_item : exp["fits"].items()) {
+      const std::string name = fit_item.key();
+      if (name != "DWLS" && name != "WLS") {
+        failures.push_back(id + ": unknown ordinal fit kind " + name);
+        continue;
+      }
+      const auto kind = name == "DWLS"
+          ? magmaan::estimate::OrdinalWeightKind::DWLS
+          : magmaan::estimate::OrdinalWeightKind::WLS;
       ++total;
       auto a = magmaan::estimate::fit_ordinal_bounded(
           h->pt, h->rep, h->stats, magmaan::estimate::Bounds{}, kind, lbfgsb);

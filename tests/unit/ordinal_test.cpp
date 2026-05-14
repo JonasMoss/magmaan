@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <limits>
+#include <vector>
 
 #include <Eigen/Core>
 
@@ -63,6 +64,24 @@ TEST_CASE("Ordinal stats: empty marginal categories are explicit errors") {
        3, 3;
   auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
   CHECK_FALSE(stats.has_value());
+}
+
+TEST_CASE("Ordinal stats: near-empty categories stay finite") {
+  Eigen::MatrixXd X(200, 3);
+  for (Eigen::Index r = 0; r < X.rows(); ++r) {
+    X(r, 0) = r == 0 ? 1 : (r + 1 == X.rows() ? 5 : 2 + (r % 3));
+    X(r, 1) = 1 + ((2 * r + r / 7) % 5);
+    X(r, 2) = 1 + ((3 * r + r / 11) % 5);
+  }
+
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  CHECK(stats->thresholds[0].allFinite());
+  CHECK(stats->R[0].allFinite());
+  CHECK(stats->NACOV[0].allFinite());
+  CHECK(stats->W_dwls[0].allFinite());
+  CHECK(stats->W_wls[0].allFinite());
+  CHECK(stats->n_levels[0] == std::vector<std::int32_t>({5, 5, 5}));
 }
 
 TEST_CASE("Ordinal rows round-trip through lavaan-shaped partables and matrix_rep ignores them") {
