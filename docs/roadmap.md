@@ -30,10 +30,12 @@ The core parser-to-fit pipeline is in place:
   existing `ModelEvaluator` Jacobians, and `fit_fiml()` optimizes with LBFGS.
   Single-group checked-in fixtures now compare `fit_fiml()` point estimates
   against lavaan `missing = "fiml"` for one-factor CFA, three-factor CFA, and
-  shared-label equality CFA with explicit mean structures. Saturated/H1
-  constants, lavaan chi-square/log-likelihood reporting, multi-group
-  missing-data parity, robust missing-data corrections, and R wrappers remain
-  open.
+  shared-label equality CFA with explicit mean structures. FIML post-fit
+  likelihood extras now add observed-data normal constants and a saturated/H1
+  likelihood so log-likelihood, unrestricted log-likelihood, chi-square, and
+  information criteria match lavaan on that fixture tranche. Baseline/fit-index
+  reporting, multi-group missing-data parity, robust missing-data corrections,
+  and R wrappers remain open.
 - ULS, GLS, and explicit-weight WLS discrepancies, each with scalar
   value/gradient and least-squares residual/Jacobian interfaces.
 - Bounded least-squares fitting through LBFGS-B and optional Ceres, including
@@ -91,9 +93,10 @@ Open work:
 
 - Extend the checked-in lavaan FIML fixture family beyond the current
   single-group point-estimate tranche to multi-group missing-data cases.
-- Add saturated/H1 likelihood accounting so FIML fit statistics, log-likelihood,
-  AIC/BIC, and nested-test inputs have lavaan-compatible constants instead of
-  only the optimizer deviance.
+- Add FIML baseline/independence likelihood accounting so fit indices such as
+  CFI/TLI/RMSEA can be reported from raw missing-data fits. User-model and
+  saturated/H1 log-likelihood accounting is already implemented for the current
+  single-group fixture tranche.
 - Decide and document the first public policy for `fixed.x` with missing
   exogenous observed variables. Until then, keep this path narrow rather than
   guessing lavaan's conditional likelihood behavior.

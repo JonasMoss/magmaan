@@ -43,6 +43,17 @@ struct FIMLValueGradient {
   Eigen::VectorXd gradient;
 };
 
+struct FIMLExtras {
+  double       logl              = 0.0;
+  double       unrestricted_logl = 0.0;
+  double       chi2              = 0.0;
+  double       aic               = 0.0;
+  double       bic               = 0.0;
+  double       bic2              = 0.0;
+  int          npar              = 0;
+  std::int64_t ntotal            = 0;
+};
+
 // Full-information ML over raw continuous data with arbitrary observed-value
 // patterns. The optimized scalar is the per-observation observed-pattern
 // normal-theory deviance without saturated/H1 constants:
@@ -79,6 +90,18 @@ struct FIML {
 // each column; covariances use pairwise observed rows with an N divisor.
 fit_expected<SampleStats>
 fiml_start_sample_stats(const RawData& raw);
+
+// Post-fit likelihood accounting for continuous raw-data FIML. The optimizer
+// minimizes only the observed-pattern deviance without constants; this helper
+// adds the normal constants and fits the saturated/H1 observed-data normal
+// model so logl, unrestricted.logl, chi-square, and information criteria use
+// lavaan-compatible missing-data likelihood accounting.
+post_expected<FIMLExtras>
+fiml_extras(partable::LatentStructure pt,
+            const model::MatrixRep& rep,
+            const RawData& raw,
+            const Estimates& est,
+            FIML discrepancy = {});
 
 template <class O = LbfgsOptimizer>
 fit_expected<Estimates>
