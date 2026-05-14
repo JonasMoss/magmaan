@@ -697,6 +697,219 @@ for (m in models) {
 
 cat("regenerated", length(regenerated_fit), "fit fixtures under", fit_dir, "\n")
 
+# === ordinal sample-stat and fit fixtures ==================================
+# First ordinal parity stream. Kept separate from corpus.json because these
+# need checked-in raw ordered data and estimator-specific lavaan internals
+# (`gamma`, `WLS.V`) rather than the Holzinger continuous corpus.
+
+ordinal_dir <- file.path(fixtures, "ordinal")
+dir.create(ordinal_dir, showWarnings = FALSE, recursive = TRUE)
+
+ordinal_model_4 <- paste("f =~ x1 + x2 + x3 + x4", sep = "\n")
+
+make_ord_df <- function(n, cuts_by_var, seed = 1L, two_factor = FALSE) {
+  set.seed(seed)
+  p <- length(cuts_by_var)
+  z <- matrix(rnorm(n * p), n, p)
+  z[, 2] <- 0.55 * z[, 1] + sqrt(1 - 0.55^2) * z[, 2]
+  z[, 3] <- 0.40 * z[, 1] + 0.25 * z[, 2] + sqrt(0.78) * z[, 3]
+  z[, 4] <- 0.30 * z[, 1] + 0.20 * z[, 2] + sqrt(0.87) * z[, 4]
+  if (two_factor) {
+    z[, 3] <- 0.25 * z[, 1] + sqrt(0.94) * z[, 3]
+    z[, 4] <- 0.50 * z[, 3] + sqrt(0.75) * z[, 4]
+  }
+  out <- data.frame(row.names = seq_len(n))
+  for (j in seq_len(p)) {
+    out[[paste0("x", j)]] <- ordered(cut(z[, j],
+                                         c(-Inf, cuts_by_var[[j]], Inf),
+                                         labels = FALSE))
+  }
+  out
+}
+
+ordered_to_int_matrix <- function(df, ov) {
+  mat <- matrix(NA_integer_, nrow(df), length(ov), dimnames = list(NULL, ov))
+  for (j in seq_along(ov)) mat[, j] <- as.integer(df[[ov[[j]]]])
+  mat
+}
+
+lower_tri_values <- function(M) {
+  p <- nrow(M)
+  out <- numeric(p * (p - 1) / 2)
+  k <- 1L
+  for (j in seq_len(p)) {
+    if (j < p) {
+      for (i in seq.int(j + 1L, p)) {
+        out[k] <- M[i, j]
+        k <- k + 1L
+      }
+    }
+  }
+  out
+}
+
+matrix_list_json <- function(x) {
+  if (is.list(x) && !is.data.frame(x)) {
+    lapply(seq_along(x), function(b) list(block = as.integer(b - 1L),
+                                          matrix = unname(as.matrix(x[[b]]))))
+  } else {
+    list(list(block = 0L, matrix = unname(as.matrix(x))))
+  }
+}
+
+ordinal_samp_json <- function(fit) {
+  ss <- lavInspect(fit, "sampstat")
+  G  <- lavInspect(fit, "gamma")
+  W  <- lavTech(fit, "WLS.V")
+  if (!is.list(ss) || (!is.null(ss$cov) || !is.null(ss$th))) ss <- list(ss)
+  if (!is.list(G)) G <- list(G)
+  if (!is.list(W)) W <- list(W)
+  lapply(seq_along(ss), function(b) {
+    cov <- unname(as.matrix(ss[[b]]$cov))
+    th <- as.numeric(ss[[b]]$th)
+    list(block = as.integer(b - 1L),
+         nobs = as.integer(lavInspect(fit, "nobs")[b]),
+         thresholds = th,
+         polychoric = cov,
+         moments = c(th, lower_tri_values(cov)),
+         NACOV = unname(as.matrix(G[[b]])),
+         WLS.V = unname(as.matrix(W[[b]])),
+         WLS.VD = diag(1 / diag(as.matrix(G[[b]])), nrow = nrow(as.matrix(G[[b]]))))
+  })
+}
+
+ordinal_fit_json <- function(fit) {
+  pt <- parTable(fit)
+  free <- pt[pt$free > 0, ]
+  free <- free[order(free$free), ]
+  fm <- fitMeasures(fit)
+  list(converged = isTRUE(lavInspect(fit, "converged")),
+       theta_hat = as.numeric(free$est),
+       free_rows = lapply(seq_len(nrow(free)), function(i) {
+         list(lhs = as.character(free$lhs[i]),
+              op = as.character(free$op[i]),
+              rhs = as.character(free$rhs[i]),
+              group = as.integer(if (!is.null(free$group)) free$group[i] else 1L),
+              free = as.integer(free$free[i]),
+              est = as.numeric(free$est[i]))
+       }),
+       chisq = as.numeric(fm["chisq"]),
+       df = as.integer(fm["df"]),
+       cfi = as.numeric(fm["cfi"]),
+       tli = as.numeric(fm["tli"]),
+       rmsea = as.numeric(fm["rmsea"]),
+       srmr = as.numeric(fm["srmr"]))
+}
+
+ordinal_cases <- list(
+  list(id = "0001_3cat_cfa",
+       model = ordinal_model_4,
+       data = make_ord_df(360, list(c(-0.70, 0.35), c(-0.55, 0.60),
+                                    c(-0.85, 0.20), c(-0.45, 0.75)),
+                          seed = 11L),
+       ordered = paste0("x", 1:4),
+       group = NULL,
+       fit = TRUE),
+  list(id = "0002_4cat_skewed_cfa",
+       model = ordinal_model_4,
+       data = make_ord_df(420, list(c(-1.25, -0.20, 0.85),
+                                    c(-0.95, 0.10, 1.10),
+                                    c(-1.45, -0.35, 0.55),
+                                    c(-0.75, 0.45, 1.35)),
+                          seed = 23L),
+       ordered = paste0("x", 1:4),
+       group = NULL,
+       fit = TRUE),
+  list(id = "0003_sparse_nonempty_pairs",
+       model = NULL,
+       data = data.frame(x1 = ordered(c(1, 1, 1, 2, 2, 3, 3, 3, 3, 2, 1, 3)),
+                         x2 = ordered(c(1, 2, 3, 1, 3, 1, 2, 2, 3, 2, 1, 3))),
+       ordered = c("x1", "x2"),
+       group = NULL,
+       fit = FALSE),
+  list(id = "0004_2group_3cat_cfa",
+       model = ordinal_model_4,
+       data = {
+         d1 <- make_ord_df(260, list(c(-0.70, 0.35), c(-0.55, 0.60),
+                                     c(-0.85, 0.20), c(-0.45, 0.75)),
+                           seed = 31L)
+         d2 <- make_ord_df(240, list(c(-0.50, 0.55), c(-0.75, 0.35),
+                                     c(-0.60, 0.45), c(-0.95, 0.25)),
+                           seed = 37L, two_factor = TRUE)
+         d1$school <- "Pasteur"; d2$school <- "Grant-White"
+         rbind(d1, d2)
+       },
+       ordered = paste0("x", 1:4),
+       group = "school",
+       fit = TRUE)
+)
+
+regenerated_ord <- character(0)
+for (oc in ordinal_cases) {
+  id <- oc$id
+  ov <- oc$ordered
+  df <- oc$data
+  group_var <- if (is.null(oc$group)) "" else oc$group
+
+  blocks <- list()
+  if (nzchar(group_var)) {
+    labels <- unique(as.character(df[[group_var]]))
+    for (b in seq_along(labels)) {
+      mat <- ordered_to_int_matrix(df[as.character(df[[group_var]]) == labels[[b]], , drop = FALSE], ov)
+      blocks[[b]] <- list(block = as.integer(b - 1L),
+                          label = labels[[b]],
+                          matrix = unname(mat))
+    }
+  } else {
+    blocks[[1]] <- list(block = 0L, label = "", matrix = unname(ordered_to_int_matrix(df, ov)))
+  }
+
+  fit_for_stats <- if (isTRUE(oc$fit)) {
+    args <- list(model = oc$model, data = df, ordered = ov,
+                 estimator = "WLS", parameterization = "delta")
+    if (nzchar(group_var)) args$group <- group_var
+    do.call(cfa, args)
+  } else {
+    # Saturated covariance model for sample-stat extraction only.
+    sat <- paste("x1 ~~ x1", "x2 ~~ x2", "x1 ~~ x2", sep = "\n")
+    cfa(sat, data = df, ordered = ov, estimator = "WLS",
+        parameterization = "delta")
+  }
+
+  fits <- NULL
+  if (isTRUE(oc$fit)) {
+    fit_dwls <- do.call(cfa, c(list(model = oc$model, data = df, ordered = ov,
+                                    estimator = "DWLS",
+                                    parameterization = "delta"),
+                               if (nzchar(group_var)) list(group = group_var) else list()))
+    fit_wls <- fit_for_stats
+    fits <- list(DWLS = ordinal_fit_json(fit_dwls),
+                 WLS = ordinal_fit_json(fit_wls))
+  }
+
+  payload <- list(
+    `_meta` = list(format_version = 1L,
+                   fixture_kind = "ordinal",
+                   corpus_id = id,
+                   tool = "lavaan::cfa(ordered=..., estimator=WLS/DWLS)",
+                   lavaan_version = installed),
+    input = oc$model,
+    ordered = ov,
+    group_var = if (nzchar(group_var)) group_var else NULL,
+    blocks = blocks,
+    sample_stats = ordinal_samp_json(fit_for_stats),
+    fits = fits
+  )
+
+  out_path <- file.path(ordinal_dir, paste0(id, ".ordinal.json"))
+  write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
+             null = "null", na = "null", digits = NA)
+  regenerated_ord <- c(regenerated_ord, out_path)
+}
+
+cat("regenerated", length(regenerated_ord), "ordinal fixtures under",
+    ordinal_dir, "\n")
+
 # === std.lv fit fixtures ===================================================
 # Stage D of the ParTable split refactor adds the `std_lv` knob to
 # LavaanifyOptions. These fixtures pin a CFA fitted with `std.lv = TRUE`

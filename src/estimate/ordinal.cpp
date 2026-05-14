@@ -22,6 +22,10 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/op.hpp"
 
+#ifdef MAGMAAN_WITH_CERES
+#include "magmaan/optim/ceres_optimizer.hpp"
+#endif
+
 namespace magmaan::estimate {
 
 namespace {
@@ -314,13 +318,14 @@ void seed_threshold_starts(Eigen::VectorXd& x,
 
 }  // namespace
 
+template <optim::LsBoundedOptimizer O>
 fit_expected<Estimates>
 fit_ordinal_bounded(spec::LatentStructure pt,
                     const model::MatrixRep& rep,
                     const data::OrdinalStats& stats,
                     Bounds bounds,
                     OrdinalWeightKind weights,
-                    optim::LbfgsBOptimizer optimizer,
+                    O optimizer,
                     spec::Starts starts) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());
@@ -428,5 +433,27 @@ fit_ordinal_bounded(spec::LatentStructure pt,
   }
   return Estimates{std::move(out_or->theta_hat), fmin_data, out_or->iterations};
 }
+
+template fit_expected<Estimates>
+fit_ordinal_bounded<optim::LbfgsBOptimizer>(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    Bounds bounds,
+    OrdinalWeightKind weights,
+    optim::LbfgsBOptimizer optimizer,
+    spec::Starts starts);
+
+#ifdef MAGMAAN_WITH_CERES
+template fit_expected<Estimates>
+fit_ordinal_bounded<optim::CeresBoundedOptimizer>(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::OrdinalStats& stats,
+    Bounds bounds,
+    OrdinalWeightKind weights,
+    optim::CeresBoundedOptimizer optimizer,
+    spec::Starts starts);
+#endif
 
 }  // namespace magmaan::estimate
