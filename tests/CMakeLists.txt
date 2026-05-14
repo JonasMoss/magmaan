@@ -27,6 +27,8 @@ add_executable(magmaan_tests
   unit/model_evaluator_test.cpp
   unit/ml_test.cpp
   unit/uls_test.cpp
+  unit/gls_wls_test.cpp
+  unit/snlls_test.cpp
   unit/concepts_test.cpp
   unit/namespace_alias_test.cpp
   unit/bounds_test.cpp

@@ -1,13 +1,9 @@
 #pragma once
 
-#include "magmaan/fit/gls.hpp"
-#include "magmaan/fit/uls.hpp"
 #include "magmaan/fit/wls.hpp"
 
 namespace magmaan::gls {
 
-using fit::GLS;
-using fit::ULS;
 using fit::WLS;
 
 }  // namespace magmaan::gls

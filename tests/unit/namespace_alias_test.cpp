@@ -9,7 +9,9 @@
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/estimate/start_values.hpp"
+#include "magmaan/gls/gls.hpp"
 #include "magmaan/gls/uls.hpp"
+#include "magmaan/gls/wls.hpp"
 #include "magmaan/lavaan/partable_view.hpp"
 #include "magmaan/nt/effects.hpp"
 #include "magmaan/nt/infer.hpp"
@@ -76,7 +78,9 @@ TEST_CASE("transitional public namespace aliases expose existing API types") {
   static_assert(magmaan::optim::Optimizer<magmaan::optim::LbfgsOptimizer>);
 
   static_assert(std::is_same_v<magmaan::nt::ml::ML, magmaan::fit::ML>);
+  static_assert(std::is_same_v<magmaan::gls::GLS, magmaan::fit::GLS>);
   static_assert(std::is_same_v<magmaan::gls::ULS, magmaan::fit::ULS>);
+  static_assert(std::is_same_v<magmaan::gls::WLS, magmaan::fit::WLS>);
   static_assert(std::is_same_v<magmaan::nt::infer::WaldTestResult,
                                magmaan::fit::WaldTestResult>);
   static_assert(std::is_same_v<magmaan::nt::measures::FitMeasures,

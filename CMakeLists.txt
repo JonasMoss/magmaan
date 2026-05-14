@@ -62,6 +62,7 @@ add_library(magmaan STATIC
   src/model/model_evaluator.cpp
   src/nt/ml.cpp
   src/gls/uls.cpp
+  src/gls/gls_wls.cpp
   src/estimate/bounds.cpp
   src/estimate/start_values.cpp
   src/optim/lbfgs_optimizer.cpp
