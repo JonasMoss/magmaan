@@ -10,6 +10,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/fit/constraints.hpp"
 #include "magmaan/fit/fit.hpp"
+#include "magmaan/fit/fit_measures.hpp"
 #include "magmaan/fit/lbfgs_optimizer.hpp"
 #include "magmaan/fit/raw_data.hpp"
 #include "magmaan/fit/resolve_fixed_x.hpp"
@@ -61,8 +62,8 @@ struct FIMLExtras {
 //   sum_patterns (n_r / N) * [log|Σ_oo| + tr(Σ_oo^-1 (S_r + dd'))]
 //
 // where d = xbar_r - μ_o and S_r is the N-divisor covariance inside the
-// pattern. This is the right objective for point estimation; saturated
-// likelihood constants and fit-statistic reporting are a later layer.
+// pattern. This is the right objective for point estimation; saturated/H1 and
+// baseline likelihood accounting are handled by the post-fit helpers below.
 struct FIML {
   static constexpr std::string_view name = "FIML";
 
@@ -102,6 +103,14 @@ fiml_extras(partable::LatentStructure pt,
             const RawData& raw,
             const Estimates& est,
             FIML discrepancy = {});
+
+// FIML independence/baseline chi-square for raw continuous data with missing
+// values. Unlike complete-data `baseline_chi2(SampleStats)`, this evaluates the
+// diagonal normal model directly over observed-value patterns and compares it
+// to the FIML saturated/H1 likelihood.
+post_expected<BaselineFit>
+fiml_baseline_chi2(const RawData& raw,
+                   FIML discrepancy = {});
 
 template <class O = LbfgsOptimizer>
 fit_expected<Estimates>

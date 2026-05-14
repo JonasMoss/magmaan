@@ -15,6 +15,8 @@
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/nt/fiml.hpp"
+#include "magmaan/nt/measures.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/lavaanify.hpp"
 
@@ -58,6 +60,10 @@ magmaan::data::RawData raw_from_fixture(const nlohmann::json& exp) {
     raw.mask.push_back(std::move(M));
   }
   return raw;
+}
+
+bool finite_json(const nlohmann::json& j) {
+  return !j.is_null() && j.is_number() && std::isfinite(j.get<double>());
 }
 
 }  // namespace
@@ -123,6 +129,29 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
     }
     const auto& fx = *fx_or;
 
+    auto start_samp_or = magmaan::nt::fiml::fiml_start_sample_stats(raw);
+    if (!start_samp_or.has_value()) {
+      failures.push_back(id + ": fiml_start_sample_stats — " +
+                         start_samp_or.error().detail);
+      continue;
+    }
+
+    auto bl_or = magmaan::nt::fiml::fiml_baseline_chi2(raw);
+    if (!bl_or.has_value()) {
+      failures.push_back(id + ": fiml_baseline_chi2 — " +
+                         bl_or.error().detail);
+      continue;
+    }
+    const auto& bl = *bl_or;
+
+    if (!exp.contains("df")) {
+      failures.push_back(id + ": missing df");
+      continue;
+    }
+    const int df = exp["df"].get<int>();
+    const auto fm = magmaan::nt::measures::fit_measures(fx.chi2, df, bl,
+                                                        *start_samp_or);
+
     const auto& th = exp["theta_hat"];
     if (static_cast<std::size_t>(est.theta.size()) != th.size()) {
       char buf[160];
@@ -171,6 +200,40 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
     ok = cmp("aic", fx.aic, 5e-5) && ok;
     ok = cmp("bic", fx.bic, 5e-5) && ok;
     ok = cmp("bic2", fx.bic2, 5e-5) && ok;
+
+    ok = cmp("baseline_chisq", bl.chi2, 2e-5) && ok;
+    if (!exp.contains("baseline_df") ||
+        bl.df != exp["baseline_df"].get<int>()) {
+      failures.push_back(id + ": baseline_df mismatch");
+      ok = false;
+    }
+
+    auto cmp_finite = [&](const char* label, double got,
+                          const char* key, double tol) {
+      if (!exp.contains(key)) {
+        failures.push_back(id + ": missing " + std::string(key));
+        return false;
+      }
+      const auto& want_j = exp[key];
+      if (!finite_json(want_j)) return true;
+      if (!std::isfinite(got)) return true;
+      const double want = want_j.get<double>();
+      const double d = std::abs(got - want);
+      if (d <= tol * std::max(1.0, std::abs(want))) return true;
+      char buf[256];
+      std::snprintf(buf, sizeof(buf),
+                    "%s mismatch: got %.12g, want %.12g, |diff| %.3e",
+                    label, got, want, d);
+      failures.push_back(id + ": " + buf);
+      return false;
+    };
+    ok = cmp_finite("cfi", fm.cfi, "cfi", 1e-5) && ok;
+    ok = cmp_finite("tli", fm.tli, "tli", 1e-5) && ok;
+    ok = cmp_finite("rmsea", fm.rmsea, "rmsea", 1e-5) && ok;
+    ok = cmp_finite("rmsea_ci_lower", fm.rmsea_ci_lower,
+                    "rmsea_ci_lower", 1e-4) && ok;
+    ok = cmp_finite("rmsea_ci_upper", fm.rmsea_ci_upper,
+                    "rmsea_ci_upper", 1e-4) && ok;
 
     if (!exp.contains("npar") || fx.npar != exp["npar"].get<int>()) {
       failures.push_back(id + ": npar mismatch");

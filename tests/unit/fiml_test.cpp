@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <string>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
@@ -59,6 +60,36 @@ magmaan::data::RawData small_missing_raw() {
        1, 0, 1,
        0, 1, 1,
        1, 1, 0;
+  raw.mask.push_back(M);
+  return raw;
+}
+
+magmaan::data::RawData well_conditioned_missing_raw() {
+  const double na = std::numeric_limits<double>::quiet_NaN();
+  magmaan::data::RawData raw;
+  Eigen::MatrixXd X(8, 3);
+  X << 1.0, 2.0, 3.0,
+       2.0, 1.0, 4.0,
+       3.0, 4.0, 2.0,
+       4.0, 3.0, 5.0,
+       5.0, 5.0, 1.0,
+       6.0, 4.0, 6.0,
+       7.0, 7.0, 4.0,
+       8.0, 6.0, 7.0;
+  X(2, 1) = na;
+  X(5, 2) = na;
+  X(6, 0) = na;
+  raw.X.push_back(X);
+
+  Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M(8, 3);
+  M << 1, 1, 1,
+       1, 1, 1,
+       1, 0, 1,
+       1, 1, 1,
+       1, 1, 1,
+       1, 1, 0,
+       0, 1, 1,
+       1, 1, 1;
   raw.mask.push_back(M);
   return raw;
 }
@@ -232,4 +263,62 @@ TEST_CASE("fiml_extras: complete data matches SampleStats fit_extras") {
         doctest::Approx(ml_fx->unrestricted_logl).epsilon(1e-9));
   CHECK(fiml_fx->npar == ml_fx->npar);
   CHECK(fiml_fx->ntotal == ml_fx->ntotal);
+}
+
+TEST_CASE("fiml_baseline_chi2: complete data matches SampleStats baseline") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3");
+
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  for (Eigen::Index k = 0; k < theta0.size(); ++k) theta0(k) = 0.7;
+  theta0.tail(3) << 1.0, 2.0, 3.0;
+  auto truth = built.ev.sigma(theta0);
+  REQUIRE(truth.has_value());
+  Eigen::LLT<Eigen::MatrixXd> llt(truth->sigma[0]);
+  REQUIRE(llt.info() == Eigen::Success);
+  const Eigen::MatrixXd L = llt.matrixL();
+  const double a = std::sqrt(3.0);
+  Eigen::MatrixXd Z(6, 3);
+  Z <<  a, 0.0, 0.0,
+       -a, 0.0, 0.0,
+       0.0,  a, 0.0,
+       0.0, -a, 0.0,
+       0.0, 0.0,  a,
+       0.0, 0.0, -a;
+
+  magmaan::data::RawData raw;
+  raw.X.push_back((Z * L.transpose()).rowwise() + truth->mu[0].transpose());
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+
+  auto fiml_bl = magmaan::nt::fiml::fiml_baseline_chi2(raw);
+  REQUIRE(fiml_bl.has_value());
+  const auto ml_bl = magmaan::nt::measures::baseline_chi2(*samp);
+
+  CHECK(fiml_bl->chi2 == doctest::Approx(ml_bl.chi2).epsilon(1e-10));
+  CHECK(fiml_bl->df == ml_bl.df);
+}
+
+TEST_CASE("fiml_baseline_chi2: missing data produces finite baseline") {
+  const auto raw = well_conditioned_missing_raw();
+  auto bl = magmaan::nt::fiml::fiml_baseline_chi2(raw);
+  if (!bl.has_value()) {
+    FAIL(bl.error().detail);
+    return;
+  }
+  CHECK(std::isfinite(bl->chi2));
+  CHECK(bl->chi2 >= 0.0);
+  CHECK(bl->df == 3);
+}
+
+TEST_CASE("fiml_baseline_chi2: rejects a column with no observed values") {
+  auto raw = small_missing_raw();
+  raw.mask[0].col(1).setZero();
+  for (Eigen::Index r = 0; r < raw.X[0].rows(); ++r) {
+    raw.X[0](r, 1) = std::numeric_limits<double>::quiet_NaN();
+  }
+
+  auto bl = magmaan::nt::fiml::fiml_baseline_chi2(raw);
+  REQUIRE(!bl.has_value());
+  CHECK(bl.error().detail.find("column 1 has no observed values") !=
+        std::string::npos);
 }

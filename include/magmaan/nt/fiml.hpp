@@ -9,6 +9,7 @@ using fit::FIMLCache;
 using fit::FIMLExtras;
 using fit::FIMLPattern;
 using fit::FIMLValueGradient;
+using fit::fiml_baseline_chi2;
 using fit::fiml_extras;
 using fit::fiml_start_sample_stats;
 
