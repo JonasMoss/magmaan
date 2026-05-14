@@ -201,6 +201,10 @@ infer_gamma_nt <- function(Sigma) {
     .Call(`_magmaan_infer_gamma_nt`, Sigma)
 }
 
+infer_ordinal_robust <- function(fit, ordinal_stats, weight = "") {
+    .Call(`_magmaan_infer_ordinal_robust`, fit, ordinal_stats, weight)
+}
+
 infer_robust_se <- function(fit, gamma_hat, bread = "expected", moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se`, fit, gamma_hat, bread, moments, cov)
 }

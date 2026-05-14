@@ -60,6 +60,19 @@ chisq_wls <- fit_wls$ntotal * fit_wls$fmin
 stopifnot(abs(chisq_dwls - fitMeasures(lavaan_dwls, "chisq")) < 0.08)
 stopifnot(abs(chisq_wls - fitMeasures(lavaan_wls, "chisq")) < 0.08)
 
+rob_dwls <- infer_ordinal_robust(fit_dwls, d)
+rob_wls <- infer_ordinal_robust(fit_wls, d, weight = "WLS")
+stopifnot(nrow(rob_dwls$vcov) == length(fit_dwls$theta))
+stopifnot(length(rob_dwls$se) == length(fit_dwls$theta))
+stopifnot(all(is.finite(rob_dwls$se)))
+stopifnot(identical(rob_dwls$df, 2L))
+stopifnot(length(rob_dwls$eigvals) == rob_dwls$df)
+stopifnot(is.finite(rob_dwls$satorra_bentler$scale_c))
+stopifnot(is.finite(rob_dwls$mean_var_adjusted$df_adj))
+stopifnot(is.finite(rob_dwls$scaled_shifted$scale_a))
+stopifnot(all(is.finite(rob_wls$se)))
+stopifnot(identical(rob_wls$df, 2L))
+
 bad <- df
 bad$x1 <- ordered(as.integer(bad$x1), levels = 1:4)
 bad <- bad[as.integer(bad$x1) != 4L, , drop = FALSE]

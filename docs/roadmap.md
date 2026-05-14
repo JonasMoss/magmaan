@@ -43,8 +43,11 @@ The core parser-to-fit pipeline is in place:
   fit coverage. The C++ ordinal fitter shares the bounded LS optimizer surface,
   with LBFGS-B as the default and Ceres objective parity coverage in Ceres
   builds. This path currently implements lavaan's delta-style response scale
-  boundary; theta parameterization, mixed polyserial statistics, ordinal SNLLS,
-  and robust ordinal reporting remain open.
+  boundary. A first explicit post-fit robust ordinal reporting path now returns
+  sandwich SEs plus Satorra-Bentler, mean/variance-adjusted, and scaled/shifted
+  test statistics from the same threshold-plus-polychoric moment vector and
+  `NACOV`/DWLS/WLS weights. Theta parameterization, mixed polyserial
+  statistics, ordinal SNLLS, and lavaan robust-reporting goldens remain open.
 - Separable nonlinear least squares (SNLLS) profiling for LS estimators where
   conditionally linear parameters can be profiled out.
 - Expected information, finite-difference observed information, analytic
@@ -138,16 +141,16 @@ Open work:
 - Extend the data path beyond all-ordinal complete/listwise indicators only
   when the mixed continuous/ordinal contract is clear. Polyserial correlations
   and mixed thresholds should not be inferred ad hoc in R.
-- Connect robust ordinal reporting deliberately, reusing the existing
-  continuous-data robust vocabulary where the algebra matches but validating
-  the categorical moment vector separately. Lavaan's relevant LS-family targets
-  are `se = "robust.sem"` / `"robust.sem.nt"` and tests
-  `satorra.bentler` (WLSM/ULSM), `scaled.shifted` (WLSMV/ULSMV), and
-  `mean.var.adjusted` (WLSMVS/ULSMVS). Plain categorical DWLS keeps a
-  standard test by default in lavaan, so WLSMV-style reporting should be an
-  explicit post-fit call, not silently implied by the DWLS point estimator.
-  Robust ordinal SEs and scaled tests must consume the threshold-plus-polychoric
+- Harden robust ordinal reporting against lavaan's LS-family robust targets:
+  `se = "robust.sem"` / `"robust.sem.nt"` and tests `satorra.bentler`
+  (WLSM/ULSM), `scaled.shifted` (WLSMV/ULSMV), and `mean.var.adjusted`
+  (WLSMVS/ULSMVS). The implemented first slice is explicit post-fit reporting
+  for delta all-ordinal DWLS/WLS and consumes the threshold-plus-polychoric
   `NACOV`/`WLS.V` layout, not raw continuous-data casewise Gamma helpers.
+  Remaining work is lavaan robust-statistic fixture parity, multi-group robust
+  edge cases, and any naming/presentation polish in the R boundary. Plain
+  categorical DWLS should continue to fit only; WLSMV-style reporting must
+  stay an explicit post-fit call.
 
 Validation targets:
 

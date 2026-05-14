@@ -38,5 +38,9 @@ Ordinal support is intentionally narrow and mirrors the C++ delta-path:
   first, then lower-triangle polychorics by columns, and all covariance/weight
   matrices use that same row/column order.
 - Fit with `fit_dwls_ordinal()` or `fit_wls_ordinal()`. These are
-  point-estimate and standard chi-square statistic workflows; robust ordinal
-  SEs and WLSMV-style scaled tests are not exposed yet.
+  point-estimate and standard chi-square statistic workflows.
+- Robust ordinal reporting is explicit: call
+  `infer_ordinal_robust(fit, ordinal_stats, weight = "")` after a DWLS/WLS
+  ordinal fit to compute sandwich SEs and SB-family scaled statistics from the
+  threshold-plus-polychoric `NACOV` and the selected DWLS/WLS weight matrix.
+  Empty `weight` reuses `fit$estimator`.

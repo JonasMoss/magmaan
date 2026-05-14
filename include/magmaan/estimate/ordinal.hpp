@@ -2,10 +2,13 @@
 
 #include <string_view>
 
+#include <Eigen/Core>
+
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/fit/robust.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/optim/concepts.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
@@ -19,10 +22,28 @@ enum class OrdinalWeightKind {
   WLS,
 };
 
+struct OrdinalRobustResult {
+  Eigen::MatrixXd vcov;              // full free-parameter covariance
+  Eigen::VectorXd se;                // sqrt(diag(vcov))
+  Eigen::VectorXd eigvals;           // nonzero U-Gamma eigenvalues
+  double chisq_standard = 0.0;       // N * F_min
+  int df = 0;
+  fit::SatorraBentlerResult satorra_bentler;
+  fit::MeanVarAdjustedResult mean_var_adjusted;
+  fit::ScaledShiftedResult scaled_shifted;
+};
+
 fit_expected<void>
 prepare_ordinal_delta_partable(spec::LatentStructure& pt,
                                 const data::OrdinalStats& stats,
                                 spec::Starts* starts = nullptr);
+
+post_expected<OrdinalRobustResult>
+robust_ordinal(spec::LatentStructure pt,
+               const model::MatrixRep& rep,
+               const data::OrdinalStats& stats,
+               const Estimates& est,
+               OrdinalWeightKind weights);
 
 template <optim::LsBoundedOptimizer O = optim::LbfgsBOptimizer>
 fit_expected<Estimates>
