@@ -4,9 +4,8 @@ This is the live roadmap for complete-data linear SEM work. It is the source of
 truth for current implementation state and near-term work; old phase notes should
 be folded here or deleted when they stop being actionable.
 
-Out of scope for this track: FIML/missing data beyond listwise handling for
-the ordinal LS path, Bayesian, multilevel, latent interactions/mixtures, EFA,
-and end-user `cfa(model, data)` ergonomics.
+Out of scope for this track: Bayesian, multilevel, latent
+interactions/mixtures, EFA, and end-user `cfa(model, data)` ergonomics.
 
 ## Current State
 
@@ -25,6 +24,13 @@ The core parser-to-fit pipeline is in place:
   linear equality constraints.
 - ML fitting through LBFGS, including affine reparameterization for linear
   equalities.
+- First-pass continuous FIML fitting over raw data with missingness masks:
+  rows are compressed into observed-value patterns, the direct
+  observed-pattern normal-theory objective and analytic gradient reuse the
+  existing `ModelEvaluator` Jacobians, and `fit_fiml()` optimizes with LBFGS.
+  This first slice targets point estimates only; saturated/H1 constants,
+  lavaan chi-square/log-likelihood reporting, robust missing-data corrections,
+  and R wrappers remain open.
 - ULS, GLS, and explicit-weight WLS discrepancies, each with scalar
   value/gradient and least-squares residual/Jacobian interfaces.
 - Bounded least-squares fitting through LBFGS-B and optional Ceres, including
@@ -71,7 +77,46 @@ The core parser-to-fit pipeline is in place:
 
 ## Immediate Priorities
 
-### 1. Turn LS estimator support into lavaan-parity fixtures
+### 1. Make continuous FIML lavaan-parity-grade
+
+The first implementation slice is direct observed-pattern ML over continuous
+raw data. It intentionally keeps the existing complete-data `SampleStats` path
+separate from raw-data FIML: incomplete data stays in `RawData` with an
+observed/missing mask, and the optimizer consumes pattern summaries.
+
+Open work:
+
+- Add checked-in lavaan FIML fixtures under a dedicated fixture family, generated
+  from deterministic missingness patterns on Holzinger data with
+  `missing = "fiml"` and explicit mean structures.
+- Compare `fit_fiml()` point estimates against lavaan for single-group CFA,
+  three-factor CFA, equality-constrained CFA, and then multi-group missing-data
+  cases.
+- Add saturated/H1 likelihood accounting so FIML fit statistics, log-likelihood,
+  AIC/BIC, and nested-test inputs have lavaan-compatible constants instead of
+  only the optimizer deviance.
+- Decide and document the first public policy for `fixed.x` with missing
+  exogenous observed variables. Until then, keep this path narrow rather than
+  guessing lavaan's conditional likelihood behavior.
+- Promote the R boundary only after C++ fixtures establish point-estimate and
+  likelihood-statistic parity. The high-level `magmaan(model, data, ...)`
+  helper should route `missing = "fiml"` to `fit_fiml()` but still leave SEs,
+  tests, and fit measures as explicit post-fit calls.
+- Keep EM as a fallback/initializer only if direct LBFGS fails on representative
+  lavaan fixtures. Do not introduce a parallel EM implementation before there is
+  fixture evidence that it is needed.
+
+Validation targets:
+
+- Single-group continuous CFA with explicit mean structure and two to four
+  missingness patterns.
+- Complete-data equivalence: FIML gradients should match complete-data ML
+  gradients up to objective constants when every row is fully observed.
+- Equality-constrained FIML through the existing affine reparameterization.
+- Multi-group FIML where pattern summaries and block weights use per-group rows
+  but the optimizer objective is weighted by total observed rows.
+
+### 2. Turn LS estimator support into lavaan-parity fixtures
 
 ULS/GLS/WLS are implemented as discrepancies and exercise the bounded LS path
 in unit/integration tests. The next step is parity work, not basic
@@ -100,7 +145,7 @@ Validation targets:
 - Multi-group LS weighting and equality constraints.
 - Mean-structure LS models with Ceres and SNLLS backends.
 
-### 2. Make ordinal LS lavaan-parity-grade
+### 3. Make ordinal LS lavaan-parity-grade
 
 The first implementation path is intentionally narrow: complete/listwise
 ordinal indicators, threshold starts from marginal proportions, pairwise
@@ -173,7 +218,7 @@ Validation targets:
   public Ceres ordinal wrapper until the remaining ordinal reporting surface is
   stable.
 
-### 3. Close remaining inference and robust gaps
+### 4. Close remaining inference and robust gaps
 
 Expected-info inference, finite-difference observed inference, covariance-only
 analytic observed inference, robust SEs, U-Gamma/Satorra-Bentler families,
@@ -196,7 +241,7 @@ Open gaps:
 - Generalize robust/inference helpers that assume the normal-theory ML weight
   so ULS/GLS/WLS can share sandwich paths with arbitrary per-block weights.
 
-### 4. Finish R/API parity polish
+### 5. Finish R/API parity polish
 
 The C++ surface is ahead of the R boundary in several places.
 
@@ -231,7 +276,7 @@ Open items:
 - Keep fit-list extraction helpers as R boundary conveniences, while keeping
   C++ APIs explicit over primitive values.
 
-### 5. Finish namespace cleanup opportunistically
+### 6. Finish namespace cleanup opportunistically
 
 The target public namespaces exist and are covered by
 `tests/unit/namespace_alias_test.cpp`:
