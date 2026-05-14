@@ -32,10 +32,12 @@ The core parser-to-fit pipeline is in place:
   LS path.
 - First-pass ordinal LS support: parser and partable projection for threshold
   (`|`) and response-scale (`~*~`) rows, integer ordinal sample statistics,
-  pairwise polychoric correlations, diagonal DWLS/WLS weights, bounded ordinal
-  LS fitting, and thin R wrappers for ordinal sample stats plus DWLS/WLS fits.
-  This path currently implements lavaan's delta-style response scale boundary;
-  theta parameterization and full ordinal ACOV/NACOV parity remain open.
+  pairwise polychoric correlations, Muthen-style all-ordinal NACOV construction
+  for thresholds plus polychorics, DWLS diagonal weights, full WLS weights,
+  bounded ordinal LS fitting, and thin R wrappers for ordinal sample stats plus
+  DWLS/WLS fits. This path currently implements lavaan's delta-style response
+  scale boundary; theta parameterization, mixed polyserial statistics, and
+  checked-in ordinal lavaan fit-statistic parity remain open.
 - Separable nonlinear least squares (SNLLS) profiling for LS estimators where
   conditionally linear parameters can be profiled out.
 - Expected information, finite-difference observed information, analytic
@@ -95,8 +97,8 @@ lavaan ordinal estimator parity.
 
 Open work:
 
-- Replace the placeholder WLS diagonal weights with lavaan-compatible full
-  ordinal asymptotic covariance weights for thresholds and polychorics.
+- Validate the new full ordinal asymptotic covariance weights against checked-in
+  lavaan `NACOV`, `WLS.V`, and `WLS.VD` fixtures for representative models.
 - Decide how far to support lavaan's `parameterization = "theta"` at this
   stage. The current R helper accepts only `"delta"` and emits fixed response
   scale rows, which is the conservative first boundary.

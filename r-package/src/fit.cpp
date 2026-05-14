@@ -180,7 +180,7 @@ magmaan::gls::WLS wls_from_arg(SEXP W, std::size_t n_blocks) {
 Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
   const R_xlen_t nb = static_cast<R_xlen_t>(s.R.size());
   Rcpp::List R(nb), thresholds(nb), threshold_ov(nb), threshold_level(nb),
-      W_dwls(nb), W_wls(nb), n_levels(nb);
+      NACOV(nb), W_dwls(nb), W_wls(nb), n_levels(nb);
   Rcpp::IntegerVector nobs(nb);
   for (R_xlen_t b = 0; b < nb; ++b) {
     const std::size_t bi = static_cast<std::size_t>(b);
@@ -194,6 +194,7 @@ Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
     }
     threshold_ov[b] = ov;
     threshold_level[b] = lev;
+    NACOV[b] = Rcpp::wrap(s.NACOV[bi]);
     W_dwls[b] = Rcpp::wrap(s.W_dwls[bi]);
     W_wls[b] = Rcpp::wrap(s.W_wls[bi]);
     nobs[b] = static_cast<int>(s.n_obs[bi]);
@@ -204,6 +205,7 @@ Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
       Rcpp::_["thresholds"] = thresholds,
       Rcpp::_["threshold_ov"] = threshold_ov,
       Rcpp::_["threshold_level"] = threshold_level,
+      Rcpp::_["NACOV"] = NACOV,
       Rcpp::_["W_dwls"] = W_dwls,
       Rcpp::_["W_wls"] = W_wls,
       Rcpp::_["nobs"] = nobs,
@@ -215,11 +217,12 @@ Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
 magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
   const char* what = "ordinal_stats";
   for (const char* nm : {"R", "thresholds", "threshold_ov", "threshold_level",
-                         "W_dwls", "W_wls", "nobs", "n_levels"}) {
+                         "NACOV", "W_dwls", "W_wls", "nobs", "n_levels"}) {
     if (!x.containsElementNamed(nm)) Rcpp::stop("magmaan: %s is missing $%s", what, nm);
   }
   Rcpp::List Rl(x["R"]), thl(x["thresholds"]), ovl(x["threshold_ov"]),
-      levl(x["threshold_level"]), Wdl(x["W_dwls"]), Wfl(x["W_wls"]),
+      levl(x["threshold_level"]), NAl(x["NACOV"]),
+      Wdl(x["W_dwls"]), Wfl(x["W_wls"]),
       nlevl(x["n_levels"]);
   Rcpp::IntegerVector nobs(x["nobs"]);
   const R_xlen_t nb = Rl.size();
@@ -228,6 +231,7 @@ magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
   out.thresholds.reserve(static_cast<std::size_t>(nb));
   out.threshold_ov.reserve(static_cast<std::size_t>(nb));
   out.threshold_level.reserve(static_cast<std::size_t>(nb));
+  out.NACOV.reserve(static_cast<std::size_t>(nb));
   out.W_dwls.reserve(static_cast<std::size_t>(nb));
   out.W_wls.reserve(static_cast<std::size_t>(nb));
   out.n_obs.reserve(static_cast<std::size_t>(nb));
@@ -244,6 +248,7 @@ magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
     }
     out.threshold_ov.push_back(std::move(ov0));
     out.threshold_level.push_back(std::move(lev0));
+    out.NACOV.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(NAl[b])));
     out.W_dwls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wdl[b])));
     out.W_wls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wfl[b])));
     out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
