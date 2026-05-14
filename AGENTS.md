@@ -46,7 +46,7 @@ Read it before structural changes.
 - `tools/` — maintainer-only scripts (R, etc.).
 - `docs/grammar/` — `grammar.ebnf` (normative), `lexer.md`, `grammar.md`.
 - `docs/roadmap.md` — what's left for full-data normal-theory ML feature-completeness
-  (the Tier 1/2/3 gap list); `docs/p8_inference.md` — the detailed P8/inference plan.
+  and active architectural cleanup.
 - `external/lavaan/` — reference source, never built.
 - `r-package/` — exploratory R bindings (Rcpp); consumes the prebuilt
   `libmagmaan.a`, separate from and not part of the C++ build.
@@ -89,6 +89,8 @@ r-package/src/*.o`) and reinstall.
 - Private headers under `src/.../detail_*.hpp` include with relative paths.
 - Comments only when the *why* is non-obvious. The plan and the lavaan
   reference together cover the *what*.
+- Remove or fold stale finished planning docs into `docs/roadmap.md` when a
+  phase completes; do not keep old plan files around as parallel roadmaps.
 - Commit coherent completed changes when there is a natural checkpoint; keep
   work on the current branch unless explicitly asked to branch.
 

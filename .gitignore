@@ -1,7 +1,9 @@
 build/
 build-*/
+CMakeFiles/
 .cache/
 compile_commands.json
+.claude/
 
 # Reference-only material with its own VCS (lavaan source, semTests, …).
 external/
@@ -18,3 +20,5 @@ external/
 *.swp
 .DS_Store
 .Rproj.user
+.RData
+.Rhistory
