@@ -180,12 +180,23 @@ magmaan::gls::WLS wls_from_arg(SEXP W, std::size_t n_blocks) {
 Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
   const R_xlen_t nb = static_cast<R_xlen_t>(s.R.size());
   Rcpp::List R(nb), thresholds(nb), threshold_ov(nb), threshold_level(nb),
-      NACOV(nb), W_dwls(nb), W_wls(nb), n_levels(nb);
+      moments(nb), NACOV(nb), W_dwls(nb), W_wls(nb), n_levels(nb);
   Rcpp::IntegerVector nobs(nb);
   for (R_xlen_t b = 0; b < nb; ++b) {
     const std::size_t bi = static_cast<std::size_t>(b);
     R[b] = Rcpp::wrap(s.R[bi]);
     thresholds[b] = Rcpp::wrap(s.thresholds[bi]);
+    const Eigen::Index p = s.R[bi].rows();
+    const Eigen::Index nth = s.thresholds[bi].size();
+    Eigen::VectorXd mb(nth + p * (p - 1) / 2);
+    mb.head(nth) = s.thresholds[bi];
+    Eigen::Index pos = nth;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j + 1; i < p; ++i) {
+        mb(pos++) = s.R[bi](i, j);
+      }
+    }
+    moments[b] = Rcpp::wrap(mb);
     Rcpp::IntegerVector ov(static_cast<R_xlen_t>(s.threshold_ov[bi].size()));
     Rcpp::IntegerVector lev(static_cast<R_xlen_t>(s.threshold_level[bi].size()));
     for (R_xlen_t k = 0; k < ov.size(); ++k) {
@@ -205,6 +216,7 @@ Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
       Rcpp::_["thresholds"] = thresholds,
       Rcpp::_["threshold_ov"] = threshold_ov,
       Rcpp::_["threshold_level"] = threshold_level,
+      Rcpp::_["moments"] = moments,
       Rcpp::_["NACOV"] = NACOV,
       Rcpp::_["W_dwls"] = W_dwls,
       Rcpp::_["W_wls"] = W_wls,
