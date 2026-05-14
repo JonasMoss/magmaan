@@ -19,6 +19,11 @@ enum class OrdinalWeightKind {
   WLS,
 };
 
+fit_expected<void>
+prepare_ordinal_delta_partable(spec::LatentStructure& pt,
+                                const data::OrdinalStats& stats,
+                                spec::Starts* starts = nullptr);
+
 template <optim::LsBoundedOptimizer O = optim::LbfgsBOptimizer>
 fit_expected<Estimates>
 fit_ordinal_bounded(spec::LatentStructure pt,
@@ -27,6 +32,15 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                     Bounds bounds,
                     OrdinalWeightKind weights,
                     O optimizer = {},
+                    spec::Starts starts = {});
+
+fit_expected<Estimates>
+fit_ordinal_bounded(spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const data::OrdinalStats& stats,
+                    Bounds bounds,
+                    OrdinalWeightKind weights,
+                    optim::LbfgsBOptimizer optimizer,
                     spec::Starts starts = {});
 
 extern template fit_expected<Estimates>

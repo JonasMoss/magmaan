@@ -224,7 +224,7 @@ TEST_CASE("ordinal goldens: thresholds, polychorics, NACOV, and WLS weights vs l
   CHECK(passed == static_cast<int>(kOrdinalFixtures.size()));
 }
 
-TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits converge") {
+TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract") {
   const std::string dir = magmaan::test::fixtures_dir() + "/ordinal";
 
   int total = 0;
@@ -247,7 +247,7 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits converge") {
 
     for (const auto kind : {magmaan::estimate::OrdinalWeightKind::DWLS,
                             magmaan::estimate::OrdinalWeightKind::WLS}) {
-      const char* name = kind == magmaan::estimate::OrdinalWeightKind::DWLS
+      const std::string name = kind == magmaan::estimate::OrdinalWeightKind::DWLS
           ? "DWLS"
           : "WLS";
       ++total;
@@ -258,20 +258,47 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits converge") {
         continue;
       }
       const double lavaan_chisq = exp["fits"][name]["chisq"].get<double>();
+      const int lavaan_df = exp["fits"][name]["df"].get<int>();
+      const Eigen::VectorXd lavaan_theta =
+          vector_from_json(exp["fits"][name]["theta_hat"]);
       const std::int64_t n_total =
           std::accumulate(h->stats.n_obs.begin(), h->stats.n_obs.end(),
                           std::int64_t{0});
+      Eigen::Index n_moments = 0;
+      for (std::size_t b = 0; b < h->stats.R.size(); ++b) {
+        const Eigen::Index p = h->stats.R[b].rows();
+        n_moments += h->stats.thresholds[b].size() + p * (p - 1) / 2;
+      }
+      const int df = static_cast<int>(n_moments - est_or->theta.size());
       const double chisq = static_cast<double>(n_total) * est_or->fmin;
       const double d_chisq = std::abs(chisq - lavaan_chisq);
+      const double d_theta = max_abs_diff(est_or->theta, lavaan_theta);
 
       if (!est_or->theta.allFinite() || !std::isfinite(est_or->fmin) ||
           est_or->fmin < 0.0) {
         failures.push_back(id + " " + name + ": non-finite fit result");
         continue;
       }
+      if (est_or->theta.size() != lavaan_theta.size()) {
+        failures.push_back(id + " " + name +
+                           ": npar mismatch magmaan=" +
+                           std::to_string(est_or->theta.size()) +
+                           " lavaan=" + std::to_string(lavaan_theta.size()));
+        continue;
+      }
+      if (df != lavaan_df || d_theta > 1e-5 || d_chisq > 8e-2) {
+        failures.push_back(id + " " + name +
+                           ": df=" + std::to_string(df) +
+                           " lavaan_df=" + std::to_string(lavaan_df) +
+                           ": theta diff=" + std::to_string(d_theta) +
+                           " chisq diff=" + std::to_string(d_chisq));
+        continue;
+      }
       MESSAGE(id << " " << name << ": magmaan chisq=" << chisq
                  << " lavaan chisq=" << lavaan_chisq
                  << " diff=" << d_chisq
+                 << " theta diff=" << d_theta
+                 << " df=" << df
                  << " npar(magmaan)=" << est_or->theta.size()
                  << " npar(lavaan)=" << exp["fits"][name]["theta_hat"].size());
       ++passed;

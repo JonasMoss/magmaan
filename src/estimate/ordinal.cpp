@@ -93,6 +93,123 @@ fit_expected<void> validate_stats(const data::OrdinalStats& s,
   return {};
 }
 
+fit_expected<std::vector<std::vector<char>>>
+ordered_indicator_layout(const spec::LatentStructure& pt,
+                         const data::OrdinalStats& stats) {
+  const std::size_t nb = stats.R.size();
+  std::vector<std::vector<char>> out(nb);
+  for (std::size_t b = 0; b < nb; ++b) {
+    out[b].assign(static_cast<std::size_t>(stats.R[b].rows()), 0);
+    for (std::int32_t ov : stats.threshold_ov[b]) {
+      if (ov < 0 || static_cast<std::size_t>(ov) >= out[b].size()) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "OrdinalStats threshold metadata references an invalid observed variable"));
+      }
+      out[b][static_cast<std::size_t>(ov)] = 1;
+    }
+  }
+  const std::size_t ng = static_cast<std::size_t>(pt.n_groups());
+  if (ng != nb) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "OrdinalStats block count does not match partable group count"));
+  }
+  return out;
+}
+
+fit_expected<void>
+compact_free_set(spec::LatentStructure& pt,
+                 const std::vector<char>& remove_free,
+                 spec::Starts* starts) {
+  const std::int32_t old_n = pt.n_free();
+  if (static_cast<std::int32_t>(remove_free.size()) != old_n + 1) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "ordinal delta free-set compaction received inconsistent metadata"));
+  }
+
+  std::vector<char> seen(static_cast<std::size_t>(old_n) + 1, 0);
+  std::vector<std::int32_t> new_to_old;
+  new_to_old.reserve(static_cast<std::size_t>(old_n));
+  auto append_by_op = [&](std::int32_t group, parse::Op op, bool matching) {
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.group[i] != group) continue;
+      if ((pt.op[i] == op) != matching) continue;
+      const std::int32_t old = pt.free[i];
+      if (old <= 0 || remove_free[static_cast<std::size_t>(old)] != 0 ||
+          seen[static_cast<std::size_t>(old)] != 0) {
+        continue;
+      }
+      seen[static_cast<std::size_t>(old)] = 1;
+      new_to_old.push_back(old);
+    }
+  };
+  for (std::int32_t g = 1; g <= pt.n_groups(); ++g) {
+    append_by_op(g, parse::Op::Measurement, true);
+    append_by_op(g, parse::Op::Threshold, true);
+    append_by_op(g, parse::Op::Threshold, false);
+  }
+
+  std::vector<std::int32_t> old_to_new(static_cast<std::size_t>(old_n) + 1, 0);
+  for (std::size_t neu = 0; neu < new_to_old.size(); ++neu) {
+    old_to_new[static_cast<std::size_t>(new_to_old[neu])] =
+        static_cast<std::int32_t>(neu) + 1;
+  }
+
+  for (std::int32_t& fr : pt.free) {
+    if (fr <= 0) continue;
+    const std::int32_t neu = old_to_new[static_cast<std::size_t>(fr)];
+    if (neu <= 0) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal delta cannot remove a response-scale variance that shares a free index"));
+    }
+    fr = neu;
+  }
+
+  std::vector<std::int32_t> eq_new(new_to_old.size(), 0);
+  const bool have_eq =
+      static_cast<std::int32_t>(pt.eq_groups.size()) == old_n;
+  for (std::size_t k = 0; k < new_to_old.size(); ++k) {
+    const std::int32_t old = new_to_old[k];
+    eq_new[k] = have_eq ? pt.eq_groups[static_cast<std::size_t>(old - 1)]
+                        : old - 1;
+  }
+  pt.eq_groups = std::move(eq_new);
+
+  const std::size_t n_lin = pt.lin_constraint_d.size();
+  if (n_lin > 0) {
+    const std::size_t old_cols = static_cast<std::size_t>(old_n);
+    if (pt.lin_constraint_R.size() != n_lin * old_cols) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal delta free-set compaction found malformed linear constraints"));
+    }
+    std::vector<double> R_new(n_lin * new_to_old.size(), 0.0);
+    for (std::size_t r = 0; r < n_lin; ++r) {
+      for (std::int32_t old = 1; old <= old_n; ++old) {
+        const double v =
+            pt.lin_constraint_R[r * old_cols + static_cast<std::size_t>(old - 1)];
+        const std::int32_t neu = old_to_new[static_cast<std::size_t>(old)];
+        if (neu > 0) {
+          R_new[r * new_to_old.size() + static_cast<std::size_t>(neu - 1)] = v;
+        } else if (std::abs(v) > 1e-12) {
+          return std::unexpected(make_err(FitError::Kind::NumericIssue,
+              "ordinal delta does not support constraints on derived response-scale variances"));
+        }
+      }
+    }
+    pt.lin_constraint_R = std::move(R_new);
+  }
+
+  if (starts != nullptr && !starts->hint.empty()) {
+    std::vector<double> hint_new(new_to_old.size(),
+                                 std::numeric_limits<double>::quiet_NaN());
+    for (std::size_t k = 0; k < new_to_old.size(); ++k) {
+      const std::size_t old = static_cast<std::size_t>(new_to_old[k] - 1);
+      if (old < starts->hint.size()) hint_new[k] = starts->hint[old];
+    }
+    starts->hint = std::move(hint_new);
+  }
+  return {};
+}
+
 struct ThresholdLayout {
   std::vector<std::vector<std::int32_t>> free;
   std::vector<std::vector<double>> fixed;
@@ -196,8 +313,7 @@ Eigen::VectorXd corr_lower(const Eigen::MatrixXd& Sigma) {
   Eigen::Index k = 0;
   for (Eigen::Index j = 0; j < p; ++j) {
     for (Eigen::Index i = j + 1; i < p; ++i) {
-      const double den = std::sqrt(std::max(1e-12, Sigma(i, i) * Sigma(j, j)));
-      out(k++) = Sigma(i, j) / den;
+      out(k++) = Sigma(i, j);
     }
   }
   return out;
@@ -206,21 +322,14 @@ Eigen::VectorXd corr_lower(const Eigen::MatrixXd& Sigma) {
 Eigen::MatrixXd corr_jacobian(const Eigen::MatrixXd& Sigma,
                               const Eigen::MatrixXd& J_sigma,
                               Eigen::Index sigma_off) {
+  (void)Sigma;
   const Eigen::Index p = Sigma.rows();
   const Eigen::Index n_free = J_sigma.cols();
   Eigen::MatrixXd J(p * (p - 1) / 2, n_free);
   Eigen::Index row = 0;
   for (Eigen::Index j = 0; j < p; ++j) {
     for (Eigen::Index i = j + 1; i < p; ++i) {
-      const double sii = std::max(1e-12, Sigma(i, i));
-      const double sjj = std::max(1e-12, Sigma(j, j));
-      const double den = std::sqrt(sii * sjj);
-      const double rho = Sigma(i, j) / den;
-      J.row(row) = J_sigma.row(sigma_off + vech_index(p, i, j)) / den;
-      J.row(row).noalias() -=
-          (0.5 * rho / sii) * J_sigma.row(sigma_off + vech_index(p, i, i));
-      J.row(row).noalias() -=
-          (0.5 * rho / sjj) * J_sigma.row(sigma_off + vech_index(p, j, j));
+      J.row(row) = J_sigma.row(sigma_off + vech_index(p, i, j));
       ++row;
     }
   }
@@ -318,6 +427,36 @@ void seed_threshold_starts(Eigen::VectorXd& x,
 
 }  // namespace
 
+fit_expected<void>
+prepare_ordinal_delta_partable(spec::LatentStructure& pt,
+                                const data::OrdinalStats& stats,
+                                spec::Starts* starts) {
+  auto ordered_or = ordered_indicator_layout(pt, stats);
+  if (!ordered_or.has_value()) return std::unexpected(ordered_or.error());
+  const auto& ordered = *ordered_or;
+
+  const std::int32_t old_n = pt.n_free();
+  std::vector<char> remove_free(static_cast<std::size_t>(old_n) + 1, 0);
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != parse::Op::Covariance || pt.group[i] <= 0) continue;
+    const std::size_t b = static_cast<std::size_t>(pt.group[i] - 1);
+    if (b >= ordered.size()) continue;
+    if (pt.lhs_var[i] < 0 || pt.rhs_var[i] < 0 ||
+        pt.lhs_var[i] != pt.rhs_var[i]) {
+      continue;
+    }
+    const std::int32_t ov = pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])];
+    if (ov < 0 || static_cast<std::size_t>(ov) >= ordered[b].size() ||
+        ordered[b][static_cast<std::size_t>(ov)] == 0) {
+      continue;
+    }
+    if (pt.free[i] > 0) remove_free[static_cast<std::size_t>(pt.free[i])] = 1;
+    pt.free[i] = 0;
+    pt.fixed_value[i] = 1.0;
+  }
+  return compact_free_set(pt, remove_free, starts);
+}
+
 template <optim::LsBoundedOptimizer O>
 fit_expected<Estimates>
 fit_ordinal_bounded(spec::LatentStructure pt,
@@ -329,6 +468,9 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                     spec::Starts starts) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());
+  }
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, &starts); !p.has_value()) {
+    return std::unexpected(p.error());
   }
   auto layout_or = make_threshold_layout(pt, rep, stats);
   if (!layout_or.has_value()) return std::unexpected(layout_or.error());
@@ -431,7 +573,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
     fmin_data = out_or->fmin - 0.5 * mu_eq * eq_resid.squaredNorm();
     if (fmin_data < 0.0) fmin_data = 0.0;
   }
-  return Estimates{std::move(out_or->theta_hat), fmin_data, out_or->iterations};
+  return Estimates{std::move(out_or->theta_hat), 2.0 * fmin_data,
+                   out_or->iterations};
 }
 
 template fit_expected<Estimates>
@@ -443,6 +586,19 @@ fit_ordinal_bounded<optim::LbfgsBOptimizer>(
     OrdinalWeightKind weights,
     optim::LbfgsBOptimizer optimizer,
     spec::Starts starts);
+
+fit_expected<Estimates>
+fit_ordinal_bounded(spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const data::OrdinalStats& stats,
+                    Bounds bounds,
+                    OrdinalWeightKind weights,
+                    optim::LbfgsBOptimizer optimizer,
+                    spec::Starts starts) {
+  return fit_ordinal_bounded<optim::LbfgsBOptimizer>(
+      std::move(pt), rep, stats, std::move(bounds), weights,
+      std::move(optimizer), std::move(starts));
+}
 
 #ifdef MAGMAAN_WITH_CERES
 template fit_expected<Estimates>
