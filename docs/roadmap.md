@@ -28,14 +28,14 @@ The core parser-to-fit pipeline is in place:
   rows are compressed into observed-value patterns, the direct
   observed-pattern normal-theory objective and analytic gradient reuse the
   existing `ModelEvaluator` Jacobians, and `fit_fiml()` optimizes with LBFGS.
-  Single-group checked-in fixtures now compare `fit_fiml()` point estimates
-  against lavaan `missing = "fiml"` for one-factor CFA, three-factor CFA, and
-  shared-label equality CFA with explicit mean structures. FIML post-fit
-  likelihood extras now add observed-data normal constants and a saturated/H1
-  likelihood so log-likelihood, unrestricted log-likelihood, chi-square, and
-  information criteria match lavaan on that fixture tranche. Baseline/fit-index
-  reporting, multi-group missing-data parity, robust missing-data corrections,
-  and R wrappers remain open.
+  Checked-in fixtures now compare `fit_fiml()` point estimates against lavaan
+  `missing = "fiml"` for single- and multi-group one-factor CFA, three-factor
+  CFA, and shared-label equality CFA with explicit mean structures. FIML
+  post-fit likelihood extras now add observed-data normal constants and a
+  saturated/H1 likelihood so log-likelihood, unrestricted log-likelihood,
+  chi-square, and information criteria match lavaan on that fixture tranche.
+  Baseline/fit-index reporting, broader missing-data parity cases, robust
+  missing-data corrections, and R wrappers remain open.
 - ULS, GLS, and explicit-weight WLS discrepancies, each with scalar
   value/gradient and least-squares residual/Jacobian interfaces.
 - Bounded least-squares fitting through LBFGS-B and optional Ceres, including
@@ -92,7 +92,8 @@ observed/missing mask, and the optimizer consumes pattern summaries.
 Open work:
 
 - Extend the checked-in lavaan FIML fixture family beyond the current
-  single-group point-estimate tranche to multi-group missing-data cases.
+  single-/multi-group CFA tranche to structural, fixed.x-policy, and additional
+  missing-pattern edge cases.
 - Add FIML baseline/independence likelihood accounting so fit indices such as
   CFI/TLI/RMSEA can be reported from raw missing-data fits. User-model and
   saturated/H1 log-likelihood accounting is already implemented for the current
