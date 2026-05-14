@@ -55,6 +55,19 @@ struct FIMLExtras {
   std::int64_t ntotal            = 0;
 };
 
+struct FIMLRobustMLR {
+  Eigen::MatrixXd vcov;
+  Eigen::VectorXd se;
+  Eigen::VectorXd eigvals;
+  double       chisq_scaled      = std::numeric_limits<double>::quiet_NaN();
+  double       scaling_factor    = std::numeric_limits<double>::quiet_NaN();
+  double       trace_ugamma      = std::numeric_limits<double>::quiet_NaN();
+  double       trace_ugamma_h1   = std::numeric_limits<double>::quiet_NaN();
+  double       trace_ugamma_h0   = std::numeric_limits<double>::quiet_NaN();
+  int          df                = 0;
+  std::int64_t ntotal            = 0;
+};
+
 // Full-information ML over raw continuous data with arbitrary observed-value
 // patterns. The optimized scalar is the per-observation observed-pattern
 // normal-theory deviance without saturated/H1 constants:
@@ -111,6 +124,20 @@ fiml_extras(partable::LatentStructure pt,
             const RawData& raw,
             const Estimates& est,
             FIML discrepancy = {});
+
+// First robust missing-data reporting slice: lavaan's continuous FIML MLR
+// corner (`missing = "fiml", estimator = "MLR"`), single block only. The
+// sandwich meat is built from observed-pattern casewise deviance gradients,
+// and the bread is a finite-difference observed FIML Hessian.
+post_expected<FIMLRobustMLR>
+fiml_robust_mlr(partable::LatentStructure pt,
+                const model::MatrixRep& rep,
+                const RawData& raw,
+                const Estimates& est,
+                int df,
+                double chisq,
+                FIML discrepancy = {},
+                double h_step = 1e-4);
 
 // FIML independence/baseline chi-square for raw continuous data with missing
 // values. Unlike complete-data `baseline_chi2(SampleStats)`, this evaluates the

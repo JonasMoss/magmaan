@@ -1385,6 +1385,39 @@ for (m in fiml_cases) {
   free_rows <- free_rows[order(free_rows$free), ]
   fm <- fitMeasures(fit)
 
+  se_robust_huberwhite <- NULL
+  mlr_chisq_scaled <- NULL
+  mlr_scaling_factor <- NULL
+  mlr_scaling_factor_h1 <- NULL
+  mlr_scaling_factor_h0 <- NULL
+  mlr_trace_ugamma <- NULL
+  mlr_trace_ugamma_h1 <- NULL
+  mlr_trace_ugamma_h0 <- NULL
+  if (n_groups <= 1L && is.null(expect_error)) {
+    mlr_args <- c(fit_args, list(estimator = "MLR"))
+    fit_mlr <- tryCatch(do.call(fit_fun, mlr_args),
+                        error = function(e) e, warning = function(w) NULL)
+    if (!is.null(fit_mlr) && !inherits(fit_mlr, "error") &&
+        lavInspect(fit_mlr, "converged")) {
+      pt_mlr <- parTable(fit_mlr)
+      free_mlr <- pt_mlr[pt_mlr$free > 0, ]
+      free_mlr <- free_mlr[order(free_mlr$free), ]
+      se_robust_huberwhite <- as.numeric(free_mlr$se)
+      test_mlr <- lavInspect(fit_mlr, "test")$yuan.bentler.mplus
+      if (!is.null(test_mlr)) {
+        mlr_chisq_scaled <- as.numeric(test_mlr$stat)
+        mlr_scaling_factor <- as.numeric(test_mlr$scaling.factor)
+        mlr_scaling_factor_h1 <- as.numeric(test_mlr$scaling.factor.h1)
+        mlr_scaling_factor_h0 <- as.numeric(test_mlr$scaling.factor.h0)
+        mlr_trace_ugamma <- as.numeric(test_mlr$trace.UGamma)
+        h1_attr <- attr(test_mlr$stat, "h1")
+        h0_attr <- attr(test_mlr$stat, "h0")
+        if (!is.null(h1_attr)) mlr_trace_ugamma_h1 <- as.numeric(h1_attr)
+        if (!is.null(h0_attr)) mlr_trace_ugamma_h0 <- as.numeric(h0_attr)
+      }
+    }
+  }
+
   payload <- list(
     `_meta` = list(
       format_version = 1L,
@@ -1411,6 +1444,14 @@ for (m in fiml_cases) {
     chisq           = as.numeric(fm["chisq"]),
     baseline_chisq  = as.numeric(fm["baseline.chisq"]),
     baseline_df     = as.integer(fm["baseline.df"]),
+    se_robust_huberwhite = se_robust_huberwhite,
+    mlr_chisq_scaled = mlr_chisq_scaled,
+    mlr_scaling_factor = mlr_scaling_factor,
+    mlr_scaling_factor_h1 = mlr_scaling_factor_h1,
+    mlr_scaling_factor_h0 = mlr_scaling_factor_h0,
+    mlr_trace_ugamma = mlr_trace_ugamma,
+    mlr_trace_ugamma_h1 = mlr_trace_ugamma_h1,
+    mlr_trace_ugamma_h0 = mlr_trace_ugamma_h0,
     cfi             = as.numeric(fm["cfi"]),
     tli             = as.numeric(fm["tli"]),
     rmsea           = as.numeric(fm["rmsea"]),

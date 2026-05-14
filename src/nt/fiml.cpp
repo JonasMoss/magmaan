@@ -13,6 +13,7 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
@@ -395,6 +396,345 @@ fiml_h1_value(const RawData& raw,
               const SampleStats& starts) {
   return raw.mask.empty() ? h1_complete_data_value(starts)
                           : h1_missing_data_value(cache, starts);
+}
+
+fit_expected<void>
+h1_moments_block(const RawData& raw,
+                 const FIMLCache& cache,
+                 const SampleStats& starts,
+                 std::size_t block,
+                 Eigen::VectorXd& mu,
+                 Eigen::MatrixXd& Sigma) {
+  if (block >= cache.block_p.size() || block >= starts.S.size() ||
+      block >= starts.mean.size()) {
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        "FIML H1: block index out of range"));
+  }
+  if (raw.mask.empty()) {
+    mu = starts.mean[block];
+    Sigma = 0.5 * (starts.S[block] + starts.S[block].transpose());
+    return {};
+  }
+
+  const Eigen::Index p = cache.block_p[block];
+  const Eigen::VectorXd x0 = h1_start_for_block(starts, block);
+  Eigen::MatrixXd L;
+  h1_decode(x0, p, mu, L, Sigma);
+
+  double prev = std::numeric_limits<double>::infinity();
+  double cur = std::numeric_limits<double>::infinity();
+  for (int iter = 0; iter < 10000; ++iter) {
+    auto val = h1_block_value_from_moments(cache, block, mu, Sigma);
+    if (!val.has_value()) return std::unexpected(val.error());
+    cur = *val;
+    if (std::isfinite(prev) &&
+        std::abs(prev - cur) <= 1e-11 * (1.0 + std::abs(cur))) {
+      break;
+    }
+    prev = cur;
+    auto upd = h1_em_update_block(cache, block, mu, Sigma);
+    if (!upd.has_value()) return std::unexpected(upd.error());
+  }
+  return {};
+}
+
+post_expected<Eigen::MatrixXd>
+invert_symmetric(const Eigen::MatrixXd& A, std::string what) {
+  if (A.rows() != A.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::move(what) + " is not square"));
+  }
+  const Eigen::Index q = A.rows();
+  const Eigen::MatrixXd S = 0.5 * (A + A.transpose());
+  Eigen::LLT<Eigen::MatrixXd> llt(S);
+  if (llt.info() == Eigen::Success) {
+    return Eigen::MatrixXd(llt.solve(Eigen::MatrixXd::Identity(q, q)));
+  }
+  Eigen::LDLT<Eigen::MatrixXd> ldlt(S);
+  if (ldlt.info() != Eigen::Success) {
+    return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
+        std::move(what) + " is not invertible"));
+  }
+  return Eigen::MatrixXd(ldlt.solve(Eigen::MatrixXd::Identity(q, q)));
+}
+
+post_expected<Eigen::VectorXd>
+observed_row_score(const Eigen::VectorXd& x_o,
+                   const std::vector<Eigen::Index>& obs,
+                   Eigen::Index p,
+                   const Eigen::VectorXd& Mu,
+                   const Eigen::MatrixXd& Sigma,
+                   const Eigen::MatrixXd& J_sigma,
+                   const Eigen::MatrixXd& J_mu,
+                   Eigen::Index sigma_off,
+                   Eigen::Index mu_off) {
+  const Eigen::Index q = static_cast<Eigen::Index>(obs.size());
+  const Eigen::MatrixXd Sigma_o = select_square(Sigma, obs);
+  const Eigen::VectorXd Mu_o = select_vector(Mu, obs);
+  const Eigen::VectorXd d = x_o - Mu_o;
+  Eigen::LLT<Eigen::MatrixXd> llt(Sigma_o);
+  if (llt.info() != Eigen::Success) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "FIML robust: implied observed-pattern Sigma is not positive definite"));
+  }
+  const Eigen::MatrixXd SigmaInv =
+      llt.solve(Eigen::MatrixXd::Identity(q, q));
+  const Eigen::VectorXd z = llt.solve(d);
+  Eigen::MatrixXd G = SigmaInv - z * z.transpose();
+  G = 0.5 * (G + G.transpose()).eval();
+
+  Eigen::VectorXd w = Eigen::VectorXd::Zero(J_sigma.rows());
+  Eigen::VectorXd u = Eigen::VectorXd::Zero(J_mu.rows());
+  for (Eigen::Index cj = 0; cj < q; ++cj) {
+    const Eigen::Index c = obs[static_cast<std::size_t>(cj)];
+    for (Eigen::Index ri = cj; ri < q; ++ri) {
+      const Eigen::Index r = obs[static_cast<std::size_t>(ri)];
+      const Eigen::Index rr = std::max(r, c);
+      const Eigen::Index cc = std::min(r, c);
+      const Eigen::Index idx = sigma_off + vech_index(p, rr, cc);
+      w(idx) += (ri == cj) ? G(ri, cj) : 2.0 * G(ri, cj);
+    }
+  }
+  for (Eigen::Index i = 0; i < q; ++i) {
+    const Eigen::Index r = obs[static_cast<std::size_t>(i)];
+    u(mu_off + r) += -2.0 * z(i);
+  }
+  Eigen::VectorXd score = J_sigma.transpose() * w;
+  score.noalias() += J_mu.transpose() * u;
+  return score;
+}
+
+post_expected<Eigen::MatrixXd>
+fiml_casewise_scores(const RawData& raw,
+                     const FIMLCache& cache,
+                     const model::ImpliedMoments& moments,
+                     const Eigen::MatrixXd& J_sigma,
+                     const Eigen::MatrixXd& J_mu) {
+  if (raw.X.size() != moments.sigma.size() ||
+      moments.mu.size() != moments.sigma.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "FIML robust: raw and implied moment block count mismatch"));
+  }
+  Eigen::Index n_total = 0;
+  for (const auto& X : raw.X) n_total += X.rows();
+  Eigen::MatrixXd scores(n_total, J_sigma.cols());
+
+  Eigen::Index row_out = 0;
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    const auto& X = raw.X[b];
+    const Eigen::Index p = X.cols();
+    for (Eigen::Index r = 0; r < X.rows(); ++r) {
+      std::vector<Eigen::Index> obs;
+      obs.reserve(static_cast<std::size_t>(p));
+      if (raw.mask.empty()) {
+        for (Eigen::Index c = 0; c < p; ++c) obs.push_back(c);
+      } else {
+        for (Eigen::Index c = 0; c < p; ++c)
+          if (raw.mask[b](r, c) != 0) obs.push_back(c);
+      }
+      if (obs.empty()) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "FIML robust: row has no observed values"));
+      }
+      if (!finite_observed_row(X, obs, r)) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "FIML robust: non-finite observed value"));
+      }
+      Eigen::VectorXd x_o(static_cast<Eigen::Index>(obs.size()));
+      for (Eigen::Index j = 0; j < x_o.size(); ++j) {
+        x_o(j) = X(r, obs[static_cast<std::size_t>(j)]);
+      }
+      auto s_or = observed_row_score(
+          x_o, obs, p, moments.mu[b], moments.sigma[b], J_sigma, J_mu,
+          cache.sigma_offsets[b], cache.mu_offsets[b]);
+      if (!s_or.has_value()) return std::unexpected(s_or.error());
+      scores.row(row_out++) = s_or->transpose();
+    }
+  }
+  return scores;
+}
+
+post_expected<Eigen::MatrixXd>
+fiml_observed_hessian_fd(partable::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const RawData& raw,
+                         const FIMLCache& cache,
+                         const SampleStats& start_samp,
+                         const Estimates& est,
+                         FIML discrepancy,
+                         double h_step) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, start_samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(), "resolve_fixed_x_from_sample"));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::build failed: " + ev_or.error().detail));
+  }
+  const auto& ev = *ev_or;
+  const Eigen::Index q = static_cast<Eigen::Index>(ev.n_free());
+  auto grad_at = [&](const Eigen::VectorXd& theta)
+      -> post_expected<Eigen::VectorXd> {
+    auto eval = ev.evaluate(theta, true, true);
+    if (!eval.has_value()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ModelEvaluator::evaluate failed: " + eval.error().detail));
+    }
+    auto g_or = discrepancy.gradient(raw, cache, eval->moments,
+                                     eval->J_sigma, eval->J_mu);
+    if (!g_or.has_value()) {
+      return std::unexpected(fit_to_post(g_or.error(), "FIML gradient"));
+    }
+    return *g_or;
+  };
+
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
+  for (Eigen::Index k = 0; k < q; ++k) {
+    Eigen::VectorXd tp = est.theta;
+    Eigen::VectorXd tm = est.theta;
+    tp(k) += h_step;
+    tm(k) -= h_step;
+    auto gp = grad_at(tp);
+    if (!gp.has_value()) return std::unexpected(gp.error());
+    auto gm = grad_at(tm);
+    if (!gm.has_value()) return std::unexpected(gm.error());
+    H.col(k) = (*gp - *gm) / (2.0 * h_step);
+  }
+  return Eigen::MatrixXd(0.5 * (H + H.transpose()));
+}
+
+Eigen::Index vech_row(Eigen::Index p, Eigen::Index target) {
+  Eigen::Index k = 0;
+  for (Eigen::Index c = 0; c < p; ++c) {
+    for (Eigen::Index r = c; r < p; ++r) {
+      if (k == target) return r;
+      ++k;
+    }
+  }
+  return 0;
+}
+
+Eigen::Index vech_col(Eigen::Index p, Eigen::Index target) {
+  Eigen::Index k = 0;
+  for (Eigen::Index c = 0; c < p; ++c) {
+    for (Eigen::Index r = c; r < p; ++r) {
+      if (k == target) return c;
+      ++k;
+    }
+  }
+  return 0;
+}
+
+post_expected<Eigen::MatrixXd>
+fiml_saturated_scores(const RawData& raw,
+                      const Eigen::VectorXd& mu,
+                      const Eigen::MatrixXd& Sigma) {
+  if (raw.X.size() != 1) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "FIML robust H1: only single-block raw data is supported"));
+  }
+  const Eigen::MatrixXd& X = raw.X[0];
+  const Eigen::Index n = X.rows();
+  const Eigen::Index p = X.cols();
+  const Eigen::Index pstar = vech_len(p);
+  Eigen::MatrixXd scores = Eigen::MatrixXd::Zero(n, p + pstar);
+  for (Eigen::Index r = 0; r < n; ++r) {
+    std::vector<Eigen::Index> obs;
+    obs.reserve(static_cast<std::size_t>(p));
+    if (raw.mask.empty()) {
+      for (Eigen::Index c = 0; c < p; ++c) obs.push_back(c);
+    } else {
+      for (Eigen::Index c = 0; c < p; ++c)
+        if (raw.mask[0](r, c) != 0) obs.push_back(c);
+    }
+    if (obs.empty() || !finite_observed_row(X, obs, r)) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "FIML robust H1: invalid observed row"));
+    }
+    const Eigen::Index q = static_cast<Eigen::Index>(obs.size());
+    Eigen::VectorXd x_o(q);
+    for (Eigen::Index j = 0; j < q; ++j) {
+      x_o(j) = X(r, obs[static_cast<std::size_t>(j)]);
+    }
+    const Eigen::MatrixXd Sigma_o = select_square(Sigma, obs);
+    const Eigen::VectorXd Mu_o = select_vector(mu, obs);
+    const Eigen::VectorXd d = x_o - Mu_o;
+    Eigen::LLT<Eigen::MatrixXd> llt(Sigma_o);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "FIML robust H1: Sigma_oo is not positive definite"));
+    }
+    const Eigen::MatrixXd SigmaInv =
+        llt.solve(Eigen::MatrixXd::Identity(q, q));
+    const Eigen::VectorXd z = llt.solve(d);
+    Eigen::MatrixXd G = SigmaInv - z * z.transpose();
+    G = 0.5 * (G + G.transpose()).eval();
+    for (Eigen::Index i = 0; i < q; ++i) {
+      const Eigen::Index rr = obs[static_cast<std::size_t>(i)];
+      scores(r, rr) = -2.0 * z(i);
+    }
+    for (Eigen::Index cj = 0; cj < q; ++cj) {
+      const Eigen::Index c = obs[static_cast<std::size_t>(cj)];
+      for (Eigen::Index ri = cj; ri < q; ++ri) {
+        const Eigen::Index rr0 = obs[static_cast<std::size_t>(ri)];
+        const Eigen::Index rr = std::max(rr0, c);
+        const Eigen::Index cc = std::min(rr0, c);
+        const Eigen::Index idx = p + vech_index(p, rr, cc);
+        scores(r, idx) += (ri == cj) ? G(ri, cj) : 2.0 * G(ri, cj);
+      }
+    }
+  }
+  return scores;
+}
+
+post_expected<Eigen::MatrixXd>
+fiml_saturated_hessian_fd(const RawData& raw,
+                          const Eigen::VectorXd& mu,
+                          const Eigen::MatrixXd& Sigma,
+                          double h_step) {
+  const Eigen::Index p = mu.size();
+  const Eigen::Index pstar = vech_len(p);
+  const Eigen::Index q = p + pstar;
+  auto grad_at = [&](const Eigen::VectorXd& mu0,
+                     const Eigen::MatrixXd& Sigma0)
+      -> post_expected<Eigen::VectorXd> {
+    Eigen::LLT<Eigen::MatrixXd> llt(0.5 * (Sigma0 + Sigma0.transpose()));
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "FIML robust H1: perturbed Sigma is not positive definite"));
+    }
+    auto S_or = fiml_saturated_scores(raw, mu0, Sigma0);
+    if (!S_or.has_value()) return std::unexpected(S_or.error());
+    return Eigen::VectorXd(S_or->colwise().mean().transpose());
+  };
+
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
+  for (Eigen::Index k = 0; k < q; ++k) {
+    Eigen::VectorXd mup = mu;
+    Eigen::VectorXd mum = mu;
+    Eigen::MatrixXd Sp = Sigma;
+    Eigen::MatrixXd Sm = Sigma;
+    if (k < p) {
+      mup(k) += h_step;
+      mum(k) -= h_step;
+    } else {
+      const Eigen::Index vk = k - p;
+      const Eigen::Index r = vech_row(p, vk);
+      const Eigen::Index c = vech_col(p, vk);
+      Sp(r, c) += h_step;
+      Sm(r, c) -= h_step;
+      if (r != c) {
+        Sp(c, r) += h_step;
+        Sm(c, r) -= h_step;
+      }
+    }
+    auto gp = grad_at(mup, Sp);
+    if (!gp.has_value()) return std::unexpected(gp.error());
+    auto gm = grad_at(mum, Sm);
+    if (!gm.has_value()) return std::unexpected(gm.error());
+    H.col(k) = (*gp - *gm) / (2.0 * h_step);
+  }
+  return Eigen::MatrixXd(0.5 * (H + H.transpose()));
 }
 
 post_expected<void>
@@ -904,6 +1244,145 @@ fiml_extras(partable::LatentStructure pt,
   out.bic = -2.0 * out.logl + static_cast<double>(npar) * std::log(N);
   out.bic2 = -2.0 * out.logl + static_cast<double>(npar)
       * std::log((N + 2.0) / 24.0);
+  return out;
+}
+
+post_expected<FIMLRobustMLR>
+fiml_robust_mlr(partable::LatentStructure pt,
+                const model::MatrixRep& rep,
+                const RawData& raw,
+                const Estimates& est,
+                int df,
+                double chisq,
+                FIML discrepancy,
+                double h_step) {
+  if (raw.X.size() != 1) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_robust_mlr: v1 supports single-block FIML only"));
+  }
+  if (df <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_robust_mlr: robust scaled test requires df > 0"));
+  }
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_robust_mlr: h_step must be > 0"));
+  }
+
+  auto cache_or = discrepancy.prepare(raw);
+  if (!cache_or.has_value()) {
+    return std::unexpected(fit_to_post(cache_or.error(), "FIML::prepare"));
+  }
+  const FIMLCache& cache = *cache_or;
+
+  auto start_samp_or = fiml_start_sample_stats(raw);
+  if (!start_samp_or.has_value()) {
+    return std::unexpected(fit_to_post(start_samp_or.error(),
+        "fiml_start_sample_stats"));
+  }
+  SampleStats start_samp = std::move(*start_samp_or);
+
+  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(),
+        "validate_fiml_fixed_x_missing_policy"));
+  }
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, start_samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(),
+        "resolve_fixed_x_from_sample"));
+  }
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::build failed: " + ev_or.error().detail));
+  }
+  const auto& ev = *ev_or;
+  if (static_cast<std::size_t>(est.theta.size()) != ev.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "Estimates.theta size " + std::to_string(est.theta.size()) +
+            " != evaluator n_free " + std::to_string(ev.n_free())));
+  }
+
+  auto eval_or = ev.evaluate(est.theta, true, true);
+  if (!eval_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::evaluate failed: " + eval_or.error().detail));
+  }
+  const auto& eval = *eval_or;
+  auto scores_or = fiml_casewise_scores(raw, cache, eval.moments,
+                                        eval.J_sigma, eval.J_mu);
+  if (!scores_or.has_value()) return std::unexpected(scores_or.error());
+  Eigen::MatrixXd scores = std::move(*scores_or);
+
+  auto H_or = fiml_observed_hessian_fd(pt, rep, raw, cache, start_samp,
+                                       est, discrepancy, h_step);
+  if (!H_or.has_value()) return std::unexpected(H_or.error());
+  Eigen::MatrixXd H = std::move(*H_or);
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  Eigen::MatrixXd K;
+  if (con_or->active()) {
+    K = con_or->K();
+    scores = (scores * K).eval();
+    H = (K.transpose() * H * K).eval();
+    H = 0.5 * (H + H.transpose()).eval();
+  }
+  const Eigen::Index q = H.rows();
+  const double N = static_cast<double>(cache.n_total);
+  const Eigen::MatrixXd meat =
+      (scores.transpose() * scores) / N;
+  auto Hinv_or = invert_symmetric(H, "fiml_robust_mlr: observed Hessian");
+  if (!Hinv_or.has_value()) return std::unexpected(Hinv_or.error());
+  const Eigen::MatrixXd& Hinv = *Hinv_or;
+
+  Eigen::MatrixXd vcov_q = (Hinv * meat * Hinv) / N;
+  vcov_q = 0.5 * (vcov_q + vcov_q.transpose()).eval();
+
+  FIMLRobustMLR out;
+  out.ntotal = cache.n_total;
+  out.df = df;
+  out.vcov = (K.size() > 0)
+      ? Eigen::MatrixXd(K * vcov_q * K.transpose())
+      : std::move(vcov_q);
+  out.vcov = 0.5 * (out.vcov + out.vcov.transpose()).eval();
+  out.se.resize(out.vcov.rows());
+  for (Eigen::Index k = 0; k < out.vcov.rows(); ++k) {
+    const double d = out.vcov(k, k);
+    out.se(k) = (d >= 0.0) ? std::sqrt(d)
+                           : std::numeric_limits<double>::quiet_NaN();
+  }
+
+  const Eigen::MatrixXd h0 = Hinv * meat;
+  out.trace_ugamma_h0 = 0.5 * h0.trace();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(
+      0.5 * (h0 + h0.transpose()), Eigen::EigenvaluesOnly);
+  if (es.info() == Eigen::Success) out.eigvals = es.eigenvalues();
+
+  Eigen::VectorXd h1_mu;
+  Eigen::MatrixXd h1_sigma;
+  auto h1_mom_or = h1_moments_block(raw, cache, start_samp, 0,
+                                    h1_mu, h1_sigma);
+  if (!h1_mom_or.has_value()) {
+    return std::unexpected(fit_to_post(h1_mom_or.error(), "FIML H1 moments"));
+  }
+  auto h1_scores_or = fiml_saturated_scores(raw, h1_mu, h1_sigma);
+  if (!h1_scores_or.has_value()) return std::unexpected(h1_scores_or.error());
+  const Eigen::MatrixXd& h1_scores = *h1_scores_or;
+  auto h1_H_or = fiml_saturated_hessian_fd(raw, h1_mu, h1_sigma, h_step);
+  if (!h1_H_or.has_value()) return std::unexpected(h1_H_or.error());
+  const Eigen::MatrixXd h1_meat =
+      (h1_scores.transpose() * h1_scores) / N;
+  auto h1_Hinv_or = invert_symmetric(*h1_H_or,
+                                     "fiml_robust_mlr: H1 observed Hessian");
+  if (!h1_Hinv_or.has_value()) return std::unexpected(h1_Hinv_or.error());
+  out.trace_ugamma_h1 = 0.5 * ((*h1_Hinv_or) * h1_meat).trace();
+  out.trace_ugamma = out.trace_ugamma_h1 - out.trace_ugamma_h0;
+  out.scaling_factor = out.trace_ugamma / static_cast<double>(df);
+  out.chisq_scaled = (out.scaling_factor > 0.0)
+      ? chisq / out.scaling_factor
+      : std::numeric_limits<double>::quiet_NaN();
+  (void)q;
   return out;
 }
 
