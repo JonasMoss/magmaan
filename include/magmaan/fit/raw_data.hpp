@@ -24,16 +24,15 @@ namespace magmaan::fit {
 // match what lavaan does internally with `likelihood = "normal"` (N-divisor
 // cov, sample mean as the m̄ estimate).
 //
-// Missingness is not yet supported in v0 — the `mask` field is reserved
-// for the FIML phase. Setting it on entries that have missing values is
-// the caller's responsibility; for now the library asserts mask is empty
-// and treats X as fully observed.
+// Missingness is represented by `mask` and consumed by FIML. Complete-data
+// moment helpers such as `sample_stats_from_raw()` still assert mask is empty
+// and treat X as fully observed.
 struct RawData {
   // Per-block raw data. X[b] is (n_b × p_b).
   std::vector<Eigen::MatrixXd> X;
 
   // Optional per-block missingness mask (1 = observed, 0 = missing).
-  // Same shape as X[b] when present. Unused in v0 (reserved for FIML).
+  // Same shape as X[b] when present.
   std::vector<Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>> mask;
 };
 

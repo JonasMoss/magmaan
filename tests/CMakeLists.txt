@@ -26,6 +26,7 @@ add_executable(magmaan_tests
   unit/matrix_rep_test.cpp
   unit/model_evaluator_test.cpp
   unit/ml_test.cpp
+  unit/fiml_test.cpp
   unit/uls_test.cpp
   unit/gls_wls_test.cpp
   unit/snlls_test.cpp

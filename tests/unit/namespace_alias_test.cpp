@@ -14,6 +14,7 @@
 #include "magmaan/gls/wls.hpp"
 #include "magmaan/lavaan/partable_view.hpp"
 #include "magmaan/nt/effects.hpp"
+#include "magmaan/nt/fiml.hpp"
 #include "magmaan/nt/infer.hpp"
 #include "magmaan/nt/measures.hpp"
 #include "magmaan/nt/ml.hpp"
@@ -31,6 +32,7 @@
 // Focused old-header coverage for the transition window.
 #include "magmaan/fit/constraints.hpp"
 #include "magmaan/fit/fit.hpp"
+#include "magmaan/fit/fiml.hpp"
 #include "magmaan/fit/lbfgs_optimizer.hpp"
 #include "magmaan/fit/ml.hpp"
 #include "magmaan/fit/raw_data.hpp"
@@ -78,6 +80,8 @@ TEST_CASE("transitional public namespace aliases expose existing API types") {
   static_assert(magmaan::optim::Optimizer<magmaan::optim::LbfgsOptimizer>);
 
   static_assert(std::is_same_v<magmaan::nt::ml::ML, magmaan::fit::ML>);
+  static_assert(std::is_same_v<magmaan::nt::fiml::FIML,
+                               magmaan::fit::FIML>);
   static_assert(std::is_same_v<magmaan::gls::GLS, magmaan::fit::GLS>);
   static_assert(std::is_same_v<magmaan::gls::ULS, magmaan::fit::ULS>);
   static_assert(std::is_same_v<magmaan::gls::WLS, magmaan::fit::WLS>);
