@@ -10,6 +10,9 @@
 
 namespace magmaan::data {
 
+// All ordinal covariance-like matrices use the same moment order:
+// thresholds first, then lower-triangle polychorics by columns
+// (rho_10, rho_20, ..., rho_p0, rho_21, ...).
 struct OrdinalStats {
   std::vector<Eigen::MatrixXd> R;
   std::vector<Eigen::VectorXd> thresholds;

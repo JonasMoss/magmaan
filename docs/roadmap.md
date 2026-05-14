@@ -125,6 +125,9 @@ Open work:
   until the sample-stat contract is stable. A public polychoric API should
   expose the moment-vector ordering, category metadata, sample-size scaling,
   and error policy explicitly rather than returning only a correlation matrix.
+  The current internal moment order is thresholds first, followed by
+  lower-triangle polychorics by columns; `NACOV`, `WLS.VD`, and `WLS.V` all
+  use that same row/column order.
 - Decide the public backend policy for ordinal fitting. C++ now shares the
   generic bounded LS optimizer surface and Ceres builds check objective parity,
   but R Ceres wrappers and any public recommendation should wait until

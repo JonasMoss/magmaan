@@ -31,6 +31,10 @@ const std::vector<std::string> kOrdinalFixtures = {
     "0004_2group_3cat_cfa",
     "0005_near_empty_5cat_cfa",
     "0006_equal_loading_3cat_cfa",
+    "0007_binary_cfa",
+    "0008_mixed_levels_cfa",
+    "0009_sparse_binary_pair",
+    "0010_near_perfect_pair",
 };
 
 Eigen::MatrixXd matrix_from_json(const nlohmann::json& j) {
@@ -103,6 +107,21 @@ double max_abs_diff(const Eigen::VectorXd& a, const Eigen::VectorXd& b) {
 
 bool has_fit(const nlohmann::json& exp) {
   return exp.contains("fits") && !exp["fits"].is_null();
+}
+
+Eigen::VectorXd ordinal_moments(const magmaan::data::OrdinalStats& stats,
+                                std::size_t b) {
+  const Eigen::Index p = stats.R[b].rows();
+  const Eigen::Index nth = stats.thresholds[b].size();
+  Eigen::VectorXd out(nth + p * (p - 1) / 2);
+  out.head(nth) = stats.thresholds[b];
+  Eigen::Index k = nth;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      out(k++) = stats.R[b](i, j);
+    }
+  }
+  return out;
 }
 
 struct OrdinalHandles {
@@ -198,19 +217,22 @@ TEST_CASE("ordinal goldens: thresholds, polychorics, NACOV, and WLS weights vs l
       const Eigen::MatrixXd NACOV = matrix_from_json(eb["NACOV"]);
       const Eigen::MatrixXd W = matrix_from_json(eb["WLS.V"]);
       const Eigen::MatrixXd WD = matrix_from_json(eb["WLS.VD"]);
+      const Eigen::VectorXd moments = vector_from_json(eb["moments"]);
 
       const double d_th = max_abs_diff(stats.thresholds[b], th);
       const double d_R = max_abs_diff(stats.R[b], R);
       const double d_N = max_abs_diff(stats.NACOV[b], NACOV);
       const double d_WD = max_abs_diff(stats.W_dwls[b], WD);
       const double d_W = max_abs_diff(stats.W_wls[b], W);
+      const double d_mom = max_abs_diff(ordinal_moments(stats, b), moments);
 
       if (d_th > 5e-8 || d_R > 5e-4 || d_N > 2e-2 ||
-          d_WD > 2e-2 || d_W > 2e-2) {
+          d_WD > 2e-2 || d_W > 2e-2 || d_mom > 5e-4) {
         failures.push_back(
             id + " block " + std::to_string(b) +
             ": max diffs thresholds=" + std::to_string(d_th) +
             " R=" + std::to_string(d_R) +
+            " moments=" + std::to_string(d_mom) +
             " NACOV=" + std::to_string(d_N) +
             " WLS.VD=" + std::to_string(d_WD) +
             " WLS.V=" + std::to_string(d_W));
