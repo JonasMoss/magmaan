@@ -90,6 +90,7 @@ ModelEvaluator::build(const partable::LatentStructure& pt, const MatrixRep& rep)
   std::int32_t max_free = 0;
   for (std::size_t i = 0; i < pt.size(); ++i) {
     if (is_constraint_op(pt.op[i])) continue;
+    if (pt.free[i] > max_free) max_free = pt.free[i];
     const Cell& c = rep.cell_for_row[i];
     if (!c.used) continue;       // P5.1 sentinel for ~ / ~1 rows
 

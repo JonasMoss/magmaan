@@ -64,6 +64,7 @@ add_library(magmaan STATIC
   src/gls/uls.cpp
   src/gls/gls_wls.cpp
   src/estimate/bounds.cpp
+  src/estimate/ordinal.cpp
   src/estimate/start_values.cpp
   src/optim/lbfgs_optimizer.cpp
   src/optim/lbfgsb_optimizer.cpp
@@ -74,6 +75,7 @@ add_library(magmaan STATIC
   src/nt/standardized.cpp
   src/nt/fit_measures.cpp
   src/data/raw_data.cpp
+  src/data/ordinal.cpp
   src/nt/robust.cpp
   src/nt/restriction.cpp
   src/nt/satorra2000.cpp

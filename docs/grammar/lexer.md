@@ -16,7 +16,7 @@ input is a `TokenKind::EndOfFile` value, not an error.
 | `Identifier` | `[A-Za-z_.][A-Za-z0-9_.]*` | The literal `NA` and `c` and `start` lex as `Identifier`; the parser interprets them in context. |
 | `NumLit` | `[0-9]+ (\.[0-9]*)? ([eE][+-]?[0-9]+)?` &#124; `\.[0-9]+ ([eE][+-]?[0-9]+)?` | A leading sign is **never** part of the number — `-1` lexes as `Op('-')` then `NumLit(1)`. |
 | `StringLit` | `"…"` | `\` is **not** an escape in v0 (lavaan treats backslashes literally inside `"…"`). A newline inside a string is an error. |
-| `Op` | one of `=~`, `~~`, `~`, `:=`, `==`, `<`, `>`, `<~`, `\|~`, `~*~`, `\|` | See "Operator longest-match" below. The four `<~`, `\|~`, `~*~`, `\|` are lexed normally and the parser produces an `UnsupportedOperator` error. |
+| `Op` | one of `=~`, `~~`, `~`, `:=`, `==`, `<`, `>`, `<~`, `\|~`, `~*~`, `\|` | See "Operator longest-match" below. `<~` and `\|~` are lexed normally and the parser produces an `UnsupportedOperator` error. |
 | `Plus` | `+` | Used both as RHS-term separator and as `expr` operator. The parser disambiguates by context. |
 | `Minus` | `-` | Binary subtraction or unary negation, only inside `expr` (constraints / define-param). |
 | `Star` | `*` | The modifier separator. Also binary multiplication inside `expr`. |
@@ -72,7 +72,7 @@ recognition (longest first) matters only because some operators share
 prefixes:
 
 ```
-'~*~'   (3 chars) — rejected
+'~*~'   (3 chars)
 '<~'    (2 chars) — rejected
 '|~'    (2 chars) — rejected
 '~~'    (2 chars)
@@ -82,7 +82,7 @@ prefixes:
 '~'     (1 char)
 '<'     (1 char)
 '>'     (1 char)
-'|'     (1 char) — rejected
+'|'     (1 char)
 ```
 
 A lone `=` is `ParseError::Kind::UnknownOperator` (we never see one
@@ -125,7 +125,7 @@ outside `=~` or `==`).
 | `UnterminatedString` | EOF or newline inside `"…"`. |
 | `MalformedNumber` | Number with `e` followed by no digits, or trailing `.` adjacent to an `id_start` character. |
 
-`UnsupportedOperator` (`<~`, `\|~`, `~*~`, `\|`) is **not** emitted by
+`UnsupportedOperator` (`<~`, `\|~`) is **not** emitted by
 the lexer. The lexer emits these as `Op` tokens and the parser raises
 the unsupported error so the diagnostic span covers the whole operator
 in context.

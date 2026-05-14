@@ -12,6 +12,8 @@ enum class Op : std::uint8_t {
   Measurement,    // =~
   Regression,     // ~
   Covariance,     // ~~
+  Threshold,      // |
+  ResponseScale,  // ~*~
   Intercept,      // ~1 (synthesized by the parser when `~` is followed by
                   //     a single `1` term with no modifier)
   DefineParam,    // :=  (parsed in P4)
@@ -25,6 +27,8 @@ constexpr std::string_view to_string(Op op) noexcept {
     case Op::Measurement:   return "=~";
     case Op::Regression:    return "~";
     case Op::Covariance:    return "~~";
+    case Op::Threshold:     return "|";
+    case Op::ResponseScale: return "~*~";
     case Op::Intercept:     return "~1";
     case Op::DefineParam:   return ":=";
     case Op::EqConstraint:  return "==";

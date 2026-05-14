@@ -45,6 +45,7 @@ add_executable(magmaan_tests
   unit/standardized_test.cpp
   unit/fit_measures_test.cpp
   unit/raw_data_test.cpp
+  unit/ordinal_test.cpp
   unit/robust_test.cpp
   unit/restriction_test.cpp
   unit/satorra2000_test.cpp

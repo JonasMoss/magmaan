@@ -134,6 +134,45 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// data_ordinal_stats_from_raw_impl
+Rcpp::List data_ordinal_stats_from_raw_impl(SEXP X);
+RcppExport SEXP _magmaan_data_ordinal_stats_from_raw_impl(SEXP XSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    rcpp_result_gen = Rcpp::wrap(data_ordinal_stats_from_raw_impl(X));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fit_dwls_ordinal_impl
+Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_dwls_ordinal_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_dwls_ordinal_impl(partable, ordinal_stats, lbfgsb, bounds));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fit_wls_ordinal_impl
+Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_wls_ordinal_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_wls_ordinal_impl(partable, ordinal_stats, lbfgsb, bounds));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_uls_snlls_impl
 Rcpp::List fit_uls_snlls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
 RcppExport SEXP _magmaan_fit_uls_snlls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
@@ -658,6 +697,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_uls_impl", (DL_FUNC) &_magmaan_fit_uls_impl, 4},
     {"_magmaan_fit_gls_impl", (DL_FUNC) &_magmaan_fit_gls_impl, 4},
     {"_magmaan_fit_wls_impl", (DL_FUNC) &_magmaan_fit_wls_impl, 5},
+    {"_magmaan_data_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_from_raw_impl, 1},
+    {"_magmaan_fit_dwls_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_ordinal_impl, 4},
+    {"_magmaan_fit_wls_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_ordinal_impl, 4},
     {"_magmaan_fit_uls_snlls_impl", (DL_FUNC) &_magmaan_fit_uls_snlls_impl, 4},
     {"_magmaan_fit_gls_snlls_impl", (DL_FUNC) &_magmaan_fit_gls_snlls_impl, 4},
     {"_magmaan_fit_wls_snlls_impl", (DL_FUNC) &_magmaan_fit_wls_snlls_impl, 5},

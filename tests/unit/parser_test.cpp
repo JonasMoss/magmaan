@@ -164,7 +164,7 @@ TEST_CASE("error: missing operator after LHS") {
 }
 
 TEST_CASE("error: rejected operator surfaces as UnsupportedOperator") {
-  auto r = Parser::parse("y | x");
+  auto r = Parser::parse("y |~ x");
   REQUIRE_FALSE(r.has_value());
   CHECK(r.error().kind == ParseError::Kind::UnsupportedOperator);
 }

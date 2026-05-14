@@ -509,6 +509,8 @@ inline std::string op_to_lavaan_string(parse::Op op) {
     case parse::Op::Measurement:   return "=~";
     case parse::Op::Regression:    return "~";
     case parse::Op::Covariance:    return "~~";
+    case parse::Op::Threshold:     return "|";
+    case parse::Op::ResponseScale: return "~*~";
     case parse::Op::Intercept:     return "~1";
     case parse::Op::DefineParam:   return ":=";
     case parse::Op::EqConstraint:  return "==";

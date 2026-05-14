@@ -37,6 +37,18 @@ fit_wls_impl <- function(partable, sample_stats, W, lbfgsb = NULL, bounds = NULL
     .Call(`_magmaan_fit_wls_impl`, partable, sample_stats, W, lbfgsb, bounds)
 }
 
+data_ordinal_stats_from_raw_impl <- function(X) {
+    .Call(`_magmaan_data_ordinal_stats_from_raw_impl`, X)
+}
+
+fit_dwls_ordinal_impl <- function(partable, ordinal_stats, lbfgsb = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_dwls_ordinal_impl`, partable, ordinal_stats, lbfgsb, bounds)
+}
+
+fit_wls_ordinal_impl <- function(partable, ordinal_stats, lbfgsb = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_wls_ordinal_impl`, partable, ordinal_stats, lbfgsb, bounds)
+}
+
 fit_uls_snlls_impl <- function(partable, sample_stats, lbfgsb = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_uls_snlls_impl`, partable, sample_stats, lbfgsb, bounds)
 }
@@ -196,4 +208,3 @@ infer_robust_se <- function(fit, gamma_hat, bread = "expected", moments = "struc
 infer_robust_se_raw <- function(fit, X, bread = "expected", moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_raw`, fit, X, bread, moments, cov)
 }
-

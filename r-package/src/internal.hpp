@@ -86,6 +86,8 @@ inline lv::parse::Op op_from_string(const std::string& s) {
   if (s == "=~") return O::Measurement;
   if (s == "~")  return O::Regression;
   if (s == "~~") return O::Covariance;
+  if (s == "|")  return O::Threshold;
+  if (s == "~*~") return O::ResponseScale;
   if (s == "~1") return O::Intercept;
   if (s == ":=") return O::DefineParam;
   if (s == "==") return O::EqConstraint;

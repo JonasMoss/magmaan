@@ -81,6 +81,13 @@ VarSets classify_vars(const RowSeq& rows) {
       }
     }
   }
+  for (const auto& r : rows) {
+    if (r.op != parse::Op::Threshold && r.op != parse::Op::ResponseScale) continue;
+    if (!r.lhs.empty() && !v.lv.contains(r.lhs) && !v.ov_ind.contains(r.lhs) &&
+        !v.ov_y.contains(r.lhs) && !v.ov_x.contains(r.lhs)) {
+      v.ov_misc.insert(r.lhs);
+    }
+  }
   return v;
 }
 

@@ -33,10 +33,13 @@ statement           ::= formula | constraint | define_param
 
 formula             ::= lhs_list operator rhs_list
 lhs_list            ::= identifier ('+' identifier)*       /* multi-LHS only meaningful for `~` */
-operator            ::= measurement | regression | covariance | rejected_operator
+operator            ::= measurement | regression | covariance
+                      | threshold | response_scale | rejected_operator
 measurement         ::= '=~'
 regression          ::= '~'
 covariance          ::= '~~'
+threshold           ::= '|'
+response_scale      ::= '~*~'
 
 (* The intercept form `y ~ 1` is recognized by the parser when `regression`
    is followed by an `intercept_rhs`. We do NOT lex `~1` as a single token
@@ -83,7 +86,7 @@ primary             ::= num_lit | identifier | '(' expr ')'
    than a generic "expected operator" message.
    ============================================================================*)
 
-rejected_operator   ::= '|' | '|~' | '~*~' | '<~'
+rejected_operator   ::= '|~' | '<~'
 
 
 (* === Lexical (terminals) ===================================================
