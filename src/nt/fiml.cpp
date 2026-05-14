@@ -389,6 +389,124 @@ h1_missing_data_value(const FIMLCache& cache, const SampleStats& starts) {
   return total;
 }
 
+fit_expected<double>
+fiml_h1_value(const RawData& raw,
+              const FIMLCache& cache,
+              const SampleStats& starts) {
+  return raw.mask.empty() ? h1_complete_data_value(starts)
+                          : h1_missing_data_value(cache, starts);
+}
+
+post_expected<void>
+independence_moments_from_raw(const RawData& raw,
+                              std::vector<Eigen::VectorXd>& means,
+                              std::vector<Eigen::VectorXd>& vars) {
+  if (auto ok = validate_raw_shape(raw); !ok.has_value()) {
+    return std::unexpected(fit_to_post(ok.error(), "FIML baseline"));
+  }
+
+  means.clear();
+  vars.clear();
+  means.reserve(raw.X.size());
+  vars.reserve(raw.X.size());
+
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    const auto& X = raw.X[b];
+    const Eigen::Index n = X.rows();
+    const Eigen::Index p = X.cols();
+    Eigen::VectorXd mean = Eigen::VectorXd::Zero(p);
+    Eigen::VectorXd count = Eigen::VectorXd::Zero(p);
+
+    for (Eigen::Index r = 0; r < n; ++r) {
+      for (Eigen::Index c = 0; c < p; ++c) {
+        const bool observed = raw.mask.empty() || raw.mask[b](r, c) != 0;
+        if (!observed) continue;
+        const double x = X(r, c);
+        if (!std::isfinite(x)) {
+          return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+              "FIML baseline: non-finite observed value in block " +
+                  std::to_string(b)));
+        }
+        mean(c) += x;
+        count(c) += 1.0;
+      }
+    }
+
+    for (Eigen::Index c = 0; c < p; ++c) {
+      if (count(c) <= 0.0) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "FIML baseline: block " + std::to_string(b) + " column " +
+                std::to_string(c) + " has no observed values"));
+      }
+      mean(c) /= count(c);
+    }
+
+    Eigen::VectorXd var = Eigen::VectorXd::Zero(p);
+    for (Eigen::Index r = 0; r < n; ++r) {
+      for (Eigen::Index c = 0; c < p; ++c) {
+        const bool observed = raw.mask.empty() || raw.mask[b](r, c) != 0;
+        if (!observed) continue;
+        const double d = X(r, c) - mean(c);
+        var(c) += d * d;
+      }
+    }
+    for (Eigen::Index c = 0; c < p; ++c) {
+      var(c) /= count(c);
+      if (!(var(c) > 0.0) || !std::isfinite(var(c))) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "FIML baseline: block " + std::to_string(b) + " column " +
+                std::to_string(c) + " variance is not positive"));
+      }
+    }
+
+    means.push_back(std::move(mean));
+    vars.push_back(std::move(var));
+  }
+  return {};
+}
+
+post_expected<double>
+independence_value_from_patterns(const FIMLCache& cache,
+                                 const std::vector<Eigen::VectorXd>& means,
+                                 const std::vector<Eigen::VectorXd>& vars) {
+  if (cache.n_total <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "FIML baseline: cache has no observations"));
+  }
+  if (means.size() != cache.block_p.size() || vars.size() != cache.block_p.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "FIML baseline: moment block count mismatch"));
+  }
+
+  double f = 0.0;
+  for (const FIMLPattern& pat : cache.patterns) {
+    const auto& mu = means[pat.block];
+    const auto& var = vars[pat.block];
+    double log_det = 0.0;
+    double quad = 0.0;
+    for (Eigen::Index j = 0;
+         j < static_cast<Eigen::Index>(pat.observed.size()); ++j) {
+      const Eigen::Index c = pat.observed[static_cast<std::size_t>(j)];
+      const double v = var(c);
+      if (!(v > 0.0) || !std::isfinite(v)) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "FIML baseline: non-positive variance"));
+      }
+      const double d = pat.mean(j) - mu(c);
+      log_det += std::log(v);
+      quad += (pat.cov(j, j) + d * d) / v;
+    }
+    const double scale = static_cast<double>(pat.n_obs) /
+                         static_cast<double>(cache.n_total);
+    f += scale * (log_det + quad);
+  }
+  if (!std::isfinite(f)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "FIML baseline objective evaluated to non-finite"));
+  }
+  return f;
+}
+
 }  // namespace
 
 fit_expected<FIMLCache>
@@ -733,9 +851,7 @@ fiml_extras(partable::LatentStructure pt,
     return std::unexpected(fit_to_post(h0_or.error(), "FIML H0 likelihood"));
   }
 
-  fit_expected<double> h1_or =
-      raw.mask.empty() ? h1_complete_data_value(start_samp)
-                       : h1_missing_data_value(cache, start_samp);
+  fit_expected<double> h1_or = fiml_h1_value(raw, cache, start_samp);
   if (!h1_or.has_value()) {
     return std::unexpected(fit_to_post(h1_or.error(), "FIML H1 likelihood"));
   }
@@ -759,6 +875,47 @@ fiml_extras(partable::LatentStructure pt,
   out.bic = -2.0 * out.logl + static_cast<double>(npar) * std::log(N);
   out.bic2 = -2.0 * out.logl + static_cast<double>(npar)
       * std::log((N + 2.0) / 24.0);
+  return out;
+}
+
+post_expected<BaselineFit>
+fiml_baseline_chi2(const RawData& raw,
+                   FIML discrepancy) {
+  auto cache_or = discrepancy.prepare(raw);
+  if (!cache_or.has_value()) {
+    return std::unexpected(fit_to_post(cache_or.error(), "FIML::prepare"));
+  }
+  const FIMLCache& cache = *cache_or;
+
+  auto start_samp_or = fiml_start_sample_stats(raw);
+  if (!start_samp_or.has_value()) {
+    return std::unexpected(fit_to_post(start_samp_or.error(),
+        "fiml_start_sample_stats"));
+  }
+  const SampleStats& start_samp = *start_samp_or;
+
+  auto h1_or = fiml_h1_value(raw, cache, start_samp);
+  if (!h1_or.has_value()) {
+    return std::unexpected(fit_to_post(h1_or.error(), "FIML H1 likelihood"));
+  }
+
+  std::vector<Eigen::VectorXd> means;
+  std::vector<Eigen::VectorXd> vars;
+  if (auto ok = independence_moments_from_raw(raw, means, vars); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  auto baseline_or = independence_value_from_patterns(cache, means, vars);
+  if (!baseline_or.has_value()) {
+    return std::unexpected(baseline_or.error());
+  }
+
+  BaselineFit out;
+  out.chi2 = static_cast<double>(cache.n_total) * (*baseline_or - *h1_or);
+  if (out.chi2 < 0.0 && out.chi2 > -1e-8) out.chi2 = 0.0;
+  for (Eigen::Index p : cache.block_p) {
+    out.df += static_cast<int>(p) * (static_cast<int>(p) - 1) / 2;
+  }
   return out;
 }
 
