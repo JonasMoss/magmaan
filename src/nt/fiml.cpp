@@ -626,16 +626,25 @@ Eigen::Index vech_col(Eigen::Index p, Eigen::Index target) {
 }
 
 post_expected<Eigen::MatrixXd>
-fiml_saturated_scores(const RawData& raw,
-                      const Eigen::VectorXd& mu,
-                      const Eigen::MatrixXd& Sigma) {
-  if (raw.X.size() != 1) {
+fiml_saturated_scores_block(const RawData& raw,
+                            std::size_t block,
+                            const Eigen::VectorXd& mu,
+                            const Eigen::MatrixXd& Sigma) {
+  if (block >= raw.X.size()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "FIML robust H1: only single-block raw data is supported"));
+        "FIML robust H1: block index out of range"));
   }
-  const Eigen::MatrixXd& X = raw.X[0];
+  if (!raw.mask.empty() && block >= raw.mask.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "FIML robust H1: mask block index out of range"));
+  }
+  const Eigen::MatrixXd& X = raw.X[block];
   const Eigen::Index n = X.rows();
   const Eigen::Index p = X.cols();
+  if (mu.size() != p || Sigma.rows() != p || Sigma.cols() != p) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "FIML robust H1: saturated moments do not match raw block"));
+  }
   const Eigen::Index pstar = vech_len(p);
   Eigen::MatrixXd scores = Eigen::MatrixXd::Zero(n, p + pstar);
   for (Eigen::Index r = 0; r < n; ++r) {
@@ -645,7 +654,7 @@ fiml_saturated_scores(const RawData& raw,
       for (Eigen::Index c = 0; c < p; ++c) obs.push_back(c);
     } else {
       for (Eigen::Index c = 0; c < p; ++c)
-        if (raw.mask[0](r, c) != 0) obs.push_back(c);
+        if (raw.mask[block](r, c) != 0) obs.push_back(c);
     }
     if (obs.empty() || !finite_observed_row(X, obs, r)) {
       return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
@@ -688,10 +697,11 @@ fiml_saturated_scores(const RawData& raw,
 }
 
 post_expected<Eigen::MatrixXd>
-fiml_saturated_hessian_fd(const RawData& raw,
-                          const Eigen::VectorXd& mu,
-                          const Eigen::MatrixXd& Sigma,
-                          double h_step) {
+fiml_saturated_hessian_fd_block(const RawData& raw,
+                                std::size_t block,
+                                const Eigen::VectorXd& mu,
+                                const Eigen::MatrixXd& Sigma,
+                                double h_step) {
   const Eigen::Index p = mu.size();
   const Eigen::Index pstar = vech_len(p);
   const Eigen::Index q = p + pstar;
@@ -703,7 +713,7 @@ fiml_saturated_hessian_fd(const RawData& raw,
       return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
           "FIML robust H1: perturbed Sigma is not positive definite"));
     }
-    auto S_or = fiml_saturated_scores(raw, mu0, Sigma0);
+    auto S_or = fiml_saturated_scores_block(raw, block, mu0, Sigma0);
     if (!S_or.has_value()) return std::unexpected(S_or.error());
     return Eigen::VectorXd(S_or->colwise().mean().transpose());
   };
@@ -735,6 +745,44 @@ fiml_saturated_hessian_fd(const RawData& raw,
     H.col(k) = (*gp - *gm) / (2.0 * h_step);
   }
   return Eigen::MatrixXd(0.5 * (H + H.transpose()));
+}
+
+post_expected<double>
+fiml_saturated_trace_h1(const RawData& raw,
+                        const FIMLCache& cache,
+                        const SampleStats& start_samp,
+                        double h_step) {
+  if (cache.block_p.size() != raw.X.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "FIML robust H1: cache and raw block count mismatch"));
+  }
+
+  double trace = 0.0;
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    Eigen::VectorXd h1_mu;
+    Eigen::MatrixXd h1_sigma;
+    auto h1_mom_or = h1_moments_block(raw, cache, start_samp, b,
+                                      h1_mu, h1_sigma);
+    if (!h1_mom_or.has_value()) {
+      return std::unexpected(fit_to_post(h1_mom_or.error(),
+          "FIML H1 moments"));
+    }
+    auto h1_scores_or = fiml_saturated_scores_block(raw, b,
+                                                    h1_mu, h1_sigma);
+    if (!h1_scores_or.has_value()) return std::unexpected(h1_scores_or.error());
+    auto h1_H_or = fiml_saturated_hessian_fd_block(raw, b, h1_mu,
+                                                  h1_sigma, h_step);
+    if (!h1_H_or.has_value()) return std::unexpected(h1_H_or.error());
+
+    const double n_block = static_cast<double>(raw.X[b].rows());
+    const Eigen::MatrixXd h1_meat =
+        (h1_scores_or->transpose() * (*h1_scores_or)) / n_block;
+    auto h1_Hinv_or = invert_symmetric(*h1_H_or,
+                                       "fiml_robust_mlr: H1 observed Hessian");
+    if (!h1_Hinv_or.has_value()) return std::unexpected(h1_Hinv_or.error());
+    trace += 0.5 * ((*h1_Hinv_or) * h1_meat).trace();
+  }
+  return trace;
 }
 
 post_expected<void>
@@ -1256,10 +1304,6 @@ fiml_robust_mlr(partable::LatentStructure pt,
                 double chisq,
                 FIML discrepancy,
                 double h_step) {
-  if (raw.X.size() != 1) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "fiml_robust_mlr: v1 supports single-block FIML only"));
-  }
   if (df <= 0) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "fiml_robust_mlr: robust scaled test requires df > 0"));
@@ -1359,24 +1403,9 @@ fiml_robust_mlr(partable::LatentStructure pt,
       0.5 * (h0 + h0.transpose()), Eigen::EigenvaluesOnly);
   if (es.info() == Eigen::Success) out.eigvals = es.eigenvalues();
 
-  Eigen::VectorXd h1_mu;
-  Eigen::MatrixXd h1_sigma;
-  auto h1_mom_or = h1_moments_block(raw, cache, start_samp, 0,
-                                    h1_mu, h1_sigma);
-  if (!h1_mom_or.has_value()) {
-    return std::unexpected(fit_to_post(h1_mom_or.error(), "FIML H1 moments"));
-  }
-  auto h1_scores_or = fiml_saturated_scores(raw, h1_mu, h1_sigma);
-  if (!h1_scores_or.has_value()) return std::unexpected(h1_scores_or.error());
-  const Eigen::MatrixXd& h1_scores = *h1_scores_or;
-  auto h1_H_or = fiml_saturated_hessian_fd(raw, h1_mu, h1_sigma, h_step);
-  if (!h1_H_or.has_value()) return std::unexpected(h1_H_or.error());
-  const Eigen::MatrixXd h1_meat =
-      (h1_scores.transpose() * h1_scores) / N;
-  auto h1_Hinv_or = invert_symmetric(*h1_H_or,
-                                     "fiml_robust_mlr: H1 observed Hessian");
-  if (!h1_Hinv_or.has_value()) return std::unexpected(h1_Hinv_or.error());
-  out.trace_ugamma_h1 = 0.5 * ((*h1_Hinv_or) * h1_meat).trace();
+  auto h1_trace_or = fiml_saturated_trace_h1(raw, cache, start_samp, h_step);
+  if (!h1_trace_or.has_value()) return std::unexpected(h1_trace_or.error());
+  out.trace_ugamma_h1 = *h1_trace_or;
   out.trace_ugamma = out.trace_ugamma_h1 - out.trace_ugamma_h0;
   out.scaling_factor = out.trace_ugamma / static_cast<double>(df);
   out.chisq_scaled = (out.scaling_factor > 0.0)

@@ -1393,11 +1393,11 @@ for (m in fiml_cases) {
   mlr_trace_ugamma <- NULL
   mlr_trace_ugamma_h1 <- NULL
   mlr_trace_ugamma_h0 <- NULL
-  if (n_groups <= 1L && is.null(expect_error)) {
+  if (is.null(expect_error)) {
     mlr_args <- c(fit_args, list(estimator = "MLR"))
-    fit_mlr <- tryCatch(do.call(fit_fun, mlr_args),
-                        error = function(e) e, warning = function(w) NULL)
-    if (!is.null(fit_mlr) && !inherits(fit_mlr, "error") &&
+    fit_mlr <- tryCatch(suppressWarnings(do.call(fit_fun, mlr_args)),
+                        error = function(e) e)
+    if (!inherits(fit_mlr, "error") &&
         lavInspect(fit_mlr, "converged")) {
       pt_mlr <- parTable(fit_mlr)
       free_mlr <- pt_mlr[pt_mlr$free > 0, ]
@@ -1405,15 +1405,19 @@ for (m in fiml_cases) {
       se_robust_huberwhite <- as.numeric(free_mlr$se)
       test_mlr <- lavInspect(fit_mlr, "test")$yuan.bentler.mplus
       if (!is.null(test_mlr)) {
-        mlr_chisq_scaled <- as.numeric(test_mlr$stat)
-        mlr_scaling_factor <- as.numeric(test_mlr$scaling.factor)
-        mlr_scaling_factor_h1 <- as.numeric(test_mlr$scaling.factor.h1)
-        mlr_scaling_factor_h0 <- as.numeric(test_mlr$scaling.factor.h0)
-        mlr_trace_ugamma <- as.numeric(test_mlr$trace.UGamma)
+        num_or_null <- function(x) {
+          y <- as.numeric(x)
+          if (!length(y) || any(!is.finite(y))) NULL else y
+        }
+        mlr_chisq_scaled <- num_or_null(test_mlr$stat)
+        mlr_scaling_factor <- num_or_null(test_mlr$scaling.factor)
+        mlr_scaling_factor_h1 <- num_or_null(test_mlr$scaling.factor.h1)
+        mlr_scaling_factor_h0 <- num_or_null(test_mlr$scaling.factor.h0)
+        mlr_trace_ugamma <- num_or_null(test_mlr$trace.UGamma)
         h1_attr <- attr(test_mlr$stat, "h1")
         h0_attr <- attr(test_mlr$stat, "h0")
-        if (!is.null(h1_attr)) mlr_trace_ugamma_h1 <- as.numeric(h1_attr)
-        if (!is.null(h0_attr)) mlr_trace_ugamma_h0 <- as.numeric(h0_attr)
+        mlr_trace_ugamma_h1 <- num_or_null(h1_attr)
+        mlr_trace_ugamma_h0 <- num_or_null(h0_attr)
       }
     }
   }

@@ -70,6 +70,24 @@ bool finite_json(const nlohmann::json& j) {
   return !j.is_null() && j.is_number() && std::isfinite(j.get<double>());
 }
 
+bool finite_scalar_json(const nlohmann::json& j) {
+  if (finite_json(j)) return true;
+  if (!j.is_array() || j.empty()) return false;
+  for (const auto& x : j) {
+    if (!finite_json(x)) return false;
+  }
+  return true;
+}
+
+double scalar_from_json(const nlohmann::json& j) {
+  if (j.is_array()) {
+    double out = 0.0;
+    for (const auto& x : j) out += x.get<double>();
+    return out;
+  }
+  return j.get<double>();
+}
+
 Eigen::VectorXd vector_from_json(const nlohmann::json& j) {
   Eigen::VectorXd out(static_cast<Eigen::Index>(j.size()));
   for (Eigen::Index i = 0; i < out.size(); ++i) {
@@ -316,8 +334,8 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
         }
         auto robust_cmp = [&](const char* label, double got,
                               const char* key, double tol) {
-          if (!exp.contains(key) || !finite_json(exp[key])) return true;
-          const double want = exp[key].get<double>();
+          if (!exp.contains(key) || !finite_scalar_json(exp[key])) return true;
+          const double want = scalar_from_json(exp[key]);
           const double d = std::abs(got - want);
           if (d <= tol * std::max(1.0, std::abs(want))) return true;
           failures.push_back(id + ": " + std::string(label) +
@@ -330,6 +348,10 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
                         "mlr_scaling_factor", 5e-3) && ok;
         ok = robust_cmp("mlr_trace_ugamma", rob_or->trace_ugamma,
                         "mlr_trace_ugamma", 5e-3) && ok;
+        ok = robust_cmp("mlr_trace_ugamma_h1", rob_or->trace_ugamma_h1,
+                        "mlr_trace_ugamma_h1", 5e-3) && ok;
+        ok = robust_cmp("mlr_trace_ugamma_h0", rob_or->trace_ugamma_h0,
+                        "mlr_trace_ugamma_h0", 5e-3) && ok;
       }
     }
     if (ok) ++passed;
