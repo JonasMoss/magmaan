@@ -1152,6 +1152,110 @@ for (m in lincon_models) {
 cat("regenerated", length(regenerated_lincon), "linear-constraint fit fixtures under",
     lincon_dir, "\n")
 
+# === FIML fit fixtures ======================================================
+# Continuous raw-data FIML parity stream. Kept separate from the complete-data
+# `fit/` corpus because the C++ consumer needs raw X plus an observed/missing
+# mask, not just sample moments.
+fiml_dir <- file.path(fixtures, "fiml")
+dir.create(fiml_dir, showWarnings = FALSE, recursive = TRUE)
+
+fiml_cases <- list(
+  list(id = "0001_one_factor_hs_fiml",
+       model = "visual =~ x1 + x2 + x3",
+       ov = paste0("x", 1:3),
+       mask = function(df) {
+         df$x2[seq(4L, nrow(df), by = 11L)] <- NA_real_
+         df$x3[seq(7L, nrow(df), by = 13L)] <- NA_real_
+         df$x1[seq(10L, nrow(df), by = 17L)] <- NA_real_
+         df
+       }),
+  list(id = "0002_three_factor_hs_fiml",
+       model = paste("visual =~ x1 + x2 + x3",
+                     "textual =~ x4 + x5 + x6",
+                     "speed =~ x7 + x8 + x9", sep = "\n"),
+       ov = paste0("x", 1:9),
+       mask = function(df) {
+         df$x2[seq(5L, nrow(df), by = 10L)] <- NA_real_
+         df$x5[seq(8L, nrow(df), by = 12L)] <- NA_real_
+         df$x8[seq(11L, nrow(df), by = 14L)] <- NA_real_
+         df$x3[seq(17L, nrow(df), by = 19L)] <- NA_real_
+         df
+       }),
+  list(id = "0003_equal_loading_hs_fiml",
+       model = "visual =~ x1 + a*x2 + a*x3",
+       ov = paste0("x", 1:3),
+       mask = function(df) {
+         df$x2[seq(3L, nrow(df), by = 9L)] <- NA_real_
+         df$x3[seq(6L, nrow(df), by = 10L)] <- NA_real_
+         df$x1[seq(13L, nrow(df), by = 16L)] <- NA_real_
+         df
+       })
+)
+
+raw_block_json <- function(df, ov) {
+  X <- as.matrix(df[, ov, drop = FALSE])
+  M <- ifelse(is.na(X), 0L, 1L)
+  list(X = unname(X), mask = unname(M))
+}
+
+regenerated_fiml <- character(0)
+for (m in fiml_cases) {
+  id <- m$id; model <- m$model; ov <- m$ov
+  df <- HolzingerSwineford1939
+  df <- m$mask(df)
+  block <- raw_block_json(df, ov)
+
+  fit <- tryCatch(cfa(model, data = df, missing = "fiml",
+                      meanstructure = TRUE, std.lv = FALSE),
+                  error = function(e) e, warning = function(w) w)
+  if (inherits(fit, "warning")) {
+    fit <- tryCatch(suppressWarnings(cfa(model, data = df, missing = "fiml",
+                                          meanstructure = TRUE, std.lv = FALSE)),
+                    error = function(e) e)
+  }
+  if (inherits(fit, "error") || !lavInspect(fit, "converged")) {
+    cat("  skip ", id, " (FIML cfa error / no convergence)\n", sep = "")
+    next
+  }
+
+  pt_fitted <- parTable(fit)
+  free_rows <- pt_fitted[pt_fitted$free > 0, ]
+  free_rows <- free_rows[order(free_rows$free), ]
+  fm <- fitMeasures(fit)
+
+  payload <- list(
+    `_meta` = list(
+      format_version = 1L,
+      fixture_kind   = "fit.fiml",
+      corpus_id      = id,
+      tool           = "lavaan::cfa(missing = \"fiml\")",
+      lavaan_version = installed
+    ),
+    input           = model,
+    meanstructure   = TRUE,
+    n_groups        = 1L,
+    group_var       = "",
+    ov_names        = list(ov),
+    n_obs           = as.integer(lavInspect(fit, "ntotal")),
+    n_obs_per_block = as.integer(lavInspect(fit, "nobs")),
+    raw             = list(list(block = 0L,
+                                X     = block$X,
+                                mask  = block$mask)),
+    theta_hat       = as.numeric(free_rows$est),
+    converged       = isTRUE(lavInspect(fit, "converged")),
+    logl            = as.numeric(fm["logl"]),
+    npar            = as.integer(fm["npar"])
+  )
+
+  out_path <- file.path(fiml_dir, paste0(id, ".fit.json"))
+  write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
+             null = "null", na = "null", digits = NA)
+  regenerated_fiml <- c(regenerated_fiml, out_path)
+}
+
+cat("regenerated", length(regenerated_fiml), "FIML fit fixtures under",
+    fiml_dir, "\n")
+
 # === standardized-solution fit fixtures ====================================
 # Post-hoc `standardizedSolution()` parity — distinct from the std.lv
 # *identification convention* fixtures (`fit_stdlv/`) above. These pin the
