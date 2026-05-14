@@ -8,12 +8,12 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
-#include "latva/fit/resolve_fixed_x.hpp"
-#include "latva/fit/sample_stats.hpp"
-#include "latva/model/matrix_rep.hpp"
-#include "latva/model/model_evaluator.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaanify.hpp"
+#include "magmaan/fit/resolve_fixed_x.hpp"
+#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaanify.hpp"
 
 namespace {
 
@@ -29,8 +29,8 @@ const std::set<std::string> kDeferred = {
 // For each fit fixture, run our evaluator at lavaan's θ̂ and check that
 // our implied Σ matches lavaan's lavInspect(fit, "implied")$cov.
 TEST_CASE("model evaluator: implied Σ matches lavaan at θ̂") {
-  const auto corpus = latva::test::load_corpus();
-  const std::string fit_dir = latva::test::fixtures_dir() + "/fit";
+  const auto corpus = magmaan::test::load_corpus();
+  const std::string fit_dir = magmaan::test::fixtures_dir() + "/fit";
 
   int total = 0, passed = 0, deferred_count = 0;
   std::vector<std::string> failures;
@@ -40,7 +40,7 @@ TEST_CASE("model evaluator: implied Σ matches lavaan at θ̂") {
   for (const auto& e : corpus) {
     if (e.n_groups > 1) continue;   // multi-group has its own golden
     const std::string path = fit_dir + "/" + e.id + ".fit.json";
-    auto raw = latva::test::read_fixture(path);
+    auto raw = magmaan::test::read_fixture(path);
     if (!raw.has_value()) continue;
     if (kDeferred.count(e.id)) {
       ++deferred_count;
@@ -55,18 +55,18 @@ TEST_CASE("model evaluator: implied Σ matches lavaan at θ̂") {
       continue;
     }
 
-    auto fp = latva::parse::Parser::parse(e.model);
+    auto fp = magmaan::parse::Parser::parse(e.model);
     if (!fp.has_value()) {
       failures.push_back(e.id + ": parse failed");
       continue;
     }
-    auto pt_or = latva::partable::lavaanify(*fp);
+    auto pt_or = magmaan::partable::lavaanify(*fp);
     if (!pt_or.has_value()) {
       failures.push_back(e.id + ": lavaanify failed");
       continue;
     }
     auto pt = std::move(*pt_or);
-    auto mr_or = latva::model::build_matrix_rep(pt);
+    auto mr_or = magmaan::model::build_matrix_rep(pt);
     if (!mr_or.has_value()) {
       failures.push_back(e.id + ": matrix_rep failed");
       continue;
@@ -77,7 +77,7 @@ TEST_CASE("model evaluator: implied Σ matches lavaan at θ̂") {
     // exogenous-moment fills.
     if (exp.contains("sample_cov")) {
       const auto& sample_blocks = exp["sample_cov"];
-      latva::fit::SampleStats samp_for_resolve;
+      magmaan::fit::SampleStats samp_for_resolve;
       for (std::size_t b = 0; b < sample_blocks.size(); ++b) {
         const auto& M = sample_blocks[b]["matrix"];
         const Eigen::Index p = static_cast<Eigen::Index>(M.size());
@@ -89,13 +89,13 @@ TEST_CASE("model evaluator: implied Σ matches lavaan at θ̂") {
         samp_for_resolve.S.push_back(std::move(S));
         samp_for_resolve.n_obs.push_back(0);
       }
-      auto rx = latva::fit::resolve_fixed_x_from_sample(pt, mr, samp_for_resolve);
+      auto rx = magmaan::fit::resolve_fixed_x_from_sample(pt, mr, samp_for_resolve);
       if (!rx.has_value()) {
         failures.push_back(e.id + ": resolve_fixed_x failed");
         continue;
       }
     }
-    auto ev_or = latva::model::ModelEvaluator::build(pt, mr);
+    auto ev_or = magmaan::model::ModelEvaluator::build(pt, mr);
     if (!ev_or.has_value()) {
       failures.push_back(e.id + ": evaluator build failed");
       continue;

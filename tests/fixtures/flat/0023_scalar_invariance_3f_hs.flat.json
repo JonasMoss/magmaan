@@ -1,0 +1,193 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "flat.partable",
+    "corpus_id": "0023_scalar_invariance_3f_hs",
+    "tool": "lavaan::lavParseModelString",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "visual =~ l1*x1 + l2*x2 + l3*x3\ntextual =~ l4*x4 + l5*x5 + l6*x6\nspeed =~ l7*x7 + l8*x8 + l9*x9\nx1 ~ n1*1\nx2 ~ n2*1\nx3 ~ n3*1\nx4 ~ n4*1\nx5 ~ n5*1\nx6 ~ n6*1\nx7 ~ n7*1\nx8 ~ n8*1\nx9 ~ n9*1",
+  "rows": [
+    {
+      "lhs": "visual",
+      "op": "=~",
+      "rhs": "x1",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "l1"
+      }
+    },
+    {
+      "lhs": "visual",
+      "op": "=~",
+      "rhs": "x2",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "l2"
+      }
+    },
+    {
+      "lhs": "visual",
+      "op": "=~",
+      "rhs": "x3",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "l3"
+      }
+    },
+    {
+      "lhs": "textual",
+      "op": "=~",
+      "rhs": "x4",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "l4"
+      }
+    },
+    {
+      "lhs": "textual",
+      "op": "=~",
+      "rhs": "x5",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "l5"
+      }
+    },
+    {
+      "lhs": "textual",
+      "op": "=~",
+      "rhs": "x6",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "l6"
+      }
+    },
+    {
+      "lhs": "speed",
+      "op": "=~",
+      "rhs": "x7",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "l7"
+      }
+    },
+    {
+      "lhs": "speed",
+      "op": "=~",
+      "rhs": "x8",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "l8"
+      }
+    },
+    {
+      "lhs": "speed",
+      "op": "=~",
+      "rhs": "x9",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "l9"
+      }
+    },
+    {
+      "lhs": "x1",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "n1"
+      }
+    },
+    {
+      "lhs": "x2",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "n2"
+      }
+    },
+    {
+      "lhs": "x3",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "n3"
+      }
+    },
+    {
+      "lhs": "x4",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "n4"
+      }
+    },
+    {
+      "lhs": "x5",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "n5"
+      }
+    },
+    {
+      "lhs": "x6",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "n6"
+      }
+    },
+    {
+      "lhs": "x7",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "n7"
+      }
+    },
+    {
+      "lhs": "x8",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "n8"
+      }
+    },
+    {
+      "lhs": "x9",
+      "op": "~1",
+      "rhs": "",
+      "block": 1,
+      "modifier": {
+        "kind": "label",
+        "text": "n9"
+      }
+    }
+  ],
+  "constraints": []
+}

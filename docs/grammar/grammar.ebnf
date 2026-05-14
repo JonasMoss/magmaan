@@ -1,5 +1,5 @@
 (* ===========================================================================
-   latva model syntax — v0 grammar
+   magmaan model syntax — v0 grammar
    ---------------------------------------------------------------------------
    Source of truth for the lexer + recursive-descent parser. Every production
    below corresponds 1:1 to a function in the C++ implementation; functions

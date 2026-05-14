@@ -1,0 +1,145 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "flat.partable",
+    "corpus_id": "0025_partial_invariance_3f_hs",
+    "tool": "lavaan::lavParseModelString",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "visual =~ x1 + c(l2, l2)*x2 + c(l3a, l3b)*x3\ntextual =~ x4 + c(l5, l5)*x5 + c(l6, l6)*x6\nspeed =~ x7 + c(l8, l8)*x8 + c(l9, l9)*x9",
+  "rows": [
+    {
+      "lhs": "visual",
+      "op": "=~",
+      "rhs": "x1",
+      "block": 1
+    },
+    {
+      "lhs": "visual",
+      "op": "=~",
+      "rhs": "x2",
+      "block": 1,
+      "modifier": {
+        "kind": "group",
+        "atoms": [
+          {
+            "kind": "label",
+            "text": "l2"
+          },
+          {
+            "kind": "label",
+            "text": "l2"
+          }
+        ]
+      }
+    },
+    {
+      "lhs": "visual",
+      "op": "=~",
+      "rhs": "x3",
+      "block": 1,
+      "modifier": {
+        "kind": "group",
+        "atoms": [
+          {
+            "kind": "label",
+            "text": "l3a"
+          },
+          {
+            "kind": "label",
+            "text": "l3b"
+          }
+        ]
+      }
+    },
+    {
+      "lhs": "textual",
+      "op": "=~",
+      "rhs": "x4",
+      "block": 1
+    },
+    {
+      "lhs": "textual",
+      "op": "=~",
+      "rhs": "x5",
+      "block": 1,
+      "modifier": {
+        "kind": "group",
+        "atoms": [
+          {
+            "kind": "label",
+            "text": "l5"
+          },
+          {
+            "kind": "label",
+            "text": "l5"
+          }
+        ]
+      }
+    },
+    {
+      "lhs": "textual",
+      "op": "=~",
+      "rhs": "x6",
+      "block": 1,
+      "modifier": {
+        "kind": "group",
+        "atoms": [
+          {
+            "kind": "label",
+            "text": "l6"
+          },
+          {
+            "kind": "label",
+            "text": "l6"
+          }
+        ]
+      }
+    },
+    {
+      "lhs": "speed",
+      "op": "=~",
+      "rhs": "x7",
+      "block": 1
+    },
+    {
+      "lhs": "speed",
+      "op": "=~",
+      "rhs": "x8",
+      "block": 1,
+      "modifier": {
+        "kind": "group",
+        "atoms": [
+          {
+            "kind": "label",
+            "text": "l8"
+          },
+          {
+            "kind": "label",
+            "text": "l8"
+          }
+        ]
+      }
+    },
+    {
+      "lhs": "speed",
+      "op": "=~",
+      "rhs": "x9",
+      "block": 1,
+      "modifier": {
+        "kind": "group",
+        "atoms": [
+          {
+            "kind": "label",
+            "text": "l9"
+          },
+          {
+            "kind": "label",
+            "text": "l9"
+          }
+        ]
+      }
+    }
+  ],
+  "constraints": []
+}

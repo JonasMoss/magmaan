@@ -1,0 +1,203 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "matrix_rep",
+    "corpus_id": "0026_two_factor_meanstructure_hs",
+    "tool": "lavaan::lavMatrixRepresentation",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "input": "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1\nx4 ~ 1\nx5 ~ 1\nx6 ~ 1",
+  "blocks": [
+    {
+      "block": 0,
+      "ov_names": ["x1", "x2", "x3", "x4", "x5", "x6"],
+      "lv_names": ["visual", "textual"]
+    }
+  ],
+  "cells": [
+    {
+      "row_id": 1,
+      "mat": "Lambda",
+      "row": 0,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 2,
+      "mat": "Lambda",
+      "row": 1,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 3,
+      "mat": "Lambda",
+      "row": 2,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 4,
+      "mat": "Lambda",
+      "row": 3,
+      "col": 1,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 5,
+      "mat": "Lambda",
+      "row": 4,
+      "col": 1,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 6,
+      "mat": "Lambda",
+      "row": 5,
+      "col": 1,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 7,
+      "mat": "Nu",
+      "row": 0,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 8,
+      "mat": "Nu",
+      "row": 1,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 9,
+      "mat": "Nu",
+      "row": 2,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 10,
+      "mat": "Nu",
+      "row": 3,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 11,
+      "mat": "Nu",
+      "row": 4,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 12,
+      "mat": "Nu",
+      "row": 5,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 13,
+      "mat": "Theta",
+      "row": 0,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 14,
+      "mat": "Theta",
+      "row": 1,
+      "col": 1,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 15,
+      "mat": "Theta",
+      "row": 2,
+      "col": 2,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 16,
+      "mat": "Theta",
+      "row": 3,
+      "col": 3,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 17,
+      "mat": "Theta",
+      "row": 4,
+      "col": 4,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 18,
+      "mat": "Theta",
+      "row": 5,
+      "col": 5,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 19,
+      "mat": "Psi",
+      "row": 0,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 20,
+      "mat": "Psi",
+      "row": 1,
+      "col": 1,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 21,
+      "mat": "Psi",
+      "row": 0,
+      "col": 1,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 22,
+      "mat": "Alpha",
+      "row": 0,
+      "col": 0,
+      "block": 0,
+      "used": true
+    },
+    {
+      "row_id": 23,
+      "mat": "Alpha",
+      "row": 1,
+      "col": 0,
+      "block": 0,
+      "used": true
+    }
+  ]
+}

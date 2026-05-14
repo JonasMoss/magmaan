@@ -11,13 +11,13 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
-#include "latva/fit/fit.hpp"
-#include "latva/fit/fit_measures.hpp"
-#include "latva/fit/inference.hpp"
-#include "latva/fit/sample_stats.hpp"
-#include "latva/model/matrix_rep.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaanify.hpp"
+#include "magmaan/fit/fit.hpp"
+#include "magmaan/fit/fit_measures.hpp"
+#include "magmaan/fit/inference.hpp"
+#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaanify.hpp"
 
 namespace {
 
@@ -38,8 +38,8 @@ bool finite_json(const nlohmann::json& j) {
 }  // namespace
 
 TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan") {
-  const auto corpus = latva::test::load_corpus();
-  const std::string fit_dir = latva::test::fixtures_dir() + "/fit";
+  const auto corpus = magmaan::test::load_corpus();
+  const std::string fit_dir = magmaan::test::fixtures_dir() + "/fit";
 
   int total = 0, passed = 0;
   std::vector<std::string> failures;
@@ -49,7 +49,7 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
 
   for (const auto& e : corpus) {
     const std::string path = fit_dir + "/" + e.id + ".fit.json";
-    auto raw = latva::test::read_fixture(path);
+    auto raw = magmaan::test::read_fixture(path);
     if (!raw.has_value()) continue;
     if (kSkipForFitMeasureGoldens.count(e.id)) {
       skipped.push_back(e.id);
@@ -69,17 +69,17 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
     ++total;
     processed.push_back(e.id);
 
-    auto fp = latva::parse::Parser::parse(e.model);
+    auto fp = magmaan::parse::Parser::parse(e.model);
     if (!fp.has_value()) { failures.push_back(e.id + ": parse"); continue; }
-    latva::partable::LavaanifyOptions opts;
+    magmaan::partable::LavaanifyOptions opts;
     opts.n_groups      = e.n_groups;
     opts.meanstructure = e.meanstructure;
-    auto pt = latva::partable::lavaanify(*fp, opts);
+    auto pt = magmaan::partable::lavaanify(*fp, opts);
     if (!pt.has_value()) {
       failures.push_back(e.id + ": lavaanify — " + pt.error().detail);
       continue;
     }
-    auto mr = latva::model::build_matrix_rep(*pt);
+    auto mr = magmaan::model::build_matrix_rep(*pt);
     if (!mr.has_value()) {
       failures.push_back(e.id + ": matrix_rep — " + mr.error().detail);
       continue;
@@ -89,7 +89,7 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
     const auto& sample_blocks = exp["sample_cov"];
     REQUIRE(sample_blocks.is_array());
     const std::size_t n_blocks = sample_blocks.size();
-    latva::fit::SampleStats samp;
+    magmaan::fit::SampleStats samp;
     for (std::size_t b = 0; b < n_blocks; ++b) {
       const auto& M = sample_blocks[b]["matrix"];
       const Eigen::Index p = static_cast<Eigen::Index>(M.size());
@@ -114,23 +114,24 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
       }
     }
 
-    auto est_or = latva::fit::fit(*pt, *mr, samp);
+    auto est_or = magmaan::fit::fit(*pt, *mr, samp);
     if (!est_or.has_value()) {
       failures.push_back(e.id + ": fit — " + est_or.error().detail);
       continue;
     }
     const auto& est = *est_or;
 
-    auto inf_or = latva::fit::ExpectedInfoSE{}.compute(*pt, *mr, samp, est);
-    if (!inf_or.has_value()) {
-      failures.push_back(e.id + ": inference — " + inf_or.error().detail);
+    const double chi2 = magmaan::fit::chi2_stat(samp, est);
+    auto df_or = magmaan::fit::df_stat(*pt, samp);
+    if (!df_or.has_value()) {
+      failures.push_back(e.id + ": df_stat — " + df_or.error().detail);
       continue;
     }
-    const auto& inf = *inf_or;
-    const auto bl = latva::fit::baseline_chi2(samp);
-    const auto fm = latva::fit::fit_measures(inf, bl, samp);
+    const int df = *df_or;
+    const auto bl = magmaan::fit::baseline_chi2(samp);
+    const auto fm = magmaan::fit::fit_measures(chi2, df, bl, samp);
 
-    auto fx_or = latva::fit::fit_extras(*pt, *mr, samp, est);
+    auto fx_or = magmaan::fit::fit_extras(*pt, *mr, samp, est);
     if (!fx_or.has_value()) {
       failures.push_back(e.id + ": fit_extras — " + fx_or.error().detail);
       continue;
@@ -179,6 +180,8 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
     cmp_field("cfi",   fm.cfi,                "cfi",   1e-5);
     cmp_field("tli",   fm.tli,                "tli",   1e-5);
     cmp_field("rmsea", fm.rmsea,              "rmsea", 1e-5);
+    cmp_field("rmsea.ci.lower", fm.rmsea_ci_lower, "rmsea_ci_lower", 1e-4);
+    cmp_field("rmsea.ci.upper", fm.rmsea_ci_upper, "rmsea_ci_upper", 1e-4);
     cmp_field("srmr",  fx.srmr,               "srmr",  1e-4);
     cmp_field("logl",  fx.logl,               "logl",  1e-6);
     cmp_field("unrestricted_logl", fx.unrestricted_logl,
@@ -190,7 +193,7 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
     // logl ≡ unrestricted_logl − χ²/2 (cov-only or free-mean models). Ties
     // the new log-likelihood back to the already-golden χ².
     {
-      const double recon = fx.unrestricted_logl - inf.chi2 / 2.0;
+      const double recon = fx.unrestricted_logl - chi2 / 2.0;
       if (!close(fx.logl, recon, 1e-6)) {
         char buf[160];
         std::snprintf(buf, sizeof(buf),

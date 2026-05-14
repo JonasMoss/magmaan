@@ -1,7 +1,7 @@
-// Thin Rcpp glue over latva's C++ API. One // [[Rcpp::export]] function per
+// Thin Rcpp glue over magmaan's C++ API. One // [[Rcpp::export]] function per
 // thing we want to poke at from R. Returns plain base-R objects (data.frame /
 // list / vectors) — no S3 classes, no print methods. Errors are surfaced as
-// ordinary R errors via Rcpp::stop, carrying latva's error kind + detail.
+// ordinary R errors via Rcpp::stop, carrying magmaan's error kind + detail.
 
 #include <Rcpp.h>
 
@@ -11,18 +11,18 @@
 #include <string_view>
 #include <variant>
 
-#include "latva/version.hpp"
-#include "latva/error.hpp"
-#include "latva/parse/op.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/parse/flat_partable.hpp"
-#include "latva/partable/lavaanify.hpp"
-#include "latva/partable/lavaan_view.hpp"
+#include "magmaan/version.hpp"
+#include "magmaan/error.hpp"
+#include "magmaan/parse/op.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/parse/flat_partable.hpp"
+#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/partable/lavaan_view.hpp"
 
 namespace {
 
-const char* parse_error_kind(latva::ParseError::Kind k) {
-  using K = latva::ParseError::Kind;
+const char* parse_error_kind(magmaan::ParseError::Kind k) {
+  using K = magmaan::ParseError::Kind;
   switch (k) {
     case K::UnexpectedChar:      return "UnexpectedChar";
     case K::UnknownOperator:     return "UnknownOperator";
@@ -38,8 +38,8 @@ const char* parse_error_kind(latva::ParseError::Kind k) {
   return "Unknown";
 }
 
-const char* partable_error_kind(latva::PartableError::Kind k) {
-  using K = latva::PartableError::Kind;
+const char* partable_error_kind(magmaan::PartableError::Kind k) {
+  using K = magmaan::PartableError::Kind;
   switch (k) {
     case K::BadGroupSpec:             return "BadGroupSpec";
     case K::UnknownLabelInConstraint: return "UnknownLabelInConstraint";
@@ -49,8 +49,8 @@ const char* partable_error_kind(latva::PartableError::Kind k) {
   return "Unknown";
 }
 
-const char* constraint_kind_str(latva::parse::ConstraintKind k) {
-  using K = latva::parse::ConstraintKind;
+const char* constraint_kind_str(magmaan::parse::ConstraintKind k) {
+  using K = magmaan::parse::ConstraintKind;
   switch (k) {
     case K::Eq:     return "==";
     case K::Lt:     return "<";
@@ -60,8 +60,8 @@ const char* constraint_kind_str(latva::parse::ConstraintKind k) {
   return "?";
 }
 
-[[noreturn]] void stop_parse(const latva::ParseError& e) {
-  Rcpp::stop("latva parse error [%s] at %u:%u (bytes %u..%u): %s",
+[[noreturn]] void stop_parse(const magmaan::ParseError& e) {
+  Rcpp::stop("magmaan parse error [%s] at %u:%u (bytes %u..%u): %s",
              parse_error_kind(e.kind), e.span.line, e.span.col,
              e.span.begin, e.span.end, e.detail);
 }
@@ -69,8 +69,8 @@ const char* constraint_kind_str(latva::parse::ConstraintKind k) {
 std::string sv2s(std::string_view sv) { return std::string(sv); }
 
 // One modifier -> a small list describing the variant.
-Rcpp::List describe_modifier(const latva::parse::Modifier& m) {
-  using namespace latva::parse;
+Rcpp::List describe_modifier(const magmaan::parse::Modifier& m) {
+  using namespace magmaan::parse;
   return std::visit(
       [](const auto& v) -> Rcpp::List {
         using T = std::decay_t<decltype(v)>;
@@ -116,23 +116,23 @@ Rcpp::List describe_modifier(const latva::parse::Modifier& m) {
 }  // namespace
 
 // [[Rcpp::export]]
-std::string latva_version() {
-  return std::string(latva::version());
+std::string version() {
+  return std::string(magmaan::version());
 }
 
 // [[Rcpp::export]]
-Rcpp::List latva_parse(std::string syntax) {
-  auto r = latva::parse::Parser::parse(syntax);
+Rcpp::List parse_parse(std::string syntax) {
+  auto r = magmaan::parse::Parser::parse(syntax);
   if (!r.has_value()) stop_parse(r.error());
-  const latva::parse::FlatPartable& fp = *r;
+  const magmaan::parse::FlatPartable& fp = *r;
 
   const R_xlen_t n = static_cast<R_xlen_t>(fp.rows.size());
   Rcpp::CharacterVector lhs(n), op(n), rhs(n);
   Rcpp::IntegerVector block(n), mod_idx(n), line(n), col(n);
   for (R_xlen_t i = 0; i < n; ++i) {
-    const latva::parse::FlatRow& row = fp.rows[static_cast<std::size_t>(i)];
+    const magmaan::parse::FlatRow& row = fp.rows[static_cast<std::size_t>(i)];
     lhs[i]     = sv2s(row.lhs);
-    op[i]      = sv2s(latva::parse::to_string(row.op));
+    op[i]      = sv2s(magmaan::parse::to_string(row.op));
     rhs[i]     = sv2s(row.rhs);
     block[i]   = static_cast<int>(row.block);
     mod_idx[i] = static_cast<int>(row.mod_idx);
@@ -154,7 +154,7 @@ Rcpp::List latva_parse(std::string syntax) {
 
   Rcpp::List constraints(fp.constraints.size());
   for (std::size_t i = 0; i < fp.constraints.size(); ++i) {
-    const latva::parse::Constraint& c = fp.constraints[i];
+    const magmaan::parse::Constraint& c = fp.constraints[i];
     constraints[i] = Rcpp::List::create(
         Rcpp::_["kind"] = constraint_kind_str(c.kind),
         Rcpp::_["name"] = sv2s(c.name));
@@ -167,7 +167,7 @@ Rcpp::List latva_parse(std::string syntax) {
 }
 
 // [[Rcpp::export]]
-Rcpp::DataFrame latva_lavaanify(std::string syntax,
+Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
                                 bool auto_var = true,
                                 bool auto_cov_lv_x = true,
                                 bool auto_cov_y = false,
@@ -179,10 +179,10 @@ Rcpp::DataFrame latva_lavaanify(std::string syntax,
                                 int n_groups = 1,
                                 std::string group_var = "",
                                 Rcpp::Nullable<Rcpp::CharacterVector> group_labels = R_NilValue) {
-  auto p = latva::parse::Parser::parse(syntax);
+  auto p = magmaan::parse::Parser::parse(syntax);
   if (!p.has_value()) stop_parse(p.error());
 
-  latva::partable::LavaanifyOptions opts;
+  magmaan::partable::LavaanifyOptions opts;
   opts.auto_var       = auto_var;
   opts.auto_cov_lv_x  = auto_cov_lv_x;
   opts.auto_cov_y     = auto_cov_y;
@@ -196,15 +196,15 @@ Rcpp::DataFrame latva_lavaanify(std::string syntax,
   if (group_labels.isNotNull())
     opts.group_labels = Rcpp::as<std::vector<std::string>>(group_labels.get());
 
-  latva::partable::Starts starts;
-  latva::partable::LatentNames names;
-  auto pt_or = latva::partable::lavaanify(*p, opts, &starts, &names);
+  magmaan::partable::Starts starts;
+  magmaan::partable::LatentNames names;
+  auto pt_or = magmaan::partable::lavaanify(*p, opts, &starts, &names);
   if (!pt_or.has_value()) {
-    Rcpp::stop("latva lavaanify error [%s]: %s",
+    Rcpp::stop("magmaan lavaanify error [%s]: %s",
                partable_error_kind(pt_or.error().kind), pt_or.error().detail);
   }
-  const latva::partable::LavaanParTable pt =
-      latva::partable::to_lavaan_partable(*pt_or, names, starts);
+  const magmaan::partable::LavaanParTable pt =
+      magmaan::partable::to_lavaan_partable(*pt_or, names, starts);
 
   const R_xlen_t n = static_cast<R_xlen_t>(pt.size());
   Rcpp::IntegerVector id(n), user(n), block(n), group(n), free(n), exo(n);
@@ -219,7 +219,7 @@ Rcpp::DataFrame latva_lavaanify(std::string syntax,
     free[i]   = pt.free[k];
     exo[i]    = pt.exo[k];
     lhs[i]    = pt.lhs[k];
-    op[i]     = sv2s(latva::parse::to_string(pt.op[k]));
+    op[i]     = sv2s(magmaan::parse::to_string(pt.op[k]));
     rhs[i]    = pt.rhs[k];
     label[i]  = pt.label[k];
     plabel[i] = pt.plabel[k];
@@ -255,10 +255,10 @@ Rcpp::DataFrame latva_lavaanify(std::string syntax,
   Rcpp::DataFrame df(cols);
   // Group identity rides as data.frame attributes (table-level metadata,
   // mirrored back into LatentNames.group_var / .group_labels by parse_partable_df).
-  Rf_setAttrib(df, Rf_install("latva.group_var"), Rf_mkString(pt.group_var.c_str()));
+  Rf_setAttrib(df, Rf_install("magmaan.group_var"), Rf_mkString(pt.group_var.c_str()));
   Rcpp::CharacterVector gl(static_cast<R_xlen_t>(pt.group_labels.size()));
   for (std::size_t j = 0; j < pt.group_labels.size(); ++j)
     gl[static_cast<R_xlen_t>(j)] = pt.group_labels[j];
-  Rf_setAttrib(df, Rf_install("latva.group_labels"), gl);
+  Rf_setAttrib(df, Rf_install("magmaan.group_labels"), gl);
   return df;
 }

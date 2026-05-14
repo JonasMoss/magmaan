@@ -6,12 +6,12 @@
 #include <unordered_map>
 #include <utility>
 
-#include "latva/parse/flat_partable.hpp"
-#include "latva/partable/lin_constraints.hpp"
+#include "magmaan/parse/flat_partable.hpp"
+#include "magmaan/partable/lin_constraints.hpp"
 
-namespace lp = latva::parse;
-using latva::partable::analyze_linear;
-using latva::partable::LinearForm;
+namespace lp = magmaan::parse;
+using magmaan::partable::analyze_linear;
+using magmaan::partable::LinearForm;
 
 namespace {
 

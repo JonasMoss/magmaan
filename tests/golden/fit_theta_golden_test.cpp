@@ -10,11 +10,11 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
-#include "latva/fit/fit.hpp"
-#include "latva/fit/sample_stats.hpp"
-#include "latva/model/matrix_rep.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaanify.hpp"
+#include "magmaan/fit/fit.hpp"
+#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaanify.hpp"
 
 namespace {
 
@@ -44,8 +44,8 @@ const std::set<std::string> kSkipForFitGoldens = {
 }  // namespace
 
 TEST_CASE("fit goldens — θ̂ matches lavaan on real data (≤1e-6)") {
-  const auto corpus = latva::test::load_corpus();
-  const std::string fit_dir = latva::test::fixtures_dir() + "/fit";
+  const auto corpus = magmaan::test::load_corpus();
+  const std::string fit_dir = magmaan::test::fixtures_dir() + "/fit";
 
   int total = 0, passed = 0;
   std::vector<std::string> failures;
@@ -53,7 +53,7 @@ TEST_CASE("fit goldens — θ̂ matches lavaan on real data (≤1e-6)") {
 
   for (const auto& e : corpus) {
     const std::string path = fit_dir + "/" + e.id + ".fit.json";
-    auto raw = latva::test::read_fixture(path);
+    auto raw = magmaan::test::read_fixture(path);
     if (!raw.has_value()) continue;
     if (e.n_groups > 1) continue;   // multi-group has its own golden
     if (kSkipForFitGoldens.count(e.id)) {
@@ -68,19 +68,22 @@ TEST_CASE("fit goldens — θ̂ matches lavaan on real data (≤1e-6)") {
       continue;
     }
 
-    auto fp = latva::parse::Parser::parse(e.model);
+    auto fp = magmaan::parse::Parser::parse(e.model);
     if (!fp.has_value()) { failures.push_back(e.id + ": parse"); continue; }
-    auto pt = latva::partable::lavaanify(*fp);
+    magmaan::partable::LavaanifyOptions opts;
+    opts.meanstructure = e.meanstructure;
+    auto pt = magmaan::partable::lavaanify(*fp, opts);
     if (!pt.has_value()) { failures.push_back(e.id + ": lavaanify"); continue; }
-    auto mr = latva::model::build_matrix_rep(*pt);
+    auto mr = magmaan::model::build_matrix_rep(*pt);
     if (!mr.has_value()) { failures.push_back(e.id + ": matrix_rep"); continue; }
 
     // Real-data S from lavaan's lavInspect(fit, "sampstat")$cov — exactly
     // the sample covariance lavaan ran ML against on
-    // HolzingerSwineford1939.
+    // HolzingerSwineford1939. Plus sample_mean when present (single-group
+    // meanstructure fixtures).
     const auto& sample_blocks = exp["sample_cov"];
     REQUIRE(sample_blocks.is_array());
-    latva::fit::SampleStats samp;
+    magmaan::fit::SampleStats samp;
     for (std::size_t b = 0; b < sample_blocks.size(); ++b) {
       const auto& M = sample_blocks[b]["matrix"];
       const Eigen::Index p = static_cast<Eigen::Index>(M.size());
@@ -91,9 +94,16 @@ TEST_CASE("fit goldens — θ̂ matches lavaan on real data (≤1e-6)") {
                      [static_cast<std::size_t>(c)].get<double>();
       samp.S.push_back(std::move(S));
       samp.n_obs.push_back(exp["n_obs"].get<std::int64_t>());
+      if (exp.contains("sample_mean") && !exp["sample_mean"].is_null()) {
+        const auto& v = exp["sample_mean"][b]["vector"];
+        Eigen::VectorXd mean(static_cast<Eigen::Index>(v.size()));
+        for (Eigen::Index i = 0; i < mean.size(); ++i)
+          mean(i) = v[static_cast<std::size_t>(i)].get<double>();
+        samp.mean.push_back(std::move(mean));
+      }
     }
 
-    auto est_or = latva::fit::fit(*pt, *mr, samp);
+    auto est_or = magmaan::fit::fit(*pt, *mr, samp);
     if (!est_or.has_value()) {
       failures.push_back(e.id + ": fit failed — kind=" +
                          std::to_string(static_cast<int>(est_or.error().kind)) +

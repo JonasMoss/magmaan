@@ -1,0 +1,62 @@
+#pragma once
+
+// Lower-triangle column-major vech helpers, shared by the fit-side translation
+// units that pack symmetric p×p matrices into p* = p(p+1)/2 vectors:
+//
+//   • raw_data.cpp     — empirical Γ̂ casewise outer-product accumulator,
+//   • robust.cpp       — apply_gamma_nt_block and the streaming Γ̂ paths,
+//   • standardized.cpp — Jacobian row indexing (currently uses only the
+//                        index helpers — vech_index, vech_len).
+//
+// The pack convention matches `ModelEvaluator::dsigma_dtheta` and the rest of
+// magmaan's moment plumbing: iterate columns `j` outermost, rows `i ≥ j` inner,
+// so element `(i, j)` of a symmetric p×p sits at offset
+//   k = j·p − j(j−1)/2 + (i − j)
+// in the p*-vector. Off-diagonal entries store **a single copy**; callers that
+// need the duplication-matrix scaling (Γ_NT operator etc.) handle it locally.
+
+#include <Eigen/Core>
+
+namespace magmaan::fit::detail {
+
+// Length of the vech of a p×p symmetric matrix: p(p+1)/2.
+constexpr Eigen::Index vech_len(Eigen::Index p) noexcept {
+  return p * (p + 1) / 2;
+}
+
+// Flat vech offset of element (r, c) with r ≥ c. Column-major lower-tri.
+constexpr Eigen::Index vech_index(Eigen::Index p, Eigen::Index r,
+                                  Eigen::Index c) noexcept {
+  return c * p - (c * (c - 1)) / 2 + (r - c);
+}
+
+// Pack the lower triangle of a symmetric p×p matrix `M` into a p*-vector.
+inline Eigen::VectorXd vech_lower(const Eigen::Ref<const Eigen::MatrixXd>& M) {
+  const Eigen::Index p     = M.rows();
+  const Eigen::Index pstar = vech_len(p);
+  Eigen::VectorXd out(pstar);
+  Eigen::Index k = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j; i < p; ++i) {
+      out(k++) = M(i, j);
+    }
+  }
+  return out;
+}
+
+// Unpack a vech vector back into a symmetric p×p matrix `M`. Caller pre-sizes
+// `M` (cheap when used in a loop with a reused buffer). Off-diagonal entries
+// are mirrored so `M(i, j) == M(j, i)`.
+inline void vech_unpack(const Eigen::Ref<const Eigen::VectorXd>& x,
+                        Eigen::Index p, Eigen::Ref<Eigen::MatrixXd> M) {
+  Eigen::Index k = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j; i < p; ++i) {
+      M(i, j) = x(k);
+      if (i != j) M(j, i) = x(k);
+      ++k;
+    }
+  }
+}
+
+}  // namespace magmaan::fit::detail

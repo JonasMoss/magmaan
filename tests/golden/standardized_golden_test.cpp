@@ -10,13 +10,13 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
-#include "latva/fit/fit.hpp"
-#include "latva/fit/inference.hpp"
-#include "latva/fit/sample_stats.hpp"
-#include "latva/fit/standardized.hpp"
-#include "latva/model/matrix_rep.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaanify.hpp"
+#include "magmaan/fit/fit.hpp"
+#include "magmaan/fit/inference.hpp"
+#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/fit/standardized.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaanify.hpp"
 
 // Post-hoc standardized-solution parity vs lavaan::standardizedSolution(fit,
 // type = "std.lv" / "std.all"). Distinct from std_lv_golden_test.cpp, which
@@ -38,33 +38,33 @@ const std::vector<std::string> kStdFixtures = {
 }  // namespace
 
 TEST_CASE("standardized-solution goldens — std.lv / std.all vs lavaan") {
-  const std::string dir = latva::test::fixtures_dir() + "/fit_std";
+  const std::string dir = magmaan::test::fixtures_dir() + "/fit_std";
 
   int total = 0, passed = 0;
   std::vector<std::string> failures;
 
   for (const auto& id : kStdFixtures) {
     const std::string path = dir + "/" + id + ".fit.json";
-    auto raw = latva::test::read_fixture(path);
+    auto raw = magmaan::test::read_fixture(path);
     if (!raw.has_value()) { failures.push_back(id + ": missing fixture"); continue; }
     auto exp = nlohmann::json::parse(*raw, nullptr, /*allow_exceptions=*/false);
     if (exp.is_discarded()) { failures.push_back(id + ": invalid JSON"); continue; }
     ++total;
 
     const std::string model = exp["input"].get<std::string>();
-    auto fp = latva::parse::Parser::parse(model);
+    auto fp = magmaan::parse::Parser::parse(model);
     if (!fp.has_value()) { failures.push_back(id + ": parse"); continue; }
 
-    latva::partable::LavaanifyOptions opts;
+    magmaan::partable::LavaanifyOptions opts;
     opts.n_groups      = exp["n_groups"].get<int>();
     opts.meanstructure = exp["meanstructure"].get<bool>();
-    auto pt = latva::partable::lavaanify(*fp, opts);
+    auto pt = magmaan::partable::lavaanify(*fp, opts);
     if (!pt.has_value()) { failures.push_back(id + ": lavaanify — " + pt.error().detail); continue; }
-    auto mr = latva::model::build_matrix_rep(*pt);
+    auto mr = magmaan::model::build_matrix_rep(*pt);
     if (!mr.has_value()) { failures.push_back(id + ": matrix_rep — " + mr.error().detail); continue; }
 
     // Assemble (possibly multi-block) SampleStats from the fixture.
-    latva::fit::SampleStats samp;
+    magmaan::fit::SampleStats samp;
     const auto n_blocks = static_cast<std::size_t>(exp["sample_cov"].size());
     const bool has_means = exp.contains("sample_mean") && !exp["sample_mean"].is_null();
     for (std::size_t b = 0; b < n_blocks; ++b) {
@@ -88,17 +88,18 @@ TEST_CASE("standardized-solution goldens — std.lv / std.all vs lavaan") {
           ? nob[b].get<std::int64_t>() : nob.get<std::int64_t>());
     }
 
-    auto est_or = latva::fit::fit(*pt, *mr, samp);
+    auto est_or = magmaan::fit::fit(*pt, *mr, samp);
     if (!est_or.has_value()) { failures.push_back(id + ": fit — " + est_or.error().detail); continue; }
     const auto& est = *est_or;
 
-    latva::fit::ExpectedInfoSE se_method;
-    auto inf_or = se_method.compute(*pt, *mr, samp, est);
-    if (!inf_or.has_value()) { failures.push_back(id + ": inference — " + inf_or.error().detail); continue; }
-    const auto& inf = *inf_or;
+    auto info_or = magmaan::fit::information_expected(*pt, *mr, samp, est);
+    if (!info_or.has_value()) { failures.push_back(id + ": information_expected — " + info_or.error().detail); continue; }
+    auto vcov_or = magmaan::fit::vcov(*info_or, *pt);
+    if (!vcov_or.has_value()) { failures.push_back(id + ": vcov — " + vcov_or.error().detail); continue; }
+    const Eigen::MatrixXd& vcov_m = *vcov_or;
 
-    auto slv_or  = latva::fit::standardize_lv(*pt, *mr, est, inf.vcov);
-    auto sall_or = latva::fit::standardize_all(*pt, *mr, est, inf.vcov);
+    auto slv_or  = magmaan::fit::standardize_lv(*pt, *mr, est, vcov_m);
+    auto sall_or = magmaan::fit::standardize_all(*pt, *mr, est, vcov_m);
     if (!slv_or.has_value())  { failures.push_back(id + ": standardize_lv — " + slv_or.error().detail); continue; }
     if (!sall_or.has_value()) { failures.push_back(id + ": standardize_all — " + sall_or.error().detail); continue; }
     const auto& slv  = *slv_or;

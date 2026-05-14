@@ -1,4 +1,4 @@
-#include "latva/model/model_evaluator.hpp"
+#include "magmaan/model/model_evaluator.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -11,13 +11,13 @@
 #include <Eigen/Core>
 #include <Eigen/LU>
 
-#include "latva/error.hpp"
-#include "latva/expected.hpp"
-#include "latva/model/matrix_rep.hpp"
-#include "latva/parse/op.hpp"
-#include "latva/partable/partable.hpp"
+#include "magmaan/error.hpp"
+#include "magmaan/expected.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/parse/op.hpp"
+#include "magmaan/partable/partable.hpp"
 
-namespace latva::model {
+namespace magmaan::model {
 
 namespace {
 
@@ -202,30 +202,41 @@ ModelEvaluator::sigma(Eigen::Ref<const Eigen::VectorXd> theta) const {
   if (auto e = assemble(theta); !e.has_value()) {
     return std::unexpected(e.error());
   }
-  ImpliedMoments out;
-  out.sigma.reserve(blocks_.size());
-  out.mu.reserve(blocks_.size());
+  compute_intermediates(true, true);
+  return current_moments();
+}
+
+void ModelEvaluator::compute_intermediates(bool with_sigma, bool with_mu) const {
   for (auto& bs : blocks_) {
     if (bs.m > 0) {
       bs.ImB     = -bs.Beta;
       bs.ImB.diagonal().array() += 1.0;
       bs.ImB_inv = bs.ImB.inverse();
       bs.LamA.noalias() = bs.Lambda * bs.ImB_inv;
-      bs.Mid.noalias()  = bs.ImB_inv * bs.Psi * bs.ImB_inv.transpose();
-      bs.Sigma.noalias() = bs.LamA * bs.Psi * bs.LamA.transpose() + bs.Theta;
-    } else {
+      if (with_sigma) {
+        bs.Mid.noalias()  = bs.ImB_inv * bs.Psi * bs.ImB_inv.transpose();
+        bs.Sigma.noalias() = bs.LamA * bs.Psi * bs.LamA.transpose() + bs.Theta;
+      }
+    } else if (with_sigma) {
       bs.Sigma = bs.Theta;
     }
-    out.sigma.push_back(bs.Sigma);
-    // μ = ν + Λ A α. Only populated when the block has mean structure;
-    // otherwise `mu` stays empty so consumers (ML, inference) can detect
-    // "no mean structure" via `mu.empty()` or `mu.size() == 0`.
-    if (bs.has_means) {
+    if (with_mu && bs.has_means) {
       if (bs.m > 0 && bs.Alpha.size() > 0) {
         bs.Mu.noalias() = bs.Nu + bs.LamA * bs.Alpha;
       } else {
         bs.Mu = bs.Nu;
       }
+    }
+  }
+}
+
+ImpliedMoments ModelEvaluator::current_moments() const {
+  ImpliedMoments out;
+  out.sigma.reserve(blocks_.size());
+  out.mu.reserve(blocks_.size());
+  for (const auto& bs : blocks_) {
+    out.sigma.push_back(bs.Sigma);
+    if (bs.has_means) {
       out.mu.push_back(bs.Mu);
     } else {
       out.mu.emplace_back();
@@ -239,17 +250,11 @@ ModelEvaluator::dsigma_dtheta(Eigen::Ref<const Eigen::VectorXd> theta) const {
   if (auto e = assemble(theta); !e.has_value()) {
     return std::unexpected(e.error());
   }
-  // Populate per-block intermediates (LamA, Mid). sigma() does this too;
-  // we replicate so dsigma_dtheta works without a prior sigma() call.
-  for (auto& bs : blocks_) {
-    if (bs.m > 0) {
-      bs.ImB     = -bs.Beta;
-      bs.ImB.diagonal().array() += 1.0;
-      bs.ImB_inv = bs.ImB.inverse();
-      bs.LamA.noalias() = bs.Lambda * bs.ImB_inv;
-      bs.Mid.noalias()  = bs.ImB_inv * bs.Psi * bs.ImB_inv.transpose();
-    }
-  }
+  compute_intermediates(true, false);
+  return current_dsigma_dtheta();
+}
+
+Eigen::MatrixXd ModelEvaluator::current_dsigma_dtheta() const {
   Eigen::Index total_vech = 0;
   for (const auto& bs : blocks_) total_vech += vech_len(static_cast<Eigen::Index>(bs.p));
 
@@ -261,10 +266,10 @@ ModelEvaluator::dsigma_dtheta(Eigen::Ref<const Eigen::VectorXd> theta) const {
   //   LamA_Psi = LamA · Ψ    — used by Λ derivatives
   //   Mid = (I-B)⁻¹ Ψ (I-B)⁻ᵀ — used by Β derivatives
   // (sigma() left LamA / Mid populated in BlockState; we re-use those.)
-  std::vector<Eigen::MatrixXd> LamA_Psi(blocks_.size());
+  std::vector<Eigen::MatrixXd> Lam_Mid(blocks_.size());
   for (std::size_t b = 0; b < blocks_.size(); ++b) {
     const auto& bs = blocks_[b];
-    if (bs.m > 0) LamA_Psi[b].noalias() = bs.LamA * bs.Psi;
+    if (bs.m > 0) Lam_Mid[b].noalias() = bs.Lambda * bs.Mid;
   }
 
   // Per-block vech offsets.
@@ -293,16 +298,12 @@ ModelEvaluator::dsigma_dtheta(Eigen::Ref<const Eigen::VectorXd> theta) const {
         // we shipped in P6.1.
         const Eigen::Index i = static_cast<Eigen::Index>(w.row);
         const Eigen::Index j = static_cast<Eigen::Index>(w.col);
-        // Compute LamA_Psi_ImBinvT = LamA_Psi * ImB_inv^T = Λ Mid (since
-        // Mid = (I-B)⁻¹ Ψ (I-B)⁻ᵀ → Λ Mid = LamA Ψ (I-B)⁻ᵀ).
-        // Cache per-block to avoid repeating across same-block iterations.
-        // For simplicity recompute (cheap at v0 sizes).
-        const Eigen::MatrixXd Lam_Mid = bs.Lambda * bs.Mid;
+        const Eigen::MatrixXd& LM = Lam_Mid[b];
         for (Eigen::Index s = 0; s < p; ++s) {
           for (Eigen::Index r = s; r < p; ++r) {
             double val = 0.0;
-            if (r == i) val += Lam_Mid(s, j);
-            if (s == i) val += Lam_Mid(r, j);
+            if (r == i) val += LM(s, j);
+            if (s == i) val += LM(r, j);
             J(off + vech_index(p, r, s), k) = val;
           }
         }
@@ -344,11 +345,11 @@ ModelEvaluator::dsigma_dtheta(Eigen::Ref<const Eigen::VectorXd> theta) const {
         // (where Lam_Mid = Λ Mid = LamA Ψ (I-B)⁻ᵀ as above).
         const Eigen::Index i = static_cast<Eigen::Index>(w.row);
         const Eigen::Index j = static_cast<Eigen::Index>(w.col);
-        const Eigen::MatrixXd Lam_Mid = bs.Lambda * bs.Mid;
+        const Eigen::MatrixXd& LM = Lam_Mid[b];
         for (Eigen::Index s = 0; s < p; ++s) {
           for (Eigen::Index r = s; r < p; ++r) {
-            const double val = bs.LamA(r, i) * Lam_Mid(s, j) +
-                               Lam_Mid(r, j) * bs.LamA(s, i);
+            const double val = bs.LamA(r, i) * LM(s, j) +
+                               LM(r, j) * bs.LamA(s, i);
             J(off + vech_index(p, r, s), k) = val;
           }
         }
@@ -370,16 +371,11 @@ ModelEvaluator::dmu_dtheta(Eigen::Ref<const Eigen::VectorXd> theta) const {
   if (auto e = assemble(theta); !e.has_value()) {
     return std::unexpected(e.error());
   }
-  // Populate intermediates that sigma() also computes (LamA, ImB_inv).
-  for (auto& bs : blocks_) {
-    if (bs.m > 0) {
-      bs.ImB     = -bs.Beta;
-      bs.ImB.diagonal().array() += 1.0;
-      bs.ImB_inv = bs.ImB.inverse();
-      bs.LamA.noalias() = bs.Lambda * bs.ImB_inv;
-    }
-  }
+  compute_intermediates(false, false);
+  return current_dmu_dtheta();
+}
 
+Eigen::MatrixXd ModelEvaluator::current_dmu_dtheta() const {
   bool any_means = false;
   for (const auto& bs : blocks_) if (bs.has_means) { any_means = true; break; }
   if (!any_means) return Eigen::MatrixXd();   // sentinel: no mean structure
@@ -444,6 +440,22 @@ ModelEvaluator::dmu_dtheta(Eigen::Ref<const Eigen::VectorXd> theta) const {
   return Jmu;
 }
 
+model_expected<Evaluation>
+ModelEvaluator::evaluate(Eigen::Ref<const Eigen::VectorXd> theta,
+                         bool with_sigma_jacobian,
+                         bool with_mu_jacobian) const {
+  if (auto e = assemble(theta); !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+  compute_intermediates(true, true);
+
+  Evaluation out;
+  out.moments = current_moments();
+  if (with_sigma_jacobian) out.J_sigma = current_dsigma_dtheta();
+  if (with_mu_jacobian) out.J_mu = current_dmu_dtheta();
+  return out;
+}
+
 model_expected<AssembledMatrices>
 ModelEvaluator::assembled(Eigen::Ref<const Eigen::VectorXd> theta) const {
   // Reuse sigma() for the assembly path — it leaves all the per-block
@@ -485,4 +497,4 @@ ModelEvaluator::param_locations() const {
   return out;
 }
 
-}  // namespace latva::model
+}  // namespace magmaan::model

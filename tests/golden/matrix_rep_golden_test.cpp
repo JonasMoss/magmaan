@@ -9,9 +9,9 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
-#include "latva/model/matrix_rep.hpp"
-#include "latva/parse/parser.hpp"
-#include "latva/partable/lavaanify.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/partable/lavaanify.hpp"
 
 namespace {
 
@@ -26,7 +26,7 @@ const std::set<std::string> kDeferred = {
 
 // One-sentence diff: row-id keyed comparison of expected cells against
 // our cell_for_row entries.
-std::string diff_cells(const latva::model::MatrixRep& mr,
+std::string diff_cells(const magmaan::model::MatrixRep& mr,
                        const nlohmann::json& exp) {
   // Build row_id → expected cell map.
   if (!exp.contains("cells") || !exp["cells"].is_array()) return "fixture has no 'cells'";
@@ -39,7 +39,7 @@ std::string diff_cells(const latva::model::MatrixRep& mr,
     if (!exp_by_id.count(row_id)) {
       return "cell row_id=" + std::to_string(row_id) +
              " missing from fixture (got mat=" +
-             std::string(latva::model::to_string(got.mat)) + ")";
+             std::string(magmaan::model::to_string(got.mat)) + ")";
     }
     const auto& exp_c = exp_by_id[row_id];
     const bool exp_used = exp_c.value("used", true);
@@ -50,7 +50,7 @@ std::string diff_cells(const latva::model::MatrixRep& mr,
     }
     if (!exp_used) continue;
     const std::string exp_mat   = exp_c["mat"].get<std::string>();
-    const std::string got_mat   = std::string(latva::model::to_string(got.mat));
+    const std::string got_mat   = std::string(magmaan::model::to_string(got.mat));
     if (got_mat != exp_mat) {
       return "row_id=" + std::to_string(row_id) +
              " mat: got=" + got_mat + " expected=" + exp_mat;
@@ -71,9 +71,9 @@ std::string diff_cells(const latva::model::MatrixRep& mr,
 }  // namespace
 
 TEST_CASE("matrix_rep goldens — pure-CFA scope (P5.1)") {
-  const auto corpus = latva::test::load_corpus();
+  const auto corpus = magmaan::test::load_corpus();
   REQUIRE(!corpus.empty());
-  const std::string mr_dir = latva::test::fixtures_dir() + "/matrix_rep";
+  const std::string mr_dir = magmaan::test::fixtures_dir() + "/matrix_rep";
 
   int total = 0, passed = 0, deferred_count = 0;
   std::vector<std::string> failures;
@@ -81,7 +81,7 @@ TEST_CASE("matrix_rep goldens — pure-CFA scope (P5.1)") {
 
   for (const auto& e : corpus) {
     const std::string path = mr_dir + "/" + e.id + ".mrep.json";
-    auto raw = latva::test::read_fixture(path);
+    auto raw = magmaan::test::read_fixture(path);
     if (!raw.has_value()) continue;
     if (kDeferred.count(e.id)) {
       ++deferred_count;
@@ -96,17 +96,17 @@ TEST_CASE("matrix_rep goldens — pure-CFA scope (P5.1)") {
       continue;
     }
 
-    auto fp = latva::parse::Parser::parse(e.model);
+    auto fp = magmaan::parse::Parser::parse(e.model);
     if (!fp.has_value()) {
       failures.push_back(e.id + ": parse failed");
       continue;
     }
-    auto pt = latva::partable::lavaanify(*fp);
+    auto pt = magmaan::partable::lavaanify(*fp);
     if (!pt.has_value()) {
       failures.push_back(e.id + ": lavaanify failed — " + pt.error().detail);
       continue;
     }
-    auto mr = latva::model::build_matrix_rep(*pt);
+    auto mr = magmaan::model::build_matrix_rep(*pt);
     if (!mr.has_value()) {
       failures.push_back(e.id + ": build_matrix_rep failed — " +
                          mr.error().detail);

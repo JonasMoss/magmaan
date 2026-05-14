@@ -6,9 +6,37 @@
       "name": "default",
       "displayName": "Default (Debug)",
       "binaryDir": "${sourceDir}/build/default",
+      "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF",
+        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=mold",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fuse-ld=mold"
+      }
+    },
+    {
+      "name": "dev",
+      "displayName": "Local dev (Debug + ASan/UBSan)",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build/dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "MAGMAAN_SANITIZER": "asan+ubsan",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "opt",
+      "displayName": "Local optimized (Release + native CPU)",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build/opt",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG -march=native"
       }
     },
     {
@@ -23,7 +51,7 @@
       "binaryDir": "${sourceDir}/build/asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "LATVA_SANITIZER": "asan+ubsan",
+        "MAGMAAN_SANITIZER": "asan+ubsan",
         "CMAKE_CXX_COMPILER": "clang++"
       }
     },
@@ -33,16 +61,28 @@
       "binaryDir": "${sourceDir}/build/ubsan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "LATVA_SANITIZER": "ubsan",
+        "MAGMAAN_SANITIZER": "ubsan",
         "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "ceres",
+      "displayName": "Ceres-enabled (no sanitizers; Ceres+Eigen-sparse+ASan trips the allocator)",
+      "inherits": "default",
+      "binaryDir": "${sourceDir}/build/ceres",
+      "cacheVariables": {
+        "MAGMAAN_WITH_CERES": "ON"
       }
     }
   ],
   "buildPresets": [
     { "name": "default", "configurePreset": "default" },
+    { "name": "dev",     "configurePreset": "dev" },
+    { "name": "opt",     "configurePreset": "opt" },
     { "name": "release", "configurePreset": "release" },
     { "name": "asan",    "configurePreset": "asan" },
-    { "name": "ubsan",   "configurePreset": "ubsan" }
+    { "name": "ubsan",   "configurePreset": "ubsan" },
+    { "name": "ceres",   "configurePreset": "ceres" }
   ],
   "testPresets": [
     {
@@ -51,8 +91,11 @@
       "output": { "outputOnFailure": true },
       "execution": { "noTestsAction": "error", "stopOnFailure": false }
     },
+    { "name": "dev",     "inherits": "default", "configurePreset": "dev" },
+    { "name": "opt",     "inherits": "default", "configurePreset": "opt" },
     { "name": "release", "inherits": "default", "configurePreset": "release" },
     { "name": "asan",    "inherits": "default", "configurePreset": "asan" },
-    { "name": "ubsan",   "inherits": "default", "configurePreset": "ubsan" }
+    { "name": "ubsan",   "inherits": "default", "configurePreset": "ubsan" },
+    { "name": "ceres",   "inherits": "default", "configurePreset": "ceres" }
   ]
 }

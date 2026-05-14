@@ -1,6 +1,6 @@
-#include "latva/version.hpp"
+#include "magmaan/version.hpp"
 
-namespace latva {
+namespace magmaan {
 
 std::string_view version() noexcept {
   return "0.0.1";

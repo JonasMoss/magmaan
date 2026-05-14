@@ -1,4 +1,4 @@
-# latva model grammar — v0
+# magmaan model grammar — v0
 
 Source of truth for the parser. Read this in conjunction with
 [`grammar.ebnf`](grammar.ebnf) (the formal spec) and

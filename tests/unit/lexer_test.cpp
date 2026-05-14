@@ -5,15 +5,15 @@
 #include <string_view>
 #include <vector>
 
-#include "latva/error.hpp"
-#include "latva/parse/lexer.hpp"
-#include "latva/parse/token.hpp"
+#include "magmaan/error.hpp"
+#include "magmaan/parse/lexer.hpp"
+#include "magmaan/parse/token.hpp"
 
-using latva::ParseError;
-using latva::SourceSpan;
-using latva::parse::Lexer;
-using latva::parse::Token;
-using latva::parse::TokenKind;
+using magmaan::ParseError;
+using magmaan::SourceSpan;
+using magmaan::parse::Lexer;
+using magmaan::parse::Token;
+using magmaan::parse::TokenKind;
 
 namespace {
 

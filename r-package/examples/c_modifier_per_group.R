@@ -1,4 +1,4 @@
-## latva R bindings — per-group `c(...)` modifiers + group identity on the
+## magmaan R bindings — per-group `c(...)` modifiers + group identity on the
 ## partable, cross-checked against lavaan's parameter table.
 ##
 ## Run from the repo root (after `R CMD INSTALL r-package`, or
@@ -7,10 +7,10 @@
 ##
 ## `c(v1, …, vk)*x` applies the g-th atom for group g (a fixed value, `NA` for
 ## free, a label, or `start(…)`). The grouping variable name + per-group labels
-## live on the partable (as the `latva.group_var` / `latva.group_labels`
+## live on the partable (as the `magmaan.group_var` / `magmaan.group_labels`
 ## attributes; on a fit object as `$group_var` / `$group_labels`).
 
-suppressMessages({ library(latva); library(lavaan) })
+suppressMessages({ library(magmaan); library(lavaan) })
 
 ok <- function(cond) if (isTRUE(cond)) "ok" else "MISMATCH"
 
@@ -18,12 +18,12 @@ ok <- function(cond) if (isTRUE(cond)) "ok" else "MISMATCH"
 ## 1.2; everything else free.  (`c(0.8, 1.2)*x2` is two fixed values; `NA` would
 ## free that group's loading; `c(L, L)*x2` would tie it across groups.)
 m  <- "f =~ x1 + c(0.8, 1.2)*x2 + x3"
-pt <- latva_lavaanify(m, n_groups = 2L, group_var = "school",
+pt <- lavaan_lavaanify(m, n_groups = 2L, group_var = "school",
                       group_labels = c("Pasteur", "Grant-White"))
 
 cat("--- group identity on the partable ---\n")
-cat(sprintf("  attr(pt, \"latva.group_var\")    = %s\n", attr(pt, "latva.group_var")))
-cat(sprintf("  attr(pt, \"latva.group_labels\") = %s\n\n", paste(attr(pt, "latva.group_labels"), collapse = ", ")))
+cat(sprintf("  attr(pt, \"magmaan.group_var\")    = %s\n", attr(pt, "magmaan.group_var")))
+cat(sprintf("  attr(pt, \"magmaan.group_labels\") = %s\n\n", paste(attr(pt, "magmaan.group_labels"), collapse = ", ")))
 
 cat("--- the f =~ x2 rows (one per group) ---\n")
 sub <- pt[pt$lhs == "f" & pt$rhs == "x2", c("block", "group", "free", "ustart", "label")]
@@ -47,8 +47,8 @@ cat(sprintf("  match: ustart %s | fixed-ness (free == 0) %s\n",
             ok(all((sub$free[order(sub$group)] == 0) == (lav_sub$free[order(lav_sub$group)] == 0)))))
 
 ## And it fits like any other multi-group model:
-ssg <- latva_sample_stats_from_raw(lapply(split(df_hs[paste0("x", 1:3)], df_hs$school), as.matrix))
-fit <- latva_fit(pt, ssg)
+ssg <- data_sample_stats_from_raw(lapply(split(df_hs[paste0("x", 1:3)], df_hs$school), as.matrix))
+fit <- fit_fit(pt, ssg)
 cat(sprintf("\n--- fit ---\n  ngroups = %d (%s), npar = %d, free λ(f=~x2)? %s\n",
             fit$ngroups, paste(fit$group_labels, collapse = "/"), fit$npar,
             ok(all(fit$partable$free[fit$partable$lhs == "f" & fit$partable$rhs == "x2"] == 0))))

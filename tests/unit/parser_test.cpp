@@ -4,22 +4,22 @@
 #include <string_view>
 #include <variant>
 
-#include "latva/error.hpp"
-#include "latva/parse/flat_partable.hpp"
-#include "latva/parse/op.hpp"
-#include "latva/parse/parser.hpp"
+#include "magmaan/error.hpp"
+#include "magmaan/parse/flat_partable.hpp"
+#include "magmaan/parse/op.hpp"
+#include "magmaan/parse/parser.hpp"
 
-using latva::ParseError;
-using latva::parse::FixedValue;
-using latva::parse::FlatPartable;
-using latva::parse::Free;
-using latva::parse::GroupVec;
-using latva::parse::Label;
-using latva::parse::Modifier;
-using latva::parse::ModifierAtom;
-using latva::parse::Op;
-using latva::parse::Parser;
-using latva::parse::StartValue;
+using magmaan::ParseError;
+using magmaan::parse::FixedValue;
+using magmaan::parse::FlatPartable;
+using magmaan::parse::Free;
+using magmaan::parse::GroupVec;
+using magmaan::parse::Label;
+using magmaan::parse::Modifier;
+using magmaan::parse::ModifierAtom;
+using magmaan::parse::Op;
+using magmaan::parse::Parser;
+using magmaan::parse::StartValue;
 
 namespace {
 
@@ -175,9 +175,9 @@ TEST_CASE("constraint: a == b") {
   auto fp = must_parse("a == b");
   REQUIRE(fp.rows.empty());
   REQUIRE(fp.constraints.size() == 1);
-  CHECK(fp.constraints[0].kind == latva::parse::ConstraintKind::Eq);
-  const auto* lhs = std::get_if<latva::parse::Param>(&fp.constraints[0].lhs);
-  const auto* rhs = std::get_if<latva::parse::Param>(&fp.constraints[0].rhs);
+  CHECK(fp.constraints[0].kind == magmaan::parse::ConstraintKind::Eq);
+  const auto* lhs = std::get_if<magmaan::parse::Param>(&fp.constraints[0].lhs);
+  const auto* rhs = std::get_if<magmaan::parse::Param>(&fp.constraints[0].rhs);
   REQUIRE(lhs != nullptr);
   REQUIRE(rhs != nullptr);
   CHECK(lhs->text == "a");
@@ -187,8 +187,8 @@ TEST_CASE("constraint: a == b") {
 TEST_CASE("constraint: a > 0 and d < 1") {
   auto fp = must_parse("a > 0\nd < 1");
   REQUIRE(fp.constraints.size() == 2);
-  CHECK(fp.constraints[0].kind == latva::parse::ConstraintKind::Gt);
-  CHECK(fp.constraints[1].kind == latva::parse::ConstraintKind::Lt);
+  CHECK(fp.constraints[0].kind == magmaan::parse::ConstraintKind::Gt);
+  CHECK(fp.constraints[1].kind == magmaan::parse::ConstraintKind::Lt);
 }
 
 TEST_CASE("constraint: chained statements via ;") {
@@ -200,45 +200,45 @@ TEST_CASE("define: indirect := a * b") {
   auto fp = must_parse("indirect := a * b");
   REQUIRE(fp.constraints.size() == 1);
   const auto& c = fp.constraints[0];
-  CHECK(c.kind == latva::parse::ConstraintKind::Define);
+  CHECK(c.kind == magmaan::parse::ConstraintKind::Define);
   CHECK(c.name == "indirect");
-  const auto* bin = std::get_if<latva::parse::BinNode>(&c.rhs);
+  const auto* bin = std::get_if<magmaan::parse::BinNode>(&c.rhs);
   REQUIRE(bin != nullptr);
-  CHECK(bin->op == latva::parse::BinOp::Mul);
+  CHECK(bin->op == magmaan::parse::BinOp::Mul);
 }
 
 TEST_CASE("Pratt: precedence — a + b * c parses as a + (b * c)") {
   auto fp = must_parse("indirect := a + b * c");
   REQUIRE(fp.constraints.size() == 1);
-  const auto* bin = std::get_if<latva::parse::BinNode>(&fp.constraints[0].rhs);
+  const auto* bin = std::get_if<magmaan::parse::BinNode>(&fp.constraints[0].rhs);
   REQUIRE(bin != nullptr);
-  CHECK(bin->op == latva::parse::BinOp::Add);
+  CHECK(bin->op == magmaan::parse::BinOp::Add);
   // RHS of Add should be a Mul
-  const auto* rhs_bin = std::get_if<latva::parse::BinNode>(bin->rhs.get());
+  const auto* rhs_bin = std::get_if<magmaan::parse::BinNode>(bin->rhs.get());
   REQUIRE(rhs_bin != nullptr);
-  CHECK(rhs_bin->op == latva::parse::BinOp::Mul);
+  CHECK(rhs_bin->op == magmaan::parse::BinOp::Mul);
 }
 
 TEST_CASE("Pratt: parens override — (a + b) * c") {
   auto fp = must_parse("indirect := (a + b) * c");
   REQUIRE(fp.constraints.size() == 1);
-  const auto* bin = std::get_if<latva::parse::BinNode>(&fp.constraints[0].rhs);
+  const auto* bin = std::get_if<magmaan::parse::BinNode>(&fp.constraints[0].rhs);
   REQUIRE(bin != nullptr);
-  CHECK(bin->op == latva::parse::BinOp::Mul);
-  const auto* lhs_bin = std::get_if<latva::parse::BinNode>(bin->lhs.get());
+  CHECK(bin->op == magmaan::parse::BinOp::Mul);
+  const auto* lhs_bin = std::get_if<magmaan::parse::BinNode>(bin->lhs.get());
   REQUIRE(lhs_bin != nullptr);
-  CHECK(lhs_bin->op == latva::parse::BinOp::Add);
+  CHECK(lhs_bin->op == magmaan::parse::BinOp::Add);
 }
 
 TEST_CASE("Pratt: unary minus") {
   auto fp = must_parse("indirect := -a + b");
   REQUIRE(fp.constraints.size() == 1);
-  const auto* bin = std::get_if<latva::parse::BinNode>(&fp.constraints[0].rhs);
+  const auto* bin = std::get_if<magmaan::parse::BinNode>(&fp.constraints[0].rhs);
   REQUIRE(bin != nullptr);
-  CHECK(bin->op == latva::parse::BinOp::Add);
-  const auto* unop = std::get_if<latva::parse::UnNode>(bin->lhs.get());
+  CHECK(bin->op == magmaan::parse::BinOp::Add);
+  const auto* unop = std::get_if<magmaan::parse::UnNode>(bin->lhs.get());
   REQUIRE(unop != nullptr);
-  CHECK(unop->op == latva::parse::UnOp::Neg);
+  CHECK(unop->op == magmaan::parse::UnOp::Neg);
 }
 
 TEST_CASE("Pratt: ^ is right-associative") {
@@ -246,13 +246,13 @@ TEST_CASE("Pratt: ^ is right-associative") {
   // (vs left-assoc which would be (2^3)^2 = 8^2 = 64)
   auto fp = must_parse("indirect := 2 ^ 3 ^ 2");
   REQUIRE(fp.constraints.size() == 1);
-  const auto* bin = std::get_if<latva::parse::BinNode>(&fp.constraints[0].rhs);
+  const auto* bin = std::get_if<magmaan::parse::BinNode>(&fp.constraints[0].rhs);
   REQUIRE(bin != nullptr);
-  CHECK(bin->op == latva::parse::BinOp::Pow);
+  CHECK(bin->op == magmaan::parse::BinOp::Pow);
   // RHS should also be Pow (right-grouped)
-  const auto* rhs_bin = std::get_if<latva::parse::BinNode>(bin->rhs.get());
+  const auto* rhs_bin = std::get_if<magmaan::parse::BinNode>(bin->rhs.get());
   REQUIRE(rhs_bin != nullptr);
-  CHECK(rhs_bin->op == latva::parse::BinOp::Pow);
+  CHECK(rhs_bin->op == magmaan::parse::BinOp::Pow);
 }
 
 TEST_CASE("error: bare := needs identifier on the left") {

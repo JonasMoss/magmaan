@@ -395,6 +395,8 @@ for (m in models) {
   cfi_v   <- as.numeric(fm["cfi"])
   tli_v   <- as.numeric(fm["tli"])
   rmsea_v <- as.numeric(fm["rmsea"])
+  rmsea_ci_lo_v <- as.numeric(fm["rmsea.ci.lower"])
+  rmsea_ci_hi_v <- as.numeric(fm["rmsea.ci.upper"])
   srmr_v  <- as.numeric(fm["srmr"])
   logl_v  <- as.numeric(fm["logl"])
   ulogl_v <- as.numeric(fm["unrestricted.logl"])
@@ -464,24 +466,51 @@ for (m in models) {
   # SEs + Satorra-Bentler χ²) and with `estimator = "MLR"` (= robust.huber.
   # white SEs + Yuan-Bentler χ²). Also dump lavaan's empirical fourth-moment
   # ACOV Γ̂ (`lavInspect(fit, "gamma")`, per-unit) — the "meat" our
-  # `robust_se` consumes. Single-group only (the robust-SE v1 surface is
-  # single-block); skipped silently for multi-group fixtures.
+  # `robust_se` consumes.
+  #
+  # Single-group: `gamma_hat` is one p* × p* matrix (cov-only) or
+  # total_rows × total_rows (means; lavaan stacks `[μ; vech(Σ)]` per block).
+  # Multi-group (G3b parity, Tranche C): `gamma_hat` is a JSON array of
+  # per-block matrices `[{block: 0, matrix: …}, {block: 1, matrix: …}]`.
+  # `se_robust_huberwhite` stays single-group only (G3c — observed-bread
+  # multi-block — is deferred); `se_robust_sem` is emitted multi-group too.
   se_robust_sem        <- NULL
   se_robust_huberwhite <- NULL
   gamma_hat            <- NULL
-  if (n_groups <= 1) {
-    mlm_args <- c(cfa_args, list(estimator = "MLM"))
-    fit_mlm  <- tryCatch(do.call(cfa, mlm_args),
-                         error = function(e) e, warning = function(w) NULL)
-    if (!is.null(fit_mlm) && !inherits(fit_mlm, "error") &&
-        lavInspect(fit_mlm, "converged")) {
-      pt_m   <- parTable(fit_mlm)
-      free_m <- pt_m[pt_m$free > 0, ]; free_m <- free_m[order(free_m$free), ]
-      se_robust_sem <- as.numeric(free_m$se)
-      Gm <- tryCatch(lavInspect(fit_mlm, "gamma"), error = function(e) NULL)
-      if (is.list(Gm)) Gm <- Gm[[1]]
-      if (!is.null(Gm)) gamma_hat <- unname(as.matrix(Gm))
+  mlm_args <- c(cfa_args, list(estimator = "MLM"))
+  fit_mlm  <- tryCatch(do.call(cfa, mlm_args),
+                       error = function(e) e, warning = function(w) w)
+  if (inherits(fit_mlm, "warning")) {
+    # Retry without catching the warning — lavaan often emits informational
+    # warnings (e.g. shared-label-implies-equality-constraint) while still
+    # producing a valid fit. Failing then is the error case.
+    fit_mlm <- tryCatch(suppressWarnings(do.call(cfa, mlm_args)),
+                        error = function(e) e)
+  }
+  if (!is.null(fit_mlm) && !inherits(fit_mlm, "error") &&
+      lavInspect(fit_mlm, "converged")) {
+    pt_m   <- parTable(fit_mlm)
+    free_m <- pt_m[pt_m$free > 0, ]; free_m <- free_m[order(free_m$free), ]
+    se_robust_sem <- as.numeric(free_m$se)
+    Gm <- tryCatch(lavInspect(fit_mlm, "gamma"), error = function(e) NULL)
+    if (!is.null(Gm)) {
+      if (n_groups <= 1) {
+        if (is.list(Gm)) Gm <- Gm[[1]]
+        gamma_hat <- unname(as.matrix(Gm))
+      } else {
+        # Multi-group: emit as a list of per-block matrices. lavaan returns
+        # a named list under `group=`; iterate in order to keep block index
+        # alignment with samp.S.
+        gamma_hat <- vector("list", length(Gm))
+        for (b in seq_along(Gm)) {
+          gamma_hat[[b]] <- list(
+              block  = as.integer(b - 1L),
+              matrix = unname(as.matrix(Gm[[b]])))
+        }
+      }
     }
+  }
+  if (n_groups <= 1) {
     mlr_args <- c(cfa_args, list(estimator = "MLR"))
     fit_mlr  <- tryCatch(do.call(cfa, mlr_args),
                          error = function(e) e, warning = function(w) NULL)
@@ -617,6 +646,8 @@ for (m in models) {
     cfi               = cfi_v,
     tli               = tli_v,
     rmsea             = rmsea_v,
+    rmsea_ci_lower    = rmsea_ci_lo_v,
+    rmsea_ci_upper    = rmsea_ci_hi_v,
     srmr              = srmr_v,
     logl              = logl_v,
     unrestricted_logl = ulogl_v,
@@ -731,7 +762,7 @@ cat("regenerated", length(regenerated_stdlv), "std.lv fit fixtures under",
 # === linear-equality constraint fit fixtures ===============================
 # P9 phase 2 — general *linear* `==` constraints (here `b2 + b3 == 1.5` on a
 # 1-factor CFA: the loadings of x2 and x3 sum to 1.5, x1 is the marker). lavaan
-# enforces it via its Lagrange / analytic-Jacobian path; latva by an affine
+# enforces it via its Lagrange / analytic-Jacobian path; magmaan by an affine
 # reparameterization `θ = θ₀ + Kα`. Point estimates, χ²/df, and (expected-info)
 # SEs match. Kept OUT of corpus.json (like the std.lv fixtures); C++ side lives
 # in tests/golden/lin_constraint_golden_test.cpp. Single-group, no mean structure.

@@ -1,25 +1,39 @@
-# latva dev tasks. `just` runs from the repo root regardless of cwd; bare
+# magmaan dev tasks. `just` runs from the repo root regardless of cwd; bare
 # `just` lists the recipes.
 
 default:
     @just --list
 
-# Configure the CMake build trees (once, or after a preset change).
+# Configure the first-class local build trees (once, or after a preset change).
 configure:
-    cmake --preset default
-    cmake --preset asan
+    cmake --preset dev
+    cmake --preset opt
 
-# Build the asan tree (canonical CI build: AddressSanitizer + UBSan).
-build:
-    cmake --build --preset asan
+# Build the local dev tree (Debug + AddressSanitizer + UBSan).
+dev:
+    cmake --build --preset dev
 
-# Build + run the full C++ test suite.
-test: build
-    ctest --preset asan
+# Build + run the dev C++ test suite.
+test-dev: dev
+    ctest --preset dev
 
-# (Re)install the exploratory R bindings (rebuilds liblatva.a; Makevars handles stale .o).
+# Build the local optimized tree (Release + native CPU tuning).
+opt:
+    cmake --build --preset opt
+
+# Build + run the optimized C++ test suite.
+test-opt: opt
+    ctest --preset opt
+
+# Back-compatible alias for the local dev build.
+build: dev
+
+# Back-compatible alias for the local dev test suite.
+test: test-dev
+
+# (Re)install the exploratory R bindings (rebuilds libmagmaan.a; Makevars handles stale .o).
 r-install:
-    cmake --build --preset default --target latva
+    cmake --build --preset opt --target magmaan
     R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
 
 # Run every r-package/examples/*.R script (the R-side smoke tests vs lavaan).
