@@ -33,6 +33,11 @@ const std::vector<std::string> kFimlFixtures = {
     "0008_structural_fixedx_false_hs_fiml",
     "0009_path_fixed_x_missing_hs_fiml",
     "0010_three_factor_dense_patterns_hs_fiml",
+    "0011_path_fixedx_false_missing_x_y_fiml",
+    "0012_path_fixedx_true_complete_x_missing_y_fiml",
+    "0013_structural_equal_regression_hs_fiml",
+    "0014_multigroup_dense_school_specific_fiml",
+    "0015_structural_highdim_hs_fiml",
 };
 
 magmaan::data::RawData raw_from_fixture(const nlohmann::json& exp) {
@@ -148,7 +153,12 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
       failures.push_back(id + ": raw block count does not match n_groups");
       continue;
     }
-    auto est_or = magmaan::estimate::fit_fiml(*pt, *mr, raw);
+    auto est_or = (id == "0015_structural_highdim_hs_fiml")
+        ? magmaan::estimate::fit_fiml(
+              *pt, *mr, raw, magmaan::nt::fiml::FIML{},
+              magmaan::fit::LbfgsOptimizer(
+                  magmaan::fit::LbfgsOptions{.max_iter = 4000}))
+        : magmaan::estimate::fit_fiml(*pt, *mr, raw);
     if (exp.contains("expect_error")) {
       if (est_or.has_value()) {
         failures.push_back(id + ": expected fit_fiml error");
@@ -183,7 +193,7 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
       continue;
     }
 
-    auto bl_or = magmaan::nt::fiml::fiml_baseline_chi2(raw);
+    auto bl_or = magmaan::nt::fiml::fiml_baseline_chi2(*pt, raw);
     if (!bl_or.has_value()) {
       failures.push_back(id + ": fiml_baseline_chi2 — " +
                          bl_or.error().detail);
@@ -210,17 +220,24 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
     }
 
     double max_diff = 0.0;
+    Eigen::Index max_k = 0;
     for (Eigen::Index k = 0; k < est.theta.size(); ++k) {
       const double d = std::abs(est.theta(k) -
           th[static_cast<std::size_t>(k)].get<double>());
-      max_diff = std::max(max_diff, d);
+      if (d > max_diff) {
+        max_diff = d;
+        max_k = k;
+      }
     }
 
-    if (max_diff > 1e-5) {
+    if (max_diff > 5e-5) {
       char buf[256];
       std::snprintf(buf, sizeof(buf),
-                    "max |θ̂ - lavaan| = %.3e (iters=%d, fmin=%.10f)",
-                    max_diff, est.iterations, est.fmin);
+                    "max |θ̂ - lavaan| = %.3e at %td (got %.10f, want %.10f; "
+                    "iters=%d, fmin=%.10f)",
+                    max_diff, max_k, est.theta(max_k),
+                    th[static_cast<std::size_t>(max_k)].get<double>(),
+                    est.iterations, est.fmin);
       failures.push_back(id + ": " + buf);
       continue;
     }

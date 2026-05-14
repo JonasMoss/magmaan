@@ -30,13 +30,17 @@ The core parser-to-fit pipeline is in place:
   existing `ModelEvaluator` Jacobians, and `fit_fiml()` optimizes with LBFGS.
   Checked-in fixtures now compare `fit_fiml()` point estimates against lavaan
   `missing = "fiml"` for single- and multi-group one-factor CFA, three-factor
-  CFA, shared-label equality CFA, latent structural models, a fixed.x-disabled
-  structural variant, and denser missing-pattern CFA cases with explicit mean
-  structures. FIML post-fit likelihood extras now add observed-data normal
+  CFA, shared-label equality CFA, latent structural models, observed-variable
+  path models under both random-x and complete fixed.x policies,
+  equality-constrained structural regressions, group-specific dense
+  non-monotone multi-group patterns, and denser missing-pattern structural/CFA
+  cases with explicit mean structures. FIML post-fit likelihood extras now add
+  observed-data normal
   constants and a saturated/H1 likelihood so log-likelihood, unrestricted
   log-likelihood, chi-square, and information criteria match lavaan on that
   fixture tranche. FIML baseline/independence likelihood accounting now feeds
-  the existing CFI/TLI/RMSEA helpers, with lavaan fixture parity on the same
+  the existing CFI/TLI/RMSEA helpers, including regression-baseline handling
+  for observed exogenous variables, with lavaan fixture parity on the same
   tranche. The robust FIML MLR post-fit path computes observed-pattern
   casewise sandwich SEs plus Yuan-Bentler Mplus scaled-test traces from the
   direct FIML objective, with lavaan `estimator = "MLR"` fixture parity on the
@@ -103,19 +107,21 @@ observed/missing mask, and the optimizer consumes pattern summaries.
 
 Open work:
 
-- Extend the checked-in lavaan FIML fixture family beyond the current
-  CFA/latent-structural tranche to additional structural, fixed.x-policy, and
-  missing-pattern edge cases.
+- Continue extending the checked-in lavaan FIML fixture family beyond the
+  current CFA/structural/path tranche as new structural, fixed.x-policy, and
+  missing-pattern edge cases are made concrete.
 - Maintain FIML baseline/independence likelihood and fit-index parity as new
   raw missing-data cases are added. User-model, saturated/H1, and baseline
-  likelihood accounting are implemented for the current CFA fixture tranche.
+  likelihood accounting are implemented for the current fixture tranche,
+  including complete fixed.x path cases.
 - Extend robust FIML beyond the current fixture-backed MLR slice only with
   fixture backing. Conditional fixed.x behavior and any robust missing-data
   tests other than lavaan's Yuan-Bentler Mplus correction remain out of the
   current public contract.
-- Keep the first public `fixed.x` policy narrow: missing observed exogenous
-  variables are rejected in FIML until conditional fixed.x likelihood behavior
-  is implemented and fixture-backed.
+- Keep the first public `fixed.x` policy narrow: complete observed exogenous
+  variables are supported for path-model FIML, but missing observed exogenous
+  variables are rejected until conditional fixed.x likelihood behavior is
+  implemented and fixture-backed.
 - Maintain the first R FIML boundary as estimate-only: `df_to_fiml_data()`
   preserves incomplete rows in raw data plus masks, and `fit_fiml()` routes to
   the fixture-backed C++ path. The future high-level `magmaan(model, data, ...)`

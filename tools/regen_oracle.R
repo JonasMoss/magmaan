@@ -1266,6 +1266,78 @@ fiml_cases <- list(
          df$x5[seq(9L, nrow(df), by = 13L)] <- NA_real_
          df$x8[seq(12L, nrow(df), by = 16L)] <- NA_real_
          df
+       }),
+  list(id = "0011_path_fixedx_false_missing_x_y_fiml",
+       entry = "sem",
+       model = "x9 ~ x1",
+       ov = c("x9", "x1"),
+       fixed_x = FALSE,
+       mask = function(df) {
+         df$x1[seq(4L, nrow(df), by = 11L)] <- NA_real_
+         y_miss <- seq(12L, nrow(df), by = 17L)
+         y_miss <- y_miss[!is.na(df$x1[y_miss])]
+         df$x9[y_miss] <- NA_real_
+         df
+       }),
+  list(id = "0012_path_fixedx_true_complete_x_missing_y_fiml",
+       entry = "sem",
+       model = "x9 ~ x1 + x2",
+       ov = c("x9", "x1", "x2"),
+       fixed_x = TRUE,
+       mask = function(df) {
+         df$x9[seq(5L, nrow(df), by = 9L)] <- NA_real_
+         df
+       }),
+  list(id = "0013_structural_equal_regression_hs_fiml",
+       entry = "sem",
+       model = paste("visual =~ x1 + x2 + x3",
+                     "textual =~ x4 + x5 + x6",
+                     "speed =~ x7 + x8 + x9",
+                     "textual ~ b*visual",
+                     "speed ~ b*visual",
+                     "textual ~~ speed", sep = "\n"),
+       ov = paste0("x", 1:9),
+       mask = function(df) {
+         df$x2[seq(4L, nrow(df), by = 11L)] <- NA_real_
+         df$x5[seq(6L, nrow(df), by = 13L)] <- NA_real_
+         df$x8[seq(8L, nrow(df), by = 17L)] <- NA_real_
+         df$x9[seq(10L, nrow(df), by = 19L)] <- NA_real_
+         df
+       }),
+  list(id = "0014_multigroup_dense_school_specific_fiml",
+       model = paste("visual =~ x1 + x2 + x3",
+                     "textual =~ x4 + x5 + x6",
+                     "speed =~ x7 + x8 + x9", sep = "\n"),
+       ov = paste0("x", 1:9),
+       group_var = "school",
+       mask = function(df) {
+         gw <- as.character(df$school) == "Grant-White"
+         pa <- as.character(df$school) == "Pasteur"
+         gw_i <- which(gw)
+         pa_i <- which(pa)
+         df[gw_i[seq(3L, length(gw_i), by = 11L)], c("x1", "x4")] <- NA_real_
+         df[gw_i[seq(5L, length(gw_i), by = 13L)], c("x2", "x8")] <- NA_real_
+         df$x6[gw_i[seq(7L, length(gw_i), by = 17L)]] <- NA_real_
+         df[pa_i[seq(4L, length(pa_i), by = 10L)], c("x3", "x9")] <- NA_real_
+         df[pa_i[seq(6L, length(pa_i), by = 12L)], c("x5", "x7")] <- NA_real_
+         df$x2[pa_i[seq(8L, length(pa_i), by = 15L)]] <- NA_real_
+         df
+       }),
+  list(id = "0015_structural_highdim_hs_fiml",
+       entry = "sem",
+       model = paste("visual =~ x1 + x2 + x3",
+                     "textual =~ x4 + x5 + x6",
+                     "speed =~ x7 + x8 + x9",
+                     "textual ~ visual",
+                     "speed ~ textual + visual", sep = "\n"),
+       ov = paste0("x", 1:9),
+       mask = function(df) {
+         df[seq(3L, nrow(df), by = 17L), c("x7", "x8", "x9")] <- NA_real_
+         df[seq(5L, nrow(df), by = 19L), c("x4", "x5", "x6")] <- NA_real_
+         df$x2[seq(7L, nrow(df), by = 11L)] <- NA_real_
+         df$x5[seq(9L, nrow(df), by = 13L)] <- NA_real_
+         df$x8[seq(12L, nrow(df), by = 16L)] <- NA_real_
+         df
        })
 )
 

@@ -42,6 +42,25 @@ resolve_fixed_x_from_sample(partable::LatentStructure&      pt,
           "block " + std::to_string(b) + " missing from SampleStats"));
     }
     const auto& S = samp.S[b];
+    if (c.mat == model::MatId::Nu || c.mat == model::MatId::Alpha) {
+      std::int32_t ov = c.row;
+      if (c.mat == model::MatId::Alpha) {
+        if (c.row < 0 || static_cast<std::size_t>(c.row) >= n_lv_ext) {
+          return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+              "fixed.x intercept index out of range"));
+        }
+        const std::int32_t v = pt.lv_ext_order[static_cast<std::size_t>(c.row)];
+        ov = (v >= 0 && v < pt.n_vars)
+                 ? pt.ov_pos[static_cast<std::size_t>(v)] : -1;
+      }
+      if (b >= samp.mean.size() || ov < 0 ||
+          ov >= static_cast<std::int32_t>(samp.mean[b].size())) {
+        return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+            "fixed.x intercept index out of range"));
+      }
+      pt.fixed_value[i] = samp.mean[b](ov);
+      continue;
+    }
     // A fixed.x cell lives in Ψ (the Reduced form promotes exogenous observed
     // to phantom latents): c.row / c.col are lv_ext positions. Map them to var
     // ids via lv_ext_order, then to observed positions via ov_pos — for a

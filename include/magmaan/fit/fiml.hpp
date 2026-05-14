@@ -147,6 +147,11 @@ post_expected<BaselineFit>
 fiml_baseline_chi2(const RawData& raw,
                    FIML discrepancy = {});
 
+post_expected<BaselineFit>
+fiml_baseline_chi2(const partable::LatentStructure& pt,
+                   const RawData& raw,
+                   FIML discrepancy = {});
+
 template <class O = LbfgsOptimizer>
 fit_expected<Estimates>
 fit_fiml(partable::LatentStructure pt,
