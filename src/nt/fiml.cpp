@@ -799,6 +799,36 @@ fiml_start_sample_stats(const RawData& raw) {
   return out;
 }
 
+fit_expected<void>
+validate_fiml_fixed_x_missing_policy(const partable::LatentStructure& pt,
+                                     const RawData& raw) {
+  if (raw.mask.empty()) return {};
+  if (auto ok = validate_raw_shape(raw); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  const std::vector<Eigen::Index> fixed_x = fixed_x_observed_indices(pt);
+  if (fixed_x.empty()) return {};
+
+  for (std::size_t b = 0; b < raw.mask.size(); ++b) {
+    const auto& M = raw.mask[b];
+    for (Eigen::Index c : fixed_x) {
+      if (c < 0 || c >= M.cols()) {
+        return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+            "FIML: fixed.x observed variable index out of range"));
+      }
+      for (Eigen::Index r = 0; r < M.rows(); ++r) {
+        if (M(r, c) == 0) {
+          return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+              "FIML: fixed.x with missing observed exogenous variables is "
+              "not supported yet"));
+        }
+      }
+    }
+  }
+  return {};
+}
+
 post_expected<FIMLExtras>
 fiml_extras(partable::LatentStructure pt,
             const model::MatrixRep& rep,
@@ -818,10 +848,9 @@ fiml_extras(partable::LatentStructure pt,
   }
   SampleStats start_samp = std::move(*start_samp_or);
 
-  if (!raw.mask.empty() && !fixed_x_observed_indices(pt).empty()) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "fiml_extras: fixed.x with missing observed exogenous variables is "
-        "not supported yet"));
+  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(),
+        "validate_fiml_fixed_x_missing_policy"));
   }
 
   if (auto e = resolve_fixed_x_from_sample(pt, rep, start_samp); !e.has_value()) {

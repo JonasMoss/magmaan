@@ -1222,6 +1222,50 @@ fiml_cases <- list(
          df$x3[seq(6L, nrow(df), by = 10L)] <- NA_real_
          df$x1[seq(13L, nrow(df), by = 16L)] <- NA_real_
          df
+       }),
+  list(id = "0007_structural_hs_fiml",
+       entry = "sem",
+       model = "visual =~ x1 + x2 + x3\nx9 ~ visual",
+       ov = c("x1", "x2", "x3", "x9"),
+       mask = function(df) {
+         df$x2[seq(4L, nrow(df), by = 11L)] <- NA_real_
+         df$x9[seq(7L, nrow(df), by = 13L)] <- NA_real_
+         df$x1[seq(10L, nrow(df), by = 17L)] <- NA_real_
+         df
+       }),
+  list(id = "0008_structural_fixedx_false_hs_fiml",
+       entry = "sem",
+       model = "visual =~ x1 + x2 + x3\nx9 ~ visual",
+       ov = c("x1", "x2", "x3", "x9"),
+       fixed_x = FALSE,
+       mask = function(df) {
+         df$x2[seq(4L, nrow(df), by = 11L)] <- NA_real_
+         df$x9[seq(10L, nrow(df), by = 17L)] <- NA_real_
+         df
+       }),
+  list(id = "0009_path_fixed_x_missing_hs_fiml",
+       entry = "sem",
+       model = "x9 ~ x1",
+       ov = c("x9", "x1"),
+       fixed_x = TRUE,
+       expect_error = "fixed.x with missing observed exogenous variables",
+       mask = function(df) {
+         df$x1[seq(4L, nrow(df), by = 11L)] <- NA_real_
+         df$x9[seq(10L, nrow(df), by = 17L)] <- NA_real_
+         df
+       }),
+  list(id = "0010_three_factor_dense_patterns_hs_fiml",
+       model = paste("visual =~ x1 + x2 + x3",
+                     "textual =~ x4 + x5 + x6",
+                     "speed =~ x7 + x8 + x9", sep = "\n"),
+       ov = paste0("x", 1:9),
+       mask = function(df) {
+         df[seq(3L, nrow(df), by = 17L), c("x7", "x8", "x9")] <- NA_real_
+         df[seq(5L, nrow(df), by = 19L), c("x4", "x5", "x6")] <- NA_real_
+         df$x2[seq(7L, nrow(df), by = 11L)] <- NA_real_
+         df$x5[seq(9L, nrow(df), by = 13L)] <- NA_real_
+         df$x8[seq(12L, nrow(df), by = 16L)] <- NA_real_
+         df
        })
 )
 
@@ -1235,44 +1279,30 @@ regenerated_fiml <- character(0)
 for (m in fiml_cases) {
   id <- m$id; model <- m$model; ov <- m$ov
   group_var <- if (!is.null(m$group_var)) m$group_var else NULL
+  entry <- if (!is.null(m$entry)) m$entry else "cfa"
+  fixed_x <- if (!is.null(m$fixed_x)) isTRUE(m$fixed_x) else TRUE
+  expect_error <- if (!is.null(m$expect_error)) m$expect_error else NULL
   df <- HolzingerSwineford1939
   df <- m$mask(df)
 
-  cfa_args <- list(model = model, data = df, missing = "fiml",
-                   meanstructure = TRUE, std.lv = FALSE)
+  fit_args <- list(model = model, data = df, missing = "fiml",
+                   meanstructure = TRUE, std.lv = FALSE, fixed.x = fixed_x)
   if (!is.null(group_var) && nchar(group_var) > 0) {
-    cfa_args$group <- group_var
+    fit_args$group <- group_var
   }
 
-  fit <- tryCatch(do.call(cfa, cfa_args),
-                  error = function(e) e, warning = function(w) w)
-  if (inherits(fit, "warning")) {
-    fit <- tryCatch(suppressWarnings(do.call(cfa, cfa_args)),
-                    error = function(e) e)
-  }
-  if (inherits(fit, "error") || !lavInspect(fit, "converged")) {
-    cat("  skip ", id, " (FIML cfa error / no convergence)\n", sep = "")
-    next
-  }
-
-  pt_fitted <- parTable(fit)
-  free_rows <- pt_fitted[pt_fitted$free > 0, ]
-  free_rows <- free_rows[order(free_rows$free), ]
-  fm <- fitMeasures(fit)
-
-  if (is.null(group_var) || !nchar(group_var)) {
-    block <- raw_block_json(df, ov)
-    raw_blocks <- list(list(block = 0L,
-                            X     = block$X,
-                            mask  = block$mask))
-    ov_names <- list(ov)
-    n_groups <- 1L
-    group_out <- ""
-  } else {
-    group_labels <- as.character(lavInspect(fit, "group.label"))
-    n_groups <- length(group_labels)
-    raw_blocks <- vector("list", n_groups)
-    ov_names <- rep(list(ov), n_groups)
+  make_raw_blocks <- function(group_labels = character()) {
+    if (is.null(group_var) || !nchar(group_var)) {
+      block <- raw_block_json(df, ov)
+      return(list(raw_blocks = list(list(block = 0L,
+                                         X     = block$X,
+                                         mask  = block$mask)),
+                  ov_names = list(ov),
+                  n_groups = 1L,
+                  group_out = ""))
+    }
+    group_labels <- as.character(group_labels)
+    raw_blocks <- vector("list", length(group_labels))
     for (b in seq_along(group_labels)) {
       block <- raw_block_json(
           df[as.character(df[[group_var]]) == group_labels[[b]], , drop = FALSE],
@@ -1281,19 +1311,92 @@ for (m in fiml_cases) {
                               X     = block$X,
                               mask  = block$mask)
     }
-    group_out <- group_var
+    list(raw_blocks = raw_blocks,
+         ov_names = rep(list(ov), length(group_labels)),
+         n_groups = length(group_labels),
+         group_out = group_var)
   }
+
+  if (!is.null(expect_error)) {
+    group_labels <- character()
+    if (!is.null(group_var) && nchar(group_var) > 0) {
+      g <- df[[group_var]]
+      group_labels <- if (is.factor(g)) levels(g) else unique(as.character(g))
+    }
+    raw_bundle <- make_raw_blocks(group_labels)
+    raw_blocks <- raw_bundle$raw_blocks
+    ov_names <- raw_bundle$ov_names
+    n_groups <- raw_bundle$n_groups
+    group_out <- raw_bundle$group_out
+
+    payload <- list(
+      `_meta` = list(
+        format_version = 1L,
+        fixture_kind   = "fit.fiml.unsupported",
+        corpus_id      = id,
+        tool           = "magmaan-policy",
+        lavaan_version = installed
+      ),
+      input           = model,
+      entry           = entry,
+      meanstructure   = TRUE,
+      fixed_x         = fixed_x,
+      expect_error    = expect_error,
+      n_groups        = as.integer(n_groups),
+      group_var       = group_out,
+      ov_names        = ov_names,
+      n_obs           = as.integer(nrow(df)),
+      n_obs_per_block = if (n_groups == 1L) as.integer(nrow(df)) else
+        as.integer(vapply(raw_blocks, function(x) nrow(x$X), integer(1))),
+      raw             = raw_blocks
+    )
+
+    out_path <- file.path(fiml_dir, paste0(id, ".fit.json"))
+    write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
+               null = "null", na = "null", digits = NA)
+    regenerated_fiml <- c(regenerated_fiml, out_path)
+    next
+  }
+
+  fit_fun <- switch(entry, cfa = cfa, sem = sem, stop("unknown FIML entry: ", entry))
+  fit <- tryCatch(do.call(fit_fun, fit_args),
+                  error = function(e) e, warning = function(w) w)
+  if (inherits(fit, "warning")) {
+    fit <- tryCatch(suppressWarnings(do.call(fit_fun, fit_args)),
+                    error = function(e) e)
+  }
+  if (inherits(fit, "error") || !lavInspect(fit, "converged")) {
+    cat("  skip ", id, " (FIML ", entry, " error / no convergence)\n", sep = "")
+    next
+  }
+
+  group_labels <- character()
+  if (!is.null(group_var) && nchar(group_var) > 0) {
+    group_labels <- as.character(lavInspect(fit, "group.label"))
+  }
+  raw_bundle <- make_raw_blocks(group_labels)
+  raw_blocks <- raw_bundle$raw_blocks
+  ov_names <- raw_bundle$ov_names
+  n_groups <- raw_bundle$n_groups
+  group_out <- raw_bundle$group_out
+
+  pt_fitted <- parTable(fit)
+  free_rows <- pt_fitted[pt_fitted$free > 0, ]
+  free_rows <- free_rows[order(free_rows$free), ]
+  fm <- fitMeasures(fit)
 
   payload <- list(
     `_meta` = list(
       format_version = 1L,
       fixture_kind   = "fit.fiml",
       corpus_id      = id,
-      tool           = "lavaan::cfa(missing = \"fiml\")",
+      tool           = paste0("lavaan::", entry, "(missing = \"fiml\")"),
       lavaan_version = installed
     ),
     input           = model,
+    entry           = entry,
     meanstructure   = TRUE,
+    fixed_x         = fixed_x,
     n_groups        = as.integer(n_groups),
     group_var       = group_out,
     ov_names        = ov_names,
