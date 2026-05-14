@@ -369,8 +369,112 @@ df_to_data <- function(x, model, group = NULL, missing = c("listwise", "error"),
   out
 }
 
+df_to_fiml_data <- function(x, model, group = NULL) {
+  if (!is.data.frame(x)) {
+    stop("df_to_fiml_data(): `x` must be a data.frame")
+  }
+  model <- as_magmaan_model_spec(model)
+  group_var <- if (is.null(group)) model$group_var else as.character(group)[1L]
+  if (is.null(group_var) || !nzchar(group_var)) group_var <- ""
+
+  if (nzchar(group_var)) {
+    if (!group_var %in% names(x)) {
+      stop("df_to_fiml_data(): grouping column not found: ", group_var)
+    }
+    g <- x[[group_var]]
+    if (anyNA(g)) stop("df_to_fiml_data(): grouping column contains missing values")
+    labels <- model$group_labels
+    if (is.null(labels) || !length(labels)) {
+      labels <- if (is.factor(g)) levels(g) else unique(as.character(g))
+    }
+    labels <- as.character(labels)
+    if (!all(as.character(g) %in% labels)) {
+      stop("df_to_fiml_data(): data contains groups outside `group_labels`: ",
+           paste(setdiff(unique(as.character(g)), labels), collapse = ", "))
+    }
+    if (!is.null(model$syntax)) {
+      model <- do.call(
+        model_spec,
+        c(list(syntax = model$syntax,
+               group = group_var,
+               group_labels = labels),
+          model$options)
+      )
+    }
+  } else {
+    labels <- character()
+  }
+
+  rep <- model_matrix_rep(model$partable)
+  ov_by_group <- rep$ov_names
+  if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
+
+  make_block <- function(rows, ov, label = NULL) {
+    miss_cols <- setdiff(ov, names(x))
+    if (length(miss_cols)) {
+      stop("df_to_fiml_data(): data is missing observed variables: ",
+           paste(miss_cols, collapse = ", "))
+    }
+    block <- x[rows, ov, drop = FALSE]
+    bad_type <- names(block)[!vapply(block, is.numeric, logical(1))]
+    if (length(bad_type)) {
+      stop("df_to_fiml_data(): observed variables must be numeric: ",
+           paste(bad_type, collapse = ", "))
+    }
+    if (!nrow(block)) {
+      suffix <- if (is.null(label)) "" else paste0(" in group '", label, "'")
+      stop("df_to_fiml_data(): no rows", suffix)
+    }
+    mat <- as.matrix(block)
+    bad_finite <- !is.na(mat) & !is.finite(mat)
+    if (any(bad_finite)) {
+      suffix <- if (is.null(label)) "" else paste0(" in group '", label, "'")
+      stop("df_to_fiml_data(): non-finite observed value", suffix)
+    }
+    mask <- !is.na(mat)
+    dimnames(mask) <- dimnames(mat)
+    list(X = mat, mask = mask)
+  }
+
+  if (nzchar(group_var)) {
+    if (length(ov_by_group) != length(labels)) {
+      stop("df_to_fiml_data(): model has ", length(ov_by_group),
+           " group block(s), but data has ", length(labels), " group label(s)")
+    }
+    g_chr <- as.character(x[[group_var]])
+    blocks <- Map(function(label, ov) {
+      make_block(g_chr == label, ov, label)
+    }, labels, ov_by_group)
+    names(blocks) <- labels
+  } else {
+    blocks <- list(make_block(rep(TRUE, nrow(x)), ov_by_group[[1L]]))
+  }
+
+  X <- lapply(blocks, `[[`, "X")
+  mask <- lapply(blocks, `[[`, "mask")
+  if (length(labels)) {
+    names(X) <- labels
+    names(mask) <- labels
+  }
+  out <- list(
+    X = X,
+    mask = mask,
+    ov_names = ov_by_group,
+    group_var = group_var,
+    group_labels = labels,
+    nobs = vapply(X, nrow, integer(1))
+  )
+  class(out) <- c("magmaan_fiml_data", "list")
+  out
+}
+
 fit_ml <- function(model, data, lbfgs = NULL) {
   fit_ml_impl(partable_arg(model), sample_stats_arg(data), lbfgs = lbfgs)
+}
+
+fit_fiml <- function(model, data, lbfgs = NULL) {
+  if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
+  fit_fiml_impl(partable_arg(model), fiml_data_arg(data), lbfgs = lbfgs)
 }
 
 fit_uls <- function(model, data, lbfgsb = NULL, bounds = NULL) {
@@ -451,6 +555,13 @@ partable_arg <- function(model) {
 sample_stats_arg <- function(data) {
   if (inherits(data, "magmaan_data")) {
     return(list(S = data$S, mean = data$mean, nobs = data$nobs))
+  }
+  data
+}
+
+fiml_data_arg <- function(data) {
+  if (inherits(data, "magmaan_fiml_data")) {
+    return(list(X = data$X, mask = data$mask))
   }
   data
 }

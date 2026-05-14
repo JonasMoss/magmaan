@@ -91,6 +91,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fit_fiml_impl
+Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data, Rcpp::Nullable<Rcpp::List> lbfgs);
+RcppExport SEXP _magmaan_fit_fiml_impl(SEXP partableSEXP, SEXP raw_dataSEXP, SEXP lbfgsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgs(lbfgsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_fiml_impl(partable, raw_data, lbfgs));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_uls_impl
 Rcpp::List fit_uls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
 RcppExport SEXP _magmaan_fit_uls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
@@ -707,6 +720,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_model_matrix_rep", (DL_FUNC) &_magmaan_model_matrix_rep, 1},
     {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 3},
     {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 3},
+    {"_magmaan_fit_fiml_impl", (DL_FUNC) &_magmaan_fit_fiml_impl, 3},
     {"_magmaan_fit_uls_impl", (DL_FUNC) &_magmaan_fit_uls_impl, 4},
     {"_magmaan_fit_gls_impl", (DL_FUNC) &_magmaan_fit_gls_impl, 4},
     {"_magmaan_fit_wls_impl", (DL_FUNC) &_magmaan_fit_wls_impl, 5},

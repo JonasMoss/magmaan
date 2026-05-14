@@ -14,12 +14,14 @@
 #include "magmaan/estimate/snlls.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/ordinal.hpp"
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/gls/gls.hpp"
 #include "magmaan/gls/uls.hpp"
 #include "magmaan/gls/wls.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/nt/ml.hpp"
+#include "magmaan/nt/fiml.hpp"
 #include "magmaan/nt/measures.hpp"
 
 // [[Rcpp::depends(RcppEigen)]]
@@ -226,6 +228,124 @@ Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
   return out;
 }
 
+Rcpp::LogicalMatrix block_mask_matrix(SEXP M, std::size_t b, std::size_t n_blocks,
+                                      const char* what) {
+  if (Rf_isMatrix(M)) {
+    if (n_blocks != 1)
+      Rcpp::stop("magmaan: the model has %d groups; pass a list of %d per-group %s matrices",
+                 static_cast<int>(n_blocks), static_cast<int>(n_blocks), what);
+    return Rcpp::LogicalMatrix(M);
+  }
+  if (TYPEOF(M) != VECSXP)
+    Rcpp::stop("magmaan: %s must be a logical matrix (single-group) or a list of "
+               "per-group logical matrices", what);
+  Rcpp::List Ml(M);
+  if (static_cast<std::size_t>(Ml.size()) != n_blocks)
+    Rcpp::stop("magmaan: %s is a list of %d matrices but the model has %d groups",
+               what, static_cast<int>(Ml.size()), static_cast<int>(n_blocks));
+  return Rcpp::LogicalMatrix(Ml[static_cast<R_xlen_t>(b)]);
+}
+
+magmaan::data::RawData fiml_raw_from_arg(const lvm::MatrixRep& rep, SEXP raw_data) {
+  SEXP X_arg = raw_data;
+  SEXP mask_arg = R_NilValue;
+  if (TYPEOF(raw_data) == VECSXP) {
+    Rcpp::List rd(raw_data);
+    if (rd.containsElementNamed("X")) {
+      X_arg = rd["X"];
+      if (rd.containsElementNamed("mask")) mask_arg = rd["mask"];
+    }
+  }
+
+  const std::size_t n_blocks = rep.dims.size();
+  magmaan::data::RawData raw;
+  raw.X.reserve(n_blocks);
+  raw.mask.reserve(n_blocks);
+
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    Rcpp::NumericMatrix Xb = block_matrix(X_arg, b, n_blocks, "raw_data$X");
+    const std::vector<int> perm = perm_for_cols(Xb, rep.ov_names[b], "raw_data$X");
+    const int n = Xb.nrow();
+    const int p = static_cast<int>(perm.size());
+
+    Rcpp::LogicalMatrix Mb;
+    const bool has_mask = !Rf_isNull(mask_arg);
+    if (has_mask) {
+      Mb = block_mask_matrix(mask_arg, b, n_blocks, "raw_data$mask");
+      if (Mb.nrow() != n || Mb.ncol() != Xb.ncol())
+        Rcpp::stop("magmaan: raw_data$mask block %d has shape %dx%d but raw_data$X has %dx%d",
+                   static_cast<int>(b + 1), Mb.nrow(), Mb.ncol(), Xb.nrow(), Xb.ncol());
+    }
+
+    Eigen::MatrixXd X(n, p);
+    Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M(n, p);
+    for (int r = 0; r < n; ++r) {
+      for (int k = 0; k < p; ++k) {
+        const int src = perm[static_cast<std::size_t>(k)];
+        const double x = Xb(r, src);
+        bool observed = has_mask
+            ? (Mb(r, src) != NA_LOGICAL && Mb(r, src) != 0)
+            : std::isfinite(x);
+        if (observed && !std::isfinite(x)) {
+          Rcpp::stop("magmaan: raw_data$mask marks a non-finite value as observed "
+                     "in block %d, row %d", static_cast<int>(b + 1), r + 1);
+        }
+        M(r, k) = static_cast<std::uint8_t>(observed ? 1 : 0);
+        X(r, k) = observed ? x : std::numeric_limits<double>::quiet_NaN();
+      }
+    }
+
+    raw.X.push_back(std::move(X));
+    raw.mask.push_back(std::move(M));
+  }
+  return raw;
+}
+
+Rcpp::List fiml_raw_to_r(const magmaan::data::RawData& raw,
+                         const std::vector<std::vector<std::string>>& ov_names,
+                         const std::vector<std::string>& group_labels) {
+  const R_xlen_t nb = static_cast<R_xlen_t>(raw.X.size());
+  Rcpp::List X_out(nb), M_out(nb);
+  Rcpp::IntegerVector nobs(nb);
+  for (R_xlen_t b = 0; b < nb; ++b) {
+    const std::size_t bi = static_cast<std::size_t>(b);
+    Rcpp::NumericMatrix Xb = Rcpp::wrap(raw.X[bi]);
+    Rcpp::LogicalMatrix Mb(raw.mask[bi].rows(), raw.mask[bi].cols());
+    for (R_xlen_t r = 0; r < Mb.nrow(); ++r)
+      for (R_xlen_t c = 0; c < Mb.ncol(); ++c)
+        Mb(r, c) = raw.mask[bi](r, c) != 0;
+    Rcpp::CharacterVector nm = Rcpp::wrap(ov_names[bi]);
+    Xb.attr("dimnames") = Rcpp::List::create(R_NilValue, nm);
+    Mb.attr("dimnames") = Rcpp::List::create(R_NilValue, nm);
+    X_out[b] = Xb;
+    M_out[b] = Mb;
+    nobs[b] = static_cast<int>(raw.X[bi].rows());
+  }
+  if (!group_labels.empty() && static_cast<R_xlen_t>(group_labels.size()) == nb) {
+    Rcpp::CharacterVector gl = Rcpp::wrap(group_labels);
+    X_out.attr("names") = gl;
+    M_out.attr("names") = gl;
+  }
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["X"] = X_out,
+      Rcpp::_["mask"] = M_out,
+      Rcpp::_["ov_names"] = names_list(ov_names),
+      Rcpp::_["group_labels"] = Rcpp::wrap(group_labels),
+      Rcpp::_["nobs"] = nobs);
+  out.attr("class") = Rcpp::CharacterVector::create("magmaan_fiml_data", "list");
+  return out;
+}
+
+Rcpp::List fiml_fit_result(Ctx& ctx,
+                           const magmaan::data::RawData& raw,
+                           const magmaan::estimate::Estimates& est,
+                           const magmaan::spec::Starts* starts) {
+  Rcpp::List out = fit_result(ctx, est, starts, "FIML");
+  out["fiml"] = true;
+  out["raw_data"] = fiml_raw_to_r(raw, ctx.rep.ov_names, ctx.names.group_labels);
+  return out;
+}
+
 magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
   const char* what = "ordinal_stats";
   for (const char* nm : {"R", "thresholds", "threshold_ov", "threshold_level",
@@ -386,6 +506,42 @@ Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats,
 Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
                        Rcpp::Nullable<Rcpp::List> lbfgs = R_NilValue) {
   return fit_fit(partable, sample_stats, lbfgs);
+}
+
+// fit_fiml() — mirrors estimate::fit_fiml(pt, rep, raw, FIML{}, LbfgsOptimizer).
+// `raw_data` is a magmaan_fiml_data object from df_to_fiml_data(), or a list
+// with $X and optional $mask. Missing values are retained in $X and represented
+// by $mask; columns are reordered to the model's observed-variable order.
+//
+// [[Rcpp::export]]
+Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
+                         Rcpp::Nullable<Rcpp::List> lbfgs = R_NilValue) {
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_fiml");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.names = std::move(parsed.names);
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  if (ctx.rep.ov_names.empty() || ctx.rep.ov_names[0].empty())
+    Rcpp::stop("magmaan: model has no observed variables");
+
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, raw_data);
+  auto start_samp_or = magmaan::nt::fiml::fiml_start_sample_stats(raw);
+  if (!start_samp_or.has_value()) stop_fit(start_samp_or.error());
+  ctx.samp = std::move(*start_samp_or);
+  ctx.ov_names = ctx.rep.ov_names[0];
+  ctx.meanstructure = has_meanstructure(ctx.pt);
+  if (!ctx.meanstructure) ctx.samp.mean.clear();
+
+  auto e_or = magmaan::estimate::fit_fiml(
+      ctx.pt, ctx.rep, raw, magmaan::nt::fiml::FIML{},
+      magmaan::optim::LbfgsOptimizer{lbfgs_opts_from(lbfgs)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return fiml_fit_result(ctx, raw, est, &starts);
 }
 
 // fit_uls() — mirrors fit_bounded<ULS, LbfgsBOptimizer>(pt, rep, samp, bounds).

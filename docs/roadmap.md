@@ -42,9 +42,12 @@ The core parser-to-fit pipeline is in place:
   direct FIML objective, with lavaan `estimator = "MLR"` fixture parity on the
   non-saturated single- and multi-group FIML cases in the current tranche. The
   current fixed.x policy rejects missing observed exogenous variables rather
-  than guessing lavaan's conditional likelihood behavior. Broader missing-data
-  parity cases, robust missing-data corrections beyond this MLR slice, and R
-  wrappers remain open.
+  than guessing lavaan's conditional likelihood behavior. A first thin R
+  boundary now exposes `df_to_fiml_data()` and `fit_fiml()` for estimate-only
+  FIML over raw continuous data with retained `NA` masks; FIML inference,
+  robust corrections, and fit measures remain explicit C++/future R post-fit
+  work. Broader missing-data parity cases and robust missing-data corrections
+  beyond this MLR slice remain open.
 - ULS, GLS, and explicit-weight WLS discrepancies, each with scalar
   value/gradient and least-squares residual/Jacobian interfaces.
 - Bounded least-squares fitting through LBFGS-B and optional Ceres, including
@@ -113,8 +116,9 @@ Open work:
 - Keep the first public `fixed.x` policy narrow: missing observed exogenous
   variables are rejected in FIML until conditional fixed.x likelihood behavior
   is implemented and fixture-backed.
-- Promote the R boundary only after C++ fixtures establish point-estimate and
-  likelihood-statistic parity. The high-level `magmaan(model, data, ...)`
+- Maintain the first R FIML boundary as estimate-only: `df_to_fiml_data()`
+  preserves incomplete rows in raw data plus masks, and `fit_fiml()` routes to
+  the fixture-backed C++ path. The future high-level `magmaan(model, data, ...)`
   helper should route `missing = "fiml"` to `fit_fiml()` but still leave SEs,
   tests, and fit measures as explicit post-fit calls.
 - Keep EM as a fallback/initializer only if direct LBFGS fails on representative
