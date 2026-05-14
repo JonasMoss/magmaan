@@ -1,0 +1,258 @@
+model_spec <- function(syntax,
+                       ...,
+                       auto_var = TRUE,
+                       auto_cov_lv_x = TRUE,
+                       auto_cov_y = FALSE,
+                       auto_fix_first = TRUE,
+                       std_lv = FALSE,
+                       effect_coding = FALSE,
+                       fixed_x = TRUE,
+                       meanstructure = FALSE,
+                       group = NULL,
+                       group_labels = NULL) {
+  dots <- list(...)
+  if (length(dots)) {
+    stop("model_spec(): unused arguments: ", paste(names(dots), collapse = ", "))
+  }
+  group_var <- if (is.null(group)) "" else as.character(group)[1L]
+  n_groups <- if (is.null(group_labels)) 1L else length(group_labels)
+  if (nzchar(group_var) && n_groups < 1L) n_groups <- 1L
+
+  opts <- list(
+    auto_var = auto_var,
+    auto_cov_lv_x = auto_cov_lv_x,
+    auto_cov_y = auto_cov_y,
+    auto_fix_first = auto_fix_first,
+    std_lv = std_lv,
+    effect_coding = effect_coding,
+    fixed_x = fixed_x,
+    meanstructure = meanstructure
+  )
+  partable <- lavaan_lavaanify(
+    syntax,
+    auto_var = auto_var,
+    auto_cov_lv_x = auto_cov_lv_x,
+    auto_cov_y = auto_cov_y,
+    auto_fix_first = auto_fix_first,
+    std_lv = std_lv,
+    effect_coding = effect_coding,
+    fixed_x = fixed_x,
+    meanstructure = meanstructure,
+    n_groups = n_groups,
+    group_var = group_var,
+    group_labels = group_labels
+  )
+
+  out <- list(
+    syntax = syntax,
+    partable = partable,
+    options = opts,
+    group_var = group_var,
+    group_labels = group_labels
+  )
+  class(out) <- c("magmaan_model_spec", "list")
+  out
+}
+
+as_magmaan_model_spec <- function(model) {
+  if (inherits(model, "magmaan_model_spec")) return(model)
+  if (is.character(model) && length(model) == 1L) return(model_spec(model))
+  if (is.data.frame(model)) {
+    out <- list(
+      syntax = NULL,
+      partable = model,
+      options = list(),
+      group_var = attr(model, "magmaan.group_var", exact = TRUE) %||% "",
+      group_labels = attr(model, "magmaan.group_labels", exact = TRUE)
+    )
+    class(out) <- c("magmaan_model_spec", "list")
+    return(out)
+  }
+  stop("expected a magmaan model spec, model syntax string, or partable data.frame")
+}
+
+df_to_data <- function(x, model, group = NULL, missing = c("listwise", "error"),
+                       scaling = c("n", "n-1")) {
+  missing <- match.arg(missing)
+  scaling <- match.arg(scaling)
+  if (!is.data.frame(x)) {
+    stop("df_to_data(): `x` must be a data.frame")
+  }
+  model <- as_magmaan_model_spec(model)
+  group_var <- if (is.null(group)) model$group_var else as.character(group)[1L]
+  if (is.null(group_var) || !nzchar(group_var)) group_var <- ""
+
+  if (nzchar(group_var)) {
+    if (!group_var %in% names(x)) {
+      stop("df_to_data(): grouping column not found: ", group_var)
+    }
+    g <- x[[group_var]]
+    if (anyNA(g)) stop("df_to_data(): grouping column contains missing values")
+    labels <- model$group_labels
+    if (is.null(labels) || !length(labels)) {
+      labels <- if (is.factor(g)) levels(g) else unique(as.character(g))
+    }
+    labels <- as.character(labels)
+    if (!all(as.character(g) %in% labels)) {
+      stop("df_to_data(): data contains groups outside `group_labels`: ",
+           paste(setdiff(unique(as.character(g)), labels), collapse = ", "))
+    }
+    if (!is.null(model$syntax)) {
+      model <- do.call(
+        model_spec,
+        c(list(syntax = model$syntax,
+               group = group_var,
+               group_labels = labels),
+          model$options)
+      )
+    }
+  } else {
+    labels <- character()
+  }
+
+  rep <- model_matrix_rep(model$partable)
+  ov_by_group <- rep$ov_names
+  if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
+
+  make_block <- function(rows, ov, label = NULL) {
+    miss_cols <- setdiff(ov, names(x))
+    if (length(miss_cols)) {
+      stop("df_to_data(): data is missing observed variables: ",
+           paste(miss_cols, collapse = ", "))
+    }
+    block <- x[rows, ov, drop = FALSE]
+    bad_type <- names(block)[!vapply(block, is.numeric, logical(1))]
+    if (length(bad_type)) {
+      stop("df_to_data(): observed variables must be numeric: ",
+           paste(bad_type, collapse = ", "))
+    }
+    cc <- stats::complete.cases(block)
+    if (!all(cc)) {
+      if (missing == "error") {
+        suffix <- if (is.null(label)) "" else paste0(" in group '", label, "'")
+        stop("df_to_data(): missing observed values", suffix)
+      }
+      block <- block[cc, , drop = FALSE]
+    }
+    if (nrow(block) < 2L) {
+      suffix <- if (is.null(label)) "" else paste0(" in group '", label, "'")
+      stop("df_to_data(): fewer than 2 complete rows", suffix)
+    }
+    as.matrix(block)
+  }
+
+  if (nzchar(group_var)) {
+    if (length(ov_by_group) != length(labels)) {
+      stop("df_to_data(): model has ", length(ov_by_group),
+           " group block(s), but data has ", length(labels), " group label(s)")
+    }
+    g_chr <- as.character(x[[group_var]])
+    X <- Map(function(label, ov) {
+      make_block(g_chr == label, ov, label)
+    }, labels, ov_by_group)
+    names(X) <- labels
+  } else {
+    X <- list(make_block(rep(TRUE, nrow(x)), ov_by_group[[1L]]))
+  }
+
+  ss <- data_sample_stats_from_raw(X)
+  if (scaling == "n-1") {
+    for (i in seq_along(ss$S)) {
+      ss$S[[i]] <- ss$S[[i]] * ss$nobs[[i]] / (ss$nobs[[i]] - 1L)
+    }
+  }
+  for (i in seq_along(ss$S)) {
+    nm <- colnames(X[[i]])
+    dimnames(ss$S[[i]]) <- list(nm, nm)
+    if (!is.null(ss$mean)) names(ss$mean[[i]]) <- nm
+  }
+  out <- c(ss, list(
+    X = X,
+    ov_names = ov_by_group,
+    group_var = group_var,
+    group_labels = labels,
+    scaling = scaling
+  ))
+  class(out) <- c("magmaan_data", "list")
+  out
+}
+
+fit_ml <- function(model, data, lbfgs = NULL) {
+  fit_ml_impl(partable_arg(model), sample_stats_arg(data), lbfgs = lbfgs)
+}
+
+fit_uls <- function(model, data, lbfgsb = NULL, bounds = NULL) {
+  fit_uls_impl(partable_arg(model), sample_stats_arg(data),
+               lbfgsb = lbfgsb, bounds = bounds)
+}
+
+fit_gls <- function(model, data, lbfgsb = NULL, bounds = NULL) {
+  fit_gls_impl(partable_arg(model), sample_stats_arg(data),
+               lbfgsb = lbfgsb, bounds = bounds)
+}
+
+fit_wls <- function(model, data, W, lbfgsb = NULL, bounds = NULL) {
+  fit_wls_impl(partable_arg(model), sample_stats_arg(data), W = W,
+               lbfgsb = lbfgsb, bounds = bounds)
+}
+
+fit_uls_snlls <- function(model, data, lbfgsb = NULL, bounds = NULL) {
+  fit_uls_snlls_impl(partable_arg(model), sample_stats_arg(data),
+                     lbfgsb = lbfgsb, bounds = bounds)
+}
+
+fit_gls_snlls <- function(model, data, lbfgsb = NULL, bounds = NULL) {
+  fit_gls_snlls_impl(partable_arg(model), sample_stats_arg(data),
+                     lbfgsb = lbfgsb, bounds = bounds)
+}
+
+fit_wls_snlls <- function(model, data, W, lbfgsb = NULL, bounds = NULL) {
+  fit_wls_snlls_impl(partable_arg(model), sample_stats_arg(data), W = W,
+                     lbfgsb = lbfgsb, bounds = bounds)
+}
+
+fit_uls_ceres <- function(model, data, ceres = NULL, bounds = NULL) {
+  fit_uls_ceres_impl(partable_arg(model), sample_stats_arg(data),
+                     ceres = ceres, bounds = bounds)
+}
+
+fit_gls_ceres <- function(model, data, ceres = NULL, bounds = NULL) {
+  fit_gls_ceres_impl(partable_arg(model), sample_stats_arg(data),
+                     ceres = ceres, bounds = bounds)
+}
+
+fit_wls_ceres <- function(model, data, W, ceres = NULL, bounds = NULL) {
+  fit_wls_ceres_impl(partable_arg(model), sample_stats_arg(data), W = W,
+                     ceres = ceres, bounds = bounds)
+}
+
+fit_uls_snlls_ceres <- function(model, data, ceres = NULL, bounds = NULL) {
+  fit_uls_snlls_ceres_impl(partable_arg(model), sample_stats_arg(data),
+                           ceres = ceres, bounds = bounds)
+}
+
+fit_gls_snlls_ceres <- function(model, data, ceres = NULL, bounds = NULL) {
+  fit_gls_snlls_ceres_impl(partable_arg(model), sample_stats_arg(data),
+                           ceres = ceres, bounds = bounds)
+}
+
+fit_wls_snlls_ceres <- function(model, data, W, ceres = NULL, bounds = NULL) {
+  fit_wls_snlls_ceres_impl(partable_arg(model), sample_stats_arg(data), W = W,
+                           ceres = ceres, bounds = bounds)
+}
+
+partable_arg <- function(model) {
+  if (inherits(model, "magmaan_model_spec")) return(model$partable)
+  model
+}
+
+sample_stats_arg <- function(data) {
+  if (inherits(data, "magmaan_data")) {
+    return(list(S = data$S, mean = data$mean, nobs = data$nobs))
+  }
+  data
+}
+
+`%||%` <- function(x, y) {
+  if (is.null(x)) y else x
+}

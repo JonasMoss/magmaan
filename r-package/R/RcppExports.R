@@ -21,6 +21,58 @@ fit_fit <- function(partable, sample_stats, lbfgs = NULL) {
     .Call(`_magmaan_fit_fit`, partable, sample_stats, lbfgs)
 }
 
+fit_ml_impl <- function(partable, sample_stats, lbfgs = NULL) {
+    .Call(`_magmaan_fit_ml_impl`, partable, sample_stats, lbfgs)
+}
+
+fit_uls_impl <- function(partable, sample_stats, lbfgsb = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_uls_impl`, partable, sample_stats, lbfgsb, bounds)
+}
+
+fit_gls_impl <- function(partable, sample_stats, lbfgsb = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_gls_impl`, partable, sample_stats, lbfgsb, bounds)
+}
+
+fit_wls_impl <- function(partable, sample_stats, W, lbfgsb = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_wls_impl`, partable, sample_stats, W, lbfgsb, bounds)
+}
+
+fit_uls_snlls_impl <- function(partable, sample_stats, lbfgsb = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_uls_snlls_impl`, partable, sample_stats, lbfgsb, bounds)
+}
+
+fit_gls_snlls_impl <- function(partable, sample_stats, lbfgsb = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_gls_snlls_impl`, partable, sample_stats, lbfgsb, bounds)
+}
+
+fit_wls_snlls_impl <- function(partable, sample_stats, W, lbfgsb = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_wls_snlls_impl`, partable, sample_stats, W, lbfgsb, bounds)
+}
+
+fit_uls_ceres_impl <- function(partable, sample_stats, ceres = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_uls_ceres_impl`, partable, sample_stats, ceres, bounds)
+}
+
+fit_uls_snlls_ceres_impl <- function(partable, sample_stats, ceres = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_uls_snlls_ceres_impl`, partable, sample_stats, ceres, bounds)
+}
+
+fit_gls_snlls_ceres_impl <- function(partable, sample_stats, ceres = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_gls_snlls_ceres_impl`, partable, sample_stats, ceres, bounds)
+}
+
+fit_wls_snlls_ceres_impl <- function(partable, sample_stats, W, ceres = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_wls_snlls_ceres_impl`, partable, sample_stats, W, ceres, bounds)
+}
+
+fit_gls_ceres_impl <- function(partable, sample_stats, ceres = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_gls_ceres_impl`, partable, sample_stats, ceres, bounds)
+}
+
+fit_wls_ceres_impl <- function(partable, sample_stats, W, ceres = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_wls_ceres_impl`, partable, sample_stats, W, ceres, bounds)
+}
+
 fit_start_values <- function(partable, sample_stats) {
     .Call(`_magmaan_fit_start_values`, partable, sample_stats)
 }

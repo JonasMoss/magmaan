@@ -9,7 +9,14 @@
 
 #include "internal.hpp"
 
+#include "magmaan/estimate/bounds.hpp"
+#include "magmaan/estimate/snlls.hpp"
 #include "magmaan/estimate/start_values.hpp"
+#include "magmaan/gls/gls.hpp"
+#include "magmaan/gls/uls.hpp"
+#include "magmaan/gls/wls.hpp"
+#include "magmaan/optim/ceres_optimizer.hpp"
+#include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/nt/ml.hpp"
 #include "magmaan/nt/measures.hpp"
 
@@ -69,6 +76,119 @@ Rcpp::DataFrame structural_cells_df(const std::vector<lvm::StructuralCell>& sc) 
   l.attr("class") = "data.frame";
   return Rcpp::DataFrame(l);
 }
+
+Rcpp::List fit_result(Ctx& ctx,
+                      const magmaan::estimate::Estimates& est,
+                      const magmaan::spec::Starts* starts,
+                      const char* estimator) {
+  const std::size_t nb = ctx.samp.S.size();
+  Rcpp::List S_out(static_cast<R_xlen_t>(nb));
+  for (std::size_t b = 0; b < nb; ++b) {
+    Rcpp::NumericMatrix Sb = Rcpp::wrap(ctx.samp.S[b]);
+    Rcpp::CharacterVector nm = Rcpp::wrap(ctx.rep.ov_names[b]);
+    Sb.attr("dimnames") = Rcpp::List::create(nm, nm);
+    S_out[static_cast<R_xlen_t>(b)] = Sb;
+  }
+  SEXP mean_out = R_NilValue;
+  if (!ctx.samp.mean.empty()) {
+    Rcpp::List Ml(static_cast<R_xlen_t>(nb));
+    for (std::size_t b = 0; b < nb; ++b)
+      Ml[static_cast<R_xlen_t>(b)] = Rcpp::wrap(ctx.samp.mean[b]);
+    mean_out = Ml;
+  }
+  Rcpp::IntegerVector nobs_out(static_cast<R_xlen_t>(nb));
+  std::int64_t ntotal = 0;
+  for (std::size_t b = 0; b < nb; ++b) {
+    nobs_out[static_cast<R_xlen_t>(b)] = static_cast<int>(ctx.samp.n_obs[b]);
+    ntotal += ctx.samp.n_obs[b];
+  }
+
+  return Rcpp::List::create(
+      Rcpp::_["converged"]     = true,
+      Rcpp::_["estimator"]     = estimator,
+      Rcpp::_["fmin"]          = est.fmin,
+      Rcpp::_["iterations"]    = est.iterations,
+      Rcpp::_["npar"]          = static_cast<int>(ctx.pt.n_free()),
+      Rcpp::_["ngroups"]       = static_cast<int>(nb),
+      Rcpp::_["ntotal"]        = static_cast<int>(ntotal),
+      Rcpp::_["group_var"]     = ctx.names.group_var,
+      Rcpp::_["group_labels"]  = Rcpp::wrap(ctx.names.group_labels),
+      Rcpp::_["theta"]         = Rcpp::wrap(est.theta),
+      Rcpp::_["ov_names"]      = Rcpp::wrap(ctx.ov_names),
+      Rcpp::_["partable"]      = partable_df(ctx.pt, ctx.names, est, starts),
+      Rcpp::_["S"]             = S_out,
+      Rcpp::_["nobs"]          = nobs_out,
+      Rcpp::_["sample_mean"]   = mean_out,
+      Rcpp::_["meanstructure"] = ctx.meanstructure);
+}
+
+Rcpp::List snlls_fit_result(Ctx& ctx,
+                            const magmaan::estimate::SnllsEstimates& est,
+                            const magmaan::spec::Starts* starts,
+                            const char* estimator,
+                            const char* backend) {
+  Rcpp::List out = fit_result(ctx, est, starts, estimator);
+  out["backend"] = backend;
+  out["snlls_compatible"] = true;
+  out["snlls_nonlinear_npar"] = est.snlls.n_nonlinear;
+  out["snlls_linear_npar"] = est.snlls.n_linear;
+  out["snlls_profile_evaluations"] = est.snlls.profile_evaluations;
+  out["snlls_profile_cache_hits"] = est.snlls.profile_cache_hits;
+  out["snlls_gradient_evaluations"] = est.snlls.gradient_evaluations;
+  out["snlls_jacobian_evaluations"] = est.snlls.jacobian_evaluations;
+  out["snlls_admissible"] = est.snlls.admissible;
+  out["snlls_min_variance"] = std::isfinite(est.snlls.min_variance)
+      ? est.snlls.min_variance
+      : NA_REAL;
+  return out;
+}
+
+magmaan::fit::Bounds bounds_from_nullable(Rcpp::Nullable<Rcpp::List> bounds) {
+  magmaan::fit::Bounds out;
+  if (bounds.isNull()) return out;
+  Rcpp::List b(bounds.get());
+  if (!b.containsElementNamed("lower") || !b.containsElementNamed("upper"))
+    Rcpp::stop("magmaan: bounds must be a list with $lower and $upper");
+  out.lower = Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(b["lower"]));
+  out.upper = Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(b["upper"]));
+  return out;
+}
+
+magmaan::gls::WLS wls_from_arg(SEXP W, std::size_t n_blocks) {
+  std::vector<Eigen::MatrixXd> weights;
+  weights.reserve(n_blocks);
+  if (Rf_isMatrix(W)) {
+    if (n_blocks != 1)
+      Rcpp::stop("magmaan: WLS weights must be a list of %d matrices for a %d-group model",
+                 static_cast<int>(n_blocks), static_cast<int>(n_blocks));
+    weights.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(W)));
+  } else if (TYPEOF(W) == VECSXP) {
+    Rcpp::List Wl(W);
+    if (static_cast<std::size_t>(Wl.size()) != n_blocks)
+      Rcpp::stop("magmaan: WLS weights list has length %d but the model has %d group(s)",
+                 static_cast<int>(Wl.size()), static_cast<int>(n_blocks));
+    for (R_xlen_t b = 0; b < Wl.size(); ++b)
+      weights.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wl[b])));
+  } else {
+    Rcpp::stop("magmaan: WLS weights must be a matrix or a list of matrices");
+  }
+  return magmaan::gls::WLS(std::move(weights));
+}
+
+#ifdef MAGMAAN_WITH_CERES
+magmaan::optim::CeresOptions ceres_opts_from(Rcpp::Nullable<Rcpp::List> ceres) {
+  magmaan::optim::CeresOptions o;
+  if (ceres.isNotNull()) {
+    Rcpp::List l(ceres.get());
+    if (l.containsElementNamed("max_iter")) o.max_iter = Rcpp::as<int>(l["max_iter"]);
+    if (l.containsElementNamed("ftol"))     o.ftol     = Rcpp::as<double>(l["ftol"]);
+    if (l.containsElementNamed("gtol"))     o.gtol     = Rcpp::as<double>(l["gtol"]);
+    if (l.containsElementNamed("ptol"))     o.ptol     = Rcpp::as<double>(l["ptol"]);
+    if (l.containsElementNamed("verbose"))  o.verbose  = Rcpp::as<bool>(l["verbose"]);
+  }
+  return o;
+}
+#endif
 
 }  // namespace
 
@@ -133,44 +253,248 @@ Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats,
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
 
-  const std::size_t nb = ctx.samp.S.size();
-  Rcpp::List S_out(static_cast<R_xlen_t>(nb));
-  for (std::size_t b = 0; b < nb; ++b) {
-    Rcpp::NumericMatrix Sb = Rcpp::wrap(ctx.samp.S[b]);
-    Rcpp::CharacterVector nm = Rcpp::wrap(ctx.rep.ov_names[b]);
-    Sb.attr("dimnames") = Rcpp::List::create(nm, nm);
-    S_out[static_cast<R_xlen_t>(b)] = Sb;
-  }
-  SEXP mean_out = R_NilValue;
-  if (!ctx.samp.mean.empty()) {
-    Rcpp::List Ml(static_cast<R_xlen_t>(nb));
-    for (std::size_t b = 0; b < nb; ++b)
-      Ml[static_cast<R_xlen_t>(b)] = Rcpp::wrap(ctx.samp.mean[b]);
-    mean_out = Ml;
-  }
-  Rcpp::IntegerVector nobs_out(static_cast<R_xlen_t>(nb));
-  std::int64_t ntotal = 0;
-  for (std::size_t b = 0; b < nb; ++b) {
-    nobs_out[static_cast<R_xlen_t>(b)] = static_cast<int>(ctx.samp.n_obs[b]);
-    ntotal += ctx.samp.n_obs[b];
-  }
+  return fit_result(ctx, est, &starts, "ML");
+}
 
-  return Rcpp::List::create(
-      Rcpp::_["converged"]     = true,                  // we stop() on failure
-      Rcpp::_["fmin"]          = est.fmin,
-      Rcpp::_["iterations"]    = est.iterations,
-      Rcpp::_["npar"]          = static_cast<int>(ctx.pt.n_free()),
-      Rcpp::_["ngroups"]       = static_cast<int>(nb),
-      Rcpp::_["ntotal"]        = static_cast<int>(ntotal),
-      Rcpp::_["group_var"]     = ctx.names.group_var,
-      Rcpp::_["group_labels"]  = Rcpp::wrap(ctx.names.group_labels),
-      Rcpp::_["theta"]         = Rcpp::wrap(est.theta),
-      Rcpp::_["ov_names"]      = Rcpp::wrap(ctx.ov_names),
-      Rcpp::_["partable"]      = partable_df(ctx.pt, ctx.names, est, &starts),  // lavaanify cols + est
-      Rcpp::_["S"]             = S_out,
-      Rcpp::_["nobs"]          = nobs_out,
-      Rcpp::_["sample_mean"]   = mean_out,
-      Rcpp::_["meanstructure"] = ctx.meanstructure);
+// fit_ml() — public ML spelling. Mirrors fit_fit(); kept separate so R users can
+// see estimator choice without a dispatcher hiding the C++ path.
+//
+// [[Rcpp::export]]
+Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
+                       Rcpp::Nullable<Rcpp::List> lbfgs = R_NilValue) {
+  return fit_fit(partable, sample_stats, lbfgs);
+}
+
+// fit_uls() — mirrors fit_bounded<ULS, LbfgsBOptimizer>(pt, rep, samp, bounds).
+//
+// [[Rcpp::export]]
+Rcpp::List fit_uls_impl(SEXP partable, Rcpp::List sample_stats,
+                        Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
+                        Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_uls");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  auto e_or = magmaan::estimate::fit_bounded(ctx.pt, ctx.rep, ctx.samp,
+      bounds_from_nullable(bounds), magmaan::gls::ULS{},
+      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return fit_result(ctx, est, &starts, "ULS");
+}
+
+// fit_gls() — mirrors fit_bounded<GLS, LbfgsBOptimizer>(pt, rep, samp, bounds).
+//
+// [[Rcpp::export]]
+Rcpp::List fit_gls_impl(SEXP partable, Rcpp::List sample_stats,
+                        Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
+                        Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  auto e_or = magmaan::estimate::fit_bounded(ctx.pt, ctx.rep, ctx.samp,
+      bounds_from_nullable(bounds), magmaan::gls::GLS{},
+      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return fit_result(ctx, est, &starts, "GLS");
+}
+
+// fit_wls() — mirrors fit_bounded<WLS, LbfgsBOptimizer>(pt, rep, samp, bounds).
+//
+// [[Rcpp::export]]
+Rcpp::List fit_wls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
+                        Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
+                        Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  magmaan::gls::WLS wls = wls_from_arg(W, ctx.samp.S.size());
+  auto e_or = magmaan::estimate::fit_bounded(ctx.pt, ctx.rep, ctx.samp,
+      bounds_from_nullable(bounds), std::move(wls),
+      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return fit_result(ctx, est, &starts, "WLS");
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_uls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
+                              Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
+                              Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_uls_snlls");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  auto e_or = magmaan::estimate::fit_snlls_bounded(ctx.pt, ctx.rep, ctx.samp,
+      bounds_from_nullable(bounds), magmaan::gls::ULS{},
+      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::SnllsEstimates est = std::move(*e_or);
+  return snlls_fit_result(ctx, est, &starts, "ULS-SNLLS", "lbfgsb");
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_gls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
+                              Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
+                              Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls_snlls");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  auto e_or = magmaan::estimate::fit_snlls_bounded(ctx.pt, ctx.rep, ctx.samp,
+      bounds_from_nullable(bounds), magmaan::gls::GLS{},
+      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::SnllsEstimates est = std::move(*e_or);
+  return snlls_fit_result(ctx, est, &starts, "GLS-SNLLS", "lbfgsb");
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_wls_snlls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
+                              Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
+                              Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_snlls");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  magmaan::gls::WLS wls = wls_from_arg(W, ctx.samp.S.size());
+  auto e_or = magmaan::estimate::fit_snlls_bounded(ctx.pt, ctx.rep, ctx.samp,
+      bounds_from_nullable(bounds), std::move(wls),
+      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::SnllsEstimates est = std::move(*e_or);
+  return snlls_fit_result(ctx, est, &starts, "WLS-SNLLS", "lbfgsb");
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_uls_ceres_impl(SEXP partable, Rcpp::List sample_stats,
+                              Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
+                              Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+#ifdef MAGMAAN_WITH_CERES
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_uls_ceres");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  auto e_or = magmaan::estimate::fit_bounded(ctx.pt, ctx.rep, ctx.samp,
+      bounds_from_nullable(bounds), magmaan::gls::ULS{},
+      magmaan::optim::CeresBoundedOptimizer{ceres_opts_from(ceres)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return fit_result(ctx, est, &starts, "ULS");
+#else
+  (void)partable; (void)sample_stats; (void)ceres; (void)bounds;
+  Rcpp::stop("magmaan: Ceres backend is not available in this build");
+#endif
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_uls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats,
+                                    Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
+                                    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+#ifdef MAGMAAN_WITH_CERES
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_uls_snlls_ceres");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  auto e_or = magmaan::estimate::fit_snlls_bounded(ctx.pt, ctx.rep, ctx.samp,
+      bounds_from_nullable(bounds), magmaan::gls::ULS{},
+      magmaan::optim::CeresBoundedOptimizer{ceres_opts_from(ceres)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::SnllsEstimates est = std::move(*e_or);
+  return snlls_fit_result(ctx, est, &starts, "ULS-SNLLS", "ceres");
+#else
+  (void)partable; (void)sample_stats; (void)ceres; (void)bounds;
+  Rcpp::stop("magmaan: Ceres backend is not available in this build");
+#endif
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_gls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats,
+                                    Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
+                                    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+#ifdef MAGMAAN_WITH_CERES
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls_snlls_ceres");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  auto e_or = magmaan::estimate::fit_snlls_bounded(ctx.pt, ctx.rep, ctx.samp,
+      bounds_from_nullable(bounds), magmaan::gls::GLS{},
+      magmaan::optim::CeresBoundedOptimizer{ceres_opts_from(ceres)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::SnllsEstimates est = std::move(*e_or);
+  return snlls_fit_result(ctx, est, &starts, "GLS-SNLLS", "ceres");
+#else
+  (void)partable; (void)sample_stats; (void)ceres; (void)bounds;
+  Rcpp::stop("magmaan: Ceres backend is not available in this build");
+#endif
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_wls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
+                                    Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
+                                    Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+#ifdef MAGMAAN_WITH_CERES
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_snlls_ceres");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  magmaan::gls::WLS wls = wls_from_arg(W, ctx.samp.S.size());
+  auto e_or = magmaan::estimate::fit_snlls_bounded(ctx.pt, ctx.rep, ctx.samp,
+      bounds_from_nullable(bounds), std::move(wls),
+      magmaan::optim::CeresBoundedOptimizer{ceres_opts_from(ceres)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::SnllsEstimates est = std::move(*e_or);
+  return snlls_fit_result(ctx, est, &starts, "WLS-SNLLS", "ceres");
+#else
+  (void)partable; (void)sample_stats; (void)W; (void)ceres; (void)bounds;
+  Rcpp::stop("magmaan: Ceres backend is not available in this build");
+#endif
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_gls_ceres_impl(SEXP partable, Rcpp::List sample_stats,
+                              Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
+                              Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+#ifdef MAGMAAN_WITH_CERES
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls_ceres");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  auto e_or = magmaan::estimate::fit_bounded(ctx.pt, ctx.rep, ctx.samp,
+      bounds_from_nullable(bounds), magmaan::gls::GLS{},
+      magmaan::optim::CeresBoundedOptimizer{ceres_opts_from(ceres)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return fit_result(ctx, est, &starts, "GLS");
+#else
+  (void)partable; (void)sample_stats; (void)ceres; (void)bounds;
+  Rcpp::stop("magmaan: Ceres backend is not available in this build");
+#endif
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_wls_ceres_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
+                              Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
+                              Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+#ifdef MAGMAAN_WITH_CERES
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_ceres");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  magmaan::gls::WLS wls = wls_from_arg(W, ctx.samp.S.size());
+  auto e_or = magmaan::estimate::fit_bounded(ctx.pt, ctx.rep, ctx.samp,
+      bounds_from_nullable(bounds), std::move(wls),
+      magmaan::optim::CeresBoundedOptimizer{ceres_opts_from(ceres)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return fit_result(ctx, est, &starts, "WLS");
+#else
+  (void)partable; (void)sample_stats; (void)W; (void)ceres; (void)bounds;
+  Rcpp::stop("magmaan: Ceres backend is not available in this build");
+#endif
 }
 
 // fit_start_values() — mirrors simple_start_values(pt, rep, samp). Returns the
