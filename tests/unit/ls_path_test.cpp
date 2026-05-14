@@ -11,7 +11,9 @@
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/gls/gls.hpp"
 #include "magmaan/gls/uls.hpp"
+#include "magmaan/gls/wls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -22,7 +24,9 @@ using magmaan::optim::CeresBoundedOptimizer;
 using magmaan::optim::LbfgsBOptimizer;
 using magmaan::optim::LbfgsBOptions;
 using magmaan::data::SampleStats;
+using magmaan::gls::GLS;
 using magmaan::gls::ULS;
+using magmaan::gls::WLS;
 using magmaan::model::build_matrix_rep;
 using magmaan::parse::Parser;
 using magmaan::spec::lavaanify;
@@ -105,6 +109,51 @@ TEST_CASE("LS path: Ceres / LBFGS-B θ̂ parity on a 1F-feasible cov") {
   auto sm_l = ev.sigma(est_lb->theta).value();
   const double diff = (sm_c.sigma[0] - sm_l.sigma[0]).cwiseAbs().maxCoeff();
   CHECK(diff < 1e-4);
+}
+
+TEST_CASE("LS path: fit_bounded<GLS, Ceres> recovers Sigma on a 1F-feasible cov") {
+  auto fp = Parser::parse("f =~ x1 + x2 + x3");
+  REQUIRE(fp.has_value());
+  auto pt = lavaanify(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  SampleStats samp;
+  samp.S = {make_1f_S()};
+  samp.n_obs = {301};
+
+  CeresBoundedOptimizer opt;
+  auto est = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{}, GLS{}, opt);
+  REQUIRE(est.has_value());
+  CHECK(est->fmin < 1e-10);
+
+  auto ev = magmaan::model::ModelEvaluator::build(*pt, *mr).value();
+  auto sm = ev.sigma(est->theta).value();
+  CHECK((samp.S[0] - sm.sigma[0]).cwiseAbs().maxCoeff() < 1e-5);
+}
+
+TEST_CASE("LS path: fit_bounded<WLS, Ceres> recovers Sigma on a 1F-feasible cov") {
+  auto fp = Parser::parse("f =~ x1 + x2 + x3");
+  REQUIRE(fp.has_value());
+  auto pt = lavaanify(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  SampleStats samp;
+  samp.S = {make_1f_S()};
+  samp.n_obs = {301};
+
+  WLS wls({Eigen::MatrixXd::Identity(6, 6)});
+  CeresBoundedOptimizer opt;
+  auto est = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{}, wls, opt);
+  REQUIRE(est.has_value());
+  CHECK(est->fmin < 1e-10);
+
+  auto ev = magmaan::model::ModelEvaluator::build(*pt, *mr).value();
+  auto sm = ev.sigma(est->theta).value();
+  CHECK((samp.S[0] - sm.sigma[0]).cwiseAbs().maxCoeff() < 1e-5);
 }
 
 TEST_CASE("LS path: equality constraints + bounds compose (shared loadings + "
