@@ -28,9 +28,12 @@ The core parser-to-fit pipeline is in place:
   rows are compressed into observed-value patterns, the direct
   observed-pattern normal-theory objective and analytic gradient reuse the
   existing `ModelEvaluator` Jacobians, and `fit_fiml()` optimizes with LBFGS.
-  This first slice targets point estimates only; saturated/H1 constants,
-  lavaan chi-square/log-likelihood reporting, robust missing-data corrections,
-  and R wrappers remain open.
+  Single-group checked-in fixtures now compare `fit_fiml()` point estimates
+  against lavaan `missing = "fiml"` for one-factor CFA, three-factor CFA, and
+  shared-label equality CFA with explicit mean structures. Saturated/H1
+  constants, lavaan chi-square/log-likelihood reporting, multi-group
+  missing-data parity, robust missing-data corrections, and R wrappers remain
+  open.
 - ULS, GLS, and explicit-weight WLS discrepancies, each with scalar
   value/gradient and least-squares residual/Jacobian interfaces.
 - Bounded least-squares fitting through LBFGS-B and optional Ceres, including
@@ -86,12 +89,8 @@ observed/missing mask, and the optimizer consumes pattern summaries.
 
 Open work:
 
-- Add checked-in lavaan FIML fixtures under a dedicated fixture family, generated
-  from deterministic missingness patterns on Holzinger data with
-  `missing = "fiml"` and explicit mean structures.
-- Compare `fit_fiml()` point estimates against lavaan for single-group CFA,
-  three-factor CFA, equality-constrained CFA, and then multi-group missing-data
-  cases.
+- Extend the checked-in lavaan FIML fixture family beyond the current
+  single-group point-estimate tranche to multi-group missing-data cases.
 - Add saturated/H1 likelihood accounting so FIML fit statistics, log-likelihood,
   AIC/BIC, and nested-test inputs have lavaan-compatible constants instead of
   only the optimizer deviance.
