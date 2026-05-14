@@ -70,6 +70,16 @@ bool finite_json(const nlohmann::json& j) {
   return !j.is_null() && j.is_number() && std::isfinite(j.get<double>());
 }
 
+Eigen::VectorXd vector_from_json(const nlohmann::json& j) {
+  Eigen::VectorXd out(static_cast<Eigen::Index>(j.size()));
+  for (Eigen::Index i = 0; i < out.size(); ++i) {
+    out(i) = j[static_cast<std::size_t>(i)].is_null()
+        ? std::numeric_limits<double>::quiet_NaN()
+        : j[static_cast<std::size_t>(i)].get<double>();
+  }
+  return out;
+}
+
 }  // namespace
 
 TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
@@ -273,6 +283,53 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
           ok = false;
           break;
         }
+      }
+    }
+    if (exp.contains("se_robust_huberwhite") &&
+        !exp["se_robust_huberwhite"].is_null() &&
+        exp.contains("mlr_chisq_scaled") &&
+        finite_json(exp["mlr_chisq_scaled"]) &&
+        df > 0) {
+      auto rob_or = magmaan::nt::fiml::fiml_robust_mlr(
+          *pt, *mr, raw, est, df, fx.chi2);
+      if (!rob_or.has_value()) {
+        failures.push_back(id + ": fiml_robust_mlr — " +
+                           rob_or.error().detail);
+        ok = false;
+      } else {
+        const Eigen::VectorXd lavaan_se =
+            vector_from_json(exp["se_robust_huberwhite"]);
+        if (lavaan_se.size() != rob_or->se.size()) {
+          failures.push_back(id + ": robust SE length mismatch");
+          ok = false;
+        } else {
+          double d_se = 0.0;
+          for (Eigen::Index k = 0; k < lavaan_se.size(); ++k) {
+            if (!std::isfinite(lavaan_se(k))) continue;
+            d_se = std::max(d_se, std::abs(lavaan_se(k) - rob_or->se(k)));
+          }
+          if (d_se > 3e-4) {
+            failures.push_back(id + ": robust SE max diff " +
+                               std::to_string(d_se));
+            ok = false;
+          }
+        }
+        auto robust_cmp = [&](const char* label, double got,
+                              const char* key, double tol) {
+          if (!exp.contains(key) || !finite_json(exp[key])) return true;
+          const double want = exp[key].get<double>();
+          const double d = std::abs(got - want);
+          if (d <= tol * std::max(1.0, std::abs(want))) return true;
+          failures.push_back(id + ": " + std::string(label) +
+                             " diff " + std::to_string(d));
+          return false;
+        };
+        ok = robust_cmp("mlr_chisq_scaled", rob_or->chisq_scaled,
+                        "mlr_chisq_scaled", 5e-3) && ok;
+        ok = robust_cmp("mlr_scaling_factor", rob_or->scaling_factor,
+                        "mlr_scaling_factor", 5e-3) && ok;
+        ok = robust_cmp("mlr_trace_ugamma", rob_or->trace_ugamma,
+                        "mlr_trace_ugamma", 5e-3) && ok;
       }
     }
     if (ok) ++passed;
