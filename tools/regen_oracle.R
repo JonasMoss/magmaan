@@ -714,6 +714,9 @@ make_ord_df <- function(n, cuts_by_var, seed = 1L, two_factor = FALSE) {
   z[, 2] <- 0.55 * z[, 1] + sqrt(1 - 0.55^2) * z[, 2]
   z[, 3] <- 0.40 * z[, 1] + 0.25 * z[, 2] + sqrt(0.78) * z[, 3]
   z[, 4] <- 0.30 * z[, 1] + 0.20 * z[, 2] + sqrt(0.87) * z[, 4]
+  if (p >= 5L) {
+    z[, 5] <- 0.45 * z[, 1] + 0.15 * z[, 2] + sqrt(0.77) * z[, 5]
+  }
   if (two_factor) {
     z[, 3] <- 0.25 * z[, 1] + sqrt(0.94) * z[, 3]
     z[, 4] <- 0.50 * z[, 3] + sqrt(0.75) * z[, 4]
@@ -841,7 +844,27 @@ ordinal_cases <- list(
        },
        ordered = paste0("x", 1:4),
        group = "school",
-       fit = TRUE)
+       fit = TRUE),
+  list(id = "0005_near_empty_5cat_cfa",
+       model = ordinal_model_4,
+       data = make_ord_df(650, list(c(-2.45, -0.35, 0.45, 2.45),
+                                    c(-2.35, -0.20, 0.70, 2.35),
+                                    c(-2.30, -0.60, 0.30, 2.30),
+                                    c(-2.40, -0.10, 0.55, 2.40)),
+                          seed = 57L),
+       ordered = paste0("x", 1:4),
+       group = NULL,
+       fit = TRUE),
+  list(id = "0006_equal_loading_3cat_cfa",
+       model = paste("f =~ x1 + a*x2 + a*x3 + x4 + x5", sep = "\n"),
+       data = make_ord_df(560, list(c(-0.70, 0.35), c(-0.55, 0.60),
+                                    c(-0.85, 0.20), c(-0.45, 0.75),
+                                    c(-0.65, 0.50)),
+                          seed = 61L),
+       ordered = paste0("x", 1:5),
+       group = NULL,
+       fit = TRUE,
+       fit_estimators = c("DWLS"))
 )
 
 regenerated_ord <- character(0)
@@ -878,13 +901,17 @@ for (oc in ordinal_cases) {
 
   fits <- NULL
   if (isTRUE(oc$fit)) {
-    fit_dwls <- do.call(cfa, c(list(model = oc$model, data = df, ordered = ov,
-                                    estimator = "DWLS",
-                                    parameterization = "delta"),
-                               if (nzchar(group_var)) list(group = group_var) else list()))
-    fit_wls <- fit_for_stats
-    fits <- list(DWLS = ordinal_fit_json(fit_dwls),
-                 WLS = ordinal_fit_json(fit_wls))
+    estimators <- oc$fit_estimators
+    if (is.null(estimators)) estimators <- c("DWLS", "WLS")
+    fits <- list()
+    if ("DWLS" %in% estimators) {
+      fit_dwls <- do.call(cfa, c(list(model = oc$model, data = df, ordered = ov,
+                                      estimator = "DWLS",
+                                      parameterization = "delta"),
+                                 if (nzchar(group_var)) list(group = group_var) else list()))
+      fits$DWLS <- ordinal_fit_json(fit_dwls)
+    }
+    if ("WLS" %in% estimators) fits$WLS <- ordinal_fit_json(fit_for_stats)
   }
 
   payload <- list(

@@ -130,6 +130,11 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
     for (j in seq_along(ov)) {
       v <- block[[ov[[j]]]]
       if (is.factor(v)) {
+        counts <- tabulate(as.integer(v), nbins = nlevels(v))
+        if (any(counts == 0L)) {
+          suffix <- if (is.null(label)) "" else paste0(" in group '", label, "'")
+          stop("data_ordinal_stats_from_df(): empty ordinal category for ", ov[[j]], suffix)
+        }
         mat[, j] <- as.integer(v)
       } else {
         vals <- sort(unique(v))
@@ -141,6 +146,10 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
 
   if (nzchar(group_var)) {
     g_chr <- as.character(x[[group_var]])
+    if (!all(g_chr %in% labels)) {
+      stop("data_ordinal_stats_from_df(): data contains groups outside `group_labels`: ",
+           paste(setdiff(unique(g_chr), labels), collapse = ", "))
+    }
     X <- Map(function(label, ov) make_block(g_chr == label, ov, label), labels, ov_by_group)
     names(X) <- labels
   } else {
