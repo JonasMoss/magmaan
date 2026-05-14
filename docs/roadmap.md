@@ -41,6 +41,9 @@ Current cleanup status:
 - [x] Add transition headers for the target namespace map. The old public
       includes still compile; new code can start including `spec/`,
       `lavaan/`, `estimate/`, `optim/`, `nt/`, `gls/`, and `data/`.
+- [x] Convert C++ tests and R binding internals to the target public headers
+      and namespaces, with one focused compatibility test keeping old
+      `fit/` and `partable/` includes alive for the transition window.
 - [ ] Mechanically move implementation files and primary definitions to the
       target namespaces. The transition headers are currently aliases only.
 - [ ] Continue replacing R fit-object-only wrappers with primitive signatures,

@@ -9,9 +9,9 @@
 
 #include "internal.hpp"
 
-#include "magmaan/fit/start_values.hpp"
-#include "magmaan/fit/ml.hpp"
-#include "magmaan/fit/fit_measures.hpp"
+#include "magmaan/estimate/start_values.hpp"
+#include "magmaan/nt/ml.hpp"
+#include "magmaan/nt/measures.hpp"
 
 // [[Rcpp::depends(RcppEigen)]]
 
@@ -86,7 +86,7 @@ Rcpp::DataFrame structural_cells_df(const std::vector<lvm::StructuralCell>& sc) 
 //
 // [[Rcpp::export]]
 Rcpp::List model_matrix_rep(SEXP partable) {
-  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "model_matrix_rep");
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "model_matrix_rep");
   auto rep_or = lvm::build_matrix_rep(parsed.structure, &parsed.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
   const lvm::MatrixRep& rep = *rep_or;
@@ -122,16 +122,16 @@ Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats,
   // `==` / shared-label equality rows are enforced by fit() (reparam θ = K·α);
   // `<` / `>` rows and arbitrary-expression `==` rows make fit() error with a
   // clear message; `:=` rows are ignored during the fit (post-fit quantities).
-  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_fit");
-  lvp::Starts starts = std::move(parsed.starts);
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_fit");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
 
-  auto e_or = lvf::fit<lvf::ML, lvf::LbfgsOptimizer>(
-      ctx.pt, ctx.rep, ctx.samp, lvf::ML{},
-      lvf::LbfgsOptimizer{lbfgs_opts_from(lbfgs)}, starts);
+  auto e_or = magmaan::estimate::fit<magmaan::nt::ml::ML, magmaan::optim::LbfgsOptimizer>(
+      ctx.pt, ctx.rep, ctx.samp, magmaan::nt::ml::ML{},
+      magmaan::optim::LbfgsOptimizer{lbfgs_opts_from(lbfgs)}, starts);
   if (!e_or.has_value()) stop_fit(e_or.error());
-  const lvf::Estimates est = std::move(*e_or);
+  const magmaan::estimate::Estimates est = std::move(*e_or);
 
   const std::size_t nb = ctx.samp.S.size();
   Rcpp::List S_out(static_cast<R_xlen_t>(nb));
@@ -179,11 +179,11 @@ Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats,
 //
 // [[Rcpp::export]]
 Rcpp::NumericVector fit_start_values(SEXP partable, Rcpp::List sample_stats) {
-  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_start_values");
-  lvp::Starts starts = std::move(parsed.starts);
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_start_values");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto sv_or = lvf::simple_start_values(ctx.pt, ctx.rep, ctx.samp, starts);
+  auto sv_or = magmaan::estimate::simple_start_values(ctx.pt, ctx.rep, ctx.samp, starts);
   if (!sv_or.has_value()) stop_fit(sv_or.error());
   return Rcpp::wrap(*sv_or);
 }
@@ -195,7 +195,7 @@ Rcpp::NumericVector fit_start_values(SEXP partable, Rcpp::List sample_stats) {
 // [[Rcpp::export]]
 Rcpp::List model_implied(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
-  const lvf::Estimates est = est_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
   auto ev_or = lvm::ModelEvaluator::build(ctx.pt, ctx.rep);
   if (!ev_or.has_value()) stop_model(ev_or.error());
   const lvm::ModelEvaluator ev = std::move(*ev_or);
@@ -218,8 +218,8 @@ Rcpp::List model_implied(Rcpp::List fit) {
 // [[Rcpp::export]]
 Rcpp::NumericMatrix infer_information_expected(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
-  const lvf::Estimates est = est_from_fit(fit);
-  auto r = lvf::information_expected(ctx.pt, ctx.rep, ctx.samp, est);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  auto r = magmaan::nt::infer::information_expected(ctx.pt, ctx.rep, ctx.samp, est);
   if (!r.has_value()) stop_post(r.error());
   return Rcpp::wrap(*r);
 }
@@ -232,8 +232,8 @@ Rcpp::NumericMatrix infer_information_expected(Rcpp::List fit) {
 Rcpp::NumericMatrix infer_information_observed_fd(Rcpp::List fit,
                                                   double h_step = 1e-4) {
   Ctx ctx = ctx_from_fit(fit);
-  const lvf::Estimates est = est_from_fit(fit);
-  auto r = lvf::information_observed_fd(ctx.pt, ctx.rep, ctx.samp, est, h_step);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  auto r = magmaan::nt::infer::information_observed_fd(ctx.pt, ctx.rep, ctx.samp, est, h_step);
   if (!r.has_value()) stop_post(r.error());
   return Rcpp::wrap(*r);
 }
@@ -245,8 +245,8 @@ Rcpp::NumericMatrix infer_information_observed_fd(Rcpp::List fit,
 // [[Rcpp::export]]
 Rcpp::NumericMatrix infer_information_observed_analytic(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
-  const lvf::Estimates est = est_from_fit(fit);
-  auto r = lvf::information_observed_analytic(ctx.pt, ctx.rep, ctx.samp, est);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  auto r = magmaan::nt::infer::information_observed_analytic(ctx.pt, ctx.rep, ctx.samp, est);
   if (!r.has_value()) stop_post(r.error());
   return Rcpp::wrap(*r);
 }
@@ -261,7 +261,7 @@ Rcpp::NumericMatrix infer_information_observed_analytic(Rcpp::List fit) {
 Rcpp::NumericMatrix infer_vcov(Rcpp::NumericMatrix info, Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
   const Eigen::MatrixXd info_m = Rcpp::as<Eigen::MatrixXd>(info);
-  auto r = lvf::vcov(info_m, ctx.pt);
+  auto r = magmaan::nt::infer::vcov(info_m, ctx.pt);
   if (!r.has_value()) stop_post(r.error());
   return Rcpp::wrap(*r);
 }
@@ -272,7 +272,7 @@ Rcpp::NumericMatrix infer_vcov(Rcpp::NumericMatrix info, Rcpp::List fit) {
 // [[Rcpp::export]]
 Rcpp::NumericVector infer_se(Rcpp::NumericMatrix vcov) {
   const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
-  return Rcpp::wrap(lvf::se(vcov_m));
+  return Rcpp::wrap(magmaan::nt::infer::se(vcov_m));
 }
 
 // infer_chi2_stat() — mirrors chi2_stat(samp, est). Returns N_total · F_ML(θ̂).
@@ -284,13 +284,13 @@ Rcpp::NumericVector infer_se(Rcpp::NumericMatrix vcov) {
 double infer_chi2_stat(Rcpp::List sample_stats, double fmin) {
   if (!sample_stats.containsElementNamed("nobs"))
     Rcpp::stop("magmaan: sample_stats must contain $nobs");
-  lvf::SampleStats samp;
+  magmaan::data::SampleStats samp;
   Rcpp::IntegerVector nv = Rcpp::as<Rcpp::IntegerVector>(sample_stats["nobs"]);
   for (R_xlen_t i = 0; i < nv.size(); ++i)
     samp.n_obs.push_back(static_cast<std::int64_t>(nv[i]));
-  lvf::Estimates est;
+  magmaan::estimate::Estimates est;
   est.fmin = fmin;
-  return lvf::chi2_stat(samp, est);
+  return magmaan::nt::infer::chi2_stat(samp, est);
 }
 
 // infer_df_stat() — mirrors df_stat(pt, samp). Returns Σ_b p_b(p_b+1)/2 (+ means)
@@ -299,10 +299,10 @@ double infer_chi2_stat(Rcpp::List sample_stats, double fmin) {
 //
 // [[Rcpp::export]]
 int infer_df_stat(SEXP partable, Rcpp::List sample_stats) {
-  lvp::ParsedLavaanParTable parsed = partable_from_arg(partable, "infer_df_stat");
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "infer_df_stat");
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto r = lvf::df_stat(ctx.pt, ctx.samp);
+  auto r = magmaan::nt::infer::df_stat(ctx.pt, ctx.samp);
   if (!r.has_value()) stop_post(r.error());
   return *r;
 }
@@ -313,7 +313,7 @@ int infer_df_stat(SEXP partable, Rcpp::List sample_stats) {
 Rcpp::List infer_baseline(Rcpp::List sample_stats) {
   if (!sample_stats.containsElementNamed("S") || !sample_stats.containsElementNamed("nobs"))
     Rcpp::stop("magmaan: sample_stats must contain $S and $nobs");
-  lvf::SampleStats samp;
+  magmaan::data::SampleStats samp;
   Rcpp::List Sl(sample_stats["S"]);
   Rcpp::IntegerVector nv = Rcpp::as<Rcpp::IntegerVector>(sample_stats["nobs"]);
   if (Sl.size() != nv.size())
@@ -322,7 +322,7 @@ Rcpp::List infer_baseline(Rcpp::List sample_stats) {
     samp.S.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Sl[b])));
     samp.n_obs.push_back(static_cast<std::int64_t>(nv[b]));
   }
-  const lvf::BaselineFit bl = lvf::baseline_chi2(samp);
+  const magmaan::nt::measures::BaselineFit bl = magmaan::nt::measures::baseline_chi2(samp);
   return Rcpp::List::create(Rcpp::_["chi2"] = bl.chi2, Rcpp::_["df"] = bl.df);
 }
 
@@ -335,12 +335,12 @@ Rcpp::List infer_baseline(Rcpp::List sample_stats) {
 Rcpp::List measures_fit(Rcpp::List fit, double chi2, int df,
                               Rcpp::List baseline) {
   Ctx ctx = ctx_from_fit(fit);
-  lvf::BaselineFit bl;
+  magmaan::nt::measures::BaselineFit bl;
   bl.chi2 = Rcpp::as<double>(baseline["chi2"]);
   bl.df   = Rcpp::as<int>(baseline["df"]);
-  const lvf::FitMeasures fm = lvf::fit_measures(chi2, df, bl, ctx.samp);
-  const lvf::Estimates   est = est_from_fit(fit);
-  auto fx = lvf::fit_extras(ctx.pt, ctx.rep, ctx.samp, est);
+  const magmaan::nt::measures::FitMeasures fm = magmaan::nt::measures::fit_measures(chi2, df, bl, ctx.samp);
+  const magmaan::estimate::Estimates   est = est_from_fit(fit);
+  auto fx = magmaan::nt::measures::fit_extras(ctx.pt, ctx.rep, ctx.samp, est);
   const bool have = fx.has_value();
   return Rcpp::List::create(
       Rcpp::_["cfi"]               = fm.cfi,
@@ -363,9 +363,9 @@ Rcpp::List measures_fit(Rcpp::List fit, double chi2, int df,
 //
 // [[Rcpp::export]]
 Rcpp::List infer_z_test(Rcpp::List fit, Rcpp::NumericVector se) {
-  const lvf::Estimates est = est_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
   const Eigen::VectorXd se_v = Rcpp::as<Eigen::VectorXd>(se);
-  const lvf::ZTestResult zt = lvf::z_test(est, se_v);
+  const magmaan::nt::infer::ZTestResult zt = magmaan::nt::infer::z_test(est, se_v);
   return Rcpp::List::create(Rcpp::_["z"] = Rcpp::wrap(zt.z),
                             Rcpp::_["pvalue"] = Rcpp::wrap(zt.p_value));
 }
@@ -382,7 +382,7 @@ Rcpp::NumericVector infer_chi2_pvalue(Rcpp::NumericVector chi2, Rcpp::IntegerVec
   for (R_xlen_t i = 0; i < n; ++i) {
     const double c = chi2[i];
     const int d = df[df.size() == 1 ? 0 : (i % df.size())];
-    out[i] = (ISNA(c) || d == NA_INTEGER) ? NA_REAL : lvf::chi2_pvalue(c, d);
+    out[i] = (ISNA(c) || d == NA_INTEGER) ? NA_REAL : magmaan::nt::infer::chi2_pvalue(c, d);
   }
   return out;
 }
@@ -395,7 +395,7 @@ Rcpp::NumericVector infer_chi2_pvalue(Rcpp::NumericVector chi2, Rcpp::IntegerVec
 Rcpp::List infer_wald_test(Rcpp::List fit, Rcpp::NumericMatrix R,
                            Rcpp::NumericMatrix vcov,
                            Rcpp::Nullable<Rcpp::NumericVector> q = R_NilValue) {
-  const lvf::Estimates est = est_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
   Eigen::MatrixXd Rmat = Rcpp::as<Eigen::MatrixXd>(R);
   {
     Rcpp::List pt_df(fit["partable"]);
@@ -410,10 +410,10 @@ Rcpp::List infer_wald_test(Rcpp::List fit, Rcpp::NumericMatrix R,
   if (qv.size() != Rmat.rows())
     Rcpp::stop("magmaan: q must have length %d (= nrow(R))", static_cast<int>(Rmat.rows()));
   Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
-  auto w_or = lvf::wald_test(Rmat, qv, est, vcov_m);
+  auto w_or = magmaan::nt::infer::wald_test(Rmat, qv, est, vcov_m);
   if (!w_or.has_value()) stop_post(w_or.error());
   return Rcpp::List::create(Rcpp::_["chi2"] = w_or->chi2, Rcpp::_["df"] = w_or->df,
-                            Rcpp::_["pvalue"] = lvf::chi2_pvalue(w_or->chi2, w_or->df));
+                            Rcpp::_["pvalue"] = magmaan::nt::infer::chi2_pvalue(w_or->chi2, w_or->df));
 }
 
 // infer_browne_residual_nt() — mirrors browne_residual_nt(pt, rep, samp, est).
@@ -423,8 +423,8 @@ Rcpp::List infer_wald_test(Rcpp::List fit, Rcpp::NumericMatrix R,
 // [[Rcpp::export]]
 Rcpp::List infer_browne_residual_nt(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
-  const lvf::Estimates est = est_from_fit(fit);
-  auto s_or = lvf::browne_residual_nt(ctx.pt, ctx.rep, ctx.samp, est);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  auto s_or = magmaan::nt::infer::browne_residual_nt(ctx.pt, ctx.rep, ctx.samp, est);
   if (!s_or.has_value()) stop_post(s_or.error());
   return Rcpp::List::create(Rcpp::_["statistic"] = *s_or);
 }
@@ -444,7 +444,7 @@ Rcpp::List infer_rls_chi2(Rcpp::List fit, Rcpp::List implied) {
     for (R_xlen_t b = 0; b < m.size(); ++b)
       im.mu.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(m[b])));
   }
-  auto s_or = lvf::rls_chi2(ctx.samp, im);
+  auto s_or = magmaan::nt::infer::rls_chi2(ctx.samp, im);
   if (!s_or.has_value()) stop_post(s_or.error());
   return Rcpp::List::create(Rcpp::_["statistic"] = *s_or);
 }

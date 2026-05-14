@@ -26,6 +26,20 @@
 #include "magmaan/spec/partable.hpp"
 #include "magmaan/spec/start_hints.hpp"
 
+// Focused old-header coverage for the transition window.
+#include "magmaan/fit/constraints.hpp"
+#include "magmaan/fit/fit.hpp"
+#include "magmaan/fit/lbfgs_optimizer.hpp"
+#include "magmaan/fit/ml.hpp"
+#include "magmaan/fit/raw_data.hpp"
+#include "magmaan/fit/robust.hpp"
+#include "magmaan/fit/standardized.hpp"
+#include "magmaan/fit/uls.hpp"
+#include "magmaan/partable/lavaan_view.hpp"
+#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/partable/lin_constraints.hpp"
+#include "magmaan/partable/partable.hpp"
+
 TEST_CASE("transitional public namespace aliases expose existing API types") {
   static_assert(std::is_same_v<magmaan::spec::LatentStructure,
                                magmaan::partable::LatentStructure>);
@@ -71,8 +85,8 @@ TEST_CASE("transitional public namespace aliases expose existing API types") {
                                magmaan::fit::StandardizedSolution>);
   static_assert(std::is_same_v<magmaan::nt::robust::SatorraBentlerResult,
                                magmaan::fit::SatorraBentlerResult>);
-  static_assert(std::is_same_v<magmaan::nt::infer::DefinedParams,
-                               magmaan::fit::DefinedParams>);
+  static_assert(std::is_same_v<magmaan::fit::DefinedParams,
+                               magmaan::nt::effects::DefinedParams>);
 
   CHECK(true);
 }

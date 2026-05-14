@@ -12,13 +12,13 @@
 
 #include <nlohmann/json.hpp>
 
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/fit_measures.hpp"
-#include "magmaan/fit/inference.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/nt/measures.hpp"
+#include "magmaan/nt/infer.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 namespace {
 
@@ -35,11 +35,11 @@ Eigen::MatrixXd random_pd(std::mt19937& rng, Eigen::Index p) {
 TEST_CASE("baseline_chi2: closed form matches log|diag(S)| − log|S|") {
   std::mt19937 rng(2026);
   Eigen::MatrixXd S = random_pd(rng, 4);
-  magmaan::fit::SampleStats samp;
+  magmaan::data::SampleStats samp;
   samp.S     = {S};
   samp.n_obs = {200};
 
-  auto bl = magmaan::fit::baseline_chi2(samp);
+  auto bl = magmaan::nt::measures::baseline_chi2(samp);
 
   // Hand calculation.
   Eigen::LLT<Eigen::MatrixXd> llt(S);
@@ -62,7 +62,7 @@ TEST_CASE("fit_measures: CFI, TLI, RMSEA on a known nontrivial fit") {
       "textual =~ x4 + x5 + x6\n"
       "speed =~ x7 + x8 + x9");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::partable::lavaanify(*fp);  REQUIRE(pt.has_value());
+  auto pt = magmaan::spec::lavaanify(*fp);  REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt); REQUIRE(mr.has_value());
 
   std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
@@ -78,15 +78,15 @@ TEST_CASE("fit_measures: CFI, TLI, RMSEA on a known nontrivial fit") {
     for (Eigen::Index c = 0; c < p; ++c)
       S(r, c) = M[static_cast<std::size_t>(r)]
                  [static_cast<std::size_t>(c)].get<double>();
-  magmaan::fit::SampleStats samp;
+  magmaan::data::SampleStats samp;
   samp.S = {S}; samp.n_obs = {j["n_obs"].get<std::int64_t>()};
 
-  auto est   = magmaan::fit::fit(*pt, *mr, samp).value();
-  auto chi2  = magmaan::fit::chi2_stat(samp, est);
-  auto df    = magmaan::fit::df_stat(*pt, samp).value();
-  auto bl    = magmaan::fit::baseline_chi2(samp);
+  auto est   = magmaan::estimate::fit(*pt, *mr, samp).value();
+  auto chi2  = magmaan::nt::infer::chi2_stat(samp, est);
+  auto df    = magmaan::nt::infer::df_stat(*pt, samp).value();
+  auto bl    = magmaan::nt::measures::baseline_chi2(samp);
 
-  auto fm = magmaan::fit::fit_measures(chi2, df, bl, samp);
+  auto fm = magmaan::nt::measures::fit_measures(chi2, df, bl, samp);
 
   // Sanity checks: all measures in expected ranges for a non-trivial CFA fit.
   CHECK(df == 24);
@@ -110,7 +110,7 @@ TEST_CASE("fit_measures: CFI, TLI, RMSEA on a known nontrivial fit") {
   // fit_extras: SRMR + log-likelihood + AIC/BIC. Lavaan reports
   //   srmr ≈ 0.06520, logl ≈ -3737.745, AIC ≈ 7517.490, BIC ≈ 7595.339,
   //   BIC2 ≈ 7528.739, npar = 21.
-  auto fx = magmaan::fit::fit_extras(*pt, *mr, samp, est).value();
+  auto fx = magmaan::nt::measures::fit_extras(*pt, *mr, samp, est).value();
   CHECK(fx.npar   == 21);
   CHECK(fx.ntotal == 301);
   CHECK(fx.srmr   == doctest::Approx(0.0652050571843865).epsilon(1e-4));
@@ -125,10 +125,10 @@ TEST_CASE("fit_measures: CFI, TLI, RMSEA on a known nontrivial fit") {
 }
 
 TEST_CASE("fit_measures: RMSEA CI edge cases (df<1, small χ², G>1 scaling)") {
-  using magmaan::fit::BaselineFit;
-  using magmaan::fit::FitMeasures;
-  using magmaan::fit::SampleStats;
-  using magmaan::fit::fit_measures;
+  using magmaan::nt::measures::BaselineFit;
+  using magmaan::nt::measures::FitMeasures;
+  using magmaan::data::SampleStats;
+  using magmaan::nt::measures::fit_measures;
 
   auto mk_samp = [](std::initializer_list<std::int64_t> ns) {
     SampleStats s;
@@ -175,7 +175,7 @@ TEST_CASE("fit_extras: saturated 1F model — SRMR ≈ 0, logl == unrestricted_l
   // every residual vanishes: SRMR ≈ 0, F_ML ≈ 0, logl ≈ saturated logl.
   auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::partable::lavaanify(*fp);  REQUIRE(pt.has_value());
+  auto pt = magmaan::spec::lavaanify(*fp);  REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt); REQUIRE(mr.has_value());
 
   std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
@@ -191,13 +191,13 @@ TEST_CASE("fit_extras: saturated 1F model — SRMR ≈ 0, logl == unrestricted_l
     for (Eigen::Index c = 0; c < p; ++c)
       S(r, c) = M[static_cast<std::size_t>(r)]
                  [static_cast<std::size_t>(c)].get<double>();
-  magmaan::fit::SampleStats samp;
+  magmaan::data::SampleStats samp;
   samp.S = {S}; samp.n_obs = {j["n_obs"].get<std::int64_t>()};
 
-  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
   CHECK(std::abs(est.fmin) < 1e-8);                   // F_ML ≈ 0
 
-  auto fx = magmaan::fit::fit_extras(*pt, *mr, samp, est).value();
+  auto fx = magmaan::nt::measures::fit_extras(*pt, *mr, samp, est).value();
   CHECK(fx.npar == 6);
   CHECK(std::abs(fx.srmr) < 1e-6);
   CHECK(fx.logl == doctest::Approx(fx.unrestricted_logl).epsilon(1e-9));

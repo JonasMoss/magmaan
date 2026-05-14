@@ -6,26 +6,26 @@
 
 #include <Eigen/Core>
 
-#include "magmaan/fit/bounds.hpp"
-#include "magmaan/fit/ceres_optimizer.hpp"
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/lbfgsb_optimizer.hpp"
-#include "magmaan/fit/sample_stats.hpp"
-#include "magmaan/fit/uls.hpp"
+#include "magmaan/estimate/bounds.hpp"
+#include "magmaan/optim/ceres_optimizer.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/optim/lbfgsb_optimizer.hpp"
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/gls/uls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
-using magmaan::fit::Bounds;
-using magmaan::fit::CeresBoundedOptimizer;
-using magmaan::fit::LbfgsBOptimizer;
-using magmaan::fit::LbfgsBOptions;
-using magmaan::fit::SampleStats;
-using magmaan::fit::ULS;
+using magmaan::estimate::Bounds;
+using magmaan::optim::CeresBoundedOptimizer;
+using magmaan::optim::LbfgsBOptimizer;
+using magmaan::optim::LbfgsBOptions;
+using magmaan::data::SampleStats;
+using magmaan::gls::ULS;
 using magmaan::model::build_matrix_rep;
 using magmaan::parse::Parser;
-using magmaan::partable::lavaanify;
+using magmaan::spec::lavaanify;
 
 // ============================================================================
 // End-to-end tests for the LS path (`fit_bounded` + `LsDiscrepancy` +
@@ -63,7 +63,7 @@ TEST_CASE("LS path: fit_bounded<ULS, Ceres> recovers θ̂ on a 1F-feasible cov")
   samp.n_obs = {301};
 
   CeresBoundedOptimizer opt;
-  auto est = magmaan::fit::fit_bounded(*pt, *mr, samp, Bounds{}, ULS{}, opt);
+  auto est = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{}, ULS{}, opt);
   REQUIRE(est.has_value());
   CHECK(est->fmin < 1e-10);
 
@@ -91,9 +91,9 @@ TEST_CASE("LS path: Ceres / LBFGS-B θ̂ parity on a 1F-feasible cov") {
   LbfgsBOptimizer lb_opt(LbfgsBOptions{
       .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9});
 
-  auto est_ceres = magmaan::fit::fit_bounded(*pt, *mr, samp, Bounds{},
+  auto est_ceres = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{},
                                            ULS{}, ceres_opt);
-  auto est_lb    = magmaan::fit::fit_bounded(*pt, *mr, samp, Bounds{},
+  auto est_lb    = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{},
                                            ULS{}, lb_opt);
   REQUIRE(est_ceres.has_value());
   REQUIRE(est_lb.has_value());
@@ -132,7 +132,7 @@ TEST_CASE("LS path: equality constraints + bounds compose (shared loadings + "
   samp.n_obs = {301};
 
   CeresBoundedOptimizer opt;
-  auto est = magmaan::fit::fit_bounded(*pt, *mr, samp, Bounds{}, ULS{}, opt);
+  auto est = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{}, ULS{}, opt);
   if (!est.has_value()) {
     MESSAGE("eq+bounds fit failed: kind="
             << static_cast<int>(est.error().kind)

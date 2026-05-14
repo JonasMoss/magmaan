@@ -9,19 +9,19 @@
 #include <nlohmann/json.hpp>
 
 #include "magmaan/error.hpp"
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/lbfgs_optimizer.hpp"
-#include "magmaan/fit/lbfgsb_optimizer.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/optim/lbfgs_optimizer.hpp"
+#include "magmaan/optim/lbfgsb_optimizer.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 using magmaan::FitError;
-using magmaan::fit::LbfgsBOptimizer;
-using magmaan::fit::LbfgsOptimizer;
-using magmaan::fit::SampleStats;
-using magmaan::partable::LavaanifyOptions;
+using magmaan::optim::LbfgsBOptimizer;
+using magmaan::optim::LbfgsOptimizer;
+using magmaan::data::SampleStats;
+using magmaan::spec::LavaanifyOptions;
 
 namespace {
 
@@ -62,7 +62,7 @@ SampleStats load_samp(const nlohmann::json& fix) {
 
 // Build (LatentStructure, MatrixRep) from a syntax string + options.
 struct ModelBuild {
-  magmaan::partable::LatentStructure pt;
+  magmaan::spec::LatentStructure pt;
   magmaan::model::MatrixRep          rep;
 };
 
@@ -71,7 +71,7 @@ ModelBuild build_model(std::string_view src, bool meanstructure) {
   REQUIRE(fp.has_value());
   LavaanifyOptions opts;
   opts.meanstructure = meanstructure;
-  auto pt = magmaan::partable::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::lavaanify(*fp, opts);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -103,12 +103,12 @@ TEST_CASE("LbfgsBOptimizer end-to-end: 2F+means HS — same θ̂ as unbounded LB
   auto samp = load_samp(fix);
 
   // Unbounded baseline.
-  auto base = magmaan::fit::fit(m.pt, m.rep, samp);
+  auto base = magmaan::estimate::fit(m.pt, m.rep, samp);
   REQUIRE_MESSAGE(base.has_value(),
       "fit<> failed: " << (base.has_value() ? "" : base.error().detail));
 
   // Bounded — picks LbfgsBOptimizer + auto-bounds from partable by default.
-  auto out = magmaan::fit::fit_bounded(m.pt, m.rep, samp, {});
+  auto out = magmaan::estimate::fit_bounded(m.pt, m.rep, samp, {});
   REQUIRE_MESSAGE(out.has_value(),
       "fit_bounded<> failed: " << (out.has_value() ? "" : out.error().detail));
 
@@ -182,7 +182,7 @@ TEST_CASE("LbfgsBOptimizer G5b: 3F+means HS — converges where LBFGS historical
         5.374;    // HS x9
   samp.mean.push_back(std::move(mu));
 
-  auto out = magmaan::fit::fit_bounded(m.pt, m.rep, samp, {});
+  auto out = magmaan::estimate::fit_bounded(m.pt, m.rep, samp, {});
   REQUIRE_MESSAGE(out.has_value(),
       "fit_bounded<LbfgsBOptimizer> on 3F+means did not converge: " <<
       (out.has_value() ? "" : out.error().detail));

@@ -11,12 +11,12 @@
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/inference.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/nt/infer.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 namespace {
 
@@ -54,16 +54,16 @@ bool run_one(const magmaan::test::CorpusEntry&   e,
 
   auto fp = magmaan::parse::Parser::parse(e.model);
   if (!fp.has_value()) { failures.push_back(e.id + ": parse"); return true; }
-  magmaan::partable::LavaanifyOptions opts;
+  magmaan::spec::LavaanifyOptions opts;
   opts.meanstructure = e.meanstructure;
-  auto pt = magmaan::partable::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::lavaanify(*fp, opts);
   if (!pt.has_value()) { failures.push_back(e.id + ": lavaanify"); return true; }
   auto mr = magmaan::model::build_matrix_rep(*pt);
   if (!mr.has_value()) { failures.push_back(e.id + ": matrix_rep"); return true; }
 
   const auto& sample_blocks = exp["sample_cov"];
   REQUIRE(sample_blocks.is_array());
-  magmaan::fit::SampleStats samp;
+  magmaan::data::SampleStats samp;
   for (std::size_t b = 0; b < sample_blocks.size(); ++b) {
     const auto& M = sample_blocks[b]["matrix"];
     const Eigen::Index p = static_cast<Eigen::Index>(M.size());
@@ -83,7 +83,7 @@ bool run_one(const magmaan::test::CorpusEntry&   e,
     }
   }
 
-  auto est_or = magmaan::fit::fit(*pt, *mr, samp);
+  auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
   if (!est_or.has_value()) {
     failures.push_back(e.id + " [" + std::string(method_name) +
                        "]: fit failed — " + est_or.error().detail);
@@ -96,13 +96,13 @@ bool run_one(const magmaan::test::CorpusEntry&   e,
                        "]: information failed — " + info_or.error().detail);
     return true;
   }
-  auto vcov_or = magmaan::fit::vcov(*info_or, *pt);
+  auto vcov_or = magmaan::nt::infer::vcov(*info_or, *pt);
   if (!vcov_or.has_value()) {
     failures.push_back(e.id + " [" + std::string(method_name) +
                        "]: vcov failed — " + vcov_or.error().detail);
     return true;
   }
-  const Eigen::VectorXd se_v = magmaan::fit::se(*vcov_or);
+  const Eigen::VectorXd se_v = magmaan::nt::infer::se(*vcov_or);
 
   const auto& se_arr = exp["se_observed"];
   if (static_cast<std::size_t>(se_v.size()) != se_arr.size()) {
@@ -162,10 +162,10 @@ TEST_CASE("observed inference goldens — FD + analytic vs lavaan") {
     }
 
     auto fd_fn = [](auto&&... args) {
-      return magmaan::fit::information_observed_fd(std::forward<decltype(args)>(args)...);
+      return magmaan::nt::infer::information_observed_fd(std::forward<decltype(args)>(args)...);
     };
     auto an_fn = [](auto&&... args) {
-      return magmaan::fit::information_observed_analytic(std::forward<decltype(args)>(args)...);
+      return magmaan::nt::infer::information_observed_analytic(std::forward<decltype(args)>(args)...);
     };
     run_one(e, exp, fd_fn, "FD",       failures, passed_fd, total_fd);
     if (kSkipAnalyticOnly.count(e.id) == 0) {

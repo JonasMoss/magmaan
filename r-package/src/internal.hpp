@@ -16,21 +16,19 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/parse/op.hpp"
-#include "magmaan/partable/partable.hpp"
-#include "magmaan/partable/start_hints.hpp"
-#include "magmaan/partable/lavaanify.hpp"     // compute_eq_groups
-#include "magmaan/partable/lavaan_view.hpp"   // LavaanParTable / to_/from_lavaan_partable
+#include "magmaan/spec/partable.hpp"
+#include "magmaan/spec/start_hints.hpp"
+#include "magmaan/spec/lavaanify.hpp"     // compute_eq_groups
+#include "magmaan/lavaan/partable_view.hpp"   // LavaanParTable / to_/from_lavaan_partable
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
-#include "magmaan/fit/sample_stats.hpp"
-#include "magmaan/fit/fit.hpp"              // Estimates
-#include "magmaan/fit/inference.hpp"        // information_*, vcov, se, chi2_stat, df_stat
-#include "magmaan/fit/lbfgs_optimizer.hpp"  // LbfgsOptions
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"              // Estimates
+#include "magmaan/nt/infer.hpp"        // information_*, vcov, se, chi2_stat, df_stat
+#include "magmaan/optim/lbfgs_optimizer.hpp"  // LbfgsOptions
 
 namespace lv  = magmaan;
-namespace lvf = magmaan::fit;
 namespace lvm = magmaan::model;
-namespace lvp = magmaan::partable;
 
 namespace magmaanr {
 
@@ -124,7 +122,7 @@ inline void read_group_attrs(SEXP df, std::string& group_var,
 // `LatentNames`. The data.frame's `ustart` column is split inside
 // `from_lavaan_partable` (a fixed row's value → `fixed_value`; a free row's
 // value → a start hint on `.starts`).
-inline lvp::ParsedLavaanParTable parse_partable_df(Rcpp::DataFrame df) {
+inline magmaan::lavaan::ParsedLavaanParTable parse_partable_df(Rcpp::DataFrame df) {
   auto col = [&](const char* nm) -> SEXP {
     if (!df.containsElementNamed(nm))
       Rcpp::stop("magmaan: partable data.frame is missing required column '%s'", nm);
@@ -140,7 +138,7 @@ inline lvp::ParsedLavaanParTable parse_partable_df(Rcpp::DataFrame df) {
   std::vector<std::string> plab  = Rcpp::as<std::vector<std::string>>(col("plabel"));
 
   const std::size_t m = static_cast<std::size_t>(id.size());
-  lvp::LavaanParTable lvpt;
+  magmaan::lavaan::LavaanParTable lvpt;
   lvpt.id.resize(m); lvpt.user.resize(m); lvpt.lhs.resize(m); lvpt.op.resize(m);
   lvpt.rhs.resize(m); lvpt.block.resize(m); lvpt.group.resize(m); lvpt.free.resize(m);
   lvpt.exo.resize(m); lvpt.ustart.resize(m); lvpt.label.resize(m); lvpt.plabel.resize(m);
@@ -160,15 +158,15 @@ inline lvp::ParsedLavaanParTable parse_partable_df(Rcpp::DataFrame df) {
     lvpt.plabel[i] = plab[i];
   }
   read_group_attrs(df, lvpt.group_var, lvpt.group_labels);
-  return lvp::from_lavaan_partable(lvpt);
+  return magmaan::lavaan::from_lavaan_partable(lvpt);
 }
 
-inline bool has_meanstructure(const lvp::LatentStructure& pt) {
+inline bool has_meanstructure(const magmaan::spec::LatentStructure& pt) {
   for (lv::parse::Op op : pt.op)
     if (op == lv::parse::Op::Intercept) return true;
   return false;
 }
-inline bool has_constraint_rows(const lvp::LatentStructure& pt) {
+inline bool has_constraint_rows(const magmaan::spec::LatentStructure& pt) {
   using O = lv::parse::Op;
   for (lv::parse::Op op : pt.op)
     if (op == O::EqConstraint || op == O::DefineParam || op == O::LtConstraint ||
@@ -180,12 +178,12 @@ inline bool has_constraint_rows(const lvp::LatentStructure& pt) {
 // The model triple + fitted estimates -> data.frame (lavaanify columns + est).
 // `starts` (optional): the user start hints, so the reconstructed `ustart`
 // column carries free-row hints (not just fixed-row values). NaN ⇒ R NA.
-inline Rcpp::DataFrame partable_df(const lvp::LatentStructure& structure,
-                                   const lvp::LatentNames& names,
-                                   const lvf::Estimates& est,
-                                   const lvp::Starts* starts = nullptr) {
-  const lvp::LavaanParTable pt =
-      lvp::to_lavaan_partable(structure, names, starts ? *starts : lvp::Starts{});
+inline Rcpp::DataFrame partable_df(const magmaan::spec::LatentStructure& structure,
+                                   const magmaan::spec::LatentNames& names,
+                                   const magmaan::estimate::Estimates& est,
+                                   const magmaan::spec::Starts* starts = nullptr) {
+  const magmaan::lavaan::LavaanParTable pt =
+      magmaan::lavaan::to_lavaan_partable(structure, names, starts ? *starts : magmaan::spec::Starts{});
   const R_xlen_t nrow = static_cast<R_xlen_t>(pt.size());
   Rcpp::IntegerVector id(nrow), user(nrow), block(nrow), group(nrow), freev(nrow), exo(nrow);
   Rcpp::CharacterVector lhs(nrow), op(nrow), rhs(nrow), label(nrow), plabel(nrow);
@@ -219,8 +217,8 @@ inline Rcpp::DataFrame partable_df(const lvp::LatentStructure& structure,
   return out;
 }
 
-inline lvf::LbfgsOptions lbfgs_opts_from(Rcpp::Nullable<Rcpp::List> lbfgs) {
-  lvf::LbfgsOptions o;  // struct defaults
+inline magmaan::optim::LbfgsOptions lbfgs_opts_from(Rcpp::Nullable<Rcpp::List> lbfgs) {
+  magmaan::optim::LbfgsOptions o;  // struct defaults
   if (lbfgs.isNotNull()) {
     Rcpp::List l(lbfgs.get());
     if (l.containsElementNamed("max_iter")) o.max_iter = Rcpp::as<int>(l["max_iter"]);
@@ -234,10 +232,10 @@ inline lvf::LbfgsOptions lbfgs_opts_from(Rcpp::Nullable<Rcpp::List> lbfgs) {
 // ---- model context ----------------------------------------------------------
 
 struct Ctx {
-  lvp::LatentStructure     pt;
-  lvp::LatentNames         names;
+  magmaan::spec::LatentStructure     pt;
+  magmaan::spec::LatentNames         names;
   lvm::MatrixRep           rep;
-  lvf::SampleStats         samp;
+  magmaan::data::SampleStats         samp;
   std::vector<std::string> ov_names;     // observed-variable order magmaan uses (block 0)
   bool                     meanstructure = false;
 };
@@ -338,7 +336,7 @@ inline Rcpp::NumericMatrix block_matrix(SEXP M, std::size_t b, std::size_t n_blo
 //                  column name (the `make_ctx` entry point — user-supplied
 //                  data); false → take them as already in model order (the
 //                  fit-object entry point).
-inline Ctx ctx_from_parts(lvp::LatentStructure pt, lvp::LatentNames names,
+inline Ctx ctx_from_parts(magmaan::spec::LatentStructure pt, magmaan::spec::LatentNames names,
                           SEXP S, SEXP nobs, SEXP sample_mean, bool reorder) {
   auto rep_or = lvm::build_matrix_rep(pt, &names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
@@ -363,7 +361,7 @@ inline Ctx ctx_from_parts(lvp::LatentStructure pt, lvp::LatentNames names,
                  static_cast<int>(sml.size()), static_cast<int>(n_blocks));
   }
 
-  lvf::SampleStats samp;
+  magmaan::data::SampleStats samp;
   for (std::size_t b = 0; b < n_blocks; ++b) {
     Rcpp::NumericMatrix Sb = block_matrix(S, b, n_blocks, "S");
     if (reorder) {
@@ -399,13 +397,13 @@ inline Ctx ctx_from_parts(lvp::LatentStructure pt, lvp::LatentNames names,
 }
 
 // User-supplied data: S/nobs/mean are reordered to the model's variable order.
-inline Ctx make_ctx(lvp::LatentStructure pt, lvp::LatentNames names,
+inline Ctx make_ctx(magmaan::spec::LatentStructure pt, magmaan::spec::LatentNames names,
                     SEXP S, SEXP n, SEXP sample_mean) {
   return ctx_from_parts(std::move(pt), std::move(names), S, n, sample_mean,
                         /*reorder=*/true);
 }
 
-inline lvp::ParsedLavaanParTable partable_from_arg(SEXP partable, const char* fn) {
+inline magmaan::lavaan::ParsedLavaanParTable partable_from_arg(SEXP partable, const char* fn) {
   if (TYPEOF(partable) == STRSXP)
     Rcpp::stop("magmaan: %s() takes a partable data.frame (e.g. from lavaan_lavaanify()), "
                "not a model-syntax string — call lavaan_lavaanify() first", fn);
@@ -419,7 +417,7 @@ inline lvp::ParsedLavaanParTable partable_from_arg(SEXP partable, const char* fn
 // form; `data_sample_stats_from_raw()` returns exactly this) or, lenient
 // for the hand-built single-group case, a bare covariance matrix is *not*
 // accepted (nobs is required) — the caller passes a `list(S = , nobs = )`.
-inline Ctx ctx_from_sample_stats(lvp::LatentStructure pt, lvp::LatentNames names,
+inline Ctx ctx_from_sample_stats(magmaan::spec::LatentStructure pt, magmaan::spec::LatentNames names,
                                  Rcpp::List ss) {
   if (!ss.containsElementNamed("S") || !ss.containsElementNamed("nobs"))
     Rcpp::stop("magmaan: `sample_stats` must be a list with $S (a covariance matrix "
@@ -443,10 +441,10 @@ inline Ctx ctx_from_fit(Rcpp::List fit) {
                         fit["S"], fit["nobs"], sm, /*reorder=*/false);
 }
 
-inline lvf::Estimates est_from_fit(Rcpp::List fit) {
+inline magmaan::estimate::Estimates est_from_fit(Rcpp::List fit) {
   if (!fit.containsElementNamed("theta"))
     Rcpp::stop("magmaan: not a fit object (missing theta) — pass the result of fit_fit()");
-  lvf::Estimates e;
+  magmaan::estimate::Estimates e;
   e.theta = Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(fit["theta"]));
   e.fmin = fit.containsElementNamed("fmin") ? Rcpp::as<double>(fit["fmin"])
                                             : std::numeric_limits<double>::quiet_NaN();

@@ -9,13 +9,13 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 using magmaan::model::build_matrix_rep;
 using magmaan::model::ImpliedMoments;
 using magmaan::model::ModelEvaluator;
 using magmaan::parse::Parser;
-using magmaan::partable::lavaanify;
+using magmaan::spec::lavaanify;
 
 namespace {
 
@@ -29,7 +29,7 @@ ModelEvaluator must_build(std::string_view src) {
   // LatentStructure and MatrixRep need to outlive the evaluator. Stash them in
   // statics with std::move so the references in the evaluator stay valid.
   // (Tests are single-threaded; this is safe.)
-  static thread_local magmaan::partable::LatentStructure s_pt;
+  static thread_local magmaan::spec::LatentStructure s_pt;
   static thread_local magmaan::model::MatrixRep   s_mr;
   s_pt = std::move(*pt);
   s_mr = std::move(*mr);

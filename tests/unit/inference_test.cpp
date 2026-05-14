@@ -12,23 +12,23 @@
 
 #include <nlohmann/json.hpp>
 
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/inference.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/nt/infer.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 #include "../inference_bundle.hpp"
 
-using magmaan::fit::Estimates;
-using magmaan::fit::SampleStats;
+using magmaan::estimate::Estimates;
+using magmaan::data::SampleStats;
 using magmaan::model::build_matrix_rep;
 using magmaan::model::MatrixRep;
 using magmaan::parse::Parser;
-using magmaan::partable::lavaanify;
-using magmaan::partable::LatentStructure;
+using magmaan::spec::lavaanify;
+using magmaan::spec::LatentStructure;
 using magmaan::test::analytic_observed_inference;
 using magmaan::test::expected_inference;
 using magmaan::test::fd_observed_inference;
@@ -204,7 +204,7 @@ TEST_CASE("rls_chi2: matches lavaan browne.residual.nt.model on 3F Holzinger") {
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
   // Fit so we have Σ̂; reuse the converged θ̂ to compute implied moments.
-  auto est = magmaan::fit::fit(*h.pt, *h.rep, samp).value();
+  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
   auto ev  = magmaan::model::ModelEvaluator::build(*h.pt, *h.rep).value();
   auto im_or = ev.sigma(est.theta);
   REQUIRE(im_or.has_value());
@@ -215,7 +215,7 @@ TEST_CASE("rls_chi2: matches lavaan browne.residual.nt.model on 3F Holzinger") {
   im.sigma.assign(im_or->sigma.begin(), im_or->sigma.end());
   im.mu.assign(im_or->mu.begin(), im_or->mu.end());
 
-  auto t_rls = magmaan::fit::rls_chi2(samp, im);
+  auto t_rls = magmaan::nt::infer::rls_chi2(samp, im);
   REQUIRE(t_rls.has_value());
   CHECK(*t_rls == doctest::Approx(81.3677).epsilon(1e-3));
 }
@@ -243,7 +243,7 @@ TEST_CASE("rls_chi2: zero on saturated 1F CFA") {
   samp.S.push_back(std::move(S));
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
-  auto est = magmaan::fit::fit(*h.pt, *h.rep, samp).value();
+  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
   auto ev  = magmaan::model::ModelEvaluator::build(*h.pt, *h.rep).value();
   auto im_or = ev.sigma(est.theta);
   REQUIRE(im_or.has_value());
@@ -251,7 +251,7 @@ TEST_CASE("rls_chi2: zero on saturated 1F CFA") {
   im.sigma.assign(im_or->sigma.begin(), im_or->sigma.end());
   im.mu.assign(im_or->mu.begin(), im_or->mu.end());
 
-  auto t_rls = magmaan::fit::rls_chi2(samp, im);
+  auto t_rls = magmaan::nt::infer::rls_chi2(samp, im);
   REQUIRE(t_rls.has_value());
   CHECK(std::abs(*t_rls) < 1e-6);
 }
@@ -283,8 +283,8 @@ TEST_CASE("browne_residual_nt: matches lavaan on 3F Holzinger") {
   samp.S.push_back(std::move(S));
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
-  auto est = magmaan::fit::fit(*h.pt, *h.rep, samp).value();
-  auto t_or = magmaan::fit::browne_residual_nt(*h.pt, *h.rep, samp, est);
+  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
+  auto t_or = magmaan::nt::infer::browne_residual_nt(*h.pt, *h.rep, samp, est);
   REQUIRE(t_or.has_value());
   CHECK(*t_or == doctest::Approx(77.9034).epsilon(1e-3));
 }
@@ -311,8 +311,8 @@ TEST_CASE("browne_residual_nt: zero on saturated 1F CFA") {
   samp.S.push_back(std::move(S));
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
-  auto est = magmaan::fit::fit(*h.pt, *h.rep, samp).value();
-  auto t_or = magmaan::fit::browne_residual_nt(*h.pt, *h.rep, samp, est);
+  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
+  auto t_or = magmaan::nt::infer::browne_residual_nt(*h.pt, *h.rep, samp, est);
   REQUIRE(t_or.has_value());
   CHECK(std::abs(*t_or) < 1e-6);
 }
@@ -329,7 +329,7 @@ TEST_CASE("chi2_stat: chi2 = n · fmin") {
   est.theta = Eigen::VectorXd::Zero(3);                // unused
   est.fmin  = 0.04321;
 
-  CHECK(magmaan::fit::chi2_stat(samp, est) ==
+  CHECK(magmaan::nt::infer::chi2_stat(samp, est) ==
         doctest::Approx(301.0 * 0.04321).epsilon(1e-12));
 }
 
@@ -487,15 +487,15 @@ TEST_CASE("z_test: per-parameter z = θ̂_k / SE_k and chi²(1) p-value") {
   est.theta << 1.0, 0.5, -2.0;
   Eigen::VectorXd se_v(3);
   se_v << 0.25, 0.0, 1.0;
-  const auto zt = magmaan::fit::z_test(est, se_v);
+  const auto zt = magmaan::nt::infer::z_test(est, se_v);
   CHECK(zt.z(0) == doctest::Approx(4.0));
   CHECK(zt.p_value(0) ==
-        doctest::Approx(magmaan::fit::chi2_pvalue(16.0, 1)).epsilon(1e-12));
+        doctest::Approx(magmaan::nt::infer::chi2_pvalue(16.0, 1)).epsilon(1e-12));
   CHECK(std::isnan(zt.z(1)));        // SE = 0
   CHECK(std::isnan(zt.p_value(1)));
   CHECK(zt.z(2) == doctest::Approx(-2.0));
   CHECK(zt.p_value(2) ==
-        doctest::Approx(magmaan::fit::chi2_pvalue(4.0, 1)).epsilon(1e-12));
+        doctest::Approx(magmaan::nt::infer::chi2_pvalue(4.0, 1)).epsilon(1e-12));
 }
 
 TEST_CASE("wald_test: single-parameter restriction matches (θ̂_k / SE_k)²") {
@@ -503,7 +503,7 @@ TEST_CASE("wald_test: single-parameter restriction matches (θ̂_k / SE_k)²") {
   // reduces to (θ̂_k / SE_k)². Verify on the 1F CFA saturated fit.
   auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::partable::lavaanify(*fp);  REQUIRE(pt.has_value());
+  auto pt = magmaan::spec::lavaanify(*fp);  REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt); REQUIRE(mr.has_value());
 
   std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
@@ -521,7 +521,7 @@ TEST_CASE("wald_test: single-parameter restriction matches (θ̂_k / SE_k)²") {
                  [static_cast<std::size_t>(c)].get<double>();
   SampleStats samp;
   samp.S = {S}; samp.n_obs = {j["n_obs"].get<std::int64_t>()};
-  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   // Test θ_0 = 0 (first free param). R = [1, 0, 0, ...], q = [0].
@@ -530,7 +530,7 @@ TEST_CASE("wald_test: single-parameter restriction matches (θ̂_k / SE_k)²") {
   R(0, 0) = 1.0;
   Eigen::VectorXd q(1); q(0) = 0.0;
 
-  auto wald_or = magmaan::fit::wald_test(R, q, est, inf.vcov);
+  auto wald_or = magmaan::nt::infer::wald_test(R, q, est, inf.vcov);
   REQUIRE(wald_or.has_value());
   CHECK(wald_or->df == 1);
   const double expected = (est.theta(0) / inf.se(0)) * (est.theta(0) / inf.se(0));
@@ -546,12 +546,12 @@ TEST_CASE("wald_test: rank-deficient R errors out") {
   R << 1, 0, 0,
        1, 0, 0;
   Eigen::VectorXd q = Eigen::VectorXd::Zero(2);
-  auto w = magmaan::fit::wald_test(R, q, est, vcov);
+  auto w = magmaan::nt::infer::wald_test(R, q, est, vcov);
   REQUIRE_FALSE(w.has_value());
 }
 
 TEST_CASE("chi2_pvalue: classic spot checks against R's pchisq") {
-  using magmaan::fit::chi2_pvalue;
+  using magmaan::nt::infer::chi2_pvalue;
   // pchisq(3.84, 1, lower.tail=FALSE) ≈ 0.05
   CHECK(chi2_pvalue(3.8414588, 1) == doctest::Approx(0.05).epsilon(1e-5));
   // pchisq(7.815, 3, lower.tail=FALSE) ≈ 0.05
@@ -567,8 +567,8 @@ TEST_CASE("chi2_pvalue: classic spot checks against R's pchisq") {
 }
 
 TEST_CASE("noncentral_chisq_cdf: spot checks against R's pchisq(x, df, ncp)") {
-  using magmaan::fit::chi2_pvalue;
-  using magmaan::fit::noncentral_chisq_cdf;
+  using magmaan::nt::infer::chi2_pvalue;
+  using magmaan::nt::infer::noncentral_chisq_cdf;
 
   // ncp == 0 ⇒ central χ²(df) CDF (= 1 − chi2_pvalue) for several (x, df).
   for (auto [x, df] : {std::pair{2.0, 3}, std::pair{12.5, 7},
@@ -653,15 +653,15 @@ TEST_CASE("Multi-group + mean structure: θ̂/SE match lavaan on HS × school") 
 
   auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  magmaan::partable::LavaanifyOptions opts;
+  magmaan::spec::LavaanifyOptions opts;
   opts.n_groups      = 2;
   opts.meanstructure = true;
-  auto pt = magmaan::partable::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::lavaanify(*fp, opts);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
 
-  auto est_or = magmaan::fit::fit(*pt, *mr, samp);
+  auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
   REQUIRE_MESSAGE(est_or.has_value(),
       "fit failed: " << (est_or.has_value() ? "" : est_or.error().detail));
   const auto& est = *est_or;
@@ -700,9 +700,9 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
 
-  magmaan::partable::LavaanifyOptions opts;
+  magmaan::spec::LavaanifyOptions opts;
   opts.n_groups = 2;
-  auto pt = magmaan::partable::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::lavaanify(*fp, opts);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -745,7 +745,7 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   samp_mg.S     = {S, S};
   samp_mg.n_obs = {n, n};
 
-  auto est_mg_or = magmaan::fit::fit(*pt, *mr, samp_mg);
+  auto est_mg_or = magmaan::estimate::fit(*pt, *mr, samp_mg);
   REQUIRE_MESSAGE(est_mg_or.has_value(),
       "multi-group fit failed: " <<
       (est_mg_or.has_value() ? "" : est_mg_or.error().detail));
@@ -755,13 +755,13 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   // (c) Each group's 6 params should match the single-block θ̂.
   auto fp_single = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp_single.has_value());
-  auto pt_single = magmaan::partable::lavaanify(*fp_single);
+  auto pt_single = magmaan::spec::lavaanify(*fp_single);
   REQUIRE(pt_single.has_value());
   auto mr_single = magmaan::model::build_matrix_rep(*pt_single);
   REQUIRE(mr_single.has_value());
   SampleStats samp_single;
   samp_single.S = {S};  samp_single.n_obs = {n};
-  auto est_single = magmaan::fit::fit(*pt_single, *mr_single, samp_single).value();
+  auto est_single = magmaan::estimate::fit(*pt_single, *mr_single, samp_single).value();
 
   const double max_g1 = (est_mg.theta.head(6) - est_single.theta).cwiseAbs().maxCoeff();
   const double max_g2 = (est_mg.theta.tail(6) - est_single.theta).cwiseAbs().maxCoeff();
@@ -798,7 +798,7 @@ TEST_CASE("expected_inference on mean-structure CFA: ν SEs match closed form") 
   SampleStats samp;
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {301};
 
-  auto est_or = magmaan::fit::fit(*h.pt, *h.rep, samp);
+  auto est_or = magmaan::estimate::fit(*h.pt, *h.rep, samp);
   REQUIRE(est_or.has_value());
 
   auto inf_or = expected_inference(*h.pt, *h.rep, samp, *est_or);
@@ -835,7 +835,7 @@ TEST_CASE("fd_observed_inference on mean-structure ≈ expected_inference at sat
   SampleStats samp;
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {200};
 
-  auto est = magmaan::fit::fit(*h.pt, *h.rep, samp).value();
+  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
 
   auto exp_or = expected_inference(*h.pt, *h.rep, samp, est);
   auto fd_or  = fd_observed_inference(*h.pt, *h.rep, samp, est);
@@ -862,8 +862,8 @@ TEST_CASE("information_observed_analytic rejects mean structure (for now)") {
   SampleStats samp;
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {100};
 
-  auto est = magmaan::fit::fit(*h.pt, *h.rep, samp).value();
-  auto an_or = magmaan::fit::information_observed_analytic(*h.pt, *h.rep, samp, est);
+  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
+  auto an_or = magmaan::nt::infer::information_observed_analytic(*h.pt, *h.rep, samp, est);
   REQUIRE_FALSE(an_or.has_value());
   CHECK(an_or.error().kind == magmaan::PostError::Kind::NumericIssue);
 }
@@ -894,13 +894,13 @@ namespace {
 // built (pt, rep) into a 2-block version: block 0 = original, block 1 =
 // identical structure with a fresh slice of free-parameter indices.
 struct TwoBlockHandles {
-  magmaan::partable::LatentStructure* pt;
+  magmaan::spec::LatentStructure* pt;
   magmaan::model::MatrixRep*   rep;
   std::size_t                n_free_single;
 };
 
 TwoBlockHandles duplicate_two_blocks(const ModelHandles& src) {
-  using namespace magmaan::partable;
+  using namespace magmaan::spec;
   using namespace magmaan::model;
   static thread_local LatentStructure  s_pt;
   static thread_local MatrixRep s_rep;

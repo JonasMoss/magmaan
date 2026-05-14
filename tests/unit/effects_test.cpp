@@ -5,24 +5,24 @@
 
 #include <Eigen/Core>
 
-#include "magmaan/fit/effects.hpp"
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/inference.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/nt/effects.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/nt/infer.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 #include "../inference_bundle.hpp"
 
-using magmaan::fit::compute_defined;
-using magmaan::fit::SampleStats;
+using magmaan::nt::effects::compute_defined;
+using magmaan::data::SampleStats;
 using magmaan::test::analytic_observed_inference;
 using magmaan::test::expected_inference;
 using magmaan::model::build_matrix_rep;
 using magmaan::model::ModelEvaluator;
 using magmaan::parse::Parser;
-using magmaan::partable::lavaanify;
+using magmaan::spec::lavaanify;
 
 namespace {
 
@@ -43,7 +43,7 @@ TEST_CASE("Effects: := value and delta-method SE on a^2 of a labeled loading") {
   const std::string src = "f =~ x1 + a*x2 + x3\na_sq := a^2";
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  magmaan::partable::LatentNames names;
+  magmaan::spec::LatentNames names;
   auto pt = lavaanify(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
@@ -54,7 +54,7 @@ TEST_CASE("Effects: := value and delta-method SE on a^2 of a labeled loading") {
   samp.S = {random_pd(rng, 3)};
   samp.n_obs = {300};
 
-  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   // Find a's free index — the row labeled "a" in pt.
@@ -93,7 +93,7 @@ TEST_CASE("Effects: := with a product of two labeled loadings") {
       "f =~ x1 + a*x2 + b*x3\nprod := a * b";
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  magmaan::partable::LatentNames names;
+  magmaan::spec::LatentNames names;
   auto pt = lavaanify(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
@@ -104,7 +104,7 @@ TEST_CASE("Effects: := with a product of two labeled loadings") {
   samp.S = {random_pd(rng, 3)};
   samp.n_obs = {300};
 
-  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   Eigen::Index a_idx = -1, b_idx = -1;
@@ -143,7 +143,7 @@ TEST_CASE("Effects: chained := (one definition references an earlier one)") {
       "f =~ x1 + a*x2 + b*x3\nab := a * b\nsum := ab + a";
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  magmaan::partable::LatentNames names;
+  magmaan::spec::LatentNames names;
   auto pt = lavaanify(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
@@ -154,7 +154,7 @@ TEST_CASE("Effects: chained := (one definition references an earlier one)") {
   samp.S = {random_pd(rng, 3)};
   samp.n_obs = {300};
 
-  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   Eigen::Index a_idx = -1, b_idx = -1;
@@ -194,7 +194,7 @@ TEST_CASE("Effects: := resolves .pN. plabels (free and fixed rows)") {
       "f =~ x1 + a*x2 + b*x3\nq := .p2. * .p3.\nm := .p1. + a";
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  magmaan::partable::LatentNames names;
+  magmaan::spec::LatentNames names;
   auto pt = lavaanify(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
@@ -219,7 +219,7 @@ TEST_CASE("Effects: := resolves .pN. plabels (free and fixed rows)") {
   samp.S = {random_pd(rng, 3)};
   samp.n_obs = {250};
 
-  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
   const double a_hat = est.theta(a_idx);
   const double b_hat = est.theta(b_idx);
@@ -242,12 +242,12 @@ TEST_CASE("Effects: circular := definitions error cleanly") {
       "f =~ x1 + a*x2 + x3\nc1 := c2 + 1\nc2 := c1 * 2";
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  magmaan::partable::LatentNames names;
+  magmaan::spec::LatentNames names;
   auto pt = lavaanify(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
 
   const Eigen::Index nf = pt->n_free();
-  magmaan::fit::Estimates est;
+  magmaan::estimate::Estimates est;
   est.theta = Eigen::VectorXd::Zero(nf);
   const Eigen::MatrixXd vcov = Eigen::MatrixXd::Identity(nf, nf);
 
@@ -258,10 +258,10 @@ TEST_CASE("Effects: circular := definitions error cleanly") {
   // A direct self-reference is the n == 1 cycle.
   auto fp2 = Parser::parse("f =~ x1 + a*x2 + x3\nd := d + 1");
   REQUIRE(fp2.has_value());
-  magmaan::partable::LatentNames names2;
+  magmaan::spec::LatentNames names2;
   auto pt2 = lavaanify(*fp2, {}, nullptr, &names2);
   REQUIRE(pt2.has_value());
-  magmaan::fit::Estimates est2;
+  magmaan::estimate::Estimates est2;
   est2.theta = Eigen::VectorXd::Zero(pt2->n_free());
   const Eigen::MatrixXd vcov2 =
       Eigen::MatrixXd::Identity(pt2->n_free(), pt2->n_free());
@@ -274,7 +274,7 @@ TEST_CASE("Effects: := referencing an unknown label errors clearly") {
   const std::string src = "f =~ x1 + a*x2 + x3\nbad := a + missing";
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  magmaan::partable::LatentNames names;
+  magmaan::spec::LatentNames names;
   auto pt = lavaanify(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
@@ -284,7 +284,7 @@ TEST_CASE("Effects: := referencing an unknown label errors clearly") {
   SampleStats samp;
   samp.S = {random_pd(rng, 3)};
   samp.n_obs = {200};
-  auto est = magmaan::fit::fit(*pt, *mr, samp).value();
+  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   auto defs_or = compute_defined(*fp, *pt, names, est, inf.vcov);

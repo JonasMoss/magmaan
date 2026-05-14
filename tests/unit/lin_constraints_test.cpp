@@ -7,11 +7,11 @@
 #include <utility>
 
 #include "magmaan/parse/flat_partable.hpp"
-#include "magmaan/partable/lin_constraints.hpp"
+#include "magmaan/spec/lin_constraints.hpp"
 
 namespace lp = magmaan::parse;
-using magmaan::partable::analyze_linear;
-using magmaan::partable::LinearForm;
+using magmaan::spec::analyze_linear;
+using magmaan::spec::LinearForm;
 
 namespace {
 
