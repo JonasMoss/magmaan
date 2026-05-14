@@ -29,6 +29,10 @@ const std::vector<std::string> kFimlFixtures = {
     "0004_multigroup_1f_school_fiml",
     "0005_multigroup_3f_school_fiml",
     "0006_multigroup_equal_loading_school_fiml",
+    "0007_structural_hs_fiml",
+    "0008_structural_fixedx_false_hs_fiml",
+    "0009_path_fixed_x_missing_hs_fiml",
+    "0010_three_factor_dense_patterns_hs_fiml",
 };
 
 magmaan::data::RawData raw_from_fixture(const nlohmann::json& exp) {
@@ -99,6 +103,7 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
     magmaan::spec::LavaanifyOptions opts;
     opts.n_groups = exp.value("n_groups", 1);
     opts.meanstructure = exp.value("meanstructure", true);
+    opts.fixed_x = exp.value("fixed_x", true);
     auto pt = magmaan::spec::lavaanify(*fp, opts);
     if (!pt.has_value()) {
       failures.push_back(id + ": lavaanify — " + pt.error().detail);
@@ -116,6 +121,20 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
       continue;
     }
     auto est_or = magmaan::estimate::fit_fiml(*pt, *mr, raw);
+    if (exp.contains("expect_error")) {
+      if (est_or.has_value()) {
+        failures.push_back(id + ": expected fit_fiml error");
+        continue;
+      }
+      const std::string want = exp["expect_error"].get<std::string>();
+      if (est_or.error().detail.find(want) == std::string::npos) {
+        failures.push_back(id + ": unexpected fit_fiml error — " +
+                           est_or.error().detail);
+        continue;
+      }
+      ++passed;
+      continue;
+    }
     if (!est_or.has_value()) {
       failures.push_back(id + ": fit_fiml — " + est_or.error().detail);
       continue;

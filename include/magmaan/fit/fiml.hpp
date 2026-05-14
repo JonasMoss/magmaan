@@ -92,6 +92,14 @@ struct FIML {
 fit_expected<SampleStats>
 fiml_start_sample_stats(const RawData& raw);
 
+// First public FIML fixed.x policy: observed exogenous variables may be fixed
+// from complete raw data, but missing values in those variables are not yet
+// supported because lavaan's conditional fixed.x likelihood accounting is a
+// separate contract from the joint observed-data FIML objective.
+fit_expected<void>
+validate_fiml_fixed_x_missing_policy(const partable::LatentStructure& pt,
+                                     const RawData& raw);
+
 // Post-fit likelihood accounting for continuous raw-data FIML. The optimizer
 // minimizes only the observed-pattern deviance without constants; this helper
 // adds the normal constants and fits the saturated/H1 observed-data normal
@@ -120,6 +128,10 @@ fit_fiml(partable::LatentStructure pt,
          FIML discrepancy = {},
          O optimizer = {},
          partable::Starts starts = {}) {
+  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+
   auto start_samp_or = fiml_start_sample_stats(raw);
   if (!start_samp_or.has_value()) return std::unexpected(start_samp_or.error());
   const SampleStats& start_samp = *start_samp_or;

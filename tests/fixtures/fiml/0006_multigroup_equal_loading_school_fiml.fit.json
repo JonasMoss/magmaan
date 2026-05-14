@@ -7,7 +7,9 @@
     "lavaan_version": "0.6.22.2560"
   },
   "input": "visual =~ x1 + a*x2 + a*x3",
+  "entry": "cfa",
   "meanstructure": true,
+  "fixed_x": true,
   "n_groups": 2,
   "group_var": "school",
   "ov_names": [
