@@ -85,6 +85,31 @@ C++ header change correctly forces the R glue to recompile against the new ABI.
 If you ever see an `undefined symbol` at R load time anyway, `just r-clean`
 (or `rm -f r-package/src/*.o`) and reinstall.
 
+## R Package Direction
+
+The R package is a methods-developer interface over the C++ library, not a
+second implementation and not a lavaan replacement UI. Prefer thin exported R
+wrappers around one C++ entry point, with C++ argument structure kept visible.
+Small R helpers are fine when they compose existing wrappers, validate R-shaped
+inputs, or preserve names/groups for inspection; they should not contain
+parallel SEM logic.
+
+The intended high-level convenience is `magmaan(model, data, estimator,
+groups)`: parse/lavaanify, build sample statistics, and estimate parameters in
+one call. That function should do estimation only. Standard errors,
+information matrices, Wald/z tests, robust corrections such as MLM and
+Satorra-Bentler, fit measures, defined parameters, and nested tests remain
+explicit post-fit calls so methods work can choose and inspect each step.
+
+Partables exposed from R are compatibility/projection objects. When a model is
+built with the R helpers, the partable returned from a fitted magmaan object
+must match the corresponding lavaan call under the same options, modulo
+documented numeric tolerances and any explicitly unsupported rows. Do not paper
+over partable mismatches in R formatting code; fix the lavaanified model
+triple, the projection helpers, or the fit result reconstruction. Mean-structure
+rows are especially sensitive: fixed-zero intercept/mean parameters
+must appear or disappear exactly as lavaan would for the requested model.
+
 ## Namespace Layout
 
 The current public namespace layout is transitional. Prefer target headers for
@@ -114,8 +139,11 @@ namespace transition.
   together cover the what.
 - Remove or fold stale finished planning docs into `docs/roadmap.md` when a
   phase completes; do not keep old plan files around as parallel roadmaps.
-- Commit coherent completed changes when there is a natural checkpoint; keep
-  work on the current branch unless explicitly asked to branch.
+- Keep `docs/roadmap.md` current whenever a change alters project direction,
+  implementation state, priorities, known gaps, or validation expectations.
+- Commit every finished user request as a coherent completed change before
+  handing back, unless the user explicitly asks not to commit. Keep work on the
+  current branch unless explicitly asked to branch.
 
 ## Working with the lavaan reference
 
