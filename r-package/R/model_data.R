@@ -83,6 +83,158 @@ as_magmaan_model_spec <- function(model) {
   stop("expected a magmaan model spec, model syntax string, or partable data.frame")
 }
 
+lavaan_compare_partable <- function(x, reference, est_tolerance = NULL,
+                                    ustart_tolerance = 1e-12) {
+  as_pt <- function(z, arg) {
+    if (inherits(z, "magmaan_model_spec")) return(z$partable)
+    if (is.list(z) && !is.data.frame(z) && !is.null(z$partable)) return(z$partable)
+    if (is.data.frame(z)) return(z)
+    stop("lavaan_compare_partable(): `", arg, "` must be a partable data.frame, ",
+         "magmaan model spec, or magmaan fit list")
+  }
+  got <- as_pt(x, "x")
+  exp <- as_pt(reference, "reference")
+
+  required <- c("lhs", "op", "rhs", "group", "free", "ustart", "label", "plabel")
+  missing_got <- setdiff(required, names(got))
+  missing_exp <- setdiff(required, names(exp))
+  if (length(missing_got)) {
+    stop("lavaan_compare_partable(): `x` is missing columns: ",
+         paste(missing_got, collapse = ", "))
+  }
+  if (length(missing_exp)) {
+    stop("lavaan_compare_partable(): `reference` is missing columns: ",
+         paste(missing_exp, collapse = ", "))
+  }
+
+  text_col <- function(pt, col) {
+    if (!col %in% names(pt)) return(rep("", nrow(pt)))
+    out <- as.character(pt[[col]])
+    out[is.na(out)] <- ""
+    out
+  }
+  int_col <- function(pt, col) {
+    if (!col %in% names(pt)) return(rep(0L, nrow(pt)))
+    out <- suppressWarnings(as.integer(pt[[col]]))
+    out[is.na(out)] <- 0L
+    out
+  }
+  num_col <- function(pt, col) {
+    if (!col %in% names(pt)) return(rep(NA_real_, nrow(pt)))
+    suppressWarnings(as.numeric(pt[[col]]))
+  }
+
+  normalize <- function(pt) {
+    data.frame(
+      .row = seq_len(nrow(pt)),
+      lhs = text_col(pt, "lhs"),
+      op = text_col(pt, "op"),
+      rhs = text_col(pt, "rhs"),
+      user = int_col(pt, "user"),
+      block = int_col(pt, "block"),
+      group = int_col(pt, "group"),
+      free = int_col(pt, "free"),
+      exo = int_col(pt, "exo"),
+      ustart = num_col(pt, "ustart"),
+      label = text_col(pt, "label"),
+      plabel = text_col(pt, "plabel"),
+      est = num_col(pt, "est"),
+      stringsAsFactors = FALSE
+    )
+  }
+
+  g <- normalize(got)
+  e <- normalize(exp)
+  key <- function(pt, i, include_group = TRUE) {
+    prefix <- if (include_group) paste0("group=", pt$group[[i]], "|") else ""
+    paste0(prefix, "op=", pt$op[[i]], "|lhs=", pt$lhs[[i]], "|rhs=", pt$rhs[[i]])
+  }
+  row_label <- function(pt, i) {
+    paste0("[", key(pt, i), ", free=", pt$free[[i]],
+           ", label=", pt$label[[i]], ", plabel=", pt$plabel[[i]], "]")
+  }
+  same_num <- function(a, b, tol) {
+    if (is.na(a) || is.na(b)) return(is.na(a) && is.na(b))
+    abs(a - b) <= tol
+  }
+  fixed_zero <- function(pt, i) {
+    pt$free[[i]] == 0L &&
+      ((!is.na(pt$ustart[[i]]) && abs(pt$ustart[[i]]) <= ustart_tolerance) ||
+         (!is.na(pt$est[[i]]) && abs(pt$est[[i]]) <= (est_tolerance %||% 1e-12)))
+  }
+  score <- function(gi, ei) {
+    sum(g[gi, c("user", "block", "group", "free", "exo")] ==
+          e[ei, c("user", "block", "group", "free", "exo")]) +
+      2L * (g$label[[gi]] == e$label[[ei]]) +
+      2L * (g$plabel[[gi]] == e$plabel[[ei]]) +
+      as.integer(same_num(g$ustart[[gi]], e$ustart[[ei]], ustart_tolerance))
+  }
+  best_match <- function(ei, used, include_group) {
+    target <- key(e, ei, include_group)
+    candidates <- which(!used & vapply(seq_len(nrow(g)), function(gi) {
+      identical(key(g, gi, include_group), target)
+    }, logical(1)))
+    if (!length(candidates)) return(NA_integer_)
+    candidates[[which.max(vapply(candidates, score, numeric(1), ei = ei))]]
+  }
+
+  failures <- data.frame(category = character(), detail = character(),
+                         stringsAsFactors = FALSE)
+  add_failure <- function(category, detail) {
+    failures <<- rbind(failures, data.frame(category = category, detail = detail,
+                                            stringsAsFactors = FALSE))
+  }
+  add_drift <- function(category, field, gi, ei) {
+    add_failure(category, paste0(field, " for ", row_label(e, ei),
+                                 ": got=", as.character(g[[field]][[gi]]),
+                                 " expected=", as.character(e[[field]][[ei]])))
+  }
+
+  used <- rep(FALSE, nrow(g))
+  for (ei in seq_len(nrow(e))) {
+    gi <- best_match(ei, used, include_group = TRUE)
+    if (is.na(gi)) {
+      gi <- best_match(ei, used, include_group = FALSE)
+      if (is.na(gi)) {
+        add_failure("missing row", row_label(e, ei))
+        next
+      }
+      add_failure("group drift", paste0(row_label(e, ei), ": got group=",
+                                        g$group[[gi]], " expected group=", e$group[[ei]]))
+    }
+    used[[gi]] <- TRUE
+
+    if (!identical(g$label[[gi]], e$label[[ei]])) add_drift("label drift", "label", gi, ei)
+    if (!identical(g$plabel[[gi]], e$plabel[[ei]])) add_drift("plabel drift", "plabel", gi, ei)
+    if (!identical(g$free[[gi]], e$free[[ei]])) add_drift("free-index drift", "free", gi, ei)
+    if (!same_num(g$ustart[[gi]], e$ustart[[ei]], ustart_tolerance)) {
+      add_failure("ustart drift", paste0(row_label(e, ei), ": got=", g$ustart[[gi]],
+                                         " expected=", e$ustart[[ei]]))
+    }
+    for (field in c("user", "block", "exo")) {
+      if (!identical(g[[field]][[gi]], e[[field]][[ei]])) {
+        add_drift("metadata drift", field, gi, ei)
+      }
+    }
+    if (!is.null(est_tolerance) && "est" %in% names(got) && "est" %in% names(exp) &&
+        !same_num(g$est[[gi]], e$est[[ei]], est_tolerance)) {
+      add_failure("estimate drift", paste0(row_label(e, ei), ": got=", g$est[[gi]],
+                                           " expected=", e$est[[ei]]))
+    }
+  }
+
+  for (gi in which(!used)) {
+    add_failure(if (fixed_zero(g, gi)) "extra fixed-zero row" else "extra row",
+                row_label(g, gi))
+  }
+
+  counts <- if (nrow(failures)) table(failures$category) else integer()
+  structure(list(ok = nrow(failures) == 0L,
+                 failures = failures,
+                 counts = counts),
+            class = "magmaan_partable_comparison")
+}
+
 data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
                                        missing = c("listwise", "error")) {
   missing <- match.arg(missing)

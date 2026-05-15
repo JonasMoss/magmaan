@@ -149,6 +149,14 @@ cat("\nregenerated", length(regenerated), "flat fixtures under", flat_dir, "\n")
 # === ptable layer ==========================================================
 # parTable(lavaanify(model)) emits the full lavaanified partable. We
 # translate to our model-description-only shape (no start/est/se).
+#
+# Comparison policy lives in the consumers, not in fixture generation:
+#   * ptable structure is matched by semantic row key (group/op/lhs/rhs), not
+#     by raw row position.
+#   * labels, plabels, free indices, groups, and fixed-zero row presence are
+#     distinct failure classes.
+#   * ustart comparison uses a tight numeric tolerance (1e-12); fitted
+#     partable examples opt into estimator-specific `est` tolerances.
 
 ptable_dir <- file.path(fixtures, "ptable")
 dir.create(ptable_dir, showWarnings = FALSE, recursive = TRUE)
