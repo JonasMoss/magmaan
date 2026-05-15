@@ -53,8 +53,10 @@ golden `parTable()` fixtures.
   observed information for covariance and mean-structure models.
 - Vcov/SE, Wald/z tests, chi-square/df helpers, LR/Satorra-2000 nested tests,
   robust U-Gamma machinery, Satorra-Bentler-family statistics, robust SEs,
-  Browne residual NT/ADF, fit measures including RMSEA close-fit p-values,
-  structural-aware standardization, and C++ defined-parameter evaluation.
+  Browne residual NT/ADF, fixed-parameter modification indices,
+  equality-release score tests, fit measures including RMSEA close-fit
+  p-values, structural-aware standardization, and C++ defined-parameter
+  evaluation.
 - Observed-bread robust SEs and observed-Hessian U-factors use total-N scaling
   and work on block-stacked multi-block covariance and mean-structure models.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand
@@ -88,6 +90,8 @@ golden `parTable()` fixtures.
 - Bounded LS fitting through LBFGS-B and optional Ceres.
 - Automatic nonnegative variance bounds.
 - Equality-penalty residuals on the LS path.
+- Fixed-parameter modification indices and equality-release score tests reuse
+  the estimator-specific LS residual/Jacobian weighting for ULS/GLS/WLS.
 - Continuous LS fixtures cover point estimates, degrees of freedom, and
   estimator-specific chi-square reporting for representative CFA,
   multi-group, labeled-equality, mean-structure, and observed-exogenous
@@ -117,6 +121,9 @@ golden `parTable()` fixtures.
 - A first mixed continuous/ordinal path builds lavaan-ordered thresholds,
   continuous means/variances, polychoric/polyserial/covariance moments,
   NACOV/DWLS/WLS weights, and DWLS/WLS delta fits.
+- Ordinal and mixed delta DWLS/WLS expose fixed-parameter modification indices
+  and equality-release score tests over the same threshold/correlation moment
+  vectors and weights used by fitting.
 
 ### R bindings and public namespace transition
 
@@ -165,12 +172,16 @@ adapters layered on top.
   estimator/model slices.
 - FIML with missing observed exogenous variables under `fixed.x = TRUE`
   remains unsupported.
+- FIML score tests and modification indices use observed-pattern gradients
+  plus a finite-difference observed information matrix; lavaan-backed fixture
+  coverage is still narrower than complete-data ML.
 - Theta parameterization for ordinal models remains unsupported.
 - Mixed categorical NACOV/weight, fit, and robust-reporting parity is
   intentionally looser than the all-ordinal path while polyserial Gamma details
   are hardened.
 - Browne residual ADF is complete-data only.
-- Modification indices, univariate score tests, and EPC are not implemented.
+- Score-test EPC is raw, unstandardized EPC only; standardized EPC and absent
+  row-generation helpers are not yet part of the public contract.
 - Nonlinear equality constraints and inequality constraints are unsupported.
 - Active bound or inequality inference must not silently report ordinary
   chi-square/SE theory.

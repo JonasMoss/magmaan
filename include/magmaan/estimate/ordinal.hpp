@@ -9,6 +9,7 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/fit/robust.hpp"
+#include "magmaan/fit/score.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/optim/concepts.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
@@ -56,6 +57,34 @@ robust_mixed_ordinal(spec::LatentStructure pt,
                      const data::MixedOrdinalStats& stats,
                      const Estimates& est,
                      OrdinalWeightKind weights);
+
+post_expected<fit::ScoreTestTable>
+modification_indices_ordinal(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const data::OrdinalStats& stats,
+                             const Estimates& est,
+                             OrdinalWeightKind weights);
+
+post_expected<fit::ScoreTestTable>
+score_tests_ordinal(spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const data::OrdinalStats& stats,
+                    const Estimates& est,
+                    OrdinalWeightKind weights);
+
+post_expected<fit::ScoreTestTable>
+modification_indices_mixed_ordinal(spec::LatentStructure pt,
+                                   const model::MatrixRep& rep,
+                                   const data::MixedOrdinalStats& stats,
+                                   const Estimates& est,
+                                   OrdinalWeightKind weights);
+
+post_expected<fit::ScoreTestTable>
+score_tests_mixed_ordinal(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const data::MixedOrdinalStats& stats,
+                          const Estimates& est,
+                          OrdinalWeightKind weights);
 
 template <optim::LsBoundedOptimizer O = optim::LbfgsBOptimizer>
 fit_expected<Estimates>
