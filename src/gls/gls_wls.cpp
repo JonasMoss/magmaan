@@ -11,6 +11,7 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
@@ -162,8 +163,21 @@ llt_factor_for_weight(const Eigen::MatrixXd& W, FitError::Kind kind,
   }
   Eigen::LLT<Eigen::MatrixXd> llt(W);
   if (llt.info() != Eigen::Success) {
-    return std::unexpected(make_err(kind,
-        detail + ": weight matrix is not positive definite"));
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(0.5 * (W + W.transpose()));
+    if (es.info() != Eigen::Success) {
+      return std::unexpected(make_err(kind,
+          detail + ": weight matrix eigendecomposition failed"));
+    }
+    Eigen::VectorXd vals = es.eigenvalues();
+    const double tol = 1e-10 * std::max<double>(1.0, W.cwiseAbs().maxCoeff());
+    for (Eigen::Index i = 0; i < vals.size(); ++i) {
+      if (vals(i) < -tol) {
+        return std::unexpected(make_err(kind,
+            detail + ": weight matrix is not positive semidefinite"));
+      }
+      vals(i) = std::sqrt(std::max(0.0, vals(i)));
+    }
+    return es.eigenvectors() * vals.asDiagonal();
   }
   return llt.matrixL();
 }

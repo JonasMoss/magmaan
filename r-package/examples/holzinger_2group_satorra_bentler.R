@@ -38,8 +38,8 @@ ssg   <- data_sample_stats_from_raw(Xg)                 # list(S = list(S1,S2), 
 ng    <- ssg$nobs
 df_hs <- as.data.frame(hs[c("school", vars)])
 
-m <- "visual  =~ x1 + 2*x2 + x3
-      textual =~ x4 + a*x5 + a*x6
+m <- "visual  =~ x1 + x2 + x3
+      textual =~ x4 + x5 + x6
       speed   =~ x7 + x8 + x9"
 
 cat(sprintf("Holzinger-Swineford, grouped by school: %s  (n = %s, N = %d)\n\n",

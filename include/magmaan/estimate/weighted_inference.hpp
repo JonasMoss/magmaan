@@ -50,6 +50,27 @@ robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
                         const Eigen::MatrixXd& K,
                         double fmin);
 
+post_expected<double>
+continuous_ls_chisq(data::SampleStats samp,
+                    spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const Estimates& est,
+                    gls::ULS discrepancy);
+
+post_expected<double>
+continuous_ls_chisq(data::SampleStats samp,
+                    spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const Estimates& est,
+                    gls::GLS discrepancy);
+
+post_expected<double>
+continuous_ls_chisq(data::SampleStats samp,
+                    spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const Estimates& est,
+                    gls::WLS discrepancy);
+
 post_expected<WeightedRobustResult>
 robust_continuous_ls(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
