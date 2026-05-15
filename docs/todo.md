@@ -38,14 +38,14 @@ claims.
 
 Intent: make parity failures easier to diagnose and fixture expansion cheaper.
 
-- [ ] Add lavaan partable comparison helpers that match by semantic row keys
+- [x] Add lavaan partable comparison helpers that match by semantic row keys
   rather than raw row position.
-- [ ] Report missing rows, extra fixed-zero rows, label/plabel drift, group
+- [x] Report missing rows, extra fixed-zero rows, label/plabel drift, group
   drift, and estimate drift as distinct comparison failures.
-- [ ] Make fitted-object partables returned through R helpers match the
+- [x] Make fitted-object partables returned through R helpers match the
   corresponding lavaan call under the same options, with special attention to
   fixed-zero intercept and mean rows.
-- [ ] Keep fixture regeneration centralized in `tools/regen_oracle.R`, and
+- [x] Keep fixture regeneration centralized in `tools/regen_oracle.R`, and
   document any new tolerance classes near the fixture code.
 - [ ] Add fixture cases for scalar-invariance latent mean rescaling once the
   bounded optimizer reliably fits the needed mean-structure models.
