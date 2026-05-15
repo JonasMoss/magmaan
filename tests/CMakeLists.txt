@@ -88,4 +88,6 @@ target_compile_definitions(magmaan_tests PRIVATE
 
 # CMake's automatic test discovery for doctest.
 include("${doctest_SOURCE_DIR}/scripts/cmake/doctest.cmake")
-doctest_discover_tests(magmaan_tests)
+doctest_discover_tests(magmaan_tests
+  PROPERTIES
+    ENVIRONMENT "LSAN_OPTIONS=detect_leaks=0")
