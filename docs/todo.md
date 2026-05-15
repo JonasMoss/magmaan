@@ -5,6 +5,10 @@ current implementation state summarized in [docs/roadmap.md](roadmap.md). Keep
 it focused on unfinished work, acceptance checks, and the next useful seams for
 methods development.
 
+## 0. Pairwise threshold model
+
+**FILL IN THIS.** We intend to do quite a bit with the pairwise likelihood for (mixed) threshold data! E.g., missing data, density power divergence or other divergences, that sort of thing. But first priority is getting it up and running for polychorics. And maybe also normal data? (For shits and giggles?) I'm not sure how this is estimated, but I would expected EM to be needed for missing data of course, which is hope will be efficient under MAR.
+
 ## 1. Trust and validation hardening
 
 Intent: reach a state where the current implementation can be trusted as a
@@ -182,3 +186,15 @@ Intent: make the codebase easier to steer for future methods work.
 Done when: a new contributor can read the roadmap for context, this TODO for
 remaining work, and examples for the intended workflow without reverse
 engineering current state from tests.
+
+## 9. Add alternative polychorics (mixed) estimators
+
+- [ ] **FILL IN** Implement resources/alternative estimators/WMA h-score robust polychoric plan
+- [ ] **FILL IN** Implement DPD and Huberized residual fitting from esources/alternative estimators/different_robust
+- [ ] Have loads of options for Huberized residual fitting.
+
+## 10. Ensure composite models work
+
+- [ ] Figure out how composite models are supposed to work; download some models to run in lavaan.
+- [ ] Check that our output agrees.
+- [ ] Check that mean structure "works" for composite models, which i dont understand what is supposed to mean.
