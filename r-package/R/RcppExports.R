@@ -129,6 +129,10 @@ infer_se <- function(vcov) {
     .Call(`_magmaan_infer_se`, vcov)
 }
 
+compute_defined_impl <- function(syntax, fit, vcov) {
+    .Call(`_magmaan_compute_defined_impl`, syntax, fit, vcov)
+}
+
 infer_chi2_stat <- function(sample_stats, fmin) {
     .Call(`_magmaan_infer_chi2_stat`, sample_stats, fmin)
 }

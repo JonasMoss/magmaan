@@ -1001,6 +1001,10 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
          })
 }
 
+compute_defined <- function(model, fit, vcov) {
+  compute_defined_impl(model_syntax_arg(model), fit, vcov)
+}
+
 fit_uls_snlls <- function(model, data, lbfgsb = NULL, bounds = NULL) {
   fit_uls_snlls_impl(partable_arg(model), sample_stats_arg(data),
                      lbfgsb = lbfgsb, bounds = bounds)
@@ -1063,6 +1067,15 @@ fiml_data_arg <- function(data) {
     return(list(X = data$X, mask = data$mask))
   }
   data
+}
+
+model_syntax_arg <- function(model) {
+  if (inherits(model, "magmaan_model_spec")) {
+    if (!is.null(model$syntax)) return(model$syntax)
+    stop("compute_defined(): model spec does not carry source syntax")
+  }
+  if (is.character(model) && length(model) == 1L) return(model)
+  stop("compute_defined(): `model` must be a syntax string or magmaan_model_spec")
 }
 
 `%||%` <- function(x, y) {

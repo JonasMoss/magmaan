@@ -17,6 +17,9 @@ Convenience helpers are limited to R-side composition:
   or FIML raw-data objects from data frames, and dispatches to the matching
   point-estimation wrapper. SEs, robust corrections, fit measures, defined
   parameters, and nested tests remain explicit post-fit calls.
+- `compute_defined(model, fit, vcov)` evaluates `:=` rows after fitting. The
+  caller supplies the covariance matrix explicitly, so expected/observed/robust
+  covariance choices stay visible.
 
 Low-level functions such as `lavaan_lavaanify()`, `model_matrix_rep()`,
 `fit_fit()`, `fit_*_impl()`, `data_sample_stats_from_raw()`, and the `infer_*`
