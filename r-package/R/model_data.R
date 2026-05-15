@@ -169,6 +169,107 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
   out
 }
 
+data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
+                                             missing = c("listwise", "error")) {
+  missing <- match.arg(missing)
+  if (!is.data.frame(x)) stop("data_mixed_ordinal_stats_from_df(): `x` must be a data.frame")
+  model <- as_magmaan_model_spec(model)
+  ordered <- if (is.null(ordered)) model$ordered else as.character(ordered)
+  if (!length(ordered)) stop("data_mixed_ordinal_stats_from_df(): `ordered` must name ordered variables")
+
+  group_var <- if (is.null(group)) model$group_var else as.character(group)[1L]
+  if (is.null(group_var) || !nzchar(group_var)) group_var <- ""
+  labels <- character()
+  if (nzchar(group_var)) {
+    if (!group_var %in% names(x)) stop("data_mixed_ordinal_stats_from_df(): grouping column not found: ", group_var)
+    g <- x[[group_var]]
+    if (anyNA(g)) stop("data_mixed_ordinal_stats_from_df(): grouping column contains missing values")
+    labels <- model$group_labels
+    if (is.null(labels) || !length(labels)) labels <- if (is.factor(g)) levels(g) else unique(as.character(g))
+    labels <- as.character(labels)
+  }
+
+  rep <- model_matrix_rep(model$partable)
+  ov_by_group <- rep$ov_names
+  if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
+  if (length(labels) && length(ov_by_group) != length(labels)) {
+    stop("data_mixed_ordinal_stats_from_df(): model/data group count mismatch")
+  }
+
+  make_block <- function(rows, ov, label = NULL) {
+    if (!all(ordered %in% ov)) {
+      stop("data_mixed_ordinal_stats_from_df(): ordered variables must be observed model variables")
+    }
+    if (setequal(ordered, ov)) {
+      stop("data_mixed_ordinal_stats_from_df(): use data_ordinal_stats_from_df() for all-ordinal data")
+    }
+    miss_cols <- setdiff(ov, names(x))
+    if (length(miss_cols)) stop("data_mixed_ordinal_stats_from_df(): data is missing observed variables: ", paste(miss_cols, collapse = ", "))
+    block <- x[rows, ov, drop = FALSE]
+    cc <- stats::complete.cases(block)
+    if (!all(cc)) {
+      if (missing == "error") {
+        suffix <- if (is.null(label)) "" else paste0(" in group '", label, "'")
+        stop("data_mixed_ordinal_stats_from_df(): missing observed values", suffix)
+      }
+      block <- block[cc, , drop = FALSE]
+    }
+    if (nrow(block) < 2L) stop("data_mixed_ordinal_stats_from_df(): fewer than 2 complete rows")
+    mat <- matrix(NA_real_, nrow(block), length(ov), dimnames = list(NULL, ov))
+    mask <- integer(length(ov))
+    for (j in seq_along(ov)) {
+      v <- block[[ov[[j]]]]
+      if (ov[[j]] %in% ordered) {
+        mask[[j]] <- 1L
+        if (is.factor(v)) {
+          counts <- tabulate(as.integer(v), nbins = nlevels(v))
+          if (any(counts == 0L)) {
+            suffix <- if (is.null(label)) "" else paste0(" in group '", label, "'")
+            stop("data_mixed_ordinal_stats_from_df(): empty ordinal category for ", ov[[j]], suffix)
+          }
+          mat[, j] <- as.integer(v)
+        } else {
+          vals <- sort(unique(v))
+          mat[, j] <- match(v, vals)
+        }
+      } else {
+        if (!is.numeric(v)) stop("data_mixed_ordinal_stats_from_df(): continuous variable is not numeric: ", ov[[j]])
+        mat[, j] <- as.numeric(v)
+      }
+    }
+    list(X = mat, ordered_mask = mask)
+  }
+
+  if (nzchar(group_var)) {
+    g_chr <- as.character(x[[group_var]])
+    if (!all(g_chr %in% labels)) {
+      stop("data_mixed_ordinal_stats_from_df(): data contains groups outside `group_labels`: ",
+           paste(setdiff(unique(g_chr), labels), collapse = ", "))
+    }
+    blocks <- Map(function(label, ov) make_block(g_chr == label, ov, label), labels, ov_by_group)
+    X <- lapply(blocks, `[[`, "X")
+    ordered_mask <- lapply(blocks, `[[`, "ordered_mask")
+    names(X) <- labels
+  } else {
+    blk <- make_block(rep(TRUE, nrow(x)), ov_by_group[[1L]])
+    X <- list(blk$X)
+    ordered_mask <- list(blk$ordered_mask)
+  }
+  out <- data_mixed_ordinal_stats_from_raw_impl(X, ordered_mask)
+  out$X <- X
+  out$ov_names <- ov_by_group
+  out$ordered <- ordered
+  out$group_var <- group_var
+  out$group_labels <- labels
+  for (b in seq_along(out$R)) {
+    nm <- ov_by_group[[b]]
+    dimnames(out$R[[b]]) <- list(nm, nm)
+    names(out$mean[[b]]) <- nm
+  }
+  class(out) <- c("magmaan_mixed_ordinal_data", "list")
+  out
+}
+
 augment_ordinal_partable <- function(model, ordinal_stats) {
   fix_delta_variances <- function(pt, ov_by_group) {
     for (b in seq_along(ov_by_group)) {
@@ -259,6 +360,113 @@ augment_ordinal_partable <- function(model, ordinal_stats) {
   attr(out, "magmaan.group_var") <- attr(pt, "magmaan.group_var", exact = TRUE)
   attr(out, "magmaan.group_labels") <- attr(pt, "magmaan.group_labels", exact = TRUE)
   attr(out, "magmaan.ordered") <- ordinal_stats$ordered
+  attr(out, "magmaan.parameterization") <- "delta"
+  out
+}
+
+augment_mixed_ordinal_partable <- function(model, mixed_stats) {
+  pt <- partable_arg(model)
+  if (!any(pt$op == "~1")) {
+    stop("augment_mixed_ordinal_partable(): mixed categorical fitting requires model_spec(..., meanstructure = TRUE)")
+  }
+  ov_by_group <- mixed_stats$ov_names
+  if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
+  ordered <- mixed_stats$ordered
+  fix_delta_variances <- function(pt) {
+    for (b in seq_along(ov_by_group)) {
+      ord <- intersect(ordered, ov_by_group[[b]])
+      idx <- pt$op == "~~" &
+        pt$lhs == pt$rhs &
+        pt$lhs %in% ord &
+        pt$group == b
+      pt$free[idx] <- 0L
+      pt$ustart[idx] <- 1.0
+      idx_i <- pt$op == "~1" &
+        pt$lhs %in% ord &
+        pt$group == b
+      pt$free[idx_i] <- 0L
+      pt$ustart[idx_i] <- 0.0
+    }
+    free_old <- pt$free
+    vals <- sort(unique(free_old[free_old > 0L]))
+    if (length(vals)) {
+      map <- setNames(seq_along(vals), vals)
+      pt$free[free_old > 0L] <- unname(map[as.character(free_old[free_old > 0L])])
+    }
+    pt
+  }
+  reorder_delta_free <- function(pt) {
+    append_unique <- function(ids, add) unique(c(ids, add[!is.na(add) & add > 0L]))
+    ids <- integer()
+    groups <- sort(unique(pt$group[pt$group > 0L]))
+    for (g in groups) {
+      in_group <- pt$group == g
+      ids <- append_unique(ids, pt$free[in_group & pt$op == "=~"])
+      ids <- append_unique(ids, pt$free[in_group & pt$op == "|"])
+      ids <- append_unique(ids, pt$free[in_group & !(pt$op %in% c("=~", "|"))])
+    }
+    if (length(ids)) {
+      map <- setNames(seq_along(ids), ids)
+      old <- pt$free
+      pt$free[old > 0L] <- unname(map[as.character(old[old > 0L])])
+    }
+    pt
+  }
+  pt <- fix_delta_variances(pt)
+  if (any(pt$op == "|")) return(reorder_delta_free(pt))
+  required <- names(pt)
+  n_new <- sum(vapply(seq_along(ov_by_group), function(b) {
+    sum(as.integer(mixed_stats$n_levels[[b]][mixed_stats$ordered_mask[[b]] != 0L]) - 1L) +
+      sum(mixed_stats$ordered_mask[[b]] != 0L)
+  }, integer(1)))
+  rows <- pt[rep(NA_integer_, n_new), required, drop = FALSE]
+  n0 <- nrow(pt)
+  next_free <- if (length(pt$free)) max(pt$free, na.rm = TRUE) else 0L
+  rr <- 0L
+  for (b in seq_along(ov_by_group)) {
+    ov <- ov_by_group[[b]]
+    th <- mixed_stats$thresholds[[b]]
+    th_pos <- 1L
+    for (j in seq_along(ov)) {
+      if (!mixed_stats$ordered_mask[[b]][[j]]) next
+      for (lev in seq_len(mixed_stats$n_levels[[b]][[j]] - 1L)) {
+        rr <- rr + 1L
+        next_free <- next_free + 1L
+        rows[rr, ] <- pt[1L, required, drop = FALSE]
+        rows$id[rr] <- n0 + rr
+        rows$lhs[rr] <- ov[[j]]
+        rows$op[rr] <- "|"
+        rows$rhs[rr] <- paste0("t", lev)
+        rows$user[rr] <- 0L
+        rows$block[rr] <- b
+        rows$group[rr] <- b
+        rows$free[rr] <- next_free
+        rows$exo[rr] <- 0L
+        rows$ustart[rr] <- th[[th_pos]]
+        rows$label[rr] <- ""
+        rows$plabel[rr] <- paste0(".p", n0 + rr, ".")
+        th_pos <- th_pos + 1L
+      }
+      rr <- rr + 1L
+      rows[rr, ] <- pt[1L, required, drop = FALSE]
+      rows$id[rr] <- n0 + rr
+      rows$lhs[rr] <- ov[[j]]
+      rows$op[rr] <- "~*~"
+      rows$rhs[rr] <- ov[[j]]
+      rows$user[rr] <- 0L
+      rows$block[rr] <- b
+      rows$group[rr] <- b
+      rows$free[rr] <- 0L
+      rows$exo[rr] <- 0L
+      rows$ustart[rr] <- 1.0
+      rows$label[rr] <- ""
+      rows$plabel[rr] <- ""
+    }
+  }
+  out <- reorder_delta_free(rbind(pt, rows))
+  attr(out, "magmaan.group_var") <- attr(pt, "magmaan.group_var", exact = TRUE)
+  attr(out, "magmaan.group_labels") <- attr(pt, "magmaan.group_labels", exact = TRUE)
+  attr(out, "magmaan.ordered") <- mixed_stats$ordered
   attr(out, "magmaan.parameterization") <- "delta"
   out
 }
@@ -500,6 +708,16 @@ fit_dwls_ordinal <- function(model, data, lbfgsb = NULL, bounds = NULL) {
 fit_wls_ordinal <- function(model, data, lbfgsb = NULL, bounds = NULL) {
   pt <- augment_ordinal_partable(model, data)
   fit_wls_ordinal_impl(pt, data, lbfgsb = lbfgsb, bounds = bounds)
+}
+
+fit_dwls_mixed_ordinal <- function(model, data, lbfgsb = NULL, bounds = NULL) {
+  pt <- augment_mixed_ordinal_partable(model, data)
+  fit_dwls_mixed_ordinal_impl(pt, data, lbfgsb = lbfgsb, bounds = bounds)
+}
+
+fit_wls_mixed_ordinal <- function(model, data, lbfgsb = NULL, bounds = NULL) {
+  pt <- augment_mixed_ordinal_partable(model, data)
+  fit_wls_mixed_ordinal_impl(pt, data, lbfgsb = lbfgsb, bounds = bounds)
 }
 
 fit_uls_snlls <- function(model, data, lbfgsb = NULL, bounds = NULL) {

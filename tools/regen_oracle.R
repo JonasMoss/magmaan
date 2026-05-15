@@ -1027,6 +1027,102 @@ for (oc in ordinal_cases) {
 cat("regenerated", length(regenerated_ord), "ordinal fixtures under",
     ordinal_dir, "\n")
 
+# === mixed continuous/ordinal categorical fixtures ==========================
+
+mixed_ordinal_dir <- file.path(fixtures, "mixed_ordinal")
+dir.create(mixed_ordinal_dir, showWarnings = FALSE, recursive = TRUE)
+
+make_mixed_ord_df <- function(n, seed = 42L) {
+  set.seed(seed)
+  eta <- rnorm(n)
+  data.frame(
+    x1 = ordered(cut(eta + rnorm(n, sd = 0.65),
+                     c(-Inf, -0.55, 0.45, Inf), labels = FALSE)),
+    x2 = ordered(cut(0.70 * eta + rnorm(n, sd = 0.75),
+                     c(-Inf, 0.10, Inf), labels = FALSE)),
+    y1 = 0.82 * eta + rnorm(n, sd = 0.70) + 0.20,
+    y2 = 0.55 * eta + rnorm(n, sd = 0.90) - 0.10
+  )
+}
+
+mixed_ordered_to_matrix <- function(df, ov, ordered) {
+  mat <- matrix(NA_real_, nrow(df), length(ov), dimnames = list(NULL, ov))
+  for (j in seq_along(ov)) {
+    mat[, j] <- if (ov[[j]] %in% ordered) as.integer(df[[ov[[j]]]])
+                else as.numeric(df[[ov[[j]]]])
+  }
+  mat
+}
+
+mixed_samp_json <- function(fit) {
+  ss <- lavInspect(fit, "sampstat")
+  G  <- lavInspect(fit, "gamma")
+  W  <- lavTech(fit, "WLS.V")
+  obs <- lavTech(fit, "wls.obs")
+  if (!is.list(G)) G <- list(G)
+  if (!is.list(W)) W <- list(W)
+  if (!is.list(obs)) obs <- list(obs)
+  list(list(block = 0L,
+            nobs = as.integer(lavInspect(fit, "nobs")),
+            mean = as.numeric(ss$mean),
+            thresholds = as.numeric(ss$th),
+            cov = unname(as.matrix(ss$cov)),
+            moments = as.numeric(obs[[1]]),
+            NACOV = unname(as.matrix(G[[1]])),
+            WLS.V = unname(as.matrix(W[[1]])),
+            WLS.VD = diag(1 / diag(as.matrix(G[[1]])),
+                           nrow = nrow(as.matrix(G[[1]])))))
+}
+
+mixed_cases <- list(
+  list(id = "0001_mixed_cfa",
+       model = "f =~ x1 + x2 + y1 + y2",
+       data = make_mixed_ord_df(360, seed = 42L),
+       ordered = c("x1", "x2"),
+       ov = c("x1", "x2", "y1", "y2"))
+)
+
+regenerated_mixed_ord <- character(0)
+for (mc in mixed_cases) {
+  fit_wls <- cfa(mc$model, data = mc$data, ordered = mc$ordered,
+                 estimator = "WLS", parameterization = "delta")
+  fit_dwls <- cfa(mc$model, data = mc$data, ordered = mc$ordered,
+                  estimator = "DWLS", parameterization = "delta")
+  fit_dwls_robust <- cfa(mc$model, data = mc$data, ordered = mc$ordered,
+                         estimator = "DWLS", parameterization = "delta",
+                         se = "robust.sem",
+                         test = c("standard", "satorra.bentler",
+                                  "mean.var.adjusted", "scaled.shifted"))
+  fits <- list(DWLS = ordinal_fit_json(fit_dwls),
+               WLS = ordinal_fit_json(fit_wls))
+  fits$DWLS$robust <- ordinal_robust_json(fit_dwls_robust)
+
+  mask <- as.integer(mc$ov %in% mc$ordered)
+  payload <- list(
+    `_meta` = list(format_version = 1L,
+                   fixture_kind = "mixed_ordinal",
+                   corpus_id = mc$id,
+                   tool = "lavaan::cfa(ordered=mixed, estimator=WLS/DWLS)",
+                   lavaan_version = installed),
+    input = mc$model,
+    ordered = mc$ordered,
+    ordered_mask = list(list(block = 0L, mask = mask)),
+    blocks = list(list(block = 0L, label = "",
+                       matrix = unname(mixed_ordered_to_matrix(mc$data, mc$ov,
+                                                               mc$ordered)))),
+    sample_stats = mixed_samp_json(fit_wls),
+    fits = fits
+  )
+
+  out_path <- file.path(mixed_ordinal_dir, paste0(mc$id, ".ordinal.json"))
+  write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
+             null = "null", na = "null", digits = NA)
+  regenerated_mixed_ord <- c(regenerated_mixed_ord, out_path)
+}
+
+cat("regenerated", length(regenerated_mixed_ord),
+    "mixed ordinal fixtures under", mixed_ordinal_dir, "\n")
+
 # === std.lv fit fixtures ===================================================
 # Stage D of the ParTable split refactor adds the `std_lv` knob to
 # LavaanifyOptions. These fixtures pin a CFA fitted with `std.lv = TRUE`

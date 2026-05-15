@@ -37,6 +37,10 @@ const std::vector<std::string> kOrdinalFixtures = {
     "0010_near_perfect_pair",
 };
 
+const std::vector<std::string> kMixedOrdinalFixtures = {
+    "0001_mixed_cfa",
+};
+
 Eigen::MatrixXd matrix_from_json(const nlohmann::json& j) {
   const Eigen::Index nr = static_cast<Eigen::Index>(j.size());
   const Eigen::Index nc = nr > 0 ? static_cast<Eigen::Index>(j[0].size()) : 0;
@@ -129,6 +133,92 @@ struct OrdinalHandles {
   magmaan::model::MatrixRep rep;
   magmaan::data::OrdinalStats stats;
 };
+
+std::string mixed_ordinal_syntax(const nlohmann::json& exp) {
+  std::string src = exp["input"].get<std::string>();
+  if (!src.empty() && src.back() != '\n') src.push_back('\n');
+
+  const auto& first_block = exp["blocks"][0]["matrix"];
+  const Eigen::Index p = static_cast<Eigen::Index>(first_block[0].size());
+  std::vector<int> ordered(static_cast<std::size_t>(p), 0);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    ordered[static_cast<std::size_t>(j)] =
+        exp["ordered_mask"][0]["mask"][static_cast<std::size_t>(j)].get<int>();
+  }
+  std::vector<int> max_level(static_cast<std::size_t>(p), 0);
+  for (const auto& block : exp["blocks"]) {
+    const auto& X = block["matrix"];
+    for (const auto& row : X) {
+      for (Eigen::Index j = 0; j < p; ++j) {
+        if (ordered[static_cast<std::size_t>(j)] == 0) continue;
+        max_level[static_cast<std::size_t>(j)] =
+            std::max(max_level[static_cast<std::size_t>(j)],
+                     row[static_cast<std::size_t>(j)].get<int>());
+      }
+    }
+  }
+
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] == 0) continue;
+    src += "x" + std::to_string(j + 1) + " | ";
+    for (int lev = 1; lev < max_level[static_cast<std::size_t>(j)]; ++lev) {
+      if (lev > 1) src += " + ";
+      src += "t" + std::to_string(lev);
+    }
+    src += "\n";
+  }
+  for (Eigen::Index j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] == 0) continue;
+    src += "x" + std::to_string(j + 1) + " ~*~ 1*x" +
+           std::to_string(j + 1) + "\n";
+  }
+  return src;
+}
+
+struct MixedOrdinalHandles {
+  magmaan::spec::LatentStructure pt;
+  magmaan::model::MatrixRep rep;
+  magmaan::data::MixedOrdinalStats stats;
+};
+
+std::optional<MixedOrdinalHandles> mixed_handles_from_fixture(
+    const std::string& id,
+    const nlohmann::json& exp,
+    std::vector<std::string>& failures) {
+  std::vector<Eigen::MatrixXd> blocks;
+  for (const auto& b : exp["blocks"]) blocks.push_back(matrix_from_json(b["matrix"]));
+  std::vector<std::vector<std::int32_t>> ordered;
+  for (const auto& b : exp["ordered_mask"]) {
+    std::vector<std::int32_t> mask;
+    for (const auto& z : b["mask"]) mask.push_back(z.get<std::int32_t>());
+    ordered.push_back(std::move(mask));
+  }
+  auto stats_or = magmaan::data::mixed_ordinal_stats_from_data(blocks, ordered);
+  if (!stats_or.has_value()) {
+    failures.push_back(id + ": mixed_ordinal_stats_from_data — " +
+                       stats_or.error().detail);
+    return std::nullopt;
+  }
+  auto fp = magmaan::parse::Parser::parse(mixed_ordinal_syntax(exp));
+  if (!fp.has_value()) {
+    failures.push_back(id + ": parse");
+    return std::nullopt;
+  }
+  magmaan::spec::LavaanifyOptions opts;
+  opts.meanstructure = true;
+  opts.n_groups = static_cast<std::int32_t>(exp["blocks"].size());
+  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  if (!pt.has_value()) {
+    failures.push_back(id + ": lavaanify — " + pt.error().detail);
+    return std::nullopt;
+  }
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  if (!mr.has_value()) {
+    failures.push_back(id + ": matrix_rep — " + mr.error().detail);
+    return std::nullopt;
+  }
+  return MixedOrdinalHandles{std::move(*pt), std::move(*mr), std::move(*stats_or)};
+}
 
 std::optional<OrdinalHandles> handles_from_fixture(
     const std::string& id,
@@ -247,6 +337,77 @@ TEST_CASE("ordinal goldens: thresholds, polychorics, NACOV, and WLS weights vs l
           << " pass");
   for (const auto& f : failures) MESSAGE("  FAIL " << f);
   CHECK(passed == static_cast<int>(kOrdinalFixtures.size()));
+}
+
+TEST_CASE("mixed ordinal goldens: thresholds, polyserials, NACOV, and WLS weights vs lavaan") {
+  const std::string dir = magmaan::test::fixtures_dir() + "/mixed_ordinal";
+
+  int passed = 0;
+  std::vector<std::string> failures;
+  for (const auto& id : kMixedOrdinalFixtures) {
+    const std::string path = dir + "/" + id + ".ordinal.json";
+    auto raw = magmaan::test::read_fixture(path);
+    if (!raw.has_value()) {
+      failures.push_back(id + ": missing fixture");
+      continue;
+    }
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    if (exp.is_discarded()) {
+      failures.push_back(id + ": invalid JSON");
+      continue;
+    }
+    std::vector<Eigen::MatrixXd> blocks;
+    for (const auto& b : exp["blocks"]) blocks.push_back(matrix_from_json(b["matrix"]));
+    std::vector<std::vector<std::int32_t>> ordered;
+    for (const auto& b : exp["ordered_mask"]) {
+      std::vector<std::int32_t> mask;
+      for (const auto& z : b["mask"]) mask.push_back(z.get<std::int32_t>());
+      ordered.push_back(std::move(mask));
+    }
+    auto stats_or = magmaan::data::mixed_ordinal_stats_from_data(blocks, ordered);
+    if (!stats_or.has_value()) {
+      failures.push_back(id + ": mixed_ordinal_stats_from_data — " +
+                         stats_or.error().detail);
+      continue;
+    }
+    const auto& stats = *stats_or;
+    bool ok = true;
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      const auto& eb = exp["sample_stats"][b];
+      const Eigen::VectorXd th = vector_from_json(eb["thresholds"]);
+      const Eigen::VectorXd mean = vector_from_json(eb["mean"]);
+      const Eigen::MatrixXd R = matrix_from_json(eb["cov"]);
+      const Eigen::VectorXd moments = vector_from_json(eb["moments"]);
+      const Eigen::MatrixXd NACOV = matrix_from_json(eb["NACOV"]);
+      const Eigen::MatrixXd W = matrix_from_json(eb["WLS.V"]);
+      const Eigen::MatrixXd WD = matrix_from_json(eb["WLS.VD"]);
+      const double d_th = max_abs_diff(stats.thresholds[b], th);
+      const double d_mean = max_abs_diff(stats.mean[b], mean);
+      const double d_R = max_abs_diff(stats.R[b], R);
+      const double d_mom = max_abs_diff(stats.moments[b], moments);
+      const double d_N = max_abs_diff(stats.NACOV[b], NACOV);
+      const double d_WD = max_abs_diff(stats.W_dwls[b], WD);
+      const double d_W = max_abs_diff(stats.W_wls[b], W);
+      if (d_th > 5e-8 || d_mean > 5e-8 || d_R > 2e-3 || d_mom > 2e-3 ||
+          d_N > 1.2 || d_WD > 1.2 || d_W > 1.2) {
+        failures.push_back(id + " block " + std::to_string(b) +
+                           ": max diffs thresholds=" + std::to_string(d_th) +
+                           " mean=" + std::to_string(d_mean) +
+                           " R=" + std::to_string(d_R) +
+                           " moments=" + std::to_string(d_mom) +
+                           " NACOV=" + std::to_string(d_N) +
+                           " WLS.VD=" + std::to_string(d_WD) +
+                           " WLS.V=" + std::to_string(d_W));
+        ok = false;
+        break;
+      }
+    }
+    if (ok) ++passed;
+  }
+  MESSAGE("mixed ordinal goldens: " << passed << " / "
+          << kMixedOrdinalFixtures.size() << " pass");
+  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+  CHECK(passed == static_cast<int>(kMixedOrdinalFixtures.size()));
 }
 
 TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract") {
@@ -412,6 +573,105 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
   }
 
   MESSAGE("ordinal fixture fits: " << passed << " / " << total << " pass");
+  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+  CHECK(passed == total);
+}
+
+TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract") {
+  const std::string dir = magmaan::test::fixtures_dir() + "/mixed_ordinal";
+
+  int total = 0;
+  int passed = 0;
+  std::vector<std::string> failures;
+
+  for (const auto& id : kMixedOrdinalFixtures) {
+    const std::string path = dir + "/" + id + ".ordinal.json";
+    auto raw = magmaan::test::read_fixture(path);
+    REQUIRE(raw.has_value());
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(exp.is_discarded());
+
+    auto h = mixed_handles_from_fixture(id, exp, failures);
+    if (!h.has_value()) continue;
+
+    const magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
+        .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8});
+
+    for (const auto& fit_item : exp["fits"].items()) {
+      const std::string name = fit_item.key();
+      const auto kind = name == "DWLS"
+          ? magmaan::estimate::OrdinalWeightKind::DWLS
+          : magmaan::estimate::OrdinalWeightKind::WLS;
+      ++total;
+      auto est_or = magmaan::estimate::fit_mixed_ordinal_bounded(
+          h->pt, h->rep, h->stats, magmaan::estimate::Bounds{}, kind, opt);
+      if (!est_or.has_value()) {
+        failures.push_back(id + " " + name + ": fit — " + est_or.error().detail);
+        continue;
+      }
+      const double lavaan_chisq = exp["fits"][name]["chisq"].get<double>();
+      const int lavaan_df = exp["fits"][name]["df"].get<int>();
+      const Eigen::VectorXd lavaan_theta =
+          vector_from_json(exp["fits"][name]["theta_hat"]);
+      const std::int64_t n_total =
+          std::accumulate(h->stats.n_obs.begin(), h->stats.n_obs.end(),
+                          std::int64_t{0});
+      Eigen::Index n_moments = 0;
+      for (const auto& m : h->stats.moments) n_moments += m.size();
+      auto pt_for_df = h->pt;
+      auto prep_for_df =
+          magmaan::estimate::prepare_mixed_ordinal_delta_partable(pt_for_df, h->stats);
+      if (!prep_for_df.has_value()) {
+        failures.push_back(id + " " + name + ": df prep — " +
+                           prep_for_df.error().detail);
+        continue;
+      }
+      auto con_or = magmaan::fit::build_eq_constraints(pt_for_df);
+      if (!con_or.has_value()) {
+        failures.push_back(id + " " + name + ": df constraints — " +
+                           con_or.error().detail);
+        continue;
+      }
+      const int df = static_cast<int>(n_moments - con_or->n_alpha);
+      const double chisq = static_cast<double>(n_total) * est_or->fmin;
+      const double d_chisq = std::abs(chisq - lavaan_chisq);
+      const double d_theta = max_abs_diff(est_or->theta, lavaan_theta);
+      if (df != lavaan_df || d_theta > 2e-2 || d_chisq > 3e-1) {
+        failures.push_back(id + " " + name +
+                           ": df=" + std::to_string(df) +
+                           " lavaan_df=" + std::to_string(lavaan_df) +
+                           " theta diff=" + std::to_string(d_theta) +
+                           " chisq diff=" + std::to_string(d_chisq));
+        continue;
+      }
+      if (fit_item.value().contains("robust") &&
+          !fit_item.value()["robust"].is_null()) {
+        auto rob_or = magmaan::estimate::robust_mixed_ordinal(
+            h->pt, h->rep, h->stats, *est_or, kind);
+        if (!rob_or.has_value()) {
+          failures.push_back(id + " " + name + ": robust — " +
+                             rob_or.error().detail);
+          continue;
+        }
+        const auto& robust = fit_item.value()["robust"];
+        const Eigen::VectorXd lavaan_se = vector_from_json(robust["se"]);
+        const double d_se = max_abs_diff(rob_or->se, lavaan_se);
+        const double d_standard =
+            std::abs(rob_or->chisq_standard -
+                     robust["chisq_standard"].get<double>());
+        if (rob_or->df != robust["df"].get<int>() ||
+            d_se > 3e-2 || d_standard > 2e-1) {
+          failures.push_back(id + " " + name +
+                             ": robust diffs se=" + std::to_string(d_se) +
+                             " standard=" + std::to_string(d_standard));
+          continue;
+        }
+      }
+      ++passed;
+    }
+  }
+
+  MESSAGE("mixed ordinal fixture fits: " << passed << " / " << total << " pass");
   for (const auto& f : failures) MESSAGE("  FAIL " << f);
   CHECK(passed == total);
 }

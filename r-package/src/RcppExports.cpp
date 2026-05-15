@@ -158,6 +158,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// data_mixed_ordinal_stats_from_raw_impl
+Rcpp::List data_mixed_ordinal_stats_from_raw_impl(SEXP X, SEXP ordered_mask);
+RcppExport SEXP _magmaan_data_mixed_ordinal_stats_from_raw_impl(SEXP XSEXP, SEXP ordered_maskSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type ordered_mask(ordered_maskSEXP);
+    rcpp_result_gen = Rcpp::wrap(data_mixed_ordinal_stats_from_raw_impl(X, ordered_mask));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_dwls_ordinal_impl
 Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
 RcppExport SEXP _magmaan_fit_dwls_ordinal_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
@@ -183,6 +195,34 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
     rcpp_result_gen = Rcpp::wrap(fit_wls_ordinal_impl(partable, ordinal_stats, lbfgsb, bounds));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fit_dwls_mixed_ordinal_impl
+Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_dwls_mixed_ordinal_impl(SEXP partableSEXP, SEXP mixed_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type mixed_stats(mixed_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_dwls_mixed_ordinal_impl(partable, mixed_stats, lbfgsb, bounds));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fit_wls_mixed_ordinal_impl
+Rcpp::List fit_wls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_wls_mixed_ordinal_impl(SEXP partableSEXP, SEXP mixed_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type mixed_stats(mixed_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_wls_mixed_ordinal_impl(partable, mixed_stats, lbfgsb, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -682,6 +722,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_mixed_ordinal_robust
+Rcpp::List infer_mixed_ordinal_robust(Rcpp::List fit, Rcpp::List mixed_stats, std::string weight);
+RcppExport SEXP _magmaan_infer_mixed_ordinal_robust(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP weightSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type mixed_stats(mixed_statsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type weight(weightSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_robust(fit, mixed_stats, weight));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_robust_se
 Rcpp::List infer_robust_se(Rcpp::List fit, Rcpp::NumericMatrix gamma_hat, std::string bread, std::string moments, std::string cov);
 RcppExport SEXP _magmaan_infer_robust_se(SEXP fitSEXP, SEXP gamma_hatSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP) {
@@ -725,8 +778,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_gls_impl", (DL_FUNC) &_magmaan_fit_gls_impl, 4},
     {"_magmaan_fit_wls_impl", (DL_FUNC) &_magmaan_fit_wls_impl, 5},
     {"_magmaan_data_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_from_raw_impl, 1},
+    {"_magmaan_data_mixed_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_from_raw_impl, 2},
     {"_magmaan_fit_dwls_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_ordinal_impl, 4},
     {"_magmaan_fit_wls_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_ordinal_impl, 4},
+    {"_magmaan_fit_dwls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_mixed_ordinal_impl, 4},
+    {"_magmaan_fit_wls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_mixed_ordinal_impl, 4},
     {"_magmaan_fit_uls_snlls_impl", (DL_FUNC) &_magmaan_fit_uls_snlls_impl, 4},
     {"_magmaan_fit_gls_snlls_impl", (DL_FUNC) &_magmaan_fit_gls_snlls_impl, 4},
     {"_magmaan_fit_wls_snlls_impl", (DL_FUNC) &_magmaan_fit_wls_snlls_impl, 5},
@@ -766,6 +822,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_empirical_gamma", (DL_FUNC) &_magmaan_infer_empirical_gamma, 1},
     {"_magmaan_infer_gamma_nt", (DL_FUNC) &_magmaan_infer_gamma_nt, 1},
     {"_magmaan_infer_ordinal_robust", (DL_FUNC) &_magmaan_infer_ordinal_robust, 3},
+    {"_magmaan_infer_mixed_ordinal_robust", (DL_FUNC) &_magmaan_infer_mixed_ordinal_robust, 3},
     {"_magmaan_infer_robust_se", (DL_FUNC) &_magmaan_infer_robust_se, 5},
     {"_magmaan_infer_robust_se_raw", (DL_FUNC) &_magmaan_infer_robust_se_raw, 5},
     {NULL, NULL, 0}

@@ -469,6 +469,32 @@ Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
       Rcpp::_["scaled_shifted"] = scaled_shifted_to_list(r.scaled_shifted));
 }
 
+// [[Rcpp::export]]
+Rcpp::List infer_mixed_ordinal_robust(Rcpp::List fit, Rcpp::List mixed_stats,
+                                      std::string weight = "") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::MixedOrdinalStats stats = mixed_ordinal_stats_from_arg(mixed_stats);
+  if (weight.empty()) {
+    if (!fit.containsElementNamed("estimator"))
+      Rcpp::stop("magmaan: infer_mixed_ordinal_robust() needs `weight` when fit$estimator is absent");
+    weight = Rcpp::as<std::string>(fit["estimator"]);
+  }
+  auto r_or = magmaan::estimate::robust_mixed_ordinal(
+      ctx.pt, ctx.rep, stats, est, ordinal_weight_from_string(weight));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  const magmaan::estimate::OrdinalRobustResult& r = *r_or;
+  return Rcpp::List::create(
+      Rcpp::_["vcov"] = Rcpp::wrap(r.vcov),
+      Rcpp::_["se"] = Rcpp::wrap(r.se),
+      Rcpp::_["df"] = r.df,
+      Rcpp::_["eigvals"] = Rcpp::wrap(r.eigvals),
+      Rcpp::_["chisq_standard"] = r.chisq_standard,
+      Rcpp::_["satorra_bentler"] = satorra_bentler_to_list(r.satorra_bentler),
+      Rcpp::_["mean_var_adjusted"] = mean_var_to_list(r.mean_var_adjusted),
+      Rcpp::_["scaled_shifted"] = scaled_shifted_to_list(r.scaled_shifted));
+}
+
 // =============================================================================
 // Robust ("sandwich") standard errors
 // =============================================================================

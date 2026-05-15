@@ -38,12 +38,24 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
                                 const data::OrdinalStats& stats,
                                 spec::Starts* starts = nullptr);
 
+fit_expected<void>
+prepare_mixed_ordinal_delta_partable(spec::LatentStructure& pt,
+                                      const data::MixedOrdinalStats& stats,
+                                      spec::Starts* starts = nullptr);
+
 post_expected<OrdinalRobustResult>
 robust_ordinal(spec::LatentStructure pt,
                const model::MatrixRep& rep,
                const data::OrdinalStats& stats,
                const Estimates& est,
                OrdinalWeightKind weights);
+
+post_expected<OrdinalRobustResult>
+robust_mixed_ordinal(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const data::MixedOrdinalStats& stats,
+                     const Estimates& est,
+                     OrdinalWeightKind weights);
 
 template <optim::LsBoundedOptimizer O = optim::LbfgsBOptimizer>
 fit_expected<Estimates>
@@ -64,11 +76,40 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                     optim::LbfgsBOptimizer optimizer,
                     spec::Starts starts = {});
 
+template <optim::LsBoundedOptimizer O = optim::LbfgsBOptimizer>
+fit_expected<Estimates>
+fit_mixed_ordinal_bounded(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const data::MixedOrdinalStats& stats,
+                          Bounds bounds,
+                          OrdinalWeightKind weights,
+                          O optimizer = {},
+                          spec::Starts starts = {});
+
+fit_expected<Estimates>
+fit_mixed_ordinal_bounded(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const data::MixedOrdinalStats& stats,
+                          Bounds bounds,
+                          OrdinalWeightKind weights,
+                          optim::LbfgsBOptimizer optimizer,
+                          spec::Starts starts = {});
+
 extern template fit_expected<Estimates>
 fit_ordinal_bounded<optim::LbfgsBOptimizer>(
     spec::LatentStructure pt,
     const model::MatrixRep& rep,
     const data::OrdinalStats& stats,
+    Bounds bounds,
+    OrdinalWeightKind weights,
+    optim::LbfgsBOptimizer optimizer,
+    spec::Starts starts);
+
+extern template fit_expected<Estimates>
+fit_mixed_ordinal_bounded<optim::LbfgsBOptimizer>(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
     Bounds bounds,
     OrdinalWeightKind weights,
     optim::LbfgsBOptimizer optimizer,

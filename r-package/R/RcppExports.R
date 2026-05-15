@@ -45,12 +45,24 @@ data_ordinal_stats_from_raw_impl <- function(X) {
     .Call(`_magmaan_data_ordinal_stats_from_raw_impl`, X)
 }
 
+data_mixed_ordinal_stats_from_raw_impl <- function(X, ordered_mask) {
+    .Call(`_magmaan_data_mixed_ordinal_stats_from_raw_impl`, X, ordered_mask)
+}
+
 fit_dwls_ordinal_impl <- function(partable, ordinal_stats, lbfgsb = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_dwls_ordinal_impl`, partable, ordinal_stats, lbfgsb, bounds)
 }
 
 fit_wls_ordinal_impl <- function(partable, ordinal_stats, lbfgsb = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_wls_ordinal_impl`, partable, ordinal_stats, lbfgsb, bounds)
+}
+
+fit_dwls_mixed_ordinal_impl <- function(partable, mixed_stats, lbfgsb = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_dwls_mixed_ordinal_impl`, partable, mixed_stats, lbfgsb, bounds)
+}
+
+fit_wls_mixed_ordinal_impl <- function(partable, mixed_stats, lbfgsb = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_wls_mixed_ordinal_impl`, partable, mixed_stats, lbfgsb, bounds)
 }
 
 fit_uls_snlls_impl <- function(partable, sample_stats, lbfgsb = NULL, bounds = NULL) {
@@ -207,6 +219,10 @@ infer_gamma_nt <- function(Sigma) {
 
 infer_ordinal_robust <- function(fit, ordinal_stats, weight = "") {
     .Call(`_magmaan_infer_ordinal_robust`, fit, ordinal_stats, weight)
+}
+
+infer_mixed_ordinal_robust <- function(fit, mixed_stats, weight = "") {
+    .Call(`_magmaan_infer_mixed_ordinal_robust`, fit, mixed_stats, weight)
 }
 
 infer_robust_se <- function(fit, gamma_hat, bread = "expected", moments = "structured", cov = "empirical") {

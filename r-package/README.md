@@ -43,4 +43,10 @@ Ordinal support is intentionally narrow and mirrors the C++ delta-path:
   `infer_ordinal_robust(fit, ordinal_stats, weight = "")` after a DWLS/WLS
   ordinal fit to compute sandwich SEs and SB-family scaled statistics from the
   threshold-plus-polychoric `NACOV` and the selected DWLS/WLS weight matrix.
+- Mixed continuous/ordinal categorical data now has a separate first-pass path:
+  use `model_spec(..., ordered = ..., parameterization = "delta",
+  meanstructure = TRUE)`, `data_mixed_ordinal_stats_from_df()`, and
+  `fit_dwls_mixed_ordinal()` / `fit_wls_mixed_ordinal()`. Mixed moment values
+  follow lavaan's categorical WLS order; mixed `NACOV`/weight and robust
+  reporting parity is still looser than the all-ordinal path.
   Empty `weight` reuses `fit$estimator`.
