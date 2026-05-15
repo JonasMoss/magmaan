@@ -55,9 +55,11 @@ The core parser-to-fit pipeline is in place:
 - ULS, GLS, and explicit-weight WLS discrepancies, each with scalar
   value/gradient and least-squares residual/Jacobian interfaces. A first
   continuous LS lavaan fixture tranche now checks bounded LBFGS-B point
-  estimates for ULS/GLS/WLS across single-group CFA, multi-group CFA, a
-  labeled-equality CFA, and a mean-structure CFA, with lavaan WLS weight
-  blocks checked in for future statistic/inference parity work.
+  estimates, degrees of freedom, and estimator-specific chi-square reporting
+  for ULS/GLS/WLS across single-group CFA, multi-group CFA, a labeled-equality
+  CFA, and a mean-structure CFA. GLS/WLS reporting follows lavaan's
+  `2 * N * fmin` LS convention, while ULS chi-square is pinned to lavaan's
+  Browne residual NT statistic.
 - Bounded least-squares fitting through LBFGS-B and optional Ceres, including
   automatic nonnegative variance bounds and equality-penalty residuals on the
   LS path.
@@ -159,8 +161,9 @@ Validation targets:
 
 ULS/GLS/WLS are implemented as discrepancies and exercise the bounded LS path
 in unit/integration tests. The first continuous lavaan fixture tranche now pins
-point-estimate parity; the next step is expanding estimator-specific reporting
-and backend policy, not basic implementation.
+point-estimate, degrees-of-freedom, and estimator-specific chi-square reporting
+parity; the next step is expanding fixture breadth and backend policy, not
+basic implementation.
 
 Open work:
 
@@ -168,10 +171,10 @@ Open work:
   and `"WLS"` beyond the current single-group CFA, multi-group CFA,
   labeled-equality, and mean-structure tranche, especially fixed.x and
   Heywood-prone cases.
-- Add estimator-specific LS fit-statistic parity helpers. The first fixture
-  tranche stores lavaan `fmin`, chi-square, df, and WLS weight blocks, while
-  the current C++ golden asserts point estimates and df because objective
-  normalization is not yet a public cross-estimator contract.
+- Expand estimator-specific LS fit-statistic parity beyond the first fixture
+  tranche. Current goldens assert lavaan chi-square by keeping raw objective
+  checks separate from estimator-specific reporting: GLS/WLS use lavaan's
+  `2 * N * fmin` convention, and ULS uses Browne residual NT.
 - Decide which LS backend is the default public recommendation for each
   estimator: LBFGS-B, Ceres, or SNLLS. ULS landscapes are shallow enough that
   backend defaults matter.
@@ -180,8 +183,8 @@ Open work:
   build pay the Ceres dependency cost.
 - Restore or add the Holzinger 3-factor mean-structure fixture once the chosen
   bounded LS path fits it reliably.
-- Compare LS fit statistics against lavaan's estimator-specific reporting,
-  especially Browne residual tests versus raw LS objective statistics.
+- Continue keeping LS raw objectives and reported test statistics distinct as
+  new estimator cases are added.
 
 Validation targets:
 
