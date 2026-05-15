@@ -1,396 +1,172 @@
 # magmaan roadmap
 
-This is the live roadmap for complete-data linear SEM work. It is the source of
-truth for current implementation state and near-term work; old phase notes should
-be folded here or deleted when they stop being actionable.
+This document summarizes the current implementation state and architectural
+contracts for magmaan. It is not the active backlog. Remaining work lives in
+[docs/todo.md](todo.md).
 
-Out of scope for this track: Bayesian, multilevel, latent
-interactions/mixtures, EFA, and end-user `cfa(model, data)` ergonomics.
+Out of scope for this track: Bayesian SEM, multilevel SEM, latent
+interactions/mixtures, EFA, nonlinear constraints, and end-user lavaan
+replacement ergonomics.
 
 ## Current State
 
-The core parser-to-fit pipeline is in place:
+magmaan is a C++23 library for methods developers working on linear SEM. It is
+built under `-fno-exceptions -fno-rtti`, Eigen runs under
+`EIGEN_NO_EXCEPTIONS`, and fallible APIs return `std::expected<T, Error>`.
+Extension points are concepts and free function templates rather than virtual
+hot-path interfaces.
 
-- C++23 library built under `-fno-exceptions -fno-rtti`, with fallible APIs
-  returning `std::expected<T, Error>`.
-- Lavaan-style syntax parser, normative EBNF in `docs/grammar/`, checked-in
-  lexer/parser/partable/matrix/fit oracle fixtures, and R-only fixture
-  regeneration through `tools/regen_oracle.R`.
-- The lavaanified model contract is the triple `LatentStructure`,
-  `LatentNames`, and `Starts`, with `LavaanParTable` as the boundary projection
-  for R and oracle comparison.
-- Single- and multi-group LISREL matrix representation, fixed.x resolution,
-  mean structures, marker/std.lv/effect-coding identification, start hints, and
-  linear equality constraints.
-- ML fitting through LBFGS, including affine reparameterization for linear
-  equalities.
-- First-pass continuous FIML fitting over raw data with missingness masks:
-  rows are compressed into observed-value patterns, the direct
-  observed-pattern normal-theory objective and analytic gradient reuse the
-  existing `ModelEvaluator` Jacobians, and `fit_fiml()` optimizes with LBFGS.
-  Checked-in fixtures now compare `fit_fiml()` point estimates against lavaan
-  `missing = "fiml"` for single- and multi-group one-factor CFA, three-factor
-  CFA, shared-label equality CFA, latent structural models, observed-variable
-  path models under both random-x and complete fixed.x policies,
-  equality-constrained structural regressions, group-specific dense
-  non-monotone multi-group patterns, and denser missing-pattern structural/CFA
-  cases with explicit mean structures. FIML post-fit likelihood extras now add
-  observed-data normal
-  constants and a saturated/H1 likelihood so log-likelihood, unrestricted
-  log-likelihood, chi-square, and information criteria match lavaan on that
-  fixture tranche. FIML baseline/independence likelihood accounting now feeds
-  the existing CFI/TLI/RMSEA helpers, including regression-baseline handling
-  for observed exogenous variables, with lavaan fixture parity on the same
-  tranche. The robust FIML MLR post-fit path computes observed-pattern
-  casewise sandwich SEs plus Yuan-Bentler Mplus scaled-test traces from the
-  direct FIML objective, with lavaan `estimator = "MLR"` fixture parity on the
-  non-saturated single- and multi-group FIML cases in the current tranche. The
-  current fixed.x policy rejects missing observed exogenous variables rather
-  than guessing lavaan's conditional likelihood behavior. A first thin R
-  boundary now exposes `df_to_fiml_data()` and `fit_fiml()` for estimate-only
-  FIML over raw continuous data with retained `NA` masks; FIML inference,
-  robust corrections, and fit measures remain explicit C++/future R post-fit
-  work. Broader missing-data parity cases and robust missing-data corrections
-  beyond this MLR slice remain open.
-- ULS, GLS, and explicit-weight WLS discrepancies, each with scalar
-  value/gradient and least-squares residual/Jacobian interfaces. A first
-  continuous LS lavaan fixture tranche now checks bounded LBFGS-B point
-  estimates, degrees of freedom, and estimator-specific chi-square reporting
-  for ULS/GLS/WLS across single-group CFA, multi-group CFA, a labeled-equality
-  CFA, two- and three-factor mean-structure CFAs, and an observed-exogenous
-  fixed.x SEM case. GLS/WLS reporting follows lavaan's `2 * N * fmin` LS
-  convention, while ULS chi-square is pinned to lavaan's Browne residual NT
-  statistic.
-- Bounded least-squares fitting through LBFGS-B and optional Ceres, including
-  automatic nonnegative variance bounds and equality-penalty residuals on the
-  LS path.
-- First-pass ordinal LS support: parser and partable projection for threshold
-  (`|`) and response-scale (`~*~`) rows, integer all-ordinal complete/listwise
-  sample statistics, pairwise polychoric correlations, Muthen-style all-ordinal
-  NACOV construction for thresholds plus polychorics, DWLS diagonal weights,
-  full WLS weights, bounded ordinal LS fitting, and thin R wrappers for ordinal
-  sample stats plus DWLS/WLS fits. Checked-in ordinal fixtures now validate
-  thresholds, polychoric `R`, `NACOV`, `WLS.V`, `WLS.VD`, and DWLS/WLS
-  delta-parameterization free sets, point estimates, degrees of freedom, and
-  chi-square statistics across single-group, multi-group, skewed, near-empty
-  category, and sparse nonempty ordinal cases, with equality-constrained DWLS
-  fit coverage. The C++ ordinal fitter shares the bounded LS optimizer surface,
-  with LBFGS-B as the default and Ceres objective parity coverage in Ceres
-  builds. This path currently implements lavaan's delta-style response scale
-  boundary. A first explicit post-fit robust ordinal reporting path now returns
-  sandwich SEs plus Satorra-Bentler, mean/variance-adjusted, and scaled/shifted
-  test statistics from the same threshold-plus-polychoric moment vector and
-  `NACOV`/DWLS/WLS weights. DWLS robust ordinal reporting is now checked
-  against lavaan robust SEM scaled-test goldens for representative single- and
-  multi-group delta fixtures. A first mixed continuous/ordinal categorical
-  path now builds lavaan-ordered thresholds, continuous means/variances,
-  polychoric/polyserial/covariance moment vectors, NACOV/DWLS/WLS weights,
-  and DWLS/WLS delta fits, with thin R wrappers and a first lavaan-backed
-  fixture. Mixed moment values match lavaan tightly; mixed NACOV/weight,
-  fit, and robust-reporting parity is intentionally held to looser first-pass
-  tolerances than the all-ordinal path while the polyserial Gamma details are
-  hardened. Theta parameterization, ordinal SNLLS, and public WLS
-  robust-reporting targets remain open.
-- Separable nonlinear least squares (SNLLS) profiling for LS estimators where
-  conditionally linear parameters can be profiled out.
-- Expected information, finite-difference observed information, analytic
-  observed information for covariance and mean-structure models, vcov/SE,
-  Wald/z tests, chi-square/df helpers, LR/Satorra-2000 nested tests, robust
-  U-Gamma machinery, Satorra-Bentler-family statistics, robust SEs, Browne
-  residual NT, fit measures, standardization, and C++ defined-parameter
+Lavaan remains the oracle. Parser output, lavaanified partables, point
+estimates, standard errors, and chi-square statistics are compared against
+checked-in lavaan fixtures where support is claimed. Fixture regeneration is
+done with `tools/regen_oracle.R`; CI does not invoke R.
+
+The lavaanified model contract is the triple:
+
+- `LatentStructure`: the estimable model, name-free except where estimator or
+  identification choices require structure.
+- `LatentNames`: the verbal model, including variable names, labels, groups,
+  group levels, and `.pN.` plabels.
+- `Starts`: free-parameter start hints.
+
+`to_lavaan_partable()` and `from_lavaan_partable()` project this model to and
+from `LavaanParTable`, which is the compatibility format used by R bindings and
+golden `parTable()` fixtures.
+
+## Implemented Capabilities
+
+### Parser, lavaanify, and matrix representation
+
+- Lavaan-style syntax parser with normative grammar in `docs/grammar/`.
+- Checked-in lexer, parser, partable, matrix, and fit oracle fixtures.
+- Single- and multi-group LISREL matrix representation.
+- Fixed.x resolution, mean structures, marker/std.lv/effect-coding
+  identification, start hints, and linear equality constraints.
+- Linear equality constraints through affine reparameterization for ML and
+  penalty residuals for bounded LS.
+- Effect coding for loadings.
+
+### Complete-data ML and inference
+
+- Normal-theory ML fitting through LBFGS.
+- Expected information, finite-difference observed information, and analytic
+  observed information for covariance and mean-structure models.
+- Vcov/SE, Wald/z tests, chi-square/df helpers, LR/Satorra-2000 nested tests,
+  robust U-Gamma machinery, Satorra-Bentler-family statistics, robust SEs,
+  Browne residual NT, fit measures, standardization, and C++ defined-parameter
   evaluation.
-- Exploratory R bindings for lavaanify, fitting, sample-stat bundles, robust
+- Observed-bread robust SEs and observed-Hessian U-factors use total-N scaling
+  and work on block-stacked multi-block covariance and mean-structure models.
+- Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand
+  and a casewise multi-block primitive.
+
+### Continuous FIML
+
+- Direct observed-pattern ML over raw continuous data with missingness masks.
+- Rows are compressed into observed-value patterns; the observed-pattern
+  objective and analytic gradient reuse `ModelEvaluator` Jacobians.
+- `fit_fiml()` optimizes with LBFGS.
+- Current checked-in fixtures cover single- and multi-group CFA, three-factor
+  CFA, labeled equality CFA, latent structural models, observed-variable path
+  models under random-x and complete fixed.x policies, equality-constrained
+  structural regressions, dense non-monotone missingness, and explicit mean
+  structures.
+- Post-fit FIML extras include observed-data normal constants, saturated/H1
+  likelihood, baseline/independence likelihood accounting, chi-square,
+  information criteria, and fit-index inputs for the current fixture tranche.
+- Robust FIML MLR post-fit reporting computes observed-pattern casewise
+  sandwich SEs and Yuan-Bentler Mplus scaled-test traces for fixture-backed
+  non-saturated single- and multi-group cases.
+- The public fixed.x policy rejects missing observed exogenous variables rather
+  than approximating lavaan's conditional likelihood behavior.
+- The R boundary exposes `df_to_fiml_data()` and estimate-only `fit_fiml()`.
+
+### Least-squares estimators
+
+- ULS, GLS, and explicit-weight WLS discrepancies with scalar
+  value/gradient and residual/Jacobian interfaces.
+- Bounded LS fitting through LBFGS-B and optional Ceres.
+- Automatic nonnegative variance bounds.
+- Equality-penalty residuals on the LS path.
+- Continuous LS fixtures cover point estimates, degrees of freedom, and
+  estimator-specific chi-square reporting for representative CFA,
+  multi-group, labeled-equality, mean-structure, and observed-exogenous
+  fixed.x cases.
+- GLS/WLS reporting follows lavaan's `2 * N * fmin` convention; ULS
+  chi-square is pinned to lavaan's Browne residual NT statistic.
+- Separable nonlinear least squares profiling exists for LS estimators where
+  conditionally linear parameters can be profiled out.
+
+### Ordinal and mixed categorical LS
+
+- Threshold (`|`) and response-scale (`~*~`) parser/partable projection.
+- Integer all-ordinal complete/listwise sample statistics.
+- Pairwise polychoric correlations.
+- Muthen-style all-ordinal NACOV construction for thresholds plus
+  polychorics.
+- DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
+  thin R wrappers for ordinal stats plus DWLS/WLS fits.
+- Current ordinal fixtures validate thresholds, polychoric `R`, `NACOV`,
+  `WLS.V`, `WLS.VD`, free sets, point estimates, degrees of freedom, and
+  chi-square statistics across representative single-group, multi-group,
+  skewed, sparse, near-empty, and equality-constrained cases.
+- The implemented ordinal boundary is lavaan's delta parameterization.
+- Explicit post-fit robust ordinal reporting returns sandwich SEs plus
+  Satorra-Bentler, mean/variance-adjusted, and scaled/shifted statistics from
+  the threshold-plus-polychoric moment vector.
+- A first mixed continuous/ordinal path builds lavaan-ordered thresholds,
+  continuous means/variances, polychoric/polyserial/covariance moments,
+  NACOV/DWLS/WLS weights, and DWLS/WLS delta fits.
+
+### R bindings and public namespace transition
+
+- Exploratory R bindings cover lavaanify, fitting, sample-stat bundles, robust
   inference, fit measures, model implied moments, LS estimators, SNLLS, Ceres
   paths when enabled, and data-frame-to-model sample statistics.
-- The intended R boundary is thin wrappers over C++ plus small composition
-  helpers. A future `magmaan(model, data, estimator, groups)` convenience should
-  perform estimation only; SEs, tests, robust corrections, fit measures, and
-  defined parameters stay explicit post-fit steps.
-- Transitional public namespaces exist (`spec`, `lavaan`, `estimate`, `optim`,
-  `nt`, `gls`, `data`) as aliases over remaining canonical definitions in
-  `fit` and `partable`.
+- The R package is intended as a methods-developer interface over the C++
+  library, not a second SEM implementation.
+- The future high-level R convenience is `magmaan(model, data, estimator,
+  groups)`, which should perform estimation only. Standard errors,
+  information matrices, Wald/z tests, robust corrections, fit measures,
+  defined parameters, and nested tests remain explicit post-fit calls.
+- Target public namespaces exist and are covered by namespace alias tests:
+  `spec`, `lavaan`, `estimate`, `optim`, `nt`, `gls`, and `data`.
+- Old `fit/*` and `partable/*` headers remain compatibility shims during the
+  namespace transition.
 
-## Immediate Priorities
+## Current Boundaries
 
-### 1. Make continuous FIML lavaan-parity-grade
-
-The first implementation slice is direct observed-pattern ML over continuous
-raw data. It intentionally keeps the existing complete-data `SampleStats` path
-separate from raw-data FIML: incomplete data stays in `RawData` with an
-observed/missing mask, and the optimizer consumes pattern summaries.
-
-Open work:
-
-- Continue extending the checked-in lavaan FIML fixture family beyond the
-  current CFA/structural/path tranche as new structural, fixed.x-policy, and
-  missing-pattern edge cases are made concrete.
-- Maintain FIML baseline/independence likelihood and fit-index parity as new
-  raw missing-data cases are added. User-model, saturated/H1, and baseline
-  likelihood accounting are implemented for the current fixture tranche,
-  including complete fixed.x path cases.
-- Extend robust FIML beyond the current fixture-backed MLR slice only with
-  fixture backing. Conditional fixed.x behavior and any robust missing-data
-  tests other than lavaan's Yuan-Bentler Mplus correction remain out of the
-  current public contract.
-- Keep the first public `fixed.x` policy narrow: complete observed exogenous
-  variables are supported for path-model FIML, but missing observed exogenous
-  variables are rejected by the fixture-backed public contract until
-  conditional fixed.x likelihood behavior is implemented.
-- Maintain the first R FIML boundary as estimate-only: `df_to_fiml_data()`
-  preserves incomplete rows in raw data plus masks, and `fit_fiml()` routes to
-  the fixture-backed C++ path. The future high-level `magmaan(model, data, ...)`
-  helper should route `missing = "fiml"` to `fit_fiml()` but still leave SEs,
-  tests, and fit measures as explicit post-fit calls.
-- Keep EM as a fallback/initializer only if direct LBFGS fails on representative
-  lavaan fixtures. Do not introduce a parallel EM implementation before there is
-  fixture evidence that it is needed.
-
-Validation targets:
-
-- Single-group continuous CFA with explicit mean structure and multiple
-  missingness patterns, including denser non-monotone cases.
-- Complete-data equivalence: FIML gradients should match complete-data ML
-  gradients up to objective constants when every row is fully observed.
-- Equality-constrained FIML through the existing affine reparameterization.
-- Multi-group FIML where pattern summaries and block weights use per-group rows
-  but the optimizer objective is weighted by total observed rows.
-- Latent structural FIML through the reduced LISREL representation.
-
-### 2. Turn LS estimator support into lavaan-parity fixtures
-
-ULS/GLS/WLS are implemented as discrepancies and exercise the bounded LS path
-in unit/integration tests. The first continuous lavaan fixture tranche now pins
-point-estimate, degrees-of-freedom, and estimator-specific chi-square reporting
-parity; the next step is expanding fixture breadth and backend policy, not
-basic implementation.
-
-Open work:
-
-- Extend checked-in lavaan golden fixtures for `estimator = "ULS"`, `"GLS"`,
-  and `"WLS"` beyond the current single-group CFA, multi-group CFA,
-  labeled-equality, mean-structure, and observed-exogenous fixed.x tranche,
-  especially Heywood-prone cases.
-- Expand estimator-specific LS fit-statistic parity beyond the first fixture
-  tranche. Current goldens assert lavaan chi-square by keeping raw objective
-  checks separate from estimator-specific reporting: GLS/WLS use lavaan's
-  `2 * N * fmin` convention, and ULS uses Browne residual NT.
-- Decide which LS backend is the default public recommendation for each
-  estimator: LBFGS-B, Ceres, or SNLLS. ULS landscapes are shallow enough that
-  backend defaults matter.
-- Promote the Ceres preset into the regular validation loop where relevant
-  (`cmake --preset ceres`, `ctest --preset ceres`) without making the default
-  build pay the Ceres dependency cost.
-- Continue keeping LS raw objectives and reported test statistics distinct as
-  new estimator cases are added.
-
-Validation targets:
-
-- Saturated one-factor ULS, which exposes shallow-landscape conditioning.
-- Heywood-prone ULS/GLS/WLS, where lower bounds must be enforced.
-- Multi-group LS weighting and equality constraints.
-- Mean-structure LS models with Ceres and SNLLS backends.
-
-### 3. Make ordinal LS lavaan-parity-grade
-
-The first implementation path is intentionally narrow: complete/listwise
-ordinal indicators, threshold starts from marginal proportions, pairwise
-polychorics, diagonal weights, and bounded LS over model-implied correlations
-plus thresholds. It is enough for methods exploration, but not yet a claim of
-lavaan ordinal estimator parity.
-
-Open work:
-
-- Extend the checked-in ordinal sample-stat fixtures as new edge cases are
-  added. Current fixtures compare thresholds, polychoric `R`, `NACOV`,
-  `WLS.V`, and `WLS.VD` against lavaan for representative all-ordinal
-  single-group, multi-group, skewed, sparse-but-nonempty, near-empty category,
-  and equality-constrained cases. Keep numeric tolerances documented
-  separately for threshold estimates, bivariate-normal integration, optimizer
-  convergence, and weight inversion.
-- Keep `parameterization = "delta"` as the asserted ordinal boundary for now.
-  The R helper accepts only `"delta"` and emits fixed response-scale rows;
-  lavaan's `parameterization = "theta"` remains a later compatibility slice.
-- Maintain ordinal DWLS/WLS fit parity. The fixtures include lavaan fit outputs
-  and now assert `fit_ordinal_bounded()` free-parameter counts, estimates,
-  degrees of freedom, and chi-square statistics under lavaan's delta contract.
-- Maintain R-boundary coverage for `data_ordinal_stats_from_df()`,
-  `fit_dwls_ordinal()`, and `fit_wls_ordinal()`. The R README and example
-  smoke tests now cover delta-only sample-stat construction, result
-  reconstruction, moment-vector metadata, lavaan chi-square parity, and
-  empty-category validation.
-- Keep polychoric construction internal to `ordinal_stats_from_integer_data()`
-  until the sample-stat contract is stable. A public polychoric API should
-  expose the moment-vector ordering, category metadata, sample-size scaling,
-  and error policy explicitly rather than returning only a correlation matrix.
-  The current internal moment order is thresholds first, followed by
-  lower-triangle polychorics by columns; `NACOV`, `WLS.VD`, and `WLS.V` all
-  use that same row/column order.
-- Decide the public backend policy for ordinal fitting. C++ now shares the
-  generic bounded LS optimizer surface and Ceres builds check objective parity,
-  but R Ceres wrappers and any public recommendation should wait until
-  parameter/statistic parity is resolved. Consider an ordinal SNLLS variant
-  only after the conditionally linear block remains valid with threshold
-  residuals included.
-- Harden the first mixed continuous/ordinal categorical path. The contract is
-  explicit and complete/listwise only: ordered variables contribute thresholds
-  plus polychoric/polyserial rows, continuous variables contribute raw-scale
-  means, variances, and covariances, and R requires `meanstructure = TRUE` so
-  continuous intercept rows are represented. Remaining work is tightening
-  mixed NACOV/weight, DWLS/WLS fit, and robust-reporting tolerances against a
-  broader lavaan fixture family.
-- Harden robust ordinal reporting against lavaan's LS-family robust targets:
-  `se = "robust.sem"` / `"robust.sem.nt"` and tests `satorra.bentler`
-  (WLSM/ULSM), `scaled.shifted` (WLSMV/ULSMV), and `mean.var.adjusted`
-  (WLSMVS/ULSMVS). The implemented first slice is explicit post-fit reporting
-  for delta all-ordinal DWLS/WLS and consumes the threshold-plus-polychoric
-  `NACOV`/`WLS.V` layout, not raw continuous-data casewise Gamma helpers.
-  DWLS robust-statistic fixtures now cover lavaan robust SEM SEs plus
-  Satorra-Bentler, mean/variance-adjusted, and scaled/shifted statistics,
-  including a multi-group case. Remaining work is deciding whether the WLS
-  robust C++ path should stay shape-only or get a non-lavaan reference target,
-  plus naming/presentation polish in the R boundary. Plain categorical DWLS
-  should continue to fit only; WLSMV-style reporting must stay an explicit
-  post-fit call.
-
-Validation targets:
-
-- Single-group ordinal CFA with three or more categories per indicator.
-- Multi-group ordinal models with group-specific thresholds.
-- Equality constraints involving loadings while thresholds remain free.
-- Threshold-heavy edge cases with empty or near-empty categories, where the
-  current sample-stat builder must return explicit errors instead of infinities.
-  Empty categories should stay hard errors; near-empty categories need fixture
-  coverage so finite adjustments, convergence, and NACOV conditioning are
-  visible instead of accidental.
-- Backend parity for ordinal LS if Ceres is enabled: LBFGS-B and Ceres already
-  agree on objective values for representative DWLS/WLS cases. Do not expose a
-  public Ceres ordinal wrapper until the remaining ordinal reporting surface is
-  stable.
-
-### 4. Close remaining inference and robust gaps
-
-Expected-info inference, finite-difference observed inference, analytic
-observed inference for covariance and mean-structure ML models, robust SEs,
-U-Gamma/Satorra-Bentler families, Browne residual NT, Wald/LR/z tests, fit
-measures, standardization, and Satorra-2000 nested tests are implemented and
-covered. Observed-bread robust SEs and observed-Hessian U-factors now use
-total-N scaling and work on block-stacked multi-block covariance and
-mean-structure models. Browne's unbiased reduced gamma has a single-block
-reduced-matrix shorthand plus a casewise multi-block primitive that applies
-the finite-sample correction per block before stitching into the shared
-reduced basis.
-
-Open gaps:
-
-- Add Browne residual ADF by swapping empirical gamma into the existing Browne
-  residual projection machinery.
-- Verify `fit_extras()` conditional log-likelihood for multi-group `fixed.x`
-  and meanstructure times `fixed.x` once targeted fixtures exist.
-- Generalize robust/inference helpers that assume the normal-theory ML weight
-  so ULS/GLS/WLS can share sandwich paths with arbitrary per-block weights.
-- Add a future API namespace for pre-composed inference workflow functions
-  after the low-level primitives stabilize. The current core API intentionally
-  stays explicit: callers choose information, bread, meat, test statistic, and
-  fit-measure steps themselves.
-
-### 5. Finish R/API parity polish
-
-The C++ surface is ahead of the R boundary in several places.
-
-Open items:
-
-- Add `magmaan(model, data, estimator, groups)` as the single high-level R
-  convenience for parse/lavaanify plus sample-stat construction plus parameter
-  estimation. Keep it estimate-only; do not automatically compute SEs, robust
-  MLM/Satorra-Bentler tests, fit measures, defined parameters, or nested tests.
-- Keep the rest of the R API as thin wrappers around C++ entry points plus
-  small R-side composition helpers. Avoid R implementations of SEM behavior
-  that can drift away from the C++ oracle path.
-- Expose `compute_defined()` through R and add a golden comparison against
-  lavaan `parameterEstimates()` for chained `:=` rows and `.pN.` references.
-- Add high-level shortcuts equivalent to `se = "none"` and `test = "none"` so
-  callers can skip post-fit inference when they only need point estimates.
-- Make fitted-object partables round-trip to the same lavaan-shaped table that
-  the corresponding lavaan call would return when constructed through the R
-  helpers. The known suspect is mean-structure handling: fixed-zero intercept
-  or mean rows may currently be retained or reconstructed differently from
-  lavaan.
-- Add lavaan partable comparison helpers that compare by semantic row keys
-  rather than raw row position, so parity failures identify whether the issue is
-  missing rows, extra fixed-zero rows, labels/plabels, groups, or estimates.
-- Tighten the sample-moment R path around validation and documentation. The
-  binding already accepts `list(S = , nobs = , mean = )`; it should be easier
-  to discover and harder to mis-shape.
-- Keep the ordinal R boundary documentation current around
-  `model_spec(..., ordered = , parameterization = "delta")`,
-  `data_ordinal_stats_from_df()`, and `fit_dwls_ordinal()` /
-  `fit_wls_ordinal()`.
-- Keep fit-list extraction helpers as R boundary conveniences, while keeping
-  C++ APIs explicit over primitive values.
-
-### 6. Finish namespace cleanup opportunistically
-
-The target public namespaces exist and are covered by
-`tests/unit/namespace_alias_test.cpp`:
-
-- `spec`: model specification, lavaanify options, equality groups, linear
-  constraints, starts.
-- `lavaan`: lavaan-shaped partable projections and compatibility views.
-- `estimate`: estimates, fitting orchestration, bounds, fixed.x resolution,
-  equality reparameterization, SNLLS.
-- `optim`: optimizer concepts and implementations.
-- `nt`: complete-data normal-theory ML, inference, robust tests, measures,
-  standardization, and defined parameters.
-- `gls`: ULS/GLS/WLS discrepancy functions.
-- `data`: sample statistics, raw data, and moment/gamma helpers.
-
-What remains:
-
-- Move primary definitions out of the old `magmaan::fit` and
-  `magmaan::partable` namespaces into the target namespaces.
-- Convert repo code and R binding internals to include and call target
-  headers/namespaces directly.
-- Keep old `include/magmaan/fit/*` and `include/magmaan/partable/*` headers as
-  compatibility shims for one transition window.
-- Keep one focused compatibility test for representative old headers.
-- Update stale source references in docs after the migration lands.
-
-This is API organization work, not the next statistical blocker.
-
-## Reporting and Exploration
-
-These are lavaan-parity features above the core estimator:
-
-- Modification indices, univariate score tests, and EPC are not implemented.
-  They need scores and information for fixed or equality-constrained
-  parameters at the optimum.
-- RMSEA close-fit p-value (`rmsea.pvalue`, H0: RMSEA <= 0.05) is not computed.
-- `std.all` beta-coefficient rescaling remains to be checked for structural
-  regressions.
-- Add targeted goldens for scalar-invariance latent mean rescaling once the
-  bounded optimizer reliably fits the needed mean-structure models.
-
-## Constraint Boundary
-
-Linear equality constraints are implemented through affine reparameterization
-for ML and penalty residuals on the bounded LS path. Effect coding for loadings
-is implemented. The current boundary is intentional:
-
-- Nonlinear equality constraints remain unsupported.
-- Inequality constraints remain unsupported.
-- Active bound/inequality inference must not silently report ordinary
-  chi-square/SE theory; boundary cases need explicit warnings or
-  chi-bar-square style treatment before being presented as regular inference.
+- Complete-data and FIML support are fixture-backed only for the documented
+  estimator/model slices.
+- FIML with missing observed exogenous variables under `fixed.x = TRUE`
+  remains unsupported.
+- Theta parameterization for ordinal models remains unsupported.
+- Mixed categorical NACOV/weight, fit, and robust-reporting parity is
+  intentionally looser than the all-ordinal path while polyserial Gamma details
+  are hardened.
+- Browne residual ADF is not implemented.
+- Modification indices, univariate score tests, EPC, and RMSEA close-fit
+  p-values are not implemented.
+- Nonlinear equality constraints and inequality constraints are unsupported.
+- Active bound or inequality inference must not silently report ordinary
+  chi-square/SE theory.
 
 ## Design Invariants
 
 - No global mutable state.
-- No in-place mutation of shared public structures. Entry points operate on
+- No in-place mutation of shared public structures; entry points operate on
   values or local copies and return values/errors.
 - No groups == one group. Single-group models use the same block/group shape
   as multi-group models.
-- Lavaan-shaped partables are a boundary format for oracle comparison,
+- Lavaan-shaped partables are boundary formats for oracle comparison,
   interchange, and compatibility projection. Core work should prefer the model
   triple plus explicit derived structures.
 - Extension points remain concepts and free functions, not virtual hot-path
   interfaces.
+- Parser behavior follows `docs/grammar/grammar.ebnf`; if parser code and the
+  EBNF disagree, the parser is wrong.
+
+## Planning Documents
+
+Use this file to understand the current state and contracts before structural
+changes. Use [docs/todo.md](todo.md) to choose or update remaining work.
