@@ -39,9 +39,10 @@ missing data, mixed data, and robust divergences.
 - [ ] Compute casewise influence/Gamma for the pairwise moment vector so DWLS,
   WLS, robust SEs, and scaled tests can reuse the existing weighted-moment
   sandwich path.
-- [ ] Extend diagnostics beyond the current complete-data pair labels,
-  convergence, boundary, adjusted-count, and minimum-eigenvalue fields:
-  add table residuals, missingness counts, and any ridge/shrinkage applied.
+- [x] Extend complete-data pair diagnostics beyond labels, convergence,
+  boundary, adjusted-count, and minimum-eigenvalue fields: include fitted
+  expected tables, residual tables, zero missingness counts, and explicit
+  no-ridge/no-shrinkage repair fields.
 - [ ] Add lavaan-backed or internally cross-checked fixtures for complete
   all-ordinal polychorics first, then mixed data, then missing-data scenarios.
 

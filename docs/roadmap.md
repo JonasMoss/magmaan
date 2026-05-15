@@ -122,8 +122,9 @@ golden `parTable()` fixtures.
 - Pairwise polychoric correlations.
 - Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
   complete/listwise ordinal data, exposing pair labels, count/adjustment
-  diagnostics, fitted fixed-threshold rho diagnostics, and minimum eigenvalue
-  diagnostics while preserving the existing `OrdinalStats` moment/weight path.
+  diagnostics, fitted fixed-threshold rho diagnostics, fitted expected/residual
+  tables, missingness/repair diagnostics, and minimum eigenvalue diagnostics
+  while preserving the existing `OrdinalStats` moment/weight path.
 - Muthen-style all-ordinal NACOV construction for thresholds plus
   polychorics.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and

@@ -210,6 +210,29 @@ post_expected<Eigen::MatrixXd> symmetric_inverse_pd(const Eigen::MatrixXd& A,
   return es.eigenvectors() * inv.asDiagonal() * es.eigenvectors().transpose();
 }
 
+Eigen::MatrixXd expected_pair_counts(double total,
+                                     const Eigen::VectorXd& th_i,
+                                     const Eigen::VectorXd& th_j,
+                                     double rho) {
+  Eigen::MatrixXd out(th_i.size() + 1, th_j.size() + 1);
+  for (Eigen::Index a = 0; a < out.rows(); ++a) {
+    const double lo_i = (a == 0) ? -kInf : th_i(a - 1);
+    const double hi_i = (a + 1 == out.rows()) ? kInf : th_i(a);
+    for (Eigen::Index c = 0; c < out.cols(); ++c) {
+      const double lo_j = (c == 0) ? -kInf : th_j(c - 1);
+      const double hi_j = (c + 1 == out.cols()) ? kInf : th_j(c);
+      out(a, c) = ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho);
+    }
+  }
+  const double prob_sum = out.sum();
+  if (std::isfinite(prob_sum) && prob_sum > 0.0) {
+    out *= total / prob_sum;
+  } else {
+    out.setZero();
+  }
+  return out;
+}
+
 }  // namespace
 
 post_expected<PairwiseOrdinalStats>
@@ -345,6 +368,12 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs)
             th_by_var[static_cast<std::size_t>(j)]);
         if (!rho_or.has_value()) return std::unexpected(rho_or.error());
         const double rho = rho_or->rho;
+        Eigen::MatrixXd expected = expected_pair_counts(
+            rho_or->adjusted_counts.sum(),
+            th_by_var[static_cast<std::size_t>(i)],
+            th_by_var[static_cast<std::size_t>(j)],
+            rho);
+        Eigen::MatrixXd residual = rho_or->adjusted_counts - expected;
         block_diag.pair_diagnostics.push_back(OrdinalPairDiagnostics{
             .label = OrdinalPairLabel{
                 .block = static_cast<std::int32_t>(b),
@@ -357,8 +386,16 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs)
             .iterations = rho_or->iterations,
             .hit_lower = rho_or->hit_lower,
             .hit_upper = rho_or->hit_upper,
+            .n_obs = static_cast<std::int64_t>(tab_or->sum()),
+            .n_missing = 0,
+            .ridge_applied = false,
+            .ridge = 0.0,
+            .shrinkage_applied = false,
+            .shrinkage_intensity = 0.0,
             .counts = *tab_or,
-            .adjusted_counts = rho_or->adjusted_counts});
+            .adjusted_counts = rho_or->adjusted_counts,
+            .expected_counts = std::move(expected),
+            .residual_counts = std::move(residual)});
         R(i, j) = R(j, i) = rho;
         auto ps_or = ordinal_pair_scores(
             xi, xj, rho, th_by_var[static_cast<std::size_t>(i)],

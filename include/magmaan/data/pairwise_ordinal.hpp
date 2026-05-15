@@ -47,8 +47,16 @@ struct OrdinalPairDiagnostics {
   int    iterations = 0;
   bool   hit_lower = false;
   bool   hit_upper = false;
+  std::int64_t n_obs = 0;
+  std::int64_t n_missing = 0;
+  bool   ridge_applied = false;
+  double ridge = 0.0;
+  bool   shrinkage_applied = false;
+  double shrinkage_intensity = 0.0;
   Eigen::MatrixXd counts;
   Eigen::MatrixXd adjusted_counts;
+  Eigen::MatrixXd expected_counts;
+  Eigen::MatrixXd residual_counts;
 };
 
 struct PairwiseOrdinalBlockDiagnostics {
