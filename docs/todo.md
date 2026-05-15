@@ -122,6 +122,31 @@ drifts into hard-to-debug lavaan parity failures.
 Intent: keep unsupported statistical work explicit so it is not mistaken for a
 polish task.
 
+- [ ] Add explicit small-sample stabilizer primitives instead of string-mode
+  knobs. Current code already has `Bounds` in full free-parameter space,
+  automatic lower bounds for free variance diagonals, bounded ML/LS optimizer
+  paths, and ordinal/mixed bounded DWLS/WLS fits. The missing work is a set of
+  named C++ builders for published bounded-estimation recipes: variance-only
+  bounds, wider/literature bounds for residual and latent variances, loading
+  bounds when statistically justified, start projection into the chosen box,
+  active-bound diagnostics, and fixtures for Heywood/small-N cases across
+  complete ML, continuous LS, and ordinal/mixed LS.
+- [ ] Add covariance shrinkage as explicit sample-moment transformations, not
+  estimator flags. Current continuous `SampleStats` carries empirical
+  covariances, while ordinal/mixed stats already build lavaan-style thresholds,
+  polychorics, polyserials, NACOV, and DWLS/WLS weights. Add separate
+  ridge-covariance and model-based shrinkage target builders that return new
+  `SampleStats`/`MixedOrdinalStats`-compatible objects plus diagnostics
+  (target, intensity, eigenvalues, repaired dimensions), then validate
+  convergence and estimate movement on small-sample and nearly singular
+  covariance/correlation cases without changing lavaan-compatible defaults.
+- [ ] Add DLS and empirical-Bayes DLS as weight-matrix builders layered on the
+  existing LS discrepancy surface. `gls::WLS` already consumes explicit full
+  weights and the weighted-moment sandwich path accepts arbitrary block
+  weights/NACOV matrices; the missing piece is constructing and validating the
+  DLS weight matrices from normal-theory and ADF/Gamma components, including
+  ridge/PSD repairs, block ordering, diagonal variants if useful, and robust
+  reporting semantics for continuous and ordinal/mixed moment stacks.
 - [ ] Add theta-parameterization support for ordinal models as a separate
   compatibility slice. The public R/C++ boundary now accepts the
   parameterization distinction and fails explicitly for `theta`; actual
