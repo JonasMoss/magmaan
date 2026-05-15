@@ -161,6 +161,11 @@ golden `parTable()` fixtures.
   for `:=` rows through R. It keeps covariance selection explicit, supports
   chained definitions, and resolves `.pN.` plabel references using the fitted
   lavaanified model.
+- R post-fit inference helpers now separate primitive-shaped entry points from
+  fit-list adapters for the first audited slice: vcov, z tests, Wald tests,
+  RLS chi-square, U-factor construction, and robust SE helpers can be called
+  with explicit `partable` / `sample_stats` / `theta` pieces, while existing
+  fit-list calls remain available with explicit `*_fit` aliases.
 - The R sample-moment path accepts `list(S = , nobs = , mean = )`, reorders
   named covariance matrices to model observed-variable order, and rejects
   malformed group counts, non-square or wrong-sized covariance matrices,

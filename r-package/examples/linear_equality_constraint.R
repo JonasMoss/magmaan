@@ -21,7 +21,7 @@ m  <- "visual =~ x1 + b2*x2 + b3*x3\nb2 + b3 == 1.5"
 pt <- lavaan_lavaanify(m)                     # the `==` row rides as op == "=="
 fit <- fit_fit(pt, S)                      # from_lavaan_partable re-parses it
 T_ml <- infer_chi2_stat(fit_sample_stats(fit), fit$fmin);  df_ml <- infer_df_stat(fit$partable, fit_sample_stats(fit))
-se   <- infer_se(infer_vcov(infer_information_expected(fit), fit))
+se   <- infer_se(infer_vcov_partable(infer_information_expected(fit), fit$partable))
 lav <- cfa(m, hs)
 fr  <- { p <- parTable(lav)[parTable(lav)$free > 0, ]; p[order(p$free), ] }
 

@@ -8,7 +8,7 @@
 ## What it shows:
 ##   1. Equality constraints — `f =~ x1 + a*x2 + a*x3` ties the two loadings;
 ##      `fit_fit()` enforces it (reparam θ = K·α), `infer_df_stat()` accounts for
-##      the rank gain and `infer_vcov()`/`infer_se()` give the tied params
+##      the rank gain and `infer_vcov_partable()`/`infer_se()` give the tied params
 ##      equal SEs. Cross-checked vs lavaan.
 ##   2. The robust UΓ-eigenvalue / Satorra-Bentler chain on the 3-factor HS CFA,
 ##      composed from the thin wrappers, cross-checked vs lavaan estimator="MLM".
@@ -40,7 +40,7 @@ fit_u <- fit_fit(pt_uncon, ss3)
 fit_c <- fit_fit(pt_con,   ss3)
 T_u   <- infer_chi2_stat(fit_sample_stats(fit_u), fit_u$fmin);   df_u  <- infer_df_stat(fit_u$partable, fit_sample_stats(fit_u))
 T_c   <- infer_chi2_stat(fit_sample_stats(fit_c), fit_c$fmin);   df_c  <- infer_df_stat(fit_c$partable, fit_sample_stats(fit_c))
-se_c_vec <- infer_se(infer_vcov(infer_information_expected(fit_c), fit_c))
+se_c_vec <- infer_se(infer_vcov_partable(infer_information_expected(fit_c), fit_c$partable))
 
 # SE indexed by the free-parameter ordinal in partable$free.
 se_of <- function(se_vec, partable, lhs_, rhs_) {
@@ -95,7 +95,7 @@ fit_hs <- fit_fit(pt_hs, data_sample_stats_from_raw(Xfull))
 T_hs   <- infer_chi2_stat(fit_sample_stats(fit_hs), fit_hs$fmin);  df_hs <- infer_df_stat(fit_hs$partable, fit_sample_stats(fit_hs))
 
 # the robust chain, composed from the thin wrappers:
-uf  <- infer_build_u_factor(fit_hs)                         # U-factor at θ̂  (inspect: str(uf))
+uf  <- infer_build_u_factor_parts(fit_hs$partable, fit_sample_stats(fit_hs), fit_hs$theta)  # U-factor at θ̂
 Zc  <- infer_casewise_contributions(pt_hs, Xfull)           # casewise vech contributions (raw data)
 M   <- infer_reduced_gamma_sample(uf, Zc, fit_hs$nobs)      # BᵀΓ̂B  (df × df); per-block divisor = nobs
 ev  <- infer_ugamma_eigenvalues(M)                          # eigenvalues of UΓ̂  ← the deliverable
@@ -111,7 +111,7 @@ cat(sprintf("  mean-and-var adjusted:  T    = %.4f  (df_adj = %.4f)\n", mva$chi2
 cat(sprintf("  scaled-and-shifted:     T    = %.4f  (a = %.4f, b = %.4f, df %d)\n",
             ss2$chi2_adj, ss2$scale_a, ss2$shift_b, ss2$df))
 # robust ("sandwich") SEs — se = "robust.sem":
-rse <- infer_robust_se_raw(fit_hs, Xfull)
+rse <- infer_robust_se_raw_parts(fit_hs$partable, fit_sample_stats(fit_hs), fit_hs$theta, Xfull)
 
 cat("\n--- cross-check vs lavaan ---\n")
 lav_mlm <- lavaan::cfa(m_hs, data = as.data.frame(Xfull), estimator = "MLM")
