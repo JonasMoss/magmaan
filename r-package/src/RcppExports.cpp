@@ -435,6 +435,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// compute_defined_impl
+Rcpp::DataFrame compute_defined_impl(std::string syntax, Rcpp::List fit, Rcpp::NumericMatrix vcov);
+RcppExport SEXP _magmaan_compute_defined_impl(SEXP syntaxSEXP, SEXP fitSEXP, SEXP vcovSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type syntax(syntaxSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type vcov(vcovSEXP);
+    rcpp_result_gen = Rcpp::wrap(compute_defined_impl(syntax, fit, vcov));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_chi2_stat
 double infer_chi2_stat(Rcpp::List sample_stats, double fmin);
 RcppExport SEXP _magmaan_infer_chi2_stat(SEXP sample_statsSEXP, SEXP fminSEXP) {
@@ -799,6 +812,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_information_observed_analytic", (DL_FUNC) &_magmaan_infer_information_observed_analytic, 1},
     {"_magmaan_infer_vcov", (DL_FUNC) &_magmaan_infer_vcov, 2},
     {"_magmaan_infer_se", (DL_FUNC) &_magmaan_infer_se, 1},
+    {"_magmaan_compute_defined_impl", (DL_FUNC) &_magmaan_compute_defined_impl, 3},
     {"_magmaan_infer_chi2_stat", (DL_FUNC) &_magmaan_infer_chi2_stat, 2},
     {"_magmaan_infer_df_stat", (DL_FUNC) &_magmaan_infer_df_stat, 2},
     {"_magmaan_infer_baseline", (DL_FUNC) &_magmaan_infer_baseline, 1},

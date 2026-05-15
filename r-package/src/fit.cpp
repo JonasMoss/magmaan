@@ -20,6 +20,8 @@
 #include "magmaan/gls/wls.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
+#include "magmaan/parse/parser.hpp"
+#include "magmaan/nt/effects.hpp"
 #include "magmaan/nt/ml.hpp"
 #include "magmaan/nt/fiml.hpp"
 #include "magmaan/nt/measures.hpp"
@@ -1077,6 +1079,48 @@ Rcpp::NumericMatrix infer_vcov(Rcpp::NumericMatrix info, Rcpp::List fit) {
 Rcpp::NumericVector infer_se(Rcpp::NumericMatrix vcov) {
   const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
   return Rcpp::wrap(magmaan::nt::infer::se(vcov_m));
+}
+
+// compute_defined_impl() — mirrors nt::effects::compute_defined(flat, pt,
+// names, est, vcov). `syntax` must be the original model syntax because the
+// lavaan-shaped partable only carries the projected `:=` rows, not their parsed
+// expression trees.
+//
+// [[Rcpp::export]]
+Rcpp::DataFrame compute_defined_impl(std::string syntax,
+                                     Rcpp::List fit,
+                                     Rcpp::NumericMatrix vcov) {
+  auto flat_or = magmaan::parse::Parser::parse(syntax);
+  if (!flat_or.has_value()) {
+    const auto& e = flat_or.error();
+    Rcpp::stop("magmaan parse error at %u:%u (bytes %u..%u): %s",
+               e.span.line, e.span.col, e.span.begin, e.span.end, e.detail);
+  }
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
+  auto defs_or = magmaan::nt::effects::compute_defined(
+      *flat_or, ctx.pt, ctx.names, est, vcov_m);
+  if (!defs_or.has_value()) stop_post(defs_or.error());
+
+  const R_xlen_t n = static_cast<R_xlen_t>(defs_or->entries.size());
+  Rcpp::CharacterVector lhs(n), op(n), rhs(n);
+  Rcpp::NumericVector est_out(n), se(n);
+  for (R_xlen_t i = 0; i < n; ++i) {
+    const auto& entry = defs_or->entries[static_cast<std::size_t>(i)];
+    lhs[i] = entry.name;
+    op[i] = ":=";
+    rhs[i] = "";
+    est_out[i] = entry.value;
+    se[i] = entry.se;
+  }
+  return Rcpp::DataFrame::create(
+      Rcpp::_["lhs"] = lhs,
+      Rcpp::_["op"] = op,
+      Rcpp::_["rhs"] = rhs,
+      Rcpp::_["est"] = est_out,
+      Rcpp::_["se"] = se,
+      Rcpp::_["stringsAsFactors"] = false);
 }
 
 // infer_chi2_stat() — mirrors chi2_stat(samp, est). Returns N_total · F_ML(θ̂).

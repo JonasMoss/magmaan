@@ -155,6 +155,10 @@ golden `parTable()` fixtures.
   construction, and the matching point-estimation wrapper for complete-data
   ML/ULS/GLS/WLS, FIML, and ordinal/mixed DWLS/WLS where the lower-level
   inputs are available.
+- `compute_defined(model, fit, vcov)` exposes C++ defined-parameter evaluation
+  for `:=` rows through R. It keeps covariance selection explicit, supports
+  chained definitions, and resolves `.pN.` plabel references using the fitted
+  lavaanified model.
 - The R sample-moment path accepts `list(S = , nobs = , mean = )`, reorders
   named covariance matrices to model observed-variable order, and rejects
   malformed group counts, non-square or wrong-sized covariance matrices,

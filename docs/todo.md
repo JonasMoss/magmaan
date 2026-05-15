@@ -100,7 +100,7 @@ package into a second SEM implementation.
   estimation.
 - [x] Keep `magmaan()` estimate-only: SEs, robust tests, fit measures, defined
   parameters, and nested tests remain explicit post-fit calls.
-- [ ] Expose `compute_defined()` through R and add lavaan-backed goldens for
+- [x] Expose `compute_defined()` through R and add lavaan-backed goldens for
   chained `:=` rows and `.pN.` references.
 - [ ] Add high-level shortcuts equivalent to `se = "none"` and `test = "none"`
   for point-estimate-only workflows.

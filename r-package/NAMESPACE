@@ -1,6 +1,7 @@
 useDynLib(magmaan, .registration = TRUE)
 importFrom(Rcpp, sourceCpp)
 exportPattern("^(parse|lavaan|model|fit|infer|measures|data)_|^version$")
+export(compute_defined)
 export(df_to_data)
 export(df_to_fiml_data)
 export(magmaan)
