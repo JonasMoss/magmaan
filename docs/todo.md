@@ -42,9 +42,12 @@ missing data, mixed data, and robust divergences.
   ordinal data: observed-pair composite likelihood may not need EM, but
   shared-threshold/multivariate MAR handling needs a documented likelihood
   target and scaling convention.
-- [ ] Add mixed continuous/ordinal pair kernels after all-ordinal works:
-  polyserial pairs, continuous-continuous normal pairs, and consistent moment
-  ordering with current `MixedOrdinalStats`.
+- [x] Add the complete-data polyserial pair kernel as a public mixed
+  continuous/ordinal primitive, including fixed-threshold rho ML, likelihood,
+  casewise scores, and reuse by `MixedOrdinalStats`.
+- [ ] Finish mixed pair kernels: add continuous-continuous normal pair
+  likelihood/diagnostics and public mixed pair ordering helpers that match
+  current `MixedOrdinalStats` moment order.
 - [ ] Decide whether normal-data pairwise likelihood is a real supported
   estimator or only a benchmark/sanity check against complete-data ML/FIML.
 - [x] Expose complete/listwise all-ordinal casewise influence and Gamma for
