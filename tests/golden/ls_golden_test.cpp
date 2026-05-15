@@ -122,20 +122,25 @@ double max_theta_diff(const Eigen::VectorXd& theta, const nlohmann::json& exp) {
   return out;
 }
 
+double total_n(const magmaan::data::SampleStats& samp) noexcept {
+  double out = 0.0;
+  for (auto n : samp.n_obs) out += static_cast<double>(n);
+  return out;
+}
+
 bool check_estimate(const std::string& id,
                     const std::string& estimator,
                     const nlohmann::json& fit,
                     const magmaan::data::SampleStats& samp,
                     const magmaan::fit::Estimates& est,
                     const magmaan::spec::LatentStructure& pt,
+                    const magmaan::model::MatrixRep& rep,
                     std::vector<std::string>& failures) {
   const double d_theta = max_theta_diff(est.theta, fit["theta_hat"]);
   // GLS currently uses the explicit 0.5 * tr(S^-1 D S^-1 D) convention in
   // `GLS::value()`, while lavaan's reported `fmin` is half of that value.
-  // ULS/WLS are close on the lavaan scale but still differ at the last few
-  // objective digits because the objective normalization is not yet a public
-  // parity contract. Keep this as a coarse regression check; theta parity is
-  // the asserted behavioral target for this first LS tranche.
+  // Keep `fmin` as an objective-scale regression check; lavaan's public LS
+  // chi-square reporting is asserted separately below.
   const double fmin_on_lavaan_scale =
       estimator == "GLS" ? 0.5 * est.fmin : est.fmin;
   const double d_fmin = std::abs(fmin_on_lavaan_scale -
@@ -171,6 +176,34 @@ bool check_estimate(const std::string& id,
   }
   if (est.theta.size() != fit["npar"].get<int>()) {
     failures.push_back(id + "/" + estimator + ": npar mismatch");
+    return false;
+  }
+
+  double chisq = std::numeric_limits<double>::quiet_NaN();
+  if (estimator == "ULS") {
+    auto br_or = magmaan::nt::infer::browne_residual_nt(pt, rep, samp, est);
+    if (!br_or.has_value()) {
+      failures.push_back(id + "/" + estimator + ": browne_residual_nt — " +
+                         br_or.error().detail);
+      return false;
+    }
+    chisq = *br_or;
+  } else {
+    chisq = 2.0 * total_n(samp) * fmin_on_lavaan_scale;
+  }
+
+  const double d_chisq = std::abs(chisq - fit["chisq"].get<double>());
+  const double chisq_tol =
+      id == "0002_multigroup_3f_school" ? 2e-1 :
+      id == "0004_two_factor_meanstructure" ? 7e-2 :
+      5e-2;
+  if (d_chisq > chisq_tol) {
+    char buf[320];
+    std::snprintf(buf, sizeof(buf),
+                  "%s/%s: |chisq-lavaan|=%.3e (ours %.9g, lavaan %.9g)",
+                  id.c_str(), estimator.c_str(), d_chisq, chisq,
+                  fit["chisq"].get<double>());
+    failures.push_back(buf);
     return false;
   }
   return true;
@@ -230,7 +263,7 @@ TEST_CASE("continuous LS fixtures: ULS/GLS/WLS bounded fits match lavaan") {
         continue;
       }
       if (check_estimate(id, estimator, fit, samp, *est_or, handles->pt,
-                         failures)) {
+                         handles->rep, failures)) {
         ++passed;
       }
     }
