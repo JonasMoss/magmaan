@@ -32,7 +32,8 @@ namespace {
 
 const std::vector<std::string> kStdFixtures = {
     "0001_three_factor_hs",          // cov-only — exercises the std.lv Ψ off-diagonals (G7)
-    "0002_three_factor_hs_2group",   // configural 2-group + meanstructure — ν rescaling under std.all
+    "0002_cfa_plus_structural_hs",   // structural Beta paths — std.all latent-variance rescaling
+    "0003_three_factor_hs_2group",   // configural 2-group + meanstructure — ν rescaling under std.all
 };
 
 }  // namespace

@@ -2,7 +2,7 @@
   "_meta": {
     "format_version": 1,
     "fixture_kind": "fit.std",
-    "corpus_id": "0002_three_factor_hs_2group",
+    "corpus_id": "0003_three_factor_hs_2group",
     "tool": "lavaan::standardizedSolution",
     "lavaan_version": "0.6.22.2560"
   },

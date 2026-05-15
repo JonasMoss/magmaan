@@ -182,6 +182,12 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
     cmp_field("rmsea", fm.rmsea,              "rmsea", 1e-5);
     cmp_field("rmsea.ci.lower", fm.rmsea_ci_lower, "rmsea_ci_lower", 1e-4);
     cmp_field("rmsea.ci.upper", fm.rmsea_ci_upper, "rmsea_ci_upper", 1e-4);
+    cmp_field("rmsea.pvalue", fm.rmsea_pvalue, "rmsea_pvalue", 1e-5);
+    cmp_field("rmsea.close.h0", fm.rmsea_close_h0, "rmsea_close_h0", 1e-12);
+    cmp_field("rmsea.notclose.pvalue", fm.rmsea_notclose_pvalue,
+              "rmsea_notclose_pvalue", 1e-5);
+    cmp_field("rmsea.notclose.h0", fm.rmsea_notclose_h0,
+              "rmsea_notclose_h0", 1e-12);
     cmp_field("srmr",  fx.srmr,               "srmr",  1e-4);
     cmp_field("logl",  fx.logl,               "logl",  1e-6);
     cmp_field("unrestricted_logl", fx.unrestricted_logl,

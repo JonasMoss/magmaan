@@ -36,6 +36,9 @@ BaselineFit baseline_chi2(const SampleStats& samp) noexcept;
 //     `√(λ/(df_u·N)) · √G`. Either bound is 0 when the corresponding tail
 //     condition isn't met (lavaan's convention; e.g. a small T_u pins the
 //     lower bound at 0). Both 0 when df_u < 1.
+//   rmsea_pvalue / rmsea_notclose_pvalue — lavaan's close-fit and not-close
+//     p-values at H0 RMSEA <= 0.05 and H0 RMSEA >= 0.08 respectively, with
+//     the same Dudgeon multi-group G correction used for RMSEA itself.
 //
 // SRMR and the log-likelihood-based information criteria need the implied
 // Σ̂(θ̂), not just T/df — see `fit_extras` below.
@@ -45,6 +48,10 @@ struct FitMeasures {
   double rmsea          = 0.0;
   double rmsea_ci_lower = 0.0;
   double rmsea_ci_upper = 0.0;
+  double rmsea_pvalue   = 0.0;
+  double rmsea_close_h0 = 0.05;
+  double rmsea_notclose_pvalue = 0.0;
+  double rmsea_notclose_h0     = 0.08;
 };
 
 // `chi2_user` / `df_user` are the model fit statistic and df — typically

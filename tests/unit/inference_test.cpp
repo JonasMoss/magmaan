@@ -13,6 +13,7 @@
 #include <nlohmann/json.hpp>
 
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/nt/infer.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -315,6 +316,57 @@ TEST_CASE("browne_residual_nt: zero on saturated 1F CFA") {
   auto t_or = magmaan::nt::infer::browne_residual_nt(*h.pt, *h.rep, samp, est);
   REQUIRE(t_or.has_value());
   CHECK(std::abs(*t_or) < 1e-6);
+}
+
+TEST_CASE("browne_residual_adf: empirical Gamma approaches NT on MVN data") {
+  auto h = must_model("f =~ x1 + x2 + x3 + x4");
+
+  Eigen::MatrixXd Sigma(4, 4);
+  Sigma << 1.00, 0.72, 0.63, 0.54,
+           0.72, 1.30, 0.70, 0.60,
+           0.63, 0.70, 1.10, 0.66,
+           0.54, 0.60, 0.66, 1.20;
+  Eigen::LLT<Eigen::MatrixXd> llt(Sigma);
+  REQUIRE(llt.info() == Eigen::Success);
+
+  std::mt19937 rng(1729);
+  std::normal_distribution<double> zdist(0.0, 1.0);
+  magmaan::data::RawData raw;
+  raw.X.emplace_back(6000, 4);
+  for (Eigen::Index r = 0; r < raw.X[0].rows(); ++r) {
+    Eigen::VectorXd z(4);
+    for (Eigen::Index c = 0; c < 4; ++c) z(c) = zdist(rng);
+    raw.X[0].row(r) = (llt.matrixL() * z).transpose();
+  }
+
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp_or.has_value());
+  auto est = magmaan::estimate::fit(*h.pt, *h.rep, *samp_or).value();
+  auto nt_or = magmaan::nt::infer::browne_residual_nt(*h.pt, *h.rep, *samp_or, est);
+  auto adf_or = magmaan::nt::infer::browne_residual_adf(*h.pt, *h.rep, *samp_or, raw, est);
+  REQUIRE(nt_or.has_value());
+  REQUIRE(adf_or.has_value());
+  CHECK(*adf_or == doctest::Approx(*nt_or).epsilon(0.20));
+}
+
+TEST_CASE("browne_residual_adf: zero on saturated model") {
+  auto h = must_model("f =~ x1 + x2 + x3");
+
+  magmaan::data::RawData raw;
+  raw.X.emplace_back(301, 3);
+  std::mt19937 rng(2024);
+  std::normal_distribution<double> zdist(0.0, 1.0);
+  for (Eigen::Index r = 0; r < raw.X[0].rows(); ++r) {
+    raw.X[0](r, 0) = zdist(rng);
+    raw.X[0](r, 1) = 0.7 * raw.X[0](r, 0) + zdist(rng);
+    raw.X[0](r, 2) = 0.5 * raw.X[0](r, 0) + zdist(rng);
+  }
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp_or.has_value());
+  auto est = magmaan::estimate::fit(*h.pt, *h.rep, *samp_or).value();
+  auto adf_or = magmaan::nt::infer::browne_residual_adf(*h.pt, *h.rep, *samp_or, raw, est);
+  REQUIRE(adf_or.has_value());
+  CHECK(std::abs(*adf_or) < 1e-6);
 }
 
 TEST_CASE("chi2_stat: chi2 = n · fmin") {

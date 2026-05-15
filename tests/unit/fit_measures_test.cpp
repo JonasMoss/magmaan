@@ -103,6 +103,16 @@ TEST_CASE("fit_measures: CFI, TLI, RMSEA on a known nontrivial fit") {
   // rmsea.ci.upper ≈ 0.1136780 for this fit (fitMeasures(fit)).
   CHECK(fm.rmsea_ci_lower == doctest::Approx(0.071418490439939).epsilon(1e-4));
   CHECK(fm.rmsea_ci_upper == doctest::Approx(0.11367801681196).epsilon(1e-4));
+  CHECK(fm.rmsea_close_h0 == doctest::Approx(0.05));
+  CHECK(fm.rmsea_notclose_h0 == doctest::Approx(0.08));
+  CHECK(fm.rmsea_pvalue == doctest::Approx(
+      1.0 - magmaan::nt::infer::noncentral_chisq_cdf(
+          chi2, static_cast<double>(df),
+          301.0 * static_cast<double>(df) * 0.05 * 0.05)).epsilon(1e-12));
+  CHECK(fm.rmsea_notclose_pvalue == doctest::Approx(
+      magmaan::nt::infer::noncentral_chisq_cdf(
+          chi2, static_cast<double>(df),
+          301.0 * static_cast<double>(df) * 0.08 * 0.08)).epsilon(1e-12));
   // The CI brackets the point estimate.
   CHECK(fm.rmsea_ci_lower <= fm.rmsea);
   CHECK(fm.rmsea          <= fm.rmsea_ci_upper);
@@ -167,6 +177,7 @@ TEST_CASE("fit_measures: RMSEA CI edge cases (df<1, small χ², G>1 scaling)") {
     CHECK(fm4.rmsea_ci_lower == doctest::Approx(2.0 * fm1.rmsea_ci_lower).epsilon(1e-12));
     CHECK(fm4.rmsea_ci_upper == doctest::Approx(2.0 * fm1.rmsea_ci_upper).epsilon(1e-12));
     CHECK(fm4.rmsea          == doctest::Approx(2.0 * fm1.rmsea).epsilon(1e-12));
+    CHECK(fm4.rmsea_pvalue != doctest::Approx(fm1.rmsea_pvalue));
   }
 }
 

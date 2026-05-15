@@ -1031,6 +1031,197 @@ browne_residual_nt(partable::LatentStructure        pt,
   return N_total * (term1 - term2);
 }
 
+post_expected<double>
+browne_residual_adf(partable::LatentStructure        pt,
+                    const model::MatrixRep&   rep,
+                    const SampleStats&        samp,
+                    const RawData&            raw,
+                    const Estimates&          est) {
+  if (!raw.mask.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "browne_residual_adf: missing-data RawData is not supported"));
+  }
+  if (raw.X.size() != samp.S.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "browne_residual_adf: RawData and SampleStats block count mismatch"));
+  }
+
+  auto ev_or = prepare_evaluator(pt, rep, samp, est);
+  if (!ev_or.has_value()) return std::unexpected(ev_or.error());
+  auto& ev = *ev_or;
+
+  const std::size_t n_blocks = samp.S.size();
+  double N_total = 0.0;
+  for (std::size_t b = 0; b < n_blocks; ++b)
+    N_total += static_cast<double>(samp.n_obs[b]);
+  if (!(N_total > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "browne_residual_adf: total n_obs is zero"));
+  }
+
+  auto im_or = ev.sigma(est.theta);
+  if (!im_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "browne_residual_adf: sigma(theta) failed: " + im_or.error().detail));
+  }
+  auto Jmu_or = ev.dmu_dtheta(est.theta);
+  if (!Jmu_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "browne_residual_adf: dmu_dtheta failed: " + Jmu_or.error().detail));
+  }
+  const bool has_means = Jmu_or->size() > 0;
+  auto J_or = ev.dsigma_dtheta(est.theta);
+  if (!J_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "browne_residual_adf: dsigma_dtheta failed: " + J_or.error().detail));
+  }
+  const Eigen::MatrixXd Delta_sigma = std::move(*J_or);
+  const Eigen::MatrixXd Delta_mu = has_means ? std::move(*Jmu_or)
+                                             : Eigen::MatrixXd();
+  const Eigen::Index q = Delta_sigma.cols();
+
+  struct BlockLayout {
+    Eigen::Index p;
+    Eigen::Index pstar;
+    Eigen::Index mu_off;
+    Eigen::Index sigma_off;
+    Eigen::Index size;
+    Eigen::MatrixXd W;
+  };
+  std::vector<BlockLayout> blk(n_blocks);
+
+  Eigen::Index row_cursor = 0;
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const Eigen::Index p = samp.S[b].rows();
+    if (p <= 0 || samp.S[b].cols() != p || raw.X[b].cols() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "browne_residual_adf: block " + std::to_string(b) +
+              " has incompatible dimensions"));
+    }
+    if (raw.X[b].rows() != samp.n_obs[b] || raw.X[b].rows() < 2) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "browne_residual_adf: block " + std::to_string(b) +
+              " raw row count does not match n_obs or is too small"));
+    }
+    if (has_means && (samp.mean.size() != n_blocks || samp.mean[b].size() != p)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "browne_residual_adf: mean structure requires per-block sample means"));
+    }
+
+    blk[b].p = p;
+    blk[b].pstar = p * (p + 1) / 2;
+    blk[b].mu_off = has_means ? row_cursor : Eigen::Index{-1};
+    if (has_means) row_cursor += p;
+    blk[b].sigma_off = row_cursor;
+    row_cursor += blk[b].pstar;
+    blk[b].size = (has_means ? p : 0) + blk[b].pstar;
+
+    Eigen::VectorXd mbar;
+    if (samp.mean.size() == n_blocks && samp.mean[b].size() == p) {
+      mbar = samp.mean[b];
+    } else {
+      mbar = raw.X[b].colwise().mean().transpose();
+    }
+
+    Eigen::MatrixXd Z(raw.X[b].rows(), blk[b].size);
+    Z.setZero();
+    for (Eigen::Index r = 0; r < raw.X[b].rows(); ++r) {
+      const Eigen::VectorXd z = raw.X[b].row(r).transpose() - mbar;
+      Eigen::Index off = 0;
+      if (has_means) {
+        Z.block(r, 0, 1, p) = z.transpose();
+        off = p;
+      }
+      Eigen::Index k = 0;
+      for (Eigen::Index j = 0; j < p; ++j) {
+        for (Eigen::Index i = j; i < p; ++i) {
+          Z(r, off + k) = z(i) * z(j) - samp.S[b](i, j);
+          ++k;
+        }
+      }
+    }
+    Eigen::MatrixXd Gamma =
+        (Z.transpose() * Z) / static_cast<double>(raw.X[b].rows());
+    Gamma = 0.5 * (Gamma + Gamma.transpose()).eval();
+    auto Winv_or = invert_spd(Gamma, "browne_residual_adf: empirical Gamma");
+    if (!Winv_or.has_value()) return std::unexpected(Winv_or.error());
+    blk[b].W = (static_cast<double>(samp.n_obs[b]) / N_total) * (*Winv_or);
+  }
+  const Eigen::Index total_rows = row_cursor;
+
+  Eigen::Index expected_sigma_rows = 0;
+  Eigen::Index expected_mu_rows = 0;
+  for (const auto& bl : blk) {
+    expected_sigma_rows += bl.pstar;
+    expected_mu_rows += bl.p;
+  }
+  if (Delta_sigma.rows() != expected_sigma_rows ||
+      (has_means && Delta_mu.rows() != expected_mu_rows)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "browne_residual_adf: derivative row count mismatch"));
+  }
+
+  Eigen::VectorXd res = Eigen::VectorXd::Zero(total_rows);
+  Eigen::MatrixXd Delta = Eigen::MatrixXd::Zero(total_rows, q);
+  Eigen::Index s_cursor = 0;
+  Eigen::Index m_cursor = 0;
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const Eigen::Index p = blk[b].p;
+    if (has_means) {
+      res.segment(blk[b].mu_off, p) = samp.mean[b] - im_or->mu[b];
+      Delta.block(blk[b].mu_off, 0, p, q) =
+          Delta_mu.block(m_cursor, 0, p, q);
+      m_cursor += p;
+    }
+    Eigen::Index k = 0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j; i < p; ++i) {
+        res(blk[b].sigma_off + k) = samp.S[b](i, j) - im_or->sigma[b](i, j);
+        ++k;
+      }
+    }
+    Delta.block(blk[b].sigma_off, 0, blk[b].pstar, q) =
+        Delta_sigma.block(s_cursor, 0, blk[b].pstar, q);
+    s_cursor += blk[b].pstar;
+  }
+
+  auto apply_weight =
+      [&](const Eigen::Ref<const Eigen::VectorXd>& x,
+          Eigen::Ref<Eigen::VectorXd> out) {
+    for (std::size_t b = 0; b < n_blocks; ++b) {
+      const Eigen::Index start = has_means ? blk[b].mu_off : blk[b].sigma_off;
+      out.segment(start, blk[b].size) =
+          blk[b].W * x.segment(start, blk[b].size);
+    }
+  };
+
+  Eigen::VectorXd u(total_rows);
+  apply_weight(res, u);
+  Eigen::MatrixXd WDelta(total_rows, q);
+  Eigen::VectorXd col_buf(total_rows);
+  for (Eigen::Index c = 0; c < q; ++c) {
+    apply_weight(Delta.col(c), col_buf);
+    WDelta.col(c) = col_buf;
+  }
+
+  const Eigen::MatrixXd A = Delta.transpose() * WDelta;
+  const Eigen::VectorXd b_vec = Delta.transpose() * u;
+  const Eigen::MatrixXd A_sym = 0.5 * (A + A.transpose());
+  Eigen::LLT<Eigen::MatrixXd> llt_A(A_sym);
+  Eigen::VectorXd Ainv_b;
+  if (llt_A.info() == Eigen::Success) {
+    Ainv_b = llt_A.solve(b_vec);
+  } else {
+    Eigen::LDLT<Eigen::MatrixXd> ldlt_A(A_sym);
+    if (ldlt_A.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+          "browne_residual_adf: Δ'Γ⁻¹Δ is singular"));
+    }
+    Ainv_b = ldlt_A.solve(b_vec);
+  }
+  return N_total * (res.dot(u) - b_vec.dot(Ainv_b));
+}
+
 double chi2_pvalue(double chi2, int df) noexcept {
   if (df <= 0)      return std::numeric_limits<double>::quiet_NaN();
   if (chi2 < 0)     return std::numeric_limits<double>::quiet_NaN();

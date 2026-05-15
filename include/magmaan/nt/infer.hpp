@@ -7,6 +7,7 @@ namespace magmaan::nt::infer {
 using fit::Estimates;
 using fit::WaldTestResult;
 using fit::ZTestResult;
+using fit::browne_residual_adf;
 using fit::browne_residual_nt;
 using fit::chi2_pvalue;
 using fit::chi2_stat;
