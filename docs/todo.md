@@ -46,71 +46,23 @@ slice, has explicit missing-data semantics, and returns a moment/Gamma bundle
 that downstream ordinal DWLS/WLS code can consume without special SEM-side
 logic.
 
-## 1. Trust and validation hardening
+## 1. Validation and lavaan comparison
 
-Intent: reach a state where the current implementation can be trusted as a
-stable base for API design, refactoring, and larger research-facing work.
+Intent: keep validation fixture-first and make parity failures cheap to
+diagnose.
 
-- [x] Extend continuous FIML lavaan fixtures beyond the original CFA,
-  structural, path, fixed.x, equality, and dense missingness tranche. The FIML
-  stream now includes complete-row equivalence coverage and multi-group
-  `fixed.x` with complete exogenous variables plus missing outcomes.
-- [x] Add targeted complete-data equivalence checks where FIML gradients match
-  complete-data ML gradients up to objective constants when every row is fully
-  observed.
-- [x] Verify `fit_extras()` likelihood accounting for complete-data FIML and
-  fixture-backed multi-group `fixed.x` / meanstructure-plus-`fixed.x` cases.
-- [x] Keep robust FIML expansion fixture-first; unsupported missing-data
-  corrections remain outside the public claim beyond the current
-  MLR/Yuan-Bentler Mplus slice.
-- [x] Harden mixed continuous/ordinal categorical validation and fixture
-  reporting. Mixed NACOV/weight parity remains intentionally tolerance-loose
-  while polyserial Gamma details are refined.
-
-Done when: representative supported estimator/model combinations have checked-in
-lavaan-backed fixtures, clear tolerances, and no hidden fixture-free parity
-claims.
-
-## 2. Lavaan comparison tooling
-
-Intent: make parity failures easier to diagnose and fixture expansion cheaper.
-
-- [x] Add lavaan partable comparison helpers that match by semantic row keys
-  rather than raw row position.
-- [x] Report missing rows, extra fixed-zero rows, label/plabel drift, group
-  drift, and estimate drift as distinct comparison failures.
-- [x] Make fitted-object partables returned through R helpers match the
-  corresponding lavaan call under the same options, with special attention to
-  fixed-zero intercept and mean rows.
-- [x] Keep fixture regeneration centralized in `tools/regen_oracle.R`, and
-  document any new tolerance classes near the fixture code.
 - [ ] Add fixture cases for scalar-invariance latent mean rescaling once the
   bounded optimizer reliably fits the needed mean-structure models.
 
-Done when: a failing lavaan parity test points to the semantic reason for the
-drift, not just a raw row or numeric mismatch.
+Done when: representative supported estimator/model combinations have
+checked-in lavaan-backed fixtures, clear tolerances, and no hidden fixture-free
+parity claims.
 
-## 3. R and public API polish
+## 2. R and public API polish
 
 Intent: make the methods-developer interface reasonable without turning the R
 package into a second SEM implementation.
 
-- [x] Add `magmaan(model, data, estimator, groups)` as the high-level R
-  convenience for parse/lavaanify, sample-stat construction, and parameter
-  estimation.
-- [x] Keep `magmaan()` estimate-only: SEs, robust tests, fit measures, defined
-  parameters, and nested tests remain explicit post-fit calls.
-- [x] Expose `compute_defined()` through R and add lavaan-backed goldens for
-  chained `:=` rows and `.pN.` references.
-- [x] Add high-level shortcuts equivalent to `se = "none"` and `test = "none"`
-  for point-estimate-only workflows.
-- [x] Audit exported R wrappers that take a whole fit list and split them into
-  primitive-shaped wrappers plus explicit fit-list convenience adapters where
-  useful. Priority examples are `infer_vcov()`, `infer_z_test()`,
-  `infer_wald_test()`, `infer_rls_chi2()`, `infer_build_u_factor()`, and robust
-  SE/test helpers.
-- [x] Tighten validation and documentation for the sample-moment R path,
-  including accepted shapes for `list(S = , nobs = , mean = )`.
 - [ ] Keep ordinal R documentation current around `model_spec()` with
   `ordered` and `parameterization = "delta"`, `data_ordinal_stats_from_df()`,
   `fit_dwls_ordinal()`, and `fit_wls_ordinal()`.
@@ -119,26 +71,18 @@ Done when: a methods developer can fit supported complete, FIML, LS, and
 ordinal/mixed models from R through thin wrappers while still choosing
 post-fit inference explicitly.
 
-## 4. Public namespace and header cleanup
+## 3. Public namespace and header cleanup
 
 Intent: finish the namespace transition without breaking compatibility
 unnecessarily.
 
-- [x] Move primary definitions out of old `magmaan::fit` and
-  `magmaan::partable` namespaces into the target namespaces.
-- [x] Convert repo code and R binding internals to target headers and
-  namespaces directly.
-- [x] Keep old `include/magmaan/fit/*` and `include/magmaan/partable/*`
-  headers as compatibility shims for one transition window.
-- [x] Keep one focused compatibility test for representative old headers.
-- [x] Update stale docs and examples after the migration lands.
 - [ ] After the transition window, remove the old `fit/*` and `partable/*`
   compatibility shims.
 
 Done when: new code naturally uses `spec`, `lavaan`, `estimate`, `optim`, `nt`,
 `gls`, and `data`, while old include paths still have a tested transition path.
 
-## 5. Benchmarks and performance baselines
+## 4. Benchmarks and performance baselines
 
 Intent: make refactors and backend choices measurable instead of anecdotal.
 
@@ -156,7 +100,7 @@ Intent: make refactors and backend choices measurable instead of anecdotal.
 Done when: backend recommendations and performance-sensitive refactors can be
 checked against repeatable local benchmark scenarios.
 
-## 6. Larger and more principled tests
+## 5. Larger and more principled tests
 
 Intent: complement narrow golden fixtures with broader tests that catch
 structural mistakes.
@@ -173,35 +117,15 @@ structural mistakes.
 Done when: new estimator work fails fast on structural invariants before it
 drifts into hard-to-debug lavaan parity failures.
 
-## 7. Remaining statistical gaps
+## 6. Remaining statistical gaps
 
 Intent: keep unsupported statistical work explicit so it is not mistaken for a
 polish task.
 
-- [x] Generalize robust/inference helpers that assume the normal-theory ML
-  weight so ULS/GLS/WLS can share sandwich paths with arbitrary per-block
-  weights. A shared weighted-moment sandwich/U-Gamma primitive now backs
-  ordinal, mixed ordinal, and continuous ULS/GLS/WLS robust adapters. ULS
-  `robust.sem` has lavaan-backed non-fixed.x fixtures; GLS/WLS robust paths
-  remain shape/scaling covered because lavaan does not expose matching robust
-  scaled-test targets for those estimators.
-- [x] Close the continuous LS standard golden gate for ULS/GLS/WLS, including
-  lavaan's fixed.x Browne residual NT convention for observed exogenous
-  moments.
-- [x] Decide whether WLS robust ordinal reporting should get a lavaan-backed
-  target or stay shape-only. Decision: keep robust WLS scaled-test reporting
-  shape-only for now because lavaan rejects Satorra-Bentler-family `test=`
-  requests with categorical `estimator = "WLS"`; DWLS robust reporting remains
-  lavaan-backed.
 - [ ] Add theta-parameterization support for ordinal models as a separate
   compatibility slice. The public R/C++ boundary now accepts the
   parameterization distinction and fails explicitly for `theta`; actual
   theta fitting still needs the separate lavaan-backed compatibility slice.
-- [x] Lavaan-back and broaden the new modification-index / score-test surface:
-  representative `modindices()` fixed-row and `lavTestScore()` equality-release
-  fixtures now cover ML, observed-information FIML, continuous ULS, ordinal
-  DWLS, and mixed ordinal DWLS. Mixed-ordinal MI remains tolerance-loose with
-  the current polyserial/NACOV hardening state.
 - [ ] Add absent-row generation and standardized EPC for modification indices
   only after the raw fixed-row/equality-release contract is fully validated.
 - [ ] Keep nonlinear equality constraints, inequality constraints, and
@@ -211,7 +135,7 @@ polish task.
 Done when: each unsupported statistical feature is either implemented with
 oracle/fixture backing or remains clearly outside the public contract.
 
-## 8. Documentation and examples
+## 7. Documentation and examples
 
 Intent: make the codebase easier to steer for future methods work.
 
@@ -229,7 +153,7 @@ Done when: a new contributor can read the roadmap for context, this TODO for
 remaining work, and examples for the intended workflow without reverse
 engineering current state from tests.
 
-## 9. Alternative robust polychoric and mixed estimators
+## 8. Alternative robust polychoric and mixed estimators
 
 Intent: turn the planning notes in `resources/alternative_estimators/` into
 incremental, testable robust polychoric estimators without changing default
@@ -272,7 +196,7 @@ Done when: robust polychoric alternatives are selectable, default ML fixtures
 are unchanged, diagnostics make robustness visible, and at least one robust
 method has a Gamma path usable by ordinal DWLS/WLS robust reporting.
 
-## 10. Composite models
+## 9. Composite models
 
 Intent: decide whether magmaan supports lavaan's new composite-variable
 semantics for `<~`, then implement the smallest lavaan-backed slice without
