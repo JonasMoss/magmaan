@@ -16,7 +16,7 @@ model_spec <- function(syntax,
   if (length(dots)) {
     stop("model_spec(): unused arguments: ", paste(names(dots), collapse = ", "))
   }
-  parameterization <- match.arg(parameterization, "delta")
+  parameterization <- match.arg(parameterization, c("delta", "theta"))
   ordered <- if (is.null(ordered)) character() else as.character(ordered)
   group_var <- if (is.null(group)) "" else as.character(group)[1L]
   n_groups <- if (is.null(group_labels)) 1L else length(group_labels)
@@ -271,6 +271,12 @@ data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = N
 }
 
 augment_ordinal_partable <- function(model, ordinal_stats) {
+  parameterization <- attr(partable_arg(model), "magmaan.parameterization",
+                           exact = TRUE) %||% "delta"
+  if (identical(parameterization, "theta")) {
+    stop("augment_ordinal_partable(): theta parameterization is not supported yet; ",
+         "use parameterization = 'delta'")
+  }
   fix_delta_variances <- function(pt, ov_by_group) {
     for (b in seq_along(ov_by_group)) {
       idx <- pt$op == "~~" &
@@ -366,6 +372,11 @@ augment_ordinal_partable <- function(model, ordinal_stats) {
 
 augment_mixed_ordinal_partable <- function(model, mixed_stats) {
   pt <- partable_arg(model)
+  parameterization <- attr(pt, "magmaan.parameterization", exact = TRUE) %||% "delta"
+  if (identical(parameterization, "theta")) {
+    stop("augment_mixed_ordinal_partable(): theta parameterization is not supported yet; ",
+         "use parameterization = 'delta'")
+  }
   if (!any(pt$op == "~1")) {
     stop("augment_mixed_ordinal_partable(): mixed categorical fitting requires model_spec(..., meanstructure = TRUE)")
   }

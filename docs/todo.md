@@ -133,11 +133,18 @@ polish task.
 
 - [ ] Generalize robust/inference helpers that assume the normal-theory ML
   weight so ULS/GLS/WLS can share sandwich paths with arbitrary per-block
-  weights.
-- [ ] Decide whether WLS robust ordinal reporting should get a lavaan-backed
-  target or stay shape-only.
+  weights. A shared weighted-moment sandwich/U-Gamma primitive now backs the
+  ordinal and mixed ordinal robust paths; remaining work is wiring continuous
+  ULS/GLS/WLS adapters to it.
+- [x] Decide whether WLS robust ordinal reporting should get a lavaan-backed
+  target or stay shape-only. Decision: keep robust WLS scaled-test reporting
+  shape-only for now because lavaan rejects Satorra-Bentler-family `test=`
+  requests with categorical `estimator = "WLS"`; DWLS robust reporting remains
+  lavaan-backed.
 - [ ] Add theta-parameterization support for ordinal models as a separate
-  compatibility slice.
+  compatibility slice. The public R/C++ boundary now accepts the
+  parameterization distinction and fails explicitly for `theta`; actual
+  theta fitting still needs the separate lavaan-backed compatibility slice.
 - [ ] Lavaan-back and broaden the new modification-index / score-test surface:
   add `modindices()` and `lavTestScore()` fixtures across ML, FIML, LS,
   ordinal, and mixed ordinal; add absent-row generation and standardized EPC

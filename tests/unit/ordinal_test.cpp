@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 #include <random>
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
@@ -227,6 +228,35 @@ TEST_CASE("Ordinal delta preparation fixes response variances and compacts free 
     }
   }
   CHECK(fixed_response_variances == 3);
+}
+
+TEST_CASE("Ordinal theta parameterization fails explicitly") {
+  Eigen::MatrixXd X(16, 2);
+  Eigen::Index r = 0;
+  for (int rep = 0; rep < 4; ++rep) {
+    for (int x1 = 1; x1 <= 2; ++x1) {
+      for (int x2 = 1; x2 <= 2; ++x2) {
+        X(r, 0) = x1;
+        X(r, 1) = x2;
+        ++r;
+      }
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  auto fp = magmaan::parse::Parser::parse(
+      "f =~ x1 + x2\n"
+      "x1 | t1\n"
+      "x2 | t1\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::lavaanify(*fp);
+  REQUIRE(pt.has_value());
+  auto prep = magmaan::estimate::prepare_ordinal_partable(
+      *pt, *stats, magmaan::estimate::OrdinalParameterization::Theta);
+  REQUIRE_FALSE(prep.has_value());
+  CHECK(prep.error().detail.find("theta parameterization") != std::string::npos);
 }
 
 TEST_CASE("Ordinal robust reporting returns sandwich SEs and scaled-test eigenvalues") {

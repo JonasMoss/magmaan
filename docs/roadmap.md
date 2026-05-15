@@ -117,7 +117,9 @@ golden `parTable()` fixtures.
 - The implemented ordinal boundary is lavaan's delta parameterization.
 - Explicit post-fit robust ordinal reporting returns sandwich SEs plus
   Satorra-Bentler, mean/variance-adjusted, and scaled/shifted statistics from
-  the threshold-plus-polychoric moment vector.
+  the threshold-plus-polychoric moment vector. The implementation now uses a
+  shared weighted-moment sandwich/U-Gamma primitive that can be reused by other
+  LS moment stacks with arbitrary block weights and NACOV matrices.
 - A first mixed continuous/ordinal path builds lavaan-ordered thresholds,
   continuous means/variances, polychoric/polyserial/covariance moments,
   NACOV/DWLS/WLS weights, and DWLS/WLS delta fits.
@@ -176,6 +178,13 @@ adapters layered on top.
   plus a finite-difference observed information matrix; lavaan-backed fixture
   coverage is still narrower than complete-data ML.
 - Theta parameterization for ordinal models remains unsupported.
+- The ordinal parameterization boundary accepts `delta` only for estimation;
+  requested `theta` models fail explicitly instead of falling through to
+  delta-shaped response-scale assumptions.
+- WLS ordinal point estimates and standard chi-square are lavaan-backed.
+  Robust WLS scaled-test reporting remains shape-only because lavaan rejects
+  Satorra-Bentler-family `test=` requests with `estimator = "WLS"` for the
+  current categorical fixtures; DWLS robust reporting remains lavaan-backed.
 - Mixed categorical NACOV/weight, fit, and robust-reporting parity is
   intentionally looser than the all-ordinal path while polyserial Gamma details
   are hardened.
