@@ -134,6 +134,31 @@ golden `parTable()` fixtures.
 - Old `fit/*` and `partable/*` headers remain compatibility shims during the
   namespace transition.
 
+### Argument-minimality sweep
+
+One core architecture rule is that functions should take exactly the data they
+need, and no more. The current C++ core mostly follows this:
+
+- Fit results are plain `Estimates` and carry no back-pointer to the model.
+- Continuous fitters take the estimable structure, matrix representation,
+  sample/raw data, starts, discrepancy, and optimizer. They do not take
+  parameter names.
+- Information, covariance, SE, chi-square, degrees of freedom, Wald/z tests,
+  robust U-Gamma reducers, and fit measures are exposed as separate primitives
+  rather than as methods on one fitted-object bundle.
+- Satorra-Bentler-family reducers take scalar test statistics, degrees of
+  freedom, and eigenvalues rather than fit objects.
+- The Satorra-2000 C++ helper takes the model, reparameterization matrices,
+  raw-data pieces, chi-square values, and degrees of freedom explicitly.
+
+The remaining pressure point is the R boundary. Several exported R wrappers
+currently accept the transparent fit list for convenience and then unpack the
+partable, sample statistics, and estimates internally. That is acceptable as an
+interactive convenience while the R package is exploratory, but it is not the
+final architectural ideal. Thin R wrappers should gradually mirror the C++
+primitive signatures; fit-list helpers can remain as explicit convenience
+adapters layered on top.
+
 ## Current Boundaries
 
 - Complete-data and FIML support are fixture-backed only for the documented
@@ -164,6 +189,12 @@ golden `parTable()` fixtures.
   interfaces.
 - Parser behavior follows `docs/grammar/grammar.ebnf`; if parser code and the
   EBNF disagree, the parser is wrong.
+- Function signatures should be argument-minimal. A computation should receive
+  the smallest structure or primitive values it needs: no names for numeric
+  fitters, no fitted object for degrees of freedom, no full fit list where a
+  parameter vector or sample-size vector is enough. Convenience adapters may
+  unpack larger objects at the boundary, but core APIs should not depend on
+  those bundles.
 
 ## Planning Documents
 
