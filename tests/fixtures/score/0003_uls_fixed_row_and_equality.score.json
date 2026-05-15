@@ -1,0 +1,64 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "score",
+    "corpus_id": "0003_uls_fixed_row_and_equality",
+    "tool": "lavaan::modindices/lavTestScore",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "kind": "ls",
+  "estimator": "ULS",
+  "input": "f =~ x1 + a*x2 + b*x3 + x4\nx1 ~~ 0*x2\na == b",
+  "meanstructure": false,
+  "ordered": null,
+  "ordered_mask": null,
+  "raw": null,
+  "blocks": null,
+  "sample_stats": null,
+  "fit": {
+    "converged": true,
+    "theta_hat": [0.656394104922614, 0.656394104922614, 0.519983569997368, 0.555912303389486, 1.03869752935242, 0.931422127891591, 1.13697165124226, 0.806985451636451],
+    "n_obs": 301,
+    "n_obs_per_block": 301,
+    "sample_cov": [
+      {
+        "block": 0,
+        "matrix": [
+          [1.36289774499779, 0.408729234586545, 0.581832320084842, 0.506517779495859],
+          [0.408729234586545, 1.38638981173865, 0.452567483388704, 0.20961978157046],
+          [0.581832320084842, 0.452567483388704, 1.279114410299, 0.208863511622148],
+          [0.506517779495859, 0.20961978157046, 0.208863511622148, 1.35516672288466]
+        ]
+      }
+    ],
+    "sample_mean": null,
+    "score_information": "expected",
+    "modindices": [
+      {
+        "lhs": "x1",
+        "op": "~~",
+        "rhs": "x2",
+        "group": 1,
+        "mi": 8.10432802198964,
+        "epc": -0.223312769056153
+      }
+    ],
+    "score_tests": {
+      "total": {
+        "mi": 3.51031044063283,
+        "df": 1,
+        "pvalue": 0.0609880266735879
+      },
+      "rows": [
+        {
+          "lhs": "a",
+          "op": "==",
+          "rhs": "b",
+          "mi": 3.51031044063283,
+          "df": 1,
+          "pvalue": 0.0609880266735879
+        }
+      ]
+    }
+  }
+}

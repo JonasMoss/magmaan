@@ -147,9 +147,12 @@ polish task.
   compatibility slice. The public R/C++ boundary now accepts the
   parameterization distinction and fails explicitly for `theta`; actual
   theta fitting still needs the separate lavaan-backed compatibility slice.
-- [ ] Lavaan-back and broaden the new modification-index / score-test surface:
-  add `modindices()` and `lavTestScore()` fixtures across ML, FIML, LS,
-  ordinal, and mixed ordinal; add absent-row generation and standardized EPC
+- [x] Lavaan-back and broaden the new modification-index / score-test surface:
+  representative `modindices()` fixed-row and `lavTestScore()` equality-release
+  fixtures now cover ML, observed-information FIML, continuous ULS, ordinal
+  DWLS, and mixed ordinal DWLS. Mixed-ordinal MI remains tolerance-loose with
+  the current polyserial/NACOV hardening state.
+- [ ] Add absent-row generation and standardized EPC for modification indices
   only after the raw fixed-row/equality-release contract is fully validated.
 - [ ] Keep nonlinear equality constraints, inequality constraints, and
   nonstandard active-bound inference out of the regular inference surface

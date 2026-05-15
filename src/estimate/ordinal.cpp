@@ -1246,8 +1246,8 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
   auto J = jacobian_fn(stats, *layout, eval->moments, eval->J_sigma,
                        eval->J_mu, *factors);
   if (!J.has_value()) return std::unexpected(fit_to_post(J.error()));
-  const Eigen::VectorXd score = -2.0 * n_total * (J->transpose() * *r);
-  Eigen::MatrixXd info = 2.0 * n_total * (J->transpose() * *J);
+  const Eigen::VectorXd score = -n_total * (J->transpose() * *r);
+  Eigen::MatrixXd info = n_total * (J->transpose() * *J);
   info = 0.5 * (info + info.transpose());
 
   for (Eigen::Index row = 0; row < con->A_eq.rows(); ++row) {

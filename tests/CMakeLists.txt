@@ -62,6 +62,7 @@ add_executable(magmaan_tests
   golden/ls_golden_test.cpp
   golden/fiml_golden_test.cpp
   golden/inference_golden_test.cpp
+  golden/score_golden_test.cpp
   golden/observed_inference_golden_test.cpp
   golden/multigroup_inference_golden_test.cpp
   golden/fit_measures_golden_test.cpp
