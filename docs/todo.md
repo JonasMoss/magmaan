@@ -5,9 +5,46 @@ current implementation state summarized in [docs/roadmap.md](roadmap.md). Keep
 it focused on unfinished work, acceptance checks, and the next useful seams for
 methods development.
 
-## 0. Pairwise threshold model
+## 0. Pairwise threshold/composite-likelihood model
 
-**FILL IN THIS.** We intend to do quite a bit with the pairwise likelihood for (mixed) threshold data! E.g., missing data, density power divergence or other divergences, that sort of thing. But first priority is getting it up and running for polychorics. And maybe also normal data? (For shits and giggles?) I'm not sure how this is estimated, but I would expected EM to be needed for missing data of course, which is hope will be efficient under MAR.
+Intent: add a direct pairwise likelihood/minimum-disparity path for threshold
+data, starting with ordinary polychoric replication and only then expanding to
+missing data, mixed data, and robust divergences.
+
+- [ ] Define the statistical contract separately from the current
+  limited-information DWLS/WLS path: pairwise table likelihood or divergence
+  over bivariate ordinal margins, with thresholds and latent correlations as
+  the first target.
+- [ ] Factor the bivariate ordinal probability, score, and table bookkeeping
+  out of the current polychoric implementation so pairwise likelihood, robust
+  polychorics, and NACOV construction share one kernel.
+- [ ] Implement the smallest all-ordinal slice first: complete/listwise
+  bivariate tables, fixed lavaan-style marginal thresholds, and pairwise rho
+  estimates that reproduce current ML polychorics.
+- [ ] Add a joint pairwise threshold/rho estimator after the fixed-threshold
+  slice is stable; decide explicitly whether thresholds are pair-local nuisance
+  parameters or shared SEM moments.
+- [ ] Define missing-data semantics before coding: observed-pair composite
+  likelihood may not need EM, but shared-threshold/multivariate MAR handling
+  needs a documented likelihood target and scaling convention.
+- [ ] Add mixed continuous/ordinal pair kernels after all-ordinal works:
+  polyserial pairs, continuous-continuous normal pairs, and consistent moment
+  ordering with current `MixedOrdinalStats`.
+- [ ] Decide whether normal-data pairwise likelihood is a real supported
+  estimator or only a benchmark/sanity check against complete-data ML/FIML.
+- [ ] Compute casewise influence/Gamma for the pairwise moment vector so DWLS,
+  WLS, robust SEs, and scaled tests can reuse the existing weighted-moment
+  sandwich path.
+- [ ] Add diagnostics: pair labels, convergence, boundary hits, table
+  residuals, missingness counts, minimum eigenvalue of the assembled
+  correlation matrix, and any ridge/shrinkage applied.
+- [ ] Add lavaan-backed or internally cross-checked fixtures for complete
+  all-ordinal polychorics first, then mixed data, then missing-data scenarios.
+
+Done when: the pairwise path reproduces existing ML polychorics in its default
+slice, has explicit missing-data semantics, and returns a moment/Gamma bundle
+that downstream ordinal DWLS/WLS code can consume without special SEM-side
+logic.
 
 ## 1. Trust and validation hardening
 
@@ -187,14 +224,88 @@ Done when: a new contributor can read the roadmap for context, this TODO for
 remaining work, and examples for the intended workflow without reverse
 engineering current state from tests.
 
-## 9. Add alternative polychorics (mixed) estimators
+## 9. Alternative robust polychoric and mixed estimators
 
-- [ ] **FILL IN** Implement resources/alternative estimators/WMA h-score robust polychoric plan
-- [ ] **FILL IN** Implement DPD and Huberized residual fitting from esources/alternative estimators/different_robust
-- [ ] Have loads of options for Huberized residual fitting.
+Intent: turn the planning notes in `resources/alternative_estimators/` into
+incremental, testable robust polychoric estimators without changing default
+lavaan-compatible behavior.
 
-## 10. Ensure composite models work
+- [ ] Add an enum-backed h-score API in `magmaan::data` for `ml`,
+  `wma_hard_cap`, `smooth_cap`, and `exp_cap`, with tests for `h`, `dh`, and
+  objective contributions where available.
+- [ ] Preserve current behavior as the default: `ml` with lavaan-style
+  marginal thresholds must reproduce existing ordinal fixtures to current
+  tolerances.
+- [ ] Implement experimental fixed-threshold h-weighted rho estimation for one
+  bivariate table, returning rho, convergence status, residuals, and per-cell
+  weights.
+- [ ] Validate fixed-threshold behavior with constructed contaminated tables:
+  hard/smooth caps should move less than ML under inflated low-probability
+  cells, while `hard_cap(k = Inf)` matches ML.
+- [ ] Implement full pair-local WMA/h-score estimation with thresholds and rho
+  estimated jointly; validate against robcat/WMA or independent reference
+  calculations for selected bivariate tables.
+- [ ] Add casewise influence and sandwich/Gamma calculations for robust
+  pairwise moments; document the hard-cap kink convention and scaling.
+- [ ] Decide and implement the first SEM integration mode: lavaan-style shared
+  marginal thresholds plus robust rhos as an experimental Option A, before
+  attempting shared-threshold composite h-score estimation.
+- [ ] Handle indefinite robust correlation matrices explicitly: report minimum
+  eigenvalues and optional ridge/shrinkage diagnostics rather than silently
+  projecting by default.
+- [ ] Implement density power divergence as the primary non-h-score comparator,
+  with ML recovered as `alpha -> 0` and tests over a small alpha grid.
+- [ ] Implement Hellinger and Huberized residual fitting only as experimental
+  comparators; keep one-sided and symmetric Huber options clearly named.
+- [ ] Keep mixed continuous/ordinal robust estimators behind the all-ordinal
+  robust Gamma milestone; polyserial robustness should not advance before the
+  all-ordinal influence path is stable.
+- [ ] Expose only predefined robust methods through R controls; keep arbitrary
+  C++ h-functions internal until there is a concrete methods use case.
 
-- [ ] Figure out how composite models are supposed to work; download some models to run in lavaan.
-- [ ] Check that our output agrees.
-- [ ] Check that mean structure "works" for composite models, which i dont understand what is supposed to mean.
+Done when: robust polychoric alternatives are selectable, default ML fixtures
+are unchanged, diagnostics make robustness visible, and at least one robust
+method has a Gamma path usable by ordinal DWLS/WLS robust reporting.
+
+## 10. Composite models
+
+Intent: decide whether magmaan supports lavaan's new composite-variable
+semantics for `<~`, then implement the smallest lavaan-backed slice without
+confusing composites with ordinary latent factors.
+
+- [ ] Document lavaan's current `<~` contract from the bundled reference:
+  composites are weighted linear combinations of composite indicators; lavaan
+  0.6-20+ treats them specially, while the old fallback rewrote `f <~ rhs` as
+  `f =~ 0; f ~~ 0*f; f ~ rhs`.
+- [ ] Collect minimal lavaan oracle cases before implementation: one pure
+  composite, one model mixing composites and common factors, one structural
+  regression involving a composite, and one multi-group case if lavaan
+  supports it cleanly.
+- [ ] Decide where composites live in the lavaanified model triple:
+  `LatentStructure` must distinguish composite variables and composite
+  indicators; `LatentNames` must preserve `<~` rows; `Starts` must carry weight
+  starts without treating them as ordinary loadings.
+- [ ] Update `docs/grammar/grammar.ebnf` first if `<~` becomes supported, then
+  parser comments/tests, replacing the current rejected-operator behavior.
+- [ ] Extend lavaan partable projection so `<~` rows, free/fixed weights,
+  labels, plabels, group equality labels, and `group.equal =
+  "composite.weights"` round-trip against lavaan.
+- [ ] Extend matrix representation with lavaan's composite handling rather than
+  pretending composites are reflective factors; identify the needed `WMAT`,
+  variance, covariance, and regression matrix behavior.
+- [ ] Implement composite variance handling, including the lavaan behavior that
+  fixes/sets composite total or residual variances from the composite weights
+  and indicator covariance structure.
+- [ ] Implement mean-structure behavior explicitly: composite means/intercepts
+  should follow the weighted indicator means, and fixtures should pin when mean
+  rows appear in `parTable()`.
+- [ ] Validate point estimates, implied covariance/mean, df, chi-square, SEs,
+  standardization, and fit measures only for the supported complete-data ML
+  slice before exposing composites through R helpers.
+- [ ] Keep ordinal, FIML missing-data, robust corrections, and LS composite
+  support out of scope until the complete-data ML composite contract is stable.
+- [ ] Add benchmark cases only after the semantic fixture suite is green.
+
+Done when: `<~` no longer parses as a rejected operator for the supported
+slice, magmaan partables and implied moments match lavaan composite examples,
+and unsupported composite combinations fail with explicit errors.
