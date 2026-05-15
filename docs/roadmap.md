@@ -154,7 +154,9 @@ golden `parTable()` fixtures.
   R convenience. It composes `model_spec()`, data-frame sample-stat/raw-data
   construction, and the matching point-estimation wrapper for complete-data
   ML/ULS/GLS/WLS, FIML, and ordinal/mixed DWLS/WLS where the lower-level
-  inputs are available.
+  inputs are available. Lavaan-style `se = "none"` and `test = "none"` are
+  accepted as explicit point-estimate-only shortcuts; other values error and
+  point users to explicit post-fit inference calls.
 - `compute_defined(model, fit, vcov)` exposes C++ defined-parameter evaluation
   for `:=` rows through R. It keeps covariance selection explicit, supports
   chained definitions, and resolves `.pN.` plabel references using the fitted

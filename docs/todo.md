@@ -102,7 +102,7 @@ package into a second SEM implementation.
   parameters, and nested tests remain explicit post-fit calls.
 - [x] Expose `compute_defined()` through R and add lavaan-backed goldens for
   chained `:=` rows and `.pN.` references.
-- [ ] Add high-level shortcuts equivalent to `se = "none"` and `test = "none"`
+- [x] Add high-level shortcuts equivalent to `se = "none"` and `test = "none"`
   for point-estimate-only workflows.
 - [ ] Audit exported R wrappers that take a whole fit list and split them into
   primitive-shaped wrappers plus explicit fit-list convenience adapters where

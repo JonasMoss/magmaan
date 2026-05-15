@@ -886,8 +886,11 @@ fit_wls_mixed_ordinal <- function(model, data, lbfgsb = NULL, bounds = NULL) {
 magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
                     ordered = NULL, parameterization = "delta",
                     missing = c("listwise", "error"),
+                    se = "none", test = "none",
                     W = NULL, lbfgs = NULL, lbfgsb = NULL, bounds = NULL) {
   missing <- match.arg(missing)
+  require_none_arg(se, "se", "standard errors")
+  require_none_arg(test, "test", "test statistics")
   estimator <- toupper(as.character(estimator)[1L])
   if (!length(estimator) || is.na(estimator)) {
     stop("magmaan(): `estimator` must be a non-missing string")
@@ -1076,6 +1079,16 @@ model_syntax_arg <- function(model) {
   }
   if (is.character(model) && length(model) == 1L) return(model)
   stop("compute_defined(): `model` must be a syntax string or magmaan_model_spec")
+}
+
+require_none_arg <- function(value, arg, what) {
+  if (is.null(value)) value <- "none"
+  value <- tolower(as.character(value))
+  if (length(value) != 1L || is.na(value) || !identical(value, "none")) {
+    stop("magmaan(): `", arg, "` is estimate-only and currently accepts only \"none\"; ",
+         what, " remain explicit post-fit calls")
+  }
+  invisible(NULL)
 }
 
 `%||%` <- function(x, y) {
