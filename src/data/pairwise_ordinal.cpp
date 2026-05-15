@@ -35,6 +35,47 @@ double normal_pdf(double x) noexcept {
   return inv_sqrt_2pi * std::exp(-0.5 * x * x);
 }
 
+double normal_quantile(double p) noexcept {
+  constexpr double a1 = -3.969683028665376e+01;
+  constexpr double a2 =  2.209460984245205e+02;
+  constexpr double a3 = -2.759285104469687e+02;
+  constexpr double a4 =  1.383577518672690e+02;
+  constexpr double a5 = -3.066479806614716e+01;
+  constexpr double a6 =  2.506628277459239e+00;
+  constexpr double b1 = -5.447609879822406e+01;
+  constexpr double b2 =  1.615858368580409e+02;
+  constexpr double b3 = -1.556989798598866e+02;
+  constexpr double b4 =  6.680131188771972e+01;
+  constexpr double b5 = -1.328068155288572e+01;
+  constexpr double c1 = -7.784894002430293e-03;
+  constexpr double c2 = -3.223964580411365e-01;
+  constexpr double c3 = -2.400758277161838e+00;
+  constexpr double c4 = -2.549732539343734e+00;
+  constexpr double c5 =  4.374664141464968e+00;
+  constexpr double c6 =  2.938163982698783e+00;
+  constexpr double d1 =  7.784695709041462e-03;
+  constexpr double d2 =  3.224671290700398e-01;
+  constexpr double d3 =  2.445134137142996e+00;
+  constexpr double d4 =  3.754408661907416e+00;
+  constexpr double plow = 0.02425;
+  constexpr double phigh = 1.0 - plow;
+
+  if (p < plow) {
+    const double q = std::sqrt(-2.0 * std::log(p));
+    return (((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
+           ((((d1 * q + d2) * q + d3) * q + d4) * q + 1.0);
+  }
+  if (p > phigh) {
+    const double q = std::sqrt(-2.0 * std::log(1.0 - p));
+    return -(((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
+            ((((d1 * q + d2) * q + d3) * q + d4) * q + 1.0);
+  }
+  const double q = p - 0.5;
+  const double r = q * q;
+  return (((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q /
+         (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1.0);
+}
+
 double bvn_cdf(double h, double k, double rho) noexcept {
   if (h == -kInf || k == -kInf) return 0.0;
   if (h == kInf) return normal_cdf(k);
@@ -177,6 +218,76 @@ double neglog_pair_unchecked(const Eigen::Ref<const Eigen::MatrixXd>& counts,
   return out;
 }
 
+post_expected<Eigen::VectorXd>
+marginal_threshold_start(const Eigen::VectorXd& margins,
+                         double min_spacing,
+                         std::string_view caller) {
+  if (margins.size() < 2 || !margins.allFinite() ||
+      (margins.array() <= 0.0).any()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": all marginal categories must be nonempty"));
+  }
+  const double total = margins.sum();
+  if (!(std::isfinite(total) && total > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": nonpositive marginal total"));
+  }
+  Eigen::VectorXd th(margins.size() - 1);
+  double cum = 0.0;
+  for (Eigen::Index k = 0; k < th.size(); ++k) {
+    cum += margins(k);
+    const double p = cum / total;
+    if (!(p > 0.0 && p < 1.0)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(caller) + ": invalid marginal cumulative probability"));
+    }
+    th(k) = normal_quantile(std::clamp(p, 1e-12, 1.0 - 1e-12));
+    if (k > 0 && th(k) <= th(k - 1) + min_spacing) {
+      th(k) = th(k - 1) + min_spacing;
+    }
+  }
+  return th;
+}
+
+void encode_thresholds(const Eigen::VectorXd& th,
+                       double min_spacing,
+                       Eigen::VectorXd& x,
+                       Eigen::Index offset) {
+  if (th.size() == 0) return;
+  x(offset) = th(0);
+  for (Eigen::Index k = 1; k < th.size(); ++k) {
+    const double gap = std::max(th(k) - th(k - 1) - min_spacing, 1e-6);
+    x(offset + k) = std::log(gap);
+  }
+}
+
+Eigen::VectorXd decode_thresholds(const Eigen::VectorXd& x,
+                                  Eigen::Index offset,
+                                  Eigen::Index n_thresholds,
+                                  double min_spacing) {
+  Eigen::VectorXd th(n_thresholds);
+  if (n_thresholds == 0) return th;
+  th(0) = x(offset);
+  for (Eigen::Index k = 1; k < n_thresholds; ++k) {
+    const double log_gap = std::clamp(x(offset + k), -30.0, 30.0);
+    th(k) = th(k - 1) + min_spacing + std::exp(log_gap);
+  }
+  return th;
+}
+
+double encode_rho(double rho, double lower, double upper) noexcept {
+  const double mid = 0.5 * (lower + upper);
+  const double half = 0.5 * (upper - lower);
+  const double z = std::clamp((rho - mid) / half, -0.999999, 0.999999);
+  return 0.5 * std::log((1.0 + z) / (1.0 - z));
+}
+
+double decode_rho(double z, double lower, double upper) noexcept {
+  const double mid = 0.5 * (lower + upper);
+  const double half = 0.5 * (upper - lower);
+  return mid + half * std::tanh(z);
+}
+
 }  // namespace
 
 post_expected<Eigen::MatrixXd>
@@ -309,6 +420,142 @@ fit_ordinal_pair_rho_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
   const double width = options.rho_upper - options.rho_lower;
   out.hit_lower = std::abs(out.rho - options.rho_lower) <= 1e-8 * width;
   out.hit_upper = std::abs(out.rho - options.rho_upper) <= 1e-8 * width;
+  return out;
+}
+
+post_expected<OrdinalPairJointMlResult>
+fit_ordinal_pair_joint_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
+                          OrdinalPairJointMlOptions options) {
+  if (counts.rows() < 2 || counts.cols() < 2 || !counts.allFinite() ||
+      (counts.array() < 0.0).any() || counts.sum() <= 0.0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "fit_ordinal_pair_joint_ml: counts must be a finite nonnegative table with positive total"));
+  }
+  if (!std::isfinite(options.rho_lower) || !std::isfinite(options.rho_upper) ||
+      !(options.rho_lower > -1.0) || !(options.rho_upper < 1.0) ||
+      !(options.rho_lower < options.rho_upper) || options.max_iter < 1 ||
+      !(std::isfinite(options.ftol) && options.ftol > 0.0) ||
+      !(std::isfinite(options.gtol) && options.gtol > 0.0) ||
+      !(std::isfinite(options.fd_step) && options.fd_step > 0.0) ||
+      !(std::isfinite(options.min_threshold_spacing) &&
+        options.min_threshold_spacing > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "fit_ordinal_pair_joint_ml: invalid options"));
+  }
+
+  Eigen::MatrixXd adjusted = options.lavaan_adjust_2x2
+      ? adjusted_polychoric_table(counts)
+      : Eigen::MatrixXd(counts);
+  const auto th_i_start = marginal_threshold_start(
+      adjusted.rowwise().sum(), options.min_threshold_spacing,
+      "fit_ordinal_pair_joint_ml");
+  if (!th_i_start.has_value()) return std::unexpected(th_i_start.error());
+  const auto th_j_start = marginal_threshold_start(
+      adjusted.colwise().sum().transpose(), options.min_threshold_spacing,
+      "fit_ordinal_pair_joint_ml");
+  if (!th_j_start.has_value()) return std::unexpected(th_j_start.error());
+
+  auto rho_start = fit_ordinal_pair_rho_ml(
+      adjusted, *th_i_start, *th_j_start,
+      OrdinalPairMlOptions{.rho_lower = options.rho_lower,
+                           .rho_upper = options.rho_upper,
+                           .max_iter = 72,
+                           .lavaan_adjust_2x2 = false});
+  if (!rho_start.has_value()) return std::unexpected(rho_start.error());
+
+  const Eigen::Index n_th_i = counts.rows() - 1;
+  const Eigen::Index n_th_j = counts.cols() - 1;
+  const Eigen::Index npar = n_th_i + n_th_j + 1;
+  Eigen::VectorXd x0(npar);
+  encode_thresholds(*th_i_start, options.min_threshold_spacing, x0, 0);
+  encode_thresholds(*th_j_start, options.min_threshold_spacing, x0, n_th_i);
+  x0(npar - 1) = encode_rho(rho_start->rho,
+                            options.rho_lower,
+                            options.rho_upper);
+
+  auto objective_value = [&](const Eigen::VectorXd& x) {
+    const Eigen::VectorXd th_i = decode_thresholds(
+        x, 0, n_th_i, options.min_threshold_spacing);
+    const Eigen::VectorXd th_j = decode_thresholds(
+        x, n_th_i, n_th_j, options.min_threshold_spacing);
+    const double rho = decode_rho(x(npar - 1),
+                                  options.rho_lower,
+                                  options.rho_upper);
+    return neglog_pair_unchecked(adjusted, th_i, th_j, rho);
+  };
+
+  auto gradient = [&](const Eigen::VectorXd& x) {
+    Eigen::VectorXd grad(x.size());
+    for (Eigen::Index k = 0; k < x.size(); ++k) {
+      const double h = options.fd_step * std::max(1.0, std::abs(x(k)));
+      Eigen::VectorXd xp = x;
+      Eigen::VectorXd xm = x;
+      xp(k) += h;
+      xm(k) -= h;
+      const double fp = objective_value(xp);
+      const double fm = objective_value(xm);
+      grad(k) = (fp - fm) / (2.0 * h);
+    }
+    return grad;
+  };
+
+  Eigen::VectorXd x = x0;
+  double f = objective_value(x);
+  if (!std::isfinite(f)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "fit_ordinal_pair_joint_ml: non-finite starting objective"));
+  }
+
+  int iterations = 0;
+  for (; iterations < options.max_iter; ++iterations) {
+    const Eigen::VectorXd grad = gradient(x);
+    if (!grad.allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "fit_ordinal_pair_joint_ml: non-finite gradient"));
+    }
+    const double grad_inf = grad.lpNorm<Eigen::Infinity>();
+    if (grad_inf <= options.gtol) break;
+
+    const double grad_sq = grad.squaredNorm();
+    double step = 1.0;
+    bool accepted = false;
+    bool ftol_stop = false;
+    for (int ls = 0; ls < 40; ++ls) {
+      const Eigen::VectorXd candidate = x - step * grad;
+      const double f_candidate = objective_value(candidate);
+      if (std::isfinite(f_candidate) &&
+          f_candidate < f - 1e-4 * step * grad_sq) {
+        ftol_stop = std::abs(f - f_candidate) <=
+            options.ftol * std::max(1.0, std::abs(f));
+        x = candidate;
+        f = f_candidate;
+        accepted = true;
+        break;
+      }
+      step *= 0.5;
+    }
+    if (!accepted) break;
+    if (ftol_stop) {
+      ++iterations;
+      break;
+    }
+  }
+
+  OrdinalPairJointMlResult out;
+  out.thresholds_i = decode_thresholds(x, 0, n_th_i,
+                                       options.min_threshold_spacing);
+  out.thresholds_j = decode_thresholds(x, n_th_i, n_th_j,
+                                       options.min_threshold_spacing);
+  out.rho = decode_rho(x(npar - 1),
+                       options.rho_lower,
+                       options.rho_upper);
+  out.negloglik = neglog_pair_unchecked(adjusted, out.thresholds_i,
+                                        out.thresholds_j, out.rho);
+  out.iterations = iterations;
+  const double width = options.rho_upper - options.rho_lower;
+  out.hit_lower = std::abs(out.rho - options.rho_lower) <= 1e-8 * width;
+  out.hit_upper = std::abs(out.rho - options.rho_upper) <= 1e-8 * width;
+  out.adjusted_counts = std::move(adjusted);
   return out;
 }
 
