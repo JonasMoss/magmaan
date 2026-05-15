@@ -179,12 +179,6 @@ build_u_factor(partable::LatentStructure        pt,
                const SampleStats&        samp,
                const Estimates&          est,
                InferenceSpec             spec) {
-  if (spec.bread == Information::Observed && samp.S.size() != 1) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "build_u_factor: Information::Observed bread is single-block only "
-        "in v1 (the H_obs units are clean only single-block)"));
-  }
-
   auto ev_or = prepare_evaluator(pt, rep, samp, est);
   if (!ev_or.has_value()) return std::unexpected(ev_or.error());
   auto& ev = *ev_or;
@@ -227,6 +221,8 @@ build_u_factor(partable::LatentStructure        pt,
   uf.moments    = spec.moments;
   uf.has_means  = has_means;
   uf.blocks.resize(samp.S.size());
+  double N_total = 0.0;
+  for (auto n : samp.n_obs) N_total += static_cast<double>(n);
   Eigen::Index row_cursor = 0;
   for (std::size_t b = 0; b < samp.S.size(); ++b) {
     const Eigen::Index p     = samp.S[b].rows();
@@ -332,7 +328,7 @@ build_u_factor(partable::LatentStructure        pt,
     apply_L_inv_block(blk, has_means, Delta, A);
   }
 
-  // ── Observed-Hessian bread (single-block; the MLR convention) ───────────
+  // ── Observed-Hessian bread (the MLR convention) ────────────────────────
   // U = L_Γ⁻ᵀ·(I − A·H_obs⁻¹·Aᵀ)·L_Γ⁻¹  (not idempotent). We don't form U;
   // store A and H_obs⁻¹ and let `reduced_gamma_*` assemble the spectrum.
   if (spec.bread == Information::Observed) {
@@ -347,10 +343,10 @@ build_u_factor(partable::LatentStructure        pt,
     Eigen::MatrixXd H_obs;
     if (auto h_or = information_observed_analytic(pt, rep, samp, est);
         h_or.has_value()) {
-      H_obs = (*h_or) / static_cast<double>(samp.n_obs[0]);
+      H_obs = (*h_or) / N_total;
     } else if (auto fd_or = information_observed_fd(pt, rep, samp, est);
                fd_or.has_value()) {
-      H_obs = (*fd_or) / static_cast<double>(samp.n_obs[0]);
+      H_obs = (*fd_or) / N_total;
     } else {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "build_u_factor: could not compute the observed Hessian"));
@@ -693,6 +689,96 @@ reduced_gamma_unbiased(const UFactor&            uf,
   return M;
 }
 
+post_expected<Eigen::MatrixXd>
+reduced_gamma_unbiased_casewise(
+    const UFactor&                            uf,
+    const SampleStats&                        samp,
+    const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+    const Eigen::Ref<const Eigen::VectorXd>&  denom) {
+  if (uf.kind != UFactor::Kind::ProjectionExpected) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_unbiased: only the ProjectionExpected U-factor is "
+        "supported"));
+  }
+  if (uf.has_means) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_unbiased: Browne's covariance correction currently "
+        "expects a covariance-only UFactor"));
+  }
+  const Eigen::Index nb = static_cast<Eigen::Index>(uf.blocks.size());
+  if (samp.S.size() != uf.blocks.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_unbiased: SampleStats/UFactor block mismatch"));
+  }
+  if (denom.size() != 1 && denom.size() != nb) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_unbiased: denom has length " +
+            std::to_string(denom.size()) + "; expected 1 or " +
+            std::to_string(nb)));
+  }
+  if (!(denom.minCoeff() > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_unbiased: every denom entry must be > 0"));
+  }
+  if (Zc.cols() != uf.pstar) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_unbiased: Zc has " + std::to_string(Zc.cols()) +
+            " columns, expected " + std::to_string(uf.pstar)));
+  }
+  const auto denom_b = [&](Eigen::Index b) -> double {
+    return denom.size() == 1 ? denom(0) : denom(b);
+  };
+
+  Eigen::MatrixXd M = Eigen::MatrixXd::Zero(uf.df, uf.df);
+  Eigen::MatrixXd H_buf;
+  for (Eigen::Index b = 0; b < nb; ++b) {
+    const auto& blk = uf.blocks[static_cast<std::size_t>(b)];
+    const double N = static_cast<double>(samp.n_obs[static_cast<std::size_t>(b)]);
+    if (!(N > 3.0)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "reduced_gamma_unbiased: Browne's correction requires every "
+          "block N > 3"));
+    }
+    const double a = N * (N - 1.0) / ((N - 2.0) * (N - 3.0));
+    const double bb = N / ((N - 2.0) * (N - 3.0));
+    const double c = 2.0 / (N - 1.0);
+
+    const Eigen::Index bstart = blk.row_offset;
+    const Eigen::Index bsize = blk.pstar;
+    const Eigen::MatrixXd B_b = uf.B.middleRows(bstart, bsize);
+    const Eigen::MatrixXd ZcB_b = Zc.middleCols(bstart, bsize) * B_b;
+    const Eigen::MatrixXd M_sample_b =
+        (ZcB_b.transpose() * ZcB_b) / denom_b(b);
+
+    Eigen::MatrixXd GB_b = Eigen::MatrixXd::Zero(bsize, uf.df);
+    Eigen::VectorXd dst = Eigen::VectorXd::Zero(uf.total_rows);
+    for (Eigen::Index col = 0; col < uf.df; ++col) {
+      dst.setZero();
+      apply_gamma_nt_block(blk, /*has_means=*/false, uf.moments,
+                           uf.B.col(col), dst, H_buf);
+      GB_b.col(col) = dst.segment(bstart, bsize);
+    }
+    const Eigen::MatrixXd M_nt_b = B_b.transpose() * GB_b;
+
+    const Eigen::VectorXd s_vech = vech_lower(samp.S[static_cast<std::size_t>(b)]);
+    const Eigen::VectorXd Bs = B_b.transpose() * s_vech;
+    M.noalias() += a * M_sample_b - bb * M_nt_b +
+                   bb * c * (Bs * Bs.transpose());
+  }
+  M = 0.5 * (M + M.transpose()).eval();
+  return M;
+}
+
+post_expected<Eigen::MatrixXd>
+reduced_gamma_unbiased_casewise(
+    const UFactor&                            uf,
+    const SampleStats&                        samp,
+    const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+    double                                    denom) {
+  const Eigen::VectorXd d = Eigen::VectorXd::Constant(1, denom);
+  return reduced_gamma_unbiased_casewise(uf, samp, Zc, d);
+}
+
 // ============================================================================
 // Eigenvalues + robust statistics
 // ============================================================================
@@ -814,12 +900,6 @@ robust_setup(partable::LatentStructure pt, const model::MatrixRep& rep,
   if (spec.cov == ScoreCovariance::BrowneUnbiased) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "robust_se: ScoreCovariance::BrowneUnbiased not yet implemented"));
-  }
-  if (spec.bread == Information::Observed && samp.S.size() != 1) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "robust_se: the Observed-info bread is single-block only (the H_obs "
-        "units are clean only single-block); use the Expected bread for "
-        "multi-group robust SEs"));
   }
   // Note: the gamma_hat overload accepts multi-group input but the caller is
   // responsible for assembling a block-diagonal Γ̂ pre-weighted by `n_b/N`
@@ -981,7 +1061,7 @@ robust_setup(partable::LatentStructure pt, const model::MatrixRep& rep,
   }
 
   // The "bread": A1 (per-unit GLS/Fisher) for Expected; the per-unit observed
-  // Hessian (single-block, projected through K) for Observed. `*InfoSE.info`
+  // Hessian (projected through K) for Observed. `*InfoSE.info`
   // is the *unprojected* total observed info; /N → per-unit; Kᵀ(·)K → α-space.
   if (spec.bread == Information::Expected) {
     s.bread = std::move(bread_exp);
@@ -1007,7 +1087,7 @@ robust_setup(partable::LatentStructure pt, const model::MatrixRep& rep,
 //   vcov_α = (1/N)·bread⁻¹·meat·bread⁻¹  (q × q);  vcov = K·vcov_α·Kᵀ.
 // With bread = A1 (= Σ_b (n_b/N)Δ_bᵀW_bΔ_b) it collapses to (1/N)·A1⁻¹ (the
 // naive expected vcov) when meat = A1; with bread = H_obs it's the
-// Huber-White sandwich (single-block). `meat` (= B1, q × q) is the per-unit
+// Huber-White sandwich. `meat` (= B1, q × q) is the per-unit
 // score variance Σ_b (n_b/N)Δ_bᵀW_bΓ̂_bW_bΔ_b.
 post_expected<RobustSeResult>
 sandwich_finish(const RobustSetup& s, const Eigen::MatrixXd& meat) {
@@ -1067,7 +1147,8 @@ robust_se(partable::LatentStructure        pt,
             std::to_string(expected_dim) + "×" + std::to_string(expected_dim) +
             (s.has_means ? " (μ-rows + σ-rows per block)" : " (σ-only)")));
   }
-  // meat = ΔᵀWΓ̂WΔ = (WΔ)ᵀ·Γ̂·(WΔ).  (Single-block: no n_b/N weight.)
+  // meat = ΔᵀWΓ̂WΔ = (WΔ)ᵀ·Γ̂·(WΔ). For multi-block callers of this overload,
+  // Γ̂ must already carry the documented per-block n_b/N scaling.
   const Eigen::MatrixXd meat = s.WDelta.transpose() * gamma_hat * s.WDelta;
   return sandwich_finish(s, meat);
 }

@@ -106,6 +106,54 @@ Eigen::MatrixXd implied_sigma(const ModelHandles& h,
   return sigma_or->sigma[0];
 }
 
+struct TwoBlockHandles {
+  magmaan::spec::LatentStructure* pt;
+  magmaan::model::MatrixRep* rep;
+};
+
+TwoBlockHandles duplicate_two_blocks(const ModelHandles& src) {
+  using namespace magmaan::spec;
+  using namespace magmaan::model;
+  static thread_local LatentStructure s_pt;
+  static thread_local MatrixRep s_rep;
+  s_pt = *src.pt;
+  s_rep = *src.rep;
+
+  const std::int32_t n_free_single =
+      static_cast<std::int32_t>(src.pt->n_free());
+  const std::size_t orig_size = src.pt->size();
+  for (std::size_t i = 0; i < orig_size; ++i) {
+    s_pt.op.push_back(src.pt->op[i]);
+    s_pt.group.push_back(2);
+    s_pt.free.push_back(src.pt->free[i] > 0
+                            ? src.pt->free[i] + n_free_single
+                            : 0);
+    s_pt.exo.push_back(src.pt->exo[i]);
+    s_pt.fixed_value.push_back(src.pt->fixed_value[i]);
+    s_pt.lhs_var.push_back(src.pt->lhs_var[i]);
+    s_pt.rhs_var.push_back(src.pt->rhs_var[i]);
+  }
+  s_pt.eq_groups.resize(static_cast<std::size_t>(2 * n_free_single));
+  for (std::int32_t k = 0; k < 2 * n_free_single; ++k)
+    s_pt.eq_groups[static_cast<std::size_t>(k)] = k;
+  s_pt.has_unenforced_constraints = false;
+
+  for (std::size_t i = 0; i < orig_size; ++i) {
+    Cell c = src.rep->cell_for_row[i];
+    c.block = 1;
+    s_rep.cell_for_row.push_back(c);
+  }
+  for (const auto& sc : src.rep->structural_cells) {
+    StructuralCell sc2 = sc;
+    sc2.block = 1;
+    s_rep.structural_cells.push_back(sc2);
+  }
+  s_rep.dims.push_back(src.rep->dims[0]);
+  s_rep.ov_names.push_back(src.rep->ov_names[0]);
+  s_rep.lv_names.push_back(src.rep->lv_names[0]);
+  return {&s_pt, &s_rep};
+}
+
 }  // namespace
 
 // ----------------------------------------------------------------------------
@@ -755,6 +803,9 @@ TEST_CASE("reduced_gamma_unbiased matches the Browne closed-form") {
   auto M_u_or = magmaan::nt::robust::reduced_gamma_unbiased(
       *uf_or, *samp_or, *M_sample_or, *M_nt_or);
   REQUIRE(M_u_or.has_value());
+  auto M_u_zc_or = magmaan::nt::robust::reduced_gamma_unbiased_casewise(
+      *uf_or, *samp_or, *Zc_or, static_cast<double>(n));
+  REQUIRE(M_u_zc_or.has_value());
 
   // Hand-coded reference.
   const double N = static_cast<double>(samp_or->n_obs[0]);
@@ -772,6 +823,41 @@ TEST_CASE("reduced_gamma_unbiased matches the Browne closed-form") {
   const Eigen::MatrixXd M_ref =
       a * (*M_sample_or) - b * (*M_nt_or) + b * c * (Bs * Bs.transpose());
   CHECK((*M_u_or - M_ref).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK((*M_u_zc_or - M_ref).cwiseAbs().maxCoeff() < 1e-10);
+}
+
+TEST_CASE("reduced_gamma_unbiased stitches per-block Browne corrections") {
+  auto single = load_and_fit(
+      "visual =~ x1 + x2 + x3\n"
+      "textual =~ x4 + x5 + x6\n"
+      "speed =~ x7 + x8 + x9",
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
+  auto two = duplicate_two_blocks(single.handles);
+  const Eigen::MatrixXd Sigma_hat = implied_sigma(single.handles, single.est.theta);
+
+  std::mt19937 rng(771);
+  magmaan::data::RawData raw;
+  raw.X.push_back(mvn_sample(rng, 260, Eigen::VectorXd::Zero(9), Sigma_hat));
+  raw.X.push_back(mvn_sample(rng, 340, Eigen::VectorXd::Zero(9), Sigma_hat));
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp_or.has_value());
+  auto est_or = magmaan::estimate::fit(*two.pt, *two.rep, *samp_or);
+  REQUIRE(est_or.has_value());
+  auto uf_or = magmaan::nt::robust::build_u_factor(*two.pt, *two.rep, *samp_or, *est_or);
+  REQUIRE(uf_or.has_value());
+  auto Zc_or = magmaan::nt::robust::casewise_contributions(raw, *samp_or);
+  REQUIRE(Zc_or.has_value());
+  Eigen::VectorXd denom(2);
+  denom << static_cast<double>(samp_or->n_obs[0]),
+           static_cast<double>(samp_or->n_obs[1]);
+
+  auto M_u_or = magmaan::nt::robust::reduced_gamma_unbiased_casewise(
+      *uf_or, *samp_or, *Zc_or, denom);
+  REQUIRE_MESSAGE(M_u_or.has_value(),
+      "reduced_gamma_unbiased multi-block failed: " <<
+          (M_u_or.has_value() ? "" : M_u_or.error().detail));
+  CHECK(M_u_or->rows() == uf_or->df);
+  CHECK(M_u_or->cols() == uf_or->df);
 }
 
 // ----------------------------------------------------------------------------
@@ -1058,6 +1144,85 @@ TEST_CASE("robust_se: Observed bread collapses to expected SE on MVN data") {
       ((rob_or->se - exp_or->se).cwiseAbs().array() /
        exp_or->se.array().abs()).maxCoeff();
   CHECK(max_rel < 0.05);
+}
+
+TEST_CASE("robust_se: Observed bread works for multi-block covariance models") {
+  auto single = load_and_fit(
+      "visual =~ x1 + x2 + x3\n"
+      "textual =~ x4 + x5 + x6\n"
+      "speed =~ x7 + x8 + x9",
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
+  auto two = duplicate_two_blocks(single.handles);
+  const Eigen::MatrixXd Sigma_hat = implied_sigma(single.handles, single.est.theta);
+
+  std::mt19937 rng(3101);
+  magmaan::data::RawData raw;
+  raw.X.push_back(mvn_sample(rng, 9000, Eigen::VectorXd::Zero(9), Sigma_hat));
+  raw.X.push_back(mvn_sample(rng, 7000, Eigen::VectorXd::Zero(9), Sigma_hat));
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp_or.has_value());
+  auto est_or = magmaan::estimate::fit(*two.pt, *two.rep, *samp_or);
+  REQUIRE(est_or.has_value());
+
+  auto exp_or = magmaan::test::expected_inference(*two.pt, *two.rep, *samp_or, *est_or);
+  REQUIRE(exp_or.has_value());
+  auto rob_or = magmaan::nt::robust::robust_se(
+      *two.pt, *two.rep, *samp_or, *est_or, raw,
+      {magmaan::nt::robust::Information::Observed,
+       magmaan::nt::robust::WeightMoments::Structured,
+       magmaan::nt::robust::ScoreCovariance::Empirical});
+  REQUIRE_MESSAGE(rob_or.has_value(),
+      "robust_se observed multi-block failed: " <<
+          (rob_or.has_value() ? "" : rob_or.error().detail));
+  const double max_rel =
+      ((rob_or->se - exp_or->se).cwiseAbs().array() /
+       exp_or->se.array().abs()).maxCoeff();
+  CHECK(max_rel < 0.07);
+}
+
+TEST_CASE("robust_se: Observed bread works for multi-block mean structures") {
+  auto seed = must_model(
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 ~ 1\nx2 ~ 1\nx3 ~ 1\nx4 ~ 1");
+  std::mt19937 rng(4202);
+  std::uniform_real_distribution<double> u(-0.4, 0.4);
+  Eigen::MatrixXd A(4, 4);
+  for (Eigen::Index r = 0; r < 4; ++r)
+    for (Eigen::Index c = 0; c < 4; ++c) A(r, c) = u(rng);
+  magmaan::data::SampleStats seed_samp;
+  seed_samp.S = {A * A.transpose() + 4.0 * Eigen::MatrixXd::Identity(4, 4)};
+  Eigen::VectorXd seed_mean(4); seed_mean << 1.0, 2.0, 1.5, 2.5;
+  seed_samp.mean = {seed_mean};
+  seed_samp.n_obs = {400};
+  auto seed_est = magmaan::estimate::fit(*seed.pt, *seed.rep, seed_samp);
+  REQUIRE(seed_est.has_value());
+  auto ev = magmaan::model::ModelEvaluator::build(*seed.pt, *seed.rep);
+  REQUIRE(ev.has_value());
+  auto im_or = ev->sigma(seed_est->theta);
+  REQUIRE(im_or.has_value());
+
+  auto two = duplicate_two_blocks(seed);
+  magmaan::data::RawData raw;
+  raw.X.push_back(mvn_sample(rng, 10000, im_or->mu[0], im_or->sigma[0]));
+  raw.X.push_back(mvn_sample(rng, 8000, im_or->mu[0], im_or->sigma[0]));
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp_or.has_value());
+  auto est_or = magmaan::estimate::fit(*two.pt, *two.rep, *samp_or);
+  REQUIRE(est_or.has_value());
+
+  auto exp_or = magmaan::test::expected_inference(*two.pt, *two.rep, *samp_or, *est_or);
+  REQUIRE(exp_or.has_value());
+  auto rob_or = magmaan::nt::robust::robust_se(
+      *two.pt, *two.rep, *samp_or, *est_or, raw,
+      {magmaan::nt::robust::Information::Observed,
+       magmaan::nt::robust::WeightMoments::Structured,
+       magmaan::nt::robust::ScoreCovariance::Empirical});
+  REQUIRE_MESSAGE(rob_or.has_value(),
+      "robust_se observed mean multi-block failed: " <<
+          (rob_or.has_value() ? "" : rob_or.error().detail));
+  CHECK(rob_or->se.size() == est_or->theta.size());
+  CHECK(rob_or->se.array().isFinite().all());
+  CHECK((rob_or->se.array() > 0.0).all());
 }
 
 TEST_CASE("robust_se: ScoreCovariance::BrowneUnbiased errors cleanly") {

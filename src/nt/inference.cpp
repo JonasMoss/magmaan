@@ -444,6 +444,73 @@ inline double h2_beta_beta(const model::ParamLocation& ba,
                 Mid(ba.col, bb.col) * P(ba.row, bb.row));
 }
 
+Eigen::VectorXd second_mu(const model::ParamLocation& a,
+                          const model::ParamLocation& b,
+                          const model::BlockMatrices& bm,
+                          const Eigen::VectorXd& A_alpha) {
+  const Eigen::Index p = bm.Lambda.rows();
+  Eigen::VectorXd out = Eigen::VectorXd::Zero(p);
+  using model::MatId;
+
+  auto lambda_alpha = [&](const model::ParamLocation& lam,
+                          const model::ParamLocation& alpha) {
+    if (bm.A.rows() == 0) return;
+    out(static_cast<Eigen::Index>(lam.row)) =
+        bm.A(static_cast<Eigen::Index>(lam.col),
+             static_cast<Eigen::Index>(alpha.row));
+  };
+  auto lambda_beta = [&](const model::ParamLocation& lam,
+                         const model::ParamLocation& beta) {
+    if (A_alpha.size() == 0) return;
+    out(static_cast<Eigen::Index>(lam.row)) =
+        bm.A(static_cast<Eigen::Index>(lam.col),
+             static_cast<Eigen::Index>(beta.row)) *
+        A_alpha(static_cast<Eigen::Index>(beta.col));
+  };
+  auto alpha_beta = [&](const model::ParamLocation& alpha,
+                        const model::ParamLocation& beta) {
+    out.noalias() =
+        bm.LamA.col(static_cast<Eigen::Index>(beta.row)) *
+        bm.A(static_cast<Eigen::Index>(beta.col),
+             static_cast<Eigen::Index>(alpha.row));
+  };
+  auto beta_beta = [&](const model::ParamLocation& ba,
+                       const model::ParamLocation& bb) {
+    if (A_alpha.size() == 0) return;
+    out.noalias() =
+        bm.LamA.col(static_cast<Eigen::Index>(bb.row)) *
+        bm.A(static_cast<Eigen::Index>(bb.col),
+             static_cast<Eigen::Index>(ba.row)) *
+        A_alpha(static_cast<Eigen::Index>(ba.col));
+    out.noalias() +=
+        bm.LamA.col(static_cast<Eigen::Index>(ba.row)) *
+        bm.A(static_cast<Eigen::Index>(ba.col),
+             static_cast<Eigen::Index>(bb.row)) *
+        A_alpha(static_cast<Eigen::Index>(bb.col));
+  };
+
+  switch (a.mat) {
+    case MatId::Lambda:
+      if (b.mat == MatId::Alpha) lambda_alpha(a, b);
+      else if (b.mat == MatId::Beta) lambda_beta(a, b);
+      break;
+    case MatId::Alpha:
+      if (b.mat == MatId::Lambda) lambda_alpha(b, a);
+      else if (b.mat == MatId::Beta) alpha_beta(a, b);
+      break;
+    case MatId::Beta:
+      if (b.mat == MatId::Lambda) lambda_beta(b, a);
+      else if (b.mat == MatId::Alpha) alpha_beta(b, a);
+      else if (b.mat == MatId::Beta) beta_beta(a, b);
+      break;
+    case MatId::Theta:
+    case MatId::Psi:
+    case MatId::Nu:
+      break;
+  }
+  return out;
+}
+
 }  // namespace
 
 post_expected<Eigen::MatrixXd>
@@ -462,14 +529,13 @@ information_observed_analytic(partable::LatentStructure       pt,
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "model has no free parameters"));
   }
-  // Mean-structure analytic observed info isn't wired up — use
-  // `information_observed_fd` for mean-structure models.
-  if (auto Jmu_or = ev.dmu_dtheta(est.theta);
-      Jmu_or.has_value() && Jmu_or->size() > 0) {
+  auto Jmu_or = ev.dmu_dtheta(est.theta);
+  if (!Jmu_or.has_value()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "information_observed_analytic: mean structure (~1) not yet "
-        "implemented; use information_observed_fd instead"));
+        "ev.dmu_dtheta(θ̂) failed: " + Jmu_or.error().detail));
   }
+  const Eigen::MatrixXd& Jmu = *Jmu_or;
+  const bool has_means = (Jmu.size() > 0);
 
   auto sm_or = ev.sigma(est.theta);
   if (!sm_or.has_value()) {
@@ -492,6 +558,7 @@ information_observed_analytic(partable::LatentStructure       pt,
 
   Eigen::MatrixXd info = Eigen::MatrixXd::Zero(n_i, n_i);
   Eigen::Index vech_off = 0;
+  Eigen::Index mu_off = 0;
 
   for (std::size_t blk = 0; blk < n_blocks; ++blk) {
     const auto& bm = am_or->blocks[blk];
@@ -506,8 +573,22 @@ information_observed_analytic(partable::LatentStructure       pt,
               std::to_string(blk)));
     }
     const Eigen::MatrixXd W = llt.solve(Eigen::MatrixXd::Identity(p, p));
-    const Eigen::MatrixXd& S = samp.S[blk];
-    const Eigen::MatrixXd Z  = W * S * W;
+    if (has_means &&
+        (blk >= samp.mean.size() || samp.mean[blk].size() != p ||
+         blk >= sm.mu.size() || sm.mu[blk].size() != p)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "information_observed_analytic: sample/implied mean missing or "
+          "wrong size in block " + std::to_string(blk)));
+    }
+    Eigen::VectorXd d;
+    Eigen::VectorXd z;
+    Eigen::MatrixXd S_eff = samp.S[blk];
+    if (has_means) {
+      d = samp.mean[blk] - sm.mu[blk];
+      z = W * d;
+      S_eff.noalias() += d * d.transpose();
+    }
+    const Eigen::MatrixXd Z  = W * S_eff * W;
     const Eigen::MatrixXd G  = W - Z;
 
     // M_k_blk = ∂Σ_blk/∂θ_k (un-vech of J's column k restricted to block blk).
@@ -535,6 +616,10 @@ information_observed_analytic(partable::LatentStructure       pt,
     const Eigen::MatrixXd K       = bm.Lambda.transpose() * G * bm.Lambda;
     const Eigen::MatrixXd P       = bm.LamA.transpose()   * G * bm.LamA;
     const Eigen::MatrixXd MKA     = bm.Mid * K * bm.A;
+    const Eigen::VectorXd A_alpha =
+        (has_means && bm.Alpha.size() > 0 && bm.A.rows() > 0)
+            ? Eigen::VectorXd(bm.A * bm.Alpha)
+            : Eigen::VectorXd();
 
     const double weight = static_cast<double>(samp.n_obs[blk]) / 2.0;
     const auto blk_i    = static_cast<std::int8_t>(blk);
@@ -589,6 +674,20 @@ information_observed_analytic(partable::LatentStructure       pt,
           }
         }
 
+        if (has_means && la.block == blk_i && lb.block == blk_i) {
+          const Eigen::VectorXd mu_a =
+              Jmu.col(static_cast<Eigen::Index>(a)).segment(mu_off, p);
+          const Eigen::VectorXd mu_b =
+              Jmu.col(static_cast<Eigen::Index>(b)).segment(mu_off, p);
+          const Eigen::VectorXd W_mu_b = W * mu_b;
+          const Eigen::VectorXd W_Mb_z = W * (M[b] * z);
+          const Eigen::VectorXd mu_ab = second_mu(la, lb, bm, A_alpha);
+          h2 += 2.0 * mu_a.dot(W_mu_b)
+              + 2.0 * mu_b.dot(W * (M[a] * z))
+              + 2.0 * mu_a.dot(W_Mb_z)
+              - 2.0 * mu_ab.dot(z);
+        }
+
         const double val = weight * (h1 + h2);
         info(static_cast<Eigen::Index>(a), static_cast<Eigen::Index>(b)) += val;
         if (a != b)
@@ -597,6 +696,7 @@ information_observed_analytic(partable::LatentStructure       pt,
     }
 
     vech_off += vech_len(p);
+    if (has_means) mu_off += p;
   }
 
   return info;

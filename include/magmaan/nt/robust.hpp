@@ -34,6 +34,7 @@ using fit::reduced_gamma_nt;
 using fit::reduced_gamma_sample;
 using fit::reduced_gamma_sample_streaming;
 using fit::reduced_gamma_unbiased;
+using fit::reduced_gamma_unbiased_casewise;
 using fit::restriction_alpha_from_K;
 using fit::robust_se;
 using fit::satorra_bentler;

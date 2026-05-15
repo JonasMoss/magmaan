@@ -81,10 +81,11 @@ The core parser-to-fit pipeline is in place:
 - Separable nonlinear least squares (SNLLS) profiling for LS estimators where
   conditionally linear parameters can be profiled out.
 - Expected information, finite-difference observed information, analytic
-  observed information for covariance-only models, vcov/SE, Wald/z tests,
-  chi-square/df helpers, LR/Satorra-2000 nested tests, robust U-Gamma
-  machinery, Satorra-Bentler-family statistics, robust SEs, Browne residual NT,
-  fit measures, standardization, and C++ defined-parameter evaluation.
+  observed information for covariance and mean-structure models, vcov/SE,
+  Wald/z tests, chi-square/df helpers, LR/Satorra-2000 nested tests, robust
+  U-Gamma machinery, Satorra-Bentler-family statistics, robust SEs, Browne
+  residual NT, fit measures, standardization, and C++ defined-parameter
+  evaluation.
 - Exploratory R bindings for lavaanify, fitting, sample-stat bundles, robust
   inference, fit measures, model implied moments, LS estimators, SNLLS, Ceres
   paths when enabled, and data-frame-to-model sample statistics.
@@ -248,26 +249,29 @@ Validation targets:
 
 ### 4. Close remaining inference and robust gaps
 
-Expected-info inference, finite-difference observed inference, covariance-only
-analytic observed inference, robust SEs, U-Gamma/Satorra-Bentler families,
-Browne residual NT, Wald/LR/z tests, fit measures, standardization, and
-Satorra-2000 nested tests are implemented and covered.
+Expected-info inference, finite-difference observed inference, analytic
+observed inference for covariance and mean-structure ML models, robust SEs,
+U-Gamma/Satorra-Bentler families, Browne residual NT, Wald/LR/z tests, fit
+measures, standardization, and Satorra-2000 nested tests are implemented and
+covered. Observed-bread robust SEs and observed-Hessian U-factors now use
+total-N scaling and work on block-stacked multi-block covariance and
+mean-structure models. Browne's unbiased reduced gamma has a single-block
+reduced-matrix shorthand plus a casewise multi-block primitive that applies
+the finite-sample correction per block before stitching into the shared
+reduced basis.
 
 Open gaps:
 
-- Extend `information_observed_analytic()` to mean-structure models. The
-  missing terms are the `dmu` and `d2mu` contributions involving Lambda-alpha,
-  Lambda-Beta, alpha-Beta, and Beta-Beta pairs.
-- Generalize observed-bread robust SE and observed-Hessian U-factor handling to
-  multi-block models. The expected-bread path is multi-block; observed bread is
-  still single-block.
-- Generalize Browne's unbiased reduced gamma correction to multi-block models.
 - Add Browne residual ADF by swapping empirical gamma into the existing Browne
   residual projection machinery.
 - Verify `fit_extras()` conditional log-likelihood for multi-group `fixed.x`
   and meanstructure times `fixed.x` once targeted fixtures exist.
 - Generalize robust/inference helpers that assume the normal-theory ML weight
   so ULS/GLS/WLS can share sandwich paths with arbitrary per-block weights.
+- Add a future API namespace for pre-composed inference workflow functions
+  after the low-level primitives stabilize. The current core API intentionally
+  stays explicit: callers choose information, bread, meat, test statistic, and
+  fit-measure steps themselves.
 
 ### 5. Finish R/API parity polish
 

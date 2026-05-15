@@ -850,10 +850,7 @@ TEST_CASE("fd_observed_inference on mean-structure ≈ expected_inference at sat
   CHECK(rel.maxCoeff() < 1e-4);
 }
 
-TEST_CASE("information_observed_analytic rejects mean structure (for now)") {
-  // Until the ∂²μ/∂θ² closed-form cases are wired up, analytic observed
-  // info on a mean-structure model is incorrect. We error out clearly so
-  // callers know to switch to FD.
+TEST_CASE("information_observed_analytic matches FD for mean structure") {
   auto h = must_model("f =~ x1 + x2 + x3\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1");
 
   std::mt19937 rng(1);
@@ -864,8 +861,37 @@ TEST_CASE("information_observed_analytic rejects mean structure (for now)") {
 
   auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
   auto an_or = magmaan::nt::infer::information_observed_analytic(*h.pt, *h.rep, samp, est);
-  REQUIRE_FALSE(an_or.has_value());
-  CHECK(an_or.error().kind == magmaan::PostError::Kind::NumericIssue);
+  auto fd_or = magmaan::nt::infer::information_observed_fd(*h.pt, *h.rep, samp, est);
+  REQUIRE_MESSAGE(an_or.has_value(),
+      "Analytic failed: " << (an_or.has_value() ? "" : an_or.error().detail));
+  REQUIRE_MESSAGE(fd_or.has_value(),
+      "FD failed: " << (fd_or.has_value() ? "" : fd_or.error().detail));
+
+  const Eigen::MatrixXd diff = *an_or - *fd_or;
+  const double scale = std::max(1.0, fd_or->cwiseAbs().maxCoeff());
+  CHECK(diff.cwiseAbs().maxCoeff() / scale < 1e-4);
+}
+
+TEST_CASE("information_observed_analytic matches FD for structural latent means") {
+  auto h = must_model("f =~ x1 + x2 + x3\ny ~ f\nf ~ 1\ny ~ 1\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1");
+
+  std::mt19937 rng(2027);
+  Eigen::MatrixXd S = random_pd(rng, 4);
+  Eigen::VectorXd mean(4);  mean << 1.0, 2.0, 3.0, 1.7;
+  SampleStats samp;
+  samp.S = {S};  samp.mean = {mean};  samp.n_obs = {180};
+
+  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
+  auto an_or = magmaan::nt::infer::information_observed_analytic(*h.pt, *h.rep, samp, est);
+  auto fd_or = magmaan::nt::infer::information_observed_fd(*h.pt, *h.rep, samp, est);
+  REQUIRE_MESSAGE(an_or.has_value(),
+      "Analytic failed: " << (an_or.has_value() ? "" : an_or.error().detail));
+  REQUIRE_MESSAGE(fd_or.has_value(),
+      "FD failed: " << (fd_or.has_value() ? "" : fd_or.error().detail));
+
+  const Eigen::MatrixXd diff = *an_or - *fd_or;
+  const double scale = std::max(1.0, fd_or->cwiseAbs().maxCoeff());
+  CHECK(diff.cwiseAbs().maxCoeff() / scale < 2e-4);
 }
 
 TEST_CASE("Observed info: FD ≈ analytic on path analysis (Reduced LISREL)") {
@@ -1057,4 +1083,3 @@ TEST_CASE("Observed info: FD ≈ analytic on CFA + structural (Reduced)") {
                               an_or->se.array().abs();
   CHECK(rel.maxCoeff() < 1e-4);
 }
-
