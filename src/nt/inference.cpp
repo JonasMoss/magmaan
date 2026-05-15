@@ -902,6 +902,20 @@ browne_residual_nt(spec::LatentStructure        pt,
               " sample S is not positive definite"));
     }
     blk[b].W = llt_S.solve(Eigen::MatrixXd::Identity(p, p));
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.exo[i] != 1 || pt.free[i] != 0) continue;
+      const std::int32_t g = i < pt.group.size() ? pt.group[i] : 1;
+      if (g <= 0 || static_cast<std::size_t>(g) != b + 1) continue;
+      auto zero_var = [&](std::int32_t v) {
+        if (v < 0 || v >= pt.n_vars) return;
+        const auto pos = pt.ov_pos[static_cast<std::size_t>(v)];
+        if (pos < 0 || pos >= p) return;
+        blk[b].W.row(pos).setZero();
+        blk[b].W.col(pos).setZero();
+      };
+      zero_var(pt.lhs_var[i]);
+      zero_var(pt.rhs_var[i]);
+    }
   }
   for (std::size_t b = 0; b < n_blocks; ++b) {
     if (has_means) {
@@ -971,6 +985,44 @@ browne_residual_nt(spec::LatentStructure        pt,
       Delta.block(blk[b].sigma_off, 0, pstar, q) =
           Delta_sigma.block(s_cursor, 0, pstar, q);
       s_cursor += pstar;
+    }
+  }
+
+  std::vector<char> include_row(static_cast<std::size_t>(total_rows), char{1});
+  bool drops_fixed_x_rows = false;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.exo[i] != 1 || pt.free[i] != 0) continue;
+    const std::int32_t g = i < pt.group.size() ? pt.group[i] : 1;
+    if (g <= 0 || static_cast<std::size_t>(g) > n_blocks) continue;
+    const std::size_t b = static_cast<std::size_t>(g - 1);
+    auto ov_index = [&](std::int32_t v) -> Eigen::Index {
+      if (v < 0 || v >= pt.n_vars) return -1;
+      const auto pos = pt.ov_pos[static_cast<std::size_t>(v)];
+      return pos >= 0 ? static_cast<Eigen::Index>(pos) : -1;
+    };
+    if (pt.op[i] == parse::Op::Intercept && has_means) {
+      const Eigen::Index row = ov_index(pt.lhs_var[i]);
+      if (row >= 0 && row < blk[b].p) {
+        include_row[static_cast<std::size_t>(blk[b].mu_off + row)] = char{0};
+        drops_fixed_x_rows = true;
+      }
+    } else if (pt.op[i] == parse::Op::Covariance) {
+      Eigen::Index r = ov_index(pt.lhs_var[i]);
+      Eigen::Index c = ov_index(pt.rhs_var[i]);
+      if (r >= 0 && c >= 0 && r < blk[b].p && c < blk[b].p) {
+        if (r < c) std::swap(r, c);
+        const Eigen::Index row = blk[b].sigma_off + vech_index(blk[b].p, r, c);
+        include_row[static_cast<std::size_t>(row)] = char{0};
+        drops_fixed_x_rows = true;
+      }
+    }
+  }
+
+  if (drops_fixed_x_rows) {
+    for (Eigen::Index row = 0; row < total_rows; ++row) {
+      if (include_row[static_cast<std::size_t>(row)] != char{0}) continue;
+      res(row) = 0.0;
+      Delta.row(row).setZero();
     }
   }
 

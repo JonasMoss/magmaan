@@ -98,6 +98,33 @@ post_expected<double> total_n(const data::SampleStats& samp) {
   return n;
 }
 
+post_expected<double>
+robust_ls_standard_chisq(const data::SampleStats& samp,
+                         const Estimates& est,
+                         const gls::ULS&) {
+  auto n = total_n(samp);
+  if (!n.has_value()) return std::unexpected(n.error());
+  return 2.0 * *n * est.fmin;
+}
+
+post_expected<double>
+robust_ls_standard_chisq(const data::SampleStats& samp,
+                         const Estimates& est,
+                         const gls::GLS&) {
+  auto n = total_n(samp);
+  if (!n.has_value()) return std::unexpected(n.error());
+  return *n * est.fmin;
+}
+
+post_expected<double>
+robust_ls_standard_chisq(const data::SampleStats& samp,
+                         const Estimates& est,
+                         const gls::WLS&) {
+  auto n = total_n(samp);
+  if (!n.has_value()) return std::unexpected(n.error());
+  return 2.0 * *n * est.fmin;
+}
+
 bool has_mean_rows(const data::SampleStats& samp,
                    const model::ImpliedMoments& moments) {
   for (std::size_t b = 0; b < moments.mu.size(); ++b) {
@@ -341,41 +368,6 @@ gamma_blocks_from_raw(const data::RawData& raw,
   return out;
 }
 
-post_expected<double>
-continuous_ls_chisq(const data::SampleStats& samp,
-                    const spec::LatentStructure& pt,
-                    const model::MatrixRep& rep,
-                    const Estimates& est,
-                    const gls::ULS&) {
-  (void)pt;
-  (void)rep;
-  auto n = total_n(samp);
-  if (!n.has_value()) return std::unexpected(n.error());
-  return 2.0 * *n * est.fmin;
-}
-
-post_expected<double>
-continuous_ls_chisq(const data::SampleStats& samp,
-                    const spec::LatentStructure&,
-                    const model::MatrixRep&,
-                    const Estimates& est,
-                    const gls::GLS&) {
-  auto n = total_n(samp);
-  if (!n.has_value()) return std::unexpected(n.error());
-  return *n * est.fmin;
-}
-
-post_expected<double>
-continuous_ls_chisq(const data::SampleStats& samp,
-                    const spec::LatentStructure&,
-                    const model::MatrixRep&,
-                    const Estimates& est,
-                    const gls::WLS&) {
-  auto n = total_n(samp);
-  if (!n.has_value()) return std::unexpected(n.error());
-  return 2.0 * *n * est.fmin;
-}
-
 template <class D>
 post_expected<WeightedRobustResult>
 robust_continuous_ls_impl(spec::LatentStructure pt,
@@ -436,7 +428,7 @@ robust_continuous_ls_impl(spec::LatentStructure pt,
         .n_obs = samp.n_obs[b]});
   }
 
-  auto chisq = continuous_ls_chisq(samp, pt, rep, est, discrepancy);
+  auto chisq = robust_ls_standard_chisq(samp, est, discrepancy);
   if (!chisq.has_value()) return std::unexpected(chisq.error());
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
@@ -471,6 +463,46 @@ robust_continuous_ls_raw_impl(spec::LatentStructure pt,
 }
 
 }  // namespace
+
+post_expected<double>
+continuous_ls_chisq(data::SampleStats samp,
+                    spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const Estimates& est,
+                    gls::ULS) {
+  auto n = total_n(samp);
+  if (!n.has_value()) return std::unexpected(n.error());
+  auto br = nt::infer::browne_residual_nt(std::move(pt), rep, samp, est);
+  if (!br.has_value()) return std::unexpected(br.error());
+  const double n_used = *n - static_cast<double>(samp.S.size());
+  if (!(n_used > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "continuous_ls_chisq ULS: non-positive effective sample size"));
+  }
+  return *br * (n_used / *n);
+}
+
+post_expected<double>
+continuous_ls_chisq(data::SampleStats samp,
+                    spec::LatentStructure,
+                    const model::MatrixRep&,
+                    const Estimates& est,
+                    gls::GLS) {
+  auto n = total_n(samp);
+  if (!n.has_value()) return std::unexpected(n.error());
+  return *n * est.fmin;
+}
+
+post_expected<double>
+continuous_ls_chisq(data::SampleStats samp,
+                    spec::LatentStructure,
+                    const model::MatrixRep&,
+                    const Estimates& est,
+                    gls::WLS) {
+  auto n = total_n(samp);
+  if (!n.has_value()) return std::unexpected(n.error());
+  return 2.0 * *n * est.fmin;
+}
 
 post_expected<WeightedRobustResult>
 robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,

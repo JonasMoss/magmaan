@@ -109,8 +109,9 @@ golden `parTable()` fixtures.
   expose matching robust scaled-test targets for those estimators.
 - GLS/WLS reporting follows lavaan's `2 * N * fmin` convention; ULS
   standard chi-square is pinned to lavaan's Browne residual NT statistic,
-  while ULS robust scaled-test reporting follows lavaan's robust LS
-  `2 * N * fmin` base statistic.
+  including lavaan's `fixed.x` convention of zeroing the fixed exogenous
+  rows/columns in the NT inverse weight. ULS robust scaled-test reporting
+  follows lavaan's robust LS `2 * N * fmin` base statistic.
 - Separable nonlinear least squares profiling exists for LS estimators where
   conditionally linear parameters can be profiled out.
 

@@ -198,22 +198,42 @@ bool check_estimate(const std::string& id,
 
   double chisq = std::numeric_limits<double>::quiet_NaN();
   if (estimator == "ULS") {
-    auto br_or = magmaan::nt::infer::browne_residual_nt(pt, rep, samp, est);
-    if (!br_or.has_value()) {
-      failures.push_back(id + "/" + estimator + ": browne_residual_nt — " +
-                         br_or.error().detail);
+    auto chisq_or = magmaan::estimate::continuous_ls_chisq(
+        samp, pt, rep, est, magmaan::gls::ULS{});
+    if (!chisq_or.has_value()) {
+      failures.push_back(id + "/" + estimator + ": continuous_ls_chisq — " +
+                         chisq_or.error().detail);
       return false;
     }
-    chisq = *br_or;
+    chisq = *chisq_or;
+  } else if (estimator == "GLS") {
+    auto chisq_or = magmaan::estimate::continuous_ls_chisq(
+        samp, pt, rep, est, magmaan::gls::GLS{});
+    if (!chisq_or.has_value()) {
+      failures.push_back(id + "/" + estimator + ": continuous_ls_chisq — " +
+                         chisq_or.error().detail);
+      return false;
+    }
+    chisq = *chisq_or;
   } else {
-    chisq = 2.0 * total_n(samp) * fmin_on_lavaan_scale;
+    auto chisq_or = magmaan::estimate::continuous_ls_chisq(
+        samp, pt, rep, est, magmaan::gls::WLS(matrices_from_blocks(fit["WLS.V"])));
+    if (!chisq_or.has_value()) {
+      failures.push_back(id + "/" + estimator + ": continuous_ls_chisq — " +
+                         chisq_or.error().detail);
+      return false;
+    }
+    chisq = *chisq_or;
   }
 
   const double d_chisq = std::abs(chisq - fit["chisq"].get<double>());
-  const double chisq_tol =
+  double chisq_tol =
       id == "0002_multigroup_3f_school" ? 2e-1 :
       id == "0004_two_factor_meanstructure" ? 7e-2 :
       5e-2;
+  if (estimator != "ULS") {
+    chisq_tol = std::max(chisq_tol, 2.0 * total_n(samp) * fmin_tol);
+  }
   if (d_chisq > chisq_tol) {
     char buf[320];
     std::snprintf(buf, sizeof(buf),

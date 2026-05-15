@@ -185,6 +185,9 @@ polish task.
   `robust.sem` has lavaan-backed non-fixed.x fixtures; GLS/WLS robust paths
   remain shape/scaling covered because lavaan does not expose matching robust
   scaled-test targets for those estimators.
+- [x] Close the continuous LS standard golden gate for ULS/GLS/WLS, including
+  lavaan's fixed.x Browne residual NT convention for observed exogenous
+  moments.
 - [x] Decide whether WLS robust ordinal reporting should get a lavaan-backed
   target or stay shape-only. Decision: keep robust WLS scaled-test reporting
   shape-only for now because lavaan rejects Satorra-Bentler-family `test=`
