@@ -778,7 +778,10 @@ ls_cases <- list(
        model = "f =~ a*x1 + a*x2 + b*x3"),
   list(id = "0004_two_factor_meanstructure",
        model = "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1\nx4 ~ 1\nx5 ~ 1\nx6 ~ 1",
-       meanstructure = TRUE)
+       meanstructure = TRUE),
+  list(id = "0005_obs_exo_cfa_fixedx",
+       model = "f =~ x2 + x3 + x4 + x5\nf ~ x1",
+       meanstructure = TRUE, fixed_x = TRUE, fit_fun = "sem")
 )
 
 regenerated_ls <- character(0)
@@ -788,19 +791,23 @@ for (m in ls_cases) {
   n_groups      <- if (!is.null(m$n_groups))      m$n_groups      else 1L
   group_var     <- if (!is.null(m$group_var))     m$group_var     else NULL
   meanstructure <- if (!is.null(m$meanstructure)) m$meanstructure else FALSE
+  fixed_x       <- if (!is.null(m$fixed_x))       m$fixed_x       else NULL
+  fit_fun_name  <- if (!is.null(m$fit_fun))       m$fit_fun       else "cfa"
+  fit_fun       <- if (identical(fit_fun_name, "sem")) sem else cfa
 
   cfa_args <- list(model = model, data = HolzingerSwineford1939,
                    std.lv = FALSE)
   if (!is.null(group_var) && nchar(group_var) > 0) cfa_args$group <- group_var
   if (meanstructure) cfa_args$meanstructure <- TRUE
+  if (!is.null(fixed_x)) cfa_args$fixed.x <- fixed_x
 
   fits <- list()
   for (estimator in c("ULS", "GLS", "WLS")) {
-    fit_or_err <- tryCatch(do.call(cfa, c(cfa_args, list(estimator = estimator))),
+    fit_or_err <- tryCatch(do.call(fit_fun, c(cfa_args, list(estimator = estimator))),
                            error = function(e) e, warning = function(w) w)
     if (inherits(fit_or_err, "warning")) {
       fit_or_err <- tryCatch(suppressWarnings(
-                               do.call(cfa, c(cfa_args, list(estimator = estimator)))),
+                               do.call(fit_fun, c(cfa_args, list(estimator = estimator)))),
                              error = function(e) e)
     }
     if (inherits(fit_or_err, "error")) {
@@ -818,7 +825,8 @@ for (m in ls_cases) {
       format_version = 1L,
       fixture_kind   = "fit.ls",
       corpus_id      = id,
-      tool           = "lavaan::cfa(estimator = ULS/GLS/WLS)",
+      tool           = paste0("lavaan::", fit_fun_name,
+                              "(estimator = ULS/GLS/WLS)"),
       lavaan_version = installed
     ),
     input             = model,
