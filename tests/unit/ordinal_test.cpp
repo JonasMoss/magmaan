@@ -144,10 +144,25 @@ TEST_CASE("Pairwise ordinal stats wrap OrdinalStats and expose diagnostics") {
     CHECK(pd.label.n_levels_j == 3);
     CHECK(std::isfinite(pd.rho));
     CHECK(std::isfinite(pd.negloglik));
+    CHECK(pd.n_obs == 24);
+    CHECK(pd.n_missing == 0);
+    CHECK_FALSE(pd.ridge_applied);
+    CHECK(pd.ridge == doctest::Approx(0.0));
+    CHECK_FALSE(pd.shrinkage_applied);
+    CHECK(pd.shrinkage_intensity == doctest::Approx(0.0));
     CHECK(pd.counts.rows() == 3);
     CHECK(pd.counts.cols() == 3);
     CHECK(pd.adjusted_counts.rows() == 3);
     CHECK(pd.adjusted_counts.cols() == 3);
+    CHECK(pd.expected_counts.rows() == 3);
+    CHECK(pd.expected_counts.cols() == 3);
+    CHECK(pd.residual_counts.rows() == 3);
+    CHECK(pd.residual_counts.cols() == 3);
+    CHECK(pd.expected_counts.allFinite());
+    CHECK(pd.residual_counts.allFinite());
+    CHECK(pd.expected_counts.sum() == doctest::Approx(pd.adjusted_counts.sum()));
+    CHECK(pd.residual_counts.sum() == doctest::Approx(0.0).epsilon(1e-12));
+    CHECK(pd.residual_counts.isApprox(pd.adjusted_counts - pd.expected_counts, 1e-12));
   }
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(pairwise->stats.R[0]);
   REQUIRE(es.info() == Eigen::Success);
@@ -174,6 +189,14 @@ TEST_CASE("Pairwise ordinal stats diagnostics report lavaan 2x2 adjustment") {
   CHECK(pd.adjusted_counts(0, 1) == doctest::Approx(4.5));
   CHECK(pd.adjusted_counts(1, 0) == doctest::Approx(3.5));
   CHECK(pd.adjusted_counts(1, 1) == doctest::Approx(6.5));
+  CHECK(pd.expected_counts.rows() == 2);
+  CHECK(pd.expected_counts.cols() == 2);
+  CHECK(pd.expected_counts.sum() == doctest::Approx(pd.adjusted_counts.sum()));
+  CHECK(pd.residual_counts.isApprox(pd.adjusted_counts - pd.expected_counts, 1e-12));
+  CHECK(pd.n_obs == 15);
+  CHECK(pd.n_missing == 0);
+  CHECK_FALSE(pd.ridge_applied);
+  CHECK_FALSE(pd.shrinkage_applied);
   CHECK(std::isfinite(pd.rho));
   CHECK(std::isfinite(pairwise->block_diagnostics[0].min_eigen_r));
 }
