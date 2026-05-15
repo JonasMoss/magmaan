@@ -9,10 +9,93 @@
 #include <Eigen/Core>
 
 #include "magmaan/data/ordinal.hpp"
+#include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/lavaanify.hpp"
+
+TEST_CASE("Ordinal pair ML kernel: probabilities, rho fit, and scores") {
+  const double inf = std::numeric_limits<double>::infinity();
+  Eigen::VectorXd thi(2);
+  thi << -0.4, 0.7;
+  Eigen::VectorXd thj(1);
+  thj << 0.2;
+
+  double total = 0.0;
+  const double bi[4] = {-inf, thi(0), thi(1), inf};
+  const double bj[3] = {-inf, thj(0), inf};
+  for (int a = 0; a < 3; ++a) {
+    for (int b = 0; b < 2; ++b) {
+      total += magmaan::data::ordinal_bvn_rect_prob(
+          bi[a], bi[a + 1], bj[b], bj[b + 1], 0.35);
+    }
+  }
+  CHECK(total == doctest::Approx(1.0).epsilon(1e-8));
+
+  const double h = 1e-5;
+  const double pp = magmaan::data::ordinal_bvn_rect_prob(
+      thi(0), thi(1), -inf, thj(0), 0.3 + h);
+  const double pm = magmaan::data::ordinal_bvn_rect_prob(
+      thi(0), thi(1), -inf, thj(0), 0.3 - h);
+  const double fd = (pp - pm) / (2.0 * h);
+  const double analytic = magmaan::data::ordinal_bvn_rect_drho(
+      thi(0), thi(1), -inf, thj(0), 0.3);
+  CHECK(analytic == doctest::Approx(fd).epsilon(1e-4));
+
+  Eigen::VectorXi xi(6);
+  Eigen::VectorXi xj(6);
+  xi << 0, 0, 1, 1, 2, 2;
+  xj << 0, 1, 0, 1, 0, 1;
+  auto table = magmaan::data::ordinal_pair_table(xi, xj, 3, 2);
+  REQUIRE(table.has_value());
+  CHECK((*table)(0, 0) == 1.0);
+  CHECK((*table)(0, 1) == 1.0);
+  CHECK((*table)(2, 0) == 1.0);
+  CHECK((*table)(2, 1) == 1.0);
+
+  auto fit = magmaan::data::fit_ordinal_pair_rho_ml(*table, thi, thj);
+  REQUIRE(fit.has_value());
+  CHECK(std::isfinite(fit->rho));
+  CHECK(std::isfinite(fit->negloglik));
+
+  auto scores = magmaan::data::ordinal_pair_scores(xi, xj, fit->rho, thi, thj);
+  REQUIRE(scores.has_value());
+  CHECK(scores->rho.size() == 6);
+  CHECK(scores->threshold_i.rows() == 6);
+  CHECK(scores->threshold_i.cols() == 2);
+  CHECK(scores->threshold_j.rows() == 6);
+  CHECK(scores->threshold_j.cols() == 1);
+  CHECK(scores->rho.allFinite());
+  CHECK(scores->threshold_i.allFinite());
+  CHECK(scores->threshold_j.allFinite());
+}
+
+TEST_CASE("Ordinal pair ML kernel: independence and lavaan 2x2 adjustment") {
+  Eigen::VectorXd th(1);
+  th << 0.0;
+
+  Eigen::MatrixXd balanced(2, 2);
+  balanced << 10.0, 10.0,
+              10.0, 10.0;
+  auto independent = magmaan::data::fit_ordinal_pair_rho_ml(balanced, th, th);
+  REQUIRE(independent.has_value());
+  CHECK(independent->rho == doctest::Approx(0.0).epsilon(1e-12));
+  CHECK(independent->iterations == 0);
+
+  Eigen::MatrixXd sparse(2, 2);
+  sparse << 0.0, 4.0,
+            5.0, 6.0;
+  auto adjusted = magmaan::data::fit_ordinal_pair_rho_ml(sparse, th, th);
+  REQUIRE(adjusted.has_value());
+  CHECK(adjusted->adjusted_counts(0, 0) == doctest::Approx(0.5));
+  CHECK(adjusted->adjusted_counts(1, 1) == doctest::Approx(6.5));
+  CHECK(adjusted->adjusted_counts(1, 0) == doctest::Approx(4.5));
+  CHECK(adjusted->adjusted_counts(0, 1) == doctest::Approx(3.5));
+  CHECK(std::isfinite(adjusted->rho));
+  CHECK(adjusted->rho > -1.0);
+  CHECK(adjusted->rho < 1.0);
+}
 
 TEST_CASE("Ordinal stats: thresholds, polychoric R, and weights have expected shapes") {
   Eigen::MatrixXd X(320, 3);
