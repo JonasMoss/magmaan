@@ -121,6 +121,45 @@ TEST_CASE("Ordinal pair ML kernel: independence and lavaan 2x2 adjustment") {
   CHECK(adjusted->rho < 1.0);
 }
 
+TEST_CASE("Ordinal pair observed table skips NaN by observed-pair semantics") {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  Eigen::VectorXd xi(7);
+  Eigen::VectorXd xj(7);
+  xi << 1.0, 2.0, nan, 3.0, 1.0, 2.0, 3.0;
+  xj << 1.0, 2.0, 1.0, nan, 2.0, 1.0, 2.0;
+
+  auto table = magmaan::data::ordinal_pair_observed_table(xi, xj, 3, 2);
+  REQUIRE(table.has_value());
+  CHECK(table->n_obs == 5);
+  CHECK(table->n_missing == 2);
+  CHECK(table->counts.rows() == 3);
+  CHECK(table->counts.cols() == 2);
+  CHECK(table->counts(0, 0) == doctest::Approx(1.0));
+  CHECK(table->counts(0, 1) == doctest::Approx(1.0));
+  CHECK(table->counts(1, 0) == doctest::Approx(1.0));
+  CHECK(table->counts(1, 1) == doctest::Approx(1.0));
+  CHECK(table->counts(2, 0) == doctest::Approx(0.0));
+  CHECK(table->counts(2, 1) == doctest::Approx(1.0));
+}
+
+TEST_CASE("Ordinal pair observed table rejects malformed observed categories") {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  Eigen::VectorXd xi(3);
+  Eigen::VectorXd xj(3);
+  xi << 1.0, 2.5, nan;
+  xj << 1.0, 2.0, 1.0;
+
+  auto malformed = magmaan::data::ordinal_pair_observed_table(xi, xj, 2, 2);
+  REQUIRE_FALSE(malformed.has_value());
+  CHECK(malformed.error().detail.find("finite integers") != std::string::npos);
+
+  xi << nan, nan, nan;
+  xj << 1.0, 2.0, nan;
+  auto empty = magmaan::data::ordinal_pair_observed_table(xi, xj, 2, 2);
+  REQUIRE_FALSE(empty.has_value());
+  CHECK(empty.error().detail.find("no observed pairs") != std::string::npos);
+}
+
 TEST_CASE("Ordinal pair joint ML estimates pair-local thresholds and rho") {
   Eigen::VectorXd thi(2);
   thi << -0.55, 0.85;
