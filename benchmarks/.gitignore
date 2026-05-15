@@ -1,0 +1,4 @@
+# Local benchmark cache and outputs. These are reproducible from scripts and
+# may contain externally licensed data.
+/data/
+/results/

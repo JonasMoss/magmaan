@@ -1,0 +1,12 @@
+id: bollen_democracy_sem
+source:
+  data: lavaan::PoliticalDemocracy
+  model: Bollen political democracy SEM from lavaan tutorial
+  url: https://lavaan.ugent.be/tutorial/sem.html
+license_or_terms: lavaan package data; confirm package license before vendoring raw data
+n: 75
+variables: [y1, y2, y3, y4, y5, y6, y7, y8, x1, x2, x3]
+estimator: ML
+status: active
+data_policy: generated into ignored local cache from installed lavaan package
+reference_engine: lavaan

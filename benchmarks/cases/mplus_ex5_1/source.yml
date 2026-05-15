@@ -1,0 +1,10 @@
+id: mplus_ex5_1
+source:
+  data: Mplus User's Guide ex5.1.dat
+  model: continuous two-factor CFA from Mplus User's Guide Chapter 5
+  url: https://www.statmodel.com/usersguide/chap5/ex5.1.html
+license_or_terms: generated User's Guide example data; audit terms before committing raw or cleaned data
+estimator: ML
+status: candidate
+data_policy: fetch into ignored local cache with benchmarks/r/fetch_data.R
+reference_engine: lavaan and Mplus output after terms are pinned

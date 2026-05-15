@@ -1,0 +1,83 @@
+# Human-readable benchmark case manifest. The executable registry is
+# benchmarks/r/cases.R so the harness does not require an extra YAML package.
+
+- id: hs_3factor_cfa
+  tier: 0
+  status: active
+  source: lavaan::HolzingerSwineford1939
+  estimator: ML
+  data_path: complete continuous
+  model_type: 3-factor CFA
+  current_use: calibration and smoke benchmark
+
+- id: bollen_democracy_sem
+  tier: 1
+  status: active
+  source: lavaan::PoliticalDemocracy
+  estimator: ML
+  data_path: complete continuous
+  model_type: latent-variable SEM
+  current_use: latent regressions plus residual covariances
+
+- id: demo_growth_linear
+  tier: 1
+  status: active
+  source: lavaan::Demo.growth
+  estimator: ML
+  data_path: complete continuous with mean structure
+  model_type: latent growth curve
+  current_use: fixed loadings, latent means, growth factors
+
+- id: bfi_5factor
+  tier: 1
+  status: dormant
+  source: psychTools::bfi
+  estimator: ML initially, DWLS later
+  data_path: item data with missingness and ordinal responses
+  model_type: 5-factor personality CFA
+  current_use: source scaffold until psychTools and missing/ordinal policy are pinned
+
+- id: openmx_mimic
+  tier: 1
+  status: dormant
+  source: OpenMx example models
+  estimator: ML over summary statistics
+  data_path: correlation matrix
+  model_type: MIMIC / formative-reflective
+  current_use: RAM-flavored model candidate after source translation
+
+- id: stata_higher_order
+  tier: 1
+  status: candidate
+  source: Stata Press sem_hcfa1.dta
+  estimator: ML
+  data_path: external dta
+  model_type: higher-order CFA
+  current_use: fetchable external benchmark after license audit
+
+- id: stata_correlated_uniqueness
+  tier: 1
+  status: candidate
+  source: Stata Press sem_cu1.dta
+  estimator: ML
+  data_path: external dta
+  model_type: CFA with correlated uniqueness
+  current_use: fetchable external benchmark after license audit
+
+- id: stata_growth
+  tier: 1
+  status: candidate
+  source: Stata Press sem_lcm.dta
+  estimator: ML
+  data_path: external dta
+  model_type: latent curve model
+  current_use: independent growth benchmark after license audit
+
+- id: mplus_ex5_1
+  tier: 1
+  status: candidate
+  source: Mplus User's Guide ex5.1
+  estimator: ML
+  data_path: external dat
+  model_type: 2-factor CFA
+  current_use: generated-data exactness fixture after source audit

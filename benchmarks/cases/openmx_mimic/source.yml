@@ -1,0 +1,12 @@
+id: openmx_mimic
+source:
+  data: OpenMx example correlation matrix
+  model: Schumacker and Lomax MIMIC / formative-reflective RAM example
+  url: https://openmx.ssri.psu.edu/wiki/example-models
+license_or_terms: audit before vendoring matrix or translated syntax
+n: 530
+variables: unknown until source translation is pinned
+estimator: ML over summary statistics
+status: dormant
+data_policy: manual source audit first
+reference_engine: OpenMx or lavaan after translation

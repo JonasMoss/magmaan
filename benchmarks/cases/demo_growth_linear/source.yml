@@ -1,0 +1,12 @@
+id: demo_growth_linear
+source:
+  data: lavaan::Demo.growth
+  model: compact latent growth curve over four time points
+  url: https://lavaan.ugent.be/tutorial/growth.html
+license_or_terms: lavaan package data; confirm package license before vendoring raw data
+n: 400
+variables: [t1, t2, t3, t4, x1, x2, c1, c2, c3, c4]
+estimator: ML
+status: active
+data_policy: generated into ignored local cache from installed lavaan package
+reference_engine: lavaan
