@@ -49,6 +49,7 @@ add_executable(magmaan_tests
   unit/raw_data_test.cpp
   unit/ordinal_test.cpp
   unit/robust_test.cpp
+  unit/weighted_inference_test.cpp
   unit/restriction_test.cpp
   unit/satorra2000_test.cpp
   unit/weighted_chisq_test.cpp

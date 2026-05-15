@@ -6,6 +6,7 @@
 #include "magmaan/fit/satorra2000.hpp"
 #include "magmaan/fit/weighted_chisq.hpp"
 #include "magmaan/estimate/ordinal.hpp"
+#include "magmaan/estimate/weighted_inference.hpp"
 
 namespace magmaan::nt::robust {
 
@@ -41,7 +42,11 @@ using fit::satorra_bentler;
 using fit::scaled_shifted;
 using fit::ugamma_eigenvalues;
 using estimate::OrdinalRobustResult;
+using estimate::OrdinalParameterization;
 using estimate::OrdinalWeightKind;
+using estimate::WeightedMomentBlock;
+using estimate::WeightedRobustResult;
 using estimate::robust_ordinal;
+using estimate::robust_weighted_moments;
 
 }  // namespace magmaan::nt::robust

@@ -23,6 +23,11 @@ enum class OrdinalWeightKind {
   WLS,
 };
 
+enum class OrdinalParameterization {
+  Delta,
+  Theta,
+};
+
 struct OrdinalRobustResult {
   Eigen::MatrixXd vcov;              // full free-parameter covariance
   Eigen::VectorXd se;                // sqrt(diag(vcov))
@@ -40,9 +45,21 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
                                 spec::Starts* starts = nullptr);
 
 fit_expected<void>
+prepare_ordinal_partable(spec::LatentStructure& pt,
+                         const data::OrdinalStats& stats,
+                         OrdinalParameterization parameterization,
+                         spec::Starts* starts = nullptr);
+
+fit_expected<void>
 prepare_mixed_ordinal_delta_partable(spec::LatentStructure& pt,
                                       const data::MixedOrdinalStats& stats,
                                       spec::Starts* starts = nullptr);
+
+fit_expected<void>
+prepare_mixed_ordinal_partable(spec::LatentStructure& pt,
+                                const data::MixedOrdinalStats& stats,
+                                OrdinalParameterization parameterization,
+                                spec::Starts* starts = nullptr);
 
 post_expected<OrdinalRobustResult>
 robust_ordinal(spec::LatentStructure pt,
