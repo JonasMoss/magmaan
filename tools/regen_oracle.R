@@ -781,7 +781,10 @@ ls_cases <- list(
        meanstructure = TRUE),
   list(id = "0005_obs_exo_cfa_fixedx",
        model = "f =~ x2 + x3 + x4 + x5\nf ~ x1",
-       meanstructure = TRUE, fixed_x = TRUE, fit_fun = "sem")
+       meanstructure = TRUE, fixed_x = TRUE, fit_fun = "sem"),
+  list(id = "0006_three_factor_meanstructure_hs",
+       model = "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9",
+       meanstructure = TRUE)
 )
 
 regenerated_ls <- character(0)
