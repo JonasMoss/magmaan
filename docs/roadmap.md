@@ -53,7 +53,11 @@ The core parser-to-fit pipeline is in place:
   work. Broader missing-data parity cases and robust missing-data corrections
   beyond this MLR slice remain open.
 - ULS, GLS, and explicit-weight WLS discrepancies, each with scalar
-  value/gradient and least-squares residual/Jacobian interfaces.
+  value/gradient and least-squares residual/Jacobian interfaces. A first
+  continuous LS lavaan fixture tranche now checks bounded LBFGS-B point
+  estimates for ULS/GLS/WLS across single-group CFA, multi-group CFA, a
+  labeled-equality CFA, and a mean-structure CFA, with lavaan WLS weight
+  blocks checked in for future statistic/inference parity work.
 - Bounded least-squares fitting through LBFGS-B and optional Ceres, including
   automatic nonnegative variance bounds and equality-penalty residuals on the
   LS path.
@@ -154,14 +158,20 @@ Validation targets:
 ### 2. Turn LS estimator support into lavaan-parity fixtures
 
 ULS/GLS/WLS are implemented as discrepancies and exercise the bounded LS path
-in unit/integration tests. The next step is parity work, not basic
-implementation.
+in unit/integration tests. The first continuous lavaan fixture tranche now pins
+point-estimate parity; the next step is expanding estimator-specific reporting
+and backend policy, not basic implementation.
 
 Open work:
 
-- Add checked-in lavaan golden fixtures for `estimator = "ULS"`, `"GLS"`, and
-  `"WLS"` across single-group CFA, multi-group CFA, equality constraints,
-  fixed.x, and mean-structure cases.
+- Extend checked-in lavaan golden fixtures for `estimator = "ULS"`, `"GLS"`,
+  and `"WLS"` beyond the current single-group CFA, multi-group CFA,
+  labeled-equality, and mean-structure tranche, especially fixed.x and
+  Heywood-prone cases.
+- Add estimator-specific LS fit-statistic parity helpers. The first fixture
+  tranche stores lavaan `fmin`, chi-square, df, and WLS weight blocks, while
+  the current C++ golden asserts point estimates and df because objective
+  normalization is not yet a public cross-estimator contract.
 - Decide which LS backend is the default public recommendation for each
   estimator: LBFGS-B, Ceres, or SNLLS. ULS landscapes are shallow enough that
   backend defaults matter.
