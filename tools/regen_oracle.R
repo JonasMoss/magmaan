@@ -697,6 +697,146 @@ for (m in models) {
 
 cat("regenerated", length(regenerated_fit), "fit fixtures under", fit_dir, "\n")
 
+# === continuous LS fit layer ===============================================
+# Dedicated lavaan-parity fixtures for continuous ULS/GLS/WLS. These live
+# outside the ML `fit/` fixtures because lavaan's LS chi-square accounting and
+# WLS weight matrices are estimator-specific.
+
+ls_dir <- file.path(fixtures, "ls")
+dir.create(ls_dir, showWarnings = FALSE, recursive = TRUE)
+
+matrix_blocks_json <- function(x) {
+  if (is.list(x) && !is.data.frame(x)) {
+    out <- vector("list", length(x))
+    for (b in seq_along(x)) {
+      out[[b]] <- list(block = as.integer(b - 1L),
+                       matrix = unname(as.matrix(x[[b]])))
+    }
+    out
+  } else {
+    list(list(block = 0L, matrix = unname(as.matrix(x))))
+  }
+}
+
+sample_blocks_json <- function(fit) {
+  sampstat <- lavInspect(fit, "sampstat")
+  nobs     <- as.integer(lavInspect(fit, "nobs"))
+  if (!is.list(sampstat[[1]])) {
+    out <- list(sample_cov = list(list(block = 0L,
+                                       matrix = unname(as.matrix(sampstat$cov)))),
+                sample_mean = NULL,
+                n_obs_per_block = nobs)
+    if (!is.null(sampstat$mean)) {
+      out$sample_mean <- list(list(block = 0L,
+                                   vector = as.numeric(sampstat$mean)))
+    }
+    return(out)
+  }
+
+  covs <- vector("list", length(sampstat))
+  means <- list()
+  for (b in seq_along(sampstat)) {
+    covs[[b]] <- list(block = as.integer(b - 1L),
+                      matrix = unname(as.matrix(sampstat[[b]]$cov)))
+    if (!is.null(sampstat[[b]]$mean)) {
+      means[[b]] <- list(block = as.integer(b - 1L),
+                         vector = as.numeric(sampstat[[b]]$mean))
+    }
+  }
+  if (length(means) == 0) means <- NULL
+  list(sample_cov = covs, sample_mean = means, n_obs_per_block = nobs)
+}
+
+ls_fit_json <- function(fit) {
+  pt_fitted <- parTable(fit)
+  free_rows <- pt_fitted[pt_fitted$free > 0, ]
+  free_rows <- free_rows[order(free_rows$free), ]
+  fm <- fitMeasures(fit)
+  samp <- sample_blocks_json(fit)
+  wls_v <- lavInspect(fit, "WLS.V")
+
+  list(theta_hat = as.numeric(free_rows$est),
+       fmin      = as.numeric(fm["fmin"]),
+       chisq     = as.numeric(fm["chisq"]),
+       df        = as.integer(fm["df"]),
+       npar      = as.integer(fm["npar"]),
+       converged = isTRUE(lavInspect(fit, "converged")),
+       WLS.V     = matrix_blocks_json(wls_v),
+       sample_cov = samp$sample_cov,
+       sample_mean = samp$sample_mean,
+       n_obs = as.integer(lavInspect(fit, "ntotal")),
+       n_obs_per_block = samp$n_obs_per_block)
+}
+
+ls_cases <- list(
+  list(id = "0001_three_factor_hs",
+       model = "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9"),
+  list(id = "0002_multigroup_3f_school",
+       model = "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9",
+       n_groups = 2L, group_var = "school", meanstructure = TRUE),
+  list(id = "0003_labeled_equality",
+       model = "f =~ a*x1 + a*x2 + b*x3"),
+  list(id = "0004_two_factor_meanstructure",
+       model = "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1\nx4 ~ 1\nx5 ~ 1\nx6 ~ 1",
+       meanstructure = TRUE)
+)
+
+regenerated_ls <- character(0)
+for (m in ls_cases) {
+  id            <- m$id
+  model         <- m$model
+  n_groups      <- if (!is.null(m$n_groups))      m$n_groups      else 1L
+  group_var     <- if (!is.null(m$group_var))     m$group_var     else NULL
+  meanstructure <- if (!is.null(m$meanstructure)) m$meanstructure else FALSE
+
+  cfa_args <- list(model = model, data = HolzingerSwineford1939,
+                   std.lv = FALSE)
+  if (!is.null(group_var) && nchar(group_var) > 0) cfa_args$group <- group_var
+  if (meanstructure) cfa_args$meanstructure <- TRUE
+
+  fits <- list()
+  for (estimator in c("ULS", "GLS", "WLS")) {
+    fit_or_err <- tryCatch(do.call(cfa, c(cfa_args, list(estimator = estimator))),
+                           error = function(e) e, warning = function(w) w)
+    if (inherits(fit_or_err, "warning")) {
+      fit_or_err <- tryCatch(suppressWarnings(
+                               do.call(cfa, c(cfa_args, list(estimator = estimator)))),
+                             error = function(e) e)
+    }
+    if (inherits(fit_or_err, "error")) {
+      stop(sprintf("LS fixture %s/%s failed: %s",
+                   id, estimator, conditionMessage(fit_or_err)))
+    }
+    if (!lavInspect(fit_or_err, "converged")) {
+      stop(sprintf("LS fixture %s/%s did not converge", id, estimator))
+    }
+    fits[[estimator]] <- ls_fit_json(fit_or_err)
+  }
+
+  payload <- list(
+    `_meta` = list(
+      format_version = 1L,
+      fixture_kind   = "fit.ls",
+      corpus_id      = id,
+      tool           = "lavaan::cfa(estimator = ULS/GLS/WLS)",
+      lavaan_version = installed
+    ),
+    input             = model,
+    n_groups          = as.integer(n_groups),
+    group_var         = group_var,
+    meanstructure     = meanstructure,
+    fits              = fits
+  )
+
+  out_path <- file.path(ls_dir, paste0(id, ".fit.json"))
+  write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
+             null = "null", na = "null", digits = NA)
+  regenerated_ls <- c(regenerated_ls, out_path)
+}
+
+cat("regenerated", length(regenerated_ls), "continuous LS fixtures under",
+    ls_dir, "\n")
+
 # === ordinal sample-stat and fit fixtures ==================================
 # First ordinal parity stream. Kept separate from corpus.json because these
 # need checked-in raw ordered data and estimator-specific lavaan internals
