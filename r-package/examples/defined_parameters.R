@@ -17,7 +17,7 @@ lavaan_model <- "visual =~ x1 + a*x2 + b*x3
 
 fit <- magmaan(model, df, estimator = "ML")
 info <- infer_information_expected(fit)
-vc <- infer_vcov(info, fit)
+vc <- infer_vcov_partable(info, fit$partable)
 defs <- compute_defined(model, fit, vc)
 
 lav <- cfa(lavaan_model, data = df)

@@ -480,6 +480,13 @@ inline Ctx ctx_from_sample_stats(magmaan::spec::LatentStructure pt, magmaan::spe
                         /*reorder=*/true);
 }
 
+inline Ctx ctx_from_partable_sample_stats(SEXP partable, Rcpp::List sample_stats,
+                                          const char* fn) {
+  auto parsed = partable_from_arg(partable, fn);
+  return ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                               sample_stats);
+}
+
 // Rebuild a Ctx from a fit object. `fit$S` is a list of per-group covariances
 // (length ≥ 1), already in the model's variable order; `fit$nobs` is the
 // per-group n vector; `fit$sample_mean` is R_NilValue or a list of vectors.
@@ -501,6 +508,14 @@ inline magmaan::estimate::Estimates est_from_fit(Rcpp::List fit) {
   e.fmin = fit.containsElementNamed("fmin") ? Rcpp::as<double>(fit["fmin"])
                                             : std::numeric_limits<double>::quiet_NaN();
   e.iterations = fit.containsElementNamed("iterations") ? Rcpp::as<int>(fit["iterations"]) : 0;
+  return e;
+}
+
+inline magmaan::estimate::Estimates est_from_theta(Rcpp::NumericVector theta) {
+  magmaan::estimate::Estimates e;
+  e.theta = Rcpp::as<Eigen::VectorXd>(theta);
+  e.fmin = std::numeric_limits<double>::quiet_NaN();
+  e.iterations = 0;
   return e;
 }
 

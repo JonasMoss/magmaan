@@ -424,6 +424,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_vcov_partable
+Rcpp::NumericMatrix infer_vcov_partable(Rcpp::NumericMatrix info, SEXP partable);
+RcppExport SEXP _magmaan_infer_vcov_partable(SEXP infoSEXP, SEXP partableSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type info(infoSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_vcov_partable(info, partable));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_se
 Rcpp::NumericVector infer_se(Rcpp::NumericMatrix vcov);
 RcppExport SEXP _magmaan_infer_se(SEXP vcovSEXP) {
@@ -509,6 +521,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_z_test_theta
+Rcpp::List infer_z_test_theta(Rcpp::NumericVector theta, Rcpp::NumericVector se);
+RcppExport SEXP _magmaan_infer_z_test_theta(SEXP thetaSEXP, SEXP seSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type se(seSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_z_test_theta(theta, se));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_chi2_pvalue
 Rcpp::NumericVector infer_chi2_pvalue(Rcpp::NumericVector chi2, Rcpp::IntegerVector df);
 RcppExport SEXP _magmaan_infer_chi2_pvalue(SEXP chi2SEXP, SEXP dfSEXP) {
@@ -535,6 +559,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_wald_test_theta
+Rcpp::List infer_wald_test_theta(Rcpp::NumericVector theta, Rcpp::NumericMatrix R, Rcpp::NumericMatrix vcov, Rcpp::Nullable<Rcpp::NumericVector> q);
+RcppExport SEXP _magmaan_infer_wald_test_theta(SEXP thetaSEXP, SEXP RSEXP, SEXP vcovSEXP, SEXP qSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type R(RSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type vcov(vcovSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type q(qSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_wald_test_theta(theta, R, vcov, q));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_browne_residual_nt
 Rcpp::List infer_browne_residual_nt(Rcpp::List fit);
 RcppExport SEXP _magmaan_infer_browne_residual_nt(SEXP fitSEXP) {
@@ -555,6 +593,18 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type implied(impliedSEXP);
     rcpp_result_gen = Rcpp::wrap(infer_rls_chi2(fit, implied));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_rls_chi2_sample
+Rcpp::List infer_rls_chi2_sample(Rcpp::List sample_stats, Rcpp::List implied);
+RcppExport SEXP _magmaan_infer_rls_chi2_sample(SEXP sample_statsSEXP, SEXP impliedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type implied(impliedSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_rls_chi2_sample(sample_stats, implied));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -586,6 +636,21 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
     Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
     rcpp_result_gen = Rcpp::wrap(infer_build_u_factor(fit, bread, moments));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_build_u_factor_parts
+Rcpp::List infer_build_u_factor_parts(SEXP partable, Rcpp::List sample_stats, Rcpp::NumericVector theta, std::string bread, std::string moments);
+RcppExport SEXP _magmaan_infer_build_u_factor_parts(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP thetaSEXP, SEXP breadSEXP, SEXP momentsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
+    Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_build_u_factor_parts(partable, sample_stats, theta, bread, moments));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -763,6 +828,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_robust_se_parts
+Rcpp::List infer_robust_se_parts(SEXP partable, Rcpp::List sample_stats, Rcpp::NumericVector theta, Rcpp::NumericMatrix gamma_hat, std::string bread, std::string moments, std::string cov);
+RcppExport SEXP _magmaan_infer_robust_se_parts(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP thetaSEXP, SEXP gamma_hatSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type gamma_hat(gamma_hatSEXP);
+    Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
+    Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_robust_se_parts(partable, sample_stats, theta, gamma_hat, bread, moments, cov));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_robust_se_raw
 Rcpp::List infer_robust_se_raw(Rcpp::List fit, SEXP X, std::string bread, std::string moments, std::string cov);
 RcppExport SEXP _magmaan_infer_robust_se_raw(SEXP fitSEXP, SEXP XSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP) {
@@ -775,6 +857,23 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
     Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
     rcpp_result_gen = Rcpp::wrap(infer_robust_se_raw(fit, X, bread, moments, cov));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_robust_se_raw_parts
+Rcpp::List infer_robust_se_raw_parts(SEXP partable, Rcpp::List sample_stats, Rcpp::NumericVector theta, SEXP X, std::string bread, std::string moments, std::string cov);
+RcppExport SEXP _magmaan_infer_robust_se_raw_parts(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP thetaSEXP, SEXP XSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
+    Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_robust_se_raw_parts(partable, sample_stats, theta, X, bread, moments, cov));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -811,6 +910,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_information_observed_fd", (DL_FUNC) &_magmaan_infer_information_observed_fd, 2},
     {"_magmaan_infer_information_observed_analytic", (DL_FUNC) &_magmaan_infer_information_observed_analytic, 1},
     {"_magmaan_infer_vcov", (DL_FUNC) &_magmaan_infer_vcov, 2},
+    {"_magmaan_infer_vcov_partable", (DL_FUNC) &_magmaan_infer_vcov_partable, 2},
     {"_magmaan_infer_se", (DL_FUNC) &_magmaan_infer_se, 1},
     {"_magmaan_compute_defined_impl", (DL_FUNC) &_magmaan_compute_defined_impl, 3},
     {"_magmaan_infer_chi2_stat", (DL_FUNC) &_magmaan_infer_chi2_stat, 2},
@@ -818,12 +918,16 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_baseline", (DL_FUNC) &_magmaan_infer_baseline, 1},
     {"_magmaan_measures_fit", (DL_FUNC) &_magmaan_measures_fit, 4},
     {"_magmaan_infer_z_test", (DL_FUNC) &_magmaan_infer_z_test, 2},
+    {"_magmaan_infer_z_test_theta", (DL_FUNC) &_magmaan_infer_z_test_theta, 2},
     {"_magmaan_infer_chi2_pvalue", (DL_FUNC) &_magmaan_infer_chi2_pvalue, 2},
     {"_magmaan_infer_wald_test", (DL_FUNC) &_magmaan_infer_wald_test, 4},
+    {"_magmaan_infer_wald_test_theta", (DL_FUNC) &_magmaan_infer_wald_test_theta, 4},
     {"_magmaan_infer_browne_residual_nt", (DL_FUNC) &_magmaan_infer_browne_residual_nt, 1},
     {"_magmaan_infer_rls_chi2", (DL_FUNC) &_magmaan_infer_rls_chi2, 2},
+    {"_magmaan_infer_rls_chi2_sample", (DL_FUNC) &_magmaan_infer_rls_chi2_sample, 2},
     {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 8},
     {"_magmaan_infer_build_u_factor", (DL_FUNC) &_magmaan_infer_build_u_factor, 3},
+    {"_magmaan_infer_build_u_factor_parts", (DL_FUNC) &_magmaan_infer_build_u_factor_parts, 5},
     {"_magmaan_infer_reduced_gamma_nt", (DL_FUNC) &_magmaan_infer_reduced_gamma_nt, 1},
     {"_magmaan_infer_reduced_gamma_sample", (DL_FUNC) &_magmaan_infer_reduced_gamma_sample, 3},
     {"_magmaan_infer_reduced_gamma_unbiased", (DL_FUNC) &_magmaan_infer_reduced_gamma_unbiased, 4},
@@ -838,7 +942,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_ordinal_robust", (DL_FUNC) &_magmaan_infer_ordinal_robust, 3},
     {"_magmaan_infer_mixed_ordinal_robust", (DL_FUNC) &_magmaan_infer_mixed_ordinal_robust, 3},
     {"_magmaan_infer_robust_se", (DL_FUNC) &_magmaan_infer_robust_se, 5},
+    {"_magmaan_infer_robust_se_parts", (DL_FUNC) &_magmaan_infer_robust_se_parts, 7},
     {"_magmaan_infer_robust_se_raw", (DL_FUNC) &_magmaan_infer_robust_se_raw, 5},
+    {"_magmaan_infer_robust_se_raw_parts", (DL_FUNC) &_magmaan_infer_robust_se_raw_parts, 7},
     {NULL, NULL, 0}
 };
 

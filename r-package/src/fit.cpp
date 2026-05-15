@@ -1072,6 +1072,18 @@ Rcpp::NumericMatrix infer_vcov(Rcpp::NumericMatrix info, Rcpp::List fit) {
   return Rcpp::wrap(*r);
 }
 
+// infer_vcov_partable() — primitive form of infer_vcov(): the information
+// matrix plus the model partable, without requiring a fit list.
+//
+// [[Rcpp::export]]
+Rcpp::NumericMatrix infer_vcov_partable(Rcpp::NumericMatrix info, SEXP partable) {
+  auto parsed = partable_from_arg(partable, "infer_vcov_partable");
+  const Eigen::MatrixXd info_m = Rcpp::as<Eigen::MatrixXd>(info);
+  auto r = magmaan::nt::infer::vcov(info_m, parsed.structure);
+  if (!r.has_value()) stop_post(r.error());
+  return Rcpp::wrap(*r);
+}
+
 // infer_se() — mirrors se(vcov). Returns √diag(vcov); NaN for negative
 // diagonal entries (Heywood case). Never errors.
 //
@@ -1222,6 +1234,18 @@ Rcpp::List infer_z_test(Rcpp::List fit, Rcpp::NumericVector se) {
                             Rcpp::_["pvalue"] = Rcpp::wrap(zt.p_value));
 }
 
+// infer_z_test_theta() — primitive form of infer_z_test(): estimate vector plus
+// SE vector, without requiring a fit list.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_z_test_theta(Rcpp::NumericVector theta, Rcpp::NumericVector se) {
+  const magmaan::estimate::Estimates est = est_from_theta(theta);
+  const Eigen::VectorXd se_v = Rcpp::as<Eigen::VectorXd>(se);
+  const magmaan::nt::infer::ZTestResult zt = magmaan::nt::infer::z_test(est, se_v);
+  return Rcpp::List::create(Rcpp::_["z"] = Rcpp::wrap(zt.z),
+                            Rcpp::_["pvalue"] = Rcpp::wrap(zt.p_value));
+}
+
 // infer_chi2_pvalue() — mirrors chi2_pvalue(chi2, df), vectorized over `chi2`
 // (recycles `df` if length 1); NA/NaN in -> NA out. Also the LR-test primitive
 // (subtract test statistics / dfs of two nested fits, call this).
@@ -1268,6 +1292,30 @@ Rcpp::List infer_wald_test(Rcpp::List fit, Rcpp::NumericMatrix R,
                             Rcpp::_["pvalue"] = magmaan::nt::infer::chi2_pvalue(w_or->chi2, w_or->df));
 }
 
+// infer_wald_test_theta() — primitive form of infer_wald_test(): R/q, theta,
+// and parameter vcov. R must have one column per element of theta.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_wald_test_theta(Rcpp::NumericVector theta,
+                                 Rcpp::NumericMatrix R,
+                                 Rcpp::NumericMatrix vcov,
+                                 Rcpp::Nullable<Rcpp::NumericVector> q = R_NilValue) {
+  const magmaan::estimate::Estimates est = est_from_theta(theta);
+  Eigen::MatrixXd Rmat = Rcpp::as<Eigen::MatrixXd>(R);
+  if (Rmat.cols() != est.theta.size())
+    Rcpp::stop("magmaan: R must have %d columns (one per free parameter)",
+               static_cast<int>(est.theta.size()));
+  Eigen::VectorXd qv = q.isNotNull() ? Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(q.get()))
+                                     : Eigen::VectorXd::Zero(Rmat.rows());
+  if (qv.size() != Rmat.rows())
+    Rcpp::stop("magmaan: q must have length %d (= nrow(R))", static_cast<int>(Rmat.rows()));
+  Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
+  auto w_or = magmaan::nt::infer::wald_test(Rmat, qv, est, vcov_m);
+  if (!w_or.has_value()) stop_post(w_or.error());
+  return Rcpp::List::create(Rcpp::_["chi2"] = w_or->chi2, Rcpp::_["df"] = w_or->df,
+                            Rcpp::_["pvalue"] = magmaan::nt::infer::chi2_pvalue(w_or->chi2, w_or->df));
+}
+
 // infer_browne_residual_nt() — mirrors browne_residual_nt(pt, rep, samp, est).
 // Returns just the statistic (the model df is infer_df_stat(); the p-value
 // is infer_chi2_pvalue(statistic, df)).
@@ -1297,6 +1345,48 @@ Rcpp::List infer_rls_chi2(Rcpp::List fit, Rcpp::List implied) {
       im.mu.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(m[b])));
   }
   auto s_or = magmaan::nt::infer::rls_chi2(ctx.samp, im);
+  if (!s_or.has_value()) stop_post(s_or.error());
+  return Rcpp::List::create(Rcpp::_["statistic"] = *s_or);
+}
+
+// infer_rls_chi2_sample() — primitive form of infer_rls_chi2(): sample moments
+// plus model-implied moments, without requiring a fit list.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_rls_chi2_sample(Rcpp::List sample_stats, Rcpp::List implied) {
+  if (!sample_stats.containsElementNamed("S") || !sample_stats.containsElementNamed("nobs"))
+    Rcpp::stop("magmaan: `sample_stats` must be a list with $S and $nobs");
+  magmaan::data::SampleStats samp;
+  Rcpp::List Sl = TYPEOF(sample_stats["S"]) == VECSXP
+      ? Rcpp::List(sample_stats["S"])
+      : Rcpp::List::create(Rcpp::NumericMatrix(sample_stats["S"]));
+  Rcpp::IntegerVector nv = Rcpp::as<Rcpp::IntegerVector>(sample_stats["nobs"]);
+  if (Sl.size() != nv.size())
+    Rcpp::stop("magmaan: sample_stats$S and sample_stats$nobs must have the same length");
+  for (R_xlen_t b = 0; b < Sl.size(); ++b) {
+    samp.S.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Sl[b])));
+    samp.n_obs.push_back(static_cast<std::int64_t>(nv[b]));
+  }
+  if (sample_stats.containsElementNamed("mean") && !Rf_isNull(sample_stats["mean"])) {
+    Rcpp::List Ml = TYPEOF(sample_stats["mean"]) == VECSXP
+        ? Rcpp::List(sample_stats["mean"])
+        : Rcpp::List::create(Rcpp::NumericVector(sample_stats["mean"]));
+    if (Ml.size() != Sl.size())
+      Rcpp::stop("magmaan: sample_stats$mean and sample_stats$S must have the same length");
+    for (R_xlen_t b = 0; b < Ml.size(); ++b)
+      samp.mean.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(Ml[b])));
+  }
+
+  lvm::ImpliedMoments im;
+  Rcpp::List sig(implied["sigma"]);
+  for (R_xlen_t b = 0; b < sig.size(); ++b)
+    im.sigma.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(sig[b])));
+  if (implied.containsElementNamed("mu") && !Rf_isNull(implied["mu"])) {
+    Rcpp::List m(implied["mu"]);
+    for (R_xlen_t b = 0; b < m.size(); ++b)
+      im.mu.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(m[b])));
+  }
+  auto s_or = magmaan::nt::infer::rls_chi2(samp, im);
   if (!s_or.has_value()) stop_post(s_or.error());
   return Rcpp::List::create(Rcpp::_["statistic"] = *s_or);
 }

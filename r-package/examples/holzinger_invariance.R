@@ -83,7 +83,7 @@ cat(sprintf("  match: configural χ² %s | metric χ² %s | configural df %s | m
 ##   the same 5-step chain on each fit; for the metric model `infer_build_u_factor`
 ##   reparameterizes Δ → Δ·K so the spectrum has df = p* − n_alpha eigenvalues.
 sb_of <- function(pt, fit, T_ml, df_ml) {
-  uf <- infer_build_u_factor(fit)
+  uf <- infer_build_u_factor_parts(fit$partable, fit_sample_stats(fit), fit$theta)
   ev <- infer_ugamma_eigenvalues(infer_reduced_gamma_sample(uf, infer_casewise_contributions(pt, Xg), fit$nobs))
   infer_satorra_bentler(T_ml, df_ml, ev)
 }

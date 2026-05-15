@@ -1008,6 +1008,36 @@ compute_defined <- function(model, fit, vcov) {
   compute_defined_impl(model_syntax_arg(model), fit, vcov)
 }
 
+infer_vcov_fit <- function(info, fit) {
+  infer_vcov(info, fit)
+}
+
+infer_z_test_fit <- function(fit, se) {
+  infer_z_test(fit, se)
+}
+
+infer_wald_test_fit <- function(fit, R, vcov, q = NULL) {
+  infer_wald_test(fit, R, vcov, q)
+}
+
+infer_rls_chi2_fit <- function(fit, implied) {
+  infer_rls_chi2(fit, implied)
+}
+
+infer_build_u_factor_fit <- function(fit, bread = "expected", moments = "structured") {
+  infer_build_u_factor(fit, bread = bread, moments = moments)
+}
+
+infer_robust_se_fit <- function(fit, gamma_hat, bread = "expected",
+                                moments = "structured", cov = "empirical") {
+  infer_robust_se(fit, gamma_hat, bread = bread, moments = moments, cov = cov)
+}
+
+infer_robust_se_raw_fit <- function(fit, X, bread = "expected",
+                                    moments = "structured", cov = "empirical") {
+  infer_robust_se_raw(fit, X, bread = bread, moments = moments, cov = cov)
+}
+
 fit_uls_snlls <- function(model, data, lbfgsb = NULL, bounds = NULL) {
   fit_uls_snlls_impl(partable_arg(model), sample_stats_arg(data),
                      lbfgsb = lbfgsb, bounds = bounds)

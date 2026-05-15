@@ -258,6 +258,23 @@ Rcpp::List infer_build_u_factor(Rcpp::List fit, std::string bread = "expected",
   return ufactor_to_list(*uf_or);
 }
 
+// infer_build_u_factor_parts() — primitive form of infer_build_u_factor():
+// partable + sample_stats + theta, without requiring a fit list.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_build_u_factor_parts(SEXP partable, Rcpp::List sample_stats,
+                                      Rcpp::NumericVector theta,
+                                      std::string bread = "expected",
+                                      std::string moments = "structured") {
+  Ctx ctx = ctx_from_partable_sample_stats(partable, sample_stats,
+                                           "infer_build_u_factor_parts");
+  const magmaan::estimate::Estimates est = est_from_theta(theta);
+  auto uf_or = magmaan::nt::robust::build_u_factor(ctx.pt, ctx.rep, ctx.samp, est,
+                                                   spec_from(bread, moments));
+  if (!uf_or.has_value()) stop_post(uf_or.error());
+  return ufactor_to_list(*uf_or);
+}
+
 // infer_reduced_gamma_nt() — mirrors reduced_gamma_nt(uf). Operator-only NT meat
 // reduction; its eigenvalues are ~ all-1 (the projector sanity check).
 //
@@ -521,6 +538,27 @@ Rcpp::List infer_robust_se(Rcpp::List fit, Rcpp::NumericMatrix gamma_hat,
                             Rcpp::_["se"]   = Rcpp::wrap(r_or->se));
 }
 
+// infer_robust_se_parts() — primitive form of infer_robust_se(): partable +
+// sample_stats + theta + Gamma, without requiring a fit list.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_robust_se_parts(SEXP partable, Rcpp::List sample_stats,
+                                 Rcpp::NumericVector theta,
+                                 Rcpp::NumericMatrix gamma_hat,
+                                 std::string bread = "expected",
+                                 std::string moments = "structured",
+                                 std::string cov = "empirical") {
+  Ctx ctx = ctx_from_partable_sample_stats(partable, sample_stats,
+                                           "infer_robust_se_parts");
+  const magmaan::estimate::Estimates est = est_from_theta(theta);
+  Eigen::MatrixXd G = Rcpp::as<Eigen::MatrixXd>(gamma_hat);
+  auto r_or = magmaan::nt::robust::robust_se(ctx.pt, ctx.rep, ctx.samp, est, G,
+                                             spec_from(bread, moments, cov));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return Rcpp::List::create(Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
+                            Rcpp::_["se"]   = Rcpp::wrap(r_or->se));
+}
+
 // infer_robust_se_raw() — mirrors robust_se(pt, rep, samp, est, raw, {bread,
 // moments, cov}). Derives Γ̂ from raw data `X` (a matrix, or a list of per-group
 // matrices) via casewise contributions — never forms the p* x p* matrix. Works
@@ -535,6 +573,26 @@ Rcpp::List infer_robust_se_raw(Rcpp::List fit, SEXP X,
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = raw_from_arg(ctx.rep, X);
   auto r_or = magmaan::nt::robust::robust_se(ctx.pt, ctx.rep, ctx.samp, est, raw, spec_from(bread, moments, cov));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return Rcpp::List::create(Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
+                            Rcpp::_["se"]   = Rcpp::wrap(r_or->se));
+}
+
+// infer_robust_se_raw_parts() — primitive form of infer_robust_se_raw():
+// partable + sample_stats + theta + raw data, without requiring a fit list.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_robust_se_raw_parts(SEXP partable, Rcpp::List sample_stats,
+                                     Rcpp::NumericVector theta, SEXP X,
+                                     std::string bread = "expected",
+                                     std::string moments = "structured",
+                                     std::string cov = "empirical") {
+  Ctx ctx = ctx_from_partable_sample_stats(partable, sample_stats,
+                                           "infer_robust_se_raw_parts");
+  const magmaan::estimate::Estimates est = est_from_theta(theta);
+  magmaan::data::RawData raw = raw_from_arg(ctx.rep, X);
+  auto r_or = magmaan::nt::robust::robust_se(ctx.pt, ctx.rep, ctx.samp, est, raw,
+                                             spec_from(bread, moments, cov));
   if (!r_or.has_value()) stop_post(r_or.error());
   return Rcpp::List::create(Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
                             Rcpp::_["se"]   = Rcpp::wrap(r_or->se));

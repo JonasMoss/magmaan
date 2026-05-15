@@ -67,7 +67,7 @@ cat(sprintf("  match: df %s | T_ML %s\n\n",
 ## ===========================================================================
 ## 2. pooled (multi-group) Satorra-Bentler scaled χ²
 ## ===========================================================================
-uf <- infer_build_u_factor(fit)                          # blocks = 2; B is (p*_1 + p*_2) × df
+uf <- infer_build_u_factor_parts(fit$partable, fit_sample_stats(fit), fit$theta)  # blocks = 2; B is (p*_1 + p*_2) x df
 Zc <- infer_casewise_contributions(pt, Xg)               # N × (p*_1 + p*_2), block-diagonal layout
 M  <- infer_reduced_gamma_sample(uf, Zc, fit$nobs)       # Σ_g B_gᵀΓ̂_gB_g, each Γ̂_g divided by n_g
 ev <- infer_ugamma_eigenvalues(M)
@@ -93,7 +93,7 @@ m_met <- "visual  =~ x1 + L1*x2 + L2*x3
 pt_met <- lavaan_lavaanify(m_met, n_groups = 2L, group_var = "school")
 fit_met <- fit_fit(pt_met, ssg)
 T_met   <- infer_chi2_stat(fit_sample_stats(fit_met), fit_met$fmin);  df_met <- infer_df_stat(fit_met$partable, fit_sample_stats(fit_met))
-uf_met  <- infer_build_u_factor(fit_met)                 # Δ → Δ·K internally; df = p* − n_alpha
+uf_met <- infer_build_u_factor_parts(fit_met$partable, fit_sample_stats(fit_met), fit_met$theta)  # constraints shrink df
 ev_met  <- infer_ugamma_eigenvalues(
              infer_reduced_gamma_sample(uf_met, infer_casewise_contributions(pt_met, Xg), fit_met$nobs))
 sb_met  <- infer_satorra_bentler(T_met, df_met, ev_met)
@@ -114,7 +114,7 @@ cat(sprintf("  match: df %s | c %s | T_SB %s\n\n",
 ## ===========================================================================
 ## 4. robust ("sandwich") two-group SEs  (≙ lavaan se = "robust.sem")
 ## ===========================================================================
-rse <- infer_robust_se_raw(fit, Xg)                      # multi-block Expected bread
+rse <- infer_robust_se_raw_parts(fit$partable, fit_sample_stats(fit), fit$theta, Xg)  # multi-block Expected bread
 ## same model on lavaan's side (cov-only — `cfa(group=)` would auto-add a
 ## saturated mean structure, which doesn't change χ²/df/SB but does change the
 ## parameter list), and match SEs by school *name* (magmaan's group g ↔ Xg[[g]];

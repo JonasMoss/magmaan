@@ -125,6 +125,10 @@ infer_vcov <- function(info, fit) {
     .Call(`_magmaan_infer_vcov`, info, fit)
 }
 
+infer_vcov_partable <- function(info, partable) {
+    .Call(`_magmaan_infer_vcov_partable`, info, partable)
+}
+
 infer_se <- function(vcov) {
     .Call(`_magmaan_infer_se`, vcov)
 }
@@ -153,12 +157,20 @@ infer_z_test <- function(fit, se) {
     .Call(`_magmaan_infer_z_test`, fit, se)
 }
 
+infer_z_test_theta <- function(theta, se) {
+    .Call(`_magmaan_infer_z_test_theta`, theta, se)
+}
+
 infer_chi2_pvalue <- function(chi2, df) {
     .Call(`_magmaan_infer_chi2_pvalue`, chi2, df)
 }
 
 infer_wald_test <- function(fit, R, vcov, q = NULL) {
     .Call(`_magmaan_infer_wald_test`, fit, R, vcov, q)
+}
+
+infer_wald_test_theta <- function(theta, R, vcov, q = NULL) {
+    .Call(`_magmaan_infer_wald_test_theta`, theta, R, vcov, q)
 }
 
 infer_browne_residual_nt <- function(fit) {
@@ -169,12 +181,20 @@ infer_rls_chi2 <- function(fit, implied) {
     .Call(`_magmaan_infer_rls_chi2`, fit, implied)
 }
 
+infer_rls_chi2_sample <- function(sample_stats, implied) {
+    .Call(`_magmaan_infer_rls_chi2_sample`, sample_stats, implied)
+}
+
 infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical") {
     .Call(`_magmaan_infer_lr_test_satorra2000`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma)
 }
 
 infer_build_u_factor <- function(fit, bread = "expected", moments = "structured") {
     .Call(`_magmaan_infer_build_u_factor`, fit, bread, moments)
+}
+
+infer_build_u_factor_parts <- function(partable, sample_stats, theta, bread = "expected", moments = "structured") {
+    .Call(`_magmaan_infer_build_u_factor_parts`, partable, sample_stats, theta, bread, moments)
 }
 
 infer_reduced_gamma_nt <- function(uf) {
@@ -233,6 +253,14 @@ infer_robust_se <- function(fit, gamma_hat, bread = "expected", moments = "struc
     .Call(`_magmaan_infer_robust_se`, fit, gamma_hat, bread, moments, cov)
 }
 
+infer_robust_se_parts <- function(partable, sample_stats, theta, gamma_hat, bread = "expected", moments = "structured", cov = "empirical") {
+    .Call(`_magmaan_infer_robust_se_parts`, partable, sample_stats, theta, gamma_hat, bread, moments, cov)
+}
+
 infer_robust_se_raw <- function(fit, X, bread = "expected", moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_raw`, fit, X, bread, moments, cov)
+}
+
+infer_robust_se_raw_parts <- function(partable, sample_stats, theta, X, bread = "expected", moments = "structured", cov = "empirical") {
+    .Call(`_magmaan_infer_robust_se_raw_parts`, partable, sample_stats, theta, X, bread, moments, cov)
 }
