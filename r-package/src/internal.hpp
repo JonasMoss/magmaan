@@ -284,6 +284,9 @@ inline Eigen::MatrixXd reorder_cov(Rcpp::NumericMatrix S, const std::vector<int>
   if (S.nrow() != S.ncol())
     Rcpp::stop("magmaan: a sample covariance must be square (got %dx%d)", S.nrow(), S.ncol());
   const int p = static_cast<int>(perm.size());
+  if (S.nrow() != p)
+    Rcpp::stop("magmaan: a sample covariance is %dx%d but the block has %d variables",
+               S.nrow(), S.ncol(), p);
   Eigen::MatrixXd out(p, p);
   for (int a = 0; a < p; ++a)
     for (int b = 0; b < p; ++b)
@@ -307,6 +310,27 @@ inline Eigen::VectorXd reorder_vec(Rcpp::NumericVector v, const std::vector<int>
   Eigen::VectorXd out(p);
   for (int k = 0; k < p; ++k) out(k) = v[perm[static_cast<std::size_t>(k)]];
   return out;
+}
+
+inline void validate_finite_matrix(const Eigen::MatrixXd& M, const char* what,
+                                   std::size_t block) {
+  for (Eigen::Index c = 0; c < M.cols(); ++c) {
+    for (Eigen::Index r = 0; r < M.rows(); ++r) {
+      if (!std::isfinite(M(r, c)))
+        Rcpp::stop("magmaan: %s for block %d contains a non-finite value at [%d,%d]",
+                   what, static_cast<int>(block), static_cast<int>(r + 1),
+                   static_cast<int>(c + 1));
+    }
+  }
+}
+
+inline void validate_finite_vector(const Eigen::VectorXd& v, const char* what,
+                                   std::size_t block) {
+  for (Eigen::Index i = 0; i < v.size(); ++i) {
+    if (!std::isfinite(v(i)))
+      Rcpp::stop("magmaan: %s for block %d contains a non-finite value at [%d]",
+                 what, static_cast<int>(block), static_cast<int>(i + 1));
+  }
 }
 
 // Pull the b-th per-block matrix out of `M`: when the model has a single
@@ -366,23 +390,48 @@ inline Ctx ctx_from_parts(magmaan::spec::LatentStructure pt, magmaan::spec::Late
 
   magmaan::data::SampleStats samp;
   for (std::size_t b = 0; b < n_blocks; ++b) {
+    const int nb = nv[static_cast<R_xlen_t>(b)];
+    if (nb == NA_INTEGER || nb <= 0)
+      Rcpp::stop("magmaan: nobs for block %d must be a positive integer",
+                 static_cast<int>(b));
+
     Rcpp::NumericMatrix Sb = block_matrix(S, b, n_blocks, "S");
+    const int p = static_cast<int>(rep.ov_names[b].size());
     if (reorder) {
       const std::vector<int> perm = perm_for_cols(Sb, rep.ov_names[b], "S");
       samp.S.push_back(reorder_cov(Sb, perm));
-      if (has_means)
-        samp.mean.push_back(
-            reorder_vec(Rcpp::NumericVector(sml[static_cast<R_xlen_t>(b)]), perm));
+      if (has_means) {
+        SEXP mb = sml[static_cast<R_xlen_t>(b)];
+        if (Rf_isNull(mb))
+          Rcpp::stop("magmaan: sample mean for block %d is NULL; omit `mean` entirely "
+                     "when means are unavailable", static_cast<int>(b));
+        samp.mean.push_back(reorder_vec(Rcpp::NumericVector(mb), perm));
+      }
     } else {
       if (Sb.nrow() != Sb.ncol())
         Rcpp::stop("magmaan: a sample covariance must be square (got %dx%d)",
                    Sb.nrow(), Sb.ncol());
+      if (Sb.nrow() != p)
+        Rcpp::stop("magmaan: a sample covariance for block %d is %dx%d but "
+                   "the model block has %d observed variables",
+                   static_cast<int>(b), Sb.nrow(), Sb.ncol(), p);
       samp.S.push_back(Rcpp::as<Eigen::MatrixXd>(Sb));
-      if (has_means)
-        samp.mean.push_back(Rcpp::as<Eigen::VectorXd>(
-            Rcpp::NumericVector(sml[static_cast<R_xlen_t>(b)])));
+      if (has_means) {
+        SEXP mb = sml[static_cast<R_xlen_t>(b)];
+        if (Rf_isNull(mb))
+          Rcpp::stop("magmaan: sample mean for block %d is NULL; omit `mean` entirely "
+                     "when means are unavailable", static_cast<int>(b));
+        Rcpp::NumericVector mv(mb);
+        if (mv.size() != p)
+          Rcpp::stop("magmaan: a sample-mean vector for block %d has length %d "
+                     "but the block has %d variables",
+                     static_cast<int>(b), static_cast<int>(mv.size()), p);
+        samp.mean.push_back(Rcpp::as<Eigen::VectorXd>(mv));
+      }
     }
-    samp.n_obs.push_back(static_cast<std::int64_t>(nv[static_cast<R_xlen_t>(b)]));
+    validate_finite_matrix(samp.S.back(), "sample covariance", b);
+    if (has_means) validate_finite_vector(samp.mean.back(), "sample mean", b);
+    samp.n_obs.push_back(static_cast<std::int64_t>(nb));
   }
 
   Ctx ctx;

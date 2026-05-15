@@ -15,6 +15,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/nt/measures.hpp"
 #include "magmaan/nt/fiml.hpp"
+#include "magmaan/nt/ml.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/lavaanify.hpp"
@@ -109,6 +110,15 @@ Eigen::MatrixXd deterministic_z(Eigen::Index n, Eigen::Index p) {
     Z.col(c).array() -= Z.col(c).mean();
   }
   return Z;
+}
+
+double log_det_pd(const Eigen::MatrixXd& A) {
+  Eigen::LLT<Eigen::MatrixXd> llt(A);
+  REQUIRE(llt.info() == Eigen::Success);
+  const auto L = llt.matrixL();
+  double out = 0.0;
+  for (Eigen::Index i = 0; i < A.rows(); ++i) out += std::log(L(i, i));
+  return 2.0 * out;
 }
 
 }  // namespace
@@ -229,6 +239,58 @@ TEST_CASE("fit_fiml: complete-data path fits a saturated mean CFA near zero grad
     return;
   }
   CHECK(vg->gradient.cwiseAbs().maxCoeff() < 1e-4);
+}
+
+TEST_CASE("FIML complete-data objective and gradient match ML up to constants") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4", /*n_groups=*/2);
+
+  Eigen::VectorXd theta(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta.setConstant(0.55);
+  auto truth = built.ev.sigma(theta);
+  REQUIRE(truth.has_value());
+
+  magmaan::data::RawData raw;
+  for (std::size_t b = 0; b < truth->sigma.size(); ++b) {
+    Eigen::LLT<Eigen::MatrixXd> llt(truth->sigma[b]);
+    REQUIRE(llt.info() == Eigen::Success);
+    const Eigen::MatrixXd L = llt.matrixL();
+    const Eigen::Index n = b == 0 ? 31 : 27;
+    Eigen::MatrixXd Z = deterministic_z(n, truth->sigma[b].rows());
+    if (b == 1) Z.array() *= 1.12;
+    raw.X.push_back((Z * L.transpose()).rowwise() +
+                    truth->mu[b].transpose());
+  }
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+
+  auto eval = built.ev.evaluate(theta, true, true);
+  REQUIRE(eval.has_value());
+
+  magmaan::nt::fiml::FIML fiml;
+  auto fiml_cache = fiml.prepare(raw);
+  REQUIRE(fiml_cache.has_value());
+  auto fiml_vg = fiml.value_gradient(raw, *fiml_cache, eval->moments,
+                                     eval->J_sigma, eval->J_mu);
+  REQUIRE(fiml_vg.has_value());
+
+  magmaan::nt::ml::ML ml;
+  auto ml_cache = ml.prepare(*samp);
+  REQUIRE(ml_cache.has_value());
+  auto ml_vg = ml.value_gradient(*samp, *ml_cache, eval->moments,
+                                 eval->J_sigma, eval->J_mu);
+  REQUIRE(ml_vg.has_value());
+
+  double constant = 0.0;
+  for (std::size_t b = 0; b < samp->S.size(); ++b) {
+    const double weight = static_cast<double>(samp->n_obs[b]) /
+                          static_cast<double>(ml_cache->n_total);
+    constant += weight *
+        (log_det_pd(samp->S[b]) + static_cast<double>(samp->S[b].rows()));
+  }
+
+  CHECK(fiml_vg->value ==
+        doctest::Approx(ml_vg->value + constant).epsilon(1e-10));
+  CHECK((fiml_vg->gradient - ml_vg->gradient).cwiseAbs().maxCoeff() < 1e-10);
 }
 
 TEST_CASE("fiml_extras: complete data matches SampleStats fit_extras") {

@@ -38,6 +38,8 @@ const std::vector<std::string> kFimlFixtures = {
     "0013_structural_equal_regression_hs_fiml",
     "0014_multigroup_dense_school_specific_fiml",
     "0015_structural_highdim_hs_fiml",
+    "0016_three_factor_complete_rows_fiml",
+    "0017_multigroup_path_fixedx_true_complete_x_missing_y_fiml",
 };
 
 magmaan::data::RawData raw_from_fixture(const nlohmann::json& exp) {

@@ -371,3 +371,94 @@ TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments
   CHECK(rob->se.size() == fit->theta.size());
   CHECK(rob->se.allFinite());
 }
+
+TEST_CASE("Mixed ordinal validation rejects malformed stats before fitting") {
+  std::mt19937 rng(20240516);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(240, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta > -0.6) + (eta > 0.4);
+    X(i, 1) = 1.0 + (0.65 * eta + 0.76 * norm(rng) > 0.1);
+    X(i, 2) = 0.8 * eta + 0.6 * norm(rng);
+    X(i, 3) = 0.7 * eta + 0.7 * norm(rng);
+  }
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data(
+      {X}, std::vector<std::vector<std::int32_t>>{{1, 1, 0, 0}});
+  REQUIRE(stats.has_value());
+
+  magmaan::spec::LavaanifyOptions opts;
+  opts.meanstructure = true;
+  auto fp = magmaan::parse::Parser::parse(
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  auto expect_error = [&](magmaan::data::MixedOrdinalStats bad,
+                          const char* needle) {
+    auto fit = magmaan::estimate::fit_mixed_ordinal_bounded(
+        *pt, *mr, bad, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+    REQUIRE_FALSE(fit.has_value());
+    CHECK(fit.error().detail.find(needle) != std::string::npos);
+  };
+
+  {
+    auto bad = *stats;
+    bad.ordered[0][0] = 2;
+    expect_error(std::move(bad), "ordered mask");
+  }
+  {
+    auto bad = *stats;
+    bad.ordered[0][3] = 1;
+    expect_error(std::move(bad), "missing thresholds");
+  }
+  {
+    auto bad = *stats;
+    bad.threshold_ov[0][0] = 2;
+    expect_error(std::move(bad), "continuous variable");
+  }
+  {
+    auto bad = *stats;
+    bad.NACOV[0](0, 0) = -1.0;
+    expect_error(std::move(bad), "NACOV diagonal");
+  }
+  {
+    auto bad = *stats;
+    bad.mean[0](0) = std::numeric_limits<double>::quiet_NaN();
+    expect_error(std::move(bad), "non-finite");
+  }
+}
+
+TEST_CASE("Mixed ordinal theta parameterization fails explicitly") {
+  Eigen::MatrixXd X(80, 3);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    X(i, 0) = 1.0 + (i % 3);
+    X(i, 1) = static_cast<double>(i) / 10.0;
+    X(i, 2) = std::sin(static_cast<double>(i));
+  }
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data(
+      {X}, std::vector<std::vector<std::int32_t>>{{1, 0, 0}});
+  REQUIRE(stats.has_value());
+
+  magmaan::spec::LavaanifyOptions opts;
+  opts.meanstructure = true;
+  auto fp = magmaan::parse::Parser::parse(
+      "f =~ x1 + x2 + x3\n"
+      "x1 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  REQUIRE(pt.has_value());
+  auto prep = magmaan::estimate::prepare_mixed_ordinal_partable(
+      *pt, *stats, magmaan::estimate::OrdinalParameterization::Theta);
+  REQUIRE_FALSE(prep.has_value());
+  CHECK(prep.error().detail.find("mixed ordinal theta parameterization") !=
+        std::string::npos);
+}
