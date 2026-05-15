@@ -1,4 +1,4 @@
-#include "magmaan/fit/lbfgsb_optimizer.hpp"
+#include "magmaan/optim/lbfgsb_optimizer.hpp"
 
 #include <cmath>
 #include <exception>
@@ -12,7 +12,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::optim {
 
 namespace {
 
@@ -140,4 +140,4 @@ LbfgsBOptimizer::minimize_ls(LsResidualFn r_fn, LsJacobianFn J_fn,
   return minimize(std::move(scalar), x0, lower, upper);
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::optim

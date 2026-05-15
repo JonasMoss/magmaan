@@ -5,7 +5,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/snlls.hpp"
-#include "magmaan/fit/start_values.hpp"
+#include "magmaan/estimate/start_values.hpp"
 #include "magmaan/gls/gls.hpp"
 #include "magmaan/gls/uls.hpp"
 #include "magmaan/gls/wls.hpp"
@@ -77,17 +77,17 @@ void check_alpha_basis_matches_residual_basis(const D& discrepancy) {
 
   auto ev = ModelEvaluator::build(h.pt, h.rep);
   REQUIRE(ev.has_value());
-  auto x0 = magmaan::fit::simple_start_values(h.pt, h.rep, samp, {});
+  auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
   REQUIRE(x0.has_value());
-  auto cls = magmaan::fit::detail_snlls::classify(h.pt, *ev, *x0);
+  auto cls = magmaan::estimate::detail_snlls::classify(h.pt, *ev, *x0);
   REQUIRE(cls.has_value());
 
   Eigen::VectorXd beta = cls->beta0;
   beta.array() += 0.05;
   const Eigen::VectorXd theta_base =
-      magmaan::fit::detail_snlls::expand_beta(*cls, beta);
+      magmaan::estimate::detail_snlls::expand_beta(*cls, beta);
 
-  auto prof = magmaan::fit::detail_snlls::profile_at(
+  auto prof = magmaan::estimate::detail_snlls::profile_at(
       *ev, samp, discrepancy, *cls, beta);
   REQUIRE(prof.has_value());
 
@@ -116,17 +116,17 @@ void check_profile_gradient_finite_difference(const D& discrepancy) {
 
   auto ev = ModelEvaluator::build(h.pt, h.rep);
   REQUIRE(ev.has_value());
-  auto x0 = magmaan::fit::simple_start_values(h.pt, h.rep, samp, {});
+  auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
   REQUIRE(x0.has_value());
-  auto cls = magmaan::fit::detail_snlls::classify(h.pt, *ev, *x0);
+  auto cls = magmaan::estimate::detail_snlls::classify(h.pt, *ev, *x0);
   REQUIRE(cls.has_value());
 
   Eigen::VectorXd beta = cls->beta0;
   beta.array() += 0.05;
-  auto prof = magmaan::fit::detail_snlls::profile_at(
+  auto prof = magmaan::estimate::detail_snlls::profile_at(
       *ev, samp, discrepancy, *cls, beta);
   REQUIRE(prof.has_value());
-  auto grad = magmaan::fit::detail_snlls::profile_gradient_at(
+  auto grad = magmaan::estimate::detail_snlls::profile_gradient_at(
       *ev, samp, discrepancy, *cls, *prof);
   REQUIRE(grad.has_value());
 
@@ -137,9 +137,9 @@ void check_profile_gradient_finite_difference(const D& discrepancy) {
     Eigen::VectorXd bm = beta;
     bp(j) += eps;
     bm(j) -= eps;
-    auto fp = magmaan::fit::detail_snlls::profile_at(
+    auto fp = magmaan::estimate::detail_snlls::profile_at(
         *ev, samp, discrepancy, *cls, bp);
-    auto fm = magmaan::fit::detail_snlls::profile_at(
+    auto fm = magmaan::estimate::detail_snlls::profile_at(
         *ev, samp, discrepancy, *cls, bm);
     REQUIRE(fp.has_value());
     REQUIRE(fm.has_value());

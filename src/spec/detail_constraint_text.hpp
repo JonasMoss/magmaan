@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-namespace magmaan::partable::detail {
+namespace magmaan::spec::detail {
 
 // True when a canonical Expr text is a bare identifier — no operator / paren /
 // whitespace characters. `a`, `.p3.` are bare; `2*b`, `(a+b)`, `-1` are not.
@@ -25,4 +25,4 @@ inline bool is_bare_identifier(std::string_view s) noexcept {
   return true;
 }
 
-}  // namespace magmaan::partable::detail
+}  // namespace magmaan::spec::detail

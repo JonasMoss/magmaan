@@ -11,7 +11,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/fit.hpp"
-#include "magmaan/fit/score.hpp"
+#include "magmaan/nt/score.hpp"
 #include "magmaan/gls/uls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -73,7 +73,7 @@ SampleStats sample_from_fixture(const nlohmann::json& j) {
   return samp;
 }
 
-bool has_covariance_candidate(const magmaan::fit::ScoreTestTable& table) {
+bool has_covariance_candidate(const magmaan::nt::infer::ScoreTestTable& table) {
   for (const auto& row : table.rows) {
     if (row.candidate.op == magmaan::parse::Op::Covariance &&
         row.mi >= 0.0 && row.information > 0.0 &&
@@ -106,7 +106,7 @@ TEST_CASE("modification_indices: complete ML reports finite fixed-row tests") {
   auto est = magmaan::estimate::fit(h.pt, h.rep, samp);
   REQUIRE(est.has_value());
 
-  auto mi = magmaan::fit::modification_indices(h.pt, h.rep, samp, *est);
+  auto mi = magmaan::nt::infer::modification_indices(h.pt, h.rep, samp, *est);
   REQUIRE(mi.has_value());
   CHECK(has_covariance_candidate(*mi));
 }
@@ -120,7 +120,7 @@ TEST_CASE("modification_indices: ULS uses LS residual information") {
                                             magmaan::estimate::Bounds{}, ULS{});
   REQUIRE(est.has_value());
 
-  auto mi = magmaan::fit::modification_indices(h.pt, h.rep, samp, *est, ULS{});
+  auto mi = magmaan::nt::infer::modification_indices(h.pt, h.rep, samp, *est, ULS{});
   REQUIRE(mi.has_value());
   CHECK(has_covariance_candidate(*mi));
 }
@@ -132,10 +132,10 @@ TEST_CASE("score_tests: equality releases are reported in constrained ML models"
   auto est = magmaan::estimate::fit(h.pt, h.rep, samp);
   REQUIRE(est.has_value());
 
-  auto st = magmaan::fit::score_tests(h.pt, h.rep, samp, *est);
+  auto st = magmaan::nt::infer::score_tests(h.pt, h.rep, samp, *est);
   REQUIRE(st.has_value());
   REQUIRE(st->rows.size() >= 1);
-  CHECK(st->rows[0].candidate.kind == magmaan::fit::ScoreCandidateKind::EqualityRelease);
+  CHECK(st->rows[0].candidate.kind == magmaan::nt::infer::ScoreCandidateKind::EqualityRelease);
   CHECK(st->rows[0].mi >= 0.0);
   CHECK(std::isfinite(st->rows[0].epc));
 }

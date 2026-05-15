@@ -1,4 +1,4 @@
-#include "magmaan/fit/fiml.hpp"
+#include "magmaan/nt/fiml.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -20,7 +20,17 @@
 
 #include "detail_vech.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::nt::fiml {
+
+using data::RawData;
+using data::SampleStats;
+using estimate::Estimates;
+using estimate::EqConstraints;
+using estimate::build_eq_constraints;
+using estimate::resolve_fixed_x_from_sample;
+using estimate::simple_start_values;
+using nt::measures::BaselineFit;
+using optim::LbfgsOptimizer;
 
 namespace {
 
@@ -109,7 +119,7 @@ double log_det_from_llt(const Eigen::LLT<Eigen::MatrixXd>& llt) {
 }
 
 std::vector<Eigen::Index>
-fixed_x_observed_indices(const partable::LatentStructure& pt) {
+fixed_x_observed_indices(const spec::LatentStructure& pt) {
   std::unordered_set<std::int32_t> exo_vars;
   for (std::size_t i = 0; i < pt.size(); ++i) {
     if (pt.exo[i] != 1) continue;
@@ -130,11 +140,11 @@ fixed_x_observed_indices(const partable::LatentStructure& pt) {
 }
 
 std::vector<Eigen::Index>
-observed_exogenous_indices(const partable::LatentStructure& pt) {
+observed_exogenous_indices(const spec::LatentStructure& pt) {
   std::vector<Eigen::Index> out;
   for (std::int32_t v = 0; v < pt.n_vars; ++v) {
     if (static_cast<std::size_t>(v) >= pt.var_role.size() ||
-        pt.var_role[static_cast<std::size_t>(v)] != partable::VarRole::ExoOv ||
+        pt.var_role[static_cast<std::size_t>(v)] != spec::VarRole::ExoOv ||
         static_cast<std::size_t>(v) >= pt.ov_pos.size()) {
       continue;
     }
@@ -146,7 +156,7 @@ observed_exogenous_indices(const partable::LatentStructure& pt) {
 }
 
 post_expected<double>
-fixed_x_saturated_logl(const partable::LatentStructure& pt,
+fixed_x_saturated_logl(const spec::LatentStructure& pt,
                        const SampleStats& samp) {
   const std::vector<Eigen::Index> exo_idx = fixed_x_observed_indices(pt);
   if (exo_idx.empty()) return 0.0;
@@ -607,7 +617,7 @@ fiml_casewise_scores(const RawData& raw,
 }
 
 post_expected<Eigen::MatrixXd>
-fiml_observed_hessian_fd(partable::LatentStructure pt,
+fiml_observed_hessian_fd(spec::LatentStructure pt,
                          const model::MatrixRep& rep,
                          const RawData& raw,
                          const FIMLCache& cache,
@@ -1278,7 +1288,7 @@ fiml_start_sample_stats(const RawData& raw) {
 }
 
 fit_expected<void>
-validate_fiml_fixed_x_missing_policy(const partable::LatentStructure& pt,
+validate_fiml_fixed_x_missing_policy(const spec::LatentStructure& pt,
                                      const RawData& raw) {
   if (raw.mask.empty()) return {};
   if (auto ok = validate_raw_shape(raw); !ok.has_value()) {
@@ -1308,7 +1318,7 @@ validate_fiml_fixed_x_missing_policy(const partable::LatentStructure& pt,
 }
 
 post_expected<FIMLExtras>
-fiml_extras(partable::LatentStructure pt,
+fiml_extras(spec::LatentStructure pt,
             const model::MatrixRep& rep,
             const RawData& raw,
             const Estimates& est,
@@ -1390,7 +1400,7 @@ fiml_extras(partable::LatentStructure pt,
 }
 
 post_expected<FIMLRobustMLR>
-fiml_robust_mlr(partable::LatentStructure pt,
+fiml_robust_mlr(spec::LatentStructure pt,
                 const model::MatrixRep& rep,
                 const RawData& raw,
                 const Estimates& est,
@@ -1565,11 +1575,11 @@ fiml_baseline_chi2(const RawData& raw,
 }
 
 post_expected<BaselineFit>
-fiml_baseline_chi2(const partable::LatentStructure& pt,
+fiml_baseline_chi2(const spec::LatentStructure& pt,
                    const RawData& raw,
                    FIML discrepancy) {
   return fiml_baseline_chi2_impl(raw, observed_exogenous_indices(pt),
                                  discrepancy);
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::nt::fiml

@@ -1,4 +1,4 @@
-#include "magmaan/fit/uls.hpp"
+#include "magmaan/gls/uls.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -10,12 +10,14 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
 #include "detail_vech.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::gls {
+
+using data::SampleStats;
 
 namespace {
 
@@ -333,4 +335,4 @@ ULS::residual_jacobian(const SampleStats& s, const model::ImpliedMoments& m,
   return Jr;
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::gls

@@ -1,11 +1,12 @@
-#include "magmaan/fit/weighted_chisq.hpp"
+#include "magmaan/nt/weighted_chisq.hpp"
 
 #include <algorithm>
 #include <cmath>
 
 #include <Eigen/Core>
 
-namespace magmaan::fit {
+namespace magmaan::nt::robust {
+
 
 namespace {
 
@@ -124,4 +125,4 @@ double imhof_upper(const Eigen::Ref<const Eigen::VectorXd>& lambda,
   return std::clamp(p, 0.0, 1.0);
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::nt::robust

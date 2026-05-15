@@ -149,7 +149,7 @@ bool check_estimate(const std::string& id,
                     const std::string& estimator,
                     const nlohmann::json& fit,
                     const magmaan::data::SampleStats& samp,
-                    const magmaan::fit::Estimates& est,
+                    const magmaan::estimate::Estimates& est,
                     const magmaan::spec::LatentStructure& pt,
                     const magmaan::model::MatrixRep& rep,
                     std::vector<std::string>& failures) {
@@ -229,7 +229,7 @@ bool check_estimate(const std::string& id,
 bool check_uls_robust(const std::string& id,
                       const nlohmann::json& fit,
                       const magmaan::data::SampleStats& samp,
-                      const magmaan::fit::Estimates& est,
+                      const magmaan::estimate::Estimates& est,
                       const magmaan::spec::LatentStructure& pt,
                       const magmaan::model::MatrixRep& rep,
                       std::vector<std::string>& failures) {
@@ -316,7 +316,7 @@ TEST_CASE("continuous LS fixtures: ULS/GLS/WLS bounded fits match lavaan") {
       const auto& fit = exp["fits"][estimator];
       auto samp = sample_stats_from_fit(fit);
 
-      magmaan::fit_expected<magmaan::fit::Estimates> est_or =
+      magmaan::fit_expected<magmaan::estimate::Estimates> est_or =
           std::unexpected(magmaan::FitError{
               magmaan::FitError::Kind::NumericIssue, "not run", 0, 0.0});
       if (estimator == "ULS") {

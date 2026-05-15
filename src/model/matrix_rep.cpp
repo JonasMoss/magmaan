@@ -10,7 +10,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/parse/op.hpp"
-#include "magmaan/partable/partable.hpp"
+#include "magmaan/spec/partable.hpp"
 
 namespace magmaan::model {
 
@@ -28,7 +28,7 @@ bool is_constraint_op(parse::Op op) noexcept {
 // Decide which form to use: PureCFA when there are no `~` regressions,
 // else Reduced. `~1` (mean structure) does NOT force Reduced — intercepts
 // live in Nu / Alpha and don't require phantom latents to represent.
-RepForm decide_form(const partable::LatentStructure& pt) noexcept {
+RepForm decide_form(const spec::LatentStructure& pt) noexcept {
   for (std::size_t i = 0; i < pt.size(); ++i) {
     if (pt.op[i] == parse::Op::Regression) return RepForm::Reduced;
   }
@@ -38,8 +38,8 @@ RepForm decide_form(const partable::LatentStructure& pt) noexcept {
 // Var id → name. Real names when a `LatentNames` is supplied; otherwise a
 // deterministic `"v<id>"` placeholder (the numeric path indexes by id, never
 // by name, so the placeholder is only ever seen in inspection / error text).
-std::vector<std::string> var_names_of(const partable::LatentStructure& pt,
-                                      const partable::LatentNames* names) {
+std::vector<std::string> var_names_of(const spec::LatentStructure& pt,
+                                      const spec::LatentNames* names) {
   std::vector<std::string> out(static_cast<std::size_t>(pt.n_vars));
   for (std::int32_t v = 0; v < pt.n_vars; ++v) {
     const std::size_t vi = static_cast<std::size_t>(v);
@@ -53,8 +53,8 @@ std::vector<std::string> var_names_of(const partable::LatentStructure& pt,
 }  // namespace
 
 model_expected<MatrixRep>
-build_matrix_rep(const partable::LatentStructure& pt,
-                 const partable::LatentNames* names) {
+build_matrix_rep(const spec::LatentStructure& pt,
+                 const spec::LatentNames* names) {
   MatrixRep out;
   out.cell_for_row.resize(pt.size());
   out.form = decide_form(pt);

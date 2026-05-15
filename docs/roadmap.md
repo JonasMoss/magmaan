@@ -160,10 +160,13 @@ golden `parTable()` fixtures.
   groups)`, which should perform estimation only. Standard errors,
   information matrices, Wald/z tests, robust corrections, fit measures,
   defined parameters, and nested tests remain explicit post-fit calls.
-- Target public namespaces exist and are covered by namespace alias tests:
-  `spec`, `lavaan`, `estimate`, `optim`, `nt`, `gls`, and `data`.
-- Old `fit/*` and `partable/*` headers remain compatibility shims during the
-  namespace transition.
+- Primary public declarations and internal implementation now live in the
+  target namespaces: `spec`, `lavaan`, `estimate`, `optim`, `nt`, `gls`, and
+  `data`. Repository code and R binding internals use those namespaces
+  directly.
+- Old `fit/*` and `partable/*` headers remain tested compatibility shims for
+  one transition window; they re-export target namespace names but no longer
+  own the primary API definitions.
 
 ### Argument-minimality sweep
 

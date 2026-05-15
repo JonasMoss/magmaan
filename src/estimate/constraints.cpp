@@ -1,4 +1,4 @@
-#include "magmaan/fit/constraints.hpp"
+#include "magmaan/estimate/constraints.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -14,7 +14,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/parse/op.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::estimate {
 
 namespace {
 
@@ -66,7 +66,7 @@ std::int32_t compact_groups(const std::vector<std::int32_t>& eq_groups,
 }  // namespace
 
 post_expected<EqConstraints>
-build_eq_constraints(const partable::LatentStructure& pt) {
+build_eq_constraints(const spec::LatentStructure& pt) {
   // `<` / `>` rows and genuinely-nonlinear `==` expressions are flagged by
   // lavaanify (`compute_eq_groups` + `resolve_lin_constraints`); those can't be
   // reparameterized away.
@@ -182,4 +182,4 @@ build_eq_constraints(const partable::LatentStructure& pt) {
   return out;
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::estimate

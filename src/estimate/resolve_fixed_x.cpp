@@ -1,4 +1,4 @@
-#include "magmaan/fit/resolve_fixed_x.hpp"
+#include "magmaan/estimate/resolve_fixed_x.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -7,11 +7,13 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
-#include "magmaan/partable/partable.hpp"
+#include "magmaan/spec/partable.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::estimate {
+
+using data::SampleStats;
 
 namespace {
 
@@ -22,7 +24,7 @@ FitError make_err(FitError::Kind k, std::string detail) {
 }  // namespace
 
 fit_expected<void>
-resolve_fixed_x_from_sample(partable::LatentStructure&      pt,
+resolve_fixed_x_from_sample(spec::LatentStructure&      pt,
                             const model::MatrixRep&  rep,
                             const SampleStats&       samp) {
   if (rep.cell_for_row.size() != pt.size()) {
@@ -89,4 +91,4 @@ resolve_fixed_x_from_sample(partable::LatentStructure&      pt,
   return {};
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::estimate

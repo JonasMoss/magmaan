@@ -1,4 +1,4 @@
-#include "magmaan/fit/ml.hpp"
+#include "magmaan/nt/ml.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -10,12 +10,14 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
 #include "detail_vech.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::nt::ml {
+
+using data::SampleStats;
 
 namespace {
 
@@ -420,4 +422,4 @@ ML::gradient_block(const SampleStats& s, const model::ImpliedMoments& m,
   return g;
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::nt::ml

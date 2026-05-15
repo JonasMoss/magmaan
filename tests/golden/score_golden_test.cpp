@@ -16,7 +16,7 @@
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/ordinal.hpp"
-#include "magmaan/fit/score.hpp"
+#include "magmaan/nt/score.hpp"
 #include "magmaan/gls/uls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/nt/fiml.hpp"
@@ -230,12 +230,12 @@ std::string op_string(magmaan::parse::Op op) {
   return std::string(magmaan::parse::to_string(op));
 }
 
-const magmaan::fit::ScoreTestResult*
-find_mi_row(const magmaan::fit::ScoreTestTable& table,
+const magmaan::nt::infer::ScoreTestResult*
+find_mi_row(const magmaan::nt::infer::ScoreTestTable& table,
             const magmaan::spec::LatentNames& names,
             const nlohmann::json& want) {
   for (const auto& row : table.rows) {
-    if (row.candidate.kind != magmaan::fit::ScoreCandidateKind::FixedParam) {
+    if (row.candidate.kind != magmaan::nt::infer::ScoreCandidateKind::FixedParam) {
       continue;
     }
     const std::size_t r = row.candidate.row;
@@ -250,12 +250,12 @@ find_mi_row(const magmaan::fit::ScoreTestTable& table,
   return nullptr;
 }
 
-magmaan::fit::Estimates estimates_from_fixture(const nlohmann::json& fit) {
-  return magmaan::fit::Estimates{vector_from_json(fit["theta_hat"]), 0.0, 0};
+magmaan::estimate::Estimates estimates_from_fixture(const nlohmann::json& fit) {
+  return magmaan::estimate::Estimates{vector_from_json(fit["theta_hat"]), 0.0, 0};
 }
 
 bool compare_modindices(const std::string& id,
-                        const magmaan::fit::ScoreTestTable& got,
+                        const magmaan::nt::infer::ScoreTestTable& got,
                         const magmaan::spec::LatentNames& names,
                         const nlohmann::json& want_rows,
                         double mi_tol,
@@ -284,7 +284,7 @@ bool compare_modindices(const std::string& id,
 }
 
 bool compare_score_tests(const std::string& id,
-                         const magmaan::fit::ScoreTestTable& got,
+                         const magmaan::nt::infer::ScoreTestTable& got,
                          const nlohmann::json& want,
                          double mi_tol,
                          double p_tol,
@@ -329,15 +329,15 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
 
     const std::string kind = exp["kind"].get<std::string>();
     const auto& fit = exp["fit"];
-    magmaan::fit::ScoreTestTable mi;
-    magmaan::fit::ScoreTestTable st;
+    magmaan::nt::infer::ScoreTestTable mi;
+    magmaan::nt::infer::ScoreTestTable st;
     bool ok = true;
 
     if (kind == "ml") {
       const auto samp = sample_stats_from_fixture(fit);
       const auto est = estimates_from_fixture(fit);
-      auto mi_or = magmaan::fit::modification_indices(h->pt, h->rep, samp, est);
-      auto st_or = magmaan::fit::score_tests(h->pt, h->rep, samp, est);
+      auto mi_or = magmaan::nt::infer::modification_indices(h->pt, h->rep, samp, est);
+      auto st_or = magmaan::nt::infer::score_tests(h->pt, h->rep, samp, est);
       if (!mi_or.has_value() || !st_or.has_value()) {
         failures.push_back(id + ": score path failed");
         continue;
@@ -351,9 +351,9 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
     } else if (kind == "fiml") {
       const auto raw = raw_from_fixture(exp);
       const auto est = estimates_from_fixture(fit);
-      auto mi_or = magmaan::fit::modification_indices_fiml(h->pt, h->rep, raw,
+      auto mi_or = magmaan::nt::infer::modification_indices_fiml(h->pt, h->rep, raw,
                                                            est);
-      auto st_or = magmaan::fit::score_tests_fiml(h->pt, h->rep, raw, est);
+      auto st_or = magmaan::nt::infer::score_tests_fiml(h->pt, h->rep, raw, est);
       if (!mi_or.has_value() || !st_or.has_value()) {
         failures.push_back(id + ": FIML score path failed");
         continue;
@@ -367,9 +367,9 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
     } else if (kind == "ls") {
       const auto samp = sample_stats_from_fixture(fit);
       const auto est = estimates_from_fixture(fit);
-      auto mi_or = magmaan::fit::modification_indices(h->pt, h->rep, samp,
+      auto mi_or = magmaan::nt::infer::modification_indices(h->pt, h->rep, samp,
                                                       est, magmaan::gls::ULS{});
-      auto st_or = magmaan::fit::score_tests(h->pt, h->rep, samp, est,
+      auto st_or = magmaan::nt::infer::score_tests(h->pt, h->rep, samp, est,
                                              magmaan::gls::ULS{});
       if (!mi_or.has_value() || !st_or.has_value()) {
         failures.push_back(id + ": ULS score path failed");

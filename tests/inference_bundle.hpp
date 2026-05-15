@@ -33,53 +33,53 @@ struct InferenceBundle {
 template <class InfoFn>
 inline post_expected<InferenceBundle>
 make_bundle(InfoFn&& info_fn,
-            const partable::LatentStructure& pt,
-            const fit::SampleStats&          samp,
-            const fit::Estimates&            est) {
+            const spec::LatentStructure& pt,
+            const data::SampleStats&          samp,
+            const estimate::Estimates&            est) {
   auto info_or = info_fn();
   if (!info_or.has_value()) return std::unexpected(info_or.error());
-  auto vcov_or = fit::vcov(*info_or, pt);
+  auto vcov_or = nt::infer::vcov(*info_or, pt);
   if (!vcov_or.has_value()) return std::unexpected(vcov_or.error());
-  auto df_or   = fit::df_stat(pt, samp);
+  auto df_or   = nt::infer::df_stat(pt, samp);
   if (!df_or.has_value())   return std::unexpected(df_or.error());
   InferenceBundle out;
   out.info = std::move(*info_or);
   out.vcov = std::move(*vcov_or);
-  out.se   = fit::se(out.vcov);
-  out.chi2 = fit::chi2_stat(samp, est);
+  out.se   = nt::infer::se(out.vcov);
+  out.chi2 = nt::infer::chi2_stat(samp, est);
   out.df   = *df_or;
   return out;
 }
 
 // Convenience: build the bundle from each of the three information methods.
 inline post_expected<InferenceBundle>
-expected_inference(partable::LatentStructure pt,
+expected_inference(spec::LatentStructure pt,
                    const model::MatrixRep&   rep,
-                   const fit::SampleStats&   samp,
-                   const fit::Estimates&     est) {
+                   const data::SampleStats&   samp,
+                   const estimate::Estimates&     est) {
   return make_bundle(
-      [&] { return fit::information_expected(pt, rep, samp, est); },
+      [&] { return nt::infer::information_expected(pt, rep, samp, est); },
       pt, samp, est);
 }
 
 inline post_expected<InferenceBundle>
-fd_observed_inference(partable::LatentStructure pt,
+fd_observed_inference(spec::LatentStructure pt,
                       const model::MatrixRep&   rep,
-                      const fit::SampleStats&   samp,
-                      const fit::Estimates&     est,
+                      const data::SampleStats&   samp,
+                      const estimate::Estimates&     est,
                       double                    h_step = 1e-4) {
   return make_bundle(
-      [&] { return fit::information_observed_fd(pt, rep, samp, est, h_step); },
+      [&] { return nt::infer::information_observed_fd(pt, rep, samp, est, h_step); },
       pt, samp, est);
 }
 
 inline post_expected<InferenceBundle>
-analytic_observed_inference(partable::LatentStructure pt,
+analytic_observed_inference(spec::LatentStructure pt,
                             const model::MatrixRep&   rep,
-                            const fit::SampleStats&   samp,
-                            const fit::Estimates&     est) {
+                            const data::SampleStats&   samp,
+                            const estimate::Estimates&     est) {
   return make_bundle(
-      [&] { return fit::information_observed_analytic(pt, rep, samp, est); },
+      [&] { return nt::infer::information_observed_analytic(pt, rep, samp, est); },
       pt, samp, est);
 }
 

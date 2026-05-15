@@ -1,4 +1,4 @@
-#include "magmaan/fit/inference.hpp"
+#include "magmaan/nt/infer.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -12,15 +12,23 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
-#include "magmaan/fit/constraints.hpp"
-#include "magmaan/fit/ml.hpp"
-#include "magmaan/fit/resolve_fixed_x.hpp"
+#include "magmaan/estimate/constraints.hpp"
+#include "magmaan/nt/ml.hpp"
+#include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
 #include "detail_vech.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::nt::infer {
+
+using estimate::build_eq_constraints;
+using estimate::resolve_fixed_x_from_sample;
+using nt::ml::ML;
+
+using data::RawData;
+using data::SampleStats;
+using estimate::Estimates;
 
 namespace {
 
@@ -53,7 +61,7 @@ invert_spd(const Eigen::MatrixXd& A, const char* what) {
 // filled — each information_* function owns its own copy of pt (the public
 // API takes pt by value).
 post_expected<model::ModelEvaluator>
-prepare_evaluator(partable::LatentStructure&       pt,
+prepare_evaluator(spec::LatentStructure&       pt,
                   const model::MatrixRep&   rep,
                   const SampleStats&        samp,
                   const Estimates&          est) {
@@ -93,7 +101,7 @@ prepare_evaluator(partable::LatentStructure&       pt,
 
 post_expected<Eigen::MatrixXd>
 vcov(const Eigen::MatrixXd&            info,
-     const partable::LatentStructure&  pt) {
+     const spec::LatentStructure&  pt) {
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const auto& con = *con_or;
@@ -128,7 +136,7 @@ Eigen::VectorXd se(const Eigen::MatrixXd& vcov) noexcept {
 // ============================================================================
 
 post_expected<int>
-df_stat(const partable::LatentStructure& pt,
+df_stat(const spec::LatentStructure& pt,
         const SampleStats&               samp) {
   int df_moments = 0;
   for (std::size_t b = 0; b < samp.S.size(); ++b) {
@@ -166,7 +174,7 @@ df_stat(const partable::LatentStructure& pt,
 // ============================================================================
 
 post_expected<Eigen::MatrixXd>
-information_expected(partable::LatentStructure       pt,
+information_expected(spec::LatentStructure       pt,
                      const model::MatrixRep&         rep,
                      const SampleStats&              samp,
                      const Estimates&                est) {
@@ -312,7 +320,7 @@ information_expected(partable::LatentStructure       pt,
 // ============================================================================
 
 post_expected<Eigen::MatrixXd>
-information_observed_fd(partable::LatentStructure       pt,
+information_observed_fd(spec::LatentStructure       pt,
                         const model::MatrixRep&         rep,
                         const SampleStats&              samp,
                         const Estimates&                est,
@@ -514,7 +522,7 @@ Eigen::VectorXd second_mu(const model::ParamLocation& a,
 }  // namespace
 
 post_expected<Eigen::MatrixXd>
-information_observed_analytic(partable::LatentStructure       pt,
+information_observed_analytic(spec::LatentStructure       pt,
                               const model::MatrixRep&         rep,
                               const SampleStats&              samp,
                               const Estimates&                est) {
@@ -818,7 +826,7 @@ rls_chi2(const SampleStats&            samp,
 }
 
 post_expected<double>
-browne_residual_nt(partable::LatentStructure        pt,
+browne_residual_nt(spec::LatentStructure        pt,
                    const model::MatrixRep&   rep,
                    const SampleStats&        samp,
                    const Estimates&          est) {
@@ -1032,7 +1040,7 @@ browne_residual_nt(partable::LatentStructure        pt,
 }
 
 post_expected<double>
-browne_residual_adf(partable::LatentStructure        pt,
+browne_residual_adf(spec::LatentStructure        pt,
                     const model::MatrixRep&   rep,
                     const SampleStats&        samp,
                     const RawData&            raw,
@@ -1276,4 +1284,4 @@ double noncentral_chisq_cdf(double x, double df, double ncp) noexcept {
   return std::clamp(sum, 0.0, 1.0);
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::nt::infer

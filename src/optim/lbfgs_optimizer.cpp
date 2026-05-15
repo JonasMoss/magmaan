@@ -1,4 +1,4 @@
-#include "magmaan/fit/lbfgs_optimizer.hpp"
+#include "magmaan/optim/lbfgs_optimizer.hpp"
 
 #include <cmath>
 #include <exception>
@@ -11,7 +11,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::optim {
 
 namespace {
 
@@ -92,4 +92,4 @@ LbfgsOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
   return LbfgsOutput{std::move(x), fval, n_iter};
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::optim

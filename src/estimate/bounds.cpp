@@ -1,4 +1,4 @@
-#include "magmaan/fit/bounds.hpp"
+#include "magmaan/estimate/bounds.hpp"
 
 #include <limits>
 #include <string>
@@ -7,7 +7,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/parse/op.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::estimate {
 
 namespace {
 
@@ -20,7 +20,7 @@ constexpr double kInf = std::numeric_limits<double>::infinity();
 }  // namespace
 
 post_expected<Bounds>
-bounds_from_partable(const partable::LatentStructure& pt) {
+bounds_from_partable(const spec::LatentStructure& pt) {
   const auto n_free = pt.n_free();
   Bounds b;
   b.lower = Eigen::VectorXd::Constant(n_free, -kInf);
@@ -48,4 +48,4 @@ bounds_from_partable(const partable::LatentStructure& pt) {
   return b;
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::estimate

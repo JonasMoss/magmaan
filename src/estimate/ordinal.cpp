@@ -17,11 +17,11 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
-#include "magmaan/fit/concepts.hpp"
-#include "magmaan/fit/constraints.hpp"
-#include "magmaan/fit/inference.hpp"
-#include "magmaan/fit/sample_stats.hpp"
-#include "magmaan/fit/start_values.hpp"
+#include "magmaan/optim/concepts.hpp"
+#include "magmaan/estimate/constraints.hpp"
+#include "magmaan/nt/infer.hpp"
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/estimate/start_values.hpp"
 #include "magmaan/estimate/weighted_inference.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/op.hpp"
@@ -31,6 +31,16 @@
 #endif
 
 namespace magmaan::estimate {
+
+using data::SampleStats;
+using nt::infer::ScoreCandidate;
+using nt::infer::ScoreCandidateKind;
+using nt::infer::ScoreTestResult;
+using nt::infer::ScoreTestTable;
+using nt::infer::chi2_pvalue;
+using nt::robust::MeanVarAdjustedResult;
+using nt::robust::SatorraBentlerResult;
+using nt::robust::ScaledShiftedResult;
 
 namespace {
 
@@ -822,15 +832,15 @@ mixed_ordinal_jacobian(const data::MixedOrdinalStats& stats,
   return out;
 }
 
-fit::SampleStats sample_stats_for_starts(const data::OrdinalStats& stats) {
-  fit::SampleStats samp;
+data::SampleStats sample_stats_for_starts(const data::OrdinalStats& stats) {
+  data::SampleStats samp;
   samp.S = stats.R;
   samp.n_obs = stats.n_obs;
   return samp;
 }
 
-fit::SampleStats sample_stats_for_starts(const data::MixedOrdinalStats& stats) {
-  fit::SampleStats samp;
+data::SampleStats sample_stats_for_starts(const data::MixedOrdinalStats& stats) {
+  data::SampleStats samp;
   samp.S = stats.R;
   samp.mean = stats.mean;
   samp.n_obs = stats.n_obs;
@@ -1004,7 +1014,7 @@ robust_ordinal(spec::LatentStructure pt,
   const Eigen::MatrixXd Delta_full =
       ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma);
 
-  auto con_or = fit::build_eq_constraints(pt);
+  auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();
   if (K.rows() != Delta_full.cols()) {
@@ -1071,7 +1081,7 @@ robust_mixed_ordinal(spec::LatentStructure pt,
       mixed_moment_jacobian(stats, *layout_or, eval->moments,
                             eval->J_sigma, eval->J_mu);
 
-  auto con_or = fit::build_eq_constraints(pt);
+  auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const Eigen::MatrixXd& K = con_or->K();
   if (K.rows() != Delta_full.cols()) {
@@ -1110,8 +1120,8 @@ post_expected<Eigen::MatrixXd> invert_score_spd(const Eigen::MatrixXd& A,
   return ldlt.solve(Eigen::MatrixXd::Identity(A.rows(), A.cols()));
 }
 
-post_expected<fit::ScoreTestResult>
-ordinal_score_for_direction(const fit::ScoreCandidate& candidate,
+post_expected<nt::infer::ScoreTestResult>
+ordinal_score_for_direction(const nt::infer::ScoreCandidate& candidate,
                             const Eigen::VectorXd& score_full,
                             const Eigen::MatrixXd& info_full,
                             const Eigen::MatrixXd& K_nuisance,
@@ -1133,13 +1143,13 @@ ordinal_score_for_direction(const fit::ScoreCandidate& candidate,
     return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
         "ordinal score efficient information is not positive"));
   }
-  fit::ScoreTestResult out;
+  nt::infer::ScoreTestResult out;
   out.candidate = candidate;
   out.score = score_eff;
   out.information = info_eff;
   out.mi = (score_eff * score_eff) / info_eff;
   out.df = 1;
-  out.p_value = fit::chi2_pvalue(out.mi, 1);
+  out.p_value = nt::infer::chi2_pvalue(out.mi, 1);
   out.epc = score_eff / info_eff;
   return out;
 }
@@ -1153,7 +1163,7 @@ post_expected<Eigen::MatrixXd> ordinal_null_space(const Eigen::MatrixXd& A,
 }
 
 post_expected<Eigen::VectorXd>
-ordinal_release_direction(const fit::EqConstraints& con, Eigen::Index release_row) {
+ordinal_release_direction(const EqConstraints& con, Eigen::Index release_row) {
   Eigen::MatrixXd A_rel(con.A_eq.rows() - 1, con.A_eq.cols());
   Eigen::Index out = 0;
   for (Eigen::Index r = 0; r < con.A_eq.rows(); ++r) {
@@ -1202,7 +1212,7 @@ void ordinal_add_free_group(spec::LatentStructure& pt, std::int32_t old_n) {
 }
 
 template <class Stats, class ResidualFn, class JacobianFn, class PrepareFn>
-post_expected<fit::ScoreTestTable>
+post_expected<nt::infer::ScoreTestTable>
 ordinal_modification_indices_impl(spec::LatentStructure pt,
                                   const model::MatrixRep& rep,
                                   const Stats& stats,
@@ -1221,13 +1231,13 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "ordinal modification indices: fitted theta length does not match delta partable"));
   }
-  auto con0 = fit::build_eq_constraints(pt);
+  auto con0 = build_eq_constraints(pt);
   if (!con0.has_value()) return std::unexpected(con0.error());
   auto N_or = total_n_obs(stats);
   if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
   const double n_total = static_cast<double>(*N_or);
 
-  fit::ScoreTestTable table;
+  nt::infer::ScoreTestTable table;
   for (std::size_t row = 0; row < pt.size(); ++row) {
     if (!ordinal_fixed_candidate(pt, rep, row)) continue;
     spec::LatentStructure aug = pt;
@@ -1269,8 +1279,8 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
 
     Eigen::VectorXd direction = Eigen::VectorXd::Zero(score.size());
     direction(score.size() - 1) = 1.0;
-    fit::ScoreCandidate cand;
-    cand.kind = fit::ScoreCandidateKind::FixedParam;
+    nt::infer::ScoreCandidate cand;
+    cand.kind = nt::infer::ScoreCandidateKind::FixedParam;
     cand.row = row;
     cand.op = pt.op[row];
     cand.lhs_var = pt.lhs_var[row];
@@ -1285,7 +1295,7 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
 }
 
 template <class Stats, class ResidualFn, class JacobianFn, class PrepareFn>
-post_expected<fit::ScoreTestTable>
+post_expected<nt::infer::ScoreTestTable>
 ordinal_score_tests_impl(spec::LatentStructure pt,
                          const model::MatrixRep& rep,
                          const Stats& stats,
@@ -1304,9 +1314,9 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "ordinal score tests: fitted theta length does not match delta partable"));
   }
-  auto con = fit::build_eq_constraints(pt);
+  auto con = build_eq_constraints(pt);
   if (!con.has_value()) return std::unexpected(con.error());
-  fit::ScoreTestTable table;
+  nt::infer::ScoreTestTable table;
   if (!con->active()) return table;
   auto N_or = total_n_obs(stats);
   if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
@@ -1338,8 +1348,8 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
   for (Eigen::Index row = 0; row < con->A_eq.rows(); ++row) {
     auto d = ordinal_release_direction(*con, row);
     if (!d.has_value()) return std::unexpected(d.error());
-    fit::ScoreCandidate cand;
-    cand.kind = fit::ScoreCandidateKind::EqualityRelease;
+    nt::infer::ScoreCandidate cand;
+    cand.kind = nt::infer::ScoreCandidateKind::EqualityRelease;
     cand.row = static_cast<std::size_t>(row);
     cand.op = parse::Op::EqConstraint;
     auto res = ordinal_score_for_direction(cand, score, info, con->K(), *d);
@@ -1350,7 +1360,7 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
 
 }  // namespace
 
-post_expected<fit::ScoreTestTable>
+post_expected<nt::infer::ScoreTestTable>
 modification_indices_ordinal(spec::LatentStructure pt,
                              const model::MatrixRep& rep,
                              const data::OrdinalStats& stats,
@@ -1379,7 +1389,7 @@ modification_indices_ordinal(spec::LatentStructure pt,
                                            prepare_fn);
 }
 
-post_expected<fit::ScoreTestTable>
+post_expected<nt::infer::ScoreTestTable>
 score_tests_ordinal(spec::LatentStructure pt,
                     const model::MatrixRep& rep,
                     const data::OrdinalStats& stats,
@@ -1407,7 +1417,7 @@ score_tests_ordinal(spec::LatentStructure pt,
                                   residual_fn, jacobian_fn, prepare_fn);
 }
 
-post_expected<fit::ScoreTestTable>
+post_expected<nt::infer::ScoreTestTable>
 modification_indices_mixed_ordinal(spec::LatentStructure pt,
                                    const model::MatrixRep& rep,
                                    const data::MixedOrdinalStats& stats,
@@ -1436,7 +1446,7 @@ modification_indices_mixed_ordinal(spec::LatentStructure pt,
                                            prepare_fn);
 }
 
-post_expected<fit::ScoreTestTable>
+post_expected<nt::infer::ScoreTestTable>
 score_tests_mixed_ordinal(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const data::MixedOrdinalStats& stats,
@@ -1490,8 +1500,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
   }
   auto ev = std::move(*ev_or);
 
-  fit::SampleStats samp = sample_stats_for_starts(stats);
-  auto x0_or = fit::simple_start_values(pt, rep, samp, starts);
+  data::SampleStats samp = sample_stats_for_starts(stats);
+  auto x0_or = simple_start_values(pt, rep, samp, starts);
   if (!x0_or.has_value()) return std::unexpected(x0_or.error());
   Eigen::VectorXd x0 = *x0_or;
   seed_threshold_starts(x0, layout, stats);
@@ -1514,12 +1524,12 @@ fit_ordinal_bounded(spec::LatentStructure pt,
   if (!factors_or.has_value()) return std::unexpected(factors_or.error());
   const auto& factors = *factors_or;
 
-  auto con_or = fit::build_eq_constraints(pt);
+  auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "constraint: " + con_or.error().detail));
   }
-  const fit::EqConstraints& con = *con_or;
+  const EqConstraints& con = *con_or;
 
   auto eval0 = ev.evaluate(x0, false, false);
   if (!eval0.has_value()) {
@@ -1563,8 +1573,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
     return out;
   };
 
-  auto out_or = optimizer.minimize_ls(fit::LsResidualFn(resid_fn),
-                                      fit::LsJacobianFn(jac_fn),
+  auto out_or = optimizer.minimize_ls(optim::LsResidualFn(resid_fn),
+                                      optim::LsJacobianFn(jac_fn),
                                       n_total, x0,
                                       bounds.lower, bounds.upper);
   if (!out_or.has_value()) return std::unexpected(out_or.error());
@@ -1610,8 +1620,8 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
   }
   auto ev = std::move(*ev_or);
 
-  fit::SampleStats samp = sample_stats_for_starts(stats);
-  auto x0_or = fit::simple_start_values(pt, rep, samp, starts);
+  data::SampleStats samp = sample_stats_for_starts(stats);
+  auto x0_or = simple_start_values(pt, rep, samp, starts);
   if (!x0_or.has_value()) return std::unexpected(x0_or.error());
   Eigen::VectorXd x0 = *x0_or;
   seed_threshold_starts(x0, layout, stats);
@@ -1634,12 +1644,12 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
   if (!factors_or.has_value()) return std::unexpected(factors_or.error());
   const auto& factors = *factors_or;
 
-  auto con_or = fit::build_eq_constraints(pt);
+  auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "constraint: " + con_or.error().detail));
   }
-  const fit::EqConstraints& con = *con_or;
+  const EqConstraints& con = *con_or;
 
   auto eval0 = ev.evaluate(x0, false, false);
   if (!eval0.has_value()) {
@@ -1684,8 +1694,8 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
     return out;
   };
 
-  auto out_or = optimizer.minimize_ls(fit::LsResidualFn(resid_fn),
-                                      fit::LsJacobianFn(jac_fn),
+  auto out_or = optimizer.minimize_ls(optim::LsResidualFn(resid_fn),
+                                      optim::LsJacobianFn(jac_fn),
                                       n_total, x0,
                                       bounds.lower, bounds.upper);
   if (!out_or.has_value()) return std::unexpected(out_or.error());

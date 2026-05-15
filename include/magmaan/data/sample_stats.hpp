@@ -1,10 +1,26 @@
 #pragma once
 
-#include "magmaan/fit/sample_stats.hpp"
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+
+#include <Eigen/Core>
 
 namespace magmaan::data {
 
-using fit::SampleStats;
+// Sample summary statistics that the ML discrepancy consumes. Per-block
+// sample covariance + per-block n. Single-block in v0; extends naturally
+// to multi-group in v0.1+.
+//
+// Pure data — owned by the caller. Tools (e.g. a future
+// `compute_sample_stats(data, ptable)`) will produce one of these from
+// raw data plus a partable's variable names. For now (P7), tests
+// construct it directly from a 2-D sample matrix or pull it from a fit
+// fixture.
+struct SampleStats {
+  std::vector<Eigen::MatrixXd> S;          // sample covariance per block
+  std::vector<Eigen::VectorXd> mean;       // sample mean per block; empty in v0
+  std::vector<std::int64_t>    n_obs;      // observations per block
+};
 
 }  // namespace magmaan::data
-

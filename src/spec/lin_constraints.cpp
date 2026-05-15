@@ -1,4 +1,4 @@
-#include "magmaan/partable/lin_constraints.hpp"
+#include "magmaan/spec/lin_constraints.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -12,7 +12,7 @@
 
 #include "detail_constraint_text.hpp"
 
-namespace magmaan::partable {
+namespace magmaan::spec {
 
 namespace {
 
@@ -165,4 +165,4 @@ void resolve_lin_constraints(LatentStructure& pt, const LatentNames& names) {
   if (!has_ineq && !any_eq_flagged) pt.has_unenforced_constraints = false;
 }
 
-}  // namespace magmaan::partable
+}  // namespace magmaan::spec

@@ -208,7 +208,7 @@ TEST_CASE("fit_fiml: complete-data path fits a saturated mean CFA near zero grad
   magmaan::data::RawData raw;
   raw.X.push_back((Z * L.transpose()).rowwise() + truth->mu[0].transpose());
 
-  magmaan::partable::Starts starts;
+  magmaan::spec::Starts starts;
   starts.hint.resize(static_cast<std::size_t>(theta0.size()));
   for (Eigen::Index k = 0; k < theta0.size(); ++k) {
     starts.hint[static_cast<std::size_t>(k)] = theta0(k);
@@ -318,7 +318,7 @@ TEST_CASE("fiml_extras: complete data matches SampleStats fit_extras") {
   auto samp = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp.has_value());
 
-  magmaan::partable::Starts starts;
+  magmaan::spec::Starts starts;
   starts.hint.resize(static_cast<std::size_t>(theta0.size()));
   for (Eigen::Index k = 0; k < theta0.size(); ++k) {
     starts.hint[static_cast<std::size_t>(k)] = theta0(k);
