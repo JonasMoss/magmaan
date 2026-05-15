@@ -95,10 +95,10 @@ drift, not just a raw row or numeric mismatch.
 Intent: make the methods-developer interface reasonable without turning the R
 package into a second SEM implementation.
 
-- [ ] Add `magmaan(model, data, estimator, groups)` as the high-level R
+- [x] Add `magmaan(model, data, estimator, groups)` as the high-level R
   convenience for parse/lavaanify, sample-stat construction, and parameter
   estimation.
-- [ ] Keep `magmaan()` estimate-only: SEs, robust tests, fit measures, defined
+- [x] Keep `magmaan()` estimate-only: SEs, robust tests, fit measures, defined
   parameters, and nested tests remain explicit post-fit calls.
 - [ ] Expose `compute_defined()` through R and add lavaan-backed goldens for
   chained `:=` rows and `.pN.` references.

@@ -883,6 +883,124 @@ fit_wls_mixed_ordinal <- function(model, data, lbfgsb = NULL, bounds = NULL) {
   fit_wls_mixed_ordinal_impl(pt, data, lbfgsb = lbfgsb, bounds = bounds)
 }
 
+magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
+                    ordered = NULL, parameterization = "delta",
+                    missing = c("listwise", "error"),
+                    W = NULL, lbfgs = NULL, lbfgsb = NULL, bounds = NULL) {
+  missing <- match.arg(missing)
+  estimator <- toupper(as.character(estimator)[1L])
+  if (!length(estimator) || is.na(estimator)) {
+    stop("magmaan(): `estimator` must be a non-missing string")
+  }
+  if (estimator %in% c("MLM", "MLR")) {
+    stop("magmaan(): `estimator` is estimate-only; robust corrections remain explicit post-fit calls")
+  }
+  allowed <- c("ML", "FIML", "ULS", "GLS", "WLS", "DWLS")
+  if (!estimator %in% allowed) {
+    stop("magmaan(): unsupported estimator '", estimator, "'")
+  }
+
+  group_var <- if (is.null(groups)) NULL else as.character(groups)[1L]
+  group_labels <- NULL
+  if (is.data.frame(data) && !is.null(group_var) && nzchar(group_var)) {
+    if (!group_var %in% names(data)) {
+      stop("magmaan(): grouping column not found: ", group_var)
+    }
+    g <- data[[group_var]]
+    if (anyNA(g)) stop("magmaan(): grouping column contains missing values")
+    group_labels <- if (is.factor(g)) levels(g) else unique(as.character(g))
+    group_labels <- as.character(group_labels)
+  }
+
+  dots <- list(...)
+  if (inherits(model, "magmaan_model_spec")) {
+    if (length(dots)) {
+      stop("magmaan(): model option arguments are only accepted when `model` is a syntax string")
+    }
+    spec <- model
+    if (!is.null(ordered)) {
+      spec$ordered <- as.character(ordered)
+      attr(spec$partable, "magmaan.ordered") <- spec$ordered
+    }
+  } else if (is.character(model) && length(model) == 1L) {
+    spec <- do.call(
+      model_spec,
+      c(list(syntax = model,
+             group = group_var,
+             group_labels = group_labels,
+             ordered = ordered,
+             parameterization = parameterization),
+        dots)
+    )
+  } else {
+    if (length(dots) || !is.null(ordered) || !is.null(groups)) {
+      stop("magmaan(): model options require a syntax string or magmaan_model_spec")
+    }
+    spec <- as_magmaan_model_spec(model)
+  }
+
+  spec_group_labels <- spec$group_labels %||% character()
+  needs_group_rebuild <- !is.null(group_var) && !identical(group_var, "") &&
+    !is.null(spec$syntax) &&
+    (!identical(spec$group_var, group_var) ||
+       (!is.null(group_labels) && !identical(as.character(spec_group_labels), group_labels)))
+  if (needs_group_rebuild) {
+    spec <- do.call(
+      model_spec,
+      c(list(syntax = spec$syntax,
+             group = group_var,
+             group_labels = group_labels %||% spec$group_labels),
+        spec$options)
+    )
+  }
+
+  ordinal_requested <- length(spec$ordered) > 0L || inherits(data, "magmaan_ordinal_data") ||
+    inherits(data, "magmaan_mixed_ordinal_data")
+
+  if (identical(estimator, "FIML")) {
+    if (is.data.frame(data)) data <- df_to_fiml_data(data, spec, group = group_var)
+    return(fit_fiml(spec, data, lbfgs = lbfgs))
+  }
+
+  if (ordinal_requested && estimator %in% c("DWLS", "WLS")) {
+    if (is.data.frame(data)) {
+      ov_by_group <- model_matrix_rep(spec$partable)$ov_names
+      if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
+      all_ordinal <- all(vapply(ov_by_group, function(ov) setequal(spec$ordered, ov), logical(1)))
+      data <- if (all_ordinal) {
+        data_ordinal_stats_from_df(data, spec, group = group_var, missing = missing)
+      } else {
+        data_mixed_ordinal_stats_from_df(data, spec, group = group_var, missing = missing)
+      }
+    }
+    if (inherits(data, "magmaan_ordinal_data")) {
+      if (identical(estimator, "DWLS")) return(fit_dwls_ordinal(spec, data, lbfgsb = lbfgsb, bounds = bounds))
+      return(fit_wls_ordinal(spec, data, lbfgsb = lbfgsb, bounds = bounds))
+    }
+    if (inherits(data, "magmaan_mixed_ordinal_data")) {
+      if (identical(estimator, "DWLS")) return(fit_dwls_mixed_ordinal(spec, data, lbfgsb = lbfgsb, bounds = bounds))
+      return(fit_wls_mixed_ordinal(spec, data, lbfgsb = lbfgsb, bounds = bounds))
+    }
+    stop("magmaan(): ordinal estimators require a data.frame, magmaan_ordinal_data, or magmaan_mixed_ordinal_data")
+  }
+
+  if (identical(estimator, "DWLS")) {
+    stop("magmaan(): DWLS requires ordered variables; pass `ordered =` or a categorical data object")
+  }
+
+  if (is.data.frame(data)) data <- df_to_data(data, spec, group = group_var, missing = missing)
+  switch(estimator,
+         ML = fit_ml(spec, data, lbfgs = lbfgs),
+         ULS = fit_uls(spec, data, lbfgsb = lbfgsb, bounds = bounds),
+         GLS = fit_gls(spec, data, lbfgsb = lbfgsb, bounds = bounds),
+         WLS = {
+           if (is.null(W)) {
+             stop("magmaan(): continuous WLS requires explicit `W`; categorical WLS requires `ordered =`")
+           }
+           fit_wls(spec, data, W = W, lbfgsb = lbfgsb, bounds = bounds)
+         })
+}
+
 fit_uls_snlls <- function(model, data, lbfgsb = NULL, bounds = NULL) {
   fit_uls_snlls_impl(partable_arg(model), sample_stats_arg(data),
                      lbfgsb = lbfgsb, bounds = bounds)

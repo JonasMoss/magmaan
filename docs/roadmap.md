@@ -150,6 +150,11 @@ golden `parTable()` fixtures.
 - Exploratory R bindings cover lavaanify, fitting, sample-stat bundles, robust
   inference, fit measures, model implied moments, LS estimators, SNLLS, Ceres
   paths when enabled, and data-frame-to-model sample statistics.
+- `magmaan(model, data, estimator, groups)` is the high-level estimate-only
+  R convenience. It composes `model_spec()`, data-frame sample-stat/raw-data
+  construction, and the matching point-estimation wrapper for complete-data
+  ML/ULS/GLS/WLS, FIML, and ordinal/mixed DWLS/WLS where the lower-level
+  inputs are available.
 - The R sample-moment path accepts `list(S = , nobs = , mean = )`, reorders
   named covariance matrices to model observed-variable order, and rejects
   malformed group counts, non-square or wrong-sized covariance matrices,
@@ -157,10 +162,9 @@ golden `parTable()` fixtures.
   C++ fitters.
 - The R package is intended as a methods-developer interface over the C++
   library, not a second SEM implementation.
-- The future high-level R convenience is `magmaan(model, data, estimator,
-  groups)`, which should perform estimation only. Standard errors,
-  information matrices, Wald/z tests, robust corrections, fit measures,
-  defined parameters, and nested tests remain explicit post-fit calls.
+- Standard errors, information matrices, Wald/z tests, robust corrections,
+  fit measures, defined parameters, and nested tests remain explicit post-fit
+  calls outside `magmaan()`.
 - Primary public declarations and internal implementation now live in the
   target namespaces: `spec`, `lavaan`, `estimate`, `optim`, `nt`, `gls`, and
   `data`. Repository code and R binding internals use those namespaces
