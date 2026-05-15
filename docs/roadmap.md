@@ -57,9 +57,10 @@ The core parser-to-fit pipeline is in place:
   continuous LS lavaan fixture tranche now checks bounded LBFGS-B point
   estimates, degrees of freedom, and estimator-specific chi-square reporting
   for ULS/GLS/WLS across single-group CFA, multi-group CFA, a labeled-equality
-  CFA, a mean-structure CFA, and an observed-exogenous fixed.x SEM case.
-  GLS/WLS reporting follows lavaan's `2 * N * fmin` LS convention, while ULS
-  chi-square is pinned to lavaan's Browne residual NT statistic.
+  CFA, two- and three-factor mean-structure CFAs, and an observed-exogenous
+  fixed.x SEM case. GLS/WLS reporting follows lavaan's `2 * N * fmin` LS
+  convention, while ULS chi-square is pinned to lavaan's Browne residual NT
+  statistic.
 - Bounded least-squares fitting through LBFGS-B and optional Ceres, including
   automatic nonnegative variance bounds and equality-penalty residuals on the
   LS path.
@@ -181,8 +182,6 @@ Open work:
 - Promote the Ceres preset into the regular validation loop where relevant
   (`cmake --preset ceres`, `ctest --preset ceres`) without making the default
   build pay the Ceres dependency cost.
-- Restore or add the Holzinger 3-factor mean-structure fixture once the chosen
-  bounded LS path fits it reliably.
 - Continue keeping LS raw objectives and reported test statistics distinct as
   new estimator cases are added.
 

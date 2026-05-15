@@ -32,6 +32,7 @@ const std::vector<std::string> kLsFixtures = {
     "0003_labeled_equality",
     "0004_two_factor_meanstructure",
     "0005_obs_exo_cfa_fixedx",
+    "0006_three_factor_meanstructure_hs",
 };
 
 Eigen::MatrixXd matrix_from_json(const nlohmann::json& j) {
