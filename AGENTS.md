@@ -6,9 +6,10 @@ Working rules for coding agents in the magmaan repo.
 
 A C++23 library that ports lavaan's behavior for **linear SEM under
 complete-data normal-theory estimators**. The audience is methods developers,
-not end users. [docs/roadmap.md](docs/roadmap.md) is the live plan and state
-summary; read it before structural changes. The old external `latva` plan is
-historical archaeology, not current guidance.
+not end users. [docs/roadmap.md](docs/roadmap.md) is the current state and
+architecture summary; [docs/todo.md](docs/todo.md) is the active backlog of
+remaining work. Read both before structural changes. The old external `latva`
+plan is historical archaeology, not current guidance.
 
 ## Non-negotiables
 
@@ -46,7 +47,8 @@ historical archaeology, not current guidance.
 - `tests/fixtures/` - checked-in JSON. Regenerate via `tools/regen_oracle.R`.
 - `tools/` - maintainer-only scripts (R, etc.).
 - `docs/grammar/` - `grammar.ebnf` (normative), `lexer.md`, `grammar.md`.
-- `docs/roadmap.md` - live roadmap and current-state summary.
+- `docs/roadmap.md` - current implementation state and design contracts.
+- `docs/todo.md` - active human-readable backlog and remaining milestones.
 - `external/lavaan/` - reference source, never built.
 - `r-package/` - exploratory R bindings (Rcpp); consumes the prebuilt
   `libmagmaan.a`, separate from and not part of the C++ build.
@@ -137,10 +139,13 @@ namespace transition.
 - Private headers under `src/.../detail_*.hpp` include with relative paths.
 - Comments only when the why is non-obvious. The roadmap and lavaan reference
   together cover the what.
-- Remove or fold stale finished planning docs into `docs/roadmap.md` when a
-  phase completes; do not keep old plan files around as parallel roadmaps.
-- Keep `docs/roadmap.md` current whenever a change alters project direction,
-  implementation state, priorities, known gaps, or validation expectations.
+- Keep `docs/todo.md` as the single active backlog. Remove or fold stale
+  finished planning docs into `docs/roadmap.md` or `docs/todo.md` when a phase
+  completes; do not create parallel roadmaps.
+- Keep `docs/roadmap.md` current whenever a change alters implementation
+  state, architecture, contracts, boundaries, or validation expectations.
+- Keep `docs/todo.md` current whenever a change completes a milestone,
+  changes priorities, or reveals new remaining work.
 - Commit every finished user request as a coherent completed change before
   handing back, unless the user explicitly asks not to commit. Keep work on the
   current branch unless explicitly asked to branch.
