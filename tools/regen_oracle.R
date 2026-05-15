@@ -776,6 +776,34 @@ ls_fit_json <- function(fit) {
        n_obs_per_block = samp$n_obs_per_block)
 }
 
+ls_robust_json <- function(fit) {
+  pt_fitted <- parTable(fit)
+  free_rows <- pt_fitted[pt_fitted$free > 0, ]
+  free_rows <- free_rows[order(free_rows$free), ]
+  sb <- lavTest(fit, "satorra.bentler")
+  mv <- lavTest(fit, "mean.var.adjusted")
+  ss <- lavTest(fit, "scaled.shifted")
+  G <- lavInspect(fit, "gamma")
+  UG <- lavInspect(fit, "UGamma")
+  ev <- Re(eigen(UG, only.values = TRUE)$values)
+  ev <- sort(ev[is.finite(ev) & ev > 1e-8])
+  list(se = as.numeric(free_rows$se),
+       gamma = matrix_blocks_json(G),
+       eigvals = I(as.numeric(ev)),
+       chisq_standard = as.numeric(sb$scaled.test.stat),
+       df = as.integer(sb$df),
+       satorra_bentler = list(chisq = as.numeric(sb$stat),
+                              scale = as.numeric(sb$scaling.factor),
+                              df = as.integer(sb$df)),
+       mean_var_adjusted = list(chisq = as.numeric(mv$stat),
+                                df_adj = as.numeric(mv$df),
+                                scale = as.numeric(mv$scaling.factor)),
+       scaled_shifted = list(chisq = as.numeric(ss$stat),
+                             scale = as.numeric(ss$scaling.factor),
+                             shift = as.numeric(ss$shift.parameter),
+                             df = as.integer(ss$df)))
+}
+
 ls_cases <- list(
   list(id = "0001_three_factor_hs",
        model = "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9"),
@@ -829,6 +857,37 @@ for (m in ls_cases) {
       stop(sprintf("LS fixture %s/%s did not converge", id, estimator))
     }
     fits[[estimator]] <- ls_fit_json(fit_or_err)
+
+    if (identical(estimator, "ULS")) {
+      robust_or_err <- tryCatch(
+        do.call(fit_fun,
+                c(cfa_args,
+                  list(estimator = estimator,
+                       se = "robust.sem",
+                       test = c("standard", "satorra.bentler",
+                                "mean.var.adjusted", "scaled.shifted")))),
+        error = function(e) e,
+        warning = function(w) w)
+      if (inherits(robust_or_err, "warning")) {
+        robust_or_err <- tryCatch(
+          suppressWarnings(
+            do.call(fit_fun,
+                    c(cfa_args,
+                      list(estimator = estimator,
+                           se = "robust.sem",
+                           test = c("standard", "satorra.bentler",
+                                    "mean.var.adjusted", "scaled.shifted"))))),
+          error = function(e) e)
+      }
+      if (inherits(robust_or_err, "error")) {
+        stop(sprintf("LS robust fixture %s/%s failed: %s",
+                     id, estimator, conditionMessage(robust_or_err)))
+      }
+      if (!lavInspect(robust_or_err, "converged")) {
+        stop(sprintf("LS robust fixture %s/%s did not converge", id, estimator))
+      }
+      fits[[estimator]]$robust <- ls_robust_json(robust_or_err)
+    }
   }
 
   payload <- list(

@@ -131,11 +131,13 @@ drifts into hard-to-debug lavaan parity failures.
 Intent: keep unsupported statistical work explicit so it is not mistaken for a
 polish task.
 
-- [ ] Generalize robust/inference helpers that assume the normal-theory ML
+- [x] Generalize robust/inference helpers that assume the normal-theory ML
   weight so ULS/GLS/WLS can share sandwich paths with arbitrary per-block
-  weights. A shared weighted-moment sandwich/U-Gamma primitive now backs the
-  ordinal and mixed ordinal robust paths; remaining work is wiring continuous
-  ULS/GLS/WLS adapters to it.
+  weights. A shared weighted-moment sandwich/U-Gamma primitive now backs
+  ordinal, mixed ordinal, and continuous ULS/GLS/WLS robust adapters. ULS
+  `robust.sem` has lavaan-backed non-fixed.x fixtures; GLS/WLS robust paths
+  remain shape/scaling covered because lavaan does not expose matching robust
+  scaled-test targets for those estimators.
 - [x] Decide whether WLS robust ordinal reporting should get a lavaan-backed
   target or stay shape-only. Decision: keep robust WLS scaled-test reporting
   shape-only for now because lavaan rejects Satorra-Bentler-family `test=`

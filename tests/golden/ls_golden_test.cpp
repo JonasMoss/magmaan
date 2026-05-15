@@ -15,6 +15,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/weighted_inference.hpp"
 #include "magmaan/gls/gls.hpp"
 #include "magmaan/gls/uls.hpp"
 #include "magmaan/gls/wls.hpp"
@@ -49,6 +50,11 @@ Eigen::MatrixXd matrix_from_json(const nlohmann::json& j) {
 }
 
 Eigen::VectorXd vector_from_json(const nlohmann::json& j) {
+  if (j.is_number()) {
+    Eigen::VectorXd out(1);
+    out(0) = j.get<double>();
+    return out;
+  }
   Eigen::VectorXd out(static_cast<Eigen::Index>(j.size()));
   for (Eigen::Index i = 0; i < out.size(); ++i) {
     out(i) = j[static_cast<std::size_t>(i)].get<double>();
@@ -120,6 +126,15 @@ double max_theta_diff(const Eigen::VectorXd& theta, const nlohmann::json& exp) {
     const double d = std::abs(theta(k) -
         exp[static_cast<std::size_t>(k)].get<double>());
     if (d > out) out = d;
+  }
+  return out;
+}
+
+double max_abs_diff(const Eigen::VectorXd& a, const Eigen::VectorXd& b) {
+  if (a.size() != b.size()) return std::numeric_limits<double>::infinity();
+  double out = 0.0;
+  for (Eigen::Index k = 0; k < a.size(); ++k) {
+    out = std::max(out, std::abs(a(k) - b(k)));
   }
   return out;
 }
@@ -211,6 +226,65 @@ bool check_estimate(const std::string& id,
   return true;
 }
 
+bool check_uls_robust(const std::string& id,
+                      const nlohmann::json& fit,
+                      const magmaan::data::SampleStats& samp,
+                      const magmaan::fit::Estimates& est,
+                      const magmaan::spec::LatentStructure& pt,
+                      const magmaan::model::MatrixRep& rep,
+                      std::vector<std::string>& failures) {
+  if (!fit.contains("robust") || fit["robust"].is_null()) return true;
+  const auto& robust = fit["robust"];
+  auto rob_or = magmaan::estimate::robust_continuous_ls(
+      pt, rep, samp, est, magmaan::gls::ULS{},
+      matrices_from_blocks(robust["gamma"]));
+  if (!rob_or.has_value()) {
+    failures.push_back(id + "/ULS robust: robust_continuous_ls — " +
+                       rob_or.error().detail);
+    return false;
+  }
+  const Eigen::VectorXd lavaan_se = vector_from_json(robust["se"]);
+  const Eigen::VectorXd lavaan_ev = vector_from_json(robust["eigvals"]);
+  const double d_se = max_abs_diff(rob_or->se, lavaan_se);
+  const double d_ev = max_abs_diff(rob_or->eigvals, lavaan_ev);
+  const double d_standard = std::abs(rob_or->chisq_standard -
+                                     robust["chisq_standard"].get<double>());
+  const double d_sb = std::abs(rob_or->satorra_bentler.chi2_scaled -
+                               robust["satorra_bentler"]["chisq"].get<double>());
+  const double d_sb_scale = std::abs(rob_or->satorra_bentler.scale_c -
+                                     robust["satorra_bentler"]["scale"].get<double>());
+  const double d_mv = std::abs(rob_or->mean_var_adjusted.chi2_adj -
+                               robust["mean_var_adjusted"]["chisq"].get<double>());
+  const double d_mv_df = std::abs(rob_or->mean_var_adjusted.df_adj -
+                                  robust["mean_var_adjusted"]["df_adj"].get<double>());
+  const double d_ss = std::abs(rob_or->scaled_shifted.chi2_adj -
+                               robust["scaled_shifted"]["chisq"].get<double>());
+  const double d_ss_scale = std::abs(
+      rob_or->scaled_shifted.scale_a -
+      1.0 / robust["scaled_shifted"]["scale"].get<double>());
+  const double d_ss_shift = std::abs(rob_or->scaled_shifted.shift_b -
+                                     robust["scaled_shifted"]["shift"].get<double>());
+
+  if (rob_or->df != robust["df"].get<int>() ||
+      rob_or->satorra_bentler.df != robust["satorra_bentler"]["df"].get<int>() ||
+      rob_or->scaled_shifted.df != robust["scaled_shifted"]["df"].get<int>() ||
+      d_se > 2e-3 || d_ev > 1e-5 || d_standard > 7e-1 ||
+      d_sb > 9e-1 || d_sb_scale > 5e-4 || d_mv > 5e-1 ||
+      d_mv_df > 5e-3 || d_ss > 7e-1 || d_ss_scale > 5e-4 ||
+      d_ss_shift > 2e-2) {
+    char buf[512];
+    std::snprintf(buf, sizeof(buf),
+                  "%s/ULS robust: diffs se=%.3e eig=%.3e standard=%.3e "
+                  "sb=%.3e sb_scale=%.3e mv=%.3e mv_df=%.3e "
+                  "ss=%.3e ss_scale=%.3e ss_shift=%.3e",
+                  id.c_str(), d_se, d_ev, d_standard, d_sb, d_sb_scale,
+                  d_mv, d_mv_df, d_ss, d_ss_scale, d_ss_shift);
+    failures.push_back(buf);
+    return false;
+  }
+  return true;
+}
+
 }  // namespace
 
 TEST_CASE("continuous LS fixtures: ULS/GLS/WLS bounded fits match lavaan") {
@@ -272,6 +346,57 @@ TEST_CASE("continuous LS fixtures: ULS/GLS/WLS bounded fits match lavaan") {
   }
 
   MESSAGE("continuous LS fixtures: " << passed << " / " << total << " pass");
+  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+  CHECK(passed == total);
+}
+
+TEST_CASE("continuous LS robust ULS fixtures match lavaan robust.sem") {
+  const std::string dir = magmaan::test::fixtures_dir() + "/ls";
+  magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
+      .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8});
+
+  int total = 0;
+  int passed = 0;
+  std::vector<std::string> failures;
+
+  for (const auto& id : kLsFixtures) {
+    // The fixed.x LS robust target follows lavaan's conditional exogenous
+    // bookkeeping, which is still tracked separately from this adapter slice.
+    if (id == "0005_obs_exo_cfa_fixedx") continue;
+    const std::string path = dir + "/" + id + ".fit.json";
+    auto raw = magmaan::test::read_fixture(path);
+    if (!raw.has_value()) {
+      failures.push_back(id + ": missing fixture");
+      continue;
+    }
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    if (exp.is_discarded()) {
+      failures.push_back(id + ": invalid JSON");
+      continue;
+    }
+    auto handles = handles_from_fixture(id, exp, failures);
+    if (!handles.has_value()) continue;
+
+    const auto& fit = exp["fits"]["ULS"];
+    if (!fit.contains("robust") || fit["robust"].is_null()) continue;
+    ++total;
+    auto samp = sample_stats_from_fit(fit);
+    auto est_or = magmaan::estimate::fit_bounded(
+        handles->pt, handles->rep, samp, magmaan::estimate::Bounds{},
+        magmaan::gls::ULS{}, opt);
+    if (!est_or.has_value()) {
+      failures.push_back(id + "/ULS robust: fit_bounded — " +
+                         est_or.error().detail);
+      continue;
+    }
+    if (check_uls_robust(id, fit, samp, *est_or, handles->pt, handles->rep,
+                         failures)) {
+      ++passed;
+    }
+  }
+
+  MESSAGE("continuous LS robust ULS fixtures: " << passed << " / " << total
+                                                << " pass");
   for (const auto& f : failures) MESSAGE("  FAIL " << f);
   CHECK(passed == total);
 }
