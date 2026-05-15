@@ -39,9 +39,13 @@ missing data, mixed data, and robust divergences.
   ordering with current `MixedOrdinalStats`.
 - [ ] Decide whether normal-data pairwise likelihood is a real supported
   estimator or only a benchmark/sanity check against complete-data ML/FIML.
-- [ ] Compute casewise influence/Gamma for the pairwise moment vector so DWLS,
-  WLS, robust SEs, and scaled tests can reuse the existing weighted-moment
-  sandwich path.
+- [x] Expose complete/listwise all-ordinal casewise influence and Gamma for
+  the threshold-plus-polychoric moment vector so downstream DWLS, WLS, robust
+  SEs, and scaled tests can reuse the existing weighted-moment sandwich path
+  without recomputing sample-stat internals.
+- [ ] Extend pairwise influence/Gamma exposure to future missing-data and
+  mixed continuous/ordinal pairwise paths once their likelihood targets and
+  moment ordering are fixed.
 - [x] Extend complete-data pair diagnostics beyond labels, convergence,
   boundary, adjusted-count, and minimum-eigenvalue fields: include fitted
   expected tables, residual tables, zero missingness counts, and explicit

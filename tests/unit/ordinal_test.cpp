@@ -189,6 +189,13 @@ TEST_CASE("Pairwise ordinal stats wrap OrdinalStats and expose diagnostics") {
   REQUIRE(pairwise->block_diagnostics.size() == 1);
   const auto& bd = pairwise->block_diagnostics[0];
   REQUIRE(bd.pair_diagnostics.size() == 3);
+  CHECK(bd.moment_influence.rows() == 24);
+  CHECK(bd.moment_influence.cols() == pairwise->stats.NACOV[0].rows());
+  CHECK(bd.moment_influence.allFinite());
+  CHECK(bd.gamma.isApprox(pairwise->stats.NACOV[0], 0.0));
+  const Eigen::MatrixXd gamma_from_if =
+      (bd.moment_influence.transpose() * bd.moment_influence) / 24.0;
+  CHECK(gamma_from_if.isApprox(pairwise->stats.NACOV[0], 1e-10));
   CHECK(bd.pair_diagnostics[0].label.i == 1);
   CHECK(bd.pair_diagnostics[0].label.j == 0);
   CHECK(bd.pair_diagnostics[1].label.i == 2);
@@ -237,6 +244,7 @@ TEST_CASE("Pairwise ordinal stats diagnostics report lavaan 2x2 adjustment") {
   REQUIRE(pairwise.has_value());
   REQUIRE(pairwise->block_diagnostics.size() == 1);
   REQUIRE(pairwise->block_diagnostics[0].pair_diagnostics.size() == 1);
+  CHECK(pairwise->block_diagnostics[0].gamma.isApprox(pairwise->stats.NACOV[0], 0.0));
   const auto& pd = pairwise->block_diagnostics[0].pair_diagnostics[0];
   CHECK(pd.counts(0, 0) == doctest::Approx(0.0));
   CHECK(pd.counts(0, 1) == doctest::Approx(5.0));
