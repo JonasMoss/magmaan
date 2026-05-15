@@ -15,6 +15,7 @@ namespace {
 
 constexpr double kInf = std::numeric_limits<double>::infinity();
 constexpr double kProbFloor = 1.4901161193847656e-8;
+constexpr double kTwoPi = 6.28318530717958647692;
 
 PostError make_err(PostError::Kind k, std::string detail) {
   return PostError{k, std::move(detail)};
@@ -61,6 +62,39 @@ validate_polyserial_inputs(const Eigen::Ref<const Eigen::VectorXi>& categories,
   return {};
 }
 
+post_expected<void>
+validate_continuous_pair_inputs(const Eigen::Ref<const Eigen::VectorXd>& x_i,
+                                const Eigen::Ref<const Eigen::VectorXd>& x_j,
+                                std::string_view caller) {
+  if (x_i.size() != x_j.size() || x_i.size() < 2) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": vectors must have equal size and at least 2 rows"));
+  }
+  if (!x_i.allFinite() || !x_j.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": non-finite input"));
+  }
+  return {};
+}
+
+post_expected<void>
+validate_normal_pair_parameters(double var_i,
+                                double var_j,
+                                double cov,
+                                std::string_view caller) {
+  if (!std::isfinite(var_i) || !std::isfinite(var_j) || !std::isfinite(cov) ||
+      var_i <= 0.0 || var_j <= 0.0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": variances must be finite and positive"));
+  }
+  const double det = var_i * var_j - cov * cov;
+  if (!std::isfinite(det) || det <= 0.0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": covariance matrix must be positive definite"));
+  }
+  return {};
+}
+
 double polyserial_prob_unchecked(int cat,
                                  double u,
                                  double rho,
@@ -85,6 +119,167 @@ double neglog_polyserial_unchecked(const Eigen::Ref<const Eigen::VectorXi>& cat,
 }
 
 }  // namespace
+
+post_expected<std::vector<MixedPairLabel>>
+mixed_pair_labels(const std::vector<std::int32_t>& ordered,
+                  std::int32_t n_thresholds) {
+  if (ordered.empty() || n_thresholds < 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "mixed_pair_labels: ordered mask must be nonempty and threshold count nonnegative"));
+  }
+
+  Eigen::Index n_cont = 0;
+  for (auto z : ordered) {
+    if (z == 0) ++n_cont;
+  }
+  const Eigen::Index p = static_cast<Eigen::Index>(ordered.size());
+  Eigen::Index moment_index = static_cast<Eigen::Index>(n_thresholds) + 2 * n_cont;
+  std::vector<MixedPairLabel> out;
+  out.reserve(static_cast<std::size_t>(p * (p - 1) / 2));
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      const bool oi = ordered[static_cast<std::size_t>(i)] != 0;
+      const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
+      MixedPairKind kind = MixedPairKind::continuous_continuous;
+      if (oi && oj) {
+        kind = MixedPairKind::ordinal_ordinal;
+      } else if (oi || oj) {
+        kind = MixedPairKind::continuous_ordinal;
+      }
+      out.push_back(MixedPairLabel{
+          .i = static_cast<std::int32_t>(i),
+          .j = static_cast<std::int32_t>(j),
+          .moment_index = static_cast<std::int32_t>(moment_index++),
+          .kind = kind});
+    }
+  }
+  return out;
+}
+
+post_expected<std::vector<MixedMomentLabel>>
+mixed_moment_labels(const std::vector<std::int32_t>& ordered,
+                    const std::vector<std::int32_t>& threshold_ov,
+                    const std::vector<std::int32_t>& threshold_level) {
+  if (ordered.empty() || threshold_ov.size() != threshold_level.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "mixed_moment_labels: invalid ordered mask or threshold metadata"));
+  }
+
+  const auto p = static_cast<std::int32_t>(ordered.size());
+  std::vector<MixedMomentLabel> out;
+  out.reserve(threshold_ov.size() + ordered.size() + ordered.size() +
+              ordered.size() * (ordered.size() - 1) / 2);
+
+  std::int32_t index = 0;
+  for (std::size_t k = 0; k < threshold_ov.size(); ++k) {
+    const std::int32_t ov = threshold_ov[k];
+    if (ov < 0 || ov >= p ||
+        ordered[static_cast<std::size_t>(ov)] == 0 || threshold_level[k] < 1) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "mixed_moment_labels: threshold metadata references an invalid ordered variable"));
+    }
+    out.push_back(MixedMomentLabel{
+        .index = index++,
+        .kind = MixedMomentKind::threshold,
+        .variable = ov,
+        .threshold_level = threshold_level[k]});
+  }
+
+  for (std::int32_t j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] == 0) {
+      out.push_back(MixedMomentLabel{
+          .index = index++,
+          .kind = MixedMomentKind::continuous_mean,
+          .variable = j});
+    }
+  }
+  for (std::int32_t j = 0; j < p; ++j) {
+    if (ordered[static_cast<std::size_t>(j)] == 0) {
+      out.push_back(MixedMomentLabel{
+          .index = index++,
+          .kind = MixedMomentKind::continuous_variance,
+          .variable = j});
+    }
+  }
+
+  auto pairs_or = mixed_pair_labels(ordered, static_cast<std::int32_t>(threshold_ov.size()));
+  if (!pairs_or.has_value()) return std::unexpected(pairs_or.error());
+  for (const auto& pair : *pairs_or) {
+    out.push_back(MixedMomentLabel{
+        .index = pair.moment_index,
+        .kind = MixedMomentKind::pair,
+        .variable_i = pair.i,
+        .variable_j = pair.j,
+        .pair_kind = pair.kind});
+  }
+  return out;
+}
+
+post_expected<double>
+continuous_pair_normal_negloglik(const Eigen::Ref<const Eigen::VectorXd>& x_i,
+                                 const Eigen::Ref<const Eigen::VectorXd>& x_j,
+                                 double mean_i,
+                                 double mean_j,
+                                 double var_i,
+                                 double var_j,
+                                 double cov) {
+  auto ok = validate_continuous_pair_inputs(x_i, x_j,
+                                            "continuous_pair_normal_negloglik");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+  if (!std::isfinite(mean_i) || !std::isfinite(mean_j)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "continuous_pair_normal_negloglik: means must be finite"));
+  }
+  ok = validate_normal_pair_parameters(var_i, var_j, cov,
+                                       "continuous_pair_normal_negloglik");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+
+  const double det = var_i * var_j - cov * cov;
+  const double inv_ii = var_j / det;
+  const double inv_jj = var_i / det;
+  const double inv_ij = -cov / det;
+  double quad = 0.0;
+  for (Eigen::Index r = 0; r < x_i.size(); ++r) {
+    const double di = x_i(r) - mean_i;
+    const double dj = x_j(r) - mean_j;
+    quad += inv_ii * di * di + 2.0 * inv_ij * di * dj + inv_jj * dj * dj;
+  }
+  return 0.5 * static_cast<double>(x_i.size()) * std::log(kTwoPi * kTwoPi * det) +
+         0.5 * quad;
+}
+
+post_expected<ContinuousPairNormalResult>
+fit_continuous_pair_normal_ml(const Eigen::Ref<const Eigen::VectorXd>& x_i,
+                              const Eigen::Ref<const Eigen::VectorXd>& x_j) {
+  auto ok = validate_continuous_pair_inputs(x_i, x_j,
+                                            "fit_continuous_pair_normal_ml");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+
+  ContinuousPairNormalResult out;
+  out.n_obs = static_cast<std::int64_t>(x_i.size());
+  out.mean_i = x_i.mean();
+  out.mean_j = x_j.mean();
+  for (Eigen::Index r = 0; r < x_i.size(); ++r) {
+    const double di = x_i(r) - out.mean_i;
+    const double dj = x_j(r) - out.mean_j;
+    out.var_i += di * di;
+    out.var_j += dj * dj;
+    out.cov += di * dj;
+  }
+  const double n = static_cast<double>(x_i.size());
+  out.var_i /= n;
+  out.var_j /= n;
+  out.cov /= n;
+  ok = validate_normal_pair_parameters(out.var_i, out.var_j, out.cov,
+                                       "fit_continuous_pair_normal_ml");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+  out.rho = out.cov / std::sqrt(out.var_i * out.var_j);
+  auto nll_or = continuous_pair_normal_negloglik(
+      x_i, x_j, out.mean_i, out.mean_j, out.var_i, out.var_j, out.cov);
+  if (!nll_or.has_value()) return std::unexpected(nll_or.error());
+  out.negloglik = *nll_or;
+  return out;
+}
 
 post_expected<double>
 polyserial_pair_negloglik(const Eigen::Ref<const Eigen::VectorXi>& categories,

@@ -156,6 +156,10 @@ golden `parTable()` fixtures.
 - Public complete-data polyserial pair kernel for mixed continuous/ordinal
   work, exposing fixed-threshold rho ML, likelihood, and casewise scores. The
   mixed sample-stat builder now reuses this kernel for polyserial associations.
+- Public complete-data mixed pair helpers also expose continuous-continuous
+  normal pair likelihood/diagnostics plus labels for the exact threshold,
+  negative-mean, variance, and lower-triangle pair order used by
+  `MixedOrdinalStats`.
 - Ordinal and mixed delta DWLS/WLS expose fixed-parameter modification indices
   and equality-release score tests over the same threshold/correlation moment
   vectors and weights used by fitting.

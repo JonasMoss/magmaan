@@ -45,9 +45,10 @@ missing data, mixed data, and robust divergences.
 - [x] Add the complete-data polyserial pair kernel as a public mixed
   continuous/ordinal primitive, including fixed-threshold rho ML, likelihood,
   casewise scores, and reuse by `MixedOrdinalStats`.
-- [ ] Finish mixed pair kernels: add continuous-continuous normal pair
-  likelihood/diagnostics and public mixed pair ordering helpers that match
-  current `MixedOrdinalStats` moment order.
+- [x] Finish the first complete-data mixed pair primitives: add
+  continuous-continuous normal pair likelihood/diagnostics and public mixed
+  pair/moment ordering helpers that match current `MixedOrdinalStats` moment
+  order.
 - [ ] Decide whether normal-data pairwise likelihood is a real supported
   estimator or only a benchmark/sanity check against complete-data ML/FIML.
 - [x] Expose complete/listwise all-ordinal casewise influence and Gamma for
