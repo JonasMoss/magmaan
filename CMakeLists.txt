@@ -78,6 +78,7 @@ add_library(magmaan STATIC
   src/nt/standardized.cpp
   src/nt/fit_measures.cpp
   src/data/raw_data.cpp
+  src/data/pairwise_ordinal.cpp
   src/data/ordinal.cpp
   src/nt/robust.cpp
   src/nt/restriction.cpp

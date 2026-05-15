@@ -14,6 +14,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/data/pairwise_ordinal.hpp"
 
 namespace magmaan::data {
 
@@ -21,7 +22,6 @@ namespace {
 
 constexpr double kInf = std::numeric_limits<double>::infinity();
 constexpr double kProbFloor = 1.4901161193847656e-8;
-constexpr double kPi = 3.14159265358979323846;
 
 PostError make_err(PostError::Kind k, std::string detail) {
   return PostError{k, std::move(detail)};
@@ -80,165 +80,6 @@ double normal_quantile(double p) noexcept {
   const double r = q * q;
   return (((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q /
          (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1.0);
-}
-
-double bvn_cdf(double h, double k, double rho) noexcept {
-  if (h == -kInf || k == -kInf) return 0.0;
-  if (h == kInf) return normal_cdf(k);
-  if (k == kInf) return normal_cdf(h);
-  const double upper = std::min(8.0, h);
-  const double lower = -8.0;
-  if (upper <= lower) return 0.0;
-
-  static constexpr double x[32] = {
-      -0.9972638618494816, -0.9856115115452684, -0.9647622555875064,
-      -0.9349060759377397, -0.8963211557660521, -0.8493676137325700,
-      -0.7944837959679424, -0.7321821187402897, -0.6630442669302152,
-      -0.5877157572407623, -0.5068999089322294, -0.4213512761306353,
-      -0.3318686022821277, -0.2392873622521371, -0.1444719615827965,
-      -0.0483076656877383,  0.0483076656877383,  0.1444719615827965,
-       0.2392873622521371,  0.3318686022821277,  0.4213512761306353,
-       0.5068999089322294,  0.5877157572407623,  0.6630442669302152,
-       0.7321821187402897,  0.7944837959679424,  0.8493676137325700,
-       0.8963211557660521,  0.9349060759377397,  0.9647622555875064,
-       0.9856115115452684,  0.9972638618494816};
-  static constexpr double w[32] = {
-      0.0070186100094701, 0.0162743947309057, 0.0253920653092621,
-      0.0342738629130214, 0.0428358980222267, 0.0509980592623762,
-      0.0586840934785355, 0.0658222227763618, 0.0723457941088485,
-      0.0781938957870703, 0.0833119242269467, 0.0876520930044038,
-      0.0911738786957639, 0.0938443990808046, 0.0956387200792749,
-      0.0965400885147278, 0.0965400885147278, 0.0956387200792749,
-      0.0938443990808046, 0.0911738786957639, 0.0876520930044038,
-      0.0833119242269467, 0.0781938957870703, 0.0723457941088485,
-      0.0658222227763618, 0.0586840934785355, 0.0509980592623762,
-      0.0428358980222267, 0.0342738629130214, 0.0253920653092621,
-      0.0162743947309057, 0.0070186100094701};
-
-  const double mid = 0.5 * (upper + lower);
-  const double half = 0.5 * (upper - lower);
-  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
-  double sum = 0.0;
-  for (int i = 0; i < 32; ++i) {
-    const double z = mid + half * x[i];
-    sum += w[i] * normal_pdf(z) * normal_cdf((k - rho * z) / sd);
-  }
-  return std::clamp(half * sum, 0.0, 1.0);
-}
-
-double bvn_pdf(double x, double y, double rho) noexcept {
-  if (!std::isfinite(x) || !std::isfinite(y)) return 0.0;
-  const double one_minus = std::max(1e-12, 1.0 - rho * rho);
-  const double z = x * x - 2.0 * rho * x * y + y * y;
-  constexpr double inv_2pi = 0.15915494309189533577;
-  return inv_2pi / std::sqrt(one_minus) * std::exp(-0.5 * z / one_minus);
-}
-
-double rect_prob_raw(double lo1, double hi1, double lo2, double hi2,
-                     double rho) noexcept {
-  const double p = bvn_cdf(hi1, hi2, rho) - bvn_cdf(lo1, hi2, rho) -
-                   bvn_cdf(hi1, lo2, rho) + bvn_cdf(lo1, lo2, rho);
-  return p;
-}
-
-double rect_prob(double lo1, double hi1, double lo2, double hi2,
-                 double rho) noexcept {
-  return std::max(kProbFloor, rect_prob_raw(lo1, hi1, lo2, hi2, rho));
-}
-
-double rect_drho(double lo1, double hi1, double lo2, double hi2,
-                 double rho) noexcept {
-  return bvn_pdf(hi1, hi2, rho) - bvn_pdf(lo1, hi2, rho) -
-         bvn_pdf(hi1, lo2, rho) + bvn_pdf(lo1, lo2, rho);
-}
-
-double neglog_pair(const Eigen::MatrixXd& tab,
-                   const Eigen::VectorXd& th1,
-                   const Eigen::VectorXd& th2,
-                   double rho) noexcept {
-  const int k1 = static_cast<int>(tab.rows());
-  const int k2 = static_cast<int>(tab.cols());
-  double out = 0.0;
-  for (int a = 0; a < k1; ++a) {
-    const double lo1 = (a == 0) ? -kInf : th1(a - 1);
-    const double hi1 = (a + 1 == k1) ? kInf : th1(a);
-    for (int b = 0; b < k2; ++b) {
-      const double n = tab(a, b);
-      if (n <= 0.0) continue;
-      const double lo2 = (b == 0) ? -kInf : th2(b - 1);
-      const double hi2 = (b + 1 == k2) ? kInf : th2(b);
-      out -= n * std::log(rect_prob(lo1, hi1, lo2, hi2, rho));
-    }
-  }
-  return out;
-}
-
-Eigen::MatrixXd adjusted_polychoric_table(const Eigen::MatrixXd& tab) {
-  Eigen::MatrixXd out = tab;
-  if (out.rows() == 2 && out.cols() == 2) {
-    std::vector<Eigen::Index> zeros;
-    for (Eigen::Index r = 0; r < 2; ++r) {
-      for (Eigen::Index c = 0; c < 2; ++c) {
-        if (out(r, c) == 0.0) zeros.push_back(r * 2 + c);
-      }
-    }
-    if (zeros.size() == 1) {
-      const Eigen::Index z = zeros[0];
-      if (z == 0 || z == 3) {
-        out(0, 0) += 0.5;
-        out(1, 1) += 0.5;
-        out(1, 0) -= 0.5;
-        out(0, 1) -= 0.5;
-      } else {
-        out(0, 0) -= 0.5;
-        out(1, 1) -= 0.5;
-        out(1, 0) += 0.5;
-        out(0, 1) += 0.5;
-      }
-    }
-  }
-  return out.cwiseMax(0.0);
-}
-
-double estimate_polychoric(const Eigen::MatrixXd& tab_in,
-                           const Eigen::VectorXd& th1,
-                           const Eigen::VectorXd& th2) noexcept {
-  const Eigen::MatrixXd tab = adjusted_polychoric_table(tab_in);
-  if (tab.rows() == 2 && tab.cols() == 2) {
-    const double ad = tab(0, 0) * tab(1, 1);
-    const double bc = tab(0, 1) * tab(1, 0);
-    if (std::abs(ad - bc) <= 1e-12 * std::max(1.0, std::abs(ad) + std::abs(bc))) {
-      return 0.0;
-    }
-    if (th1.size() == 1 && th2.size() == 1 &&
-        std::abs(th1(0)) <= 1e-12 && std::abs(th2(0)) <= 1e-12) {
-      return std::clamp(-std::cos(2.0 * kPi * tab(0, 0) / tab.sum()),
-                        -0.999, 0.999);
-    }
-  }
-  double lo = -0.999;
-  double hi = 0.999;
-  constexpr double gr = 0.6180339887498948482;
-  double c = hi - gr * (hi - lo);
-  double d = lo + gr * (hi - lo);
-  double fc = neglog_pair(tab, th1, th2, c);
-  double fd = neglog_pair(tab, th1, th2, d);
-  for (int iter = 0; iter < 72; ++iter) {
-    if (fc < fd) {
-      hi = d;
-      d = c;
-      fd = fc;
-      c = hi - gr * (hi - lo);
-      fc = neglog_pair(tab, th1, th2, c);
-    } else {
-      lo = c;
-      c = d;
-      fc = fd;
-      d = lo + gr * (hi - lo);
-      fd = neglog_pair(tab, th1, th2, d);
-    }
-  }
-  return 0.5 * (lo + hi);
 }
 
 double polyserial_prob(int cat, double u, double rho,
@@ -317,57 +158,6 @@ PolyserialScores polyserial_scores(const Eigen::VectorXi& cat,
       const double z = normal_pdf((th(a) - rho * u(r)) / sd) / sd;
       if (c == a) out.th(r, a) += z / lik;
       if (c == a + 1) out.th(r, a) -= z / lik;
-    }
-  }
-  return out;
-}
-
-struct PairScores {
-  Eigen::VectorXd rho;
-  Eigen::MatrixXd th_i;
-  Eigen::MatrixXd th_j;
-};
-
-PairScores pair_scores(const Eigen::MatrixXi& Xcat,
-                       Eigen::Index i,
-                       Eigen::Index j,
-                       double rho,
-                       const Eigen::VectorXd& th_i,
-                       const Eigen::VectorXd& th_j) {
-  const Eigen::Index n = Xcat.rows();
-  const Eigen::Index ni = th_i.size();
-  const Eigen::Index nj = th_j.size();
-  PairScores out{
-      Eigen::VectorXd::Zero(n),
-      Eigen::MatrixXd::Zero(n, ni),
-      Eigen::MatrixXd::Zero(n, nj)};
-  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
-
-  for (Eigen::Index r = 0; r < n; ++r) {
-    const int ci = Xcat(r, i);
-    const int cj = Xcat(r, j);
-    const double lo_i = (ci == 0) ? -kInf : th_i(ci - 1);
-    const double hi_i = (ci == ni) ? kInf : th_i(ci);
-    const double lo_j = (cj == 0) ? -kInf : th_j(cj - 1);
-    const double hi_j = (cj == nj) ? kInf : th_j(cj);
-    const double lik = rect_prob(lo_i, hi_i, lo_j, hi_j, rho);
-    out.rho(r) = rect_drho(lo_i, hi_i, lo_j, hi_j, rho) / lik;
-
-    for (Eigen::Index a = 0; a < ni; ++a) {
-      const double t = th_i(a);
-      const double z = normal_pdf(t) *
-          (normal_cdf((hi_j - rho * t) / sd) -
-           normal_cdf((lo_j - rho * t) / sd));
-      if (ci == a) out.th_i(r, a) += z / lik;
-      if (ci == a + 1) out.th_i(r, a) -= z / lik;
-    }
-    for (Eigen::Index a = 0; a < nj; ++a) {
-      const double t = th_j(a);
-      const double z = normal_pdf(t) *
-          (normal_cdf((hi_i - rho * t) / sd) -
-           normal_cdf((lo_i - rho * t) / sd));
-      if (cj == a) out.th_j(r, a) += z / lik;
-      if (cj == a + 1) out.th_j(r, a) -= z / lik;
     }
   }
   return out;
@@ -541,26 +331,30 @@ ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs) {
     Eigen::Index corr_idx = 0;
     for (Eigen::Index j = 0; j < p; ++j) {
       for (Eigen::Index i = j + 1; i < p; ++i) {
-        Eigen::MatrixXd tab(levels[static_cast<std::size_t>(i)],
-                            levels[static_cast<std::size_t>(j)]);
-        tab.setZero();
-        for (Eigen::Index r = 0; r < n; ++r) {
-          tab(Xcat(r, i), Xcat(r, j)) += 1.0;
-        }
-        const double rho = estimate_polychoric(
-            tab, th_by_var[static_cast<std::size_t>(i)],
+        const Eigen::VectorXi xi = Xcat.col(i);
+        const Eigen::VectorXi xj = Xcat.col(j);
+        auto tab_or = ordinal_pair_table(
+            xi, xj, levels[static_cast<std::size_t>(i)],
+            levels[static_cast<std::size_t>(j)]);
+        if (!tab_or.has_value()) return std::unexpected(tab_or.error());
+        auto rho_or = fit_ordinal_pair_rho_ml(
+            *tab_or, th_by_var[static_cast<std::size_t>(i)],
             th_by_var[static_cast<std::size_t>(j)]);
+        if (!rho_or.has_value()) return std::unexpected(rho_or.error());
+        const double rho = rho_or->rho;
         R(i, j) = R(j, i) = rho;
-        PairScores ps = pair_scores(
-            Xcat, i, j, rho, th_by_var[static_cast<std::size_t>(i)],
+        auto ps_or = ordinal_pair_scores(
+            xi, xj, rho, th_by_var[static_cast<std::size_t>(i)],
             th_by_var[static_cast<std::size_t>(j)]);
+        if (!ps_or.has_value()) return std::unexpected(ps_or.error());
+        const auto& ps = *ps_or;
         SC_COR.col(corr_idx) = ps.rho;
         const Eigen::Index si = th_start[static_cast<std::size_t>(i)];
         const Eigen::Index sj = th_start[static_cast<std::size_t>(j)];
-        A21.block(corr_idx, si, 1, ps.th_i.cols()) =
-            ps.rho.transpose() * ps.th_i;
-        A21.block(corr_idx, sj, 1, ps.th_j.cols()) =
-            ps.rho.transpose() * ps.th_j;
+        A21.block(corr_idx, si, 1, ps.threshold_i.cols()) =
+            ps.rho.transpose() * ps.threshold_i;
+        A21.block(corr_idx, sj, 1, ps.threshold_j.cols()) =
+            ps.rho.transpose() * ps.threshold_j;
         ++corr_idx;
       }
     }
@@ -820,25 +614,31 @@ mixed_ordinal_stats_from_data(const std::vector<Eigen::MatrixXd>& Xs,
         const bool oi = ordered[b][static_cast<std::size_t>(i)] != 0;
         const bool oj = ordered[b][static_cast<std::size_t>(j)] != 0;
         if (oi && oj) {
-          Eigen::MatrixXd tab(levels[static_cast<std::size_t>(i)],
-                              levels[static_cast<std::size_t>(j)]);
-          tab.setZero();
-          for (Eigen::Index r = 0; r < n; ++r) tab(Xcat(r, i), Xcat(r, j)) += 1.0;
-          const double rho = estimate_polychoric(
-              tab, th_by_var[static_cast<std::size_t>(i)],
+          const Eigen::VectorXi xi = Xcat.col(i);
+          const Eigen::VectorXi xj = Xcat.col(j);
+          auto tab_or = ordinal_pair_table(
+              xi, xj, levels[static_cast<std::size_t>(i)],
+              levels[static_cast<std::size_t>(j)]);
+          if (!tab_or.has_value()) return std::unexpected(tab_or.error());
+          auto rho_or = fit_ordinal_pair_rho_ml(
+              *tab_or, th_by_var[static_cast<std::size_t>(i)],
               th_by_var[static_cast<std::size_t>(j)]);
+          if (!rho_or.has_value()) return std::unexpected(rho_or.error());
+          const double rho = rho_or->rho;
           R(i, j) = R(j, i) = rho;
-          PairScores ps = pair_scores(
-              Xcat, i, j, rho, th_by_var[static_cast<std::size_t>(i)],
+          auto ps_or = ordinal_pair_scores(
+              xi, xj, rho, th_by_var[static_cast<std::size_t>(i)],
               th_by_var[static_cast<std::size_t>(j)]);
+          if (!ps_or.has_value()) return std::unexpected(ps_or.error());
+          const auto& ps = *ps_or;
           assoc_scores.push_back(ps.rho);
           assoc_if_scale.push_back(Eigen::VectorXd::Ones(n));
           const Eigen::Index si = th_start[static_cast<std::size_t>(i)];
           const Eigen::Index sj = th_start[static_cast<std::size_t>(j)];
-          A21.block(assoc_count, si, 1, ps.th_i.cols()) =
-              ps.rho.transpose() * ps.th_i;
-          A21.block(assoc_count, sj, 1, ps.th_j.cols()) =
-              ps.rho.transpose() * ps.th_j;
+          A21.block(assoc_count, si, 1, ps.threshold_i.cols()) =
+              ps.rho.transpose() * ps.threshold_i;
+          A21.block(assoc_count, sj, 1, ps.threshold_j.cols()) =
+              ps.rho.transpose() * ps.threshold_j;
         } else if (oi || oj) {
           const Eigen::Index o = oi ? i : j;
           const Eigen::Index c = oi ? j : i;
