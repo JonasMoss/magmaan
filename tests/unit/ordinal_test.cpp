@@ -16,6 +16,29 @@
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/lavaanify.hpp"
 
+namespace {
+
+Eigen::MatrixXd ordinal_expected_counts(const Eigen::VectorXd& th_i,
+                                        const Eigen::VectorXd& th_j,
+                                        double rho,
+                                        double total) {
+  const double inf = std::numeric_limits<double>::infinity();
+  Eigen::MatrixXd out(th_i.size() + 1, th_j.size() + 1);
+  for (Eigen::Index a = 0; a < out.rows(); ++a) {
+    const double lo_i = (a == 0) ? -inf : th_i(a - 1);
+    const double hi_i = (a + 1 == out.rows()) ? inf : th_i(a);
+    for (Eigen::Index b = 0; b < out.cols(); ++b) {
+      const double lo_j = (b == 0) ? -inf : th_j(b - 1);
+      const double hi_j = (b + 1 == out.cols()) ? inf : th_j(b);
+      out(a, b) = total * magmaan::data::ordinal_bvn_rect_prob(
+          lo_i, hi_i, lo_j, hi_j, rho);
+    }
+  }
+  return out;
+}
+
+}  // namespace
+
 TEST_CASE("Ordinal pair ML kernel: probabilities, rho fit, and scores") {
   const double inf = std::numeric_limits<double>::infinity();
   Eigen::VectorXd thi(2);
@@ -96,6 +119,40 @@ TEST_CASE("Ordinal pair ML kernel: independence and lavaan 2x2 adjustment") {
   CHECK(std::isfinite(adjusted->rho));
   CHECK(adjusted->rho > -1.0);
   CHECK(adjusted->rho < 1.0);
+}
+
+TEST_CASE("Ordinal pair joint ML estimates pair-local thresholds and rho") {
+  Eigen::VectorXd thi(2);
+  thi << -0.55, 0.85;
+  Eigen::VectorXd thj(2);
+  thj << -0.25, 0.65;
+  const double rho = 0.42;
+  const Eigen::MatrixXd counts = ordinal_expected_counts(thi, thj, rho, 50000.0);
+
+  auto joint = magmaan::data::fit_ordinal_pair_joint_ml(counts);
+  REQUIRE(joint.has_value());
+  CHECK(joint->thresholds_i.size() == 2);
+  CHECK(joint->thresholds_j.size() == 2);
+  CHECK(joint->thresholds_i(0) == doctest::Approx(thi(0)).epsilon(5e-4));
+  CHECK(joint->thresholds_i(1) == doctest::Approx(thi(1)).epsilon(5e-4));
+  CHECK(joint->thresholds_j(0) == doctest::Approx(thj(0)).epsilon(5e-4));
+  CHECK(joint->thresholds_j(1) == doctest::Approx(thj(1)).epsilon(5e-4));
+  CHECK(joint->rho == doctest::Approx(rho).epsilon(5e-4));
+  CHECK(joint->thresholds_i(0) < joint->thresholds_i(1));
+  CHECK(joint->thresholds_j(0) < joint->thresholds_j(1));
+  CHECK(std::isfinite(joint->negloglik));
+  CHECK(joint->adjusted_counts.isApprox(counts, 0.0));
+}
+
+TEST_CASE("Ordinal pair joint ML rejects empty marginal categories") {
+  Eigen::MatrixXd counts(3, 2);
+  counts << 3.0, 2.0,
+            0.0, 0.0,
+            4.0, 5.0;
+
+  auto joint = magmaan::data::fit_ordinal_pair_joint_ml(counts);
+  REQUIRE_FALSE(joint.has_value());
+  CHECK(joint.error().detail.find("marginal categories") != std::string::npos);
 }
 
 TEST_CASE("Pairwise ordinal stats wrap OrdinalStats and expose diagnostics") {

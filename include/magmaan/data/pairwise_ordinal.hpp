@@ -26,6 +26,28 @@ struct OrdinalPairMlResult {
   Eigen::MatrixXd adjusted_counts;
 };
 
+struct OrdinalPairJointMlOptions {
+  double rho_lower = -0.999;
+  double rho_upper = 0.999;
+  int    max_iter = 250;
+  double ftol = 1e-10;
+  double gtol = 1e-7;
+  double fd_step = 1e-5;
+  double min_threshold_spacing = 1e-6;
+  bool   lavaan_adjust_2x2 = true;
+};
+
+struct OrdinalPairJointMlResult {
+  Eigen::VectorXd thresholds_i;
+  Eigen::VectorXd thresholds_j;
+  double rho = 0.0;
+  double negloglik = 0.0;
+  int    iterations = 0;
+  bool   hit_lower = false;
+  bool   hit_upper = false;
+  Eigen::MatrixXd adjusted_counts;
+};
+
 struct OrdinalPairScores {
   Eigen::VectorXd rho;
   Eigen::MatrixXd threshold_i;
@@ -94,6 +116,10 @@ fit_ordinal_pair_rho_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
                         const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
                         const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
                         OrdinalPairMlOptions options = {});
+
+post_expected<OrdinalPairJointMlResult>
+fit_ordinal_pair_joint_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
+                          OrdinalPairJointMlOptions options = {});
 
 post_expected<OrdinalPairScores>
 ordinal_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& x_i,

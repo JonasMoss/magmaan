@@ -25,9 +25,12 @@ missing data, mixed data, and robust divergences.
   `OrdinalStats` with pair diagnostics, lower-triangle pair labels,
   adjusted-count reporting, minimum eigenvalue diagnostics, and
   bitwise-equivalent NACOV/DWLS/WLS moment output.
-- [ ] Add a joint pairwise threshold/rho estimator after the fixed-threshold
-  slice is stable; decide explicitly whether thresholds are pair-local nuisance
-  parameters or shared SEM moments.
+- [x] Add the first joint pairwise threshold/rho estimator at the bivariate
+  kernel level: pair-local nuisance thresholds plus rho for one complete
+  ordinal table, separate from the shared-moment `OrdinalStats` path.
+- [ ] Decide how joint pairwise threshold/rho estimation integrates with SEM
+  moments: pair-local nuisance thresholds for composite likelihood, shared
+  threshold moments, or both as separate explicit APIs.
 - [ ] Define missing-data semantics before coding: observed-pair composite
   likelihood may not need EM, but shared-threshold/multivariate MAR handling
   needs a documented likelihood target and scaling convention.
