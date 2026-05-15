@@ -92,6 +92,10 @@ golden `parTable()` fixtures.
 - Equality-penalty residuals on the LS path.
 - Fixed-parameter modification indices and equality-release score tests reuse
   the estimator-specific LS residual/Jacobian weighting for ULS/GLS/WLS.
+- Representative fixed-row modification-index and equality-release score-test
+  fixtures now pin the shared score surface against lavaan across complete ML,
+  observed-information FIML, continuous ULS, ordinal DWLS, and mixed ordinal
+  DWLS; absent-row generation and standardized EPC remain future work.
 - Continuous LS fixtures cover point estimates, degrees of freedom, and
   estimator-specific chi-square reporting for representative CFA,
   multi-group, labeled-equality, mean-structure, and observed-exogenous
@@ -183,8 +187,9 @@ adapters layered on top.
 - FIML with missing observed exogenous variables under `fixed.x = TRUE`
   remains unsupported.
 - FIML score tests and modification indices use observed-pattern gradients
-  plus a finite-difference observed information matrix; lavaan-backed fixture
-  coverage is still narrower than complete-data ML.
+  plus a finite-difference observed information matrix; fixture parity is
+  against lavaan's observed-information score output for the covered fixed-row
+  and equality-release cases.
 - Theta parameterization for ordinal models remains unsupported.
 - The ordinal parameterization boundary accepts `delta` only for estimation;
   requested `theta` models fail explicitly instead of falling through to

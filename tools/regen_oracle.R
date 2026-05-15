@@ -1866,6 +1866,215 @@ for (m in fiml_cases) {
 cat("regenerated", length(regenerated_fiml), "FIML fit fixtures under",
     fiml_dir, "\n")
 
+# === score-test / modification-index fixtures ==============================
+# Dedicated fixtures for the currently supported score surface:
+#   * explicit fixed rows already present in the lavaanified partable
+#   * one-dimensional equality releases from `lavTestScore()`
+#
+# Deliberately do not add absent-row generation here. That is a separate
+# contract once fixed-row/equality-release parity is pinned down.
+score_dir <- file.path(fixtures, "score")
+dir.create(score_dir, showWarnings = FALSE, recursive = TRUE)
+
+score_model_cont <- paste("f =~ x1 + a*x2 + b*x3 + x4",
+                          "x1 ~~ 0*x2",
+                          "a == b", sep = "\n")
+score_model_mixed <- paste("f =~ x1 + a*x2 + b*y1 + y2",
+                           "y1 ~~ 0*y2",
+                           "a == b", sep = "\n")
+
+score_modindices_json <- function(fit, targets, information = "expected") {
+  mi <- suppressWarnings(modindices(fit, information = information))
+  if (is.null(mi) || !nrow(mi)) return(list())
+  grp <- if (!is.null(mi$group)) mi$group else rep(1L, nrow(mi))
+  out <- list()
+  for (t in targets) {
+    group <- if (!is.null(t$group)) t$group else 1L
+    hit <- which(mi$lhs == t$lhs & mi$op == t$op & mi$rhs == t$rhs &
+                 grp == group)
+    if (length(hit) != 1L) {
+      stop(sprintf("score fixture target MI not found uniquely: %s %s %s",
+                   t$lhs, t$op, t$rhs))
+    }
+    i <- hit[[1]]
+    out[[length(out) + 1L]] <- list(
+      lhs = as.character(mi$lhs[i]),
+      op = as.character(mi$op[i]),
+      rhs = as.character(mi$rhs[i]),
+      group = as.integer(grp[i]),
+      mi = as.numeric(mi$mi[i]),
+      epc = as.numeric(mi$epc[i])
+    )
+  }
+  out
+}
+
+score_tests_json <- function(fit, information = "expected") {
+  st <- suppressWarnings(lavTestScore(fit, information = information))
+  uni <- st$uni
+  if (is.null(uni) || !nrow(uni)) return(list(total = NULL, rows = list()))
+  rows <- lapply(seq_len(nrow(uni)), function(i) {
+    list(lhs = as.character(uni$lhs[i]),
+         op = as.character(uni$op[i]),
+         rhs = as.character(uni$rhs[i]),
+         mi = as.numeric(uni$X2[i]),
+         df = as.integer(uni$df[i]),
+         pvalue = as.numeric(uni$p.value[i]))
+  })
+  list(total = list(mi = as.numeric(st$test$X2[1]),
+                    df = as.integer(st$test$df[1]),
+                    pvalue = as.numeric(st$test$p.value[1])),
+       rows = rows)
+}
+
+score_sample_cov_json <- function(fit) {
+  ss <- lavInspect(fit, "sampstat")
+  if (!is.null(ss$cov)) {
+    return(list(list(block = 0L, matrix = unname(as.matrix(ss$cov)))))
+  }
+  lapply(seq_along(ss), function(b) {
+    list(block = as.integer(b - 1L), matrix = unname(as.matrix(ss[[b]]$cov)))
+  })
+}
+
+score_sample_mean_json <- function(fit) {
+  ss <- lavInspect(fit, "sampstat")
+  if (is.list(ss) && !is.null(ss$mean)) {
+    return(list(list(block = 0L, vector = as.numeric(ss$mean))))
+  }
+  if (!is.list(ss) || !is.list(ss[[1]]) || is.null(ss[[1]]$mean)) return(NULL)
+  lapply(seq_along(ss), function(b) {
+    list(block = as.integer(b - 1L), vector = as.numeric(ss[[b]]$mean))
+  })
+}
+
+score_fit_json <- function(fit, mi_targets, information = "expected") {
+  pt <- parTable(fit)
+  free <- pt[pt$free > 0, ]
+  free <- free[order(free$free), ]
+  list(converged = isTRUE(lavInspect(fit, "converged")),
+       theta_hat = as.numeric(free$est),
+       n_obs = as.integer(lavInspect(fit, "ntotal")),
+       n_obs_per_block = as.integer(lavInspect(fit, "nobs")),
+       sample_cov = score_sample_cov_json(fit),
+       sample_mean = score_sample_mean_json(fit),
+       score_information = information,
+       modindices = score_modindices_json(fit, mi_targets, information),
+       score_tests = score_tests_json(fit, information))
+}
+
+score_cases <- list(
+  list(id = "0001_ml_fixed_row_and_equality",
+       kind = "ml",
+       model = score_model_cont,
+       data = HolzingerSwineford1939,
+       ov = paste0("x", 1:4),
+       fit = function(model, data) cfa(model, data = data),
+       mi_targets = list(list(lhs = "x1", op = "~~", rhs = "x2"))),
+  list(id = "0002_fiml_fixed_row_and_equality",
+       kind = "fiml",
+       model = score_model_cont,
+       data = {
+         d <- HolzingerSwineford1939
+         d$x2[seq(1L, nrow(d), by = 7L)] <- NA_real_
+         d$x4[seq(5L, nrow(d), by = 11L)] <- NA_real_
+         d
+       },
+       ov = paste0("x", 1:4),
+       fit = function(model, data) cfa(model, data = data, missing = "fiml",
+                                       meanstructure = TRUE),
+       meanstructure = TRUE,
+       score_information = "observed",
+       mi_targets = list(list(lhs = "x1", op = "~~", rhs = "x2"))),
+  list(id = "0003_uls_fixed_row_and_equality",
+       kind = "ls",
+       estimator = "ULS",
+       model = score_model_cont,
+       data = HolzingerSwineford1939,
+       ov = paste0("x", 1:4),
+       fit = function(model, data) cfa(model, data = data, estimator = "ULS"),
+       mi_targets = list(list(lhs = "x1", op = "~~", rhs = "x2"))),
+  list(id = "0004_ordinal_dwls_fixed_row_and_equality",
+       kind = "ordinal",
+       estimator = "DWLS",
+       model = score_model_cont,
+       data = make_ord_df(360, list(c(-0.70, 0.35), c(-0.55, 0.60),
+                                    c(-0.85, 0.20), c(-0.45, 0.75)),
+                          seed = 11L),
+       ordered = paste0("x", 1:4),
+       ov = paste0("x", 1:4),
+       fit = function(model, data) cfa(model, data = data,
+                                       ordered = paste0("x", 1:4),
+                                       estimator = "DWLS",
+                                       parameterization = "delta"),
+       mi_targets = list(list(lhs = "x1", op = "~~", rhs = "x2"))),
+  list(id = "0005_mixed_dwls_fixed_row_and_equality",
+       kind = "mixed_ordinal",
+       estimator = "DWLS",
+       model = score_model_mixed,
+       data = make_mixed_ord_df(360, seed = 42L),
+       ordered = c("x1", "x2"),
+       ov = c("x1", "x2", "y1", "y2"),
+       fit = function(model, data) cfa(model, data = data,
+                                       ordered = c("x1", "x2"),
+                                       estimator = "DWLS",
+                                       parameterization = "delta"),
+       mi_targets = list(list(lhs = "y1", op = "~~", rhs = "y2")))
+)
+
+regenerated_score <- character(0)
+for (sc in score_cases) {
+  fit <- tryCatch(suppressWarnings(sc$fit(sc$model, sc$data)),
+                  error = function(e) e)
+  if (inherits(fit, "error") || !lavInspect(fit, "converged")) {
+    stop(sprintf("score fixture %s failed or did not converge: %s",
+                 sc$id,
+                 if (inherits(fit, "error")) conditionMessage(fit) else "no convergence"))
+  }
+
+  raw <- NULL
+  if (identical(sc$kind, "fiml")) {
+    rb <- raw_block_json(sc$data, sc$ov)
+    raw <- list(list(block = 0L, X = rb$X, mask = rb$mask))
+  }
+
+  payload <- list(
+    `_meta` = list(format_version = 1L,
+                   fixture_kind = "score",
+                   corpus_id = sc$id,
+                   tool = "lavaan::modindices/lavTestScore",
+                   lavaan_version = installed),
+    kind = sc$kind,
+    estimator = if (!is.null(sc$estimator)) sc$estimator else "ML",
+    input = sc$model,
+    meanstructure = if (!is.null(sc$meanstructure)) sc$meanstructure else FALSE,
+    ordered = if (!is.null(sc$ordered)) sc$ordered else NULL,
+    ordered_mask = if (!is.null(sc$ordered))
+      list(list(block = 0L, mask = as.integer(sc$ov %in% sc$ordered))) else NULL,
+    raw = raw,
+    blocks = if (identical(sc$kind, "ordinal"))
+      list(list(block = 0L, label = "",
+                matrix = unname(ordered_to_int_matrix(sc$data, sc$ov)))) else
+      if (identical(sc$kind, "mixed_ordinal"))
+        list(list(block = 0L, label = "",
+                  matrix = unname(mixed_ordered_to_matrix(sc$data, sc$ov,
+                                                          sc$ordered)))) else NULL,
+    sample_stats = if (identical(sc$kind, "ordinal")) ordinal_samp_json(fit) else
+      if (identical(sc$kind, "mixed_ordinal")) mixed_samp_json(fit) else NULL,
+    fit = score_fit_json(fit, sc$mi_targets,
+                         if (!is.null(sc$score_information))
+                           sc$score_information else "expected")
+  )
+
+  out_path <- file.path(score_dir, paste0(sc$id, ".score.json"))
+  write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
+             null = "null", na = "null", digits = NA)
+  regenerated_score <- c(regenerated_score, out_path)
+}
+
+cat("regenerated", length(regenerated_score),
+    "score-test/modification-index fixtures under", score_dir, "\n")
+
 # === standardized-solution fit fixtures ====================================
 # Post-hoc `standardizedSolution()` parity — distinct from the std.lv
 # *identification convention* fixtures (`fit_stdlv/`) above. These pin the
