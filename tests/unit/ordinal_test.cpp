@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/pairwise_ordinal.hpp"
@@ -95,6 +96,86 @@ TEST_CASE("Ordinal pair ML kernel: independence and lavaan 2x2 adjustment") {
   CHECK(std::isfinite(adjusted->rho));
   CHECK(adjusted->rho > -1.0);
   CHECK(adjusted->rho < 1.0);
+}
+
+TEST_CASE("Pairwise ordinal stats wrap OrdinalStats and expose diagnostics") {
+  Eigen::MatrixXd X(24, 3);
+  Eigen::Index r = 0;
+  for (int rep = 0; rep < 4; ++rep) {
+    for (int c = 1; c <= 3; ++c) {
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((c + rep) % 3);
+      X(r, 2) = 1 + ((2 * c + rep) % 3);
+      ++r;
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((2 * c + rep) % 3);
+      X(r, 2) = 1 + ((c + rep) % 3);
+      ++r;
+    }
+  }
+
+  auto base = magmaan::data::ordinal_stats_from_integer_data({X});
+  auto pairwise = magmaan::data::pairwise_ordinal_stats_from_integer_data({X});
+  REQUIRE(base.has_value());
+  REQUIRE(pairwise.has_value());
+  REQUIRE(pairwise->stats.R.size() == 1);
+  CHECK(pairwise->stats.R[0].isApprox(base->R[0], 0.0));
+  CHECK(pairwise->stats.thresholds[0].isApprox(base->thresholds[0], 0.0));
+  CHECK(pairwise->stats.NACOV[0].isApprox(base->NACOV[0], 0.0));
+  CHECK(pairwise->stats.W_dwls[0].isApprox(base->W_dwls[0], 0.0));
+  CHECK(pairwise->stats.W_wls[0].isApprox(base->W_wls[0], 0.0));
+  CHECK(pairwise->stats.n_obs == base->n_obs);
+  CHECK(pairwise->stats.n_levels == base->n_levels);
+  CHECK(pairwise->stats.threshold_ov == base->threshold_ov);
+  CHECK(pairwise->stats.threshold_level == base->threshold_level);
+
+  REQUIRE(pairwise->block_diagnostics.size() == 1);
+  const auto& bd = pairwise->block_diagnostics[0];
+  REQUIRE(bd.pair_diagnostics.size() == 3);
+  CHECK(bd.pair_diagnostics[0].label.i == 1);
+  CHECK(bd.pair_diagnostics[0].label.j == 0);
+  CHECK(bd.pair_diagnostics[1].label.i == 2);
+  CHECK(bd.pair_diagnostics[1].label.j == 0);
+  CHECK(bd.pair_diagnostics[2].label.i == 2);
+  CHECK(bd.pair_diagnostics[2].label.j == 1);
+  for (const auto& pd : bd.pair_diagnostics) {
+    CHECK(pd.label.block == 0);
+    CHECK(pd.label.n_levels_i == 3);
+    CHECK(pd.label.n_levels_j == 3);
+    CHECK(std::isfinite(pd.rho));
+    CHECK(std::isfinite(pd.negloglik));
+    CHECK(pd.counts.rows() == 3);
+    CHECK(pd.counts.cols() == 3);
+    CHECK(pd.adjusted_counts.rows() == 3);
+    CHECK(pd.adjusted_counts.cols() == 3);
+  }
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(pairwise->stats.R[0]);
+  REQUIRE(es.info() == Eigen::Success);
+  CHECK(bd.min_eigen_r == doctest::Approx(es.eigenvalues().minCoeff()));
+}
+
+TEST_CASE("Pairwise ordinal stats diagnostics report lavaan 2x2 adjustment") {
+  Eigen::MatrixXd X(15, 2);
+  Eigen::Index r = 0;
+  for (int k = 0; k < 4; ++k) X.row(r++) << 1, 2;
+  for (int k = 0; k < 5; ++k) X.row(r++) << 2, 1;
+  for (int k = 0; k < 6; ++k) X.row(r++) << 2, 2;
+
+  auto pairwise = magmaan::data::pairwise_ordinal_stats_from_integer_data({X});
+  REQUIRE(pairwise.has_value());
+  REQUIRE(pairwise->block_diagnostics.size() == 1);
+  REQUIRE(pairwise->block_diagnostics[0].pair_diagnostics.size() == 1);
+  const auto& pd = pairwise->block_diagnostics[0].pair_diagnostics[0];
+  CHECK(pd.counts(0, 0) == doctest::Approx(0.0));
+  CHECK(pd.counts(0, 1) == doctest::Approx(5.0));
+  CHECK(pd.counts(1, 0) == doctest::Approx(4.0));
+  CHECK(pd.counts(1, 1) == doctest::Approx(6.0));
+  CHECK(pd.adjusted_counts(0, 0) == doctest::Approx(0.5));
+  CHECK(pd.adjusted_counts(0, 1) == doctest::Approx(4.5));
+  CHECK(pd.adjusted_counts(1, 0) == doctest::Approx(3.5));
+  CHECK(pd.adjusted_counts(1, 1) == doctest::Approx(6.5));
+  CHECK(std::isfinite(pd.rho));
+  CHECK(std::isfinite(pairwise->block_diagnostics[0].min_eigen_r));
 }
 
 TEST_CASE("Ordinal stats: thresholds, polychoric R, and weights have expected shapes") {

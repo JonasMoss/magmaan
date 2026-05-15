@@ -11,16 +11,20 @@ Intent: add a direct pairwise likelihood/minimum-disparity path for threshold
 data, starting with ordinary polychoric replication and only then expanding to
 missing data, mixed data, and robust divergences.
 
-- [ ] Define the statistical contract separately from the current
+- [x] Define the statistical contract separately from the current
   limited-information DWLS/WLS path: pairwise table likelihood or divergence
   over bivariate ordinal margins, with thresholds and latent correlations as
   the first target.
-- [ ] Factor the bivariate ordinal probability, score, and table bookkeeping
+- [x] Factor the bivariate ordinal probability, score, and table bookkeeping
   out of the current polychoric implementation so pairwise likelihood, robust
   polychorics, and NACOV construction share one kernel.
-- [ ] Implement the smallest all-ordinal slice first: complete/listwise
+- [x] Implement the smallest all-ordinal slice first: complete/listwise
   bivariate tables, fixed lavaan-style marginal thresholds, and pairwise rho
   estimates that reproduce current ML polychorics.
+- [x] Add an explicit all-ordinal `PairwiseOrdinalStats` wrapper over
+  `OrdinalStats` with pair diagnostics, lower-triangle pair labels,
+  adjusted-count reporting, minimum eigenvalue diagnostics, and
+  bitwise-equivalent NACOV/DWLS/WLS moment output.
 - [ ] Add a joint pairwise threshold/rho estimator after the fixed-threshold
   slice is stable; decide explicitly whether thresholds are pair-local nuisance
   parameters or shared SEM moments.
@@ -35,9 +39,9 @@ missing data, mixed data, and robust divergences.
 - [ ] Compute casewise influence/Gamma for the pairwise moment vector so DWLS,
   WLS, robust SEs, and scaled tests can reuse the existing weighted-moment
   sandwich path.
-- [ ] Add diagnostics: pair labels, convergence, boundary hits, table
-  residuals, missingness counts, minimum eigenvalue of the assembled
-  correlation matrix, and any ridge/shrinkage applied.
+- [ ] Extend diagnostics beyond the current complete-data pair labels,
+  convergence, boundary, adjusted-count, and minimum-eigenvalue fields:
+  add table residuals, missingness counts, and any ridge/shrinkage applied.
 - [ ] Add lavaan-backed or internally cross-checked fixtures for complete
   all-ordinal polychorics first, then mixed data, then missing-data scenarios.
 
