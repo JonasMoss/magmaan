@@ -16,7 +16,9 @@ Convenience helpers are limited to R-side composition:
   convenience. It parses/lavaanifies syntax strings, builds sample statistics
   or FIML raw-data objects from data frames, and dispatches to the matching
   point-estimation wrapper. SEs, robust corrections, fit measures, defined
-  parameters, and nested tests remain explicit post-fit calls.
+  parameters, and nested tests remain explicit post-fit calls. Lavaan-style
+  `se = "none"` and `test = "none"` are accepted to make point-estimate-only
+  workflows explicit; other values error.
 - `compute_defined(model, fit, vcov)` evaluates `:=` rows after fitting. The
   caller supplies the covariance matrix explicitly, so expected/observed/robust
   covariance choices stay visible.

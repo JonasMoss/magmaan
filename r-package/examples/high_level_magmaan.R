@@ -11,7 +11,7 @@ df$school <- rep(c("Pasteur", "Grant-White"), each = 180)
 
 model <- "f =~ x1 + x2 + x3"
 
-fit_ml_high <- magmaan(model, df, estimator = "ML")
+fit_ml_high <- magmaan(model, df, estimator = "ML", se = "none", test = "none")
 fit_uls_high <- magmaan(
   model, df, estimator = "ULS",
   lbfgsb = list(max_iter = 2000, ftol = 1e-12, gtol = 1e-8)
@@ -50,5 +50,11 @@ stopifnot(identical(fit_dwls_high$estimator, "DWLS"))
 err <- tryCatch(magmaan(model, df, estimator = "MLM"),
                 error = function(e) conditionMessage(e))
 stopifnot(grepl("estimate-only", err, fixed = TRUE))
+err <- tryCatch(magmaan(model, df, estimator = "ML", se = "standard"),
+                error = function(e) conditionMessage(e))
+stopifnot(grepl("explicit post-fit", err, fixed = TRUE))
+err <- tryCatch(magmaan(model, df, estimator = "ML", test = "standard"),
+                error = function(e) conditionMessage(e))
+stopifnot(grepl("explicit post-fit", err, fixed = TRUE))
 
 cat("magmaan() high-level estimate-only workflow: ok\n")
