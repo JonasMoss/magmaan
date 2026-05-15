@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
@@ -24,6 +27,69 @@ struct PolyserialPairScores {
   Eigen::VectorXd rho;
   Eigen::MatrixXd thresholds;
 };
+
+enum class MixedPairKind {
+  ordinal_ordinal,
+  continuous_ordinal,
+  continuous_continuous
+};
+
+enum class MixedMomentKind {
+  threshold,
+  continuous_mean,
+  continuous_variance,
+  pair
+};
+
+struct MixedPairLabel {
+  std::int32_t i = 0;
+  std::int32_t j = 0;
+  std::int32_t moment_index = 0;
+  MixedPairKind kind = MixedPairKind::continuous_continuous;
+};
+
+struct MixedMomentLabel {
+  std::int32_t index = 0;
+  MixedMomentKind kind = MixedMomentKind::threshold;
+  std::int32_t variable = -1;
+  std::int32_t variable_i = -1;
+  std::int32_t variable_j = -1;
+  std::int32_t threshold_level = -1;
+  MixedPairKind pair_kind = MixedPairKind::continuous_continuous;
+};
+
+struct ContinuousPairNormalResult {
+  double mean_i = 0.0;
+  double mean_j = 0.0;
+  double var_i = 0.0;
+  double var_j = 0.0;
+  double cov = 0.0;
+  double rho = 0.0;
+  double negloglik = 0.0;
+  std::int64_t n_obs = 0;
+};
+
+post_expected<std::vector<MixedPairLabel>>
+mixed_pair_labels(const std::vector<std::int32_t>& ordered,
+                  std::int32_t n_thresholds);
+
+post_expected<std::vector<MixedMomentLabel>>
+mixed_moment_labels(const std::vector<std::int32_t>& ordered,
+                    const std::vector<std::int32_t>& threshold_ov,
+                    const std::vector<std::int32_t>& threshold_level);
+
+post_expected<double>
+continuous_pair_normal_negloglik(const Eigen::Ref<const Eigen::VectorXd>& x_i,
+                                 const Eigen::Ref<const Eigen::VectorXd>& x_j,
+                                 double mean_i,
+                                 double mean_j,
+                                 double var_i,
+                                 double var_j,
+                                 double cov);
+
+post_expected<ContinuousPairNormalResult>
+fit_continuous_pair_normal_ml(const Eigen::Ref<const Eigen::VectorXd>& x_i,
+                              const Eigen::Ref<const Eigen::VectorXd>& x_j);
 
 post_expected<double>
 polyserial_pair_negloglik(const Eigen::Ref<const Eigen::VectorXi>& categories,

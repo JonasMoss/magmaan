@@ -174,6 +174,97 @@ TEST_CASE("Polyserial pair ML kernel rejects malformed inputs") {
   CHECK(bad_th.error().detail.find("strictly increasing") != std::string::npos);
 }
 
+TEST_CASE("Continuous pair normal ML kernel returns complete-data pair diagnostics") {
+  Eigen::VectorXd x(4);
+  Eigen::VectorXd y(4);
+  x << 1.0, 2.0, 3.0, 4.0;
+  y << 2.0, 3.0, 5.0, 7.0;
+
+  auto fit = magmaan::data::fit_continuous_pair_normal_ml(x, y);
+  REQUIRE(fit.has_value());
+  CHECK(fit->n_obs == 4);
+  CHECK(fit->mean_i == doctest::Approx(2.5));
+  CHECK(fit->mean_j == doctest::Approx(4.25));
+  CHECK(fit->var_i == doctest::Approx(1.25));
+  CHECK(fit->var_j == doctest::Approx(3.6875));
+  CHECK(fit->cov == doctest::Approx(2.125));
+  CHECK(fit->rho == doctest::Approx(2.125 / std::sqrt(1.25 * 3.6875)));
+  CHECK(std::isfinite(fit->negloglik));
+
+  auto nll = magmaan::data::continuous_pair_normal_negloglik(
+      x, y, fit->mean_i, fit->mean_j, fit->var_i, fit->var_j, fit->cov);
+  REQUIRE(nll.has_value());
+  CHECK(*nll == doctest::Approx(fit->negloglik));
+
+  y << 2.0, 4.0, 6.0, 8.0;
+  auto singular = magmaan::data::fit_continuous_pair_normal_ml(x, y);
+  REQUIRE_FALSE(singular.has_value());
+  CHECK(singular.error().detail.find("positive definite") != std::string::npos);
+}
+
+TEST_CASE("Mixed pair labels match MixedOrdinalStats moment order") {
+  std::vector<std::int32_t> ordered{0, 1, 0};
+  std::vector<std::int32_t> threshold_ov{1, 1};
+  std::vector<std::int32_t> threshold_level{1, 2};
+
+  auto moments = magmaan::data::mixed_moment_labels(
+      ordered, threshold_ov, threshold_level);
+  REQUIRE(moments.has_value());
+  REQUIRE(moments->size() == 9);
+
+  CHECK((*moments)[0].kind == magmaan::data::MixedMomentKind::threshold);
+  CHECK((*moments)[0].variable == 1);
+  CHECK((*moments)[0].threshold_level == 1);
+  CHECK((*moments)[1].kind == magmaan::data::MixedMomentKind::threshold);
+  CHECK((*moments)[1].variable == 1);
+  CHECK((*moments)[1].threshold_level == 2);
+  CHECK((*moments)[2].kind == magmaan::data::MixedMomentKind::continuous_mean);
+  CHECK((*moments)[2].variable == 0);
+  CHECK((*moments)[3].kind == magmaan::data::MixedMomentKind::continuous_mean);
+  CHECK((*moments)[3].variable == 2);
+  CHECK((*moments)[4].kind == magmaan::data::MixedMomentKind::continuous_variance);
+  CHECK((*moments)[4].variable == 0);
+  CHECK((*moments)[5].kind == magmaan::data::MixedMomentKind::continuous_variance);
+  CHECK((*moments)[5].variable == 2);
+
+  auto pairs = magmaan::data::mixed_pair_labels(
+      ordered, static_cast<std::int32_t>(threshold_ov.size()));
+  REQUIRE(pairs.has_value());
+  REQUIRE(pairs->size() == 3);
+  CHECK((*pairs)[0].i == 1);
+  CHECK((*pairs)[0].j == 0);
+  CHECK((*pairs)[0].moment_index == 6);
+  CHECK((*pairs)[0].kind == magmaan::data::MixedPairKind::continuous_ordinal);
+  CHECK((*pairs)[1].i == 2);
+  CHECK((*pairs)[1].j == 0);
+  CHECK((*pairs)[1].moment_index == 7);
+  CHECK((*pairs)[1].kind == magmaan::data::MixedPairKind::continuous_continuous);
+  CHECK((*pairs)[2].i == 2);
+  CHECK((*pairs)[2].j == 1);
+  CHECK((*pairs)[2].moment_index == 8);
+  CHECK((*pairs)[2].kind == magmaan::data::MixedPairKind::continuous_ordinal);
+
+  CHECK((*moments)[6].kind == magmaan::data::MixedMomentKind::pair);
+  CHECK((*moments)[6].variable_i == 1);
+  CHECK((*moments)[6].variable_j == 0);
+  CHECK((*moments)[6].pair_kind == magmaan::data::MixedPairKind::continuous_ordinal);
+  CHECK((*moments)[7].kind == magmaan::data::MixedMomentKind::pair);
+  CHECK((*moments)[7].variable_i == 2);
+  CHECK((*moments)[7].variable_j == 0);
+  CHECK((*moments)[7].pair_kind == magmaan::data::MixedPairKind::continuous_continuous);
+  CHECK((*moments)[8].kind == magmaan::data::MixedMomentKind::pair);
+  CHECK((*moments)[8].variable_i == 2);
+  CHECK((*moments)[8].variable_j == 1);
+  CHECK((*moments)[8].pair_kind == magmaan::data::MixedPairKind::continuous_ordinal);
+
+  threshold_ov = {0};
+  threshold_level = {1};
+  auto bad = magmaan::data::mixed_moment_labels(
+      ordered, threshold_ov, threshold_level);
+  REQUIRE_FALSE(bad.has_value());
+  CHECK(bad.error().detail.find("invalid ordered variable") != std::string::npos);
+}
+
 TEST_CASE("Ordinal pair observed table skips NaN by observed-pair semantics") {
   const double nan = std::numeric_limits<double>::quiet_NaN();
   Eigen::VectorXd xi(7);
