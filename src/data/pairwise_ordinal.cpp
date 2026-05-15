@@ -602,6 +602,45 @@ fit_ordinal_pair_joint_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
   return out;
 }
 
+post_expected<OrdinalPairObservedMlResult>
+fit_ordinal_pair_observed_rho_ml(
+    const Eigen::Ref<const Eigen::VectorXd>& x_i,
+    const Eigen::Ref<const Eigen::VectorXd>& x_j,
+    std::int32_t n_levels_i,
+    std::int32_t n_levels_j,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+    OrdinalPairMlOptions options) {
+  auto tab_or = ordinal_pair_observed_table(x_i, x_j, n_levels_i, n_levels_j);
+  if (!tab_or.has_value()) return std::unexpected(tab_or.error());
+  auto fit_or = fit_ordinal_pair_rho_ml(tab_or->counts, thresholds_i,
+                                        thresholds_j, options);
+  if (!fit_or.has_value()) return std::unexpected(fit_or.error());
+  return OrdinalPairObservedMlResult{
+      .fit = std::move(*fit_or),
+      .counts = std::move(tab_or->counts),
+      .n_obs = tab_or->n_obs,
+      .n_missing = tab_or->n_missing};
+}
+
+post_expected<OrdinalPairObservedJointMlResult>
+fit_ordinal_pair_observed_joint_ml(
+    const Eigen::Ref<const Eigen::VectorXd>& x_i,
+    const Eigen::Ref<const Eigen::VectorXd>& x_j,
+    std::int32_t n_levels_i,
+    std::int32_t n_levels_j,
+    OrdinalPairJointMlOptions options) {
+  auto tab_or = ordinal_pair_observed_table(x_i, x_j, n_levels_i, n_levels_j);
+  if (!tab_or.has_value()) return std::unexpected(tab_or.error());
+  auto fit_or = fit_ordinal_pair_joint_ml(tab_or->counts, options);
+  if (!fit_or.has_value()) return std::unexpected(fit_or.error());
+  return OrdinalPairObservedJointMlResult{
+      .fit = std::move(*fit_or),
+      .counts = std::move(tab_or->counts),
+      .n_obs = tab_or->n_obs,
+      .n_missing = tab_or->n_missing};
+}
+
 post_expected<OrdinalPairScores>
 ordinal_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& x_i,
                     const Eigen::Ref<const Eigen::VectorXi>& x_j,

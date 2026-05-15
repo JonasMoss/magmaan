@@ -129,7 +129,9 @@ golden `parTable()` fixtures.
 - Bivariate ordinal observed-pair table kernel for future missing-data
   composite-likelihood work. `NaN` skips the pair and increments missing-pair
   diagnostics; finite observed values must be positive integer categories
-  inside the declared level ranges.
+  inside the declared level ranges. Observed-pair wrappers feed those counts
+  into both fixed-threshold rho ML and pair-local joint threshold/rho ML while
+  preserving `n_obs` and `n_missing`.
 - Experimental joint bivariate ordinal ML kernel for one complete pairwise
   table, estimating pair-local nuisance thresholds and rho. This is not yet
   wired into SEM moment construction or a shared-threshold composite-likelihood

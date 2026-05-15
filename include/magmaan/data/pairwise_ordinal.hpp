@@ -54,6 +54,20 @@ struct OrdinalPairObservedTable {
   std::int64_t n_missing = 0;
 };
 
+struct OrdinalPairObservedMlResult {
+  OrdinalPairMlResult fit;
+  Eigen::MatrixXd counts;
+  std::int64_t n_obs = 0;
+  std::int64_t n_missing = 0;
+};
+
+struct OrdinalPairObservedJointMlResult {
+  OrdinalPairJointMlResult fit;
+  Eigen::MatrixXd counts;
+  std::int64_t n_obs = 0;
+  std::int64_t n_missing = 0;
+};
+
 struct OrdinalPairScores {
   Eigen::VectorXd rho;
   Eigen::MatrixXd threshold_i;
@@ -134,6 +148,24 @@ fit_ordinal_pair_rho_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
 post_expected<OrdinalPairJointMlResult>
 fit_ordinal_pair_joint_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
                           OrdinalPairJointMlOptions options = {});
+
+post_expected<OrdinalPairObservedMlResult>
+fit_ordinal_pair_observed_rho_ml(
+    const Eigen::Ref<const Eigen::VectorXd>& x_i,
+    const Eigen::Ref<const Eigen::VectorXd>& x_j,
+    std::int32_t n_levels_i,
+    std::int32_t n_levels_j,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+    OrdinalPairMlOptions options = {});
+
+post_expected<OrdinalPairObservedJointMlResult>
+fit_ordinal_pair_observed_joint_ml(
+    const Eigen::Ref<const Eigen::VectorXd>& x_i,
+    const Eigen::Ref<const Eigen::VectorXd>& x_j,
+    std::int32_t n_levels_i,
+    std::int32_t n_levels_j,
+    OrdinalPairJointMlOptions options = {});
 
 post_expected<OrdinalPairScores>
 ordinal_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& x_i,
