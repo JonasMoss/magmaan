@@ -10,6 +10,7 @@
 #include <Eigen/Eigenvalues>
 
 #include "magmaan/data/ordinal.hpp"
+#include "magmaan/data/pairwise_mixed.hpp"
 #include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -119,6 +120,58 @@ TEST_CASE("Ordinal pair ML kernel: independence and lavaan 2x2 adjustment") {
   CHECK(std::isfinite(adjusted->rho));
   CHECK(adjusted->rho > -1.0);
   CHECK(adjusted->rho < 1.0);
+}
+
+TEST_CASE("Polyserial pair ML kernel: likelihood, rho fit, and scores") {
+  Eigen::VectorXi cat(8);
+  cat << 0, 0, 1, 1, 1, 2, 2, 2;
+  Eigen::VectorXd u(8);
+  u << -1.4, -0.8, -0.5, 0.0, 0.4, 0.7, 1.1, 1.5;
+  Eigen::VectorXd th(2);
+  th << -0.45, 0.65;
+
+  auto nll0 = magmaan::data::polyserial_pair_negloglik(cat, u, th, 0.0);
+  auto nll1 = magmaan::data::polyserial_pair_negloglik(cat, u, th, 0.45);
+  REQUIRE(nll0.has_value());
+  REQUIRE(nll1.has_value());
+  CHECK(std::isfinite(*nll0));
+  CHECK(std::isfinite(*nll1));
+  CHECK(*nll1 < *nll0);
+
+  auto fit = magmaan::data::fit_polyserial_pair_rho_ml(cat, u, th);
+  REQUIRE(fit.has_value());
+  CHECK(std::isfinite(fit->rho));
+  CHECK(std::isfinite(fit->negloglik));
+  CHECK(fit->rho > 0.0);
+  CHECK(fit->rho > -1.0);
+  CHECK(fit->rho < 1.0);
+
+  auto scores = magmaan::data::polyserial_pair_scores(cat, u, fit->rho, th);
+  REQUIRE(scores.has_value());
+  CHECK(scores->rho.size() == cat.size());
+  CHECK(scores->thresholds.rows() == cat.size());
+  CHECK(scores->thresholds.cols() == th.size());
+  CHECK(scores->rho.allFinite());
+  CHECK(scores->thresholds.allFinite());
+}
+
+TEST_CASE("Polyserial pair ML kernel rejects malformed inputs") {
+  Eigen::VectorXi cat(3);
+  cat << 0, 1, 3;
+  Eigen::VectorXd u(3);
+  u << -0.5, 0.0, 0.5;
+  Eigen::VectorXd th(2);
+  th << -0.4, 0.6;
+
+  auto bad_cat = magmaan::data::fit_polyserial_pair_rho_ml(cat, u, th);
+  REQUIRE_FALSE(bad_cat.has_value());
+  CHECK(bad_cat.error().detail.find("category outside") != std::string::npos);
+
+  cat << 0, 1, 2;
+  th << 0.6, -0.4;
+  auto bad_th = magmaan::data::fit_polyserial_pair_rho_ml(cat, u, th);
+  REQUIRE_FALSE(bad_th.has_value());
+  CHECK(bad_th.error().detail.find("strictly increasing") != std::string::npos);
 }
 
 TEST_CASE("Ordinal pair observed table skips NaN by observed-pair semantics") {

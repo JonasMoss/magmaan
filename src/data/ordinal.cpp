@@ -14,6 +14,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/data/pairwise_mixed.hpp"
 #include "magmaan/data/pairwise_ordinal.hpp"
 
 namespace magmaan::data {
@@ -80,87 +81,6 @@ double normal_quantile(double p) noexcept {
   const double r = q * q;
   return (((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q /
          (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1.0);
-}
-
-double polyserial_prob(int cat, double u, double rho,
-                       const Eigen::VectorXd& th) noexcept {
-  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
-  const double lo = (cat == 0) ? -kInf : th(cat - 1);
-  const double hi = (cat == th.size()) ? kInf : th(cat);
-  return std::max(kProbFloor,
-                  normal_cdf((hi - rho * u) / sd) -
-                      normal_cdf((lo - rho * u) / sd));
-}
-
-double neglog_polyserial(const Eigen::VectorXi& cat,
-                         const Eigen::VectorXd& u,
-                         double rho,
-                         const Eigen::VectorXd& th) noexcept {
-  double out = 0.0;
-  for (Eigen::Index i = 0; i < cat.size(); ++i) {
-    out -= std::log(polyserial_prob(cat(i), u(i), rho, th));
-  }
-  return out;
-}
-
-double estimate_polyserial(const Eigen::VectorXi& cat,
-                           const Eigen::VectorXd& u,
-                           const Eigen::VectorXd& th) noexcept {
-  double lo = -0.999;
-  double hi = 0.999;
-  constexpr double gr = 0.6180339887498948482;
-  double c = hi - gr * (hi - lo);
-  double d = lo + gr * (hi - lo);
-  double fc = neglog_polyserial(cat, u, c, th);
-  double fd = neglog_polyserial(cat, u, d, th);
-  for (int iter = 0; iter < 72; ++iter) {
-    if (fc < fd) {
-      hi = d;
-      d = c;
-      fd = fc;
-      c = hi - gr * (hi - lo);
-      fc = neglog_polyserial(cat, u, c, th);
-    } else {
-      lo = c;
-      c = d;
-      fc = fd;
-      d = lo + gr * (hi - lo);
-      fd = neglog_polyserial(cat, u, d, th);
-    }
-  }
-  return 0.5 * (lo + hi);
-}
-
-struct PolyserialScores {
-  Eigen::VectorXd rho;
-  Eigen::MatrixXd th;
-};
-
-PolyserialScores polyserial_scores(const Eigen::VectorXi& cat,
-                                   const Eigen::VectorXd& u,
-                                   double rho,
-                                   const Eigen::VectorXd& th) {
-  const Eigen::Index n = cat.size();
-  const Eigen::Index nth = th.size();
-  PolyserialScores out{Eigen::VectorXd::Zero(n),
-                       Eigen::MatrixXd::Zero(n, nth)};
-  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
-  const double h = 1e-5;
-  const double rp = std::min(0.999, rho + h);
-  const double rm = std::max(-0.999, rho - h);
-  for (Eigen::Index r = 0; r < n; ++r) {
-    const int c = cat(r);
-    const double lik = polyserial_prob(c, u(r), rho, th);
-    const double pp = polyserial_prob(c, u(r), rp, th);
-    const double pm = polyserial_prob(c, u(r), rm, th);
-    out.rho(r) = (std::log(pp) - std::log(pm)) / (rp - rm);
-    for (Eigen::Index a = 0; a < nth; ++a) {
-      const double z = normal_pdf((th(a) - rho * u(r)) / sd) / sd;
-      if (c == a) out.th(r, a) += z / lik;
-      if (c == a + 1) out.th(r, a) -= z / lik;
-    }
-  }
-  return out;
 }
 
 Eigen::VectorXd mixed_moment_vector(const Eigen::MatrixXd& R,
@@ -717,17 +637,21 @@ mixed_ordinal_stats_from_data(const std::vector<Eigen::MatrixXd>& Xs,
           const Eigen::Index c = oi ? j : i;
           Eigen::VectorXi cat(n);
           for (Eigen::Index r = 0; r < n; ++r) cat(r) = Xcat(r, o);
-          const double rho = estimate_polyserial(
+          auto rho_or = fit_polyserial_pair_rho_ml(
               cat, U.col(c), th_by_var[static_cast<std::size_t>(o)]);
+          if (!rho_or.has_value()) return std::unexpected(rho_or.error());
+          const double rho = rho_or->rho;
           const double sd = std::sqrt(var(c));
           R(i, j) = R(j, i) = rho * sd;
-          PolyserialScores ps = polyserial_scores(
+          auto ps_or = polyserial_pair_scores(
               cat, U.col(c), rho, th_by_var[static_cast<std::size_t>(o)]);
+          if (!ps_or.has_value()) return std::unexpected(ps_or.error());
+          const auto& ps = *ps_or;
           assoc_scores.push_back(ps.rho);
           assoc_if_scale.push_back(Eigen::VectorXd::Constant(n, sd));
           const Eigen::Index so = th_start[static_cast<std::size_t>(o)];
-          A21.block(assoc_count, so, 1, ps.th.cols()) =
-              ps.rho.transpose() * ps.th;
+          A21.block(assoc_count, so, 1, ps.thresholds.cols()) =
+              ps.rho.transpose() * ps.thresholds;
         } else {
           double cov = 0.0;
           for (Eigen::Index r = 0; r < n; ++r) {

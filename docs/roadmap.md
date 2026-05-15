@@ -153,6 +153,9 @@ golden `parTable()` fixtures.
 - A first mixed continuous/ordinal path builds lavaan-ordered thresholds,
   continuous means/variances, polychoric/polyserial/covariance moments,
   NACOV/DWLS/WLS weights, and DWLS/WLS delta fits.
+- Public complete-data polyserial pair kernel for mixed continuous/ordinal
+  work, exposing fixed-threshold rho ML, likelihood, and casewise scores. The
+  mixed sample-stat builder now reuses this kernel for polyserial associations.
 - Ordinal and mixed delta DWLS/WLS expose fixed-parameter modification indices
   and equality-release score tests over the same threshold/correlation moment
   vectors and weights used by fitting.
