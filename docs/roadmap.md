@@ -120,6 +120,10 @@ golden `parTable()` fixtures.
 - Threshold (`|`) and response-scale (`~*~`) parser/partable projection.
 - Integer all-ordinal complete/listwise sample statistics.
 - Pairwise polychoric correlations.
+- Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
+  complete/listwise ordinal data, exposing pair labels, count/adjustment
+  diagnostics, fitted fixed-threshold rho diagnostics, and minimum eigenvalue
+  diagnostics while preserving the existing `OrdinalStats` moment/weight path.
 - Muthen-style all-ordinal NACOV construction for thresholds plus
   polychorics.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
