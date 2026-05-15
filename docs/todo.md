@@ -31,9 +31,14 @@ missing data, mixed data, and robust divergences.
 - [ ] Decide how joint pairwise threshold/rho estimation integrates with SEM
   moments: pair-local nuisance thresholds for composite likelihood, shared
   threshold moments, or both as separate explicit APIs.
-- [ ] Define missing-data semantics before coding: observed-pair composite
-  likelihood may not need EM, but shared-threshold/multivariate MAR handling
-  needs a documented likelihood target and scaling convention.
+- [x] Define and implement the bivariate observed-pair missingness contract
+  for ordinal table kernels: `NaN` in either variable skips that pair and
+  increments `n_missing`; finite observed values must be positive integer
+  categories inside declared level ranges; all-missing pairs are hard errors.
+- [ ] Define SEM-level missing-data semantics before fitting with missing
+  ordinal data: observed-pair composite likelihood may not need EM, but
+  shared-threshold/multivariate MAR handling needs a documented likelihood
+  target and scaling convention.
 - [ ] Add mixed continuous/ordinal pair kernels after all-ordinal works:
   polyserial pairs, continuous-continuous normal pairs, and consistent moment
   ordering with current `MixedOrdinalStats`.

@@ -126,6 +126,10 @@ golden `parTable()` fixtures.
   tables, missingness/repair diagnostics, casewise moment influence, Gamma,
   and minimum eigenvalue diagnostics while preserving the existing
   `OrdinalStats` moment/weight path.
+- Bivariate ordinal observed-pair table kernel for future missing-data
+  composite-likelihood work. `NaN` skips the pair and increments missing-pair
+  diagnostics; finite observed values must be positive integer categories
+  inside the declared level ranges.
 - Experimental joint bivariate ordinal ML kernel for one complete pairwise
   table, estimating pair-local nuisance thresholds and rho. This is not yet
   wired into SEM moment construction or a shared-threshold composite-likelihood

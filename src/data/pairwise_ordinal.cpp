@@ -316,6 +316,49 @@ ordinal_pair_table(const Eigen::Ref<const Eigen::VectorXi>& x_i,
   return out;
 }
 
+post_expected<OrdinalPairObservedTable>
+ordinal_pair_observed_table(const Eigen::Ref<const Eigen::VectorXd>& x_i,
+                            const Eigen::Ref<const Eigen::VectorXd>& x_j,
+                            std::int32_t n_levels_i,
+                            std::int32_t n_levels_j) {
+  if (x_i.size() != x_j.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ordinal_pair_observed_table: category vectors must have equal size"));
+  }
+  if (x_i.size() == 0 || n_levels_i < 2 || n_levels_j < 2) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ordinal_pair_observed_table: empty data or fewer than two levels"));
+  }
+  OrdinalPairObservedTable out{
+      Eigen::MatrixXd::Zero(n_levels_i, n_levels_j), 0, 0};
+  for (Eigen::Index r = 0; r < x_i.size(); ++r) {
+    const double vi = x_i(r);
+    const double vj = x_j(r);
+    if (std::isnan(vi) || std::isnan(vj)) {
+      ++out.n_missing;
+      continue;
+    }
+    if (!std::isfinite(vi) || !std::isfinite(vj) ||
+        std::floor(vi) != vi || std::floor(vj) != vj) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "ordinal_pair_observed_table: observed categories must be finite integers"));
+    }
+    const int ci = static_cast<int>(vi);
+    const int cj = static_cast<int>(vj);
+    if (ci < 1 || ci > n_levels_i || cj < 1 || cj > n_levels_j) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "ordinal_pair_observed_table: category outside declared level range"));
+    }
+    out.counts(ci - 1, cj - 1) += 1.0;
+    ++out.n_obs;
+  }
+  if (out.n_obs <= 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ordinal_pair_observed_table: no observed pairs"));
+  }
+  return out;
+}
+
 double ordinal_bvn_rect_prob(double lo_i, double hi_i,
                              double lo_j, double hi_j,
                              double rho) noexcept {

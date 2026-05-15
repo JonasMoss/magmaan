@@ -48,6 +48,12 @@ struct OrdinalPairJointMlResult {
   Eigen::MatrixXd adjusted_counts;
 };
 
+struct OrdinalPairObservedTable {
+  Eigen::MatrixXd counts;
+  std::int64_t n_obs = 0;
+  std::int64_t n_missing = 0;
+};
+
 struct OrdinalPairScores {
   Eigen::VectorXd rho;
   Eigen::MatrixXd threshold_i;
@@ -98,6 +104,12 @@ ordinal_pair_table(const Eigen::Ref<const Eigen::VectorXi>& x_i,
                    const Eigen::Ref<const Eigen::VectorXi>& x_j,
                    std::int32_t n_levels_i,
                    std::int32_t n_levels_j);
+
+post_expected<OrdinalPairObservedTable>
+ordinal_pair_observed_table(const Eigen::Ref<const Eigen::VectorXd>& x_i,
+                            const Eigen::Ref<const Eigen::VectorXd>& x_j,
+                            std::int32_t n_levels_i,
+                            std::int32_t n_levels_j);
 
 double ordinal_bvn_rect_prob(double lo_i, double hi_i,
                              double lo_j, double hi_j,
