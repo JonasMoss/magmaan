@@ -248,6 +248,13 @@ Recommended structure:
 - `benchmarks/cpp/`: optional C++ microbenchmarks for evaluator, discrepancy,
   gradient, sample-stat, and optimizer primitives.
 
+The current scaffold follows this layout. `benchmarks/cases.yml` is the
+human-readable manifest, `benchmarks/r/cases.R` is the executable case
+registry, and `benchmarks/cases/<case_id>/` holds model syntax, source
+metadata, and small reference summaries. Ignored local cache directories under
+`benchmarks/data/` hold prepared CSV files and any fetched raw data whose
+redistribution terms are not yet pinned.
+
 Use `bench` or a similarly robust R benchmarking tool rather than raw
 `system.time()` for public runs. Use `callr` or a similar process-isolation
 tool for cold-start/end-to-end timings when package load, JIT warm-up, or

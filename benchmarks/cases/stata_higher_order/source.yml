@@ -1,0 +1,10 @@
+id: stata_higher_order
+source:
+  data: Stata Press sem_hcfa1.dta
+  model: Stata SEM Reference Manual higher-order CFA example
+  url: https://www.stata-press.com/data/r15/sem_hcfa1.dta
+license_or_terms: demonstration data; audit redistribution terms before committing raw or cleaned data
+estimator: ML
+status: candidate
+data_policy: fetch into ignored local cache with benchmarks/r/fetch_data.R
+reference_engine: lavaan or Stata after syntax is pinned

@@ -86,6 +86,9 @@ Done when: new code naturally uses `spec`, `lavaan`, `estimate`, `optim`, `nt`,
 
 Intent: make refactors and backend choices measurable instead of anecdotal.
 
+- [x] Seed an R-first benchmark scaffold with a case manifest, per-case model
+  syntax/source metadata, ignored local data/result caches, and lavaan
+  references for the initial built-in complete-data cases.
 - [ ] Add benchmark fixtures for representative complete-data ML, FIML, ULS,
   GLS, WLS, ordinal DWLS/WLS, and mixed categorical models.
 - [ ] Compare LBFGS, LBFGS-B, Ceres, and SNLLS only where each backend is
