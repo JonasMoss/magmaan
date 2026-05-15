@@ -18,6 +18,27 @@ Low-level functions such as `lavaan_lavaanify()`, `model_matrix_rep()`,
 family remain exported so the C++ architecture is still directly inspectable
 from R.
 
+## Sample-moment data
+
+Complete-data ML/ULS/GLS/WLS fit wrappers accept sample moments as
+`list(S = , nobs = , mean = )`:
+
+- `S` is a covariance matrix for one group, or a list of covariance matrices
+  for multiple groups. Each covariance must be square, finite, and match the
+  model's observed-variable dimension.
+- `nobs` is a positive integer scalar for one group, or a positive integer
+  vector with one entry per group.
+- `mean` is optional. When supplied, it is a length-`p` vector for one group,
+  or a list of per-group vectors. Omit `mean` entirely when means are
+  unavailable.
+- Named covariance columns are reordered to the model's observed-variable
+  order. Without names, matrices and means are assumed to already be in model
+  order.
+- `data_sample_stats_from_raw()` and `df_to_data()` use the N-divisor
+  covariance convention expected by the C++ discrepancies. `df_to_data()` can
+  rescale to `n-1` for inspection, but lavaan parity fixtures use N-divisor
+  moments.
+
 ## Ordinal LS boundary
 
 Ordinal support is intentionally narrow and mirrors the C++ delta-path:

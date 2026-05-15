@@ -54,6 +54,19 @@ Eigen::Index vech_len(Eigen::Index p) noexcept {
   return p * (p + 1) / 2;
 }
 
+bool matrix_all_finite(const Eigen::MatrixXd& M) {
+  for (Eigen::Index c = 0; c < M.cols(); ++c)
+    for (Eigen::Index r = 0; r < M.rows(); ++r)
+      if (!std::isfinite(M(r, c))) return false;
+  return true;
+}
+
+bool vector_all_finite(const Eigen::VectorXd& v) {
+  for (Eigen::Index i = 0; i < v.size(); ++i)
+    if (!std::isfinite(v(i))) return false;
+  return true;
+}
+
 fit_expected<std::int64_t> total_n_obs(const data::OrdinalStats& s) {
   std::int64_t total = 0;
   for (auto n : s.n_obs) total += n;
@@ -85,9 +98,9 @@ fit_expected<void> validate_stats(const data::OrdinalStats& s,
         "OrdinalStats block counts do not match MatrixRep"));
   }
   const auto& Ws = kind == OrdinalWeightKind::DWLS ? s.W_dwls : s.W_wls;
-  if (Ws.size() != nb) {
+  if (Ws.size() != nb || s.NACOV.size() != nb) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "OrdinalStats weight block count does not match MatrixRep"));
+        "OrdinalStats weight/NACOV block count does not match MatrixRep"));
   }
   for (std::size_t b = 0; b < nb; ++b) {
     const Eigen::Index p = rep.dims[b].n_observed;
@@ -101,9 +114,28 @@ fit_expected<void> validate_stats(const data::OrdinalStats& s,
           "OrdinalStats threshold metadata mismatch in block " + std::to_string(b)));
     }
     const Eigen::Index mdim = s.thresholds[b].size() + p * (p - 1) / 2;
-    if (Ws[b].rows() != mdim || Ws[b].cols() != mdim) {
+    if (Ws[b].rows() != mdim || Ws[b].cols() != mdim ||
+        s.NACOV[b].rows() != mdim || s.NACOV[b].cols() != mdim) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          "OrdinalStats weight dimension mismatch in block " + std::to_string(b)));
+          "OrdinalStats moment/weight dimension mismatch in block " +
+              std::to_string(b)));
+    }
+    if (s.n_obs[b] <= 0) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "OrdinalStats n_obs must be positive in block " + std::to_string(b)));
+    }
+    if (!matrix_all_finite(s.R[b]) || !vector_all_finite(s.thresholds[b]) ||
+        !matrix_all_finite(Ws[b]) || !matrix_all_finite(s.NACOV[b])) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "OrdinalStats contains non-finite values in block " +
+              std::to_string(b)));
+    }
+    for (Eigen::Index k = 0; k < s.NACOV[b].rows(); ++k) {
+      if (!(s.NACOV[b](k, k) > 0.0)) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "OrdinalStats NACOV diagonal is not positive in block " +
+                std::to_string(b)));
+      }
     }
     Eigen::LLT<Eigen::MatrixXd> llt(Ws[b]);
     if (llt.info() != Eigen::Success) {
@@ -138,9 +170,43 @@ fit_expected<void> validate_stats(const data::MixedOrdinalStats& s,
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "MixedOrdinalStats dimension mismatch in block " + std::to_string(b)));
     }
+    if (static_cast<Eigen::Index>(s.threshold_ov[b].size()) != s.thresholds[b].size() ||
+        static_cast<Eigen::Index>(s.threshold_level[b].size()) != s.thresholds[b].size()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "MixedOrdinalStats threshold metadata mismatch in block " +
+              std::to_string(b)));
+    }
     Eigen::Index n_cont = 0;
+    std::vector<char> has_threshold(static_cast<std::size_t>(p), 0);
     for (Eigen::Index j = 0; j < p; ++j) {
-      if (s.ordered[b][static_cast<std::size_t>(j)] == 0) ++n_cont;
+      const std::int32_t flag = s.ordered[b][static_cast<std::size_t>(j)];
+      if (flag != 0 && flag != 1) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "MixedOrdinalStats ordered mask must contain only 0/1 values in block " +
+                std::to_string(b)));
+      }
+      if (flag == 0) ++n_cont;
+    }
+    for (std::int32_t ov : s.threshold_ov[b]) {
+      if (ov < 0 || ov >= p) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "MixedOrdinalStats threshold metadata references an invalid observed "
+            "variable in block " + std::to_string(b)));
+      }
+      if (s.ordered[b][static_cast<std::size_t>(ov)] == 0) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "MixedOrdinalStats threshold metadata references a continuous variable "
+            "in block " + std::to_string(b)));
+      }
+      has_threshold[static_cast<std::size_t>(ov)] = 1;
+    }
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (s.ordered[b][static_cast<std::size_t>(j)] != 0 &&
+          has_threshold[static_cast<std::size_t>(j)] == 0) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "MixedOrdinalStats missing thresholds for ordered variable in block " +
+                std::to_string(b)));
+      }
     }
     const Eigen::Index mdim = s.thresholds[b].size() + 2 * n_cont + p * (p - 1) / 2;
     if (s.moments[b].size() != mdim || Ws[b].rows() != mdim || Ws[b].cols() != mdim ||
@@ -148,6 +214,25 @@ fit_expected<void> validate_stats(const data::MixedOrdinalStats& s,
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "MixedOrdinalStats moment/weight dimension mismatch in block " +
               std::to_string(b)));
+    }
+    if (s.n_obs[b] <= 0) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "MixedOrdinalStats n_obs must be positive in block " + std::to_string(b)));
+    }
+    if (!matrix_all_finite(s.R[b]) || !vector_all_finite(s.mean[b]) ||
+        !vector_all_finite(s.thresholds[b]) ||
+        !vector_all_finite(s.moments[b]) ||
+        !matrix_all_finite(Ws[b]) || !matrix_all_finite(s.NACOV[b])) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "MixedOrdinalStats contains non-finite values in block " +
+              std::to_string(b)));
+    }
+    for (Eigen::Index k = 0; k < s.NACOV[b].rows(); ++k) {
+      if (!(s.NACOV[b](k, k) > 0.0)) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "MixedOrdinalStats NACOV diagonal is not positive in block " +
+                std::to_string(b)));
+      }
     }
     Eigen::LLT<Eigen::MatrixXd> llt(Ws[b]);
     if (llt.info() != Eigen::Success) {

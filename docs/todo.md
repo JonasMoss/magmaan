@@ -10,17 +10,21 @@ methods development.
 Intent: reach a state where the current implementation can be trusted as a
 stable base for API design, refactoring, and larger research-facing work.
 
-- [ ] Extend continuous FIML lavaan fixtures beyond the current CFA,
-  structural, path, fixed.x, equality, and dense missingness tranche.
-- [ ] Add targeted complete-data equivalence checks where FIML gradients match
+- [x] Extend continuous FIML lavaan fixtures beyond the original CFA,
+  structural, path, fixed.x, equality, and dense missingness tranche. The FIML
+  stream now includes complete-row equivalence coverage and multi-group
+  `fixed.x` with complete exogenous variables plus missing outcomes.
+- [x] Add targeted complete-data equivalence checks where FIML gradients match
   complete-data ML gradients up to objective constants when every row is fully
   observed.
-- [ ] Verify `fit_extras()` conditional log-likelihood for multi-group
-  `fixed.x` and meanstructure plus `fixed.x` once targeted fixtures exist.
-- [ ] Keep robust FIML expansion fixture-first; do not claim unsupported
-  missing-data corrections beyond the current MLR/Yuan-Bentler Mplus slice.
-- [ ] Harden mixed continuous/ordinal categorical parity, especially
-  NACOV/weight construction, DWLS/WLS fits, and robust reporting tolerances.
+- [x] Verify `fit_extras()` likelihood accounting for complete-data FIML and
+  fixture-backed multi-group `fixed.x` / meanstructure-plus-`fixed.x` cases.
+- [x] Keep robust FIML expansion fixture-first; unsupported missing-data
+  corrections remain outside the public claim beyond the current
+  MLR/Yuan-Bentler Mplus slice.
+- [x] Harden mixed continuous/ordinal categorical validation and fixture
+  reporting. Mixed NACOV/weight parity remains intentionally tolerance-loose
+  while polyserial Gamma details are refined.
 
 Done when: representative supported estimator/model combinations have checked-in
 lavaan-backed fixtures, clear tolerances, and no hidden fixture-free parity
@@ -64,7 +68,7 @@ package into a second SEM implementation.
   useful. Priority examples are `infer_vcov()`, `infer_z_test()`,
   `infer_wald_test()`, `infer_rls_chi2()`, `infer_build_u_factor()`, and robust
   SE/test helpers.
-- [ ] Tighten validation and documentation for the sample-moment R path,
+- [x] Tighten validation and documentation for the sample-moment R path,
   including accepted shapes for `list(S = , nobs = , mean = )`.
 - [ ] Keep ordinal R documentation current around `model_spec()` with
   `ordered` and `parameterization = "delta"`, `data_ordinal_stats_from_df()`,

@@ -1652,6 +1652,27 @@ fiml_cases <- list(
          df$x5[seq(9L, nrow(df), by = 13L)] <- NA_real_
          df$x8[seq(12L, nrow(df), by = 16L)] <- NA_real_
          df
+       }),
+  list(id = "0016_three_factor_complete_rows_fiml",
+       model = paste("visual =~ x1 + x2 + x3",
+                     "textual =~ x4 + x5 + x6",
+                     "speed =~ x7 + x8 + x9", sep = "\n"),
+       ov = paste0("x", 1:9),
+       mask = function(df) df),
+  list(id = "0017_multigroup_path_fixedx_true_complete_x_missing_y_fiml",
+       entry = "sem",
+       model = "x9 ~ x1 + x2",
+       ov = c("x9", "x1", "x2"),
+       group_var = "school",
+       fixed_x = TRUE,
+       mask = function(df) {
+         gw <- as.character(df$school) == "Grant-White"
+         pa <- as.character(df$school) == "Pasteur"
+         gw_i <- which(gw)
+         pa_i <- which(pa)
+         df$x9[gw_i[seq(5L, length(gw_i), by = 11L)]] <- NA_real_
+         df$x9[pa_i[seq(7L, length(pa_i), by = 13L)]] <- NA_real_
+         df
        })
 )
 

@@ -71,8 +71,9 @@ golden `parTable()` fixtures.
 - Current checked-in fixtures cover single- and multi-group CFA, three-factor
   CFA, labeled equality CFA, latent structural models, observed-variable path
   models under random-x and complete fixed.x policies, equality-constrained
-  structural regressions, dense non-monotone missingness, and explicit mean
-  structures.
+  structural regressions, dense non-monotone missingness, complete observed-row
+  equivalence, multi-group fixed.x with complete exogenous variables and
+  missing outcomes, and explicit mean structures.
 - Post-fit FIML extras include observed-data normal constants, saturated/H1
   likelihood, baseline/independence likelihood accounting, chi-square,
   information criteria, and fit-index inputs for the current fixture tranche.
@@ -138,12 +139,21 @@ golden `parTable()` fixtures.
 - Ordinal and mixed delta DWLS/WLS expose fixed-parameter modification indices
   and equality-release score tests over the same threshold/correlation moment
   vectors and weights used by fitting.
+- Ordinal and mixed categorical entry points validate block counts, threshold
+  metadata, ordered masks, moment/weight/NACOV dimensions, finite values,
+  positive `n_obs`, and positive NACOV diagonals before fitting or robust
+  reporting.
 
 ### R bindings and public namespace transition
 
 - Exploratory R bindings cover lavaanify, fitting, sample-stat bundles, robust
   inference, fit measures, model implied moments, LS estimators, SNLLS, Ceres
   paths when enabled, and data-frame-to-model sample statistics.
+- The R sample-moment path accepts `list(S = , nobs = , mean = )`, reorders
+  named covariance matrices to model observed-variable order, and rejects
+  malformed group counts, non-square or wrong-sized covariance matrices,
+  non-finite moments, nonpositive `nobs`, and wrong-length means before calling
+  C++ fitters.
 - The R package is intended as a methods-developer interface over the C++
   library, not a second SEM implementation.
 - The future high-level R convenience is `magmaan(model, data, estimator,
