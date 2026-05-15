@@ -96,8 +96,16 @@ golden `parTable()` fixtures.
   estimator-specific chi-square reporting for representative CFA,
   multi-group, labeled-equality, mean-structure, and observed-exogenous
   fixed.x cases.
+- Continuous ULS/GLS/WLS robust adapters reuse the shared weighted-moment
+  sandwich/U-Gamma primitive with either supplied Gamma blocks or raw-data
+  Gamma construction. ULS `robust.sem` SEs and Satorra-Bentler-family
+  statistics are lavaan-backed for the non-fixed.x continuous LS fixtures;
+  GLS/WLS robust paths have shape and scaling coverage because lavaan does not
+  expose matching robust scaled-test targets for those estimators.
 - GLS/WLS reporting follows lavaan's `2 * N * fmin` convention; ULS
-  chi-square is pinned to lavaan's Browne residual NT statistic.
+  standard chi-square is pinned to lavaan's Browne residual NT statistic,
+  while ULS robust scaled-test reporting follows lavaan's robust LS
+  `2 * N * fmin` base statistic.
 - Separable nonlinear least squares profiling exists for LS estimators where
   conditionally linear parameters can be profiled out.
 
@@ -185,6 +193,9 @@ adapters layered on top.
   Robust WLS scaled-test reporting remains shape-only because lavaan rejects
   Satorra-Bentler-family `test=` requests with `estimator = "WLS"` for the
   current categorical fixtures; DWLS robust reporting remains lavaan-backed.
+- Continuous LS robust ULS reporting is lavaan-backed for non-fixed.x cases;
+  fixed.x robust LS still follows lavaan's conditional exogenous bookkeeping
+  and is not part of the generic continuous adapter coverage.
 - Mixed categorical NACOV/weight, fit, and robust-reporting parity is
   intentionally looser than the all-ordinal path while polyserial Gamma details
   are hardened.

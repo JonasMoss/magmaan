@@ -47,6 +47,7 @@ using estimate::OrdinalWeightKind;
 using estimate::WeightedMomentBlock;
 using estimate::WeightedRobustResult;
 using estimate::robust_ordinal;
+using estimate::robust_continuous_ls;
 using estimate::robust_weighted_moments;
 
 }  // namespace magmaan::nt::robust

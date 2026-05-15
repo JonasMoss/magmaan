@@ -6,7 +6,15 @@
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
+#include "magmaan/fit/fit.hpp"
+#include "magmaan/fit/gls.hpp"
+#include "magmaan/fit/raw_data.hpp"
 #include "magmaan/fit/robust.hpp"
+#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/fit/uls.hpp"
+#include "magmaan/fit/wls.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/spec/partable.hpp"
 
 namespace magmaan::estimate {
 
@@ -32,5 +40,53 @@ post_expected<WeightedRobustResult>
 robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
                         const Eigen::MatrixXd& K,
                         double fmin);
+
+post_expected<WeightedRobustResult>
+robust_continuous_ls(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const fit::SampleStats& samp,
+                     const fit::Estimates& est,
+                     fit::ULS discrepancy,
+                     const std::vector<Eigen::MatrixXd>& gamma);
+
+post_expected<WeightedRobustResult>
+robust_continuous_ls(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const fit::SampleStats& samp,
+                     const fit::Estimates& est,
+                     fit::GLS discrepancy,
+                     const std::vector<Eigen::MatrixXd>& gamma);
+
+post_expected<WeightedRobustResult>
+robust_continuous_ls(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const fit::SampleStats& samp,
+                     const fit::Estimates& est,
+                     fit::WLS discrepancy,
+                     const std::vector<Eigen::MatrixXd>& gamma);
+
+post_expected<WeightedRobustResult>
+robust_continuous_ls(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const fit::SampleStats& samp,
+                     const fit::Estimates& est,
+                     fit::ULS discrepancy,
+                     const fit::RawData& raw);
+
+post_expected<WeightedRobustResult>
+robust_continuous_ls(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const fit::SampleStats& samp,
+                     const fit::Estimates& est,
+                     fit::GLS discrepancy,
+                     const fit::RawData& raw);
+
+post_expected<WeightedRobustResult>
+robust_continuous_ls(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const fit::SampleStats& samp,
+                     const fit::Estimates& est,
+                     fit::WLS discrepancy,
+                     const fit::RawData& raw);
 
 }  // namespace magmaan::estimate
