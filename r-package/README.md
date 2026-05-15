@@ -12,6 +12,11 @@ Convenience helpers are limited to R-side composition:
   grouping, and calls the C++ raw-data sample-statistics wrapper.
 - `fit_ml()`, `fit_uls()`, `fit_gls()`, and `fit_wls()` accept those helper
   objects, then delegate to the matching C++ fit wrapper.
+- `magmaan(model, data, estimator, groups)` is the high-level estimate-only
+  convenience. It parses/lavaanifies syntax strings, builds sample statistics
+  or FIML raw-data objects from data frames, and dispatches to the matching
+  point-estimation wrapper. SEs, robust corrections, fit measures, defined
+  parameters, and nested tests remain explicit post-fit calls.
 
 Low-level functions such as `lavaan_lavaanify()`, `model_matrix_rep()`,
 `fit_fit()`, `fit_*_impl()`, `data_sample_stats_from_raw()`, and the `infer_*`
