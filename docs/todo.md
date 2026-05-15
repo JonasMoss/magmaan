@@ -35,6 +35,9 @@ missing data, mixed data, and robust divergences.
   for ordinal table kernels: `NaN` in either variable skips that pair and
   increments `n_missing`; finite observed values must be positive integer
   categories inside declared level ranges; all-missing pairs are hard errors.
+- [x] Add observed-pair bivariate ordinal ML wrappers for the fixed-threshold
+  rho estimator and pair-local joint threshold/rho estimator, reusing the
+  observed-pair table counts and preserving `n_obs`/`n_missing` diagnostics.
 - [ ] Define SEM-level missing-data semantics before fitting with missing
   ordinal data: observed-pair composite likelihood may not need EM, but
   shared-threshold/multivariate MAR handling needs a documented likelihood

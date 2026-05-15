@@ -160,6 +160,45 @@ TEST_CASE("Ordinal pair observed table rejects malformed observed categories") {
   CHECK(empty.error().detail.find("no observed pairs") != std::string::npos);
 }
 
+TEST_CASE("Ordinal pair observed ML wrappers reuse observed-pair table counts") {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  Eigen::VectorXd xi(8);
+  Eigen::VectorXd xj(8);
+  xi << 1.0, 2.0, 3.0, nan, 1.0, 2.0, 3.0, 2.0;
+  xj << 1.0, 2.0, 2.0, 1.0, nan, 1.0, 1.0, 2.0;
+  Eigen::VectorXd thi(2);
+  thi << -0.4, 0.7;
+  Eigen::VectorXd thj(1);
+  thj << 0.2;
+
+  auto table = magmaan::data::ordinal_pair_observed_table(xi, xj, 3, 2);
+  REQUIRE(table.has_value());
+  auto direct_rho = magmaan::data::fit_ordinal_pair_rho_ml(
+      table->counts, thi, thj);
+  auto observed_rho = magmaan::data::fit_ordinal_pair_observed_rho_ml(
+      xi, xj, 3, 2, thi, thj);
+  REQUIRE(direct_rho.has_value());
+  REQUIRE(observed_rho.has_value());
+  CHECK(observed_rho->n_obs == table->n_obs);
+  CHECK(observed_rho->n_missing == table->n_missing);
+  CHECK(observed_rho->counts.isApprox(table->counts, 0.0));
+  CHECK(observed_rho->fit.rho == doctest::Approx(direct_rho->rho));
+  CHECK(observed_rho->fit.negloglik == doctest::Approx(direct_rho->negloglik));
+
+  auto direct_joint = magmaan::data::fit_ordinal_pair_joint_ml(table->counts);
+  auto observed_joint = magmaan::data::fit_ordinal_pair_observed_joint_ml(
+      xi, xj, 3, 2);
+  REQUIRE(direct_joint.has_value());
+  REQUIRE(observed_joint.has_value());
+  CHECK(observed_joint->n_obs == table->n_obs);
+  CHECK(observed_joint->n_missing == table->n_missing);
+  CHECK(observed_joint->counts.isApprox(table->counts, 0.0));
+  CHECK(observed_joint->fit.thresholds_i.isApprox(direct_joint->thresholds_i, 1e-12));
+  CHECK(observed_joint->fit.thresholds_j.isApprox(direct_joint->thresholds_j, 1e-12));
+  CHECK(observed_joint->fit.rho == doctest::Approx(direct_joint->rho));
+  CHECK(observed_joint->fit.negloglik == doctest::Approx(direct_joint->negloglik));
+}
+
 TEST_CASE("Ordinal pair joint ML estimates pair-local thresholds and rho") {
   Eigen::VectorXd thi(2);
   thi << -0.55, 0.85;
