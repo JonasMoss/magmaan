@@ -59,6 +59,11 @@ package into a second SEM implementation.
   chained `:=` rows and `.pN.` references.
 - [ ] Add high-level shortcuts equivalent to `se = "none"` and `test = "none"`
   for point-estimate-only workflows.
+- [ ] Audit exported R wrappers that take a whole fit list and split them into
+  primitive-shaped wrappers plus explicit fit-list convenience adapters where
+  useful. Priority examples are `infer_vcov()`, `infer_z_test()`,
+  `infer_wald_test()`, `infer_rls_chi2()`, `infer_build_u_factor()`, and robust
+  SE/test helpers.
 - [ ] Tighten validation and documentation for the sample-moment R path,
   including accepted shapes for `list(S = , nobs = , mean = )`.
 - [ ] Keep ordinal R documentation current around `model_spec()` with
