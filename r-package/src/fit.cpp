@@ -228,6 +228,50 @@ Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
   return out;
 }
 
+Rcpp::List mixed_ordinal_stats_to_r(const magmaan::data::MixedOrdinalStats& s) {
+  const R_xlen_t nb = static_cast<R_xlen_t>(s.R.size());
+  Rcpp::List R(nb), mean(nb), ordered_mask(nb), thresholds(nb), threshold_ov(nb),
+      threshold_level(nb), moments(nb), NACOV(nb), W_dwls(nb), W_wls(nb),
+      n_levels(nb);
+  Rcpp::IntegerVector nobs(nb);
+  for (R_xlen_t b = 0; b < nb; ++b) {
+    const std::size_t bi = static_cast<std::size_t>(b);
+    R[b] = Rcpp::wrap(s.R[bi]);
+    mean[b] = Rcpp::wrap(s.mean[bi]);
+    ordered_mask[b] = Rcpp::wrap(s.ordered[bi]);
+    thresholds[b] = Rcpp::wrap(s.thresholds[bi]);
+    moments[b] = Rcpp::wrap(s.moments[bi]);
+    Rcpp::IntegerVector ov(static_cast<R_xlen_t>(s.threshold_ov[bi].size()));
+    Rcpp::IntegerVector lev(static_cast<R_xlen_t>(s.threshold_level[bi].size()));
+    for (R_xlen_t k = 0; k < ov.size(); ++k) {
+      ov[k] = s.threshold_ov[bi][static_cast<std::size_t>(k)] + 1;
+      lev[k] = s.threshold_level[bi][static_cast<std::size_t>(k)];
+    }
+    threshold_ov[b] = ov;
+    threshold_level[b] = lev;
+    NACOV[b] = Rcpp::wrap(s.NACOV[bi]);
+    W_dwls[b] = Rcpp::wrap(s.W_dwls[bi]);
+    W_wls[b] = Rcpp::wrap(s.W_wls[bi]);
+    nobs[b] = static_cast<int>(s.n_obs[bi]);
+    n_levels[b] = Rcpp::wrap(s.n_levels[bi]);
+  }
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["R"] = R,
+      Rcpp::_["mean"] = mean,
+      Rcpp::_["ordered_mask"] = ordered_mask,
+      Rcpp::_["thresholds"] = thresholds,
+      Rcpp::_["threshold_ov"] = threshold_ov,
+      Rcpp::_["threshold_level"] = threshold_level,
+      Rcpp::_["moments"] = moments,
+      Rcpp::_["NACOV"] = NACOV,
+      Rcpp::_["W_dwls"] = W_dwls,
+      Rcpp::_["W_wls"] = W_wls,
+      Rcpp::_["nobs"] = nobs,
+      Rcpp::_["n_levels"] = n_levels);
+  out.attr("class") = Rcpp::CharacterVector::create("magmaan_mixed_ordinal_data", "list");
+  return out;
+}
+
 Rcpp::LogicalMatrix block_mask_matrix(SEXP M, std::size_t b, std::size_t n_blocks,
                                       const char* what) {
   if (Rf_isMatrix(M)) {
@@ -608,6 +652,37 @@ Rcpp::List data_ordinal_stats_from_raw_impl(SEXP X) {
 }
 
 // [[Rcpp::export]]
+Rcpp::List data_mixed_ordinal_stats_from_raw_impl(SEXP X, SEXP ordered_mask) {
+  auto blocks = matrix_blocks_from_arg(X);
+  std::vector<std::vector<std::int32_t>> ordered;
+  ordered.reserve(blocks.size());
+  if (Rf_isMatrix(ordered_mask)) {
+    Rcpp::IntegerMatrix M(ordered_mask);
+    if (blocks.size() != 1)
+      Rcpp::stop("magmaan: ordered_mask must be a list for multi-group data");
+    std::vector<std::int32_t> row(static_cast<std::size_t>(M.ncol()));
+    for (R_xlen_t j = 0; j < M.ncol(); ++j) row[static_cast<std::size_t>(j)] = M(0, j);
+    ordered.push_back(std::move(row));
+  } else if (TYPEOF(ordered_mask) == VECSXP) {
+    Rcpp::List L(ordered_mask);
+    if (static_cast<std::size_t>(L.size()) != blocks.size())
+      Rcpp::stop("magmaan: ordered_mask block count does not match X");
+    for (R_xlen_t b = 0; b < L.size(); ++b) {
+      Rcpp::IntegerVector v(L[b]);
+      ordered.push_back(Rcpp::as<std::vector<std::int32_t>>(v));
+    }
+  } else {
+    Rcpp::IntegerVector v(ordered_mask);
+    if (blocks.size() != 1)
+      Rcpp::stop("magmaan: ordered_mask must be a list for multi-group data");
+    ordered.push_back(Rcpp::as<std::vector<std::int32_t>>(v));
+  }
+  auto out_or = magmaan::data::mixed_ordinal_stats_from_data(blocks, ordered);
+  if (!out_or.has_value()) stop_post(out_or.error());
+  return mixed_ordinal_stats_to_r(*out_or);
+}
+
+// [[Rcpp::export]]
 Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
                                  Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                                  Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
@@ -661,6 +736,68 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return ordinal_fit_result(ctx, stats, est, &starts, "WLS");
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
+                                       Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
+                                       Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_dwls_mixed_ordinal");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.names = std::move(parsed.names);
+  magmaan::data::MixedOrdinalStats stats = mixed_ordinal_stats_from_arg(mixed_stats);
+  auto prep_or = magmaan::estimate::prepare_mixed_ordinal_delta_partable(ctx.pt, stats, &starts);
+  if (!prep_or.has_value()) stop_fit(prep_or.error());
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  ctx.samp.S = stats.R;
+  ctx.samp.mean = stats.mean;
+  ctx.samp.n_obs = stats.n_obs;
+  ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];
+  ctx.meanstructure = true;
+  auto e_or = magmaan::estimate::fit_mixed_ordinal_bounded(
+      ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
+      magmaan::estimate::OrdinalWeightKind::DWLS,
+      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  Rcpp::List out = fit_result(ctx, est, &starts, "DWLS");
+  out["mixed_ordinal"] = true;
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_wls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
+                                      Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
+                                      Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_mixed_ordinal");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.names = std::move(parsed.names);
+  magmaan::data::MixedOrdinalStats stats = mixed_ordinal_stats_from_arg(mixed_stats);
+  auto prep_or = magmaan::estimate::prepare_mixed_ordinal_delta_partable(ctx.pt, stats, &starts);
+  if (!prep_or.has_value()) stop_fit(prep_or.error());
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  ctx.samp.S = stats.R;
+  ctx.samp.mean = stats.mean;
+  ctx.samp.n_obs = stats.n_obs;
+  ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];
+  ctx.meanstructure = true;
+  auto e_or = magmaan::estimate::fit_mixed_ordinal_bounded(
+      ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
+      magmaan::estimate::OrdinalWeightKind::WLS,
+      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  Rcpp::List out = fit_result(ctx, est, &starts, "WLS");
+  out["mixed_ordinal"] = true;
+  return out;
 }
 
 // [[Rcpp::export]]

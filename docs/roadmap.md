@@ -75,9 +75,15 @@ The core parser-to-fit pipeline is in place:
   test statistics from the same threshold-plus-polychoric moment vector and
   `NACOV`/DWLS/WLS weights. DWLS robust ordinal reporting is now checked
   against lavaan robust SEM scaled-test goldens for representative single- and
-  multi-group delta fixtures. Theta parameterization, mixed polyserial
-  statistics, ordinal SNLLS, and public WLS robust-reporting targets remain
-  open.
+  multi-group delta fixtures. A first mixed continuous/ordinal categorical
+  path now builds lavaan-ordered thresholds, continuous means/variances,
+  polychoric/polyserial/covariance moment vectors, NACOV/DWLS/WLS weights,
+  and DWLS/WLS delta fits, with thin R wrappers and a first lavaan-backed
+  fixture. Mixed moment values match lavaan tightly; mixed NACOV/weight,
+  fit, and robust-reporting parity is intentionally held to looser first-pass
+  tolerances than the all-ordinal path while the polyserial Gamma details are
+  hardened. Theta parameterization, ordinal SNLLS, and public WLS
+  robust-reporting targets remain open.
 - Separable nonlinear least squares (SNLLS) profiling for LS estimators where
   conditionally linear parameters can be profiled out.
 - Expected information, finite-difference observed information, analytic
@@ -215,9 +221,13 @@ Open work:
   parameter/statistic parity is resolved. Consider an ordinal SNLLS variant
   only after the conditionally linear block remains valid with threshold
   residuals included.
-- Extend the data path beyond all-ordinal complete/listwise indicators only
-  when the mixed continuous/ordinal contract is clear. Polyserial correlations
-  and mixed thresholds should not be inferred ad hoc in R.
+- Harden the first mixed continuous/ordinal categorical path. The contract is
+  explicit and complete/listwise only: ordered variables contribute thresholds
+  plus polychoric/polyserial rows, continuous variables contribute raw-scale
+  means, variances, and covariances, and R requires `meanstructure = TRUE` so
+  continuous intercept rows are represented. Remaining work is tightening
+  mixed NACOV/weight, DWLS/WLS fit, and robust-reporting tolerances against a
+  broader lavaan fixture family.
 - Harden robust ordinal reporting against lavaan's LS-family robust targets:
   `se = "robust.sem"` / `"robust.sem.nt"` and tests `satorra.bentler`
   (WLSM/ULSM), `scaled.shifted` (WLSMV/ULSMV), and `mean.var.adjusted`

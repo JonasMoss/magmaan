@@ -282,3 +282,62 @@ TEST_CASE("Ordinal robust reporting returns sandwich SEs and scaled-test eigenva
   CHECK(std::isfinite(rob->mean_var_adjusted.df_adj));
   CHECK(std::isfinite(rob->scaled_shifted.scale_a));
 }
+
+TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments") {
+  std::mt19937 rng(20240515);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(600, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    const double e1 = norm(rng);
+    const double e2 = norm(rng);
+    const double y1 = 0.8 * eta + 0.6 * e1;
+    const double y2 = 0.7 * eta + 0.7 * e2;
+    X(i, 0) = 1.0 + (eta > -0.6) + (eta > 0.4);
+    X(i, 1) = 1.0 + (0.65 * eta + 0.76 * norm(rng) > 0.1);
+    X(i, 2) = y1 + 0.2;
+    X(i, 3) = y2 - 0.1;
+  }
+  std::vector<std::vector<std::int32_t>> ordered = {{1, 1, 0, 0}};
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data({X}, ordered);
+  REQUIRE(stats.has_value());
+  REQUIRE(stats->R.size() == 1);
+  CHECK(stats->thresholds[0].size() == 3);
+  CHECK(stats->mean[0].size() == 4);
+  CHECK(stats->moments[0].size() == 13);
+  CHECK(stats->NACOV[0].rows() == 13);
+  CHECK(stats->W_dwls[0].rows() == 13);
+  CHECK(stats->W_wls[0].rows() == 13);
+  CHECK(stats->R[0](0, 0) == doctest::Approx(1.0));
+  CHECK(stats->R[0](1, 1) == doctest::Approx(1.0));
+  CHECK(stats->R[0](2, 2) > 0.0);
+  CHECK(stats->R[0](3, 3) > 0.0);
+
+  magmaan::spec::LavaanifyOptions opts;
+  opts.meanstructure = true;
+
+  const char* th_syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n";
+  auto fpt = magmaan::parse::Parser::parse(th_syntax);
+  REQUIRE(fpt.has_value());
+  auto pt2 = magmaan::spec::lavaanify(*fpt, opts);
+  REQUIRE(pt2.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt2);
+  REQUIRE(mr.has_value());
+  auto fit = magmaan::estimate::fit_mixed_ordinal_bounded(
+      *pt2, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(fit.has_value());
+  CHECK(fit->theta.allFinite());
+  CHECK(std::isfinite(fit->fmin));
+
+  auto rob = magmaan::estimate::robust_mixed_ordinal(
+      *pt2, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(rob.has_value());
+  CHECK(rob->vcov.rows() == fit->theta.size());
+  CHECK(rob->se.size() == fit->theta.size());
+  CHECK(rob->se.allFinite());
+}

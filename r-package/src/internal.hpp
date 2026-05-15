@@ -23,6 +23,7 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/data/ordinal.hpp"
 #include "magmaan/estimate/fit.hpp"              // Estimates
 #include "magmaan/nt/infer.hpp"        // information_*, vcov, se, chi2_stat, df_stat
 #include "magmaan/optim/lbfgs_optimizer.hpp"  // LbfgsOptions
@@ -452,6 +453,57 @@ inline magmaan::estimate::Estimates est_from_fit(Rcpp::List fit) {
                                             : std::numeric_limits<double>::quiet_NaN();
   e.iterations = fit.containsElementNamed("iterations") ? Rcpp::as<int>(fit["iterations"]) : 0;
   return e;
+}
+
+inline magmaan::data::MixedOrdinalStats mixed_ordinal_stats_from_arg(Rcpp::List x) {
+  const char* what = "mixed_ordinal_stats";
+  for (const char* nm : {"R", "mean", "ordered_mask", "thresholds",
+                         "threshold_ov", "threshold_level", "moments",
+                         "NACOV", "W_dwls", "W_wls", "nobs", "n_levels"}) {
+    if (!x.containsElementNamed(nm)) Rcpp::stop("magmaan: %s is missing $%s", what, nm);
+  }
+  Rcpp::List Rl(x["R"]), meanl(x["mean"]), ordl(x["ordered_mask"]),
+      thl(x["thresholds"]), ovl(x["threshold_ov"]), levl(x["threshold_level"]),
+      moml(x["moments"]), NAl(x["NACOV"]), Wdl(x["W_dwls"]),
+      Wfl(x["W_wls"]), nlevl(x["n_levels"]);
+  Rcpp::IntegerVector nobs(x["nobs"]);
+  const R_xlen_t nb = Rl.size();
+  magmaan::data::MixedOrdinalStats out;
+  out.R.reserve(static_cast<std::size_t>(nb));
+  out.mean.reserve(static_cast<std::size_t>(nb));
+  out.ordered.reserve(static_cast<std::size_t>(nb));
+  out.thresholds.reserve(static_cast<std::size_t>(nb));
+  out.threshold_ov.reserve(static_cast<std::size_t>(nb));
+  out.threshold_level.reserve(static_cast<std::size_t>(nb));
+  out.moments.reserve(static_cast<std::size_t>(nb));
+  out.NACOV.reserve(static_cast<std::size_t>(nb));
+  out.W_dwls.reserve(static_cast<std::size_t>(nb));
+  out.W_wls.reserve(static_cast<std::size_t>(nb));
+  out.n_obs.reserve(static_cast<std::size_t>(nb));
+  out.n_levels.reserve(static_cast<std::size_t>(nb));
+  for (R_xlen_t b = 0; b < nb; ++b) {
+    out.R.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Rl[b])));
+    out.mean.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(meanl[b])));
+    Rcpp::IntegerVector ord(ordl[b]);
+    out.ordered.push_back(Rcpp::as<std::vector<std::int32_t>>(ord));
+    out.thresholds.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(thl[b])));
+    Rcpp::IntegerVector ov(ovl[b]), lev(levl[b]);
+    std::vector<std::int32_t> ov0(static_cast<std::size_t>(ov.size()));
+    std::vector<std::int32_t> lev0(static_cast<std::size_t>(lev.size()));
+    for (R_xlen_t k = 0; k < ov.size(); ++k) {
+      ov0[static_cast<std::size_t>(k)] = ov[k] - 1;
+      lev0[static_cast<std::size_t>(k)] = lev[k];
+    }
+    out.threshold_ov.push_back(std::move(ov0));
+    out.threshold_level.push_back(std::move(lev0));
+    out.moments.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(moml[b])));
+    out.NACOV.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(NAl[b])));
+    out.W_dwls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wdl[b])));
+    out.W_wls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wfl[b])));
+    out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
+    out.n_levels.push_back(Rcpp::as<std::vector<std::int32_t>>(Rcpp::IntegerVector(nlevl[b])));
+  }
+  return out;
 }
 
 }  // namespace magmaanr
