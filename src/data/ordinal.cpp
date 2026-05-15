@@ -456,6 +456,7 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs)
         -A22_inv * A21 * (*A11_inv_or);
     B_inv.block(nth, nth, ncorr, ncorr) = A22_inv;
 
+    Eigen::MatrixXd IF = static_cast<double>(n) * SC * B_inv.transpose();
     Eigen::MatrixXd NACOV = static_cast<double>(n) *
         (B_inv * INNER * B_inv.transpose());
     NACOV = 0.5 * (NACOV + NACOV.transpose());
@@ -473,6 +474,8 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs)
     auto W_wls_or = symmetric_inverse_pd(
         NACOV, "ordinal NACOV matrix");
     if (!W_wls_or.has_value()) return std::unexpected(W_wls_or.error());
+    block_diag.moment_influence = std::move(IF);
+    block_diag.gamma = NACOV;
 
     out.stats.R.push_back(std::move(R));
     out.stats.thresholds.push_back(std::move(th));

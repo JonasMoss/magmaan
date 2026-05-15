@@ -123,8 +123,9 @@ golden `parTable()` fixtures.
 - Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
   complete/listwise ordinal data, exposing pair labels, count/adjustment
   diagnostics, fitted fixed-threshold rho diagnostics, fitted expected/residual
-  tables, missingness/repair diagnostics, and minimum eigenvalue diagnostics
-  while preserving the existing `OrdinalStats` moment/weight path.
+  tables, missingness/repair diagnostics, casewise moment influence, Gamma,
+  and minimum eigenvalue diagnostics while preserving the existing
+  `OrdinalStats` moment/weight path.
 - Experimental joint bivariate ordinal ML kernel for one complete pairwise
   table, estimating pair-local nuisance thresholds and rho. This is not yet
   wired into SEM moment construction or a shared-threshold composite-likelihood

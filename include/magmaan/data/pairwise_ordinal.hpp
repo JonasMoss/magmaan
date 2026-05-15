@@ -83,6 +83,8 @@ struct OrdinalPairDiagnostics {
 
 struct PairwiseOrdinalBlockDiagnostics {
   std::vector<OrdinalPairDiagnostics> pair_diagnostics;
+  Eigen::MatrixXd moment_influence;
+  Eigen::MatrixXd gamma;
   double min_eigen_r = 0.0;
 };
 
