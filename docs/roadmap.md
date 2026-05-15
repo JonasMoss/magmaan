@@ -134,8 +134,8 @@ Open work:
   current public contract.
 - Keep the first public `fixed.x` policy narrow: complete observed exogenous
   variables are supported for path-model FIML, but missing observed exogenous
-  variables are rejected until conditional fixed.x likelihood behavior is
-  implemented and fixture-backed.
+  variables are rejected by the fixture-backed public contract until
+  conditional fixed.x likelihood behavior is implemented.
 - Maintain the first R FIML boundary as estimate-only: `df_to_fiml_data()`
   preserves incomplete rows in raw data plus masks, and `fit_fiml()` routes to
   the fixture-backed C++ path. The future high-level `magmaan(model, data, ...)`
@@ -155,8 +155,6 @@ Validation targets:
 - Multi-group FIML where pattern summaries and block weights use per-group rows
   but the optimizer objective is weighted by total observed rows.
 - Latent structural FIML through the reduced LISREL representation.
-- Explicit rejection coverage for `fixed.x = TRUE` with missing observed
-  exogenous variables.
 
 ### 2. Turn LS estimator support into lavaan-parity fixtures
 
