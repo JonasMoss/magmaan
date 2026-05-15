@@ -63,10 +63,9 @@ information_observed_fd(partable::LatentStructure       pt,
 //   H1[a,b] = -tr(Σ⁻¹ M_b Σ⁻¹ M_a) + 2 · tr(Σ⁻¹ M_b · Σ⁻¹ S Σ⁻¹ · M_a)
 //   H2[a,b] = tr(G · ∂²Σ/∂θ_a ∂θ_b),  G = Σ⁻¹ − Σ⁻¹ S Σ⁻¹
 //
-// ∂²Σ/∂θ² derived case-by-case on (mat_a, mat_b). v0 implements the Pure-CFA
-// cases ((Λ,Λ), (Λ,Ψ)) and the Reduced-form cross-terms; mean-structure
-// analytic observed info is not wired up — use `information_observed_fd` for
-// mean-structure models.
+// ∂²Σ/∂θ² derived case-by-case on (mat_a, mat_b), including the reduced-form
+// Λ/Ψ/Β cross-terms. Mean structures add the analytic Hessian terms for
+// μ = ν + Λ(I−B)⁻¹α, including Λ-α, Λ-B, α-B, and B-B interactions.
 post_expected<Eigen::MatrixXd>
 information_observed_analytic(partable::LatentStructure       pt,
                               const model::MatrixRep&         rep,

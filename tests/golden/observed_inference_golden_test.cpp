@@ -30,15 +30,6 @@ const std::set<std::string> kSkipForObservedGoldens = {
     "0018_na_modifier",
 };
 
-// Mean-structure fixtures: information_observed_analytic errors out cleanly
-// until the ∂²μ/∂θ² closed-form cases land (= G4, deferred).
-// information_observed_fd handles them via numerical differentiation of the
-// gradient, so the FD path runs on these fixtures and the analytic path is
-// skipped.
-const std::set<std::string> kSkipAnalyticOnly = {
-    "0026_two_factor_meanstructure_hs",
-};
-
 // Run a single information_* function on one fixture, comparing the derived
 // SEs to `se_observed` in the fixture. Appends a `<id>: <message>` entry to
 // `failures` on disagreement and increments `passed` on success.
@@ -168,9 +159,7 @@ TEST_CASE("observed inference goldens — FD + analytic vs lavaan") {
       return magmaan::nt::infer::information_observed_analytic(std::forward<decltype(args)>(args)...);
     };
     run_one(e, exp, fd_fn, "FD",       failures, passed_fd, total_fd);
-    if (kSkipAnalyticOnly.count(e.id) == 0) {
-      run_one(e, exp, an_fn, "analytic", failures, passed_an, total_an);
-    }
+    run_one(e, exp, an_fn, "analytic", failures, passed_an, total_an);
   }
 
   MESSAGE("observed inference goldens: FD " << passed_fd << "/" << total_fd

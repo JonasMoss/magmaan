@@ -170,15 +170,16 @@ struct UFactor {
 //   4. `spec.bread == Expected` (`kind = ProjectionExpected`):
 //        HouseholderQR of A → trailing (p* − rank(A)) columns of Q are an
 //        orthonormal basis N of ker(Aᵀ); B_b = L_Γ,b⁻ᵀ·N_b. `U = B·Bᵀ`.
-//      `spec.bread == Observed` (`kind = ObservedHessian`, single-block in
-//        v1): compute the observed Hessian H_obs (via `information_observed_analytic`,
-//        FD fallback) in the same per-unit units as ΔᵀWΔ; store `A` and
-//        `H_obs⁻¹`. `U = L_Γ⁻ᵀ·(I − A·H_obs⁻¹·Aᵀ)·L_Γ⁻¹` — not idempotent.
+//      `spec.bread == Observed` (`kind = ObservedHessian`): compute the
+//        observed Hessian H_obs (via `information_observed_analytic`, FD
+//        fallback) in total-N per-unit units, project it through any equality
+//        constraints, then store `A` and `H_obs⁻¹`.
+//        `U = L_Γ⁻ᵀ·(I − A·H_obs⁻¹·Aᵀ)·L_Γ⁻¹` — not idempotent.
 //
-// Multi-block: the `Expected` path stacks A/B per block; `Observed` is
-// single-block only in v1. Mean structure (`~1`): when `dmu_dtheta(theta)`
-// is non-empty, each block's stacked slice is `[μ_b; vech(Σ_b)]` (μ-rows
-// on top, σ-rows below) and the per-block Γ_NT block-diagonalises as
+// Multi-block: both `Expected` and `Observed` stack A/B per block. Mean
+// structure (`~1`): when `dmu_dtheta(theta)` is non-empty, each block's
+// stacked slice is `[μ_b; vech(Σ_b)]` (μ-rows on top, σ-rows below) and the
+// per-block Γ_NT block-diagonalises as
 // `[M_b 0; 0 Γ_NT_cov(M_b)]` (G3b). Mirrors `browne_residual_nt`'s layout.
 //
 // `PostError::InfoMatrixSingular` if Γ_NT(M_b) or M_b is non-PD, Δ is
@@ -286,16 +287,32 @@ reduced_gamma_nt(const UFactor& uf);
 //   b = N       / ((N−2)·(N−3))
 //   s = vech(S) stacked per block
 //
-// `N` here is the total sample size (multi-block: Σ_b n_b). The function
-// errors with `PostError::NumericIssue` if the setup isn't single-block
-// (Browne's correction is well-defined per-block; multi-block would
-// require the user to call this per block and stitch, which the v0
-// surface doesn't expose).
+// `N` here is the single block's sample size. The reduced-matrix shorthand
+// errors for multi-block models because the per-block sample pieces have
+// already been summed. Use `reduced_gamma_unbiased_casewise()` for grouped
+// data so the per-block Browne coefficients can be applied before stitching.
 post_expected<Eigen::MatrixXd>
 reduced_gamma_unbiased(const UFactor&            uf,
                        const SampleStats&        samp,
                        const Eigen::MatrixXd&    M_sample,
                        const Eigen::MatrixXd&    M_nt);
+
+// Multi-block Browne-unbiased correction. This overload consumes the raw
+// stacked casewise contributions so it can apply Browne's finite-sample
+// coefficients per block before summing into the common reduced basis. The
+// reduced-matrix overload above remains the single-block shorthand.
+post_expected<Eigen::MatrixXd>
+reduced_gamma_unbiased_casewise(
+    const UFactor&                            uf,
+    const SampleStats&                        samp,
+    const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+    const Eigen::Ref<const Eigen::VectorXd>&  denom);
+post_expected<Eigen::MatrixXd>
+reduced_gamma_unbiased_casewise(
+    const UFactor&                            uf,
+    const SampleStats&                        samp,
+    const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+    double                                    denom);
 
 // ============================================================================
 // Eigenvalues + robust statistics
@@ -375,7 +392,7 @@ scaled_shifted(double                                    t_ml,
 //   A1 = Σ_b (n_b/N)·Δ_bᵀW_bΔ_b      (spec.bread == Information::Expected; the
 //                                     per-unit GLS/Fisher form, W_b = Γ_NT(M_b)⁻¹)
 //      = H = H1 + H2 / N              (spec.bread == Information::Observed — the
-//                                     MLR convention; single-block only here)
+//                                     MLR convention, projected through K)
 //   B1 = Σ_b (n_b/N)·Δ_bᵀW_bΓ̂_bW_bΔ_b   (the per-unit score variance; with the
 //                                     `gamma_hat` overload it's (WΔ)ᵀ·Γ̂·(WΔ),
 //                                     single-block; with the `RawData` overload
@@ -396,8 +413,8 @@ scaled_shifted(double                                    t_ml,
 //
 // lavaan mapping: `{Expected, Structured, Empirical}` ≡ `se = "robust.sem"`
 // (the SB / MLM SE — multi-group via the `RawData` overload); `{Observed,
-// Structured, Empirical}` ≡ `se = "robust.huber.white"` (MLR — single-block
-// only for now). `spec.cov == BrowneUnbiased` errors for now.
+// Structured, Empirical}` ≡ `se = "robust.huber.white"` (MLR).
+// `spec.cov == BrowneUnbiased` errors for now.
 struct RobustSeResult {
   Eigen::MatrixXd vcov;       // n_free × n_free  — Cov(θ̂) (robust)
   Eigen::VectorXd se;         // n_free            — √diag(vcov)
@@ -418,8 +435,8 @@ robust_se(partable::LatentStructure        pt,
 
 // Convenience: derives Γ̂ from raw data via `casewise_contributions` — never
 // materialises the p* × p* matrix (meat = (Z_c·WΔ)ᵀ·(Z_c·WΔ)/N_total). Works
-// multi-group for the `Expected` bread (the per-block n_b/N weighting falls
-// out of the block-diagonal Z_c · WΔ); the `Observed` bread is single-block.
+// multi-group for both `Expected` and `Observed` bread; the per-block n_b/N
+// weighting falls out of the block-diagonal Z_c · WΔ.
 post_expected<RobustSeResult>
 robust_se(partable::LatentStructure        pt,
           const model::MatrixRep&   rep,
