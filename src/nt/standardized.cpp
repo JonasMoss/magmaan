@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -42,98 +43,99 @@ standardize_lv(const partable::LatentStructure& pt,
             ev_or.error().detail));
   }
   const auto& ev = *ev_or;
-  auto am_or = ev.assembled(est.theta);
-  if (!am_or.has_value()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "standardize_lv: ev.assembled failed: " + am_or.error().detail));
-  }
-  const auto& am = *am_or;
   const auto locs = ev.param_locations();
-
-  // Build a lookup: (block, j) → free index (1-based) of Ψ[j, j] if free,
-  // else 0. Used to record the gradient contribution wrt ψ_jj when
-  // standardizing a Λ loading that loads on factor j.
-  // For multi-block: one lookup per block.
-  std::vector<std::vector<std::int32_t>> psi_diag_free(am.blocks.size());
-  for (std::size_t b = 0; b < am.blocks.size(); ++b) {
-    psi_diag_free[b].assign(static_cast<std::size_t>(am.blocks[b].Psi.rows()), 0);
-  }
-  for (std::size_t k = 0; k < locs.size(); ++k) {
-    const auto& L = locs[k];
-    if (L.mat == model::MatId::Psi && L.row == L.col) {
-      psi_diag_free[static_cast<std::size_t>(L.block)]
-                   [static_cast<std::size_t>(L.row)] =
-          static_cast<std::int32_t>(k) + 1;
-    }
-  }
 
   // Build the Jacobian J of θ → θ_std and the values theta_std. Each row k
   // of J is the gradient of g_k(θ).
   Eigen::MatrixXd J = Eigen::MatrixXd::Identity(n_free, n_free);
   Eigen::VectorXd theta_std = est.theta;
 
-  for (std::size_t k = 0; k < locs.size(); ++k) {
-    const auto& L = locs[k];
-    const auto  b = static_cast<std::size_t>(L.block);
-    const auto& bm = am.blocks[b];
-    const Eigen::Index ki = static_cast<Eigen::Index>(k);
+  auto latent_std_value =
+      [&](const Eigen::VectorXd& theta,
+          const model::ParamLocation& L) -> post_expected<double> {
+    auto a_or = ev.assembled(theta);
+    if (!a_or.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "standardize_lv: ev.assembled failed while standardizing latent "
+          "parameter: " + a_or.error().detail));
+    }
+    const auto& bmat = a_or->blocks[static_cast<std::size_t>(L.block)];
+    auto latent_var = [&](Eigen::Index j) -> post_expected<double> {
+      const double v = bmat.Mid(j, j);
+      if (v <= 0.0) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "standardize_lv: non-positive latent variance; cannot standardize"));
+      }
+      return v;
+    };
     switch (L.mat) {
       case model::MatId::Lambda: {
-        // λ_std = λ · √ψ_cc where c = L.col is the factor index.
-        const double psi_cc = bm.Psi(L.col, L.col);
-        if (psi_cc <= 0.0) {
-          return std::unexpected(make_err(PostError::Kind::NumericIssue,
-              "standardize_lv: ψ_cc for column " + std::to_string(L.col) +
-                  " of block " + std::to_string(L.block) +
-                  " is non-positive; cannot standardize"));
-        }
-        const double sqrt_psi = std::sqrt(psi_cc);
-        const double lambda   = est.theta(ki);
-        theta_std(ki) = lambda * sqrt_psi;
-        // Reset row to zero (we built J from Identity; for non-identity
-        // transforms we set the row explicitly).
-        J.row(ki).setZero();
-        J(ki, ki) = sqrt_psi;
-        const std::int32_t psi_k = psi_diag_free[b][static_cast<std::size_t>(L.col)];
-        if (psi_k > 0) {
-          // ψ_cc is free; add ∂(λ√ψ)/∂ψ = λ / (2√ψ) to the J row.
-          J(ki, psi_k - 1) = lambda / (2.0 * sqrt_psi);
-        }
+        auto v_or = latent_var(L.col);
+        if (!v_or.has_value()) return std::unexpected(v_or.error());
+        return bmat.Lambda(L.row, L.col) * std::sqrt(*v_or);
+      }
+      case model::MatId::Psi: {
+        auto vr_or = latent_var(L.row);
+        auto vc_or = latent_var(L.col);
+        if (!vr_or.has_value()) return std::unexpected(vr_or.error());
+        if (!vc_or.has_value()) return std::unexpected(vc_or.error());
+        return bmat.Psi(L.row, L.col) / std::sqrt((*vr_or) * (*vc_or));
+      }
+      case model::MatId::Beta: {
+        auto vy_or = latent_var(L.row);
+        auto vx_or = latent_var(L.col);
+        if (!vy_or.has_value()) return std::unexpected(vy_or.error());
+        if (!vx_or.has_value()) return std::unexpected(vx_or.error());
+        return bmat.Beta(L.row, L.col) * std::sqrt(*vx_or) / std::sqrt(*vy_or);
+      }
+      case model::MatId::Alpha: {
+        auto v_or = latent_var(L.row);
+        if (!v_or.has_value()) return std::unexpected(v_or.error());
+        return bmat.Alpha(L.row) / std::sqrt(*v_or);
+      }
+      case model::MatId::Theta:
+      case model::MatId::Nu:
+        return theta(static_cast<Eigen::Index>(&L - locs.data()));
+    }
+    return theta(static_cast<Eigen::Index>(&L - locs.data()));
+  };
+
+  auto fill_fd_row = [&](Eigen::Index ki, const model::ParamLocation& L)
+      -> post_expected<void> {
+    auto val_or = latent_std_value(est.theta, L);
+    if (!val_or.has_value()) return std::unexpected(val_or.error());
+    theta_std(ki) = *val_or;
+    J.row(ki).setZero();
+    for (Eigen::Index j = 0; j < n_free; ++j) {
+      const double base = std::abs(est.theta(j)) + 1.0;
+      const double h = std::sqrt(std::numeric_limits<double>::epsilon()) * base;
+      Eigen::VectorXd tp = est.theta;
+      Eigen::VectorXd tm = est.theta;
+      tp(j) += h;
+      tm(j) -= h;
+      auto vp = latent_std_value(tp, L);
+      auto vm = latent_std_value(tm, L);
+      if (!vp.has_value()) return std::unexpected(vp.error());
+      if (!vm.has_value()) return std::unexpected(vm.error());
+      J(ki, j) = (*vp - *vm) / (2.0 * h);
+    }
+    return {};
+  };
+
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    const auto& L = locs[k];
+    const Eigen::Index ki = static_cast<Eigen::Index>(k);
+    switch (L.mat) {
+      case model::MatId::Lambda:
+      case model::MatId::Psi:
+      case model::MatId::Beta:
+      case model::MatId::Alpha: {
+        auto row_or = fill_fd_row(ki, L);
+        if (!row_or.has_value()) return std::unexpected(row_or.error());
         break;
       }
-      case model::MatId::Psi:
-        if (L.row == L.col) {
-          // ψ_jj → 1: constant transform.
-          theta_std(ki) = 1.0;
-          J.row(ki).setZero();
-        } else {
-          // Factor covariance → factor correlation: ψ_rc / √(ψ_rr·ψ_cc),
-          // with the delta-method cross-terms wrt the (possibly free)
-          // ψ_rr / ψ_cc — same transform std.all applies.
-          const double psi_rr = bm.Psi(L.row, L.row);
-          const double psi_cc = bm.Psi(L.col, L.col);
-          if (psi_rr <= 0.0 || psi_cc <= 0.0) {
-            return std::unexpected(make_err(PostError::Kind::NumericIssue,
-                "standardize_lv: non-positive ψ_rr or ψ_cc for off-diagonal Ψ;"
-                " cannot standardize"));
-          }
-          const double psi_rc = est.theta(ki);
-          const double prod   = std::sqrt(psi_rr * psi_cc);
-          theta_std(ki) = psi_rc / prod;
-          J.row(ki).setZero();
-          J(ki, ki) = 1.0 / prod;
-          if (auto pk = psi_diag_free[b][static_cast<std::size_t>(L.row)]; pk > 0) {
-            J(ki, pk - 1) -= psi_rc / (2.0 * psi_rr * prod);
-          }
-          if (auto pk = psi_diag_free[b][static_cast<std::size_t>(L.col)]; pk > 0) {
-            J(ki, pk - 1) -= psi_rc / (2.0 * psi_cc * prod);
-          }
-        }
-        break;
       case model::MatId::Theta:
-      case model::MatId::Beta:
       case model::MatId::Nu:
-      case model::MatId::Alpha:
         // Identity transform — J already has 1 on the diagonal from
         // the initial Identity, value already correct in theta_std.
         break;
@@ -198,23 +200,12 @@ standardize_all(const partable::LatentStructure& pt,
   const auto  locs = ev.param_locations();
   const std::size_t n_blocks = am.blocks.size();
 
-  // Lookups: free-index of Ψ[j,j] per (block, j); per-block vech offset
-  // into the Jacobian Js (rows = sum_b vech_len(p_b)).
-  std::vector<std::vector<std::int32_t>> psi_diag_free(n_blocks);
+  // Per-block vech offset into the Jacobian Js (rows = sum_b vech_len(p_b)).
   std::vector<Eigen::Index> vech_off(n_blocks, 0);
   Eigen::Index running = 0;
   for (std::size_t b = 0; b < n_blocks; ++b) {
-    psi_diag_free[b].assign(static_cast<std::size_t>(am.blocks[b].Psi.rows()), 0);
     vech_off[b] = running;
     running += vech_len(static_cast<Eigen::Index>(am.blocks[b].Lambda.rows()));
-  }
-  for (std::size_t k = 0; k < locs.size(); ++k) {
-    const auto& L = locs[k];
-    if (L.mat == model::MatId::Psi && L.row == L.col) {
-      psi_diag_free[static_cast<std::size_t>(L.block)]
-                   [static_cast<std::size_t>(L.row)] =
-          static_cast<std::int32_t>(k) + 1;
-    }
   }
 
   Eigen::MatrixXd J = Eigen::MatrixXd::Identity(n_free, n_free);
@@ -229,30 +220,103 @@ standardize_all(const partable::LatentStructure& pt,
     J.row(k_out) -= scalar * Js.row(row);
   };
 
+  auto latent_all_value =
+      [&](const Eigen::VectorXd& theta,
+          const model::ParamLocation& L) -> post_expected<double> {
+    auto a_or = ev.assembled(theta);
+    if (!a_or.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "standardize_all: ev.assembled failed while standardizing latent "
+          "parameter: " +
+              a_or.error().detail));
+    }
+    auto sm_theta_or = ev.sigma(theta);
+    if (!sm_theta_or.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "standardize_all: ev.sigma failed while standardizing latent "
+          "parameter: " + sm_theta_or.error().detail));
+    }
+    const auto& bmat = a_or->blocks[static_cast<std::size_t>(L.block)];
+    const auto& sigma = sm_theta_or->sigma[static_cast<std::size_t>(L.block)];
+    auto latent_var = [&](Eigen::Index j) -> post_expected<double> {
+      const double v = bmat.Mid(j, j);
+      if (v <= 0.0) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "standardize_all: non-positive latent variance; cannot standardize"));
+      }
+      return v;
+    };
+    switch (L.mat) {
+      case model::MatId::Lambda: {
+        auto v_or = latent_var(L.col);
+        if (!v_or.has_value()) return std::unexpected(v_or.error());
+        const double sigma_rr = sigma(L.row, L.row);
+        if (sigma_rr <= 0.0) {
+          return std::unexpected(make_err(PostError::Kind::NumericIssue,
+              "standardize_all: non-positive σ_rr for Lambda"));
+        }
+        return bmat.Lambda(L.row, L.col) * std::sqrt(*v_or) /
+               std::sqrt(sigma_rr);
+      }
+      case model::MatId::Psi: {
+        auto vr_or = latent_var(L.row);
+        auto vc_or = latent_var(L.col);
+        if (!vr_or.has_value()) return std::unexpected(vr_or.error());
+        if (!vc_or.has_value()) return std::unexpected(vc_or.error());
+        return bmat.Psi(L.row, L.col) / std::sqrt((*vr_or) * (*vc_or));
+      }
+      case model::MatId::Beta: {
+        auto vy_or = latent_var(L.row);
+        auto vx_or = latent_var(L.col);
+        if (!vy_or.has_value()) return std::unexpected(vy_or.error());
+        if (!vx_or.has_value()) return std::unexpected(vx_or.error());
+        return bmat.Beta(L.row, L.col) * std::sqrt(*vx_or) / std::sqrt(*vy_or);
+      }
+      case model::MatId::Alpha: {
+        auto v_or = latent_var(L.row);
+        if (!v_or.has_value()) return std::unexpected(v_or.error());
+        return bmat.Alpha(L.row) / std::sqrt(*v_or);
+      }
+      case model::MatId::Theta:
+      case model::MatId::Nu:
+        return theta(static_cast<Eigen::Index>(&L - locs.data()));
+    }
+    return theta(static_cast<Eigen::Index>(&L - locs.data()));
+  };
+
+  auto fill_fd_row = [&](Eigen::Index ki, const model::ParamLocation& L)
+      -> post_expected<void> {
+    auto val_or = latent_all_value(est.theta, L);
+    if (!val_or.has_value()) return std::unexpected(val_or.error());
+    theta_std(ki) = *val_or;
+    J.row(ki).setZero();
+    for (Eigen::Index j = 0; j < n_free; ++j) {
+      const double base = std::abs(est.theta(j)) + 1.0;
+      const double h = std::sqrt(std::numeric_limits<double>::epsilon()) * base;
+      Eigen::VectorXd tp = est.theta;
+      Eigen::VectorXd tm = est.theta;
+      tp(j) += h;
+      tm(j) -= h;
+      auto vp = latent_all_value(tp, L);
+      auto vm = latent_all_value(tm, L);
+      if (!vp.has_value()) return std::unexpected(vp.error());
+      if (!vm.has_value()) return std::unexpected(vm.error());
+      J(ki, j) = (*vp - *vm) / (2.0 * h);
+    }
+    return {};
+  };
+
   for (std::size_t k = 0; k < locs.size(); ++k) {
     const auto& L = locs[k];
     const auto  b = static_cast<std::size_t>(L.block);
-    const auto& bm = am.blocks[b];
     const Eigen::Index ki = static_cast<Eigen::Index>(k);
     switch (L.mat) {
-      case model::MatId::Lambda: {
-        const double psi_cc   = bm.Psi(L.col, L.col);
-        const double sigma_rr = sm.sigma[b](L.row, L.row);
-        if (psi_cc <= 0.0 || sigma_rr <= 0.0) {
-          return std::unexpected(make_err(PostError::Kind::NumericIssue,
-              "standardize_all: non-positive ψ_cc or σ_rr"));
-        }
-        const double sp = std::sqrt(psi_cc);
-        const double ss = std::sqrt(sigma_rr);
-        const double lam = est.theta(ki);
-        theta_std(ki) = lam * sp / ss;
-        J.row(ki).setZero();
-        J(ki, ki) = sp / ss;                          // direct λ
-        if (auto pk = psi_diag_free[b][static_cast<std::size_t>(L.col)]; pk > 0) {
-          J(ki, pk - 1) += lam / (2.0 * sp * ss);     // via ψ_cc
-        }
-        // via σ_rr: ∂(lam·sp/ss)/∂σ_rr = − lam·sp / (2·σ·ss); chain through dsigma.
-        sub_dsigma_rr(ki, b, L.row, lam * sp / (2.0 * sigma_rr * ss));
+      case model::MatId::Lambda:
+      case model::MatId::Psi:
+      case model::MatId::Alpha:
+      case model::MatId::Beta: {
+        auto row_or = fill_fd_row(ki, L);
+        if (!row_or.has_value()) return std::unexpected(row_or.error());
         break;
       }
       case model::MatId::Theta:
@@ -270,31 +334,6 @@ standardize_all(const partable::LatentStructure& pt,
         }
         // Θ off-diagonals: identity (preserved from Identity init).
         break;
-      case model::MatId::Psi:
-        if (L.row == L.col) {
-          theta_std(ki) = 1.0;
-          J.row(ki).setZero();
-        } else {
-          // ψ_rc / √(ψ_rr · ψ_cc): same as std.lv off-diag.
-          const double psi_rr = bm.Psi(L.row, L.row);
-          const double psi_cc = bm.Psi(L.col, L.col);
-          if (psi_rr <= 0.0 || psi_cc <= 0.0) {
-            return std::unexpected(make_err(PostError::Kind::NumericIssue,
-                "standardize_all: non-positive ψ_rr or ψ_cc for off-diag Ψ"));
-          }
-          const double psi_rc = est.theta(ki);
-          const double prod   = std::sqrt(psi_rr * psi_cc);
-          theta_std(ki) = psi_rc / prod;
-          J.row(ki).setZero();
-          J(ki, ki) = 1.0 / prod;
-          if (auto pk = psi_diag_free[b][static_cast<std::size_t>(L.row)]; pk > 0) {
-            J(ki, pk - 1) -= psi_rc / (2.0 * psi_rr * prod);
-          }
-          if (auto pk = psi_diag_free[b][static_cast<std::size_t>(L.col)]; pk > 0) {
-            J(ki, pk - 1) -= psi_rc / (2.0 * psi_cc * prod);
-          }
-        }
-        break;
       case model::MatId::Nu: {
         const double sigma_rr = sm.sigma[b](L.row, L.row);
         if (sigma_rr <= 0.0) {
@@ -309,25 +348,6 @@ standardize_all(const partable::LatentStructure& pt,
         sub_dsigma_rr(ki, b, L.row, nu / (2.0 * sigma_rr * ss));
         break;
       }
-      case model::MatId::Alpha: {
-        const double psi_jj = bm.Psi(L.row, L.row);
-        if (psi_jj <= 0.0) {
-          return std::unexpected(make_err(PostError::Kind::NumericIssue,
-              "standardize_all: non-positive ψ_jj for α_j"));
-        }
-        const double sp = std::sqrt(psi_jj);
-        const double a  = est.theta(ki);
-        theta_std(ki) = a / sp;
-        J.row(ki).setZero();
-        J(ki, ki) = 1.0 / sp;
-        if (auto pk = psi_diag_free[b][static_cast<std::size_t>(L.row)]; pk > 0) {
-          J(ki, pk - 1) -= a / (2.0 * psi_jj * sp);
-        }
-        break;
-      }
-      case model::MatId::Beta:
-        // Identity transform for v0 (Reduced-form β rescaling pending).
-        break;
     }
   }
 

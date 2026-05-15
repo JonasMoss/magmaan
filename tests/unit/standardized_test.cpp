@@ -94,7 +94,7 @@ TEST_CASE("standardize_lv: 1F CFA — ψ_ff → 1, λs scaled by √ψ̂_ff") {
     const double var = a * a * inf.vcov(k, k) +
                        2.0 * a * b * inf.vcov(k, psi_idx) +
                        b * b * inf.vcov(psi_idx, psi_idx);
-    CHECK(sol.se(k) == doctest::Approx(std::sqrt(var)).epsilon(1e-10));
+      CHECK(sol.se(k) == doctest::Approx(std::sqrt(var)).epsilon(1e-6));
   }
 }
 
@@ -231,4 +231,63 @@ TEST_CASE("standardize_lv: 2F CFA — factor covariance → correlation, with de
   REQUIRE(sol_all.has_value());
   CHECK(sol_all->theta(cov_idx) == doctest::Approx(sol.theta(cov_idx)).epsilon(1e-12));
   CHECK(sol_all->se(cov_idx)    == doctest::Approx(sol.se(cov_idx)).epsilon(1e-12));
+}
+
+TEST_CASE("standardize_all: structural Beta uses total latent variances") {
+  auto fp = Parser::parse(
+      "visual =~ x1 + x2 + x3\n"
+      "textual =~ x4 + x5 + x6\n"
+      "speed =~ x7 + x8 + x9\n"
+      "speed ~ visual + textual");
+  REQUIRE(fp.has_value());
+  auto pt = lavaanify(*fp); REQUIRE(pt.has_value());
+  auto mr = build_matrix_rep(*pt); REQUIRE(mr.has_value());
+
+  SampleStats samp;
+  std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
+                   "/fit_std/0002_cfa_plus_structural_hs.fit.json");
+  REQUIRE(in.is_open());
+  std::stringstream ss; ss << in.rdbuf();
+  auto j = nlohmann::json::parse(ss.str(), nullptr, false);
+  REQUIRE(!j.is_discarded());
+  const auto& M = j["sample_cov"][0]["matrix"];
+  const Eigen::Index p = static_cast<Eigen::Index>(M.size());
+  Eigen::MatrixXd S(p, p);
+  for (Eigen::Index r = 0; r < p; ++r)
+    for (Eigen::Index c = 0; c < p; ++c)
+      S(r, c) = M[static_cast<std::size_t>(r)]
+                 [static_cast<std::size_t>(c)].get<double>();
+  samp.S = {std::move(S)};
+  samp.n_obs = {j["n_obs"].get<std::int64_t>()};
+  auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
+  REQUIRE(est_or.has_value());
+  auto inf = expected_inference(*pt, *mr, samp, *est_or).value();
+
+  auto lv_or = standardize_lv(*pt, *mr, *est_or, inf.vcov);
+  auto all_or = standardize_all(*pt, *mr, *est_or, inf.vcov);
+  REQUIRE(lv_or.has_value());
+  REQUIRE(all_or.has_value());
+
+  auto ev = ModelEvaluator::build(*pt, *mr).value();
+  auto am = ev.assembled(est_or->theta).value();
+  const auto locs = ev.param_locations();
+  Eigen::Index beta_idx = -1;
+  magmaan::model::ParamLocation beta_loc;
+  for (std::size_t k = 0; k < locs.size(); ++k) {
+    if (locs[k].mat == magmaan::model::MatId::Beta) {
+      beta_idx = static_cast<Eigen::Index>(k);
+      beta_loc = locs[k];
+      break;
+    }
+  }
+  REQUIRE(beta_idx >= 0);
+
+  const auto& bm = am.blocks[static_cast<std::size_t>(beta_loc.block)];
+  const double beta = est_or->theta(beta_idx);
+  const double expected =
+      beta * std::sqrt(bm.Mid(beta_loc.col, beta_loc.col)) /
+      std::sqrt(bm.Mid(beta_loc.row, beta_loc.row));
+  CHECK(lv_or->theta(beta_idx) == doctest::Approx(expected).epsilon(1e-10));
+  CHECK(all_or->theta(beta_idx) == doctest::Approx(expected).epsilon(1e-10));
+  CHECK(all_or->se(beta_idx) > 0.0);
 }

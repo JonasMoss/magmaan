@@ -148,6 +148,23 @@ FitMeasures fit_measures(double             chi2_user,
         out.rmsea_ci_upper = std::sqrt(lam_u * scale) * sqrtG;
     }
   }
+  out.rmsea_pvalue = std::numeric_limits<double>::quiet_NaN();
+  out.rmsea_notclose_pvalue = std::numeric_limits<double>::quiet_NaN();
+  if (df_u > 0.0 && N_total > 0 && std::isfinite(T_u) && T_u >= 0.0) {
+    const double G = static_cast<double>(std::max<std::size_t>(1, samp.S.size()));
+    const double ncp_close =
+        (static_cast<double>(N_total) * df_u * out.rmsea_close_h0 *
+         out.rmsea_close_h0) / G;
+    const double cdf_close = noncentral_chisq_cdf(T_u, df_u, ncp_close);
+    out.rmsea_pvalue = std::isfinite(cdf_close) ? 1.0 - cdf_close
+                                                : std::numeric_limits<double>::quiet_NaN();
+
+    const double ncp_notclose =
+        (static_cast<double>(N_total) * df_u * out.rmsea_notclose_h0 *
+         out.rmsea_notclose_h0) / G;
+    out.rmsea_notclose_pvalue =
+        noncentral_chisq_cdf(T_u, df_u, ncp_notclose);
+  }
   return out;
 }
 

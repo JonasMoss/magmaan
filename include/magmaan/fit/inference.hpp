@@ -8,6 +8,7 @@
 
 #include "magmaan/expected.hpp"
 #include "magmaan/fit/fit.hpp"          // Estimates
+#include "magmaan/fit/raw_data.hpp"
 #include "magmaan/fit/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/partable/partable.hpp"
@@ -164,6 +165,16 @@ browne_residual_nt(partable::LatentStructure        pt,
                    const model::MatrixRep&   rep,
                    const SampleStats&        samp,
                    const Estimates&          est);
+
+// Browne's residual-based ADF test — same model-space projection as
+// `browne_residual_nt`, but the block weight is the empirical fourth-moment
+// ACOV from complete raw data instead of the normal-theory ACOV.
+post_expected<double>
+browne_residual_adf(partable::LatentStructure        pt,
+                    const model::MatrixRep&   rep,
+                    const SampleStats&        samp,
+                    const RawData&            raw,
+                    const Estimates&          est);
 
 // Per-parameter z-test: z_k = θ̂_k / SE_k, p_k = P(χ²(1) > z_k²). Convenience
 // view of what `Estimates` and a separately-computed `se` vector already carry.

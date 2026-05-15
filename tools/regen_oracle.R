@@ -397,6 +397,10 @@ for (m in models) {
   rmsea_v <- as.numeric(fm["rmsea"])
   rmsea_ci_lo_v <- as.numeric(fm["rmsea.ci.lower"])
   rmsea_ci_hi_v <- as.numeric(fm["rmsea.ci.upper"])
+  rmsea_pvalue_v <- as.numeric(fm["rmsea.pvalue"])
+  rmsea_close_h0_v <- as.numeric(fm["rmsea.close.h0"])
+  rmsea_notclose_pvalue_v <- as.numeric(fm["rmsea.notclose.pvalue"])
+  rmsea_notclose_h0_v <- as.numeric(fm["rmsea.notclose.h0"])
   srmr_v  <- as.numeric(fm["srmr"])
   logl_v  <- as.numeric(fm["logl"])
   ulogl_v <- as.numeric(fm["unrestricted.logl"])
@@ -648,6 +652,10 @@ for (m in models) {
     rmsea             = rmsea_v,
     rmsea_ci_lower    = rmsea_ci_lo_v,
     rmsea_ci_upper    = rmsea_ci_hi_v,
+    rmsea_pvalue      = rmsea_pvalue_v,
+    rmsea_close_h0    = rmsea_close_h0_v,
+    rmsea_notclose_pvalue = rmsea_notclose_pvalue_v,
+    rmsea_notclose_h0 = rmsea_notclose_h0_v,
     srmr              = srmr_v,
     logl              = logl_v,
     unrestricted_logl = ulogl_v,
@@ -1780,6 +1788,10 @@ for (m in fiml_cases) {
     rmsea           = as.numeric(fm["rmsea"]),
     rmsea_ci_lower  = as.numeric(fm["rmsea.ci.lower"]),
     rmsea_ci_upper  = as.numeric(fm["rmsea.ci.upper"]),
+    rmsea_pvalue    = as.numeric(fm["rmsea.pvalue"]),
+    rmsea_close_h0  = as.numeric(fm["rmsea.close.h0"]),
+    rmsea_notclose_pvalue = as.numeric(fm["rmsea.notclose.pvalue"]),
+    rmsea_notclose_h0 = as.numeric(fm["rmsea.notclose.h0"]),
     aic             = as.numeric(fm["aic"]),
     bic             = as.numeric(fm["bic"]),
     bic2            = as.numeric(fm["bic2"]),
@@ -1801,8 +1813,9 @@ cat("regenerated", length(regenerated_fiml), "FIML fit fixtures under",
 # std.lv / std.all transforms (values + delta-method SEs) per free θ index,
 # against lavaan::standardizedSolution(fit, type=...). Covers a cov-only CFA
 # with free factor covariances (the std.lv Ψ-off-diagonal surface), a
-# mean-structure CFA (ν/α rescaling under std.all), and a configural 2-group
-# CFA. Kept OUT of corpus.json; C++ side: tests/golden/standardized_golden_test.cpp.
+# structural regression model (std.all Beta rescaling), and a configural
+# 2-group CFA with means. Kept OUT of corpus.json; C++ side:
+# tests/golden/standardized_golden_test.cpp.
 std_dir <- file.path(fixtures, "fit_std")
 dir.create(std_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -1812,12 +1825,18 @@ std_models <- list(
                      "textual =~ x4 + x5 + x6",
                      "speed =~ x7 + x8 + x9", sep = "\n"),
        meanstructure = FALSE, n_groups = 1L, group = NULL),
+  list(id = "0002_cfa_plus_structural_hs",
+       model = paste("visual =~ x1 + x2 + x3",
+                     "textual =~ x4 + x5 + x6",
+                     "speed =~ x7 + x8 + x9",
+                     "speed ~ visual + textual", sep = "\n"),
+       meanstructure = FALSE, n_groups = 1L, group = NULL),
   # Configural 2-group + meanstructure — exercises the free ν intercepts'
   # std.all rescaling (and the factor covariances' std.lv → correlation in
   # both groups). A single-group 3F + meanstructure variant is intentionally
   # omitted: our LBFGS line search currently fails on it (the 2-group fit is
   # fine), and chasing that convergence corner is out of scope for this pass.
-  list(id = "0002_three_factor_hs_2group",
+  list(id = "0003_three_factor_hs_2group",
        model = paste("visual =~ x1 + x2 + x3",
                      "textual =~ x4 + x5 + x6",
                      "speed =~ x7 + x8 + x9", sep = "\n"),

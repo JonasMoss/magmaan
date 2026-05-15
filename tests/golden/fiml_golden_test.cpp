@@ -298,6 +298,16 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
                     "rmsea_ci_lower", 1e-4) && ok;
     ok = cmp_finite("rmsea_ci_upper", fm.rmsea_ci_upper,
                     "rmsea_ci_upper", 1e-4) && ok;
+    if (exp.contains("rmsea_pvalue")) {
+      ok = cmp_finite("rmsea_pvalue", fm.rmsea_pvalue,
+                      "rmsea_pvalue", 1e-5) && ok;
+      ok = cmp_finite("rmsea_close_h0", fm.rmsea_close_h0,
+                      "rmsea_close_h0", 1e-12) && ok;
+      ok = cmp_finite("rmsea_notclose_pvalue", fm.rmsea_notclose_pvalue,
+                      "rmsea_notclose_pvalue", 1e-5) && ok;
+      ok = cmp_finite("rmsea_notclose_h0", fm.rmsea_notclose_h0,
+                      "rmsea_notclose_h0", 1e-12) && ok;
+    }
 
     if (!exp.contains("npar") || fx.npar != exp["npar"].get<int>()) {
       failures.push_back(id + ": npar mismatch");

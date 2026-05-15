@@ -53,8 +53,8 @@ golden `parTable()` fixtures.
   observed information for covariance and mean-structure models.
 - Vcov/SE, Wald/z tests, chi-square/df helpers, LR/Satorra-2000 nested tests,
   robust U-Gamma machinery, Satorra-Bentler-family statistics, robust SEs,
-  Browne residual NT, fit measures, standardization, and C++ defined-parameter
-  evaluation.
+  Browne residual NT/ADF, fit measures including RMSEA close-fit p-values,
+  structural-aware standardization, and C++ defined-parameter evaluation.
 - Observed-bread robust SEs and observed-Hessian U-factors use total-N scaling
   and work on block-stacked multi-block covariance and mean-structure models.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand
@@ -144,9 +144,8 @@ golden `parTable()` fixtures.
 - Mixed categorical NACOV/weight, fit, and robust-reporting parity is
   intentionally looser than the all-ordinal path while polyserial Gamma details
   are hardened.
-- Browne residual ADF is not implemented.
-- Modification indices, univariate score tests, EPC, and RMSEA close-fit
-  p-values are not implemented.
+- Browne residual ADF is complete-data only.
+- Modification indices, univariate score tests, and EPC are not implemented.
 - Nonlinear equality constraints and inequality constraints are unsupported.
 - Active bound or inequality inference must not silently report ordinary
   chi-square/SE theory.

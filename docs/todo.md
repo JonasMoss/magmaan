@@ -126,8 +126,6 @@ drifts into hard-to-debug lavaan parity failures.
 Intent: keep unsupported statistical work explicit so it is not mistaken for a
 polish task.
 
-- [ ] Add Browne residual ADF by swapping empirical gamma into the existing
-  Browne residual projection machinery.
 - [ ] Generalize robust/inference helpers that assume the normal-theory ML
   weight so ULS/GLS/WLS can share sandwich paths with arbitrary per-block
   weights.
@@ -137,8 +135,6 @@ polish task.
   compatibility slice.
 - [ ] Add modification indices, univariate score tests, and EPC using scores
   and information for fixed or equality-constrained parameters at the optimum.
-- [ ] Add RMSEA close-fit p-value support.
-- [ ] Check `std.all` beta-coefficient rescaling for structural regressions.
 - [ ] Keep nonlinear equality constraints, inequality constraints, and
   nonstandard active-bound inference out of the regular inference surface
   until their theory and reporting are explicit.
