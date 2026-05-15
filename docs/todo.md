@@ -138,8 +138,10 @@ polish task.
   target or stay shape-only.
 - [ ] Add theta-parameterization support for ordinal models as a separate
   compatibility slice.
-- [ ] Add modification indices, univariate score tests, and EPC using scores
-  and information for fixed or equality-constrained parameters at the optimum.
+- [ ] Lavaan-back and broaden the new modification-index / score-test surface:
+  add `modindices()` and `lavTestScore()` fixtures across ML, FIML, LS,
+  ordinal, and mixed ordinal; add absent-row generation and standardized EPC
+  only after the raw fixed-row/equality-release contract is fully validated.
 - [ ] Keep nonlinear equality constraints, inequality constraints, and
   nonstandard active-bound inference out of the regular inference surface
   until their theory and reporting are explicit.

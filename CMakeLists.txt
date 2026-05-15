@@ -72,6 +72,7 @@ add_library(magmaan STATIC
   src/estimate/resolve_fixed_x.cpp
   src/estimate/constraints.cpp
   src/nt/inference.cpp
+  src/nt/score.cpp
   src/nt/effects.cpp
   src/nt/standardized.cpp
   src/nt/fit_measures.cpp

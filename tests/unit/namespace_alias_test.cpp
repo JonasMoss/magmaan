@@ -37,6 +37,7 @@
 #include "magmaan/fit/ml.hpp"
 #include "magmaan/fit/raw_data.hpp"
 #include "magmaan/fit/robust.hpp"
+#include "magmaan/fit/score.hpp"
 #include "magmaan/fit/standardized.hpp"
 #include "magmaan/fit/uls.hpp"
 #include "magmaan/partable/lavaan_view.hpp"
@@ -87,6 +88,8 @@ TEST_CASE("transitional public namespace aliases expose existing API types") {
   static_assert(std::is_same_v<magmaan::gls::WLS, magmaan::fit::WLS>);
   static_assert(std::is_same_v<magmaan::nt::infer::WaldTestResult,
                                magmaan::fit::WaldTestResult>);
+  static_assert(std::is_same_v<magmaan::nt::infer::ScoreTestTable,
+                               magmaan::fit::ScoreTestTable>);
   static_assert(std::is_same_v<magmaan::nt::measures::FitMeasures,
                                magmaan::fit::FitMeasures>);
   static_assert(std::is_same_v<magmaan::nt::standardize::StandardizedSolution,

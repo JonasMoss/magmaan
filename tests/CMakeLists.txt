@@ -42,6 +42,7 @@ add_executable(magmaan_tests
   unit/constraints_test.cpp
   unit/lin_constraints_test.cpp
   unit/inference_test.cpp
+  unit/score_test.cpp
   unit/effects_test.cpp
   unit/standardized_test.cpp
   unit/fit_measures_test.cpp

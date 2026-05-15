@@ -13,12 +13,14 @@
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
+#include <Eigen/SVD>
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/fit/concepts.hpp"
 #include "magmaan/fit/constraints.hpp"
+#include "magmaan/fit/inference.hpp"
 #include "magmaan/fit/sample_stats.hpp"
 #include "magmaan/fit/start_values.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -1117,6 +1119,372 @@ robust_mixed_ordinal(spec::LatentStructure pt,
   out.mean_var_adjusted = fit::mean_var_adjusted(out.chisq_standard, out.df, out.eigvals);
   out.scaled_shifted = fit::scaled_shifted(out.chisq_standard, out.df, out.eigvals);
   return out;
+}
+
+namespace {
+
+post_expected<Eigen::MatrixXd> invert_score_spd(const Eigen::MatrixXd& A,
+                                                std::string_view what) {
+  Eigen::LDLT<Eigen::MatrixXd> ldlt(0.5 * (A + A.transpose()));
+  if (ldlt.info() != Eigen::Success || !ldlt.isPositive()) {
+    return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
+        std::string(what) + " is not positive definite"));
+  }
+  return ldlt.solve(Eigen::MatrixXd::Identity(A.rows(), A.cols()));
+}
+
+post_expected<fit::ScoreTestResult>
+ordinal_score_for_direction(const fit::ScoreCandidate& candidate,
+                            const Eigen::VectorXd& score_full,
+                            const Eigen::MatrixXd& info_full,
+                            const Eigen::MatrixXd& K_nuisance,
+                            const Eigen::VectorXd& direction) {
+  const Eigen::VectorXd I_d = info_full * direction;
+  double score_eff = direction.dot(score_full);
+  double info_eff = direction.dot(I_d);
+  if (K_nuisance.cols() > 0) {
+    const Eigen::MatrixXd I_aa =
+        K_nuisance.transpose() * info_full * K_nuisance;
+    const Eigen::VectorXd I_ab = K_nuisance.transpose() * I_d;
+    const Eigen::VectorXd score_a = K_nuisance.transpose() * score_full;
+    auto inv = invert_score_spd(I_aa, "ordinal score nuisance information");
+    if (!inv.has_value()) return std::unexpected(inv.error());
+    score_eff -= I_ab.dot((*inv) * score_a);
+    info_eff -= I_ab.dot((*inv) * I_ab);
+  }
+  if (!(info_eff > 1e-10 * std::max<double>(1.0, std::abs(info_eff)))) {
+    return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
+        "ordinal score efficient information is not positive"));
+  }
+  fit::ScoreTestResult out;
+  out.candidate = candidate;
+  out.score = score_eff;
+  out.information = info_eff;
+  out.mi = (score_eff * score_eff) / info_eff;
+  out.df = 1;
+  out.p_value = fit::chi2_pvalue(out.mi, 1);
+  out.epc = score_eff / info_eff;
+  return out;
+}
+
+post_expected<Eigen::MatrixXd> ordinal_null_space(const Eigen::MatrixXd& A,
+                                                  Eigen::Index n_cols) {
+  if (A.rows() == 0) return Eigen::MatrixXd::Identity(n_cols, n_cols);
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeFullV);
+  svd.setThreshold(1e-9);
+  return Eigen::MatrixXd(svd.matrixV().rightCols(n_cols - svd.rank()));
+}
+
+post_expected<Eigen::VectorXd>
+ordinal_release_direction(const fit::EqConstraints& con, Eigen::Index release_row) {
+  Eigen::MatrixXd A_rel(con.A_eq.rows() - 1, con.A_eq.cols());
+  Eigen::Index out = 0;
+  for (Eigen::Index r = 0; r < con.A_eq.rows(); ++r) {
+    if (r == release_row) continue;
+    A_rel.row(out++) = con.A_eq.row(r);
+  }
+  auto K_rel = ordinal_null_space(A_rel, con.npar);
+  if (!K_rel.has_value()) return std::unexpected(K_rel.error());
+  const Eigen::MatrixXd M = K_rel->transpose() * con.K();
+  auto z = ordinal_null_space(M.transpose(), K_rel->cols());
+  if (!z.has_value()) return std::unexpected(z.error());
+  if (z->cols() != 1) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal score equality release is not one-dimensional"));
+  }
+  Eigen::VectorXd d = (*K_rel) * z->col(0);
+  const double norm = d.norm();
+  if (!(norm > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal score equality-release direction is degenerate"));
+  }
+  d /= norm;
+  return d;
+}
+
+bool ordinal_fixed_candidate(const spec::LatentStructure& pt,
+                             const model::MatrixRep& rep,
+                             std::size_t row) {
+  if (row >= pt.size()) return false;
+  if (pt.is_constraint_row(row)) return false;
+  if (pt.free[row] != 0) return false;
+  if (row < pt.exo.size() && pt.exo[row] != 0) return false;
+  if (row >= pt.fixed_value.size() || !std::isfinite(pt.fixed_value[row])) {
+    return false;
+  }
+  return pt.op[row] == parse::Op::Threshold ||
+         (row < rep.cell_for_row.size() && rep.cell_for_row[row].used);
+}
+
+void ordinal_add_free_group(spec::LatentStructure& pt, std::int32_t old_n) {
+  if (static_cast<std::int32_t>(pt.eq_groups.size()) == old_n) {
+    pt.eq_groups.push_back(old_n);
+  } else if (!pt.eq_groups.empty()) {
+    pt.eq_groups.clear();
+  }
+}
+
+template <class Stats, class ResidualFn, class JacobianFn, class PrepareFn>
+post_expected<fit::ScoreTestTable>
+ordinal_modification_indices_impl(spec::LatentStructure pt,
+                                  const model::MatrixRep& rep,
+                                  const Stats& stats,
+                                  const Estimates& est,
+                                  OrdinalWeightKind weights,
+                                  ResidualFn residual_fn,
+                                  JacobianFn jacobian_fn,
+                                  PrepareFn prepare_fn) {
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (auto p = prepare_fn(pt, stats); !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal modification indices: fitted theta length does not match delta partable"));
+  }
+  auto con0 = fit::build_eq_constraints(pt);
+  if (!con0.has_value()) return std::unexpected(con0.error());
+  auto N_or = total_n_obs(stats);
+  if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
+  const double n_total = static_cast<double>(*N_or);
+
+  fit::ScoreTestTable table;
+  for (std::size_t row = 0; row < pt.size(); ++row) {
+    if (!ordinal_fixed_candidate(pt, rep, row)) continue;
+    spec::LatentStructure aug = pt;
+    const double fixed_value = aug.fixed_value[row];
+    const std::int32_t old_n = aug.n_free();
+    aug.free[row] = old_n + 1;
+    aug.fixed_value[row] = std::numeric_limits<double>::quiet_NaN();
+    ordinal_add_free_group(aug, old_n);
+
+    Eigen::VectorXd theta(est.theta.size() + 1);
+    if (est.theta.size() > 0) theta.head(est.theta.size()) = est.theta;
+    theta(est.theta.size()) = fixed_value;
+
+    auto layout = make_threshold_layout(aug, rep, stats);
+    if (!layout.has_value()) return std::unexpected(fit_to_post(layout.error()));
+    auto factors = weight_factors(stats, weights);
+    if (!factors.has_value()) return std::unexpected(fit_to_post(factors.error()));
+    auto ev = model::ModelEvaluator::build(aug, rep);
+    if (!ev.has_value()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ordinal modification indices: ModelEvaluator::build failed: " +
+              ev.error().detail));
+    }
+    auto eval = ev->evaluate(theta, true, true);
+    if (!eval.has_value()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ordinal modification indices: fitted evaluation failed: " +
+              eval.error().detail));
+    }
+    auto r = residual_fn(stats, *layout, eval->moments, *factors, theta);
+    if (!r.has_value()) return std::unexpected(fit_to_post(r.error()));
+    auto J = jacobian_fn(stats, *layout, eval->moments, eval->J_sigma,
+                         eval->J_mu, *factors);
+    if (!J.has_value()) return std::unexpected(fit_to_post(J.error()));
+
+    const Eigen::VectorXd score = -2.0 * n_total * (J->transpose() * *r);
+    Eigen::MatrixXd info = 2.0 * n_total * (J->transpose() * *J);
+    info = 0.5 * (info + info.transpose());
+
+    Eigen::VectorXd direction = Eigen::VectorXd::Zero(score.size());
+    direction(score.size() - 1) = 1.0;
+    fit::ScoreCandidate cand;
+    cand.kind = fit::ScoreCandidateKind::FixedParam;
+    cand.row = row;
+    cand.op = pt.op[row];
+    cand.lhs_var = pt.lhs_var[row];
+    cand.rhs_var = pt.rhs_var[row];
+    cand.group = pt.group[row];
+    Eigen::MatrixXd K_aug = Eigen::MatrixXd::Zero(score.size(), con0->K().cols());
+    if (con0->K().rows() > 0) K_aug.topRows(con0->K().rows()) = con0->K();
+    auto res = ordinal_score_for_direction(cand, score, info, K_aug, direction);
+    if (res.has_value()) table.rows.push_back(*res);
+  }
+  return table;
+}
+
+template <class Stats, class ResidualFn, class JacobianFn, class PrepareFn>
+post_expected<fit::ScoreTestTable>
+ordinal_score_tests_impl(spec::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const Stats& stats,
+                         const Estimates& est,
+                         OrdinalWeightKind weights,
+                         ResidualFn residual_fn,
+                         JacobianFn jacobian_fn,
+                         PrepareFn prepare_fn) {
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (auto p = prepare_fn(pt, stats); !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal score tests: fitted theta length does not match delta partable"));
+  }
+  auto con = fit::build_eq_constraints(pt);
+  if (!con.has_value()) return std::unexpected(con.error());
+  fit::ScoreTestTable table;
+  if (!con->active()) return table;
+  auto N_or = total_n_obs(stats);
+  if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
+  const double n_total = static_cast<double>(*N_or);
+
+  auto layout = make_threshold_layout(pt, rep, stats);
+  if (!layout.has_value()) return std::unexpected(fit_to_post(layout.error()));
+  auto factors = weight_factors(stats, weights);
+  if (!factors.has_value()) return std::unexpected(fit_to_post(factors.error()));
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal score tests: ModelEvaluator::build failed: " + ev.error().detail));
+  }
+  auto eval = ev->evaluate(est.theta, true, true);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal score tests: fitted evaluation failed: " + eval.error().detail));
+  }
+  auto r = residual_fn(stats, *layout, eval->moments, *factors, est.theta);
+  if (!r.has_value()) return std::unexpected(fit_to_post(r.error()));
+  auto J = jacobian_fn(stats, *layout, eval->moments, eval->J_sigma,
+                       eval->J_mu, *factors);
+  if (!J.has_value()) return std::unexpected(fit_to_post(J.error()));
+  const Eigen::VectorXd score = -2.0 * n_total * (J->transpose() * *r);
+  Eigen::MatrixXd info = 2.0 * n_total * (J->transpose() * *J);
+  info = 0.5 * (info + info.transpose());
+
+  for (Eigen::Index row = 0; row < con->A_eq.rows(); ++row) {
+    auto d = ordinal_release_direction(*con, row);
+    if (!d.has_value()) return std::unexpected(d.error());
+    fit::ScoreCandidate cand;
+    cand.kind = fit::ScoreCandidateKind::EqualityRelease;
+    cand.row = static_cast<std::size_t>(row);
+    cand.op = parse::Op::EqConstraint;
+    auto res = ordinal_score_for_direction(cand, score, info, con->K(), *d);
+    if (res.has_value()) table.rows.push_back(*res);
+  }
+  return table;
+}
+
+}  // namespace
+
+post_expected<fit::ScoreTestTable>
+modification_indices_ordinal(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const data::OrdinalStats& stats,
+                             const Estimates& est,
+                             OrdinalWeightKind weights) {
+  auto residual_fn = [](const data::OrdinalStats& s,
+                        const ThresholdLayout& layout,
+                        const model::ImpliedMoments& moments,
+                        const std::vector<Eigen::MatrixXd>& factors,
+                        const Eigen::VectorXd& theta) {
+    return ordinal_residuals(s, layout, moments, factors, theta);
+  };
+  auto jacobian_fn = [](const data::OrdinalStats& s,
+                        const ThresholdLayout& layout,
+                        const model::ImpliedMoments& moments,
+                        const Eigen::MatrixXd& J_sigma,
+                        const Eigen::MatrixXd&,
+                        const std::vector<Eigen::MatrixXd>& factors) {
+    return ordinal_jacobian(s, layout, moments, J_sigma, factors);
+  };
+  auto prepare_fn = [](spec::LatentStructure& p, const data::OrdinalStats& s) {
+    return prepare_ordinal_delta_partable(p, s, nullptr);
+  };
+  return ordinal_modification_indices_impl(std::move(pt), rep, stats, est,
+                                           weights, residual_fn, jacobian_fn,
+                                           prepare_fn);
+}
+
+post_expected<fit::ScoreTestTable>
+score_tests_ordinal(spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const data::OrdinalStats& stats,
+                    const Estimates& est,
+                    OrdinalWeightKind weights) {
+  auto residual_fn = [](const data::OrdinalStats& s,
+                        const ThresholdLayout& layout,
+                        const model::ImpliedMoments& moments,
+                        const std::vector<Eigen::MatrixXd>& factors,
+                        const Eigen::VectorXd& theta) {
+    return ordinal_residuals(s, layout, moments, factors, theta);
+  };
+  auto jacobian_fn = [](const data::OrdinalStats& s,
+                        const ThresholdLayout& layout,
+                        const model::ImpliedMoments& moments,
+                        const Eigen::MatrixXd& J_sigma,
+                        const Eigen::MatrixXd&,
+                        const std::vector<Eigen::MatrixXd>& factors) {
+    return ordinal_jacobian(s, layout, moments, J_sigma, factors);
+  };
+  auto prepare_fn = [](spec::LatentStructure& p, const data::OrdinalStats& s) {
+    return prepare_ordinal_delta_partable(p, s, nullptr);
+  };
+  return ordinal_score_tests_impl(std::move(pt), rep, stats, est, weights,
+                                  residual_fn, jacobian_fn, prepare_fn);
+}
+
+post_expected<fit::ScoreTestTable>
+modification_indices_mixed_ordinal(spec::LatentStructure pt,
+                                   const model::MatrixRep& rep,
+                                   const data::MixedOrdinalStats& stats,
+                                   const Estimates& est,
+                                   OrdinalWeightKind weights) {
+  auto residual_fn = [](const data::MixedOrdinalStats& s,
+                        const ThresholdLayout& layout,
+                        const model::ImpliedMoments& moments,
+                        const std::vector<Eigen::MatrixXd>& factors,
+                        const Eigen::VectorXd& theta) {
+    return mixed_ordinal_residuals(s, layout, moments, factors, theta);
+  };
+  auto jacobian_fn = [](const data::MixedOrdinalStats& s,
+                        const ThresholdLayout& layout,
+                        const model::ImpliedMoments& moments,
+                        const Eigen::MatrixXd& J_sigma,
+                        const Eigen::MatrixXd& J_mu,
+                        const std::vector<Eigen::MatrixXd>& factors) {
+    return mixed_ordinal_jacobian(s, layout, moments, J_sigma, J_mu, factors);
+  };
+  auto prepare_fn = [](spec::LatentStructure& p, const data::MixedOrdinalStats& s) {
+    return prepare_mixed_ordinal_delta_partable(p, s, nullptr);
+  };
+  return ordinal_modification_indices_impl(std::move(pt), rep, stats, est,
+                                           weights, residual_fn, jacobian_fn,
+                                           prepare_fn);
+}
+
+post_expected<fit::ScoreTestTable>
+score_tests_mixed_ordinal(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const data::MixedOrdinalStats& stats,
+                          const Estimates& est,
+                          OrdinalWeightKind weights) {
+  auto residual_fn = [](const data::MixedOrdinalStats& s,
+                        const ThresholdLayout& layout,
+                        const model::ImpliedMoments& moments,
+                        const std::vector<Eigen::MatrixXd>& factors,
+                        const Eigen::VectorXd& theta) {
+    return mixed_ordinal_residuals(s, layout, moments, factors, theta);
+  };
+  auto jacobian_fn = [](const data::MixedOrdinalStats& s,
+                        const ThresholdLayout& layout,
+                        const model::ImpliedMoments& moments,
+                        const Eigen::MatrixXd& J_sigma,
+                        const Eigen::MatrixXd& J_mu,
+                        const std::vector<Eigen::MatrixXd>& factors) {
+    return mixed_ordinal_jacobian(s, layout, moments, J_sigma, J_mu, factors);
+  };
+  auto prepare_fn = [](spec::LatentStructure& p, const data::MixedOrdinalStats& s) {
+    return prepare_mixed_ordinal_delta_partable(p, s, nullptr);
+  };
+  return ordinal_score_tests_impl(std::move(pt), rep, stats, est, weights,
+                                  residual_fn, jacobian_fn, prepare_fn);
 }
 
 template <optim::LsBoundedOptimizer O>
