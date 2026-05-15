@@ -15,7 +15,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/op.hpp"
-#include "magmaan/partable/partable.hpp"
+#include "magmaan/spec/partable.hpp"
 
 namespace magmaan::model {
 
@@ -44,7 +44,7 @@ inline Eigen::Index vech_len(Eigen::Index p) noexcept {
 }  // namespace
 
 model_expected<ModelEvaluator>
-ModelEvaluator::build(const partable::LatentStructure& pt, const MatrixRep& rep) {
+ModelEvaluator::build(const spec::LatentStructure& pt, const MatrixRep& rep) {
   if (rep.dims.empty()) {
     return std::unexpected(make_err(
         ModelError::Kind::EmptyMatrix,

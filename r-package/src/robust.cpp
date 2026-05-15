@@ -11,6 +11,7 @@
 #include "magmaan/nt/robust.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
+#include "magmaan/estimate/ordinal.hpp"
 
 // [[Rcpp::depends(RcppEigen)]]
 
@@ -104,18 +105,21 @@ magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
   return out;
 }
 
-Rcpp::List satorra_bentler_to_list(const magmaan::fit::SatorraBentlerResult& r) {
+[[maybe_unused]] Rcpp::List
+satorra_bentler_to_list(const magmaan::nt::robust::SatorraBentlerResult& r) {
   return Rcpp::List::create(Rcpp::_["chi2_scaled"] = r.chi2_scaled,
                             Rcpp::_["scale_c"] = r.scale_c,
                             Rcpp::_["df"] = r.df);
 }
 
-Rcpp::List mean_var_to_list(const magmaan::fit::MeanVarAdjustedResult& r) {
+[[maybe_unused]] Rcpp::List
+mean_var_to_list(const magmaan::nt::robust::MeanVarAdjustedResult& r) {
   return Rcpp::List::create(Rcpp::_["chi2_adj"] = r.chi2_adj,
                             Rcpp::_["df_adj"] = r.df_adj);
 }
 
-Rcpp::List scaled_shifted_to_list(const magmaan::fit::ScaledShiftedResult& r) {
+[[maybe_unused]] Rcpp::List
+scaled_shifted_to_list(const magmaan::nt::robust::ScaledShiftedResult& r) {
   return Rcpp::List::create(Rcpp::_["chi2_adj"] = r.chi2_adj,
                             Rcpp::_["df"] = r.df,
                             Rcpp::_["scale_a"] = r.scale_a,

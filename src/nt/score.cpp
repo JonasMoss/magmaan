@@ -1,4 +1,4 @@
-#include "magmaan/fit/score.hpp"
+#include "magmaan/nt/score.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -16,13 +16,32 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
-#include "magmaan/fit/concepts.hpp"
-#include "magmaan/fit/constraints.hpp"
-#include "magmaan/fit/inference.hpp"
-#include "magmaan/fit/resolve_fixed_x.hpp"
+#include "magmaan/optim/concepts.hpp"
+#include "magmaan/estimate/constraints.hpp"
+#include "magmaan/nt/infer.hpp"
+#include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::nt::infer {
+
+using estimate::build_eq_constraints;
+using estimate::EqConstraints;
+using estimate::resolve_fixed_x_from_sample;
+using gls::GLS;
+using gls::ULS;
+using gls::WLS;
+using nt::ml::ML;
+using fiml::FIML;
+using fiml::fiml_start_sample_stats;
+using fiml::validate_fiml_fixed_x_missing_policy;
+
+using data::RawData;
+using data::SampleStats;
+using estimate::Estimates;
+using gls::GLS;
+using gls::ULS;
+using gls::WLS;
+using fiml::FIML;
 
 namespace {
 
@@ -48,7 +67,7 @@ post_expected<double> total_n(const SampleStats& samp) {
   return n;
 }
 
-bool fixed_candidate_row(const partable::LatentStructure& pt,
+bool fixed_candidate_row(const spec::LatentStructure& pt,
                          const model::MatrixRep& rep,
                          std::size_t row) {
   if (row >= pt.size() || row >= rep.cell_for_row.size()) return false;
@@ -62,7 +81,7 @@ bool fixed_candidate_row(const partable::LatentStructure& pt,
   return true;
 }
 
-void add_new_free_group(partable::LatentStructure& pt, std::int32_t old_n) {
+void add_new_free_group(spec::LatentStructure& pt, std::int32_t old_n) {
   if (static_cast<std::int32_t>(pt.eq_groups.size()) == old_n) {
     pt.eq_groups.push_back(old_n);
   } else if (!pt.eq_groups.empty()) {
@@ -70,8 +89,8 @@ void add_new_free_group(partable::LatentStructure& pt, std::int32_t old_n) {
   }
 }
 
-post_expected<partable::LatentStructure>
-with_fixed_row_freed(partable::LatentStructure pt, std::size_t row,
+post_expected<spec::LatentStructure>
+with_fixed_row_freed(spec::LatentStructure pt, std::size_t row,
                      const SampleStats& samp, const model::MatrixRep& rep) {
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
@@ -210,7 +229,7 @@ release_direction(const EqConstraints& con, Eigen::Index release_row) {
 }
 
 post_expected<model::ModelEvaluator>
-build_eval(const partable::LatentStructure& pt, const model::MatrixRep& rep) {
+build_eval(const spec::LatentStructure& pt, const model::MatrixRep& rep) {
   auto ev = model::ModelEvaluator::build(pt, rep);
   if (!ev.has_value()) {
     return std::unexpected(model_to_post(ev.error()));
@@ -219,7 +238,7 @@ build_eval(const partable::LatentStructure& pt, const model::MatrixRep& rep) {
 }
 
 post_expected<void>
-evaluate_augmented_ml(const partable::LatentStructure& pt,
+evaluate_augmented_ml(const spec::LatentStructure& pt,
                       const model::MatrixRep& rep,
                       const SampleStats& samp,
                       const Estimates& est,
@@ -250,7 +269,7 @@ evaluate_augmented_ml(const partable::LatentStructure& pt,
 
 template <class D>
 post_expected<void>
-evaluate_augmented_ls(const partable::LatentStructure& pt,
+evaluate_augmented_ls(const spec::LatentStructure& pt,
                       const model::MatrixRep& rep,
                       const SampleStats& samp,
                       const Estimates& est,
@@ -280,7 +299,7 @@ evaluate_augmented_ls(const partable::LatentStructure& pt,
 }
 
 post_expected<void>
-evaluate_augmented_fiml(const partable::LatentStructure& pt,
+evaluate_augmented_fiml(const spec::LatentStructure& pt,
                         const model::MatrixRep& rep,
                         const RawData& raw,
                         const Estimates& est,
@@ -335,7 +354,7 @@ evaluate_augmented_fiml(const partable::LatentStructure& pt,
 
 template <class Evaluator>
 post_expected<ScoreTestTable>
-fixed_parameter_tests(partable::LatentStructure pt,
+fixed_parameter_tests(spec::LatentStructure pt,
                       const model::MatrixRep& rep,
                       const Estimates& est,
                       Evaluator eval_score_info) {
@@ -352,7 +371,7 @@ fixed_parameter_tests(partable::LatentStructure pt,
     const double fixed_value = pt.fixed_value[row];
     auto aug_or = eval_score_info.make_augmented(pt, row);
     if (!aug_or.has_value()) return std::unexpected(aug_or.error());
-    partable::LatentStructure aug_pt = std::move(*aug_or);
+    spec::LatentStructure aug_pt = std::move(*aug_or);
     Estimates aug_est{append_theta(est.theta, fixed_value), est.fmin, est.iterations};
 
     Eigen::VectorXd score_full;
@@ -384,7 +403,7 @@ fixed_parameter_tests(partable::LatentStructure pt,
 
 template <class Evaluator>
 post_expected<ScoreTestTable>
-equality_release_tests(partable::LatentStructure pt,
+equality_release_tests(spec::LatentStructure pt,
                        const model::MatrixRep& rep,
                        const Estimates& est,
                        Evaluator eval_score_info) {
@@ -425,13 +444,13 @@ struct ContinuousMlEvaluator {
   ScoreInformation information;
   double score_scale;
 
-  post_expected<partable::LatentStructure>
-  make_augmented(partable::LatentStructure pt, std::size_t row) const {
+  post_expected<spec::LatentStructure>
+  make_augmented(spec::LatentStructure pt, std::size_t row) const {
     return with_fixed_row_freed(std::move(pt), row, samp, rep);
   }
 
   post_expected<void>
-  evaluate(const partable::LatentStructure& pt, const Estimates& est,
+  evaluate(const spec::LatentStructure& pt, const Estimates& est,
            Eigen::VectorXd& score, Eigen::MatrixXd& info) const {
     return evaluate_augmented_ml(pt, rep, samp, est, discrepancy, information,
                                  score_scale, score, info);
@@ -445,13 +464,13 @@ struct ContinuousLsEvaluator {
   D discrepancy;
   double n_total;
 
-  post_expected<partable::LatentStructure>
-  make_augmented(partable::LatentStructure pt, std::size_t row) const {
+  post_expected<spec::LatentStructure>
+  make_augmented(spec::LatentStructure pt, std::size_t row) const {
     return with_fixed_row_freed(std::move(pt), row, samp, rep);
   }
 
   post_expected<void>
-  evaluate(const partable::LatentStructure& pt, const Estimates& est,
+  evaluate(const spec::LatentStructure& pt, const Estimates& est,
            Eigen::VectorXd& score, Eigen::MatrixXd& info) const {
     return evaluate_augmented_ls(pt, rep, samp, est, discrepancy, n_total,
                                  score, info);
@@ -464,15 +483,15 @@ struct FimlEvaluator {
   FIML discrepancy;
   double h_step;
 
-  post_expected<partable::LatentStructure>
-  make_augmented(partable::LatentStructure pt, std::size_t row) const {
+  post_expected<spec::LatentStructure>
+  make_augmented(spec::LatentStructure pt, std::size_t row) const {
     auto start_samp = fiml_start_sample_stats(raw);
     if (!start_samp.has_value()) return std::unexpected(fit_to_post(start_samp.error()));
     return with_fixed_row_freed(std::move(pt), row, *start_samp, rep);
   }
 
   post_expected<void>
-  evaluate(const partable::LatentStructure& pt, const Estimates& est,
+  evaluate(const spec::LatentStructure& pt, const Estimates& est,
            Eigen::VectorXd& score, Eigen::MatrixXd& info) const {
     return evaluate_augmented_fiml(pt, rep, raw, est, discrepancy, h_step,
                                    score, info);
@@ -482,7 +501,7 @@ struct FimlEvaluator {
 }  // namespace
 
 post_expected<ScoreTestTable>
-modification_indices(partable::LatentStructure pt,
+modification_indices(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const SampleStats& samp,
                      const Estimates& est,
@@ -498,7 +517,7 @@ modification_indices(partable::LatentStructure pt,
 }
 
 post_expected<ScoreTestTable>
-score_tests(partable::LatentStructure pt,
+score_tests(spec::LatentStructure pt,
             const model::MatrixRep& rep,
             const SampleStats& samp,
             const Estimates& est,
@@ -514,7 +533,7 @@ score_tests(partable::LatentStructure pt,
 }
 
 post_expected<ScoreTestTable>
-modification_indices(partable::LatentStructure pt,
+modification_indices(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const SampleStats& samp,
                      const Estimates& est,
@@ -530,7 +549,7 @@ modification_indices(partable::LatentStructure pt,
 }
 
 post_expected<ScoreTestTable>
-score_tests(partable::LatentStructure pt,
+score_tests(spec::LatentStructure pt,
             const model::MatrixRep& rep,
             const SampleStats& samp,
             const Estimates& est,
@@ -546,7 +565,7 @@ score_tests(partable::LatentStructure pt,
 }
 
 post_expected<ScoreTestTable>
-modification_indices(partable::LatentStructure pt,
+modification_indices(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const SampleStats& samp,
                      const Estimates& est,
@@ -562,7 +581,7 @@ modification_indices(partable::LatentStructure pt,
 }
 
 post_expected<ScoreTestTable>
-score_tests(partable::LatentStructure pt,
+score_tests(spec::LatentStructure pt,
             const model::MatrixRep& rep,
             const SampleStats& samp,
             const Estimates& est,
@@ -578,7 +597,7 @@ score_tests(partable::LatentStructure pt,
 }
 
 post_expected<ScoreTestTable>
-modification_indices(partable::LatentStructure pt,
+modification_indices(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const SampleStats& samp,
                      const Estimates& est,
@@ -594,7 +613,7 @@ modification_indices(partable::LatentStructure pt,
 }
 
 post_expected<ScoreTestTable>
-score_tests(partable::LatentStructure pt,
+score_tests(spec::LatentStructure pt,
             const model::MatrixRep& rep,
             const SampleStats& samp,
             const Estimates& est,
@@ -610,7 +629,7 @@ score_tests(partable::LatentStructure pt,
 }
 
 post_expected<ScoreTestTable>
-modification_indices_fiml(partable::LatentStructure pt,
+modification_indices_fiml(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const RawData& raw,
                           const Estimates& est,
@@ -629,7 +648,7 @@ modification_indices_fiml(partable::LatentStructure pt,
 }
 
 post_expected<ScoreTestTable>
-score_tests_fiml(partable::LatentStructure pt,
+score_tests_fiml(spec::LatentStructure pt,
                  const model::MatrixRep& rep,
                  const RawData& raw,
                  const Estimates& est,
@@ -647,4 +666,4 @@ score_tests_fiml(partable::LatentStructure pt,
   return equality_release_tests(std::move(pt), rep, est, ev);
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::nt::infer

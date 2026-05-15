@@ -1,4 +1,4 @@
-#include "magmaan/fit/satorra2000.hpp"
+#include "magmaan/nt/satorra2000.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -15,7 +15,10 @@
 
 #include "detail_vech.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::nt::robust {
+
+using estimate::EqConstraints;
+
 
 namespace {
 
@@ -274,4 +277,4 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
   return out;
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::nt::robust

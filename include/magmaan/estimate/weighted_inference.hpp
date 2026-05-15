@@ -6,17 +6,26 @@
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
-#include "magmaan/fit/fit.hpp"
-#include "magmaan/fit/gls.hpp"
-#include "magmaan/fit/raw_data.hpp"
-#include "magmaan/fit/robust.hpp"
-#include "magmaan/fit/sample_stats.hpp"
-#include "magmaan/fit/uls.hpp"
-#include "magmaan/fit/wls.hpp"
+#include "magmaan/estimate/fit.hpp"
+#include "magmaan/gls/gls.hpp"
+#include "magmaan/data/raw_data.hpp"
+#include "magmaan/nt/robust.hpp"
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/gls/uls.hpp"
+#include "magmaan/gls/wls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/spec/partable.hpp"
 
 namespace magmaan::estimate {
+
+using data::RawData;
+using data::SampleStats;
+using gls::GLS;
+using gls::ULS;
+using gls::WLS;
+using nt::robust::MeanVarAdjustedResult;
+using nt::robust::SatorraBentlerResult;
+using nt::robust::ScaledShiftedResult;
 
 struct WeightedMomentBlock {
   Eigen::MatrixXd jacobian;  // model moments wrt full free theta
@@ -31,9 +40,9 @@ struct WeightedRobustResult {
   Eigen::VectorXd eigvals;
   double chisq_standard = 0.0;
   int df = 0;
-  fit::SatorraBentlerResult satorra_bentler;
-  fit::MeanVarAdjustedResult mean_var_adjusted;
-  fit::ScaledShiftedResult scaled_shifted;
+  nt::robust::SatorraBentlerResult satorra_bentler;
+  nt::robust::MeanVarAdjustedResult mean_var_adjusted;
+  nt::robust::ScaledShiftedResult scaled_shifted;
 };
 
 post_expected<WeightedRobustResult>
@@ -44,49 +53,49 @@ robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
 post_expected<WeightedRobustResult>
 robust_continuous_ls(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
-                     const fit::SampleStats& samp,
-                     const fit::Estimates& est,
-                     fit::ULS discrepancy,
+                     const data::SampleStats& samp,
+                     const Estimates& est,
+                     gls::ULS discrepancy,
                      const std::vector<Eigen::MatrixXd>& gamma);
 
 post_expected<WeightedRobustResult>
 robust_continuous_ls(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
-                     const fit::SampleStats& samp,
-                     const fit::Estimates& est,
-                     fit::GLS discrepancy,
+                     const data::SampleStats& samp,
+                     const Estimates& est,
+                     gls::GLS discrepancy,
                      const std::vector<Eigen::MatrixXd>& gamma);
 
 post_expected<WeightedRobustResult>
 robust_continuous_ls(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
-                     const fit::SampleStats& samp,
-                     const fit::Estimates& est,
-                     fit::WLS discrepancy,
+                     const data::SampleStats& samp,
+                     const Estimates& est,
+                     gls::WLS discrepancy,
                      const std::vector<Eigen::MatrixXd>& gamma);
 
 post_expected<WeightedRobustResult>
 robust_continuous_ls(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
-                     const fit::SampleStats& samp,
-                     const fit::Estimates& est,
-                     fit::ULS discrepancy,
-                     const fit::RawData& raw);
+                     const data::SampleStats& samp,
+                     const Estimates& est,
+                     gls::ULS discrepancy,
+                     const data::RawData& raw);
 
 post_expected<WeightedRobustResult>
 robust_continuous_ls(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
-                     const fit::SampleStats& samp,
-                     const fit::Estimates& est,
-                     fit::GLS discrepancy,
-                     const fit::RawData& raw);
+                     const data::SampleStats& samp,
+                     const Estimates& est,
+                     gls::GLS discrepancy,
+                     const data::RawData& raw);
 
 post_expected<WeightedRobustResult>
 robust_continuous_ls(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
-                     const fit::SampleStats& samp,
-                     const fit::Estimates& est,
-                     fit::WLS discrepancy,
-                     const fit::RawData& raw);
+                     const data::SampleStats& samp,
+                     const Estimates& est,
+                     gls::WLS discrepancy,
+                     const data::RawData& raw);
 
 }  // namespace magmaan::estimate

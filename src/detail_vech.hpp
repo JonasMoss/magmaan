@@ -17,7 +17,7 @@
 
 #include <Eigen/Core>
 
-namespace magmaan::fit::detail {
+namespace magmaan::detail {
 
 // Length of the vech of a p×p symmetric matrix: p(p+1)/2.
 constexpr Eigen::Index vech_len(Eigen::Index p) noexcept {
@@ -59,4 +59,4 @@ inline void vech_unpack(const Eigen::Ref<const Eigen::VectorXd>& x,
   }
 }
 
-}  // namespace magmaan::fit::detail
+}  // namespace magmaan::detail

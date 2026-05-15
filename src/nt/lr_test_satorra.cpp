@@ -1,4 +1,4 @@
-#include "magmaan/fit/lr_test_satorra.hpp"
+#include "magmaan/nt/lr_test_satorra.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -9,14 +9,20 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
-#include "magmaan/fit/inference.hpp"        // chi2_pvalue, noncentral_chisq_cdf
-#include "magmaan/fit/restriction.hpp"      // restriction_alpha_from_K
-#include "magmaan/fit/weighted_chisq.hpp"   // imhof_upper
+#include "magmaan/nt/infer.hpp"        // chi2_pvalue, noncentral_chisq_cdf
+#include "magmaan/nt/restriction.hpp"      // restriction_alpha_from_K
+#include "magmaan/nt/weighted_chisq.hpp"   // imhof_upper
 #include "magmaan/model/model_evaluator.hpp"
 
 #include "detail_vech.hpp"                // vech_len
 
-namespace magmaan::fit {
+namespace magmaan::nt::robust {
+
+using infer::chi2_pvalue;
+using infer::noncentral_chisq_cdf;
+
+using estimate::EqConstraints;
+
 
 namespace {
 
@@ -100,7 +106,7 @@ lr_test_satorra2000(double                  T_diff,
 
 post_expected<LRSatorra2000Result>
 lr_test_satorra2000_from_data(
-    const partable::LatentStructure&     pt,
+    const spec::LatentStructure&     pt,
     const model::MatrixRep&              rep,
     const Eigen::VectorXd&               theta_H1_full,
     const EqConstraints&                 K_H1,
@@ -208,4 +214,4 @@ lr_test_satorra2000_from_data(
   return lr_test_satorra2000(T_H0 - T_H1, *sd_or);
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::nt::robust

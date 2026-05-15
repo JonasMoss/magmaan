@@ -1,4 +1,4 @@
-#include "magmaan/fit/fit_measures.hpp"
+#include "magmaan/nt/measures.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -15,11 +15,18 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
-#include "magmaan/fit/constraints.hpp"
-#include "magmaan/fit/resolve_fixed_x.hpp"
+#include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::nt::measures {
+
+using estimate::build_eq_constraints;
+using estimate::resolve_fixed_x_from_sample;
+using infer::noncentral_chisq_cdf;
+
+using data::SampleStats;
+using estimate::Estimates;
 
 namespace {
 
@@ -169,7 +176,7 @@ FitMeasures fit_measures(double             chi2_user,
 }
 
 post_expected<FitExtras>
-fit_extras(partable::LatentStructure        pt,
+fit_extras(spec::LatentStructure        pt,
            const model::MatrixRep&   rep,
            const SampleStats&        samp,
            const Estimates&          est) {
@@ -358,4 +365,4 @@ fit_extras(partable::LatentStructure        pt,
   return out;
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::nt::measures

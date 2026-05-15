@@ -15,7 +15,7 @@
 #include "../oracle.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/estimate/ordinal.hpp"
-#include "magmaan/fit/constraints.hpp"
+#include "magmaan/estimate/constraints.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
@@ -467,7 +467,7 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
                            prep_for_df.error().detail);
         continue;
       }
-      auto con_or = magmaan::fit::build_eq_constraints(pt_for_df);
+      auto con_or = magmaan::estimate::build_eq_constraints(pt_for_df);
       if (!con_or.has_value()) {
         failures.push_back(id + " " + name + ": df constraints — " +
                            con_or.error().detail);
@@ -626,7 +626,7 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
                            prep_for_df.error().detail);
         continue;
       }
-      auto con_or = magmaan::fit::build_eq_constraints(pt_for_df);
+      auto con_or = magmaan::estimate::build_eq_constraints(pt_for_df);
       if (!con_or.has_value()) {
         failures.push_back(id + " " + name + ": df constraints — " +
                            con_or.error().detail);

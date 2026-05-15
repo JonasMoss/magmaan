@@ -1,4 +1,4 @@
-#include "magmaan/fit/standardized.hpp"
+#include "magmaan/nt/standardize.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -15,7 +15,10 @@
 
 #include "detail_vech.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::nt::standardize {
+
+using data::SampleStats;
+using estimate::Estimates;
 
 namespace {
 
@@ -26,7 +29,7 @@ PostError make_err(PostError::Kind k, std::string detail) {
 }  // namespace
 
 post_expected<StandardizedSolution>
-standardize_lv(const partable::LatentStructure& pt,
+standardize_lv(const spec::LatentStructure& pt,
                const model::MatrixRep&   rep,
                const Estimates&          est,
                const Eigen::MatrixXd&    vcov) {
@@ -161,7 +164,7 @@ using detail::vech_len;
 }  // namespace
 
 post_expected<StandardizedSolution>
-standardize_all(const partable::LatentStructure& pt,
+standardize_all(const spec::LatentStructure& pt,
                 const model::MatrixRep&   rep,
                 const Estimates&          est,
                 const Eigen::MatrixXd&    vcov) {
@@ -362,4 +365,4 @@ standardize_all(const partable::LatentStructure& pt,
   return out;
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::nt::standardize

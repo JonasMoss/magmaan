@@ -158,8 +158,8 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
     auto est_or = (id == "0015_structural_highdim_hs_fiml")
         ? magmaan::estimate::fit_fiml(
               *pt, *mr, raw, magmaan::nt::fiml::FIML{},
-              magmaan::fit::LbfgsOptimizer(
-                  magmaan::fit::LbfgsOptions{.max_iter = 4000}))
+              magmaan::optim::LbfgsOptimizer(
+                  magmaan::optim::LbfgsOptions{.max_iter = 4000}))
         : magmaan::estimate::fit_fiml(*pt, *mr, raw);
     if (exp.contains("expect_error")) {
       if (est_or.has_value()) {

@@ -1,4 +1,4 @@
-#include "magmaan/fit/robust.hpp"
+#include "magmaan/nt/robust.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -12,15 +12,26 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
-#include "magmaan/fit/constraints.hpp"        // EqConstraints / build_eq_constraints
-#include "magmaan/fit/inference.hpp"          // information_observed_{analytic,fd}
-#include "magmaan/fit/raw_data.hpp"
-#include "magmaan/fit/resolve_fixed_x.hpp"
+#include "magmaan/estimate/constraints.hpp"        // EqConstraints / build_eq_constraints
+#include "magmaan/nt/infer.hpp"          // information_observed_{analytic,fd}
+#include "magmaan/data/raw_data.hpp"
+#include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
 #include "detail_vech.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::nt::robust {
+
+using data::gamma_nt;
+using infer::information_observed_analytic;
+using infer::information_observed_fd;
+
+using data::RawData;
+using data::SampleStats;
+using estimate::Estimates;
+using estimate::EqConstraints;
+using estimate::build_eq_constraints;
+using estimate::resolve_fixed_x_from_sample;
 
 namespace {
 
@@ -141,7 +152,7 @@ Eigen::MatrixXd symm_product_eigbasis(const Eigen::MatrixXd& Mtilde,
 // `fixed_value`s from the sample (matches `fit()` pattern), then builds and
 // shape-checks the evaluator.
 post_expected<model::ModelEvaluator>
-prepare_evaluator(partable::LatentStructure&       pt,
+prepare_evaluator(spec::LatentStructure&       pt,
                   const model::MatrixRep&   rep,
                   const SampleStats&        samp,
                   const Estimates&          est) {
@@ -174,7 +185,7 @@ prepare_evaluator(partable::LatentStructure&       pt,
 // ============================================================================
 
 post_expected<UFactor>
-build_u_factor(partable::LatentStructure        pt,
+build_u_factor(spec::LatentStructure        pt,
                const model::MatrixRep&   rep,
                const SampleStats&        samp,
                const Estimates&          est,
@@ -308,7 +319,7 @@ build_u_factor(partable::LatentStructure        pt,
   // `df` becomes total_rows − n_alpha. Stacking [μ; σ] happens BEFORE the
   // K_con multiply (K_con acts on columns, not rows). `K_con` is empty when
   // there are none — the identity reparameterization. Mirrors
-  // `fit::vcov(info, pt)`.
+  // the lavaan vcov shape.
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) {
     return std::unexpected(make_err(con_or.error().kind,
@@ -894,7 +905,7 @@ struct RobustSetup {
 };
 
 post_expected<RobustSetup>
-robust_setup(partable::LatentStructure pt, const model::MatrixRep& rep,
+robust_setup(spec::LatentStructure pt, const model::MatrixRep& rep,
              const SampleStats& samp, const Estimates& est,
              InferenceSpec spec, bool /*gamma_hat_overload*/) {
   if (spec.cov == ScoreCovariance::BrowneUnbiased) {
@@ -1001,7 +1012,7 @@ robust_setup(partable::LatentStructure pt, const model::MatrixRep& rep,
   }
 
   // Constraints: Δ_full → Δ_full·K (total_rows × n_alpha). Mirrors
-  // `fit::vcov(info, pt)` / `build_u_factor`.
+  // the lavaan vcov shape / `build_u_factor`.
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) {
     return std::unexpected(make_err(con_or.error().kind,
@@ -1127,7 +1138,7 @@ sandwich_finish(const RobustSetup& s, const Eigen::MatrixXd& meat) {
 }  // namespace
 
 post_expected<RobustSeResult>
-robust_se(partable::LatentStructure        pt,
+robust_se(spec::LatentStructure        pt,
           const model::MatrixRep&   rep,
           const SampleStats&        samp,
           const Estimates&          est,
@@ -1154,7 +1165,7 @@ robust_se(partable::LatentStructure        pt,
 }
 
 post_expected<RobustSeResult>
-robust_se(partable::LatentStructure        pt,
+robust_se(spec::LatentStructure        pt,
           const model::MatrixRep&   rep,
           const SampleStats&        samp,
           const Estimates&          est,
@@ -1184,4 +1195,4 @@ robust_se(partable::LatentStructure        pt,
   return sandwich_finish(s, meat);
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::nt::robust

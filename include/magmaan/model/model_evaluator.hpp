@@ -8,7 +8,7 @@
 
 #include "magmaan/expected.hpp"
 #include "magmaan/model/matrix_rep.hpp"
-#include "magmaan/partable/partable.hpp"
+#include "magmaan/spec/partable.hpp"
 
 namespace magmaan::model {
 
@@ -80,7 +80,7 @@ class ModelEvaluator {
   // for the lifetime of the evaluator. Build is fallible because some
   // partables (mismatched MatrixRep, missing variables) can't be evaluated.
   static model_expected<ModelEvaluator>
-  build(const partable::LatentStructure& pt, const MatrixRep& rep);
+  build(const spec::LatentStructure& pt, const MatrixRep& rep);
 
   // Number of free parameters this evaluator expects in θ.
   std::size_t n_free() const noexcept { return n_free_; }

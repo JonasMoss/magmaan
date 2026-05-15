@@ -1,4 +1,4 @@
-#include "magmaan/partable/lavaan_view.hpp"
+#include "magmaan/lavaan/partable_view.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -9,13 +9,18 @@
 #include <vector>
 
 #include "magmaan/parse/op.hpp"
-#include "magmaan/partable/lavaanify.hpp"        // compute_eq_groups
-#include "magmaan/partable/lin_constraints.hpp"  // resolve_lin_constraints
-#include "magmaan/partable/partable.hpp"
+#include "magmaan/spec/lavaanify.hpp"        // compute_eq_groups
+#include "magmaan/spec/lin_constraints.hpp"  // resolve_lin_constraints
+#include "magmaan/spec/partable.hpp"
 
 #include "spec/classify.hpp"
 
-namespace magmaan::partable {
+namespace magmaan::lavaan {
+
+using spec::LatentNames;
+using spec::LatentStructure;
+using spec::Starts;
+namespace detail = spec::detail;
 
 namespace {
 
@@ -237,4 +242,4 @@ ParsedLavaanParTable from_lavaan_partable(const LavaanParTable& pt) {
   return out;
 }
 
-}  // namespace magmaan::partable
+}  // namespace magmaan::lavaan

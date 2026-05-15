@@ -1,4 +1,4 @@
-#include "magmaan/fit/effects.hpp"
+#include "magmaan/nt/effects.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -17,7 +17,9 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/parse/flat_partable.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::nt::effects {
+
+using estimate::Estimates;
 
 namespace {
 
@@ -195,8 +197,8 @@ void collect_params(const parse::Expr& e, std::vector<std::string_view>& out) {
 
 post_expected<DefinedParams>
 compute_defined(const parse::FlatPartable& flat,
-                const partable::LatentStructure&  pt,
-                const partable::LatentNames&      names,
+                const spec::LatentStructure&  pt,
+                const spec::LatentNames&      names,
                 const Estimates&           est,
                 const Eigen::MatrixXd&     vcov) {
   const std::size_t n_free = static_cast<std::size_t>(est.theta.size());
@@ -308,4 +310,4 @@ compute_defined(const parse::FlatPartable& flat,
   return out;
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::nt::effects

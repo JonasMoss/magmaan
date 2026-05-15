@@ -1,4 +1,4 @@
-#include "magmaan/fit/ceres_optimizer.hpp"
+#include "magmaan/optim/ceres_optimizer.hpp"
 
 #ifdef MAGMAAN_WITH_CERES
 
@@ -16,7 +16,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::optim {
 
 namespace {
 
@@ -356,6 +356,6 @@ CeresBoundedOptimizer::minimize_ls(LsResidualFn r_fn,
       static_cast<int>(summary.iterations.size())};
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::optim
 
 #endif  // MAGMAAN_WITH_CERES

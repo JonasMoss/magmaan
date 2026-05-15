@@ -1,4 +1,4 @@
-#include "magmaan/partable/lavaanify.hpp"
+#include "magmaan/spec/lavaanify.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -17,13 +17,13 @@
 #include "magmaan/parse/expr_format.hpp"
 #include "magmaan/parse/flat_partable.hpp"
 #include "magmaan/parse/op.hpp"
-#include "magmaan/partable/lin_constraints.hpp"
-#include "magmaan/partable/partable.hpp"
+#include "magmaan/spec/lin_constraints.hpp"
+#include "magmaan/spec/partable.hpp"
 
 #include "classify.hpp"
 #include "detail_constraint_text.hpp"
 
-namespace magmaan::partable {
+namespace magmaan::spec {
 
 namespace {
 
@@ -784,4 +784,4 @@ void compute_eq_groups(LatentStructure& s, const LatentNames& names) {
   }
 }
 
-}  // namespace magmaan::partable
+}  // namespace magmaan::spec

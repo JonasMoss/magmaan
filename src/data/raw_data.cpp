@@ -1,4 +1,4 @@
-#include "magmaan/fit/raw_data.hpp"
+#include "magmaan/data/raw_data.hpp"
 
 #include <cstddef>
 #include <string>
@@ -10,7 +10,7 @@
 
 #include "detail_vech.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::data {
 
 namespace {
 
@@ -130,4 +130,4 @@ gamma_nt(const Eigen::Ref<const Eigen::MatrixXd>& Sigma) {
   return Gamma;
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::data

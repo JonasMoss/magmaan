@@ -147,8 +147,8 @@ Rcpp::List snlls_fit_result(Ctx& ctx,
   return out;
 }
 
-magmaan::fit::Bounds bounds_from_nullable(Rcpp::Nullable<Rcpp::List> bounds) {
-  magmaan::fit::Bounds out;
+magmaan::estimate::Bounds bounds_from_nullable(Rcpp::Nullable<Rcpp::List> bounds) {
+  magmaan::estimate::Bounds out;
   if (bounds.isNull()) return out;
   Rcpp::List b(bounds.get());
   if (!b.containsElementNamed("lower") || !b.containsElementNamed("upper"))

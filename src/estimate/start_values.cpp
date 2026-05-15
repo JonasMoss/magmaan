@@ -1,4 +1,4 @@
-#include "magmaan/fit/start_values.hpp"
+#include "magmaan/estimate/start_values.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -10,13 +10,15 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/op.hpp"
-#include "magmaan/partable/partable.hpp"
-#include "magmaan/partable/start_hints.hpp"
+#include "magmaan/spec/partable.hpp"
+#include "magmaan/spec/start_hints.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::estimate {
+
+using data::SampleStats;
 
 namespace {
 
@@ -32,10 +34,10 @@ bool is_constraint_op(parse::Op op) noexcept {
 }  // namespace
 
 fit_expected<Eigen::VectorXd>
-simple_start_values(const partable::LatentStructure& pt,
+simple_start_values(const spec::LatentStructure& pt,
                     const model::MatrixRep& rep,
                     const SampleStats& samp,
-                    const partable::Starts& starts) {
+                    const spec::Starts& starts) {
   const std::int32_t n_free = pt.n_free();
   Eigen::VectorXd start = Eigen::VectorXd::Zero(n_free);
   if (n_free == 0) return start;
@@ -170,4 +172,4 @@ simple_start_values(const partable::LatentStructure& pt,
   return start;
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::estimate

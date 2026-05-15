@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "magmaan/expected.hpp"
-#include "magmaan/partable/partable.hpp"
+#include "magmaan/spec/partable.hpp"
 
 namespace magmaan::model {
 
@@ -99,7 +99,7 @@ struct MatrixRep {
 // and for the "unknown variable" error messages. Pass it when the result is
 // inspected by name (R, golden tests); leave it null for the pure numeric path.
 model_expected<MatrixRep>
-build_matrix_rep(const partable::LatentStructure& pt,
-                 const partable::LatentNames* names = nullptr);
+build_matrix_rep(const spec::LatentStructure& pt,
+                 const spec::LatentNames* names = nullptr);
 
 }  // namespace magmaan::model

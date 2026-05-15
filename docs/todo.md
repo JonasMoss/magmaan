@@ -124,14 +124,16 @@ post-fit inference explicitly.
 Intent: finish the namespace transition without breaking compatibility
 unnecessarily.
 
-- [ ] Move primary definitions out of old `magmaan::fit` and
+- [x] Move primary definitions out of old `magmaan::fit` and
   `magmaan::partable` namespaces into the target namespaces.
-- [ ] Convert repo code and R binding internals to target headers and
+- [x] Convert repo code and R binding internals to target headers and
   namespaces directly.
-- [ ] Keep old `include/magmaan/fit/*` and `include/magmaan/partable/*`
+- [x] Keep old `include/magmaan/fit/*` and `include/magmaan/partable/*`
   headers as compatibility shims for one transition window.
-- [ ] Keep one focused compatibility test for representative old headers.
-- [ ] Update stale docs and examples after the migration lands.
+- [x] Keep one focused compatibility test for representative old headers.
+- [x] Update stale docs and examples after the migration lands.
+- [ ] After the transition window, remove the old `fit/*` and `partable/*`
+  compatibility shims.
 
 Done when: new code naturally uses `spec`, `lavaan`, `estimate`, `optim`, `nt`,
 `gls`, and `data`, while old include paths still have a tested transition path.

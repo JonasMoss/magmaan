@@ -14,9 +14,9 @@
 #include <vector>
 
 #include "magmaan/parse/op.hpp"
-#include "magmaan/partable/partable.hpp"  // VarRole
+#include "magmaan/spec/partable.hpp"  // VarRole
 
-namespace magmaan::partable::detail {
+namespace magmaan::spec::detail {
 
 // Insertion-order-preserving set of strings (lavaan's variable ordering
 // follows order of appearance in the model syntax).
@@ -157,4 +157,4 @@ inline VarInventory build_var_inventory(const VarSets& v, bool reduced) {
   return inv;
 }
 
-}  // namespace magmaan::partable::detail
+}  // namespace magmaan::spec::detail

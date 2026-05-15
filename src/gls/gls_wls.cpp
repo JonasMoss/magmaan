@@ -1,5 +1,5 @@
-#include "magmaan/fit/gls.hpp"
-#include "magmaan/fit/wls.hpp"
+#include "magmaan/gls/gls.hpp"
+#include "magmaan/gls/wls.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -14,12 +14,14 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
-#include "magmaan/fit/sample_stats.hpp"
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
 #include "detail_vech.hpp"
 
-namespace magmaan::fit {
+namespace magmaan::gls {
+
+using data::SampleStats;
 
 namespace {
 
@@ -454,4 +456,4 @@ WLS::residual_jacobian(const SampleStats& s,
       });
 }
 
-}  // namespace magmaan::fit
+}  // namespace magmaan::gls
