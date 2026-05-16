@@ -26,33 +26,44 @@ Settled decisions:
   missing ordinal estimation is not supported until a likelihood target and
   scaling convention are explicit. The first missing-data target should be an
   observed-pair composite-likelihood path, not an implicit MAR/FIML claim.
+- Shared-threshold multivariate missing ordinal modeling is out of scope for
+  this pairwise milestone. If reopened later, it needs a separate design note
+  covering the likelihood target, threshold sharing rules, and scaling before
+  implementation.
 - Continuous normal pair likelihood is a mixed-pair primitive and
   benchmark/sanity check against complete-data ML/FIML, not a supported
   standalone SEM estimator.
 
-Remaining work:
+Remaining work, in suggested order. Effort is approximate: S = bounded
+docs/tests, M = focused implementation slice, L = new estimator plumbing, XL =
+separate statistical design/research track.
 
-- [ ] Design the first SEM-level pairwise composite-likelihood API as a
+- [ ] **L, prerequisite.** Design the first SEM-level pairwise
+  composite-likelihood API as a
   separate estimator from lavaan-compatible `OrdinalStats`/DWLS. Use pair-local
   nuisance thresholds and pairwise latent correlations initially; document
   objective scaling, per-pair sample-size weighting, parameter mapping to
   SEM-implied bivariate margins, boundary diagnostics, and the reported
   chi-square/df convention before exposing it through R.
-- [ ] Add an observed-pair all-ordinal prototype behind that composite
+- [ ] **M/L, depends on API.** Add a complete/listwise all-ordinal prototype
+  behind that composite-likelihood API first. Reuse the existing complete
+  bivariate joint ML kernel, map SEM-implied pair margins into the pair
+  objective, and return enough diagnostics to compare against the current
+  polychoric/DWLS path.
+- [ ] **L, harder than complete/listwise.** Add an observed-pair all-ordinal
+  prototype behind the same composite
   likelihood API. Preserve per-pair `n_obs`/`n_missing`, reject all-missing
   pairs and empty marginal categories, and keep the documentation clear that
   this is pairwise observed-data likelihood rather than multivariate MAR
   ordinal FIML.
-- [ ] Keep shared-threshold multivariate missing ordinal modeling out of this
-  pairwise milestone. If that model is reopened later, require a separate
-  design note covering the likelihood target, threshold sharing rules, and
-  scaling before implementation.
-- [ ] Extend pairwise influence/Gamma exposure to the missing-data all-ordinal
-  composite-likelihood path, then to mixed continuous/ordinal pairwise paths
-  once their likelihood targets and moment ordering are fixed.
-- [ ] Add explicit pairwise diagnostics fixtures: complete all-ordinal
-  polychoric wrappers first, mixed pair primitives second, and observed-pair
-  missing-data scenarios only after the SEM-level target is fixed.
+- [ ] **M, after each implementation slice.** Add explicit pairwise diagnostics
+  fixtures: current complete all-ordinal polychoric wrappers first, mixed pair
+  primitives second, complete/listwise composite-likelihood prototypes third,
+  and observed-pair missing-data scenarios only after that target is fixed.
+- [ ] **L, follow-on inference work.** Extend pairwise influence/Gamma exposure
+  to the complete/listwise and missing-data all-ordinal composite-likelihood
+  paths, then to mixed continuous/ordinal pairwise paths once their likelihood
+  targets and moment ordering are fixed.
 
 Done when: the pairwise path reproduces existing ML polychorics in its default
 slice, has an explicit composite-likelihood API for pair-local SEM work, and
