@@ -64,7 +64,15 @@ Remaining work, in suggested order:
   drifts past the documented loose tolerance for a sparse 4-category indicator.
 - [ ] **M/L.** Add multi-group LS weighting and equality-constraint cases
   across continuous and ordinal estimators, plus mean-structure LS cases that
-  exercise Ceres and SNLLS where semantically appropriate.
+  exercise Ceres and SNLLS where semantically appropriate. Continuous
+  multi-group LS *weighting* parity has landed (`hs_3factor_ls_mg_configural`,
+  ULS/GLS/WLS, HS by school). The cross-group equality-constrained companion
+  is blocked: `fit_bounded`'s LS path enforces equality with a ~1e10 penalty
+  residual, and on a 2-group metric-invariance model LBFGS-B's Cauchy-point
+  search fails to terminate. Needs a conditioned LS-equality path (e.g. a
+  K-reparameterization, as the ML path uses) before that case can be gated.
+  Remaining: that fix, ordinal multi-group LS, and mean-structure LS
+  exercising Ceres/SNLLS.
 - [ ] **S.** Add scalar-invariance latent mean rescaling fixtures. The
   line-search salvage (`docs/convergence_diagnostics.md`) unblocked
   mean-structure ML convergence on the unbounded path; confirm the bounded

@@ -30,7 +30,7 @@ Each parity case belongs to one of four families, one C++ `TEST_CASE` each:
 |---|---|---|
 | `ML` | `hs_3factor_cfa`, `bollen_democracy_sem`, `demo_growth_linear`, `bfi_5factor`, `mplus_ex5_1` | complete-data normal-theory ML |
 | `FIML` | `bfi_fiml` | raw-data full-information ML over genuine missingness |
-| `LS` | `hs_3factor_ls` | continuous ULS / GLS / WLS |
+| `LS` | `hs_3factor_ls`, `hs_3factor_ls_mg_configural` | continuous ULS / GLS / WLS — single- and multi-group configural (HS by school) |
 | `ordinal` | `bfi_ordinal_dwls` | ordinal DWLS / WLS on integer Likert data |
 
 ## Regenerating
@@ -88,6 +88,11 @@ sample_mean, n_obs}`. The `ULS` entry additionally carries a `robust` block
 statistics). `WLS.V` is lavaan's weight matrix — the C++ test feeds it into
 `gls::WLS` so magmaan fits the same weighted moments lavaan did.
 
+Multi-group LS cases set `n_groups > 1` and add `group_var` / `group_labels`;
+`sample_cov`, `WLS.V`, and the robust `gamma` each become one `{block, matrix}`
+entry per group, and every fit's `n_obs_per_block` carries the per-group
+counts.
+
 ### ordinal family
 
 `input` is the bare model; the C++ test appends the threshold/`~*~` rows.
@@ -117,8 +122,9 @@ estimator-convention divergence the `ls/` corpus goldens accept).
 Raw observations under the `raw: [{X, [mask]}]` grid schema shared with the
 FIML golden fixtures. One block per group.
 
-- **ML / LS** — `raw: [{X}]`, no mask: listwise-complete rows in `ov_names`
-  order, exactly what lavaan fit under `missing = "listwise"`.
+- **ML / LS** — `raw: [{X}, …]`, no mask: listwise-complete rows in `ov_names`
+  order, one block per group (single-group cases have a single block), exactly
+  what lavaan fit under `missing = "listwise"`.
 - **FIML** — `raw: [{X, mask}]`: every row with at least one observed value,
   NAs preserved (`null` in `X`, `0` in `mask`). The genuine missing-data path.
 - **ordinal** — `{ordered, blocks: [{block, label, matrix}]}`: integer Likert
@@ -139,4 +145,5 @@ raw-data ingestion sub-check is skipped.
 | `mplus_ex5_1` | Mplus User's Guide ex5.1 | no | redistribution not cleared |
 | `bfi_fiml` | `psychTools::bfi` | yes | psychTools, GPL-2 \| GPL-3 |
 | `hs_3factor_ls` | `lavaan::HolzingerSwineford1939` | yes | lavaan, GPL-3 |
+| `hs_3factor_ls_mg_configural` | `lavaan::HolzingerSwineford1939` | yes | lavaan, GPL-3 |
 | `bfi_ordinal_dwls` | `psychTools::bfi` | yes | psychTools, GPL-2 \| GPL-3 |
