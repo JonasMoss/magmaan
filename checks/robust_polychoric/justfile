@@ -1,0 +1,31 @@
+set shell := ["bash", "-uc"]
+
+root := "../.."
+build_dir := "build"
+bin := build_dir / "robust_polychoric_sanity"
+cxx := env_var_or_default("CXX", "clang++")
+
+default:
+    @just --list
+
+build:
+    mkdir -p {{build_dir}}
+    {{cxx}} -std=gnu++23 -g -fPIC -fno-exceptions -fno-rtti \
+      -fvisibility=hidden -fvisibility-inlines-hidden \
+      -DEIGEN_DONT_PARALLELIZE=1 -DEIGEN_INITIALIZE_MATRICES_BY_NAN=1 \
+      -DEIGEN_MAX_ALIGN_BYTES=64 -DEIGEN_NO_AUTOMATIC_RESIZING=1 \
+      -DEIGEN_NO_EXCEPTIONS=1 -DEIGEN_RUNTIME_NO_MALLOC=1 \
+      -I{{root}}/include -I{{root}}/src -isystem /usr/include/eigen3 \
+      -isystem {{root}}/build/fast/_deps/lbfgspp-src/include \
+      robust_polychoric_sanity.cpp {{root}}/build/fast/libmagmaan.a -o {{bin}}
+
+quick: build
+    mkdir -p results
+    {{bin}} --n=800 --pair-reps=50 --matrix-reps=30 --sem-reps=12 | tee results/quick.txt
+
+all: build
+    mkdir -p results
+    {{bin}} --n=1200 --pair-reps=140 --matrix-reps=70 --sem-reps=30 | tee results/latest.txt
+
+clean:
+    rm -rf {{build_dir}} results
