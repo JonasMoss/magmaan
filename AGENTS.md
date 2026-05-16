@@ -79,7 +79,11 @@ There's a `justfile` at the repo root wrapping the common loops: `just build`,
 `just test` (aliases for the `dev` build plus ctest), `just opt`,
 `just test-opt`, `just r-install`, `just r-check` (reinstall the R bindings
 plus run `r-package/examples/*.R` vs lavaan), `just regen-oracle`, and
-`just check` (everything). `just` with no recipe lists them.
+`just check` (everything). `just` with no recipe lists them. For the iterative
+loop, `just test-area <area>` builds and runs a single test executable
+(`smoke`, `spec`, `estimate`, `inference`, `ordinal`, or `parity`) — with an
+optional test-name filter as a second arg — and `just test-quick` runs
+everything except the heavy real-data `parity` tests.
 
 The R bindings (`r-package/`) link the prebuilt non-sanitized `opt`
 `libmagmaan.a`; `src/Makevars` makes the package objects depend on it, so a
