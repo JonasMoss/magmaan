@@ -2,8 +2,27 @@
 
 This is the active human-readable backlog for work that remains after the
 current implementation state summarized in [docs/roadmap.md](roadmap.md). Keep
-it focused on unfinished work, acceptance checks, and the next useful seams for
+it focused on unfinished work, acceptance checks, and the next useful paths for
 methods development.
+
+Effort is approximate:
+
+- **S**: bounded docs, fixtures, or wrapper cleanup.
+- **M**: focused implementation or test slice.
+- **L**: new estimator plumbing, cross-module semantics, or inference work.
+- **XL**: separate statistical design/research track before implementation.
+
+Global contracts:
+
+- `docs/roadmap.md` is the state and architecture summary; this file is only
+  the remaining-work backlog.
+- Lavaan-backed support claims need checked-in fixtures and tolerances. CI
+  never depends on running R.
+- R bindings stay methods-developer oriented: estimate first, then explicit
+  post-fit inference, robust tests, fit measures, defined parameters, and
+  nested tests.
+- Unsupported statistical combinations should fail explicitly rather than
+  falling through to nearby lavaan-compatible behavior.
 
 ## 0. Pairwise threshold/composite-likelihood model
 
@@ -11,7 +30,7 @@ Intent: add a direct pairwise likelihood/minimum-disparity path for threshold
 data, starting with ordinary polychoric replication and only then expanding to
 missing data, mixed data, and robust divergences.
 
-Settled decisions:
+Contracts:
 
 - The lavaan-compatible SEM-facing ordinal path remains shared marginal
   thresholds plus polychoric/polyserial/covariance moments consumed by
@@ -34,258 +53,237 @@ Settled decisions:
   benchmark/sanity check against complete-data ML/FIML, not a supported
   standalone SEM estimator.
 
-Remaining work, in suggested order. Effort is approximate: S = bounded
-docs/tests, M = focused implementation slice, L = new estimator plumbing, XL =
-separate statistical design/research track.
+Remaining work, in suggested order:
 
-- [ ] **L, prerequisite.** Design the first SEM-level pairwise
-  composite-likelihood API as a
-  separate estimator from lavaan-compatible `OrdinalStats`/DWLS. Use pair-local
-  nuisance thresholds and pairwise latent correlations initially; document
-  objective scaling, per-pair sample-size weighting, parameter mapping to
-  SEM-implied bivariate margins, boundary diagnostics, and the reported
-  chi-square/df convention before exposing it through R.
-- [ ] **M/L, depends on API.** Add a complete/listwise all-ordinal prototype
-  behind that composite-likelihood API first. Reuse the existing complete
-  bivariate joint ML kernel, map SEM-implied pair margins into the pair
-  objective, and return enough diagnostics to compare against the current
-  polychoric/DWLS path.
+- [ ] **L, prerequisite.** Design the SEM-level pairwise composite-likelihood
+  API as a separate estimator from lavaan-compatible `OrdinalStats`/DWLS.
+  Specify scaling, per-pair sample-size weighting, SEM-implied bivariate margin
+  mapping, boundary diagnostics, and reported chi-square/df behavior.
+- [ ] **M/L, depends on API.** Add a complete/listwise all-ordinal
+  composite-likelihood prototype using the existing complete bivariate joint ML
+  kernel and diagnostics comparable to the current polychoric/DWLS path.
 - [ ] **L, harder than complete/listwise.** Add an observed-pair all-ordinal
-  prototype behind the same composite
-  likelihood API. Preserve per-pair `n_obs`/`n_missing`, reject all-missing
-  pairs and empty marginal categories, and keep the documentation clear that
-  this is pairwise observed-data likelihood rather than multivariate MAR
-  ordinal FIML.
-- [ ] **M, after each implementation slice.** Add explicit pairwise diagnostics
-  fixtures: current complete all-ordinal polychoric wrappers first, mixed pair
-  primitives second, complete/listwise composite-likelihood prototypes third,
-  and observed-pair missing-data scenarios only after that target is fixed.
+  prototype behind the same API. Preserve per-pair `n_obs`/`n_missing`; reject
+  all-missing pairs and empty marginal categories; document that this is
+  pairwise observed-data likelihood, not multivariate MAR ordinal FIML.
+- [ ] **M, after each implementation slice.** Add explicit pairwise
+  diagnostics fixtures: current complete all-ordinal polychoric wrappers first,
+  mixed pair primitives second, complete/listwise composite-likelihood
+  prototypes third, and observed-pair scenarios only after that target is fixed.
 - [ ] **L, follow-on inference work.** Extend pairwise influence/Gamma exposure
-  to the complete/listwise and missing-data all-ordinal composite-likelihood
-  paths, then to mixed continuous/ordinal pairwise paths once their likelihood
-  targets and moment ordering are fixed.
+  to complete/listwise and missing-data all-ordinal composite-likelihood paths,
+  then to mixed continuous/ordinal pairwise paths once their likelihood targets
+  and moment ordering are fixed.
 
 Done when: the pairwise path reproduces existing ML polychorics in its default
 slice, has an explicit composite-likelihood API for pair-local SEM work, and
 documents missing-data semantics without implying unsupported multivariate
 ordinal FIML behavior.
 
-## 1. Validation and lavaan comparison
+## 1. Validation, tests, and examples
 
-Intent: keep validation fixture-first and make parity failures cheap to
-diagnose.
+Intent: keep validation fixture-first, broaden structural test coverage, and
+make supported workflows legible without turning docs into a second roadmap.
 
-- [ ] Add fixture cases for scalar-invariance latent mean rescaling once the
-  bounded optimizer reliably fits the needed mean-structure models.
+Contracts:
 
-Done when: representative supported estimator/model combinations have
-checked-in lavaan-backed fixtures, clear tolerances, and no hidden fixture-free
-parity claims.
+- Fixture-backed parity remains the bar for supported estimator/model slices.
+- Property and boundary tests should catch structural mistakes before they turn
+  into hard-to-debug lavaan parity failures.
+- Examples should demonstrate the explicit post-fit workflow rather than hide
+  inference behind `magmaan()`.
 
-## 2. R and public API polish
+Remaining work, in suggested order:
 
-Intent: make the methods-developer interface reasonable without turning the R
-package into a second SEM implementation.
+- [ ] **S.** Keep ordinal R documentation current around `model_spec()` with
+  `ordered` and `parameterization = "delta"`, ordinal sample-stat builders, and
+  ordinal DWLS/WLS fitting wrappers.
+- [ ] **S/M.** Add examples for the intended workflow: estimation first, then
+  optional SEs, robust tests, fit measures, defined parameters, and nested
+  tests. Include public fixed.x and missing-data boundaries where users are
+  likely to hit them.
+- [ ] **M.** Expand property tests around Jacobians, moment-vector ordering,
+  block stacking, equality constraints, and group weighting.
+- [ ] **M.** Add ordinal/mixed boundary fixtures: threshold-heavy sparse or
+  near-empty categories, complete/listwise mixed categorical sample stats, and
+  explicit empty-category hard errors.
+- [ ] **M/L.** Add multi-group LS weighting and equality-constraint cases
+  across continuous and ordinal estimators, plus mean-structure LS cases that
+  exercise Ceres and SNLLS where semantically appropriate.
+- [ ] **S, blocked on optimizer behavior.** Add scalar-invariance latent mean
+  rescaling fixtures once the bounded optimizer reliably fits the needed
+  mean-structure models.
 
-- [ ] Keep ordinal R documentation current around `model_spec()` with
-  `ordered` and `parameterization = "delta"`, `data_ordinal_stats_from_df()`,
-  `fit_dwls_ordinal()`, and `fit_wls_ordinal()`.
+Done when: representative supported estimator/model combinations have fixtures
+or structural tests at the right level, and contributors can discover the
+intended workflow from docs/examples rather than reverse engineering tests.
 
-Done when: a methods developer can fit supported complete, FIML, LS, and
-ordinal/mixed models from R through thin wrappers while still choosing
-post-fit inference explicitly.
+## 2. API, R boundary, and namespace cleanup
 
-## 3. Public namespace and header cleanup
+Intent: keep the public surface coherent while the namespace transition and R
+methods-developer interface settle.
 
-Intent: finish the namespace transition without breaking compatibility
-unnecessarily.
+Contracts:
 
-- [ ] After the transition window, remove the old `fit/*` and `partable/*`
-  compatibility shims.
+- Thin R wrappers should mirror C++ primitive signatures over time; fit-list
+  helpers may remain as explicit convenience adapters.
+- New C++ code should use `spec`, `lavaan`, `estimate`, `optim`, `nt`, `gls`,
+  and `data` directly.
 
-Done when: new code naturally uses `spec`, `lavaan`, `estimate`, `optim`, `nt`,
-`gls`, and `data`, while old include paths still have a tested transition path.
+Remaining work, in suggested order:
 
-## 4. Benchmarks and performance baselines
+- [ ] **S/M.** Continue migrating R post-fit helpers from opaque fit-list
+  unpacking toward explicit primitive-shaped entry points, keeping convenience
+  aliases only where they do not obscure the contract.
+- [ ] **M, later transition cleanup.** After the compatibility window, remove
+  the old `fit/*` and `partable/*` shim headers and their transition tests.
+
+Done when: new code naturally uses the target namespaces and R users can choose
+primitive post-fit operations without depending on hidden fit-list unpacking.
+
+## 3. Benchmarks and performance baselines
 
 Intent: make refactors and backend choices measurable instead of anecdotal.
 
-- [x] Seed an R-first benchmark scaffold with a case manifest, per-case model
-  syntax/source metadata, ignored local data/result caches, and lavaan
-  references for the initial built-in complete-data cases.
-- [ ] Add benchmark fixtures for representative complete-data ML, FIML, ULS,
-  GLS, WLS, ordinal DWLS/WLS, and mixed categorical models.
-- [ ] Compare LBFGS, LBFGS-B, Ceres, and SNLLS only where each backend is
-  semantically appropriate.
-- [ ] Track objective value, gradient norm, iteration count, wall time, and
-  agreement with lavaan-backed estimates where applicable.
-- [ ] Promote the Ceres preset into regular validation where relevant without
-  making the default build pay the Ceres dependency cost.
-- [ ] Include shallow or Heywood-prone LS cases so lower bounds and backend
-  conditioning stay visible.
+Contracts:
+
+- Benchmarks are advisory local tooling, not a substitute for lavaan parity
+  fixtures or correctness tests.
+- Compare only semantically appropriate backends for each estimator/model slice.
+
+Remaining work, in suggested order:
+
+- [ ] **S/M.** Add benchmark fixtures for representative complete-data ML,
+  FIML, ULS, GLS, WLS, ordinal DWLS/WLS, and mixed categorical models.
+- [ ] **M.** Track objective value, gradient norm, iteration count, wall time,
+  and agreement with lavaan-backed estimates where applicable.
+- [ ] **M.** Compare LBFGS, LBFGS-B, Ceres, and SNLLS only on cases where each
+  backend is semantically appropriate; include shallow or Heywood-prone LS
+  cases so bounds and conditioning stay visible.
+- [ ] **M/L, after benchmark coverage exists.** Promote the Ceres preset into
+  regular validation where relevant without making the default build pay the
+  Ceres dependency cost.
+- [ ] **S, after scenarios exist.** Document benchmark usage.
 
 Done when: backend recommendations and performance-sensitive refactors can be
 checked against repeatable local benchmark scenarios.
 
-## 5. Larger and more principled tests
+## 4. Statistical feature backlog
 
-Intent: complement narrow golden fixtures with broader tests that catch
-structural mistakes.
+Intent: keep unsupported statistical work explicit so it is not mistaken for
+polish.
 
-- [ ] Expand property tests around Jacobians, moment-vector ordering, block
-  stacking, equality constraints, and group weighting.
-- [ ] Add stress cases for threshold-heavy ordinal models with sparse or
-  near-empty categories; empty categories should remain hard errors.
-- [ ] Add multi-group LS weighting and equality-constraint cases across
-  continuous and ordinal estimators.
-- [ ] Add mean-structure LS cases that exercise Ceres and SNLLS backends.
-- [ ] Add complete/listwise boundary tests for mixed categorical sample stats.
+Contracts:
 
-Done when: new estimator work fails fast on structural invariants before it
-drifts into hard-to-debug lavaan parity failures.
+- Small-sample stabilizers, shrinkage, and DLS should be explicit builders or
+  transformations, not string-mode knobs that alter lavaan-compatible defaults.
+- Theta ordinal support is a separate lavaan compatibility slice from the
+  current delta boundary.
+- Nonlinear constraints, inequality constraints, and nonstandard active-bound
+  inference stay outside the regular inference surface until their theory and
+  reporting are explicit.
 
-## 6. Remaining statistical gaps
+Remaining work, in suggested order:
 
-Intent: keep unsupported statistical work explicit so it is not mistaken for a
-polish task.
-
-- [ ] Add explicit small-sample stabilizer primitives instead of string-mode
-  knobs. Current code already has `Bounds` in full free-parameter space,
-  automatic lower bounds for free variance diagonals, bounded ML/LS optimizer
-  paths, and ordinal/mixed bounded DWLS/WLS fits. The missing work is a set of
-  named C++ builders for published bounded-estimation recipes: variance-only
-  bounds, wider/literature bounds for residual and latent variances, loading
-  bounds when statistically justified, start projection into the chosen box,
-  active-bound diagnostics, and fixtures for Heywood/small-N cases across
-  complete ML, continuous LS, and ordinal/mixed LS.
-- [ ] Add covariance shrinkage as explicit sample-moment transformations, not
-  estimator flags. Current continuous `SampleStats` carries empirical
-  covariances, while ordinal/mixed stats already build lavaan-style thresholds,
-  polychorics, polyserials, NACOV, and DWLS/WLS weights. Add separate
-  ridge-covariance and model-based shrinkage target builders that return new
-  `SampleStats`/`MixedOrdinalStats`-compatible objects plus diagnostics
-  (target, intensity, eigenvalues, repaired dimensions), then validate
-  convergence and estimate movement on small-sample and nearly singular
-  covariance/correlation cases without changing lavaan-compatible defaults.
-- [ ] Add DLS and empirical-Bayes DLS as weight-matrix builders layered on the
-  existing LS discrepancy surface. `gls::WLS` already consumes explicit full
-  weights and the weighted-moment sandwich path accepts arbitrary block
-  weights/NACOV matrices; the missing piece is constructing and validating the
-  DLS weight matrices from normal-theory and ADF/Gamma components, including
-  ridge/PSD repairs, block ordering, diagonal variants if useful, and robust
-  reporting semantics for continuous and ordinal/mixed moment stacks.
-- [ ] Add theta-parameterization support for ordinal models as a separate
-  compatibility slice. The public R/C++ boundary now accepts the
-  parameterization distinction and fails explicitly for `theta`; actual
-  theta fitting still needs the separate lavaan-backed compatibility slice.
-- [ ] Add absent-row generation and standardized EPC for modification indices
-  only after the raw fixed-row/equality-release contract is fully validated.
-- [ ] Keep nonlinear equality constraints, inequality constraints, and
-  nonstandard active-bound inference out of the regular inference surface
-  until their theory and reporting are explicit.
+- [ ] **M/L.** Add named small-sample stabilizer builders: variance-only bounds,
+  wider/literature variance bounds, statistically justified loading bounds,
+  start projection into the chosen box, active-bound diagnostics, and
+  Heywood/small-N fixtures across representative ML/LS/ordinal slices.
+- [ ] **M/L.** Add covariance shrinkage as sample-moment transformations that
+  return `SampleStats` or `MixedOrdinalStats`-compatible objects plus repair
+  diagnostics, without changing lavaan-compatible defaults.
+- [ ] **L.** Add DLS and empirical-Bayes DLS as weight-matrix builders layered
+  on the existing LS discrepancy and weighted-moment sandwich surfaces.
+- [ ] **L.** Add theta-parameterization support for ordinal models as a
+  separate lavaan-backed compatibility slice.
+- [ ] **M.** Add absent-row generation and standardized EPC for modification
+  indices after the raw fixed-row/equality-release contract remains stable.
+- [ ] **XL, deferred.** Reopen nonlinear equality constraints, inequality
+  constraints, or active-bound inference only with an explicit statistical
+  design and reporting contract.
 
 Done when: each unsupported statistical feature is either implemented with
 oracle/fixture backing or remains clearly outside the public contract.
 
-## 7. Documentation and examples
-
-Intent: make the codebase easier to steer for future methods work.
-
-- [ ] Keep `docs/roadmap.md` current as the state and architecture summary.
-- [ ] Keep this file limited to remaining work; remove or rewrite completed
-  checklist items when milestones land.
-- [ ] Add examples that show the intended explicit post-fit workflow:
-  estimation first, then optional SEs, robust tests, fit measures, defined
-  parameters, and nested tests.
-- [ ] Document public fixed.x and missing-data boundaries where users are most
-  likely to encounter them.
-- [ ] Document benchmark usage once benchmark scenarios exist.
-
-Done when: a new contributor can read the roadmap for context, this TODO for
-remaining work, and examples for the intended workflow without reverse
-engineering current state from tests.
-
-## 8. Alternative robust polychoric and mixed estimators
+## 5. Robust pairwise estimators
 
 Intent: turn the planning notes in `resources/alternative_estimators/` into
-incremental, testable robust polychoric estimators without changing default
+incremental robust polychoric estimators without changing default
 lavaan-compatible behavior.
 
-- [ ] Add an enum-backed h-score API in `magmaan::data` for `ml`,
-  `wma_hard_cap`, `smooth_cap`, and `exp_cap`, with tests for `h`, `dh`, and
-  objective contributions where available.
-- [ ] Preserve current behavior as the default: `ml` with lavaan-style
-  marginal thresholds must reproduce existing ordinal fixtures to current
-  tolerances.
-- [ ] Implement experimental fixed-threshold h-weighted rho estimation for one
-  bivariate table, returning rho, convergence status, residuals, and per-cell
-  weights.
-- [ ] Validate fixed-threshold behavior with constructed contaminated tables:
-  hard/smooth caps should move less than ML under inflated low-probability
-  cells, while `hard_cap(k = Inf)` matches ML.
-- [ ] Implement full pair-local WMA/h-score estimation with thresholds and rho
-  estimated jointly; validate against robcat/WMA or independent reference
-  calculations for selected bivariate tables.
-- [ ] Add casewise influence and sandwich/Gamma calculations for robust
-  pairwise moments; document the hard-cap kink convention and scaling.
-- [ ] Decide and implement the first SEM integration mode: lavaan-style shared
-  marginal thresholds plus robust rhos as an experimental Option A, before
-  attempting shared-threshold composite h-score estimation.
-- [ ] Handle indefinite robust correlation matrices explicitly: report minimum
-  eigenvalues and optional ridge/shrinkage diagnostics rather than silently
-  projecting by default.
-- [ ] Implement density power divergence as the primary non-h-score comparator,
-  with ML recovered as `alpha -> 0` and tests over a small alpha grid.
-- [ ] Implement Hellinger and Huberized residual fitting only as experimental
-  comparators; keep one-sided and symmetric Huber options clearly named.
-- [ ] Keep mixed continuous/ordinal robust estimators behind the all-ordinal
-  robust Gamma milestone; polyserial robustness should not advance before the
-  all-ordinal influence path is stable.
-- [ ] Expose only predefined robust methods through R controls; keep arbitrary
-  C++ h-functions internal until there is a concrete methods use case.
+Contracts:
+
+- Default ordinal behavior remains ML with lavaan-style marginal thresholds and
+  must continue to reproduce existing ordinal fixtures.
+- Robust methods are experimental until diagnostics, influence/Gamma, and at
+  least one SEM integration mode are fixture-backed.
+- Mixed continuous/ordinal robust estimators wait behind the all-ordinal robust
+  Gamma milestone.
+- R should expose only predefined robust methods; arbitrary C++ h-functions
+  remain internal until a concrete methods use case exists.
+
+Remaining work, in suggested order:
+
+- [ ] **M.** Add an enum-backed h-score API in `magmaan::data` for `ml`,
+  `wma_hard_cap`, `smooth_cap`, and `exp_cap`, with focused tests for score
+  values, derivatives, and objective contributions where available.
+- [ ] **M.** Implement experimental fixed-threshold h-weighted rho estimation
+  for one bivariate table, returning rho, convergence status, residuals, and
+  per-cell weights.
+- [ ] **S/M.** Validate fixed-threshold robustness with constructed
+  contaminated tables, including the `hard_cap(k = Inf)` equals ML limit.
+- [ ] **L.** Implement full pair-local WMA/h-score estimation with thresholds
+  and rho estimated jointly, validated against robcat/WMA or independent
+  reference calculations for selected bivariate tables.
+- [ ] **L.** Add casewise influence and sandwich/Gamma calculations for robust
+  pairwise moments, including the hard-cap kink convention and scaling.
+- [ ] **M/L.** Add the first SEM integration mode: shared lavaan-style marginal
+  thresholds plus robust rhos as experimental Option A before attempting
+  shared-threshold composite h-score estimation.
+- [ ] **M.** Handle indefinite robust correlation matrices explicitly with
+  minimum eigenvalue and optional ridge/shrinkage diagnostics.
+- [ ] **L, comparator track.** Implement density power divergence as the main
+  non-h-score comparator; keep Hellinger and Huberized residual fitting as
+  lower-priority experimental comparators.
 
 Done when: robust polychoric alternatives are selectable, default ML fixtures
 are unchanged, diagnostics make robustness visible, and at least one robust
 method has a Gamma path usable by ordinal DWLS/WLS robust reporting.
 
-## 9. Composite models
+## 6. Composite models
 
 Intent: decide whether magmaan supports lavaan's new composite-variable
-semantics for `<~`, then implement the smallest lavaan-backed slice without
-confusing composites with ordinary latent factors.
+semantics for `<~`, then implement the smallest lavaan-backed complete-data ML
+slice without confusing composites with ordinary latent factors.
 
-- [ ] Document lavaan's current `<~` contract from the bundled reference:
-  composites are weighted linear combinations of composite indicators; lavaan
-  0.6-20+ treats them specially, while the old fallback rewrote `f <~ rhs` as
-  `f =~ 0; f ~~ 0*f; f ~ rhs`.
-- [ ] Collect minimal lavaan oracle cases before implementation: one pure
-  composite, one model mixing composites and common factors, one structural
-  regression involving a composite, and one multi-group case if lavaan
-  supports it cleanly.
-- [ ] Decide where composites live in the lavaanified model triple:
-  `LatentStructure` must distinguish composite variables and composite
-  indicators; `LatentNames` must preserve `<~` rows; `Starts` must carry weight
-  starts without treating them as ordinary loadings.
-- [ ] Update `docs/grammar/grammar.ebnf` first if `<~` becomes supported, then
-  parser comments/tests, replacing the current rejected-operator behavior.
-- [ ] Extend lavaan partable projection so `<~` rows, free/fixed weights,
-  labels, plabels, group equality labels, and `group.equal =
-  "composite.weights"` round-trip against lavaan.
-- [ ] Extend matrix representation with lavaan's composite handling rather than
-  pretending composites are reflective factors; identify the needed `WMAT`,
-  variance, covariance, and regression matrix behavior.
-- [ ] Implement composite variance handling, including the lavaan behavior that
-  fixes/sets composite total or residual variances from the composite weights
-  and indicator covariance structure.
-- [ ] Implement mean-structure behavior explicitly: composite means/intercepts
-  should follow the weighted indicator means, and fixtures should pin when mean
-  rows appear in `parTable()`.
-- [ ] Validate point estimates, implied covariance/mean, df, chi-square, SEs,
-  standardization, and fit measures only for the supported complete-data ML
-  slice before exposing composites through R helpers.
-- [ ] Keep ordinal, FIML missing-data, robust corrections, and LS composite
-  support out of scope until the complete-data ML composite contract is stable.
-- [ ] Add benchmark cases only after the semantic fixture suite is green.
+Contracts:
+
+- Composites are not ordinary reflective factors. If supported, they need a
+  distinct representation in the lavaanified model triple and matrix layer.
+- Grammar changes start in `docs/grammar/grammar.ebnf`, followed by parser
+  comments/tests and oracle fixtures.
+- Ordinal, FIML missing-data, robust corrections, and LS composite support stay
+  out of scope until the complete-data ML composite contract is stable.
+
+Remaining work, in suggested order:
+
+- [ ] **S/M.** Document lavaan's current `<~` contract from the bundled
+  reference and collect minimal oracle cases: pure composite, composite plus
+  common factor, structural regression involving a composite, and multi-group
+  only if lavaan supports it cleanly.
+- [ ] **L, prerequisite.** Design where composites live in the lavaanified model
+  triple and matrix representation, including weights, names, starts, partable
+  rows, variance behavior, covariance behavior, and regressions.
+- [ ] **M.** If support is accepted, update the grammar and parser from
+  rejected-operator behavior to `<~` support with fixture-backed tests.
+- [ ] **L.** Extend lavaan partable projection for `<~` rows, weights, labels,
+  plabels, group equality labels, and `group.equal = "composite.weights"`.
+- [ ] **L.** Implement matrix/implied-moment behavior for composite weights,
+  composite variance handling, and mean-structure rows.
+- [ ] **L.** Validate point estimates, implied covariance/mean, df,
+  chi-square, SEs, standardization, and fit measures for the supported
+  complete-data ML slice before exposing composites through R helpers.
+- [ ] **S, after semantic fixtures are green.** Add benchmark cases.
 
 Done when: `<~` no longer parses as a rejected operator for the supported
 slice, magmaan partables and implied moments match lavaan composite examples,
