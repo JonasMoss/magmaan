@@ -81,4 +81,10 @@ pairwise_ordinal_joint_composite_objective(
     const data::PairwiseOrdinalStats& sample,
     PairwiseOrdinalCompositeOptions options = {});
 
+post_expected<PairwiseOrdinalCompositeResult>
+pairwise_ordinal_observed_joint_composite_objective(
+    const std::vector<Eigen::MatrixXd>& X,
+    const std::vector<std::vector<std::int32_t>>& n_levels,
+    PairwiseOrdinalCompositeOptions options = {});
+
 }  // namespace magmaan::estimate

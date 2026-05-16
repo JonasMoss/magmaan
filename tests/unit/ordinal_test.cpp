@@ -656,6 +656,83 @@ TEST_CASE("Pairwise ordinal joint composite objective preserves lavaan 2x2 adjus
   CHECK(adj_pair.negloglik != doctest::Approx(raw_pair.negloglik));
 }
 
+TEST_CASE("Pairwise ordinal observed joint composite objective preserves pairwise missingness") {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  Eigen::MatrixXd X(8, 3);
+  X << 1.0, 1.0, 1.0,
+       2.0, 2.0, 1.0,
+       3.0, 1.0, 2.0,
+       nan, 2.0, 2.0,
+       1.0, nan, 1.0,
+       2.0, 1.0, nan,
+       3.0, 2.0, 1.0,
+       nan, nan, 2.0;
+  std::vector<std::vector<std::int32_t>> levels{{3, 2, 2}};
+
+  auto observed =
+      magmaan::estimate::pairwise_ordinal_observed_joint_composite_objective(
+          {X}, levels);
+  REQUIRE(observed.has_value());
+  REQUIRE(observed->blocks.size() == 1);
+  REQUIRE(observed->blocks[0].pairs.size() == 3);
+  CHECK(observed->blocks[0].n_obs == 8);
+  CHECK_FALSE(observed->reports_chisq);
+  CHECK(observed->df == -1);
+
+  double expected_nll = 0.0;
+  std::int64_t expected_pair_n = 0;
+  for (const auto& pair : observed->blocks[0].pairs) {
+    auto direct = magmaan::data::fit_ordinal_pair_observed_joint_ml(
+        X.col(pair.label.i), X.col(pair.label.j),
+        pair.label.n_levels_i, pair.label.n_levels_j);
+    REQUIRE(direct.has_value());
+    expected_nll += direct->fit.negloglik;
+    expected_pair_n += direct->n_obs;
+    CHECK(pair.thresholds_i.isApprox(direct->fit.thresholds_i, 1e-12));
+    CHECK(pair.thresholds_j.isApprox(direct->fit.thresholds_j, 1e-12));
+    CHECK(pair.rho == doctest::Approx(direct->fit.rho));
+    CHECK(pair.negloglik == doctest::Approx(direct->fit.negloglik));
+    CHECK(pair.n_obs == direct->n_obs);
+    CHECK(pair.n_missing == direct->n_missing);
+    CHECK(pair.n_obs == 5);
+    CHECK(pair.n_missing == 3);
+    CHECK(pair.counts.isApprox(direct->counts, 0.0));
+    CHECK(pair.adjusted_counts.isApprox(direct->fit.adjusted_counts, 0.0));
+    CHECK(pair.expected_counts.sum() ==
+          doctest::Approx(pair.adjusted_counts.sum()).epsilon(0.03));
+    CHECK(pair.residual_counts.isApprox(pair.adjusted_counts - pair.expected_counts, 1e-12));
+  }
+  CHECK(observed->negloglik == doctest::Approx(expected_nll));
+  CHECK(observed->weighted_negloglik == doctest::Approx(expected_nll));
+  CHECK(observed->scaling_denominator == doctest::Approx(static_cast<double>(expected_pair_n)));
+  CHECK(observed->objective == doctest::Approx(expected_nll / static_cast<double>(expected_pair_n)));
+}
+
+TEST_CASE("Pairwise ordinal observed joint composite objective rejects invalid observed pairs") {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  std::vector<std::vector<std::int32_t>> levels{{2, 2}};
+
+  Eigen::MatrixXd all_missing(3, 2);
+  all_missing << nan, 1.0,
+                 nan, 2.0,
+                 nan, nan;
+  auto missing =
+      magmaan::estimate::pairwise_ordinal_observed_joint_composite_objective(
+          {all_missing}, levels);
+  REQUIRE_FALSE(missing.has_value());
+  CHECK(missing.error().detail.find("no observed pairs") != std::string::npos);
+
+  Eigen::MatrixXd empty_margin(3, 2);
+  empty_margin << 1.0, 1.0,
+                  1.0, 2.0,
+                  nan, 1.0;
+  auto empty =
+      magmaan::estimate::pairwise_ordinal_observed_joint_composite_objective(
+          {empty_margin}, levels);
+  REQUIRE_FALSE(empty.has_value());
+  CHECK(empty.error().detail.find("marginal categories") != std::string::npos);
+}
+
 TEST_CASE("Ordinal stats: thresholds, polychoric R, and weights have expected shapes") {
   Eigen::MatrixXd X(320, 3);
   Eigen::Index r = 0;

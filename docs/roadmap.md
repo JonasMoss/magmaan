@@ -151,6 +151,13 @@ golden `parTable()` fixtures.
   boundary flags, and objective scaling. This is a saturated/reference
   composite target for future SEM fitting, not a lavaan-compatible DWLS moment
   builder and not a calibrated global chi-square test.
+- Observed-pair all-ordinal joint composite prototype under
+  `estimate::pairwise_ordinal_observed_joint_composite_objective()`. It takes
+  ordinal data blocks with `NaN` missingness plus declared level counts, fits
+  each bivariate observed-pair table independently with the joint threshold/rho
+  ML kernel, preserves per-pair `n_obs`/`n_missing`, and rejects all-missing
+  pairs or empty marginal categories. This is pairwise observed-data
+  likelihood, not multivariate MAR ordinal FIML.
 - The SEM-facing ordinal moment path remains the lavaan-compatible
   shared-threshold path. Pair-local joint threshold/rho ML is reserved for
   diagnostics, robust pair experiments, and future composite likelihood rather
