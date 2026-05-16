@@ -24,82 +24,7 @@ Global contracts:
 - Unsupported statistical combinations should fail explicitly rather than
   falling through to nearby lavaan-compatible behavior.
 
-## 0. Pairwise threshold/composite-likelihood model
-
-Intent: add a direct pairwise likelihood/minimum-disparity path for threshold
-data, starting with ordinary polychoric replication and only then expanding to
-missing data, mixed data, and robust divergences.
-
-Contracts:
-
-- The lavaan-compatible SEM-facing ordinal path remains shared marginal
-  thresholds plus polychoric/polyserial/covariance moments consumed by
-  DWLS/WLS. `PairwiseOrdinalStats` is the diagnostic, influence, and Gamma
-  wrapper for that path; it must stay bitwise-equivalent to `OrdinalStats`
-  where the moment outputs overlap.
-- Joint bivariate threshold/rho ML is a pair-local primitive for diagnostics,
-  robust-pair experiments, and future composite likelihood. It does not feed
-  the current shared-threshold SEM moment vector because pair-local thresholds
-  would duplicate each variable's nuisance parameters across pairs.
-- Missing ordinal pair wrappers use observed-pair counts only. SEM-level
-  missing ordinal estimation is not supported until a likelihood target and
-  scaling convention are explicit. The first missing-data target should be an
-  observed-pair composite-likelihood path, not an implicit MAR/FIML claim.
-- Shared-threshold multivariate missing ordinal modeling is out of scope for
-  this pairwise milestone. If reopened later, it needs a separate design note
-  covering the likelihood target, threshold sharing rules, and scaling before
-  implementation.
-- Continuous normal pair likelihood is a mixed-pair primitive and
-  benchmark/sanity check against complete-data ML/FIML, not a supported
-  standalone SEM estimator.
-
-Remaining work, in suggested order:
-
-- [x] **L, prerequisite.** Design the SEM-level pairwise composite-likelihood
-  API as a separate estimator from lavaan-compatible `OrdinalStats`/DWLS.
-  Specify scaling, per-pair sample-size weighting, SEM-implied bivariate margin
-  mapping, boundary diagnostics, and reported chi-square/df behavior. Initial
-  surface: `estimate::pairwise_ordinal_composite_objective()` evaluates the
-  shared-threshold all-ordinal objective, supports observed-pair-count or
-  equal-pair weighting, exposes boundary diagnostics, and explicitly reports no
-  chi-square/df until a calibrated composite-likelihood test exists.
-- [x] **M/L, depends on API.** Add a complete/listwise all-ordinal
-  composite-likelihood prototype using the existing complete bivariate joint ML
-  kernel and diagnostics comparable to the current polychoric/DWLS path.
-  Initial surface: `estimate::pairwise_ordinal_joint_composite_objective()`
-  consumes `PairwiseOrdinalStats`, refits each complete pair with joint
-  threshold/rho ML, preserves the same weighting/scaling options, and keeps
-  chi-square/df unreported until a calibrated composite test is designed.
-- [x] **L, harder than complete/listwise.** Add an observed-pair all-ordinal
-  prototype behind the same API. Preserve per-pair `n_obs`/`n_missing`; reject
-  all-missing pairs and empty marginal categories; document that this is
-  pairwise observed-data likelihood, not multivariate MAR ordinal FIML.
-  Initial surface:
-  `estimate::pairwise_ordinal_observed_joint_composite_objective()` takes raw
-  ordinal blocks with `NaN` missingness and declared level counts, fits each
-  pair on its observed cases, and returns the shared composite result shape.
-- [x] **M, after each implementation slice.** Add explicit pairwise
-  diagnostics fixtures: current complete all-ordinal polychoric wrappers first,
-  mixed pair primitives second, complete/listwise composite-likelihood
-  prototypes third, and observed-pair scenarios only after that target is fixed.
-  Initial fixture: `tests/fixtures/pairwise/0001_pairwise_diagnostics.json`
-  covers all four slices with a golden fixture test.
-- [x] **L, follow-on inference work.** Extend pairwise influence/Gamma exposure
-  to complete/listwise and missing-data all-ordinal composite-likelihood paths,
-  then to mixed continuous/ordinal pairwise paths once their likelihood targets
-  and moment ordering are fixed. All-ordinal shared-threshold,
-  complete/listwise pair-local, and observed-pair composite surfaces expose
-  per-observation bivariate threshold/rho score contributions plus pairwise
-  score Gamma; mixed pair primitives expose polyserial threshold/rho and
-  continuous-normal mean/variance/covariance score contributions plus score
-  Gamma.
-
-Done when: the pairwise path reproduces existing ML polychorics in its default
-slice, has an explicit composite-likelihood API for pair-local SEM work, and
-documents missing-data semantics without implying unsupported multivariate
-ordinal FIML behavior.
-
-## 1. Validation, tests, and examples
+## 0. Validation, tests, and examples
 
 Intent: keep validation fixture-first, broaden structural test coverage, and
 make supported workflows legible without turning docs into a second roadmap.
@@ -137,7 +62,7 @@ Done when: representative supported estimator/model combinations have fixtures
 or structural tests at the right level, and contributors can discover the
 intended workflow from docs/examples rather than reverse engineering tests.
 
-## 2. API, R boundary, and namespace cleanup
+## 1. API, R boundary, and namespace cleanup
 
 Intent: keep the public surface coherent while the namespace transition and R
 methods-developer interface settle.
@@ -160,7 +85,7 @@ Remaining work, in suggested order:
 Done when: new code naturally uses the target namespaces and R users can choose
 primitive post-fit operations without depending on hidden fit-list unpacking.
 
-## 3. Benchmarks and performance baselines
+## 2. Benchmarks and performance baselines
 
 Intent: make refactors and backend choices measurable instead of anecdotal.
 
@@ -187,7 +112,7 @@ Remaining work, in suggested order:
 Done when: backend recommendations and performance-sensitive refactors can be
 checked against repeatable local benchmark scenarios.
 
-## 4. Statistical feature backlog
+## 3. Statistical feature backlog
 
 Intent: keep unsupported statistical work explicit so it is not mistaken for
 polish.
@@ -224,7 +149,7 @@ Remaining work, in suggested order:
 Done when: each unsupported statistical feature is either implemented with
 oracle/fixture backing or remains clearly outside the public contract.
 
-## 5. Robust pairwise estimators
+## 4. Robust pairwise estimators
 
 Intent: turn the planning notes in `resources/alternative_estimators/` into
 incremental robust polychoric estimators without changing default
@@ -269,7 +194,7 @@ Done when: robust polychoric alternatives are selectable, default ML fixtures
 are unchanged, diagnostics make robustness visible, and at least one robust
 method has a Gamma path usable by ordinal DWLS/WLS robust reporting.
 
-## 6. Composite models
+## 5. Composite models
 
 Intent: decide whether magmaan supports lavaan's new composite-variable
 semantics for `<~`, then implement the smallest lavaan-backed complete-data ML

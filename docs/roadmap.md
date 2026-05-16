@@ -126,16 +126,17 @@ golden `parTable()` fixtures.
   tables, missingness/repair diagnostics, casewise moment influence, Gamma,
   and minimum eigenvalue diagnostics while preserving the existing
   `OrdinalStats` moment/weight path.
-- Bivariate ordinal observed-pair table kernel for future missing-data
-  composite-likelihood work. `NaN` skips the pair and increments missing-pair
-  diagnostics; finite observed values must be positive integer categories
-  inside the declared level ranges. Observed-pair wrappers feed those counts
-  into both fixed-threshold rho ML and pair-local joint threshold/rho ML while
-  preserving `n_obs` and `n_missing`.
+- Bivariate ordinal observed-pair table kernel for explicit pairwise
+  observed-data composite-likelihood work. `NaN` skips the pair and increments
+  missing-pair diagnostics; finite observed values must be positive integer
+  categories inside the declared level ranges. Observed-pair wrappers feed
+  those counts into both fixed-threshold rho ML and pair-local joint
+  threshold/rho ML while preserving `n_obs` and `n_missing`.
 - Experimental joint bivariate ordinal ML kernel for one complete pairwise
-  table, estimating pair-local nuisance thresholds and rho. This is not yet
-  wired into SEM moment construction or a fitted composite-likelihood
-  estimator.
+  table, estimating pair-local nuisance thresholds and rho. This kernel backs
+  the pair-local complete/listwise and observed-pair composite objective
+  prototypes, but it is not wired into the lavaan-compatible SEM moment
+  construction path.
 - Public SEM-facing all-ordinal pairwise composite objective API under
   `estimate::pairwise_ordinal_composite_objective()`. It consumes
   `PairwiseOrdinalStats` plus SEM-implied shared thresholds and correlations,
@@ -171,6 +172,9 @@ golden `parTable()` fixtures.
   shared-threshold path. Pair-local joint threshold/rho ML is reserved for
   diagnostics, robust pair experiments, and future composite likelihood rather
   than for constructing the current `OrdinalStats` moment vector.
+- Shared-threshold multivariate missing ordinal modeling remains out of scope:
+  the implemented missing-data ordinal path is pairwise observed-data
+  composite likelihood, not multivariate MAR ordinal FIML.
 - Muthen-style all-ordinal NACOV construction for thresholds plus
   polychorics.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
