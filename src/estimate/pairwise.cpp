@@ -155,6 +155,51 @@ double weighted_pair_negloglik(double negloglik,
   return negloglik;
 }
 
+void accumulate_pair(PairwiseOrdinalCompositeBlock& block,
+                     PairwiseOrdinalCompositePair pair) {
+  block.negloglik += pair.negloglik;
+  block.weighted_negloglik += pair.weighted_negloglik;
+  block.scaling_denominator += pair.scaling_weight;
+  block.pairs.push_back(std::move(pair));
+}
+
+void finalize_block(PairwiseOrdinalCompositeBlock& block,
+                    PairwiseCompositeScaling scaling) {
+  block.objective = scaling == PairwiseCompositeScaling::AverageNegLogLik
+      ? block.weighted_negloglik / block.scaling_denominator
+      : block.weighted_negloglik;
+}
+
+void accumulate_block(PairwiseOrdinalCompositeResult& out,
+                      PairwiseOrdinalCompositeBlock block) {
+  out.negloglik += block.negloglik;
+  out.weighted_negloglik += block.weighted_negloglik;
+  out.scaling_denominator += block.scaling_denominator;
+  out.blocks.push_back(std::move(block));
+}
+
+post_expected<void>
+finalize_result(PairwiseOrdinalCompositeResult& out,
+                PairwiseCompositeScaling scaling) {
+  if (!(out.scaling_denominator > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "pairwise ordinal composite: non-positive scaling denominator"));
+  }
+  out.objective = scaling == PairwiseCompositeScaling::AverageNegLogLik
+      ? out.weighted_negloglik / out.scaling_denominator
+      : out.weighted_negloglik;
+  return {};
+}
+
+data::OrdinalPairJointMlOptions joint_options(
+    PairwiseOrdinalCompositeOptions options) {
+  data::OrdinalPairJointMlOptions out;
+  out.rho_lower = options.rho_lower;
+  out.rho_upper = options.rho_upper;
+  out.lavaan_adjust_2x2 = options.lavaan_adjust_2x2;
+  return out;
+}
+
 }  // namespace
 
 post_expected<PairwiseOrdinalCompositeResult>
@@ -222,6 +267,8 @@ pairwise_ordinal_composite_objective(
 
       PairwiseOrdinalCompositePair pair{
           .label = pd.label,
+          .thresholds_i = std::move(*th_i),
+          .thresholds_j = std::move(*th_j),
           .rho = rho,
           .negloglik = *nll,
           .weighted_negloglik = weighted,
@@ -230,37 +277,92 @@ pairwise_ordinal_composite_objective(
           .n_missing = pd.n_missing,
           .hit_lower = rho <= options.rho_lower,
           .hit_upper = rho >= options.rho_upper,
-          .counts = counts,
+          .counts = pd.counts,
+          .adjusted_counts = counts,
           .expected_counts = std::move(expected),
           .residual_counts = std::move(residual)};
 
-      block.negloglik += pair.negloglik;
-      block.weighted_negloglik += pair.weighted_negloglik;
-      block.scaling_denominator += pair.scaling_weight;
-      block.pairs.push_back(std::move(pair));
+      accumulate_pair(block, std::move(pair));
     }
 
     if (block.pairs.empty()) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "pairwise ordinal composite: block has no pairs"));
     }
-    block.objective = options.scaling == PairwiseCompositeScaling::AverageNegLogLik
-        ? block.weighted_negloglik / block.scaling_denominator
-        : block.weighted_negloglik;
-
-    out.negloglik += block.negloglik;
-    out.weighted_negloglik += block.weighted_negloglik;
-    out.scaling_denominator += block.scaling_denominator;
-    out.blocks.push_back(std::move(block));
+    finalize_block(block, options.scaling);
+    accumulate_block(out, std::move(block));
   }
 
-  if (!(out.scaling_denominator > 0.0)) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "pairwise ordinal composite: non-positive scaling denominator"));
+  auto done = finalize_result(out, options.scaling);
+  if (!done.has_value()) return std::unexpected(done.error());
+  return out;
+}
+
+post_expected<PairwiseOrdinalCompositeResult>
+pairwise_ordinal_joint_composite_objective(
+    const data::PairwiseOrdinalStats& sample,
+    PairwiseOrdinalCompositeOptions options) {
+  auto ok = validate_sample(sample, sample.stats.R, options);
+  if (!ok.has_value()) return std::unexpected(ok.error());
+
+  PairwiseOrdinalCompositeResult out;
+  out.blocks.reserve(sample.block_diagnostics.size());
+  const auto joint_opts = joint_options(options);
+
+  for (std::size_t b = 0; b < sample.block_diagnostics.size(); ++b) {
+    PairwiseOrdinalCompositeBlock block;
+    block.n_obs = sample.stats.n_obs[b];
+    block.pairs.reserve(sample.block_diagnostics[b].pair_diagnostics.size());
+
+    for (const auto& pd : sample.block_diagnostics[b].pair_diagnostics) {
+      if (pd.n_obs <= 0 || pd.counts.rows() != pd.label.n_levels_i ||
+          pd.counts.cols() != pd.label.n_levels_j) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "pairwise ordinal joint composite: invalid pair diagnostics in block " +
+                std::to_string(b)));
+      }
+      auto joint = data::fit_ordinal_pair_joint_ml(pd.counts, joint_opts);
+      if (!joint.has_value()) return std::unexpected(joint.error());
+
+      Eigen::MatrixXd expected =
+          expected_counts(joint->adjusted_counts.sum(), joint->thresholds_i,
+                          joint->thresholds_j, joint->rho);
+      Eigen::MatrixXd residual = joint->adjusted_counts - expected;
+      const double weighted =
+          weighted_pair_negloglik(joint->negloglik, pd, options.weighting);
+      const double scale_weight =
+          scaling_weight_for_pair(pd, options.weighting);
+
+      PairwiseOrdinalCompositePair pair{
+          .label = pd.label,
+          .thresholds_i = std::move(joint->thresholds_i),
+          .thresholds_j = std::move(joint->thresholds_j),
+          .rho = joint->rho,
+          .negloglik = joint->negloglik,
+          .weighted_negloglik = weighted,
+          .scaling_weight = scale_weight,
+          .n_obs = pd.n_obs,
+          .n_missing = pd.n_missing,
+          .hit_lower = joint->hit_lower,
+          .hit_upper = joint->hit_upper,
+          .counts = pd.counts,
+          .adjusted_counts = std::move(joint->adjusted_counts),
+          .expected_counts = std::move(expected),
+          .residual_counts = std::move(residual)};
+
+      accumulate_pair(block, std::move(pair));
+    }
+
+    if (block.pairs.empty()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "pairwise ordinal joint composite: block has no pairs"));
+    }
+    finalize_block(block, options.scaling);
+    accumulate_block(out, std::move(block));
   }
-  out.objective = options.scaling == PairwiseCompositeScaling::AverageNegLogLik
-      ? out.weighted_negloglik / out.scaling_denominator
-      : out.weighted_negloglik;
+
+  auto done = finalize_result(out, options.scaling);
+  if (!done.has_value()) return std::unexpected(done.error());
   return out;
 }
 

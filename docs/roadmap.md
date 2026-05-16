@@ -143,6 +143,14 @@ golden `parTable()` fixtures.
   diagnostics, and makes scaling/weighting explicit. The current reporting
   contract deliberately does not report chi-square or degrees of freedom until
   a calibrated composite-likelihood test is implemented.
+- Complete/listwise all-ordinal pair-local joint composite prototype under
+  `estimate::pairwise_ordinal_joint_composite_objective()`. It consumes the
+  same `PairwiseOrdinalStats` diagnostics and options surface, refits every
+  pair with the complete bivariate joint threshold/rho ML kernel, and returns
+  pair-local thresholds, rho, adjusted counts, fitted counts, residuals,
+  boundary flags, and objective scaling. This is a saturated/reference
+  composite target for future SEM fitting, not a lavaan-compatible DWLS moment
+  builder and not a calibrated global chi-square test.
 - The SEM-facing ordinal moment path remains the lavaan-compatible
   shared-threshold path. Pair-local joint threshold/rho ML is reserved for
   diagnostics, robust pair experiments, and future composite likelihood rather

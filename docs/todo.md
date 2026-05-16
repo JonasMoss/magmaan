@@ -63,9 +63,13 @@ Remaining work, in suggested order:
   shared-threshold all-ordinal objective, supports observed-pair-count or
   equal-pair weighting, exposes boundary diagnostics, and explicitly reports no
   chi-square/df until a calibrated composite-likelihood test exists.
-- [ ] **M/L, depends on API.** Add a complete/listwise all-ordinal
+- [x] **M/L, depends on API.** Add a complete/listwise all-ordinal
   composite-likelihood prototype using the existing complete bivariate joint ML
   kernel and diagnostics comparable to the current polychoric/DWLS path.
+  Initial surface: `estimate::pairwise_ordinal_joint_composite_objective()`
+  consumes `PairwiseOrdinalStats`, refits each complete pair with joint
+  threshold/rho ML, preserves the same weighting/scaling options, and keeps
+  chi-square/df unreported until a calibrated composite test is designed.
 - [ ] **L, harder than complete/listwise.** Add an observed-pair all-ordinal
   prototype behind the same API. Preserve per-pair `n_obs`/`n_missing`; reject
   all-missing pairs and empty marginal categories; document that this is

@@ -30,6 +30,8 @@ struct PairwiseOrdinalCompositeOptions {
 
 struct PairwiseOrdinalCompositePair {
   data::OrdinalPairLabel label;
+  Eigen::VectorXd thresholds_i;
+  Eigen::VectorXd thresholds_j;
   double rho = 0.0;
   double negloglik = 0.0;
   double weighted_negloglik = 0.0;
@@ -39,6 +41,7 @@ struct PairwiseOrdinalCompositePair {
   bool hit_lower = false;
   bool hit_upper = false;
   Eigen::MatrixXd counts;
+  Eigen::MatrixXd adjusted_counts;
   Eigen::MatrixXd expected_counts;
   Eigen::MatrixXd residual_counts;
 };
@@ -71,6 +74,11 @@ pairwise_ordinal_composite_objective(
     const data::PairwiseOrdinalStats& sample,
     const std::vector<Eigen::VectorXd>& implied_thresholds,
     const std::vector<Eigen::MatrixXd>& implied_correlation,
+    PairwiseOrdinalCompositeOptions options = {});
+
+post_expected<PairwiseOrdinalCompositeResult>
+pairwise_ordinal_joint_composite_objective(
+    const data::PairwiseOrdinalStats& sample,
     PairwiseOrdinalCompositeOptions options = {});
 
 }  // namespace magmaan::estimate
