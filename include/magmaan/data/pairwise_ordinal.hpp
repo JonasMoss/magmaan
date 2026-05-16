@@ -5,6 +5,7 @@
 
 #include <Eigen/Core>
 
+#include "magmaan/data/h_score.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/expected.hpp"
 
@@ -24,6 +25,31 @@ struct OrdinalPairMlResult {
   bool   hit_lower = false;
   bool   hit_upper = false;
   Eigen::MatrixXd adjusted_counts;
+};
+
+struct OrdinalPairHWeightedOptions {
+  double rho_lower = -0.999;
+  double rho_upper = 0.999;
+  int    max_iter = 72;
+  double x_tol = 1e-10;
+  bool   lavaan_adjust_2x2 = true;
+  PolychoricHScoreOptions h_score;
+};
+
+struct OrdinalPairHWeightedResult {
+  double rho = 0.0;
+  double objective = 0.0;
+  double score = 0.0;
+  int    iterations = 0;
+  bool   converged = false;
+  bool   hit_lower = false;
+  bool   hit_upper = false;
+  Eigen::MatrixXd adjusted_counts;
+  Eigen::MatrixXd probabilities;
+  Eigen::MatrixXd expected_counts;
+  Eigen::MatrixXd residual_counts;
+  Eigen::MatrixXd pearson_residuals;
+  Eigen::MatrixXd weights;
 };
 
 struct OrdinalPairJointMlOptions {
@@ -144,6 +170,13 @@ fit_ordinal_pair_rho_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
                         const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
                         const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
                         OrdinalPairMlOptions options = {});
+
+post_expected<OrdinalPairHWeightedResult>
+fit_ordinal_pair_rho_h_weighted(
+    const Eigen::Ref<const Eigen::MatrixXd>& counts,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+    OrdinalPairHWeightedOptions options = {});
 
 post_expected<OrdinalPairJointMlResult>
 fit_ordinal_pair_joint_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,

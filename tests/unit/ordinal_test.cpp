@@ -236,6 +236,77 @@ TEST_CASE("Ordinal pair ML kernel: independence and lavaan 2x2 adjustment") {
   CHECK(adjusted->rho < 1.0);
 }
 
+TEST_CASE("Ordinal pair h-weighted rho preserves ML limits and diagnostics") {
+  using magmaan::data::PolychoricHScoreKind;
+  using magmaan::data::PolychoricHScoreOptions;
+
+  Eigen::VectorXd thi(2);
+  thi << -0.4, 0.7;
+  Eigen::VectorXd thj(1);
+  thj << 0.2;
+  Eigen::MatrixXd counts(3, 2);
+  counts << 8.0, 3.0,
+            4.0, 7.0,
+            2.0, 9.0;
+
+  auto ml = magmaan::data::fit_ordinal_pair_rho_ml(counts, thi, thj);
+  auto h_ml = magmaan::data::fit_ordinal_pair_rho_h_weighted(counts, thi, thj);
+  auto hard_inf = magmaan::data::fit_ordinal_pair_rho_h_weighted(
+      counts, thi, thj,
+      magmaan::data::OrdinalPairHWeightedOptions{
+          .h_score = PolychoricHScoreOptions{
+              .kind = PolychoricHScoreKind::WmaHardCap,
+              .k = std::numeric_limits<double>::infinity()}});
+  REQUIRE(ml.has_value());
+  REQUIRE(h_ml.has_value());
+  REQUIRE(hard_inf.has_value());
+  CHECK(h_ml->rho == doctest::Approx(ml->rho));
+  CHECK(hard_inf->rho == doctest::Approx(ml->rho));
+  CHECK(h_ml->converged);
+  CHECK(hard_inf->converged);
+  CHECK(std::isfinite(h_ml->objective));
+  CHECK(std::isfinite(h_ml->score));
+  CHECK(h_ml->probabilities.rows() == counts.rows());
+  CHECK(h_ml->probabilities.cols() == counts.cols());
+  CHECK(h_ml->expected_counts.rows() == counts.rows());
+  CHECK(h_ml->residual_counts.isApprox(
+      h_ml->adjusted_counts - h_ml->expected_counts, 1e-12));
+  CHECK(h_ml->pearson_residuals.allFinite());
+  CHECK(h_ml->weights.isApprox(Eigen::MatrixXd::Ones(3, 2), 1e-12));
+  CHECK(hard_inf->weights.isApprox(Eigen::MatrixXd::Ones(3, 2), 1e-12));
+}
+
+TEST_CASE("Ordinal pair h-weighted rho downweights contaminated cells") {
+  using magmaan::data::PolychoricHScoreKind;
+  using magmaan::data::PolychoricHScoreOptions;
+
+  Eigen::VectorXd th(2);
+  th << -0.55, 0.75;
+  const Eigen::MatrixXd clean = ordinal_expected_counts(th, th, 0.55, 5000.0);
+  Eigen::MatrixXd contaminated = clean;
+  contaminated(0, 2) += 900.0;
+
+  auto clean_ml = magmaan::data::fit_ordinal_pair_rho_ml(clean, th, th);
+  auto contaminated_ml =
+      magmaan::data::fit_ordinal_pair_rho_ml(contaminated, th, th);
+  auto robust = magmaan::data::fit_ordinal_pair_rho_h_weighted(
+      contaminated, th, th,
+      magmaan::data::OrdinalPairHWeightedOptions{
+          .h_score = PolychoricHScoreOptions{
+              .kind = PolychoricHScoreKind::WmaHardCap,
+              .k = 1.15}});
+  REQUIRE(clean_ml.has_value());
+  REQUIRE(contaminated_ml.has_value());
+  REQUIRE(robust.has_value());
+  CHECK(robust->converged);
+  CHECK(contaminated_ml->rho < clean_ml->rho);
+  CHECK(robust->rho > contaminated_ml->rho);
+  CHECK(std::abs(robust->rho - clean_ml->rho) <
+        std::abs(contaminated_ml->rho - clean_ml->rho));
+  CHECK(robust->weights(0, 2) < 1.0);
+  CHECK(robust->pearson_residuals(0, 2) > 0.0);
+}
+
 TEST_CASE("Polyserial pair ML kernel: likelihood, rho fit, and scores") {
   Eigen::VectorXi cat(8);
   cat << 0, 0, 1, 1, 1, 2, 2, 2;

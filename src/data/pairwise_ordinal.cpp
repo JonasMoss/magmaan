@@ -218,6 +218,67 @@ double neglog_pair_unchecked(const Eigen::Ref<const Eigen::MatrixXd>& counts,
   return out;
 }
 
+post_expected<OrdinalPairHWeightedResult>
+h_weighted_result(const Eigen::Ref<const Eigen::MatrixXd>& counts,
+                  const Eigen::Ref<const Eigen::VectorXd>& th_i,
+                  const Eigen::Ref<const Eigen::VectorXd>& th_j,
+                  double rho,
+                  const PolychoricHScoreOptions& h_options) {
+  const double total = counts.sum();
+  OrdinalPairHWeightedResult out;
+  out.rho = rho;
+  out.adjusted_counts = counts;
+  out.probabilities = Eigen::MatrixXd::Zero(counts.rows(), counts.cols());
+  out.expected_counts = Eigen::MatrixXd::Zero(counts.rows(), counts.cols());
+  out.residual_counts = Eigen::MatrixXd::Zero(counts.rows(), counts.cols());
+  out.pearson_residuals = Eigen::MatrixXd::Zero(counts.rows(), counts.cols());
+  out.weights = Eigen::MatrixXd::Ones(counts.rows(), counts.cols());
+
+  for (Eigen::Index a = 0; a < counts.rows(); ++a) {
+    const double lo_i = (a == 0) ? -kInf : th_i(a - 1);
+    const double hi_i = (a + 1 == counts.rows()) ? kInf : th_i(a);
+    for (Eigen::Index b = 0; b < counts.cols(); ++b) {
+      const double lo_j = (b == 0) ? -kInf : th_j(b - 1);
+      const double hi_j = (b + 1 == counts.cols()) ? kInf : th_j(b);
+      const double raw_p = ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho);
+      const double p = std::max(kProbFloor, raw_p);
+      const double expected = total * p;
+      const double t = counts(a, b) / expected;
+      auto h = eval_polychoric_h_score(t, h_options);
+      if (!h.has_value()) return std::unexpected(h.error());
+
+      out.probabilities(a, b) = p;
+      out.expected_counts(a, b) = expected;
+      out.residual_counts(a, b) = counts(a, b) - expected;
+      out.pearson_residuals(a, b) =
+          out.residual_counts(a, b) / std::sqrt(expected);
+      out.weights(a, b) = t > 0.0 ? h->h / t : 1.0;
+      out.objective += p * h->phi;
+      if (raw_p > kProbFloor) {
+        out.score += h->h * ordinal_bvn_rect_drho(lo_i, hi_i, lo_j, hi_j, rho);
+      }
+    }
+  }
+  return out;
+}
+
+double h_weighted_objective_unchecked(
+    const Eigen::Ref<const Eigen::MatrixXd>& counts,
+    const Eigen::Ref<const Eigen::VectorXd>& th_i,
+    const Eigen::Ref<const Eigen::VectorXd>& th_j,
+    double rho,
+    const PolychoricHScoreOptions& h_options) {
+  auto result = h_weighted_result(counts, th_i, th_j, rho, h_options);
+  if (!result.has_value()) return std::numeric_limits<double>::infinity();
+  return result->objective;
+}
+
+bool h_score_is_ml_like(const PolychoricHScoreOptions& h_options) noexcept {
+  return h_options.kind == PolychoricHScoreKind::ML ||
+         (h_options.kind == PolychoricHScoreKind::WmaHardCap &&
+          h_options.k == std::numeric_limits<double>::infinity());
+}
+
 post_expected<Eigen::VectorXd>
 marginal_threshold_start(const Eigen::VectorXd& margins,
                          double min_spacing,
@@ -463,6 +524,87 @@ fit_ordinal_pair_rho_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
   const double width = options.rho_upper - options.rho_lower;
   out.hit_lower = std::abs(out.rho - options.rho_lower) <= 1e-8 * width;
   out.hit_upper = std::abs(out.rho - options.rho_upper) <= 1e-8 * width;
+  return out;
+}
+
+post_expected<OrdinalPairHWeightedResult>
+fit_ordinal_pair_rho_h_weighted(
+    const Eigen::Ref<const Eigen::MatrixXd>& counts,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+    OrdinalPairHWeightedOptions options) {
+  auto ok = validate_pair_shape(counts, thresholds_i, thresholds_j,
+                                "fit_ordinal_pair_rho_h_weighted");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+  if (!std::isfinite(options.rho_lower) || !std::isfinite(options.rho_upper) ||
+      !(options.rho_lower > -1.0) || !(options.rho_upper < 1.0) ||
+      !(options.rho_lower < options.rho_upper) || options.max_iter < 1 ||
+      !(std::isfinite(options.x_tol) && options.x_tol > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "fit_ordinal_pair_rho_h_weighted: invalid options"));
+  }
+  auto h_ok = eval_polychoric_h_score(1.0, options.h_score);
+  if (!h_ok.has_value()) return std::unexpected(h_ok.error());
+
+  if (h_score_is_ml_like(options.h_score)) {
+    auto ml = fit_ordinal_pair_rho_ml(
+        counts, thresholds_i, thresholds_j,
+        OrdinalPairMlOptions{.rho_lower = options.rho_lower,
+                             .rho_upper = options.rho_upper,
+                             .max_iter = options.max_iter,
+                             .lavaan_adjust_2x2 = options.lavaan_adjust_2x2});
+    if (!ml.has_value()) return std::unexpected(ml.error());
+    auto out = h_weighted_result(ml->adjusted_counts, thresholds_i,
+                                 thresholds_j, ml->rho, options.h_score);
+    if (!out.has_value()) return std::unexpected(out.error());
+    out->iterations = ml->iterations;
+    out->converged = true;
+    out->hit_lower = ml->hit_lower;
+    out->hit_upper = ml->hit_upper;
+    return out;
+  }
+
+  Eigen::MatrixXd adjusted = options.lavaan_adjust_2x2
+      ? adjusted_polychoric_table(counts)
+      : Eigen::MatrixXd(counts);
+
+  double lo = options.rho_lower;
+  double hi = options.rho_upper;
+  constexpr double gr = 0.6180339887498948482;
+  double c = hi - gr * (hi - lo);
+  double d = lo + gr * (hi - lo);
+  double fc = h_weighted_objective_unchecked(
+      adjusted, thresholds_i, thresholds_j, c, options.h_score);
+  double fd = h_weighted_objective_unchecked(
+      adjusted, thresholds_i, thresholds_j, d, options.h_score);
+  const double width0 = hi - lo;
+  const double tol = options.x_tol * std::max(1.0, width0);
+  int iterations = 0;
+  for (; iterations < options.max_iter && (hi - lo) > tol; ++iterations) {
+    if (fc < fd) {
+      hi = d;
+      d = c;
+      fd = fc;
+      c = hi - gr * (hi - lo);
+      fc = h_weighted_objective_unchecked(
+          adjusted, thresholds_i, thresholds_j, c, options.h_score);
+    } else {
+      lo = c;
+      c = d;
+      fc = fd;
+      d = lo + gr * (hi - lo);
+      fd = h_weighted_objective_unchecked(
+          adjusted, thresholds_i, thresholds_j, d, options.h_score);
+    }
+  }
+  auto out = h_weighted_result(adjusted, thresholds_i, thresholds_j,
+                               0.5 * (lo + hi), options.h_score);
+  if (!out.has_value()) return std::unexpected(out.error());
+  out->iterations = iterations;
+  out->converged = (hi - lo) <= tol;
+  const double width = options.rho_upper - options.rho_lower;
+  out->hit_lower = std::abs(out->rho - options.rho_lower) <= 1e-8 * width;
+  out->hit_upper = std::abs(out->rho - options.rho_upper) <= 1e-8 * width;
   return out;
 }
 
