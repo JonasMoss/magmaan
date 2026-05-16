@@ -104,6 +104,25 @@ struct OrdinalPairJointHWeightedResult {
   Eigen::MatrixXd weights;
 };
 
+struct OrdinalPairHWeightedInfluenceOptions {
+  double fd_step = 1e-5;
+  PolychoricHScoreOptions h_score;
+};
+
+struct OrdinalPairHWeightedInfluence {
+  std::int64_t n_obs = 0;
+  Eigen::MatrixXd probabilities;
+  Eigen::MatrixXd ratios;
+  Eigen::MatrixXd h_values;
+  Eigen::MatrixXd dh_values;
+  Eigen::MatrixXd weights;
+  Eigen::MatrixXd estimating_functions;
+  Eigen::MatrixXd score_gamma;
+  Eigen::MatrixXd bread;
+  Eigen::MatrixXd influence;
+  Eigen::MatrixXd gamma;
+};
+
 struct OrdinalPairObservedTable {
   Eigen::MatrixXd counts;
   std::int64_t n_obs = 0;
@@ -216,6 +235,14 @@ post_expected<OrdinalPairJointHWeightedResult>
 fit_ordinal_pair_joint_h_weighted(
     const Eigen::Ref<const Eigen::MatrixXd>& counts,
     OrdinalPairJointHWeightedOptions options = {});
+
+post_expected<OrdinalPairHWeightedInfluence>
+ordinal_pair_h_weighted_influence(
+    const Eigen::Ref<const Eigen::MatrixXd>& counts,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+    double rho,
+    OrdinalPairHWeightedInfluenceOptions options = {});
 
 post_expected<OrdinalPairObservedMlResult>
 fit_ordinal_pair_observed_rho_ml(
