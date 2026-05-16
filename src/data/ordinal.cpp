@@ -130,6 +130,97 @@ post_expected<Eigen::MatrixXd> symmetric_inverse_pd(const Eigen::MatrixXd& A,
   return es.eigenvectors() * inv.asDiagonal() * es.eigenvectors().transpose();
 }
 
+struct CorrelationRepairResult {
+  Eigen::MatrixXd R;
+  double raw_min_eigen = 0.0;
+  double min_eigen = 0.0;
+  bool   repaired = false;
+  double ridge = 0.0;
+  double shrinkage = 0.0;
+};
+
+post_expected<CorrelationRepairResult>
+repair_correlation_if_requested(
+    const Eigen::MatrixXd& R,
+    PairwiseOrdinalCorrelationRepairOptions options,
+    std::string what) {
+  if (R.rows() != R.cols() || !R.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::move(what) + " is not a finite square matrix"));
+  }
+  if (!std::isfinite(options.min_eigenvalue) ||
+      options.min_eigenvalue < 0.0 ||
+      options.min_eigenvalue >= 1.0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::move(what) + " repair target must be finite and in [0, 1)"));
+  }
+
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(
+      0.5 * (R + R.transpose()));
+  if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::move(what) + " eigendecomposition failed"));
+  }
+
+  CorrelationRepairResult out;
+  out.R = 0.5 * (R + R.transpose());
+  out.raw_min_eigen = es.eigenvalues().minCoeff();
+  out.min_eigen = out.raw_min_eigen;
+
+  if (out.raw_min_eigen >= options.min_eigenvalue ||
+      options.kind == PairwiseOrdinalCorrelationRepairKind::None) {
+    return out;
+  }
+
+  if (options.kind == PairwiseOrdinalCorrelationRepairKind::Error) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::move(what) + " is below the requested minimum eigenvalue"));
+  }
+
+  const double target = options.min_eigenvalue;
+  const double denom = 1.0 - out.raw_min_eigen;
+  if (!(denom > 0.0) || !std::isfinite(denom)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::move(what) + " cannot be repaired toward the identity"));
+  }
+  const double shrinkage = (target - out.raw_min_eigen) / denom;
+  if (!(shrinkage > 0.0) || !(shrinkage < 1.0) ||
+      !std::isfinite(shrinkage)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::move(what) + " produced invalid repair intensity"));
+  }
+
+  const Eigen::MatrixXd I = Eigen::MatrixXd::Identity(R.rows(), R.cols());
+  if (options.kind == PairwiseOrdinalCorrelationRepairKind::Ridge) {
+    const double ridge = shrinkage / (1.0 - shrinkage);
+    if (!(ridge > 0.0) || !std::isfinite(ridge)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::move(what) + " produced invalid ridge"));
+    }
+    out.R = (out.R + ridge * I) / (1.0 + ridge);
+    out.repaired = true;
+    out.ridge = ridge;
+  } else if (options.kind == PairwiseOrdinalCorrelationRepairKind::Shrinkage) {
+    out.R = (1.0 - shrinkage) * out.R + shrinkage * I;
+    out.repaired = true;
+    out.shrinkage = shrinkage;
+  } else {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::move(what) + " has an unknown repair kind"));
+  }
+
+  out.R.diagonal().setOnes();
+  out.R = 0.5 * (out.R + out.R.transpose());
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> repaired_es(out.R);
+  if (repaired_es.info() != Eigen::Success ||
+      !repaired_es.eigenvalues().allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::move(what) + " repaired eigendecomposition failed"));
+  }
+  out.min_eigen = repaired_es.eigenvalues().minCoeff();
+  return out;
+}
+
 Eigen::MatrixXd expected_pair_counts(double total,
                                      const Eigen::VectorXd& th_i,
                                      const Eigen::VectorXd& th_j,
@@ -400,14 +491,12 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs)
         ++corr_idx;
       }
     }
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> r_es(
-        0.5 * (R + R.transpose()));
-    if (r_es.info() != Eigen::Success || !r_es.eigenvalues().allFinite()) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "ordinal_stats_from_integer_data: block " + std::to_string(b) +
-              " polychoric R eigendecomposition failed"));
-    }
-    block_diag.min_eigen_r = r_es.eigenvalues().minCoeff();
+    auto r_diag_or = repair_correlation_if_requested(
+        R, {}, "ordinal_stats_from_integer_data: block " + std::to_string(b) +
+                   " polychoric R");
+    if (!r_diag_or.has_value()) return std::unexpected(r_diag_or.error());
+    block_diag.min_eigen_r = r_diag_or->min_eigen;
+    block_diag.raw_min_eigen_r = r_diag_or->raw_min_eigen;
 
     Eigen::MatrixXd SC(n, mdim);
     SC.leftCols(nth) = SC_TH;
@@ -626,12 +715,23 @@ pairwise_ordinal_stats_h_weighted_from_integer_data(
       }
     }
 
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> r_es(
-        0.5 * (R + R.transpose()));
-    if (r_es.info() != Eigen::Success || !r_es.eigenvalues().allFinite()) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "pairwise_ordinal_stats_h_weighted_from_integer_data: block " +
-              std::to_string(b) + " robust R eigendecomposition failed"));
+    auto r_repair_or = repair_correlation_if_requested(
+        R, options.correlation_repair,
+        "pairwise_ordinal_stats_h_weighted_from_integer_data: block " +
+            std::to_string(b) + " robust R");
+    if (!r_repair_or.has_value()) return std::unexpected(r_repair_or.error());
+    R = std::move(r_repair_or->R);
+    if (r_repair_or->repaired) {
+      const double corr_scale = r_repair_or->ridge > 0.0
+          ? 1.0 / (1.0 + r_repair_or->ridge)
+          : 1.0 - r_repair_or->shrinkage;
+      IF.rightCols(ncorr) *= corr_scale;
+      for (auto& pd : pair_diag) {
+        pd.ridge_applied = r_repair_or->ridge > 0.0;
+        pd.ridge = r_repair_or->ridge;
+        pd.shrinkage_applied = r_repair_or->shrinkage > 0.0;
+        pd.shrinkage_intensity = r_repair_or->shrinkage;
+      }
     }
 
     Eigen::MatrixXd gamma =
@@ -660,7 +760,11 @@ pairwise_ordinal_stats_h_weighted_from_integer_data(
     out.block_diagnostics[b].pair_diagnostics = std::move(pair_diag);
     out.block_diagnostics[b].moment_influence = std::move(IF);
     out.block_diagnostics[b].gamma = out.stats.NACOV[b];
-    out.block_diagnostics[b].min_eigen_r = r_es.eigenvalues().minCoeff();
+    out.block_diagnostics[b].min_eigen_r = r_repair_or->min_eigen;
+    out.block_diagnostics[b].raw_min_eigen_r = r_repair_or->raw_min_eigen;
+    out.block_diagnostics[b].r_repair_applied = r_repair_or->repaired;
+    out.block_diagnostics[b].r_ridge = r_repair_or->ridge;
+    out.block_diagnostics[b].r_shrinkage_intensity = r_repair_or->shrinkage;
   }
 
   return out;

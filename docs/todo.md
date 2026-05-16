@@ -252,8 +252,13 @@ Remaining work, in suggested order:
   rebuilds moment influence/Gamma and DWLS/WLS weights, and returns fit-ready
   `PairwiseOrdinalStats`; tests pin the ML point-estimate limit, robust-rho
   replacement, Gamma scaling, and `fit_ordinal_bounded()` compatibility.)
-- [ ] **M.** Handle indefinite robust correlation matrices explicitly with
-  minimum eigenvalue and optional ridge/shrinkage diagnostics.
+- [x] **M.** Handle indefinite/low-eigen robust correlation matrices
+  explicitly with minimum-eigen diagnostics and optional error, ridge, or
+  shrinkage policies.
+  (`PairwiseOrdinalCorrelationRepairOptions` records the raw/final minimum
+  eigenvalues, repairs robust `R` toward the identity when requested, applies
+  the matching correlation-column influence scaling before rebuilding Gamma,
+  and exposes block/pair diagnostics.)
 - [ ] **L, comparator track.** Implement density power divergence as the main
   non-h-score comparator; keep Hellinger and Huberized residual fitting as
   lower-priority experimental comparators.
