@@ -84,14 +84,15 @@ Remaining work, in suggested order:
   prototypes third, and observed-pair scenarios only after that target is fixed.
   Initial fixture: `tests/fixtures/pairwise/0001_pairwise_diagnostics.json`
   covers all four slices with a golden fixture test.
-- [ ] **L, follow-on inference work.** Extend pairwise influence/Gamma exposure
+- [x] **L, follow-on inference work.** Extend pairwise influence/Gamma exposure
   to complete/listwise and missing-data all-ordinal composite-likelihood paths,
   then to mixed continuous/ordinal pairwise paths once their likelihood targets
-  and moment ordering are fixed. Partial: all-ordinal shared-threshold,
-  complete/listwise pair-local, and observed-pair composite surfaces now expose
-  per-observation bivariate threshold/rho score contributions plus their
-  pairwise score Gamma; mixed continuous/ordinal composite influence remains
-  open.
+  and moment ordering are fixed. All-ordinal shared-threshold,
+  complete/listwise pair-local, and observed-pair composite surfaces expose
+  per-observation bivariate threshold/rho score contributions plus pairwise
+  score Gamma; mixed pair primitives expose polyserial threshold/rho and
+  continuous-normal mean/variance/covariance score contributions plus score
+  Gamma.
 
 Done when: the pairwise path reproduces existing ML polychorics in its default
 slice, has an explicit composite-likelihood API for pair-local SEM work, and

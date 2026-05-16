@@ -189,12 +189,13 @@ golden `parTable()` fixtures.
   continuous means/variances, polychoric/polyserial/covariance moments,
   NACOV/DWLS/WLS weights, and DWLS/WLS delta fits.
 - Public complete-data polyserial pair kernel for mixed continuous/ordinal
-  work, exposing fixed-threshold rho ML, likelihood, and casewise scores. The
-  mixed sample-stat builder now reuses this kernel for polyserial associations.
+  work, exposing fixed-threshold rho ML, likelihood, casewise threshold/rho
+  scores, and pairwise score Gamma. The mixed sample-stat builder now reuses
+  this kernel for polyserial associations.
 - Public complete-data mixed pair helpers also expose continuous-continuous
-  normal pair likelihood/diagnostics plus labels for the exact threshold,
-  negative-mean, variance, and lower-triangle pair order used by
-  `MixedOrdinalStats`.
+  normal pair likelihood/diagnostics, casewise mean/variance/covariance scores,
+  score Gamma, and labels for the exact threshold, negative-mean, variance,
+  and lower-triangle pair order used by `MixedOrdinalStats`.
 - The continuous normal pair likelihood is currently a mixed-pair primitive
   and benchmark against complete-data ML/FIML, not a supported standalone
   normal-data pairwise SEM estimator.
@@ -292,8 +293,9 @@ adapters layered on top.
   fixed.x robust LS still follows lavaan's conditional exogenous bookkeeping
   and is not part of the generic continuous adapter coverage.
 - Mixed categorical NACOV/weight, fit, and robust-reporting parity is
-  intentionally looser than the all-ordinal path while polyserial Gamma details
-  are hardened.
+  intentionally looser than the all-ordinal path, but pairwise polyserial and
+  continuous-normal score/Gamma primitives are exposed for follow-on inference
+  work.
 - Observed-pair ordinal table kernels are pair-level primitives only. Missing
   ordinal SEM estimation is limited to the explicit pairwise observed-data
   composite prototype; shared-threshold multivariate missing ordinal modeling

@@ -238,6 +238,16 @@ TEST_CASE("pairwise diagnostics fixtures: mixed pair primitives") {
   CHECK(normal->var_j == doctest::Approx(normal_exp["var_j"].get<double>()));
   CHECK(normal->cov == doctest::Approx(normal_exp["cov"].get<double>()));
   CHECK(std::isfinite(normal->negloglik));
+  CHECK(normal->score_contributions.rows() == normal->n_obs);
+  CHECK(normal->score_contributions.cols() == 5);
+  CHECK(normal->score_contributions.allFinite());
+  CHECK(normal->score_contributions.colwise().sum().norm() < 1e-10);
+  CHECK(normal->score_gamma.rows() == 5);
+  CHECK(normal->score_gamma.cols() == 5);
+  CHECK(normal->score_gamma.isApprox(
+      (normal->score_contributions.transpose() * normal->score_contributions) /
+          static_cast<double>(normal->n_obs),
+      1e-12));
 
   const auto& poly_exp = exp["polyserial_pair"];
   auto categories = int_vector_from_json(poly_exp["categories"]);
@@ -259,4 +269,16 @@ TEST_CASE("pairwise diagnostics fixtures: mixed pair primitives") {
   CHECK(scores->thresholds.cols() == thresholds.size());
   CHECK(scores->rho.allFinite());
   CHECK(scores->thresholds.allFinite());
+  CHECK(scores->score_contributions.rows() == categories.size());
+  CHECK(scores->score_contributions.cols() == thresholds.size() + 1);
+  CHECK(scores->score_contributions.leftCols(thresholds.size()).isApprox(
+      scores->thresholds, 0.0));
+  CHECK(scores->score_contributions.col(thresholds.size()).isApprox(
+      scores->rho, 0.0));
+  CHECK(scores->score_gamma.rows() == thresholds.size() + 1);
+  CHECK(scores->score_gamma.cols() == thresholds.size() + 1);
+  CHECK(scores->score_gamma.isApprox(
+      (scores->score_contributions.transpose() * scores->score_contributions) /
+          static_cast<double>(categories.size()),
+      1e-12));
 }
