@@ -134,8 +134,15 @@ golden `parTable()` fixtures.
   preserving `n_obs` and `n_missing`.
 - Experimental joint bivariate ordinal ML kernel for one complete pairwise
   table, estimating pair-local nuisance thresholds and rho. This is not yet
-  wired into SEM moment construction or a shared-threshold composite-likelihood
-  API.
+  wired into SEM moment construction or a fitted composite-likelihood
+  estimator.
+- Public SEM-facing all-ordinal pairwise composite objective API under
+  `estimate::pairwise_ordinal_composite_objective()`. It consumes
+  `PairwiseOrdinalStats` plus SEM-implied shared thresholds and correlations,
+  maps each pair to its bivariate threshold margins, exposes per-pair boundary
+  diagnostics, and makes scaling/weighting explicit. The current reporting
+  contract deliberately does not report chi-square or degrees of freedom until
+  a calibrated composite-likelihood test is implemented.
 - The SEM-facing ordinal moment path remains the lavaan-compatible
   shared-threshold path. Pair-local joint threshold/rho ML is reserved for
   diagnostics, robust pair experiments, and future composite likelihood rather

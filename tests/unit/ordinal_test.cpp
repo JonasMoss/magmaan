@@ -13,6 +13,7 @@
 #include "magmaan/data/pairwise_mixed.hpp"
 #include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/estimate/ordinal.hpp"
+#include "magmaan/estimate/pairwise.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/lavaanify.hpp"
@@ -486,6 +487,94 @@ TEST_CASE("Pairwise ordinal stats diagnostics report lavaan 2x2 adjustment") {
   CHECK_FALSE(pd.shrinkage_applied);
   CHECK(std::isfinite(pd.rho));
   CHECK(std::isfinite(pairwise->block_diagnostics[0].min_eigen_r));
+}
+
+TEST_CASE("Pairwise ordinal composite objective uses pair diagnostics and explicit scaling") {
+  Eigen::MatrixXd X(24, 3);
+  Eigen::Index r = 0;
+  for (int rep = 0; rep < 4; ++rep) {
+    for (int c = 1; c <= 3; ++c) {
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((c + rep) % 3);
+      X(r, 2) = 1 + ((2 * c + rep) % 3);
+      ++r;
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((2 * c + rep) % 3);
+      X(r, 2) = 1 + ((c + rep) % 3);
+      ++r;
+    }
+  }
+
+  auto pairwise = magmaan::data::pairwise_ordinal_stats_from_integer_data({X});
+  REQUIRE(pairwise.has_value());
+
+  auto obj = magmaan::estimate::pairwise_ordinal_composite_objective(
+      *pairwise, pairwise->stats.thresholds, pairwise->stats.R);
+  REQUIRE(obj.has_value());
+  REQUIRE(obj->blocks.size() == 1);
+  REQUIRE(obj->blocks[0].pairs.size() == 3);
+
+  double expected_nll = 0.0;
+  for (const auto& pd : pairwise->block_diagnostics[0].pair_diagnostics) {
+    expected_nll += pd.negloglik;
+  }
+  CHECK(obj->negloglik == doctest::Approx(expected_nll));
+  CHECK(obj->weighted_negloglik == doctest::Approx(expected_nll));
+  CHECK(obj->scaling_denominator == doctest::Approx(72.0));
+  CHECK(obj->objective == doctest::Approx(expected_nll / 72.0));
+  CHECK_FALSE(obj->reports_chisq);
+  CHECK(obj->df == -1);
+  CHECK_FALSE(obj->blocks[0].reports_chisq);
+  CHECK(obj->blocks[0].df == -1);
+
+  for (const auto& pair : obj->blocks[0].pairs) {
+    CHECK(pair.n_obs == 24);
+    CHECK(pair.n_missing == 0);
+    CHECK(pair.scaling_weight == doctest::Approx(24.0));
+    CHECK(pair.expected_counts.sum() == doctest::Approx(pair.counts.sum()));
+    CHECK(pair.residual_counts.isApprox(pair.counts - pair.expected_counts, 1e-12));
+  }
+
+  auto sum_obj = magmaan::estimate::pairwise_ordinal_composite_objective(
+      *pairwise, pairwise->stats.thresholds, pairwise->stats.R,
+      magmaan::estimate::PairwiseOrdinalCompositeOptions{
+          .weighting = magmaan::estimate::PairwiseCompositeWeighting::ObservedPairCount,
+          .scaling = magmaan::estimate::PairwiseCompositeScaling::SumNegLogLik});
+  REQUIRE(sum_obj.has_value());
+  CHECK(sum_obj->objective == doctest::Approx(expected_nll));
+}
+
+TEST_CASE("Pairwise ordinal composite objective validates implied pair mapping") {
+  Eigen::MatrixXd X(15, 2);
+  Eigen::Index r = 0;
+  for (int k = 0; k < 4; ++k) X.row(r++) << 1, 1;
+  for (int k = 0; k < 3; ++k) X.row(r++) << 1, 2;
+  for (int k = 0; k < 2; ++k) X.row(r++) << 2, 1;
+  for (int k = 0; k < 6; ++k) X.row(r++) << 2, 2;
+
+  auto pairwise = magmaan::data::pairwise_ordinal_stats_from_integer_data({X});
+  REQUIRE(pairwise.has_value());
+
+  auto implied_r = pairwise->stats.R;
+  implied_r[0](1, 0) = implied_r[0](0, 1) = 0.25;
+  auto obj = magmaan::estimate::pairwise_ordinal_composite_objective(
+      *pairwise, pairwise->stats.thresholds, implied_r);
+  REQUIRE(obj.has_value());
+  REQUIRE(obj->blocks[0].pairs.size() == 1);
+  CHECK(obj->blocks[0].pairs[0].rho == doctest::Approx(0.25));
+
+  implied_r[0](1, 0) = implied_r[0](0, 1) = 1.0;
+  auto bad_rho = magmaan::estimate::pairwise_ordinal_composite_objective(
+      *pairwise, pairwise->stats.thresholds, implied_r);
+  REQUIRE_FALSE(bad_rho.has_value());
+  CHECK(bad_rho.error().detail.find("inside (-1, 1)") != std::string::npos);
+
+  auto bad_thresholds = pairwise->stats.thresholds;
+  bad_thresholds[0](0) = std::numeric_limits<double>::quiet_NaN();
+  auto bad_th = magmaan::estimate::pairwise_ordinal_composite_objective(
+      *pairwise, bad_thresholds, pairwise->stats.R);
+  REQUIRE_FALSE(bad_th.has_value());
+  CHECK(bad_th.error().detail.find("non-finite") != std::string::npos);
 }
 
 TEST_CASE("Ordinal stats: thresholds, polychoric R, and weights have expected shapes") {
