@@ -1110,6 +1110,93 @@ TEST_CASE("Pairwise ordinal h-weighted stats replace rhos and robust Gamma") {
   CHECK(pd.expected_counts.isApprox(direct->expected_counts, 1e-12));
 }
 
+TEST_CASE("Pairwise ordinal h-weighted stats repair low-eigen robust R on request") {
+  Eigen::MatrixXd X(24, 3);
+  Eigen::Index r = 0;
+  for (int rep = 0; rep < 4; ++rep) {
+    for (int c = 1; c <= 3; ++c) {
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((c + rep) % 3);
+      X(r, 2) = 1 + ((2 * c + rep) % 3);
+      ++r;
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((2 * c + rep) % 3);
+      X(r, 2) = 1 + ((c + rep) % 3);
+      ++r;
+    }
+  }
+
+  auto raw = magmaan::data::pairwise_ordinal_stats_h_weighted_from_integer_data({X});
+  REQUIRE(raw.has_value());
+  const auto& raw_bd = raw->block_diagnostics[0];
+  CHECK(raw_bd.raw_min_eigen_r == doctest::Approx(raw_bd.min_eigen_r));
+  CHECK_FALSE(raw_bd.r_repair_applied);
+  CHECK(raw_bd.r_ridge == doctest::Approx(0.0));
+  CHECK(raw_bd.r_shrinkage_intensity == doctest::Approx(0.0));
+  REQUIRE(raw_bd.min_eigen_r < 0.95);
+
+  magmaan::data::PairwiseOrdinalHWeightedStatsOptions err_options;
+  err_options.correlation_repair.kind =
+      magmaan::data::PairwiseOrdinalCorrelationRepairKind::Error;
+  err_options.correlation_repair.min_eigenvalue = 0.95;
+  auto err = magmaan::data::pairwise_ordinal_stats_h_weighted_from_integer_data(
+      {X}, err_options);
+  REQUIRE_FALSE(err.has_value());
+  CHECK(err.error().detail.find("minimum eigenvalue") != std::string::npos);
+
+  magmaan::data::PairwiseOrdinalHWeightedStatsOptions shrink_options;
+  shrink_options.correlation_repair.kind =
+      magmaan::data::PairwiseOrdinalCorrelationRepairKind::Shrinkage;
+  shrink_options.correlation_repair.min_eigenvalue = 0.95;
+  auto shrunk = magmaan::data::pairwise_ordinal_stats_h_weighted_from_integer_data(
+      {X}, shrink_options);
+  REQUIRE(shrunk.has_value());
+  const auto& shrunk_bd = shrunk->block_diagnostics[0];
+  CHECK(shrunk_bd.raw_min_eigen_r == doctest::Approx(raw_bd.raw_min_eigen_r));
+  CHECK(shrunk_bd.min_eigen_r == doctest::Approx(0.95).epsilon(1e-10));
+  CHECK(shrunk_bd.r_repair_applied);
+  CHECK(shrunk_bd.r_ridge == doctest::Approx(0.0));
+  REQUIRE(shrunk_bd.r_shrinkage_intensity > 0.0);
+  CHECK(shrunk_bd.r_shrinkage_intensity < 1.0);
+  CHECK(shrunk->stats.R[0].diagonal().isOnes(1e-12));
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> shrunk_es(shrunk->stats.R[0]);
+  REQUIRE(shrunk_es.info() == Eigen::Success);
+  CHECK(shrunk_es.eigenvalues().minCoeff() == doctest::Approx(0.95).epsilon(1e-10));
+  CHECK(shrunk->stats.NACOV[0].isApprox(
+      (shrunk_bd.moment_influence.transpose() *
+       shrunk_bd.moment_influence) /
+          static_cast<double>(shrunk->stats.n_obs[0]),
+      1e-12));
+  for (const auto& pd : shrunk_bd.pair_diagnostics) {
+    CHECK_FALSE(pd.ridge_applied);
+    CHECK(pd.ridge == doctest::Approx(0.0));
+    CHECK(pd.shrinkage_applied);
+    CHECK(pd.shrinkage_intensity ==
+          doctest::Approx(shrunk_bd.r_shrinkage_intensity));
+  }
+
+  magmaan::data::PairwiseOrdinalHWeightedStatsOptions ridge_options;
+  ridge_options.correlation_repair.kind =
+      magmaan::data::PairwiseOrdinalCorrelationRepairKind::Ridge;
+  ridge_options.correlation_repair.min_eigenvalue = 0.95;
+  auto ridged = magmaan::data::pairwise_ordinal_stats_h_weighted_from_integer_data(
+      {X}, ridge_options);
+  REQUIRE(ridged.has_value());
+  const auto& ridged_bd = ridged->block_diagnostics[0];
+  CHECK(ridged_bd.raw_min_eigen_r == doctest::Approx(raw_bd.raw_min_eigen_r));
+  CHECK(ridged_bd.min_eigen_r == doctest::Approx(0.95).epsilon(1e-10));
+  CHECK(ridged_bd.r_repair_applied);
+  CHECK(ridged_bd.r_ridge > 0.0);
+  CHECK(ridged_bd.r_shrinkage_intensity == doctest::Approx(0.0));
+  CHECK(ridged->stats.R[0].isApprox(shrunk->stats.R[0], 1e-12));
+  for (const auto& pd : ridged_bd.pair_diagnostics) {
+    CHECK(pd.ridge_applied);
+    CHECK(pd.ridge == doctest::Approx(ridged_bd.r_ridge));
+    CHECK_FALSE(pd.shrinkage_applied);
+    CHECK(pd.shrinkage_intensity == doctest::Approx(0.0));
+  }
+}
+
 TEST_CASE("Pairwise ordinal composite objective uses pair diagnostics and explicit scaling") {
   Eigen::MatrixXd X(24, 3);
   Eigen::Index r = 0;

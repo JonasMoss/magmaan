@@ -123,9 +123,23 @@ struct OrdinalPairHWeightedInfluence {
   Eigen::MatrixXd gamma;
 };
 
+enum class PairwiseOrdinalCorrelationRepairKind {
+  None,
+  Error,
+  Ridge,
+  Shrinkage,
+};
+
+struct PairwiseOrdinalCorrelationRepairOptions {
+  PairwiseOrdinalCorrelationRepairKind kind =
+      PairwiseOrdinalCorrelationRepairKind::None;
+  double min_eigenvalue = 1e-8;
+};
+
 struct PairwiseOrdinalHWeightedStatsOptions {
   OrdinalPairHWeightedOptions rho;
   double influence_fd_step = 1e-5;
+  PairwiseOrdinalCorrelationRepairOptions correlation_repair;
 };
 
 struct OrdinalPairObservedTable {
@@ -192,6 +206,10 @@ struct PairwiseOrdinalBlockDiagnostics {
   Eigen::MatrixXd moment_influence;
   Eigen::MatrixXd gamma;
   double min_eigen_r = 0.0;
+  double raw_min_eigen_r = 0.0;
+  bool   r_repair_applied = false;
+  double r_ridge = 0.0;
+  double r_shrinkage_intensity = 0.0;
 };
 
 struct PairwiseOrdinalStats {

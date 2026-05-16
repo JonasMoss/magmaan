@@ -164,10 +164,14 @@ golden `parTable()` fixtures.
   lavaan-style shared marginal thresholds and metadata, replaces the
   polychoric correlation block with fixed-threshold h-weighted rhos, rebuilds
   casewise moment influence/Gamma from marginal-threshold influence plus
-  robust rho influence, and refreshes DWLS/WLS weights. The result is an
-  ordinary `OrdinalStats`/`PairwiseOrdinalStats` payload consumable by the
-  existing ordinal LS fitting and robust reporting surfaces. This remains
-  experimental and separate from the default lavaan-compatible
+  robust rho influence, and refreshes DWLS/WLS weights. Optional robust-R
+  handling records the raw minimum eigenvalue and can either fail explicitly or
+  repair low-eigen correlation matrices by ridge/shrinkage toward the identity,
+  with the same transformation applied to the correlation influence columns
+  before Gamma and weights are rebuilt. The result is an ordinary
+  `OrdinalStats`/`PairwiseOrdinalStats` payload consumable by the existing
+  ordinal LS fitting and robust reporting surfaces. This remains experimental
+  and separate from the default lavaan-compatible
   `ordinal_stats_from_integer_data()` path.
 - Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
   complete/listwise ordinal data, exposing pair labels, count/adjustment
