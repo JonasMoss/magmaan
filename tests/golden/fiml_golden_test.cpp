@@ -42,37 +42,6 @@ const std::vector<std::string> kFimlFixtures = {
     "0017_multigroup_path_fixedx_true_complete_x_missing_y_fiml",
 };
 
-magmaan::data::RawData raw_from_fixture(const nlohmann::json& exp) {
-  magmaan::data::RawData raw;
-  const auto& blocks = exp["raw"];
-  raw.X.reserve(blocks.size());
-  raw.mask.reserve(blocks.size());
-  for (const auto& block : blocks) {
-    const auto& Xj = block["X"];
-    const auto& Mj = block["mask"];
-    const Eigen::Index n = static_cast<Eigen::Index>(Xj.size());
-    const Eigen::Index p = n > 0 ? static_cast<Eigen::Index>(Xj[0].size()) : 0;
-
-    Eigen::MatrixXd X(n, p);
-    Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M(n, p);
-    for (Eigen::Index r = 0; r < n; ++r) {
-      for (Eigen::Index c = 0; c < p; ++c) {
-        const auto& x = Xj[static_cast<std::size_t>(r)]
-                         [static_cast<std::size_t>(c)];
-        X(r, c) = x.is_null()
-            ? std::numeric_limits<double>::quiet_NaN()
-            : x.get<double>();
-        M(r, c) = static_cast<std::uint8_t>(
-            Mj[static_cast<std::size_t>(r)]
-              [static_cast<std::size_t>(c)].get<int>());
-      }
-    }
-    raw.X.push_back(std::move(X));
-    raw.mask.push_back(std::move(M));
-  }
-  return raw;
-}
-
 bool finite_json(const nlohmann::json& j) {
   return !j.is_null() && j.is_number() && std::isfinite(j.get<double>());
 }
@@ -150,7 +119,7 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
       continue;
     }
 
-    const magmaan::data::RawData raw = raw_from_fixture(exp);
+    const magmaan::data::RawData raw = magmaan::test::raw_from_fixture(exp);
     if (raw.X.size() != static_cast<std::size_t>(opts.n_groups)) {
       failures.push_back(id + ": raw block count does not match n_groups");
       continue;

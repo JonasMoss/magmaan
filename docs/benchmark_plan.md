@@ -1,8 +1,13 @@
 # Benchmark Plan
 
-This is a planning document for future benchmarking once the R package API is
-more mature. It is not an implementation spec for the current exploratory
-bindings.
+This is the full benchmarking design — tiers, datasets, workload levels, and
+public-reporting shape. The scaffold described under Execution Methodology now
+exists (`benchmarks/cases.yml`, the `benchmarks/r/` harness, and five active
+complete-data ML cases with checked-in `reference_lavaan.json`); the actionable
+near-term slice is tracked in `docs/todo.md` §2. The lavaan-parity test layer
+(`tests/golden/lavaan_parity_golden_test.cpp`, `tests/fixtures/parity/`) is the
+concrete realization of the correctness gating this document calls for. Public
+headline benchmarking still waits on a more mature R package API.
 
 ## Goals
 
@@ -344,7 +349,8 @@ not block normal correctness CI until the noise profile is well understood.
 
 - R package has stable wrappers for estimate-only and explicit post-fit
   reporting workflows.
-- Each public workload has lavaan parity fixtures or a benchmark-local
+- Each public workload has lavaan parity fixtures (`tests/fixtures/parity/`,
+  gated by `tests/golden/lavaan_parity_golden_test.cpp`) or a benchmark-local
   correctness gate with documented tolerances.
 - Dataset cache scripts are reproducible and license-compatible.
 - Benchmark output records all versions, options, dimensions, and hardware.

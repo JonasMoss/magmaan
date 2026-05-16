@@ -41,7 +41,7 @@ benchmark_cases <- list(
   bfi_5factor = list(
     id = "bfi_5factor",
     tier = 1L,
-    status = "dormant",
+    status = "active",
     estimator = "ML",
     source_type = "r_package_dataset",
     package = "psychTools",
@@ -50,7 +50,7 @@ benchmark_cases <- list(
                   paste0("N", 1:5), paste0("O", 1:5)),
     lavaan_function = "cfa",
     meanstructure = FALSE,
-    supported_now = FALSE
+    supported_now = TRUE
   ),
   openmx_mimic = list(
     id = "openmx_mimic",
@@ -100,7 +100,7 @@ benchmark_cases <- list(
   mplus_ex5_1 = list(
     id = "mplus_ex5_1",
     tier = 1L,
-    status = "candidate",
+    status = "active",
     estimator = "ML",
     source_type = "mplus_dat",
     source_url = "https://www.statmodel.com/usersguide/chap5/ex5.1.dat",
@@ -108,7 +108,7 @@ benchmark_cases <- list(
     variables = paste0("y", 1:6),
     lavaan_function = "cfa",
     meanstructure = FALSE,
-    supported_now = FALSE
+    supported_now = TRUE
   )
 )
 

@@ -1,5 +1,6 @@
 #include "magmaan/optim/lbfgs_optimizer.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <string>
@@ -60,21 +61,33 @@ LbfgsOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
   // -fexceptions precisely so we can catch it here and convert it to a
   // value; the throw site is deep in LBFGSpp's line-search loop, *outside*
   // any objective-callback frame, so unwinding stays within this
-  // -fexceptions TU and never crosses a -fno-exceptions frame. Known
-  // trigger: single-group 3F CFA + meanstructure on the Holzinger sample
-  // (lavaan's nlminb converges; LBFGS++ exhausts the line search). The
-  // capable / box-constrained alternative now exists — `LbfgsBOptimizer`
-  // via `fit_bounded(...)` (LBFGSpp's `LBFGSBSolver`) handles this case;
-  // see `tests/unit/lbfgsb_integration_test.cpp` for the demonstration.
+  // -fexceptions TU and never crosses a -fno-exceptions frame.
+  //
+  // The strong-Wolfe line search throws most often *at* the optimum: in the
+  // flat neighbourhood of the minimum the objective no longer changes
+  // measurably along any step before ‖g‖ falls under the absolute `gtol`.
+  // When that happens `x` already holds a converged iterate, so we salvage it
+  // (see the catch block) rather than discarding a good solution. See
+  // docs/convergence_diagnostics.md.
   LBFGSpp::LBFGSSolver<double> solver(param);
   int n_iter = 0;
   try {
     n_iter = solver.minimize(fn, x, fval);
   } catch (const std::exception& e) {
+    // Line search failed. `x` is the last accepted iterate; if its gradient
+    // is small the search has effectively converged -- accept it. A point
+    // with a genuinely large gradient is still surfaced as a failure.
+    Eigen::VectorXd grad = Eigen::VectorXd::Zero(x.size());
+    const double f_at_x = fn(x, grad);
+    const double gmax = x.size() > 0 ? grad.cwiseAbs().maxCoeff() : 0.0;
+    const double salvage_gtol = std::max(1e-3, 1e3 * opts_.gtol);
+    if (std::isfinite(f_at_x) && gmax <= salvage_gtol) {
+      return LbfgsOutput{std::move(x), f_at_x, n_iter};
+    }
     return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
         std::string("L-BFGS line search failed: ") + e.what() +
         " (model may need a box-constrained optimizer or better starts)",
-        0, fval));
+        n_iter, fval));
   }
 
   if (!std::isfinite(fval)) {

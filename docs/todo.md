@@ -35,6 +35,9 @@ make supported workflows legible without turning docs into a second roadmap.
 Contracts:
 
 - Fixture-backed parity remains the bar for supported estimator/model slices.
+- The synthetic corpus goldens cover breadth; the lavaan-parity layer
+  (`tests/golden/lavaan_parity_golden_test.cpp`, `tests/fixtures/parity/`)
+  covers depth on real datasets. See `docs/roadmap.md` → Testing and validation.
 - Property and boundary tests should catch structural mistakes before they turn
   into hard-to-debug lavaan parity failures.
 - Examples should demonstrate the explicit post-fit workflow rather than hide
@@ -57,9 +60,18 @@ Remaining work, in suggested order:
 - [ ] **M/L.** Add multi-group LS weighting and equality-constraint cases
   across continuous and ordinal estimators, plus mean-structure LS cases that
   exercise Ceres and SNLLS where semantically appropriate.
-- [ ] **S, blocked on optimizer behavior.** Add scalar-invariance latent mean
-  rescaling fixtures once the bounded optimizer reliably fits the needed
-  mean-structure models.
+- [ ] **S.** Add scalar-invariance latent mean rescaling fixtures. The
+  line-search salvage (`docs/convergence_diagnostics.md`) unblocked
+  mean-structure ML convergence on the unbounded path; confirm the bounded
+  optimizer also fits these models before relying on it there.
+- [ ] **M.** Extend the lavaan-parity golden layer
+  (`tests/golden/lavaan_parity_golden_test.cpp`): add a FIML real-data case
+  (raw data is now committed, so the path is enabled) and broaden beyond
+  complete-data ML to ULS/GLS/WLS and ordinal DWLS/WLS real-data cases.
+- [ ] **M/L.** Bring `demo_growth_linear` to lavaan parity. magmaan has no
+  `growth()` equivalent, so its free set does not align with lavaan's
+  (`magmaan_aligned = false` in the fixture); the case is committed as a soft
+  known gap and auto-promotes to a hard gate once the parameterization matches.
 
 Done when: representative supported estimator/model combinations have fixtures
 or structural tests at the right level, and contributors can discover the
@@ -96,6 +108,8 @@ Contracts:
 
 - Benchmarks are advisory local tooling, not a substitute for lavaan parity
   fixtures or correctness tests.
+- `docs/benchmark_plan.md` is the full benchmarking design; this section tracks
+  the actionable near-term slice.
 - Compare only semantically appropriate backends for each estimator/model slice.
 
 Remaining work, in suggested order:
@@ -103,8 +117,10 @@ Remaining work, in suggested order:
 - [ ] **S.** Record local build-loop timings after major workflow changes:
   no-op build, touched core TU, touched test TU, labeled `ctest`, `test-dev`,
   and the three R install modes.
-- [ ] **S/M.** Add benchmark fixtures for representative complete-data ML,
-  FIML, ULS, GLS, WLS, ordinal DWLS/WLS, and mixed categorical models.
+- [ ] **S/M.** The benchmark scaffold exists — `benchmarks/cases.yml`, the
+  `benchmarks/r/` harness, and five active complete-data ML cases with
+  checked-in `reference_lavaan.json`. Extend case coverage to FIML, ULS, GLS,
+  WLS, ordinal DWLS/WLS, and mixed categorical models.
 - [ ] **M.** Track objective value, gradient norm, iteration count, wall time,
   and agreement with lavaan-backed estimates where applicable.
 - [ ] **M.** Compare LBFGS, LBFGS-B, Ceres, and SNLLS only on cases where each
@@ -116,7 +132,6 @@ Remaining work, in suggested order:
 - [ ] **S, only if timings justify it.** Experiment with opt-in precompiled
   headers for Eigen-heavy local builds; keep them disabled unless they improve
   changed-TU rebuilds without worsening no-op or full rebuild ergonomics.
-- [ ] **S, after scenarios exist.** Document benchmark usage.
 
 Done when: backend recommendations and performance-sensitive refactors can be
 checked against repeatable local benchmark scenarios.

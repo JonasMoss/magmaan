@@ -48,7 +48,11 @@ golden `parTable()` fixtures.
 
 ### Complete-data ML and inference
 
-- Normal-theory ML fitting through LBFGS.
+- Normal-theory ML fitting through LBFGS. Heuristic start values sign each
+  free loading by its indicator's covariance with the factor's marker, and the
+  unbounded path salvages a converged iterate when the strong-Wolfe line search
+  stalls in the flat neighbourhood of the optimum instead of reporting a hard
+  line-search error (see `docs/convergence_diagnostics.md`).
 - Expected information, finite-difference observed information, and analytic
   observed information for covariance and mean-structure models.
 - Vcov/SE, Wald/z tests, chi-square/df helpers, LR/Satorra-2000 nested tests,
@@ -291,10 +295,39 @@ final architectural ideal. Thin R wrappers should gradually mirror the C++
 primitive signatures; fit-list helpers can remain as explicit convenience
 adapters layered on top.
 
+### Testing and validation
+
+Validation has three deliberately separate surfaces:
+
+- **Corpus golden tests** — breadth. 26 small synthetic models in
+  `tests/fixtures/corpus.json` exercise every parser, lavaanify, matrix, fit,
+  and inference stage against checked-in lavaan fixtures. Oracle:
+  `tools/regen_oracle.R`.
+- **Parity golden tests** — depth. `tests/golden/lavaan_parity_golden_test.cpp`
+  gates magmaan against lavaan on the real-data benchmark cases
+  (HolzingerSwineford1939, PoliticalDemocracy, Demo.growth, bfi, Mplus ex5.1):
+  real sample sizes, real conditioning, real SEs and fit measures, and the
+  raw-data ingestion path. Self-contained fixtures live in
+  `tests/fixtures/parity/`; oracle: `tools/regen_parity_fixtures.R`.
+- **Benchmarks** — `benchmarks/` fits *live lavaan* on every run and gates
+  timing, not CI correctness. It is R-dependent and advisory; the parity layer
+  is the bridge that freezes its correctness checks into the gated C++ suite.
+
+The suite builds as six doctest executables — `magmaan_test_{smoke, spec,
+estimate, inference, ordinal, parity}` — so areas build and run independently
+(`ctest -L parity`). CI never invokes R; fixture regeneration is a manual
+developer step.
+
 ## Current Boundaries
 
 - Complete-data and FIML support are fixture-backed only for the documented
   estimator/model slices.
+- The `lavaan::growth()` identification defaults (observed-variable intercepts
+  fixed to zero, latent growth-factor means freely estimated) are not
+  replicated. Latent growth models fit, but the mean-structure rows must be
+  spelled out explicitly in the model syntax; magmaan has no `growth()`-
+  equivalent option, so for the same syntax its free set differs from lavaan's
+  (`demo_growth_linear` is a tracked parity gap — see `docs/todo.md`).
 - FIML with missing observed exogenous variables under `fixed.x = TRUE`
   remains unsupported.
 - FIML score tests and modification indices use observed-pattern gradients
