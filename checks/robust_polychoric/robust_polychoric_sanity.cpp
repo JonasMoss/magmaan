@@ -423,6 +423,32 @@ CompareSummary run_mixed_check(const Config& cfg, std::mt19937_64& rng) {
                              cfg.mixed_reps, failed, moments, gammas, cfg.n);
 }
 
+CompareSummary run_mixed_h_weighted_check(const Config& cfg, std::mt19937_64& rng) {
+  const std::vector<std::vector<std::int32_t>> ordered =
+      {{1, 1, 1, 1, 1, 1, 0, 0, 0}};
+  magmaan::data::MixedOrdinalPolyserialHWeightedStatsOptions opts;
+  opts.polyserial.h_score.kind =
+      magmaan::data::PolychoricHScoreKind::WmaHardCap;
+  opts.polyserial.h_score.k = 2.0;
+
+  std::vector<Eigen::VectorXd> moments;
+  std::vector<Eigen::MatrixXd> gammas;
+  int failed = 0;
+  for (int r = 0; r < cfg.mixed_reps; ++r) {
+    const Eigen::MatrixXd X = simulate_hs_mixed(cfg.n, 0.035, rng);
+    auto stats = magmaan::data::mixed_ordinal_stats_polyserial_h_weighted_from_data(
+        {X}, ordered, opts);
+    if (!stats.has_value() || !stats->NACOV[0].allFinite()) {
+      ++failed;
+      continue;
+    }
+    moments.push_back(stats->moments[0]);
+    gammas.push_back(stats->NACOV[0]);
+  }
+  return compare_covariances("HS mixed h-weighted moments",
+                             cfg.mixed_reps, failed, moments, gammas, cfg.n);
+}
+
 std::string hs_ordinal_model_syntax() {
   return
       "visual =~ x1 + x2 + x3\n"
@@ -525,18 +551,20 @@ int main(int argc, char** argv) {
             << " matrix_reps=" << cfg.matrix_reps
             << " mixed_reps=" << cfg.mixed_reps
             << " sem_reps=" << cfg.sem_reps
-            << " h=wma_hard_cap(k=1.30) polyserial_dpd_alpha=0.5\n\n";
+            << " h=wma_hard_cap(k=1.30)"
+            << " polyserial_dpd_alpha=0.5 polyserial_h_k=2.0\n\n";
 
   std::cout << "diagnostic columns: empirical cov of sqrt(N)*estimate vs "
                "average theoretical Gamma / N-scaled vcov\n";
   print_summary(run_pair_check(cfg, rng));
   print_summary(run_matrix_check(cfg, rng));
   print_summary(run_mixed_check(cfg, rng));
+  print_summary(run_mixed_h_weighted_check(cfg, rng));
   print_summary(run_sem_check(cfg, rng));
 
   std::cout << "\nInterpretation: diag ratios near 1 and modest relative "
                "Frobenius error are the desired Monte Carlo pattern. "
                "The HS checks are contaminated simulations and the mixed "
-               "path uses fixed-marginal DPD polyserial pairs.\n";
+               "paths use fixed-marginal DPD or h-weighted polyserial pairs.\n";
   return 0;
 }

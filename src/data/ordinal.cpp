@@ -770,7 +770,8 @@ post_expected<MixedOrdinalStats>
 mixed_ordinal_stats_from_data_impl(
     const std::vector<Eigen::MatrixXd>& Xs,
     const std::vector<std::vector<std::int32_t>>& ordered,
-    const MixedOrdinalPolyserialDpdStatsOptions* dpd_options) {
+    const MixedOrdinalPolyserialDpdStatsOptions* dpd_options,
+    const MixedOrdinalPolyserialHWeightedStatsOptions* h_weighted_options) {
   if (Xs.empty()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "mixed_ordinal_stats_from_data: no data blocks"));
@@ -989,7 +990,14 @@ mixed_ordinal_stats_from_data_impl(
           for (Eigen::Index r = 0; r < n; ++r) cat(r) = Xcat(r, o);
           double rho = 0.0;
           Eigen::VectorXd rho_weights = Eigen::VectorXd::Ones(n);
-          if (dpd_options != nullptr && dpd_options->polyserial.alpha > 0.0) {
+          if (h_weighted_options != nullptr) {
+            auto rho_or = fit_polyserial_pair_rho_h_weighted(
+                cat, U.col(c), th_by_var[static_cast<std::size_t>(o)],
+                h_weighted_options->polyserial);
+            if (!rho_or.has_value()) return std::unexpected(rho_or.error());
+            rho = rho_or->rho;
+            rho_weights = std::move(rho_or->weights);
+          } else if (dpd_options != nullptr && dpd_options->polyserial.alpha > 0.0) {
             auto rho_or = fit_polyserial_pair_rho_dpd(
                 cat, U.col(c), th_by_var[static_cast<std::size_t>(o)],
                 dpd_options->polyserial);
@@ -1118,7 +1126,7 @@ post_expected<MixedOrdinalStats>
 mixed_ordinal_stats_from_data(
     const std::vector<Eigen::MatrixXd>& Xs,
     const std::vector<std::vector<std::int32_t>>& ordered) {
-  return mixed_ordinal_stats_from_data_impl(Xs, ordered, nullptr);
+  return mixed_ordinal_stats_from_data_impl(Xs, ordered, nullptr, nullptr);
 }
 
 post_expected<MixedOrdinalStats>
@@ -1131,7 +1139,19 @@ mixed_ordinal_stats_polyserial_dpd_from_data(
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "mixed_ordinal_stats_polyserial_dpd_from_data: invalid options"));
   }
-  return mixed_ordinal_stats_from_data_impl(Xs, ordered, &options);
+  return mixed_ordinal_stats_from_data_impl(Xs, ordered, &options, nullptr);
+}
+
+post_expected<MixedOrdinalStats>
+mixed_ordinal_stats_polyserial_h_weighted_from_data(
+    const std::vector<Eigen::MatrixXd>& Xs,
+    const std::vector<std::vector<std::int32_t>>& ordered,
+    MixedOrdinalPolyserialHWeightedStatsOptions options) {
+  if (!eval_polychoric_h_score(1.0, options.polyserial.h_score).has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_stats_polyserial_h_weighted_from_data: invalid options"));
+  }
+  return mixed_ordinal_stats_from_data_impl(Xs, ordered, nullptr, &options);
 }
 
 }  // namespace magmaan::data

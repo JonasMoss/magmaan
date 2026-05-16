@@ -6,6 +6,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
+#include "magmaan/data/h_score.hpp"
 
 namespace magmaan::data {
 
@@ -41,6 +42,29 @@ struct PolyserialPairDpdResult {
   // Per-row joint densities phi(u_i) * Pr(y_i | u_i).
   Eigen::VectorXd joint_densities;
   // Raw DPD attenuation weights: joint_density^alpha.
+  Eigen::VectorXd weights;
+};
+
+struct PolyserialPairHWeightedOptions {
+  double rho_lower = -0.999;
+  double rho_upper = 0.999;
+  int    max_iter = 72;
+  PolychoricHScoreOptions h_score;
+};
+
+struct PolyserialPairHWeightedResult {
+  double rho = 0.0;
+  double objective = 0.0;
+  int    iterations = 0;
+  bool   hit_lower = false;
+  bool   hit_upper = false;
+  // Per-row conditional probabilities for the observed category.
+  Eigen::VectorXd probabilities;
+  // Per-row rho=0 reference joint densities phi(u_i) * Pr(y_i).
+  Eigen::VectorXd joint_densities;
+  // Density outlyingness ratios; larger means lower reference joint density.
+  Eigen::VectorXd ratios;
+  // Raw h-weight attenuation h(t) / t.
   Eigen::VectorXd weights;
 };
 
@@ -152,6 +176,13 @@ fit_polyserial_pair_rho_dpd(
     const Eigen::Ref<const Eigen::VectorXd>& u,
     const Eigen::Ref<const Eigen::VectorXd>& thresholds,
     PolyserialPairDpdOptions options = {});
+
+post_expected<PolyserialPairHWeightedResult>
+fit_polyserial_pair_rho_h_weighted(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    PolyserialPairHWeightedOptions options = {});
 
 post_expected<PolyserialPairScores>
 polyserial_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& categories,

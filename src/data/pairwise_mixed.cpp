@@ -200,6 +200,78 @@ PolyserialPairDpdResult polyserial_dpd_result_unchecked(
   return out;
 }
 
+bool h_score_is_ml_like(const PolychoricHScoreOptions& options) noexcept {
+  return options.kind == PolychoricHScoreKind::ML ||
+         (options.kind == PolychoricHScoreKind::WmaHardCap &&
+          !std::isfinite(options.k));
+}
+
+double polyserial_joint_density_unchecked(int cat,
+                                          double u,
+                                          double rho,
+                                          const Eigen::VectorXd& th) noexcept {
+  return std::max(kProbFloor,
+                  normal_pdf(u) * polyserial_prob_unchecked(cat, u, rho, th));
+}
+
+double polyserial_h_weight_unchecked(double joint,
+                                     const PolychoricHScoreOptions& options) noexcept {
+  if (h_score_is_ml_like(options)) return 1.0;
+  const double ratio = kInvSqrt2Pi / std::max(kProbFloor, joint);
+  auto h = eval_polychoric_h_score(ratio, options);
+  if (!h.has_value() || !std::isfinite(h->h)) return 1.0;
+  return std::clamp(h->h / std::max(kProbFloor, ratio), 0.0, 1.0);
+}
+
+double polyserial_h_weighted_objective_unchecked(
+    const Eigen::Ref<const Eigen::VectorXi>& cat,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    const Eigen::Ref<const Eigen::VectorXd>& th,
+    double rho,
+    const PolychoricHScoreOptions& options) noexcept {
+  double out = 0.0;
+  for (Eigen::Index r = 0; r < cat.size(); ++r) {
+    const double p = polyserial_prob_unchecked(cat(r), u(r), rho, th);
+    const double joint = polyserial_joint_density_unchecked(
+        cat(r), u(r), 0.0, th);
+    out -= polyserial_h_weight_unchecked(joint, options) * std::log(p);
+  }
+  return out;
+}
+
+PolyserialPairHWeightedResult polyserial_h_weighted_result_unchecked(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    double rho,
+    double objective,
+    int iterations,
+    const PolyserialPairHWeightedOptions& options) {
+  PolyserialPairHWeightedResult out;
+  out.rho = rho;
+  out.objective = objective;
+  out.iterations = iterations;
+  const double width = options.rho_upper - options.rho_lower;
+  out.hit_lower = std::abs(out.rho - options.rho_lower) <= 1e-8 * width;
+  out.hit_upper = std::abs(out.rho - options.rho_upper) <= 1e-8 * width;
+  out.probabilities = Eigen::VectorXd::Zero(categories.size());
+  out.joint_densities = Eigen::VectorXd::Zero(categories.size());
+  out.ratios = Eigen::VectorXd::Zero(categories.size());
+  out.weights = Eigen::VectorXd::Ones(categories.size());
+  for (Eigen::Index r = 0; r < categories.size(); ++r) {
+    const double p = polyserial_prob_unchecked(
+        categories(r), u(r), rho, thresholds);
+    const double joint = polyserial_joint_density_unchecked(
+        categories(r), u(r), 0.0, thresholds);
+    const double ratio = kInvSqrt2Pi / joint;
+    out.probabilities(r) = p;
+    out.joint_densities(r) = joint;
+    out.ratios(r) = ratio;
+    out.weights(r) = polyserial_h_weight_unchecked(joint, options.h_score);
+  }
+  return out;
+}
+
 Eigen::MatrixXd score_gamma(const Eigen::MatrixXd& scores) {
   if (scores.rows() == 0) {
     return Eigen::MatrixXd::Zero(scores.cols(), scores.cols());
@@ -540,6 +612,69 @@ fit_polyserial_pair_rho_dpd(
   const double objective = dpd_polyserial_objective_unchecked(
       categories, u, thresholds, rho, options.alpha);
   return polyserial_dpd_result_unchecked(
+      categories, u, thresholds, rho, objective, iterations, options);
+}
+
+post_expected<PolyserialPairHWeightedResult>
+fit_polyserial_pair_rho_h_weighted(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    PolyserialPairHWeightedOptions options) {
+  auto ok = validate_polyserial_inputs(categories, u, thresholds,
+                                       "fit_polyserial_pair_rho_h_weighted");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+  if (!std::isfinite(options.rho_lower) || !std::isfinite(options.rho_upper) ||
+      !(options.rho_lower > -1.0) || !(options.rho_upper < 1.0) ||
+      !(options.rho_lower < options.rho_upper) || options.max_iter < 1 ||
+      !eval_polychoric_h_score(1.0, options.h_score).has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "fit_polyserial_pair_rho_h_weighted: invalid options"));
+  }
+  if (h_score_is_ml_like(options.h_score)) {
+    auto ml = fit_polyserial_pair_rho_ml(
+        categories, u, thresholds,
+        PolyserialPairMlOptions{.rho_lower = options.rho_lower,
+                                .rho_upper = options.rho_upper,
+                                .max_iter = options.max_iter});
+    if (!ml.has_value()) return std::unexpected(ml.error());
+    return polyserial_h_weighted_result_unchecked(
+        categories, u, thresholds, ml->rho, ml->negloglik, ml->iterations,
+        options);
+  }
+
+  double lo = options.rho_lower;
+  double hi = options.rho_upper;
+  constexpr double gr = 0.6180339887498948482;
+  double c = hi - gr * (hi - lo);
+  double d = lo + gr * (hi - lo);
+  double fc = polyserial_h_weighted_objective_unchecked(
+      categories, u, thresholds, c, options.h_score);
+  double fd = polyserial_h_weighted_objective_unchecked(
+      categories, u, thresholds, d, options.h_score);
+  int iterations = 0;
+  for (int iter = 0; iter < options.max_iter; ++iter) {
+    if (fc < fd) {
+      hi = d;
+      d = c;
+      fd = fc;
+      c = hi - gr * (hi - lo);
+      fc = polyserial_h_weighted_objective_unchecked(
+          categories, u, thresholds, c, options.h_score);
+    } else {
+      lo = c;
+      c = d;
+      fc = fd;
+      d = lo + gr * (hi - lo);
+      fd = polyserial_h_weighted_objective_unchecked(
+          categories, u, thresholds, d, options.h_score);
+    }
+    iterations = iter + 1;
+  }
+  const double rho = 0.5 * (lo + hi);
+  const double objective = polyserial_h_weighted_objective_unchecked(
+      categories, u, thresholds, rho, options.h_score);
+  return polyserial_h_weighted_result_unchecked(
       categories, u, thresholds, rho, objective, iterations, options);
 }
 
