@@ -30,7 +30,7 @@ Each parity case belongs to one of four families, one C++ `TEST_CASE` each:
 |---|---|---|
 | `ML` | `hs_3factor_cfa`, `bollen_democracy_sem`, `demo_growth_linear`, `bfi_5factor`, `mplus_ex5_1` | complete-data normal-theory ML |
 | `FIML` | `bfi_fiml` | raw-data full-information ML over genuine missingness |
-| `LS` | `hs_3factor_ls`, `hs_3factor_ls_mg_configural` | continuous ULS / GLS / WLS — single- and multi-group configural (HS by school) |
+| `LS` | `hs_3factor_ls`, `hs_3factor_ls_mg_configural`, `hs_3factor_ls_mg_metric` | continuous ULS / GLS / WLS — single- and multi-group (HS by school: configural + metric invariance) |
 | `ordinal` | `bfi_ordinal_dwls` | ordinal DWLS / WLS on integer Likert data |
 
 ## Regenerating
@@ -91,7 +91,9 @@ statistics). `WLS.V` is lavaan's weight matrix — the C++ test feeds it into
 Multi-group LS cases set `n_groups > 1` and add `group_var` / `group_labels`;
 `sample_cov`, `WLS.V`, and the robust `gamma` each become one `{block, matrix}`
 entry per group, and every fit's `n_obs_per_block` carries the per-group
-counts.
+counts. Cross-group equality (metric invariance) is expressed by bare shared
+loading labels in `model` — equated by both lavaan and magmaan, no
+`group.equal=` argument.
 
 ### ordinal family
 
@@ -146,4 +148,5 @@ raw-data ingestion sub-check is skipped.
 | `bfi_fiml` | `psychTools::bfi` | yes | psychTools, GPL-2 \| GPL-3 |
 | `hs_3factor_ls` | `lavaan::HolzingerSwineford1939` | yes | lavaan, GPL-3 |
 | `hs_3factor_ls_mg_configural` | `lavaan::HolzingerSwineford1939` | yes | lavaan, GPL-3 |
+| `hs_3factor_ls_mg_metric` | `lavaan::HolzingerSwineford1939` | yes | lavaan, GPL-3 |
 | `bfi_ordinal_dwls` | `psychTools::bfi` | yes | psychTools, GPL-2 \| GPL-3 |
