@@ -78,10 +78,12 @@ Remaining work, in suggested order:
   `estimate::pairwise_ordinal_observed_joint_composite_objective()` takes raw
   ordinal blocks with `NaN` missingness and declared level counts, fits each
   pair on its observed cases, and returns the shared composite result shape.
-- [ ] **M, after each implementation slice.** Add explicit pairwise
+- [x] **M, after each implementation slice.** Add explicit pairwise
   diagnostics fixtures: current complete all-ordinal polychoric wrappers first,
   mixed pair primitives second, complete/listwise composite-likelihood
   prototypes third, and observed-pair scenarios only after that target is fixed.
+  Initial fixture: `tests/fixtures/pairwise/0001_pairwise_diagnostics.json`
+  covers all four slices with a golden fixture test.
 - [ ] **L, follow-on inference work.** Extend pairwise influence/Gamma exposure
   to complete/listwise and missing-data all-ordinal composite-likelihood paths,
   then to mixed continuous/ordinal pairwise paths once their likelihood targets
