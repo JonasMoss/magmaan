@@ -40,6 +40,33 @@ Eigen::MatrixXd ordinal_expected_counts(const Eigen::VectorXd& th_i,
   return out;
 }
 
+double h_score_pair_objective(
+    const Eigen::MatrixXd& counts,
+    const Eigen::VectorXd& th_i,
+    const Eigen::VectorXd& th_j,
+    double rho,
+    const magmaan::data::PolychoricHScoreOptions& options) {
+  const double inf = std::numeric_limits<double>::infinity();
+  const double total = counts.sum();
+  double out = 0.0;
+  for (Eigen::Index a = 0; a < counts.rows(); ++a) {
+    const double lo_i = (a == 0) ? -inf : th_i(a - 1);
+    const double hi_i = (a + 1 == counts.rows()) ? inf : th_i(a);
+    for (Eigen::Index b = 0; b < counts.cols(); ++b) {
+      const double lo_j = (b == 0) ? -inf : th_j(b - 1);
+      const double hi_j = (b + 1 == counts.cols()) ? inf : th_j(b);
+      const double p = std::max(
+          1.4901161193847656e-8,
+          magmaan::data::ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho));
+      const double t = counts(a, b) / (total * p);
+      auto h = magmaan::data::eval_polychoric_h_score(t, options);
+      if (!h.has_value()) return std::numeric_limits<double>::quiet_NaN();
+      out += p * h->phi;
+    }
+  }
+  return out;
+}
+
 }  // namespace
 
 TEST_CASE("Polychoric h-score API evaluates predefined caps") {
@@ -575,6 +602,112 @@ TEST_CASE("Ordinal pair joint ML estimates pair-local thresholds and rho") {
   CHECK(joint->thresholds_j(0) < joint->thresholds_j(1));
   CHECK(std::isfinite(joint->negloglik));
   CHECK(joint->adjusted_counts.isApprox(counts, 0.0));
+}
+
+TEST_CASE("Ordinal pair joint h-weighted estimator preserves ML limits") {
+  using magmaan::data::PolychoricHScoreKind;
+  using magmaan::data::PolychoricHScoreOptions;
+
+  Eigen::VectorXd thi(2);
+  thi << -0.55, 0.85;
+  Eigen::VectorXd thj(2);
+  thj << -0.25, 0.65;
+  const Eigen::MatrixXd counts = ordinal_expected_counts(thi, thj, 0.42, 50000.0);
+
+  auto ml = magmaan::data::fit_ordinal_pair_joint_ml(counts);
+  auto h_ml = magmaan::data::fit_ordinal_pair_joint_h_weighted(counts);
+  auto hard_inf = magmaan::data::fit_ordinal_pair_joint_h_weighted(
+      counts, magmaan::data::OrdinalPairJointHWeightedOptions{
+                  .h_score = PolychoricHScoreOptions{
+                      .kind = PolychoricHScoreKind::WmaHardCap,
+                      .k = std::numeric_limits<double>::infinity()}});
+  REQUIRE(ml.has_value());
+  REQUIRE(h_ml.has_value());
+  REQUIRE(hard_inf.has_value());
+  CHECK(h_ml->thresholds_i.isApprox(ml->thresholds_i, 1e-12));
+  CHECK(h_ml->thresholds_j.isApprox(ml->thresholds_j, 1e-12));
+  CHECK(h_ml->rho == doctest::Approx(ml->rho));
+  CHECK(hard_inf->thresholds_i.isApprox(ml->thresholds_i, 1e-12));
+  CHECK(hard_inf->thresholds_j.isApprox(ml->thresholds_j, 1e-12));
+  CHECK(hard_inf->rho == doctest::Approx(ml->rho));
+  CHECK(h_ml->converged);
+  CHECK(hard_inf->converged);
+  CHECK(std::isfinite(h_ml->objective));
+  CHECK(h_ml->expected_counts.rows() == counts.rows());
+  CHECK(h_ml->expected_counts.cols() == counts.cols());
+  CHECK(h_ml->residual_counts.isApprox(
+      h_ml->adjusted_counts - h_ml->expected_counts, 1e-12));
+  CHECK(h_ml->pearson_residuals.allFinite());
+  CHECK(h_ml->weights.isApprox(Eigen::MatrixXd::Ones(3, 3), 1e-12));
+}
+
+TEST_CASE("Ordinal pair joint h-weighted estimator downweights contaminated cells") {
+  using magmaan::data::PolychoricHScoreKind;
+  using magmaan::data::PolychoricHScoreOptions;
+
+  Eigen::VectorXd th(2);
+  th << -0.55, 0.75;
+  const Eigen::MatrixXd clean = ordinal_expected_counts(th, th, 0.55, 5000.0);
+  Eigen::MatrixXd contaminated = clean;
+  contaminated(0, 2) += 900.0;
+
+  auto clean_ml = magmaan::data::fit_ordinal_pair_joint_ml(clean);
+  auto contaminated_ml =
+      magmaan::data::fit_ordinal_pair_joint_ml(contaminated);
+  auto robust = magmaan::data::fit_ordinal_pair_joint_h_weighted(
+      contaminated, magmaan::data::OrdinalPairJointHWeightedOptions{
+                        .h_score = PolychoricHScoreOptions{
+                            .kind = PolychoricHScoreKind::WmaHardCap,
+                            .k = 1.15}});
+  REQUIRE(clean_ml.has_value());
+  REQUIRE(contaminated_ml.has_value());
+  REQUIRE(robust.has_value());
+  CHECK(robust->thresholds_i(0) < robust->thresholds_i(1));
+  CHECK(robust->thresholds_j(0) < robust->thresholds_j(1));
+  CHECK(robust->rho > contaminated_ml->rho);
+  CHECK(std::abs(robust->rho - clean_ml->rho) <
+        std::abs(contaminated_ml->rho - clean_ml->rho));
+  CHECK(robust->weights(0, 2) < 1.0);
+  CHECK(robust->pearson_residuals(0, 2) > 0.0);
+  CHECK(robust->expected_counts.sum() ==
+        doctest::Approx(robust->adjusted_counts.sum()).epsilon(0.03));
+
+  const PolychoricHScoreOptions h_options{
+      .kind = PolychoricHScoreKind::WmaHardCap, .k = 1.15};
+  const double objective = h_score_pair_objective(
+      contaminated, robust->thresholds_i, robust->thresholds_j, robust->rho,
+      h_options);
+  CHECK(robust->objective == doctest::Approx(objective).epsilon(1e-12));
+  CHECK(objective < h_score_pair_objective(
+      contaminated, contaminated_ml->thresholds_i, contaminated_ml->thresholds_j,
+      contaminated_ml->rho, h_options));
+
+  for (Eigen::Index k = 0; k < robust->thresholds_i.size(); ++k) {
+    Eigen::VectorXd plus = robust->thresholds_i;
+    Eigen::VectorXd minus = robust->thresholds_i;
+    plus(k) += 0.02;
+    minus(k) -= 0.02;
+    CHECK(objective <= h_score_pair_objective(
+        contaminated, plus, robust->thresholds_j, robust->rho, h_options));
+    CHECK(objective <= h_score_pair_objective(
+        contaminated, minus, robust->thresholds_j, robust->rho, h_options));
+  }
+  for (Eigen::Index k = 0; k < robust->thresholds_j.size(); ++k) {
+    Eigen::VectorXd plus = robust->thresholds_j;
+    Eigen::VectorXd minus = robust->thresholds_j;
+    plus(k) += 0.02;
+    minus(k) -= 0.02;
+    CHECK(objective <= h_score_pair_objective(
+        contaminated, robust->thresholds_i, plus, robust->rho, h_options));
+    CHECK(objective <= h_score_pair_objective(
+        contaminated, robust->thresholds_i, minus, robust->rho, h_options));
+  }
+  CHECK(objective <= h_score_pair_objective(
+      contaminated, robust->thresholds_i, robust->thresholds_j,
+      robust->rho + 0.02, h_options));
+  CHECK(objective <= h_score_pair_objective(
+      contaminated, robust->thresholds_i, robust->thresholds_j,
+      robust->rho - 0.02, h_options));
 }
 
 TEST_CASE("Ordinal pair joint ML rejects empty marginal categories") {

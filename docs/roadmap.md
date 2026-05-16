@@ -142,6 +142,15 @@ golden `parTable()` fixtures.
   `WmaHardCap(k = Inf)` delegate to the existing ML rho path, preserving the
   lavaan-compatible limit; finite caps remain diagnostics/prototype machinery,
   not the default ordinal moment builder.
+- Experimental pair-local all-ordinal bivariate joint h-weighted fitting under
+  `data::fit_ordinal_pair_joint_h_weighted()`. It estimates both pair-local
+  thresholds and rho by minimizing the h-score/minimum-disparity objective,
+  reusing ordered-threshold and bounded-rho transforms. It returns pair-local
+  thresholds, rho, objective/gradient diagnostics, adjusted counts, fitted
+  probabilities, expected/residual/Pearson tables, and per-cell robust weights.
+  ML and `WmaHardCap(k = Inf)` delegate to the existing joint ML kernel; finite
+  caps are validated as experimental bivariate diagnostics, not SEM moment
+  construction or calibrated robust inference.
 - Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
   complete/listwise ordinal data, exposing pair labels, count/adjustment
   diagnostics, fitted fixed-threshold rho diagnostics, fitted expected/residual

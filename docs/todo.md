@@ -230,9 +230,13 @@ Remaining work, in suggested order:
   contaminated tables, including the `hard_cap(k = Inf)` equals ML limit.
   (`tests/unit/ordinal_test.cpp` pins the ML and hard-cap-infinity limits and
   a discordant-corner contamination case.)
-- [ ] **L.** Implement full pair-local WMA/h-score estimation with thresholds
+- [x] **L.** Implement full pair-local WMA/h-score estimation with thresholds
   and rho estimated jointly, validated against robcat/WMA or independent
   reference calculations for selected bivariate tables.
+  (`data::fit_ordinal_pair_joint_h_weighted()` estimates pair-local thresholds
+  and rho with the same predefined h-score family; unit coverage pins the ML
+  and `hard_cap(k = Inf)` limits, a contaminated discordant-corner case, and
+  an independently recomputed h-objective/local-perturbation check.)
 - [ ] **L.** Add casewise influence and sandwich/Gamma calculations for robust
   pairwise moments, including the hard-cap kink convention and scaling.
 - [ ] **M/L.** Add the first SEM integration mode: shared lavaan-style marginal
