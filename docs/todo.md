@@ -221,11 +221,15 @@ Remaining work, in suggested order:
   `wma_hard_cap`, `smooth_cap`, and `exp_cap`, with focused tests for score
   values, derivatives, and objective contributions where available.
   (`include/magmaan/data/h_score.hpp`, `tests/unit/ordinal_test.cpp`.)
-- [ ] **M.** Implement experimental fixed-threshold h-weighted rho estimation
+- [x] **M.** Implement experimental fixed-threshold h-weighted rho estimation
   for one bivariate table, returning rho, convergence status, residuals, and
   per-cell weights.
-- [ ] **S/M.** Validate fixed-threshold robustness with constructed
+  (`include/magmaan/data/pairwise_ordinal.hpp`,
+  `src/data/pairwise_ordinal.cpp`, `tests/unit/ordinal_test.cpp`.)
+- [x] **S/M.** Validate fixed-threshold robustness with constructed
   contaminated tables, including the `hard_cap(k = Inf)` equals ML limit.
+  (`tests/unit/ordinal_test.cpp` pins the ML and hard-cap-infinity limits and
+  a discordant-corner contamination case.)
 - [ ] **L.** Implement full pair-local WMA/h-score estimation with thresholds
   and rho estimated jointly, validated against robcat/WMA or independent
   reference calculations for selected bivariate tables.

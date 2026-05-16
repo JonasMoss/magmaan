@@ -134,6 +134,14 @@ golden `parTable()` fixtures.
   for ML, WMA hard cap, smooth cap, and exponential cap experiments, returning
   score values, derivatives, and objective contributions while leaving the
   default lavaan-compatible ordinal sample-stat path unchanged.
+- Experimental fixed-threshold all-ordinal bivariate h-weighted rho fitting
+  under `data::fit_ordinal_pair_rho_h_weighted()`. It keeps thresholds fixed,
+  accepts the predefined h-score options, returns rho/objective/score,
+  convergence and bound diagnostics, adjusted counts, fitted probabilities,
+  expected/residual/Pearson tables, and per-cell robust weights. ML and
+  `WmaHardCap(k = Inf)` delegate to the existing ML rho path, preserving the
+  lavaan-compatible limit; finite caps remain diagnostics/prototype machinery,
+  not the default ordinal moment builder.
 - Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
   complete/listwise ordinal data, exposing pair labels, count/adjustment
   diagnostics, fitted fixed-threshold rho diagnostics, fitted expected/residual
