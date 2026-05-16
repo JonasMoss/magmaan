@@ -51,6 +51,10 @@ struct MixedOrdinalPolyserialDpdStatsOptions {
   PolyserialPairDpdOptions polyserial;
 };
 
+struct MixedOrdinalPolyserialHWeightedStatsOptions {
+  PolyserialPairHWeightedOptions polyserial;
+};
+
 post_expected<OrdinalStats>
 ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& X);
 
@@ -63,5 +67,11 @@ mixed_ordinal_stats_polyserial_dpd_from_data(
     const std::vector<Eigen::MatrixXd>& X,
     const std::vector<std::vector<std::int32_t>>& ordered,
     MixedOrdinalPolyserialDpdStatsOptions options = {});
+
+post_expected<MixedOrdinalStats>
+mixed_ordinal_stats_polyserial_h_weighted_from_data(
+    const std::vector<Eigen::MatrixXd>& X,
+    const std::vector<std::vector<std::int32_t>>& ordered,
+    MixedOrdinalPolyserialHWeightedStatsOptions options = {});
 
 }  // namespace magmaan::data

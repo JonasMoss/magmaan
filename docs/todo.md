@@ -296,11 +296,23 @@ Remaining work, in suggested order:
   `p(x, y)^alpha`, and
   `data::mixed_ordinal_stats_polyserial_dpd_from_data()` preserves the default
   mixed marginals while swapping DPD polyserial pairs into `MixedOrdinalStats`.
+- [x] **M.** Add an experimental fixed-marginal fixed-reference h-weighted
+  polyserial path for mixed continuous/ordinal data.
+  `data::fit_polyserial_pair_rho_h_weighted()` delegates ML-like h-scores to
+  the existing ML rho kernel, attenuates low rho=0 reference joint-density
+  observations with the shared h-score family, and
+  `data::mixed_ordinal_stats_polyserial_h_weighted_from_data()` keeps the
+  default mixed marginals while swapping h-weighted polyserial pairs into
+  `MixedOrdinalStats`.
 - [ ] **M/L.** If fixed-marginal DPD polyserial is promising in simulations,
   pin it against robcat's full polyserial DPD estimator or document the
   intended difference. robcat estimates rho, continuous mean/variance, and
   thresholds jointly; magmaan's first mixed SEM path keeps lavaan-style shared
   marginals and robustifies only the polyserial association.
+- [ ] **M/L.** Decide whether the fixed-marginal fixed-reference h-weighted
+  polyserial prototype is useful enough to keep as an exposed robustness
+  option. It is a density-ratio casewise h-weighting analogue for mixed pairs,
+  not the same finite contingency-table C-estimator used for polychorics.
 
 Done when: robust polychoric alternatives are selectable, default ML fixtures
 are unchanged, diagnostics make robustness visible, and at least one robust
