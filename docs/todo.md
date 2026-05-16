@@ -11,64 +11,53 @@ Intent: add a direct pairwise likelihood/minimum-disparity path for threshold
 data, starting with ordinary polychoric replication and only then expanding to
 missing data, mixed data, and robust divergences.
 
-- [x] Define the statistical contract separately from the current
-  limited-information DWLS/WLS path: pairwise table likelihood or divergence
-  over bivariate ordinal margins, with thresholds and latent correlations as
-  the first target.
-- [x] Factor the bivariate ordinal probability, score, and table bookkeeping
-  out of the current polychoric implementation so pairwise likelihood, robust
-  polychorics, and NACOV construction share one kernel.
-- [x] Implement the smallest all-ordinal slice first: complete/listwise
-  bivariate tables, fixed lavaan-style marginal thresholds, and pairwise rho
-  estimates that reproduce current ML polychorics.
-- [x] Add an explicit all-ordinal `PairwiseOrdinalStats` wrapper over
-  `OrdinalStats` with pair diagnostics, lower-triangle pair labels,
-  adjusted-count reporting, minimum eigenvalue diagnostics, and
-  bitwise-equivalent NACOV/DWLS/WLS moment output.
-- [x] Add the first joint pairwise threshold/rho estimator at the bivariate
-  kernel level: pair-local nuisance thresholds plus rho for one complete
-  ordinal table, separate from the shared-moment `OrdinalStats` path.
-- [ ] Decide how joint pairwise threshold/rho estimation integrates with SEM
-  moments: pair-local nuisance thresholds for composite likelihood, shared
-  threshold moments, or both as separate explicit APIs.
-- [x] Define and implement the bivariate observed-pair missingness contract
-  for ordinal table kernels: `NaN` in either variable skips that pair and
-  increments `n_missing`; finite observed values must be positive integer
-  categories inside declared level ranges; all-missing pairs are hard errors.
-- [x] Add observed-pair bivariate ordinal ML wrappers for the fixed-threshold
-  rho estimator and pair-local joint threshold/rho estimator, reusing the
-  observed-pair table counts and preserving `n_obs`/`n_missing` diagnostics.
-- [ ] Define SEM-level missing-data semantics before fitting with missing
-  ordinal data: observed-pair composite likelihood may not need EM, but
-  shared-threshold/multivariate MAR handling needs a documented likelihood
-  target and scaling convention.
-- [x] Add the complete-data polyserial pair kernel as a public mixed
-  continuous/ordinal primitive, including fixed-threshold rho ML, likelihood,
-  casewise scores, and reuse by `MixedOrdinalStats`.
-- [x] Finish the first complete-data mixed pair primitives: add
-  continuous-continuous normal pair likelihood/diagnostics and public mixed
-  pair/moment ordering helpers that match current `MixedOrdinalStats` moment
-  order.
-- [ ] Decide whether normal-data pairwise likelihood is a real supported
-  estimator or only a benchmark/sanity check against complete-data ML/FIML.
-- [x] Expose complete/listwise all-ordinal casewise influence and Gamma for
-  the threshold-plus-polychoric moment vector so downstream DWLS, WLS, robust
-  SEs, and scaled tests can reuse the existing weighted-moment sandwich path
-  without recomputing sample-stat internals.
-- [ ] Extend pairwise influence/Gamma exposure to future missing-data and
-  mixed continuous/ordinal pairwise paths once their likelihood targets and
-  moment ordering are fixed.
-- [x] Extend complete-data pair diagnostics beyond labels, convergence,
-  boundary, adjusted-count, and minimum-eigenvalue fields: include fitted
-  expected tables, residual tables, zero missingness counts, and explicit
-  no-ridge/no-shrinkage repair fields.
-- [ ] Add lavaan-backed or internally cross-checked fixtures for complete
-  all-ordinal polychorics first, then mixed data, then missing-data scenarios.
+Settled decisions:
+
+- The lavaan-compatible SEM-facing ordinal path remains shared marginal
+  thresholds plus polychoric/polyserial/covariance moments consumed by
+  DWLS/WLS. `PairwiseOrdinalStats` is the diagnostic, influence, and Gamma
+  wrapper for that path; it must stay bitwise-equivalent to `OrdinalStats`
+  where the moment outputs overlap.
+- Joint bivariate threshold/rho ML is a pair-local primitive for diagnostics,
+  robust-pair experiments, and future composite likelihood. It does not feed
+  the current shared-threshold SEM moment vector because pair-local thresholds
+  would duplicate each variable's nuisance parameters across pairs.
+- Missing ordinal pair wrappers use observed-pair counts only. SEM-level
+  missing ordinal estimation is not supported until a likelihood target and
+  scaling convention are explicit. The first missing-data target should be an
+  observed-pair composite-likelihood path, not an implicit MAR/FIML claim.
+- Continuous normal pair likelihood is a mixed-pair primitive and
+  benchmark/sanity check against complete-data ML/FIML, not a supported
+  standalone SEM estimator.
+
+Remaining work:
+
+- [ ] Design the first SEM-level pairwise composite-likelihood API as a
+  separate estimator from lavaan-compatible `OrdinalStats`/DWLS. Use pair-local
+  nuisance thresholds and pairwise latent correlations initially; document
+  objective scaling, per-pair sample-size weighting, parameter mapping to
+  SEM-implied bivariate margins, boundary diagnostics, and the reported
+  chi-square/df convention before exposing it through R.
+- [ ] Add an observed-pair all-ordinal prototype behind that composite
+  likelihood API. Preserve per-pair `n_obs`/`n_missing`, reject all-missing
+  pairs and empty marginal categories, and keep the documentation clear that
+  this is pairwise observed-data likelihood rather than multivariate MAR
+  ordinal FIML.
+- [ ] Keep shared-threshold multivariate missing ordinal modeling out of this
+  pairwise milestone. If that model is reopened later, require a separate
+  design note covering the likelihood target, threshold sharing rules, and
+  scaling before implementation.
+- [ ] Extend pairwise influence/Gamma exposure to the missing-data all-ordinal
+  composite-likelihood path, then to mixed continuous/ordinal pairwise paths
+  once their likelihood targets and moment ordering are fixed.
+- [ ] Add explicit pairwise diagnostics fixtures: complete all-ordinal
+  polychoric wrappers first, mixed pair primitives second, and observed-pair
+  missing-data scenarios only after the SEM-level target is fixed.
 
 Done when: the pairwise path reproduces existing ML polychorics in its default
-slice, has explicit missing-data semantics, and returns a moment/Gamma bundle
-that downstream ordinal DWLS/WLS code can consume without special SEM-side
-logic.
+slice, has an explicit composite-likelihood API for pair-local SEM work, and
+documents missing-data semantics without implying unsupported multivariate
+ordinal FIML behavior.
 
 ## 1. Validation and lavaan comparison
 
