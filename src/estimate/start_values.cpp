@@ -50,9 +50,16 @@ simple_start_values(const spec::LatentStructure& pt,
   // marker-world 0.7. Built once up front by a single sweep over the rows.
   std::vector<std::vector<bool>> lv_var_fixed(rep.dims.size());
   std::vector<std::vector<std::int16_t>> phantom_ov_for_lv(rep.dims.size());
+  // Marker indicator per latent: the observed row whose loading on that latent
+  // is fixed to 1 via a user `=~` marker. Markers are partable rows, so this
+  // is read from `cell_for_row` (not `structural_cells`, which holds only
+  // synthesized fixed cells). Used to sign and scale that latent's free
+  // loadings.
+  std::vector<std::vector<std::int16_t>> marker_for_lv(rep.dims.size());
   for (std::size_t b = 0; b < rep.dims.size(); ++b) {
     lv_var_fixed[b].assign(static_cast<std::size_t>(rep.dims[b].n_latent), false);
     phantom_ov_for_lv[b].assign(static_cast<std::size_t>(rep.dims[b].n_latent), -1);
+    marker_for_lv[b].assign(static_cast<std::size_t>(rep.dims[b].n_latent), -1);
   }
   for (const auto& sc : rep.structural_cells) {
     if (sc.mat != model::MatId::Lambda || sc.value != 1.0) continue;
@@ -65,12 +72,21 @@ simple_start_values(const spec::LatentStructure& pt,
   }
   for (std::size_t i = 0; i < pt.size(); ++i) {
     const auto& c = rep.cell_for_row[i];
-    if (!c.used || c.mat != model::MatId::Psi || c.row != c.col) continue;
-    if (pt.free[i] != 0) continue;  // variance is estimated → not the std.lv case
+    if (!c.used || pt.free[i] != 0) continue;  // estimated → neither fact holds
     const std::size_t b = static_cast<std::size_t>(c.block);
-    if (b < lv_var_fixed.size() &&
+    // std.lv: a fixed latent variance.
+    if (c.mat == model::MatId::Psi && c.row == c.col &&
+        b < lv_var_fixed.size() &&
         static_cast<std::size_t>(c.col) < lv_var_fixed[b].size()) {
       lv_var_fixed[b][static_cast<std::size_t>(c.col)] = true;
+    }
+    // marker: a loading fixed to 1.
+    if (c.mat == model::MatId::Lambda &&
+        !std::isnan(pt.fixed_value[i]) &&
+        std::abs(pt.fixed_value[i] - 1.0) < 1e-12 &&
+        b < marker_for_lv.size() &&
+        static_cast<std::size_t>(c.col) < marker_for_lv[b].size()) {
+      marker_for_lv[b][static_cast<std::size_t>(c.col)] = c.row;
     }
   }
 
@@ -101,18 +117,33 @@ simple_start_values(const spec::LatentStructure& pt,
 
     switch (c.mat) {
       case model::MatId::Lambda: {
-        // Marker-world default: 0.7. Under std.lv (LV variance fixed), scale
-        // from the indicator's own variance — λ ≈ √(½·Var(indicator)) — so
-        // a unit-variance latent reproduces ~half of each indicator's spread.
+        // Under std.lv (LV variance fixed), scale from the indicator's own
+        // variance — λ ≈ √(½·Var(indicator)) — so a unit-variance latent
+        // reproduces ~half of each indicator's spread. Otherwise (marker
+        // world) use the default magnitude 0.7, signed by the indicator's
+        // covariance with the factor's marker: reverse-keyed indicators then
+        // start in the correct orthant, where a flat +0.7 stranded them in
+        // the wrong one and could stall the optimizer (see
+        // docs/convergence_diagnostics.md). The magnitude stays 0.7, so
+        // equality-constrained loadings of the same sign keep a consistent
+        // start.
         const bool lv_fixed =
             b < lv_var_fixed.size() &&
             static_cast<std::size_t>(c.col) < lv_var_fixed[b].size() &&
             lv_var_fixed[b][static_cast<std::size_t>(c.col)];
         if (lv_fixed && c.row < S.rows() && S(c.row, c.row) > 0.0) {
           start(k) = std::sqrt(0.5 * S(c.row, c.row));
-        } else {
-          start(k) = 0.7;
+          break;
         }
+        const std::int16_t marker =
+            (b < marker_for_lv.size() &&
+             static_cast<std::size_t>(c.col) < marker_for_lv[b].size())
+                ? marker_for_lv[b][static_cast<std::size_t>(c.col)]
+                : static_cast<std::int16_t>(-1);
+        const bool reverse_keyed =
+            marker >= 0 && marker < S.rows() && c.row < S.rows() &&
+            S(c.row, marker) < 0.0;
+        start(k) = reverse_keyed ? -0.7 : 0.7;
         break;
       }
       case model::MatId::Theta:

@@ -5,6 +5,7 @@ source:
   url: https://www.statmodel.com/usersguide/chap5/ex5.1.html
 license_or_terms: generated User's Guide example data; audit terms before committing raw or cleaned data
 estimator: ML
-status: candidate
+status: active
 data_policy: fetch into ignored local cache with benchmarks/r/fetch_data.R
-reference_engine: lavaan and Mplus output after terms are pinned
+reference_engine: lavaan
+notes: raw ex5.1.dat cached and prepared (500 obs, y1-y6); lavaan reference generated and magmaan ML matches it.

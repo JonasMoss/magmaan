@@ -30,12 +30,12 @@
 
 - id: bfi_5factor
   tier: 1
-  status: dormant
+  status: active
   source: psychTools::bfi
   estimator: ML initially, DWLS later
   data_path: item data with missingness and ordinal responses
   model_type: 5-factor personality CFA
-  current_use: source scaffold until psychTools and missing/ordinal policy are pinned
+  current_use: continuous-ML listwise stress case; lavaan reference generated, magmaan ML does not yet converge
 
 - id: openmx_mimic
   tier: 1
@@ -75,9 +75,9 @@
 
 - id: mplus_ex5_1
   tier: 1
-  status: candidate
+  status: active
   source: Mplus User's Guide ex5.1
   estimator: ML
   data_path: external dat
   model_type: 2-factor CFA
-  current_use: generated-data exactness fixture after source audit
+  current_use: continuous two-factor CFA; magmaan matches the lavaan reference

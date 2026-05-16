@@ -12,7 +12,12 @@ variables:
   - N1-N5
   - O1-O5
 estimator: ML initially; DWLS later
-status: dormant
+status: active
 data_policy: generated into ignored local cache when psychTools is installed
-reference_engine: lavaan later
-notes: Treating these ordinal-ish items as continuous is a stress benchmark, not a substantive model claim.
+reference_engine: lavaan
+notes: >-
+  Treating these ordinal-ish items as continuous is a stress benchmark, not a
+  substantive model claim. psychTools is installed; data prepared listwise
+  (2436 complete cases) and a continuous-ML lavaan reference is generated.
+  magmaan ML does not yet converge on this 25-indicator model (L-BFGS hits the
+  iteration cap), so the case currently fails the magmaan side of the smoke.

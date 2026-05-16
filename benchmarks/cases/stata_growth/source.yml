@@ -8,3 +8,8 @@ estimator: ML
 status: candidate
 data_policy: fetch into ignored local cache with benchmarks/r/fetch_data.R
 reference_engine: lavaan or Stata after syntax is pinned
+notes: >-
+  raw sem_lcm.dta cached and prepared (359 obs of lncrime0-lncrime3, real raw
+  data). model.lav is still a placeholder: the latent-curve syntax must be
+  pinned from the Stata SEM Reference Manual. magmaan also has no growth()
+  equivalent yet (see demo_growth_linear), so activation is blocked on both.

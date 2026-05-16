@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
 #include <optional>
 #include <span>
 #include <sstream>
@@ -25,6 +26,7 @@
 #include <Eigen/Core>
 #include <nlohmann/json.hpp>
 
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/error.hpp"
 #include "magmaan/parse/expr_format.hpp"
 #include "magmaan/parse/flat_partable.hpp"
@@ -217,6 +219,44 @@ inline std::optional<std::string> read_fixture(const std::string& path) {
   std::stringstream ss;
   ss << in.rdbuf();
   return ss.str();
+}
+
+// Load a `raw: [{X:[[...]], mask?:[[...]]}]` JSON grid into data::RawData.
+// One object per block; `X` is row-major (n_b × p_b). `mask` is optional:
+// when every block omits it, RawData::mask is left empty, which is what
+// data::sample_stats_from_raw() requires for complete data. A null `X` entry
+// becomes NaN. Shared by the FIML and lavaan-parity golden tests.
+inline magmaan::data::RawData raw_from_fixture(const nlohmann::json& exp) {
+  magmaan::data::RawData raw;
+  const auto& blocks = exp["raw"];
+  raw.X.reserve(blocks.size());
+  for (const auto& block : blocks) {
+    const auto& Xj = block["X"];
+    const Eigen::Index n = static_cast<Eigen::Index>(Xj.size());
+    const Eigen::Index p = n > 0 ? static_cast<Eigen::Index>(Xj[0].size()) : 0;
+    const bool has_mask = block.contains("mask") && !block["mask"].is_null();
+
+    Eigen::MatrixXd X(n, p);
+    Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M;
+    if (has_mask) M.resize(n, p);
+    for (Eigen::Index r = 0; r < n; ++r) {
+      for (Eigen::Index c = 0; c < p; ++c) {
+        const auto& x = Xj[static_cast<std::size_t>(r)]
+                          [static_cast<std::size_t>(c)];
+        X(r, c) = x.is_null() ? std::numeric_limits<double>::quiet_NaN()
+                              : x.get<double>();
+        if (has_mask)
+          M(r, c) = static_cast<std::uint8_t>(
+              block["mask"][static_cast<std::size_t>(r)]
+                           [static_cast<std::size_t>(c)].get<int>());
+      }
+    }
+    raw.X.push_back(std::move(X));
+    if (has_mask) raw.mask.push_back(std::move(M));
+  }
+  // Either every block carries a mask or none do; a partial set is malformed.
+  if (raw.mask.size() != raw.X.size()) raw.mask.clear();
+  return raw;
 }
 
 // Read a fixture's `gamma_hat` field as one block-diagonal Eigen::MatrixXd of
