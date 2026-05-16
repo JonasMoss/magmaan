@@ -81,6 +81,7 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/ls_path_test.cpp
   unit/constraints_test.cpp
   unit/lin_constraints_test.cpp
+  unit/property_test.cpp
   unit/raw_data_test.cpp
   golden/fit_theta_golden_test.cpp
   golden/ls_golden_test.cpp

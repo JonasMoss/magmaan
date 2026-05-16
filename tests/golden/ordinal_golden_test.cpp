@@ -35,6 +35,7 @@ const std::vector<std::string> kOrdinalFixtures = {
     "0008_mixed_levels_cfa",
     "0009_sparse_binary_pair",
     "0010_near_perfect_pair",
+    "0011_sixcat_threshold_heavy_cfa",
 };
 
 const std::vector<std::string> kMixedOrdinalFixtures = {

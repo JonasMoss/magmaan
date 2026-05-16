@@ -52,11 +52,16 @@ Remaining work, in suggested order:
   optional SEs, robust tests, fit measures, defined parameters, and nested
   tests. Include public fixed.x and missing-data boundaries where users are
   likely to hit them.
-- [ ] **M.** Expand property tests around Jacobians, moment-vector ordering,
+- [x] **M.** Expand property tests around Jacobians, moment-vector ordering,
   block stacking, equality constraints, and group weighting.
-- [ ] **M.** Add ordinal/mixed boundary fixtures: threshold-heavy sparse or
-  near-empty categories, complete/listwise mixed categorical sample stats, and
-  explicit empty-category hard errors.
+  (`tests/unit/property_test.cpp` — structural invariants independent of any
+  one lavaan fixture.)
+- [ ] **M.** Add ordinal/mixed boundary fixtures. A threshold-heavy 6-category
+  case is in (`0011_sixcat_threshold_heavy_cfa`, 20 thresholds); near-empty
+  categories (`0005`) and empty-category hard errors (ordinal_test.cpp) are
+  already covered. Remaining: a lavaan-backed complete/listwise mixed
+  categorical case — blocked on the mixed NACOV/weight path, which currently
+  drifts past the documented loose tolerance for a sparse 4-category indicator.
 - [ ] **M/L.** Add multi-group LS weighting and equality-constraint cases
   across continuous and ordinal estimators, plus mean-structure LS cases that
   exercise Ceres and SNLLS where semantically appropriate.
@@ -64,10 +69,20 @@ Remaining work, in suggested order:
   line-search salvage (`docs/convergence_diagnostics.md`) unblocked
   mean-structure ML convergence on the unbounded path; confirm the bounded
   optimizer also fits these models before relying on it there.
-- [ ] **M.** Extend the lavaan-parity golden layer
-  (`tests/golden/lavaan_parity_golden_test.cpp`): add a FIML real-data case
-  (raw data is now committed, so the path is enabled) and broaden beyond
-  complete-data ML to ULS/GLS/WLS and ordinal DWLS/WLS real-data cases.
+- [x] **M.** Extend the lavaan-parity golden layer
+  (`tests/golden/lavaan_parity_golden_test.cpp`): four estimator-family
+  `TEST_CASE`s now gate real data — ML, FIML (`bfi_fiml`, raw bfi with genuine
+  missingness), continuous LS (`hs_3factor_ls`, ULS/GLS/WLS), and ordinal
+  DWLS/WLS (`bfi_ordinal_dwls`). Each gates every quantity lavaan exposes that
+  magmaan produces; see the per-family "not gated" table in
+  `tests/fixtures/parity/README.md`. Shared lavaan→JSON regen helpers were
+  factored into `benchmarks/r/fixture_json.R`.
+- [ ] **S/M.** Deepen the parity layer's non-ML coverage. `bfi_fiml` is a
+  2-factor 10-item model — add a full 5-factor bfi FIML case once convergence
+  on the wider model is confirmed. The parity test also leaves FIML/LS
+  standard SEs and LS/ordinal CFI/TLI/RMSEA/SRMR ungated, because magmaan has
+  no standard-SE path for FIML/LS and no LS/ordinal fit-measure path; extend
+  the gate as those post-fit surfaces land.
 - [ ] **M/L.** Bring `demo_growth_linear` to lavaan parity. magmaan has no
   `growth()` equivalent, so its free set does not align with lavaan's
   (`magmaan_aligned = false` in the fixture); the case is committed as a soft
