@@ -284,6 +284,12 @@ Remaining work, in suggested order:
   weight `h(t_k)/t_k`; the bread is analytic from bivariate rectangle
   probability Hessians rather than finite differences. The SEM Option A
   ordinal Gamma path uses the same `h'(t)` rho linearization.
+- [x] **S/M.** Add non-CI simulation sanity checks for the robust all-ordinal
+  Gamma path. `checks/robust_polychoric/` has its own local `justfile` and
+  standalone C++ driver for pair-local robust polychorics, HS-style ordinal
+  moment Gamma, and HS-style ordinal CFA robust vcov checks; generated
+  binaries/results stay ignored and are not wired into the root package
+  workflow.
 
 Done when: robust polychoric alternatives are selectable, default ML fixtures
 are unchanged, diagnostics make robustness visible, and at least one robust
