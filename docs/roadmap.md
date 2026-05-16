@@ -265,7 +265,9 @@ adapters layered on top.
   are hardened.
 - Observed-pair ordinal table kernels are pair-level primitives only. Missing
   ordinal SEM estimation remains unsupported until an explicit composite
-  likelihood or shared-threshold multivariate target is documented.
+  likelihood target is documented. Shared-threshold multivariate missing
+  ordinal modeling is outside the pairwise milestone and requires a separate
+  design note before implementation.
 - Browne residual ADF is complete-data only.
 - Score-test EPC is raw, unstandardized EPC only; standardized EPC and absent
   row-generation helpers are not yet part of the public contract.
