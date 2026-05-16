@@ -3,12 +3,14 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
@@ -1072,22 +1074,37 @@ browne_residual_nt(spec::LatentStructure        pt,
   const Eigen::VectorXd b_vec = Delta.transpose() * u;
   const Eigen::MatrixXd A_sym = 0.5 * (A + A.transpose());
 
+  // term2 = b'A⁻¹b projects the discrepancy onto the model tangent space.
+  // A_sym = Δ'Γ⁻¹Δ is a Gram matrix in the Γ⁻¹ metric (symmetric PSD), and
+  // b_vec = Δ'u lies in range(A_sym) by construction — Γ⁻¹ has full rank, so
+  // range(A_sym) = range(Δ'). LLT is the fast path for the well-conditioned
+  // identified case. A just-identified or fixed-x model can leave A_sym with
+  // an eigenvalue at the rounding floor; -O3/-march FP reassociation then
+  // tips it slightly indefinite and LLT rejects it. Fall back to a
+  // self-adjoint eigendecomposition and a range-restricted (Moore-Penrose)
+  // solve: identical to A⁻¹ at full rank, and well-defined when A_sym is
+  // numerically singular since b_vec carries no weight in the null space.
+  double term2 = 0.0;
   Eigen::LLT<Eigen::MatrixXd> llt_A(A_sym);
-  Eigen::VectorXd Ainv_b;
   if (llt_A.info() == Eigen::Success) {
-    Ainv_b = llt_A.solve(b_vec);
+    term2 = b_vec.dot(llt_A.solve(b_vec));
   } else {
-    Eigen::LDLT<Eigen::MatrixXd> ldlt_A(A_sym);
-    if (ldlt_A.info() != Eigen::Success) {
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(A_sym);
+    if (es.info() != Eigen::Success) {
       return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
-          "browne_residual_nt: Δ'Γ⁻¹Δ is singular — model under-identified "
-          "or Δ rank-deficient"));
+          "browne_residual_nt: Δ'Γ⁻¹Δ eigendecomposition failed"));
     }
-    Ainv_b = ldlt_A.solve(b_vec);
+    const Eigen::VectorXd& lambda = es.eigenvalues();
+    const double tol = static_cast<double>(A_sym.rows()) *
+                       std::numeric_limits<double>::epsilon() *
+                       std::max(lambda.cwiseAbs().maxCoeff(), 1.0);
+    const Eigen::VectorXd c = es.eigenvectors().transpose() * b_vec;
+    for (Eigen::Index k = 0; k < lambda.size(); ++k) {
+      if (lambda(k) > tol) term2 += (c(k) * c(k)) / lambda(k);
+    }
   }
 
   const double term1 = res.dot(u);
-  const double term2 = b_vec.dot(Ainv_b);
   return N_total * (term1 - term2);
 }
 
