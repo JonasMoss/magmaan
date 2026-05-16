@@ -158,7 +158,17 @@ golden `parTable()` fixtures.
   influence rows, score Gamma, and sandwich Gamma with `S'S / n` scaling. The
   WMA hard-cap derivative convention is pinned as `dh(t) = 1[t < k]`, so the
   exact kink uses derivative zero. This is the robust pairwise Gamma primitive;
-  SEM moment integration remains a follow-on step.
+  the stats-builder integration is the separate Option A path below.
+- Experimental all-ordinal SEM integration Option A under
+  `data::pairwise_ordinal_stats_h_weighted_from_integer_data()`. It preserves
+  lavaan-style shared marginal thresholds and metadata, replaces the
+  polychoric correlation block with fixed-threshold h-weighted rhos, rebuilds
+  casewise moment influence/Gamma from marginal-threshold influence plus
+  robust rho influence, and refreshes DWLS/WLS weights. The result is an
+  ordinary `OrdinalStats`/`PairwiseOrdinalStats` payload consumable by the
+  existing ordinal LS fitting and robust reporting surfaces. This remains
+  experimental and separate from the default lavaan-compatible
+  `ordinal_stats_from_integer_data()` path.
 - Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
   complete/listwise ordinal data, exposing pair labels, count/adjustment
   diagnostics, fitted fixed-threshold rho diagnostics, fitted expected/residual

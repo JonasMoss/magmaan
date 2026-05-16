@@ -123,6 +123,11 @@ struct OrdinalPairHWeightedInfluence {
   Eigen::MatrixXd gamma;
 };
 
+struct PairwiseOrdinalHWeightedStatsOptions {
+  OrdinalPairHWeightedOptions rho;
+  double influence_fd_step = 1e-5;
+};
+
 struct OrdinalPairObservedTable {
   Eigen::MatrixXd counts;
   std::int64_t n_obs = 0;
@@ -161,7 +166,11 @@ struct OrdinalPairDiagnostics {
   OrdinalPairLabel label;
   double rho = 0.0;
   double negloglik = 0.0;
+  double objective = 0.0;
+  double score = 0.0;
   int    iterations = 0;
+  bool   h_weighted = false;
+  bool   converged = true;
   bool   hit_lower = false;
   bool   hit_upper = false;
   std::int64_t n_obs = 0;
@@ -174,6 +183,8 @@ struct OrdinalPairDiagnostics {
   Eigen::MatrixXd adjusted_counts;
   Eigen::MatrixXd expected_counts;
   Eigen::MatrixXd residual_counts;
+  Eigen::MatrixXd pearson_residuals;
+  Eigen::MatrixXd weights;
 };
 
 struct PairwiseOrdinalBlockDiagnostics {
@@ -271,5 +282,10 @@ ordinal_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& x_i,
 
 post_expected<PairwiseOrdinalStats>
 pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& X);
+
+post_expected<PairwiseOrdinalStats>
+pairwise_ordinal_stats_h_weighted_from_integer_data(
+    const std::vector<Eigen::MatrixXd>& X,
+    PairwiseOrdinalHWeightedStatsOptions options = {});
 
 }  // namespace magmaan::data

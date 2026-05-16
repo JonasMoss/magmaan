@@ -101,6 +101,28 @@ Eigen::MatrixXd ordinal_pair_score_rows_from_counts(
   return out;
 }
 
+Eigen::MatrixXd ordinal_data_from_pair_counts(const Eigen::MatrixXd& counts) {
+  Eigen::Index n = 0;
+  for (Eigen::Index a = 0; a < counts.rows(); ++a) {
+    for (Eigen::Index b = 0; b < counts.cols(); ++b) {
+      n += static_cast<Eigen::Index>(std::llround(counts(a, b)));
+    }
+  }
+  Eigen::MatrixXd out(n, 2);
+  Eigen::Index row = 0;
+  for (Eigen::Index a = 0; a < counts.rows(); ++a) {
+    for (Eigen::Index b = 0; b < counts.cols(); ++b) {
+      const auto reps = static_cast<Eigen::Index>(std::llround(counts(a, b)));
+      for (Eigen::Index k = 0; k < reps; ++k) {
+        out(row, 0) = static_cast<double>(a + 1);
+        out(row, 1) = static_cast<double>(b + 1);
+        ++row;
+      }
+    }
+  }
+  return out;
+}
+
 }  // namespace
 
 TEST_CASE("Polychoric h-score API evaluates predefined caps") {
@@ -977,6 +999,115 @@ TEST_CASE("Pairwise ordinal stats diagnostics report lavaan 2x2 adjustment") {
   CHECK_FALSE(pd.shrinkage_applied);
   CHECK(std::isfinite(pd.rho));
   CHECK(std::isfinite(pairwise->block_diagnostics[0].min_eigen_r));
+}
+
+TEST_CASE("Pairwise ordinal h-weighted stats preserve shared-threshold ML limit") {
+  Eigen::MatrixXd X(24, 3);
+  Eigen::Index r = 0;
+  for (int rep = 0; rep < 4; ++rep) {
+    for (int c = 1; c <= 3; ++c) {
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((c + rep) % 3);
+      X(r, 2) = 1 + ((2 * c + rep) % 3);
+      ++r;
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((2 * c + rep) % 3);
+      X(r, 2) = 1 + ((c + rep) % 3);
+      ++r;
+    }
+  }
+
+  auto base = magmaan::data::pairwise_ordinal_stats_from_integer_data({X});
+  auto robust =
+      magmaan::data::pairwise_ordinal_stats_h_weighted_from_integer_data({X});
+  REQUIRE(base.has_value());
+  REQUIRE(robust.has_value());
+  CHECK(robust->stats.thresholds[0].isApprox(base->stats.thresholds[0], 0.0));
+  CHECK(robust->stats.R[0].isApprox(base->stats.R[0], 1e-7));
+  CHECK(robust->stats.NACOV[0].rows() == base->stats.NACOV[0].rows());
+  CHECK(robust->stats.NACOV[0].cols() == base->stats.NACOV[0].cols());
+  CHECK(robust->stats.NACOV[0].allFinite());
+  CHECK(robust->stats.W_dwls[0].diagonal().minCoeff() > 0.0);
+  CHECK(robust->block_diagnostics[0].gamma.isApprox(
+      (robust->block_diagnostics[0].moment_influence.transpose() *
+       robust->block_diagnostics[0].moment_influence) /
+          static_cast<double>(robust->stats.n_obs[0]),
+      1e-12));
+  for (const auto& pd : robust->block_diagnostics[0].pair_diagnostics) {
+    CHECK(pd.h_weighted);
+    CHECK(pd.converged);
+    CHECK(pd.weights.rows() == pd.counts.rows());
+    CHECK(pd.weights.cols() == pd.counts.cols());
+  }
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::lavaanify(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto fit = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, robust->stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(fit.has_value());
+  CHECK(std::isfinite(fit->fmin));
+}
+
+TEST_CASE("Pairwise ordinal h-weighted stats replace rhos and robust Gamma") {
+  using magmaan::data::PolychoricHScoreKind;
+  using magmaan::data::PolychoricHScoreOptions;
+
+  Eigen::MatrixXd counts(3, 3);
+  counts << 594.0, 365.0, 858.0,
+            453.0, 715.0, 372.0,
+            311.0, 614.0, 718.0;
+  const Eigen::MatrixXd X = ordinal_data_from_pair_counts(counts);
+  auto base = magmaan::data::pairwise_ordinal_stats_from_integer_data({X});
+  REQUIRE(base.has_value());
+
+  magmaan::data::PairwiseOrdinalHWeightedStatsOptions options;
+  options.rho.h_score = PolychoricHScoreOptions{
+      .kind = PolychoricHScoreKind::WmaHardCap,
+      .k = 1.15};
+  auto robust = magmaan::data::pairwise_ordinal_stats_h_weighted_from_integer_data(
+      {X}, options);
+  REQUIRE(robust.has_value());
+
+  const Eigen::VectorXd th0 =
+      base->stats.thresholds[0].segment(0, 2);
+  const Eigen::VectorXd th1 =
+      base->stats.thresholds[0].segment(2, 2);
+  auto direct = magmaan::data::fit_ordinal_pair_rho_h_weighted(
+      counts.transpose(), th1, th0,
+      magmaan::data::OrdinalPairHWeightedOptions{
+          .h_score = options.rho.h_score});
+  REQUIRE(direct.has_value());
+
+  CHECK(robust->stats.thresholds[0].isApprox(base->stats.thresholds[0], 0.0));
+  CHECK(robust->stats.R[0](1, 0) == doctest::Approx(direct->rho));
+  CHECK(std::abs(robust->stats.R[0](1, 0) - base->stats.R[0](1, 0)) > 1e-4);
+  CHECK(robust->stats.NACOV[0].isApprox(
+      (robust->block_diagnostics[0].moment_influence.transpose() *
+       robust->block_diagnostics[0].moment_influence) /
+          static_cast<double>(robust->stats.n_obs[0]),
+      1e-12));
+  CHECK_FALSE(robust->stats.NACOV[0].isApprox(base->stats.NACOV[0], 1e-6));
+  CHECK(robust->stats.W_dwls[0].diagonal().minCoeff() > 0.0);
+  REQUIRE(robust->block_diagnostics[0].pair_diagnostics.size() == 1);
+  const auto& pd = robust->block_diagnostics[0].pair_diagnostics[0];
+  CHECK(pd.h_weighted);
+  CHECK(pd.converged);
+  CHECK(pd.objective == doctest::Approx(direct->objective));
+  CHECK(pd.weights.isApprox(direct->weights, 1e-12));
+  CHECK(pd.weights(2, 0) < 1.0);
+  CHECK(pd.expected_counts.isApprox(direct->expected_counts, 1e-12));
 }
 
 TEST_CASE("Pairwise ordinal composite objective uses pair diagnostics and explicit scaling") {
