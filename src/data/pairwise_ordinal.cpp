@@ -349,6 +349,48 @@ double decode_rho(double z, double lower, double upper) noexcept {
   return mid + half * std::tanh(z);
 }
 
+double joint_h_weighted_gradient_inf_unchecked(
+    const Eigen::Ref<const Eigen::MatrixXd>& counts,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+    double rho,
+    double rho_lower,
+    double rho_upper,
+    double min_threshold_spacing,
+    double fd_step,
+    const PolychoricHScoreOptions& h_options) {
+  const Eigen::Index n_th_i = thresholds_i.size();
+  const Eigen::Index n_th_j = thresholds_j.size();
+  const Eigen::Index npar = n_th_i + n_th_j + 1;
+  Eigen::VectorXd x(npar);
+  encode_thresholds(thresholds_i, min_threshold_spacing, x, 0);
+  encode_thresholds(thresholds_j, min_threshold_spacing, x, n_th_i);
+  x(npar - 1) = encode_rho(rho, rho_lower, rho_upper);
+
+  auto objective_value = [&](const Eigen::VectorXd& z) {
+    const Eigen::VectorXd th_i = decode_thresholds(
+        z, 0, n_th_i, min_threshold_spacing);
+    const Eigen::VectorXd th_j = decode_thresholds(
+        z, n_th_i, n_th_j, min_threshold_spacing);
+    const double r = decode_rho(z(npar - 1), rho_lower, rho_upper);
+    return h_weighted_objective_unchecked(counts, th_i, th_j, r, h_options);
+  };
+
+  Eigen::VectorXd grad(npar);
+  for (Eigen::Index k = 0; k < npar; ++k) {
+    const double h = fd_step * std::max(1.0, std::abs(x(k)));
+    Eigen::VectorXd xp = x;
+    Eigen::VectorXd xm = x;
+    xp(k) += h;
+    xm(k) -= h;
+    const double fp = objective_value(xp);
+    const double fm = objective_value(xm);
+    grad(k) = (fp - fm) / (2.0 * h);
+  }
+  if (!grad.allFinite()) return std::numeric_limits<double>::infinity();
+  return grad.lpNorm<Eigen::Infinity>();
+}
+
 }  // namespace
 
 post_expected<Eigen::MatrixXd>
@@ -742,6 +784,209 @@ fit_ordinal_pair_joint_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
   out.hit_upper = std::abs(out.rho - options.rho_upper) <= 1e-8 * width;
   out.adjusted_counts = std::move(adjusted);
   return out;
+}
+
+post_expected<OrdinalPairJointHWeightedResult>
+fit_ordinal_pair_joint_h_weighted(
+    const Eigen::Ref<const Eigen::MatrixXd>& counts,
+    OrdinalPairJointHWeightedOptions options) {
+  if (counts.rows() < 2 || counts.cols() < 2 || !counts.allFinite() ||
+      (counts.array() < 0.0).any() || counts.sum() <= 0.0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "fit_ordinal_pair_joint_h_weighted: counts must be a finite nonnegative table with positive total"));
+  }
+  if (!std::isfinite(options.rho_lower) || !std::isfinite(options.rho_upper) ||
+      !(options.rho_lower > -1.0) || !(options.rho_upper < 1.0) ||
+      !(options.rho_lower < options.rho_upper) || options.max_iter < 1 ||
+      !(std::isfinite(options.ftol) && options.ftol > 0.0) ||
+      !(std::isfinite(options.gtol) && options.gtol > 0.0) ||
+      !(std::isfinite(options.fd_step) && options.fd_step > 0.0) ||
+      !(std::isfinite(options.min_threshold_spacing) &&
+        options.min_threshold_spacing > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "fit_ordinal_pair_joint_h_weighted: invalid options"));
+  }
+  auto h_ok = eval_polychoric_h_score(1.0, options.h_score);
+  if (!h_ok.has_value()) return std::unexpected(h_ok.error());
+
+  if (h_score_is_ml_like(options.h_score)) {
+    auto ml = fit_ordinal_pair_joint_ml(
+        counts, OrdinalPairJointMlOptions{
+            .rho_lower = options.rho_lower,
+            .rho_upper = options.rho_upper,
+            .max_iter = options.max_iter,
+            .ftol = options.ftol,
+            .gtol = options.gtol,
+            .fd_step = options.fd_step,
+            .min_threshold_spacing = options.min_threshold_spacing,
+            .lavaan_adjust_2x2 = options.lavaan_adjust_2x2});
+    if (!ml.has_value()) return std::unexpected(ml.error());
+    auto diag = h_weighted_result(ml->adjusted_counts, ml->thresholds_i,
+                                  ml->thresholds_j, ml->rho, options.h_score);
+    if (!diag.has_value()) return std::unexpected(diag.error());
+    const double gradient_inf = joint_h_weighted_gradient_inf_unchecked(
+        diag->adjusted_counts, ml->thresholds_i, ml->thresholds_j, ml->rho,
+        options.rho_lower, options.rho_upper, options.min_threshold_spacing,
+        options.fd_step, options.h_score);
+    return OrdinalPairJointHWeightedResult{
+        .thresholds_i = std::move(ml->thresholds_i),
+        .thresholds_j = std::move(ml->thresholds_j),
+        .rho = ml->rho,
+        .objective = diag->objective,
+        .gradient_inf = gradient_inf,
+        .iterations = ml->iterations,
+        .converged = true,
+        .hit_lower = ml->hit_lower,
+        .hit_upper = ml->hit_upper,
+        .adjusted_counts = std::move(diag->adjusted_counts),
+        .probabilities = std::move(diag->probabilities),
+        .expected_counts = std::move(diag->expected_counts),
+        .residual_counts = std::move(diag->residual_counts),
+        .pearson_residuals = std::move(diag->pearson_residuals),
+        .weights = std::move(diag->weights)};
+  }
+
+  Eigen::MatrixXd adjusted = options.lavaan_adjust_2x2
+      ? adjusted_polychoric_table(counts)
+      : Eigen::MatrixXd(counts);
+  const auto th_i_start = marginal_threshold_start(
+      adjusted.rowwise().sum(), options.min_threshold_spacing,
+      "fit_ordinal_pair_joint_h_weighted");
+  if (!th_i_start.has_value()) return std::unexpected(th_i_start.error());
+  const auto th_j_start = marginal_threshold_start(
+      adjusted.colwise().sum().transpose(), options.min_threshold_spacing,
+      "fit_ordinal_pair_joint_h_weighted");
+  if (!th_j_start.has_value()) return std::unexpected(th_j_start.error());
+
+  auto rho_start = fit_ordinal_pair_rho_h_weighted(
+      adjusted, *th_i_start, *th_j_start,
+      OrdinalPairHWeightedOptions{
+          .rho_lower = options.rho_lower,
+          .rho_upper = options.rho_upper,
+          .max_iter = 72,
+          .x_tol = 1e-10,
+          .lavaan_adjust_2x2 = false,
+          .h_score = options.h_score});
+  if (!rho_start.has_value()) return std::unexpected(rho_start.error());
+
+  const Eigen::Index n_th_i = counts.rows() - 1;
+  const Eigen::Index n_th_j = counts.cols() - 1;
+  const Eigen::Index npar = n_th_i + n_th_j + 1;
+  Eigen::VectorXd x0(npar);
+  encode_thresholds(*th_i_start, options.min_threshold_spacing, x0, 0);
+  encode_thresholds(*th_j_start, options.min_threshold_spacing, x0, n_th_i);
+  x0(npar - 1) = encode_rho(rho_start->rho,
+                            options.rho_lower,
+                            options.rho_upper);
+
+  auto objective_value = [&](const Eigen::VectorXd& x) {
+    const Eigen::VectorXd th_i = decode_thresholds(
+        x, 0, n_th_i, options.min_threshold_spacing);
+    const Eigen::VectorXd th_j = decode_thresholds(
+        x, n_th_i, n_th_j, options.min_threshold_spacing);
+    const double rho = decode_rho(x(npar - 1),
+                                  options.rho_lower,
+                                  options.rho_upper);
+    return h_weighted_objective_unchecked(adjusted, th_i, th_j, rho,
+                                          options.h_score);
+  };
+
+  auto gradient = [&](const Eigen::VectorXd& x) {
+    Eigen::VectorXd grad(x.size());
+    for (Eigen::Index k = 0; k < x.size(); ++k) {
+      const double h = options.fd_step * std::max(1.0, std::abs(x(k)));
+      Eigen::VectorXd xp = x;
+      Eigen::VectorXd xm = x;
+      xp(k) += h;
+      xm(k) -= h;
+      const double fp = objective_value(xp);
+      const double fm = objective_value(xm);
+      grad(k) = (fp - fm) / (2.0 * h);
+    }
+    return grad;
+  };
+
+  Eigen::VectorXd x = x0;
+  double f = objective_value(x);
+  if (!std::isfinite(f)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "fit_ordinal_pair_joint_h_weighted: non-finite starting objective"));
+  }
+
+  int iterations = 0;
+  double gradient_inf = std::numeric_limits<double>::infinity();
+  bool converged = false;
+  for (; iterations < options.max_iter; ++iterations) {
+    const Eigen::VectorXd grad = gradient(x);
+    if (!grad.allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "fit_ordinal_pair_joint_h_weighted: non-finite gradient"));
+    }
+    gradient_inf = grad.lpNorm<Eigen::Infinity>();
+    if (gradient_inf <= options.gtol) {
+      converged = true;
+      break;
+    }
+
+    const double grad_sq = grad.squaredNorm();
+    double step = 1.0;
+    bool accepted = false;
+    bool ftol_stop = false;
+    for (int ls = 0; ls < 40; ++ls) {
+      const Eigen::VectorXd candidate = x - step * grad;
+      const double f_candidate = objective_value(candidate);
+      if (std::isfinite(f_candidate) &&
+          f_candidate < f - 1e-4 * step * grad_sq) {
+        ftol_stop = std::abs(f - f_candidate) <=
+            options.ftol * std::max(1.0, std::abs(f));
+        x = candidate;
+        f = f_candidate;
+        accepted = true;
+        break;
+      }
+      step *= 0.5;
+    }
+    if (!accepted) break;
+    if (ftol_stop) {
+      ++iterations;
+      converged = true;
+      break;
+    }
+  }
+
+  const Eigen::VectorXd thresholds_i = decode_thresholds(
+      x, 0, n_th_i, options.min_threshold_spacing);
+  const Eigen::VectorXd thresholds_j = decode_thresholds(
+      x, n_th_i, n_th_j, options.min_threshold_spacing);
+  const double rho = decode_rho(x(npar - 1),
+                                options.rho_lower,
+                                options.rho_upper);
+  const Eigen::VectorXd final_grad = gradient(x);
+  if (final_grad.allFinite()) {
+    gradient_inf = final_grad.lpNorm<Eigen::Infinity>();
+    converged = converged || gradient_inf <= options.gtol;
+  }
+  auto diag = h_weighted_result(adjusted, thresholds_i, thresholds_j, rho,
+                                options.h_score);
+  if (!diag.has_value()) return std::unexpected(diag.error());
+
+  const double width = options.rho_upper - options.rho_lower;
+  return OrdinalPairJointHWeightedResult{
+      .thresholds_i = thresholds_i,
+      .thresholds_j = thresholds_j,
+      .rho = rho,
+      .objective = diag->objective,
+      .gradient_inf = gradient_inf,
+      .iterations = iterations,
+      .converged = converged,
+      .hit_lower = std::abs(rho - options.rho_lower) <= 1e-8 * width,
+      .hit_upper = std::abs(rho - options.rho_upper) <= 1e-8 * width,
+      .adjusted_counts = std::move(diag->adjusted_counts),
+      .probabilities = std::move(diag->probabilities),
+      .expected_counts = std::move(diag->expected_counts),
+      .residual_counts = std::move(diag->residual_counts),
+      .pearson_residuals = std::move(diag->pearson_residuals),
+      .weights = std::move(diag->weights)};
 }
 
 post_expected<OrdinalPairObservedMlResult>

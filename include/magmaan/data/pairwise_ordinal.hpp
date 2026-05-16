@@ -74,6 +74,36 @@ struct OrdinalPairJointMlResult {
   Eigen::MatrixXd adjusted_counts;
 };
 
+struct OrdinalPairJointHWeightedOptions {
+  double rho_lower = -0.999;
+  double rho_upper = 0.999;
+  int    max_iter = 250;
+  double ftol = 1e-10;
+  double gtol = 1e-7;
+  double fd_step = 1e-5;
+  double min_threshold_spacing = 1e-6;
+  bool   lavaan_adjust_2x2 = true;
+  PolychoricHScoreOptions h_score;
+};
+
+struct OrdinalPairJointHWeightedResult {
+  Eigen::VectorXd thresholds_i;
+  Eigen::VectorXd thresholds_j;
+  double rho = 0.0;
+  double objective = 0.0;
+  double gradient_inf = 0.0;
+  int    iterations = 0;
+  bool   converged = false;
+  bool   hit_lower = false;
+  bool   hit_upper = false;
+  Eigen::MatrixXd adjusted_counts;
+  Eigen::MatrixXd probabilities;
+  Eigen::MatrixXd expected_counts;
+  Eigen::MatrixXd residual_counts;
+  Eigen::MatrixXd pearson_residuals;
+  Eigen::MatrixXd weights;
+};
+
 struct OrdinalPairObservedTable {
   Eigen::MatrixXd counts;
   std::int64_t n_obs = 0;
@@ -181,6 +211,11 @@ fit_ordinal_pair_rho_h_weighted(
 post_expected<OrdinalPairJointMlResult>
 fit_ordinal_pair_joint_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
                           OrdinalPairJointMlOptions options = {});
+
+post_expected<OrdinalPairJointHWeightedResult>
+fit_ordinal_pair_joint_h_weighted(
+    const Eigen::Ref<const Eigen::MatrixXd>& counts,
+    OrdinalPairJointHWeightedOptions options = {});
 
 post_expected<OrdinalPairObservedMlResult>
 fit_ordinal_pair_observed_rho_ml(
