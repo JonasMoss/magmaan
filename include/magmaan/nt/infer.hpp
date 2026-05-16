@@ -161,6 +161,12 @@ post_expected<double>
 rls_chi2(const SampleStats&            samp,
          const model::ImpliedMoments&  implied);
 
+post_expected<double>
+rls_chi2(spec::LatentStructure       pt,
+         const model::MatrixRep&     rep,
+         const SampleStats&          samp,
+         const Eigen::VectorXd&      theta);
+
 // Browne's residual-based normal-theory test — full quadratic form with
 // model-space projected out. Matches lavaan's `test = "browne.residual.nt"`.
 // See the .cpp for the full derivation.

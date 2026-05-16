@@ -219,6 +219,11 @@ TEST_CASE("rls_chi2: matches lavaan browne.residual.nt.model on 3F Holzinger") {
   auto t_rls = magmaan::nt::infer::rls_chi2(samp, im);
   REQUIRE(t_rls.has_value());
   CHECK(*t_rls == doctest::Approx(81.3677).epsilon(1e-3));
+
+  auto t_rls_theta = magmaan::nt::infer::rls_chi2(
+      *h.pt, *h.rep, samp, est.theta);
+  REQUIRE(t_rls_theta.has_value());
+  CHECK(*t_rls_theta == doctest::Approx(*t_rls).epsilon(1e-12));
 }
 
 TEST_CASE("rls_chi2: zero on saturated 1F CFA") {

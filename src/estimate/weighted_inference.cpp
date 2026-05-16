@@ -462,7 +462,77 @@ robust_continuous_ls_raw_impl(spec::LatentStructure pt,
                                    std::move(discrepancy), *gamma);
 }
 
+post_expected<model::ImpliedMoments>
+evaluate_implied_moments(spec::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const data::SampleStats& samp,
+                         const Eigen::VectorXd& theta,
+                         const char* who) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
+  if (static_cast<std::size_t>(theta.size()) != ev_or->n_free()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(who) + ": theta length " + std::to_string(theta.size()) +
+            " does not match evaluator n_free " +
+            std::to_string(ev_or->n_free())));
+  }
+  auto eval = ev_or->evaluate(theta, false, false);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  if (auto v = validate_moment_shapes(samp, eval->moments); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  return std::move(eval->moments);
+}
+
+template <class D>
+post_expected<double>
+evaluate_ls_objective_impl(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::SampleStats& samp,
+                           const Eigen::VectorXd& theta,
+                           D discrepancy) {
+  auto moments = evaluate_implied_moments(std::move(pt), rep, samp, theta,
+                                          "evaluate_ls_objective");
+  if (!moments.has_value()) return std::unexpected(moments.error());
+  auto f = discrepancy.value(samp, *moments);
+  if (!f.has_value()) return std::unexpected(fit_to_post(f.error()));
+  return *f;
+}
+
 }  // namespace
+
+post_expected<double>
+evaluate_ls_objective(spec::LatentStructure pt,
+                      const model::MatrixRep& rep,
+                      const data::SampleStats& samp,
+                      const Eigen::VectorXd& theta,
+                      gls::ULS discrepancy) {
+  return evaluate_ls_objective_impl(std::move(pt), rep, samp, theta,
+                                    std::move(discrepancy));
+}
+
+post_expected<double>
+evaluate_ls_objective(spec::LatentStructure pt,
+                      const model::MatrixRep& rep,
+                      const data::SampleStats& samp,
+                      const Eigen::VectorXd& theta,
+                      gls::GLS discrepancy) {
+  return evaluate_ls_objective_impl(std::move(pt), rep, samp, theta,
+                                    std::move(discrepancy));
+}
+
+post_expected<double>
+evaluate_ls_objective(spec::LatentStructure pt,
+                      const model::MatrixRep& rep,
+                      const data::SampleStats& samp,
+                      const Eigen::VectorXd& theta,
+                      gls::WLS discrepancy) {
+  return evaluate_ls_objective_impl(std::move(pt), rep, samp, theta,
+                                    std::move(discrepancy));
+}
 
 post_expected<double>
 continuous_ls_chisq(data::SampleStats samp,

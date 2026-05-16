@@ -148,6 +148,67 @@ TEST_CASE("robust_weighted_moments respects per-block sample weighting and K") {
   CHECK(out->eigvals(0) >= 0.0);
 }
 
+TEST_CASE("evaluate_ls_objective matches fitted fmin for continuous LS") {
+  auto fx = one_factor_fixture();
+  magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8});
+
+  auto est_uls = magmaan::estimate::fit_bounded(
+      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{},
+      magmaan::gls::ULS{}, opt);
+  REQUIRE(est_uls.has_value());
+  auto f_uls = magmaan::estimate::evaluate_ls_objective(
+      fx.pt, fx.rep, fx.samp, est_uls->theta, magmaan::gls::ULS{});
+  REQUIRE(f_uls.has_value());
+  CHECK(*f_uls == doctest::Approx(est_uls->fmin).epsilon(1e-12));
+
+  auto est_gls = magmaan::estimate::fit_bounded(
+      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{},
+      magmaan::gls::GLS{}, opt);
+  REQUIRE(est_gls.has_value());
+  auto f_gls = magmaan::estimate::evaluate_ls_objective(
+      fx.pt, fx.rep, fx.samp, est_gls->theta, magmaan::gls::GLS{});
+  REQUIRE(f_gls.has_value());
+  CHECK(*f_gls == doctest::Approx(est_gls->fmin).epsilon(1e-12));
+
+  magmaan::gls::WLS wls(wls_weights_from_sample(fx.samp));
+  auto est_wls = magmaan::estimate::fit_bounded(
+      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{}, wls, opt);
+  REQUIRE(est_wls.has_value());
+  auto f_wls = magmaan::estimate::evaluate_ls_objective(
+      fx.pt, fx.rep, fx.samp, est_wls->theta, wls);
+  REQUIRE(f_wls.has_value());
+  CHECK(*f_wls == doctest::Approx(est_wls->fmin).epsilon(1e-12));
+}
+
+TEST_CASE("evaluate_ls_objective reports data objective under LS constraints") {
+  auto fp = magmaan::parse::Parser::parse(
+      "f =~ x1 + b2*x2 + b3*x3\n"
+      "b2 + b3 == 1.5");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::lavaanify(*fp);
+  REQUIRE(pt.has_value());
+  auto rep = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+
+  const Eigen::Vector3d lam(1.0, 0.7, 0.8);
+  const Eigen::Vector3d th(0.5, 0.6, 0.4);
+  magmaan::data::SampleStats samp;
+  samp.S = {lam * lam.transpose() * 1.8 + th.asDiagonal().toDenseMatrix()};
+  samp.n_obs = {250};
+
+  magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
+      .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9});
+  auto est = magmaan::estimate::fit_bounded(
+      *pt, *rep, samp, magmaan::estimate::Bounds{}, magmaan::gls::ULS{}, opt);
+  REQUIRE(est.has_value());
+
+  auto f = magmaan::estimate::evaluate_ls_objective(
+      *pt, *rep, samp, est->theta, magmaan::gls::ULS{});
+  REQUIRE(f.has_value());
+  CHECK(*f == doctest::Approx(est->fmin).epsilon(1e-12));
+}
+
 TEST_CASE("robust_continuous_ls: raw and supplied Gamma agree for ULS") {
   auto fx = one_factor_fixture();
   magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
