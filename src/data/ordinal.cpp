@@ -579,11 +579,6 @@ post_expected<PairwiseOrdinalStats>
 pairwise_ordinal_stats_h_weighted_from_integer_data(
     const std::vector<Eigen::MatrixXd>& Xs,
     PairwiseOrdinalHWeightedStatsOptions options) {
-  if (!(std::isfinite(options.influence_fd_step) &&
-        options.influence_fd_step > 0.0)) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "pairwise_ordinal_stats_h_weighted_from_integer_data: invalid options"));
-  }
   auto h_ok = eval_polychoric_h_score(1.0, options.rho.h_score);
   if (!h_ok.has_value()) return std::unexpected(h_ok.error());
 
@@ -668,8 +663,9 @@ pairwise_ordinal_stats_h_weighted_from_integer_data(
           const int ci = xi(row);
           const int cj = xj(row);
           psi_rho(row) =
-              influence_or->weights(ci, cj) * scores_or->rho(row);
+              influence_or->dh_values(ci, cj) * scores_or->rho(row);
         }
+        psi_rho.array() -= psi_rho.mean();
         Eigen::VectorXd threshold_adjust = Eigen::VectorXd::Zero(n);
         if (pair_nth > 0) {
           Eigen::MatrixXd pair_if = Eigen::MatrixXd::Zero(n, pair_nth);

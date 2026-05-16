@@ -154,11 +154,12 @@ golden `parTable()` fixtures.
 - Experimental pair-local all-ordinal h-weighted influence diagnostics under
   `data::ordinal_pair_h_weighted_influence()`. Given integer bivariate counts,
   pair-local thresholds, and rho, it expands casewise estimating-function rows,
-  returns h-score ratios/values/derivatives/weights, finite-difference bread,
-  influence rows, score Gamma, and sandwich Gamma with `S'S / n` scaling. The
-  WMA hard-cap derivative convention is pinned as `dh(t) = 1[t < k]`, so the
-  exact kink uses derivative zero. This is the robust pairwise Gamma primitive;
-  the stats-builder integration is the separate Option A path below.
+  returns h-score ratios/values/derivatives/diagnostic weights, analytic
+  probability-Hessian bread, centered `h'(t)`-weighted meat rows, influence
+  rows, score Gamma, and sandwich Gamma with `S'S / n` scaling. The WMA
+  hard-cap derivative convention is pinned as `dh(t) = 1[t < k]`, so the exact
+  kink uses derivative zero. This is the robust pairwise Gamma primitive; the
+  stats-builder integration is the separate Option A path below.
 - Experimental all-ordinal SEM integration Option A under
   `data::pairwise_ordinal_stats_h_weighted_from_integer_data()`. It preserves
   lavaan-style shared marginal thresholds and metadata, replaces the

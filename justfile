@@ -18,7 +18,7 @@ fast:
 test-fast: fast
     ctest --preset fast
 
-# Build + run one fast-suite area (smoke|spec|estimate|inference|ordinal|parity); optional 2nd arg filters test names by regex.
+# Build + run one fast-suite area (smoke|spec|estimate|inference|ordinal|parity|robcat); optional 2nd arg filters test names by regex.
 test-area area regex="":
     cmake --build --preset fast --target magmaan_test_{{area}}
     ctest --preset fast -L {{area}} {{ if regex == "" { "" } else { "-R '" + regex + "'" } }}
@@ -83,6 +83,10 @@ r-clean:
 # Regenerate the lavaan oracle fixtures (needs R + the pinned lavaan version).
 regen-oracle:
     Rscript tools/regen_oracle.R
+
+# Regenerate the robcat parity fixtures (needs R + the pinned robcat version).
+regen-robcat:
+    Rscript tools/regen_robcat_fixtures.R
 
 # C++ tests + R smoke — everything.
 check: test r-check

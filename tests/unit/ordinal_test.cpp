@@ -789,10 +789,12 @@ TEST_CASE("Ordinal pair h-weighted influence gives casewise sandwich rows") {
   REQUIRE(influence.has_value());
   const Eigen::MatrixXd ordinary_scores = ordinal_pair_score_rows_from_counts(
       counts, fit->thresholds_i, fit->thresholds_j, fit->rho);
+  Eigen::MatrixXd centered_scores = ordinary_scores;
+  centered_scores.rowwise() -= centered_scores.colwise().mean();
   CHECK(influence->n_obs == counts.sum());
-  CHECK(influence->estimating_functions.isApprox(ordinary_scores, 1e-12));
+  CHECK(influence->estimating_functions.isApprox(centered_scores, 1e-12));
   CHECK(influence->score_gamma.isApprox(
-      (ordinary_scores.transpose() * ordinary_scores) /
+      (centered_scores.transpose() * centered_scores) /
           static_cast<double>(influence->n_obs),
       1e-12));
   CHECK(influence->bread.rows() == ordinary_scores.cols());
