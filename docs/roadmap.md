@@ -116,6 +116,12 @@ golden `parTable()` fixtures.
   including lavaan's `fixed.x` convention of zeroing the fixed exogenous
   rows/columns in the NT inverse weight. ULS robust scaled-test reporting
   follows lavaan's robust LS `2 * N * fmin` base statistic.
+- Continuous ULS/GLS/WLS objectives can be evaluated explicitly at any
+  supplied parameter vector via `estimate::evaluate_ls_objective()`, keeping
+  discrepancy evaluation separate from chi-square reporting scale. RLS exposes
+  a matching theta-based `nt::infer::rls_chi2()` overload that builds implied
+  moments from the model structure before applying Browne's model-based
+  residual quadratic.
 - Separable nonlinear least squares profiling exists for LS estimators where
   conditionally linear parameters can be profiled out.
 

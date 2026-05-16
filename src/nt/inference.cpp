@@ -828,6 +828,23 @@ rls_chi2(const SampleStats&            samp,
 }
 
 post_expected<double>
+rls_chi2(spec::LatentStructure       pt,
+         const model::MatrixRep&     rep,
+         const SampleStats&          samp,
+         const Eigen::VectorXd&      theta) {
+  Estimates est;
+  est.theta = theta;
+  auto ev_or = prepare_evaluator(pt, rep, samp, est);
+  if (!ev_or.has_value()) return std::unexpected(ev_or.error());
+  auto im_or = ev_or->sigma(theta);
+  if (!im_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "rls_chi2: sigma(theta) failed: " + im_or.error().detail));
+  }
+  return rls_chi2(samp, *im_or);
+}
+
+post_expected<double>
 browne_residual_nt(spec::LatentStructure        pt,
                    const model::MatrixRep&   rep,
                    const SampleStats&        samp,
