@@ -105,6 +105,7 @@ struct OrdinalPairJointHWeightedResult {
 };
 
 struct OrdinalPairHWeightedInfluenceOptions {
+  // Retained for source compatibility; h-weighted bread is analytic.
   double fd_step = 1e-5;
   PolychoricHScoreOptions h_score;
 };
@@ -138,6 +139,7 @@ struct PairwiseOrdinalCorrelationRepairOptions {
 
 struct PairwiseOrdinalHWeightedStatsOptions {
   OrdinalPairHWeightedOptions rho;
+  // Retained for source compatibility; h-weighted influence bread is analytic.
   double influence_fd_step = 1e-5;
   PairwiseOrdinalCorrelationRepairOptions correlation_repair;
 };

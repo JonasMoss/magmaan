@@ -240,10 +240,10 @@ Remaining work, in suggested order:
 - [x] **L.** Add casewise influence and sandwich/Gamma calculations for robust
   pairwise moments, including the hard-cap kink convention and scaling.
   (`data::ordinal_pair_h_weighted_influence()` returns casewise
-  estimating-function rows, h-score diagnostics, finite-difference bread,
-  influence rows, score Gamma, and sandwich Gamma; unit coverage pins ML and
-  `hard_cap(k = Inf)` limits, `S'S / n` scaling, downweighting, and
-  `dh(t) = 0` at the WMA hard-cap kink.)
+  centered `h'(t)`-weighted meat rows, h-score diagnostics, analytic
+  probability-Hessian bread, influence rows, score Gamma, and sandwich Gamma;
+  unit coverage pins ML and `hard_cap(k = Inf)` limits, `S'S / n` scaling,
+  downweighting, and `dh(t) = 0` at the WMA hard-cap kink.)
 - [x] **M/L.** Add the first SEM integration mode: shared lavaan-style marginal
   thresholds plus robust rhos as experimental Option A before attempting
   shared-threshold composite h-score estimation.
@@ -262,6 +262,23 @@ Remaining work, in suggested order:
 - [ ] **L, comparator track.** Implement density power divergence as the main
   non-h-score comparator; keep Hellinger and Huberized residual fitting as
   lower-priority experimental comparators.
+- [x] **M.** Pin the h-score estimators against the canonical robcat R package
+  (Welz, Mair & Alfons, 2026; vendored in `external/robcat`). The WMA hard cap
+  is the same C-estimator as robcat `polycor`: `robcat polycor(c=C)` ≡ magmaan
+  `WmaHardCap, k = C+1`, and `polycor_mle` ≡ `ML`.
+  (`tools/regen_robcat_fixtures.R` freezes robcat MLE + robust-sweep oracles
+  into `tests/fixtures/robcat/`; `tests/golden/robcat_parity_golden_test.cpp`
+  — target `magmaan_test_robcat`, `just test-area robcat` — hard-gates rho,
+  thresholds, and robust sandwich SE magnitudes for `c > 0` on clean, skewed,
+  and contaminated tables. Point estimates match robcat to <5e-4 everywhere;
+  the `c = 0` boundary remains a finite/positive SE diagnostic because the WMA
+  hard cap is degenerate there.)
+- [x] **M.** Fix the robust h-weighted sandwich meat in
+  `data::ordinal_pair_h_weighted_influence()`. The C-estimation meat now uses
+  centered `W·Λ·Wᵀ` rows with `W_k = h'(t_k)·s_k` instead of the diagnostic
+  weight `h(t_k)/t_k`; the bread is analytic from bivariate rectangle
+  probability Hessians rather than finite differences. The SEM Option A
+  ordinal Gamma path uses the same `h'(t)` rho linearization.
 
 Done when: robust polychoric alternatives are selectable, default ML fixtures
 are unchanged, diagnostics make robustness visible, and at least one robust
