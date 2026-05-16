@@ -130,6 +130,10 @@ golden `parTable()` fixtures.
 - Threshold (`|`) and response-scale (`~*~`) parser/partable projection.
 - Integer all-ordinal complete/listwise sample statistics.
 - Pairwise polychoric correlations.
+- Public enum-backed polychoric h-score API under `data::eval_polychoric_h_score()`
+  for ML, WMA hard cap, smooth cap, and exponential cap experiments, returning
+  score values, derivatives, and objective contributions while leaving the
+  default lavaan-compatible ordinal sample-stat path unchanged.
 - Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
   complete/listwise ordinal data, exposing pair labels, count/adjustment
   diagnostics, fitted fixed-threshold rho diagnostics, fitted expected/residual

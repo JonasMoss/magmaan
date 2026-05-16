@@ -217,9 +217,10 @@ Contracts:
 
 Remaining work, in suggested order:
 
-- [ ] **M.** Add an enum-backed h-score API in `magmaan::data` for `ml`,
+- [x] **M.** Add an enum-backed h-score API in `magmaan::data` for `ml`,
   `wma_hard_cap`, `smooth_cap`, and `exp_cap`, with focused tests for score
   values, derivatives, and objective contributions where available.
+  (`include/magmaan/data/h_score.hpp`, `tests/unit/ordinal_test.cpp`.)
 - [ ] **M.** Implement experimental fixed-threshold h-weighted rho estimation
   for one bivariate table, returning rho, convergence status, residuals, and
   per-cell weights.

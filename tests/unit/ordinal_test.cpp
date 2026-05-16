@@ -9,6 +9,7 @@
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
 
+#include "magmaan/data/h_score.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/pairwise_mixed.hpp"
 #include "magmaan/data/pairwise_ordinal.hpp"
@@ -40,6 +41,118 @@ Eigen::MatrixXd ordinal_expected_counts(const Eigen::VectorXd& th_i,
 }
 
 }  // namespace
+
+TEST_CASE("Polychoric h-score API evaluates predefined caps") {
+  using magmaan::data::PolychoricHScoreKind;
+  using magmaan::data::PolychoricHScoreOptions;
+
+  auto ml = magmaan::data::eval_polychoric_h_score(1.7);
+  REQUIRE(ml.has_value());
+  CHECK(ml->h == doctest::Approx(1.7));
+  CHECK(ml->dh == doctest::Approx(1.0));
+  CHECK(ml->phi == doctest::Approx(1.7 * std::log(1.7)));
+
+  auto hard_inf = magmaan::data::eval_polychoric_h_score(
+      2.4, PolychoricHScoreOptions{
+               .kind = PolychoricHScoreKind::WmaHardCap,
+               .k = std::numeric_limits<double>::infinity()});
+  REQUIRE(hard_inf.has_value());
+  CHECK(hard_inf->h == doctest::Approx(2.4));
+  CHECK(hard_inf->dh == doctest::Approx(1.0));
+  CHECK(hard_inf->phi == doctest::Approx(2.4 * std::log(2.4)));
+
+  auto hard = magmaan::data::eval_polychoric_h_score(
+      2.4, PolychoricHScoreOptions{
+               .kind = PolychoricHScoreKind::WmaHardCap, .k = 1.6});
+  REQUIRE(hard.has_value());
+  CHECK(hard->h == doctest::Approx(1.6));
+  CHECK(hard->dh == doctest::Approx(0.0));
+  CHECK(hard->phi == doctest::Approx(2.4 * (std::log(1.6) + 1.0) - 1.6));
+
+  auto smooth_low = magmaan::data::eval_polychoric_h_score(
+      1.2, PolychoricHScoreOptions{.kind = PolychoricHScoreKind::SmoothCap});
+  REQUIRE(smooth_low.has_value());
+  CHECK(smooth_low->h == doctest::Approx(1.2));
+  CHECK(smooth_low->dh == doctest::Approx(1.0));
+  CHECK(smooth_low->phi == doctest::Approx(1.2 * std::log(1.2)));
+
+  auto smooth_high = magmaan::data::eval_polychoric_h_score(
+      2.8, PolychoricHScoreOptions{.kind = PolychoricHScoreKind::SmoothCap});
+  REQUIRE(smooth_high.has_value());
+  CHECK(smooth_high->h == doctest::Approx(1.9));
+  CHECK(smooth_high->dh == doctest::Approx(0.0));
+  CHECK(std::isfinite(smooth_high->phi));
+
+  auto exp = magmaan::data::eval_polychoric_h_score(
+      2.0, PolychoricHScoreOptions{
+               .kind = PolychoricHScoreKind::ExpCap, .k = 1.6, .lambda = 0.2});
+  REQUIRE(exp.has_value());
+  CHECK(exp->h == doctest::Approx(1.6 + 0.2 * (1.0 - std::exp(-2.0))));
+  CHECK(exp->dh == doctest::Approx(std::exp(-2.0)));
+  CHECK(std::isfinite(exp->phi));
+}
+
+TEST_CASE("Polychoric h-score objective contribution matches score identity") {
+  using magmaan::data::PolychoricHScoreKind;
+  using magmaan::data::PolychoricHScoreOptions;
+
+  const PolychoricHScoreOptions options[] = {
+      PolychoricHScoreOptions{.kind = PolychoricHScoreKind::ML},
+      PolychoricHScoreOptions{.kind = PolychoricHScoreKind::WmaHardCap,
+                              .k = 1.6},
+      PolychoricHScoreOptions{.kind = PolychoricHScoreKind::SmoothCap},
+      PolychoricHScoreOptions{.kind = PolychoricHScoreKind::ExpCap,
+                              .k = 1.6,
+                              .lambda = 0.2},
+  };
+
+  for (const auto& option : options) {
+    const double t = 2.0;
+    const double step = 1e-5;
+    auto mid = magmaan::data::eval_polychoric_h_score(t, option);
+    auto plus = magmaan::data::eval_polychoric_h_score(t + step, option);
+    auto minus = magmaan::data::eval_polychoric_h_score(t - step, option);
+    REQUIRE(mid.has_value());
+    REQUIRE(plus.has_value());
+    REQUIRE(minus.has_value());
+    const double dphi = (plus->phi - minus->phi) / (2.0 * step);
+    CHECK(mid->h == doctest::Approx(t * dphi - mid->phi).epsilon(1e-8));
+  }
+}
+
+TEST_CASE("Polychoric h-score API rejects invalid inputs") {
+  using magmaan::data::PolychoricHScoreKind;
+  using magmaan::data::PolychoricHScoreOptions;
+
+  auto negative = magmaan::data::eval_polychoric_h_score(-0.1);
+  REQUIRE_FALSE(negative.has_value());
+  CHECK(negative.error().detail.find("nonnegative") != std::string::npos);
+
+  auto bad_hard = magmaan::data::eval_polychoric_h_score(
+      1.0, PolychoricHScoreOptions{
+               .kind = PolychoricHScoreKind::WmaHardCap, .k = 0.8});
+  REQUIRE_FALSE(bad_hard.has_value());
+  CHECK(bad_hard.error().detail.find("at least 1") != std::string::npos);
+
+  auto bad_hard_inf = magmaan::data::eval_polychoric_h_score(
+      1.0, PolychoricHScoreOptions{
+               .kind = PolychoricHScoreKind::WmaHardCap,
+               .k = -std::numeric_limits<double>::infinity()});
+  REQUIRE_FALSE(bad_hard_inf.has_value());
+  CHECK(bad_hard_inf.error().detail.find("at least 1") != std::string::npos);
+
+  auto bad_smooth = magmaan::data::eval_polychoric_h_score(
+      1.0, PolychoricHScoreOptions{
+               .kind = PolychoricHScoreKind::SmoothCap, .a = 2.0, .b = 1.8});
+  REQUIRE_FALSE(bad_smooth.has_value());
+  CHECK(bad_smooth.error().detail.find("1 <= a < b") != std::string::npos);
+
+  auto bad_exp = magmaan::data::eval_polychoric_h_score(
+      1.0, PolychoricHScoreOptions{
+               .kind = PolychoricHScoreKind::ExpCap, .k = 1.6, .lambda = 0.0});
+  REQUIRE_FALSE(bad_exp.has_value());
+  CHECK(bad_exp.error().detail.find("lambda > 0") != std::string::npos);
+}
 
 TEST_CASE("Ordinal pair ML kernel: probabilities, rho fit, and scores") {
   const double inf = std::numeric_limits<double>::infinity();
