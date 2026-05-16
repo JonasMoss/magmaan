@@ -6,14 +6,23 @@ default:
 
 # Configure the first-class local build trees (once, or after a preset change).
 configure:
+    cmake --preset fast
     cmake --preset dev
     cmake --preset opt
 
-# Build the local dev tree (Debug + AddressSanitizer + UBSan).
+# Build the fast local C++ tree (Debug, no sanitizers).
+fast:
+    cmake --build --preset fast
+
+# Build + run the fast local C++ test suite.
+test-fast: fast
+    ctest --preset fast
+
+# Build the sanitizer validation tree (Debug + AddressSanitizer + UBSan).
 dev:
     cmake --build --preset dev
 
-# Build + run the dev C++ test suite.
+# Build + run the sanitizer C++ test suite.
 test-dev: dev
     ctest --preset dev
 
@@ -25,16 +34,26 @@ opt:
 test-opt: opt
     ctest --preset opt
 
-# Back-compatible alias for the local dev build.
-build: dev
+# Back-compatible alias for the normal local C++ build.
+build: fast
 
-# Back-compatible alias for the local dev test suite.
-test: test-dev
+# Back-compatible alias for the normal local C++ test suite.
+test: test-fast
 
-# (Re)install the exploratory R bindings (rebuilds libmagmaan.a; Makevars handles stale .o).
+# (Re)install the exploratory R bindings against the optimized non-Ceres core.
 r-install:
     cmake --build --preset opt --target magmaan
-    R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+    MAGMAAN_PRESET=opt MAGMAAN_WITH_CERES_R=0 R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+
+# Fast R install for interactive wrapper work; not a numeric-performance check.
+r-install-fast:
+    cmake --build --preset fast --target magmaan
+    MAGMAAN_PRESET=fast MAGMAAN_WITH_CERES_R=0 R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+
+# Ceres-enabled R install, only when exploring the Ceres backend from R.
+r-install-ceres:
+    cmake --build --preset ceres --target magmaan
+    MAGMAAN_PRESET=ceres MAGMAAN_WITH_CERES_R=1 R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
 
 # Run every r-package/examples/*.R script (the R-side smoke tests vs lavaan).
 r-examples:
@@ -50,7 +69,7 @@ r-check: r-install r-examples
 
 # Force-clean the in-tree R build artifacts (the Makevars dep makes this rarely needed).
 r-clean:
-    rm -f r-package/src/*.o r-package/src/*.so
+    rm -f r-package/src/*.o r-package/src/*.so r-package/src/.magmaan-build-config
 
 # Regenerate the lavaan oracle fixtures (needs R + the pinned lavaan version).
 regen-oracle:

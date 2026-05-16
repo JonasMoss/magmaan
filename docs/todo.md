@@ -23,6 +23,9 @@ Global contracts:
   nested tests.
 - Unsupported statistical combinations should fail explicitly rather than
   falling through to nearby lavaan-compatible behavior.
+- Local iteration should default to the non-sanitized `fast` C++ preset; run
+  sanitizer, optimized, Ceres, and R workflows explicitly when they are relevant
+  validation gates.
 
 ## 0. Validation, tests, and examples
 
@@ -97,6 +100,9 @@ Contracts:
 
 Remaining work, in suggested order:
 
+- [ ] **S.** Record local build-loop timings after major workflow changes:
+  no-op build, touched core TU, touched test TU, labeled `ctest`, `test-dev`,
+  and the three R install modes.
 - [ ] **S/M.** Add benchmark fixtures for representative complete-data ML,
   FIML, ULS, GLS, WLS, ordinal DWLS/WLS, and mixed categorical models.
 - [ ] **M.** Track objective value, gradient norm, iteration count, wall time,
@@ -107,6 +113,9 @@ Remaining work, in suggested order:
 - [ ] **M/L, after benchmark coverage exists.** Promote the Ceres preset into
   regular validation where relevant without making the default build pay the
   Ceres dependency cost.
+- [ ] **S, only if timings justify it.** Experiment with opt-in precompiled
+  headers for Eigen-heavy local builds; keep them disabled unless they improve
+  changed-TU rebuilds without worsening no-op or full rebuild ergonomics.
 - [ ] **S, after scenarios exist.** Document benchmark usage.
 
 Done when: backend recommendations and performance-sensitive refactors can be

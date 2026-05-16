@@ -22,3 +22,4 @@ external/
 .Rproj.user
 .RData
 .Rhistory
+r-package/src/.magmaan-build-config
