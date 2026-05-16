@@ -244,9 +244,14 @@ Remaining work, in suggested order:
   influence rows, score Gamma, and sandwich Gamma; unit coverage pins ML and
   `hard_cap(k = Inf)` limits, `S'S / n` scaling, downweighting, and
   `dh(t) = 0` at the WMA hard-cap kink.)
-- [ ] **M/L.** Add the first SEM integration mode: shared lavaan-style marginal
+- [x] **M/L.** Add the first SEM integration mode: shared lavaan-style marginal
   thresholds plus robust rhos as experimental Option A before attempting
   shared-threshold composite h-score estimation.
+  (`data::pairwise_ordinal_stats_h_weighted_from_integer_data()` preserves the
+  shared marginal-threshold layout, swaps in fixed-threshold h-weighted rhos,
+  rebuilds moment influence/Gamma and DWLS/WLS weights, and returns fit-ready
+  `PairwiseOrdinalStats`; tests pin the ML point-estimate limit, robust-rho
+  replacement, Gamma scaling, and `fit_ordinal_bounded()` compatibility.)
 - [ ] **M.** Handle indefinite robust correlation matrices explicitly with
   minimum eigenvalue and optional ridge/shrinkage diagnostics.
 - [ ] **L, comparator track.** Implement density power divergence as the main
