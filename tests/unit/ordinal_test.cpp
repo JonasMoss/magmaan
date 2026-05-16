@@ -67,6 +67,31 @@ double h_score_pair_objective(
   return out;
 }
 
+double dpd_pair_objective(const Eigen::MatrixXd& counts,
+                          const Eigen::VectorXd& th_i,
+                          const Eigen::VectorXd& th_j,
+                          double rho,
+                          double alpha) {
+  const double inf = std::numeric_limits<double>::infinity();
+  const double total = counts.sum();
+  double out = 0.0;
+  for (Eigen::Index a = 0; a < counts.rows(); ++a) {
+    const double lo_i = (a == 0) ? -inf : th_i(a - 1);
+    const double hi_i = (a + 1 == counts.rows()) ? inf : th_i(a);
+    for (Eigen::Index b = 0; b < counts.cols(); ++b) {
+      const double lo_j = (b == 0) ? -inf : th_j(b - 1);
+      const double hi_j = (b + 1 == counts.cols()) ? inf : th_j(b);
+      const double p = std::max(
+          1.4901161193847656e-8,
+          magmaan::data::ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho));
+      const double fhat = counts(a, b) / total;
+      const double pa = std::pow(p, alpha);
+      out += p * pa - ((1.0 + alpha) / alpha) * fhat * pa;
+    }
+  }
+  return out;
+}
+
 Eigen::MatrixXd ordinal_pair_score_rows_from_counts(
     const Eigen::MatrixXd& counts,
     const Eigen::VectorXd& th_i,
@@ -771,6 +796,63 @@ TEST_CASE("Ordinal pair joint h-weighted estimator downweights contaminated cell
   CHECK(objective <= h_score_pair_objective(
       contaminated, robust->thresholds_i, robust->thresholds_j,
       robust->rho - 0.02, h_options));
+}
+
+TEST_CASE("Ordinal pair joint DPD estimator preserves ML limit") {
+  Eigen::VectorXd thi(2);
+  thi << -0.55, 0.85;
+  Eigen::VectorXd thj(2);
+  thj << -0.25, 0.65;
+  const Eigen::MatrixXd counts = ordinal_expected_counts(thi, thj, 0.42, 50000.0);
+
+  auto ml = magmaan::data::fit_ordinal_pair_joint_ml(counts);
+  auto dpd0 = magmaan::data::fit_ordinal_pair_joint_dpd(
+      counts, magmaan::data::OrdinalPairJointDpdOptions{.alpha = 0.0});
+  REQUIRE(ml.has_value());
+  REQUIRE(dpd0.has_value());
+  CHECK(dpd0->thresholds_i.isApprox(ml->thresholds_i, 1e-12));
+  CHECK(dpd0->thresholds_j.isApprox(ml->thresholds_j, 1e-12));
+  CHECK(dpd0->rho == doctest::Approx(ml->rho));
+  CHECK(dpd0->converged);
+  CHECK(dpd0->weights.isApprox(Eigen::MatrixXd::Ones(3, 3), 1e-12));
+  CHECK(dpd0->objective ==
+        doctest::Approx(ml->negloglik / counts.sum()).epsilon(1e-12));
+
+  auto bad = magmaan::data::fit_ordinal_pair_joint_dpd(
+      counts, magmaan::data::OrdinalPairJointDpdOptions{.alpha = -0.1});
+  REQUIRE_FALSE(bad.has_value());
+  CHECK(bad.error().detail.find("invalid options") != std::string::npos);
+}
+
+TEST_CASE("Ordinal pair joint DPD estimator tempers low-probability cells") {
+  Eigen::VectorXd th(2);
+  th << -0.55, 0.75;
+  const Eigen::MatrixXd clean = ordinal_expected_counts(th, th, 0.55, 5000.0);
+  Eigen::MatrixXd contaminated = clean;
+  contaminated(0, 2) += 900.0;
+
+  auto clean_ml = magmaan::data::fit_ordinal_pair_joint_ml(clean);
+  auto contaminated_ml =
+      magmaan::data::fit_ordinal_pair_joint_ml(contaminated);
+  auto dpd = magmaan::data::fit_ordinal_pair_joint_dpd(
+      contaminated, magmaan::data::OrdinalPairJointDpdOptions{.alpha = 0.35});
+  REQUIRE(clean_ml.has_value());
+  REQUIRE(contaminated_ml.has_value());
+  REQUIRE(dpd.has_value());
+  CHECK(dpd->converged);
+  CHECK(dpd->thresholds_i(0) < dpd->thresholds_i(1));
+  CHECK(dpd->thresholds_j(0) < dpd->thresholds_j(1));
+  CHECK(contaminated_ml->rho != doctest::Approx(clean_ml->rho));
+  CHECK(dpd->rho != doctest::Approx(contaminated_ml->rho));
+  CHECK(dpd->weights(0, 2) < dpd->weights(1, 1));
+  CHECK(dpd->pearson_residuals(0, 2) > 0.0);
+
+  const double objective = dpd_pair_objective(
+      contaminated, dpd->thresholds_i, dpd->thresholds_j, dpd->rho, 0.35);
+  CHECK(dpd->objective == doctest::Approx(objective).epsilon(1e-12));
+  CHECK(objective < dpd_pair_objective(
+      contaminated, contaminated_ml->thresholds_i, contaminated_ml->thresholds_j,
+      contaminated_ml->rho, 0.35));
 }
 
 TEST_CASE("Ordinal pair h-weighted influence gives casewise sandwich rows") {
