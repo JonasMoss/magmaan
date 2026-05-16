@@ -55,10 +55,14 @@ Contracts:
 
 Remaining work, in suggested order:
 
-- [ ] **L, prerequisite.** Design the SEM-level pairwise composite-likelihood
+- [x] **L, prerequisite.** Design the SEM-level pairwise composite-likelihood
   API as a separate estimator from lavaan-compatible `OrdinalStats`/DWLS.
   Specify scaling, per-pair sample-size weighting, SEM-implied bivariate margin
-  mapping, boundary diagnostics, and reported chi-square/df behavior.
+  mapping, boundary diagnostics, and reported chi-square/df behavior. Initial
+  surface: `estimate::pairwise_ordinal_composite_objective()` evaluates the
+  shared-threshold all-ordinal objective, supports observed-pair-count or
+  equal-pair weighting, exposes boundary diagnostics, and explicitly reports no
+  chi-square/df until a calibrated composite-likelihood test exists.
 - [ ] **M/L, depends on API.** Add a complete/listwise all-ordinal
   composite-likelihood prototype using the existing complete bivariate joint ML
   kernel and diagnostics comparable to the current polychoric/DWLS path.

@@ -66,6 +66,7 @@ add_library(magmaan STATIC
   src/gls/gls_wls.cpp
   src/estimate/bounds.cpp
   src/estimate/ordinal.cpp
+  src/estimate/pairwise.cpp
   src/estimate/weighted_inference.cpp
   src/estimate/start_values.cpp
   src/optim/lbfgs_optimizer.cpp
