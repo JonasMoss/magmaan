@@ -26,6 +26,9 @@ struct PolyserialPairMlResult {
 struct PolyserialPairScores {
   Eigen::VectorXd rho;
   Eigen::MatrixXd thresholds;
+  // Columns: thresholds, rho.
+  Eigen::MatrixXd score_contributions;
+  Eigen::MatrixXd score_gamma;
 };
 
 enum class MixedPairKind {
@@ -67,6 +70,15 @@ struct ContinuousPairNormalResult {
   double rho = 0.0;
   double negloglik = 0.0;
   std::int64_t n_obs = 0;
+  // Columns: mean_i, mean_j, var_i, var_j, cov.
+  Eigen::MatrixXd score_contributions;
+  Eigen::MatrixXd score_gamma;
+};
+
+struct ContinuousPairNormalScores {
+  // Columns: mean_i, mean_j, var_i, var_j, cov.
+  Eigen::MatrixXd score_contributions;
+  Eigen::MatrixXd score_gamma;
 };
 
 post_expected<std::vector<MixedPairLabel>>
@@ -90,6 +102,15 @@ continuous_pair_normal_negloglik(const Eigen::Ref<const Eigen::VectorXd>& x_i,
 post_expected<ContinuousPairNormalResult>
 fit_continuous_pair_normal_ml(const Eigen::Ref<const Eigen::VectorXd>& x_i,
                               const Eigen::Ref<const Eigen::VectorXd>& x_j);
+
+post_expected<ContinuousPairNormalScores>
+continuous_pair_normal_scores(const Eigen::Ref<const Eigen::VectorXd>& x_i,
+                              const Eigen::Ref<const Eigen::VectorXd>& x_j,
+                              double mean_i,
+                              double mean_j,
+                              double var_i,
+                              double var_j,
+                              double cov);
 
 post_expected<double>
 polyserial_pair_negloglik(const Eigen::Ref<const Eigen::VectorXi>& categories,

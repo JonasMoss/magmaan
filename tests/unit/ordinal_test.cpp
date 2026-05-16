@@ -154,6 +154,17 @@ TEST_CASE("Polyserial pair ML kernel: likelihood, rho fit, and scores") {
   CHECK(scores->thresholds.cols() == th.size());
   CHECK(scores->rho.allFinite());
   CHECK(scores->thresholds.allFinite());
+  CHECK(scores->score_contributions.rows() == cat.size());
+  CHECK(scores->score_contributions.cols() == th.size() + 1);
+  CHECK(scores->score_contributions.leftCols(th.size()).isApprox(
+      scores->thresholds, 0.0));
+  CHECK(scores->score_contributions.col(th.size()).isApprox(scores->rho, 0.0));
+  CHECK(scores->score_gamma.rows() == th.size() + 1);
+  CHECK(scores->score_gamma.cols() == th.size() + 1);
+  CHECK(scores->score_gamma.isApprox(
+      (scores->score_contributions.transpose() * scores->score_contributions) /
+          static_cast<double>(cat.size()),
+      1e-12));
 }
 
 TEST_CASE("Polyserial pair ML kernel rejects malformed inputs") {
@@ -191,11 +202,26 @@ TEST_CASE("Continuous pair normal ML kernel returns complete-data pair diagnosti
   CHECK(fit->cov == doctest::Approx(2.125));
   CHECK(fit->rho == doctest::Approx(2.125 / std::sqrt(1.25 * 3.6875)));
   CHECK(std::isfinite(fit->negloglik));
+  CHECK(fit->score_contributions.rows() == x.size());
+  CHECK(fit->score_contributions.cols() == 5);
+  CHECK(fit->score_contributions.allFinite());
+  CHECK(fit->score_contributions.colwise().sum().norm() < 1e-10);
+  CHECK(fit->score_gamma.rows() == 5);
+  CHECK(fit->score_gamma.cols() == 5);
+  CHECK(fit->score_gamma.isApprox(
+      (fit->score_contributions.transpose() * fit->score_contributions) /
+          static_cast<double>(x.size()),
+      1e-12));
 
   auto nll = magmaan::data::continuous_pair_normal_negloglik(
       x, y, fit->mean_i, fit->mean_j, fit->var_i, fit->var_j, fit->cov);
   REQUIRE(nll.has_value());
   CHECK(*nll == doctest::Approx(fit->negloglik));
+  auto scores = magmaan::data::continuous_pair_normal_scores(
+      x, y, fit->mean_i, fit->mean_j, fit->var_i, fit->var_j, fit->cov);
+  REQUIRE(scores.has_value());
+  CHECK(scores->score_contributions.isApprox(fit->score_contributions, 0.0));
+  CHECK(scores->score_gamma.isApprox(fit->score_gamma, 0.0));
 
   y << 2.0, 4.0, 6.0, 8.0;
   auto singular = magmaan::data::fit_continuous_pair_normal_ml(x, y);

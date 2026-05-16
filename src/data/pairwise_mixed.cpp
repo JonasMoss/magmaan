@@ -118,6 +118,13 @@ double neglog_polyserial_unchecked(const Eigen::Ref<const Eigen::VectorXi>& cat,
   return out;
 }
 
+Eigen::MatrixXd score_gamma(const Eigen::MatrixXd& scores) {
+  if (scores.rows() == 0) {
+    return Eigen::MatrixXd::Zero(scores.cols(), scores.cols());
+  }
+  return (scores.transpose() * scores) / static_cast<double>(scores.rows());
+}
+
 }  // namespace
 
 post_expected<std::vector<MixedPairLabel>>
@@ -278,6 +285,53 @@ fit_continuous_pair_normal_ml(const Eigen::Ref<const Eigen::VectorXd>& x_i,
       x_i, x_j, out.mean_i, out.mean_j, out.var_i, out.var_j, out.cov);
   if (!nll_or.has_value()) return std::unexpected(nll_or.error());
   out.negloglik = *nll_or;
+  auto scores_or = continuous_pair_normal_scores(
+      x_i, x_j, out.mean_i, out.mean_j, out.var_i, out.var_j, out.cov);
+  if (!scores_or.has_value()) return std::unexpected(scores_or.error());
+  out.score_contributions = std::move(scores_or->score_contributions);
+  out.score_gamma = std::move(scores_or->score_gamma);
+  return out;
+}
+
+post_expected<ContinuousPairNormalScores>
+continuous_pair_normal_scores(const Eigen::Ref<const Eigen::VectorXd>& x_i,
+                              const Eigen::Ref<const Eigen::VectorXd>& x_j,
+                              double mean_i,
+                              double mean_j,
+                              double var_i,
+                              double var_j,
+                              double cov) {
+  auto ok = validate_continuous_pair_inputs(x_i, x_j,
+                                            "continuous_pair_normal_scores");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+  if (!std::isfinite(mean_i) || !std::isfinite(mean_j)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "continuous_pair_normal_scores: means must be finite"));
+  }
+  ok = validate_normal_pair_parameters(var_i, var_j, cov,
+                                       "continuous_pair_normal_scores");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+
+  const double det = var_i * var_j - cov * cov;
+  const double inv_ii = var_j / det;
+  const double inv_jj = var_i / det;
+  const double inv_ij = -cov / det;
+
+  ContinuousPairNormalScores out{
+      .score_contributions = Eigen::MatrixXd::Zero(x_i.size(), 5),
+      .score_gamma = Eigen::MatrixXd::Zero(5, 5)};
+  for (Eigen::Index r = 0; r < x_i.size(); ++r) {
+    const double di = x_i(r) - mean_i;
+    const double dj = x_j(r) - mean_j;
+    const double qi = inv_ii * di + inv_ij * dj;
+    const double qj = inv_ij * di + inv_jj * dj;
+    out.score_contributions(r, 0) = qi;
+    out.score_contributions(r, 1) = qj;
+    out.score_contributions(r, 2) = 0.5 * (qi * qi - inv_ii);
+    out.score_contributions(r, 3) = 0.5 * (qj * qj - inv_jj);
+    out.score_contributions(r, 4) = qi * qj - inv_ij;
+  }
+  out.score_gamma = score_gamma(out.score_contributions);
   return out;
 }
 
@@ -359,8 +413,11 @@ polyserial_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& categories,
 
   const Eigen::Index n = categories.size();
   const Eigen::Index nth = thresholds.size();
-  PolyserialPairScores out{Eigen::VectorXd::Zero(n),
-                           Eigen::MatrixXd::Zero(n, nth)};
+  PolyserialPairScores out{
+      .rho = Eigen::VectorXd::Zero(n),
+      .thresholds = Eigen::MatrixXd::Zero(n, nth),
+      .score_contributions = Eigen::MatrixXd::Zero(n, nth + 1),
+      .score_gamma = Eigen::MatrixXd::Zero(nth + 1, nth + 1)};
   const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
   const double h = 1e-5;
   const double rp = std::min(0.999, rho + h);
@@ -377,6 +434,9 @@ polyserial_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& categories,
       if (c == a + 1) out.thresholds(r, a) -= z / lik;
     }
   }
+  out.score_contributions.leftCols(nth) = out.thresholds;
+  out.score_contributions.col(nth) = out.rho;
+  out.score_gamma = score_gamma(out.score_contributions);
   return out;
 }
 
