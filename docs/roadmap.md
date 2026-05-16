@@ -160,6 +160,12 @@ golden `parTable()` fixtures.
   hard-cap derivative convention is pinned as `dh(t) = 1[t < k]`, so the exact
   kink uses derivative zero. This is the robust pairwise Gamma primitive; the
   stats-builder integration is the separate Option A path below.
+- Experimental pair-local all-ordinal density power divergence fitting under
+  `data::fit_ordinal_pair_joint_dpd()`. It estimates pair-local thresholds and
+  rho with DPD tuning `alpha`, delegates `alpha = 0` to joint ML, and returns
+  probabilities, expected/residual/Pearson tables, and `p^alpha` attenuation
+  weights. This is the main non-h-score bivariate comparator and is not yet
+  wired into SEM moment/Gamma construction.
 - Experimental all-ordinal SEM integration Option A under
   `data::pairwise_ordinal_stats_h_weighted_from_integer_data()`. It preserves
   lavaan-style shared marginal thresholds and metadata, replaces the

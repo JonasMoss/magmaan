@@ -259,9 +259,14 @@ Remaining work, in suggested order:
   eigenvalues, repairs robust `R` toward the identity when requested, applies
   the matching correlation-column influence scaling before rebuilding Gamma,
   and exposes block/pair diagnostics.)
-- [ ] **L, comparator track.** Implement density power divergence as the main
-  non-h-score comparator; keep Hellinger and Huberized residual fitting as
-  lower-priority experimental comparators.
+- [x] **M.** Add pair-local density power divergence as the main non-h-score
+  bivariate comparator.
+  (`data::fit_ordinal_pair_joint_dpd()` estimates pair-local thresholds and
+  rho, delegates `alpha = 0` to joint ML, and exposes `p^alpha` attenuation
+  weights plus the same table diagnostics as the h-weighted path.)
+- [ ] **M/L.** Decide, after simulation use, whether DPD deserves fixed-shared-
+  threshold and SEM Option A/Gamma integration. Keep Hellinger and Huberized
+  residual fitting as lower-priority experimental comparators.
 - [x] **M.** Pin the h-score estimators against the canonical robcat R package
   (Welz, Mair & Alfons, 2026; vendored in `external/robcat`). The WMA hard cap
   is the same C-estimator as robcat `polycor`: `robcat polycor(c=C)` ≡ magmaan
