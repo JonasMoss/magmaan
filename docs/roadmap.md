@@ -256,6 +256,12 @@ golden `parTable()` fixtures.
   work, exposing fixed-threshold rho ML, likelihood, casewise threshold/rho
   scores, and pairwise score Gamma. The mixed sample-stat builder now reuses
   this kernel for polyserial associations.
+- Experimental fixed-marginal DPD polyserial rho fitting is available for
+  mixed continuous/ordinal robustness work. It keeps the mixed builder's
+  lavaan-style marginal thresholds and continuous mean/variance estimates,
+  attenuates observations by joint-density `p(x, y)^alpha`, and a separate
+  mixed sample-stat builder can swap DPD polyserial pairs into
+  `MixedOrdinalStats` without changing the default ML/lavaan-compatible path.
 - Public complete-data mixed pair helpers also expose continuous-continuous
   normal pair likelihood/diagnostics, casewise mean/variance/covariance scores,
   score Gamma, and labels for the exact threshold, negative-mean, variance,
@@ -402,9 +408,9 @@ developer step.
   fixed.x robust LS still follows lavaan's conditional exogenous bookkeeping
   and is not part of the generic continuous adapter coverage.
 - Mixed categorical NACOV/weight, fit, and robust-reporting parity is
-  intentionally looser than the all-ordinal path, but pairwise polyserial and
-  continuous-normal score/Gamma primitives are exposed for follow-on inference
-  work.
+  intentionally looser than the all-ordinal path, but pairwise polyserial,
+  fixed-marginal DPD polyserial, and continuous-normal score/Gamma primitives
+  are exposed for follow-on inference work.
 - Observed-pair ordinal table kernels are pair-level primitives only. Missing
   ordinal SEM estimation is limited to the explicit pairwise observed-data
   composite prototype; shared-threshold multivariate missing ordinal modeling
