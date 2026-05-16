@@ -158,6 +158,11 @@ golden `parTable()` fixtures.
   ML kernel, preserves per-pair `n_obs`/`n_missing`, and rejects all-missing
   pairs or empty marginal categories. This is pairwise observed-data
   likelihood, not multivariate MAR ordinal FIML.
+- Checked-in pairwise diagnostic fixture coverage under
+  `tests/fixtures/pairwise/`: complete all-ordinal polychoric diagnostics,
+  mixed pair labels and primitive ML helpers, complete/listwise joint
+  composite diagnostics, and observed-pair composite missingness/count
+  semantics.
 - The SEM-facing ordinal moment path remains the lavaan-compatible
   shared-threshold path. Pair-local joint threshold/rho ML is reserved for
   diagnostics, robust pair experiments, and future composite likelihood rather

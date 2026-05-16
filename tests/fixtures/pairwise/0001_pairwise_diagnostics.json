@@ -1,0 +1,142 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "pairwise_diagnostics",
+    "description": "Small hand-auditable fixtures for complete, observed-pair, and mixed pairwise diagnostics."
+  },
+  "complete_ordinal": {
+    "blocks": [
+      {
+        "matrix": [
+          [1, 1, 1],
+          [1, 2, 2],
+          [1, 3, 3],
+          [2, 1, 2],
+          [2, 2, 3],
+          [2, 3, 1],
+          [3, 1, 3],
+          [3, 2, 1],
+          [3, 3, 2],
+          [1, 1, 2],
+          [2, 2, 1],
+          [3, 3, 3]
+        ],
+        "moment_dim": 9,
+        "pairs": [
+          {
+            "i": 1,
+            "j": 0,
+            "n_levels_i": 3,
+            "n_levels_j": 3,
+            "n_obs": 12,
+            "n_missing": 0,
+            "counts": [[2, 1, 1], [1, 2, 1], [1, 1, 2]]
+          },
+          {
+            "i": 2,
+            "j": 0,
+            "n_levels_i": 3,
+            "n_levels_j": 3,
+            "n_obs": 12,
+            "n_missing": 0,
+            "counts": [[1, 2, 1], [2, 1, 1], [1, 1, 2]]
+          },
+          {
+            "i": 2,
+            "j": 1,
+            "n_levels_i": 3,
+            "n_levels_j": 3,
+            "n_obs": 12,
+            "n_missing": 0,
+            "counts": [[1, 2, 1], [2, 1, 1], [1, 1, 2]]
+          }
+        ]
+      }
+    ],
+    "composite": {
+      "pair_count": 3,
+      "scaling_denominator": 36,
+      "reports_chisq": false,
+      "df": -1
+    }
+  },
+  "observed_ordinal": {
+    "n_levels": [[3, 2, 2]],
+    "blocks": [
+      {
+        "matrix": [
+          [1, 1, 1],
+          [2, 2, 1],
+          [3, 1, 2],
+          [null, 2, 2],
+          [1, null, 1],
+          [2, 1, null],
+          [3, 2, 1],
+          [null, null, 2]
+        ],
+        "pairs": [
+          {
+            "i": 1,
+            "j": 0,
+            "n_levels_i": 2,
+            "n_levels_j": 3,
+            "n_obs": 5,
+            "n_missing": 3,
+            "counts": [[1, 1, 1], [0, 1, 1]]
+          },
+          {
+            "i": 2,
+            "j": 0,
+            "n_levels_i": 2,
+            "n_levels_j": 3,
+            "n_obs": 5,
+            "n_missing": 3,
+            "counts": [[2, 1, 1], [0, 0, 1]]
+          },
+          {
+            "i": 2,
+            "j": 1,
+            "n_levels_i": 2,
+            "n_levels_j": 2,
+            "n_obs": 5,
+            "n_missing": 3,
+            "counts": [[1, 2], [1, 1]]
+          }
+        ]
+      }
+    ],
+    "composite": {
+      "pair_count": 3,
+      "scaling_denominator": 15,
+      "reports_chisq": false,
+      "df": -1
+    }
+  },
+  "mixed_primitives": {
+    "ordered": [0, 1, 0],
+    "threshold_ov": [1, 1],
+    "threshold_level": [1, 2],
+    "moment_count": 9,
+    "pairs": [
+      {"i": 1, "j": 0, "moment_index": 6, "kind": "continuous_ordinal"},
+      {"i": 2, "j": 0, "moment_index": 7, "kind": "continuous_continuous"},
+      {"i": 2, "j": 1, "moment_index": 8, "kind": "continuous_ordinal"}
+    ],
+    "continuous_pair": {
+      "x_i": [1, 2, 3, 4],
+      "x_j": [2, 3, 5, 7],
+      "n_obs": 4,
+      "mean_i": 2.5,
+      "mean_j": 4.25,
+      "var_i": 1.25,
+      "var_j": 3.6875,
+      "cov": 2.125
+    },
+    "polyserial_pair": {
+      "categories": [0, 0, 1, 1, 1, 2, 2, 2],
+      "u": [-1.4, -0.8, -0.5, 0.0, 0.4, 0.7, 1.1, 1.5],
+      "thresholds": [-0.45, 0.65],
+      "rho_sign": "positive"
+    }
+  }
+}
