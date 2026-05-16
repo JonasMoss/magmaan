@@ -621,6 +621,17 @@ TEST_CASE("Pairwise ordinal joint composite objective fits complete pair-local m
     CHECK(pair.expected_counts.sum() == doctest::Approx(pair.adjusted_counts.sum()));
     CHECK(pair.residual_counts.isApprox(pair.adjusted_counts - pair.expected_counts, 1e-12));
     CHECK(pair.scaling_weight == doctest::Approx(24.0));
+    const Eigen::Index n_score_cols =
+        pair.thresholds_i.size() + pair.thresholds_j.size() + 1;
+    CHECK(pair.score_contributions.rows() == pair.n_obs);
+    CHECK(pair.score_contributions.cols() == n_score_cols);
+    CHECK(pair.score_contributions.allFinite());
+    CHECK(pair.score_gamma.rows() == n_score_cols);
+    CHECK(pair.score_gamma.cols() == n_score_cols);
+    CHECK(pair.score_gamma.isApprox(
+        (pair.score_contributions.transpose() * pair.score_contributions) /
+            static_cast<double>(pair.n_obs),
+        1e-12));
   }
   CHECK(joint->negloglik == doctest::Approx(expected_nll));
   CHECK(joint->weighted_negloglik == doctest::Approx(expected_nll));
@@ -701,6 +712,17 @@ TEST_CASE("Pairwise ordinal observed joint composite objective preserves pairwis
     CHECK(pair.expected_counts.sum() ==
           doctest::Approx(pair.adjusted_counts.sum()).epsilon(0.03));
     CHECK(pair.residual_counts.isApprox(pair.adjusted_counts - pair.expected_counts, 1e-12));
+    const Eigen::Index n_score_cols =
+        pair.thresholds_i.size() + pair.thresholds_j.size() + 1;
+    CHECK(pair.score_contributions.rows() == pair.n_obs);
+    CHECK(pair.score_contributions.cols() == n_score_cols);
+    CHECK(pair.score_contributions.allFinite());
+    CHECK(pair.score_gamma.rows() == n_score_cols);
+    CHECK(pair.score_gamma.cols() == n_score_cols);
+    CHECK(pair.score_gamma.isApprox(
+        (pair.score_contributions.transpose() * pair.score_contributions) /
+            static_cast<double>(pair.n_obs),
+        1e-12));
   }
   CHECK(observed->negloglik == doctest::Approx(expected_nll));
   CHECK(observed->weighted_negloglik == doctest::Approx(expected_nll));

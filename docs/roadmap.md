@@ -140,24 +140,28 @@ golden `parTable()` fixtures.
   `estimate::pairwise_ordinal_composite_objective()`. It consumes
   `PairwiseOrdinalStats` plus SEM-implied shared thresholds and correlations,
   maps each pair to its bivariate threshold margins, exposes per-pair boundary
-  diagnostics, and makes scaling/weighting explicit. The current reporting
-  contract deliberately does not report chi-square or degrees of freedom until
-  a calibrated composite-likelihood test is implemented.
+  diagnostics plus score/Gamma rows for the bivariate threshold/rho margin,
+  and makes scaling/weighting explicit. The current reporting contract
+  deliberately does not report chi-square or degrees of freedom until a
+  calibrated composite-likelihood test is implemented.
 - Complete/listwise all-ordinal pair-local joint composite prototype under
   `estimate::pairwise_ordinal_joint_composite_objective()`. It consumes the
   same `PairwiseOrdinalStats` diagnostics and options surface, refits every
   pair with the complete bivariate joint threshold/rho ML kernel, and returns
   pair-local thresholds, rho, adjusted counts, fitted counts, residuals,
-  boundary flags, and objective scaling. This is a saturated/reference
-  composite target for future SEM fitting, not a lavaan-compatible DWLS moment
-  builder and not a calibrated global chi-square test.
+  score contributions, score Gamma, boundary flags, and objective scaling.
+  This is a saturated/reference composite target for future SEM fitting, not a
+  lavaan-compatible DWLS moment builder and not a calibrated global chi-square
+  test.
 - Observed-pair all-ordinal joint composite prototype under
   `estimate::pairwise_ordinal_observed_joint_composite_objective()`. It takes
   ordinal data blocks with `NaN` missingness plus declared level counts, fits
   each bivariate observed-pair table independently with the joint threshold/rho
   ML kernel, preserves per-pair `n_obs`/`n_missing`, and rejects all-missing
-  pairs or empty marginal categories. This is pairwise observed-data
-  likelihood, not multivariate MAR ordinal FIML.
+  pairs or empty marginal categories. It exposes the same bivariate
+  threshold/rho score contributions and score Gamma as the complete/listwise
+  path. This is pairwise observed-data likelihood, not multivariate MAR
+  ordinal FIML.
 - Checked-in pairwise diagnostic fixture coverage under
   `tests/fixtures/pairwise/`: complete all-ordinal polychoric diagnostics,
   mixed pair labels and primitive ML helpers, complete/listwise joint
@@ -291,10 +295,10 @@ adapters layered on top.
   intentionally looser than the all-ordinal path while polyserial Gamma details
   are hardened.
 - Observed-pair ordinal table kernels are pair-level primitives only. Missing
-  ordinal SEM estimation remains unsupported until an explicit composite
-  likelihood target is documented. Shared-threshold multivariate missing
-  ordinal modeling is outside the pairwise milestone and requires a separate
-  design note before implementation.
+  ordinal SEM estimation is limited to the explicit pairwise observed-data
+  composite prototype; shared-threshold multivariate missing ordinal modeling
+  remains unsupported and requires a separate design note before
+  implementation.
 - Browne residual ADF is complete-data only.
 - Score-test EPC is raw, unstandardized EPC only; standardized EPC and absent
   row-generation helpers are not yet part of the public contract.

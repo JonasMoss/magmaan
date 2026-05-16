@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -200,6 +201,72 @@ data::OrdinalPairJointMlOptions joint_options(
   return out;
 }
 
+post_expected<Eigen::MatrixXd>
+score_contributions_from_counts(const Eigen::MatrixXd& counts,
+                                const Eigen::VectorXd& thresholds_i,
+                                const Eigen::VectorXd& thresholds_j,
+                                double rho,
+                                std::string_view caller) {
+  if (counts.rows() != thresholds_i.size() + 1 ||
+      counts.cols() != thresholds_j.size() + 1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": score count/threshold dimension mismatch"));
+  }
+  if (!counts.allFinite() || (counts.array() < 0.0).any()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": score counts must be finite and nonnegative"));
+  }
+  std::int64_t n = 0;
+  for (Eigen::Index r = 0; r < counts.rows(); ++r) {
+    for (Eigen::Index c = 0; c < counts.cols(); ++c) {
+      const double v = counts(r, c);
+      const double rounded = std::round(v);
+      if (std::abs(v - rounded) > 1e-10) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            std::string(caller) + ": score counts must be integer-valued"));
+      }
+      n += static_cast<std::int64_t>(rounded);
+    }
+  }
+  if (n <= 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": score counts have no observations"));
+  }
+
+  Eigen::VectorXi x_i(n);
+  Eigen::VectorXi x_j(n);
+  Eigen::Index row = 0;
+  for (Eigen::Index r = 0; r < counts.rows(); ++r) {
+    for (Eigen::Index c = 0; c < counts.cols(); ++c) {
+      const auto reps = static_cast<Eigen::Index>(std::llround(counts(r, c)));
+      for (Eigen::Index k = 0; k < reps; ++k) {
+        x_i(row) = static_cast<int>(r);
+        x_j(row) = static_cast<int>(c);
+        ++row;
+      }
+    }
+  }
+
+  auto scores = data::ordinal_pair_scores(
+      x_i, x_j, rho, thresholds_i, thresholds_j);
+  if (!scores.has_value()) return std::unexpected(scores.error());
+
+  Eigen::MatrixXd out(
+      n, thresholds_i.size() + thresholds_j.size() + 1);
+  out.leftCols(thresholds_i.size()) = scores->threshold_i;
+  out.middleCols(thresholds_i.size(), thresholds_j.size()) =
+      scores->threshold_j;
+  out.col(out.cols() - 1) = scores->rho;
+  return out;
+}
+
+Eigen::MatrixXd score_gamma(const Eigen::MatrixXd& scores) {
+  if (scores.rows() == 0) {
+    return Eigen::MatrixXd::Zero(scores.cols(), scores.cols());
+  }
+  return (scores.transpose() * scores) / static_cast<double>(scores.rows());
+}
+
 post_expected<void>
 validate_observed_blocks(const std::vector<Eigen::MatrixXd>& X,
                          const std::vector<std::vector<std::int32_t>>& n_levels,
@@ -296,6 +363,10 @@ pairwise_ordinal_composite_objective(
       Eigen::MatrixXd expected =
           expected_counts(counts.sum(), *th_i, *th_j, rho);
       Eigen::MatrixXd residual = counts - expected;
+      auto score_or = score_contributions_from_counts(
+          pd.counts, *th_i, *th_j, rho, "pairwise ordinal composite");
+      if (!score_or.has_value()) return std::unexpected(score_or.error());
+      Eigen::MatrixXd gamma = score_gamma(*score_or);
 
       PairwiseOrdinalCompositePair pair{
           .label = pd.label,
@@ -312,7 +383,9 @@ pairwise_ordinal_composite_objective(
           .counts = pd.counts,
           .adjusted_counts = counts,
           .expected_counts = std::move(expected),
-          .residual_counts = std::move(residual)};
+          .residual_counts = std::move(residual),
+          .score_contributions = std::move(*score_or),
+          .score_gamma = std::move(gamma)};
 
       accumulate_pair(block, std::move(pair));
     }
@@ -360,6 +433,11 @@ pairwise_ordinal_joint_composite_objective(
           expected_counts(joint->adjusted_counts.sum(), joint->thresholds_i,
                           joint->thresholds_j, joint->rho);
       Eigen::MatrixXd residual = joint->adjusted_counts - expected;
+      auto score_or = score_contributions_from_counts(
+          pd.counts, joint->thresholds_i, joint->thresholds_j, joint->rho,
+          "pairwise ordinal joint composite");
+      if (!score_or.has_value()) return std::unexpected(score_or.error());
+      Eigen::MatrixXd gamma = score_gamma(*score_or);
       const double weighted =
           weighted_pair_negloglik(joint->negloglik, pd.n_obs, options.weighting);
       const double scale_weight =
@@ -380,7 +458,9 @@ pairwise_ordinal_joint_composite_objective(
           .counts = pd.counts,
           .adjusted_counts = std::move(joint->adjusted_counts),
           .expected_counts = std::move(expected),
-          .residual_counts = std::move(residual)};
+          .residual_counts = std::move(residual),
+          .score_contributions = std::move(*score_or),
+          .score_gamma = std::move(gamma)};
 
       accumulate_pair(block, std::move(pair));
     }
@@ -431,6 +511,11 @@ pairwise_ordinal_observed_joint_composite_objective(
                             joint->fit.thresholds_j,
                             joint->fit.rho);
         Eigen::MatrixXd residual = joint->fit.adjusted_counts - expected;
+        auto score_or = score_contributions_from_counts(
+            joint->counts, joint->fit.thresholds_i, joint->fit.thresholds_j,
+            joint->fit.rho, "pairwise ordinal observed joint composite");
+        if (!score_or.has_value()) return std::unexpected(score_or.error());
+        Eigen::MatrixXd gamma = score_gamma(*score_or);
         const double weighted =
             weighted_pair_negloglik(joint->fit.negloglik, joint->n_obs,
                                     options.weighting);
@@ -457,7 +542,9 @@ pairwise_ordinal_observed_joint_composite_objective(
             .counts = std::move(joint->counts),
             .adjusted_counts = std::move(joint->fit.adjusted_counts),
             .expected_counts = std::move(expected),
-            .residual_counts = std::move(residual)};
+            .residual_counts = std::move(residual),
+            .score_contributions = std::move(*score_or),
+            .score_gamma = std::move(gamma)};
 
         accumulate_pair(block, std::move(pair));
       }

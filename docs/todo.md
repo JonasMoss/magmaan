@@ -87,7 +87,11 @@ Remaining work, in suggested order:
 - [ ] **L, follow-on inference work.** Extend pairwise influence/Gamma exposure
   to complete/listwise and missing-data all-ordinal composite-likelihood paths,
   then to mixed continuous/ordinal pairwise paths once their likelihood targets
-  and moment ordering are fixed.
+  and moment ordering are fixed. Partial: all-ordinal shared-threshold,
+  complete/listwise pair-local, and observed-pair composite surfaces now expose
+  per-observation bivariate threshold/rho score contributions plus their
+  pairwise score Gamma; mixed continuous/ordinal composite influence remains
+  open.
 
 Done when: the pairwise path reproduces existing ML polychorics in its default
 slice, has an explicit composite-likelihood API for pair-local SEM work, and
