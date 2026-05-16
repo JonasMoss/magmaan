@@ -18,6 +18,15 @@ fast:
 test-fast: fast
     ctest --preset fast
 
+# Build + run one fast-suite area (smoke|spec|estimate|inference|ordinal|parity); optional 2nd arg filters test names by regex.
+test-area area regex="":
+    cmake --build --preset fast --target magmaan_test_{{area}}
+    ctest --preset fast -L {{area}} {{ if regex == "" { "" } else { "-R '" + regex + "'" } }}
+
+# Build + run the fast suite minus the heavy real-data parity tests.
+test-quick: fast
+    ctest --preset fast -LE parity
+
 # Build the sanitizer validation tree (Debug + AddressSanitizer + UBSan).
 dev:
     cmake --build --preset dev
