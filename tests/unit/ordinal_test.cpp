@@ -577,6 +577,85 @@ TEST_CASE("Pairwise ordinal composite objective validates implied pair mapping")
   CHECK(bad_th.error().detail.find("non-finite") != std::string::npos);
 }
 
+TEST_CASE("Pairwise ordinal joint composite objective fits complete pair-local margins") {
+  Eigen::MatrixXd X(24, 3);
+  Eigen::Index r = 0;
+  for (int rep = 0; rep < 4; ++rep) {
+    for (int c = 1; c <= 3; ++c) {
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((c + rep) % 3);
+      X(r, 2) = 1 + ((2 * c + rep) % 3);
+      ++r;
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((2 * c + rep) % 3);
+      X(r, 2) = 1 + ((c + rep) % 3);
+      ++r;
+    }
+  }
+
+  auto pairwise = magmaan::data::pairwise_ordinal_stats_from_integer_data({X});
+  REQUIRE(pairwise.has_value());
+  auto joint = magmaan::estimate::pairwise_ordinal_joint_composite_objective(
+      *pairwise);
+  REQUIRE(joint.has_value());
+  REQUIRE(joint->blocks.size() == 1);
+  REQUIRE(joint->blocks[0].pairs.size() == 3);
+  CHECK_FALSE(joint->reports_chisq);
+  CHECK(joint->df == -1);
+
+  double expected_nll = 0.0;
+  for (std::size_t k = 0; k < joint->blocks[0].pairs.size(); ++k) {
+    const auto& pd = pairwise->block_diagnostics[0].pair_diagnostics[k];
+    const auto direct = magmaan::data::fit_ordinal_pair_joint_ml(pd.counts);
+    REQUIRE(direct.has_value());
+    const auto& pair = joint->blocks[0].pairs[k];
+    expected_nll += direct->negloglik;
+    CHECK(pair.label.i == pd.label.i);
+    CHECK(pair.label.j == pd.label.j);
+    CHECK(pair.thresholds_i.isApprox(direct->thresholds_i, 1e-12));
+    CHECK(pair.thresholds_j.isApprox(direct->thresholds_j, 1e-12));
+    CHECK(pair.rho == doctest::Approx(direct->rho));
+    CHECK(pair.negloglik == doctest::Approx(direct->negloglik));
+    CHECK(pair.counts.isApprox(pd.counts, 0.0));
+    CHECK(pair.adjusted_counts.isApprox(direct->adjusted_counts, 0.0));
+    CHECK(pair.expected_counts.sum() == doctest::Approx(pair.adjusted_counts.sum()));
+    CHECK(pair.residual_counts.isApprox(pair.adjusted_counts - pair.expected_counts, 1e-12));
+    CHECK(pair.scaling_weight == doctest::Approx(24.0));
+  }
+  CHECK(joint->negloglik == doctest::Approx(expected_nll));
+  CHECK(joint->weighted_negloglik == doctest::Approx(expected_nll));
+  CHECK(joint->scaling_denominator == doctest::Approx(72.0));
+  CHECK(joint->objective == doctest::Approx(expected_nll / 72.0));
+}
+
+TEST_CASE("Pairwise ordinal joint composite objective preserves lavaan 2x2 adjustment choice") {
+  Eigen::MatrixXd X(15, 2);
+  Eigen::Index r = 0;
+  for (int k = 0; k < 4; ++k) X.row(r++) << 1, 2;
+  for (int k = 0; k < 5; ++k) X.row(r++) << 2, 1;
+  for (int k = 0; k < 6; ++k) X.row(r++) << 2, 2;
+
+  auto pairwise = magmaan::data::pairwise_ordinal_stats_from_integer_data({X});
+  REQUIRE(pairwise.has_value());
+  auto adjusted = magmaan::estimate::pairwise_ordinal_joint_composite_objective(
+      *pairwise);
+  auto raw = magmaan::estimate::pairwise_ordinal_joint_composite_objective(
+      *pairwise,
+      magmaan::estimate::PairwiseOrdinalCompositeOptions{
+          .lavaan_adjust_2x2 = false});
+  REQUIRE(adjusted.has_value());
+  REQUIRE(raw.has_value());
+  REQUIRE(adjusted->blocks[0].pairs.size() == 1);
+  REQUIRE(raw->blocks[0].pairs.size() == 1);
+
+  const auto& adj_pair = adjusted->blocks[0].pairs[0];
+  const auto& raw_pair = raw->blocks[0].pairs[0];
+  CHECK(adj_pair.counts.isApprox(raw_pair.counts, 0.0));
+  CHECK(adj_pair.adjusted_counts(0, 0) == doctest::Approx(0.5));
+  CHECK(raw_pair.adjusted_counts(0, 0) == doctest::Approx(0.0));
+  CHECK(adj_pair.negloglik != doctest::Approx(raw_pair.negloglik));
+}
+
 TEST_CASE("Ordinal stats: thresholds, polychoric R, and weights have expected shapes") {
   Eigen::MatrixXd X(320, 3);
   Eigen::Index r = 0;
