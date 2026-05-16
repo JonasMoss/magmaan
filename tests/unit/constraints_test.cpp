@@ -375,3 +375,37 @@ TEST_CASE("constraints: multi-group shared-label LS fits via K-reparameterizatio
       (con.A_eq * est_or->theta - con.b_eq).cwiseAbs().maxCoeff();
   CHECK(eq_resid < 1e-9);
 }
+
+TEST_CASE("constraints: general-linear equality LS fits via K-reparameterization") {
+  // `b2 + b3 == 1.5` is arithmetic — a general-linear lin_constraint row, not
+  // a pure-merge group. fit_bounded's LS path reparameterizes θ = θ₀ + K·α
+  // with the SVD-kernel K (which rotates the parameter axes) and optimizes the
+  // reduced problem — exact constraint, no penalty.
+  auto pt  = must_lavaanify("f =~ x1 + b2*x2 + b3*x3\nb2 + b3 == 1.5");
+  auto rep = build_matrix_rep(pt).value();
+
+  // A 1-factor-structured 3×3 covariance.
+  const Eigen::Vector3d lam(1.0, 0.7, 0.8);
+  const Eigen::Vector3d th(0.5, 0.6, 0.4);
+  Eigen::Matrix3d S =
+      lam * lam.transpose() * 1.8 + th.asDiagonal().toDenseMatrix();
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {250};
+
+  const magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
+      .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9});
+  auto est_or = magmaan::estimate::fit_bounded(
+      pt, rep, samp, magmaan::estimate::Bounds{}, magmaan::gls::ULS{}, opt);
+  REQUIRE_MESSAGE(est_or.has_value(),
+      "general-linear LS fit failed: "
+          << (est_or.has_value() ? "" : est_or.error().detail));
+  CHECK(std::isfinite(est_or->fmin));
+
+  auto con = build_eq_constraints(pt).value();
+  REQUIRE(con.active());
+  REQUIRE(con.group.empty());   // general-linear path, not pure-merge
+  const double eq_resid =
+      (con.A_eq * est_or->theta - con.b_eq).cwiseAbs().maxCoeff();
+  CHECK(eq_resid < 1e-9);
+}
