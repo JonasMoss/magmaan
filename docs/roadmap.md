@@ -136,6 +136,10 @@ golden `parTable()` fixtures.
   table, estimating pair-local nuisance thresholds and rho. This is not yet
   wired into SEM moment construction or a shared-threshold composite-likelihood
   API.
+- The SEM-facing ordinal moment path remains the lavaan-compatible
+  shared-threshold path. Pair-local joint threshold/rho ML is reserved for
+  diagnostics, robust pair experiments, and future composite likelihood rather
+  than for constructing the current `OrdinalStats` moment vector.
 - Muthen-style all-ordinal NACOV construction for thresholds plus
   polychorics.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
@@ -160,6 +164,9 @@ golden `parTable()` fixtures.
   normal pair likelihood/diagnostics plus labels for the exact threshold,
   negative-mean, variance, and lower-triangle pair order used by
   `MixedOrdinalStats`.
+- The continuous normal pair likelihood is currently a mixed-pair primitive
+  and benchmark against complete-data ML/FIML, not a supported standalone
+  normal-data pairwise SEM estimator.
 - Ordinal and mixed delta DWLS/WLS expose fixed-parameter modification indices
   and equality-release score tests over the same threshold/correlation moment
   vectors and weights used by fitting.
@@ -256,6 +263,9 @@ adapters layered on top.
 - Mixed categorical NACOV/weight, fit, and robust-reporting parity is
   intentionally looser than the all-ordinal path while polyserial Gamma details
   are hardened.
+- Observed-pair ordinal table kernels are pair-level primitives only. Missing
+  ordinal SEM estimation remains unsupported until an explicit composite
+  likelihood or shared-threshold multivariate target is documented.
 - Browne residual ADF is complete-data only.
 - Score-test EPC is raw, unstandardized EPC only; standardized EPC and absent
   row-generation helpers are not yet part of the public contract.
