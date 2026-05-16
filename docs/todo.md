@@ -237,8 +237,13 @@ Remaining work, in suggested order:
   and rho with the same predefined h-score family; unit coverage pins the ML
   and `hard_cap(k = Inf)` limits, a contaminated discordant-corner case, and
   an independently recomputed h-objective/local-perturbation check.)
-- [ ] **L.** Add casewise influence and sandwich/Gamma calculations for robust
+- [x] **L.** Add casewise influence and sandwich/Gamma calculations for robust
   pairwise moments, including the hard-cap kink convention and scaling.
+  (`data::ordinal_pair_h_weighted_influence()` returns casewise
+  estimating-function rows, h-score diagnostics, finite-difference bread,
+  influence rows, score Gamma, and sandwich Gamma; unit coverage pins ML and
+  `hard_cap(k = Inf)` limits, `S'S / n` scaling, downweighting, and
+  `dh(t) = 0` at the WMA hard-cap kink.)
 - [ ] **M/L.** Add the first SEM integration mode: shared lavaan-style marginal
   thresholds plus robust rhos as experimental Option A before attempting
   shared-threshold composite h-score estimation.

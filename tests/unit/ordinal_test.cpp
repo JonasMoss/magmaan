@@ -67,6 +67,40 @@ double h_score_pair_objective(
   return out;
 }
 
+Eigen::MatrixXd ordinal_pair_score_rows_from_counts(
+    const Eigen::MatrixXd& counts,
+    const Eigen::VectorXd& th_i,
+    const Eigen::VectorXd& th_j,
+    double rho) {
+  std::int64_t n = 0;
+  for (Eigen::Index a = 0; a < counts.rows(); ++a) {
+    for (Eigen::Index b = 0; b < counts.cols(); ++b) {
+      n += static_cast<std::int64_t>(std::llround(counts(a, b)));
+    }
+  }
+  Eigen::VectorXi xi(n);
+  Eigen::VectorXi xj(n);
+  Eigen::Index row = 0;
+  for (Eigen::Index a = 0; a < counts.rows(); ++a) {
+    for (Eigen::Index b = 0; b < counts.cols(); ++b) {
+      const auto reps = static_cast<Eigen::Index>(std::llround(counts(a, b)));
+      for (Eigen::Index k = 0; k < reps; ++k) {
+        xi(row) = static_cast<int>(a);
+        xj(row) = static_cast<int>(b);
+        ++row;
+      }
+    }
+  }
+
+  auto scores = magmaan::data::ordinal_pair_scores(xi, xj, rho, th_i, th_j);
+  REQUIRE(scores.has_value());
+  Eigen::MatrixXd out(n, th_i.size() + th_j.size() + 1);
+  out.leftCols(th_i.size()) = scores->threshold_i;
+  out.middleCols(th_i.size(), th_j.size()) = scores->threshold_j;
+  out.col(out.cols() - 1) = scores->rho;
+  return out;
+}
+
 }  // namespace
 
 TEST_CASE("Polychoric h-score API evaluates predefined caps") {
@@ -95,6 +129,13 @@ TEST_CASE("Polychoric h-score API evaluates predefined caps") {
   CHECK(hard->h == doctest::Approx(1.6));
   CHECK(hard->dh == doctest::Approx(0.0));
   CHECK(hard->phi == doctest::Approx(2.4 * (std::log(1.6) + 1.0) - 1.6));
+
+  auto hard_kink = magmaan::data::eval_polychoric_h_score(
+      1.6, PolychoricHScoreOptions{
+               .kind = PolychoricHScoreKind::WmaHardCap, .k = 1.6});
+  REQUIRE(hard_kink.has_value());
+  CHECK(hard_kink->h == doctest::Approx(1.6));
+  CHECK(hard_kink->dh == doctest::Approx(0.0));
 
   auto smooth_low = magmaan::data::eval_polychoric_h_score(
       1.2, PolychoricHScoreOptions{.kind = PolychoricHScoreKind::SmoothCap});
@@ -708,6 +749,112 @@ TEST_CASE("Ordinal pair joint h-weighted estimator downweights contaminated cell
   CHECK(objective <= h_score_pair_objective(
       contaminated, robust->thresholds_i, robust->thresholds_j,
       robust->rho - 0.02, h_options));
+}
+
+TEST_CASE("Ordinal pair h-weighted influence gives casewise sandwich rows") {
+  using magmaan::data::PolychoricHScoreKind;
+  using magmaan::data::PolychoricHScoreOptions;
+
+  Eigen::MatrixXd counts(3, 3);
+  counts << 20.0, 10.0, 5.0,
+             8.0, 25.0, 12.0,
+             4.0, 14.0, 22.0;
+
+  auto fit = magmaan::data::fit_ordinal_pair_joint_ml(counts);
+  REQUIRE(fit.has_value());
+  auto influence = magmaan::data::ordinal_pair_h_weighted_influence(
+      counts, fit->thresholds_i, fit->thresholds_j, fit->rho);
+  REQUIRE(influence.has_value());
+  const Eigen::MatrixXd ordinary_scores = ordinal_pair_score_rows_from_counts(
+      counts, fit->thresholds_i, fit->thresholds_j, fit->rho);
+  CHECK(influence->n_obs == counts.sum());
+  CHECK(influence->estimating_functions.isApprox(ordinary_scores, 1e-12));
+  CHECK(influence->score_gamma.isApprox(
+      (ordinary_scores.transpose() * ordinary_scores) /
+          static_cast<double>(influence->n_obs),
+      1e-12));
+  CHECK(influence->bread.rows() == ordinary_scores.cols());
+  CHECK(influence->bread.cols() == ordinary_scores.cols());
+  CHECK(influence->influence.rows() == ordinary_scores.rows());
+  CHECK(influence->influence.cols() == ordinary_scores.cols());
+  CHECK(influence->gamma.isApprox(
+      (influence->influence.transpose() * influence->influence) /
+          static_cast<double>(influence->n_obs),
+      1e-12));
+  CHECK(influence->gamma.isApprox(influence->gamma.transpose(), 1e-12));
+  CHECK(influence->gamma.allFinite());
+
+  auto hard_inf = magmaan::data::ordinal_pair_h_weighted_influence(
+      counts, fit->thresholds_i, fit->thresholds_j, fit->rho,
+      magmaan::data::OrdinalPairHWeightedInfluenceOptions{
+          .h_score = PolychoricHScoreOptions{
+              .kind = PolychoricHScoreKind::WmaHardCap,
+              .k = std::numeric_limits<double>::infinity()}});
+  REQUIRE(hard_inf.has_value());
+  CHECK(hard_inf->estimating_functions.isApprox(
+      influence->estimating_functions, 1e-12));
+  CHECK(hard_inf->gamma.isApprox(influence->gamma, 1e-12));
+}
+
+TEST_CASE("Ordinal pair h-weighted influence reports hard-cap kink convention") {
+  using magmaan::data::PolychoricHScoreKind;
+  using magmaan::data::PolychoricHScoreOptions;
+
+  Eigen::VectorXd th(1);
+  th << 0.0;
+  Eigen::MatrixXd counts(2, 2);
+  counts << 16.0, 8.0,
+             8.0, 8.0;
+  auto influence = magmaan::data::ordinal_pair_h_weighted_influence(
+      counts, th, th, 0.0,
+      magmaan::data::OrdinalPairHWeightedInfluenceOptions{
+          .h_score = PolychoricHScoreOptions{
+              .kind = PolychoricHScoreKind::WmaHardCap,
+              .k = 1.6}});
+  REQUIRE(influence.has_value());
+  CHECK(influence->ratios(0, 0) == doctest::Approx(1.6));
+  CHECK(influence->h_values(0, 0) == doctest::Approx(1.6));
+  CHECK(influence->dh_values(0, 0) == doctest::Approx(0.0));
+  CHECK(influence->weights(0, 0) == doctest::Approx(1.0));
+  CHECK(influence->ratios(0, 1) == doctest::Approx(0.8));
+  CHECK(influence->dh_values(0, 1) == doctest::Approx(1.0));
+}
+
+TEST_CASE("Ordinal pair h-weighted influence downweights inflated cells and scales Gamma") {
+  using magmaan::data::PolychoricHScoreKind;
+  using magmaan::data::PolychoricHScoreOptions;
+
+  Eigen::MatrixXd counts(3, 3);
+  counts << 594.0, 365.0, 858.0,
+            453.0, 715.0, 372.0,
+            311.0, 614.0, 718.0;
+  auto robust = magmaan::data::fit_ordinal_pair_joint_h_weighted(
+      counts, magmaan::data::OrdinalPairJointHWeightedOptions{
+                  .h_score = PolychoricHScoreOptions{
+                      .kind = PolychoricHScoreKind::WmaHardCap,
+                      .k = 1.15}});
+  REQUIRE(robust.has_value());
+  auto influence = magmaan::data::ordinal_pair_h_weighted_influence(
+      counts, robust->thresholds_i, robust->thresholds_j, robust->rho,
+      magmaan::data::OrdinalPairHWeightedInfluenceOptions{
+          .h_score = PolychoricHScoreOptions{
+              .kind = PolychoricHScoreKind::WmaHardCap,
+              .k = 1.15}});
+  REQUIRE(influence.has_value());
+  CHECK(influence->weights(0, 2) < 1.0);
+  CHECK(influence->estimating_functions.rows() == counts.sum());
+  CHECK(influence->estimating_functions.cols() == 5);
+  CHECK(influence->score_gamma.isApprox(
+      (influence->estimating_functions.transpose() *
+       influence->estimating_functions) /
+          static_cast<double>(influence->n_obs),
+      1e-12));
+  CHECK(influence->gamma.isApprox(
+      (influence->influence.transpose() * influence->influence) /
+          static_cast<double>(influence->n_obs),
+      1e-12));
+  CHECK(influence->gamma.allFinite());
+  CHECK(influence->gamma.diagonal().minCoeff() > 0.0);
 }
 
 TEST_CASE("Ordinal pair joint ML rejects empty marginal categories") {

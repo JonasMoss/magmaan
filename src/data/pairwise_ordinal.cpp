@@ -9,6 +9,8 @@
 #include <utility>
 #include <vector>
 
+#include <Eigen/LU>
+
 #include "magmaan/error.hpp"
 
 namespace magmaan::data {
@@ -277,6 +279,159 @@ bool h_score_is_ml_like(const PolychoricHScoreOptions& h_options) noexcept {
   return h_options.kind == PolychoricHScoreKind::ML ||
          (h_options.kind == PolychoricHScoreKind::WmaHardCap &&
           h_options.k == std::numeric_limits<double>::infinity());
+}
+
+post_expected<std::int64_t>
+integer_total_count(const Eigen::Ref<const Eigen::MatrixXd>& counts,
+                    std::string_view caller) {
+  std::int64_t n = 0;
+  for (Eigen::Index r = 0; r < counts.rows(); ++r) {
+    for (Eigen::Index c = 0; c < counts.cols(); ++c) {
+      const double v = counts(r, c);
+      const double rounded = std::round(v);
+      if (std::abs(v - rounded) > 1e-10) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            std::string(caller) + ": counts must be integer-valued"));
+      }
+      n += static_cast<std::int64_t>(rounded);
+    }
+  }
+  if (n <= 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": counts have no observations"));
+  }
+  return n;
+}
+
+Eigen::VectorXd cell_log_score(Eigen::Index ci,
+                               Eigen::Index cj,
+                               const Eigen::Ref<const Eigen::VectorXd>& th_i,
+                               const Eigen::Ref<const Eigen::VectorXd>& th_j,
+                               double rho) {
+  const Eigen::Index nth_i = th_i.size();
+  const Eigen::Index nth_j = th_j.size();
+  Eigen::VectorXd out = Eigen::VectorXd::Zero(nth_i + nth_j + 1);
+  const Eigen::Index n_levels_i = nth_i + 1;
+  const Eigen::Index n_levels_j = nth_j + 1;
+  const double lo_i = (ci == 0) ? -kInf : th_i(ci - 1);
+  const double hi_i = (ci + 1 == n_levels_i) ? kInf : th_i(ci);
+  const double lo_j = (cj == 0) ? -kInf : th_j(cj - 1);
+  const double hi_j = (cj + 1 == n_levels_j) ? kInf : th_j(cj);
+  const double lik = floored_rect_prob(lo_i, hi_i, lo_j, hi_j, rho);
+  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
+
+  for (Eigen::Index a = 0; a < nth_i; ++a) {
+    const double t = th_i(a);
+    const double z = normal_pdf(t) *
+        (normal_cdf((hi_j - rho * t) / sd) -
+         normal_cdf((lo_j - rho * t) / sd));
+    if (ci == a) out(a) += z / lik;
+    if (ci == a + 1) out(a) -= z / lik;
+  }
+  for (Eigen::Index a = 0; a < nth_j; ++a) {
+    const double t = th_j(a);
+    const double z = normal_pdf(t) *
+        (normal_cdf((hi_i - rho * t) / sd) -
+         normal_cdf((lo_i - rho * t) / sd));
+    if (cj == a) out(nth_i + a) += z / lik;
+    if (cj == a + 1) out(nth_i + a) -= z / lik;
+  }
+  out(out.size() - 1) =
+      ordinal_bvn_rect_drho(lo_i, hi_i, lo_j, hi_j, rho) / lik;
+  return out;
+}
+
+post_expected<Eigen::VectorXd>
+mean_h_weighted_score(const Eigen::Ref<const Eigen::MatrixXd>& counts,
+                      const Eigen::Ref<const Eigen::VectorXd>& th_i,
+                      const Eigen::Ref<const Eigen::VectorXd>& th_j,
+                      double rho,
+                      const PolychoricHScoreOptions& h_options,
+                      std::string_view caller) {
+  const double total = counts.sum();
+  Eigen::VectorXd out = Eigen::VectorXd::Zero(th_i.size() + th_j.size() + 1);
+  for (Eigen::Index a = 0; a < counts.rows(); ++a) {
+    const double lo_i = (a == 0) ? -kInf : th_i(a - 1);
+    const double hi_i = (a + 1 == counts.rows()) ? kInf : th_i(a);
+    for (Eigen::Index b = 0; b < counts.cols(); ++b) {
+      const double lo_j = (b == 0) ? -kInf : th_j(b - 1);
+      const double hi_j = (b + 1 == counts.cols()) ? kInf : th_j(b);
+      const double p = std::max(
+          kProbFloor, ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho));
+      const double t = counts(a, b) / (total * p);
+      auto h = eval_polychoric_h_score(t, h_options);
+      if (!h.has_value()) return std::unexpected(h.error());
+      if (!std::isfinite(h->h)) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            std::string(caller) + ": non-finite h-score"));
+      }
+      out.noalias() += p * h->h * cell_log_score(a, b, th_i, th_j, rho);
+    }
+  }
+  return out;
+}
+
+bool strictly_increasing(const Eigen::VectorXd& x) {
+  for (Eigen::Index k = 1; k < x.size(); ++k) {
+    if (!(x(k - 1) < x(k))) return false;
+  }
+  return true;
+}
+
+post_expected<Eigen::MatrixXd>
+h_weighted_bread(const Eigen::Ref<const Eigen::MatrixXd>& counts,
+                 const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+                 const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+                 double rho,
+                 double fd_step,
+                 const PolychoricHScoreOptions& h_options,
+                 std::string_view caller) {
+  const Eigen::Index nth_i = thresholds_i.size();
+  const Eigen::Index nth_j = thresholds_j.size();
+  const Eigen::Index npar = nth_i + nth_j + 1;
+  Eigen::VectorXd theta(npar);
+  theta.head(nth_i) = thresholds_i;
+  theta.segment(nth_i, nth_j) = thresholds_j;
+  theta(npar - 1) = rho;
+
+  auto eval = [&](const Eigen::VectorXd& x) -> post_expected<Eigen::VectorXd> {
+    const Eigen::VectorXd th_i = x.head(nth_i);
+    const Eigen::VectorXd th_j = x.segment(nth_i, nth_j);
+    const double r = x(npar - 1);
+    if (!strictly_increasing(th_i) || !strictly_increasing(th_j) ||
+        !std::isfinite(r) || r <= -1.0 || r >= 1.0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(caller) + ": finite-difference step left parameter domain"));
+    }
+    return mean_h_weighted_score(counts, th_i, th_j, r, h_options, caller);
+  };
+
+  Eigen::MatrixXd out(npar, npar);
+  for (Eigen::Index k = 0; k < npar; ++k) {
+    double h = fd_step * std::max(1.0, std::abs(theta(k)));
+    bool ok = false;
+    Eigen::VectorXd col(npar);
+    for (int attempt = 0; attempt < 12; ++attempt) {
+      Eigen::VectorXd xp = theta;
+      Eigen::VectorXd xm = theta;
+      xp(k) += h;
+      xm(k) -= h;
+      auto fp = eval(xp);
+      auto fm = eval(xm);
+      if (fp.has_value() && fm.has_value()) {
+        col = (*fp - *fm) / (2.0 * h);
+        ok = true;
+        break;
+      }
+      h *= 0.5;
+    }
+    if (!ok) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(caller) + ": could not compute finite-difference bread"));
+    }
+    out.col(k) = col;
+  }
+  return out;
 }
 
 post_expected<Eigen::VectorXd>
@@ -987,6 +1142,99 @@ fit_ordinal_pair_joint_h_weighted(
       .residual_counts = std::move(diag->residual_counts),
       .pearson_residuals = std::move(diag->pearson_residuals),
       .weights = std::move(diag->weights)};
+}
+
+post_expected<OrdinalPairHWeightedInfluence>
+ordinal_pair_h_weighted_influence(
+    const Eigen::Ref<const Eigen::MatrixXd>& counts,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+    double rho,
+    OrdinalPairHWeightedInfluenceOptions options) {
+  auto ok = validate_pair_shape(counts, thresholds_i, thresholds_j,
+                                "ordinal_pair_h_weighted_influence");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+  if (!std::isfinite(rho) || rho <= -1.0 || rho >= 1.0 ||
+      !(std::isfinite(options.fd_step) && options.fd_step > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ordinal_pair_h_weighted_influence: invalid options"));
+  }
+  auto h_ok = eval_polychoric_h_score(1.0, options.h_score);
+  if (!h_ok.has_value()) return std::unexpected(h_ok.error());
+  auto n_or = integer_total_count(counts, "ordinal_pair_h_weighted_influence");
+  if (!n_or.has_value()) return std::unexpected(n_or.error());
+
+  const auto n = static_cast<Eigen::Index>(*n_or);
+  const Eigen::Index npar = thresholds_i.size() + thresholds_j.size() + 1;
+  OrdinalPairHWeightedInfluence out;
+  out.n_obs = *n_or;
+  out.probabilities = Eigen::MatrixXd::Zero(counts.rows(), counts.cols());
+  out.ratios = Eigen::MatrixXd::Zero(counts.rows(), counts.cols());
+  out.h_values = Eigen::MatrixXd::Zero(counts.rows(), counts.cols());
+  out.dh_values = Eigen::MatrixXd::Zero(counts.rows(), counts.cols());
+  out.weights = Eigen::MatrixXd::Ones(counts.rows(), counts.cols());
+  out.estimating_functions = Eigen::MatrixXd::Zero(n, npar);
+
+  Eigen::Index row = 0;
+  for (Eigen::Index a = 0; a < counts.rows(); ++a) {
+    const double lo_i = (a == 0) ? -kInf : thresholds_i(a - 1);
+    const double hi_i = (a + 1 == counts.rows()) ? kInf : thresholds_i(a);
+    for (Eigen::Index b = 0; b < counts.cols(); ++b) {
+      const double lo_j = (b == 0) ? -kInf : thresholds_j(b - 1);
+      const double hi_j = (b + 1 == counts.cols()) ? kInf : thresholds_j(b);
+      const double p = std::max(
+          kProbFloor, ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho));
+      const double t = counts(a, b) / (static_cast<double>(*n_or) * p);
+      auto h = eval_polychoric_h_score(t, options.h_score);
+      if (!h.has_value()) return std::unexpected(h.error());
+      const double weight = t > 0.0 ? h->h / t : 1.0;
+      out.probabilities(a, b) = p;
+      out.ratios(a, b) = t;
+      out.h_values(a, b) = h->h;
+      out.dh_values(a, b) = h->dh;
+      out.weights(a, b) = weight;
+
+      const auto reps = static_cast<Eigen::Index>(std::llround(counts(a, b)));
+      if (reps <= 0) continue;
+      const Eigen::VectorXd score =
+          weight * cell_log_score(a, b, thresholds_i, thresholds_j, rho);
+      for (Eigen::Index k = 0; k < reps; ++k) {
+        out.estimating_functions.row(row) = score.transpose();
+        ++row;
+      }
+    }
+  }
+  if (row != n) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ordinal_pair_h_weighted_influence: count expansion mismatch"));
+  }
+
+  out.score_gamma =
+      (out.estimating_functions.transpose() * out.estimating_functions) /
+      static_cast<double>(out.n_obs);
+  auto bread_or = h_weighted_bread(counts, thresholds_i, thresholds_j, rho,
+                                   options.fd_step, options.h_score,
+                                   "ordinal_pair_h_weighted_influence");
+  if (!bread_or.has_value()) return std::unexpected(bread_or.error());
+  out.bread = std::move(*bread_or);
+
+  Eigen::FullPivLU<Eigen::MatrixXd> lu(out.bread);
+  lu.setThreshold(1e-10);
+  if (lu.rank() < out.bread.rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ordinal_pair_h_weighted_influence: singular bread matrix"));
+  }
+  const Eigen::MatrixXd bread_inv =
+      lu.solve(Eigen::MatrixXd::Identity(npar, npar));
+  if (!bread_inv.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ordinal_pair_h_weighted_influence: non-finite bread inverse"));
+  }
+  out.influence = -out.estimating_functions * bread_inv.transpose();
+  out.gamma = (out.influence.transpose() * out.influence) /
+              static_cast<double>(out.n_obs);
+  out.gamma = 0.5 * (out.gamma + out.gamma.transpose());
+  return out;
 }
 
 post_expected<OrdinalPairObservedMlResult>

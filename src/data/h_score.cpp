@@ -144,7 +144,7 @@ eval_polychoric_h_score(double t, const PolychoricHScoreOptions& options) {
         return PolychoricHScoreEval{.h = t, .dh = 1.0, .phi = ml_phi(t)};
       }
       const double k = options.k;
-      if (t <= k) {
+      if (t < k) {
         return PolychoricHScoreEval{.h = t, .dh = 1.0, .phi = ml_phi(t)};
       }
       const double phi = t * (std::log(k) + 1.0) - k;

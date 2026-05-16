@@ -151,6 +151,14 @@ golden `parTable()` fixtures.
   ML and `WmaHardCap(k = Inf)` delegate to the existing joint ML kernel; finite
   caps are validated as experimental bivariate diagnostics, not SEM moment
   construction or calibrated robust inference.
+- Experimental pair-local all-ordinal h-weighted influence diagnostics under
+  `data::ordinal_pair_h_weighted_influence()`. Given integer bivariate counts,
+  pair-local thresholds, and rho, it expands casewise estimating-function rows,
+  returns h-score ratios/values/derivatives/weights, finite-difference bread,
+  influence rows, score Gamma, and sandwich Gamma with `S'S / n` scaling. The
+  WMA hard-cap derivative convention is pinned as `dh(t) = 1[t < k]`, so the
+  exact kink uses derivative zero. This is the robust pairwise Gamma primitive;
+  SEM moment integration remains a follow-on step.
 - Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
   complete/listwise ordinal data, exposing pair labels, count/adjustment
   diagnostics, fitted fixed-threshold rho diagnostics, fitted expected/residual
