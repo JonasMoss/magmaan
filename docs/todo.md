@@ -65,14 +65,15 @@ Remaining work, in suggested order:
 - [ ] **M/L.** Add multi-group LS weighting and equality-constraint cases
   across continuous and ordinal estimators, plus mean-structure LS cases that
   exercise Ceres and SNLLS where semantically appropriate. Continuous
-  multi-group LS *weighting* parity has landed (`hs_3factor_ls_mg_configural`,
-  ULS/GLS/WLS, HS by school). The cross-group equality-constrained companion
-  is blocked: `fit_bounded`'s LS path enforces equality with a ~1e10 penalty
-  residual, and on a 2-group metric-invariance model LBFGS-B's Cauchy-point
-  search fails to terminate. Needs a conditioned LS-equality path (e.g. a
-  K-reparameterization, as the ML path uses) before that case can be gated.
-  Remaining: that fix, ordinal multi-group LS, and mean-structure LS
-  exercising Ceres/SNLLS.
+  multi-group LS parity has landed — weighting (`hs_3factor_ls_mg_configural`)
+  and cross-group equal loadings (`hs_3factor_ls_mg_metric`), ULS/GLS/WLS, HS
+  by school. `fit_bounded`'s LS path now K-reparameterizes pure-merge equality
+  constraints (`θ = θ₀ + K·α`, optimizing the reduced bounded problem) instead
+  of the old 1e10 penalty residual, which was ill-conditioned enough to hang
+  LBFGS-B; `browne_residual_nt` K-reduces its Jacobian so constrained ULS
+  chi-square is correct. Remaining: ordinal multi-group LS, mean-structure LS
+  exercising Ceres/SNLLS, and general-linear (`a == 2*b + c`) equality on the
+  LS+bounds path (still on the penalty path — rare, untested).
 - [ ] **S.** Add scalar-invariance latent mean rescaling fixtures. The
   line-search salvage (`docs/convergence_diagnostics.md`) unblocked
   mean-structure ML convergence on the unbounded path; confirm the bounded

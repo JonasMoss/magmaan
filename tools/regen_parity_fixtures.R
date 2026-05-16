@@ -59,6 +59,7 @@ data_redistributable <- c(
   bfi_fiml             = TRUE,   # psychTools::bfi                (GPL-2 | GPL-3)
   hs_3factor_ls        = TRUE,   # lavaan::HolzingerSwineford1939 (GPL-3)
   hs_3factor_ls_mg_configural = TRUE,  # lavaan::HolzingerSwineford1939 (GPL-3)
+  hs_3factor_ls_mg_metric     = TRUE,  # lavaan::HolzingerSwineford1939 (GPL-3)
   bfi_ordinal_dwls     = TRUE    # psychTools::bfi                (GPL-2 | GPL-3)
 )
 
@@ -131,13 +132,24 @@ parity_cases <- list(
   # Multi-group continuous LS on Holzinger-Swineford by school (2 groups).
   # Configural: the 3-factor model is fitted per group with no cross-group
   # constraints — depth coverage for the (n_b/N) multi-block LS weighting.
-  # (A cross-group equality-constrained companion case is blocked on
-  # fit_bounded's LS penalty path — see docs/todo.md.)
   hs_3factor_ls_mg_configural = list(
     family = "LS",
     model  = paste("visual =~ x1 + x2 + x3",
                    "textual =~ x4 + x5 + x6",
                    "speed =~ x7 + x8 + x9", sep = "\n"),
+    package = "lavaan", dataset = "HolzingerSwineford1939",
+    ov = paste0("x", 1:9),
+    group = "school",
+    estimators = c("ULS", "GLS", "WLS")),
+
+  # Metric invariance: the six non-marker loadings carry bare shared labels, so
+  # they are equated across groups. lavaan and magmaan both equate by label —
+  # no group.equal= needed. First golden combining multi-group LS + equality.
+  hs_3factor_ls_mg_metric = list(
+    family = "LS",
+    model  = paste("visual =~ x1 + l2*x2 + l3*x3",
+                   "textual =~ x4 + l5*x5 + l6*x6",
+                   "speed =~ x7 + l8*x8 + l9*x9", sep = "\n"),
     package = "lavaan", dataset = "HolzingerSwineford1939",
     ov = paste0("x", 1:9),
     group = "school",

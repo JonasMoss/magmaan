@@ -1028,6 +1028,19 @@ browne_residual_nt(spec::LatentStructure        pt,
     }
   }
 
+  // Equality constraints reduce the fitted manifold: project Δ onto the
+  // constrained directions (Δ → Δ·K) so the Browne residual is taken against
+  // the n_alpha-dimensional model tangent space. Mirrors src/nt/robust.cpp;
+  // for an unconstrained model K is absent and Δ is unchanged.
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "browne_residual_nt: build_eq_constraints — " +
+            con_or.error().detail));
+  }
+  if (con_or->active()) Delta = (Delta * con_or->Kmat).eval();
+  const Eigen::Index q_red = Delta.cols();
+
   auto apply_gamma_inv =
       [&](const Eigen::Ref<const Eigen::VectorXd>& x,
           Eigen::Ref<Eigen::VectorXd> out) {
@@ -1063,9 +1076,9 @@ browne_residual_nt(spec::LatentStructure        pt,
   Eigen::VectorXd u(total_rows);
   apply_gamma_inv(res, u);
 
-  Eigen::MatrixXd GinvDelta(total_rows, q);
+  Eigen::MatrixXd GinvDelta(total_rows, q_red);
   Eigen::VectorXd col_buf(total_rows);
-  for (Eigen::Index c = 0; c < q; ++c) {
+  for (Eigen::Index c = 0; c < q_red; ++c) {
     apply_gamma_inv(Delta.col(c), col_buf);
     GinvDelta.col(c) = col_buf;
   }

@@ -15,6 +15,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/gls/uls.hpp"
 #include "magmaan/nt/infer.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -335,4 +336,42 @@ TEST_CASE("fit: effect_coding — loadings sum to #indicators; χ²/df match the
   auto inf_m = expected_inference(pt_m, rep_m, samp, est_m).value();
   CHECK(inf_ec.df == inf_m.df);
   CHECK(inf_ec.chi2 == doctest::Approx(inf_m.chi2).epsilon(1e-6));
+}
+
+TEST_CASE("constraints: multi-group shared-label LS fits via K-reparameterization") {
+  // Two groups; the two non-marker loadings carry bare shared labels, so they
+  // are equated across groups (cross-group metric invariance). fit_bounded's
+  // LS path reparameterizes θ = θ₀ + K·α and optimizes the reduced bounded
+  // problem — exact constraints, no penalty. The earlier 1e10-penalty path
+  // made LBFGS-B's Cauchy-point search loop forever on this model.
+  LavaanifyOptions opts;
+  opts.n_groups = 2;
+  auto pt  = must_lavaanify("f =~ x1 + l2*x2 + l3*x3", opts);
+  auto rep = build_matrix_rep(pt).value();
+
+  // Two distinct 1-factor-structured covariances, one per group.
+  auto cov1f = [](double psi) -> Eigen::Matrix3d {
+    const Eigen::Vector3d lam(1.0, 0.8, 0.65);
+    const Eigen::Vector3d th(0.6, 0.5, 0.7);
+    return lam * lam.transpose() * psi + th.asDiagonal().toDenseMatrix();
+  };
+  SampleStats samp;
+  samp.S = {cov1f(2.0), cov1f(2.6)};
+  samp.n_obs = {180, 150};
+
+  const magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
+      .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9});
+  auto est_or = magmaan::estimate::fit_bounded(
+      pt, rep, samp, magmaan::estimate::Bounds{}, magmaan::gls::ULS{}, opt);
+  REQUIRE_MESSAGE(est_or.has_value(),
+      "constrained multi-group LS fit failed: "
+          << (est_or.has_value() ? "" : est_or.error().detail));
+  CHECK(std::isfinite(est_or->fmin));
+
+  // The shared labels must hold exactly in θ̂: A_eq·θ̂ = b_eq.
+  auto con = build_eq_constraints(pt).value();
+  REQUIRE(con.active());
+  const double eq_resid =
+      (con.A_eq * est_or->theta - con.b_eq).cwiseAbs().maxCoeff();
+  CHECK(eq_resid < 1e-9);
 }

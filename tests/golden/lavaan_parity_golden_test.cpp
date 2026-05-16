@@ -67,13 +67,13 @@ const std::vector<std::string> kParityCases = {
     "mplus_ex5_1",
 };
 
-// The continuous-LS parity cases — single-group plus multi-group configural
-// (HS by school). Each must have a reference.json under
-// tests/fixtures/parity/<id>/. (A cross-group equality-constrained case is
-// blocked on fit_bounded's LS penalty path — see docs/todo.md.)
+// The continuous-LS parity cases — single-group plus multi-group (HS by
+// school: configural, and metric invariance with cross-group equal loadings).
+// Each must have a reference.json under tests/fixtures/parity/<id>/.
 const std::vector<std::string> kLsParityCases = {
     "hs_3factor_ls",
     "hs_3factor_ls_mg_configural",
+    "hs_3factor_ls_mg_metric",
 };
 
 // abs-or-rel agreement: passes when |a-b| ≤ tol·max(1,|b|).
@@ -576,8 +576,8 @@ TEST_CASE("lavaan-parity FIML — bfi missing=ml") {
 // === continuous LS — ULS / GLS / WLS on the HS 3-factor CFA ================
 //
 // One per-case routine serves the single-group case (hs_3factor_ls) and the
-// multi-group HS-by-school configural case; the TEST_CASE loops it over
-// kLsParityCases.
+// multi-group HS-by-school cases (configural and metric invariance); the
+// TEST_CASE loops it over kLsParityCases.
 
 namespace {
 
@@ -674,8 +674,15 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
       fail(e + ": df = " + std::to_string(*df_or) + ", lavaan = " +
            std::to_string(fit["df"].get<int>()));
     }
-    if (est.theta.size() != fit["npar"].get<int>())
-      fail(e + ": npar mismatch");
+    // lavaan npar is the post-equality independent parameter count; magmaan's
+    // equivalent is EqConstraints::n_alpha (== θ size when unconstrained).
+    auto con_or = magmaan::estimate::build_eq_constraints(*pt);
+    const int magmaan_npar = con_or.has_value()
+        ? static_cast<int>(con_or->n_alpha)
+        : static_cast<int>(est.theta.size());
+    if (magmaan_npar != fit["npar"].get<int>())
+      fail(e + ": npar = " + std::to_string(magmaan_npar) + ", lavaan = " +
+           std::to_string(fit["npar"].get<int>()));
 
     // ULS standard chi-square is lavaan's Browne residual NT statistic, which
     // continuous_ls_chisq reproduces exactly. GLS/WLS reporting follows the

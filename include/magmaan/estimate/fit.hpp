@@ -297,6 +297,73 @@ fit_bounded(spec::LatentStructure pt,
                       0, 0.0};
     };
 
+    // Pure-merge equality constraints (shared labels, `a == b`, multi-group
+    // invariance) reparameterize θ = θ₀ + K·α and optimize the reduced LS
+    // problem over α: the constraints hold exactly by construction, with no
+    // penalty term and no ill-conditioning. Box bounds map cleanly because for
+    // pure-merge K each θ_k is a copy of one α (θ_k = α_{group[k]}, θ₀ = 0).
+    // General-linear constraints (`a == 2*b + c`, `con.group` empty) fall
+    // through to the penalty path below — their K rotates the parameter axes,
+    // so θ-box bounds do not map to α-box bounds.
+    if (con.active() && !con.group.empty()) {
+      const Eigen::Index n_alpha = con.Kmat.cols();
+      constexpr double kInf = std::numeric_limits<double>::infinity();
+      Eigen::VectorXd lo_a = Eigen::VectorXd::Constant(n_alpha, -kInf);
+      Eigen::VectorXd hi_a = Eigen::VectorXd::Constant(n_alpha,  kInf);
+      for (Eigen::Index k = 0; k < bounds.lower.size(); ++k) {
+        const auto g = static_cast<Eigen::Index>(con.group[
+            static_cast<std::size_t>(k)]);
+        lo_a(g) = std::max(lo_a(g), bounds.lower(k));
+        hi_a(g) = std::min(hi_a(g), bounds.upper(k));
+      }
+
+      auto resid_a = [&, n_data, wrap_model_err](
+          const Eigen::VectorXd& a) -> fit_expected<Eigen::VectorXd> {
+        const Eigen::VectorXd x = con.expand(a);
+        auto eval = ev.evaluate(x, false, false);
+        if (!eval.has_value())
+          return std::unexpected(wrap_model_err(eval.error(), "evaluate"));
+        auto r = discrepancy.residuals(samp, eval->moments);
+        if (!r.has_value()) return std::unexpected(r.error());
+        if (r->size() != n_data) {
+          return std::unexpected(FitError{
+              FitError::Kind::NumericIssue,
+              "fit_bounded (ls): residual length changed mid-fit", 0, 0.0});
+        }
+        return *r;
+      };
+
+      if (n_alpha == 0) {           // every parameter pinned by constraints
+        auto r = resid_a(Eigen::VectorXd(0));
+        if (!r.has_value()) return std::unexpected(r.error());
+        return Estimates{con.expand(Eigen::VectorXd(0)),
+                         0.5 * r->squaredNorm(), 0};
+      }
+
+      Eigen::VectorXd alpha0 = con.contract(*x0_or);
+      alpha0 = alpha0.cwiseMax(lo_a).cwiseMin(hi_a);
+
+      auto jac_a = [&, wrap_model_err](
+          const Eigen::VectorXd& a) -> fit_expected<Eigen::MatrixXd> {
+        const Eigen::VectorXd x = con.expand(a);
+        auto eval = ev.evaluate(x, true, true);
+        if (!eval.has_value())
+          return std::unexpected(wrap_model_err(eval.error(), "evaluate"));
+        auto Jr = discrepancy.residual_jacobian(samp, eval->moments,
+                                                eval->J_sigma, eval->J_mu);
+        if (!Jr.has_value()) return std::unexpected(Jr.error());
+        Eigen::MatrixXd J_alpha = *Jr * con.Kmat;   // chain rule: J_r·K
+        return J_alpha;
+      };
+
+      auto out_a = optimizer.minimize_ls(LsResidualFn(resid_a),
+                                         LsJacobianFn(jac_a),
+                                         n_data, alpha0, lo_a, hi_a);
+      if (!out_a.has_value()) return std::unexpected(out_a.error());
+      return Estimates{con.expand(out_a->theta_hat), out_a->fmin,
+                       out_a->iterations};
+    }
+
     auto resid_fn = [&, n_data, n_total, sqrt_mu_eq, wrap_model_err](
         const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
       auto eval = ev.evaluate(x, false, false);
