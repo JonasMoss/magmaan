@@ -140,17 +140,17 @@ validate_sample(const data::PairwiseOrdinalStats& sample,
   return {};
 }
 
-double scaling_weight_for_pair(const data::OrdinalPairDiagnostics& pd,
+double scaling_weight_for_pair(std::int64_t n_obs,
                                PairwiseCompositeWeighting weighting) {
   if (weighting == PairwiseCompositeWeighting::EqualPair) return 1.0;
-  return static_cast<double>(pd.n_obs);
+  return static_cast<double>(n_obs);
 }
 
 double weighted_pair_negloglik(double negloglik,
-                               const data::OrdinalPairDiagnostics& pd,
+                               std::int64_t n_obs,
                                PairwiseCompositeWeighting weighting) {
   if (weighting == PairwiseCompositeWeighting::EqualPair) {
-    return negloglik / static_cast<double>(pd.n_obs);
+    return negloglik / static_cast<double>(n_obs);
   }
   return negloglik;
 }
@@ -198,6 +198,38 @@ data::OrdinalPairJointMlOptions joint_options(
   out.rho_upper = options.rho_upper;
   out.lavaan_adjust_2x2 = options.lavaan_adjust_2x2;
   return out;
+}
+
+post_expected<void>
+validate_observed_blocks(const std::vector<Eigen::MatrixXd>& X,
+                         const std::vector<std::vector<std::int32_t>>& n_levels,
+                         const PairwiseOrdinalCompositeOptions& options) {
+  if (X.empty() || X.size() != n_levels.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "pairwise ordinal observed joint composite: block count mismatch"));
+  }
+  if (!std::isfinite(options.rho_lower) || !std::isfinite(options.rho_upper) ||
+      !(options.rho_lower > -1.0) || !(options.rho_upper < 1.0) ||
+      !(options.rho_lower < options.rho_upper)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "pairwise ordinal observed joint composite: invalid rho bounds"));
+  }
+  for (std::size_t b = 0; b < X.size(); ++b) {
+    if (X[b].rows() < 2 || X[b].cols() < 2 ||
+        n_levels[b].size() != static_cast<std::size_t>(X[b].cols())) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "pairwise ordinal observed joint composite: invalid block " +
+              std::to_string(b)));
+    }
+    for (std::int32_t level_count : n_levels[b]) {
+      if (level_count < 2) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "pairwise ordinal observed joint composite: fewer than two levels in block " +
+                std::to_string(b)));
+      }
+    }
+  }
+  return {};
 }
 
 }  // namespace
@@ -258,9 +290,9 @@ pairwise_ordinal_composite_objective(
       auto nll = data::ordinal_pair_negloglik(counts, *th_i, *th_j, rho);
       if (!nll.has_value()) return std::unexpected(nll.error());
       const double weighted =
-          weighted_pair_negloglik(*nll, pd, options.weighting);
+          weighted_pair_negloglik(*nll, pd.n_obs, options.weighting);
       const double scale_weight =
-          scaling_weight_for_pair(pd, options.weighting);
+          scaling_weight_for_pair(pd.n_obs, options.weighting);
       Eigen::MatrixXd expected =
           expected_counts(counts.sum(), *th_i, *th_j, rho);
       Eigen::MatrixXd residual = counts - expected;
@@ -329,9 +361,9 @@ pairwise_ordinal_joint_composite_objective(
                           joint->thresholds_j, joint->rho);
       Eigen::MatrixXd residual = joint->adjusted_counts - expected;
       const double weighted =
-          weighted_pair_negloglik(joint->negloglik, pd, options.weighting);
+          weighted_pair_negloglik(joint->negloglik, pd.n_obs, options.weighting);
       const double scale_weight =
-          scaling_weight_for_pair(pd, options.weighting);
+          scaling_weight_for_pair(pd.n_obs, options.weighting);
 
       PairwiseOrdinalCompositePair pair{
           .label = pd.label,
@@ -356,6 +388,84 @@ pairwise_ordinal_joint_composite_objective(
     if (block.pairs.empty()) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "pairwise ordinal joint composite: block has no pairs"));
+    }
+    finalize_block(block, options.scaling);
+    accumulate_block(out, std::move(block));
+  }
+
+  auto done = finalize_result(out, options.scaling);
+  if (!done.has_value()) return std::unexpected(done.error());
+  return out;
+}
+
+post_expected<PairwiseOrdinalCompositeResult>
+pairwise_ordinal_observed_joint_composite_objective(
+    const std::vector<Eigen::MatrixXd>& X,
+    const std::vector<std::vector<std::int32_t>>& n_levels,
+    PairwiseOrdinalCompositeOptions options) {
+  auto ok = validate_observed_blocks(X, n_levels, options);
+  if (!ok.has_value()) return std::unexpected(ok.error());
+
+  PairwiseOrdinalCompositeResult out;
+  out.blocks.reserve(X.size());
+  const auto joint_opts = joint_options(options);
+
+  for (std::size_t b = 0; b < X.size(); ++b) {
+    const Eigen::Index p = X[b].cols();
+    PairwiseOrdinalCompositeBlock block;
+    block.n_obs = static_cast<std::int64_t>(X[b].rows());
+    block.pairs.reserve(static_cast<std::size_t>(p * (p - 1) / 2));
+
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j + 1; i < p; ++i) {
+        auto joint = data::fit_ordinal_pair_observed_joint_ml(
+            X[b].col(i), X[b].col(j),
+            n_levels[b][static_cast<std::size_t>(i)],
+            n_levels[b][static_cast<std::size_t>(j)],
+            joint_opts);
+        if (!joint.has_value()) return std::unexpected(joint.error());
+
+        Eigen::MatrixXd expected =
+            expected_counts(joint->fit.adjusted_counts.sum(),
+                            joint->fit.thresholds_i,
+                            joint->fit.thresholds_j,
+                            joint->fit.rho);
+        Eigen::MatrixXd residual = joint->fit.adjusted_counts - expected;
+        const double weighted =
+            weighted_pair_negloglik(joint->fit.negloglik, joint->n_obs,
+                                    options.weighting);
+        const double scale_weight =
+            scaling_weight_for_pair(joint->n_obs, options.weighting);
+
+        PairwiseOrdinalCompositePair pair{
+            .label = data::OrdinalPairLabel{
+                .block = static_cast<std::int32_t>(b),
+                .i = static_cast<std::int32_t>(i),
+                .j = static_cast<std::int32_t>(j),
+                .n_levels_i = n_levels[b][static_cast<std::size_t>(i)],
+                .n_levels_j = n_levels[b][static_cast<std::size_t>(j)]},
+            .thresholds_i = std::move(joint->fit.thresholds_i),
+            .thresholds_j = std::move(joint->fit.thresholds_j),
+            .rho = joint->fit.rho,
+            .negloglik = joint->fit.negloglik,
+            .weighted_negloglik = weighted,
+            .scaling_weight = scale_weight,
+            .n_obs = joint->n_obs,
+            .n_missing = joint->n_missing,
+            .hit_lower = joint->fit.hit_lower,
+            .hit_upper = joint->fit.hit_upper,
+            .counts = std::move(joint->counts),
+            .adjusted_counts = std::move(joint->fit.adjusted_counts),
+            .expected_counts = std::move(expected),
+            .residual_counts = std::move(residual)};
+
+        accumulate_pair(block, std::move(pair));
+      }
+    }
+
+    if (block.pairs.empty()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "pairwise ordinal observed joint composite: block has no pairs"));
     }
     finalize_block(block, options.scaling);
     accumulate_block(out, std::move(block));

@@ -70,10 +70,14 @@ Remaining work, in suggested order:
   consumes `PairwiseOrdinalStats`, refits each complete pair with joint
   threshold/rho ML, preserves the same weighting/scaling options, and keeps
   chi-square/df unreported until a calibrated composite test is designed.
-- [ ] **L, harder than complete/listwise.** Add an observed-pair all-ordinal
+- [x] **L, harder than complete/listwise.** Add an observed-pair all-ordinal
   prototype behind the same API. Preserve per-pair `n_obs`/`n_missing`; reject
   all-missing pairs and empty marginal categories; document that this is
   pairwise observed-data likelihood, not multivariate MAR ordinal FIML.
+  Initial surface:
+  `estimate::pairwise_ordinal_observed_joint_composite_objective()` takes raw
+  ordinal blocks with `NaN` missingness and declared level counts, fits each
+  pair on its observed cases, and returns the shared composite result shape.
 - [ ] **M, after each implementation slice.** Add explicit pairwise
   diagnostics fixtures: current complete all-ordinal polychoric wrappers first,
   mixed pair primitives second, complete/listwise composite-likelihood
