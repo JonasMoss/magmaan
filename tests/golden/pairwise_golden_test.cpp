@@ -117,6 +117,17 @@ void check_composite_pair(const magmaan::estimate::PairwiseOrdinalCompositePair&
   CHECK(got.residual_counts.cols() == got.counts.cols());
   CHECK(std::isfinite(got.rho));
   CHECK(std::isfinite(got.negloglik));
+  const Eigen::Index n_score_cols =
+      got.thresholds_i.size() + got.thresholds_j.size() + 1;
+  CHECK(got.score_contributions.rows() == got.n_obs);
+  CHECK(got.score_contributions.cols() == n_score_cols);
+  CHECK(got.score_contributions.allFinite());
+  CHECK(got.score_gamma.rows() == n_score_cols);
+  CHECK(got.score_gamma.cols() == n_score_cols);
+  CHECK(got.score_gamma.isApprox(
+      (got.score_contributions.transpose() * got.score_contributions) /
+          static_cast<double>(got.n_obs),
+      1e-12));
 }
 
 }  // namespace

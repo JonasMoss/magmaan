@@ -44,6 +44,8 @@ struct PairwiseOrdinalCompositePair {
   Eigen::MatrixXd adjusted_counts;
   Eigen::MatrixXd expected_counts;
   Eigen::MatrixXd residual_counts;
+  Eigen::MatrixXd score_contributions;
+  Eigen::MatrixXd score_gamma;
 };
 
 struct PairwiseOrdinalCompositeBlock {
