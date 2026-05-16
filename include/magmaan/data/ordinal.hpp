@@ -7,6 +7,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
+#include "magmaan/data/pairwise_mixed.hpp"
 
 namespace magmaan::data {
 
@@ -46,11 +47,21 @@ struct MixedOrdinalStats {
   std::vector<std::vector<std::string>> ov_names;
 };
 
+struct MixedOrdinalPolyserialDpdStatsOptions {
+  PolyserialPairDpdOptions polyserial;
+};
+
 post_expected<OrdinalStats>
 ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& X);
 
 post_expected<MixedOrdinalStats>
 mixed_ordinal_stats_from_data(const std::vector<Eigen::MatrixXd>& X,
                               const std::vector<std::vector<std::int32_t>>& ordered);
+
+post_expected<MixedOrdinalStats>
+mixed_ordinal_stats_polyserial_dpd_from_data(
+    const std::vector<Eigen::MatrixXd>& X,
+    const std::vector<std::vector<std::int32_t>>& ordered,
+    MixedOrdinalPolyserialDpdStatsOptions options = {});
 
 }  // namespace magmaan::data

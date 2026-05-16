@@ -32,6 +32,7 @@ struct Config {
   int n = 1200;
   int pair_reps = 140;
   int matrix_reps = 70;
+  int mixed_reps = 50;
   int sem_reps = 30;
   std::uint64_t seed = 20260516;
 };
@@ -78,6 +79,9 @@ Config parse_args(int argc, char** argv) {
     }
     if (const auto v = value("--matrix-reps="); !v.empty()) {
       cfg.matrix_reps = parse_int(v, cfg.matrix_reps);
+    }
+    if (const auto v = value("--mixed-reps="); !v.empty()) {
+      cfg.mixed_reps = parse_int(v, cfg.mixed_reps);
     }
     if (const auto v = value("--sem-reps="); !v.empty()) {
       cfg.sem_reps = parse_int(v, cfg.sem_reps);
@@ -328,6 +332,38 @@ Eigen::MatrixXd simulate_hs_ordinal(int n, double contam, std::mt19937_64& rng) 
   return X;
 }
 
+Eigen::MatrixXd simulate_hs_mixed(int n, double contam, std::mt19937_64& rng) {
+  const Eigen::MatrixXd sigma = hs_latent_correlation();
+  const Eigen::LLT<Eigen::MatrixXd> llt(sigma);
+  const Eigen::MatrixXd L = llt.matrixL();
+  const auto thresholds = hs_thresholds();
+
+  Eigen::MatrixXd X(n, 9);
+  std::normal_distribution<double> normal(0.0, 1.0);
+  std::uniform_real_distribution<double> uniform(0.0, 1.0);
+  for (int row = 0; row < n; ++row) {
+    Eigen::VectorXd z(9);
+    for (Eigen::Index j = 0; j < z.size(); ++j) z(j) = normal(rng);
+    z = L * z;
+    for (Eigen::Index j = 0; j < 6; ++j) {
+      X(row, j) = ordinal_level(z(j), thresholds[static_cast<std::size_t>(j)]);
+    }
+    X(row, 6) = z(6) + 0.15;
+    X(row, 7) = z(7) - 0.10;
+    X(row, 8) = z(8) + 0.05;
+    if (uniform(rng) < contam) {
+      if ((row % 2) == 0) {
+        X(row, 0) = 1.0;
+        X(row, 6) = 6.0;
+      } else {
+        X(row, 3) = 4.0;
+        X(row, 7) = -6.0;
+      }
+    }
+  }
+  return X;
+}
+
 Eigen::VectorXd ordinal_moment_vector(const magmaan::data::OrdinalStats& stats) {
   const Eigen::MatrixXd& R = stats.R[0];
   const Eigen::VectorXd& th = stats.thresholds[0];
@@ -361,6 +397,30 @@ CompareSummary run_matrix_check(const Config& cfg, std::mt19937_64& rng) {
   }
   return compare_covariances("HS robust ordinal moments",
                              cfg.matrix_reps, failed, moments, gammas, cfg.n);
+}
+
+CompareSummary run_mixed_check(const Config& cfg, std::mt19937_64& rng) {
+  const std::vector<std::vector<std::int32_t>> ordered =
+      {{1, 1, 1, 1, 1, 1, 0, 0, 0}};
+  magmaan::data::MixedOrdinalPolyserialDpdStatsOptions opts;
+  opts.polyserial.alpha = 0.5;
+
+  std::vector<Eigen::VectorXd> moments;
+  std::vector<Eigen::MatrixXd> gammas;
+  int failed = 0;
+  for (int r = 0; r < cfg.mixed_reps; ++r) {
+    const Eigen::MatrixXd X = simulate_hs_mixed(cfg.n, 0.035, rng);
+    auto stats = magmaan::data::mixed_ordinal_stats_polyserial_dpd_from_data(
+        {X}, ordered, opts);
+    if (!stats.has_value() || !stats->NACOV[0].allFinite()) {
+      ++failed;
+      continue;
+    }
+    moments.push_back(stats->moments[0]);
+    gammas.push_back(stats->NACOV[0]);
+  }
+  return compare_covariances("HS mixed DPD moments",
+                             cfg.mixed_reps, failed, moments, gammas, cfg.n);
 }
 
 std::string hs_ordinal_model_syntax() {
@@ -463,18 +523,20 @@ int main(int argc, char** argv) {
             << "seed=" << cfg.seed << " n=" << cfg.n
             << " pair_reps=" << cfg.pair_reps
             << " matrix_reps=" << cfg.matrix_reps
+            << " mixed_reps=" << cfg.mixed_reps
             << " sem_reps=" << cfg.sem_reps
-            << " h=wma_hard_cap(k=1.30)\n\n";
+            << " h=wma_hard_cap(k=1.30) polyserial_dpd_alpha=0.5\n\n";
 
   std::cout << "diagnostic columns: empirical cov of sqrt(N)*estimate vs "
                "average theoretical Gamma / N-scaled vcov\n";
   print_summary(run_pair_check(cfg, rng));
   print_summary(run_matrix_check(cfg, rng));
+  print_summary(run_mixed_check(cfg, rng));
   print_summary(run_sem_check(cfg, rng));
 
   std::cout << "\nInterpretation: diag ratios near 1 and modest relative "
                "Frobenius error are the desired Monte Carlo pattern. "
-               "The HS checks are contaminated all-ordinal simulations; "
-               "robust polyserial is not implemented yet.\n";
+               "The HS checks are contaminated simulations and the mixed "
+               "path uses fixed-marginal DPD polyserial pairs.\n";
   return 0;
 }

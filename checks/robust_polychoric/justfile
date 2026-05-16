@@ -21,11 +21,11 @@ build:
 
 quick: build
     mkdir -p results
-    {{bin}} --n=800 --pair-reps=50 --matrix-reps=30 --sem-reps=12 | tee results/quick.txt
+    {{bin}} --n=800 --pair-reps=50 --matrix-reps=30 --mixed-reps=24 --sem-reps=12 | tee results/quick.txt
 
 all: build
     mkdir -p results
-    {{bin}} --n=1200 --pair-reps=140 --matrix-reps=70 --sem-reps=30 | tee results/latest.txt
+    {{bin}} --n=1200 --pair-reps=140 --matrix-reps=70 --mixed-reps=50 --sem-reps=30 | tee results/latest.txt
 
 clean:
     rm -rf {{build_dir}} results

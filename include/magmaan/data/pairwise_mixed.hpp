@@ -23,6 +23,27 @@ struct PolyserialPairMlResult {
   bool   hit_upper = false;
 };
 
+struct PolyserialPairDpdOptions {
+  double rho_lower = -0.999;
+  double rho_upper = 0.999;
+  int    max_iter = 72;
+  double alpha = 0.5;
+};
+
+struct PolyserialPairDpdResult {
+  double rho = 0.0;
+  double objective = 0.0;
+  int    iterations = 0;
+  bool   hit_lower = false;
+  bool   hit_upper = false;
+  // Per-row conditional probabilities for the observed category.
+  Eigen::VectorXd probabilities;
+  // Per-row joint densities phi(u_i) * Pr(y_i | u_i).
+  Eigen::VectorXd joint_densities;
+  // Raw DPD attenuation weights: joint_density^alpha.
+  Eigen::VectorXd weights;
+};
+
 struct PolyserialPairScores {
   Eigen::VectorXd rho;
   Eigen::MatrixXd thresholds;
@@ -124,6 +145,13 @@ fit_polyserial_pair_rho_ml(
     const Eigen::Ref<const Eigen::VectorXd>& u,
     const Eigen::Ref<const Eigen::VectorXd>& thresholds,
     PolyserialPairMlOptions options = {});
+
+post_expected<PolyserialPairDpdResult>
+fit_polyserial_pair_rho_dpd(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    PolyserialPairDpdOptions options = {});
 
 post_expected<PolyserialPairScores>
 polyserial_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& categories,

@@ -466,6 +466,60 @@ TEST_CASE("Polyserial pair ML kernel: likelihood, rho fit, and scores") {
       1e-12));
 }
 
+TEST_CASE("Polyserial pair DPD kernel downweights continuous-tail discordance") {
+  std::mt19937 rng(20260516);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::VectorXd th(2);
+  th << -0.45, 0.65;
+
+  constexpr Eigen::Index n_clean = 420;
+  constexpr Eigen::Index n_bad = 35;
+  Eigen::VectorXi cat_clean(n_clean);
+  Eigen::VectorXd u_clean(n_clean);
+  const double rho_true = 0.62;
+  const double sd = std::sqrt(1.0 - rho_true * rho_true);
+  for (Eigen::Index r = 0; r < n_clean; ++r) {
+    const double u = norm(rng);
+    const double z = rho_true * u + sd * norm(rng);
+    u_clean(r) = u;
+    cat_clean(r) = (z > th(0)) + (z > th(1));
+  }
+
+  Eigen::VectorXi cat_cont(n_clean + n_bad);
+  Eigen::VectorXd u_cont(n_clean + n_bad);
+  cat_cont.head(n_clean) = cat_clean;
+  u_cont.head(n_clean) = u_clean;
+  for (Eigen::Index r = 0; r < n_bad; ++r) {
+    cat_cont(n_clean + r) = 0;
+    u_cont(n_clean + r) = 5.5 + 0.01 * static_cast<double>(r);
+  }
+
+  auto clean_ml = magmaan::data::fit_polyserial_pair_rho_ml(
+      cat_clean, u_clean, th);
+  auto cont_ml = magmaan::data::fit_polyserial_pair_rho_ml(
+      cat_cont, u_cont, th);
+  auto alpha0 = magmaan::data::fit_polyserial_pair_rho_dpd(
+      cat_cont, u_cont, th, magmaan::data::PolyserialPairDpdOptions{.alpha = 0.0});
+  auto robust = magmaan::data::fit_polyserial_pair_rho_dpd(
+      cat_cont, u_cont, th, magmaan::data::PolyserialPairDpdOptions{.alpha = 0.5});
+
+  REQUIRE(clean_ml.has_value());
+  REQUIRE(cont_ml.has_value());
+  REQUIRE(alpha0.has_value());
+  REQUIRE(robust.has_value());
+  CHECK(alpha0->rho == doctest::Approx(cont_ml->rho).epsilon(1e-10));
+  CHECK(cont_ml->rho < clean_ml->rho);
+  CHECK(robust->rho > cont_ml->rho);
+  CHECK(std::abs(robust->rho - clean_ml->rho) <
+        std::abs(cont_ml->rho - clean_ml->rho));
+  CHECK(robust->weights.tail(n_bad).maxCoeff() <
+        robust->weights.head(n_clean).mean());
+  CHECK(robust->probabilities.size() == cat_cont.size());
+  CHECK(robust->joint_densities.size() == cat_cont.size());
+  CHECK(robust->weights.size() == cat_cont.size());
+  CHECK(robust->weights.allFinite());
+}
+
 TEST_CASE("Polyserial pair ML kernel rejects malformed inputs") {
   Eigen::VectorXi cat(3);
   cat << 0, 1, 3;
@@ -1903,6 +1957,44 @@ TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments
   CHECK(rob->vcov.rows() == fit->theta.size());
   CHECK(rob->se.size() == fit->theta.size());
   CHECK(rob->se.allFinite());
+}
+
+TEST_CASE("Mixed ordinal DPD polyserial stats preserve marginals and robustify mixed pairs") {
+  std::mt19937 rng(20260517);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(640, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    const double y1 = 0.8 * eta + 0.6 * norm(rng);
+    const double y2 = 0.7 * eta + 0.7 * norm(rng);
+    X(i, 0) = 1.0 + (eta > -0.6) + (eta > 0.4);
+    X(i, 1) = 1.0 + (0.65 * eta + 0.76 * norm(rng) > 0.1);
+    X(i, 2) = y1 + 0.2;
+    X(i, 3) = y2 - 0.1;
+  }
+  for (Eigen::Index i = X.rows() - 35; i < X.rows(); ++i) {
+    X(i, 0) = 1.0;
+    X(i, 2) = 6.0;
+  }
+
+  std::vector<std::vector<std::int32_t>> ordered = {{1, 1, 0, 0}};
+  auto ml = magmaan::data::mixed_ordinal_stats_from_data({X}, ordered);
+  auto dpd = magmaan::data::mixed_ordinal_stats_polyserial_dpd_from_data(
+      {X}, ordered,
+      magmaan::data::MixedOrdinalPolyserialDpdStatsOptions{
+          .polyserial = magmaan::data::PolyserialPairDpdOptions{.alpha = 0.5}});
+  REQUIRE(ml.has_value());
+  REQUIRE(dpd.has_value());
+
+  CHECK(dpd->thresholds[0].isApprox(ml->thresholds[0], 0.0));
+  CHECK(dpd->mean[0].isApprox(ml->mean[0], 0.0));
+  CHECK(dpd->R[0](0, 1) == doctest::Approx(ml->R[0](0, 1)));
+  CHECK(dpd->R[0](2, 3) == doctest::Approx(ml->R[0](2, 3)));
+  CHECK(std::abs(dpd->R[0](2, 0) - ml->R[0](2, 0)) > 1e-4);
+  CHECK(dpd->moments[0].size() == ml->moments[0].size());
+  CHECK(dpd->NACOV[0].rows() == ml->NACOV[0].rows());
+  CHECK(dpd->NACOV[0].allFinite());
+  CHECK(dpd->W_dwls[0].diagonal().minCoeff() > 0.0);
 }
 
 TEST_CASE("Mixed ordinal validation rejects malformed stats before fitting") {

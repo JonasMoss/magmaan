@@ -210,8 +210,8 @@ Contracts:
   must continue to reproduce existing ordinal fixtures.
 - Robust methods are experimental until diagnostics, influence/Gamma, and at
   least one SEM integration mode are fixture-backed.
-- Mixed continuous/ordinal robust estimators wait behind the all-ordinal robust
-  Gamma milestone.
+- Mixed continuous/ordinal robust estimators should stay explicitly separated
+  from the default lavaan-compatible mixed path.
 - R should expose only predefined robust methods; arbitrary C++ h-functions
   remain internal until a concrete methods use case exists.
 
@@ -264,9 +264,9 @@ Remaining work, in suggested order:
   (`data::fit_ordinal_pair_joint_dpd()` estimates pair-local thresholds and
   rho, delegates `alpha = 0` to joint ML, and exposes `p^alpha` attenuation
   weights plus the same table diagnostics as the h-weighted path.)
-- [ ] **M/L.** Decide, after simulation use, whether DPD deserves fixed-shared-
-  threshold and SEM Option A/Gamma integration. Keep Hellinger and Huberized
-  residual fitting as lower-priority experimental comparators.
+- [ ] **M/L.** Decide, after simulation use, whether ordinal-pair DPD deserves
+  fixed-shared-threshold and SEM Option A/Gamma integration. Keep Hellinger and
+  Huberized residual fitting as lower-priority experimental comparators.
 - [x] **M.** Pin the h-score estimators against the canonical robcat R package
   (Welz, Mair & Alfons, 2026; vendored in `external/robcat`). The WMA hard cap
   is the same C-estimator as robcat `polycor`: `robcat polycor(c=C)` ≡ magmaan
@@ -290,6 +290,17 @@ Remaining work, in suggested order:
   moment Gamma, and HS-style ordinal CFA robust vcov checks; generated
   binaries/results stay ignored and are not wired into the root package
   workflow.
+- [x] **M.** Add an experimental fixed-marginal DPD polyserial path for mixed
+  continuous/ordinal data. `data::fit_polyserial_pair_rho_dpd()` delegates
+  `alpha = 0` to the existing ML rho kernel, attenuates observations by
+  `p(x, y)^alpha`, and
+  `data::mixed_ordinal_stats_polyserial_dpd_from_data()` preserves the default
+  mixed marginals while swapping DPD polyserial pairs into `MixedOrdinalStats`.
+- [ ] **M/L.** If fixed-marginal DPD polyserial is promising in simulations,
+  pin it against robcat's full polyserial DPD estimator or document the
+  intended difference. robcat estimates rho, continuous mean/variance, and
+  thresholds jointly; magmaan's first mixed SEM path keeps lavaan-style shared
+  marginals and robustifies only the polyserial association.
 
 Done when: robust polychoric alternatives are selectable, default ML fixtures
 are unchanged, diagnostics make robustness visible, and at least one robust
