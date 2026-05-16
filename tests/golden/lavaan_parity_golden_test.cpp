@@ -67,6 +67,15 @@ const std::vector<std::string> kParityCases = {
     "mplus_ex5_1",
 };
 
+// The continuous-LS parity cases — single-group plus multi-group configural
+// (HS by school). Each must have a reference.json under
+// tests/fixtures/parity/<id>/. (A cross-group equality-constrained case is
+// blocked on fit_bounded's LS penalty path — see docs/todo.md.)
+const std::vector<std::string> kLsParityCases = {
+    "hs_3factor_ls",
+    "hs_3factor_ls_mg_configural",
+};
+
 // abs-or-rel agreement: passes when |a-b| ≤ tol·max(1,|b|).
 bool close(double a, double b, double tol) {
   return std::abs(a - b) <= tol * std::max(1.0, std::abs(b));
@@ -565,23 +574,33 @@ TEST_CASE("lavaan-parity FIML — bfi missing=ml") {
 }
 
 // === continuous LS — ULS / GLS / WLS on the HS 3-factor CFA ================
+//
+// One per-case routine serves the single-group case (hs_3factor_ls) and the
+// multi-group HS-by-school configural case; the TEST_CASE loops it over
+// kLsParityCases.
 
-TEST_CASE("lavaan-parity continuous LS — HS ULS/GLS/WLS") {
-  const std::string parity_dir = magmaan::test::fixtures_dir() + "/parity";
-  const std::string id = "hs_3factor_ls";
+namespace {
 
-  std::vector<std::string> failures;
-  std::vector<std::string> notes;
-
+void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
+                        std::vector<std::string>& failures,
+                        std::vector<std::string>& notes) {
   nlohmann::json ref, data_json;
   REQUIRE(load_fixture(parity_dir, id, ref, data_json, failures));
   REQUIRE(!data_json.is_null());
+
+  // A case magmaan parameterizes differently than lavaan is a soft known gap:
+  // reported, not failed (mirrors the ML/FIML tranches).
+  if (!ref.value("magmaan_aligned", true)) {
+    notes.push_back(id + ": KNOWN GAP (magmaan_aligned=false) — not gated");
+    return;
+  }
 
   auto fp = magmaan::parse::Parser::parse(ref["model"].get<std::string>());
   REQUIRE(fp.has_value());
   magmaan::spec::LavaanifyOptions opts;
   opts.meanstructure = false;
   opts.auto_cov_y    = ref.value("auto_cov_y", false);
+  opts.n_groups      = ref.value("n_groups", 1);
   auto pt = magmaan::spec::lavaanify(*fp, opts);
   REQUIRE_MESSAGE(pt.has_value(),
                   "lavaanify: " << (pt.has_value() ? "" : pt.error().detail));
@@ -608,15 +627,25 @@ TEST_CASE("lavaan-parity continuous LS — HS ULS/GLS/WLS") {
   const magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
       .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8});
 
-  bool ok = true;
-  auto fail = [&](const std::string& m) { failures.push_back(id + ": " + m);
-                                          ok = false; };
+  auto fail = [&](const std::string& m) {
+    failures.push_back(id + ": " + m);
+  };
 
-  // Ingestion guard against the ULS fit's lavaan sample_cov.
-  const Eigen::MatrixXd S_ref =
-      matrix_from_json(ref["fits"]["ULS"]["sample_cov"][0]["matrix"]);
-  if ((samp.S[0] - S_ref).cwiseAbs().maxCoeff() > 1e-8)
-    fail("raw→cov ingestion guard: max|ΔS| > 1e-8");
+  // Ingestion guard: every block's raw→(N−1) covariance must match the ULS
+  // fit's lavaan sample_cov — one block per group.
+  const auto& sc_ref = ref["fits"]["ULS"]["sample_cov"];
+  if (sc_ref.size() != samp.S.size()) {
+    fail("raw→cov ingestion guard: block count " +
+         std::to_string(samp.S.size()) + " ≠ lavaan " +
+         std::to_string(sc_ref.size()));
+  } else {
+    for (std::size_t b = 0; b < samp.S.size(); ++b) {
+      const Eigen::MatrixXd S_ref = matrix_from_json(sc_ref[b]["matrix"]);
+      if ((samp.S[b] - S_ref).cwiseAbs().maxCoeff() > 1e-8)
+        fail("raw→cov ingestion guard block " + std::to_string(b) +
+             ": max|ΔS| > 1e-8");
+    }
+  }
 
   // One estimator: fit_bounded, then gate theta / df / npar / chi-square.
   // `disc` carries the estimator type; robust SEs run for ULS only — lavaan
@@ -714,10 +743,20 @@ TEST_CASE("lavaan-parity continuous LS — HS ULS/GLS/WLS") {
     run_ls("WLS", fits["WLS"],
            magmaan::gls::WLS(matrices_from_blocks(fits["WLS"]["WLS.V"])));
 
-  for (const auto& n : notes)    MESSAGE(n);
-  for (const auto& f : failures) MESSAGE("FAIL " << f);
-  CHECK(failures.empty());
-  CHECK(ok);
+}
+
+}  // namespace
+
+TEST_CASE("lavaan-parity continuous LS — HS ULS/GLS/WLS") {
+  const std::string parity_dir = magmaan::test::fixtures_dir() + "/parity";
+  for (const std::string& id : kLsParityCases) {
+    CAPTURE(id);
+    std::vector<std::string> failures, notes;
+    run_ls_parity_case(parity_dir, id, failures, notes);
+    for (const auto& n : notes)    MESSAGE(n);
+    for (const auto& f : failures) MESSAGE("FAIL " << f);
+    CHECK(failures.empty());
+  }
 }
 
 // === ordinal — DWLS / WLS on five bfi Likert items =========================

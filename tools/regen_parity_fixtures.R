@@ -58,6 +58,7 @@ data_redistributable <- c(
   mplus_ex5_1          = FALSE,  # Mplus User's Guide example -- licensing TBD
   bfi_fiml             = TRUE,   # psychTools::bfi                (GPL-2 | GPL-3)
   hs_3factor_ls        = TRUE,   # lavaan::HolzingerSwineford1939 (GPL-3)
+  hs_3factor_ls_mg_configural = TRUE,  # lavaan::HolzingerSwineford1939 (GPL-3)
   bfi_ordinal_dwls     = TRUE    # psychTools::bfi                (GPL-2 | GPL-3)
 )
 
@@ -79,11 +80,15 @@ load_dataset <- function(package, name, vars = NULL) {
 }
 
 # magmaan's free-parameter order, and the index map from magmaan order into a
-# lavaan free-parameter table, keyed by group|op|lhs|rhs.
+# lavaan free-parameter table, keyed by group|op|lhs|rhs. `group`/`group_labels`
+# are threaded through for multi-group cases — model_spec derives n_groups from
+# length(group_labels), so group_labels must be supplied when group is set.
 align_magmaan_free <- function(model, lavaan_free, meanstructure,
-                               auto_cov_y = TRUE) {
+                               auto_cov_y = TRUE, group = NULL,
+                               group_labels = NULL) {
   mspec <- magmaan::model_spec(model, auto_cov_y = auto_cov_y,
-                               meanstructure = meanstructure)
+                               meanstructure = meanstructure,
+                               group = group, group_labels = group_labels)
   mfree <- mspec$partable[mspec$partable$free > 0, , drop = FALSE]
   mfree <- mfree[order(mfree$free), , drop = FALSE]
   key <- function(d) paste(d$group, d$op, d$lhs, d$rhs, sep = "\r")
@@ -121,6 +126,21 @@ parity_cases <- list(
                    "speed =~ x7 + x8 + x9", sep = "\n"),
     package = "lavaan", dataset = "HolzingerSwineford1939",
     ov = paste0("x", 1:9),
+    estimators = c("ULS", "GLS", "WLS")),
+
+  # Multi-group continuous LS on Holzinger-Swineford by school (2 groups).
+  # Configural: the 3-factor model is fitted per group with no cross-group
+  # constraints — depth coverage for the (n_b/N) multi-block LS weighting.
+  # (A cross-group equality-constrained companion case is blocked on
+  # fit_bounded's LS penalty path — see docs/todo.md.)
+  hs_3factor_ls_mg_configural = list(
+    family = "LS",
+    model  = paste("visual =~ x1 + x2 + x3",
+                   "textual =~ x4 + x5 + x6",
+                   "speed =~ x7 + x8 + x9", sep = "\n"),
+    package = "lavaan", dataset = "HolzingerSwineford1939",
+    ov = paste0("x", 1:9),
+    group = "school",
     estimators = c("ULS", "GLS", "WLS")),
 
   # Ordinal DWLS / WLS on five bfi Neuroticism items (all six Likert
@@ -328,29 +348,52 @@ emit_ls <- function(id) {
   case <- parity_cases[[id]]
   model <- case$model
   ov <- case$ov
-  raw <- load_dataset(case$package, case$dataset, ov)
-  data <- raw[stats::complete.cases(raw), ov, drop = FALSE]
+  grp <- case$group
+  multigroup <- !is.null(grp) && nzchar(grp)
 
+  ## Multi-group cases load the grouping column alongside the observed vars.
+  load_vars <- if (multigroup) c(ov, grp) else ov
+  raw <- load_dataset(case$package, case$dataset, load_vars)
+  data <- raw[stats::complete.cases(raw), load_vars, drop = FALSE]
+
+  group_labels <- NULL
   fits <- list()
   align <- NULL
   for (est in case$estimators) {
     ## Pure lavaan defaults — passing se=/test= changes lavaan's reported LS
     ## chi-square (e.g. ULS default = Browne residual NT statistic, which
-    ## magmaan's continuous_ls_chisq reproduces).
-    fit <- lavaan::cfa(model, data = data, estimator = est, std.lv = FALSE)
+    ## magmaan's continuous_ls_chisq reproduces). Multi-group LS is fitted
+    ## cov-only (meanstructure = FALSE) to match the single-group convention.
+    cfa_args <- list(model = model, data = data, estimator = est,
+                     std.lv = FALSE)
+    if (multigroup) {
+      cfa_args$group <- grp
+      cfa_args$meanstructure <- FALSE
+    }
+    fit <- do.call(lavaan::cfa, cfa_args)
+    if (multigroup && is.null(group_labels)) {
+      group_labels <- as.character(lavaan::lavInspect(fit, "group.label"))
+    }
     lpt <- lavaan::parTable(fit)
     lfree <- lpt[lpt$free > 0, , drop = FALSE]
     if (is.null(align)) {
       align <- align_magmaan_free(model, lfree, meanstructure = FALSE,
-                                  auto_cov_y = FALSE)
+                                  auto_cov_y = FALSE,
+                                  group = if (multigroup) grp else NULL,
+                                  group_labels = group_labels)
     }
     fj <- ls_fit_json(fit)
     fj$theta_hat <- fj$theta_hat[align$idx]   # reorder into magmaan free order
     if (est == "ULS") {
-      fit_rob <- lavaan::cfa(model, data = data, estimator = "ULS",
-                             se = "robust.sem",
-                             test = c("satorra.bentler", "mean.var.adjusted",
-                                      "scaled.shifted"))
+      rob_args <- list(model = model, data = data, estimator = "ULS",
+                       std.lv = FALSE, se = "robust.sem",
+                       test = c("satorra.bentler", "mean.var.adjusted",
+                                "scaled.shifted"))
+      if (multigroup) {
+        rob_args$group <- grp
+        rob_args$meanstructure <- FALSE
+      }
+      fit_rob <- do.call(lavaan::cfa, rob_args)
       rj <- ls_robust_json(fit_rob)
       rj$se <- rj$se[align$idx]               # reorder into magmaan free order
       fj$robust <- rj
@@ -371,13 +414,17 @@ emit_ls <- function(id) {
     lavaan_function = "cfa",
     meanstructure = FALSE,
     auto_cov_y = FALSE,
-    n_groups = 1L,
+    n_groups = if (multigroup) length(group_labels) else 1L,
     n_obs = nrow(data),
     ov_names = ov,
     n_free = nrow(align$mfree),
     magmaan_aligned = align$aligned,
     estimators = case$estimators,
     fits = fits)
+  if (multigroup) {
+    payload$group_var <- grp
+    payload$group_labels <- group_labels
+  }
   if (align$aligned) {
     payload$param_lhs <- align$mfree$lhs
     payload$param_op <- align$mfree$op
@@ -385,8 +432,12 @@ emit_ls <- function(id) {
   }
 
   write_case(id, payload, data, ov,
-             sprintf("LS n=%d estimators=%s", nrow(data),
-                     paste(case$estimators, collapse = "/")))
+             sprintf("LS %sn=%d estimators=%s",
+                     if (multigroup) sprintf("ngrp=%d ", length(group_labels))
+                     else "",
+                     nrow(data), paste(case$estimators, collapse = "/")),
+             group_col = if (multigroup) data[[grp]] else NULL,
+             group_labels = group_labels)
 }
 
 # === ordinal family ========================================================
@@ -439,7 +490,10 @@ emit_ordinal <- function(id) {
 # === writers ===============================================================
 
 # Write reference.json plus an X-only data.json (complete-data families).
-write_case <- function(id, payload, data, ov, note) {
+# `group_col` (a per-row group vector) and `group_labels` split the raw matrix
+# into one `raw` block per group, in group-label order; absent ⇒ single block.
+write_case <- function(id, payload, data, ov, note,
+                       group_col = NULL, group_labels = NULL) {
   case_dir <- file.path(out_root, id)
   dir.create(case_dir, recursive = TRUE, showWarnings = FALSE)
   write_json(payload, file.path(case_dir, "reference.json"), pretty = TRUE,
@@ -447,15 +501,24 @@ write_case <- function(id, payload, data, ov, note) {
 
   data_note <- "skipped (not cleared for redistribution)"
   if (isTRUE(data_redistributable[[id]])) {
+    if (is.null(group_col)) {
+      raw <- list(list(X = unname(as.matrix(data[, ov, drop = FALSE]))))
+    } else {
+      g <- as.character(group_col)
+      raw <- lapply(group_labels, function(lab) {
+        list(X = unname(as.matrix(data[g == lab, ov, drop = FALSE])))
+      })
+    }
     data_payload <- list(
       case_id = id,
       ov_names = ov,
-      raw = list(list(X = unname(as.matrix(data)))))
+      raw = raw)
     write_json(data_payload, file.path(case_dir, "data.json"), pretty = TRUE,
                auto_unbox = TRUE, digits = NA)
-    data_note <- sprintf("data.json (%d x %d)", nrow(data), ncol(data))
+    data_note <- sprintf("data.json (%d x %d, %d block(s))",
+                         nrow(data), length(ov), length(raw))
   }
-  cat(sprintf("wrote %-20s %-40s %s\n", id, note, data_note))
+  cat(sprintf("wrote %-28s %-40s %s\n", id, note, data_note))
 }
 
 # Write reference.json plus a caller-built data.json (FIML / ordinal).
