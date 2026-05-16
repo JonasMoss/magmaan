@@ -740,7 +740,11 @@ ls_cases <- list(
        meanstructure = TRUE, fixed_x = TRUE, fit_fun = "sem"),
   list(id = "0006_three_factor_meanstructure_hs",
        model = "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nspeed =~ x7 + x8 + x9",
-       meanstructure = TRUE)
+       meanstructure = TRUE),
+  # General-linear equality constraint (b2 + b3 == 1.5) under LS — exercises
+  # fit_bounded's K-reparameterized general-linear path.
+  list(id = "0007_general_linear_hs",
+       model = "visual =~ x1 + b2*x2 + b3*x3\nb2 + b3 == 1.5")
 )
 
 regenerated_ls <- character(0)

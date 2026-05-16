@@ -255,11 +255,14 @@ fit_bounded(spec::LatentStructure pt,
   }
 
   if constexpr (LsDiscrepancy<D> && LsBoundedOptimizer<O>) {
-    // ---- LS path: true multi-residual Gauss–Newton + optional eq-penalty. ----
+    // ---- LS path: true multi-residual Gauss–Newton. ----
+    //
+    // Equality constraints are handled by K-reparameterization (θ = θ₀ + K·α,
+    // optimizing the reduced problem over α — exact constraints, no penalty);
+    // unconstrained models optimize θ directly. Either way the optimizer sees
+    // a plain bounded least-squares problem.
 
-    // Compute the data-residual layout once. The LS-aware discrepancy will
-    // report its own `n_resid` via `residuals(samp, m₀)`; we evaluate at the
-    // start to size n_data, then size the augmented residual vector.
+    // Evaluate at the start point to size the data residual.
     auto sm0 = ev.sigma(*x0_or);
     if (!sm0.has_value()) {
       return std::unexpected(FitError{
@@ -272,19 +275,6 @@ fit_bounded(spec::LatentStructure pt,
       return std::unexpected(r0.error());
     }
     const Eigen::Index n_data = r0->size();
-    const Eigen::Index n_eq   = con.active() ? con.A_eq.rows() : 0;
-    const Eigen::Index n_total = n_data + n_eq;
-
-    // Penalty weight: scale to the magnitude of F at the start so the eq
-    // residuals dominate as θ drifts off the constraint surface, but stay
-    // proportional to the data residuals when they're large. 1e10 multiplier
-    // puts equality residuals at ~1e-5 of the data residuals at convergence,
-    // i.e. ‖A_eq·θ − b_eq‖₂ ≲ √(F_final / μ_eq) ≈ 1e-5 for F_final ~ 1e0.
-    const double F0 = 0.5 * r0->squaredNorm();
-    const double mu_eq = n_eq > 0
-        ? std::max(1.0, F0) * 1e10
-        : 0.0;
-    const double sqrt_mu_eq = std::sqrt(mu_eq);
 
     // `ev.{sigma,dsigma_dtheta,dmu_dtheta}` return `model_expected<...>`
     // with `ModelError`; the LS callbacks want `fit_expected<...>` with
@@ -297,25 +287,17 @@ fit_bounded(spec::LatentStructure pt,
                       0, 0.0};
     };
 
-    // Pure-merge equality constraints (shared labels, `a == b`, multi-group
-    // invariance) reparameterize θ = θ₀ + K·α and optimize the reduced LS
-    // problem over α: the constraints hold exactly by construction, with no
-    // penalty term and no ill-conditioning. Box bounds map cleanly because for
-    // pure-merge K each θ_k is a copy of one α (θ_k = α_{group[k]}, θ₀ = 0).
-    // General-linear constraints (`a == 2*b + c`, `con.group` empty) fall
-    // through to the penalty path below — their K rotates the parameter axes,
-    // so θ-box bounds do not map to α-box bounds.
-    if (con.active() && !con.group.empty()) {
+    // Equality constraints — any kind — are handled by K-reparameterization:
+    // θ = θ₀ + K·α, optimizing the reduced LS problem over α so the
+    // constraints hold exactly by construction (no penalty, no
+    // ill-conditioning). For pure-merge K each θ_k is a copy of one α
+    // (θ_k = α_{group[k]}, θ₀ = 0), so the θ box bounds fold straight onto α
+    // box bounds. For general-linear K (an SVD kernel basis that rotates the
+    // parameter axes) a θ box is not an α box — α is optimized unbounded and
+    // the bounds are verified on the recovered θ̂ afterwards.
+    if (con.active()) {
       const Eigen::Index n_alpha = con.Kmat.cols();
-      constexpr double kInf = std::numeric_limits<double>::infinity();
-      Eigen::VectorXd lo_a = Eigen::VectorXd::Constant(n_alpha, -kInf);
-      Eigen::VectorXd hi_a = Eigen::VectorXd::Constant(n_alpha,  kInf);
-      for (Eigen::Index k = 0; k < bounds.lower.size(); ++k) {
-        const auto g = static_cast<Eigen::Index>(con.group[
-            static_cast<std::size_t>(k)]);
-        lo_a(g) = std::max(lo_a(g), bounds.lower(k));
-        hi_a(g) = std::min(hi_a(g), bounds.upper(k));
-      }
+      const bool pure_merge = !con.group.empty();
 
       auto resid_a = [&, n_data, wrap_model_err](
           const Eigen::VectorXd& a) -> fit_expected<Eigen::VectorXd> {
@@ -340,9 +322,6 @@ fit_bounded(spec::LatentStructure pt,
                          0.5 * r->squaredNorm(), 0};
       }
 
-      Eigen::VectorXd alpha0 = con.contract(*x0_or);
-      alpha0 = alpha0.cwiseMax(lo_a).cwiseMin(hi_a);
-
       auto jac_a = [&, wrap_model_err](
           const Eigen::VectorXd& a) -> fit_expected<Eigen::MatrixXd> {
         const Eigen::VectorXd x = con.expand(a);
@@ -356,15 +335,52 @@ fit_bounded(spec::LatentStructure pt,
         return J_alpha;
       };
 
+      // α box bounds: folded per group for pure-merge, open for general-linear.
+      constexpr double kInf = std::numeric_limits<double>::infinity();
+      Eigen::VectorXd lo_a = Eigen::VectorXd::Constant(n_alpha, -kInf);
+      Eigen::VectorXd hi_a = Eigen::VectorXd::Constant(n_alpha,  kInf);
+      if (pure_merge) {
+        for (Eigen::Index k = 0; k < bounds.lower.size(); ++k) {
+          const auto g = static_cast<Eigen::Index>(con.group[
+              static_cast<std::size_t>(k)]);
+          lo_a(g) = std::max(lo_a(g), bounds.lower(k));
+          hi_a(g) = std::min(hi_a(g), bounds.upper(k));
+        }
+      }
+
+      Eigen::VectorXd alpha0 = con.contract(*x0_or);
+      alpha0 = alpha0.cwiseMax(lo_a).cwiseMin(hi_a);
+
       auto out_a = optimizer.minimize_ls(LsResidualFn(resid_a),
                                          LsJacobianFn(jac_a),
                                          n_data, alpha0, lo_a, hi_a);
       if (!out_a.has_value()) return std::unexpected(out_a.error());
-      return Estimates{con.expand(out_a->theta_hat), out_a->fmin,
-                       out_a->iterations};
+      Eigen::VectorXd theta_hat = con.expand(out_a->theta_hat);
+
+      if (!pure_merge) {
+        // General-linear α was optimized unbounded — a θ box does not map to
+        // an α box. Verify the recovered θ̂ honors the bounds; a real
+        // violation means the constrained optimum is Heywood, which an α-box
+        // cannot represent. Fail explicitly rather than return such a fit.
+        constexpr double tol_b = 1e-6;
+        for (Eigen::Index k = 0; k < theta_hat.size(); ++k) {
+          if (theta_hat(k) < bounds.lower(k) - tol_b ||
+              theta_hat(k) > bounds.upper(k) + tol_b) {
+            return std::unexpected(FitError{
+                FitError::Kind::NumericIssue,
+                "fit_bounded (ls): general-linear equality drove parameter " +
+                    std::to_string(k) + " past its bound — the constrained "
+                    "optimum appears Heywood and is not representable as an "
+                    "alpha-box",
+                out_a->iterations, out_a->fmin});
+          }
+        }
+      }
+      return Estimates{std::move(theta_hat), out_a->fmin, out_a->iterations};
     }
 
-    auto resid_fn = [&, n_data, n_total, sqrt_mu_eq, wrap_model_err](
+    // ---- Unconstrained: plain bounded LS over θ. ----
+    auto resid_fn = [&, n_data, wrap_model_err](
         const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
       auto eval = ev.evaluate(x, false, false);
       if (!eval.has_value())
@@ -376,16 +392,10 @@ fit_bounded(spec::LatentStructure pt,
             FitError::Kind::NumericIssue,
             "fit_bounded (ls): residual length changed mid-fit", 0, 0.0});
       }
-      Eigen::VectorXd r_aug(n_total);
-      r_aug.head(n_data) = *r;
-      if (n_total > n_data) {
-        r_aug.tail(n_total - n_data).noalias() =
-            sqrt_mu_eq * (con.A_eq * x - con.b_eq);
-      }
-      return r_aug;
+      return std::move(*r);
     };
 
-    auto jac_fn = [&, n_data, n_total, sqrt_mu_eq, wrap_model_err](
+    auto jac_fn = [&, wrap_model_err](
         const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
       auto eval = ev.evaluate(x, true, true);
       if (!eval.has_value())
@@ -393,43 +403,17 @@ fit_bounded(spec::LatentStructure pt,
       auto Jr = discrepancy.residual_jacobian(samp, eval->moments,
                                              eval->J_sigma, eval->J_mu);
       if (!Jr.has_value()) return std::unexpected(Jr.error());
-      const Eigen::Index n_free = Jr->cols();
-      Eigen::MatrixXd J_aug(n_total, n_free);
-      J_aug.topRows(n_data) = *Jr;
-      if (n_total > n_data) {
-        J_aug.bottomRows(n_total - n_data).noalias() = sqrt_mu_eq * con.A_eq;
-      }
-      return J_aug;
+      return std::move(*Jr);
     };
 
     auto out_or = optimizer.minimize_ls(LsResidualFn(resid_fn),
                                         LsJacobianFn(jac_fn),
-                                        n_total,
+                                        n_data,
                                         *x0_or,
                                         bounds.lower,
                                         bounds.upper);
     if (!out_or.has_value()) return std::unexpected(out_or.error());
-
-    // The LS optimizer returns ½‖r_aug‖² which includes the penalty term.
-    // Strip it for the user-facing `fmin` (= ½‖r_data‖² = F_data) and
-    // verify the equality residual stayed inside `tol_eq`.
-    double fmin_data = out_or->fmin;
-    if (n_eq > 0) {
-      const Eigen::VectorXd eq_resid = con.A_eq * out_or->theta_hat - con.b_eq;
-      const double eq_max = eq_resid.cwiseAbs().maxCoeff();
-      constexpr double tol_eq = 1e-6;
-      if (eq_max > tol_eq) {
-        return std::unexpected(FitError{
-            FitError::Kind::NumericIssue,
-            "fit_bounded (ls): equality residual " + std::to_string(eq_max) +
-                " exceeded tolerance " + std::to_string(tol_eq) +
-                " (consider raising μ_eq or tightening the optimizer)",
-            out_or->iterations, out_or->fmin});
-      }
-      fmin_data = out_or->fmin - 0.5 * mu_eq * eq_resid.squaredNorm();
-      if (fmin_data < 0.0) fmin_data = 0.0;   // float-noise clamp
-    }
-    return Estimates{std::move(out_or->theta_hat), fmin_data,
+    return Estimates{std::move(out_or->theta_hat), out_or->fmin,
                      out_or->iterations};
   } else {
     // ---- Scalar fallback path (non-LS discrepancy or non-LS optimizer). ----

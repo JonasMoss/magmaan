@@ -34,6 +34,7 @@ const std::vector<std::string> kLsFixtures = {
     "0004_two_factor_meanstructure",
     "0005_obs_exo_cfa_fixedx",
     "0006_three_factor_meanstructure_hs",
+    "0007_general_linear_hs",
 };
 
 Eigen::MatrixXd matrix_from_json(const nlohmann::json& j) {
@@ -191,8 +192,17 @@ bool check_estimate(const std::string& id,
     failures.push_back(id + "/" + estimator + ": df mismatch");
     return false;
   }
-  if (est.theta.size() != fit["npar"].get<int>()) {
-    failures.push_back(id + "/" + estimator + ": npar mismatch");
+  // lavaan npar is the post-equality independent parameter count; magmaan's
+  // equivalent is EqConstraints::n_alpha (equal to the θ size when there are
+  // no equality constraints).
+  auto con_or = magmaan::estimate::build_eq_constraints(pt);
+  const int magmaan_npar = con_or.has_value()
+      ? static_cast<int>(con_or->n_alpha)
+      : static_cast<int>(est.theta.size());
+  if (magmaan_npar != fit["npar"].get<int>()) {
+    failures.push_back(id + "/" + estimator + ": npar mismatch (" +
+                       std::to_string(magmaan_npar) + " vs lavaan " +
+                       std::to_string(fit["npar"].get<int>()) + ")");
     return false;
   }
 
