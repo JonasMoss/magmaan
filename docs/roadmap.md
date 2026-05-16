@@ -250,6 +250,22 @@ golden `parTable()` fixtures.
   one transition window; they re-export target namespace names but no longer
   own the primary API definitions.
 
+### Local build workflow
+
+- The normal C++ edit loop is the `fast` preset and `just test-fast` / `just
+  test`: Debug, no sanitizers, Ceres off, with ccache and mold enabled.
+- The `dev` preset is the sanitizer validation loop: Debug plus ASan/UBSan.
+  Use `just test-dev` before handing back risky core changes, and prefer
+  targeted `ctest --preset dev -R ...` while narrowing failures.
+- The C++ doctest suite is split into labeled executables (`smoke`, `spec`,
+  `estimate`, `inference`, and `ordinal`) behind the aggregate
+  `magmaan_tests` target. This keeps `cmake --build --preset <p> --target
+  magmaan_tests` working while allowing narrower relinks and `ctest -L`.
+- R bindings are intentionally outside the default C++ loop. `just r-install`
+  links the optimized non-Ceres core, `just r-install-fast` is for interactive
+  wrapper work, and `just r-install-ceres` is the explicit Ceres-enabled R
+  path.
+
 ### Argument-minimality sweep
 
 One core architecture rule is that functions should take exactly the data they

@@ -1,22 +1,35 @@
 # Repo root = two levels up from this Makevars. During an R build the cwd is
 # <repo>/r-package/src, so $(CURDIR)/../.. is the magmaan repo root.
 MAGMAAN_ROOT := $(abspath $(CURDIR)/../..)
-MAGMAAN_BUILD := $(MAGMAAN_ROOT)/build/ceres
+MAGMAAN_PRESET ?= opt
+MAGMAAN_BUILD ?= $(MAGMAAN_ROOT)/build/$(MAGMAAN_PRESET)
 MAGMAAN_LIB  := $(MAGMAAN_BUILD)/libmagmaan.a
+MAGMAAN_WITH_CERES_R ?= 0
+MAGMAAN_CONFIG_STAMP := .magmaan-build-config
 
 CXX_STD       = CXX23
-PKG_CPPFLAGS  = -I$(MAGMAAN_ROOT)/include -DEIGEN_MAX_ALIGN_BYTES=64 -DMAGMAAN_WITH_CERES
+PKG_CPPFLAGS  = -I$(MAGMAAN_ROOT)/include -DEIGEN_MAX_ALIGN_BYTES=64
 override CXXFLAGS += -O3 -DNDEBUG -march=native
-PKG_LIBS      = $(MAGMAAN_LIB) -lceres -lglog -lgflags
+PKG_LIBS      = $(MAGMAAN_LIB)
 
-# Make sure libmagmaan.a (optimized Ceres preset) is current before linking the
+ifeq ($(MAGMAAN_WITH_CERES_R),1)
+PKG_CPPFLAGS += -DMAGMAAN_WITH_CERES
+PKG_LIBS     += -lceres -lglog -lgflags
+endif
+
+# Make sure libmagmaan.a is current before linking the
 # R glue. Incremental: a no-op (~1s) when nothing changed in the C++ tree.
 $(SHLIB): magmaan_lib
 
-.PHONY: magmaan_lib
+.PHONY: magmaan_lib FORCE
 magmaan_lib:
 	@cmake --build "$(MAGMAAN_BUILD)" --target magmaan 2>/dev/null || \
-	  ( cd "$(MAGMAAN_ROOT)" && cmake --preset ceres && cmake --build --preset ceres --target magmaan )
+	  ( cd "$(MAGMAAN_ROOT)" && cmake --preset "$(MAGMAAN_PRESET)" && cmake --build --preset "$(MAGMAAN_PRESET)" --target magmaan )
+
+$(MAGMAAN_CONFIG_STAMP): FORCE
+	@tmp="$@.tmp"; \
+	printf '%s\n' "MAGMAAN_PRESET=$(MAGMAAN_PRESET)" "MAGMAAN_BUILD=$(MAGMAAN_BUILD)" "MAGMAAN_WITH_CERES_R=$(MAGMAAN_WITH_CERES_R)" > "$$tmp"; \
+	if test -r "$@" && cmp -s "$$tmp" "$@"; then rm "$$tmp"; else mv "$$tmp" "$@"; fi
 
 # R's auto-generated package Makefile only tracks .cpp -> .o; it has no idea
 # the R-glue objects also depend on the magmaan headers libmagmaan.a was built
@@ -25,4 +38,4 @@ magmaan_lib:
 # (-> "undefined symbol" at load time, the exact footgun this guards). Make the
 # package objects depend on libmagmaan.a: when `magmaan_lib` re-links it, they
 # rebuild. Cheap (a handful of small TUs); a no-op when nothing changed.
-$(OBJECTS): $(MAGMAAN_LIB)
+$(OBJECTS): $(MAGMAAN_LIB) $(MAGMAAN_CONFIG_STAMP)
