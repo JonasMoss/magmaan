@@ -13,6 +13,7 @@
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/ordinal.hpp"
+#include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
@@ -287,6 +288,91 @@ Rcpp::List mixed_ordinal_stats_to_r(const magmaan::data::MixedOrdinalStats& s) {
       Rcpp::_["nobs"] = nobs,
       Rcpp::_["n_levels"] = n_levels);
   out.attr("class") = Rcpp::CharacterVector::create("magmaan_mixed_ordinal_data", "list");
+  return out;
+}
+
+magmaan::data::PolychoricHScoreKind h_score_kind_from(std::string kind) {
+  if (kind == "ml") return magmaan::data::PolychoricHScoreKind::ML;
+  if (kind == "wma_hard_cap") return magmaan::data::PolychoricHScoreKind::WmaHardCap;
+  if (kind == "smooth_cap") return magmaan::data::PolychoricHScoreKind::SmoothCap;
+  if (kind == "exp_cap") return magmaan::data::PolychoricHScoreKind::ExpCap;
+  Rcpp::stop("magmaan: h_kind must be one of 'ml', 'wma_hard_cap', 'smooth_cap', or 'exp_cap'");
+}
+
+magmaan::data::PairwiseOrdinalHWeightedStatsOptions
+h_weighted_options_from(std::string h_kind, double k, double a, double b,
+                        double lambda) {
+  magmaan::data::PairwiseOrdinalHWeightedStatsOptions options;
+  options.rho.h_score.kind = h_score_kind_from(h_kind);
+  options.rho.h_score.k = k;
+  options.rho.h_score.a = a;
+  options.rho.h_score.b = b;
+  options.rho.h_score.lambda = lambda;
+  return options;
+}
+
+magmaan::data::PairwiseOrdinalDpdStatsOptions
+ordinal_dpd_options_from(double alpha) {
+  magmaan::data::PairwiseOrdinalDpdStatsOptions options;
+  options.alpha = alpha;
+  return options;
+}
+
+magmaan::data::PolyserialPairDpdOptions
+polyserial_dpd_options_from(double alpha) {
+  magmaan::data::PolyserialPairDpdOptions options;
+  options.alpha = alpha;
+  return options;
+}
+
+Rcpp::List pairwise_ordinal_diagnostics_to_r(
+    const std::vector<magmaan::data::PairwiseOrdinalBlockDiagnostics>& d) {
+  Rcpp::List out(static_cast<R_xlen_t>(d.size()));
+  for (std::size_t b = 0; b < d.size(); ++b) {
+    out[static_cast<R_xlen_t>(b)] = Rcpp::List::create(
+        Rcpp::_["moment_influence"] = Rcpp::wrap(d[b].moment_influence),
+        Rcpp::_["gamma"] = Rcpp::wrap(d[b].gamma),
+        Rcpp::_["min_eigen_r"] = d[b].min_eigen_r,
+        Rcpp::_["raw_min_eigen_r"] = d[b].raw_min_eigen_r,
+        Rcpp::_["r_repair_applied"] = d[b].r_repair_applied);
+  }
+  return out;
+}
+
+Rcpp::List mixed_polyserial_dpd_diagnostics_to_r(
+    const std::vector<magmaan::data::MixedOrdinalPolyserialDpdBlockDiagnostics>& d) {
+  Rcpp::List out(static_cast<R_xlen_t>(d.size()));
+  for (std::size_t b = 0; b < d.size(); ++b) {
+    const auto& block = d[b];
+    Rcpp::DataFrame pairs;
+    {
+      const R_xlen_t n = static_cast<R_xlen_t>(block.dpd_pairs.size());
+      Rcpp::IntegerVector i(n), j(n), moment_index(n);
+      for (R_xlen_t r = 0; r < n; ++r) {
+        const auto& pair = block.dpd_pairs[static_cast<std::size_t>(r)];
+        i[r] = pair.i + 1;
+        j[r] = pair.j + 1;
+        moment_index[r] = pair.moment_index + 1;
+      }
+      pairs = Rcpp::DataFrame::create(Rcpp::_["i"] = i,
+                                      Rcpp::_["j"] = j,
+                                      Rcpp::_["moment_index"] = moment_index,
+                                      Rcpp::_["stringsAsFactors"] = false);
+    }
+    Rcpp::NumericVector rho(static_cast<R_xlen_t>(block.dpd_fits.size()));
+    Rcpp::NumericVector objective(static_cast<R_xlen_t>(block.dpd_fits.size()));
+    for (R_xlen_t r = 0; r < rho.size(); ++r) {
+      const auto& fit = block.dpd_fits[static_cast<std::size_t>(r)];
+      rho[r] = fit.rho;
+      objective[r] = fit.objective;
+    }
+    out[static_cast<R_xlen_t>(b)] = Rcpp::List::create(
+        Rcpp::_["pairs"] = pairs,
+        Rcpp::_["rho"] = rho,
+        Rcpp::_["objective"] = objective,
+        Rcpp::_["moment_influence"] = Rcpp::wrap(block.moment_influence),
+        Rcpp::_["gamma"] = Rcpp::wrap(block.gamma));
+  }
   return out;
 }
 
@@ -687,6 +773,33 @@ Rcpp::List data_ordinal_stats_from_raw_impl(SEXP X) {
 }
 
 // [[Rcpp::export]]
+Rcpp::List data_ordinal_stats_h_weighted_from_raw_impl(
+    SEXP X, std::string h_kind = "wma_hard_cap",
+    double k = 1.5, double a = 1.6, double b = 2.2, double lambda = 0.2) {
+  auto blocks = matrix_blocks_from_arg(X);
+  auto out_or = magmaan::data::pairwise_ordinal_stats_h_weighted_from_integer_data(
+      blocks, h_weighted_options_from(h_kind, k, a, b, lambda));
+  if (!out_or.has_value()) stop_post(out_or.error());
+  Rcpp::List out = ordinal_stats_to_r(out_or->stats);
+  out["robust_method"] = "h_weighted";
+  out["diagnostics"] = pairwise_ordinal_diagnostics_to_r(out_or->block_diagnostics);
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List data_ordinal_stats_dpd_from_raw_impl(SEXP X, double alpha = 0.3) {
+  auto blocks = matrix_blocks_from_arg(X);
+  auto out_or = magmaan::data::pairwise_ordinal_stats_dpd_from_integer_data(
+      blocks, ordinal_dpd_options_from(alpha));
+  if (!out_or.has_value()) stop_post(out_or.error());
+  Rcpp::List out = ordinal_stats_to_r(out_or->stats);
+  out["robust_method"] = "dpd";
+  out["alpha"] = alpha;
+  out["diagnostics"] = pairwise_ordinal_diagnostics_to_r(out_or->block_diagnostics);
+  return out;
+}
+
+// [[Rcpp::export]]
 Rcpp::List data_mixed_ordinal_stats_from_raw_impl(SEXP X, SEXP ordered_mask) {
   auto blocks = matrix_blocks_from_arg(X);
   std::vector<std::vector<std::int32_t>> ordered;
@@ -715,6 +828,44 @@ Rcpp::List data_mixed_ordinal_stats_from_raw_impl(SEXP X, SEXP ordered_mask) {
   auto out_or = magmaan::data::mixed_ordinal_stats_from_data(blocks, ordered);
   if (!out_or.has_value()) stop_post(out_or.error());
   return mixed_ordinal_stats_to_r(*out_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl(
+    SEXP X, SEXP ordered_mask, double alpha = 0.3) {
+  auto blocks = matrix_blocks_from_arg(X);
+  std::vector<std::vector<std::int32_t>> ordered;
+  ordered.reserve(blocks.size());
+  if (Rf_isMatrix(ordered_mask)) {
+    Rcpp::IntegerMatrix M(ordered_mask);
+    if (blocks.size() != 1)
+      Rcpp::stop("magmaan: ordered_mask must be a list for multi-group data");
+    std::vector<std::int32_t> row(static_cast<std::size_t>(M.ncol()));
+    for (R_xlen_t j = 0; j < M.ncol(); ++j) row[static_cast<std::size_t>(j)] = M(0, j);
+    ordered.push_back(std::move(row));
+  } else if (TYPEOF(ordered_mask) == VECSXP) {
+    Rcpp::List L(ordered_mask);
+    if (static_cast<std::size_t>(L.size()) != blocks.size())
+      Rcpp::stop("magmaan: ordered_mask block count does not match X");
+    for (R_xlen_t b = 0; b < L.size(); ++b) {
+      Rcpp::IntegerVector v(L[b]);
+      ordered.push_back(Rcpp::as<std::vector<std::int32_t>>(v));
+    }
+  } else {
+    Rcpp::IntegerVector v(ordered_mask);
+    if (blocks.size() != 1)
+      Rcpp::stop("magmaan: ordered_mask must be a list for multi-group data");
+    ordered.push_back(Rcpp::as<std::vector<std::int32_t>>(v));
+  }
+  auto out_or = magmaan::data::mixed_ordinal_stats_polyserial_dpd_from_data(
+      blocks, ordered, polyserial_dpd_options_from(alpha));
+  if (!out_or.has_value()) stop_post(out_or.error());
+  Rcpp::List out = mixed_ordinal_stats_to_r(out_or->stats);
+  out["robust_method"] = "polyserial_dpd";
+  out["alpha"] = alpha;
+  out["diagnostics"] = mixed_polyserial_dpd_diagnostics_to_r(
+      out_or->block_diagnostics);
+  return out;
 }
 
 // [[Rcpp::export]]

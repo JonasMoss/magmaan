@@ -25,6 +25,15 @@ df <- make_ord_df(360, list(c(-0.70, 0.35), c(-0.55, 0.60),
 
 m <- model_spec(model, ordered = ordered, parameterization = "delta")
 d <- magmaan_core$data_ordinal_stats_from_df(df, m)
+d_h <- magmaan_core$data_ordinal_stats_from_df(
+  df, m, robust = "h_weighted", h_kind = "wma_hard_cap", h_k = 1.25)
+d_dpd <- magmaan_core$data_ordinal_stats_from_df(df, m, robust = "dpd", alpha = 0.25)
+stopifnot(identical(d_h$robust_method, "h_weighted"))
+stopifnot(identical(d_dpd$robust_method, "dpd"))
+stopifnot(length(d_h$diagnostics) == 1L, length(d_dpd$diagnostics) == 1L)
+stopifnot(nrow(d_h$NACOV[[1]]) == nrow(d$NACOV[[1]]))
+stopifnot(nrow(d_dpd$NACOV[[1]]) == nrow(d$NACOV[[1]]))
+
 lavaan_wls <- cfa(model, data = df, ordered = ordered,
                   estimator = "WLS", parameterization = "delta")
 lavaan_samp <- lavInspect(lavaan_wls, "sampstat")
@@ -44,13 +53,18 @@ stopifnot(length(moments) == nrow(d$NACOV[[1]]))
 stopifnot(length(moments) == nrow(d$W_dwls[[1]]))
 stopifnot(length(moments) == nrow(d$W_wls[[1]]))
 
-fit_dwls <- fit_dwls_ordinal(
+fit_dwls <- magmaan_core$fit_dwls_ordinal(
   m, d, lbfgsb = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
-fit_wls <- fit_wls_ordinal(
+fit_wls <- magmaan_core$fit_wls_ordinal(
   m, d, lbfgsb = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+fit_dwls_h <- magmaan_core$fit_dwls_ordinal(
+  m, d_h, lbfgsb = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+fit_dwls_dpd <- magmaan_core$fit_dwls_ordinal(
+  m, d_dpd, lbfgsb = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
 
 stopifnot(isTRUE(fit_dwls$ordinal), identical(fit_dwls$estimator, "DWLS"))
 stopifnot(isTRUE(fit_wls$ordinal), identical(fit_wls$estimator, "WLS"))
+stopifnot(isTRUE(fit_dwls_h$ordinal), isTRUE(fit_dwls_dpd$ordinal))
 stopifnot(length(fit_dwls$theta) == sum(parTable(lavaan_wls)$free > 0L))
 
 lavaan_dwls <- cfa(model, data = df, ordered = ordered,
@@ -72,6 +86,26 @@ stopifnot(is.finite(rob_dwls$mean_var_adjusted$df_adj))
 stopifnot(is.finite(rob_dwls$scaled_shifted$scale_a))
 stopifnot(all(is.finite(rob_wls$se)))
 stopifnot(identical(rob_wls$df, 2L))
+
+df_mixed <- df
+set.seed(22L)
+eta <- rnorm(nrow(df_mixed))
+df_mixed$x3 <- 0.8 * eta + 0.6 * rnorm(nrow(df_mixed))
+df_mixed$x4 <- 0.7 * eta + 0.7 * rnorm(nrow(df_mixed))
+m_mixed <- model_spec(model, ordered = c("x1", "x2"),
+                      parameterization = "delta", meanstructure = TRUE)
+d_mixed <- magmaan_core$data_mixed_ordinal_stats_from_df(df_mixed, m_mixed)
+d_mixed_dpd <- magmaan_core$data_mixed_ordinal_stats_from_df(
+  df_mixed, m_mixed, polyserial = "dpd", alpha = 0.35)
+stopifnot(identical(d_mixed_dpd$robust_method, "polyserial_dpd"))
+stopifnot(length(d_mixed_dpd$diagnostics) == 1L)
+stopifnot(nrow(d_mixed_dpd$NACOV[[1]]) == nrow(d_mixed$NACOV[[1]]))
+stopifnot(identical(d_mixed_dpd$thresholds, d_mixed$thresholds))
+fit_mixed_dpd <- magmaan_core$fit_dwls_mixed_ordinal(
+  m_mixed, d_mixed_dpd,
+  lbfgsb = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+stopifnot(isTRUE(fit_mixed_dpd$mixed_ordinal))
+stopifnot(all(is.finite(fit_mixed_dpd$theta)))
 
 bad <- df
 bad$x1 <- ordered(as.integer(bad$x1), levels = 1:4)

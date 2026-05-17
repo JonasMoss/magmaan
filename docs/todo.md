@@ -223,6 +223,11 @@ Completed implementation slices:
 - [x] Broader mixed robustness is not part of this line: continuous marginal
   moments and continuous-continuous covariance equations stay ordinary moment
   estimates unless a separate design reopens them.
+- [x] Experimental h/DPD robust moment builders are exposed through the
+  methods-developer surfaces: R `magmaan_core` wrappers/examples and the
+  staged C++ facade in `src/api/sem.hpp`. This covers all-ordinal h-weighted,
+  all-ordinal DPD, and mixed fixed-marginal polyserial DPD without changing the
+  default lavaan-compatible data builders.
 
 Remaining work, in suggested order:
 
@@ -235,11 +240,6 @@ Remaining work, in suggested order:
   h-weighted and DPD all-ordinal SEM paths: clean ML limit, sparse-cell
   behavior, contaminated-cell downweighting, positive DWLS diagonals, and stable
   repaired correlation influence columns.
-- **M.** Expose the experimental h/DPD robust moment builders through the
-  methods-developer surfaces: R `magmaan_core` wrappers/examples and the
-  staged C++ facade in `src/api/sem.hpp`. Cover all-ordinal h-weighted,
-  all-ordinal DPD, and mixed fixed-marginal polyserial DPD without changing the
-  default lavaan-compatible data builders.
 
 Done when: robust polychoric/polyserial alternatives are selectable where their
 moment contracts are designed, default ML fixtures are unchanged, diagnostics

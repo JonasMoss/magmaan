@@ -158,6 +158,34 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// data_ordinal_stats_h_weighted_from_raw_impl
+Rcpp::List data_ordinal_stats_h_weighted_from_raw_impl(SEXP X, std::string h_kind, double k, double a, double b, double lambda);
+RcppExport SEXP _magmaan_data_ordinal_stats_h_weighted_from_raw_impl(SEXP XSEXP, SEXP h_kindSEXP, SEXP kSEXP, SEXP aSEXP, SEXP bSEXP, SEXP lambdaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< std::string >::type h_kind(h_kindSEXP);
+    Rcpp::traits::input_parameter< double >::type k(kSEXP);
+    Rcpp::traits::input_parameter< double >::type a(aSEXP);
+    Rcpp::traits::input_parameter< double >::type b(bSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
+    rcpp_result_gen = Rcpp::wrap(data_ordinal_stats_h_weighted_from_raw_impl(X, h_kind, k, a, b, lambda));
+    return rcpp_result_gen;
+END_RCPP
+}
+// data_ordinal_stats_dpd_from_raw_impl
+Rcpp::List data_ordinal_stats_dpd_from_raw_impl(SEXP X, double alpha);
+RcppExport SEXP _magmaan_data_ordinal_stats_dpd_from_raw_impl(SEXP XSEXP, SEXP alphaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
+    rcpp_result_gen = Rcpp::wrap(data_ordinal_stats_dpd_from_raw_impl(X, alpha));
+    return rcpp_result_gen;
+END_RCPP
+}
 // data_mixed_ordinal_stats_from_raw_impl
 Rcpp::List data_mixed_ordinal_stats_from_raw_impl(SEXP X, SEXP ordered_mask);
 RcppExport SEXP _magmaan_data_mixed_ordinal_stats_from_raw_impl(SEXP XSEXP, SEXP ordered_maskSEXP) {
@@ -167,6 +195,19 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
     Rcpp::traits::input_parameter< SEXP >::type ordered_mask(ordered_maskSEXP);
     rcpp_result_gen = Rcpp::wrap(data_mixed_ordinal_stats_from_raw_impl(X, ordered_mask));
+    return rcpp_result_gen;
+END_RCPP
+}
+// data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl
+Rcpp::List data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl(SEXP X, SEXP ordered_mask, double alpha);
+RcppExport SEXP _magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl(SEXP XSEXP, SEXP ordered_maskSEXP, SEXP alphaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type ordered_mask(ordered_maskSEXP);
+    Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
+    rcpp_result_gen = Rcpp::wrap(data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl(X, ordered_mask, alpha));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -890,7 +931,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_gls_impl", (DL_FUNC) &_magmaan_fit_gls_impl, 4},
     {"_magmaan_fit_wls_impl", (DL_FUNC) &_magmaan_fit_wls_impl, 5},
     {"_magmaan_data_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_from_raw_impl, 1},
+    {"_magmaan_data_ordinal_stats_h_weighted_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_h_weighted_from_raw_impl, 6},
+    {"_magmaan_data_ordinal_stats_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_dpd_from_raw_impl, 2},
     {"_magmaan_data_mixed_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_from_raw_impl, 2},
+    {"_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl, 3},
     {"_magmaan_fit_dwls_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_ordinal_impl, 4},
     {"_magmaan_fit_wls_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_ordinal_impl, 4},
     {"_magmaan_fit_dwls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_mixed_ordinal_impl, 4},
