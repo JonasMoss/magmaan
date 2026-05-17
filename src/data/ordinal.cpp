@@ -221,180 +221,6 @@ repair_correlation_if_requested(
   return out;
 }
 
-double mixed_polyserial_prob_unchecked(int cat,
-                                       double u,
-                                       double rho,
-                                       const Eigen::VectorXd& th) noexcept {
-  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
-  const double lo = (cat == 0) ? -kInf : th(cat - 1);
-  const double hi = (cat == th.size()) ? kInf : th(cat);
-  return std::max(kProbFloor,
-                  normal_cdf((hi - rho * u) / sd) -
-                      normal_cdf((lo - rho * u) / sd));
-}
-
-double mixed_polyserial_prob_power_sum(double u,
-                                       double rho,
-                                       const Eigen::VectorXd& th,
-                                       double power) noexcept {
-  double out = 0.0;
-  for (Eigen::Index c = 0; c < th.size() + 1; ++c) {
-    out += std::pow(mixed_polyserial_prob_unchecked(
-                        static_cast<int>(c), u, rho, th),
-                    power);
-  }
-  return out;
-}
-
-double mixed_polyserial_dpd_integral(double rho,
-                                     const Eigen::VectorXd& th,
-                                     double alpha) noexcept {
-  const double power = 1.0 + alpha;
-  constexpr int n_grid = 320;
-  constexpr double lo = -9.0;
-  constexpr double hi = 9.0;
-  constexpr double step = (hi - lo) / static_cast<double>(n_grid);
-  double sum = 0.0;
-  for (int g = 0; g <= n_grid; ++g) {
-    const double x = lo + step * static_cast<double>(g);
-    const double fx = std::pow(normal_pdf(x), power) *
-        mixed_polyserial_prob_power_sum(x, rho, th, power);
-    const double w = (g == 0 || g == n_grid) ? 1.0 : (g % 2 == 0 ? 2.0 : 4.0);
-    sum += w * fx;
-  }
-  return (step / 3.0) * sum;
-}
-
-double mixed_polyserial_dpd_integral_rho_derivative(double rho,
-                                                    const Eigen::VectorXd& th,
-                                                    double alpha) noexcept {
-  const double h = 1e-5 * std::max(1.0, std::abs(rho));
-  const double rp = std::min(0.999, rho + h);
-  const double rm = std::max(-0.999, rho - h);
-  return (mixed_polyserial_dpd_integral(rp, th, alpha) -
-          mixed_polyserial_dpd_integral(rm, th, alpha)) / (rp - rm);
-}
-
-double mixed_polyserial_h_weight(double joint,
-                                 const PolychoricHScoreOptions& options) noexcept {
-  if (options.kind == PolychoricHScoreKind::ML ||
-      (options.kind == PolychoricHScoreKind::WmaHardCap &&
-       !std::isfinite(options.k))) {
-    return 1.0;
-  }
-  constexpr double inv_sqrt_2pi = 0.39894228040143267794;
-  const double ratio = inv_sqrt_2pi / std::max(kProbFloor, joint);
-  auto h = eval_polychoric_h_score(ratio, options);
-  if (!h.has_value() || !std::isfinite(h->h)) return 1.0;
-  return std::clamp(h->h / std::max(kProbFloor, ratio), 0.0, 1.0);
-}
-
-struct MixedPolyserialInfluenceParts {
-  Eigen::VectorXd psi;
-  double bread_rho = 1.0;
-  Eigen::VectorXd bread_thresholds;
-};
-
-enum class MixedPolyserialRobustKind {
-  Dpd,
-  HWeighted,
-};
-
-post_expected<Eigen::VectorXd>
-mixed_polyserial_rho_psi(const Eigen::Ref<const Eigen::VectorXi>& cat,
-                         const Eigen::Ref<const Eigen::VectorXd>& u,
-                         const Eigen::VectorXd& th,
-                         double rho,
-                         MixedPolyserialRobustKind kind,
-                         const PolyserialPairDpdOptions* dpd_options,
-                         const PolyserialPairHWeightedOptions* h_options) {
-  auto scores_or = polyserial_pair_scores(cat, u, rho, th);
-  if (!scores_or.has_value()) return std::unexpected(scores_or.error());
-  const Eigen::VectorXd& score = scores_or->rho;
-  Eigen::VectorXd psi = Eigen::VectorXd::Zero(cat.size());
-  if (kind == MixedPolyserialRobustKind::Dpd) {
-    const double alpha = dpd_options == nullptr ? 0.0 : dpd_options->alpha;
-    if (alpha <= 0.0) return score;
-    const double integral_score =
-        mixed_polyserial_dpd_integral_rho_derivative(rho, th, alpha);
-    for (Eigen::Index r = 0; r < cat.size(); ++r) {
-      const double joint = std::max(
-          kProbFloor,
-          normal_pdf(u(r)) *
-              mixed_polyserial_prob_unchecked(cat(r), u(r), rho, th));
-      psi(r) = (1.0 + alpha) * std::pow(joint, alpha) * score(r) -
-               integral_score;
-    }
-  } else {
-    const auto& options = h_options->h_score;
-    for (Eigen::Index r = 0; r < cat.size(); ++r) {
-      const double reference_joint = std::max(
-          kProbFloor,
-          normal_pdf(u(r)) *
-              mixed_polyserial_prob_unchecked(cat(r), u(r), 0.0, th));
-      psi(r) = mixed_polyserial_h_weight(reference_joint, options) * score(r);
-    }
-  }
-  return psi;
-}
-
-post_expected<MixedPolyserialInfluenceParts>
-mixed_polyserial_influence_parts(
-    const Eigen::Ref<const Eigen::VectorXi>& cat,
-    const Eigen::Ref<const Eigen::VectorXd>& u,
-    const Eigen::VectorXd& th,
-    double rho,
-    MixedPolyserialRobustKind kind,
-    const PolyserialPairDpdOptions* dpd_options,
-    const PolyserialPairHWeightedOptions* h_options) {
-  auto psi_or = mixed_polyserial_rho_psi(
-      cat, u, th, rho, kind, dpd_options, h_options);
-  if (!psi_or.has_value()) return std::unexpected(psi_or.error());
-  MixedPolyserialInfluenceParts out;
-  out.psi = std::move(*psi_or);
-  out.bread_thresholds = Eigen::VectorXd::Zero(th.size());
-
-  auto estimating_sum = [&](double r, const Eigen::VectorXd& t)
-      -> post_expected<double> {
-    auto z = mixed_polyserial_rho_psi(
-        cat, u, t, r, kind, dpd_options, h_options);
-    if (!z.has_value()) return std::unexpected(z.error());
-    return z->sum();
-  };
-
-  const double hr = 1e-5 * std::max(1.0, std::abs(rho));
-  const double rp = std::min(0.999, rho + hr);
-  const double rm = std::max(-0.999, rho - hr);
-  auto gp = estimating_sum(rp, th);
-  if (!gp.has_value()) return std::unexpected(gp.error());
-  auto gm = estimating_sum(rm, th);
-  if (!gm.has_value()) return std::unexpected(gm.error());
-  out.bread_rho = -(*gp - *gm) / (rp - rm);
-
-  for (Eigen::Index k = 0; k < th.size(); ++k) {
-    double spacing = 1.0;
-    if (k > 0) spacing = std::min(spacing, th(k) - th(k - 1));
-    if (k + 1 < th.size()) spacing = std::min(spacing, th(k + 1) - th(k));
-    double hk = std::min(1e-5 * std::max(1.0, std::abs(th(k))),
-                         0.25 * spacing);
-    if (!(hk > 0.0) || !std::isfinite(hk)) hk = 1e-7;
-    Eigen::VectorXd tp = th;
-    Eigen::VectorXd tm = th;
-    tp(k) += hk;
-    tm(k) -= hk;
-    auto gtp = estimating_sum(rho, tp);
-    if (!gtp.has_value()) return std::unexpected(gtp.error());
-    auto gtm = estimating_sum(rho, tm);
-    if (!gtm.has_value()) return std::unexpected(gtm.error());
-    out.bread_thresholds(k) = -(*gtp - *gtm) / (2.0 * hk);
-  }
-
-  if (!std::isfinite(out.bread_rho) || std::abs(out.bread_rho) <= 1e-10) {
-    out.bread_rho = out.psi.squaredNorm();
-  }
-  return out;
-}
-
 Eigen::MatrixXd expected_pair_counts(double total,
                                      const Eigen::VectorXd& th_i,
                                      const Eigen::VectorXd& th_j,
@@ -943,9 +769,7 @@ pairwise_ordinal_stats_h_weighted_from_integer_data(
 post_expected<MixedOrdinalStats>
 mixed_ordinal_stats_from_data_impl(
     const std::vector<Eigen::MatrixXd>& Xs,
-    const std::vector<std::vector<std::int32_t>>& ordered,
-    const MixedOrdinalPolyserialDpdStatsOptions* dpd_options,
-    const MixedOrdinalPolyserialHWeightedStatsOptions* h_weighted_options) {
+    const std::vector<std::vector<std::int32_t>>& ordered) {
   if (Xs.empty()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "mixed_ordinal_stats_from_data: no data blocks"));
@@ -1125,7 +949,6 @@ mixed_ordinal_stats_from_data_impl(
 
     std::vector<Eigen::VectorXd> assoc_scores;
     std::vector<Eigen::VectorXd> assoc_if_scale;
-    std::vector<double> assoc_bread_override;
     Eigen::MatrixXd A21 = Eigen::MatrixXd::Zero(p * (p - 1) / 2, nth);
     Eigen::Index assoc_count = 0;
     for (Eigen::Index j = 0; j < p; ++j) {
@@ -1152,7 +975,6 @@ mixed_ordinal_stats_from_data_impl(
           const auto& ps = *ps_or;
           assoc_scores.push_back(ps.rho);
           assoc_if_scale.push_back(Eigen::VectorXd::Ones(n));
-          assoc_bread_override.push_back(std::numeric_limits<double>::quiet_NaN());
           const Eigen::Index si = th_start[static_cast<std::size_t>(i)];
           const Eigen::Index sj = th_start[static_cast<std::size_t>(j)];
           A21.block(assoc_count, si, 1, ps.threshold_i.cols()) =
@@ -1164,66 +986,21 @@ mixed_ordinal_stats_from_data_impl(
           const Eigen::Index c = oi ? j : i;
           Eigen::VectorXi cat(n);
           for (Eigen::Index r = 0; r < n; ++r) cat(r) = Xcat(r, o);
-          double rho = 0.0;
-          Eigen::VectorXd rho_psi = Eigen::VectorXd::Zero(n);
-          double rho_bread = 0.0;
-          Eigen::VectorXd threshold_bread;
-          if (h_weighted_options != nullptr) {
-            auto rho_or = fit_polyserial_pair_rho_h_weighted(
-                cat, U.col(c), th_by_var[static_cast<std::size_t>(o)],
-                h_weighted_options->polyserial);
-            if (!rho_or.has_value()) return std::unexpected(rho_or.error());
-            rho = rho_or->rho;
-            auto infl_or = mixed_polyserial_influence_parts(
-                cat, U.col(c), th_by_var[static_cast<std::size_t>(o)], rho,
-                MixedPolyserialRobustKind::HWeighted, nullptr,
-                &h_weighted_options->polyserial);
-            if (!infl_or.has_value()) return std::unexpected(infl_or.error());
-            rho_psi = std::move(infl_or->psi);
-            rho_bread = infl_or->bread_rho;
-            threshold_bread = std::move(infl_or->bread_thresholds);
-          } else if (dpd_options != nullptr && dpd_options->polyserial.alpha > 0.0) {
-            auto rho_or = fit_polyserial_pair_rho_dpd(
-                cat, U.col(c), th_by_var[static_cast<std::size_t>(o)],
-                dpd_options->polyserial);
-            if (!rho_or.has_value()) return std::unexpected(rho_or.error());
-            rho = rho_or->rho;
-            auto infl_or = mixed_polyserial_influence_parts(
-                cat, U.col(c), th_by_var[static_cast<std::size_t>(o)], rho,
-                MixedPolyserialRobustKind::Dpd, &dpd_options->polyserial,
-                nullptr);
-            if (!infl_or.has_value()) return std::unexpected(infl_or.error());
-            rho_psi = std::move(infl_or->psi);
-            rho_bread = infl_or->bread_rho;
-            threshold_bread = std::move(infl_or->bread_thresholds);
-          } else {
-            auto rho_or = fit_polyserial_pair_rho_ml(
-                cat, U.col(c), th_by_var[static_cast<std::size_t>(o)]);
-            if (!rho_or.has_value()) return std::unexpected(rho_or.error());
-            rho = rho_or->rho;
-          }
+          auto rho_or = fit_polyserial_pair_rho_ml(
+              cat, U.col(c), th_by_var[static_cast<std::size_t>(o)]);
+          if (!rho_or.has_value()) return std::unexpected(rho_or.error());
+          const double rho = rho_or->rho;
           const double sd = std::sqrt(var(c));
           R(i, j) = R(j, i) = rho * sd;
           auto ps_or = polyserial_pair_scores(
               cat, U.col(c), rho, th_by_var[static_cast<std::size_t>(o)]);
           if (!ps_or.has_value()) return std::unexpected(ps_or.error());
           const auto& ps = *ps_or;
-          const bool robust_polyserial =
-              h_weighted_options != nullptr ||
-              (dpd_options != nullptr && dpd_options->polyserial.alpha > 0.0);
-          assoc_scores.push_back(robust_polyserial ? rho_psi : ps.rho);
+          assoc_scores.push_back(ps.rho);
           assoc_if_scale.push_back(Eigen::VectorXd::Constant(n, sd));
           const Eigen::Index so = th_start[static_cast<std::size_t>(o)];
-          if (robust_polyserial) {
-            A21.block(assoc_count, so, 1, threshold_bread.size()) =
-                threshold_bread.transpose();
-          } else {
-            A21.block(assoc_count, so, 1, ps.thresholds.cols()) =
-                assoc_scores.back().transpose() * ps.thresholds;
-          }
-          assoc_bread_override.push_back(robust_polyserial
-                                             ? rho_bread
-                                             : std::numeric_limits<double>::quiet_NaN());
+          A21.block(assoc_count, so, 1, ps.thresholds.cols()) =
+              assoc_scores.back().transpose() * ps.thresholds;
         } else {
           double cov = 0.0;
           for (Eigen::Index r = 0; r < n; ++r) {
@@ -1233,7 +1010,6 @@ mixed_ordinal_stats_from_data_impl(
           R(i, j) = R(j, i) = cov;
           assoc_scores.push_back(Eigen::VectorXd::Zero(n));
           assoc_if_scale.push_back(Eigen::VectorXd::Zero(n));
-          assoc_bread_override.push_back(std::numeric_limits<double>::quiet_NaN());
         }
         ++assoc_count;
       }
@@ -1244,10 +1020,7 @@ mixed_ordinal_stats_from_data_impl(
     Eigen::VectorXd A22_diag(n_assoc);
     for (Eigen::Index k = 0; k < n_assoc; ++k) {
       SC_ASSOC.col(k) = assoc_scores[static_cast<std::size_t>(k)];
-      const double bread = assoc_bread_override[static_cast<std::size_t>(k)];
-      A22_diag(k) = std::isfinite(bread) && std::abs(bread) > 1e-10
-          ? bread
-          : SC_ASSOC.col(k).squaredNorm();
+      A22_diag(k) = SC_ASSOC.col(k).squaredNorm();
       if (A22_diag(k) <= 1e-12 || !std::isfinite(A22_diag(k))) {
         A22_diag(k) = 1.0;
       }
@@ -1333,32 +1106,7 @@ post_expected<MixedOrdinalStats>
 mixed_ordinal_stats_from_data(
     const std::vector<Eigen::MatrixXd>& Xs,
     const std::vector<std::vector<std::int32_t>>& ordered) {
-  return mixed_ordinal_stats_from_data_impl(Xs, ordered, nullptr, nullptr);
-}
-
-post_expected<MixedOrdinalStats>
-mixed_ordinal_stats_polyserial_dpd_from_data(
-    const std::vector<Eigen::MatrixXd>& Xs,
-    const std::vector<std::vector<std::int32_t>>& ordered,
-    MixedOrdinalPolyserialDpdStatsOptions options) {
-  if (!std::isfinite(options.polyserial.alpha) ||
-      options.polyserial.alpha < 0.0) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "mixed_ordinal_stats_polyserial_dpd_from_data: invalid options"));
-  }
-  return mixed_ordinal_stats_from_data_impl(Xs, ordered, &options, nullptr);
-}
-
-post_expected<MixedOrdinalStats>
-mixed_ordinal_stats_polyserial_h_weighted_from_data(
-    const std::vector<Eigen::MatrixXd>& Xs,
-    const std::vector<std::vector<std::int32_t>>& ordered,
-    MixedOrdinalPolyserialHWeightedStatsOptions options) {
-  if (!eval_polychoric_h_score(1.0, options.polyserial.h_score).has_value()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "mixed_ordinal_stats_polyserial_h_weighted_from_data: invalid options"));
-  }
-  return mixed_ordinal_stats_from_data_impl(Xs, ordered, nullptr, &options);
+  return mixed_ordinal_stats_from_data_impl(Xs, ordered);
 }
 
 }  // namespace magmaan::data

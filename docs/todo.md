@@ -290,48 +290,42 @@ Remaining work, in suggested order:
   moment Gamma, and HS-style ordinal CFA robust vcov checks; generated
   binaries/results stay ignored and are not wired into the root package
   workflow.
-- [x] **M.** Add an experimental fixed-marginal DPD polyserial path for mixed
-  continuous/ordinal data. `data::fit_polyserial_pair_rho_dpd()` delegates
-  `alpha = 0` to the existing ML rho kernel, attenuates observations by
-  `p(x, y)^alpha`, and
-  `data::mixed_ordinal_stats_polyserial_dpd_from_data()` preserves the default
-  mixed marginals while swapping DPD polyserial pairs into `MixedOrdinalStats`.
-- [x] **M.** Add an experimental fixed-marginal fixed-reference h-weighted
-  polyserial path for mixed continuous/ordinal data.
-  `data::fit_polyserial_pair_rho_h_weighted()` delegates ML-like h-scores to
-  the existing ML rho kernel, attenuates low rho=0 reference joint-density
-  observations with the shared h-score family, and
-  `data::mixed_ordinal_stats_polyserial_h_weighted_from_data()` keeps the
-  default mixed marginals while swapping h-weighted polyserial pairs into
-  `MixedOrdinalStats`.
 - [x] **S/M.** Keep the terminology clean: DPD means density power divergence
   and is independent of robcat; robcat parity applies to the h-score/WMA
-  C-estimators only. Current package names follow this split (`*_dpd` versus
-  `*_h_weighted`), and the mixed DPD/h paths are documented separately.
-- [x] **M.** Make the fixed-marginal-vs-full polyserial DPD question visible
-  in simulation checks. The local `checks/robust_polychoric` driver now runs a
-  pair-level contaminated polyserial experiment comparing ML, magmaan's
-  fixed-marginal DPD rho, and a local full DPD prototype that jointly optimizes
-  continuous mean/scale, thresholds, and rho. On the current quick run, full
-  DPD worked and improved average `|rho - rho_true|` relative to the
-  fixed-marginal path, but it is not promoted to the package API yet.
-- [x] **M.** Correct the mixed DPD/h polyserial Gamma approximation. The mixed
-  NACOV path now uses the robust scalar estimating equation, numeric sandwich
-  bread for rho, and numeric threshold cross-bread instead of the ML
-  information-identity shortcut. The local Gamma simulations cover the
-  non-robcat DPD and fixed-reference h-weighted mixed paths.
-- [ ] **M/L.** Decide whether to promote a full polyserial DPD estimator to the
-  package API or keep it as a simulation-only comparator. A package version
-  should use a real optimizer and expose diagnostics before replacing the
-  current SEM-oriented fixed-marginal path.
-- [ ] **M/L.** Decide whether the fixed-marginal fixed-reference h-weighted
-  polyserial prototype is useful enough to keep as an exposed robustness
-  option. It is a density-ratio casewise h-weighting analogue for mixed pairs,
-  not the same finite contingency-table C-estimator used for polychorics.
+  C-estimators only. Package names keep this split (`*_dpd` versus
+  `*_h_weighted`), and the mixed robust polyserial path no longer reuses
+  robcat wording.
+- [x] **M.** Promote the full pair-local DPD polyserial primitive and retire
+  the fixed-marginal/fixed-threshold robust polyserial prototypes. The exposed
+  DPD path is now `data::fit_polyserial_pair_joint_dpd()`, which jointly
+  estimates continuous mean/scale, ordinal thresholds, and rho, returning
+  probabilities, joint densities, and `f(x, y)^alpha` attenuation weights. The
+  retired rho-only DPD and fixed-reference h-weighted mixed-stat builders were
+  misleading for the intended robustness track because they kept the ordinal
+  thresholds fixed.
+- [x] **M.** Make the full polyserial DPD question visible in simulation
+  checks. The local `checks/robust_polychoric` driver now runs a pair-level
+  contaminated polyserial experiment comparing lavaan-style fixed-marginal ML
+  rho against package full DPD. On the current quick run, full DPD worked and
+  sharply reduced average `|rho - rho_true|` relative to ML under continuous
+  tail/category discordance.
+- [ ] **M/L.** Design SEM-level mixed DPD integration for polyserial pairs.
+  The current `MixedOrdinalStats` layout has shared marginal thresholds, while
+  full DPD polyserial estimation has pair-local nuisance thresholds. Do not
+  silently inject pair-specific thresholds into shared-threshold moments; choose
+  either a composite/pair-local moment contract or an explicitly justified
+  shared-threshold robust estimator, then implement the matching sandwich
+  Gamma.
+- [ ] **M/L.** Add a sandwich/Gamma calculation for full pair-local
+  polyserial DPD before using it for SEM robust inference. It cannot be checked
+  against robcat because DPD is not a robcat estimator, so validation should use
+  finite-difference estimating-equation derivatives plus Monte Carlo covariance
+  checks in `checks/robust_polychoric`.
 
-Done when: robust polychoric alternatives are selectable, default ML fixtures
-are unchanged, diagnostics make robustness visible, and at least one robust
-method has a Gamma path usable by ordinal DWLS/WLS robust reporting.
+Done when: robust polychoric/polyserial alternatives are selectable where their
+moment contracts are designed, default ML fixtures are unchanged, diagnostics
+make robustness visible, and at least one robust method has a Gamma path usable
+by ordinal DWLS/WLS robust reporting.
 
 ## 5. Composite models
 

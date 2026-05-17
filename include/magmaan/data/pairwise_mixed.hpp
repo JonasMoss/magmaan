@@ -6,7 +6,6 @@
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
-#include "magmaan/data/h_score.hpp"
 
 namespace magmaan::data {
 
@@ -24,47 +23,30 @@ struct PolyserialPairMlResult {
   bool   hit_upper = false;
 };
 
-struct PolyserialPairDpdOptions {
+struct PolyserialPairJointDpdOptions {
   double rho_lower = -0.999;
   double rho_upper = 0.999;
-  int    max_iter = 72;
+  int    max_iter = 120;
+  double ftol = 1e-10;
+  double gtol = 2e-5;
+  double fd_step = 2e-5;
+  double min_threshold_spacing = 1e-4;
   double alpha = 0.5;
 };
 
-struct PolyserialPairDpdResult {
+struct PolyserialPairJointDpdResult {
+  Eigen::VectorXd thresholds;
+  double mean = 0.0;
+  double sd = 1.0;
   double rho = 0.0;
   double objective = 0.0;
   int    iterations = 0;
-  bool   hit_lower = false;
-  bool   hit_upper = false;
+  bool   converged = false;
   // Per-row conditional probabilities for the observed category.
   Eigen::VectorXd probabilities;
   // Per-row joint densities phi(u_i) * Pr(y_i | u_i).
   Eigen::VectorXd joint_densities;
   // Raw DPD attenuation weights: joint_density^alpha.
-  Eigen::VectorXd weights;
-};
-
-struct PolyserialPairHWeightedOptions {
-  double rho_lower = -0.999;
-  double rho_upper = 0.999;
-  int    max_iter = 72;
-  PolychoricHScoreOptions h_score;
-};
-
-struct PolyserialPairHWeightedResult {
-  double rho = 0.0;
-  double objective = 0.0;
-  int    iterations = 0;
-  bool   hit_lower = false;
-  bool   hit_upper = false;
-  // Per-row conditional probabilities for the observed category.
-  Eigen::VectorXd probabilities;
-  // Per-row rho=0 reference joint densities phi(u_i) * Pr(y_i).
-  Eigen::VectorXd joint_densities;
-  // Density outlyingness ratios; larger means lower reference joint density.
-  Eigen::VectorXd ratios;
-  // Raw h-weight attenuation h(t) / t.
   Eigen::VectorXd weights;
 };
 
@@ -170,19 +152,11 @@ fit_polyserial_pair_rho_ml(
     const Eigen::Ref<const Eigen::VectorXd>& thresholds,
     PolyserialPairMlOptions options = {});
 
-post_expected<PolyserialPairDpdResult>
-fit_polyserial_pair_rho_dpd(
+post_expected<PolyserialPairJointDpdResult>
+fit_polyserial_pair_joint_dpd(
     const Eigen::Ref<const Eigen::VectorXi>& categories,
-    const Eigen::Ref<const Eigen::VectorXd>& u,
-    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
-    PolyserialPairDpdOptions options = {});
-
-post_expected<PolyserialPairHWeightedResult>
-fit_polyserial_pair_rho_h_weighted(
-    const Eigen::Ref<const Eigen::VectorXi>& categories,
-    const Eigen::Ref<const Eigen::VectorXd>& u,
-    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
-    PolyserialPairHWeightedOptions options = {});
+    const Eigen::Ref<const Eigen::VectorXd>& x,
+    PolyserialPairJointDpdOptions options = {});
 
 post_expected<PolyserialPairScores>
 polyserial_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& categories,
