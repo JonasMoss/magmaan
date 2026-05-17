@@ -201,9 +201,9 @@ Contracts:
   block per ordinal variable.
 - Pair-local threshold estimators are diagnostics/prototypes only. They are not
   a path for constructing SEM moments.
-- Mixed continuous/ordinal robust estimators should stay explicitly separated
-  from the default lavaan-compatible mixed path, and need a shared-marginal
-  threshold contract before any robust polyserial SEM integration.
+- Mixed continuous/ordinal polyserial DPD now has a shared-marginal SEM-facing
+  path for continuous-ordinal associations; broader robust mixed moments need
+  their own contract.
 - R should expose only predefined robust methods; arbitrary C++ h-functions
   remain internal until a concrete methods use case exists.
 
@@ -218,11 +218,13 @@ Remaining work, in suggested order:
   h-weighted and DPD all-ordinal SEM paths: clean ML limit, sparse-cell
   behavior, contaminated-cell downweighting, positive DWLS diagonals, and stable
   repaired correlation influence columns.
-- **M/L.** If mixed robust SEM moments are still useful, design them from the
-  shared-marginal side: shared ordinal thresholds, robust continuous marginal
-  moments, fixed-shared-threshold polyserial association equations, and a
-  coherent mixed Gamma/NACOV rebuild. Do not use pair-local thresholds for
-  `MixedOrdinalStats`.
+- **S/M.** Decide whether to expose the experimental mixed polyserial DPD
+  builder through R examples/wrappers now or keep it C++-only until the
+  Huberized-residual comparator lands.
+- **M/L.** If broader mixed robustness is still useful, design it separately:
+  robust continuous marginal moments and continuous-continuous covariance
+  equations layered around the existing shared-threshold polyserial DPD
+  contract. Do not use pair-local thresholds for `MixedOrdinalStats`.
 
 Done when: robust polychoric/polyserial alternatives are selectable where their
 moment contracts are designed, default ML fixtures are unchanged, diagnostics

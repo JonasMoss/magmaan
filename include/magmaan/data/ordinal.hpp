@@ -47,11 +47,29 @@ struct MixedOrdinalStats {
   std::vector<std::vector<std::string>> ov_names;
 };
 
+struct MixedOrdinalPolyserialDpdBlockDiagnostics {
+  std::vector<MixedPairLabel> dpd_pairs;
+  std::vector<PolyserialPairDpdResult> dpd_fits;
+  Eigen::MatrixXd moment_influence;
+  Eigen::MatrixXd gamma;
+};
+
+struct MixedOrdinalPolyserialDpdStats {
+  MixedOrdinalStats stats;
+  std::vector<MixedOrdinalPolyserialDpdBlockDiagnostics> block_diagnostics;
+};
+
 post_expected<OrdinalStats>
 ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& X);
 
 post_expected<MixedOrdinalStats>
 mixed_ordinal_stats_from_data(const std::vector<Eigen::MatrixXd>& X,
                               const std::vector<std::vector<std::int32_t>>& ordered);
+
+post_expected<MixedOrdinalPolyserialDpdStats>
+mixed_ordinal_stats_polyserial_dpd_from_data(
+    const std::vector<Eigen::MatrixXd>& X,
+    const std::vector<std::vector<std::int32_t>>& ordered,
+    PolyserialPairDpdOptions options = {});
 
 }  // namespace magmaan::data

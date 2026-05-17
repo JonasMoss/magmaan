@@ -1351,10 +1351,12 @@ pairwise_ordinal_stats_dpd_from_integer_data(
               .correlation_repair = options.correlation_repair});
 }
 
-post_expected<MixedOrdinalStats>
+post_expected<MixedOrdinalPolyserialDpdStats>
 mixed_ordinal_stats_from_data_impl(
     const std::vector<Eigen::MatrixXd>& Xs,
-    const std::vector<std::vector<std::int32_t>>& ordered) {
+    const std::vector<std::vector<std::int32_t>>& ordered,
+    bool use_polyserial_dpd,
+    PolyserialPairDpdOptions dpd_options) {
   if (Xs.empty()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "mixed_ordinal_stats_from_data: no data blocks"));
@@ -1364,19 +1366,21 @@ mixed_ordinal_stats_from_data_impl(
         "mixed_ordinal_stats_from_data: ordered mask block count mismatch"));
   }
 
-  MixedOrdinalStats out;
-  out.R.reserve(Xs.size());
-  out.mean.reserve(Xs.size());
-  out.ordered.reserve(Xs.size());
-  out.thresholds.reserve(Xs.size());
-  out.threshold_ov.reserve(Xs.size());
-  out.threshold_level.reserve(Xs.size());
-  out.moments.reserve(Xs.size());
-  out.NACOV.reserve(Xs.size());
-  out.W_dwls.reserve(Xs.size());
-  out.W_wls.reserve(Xs.size());
-  out.n_obs.reserve(Xs.size());
-  out.n_levels.reserve(Xs.size());
+  MixedOrdinalPolyserialDpdStats out;
+  MixedOrdinalStats& stats = out.stats;
+  stats.R.reserve(Xs.size());
+  stats.mean.reserve(Xs.size());
+  stats.ordered.reserve(Xs.size());
+  stats.thresholds.reserve(Xs.size());
+  stats.threshold_ov.reserve(Xs.size());
+  stats.threshold_level.reserve(Xs.size());
+  stats.moments.reserve(Xs.size());
+  stats.NACOV.reserve(Xs.size());
+  stats.W_dwls.reserve(Xs.size());
+  stats.W_wls.reserve(Xs.size());
+  stats.n_obs.reserve(Xs.size());
+  stats.n_levels.reserve(Xs.size());
+  if (use_polyserial_dpd) out.block_diagnostics.reserve(Xs.size());
 
   for (std::size_t b = 0; b < Xs.size(); ++b) {
     const auto& X = Xs[b];
@@ -1535,6 +1539,10 @@ mixed_ordinal_stats_from_data_impl(
     std::vector<Eigen::VectorXd> assoc_scores;
     std::vector<Eigen::VectorXd> assoc_if_scale;
     Eigen::MatrixXd A21 = Eigen::MatrixXd::Zero(p * (p - 1) / 2, nth);
+    Eigen::VectorXd A22_override =
+        Eigen::VectorXd::Constant(p * (p - 1) / 2,
+                                  std::numeric_limits<double>::quiet_NaN());
+    MixedOrdinalPolyserialDpdBlockDiagnostics block_diag;
     Eigen::Index assoc_count = 0;
     for (Eigen::Index j = 0; j < p; ++j) {
       for (Eigen::Index i = j + 1; i < p; ++i) {
@@ -1571,21 +1579,51 @@ mixed_ordinal_stats_from_data_impl(
           const Eigen::Index c = oi ? j : i;
           Eigen::VectorXi cat(n);
           for (Eigen::Index r = 0; r < n; ++r) cat(r) = Xcat(r, o);
-          auto rho_or = fit_polyserial_pair_rho_ml(
-              cat, U.col(c), th_by_var[static_cast<std::size_t>(o)]);
-          if (!rho_or.has_value()) return std::unexpected(rho_or.error());
-          const double rho = rho_or->rho;
           const double sd = std::sqrt(var(c));
-          R(i, j) = R(j, i) = rho * sd;
-          auto ps_or = polyserial_pair_scores(
-              cat, U.col(c), rho, th_by_var[static_cast<std::size_t>(o)]);
-          if (!ps_or.has_value()) return std::unexpected(ps_or.error());
-          const auto& ps = *ps_or;
-          assoc_scores.push_back(ps.rho);
-          assoc_if_scale.push_back(Eigen::VectorXd::Constant(n, sd));
           const Eigen::Index so = th_start[static_cast<std::size_t>(o)];
-          A21.block(assoc_count, so, 1, ps.thresholds.cols()) =
-              assoc_scores.back().transpose() * ps.thresholds;
+          if (use_polyserial_dpd) {
+            auto rho_or = fit_polyserial_pair_rho_dpd(
+                cat, U.col(c), th_by_var[static_cast<std::size_t>(o)],
+                dpd_options);
+            if (!rho_or.has_value()) return std::unexpected(rho_or.error());
+            const double rho = rho_or->rho;
+            R(i, j) = R(j, i) = rho * sd;
+            auto ps_or = polyserial_pair_dpd_scores(
+                cat, U.col(c), rho, th_by_var[static_cast<std::size_t>(o)],
+                dpd_options);
+            if (!ps_or.has_value()) return std::unexpected(ps_or.error());
+            const auto& ps = *ps_or;
+            assoc_scores.push_back(ps.rho);
+            assoc_if_scale.push_back(Eigen::VectorXd::Constant(n, sd));
+            A21.block(assoc_count, so, 1, ps.thresholds.cols()) =
+                static_cast<double>(n) *
+                ps.bread.block(ps.bread.rows() - 1, 0, 1, ps.thresholds.cols());
+            A22_override(assoc_count) =
+                static_cast<double>(n) *
+                ps.bread(ps.bread.rows() - 1, ps.bread.cols() - 1);
+            block_diag.dpd_pairs.push_back(MixedPairLabel{
+                .i = static_cast<std::int32_t>(i),
+                .j = static_cast<std::int32_t>(j),
+                .moment_index = static_cast<std::int32_t>(
+                    nth + 2 * std::count(ordered[b].begin(), ordered[b].end(), 0) +
+                    assoc_count),
+                .kind = MixedPairKind::continuous_ordinal});
+            block_diag.dpd_fits.push_back(std::move(*rho_or));
+          } else {
+            auto rho_or = fit_polyserial_pair_rho_ml(
+                cat, U.col(c), th_by_var[static_cast<std::size_t>(o)]);
+            if (!rho_or.has_value()) return std::unexpected(rho_or.error());
+            const double rho = rho_or->rho;
+            R(i, j) = R(j, i) = rho * sd;
+            auto ps_or = polyserial_pair_scores(
+                cat, U.col(c), rho, th_by_var[static_cast<std::size_t>(o)]);
+            if (!ps_or.has_value()) return std::unexpected(ps_or.error());
+            const auto& ps = *ps_or;
+            assoc_scores.push_back(ps.rho);
+            assoc_if_scale.push_back(Eigen::VectorXd::Constant(n, sd));
+            A21.block(assoc_count, so, 1, ps.thresholds.cols()) =
+                assoc_scores.back().transpose() * ps.thresholds;
+          }
         } else {
           double cov = 0.0;
           for (Eigen::Index r = 0; r < n; ++r) {
@@ -1605,7 +1643,9 @@ mixed_ordinal_stats_from_data_impl(
     Eigen::VectorXd A22_diag(n_assoc);
     for (Eigen::Index k = 0; k < n_assoc; ++k) {
       SC_ASSOC.col(k) = assoc_scores[static_cast<std::size_t>(k)];
-      A22_diag(k) = SC_ASSOC.col(k).squaredNorm();
+      A22_diag(k) = std::isfinite(A22_override(k))
+          ? A22_override(k)
+          : SC_ASSOC.col(k).squaredNorm();
       if (A22_diag(k) <= 1e-12 || !std::isfinite(A22_diag(k))) {
         A22_diag(k) = 1.0;
       }
@@ -1671,18 +1711,24 @@ mixed_ordinal_stats_from_data_impl(
     auto W_wls_or = symmetric_inverse_pd(NACOV, "mixed ordinal NACOV matrix");
     if (!W_wls_or.has_value()) return std::unexpected(W_wls_or.error());
 
-    out.R.push_back(std::move(R));
-    out.mean.push_back(std::move(mean));
-    out.ordered.push_back(ordered[b]);
-    out.thresholds.push_back(std::move(th));
-    out.threshold_ov.push_back(std::move(th_ov));
-    out.threshold_level.push_back(std::move(th_level));
-    out.moments.push_back(std::move(moment));
-    out.NACOV.push_back(std::move(NACOV));
-    out.W_dwls.push_back(std::move(W_dwls));
-    out.W_wls.push_back(std::move(*W_wls_or));
-    out.n_obs.push_back(static_cast<std::int64_t>(n));
-    out.n_levels.push_back(std::move(levels));
+    if (use_polyserial_dpd) {
+      block_diag.moment_influence = IF;
+      block_diag.gamma = NACOV;
+      out.block_diagnostics.push_back(std::move(block_diag));
+    }
+
+    stats.R.push_back(std::move(R));
+    stats.mean.push_back(std::move(mean));
+    stats.ordered.push_back(ordered[b]);
+    stats.thresholds.push_back(std::move(th));
+    stats.threshold_ov.push_back(std::move(th_ov));
+    stats.threshold_level.push_back(std::move(th_level));
+    stats.moments.push_back(std::move(moment));
+    stats.NACOV.push_back(std::move(NACOV));
+    stats.W_dwls.push_back(std::move(W_dwls));
+    stats.W_wls.push_back(std::move(*W_wls_or));
+    stats.n_obs.push_back(static_cast<std::int64_t>(n));
+    stats.n_levels.push_back(std::move(levels));
   }
   return out;
 }
@@ -1691,7 +1737,17 @@ post_expected<MixedOrdinalStats>
 mixed_ordinal_stats_from_data(
     const std::vector<Eigen::MatrixXd>& Xs,
     const std::vector<std::vector<std::int32_t>>& ordered) {
-  return mixed_ordinal_stats_from_data_impl(Xs, ordered);
+  auto out = mixed_ordinal_stats_from_data_impl(Xs, ordered, false, {});
+  if (!out.has_value()) return std::unexpected(out.error());
+  return std::move(out->stats);
+}
+
+post_expected<MixedOrdinalPolyserialDpdStats>
+mixed_ordinal_stats_polyserial_dpd_from_data(
+    const std::vector<Eigen::MatrixXd>& Xs,
+    const std::vector<std::vector<std::int32_t>>& ordered,
+    PolyserialPairDpdOptions options) {
+  return mixed_ordinal_stats_from_data_impl(Xs, ordered, true, options);
 }
 
 }  // namespace magmaan::data

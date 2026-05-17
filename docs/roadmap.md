@@ -257,17 +257,27 @@ golden `parTable()` fixtures.
   work, exposing fixed-threshold rho ML, likelihood, casewise threshold/rho
   scores, and pairwise score Gamma. The mixed sample-stat builder now reuses
   this kernel for polyserial associations.
+- Experimental fixed-marginal polyserial DPD is available under
+  `data::fit_polyserial_pair_rho_dpd()` and
+  `data::polyserial_pair_dpd_scores()`. It keeps the shared ordinal thresholds
+  and standardized continuous marginal fixed, estimates only the polyserial
+  association, delegates `alpha = 0` to the ML kernel, and returns DPD
+  attenuation weights plus score/Gamma/bread diagnostics.
+- Experimental SEM-facing mixed polyserial DPD stats are available under
+  `data::mixed_ordinal_stats_polyserial_dpd_from_data()`. The builder preserves
+  the existing mixed moment order, shared ordinal thresholds, continuous
+  means/variances, ordinal-ordinal polychorics, and continuous-continuous
+  covariance moments, while replacing only continuous-ordinal association
+  equations with fixed-marginal DPD and rebuilding NACOV/DWLS/WLS weights from
+  the mixed casewise influence rows.
 - Experimental pair-local full DPD polyserial fitting is available under
   `data::fit_polyserial_pair_joint_dpd()`. It jointly estimates continuous
   mean/scale, ordinal thresholds, and rho with DPD tuning `alpha`, and returns
   probabilities, joint densities, and `f(x, y)^alpha` attenuation weights. DPD
   here means density power divergence and is not part of robcat parity.
-- The earlier fixed-marginal/fixed-threshold robust polyserial prototypes and
-  mixed-stat builders have been retired. Robust mixed SEM integration now
-  needs an explicit design because `MixedOrdinalStats` has shared marginal
-  thresholds, while full pair-local polyserial DPD estimates pair-specific
-  nuisance thresholds. No mixed DPD/h-weighted polyserial NACOV path is exposed
-  until that moment/Gamma contract is chosen.
+- Pair-local full polyserial DPD remains a bivariate diagnostic only and is not
+  used to construct `MixedOrdinalStats`; SEM-facing robust mixed moments use
+  the shared-marginal fixed-threshold contract instead.
 - Public complete-data mixed pair helpers also expose continuous-continuous
   normal pair likelihood/diagnostics, casewise mean/variance/covariance scores,
   score Gamma, and labels for the exact threshold, negative-mean, variance,
@@ -433,11 +443,11 @@ developer step.
   and is not part of the generic continuous adapter coverage.
 - Mixed categorical NACOV/weight, fit, and robust-reporting parity is
   intentionally looser than the all-ordinal path, but pairwise polyserial ML,
-  pair-local full DPD polyserial, and continuous-normal score/Gamma primitives
-  are exposed for follow-on inference work. Local simulation checks exercise
-  the all-ordinal robust Gamma path and compare pair-level full polyserial DPD
-  against ML under continuous-tail/category discordance; mixed SEM-level
-  robust DPD Gamma remains a design item.
+  fixed-marginal polyserial DPD, pair-local full DPD polyserial diagnostics,
+  and continuous-normal score/Gamma primitives are exposed for follow-on
+  inference work. The SEM-facing mixed polyserial DPD path robustifies only
+  continuous-ordinal associations; robust continuous marginals and
+  continuous-continuous covariances remain outside that contract.
 - Observed-pair ordinal table kernels are pair-level primitives only. Missing
   ordinal SEM estimation is limited to the explicit pairwise observed-data
   composite prototype; shared-threshold multivariate missing ordinal modeling
