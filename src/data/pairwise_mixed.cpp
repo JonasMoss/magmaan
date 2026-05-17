@@ -119,6 +119,157 @@ double neglog_polyserial_unchecked(const Eigen::Ref<const Eigen::VectorXi>& cat,
   return out;
 }
 
+Eigen::VectorXd polyserial_probabilities_unchecked(double u,
+                                                   double rho,
+                                                   const Eigen::VectorXd& th) {
+  Eigen::VectorXd out(th.size() + 1);
+  for (Eigen::Index c = 0; c < out.size(); ++c) {
+    out(c) = polyserial_prob_unchecked(static_cast<int>(c), u, rho, th);
+  }
+  return out;
+}
+
+post_expected<void>
+validate_polyserial_dpd_options(const PolyserialPairDpdOptions& options,
+                                std::string_view caller) {
+  if (!std::isfinite(options.rho_lower) || !std::isfinite(options.rho_upper) ||
+      !(options.rho_lower > -1.0) || !(options.rho_upper < 1.0) ||
+      !(options.rho_lower < options.rho_upper) || options.max_iter < 1 ||
+      !(std::isfinite(options.alpha) && options.alpha >= 0.0) ||
+      !(std::isfinite(options.fd_step) && options.fd_step > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": invalid options"));
+  }
+  return {};
+}
+
+double polyserial_conditional_dpd_objective_unchecked(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    double rho,
+    double alpha) noexcept {
+  if (alpha == 0.0) {
+    return neglog_polyserial_unchecked(categories, u, thresholds, rho) /
+           static_cast<double>(categories.size());
+  }
+  double out = 0.0;
+  for (Eigen::Index r = 0; r < categories.size(); ++r) {
+    const Eigen::VectorXd p =
+        polyserial_probabilities_unchecked(u(r), rho, thresholds);
+    const double p_obs = p(categories(r));
+    out += p.array().pow(1.0 + alpha).sum() -
+           ((1.0 + alpha) / alpha) * std::pow(p_obs, alpha) +
+           1.0 / alpha;
+  }
+  return out / static_cast<double>(categories.size());
+}
+
+Eigen::MatrixXd polyserial_dpd_casewise_psi_unchecked(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    double rho,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    const PolyserialPairDpdOptions& options) {
+  const Eigen::Index n = categories.size();
+  const Eigen::Index nth = thresholds.size();
+  const Eigen::Index npar = nth + 1;
+  Eigen::MatrixXd psi = Eigen::MatrixXd::Zero(n, npar);
+  Eigen::VectorXd params(npar);
+  params.head(nth) = thresholds;
+  params(nth) = rho;
+
+  auto probabilities = [&](Eigen::Index row, const Eigen::VectorXd& z) {
+    return polyserial_probabilities_unchecked(
+        u(row), z(nth), z.head(nth));
+  };
+
+  for (Eigen::Index r = 0; r < n; ++r) {
+    const Eigen::VectorXd p0 = probabilities(r, params);
+    Eigen::MatrixXd dp = Eigen::MatrixXd::Zero(p0.size(), npar);
+    for (Eigen::Index k = 0; k < npar; ++k) {
+      double h = options.fd_step * std::max(1.0, std::abs(params(k)));
+      Eigen::VectorXd xp = params;
+      Eigen::VectorXd xm = params;
+      if (k < nth) {
+        if (k > 0) {
+          h = std::min(h, 0.25 * (thresholds(k) - thresholds(k - 1)));
+        }
+        if (k + 1 < nth) {
+          h = std::min(h, 0.25 * (thresholds(k + 1) - thresholds(k)));
+        }
+        h = std::max(h, 1e-8);
+      } else {
+        xp(k) = std::min(options.rho_upper, params(k) + h);
+        xm(k) = std::max(options.rho_lower, params(k) - h);
+      }
+      if (k < nth) {
+        xp(k) += h;
+        xm(k) -= h;
+      }
+      const double denom = xp(k) - xm(k);
+      dp.col(k) = (probabilities(r, xp) - probabilities(r, xm)) / denom;
+    }
+
+    const int obs = categories(r);
+    const double p_obs = std::max(kProbFloor, p0(obs));
+    for (Eigen::Index k = 0; k < npar; ++k) {
+      double fitted = 0.0;
+      for (Eigen::Index c = 0; c < p0.size(); ++c) {
+        fitted += std::pow(std::max(kProbFloor, p0(c)), options.alpha) *
+                  dp(c, k);
+      }
+      psi(r, k) = std::pow(p_obs, options.alpha - 1.0) * dp(obs, k) -
+                  fitted;
+    }
+  }
+  return psi;
+}
+
+Eigen::MatrixXd polyserial_dpd_bread_unchecked(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    double rho,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    const PolyserialPairDpdOptions& options) {
+  const Eigen::Index nth = thresholds.size();
+  const Eigen::Index npar = nth + 1;
+  Eigen::VectorXd params(npar);
+  params.head(nth) = thresholds;
+  params(nth) = rho;
+
+  auto mean_psi = [&](const Eigen::VectorXd& z) {
+    Eigen::VectorXd th = z.head(nth);
+    PolyserialPairDpdOptions local = options;
+    Eigen::MatrixXd psi = polyserial_dpd_casewise_psi_unchecked(
+        categories, u, z(nth), th, local);
+    return psi.colwise().mean().transpose().eval();
+  };
+
+  Eigen::MatrixXd deriv(npar, npar);
+  for (Eigen::Index k = 0; k < npar; ++k) {
+    double h = options.fd_step * std::max(1.0, std::abs(params(k)));
+    Eigen::VectorXd xp = params;
+    Eigen::VectorXd xm = params;
+    if (k < nth) {
+      if (k > 0) {
+        h = std::min(h, 0.25 * (thresholds(k) - thresholds(k - 1)));
+      }
+      if (k + 1 < nth) {
+        h = std::min(h, 0.25 * (thresholds(k + 1) - thresholds(k)));
+      }
+      h = std::max(h, 1e-8);
+      xp(k) += h;
+      xm(k) -= h;
+    } else {
+      xp(k) = std::min(options.rho_upper, params(k) + h);
+      xm(k) = std::max(options.rho_lower, params(k) - h);
+    }
+    deriv.col(k) = (mean_psi(xp) - mean_psi(xm)) / (xp(k) - xm(k));
+  }
+  return -deriv;
+}
+
 double polyserial_all_category_prob_power_sum(double u,
                                               double rho,
                                               const Eigen::VectorXd& th,
@@ -599,6 +750,86 @@ fit_polyserial_pair_rho_ml(
   return out;
 }
 
+post_expected<PolyserialPairDpdResult>
+fit_polyserial_pair_rho_dpd(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    PolyserialPairDpdOptions options) {
+  auto ok = validate_polyserial_inputs(categories, u, thresholds,
+                                       "fit_polyserial_pair_rho_dpd");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+  ok = validate_polyserial_dpd_options(options, "fit_polyserial_pair_rho_dpd");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+
+  if (options.alpha == 0.0) {
+    auto ml = fit_polyserial_pair_rho_ml(
+        categories, u, thresholds,
+        PolyserialPairMlOptions{.rho_lower = options.rho_lower,
+                                .rho_upper = options.rho_upper,
+                                .max_iter = options.max_iter});
+    if (!ml.has_value()) return std::unexpected(ml.error());
+    PolyserialPairDpdResult out;
+    out.rho = ml->rho;
+    out.objective = ml->negloglik / static_cast<double>(categories.size());
+    out.iterations = ml->iterations;
+    out.converged = true;
+    out.hit_lower = ml->hit_lower;
+    out.hit_upper = ml->hit_upper;
+    out.probabilities = Eigen::VectorXd::Zero(categories.size());
+    out.weights = Eigen::VectorXd::Ones(categories.size());
+    for (Eigen::Index r = 0; r < categories.size(); ++r) {
+      out.probabilities(r) = polyserial_prob_unchecked(
+          categories(r), u(r), out.rho, thresholds);
+    }
+    return out;
+  }
+
+  PolyserialPairDpdResult out;
+  double lo = options.rho_lower;
+  double hi = options.rho_upper;
+  constexpr double gr = 0.6180339887498948482;
+  double c = hi - gr * (hi - lo);
+  double d = lo + gr * (hi - lo);
+  double fc = polyserial_conditional_dpd_objective_unchecked(
+      categories, u, thresholds, c, options.alpha);
+  double fd = polyserial_conditional_dpd_objective_unchecked(
+      categories, u, thresholds, d, options.alpha);
+  for (int iter = 0; iter < options.max_iter; ++iter) {
+    if (fc < fd) {
+      hi = d;
+      d = c;
+      fd = fc;
+      c = hi - gr * (hi - lo);
+      fc = polyserial_conditional_dpd_objective_unchecked(
+          categories, u, thresholds, c, options.alpha);
+    } else {
+      lo = c;
+      c = d;
+      fc = fd;
+      d = lo + gr * (hi - lo);
+      fd = polyserial_conditional_dpd_objective_unchecked(
+          categories, u, thresholds, d, options.alpha);
+    }
+    out.iterations = iter + 1;
+  }
+  out.rho = 0.5 * (lo + hi);
+  out.objective = polyserial_conditional_dpd_objective_unchecked(
+      categories, u, thresholds, out.rho, options.alpha);
+  out.converged = true;
+  const double width = options.rho_upper - options.rho_lower;
+  out.hit_lower = std::abs(out.rho - options.rho_lower) <= 1e-8 * width;
+  out.hit_upper = std::abs(out.rho - options.rho_upper) <= 1e-8 * width;
+  out.probabilities = Eigen::VectorXd::Zero(categories.size());
+  out.weights = Eigen::VectorXd::Zero(categories.size());
+  for (Eigen::Index r = 0; r < categories.size(); ++r) {
+    out.probabilities(r) = polyserial_prob_unchecked(
+        categories(r), u(r), out.rho, thresholds);
+    out.weights(r) = std::pow(out.probabilities(r), options.alpha);
+  }
+  return out;
+}
+
 post_expected<PolyserialPairJointDpdResult>
 fit_polyserial_pair_joint_dpd(
     const Eigen::Ref<const Eigen::VectorXi>& categories,
@@ -783,6 +1014,65 @@ polyserial_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& categories,
   out.score_contributions.leftCols(nth) = out.thresholds;
   out.score_contributions.col(nth) = out.rho;
   out.score_gamma = score_gamma(out.score_contributions);
+  return out;
+}
+
+post_expected<PolyserialPairDpdScores>
+polyserial_pair_dpd_scores(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    double rho,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    PolyserialPairDpdOptions options) {
+  auto ok = validate_polyserial_inputs(categories, u, thresholds,
+                                       "polyserial_pair_dpd_scores");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+  ok = validate_polyserial_dpd_options(options, "polyserial_pair_dpd_scores");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+  if (!std::isfinite(rho) || rho <= options.rho_lower ||
+      rho >= options.rho_upper) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "polyserial_pair_dpd_scores: rho must be finite and inside bounds"));
+  }
+
+  if (options.alpha == 0.0) {
+    auto ml = polyserial_pair_scores(categories, u, rho, thresholds);
+    if (!ml.has_value()) return std::unexpected(ml.error());
+    PolyserialPairDpdScores out{
+        .rho = ml->rho,
+        .thresholds = ml->thresholds,
+        .score_contributions = ml->score_contributions,
+        .score_gamma = ml->score_gamma,
+        .bread = ml->score_gamma,
+        .weights = Eigen::VectorXd::Ones(categories.size())};
+    return out;
+  }
+
+  const Eigen::MatrixXd psi = polyserial_dpd_casewise_psi_unchecked(
+      categories, u, rho, thresholds, options);
+  const Eigen::MatrixXd bread = polyserial_dpd_bread_unchecked(
+      categories, u, rho, thresholds, options);
+  if (!psi.allFinite() || !bread.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "polyserial_pair_dpd_scores: non-finite sandwich components"));
+  }
+  if (!(bread(bread.rows() - 1, bread.cols() - 1) > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "polyserial_pair_dpd_scores: non-positive rho bread"));
+  }
+
+  PolyserialPairDpdScores out{
+      .rho = psi.col(psi.cols() - 1),
+      .thresholds = psi.leftCols(thresholds.size()),
+      .score_contributions = psi,
+      .score_gamma = score_gamma(psi),
+      .bread = bread,
+      .weights = Eigen::VectorXd::Zero(categories.size())};
+  for (Eigen::Index r = 0; r < categories.size(); ++r) {
+    const double p = polyserial_prob_unchecked(
+        categories(r), u(r), rho, thresholds);
+    out.weights(r) = std::pow(p, options.alpha);
+  }
   return out;
 }
 

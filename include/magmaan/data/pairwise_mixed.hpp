@@ -23,6 +23,25 @@ struct PolyserialPairMlResult {
   bool   hit_upper = false;
 };
 
+struct PolyserialPairDpdOptions {
+  double rho_lower = -0.999;
+  double rho_upper = 0.999;
+  int    max_iter = 72;
+  double alpha = 0.3;
+  double fd_step = 1e-5;
+};
+
+struct PolyserialPairDpdResult {
+  double rho = 0.0;
+  double objective = 0.0;
+  int    iterations = 0;
+  bool   converged = true;
+  bool   hit_lower = false;
+  bool   hit_upper = false;
+  Eigen::VectorXd probabilities;
+  Eigen::VectorXd weights;
+};
+
 struct PolyserialPairJointDpdOptions {
   double rho_lower = -0.999;
   double rho_upper = 0.999;
@@ -56,6 +75,17 @@ struct PolyserialPairScores {
   // Columns: thresholds, rho.
   Eigen::MatrixXd score_contributions;
   Eigen::MatrixXd score_gamma;
+};
+
+struct PolyserialPairDpdScores {
+  Eigen::VectorXd rho;
+  Eigen::MatrixXd thresholds;
+  // Columns: thresholds, rho.
+  Eigen::MatrixXd score_contributions;
+  Eigen::MatrixXd score_gamma;
+  // Positive bread: -d mean(estimating_functions) / d(thresholds, rho).
+  Eigen::MatrixXd bread;
+  Eigen::VectorXd weights;
 };
 
 enum class MixedPairKind {
@@ -152,6 +182,13 @@ fit_polyserial_pair_rho_ml(
     const Eigen::Ref<const Eigen::VectorXd>& thresholds,
     PolyserialPairMlOptions options = {});
 
+post_expected<PolyserialPairDpdResult>
+fit_polyserial_pair_rho_dpd(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    PolyserialPairDpdOptions options = {});
+
 post_expected<PolyserialPairJointDpdResult>
 fit_polyserial_pair_joint_dpd(
     const Eigen::Ref<const Eigen::VectorXi>& categories,
@@ -163,5 +200,13 @@ polyserial_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& categories,
                        const Eigen::Ref<const Eigen::VectorXd>& u,
                        double rho,
                        const Eigen::Ref<const Eigen::VectorXd>& thresholds);
+
+post_expected<PolyserialPairDpdScores>
+polyserial_pair_dpd_scores(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    double rho,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    PolyserialPairDpdOptions options = {});
 
 }  // namespace magmaan::data

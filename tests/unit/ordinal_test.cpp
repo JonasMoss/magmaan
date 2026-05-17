@@ -542,6 +542,84 @@ TEST_CASE("Polyserial pair ML kernel rejects malformed inputs") {
   CHECK(bad_th.error().detail.find("strictly increasing") != std::string::npos);
 }
 
+TEST_CASE("Polyserial fixed-marginal DPD preserves ML limit and downweights discordance") {
+  std::mt19937 rng(20260517);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::VectorXd th(2);
+  th << -0.45, 0.65;
+
+  constexpr Eigen::Index n_clean = 420;
+  constexpr Eigen::Index n_bad = 35;
+  Eigen::VectorXi cat_clean(n_clean);
+  Eigen::VectorXd u_clean(n_clean);
+  const double rho_true = 0.62;
+  const double sd = std::sqrt(1.0 - rho_true * rho_true);
+  for (Eigen::Index r = 0; r < n_clean; ++r) {
+    const double u = norm(rng);
+    const double z = rho_true * u + sd * norm(rng);
+    u_clean(r) = u;
+    cat_clean(r) = (z > th(0)) + (z > th(1));
+  }
+
+  Eigen::VectorXi cat_cont(n_clean + n_bad);
+  Eigen::VectorXd u_cont(n_clean + n_bad);
+  cat_cont.head(n_clean) = cat_clean;
+  u_cont.head(n_clean) = u_clean;
+  for (Eigen::Index r = 0; r < n_bad; ++r) {
+    cat_cont(n_clean + r) = 0;
+    u_cont(n_clean + r) = 5.5 + 0.01 * static_cast<double>(r);
+  }
+
+  auto clean_ml = magmaan::data::fit_polyserial_pair_rho_ml(
+      cat_clean, u_clean, th);
+  auto cont_ml = magmaan::data::fit_polyserial_pair_rho_ml(
+      cat_cont, u_cont, th);
+  auto dpd0 = magmaan::data::fit_polyserial_pair_rho_dpd(
+      cat_cont, u_cont, th,
+      magmaan::data::PolyserialPairDpdOptions{.alpha = 0.0});
+  auto robust = magmaan::data::fit_polyserial_pair_rho_dpd(
+      cat_cont, u_cont, th,
+      magmaan::data::PolyserialPairDpdOptions{.alpha = 0.5});
+
+  REQUIRE(clean_ml.has_value());
+  REQUIRE(cont_ml.has_value());
+  REQUIRE(dpd0.has_value());
+  REQUIRE(robust.has_value());
+  CHECK(dpd0->rho == doctest::Approx(cont_ml->rho));
+  CHECK(cont_ml->rho < clean_ml->rho);
+  CHECK(robust->rho > cont_ml->rho);
+  CHECK(std::abs(robust->rho - clean_ml->rho) <
+        std::abs(cont_ml->rho - clean_ml->rho));
+  CHECK(robust->probabilities.size() == cat_cont.size());
+  CHECK(robust->weights.tail(n_bad).maxCoeff() <
+        robust->weights.head(n_clean).mean());
+
+  auto ml_scores = magmaan::data::polyserial_pair_scores(
+      cat_cont, u_cont, cont_ml->rho, th);
+  auto dpd0_scores = magmaan::data::polyserial_pair_dpd_scores(
+      cat_cont, u_cont, cont_ml->rho, th,
+      magmaan::data::PolyserialPairDpdOptions{.alpha = 0.0});
+  auto robust_scores = magmaan::data::polyserial_pair_dpd_scores(
+      cat_cont, u_cont, robust->rho, th,
+      magmaan::data::PolyserialPairDpdOptions{.alpha = 0.5});
+  REQUIRE(ml_scores.has_value());
+  REQUIRE(dpd0_scores.has_value());
+  REQUIRE(robust_scores.has_value());
+  CHECK(dpd0_scores->score_contributions.isApprox(
+      ml_scores->score_contributions, 0.0));
+  CHECK(dpd0_scores->bread.isApprox(ml_scores->score_gamma, 0.0));
+  CHECK(robust_scores->score_contributions.rows() == cat_cont.size());
+  CHECK(robust_scores->score_contributions.cols() == th.size() + 1);
+  CHECK(robust_scores->score_gamma.isApprox(
+      (robust_scores->score_contributions.transpose() *
+       robust_scores->score_contributions) /
+          static_cast<double>(cat_cont.size()),
+      1e-12));
+  CHECK(robust_scores->bread.rows() == th.size() + 1);
+  CHECK(robust_scores->bread.cols() == th.size() + 1);
+  CHECK(robust_scores->bread(th.size(), th.size()) > 0.0);
+}
+
 TEST_CASE("Continuous pair normal ML kernel returns complete-data pair diagnostics") {
   Eigen::VectorXd x(4);
   Eigen::VectorXd y(4);
@@ -2023,6 +2101,73 @@ TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments
   CHECK(rob->vcov.rows() == fit->theta.size());
   CHECK(rob->se.size() == fit->theta.size());
   CHECK(rob->se.allFinite());
+}
+
+TEST_CASE("Mixed ordinal polyserial DPD keeps shared marginals and fits DWLS") {
+  std::mt19937 rng(20260517);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(520, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta > -0.6) + (eta > 0.4);
+    X(i, 1) = 1.0 + (0.65 * eta + 0.76 * norm(rng) > 0.1);
+    X(i, 2) = 0.8 * eta + 0.6 * norm(rng) + 0.2;
+    X(i, 3) = 0.7 * eta + 0.7 * norm(rng) - 0.1;
+  }
+  for (Eigen::Index i = 0; i < 28; ++i) {
+    X(i, 0) = 1.0;
+    X(i, 2) = 7.0 + 0.02 * static_cast<double>(i);
+  }
+  std::vector<std::vector<std::int32_t>> ordered = {{1, 1, 0, 0}};
+
+  auto base = magmaan::data::mixed_ordinal_stats_from_data({X}, ordered);
+  auto ml_limit = magmaan::data::mixed_ordinal_stats_polyserial_dpd_from_data(
+      {X}, ordered, magmaan::data::PolyserialPairDpdOptions{.alpha = 0.0});
+  auto robust = magmaan::data::mixed_ordinal_stats_polyserial_dpd_from_data(
+      {X}, ordered, magmaan::data::PolyserialPairDpdOptions{.alpha = 0.45});
+  REQUIRE(base.has_value());
+  REQUIRE(ml_limit.has_value());
+  REQUIRE(robust.has_value());
+
+  CHECK(ml_limit->stats.thresholds[0].isApprox(base->thresholds[0], 0.0));
+  CHECK(ml_limit->stats.R[0].isApprox(base->R[0], 1e-10));
+  CHECK(ml_limit->stats.NACOV[0].isApprox(base->NACOV[0], 1e-8));
+  CHECK(robust->stats.thresholds[0].isApprox(base->thresholds[0], 0.0));
+  CHECK(robust->stats.mean[0].isApprox(base->mean[0], 0.0));
+  CHECK(robust->stats.R[0](0, 0) == doctest::Approx(base->R[0](0, 0)));
+  CHECK(robust->stats.R[0](1, 1) == doctest::Approx(base->R[0](1, 1)));
+  CHECK(robust->stats.R[0](2, 2) == doctest::Approx(base->R[0](2, 2)));
+  CHECK(robust->stats.R[0](3, 3) == doctest::Approx(base->R[0](3, 3)));
+  CHECK(std::abs(robust->stats.R[0](2, 0) - base->R[0](2, 0)) > 1e-4);
+  CHECK(robust->stats.NACOV[0].isApprox(
+      (robust->block_diagnostics[0].moment_influence.transpose() *
+       robust->block_diagnostics[0].moment_influence) /
+          static_cast<double>(robust->stats.n_obs[0]),
+      1e-12));
+  CHECK(robust->stats.W_dwls[0].diagonal().minCoeff() > 0.0);
+  REQUIRE(robust->block_diagnostics.size() == 1);
+  CHECK(robust->block_diagnostics[0].dpd_pairs.size() == 4);
+  CHECK(robust->block_diagnostics[0].dpd_fits.size() == 4);
+  CHECK(robust->block_diagnostics[0].dpd_fits[0].weights.allFinite());
+
+  magmaan::spec::LavaanifyOptions opts;
+  opts.meanstructure = true;
+  auto fp = magmaan::parse::Parser::parse(
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto fit = magmaan::test::fit_mixed_ordinal_bounded(
+      *pt, *mr, robust->stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(fit.has_value());
+  CHECK(fit->theta.allFinite());
+  CHECK(std::isfinite(fit->fmin));
 }
 
 TEST_CASE("Mixed ordinal validation rejects malformed stats before fitting") {
