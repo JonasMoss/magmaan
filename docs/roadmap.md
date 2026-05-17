@@ -308,6 +308,25 @@ golden `parTable()` fixtures.
   malformed group counts, non-square or wrong-sized covariance matrices,
   non-finite moments, nonpositive `nobs`, and wrong-length means before calling
   C++ fitters.
+- Future public API direction is a staged, explicit workflow rather than
+  lavaan-style compound estimator strings. Users should build a model, build
+  data or sample moments, fit point estimates, and then explicitly request
+  standard errors, robust corrections, test statistics, fit measures, defined
+  parameters, or summaries. High-level objects may retain model/data/fit
+  context for ergonomic chaining, but each statistical choice must remain
+  inspectable.
+- The planned C++ facade sits above the existing primitive namespaces as value
+  objects such as `Model`, `Data`, `Fit`, `Analysis`, and `Summary`. It may
+  support fluent usage, while the primitive namespaces remain the
+  methods-developer surface. Convenience recipes can be added later only if
+  they expand to visible choices such as estimator, moment builder, standard
+  error method, test statistic, and fit-measure inputs.
+- Bindings should keep the same split between a small friendly surface and an
+  inspectable primitive layer. Python can expose a friendly top-level API plus a
+  `magmaan.core` submodule for C++-shaped primitives. R should avoid exporting
+  every primitive into the package namespace; instead, the friendly staged API
+  should be exported directly and low-level functions should live behind a
+  single `magmaan_core` object.
 - The R package is intended as a methods-developer interface over the C++
   library, not a second SEM implementation.
 - Standard errors, information matrices, Wald/z tests, robust corrections,
