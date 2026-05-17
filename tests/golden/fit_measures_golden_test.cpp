@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -114,7 +115,7 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
       }
     }
 
-    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
+    auto est_or = magmaan::test::fit(*pt, *mr, samp);
     if (!est_or.has_value()) {
       failures.push_back(e.id + ": fit — " + est_or.error().detail);
       continue;

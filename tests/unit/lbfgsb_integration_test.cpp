@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cstdint>
 #include <fstream>
@@ -103,12 +104,12 @@ TEST_CASE("LbfgsBOptimizer end-to-end: 2F+means HS — same θ̂ as unbounded LB
   auto samp = load_samp(fix);
 
   // Unbounded baseline.
-  auto base = magmaan::estimate::fit(m.pt, m.rep, samp);
+  auto base = magmaan::test::fit(m.pt, m.rep, samp);
   REQUIRE_MESSAGE(base.has_value(),
       "fit<> failed: " << (base.has_value() ? "" : base.error().detail));
 
   // Bounded — picks LbfgsBOptimizer + auto-bounds from partable by default.
-  auto out = magmaan::estimate::fit_bounded(m.pt, m.rep, samp, {});
+  auto out = magmaan::test::fit_bounded(m.pt, m.rep, samp, {});
   REQUIRE_MESSAGE(out.has_value(),
       "fit_bounded<> failed: " << (out.has_value() ? "" : out.error().detail));
 
@@ -182,7 +183,7 @@ TEST_CASE("LbfgsBOptimizer G5b: 3F+means HS — converges where LBFGS historical
         5.374;    // HS x9
   samp.mean.push_back(std::move(mu));
 
-  auto out = magmaan::estimate::fit_bounded(m.pt, m.rep, samp, {});
+  auto out = magmaan::test::fit_bounded(m.pt, m.rep, samp, {});
   REQUIRE_MESSAGE(out.has_value(),
       "fit_bounded<LbfgsBOptimizer> on 3F+means did not converge: " <<
       (out.has_value() ? "" : out.error().detail));

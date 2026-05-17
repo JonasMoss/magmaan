@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -97,7 +98,7 @@ TEST_CASE("multi-group goldens — θ̂ / SE / df match lavaan") {
       samp.n_obs.push_back(bd.n_obs);
     }
 
-    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
+    auto est_or = magmaan::test::fit(*pt, *mr, samp);
     if (!est_or.has_value()) {
       failures.push_back(e.id + ": fit — " + est_or.error().detail);
       continue;

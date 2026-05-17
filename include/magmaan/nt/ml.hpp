@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 #include <vector>
@@ -9,78 +10,70 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/optim/problem.hpp"
 
-namespace magmaan::nt::ml {
+// Normal-theory maximum-likelihood discrepancy, as free functions.
+//
+//   F_ML(θ) = Σ_b w_b · [ log|Σ_b(θ)| + tr(S_b Σ_b(θ)⁻¹) − log|S_b| − p_b ]
+//             + (optional) (m̄_b − μ_b)ᵀ Σ_b⁻¹ (m̄_b − μ_b)
+//
+// where w_b = n_b/N is the block weight. The −log|S_b| − p_b constants make
+// F_ML = 0 at the saturated model. Not a sum of squares ⇒ scalar form only;
+// `ml_objective` packages it as an optimizer-ready `optim::ScalarProblem`.
+
+namespace magmaan::nt {
 
 using data::SampleStats;
 
-struct MLSampleCache {
+// Per-sample ML cache — block weights (n_b/N) and log|S_b|, built once by
+// `ml_prepare` and reused across optimizer iterations.
+struct MlCache {
   std::vector<double> weight;
   std::vector<double> log_det_S;
   std::int64_t        n_total = 0;
 };
 
-struct MLValueGradient {
+struct MlValueGradient {
   double          value = 0.0;
   Eigen::VectorXd gradient;
 };
 
-// ML discrepancy.
-//
-//   F_ML(θ) = sum_b w_b · [ log|Σ_b(θ)| + tr(S_b Σ_b(θ)⁻¹) − log|S_b| − p_b ]
-//
-// where w_b is the block weight (single block in v0 → w=1). The
-// −log|S_b| − p_b constants make F_ML = 0 at the saturated model so
-// values are interpretable; they don't affect the optimizer.
-//
-// Gradient (per block):
-//   G_b = Σ_b⁻¹ − Σ_b⁻¹ S_b Σ_b⁻¹
-//   ∂F_b/∂θ_k = sum_{i,j} G_b[i,j] · ∂Σ_b[i,j]/∂θ_k
-//             = J_b^T · w(G_b)        // see vech-doubled trick in ml.cpp
-struct ML {
-  static constexpr std::string_view name = "ML";
-  bool is_ml() const noexcept { return true; }
+// Pre-compute the per-sample cache. Fails NonPositiveDefiniteSample if any
+// sample S_b is not PD.
+fit_expected<MlCache>
+ml_prepare(const SampleStats& s);
 
-  // Returns NumericIssue if any Σ_b is not positive-definite (its log|Σ|
-  // is undefined). Cheap to detect via LLT.
-  fit_expected<double>
-  value(const SampleStats& s, const model::ImpliedMoments& m) const;
+// F_ML(θ). The cache-free overload calls `ml_prepare` internally; pass a
+// cache on the hot path. Fails NonPositiveDefiniteSigma if any Σ_b is not PD.
+fit_expected<double>
+ml_value(const SampleStats& s, const model::ImpliedMoments& m);
+fit_expected<double>
+ml_value(const SampleStats& s, const MlCache& cache,
+         const model::ImpliedMoments& m);
 
-  fit_expected<MLSampleCache>
-  prepare(const SampleStats& s) const;
+// ∇_θ F_ML. `J` = ∂vech(Σ)/∂θ; `Jmu` = ∂μ/∂θ (empty ⇒ covariance-only).
+fit_expected<Eigen::VectorXd>
+ml_gradient(const SampleStats& s, const model::ImpliedMoments& m,
+            const Eigen::MatrixXd& J,
+            const Eigen::MatrixXd& Jmu = Eigen::MatrixXd());
 
-  fit_expected<double>
-  value(const SampleStats& s, const MLSampleCache& cache,
-        const model::ImpliedMoments& m) const;
+// F_ML and ∇_θ F_ML together — one Cholesky per block.
+fit_expected<MlValueGradient>
+ml_value_gradient(const SampleStats& s, const MlCache& cache,
+                  const model::ImpliedMoments& m,
+                  const Eigen::MatrixXd& J,
+                  const Eigen::MatrixXd& Jmu = Eigen::MatrixXd());
 
-  // Caller must have called ev.dsigma_dtheta(theta) and passed the result
-  // as `J`. Same shape as the J returned by ModelEvaluator::dsigma_dtheta:
-  // (sum_b vech_len(p_b)) rows × n_free cols.
-  //
-  // `Jmu` is the dμ/dθ Jacobian from ModelEvaluator::dmu_dtheta(theta) —
-  // shape (sum_b p_b) × n_free. Pass an empty matrix (the default) for
-  // covariance-only models; the mean term is skipped automatically. When
-  // the model has mean structure, both `ImpliedMoments::mu[b]` and
-  // `SampleStats::mean[b]` must be populated for each mean-bearing block.
-  fit_expected<Eigen::VectorXd>
-  gradient(const SampleStats& s, const model::ImpliedMoments& m,
-           const Eigen::MatrixXd& J,
-           const Eigen::MatrixXd& Jmu = Eigen::MatrixXd()) const;
+// Un-weighted per-block gradient ∂F_b/∂θ — used by `information_observed_fd`
+// to FD-Hessian each block separately for the multi-group info weighting.
+fit_expected<Eigen::VectorXd>
+ml_gradient_block(const SampleStats& s, const model::ImpliedMoments& m,
+                  const Eigen::MatrixXd& J, std::size_t block_idx,
+                  const Eigen::MatrixXd& Jmu = Eigen::MatrixXd());
 
-  fit_expected<MLValueGradient>
-  value_gradient(const SampleStats& s, const MLSampleCache& cache,
-                 const model::ImpliedMoments& m,
-                 const Eigen::MatrixXd& J,
-                 const Eigen::MatrixXd& Jmu = Eigen::MatrixXd()) const;
+// Package the ML objective as an optimizer-ready scalar problem. `ev` must
+// outlive the returned `ScalarProblem` (its closure borrows it by reference).
+fit_expected<optim::ScalarProblem>
+ml_objective(const model::ModelEvaluator& ev, const SampleStats& s);
 
-  // Per-block gradient: just block `block_idx`'s ∂F_b/∂θ contribution
-  // (un-weighted — the (n_b/N) scaling lives in the full `gradient()`).
-  // Used by `information_observed_fd` to FD-Hessian each block separately so the
-  // multi-group info weighting (n_b/2 per block) is correct.
-  fit_expected<Eigen::VectorXd>
-  gradient_block(const SampleStats& s, const model::ImpliedMoments& m,
-                 const Eigen::MatrixXd& J, std::size_t block_idx,
-                 const Eigen::MatrixXd& Jmu = Eigen::MatrixXd()) const;
-};
-
-}  // namespace magmaan::nt::ml
+}  // namespace magmaan::nt

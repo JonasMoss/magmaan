@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -85,7 +86,7 @@ TEST_CASE("test-stat goldens — z / p-value / Wald vs lavaan") {
       samp.mean.push_back(std::move(mean));
     }
 
-    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
+    auto est_or = magmaan::test::fit(*pt, *mr, samp);
     if (!est_or.has_value()) { failures.push_back(e.id + ": fit — " + est_or.error().detail); continue; }
     const auto& est = *est_or;
 

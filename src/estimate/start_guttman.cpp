@@ -1,0 +1,143 @@
+#include "magmaan/estimate/start_values.hpp"
+
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+
+#include <Eigen/Core>
+#include <Eigen/Dense>
+
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/estimate/cfa_utils.hpp"
+#include "magmaan/expected.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/spec/partable.hpp"
+#include "magmaan/spec/start_hints.hpp"
+
+namespace magmaan::estimate {
+
+using data::SampleStats;
+
+// guttman_start_values — Guttman's (1952) "multiple group method" for CFA
+// factor loadings, used as a start-value producer. Port of the non-force-pd
+// path of lavaan's `lav_cfa_guttman1952`. Equals `simple_start_values` for
+// every parameter except free loadings; a block it cannot handle (a
+// structural part, crossloadings, a factor without a marker or with fewer
+// than three indicators) keeps its simple-baseline loadings. Hints still win.
+fit_expected<Eigen::VectorXd>
+guttman_start_values(const spec::LatentStructure& pt,
+                     const model::MatrixRep& rep,
+                     const SampleStats& samp,
+                     const spec::Starts& starts) {
+  auto base = simple_start_values(pt, rep, samp, starts);
+  if (!base.has_value()) return base;
+  Eigen::VectorXd x0 = std::move(*base);
+  if (x0.size() == 0) return x0;
+  if (rep.form != model::RepForm::PureCFA) return x0;  // CFA-only method
+
+  const std::vector<CfaBlockLayout> layouts = cfa_block_layouts(pt, rep);
+  for (std::size_t b = 0; b < layouts.size(); ++b) {
+    const CfaBlockLayout& L = layouts[b];
+    const std::int16_t nfac = L.n_factor();
+    if (nfac == 0 || L.crossloadings || !L.all_have_marker) continue;
+    if (b >= samp.S.size()) continue;
+    const Eigen::MatrixXd& S = samp.S[b];
+    const Eigen::Index nvar = L.n_observed;
+    if (S.rows() != nvar || S.cols() != nvar) continue;
+
+    // Loading pattern B (nvar × nfac) and per-factor indicator rows.
+    Eigen::MatrixXd B = Eigen::MatrixXd::Zero(nvar, nfac);
+    std::vector<std::vector<Eigen::Index>> rows_of(static_cast<std::size_t>(nfac));
+    for (const auto& load : L.loads) {
+      B(load.ov_row, load.factor) = 1.0;
+      rows_of[static_cast<std::size_t>(load.factor)].push_back(load.ov_row);
+    }
+    bool ok = true;
+    for (const auto& r : rows_of) {
+      if (r.size() < 3) ok = false;  // Spearman communality needs >= 3
+    }
+    if (!ok) continue;
+
+    // THETA: per-factor Spearman communalities, clamped to [0, diag(S)].
+    Eigen::VectorXd theta = Eigen::VectorXd::Zero(nvar);
+    for (std::size_t f = 0; f < rows_of.size(); ++f) {
+      const auto& rr = rows_of[f];
+      Eigen::MatrixXd Sf(static_cast<Eigen::Index>(rr.size()),
+                         static_cast<Eigen::Index>(rr.size()));
+      for (std::size_t a = 0; a < rr.size(); ++a) {
+        for (std::size_t d = 0; d < rr.size(); ++d) {
+          Sf(static_cast<Eigen::Index>(a), static_cast<Eigen::Index>(d)) =
+              S(rr[a], rr[d]);
+        }
+      }
+      const Eigen::VectorXd tf = theta_spearman(Sf);
+      for (std::size_t a = 0; a < rr.size(); ++a) {
+        theta(rr[a]) = tf(static_cast<Eigen::Index>(a));
+      }
+    }
+    for (Eigen::Index i = 0; i < nvar; ++i) {
+      theta(i) = std::min(std::max(theta(i), 0.0), S(i, i));
+    }
+
+    // SminTheta — S with communalities on the diagonal, kept non-negative.
+    Eigen::MatrixXd SminTheta = S;
+    SminTheta.diagonal() -= theta;
+    for (Eigen::Index i = 0; i < nvar; ++i) {
+      const double lo = 0.001 * S(i, i);
+      if (SminTheta(i, i) < lo) SminTheta(i, i) = lo;
+    }
+
+    const Eigen::MatrixXd YS_COV = SminTheta * B;          // nvar × nfac
+    const Eigen::MatrixXd SS_COV = B.transpose() * YS_COV;  // nfac × nfac
+
+    Eigen::VectorXd dinv(nfac);
+    bool diag_ok = true;
+    for (Eigen::Index f = 0; f < nfac; ++f) {
+      if (SS_COV(f, f) <= 0.0) {
+        diag_ok = false;
+        break;
+      }
+      dinv(f) = 1.0 / std::sqrt(SS_COV(f, f));
+    }
+    if (!diag_ok) continue;
+
+    Eigen::MatrixXd PHI(nfac, nfac);
+    for (Eigen::Index f = 0; f < nfac; ++f) {
+      for (Eigen::Index g = 0; g < nfac; ++g) {
+        PHI(f, g) = SS_COV(f, g) * dinv(f) * dinv(g);
+      }
+    }
+    Eigen::MatrixXd YS_COR(nfac, nvar);  // transposed, row f scaled by dinv(f)
+    for (Eigen::Index f = 0; f < nfac; ++f) {
+      for (Eigen::Index i = 0; i < nvar; ++i) {
+        YS_COR(f, i) = YS_COV(i, f) * dinv(f);
+      }
+    }
+
+    Eigen::LDLT<Eigen::MatrixXd> ldlt(PHI);
+    if (ldlt.info() != Eigen::Success) continue;
+    // LAMBDA = (PHI⁻¹ · YS_COR)ᵀ — nvar × nfac.
+    Eigen::MatrixXd LAMBDA = ldlt.solve(YS_COR).transpose();
+
+    // Rescale each column so its marker loading is 1.
+    for (Eigen::Index f = 0; f < nfac; ++f) {
+      const std::int16_t mk = L.marker_ov[static_cast<std::size_t>(f)];
+      if (mk < 0 || mk >= nvar) continue;
+      const double ml = LAMBDA(mk, f);
+      if (std::abs(ml) > 1e-12) LAMBDA.col(f) /= ml;
+    }
+
+    for (const auto& load : L.loads) {
+      if (load.free_idx < 0) continue;
+      const std::size_t fi = static_cast<std::size_t>(load.free_idx);
+      if (fi < starts.hint.size() && std::isfinite(starts.hint[fi])) continue;
+      const double v = LAMBDA(load.ov_row, load.factor);
+      if (std::isfinite(v)) x0(load.free_idx) = v;
+    }
+  }
+
+  return x0;
+}
+
+}  // namespace magmaan::estimate

@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -103,7 +104,7 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
       }
     }
 
-    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
+    auto est_or = magmaan::test::fit(*pt, *mr, samp);
     if (!est_or.has_value()) {
       failures.push_back(e.id + ": fit failed — kind=" +
                          std::to_string(static_cast<int>(est_or.error().kind)) +

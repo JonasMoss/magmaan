@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -12,33 +13,29 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/optim/problem.hpp"
 
 #include "detail_vech.hpp"
 
-namespace magmaan::nt::ml {
+namespace magmaan::nt {
 
 using data::SampleStats;
 
 namespace {
 
+constexpr double kInf = std::numeric_limits<double>::infinity();
+
 FitError make_err(FitError::Kind k, std::string detail) {
   return FitError{k, std::move(detail), 0, 0.0};
 }
 
-using detail::vech_len;
 using detail::vech_index;
+using detail::vech_len;
 
 }  // namespace
 
-fit_expected<double>
-ML::value(const SampleStats& s, const model::ImpliedMoments& m) const {
-  auto cache = prepare(s);
-  if (!cache.has_value()) return std::unexpected(cache.error());
-  return value(s, *cache, m);
-}
-
-fit_expected<MLSampleCache>
-ML::prepare(const SampleStats& s) const {
+fit_expected<MlCache>
+ml_prepare(const SampleStats& s) {
   if (s.S.size() != s.n_obs.size()) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "SampleStats S and n_obs have different block counts"));
@@ -53,7 +50,7 @@ ML::prepare(const SampleStats& s) const {
         "SampleStats has non-positive total n_obs"));
   }
 
-  MLSampleCache cache;
+  MlCache cache;
   cache.weight.resize(s.S.size());
   cache.log_det_S.resize(s.S.size());
   cache.n_total = N_total;
@@ -82,8 +79,15 @@ ML::prepare(const SampleStats& s) const {
 }
 
 fit_expected<double>
-ML::value(const SampleStats& s, const MLSampleCache& cache,
-          const model::ImpliedMoments& m) const {
+ml_value(const SampleStats& s, const model::ImpliedMoments& m) {
+  auto cache = ml_prepare(s);
+  if (!cache.has_value()) return std::unexpected(cache.error());
+  return ml_value(s, *cache, m);
+}
+
+fit_expected<double>
+ml_value(const SampleStats& s, const MlCache& cache,
+         const model::ImpliedMoments& m) {
   if (s.S.size() != m.sigma.size()) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "SampleStats and ImpliedMoments have different block counts"));
@@ -92,7 +96,7 @@ ML::value(const SampleStats& s, const MLSampleCache& cache,
       cache.log_det_S.size() != s.S.size() ||
       cache.n_total <= 0) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "MLSampleCache does not match SampleStats"));
+        "MlCache does not match SampleStats"));
   }
   double f = 0.0;
   for (std::size_t b = 0; b < s.S.size(); ++b) {
@@ -182,10 +186,6 @@ fill_block_weight(const SampleStats& s, const model::ImpliedMoments& m,
   return {};
 }
 
-}  // namespace
-
-namespace {
-
 // Mean-structure correction for one block's vech-doubled weight vector
 // and the parallel "u" vector that gets multiplied by Jmu^T. Updates w
 // in place (subtracts scale · vech-doubled(zz')) and writes u_segment.
@@ -228,21 +228,19 @@ apply_mean_correction(const SampleStats& s, const model::ImpliedMoments& m,
 }  // namespace
 
 fit_expected<Eigen::VectorXd>
-ML::gradient(const SampleStats& s, const model::ImpliedMoments& m,
-             const Eigen::MatrixXd& J,
-             const Eigen::MatrixXd& Jmu) const {
-  auto cache = prepare(s);
+ml_gradient(const SampleStats& s, const model::ImpliedMoments& m,
+            const Eigen::MatrixXd& J, const Eigen::MatrixXd& Jmu) {
+  auto cache = ml_prepare(s);
   if (!cache.has_value()) return std::unexpected(cache.error());
-  auto vg = value_gradient(s, *cache, m, J, Jmu);
+  auto vg = ml_value_gradient(s, *cache, m, J, Jmu);
   if (!vg.has_value()) return std::unexpected(vg.error());
   return std::move(vg->gradient);
 }
 
-fit_expected<MLValueGradient>
-ML::value_gradient(const SampleStats& s, const MLSampleCache& cache,
-                   const model::ImpliedMoments& m,
-                   const Eigen::MatrixXd& J,
-                   const Eigen::MatrixXd& Jmu) const {
+fit_expected<MlValueGradient>
+ml_value_gradient(const SampleStats& s, const MlCache& cache,
+                  const model::ImpliedMoments& m,
+                  const Eigen::MatrixXd& J, const Eigen::MatrixXd& Jmu) {
   if (s.S.size() != m.sigma.size()) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "SampleStats and ImpliedMoments have different block counts"));
@@ -251,7 +249,7 @@ ML::value_gradient(const SampleStats& s, const MLSampleCache& cache,
       cache.log_det_S.size() != s.S.size() ||
       cache.n_total <= 0) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "MLSampleCache does not match SampleStats"));
+        "MlCache does not match SampleStats"));
   }
   // ∂F_ML/∂θ_k = Σ_b (n_b/N) · ∂F_b/∂θ_k.
   // Covariance part : J^T · w_vech (vech-doubled G* with scale n_b/N).
@@ -357,13 +355,13 @@ ML::value_gradient(const SampleStats& s, const MLSampleCache& cache,
     }
     g.noalias() += Jmu.transpose() * u;
   }
-  return MLValueGradient{f, std::move(g)};
+  return MlValueGradient{f, std::move(g)};
 }
 
 fit_expected<Eigen::VectorXd>
-ML::gradient_block(const SampleStats& s, const model::ImpliedMoments& m,
-                   const Eigen::MatrixXd& J, std::size_t block_idx,
-                   const Eigen::MatrixXd& Jmu) const {
+ml_gradient_block(const SampleStats& s, const model::ImpliedMoments& m,
+                  const Eigen::MatrixXd& J, std::size_t block_idx,
+                  const Eigen::MatrixXd& Jmu) {
   if (s.S.size() != m.sigma.size()) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "SampleStats and ImpliedMoments have different block counts"));
@@ -422,4 +420,31 @@ ML::gradient_block(const SampleStats& s, const model::ImpliedMoments& m,
   return g;
 }
 
-}  // namespace magmaan::nt::ml
+fit_expected<optim::ScalarProblem>
+ml_objective(const model::ModelEvaluator& ev, const SampleStats& s) {
+  auto cache = ml_prepare(s);
+  if (!cache.has_value()) return std::unexpected(cache.error());
+
+  optim::ScalarProblem prob;
+  prob.n_param = static_cast<Eigen::Index>(ev.n_free());
+  prob.expand  = [](const Eigen::VectorXd& x) { return x; };
+  prob.f = [&ev, s, mc = std::move(*cache)](
+               const Eigen::VectorXd& x, Eigen::VectorXd& grad) -> double {
+    auto eval = ev.evaluate(x, true, true);
+    if (!eval.has_value()) {
+      grad.setZero();
+      return kInf;
+    }
+    auto vg = ml_value_gradient(s, mc, eval->moments, eval->J_sigma,
+                                eval->J_mu);
+    if (!vg.has_value()) {
+      grad.setZero();
+      return kInf;
+    }
+    grad = std::move(vg->gradient);
+    return vg->value;
+  };
+  return prob;
+}
+
+}  // namespace magmaan::nt

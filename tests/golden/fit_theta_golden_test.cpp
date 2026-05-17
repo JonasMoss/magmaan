@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <fstream>
 #include <set>
@@ -103,7 +104,7 @@ TEST_CASE("fit goldens — θ̂ matches lavaan on real data (≤1e-6)") {
       }
     }
 
-    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
+    auto est_or = magmaan::test::fit(*pt, *mr, samp);
     if (!est_or.has_value()) {
       failures.push_back(e.id + ": fit failed — kind=" +
                          std::to_string(static_cast<int>(est_or.error().kind)) +

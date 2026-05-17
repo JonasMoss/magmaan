@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <fstream>
@@ -50,7 +51,7 @@ TEST_CASE("standardize_lv: 1F CFA — ψ_ff → 1, λs scaled by √ψ̂_ff") {
   SampleStats samp;
   samp.S = {random_pd(rng, 3)};
   samp.n_obs = {300};
-  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
+  auto est = magmaan::test::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   auto std_or = standardize_lv(*pt, *mr, est, inf.vcov);
@@ -111,7 +112,7 @@ TEST_CASE("standardize_all: 1F CFA — ν_i rescaled by 1/√σ̂_ii, λ by √�
   Eigen::VectorXd mean(3);  mean << 3.0, 4.0, 5.0;
   SampleStats samp;  samp.S = {S};  samp.mean = {mean};  samp.n_obs = {300};
 
-  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
+  auto est = magmaan::test::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   auto std_or = standardize_all(*pt, *mr, est, inf.vcov);
@@ -178,7 +179,7 @@ TEST_CASE("standardize_lv: 2F CFA — factor covariance → correlation, with de
                     .get<double>();
   SampleStats samp;  samp.S = {S};  samp.n_obs = {301};
 
-  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
+  auto est = magmaan::test::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
   auto sol_or = standardize_lv(*pt, *mr, est, inf.vcov);
   REQUIRE_MESSAGE(sol_or.has_value(),
@@ -259,7 +260,7 @@ TEST_CASE("standardize_all: structural Beta uses total latent variances") {
                  [static_cast<std::size_t>(c)].get<double>();
   samp.S = {std::move(S)};
   samp.n_obs = {j["n_obs"].get<std::int64_t>()};
-  auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
+  auto est_or = magmaan::test::fit(*pt, *mr, samp);
   REQUIRE(est_or.has_value());
   auto inf = expected_inference(*pt, *mr, samp, *est_or).value();
 

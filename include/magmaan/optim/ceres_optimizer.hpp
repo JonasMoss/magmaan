@@ -17,7 +17,7 @@ struct CeresBoundedOptimizer;
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
-#include "magmaan/optim/concepts.hpp"          // LsResidualFn / LsJacobianFn
+#include "magmaan/optim/problem.hpp"           // LsResidualFn / LsJacobianFn
 #include "magmaan/optim/lbfgs_optimizer.hpp"   // shared LbfgsOutput return type
 
 namespace magmaan::optim {
@@ -42,6 +42,8 @@ public:
   static constexpr std::string_view name = "ceres-gradient";
 
   CeresOptimizer(CeresOptions opts = {}) noexcept : opts_(opts) {}
+
+  CeresOptions options() const noexcept { return opts_; }
 
   using Objective = std::function<double(const Eigen::VectorXd& /*x*/,
                                          Eigen::VectorXd&       /*grad_out*/)>;
@@ -81,6 +83,8 @@ public:
   static constexpr std::string_view name = "ceres-bounded";
 
   CeresBoundedOptimizer(CeresOptions opts = {}) noexcept : opts_(opts) {}
+
+  CeresOptions options() const noexcept { return opts_; }
 
   using Objective = std::function<double(const Eigen::VectorXd& /*x*/,
                                          Eigen::VectorXd&       /*grad_out*/)>;

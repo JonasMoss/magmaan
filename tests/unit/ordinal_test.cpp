@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <limits>
@@ -1194,7 +1195,7 @@ TEST_CASE("Pairwise ordinal h-weighted stats preserve shared-threshold ML limit"
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
-  auto fit = magmaan::estimate::fit_ordinal_bounded(
+  auto fit = magmaan::test::fit_ordinal_bounded(
       *pt, *mr, robust->stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
   REQUIRE(fit.has_value());
   CHECK(std::isfinite(fit->fmin));
@@ -1819,33 +1820,62 @@ TEST_CASE("Ordinal delta preparation fixes response variances and compacts free 
   CHECK(fixed_response_variances == 3);
 }
 
-TEST_CASE("Ordinal theta parameterization fails explicitly") {
-  Eigen::MatrixXd X(16, 2);
-  Eigen::Index r = 0;
-  for (int rep = 0; rep < 4; ++rep) {
-    for (int x1 = 1; x1 <= 2; ++x1) {
-      for (int x2 = 1; x2 <= 2; ++x2) {
-        X(r, 0) = x1;
-        X(r, 1) = x2;
-        ++r;
-      }
+TEST_CASE("Ordinal theta parameterization is a valid reparameterization of delta") {
+  // Delta and Theta fit the same model to the same data — they are
+  // reparameterizations, so the discrepancy at the optimum (fmin / χ²) must
+  // agree. Theta differs only in the fit objective: the implied latent-
+  // response moments are standardized before comparison with the polychorics.
+  std::mt19937 rng(20260518);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(600, 4);
+  const double loading[4] = {0.9, 0.8, 0.7, 0.6};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.6) + (y > 0.5);   // 3 categories
     }
   }
   auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
   REQUIRE(stats.has_value());
-  auto fp = magmaan::parse::Parser::parse(
-      "f =~ x1 + x2\n"
-      "x1 | t1\n"
-      "x2 | t1\n"
-      "x1 ~*~ 1*x1\n"
-      "x2 ~*~ 1*x2\n");
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
   REQUIRE(fp.has_value());
   auto pt = magmaan::spec::lavaanify(*fp);
   REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  using magmaan::estimate::OrdinalParameterization;
+  using magmaan::estimate::OrdinalWeightKind;
+
+  // The prepared partable is parameterization-independent.
   auto prep = magmaan::estimate::prepare_ordinal_partable(
-      *pt, *stats, magmaan::estimate::OrdinalParameterization::Theta);
-  REQUIRE_FALSE(prep.has_value());
-  CHECK(prep.error().detail.find("theta parameterization") != std::string::npos);
+      *pt, *stats, OrdinalParameterization::Theta);
+  REQUIRE(prep.has_value());
+
+  auto delta = magmaan::test::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, OrdinalWeightKind::DWLS,
+      magmaan::estimate::Backend::Lbfgs, {}, OrdinalParameterization::Delta);
+  auto theta = magmaan::test::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, OrdinalWeightKind::DWLS,
+      magmaan::estimate::Backend::Lbfgs, {}, OrdinalParameterization::Theta);
+  REQUIRE_MESSAGE(delta.has_value(),
+      "delta fit failed: " << (delta.has_value() ? "" : delta.error().detail));
+  REQUIRE_MESSAGE(theta.has_value(),
+      "theta fit failed: " << (theta.has_value() ? "" : theta.error().detail));
+
+  CHECK(std::isfinite(theta->fmin));
+  CHECK(theta->iterations > 0);
+  // Reparameterization invariance: same minimized discrepancy.
+  CHECK(theta->fmin == doctest::Approx(delta->fmin).epsilon(1e-4));
+  // The parameter vectors themselves differ — theta loadings are unstandardized.
+  CHECK((theta->theta - delta->theta).cwiseAbs().maxCoeff() > 1e-3);
 }
 
 TEST_CASE("Ordinal robust reporting returns sandwich SEs and scaled-test eigenvalues") {
@@ -1881,7 +1911,7 @@ TEST_CASE("Ordinal robust reporting returns sandwich SEs and scaled-test eigenva
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
 
-  auto fit = magmaan::estimate::fit_ordinal_bounded(
+  auto fit = magmaan::test::fit_ordinal_bounded(
       *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
   REQUIRE(fit.has_value());
   auto rob = magmaan::estimate::robust_ordinal(
@@ -1947,7 +1977,7 @@ TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments
   REQUIRE(pt2.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt2);
   REQUIRE(mr.has_value());
-  auto fit = magmaan::estimate::fit_mixed_ordinal_bounded(
+  auto fit = magmaan::test::fit_mixed_ordinal_bounded(
       *pt2, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
   REQUIRE(fit.has_value());
   CHECK(fit->theta.allFinite());
@@ -1992,8 +2022,12 @@ TEST_CASE("Mixed ordinal validation rejects malformed stats before fitting") {
 
   auto expect_error = [&](magmaan::data::MixedOrdinalStats bad,
                           const char* needle) {
+    // Call the core directly: malformed stats must be rejected by
+    // validate_stats, which runs before the x0 size check — so an empty x0
+    // is fine here.
     auto fit = magmaan::estimate::fit_mixed_ordinal_bounded(
-        *pt, *mr, bad, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+        *pt, *mr, bad, {}, magmaan::estimate::OrdinalWeightKind::DWLS,
+        Eigen::VectorXd{});
     REQUIRE_FALSE(fit.has_value());
     CHECK(fit.error().detail.find(needle) != std::string::npos);
   };

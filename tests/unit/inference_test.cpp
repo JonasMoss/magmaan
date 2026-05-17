@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cstdint>
 #include <fstream>
@@ -205,7 +206,7 @@ TEST_CASE("rls_chi2: matches lavaan browne.residual.nt.model on 3F Holzinger") {
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
   // Fit so we have Σ̂; reuse the converged θ̂ to compute implied moments.
-  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
+  auto est = magmaan::test::fit(*h.pt, *h.rep, samp).value();
   auto ev  = magmaan::model::ModelEvaluator::build(*h.pt, *h.rep).value();
   auto im_or = ev.sigma(est.theta);
   REQUIRE(im_or.has_value());
@@ -249,7 +250,7 @@ TEST_CASE("rls_chi2: zero on saturated 1F CFA") {
   samp.S.push_back(std::move(S));
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
-  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
+  auto est = magmaan::test::fit(*h.pt, *h.rep, samp).value();
   auto ev  = magmaan::model::ModelEvaluator::build(*h.pt, *h.rep).value();
   auto im_or = ev.sigma(est.theta);
   REQUIRE(im_or.has_value());
@@ -289,7 +290,7 @@ TEST_CASE("browne_residual_nt: matches lavaan on 3F Holzinger") {
   samp.S.push_back(std::move(S));
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
-  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
+  auto est = magmaan::test::fit(*h.pt, *h.rep, samp).value();
   auto t_or = magmaan::nt::infer::browne_residual_nt(*h.pt, *h.rep, samp, est);
   REQUIRE(t_or.has_value());
   CHECK(*t_or == doctest::Approx(77.9034).epsilon(1e-3));
@@ -317,7 +318,7 @@ TEST_CASE("browne_residual_nt: zero on saturated 1F CFA") {
   samp.S.push_back(std::move(S));
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
-  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
+  auto est = magmaan::test::fit(*h.pt, *h.rep, samp).value();
   auto t_or = magmaan::nt::infer::browne_residual_nt(*h.pt, *h.rep, samp, est);
   REQUIRE(t_or.has_value());
   CHECK(std::abs(*t_or) < 1e-6);
@@ -346,7 +347,7 @@ TEST_CASE("browne_residual_adf: empirical Gamma approaches NT on MVN data") {
 
   auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
-  auto est = magmaan::estimate::fit(*h.pt, *h.rep, *samp_or).value();
+  auto est = magmaan::test::fit(*h.pt, *h.rep, *samp_or).value();
   auto nt_or = magmaan::nt::infer::browne_residual_nt(*h.pt, *h.rep, *samp_or, est);
   auto adf_or = magmaan::nt::infer::browne_residual_adf(*h.pt, *h.rep, *samp_or, raw, est);
   REQUIRE(nt_or.has_value());
@@ -368,7 +369,7 @@ TEST_CASE("browne_residual_adf: zero on saturated model") {
   }
   auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
-  auto est = magmaan::estimate::fit(*h.pt, *h.rep, *samp_or).value();
+  auto est = magmaan::test::fit(*h.pt, *h.rep, *samp_or).value();
   auto adf_or = magmaan::nt::infer::browne_residual_adf(*h.pt, *h.rep, *samp_or, raw, est);
   REQUIRE(adf_or.has_value());
   CHECK(std::abs(*adf_or) < 1e-6);
@@ -578,7 +579,7 @@ TEST_CASE("wald_test: single-parameter restriction matches (θ̂_k / SE_k)²") {
                  [static_cast<std::size_t>(c)].get<double>();
   SampleStats samp;
   samp.S = {S}; samp.n_obs = {j["n_obs"].get<std::int64_t>()};
-  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
+  auto est = magmaan::test::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   // Test θ_0 = 0 (first free param). R = [1, 0, 0, ...], q = [0].
@@ -718,7 +719,7 @@ TEST_CASE("Multi-group + mean structure: θ̂/SE match lavaan on HS × school") 
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
 
-  auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
+  auto est_or = magmaan::test::fit(*pt, *mr, samp);
   REQUIRE_MESSAGE(est_or.has_value(),
       "fit failed: " << (est_or.has_value() ? "" : est_or.error().detail));
   const auto& est = *est_or;
@@ -802,7 +803,7 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   samp_mg.S     = {S, S};
   samp_mg.n_obs = {n, n};
 
-  auto est_mg_or = magmaan::estimate::fit(*pt, *mr, samp_mg);
+  auto est_mg_or = magmaan::test::fit(*pt, *mr, samp_mg);
   REQUIRE_MESSAGE(est_mg_or.has_value(),
       "multi-group fit failed: " <<
       (est_mg_or.has_value() ? "" : est_mg_or.error().detail));
@@ -818,7 +819,7 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   REQUIRE(mr_single.has_value());
   SampleStats samp_single;
   samp_single.S = {S};  samp_single.n_obs = {n};
-  auto est_single = magmaan::estimate::fit(*pt_single, *mr_single, samp_single).value();
+  auto est_single = magmaan::test::fit(*pt_single, *mr_single, samp_single).value();
 
   const double max_g1 = (est_mg.theta.head(6) - est_single.theta).cwiseAbs().maxCoeff();
   const double max_g2 = (est_mg.theta.tail(6) - est_single.theta).cwiseAbs().maxCoeff();
@@ -855,7 +856,7 @@ TEST_CASE("expected_inference on mean-structure CFA: ν SEs match closed form") 
   SampleStats samp;
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {301};
 
-  auto est_or = magmaan::estimate::fit(*h.pt, *h.rep, samp);
+  auto est_or = magmaan::test::fit(*h.pt, *h.rep, samp);
   REQUIRE(est_or.has_value());
 
   auto inf_or = expected_inference(*h.pt, *h.rep, samp, *est_or);
@@ -892,7 +893,7 @@ TEST_CASE("fd_observed_inference on mean-structure ≈ expected_inference at sat
   SampleStats samp;
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {200};
 
-  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
+  auto est = magmaan::test::fit(*h.pt, *h.rep, samp).value();
 
   auto exp_or = expected_inference(*h.pt, *h.rep, samp, est);
   auto fd_or  = fd_observed_inference(*h.pt, *h.rep, samp, est);
@@ -916,7 +917,7 @@ TEST_CASE("information_observed_analytic matches FD for mean structure") {
   SampleStats samp;
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {100};
 
-  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
+  auto est = magmaan::test::fit(*h.pt, *h.rep, samp).value();
   auto an_or = magmaan::nt::infer::information_observed_analytic(*h.pt, *h.rep, samp, est);
   auto fd_or = magmaan::nt::infer::information_observed_fd(*h.pt, *h.rep, samp, est);
   REQUIRE_MESSAGE(an_or.has_value(),
@@ -938,7 +939,7 @@ TEST_CASE("information_observed_analytic matches FD for structural latent means"
   SampleStats samp;
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {180};
 
-  auto est = magmaan::estimate::fit(*h.pt, *h.rep, samp).value();
+  auto est = magmaan::test::fit(*h.pt, *h.rep, samp).value();
   auto an_or = magmaan::nt::infer::information_observed_analytic(*h.pt, *h.rep, samp, est);
   auto fd_or = magmaan::nt::infer::information_observed_fd(*h.pt, *h.rep, samp, est);
   REQUIRE_MESSAGE(an_or.has_value(),

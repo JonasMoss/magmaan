@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -208,18 +209,10 @@ TEST_CASE("fit_fiml: complete-data path fits a saturated mean CFA near zero grad
   magmaan::data::RawData raw;
   raw.X.push_back((Z * L.transpose()).rowwise() + truth->mu[0].transpose());
 
-  magmaan::spec::Starts starts;
-  starts.hint.resize(static_cast<std::size_t>(theta0.size()));
-  for (Eigen::Index k = 0; k < theta0.size(); ++k) {
-    starts.hint[static_cast<std::size_t>(k)] = theta0(k);
-  }
-
   magmaan::optim::LbfgsOptions opts;
   opts.max_iter = 100;
-  magmaan::optim::LbfgsOptimizer opt(opts);
-  auto est = magmaan::estimate::fit_fiml(*built.pt, *built.rep, raw,
-                                         magmaan::nt::fiml::FIML{}, opt,
-                                         std::move(starts));
+  auto est = magmaan::estimate::fit_fiml(*built.pt, *built.rep, raw, theta0,
+                                         magmaan::nt::fiml::FIML{}, opts);
   if (!est.has_value()) {
     FAIL(est.error().detail);
     return;
@@ -273,11 +266,10 @@ TEST_CASE("FIML complete-data objective and gradient match ML up to constants") 
                                      eval->J_sigma, eval->J_mu);
   REQUIRE(fiml_vg.has_value());
 
-  magmaan::nt::ml::ML ml;
-  auto ml_cache = ml.prepare(*samp);
+  auto ml_cache = magmaan::nt::ml_prepare(*samp);
   REQUIRE(ml_cache.has_value());
-  auto ml_vg = ml.value_gradient(*samp, *ml_cache, eval->moments,
-                                 eval->J_sigma, eval->J_mu);
+  auto ml_vg = magmaan::nt::ml_value_gradient(*samp, *ml_cache, eval->moments,
+                                              eval->J_sigma, eval->J_mu);
   REQUIRE(ml_vg.has_value());
 
   double constant = 0.0;
@@ -318,18 +310,10 @@ TEST_CASE("fiml_extras: complete data matches SampleStats fit_extras") {
   auto samp = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp.has_value());
 
-  magmaan::spec::Starts starts;
-  starts.hint.resize(static_cast<std::size_t>(theta0.size()));
-  for (Eigen::Index k = 0; k < theta0.size(); ++k) {
-    starts.hint[static_cast<std::size_t>(k)] = theta0(k);
-  }
-
   magmaan::optim::LbfgsOptions opts;
   opts.max_iter = 100;
-  magmaan::optim::LbfgsOptimizer opt(opts);
-  auto est = magmaan::estimate::fit_fiml(*built.pt, *built.rep, raw,
-                                         magmaan::nt::fiml::FIML{}, opt,
-                                         std::move(starts));
+  auto est = magmaan::estimate::fit_fiml(*built.pt, *built.rep, raw, theta0,
+                                         magmaan::nt::fiml::FIML{}, opts);
   REQUIRE(est.has_value());
 
   auto fiml_fx = magmaan::nt::fiml::fiml_extras(*built.pt, *built.rep, raw, *est);

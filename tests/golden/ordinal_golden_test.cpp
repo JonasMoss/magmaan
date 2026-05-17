@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -429,8 +430,8 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
     auto h = handles_from_fixture(id, exp, failures);
     if (!h.has_value()) continue;
 
-    const magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-        .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8});
+    const magmaan::optim::LbfgsOptions opt{
+        .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
 
     for (const auto& fit_item : exp["fits"].items()) {
       const std::string name = fit_item.key();
@@ -442,8 +443,9 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
           ? magmaan::estimate::OrdinalWeightKind::DWLS
           : magmaan::estimate::OrdinalWeightKind::WLS;
       ++total;
-      auto est_or = magmaan::estimate::fit_ordinal_bounded(
-          h->pt, h->rep, h->stats, magmaan::estimate::Bounds{}, kind, opt);
+      auto est_or = magmaan::test::fit_ordinal_bounded(
+          h->pt, h->rep, h->stats, magmaan::estimate::Bounds{}, kind,
+          magmaan::estimate::Backend::Lbfgs, opt);
       if (!est_or.has_value()) {
         failures.push_back(id + " " + name + ": fit — " + est_or.error().detail);
         continue;
@@ -578,6 +580,68 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
   CHECK(passed == total);
 }
 
+TEST_CASE("ordinal theta parameterization: reparameterization invariance and "
+          "lavaan theta loadings") {
+  const std::string dir = magmaan::test::fixtures_dir() + "/ordinal";
+
+  // lavaan cfa(input, ordered=, estimator="DWLS", parameterization="theta")
+  // free loadings, indicator order (x2, x3, x4); lavaan 0.6.22.
+  struct ThetaOracle { const char* id; double loadings[3]; };
+  const ThetaOracle oracles[] = {
+      {"0001_3cat_cfa",   {0.84027, 0.72418, 0.34726}},
+      {"0007_binary_cfa", {1.11134, 0.74956, 0.59699}},
+  };
+
+  std::vector<std::string> failures;
+  for (const auto& orc : oracles) {
+    auto raw = magmaan::test::read_fixture(dir + "/" + orc.id + ".ordinal.json");
+    REQUIRE(raw.has_value());
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(exp.is_discarded());
+    auto h = handles_from_fixture(orc.id, exp, failures);
+    REQUIRE(h.has_value());
+
+    const magmaan::optim::LbfgsOptions opt{
+        .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+    using magmaan::estimate::OrdinalParameterization;
+    auto delta = magmaan::test::fit_ordinal_bounded(
+        h->pt, h->rep, h->stats, magmaan::estimate::Bounds{},
+        magmaan::estimate::OrdinalWeightKind::DWLS,
+        magmaan::estimate::Backend::Lbfgs, opt,
+        OrdinalParameterization::Delta);
+    auto theta = magmaan::test::fit_ordinal_bounded(
+        h->pt, h->rep, h->stats, magmaan::estimate::Bounds{},
+        magmaan::estimate::OrdinalWeightKind::DWLS,
+        magmaan::estimate::Backend::Lbfgs, opt,
+        OrdinalParameterization::Theta);
+    REQUIRE(delta.has_value());
+    REQUIRE(theta.has_value());
+
+    // Reparameterization invariance — delta and theta minimize the same
+    // discrepancy. The delta χ² is lavaan-verified by the golden above, so
+    // theta inherits that backing.
+    CHECK(theta->fmin == doctest::Approx(delta->fmin).epsilon(1e-3));
+
+    // After the ordinal prep the free θ entries lead with the free `=~`
+    // loadings in indicator order — compare them to the lavaan theta oracle.
+    auto pt_copy = h->pt;
+    auto prep =
+        magmaan::estimate::prepare_ordinal_delta_partable(pt_copy, h->stats);
+    REQUIRE(prep.has_value());
+    int li = 0;
+    for (std::size_t r = 0; r < pt_copy.size(); ++r) {
+      if (pt_copy.op[r] != magmaan::parse::Op::Measurement) continue;
+      if (pt_copy.free[r] <= 0) continue;
+      REQUIRE(li < 3);
+      const double got = theta->theta(pt_copy.free[r] - 1);
+      CHECK(got == doctest::Approx(orc.loadings[li]).epsilon(0.01));
+      ++li;
+    }
+    CHECK(li == 3);
+  }
+  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+}
+
 TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract") {
   const std::string dir = magmaan::test::fixtures_dir() + "/mixed_ordinal";
 
@@ -595,8 +659,8 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
     auto h = mixed_handles_from_fixture(id, exp, failures);
     if (!h.has_value()) continue;
 
-    const magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-        .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8});
+    const magmaan::optim::LbfgsOptions opt{
+        .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8};
 
     for (const auto& fit_item : exp["fits"].items()) {
       const std::string name = fit_item.key();
@@ -604,8 +668,9 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
           ? magmaan::estimate::OrdinalWeightKind::DWLS
           : magmaan::estimate::OrdinalWeightKind::WLS;
       ++total;
-      auto est_or = magmaan::estimate::fit_mixed_ordinal_bounded(
-          h->pt, h->rep, h->stats, magmaan::estimate::Bounds{}, kind, opt);
+      auto est_or = magmaan::test::fit_mixed_ordinal_bounded(
+          h->pt, h->rep, h->stats, magmaan::estimate::Bounds{}, kind,
+          magmaan::estimate::Backend::Lbfgs, opt);
       if (!est_or.has_value()) {
         failures.push_back(id + " " + name + ": fit — " + est_or.error().detail);
         continue;
@@ -696,11 +761,10 @@ TEST_CASE("ordinal fixtures: Ceres and LBFGS-B bounded fits agree") {
     auto h = handles_from_fixture(id, exp, failures);
     if (!h.has_value()) continue;
 
-    const magmaan::optim::LbfgsBOptimizer lbfgsb(magmaan::optim::LbfgsBOptions{
-        .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8});
-    const magmaan::optim::CeresBoundedOptimizer ceres(
-        magmaan::optim::CeresOptions{.max_iter = 1000, .ftol = 1e-12,
-                                     .gtol = 1e-8, .ptol = 1e-10});
+    const magmaan::optim::LbfgsOptions lbfgsb{
+        .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+    const magmaan::optim::LbfgsOptions ceres{
+        .max_iter = 1000, .ftol = 1e-12, .gtol = 1e-8};
 
     for (const auto& fit_item : exp["fits"].items()) {
       const std::string name = fit_item.key();
@@ -712,10 +776,12 @@ TEST_CASE("ordinal fixtures: Ceres and LBFGS-B bounded fits agree") {
           ? magmaan::estimate::OrdinalWeightKind::DWLS
           : magmaan::estimate::OrdinalWeightKind::WLS;
       ++total;
-      auto a = magmaan::estimate::fit_ordinal_bounded(
-          h->pt, h->rep, h->stats, magmaan::estimate::Bounds{}, kind, lbfgsb);
-      auto b = magmaan::estimate::fit_ordinal_bounded(
-          h->pt, h->rep, h->stats, magmaan::estimate::Bounds{}, kind, ceres);
+      auto a = magmaan::test::fit_ordinal_bounded(
+          h->pt, h->rep, h->stats, magmaan::estimate::Bounds{}, kind,
+          magmaan::estimate::Backend::Lbfgs, lbfgsb);
+      auto b = magmaan::test::fit_ordinal_bounded(
+          h->pt, h->rep, h->stats, magmaan::estimate::Bounds{}, kind,
+          magmaan::estimate::Backend::Ceres, ceres);
       if (!a.has_value() || !b.has_value()) {
         failures.push_back(id + " " + name + ": backend fit failed");
         continue;

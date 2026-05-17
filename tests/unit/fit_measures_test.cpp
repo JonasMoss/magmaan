@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -81,7 +82,7 @@ TEST_CASE("fit_measures: CFI, TLI, RMSEA on a known nontrivial fit") {
   magmaan::data::SampleStats samp;
   samp.S = {S}; samp.n_obs = {j["n_obs"].get<std::int64_t>()};
 
-  auto est   = magmaan::estimate::fit(*pt, *mr, samp).value();
+  auto est   = magmaan::test::fit(*pt, *mr, samp).value();
   auto chi2  = magmaan::nt::infer::chi2_stat(samp, est);
   auto df    = magmaan::nt::infer::df_stat(*pt, samp).value();
   auto bl    = magmaan::nt::measures::baseline_chi2(samp);
@@ -205,7 +206,7 @@ TEST_CASE("fit_extras: saturated 1F model — SRMR ≈ 0, logl == unrestricted_l
   magmaan::data::SampleStats samp;
   samp.S = {S}; samp.n_obs = {j["n_obs"].get<std::int64_t>()};
 
-  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
+  auto est = magmaan::test::fit(*pt, *mr, samp).value();
   CHECK(std::abs(est.fmin) < 1e-8);                   // F_ML ≈ 0
 
   auto fx = magmaan::nt::measures::fit_extras(*pt, *mr, samp, est).value();

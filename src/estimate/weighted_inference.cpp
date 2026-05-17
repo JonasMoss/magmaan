@@ -25,9 +25,6 @@ namespace magmaan::estimate {
 
 using data::RawData;
 using data::SampleStats;
-using gls::GLS;
-using gls::ULS;
-using gls::WLS;
 using nt::robust::MeanVarAdjustedResult;
 using nt::robust::SatorraBentlerResult;
 using nt::robust::ScaledShiftedResult;
@@ -98,28 +95,11 @@ post_expected<double> total_n(const data::SampleStats& samp) {
   return n;
 }
 
+// Standard (un-robust) LS reference statistic. Uniform 2N·fmin: the GLS
+// moment weight now carries the ½ that used to make GLS a special case.
 post_expected<double>
 robust_ls_standard_chisq(const data::SampleStats& samp,
-                         const Estimates& est,
-                         const gls::ULS&) {
-  auto n = total_n(samp);
-  if (!n.has_value()) return std::unexpected(n.error());
-  return 2.0 * *n * est.fmin;
-}
-
-post_expected<double>
-robust_ls_standard_chisq(const data::SampleStats& samp,
-                         const Estimates& est,
-                         const gls::GLS&) {
-  auto n = total_n(samp);
-  if (!n.has_value()) return std::unexpected(n.error());
-  return *n * est.fmin;
-}
-
-post_expected<double>
-robust_ls_standard_chisq(const data::SampleStats& samp,
-                         const Estimates& est,
-                         const gls::WLS&) {
+                         const Estimates& est) {
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
   return 2.0 * *n * est.fmin;
@@ -232,86 +212,26 @@ continuous_moment_jacobian_block(const ContinuousLsLayout& layout,
   return Jb;
 }
 
-Eigen::MatrixXd symmetric_vech_gls_weight(const Eigen::MatrixXd& Sinv) {
-  const Eigen::Index p = Sinv.rows();
-  const Eigen::Index pstar = vech_len(p);
-  Eigen::MatrixXd W = Eigen::MatrixXd::Zero(pstar, pstar);
-  for (Eigen::Index c1 = 0; c1 < p; ++c1) {
-    for (Eigen::Index r1 = c1; r1 < p; ++r1) {
-      const Eigen::Index k1 = vech_index(p, r1, c1);
-      Eigen::MatrixXd E1 = Eigen::MatrixXd::Zero(p, p);
-      E1(r1, c1) = 1.0;
-      E1(c1, r1) = 1.0;
-      const Eigen::MatrixXd A1 = Sinv * E1 * Sinv;
-      for (Eigen::Index c2 = 0; c2 < p; ++c2) {
-        for (Eigen::Index r2 = c2; r2 < p; ++r2) {
-          const Eigen::Index k2 = vech_index(p, r2, c2);
-          Eigen::MatrixXd E2 = Eigen::MatrixXd::Zero(p, p);
-          E2(r2, c2) = 1.0;
-          E2(c2, r2) = 1.0;
-          W(k1, k2) = (A1 * E2).trace();
-        }
-      }
-    }
-  }
-  return W;
-}
-
+// Per-block estimator weight for the robust sandwich. An empty `weight` ⇒
+// ULS (identity); otherwise the caller-supplied block (GLS callers pass
+// `gmm::normal_theory_weight`). The sandwich is weight-scale-invariant, so
+// the absolute scale of a GLS/WLS weight does not affect `vcov`.
 post_expected<Eigen::MatrixXd>
-gls_weight_block(const data::SampleStats& samp,
-                 const ContinuousLsLayout& layout,
-                 std::size_t b) {
-  const Eigen::Index p = samp.S[b].rows();
-  Eigen::LLT<Eigen::MatrixXd> llt(samp.S[b]);
-  if (llt.info() != Eigen::Success) {
-    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
-        "robust_continuous_ls GLS: sample covariance is not positive definite in block " +
-            std::to_string(b)));
-  }
-  const Eigen::MatrixXd Sinv = llt.solve(Eigen::MatrixXd::Identity(p, p));
-  Eigen::MatrixXd W = Eigen::MatrixXd::Zero(layout.block_rows[b],
-                                           layout.block_rows[b]);
-  Eigen::Index off = 0;
-  if (layout.has_means) {
-    W.block(0, 0, p, p) = Sinv;
-    off = p;
-  }
-  W.block(off, off, vech_len(p), vech_len(p)) =
-      symmetric_vech_gls_weight(Sinv);
-  return W;
-}
-
-template <class D>
-post_expected<Eigen::MatrixXd>
-weight_block(const D&, const data::SampleStats&,
+weight_block(const gmm::Weight& weight,
              const ContinuousLsLayout& layout,
              std::size_t b) {
-  return Eigen::MatrixXd::Identity(layout.block_rows[b], layout.block_rows[b]);
-}
-
-post_expected<Eigen::MatrixXd>
-weight_block(const gls::GLS& gls,
-             const data::SampleStats& samp,
-             const ContinuousLsLayout& layout,
-             std::size_t b) {
-  (void)gls;
-  return gls_weight_block(samp, layout, b);
-}
-
-post_expected<Eigen::MatrixXd>
-weight_block(const gls::WLS& wls,
-             const data::SampleStats&,
-             const ContinuousLsLayout& layout,
-             std::size_t b) {
-  if (wls.weights.size() <= b) {
+  if (weight.empty()) {
+    return Eigen::MatrixXd::Identity(layout.block_rows[b],
+                                     layout.block_rows[b]);
+  }
+  if (weight.size() <= b) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "robust_continuous_ls WLS: missing weight block " +
-            std::to_string(b)));
+        "robust_continuous_ls: missing weight block " + std::to_string(b)));
   }
-  const auto& W = wls.weights[b];
+  const auto& W = weight[b];
   if (W.rows() != layout.block_rows[b] || W.cols() != layout.block_rows[b]) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "robust_continuous_ls WLS: weight dimension mismatch in block " +
+        "robust_continuous_ls: weight dimension mismatch in block " +
             std::to_string(b)));
   }
   return W;
@@ -368,13 +288,12 @@ gamma_blocks_from_raw(const data::RawData& raw,
   return out;
 }
 
-template <class D>
 post_expected<WeightedRobustResult>
 robust_continuous_ls_impl(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const data::SampleStats& samp,
                           const Estimates& est,
-                          D discrepancy,
+                          const gmm::Weight& weight,
                           const std::vector<Eigen::MatrixXd>& gamma) {
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
@@ -413,7 +332,7 @@ robust_continuous_ls_impl(spec::LatentStructure pt,
     auto Jb = continuous_moment_jacobian_block(
         layout, eval->moments, eval->J_sigma, eval->J_mu, b);
     if (!Jb.has_value()) return std::unexpected(Jb.error());
-    auto Wb = weight_block(discrepancy, samp, layout, b);
+    auto Wb = weight_block(weight, layout, b);
     if (!Wb.has_value()) return std::unexpected(Wb.error());
     if (gamma[b].rows() != layout.block_rows[b] ||
         gamma[b].cols() != layout.block_rows[b]) {
@@ -428,20 +347,19 @@ robust_continuous_ls_impl(spec::LatentStructure pt,
         .n_obs = samp.n_obs[b]});
   }
 
-  auto chisq = robust_ls_standard_chisq(samp, est, discrepancy);
+  auto chisq = robust_ls_standard_chisq(samp, est);
   if (!chisq.has_value()) return std::unexpected(chisq.error());
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
   return robust_weighted_moments(blocks, con_or->K(), *chisq / *n);
 }
 
-template <class D>
 post_expected<WeightedRobustResult>
 robust_continuous_ls_raw_impl(spec::LatentStructure pt,
                               const model::MatrixRep& rep,
                               const data::SampleStats& samp,
                               const Estimates& est,
-                              D discrepancy,
+                              const gmm::Weight& weight,
                               const data::RawData& raw) {
   spec::LatentStructure pt_for_layout = pt;
   if (auto e = resolve_fixed_x_from_sample(pt_for_layout, rep, samp);
@@ -459,47 +377,7 @@ robust_continuous_ls_raw_impl(spec::LatentStructure pt,
   auto gamma = gamma_blocks_from_raw(raw, samp, layout);
   if (!gamma.has_value()) return std::unexpected(gamma.error());
   return robust_continuous_ls_impl(std::move(pt), rep, samp, est,
-                                   std::move(discrepancy), *gamma);
-}
-
-post_expected<model::ImpliedMoments>
-evaluate_implied_moments(spec::LatentStructure pt,
-                         const model::MatrixRep& rep,
-                         const data::SampleStats& samp,
-                         const Eigen::VectorXd& theta,
-                         const char* who) {
-  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
-    return std::unexpected(fit_to_post(e.error()));
-  }
-  auto ev_or = model::ModelEvaluator::build(pt, rep);
-  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
-  if (static_cast<std::size_t>(theta.size()) != ev_or->n_free()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        std::string(who) + ": theta length " + std::to_string(theta.size()) +
-            " does not match evaluator n_free " +
-            std::to_string(ev_or->n_free())));
-  }
-  auto eval = ev_or->evaluate(theta, false, false);
-  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
-  if (auto v = validate_moment_shapes(samp, eval->moments); !v.has_value()) {
-    return std::unexpected(v.error());
-  }
-  return std::move(eval->moments);
-}
-
-template <class D>
-post_expected<double>
-evaluate_ls_objective_impl(spec::LatentStructure pt,
-                           const model::MatrixRep& rep,
-                           const data::SampleStats& samp,
-                           const Eigen::VectorXd& theta,
-                           D discrepancy) {
-  auto moments = evaluate_implied_moments(std::move(pt), rep, samp, theta,
-                                          "evaluate_ls_objective");
-  if (!moments.has_value()) return std::unexpected(moments.error());
-  auto f = discrepancy.value(samp, *moments);
-  if (!f.has_value()) return std::unexpected(fit_to_post(f.error()));
-  return *f;
+                                   weight, *gamma);
 }
 
 }  // namespace
@@ -509,29 +387,23 @@ evaluate_ls_objective(spec::LatentStructure pt,
                       const model::MatrixRep& rep,
                       const data::SampleStats& samp,
                       const Eigen::VectorXd& theta,
-                      gls::ULS discrepancy) {
-  return evaluate_ls_objective_impl(std::move(pt), rep, samp, theta,
-                                    std::move(discrepancy));
-}
-
-post_expected<double>
-evaluate_ls_objective(spec::LatentStructure pt,
-                      const model::MatrixRep& rep,
-                      const data::SampleStats& samp,
-                      const Eigen::VectorXd& theta,
-                      gls::GLS discrepancy) {
-  return evaluate_ls_objective_impl(std::move(pt), rep, samp, theta,
-                                    std::move(discrepancy));
-}
-
-post_expected<double>
-evaluate_ls_objective(spec::LatentStructure pt,
-                      const model::MatrixRep& rep,
-                      const data::SampleStats& samp,
-                      const Eigen::VectorXd& theta,
-                      gls::WLS discrepancy) {
-  return evaluate_ls_objective_impl(std::move(pt), rep, samp, theta,
-                                    std::move(discrepancy));
+                      const gmm::Weight& weight) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
+  if (static_cast<std::size_t>(theta.size()) != ev_or->n_free()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "evaluate_ls_objective: theta length " + std::to_string(theta.size()) +
+            " does not match evaluator n_free " +
+            std::to_string(ev_or->n_free())));
+  }
+  auto prob = gmm::residuals(*ev_or, samp, theta, weight);
+  if (!prob.has_value()) return std::unexpected(fit_to_post(prob.error()));
+  auto r = prob->r(theta);
+  if (!r.has_value()) return std::unexpected(fit_to_post(r.error()));
+  return 0.5 * r->squaredNorm();
 }
 
 post_expected<double>
@@ -539,38 +411,22 @@ continuous_ls_chisq(data::SampleStats samp,
                     spec::LatentStructure pt,
                     const model::MatrixRep& rep,
                     const Estimates& est,
-                    gls::ULS) {
+                    const gmm::Weight& weight) {
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
-  auto br = nt::infer::browne_residual_nt(std::move(pt), rep, samp, est);
-  if (!br.has_value()) return std::unexpected(br.error());
-  const double n_used = *n - static_cast<double>(samp.S.size());
-  if (!(n_used > 0.0)) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "continuous_ls_chisq ULS: non-positive effective sample size"));
+  if (weight.empty()) {
+    // ULS — Browne's residual-based normal-theory statistic (N·F_ULS is not
+    // itself asymptotically χ²).
+    auto br = nt::infer::browne_residual_nt(std::move(pt), rep, samp, est);
+    if (!br.has_value()) return std::unexpected(br.error());
+    const double n_used = *n - static_cast<double>(samp.S.size());
+    if (!(n_used > 0.0)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "continuous_ls_chisq ULS: non-positive effective sample size"));
+    }
+    return *br * (n_used / *n);
   }
-  return *br * (n_used / *n);
-}
-
-post_expected<double>
-continuous_ls_chisq(data::SampleStats samp,
-                    spec::LatentStructure,
-                    const model::MatrixRep&,
-                    const Estimates& est,
-                    gls::GLS) {
-  auto n = total_n(samp);
-  if (!n.has_value()) return std::unexpected(n.error());
-  return *n * est.fmin;
-}
-
-post_expected<double>
-continuous_ls_chisq(data::SampleStats samp,
-                    spec::LatentStructure,
-                    const model::MatrixRep&,
-                    const Estimates& est,
-                    gls::WLS) {
-  auto n = total_n(samp);
-  if (!n.has_value()) return std::unexpected(n.error());
+  // GLS / WLS — the moment quadratic's reference statistic is 2N·fmin.
   return 2.0 * *n * est.fmin;
 }
 
@@ -690,10 +546,10 @@ robust_continuous_ls(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const data::SampleStats& samp,
                      const Estimates& est,
-                     gls::ULS discrepancy,
+                     const gmm::Weight& weight,
                      const std::vector<Eigen::MatrixXd>& gamma) {
   return robust_continuous_ls_impl(std::move(pt), rep, samp, est,
-                                   discrepancy, gamma);
+                                   weight, gamma);
 }
 
 post_expected<WeightedRobustResult>
@@ -701,54 +557,10 @@ robust_continuous_ls(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const data::SampleStats& samp,
                      const Estimates& est,
-                     gls::GLS discrepancy,
-                     const std::vector<Eigen::MatrixXd>& gamma) {
-  return robust_continuous_ls_impl(std::move(pt), rep, samp, est,
-                                   discrepancy, gamma);
-}
-
-post_expected<WeightedRobustResult>
-robust_continuous_ls(spec::LatentStructure pt,
-                     const model::MatrixRep& rep,
-                     const data::SampleStats& samp,
-                     const Estimates& est,
-                     gls::WLS discrepancy,
-                     const std::vector<Eigen::MatrixXd>& gamma) {
-  return robust_continuous_ls_impl(std::move(pt), rep, samp, est,
-                                   std::move(discrepancy), gamma);
-}
-
-post_expected<WeightedRobustResult>
-robust_continuous_ls(spec::LatentStructure pt,
-                     const model::MatrixRep& rep,
-                     const data::SampleStats& samp,
-                     const Estimates& est,
-                     gls::ULS discrepancy,
+                     const gmm::Weight& weight,
                      const data::RawData& raw) {
   return robust_continuous_ls_raw_impl(std::move(pt), rep, samp, est,
-                                       discrepancy, raw);
-}
-
-post_expected<WeightedRobustResult>
-robust_continuous_ls(spec::LatentStructure pt,
-                     const model::MatrixRep& rep,
-                     const data::SampleStats& samp,
-                     const Estimates& est,
-                     gls::GLS discrepancy,
-                     const data::RawData& raw) {
-  return robust_continuous_ls_raw_impl(std::move(pt), rep, samp, est,
-                                       discrepancy, raw);
-}
-
-post_expected<WeightedRobustResult>
-robust_continuous_ls(spec::LatentStructure pt,
-                     const model::MatrixRep& rep,
-                     const data::SampleStats& samp,
-                     const Estimates& est,
-                     gls::WLS discrepancy,
-                     const data::RawData& raw) {
-  return robust_continuous_ls_raw_impl(std::move(pt), rep, samp, est,
-                                       std::move(discrepancy), raw);
+                                       weight, raw);
 }
 
 }  // namespace magmaan::estimate

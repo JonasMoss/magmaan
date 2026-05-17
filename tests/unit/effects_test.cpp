@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <random>
@@ -54,7 +55,7 @@ TEST_CASE("Effects: := value and delta-method SE on a^2 of a labeled loading") {
   samp.S = {random_pd(rng, 3)};
   samp.n_obs = {300};
 
-  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
+  auto est = magmaan::test::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   // Find a's free index — the row labeled "a" in pt.
@@ -104,7 +105,7 @@ TEST_CASE("Effects: := with a product of two labeled loadings") {
   samp.S = {random_pd(rng, 3)};
   samp.n_obs = {300};
 
-  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
+  auto est = magmaan::test::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   Eigen::Index a_idx = -1, b_idx = -1;
@@ -154,7 +155,7 @@ TEST_CASE("Effects: chained := (one definition references an earlier one)") {
   samp.S = {random_pd(rng, 3)};
   samp.n_obs = {300};
 
-  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
+  auto est = magmaan::test::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   Eigen::Index a_idx = -1, b_idx = -1;
@@ -219,7 +220,7 @@ TEST_CASE("Effects: := resolves .pN. plabels (free and fixed rows)") {
   samp.S = {random_pd(rng, 3)};
   samp.n_obs = {250};
 
-  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
+  auto est = magmaan::test::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
   const double a_hat = est.theta(a_idx);
   const double b_hat = est.theta(b_idx);
@@ -284,7 +285,7 @@ TEST_CASE("Effects: := referencing an unknown label errors clearly") {
   SampleStats samp;
   samp.S = {random_pd(rng, 3)};
   samp.n_obs = {200};
-  auto est = magmaan::estimate::fit(*pt, *mr, samp).value();
+  auto est = magmaan::test::fit(*pt, *mr, samp).value();
   auto inf = expected_inference(*pt, *mr, samp, est).value();
 
   auto defs_or = compute_defined(*fp, *pt, names, est, inf.vcov);

@@ -9,11 +9,8 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/nt/fiml.hpp"
 #include "magmaan/estimate/fit.hpp"
-#include "magmaan/gls/gls.hpp"
-#include "magmaan/nt/ml.hpp"
+#include "magmaan/gmm/moment_quadratic.hpp"
 #include "magmaan/data/sample_stats.hpp"
-#include "magmaan/gls/uls.hpp"
-#include "magmaan/gls/wls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/op.hpp"
 #include "magmaan/spec/partable.hpp"
@@ -23,10 +20,6 @@ namespace magmaan::nt::infer {
 using estimate::build_eq_constraints;
 using estimate::EqConstraints;
 using estimate::resolve_fixed_x_from_sample;
-using gls::GLS;
-using gls::ULS;
-using gls::WLS;
-using nt::ml::ML;
 using fiml::FIML;
 using fiml::fiml_start_sample_stats;
 using fiml::validate_fiml_fixed_x_missing_policy;
@@ -57,44 +50,62 @@ struct ScoreTestResult {
   double mi = 0.0;
   int    df = 1;
   double p_value = 1.0;
-  double epc = 0.0;
+  double epc = 0.0;        // raw expected parameter change
+  double epc_lv = 0.0;     // std.lv-standardized EPC (latent SDs)
+  double epc_all = 0.0;    // std.all-standardized EPC (latent + indicator SDs)
 };
 
 struct ScoreTestTable {
   std::vector<ScoreTestResult> rows;
 };
 
+// Which candidate parameters a modification-index sweep scores.
+enum class ScoreCandidateSet : std::uint8_t {
+  FixedRowsOnly,   // only parameters already present in the model as fixed rows
+  WithAbsentRows,  // also enumerate statements absent from the model entirely
+};
+
+// Controls a modification-index sweep. The default reproduces the legacy
+// `modification_indices(..., ScoreInformation)` behaviour. The absent-row flags
+// scope the enumeration (mirroring lavaan's `modindices()`: cross-loadings and
+// covariances). Structural regressions are not enumerated — adding a `~` row
+// changes the model form, which needs Reduced-LISREL variable-table support.
+struct ModificationIndexOptions {
+  ScoreCandidateSet candidates = ScoreCandidateSet::FixedRowsOnly;
+  ScoreInformation  information = ScoreInformation::Expected;
+  bool include_loadings = true;     // absent cross-loadings  f =~ x
+  bool include_covariances = true;  // absent covariances     x ~~ y
+};
+
+// Normal-theory ML modification indices / score tests.
 post_expected<ScoreTestTable>
 modification_indices(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const SampleStats& samp,
                      const Estimates& est,
-                     ML discrepancy = {},
                      ScoreInformation information = ScoreInformation::Expected);
 
+// Normal-theory ML modification indices with explicit options: optionally
+// enumerates absent statements (cross-loadings, covariances) as fixed-at-0
+// candidates, and always reports standardized EPC (`epc_lv` / `epc_all`)
+// alongside the raw `epc`.
 post_expected<ScoreTestTable>
 modification_indices(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const SampleStats& samp,
                      const Estimates& est,
-                     ULS discrepancy,
-                     ScoreInformation information = ScoreInformation::Expected);
+                     const ModificationIndexOptions& options);
 
+// Least-squares (moment-quadratic) modification indices / score tests. The
+// `weight` is the only estimator selector: empty ⇒ ULS; a normal-theory
+// weight ⇒ GLS; a caller-supplied weight ⇒ WLS. LS score tests always use the
+// expected (residual-Jacobian) information.
 post_expected<ScoreTestTable>
 modification_indices(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const SampleStats& samp,
                      const Estimates& est,
-                     GLS discrepancy,
-                     ScoreInformation information = ScoreInformation::Expected);
-
-post_expected<ScoreTestTable>
-modification_indices(spec::LatentStructure pt,
-                     const model::MatrixRep& rep,
-                     const SampleStats& samp,
-                     const Estimates& est,
-                     WLS discrepancy,
-                     ScoreInformation information = ScoreInformation::Expected);
+                     const gmm::Weight& weight);
 
 post_expected<ScoreTestTable>
 modification_indices_fiml(spec::LatentStructure pt,
@@ -109,7 +120,6 @@ score_tests(spec::LatentStructure pt,
             const model::MatrixRep& rep,
             const SampleStats& samp,
             const Estimates& est,
-            ML discrepancy = {},
             ScoreInformation information = ScoreInformation::Expected);
 
 post_expected<ScoreTestTable>
@@ -117,24 +127,7 @@ score_tests(spec::LatentStructure pt,
             const model::MatrixRep& rep,
             const SampleStats& samp,
             const Estimates& est,
-            ULS discrepancy,
-            ScoreInformation information = ScoreInformation::Expected);
-
-post_expected<ScoreTestTable>
-score_tests(spec::LatentStructure pt,
-            const model::MatrixRep& rep,
-            const SampleStats& samp,
-            const Estimates& est,
-            GLS discrepancy,
-            ScoreInformation information = ScoreInformation::Expected);
-
-post_expected<ScoreTestTable>
-score_tests(spec::LatentStructure pt,
-            const model::MatrixRep& rep,
-            const SampleStats& samp,
-            const Estimates& est,
-            WLS discrepancy,
-            ScoreInformation information = ScoreInformation::Expected);
+            const gmm::Weight& weight);
 
 post_expected<ScoreTestTable>
 score_tests_fiml(spec::LatentStructure pt,

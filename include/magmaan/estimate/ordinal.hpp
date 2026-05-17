@@ -11,8 +11,7 @@
 #include "magmaan/nt/robust.hpp"
 #include "magmaan/nt/score.hpp"
 #include "magmaan/model/matrix_rep.hpp"
-#include "magmaan/optim/concepts.hpp"
-#include "magmaan/optim/lbfgsb_optimizer.hpp"
+#include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/spec/partable.hpp"
 #include "magmaan/spec/start_hints.hpp"
 
@@ -113,34 +112,44 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
                           const Estimates& est,
                           OrdinalWeightKind weights);
 
-template <optim::LsBoundedOptimizer O = optim::LbfgsBOptimizer>
+// Start-value producers for the ordinal delta path. They run the partable
+// preparation step internally (delta parameterization changes n_free), so the
+// returned vector is sized for the *prepared* partable — exactly what the
+// matching `fit_*_ordinal_bounded` rebuilds. Pass the result straight in.
+fit_expected<Eigen::VectorXd>
+ordinal_start_values(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const data::OrdinalStats& stats,
+                     spec::Starts starts = {});
+
+fit_expected<Eigen::VectorXd>
+mixed_ordinal_start_values(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::MixedOrdinalStats& stats,
+                           spec::Starts starts = {});
+
+// Ordinal DWLS / WLS fit. The model is fitted as a bounded least-squares
+// problem in the thresholds + polychoric correlations; `backend` selects the
+// optimizer (L-BFGS-B or, with MAGMAAN_WITH_CERES, Ceres LM). `opts` tunes the
+// optimizer (the Ceres path reads max_iter / ftol / gtol from it).
+//
+// `parameterization` selects the lavaan-compatible ordinal parameterization.
+// `Delta` (the default) compares the implied latent-response covariances
+// directly to the polychoric correlations; `Theta` fixes the latent-response
+// residual variances to 1, lets the total variances float, and compares the
+// *standardized* implied moments — Σ*ᵢⱼ/√(Σ*ᵢᵢΣ*ⱼⱼ) and thresholds rescaled by
+// √Σ*ᵢᵢ. The two are reparameterizations of one model (same fmin / χ² / df).
 fit_expected<Estimates>
 fit_ordinal_bounded(spec::LatentStructure pt,
                     const model::MatrixRep& rep,
                     const data::OrdinalStats& stats,
                     Bounds bounds,
                     OrdinalWeightKind weights,
-                    O optimizer = {},
-                    spec::Starts starts = {});
-
-fit_expected<Estimates>
-fit_ordinal_bounded(spec::LatentStructure pt,
-                    const model::MatrixRep& rep,
-                    const data::OrdinalStats& stats,
-                    Bounds bounds,
-                    OrdinalWeightKind weights,
-                    optim::LbfgsBOptimizer optimizer,
-                    spec::Starts starts = {});
-
-template <optim::LsBoundedOptimizer O = optim::LbfgsBOptimizer>
-fit_expected<Estimates>
-fit_mixed_ordinal_bounded(spec::LatentStructure pt,
-                          const model::MatrixRep& rep,
-                          const data::MixedOrdinalStats& stats,
-                          Bounds bounds,
-                          OrdinalWeightKind weights,
-                          O optimizer = {},
-                          spec::Starts starts = {});
+                    const Eigen::VectorXd& x0,
+                    Backend backend = Backend::Lbfgs,
+                    optim::LbfgsOptions opts = {},
+                    OrdinalParameterization parameterization =
+                        OrdinalParameterization::Delta);
 
 fit_expected<Estimates>
 fit_mixed_ordinal_bounded(spec::LatentStructure pt,
@@ -148,27 +157,8 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           const data::MixedOrdinalStats& stats,
                           Bounds bounds,
                           OrdinalWeightKind weights,
-                          optim::LbfgsBOptimizer optimizer,
-                          spec::Starts starts = {});
-
-extern template fit_expected<Estimates>
-fit_ordinal_bounded<optim::LbfgsBOptimizer>(
-    spec::LatentStructure pt,
-    const model::MatrixRep& rep,
-    const data::OrdinalStats& stats,
-    Bounds bounds,
-    OrdinalWeightKind weights,
-    optim::LbfgsBOptimizer optimizer,
-    spec::Starts starts);
-
-extern template fit_expected<Estimates>
-fit_mixed_ordinal_bounded<optim::LbfgsBOptimizer>(
-    spec::LatentStructure pt,
-    const model::MatrixRep& rep,
-    const data::MixedOrdinalStats& stats,
-    Bounds bounds,
-    OrdinalWeightKind weights,
-    optim::LbfgsBOptimizer optimizer,
-    spec::Starts starts);
+                          const Eigen::VectorXd& x0,
+                          Backend backend = Backend::Lbfgs,
+                          optim::LbfgsOptions opts = {});
 
 }  // namespace magmaan::estimate

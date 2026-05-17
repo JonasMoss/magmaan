@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -15,7 +16,6 @@
 #include "magmaan/error.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/fit.hpp"
-#include "magmaan/gls/uls.hpp"
 #include "magmaan/nt/infer.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -120,7 +120,7 @@ TEST_CASE("fit: an equality constraint is actually enforced (the tied loadings c
   auto pt   = must_lavaanify("f =~ x1 + a*x2 + a*x3");
   auto rep  = build_matrix_rep(pt).value();
 
-  auto est_or = magmaan::estimate::fit(pt, rep, samp);
+  auto est_or = magmaan::test::fit(pt, rep, samp);
   REQUIRE_MESSAGE(est_or.has_value(),
       "constrained fit failed: " << (est_or.has_value() ? "" : est_or.error().detail));
   const auto& est = *est_or;
@@ -142,7 +142,7 @@ TEST_CASE("Inference under an equality constraint: df += 1, tied SEs, χ² refle
   // Unconstrained baseline: saturated 1F CFA, df = 0, χ² ≈ 0.
   auto pt_u  = must_lavaanify("f =~ x1 + x2 + x3");
   auto rep_u = build_matrix_rep(pt_u).value();
-  auto est_u = magmaan::estimate::fit(pt_u, rep_u, samp).value();
+  auto est_u = magmaan::test::fit(pt_u, rep_u, samp).value();
   auto inf_u = expected_inference(pt_u, rep_u, samp, est_u).value();
   CHECK(inf_u.df == 0);
   CHECK(inf_u.chi2 < 1e-6);
@@ -150,7 +150,7 @@ TEST_CASE("Inference under an equality constraint: df += 1, tied SEs, χ² refle
   // Constrained: x2 & x3 loadings tied → one fewer effective free param.
   auto pt_c  = must_lavaanify("f =~ x1 + a*x2 + a*x3");
   auto rep_c = build_matrix_rep(pt_c).value();
-  auto est_c = magmaan::estimate::fit(pt_c, rep_c, samp).value();
+  auto est_c = magmaan::test::fit(pt_c, rep_c, samp).value();
   auto inf_or = expected_inference(pt_c, rep_c, samp, est_c);
   REQUIRE_MESSAGE(inf_or.has_value(),
       "constrained expected_inference failed: " <<
@@ -225,7 +225,7 @@ TEST_CASE("fit: a linear equality constraint `b2 + b3 == 1.5` is enforced") {
   CHECK_FALSE(pt.has_unenforced_constraints);
   auto rep  = build_matrix_rep(pt).value();
 
-  auto est_or = magmaan::estimate::fit(pt, rep, samp);
+  auto est_or = magmaan::test::fit(pt, rep, samp);
   REQUIRE_MESSAGE(est_or.has_value(),
       "constrained fit failed: " << (est_or.has_value() ? "" : est_or.error().detail));
   const auto& est = *est_or;
@@ -241,7 +241,7 @@ TEST_CASE("fit: a linear equality constraint `b2 + b3 == 1.5` is enforced") {
   // df increases by 1 vs the unconstrained model.
   auto pt_u  = must_lavaanify("f =~ x1 + b2*x2 + b3*x3");
   auto rep_u = build_matrix_rep(pt_u).value();
-  auto est_u = magmaan::estimate::fit(pt_u, rep_u, samp).value();
+  auto est_u = magmaan::test::fit(pt_u, rep_u, samp).value();
   auto inf_u = expected_inference(pt_u, rep_u, samp, est_u).value();
   auto inf_c = expected_inference(pt, rep, samp, est).value();
   CHECK(inf_c.df == inf_u.df + 1);
@@ -254,7 +254,7 @@ TEST_CASE("fit: `d == 0` pins a loading to zero") {
   auto pt   = must_lavaanify("f =~ x1 + d*x2 + x3\nd == 0");
   CHECK_FALSE(pt.has_unenforced_constraints);
   auto rep  = build_matrix_rep(pt).value();
-  auto est  = magmaan::estimate::fit(pt, rep, samp).value();
+  auto est  = magmaan::test::fit(pt, rep, samp).value();
   auto ev   = ModelEvaluator::build(pt, rep).value();
   const Eigen::Index k_x2 = lambda_free_idx(ev, 1);
   REQUIRE(k_x2 >= 0);
@@ -317,7 +317,7 @@ TEST_CASE("fit: effect_coding — loadings sum to #indicators; χ²/df match the
   LavaanifyOptions opts; opts.effect_coding = true;
   auto pt  = must_lavaanify("f =~ x1 + x2 + x3", opts);
   auto rep = build_matrix_rep(pt).value();
-  auto est_or = magmaan::estimate::fit(pt, rep, samp);
+  auto est_or = magmaan::test::fit(pt, rep, samp);
   REQUIRE_MESSAGE(est_or.has_value(),
       "effect-coding fit failed: " << (est_or.has_value() ? "" : est_or.error().detail));
   const auto& est = *est_or;
@@ -332,7 +332,7 @@ TEST_CASE("fit: effect_coding — loadings sum to #indicators; χ²/df match the
   // Marker fit of the same model — bijective reparam ⇒ identical χ² and df.
   auto pt_m  = must_lavaanify("f =~ x1 + x2 + x3");
   auto rep_m = build_matrix_rep(pt_m).value();
-  auto est_m = magmaan::estimate::fit(pt_m, rep_m, samp).value();
+  auto est_m = magmaan::test::fit(pt_m, rep_m, samp).value();
   auto inf_m = expected_inference(pt_m, rep_m, samp, est_m).value();
   CHECK(inf_ec.df == inf_m.df);
   CHECK(inf_ec.chi2 == doctest::Approx(inf_m.chi2).epsilon(1e-6));
@@ -359,10 +359,11 @@ TEST_CASE("constraints: multi-group shared-label LS fits via K-reparameterizatio
   samp.S = {cov1f(2.0), cov1f(2.6)};
   samp.n_obs = {180, 150};
 
-  const magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-      .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9});
-  auto est_or = magmaan::estimate::fit_bounded(
-      pt, rep, samp, magmaan::estimate::Bounds{}, magmaan::gls::ULS{}, opt);
+  const magmaan::optim::LbfgsOptions opt{
+      .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9};
+  auto est_or = magmaan::test::fit_gmm(
+      pt, rep, samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::Lbfgs, opt);
   REQUIRE_MESSAGE(est_or.has_value(),
       "constrained multi-group LS fit failed: "
           << (est_or.has_value() ? "" : est_or.error().detail));
@@ -393,10 +394,11 @@ TEST_CASE("constraints: general-linear equality LS fits via K-reparameterization
   samp.S = {S};
   samp.n_obs = {250};
 
-  const magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-      .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9});
-  auto est_or = magmaan::estimate::fit_bounded(
-      pt, rep, samp, magmaan::estimate::Bounds{}, magmaan::gls::ULS{}, opt);
+  const magmaan::optim::LbfgsOptions opt{
+      .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9};
+  auto est_or = magmaan::test::fit_gmm(
+      pt, rep, samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::Lbfgs, opt);
   REQUIRE_MESSAGE(est_or.has_value(),
       "general-linear LS fit failed: "
           << (est_or.has_value() ? "" : est_or.error().detail));
