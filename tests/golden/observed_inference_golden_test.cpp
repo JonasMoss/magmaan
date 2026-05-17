@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -74,7 +75,7 @@ bool run_one(const magmaan::test::CorpusEntry&   e,
     }
   }
 
-  auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
+  auto est_or = magmaan::test::fit(*pt, *mr, samp);
   if (!est_or.has_value()) {
     failures.push_back(e.id + " [" + std::string(method_name) +
                        "]: fit failed — " + est_or.error().detail);

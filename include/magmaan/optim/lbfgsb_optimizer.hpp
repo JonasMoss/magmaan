@@ -6,7 +6,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
-#include "magmaan/optim/concepts.hpp"           // LsResidualFn / LsJacobianFn
+#include "magmaan/optim/problem.hpp"            // LsResidualFn / LsJacobianFn
 #include "magmaan/optim/lbfgs_optimizer.hpp"    // LbfgsOutput shared; reuse LbfgsOptions
 
 namespace magmaan::optim {
@@ -56,6 +56,8 @@ class LbfgsBOptimizer {
   static constexpr std::string_view name = "lbfgsb";
 
   LbfgsBOptimizer(LbfgsBOptions opts = {}) noexcept : opts_(opts) {}
+
+  LbfgsBOptions options() const noexcept { return opts_; }
 
   using Objective = std::function<double(const Eigen::VectorXd& /*x*/,
                                          Eigen::VectorXd&       /*grad_out*/)>;

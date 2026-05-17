@@ -17,18 +17,15 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
-#include "magmaan/optim/concepts.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/nt/infer.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/estimate/weighted_inference.hpp"
 #include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/optim/optimizers.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/op.hpp"
-
-#ifdef MAGMAAN_WITH_CERES
-#include "magmaan/optim/ceres_optimizer.hpp"
-#endif
 
 namespace magmaan::estimate {
 
@@ -41,6 +38,7 @@ using nt::infer::chi2_pvalue;
 using nt::robust::MeanVarAdjustedResult;
 using nt::robust::SatorraBentlerResult;
 using nt::robust::ScaledShiftedResult;
+using optim::LbfgsOptions;
 
 namespace {
 
@@ -593,14 +591,62 @@ Eigen::MatrixXd corr_jacobian(const Eigen::MatrixXd& Sigma,
   return J;
 }
 
+// === Theta-parameterization helpers =========================================
+// Under theta the latent-response residual variances are fixed to 1, so the
+// implied total variances Σ*ᵢᵢ float; the implied moments are standardized
+// before comparison with the (always unit-variance) polychoric sample moments.
+
+// Σᵢⱼ / √(Σᵢᵢ Σⱼⱼ) over the strict lower triangle.
+Eigen::VectorXd std_corr_lower(const Eigen::MatrixXd& Sigma) {
+  const Eigen::Index p = Sigma.rows();
+  Eigen::VectorXd sd(p);
+  for (Eigen::Index i = 0; i < p; ++i) sd(i) = std::sqrt(Sigma(i, i));
+  Eigen::VectorXd out(p * (p - 1) / 2);
+  Eigen::Index k = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      out(k++) = Sigma(i, j) / (sd(i) * sd(j));
+    }
+  }
+  return out;
+}
+
+// ∂[Σᵢⱼ/√(ΣᵢᵢΣⱼⱼ)]/∂θ over the strict lower triangle, from ∂vech(Σ)/∂θ.
+Eigen::MatrixXd std_corr_jacobian(const Eigen::MatrixXd& Sigma,
+                                  const Eigen::MatrixXd& J_sigma,
+                                  Eigen::Index sigma_off) {
+  const Eigen::Index p = Sigma.rows();
+  Eigen::MatrixXd J(p * (p - 1) / 2, J_sigma.cols());
+  Eigen::Index row = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      const double sij = Sigma(i, j);
+      const double sii = Sigma(i, i);
+      const double sjj = Sigma(j, j);
+      const double inv_i = 1.0 / std::sqrt(sii);
+      const double inv_j = 1.0 / std::sqrt(sjj);
+      J.row(row) =
+          (inv_i * inv_j) * J_sigma.row(sigma_off + vech_index(p, i, j)) -
+          (0.5 * sij * inv_i / sii * inv_j) *
+              J_sigma.row(sigma_off + vech_index(p, i, i)) -
+          (0.5 * sij * inv_i * inv_j / sjj) *
+              J_sigma.row(sigma_off + vech_index(p, j, j));
+      ++row;
+    }
+  }
+  return J;
+}
+
 fit_expected<Eigen::VectorXd>
 ordinal_residuals(const data::OrdinalStats& stats,
                   const ThresholdLayout& layout,
                   const model::ImpliedMoments& moments,
                   const std::vector<Eigen::MatrixXd>& factors,
-                  const Eigen::VectorXd& theta) {
+                  const Eigen::VectorXd& theta,
+                  OrdinalParameterization param) {
   auto N = total_n_obs(stats);
   if (!N.has_value()) return std::unexpected(N.error());
+  const bool theta_param = param == OrdinalParameterization::Theta;
   Eigen::Index n_total = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
@@ -612,9 +658,22 @@ ordinal_residuals(const data::OrdinalStats& stats,
     const Eigen::Index p = stats.R[b].rows();
     const Eigen::Index nth = stats.thresholds[b].size();
     const Eigen::Index ncorr = p * (p - 1) / 2;
+    const Eigen::MatrixXd& Sig = moments.sigma[b];
     Eigen::VectorXd d(nth + ncorr);
-    d.head(nth) = implied_thresholds(layout, theta, b) - stats.thresholds[b];
-    d.tail(ncorr) = corr_lower(moments.sigma[b]) - corr_lower(stats.R[b]);
+    Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+    if (theta_param) {
+      // Standardize: implied thresholds τ_θ/√Σ*ᵢᵢ, implied correlations.
+      for (Eigen::Index k = 0; k < nth; ++k) {
+        const Eigen::Index ov =
+            stats.threshold_ov[b][static_cast<std::size_t>(k)];
+        it(k) /= std::sqrt(Sig(ov, ov));
+      }
+      d.head(nth) = it - stats.thresholds[b];
+      d.tail(ncorr) = std_corr_lower(Sig) - corr_lower(stats.R[b]);
+    } else {
+      d.head(nth) = it - stats.thresholds[b];
+      d.tail(ncorr) = corr_lower(Sig) - corr_lower(stats.R[b]);
+    }
     const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) /
                                 static_cast<double>(*N));
     out.segment(off, d.size()) = sw * (factors[b].transpose() * d);
@@ -632,9 +691,12 @@ ordinal_jacobian(const data::OrdinalStats& stats,
                  const ThresholdLayout& layout,
                  const model::ImpliedMoments& moments,
                  const Eigen::MatrixXd& J_sigma,
-                 const std::vector<Eigen::MatrixXd>& factors) {
+                 const std::vector<Eigen::MatrixXd>& factors,
+                 const Eigen::VectorXd& theta,
+                 OrdinalParameterization param) {
   auto N = total_n_obs(stats);
   if (!N.has_value()) return std::unexpected(N.error());
+  const bool theta_param = param == OrdinalParameterization::Theta;
   Eigen::Index n_total = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
@@ -647,13 +709,31 @@ ordinal_jacobian(const data::OrdinalStats& stats,
     const Eigen::Index p = stats.R[b].rows();
     const Eigen::Index nth = stats.thresholds[b].size();
     const Eigen::Index ncorr = p * (p - 1) / 2;
+    const Eigen::MatrixXd& Sig = moments.sigma[b];
     Eigen::MatrixXd Jb(nth + ncorr, J_sigma.cols());
     Jb.setZero();
-    for (Eigen::Index k = 0; k < nth; ++k) {
-      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
-      if (fr > 0) Jb(k, fr - 1) = 1.0;
+    if (theta_param) {
+      // Threshold rows: ∂(τ_θ/√Σ*ᵢᵢ)/∂θ — a selector term on the free
+      // threshold parameter plus a structural term through Σ*ᵢᵢ.
+      const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+      for (Eigen::Index k = 0; k < nth; ++k) {
+        const Eigen::Index ov =
+            stats.threshold_ov[b][static_cast<std::size_t>(k)];
+        const double sii = Sig(ov, ov);
+        const double inv_sd = 1.0 / std::sqrt(sii);
+        const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+        if (fr > 0) Jb(k, fr - 1) += inv_sd;
+        Jb.row(k) += (-0.5 * it(k) * inv_sd / sii) *
+                     J_sigma.row(sigma_off + vech_index(p, ov, ov));
+      }
+      Jb.bottomRows(ncorr) = std_corr_jacobian(Sig, J_sigma, sigma_off);
+    } else {
+      for (Eigen::Index k = 0; k < nth; ++k) {
+        const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+        if (fr > 0) Jb(k, fr - 1) = 1.0;
+      }
+      Jb.bottomRows(ncorr) = corr_jacobian(Sig, J_sigma, sigma_off);
     }
-    Jb.bottomRows(ncorr) = corr_jacobian(moments.sigma[b], J_sigma, sigma_off);
     const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) /
                                 static_cast<double>(*N));
     out.block(out_off, 0, Jb.rows(), Jb.cols()) =
@@ -924,11 +1004,12 @@ prepare_ordinal_partable(spec::LatentStructure& pt,
                          const data::OrdinalStats& stats,
                          OrdinalParameterization parameterization,
                          spec::Starts* starts) {
-  if (parameterization == OrdinalParameterization::Delta) {
-    return prepare_ordinal_delta_partable(pt, stats, starts);
-  }
-  return std::unexpected(make_err(FitError::Kind::NumericIssue,
-      "ordinal theta parameterization is not supported yet; use delta"));
+  // The prepared partable is identical for Delta and Theta: magmaan fixes the
+  // ordinal-indicator residual variances and intercepts the same way for both.
+  // The Delta/Theta distinction is realized in the fit objective (whether the
+  // implied moments are standardized), not in the partable layout.
+  (void)parameterization;
+  return prepare_ordinal_delta_partable(pt, stats, starts);
 }
 
 fit_expected<void>
@@ -974,6 +1055,52 @@ prepare_mixed_ordinal_partable(spec::LatentStructure& pt,
   }
   return std::unexpected(make_err(FitError::Kind::NumericIssue,
       "mixed ordinal theta parameterization is not supported yet; use delta"));
+}
+
+// Start-value producer for the ordinal delta path. Prepares the partable
+// (delta parameterization fixes the ordinal indicator variances/intercepts —
+// this is what changes n_free), seeds the structural parameters via the simple
+// scheme, then overwrites the free thresholds from the sample thresholds. The
+// returned vector is sized for the *prepared* partable, which is exactly what
+// `fit_ordinal_bounded` rebuilds internally.
+fit_expected<Eigen::VectorXd>
+ordinal_start_values(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const data::OrdinalStats& stats,
+                     spec::Starts starts) {
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, &starts);
+      !p.has_value()) {
+    return std::unexpected(p.error());
+  }
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(layout_or.error());
+
+  data::SampleStats samp = sample_stats_for_starts(stats);
+  auto x0_or = simple_start_values(pt, rep, samp, starts);
+  if (!x0_or.has_value()) return std::unexpected(x0_or.error());
+  Eigen::VectorXd x0 = std::move(*x0_or);
+  seed_threshold_starts(x0, *layout_or, stats);
+  return x0;
+}
+
+fit_expected<Eigen::VectorXd>
+mixed_ordinal_start_values(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::MixedOrdinalStats& stats,
+                           spec::Starts starts) {
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, &starts);
+      !p.has_value()) {
+    return std::unexpected(p.error());
+  }
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(layout_or.error());
+
+  data::SampleStats samp = sample_stats_for_starts(stats);
+  auto x0_or = simple_start_values(pt, rep, samp, starts);
+  if (!x0_or.has_value()) return std::unexpected(x0_or.error());
+  Eigen::VectorXd x0 = std::move(*x0_or);
+  seed_threshold_starts(x0, *layout_or, stats);
+  return x0;
 }
 
 post_expected<OrdinalRobustResult>
@@ -1371,7 +1498,8 @@ modification_indices_ordinal(spec::LatentStructure pt,
                         const model::ImpliedMoments& moments,
                         const std::vector<Eigen::MatrixXd>& factors,
                         const Eigen::VectorXd& theta) {
-    return ordinal_residuals(s, layout, moments, factors, theta);
+    return ordinal_residuals(s, layout, moments, factors, theta,
+                             OrdinalParameterization::Delta);
   };
   auto jacobian_fn = [](const data::OrdinalStats& s,
                         const ThresholdLayout& layout,
@@ -1379,7 +1507,8 @@ modification_indices_ordinal(spec::LatentStructure pt,
                         const Eigen::MatrixXd& J_sigma,
                         const Eigen::MatrixXd&,
                         const std::vector<Eigen::MatrixXd>& factors) {
-    return ordinal_jacobian(s, layout, moments, J_sigma, factors);
+    return ordinal_jacobian(s, layout, moments, J_sigma, factors,
+                            Eigen::VectorXd{}, OrdinalParameterization::Delta);
   };
   auto prepare_fn = [](spec::LatentStructure& p, const data::OrdinalStats& s) {
     return prepare_ordinal_delta_partable(p, s, nullptr);
@@ -1400,7 +1529,8 @@ score_tests_ordinal(spec::LatentStructure pt,
                         const model::ImpliedMoments& moments,
                         const std::vector<Eigen::MatrixXd>& factors,
                         const Eigen::VectorXd& theta) {
-    return ordinal_residuals(s, layout, moments, factors, theta);
+    return ordinal_residuals(s, layout, moments, factors, theta,
+                             OrdinalParameterization::Delta);
   };
   auto jacobian_fn = [](const data::OrdinalStats& s,
                         const ThresholdLayout& layout,
@@ -1408,7 +1538,8 @@ score_tests_ordinal(spec::LatentStructure pt,
                         const Eigen::MatrixXd& J_sigma,
                         const Eigen::MatrixXd&,
                         const std::vector<Eigen::MatrixXd>& factors) {
-    return ordinal_jacobian(s, layout, moments, J_sigma, factors);
+    return ordinal_jacobian(s, layout, moments, J_sigma, factors,
+                            Eigen::VectorXd{}, OrdinalParameterization::Delta);
   };
   auto prepare_fn = [](spec::LatentStructure& p, const data::OrdinalStats& s) {
     return prepare_ordinal_delta_partable(p, s, nullptr);
@@ -1474,19 +1605,53 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
                                   residual_fn, jacobian_fn, prepare_fn);
 }
 
-template <optim::LsBoundedOptimizer O>
+namespace {
+
+// Dispatch a bounded least-squares ordinal problem (residual + Jacobian
+// closures, equality penalty rows already folded in) to the chosen backend.
+fit_expected<optim::OptimResult>
+run_ordinal_ls(optim::ResidualFn r, optim::JacobianFn J, Eigen::Index n_resid,
+               const Eigen::VectorXd& x0, const Bounds& bounds,
+               Backend backend, LbfgsOptions opts) {
+  optim::GmmProblem prob;
+  prob.r       = std::move(r);
+  prob.J       = std::move(J);
+  prob.n_resid = n_resid;
+  prob.n_param = x0.size();
+  prob.expand  = [](const Eigen::VectorXd& x) { return x; };
+  if (backend == Backend::Ceres) {
+#ifdef MAGMAAN_WITH_CERES
+    optim::CeresOptions copts;
+    copts.max_iter = opts.max_iter;
+    copts.ftol     = opts.ftol;
+    copts.gtol     = opts.gtol;
+    return optim::ceres_lm(prob, x0, bounds, copts);
+#else
+    (void)opts;
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: Ceres backend requested but MAGMAAN_WITH_CERES "
+        "is off"));
+#endif
+  }
+  return optim::lbfgs(optim::scalarize(prob), x0, bounds, opts);
+}
+
+}  // namespace
+
 fit_expected<Estimates>
 fit_ordinal_bounded(spec::LatentStructure pt,
                     const model::MatrixRep& rep,
                     const data::OrdinalStats& stats,
                     Bounds bounds,
                     OrdinalWeightKind weights,
-                    O optimizer,
-                    spec::Starts starts) {
+                    const Eigen::VectorXd& x0,
+                    Backend backend,
+                    LbfgsOptions opts,
+                    OrdinalParameterization parameterization) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());
   }
-  if (auto p = prepare_ordinal_delta_partable(pt, stats, &starts); !p.has_value()) {
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
     return std::unexpected(p.error());
   }
   auto layout_or = make_threshold_layout(pt, rep, stats);
@@ -1500,11 +1665,12 @@ fit_ordinal_bounded(spec::LatentStructure pt,
   }
   auto ev = std::move(*ev_or);
 
-  data::SampleStats samp = sample_stats_for_starts(stats);
-  auto x0_or = simple_start_values(pt, rep, samp, starts);
-  if (!x0_or.has_value()) return std::unexpected(x0_or.error());
-  Eigen::VectorXd x0 = *x0_or;
-  seed_threshold_starts(x0, layout, stats);
+  if (x0.size() != pt.n_free()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "fit_ordinal_bounded: x0 size (" + std::to_string(x0.size()) +
+            ") != prepared partable n_free (" +
+            std::to_string(pt.n_free()) + ")"));
+  }
 
   if (bounds.empty()) {
     auto b_or = bounds_from_partable(pt);
@@ -1536,7 +1702,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
     return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
         "fit_ordinal_bounded: start evaluation failed: " + eval0.error().detail));
   }
-  auto r0 = ordinal_residuals(stats, layout, eval0->moments, factors, x0);
+  auto r0 = ordinal_residuals(stats, layout, eval0->moments, factors, x0,
+                              parameterization);
   if (!r0.has_value()) return std::unexpected(r0.error());
   const Eigen::Index n_data = r0->size();
   const Eigen::Index n_eq = con.active() ? con.A_eq.rows() : 0;
@@ -1551,7 +1718,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
       return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
           "fit_ordinal_bounded: evaluate failed: " + eval.error().detail));
     }
-    auto r = ordinal_residuals(stats, layout, eval->moments, factors, x);
+    auto r = ordinal_residuals(stats, layout, eval->moments, factors, x,
+                               parameterization);
     if (!r.has_value()) return std::unexpected(r.error());
     Eigen::VectorXd out(n_total);
     out.head(n_data) = *r;
@@ -1565,7 +1733,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
       return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
           "fit_ordinal_bounded: evaluate failed: " + eval.error().detail));
     }
-    auto J = ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma, factors);
+    auto J = ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
+                              factors, x, parameterization);
     if (!J.has_value()) return std::unexpected(J.error());
     Eigen::MatrixXd out(n_total, J->cols());
     out.topRows(n_data) = *J;
@@ -1573,15 +1742,13 @@ fit_ordinal_bounded(spec::LatentStructure pt,
     return out;
   };
 
-  auto out_or = optimizer.minimize_ls(optim::LsResidualFn(resid_fn),
-                                      optim::LsJacobianFn(jac_fn),
-                                      n_total, x0,
-                                      bounds.lower, bounds.upper);
+  auto out_or = run_ordinal_ls(resid_fn, jac_fn, n_total, x0, bounds,
+                               backend, opts);
   if (!out_or.has_value()) return std::unexpected(out_or.error());
 
   double fmin_data = out_or->fmin;
   if (n_eq > 0) {
-    const Eigen::VectorXd eq_resid = con.A_eq * out_or->theta_hat - con.b_eq;
+    const Eigen::VectorXd eq_resid = con.A_eq * out_or->x - con.b_eq;
     const double eq_max = eq_resid.cwiseAbs().maxCoeff();
     if (eq_max > 1e-6) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -1590,23 +1757,23 @@ fit_ordinal_bounded(spec::LatentStructure pt,
     fmin_data = out_or->fmin - 0.5 * mu_eq * eq_resid.squaredNorm();
     if (fmin_data < 0.0) fmin_data = 0.0;
   }
-  return Estimates{std::move(out_or->theta_hat), 2.0 * fmin_data,
+  return Estimates{std::move(out_or->x), 2.0 * fmin_data,
                    out_or->iterations};
 }
 
-template <optim::LsBoundedOptimizer O>
 fit_expected<Estimates>
 fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const data::MixedOrdinalStats& stats,
                           Bounds bounds,
                           OrdinalWeightKind weights,
-                          O optimizer,
-                          spec::Starts starts) {
+                          const Eigen::VectorXd& x0,
+                          Backend backend,
+                          LbfgsOptions opts) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());
   }
-  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, &starts); !p.has_value()) {
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
     return std::unexpected(p.error());
   }
   auto layout_or = make_threshold_layout(pt, rep, stats);
@@ -1620,11 +1787,12 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
   }
   auto ev = std::move(*ev_or);
 
-  data::SampleStats samp = sample_stats_for_starts(stats);
-  auto x0_or = simple_start_values(pt, rep, samp, starts);
-  if (!x0_or.has_value()) return std::unexpected(x0_or.error());
-  Eigen::VectorXd x0 = *x0_or;
-  seed_threshold_starts(x0, layout, stats);
+  if (x0.size() != pt.n_free()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "fit_mixed_ordinal_bounded: x0 size (" + std::to_string(x0.size()) +
+            ") != prepared partable n_free (" +
+            std::to_string(pt.n_free()) + ")"));
+  }
 
   if (bounds.empty()) {
     auto b_or = bounds_from_partable(pt);
@@ -1694,15 +1862,13 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
     return out;
   };
 
-  auto out_or = optimizer.minimize_ls(optim::LsResidualFn(resid_fn),
-                                      optim::LsJacobianFn(jac_fn),
-                                      n_total, x0,
-                                      bounds.lower, bounds.upper);
+  auto out_or = run_ordinal_ls(resid_fn, jac_fn, n_total, x0, bounds,
+                               backend, opts);
   if (!out_or.has_value()) return std::unexpected(out_or.error());
 
   double fmin_data = out_or->fmin;
   if (n_eq > 0) {
-    const Eigen::VectorXd eq_resid = con.A_eq * out_or->theta_hat - con.b_eq;
+    const Eigen::VectorXd eq_resid = con.A_eq * out_or->x - con.b_eq;
     const double eq_max = eq_resid.cwiseAbs().maxCoeff();
     if (eq_max > 1e-6) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -1711,76 +1877,8 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
     fmin_data = out_or->fmin - 0.5 * mu_eq * eq_resid.squaredNorm();
     if (fmin_data < 0.0) fmin_data = 0.0;
   }
-  return Estimates{std::move(out_or->theta_hat), 2.0 * fmin_data,
+  return Estimates{std::move(out_or->x), 2.0 * fmin_data,
                    out_or->iterations};
 }
-
-template fit_expected<Estimates>
-fit_ordinal_bounded<optim::LbfgsBOptimizer>(
-    spec::LatentStructure pt,
-    const model::MatrixRep& rep,
-    const data::OrdinalStats& stats,
-    Bounds bounds,
-    OrdinalWeightKind weights,
-    optim::LbfgsBOptimizer optimizer,
-    spec::Starts starts);
-
-template fit_expected<Estimates>
-fit_mixed_ordinal_bounded<optim::LbfgsBOptimizer>(
-    spec::LatentStructure pt,
-    const model::MatrixRep& rep,
-    const data::MixedOrdinalStats& stats,
-    Bounds bounds,
-    OrdinalWeightKind weights,
-    optim::LbfgsBOptimizer optimizer,
-    spec::Starts starts);
-
-fit_expected<Estimates>
-fit_ordinal_bounded(spec::LatentStructure pt,
-                    const model::MatrixRep& rep,
-                    const data::OrdinalStats& stats,
-                    Bounds bounds,
-                    OrdinalWeightKind weights,
-                    optim::LbfgsBOptimizer optimizer,
-                    spec::Starts starts) {
-  return fit_ordinal_bounded<optim::LbfgsBOptimizer>(
-      std::move(pt), rep, stats, std::move(bounds), weights,
-      std::move(optimizer), std::move(starts));
-}
-
-fit_expected<Estimates>
-fit_mixed_ordinal_bounded(spec::LatentStructure pt,
-                          const model::MatrixRep& rep,
-                          const data::MixedOrdinalStats& stats,
-                          Bounds bounds,
-                          OrdinalWeightKind weights,
-                          optim::LbfgsBOptimizer optimizer,
-                          spec::Starts starts) {
-  return fit_mixed_ordinal_bounded<optim::LbfgsBOptimizer>(
-      std::move(pt), rep, stats, std::move(bounds), weights,
-      std::move(optimizer), std::move(starts));
-}
-
-#ifdef MAGMAAN_WITH_CERES
-template fit_expected<Estimates>
-fit_ordinal_bounded<optim::CeresBoundedOptimizer>(
-    spec::LatentStructure pt,
-    const model::MatrixRep& rep,
-    const data::OrdinalStats& stats,
-    Bounds bounds,
-    OrdinalWeightKind weights,
-    optim::CeresBoundedOptimizer optimizer,
-    spec::Starts starts);
-
-template fit_expected<Estimates>
-fit_mixed_ordinal_bounded<optim::CeresBoundedOptimizer>(
-    spec::LatentStructure pt,
-    const model::MatrixRep& rep,
-    const data::MixedOrdinalStats& stats,
-    Bounds bounds,
-    OrdinalWeightKind weights,
-    optim::CeresBoundedOptimizer optimizer,
-    spec::Starts starts);
-#endif
 
 }  // namespace magmaan::estimate

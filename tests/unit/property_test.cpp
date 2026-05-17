@@ -22,9 +22,6 @@
 
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/constraints.hpp"
-#include "magmaan/gls/gls.hpp"
-#include "magmaan/gls/uls.hpp"
-#include "magmaan/gls/wls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -33,9 +30,6 @@
 using magmaan::data::SampleStats;
 using magmaan::estimate::build_eq_constraints;
 using magmaan::estimate::EqConstraints;
-using magmaan::gls::GLS;
-using magmaan::gls::ULS;
-using magmaan::gls::WLS;
 using magmaan::model::build_matrix_rep;
 using magmaan::model::ImpliedMoments;
 using magmaan::model::ModelEvaluator;
@@ -79,7 +73,7 @@ ModelEvaluator must_build(std::string_view src, LavaanifyOptions opts = {}) {
   return std::move(*ev);
 }
 
-Eigen::MatrixXd random_pd(std::mt19937& rng, Eigen::Index p) {
+[[maybe_unused]] Eigen::MatrixXd random_pd(std::mt19937& rng, Eigen::Index p) {
   std::uniform_real_distribution<double> d(-0.5, 0.5);
   Eigen::MatrixXd A(p, p);
   for (Eigen::Index i = 0; i < p; ++i)
@@ -139,49 +133,6 @@ Eigen::MatrixXd fd_jacobian(Fn&& f, const Eigen::VectorXd& theta,
 }  // namespace
 
 // === moment-vector ordering ================================================
-
-TEST_CASE("Property: LS residual layout is means-first then column-major vech") {
-  // The LS estimators document a fixed stacked-moment order: per block,
-  // mean rows first, then vech(cov) as a column-major lower triangle. Build
-  // Σ−S and μ−m̄ with all-distinct entries so each residual slot is
-  // identifiable, then pin every position. Single block ⇒ n_b/N = 1, so the
-  // residual is exactly [μ−m̄ ; vech(Σ−S)] with no scaling to unwind.
-  Eigen::Matrix3d S;
-  S << 2.0, 0.3, 0.1,
-       0.3, 1.5, 0.2,
-       0.1, 0.2, 1.8;
-  Eigen::Matrix3d Delta;          // symmetric; lower triangle all distinct
-  Delta << 0.11, 0.21, 0.31,
-           0.21, 0.22, 0.32,
-           0.31, 0.32, 0.33;
-  Eigen::Vector3d mean(1.0, 2.0, 3.0);
-  Eigen::Vector3d e(0.5, -0.7, 0.9);
-
-  SampleStats samp;
-  samp.S = {S};
-  samp.mean = {mean};
-  samp.n_obs = {100};
-
-  ImpliedMoments im;
-  im.sigma = {S + Delta};
-  im.mu = {mean + e};
-
-  auto r = ULS{}.residuals(samp, im);
-  REQUIRE(r.has_value());
-  REQUIRE(r->size() == 3 + 6);   // 3 mean rows + vech(3×3)=6 cov rows
-
-  // mean rows: μ − m̄, in variable order.
-  CHECK((*r)(0) == doctest::Approx(0.5));
-  CHECK((*r)(1) == doctest::Approx(-0.7));
-  CHECK((*r)(2) == doctest::Approx(0.9));
-  // vech rows: column-major lower triangle of Σ − S.
-  CHECK((*r)(3) == doctest::Approx(0.11));   // (0,0)
-  CHECK((*r)(4) == doctest::Approx(0.21));   // (1,0)
-  CHECK((*r)(5) == doctest::Approx(0.31));   // (2,0)
-  CHECK((*r)(6) == doctest::Approx(0.22));   // (1,1)
-  CHECK((*r)(7) == doctest::Approx(0.32));   // (2,1)
-  CHECK((*r)(8) == doctest::Approx(0.33));   // (2,2)
-}
 
 // === analytic Jacobians on structural (non-CFA) models =====================
 
@@ -273,86 +224,7 @@ TEST_CASE("Property: unconstrained multi-group Jacobian is block-diagonal") {
   }
 }
 
-TEST_CASE("Property: multi-group ULS residuals are per-block √(n_b/N) slices") {
-  // The stacked residual is [√(n_b/N)·vech(Σ_b−S_b)] per block. Recover each
-  // block's unweighted residual by dividing its slice by √(n_b/N) and check
-  // it against the hand-computed vech of that block's discrepancy.
-  LavaanifyOptions opts;
-  opts.n_groups = 2;
-  auto ev = must_build("f =~ x1 + x2 + x3", opts);
-
-  std::mt19937 rng(404);
-  SampleStats samp;
-  samp.S = {random_pd(rng, 3), random_pd(rng, 3)};
-  samp.n_obs = {150, 90};
-  const double N = 240.0;
-
-  const Eigen::VectorXd theta = random_theta(ev, rng);
-  const ImpliedMoments im = ev.sigma(theta).value();
-  auto r = ULS{}.residuals(samp, im);
-  REQUIRE(r.has_value());
-  REQUIRE(r->size() == 12);   // 2 blocks × vech(3×3)
-
-  Eigen::Index off = 0;
-  for (std::size_t b = 0; b < 2; ++b) {
-    const double sw = std::sqrt(static_cast<double>(samp.n_obs[b]) / N);
-    const Eigen::Matrix3d D = im.sigma[b] - samp.S[b];
-    for (Eigen::Index c = 0; c < 3; ++c)
-      for (Eigen::Index rr = c; rr < 3; ++rr)
-        CHECK((*r)(off++) == doctest::Approx(sw * D(rr, c)).epsilon(1e-12));
-  }
-}
-
 // === multi-group (n_b/N) weighting =========================================
-
-TEST_CASE("Property: GLS and WLS multi-group F is the (n_b/N)-weighted block sum") {
-  // The ULS variant of this is already pinned (uls_test.cpp). GLS induces a
-  // per-block weight from S_b⁻¹ and WLS carries an explicit per-block weight,
-  // so both need their own check that F_total = Σ_b (n_b/N)·F_b.
-  std::mt19937 rng(909);
-  Eigen::MatrixXd S0 = random_pd(rng, 3), S1 = random_pd(rng, 3);
-  Eigen::MatrixXd Sig0 = random_pd(rng, 3), Sig1 = random_pd(rng, 3);
-
-  SampleStats mg;
-  mg.S = {S0, S1};
-  mg.n_obs = {130, 70};
-  const double N = 200.0;
-  ImpliedMoments im_mg;
-  im_mg.sigma = {Sig0, Sig1};
-
-  // Per-block: single-block SampleStats ⇒ n_b/N = 1 internally, so each
-  // single-block value() returns the unweighted F_b.
-  auto single = [](const Eigen::MatrixXd& S, std::int64_t n,
-                   const Eigen::MatrixXd& Sig) {
-    SampleStats s;
-    s.S = {S};
-    s.n_obs = {n};
-    ImpliedMoments im;
-    im.sigma = {Sig};
-    return std::pair{s, im};
-  };
-  auto [s0, i0] = single(S0, mg.n_obs[0], Sig0);
-  auto [s1, i1] = single(S1, mg.n_obs[1], Sig1);
-
-  SUBCASE("GLS") {
-    GLS gls;
-    const double f_mg = gls.value(mg, im_mg).value();
-    const double f0 = gls.value(s0, i0).value();
-    const double f1 = gls.value(s1, i1).value();
-    const double expected =
-        (130.0 / N) * f0 + (70.0 / N) * f1;
-    CHECK(f_mg == doctest::Approx(expected).epsilon(1e-12));
-  }
-  SUBCASE("WLS") {
-    Eigen::MatrixXd W0 = random_pd(rng, 6), W1 = random_pd(rng, 6);
-    const double f_mg = WLS({W0, W1}).value(mg, im_mg).value();
-    const double f0 = WLS({W0}).value(s0, i0).value();
-    const double f1 = WLS({W1}).value(s1, i1).value();
-    const double expected =
-        (130.0 / N) * f0 + (70.0 / N) * f1;
-    CHECK(f_mg == doctest::Approx(expected).epsilon(1e-12));
-  }
-}
 
 // === equality-constraint affine reparameterization =========================
 

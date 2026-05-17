@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <random>
@@ -11,10 +12,8 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/weighted_inference.hpp"
-#include "magmaan/gls/gls.hpp"
-#include "magmaan/gls/uls.hpp"
-#include "magmaan/gls/wls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/nt/infer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -90,6 +89,18 @@ double total_n(const magmaan::data::SampleStats& samp) {
   return out;
 }
 
+// The GLS moment weight (normal-theory weight built from S).
+magmaan::gmm::Weight gls_weight(const magmaan::spec::LatentStructure& pt,
+                                const magmaan::model::MatrixRep& rep,
+                                const magmaan::data::SampleStats& samp,
+                                const Eigen::VectorXd& theta) {
+  auto ev = magmaan::model::ModelEvaluator::build(pt, rep);
+  REQUIRE(ev.has_value());
+  auto w = magmaan::gmm::normal_theory_weight(*ev, samp, theta);
+  REQUIRE(w.has_value());
+  return *w;
+}
+
 }  // namespace
 
 TEST_CASE("robust_weighted_moments computes sandwich and U-Gamma for one block") {
@@ -150,30 +161,32 @@ TEST_CASE("robust_weighted_moments respects per-block sample weighting and K") {
 
 TEST_CASE("evaluate_ls_objective matches fitted fmin for continuous LS") {
   auto fx = one_factor_fixture();
-  magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8});
+  const magmaan::optim::LbfgsOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
 
-  auto est_uls = magmaan::estimate::fit_bounded(
-      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{},
-      magmaan::gls::ULS{}, opt);
+  auto est_uls = magmaan::test::fit_gmm(
+      fx.pt, fx.rep, fx.samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::Lbfgs, opt);
   REQUIRE(est_uls.has_value());
   auto f_uls = magmaan::estimate::evaluate_ls_objective(
-      fx.pt, fx.rep, fx.samp, est_uls->theta, magmaan::gls::ULS{});
+      fx.pt, fx.rep, fx.samp, est_uls->theta, magmaan::gmm::Weight{});
   REQUIRE(f_uls.has_value());
   CHECK(*f_uls == doctest::Approx(est_uls->fmin).epsilon(1e-12));
 
-  auto est_gls = magmaan::estimate::fit_bounded(
+  auto est_gls = magmaan::test::fit_gls(
       fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{},
-      magmaan::gls::GLS{}, opt);
+      magmaan::estimate::Backend::Lbfgs, opt);
   REQUIRE(est_gls.has_value());
   auto f_gls = magmaan::estimate::evaluate_ls_objective(
-      fx.pt, fx.rep, fx.samp, est_gls->theta, magmaan::gls::GLS{});
+      fx.pt, fx.rep, fx.samp, est_gls->theta,
+      gls_weight(fx.pt, fx.rep, fx.samp, est_gls->theta));
   REQUIRE(f_gls.has_value());
   CHECK(*f_gls == doctest::Approx(est_gls->fmin).epsilon(1e-12));
 
-  magmaan::gls::WLS wls(wls_weights_from_sample(fx.samp));
-  auto est_wls = magmaan::estimate::fit_bounded(
-      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{}, wls, opt);
+  magmaan::gmm::Weight wls = wls_weights_from_sample(fx.samp);
+  auto est_wls = magmaan::test::fit_gmm(
+      fx.pt, fx.rep, fx.samp, wls, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::Lbfgs, opt);
   REQUIRE(est_wls.has_value());
   auto f_wls = magmaan::estimate::evaluate_ls_objective(
       fx.pt, fx.rep, fx.samp, est_wls->theta, wls);
@@ -197,33 +210,34 @@ TEST_CASE("evaluate_ls_objective reports data objective under LS constraints") {
   samp.S = {lam * lam.transpose() * 1.8 + th.asDiagonal().toDenseMatrix()};
   samp.n_obs = {250};
 
-  magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-      .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9});
-  auto est = magmaan::estimate::fit_bounded(
-      *pt, *rep, samp, magmaan::estimate::Bounds{}, magmaan::gls::ULS{}, opt);
+  const magmaan::optim::LbfgsOptions opt{
+      .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9};
+  auto est = magmaan::test::fit_gmm(
+      *pt, *rep, samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::Lbfgs, opt);
   REQUIRE(est.has_value());
 
   auto f = magmaan::estimate::evaluate_ls_objective(
-      *pt, *rep, samp, est->theta, magmaan::gls::ULS{});
+      *pt, *rep, samp, est->theta, magmaan::gmm::Weight{});
   REQUIRE(f.has_value());
   CHECK(*f == doctest::Approx(est->fmin).epsilon(1e-12));
 }
 
 TEST_CASE("robust_continuous_ls: raw and supplied Gamma agree for ULS") {
   auto fx = one_factor_fixture();
-  magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8});
-  auto est = magmaan::estimate::fit_bounded(
-      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{},
-      magmaan::gls::ULS{}, opt);
+  const magmaan::optim::LbfgsOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+  auto est = magmaan::test::fit_gmm(
+      fx.pt, fx.rep, fx.samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::Lbfgs, opt);
   REQUIRE(est.has_value());
 
   auto G = magmaan::data::empirical_gamma(fx.raw.X[0]);
   REQUIRE(G.has_value());
   auto by_gamma = magmaan::estimate::robust_continuous_ls(
-      fx.pt, fx.rep, fx.samp, *est, magmaan::gls::ULS{}, {*G});
+      fx.pt, fx.rep, fx.samp, *est, magmaan::gmm::Weight{}, {*G});
   auto by_raw = magmaan::estimate::robust_continuous_ls(
-      fx.pt, fx.rep, fx.samp, *est, magmaan::gls::ULS{}, fx.raw);
+      fx.pt, fx.rep, fx.samp, *est, magmaan::gmm::Weight{}, fx.raw);
   REQUIRE(by_gamma.has_value());
   REQUIRE(by_raw.has_value());
 
@@ -236,23 +250,25 @@ TEST_CASE("robust_continuous_ls: raw and supplied Gamma agree for ULS") {
 
 TEST_CASE("robust_continuous_ls: GLS and WLS preserve continuous LS statistic scale") {
   auto fx = one_factor_fixture();
-  magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8});
+  const magmaan::optim::LbfgsOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
 
-  auto est_gls = magmaan::estimate::fit_bounded(
+  auto est_gls = magmaan::test::fit_gls(
       fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{},
-      magmaan::gls::GLS{}, opt);
+      magmaan::estimate::Backend::Lbfgs, opt);
   REQUIRE(est_gls.has_value());
   auto rob_gls = magmaan::estimate::robust_continuous_ls(
-      fx.pt, fx.rep, fx.samp, *est_gls, magmaan::gls::GLS{}, fx.raw);
+      fx.pt, fx.rep, fx.samp, *est_gls,
+      gls_weight(fx.pt, fx.rep, fx.samp, est_gls->theta), fx.raw);
   REQUIRE(rob_gls.has_value());
   CHECK(rob_gls->chisq_standard ==
-        doctest::Approx(total_n(fx.samp) * est_gls->fmin));
+        doctest::Approx(2.0 * total_n(fx.samp) * est_gls->fmin));
   CHECK(rob_gls->se.allFinite());
 
-  magmaan::gls::WLS wls(wls_weights_from_sample(fx.samp));
-  auto est_wls = magmaan::estimate::fit_bounded(
-      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{}, wls, opt);
+  magmaan::gmm::Weight wls = wls_weights_from_sample(fx.samp);
+  auto est_wls = magmaan::test::fit_gmm(
+      fx.pt, fx.rep, fx.samp, wls, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::Lbfgs, opt);
   REQUIRE(est_wls.has_value());
   auto rob_wls = magmaan::estimate::robust_continuous_ls(
       fx.pt, fx.rep, fx.samp, *est_wls, wls, fx.raw);
@@ -264,14 +280,14 @@ TEST_CASE("robust_continuous_ls: GLS and WLS preserve continuous LS statistic sc
 
 TEST_CASE("robust_continuous_ls: validates Gamma block dimensions") {
   auto fx = one_factor_fixture();
-  magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8});
-  auto est = magmaan::estimate::fit_bounded(
-      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{},
-      magmaan::gls::ULS{}, opt);
+  const magmaan::optim::LbfgsOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+  auto est = magmaan::test::fit_gmm(
+      fx.pt, fx.rep, fx.samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::Lbfgs, opt);
   REQUIRE(est.has_value());
   std::vector<Eigen::MatrixXd> bad{
       Eigen::MatrixXd::Identity(2, 2)};
   CHECK_FALSE(magmaan::estimate::robust_continuous_ls(
-      fx.pt, fx.rep, fx.samp, *est, magmaan::gls::ULS{}, bad).has_value());
+      fx.pt, fx.rep, fx.samp, *est, magmaan::gmm::Weight{}, bad).has_value());
 }

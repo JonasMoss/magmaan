@@ -11,13 +11,9 @@
 
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/ordinal.hpp"
-#include "magmaan/estimate/snlls.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
-#include "magmaan/gls/gls.hpp"
-#include "magmaan/gls/uls.hpp"
-#include "magmaan/gls/wls.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -31,6 +27,36 @@
 using namespace magmaanr;
 
 namespace {
+
+// The estimate::fit* core takes an explicit start vector. These helpers
+// compute the starting values from a parsed model and abort to R on failure.
+// The R-facing layer owns the choice of starting algorithm; the default is
+// FABIN3 (Hägglund 1982), matching lavaan's default.
+Eigen::VectorXd start_values_or_stop(const Ctx& ctx,
+                                     const magmaan::spec::Starts& starts) {
+  auto x = magmaan::estimate::fabin_start_values(ctx.pt, ctx.rep, ctx.samp,
+                                                 starts);
+  if (!x.has_value()) stop_fit(x.error());
+  return std::move(*x);
+}
+
+Eigen::VectorXd ordinal_starts_or_stop(const Ctx& ctx,
+                                       const magmaan::data::OrdinalStats& stats,
+                                       const magmaan::spec::Starts& starts) {
+  auto x = magmaan::estimate::ordinal_start_values(ctx.pt, ctx.rep, stats,
+                                                   starts);
+  if (!x.has_value()) stop_fit(x.error());
+  return std::move(*x);
+}
+
+Eigen::VectorXd mixed_ordinal_starts_or_stop(
+    const Ctx& ctx, const magmaan::data::MixedOrdinalStats& stats,
+    const magmaan::spec::Starts& starts) {
+  auto x = magmaan::estimate::mixed_ordinal_start_values(ctx.pt, ctx.rep, stats,
+                                                         starts);
+  if (!x.has_value()) stop_fit(x.error());
+  return std::move(*x);
+}
 
 Rcpp::List names_list(const std::vector<std::vector<std::string>>& nn) {
   Rcpp::List out(static_cast<R_xlen_t>(nn.size()));
@@ -129,23 +155,13 @@ Rcpp::List fit_result(Ctx& ctx,
 }
 
 Rcpp::List snlls_fit_result(Ctx& ctx,
-                            const magmaan::estimate::SnllsEstimates& est,
+                            const magmaan::estimate::Estimates& est,
                             const magmaan::spec::Starts* starts,
                             const char* estimator,
                             const char* backend) {
   Rcpp::List out = fit_result(ctx, est, starts, estimator);
   out["backend"] = backend;
   out["snlls_compatible"] = true;
-  out["snlls_nonlinear_npar"] = est.snlls.n_nonlinear;
-  out["snlls_linear_npar"] = est.snlls.n_linear;
-  out["snlls_profile_evaluations"] = est.snlls.profile_evaluations;
-  out["snlls_profile_cache_hits"] = est.snlls.profile_cache_hits;
-  out["snlls_gradient_evaluations"] = est.snlls.gradient_evaluations;
-  out["snlls_jacobian_evaluations"] = est.snlls.jacobian_evaluations;
-  out["snlls_admissible"] = est.snlls.admissible;
-  out["snlls_min_variance"] = std::isfinite(est.snlls.min_variance)
-      ? est.snlls.min_variance
-      : NA_REAL;
   return out;
 }
 
@@ -160,7 +176,7 @@ magmaan::estimate::Bounds bounds_from_nullable(Rcpp::Nullable<Rcpp::List> bounds
   return out;
 }
 
-magmaan::gls::WLS wls_from_arg(SEXP W, std::size_t n_blocks) {
+magmaan::gmm::Weight wls_from_arg(SEXP W, std::size_t n_blocks) {
   std::vector<Eigen::MatrixXd> weights;
   weights.reserve(n_blocks);
   if (Rf_isMatrix(W)) {
@@ -178,7 +194,7 @@ magmaan::gls::WLS wls_from_arg(SEXP W, std::size_t n_blocks) {
   } else {
     Rcpp::stop("magmaan: WLS weights must be a matrix or a list of matrices");
   }
-  return magmaan::gls::WLS(std::move(weights));
+  return weights;
 }
 
 Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
@@ -477,6 +493,18 @@ magmaan::optim::CeresOptions ceres_opts_from(Rcpp::Nullable<Rcpp::List> ceres) {
   }
   return o;
 }
+
+// The composers take the optimizer-agnostic LbfgsOptions; the Ceres backend
+// reads max_iter / ftol / gtol from it. (ptol / verbose were already dropped
+// by the old fit<D,O> shim, so this is behavior-preserving.)
+magmaan::optim::LbfgsOptions ceres_opts_as_lbfgs(Rcpp::Nullable<Rcpp::List> ceres) {
+  const magmaan::optim::CeresOptions c = ceres_opts_from(ceres);
+  magmaan::optim::LbfgsOptions o;
+  o.max_iter = c.max_iter;
+  o.ftol     = c.ftol;
+  o.gtol     = c.gtol;
+  return o;
+}
 #endif
 
 }  // namespace
@@ -536,9 +564,10 @@ Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats,
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
 
-  auto e_or = magmaan::estimate::fit<magmaan::nt::ml::ML, magmaan::optim::LbfgsOptimizer>(
-      ctx.pt, ctx.rep, ctx.samp, magmaan::nt::ml::ML{},
-      magmaan::optim::LbfgsOptimizer{lbfgs_opts_from(lbfgs)}, starts);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  auto e_or = magmaan::estimate::fit_ml(ctx.pt, ctx.rep, ctx.samp, x0,
+      magmaan::estimate::Bounds{}, magmaan::estimate::Backend::Lbfgs,
+      lbfgs_opts_from(lbfgs));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
 
@@ -582,15 +611,16 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
   ctx.meanstructure = has_meanstructure(ctx.pt);
   if (!ctx.meanstructure) ctx.samp.mean.clear();
 
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
   auto e_or = magmaan::estimate::fit_fiml(
-      ctx.pt, ctx.rep, raw, magmaan::nt::fiml::FIML{},
-      magmaan::optim::LbfgsOptimizer{lbfgs_opts_from(lbfgs)}, starts);
+      ctx.pt, ctx.rep, raw, x0, magmaan::nt::fiml::FIML{},
+      lbfgs_opts_from(lbfgs));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fiml_fit_result(ctx, raw, est, &starts);
 }
 
-// fit_uls() — mirrors fit_bounded<ULS, LbfgsBOptimizer>(pt, rep, samp, bounds).
+// fit_uls() — composes fit_gmm(pt, rep, samp, x0, {}, bounds) (LBFGS-B).
 //
 // [[Rcpp::export]]
 Rcpp::List fit_uls_impl(SEXP partable, Rcpp::List sample_stats,
@@ -600,15 +630,16 @@ Rcpp::List fit_uls_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto e_or = magmaan::estimate::fit_bounded(ctx.pt, ctx.rep, ctx.samp,
-      bounds_from_nullable(bounds), magmaan::gls::ULS{},
-      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  auto e_or = magmaan::estimate::fit_gmm(ctx.pt, ctx.rep, ctx.samp, x0,
+      {}, bounds_from_nullable(bounds), magmaan::estimate::Backend::Lbfgs,
+      lbfgs_opts_from(lbfgsb));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "ULS");
 }
 
-// fit_gls() — mirrors fit_bounded<GLS, LbfgsBOptimizer>(pt, rep, samp, bounds).
+// fit_gls() — composes fit_gls(pt, rep, samp, x0, bounds) (LBFGS-B).
 //
 // [[Rcpp::export]]
 Rcpp::List fit_gls_impl(SEXP partable, Rcpp::List sample_stats,
@@ -618,15 +649,16 @@ Rcpp::List fit_gls_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto e_or = magmaan::estimate::fit_bounded(ctx.pt, ctx.rep, ctx.samp,
-      bounds_from_nullable(bounds), magmaan::gls::GLS{},
-      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  auto e_or = magmaan::estimate::fit_gls(ctx.pt, ctx.rep, ctx.samp, x0,
+      bounds_from_nullable(bounds), magmaan::estimate::Backend::Lbfgs,
+      lbfgs_opts_from(lbfgsb));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "GLS");
 }
 
-// fit_wls() — mirrors fit_bounded<WLS, LbfgsBOptimizer>(pt, rep, samp, bounds).
+// fit_wls() — composes fit_gmm(pt, rep, samp, x0, W, bounds) (LBFGS-B).
 //
 // [[Rcpp::export]]
 Rcpp::List fit_wls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
@@ -636,10 +668,11 @@ Rcpp::List fit_wls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  magmaan::gls::WLS wls = wls_from_arg(W, ctx.samp.S.size());
-  auto e_or = magmaan::estimate::fit_bounded(ctx.pt, ctx.rep, ctx.samp,
-      bounds_from_nullable(bounds), std::move(wls),
-      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  magmaan::gmm::Weight wls = wls_from_arg(W, ctx.samp.S.size());
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  auto e_or = magmaan::estimate::fit_gmm(ctx.pt, ctx.rep, ctx.samp, x0,
+      std::move(wls), bounds_from_nullable(bounds),
+      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "WLS");
@@ -703,10 +736,11 @@ Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   ctx.samp.n_obs = stats.n_obs;
   ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];
   ctx.meanstructure = false;
+  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts);
   auto e_or = magmaan::estimate::fit_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
-      magmaan::estimate::OrdinalWeightKind::DWLS,
-      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+      magmaan::estimate::OrdinalWeightKind::DWLS, x0,
+      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return ordinal_fit_result(ctx, stats, est, &starts, "DWLS");
@@ -731,10 +765,11 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   ctx.samp.n_obs = stats.n_obs;
   ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];
   ctx.meanstructure = false;
+  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts);
   auto e_or = magmaan::estimate::fit_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
-      magmaan::estimate::OrdinalWeightKind::WLS,
-      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+      magmaan::estimate::OrdinalWeightKind::WLS, x0,
+      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return ordinal_fit_result(ctx, stats, est, &starts, "WLS");
@@ -760,10 +795,11 @@ Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
   ctx.samp.n_obs = stats.n_obs;
   ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];
   ctx.meanstructure = true;
+  const Eigen::VectorXd x0 = mixed_ordinal_starts_or_stop(ctx, stats, starts);
   auto e_or = magmaan::estimate::fit_mixed_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
-      magmaan::estimate::OrdinalWeightKind::DWLS,
-      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+      magmaan::estimate::OrdinalWeightKind::DWLS, x0,
+      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   Rcpp::List out = fit_result(ctx, est, &starts, "DWLS");
@@ -791,10 +827,11 @@ Rcpp::List fit_wls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
   ctx.samp.n_obs = stats.n_obs;
   ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];
   ctx.meanstructure = true;
+  const Eigen::VectorXd x0 = mixed_ordinal_starts_or_stop(ctx, stats, starts);
   auto e_or = magmaan::estimate::fit_mixed_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
-      magmaan::estimate::OrdinalWeightKind::WLS,
-      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+      magmaan::estimate::OrdinalWeightKind::WLS, x0,
+      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   Rcpp::List out = fit_result(ctx, est, &starts, "WLS");
@@ -810,11 +847,12 @@ Rcpp::List fit_uls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto e_or = magmaan::estimate::fit_snlls_bounded(ctx.pt, ctx.rep, ctx.samp,
-      bounds_from_nullable(bounds), magmaan::gls::ULS{},
-      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
+  auto e_or = magmaan::estimate::fit_snlls(ctx.pt, ctx.rep, ctx.samp, x0,
+      {}, magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb));
   if (!e_or.has_value()) stop_fit(e_or.error());
-  const magmaan::estimate::SnllsEstimates est = std::move(*e_or);
+  const magmaan::estimate::Estimates est = std::move(*e_or);
   return snlls_fit_result(ctx, est, &starts, "ULS-SNLLS", "lbfgsb");
 }
 
@@ -826,11 +864,12 @@ Rcpp::List fit_gls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto e_or = magmaan::estimate::fit_snlls_bounded(ctx.pt, ctx.rep, ctx.samp,
-      bounds_from_nullable(bounds), magmaan::gls::GLS{},
-      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
+  auto e_or = magmaan::estimate::fit_snlls_gls(ctx.pt, ctx.rep, ctx.samp, x0,
+      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb));
   if (!e_or.has_value()) stop_fit(e_or.error());
-  const magmaan::estimate::SnllsEstimates est = std::move(*e_or);
+  const magmaan::estimate::Estimates est = std::move(*e_or);
   return snlls_fit_result(ctx, est, &starts, "GLS-SNLLS", "lbfgsb");
 }
 
@@ -842,12 +881,14 @@ Rcpp::List fit_wls_snlls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  magmaan::gls::WLS wls = wls_from_arg(W, ctx.samp.S.size());
-  auto e_or = magmaan::estimate::fit_snlls_bounded(ctx.pt, ctx.rep, ctx.samp,
-      bounds_from_nullable(bounds), std::move(wls),
-      magmaan::optim::LbfgsBOptimizer{lbfgs_opts_from(lbfgsb)}, starts);
+  magmaan::gmm::Weight wls = wls_from_arg(W, ctx.samp.S.size());
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
+  auto e_or = magmaan::estimate::fit_snlls(ctx.pt, ctx.rep, ctx.samp, x0,
+      std::move(wls),
+      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb));
   if (!e_or.has_value()) stop_fit(e_or.error());
-  const magmaan::estimate::SnllsEstimates est = std::move(*e_or);
+  const magmaan::estimate::Estimates est = std::move(*e_or);
   return snlls_fit_result(ctx, est, &starts, "WLS-SNLLS", "lbfgsb");
 }
 
@@ -860,9 +901,10 @@ Rcpp::List fit_uls_ceres_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto e_or = magmaan::estimate::fit_bounded(ctx.pt, ctx.rep, ctx.samp,
-      bounds_from_nullable(bounds), magmaan::gls::ULS{},
-      magmaan::optim::CeresBoundedOptimizer{ceres_opts_from(ceres)}, starts);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  auto e_or = magmaan::estimate::fit_gmm(ctx.pt, ctx.rep, ctx.samp, x0,
+      {}, bounds_from_nullable(bounds), magmaan::estimate::Backend::Ceres,
+      ceres_opts_as_lbfgs(ceres));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "ULS");
@@ -881,11 +923,12 @@ Rcpp::List fit_uls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto e_or = magmaan::estimate::fit_snlls_bounded(ctx.pt, ctx.rep, ctx.samp,
-      bounds_from_nullable(bounds), magmaan::gls::ULS{},
-      magmaan::optim::CeresBoundedOptimizer{ceres_opts_from(ceres)}, starts);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
+  auto e_or = magmaan::estimate::fit_snlls(ctx.pt, ctx.rep, ctx.samp, x0,
+      {}, magmaan::estimate::Backend::Ceres, ceres_opts_as_lbfgs(ceres));
   if (!e_or.has_value()) stop_fit(e_or.error());
-  const magmaan::estimate::SnllsEstimates est = std::move(*e_or);
+  const magmaan::estimate::Estimates est = std::move(*e_or);
   return snlls_fit_result(ctx, est, &starts, "ULS-SNLLS", "ceres");
 #else
   (void)partable; (void)sample_stats; (void)ceres; (void)bounds;
@@ -902,11 +945,12 @@ Rcpp::List fit_gls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto e_or = magmaan::estimate::fit_snlls_bounded(ctx.pt, ctx.rep, ctx.samp,
-      bounds_from_nullable(bounds), magmaan::gls::GLS{},
-      magmaan::optim::CeresBoundedOptimizer{ceres_opts_from(ceres)}, starts);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
+  auto e_or = magmaan::estimate::fit_snlls_gls(ctx.pt, ctx.rep, ctx.samp, x0,
+      magmaan::estimate::Backend::Ceres, ceres_opts_as_lbfgs(ceres));
   if (!e_or.has_value()) stop_fit(e_or.error());
-  const magmaan::estimate::SnllsEstimates est = std::move(*e_or);
+  const magmaan::estimate::Estimates est = std::move(*e_or);
   return snlls_fit_result(ctx, est, &starts, "GLS-SNLLS", "ceres");
 #else
   (void)partable; (void)sample_stats; (void)ceres; (void)bounds;
@@ -923,12 +967,14 @@ Rcpp::List fit_wls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats, SEXP
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  magmaan::gls::WLS wls = wls_from_arg(W, ctx.samp.S.size());
-  auto e_or = magmaan::estimate::fit_snlls_bounded(ctx.pt, ctx.rep, ctx.samp,
-      bounds_from_nullable(bounds), std::move(wls),
-      magmaan::optim::CeresBoundedOptimizer{ceres_opts_from(ceres)}, starts);
+  magmaan::gmm::Weight wls = wls_from_arg(W, ctx.samp.S.size());
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
+  auto e_or = magmaan::estimate::fit_snlls(ctx.pt, ctx.rep, ctx.samp, x0,
+      std::move(wls),
+      magmaan::estimate::Backend::Ceres, ceres_opts_as_lbfgs(ceres));
   if (!e_or.has_value()) stop_fit(e_or.error());
-  const magmaan::estimate::SnllsEstimates est = std::move(*e_or);
+  const magmaan::estimate::Estimates est = std::move(*e_or);
   return snlls_fit_result(ctx, est, &starts, "WLS-SNLLS", "ceres");
 #else
   (void)partable; (void)sample_stats; (void)W; (void)ceres; (void)bounds;
@@ -945,9 +991,10 @@ Rcpp::List fit_gls_ceres_impl(SEXP partable, Rcpp::List sample_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto e_or = magmaan::estimate::fit_bounded(ctx.pt, ctx.rep, ctx.samp,
-      bounds_from_nullable(bounds), magmaan::gls::GLS{},
-      magmaan::optim::CeresBoundedOptimizer{ceres_opts_from(ceres)}, starts);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  auto e_or = magmaan::estimate::fit_gls(ctx.pt, ctx.rep, ctx.samp, x0,
+      bounds_from_nullable(bounds), magmaan::estimate::Backend::Ceres,
+      ceres_opts_as_lbfgs(ceres));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "GLS");
@@ -966,10 +1013,11 @@ Rcpp::List fit_wls_ceres_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  magmaan::gls::WLS wls = wls_from_arg(W, ctx.samp.S.size());
-  auto e_or = magmaan::estimate::fit_bounded(ctx.pt, ctx.rep, ctx.samp,
-      bounds_from_nullable(bounds), std::move(wls),
-      magmaan::optim::CeresBoundedOptimizer{ceres_opts_from(ceres)}, starts);
+  magmaan::gmm::Weight wls = wls_from_arg(W, ctx.samp.S.size());
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  auto e_or = magmaan::estimate::fit_gmm(ctx.pt, ctx.rep, ctx.samp, x0,
+      std::move(wls), bounds_from_nullable(bounds),
+      magmaan::estimate::Backend::Ceres, ceres_opts_as_lbfgs(ceres));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "WLS");
@@ -989,7 +1037,7 @@ Rcpp::NumericVector fit_start_values(SEXP partable, Rcpp::List sample_stats) {
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto sv_or = magmaan::estimate::simple_start_values(ctx.pt, ctx.rep, ctx.samp, starts);
+  auto sv_or = magmaan::estimate::simple_start_values(ctx.pt, ctx.rep, ctx.samp);
   if (!sv_or.has_value()) stop_fit(sv_or.error());
   return Rcpp::wrap(*sv_or);
 }

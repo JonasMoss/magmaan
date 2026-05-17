@@ -6,25 +6,11 @@
 #include <Eigen/Core>
 
 #include "magmaan/error.hpp"
-#include "magmaan/optim/concepts.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 
 using magmaan::FitError;
 using magmaan::optim::LbfgsBOptimizer;
-
-// ============================================================================
-// Concept conformance — LbfgsBOptimizer models both Optimizer (via the
-// unbounded overload) and BoundedOptimizer (via the bounded overload).
-// These static_asserts are the compile-time gate.
-// ============================================================================
-
-TEST_CASE("LbfgsBOptimizer satisfies Optimizer and BoundedOptimizer concepts") {
-  static_assert(magmaan::optim::Optimizer<LbfgsBOptimizer>,
-                "LbfgsBOptimizer must model Optimizer");
-  static_assert(magmaan::optim::BoundedOptimizer<LbfgsBOptimizer>,
-                "LbfgsBOptimizer must model BoundedOptimizer");
-  CHECK(true);
-}
 
 // ============================================================================
 // Behavioural — unbounded path is a regular L-BFGS-equivalent solve.

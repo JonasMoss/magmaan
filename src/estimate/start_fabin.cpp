@@ -1,0 +1,299 @@
+#include "magmaan/estimate/start_values.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+
+#include <Eigen/Core>
+#include <Eigen/Dense>
+
+#include "magmaan/error.hpp"
+#include "magmaan/expected.hpp"
+#include "magmaan/data/sample_stats.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/spec/partable.hpp"
+#include "magmaan/spec/start_hints.hpp"
+
+namespace magmaan::estimate {
+
+using data::SampleStats;
+
+namespace {
+
+// Outcome of a 1-factor FABIN solve on an indicator submatrix whose reference
+// indicator sits at index 0. `lambda` has one entry per indicator; `lambda(0)`
+// is the reference (1.0, or rescaled when std.lv). `neg_triad` flags the
+// inconsistent-covariance case (only meaningful for <= 3 indicators).
+struct Fabin1F {
+  Eigen::VectorXd lambda;
+  bool neg_triad = false;
+};
+
+// Closed-form 1-factor solution for <= 3 indicators — port of lavaan's
+// `lav_cfa_1fac_3ind` (lav_cfa_1fac.R). `S0` is the indicator submatrix with
+// the reference indicator at index 0.
+Fabin1F fabin_3ind(const Eigen::MatrixXd& S0, bool std_lv) {
+  const Eigen::Index nvar = S0.rows();
+  Eigen::Matrix3d S = Eigen::Matrix3d::Zero();
+  bool degenerate2 = false;
+  if (nvar == 1) {
+    S.setOnes();  // lavaan: a 1x1 cov is replaced by a 3x3 of ones
+  } else if (nvar == 2) {
+    degenerate2 = true;
+    const double mean_2var = 0.5 * (S0(0, 0) + S0(1, 1));
+    const double max_var = std::max(S0(0, 0), S0(1, 1));
+    S(0, 0) = S0(0, 0);
+    S(1, 1) = S0(1, 1);
+    S(0, 1) = S(1, 0) = S0(1, 0);
+    S(0, 2) = S(2, 0) = mean_2var;
+    S(1, 2) = S(2, 1) = S0(1, 0);
+    S(2, 2) = max_var;
+  } else {
+    S = S0.topLeftCorner(3, 3);
+  }
+
+  const double s11 = S(0, 0), s22 = S(1, 1), s33 = S(2, 2);
+  const double s21 = S(1, 0), s31 = S(2, 0), s32 = S(2, 1);
+
+  Fabin1F out;
+  out.neg_triad = (s21 * s31 * s32 < 0.0);
+
+  double psi = (s32 != 0.0) ? (s21 * s31) / s32 : s11;
+  double l2 = (s31 != 0.0) ? s32 / s31 : 1.0;
+  double l3 = (s21 != 0.0) ? s32 / s21 : 1.0;
+
+  // standard bounds (lavaan 0.6-11): assume marker reliability >= 0.1.
+  const double lower_psi = 0.1 * s11;
+  if (lower_psi > 0.0) {
+    psi = std::min(std::max(psi, lower_psi), s11);
+    const double l2b = std::sqrt(s22 / lower_psi);
+    const double l3b = std::sqrt(s33 / lower_psi);
+    l2 = std::min(std::max(-l2b, l2), l2b);
+    l3 = std::min(std::max(-l3b, l3), l3b);
+  }
+  if (degenerate2) psi *= 0.5;
+
+  Eigen::Vector3d lam(1.0, l2, l3);
+  if (std_lv) {
+    const double s = (psi < 0.0 ? -1.0 : 1.0) * std::sqrt(std::abs(psi));
+    lam *= s;
+  }
+  out.lambda = lam.head(nvar);
+  return out;
+}
+
+// 1-factor FABIN for >= 4 indicators — port of lavaan's `lav_cfa_1fac_fabin`
+// (FABIN3 / FABIN2). `S` is the indicator submatrix, reference at index 0.
+Fabin1F fabin_nfac(const Eigen::MatrixXd& S, FabinVariant variant,
+                   bool std_lv) {
+  const Eigen::Index nvar = S.rows();
+  Eigen::VectorXd lambda = Eigen::VectorXd::Zero(nvar);
+  lambda(0) = 1.0;
+
+  for (Eigen::Index i = 1; i < nvar; ++i) {
+    // instruments: every indicator other than i and the reference (0).
+    std::vector<Eigen::Index> idx3;
+    idx3.reserve(static_cast<std::size_t>(nvar - 2));
+    for (Eigen::Index j = 1; j < nvar; ++j) {
+      if (j != i) idx3.push_back(j);
+    }
+    const Eigen::Index m = static_cast<Eigen::Index>(idx3.size());
+    Eigen::VectorXd s23(m), s31(m);
+    for (Eigen::Index a = 0; a < m; ++a) {
+      s23(a) = S(i, idx3[static_cast<std::size_t>(a)]);
+      s31(a) = S(idx3[static_cast<std::size_t>(a)], 0);
+    }
+
+    bool solved = false;
+    double lam_i = 1.0;
+    if (variant == FabinVariant::Fabin3 && m > 0) {
+      Eigen::MatrixXd S33(m, m);
+      for (Eigen::Index a = 0; a < m; ++a) {
+        for (Eigen::Index b = 0; b < m; ++b) {
+          S33(a, b) = S(idx3[static_cast<std::size_t>(a)],
+                        idx3[static_cast<std::size_t>(b)]);
+        }
+      }
+      Eigen::LDLT<Eigen::MatrixXd> ldlt(S33);
+      if (ldlt.info() == Eigen::Success) {
+        const Eigen::VectorXd tmp = ldlt.solve(s31);
+        const double denom = s31.dot(tmp);
+        if (std::abs(denom) > 0.0) {
+          lam_i = s23.dot(tmp) / denom;  // FABIN3
+          solved = true;
+        }
+      }
+    }
+    if (!solved) {  // FABIN2 (also the FABIN3 fallback on a singular S33)
+      const double denom = s31.dot(s31);
+      lam_i = (denom != 0.0) ? s23.dot(s31) / denom : 1.0;
+    }
+    lambda(i) = lam_i;
+  }
+
+  // standard bounds: assume marker reliability >= 0.1.
+  const double lower_psi = 0.1 * S(0, 0);
+  if (lower_psi > 0.0) {
+    for (Eigen::Index i = 1; i < nvar; ++i) {
+      const double lb = std::sqrt(S(i, i) / lower_psi);
+      lambda(i) = std::min(std::max(-lb, lambda(i)), lb);
+    }
+  }
+
+  if (std_lv) {
+    // std.lv needs psi to rescale: recover THETA (ULS map) then PSI.
+    const double l2 = lambda.squaredNorm();
+    if (l2 > 0.0) {
+      const Eigen::MatrixXd D = (lambda * lambda.transpose()) / l2;
+      const Eigen::MatrixXd A =
+          Eigen::MatrixXd::Identity(nvar, nvar) - D.cwiseProduct(D);
+      const Eigen::VectorXd rhs = (S - D * S * D).diagonal();
+      Eigen::LDLT<Eigen::MatrixXd> ldlt(A);
+      Eigen::VectorXd theta = Eigen::VectorXd::Zero(nvar);
+      if (ldlt.info() == Eigen::Success) theta = ldlt.solve(rhs);
+      Eigen::MatrixXd S1 = S;
+      S1.diagonal() -= theta;
+      const double psi = lambda.dot(S1 * lambda) / (l2 * l2);
+      const double s = (psi < 0.0 ? -1.0 : 1.0) * std::sqrt(std::abs(psi));
+      lambda *= s;
+    }
+  }
+
+  Fabin1F out;
+  out.lambda = std::move(lambda);
+  return out;
+}
+
+// One factor's Lambda indicators, in partable-row order.
+struct Indicator {
+  std::int16_t ov_row = -1;     // observed-variable row in S
+  std::int32_t free_idx = -1;   // 0-based free-parameter index, or -1 if fixed
+};
+struct FactorInfo {
+  std::vector<Indicator> indicators;
+  bool std_lv = false;          // latent variance fixed
+  bool marker_negative = false; // a loading fixed to a negative value
+  bool ok = true;               // false ⇒ keep simple-baseline loadings
+};
+
+}  // namespace
+
+fit_expected<Eigen::VectorXd>
+fabin_start_values(const spec::LatentStructure& pt,
+                   const model::MatrixRep& rep,
+                   const SampleStats& samp,
+                   const spec::Starts& starts,
+                   FabinVariant variant) {
+  // FABIN replaces only the free loadings; everything else is the simple
+  // scheme. The baseline also applies user hints, which still win below.
+  auto base = simple_start_values(pt, rep, samp, starts);
+  if (!base.has_value()) return base;
+  Eigen::VectorXd x0 = std::move(*base);
+  if (x0.size() == 0) return x0;
+
+  // Gather, per (block, latent), the factor's Lambda indicators.
+  std::vector<std::vector<FactorInfo>> facs(rep.dims.size());
+  for (std::size_t b = 0; b < rep.dims.size(); ++b) {
+    facs[b].assign(static_cast<std::size_t>(rep.dims[b].n_latent), FactorInfo{});
+  }
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    const auto& c = rep.cell_for_row[i];
+    if (!c.used) continue;
+    const std::size_t b = static_cast<std::size_t>(c.block);
+    if (b >= facs.size()) continue;
+    const std::size_t col = static_cast<std::size_t>(c.col);
+
+    if (c.mat == model::MatId::Psi && c.row == c.col && pt.free[i] == 0 &&
+        col < facs[b].size()) {
+      facs[b][col].std_lv = true;
+      continue;
+    }
+    if (c.mat != model::MatId::Lambda || col >= facs[b].size()) continue;
+
+    FactorInfo& f = facs[b][col];
+    Indicator ind;
+    ind.ov_row = c.row;
+    ind.free_idx = pt.free[i] > 0 ? pt.free[i] - 1 : -1;
+    f.indicators.push_back(ind);
+    if (pt.free[i] == 0 && !std::isnan(pt.fixed_value[i]) &&
+        pt.fixed_value[i] < 0.0) {
+      f.marker_negative = true;
+    }
+  }
+
+  for (std::size_t b = 0; b < facs.size(); ++b) {
+    if (b >= samp.S.size()) continue;
+    const Eigen::MatrixXd& S = samp.S[b];
+    for (FactorInfo& f : facs[b]) {
+      if (!f.ok || f.indicators.empty()) continue;
+
+      // Reference indicator: the first fixed loading (the marker), else the
+      // first indicator. lavaan places it at FABIN submatrix index 0.
+      std::size_t ref = 0;
+      bool found_marker = false;
+      for (std::size_t k = 0; k < f.indicators.size(); ++k) {
+        if (f.indicators[k].free_idx < 0) {  // fixed loading
+          ref = k;
+          found_marker = true;
+          break;
+        }
+      }
+      (void)found_marker;
+
+      // Ordered indicator list with the reference first; validate ov rows.
+      std::vector<std::size_t> order;
+      order.reserve(f.indicators.size());
+      order.push_back(ref);
+      for (std::size_t k = 0; k < f.indicators.size(); ++k) {
+        if (k != ref) order.push_back(k);
+      }
+      bool rows_ok = true;
+      std::vector<Eigen::Index> ov;
+      ov.reserve(order.size());
+      for (std::size_t k : order) {
+        const std::int16_t r = f.indicators[k].ov_row;
+        if (r < 0 || r >= S.rows()) {
+          rows_ok = false;
+          break;
+        }
+        ov.push_back(static_cast<Eigen::Index>(r));
+      }
+      if (!rows_ok) continue;  // higher-order / out-of-range ⇒ keep baseline
+
+      const Eigen::Index nvar = static_cast<Eigen::Index>(ov.size());
+      Eigen::MatrixXd COV(nvar, nvar);
+      for (Eigen::Index a = 0; a < nvar; ++a) {
+        for (Eigen::Index d = 0; d < nvar; ++d) {
+          COV(a, d) = S(ov[static_cast<std::size_t>(a)],
+                        ov[static_cast<std::size_t>(d)]);
+        }
+      }
+
+      const Fabin1F r = (nvar < 4) ? fabin_3ind(COV, f.std_lv)
+                                   : fabin_nfac(COV, variant, f.std_lv);
+      Eigen::VectorXd lam = r.lambda;
+      for (Eigen::Index k = 0; k < lam.size(); ++k) {
+        if (!std::isfinite(lam(k))) lam(k) = 1.0;  // lavaan: 0/0 etc. ⇒ 1.0
+      }
+      if (r.neg_triad) lam.setConstant(f.std_lv ? 0.7 : 1.0);
+      if (!f.std_lv && f.marker_negative) lam = -lam;
+
+      // Write each free loading, unless a user hint already pinned it.
+      for (Eigen::Index k = 0; k < nvar; ++k) {
+        const Indicator& ind = f.indicators[order[static_cast<std::size_t>(k)]];
+        if (ind.free_idx < 0) continue;  // fixed loading: not in θ
+        const std::size_t fi = static_cast<std::size_t>(ind.free_idx);
+        if (fi < starts.hint.size() && std::isfinite(starts.hint[fi])) {
+          continue;  // user hint wins
+        }
+        x0(ind.free_idx) = lam(k);
+      }
+    }
+  }
+
+  return x0;
+}
+
+}  // namespace magmaan::estimate

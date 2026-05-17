@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -73,7 +74,7 @@ FitCtx load_and_fit(std::string_view model_src,
   ctx.samp.S.push_back(std::move(S));
   ctx.samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
-  auto est_or = magmaan::estimate::fit(*ctx.handles.pt, *ctx.handles.rep, ctx.samp);
+  auto est_or = magmaan::test::fit(*ctx.handles.pt, *ctx.handles.rep, ctx.samp);
   REQUIRE(est_or.has_value());
   ctx.est = std::move(*est_or);
   return ctx;
@@ -279,7 +280,7 @@ TEST_CASE("U·Γ_NT eigenvalues all 1 on 2F+meanstructure (G3b)") {
   samp.mean  = {mean};
   samp.n_obs = {300};
 
-  auto est_or = magmaan::estimate::fit(*h.pt, *h.rep, samp);
+  auto est_or = magmaan::test::fit(*h.pt, *h.rep, samp);
   REQUIRE(est_or.has_value());
   const auto& est = *est_or;
 
@@ -713,7 +714,7 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B with mean structure (G3
   magmaan::data::SampleStats samp_seed;
   samp_seed.S = {S0};  samp_seed.mean = {mu0};  samp_seed.n_obs = {500};
 
-  auto est_or = magmaan::estimate::fit(*h.pt, *h.rep, samp_seed);
+  auto est_or = magmaan::test::fit(*h.pt, *h.rep, samp_seed);
   REQUIRE(est_or.has_value());
 
   // Now build raw data from the fitted Σ̂, μ̂ to construct the empirical Γ̂.
@@ -841,7 +842,7 @@ TEST_CASE("reduced_gamma_unbiased stitches per-block Browne corrections") {
   raw.X.push_back(mvn_sample(rng, 340, Eigen::VectorXd::Zero(9), Sigma_hat));
   auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
-  auto est_or = magmaan::estimate::fit(*two.pt, *two.rep, *samp_or);
+  auto est_or = magmaan::test::fit(*two.pt, *two.rep, *samp_or);
   REQUIRE(est_or.has_value());
   auto uf_or = magmaan::nt::robust::build_u_factor(*two.pt, *two.rep, *samp_or, *est_or);
   REQUIRE(uf_or.has_value());
@@ -1013,7 +1014,7 @@ TEST_CASE("robust_se: collapses to expected info when Γ̂ = Γ_NT(Σ̂), mean s
   magmaan::data::SampleStats samp;
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {300};
 
-  auto est_or = magmaan::estimate::fit(*h.pt, *h.rep, samp);
+  auto est_or = magmaan::test::fit(*h.pt, *h.rep, samp);
   REQUIRE(est_or.has_value());
 
   // Model-implied Σ̂ at θ̂ (M_b for `Structured` moments).
@@ -1129,7 +1130,7 @@ TEST_CASE("robust_se: Observed bread collapses to expected SE on MVN data") {
   raw.X.push_back(mvn_sample(rng, n, Eigen::VectorXd::Zero(9), Sigma_hat));
   auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
-  auto est_mvn_or = magmaan::estimate::fit(*ctx.handles.pt, *ctx.handles.rep, *samp_or);
+  auto est_mvn_or = magmaan::test::fit(*ctx.handles.pt, *ctx.handles.rep, *samp_or);
   REQUIRE(est_mvn_or.has_value());
 
   auto exp_or = magmaan::test::expected_inference(
@@ -1161,7 +1162,7 @@ TEST_CASE("robust_se: Observed bread works for multi-block covariance models") {
   raw.X.push_back(mvn_sample(rng, 7000, Eigen::VectorXd::Zero(9), Sigma_hat));
   auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
-  auto est_or = magmaan::estimate::fit(*two.pt, *two.rep, *samp_or);
+  auto est_or = magmaan::test::fit(*two.pt, *two.rep, *samp_or);
   REQUIRE(est_or.has_value());
 
   auto exp_or = magmaan::test::expected_inference(*two.pt, *two.rep, *samp_or, *est_or);
@@ -1194,7 +1195,7 @@ TEST_CASE("robust_se: Observed bread works for multi-block mean structures") {
   Eigen::VectorXd seed_mean(4); seed_mean << 1.0, 2.0, 1.5, 2.5;
   seed_samp.mean = {seed_mean};
   seed_samp.n_obs = {400};
-  auto seed_est = magmaan::estimate::fit(*seed.pt, *seed.rep, seed_samp);
+  auto seed_est = magmaan::test::fit(*seed.pt, *seed.rep, seed_samp);
   REQUIRE(seed_est.has_value());
   auto ev = magmaan::model::ModelEvaluator::build(*seed.pt, *seed.rep);
   REQUIRE(ev.has_value());
@@ -1207,7 +1208,7 @@ TEST_CASE("robust_se: Observed bread works for multi-block mean structures") {
   raw.X.push_back(mvn_sample(rng, 8000, im_or->mu[0], im_or->sigma[0]));
   auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
-  auto est_or = magmaan::estimate::fit(*two.pt, *two.rep, *samp_or);
+  auto est_or = magmaan::test::fit(*two.pt, *two.rep, *samp_or);
   REQUIRE(est_or.has_value());
 
   auto exp_or = magmaan::test::expected_inference(*two.pt, *two.rep, *samp_or, *est_or);

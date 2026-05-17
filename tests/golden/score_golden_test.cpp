@@ -17,7 +17,6 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/nt/score.hpp"
-#include "magmaan/gls/uls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/nt/fiml.hpp"
 #include "magmaan/parse/op.hpp"
@@ -367,10 +366,10 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
     } else if (kind == "ls") {
       const auto samp = sample_stats_from_fixture(fit);
       const auto est = estimates_from_fixture(fit);
-      auto mi_or = magmaan::nt::infer::modification_indices(h->pt, h->rep, samp,
-                                                      est, magmaan::gls::ULS{});
-      auto st_or = magmaan::nt::infer::score_tests(h->pt, h->rep, samp, est,
-                                             magmaan::gls::ULS{});
+      auto mi_or = magmaan::nt::infer::modification_indices(
+          h->pt, h->rep, samp, est, magmaan::gmm::Weight{});
+      auto st_or = magmaan::nt::infer::score_tests(
+          h->pt, h->rep, samp, est, magmaan::gmm::Weight{});
       if (!mi_or.has_value() || !st_or.has_value()) {
         failures.push_back(id + ": ULS score path failed");
         continue;

@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -89,7 +90,7 @@ TEST_CASE("standardized-solution goldens — std.lv / std.all vs lavaan") {
           ? nob[b].get<std::int64_t>() : nob.get<std::int64_t>());
     }
 
-    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
+    auto est_or = magmaan::test::fit(*pt, *mr, samp);
     if (!est_or.has_value()) { failures.push_back(id + ": fit — " + est_or.error().detail); continue; }
     const auto& est = *est_or;
 

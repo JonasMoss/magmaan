@@ -178,19 +178,58 @@ Contracts:
 
 Remaining work, in suggested order:
 
-- [ ] **M/L.** Add named small-sample stabilizer builders: variance-only bounds,
+- [x] **M/L.** Add named small-sample stabilizer builders: variance-only bounds,
   wider/literature variance bounds, statistically justified loading bounds,
   start projection into the chosen box, active-bound diagnostics, and
   Heywood/small-N fixtures across representative ML/LS/ordinal slices.
+  (`estimate::variance_bounds` / `standard_bounds` / `wide_bounds` /
+  `loading_bounds` port lavaan's `optim.bounds` `pos.var`/`standard`/`wide`
+  presets — explicit builders, no default change; `intersect_bounds`,
+  `project_start_into_bounds`, `active_bounds` round out the surface.
+  `tests/unit/stabilizer_bounds_test.cpp` pins the bound values against a
+  lavaan 0.6.22 oracle and exercises ML + ULS Heywood slices.)
 - [ ] **M/L.** Add covariance shrinkage as sample-moment transformations that
   return `SampleStats` or `MixedOrdinalStats`-compatible objects plus repair
   diagnostics, without changing lavaan-compatible defaults.
+  (`data::shrink_sample_stats` shrinks continuous `SampleStats` toward Ridge /
+  identity / diagonal / constant-correlation targets — fixed or normal-theory
+  Ledoit-Wolf intensity — returning `ShrunkSampleStats` with per-block
+  eigenvalue diagnostics; `tests/unit/shrinkage_test.cpp`. Remaining (2b):
+  `MixedOrdinalStats` shrinkage needs the `src/data/ordinal.cpp` moment/NACOV
+  rebuild factored into a shared helper before R can be shrunk consistently.)
 - [ ] **L.** Add DLS and empirical-Bayes DLS as weight-matrix builders layered
   on the existing LS discrepancy and weighted-moment sandwich surfaces.
-- [ ] **L.** Add theta-parameterization support for ordinal models as a
+  (`estimate::dls_weight` builds Browne's distributionally-weighted weight
+  `W = ((1-a)·Γ_NT + a·Γ_ADF)⁻¹` over the `[mean ; vech(cov)]` layout — reuses
+  `data::gamma_nt` / `data::empirical_gamma`; `a = 0` reproduces
+  `gmm::normal_theory_weight` bit-exactly, `a = 1` the ADF weight;
+  `tests/unit/dls_weight_test.cpp`. Remaining: `eb_dls_weight` — the
+  empirical-Bayes mixing-scalar estimator needs a methods decision + citation;
+  and a `checks/dls/` Monte-Carlo driver for the statistical-benefit check.)
+- [x] **L.** Add theta-parameterization support for ordinal models as a
   separate lavaan-backed compatibility slice.
+  (`fit_ordinal_bounded` takes an `OrdinalParameterization` argument; `Theta`
+  fixes the latent-response residual variances to 1 and fits the *standardized*
+  implied moments — `ordinal_residuals` / `ordinal_jacobian` gained a theta
+  branch that standardizes the implied correlations Σ*ᵢⱼ/√(Σ*ᵢᵢΣ*ⱼⱼ) and
+  rescales the implied thresholds by √Σ*ᵢᵢ. The prepared partable is
+  parameterization-independent. `tests/unit/ordinal_test.cpp` pins
+  delta/theta reparameterization invariance (equal fmin); the
+  `ordinal_golden_test.cpp` theta case matches magmaan's theta loadings to a
+  lavaan 0.6.22 `parameterization="theta"` oracle. Remaining: mixed
+  continuous/ordinal theta, and theta robust inference / modification indices /
+  standardized-solution reporting.)
 - [ ] **M.** Add absent-row generation and standardized EPC for modification
   indices after the raw fixed-row/equality-release contract remains stable.
+  (`nt::infer::modification_indices` gains a `ModificationIndexOptions` overload
+  — `ScoreCandidateSet::WithAbsentRows` enumerates absent cross-loadings and
+  covariances as fixed-at-0 candidates; `ScoreTestResult` now carries
+  standardized EPC `epc_lv` / `epc_all`. `tests/unit/score_test.cpp` gates
+  absent-row MI/EPC against a lavaan 0.6.22 `modindices()` oracle and pins
+  absent-gen ≡ explicit-fixed-row scoring. Remaining: thread the options
+  through the LS / FIML / ordinal `modification_indices` overloads;
+  structural-regression absent rows (a `~` row changes the model form, beyond
+  a partable append); golden-fixture regen of `tests/fixtures/score/`.)
 - [ ] **XL, deferred.** Reopen nonlinear equality constraints, inequality
   constraints, or active-bound inference only with an explicit statistical
   design and reporting contract.

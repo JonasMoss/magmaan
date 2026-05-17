@@ -1,0 +1,23 @@
+Fix TrustRegionNewton losing the problem dimension in CppNumericalSolvers v2.0.0.
+
+InitializeSolver() sets `dim_` from the initial point and then calls
+ResetInternal(), which sets `dim_ = 0`. The CG-Steihaug subproblem solver then
+reads `dim_` (== 0) and allocates a size-0 step vector; the first
+`p + alpha * direction` update mixes a size-0 and a size-n vector and aborts
+inside Eigen on every dynamically-sized problem. Reorder the two statements so
+`dim_` is assigned last.
+
+Upstream: https://github.com/PatWie/CppNumericalSolvers (v2.0.0)
+
+--- a/include/cppoptlib/solver/trust_region_newton.h
++++ b/include/cppoptlib/solver/trust_region_newton.h
+@@ -184,5 +184,8 @@
+   void InitializeSolver(const FunctionType& /*function*/,
+                         const StateType& initial_state) override {
+-    dim_ = initial_state.x.rows();
+     ResetInternal();
++    // Patched (magmaan): upstream v2.0.0 set dim_ then called ResetInternal(),
++    // which zeroes dim_ -- the CG subproblem then built a size-0 step vector
++    // and aborted. Assigning dim_ after ResetInternal() restores the sizing.
++    dim_ = initial_state.x.rows();
+   }

@@ -50,9 +50,7 @@ function(magmaan_add_test_target target label)
 endfunction()
 
 magmaan_add_test_target(magmaan_test_smoke smoke
-  unit/version_test.cpp
-  unit/concepts_test.cpp
-  unit/namespace_alias_test.cpp)
+  unit/version_test.cpp)
 
 magmaan_add_test_target(magmaan_test_spec spec
   unit/lexer_test.cpp
@@ -69,20 +67,26 @@ magmaan_add_test_target(magmaan_test_spec spec
 set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/ml_test.cpp
   unit/fiml_test.cpp
-  unit/uls_test.cpp
-  unit/gls_wls_test.cpp
+  unit/start_fabin_test.cpp
+  unit/start_cfa_noniter_test.cpp
   unit/snlls_test.cpp
   unit/bounds_test.cpp
+  unit/stabilizer_bounds_test.cpp
   unit/lbfgs_optimizer_test.cpp
   unit/lbfgsb_optimizer_test.cpp
   unit/lbfgsb_integration_test.cpp
   unit/ceres_optimizer_test.cpp
   unit/ceres_integration_test.cpp
+  unit/nlopt_optimizer_test.cpp
+  unit/trust_region_optimizer_test.cpp
+  unit/optimizer_crosscheck_test.cpp
   unit/ls_path_test.cpp
   unit/constraints_test.cpp
   unit/lin_constraints_test.cpp
   unit/property_test.cpp
   unit/raw_data_test.cpp
+  unit/shrinkage_test.cpp
+  unit/dls_weight_test.cpp
   golden/fit_theta_golden_test.cpp
   golden/ls_golden_test.cpp
   golden/fiml_golden_test.cpp

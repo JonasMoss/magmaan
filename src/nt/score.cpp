@@ -1,10 +1,12 @@
 #include "magmaan/nt/score.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <set>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -16,9 +18,10 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
-#include "magmaan/optim/concepts.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/gmm/moment_quadratic.hpp"
 #include "magmaan/nt/infer.hpp"
+#include "magmaan/nt/ml.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
@@ -27,10 +30,6 @@ namespace magmaan::nt::infer {
 using estimate::build_eq_constraints;
 using estimate::EqConstraints;
 using estimate::resolve_fixed_x_from_sample;
-using gls::GLS;
-using gls::ULS;
-using gls::WLS;
-using nt::ml::ML;
 using fiml::FIML;
 using fiml::fiml_start_sample_stats;
 using fiml::validate_fiml_fixed_x_missing_policy;
@@ -38,10 +37,6 @@ using fiml::validate_fiml_fixed_x_missing_policy;
 using data::RawData;
 using data::SampleStats;
 using estimate::Estimates;
-using gls::GLS;
-using gls::ULS;
-using gls::WLS;
-using fiml::FIML;
 
 namespace {
 
@@ -242,7 +237,6 @@ evaluate_augmented_ml(const spec::LatentStructure& pt,
                       const model::MatrixRep& rep,
                       const SampleStats& samp,
                       const Estimates& est,
-                      ML discrepancy,
                       ScoreInformation information,
                       double score_scale,
                       Eigen::VectorXd& score_full,
@@ -253,10 +247,10 @@ evaluate_augmented_ml(const spec::LatentStructure& pt,
   if (!eval.has_value()) {
     return std::unexpected(model_to_post(eval.error()));
   }
-  auto cache = discrepancy.prepare(samp);
+  auto cache = nt::ml_prepare(samp);
   if (!cache.has_value()) return std::unexpected(fit_to_post(cache.error()));
-  auto vg = discrepancy.value_gradient(samp, *cache, eval->moments,
-                                       eval->J_sigma, eval->J_mu);
+  auto vg = nt::ml_value_gradient(samp, *cache, eval->moments,
+                                  eval->J_sigma, eval->J_mu);
   if (!vg.has_value()) return std::unexpected(fit_to_post(vg.error()));
   score_full = -score_scale * vg->gradient;
   auto info = information == ScoreInformation::Expected
@@ -267,26 +261,22 @@ evaluate_augmented_ml(const spec::LatentStructure& pt,
   return {};
 }
 
-template <class D>
 post_expected<void>
 evaluate_augmented_ls(const spec::LatentStructure& pt,
                       const model::MatrixRep& rep,
                       const SampleStats& samp,
                       const Estimates& est,
-                      D discrepancy,
+                      const gmm::Weight& weight,
                       double n_total,
                       Eigen::VectorXd& score_full,
                       Eigen::MatrixXd& info_full) {
   auto ev = build_eval(pt, rep);
   if (!ev.has_value()) return std::unexpected(ev.error());
-  auto eval = ev->evaluate(est.theta, true, true);
-  if (!eval.has_value()) {
-    return std::unexpected(model_to_post(eval.error()));
-  }
-  auto r = discrepancy.residuals(samp, eval->moments);
+  auto prob = gmm::residuals(*ev, samp, est.theta, weight);
+  if (!prob.has_value()) return std::unexpected(fit_to_post(prob.error()));
+  auto r = prob->r(est.theta);
   if (!r.has_value()) return std::unexpected(fit_to_post(r.error()));
-  auto J = discrepancy.residual_jacobian(samp, eval->moments,
-                                         eval->J_sigma, eval->J_mu);
+  auto J = prob->J(est.theta);
   if (!J.has_value()) return std::unexpected(fit_to_post(J.error()));
   if (J->rows() != r->size()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -440,7 +430,6 @@ equality_release_tests(spec::LatentStructure pt,
 struct ContinuousMlEvaluator {
   const model::MatrixRep& rep;
   const SampleStats& samp;
-  ML discrepancy;
   ScoreInformation information;
   double score_scale;
 
@@ -452,16 +441,15 @@ struct ContinuousMlEvaluator {
   post_expected<void>
   evaluate(const spec::LatentStructure& pt, const Estimates& est,
            Eigen::VectorXd& score, Eigen::MatrixXd& info) const {
-    return evaluate_augmented_ml(pt, rep, samp, est, discrepancy, information,
+    return evaluate_augmented_ml(pt, rep, samp, est, information,
                                  score_scale, score, info);
   }
 };
 
-template <class D>
 struct ContinuousLsEvaluator {
   const model::MatrixRep& rep;
   const SampleStats& samp;
-  D discrepancy;
+  gmm::Weight weight;
   double n_total;
 
   post_expected<spec::LatentStructure>
@@ -472,7 +460,7 @@ struct ContinuousLsEvaluator {
   post_expected<void>
   evaluate(const spec::LatentStructure& pt, const Estimates& est,
            Eigen::VectorXd& score, Eigen::MatrixXd& info) const {
-    return evaluate_augmented_ls(pt, rep, samp, est, discrepancy, n_total,
+    return evaluate_augmented_ls(pt, rep, samp, est, weight, n_total,
                                  score, info);
   }
 };
@@ -498,6 +486,189 @@ struct FimlEvaluator {
   }
 };
 
+// === Absent-row generation ==================================================
+
+bool var_is_latent(const spec::LatentStructure& pt, std::int32_t v) {
+  return v >= 0 && static_cast<std::size_t>(v) < pt.var_role.size() &&
+         pt.var_role[static_cast<std::size_t>(v)] == spec::VarRole::Latent;
+}
+
+bool var_is_indicator(const spec::LatentStructure& pt, std::int32_t v) {
+  return v >= 0 && static_cast<std::size_t>(v) < pt.var_role.size() &&
+         pt.var_role[static_cast<std::size_t>(v)] == spec::VarRole::Indicator;
+}
+
+struct AbsentRow {
+  parse::Op    op;
+  std::int32_t lhs;
+  std::int32_t rhs;
+  std::int32_t group;
+};
+
+// Enumerate model statements that have no partable row — fixed-at-0 candidates
+// for a modification-index sweep. Mirrors lavaan's `modindices()`: cross-
+// loadings and covariances. Structural regressions are not enumerated (a `~`
+// row changes the model form, beyond a partable-row append).
+std::vector<AbsentRow>
+enumerate_absent_rows(const spec::LatentStructure& pt,
+                      const ModificationIndexOptions& opts) {
+  std::vector<AbsentRow> out;
+  std::vector<std::int32_t> latents;
+  std::vector<std::int32_t> indicators;
+  for (std::int32_t v = 0; v < pt.n_vars; ++v) {
+    if (var_is_latent(pt, v)) latents.push_back(v);
+    else if (var_is_indicator(pt, v)) indicators.push_back(v);
+  }
+  using Key = std::array<std::int32_t, 3>;  // {op-tag, a, b}
+  for (std::int32_t g = 1; g <= pt.n_groups(); ++g) {
+    std::set<Key> present;
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.group[i] != g) continue;
+      const std::int32_t a = pt.lhs_var[i];
+      const std::int32_t b = pt.rhs_var[i];
+      if (pt.op[i] == parse::Op::Measurement) {
+        present.insert({0, a, b});
+      } else if (pt.op[i] == parse::Op::Covariance) {
+        present.insert({1, std::min(a, b), std::max(a, b)});
+      } else if (pt.op[i] == parse::Op::Regression) {
+        present.insert({2, a, b});
+      }
+    }
+    if (opts.include_loadings) {
+      for (const std::int32_t f : latents) {
+        for (const std::int32_t x : indicators) {
+          if (!present.count({0, f, x})) {
+            out.push_back({parse::Op::Measurement, f, x, g});
+          }
+        }
+      }
+    }
+    if (opts.include_covariances) {
+      auto cov_pairs = [&](const std::vector<std::int32_t>& vs) {
+        for (std::size_t i = 0; i < vs.size(); ++i) {
+          for (std::size_t j = i + 1; j < vs.size(); ++j) {
+            const std::int32_t a = std::min(vs[i], vs[j]);
+            const std::int32_t b = std::max(vs[i], vs[j]);
+            if (!present.count({1, a, b})) {
+              out.push_back({parse::Op::Covariance, a, b, g});
+            }
+          }
+        }
+      };
+      cov_pairs(indicators);   // residual covariances
+      cov_pairs(latents);      // factor covariances
+    }
+  }
+  return out;
+}
+
+// Append the enumerated absent statements to a partable as fixed-at-0 rows.
+spec::LatentStructure
+append_absent_rows(spec::LatentStructure pt,
+                   const std::vector<AbsentRow>& rows) {
+  for (const AbsentRow& r : rows) {
+    pt.op.push_back(r.op);
+    pt.lhs_var.push_back(r.lhs);
+    pt.rhs_var.push_back(r.rhs);
+    pt.group.push_back(r.group);
+    pt.free.push_back(0);
+    pt.exo.push_back(0);
+    pt.fixed_value.push_back(0.0);
+  }
+  return pt;
+}
+
+// === Standardized EPC =======================================================
+
+// Model-implied standard deviation of variable `v` in block `b`: a latent SD
+// from the implied latent covariance AΨAᵀ, an indicator SD from Σ(θ̂). NaN if
+// not resolvable.
+double implied_sd(const spec::LatentStructure& pt, std::int32_t v,
+                  std::size_t b, const model::ImpliedMoments& moments,
+                  const model::AssembledMatrices& assembled) {
+  if (var_is_latent(pt, v)) {
+    if (b >= assembled.blocks.size()) return std::numeric_limits<double>::quiet_NaN();
+    const Eigen::MatrixXd& Mid = assembled.blocks[b].Mid;
+    const std::int32_t pos = (static_cast<std::size_t>(v) < pt.lv_ext_pos.size())
+        ? pt.lv_ext_pos[static_cast<std::size_t>(v)] : -1;
+    if (pos < 0 || pos >= Mid.rows()) return std::numeric_limits<double>::quiet_NaN();
+    return Mid(pos, pos) > 0.0 ? std::sqrt(Mid(pos, pos))
+                               : std::numeric_limits<double>::quiet_NaN();
+  }
+  if (b >= moments.sigma.size()) return std::numeric_limits<double>::quiet_NaN();
+  const Eigen::MatrixXd& S = moments.sigma[b];
+  const std::int32_t pos = (v >= 0 && static_cast<std::size_t>(v) < pt.ov_pos.size())
+      ? pt.ov_pos[static_cast<std::size_t>(v)] : -1;
+  if (pos < 0 || pos >= S.rows()) return std::numeric_limits<double>::quiet_NaN();
+  return S(pos, pos) > 0.0 ? std::sqrt(S(pos, pos))
+                           : std::numeric_limits<double>::quiet_NaN();
+}
+
+// Residual standard deviation of an observed variable `v` (the Θ-diagonal at
+// θ̂). lavaan standardizes a residual covariance to a residual correlation
+// (`cov.std = TRUE`), dividing by the residual — not total — SDs.
+double residual_sd(const spec::LatentStructure& pt, std::int32_t v,
+                   std::size_t b, const model::AssembledMatrices& assembled) {
+  if (b >= assembled.blocks.size()) return std::numeric_limits<double>::quiet_NaN();
+  const Eigen::MatrixXd& Theta = assembled.blocks[b].Theta;
+  const std::int32_t pos = (v >= 0 && static_cast<std::size_t>(v) < pt.ov_pos.size())
+      ? pt.ov_pos[static_cast<std::size_t>(v)] : -1;
+  if (pos < 0 || pos >= Theta.rows()) return std::numeric_limits<double>::quiet_NaN();
+  return Theta(pos, pos) > 0.0 ? std::sqrt(Theta(pos, pos))
+                               : std::numeric_limits<double>::quiet_NaN();
+}
+
+// Fill `epc_lv` / `epc_all` for every fixed-parameter row of `table`, rescaling
+// the raw EPC by the model-implied SDs the standardized solution uses.
+post_expected<void>
+fill_standardized_epc(ScoreTestTable& table, const spec::LatentStructure& pt,
+                      const model::MatrixRep& rep, const Estimates& est) {
+  auto ev = build_eval(pt, rep);
+  if (!ev.has_value()) return std::unexpected(ev.error());
+  auto eval = ev->evaluate(est.theta, false, false);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  auto assembled = ev->assembled(est.theta);
+  if (!assembled.has_value()) {
+    return std::unexpected(model_to_post(assembled.error()));
+  }
+
+  for (ScoreTestResult& row : table.rows) {
+    row.epc_lv = row.epc;     // fallback: raw EPC
+    row.epc_all = row.epc;
+    const ScoreCandidate& c = row.candidate;
+    if (c.kind != ScoreCandidateKind::FixedParam) continue;
+    const std::size_t b = c.group >= 1 ? static_cast<std::size_t>(c.group - 1) : 0;
+    const double sd_l = implied_sd(pt, c.lhs_var, b, eval->moments, *assembled);
+    const double sd_r = implied_sd(pt, c.rhs_var, b, eval->moments, *assembled);
+    if (!std::isfinite(sd_l) || !std::isfinite(sd_r)) continue;
+    const bool l_lat = var_is_latent(pt, c.lhs_var);
+    const bool r_lat = var_is_latent(pt, c.rhs_var);
+    const double dl = l_lat ? sd_l : 1.0;
+    const double dr = r_lat ? sd_r : 1.0;
+    if (c.op == parse::Op::Measurement) {
+      // f =~ x: std.lv rescales the latent only, std.all also the indicator.
+      row.epc_lv = row.epc * sd_l;
+      row.epc_all = row.epc * sd_l / sd_r;
+    } else if (c.op == parse::Op::Covariance) {
+      // std.lv: latents standardized, observed (residual) covariances are not.
+      row.epc_lv = row.epc / (dl * dr);
+      // std.all (cov.std = TRUE): a residual covariance becomes a residual
+      // correlation — scaled by residual SDs; a latent covariance by latent
+      // SDs.
+      const double rl = l_lat ? sd_l : residual_sd(pt, c.lhs_var, b, *assembled);
+      const double rr = r_lat ? sd_r : residual_sd(pt, c.rhs_var, b, *assembled);
+      if (std::isfinite(rl) && std::isfinite(rr)) {
+        row.epc_all = row.epc / (rl * rr);
+      }
+    } else if (c.op == parse::Op::Regression) {
+      // y ~ x: outcome lhs, predictor rhs.
+      row.epc_lv = row.epc * dr / dl;
+      row.epc_all = row.epc * sd_r / sd_l;
+    }
+  }
+  return {};
+}
+
 }  // namespace
 
 post_expected<ScoreTestTable>
@@ -505,15 +676,50 @@ modification_indices(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const SampleStats& samp,
                      const Estimates& est,
-                     ML discrepancy,
-                     ScoreInformation information) {
+                     const ModificationIndexOptions& options) {
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
-  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+
+  // Optionally fold in statements absent from the model as fixed-at-0 rows,
+  // then place them with a freshly built MatrixRep.
+  spec::LatentStructure work_pt = std::move(pt);
+  model::MatrixRep augmented_rep;
+  const model::MatrixRep* work_rep = &rep;
+  if (options.candidates == ScoreCandidateSet::WithAbsentRows) {
+    const std::vector<AbsentRow> absent =
+        enumerate_absent_rows(work_pt, options);
+    work_pt = append_absent_rows(std::move(work_pt), absent);
+    auto mr = model::build_matrix_rep(work_pt);
+    if (!mr.has_value()) return std::unexpected(model_to_post(mr.error()));
+    augmented_rep = std::move(*mr);
+    work_rep = &augmented_rep;
+  }
+
+  if (auto e = resolve_fixed_x_from_sample(work_pt, *work_rep, samp);
+      !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  ContinuousMlEvaluator ev{rep, samp, discrepancy, information, 0.5 * *n};
-  return fixed_parameter_tests(std::move(pt), rep, est, ev);
+  ContinuousMlEvaluator ev{*work_rep, samp, options.information, 0.5 * *n};
+  auto table = fixed_parameter_tests(work_pt, *work_rep, est, ev);
+  if (!table.has_value()) return std::unexpected(table.error());
+
+  if (auto e = fill_standardized_epc(*table, work_pt, *work_rep, est);
+      !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+  return table;
+}
+
+post_expected<ScoreTestTable>
+modification_indices(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const SampleStats& samp,
+                     const Estimates& est,
+                     ScoreInformation information) {
+  ModificationIndexOptions options;
+  options.candidates = ScoreCandidateSet::FixedRowsOnly;
+  options.information = information;
+  return modification_indices(std::move(pt), rep, samp, est, options);
 }
 
 post_expected<ScoreTestTable>
@@ -521,14 +727,13 @@ score_tests(spec::LatentStructure pt,
             const model::MatrixRep& rep,
             const SampleStats& samp,
             const Estimates& est,
-            ML discrepancy,
             ScoreInformation information) {
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  ContinuousMlEvaluator ev{rep, samp, discrepancy, information, 0.5 * *n};
+  ContinuousMlEvaluator ev{rep, samp, information, 0.5 * *n};
   return equality_release_tests(std::move(pt), rep, est, ev);
 }
 
@@ -537,14 +742,13 @@ modification_indices(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const SampleStats& samp,
                      const Estimates& est,
-                     ULS discrepancy,
-                     ScoreInformation) {
+                     const gmm::Weight& weight) {
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  ContinuousLsEvaluator<ULS> ev{rep, samp, discrepancy, *n};
+  ContinuousLsEvaluator ev{rep, samp, weight, *n};
   return fixed_parameter_tests(std::move(pt), rep, est, ev);
 }
 
@@ -553,78 +757,13 @@ score_tests(spec::LatentStructure pt,
             const model::MatrixRep& rep,
             const SampleStats& samp,
             const Estimates& est,
-            ULS discrepancy,
-            ScoreInformation) {
+            const gmm::Weight& weight) {
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  ContinuousLsEvaluator<ULS> ev{rep, samp, discrepancy, *n};
-  return equality_release_tests(std::move(pt), rep, est, ev);
-}
-
-post_expected<ScoreTestTable>
-modification_indices(spec::LatentStructure pt,
-                     const model::MatrixRep& rep,
-                     const SampleStats& samp,
-                     const Estimates& est,
-                     GLS discrepancy,
-                     ScoreInformation) {
-  auto n = total_n(samp);
-  if (!n.has_value()) return std::unexpected(n.error());
-  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
-    return std::unexpected(fit_to_post(e.error()));
-  }
-  ContinuousLsEvaluator<GLS> ev{rep, samp, discrepancy, *n};
-  return fixed_parameter_tests(std::move(pt), rep, est, ev);
-}
-
-post_expected<ScoreTestTable>
-score_tests(spec::LatentStructure pt,
-            const model::MatrixRep& rep,
-            const SampleStats& samp,
-            const Estimates& est,
-            GLS discrepancy,
-            ScoreInformation) {
-  auto n = total_n(samp);
-  if (!n.has_value()) return std::unexpected(n.error());
-  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
-    return std::unexpected(fit_to_post(e.error()));
-  }
-  ContinuousLsEvaluator<GLS> ev{rep, samp, discrepancy, *n};
-  return equality_release_tests(std::move(pt), rep, est, ev);
-}
-
-post_expected<ScoreTestTable>
-modification_indices(spec::LatentStructure pt,
-                     const model::MatrixRep& rep,
-                     const SampleStats& samp,
-                     const Estimates& est,
-                     WLS discrepancy,
-                     ScoreInformation) {
-  auto n = total_n(samp);
-  if (!n.has_value()) return std::unexpected(n.error());
-  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
-    return std::unexpected(fit_to_post(e.error()));
-  }
-  ContinuousLsEvaluator<WLS> ev{rep, samp, std::move(discrepancy), *n};
-  return fixed_parameter_tests(std::move(pt), rep, est, ev);
-}
-
-post_expected<ScoreTestTable>
-score_tests(spec::LatentStructure pt,
-            const model::MatrixRep& rep,
-            const SampleStats& samp,
-            const Estimates& est,
-            WLS discrepancy,
-            ScoreInformation) {
-  auto n = total_n(samp);
-  if (!n.has_value()) return std::unexpected(n.error());
-  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
-    return std::unexpected(fit_to_post(e.error()));
-  }
-  ContinuousLsEvaluator<WLS> ev{rep, samp, std::move(discrepancy), *n};
+  ContinuousLsEvaluator ev{rep, samp, weight, *n};
   return equality_release_tests(std::move(pt), rep, est, ev);
 }
 

@@ -20,6 +20,7 @@
 //   ./build/fast/tests/magmaan_test_parity -s
 
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -43,10 +44,8 @@
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/weighted_inference.hpp"
-#include "magmaan/gls/gls.hpp"
-#include "magmaan/gls/uls.hpp"
-#include "magmaan/gls/wls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/nt/fiml.hpp"
 #include "magmaan/nt/infer.hpp"
 #include "magmaan/nt/measures.hpp"
@@ -264,7 +263,7 @@ TEST_CASE("lavaan-parity ML — magmaan reproduces lavaan on real data") {
     }
 
     // ---- fit ------------------------------------------------------------
-    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
+    auto est_or = magmaan::test::fit(*pt, *mr, samp);
 
     // demo_growth_linear and any other case magmaan parameterizes differently
     // than lavaan are soft known gaps: fit and report, never fail. The
@@ -445,10 +444,8 @@ TEST_CASE("lavaan-parity FIML — bfi missing=ml") {
   // Raw data carries the missingness mask — the genuine FIML ingestion path.
   const magmaan::data::RawData raw = magmaan::test::raw_from_fixture(data_json);
 
-  auto est_or = magmaan::estimate::fit_fiml(
-      *pt, *mr, raw, magmaan::nt::fiml::FIML{},
-      magmaan::optim::LbfgsOptimizer(
-          magmaan::optim::LbfgsOptions{.max_iter = 8000}));
+  auto est_or = magmaan::test::fit_fiml(
+      *pt, *mr, raw, magmaan::optim::LbfgsOptions{.max_iter = 8000});
 
   // magmaan_aligned soft-gate: a real-data case magmaan parameterizes
   // differently than lavaan is reported, not failed (mirrors the ML tranche).
@@ -624,8 +621,8 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
     samp.S[b] *= nb / (nb - 1.0);
   }
 
-  const magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-      .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8});
+  const magmaan::optim::LbfgsOptions opt{
+      .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8};
 
   auto fail = [&](const std::string& m) {
     failures.push_back(id + ": " + m);
@@ -647,15 +644,27 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
     }
   }
 
-  // One estimator: fit_bounded, then gate theta / df / npar / chi-square.
-  // `disc` carries the estimator type; robust SEs run for ULS only — lavaan
-  // does not expose matching robust scaled-test targets for GLS/WLS.
-  auto run_ls = [&](const std::string& e, const nlohmann::json& fit,
-                    auto disc) {
-    auto est_or = magmaan::estimate::fit_bounded(
-        *pt, *mr, samp, magmaan::estimate::Bounds{}, disc, opt);
+  // One estimator: fit via the moment-quadratic composer, then gate
+  // theta / df / npar / chi-square. The estimator name `e` selects the path;
+  // robust SEs run for ULS only — lavaan does not expose matching robust
+  // scaled-test targets for GLS/WLS.
+  auto run_ls = [&](const std::string& e, const nlohmann::json& fit) {
+    const bool is_uls = (e == "ULS");
+    const bool is_gls = (e == "GLS");
+    auto est_or = [&]() {
+      if (is_gls) {
+        return magmaan::test::fit_gls(*pt, *mr, samp,
+                                      magmaan::estimate::Bounds{},
+                                      magmaan::estimate::Backend::Lbfgs, opt);
+      }
+      magmaan::gmm::Weight w;
+      if (!is_uls) w = magmaan::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
+      return magmaan::test::fit_gmm(*pt, *mr, samp, w,
+                                    magmaan::estimate::Bounds{},
+                                    magmaan::estimate::Backend::Lbfgs, opt);
+    }();
     if (!est_or.has_value()) {
-      fail(e + ": fit_bounded — " + est_or.error().detail);
+      fail(e + ": fit — " + est_or.error().detail);
       return;
     }
     const auto& est = *est_or;
@@ -688,8 +697,19 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
     // continuous_ls_chisq reproduces exactly. GLS/WLS reporting follows the
     // 2·N·fmin convention, which diverges from lavaan's reported chi-square by
     // an estimator-convention amount — gated loosely, mirroring ls_golden.
+    // The moment weight is the only estimator selector: empty ⇒ ULS.
+    magmaan::gmm::Weight weight;
+    if (is_gls) {
+      auto ev = magmaan::model::ModelEvaluator::build(*pt, *mr);
+      REQUIRE(ev.has_value());
+      auto w = magmaan::gmm::normal_theory_weight(*ev, samp, est.theta);
+      REQUIRE(w.has_value());
+      weight = *w;
+    } else if (!is_uls) {
+      weight = magmaan::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
+    }
     double chisq = 0.0;
-    auto c = magmaan::estimate::continuous_ls_chisq(samp, *pt, *mr, est, disc);
+    auto c = magmaan::estimate::continuous_ls_chisq(samp, *pt, *mr, est, weight);
     if (!c.has_value()) {
       fail(e + ": continuous_ls_chisq — " + c.error().detail);
     } else {
@@ -697,19 +717,17 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
       double n_total = 0.0;
       for (auto nb : samp.n_obs) n_total += static_cast<double>(nb);
       const double chisq_tol =
-          std::is_same_v<decltype(disc), magmaan::gls::ULS>
-              ? 5e-2
-              : std::max(5e-2, 2.0 * n_total * 2e-3);
+          is_uls ? 5e-2 : std::max(5e-2, 2.0 * n_total * 2e-3);
       if (std::abs(chisq - fit["chisq"].get<double>()) > chisq_tol)
         fail(e + ": chisq = " + std::to_string(chisq) + ", lavaan = " +
              std::to_string(fit["chisq"].get<double>()));
     }
 
-    if constexpr (std::is_same_v<decltype(disc), magmaan::gls::ULS>) {
+    if (is_uls) {
       if (fit.contains("robust") && !fit["robust"].is_null()) {
         const auto& rref = fit["robust"];
         auto rob_or = magmaan::estimate::robust_continuous_ls(
-            *pt, *mr, samp, est, magmaan::gls::ULS{},
+            *pt, *mr, samp, est, magmaan::gmm::Weight{},
             matrices_from_blocks(rref["gamma"]));
         if (!rob_or.has_value()) {
           fail("ULS robust — " + rob_or.error().detail);
@@ -742,13 +760,9 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
   };
 
   const auto& fits = ref["fits"];
-  if (fits.contains("ULS"))
-    run_ls("ULS", fits["ULS"], magmaan::gls::ULS{});
-  if (fits.contains("GLS"))
-    run_ls("GLS", fits["GLS"], magmaan::gls::GLS{});
-  if (fits.contains("WLS"))
-    run_ls("WLS", fits["WLS"],
-           magmaan::gls::WLS(matrices_from_blocks(fits["WLS"]["WLS.V"])));
+  if (fits.contains("ULS")) run_ls("ULS", fits["ULS"]);
+  if (fits.contains("GLS")) run_ls("GLS", fits["GLS"]);
+  if (fits.contains("WLS")) run_ls("WLS", fits["WLS"]);
 
 }
 
@@ -802,8 +816,8 @@ TEST_CASE("lavaan-parity ordinal — bfi DWLS/WLS") {
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
 
-  const magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-      .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8});
+  const magmaan::optim::LbfgsOptions opt{
+      .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8};
 
   const std::int64_t n_total = std::accumulate(
       stats.n_obs.begin(), stats.n_obs.end(), std::int64_t{0});
@@ -824,8 +838,9 @@ TEST_CASE("lavaan-parity ordinal — bfi DWLS/WLS") {
         : magmaan::estimate::OrdinalWeightKind::WLS;
     const auto& fit = fit_item.value();
 
-    auto est_or = magmaan::estimate::fit_ordinal_bounded(
-        *pt, *mr, stats, magmaan::estimate::Bounds{}, kind, opt);
+    auto est_or = magmaan::test::fit_ordinal_bounded(
+        *pt, *mr, stats, magmaan::estimate::Bounds{}, kind,
+        magmaan::estimate::Backend::Lbfgs, opt);
     if (!est_or.has_value()) {
       fail(name + ": fit_ordinal_bounded — " + est_or.error().detail);
       continue;

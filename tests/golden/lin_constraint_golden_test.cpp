@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -83,7 +84,7 @@ TEST_CASE("linear-constraint goldens — θ̂/SE/χ²/df match lavaan(+ `==`)") 
 
     const magmaan::data::SampleStats samp = sample_from_fixture(exp);
 
-    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
+    auto est_or = magmaan::test::fit(*pt, *mr, samp);
     if (!est_or.has_value()) { failures.push_back(id + ": fit — " + est_or.error().detail); continue; }
     const auto& est = *est_or;
 

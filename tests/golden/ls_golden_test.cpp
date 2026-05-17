@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -16,12 +17,10 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/weighted_inference.hpp"
-#include "magmaan/gls/gls.hpp"
-#include "magmaan/gls/uls.hpp"
-#include "magmaan/gls/wls.hpp"
 #include "magmaan/nt/infer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/lavaanify.hpp"
 
@@ -68,6 +67,25 @@ std::vector<Eigen::MatrixXd> matrices_from_blocks(const nlohmann::json& blocks) 
   out.reserve(blocks.size());
   for (const auto& b : blocks) out.push_back(matrix_from_json(b["matrix"]));
   return out;
+}
+
+// The moment-quadratic weight for a continuous LS estimator: empty ⇒ ULS;
+// `WLS.V` from the fixture ⇒ WLS; the normal-theory weight ⇒ GLS.
+magmaan::gmm::Weight ls_estimator_weight(
+    const std::string& estimator, const nlohmann::json& fit,
+    const magmaan::spec::LatentStructure& pt,
+    const magmaan::model::MatrixRep& rep,
+    const magmaan::data::SampleStats& samp,
+    const magmaan::estimate::Estimates& est) {
+  if (estimator == "ULS") return {};
+  if (estimator == "WLS") {
+    return magmaan::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
+  }
+  auto ev = magmaan::model::ModelEvaluator::build(pt, rep);
+  REQUIRE(ev.has_value());
+  auto w = magmaan::gmm::normal_theory_weight(*ev, samp, est.theta);
+  REQUIRE(w.has_value());
+  return *w;
 }
 
 struct LsHandles {
@@ -155,14 +173,10 @@ bool check_estimate(const std::string& id,
                     const magmaan::model::MatrixRep& rep,
                     std::vector<std::string>& failures) {
   const double d_theta = max_theta_diff(est.theta, fit["theta_hat"]);
-  // GLS currently uses the explicit 0.5 * tr(S^-1 D S^-1 D) convention in
-  // `GLS::value()`, while lavaan's reported `fmin` is half of that value.
-  // Keep `fmin` as an objective-scale regression check; lavaan's public LS
-  // chi-square reporting is asserted separately below.
-  const double fmin_on_lavaan_scale =
-      estimator == "GLS" ? 0.5 * est.fmin : est.fmin;
-  const double d_fmin = std::abs(fmin_on_lavaan_scale -
-                                 fit["fmin"].get<double>());
+  // `fmin` is on lavaan's objective scale for every estimator — the GLS
+  // moment weight carries no extra factor (χ² = 2N·fmin uniformly). Kept as
+  // an objective-scale regression check.
+  const double d_fmin = std::abs(est.fmin - fit["fmin"].get<double>());
 
   const double theta_tol =
       id == "0002_multigroup_3f_school" ? 2e-4 :
@@ -176,7 +190,7 @@ bool check_estimate(const std::string& id,
                   "%s/%s: max|theta-lavaan|=%.3e, |fmin-lavaan|=%.3e "
                   "(ours %.9g, lavaan %.9g, iters=%d)",
                   id.c_str(), estimator.c_str(), d_theta, d_fmin,
-                  fmin_on_lavaan_scale,
+                  est.fmin,
                   fit["fmin"].get<double>(), est.iterations);
     failures.push_back(buf);
     return false;
@@ -207,27 +221,10 @@ bool check_estimate(const std::string& id,
   }
 
   double chisq = std::numeric_limits<double>::quiet_NaN();
-  if (estimator == "ULS") {
+  {
     auto chisq_or = magmaan::estimate::continuous_ls_chisq(
-        samp, pt, rep, est, magmaan::gls::ULS{});
-    if (!chisq_or.has_value()) {
-      failures.push_back(id + "/" + estimator + ": continuous_ls_chisq — " +
-                         chisq_or.error().detail);
-      return false;
-    }
-    chisq = *chisq_or;
-  } else if (estimator == "GLS") {
-    auto chisq_or = magmaan::estimate::continuous_ls_chisq(
-        samp, pt, rep, est, magmaan::gls::GLS{});
-    if (!chisq_or.has_value()) {
-      failures.push_back(id + "/" + estimator + ": continuous_ls_chisq — " +
-                         chisq_or.error().detail);
-      return false;
-    }
-    chisq = *chisq_or;
-  } else {
-    auto chisq_or = magmaan::estimate::continuous_ls_chisq(
-        samp, pt, rep, est, magmaan::gls::WLS(matrices_from_blocks(fit["WLS.V"])));
+        samp, pt, rep, est,
+        ls_estimator_weight(estimator, fit, pt, rep, samp, est));
     if (!chisq_or.has_value()) {
       failures.push_back(id + "/" + estimator + ": continuous_ls_chisq — " +
                          chisq_or.error().detail);
@@ -266,7 +263,7 @@ bool check_uls_robust(const std::string& id,
   if (!fit.contains("robust") || fit["robust"].is_null()) return true;
   const auto& robust = fit["robust"];
   auto rob_or = magmaan::estimate::robust_continuous_ls(
-      pt, rep, samp, est, magmaan::gls::ULS{},
+      pt, rep, samp, est, magmaan::gmm::Weight{},
       matrices_from_blocks(robust["gamma"]));
   if (!rob_or.has_value()) {
     failures.push_back(id + "/ULS robust: robust_continuous_ls — " +
@@ -319,8 +316,8 @@ bool check_uls_robust(const std::string& id,
 
 TEST_CASE("continuous LS fixtures: ULS/GLS/WLS bounded fits match lavaan") {
   const std::string dir = magmaan::test::fixtures_dir() + "/ls";
-  magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-      .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8});
+  const magmaan::optim::LbfgsOptions opt{
+      .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8};
 
   int total = 0;
   int passed = 0;
@@ -350,21 +347,22 @@ TEST_CASE("continuous LS fixtures: ULS/GLS/WLS bounded fits match lavaan") {
           std::unexpected(magmaan::FitError{
               magmaan::FitError::Kind::NumericIssue, "not run", 0, 0.0});
       if (estimator == "ULS") {
-        est_or = magmaan::estimate::fit_bounded(
-            handles->pt, handles->rep, samp, magmaan::estimate::Bounds{},
-            magmaan::gls::ULS{}, opt);
+        est_or = magmaan::test::fit_gmm(
+            handles->pt, handles->rep, samp, {}, magmaan::estimate::Bounds{},
+            magmaan::estimate::Backend::Lbfgs, opt);
       } else if (estimator == "GLS") {
-        est_or = magmaan::estimate::fit_bounded(
+        est_or = magmaan::test::fit_gls(
             handles->pt, handles->rep, samp, magmaan::estimate::Bounds{},
-            magmaan::gls::GLS{}, opt);
+            magmaan::estimate::Backend::Lbfgs, opt);
       } else {
-        est_or = magmaan::estimate::fit_bounded(
-            handles->pt, handles->rep, samp, magmaan::estimate::Bounds{},
-            magmaan::gls::WLS(matrices_from_blocks(fit["WLS.V"])), opt);
+        est_or = magmaan::test::fit_gmm(
+            handles->pt, handles->rep, samp,
+            magmaan::gmm::Weight(matrices_from_blocks(fit["WLS.V"])),
+            magmaan::estimate::Bounds{}, magmaan::estimate::Backend::Lbfgs, opt);
       }
 
       if (!est_or.has_value()) {
-        failures.push_back(id + "/" + estimator + ": fit_bounded — " +
+        failures.push_back(id + "/" + estimator + ": fit — " +
                            est_or.error().detail);
         continue;
       }
@@ -382,8 +380,8 @@ TEST_CASE("continuous LS fixtures: ULS/GLS/WLS bounded fits match lavaan") {
 
 TEST_CASE("continuous LS robust ULS fixtures match lavaan robust.sem") {
   const std::string dir = magmaan::test::fixtures_dir() + "/ls";
-  magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-      .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8});
+  const magmaan::optim::LbfgsOptions opt{
+      .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8};
 
   int total = 0;
   int passed = 0;
@@ -411,11 +409,11 @@ TEST_CASE("continuous LS robust ULS fixtures match lavaan robust.sem") {
     if (!fit.contains("robust") || fit["robust"].is_null()) continue;
     ++total;
     auto samp = sample_stats_from_fit(fit);
-    auto est_or = magmaan::estimate::fit_bounded(
-        handles->pt, handles->rep, samp, magmaan::estimate::Bounds{},
-        magmaan::gls::ULS{}, opt);
+    auto est_or = magmaan::test::fit_gmm(
+        handles->pt, handles->rep, samp, {}, magmaan::estimate::Bounds{},
+        magmaan::estimate::Backend::Lbfgs, opt);
     if (!est_or.has_value()) {
-      failures.push_back(id + "/ULS robust: fit_bounded — " +
+      failures.push_back(id + "/ULS robust: fit — " +
                          est_or.error().detail);
       continue;
     }

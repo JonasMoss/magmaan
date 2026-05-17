@@ -26,7 +26,6 @@ namespace magmaan::nt::infer {
 
 using estimate::build_eq_constraints;
 using estimate::resolve_fixed_x_from_sample;
-using nt::ml::ML;
 
 using data::RawData;
 using data::SampleStats;
@@ -341,7 +340,6 @@ information_observed_fd(spec::LatentStructure       pt,
 
   // FD per-block Hessian, accumulated with each block's n_b/2 weighting:
   //   info[a,b] = Σ_blocks (n_b/2) · ∂²F_b/∂θ_a ∂θ_b
-  ML ml;
   auto block_grad_at = [&](const Eigen::VectorXd& theta, std::size_t b)
       -> post_expected<Eigen::VectorXd> {
     auto sm = ev.sigma(theta);
@@ -359,10 +357,10 @@ information_observed_fd(spec::LatentStructure       pt,
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "ev.dmu_dtheta(θ±h) failed: " + Jmu.error().detail));
     }
-    auto g = ml.gradient_block(samp, *sm, *J, b, *Jmu);
+    auto g = nt::ml_gradient_block(samp, *sm, *J, b, *Jmu);
     if (!g.has_value()) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "ML::gradient_block failed: " + g.error().detail));
+          "ml_gradient_block failed: " + g.error().detail));
     }
     return *g;
   };

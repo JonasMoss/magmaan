@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #ifdef MAGMAAN_WITH_CERES
 
@@ -11,7 +12,6 @@
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/data/sample_stats.hpp"
-#include "magmaan/gls/uls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -23,7 +23,6 @@ using magmaan::optim::CeresOptions;
 using magmaan::optim::LbfgsBOptimizer;
 using magmaan::optim::LbfgsBOptions;
 using magmaan::data::SampleStats;
-using magmaan::gls::ULS;
 using magmaan::model::build_matrix_rep;
 using magmaan::parse::Parser;
 using magmaan::spec::lavaanify;
@@ -77,11 +76,10 @@ TEST_CASE("CeresBoundedOptimizer + ULS — multi-residual LS adapter converges "
   samp.S = {S};
   samp.n_obs = {301};
 
-  CeresBoundedOptimizer opt;  // default opts; max_iter=500
-  auto est_or = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{},
-                                        ULS{}, opt);
+  auto est_or = magmaan::test::fit_gmm(*pt, *mr, samp, {}, Bounds{},
+                                       magmaan::estimate::Backend::Ceres);
   if (!est_or.has_value()) {
-    MESSAGE("fit_bounded<ULS, CeresBoundedOptimizer> failed: "
+    MESSAGE("fit_gmm(ULS, Ceres) failed: "
             << "kind=" << static_cast<int>(est_or.error().kind)
             << " detail=" << est_or.error().detail);
   }
@@ -124,12 +122,12 @@ TEST_CASE("LbfgsBOptimizer + ULS — Heywood-prone S: LS-adapter path honors "
 
   // ULS landscape is shallow at convergence — match the existing ULS
   // bounded path's tolerance combo (see `uls_test.cpp` cov+mean recovery).
-  LbfgsBOptimizer opt(LbfgsBOptions{
-      .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9});
-  auto est_or = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{},
-                                        ULS{}, opt);
+  const magmaan::optim::LbfgsOptions opt{
+      .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9};
+  auto est_or = magmaan::test::fit_gmm(*pt, *mr, samp, {}, Bounds{},
+                                       magmaan::estimate::Backend::Lbfgs, opt);
   if (!est_or.has_value()) {
-    MESSAGE("fit_bounded<ULS, LbfgsBOptimizer> failed: "
+    MESSAGE("fit_gmm(ULS, LBFGS-B) failed: "
             << "kind=" << static_cast<int>(est_or.error().kind)
             << " detail=" << est_or.error().detail);
   }

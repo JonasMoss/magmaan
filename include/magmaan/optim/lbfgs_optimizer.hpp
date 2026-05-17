@@ -35,6 +35,8 @@ class LbfgsOptimizer {
 
   LbfgsOptimizer(LbfgsOptions opts = {}) noexcept : opts_(opts) {}
 
+  LbfgsOptions options() const noexcept { return opts_; }
+
   using Objective = std::function<double(const Eigen::VectorXd& /*x*/,
                                          Eigen::VectorXd&       /*grad_out*/)>;
 

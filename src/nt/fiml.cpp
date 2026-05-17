@@ -17,6 +17,8 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/optim/optimizers.hpp"
+#include "magmaan/optim/problem.hpp"
 
 #include "detail_vech.hpp"
 
@@ -30,7 +32,6 @@ using estimate::build_eq_constraints;
 using estimate::resolve_fixed_x_from_sample;
 using estimate::simple_start_values;
 using nt::measures::BaselineFit;
-using optim::LbfgsOptimizer;
 
 namespace {
 
@@ -1580,6 +1581,102 @@ fiml_baseline_chi2(const spec::LatentStructure& pt,
                    FIML discrepancy) {
   return fiml_baseline_chi2_impl(raw, observed_exogenous_indices(pt),
                                  discrepancy);
+}
+
+fit_expected<Estimates>
+fit_fiml(spec::LatentStructure pt,
+         const model::MatrixRep& rep,
+         const RawData& raw,
+         const Eigen::VectorXd& x0,
+         FIML discrepancy,
+         optim::LbfgsOptions opts) {
+  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+
+  auto start_samp_or = fiml_start_sample_stats(raw);
+  if (!start_samp_or.has_value()) return std::unexpected(start_samp_or.error());
+  const SampleStats& start_samp = *start_samp_or;
+
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, start_samp);
+      !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(FitError{
+        FitError::Kind::InvalidStartValues,
+        "ModelEvaluator::build failed: " + ev_or.error().detail, 0, 0.0});
+  }
+  auto ev = std::move(*ev_or);
+
+  if (x0.size() != pt.n_free()) {
+    return std::unexpected(FitError{
+        FitError::Kind::InvalidStartValues,
+        "fit_fiml: x0 size (" + std::to_string(x0.size()) + ") != n_free (" +
+            std::to_string(pt.n_free()) + ")", 0, 0.0});
+  }
+
+  auto cache_or = discrepancy.prepare(raw);
+  if (!cache_or.has_value()) return std::unexpected(cache_or.error());
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) {
+    return std::unexpected(FitError{
+        FitError::Kind::NumericIssue,
+        "constraint: " + con_or.error().detail, 0, 0.0});
+  }
+  const EqConstraints& con = *con_or;
+
+  auto eval_at = [&](const Eigen::VectorXd& x,
+                     Eigen::VectorXd& grad) -> double {
+    auto eval = ev.evaluate(x, true, true);
+    if (!eval.has_value()) {
+      grad.setZero();
+      return std::numeric_limits<double>::infinity();
+    }
+    auto vg = discrepancy.value_gradient(raw, *cache_or, eval->moments,
+                                         eval->J_sigma, eval->J_mu);
+    if (!vg.has_value()) {
+      grad.setZero();
+      return std::numeric_limits<double>::infinity();
+    }
+    grad = std::move(vg->gradient);
+    return vg->value;
+  };
+
+  if (!con.active()) {
+    optim::ScalarProblem prob;
+    prob.f       = eval_at;
+    prob.n_param = x0.size();
+    prob.expand  = [](const Eigen::VectorXd& x) { return x; };
+    auto out_or = optim::lbfgs(prob, x0, {}, opts);
+    if (!out_or.has_value()) return std::unexpected(out_or.error());
+    return Estimates{std::move(out_or->x), out_or->fmin, out_or->iterations};
+  }
+
+  if (con.n_alpha == 0) {
+    Eigen::VectorXd theta = con.expand(Eigen::VectorXd(0));
+    Eigen::VectorXd scratch(theta.size());
+    const double f = eval_at(theta, scratch);
+    return Estimates{std::move(theta), f, 0};
+  }
+
+  optim::ScalarProblem prob_a;
+  prob_a.n_param = con.n_alpha;
+  prob_a.expand  = [&con](const Eigen::VectorXd& a) { return con.expand(a); };
+  prob_a.f = [&con, &eval_at](const Eigen::VectorXd& a,
+                              Eigen::VectorXd& grad_a) -> double {
+    const Eigen::VectorXd x = con.expand(a);
+    Eigen::VectorXd grad_x(x.size());
+    const double v = eval_at(x, grad_x);
+    grad_a = con.reduce_gradient(grad_x);
+    return v;
+  };
+  auto out_or = optim::lbfgs(prob_a, con.contract(x0), {}, opts);
+  if (!out_or.has_value()) return std::unexpected(out_or.error());
+  return Estimates{con.expand(out_or->x), out_or->fmin, out_or->iterations};
 }
 
 }  // namespace magmaan::nt::fiml

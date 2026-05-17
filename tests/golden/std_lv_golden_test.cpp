@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -86,7 +87,7 @@ TEST_CASE("std.lv goldens — θ̂/SE/χ²/df match lavaan(std.lv=TRUE)") {
 
     const magmaan::data::SampleStats samp = sample_from_fixture(exp);
 
-    auto est_or = magmaan::estimate::fit(*pt, *mr, samp);
+    auto est_or = magmaan::test::fit(*pt, *mr, samp);
     if (!est_or.has_value()) {
       failures.push_back(id + ": fit — " + est_or.error().detail);
       continue;
@@ -171,7 +172,7 @@ TEST_CASE("std.lv goldens — θ̂/SE/χ²/df match lavaan(std.lv=TRUE)") {
     auto pt_m = magmaan::spec::lavaanify(*fp);   // marker (default)
     auto mr_m = magmaan::model::build_matrix_rep(*pt_m);
     if (pt_m.has_value() && mr_m.has_value()) {
-      auto est_m = magmaan::estimate::fit(*pt_m, *mr_m, samp);
+      auto est_m = magmaan::test::fit(*pt_m, *mr_m, samp);
       if (est_m.has_value()) {
         const double chi2_m = magmaan::nt::infer::chi2_stat(samp, *est_m);
         auto df_m_or = magmaan::nt::infer::df_stat(*pt_m, samp);

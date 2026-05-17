@@ -9,29 +9,13 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
-#include "magmaan/optim/concepts.hpp"
+#include "magmaan/optim/problem.hpp"
 
 using magmaan::FitError;
 using magmaan::optim::CeresBoundedOptimizer;
 using magmaan::optim::CeresOptimizer;
 using magmaan::optim::CeresOptions;
 
-// ============================================================================
-// Concept guards — compile-time checks that both adapters model the right
-// concepts. CeresBoundedOptimizer satisfies both Optimizer (via the
-// (f, x0) overload) and BoundedOptimizer (via the (f, x0, lb, ub) overload).
-// ============================================================================
-
-TEST_CASE("Optimizer concept is satisfied by both Ceres backends") {
-  static_assert(magmaan::optim::Optimizer<CeresOptimizer>,
-                "CeresOptimizer must model Optimizer");
-  static_assert(magmaan::optim::Optimizer<CeresBoundedOptimizer>,
-                "CeresBoundedOptimizer must model Optimizer too "
-                "(via its unbounded minimize overload)");
-  static_assert(magmaan::optim::BoundedOptimizer<CeresBoundedOptimizer>,
-                "CeresBoundedOptimizer must model BoundedOptimizer");
-  CHECK(true);
-}
 
 // ============================================================================
 // Behavioural tests — quadratic minimization with each backend.

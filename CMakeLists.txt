@@ -14,6 +14,7 @@ endif()
 option(MAGMAAN_BUILD_TESTS  "Build the magmaan test suite"      ${MAGMAAN_IS_TOP_LEVEL})
 option(MAGMAAN_BUILD_BENCH  "Build the magmaan benchmarks"      OFF)
 option(MAGMAAN_WITH_CERES   "Enable the Ceres Solver optimizer backend (optional, heavy first build)"  OFF)
+option(MAGMAAN_WITH_NLOPT   "Enable the NLopt optimizer backend (SLSQP cross-check; augmented-Lagrangian-ready)"  OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -39,6 +40,12 @@ magmaan_find_or_fetch(NAME lbfgspp
   GIT_TAG        v0.4.0
   FIND_PACKAGE_ARGS CONFIG)
 
+# CppNumericalSolvers — header-only, Eigen-native optimizer collection. We use
+# its Newton trust-region solver as an independent cross-check of the L-BFGS
+# optima (lavaan's nlminb is itself a trust region). v2.0.0 is fetched and
+# patched (a TrustRegionNewton dimension bug); see cmake/CppNumericalSolversFetch.cmake.
+include(CppNumericalSolversFetch)
+
 # Ceres Solver — optional alternative optimizer backend, behind MAGMAAN_WITH_CERES.
 # OFF by default because Ceres is a heavy first build (~5–15 min via FetchContent).
 # The Ceres-specific build flags (no LAPACK / SuiteSparse / glog / gflags /
@@ -46,6 +53,14 @@ magmaan_find_or_fetch(NAME lbfgspp
 # `cmake/CeresFetch.cmake` so the top-level CMakeLists stays tidy.
 if(MAGMAAN_WITH_CERES)
   include(CeresFetch)
+endif()
+
+# NLopt — optional optimizer backend, behind MAGMAAN_WITH_NLOPT. Lightweight C
+# library; the SLSQP algorithm gives a sequential-quadratic-programming
+# cross-check, and AUGLAG is reserved for future nonlinear-constraint support.
+# Build knobs live in `cmake/NloptFetch.cmake`, mirroring CeresFetch.cmake.
+if(MAGMAAN_WITH_NLOPT)
+  include(NloptFetch)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -62,15 +77,25 @@ add_library(magmaan STATIC
   src/model/model_evaluator.cpp
   src/nt/ml.cpp
   src/nt/fiml.cpp
-  src/gls/uls.cpp
-  src/gls/gls_wls.cpp
+  src/gmm/moment_quadratic.cpp
+  src/gmm/gp.cpp
+  src/estimate/fit.cpp
+  src/estimate/reparameterize.cpp
   src/estimate/bounds.cpp
+  src/estimate/dls_weight.cpp
   src/estimate/ordinal.cpp
   src/estimate/pairwise.cpp
   src/estimate/weighted_inference.cpp
   src/estimate/start_values.cpp
+  src/estimate/start_fabin.cpp
+  src/estimate/start_guttman.cpp
+  src/estimate/start_bentler.cpp
+  src/estimate/start_jamesstein.cpp
+  src/estimate/cfa_utils.cpp
   src/optim/lbfgs_optimizer.cpp
   src/optim/lbfgsb_optimizer.cpp
+  src/optim/trust_region_optimizer.cpp
+  src/optim/optimizers.cpp
   src/estimate/resolve_fixed_x.cpp
   src/estimate/constraints.cpp
   src/nt/inference.cpp
@@ -79,6 +104,7 @@ add_library(magmaan STATIC
   src/nt/standardized.cpp
   src/nt/fit_measures.cpp
   src/data/raw_data.cpp
+  src/data/shrinkage.cpp
   src/data/h_score.cpp
   src/data/pairwise_mixed.cpp
   src/data/pairwise_ordinal.cpp
@@ -104,7 +130,8 @@ target_include_directories(magmaan
 
 target_link_libraries(magmaan
   PUBLIC  magmaan::no_exc_no_rtti Eigen3::Eigen
-  PRIVATE magmaan::warnings magmaan::sanitizers lbfgspp)
+  PRIVATE magmaan::warnings magmaan::sanitizers lbfgspp
+          CppNumericalSolvers::CppNumericalSolvers)
 
 # LBFGS++ has `throw std::invalid_argument` in its Param check. GCC under
 # -fno-exceptions refuses to compile any throw statement (Clang elides it
@@ -119,6 +146,11 @@ set_source_files_properties(src/optim/lbfgs_optimizer.cpp
 # we can catch at the boundary; the rest of magmaan stays -fno-exceptions.
 set_source_files_properties(src/optim/lbfgsb_optimizer.cpp
   PROPERTIES COMPILE_OPTIONS "-fexceptions")
+# Trust-region adapter — CppNumericalSolvers is header-only and compiled into
+# this TU; like the LBFGS++ TUs it may instantiate code that `throw`s, which
+# GCC rejects under -fno-exceptions. Compile just this TU with -fexceptions.
+set_source_files_properties(src/optim/trust_region_optimizer.cpp
+  PROPERTIES COMPILE_OPTIONS "-fexceptions")
 
 # Ceres optimizer adapter — only compiled when MAGMAAN_WITH_CERES=ON. Mirrors
 # the LBFGS++ pattern: TU is `-fexceptions` (Ceres uses exceptions internally,
@@ -131,6 +163,16 @@ if(MAGMAAN_WITH_CERES)
   target_compile_definitions(magmaan PUBLIC MAGMAAN_WITH_CERES)
   set_source_files_properties(src/optim/ceres_optimizer.cpp
     PROPERTIES COMPILE_OPTIONS "-fexceptions")
+endif()
+
+# NLopt optimizer adapter — only compiled when MAGMAAN_WITH_NLOPT=ON. The
+# adapter uses NLopt's C API (`<nlopt.h>`, return-code based), so unlike the
+# Ceres TU it needs no -fexceptions. A PUBLIC compile definition lets
+# downstream code (tests, R bindings) detect the build via `#ifdef`.
+if(MAGMAAN_WITH_NLOPT)
+  target_sources(magmaan PRIVATE src/optim/nlopt_optimizer.cpp)
+  target_link_libraries(magmaan PRIVATE NLopt::nlopt)
+  target_compile_definitions(magmaan PUBLIC MAGMAAN_WITH_NLOPT)
 endif()
 
 # ---------------------------------------------------------------------------

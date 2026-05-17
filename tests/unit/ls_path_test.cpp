@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../test_fit.hpp"
 
 #ifdef MAGMAAN_WITH_CERES
 
@@ -7,37 +8,28 @@
 #include <Eigen/Core>
 
 #include "magmaan/estimate/bounds.hpp"
-#include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/estimate/fit.hpp"
-#include "magmaan/optim/lbfgsb_optimizer.hpp"
+#include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/data/sample_stats.hpp"
-#include "magmaan/gls/gls.hpp"
-#include "magmaan/gls/uls.hpp"
-#include "magmaan/gls/wls.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/lavaanify.hpp"
 
+using magmaan::estimate::Backend;
 using magmaan::estimate::Bounds;
-using magmaan::optim::CeresBoundedOptimizer;
-using magmaan::optim::LbfgsBOptimizer;
-using magmaan::optim::LbfgsBOptions;
+using magmaan::optim::LbfgsOptions;
 using magmaan::data::SampleStats;
-using magmaan::gls::GLS;
-using magmaan::gls::ULS;
-using magmaan::gls::WLS;
 using magmaan::model::build_matrix_rep;
 using magmaan::parse::Parser;
 using magmaan::spec::lavaanify;
 
 // ============================================================================
-// End-to-end tests for the LS path (`fit_bounded` + `LsDiscrepancy` +
-// `LsBoundedOptimizer`). Covers the three combinations exercised by the
-// Phase A / B work:
+// End-to-end tests for the moment-quadratic LS path (`fit_gmm` / `fit_gls`).
+// Covers:
 //
-//   • LS-aware Ceres adapter recovers ground-truth on a 1F-feasible cov.
-//   • LS-aware LBFGS-B adapter recovers the same θ̂ (cross-backend parity).
+//   • LS-aware Ceres backend recovers ground-truth on a 1F-feasible cov.
+//   • Ceres / LBFGS-B θ̂ parity (cross-backend).
 //   • Active equality constraints (shared loadings) compose with auto-bounds
 //     on residual variances — both constraints respected at the optimum.
 // ============================================================================
@@ -54,7 +46,7 @@ Eigen::Matrix3d make_1f_S() {
 
 }  // namespace
 
-TEST_CASE("LS path: fit_bounded<ULS, Ceres> recovers θ̂ on a 1F-feasible cov") {
+TEST_CASE("LS path: ULS / Ceres recovers θ̂ on a 1F-feasible cov") {
   auto fp = Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
   auto pt = lavaanify(*fp);
@@ -66,8 +58,8 @@ TEST_CASE("LS path: fit_bounded<ULS, Ceres> recovers θ̂ on a 1F-feasible cov")
   samp.S = {make_1f_S()};
   samp.n_obs = {301};
 
-  CeresBoundedOptimizer opt;
-  auto est = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{}, ULS{}, opt);
+  auto est = magmaan::test::fit_gmm(*pt, *mr, samp, {}, Bounds{},
+                                    Backend::Ceres);
   REQUIRE(est.has_value());
   CHECK(est->fmin < 1e-10);
 
@@ -90,15 +82,13 @@ TEST_CASE("LS path: Ceres / LBFGS-B θ̂ parity on a 1F-feasible cov") {
   samp.S = {make_1f_S()};
   samp.n_obs = {301};
 
-  CeresBoundedOptimizer ceres_opt;
   // LBFGS-B on ULS still needs the shallow-LS tolerance combo from uls_test.
-  LbfgsBOptimizer lb_opt(LbfgsBOptions{
-      .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9});
+  const LbfgsOptions lb_opts{.max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9};
 
-  auto est_ceres = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{},
-                                           ULS{}, ceres_opt);
-  auto est_lb    = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{},
-                                           ULS{}, lb_opt);
+  auto est_ceres = magmaan::test::fit_gmm(*pt, *mr, samp, {}, Bounds{},
+                                          Backend::Ceres);
+  auto est_lb    = magmaan::test::fit_gmm(*pt, *mr, samp, {}, Bounds{},
+                                          Backend::Lbfgs, lb_opts);
   REQUIRE(est_ceres.has_value());
   REQUIRE(est_lb.has_value());
 
@@ -111,7 +101,7 @@ TEST_CASE("LS path: Ceres / LBFGS-B θ̂ parity on a 1F-feasible cov") {
   CHECK(diff < 1e-4);
 }
 
-TEST_CASE("LS path: fit_bounded<GLS, Ceres> recovers Sigma on a 1F-feasible cov") {
+TEST_CASE("LS path: GLS / Ceres recovers Sigma on a 1F-feasible cov") {
   auto fp = Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
   auto pt = lavaanify(*fp);
@@ -123,8 +113,7 @@ TEST_CASE("LS path: fit_bounded<GLS, Ceres> recovers Sigma on a 1F-feasible cov"
   samp.S = {make_1f_S()};
   samp.n_obs = {301};
 
-  CeresBoundedOptimizer opt;
-  auto est = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{}, GLS{}, opt);
+  auto est = magmaan::test::fit_gls(*pt, *mr, samp, Bounds{}, Backend::Ceres);
   REQUIRE(est.has_value());
   CHECK(est->fmin < 1e-10);
 
@@ -133,7 +122,7 @@ TEST_CASE("LS path: fit_bounded<GLS, Ceres> recovers Sigma on a 1F-feasible cov"
   CHECK((samp.S[0] - sm.sigma[0]).cwiseAbs().maxCoeff() < 1e-5);
 }
 
-TEST_CASE("LS path: fit_bounded<WLS, Ceres> recovers Sigma on a 1F-feasible cov") {
+TEST_CASE("LS path: WLS / Ceres recovers Sigma on a 1F-feasible cov") {
   auto fp = Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
   auto pt = lavaanify(*fp);
@@ -145,9 +134,9 @@ TEST_CASE("LS path: fit_bounded<WLS, Ceres> recovers Sigma on a 1F-feasible cov"
   samp.S = {make_1f_S()};
   samp.n_obs = {301};
 
-  WLS wls({Eigen::MatrixXd::Identity(6, 6)});
-  CeresBoundedOptimizer opt;
-  auto est = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{}, wls, opt);
+  magmaan::gmm::Weight wls{Eigen::MatrixXd::Identity(6, 6)};
+  auto est = magmaan::test::fit_gmm(*pt, *mr, samp, wls, Bounds{},
+                                    Backend::Ceres);
   REQUIRE(est.has_value());
   CHECK(est->fmin < 1e-10);
 
@@ -180,8 +169,8 @@ TEST_CASE("LS path: equality constraints + bounds compose (shared loadings + "
   samp.S = {S};
   samp.n_obs = {301};
 
-  CeresBoundedOptimizer opt;
-  auto est = magmaan::estimate::fit_bounded(*pt, *mr, samp, Bounds{}, ULS{}, opt);
+  auto est = magmaan::test::fit_gmm(*pt, *mr, samp, {}, Bounds{},
+                                    Backend::Ceres);
   if (!est.has_value()) {
     MESSAGE("eq+bounds fit failed: kind="
             << static_cast<int>(est.error().kind)
@@ -190,29 +179,16 @@ TEST_CASE("LS path: equality constraints + bounds compose (shared loadings + "
   REQUIRE(est.has_value());
   CHECK(std::isfinite(est->fmin));
 
-  // Equality must hold: with the shared label, the two loading parameters
-  // (positions in θ correspond to a partable lookup) must be equal to
-  // within `tol_eq`. We don't depend on which exact θ-indices they live at;
-  // instead, fetch them from `param_locations()` via the matrix id.
   auto ev = magmaan::model::ModelEvaluator::build(*pt, *mr).value();
   const auto locs = ev.param_locations();
-  // Λ rows for "a*x2" and "a*x3" — find both via MatId::Lambda. Marker
-  // λ_1 = 1 isn't free, so the only two free Lambda entries are λ_2 and λ_3,
-  // and under the shared label they should map to the same θ index. The
-  // partable's `eq_groups` does the merging upstream; verify the resolved θ
-  // has matching slots if both were free.
   std::vector<Eigen::Index> lam_idx;
   for (std::size_t k = 0; k < locs.size(); ++k) {
     if (locs[k].mat == magmaan::model::MatId::Lambda) {
       lam_idx.push_back(static_cast<Eigen::Index>(k));
     }
   }
-  // With a shared `a` label, the two free Lambda rows collapse to ONE free
-  // θ index (the eq_groups merge). So `lam_idx.size() == 1` and the
-  // equality is trivially satisfied. If a future partable representation
-  // keeps two θ indices and enforces equality via `A_eq` instead, the test
-  // below will detect that and still assert equality. Either way, ULS must
-  // not have drifted λ_2 ≠ λ_3.
+  // With a shared `a` label the two free Lambda rows collapse to ONE free θ
+  // index (the eq_groups merge); equality is then trivially satisfied.
   if (lam_idx.size() == 2) {
     CHECK(est->theta(lam_idx[0]) ==
           doctest::Approx(est->theta(lam_idx[1])).epsilon(1e-6));
