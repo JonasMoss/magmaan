@@ -27,7 +27,7 @@ using magmaan::measures::standardize::standardize_lv;
 using magmaan::model::build_matrix_rep;
 using magmaan::model::ModelEvaluator;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
+using magmaan::spec::build;
 
 namespace {
 
@@ -44,7 +44,7 @@ Eigen::MatrixXd random_pd(std::mt19937& rng, Eigen::Index p) {
 TEST_CASE("standardize_lv: 1F CFA — ψ_ff → 1, λs scaled by √ψ̂_ff") {
   auto fp = Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);  REQUIRE(pt.has_value());
+  auto pt = build(*fp);  REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt); REQUIRE(mr.has_value());
 
   std::mt19937 rng(7);
@@ -104,7 +104,7 @@ TEST_CASE("standardize_all: 1F CFA — ν_i rescaled by 1/√σ̂_ii, λ by √�
   // should be scaled by both ψ_cc and σ_rr.
   auto fp = Parser::parse("f =~ x1 + x2 + x3\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);  REQUIRE(pt.has_value());
+  auto pt = build(*fp);  REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt); REQUIRE(mr.has_value());
 
   std::mt19937 rng(2026);
@@ -160,7 +160,7 @@ TEST_CASE("standardize_lv: 2F CFA — factor covariance → correlation, with de
       "f1 =~ x1 + x2 + x3\n"
       "f2 =~ x4 + x5 + x6");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);  REQUIRE(pt.has_value());
+  auto pt = build(*fp);  REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt); REQUIRE(mr.has_value());
 
   // Use the [x1..x6] submatrix of lavaan's Holzinger sample covariance so the
@@ -241,7 +241,7 @@ TEST_CASE("standardize_all: structural Beta uses total latent variances") {
       "speed =~ x7 + x8 + x9\n"
       "speed ~ visual + textual");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp); REQUIRE(pt.has_value());
+  auto pt = build(*fp); REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt); REQUIRE(mr.has_value());
 
   SampleStats samp;

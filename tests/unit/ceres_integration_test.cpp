@@ -25,7 +25,7 @@ using magmaan::optim::LbfgsBOptions;
 using magmaan::data::SampleStats;
 using magmaan::model::build_matrix_rep;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
+using magmaan::spec::build;
 
 // ============================================================================
 // `CeresBoundedOptimizer + ULS` end-to-end via the LS path. Both test cases
@@ -60,7 +60,7 @@ TEST_CASE("CeresBoundedOptimizer + ULS — multi-residual LS adapter converges "
   // F = 0; with the multi-residual LS path, LM lands on it.
   auto fp = Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -108,7 +108,7 @@ TEST_CASE("LbfgsBOptimizer + ULS — Heywood-prone S: LS-adapter path honors "
   // through the LS adapter (`minimize_ls`); only the optimizer differs.
   auto fp = Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());

@@ -182,7 +182,7 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   auto p = magmaan::parse::Parser::parse(syntax);
   if (!p.has_value()) stop_parse(p.error());
 
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.auto_var       = auto_var;
   opts.auto_cov_lv_x  = auto_cov_lv_x;
   opts.auto_cov_y     = auto_cov_y;
@@ -198,7 +198,7 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
 
   magmaan::spec::Starts starts;
   magmaan::spec::LatentNames names;
-  auto pt_or = magmaan::spec::lavaanify(*p, opts, &starts, &names);
+  auto pt_or = magmaan::spec::build(*p, opts, &starts, &names);
   if (!pt_or.has_value()) {
     Rcpp::stop("magmaan lavaanify error [%s]: %s",
                partable_error_kind(pt_or.error().kind), pt_or.error().detail);

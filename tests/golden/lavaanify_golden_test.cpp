@@ -33,7 +33,7 @@ nlohmann::json ptable_to_json(std::string_view input,
       {"format_version", 1},
       {"fixture_kind",   "ptable"},
       {"corpus_id",      std::string(corpus_id)},
-      {"tool",           "magmaan::compat::lavaanify"}};
+      {"tool",           "magmaan::spec::build"}};
   j["input"] = std::string(input);
 
   nlohmann::json rows = nlohmann::json::array();
@@ -250,8 +250,8 @@ TEST_CASE("ptable goldens — every corpus entry that lavaanify can handle") {
        "lavaan emits two identical `:=` rows differing only in plabel "
        "(internal quirk in lavaanify); we emit one."},
       {"0026_two_factor_meanstructure_hs",
-       "lavaan's `lavaanify(...)` auto-adds LV α=0 rows when explicit OV "
-       "`~1` rows are present; our `lavaanify({})` only adds them when "
+       "lavaan's `build(...)` auto-adds LV α=0 rows when explicit OV "
+       "`~1` rows are present; our `build({})` only adds them when "
        "`opts.meanstructure=true` is passed. The inference goldens pass "
        "the option explicitly; this single-group ptable round-trip uses "
        "the no-options form."},
@@ -293,7 +293,7 @@ TEST_CASE("ptable goldens — every corpus entry that lavaanify can handle") {
     }
     magmaan::spec::Starts starts;
     magmaan::spec::LatentNames names;
-    auto pt = magmaan::spec::lavaanify(*fp, {}, &starts, &names);
+    auto pt = magmaan::spec::build(*fp, {}, &starts, &names);
     if (!pt.has_value()) {
       failures.push_back(e.id + ": lavaanify failed — " + pt.error().detail);
       continue;

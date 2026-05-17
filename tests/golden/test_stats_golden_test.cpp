@@ -61,9 +61,9 @@ TEST_CASE("test-stat goldens — z / p-value / Wald vs lavaan") {
 
     auto fp = magmaan::parse::Parser::parse(e.model);
     if (!fp.has_value()) { failures.push_back(e.id + ": parse"); continue; }
-    magmaan::spec::LavaanifyOptions opts;
+    magmaan::spec::BuildOptions opts;
     opts.meanstructure = e.meanstructure;
-    auto pt = magmaan::spec::lavaanify(*fp, opts);
+    auto pt = magmaan::spec::build(*fp, opts);
     if (!pt.has_value()) { failures.push_back(e.id + ": lavaanify"); continue; }
     auto mr = magmaan::model::build_matrix_rep(*pt);
     if (!mr.has_value()) { failures.push_back(e.id + ": matrix_rep"); continue; }

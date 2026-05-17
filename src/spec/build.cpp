@@ -188,7 +188,7 @@ apply_modifiers_to_rows(const parse::FlatPartable& flat,
   return {};
 }
 
-// === Step 4 (auto-add default rows) is implemented inline in lavaanify();
+// === Step 4 (auto-add default rows) is implemented inline in build();
 // it depends on a re-walk of flat.rows to detect endogenous LVs which is
 // cleaner to do at the orchestration layer.
 
@@ -470,7 +470,7 @@ namespace {
 // group, sets `block`/`group` on each output row, and concatenates.
 partable_expected<std::vector<PendingRow>>
 build_group_template(const parse::FlatPartable& flat,
-                     const LavaanifyOptions&    opts,
+                     const BuildOptions&    opts,
                      const VarSets&             v,
                      std::int32_t               group_idx) {
   std::vector<PendingRow> rows;
@@ -516,7 +516,7 @@ build_group_template(const parse::FlatPartable& flat,
   // Latent scaling — three mutually-exclusive conventions. `std.lv`: fix each
   // LV variance at 1 (auto.fix.first forced off, lavaan-style). `effect_coding`:
   // leave *everything* free (loadings + LV variance) — the scale is set instead
-  // by the `Σλ == #indicators` constraint rows synthesized in `lavaanify()`.
+  // by the `Σλ == #indicators` constraint rows synthesized in `build()`.
   // Otherwise: the marker convention (fix the first loading per latent at 1).
   if (opts.std_lv) {
     apply_std_lv(v, rows);
@@ -569,8 +569,8 @@ build_group_template(const parse::FlatPartable& flat,
 
 }  // namespace
 
-partable_expected<LatentStructure> lavaanify(const parse::FlatPartable& flat,
-                                      const LavaanifyOptions& opts,
+partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
+                                      const BuildOptions& opts,
                                       Starts* out_starts,
                                       LatentNames* out_names) {
   if (opts.n_groups < 1) {

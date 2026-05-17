@@ -205,14 +205,14 @@ std::optional<Handles> build_handles(const std::string& id,
     failures.push_back(id + ": parse - " + fp.error().detail);
     return std::nullopt;
   }
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.meanstructure = exp.value("meanstructure", false);
   if (kind == "mixed_ordinal") opts.meanstructure = true;
   if (exp.contains("blocks") && !exp["blocks"].is_null()) {
     opts.n_groups = static_cast<std::int32_t>(exp["blocks"].size());
   }
   magmaan::spec::LatentNames names;
-  auto pt = magmaan::spec::lavaanify(*fp, opts, nullptr, &names);
+  auto pt = magmaan::spec::build(*fp, opts, nullptr, &names);
   if (!pt.has_value()) {
     failures.push_back(id + ": lavaanify - " + pt.error().detail);
     return std::nullopt;

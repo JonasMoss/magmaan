@@ -29,7 +29,7 @@ using magmaan::data::SampleStats;
 using magmaan::model::build_matrix_rep;
 using magmaan::model::MatrixRep;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
+using magmaan::spec::build;
 using magmaan::spec::LatentStructure;
 using magmaan::test::analytic_observed_inference;
 using magmaan::test::expected_inference;
@@ -50,7 +50,7 @@ struct ModelHandles {
 ModelHandles must_model(std::string_view src) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -561,7 +561,7 @@ TEST_CASE("wald_test: single-parameter restriction matches (θ̂_k / SE_k)²") {
   // reduces to (θ̂_k / SE_k)². Verify on the 1F CFA saturated fit.
   auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp);  REQUIRE(pt.has_value());
+  auto pt = magmaan::spec::build(*fp);  REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt); REQUIRE(mr.has_value());
 
   std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
@@ -711,10 +711,10 @@ TEST_CASE("Multi-group + mean structure: θ̂/SE match lavaan on HS × school") 
 
   auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.n_groups      = 2;
   opts.meanstructure = true;
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -758,9 +758,9 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
 
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.n_groups = 2;
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -813,7 +813,7 @@ TEST_CASE("Multi-group: lavaanify + matrix_rep + fit → end-to-end 2-group CFA"
   // (c) Each group's 6 params should match the single-block θ̂.
   auto fp_single = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp_single.has_value());
-  auto pt_single = magmaan::spec::lavaanify(*fp_single);
+  auto pt_single = magmaan::spec::build(*fp_single);
   REQUIRE(pt_single.has_value());
   auto mr_single = magmaan::model::build_matrix_rep(*pt_single);
   REQUIRE(mr_single.has_value());

@@ -72,10 +72,10 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
 
     auto fp = magmaan::parse::Parser::parse(e.model);
     if (!fp.has_value()) { failures.push_back(e.id + ": parse"); continue; }
-    magmaan::spec::LavaanifyOptions opts;
+    magmaan::spec::BuildOptions opts;
     opts.n_groups      = e.n_groups;
     opts.meanstructure = e.meanstructure;
-    auto pt = magmaan::spec::lavaanify(*fp, opts);
+    auto pt = magmaan::spec::build(*fp, opts);
     if (!pt.has_value()) {
       failures.push_back(e.id + ": lavaanify — " + pt.error().detail);
       continue;

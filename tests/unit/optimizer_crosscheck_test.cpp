@@ -15,7 +15,7 @@ using magmaan::estimate::Bounds;
 using magmaan::data::SampleStats;
 using magmaan::model::build_matrix_rep;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
+using magmaan::spec::build;
 
 // ============================================================================
 // Optimizer cross-check: re-fit the same ML problem with optimizers of
@@ -55,7 +55,7 @@ Eigen::Matrix4d make_offmanifold_S() {
 TEST_CASE("optimizer cross-check: trust region matches L-BFGS on ML") {
   auto fp = Parser::parse("f =~ x1 + x2 + x3 + x4");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -82,7 +82,7 @@ TEST_CASE("optimizer cross-check: trust region matches L-BFGS on ML") {
 TEST_CASE("optimizer cross-check: NLopt SLSQP matches L-BFGS on ML") {
   auto fp = Parser::parse("f =~ x1 + x2 + x3 + x4");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());

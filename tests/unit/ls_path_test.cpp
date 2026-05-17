@@ -22,7 +22,7 @@ using magmaan::optim::LbfgsOptions;
 using magmaan::data::SampleStats;
 using magmaan::model::build_matrix_rep;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
+using magmaan::spec::build;
 
 // ============================================================================
 // End-to-end tests for the moment-quadratic LS path (`fit_gmm` / `fit_gls`).
@@ -49,7 +49,7 @@ Eigen::Matrix3d make_1f_S() {
 TEST_CASE("LS path: ULS / Ceres recovers θ̂ on a 1F-feasible cov") {
   auto fp = Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -73,7 +73,7 @@ TEST_CASE("LS path: ULS / Ceres recovers θ̂ on a 1F-feasible cov") {
 TEST_CASE("LS path: Ceres / LBFGS-B θ̂ parity on a 1F-feasible cov") {
   auto fp = Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -104,7 +104,7 @@ TEST_CASE("LS path: Ceres / LBFGS-B θ̂ parity on a 1F-feasible cov") {
 TEST_CASE("LS path: GLS / Ceres recovers Sigma on a 1F-feasible cov") {
   auto fp = Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -125,7 +125,7 @@ TEST_CASE("LS path: GLS / Ceres recovers Sigma on a 1F-feasible cov") {
 TEST_CASE("LS path: WLS / Ceres recovers Sigma on a 1F-feasible cov") {
   auto fp = Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -153,7 +153,7 @@ TEST_CASE("LS path: equality constraints + bounds compose (shared loadings + "
   // and the equality must hold to within `tol_eq`.
   auto fp = Parser::parse("f =~ x1 + a*x2 + a*x3");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());

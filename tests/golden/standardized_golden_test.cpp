@@ -21,7 +21,7 @@
 
 // Post-hoc standardized-solution parity vs lavaan::standardizedSolution(fit,
 // type = "std.lv" / "std.all"). Distinct from std_lv_golden_test.cpp, which
-// pins the std.lv *identification convention* (`lavaanify(std_lv=TRUE)`); here
+// pins the std.lv *identification convention* (`build(std_lv=TRUE)`); here
 // we fit in the marker parameterization and apply the post-hoc transforms.
 // Fixtures under tests/fixtures/fit_std/ are produced by the dedicated section
 // in tools/regen_oracle.R. Each carries, per free θ index (free-index order):
@@ -57,10 +57,10 @@ TEST_CASE("standardized-solution goldens — std.lv / std.all vs lavaan") {
     auto fp = magmaan::parse::Parser::parse(model);
     if (!fp.has_value()) { failures.push_back(id + ": parse"); continue; }
 
-    magmaan::spec::LavaanifyOptions opts;
+    magmaan::spec::BuildOptions opts;
     opts.n_groups      = exp["n_groups"].get<int>();
     opts.meanstructure = exp["meanstructure"].get<bool>();
-    auto pt = magmaan::spec::lavaanify(*fp, opts);
+    auto pt = magmaan::spec::build(*fp, opts);
     if (!pt.has_value()) { failures.push_back(id + ": lavaanify — " + pt.error().detail); continue; }
     auto mr = magmaan::model::build_matrix_rep(*pt);
     if (!mr.has_value()) { failures.push_back(id + ": matrix_rep — " + mr.error().detail); continue; }

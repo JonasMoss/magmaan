@@ -48,7 +48,7 @@ Eigen::MatrixXd mvn_sample(Eigen::Index n,
 OneFactorFixture one_factor_fixture() {
   auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3 + x4");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp);
+  auto pt = magmaan::spec::build(*fp);
   REQUIRE(pt.has_value());
   auto rep = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(rep.has_value());
@@ -199,7 +199,7 @@ TEST_CASE("evaluate_ls_objective reports data objective under LS constraints") {
       "f =~ x1 + b2*x2 + b3*x3\n"
       "b2 + b3 == 1.5");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp);
+  auto pt = magmaan::spec::build(*fp);
   REQUIRE(pt.has_value());
   auto rep = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(rep.has_value());

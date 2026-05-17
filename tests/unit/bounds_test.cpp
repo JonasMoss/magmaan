@@ -17,9 +17,9 @@ magmaan::spec::LatentStructure must_parse(std::string_view src,
                                             int n_groups = 1) {
   auto fp = magmaan::parse::Parser::parse(src);
   REQUIRE(fp.has_value());
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.n_groups = n_groups;
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE(pt.has_value());
   return std::move(*pt);
 }

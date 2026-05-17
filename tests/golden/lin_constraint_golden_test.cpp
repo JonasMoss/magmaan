@@ -77,7 +77,7 @@ TEST_CASE("linear-constraint goldens — θ̂/SE/χ²/df match lavaan(+ `==`)") 
     const std::string model = exp["input"].get<std::string>();
     auto fp = magmaan::parse::Parser::parse(model);
     if (!fp.has_value()) { failures.push_back(id + ": parse"); continue; }
-    auto pt = magmaan::spec::lavaanify(*fp);
+    auto pt = magmaan::spec::build(*fp);
     if (!pt.has_value()) { failures.push_back(id + ": lavaanify — " + pt.error().detail); continue; }
     auto mr = magmaan::model::build_matrix_rep(*pt);
     if (!mr.has_value()) { failures.push_back(id + ": matrix_rep — " + mr.error().detail); continue; }

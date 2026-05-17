@@ -101,7 +101,7 @@ TEST_CASE("matrix_rep goldens — pure-CFA scope (P5.1)") {
       failures.push_back(e.id + ": parse failed");
       continue;
     }
-    auto pt = magmaan::spec::lavaanify(*fp);
+    auto pt = magmaan::spec::build(*fp);
     if (!pt.has_value()) {
       failures.push_back(e.id + ": lavaanify failed — " + pt.error().detail);
       continue;

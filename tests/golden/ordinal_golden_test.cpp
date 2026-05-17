@@ -206,10 +206,10 @@ std::optional<MixedOrdinalHandles> mixed_handles_from_fixture(
     failures.push_back(id + ": parse");
     return std::nullopt;
   }
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.meanstructure = true;
   opts.n_groups = static_cast<std::int32_t>(exp["blocks"].size());
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   if (!pt.has_value()) {
     failures.push_back(id + ": lavaanify — " + pt.error().detail);
     return std::nullopt;
@@ -242,7 +242,7 @@ std::optional<OrdinalHandles> handles_from_fixture(
     failures.push_back(id + ": parse");
     return std::nullopt;
   }
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.n_groups = static_cast<std::int32_t>(exp["blocks"].size());
   if (opts.n_groups > 1) {
     opts.group_var = exp["group_var"].get<std::string>();
@@ -250,7 +250,7 @@ std::optional<OrdinalHandles> handles_from_fixture(
       opts.group_labels.push_back(b["label"].get<std::string>());
     }
   }
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   if (!pt.has_value()) {
     failures.push_back(id + ": lavaanify — " + pt.error().detail);
     return std::nullopt;

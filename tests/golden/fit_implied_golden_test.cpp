@@ -60,7 +60,7 @@ TEST_CASE("model evaluator: implied Σ matches lavaan at θ̂") {
       failures.push_back(e.id + ": parse failed");
       continue;
     }
-    auto pt_or = magmaan::spec::lavaanify(*fp);
+    auto pt_or = magmaan::spec::build(*fp);
     if (!pt_or.has_value()) {
       failures.push_back(e.id + ": lavaanify failed");
       continue;

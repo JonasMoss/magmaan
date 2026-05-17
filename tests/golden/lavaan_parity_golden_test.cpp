@@ -197,11 +197,11 @@ TEST_CASE("lavaan-parity ML — magmaan reproduces lavaan on real data") {
     const std::string model = ref["model"].get<std::string>();
     auto fp = magmaan::parse::Parser::parse(model);
     if (!fp.has_value()) { failures.push_back(id + ": parse"); continue; }
-    magmaan::spec::LavaanifyOptions opts;
+    magmaan::spec::BuildOptions opts;
     opts.auto_cov_y    = ref.value("auto_cov_y", true);
     opts.meanstructure = ref.value("meanstructure", false);
     opts.n_groups      = ref.value("n_groups", 1);
-    auto pt = magmaan::spec::lavaanify(*fp, opts);
+    auto pt = magmaan::spec::build(*fp, opts);
     if (!pt.has_value()) {
       failures.push_back(id + ": lavaanify — " + pt.error().detail);
       continue;
@@ -431,10 +431,10 @@ TEST_CASE("lavaan-parity FIML — bfi missing=ml") {
 
   auto fp = magmaan::parse::Parser::parse(ref["model"].get<std::string>());
   REQUIRE(fp.has_value());
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.meanstructure = true;
   opts.auto_cov_y    = ref.value("auto_cov_y", true);
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE_MESSAGE(pt.has_value(),
                   "lavaanify: " << (pt.has_value() ? "" : pt.error().detail));
   auto mr = magmaan::model::build_matrix_rep(*pt);
@@ -594,11 +594,11 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
 
   auto fp = magmaan::parse::Parser::parse(ref["model"].get<std::string>());
   REQUIRE(fp.has_value());
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.meanstructure = false;
   opts.auto_cov_y    = ref.value("auto_cov_y", false);
   opts.n_groups      = ref.value("n_groups", 1);
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE_MESSAGE(pt.has_value(),
                   "lavaanify: " << (pt.has_value() ? "" : pt.error().detail));
   auto mr = magmaan::model::build_matrix_rep(*pt);
@@ -808,9 +808,9 @@ TEST_CASE("lavaan-parity ordinal — bfi DWLS/WLS") {
   auto fp = magmaan::parse::Parser::parse(
       ordinal_syntax(ref["input"].get<std::string>(), data_json["blocks"]));
   REQUIRE(fp.has_value());
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.n_groups = static_cast<std::int32_t>(blocks.size());
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE_MESSAGE(pt.has_value(),
                   "lavaanify: " << (pt.has_value() ? "" : pt.error().detail));
   auto mr = magmaan::model::build_matrix_rep(*pt);

@@ -101,10 +101,10 @@ std::optional<LsHandles> handles_from_fixture(const std::string& id,
     failures.push_back(id + ": parse — " + fp.error().detail);
     return std::nullopt;
   }
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.n_groups = exp["n_groups"].get<std::int32_t>();
   opts.meanstructure = exp["meanstructure"].get<bool>();
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   if (!pt.has_value()) {
     failures.push_back(id + ": lavaanify — " + pt.error().detail);
     return std::nullopt;

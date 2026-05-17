@@ -55,7 +55,7 @@ using magmaan::model::MatId;
 using magmaan::model::ModelEvaluator;
 using magmaan::model::build_matrix_rep;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
+using magmaan::spec::build;
 
 namespace {
 
@@ -117,9 +117,9 @@ struct Case {
 Case build_case(const Fixture& f) {
   auto fp = Parser::parse(f.model);
   REQUIRE(fp.has_value());
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.auto_cov_y = true;  // mirrors lavaan cfa/sem and the benchmark runner
-  auto pt = lavaanify(*fp, opts);
+  auto pt = build(*fp, opts);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());

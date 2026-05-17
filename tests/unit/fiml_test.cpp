@@ -32,10 +32,10 @@ struct BuiltModel {
 BuiltModel build_mean_model(std::string_view src, int n_groups = 1) {
   auto fp = magmaan::parse::Parser::parse(src);
   REQUIRE(fp.has_value());
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.meanstructure = true;
   opts.n_groups = n_groups;
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE(pt.has_value());
   auto rep = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(rep.has_value());

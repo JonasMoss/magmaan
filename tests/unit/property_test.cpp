@@ -34,16 +34,16 @@ using magmaan::model::build_matrix_rep;
 using magmaan::model::ImpliedMoments;
 using magmaan::model::ModelEvaluator;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
-using magmaan::spec::LavaanifyOptions;
+using magmaan::spec::build;
+using magmaan::spec::BuildOptions;
 using magmaan::spec::LatentStructure;
 
 namespace {
 
-LatentStructure must_lavaanify(std::string_view src, LavaanifyOptions opts = {}) {
+LatentStructure must_lavaanify(std::string_view src, BuildOptions opts = {}) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp, opts);
+  auto pt = build(*fp, opts);
   REQUIRE_MESSAGE(pt.has_value(),
                   "lavaanify failed: "
                       << (pt.has_value() ? "" : pt.error().detail));
@@ -53,10 +53,10 @@ LatentStructure must_lavaanify(std::string_view src, LavaanifyOptions opts = {})
 // Builds an evaluator and parks LatentStructure + MatrixRep in thread-local
 // statics so the references inside the evaluator stay valid. One build per
 // test case — a second call in the same test would invalidate the first.
-ModelEvaluator must_build(std::string_view src, LavaanifyOptions opts = {}) {
+ModelEvaluator must_build(std::string_view src, BuildOptions opts = {}) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp, opts);
+  auto pt = build(*fp, opts);
   REQUIRE_MESSAGE(pt.has_value(),
                   "lavaanify failed: "
                       << (pt.has_value() ? "" : pt.error().detail));
@@ -182,7 +182,7 @@ TEST_CASE("Property: multi-group dσ/dθ is block-stacked and FD-correct") {
   // Two independent groups → dvech(Σ)/dθ stacks block 0's vech rows above
   // block 1's. Verify the analytic Jacobian against finite differences over
   // the joint θ.
-  LavaanifyOptions opts;
+  BuildOptions opts;
   opts.n_groups = 2;
   auto ev = must_build("f =~ x1 + x2 + x3", opts);
   REQUIRE(ev.n_blocks() == 2);
@@ -204,7 +204,7 @@ TEST_CASE("Property: unconstrained multi-group Jacobian is block-diagonal") {
   // No cross-group labels ⇒ every free parameter belongs to exactly one
   // group. Block b's vech rows must then be insensitive to any parameter
   // located in another block: the analytic Jacobian is block-structured.
-  LavaanifyOptions opts;
+  BuildOptions opts;
   opts.n_groups = 2;
   auto ev = must_build("f =~ x1 + x2 + x3", opts);
 

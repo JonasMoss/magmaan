@@ -14,8 +14,8 @@
 using magmaan::PartableError;
 using magmaan::parse::Op;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
-using magmaan::spec::LavaanifyOptions;
+using magmaan::spec::build;
+using magmaan::spec::BuildOptions;
 using magmaan::compat::lavaan::LavaanParTable;
 using magmaan::spec::LatentNames;
 using magmaan::spec::LatentStructure;
@@ -28,12 +28,12 @@ namespace {
 // `block` / `label` / `plabel` / `ustart`) — it's the most direct view of
 // what lavaanify produced. The structure + names + starts are bundled back
 // up via to_lavaan_partable.
-LavaanParTable must_lavaanify(std::string_view src, LavaanifyOptions opts = {}) {
+LavaanParTable must_lavaanify(std::string_view src, BuildOptions opts = {}) {
   auto fp = Parser::parse(src);
   REQUIRE_MESSAGE(fp.has_value(), "parser failed: " << fp.error().detail);
   Starts starts;
   LatentNames names;
-  auto pt = lavaanify(*fp, opts, &starts, &names);
+  auto pt = build(*fp, opts, &starts, &names);
   REQUIRE_MESSAGE(pt.has_value(),
                   "lavaanify failed: kind=" << static_cast<int>(pt.error().kind)
                   << " — " << pt.error().detail);
@@ -84,7 +84,7 @@ TEST_CASE("lavaanify: 1-factor CFA produces 4 rows (3 loadings + 1 var auto.fix.
 TEST_CASE("lavaanify: std_lv frees the first loading and fixes the LV variance at 1") {
   // f =~ x1 + x2 + x3, std.lv = TRUE
   //   → all three loadings free; f ~~ f fixed at 1.0 (auto-added)
-  LavaanifyOptions opts;
+  BuildOptions opts;
   opts.std_lv = true;
   auto pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
   REQUIRE(pt.size() == 7);
@@ -120,7 +120,7 @@ TEST_CASE("lavaanify: std_lv frees the first loading and fixes the LV variance a
 
 TEST_CASE("lavaanify: std_lv ignores auto_fix_first and leaves a user-fixed LV variance alone") {
   // f =~ x1 + x2 + x3; f ~~ 2*f, std.lv = TRUE (auto_fix_first left on — std.lv wins)
-  LavaanifyOptions opts;
+  BuildOptions opts;
   opts.std_lv = true;
   opts.auto_fix_first = true;   // forced off by std_lv
   auto pt = must_lavaanify("f =~ x1 + x2 + x3\nf ~~ 2*f", opts);
@@ -240,7 +240,7 @@ TEST_CASE("lavaanify: explicit constraint rows have block=0, group=0") {
 }
 
 TEST_CASE("lavaanify: meanstructure auto-adds ν (free) and α (fixed) rows") {
-  LavaanifyOptions opts;
+  BuildOptions opts;
   opts.meanstructure = true;
   auto pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
 
@@ -266,7 +266,7 @@ TEST_CASE("lavaanify: meanstructure auto-adds ν (free) and α (fixed) rows") {
 }
 
 TEST_CASE("lavaanify: meanstructure does not duplicate user-supplied ~1 rows") {
-  LavaanifyOptions opts;
+  BuildOptions opts;
   opts.meanstructure = true;
   auto pt = must_lavaanify("f =~ x1 + x2 + x3\nx1 ~ 1\nf ~ 1", opts);
 
@@ -293,7 +293,7 @@ TEST_CASE("lavaanify: c(...) modifier with wrong arity is rejected") {
   // n_groups defaults to 1, so a 2-atom c() doesn't match.
   auto fp = Parser::parse("f =~ c(1, 1)*x1 + c(NA, NA)*x2");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE_FALSE(pt.has_value());
   CHECK(pt.error().kind == PartableError::Kind::BadGroupSpec);
 }
@@ -301,7 +301,7 @@ TEST_CASE("lavaanify: c(...) modifier with wrong arity is rejected") {
 TEST_CASE("lavaanify: c(...) modifier indexes per group with n_groups = 2") {
   // c(1, NA) on the marker means: group 1's λ_1 fixed at 1, group 2's free.
   // c(NA, NA) on x2's loading means: both groups free.
-  LavaanifyOptions opts;  opts.n_groups = 2;
+  BuildOptions opts;  opts.n_groups = 2;
   auto pt = must_lavaanify("f =~ c(1, NA)*x1 + c(NA, NA)*x2 + x3", opts);
 
   // Find the two `f =~ x1` rows (one per block) and confirm their fixed-ness.
@@ -319,7 +319,7 @@ TEST_CASE("lavaanify: c(...) modifier indexes per group with n_groups = 2") {
 }
 
 TEST_CASE("lavaanify: n_groups = 2 replicates rows with block / group set") {
-  LavaanifyOptions opts;
+  BuildOptions opts;
   opts.n_groups = 2;
   auto pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
 
@@ -343,9 +343,9 @@ TEST_CASE("lavaanify: n_groups = 2 replicates rows with block / group set") {
 TEST_CASE("lavaanify: n_groups < 1 is rejected") {
   auto fp = Parser::parse("f =~ x1 + x2");
   REQUIRE(fp.has_value());
-  LavaanifyOptions opts;
+  BuildOptions opts;
   opts.n_groups = 0;
-  auto pt = lavaanify(*fp, opts);
+  auto pt = build(*fp, opts);
   REQUIRE_FALSE(pt.has_value());
   CHECK(pt.error().kind == PartableError::Kind::BadGroupSpec);
 }
@@ -360,7 +360,7 @@ TEST_CASE("lavaanify: group identity rides on LatentNames / the lavaan view") {
   }
   // Two groups, named, with explicit labels: round-tripped verbatim.
   {
-    LavaanifyOptions opts;
+    BuildOptions opts;
     opts.n_groups     = 2;
     opts.group_var    = "school";
     opts.group_labels = {"Pasteur", "Grant-White"};
@@ -373,7 +373,7 @@ TEST_CASE("lavaanify: group identity rides on LatentNames / the lavaan view") {
   }
   // Two groups, name omitted ⇒ defaults to "group"; labels auto-generated.
   {
-    LavaanifyOptions opts;  opts.n_groups = 2;
+    BuildOptions opts;  opts.n_groups = 2;
     auto pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
     CHECK(pt.n_groups() == 2);
     CHECK(pt.group_var == "group");
@@ -385,8 +385,8 @@ TEST_CASE("lavaanify: group identity rides on LatentNames / the lavaan view") {
   {
     auto fp = Parser::parse("f =~ x1 + x2 + x3");
     REQUIRE(fp.has_value());
-    LavaanifyOptions opts;  opts.n_groups = 2;  opts.group_labels = {"only-one"};
-    auto pt = lavaanify(*fp, opts);
+    BuildOptions opts;  opts.n_groups = 2;  opts.group_labels = {"only-one"};
+    auto pt = build(*fp, opts);
     REQUIRE_FALSE(pt.has_value());
     CHECK(pt.error().kind == PartableError::Kind::BadGroupSpec);
   }
@@ -395,7 +395,7 @@ TEST_CASE("lavaanify: group identity rides on LatentNames / the lavaan view") {
 TEST_CASE("lavaanify: c(...) supplies per-group fixed values") {
   // c(0.8, 1.2) on x2's loading ⇒ group-1 loading fixed at 0.8, group-2 at
   // 1.2 (both rows fixed, distinct values).
-  LavaanifyOptions opts;  opts.n_groups = 2;  opts.group_var = "school";
+  BuildOptions opts;  opts.n_groups = 2;  opts.group_var = "school";
   auto pt = must_lavaanify("f =~ x1 + c(0.8, 1.2)*x2 + x3", opts);
   double g1 = std::nan(""), g2 = std::nan("");
   std::int32_t f1 = -1, f2 = -1;
@@ -417,7 +417,7 @@ TEST_CASE("lavaanify: empty model rejected") {
   // An empty parse would actually fail at the parser level, so we craft a
   // FlatPartable manually with no rows and no constraints.
   magmaan::parse::FlatPartable fp;
-  auto pt = lavaanify(fp);
+  auto pt = build(fp);
   REQUIRE_FALSE(pt.has_value());
   CHECK(pt.error().kind == PartableError::Kind::EmptyModel);
 }

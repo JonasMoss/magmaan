@@ -16,7 +16,7 @@ namespace magmaan::compat::lavaan {
 // carries, in struct-of-arrays form. This is *not* the in-memory model
 // representation — that's the (`spec::LatentStructure`, `spec::LatentNames`, `spec::Starts`)
 // triple. It exists so the R layer can keep a familiar data.frame surface and
-// the golden fixtures can keep diffing against `parTable(lavaanify(...))`.
+// the golden fixtures can keep diffing against `parTable(build(...))`.
 //
 // `ustart` reconstructs lavaan's column: a fixed row's `spec::LatentStructure.fixed_value`
 // (NaN for a not-yet-resolved fixed.x moment), or a free row's start *hint*

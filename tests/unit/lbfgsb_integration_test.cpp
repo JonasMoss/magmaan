@@ -22,7 +22,7 @@ using magmaan::FitError;
 using magmaan::optim::LbfgsBOptimizer;
 using magmaan::optim::LbfgsOptimizer;
 using magmaan::data::SampleStats;
-using magmaan::spec::LavaanifyOptions;
+using magmaan::spec::BuildOptions;
 
 namespace {
 
@@ -70,9 +70,9 @@ struct ModelBuild {
 ModelBuild build_model(std::string_view src, bool meanstructure) {
   auto fp = magmaan::parse::Parser::parse(src);
   REQUIRE(fp.has_value());
-  LavaanifyOptions opts;
+  BuildOptions opts;
   opts.meanstructure = meanstructure;
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());

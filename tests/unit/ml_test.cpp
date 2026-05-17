@@ -26,14 +26,14 @@ using magmaan::data::SampleStats;
 using magmaan::model::build_matrix_rep;
 using magmaan::model::ModelEvaluator;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
+using magmaan::spec::build;
 
 namespace {
 
 ModelEvaluator must_build(std::string_view src) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -250,7 +250,7 @@ TEST_CASE("ML: fit() recovers ν̂_i ≈ m̄_i on saturated mean-structure CFA")
   auto fp = magmaan::parse::Parser::parse(
       "f =~ x1 + x2 + x3\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp);
+  auto pt = magmaan::spec::build(*fp);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());

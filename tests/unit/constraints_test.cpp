@@ -32,16 +32,16 @@ using magmaan::model::build_matrix_rep;
 using magmaan::model::MatId;
 using magmaan::model::ModelEvaluator;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
-using magmaan::spec::LavaanifyOptions;
+using magmaan::spec::build;
+using magmaan::spec::BuildOptions;
 using magmaan::spec::LatentStructure;
 
 namespace {
 
-LatentStructure must_lavaanify(std::string_view src, LavaanifyOptions opts = {}) {
+LatentStructure must_lavaanify(std::string_view src, BuildOptions opts = {}) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp, opts);
+  auto pt = build(*fp, opts);
   REQUIRE_MESSAGE(pt.has_value(),
       "lavaanify failed: " << (pt.has_value() ? "" : pt.error().detail));
   return std::move(*pt);
@@ -281,7 +281,7 @@ TEST_CASE("build_eq_constraints: a genuinely nonlinear `==` is still rejected") 
 // === effect coding =========================================================
 
 TEST_CASE("lavaanify: effect_coding synthesizes `Σλ == #indicators` and frees everything") {
-  LavaanifyOptions opts; opts.effect_coding = true;
+  BuildOptions opts; opts.effect_coding = true;
   auto pt = must_lavaanify("f =~ x1 + x2 + x3", opts);
   CHECK_FALSE(pt.has_unenforced_constraints);
   CHECK(pt.lin_constraint_d.size() == 1);           // one latent, one group
@@ -304,17 +304,17 @@ TEST_CASE("lavaanify: effect_coding synthesizes `Σλ == #indicators` and frees 
 }
 
 TEST_CASE("lavaanify: effect_coding and std_lv are mutually exclusive") {
-  LavaanifyOptions opts; opts.effect_coding = true; opts.std_lv = true;
+  BuildOptions opts; opts.effect_coding = true; opts.std_lv = true;
   auto fp = Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp, opts);
+  auto pt = build(*fp, opts);
   REQUIRE_FALSE(pt.has_value());
   CHECK(pt.error().kind == magmaan::PartableError::Kind::BadGroupSpec);
 }
 
 TEST_CASE("fit: effect_coding — loadings sum to #indicators; χ²/df match the marker fit") {
   auto samp = fixture_samp_3();
-  LavaanifyOptions opts; opts.effect_coding = true;
+  BuildOptions opts; opts.effect_coding = true;
   auto pt  = must_lavaanify("f =~ x1 + x2 + x3", opts);
   auto rep = build_matrix_rep(pt).value();
   auto est_or = magmaan::test::fit(pt, rep, samp);
@@ -344,7 +344,7 @@ TEST_CASE("constraints: multi-group shared-label LS fits via K-reparameterizatio
   // LS path reparameterizes θ = θ₀ + K·α and optimizes the reduced bounded
   // problem — exact constraints, no penalty. The earlier 1e10-penalty path
   // made LBFGS-B's Cauchy-point search loop forever on this model.
-  LavaanifyOptions opts;
+  BuildOptions opts;
   opts.n_groups = 2;
   auto pt  = must_lavaanify("f =~ x1 + l2*x2 + l3*x3", opts);
   auto rep = build_matrix_rep(pt).value();
