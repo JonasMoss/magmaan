@@ -1,8 +1,11 @@
 #include <doctest/doctest.h>
 #include "../test_fit.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -36,27 +39,45 @@ nlohmann::json read_fixture(const std::string& path) {
   return j;
 }
 
-// Pull `sample_cov` (single block) and optionally `sample_mean` from a fit
-// fixture into a SampleStats. Mirrors the loader logic in
-// `fit_theta_golden_test.cpp` but is single-group only — what we need
-// here.
+Eigen::MatrixXd matrix_from_json(const nlohmann::json& j) {
+  const Eigen::Index nr = static_cast<Eigen::Index>(j.size());
+  const Eigen::Index nc = nr > 0 ? static_cast<Eigen::Index>(j[0].size()) : 0;
+  Eigen::MatrixXd out(nr, nc);
+  for (Eigen::Index r = 0; r < nr; ++r)
+    for (Eigen::Index c = 0; c < nc; ++c)
+      out(r, c) = j[static_cast<std::size_t>(r)]
+                   [static_cast<std::size_t>(c)].get<double>();
+  return out;
+}
+
+Eigen::VectorXd vector_from_json(const nlohmann::json& j) {
+  Eigen::VectorXd out(static_cast<Eigen::Index>(j.size()));
+  for (Eigen::Index i = 0; i < out.size(); ++i) {
+    out(i) = j[static_cast<std::size_t>(i)].get<double>();
+  }
+  return out;
+}
+
+// Pull `sample_cov`, `n_obs`, and optionally `sample_mean` from a fit fixture
+// into SampleStats. Mirrors the loader logic in the golden fit tests while
+// keeping this integration test self-contained.
 SampleStats load_samp(const nlohmann::json& fix) {
   SampleStats samp;
-  const auto& M = fix["sample_cov"][0]["matrix"];
-  const Eigen::Index p = static_cast<Eigen::Index>(M.size());
-  Eigen::MatrixXd S(p, p);
-  for (Eigen::Index r = 0; r < p; ++r)
-    for (Eigen::Index c = 0; c < p; ++c)
-      S(r, c) = M[static_cast<std::size_t>(r)]
-                 [static_cast<std::size_t>(c)].get<double>();
-  samp.S.push_back(std::move(S));
-  samp.n_obs.push_back(fix["n_obs"].get<std::int64_t>());
+  for (const auto& b : fix["sample_cov"]) {
+    samp.S.push_back(matrix_from_json(b["matrix"]));
+  }
+  const auto& nobs = fix.contains("n_obs_per_block")
+      ? fix["n_obs_per_block"]
+      : fix["n_obs"];
+  if (nobs.is_array()) {
+    for (const auto& n : nobs) samp.n_obs.push_back(n.get<std::int64_t>());
+  } else {
+    samp.n_obs.push_back(nobs.get<std::int64_t>());
+  }
   if (fix.contains("sample_mean") && !fix["sample_mean"].is_null()) {
-    const auto& v = fix["sample_mean"][0]["vector"];
-    Eigen::VectorXd mu(static_cast<Eigen::Index>(v.size()));
-    for (Eigen::Index i = 0; i < mu.size(); ++i)
-      mu(i) = v[static_cast<std::size_t>(i)].get<double>();
-    samp.mean.push_back(std::move(mu));
+    for (const auto& b : fix["sample_mean"]) {
+      samp.mean.push_back(vector_from_json(b["vector"]));
+    }
   }
   return samp;
 }
@@ -67,16 +88,36 @@ struct ModelBuild {
   magmaan::model::MatrixRep          rep;
 };
 
-ModelBuild build_model(std::string_view src, bool meanstructure) {
+ModelBuild build_model(std::string_view src, bool meanstructure,
+                       int n_groups = 1) {
   auto fp = magmaan::parse::Parser::parse(src);
   REQUIRE(fp.has_value());
   BuildOptions opts;
   opts.meanstructure = meanstructure;
+  opts.n_groups = n_groups;
   auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
   return ModelBuild{std::move(*pt), std::move(*mr)};
+}
+
+double max_theta_diff(const Eigen::VectorXd& theta, const nlohmann::json& exp) {
+  if (static_cast<std::size_t>(theta.size()) != exp.size()) {
+    return std::numeric_limits<double>::infinity();
+  }
+  double out = 0.0;
+  for (Eigen::Index k = 0; k < theta.size(); ++k) {
+    out = std::max(out, std::abs(theta(k) -
+        exp[static_cast<std::size_t>(k)].get<double>()));
+  }
+  return out;
+}
+
+double total_n(const SampleStats& samp) noexcept {
+  double out = 0.0;
+  for (auto n : samp.n_obs) out += static_cast<double>(n);
+  return out;
 }
 
 }  // namespace
@@ -193,4 +234,26 @@ TEST_CASE("LbfgsBOptimizer G5b: 3F+means HS — converges where LBFGS historical
   // nlminb. LBFGS-B with M=10 history typically takes 50-150. 500 is the
   // default max_iter; if we needed > 250 something is off.
   CHECK(out->iterations < 250);
+}
+
+TEST_CASE("LbfgsBOptimizer scalar invariance: bounded ML fits latent-mean rescaling fixture") {
+  auto fix = read_fixture(std::string(MAGMAAN_FIXTURES_DIR) +
+                          "/fit/0023_scalar_invariance_3f_hs.fit.json");
+  auto m = build_model(fix["input"].get<std::string>(),
+                       /*meanstructure=*/true, /*n_groups=*/2);
+  auto samp = load_samp(fix);
+
+  magmaan::optim::LbfgsOptions opts;
+  opts.max_iter = 2000;
+  opts.ftol = 1e-12;
+  opts.gtol = 1e-8;
+  auto out = magmaan::test::fit_bounded(m.pt, m.rep, samp, {}, opts);
+  REQUIRE_MESSAGE(out.has_value(),
+      "fit_bounded<LbfgsBOptimizer> on scalar invariance did not converge: " <<
+      (out.has_value() ? "" : out.error().detail));
+
+  CHECK(std::isfinite(out->fmin));
+  CHECK(out->iterations > 0);
+  CHECK(max_theta_diff(out->theta, fix["theta_hat"]) < 2e-4);
+  CHECK(std::abs(total_n(samp) * out->fmin - fix["chi2"].get<double>()) < 2e-3);
 }

@@ -62,9 +62,10 @@ Remaining work, in suggested order:
 - **M/L.** Add ordinal multi-group LS weighting/equality-constraint fixtures,
   plus mean-structure LS cases that exercise Ceres and SNLLS where semantically
   appropriate.
-- **S.** Add scalar-invariance latent mean rescaling fixtures. The unbounded
-  ML path converges after the line-search salvage; confirm the bounded optimizer
-  also fits these models before relying on it there.
+- **S.** Keep scalar-invariance latent-mean rescaling coverage current. The
+  unbounded ML path is fixture-backed, and a focused LBFGS-B integration test
+  confirms the bounded variance-box path fits the scalar-invariance
+  multi-group meanstructure fixture.
 - **S/M.** Deepen parity coverage for non-ML post-fit surfaces. Add a full
   5-factor bfi FIML case once convergence on the wider model is confirmed, then
   gate FIML/LS standard SEs and LS/ordinal CFI/TLI/RMSEA/SRMR as those surfaces
