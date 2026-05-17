@@ -436,3 +436,39 @@ TEST_CASE("lavaanify: 3-factor CFA produces auto-covariances among latents") {
   }
   CHECK(lv_cov_count == 3);
 }
+
+TEST_CASE("lavaanify: a user-written exogenous-latent covariance is not auto-duplicated") {
+  // `visual ~~ cvt*textual` is also a pair auto.cov.lv.x would generate. The
+  // user row must win — a duplicate auto row would be a second free parameter
+  // for the same moment, leaving the information matrix rank-deficient.
+  auto pt = must_lavaanify("visual =~ x1 + x2 + x3\n"
+                           "textual =~ x4 + x5 + x6\n"
+                           "speed =~ x7 + x8 + x9\n"
+                           "visual ~~ cvt*textual");
+  int vt_count = 0;
+  int vt_idx = -1;
+  int other_cov = 0;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != Op::Covariance) continue;
+    if ((pt.lhs[i] == "visual"  && pt.rhs[i] == "textual") ||
+        (pt.lhs[i] == "textual" && pt.rhs[i] == "visual")) {
+      ++vt_count;
+      vt_idx = static_cast<int>(i);
+    }
+    if (pt.lhs[i] == "visual"  && pt.rhs[i] == "speed") ++other_cov;
+    if (pt.lhs[i] == "textual" && pt.rhs[i] == "speed") ++other_cov;
+  }
+  CHECK(vt_count == 1);                            // not duplicated
+  REQUIRE(vt_idx >= 0);
+  CHECK(pt.label[static_cast<std::size_t>(vt_idx)] == "cvt");  // the user row
+  CHECK(pt.user[static_cast<std::size_t>(vt_idx)] == 1);
+  CHECK(pt.free[static_cast<std::size_t>(vt_idx)] > 0);
+  CHECK(other_cov == 2);                           // the other pairs still auto-added
+
+  // 6 free loadings + 9 residual var + 3 latent var + 3 latent cov = 21 free
+  // parameters — no phantom 22nd from a duplicate covariance.
+  int n_free = 0;
+  for (std::size_t i = 0; i < pt.size(); ++i)
+    if (pt.free[i] > n_free) n_free = pt.free[i];
+  CHECK(n_free == 21);
+}
