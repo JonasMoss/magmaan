@@ -89,8 +89,9 @@ Contracts:
   point estimation, and post-fit inference/reporting are separate choices.
 - Primitive APIs should remain available for methods work without crowding the
   friendly R namespace.
-- New C++ code should use `spec`, `lavaan`, `estimate`, `optim`, `nt`, `gls`,
-  and `data` directly.
+- New C++ code should use the target namespaces directly: `parse`, `spec`,
+  `model`, `data`, `estimate`, `inference`, `robust`, `measures`, `optim`,
+  and `compat::lavaan`.
 
 Remaining work, in suggested order:
 
