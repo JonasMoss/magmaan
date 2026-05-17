@@ -207,6 +207,20 @@ Contracts:
 - R should expose only predefined robust methods; arbitrary C++ h-functions
   remain internal until a concrete methods use case exists.
 
+Completed implementation slices:
+
+- [x] All-ordinal shared-threshold h-weighted SEM stats: shared thresholds,
+  robust polychorics, casewise moment influence/Gamma, NACOV, and DWLS/WLS
+  weights.
+- [x] All-ordinal shared-threshold DPD SEM stats with the same moment/Gamma
+  contract and `alpha = 0` ML limit.
+- [x] Mixed continuous/ordinal fixed-marginal polyserial DPD: shared ordinal
+  thresholds, existing continuous marginals, DPD continuous-ordinal
+  associations, mixed moment influence/Gamma, NACOV, DWLS/WLS weights, and
+  DWLS fitting coverage.
+- [x] Pair-local threshold estimators are documented as diagnostics/prototypes,
+  not SEM moment builders.
+
 Remaining work, in suggested order:
 
 - **M/L.** Design a Huberized-residual all-ordinal shared-threshold moment
