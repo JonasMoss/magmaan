@@ -46,10 +46,11 @@ Contracts:
 
 Remaining work, in suggested order:
 
-- **S.** Keep ordinal R documentation current around `model_spec()` with
-  `ordered` and `parameterization = "delta"`, ordinal sample-stat builders,
-  mixed ordinal sample-stat builders, and ordinal/mixed DWLS/WLS fitting
-  wrappers.
+- **S.** Keep ordinal R documentation current as wrappers evolve. The
+  `r-package/README.md` boundary now covers `model_spec()` with `ordered` and
+  `parameterization = "delta"`, all-ordinal and mixed sample-stat builders,
+  high-level DWLS/WLS dispatch, explicit robust reporting, and the current
+  theta rejection boundary.
 - **S.** Keep R examples current as staged surfaces evolve. Current examples
   cover the intended workflow (estimate-only `magmaan()`, then explicit
   post-fit SEs/z tests, Satorra-Bentler, fit measures, defined parameters, and
