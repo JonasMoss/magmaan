@@ -220,6 +220,9 @@ Completed implementation slices:
   DWLS fitting coverage.
 - [x] Pair-local threshold estimators are documented as diagnostics/prototypes,
   not SEM moment builders.
+- [x] Broader mixed robustness is not part of this line: continuous marginal
+  moments and continuous-continuous covariance equations stay ordinary moment
+  estimates unless a separate design reopens them.
 
 Remaining work, in suggested order:
 
@@ -232,13 +235,11 @@ Remaining work, in suggested order:
   h-weighted and DPD all-ordinal SEM paths: clean ML limit, sparse-cell
   behavior, contaminated-cell downweighting, positive DWLS diagonals, and stable
   repaired correlation influence columns.
-- **S/M.** Decide whether to expose the experimental mixed polyserial DPD
-  builder through R examples/wrappers now or keep it C++-only until the
-  Huberized-residual comparator lands.
-- **M/L.** If broader mixed robustness is still useful, design it separately:
-  robust continuous marginal moments and continuous-continuous covariance
-  equations layered around the existing shared-threshold polyserial DPD
-  contract. Do not use pair-local thresholds for `MixedOrdinalStats`.
+- **M.** Expose the experimental h/DPD robust moment builders through the
+  methods-developer surfaces: R `magmaan_core` wrappers/examples and the
+  staged C++ facade in `src/api/sem.hpp`. Cover all-ordinal h-weighted,
+  all-ordinal DPD, and mixed fixed-marginal polyserial DPD without changing the
+  default lavaan-compatible data builders.
 
 Done when: robust polychoric/polyserial alternatives are selectable where their
 moment contracts are designed, default ML fixtures are unchanged, diagnostics
