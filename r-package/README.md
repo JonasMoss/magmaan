@@ -10,8 +10,6 @@ Convenience helpers are limited to R-side composition:
   lavaanify options.
 - `df_to_data()` selects model variables from a data frame, handles optional
   grouping, and calls the C++ raw-data sample-statistics wrapper.
-- `fit_ml()`, `fit_uls()`, `fit_gls()`, and `fit_wls()` accept those helper
-  objects, then delegate to the matching C++ fit wrapper.
 - `magmaan(model, data, estimator, groups)` is the high-level estimate-only
   convenience. It parses/lavaanifies syntax strings, builds sample statistics
   or FIML raw-data objects from data frames, and dispatches to the matching
@@ -64,10 +62,18 @@ Ordinal support is intentionally narrow and mirrors the C++ delta-path:
 
 - Declare ordered indicators with
   `model_spec(model, ordered = ..., parameterization = "delta")`.
-  `"delta"` is the only accepted ordinal parameterization at the R boundary.
-- Build sample statistics with `data_ordinal_stats_from_df()`. In this v1
-  path, every observed model variable must be ordered; mixed
-  continuous/ordinal data and polyserial correlations are not inferred in R.
+  `"delta"` is the only supported estimation parameterization at the R
+  boundary; `parameterization = "theta"` is accepted by `model_spec()` only far
+  enough for wrappers to reject it explicitly before fitting.
+- For all-ordinal models, build sample statistics with
+  `magmaan_core$data_ordinal_stats_from_df()`. Every observed model variable
+  must be listed in `ordered`; otherwise use the mixed builder.
+- For mixed continuous/ordinal models, use
+  `magmaan_core$data_mixed_ordinal_stats_from_df()`. Ordered variables produce
+  thresholds and categorical association rows; continuous variables contribute
+  ordinary means, variances, and covariances. Mixed models currently require
+  `meanstructure = TRUE` so lavaan-style categorical WLS moment order is
+  explicit.
 - Missing observed values are handled listwise by default. Use
   `missing = "error"` to reject missing observed values instead.
 - Empty ordinal categories are hard errors. Near-empty but nonempty categories
@@ -77,16 +83,23 @@ Ordinal support is intentionally narrow and mirrors the C++ delta-path:
   `NACOV`, `W_dwls`, and `W_wls`. `moments[[b]]` is ordered as thresholds
   first, then lower-triangle polychorics by columns, and all covariance/weight
   matrices use that same row/column order.
-- Fit with `magmaan_core$fit_dwls_ordinal()` or
-  `magmaan_core$fit_wls_ordinal()`. These are
-  point-estimate and standard chi-square statistic workflows.
+- Returned mixed data follows lavaan's categorical WLS moment order and
+  includes `ordered_mask`, `thresholds`, `R`, continuous means, `moments`,
+  `NACOV`, `W_dwls`, and `W_wls`.
+- Fit all-ordinal data with `magmaan_core$fit_dwls_ordinal()` or
+  `magmaan_core$fit_wls_ordinal()`. Fit mixed continuous/ordinal data with
+  `magmaan_core$fit_dwls_mixed_ordinal()` or
+  `magmaan_core$fit_wls_mixed_ordinal()`. These are point-estimate and
+  standard chi-square statistic workflows.
+- The high-level `magmaan()` helper dispatches to the same all-ordinal or
+  mixed path for `estimator = "DWLS"` / `"WLS"` when `ordered =` is supplied
+  with a data frame.
 - Experimental robust moment builders are opt-in on the data step:
   `magmaan_core$data_ordinal_stats_from_df(..., robust = "h_weighted")`,
   `robust = "dpd"`, or
   `magmaan_core$data_mixed_ordinal_stats_from_df(..., polyserial = "dpd")`.
   The mixed path also exposes the experimental Pearson-residual clipping
-  comparator with
-  `polyserial = "huber_residual"` and `clip = "hard_huber"`,
+  comparator with `polyserial = "huber_residual"` and `clip = "hard_huber"`,
   `"pseudo_huber"`, `"tukey_biweight"`, or `"none"`. In that path,
   ordinal-containing threshold/correlation/polyserial rows are rebuilt from
   clipped residual influence; continuous-only moments remain ordinary.
@@ -96,10 +109,7 @@ Ordinal support is intentionally narrow and mirrors the C++ delta-path:
   DWLS/WLS ordinal fit to compute sandwich SEs and SB-family scaled statistics
   from the threshold-plus-polychoric `NACOV` and the selected DWLS/WLS weight
   matrix.
-- Mixed continuous/ordinal categorical data now has a separate first-pass path:
-  use `model_spec(..., ordered = ..., parameterization = "delta",
-  meanstructure = TRUE)`, `data_mixed_ordinal_stats_from_df()`, and
-  `fit_dwls_mixed_ordinal()` / `fit_wls_mixed_ordinal()`. Mixed moment values
-  follow lavaan's categorical WLS order; mixed `NACOV`/weight and robust
-  reporting parity is still looser than the all-ordinal path.
-  Empty `weight` reuses `fit$estimator`.
+- Mixed robust reporting is explicit too:
+  `magmaan_core$infer_mixed_ordinal_robust(fit, mixed_stats, weight = "")`.
+  Mixed `NACOV`/weight and robust reporting parity is still looser than the
+  all-ordinal path. Empty `weight` reuses `fit$estimator`.
