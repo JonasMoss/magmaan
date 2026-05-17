@@ -1,4 +1,4 @@
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 #include <algorithm>
 #include <cmath>

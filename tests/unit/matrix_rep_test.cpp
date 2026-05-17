@@ -5,7 +5,7 @@
 
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 using magmaan::model::build_matrix_rep;
 using magmaan::model::Cell;

@@ -1,4 +1,4 @@
-#include "magmaan/nt/fiml.hpp"
+#include "magmaan/estimate/fiml.hpp"
 
 #include <algorithm>
 #include <cmath>

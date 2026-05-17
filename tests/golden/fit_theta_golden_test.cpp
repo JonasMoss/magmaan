@@ -15,7 +15,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 namespace {
 

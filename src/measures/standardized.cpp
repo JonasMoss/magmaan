@@ -1,4 +1,4 @@
-#include "magmaan/nt/standardize.hpp"
+#include "magmaan/measures/standardized.hpp"
 
 #include <cmath>
 #include <cstddef>

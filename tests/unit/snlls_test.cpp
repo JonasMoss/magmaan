@@ -6,14 +6,14 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/start_values.hpp"
-#include "magmaan/gmm/gp.hpp"
-#include "magmaan/gmm/moment_quadratic.hpp"
+#include "magmaan/estimate/gmm/gp.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 using magmaan::data::SampleStats;
 using magmaan::estimate::Backend;

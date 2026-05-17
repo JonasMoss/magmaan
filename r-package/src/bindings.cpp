@@ -16,8 +16,8 @@
 #include "magmaan/parse/op.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/parse/flat_partable.hpp"
-#include "magmaan/spec/lavaanify.hpp"
-#include "magmaan/lavaan/partable_view.hpp"
+#include "magmaan/spec/build.hpp"
+#include "magmaan/compat/lavaan/partable_view.hpp"
 
 namespace {
 

@@ -7,9 +7,9 @@
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
-#include "magmaan/nt/fiml.hpp"
+#include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/fit.hpp"
-#include "magmaan/gmm/moment_quadratic.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/op.hpp"

@@ -23,7 +23,7 @@
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/start_values.hpp"
-#include "magmaan/nt/fiml.hpp"
+#include "magmaan/estimate/fiml.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
 
 namespace magmaan::test {

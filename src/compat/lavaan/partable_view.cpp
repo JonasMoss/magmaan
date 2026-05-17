@@ -1,4 +1,4 @@
-#include "magmaan/lavaan/partable_view.hpp"
+#include "magmaan/compat/lavaan/partable_view.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "magmaan/parse/op.hpp"
-#include "magmaan/spec/lavaanify.hpp"        // compute_eq_groups
+#include "magmaan/spec/build.hpp"        // compute_eq_groups
 #include "magmaan/spec/lin_constraints.hpp"  // resolve_lin_constraints
 #include "magmaan/spec/partable.hpp"
 

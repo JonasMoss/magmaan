@@ -1,4 +1,4 @@
-#include "magmaan/nt/effects.hpp"
+#include "magmaan/measures/effects.hpp"
 
 #include <cmath>
 #include <cstddef>

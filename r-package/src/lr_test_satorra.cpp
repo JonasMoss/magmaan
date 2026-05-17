@@ -16,8 +16,8 @@
 
 #include "internal.hpp"
 #include "magmaan/estimate/constraints.hpp"
-#include "magmaan/nt/robust.hpp"
-#include "magmaan/nt/robust.hpp"
+#include "magmaan/robust/robust.hpp"
+#include "magmaan/robust/robust.hpp"
 
 
 namespace {

@@ -1,4 +1,4 @@
-#include "magmaan/nt/satorra2000.hpp"
+#include "magmaan/robust/satorra2000.hpp"
 
 #include <algorithm>
 #include <cstddef>

@@ -7,11 +7,11 @@
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
 
-#include "magmaan/nt/infer.hpp"     // chi2_pvalue (oracle for p-values)
-#include "magmaan/nt/robust.hpp"
+#include "magmaan/inference/inference.hpp"     // chi2_pvalue (oracle for p-values)
+#include "magmaan/robust/robust.hpp"
 #include "magmaan/data/raw_data.hpp"      // empirical_gamma (oracle Γ̂)
-#include "magmaan/nt/robust.hpp"
-#include "magmaan/nt/robust.hpp"
+#include "magmaan/robust/robust.hpp"
+#include "magmaan/robust/robust.hpp"
 
 
 namespace {

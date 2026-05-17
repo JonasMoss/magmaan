@@ -18,14 +18,14 @@
 #include "magmaan/parse/op.hpp"
 #include "magmaan/spec/partable.hpp"
 #include "magmaan/spec/start_hints.hpp"
-#include "magmaan/spec/lavaanify.hpp"     // compute_eq_groups
-#include "magmaan/lavaan/partable_view.hpp"   // LavaanParTable / to_/from_lavaan_partable
+#include "magmaan/spec/build.hpp"     // compute_eq_groups
+#include "magmaan/compat/lavaan/partable_view.hpp"   // LavaanParTable / to_/from_lavaan_partable
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/estimate/fit.hpp"              // Estimates
-#include "magmaan/nt/infer.hpp"        // information_*, vcov, se, chi2_stat, df_stat
+#include "magmaan/inference/inference.hpp"        // information_*, vcov, se, chi2_stat, df_stat
 #include "magmaan/optim/lbfgs_optimizer.hpp"  // LbfgsOptions
 
 namespace lv  = magmaan;

@@ -14,12 +14,12 @@
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
-#include "magmaan/nt/measures.hpp"
-#include "magmaan/nt/fiml.hpp"
-#include "magmaan/nt/ml.hpp"
+#include "magmaan/measures/fit_measures.hpp"
+#include "magmaan/estimate/fiml.hpp"
+#include "magmaan/estimate/nt.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 namespace {
 

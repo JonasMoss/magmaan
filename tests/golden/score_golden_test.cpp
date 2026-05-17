@@ -16,12 +16,12 @@
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/ordinal.hpp"
-#include "magmaan/nt/score.hpp"
+#include "magmaan/inference/score.hpp"
 #include "magmaan/model/matrix_rep.hpp"
-#include "magmaan/nt/fiml.hpp"
+#include "magmaan/estimate/fiml.hpp"
 #include "magmaan/parse/op.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 namespace {
 

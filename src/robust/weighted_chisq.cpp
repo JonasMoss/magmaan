@@ -1,4 +1,4 @@
-#include "magmaan/nt/weighted_chisq.hpp"
+#include "magmaan/robust/weighted_chisq.hpp"
 
 #include <algorithm>
 #include <cmath>

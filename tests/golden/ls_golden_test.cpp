@@ -16,13 +16,13 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/fit.hpp"
-#include "magmaan/estimate/weighted_inference.hpp"
-#include "magmaan/nt/infer.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
+#include "magmaan/inference/inference.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 namespace {
 

@@ -1,4 +1,4 @@
-#include "magmaan/nt/score.hpp"
+#include "magmaan/inference/score.hpp"
 
 #include <algorithm>
 #include <array>
@@ -19,9 +19,9 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/constraints.hpp"
-#include "magmaan/gmm/moment_quadratic.hpp"
-#include "magmaan/nt/infer.hpp"
-#include "magmaan/nt/ml.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
+#include "magmaan/inference/inference.hpp"
+#include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 

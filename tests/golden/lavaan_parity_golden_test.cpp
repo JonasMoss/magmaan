@@ -43,16 +43,16 @@
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/ordinal.hpp"
-#include "magmaan/estimate/weighted_inference.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
-#include "magmaan/nt/fiml.hpp"
-#include "magmaan/nt/infer.hpp"
-#include "magmaan/nt/measures.hpp"
+#include "magmaan/estimate/fiml.hpp"
+#include "magmaan/inference/inference.hpp"
+#include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 namespace {
 

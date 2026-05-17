@@ -6,7 +6,7 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 using magmaan::estimate::Bounds;
 using magmaan::estimate::bounds_from_partable;

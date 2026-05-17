@@ -18,10 +18,10 @@
 #include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/nt/effects.hpp"
-#include "magmaan/nt/ml.hpp"
-#include "magmaan/nt/fiml.hpp"
-#include "magmaan/nt/measures.hpp"
+#include "magmaan/measures/effects.hpp"
+#include "magmaan/estimate/nt.hpp"
+#include "magmaan/estimate/fiml.hpp"
+#include "magmaan/measures/fit_measures.hpp"
 
 // [[Rcpp::depends(RcppEigen)]]
 

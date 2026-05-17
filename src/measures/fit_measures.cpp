@@ -1,4 +1,4 @@
-#include "magmaan/nt/measures.hpp"
+#include "magmaan/measures/fit_measures.hpp"
 
 #include <algorithm>
 #include <cmath>
