@@ -45,8 +45,20 @@ data_ordinal_stats_from_raw_impl <- function(X) {
     .Call(`_magmaan_data_ordinal_stats_from_raw_impl`, X)
 }
 
+data_ordinal_stats_h_weighted_from_raw_impl <- function(X, h_kind = "wma_hard_cap", k = 1.5, a = 1.6, b = 2.2, lambda = 0.2) {
+    .Call(`_magmaan_data_ordinal_stats_h_weighted_from_raw_impl`, X, h_kind, k, a, b, lambda)
+}
+
+data_ordinal_stats_dpd_from_raw_impl <- function(X, alpha = 0.3) {
+    .Call(`_magmaan_data_ordinal_stats_dpd_from_raw_impl`, X, alpha)
+}
+
 data_mixed_ordinal_stats_from_raw_impl <- function(X, ordered_mask) {
     .Call(`_magmaan_data_mixed_ordinal_stats_from_raw_impl`, X, ordered_mask)
+}
+
+data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl <- function(X, ordered_mask, alpha = 0.3) {
+    .Call(`_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl`, X, ordered_mask, alpha)
 }
 
 fit_dwls_ordinal_impl <- function(partable, ordinal_stats, lbfgsb = NULL, bounds = NULL) {

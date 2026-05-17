@@ -8,10 +8,12 @@
 #include <string_view>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include <Eigen/Core>
 
 #include "magmaan/data/ordinal.hpp"
+#include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/error.hpp"
@@ -211,6 +213,40 @@ inline Result<Data> data_from_ordinal(const Model &, data::OrdinalStats stats) {
 inline Result<Data> data_from_mixed_ordinal(const Model &,
                                             data::MixedOrdinalStats stats) {
   return Data::from_mixed_ordinal(std::move(stats));
+}
+
+inline Result<Data> data_from_ordinal_h_weighted(
+    const Model &, const std::vector<Eigen::MatrixXd> &blocks,
+    data::PairwiseOrdinalHWeightedStatsOptions options = {}) {
+  auto stats = data::pairwise_ordinal_stats_h_weighted_from_integer_data(
+      blocks, options);
+  if (!stats) {
+    return std::unexpected(make_error(ErrorStage::Data, stats.error()));
+  }
+  return Data::from_ordinal(std::move(stats->stats));
+}
+
+inline Result<Data> data_from_ordinal_dpd(
+    const Model &, const std::vector<Eigen::MatrixXd> &blocks,
+    data::PairwiseOrdinalDpdStatsOptions options = {}) {
+  auto stats = data::pairwise_ordinal_stats_dpd_from_integer_data(blocks,
+                                                                  options);
+  if (!stats) {
+    return std::unexpected(make_error(ErrorStage::Data, stats.error()));
+  }
+  return Data::from_ordinal(std::move(stats->stats));
+}
+
+inline Result<Data> data_from_mixed_ordinal_polyserial_dpd(
+    const Model &, const std::vector<Eigen::MatrixXd> &blocks,
+    const std::vector<std::vector<std::int32_t>> &ordered,
+    data::PolyserialPairDpdOptions options = {}) {
+  auto stats = data::mixed_ordinal_stats_polyserial_dpd_from_data(
+      blocks, ordered, options);
+  if (!stats) {
+    return std::unexpected(make_error(ErrorStage::Data, stats.error()));
+  }
+  return Data::from_mixed_ordinal(std::move(stats->stats));
 }
 
 enum class OptimizerKind : std::uint8_t {

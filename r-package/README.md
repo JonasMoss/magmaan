@@ -77,12 +77,19 @@ Ordinal support is intentionally narrow and mirrors the C++ delta-path:
   `NACOV`, `W_dwls`, and `W_wls`. `moments[[b]]` is ordered as thresholds
   first, then lower-triangle polychorics by columns, and all covariance/weight
   matrices use that same row/column order.
-- Fit with `fit_dwls_ordinal()` or `fit_wls_ordinal()`. These are
+- Fit with `magmaan_core$fit_dwls_ordinal()` or
+  `magmaan_core$fit_wls_ordinal()`. These are
   point-estimate and standard chi-square statistic workflows.
+- Experimental robust moment builders are opt-in on the data step:
+  `magmaan_core$data_ordinal_stats_from_df(..., robust = "h_weighted")`,
+  `robust = "dpd"`, or
+  `magmaan_core$data_mixed_ordinal_stats_from_df(..., polyserial = "dpd")`.
+  Defaults remain the lavaan-compatible ML moment builders.
 - Robust ordinal reporting is explicit: call
-  `infer_ordinal_robust(fit, ordinal_stats, weight = "")` after a DWLS/WLS
-  ordinal fit to compute sandwich SEs and SB-family scaled statistics from the
-  threshold-plus-polychoric `NACOV` and the selected DWLS/WLS weight matrix.
+  `magmaan_core$infer_ordinal_robust(fit, ordinal_stats, weight = "")` after a
+  DWLS/WLS ordinal fit to compute sandwich SEs and SB-family scaled statistics
+  from the threshold-plus-polychoric `NACOV` and the selected DWLS/WLS weight
+  matrix.
 - Mixed continuous/ordinal categorical data now has a separate first-pass path:
   use `model_spec(..., ordered = ..., parameterization = "delta",
   meanstructure = TRUE)`, `data_mixed_ordinal_stats_from_df()`, and

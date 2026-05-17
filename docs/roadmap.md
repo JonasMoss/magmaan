@@ -338,6 +338,10 @@ golden `parTable()` fixtures.
   every primitive into the package namespace; instead, the friendly staged API
   should be exported directly and low-level functions should live behind a
   single `magmaan_core` object.
+- The staged C++ facade and R `magmaan_core` surface expose the experimental
+  robust ordinal moment builders explicitly: all-ordinal h-weighted,
+  all-ordinal DPD, and mixed continuous/ordinal fixed-marginal polyserial DPD.
+  Default ordinal and mixed data builders remain lavaan-compatible ML paths.
 - The R package is intended as a methods-developer interface over the C++
   library, not a second SEM implementation.
 - Standard errors, information matrices, Wald/z tests, robust corrections,
