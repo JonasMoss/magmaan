@@ -70,50 +70,50 @@ add_library(magmaan STATIC
   src/util/version.cpp
   src/parse/lexer.cpp
   src/parse/parser.cpp
-  src/spec/lavaanify.cpp
+  src/spec/build.cpp
   src/spec/lin_constraints.cpp
-  src/lavaan/partable_view.cpp
+  src/compat/lavaan/partable_view.cpp
   src/model/matrix_rep.cpp
   src/model/model_evaluator.cpp
-  src/nt/ml.cpp
-  src/nt/fiml.cpp
-  src/gmm/moment_quadratic.cpp
-  src/gmm/gp.cpp
-  src/estimate/fit.cpp
-  src/estimate/reparameterize.cpp
-  src/estimate/bounds.cpp
-  src/estimate/dls_weight.cpp
-  src/estimate/ordinal.cpp
-  src/estimate/pairwise.cpp
-  src/estimate/weighted_inference.cpp
-  src/estimate/start_values.cpp
-  src/estimate/start_fabin.cpp
-  src/estimate/start_guttman.cpp
-  src/estimate/start_bentler.cpp
-  src/estimate/start_jamesstein.cpp
-  src/estimate/cfa_utils.cpp
-  src/optim/lbfgs_optimizer.cpp
-  src/optim/lbfgsb_optimizer.cpp
-  src/optim/trust_region_optimizer.cpp
-  src/optim/optimizers.cpp
-  src/estimate/resolve_fixed_x.cpp
-  src/estimate/constraints.cpp
-  src/nt/inference.cpp
-  src/nt/score.cpp
-  src/nt/effects.cpp
-  src/nt/standardized.cpp
-  src/nt/fit_measures.cpp
   src/data/raw_data.cpp
   src/data/shrinkage.cpp
   src/data/h_score.cpp
   src/data/pairwise_mixed.cpp
   src/data/pairwise_ordinal.cpp
   src/data/ordinal.cpp
-  src/nt/robust.cpp
-  src/nt/restriction.cpp
-  src/nt/satorra2000.cpp
-  src/nt/lr_test_satorra.cpp
-  src/nt/weighted_chisq.cpp)
+  src/estimate/fit.cpp
+  src/estimate/nt.cpp
+  src/estimate/fiml.cpp
+  src/estimate/reparameterize.cpp
+  src/estimate/bounds.cpp
+  src/estimate/ordinal.cpp
+  src/estimate/pairwise.cpp
+  src/estimate/start_values.cpp
+  src/estimate/start_fabin.cpp
+  src/estimate/start_guttman.cpp
+  src/estimate/start_bentler.cpp
+  src/estimate/start_jamesstein.cpp
+  src/estimate/cfa_utils.cpp
+  src/estimate/resolve_fixed_x.cpp
+  src/estimate/constraints.cpp
+  src/estimate/gmm/moment_quadratic.cpp
+  src/estimate/gmm/gp.cpp
+  src/estimate/gmm/dls_weight.cpp
+  src/inference/inference.cpp
+  src/inference/score.cpp
+  src/robust/robust.cpp
+  src/robust/restriction.cpp
+  src/robust/satorra2000.cpp
+  src/robust/lr_test_satorra.cpp
+  src/robust/weighted_chisq.cpp
+  src/robust/weighted_inference.cpp
+  src/measures/fit_measures.cpp
+  src/measures/standardized.cpp
+  src/measures/effects.cpp
+  src/optim/lbfgs_optimizer.cpp
+  src/optim/lbfgsb_optimizer.cpp
+  src/optim/trust_region_optimizer.cpp
+  src/optim/optimizers.cpp)
 add_library(magmaan::magmaan ALIAS magmaan)
 
 target_compile_features(magmaan PUBLIC cxx_std_23)
