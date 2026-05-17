@@ -50,12 +50,11 @@ Remaining work, in suggested order:
   `ordered` and `parameterization = "delta"`, ordinal sample-stat builders,
   mixed ordinal sample-stat builders, and ordinal/mixed DWLS/WLS fitting
   wrappers.
-- **S.** `r-package/examples/staged_workflow.R` and `fit_measures.R` now cover
-  the intended workflow (estimate-only `magmaan()`, then explicit SEs/z tests,
-  Satorra-Bentler, fit measures, defined parameters, and the LR nested test).
-  The missing-data boundary is in `fiml.R`; a dedicated complete-data `fixed.x`
-  example (observed exogenous variables, `fixed_x = TRUE/FALSE`) is still worth
-  adding where users are likely to hit it.
+- **S.** Keep R examples current as staged surfaces evolve. Current examples
+  cover the intended workflow (estimate-only `magmaan()`, then explicit
+  post-fit SEs/z tests, Satorra-Bentler, fit measures, defined parameters, and
+  nested tests), the FIML missing-data boundary, and the complete-data
+  observed-exogenous `fixed_x = TRUE/FALSE` boundary.
 - **M.** Add a lavaan-backed complete/listwise mixed categorical boundary
   fixture. The remaining blocker is the mixed NACOV/weight path, which still
   drifts past the documented loose tolerance for a sparse 4-category indicator.
