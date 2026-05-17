@@ -16,7 +16,7 @@ hs    <- HolzingerSwineford1939
 vars  <- paste0("x", 1:9)
 df_hs <- as.data.frame(hs[c("school", vars)])
 Xg    <- lapply(split(hs[vars], hs$school), as.matrix)
-ssg   <- data_sample_stats_from_raw(Xg)
+ssg   <- magmaan_core$data_sample_stats_from_raw(Xg)
 
 m_cfg <- "visual  =~ x1 + x2 + x3
           textual =~ x4 + x5 + x6
@@ -27,15 +27,15 @@ m_met <- "visual  =~ x1 + L1*x2 + L2*x3
 
 ## ---- fit configural (H1, less restricted) and metric (H0) -----------------
 
-pt_cfg <- lavaan_lavaanify(m_cfg, n_groups = 2L, group_var = "school")
-pt_met <- lavaan_lavaanify(m_met, n_groups = 2L, group_var = "school")
-fit_cfg <- fit_fit(pt_cfg, ssg)     # H1
-fit_met <- fit_fit(pt_met, ssg)     # H0  (additional cross-group `==` rows)
+pt_cfg <- magmaan_core$lavaan_lavaanify(m_cfg, n_groups = 2L, group_var = "school")
+pt_met <- magmaan_core$lavaan_lavaanify(m_met, n_groups = 2L, group_var = "school")
+fit_cfg <- magmaan_core$fit_fit(pt_cfg, ssg)     # H1
+fit_met <- magmaan_core$fit_fit(pt_met, ssg)     # H0  (additional cross-group `==` rows)
 
 ## ---- run the Satorra-2000 nested test --------------------------------------
 
 ## Multi-group: pass per-group raw data as a list (same block order as
-## fit_cfg$S — which is the order `data_sample_stats_from_raw()` consumed
+## fit_cfg$S — which is the order `magmaan_core$data_sample_stats_from_raw()` consumed
 ## above).
 res <- nestedTest(fit_H1 = fit_cfg, fit_H0 = fit_met, data = Xg)
 cat("\n=== magmaan: nestedTest(fit_cfg, fit_met) ===\n")

@@ -24,7 +24,7 @@ df <- make_ord_df(360, list(c(-0.70, 0.35), c(-0.55, 0.60),
                   seed = 11L)
 
 m <- model_spec(model, ordered = ordered, parameterization = "delta")
-d <- data_ordinal_stats_from_df(df, m)
+d <- magmaan_core$data_ordinal_stats_from_df(df, m)
 lavaan_wls <- cfa(model, data = df, ordered = ordered,
                   estimator = "WLS", parameterization = "delta")
 lavaan_samp <- lavInspect(lavaan_wls, "sampstat")
@@ -60,8 +60,8 @@ chisq_wls <- fit_wls$ntotal * fit_wls$fmin
 stopifnot(abs(chisq_dwls - fitMeasures(lavaan_dwls, "chisq")) < 0.08)
 stopifnot(abs(chisq_wls - fitMeasures(lavaan_wls, "chisq")) < 0.08)
 
-rob_dwls <- infer_ordinal_robust(fit_dwls, d)
-rob_wls <- infer_ordinal_robust(fit_wls, d, weight = "WLS")
+rob_dwls <- magmaan_core$infer_ordinal_robust(fit_dwls, d)
+rob_wls <- magmaan_core$infer_ordinal_robust(fit_wls, d, weight = "WLS")
 stopifnot(nrow(rob_dwls$vcov) == length(fit_dwls$theta))
 stopifnot(length(rob_dwls$se) == length(fit_dwls$theta))
 stopifnot(all(is.finite(rob_dwls$se)))
@@ -76,8 +76,8 @@ stopifnot(identical(rob_wls$df, 2L))
 bad <- df
 bad$x1 <- ordered(as.integer(bad$x1), levels = 1:4)
 bad <- bad[as.integer(bad$x1) != 4L, , drop = FALSE]
-err <- tryCatch(data_ordinal_stats_from_df(bad, m),
+err <- tryCatch(magmaan_core$data_ordinal_stats_from_df(bad, m),
                 error = function(e) conditionMessage(e))
 stopifnot(grepl("empty ordinal category", err, fixed = TRUE))
 
-cat("ordinal data_ordinal_stats_from_df()/DWLS/WLS workflow: ok\n")
+cat("ordinal magmaan_core$data_ordinal_stats_from_df()/DWLS/WLS workflow: ok\n")

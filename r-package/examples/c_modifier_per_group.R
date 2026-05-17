@@ -18,7 +18,7 @@ ok <- function(cond) if (isTRUE(cond)) "ok" else "MISMATCH"
 ## 1.2; everything else free.  (`c(0.8, 1.2)*x2` is two fixed values; `NA` would
 ## free that group's loading; `c(L, L)*x2` would tie it across groups.)
 m  <- "f =~ x1 + c(0.8, 1.2)*x2 + x3"
-pt <- lavaan_lavaanify(m, n_groups = 2L, group_var = "school",
+pt <- magmaan_core$lavaan_lavaanify(m, n_groups = 2L, group_var = "school",
                       group_labels = c("Pasteur", "Grant-White"))
 
 cat("--- group identity on the partable ---\n")
@@ -47,8 +47,8 @@ cat(sprintf("  match: ustart %s | fixed-ness (free == 0) %s\n",
             ok(all((sub$free[order(sub$group)] == 0) == (lav_sub$free[order(lav_sub$group)] == 0)))))
 
 ## And it fits like any other multi-group model:
-ssg <- data_sample_stats_from_raw(lapply(split(df_hs[paste0("x", 1:3)], df_hs$school), as.matrix))
-fit <- fit_fit(pt, ssg)
+ssg <- magmaan_core$data_sample_stats_from_raw(lapply(split(df_hs[paste0("x", 1:3)], df_hs$school), as.matrix))
+fit <- magmaan_core$fit_fit(pt, ssg)
 cat(sprintf("\n--- fit ---\n  ngroups = %d (%s), npar = %d, free λ(f=~x2)? %s\n",
             fit$ngroups, paste(fit$group_labels, collapse = "/"), fit$npar,
             ok(all(fit$partable$free[fit$partable$lhs == "f" & fit$partable$rhs == "x2"] == 0))))

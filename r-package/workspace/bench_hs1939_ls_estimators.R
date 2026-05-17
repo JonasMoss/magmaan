@@ -23,7 +23,7 @@ uls_chisq <- function(fit) {
   ## Browne's residual NT test, not the raw ULS objective statistic.
   ## magmaan's C++ Browne helper is N-scaled; lavaan's ULS test is on the
   ## same n - 1 scale as the standard ULS statistic for raw-data fits.
-  infer_browne_residual_nt(fit)$statistic *
+  magmaan_core$infer_browne_residual_nt(fit)$statistic *
     sum(fit$nobs - 1L) / sum(fit$nobs)
 }
 

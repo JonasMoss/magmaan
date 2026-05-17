@@ -23,7 +23,7 @@ require_pkg("lavaan")
 require_pkg("bench")
 require_pkg("jsonlite")
 ## magmaan is attached (not just loaded) so its exported post-fit primitives
-## -- lavaan_compare_partable(), infer_*() -- resolve as bare names.
+## -- magmaan_core$lavaan_compare_partable(), infer_*() -- resolve as bare names.
 require_pkg("magmaan")
 suppressPackageStartupMessages(library(magmaan))
 
@@ -89,8 +89,8 @@ est_max_abs_diff <- function(m_pt, l_pt) {
 ## Best-effort magmaan SE vector via the explicit post-fit primitives.
 magmaan_se <- function(fit) {
   tryCatch({
-    info <- infer_information_expected(fit)
-    infer_se(infer_vcov_partable(info, fit$partable))
+    info <- magmaan_core$infer_information_expected(fit)
+    magmaan_core$infer_se(magmaan_core$infer_vcov_partable(info, fit$partable))
   }, error = function(e) NULL)
 }
 
@@ -135,7 +135,7 @@ run_case <- function(id) {
   ## Correctness: reuse magmaan's own partable comparator as the structural +
   ## estimate gate, plus an explicit max-abs estimate diff and an fmin check.
   cmp <- tryCatch(
-    lavaan_compare_partable(mfit, l_pt, est_tolerance = EST_TOL),
+    magmaan_core$lavaan_compare_partable(mfit, l_pt, est_tolerance = EST_TOL),
     error = function(e) list(ok = NA, counts = integer(),
                              failures = conditionMessage(e)))
   est_diff <- est_max_abs_diff(mfit$partable, l_pt)

@@ -10,13 +10,13 @@ magmaan_model <- \() {
                      group_labels = levels(data$school))
   dat <- df_to_data(data, spec, group = "school")
   fit <- fit_ml(spec, dat)
-  uf  <- infer_build_u_factor(fit)
-  Zc  <- infer_casewise_contributions(spec$partable, dat$X)
-  M   <- infer_reduced_gamma_sample(uf, Zc, fit$nobs)
-  ev  <- infer_ugamma_eigenvalues(M)
-  df <- infer_df_stat(fit$partable, fit_sample_stats(fit))
-  chisq <- infer_chi2_stat(fit_sample_stats(fit), fit$fmin)
-  sb <- infer_satorra_bentler(chisq, df, ev)$chi2_scaled
+  uf  <- magmaan_core$infer_build_u_factor(fit)
+  Zc  <- magmaan_core$infer_casewise_contributions(spec$partable, dat$X)
+  M   <- magmaan_core$infer_reduced_gamma_sample(uf, Zc, fit$nobs)
+  ev  <- magmaan_core$infer_ugamma_eigenvalues(M)
+  df <- magmaan_core$infer_df_stat(fit$partable, magmaan_core$fit_sample_stats(fit))
+  chisq <- magmaan_core$infer_chi2_stat(magmaan_core$fit_sample_stats(fit), fit$fmin)
+  sb <- magmaan_core$infer_satorra_bentler(chisq, df, ev)$chi2_scaled
   sb
 }
 

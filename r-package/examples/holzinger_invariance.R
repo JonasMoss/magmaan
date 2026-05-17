@@ -6,10 +6,10 @@
 ## `devtools::load_all("r-package")`):
 ##     Rscript r-package/examples/holzinger_invariance.R
 ##
-## Multi-group is one uniform path: `lavaan_lavaanify(m, n_groups = 2L,
+## Multi-group is one uniform path: `magmaan_core$lavaan_lavaanify(m, n_groups = 2L,
 ## group_var = "school")` builds the per-group partable (shared loading labels
 ## auto-synthesize the cross-group `==` rows ≙ `group.equal = "loadings"`), and
-## `fit_fit(pt, data_sample_stats_from_raw(Xg))` takes the {S, nobs, mean}
+## `magmaan_core$fit_fit(pt, magmaan_core$data_sample_stats_from_raw(Xg))` takes the {S, nobs, mean}
 ## bundle (Xg a list of per-group raw matrices) straight in. See
 ## holzinger_2group_satorra_bentler.R for more on the SB pipeline.
 
@@ -22,7 +22,7 @@ hs   <- HolzingerSwineford1939
 vars <- paste0("x", 1:9)
 Xg   <- lapply(split(hs[vars], hs$school), as.matrix)   # list of 2 raw-data matrices
 gnm  <- names(Xg)
-ssg  <- data_sample_stats_from_raw(Xg)                 # list(S = list(S1,S2), mean = list(m1,m2), nobs = c(n1,n2))
+ssg  <- magmaan_core$data_sample_stats_from_raw(Xg)                 # list(S = list(S1,S2), mean = list(m1,m2), nobs = c(n1,n2))
 ng   <- ssg$nobs
 df_hs <- as.data.frame(hs[c("school", vars)])
 cat(sprintf("Groups: %s   (n = %s)\n\n", paste(gnm, collapse = ", "), paste(ng, collapse = ", ")))
@@ -37,24 +37,24 @@ m_met <- "visual  =~ x1 + L1*x2 + L2*x3
           speed   =~ x7 + L5*x8 + L6*x9"
 
 ## ---- fit both 2-group models ----------------------------------------------
-pt_cfg <- lavaan_lavaanify(m_cfg, n_groups = 2L, group_var = "school")
-pt_met <- lavaan_lavaanify(m_met, n_groups = 2L, group_var = "school")
+pt_cfg <- magmaan_core$lavaan_lavaanify(m_cfg, n_groups = 2L, group_var = "school")
+pt_met <- magmaan_core$lavaan_lavaanify(m_met, n_groups = 2L, group_var = "school")
 
-fit_cfg <- fit_fit(pt_cfg, ssg)
-fit_met <- fit_fit(pt_met, ssg)
-T_cfg   <- infer_chi2_stat(fit_sample_stats(fit_cfg), fit_cfg$fmin);  df_cfg <- infer_df_stat(fit_cfg$partable, fit_sample_stats(fit_cfg))
-T_met   <- infer_chi2_stat(fit_sample_stats(fit_met), fit_met$fmin);  df_met <- infer_df_stat(fit_met$partable, fit_sample_stats(fit_met))
+fit_cfg <- magmaan_core$fit_fit(pt_cfg, ssg)
+fit_met <- magmaan_core$fit_fit(pt_met, ssg)
+T_cfg   <- magmaan_core$infer_chi2_stat(magmaan_core$fit_sample_stats(fit_cfg), fit_cfg$fmin);  df_cfg <- magmaan_core$infer_df_stat(fit_cfg$partable, magmaan_core$fit_sample_stats(fit_cfg))
+T_met   <- magmaan_core$infer_chi2_stat(magmaan_core$fit_sample_stats(fit_met), fit_met$fmin);  df_met <- magmaan_core$infer_df_stat(fit_met$partable, magmaan_core$fit_sample_stats(fit_met))
 n_eqcon <- sum(fit_met$partable$op == "==")
 
 cat("--- configural (loadings free in both groups) ---\n")
 cat(sprintf("  ngroups = %d, npar = %d, df = %d, χ² = %.4f (p %.4g)\n\n",
             fit_cfg$ngroups, fit_cfg$npar, df_cfg, T_cfg,
-            infer_chi2_pvalue(T_cfg, df_cfg)))
+            magmaan_core$infer_chi2_pvalue(T_cfg, df_cfg)))
 
 cat("--- metric (loadings constrained equal across groups) ---\n")
 cat(sprintf("  npar = %d free indices, %d cross-group equality constraints → %d effective, df = %d, χ² = %.4f (p %.4g)\n",
             fit_met$npar, n_eqcon, fit_met$npar - n_eqcon,
-            df_met, T_met, infer_chi2_pvalue(T_met, df_met)))
+            df_met, T_met, magmaan_core$infer_chi2_pvalue(T_met, df_met)))
 ld <- fit_met$partable$est[fit_met$partable$op == "=~" & fit_met$partable$rhs == "x2"]
 cat(sprintf("  e.g. λ(visual=~x2): group 1 = %.6f, group 2 = %.6f   (equal: %s)\n\n",
             ld[1], ld[2], isTRUE(all.equal(ld[1], ld[2]))))
@@ -62,7 +62,7 @@ cat(sprintf("  e.g. λ(visual=~x2): group 1 = %.6f, group 2 = %.6f   (equal: %s)
 cat("--- metric-vs-configural invariance test (LR, in pure R via magmaan) ---\n")
 lr_stat <- T_met - T_cfg
 lr_df   <- df_met - df_cfg
-cat(sprintf("  Δχ² = %.4f,  Δdf = %d,  p = %.4g\n\n", lr_stat, lr_df, infer_chi2_pvalue(lr_stat, lr_df)))
+cat(sprintf("  Δχ² = %.4f,  Δdf = %d,  p = %.4g\n\n", lr_stat, lr_df, magmaan_core$infer_chi2_pvalue(lr_stat, lr_df)))
 
 ## ---- cross-check vs lavaan ------------------------------------------------
 lav_cfg <- lavaan::cfa(m_cfg, data = df_hs, group = "school")
@@ -83,9 +83,9 @@ cat(sprintf("  match: configural χ² %s | metric χ² %s | configural df %s | m
 ##   the same 5-step chain on each fit; for the metric model `infer_build_u_factor`
 ##   reparameterizes Δ → Δ·K so the spectrum has df = p* − n_alpha eigenvalues.
 sb_of <- function(pt, fit, T_ml, df_ml) {
-  uf <- infer_build_u_factor_parts(fit$partable, fit_sample_stats(fit), fit$theta)
-  ev <- infer_ugamma_eigenvalues(infer_reduced_gamma_sample(uf, infer_casewise_contributions(pt, Xg), fit$nobs))
-  infer_satorra_bentler(T_ml, df_ml, ev)
+  uf <- magmaan_core$infer_build_u_factor_parts(fit$partable, magmaan_core$fit_sample_stats(fit), fit$theta)
+  ev <- magmaan_core$infer_ugamma_eigenvalues(magmaan_core$infer_reduced_gamma_sample(uf, magmaan_core$infer_casewise_contributions(pt, Xg), fit$nobs))
+  magmaan_core$infer_satorra_bentler(T_ml, df_ml, ev)
 }
 sb_cfg <- sb_of(pt_cfg, fit_cfg, T_cfg, df_cfg)
 sb_met <- sb_of(pt_met, fit_met, T_met, df_met)

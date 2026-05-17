@@ -12,7 +12,7 @@ df$school <- rep(c("Pasteur", "Grant-White"), each = 300)
 m <- model_spec("f =~ x1 + x2 + x3")
 d <- df_to_data(df, m)
 
-manual <- data_sample_stats_from_raw(list(as.matrix(df[c("x1", "x2", "x3")])))
+manual <- magmaan_core$data_sample_stats_from_raw(list(as.matrix(df[c("x1", "x2", "x3")])))
 stopifnot(max(abs(d$S[[1]] - manual$S[[1]])) < 1e-12)
 stopifnot(max(abs(d$mean[[1]] - manual$mean[[1]])) < 1e-12)
 
