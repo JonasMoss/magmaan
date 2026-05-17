@@ -9,16 +9,13 @@
 ## Satorra-Bentler scaled correction, the mean-and-variance adjustment, and the
 ## exact Imhof mixture tail.
 ##
-## NOTE ON LAVAAN PARITY. magmaan's scaled difference statistic is the
-## *H1-anchored reduced-form* Satorra-2000 test (everything evaluated at the H1
-## fit). lavaan's `lavTestLRT(method = "satorra.2000")` computes a different
-## variant; the two agree on the unscaled difference and df exactly, but the
-## *scaled* statistic diverges for strongly-binding restrictions. On this
-## example metric invariance nearly holds on the HS data, so the restriction
-## barely binds and the two happen to be close — but that is not a parity
-## guarantee. See docs/satorra2000_parity.md. This example therefore checks
-## only the unscaled difference and df against lavaan, and shows lavaan's scaled
-## statistic for reference, not as a parity check.
+## NOTE ON LAVAAN PARITY. magmaan's scaled difference statistic is the exact
+## parameter-nesting Satorra-2000 test. The matching lavaan oracle is
+## `lavTestLRT(..., method = "satorra.2000", A.method = "exact",
+## scaled.shifted = FALSE)`. lavaan's defaults use a covariance-nesting
+## moment-Jacobian construction for the restriction matrix and the
+## scaled-shifted statistic; both can differ from this mean-scaled
+## parameter-nesting check. See docs/satorra2000_parity.md.
 
 suppressMessages({ library(magmaan); library(lavaan) })
 
@@ -59,9 +56,12 @@ lav_cfg <- lavaan::cfa(m_cfg, data = df_hs, group = "school",
                        estimator = "MLM")
 lav_met <- lavaan::cfa(m_cfg, data = df_hs, group = "school",
                        group.equal = "loadings", estimator = "MLM")
-lav_lr  <- lavaan::lavTestLRT(lav_cfg, lav_met, method = "satorra.2000")
+lav_lr  <- lavaan::lavTestLRT(lav_cfg, lav_met, method = "satorra.2000",
+                              A.method = "exact", scaled.shifted = FALSE)
+lav_lr_delta <- lavaan::lavTestLRT(lav_cfg, lav_met, method = "satorra.2000",
+                                   A.method = "delta")
 
-cat("\n=== lavaan::lavTestLRT(., method = 'satorra.2000') ===\n")
+cat("\n=== lavaan::lavTestLRT(., method = 'satorra.2000', A.method = 'exact', scaled.shifted = FALSE) ===\n")
 print(lav_lr)
 
 ## Layout: rows 1 = H1 (NA Δχ²), 2 = H0 (Δχ², Δdf, p).
@@ -70,10 +70,7 @@ lav_unscaled <- as.numeric(fitMeasures(lav_met, "chisq") -
                            fitMeasures(lav_cfg, "chisq"))
 lav_scaled   <- as.numeric(lav_lr[2, "Chisq diff"])
 
-## ---- checks: unscaled difference + df only ---------------------------------
-## These are exact across implementations. The *scaled* statistic is variant-
-## dependent (see the header note / docs/satorra2000_parity.md) and is shown
-## for reference only.
+## ---- checks: exact parameter-nesting parity --------------------------------
 cat("\n--- magmaan vs lavaan -------------------------------------------\n")
 cat(sprintf("  Δdf:              magmaan = %d        lavaan = %d         %s\n",
             res$df_diff, as.integer(lav_df),
@@ -81,8 +78,11 @@ cat(sprintf("  Δdf:              magmaan = %d        lavaan = %d         %s\n",
 cat(sprintf("  Δχ² (unscaled):   magmaan = %.4f   lavaan = %.4f   %s\n",
             res$T_diff, lav_unscaled,
             ok(isTRUE(all.equal(res$T_diff, lav_unscaled, tolerance = 1e-3)))))
-cat(sprintf("  Δχ² (scaled):     magmaan = %.4f   lavaan = %.4f   (different variants — reference only)\n",
-            res$T_scaled, lav_scaled))
+cat(sprintf("  Δχ² (scaled):     magmaan = %.4f   lavaan = %.4f   %s\n",
+            res$T_scaled, lav_scaled,
+            ok(isTRUE(all.equal(res$T_scaled, lav_scaled, tolerance = 1e-3)))))
+cat(sprintf("  Δχ² (lavaan delta A.method, reference only): %.4f\n",
+            as.numeric(lav_lr_delta[2, "Chisq diff"])))
 cat(sprintf("  ĉ (magmaan scale factor): %.6f\n", res$scale_c))
 cat(sprintf("  d̂₀ (adj. df):             %.6f\n", res$adjust_d0))
 cat(sprintf("  Imhof mixture p:          %.6g\n", res$p_mixture))
@@ -91,5 +91,6 @@ print(res$eigenvalues)
 
 stopifnot(identical(as.integer(res$df_diff), as.integer(lav_df)))
 stopifnot(isTRUE(all.equal(res$T_diff, lav_unscaled, tolerance = 1e-3)))
+stopifnot(isTRUE(all.equal(res$T_scaled, lav_scaled, tolerance = 1e-3)))
 
 cat("\nnestedTest() Satorra-2000 workflow: ok\n")
