@@ -380,9 +380,9 @@ golden `parTable()` fixtures.
   fit measures, defined parameters, and nested tests remain explicit post-fit
   calls outside `magmaan()`.
 - Primary public declarations and internal implementation now live in the
-  target namespaces: `spec`, `lavaan`, `estimate`, `optim`, `nt`, `gls`, and
-  `data`. Repository code and R binding internals use those namespaces
-  directly.
+  target namespaces: `parse`, `spec`, `model`, `data`, `estimate`,
+  `inference`, `robust`, `measures`, `optim`, and `compat::lavaan`. Repository
+  code and R binding internals use those namespaces directly.
 - Old `fit/*` and `partable/*` compatibility headers have been removed; use the
   target namespace headers directly.
 
