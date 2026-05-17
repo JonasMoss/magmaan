@@ -18,7 +18,7 @@
 #include "magmaan/robust/satorra2000.hpp"
 #include "magmaan/robust/lr_test_satorra.hpp"
 
-namespace magmaan::nt::robust {
+namespace magmaan::robust {
 
 using data::RawData;
 using data::SampleStats;
@@ -459,4 +459,4 @@ robust_se(spec::LatentStructure        pt,
                                             WeightMoments::Structured,
                                             ScoreCovariance::Empirical});
 
-}  // namespace magmaan::nt::robust
+}  // namespace magmaan::robust

@@ -15,7 +15,7 @@
 
 #include "spec/classify.hpp"
 
-namespace magmaan::lavaan {
+namespace magmaan::compat::lavaan {
 
 using spec::LatentNames;
 using spec::LatentStructure;
@@ -242,4 +242,4 @@ ParsedLavaanParTable from_lavaan_partable(const LavaanParTable& pt) {
   return out;
 }
 
-}  // namespace magmaan::lavaan
+}  // namespace magmaan::compat::lavaan

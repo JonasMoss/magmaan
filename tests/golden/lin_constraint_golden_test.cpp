@@ -88,13 +88,13 @@ TEST_CASE("linear-constraint goldens — θ̂/SE/χ²/df match lavaan(+ `==`)") 
     if (!est_or.has_value()) { failures.push_back(id + ": fit — " + est_or.error().detail); continue; }
     const auto& est = *est_or;
 
-    auto info_or = magmaan::nt::infer::information_expected(*pt, *mr, samp, est);
+    auto info_or = magmaan::inference::information_expected(*pt, *mr, samp, est);
     if (!info_or.has_value()) { failures.push_back(id + ": information_expected — " + info_or.error().detail); continue; }
-    auto vcov_or = magmaan::nt::infer::vcov(*info_or, *pt);
+    auto vcov_or = magmaan::inference::vcov(*info_or, *pt);
     if (!vcov_or.has_value()) { failures.push_back(id + ": vcov — " + vcov_or.error().detail); continue; }
-    const Eigen::VectorXd se_v = magmaan::nt::infer::se(*vcov_or);
-    const double          chi2 = magmaan::nt::infer::chi2_stat(samp, est);
-    auto df_or = magmaan::nt::infer::df_stat(*pt, samp);
+    const Eigen::VectorXd se_v = magmaan::inference::se(*vcov_or);
+    const double          chi2 = magmaan::inference::chi2_stat(samp, est);
+    auto df_or = magmaan::inference::df_stat(*pt, samp);
     if (!df_or.has_value()) { failures.push_back(id + ": df_stat — " + df_or.error().detail); continue; }
     const int df = *df_or;
 

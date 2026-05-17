@@ -16,10 +16,10 @@
 
 #include "detail_vech.hpp"                // vech_len
 
-namespace magmaan::nt::robust {
+namespace magmaan::robust {
 
-using infer::chi2_pvalue;
-using infer::noncentral_chisq_cdf;
+using inference::chi2_pvalue;
+using inference::noncentral_chisq_cdf;
 
 using estimate::EqConstraints;
 
@@ -214,4 +214,4 @@ lr_test_satorra2000_from_data(
   return lr_test_satorra2000(T_H0 - T_H1, *sd_or);
 }
 
-}  // namespace magmaan::nt::robust
+}  // namespace magmaan::robust

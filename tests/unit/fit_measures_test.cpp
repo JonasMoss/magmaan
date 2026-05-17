@@ -40,7 +40,7 @@ TEST_CASE("baseline_chi2: closed form matches log|diag(S)| − log|S|") {
   samp.S     = {S};
   samp.n_obs = {200};
 
-  auto bl = magmaan::nt::measures::baseline_chi2(samp);
+  auto bl = magmaan::measures::baseline_chi2(samp);
 
   // Hand calculation.
   Eigen::LLT<Eigen::MatrixXd> llt(S);
@@ -83,11 +83,11 @@ TEST_CASE("fit_measures: CFI, TLI, RMSEA on a known nontrivial fit") {
   samp.S = {S}; samp.n_obs = {j["n_obs"].get<std::int64_t>()};
 
   auto est   = magmaan::test::fit(*pt, *mr, samp).value();
-  auto chi2  = magmaan::nt::infer::chi2_stat(samp, est);
-  auto df    = magmaan::nt::infer::df_stat(*pt, samp).value();
-  auto bl    = magmaan::nt::measures::baseline_chi2(samp);
+  auto chi2  = magmaan::inference::chi2_stat(samp, est);
+  auto df    = magmaan::inference::df_stat(*pt, samp).value();
+  auto bl    = magmaan::measures::baseline_chi2(samp);
 
-  auto fm = magmaan::nt::measures::fit_measures(chi2, df, bl, samp);
+  auto fm = magmaan::measures::fit_measures(chi2, df, bl, samp);
 
   // Sanity checks: all measures in expected ranges for a non-trivial CFA fit.
   CHECK(df == 24);
@@ -107,11 +107,11 @@ TEST_CASE("fit_measures: CFI, TLI, RMSEA on a known nontrivial fit") {
   CHECK(fm.rmsea_close_h0 == doctest::Approx(0.05));
   CHECK(fm.rmsea_notclose_h0 == doctest::Approx(0.08));
   CHECK(fm.rmsea_pvalue == doctest::Approx(
-      1.0 - magmaan::nt::infer::noncentral_chisq_cdf(
+      1.0 - magmaan::inference::noncentral_chisq_cdf(
           chi2, static_cast<double>(df),
           301.0 * static_cast<double>(df) * 0.05 * 0.05)).epsilon(1e-12));
   CHECK(fm.rmsea_notclose_pvalue == doctest::Approx(
-      magmaan::nt::infer::noncentral_chisq_cdf(
+      magmaan::inference::noncentral_chisq_cdf(
           chi2, static_cast<double>(df),
           301.0 * static_cast<double>(df) * 0.08 * 0.08)).epsilon(1e-12));
   // The CI brackets the point estimate.
@@ -121,7 +121,7 @@ TEST_CASE("fit_measures: CFI, TLI, RMSEA on a known nontrivial fit") {
   // fit_extras: SRMR + log-likelihood + AIC/BIC. Lavaan reports
   //   srmr ≈ 0.06520, logl ≈ -3737.745, AIC ≈ 7517.490, BIC ≈ 7595.339,
   //   BIC2 ≈ 7528.739, npar = 21.
-  auto fx = magmaan::nt::measures::fit_extras(*pt, *mr, samp, est).value();
+  auto fx = magmaan::measures::fit_extras(*pt, *mr, samp, est).value();
   CHECK(fx.npar   == 21);
   CHECK(fx.ntotal == 301);
   CHECK(fx.srmr   == doctest::Approx(0.0652050571843865).epsilon(1e-4));
@@ -136,10 +136,10 @@ TEST_CASE("fit_measures: CFI, TLI, RMSEA on a known nontrivial fit") {
 }
 
 TEST_CASE("fit_measures: RMSEA CI edge cases (df<1, small χ², G>1 scaling)") {
-  using magmaan::nt::measures::BaselineFit;
-  using magmaan::nt::measures::FitMeasures;
+  using magmaan::measures::BaselineFit;
+  using magmaan::measures::FitMeasures;
   using magmaan::data::SampleStats;
-  using magmaan::nt::measures::fit_measures;
+  using magmaan::measures::fit_measures;
 
   auto mk_samp = [](std::initializer_list<std::int64_t> ns) {
     SampleStats s;
@@ -209,7 +209,7 @@ TEST_CASE("fit_extras: saturated 1F model — SRMR ≈ 0, logl == unrestricted_l
   auto est = magmaan::test::fit(*pt, *mr, samp).value();
   CHECK(std::abs(est.fmin) < 1e-8);                   // F_ML ≈ 0
 
-  auto fx = magmaan::nt::measures::fit_extras(*pt, *mr, samp, est).value();
+  auto fx = magmaan::measures::fit_extras(*pt, *mr, samp, est).value();
   CHECK(fx.npar == 6);
   CHECK(std::abs(fx.srmr) < 1e-6);
   CHECK(fx.logl == doctest::Approx(fx.unrestricted_logl).epsilon(1e-9));

@@ -25,8 +25,8 @@ TEST_CASE("imhof_upper: single λ collapses to a scaled χ²(1)") {
   // For a single λ, Q = λ·χ²(1), so Pr(Q > x) = Pr(χ²(1) > x/λ).
   for (double lambda : {0.25, 1.0, 4.0, 17.5}) {
     for (double x : {0.05, 0.5, 1.0, 2.5, 7.0, 15.0}) {
-      const double p_imhof = magmaan::nt::robust::imhof_upper(vec({lambda}), x);
-      const double p_exact = magmaan::nt::infer::chi2_pvalue(x / lambda, 1);
+      const double p_imhof = magmaan::robust::imhof_upper(vec({lambda}), x);
+      const double p_exact = magmaan::inference::chi2_pvalue(x / lambda, 1);
       INFO("λ=", lambda, "  x=", x);
       CHECK(p_imhof == doctest::Approx(p_exact).epsilon(1e-5));
     }
@@ -38,8 +38,8 @@ TEST_CASE("imhof_upper: k equal-weight λ=1 collapses to χ²(k)") {
   for (int k : {2, 3, 5, 8}) {
     Eigen::VectorXd lam = Eigen::VectorXd::Ones(k);
     for (double x : {0.1, 1.0, 3.0, 8.0, 16.0, 30.0}) {
-      const double p_imhof = magmaan::nt::robust::imhof_upper(lam, x);
-      const double p_exact = magmaan::nt::infer::chi2_pvalue(x, k);
+      const double p_imhof = magmaan::robust::imhof_upper(lam, x);
+      const double p_exact = magmaan::inference::chi2_pvalue(x, k);
       INFO("k=", k, "  x=", x);
       CHECK(p_imhof == doctest::Approx(p_exact).epsilon(1e-5));
     }
@@ -52,8 +52,8 @@ TEST_CASE("imhof_upper: k equal-weight λ=c collapses to a scaled χ²(k)") {
   for (double c : {0.5, 2.0, 7.3}) {
     Eigen::VectorXd lam = Eigen::VectorXd::Constant(k, c);
     for (double x : {0.5, 3.0, 10.0, 25.0}) {
-      const double p_imhof = magmaan::nt::robust::imhof_upper(lam, x);
-      const double p_exact = magmaan::nt::infer::chi2_pvalue(x / c, k);
+      const double p_imhof = magmaan::robust::imhof_upper(lam, x);
+      const double p_exact = magmaan::inference::chi2_pvalue(x / c, k);
       INFO("c=", c, "  x=", x);
       CHECK(p_imhof == doctest::Approx(p_exact).epsilon(1e-5));
     }
@@ -64,11 +64,11 @@ TEST_CASE("imhof_upper: k equal-weight λ=c collapses to a scaled χ²(k)") {
 
 TEST_CASE("imhof_upper: degenerate inputs") {
   // x ≤ 0  ⇒  full mass to the right.
-  CHECK(magmaan::nt::robust::imhof_upper(vec({1.0, 2.0}), 0.0)  == doctest::Approx(1.0));
-  CHECK(magmaan::nt::robust::imhof_upper(vec({1.0, 2.0}), -3.0) == doctest::Approx(1.0));
+  CHECK(magmaan::robust::imhof_upper(vec({1.0, 2.0}), 0.0)  == doctest::Approx(1.0));
+  CHECK(magmaan::robust::imhof_upper(vec({1.0, 2.0}), -3.0) == doctest::Approx(1.0));
 
   // All λ = 0  ⇒  Q ≡ 0; upper tail above any x > 0 is exactly 0.
-  CHECK(magmaan::nt::robust::imhof_upper(vec({0.0, 0.0, 0.0}), 1.0) == doctest::Approx(0.0));
+  CHECK(magmaan::robust::imhof_upper(vec({0.0, 0.0, 0.0}), 1.0) == doctest::Approx(0.0));
 }
 
 // ── Monte-Carlo cross-check on unequal-λ mixtures ───────────────────────────
@@ -115,7 +115,7 @@ TEST_CASE("imhof_upper: Monte-Carlo agreement on mixed-λ spectra") {
     {vec({3.0, 1.0, 0.3, 0.1}), 5.0},
   };
   for (const auto& c : cases) {
-    const double p_imhof = magmaan::nt::robust::imhof_upper(c.lambda, c.x);
+    const double p_imhof = magmaan::robust::imhof_upper(c.lambda, c.x);
     const double p_mc    = mc_upper(c.lambda, c.x, N, rng);
     // Wilson-style envelope: 4·σ where σ = √(p(1−p)/N).
     const double sigma   = std::sqrt(std::max(p_mc * (1.0 - p_mc), 1e-12) / N);

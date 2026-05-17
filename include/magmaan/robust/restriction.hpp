@@ -5,7 +5,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/constraints.hpp"
 
-namespace magmaan::nt::robust {
+namespace magmaan::robust {
 
 using estimate::EqConstraints;
 
@@ -59,4 +59,4 @@ restriction_alpha_from_K(const EqConstraints& K_H1,
                          double               tol_range_F = 1e-8,
                          double               tol_singular = 1e-9);
 
-}  // namespace magmaan::nt::robust
+}  // namespace magmaan::robust

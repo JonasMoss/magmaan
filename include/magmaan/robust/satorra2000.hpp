@@ -9,7 +9,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/constraints.hpp"
 
-namespace magmaan::nt::robust {
+namespace magmaan::robust {
 
 using estimate::EqConstraints;
 
@@ -96,4 +96,4 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
                     const Eigen::MatrixXd&           A_alpha,
                     GammaSource                      gamma = GammaSource::Empirical);
 
-}  // namespace magmaan::nt::robust
+}  // namespace magmaan::robust

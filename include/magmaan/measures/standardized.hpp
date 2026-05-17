@@ -7,7 +7,7 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/spec/partable.hpp"
 
-namespace magmaan::nt::standardize {
+namespace magmaan::measures::standardize {
 
 using data::SampleStats;
 using estimate::Estimates;
@@ -56,4 +56,4 @@ standardize_all(const spec::LatentStructure& pt,
                 const Estimates&          est,
                 const Eigen::MatrixXd&    vcov);
 
-}  // namespace magmaan::nt::standardize
+}  // namespace magmaan::measures::standardize

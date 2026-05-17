@@ -474,10 +474,10 @@ struct TestResult {
 };
 
 struct FitMeasuresResult {
-  nt::measures::BaselineFit baseline;
-  nt::measures::FitMeasures indices;
-  std::optional<nt::measures::FitExtras> complete_data_extras;
-  std::optional<nt::fiml::FIMLExtras> fiml_extras;
+  measures::BaselineFit baseline;
+  measures::FitMeasures indices;
+  std::optional<measures::FitExtras> complete_data_extras;
+  std::optional<estimate::fiml::FIMLExtras> fiml_extras;
 };
 
 class Fit {
@@ -530,7 +530,7 @@ inline Result<Fit> fit(std::shared_ptr<const Model> model,
                      "FIML currently supports only the L-BFGS optimizer"));
     }
 
-    auto start_stats = nt::fiml::fiml_start_sample_stats(*raw);
+    auto start_stats = estimate::fiml::fiml_start_sample_stats(*raw);
     if (!start_stats) {
       return std::unexpected(make_error(ErrorStage::Data, start_stats.error()));
     }
@@ -539,7 +539,7 @@ inline Result<Fit> fit(std::shared_ptr<const Model> model,
     if (!x0)
       return std::unexpected(x0.error());
 
-    auto est = nt::fiml::fit_fiml(pt, rep, *raw, *x0, {},
+    auto est = estimate::fiml::fit_fiml(pt, rep, *raw, *x0, {},
                                   estimator.optimizer_spec.lbfgs);
     if (!est)
       return std::unexpected(make_error(ErrorStage::Fit, est.error()));
@@ -655,17 +655,17 @@ inline Result<StandardErrors> standard_errors(const Fit &fit,
   post_expected<Eigen::MatrixXd> info;
   switch (spec.kind) {
   case InformationKind::Expected:
-    info = nt::infer::information_expected(fit.model().structure(),
+    info = inference::information_expected(fit.model().structure(),
                                            fit.model().matrix_rep(), *stats,
                                            fit.estimates());
     break;
   case InformationKind::ObservedFiniteDifference:
-    info = nt::infer::information_observed_fd(fit.model().structure(),
+    info = inference::information_observed_fd(fit.model().structure(),
                                               fit.model().matrix_rep(), *stats,
                                               fit.estimates(), spec.h_step);
     break;
   case InformationKind::ObservedAnalytic:
-    info = nt::infer::information_observed_analytic(fit.model().structure(),
+    info = inference::information_observed_analytic(fit.model().structure(),
                                                     fit.model().matrix_rep(),
                                                     *stats, fit.estimates());
     break;
@@ -674,12 +674,12 @@ inline Result<StandardErrors> standard_errors(const Fit &fit,
     return std::unexpected(make_error(ErrorStage::PostFit, info.error()));
   }
 
-  auto vc = nt::infer::vcov(*info, fit.model().structure());
+  auto vc = inference::vcov(*info, fit.model().structure());
   if (!vc) {
     return std::unexpected(make_error(ErrorStage::PostFit, vc.error()));
   }
 
-  return StandardErrors{std::move(*info), *vc, nt::infer::se(*vc)};
+  return StandardErrors{std::move(*info), *vc, inference::se(*vc)};
 }
 
 enum class TestKind : std::uint8_t {
@@ -699,31 +699,31 @@ inline Result<TestResult> test(const Fit &fit, TestSpec spec) {
   }
 
   if (const auto *stats = fit.data().sample_stats()) {
-    const double chi2 = nt::infer::chi2_stat(*stats, fit.estimates());
-    auto df = nt::infer::df_stat(fit.model().structure(), *stats);
+    const double chi2 = inference::chi2_stat(*stats, fit.estimates());
+    auto df = inference::df_stat(fit.model().structure(), *stats);
     if (!df) {
       return std::unexpected(make_error(ErrorStage::PostFit, df.error()));
     }
-    return TestResult{"standard", chi2, *df, nt::infer::chi2_pvalue(chi2, *df)};
+    return TestResult{"standard", chi2, *df, inference::chi2_pvalue(chi2, *df)};
   }
 
   if (const auto *raw = fit.data().raw()) {
-    auto stats = nt::fiml::fiml_start_sample_stats(*raw);
+    auto stats = estimate::fiml::fiml_start_sample_stats(*raw);
     if (!stats) {
       return std::unexpected(make_error(ErrorStage::Data, stats.error()));
     }
-    auto df = nt::infer::df_stat(fit.model().structure(), *stats);
+    auto df = inference::df_stat(fit.model().structure(), *stats);
     if (!df) {
       return std::unexpected(make_error(ErrorStage::PostFit, df.error()));
     }
     auto extras =
-        nt::fiml::fiml_extras(fit.model().structure(), fit.model().matrix_rep(),
+        estimate::fiml::fiml_extras(fit.model().structure(), fit.model().matrix_rep(),
                               *raw, fit.estimates());
     if (!extras) {
       return std::unexpected(make_error(ErrorStage::PostFit, extras.error()));
     }
     return TestResult{"fiml-likelihood", extras->chi2, *df,
-                      nt::infer::chi2_pvalue(extras->chi2, *df)};
+                      inference::chi2_pvalue(extras->chi2, *df)};
   }
 
   return std::unexpected(
@@ -736,10 +736,10 @@ inline Result<FitMeasuresResult> fit_measures(const Fit &fit) {
     auto t = test(fit, standard_chi_square());
     if (!t)
       return std::unexpected(t.error());
-    auto baseline = nt::measures::baseline_chi2(*stats);
+    auto baseline = measures::baseline_chi2(*stats);
     auto indices =
-        nt::measures::fit_measures(t->statistic, t->df, baseline, *stats);
-    auto extras = nt::measures::fit_extras(fit.model().structure(),
+        measures::fit_measures(t->statistic, t->df, baseline, *stats);
+    auto extras = measures::fit_extras(fit.model().structure(),
                                            fit.model().matrix_rep(), *stats,
                                            fit.estimates());
     if (!extras) {
@@ -750,21 +750,21 @@ inline Result<FitMeasuresResult> fit_measures(const Fit &fit) {
   }
 
   if (const auto *raw = fit.data().raw()) {
-    auto stats = nt::fiml::fiml_start_sample_stats(*raw);
+    auto stats = estimate::fiml::fiml_start_sample_stats(*raw);
     if (!stats) {
       return std::unexpected(make_error(ErrorStage::Data, stats.error()));
     }
     auto t = test(fit, standard_chi_square());
     if (!t)
       return std::unexpected(t.error());
-    auto baseline = nt::fiml::fiml_baseline_chi2(fit.model().structure(), *raw);
+    auto baseline = estimate::fiml::fiml_baseline_chi2(fit.model().structure(), *raw);
     if (!baseline) {
       return std::unexpected(make_error(ErrorStage::PostFit, baseline.error()));
     }
     auto indices =
-        nt::measures::fit_measures(t->statistic, t->df, *baseline, *stats);
+        measures::fit_measures(t->statistic, t->df, *baseline, *stats);
     auto extras =
-        nt::fiml::fiml_extras(fit.model().structure(), fit.model().matrix_rep(),
+        estimate::fiml::fiml_extras(fit.model().structure(), fit.model().matrix_rep(),
                               *raw, fit.estimates());
     if (!extras) {
       return std::unexpected(make_error(ErrorStage::PostFit, extras.error()));

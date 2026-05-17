@@ -13,7 +13,7 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/spec/partable.hpp"
 
-namespace magmaan::nt::infer {
+namespace magmaan::inference {
 
 using data::RawData;
 using data::SampleStats;
@@ -214,4 +214,4 @@ inline ZTestResult z_test(const Estimates& est,
   return out;
 }
 
-}  // namespace magmaan::nt::infer
+}  // namespace magmaan::inference

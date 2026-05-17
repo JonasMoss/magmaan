@@ -90,13 +90,13 @@ double total_n(const magmaan::data::SampleStats& samp) {
 }
 
 // The GLS moment weight (normal-theory weight built from S).
-magmaan::gmm::Weight gls_weight(const magmaan::spec::LatentStructure& pt,
+magmaan::estimate::gmm::Weight gls_weight(const magmaan::spec::LatentStructure& pt,
                                 const magmaan::model::MatrixRep& rep,
                                 const magmaan::data::SampleStats& samp,
                                 const Eigen::VectorXd& theta) {
   auto ev = magmaan::model::ModelEvaluator::build(pt, rep);
   REQUIRE(ev.has_value());
-  auto w = magmaan::gmm::normal_theory_weight(*ev, samp, theta);
+  auto w = magmaan::estimate::gmm::normal_theory_weight(*ev, samp, theta);
   REQUIRE(w.has_value());
   return *w;
 }
@@ -169,7 +169,7 @@ TEST_CASE("evaluate_ls_objective matches fitted fmin for continuous LS") {
       magmaan::estimate::Backend::Lbfgs, opt);
   REQUIRE(est_uls.has_value());
   auto f_uls = magmaan::estimate::evaluate_ls_objective(
-      fx.pt, fx.rep, fx.samp, est_uls->theta, magmaan::gmm::Weight{});
+      fx.pt, fx.rep, fx.samp, est_uls->theta, magmaan::estimate::gmm::Weight{});
   REQUIRE(f_uls.has_value());
   CHECK(*f_uls == doctest::Approx(est_uls->fmin).epsilon(1e-12));
 
@@ -183,7 +183,7 @@ TEST_CASE("evaluate_ls_objective matches fitted fmin for continuous LS") {
   REQUIRE(f_gls.has_value());
   CHECK(*f_gls == doctest::Approx(est_gls->fmin).epsilon(1e-12));
 
-  magmaan::gmm::Weight wls = wls_weights_from_sample(fx.samp);
+  magmaan::estimate::gmm::Weight wls = wls_weights_from_sample(fx.samp);
   auto est_wls = magmaan::test::fit_gmm(
       fx.pt, fx.rep, fx.samp, wls, magmaan::estimate::Bounds{},
       magmaan::estimate::Backend::Lbfgs, opt);
@@ -218,7 +218,7 @@ TEST_CASE("evaluate_ls_objective reports data objective under LS constraints") {
   REQUIRE(est.has_value());
 
   auto f = magmaan::estimate::evaluate_ls_objective(
-      *pt, *rep, samp, est->theta, magmaan::gmm::Weight{});
+      *pt, *rep, samp, est->theta, magmaan::estimate::gmm::Weight{});
   REQUIRE(f.has_value());
   CHECK(*f == doctest::Approx(est->fmin).epsilon(1e-12));
 }
@@ -235,9 +235,9 @@ TEST_CASE("robust_continuous_ls: raw and supplied Gamma agree for ULS") {
   auto G = magmaan::data::empirical_gamma(fx.raw.X[0]);
   REQUIRE(G.has_value());
   auto by_gamma = magmaan::estimate::robust_continuous_ls(
-      fx.pt, fx.rep, fx.samp, *est, magmaan::gmm::Weight{}, {*G});
+      fx.pt, fx.rep, fx.samp, *est, magmaan::estimate::gmm::Weight{}, {*G});
   auto by_raw = magmaan::estimate::robust_continuous_ls(
-      fx.pt, fx.rep, fx.samp, *est, magmaan::gmm::Weight{}, fx.raw);
+      fx.pt, fx.rep, fx.samp, *est, magmaan::estimate::gmm::Weight{}, fx.raw);
   REQUIRE(by_gamma.has_value());
   REQUIRE(by_raw.has_value());
 
@@ -265,7 +265,7 @@ TEST_CASE("robust_continuous_ls: GLS and WLS preserve continuous LS statistic sc
         doctest::Approx(2.0 * total_n(fx.samp) * est_gls->fmin));
   CHECK(rob_gls->se.allFinite());
 
-  magmaan::gmm::Weight wls = wls_weights_from_sample(fx.samp);
+  magmaan::estimate::gmm::Weight wls = wls_weights_from_sample(fx.samp);
   auto est_wls = magmaan::test::fit_gmm(
       fx.pt, fx.rep, fx.samp, wls, magmaan::estimate::Bounds{},
       magmaan::estimate::Backend::Lbfgs, opt);
@@ -289,5 +289,5 @@ TEST_CASE("robust_continuous_ls: validates Gamma block dimensions") {
   std::vector<Eigen::MatrixXd> bad{
       Eigen::MatrixXd::Identity(2, 2)};
   CHECK_FALSE(magmaan::estimate::robust_continuous_ls(
-      fx.pt, fx.rep, fx.samp, *est, magmaan::gmm::Weight{}, bad).has_value());
+      fx.pt, fx.rep, fx.samp, *est, magmaan::estimate::gmm::Weight{}, bad).has_value());
 }

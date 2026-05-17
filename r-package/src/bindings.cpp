@@ -203,8 +203,8 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
     Rcpp::stop("magmaan lavaanify error [%s]: %s",
                partable_error_kind(pt_or.error().kind), pt_or.error().detail);
   }
-  const magmaan::lavaan::LavaanParTable pt =
-      magmaan::lavaan::to_lavaan_partable(*pt_or, names, starts);
+  const magmaan::compat::lavaan::LavaanParTable pt =
+      magmaan::compat::lavaan::to_lavaan_partable(*pt_or, names, starts);
 
   const R_xlen_t n = static_cast<R_xlen_t>(pt.size());
   Rcpp::IntegerVector id(n), user(n), block(n), group(n), free(n), exo(n);

@@ -94,14 +94,14 @@ TEST_CASE("standardized-solution goldens — std.lv / std.all vs lavaan") {
     if (!est_or.has_value()) { failures.push_back(id + ": fit — " + est_or.error().detail); continue; }
     const auto& est = *est_or;
 
-    auto info_or = magmaan::nt::infer::information_expected(*pt, *mr, samp, est);
+    auto info_or = magmaan::inference::information_expected(*pt, *mr, samp, est);
     if (!info_or.has_value()) { failures.push_back(id + ": information_expected — " + info_or.error().detail); continue; }
-    auto vcov_or = magmaan::nt::infer::vcov(*info_or, *pt);
+    auto vcov_or = magmaan::inference::vcov(*info_or, *pt);
     if (!vcov_or.has_value()) { failures.push_back(id + ": vcov — " + vcov_or.error().detail); continue; }
     const Eigen::MatrixXd& vcov_m = *vcov_or;
 
-    auto slv_or  = magmaan::nt::standardize::standardize_lv(*pt, *mr, est, vcov_m);
-    auto sall_or = magmaan::nt::standardize::standardize_all(*pt, *mr, est, vcov_m);
+    auto slv_or  = magmaan::measures::standardize::standardize_lv(*pt, *mr, est, vcov_m);
+    auto sall_or = magmaan::measures::standardize::standardize_all(*pt, *mr, est, vcov_m);
     if (!slv_or.has_value())  { failures.push_back(id + ": standardize_lv — " + slv_or.error().detail); continue; }
     if (!sall_or.has_value()) { failures.push_back(id + ": standardize_all — " + sall_or.error().detail); continue; }
     const auto& slv  = *slv_or;

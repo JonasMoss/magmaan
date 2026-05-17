@@ -177,7 +177,7 @@ magmaan::estimate::Bounds bounds_from_nullable(Rcpp::Nullable<Rcpp::List> bounds
   return out;
 }
 
-magmaan::gmm::Weight wls_from_arg(SEXP W, std::size_t n_blocks) {
+magmaan::estimate::gmm::Weight wls_from_arg(SEXP W, std::size_t n_blocks) {
   std::vector<Eigen::MatrixXd> weights;
   weights.reserve(n_blocks);
   if (Rf_isMatrix(W)) {
@@ -665,7 +665,7 @@ magmaan::optim::LbfgsOptions ceres_opts_as_lbfgs(Rcpp::Nullable<Rcpp::List> cere
 //
 // [[Rcpp::export]]
 Rcpp::List model_matrix_rep(SEXP partable) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "model_matrix_rep");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "model_matrix_rep");
   auto rep_or = lvm::build_matrix_rep(parsed.structure, &parsed.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
   const lvm::MatrixRep& rep = *rep_or;
@@ -701,7 +701,7 @@ Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats,
   // `==` / shared-label equality rows are enforced by fit() (reparam θ = K·α);
   // `<` / `>` rows and arbitrary-expression `==` rows make fit() error with a
   // clear message; `:=` rows are ignored during the fit (post-fit quantities).
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_fit");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_fit");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
@@ -733,7 +733,7 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
 // [[Rcpp::export]]
 Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
                          Rcpp::Nullable<Rcpp::List> lbfgs = R_NilValue) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_fiml");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_fiml");
   magmaan::spec::Starts starts = std::move(parsed.starts);
 
   Ctx ctx;
@@ -746,7 +746,7 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
     Rcpp::stop("magmaan: model has no observed variables");
 
   magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, raw_data);
-  auto start_samp_or = magmaan::nt::fiml::fiml_start_sample_stats(raw);
+  auto start_samp_or = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
   if (!start_samp_or.has_value()) stop_fit(start_samp_or.error());
   ctx.samp = std::move(*start_samp_or);
   ctx.ov_names = ctx.rep.ov_names[0];
@@ -755,7 +755,7 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
 
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
   auto e_or = magmaan::estimate::fit_fiml(
-      ctx.pt, ctx.rep, raw, x0, magmaan::nt::fiml::FIML{},
+      ctx.pt, ctx.rep, raw, x0, magmaan::estimate::fiml::FIML{},
       lbfgs_opts_from(lbfgs));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
@@ -768,7 +768,7 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
 Rcpp::List fit_uls_impl(SEXP partable, Rcpp::List sample_stats,
                         Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                         Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_uls");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_uls");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
@@ -787,7 +787,7 @@ Rcpp::List fit_uls_impl(SEXP partable, Rcpp::List sample_stats,
 Rcpp::List fit_gls_impl(SEXP partable, Rcpp::List sample_stats,
                         Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                         Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
@@ -806,11 +806,11 @@ Rcpp::List fit_gls_impl(SEXP partable, Rcpp::List sample_stats,
 Rcpp::List fit_wls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
                         Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                         Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  magmaan::gmm::Weight wls = wls_from_arg(W, ctx.samp.S.size());
+  magmaan::estimate::gmm::Weight wls = wls_from_arg(W, ctx.samp.S.size());
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
   auto e_or = magmaan::estimate::fit_gmm(ctx.pt, ctx.rep, ctx.samp, x0,
       std::move(wls), bounds_from_nullable(bounds),
@@ -968,7 +968,7 @@ Rcpp::List data_mixed_ordinal_stats_huber_residual_from_raw_impl(
 Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
                                  Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                                  Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_dwls_ordinal");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_dwls_ordinal");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx;
   ctx.pt = std::move(parsed.structure);
@@ -997,7 +997,7 @@ Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
 Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
                                 Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                                 Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_ordinal");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_ordinal");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx;
   ctx.pt = std::move(parsed.structure);
@@ -1026,7 +1026,7 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
 Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
                                        Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                                        Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_dwls_mixed_ordinal");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_dwls_mixed_ordinal");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx;
   ctx.pt = std::move(parsed.structure);
@@ -1058,7 +1058,7 @@ Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
 Rcpp::List fit_wls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
                                       Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                                       Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_mixed_ordinal");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_mixed_ordinal");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx;
   ctx.pt = std::move(parsed.structure);
@@ -1090,7 +1090,7 @@ Rcpp::List fit_wls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
 Rcpp::List fit_uls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
                               Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                               Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_uls_snlls");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_uls_snlls");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
@@ -1107,7 +1107,7 @@ Rcpp::List fit_uls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
 Rcpp::List fit_gls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
                               Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                               Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls_snlls");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls_snlls");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
@@ -1124,11 +1124,11 @@ Rcpp::List fit_gls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
 Rcpp::List fit_wls_snlls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
                               Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                               Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_snlls");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_snlls");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  magmaan::gmm::Weight wls = wls_from_arg(W, ctx.samp.S.size());
+  magmaan::estimate::gmm::Weight wls = wls_from_arg(W, ctx.samp.S.size());
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
   (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
   auto e_or = magmaan::estimate::fit_snlls(ctx.pt, ctx.rep, ctx.samp, x0,
@@ -1144,7 +1144,7 @@ Rcpp::List fit_uls_ceres_impl(SEXP partable, Rcpp::List sample_stats,
                               Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
                               Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
 #ifdef MAGMAAN_WITH_CERES
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_uls_ceres");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_uls_ceres");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
@@ -1166,7 +1166,7 @@ Rcpp::List fit_uls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats,
                                     Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
                                     Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
 #ifdef MAGMAAN_WITH_CERES
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_uls_snlls_ceres");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_uls_snlls_ceres");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
@@ -1188,7 +1188,7 @@ Rcpp::List fit_gls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats,
                                     Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
                                     Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
 #ifdef MAGMAAN_WITH_CERES
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls_snlls_ceres");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls_snlls_ceres");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
@@ -1210,11 +1210,11 @@ Rcpp::List fit_wls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats, SEXP
                                     Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
                                     Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
 #ifdef MAGMAAN_WITH_CERES
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_snlls_ceres");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_snlls_ceres");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  magmaan::gmm::Weight wls = wls_from_arg(W, ctx.samp.S.size());
+  magmaan::estimate::gmm::Weight wls = wls_from_arg(W, ctx.samp.S.size());
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
   (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
   auto e_or = magmaan::estimate::fit_snlls(ctx.pt, ctx.rep, ctx.samp, x0,
@@ -1234,7 +1234,7 @@ Rcpp::List fit_gls_ceres_impl(SEXP partable, Rcpp::List sample_stats,
                               Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
                               Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
 #ifdef MAGMAAN_WITH_CERES
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls_ceres");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls_ceres");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
@@ -1256,11 +1256,11 @@ Rcpp::List fit_wls_ceres_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
                               Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
                               Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
 #ifdef MAGMAAN_WITH_CERES
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_ceres");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_ceres");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  magmaan::gmm::Weight wls = wls_from_arg(W, ctx.samp.S.size());
+  magmaan::estimate::gmm::Weight wls = wls_from_arg(W, ctx.samp.S.size());
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
   auto e_or = magmaan::estimate::fit_gmm(ctx.pt, ctx.rep, ctx.samp, x0,
       std::move(wls), bounds_from_nullable(bounds),
@@ -1280,7 +1280,7 @@ Rcpp::List fit_wls_ceres_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
 //
 // [[Rcpp::export]]
 Rcpp::NumericVector fit_start_values(SEXP partable, Rcpp::List sample_stats) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_start_values");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_start_values");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
@@ -1320,7 +1320,7 @@ Rcpp::List model_implied(Rcpp::List fit) {
 Rcpp::NumericMatrix infer_information_expected(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
-  auto r = magmaan::nt::infer::information_expected(ctx.pt, ctx.rep, ctx.samp, est);
+  auto r = magmaan::inference::information_expected(ctx.pt, ctx.rep, ctx.samp, est);
   if (!r.has_value()) stop_post(r.error());
   return Rcpp::wrap(*r);
 }
@@ -1334,7 +1334,7 @@ Rcpp::NumericMatrix infer_information_observed_fd(Rcpp::List fit,
                                                   double h_step = 1e-4) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
-  auto r = magmaan::nt::infer::information_observed_fd(ctx.pt, ctx.rep, ctx.samp, est, h_step);
+  auto r = magmaan::inference::information_observed_fd(ctx.pt, ctx.rep, ctx.samp, est, h_step);
   if (!r.has_value()) stop_post(r.error());
   return Rcpp::wrap(*r);
 }
@@ -1347,7 +1347,7 @@ Rcpp::NumericMatrix infer_information_observed_fd(Rcpp::List fit,
 Rcpp::NumericMatrix infer_information_observed_analytic(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
-  auto r = magmaan::nt::infer::information_observed_analytic(ctx.pt, ctx.rep, ctx.samp, est);
+  auto r = magmaan::inference::information_observed_analytic(ctx.pt, ctx.rep, ctx.samp, est);
   if (!r.has_value()) stop_post(r.error());
   return Rcpp::wrap(*r);
 }
@@ -1362,7 +1362,7 @@ Rcpp::NumericMatrix infer_information_observed_analytic(Rcpp::List fit) {
 Rcpp::NumericMatrix infer_vcov(Rcpp::NumericMatrix info, Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
   const Eigen::MatrixXd info_m = Rcpp::as<Eigen::MatrixXd>(info);
-  auto r = magmaan::nt::infer::vcov(info_m, ctx.pt);
+  auto r = magmaan::inference::vcov(info_m, ctx.pt);
   if (!r.has_value()) stop_post(r.error());
   return Rcpp::wrap(*r);
 }
@@ -1374,7 +1374,7 @@ Rcpp::NumericMatrix infer_vcov(Rcpp::NumericMatrix info, Rcpp::List fit) {
 Rcpp::NumericMatrix infer_vcov_partable(Rcpp::NumericMatrix info, SEXP partable) {
   auto parsed = partable_from_arg(partable, "infer_vcov_partable");
   const Eigen::MatrixXd info_m = Rcpp::as<Eigen::MatrixXd>(info);
-  auto r = magmaan::nt::infer::vcov(info_m, parsed.structure);
+  auto r = magmaan::inference::vcov(info_m, parsed.structure);
   if (!r.has_value()) stop_post(r.error());
   return Rcpp::wrap(*r);
 }
@@ -1385,10 +1385,10 @@ Rcpp::NumericMatrix infer_vcov_partable(Rcpp::NumericMatrix info, SEXP partable)
 // [[Rcpp::export]]
 Rcpp::NumericVector infer_se(Rcpp::NumericMatrix vcov) {
   const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
-  return Rcpp::wrap(magmaan::nt::infer::se(vcov_m));
+  return Rcpp::wrap(magmaan::inference::se(vcov_m));
 }
 
-// compute_defined_impl() — mirrors nt::effects::compute_defined(flat, pt,
+// compute_defined_impl() — mirrors measures::effects::compute_defined(flat, pt,
 // names, est, vcov). `syntax` must be the original model syntax because the
 // lavaan-shaped partable only carries the projected `:=` rows, not their parsed
 // expression trees.
@@ -1406,7 +1406,7 @@ Rcpp::DataFrame compute_defined_impl(std::string syntax,
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
-  auto defs_or = magmaan::nt::effects::compute_defined(
+  auto defs_or = magmaan::measures::effects::compute_defined(
       *flat_or, ctx.pt, ctx.names, est, vcov_m);
   if (!defs_or.has_value()) stop_post(defs_or.error());
 
@@ -1445,7 +1445,7 @@ double infer_chi2_stat(Rcpp::List sample_stats, double fmin) {
     samp.n_obs.push_back(static_cast<std::int64_t>(nv[i]));
   magmaan::estimate::Estimates est;
   est.fmin = fmin;
-  return magmaan::nt::infer::chi2_stat(samp, est);
+  return magmaan::inference::chi2_stat(samp, est);
 }
 
 // infer_df_stat() — mirrors df_stat(pt, samp). Returns Σ_b p_b(p_b+1)/2 (+ means)
@@ -1454,10 +1454,10 @@ double infer_chi2_stat(Rcpp::List sample_stats, double fmin) {
 //
 // [[Rcpp::export]]
 int infer_df_stat(SEXP partable, Rcpp::List sample_stats) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "infer_df_stat");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "infer_df_stat");
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto r = magmaan::nt::infer::df_stat(ctx.pt, ctx.samp);
+  auto r = magmaan::inference::df_stat(ctx.pt, ctx.samp);
   if (!r.has_value()) stop_post(r.error());
   return *r;
 }
@@ -1477,7 +1477,7 @@ Rcpp::List infer_baseline(Rcpp::List sample_stats) {
     samp.S.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Sl[b])));
     samp.n_obs.push_back(static_cast<std::int64_t>(nv[b]));
   }
-  const magmaan::nt::measures::BaselineFit bl = magmaan::nt::measures::baseline_chi2(samp);
+  const magmaan::measures::BaselineFit bl = magmaan::measures::baseline_chi2(samp);
   return Rcpp::List::create(Rcpp::_["chi2"] = bl.chi2, Rcpp::_["df"] = bl.df);
 }
 
@@ -1490,12 +1490,12 @@ Rcpp::List infer_baseline(Rcpp::List sample_stats) {
 Rcpp::List measures_fit(Rcpp::List fit, double chi2, int df,
                               Rcpp::List baseline) {
   Ctx ctx = ctx_from_fit(fit);
-  magmaan::nt::measures::BaselineFit bl;
+  magmaan::measures::BaselineFit bl;
   bl.chi2 = Rcpp::as<double>(baseline["chi2"]);
   bl.df   = Rcpp::as<int>(baseline["df"]);
-  const magmaan::nt::measures::FitMeasures fm = magmaan::nt::measures::fit_measures(chi2, df, bl, ctx.samp);
+  const magmaan::measures::FitMeasures fm = magmaan::measures::fit_measures(chi2, df, bl, ctx.samp);
   const magmaan::estimate::Estimates   est = est_from_fit(fit);
-  auto fx = magmaan::nt::measures::fit_extras(ctx.pt, ctx.rep, ctx.samp, est);
+  auto fx = magmaan::measures::fit_extras(ctx.pt, ctx.rep, ctx.samp, est);
   const bool have = fx.has_value();
   return Rcpp::List::create(
       Rcpp::_["cfi"]               = fm.cfi,
@@ -1524,7 +1524,7 @@ Rcpp::List measures_fit(Rcpp::List fit, double chi2, int df,
 Rcpp::List infer_z_test(Rcpp::List fit, Rcpp::NumericVector se) {
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const Eigen::VectorXd se_v = Rcpp::as<Eigen::VectorXd>(se);
-  const magmaan::nt::infer::ZTestResult zt = magmaan::nt::infer::z_test(est, se_v);
+  const magmaan::inference::ZTestResult zt = magmaan::inference::z_test(est, se_v);
   return Rcpp::List::create(Rcpp::_["z"] = Rcpp::wrap(zt.z),
                             Rcpp::_["pvalue"] = Rcpp::wrap(zt.p_value));
 }
@@ -1536,7 +1536,7 @@ Rcpp::List infer_z_test(Rcpp::List fit, Rcpp::NumericVector se) {
 Rcpp::List infer_z_test_theta(Rcpp::NumericVector theta, Rcpp::NumericVector se) {
   const magmaan::estimate::Estimates est = est_from_theta(theta);
   const Eigen::VectorXd se_v = Rcpp::as<Eigen::VectorXd>(se);
-  const magmaan::nt::infer::ZTestResult zt = magmaan::nt::infer::z_test(est, se_v);
+  const magmaan::inference::ZTestResult zt = magmaan::inference::z_test(est, se_v);
   return Rcpp::List::create(Rcpp::_["z"] = Rcpp::wrap(zt.z),
                             Rcpp::_["pvalue"] = Rcpp::wrap(zt.p_value));
 }
@@ -1553,7 +1553,7 @@ Rcpp::NumericVector infer_chi2_pvalue(Rcpp::NumericVector chi2, Rcpp::IntegerVec
   for (R_xlen_t i = 0; i < n; ++i) {
     const double c = chi2[i];
     const int d = df[df.size() == 1 ? 0 : (i % df.size())];
-    out[i] = (ISNA(c) || d == NA_INTEGER) ? NA_REAL : magmaan::nt::infer::chi2_pvalue(c, d);
+    out[i] = (ISNA(c) || d == NA_INTEGER) ? NA_REAL : magmaan::inference::chi2_pvalue(c, d);
   }
   return out;
 }
@@ -1581,10 +1581,10 @@ Rcpp::List infer_wald_test(Rcpp::List fit, Rcpp::NumericMatrix R,
   if (qv.size() != Rmat.rows())
     Rcpp::stop("magmaan: q must have length %d (= nrow(R))", static_cast<int>(Rmat.rows()));
   Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
-  auto w_or = magmaan::nt::infer::wald_test(Rmat, qv, est, vcov_m);
+  auto w_or = magmaan::inference::wald_test(Rmat, qv, est, vcov_m);
   if (!w_or.has_value()) stop_post(w_or.error());
   return Rcpp::List::create(Rcpp::_["chi2"] = w_or->chi2, Rcpp::_["df"] = w_or->df,
-                            Rcpp::_["pvalue"] = magmaan::nt::infer::chi2_pvalue(w_or->chi2, w_or->df));
+                            Rcpp::_["pvalue"] = magmaan::inference::chi2_pvalue(w_or->chi2, w_or->df));
 }
 
 // infer_wald_test_theta() — primitive form of infer_wald_test(): R/q, theta,
@@ -1605,10 +1605,10 @@ Rcpp::List infer_wald_test_theta(Rcpp::NumericVector theta,
   if (qv.size() != Rmat.rows())
     Rcpp::stop("magmaan: q must have length %d (= nrow(R))", static_cast<int>(Rmat.rows()));
   Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
-  auto w_or = magmaan::nt::infer::wald_test(Rmat, qv, est, vcov_m);
+  auto w_or = magmaan::inference::wald_test(Rmat, qv, est, vcov_m);
   if (!w_or.has_value()) stop_post(w_or.error());
   return Rcpp::List::create(Rcpp::_["chi2"] = w_or->chi2, Rcpp::_["df"] = w_or->df,
-                            Rcpp::_["pvalue"] = magmaan::nt::infer::chi2_pvalue(w_or->chi2, w_or->df));
+                            Rcpp::_["pvalue"] = magmaan::inference::chi2_pvalue(w_or->chi2, w_or->df));
 }
 
 // infer_browne_residual_nt() — mirrors browne_residual_nt(pt, rep, samp, est).
@@ -1619,7 +1619,7 @@ Rcpp::List infer_wald_test_theta(Rcpp::NumericVector theta,
 Rcpp::List infer_browne_residual_nt(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
-  auto s_or = magmaan::nt::infer::browne_residual_nt(ctx.pt, ctx.rep, ctx.samp, est);
+  auto s_or = magmaan::inference::browne_residual_nt(ctx.pt, ctx.rep, ctx.samp, est);
   if (!s_or.has_value()) stop_post(s_or.error());
   return Rcpp::List::create(Rcpp::_["statistic"] = *s_or);
 }
@@ -1639,7 +1639,7 @@ Rcpp::List infer_rls_chi2(Rcpp::List fit, Rcpp::List implied) {
     for (R_xlen_t b = 0; b < m.size(); ++b)
       im.mu.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(m[b])));
   }
-  auto s_or = magmaan::nt::infer::rls_chi2(ctx.samp, im);
+  auto s_or = magmaan::inference::rls_chi2(ctx.samp, im);
   if (!s_or.has_value()) stop_post(s_or.error());
   return Rcpp::List::create(Rcpp::_["statistic"] = *s_or);
 }
@@ -1681,7 +1681,7 @@ Rcpp::List infer_rls_chi2_sample(Rcpp::List sample_stats, Rcpp::List implied) {
     for (R_xlen_t b = 0; b < m.size(); ++b)
       im.mu.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(m[b])));
   }
-  auto s_or = magmaan::nt::infer::rls_chi2(samp, im);
+  auto s_or = magmaan::inference::rls_chi2(samp, im);
   if (!s_or.has_value()) stop_post(s_or.error());
   return Rcpp::List::create(Rcpp::_["statistic"] = *s_or);
 }

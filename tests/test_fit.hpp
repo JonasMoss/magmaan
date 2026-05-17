@@ -74,7 +74,7 @@ fit_bounded(const Pt& pt, const Rep& rep, const Samp& samp,
 template <class Pt, class Rep, class Samp>
 fit_expected<estimate::Estimates>
 fit_gmm(const Pt& pt, const Rep& rep, const Samp& samp,
-        gmm::Weight weight = {}, estimate::Bounds bounds = {},
+        estimate::gmm::Weight weight = {}, estimate::Bounds bounds = {},
         estimate::Backend backend = estimate::Backend::Lbfgs,
         optim::LbfgsOptions opts = {}) {
   auto x0 = estimate::simple_start_values(pt, rep, samp, {});
@@ -104,7 +104,7 @@ template <class Pt, class Rep, class Raw>
 fit_expected<estimate::Estimates>
 fit_fiml(const Pt& pt, const Rep& rep, const Raw& raw,
          optim::LbfgsOptions opts = {}) {
-  auto samp = nt::fiml::fiml_start_sample_stats(raw);
+  auto samp = estimate::fiml::fiml_start_sample_stats(raw);
   if (!samp.has_value()) return std::unexpected(samp.error());
   auto x0 = estimate::simple_start_values(pt, rep, *samp, {});
   if (!x0.has_value()) return std::unexpected(x0.error());

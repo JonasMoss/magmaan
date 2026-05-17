@@ -16,11 +16,11 @@ using magmaan::parse::Op;
 using magmaan::parse::Parser;
 using magmaan::spec::lavaanify;
 using magmaan::spec::LavaanifyOptions;
-using magmaan::lavaan::LavaanParTable;
+using magmaan::compat::lavaan::LavaanParTable;
 using magmaan::spec::LatentNames;
 using magmaan::spec::LatentStructure;
 using magmaan::spec::Starts;
-using magmaan::lavaan::to_lavaan_partable;
+using magmaan::compat::lavaan::to_lavaan_partable;
 
 namespace {
 

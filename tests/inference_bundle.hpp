@@ -38,15 +38,15 @@ make_bundle(InfoFn&& info_fn,
             const estimate::Estimates&            est) {
   auto info_or = info_fn();
   if (!info_or.has_value()) return std::unexpected(info_or.error());
-  auto vcov_or = nt::infer::vcov(*info_or, pt);
+  auto vcov_or = inference::vcov(*info_or, pt);
   if (!vcov_or.has_value()) return std::unexpected(vcov_or.error());
-  auto df_or   = nt::infer::df_stat(pt, samp);
+  auto df_or   = inference::df_stat(pt, samp);
   if (!df_or.has_value())   return std::unexpected(df_or.error());
   InferenceBundle out;
   out.info = std::move(*info_or);
   out.vcov = std::move(*vcov_or);
-  out.se   = nt::infer::se(out.vcov);
-  out.chi2 = nt::infer::chi2_stat(samp, est);
+  out.se   = inference::se(out.vcov);
+  out.chi2 = inference::chi2_stat(samp, est);
   out.df   = *df_or;
   return out;
 }
@@ -58,7 +58,7 @@ expected_inference(spec::LatentStructure pt,
                    const data::SampleStats&   samp,
                    const estimate::Estimates&     est) {
   return make_bundle(
-      [&] { return nt::infer::information_expected(pt, rep, samp, est); },
+      [&] { return inference::information_expected(pt, rep, samp, est); },
       pt, samp, est);
 }
 
@@ -69,7 +69,7 @@ fd_observed_inference(spec::LatentStructure pt,
                       const estimate::Estimates&     est,
                       double                    h_step = 1e-4) {
   return make_bundle(
-      [&] { return nt::infer::information_observed_fd(pt, rep, samp, est, h_step); },
+      [&] { return inference::information_observed_fd(pt, rep, samp, est, h_step); },
       pt, samp, est);
 }
 
@@ -79,7 +79,7 @@ analytic_observed_inference(spec::LatentStructure pt,
                             const data::SampleStats&   samp,
                             const estimate::Estimates&     est) {
   return make_bundle(
-      [&] { return nt::infer::information_observed_analytic(pt, rep, samp, est); },
+      [&] { return inference::information_observed_analytic(pt, rep, samp, est); },
       pt, samp, est);
 }
 

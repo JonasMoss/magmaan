@@ -88,13 +88,13 @@ bool run_one(const magmaan::test::CorpusEntry&   e,
                        "]: information failed — " + info_or.error().detail);
     return true;
   }
-  auto vcov_or = magmaan::nt::infer::vcov(*info_or, *pt);
+  auto vcov_or = magmaan::inference::vcov(*info_or, *pt);
   if (!vcov_or.has_value()) {
     failures.push_back(e.id + " [" + std::string(method_name) +
                        "]: vcov failed — " + vcov_or.error().detail);
     return true;
   }
-  const Eigen::VectorXd se_v = magmaan::nt::infer::se(*vcov_or);
+  const Eigen::VectorXd se_v = magmaan::inference::se(*vcov_or);
 
   const auto& se_arr = exp["se_observed"];
   if (static_cast<std::size_t>(se_v.size()) != se_arr.size()) {
@@ -154,10 +154,10 @@ TEST_CASE("observed inference goldens — FD + analytic vs lavaan") {
     }
 
     auto fd_fn = [](auto&&... args) {
-      return magmaan::nt::infer::information_observed_fd(std::forward<decltype(args)>(args)...);
+      return magmaan::inference::information_observed_fd(std::forward<decltype(args)>(args)...);
     };
     auto an_fn = [](auto&&... args) {
-      return magmaan::nt::infer::information_observed_analytic(std::forward<decltype(args)>(args)...);
+      return magmaan::inference::information_observed_analytic(std::forward<decltype(args)>(args)...);
     };
     run_one(e, exp, fd_fn, "FD",       failures, passed_fd, total_fd);
     run_one(e, exp, an_fn, "analytic", failures, passed_an, total_an);

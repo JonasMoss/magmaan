@@ -129,19 +129,19 @@ TEST_CASE("multi-group goldens — θ̂ / SE / df match lavaan") {
     }
 
     // expected-info: SE within 1e-4, df exact, chi² within 1e-3.
-    auto info_or = magmaan::nt::infer::information_expected(*pt, *mr, samp, est);
+    auto info_or = magmaan::inference::information_expected(*pt, *mr, samp, est);
     if (!info_or.has_value()) {
       failures.push_back(e.id + ": information_expected — " + info_or.error().detail);
       continue;
     }
-    auto vcov_or = magmaan::nt::infer::vcov(*info_or, *pt);
+    auto vcov_or = magmaan::inference::vcov(*info_or, *pt);
     if (!vcov_or.has_value()) {
       failures.push_back(e.id + ": vcov — " + vcov_or.error().detail);
       continue;
     }
-    const Eigen::VectorXd se_v = magmaan::nt::infer::se(*vcov_or);
-    const double          chi2 = magmaan::nt::infer::chi2_stat(samp, est);
-    auto df_or = magmaan::nt::infer::df_stat(*pt, samp);
+    const Eigen::VectorXd se_v = magmaan::inference::se(*vcov_or);
+    const double          chi2 = magmaan::inference::chi2_stat(samp, est);
+    auto df_or = magmaan::inference::df_stat(*pt, samp);
     if (!df_or.has_value()) {
       failures.push_back(e.id + ": df_stat — " + df_or.error().detail);
       continue;
@@ -201,7 +201,7 @@ TEST_CASE("multi-group goldens — θ̂ / SE / df match lavaan") {
       }
       im.sigma.assign(im_view->sigma.begin(), im_view->sigma.end());
       im.mu.assign(im_view->mu.begin(), im_view->mu.end());
-      auto rls = magmaan::nt::infer::rls_chi2(samp, im);
+      auto rls = magmaan::inference::rls_chi2(samp, im);
       if (!rls.has_value()) {
         failures.push_back(e.id + ": rls_chi2 — " + rls.error().detail);
         continue;
@@ -227,7 +227,7 @@ TEST_CASE("multi-group goldens — θ̂ / SE / df match lavaan") {
       const bool skip_browne =
           e.id == "0025_partial_invariance_3f_hs";
       if (!skip_browne) {
-        auto br = magmaan::nt::infer::browne_residual_nt(*pt, *mr, samp, est);
+        auto br = magmaan::inference::browne_residual_nt(*pt, *mr, samp, est);
         if (!br.has_value()) {
           failures.push_back(e.id + ": browne_residual_nt — " +
                              br.error().detail);
@@ -248,18 +248,18 @@ TEST_CASE("multi-group goldens — θ̂ / SE / df match lavaan") {
     // FD observed info: SE within 1e-4 of lavaan's se_observed. Skip
     // silently if the fixture didn't carry an observed-info refit.
     if (exp.contains("se_observed") && !exp["se_observed"].is_null()) {
-      auto fd_info_or = magmaan::nt::infer::information_observed_fd(*pt, *mr, samp, est);
+      auto fd_info_or = magmaan::inference::information_observed_fd(*pt, *mr, samp, est);
       if (!fd_info_or.has_value()) {
         failures.push_back(e.id + ": information_observed_fd — " +
                            fd_info_or.error().detail);
         continue;
       }
-      auto fd_vcov_or = magmaan::nt::infer::vcov(*fd_info_or, *pt);
+      auto fd_vcov_or = magmaan::inference::vcov(*fd_info_or, *pt);
       if (!fd_vcov_or.has_value()) {
         failures.push_back(e.id + ": vcov(fd info) — " + fd_vcov_or.error().detail);
         continue;
       }
-      const Eigen::VectorXd se_fd = magmaan::nt::infer::se(*fd_vcov_or);
+      const Eigen::VectorXd se_fd = magmaan::inference::se(*fd_vcov_or);
       const auto& se_obs = exp["se_observed"];
       double max_fd_diff = 0.0;
       for (Eigen::Index k = 0; k < se_fd.size(); ++k) {
@@ -312,11 +312,11 @@ TEST_CASE("multi-group goldens — θ̂ / SE / df match lavaan") {
         Gamma_or->block(offset, offset, bs, bs) *= w_b;
         offset += bs;
       }
-      auto rob_or = magmaan::nt::robust::robust_se(
+      auto rob_or = magmaan::robust::robust_se(
           *pt, *mr, samp, est, *Gamma_or,
-          {magmaan::nt::robust::Information::Expected,
-           magmaan::nt::robust::WeightMoments::Structured,
-           magmaan::nt::robust::ScoreCovariance::Empirical});
+          {magmaan::robust::Information::Expected,
+           magmaan::robust::WeightMoments::Structured,
+           magmaan::robust::ScoreCovariance::Empirical});
       if (!rob_or.has_value()) {
         failures.push_back(e.id + ": robust_se(gamma_hat) — " +
                            rob_or.error().detail);

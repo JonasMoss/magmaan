@@ -8,7 +8,7 @@
 
 // The contract between objective builders and optimizers.
 //
-// Objective builders (`gmm::residuals`, `gmm::gp`, `nt::ml_objective`) package a
+// Objective builders (`gmm::residuals`, `gmm::gp`, `estimate::ml_objective`) package a
 // model + sample into one of two plain structs of closures; optimizers
 // (`optim::lbfgs`, `optim::ceres_lm`) consume them. No templates, no concepts —
 // the closures are `std::function`, so the optimizer never sees the builder's
@@ -45,7 +45,7 @@ struct GmmProblem {
 };
 
 // Scalar-shaped problem: F(x) and ∇F(x) only — no sum-of-squares structure.
-// `nt::ml_objective` produces this; `optim::scalarize` adapts a GmmProblem.
+// `estimate::ml_objective` produces this; `optim::scalarize` adapts a GmmProblem.
 struct ScalarProblem {
   ObjectiveFn  f;
   Eigen::Index n_param = 0;

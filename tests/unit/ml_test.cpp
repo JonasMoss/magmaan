@@ -85,7 +85,7 @@ TEST_CASE("ML: F=0 when Σ(θ)=S (saturated model fit)") {
 
   auto sm = ev.sigma(theta);
   REQUIRE(sm.has_value());
-  auto f = magmaan::nt::ml_value(samp, *sm);
+  auto f = magmaan::estimate::ml_value(samp, *sm);
   REQUIRE(f.has_value());
 
   // Compute F manually and compare.
@@ -117,7 +117,7 @@ TEST_CASE("ML: gradient matches finite differences (1F CFA)") {
 
   auto sm = ev.sigma(theta).value();
   auto J  = ev.dsigma_dtheta(theta).value();
-  auto g_an = magmaan::nt::ml_gradient(samp, sm, J).value();
+  auto g_an = magmaan::estimate::ml_gradient(samp, sm, J).value();
 
   // Finite-difference gradient.
   Eigen::VectorXd g_fd(theta.size());
@@ -127,7 +127,7 @@ TEST_CASE("ML: gradient matches finite differences (1F CFA)") {
     Eigen::VectorXd tm = theta;  tm(k) -= h;
     auto smp = ev.sigma(tp).value();
     auto smm = ev.sigma(tm).value();
-    g_fd(k) = (magmaan::nt::ml_value(samp, smp).value() - magmaan::nt::ml_value(samp, smm).value()) / (2.0 * h);
+    g_fd(k) = (magmaan::estimate::ml_value(samp, smp).value() - magmaan::estimate::ml_value(samp, smm).value()) / (2.0 * h);
   }
 
   const double diff = (g_an - g_fd).cwiseAbs().maxCoeff();
@@ -147,10 +147,10 @@ TEST_CASE("ML: cached fused value_gradient matches separate value and gradient")
 
   auto sm = ev.sigma(theta).value();
   auto J  = ev.dsigma_dtheta(theta).value();
-  auto cache = magmaan::nt::ml_prepare(samp).value();
-  auto f_sep = magmaan::nt::ml_value(samp, sm).value();
-  auto g_sep = magmaan::nt::ml_gradient(samp, sm, J).value();
-  auto vg = magmaan::nt::ml_value_gradient(samp, cache, sm, J).value();
+  auto cache = magmaan::estimate::ml_prepare(samp).value();
+  auto f_sep = magmaan::estimate::ml_value(samp, sm).value();
+  auto g_sep = magmaan::estimate::ml_gradient(samp, sm, J).value();
+  auto vg = magmaan::estimate::ml_value_gradient(samp, cache, sm, J).value();
 
   CHECK(vg.value == doctest::Approx(f_sep).epsilon(1e-14));
   CHECK((vg.gradient - g_sep).cwiseAbs().maxCoeff() < 1e-12);
@@ -188,7 +188,7 @@ TEST_CASE("ML: mean-structure F formula matches hand calculation") {
   REQUIRE(sm->mu.size() == 1);
   REQUIRE(sm->mu[0].size() == 3);
 
-  auto f_or = magmaan::nt::ml_value(samp, *sm);
+  auto f_or = magmaan::estimate::ml_value(samp, *sm);
   REQUIRE(f_or.has_value());
 
   // Manual F_b:
@@ -228,7 +228,7 @@ TEST_CASE("ML: mean-structure gradient matches finite differences") {
   REQUIRE(Jmu.rows() == 3);
   REQUIRE(Jmu.cols() == theta.size());
 
-  auto g_an = magmaan::nt::ml_gradient(samp, sm, J, Jmu).value();
+  auto g_an = magmaan::estimate::ml_gradient(samp, sm, J, Jmu).value();
 
   Eigen::VectorXd g_fd(theta.size());
   const double h = 1e-6;
@@ -237,7 +237,7 @@ TEST_CASE("ML: mean-structure gradient matches finite differences") {
     Eigen::VectorXd tm = theta;  tm(k) -= h;
     auto smp = ev.sigma(tp).value();
     auto smm = ev.sigma(tm).value();
-    g_fd(k) = (magmaan::nt::ml_value(samp, smp).value() - magmaan::nt::ml_value(samp, smm).value()) / (2.0 * h);
+    g_fd(k) = (magmaan::estimate::ml_value(samp, smp).value() - magmaan::estimate::ml_value(samp, smm).value()) / (2.0 * h);
   }
   const double max_diff = (g_an - g_fd).cwiseAbs().maxCoeff();
   CHECK(max_diff < 1e-5);
@@ -318,15 +318,15 @@ TEST_CASE("ML: gradient matches finite differences (3F Holzinger at lavaan θ̂)
 
   auto sm = ev.sigma(theta).value();
   auto J  = ev.dsigma_dtheta(theta).value();
-  auto g_an = magmaan::nt::ml_gradient(samp, sm, J).value();
+  auto g_an = magmaan::estimate::ml_gradient(samp, sm, J).value();
 
   Eigen::VectorXd g_fd(theta.size());
   const double h = 1e-6;
   for (Eigen::Index k = 0; k < theta.size(); ++k) {
     Eigen::VectorXd tp = theta;  tp(k) += h;
     Eigen::VectorXd tm = theta;  tm(k) -= h;
-    g_fd(k) = (magmaan::nt::ml_value(samp, ev.sigma(tp).value()).value() -
-               magmaan::nt::ml_value(samp, ev.sigma(tm).value()).value()) / (2.0 * h);
+    g_fd(k) = (magmaan::estimate::ml_value(samp, ev.sigma(tp).value()).value() -
+               magmaan::estimate::ml_value(samp, ev.sigma(tm).value()).value()) / (2.0 * h);
   }
   const double max_diff = (g_an - g_fd).cwiseAbs().maxCoeff();
   // Slightly looser tolerance for the larger model — FD noise grows with

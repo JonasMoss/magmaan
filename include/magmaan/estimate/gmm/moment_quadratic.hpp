@@ -21,7 +21,7 @@
 // `residuals` packages the objective as an optim::GmmProblem; the weight is
 // Cholesky-factored once at build time.
 
-namespace magmaan::gmm {
+namespace magmaan::estimate::gmm {
 
 // Per-block weight, aligned to the stacked [mean ; vech(cov)] moment vector
 // of each block. Empty ⇒ identity weight (ULS). Each entry is symmetric PD.
@@ -45,4 +45,4 @@ normal_theory_weight(const model::ModelEvaluator& ev,
                      const data::SampleStats& samp,
                      const Eigen::VectorXd& theta0);
 
-}  // namespace magmaan::gmm
+}  // namespace magmaan::estimate::gmm

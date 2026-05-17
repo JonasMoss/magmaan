@@ -22,7 +22,7 @@
 
 #include "detail_vech.hpp"
 
-namespace magmaan::nt::infer {
+namespace magmaan::inference {
 
 using estimate::build_eq_constraints;
 using estimate::resolve_fixed_x_from_sample;
@@ -357,7 +357,7 @@ information_observed_fd(spec::LatentStructure       pt,
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "ev.dmu_dtheta(θ±h) failed: " + Jmu.error().detail));
     }
-    auto g = nt::ml_gradient_block(samp, *sm, *J, b, *Jmu);
+    auto g = estimate::ml_gradient_block(samp, *sm, *J, b, *Jmu);
     if (!g.has_value()) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "ml_gradient_block failed: " + g.error().detail));
@@ -1381,4 +1381,4 @@ double noncentral_chisq_cdf(double x, double df, double ncp) noexcept {
   return std::clamp(sum, 0.0, 1.0);
 }
 
-}  // namespace magmaan::nt::infer
+}  // namespace magmaan::inference

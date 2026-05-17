@@ -19,7 +19,7 @@
 
 #include "detail_vech.hpp"
 
-namespace magmaan::gmm {
+namespace magmaan::estimate::gmm {
 
 using data::SampleStats;
 
@@ -423,4 +423,4 @@ normal_theory_weight(const model::ModelEvaluator& ev,
   return W;
 }
 
-}  // namespace magmaan::gmm
+}  // namespace magmaan::estimate::gmm

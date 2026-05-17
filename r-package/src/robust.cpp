@@ -21,38 +21,38 @@ namespace {
 
 // ---- InferenceSpec enums <-> strings ---------------------------------------
 
-magmaan::nt::robust::Information info_from_string(const std::string& s) {
-  if (s == "expected") return magmaan::nt::robust::Information::Expected;
-  if (s == "observed") return magmaan::nt::robust::Information::Observed;
+magmaan::robust::Information info_from_string(const std::string& s) {
+  if (s == "expected") return magmaan::robust::Information::Expected;
+  if (s == "observed") return magmaan::robust::Information::Observed;
   Rcpp::stop("magmaan: `bread` must be 'expected' or 'observed' (got '%s')", s);
 }
-magmaan::nt::robust::WeightMoments moments_from_string(const std::string& s) {
-  if (s == "structured")   return magmaan::nt::robust::WeightMoments::Structured;
-  if (s == "unstructured") return magmaan::nt::robust::WeightMoments::Unstructured;
+magmaan::robust::WeightMoments moments_from_string(const std::string& s) {
+  if (s == "structured")   return magmaan::robust::WeightMoments::Structured;
+  if (s == "unstructured") return magmaan::robust::WeightMoments::Unstructured;
   Rcpp::stop("magmaan: `moments` must be 'structured' or 'unstructured' (got '%s')", s);
 }
-magmaan::nt::robust::ScoreCovariance cov_from_string(const std::string& s) {
-  if (s == "model_implied")   return magmaan::nt::robust::ScoreCovariance::ModelImplied;
-  if (s == "empirical")       return magmaan::nt::robust::ScoreCovariance::Empirical;
-  if (s == "browne_unbiased") return magmaan::nt::robust::ScoreCovariance::BrowneUnbiased;
+magmaan::robust::ScoreCovariance cov_from_string(const std::string& s) {
+  if (s == "model_implied")   return magmaan::robust::ScoreCovariance::ModelImplied;
+  if (s == "empirical")       return magmaan::robust::ScoreCovariance::Empirical;
+  if (s == "browne_unbiased") return magmaan::robust::ScoreCovariance::BrowneUnbiased;
   Rcpp::stop("magmaan: `cov` must be 'model_implied', 'empirical', or 'browne_unbiased' (got '%s')", s);
 }
-const char* moments_to_string(magmaan::nt::robust::WeightMoments m) {
-  return m == magmaan::nt::robust::WeightMoments::Structured ? "structured" : "unstructured";
+const char* moments_to_string(magmaan::robust::WeightMoments m) {
+  return m == magmaan::robust::WeightMoments::Structured ? "structured" : "unstructured";
 }
-const char* ufactor_kind_to_string(magmaan::nt::robust::UFactor::Kind k) {
-  return k == magmaan::nt::robust::UFactor::Kind::ProjectionExpected ? "ProjectionExpected" : "ObservedHessian";
+const char* ufactor_kind_to_string(magmaan::robust::UFactor::Kind k) {
+  return k == magmaan::robust::UFactor::Kind::ProjectionExpected ? "ProjectionExpected" : "ObservedHessian";
 }
 
-magmaan::nt::robust::InferenceSpec spec_from(const std::string& bread, const std::string& moments) {
-  magmaan::nt::robust::InferenceSpec s;
+magmaan::robust::InferenceSpec spec_from(const std::string& bread, const std::string& moments) {
+  magmaan::robust::InferenceSpec s;
   s.bread = info_from_string(bread);
   s.moments = moments_from_string(moments);
   return s;
 }
-magmaan::nt::robust::InferenceSpec spec_from(const std::string& bread, const std::string& moments,
+magmaan::robust::InferenceSpec spec_from(const std::string& bread, const std::string& moments,
                              const std::string& cov) {
-  magmaan::nt::robust::InferenceSpec s = spec_from(bread, moments);
+  magmaan::robust::InferenceSpec s = spec_from(bread, moments);
   s.cov = cov_from_string(cov);
   return s;
 }
@@ -106,20 +106,20 @@ magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
 }
 
 [[maybe_unused]] Rcpp::List
-satorra_bentler_to_list(const magmaan::nt::robust::SatorraBentlerResult& r) {
+satorra_bentler_to_list(const magmaan::robust::SatorraBentlerResult& r) {
   return Rcpp::List::create(Rcpp::_["chi2_scaled"] = r.chi2_scaled,
                             Rcpp::_["scale_c"] = r.scale_c,
                             Rcpp::_["df"] = r.df);
 }
 
 [[maybe_unused]] Rcpp::List
-mean_var_to_list(const magmaan::nt::robust::MeanVarAdjustedResult& r) {
+mean_var_to_list(const magmaan::robust::MeanVarAdjustedResult& r) {
   return Rcpp::List::create(Rcpp::_["chi2_adj"] = r.chi2_adj,
                             Rcpp::_["df_adj"] = r.df_adj);
 }
 
 [[maybe_unused]] Rcpp::List
-scaled_shifted_to_list(const magmaan::nt::robust::ScaledShiftedResult& r) {
+scaled_shifted_to_list(const magmaan::robust::ScaledShiftedResult& r) {
   return Rcpp::List::create(Rcpp::_["chi2_adj"] = r.chi2_adj,
                             Rcpp::_["df"] = r.df,
                             Rcpp::_["scale_a"] = r.scale_a,
@@ -128,10 +128,10 @@ scaled_shifted_to_list(const magmaan::nt::robust::ScaledShiftedResult& r) {
 
 // ---- UFactor <-> R list ----------------------------------------------------
 
-Rcpp::List ufactor_to_list(const magmaan::nt::robust::UFactor& uf) {
+Rcpp::List ufactor_to_list(const magmaan::robust::UFactor& uf) {
   Rcpp::List blocks(static_cast<R_xlen_t>(uf.blocks.size()));
   for (std::size_t b = 0; b < uf.blocks.size(); ++b) {
-    const magmaan::nt::robust::UFactor::Block& blk = uf.blocks[b];
+    const magmaan::robust::UFactor::Block& blk = uf.blocks[b];
     blocks[static_cast<R_xlen_t>(b)] = Rcpp::List::create(
         Rcpp::_["p"]          = static_cast<int>(blk.p),
         Rcpp::_["pstar"]      = static_cast<int>(blk.pstar),
@@ -141,7 +141,7 @@ Rcpp::List ufactor_to_list(const magmaan::nt::robust::UFactor& uf) {
         Rcpp::_["Sigma_hat"]  = Rcpp::wrap(blk.Sigma_hat),
         Rcpp::_["S"]          = Rcpp::wrap(blk.S));
   }
-  const bool proj = (uf.kind == magmaan::nt::robust::UFactor::Kind::ProjectionExpected);
+  const bool proj = (uf.kind == magmaan::robust::UFactor::Kind::ProjectionExpected);
   return Rcpp::List::create(
       Rcpp::_["kind"]       = std::string(ufactor_kind_to_string(uf.kind)),
       Rcpp::_["B"]          = proj ? static_cast<SEXP>(Rcpp::wrap(uf.B)) : R_NilValue,
@@ -155,20 +155,20 @@ Rcpp::List ufactor_to_list(const magmaan::nt::robust::UFactor& uf) {
       Rcpp::_["blocks"]     = blocks);
 }
 
-magmaan::nt::robust::UFactor ufactor_from_list(Rcpp::List ul) {
+magmaan::robust::UFactor ufactor_from_list(Rcpp::List ul) {
   auto need = [&](const char* nm) {
     if (!ul.containsElementNamed(nm))
       Rcpp::stop("magmaan: not a u-factor list (missing '%s') — pass the result of infer_build_u_factor()", nm);
   };
   need("kind"); need("df"); need("pstar"); need("moments"); need("blocks");
-  magmaan::nt::robust::UFactor uf;
+  magmaan::robust::UFactor uf;
   const std::string kind = Rcpp::as<std::string>(ul["kind"]);
   if (kind == "ProjectionExpected") {
-    uf.kind = magmaan::nt::robust::UFactor::Kind::ProjectionExpected;
+    uf.kind = magmaan::robust::UFactor::Kind::ProjectionExpected;
     need("B");
     uf.B = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(ul["B"]));
   } else if (kind == "ObservedHessian") {
-    uf.kind = magmaan::nt::robust::UFactor::Kind::ObservedHessian;
+    uf.kind = magmaan::robust::UFactor::Kind::ObservedHessian;
     need("A"); need("H_obs_inv");
     uf.A = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(ul["A"]));
     uf.H_obs_inv = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(ul["H_obs_inv"]));
@@ -188,7 +188,7 @@ magmaan::nt::robust::UFactor ufactor_from_list(Rcpp::List ul) {
   uf.blocks.resize(static_cast<std::size_t>(blocks.size()));
   for (R_xlen_t b = 0; b < blocks.size(); ++b) {
     Rcpp::List bl(blocks[b]);
-    magmaan::nt::robust::UFactor::Block& blk = uf.blocks[static_cast<std::size_t>(b)];
+    magmaan::robust::UFactor::Block& blk = uf.blocks[static_cast<std::size_t>(b)];
     blk.p          = static_cast<Eigen::Index>(Rcpp::as<int>(bl["p"]));
     blk.pstar      = static_cast<Eigen::Index>(Rcpp::as<int>(bl["pstar"]));
     blk.row_offset = static_cast<Eigen::Index>(Rcpp::as<int>(bl["row_offset"]));
@@ -203,7 +203,7 @@ magmaan::nt::robust::UFactor ufactor_from_list(Rcpp::List ul) {
     // when the U-factor carries mean structure, the μ-block's M_b Cholesky too
     // (used by `apply_L_inv_block` on the μ-rows; mirrors build_u_factor()).
     const Eigen::MatrixXd& M =
-        (uf.moments == magmaan::nt::robust::WeightMoments::Structured) ? blk.Sigma_hat : blk.S;
+        (uf.moments == magmaan::robust::WeightMoments::Structured) ? blk.Sigma_hat : blk.S;
     auto g_or = magmaan::data::gamma_nt(M);
     if (!g_or.has_value()) stop_post(g_or.error());
     blk.llt_gamma_nt.compute(*g_or);
@@ -253,7 +253,7 @@ Rcpp::List infer_build_u_factor(Rcpp::List fit, std::string bread = "expected",
                                 std::string moments = "structured") {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
-  auto uf_or = magmaan::nt::robust::build_u_factor(ctx.pt, ctx.rep, ctx.samp, est, spec_from(bread, moments));
+  auto uf_or = magmaan::robust::build_u_factor(ctx.pt, ctx.rep, ctx.samp, est, spec_from(bread, moments));
   if (!uf_or.has_value()) stop_post(uf_or.error());
   return ufactor_to_list(*uf_or);
 }
@@ -269,7 +269,7 @@ Rcpp::List infer_build_u_factor_parts(SEXP partable, Rcpp::List sample_stats,
   Ctx ctx = ctx_from_partable_sample_stats(partable, sample_stats,
                                            "infer_build_u_factor_parts");
   const magmaan::estimate::Estimates est = est_from_theta(theta);
-  auto uf_or = magmaan::nt::robust::build_u_factor(ctx.pt, ctx.rep, ctx.samp, est,
+  auto uf_or = magmaan::robust::build_u_factor(ctx.pt, ctx.rep, ctx.samp, est,
                                                    spec_from(bread, moments));
   if (!uf_or.has_value()) stop_post(uf_or.error());
   return ufactor_to_list(*uf_or);
@@ -280,8 +280,8 @@ Rcpp::List infer_build_u_factor_parts(SEXP partable, Rcpp::List sample_stats,
 //
 // [[Rcpp::export]]
 Rcpp::NumericMatrix infer_reduced_gamma_nt(Rcpp::List uf) {
-  magmaan::nt::robust::UFactor u = ufactor_from_list(uf);
-  auto m_or = magmaan::nt::robust::reduced_gamma_nt(u);
+  magmaan::robust::UFactor u = ufactor_from_list(uf);
+  auto m_or = magmaan::robust::reduced_gamma_nt(u);
   if (!m_or.has_value()) stop_post(m_or.error());
   return Rcpp::wrap(*m_or);
 }
@@ -297,10 +297,10 @@ Rcpp::NumericMatrix infer_reduced_gamma_nt(Rcpp::List uf) {
 // [[Rcpp::export]]
 Rcpp::NumericMatrix infer_reduced_gamma_sample(Rcpp::List uf, Rcpp::NumericMatrix Zc,
                                                Rcpp::NumericVector denom) {
-  magmaan::nt::robust::UFactor u = ufactor_from_list(uf);
+  magmaan::robust::UFactor u = ufactor_from_list(uf);
   Eigen::MatrixXd Zceig = Rcpp::as<Eigen::MatrixXd>(Zc);
   Eigen::VectorXd d = Rcpp::as<Eigen::VectorXd>(denom);
-  auto m_or = magmaan::nt::robust::reduced_gamma_sample(u, Zceig, d);
+  auto m_or = magmaan::robust::reduced_gamma_sample(u, Zceig, d);
   if (!m_or.has_value()) stop_post(m_or.error());
   return Rcpp::wrap(*m_or);
 }
@@ -315,14 +315,14 @@ Rcpp::NumericMatrix infer_reduced_gamma_sample(Rcpp::List uf, Rcpp::NumericMatri
 Rcpp::NumericMatrix infer_reduced_gamma_unbiased(Rcpp::List uf, int n,
                                                  Rcpp::NumericMatrix M_sample,
                                                  Rcpp::NumericMatrix M_nt) {
-  magmaan::nt::robust::UFactor u = ufactor_from_list(uf);
+  magmaan::robust::UFactor u = ufactor_from_list(uf);
   if (u.blocks.empty()) Rcpp::stop("magmaan: u-factor has no blocks");
   magmaan::data::SampleStats samp;            // single-block; multi-block reduced_gamma_unbiased() errors
   samp.S = {u.blocks[0].S};
   samp.n_obs = {static_cast<std::int64_t>(n)};
   Eigen::MatrixXd Ms = Rcpp::as<Eigen::MatrixXd>(M_sample);
   Eigen::MatrixXd Mn = Rcpp::as<Eigen::MatrixXd>(M_nt);
-  auto m_or = magmaan::nt::robust::reduced_gamma_unbiased(u, samp, Ms, Mn);
+  auto m_or = magmaan::robust::reduced_gamma_unbiased(u, samp, Ms, Mn);
   if (!m_or.has_value()) stop_post(m_or.error());
   return Rcpp::wrap(*m_or);
 }
@@ -333,7 +333,7 @@ Rcpp::NumericMatrix infer_reduced_gamma_unbiased(Rcpp::List uf, int n,
 // [[Rcpp::export]]
 Rcpp::NumericVector infer_ugamma_eigenvalues(Rcpp::NumericMatrix M) {
   Eigen::MatrixXd Meig = Rcpp::as<Eigen::MatrixXd>(M);
-  auto ev_or = magmaan::nt::robust::ugamma_eigenvalues(Meig);
+  auto ev_or = magmaan::robust::ugamma_eigenvalues(Meig);
   if (!ev_or.has_value()) stop_post(ev_or.error());
   return Rcpp::wrap(*ev_or);
 }
@@ -344,7 +344,7 @@ Rcpp::NumericVector infer_ugamma_eigenvalues(Rcpp::NumericMatrix M) {
 // [[Rcpp::export]]
 Rcpp::List infer_satorra_bentler(double t_ml, int df, Rcpp::NumericVector eigvals) {
   const Eigen::VectorXd ev = Rcpp::as<Eigen::VectorXd>(eigvals);
-  const magmaan::nt::robust::SatorraBentlerResult r = magmaan::nt::robust::satorra_bentler(t_ml, df, ev);
+  const magmaan::robust::SatorraBentlerResult r = magmaan::robust::satorra_bentler(t_ml, df, ev);
   return Rcpp::List::create(Rcpp::_["chi2_scaled"] = r.chi2_scaled,
                             Rcpp::_["scale_c"] = r.scale_c, Rcpp::_["df"] = r.df);
 }
@@ -355,7 +355,7 @@ Rcpp::List infer_satorra_bentler(double t_ml, int df, Rcpp::NumericVector eigval
 // [[Rcpp::export]]
 Rcpp::List infer_mean_var_adjusted(double t_ml, int df, Rcpp::NumericVector eigvals) {
   const Eigen::VectorXd ev = Rcpp::as<Eigen::VectorXd>(eigvals);
-  const magmaan::nt::robust::MeanVarAdjustedResult r = magmaan::nt::robust::mean_var_adjusted(t_ml, df, ev);
+  const magmaan::robust::MeanVarAdjustedResult r = magmaan::robust::mean_var_adjusted(t_ml, df, ev);
   return Rcpp::List::create(Rcpp::_["chi2_adj"] = r.chi2_adj, Rcpp::_["df_adj"] = r.df_adj);
 }
 
@@ -365,7 +365,7 @@ Rcpp::List infer_mean_var_adjusted(double t_ml, int df, Rcpp::NumericVector eigv
 // [[Rcpp::export]]
 Rcpp::List infer_scaled_shifted(double t_ml, int df, Rcpp::NumericVector eigvals) {
   const Eigen::VectorXd ev = Rcpp::as<Eigen::VectorXd>(eigvals);
-  const magmaan::nt::robust::ScaledShiftedResult r = magmaan::nt::robust::scaled_shifted(t_ml, df, ev);
+  const magmaan::robust::ScaledShiftedResult r = magmaan::robust::scaled_shifted(t_ml, df, ev);
   return Rcpp::List::create(Rcpp::_["chi2_adj"] = r.chi2_adj, Rcpp::_["df"] = r.df,
                             Rcpp::_["scale_a"] = r.scale_a, Rcpp::_["shift_b"] = r.shift_b);
 }
@@ -386,7 +386,7 @@ Rcpp::List infer_scaled_shifted(double t_ml, int df, Rcpp::NumericVector eigvals
 //
 // [[Rcpp::export]]
 Rcpp::NumericMatrix infer_casewise_contributions(SEXP partable, SEXP X) {
-  magmaan::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "infer_casewise_contributions");
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "infer_casewise_contributions");
   auto rep_or = lvm::build_matrix_rep(parsed.structure, &parsed.names);
   if (!rep_or.has_value()) stop_model(rep_or.error());
   if (rep_or->ov_names.empty() || rep_or->ov_names[0].empty())
@@ -394,7 +394,7 @@ Rcpp::NumericMatrix infer_casewise_contributions(SEXP partable, SEXP X) {
   magmaan::data::RawData raw = raw_from_arg(*rep_or, X);
   auto ss_or = magmaan::data::sample_stats_from_raw(raw);
   if (!ss_or.has_value()) stop_post(ss_or.error());
-  auto zc_or = magmaan::nt::robust::casewise_contributions(raw, *ss_or);
+  auto zc_or = magmaan::robust::casewise_contributions(raw, *ss_or);
   if (!zc_or.has_value()) stop_post(zc_or.error());
   return Rcpp::wrap(*zc_or);
 }
@@ -532,7 +532,7 @@ Rcpp::List infer_robust_se(Rcpp::List fit, Rcpp::NumericMatrix gamma_hat,
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   Eigen::MatrixXd G = Rcpp::as<Eigen::MatrixXd>(gamma_hat);
-  auto r_or = magmaan::nt::robust::robust_se(ctx.pt, ctx.rep, ctx.samp, est, G, spec_from(bread, moments, cov));
+  auto r_or = magmaan::robust::robust_se(ctx.pt, ctx.rep, ctx.samp, est, G, spec_from(bread, moments, cov));
   if (!r_or.has_value()) stop_post(r_or.error());
   return Rcpp::List::create(Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
                             Rcpp::_["se"]   = Rcpp::wrap(r_or->se));
@@ -552,7 +552,7 @@ Rcpp::List infer_robust_se_parts(SEXP partable, Rcpp::List sample_stats,
                                            "infer_robust_se_parts");
   const magmaan::estimate::Estimates est = est_from_theta(theta);
   Eigen::MatrixXd G = Rcpp::as<Eigen::MatrixXd>(gamma_hat);
-  auto r_or = magmaan::nt::robust::robust_se(ctx.pt, ctx.rep, ctx.samp, est, G,
+  auto r_or = magmaan::robust::robust_se(ctx.pt, ctx.rep, ctx.samp, est, G,
                                              spec_from(bread, moments, cov));
   if (!r_or.has_value()) stop_post(r_or.error());
   return Rcpp::List::create(Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
@@ -572,7 +572,7 @@ Rcpp::List infer_robust_se_raw(Rcpp::List fit, SEXP X,
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = raw_from_arg(ctx.rep, X);
-  auto r_or = magmaan::nt::robust::robust_se(ctx.pt, ctx.rep, ctx.samp, est, raw, spec_from(bread, moments, cov));
+  auto r_or = magmaan::robust::robust_se(ctx.pt, ctx.rep, ctx.samp, est, raw, spec_from(bread, moments, cov));
   if (!r_or.has_value()) stop_post(r_or.error());
   return Rcpp::List::create(Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
                             Rcpp::_["se"]   = Rcpp::wrap(r_or->se));
@@ -591,7 +591,7 @@ Rcpp::List infer_robust_se_raw_parts(SEXP partable, Rcpp::List sample_stats,
                                            "infer_robust_se_raw_parts");
   const magmaan::estimate::Estimates est = est_from_theta(theta);
   magmaan::data::RawData raw = raw_from_arg(ctx.rep, X);
-  auto r_or = magmaan::nt::robust::robust_se(ctx.pt, ctx.rep, ctx.samp, est, raw,
+  auto r_or = magmaan::robust::robust_se(ctx.pt, ctx.rep, ctx.samp, est, raw,
                                              spec_from(bread, moments, cov));
   if (!r_or.has_value()) stop_post(r_or.error());
   return Rcpp::List::create(Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
