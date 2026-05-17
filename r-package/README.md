@@ -1,8 +1,8 @@
 # magmaan R bindings
 
-These bindings are intentionally thin. Most exported functions are direct
-`.Call` wrappers around one C++ entry point and keep the C++ argument shape
-visible for interactive methods work.
+These bindings keep the exported user namespace intentionally small. The
+friendly helpers compose a staged SEM workflow, while C++-shaped primitives are
+available through the `magmaan_core` object for interactive methods work.
 
 Convenience helpers are limited to R-side composition:
 
@@ -25,14 +25,17 @@ Convenience helpers are limited to R-side composition:
 
 Low-level functions such as `lavaan_lavaanify()`, `model_matrix_rep()`,
 `fit_fit()`, `fit_*_impl()`, `data_sample_stats_from_raw()`, and the `infer_*`
-family remain exported so the C++ architecture is still directly inspectable
-from R. Model-dependent post-fit helpers now expose primitive-shaped entry
-points such as `infer_vcov_partable(info, partable)`,
-`infer_z_test_theta(theta, se)`, `infer_wald_test_theta(theta, R, vcov)`,
-`infer_rls_chi2_sample(sample_stats, implied)`,
-`infer_build_u_factor_parts(partable, sample_stats, theta)`, and
-`infer_robust_se*_parts(...)`. Existing fit-list calls remain available, with
-explicit `*_fit` aliases for scripts that prefer adapter-style names.
+family are available as `magmaan_core$...` entries so the C++ architecture is
+still directly inspectable from R without flooding ordinary tab completion.
+Model-dependent post-fit helpers expose primitive-shaped entry points such as
+`magmaan_core$infer_vcov_partable(info, partable)`,
+`magmaan_core$infer_z_test_theta(theta, se)`,
+`magmaan_core$infer_wald_test_theta(theta, R, vcov)`,
+`magmaan_core$infer_rls_chi2_sample(sample_stats, implied)`,
+`magmaan_core$infer_build_u_factor_parts(partable, sample_stats, theta)`, and
+`magmaan_core$infer_robust_se*_parts(...)`. Fit-list calls remain available in
+`magmaan_core`, with explicit `*_fit` aliases for scripts that prefer
+adapter-style names.
 
 ## Sample-moment data
 

@@ -6,7 +6,7 @@
 suppressMessages({ library(magmaan); library(lavaan) })
 
 check_partable <- function(label, fit, lav, tol = 2e-4) {
-  cmp <- lavaan_compare_partable(fit, lavaan::parTable(lav), est_tolerance = tol)
+  cmp <- magmaan_core$lavaan_compare_partable(fit, lavaan::parTable(lav), est_tolerance = tol)
   if (!isTRUE(cmp$ok)) {
     print(cmp$counts)
     print(utils::head(cmp$failures, 12L))

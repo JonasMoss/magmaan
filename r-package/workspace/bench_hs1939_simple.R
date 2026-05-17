@@ -9,13 +9,13 @@ magmaan_model <- \() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec)
   fit <- fit_ml(spec, dat)
-  uf <- infer_build_u_factor(fit)
-  df <- infer_df_stat(fit$partable, fit_sample_stats(fit))
-  chisq <- infer_chi2_stat(fit_sample_stats(fit), fit$fmin)
-  Zc <- infer_casewise_contributions(spec$partable, dat$X)
-  M  <- infer_reduced_gamma_sample(uf, Zc, dat$nobs)
-  ev <- infer_ugamma_eigenvalues(M)
-  sb <- infer_satorra_bentler(chisq, df, ev)$chi2_scaled
+  uf <- magmaan_core$infer_build_u_factor(fit)
+  df <- magmaan_core$infer_df_stat(fit$partable, magmaan_core$fit_sample_stats(fit))
+  chisq <- magmaan_core$infer_chi2_stat(magmaan_core$fit_sample_stats(fit), fit$fmin)
+  Zc <- magmaan_core$infer_casewise_contributions(spec$partable, dat$X)
+  M  <- magmaan_core$infer_reduced_gamma_sample(uf, Zc, dat$nobs)
+  ev <- magmaan_core$infer_ugamma_eigenvalues(M)
+  sb <- magmaan_core$infer_satorra_bentler(chisq, df, ev)$chi2_scaled
   sb
 }
 

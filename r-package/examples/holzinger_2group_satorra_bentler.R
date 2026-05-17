@@ -8,12 +8,12 @@
 ##
 ## What it shows, end to end:
 ##   1. fit the 3-factor CFA on both `school` groups at once — one uniform path,
-##      `lavaan_lavaanify(m, n_groups = 2L, group_var = "school")` →
-##      `fit_fit(pt, data_sample_stats_from_raw(Xg))` (Xg a list of two raw
+##      `magmaan_core$lavaan_lavaanify(m, n_groups = 2L, group_var = "school")` →
+##      `magmaan_core$fit_fit(pt, magmaan_core$data_sample_stats_from_raw(Xg))` (Xg a list of two raw
 ##      matrices; the {S, nobs, mean} bundle goes straight in);
 ##   2. the *pooled* (multi-group) Satorra-Bentler scaled χ² — the canonical
 ##      `infer_build_u_factor → infer_casewise_contributions →
-##       infer_reduced_gamma_sample(uf, Zc, fit$nobs) → infer_ugamma_eigenvalues →
+##       magmaan_core$infer_reduced_gamma_sample(uf, Zc, fit$nobs) → infer_ugamma_eigenvalues →
 ##       infer_satorra_bentler` pipeline (`fit$nobs` is the per-block divisor
 ##      vector: the reduced meat is Σ_g B_gᵀΓ̂_gB_g with each Γ̂_g over n_g);
 ##   3. the same for the *metric-invariance* model (shared loading labels →
@@ -34,7 +34,7 @@ hs    <- HolzingerSwineford1939
 vars  <- paste0("x", 1:9)
 Xg    <- lapply(split(hs[vars], hs$school), as.matrix)   # list of 2 raw-data matrices
 gnm   <- names(Xg)
-ssg   <- data_sample_stats_from_raw(Xg)                 # list(S = list(S1,S2), mean = list(m1,m2), nobs = c(n1,n2))
+ssg   <- magmaan_core$data_sample_stats_from_raw(Xg)                 # list(S = list(S1,S2), mean = list(m1,m2), nobs = c(n1,n2))
 ng    <- ssg$nobs
 df_hs <- as.data.frame(hs[c("school", vars)])
 
@@ -48,14 +48,14 @@ cat(sprintf("Holzinger-Swineford, grouped by school: %s  (n = %s, N = %d)\n\n",
 ## ===========================================================================
 ## 1. two-group CFA fit
 ## ===========================================================================
-pt   <- lavaan_lavaanify(m, n_groups = 2L, group_var = "school")
-fit  <- fit_fit(pt, ssg)                  # the {S, nobs, mean} bundle, straight in
-T_ml <- infer_chi2_stat(fit_sample_stats(fit), fit$fmin);  df_ml <- infer_df_stat(fit$partable, fit_sample_stats(fit))
+pt   <- magmaan_core$lavaan_lavaanify(m, n_groups = 2L, group_var = "school")
+fit  <- magmaan_core$fit_fit(pt, ssg)                  # the {S, nobs, mean} bundle, straight in
+T_ml <- magmaan_core$infer_chi2_stat(magmaan_core$fit_sample_stats(fit), fit$fmin);  df_ml <- magmaan_core$infer_df_stat(fit$partable, magmaan_core$fit_sample_stats(fit))
 
 cat("--- two-group configural CFA (magmaan) ---\n")
 cat(sprintf("  ngroups = %d (%s), npar = %d, df = %d, T_ML = χ² = %.4f  (p %.4g)\n\n",
             fit$ngroups, paste(fit$group_labels, collapse = "/"), fit$npar, df_ml, T_ml,
-            infer_chi2_pvalue(T_ml, df_ml)))
+            magmaan_core$infer_chi2_pvalue(T_ml, df_ml)))
 
 lav  <- lavaan::cfa(m, data = df_hs, group = "school", estimator = "MLM")
 cat("--- cross-check vs lavaan::cfa(group = \"school\") ---\n")
@@ -67,17 +67,17 @@ cat(sprintf("  match: df %s | T_ML %s\n\n",
 ## ===========================================================================
 ## 2. pooled (multi-group) Satorra-Bentler scaled χ²
 ## ===========================================================================
-uf <- infer_build_u_factor_parts(fit$partable, fit_sample_stats(fit), fit$theta)  # blocks = 2; B is (p*_1 + p*_2) x df
-Zc <- infer_casewise_contributions(pt, Xg)               # N × (p*_1 + p*_2), block-diagonal layout
-M  <- infer_reduced_gamma_sample(uf, Zc, fit$nobs)       # Σ_g B_gᵀΓ̂_gB_g, each Γ̂_g divided by n_g
-ev <- infer_ugamma_eigenvalues(M)
-sb <- infer_satorra_bentler(T_ml, df_ml, ev)
+uf <- magmaan_core$infer_build_u_factor_parts(fit$partable, magmaan_core$fit_sample_stats(fit), fit$theta)  # blocks = 2; B is (p*_1 + p*_2) x df
+Zc <- magmaan_core$infer_casewise_contributions(pt, Xg)               # N × (p*_1 + p*_2), block-diagonal layout
+M  <- magmaan_core$infer_reduced_gamma_sample(uf, Zc, fit$nobs)       # Σ_g B_gᵀΓ̂_gB_g, each Γ̂_g divided by n_g
+ev <- magmaan_core$infer_ugamma_eigenvalues(M)
+sb <- magmaan_core$infer_satorra_bentler(T_ml, df_ml, ev)
 
 cat("--- pooled Satorra-Bentler scaled χ² (both groups) ---\n")
 cat(sprintf("  UΓ̂ spectrum: %d eigenvalues, mean %.4f (= scaling c), range [%.4f, %.4f]\n",
             length(ev), mean(ev), min(ev), max(ev)))
 cat(sprintf("  T_ML = %.4f (df %d)  →  c = %.4f,  T_SB = %.4f  (p %.4g)\n",
-            T_ml, df_ml, sb$scale_c, sb$chi2_scaled, infer_chi2_pvalue(sb$chi2_scaled, sb$df)))
+            T_ml, df_ml, sb$scale_c, sb$chi2_scaled, magmaan_core$infer_chi2_pvalue(sb$chi2_scaled, sb$df)))
 cat(sprintf("  lavaan MLM (group = \"school\"): c = %.4f, T_SB = %.4f\n",
             fitMeasures(lav, "chisq.scaling.factor"), fitMeasures(lav, "chisq.scaled")))
 cat(sprintf("  match: c %s | T_SB %s\n\n",
@@ -90,19 +90,19 @@ cat(sprintf("  match: c %s | T_SB %s\n\n",
 m_met <- "visual  =~ x1 + L1*x2 + L2*x3
           textual =~ x4 + L3*x5 + L4*x6
           speed   =~ x7 + L5*x8 + L6*x9"   # bare loading labels ⇒ cross-group ==  ≙ group.equal="loadings"
-pt_met <- lavaan_lavaanify(m_met, n_groups = 2L, group_var = "school")
-fit_met <- fit_fit(pt_met, ssg)
-T_met   <- infer_chi2_stat(fit_sample_stats(fit_met), fit_met$fmin);  df_met <- infer_df_stat(fit_met$partable, fit_sample_stats(fit_met))
-uf_met <- infer_build_u_factor_parts(fit_met$partable, fit_sample_stats(fit_met), fit_met$theta)  # constraints shrink df
-ev_met  <- infer_ugamma_eigenvalues(
-             infer_reduced_gamma_sample(uf_met, infer_casewise_contributions(pt_met, Xg), fit_met$nobs))
-sb_met  <- infer_satorra_bentler(T_met, df_met, ev_met)
+pt_met <- magmaan_core$lavaan_lavaanify(m_met, n_groups = 2L, group_var = "school")
+fit_met <- magmaan_core$fit_fit(pt_met, ssg)
+T_met   <- magmaan_core$infer_chi2_stat(magmaan_core$fit_sample_stats(fit_met), fit_met$fmin);  df_met <- magmaan_core$infer_df_stat(fit_met$partable, magmaan_core$fit_sample_stats(fit_met))
+uf_met <- magmaan_core$infer_build_u_factor_parts(fit_met$partable, magmaan_core$fit_sample_stats(fit_met), fit_met$theta)  # constraints shrink df
+ev_met  <- magmaan_core$infer_ugamma_eigenvalues(
+             magmaan_core$infer_reduced_gamma_sample(uf_met, magmaan_core$infer_casewise_contributions(pt_met, Xg), fit_met$nobs))
+sb_met  <- magmaan_core$infer_satorra_bentler(T_met, df_met, ev_met)
 lr_stat <- T_met - T_ml;  lr_df <- df_met - df_ml
 
 cat("--- metric invariance (loadings equal across groups) ---\n")
 cat(sprintf("  df = %d, T_ML = %.4f  →  c = %.4f,  T_SB = %.4f   |  invariance LR: Δχ² = %.4f, Δdf = %d, p = %.4g\n",
             df_met, T_met, sb_met$scale_c, sb_met$chi2_scaled, lr_stat, lr_df,
-            infer_chi2_pvalue(lr_stat, lr_df)))
+            magmaan_core$infer_chi2_pvalue(lr_stat, lr_df)))
 lav_met <- lavaan::cfa(m, data = df_hs, group = "school", group.equal = "loadings", estimator = "MLM")
 cat(sprintf("  lavaan group.equal=\"loadings\" MLM: df = %g, c = %.4f, T_SB = %.4f\n",
             fitMeasures(lav_met, "df"), fitMeasures(lav_met, "chisq.scaling.factor"), fitMeasures(lav_met, "chisq.scaled")))
@@ -114,7 +114,7 @@ cat(sprintf("  match: df %s | c %s | T_SB %s\n\n",
 ## ===========================================================================
 ## 4. robust ("sandwich") two-group SEs  (≙ lavaan se = "robust.sem")
 ## ===========================================================================
-rse <- infer_robust_se_raw_parts(fit$partable, fit_sample_stats(fit), fit$theta, Xg)  # multi-block Expected bread
+rse <- magmaan_core$infer_robust_se_raw_parts(fit$partable, magmaan_core$fit_sample_stats(fit), fit$theta, Xg)  # multi-block Expected bread
 ## same model on lavaan's side (cov-only — `cfa(group=)` would auto-add a
 ## saturated mean structure, which doesn't change χ²/df/SB but does change the
 ## parameter list), and match SEs by school *name* (magmaan's group g ↔ Xg[[g]];

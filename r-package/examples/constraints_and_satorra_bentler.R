@@ -7,14 +7,14 @@
 ##
 ## What it shows:
 ##   1. Equality constraints — `f =~ x1 + a*x2 + a*x3` ties the two loadings;
-##      `fit_fit()` enforces it (reparam θ = K·α), `infer_df_stat()` accounts for
-##      the rank gain and `infer_vcov_partable()`/`infer_se()` give the tied params
+##      `magmaan_core$fit_fit()` enforces it (reparam θ = K·α), `magmaan_core$infer_df_stat()` accounts for
+##      the rank gain and `magmaan_core$infer_vcov_partable()`/`magmaan_core$infer_se()` give the tied params
 ##      equal SEs. Cross-checked vs lavaan.
 ##   2. The robust UΓ-eigenvalue / Satorra-Bentler chain on the 3-factor HS CFA,
 ##      composed from the thin wrappers, cross-checked vs lavaan estimator="MLM".
 ##
 ## All `magmaan_*` calls take the {S, nobs, mean} sample-stats bundle that
-## `data_sample_stats_from_raw()` returns (or a hand-built list(S=, nobs=)).
+## `magmaan_core$data_sample_stats_from_raw()` returns (or a hand-built list(S=, nobs=)).
 ## For per-group / measurement-invariance + robust, see holzinger_invariance.R
 ## and holzinger_2group_satorra_bentler.R.
 
@@ -31,16 +31,16 @@ cat("1. Equality constraints: tie the x2 and x3 loadings on a 1-factor CFA\n")
 cat("=================================================================\n\n")
 
 X3  <- Xfull[, c("x1", "x2", "x3")]           # all 301 cases, 3 indicators
-ss3 <- data_sample_stats_from_raw(X3)        # list(S = list(<3x3>), mean = list(<3>), nobs = 301)
+ss3 <- magmaan_core$data_sample_stats_from_raw(X3)        # list(S = list(<3x3>), mean = list(<3>), nobs = 301)
 
-pt_uncon <- lavaan_lavaanify("visual =~ x1 + x2 + x3")
-pt_con   <- lavaan_lavaanify("visual =~ x1 + a*x2 + a*x3")   # synthesizes the `==` row
+pt_uncon <- magmaan_core$lavaan_lavaanify("visual =~ x1 + x2 + x3")
+pt_con   <- magmaan_core$lavaan_lavaanify("visual =~ x1 + a*x2 + a*x3")   # synthesizes the `==` row
 
-fit_u <- fit_fit(pt_uncon, ss3)
-fit_c <- fit_fit(pt_con,   ss3)
-T_u   <- infer_chi2_stat(fit_sample_stats(fit_u), fit_u$fmin);   df_u  <- infer_df_stat(fit_u$partable, fit_sample_stats(fit_u))
-T_c   <- infer_chi2_stat(fit_sample_stats(fit_c), fit_c$fmin);   df_c  <- infer_df_stat(fit_c$partable, fit_sample_stats(fit_c))
-se_c_vec <- infer_se(infer_vcov_partable(infer_information_expected(fit_c), fit_c$partable))
+fit_u <- magmaan_core$fit_fit(pt_uncon, ss3)
+fit_c <- magmaan_core$fit_fit(pt_con,   ss3)
+T_u   <- magmaan_core$infer_chi2_stat(magmaan_core$fit_sample_stats(fit_u), fit_u$fmin);   df_u  <- magmaan_core$infer_df_stat(fit_u$partable, magmaan_core$fit_sample_stats(fit_u))
+T_c   <- magmaan_core$infer_chi2_stat(magmaan_core$fit_sample_stats(fit_c), fit_c$fmin);   df_c  <- magmaan_core$infer_df_stat(fit_c$partable, magmaan_core$fit_sample_stats(fit_c))
+se_c_vec <- magmaan_core$infer_se(magmaan_core$infer_vcov_partable(magmaan_core$infer_information_expected(fit_c), fit_c$partable))
 
 # SE indexed by the free-parameter ordinal in partable$free.
 se_of <- function(se_vec, partable, lhs_, rhs_) {
@@ -67,7 +67,7 @@ cat(sprintf("  SE(visual=~x2) = %.6f,  SE(visual=~x3) = %.6f   (equal: %s)\n",
 cat("\n--- LR test for the equality constraint (pure R, via magmaan) ---\n")
 lr_stat <- T_c - T_u
 lr_df   <- df_c - df_u
-cat(sprintf("  Δχ2 = %.5g,  Δdf = %d,  p = %.4g\n", lr_stat, lr_df, infer_chi2_pvalue(lr_stat, lr_df)))
+cat(sprintf("  Δχ2 = %.5g,  Δdf = %d,  p = %.4g\n", lr_stat, lr_df, magmaan_core$infer_chi2_pvalue(lr_stat, lr_df)))
 
 cat("\n--- cross-check vs lavaan (same S, no rescaling) ---\n")
 S3 <- ss3$S[[1]]; dimnames(S3) <- list(colnames(X3), colnames(X3))
@@ -90,28 +90,28 @@ m_hs <- "visual  =~ x1 + x2 + x3
          textual =~ x4 + x5 + x6
          speed   =~ x7 + x8 + x9"
 
-pt_hs  <- lavaan_lavaanify(m_hs)
-fit_hs <- fit_fit(pt_hs, data_sample_stats_from_raw(Xfull))
-T_hs   <- infer_chi2_stat(fit_sample_stats(fit_hs), fit_hs$fmin);  df_hs <- infer_df_stat(fit_hs$partable, fit_sample_stats(fit_hs))
+pt_hs  <- magmaan_core$lavaan_lavaanify(m_hs)
+fit_hs <- magmaan_core$fit_fit(pt_hs, magmaan_core$data_sample_stats_from_raw(Xfull))
+T_hs   <- magmaan_core$infer_chi2_stat(magmaan_core$fit_sample_stats(fit_hs), fit_hs$fmin);  df_hs <- magmaan_core$infer_df_stat(fit_hs$partable, magmaan_core$fit_sample_stats(fit_hs))
 
 # the robust chain, composed from the thin wrappers:
-uf  <- infer_build_u_factor_parts(fit_hs$partable, fit_sample_stats(fit_hs), fit_hs$theta)  # U-factor at θ̂
-Zc  <- infer_casewise_contributions(pt_hs, Xfull)           # casewise vech contributions (raw data)
-M   <- infer_reduced_gamma_sample(uf, Zc, fit_hs$nobs)      # BᵀΓ̂B  (df × df); per-block divisor = nobs
-ev  <- infer_ugamma_eigenvalues(M)                          # eigenvalues of UΓ̂  ← the deliverable
-sb  <- infer_satorra_bentler(T_hs, df_hs, ev)
-mva <- infer_mean_var_adjusted(T_hs, df_hs, ev)
-ss2 <- infer_scaled_shifted(T_hs, df_hs, ev)
+uf  <- magmaan_core$infer_build_u_factor_parts(fit_hs$partable, magmaan_core$fit_sample_stats(fit_hs), fit_hs$theta)  # U-factor at θ̂
+Zc  <- magmaan_core$infer_casewise_contributions(pt_hs, Xfull)           # casewise vech contributions (raw data)
+M   <- magmaan_core$infer_reduced_gamma_sample(uf, Zc, fit_hs$nobs)      # BᵀΓ̂B  (df × df); per-block divisor = nobs
+ev  <- magmaan_core$infer_ugamma_eigenvalues(M)                          # eigenvalues of UΓ̂  ← the deliverable
+sb  <- magmaan_core$infer_satorra_bentler(T_hs, df_hs, ev)
+mva <- magmaan_core$infer_mean_var_adjusted(T_hs, df_hs, ev)
+ss2 <- magmaan_core$infer_scaled_shifted(T_hs, df_hs, ev)
 
-cat(sprintf("  T_ML = %.4f  (df %d, p %.4g)\n", T_hs, df_hs, infer_chi2_pvalue(T_hs, df_hs)))
+cat(sprintf("  T_ML = %.4f  (df %d, p %.4g)\n", T_hs, df_hs, magmaan_core$infer_chi2_pvalue(T_hs, df_hs)))
 cat(sprintf("  UΓ̂ eigenvalues (%d of them): min %.4f, mean %.4f, max %.4f\n", length(ev), min(ev), mean(ev), max(ev)))
 cat(sprintf("  Satorra-Bentler:        T_SB = %.4f  (c = %.4f, df %d, p %.4g)\n",
-            sb$chi2_scaled, sb$scale_c, sb$df, infer_chi2_pvalue(sb$chi2_scaled, sb$df)))
+            sb$chi2_scaled, sb$scale_c, sb$df, magmaan_core$infer_chi2_pvalue(sb$chi2_scaled, sb$df)))
 cat(sprintf("  mean-and-var adjusted:  T    = %.4f  (df_adj = %.4f)\n", mva$chi2_adj, mva$df_adj))
 cat(sprintf("  scaled-and-shifted:     T    = %.4f  (a = %.4f, b = %.4f, df %d)\n",
             ss2$chi2_adj, ss2$scale_a, ss2$shift_b, ss2$df))
 # robust ("sandwich") SEs — se = "robust.sem":
-rse <- infer_robust_se_raw_parts(fit_hs$partable, fit_sample_stats(fit_hs), fit_hs$theta, Xfull)
+rse <- magmaan_core$infer_robust_se_raw_parts(fit_hs$partable, magmaan_core$fit_sample_stats(fit_hs), fit_hs$theta, Xfull)
 
 cat("\n--- cross-check vs lavaan ---\n")
 lav_mlm <- lavaan::cfa(m_hs, data = as.data.frame(Xfull), estimator = "MLM")
