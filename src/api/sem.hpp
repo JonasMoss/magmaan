@@ -237,6 +237,17 @@ inline Result<Data> data_from_ordinal_dpd(
   return Data::from_ordinal(std::move(stats->stats));
 }
 
+inline Result<Data> data_from_ordinal_huber_residual(
+    const Model &, const std::vector<Eigen::MatrixXd> &blocks,
+    data::PairwiseOrdinalHuberResidualStatsOptions options = {}) {
+  auto stats = data::pairwise_ordinal_stats_huber_residual_from_integer_data(
+      blocks, options);
+  if (!stats) {
+    return std::unexpected(make_error(ErrorStage::Data, stats.error()));
+  }
+  return Data::from_ordinal(std::move(stats->stats));
+}
+
 inline Result<Data> data_from_mixed_ordinal_polyserial_dpd(
     const Model &, const std::vector<Eigen::MatrixXd> &blocks,
     const std::vector<std::vector<std::int32_t>> &ordered,

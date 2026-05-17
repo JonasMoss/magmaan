@@ -1368,6 +1368,132 @@ TEST_CASE("Pairwise ordinal DPD stats jointly estimate shared thresholds") {
   CHECK(pd.expected_counts.sum() == doctest::Approx(pd.adjusted_counts.sum()));
 }
 
+TEST_CASE("Pairwise ordinal Huber residual stats preserve ML limit and downweight contamination") {
+  Eigen::MatrixXd clean_counts(3, 3);
+  clean_counts << 250.0, 120.0, 35.0,
+                  110.0, 300.0, 120.0,
+                  25.0, 130.0, 260.0;
+  Eigen::MatrixXd contaminated_counts = clean_counts;
+  contaminated_counts(0, 2) += 900.0;
+  const Eigen::MatrixXd clean = ordinal_data_from_pair_counts(clean_counts);
+  const Eigen::MatrixXd contaminated =
+      ordinal_data_from_pair_counts(contaminated_counts);
+
+  auto clean_ml = magmaan::data::pairwise_ordinal_stats_from_integer_data({clean});
+  auto contaminated_ml =
+      magmaan::data::pairwise_ordinal_stats_from_integer_data({contaminated});
+  magmaan::data::PairwiseOrdinalHuberResidualStatsOptions huber_ml_options;
+  huber_ml_options.clip.kind = magmaan::data::HuberResidualClipKind::None;
+  auto huber_ml = magmaan::data::pairwise_ordinal_stats_huber_residual_from_integer_data(
+      {contaminated}, huber_ml_options);
+  magmaan::data::PairwiseOrdinalHuberResidualStatsOptions huber_options;
+  huber_options.clip.kind = magmaan::data::HuberResidualClipKind::PseudoHuber;
+  huber_options.clip.k = 1.25;
+  auto huber = magmaan::data::pairwise_ordinal_stats_huber_residual_from_integer_data(
+      {contaminated}, huber_options);
+  magmaan::data::PairwiseOrdinalHWeightedStatsOptions h_options;
+  h_options.rho.h_score = magmaan::data::PolychoricHScoreOptions{
+      .kind = magmaan::data::PolychoricHScoreKind::WmaHardCap,
+      .k = 1.15};
+  auto h_weighted =
+      magmaan::data::pairwise_ordinal_stats_h_weighted_from_integer_data(
+          {contaminated}, h_options);
+  magmaan::data::PairwiseOrdinalDpdStatsOptions dpd_options;
+  dpd_options.alpha = 0.35;
+  auto dpd = magmaan::data::pairwise_ordinal_stats_dpd_from_integer_data(
+      {contaminated}, dpd_options);
+  REQUIRE(clean_ml.has_value());
+  REQUIRE(contaminated_ml.has_value());
+  REQUIRE(huber_ml.has_value());
+  REQUIRE(huber.has_value());
+  REQUIRE(h_weighted.has_value());
+  REQUIRE(dpd.has_value());
+
+  CHECK(huber_ml->stats.thresholds[0].isApprox(
+      contaminated_ml->stats.thresholds[0], 0.0));
+  CHECK(huber_ml->stats.R[0].isApprox(contaminated_ml->stats.R[0], 0.0));
+  CHECK(huber_ml->stats.NACOV[0].isApprox(contaminated_ml->stats.NACOV[0], 0.0));
+
+  const double contaminated_r = contaminated_ml->stats.R[0](1, 0);
+  const double huber_r = huber->stats.R[0](1, 0);
+  CHECK(std::isfinite(huber_r));
+  CHECK(std::abs(huber_r - contaminated_r) > 1e-4);
+  CHECK(std::abs(h_weighted->stats.R[0](1, 0) - contaminated_r) > 1e-4);
+  CHECK(std::abs(dpd->stats.R[0](1, 0) - contaminated_r) > 1e-4);
+  CHECK(huber->stats.W_dwls[0].diagonal().minCoeff() > 0.0);
+  CHECK(h_weighted->stats.W_dwls[0].diagonal().minCoeff() > 0.0);
+  CHECK(dpd->stats.W_dwls[0].diagonal().minCoeff() > 0.0);
+  REQUIRE(huber->block_diagnostics[0].pair_diagnostics.size() == 1);
+  const auto& pd = huber->block_diagnostics[0].pair_diagnostics[0];
+  CHECK(pd.weights.minCoeff() < 1.0);
+  CHECK(pd.pearson_residuals.cwiseAbs().maxCoeff() > 1.25);
+  CHECK(huber->stats.NACOV[0].isApprox(
+      (huber->block_diagnostics[0].moment_influence.transpose() *
+       huber->block_diagnostics[0].moment_influence) /
+          static_cast<double>(huber->stats.n_obs[0]),
+      1e-12));
+}
+
+TEST_CASE("Pairwise ordinal Huber residual repair keeps correlation influence stable") {
+  Eigen::MatrixXd X(24, 3);
+  Eigen::Index r = 0;
+  for (int rep = 0; rep < 4; ++rep) {
+    for (int c = 1; c <= 3; ++c) {
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((c + rep) % 3);
+      X(r, 2) = 1 + ((2 * c + rep) % 3);
+      ++r;
+      X(r, 0) = c;
+      X(r, 1) = 1 + ((2 * c + rep) % 3);
+      X(r, 2) = 1 + ((c + rep) % 3);
+      ++r;
+    }
+  }
+
+  magmaan::data::PairwiseOrdinalHuberResidualStatsOptions raw_options;
+  raw_options.clip = magmaan::data::HuberResidualClipOptions{
+      .kind = magmaan::data::HuberResidualClipKind::HardHuber,
+      .k = 1.20};
+  auto raw = magmaan::data::pairwise_ordinal_stats_huber_residual_from_integer_data(
+      {X}, raw_options);
+  REQUIRE(raw.has_value());
+  const auto& raw_bd = raw->block_diagnostics[0];
+  REQUIRE(raw_bd.min_eigen_r < 0.95);
+
+  auto ridge_options = raw_options;
+  ridge_options.correlation_repair.kind =
+      magmaan::data::PairwiseOrdinalCorrelationRepairKind::Ridge;
+  ridge_options.correlation_repair.min_eigenvalue = 0.95;
+  auto ridged =
+      magmaan::data::pairwise_ordinal_stats_huber_residual_from_integer_data(
+          {X}, ridge_options);
+  REQUIRE(ridged.has_value());
+  const auto& ridged_bd = ridged->block_diagnostics[0];
+  CHECK(ridged_bd.raw_min_eigen_r == doctest::Approx(raw_bd.raw_min_eigen_r));
+  CHECK(ridged_bd.min_eigen_r == doctest::Approx(0.95).epsilon(1e-10));
+  CHECK(ridged_bd.r_repair_applied);
+  REQUIRE(ridged_bd.r_ridge > 0.0);
+
+  const Eigen::Index nth = ridged->stats.thresholds[0].size();
+  const Eigen::Index ncorr = ridged->stats.R[0].cols() *
+      (ridged->stats.R[0].cols() - 1) / 2;
+  const double corr_scale = 1.0 / (1.0 + ridged_bd.r_ridge);
+  CHECK(ridged_bd.moment_influence.leftCols(nth).isApprox(
+      raw_bd.moment_influence.leftCols(nth), 1e-12));
+  CHECK(ridged_bd.moment_influence.rightCols(ncorr).isApprox(
+      corr_scale * raw_bd.moment_influence.rightCols(ncorr), 1e-12));
+  CHECK(ridged->stats.NACOV[0].isApprox(
+      (ridged_bd.moment_influence.transpose() *
+       ridged_bd.moment_influence) /
+          static_cast<double>(ridged->stats.n_obs[0]),
+      1e-12));
+  CHECK(ridged->stats.W_dwls[0].diagonal().minCoeff() > 0.0);
+  for (const auto& pd : ridged_bd.pair_diagnostics) {
+    CHECK(pd.ridge_applied);
+    CHECK(pd.ridge == doctest::Approx(ridged_bd.r_ridge));
+  }
+}
+
 TEST_CASE("Pairwise ordinal h-weighted stats repair low-eigen robust R on request") {
   Eigen::MatrixXd X(24, 3);
   Eigen::Index r = 0;

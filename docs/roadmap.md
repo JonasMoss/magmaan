@@ -181,6 +181,15 @@ golden `parTable()` fixtures.
   output contract matches the h-weighted SEM path, but the composite objective
   is density power divergence with tuning `alpha`; `alpha = 0` delegates to
   the default ML/lavaan-compatible stats path.
+- Experimental all-ordinal shared-threshold Huberized Pearson-residual stats
+  are available under
+  `data::pairwise_ordinal_stats_huber_residual_from_integer_data()`. The
+  clipped residual is the cell Pearson residual; hard Huber, pseudo-Huber,
+  Tukey biweight, and no-clip options share the same moment/Gamma contract as
+  h-weighted and DPD stats, with no-clip delegating to the default
+  ML/lavaan-compatible stats path. Robust-R ridge/shrinkage repair applies the
+  same correlation-column influence transformation before Gamma and weights
+  are rebuilt.
 - Experimental mixed continuous/ordinal Huberized Pearson-residual stats are
   available under `data::mixed_ordinal_stats_huber_residual_from_data()`.
   Hard Huber, pseudo-Huber, Tukey biweight, and no-clip residual options are
@@ -351,8 +360,10 @@ golden `parTable()` fixtures.
   single `magmaan_core` object.
 - The staged C++ facade and R `magmaan_core` surface expose the experimental
   robust ordinal moment builders explicitly: all-ordinal h-weighted,
-  all-ordinal DPD, and mixed continuous/ordinal fixed-marginal polyserial DPD.
-  Default ordinal and mixed data builders remain lavaan-compatible ML paths.
+  all-ordinal DPD, mixed continuous/ordinal fixed-marginal polyserial DPD, and
+  mixed continuous/ordinal Huberized residual stats. The staged C++ facade also
+  exposes all-ordinal Huberized residual stats. Default ordinal and mixed data
+  builders remain lavaan-compatible ML paths.
 - The R package is intended as a methods-developer interface over the C++
   library, not a second SEM implementation.
 - Standard errors, information matrices, Wald/z tests, robust corrections,

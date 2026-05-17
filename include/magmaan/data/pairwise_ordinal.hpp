@@ -192,6 +192,19 @@ struct PairwiseOrdinalDpdStatsOptions {
   PairwiseOrdinalCorrelationRepairOptions correlation_repair;
 };
 
+struct PairwiseOrdinalHuberResidualStatsOptions {
+  double rho_lower = -0.999;
+  double rho_upper = 0.999;
+  int    max_iter = 90;
+  double ftol = 1e-10;
+  double gtol = 2e-5;
+  double fd_step = 1e-5;
+  double min_threshold_spacing = 1e-6;
+  bool   lavaan_adjust_2x2 = true;
+  HuberResidualClipOptions clip;
+  PairwiseOrdinalCorrelationRepairOptions correlation_repair;
+};
+
 struct OrdinalPairObservedTable {
   Eigen::MatrixXd counts;
   std::int64_t n_obs = 0;
@@ -365,5 +378,10 @@ post_expected<PairwiseOrdinalStats>
 pairwise_ordinal_stats_dpd_from_integer_data(
     const std::vector<Eigen::MatrixXd>& X,
     PairwiseOrdinalDpdStatsOptions options = {});
+
+post_expected<PairwiseOrdinalStats>
+pairwise_ordinal_stats_huber_residual_from_integer_data(
+    const std::vector<Eigen::MatrixXd>& X,
+    PairwiseOrdinalHuberResidualStatsOptions options = {});
 
 }  // namespace magmaan::data

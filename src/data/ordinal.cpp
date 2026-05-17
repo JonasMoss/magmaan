@@ -1096,6 +1096,9 @@ pairwise_ordinal_stats_shared_robust_from_integer_data(
   } else if (options.kind == SharedRobustOrdinalKind::HuberResidual) {
     auto clip_ok = eval_huber_residual_clip(0.0, options.clip);
     if (!clip_ok.has_value()) return std::unexpected(clip_ok.error());
+    if (options.clip.kind == HuberResidualClipKind::None) {
+      return pairwise_ordinal_stats_from_integer_data(Xs);
+    }
   }
 
   auto base_or = pairwise_ordinal_stats_from_integer_data(Xs);
@@ -1394,6 +1397,27 @@ pairwise_ordinal_stats_dpd_from_integer_data(
               .h_score = {},
               .clip = {},
               .alpha = options.alpha,
+              .rho_lower = options.rho_lower,
+              .rho_upper = options.rho_upper,
+              .max_iter = options.max_iter,
+              .ftol = options.ftol,
+              .gtol = options.gtol,
+              .fd_step = options.fd_step,
+              .min_threshold_spacing = options.min_threshold_spacing,
+              .lavaan_adjust_2x2 = options.lavaan_adjust_2x2,
+              .correlation_repair = options.correlation_repair});
+}
+
+post_expected<PairwiseOrdinalStats>
+pairwise_ordinal_stats_huber_residual_from_integer_data(
+    const std::vector<Eigen::MatrixXd>& Xs,
+    PairwiseOrdinalHuberResidualStatsOptions options) {
+  return pairwise_ordinal_stats_shared_robust_from_integer_data(
+      Xs, SharedRobustOrdinalOptions{
+              .kind = SharedRobustOrdinalKind::HuberResidual,
+              .h_score = {},
+              .clip = options.clip,
+              .alpha = 0.0,
               .rho_lower = options.rho_lower,
               .rho_upper = options.rho_upper,
               .max_iter = options.max_iter,
