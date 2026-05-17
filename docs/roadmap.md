@@ -337,9 +337,8 @@ golden `parTable()` fixtures.
   target namespaces: `spec`, `lavaan`, `estimate`, `optim`, `nt`, `gls`, and
   `data`. Repository code and R binding internals use those namespaces
   directly.
-- Old `fit/*` and `partable/*` headers remain tested compatibility shims for
-  one transition window; they re-export target namespace names but no longer
-  own the primary API definitions.
+- Old `fit/*` and `partable/*` compatibility headers have been removed; use the
+  target namespace headers directly.
 
 ### Local build workflow
 
