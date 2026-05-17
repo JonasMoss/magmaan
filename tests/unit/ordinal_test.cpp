@@ -149,6 +149,19 @@ Eigen::MatrixXd ordinal_data_from_pair_counts(const Eigen::MatrixXd& counts) {
   return out;
 }
 
+double symmetric_condition_number(const Eigen::MatrixXd& x) {
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(0.5 * (x + x.transpose()));
+  if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
+    return std::numeric_limits<double>::infinity();
+  }
+  const double max_eval = es.eigenvalues().cwiseAbs().maxCoeff();
+  const double min_eval = es.eigenvalues().cwiseAbs().minCoeff();
+  if (!(min_eval > 0.0) || !std::isfinite(max_eval)) {
+    return std::numeric_limits<double>::infinity();
+  }
+  return max_eval / min_eval;
+}
+
 }  // namespace
 
 TEST_CASE("Polychoric h-score API evaluates predefined caps") {
@@ -2317,6 +2330,92 @@ TEST_CASE("Mixed ordinal Huber residual stats rebuild Gamma and preserve continu
       *pt, *mr, robust->stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
   REQUIRE(fit.has_value());
   CHECK(fit->theta.allFinite());
+}
+
+TEST_CASE("Mixed ordinal Huber residual Monte Carlo keeps sparse contaminated Gamma stable") {
+  std::normal_distribution<double> norm(0.0, 1.0);
+  std::vector<std::vector<std::int32_t>> ordered = {{1, 1, 0, 0}};
+  double clean_to_ml = 0.0;
+  double clean_to_huber = 0.0;
+  double huber_log_condition = 0.0;
+  int stable_reps = 0;
+
+  for (int rep = 0; rep < 6; ++rep) {
+    std::mt19937 rng(static_cast<std::mt19937::result_type>(20260600 + rep));
+    Eigen::MatrixXd clean(300, 4);
+    for (Eigen::Index i = 0; i < clean.rows(); ++i) {
+      const double eta = norm(rng);
+      const double z1 = 0.78 * eta + 0.63 * norm(rng);
+      const double z2 = 0.62 * eta + 0.78 * norm(rng);
+      clean(i, 0) = 1.0 + (z1 > -1.65) + (z1 > -0.25) + (z1 > 1.35);
+      clean(i, 1) = 1.0 + (z2 > -1.15) + (z2 > 0.35);
+      clean(i, 2) = 0.75 * eta + 0.66 * norm(rng);
+      clean(i, 3) = 0.55 * eta + 0.84 * norm(rng);
+    }
+
+    Eigen::MatrixXd contaminated(clean.rows() + 24, clean.cols());
+    contaminated.topRows(clean.rows()) = clean;
+    for (Eigen::Index i = 0; i < 24; ++i) {
+      contaminated(clean.rows() + i, 0) = 1.0;
+      contaminated(clean.rows() + i, 1) = 3.0;
+      contaminated(clean.rows() + i, 2) = 6.0 + 0.03 * static_cast<double>(i);
+      contaminated(clean.rows() + i, 3) = -5.5 - 0.02 * static_cast<double>(i);
+    }
+
+    auto clean_stats = magmaan::data::mixed_ordinal_stats_from_data(
+        {clean}, ordered);
+    auto base = magmaan::data::mixed_ordinal_stats_from_data(
+        {contaminated}, ordered);
+    auto huber = magmaan::data::mixed_ordinal_stats_huber_residual_from_data(
+        {contaminated}, ordered,
+        magmaan::data::MixedOrdinalHuberResidualOptions{
+            .clip = magmaan::data::HuberResidualClipOptions{
+                .kind = magmaan::data::HuberResidualClipKind::HardHuber,
+                .k = 1.20},
+            .correlation_repair =
+                magmaan::data::MixedOrdinalCorrelationRepairOptions{
+                    .kind = magmaan::data::MixedOrdinalCorrelationRepairKind::Ridge,
+                    .min_eigenvalue = 1e-6}});
+    auto dpd = magmaan::data::mixed_ordinal_stats_polyserial_dpd_from_data(
+        {contaminated}, ordered,
+        magmaan::data::PolyserialPairDpdOptions{.alpha = 0.35});
+    REQUIRE(clean_stats.has_value());
+    REQUIRE(base.has_value());
+    REQUIRE(huber.has_value());
+    REQUIRE(dpd.has_value());
+
+    const Eigen::MatrixXd& gamma = huber->stats.NACOV[0];
+    CHECK(gamma.allFinite());
+    CHECK(huber->stats.W_dwls[0].diagonal().minCoeff() > 0.0);
+    CHECK(huber->stats.W_dwls[0].diagonal().allFinite());
+    CHECK(huber->block_diagnostics[0].gamma.isApprox(
+        (huber->block_diagnostics[0].moment_influence.transpose() *
+         huber->block_diagnostics[0].moment_influence) /
+            static_cast<double>(huber->stats.n_obs[0]),
+        1e-12));
+    CHECK(dpd->stats.W_dwls[0].diagonal().minCoeff() > 0.0);
+    CHECK(dpd->stats.W_dwls[0].diagonal().allFinite());
+
+    const double base_cond = symmetric_condition_number(base->NACOV[0]);
+    const double huber_cond = symmetric_condition_number(gamma);
+    CHECK(std::isfinite(base_cond));
+    CHECK(std::isfinite(huber_cond));
+    CHECK(huber_cond < 1e14);
+    huber_log_condition += std::log(huber_cond);
+
+    const double clean_r = clean_stats->R[0](2, 0);
+    const double base_r = base->R[0](2, 0);
+    const double huber_r = huber->stats.R[0](2, 0);
+    clean_to_ml += std::abs(base_r - clean_r);
+    clean_to_huber += std::abs(huber_r - clean_r);
+    CHECK(std::abs(huber_r - base_r) > 1e-4);
+    CHECK(huber->block_diagnostics[0].objective.allFinite());
+    ++stable_reps;
+  }
+
+  REQUIRE(stable_reps == 6);
+  CHECK(clean_to_huber < clean_to_ml);
+  CHECK(huber_log_condition / static_cast<double>(stable_reps) < std::log(1e8));
 }
 
 TEST_CASE("Mixed ordinal validation rejects malformed stats before fitting") {

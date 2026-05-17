@@ -246,7 +246,7 @@ Remaining work, in suggested order:
     keeping continuous-only moments ordinary.
   - [x] Tighten the shared bread/influence derivation for thresholds when only
     polyserial links carry ordinal information.
-  - [ ] Add broader Monte Carlo checks for Gamma conditioning and weight
+  - [x] Add broader Monte Carlo checks for Gamma conditioning and weight
     stability under sparse ordinal categories and contaminated polyserial tails.
 - **M.** Add Huberized-residual simulation checks against the existing
   h-weighted and DPD all-ordinal SEM paths: clean ML limit, sparse-cell
