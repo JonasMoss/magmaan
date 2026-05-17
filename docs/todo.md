@@ -304,11 +304,26 @@ Remaining work, in suggested order:
   `data::mixed_ordinal_stats_polyserial_h_weighted_from_data()` keeps the
   default mixed marginals while swapping h-weighted polyserial pairs into
   `MixedOrdinalStats`.
-- [ ] **M/L.** If fixed-marginal DPD polyserial is promising in simulations,
-  pin it against robcat's full polyserial DPD estimator or document the
-  intended difference. robcat estimates rho, continuous mean/variance, and
-  thresholds jointly; magmaan's first mixed SEM path keeps lavaan-style shared
-  marginals and robustifies only the polyserial association.
+- [x] **S/M.** Keep the terminology clean: DPD means density power divergence
+  and is independent of robcat; robcat parity applies to the h-score/WMA
+  C-estimators only. Current package names follow this split (`*_dpd` versus
+  `*_h_weighted`), and the mixed DPD/h paths are documented separately.
+- [x] **M.** Make the fixed-marginal-vs-full polyserial DPD question visible
+  in simulation checks. The local `checks/robust_polychoric` driver now runs a
+  pair-level contaminated polyserial experiment comparing ML, magmaan's
+  fixed-marginal DPD rho, and a local full DPD prototype that jointly optimizes
+  continuous mean/scale, thresholds, and rho. On the current quick run, full
+  DPD worked and improved average `|rho - rho_true|` relative to the
+  fixed-marginal path, but it is not promoted to the package API yet.
+- [x] **M.** Correct the mixed DPD/h polyserial Gamma approximation. The mixed
+  NACOV path now uses the robust scalar estimating equation, numeric sandwich
+  bread for rho, and numeric threshold cross-bread instead of the ML
+  information-identity shortcut. The local Gamma simulations cover the
+  non-robcat DPD and fixed-reference h-weighted mixed paths.
+- [ ] **M/L.** Decide whether to promote a full polyserial DPD estimator to the
+  package API or keep it as a simulation-only comparator. A package version
+  should use a real optimizer and expose diagnostics before replacing the
+  current SEM-oriented fixed-marginal path.
 - [ ] **M/L.** Decide whether the fixed-marginal fixed-reference h-weighted
   polyserial prototype is useful enough to keep as an exposed robustness
   option. It is a density-ratio casewise h-weighting analogue for mixed pairs,

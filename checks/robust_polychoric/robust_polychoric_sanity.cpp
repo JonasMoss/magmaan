@@ -15,6 +15,7 @@
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
 
+#include "magmaan/data/pairwise_mixed.hpp"
 #include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -47,6 +48,16 @@ struct CompareSummary {
   double      diag_median = std::numeric_limits<double>::quiet_NaN();
   double      diag_max = std::numeric_limits<double>::quiet_NaN();
   double      max_abs_corr_diff = std::numeric_limits<double>::quiet_NaN();
+};
+
+struct PolyserialFullSummary {
+  int requested = 0;
+  int used = 0;
+  int failed = 0;
+  double ml_abs_error = 0.0;
+  double fixed_dpd_abs_error = 0.0;
+  double full_dpd_abs_error = 0.0;
+  double fixed_full_abs_diff = 0.0;
 };
 
 Config parse_args(int argc, char** argv) {
@@ -98,6 +109,56 @@ int ordinal_level(double z, const Eigen::VectorXd& thresholds) {
     if (z <= thresholds(k)) return static_cast<int>(k) + 1;
   }
   return static_cast<int>(thresholds.size()) + 1;
+}
+
+double normal_cdf(double x) noexcept {
+  return 0.5 * std::erfc(-x / std::sqrt(2.0));
+}
+
+double normal_pdf(double x) noexcept {
+  constexpr double inv_sqrt_2pi = 0.39894228040143267794;
+  return inv_sqrt_2pi * std::exp(-0.5 * x * x);
+}
+
+double normal_quantile(double p) noexcept {
+  constexpr double a1 = -3.969683028665376e+01;
+  constexpr double a2 =  2.209460984245205e+02;
+  constexpr double a3 = -2.759285104469687e+02;
+  constexpr double a4 =  1.383577518672690e+02;
+  constexpr double a5 = -3.066479806614716e+01;
+  constexpr double a6 =  2.506628277459239e+00;
+  constexpr double b1 = -5.447609879822406e+01;
+  constexpr double b2 =  1.615858368580409e+02;
+  constexpr double b3 = -1.556989798598866e+02;
+  constexpr double b4 =  6.680131188771972e+01;
+  constexpr double b5 = -1.328068155288572e+01;
+  constexpr double c1 = -7.784894002430293e-03;
+  constexpr double c2 = -3.223964580411365e-01;
+  constexpr double c3 = -2.400758277161838e+00;
+  constexpr double c4 = -2.549732539343734e+00;
+  constexpr double c5 =  4.374664141464968e+00;
+  constexpr double c6 =  2.938163982698783e+00;
+  constexpr double d1 =  7.784695709041462e-03;
+  constexpr double d2 =  3.224671290700398e-01;
+  constexpr double d3 =  2.445134137142996e+00;
+  constexpr double d4 =  3.754408661907416e+00;
+  constexpr double plow = 0.02425;
+  constexpr double phigh = 1.0 - plow;
+  p = std::clamp(p, 1e-12, 1.0 - 1e-12);
+  if (p < plow) {
+    const double q = std::sqrt(-2.0 * std::log(p));
+    return (((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
+           ((((d1 * q + d2) * q + d3) * q + d4) * q + 1.0);
+  }
+  if (p > phigh) {
+    const double q = std::sqrt(-2.0 * std::log(1.0 - p));
+    return -(((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6) /
+            ((((d1 * q + d2) * q + d3) * q + d4) * q + 1.0);
+  }
+  const double q = p - 0.5;
+  const double r = q * q;
+  return (((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q /
+         (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1.0);
 }
 
 Eigen::MatrixXd covariance_sqrt_n(const std::vector<Eigen::VectorXd>& values,
@@ -185,6 +246,16 @@ void print_summary(const CompareSummary& s) {
             << " diag[min/med/max]=" << std::setprecision(3)
             << s.diag_min << "/" << s.diag_median << "/" << s.diag_max
             << " max|corr diff|=" << s.max_abs_corr_diff << "\n";
+}
+
+void print_summary(const PolyserialFullSummary& s) {
+  std::cout << std::left << std::setw(31) << "polyserial DPD fixed/full"
+            << " used=" << std::setw(4) << s.used
+            << " fail=" << std::setw(3) << s.failed
+            << " |rho-true| ml/fixed/full=" << std::setprecision(3)
+            << s.ml_abs_error << "/" << s.fixed_dpd_abs_error << "/"
+            << s.full_dpd_abs_error
+            << " fixed-full=" << s.fixed_full_abs_diff << "\n";
 }
 
 PairwiseOrdinalHWeightedStatsOptions robust_options() {
@@ -362,6 +433,234 @@ Eigen::MatrixXd simulate_hs_mixed(int n, double contam, std::mt19937_64& rng) {
     }
   }
   return X;
+}
+
+double polyserial_prob(int cat, double u, double rho, const Eigen::VectorXd& th) {
+  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
+  const double lo = cat == 0 ? -std::numeric_limits<double>::infinity()
+                             : th(cat - 1);
+  const double hi = cat == th.size() ? std::numeric_limits<double>::infinity()
+                                     : th(cat);
+  const double plo = std::isinf(lo) && lo < 0.0 ? 0.0
+      : normal_cdf((lo - rho * u) / sd);
+  const double phi = std::isinf(hi) && hi > 0.0 ? 1.0
+      : normal_cdf((hi - rho * u) / sd);
+  return std::max(1e-12, phi - plo);
+}
+
+double polyserial_power_sum(double u, double rho, const Eigen::VectorXd& th,
+                            double power) {
+  double out = 0.0;
+  for (Eigen::Index c = 0; c < th.size() + 1; ++c) {
+    out += std::pow(polyserial_prob(static_cast<int>(c), u, rho, th), power);
+  }
+  return out;
+}
+
+double polyserial_dpd_integral(double rho, const Eigen::VectorXd& th,
+                               double alpha, double sigma) {
+  constexpr int n_grid = 220;
+  constexpr double lo = -8.0;
+  constexpr double hi = 8.0;
+  constexpr double step = (hi - lo) / static_cast<double>(n_grid);
+  const double power = 1.0 + alpha;
+  double sum = 0.0;
+  for (int g = 0; g <= n_grid; ++g) {
+    const double u = lo + step * static_cast<double>(g);
+    const double fx = std::pow(normal_pdf(u), power) *
+        polyserial_power_sum(u, rho, th, power);
+    const double w = (g == 0 || g == n_grid) ? 1.0 : (g % 2 == 0 ? 2.0 : 4.0);
+    sum += w * fx;
+  }
+  return std::pow(sigma, -alpha) * (step / 3.0) * sum;
+}
+
+Eigen::VectorXd threshold_starts(const Eigen::VectorXi& cat) {
+  const int levels = cat.maxCoeff() + 1;
+  Eigen::VectorXd th(levels - 1);
+  for (int k = 0; k < levels - 1; ++k) {
+    int count = 0;
+    for (Eigen::Index r = 0; r < cat.size(); ++r) {
+      if (cat(r) <= k) ++count;
+    }
+    th(k) = normal_quantile(static_cast<double>(count) /
+                            static_cast<double>(cat.size()));
+  }
+  return th;
+}
+
+struct LocalFullDpdFit {
+  double rho = 0.0;
+  double mu = 0.0;
+  double sigma = 1.0;
+  Eigen::VectorXd thresholds;
+  double objective = std::numeric_limits<double>::quiet_NaN();
+  bool converged = false;
+};
+
+double decode_rho(double z) {
+  return 1.998 / (1.0 + std::exp(-z)) - 0.999;
+}
+
+double encode_rho(double rho) {
+  const double p = std::clamp((rho + 0.999) / 1.998, 1e-8, 1.0 - 1e-8);
+  return std::log(p / (1.0 - p));
+}
+
+Eigen::VectorXd decode_full_polyserial(const Eigen::VectorXd& x,
+                                       double& mu,
+                                       double& sigma,
+                                       double& rho) {
+  mu = x(0);
+  sigma = std::exp(x(1));
+  Eigen::VectorXd th(2);
+  th(0) = x(2);
+  th(1) = x(2) + 1e-4 + std::exp(x(3));
+  rho = decode_rho(x(4));
+  return th;
+}
+
+double full_polyserial_dpd_objective(const Eigen::VectorXi& cat,
+                                     const Eigen::VectorXd& xobs,
+                                     const Eigen::VectorXd& x,
+                                     double alpha) {
+  double mu = 0.0;
+  double sigma = 1.0;
+  double rho = 0.0;
+  const Eigen::VectorXd th = decode_full_polyserial(x, mu, sigma, rho);
+  if (!(sigma > 0.0) || !std::isfinite(sigma)) return 1e100;
+  const double integral = polyserial_dpd_integral(rho, th, alpha, sigma);
+  double observed = 0.0;
+  for (Eigen::Index r = 0; r < cat.size(); ++r) {
+    const double u = (xobs(r) - mu) / sigma;
+    const double joint = std::max(
+        1e-12, (normal_pdf(u) / sigma) *
+                   polyserial_prob(cat(r), u, rho, th));
+    observed += std::pow(joint, alpha);
+  }
+  return integral -
+         ((1.0 + 1.0 / alpha) / static_cast<double>(cat.size())) * observed +
+         1.0 / alpha;
+}
+
+LocalFullDpdFit fit_full_polyserial_dpd(const Eigen::VectorXi& cat,
+                                        const Eigen::VectorXd& xobs,
+                                        double fixed_rho,
+                                        const Eigen::VectorXd& fixed_th) {
+  constexpr double alpha = 0.5;
+  LocalFullDpdFit out;
+  const double mu0 = xobs.mean();
+  double var0 = 0.0;
+  for (Eigen::Index r = 0; r < xobs.size(); ++r) {
+    const double d = xobs(r) - mu0;
+    var0 += d * d;
+  }
+  const double sigma0 = std::sqrt(var0 / static_cast<double>(xobs.size()));
+  Eigen::VectorXd x(5);
+  x(0) = mu0;
+  x(1) = std::log(std::max(1e-6, sigma0));
+  x(2) = fixed_th(0);
+  x(3) = std::log(std::max(1e-4, fixed_th(1) - fixed_th(0) - 1e-4));
+  x(4) = encode_rho(fixed_rho);
+  double f = full_polyserial_dpd_objective(cat, xobs, x, alpha);
+  for (int iter = 0; iter < 90; ++iter) {
+    Eigen::VectorXd grad(x.size());
+    for (Eigen::Index k = 0; k < x.size(); ++k) {
+      const double h = 2e-5 * std::max(1.0, std::abs(x(k)));
+      Eigen::VectorXd xp = x;
+      Eigen::VectorXd xm = x;
+      xp(k) += h;
+      xm(k) -= h;
+      grad(k) = (full_polyserial_dpd_objective(cat, xobs, xp, alpha) -
+                 full_polyserial_dpd_objective(cat, xobs, xm, alpha)) /
+                (2.0 * h);
+    }
+    if (!grad.allFinite()) break;
+    if (grad.lpNorm<Eigen::Infinity>() < 2e-5) {
+      out.converged = true;
+      break;
+    }
+    const double grad_sq = grad.squaredNorm();
+    bool accepted = false;
+    double step = 0.4;
+    for (int ls = 0; ls < 28; ++ls) {
+      const Eigen::VectorXd cand = x - step * grad;
+      const double fc = full_polyserial_dpd_objective(cat, xobs, cand, alpha);
+      if (std::isfinite(fc) && fc < f - 1e-4 * step * grad_sq) {
+        x = cand;
+        f = fc;
+        accepted = true;
+        break;
+      }
+      step *= 0.5;
+    }
+    if (!accepted) break;
+  }
+  out.thresholds = decode_full_polyserial(x, out.mu, out.sigma, out.rho);
+  out.objective = f;
+  return out;
+}
+
+PolyserialFullSummary run_polyserial_full_check(const Config& cfg,
+                                                std::mt19937_64& rng) {
+  const int reps = std::max(1, std::min(cfg.mixed_reps, 18));
+  constexpr double rho_true = 0.60;
+  constexpr double alpha = 0.5;
+  Eigen::VectorXd th_true(2);
+  th_true << -0.45, 0.65;
+  std::normal_distribution<double> norm(0.0, 1.0);
+  PolyserialFullSummary s;
+  s.requested = reps;
+  for (int rep = 0; rep < reps; ++rep) {
+    Eigen::VectorXi cat(cfg.n);
+    Eigen::VectorXd x(cfg.n);
+    const double sd = std::sqrt(1.0 - rho_true * rho_true);
+    for (Eigen::Index r = 0; r < cfg.n; ++r) {
+      const double u = norm(rng);
+      const double y = rho_true * u + sd * norm(rng);
+      x(r) = u;
+      cat(r) = ordinal_level(y, th_true) - 1;
+    }
+    for (Eigen::Index r = cfg.n - cfg.n / 25; r < cfg.n; ++r) {
+      x(r) = 5.5 + 0.01 * static_cast<double>(r - (cfg.n - cfg.n / 25));
+      cat(r) = 0;
+    }
+
+    const double mu = x.mean();
+    double var = 0.0;
+    for (Eigen::Index r = 0; r < x.size(); ++r) {
+      const double d = x(r) - mu;
+      var += d * d;
+    }
+    var /= static_cast<double>(x.size());
+    const Eigen::VectorXd u = (x.array() - mu) / std::sqrt(var);
+    const Eigen::VectorXd th = threshold_starts(cat);
+    auto ml = magmaan::data::fit_polyserial_pair_rho_ml(cat, u, th);
+    auto fixed = magmaan::data::fit_polyserial_pair_rho_dpd(
+        cat, u, th, magmaan::data::PolyserialPairDpdOptions{.alpha = alpha});
+    if (!ml.has_value() || !fixed.has_value()) {
+      ++s.failed;
+      continue;
+    }
+    const auto full = fit_full_polyserial_dpd(cat, x, fixed->rho, th);
+    if (!std::isfinite(full.rho)) {
+      ++s.failed;
+      continue;
+    }
+    ++s.used;
+    s.ml_abs_error += std::abs(ml->rho - rho_true);
+    s.fixed_dpd_abs_error += std::abs(fixed->rho - rho_true);
+    s.full_dpd_abs_error += std::abs(full.rho - rho_true);
+    s.fixed_full_abs_diff += std::abs(fixed->rho - full.rho);
+  }
+  if (s.used > 0) {
+    const double inv = 1.0 / static_cast<double>(s.used);
+    s.ml_abs_error *= inv;
+    s.fixed_dpd_abs_error *= inv;
+    s.full_dpd_abs_error *= inv;
+    s.fixed_full_abs_diff *= inv;
+  }
+  return s;
 }
 
 Eigen::VectorXd ordinal_moment_vector(const magmaan::data::OrdinalStats& stats) {
@@ -560,11 +859,14 @@ int main(int argc, char** argv) {
   print_summary(run_matrix_check(cfg, rng));
   print_summary(run_mixed_check(cfg, rng));
   print_summary(run_mixed_h_weighted_check(cfg, rng));
+  print_summary(run_polyserial_full_check(cfg, rng));
   print_summary(run_sem_check(cfg, rng));
 
   std::cout << "\nInterpretation: diag ratios near 1 and modest relative "
                "Frobenius error are the desired Monte Carlo pattern. "
                "The HS checks are contaminated simulations and the mixed "
-               "paths use fixed-marginal DPD or h-weighted polyserial pairs.\n";
+               "paths use fixed-marginal DPD or h-weighted polyserial pairs. "
+               "The full DPD polyserial line is a local comparator, not a "
+               "package API.\n";
   return 0;
 }
