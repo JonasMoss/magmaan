@@ -262,12 +262,17 @@ golden `parTable()` fixtures.
   attenuates observations by joint-density `p(x, y)^alpha`, and a separate
   mixed sample-stat builder can swap DPD polyserial pairs into
   `MixedOrdinalStats` without changing the default ML/lavaan-compatible path.
+  DPD here means density power divergence and is not part of robcat parity.
 - Experimental fixed-marginal fixed-reference density-ratio h-weighted
   polyserial rho fitting is available for mixed continuous/ordinal robustness
   checks. It uses the same lavaan-style marginal estimates, delegates ML-like
   h-scores to the ML rho kernel, attenuates low joint-density observations
   using the rho=0 fixed-reference joint density and the shared h-score family,
   and is exposed through a separate mixed sample-stat builder.
+- Mixed DPD and h-weighted polyserial NACOV construction uses the corresponding
+  scalar robust estimating equation with numeric sandwich bread for rho and
+  numeric threshold cross-bread. This avoids applying the ML information
+  identity to non-ML robust estimators.
 - Public complete-data mixed pair helpers also expose continuous-continuous
   normal pair likelihood/diagnostics, casewise mean/variance/covariance scores,
   score Gamma, and labels for the exact threshold, negative-mean, variance,
@@ -416,7 +421,10 @@ developer step.
 - Mixed categorical NACOV/weight, fit, and robust-reporting parity is
   intentionally looser than the all-ordinal path, but pairwise polyserial,
   fixed-marginal DPD and h-weighted polyserial, and continuous-normal
-  score/Gamma primitives are exposed for follow-on inference work.
+  score/Gamma primitives are exposed for follow-on inference work. Local
+  simulation checks compare the mixed robust Gamma paths against empirical
+  moment covariance and include a package-external full polyserial DPD
+  prototype for fixed-marginal/full-estimator comparisons.
 - Observed-pair ordinal table kernels are pair-level primitives only. Missing
   ordinal SEM estimation is limited to the explicit pairwise observed-data
   composite prototype; shared-threshold multivariate missing ordinal modeling
