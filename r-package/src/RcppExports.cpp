@@ -211,6 +211,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// data_mixed_ordinal_stats_huber_residual_from_raw_impl
+Rcpp::List data_mixed_ordinal_stats_huber_residual_from_raw_impl(SEXP X, SEXP ordered_mask, std::string clip, double k);
+RcppExport SEXP _magmaan_data_mixed_ordinal_stats_huber_residual_from_raw_impl(SEXP XSEXP, SEXP ordered_maskSEXP, SEXP clipSEXP, SEXP kSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type ordered_mask(ordered_maskSEXP);
+    Rcpp::traits::input_parameter< std::string >::type clip(clipSEXP);
+    Rcpp::traits::input_parameter< double >::type k(kSEXP);
+    rcpp_result_gen = Rcpp::wrap(data_mixed_ordinal_stats_huber_residual_from_raw_impl(X, ordered_mask, clip, k));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_dwls_ordinal_impl
 Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
 RcppExport SEXP _magmaan_fit_dwls_ordinal_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
@@ -935,6 +949,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_data_ordinal_stats_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_dpd_from_raw_impl, 2},
     {"_magmaan_data_mixed_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_from_raw_impl, 2},
     {"_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl, 3},
+    {"_magmaan_data_mixed_ordinal_stats_huber_residual_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_huber_residual_from_raw_impl, 4},
     {"_magmaan_fit_dwls_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_ordinal_impl, 4},
     {"_magmaan_fit_wls_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_ordinal_impl, 4},
     {"_magmaan_fit_dwls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_mixed_ordinal_impl, 4},

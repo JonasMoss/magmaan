@@ -2170,6 +2170,108 @@ TEST_CASE("Mixed ordinal polyserial DPD keeps shared marginals and fits DWLS") {
   CHECK(std::isfinite(fit->fmin));
 }
 
+TEST_CASE("Huber residual clipping API covers hard, smooth, Tukey, and no-clip") {
+  using magmaan::data::HuberResidualClipKind;
+  using magmaan::data::HuberResidualClipOptions;
+
+  auto none = magmaan::data::eval_huber_residual_clip(
+      2.0, HuberResidualClipOptions{.kind = HuberResidualClipKind::None});
+  REQUIRE(none.has_value());
+  CHECK(none->psi == doctest::Approx(2.0));
+  CHECK(none->dpsi == doctest::Approx(1.0));
+
+  auto hard = magmaan::data::eval_huber_residual_clip(
+      2.0, HuberResidualClipOptions{
+               .kind = HuberResidualClipKind::HardHuber, .k = 1.25});
+  REQUIRE(hard.has_value());
+  CHECK(hard->psi == doctest::Approx(1.25));
+  CHECK(hard->dpsi == doctest::Approx(0.0));
+  CHECK(hard->weight == doctest::Approx(0.625));
+
+  auto pseudo = magmaan::data::eval_huber_residual_clip(
+      2.0, HuberResidualClipOptions{
+               .kind = HuberResidualClipKind::PseudoHuber, .k = 1.0});
+  REQUIRE(pseudo.has_value());
+  CHECK(pseudo->psi == doctest::Approx(2.0 / std::sqrt(5.0)));
+  CHECK(pseudo->dpsi == doctest::Approx(1.0 / (std::sqrt(5.0) * 5.0)));
+
+  auto tukey = magmaan::data::eval_huber_residual_clip(
+      2.0, HuberResidualClipOptions{
+               .kind = HuberResidualClipKind::TukeyBiweight, .k = 1.5});
+  REQUIRE(tukey.has_value());
+  CHECK(tukey->psi == doctest::Approx(0.0));
+  CHECK(tukey->dpsi == doctest::Approx(0.0));
+}
+
+TEST_CASE("Mixed ordinal Huber residual stats rebuild Gamma and preserve continuous moments") {
+  std::mt19937 rng(20260518);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(420, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta > -0.55) + (eta > 0.55);
+    X(i, 1) = 1.0 + (0.7 * eta + 0.72 * norm(rng) > 0.0);
+    X(i, 2) = 0.8 * eta + 0.6 * norm(rng);
+    X(i, 3) = 0.6 * eta + 0.8 * norm(rng);
+  }
+  for (Eigen::Index i = 0; i < 20; ++i) {
+    X(i, 0) = 1.0;
+    X(i, 1) = 2.0;
+    X(i, 2) = 6.0 + 0.01 * static_cast<double>(i);
+  }
+  std::vector<std::vector<std::int32_t>> ordered = {{1, 1, 0, 0}};
+
+  auto base = magmaan::data::mixed_ordinal_stats_from_data({X}, ordered);
+  auto none = magmaan::data::mixed_ordinal_stats_huber_residual_from_data(
+      {X}, ordered,
+      magmaan::data::MixedOrdinalHuberResidualOptions{
+          .clip = magmaan::data::HuberResidualClipOptions{
+              .kind = magmaan::data::HuberResidualClipKind::None},
+          .correlation_repair = {}});
+  auto robust = magmaan::data::mixed_ordinal_stats_huber_residual_from_data(
+      {X}, ordered,
+      magmaan::data::MixedOrdinalHuberResidualOptions{
+          .clip = magmaan::data::HuberResidualClipOptions{
+              .kind = magmaan::data::HuberResidualClipKind::HardHuber,
+              .k = 1.345},
+          .correlation_repair = {}});
+  REQUIRE(base.has_value());
+  REQUIRE(none.has_value());
+  REQUIRE(robust.has_value());
+
+  CHECK(none->stats.mean[0].isApprox(base->mean[0], 0.0));
+  CHECK(robust->stats.mean[0].isApprox(base->mean[0], 0.0));
+  CHECK(robust->stats.R[0](2, 2) == doctest::Approx(base->R[0](2, 2)));
+  CHECK(robust->stats.R[0](3, 3) == doctest::Approx(base->R[0](3, 3)));
+  CHECK(std::abs(robust->stats.R[0](2, 0) - base->R[0](2, 0)) > 1e-5);
+  CHECK(robust->stats.NACOV[0].isApprox(
+      (robust->block_diagnostics[0].moment_influence.transpose() *
+       robust->block_diagnostics[0].moment_influence) /
+          static_cast<double>(robust->stats.n_obs[0]),
+      1e-12));
+  CHECK(robust->stats.W_dwls[0].diagonal().minCoeff() > 0.0);
+  CHECK(robust->block_diagnostics[0].robust_pairs.size() == 5);
+  CHECK(robust->block_diagnostics[0].rho.size() == 5);
+
+  magmaan::spec::LavaanifyOptions opts;
+  opts.meanstructure = true;
+  auto fp = magmaan::parse::Parser::parse(
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto fit = magmaan::test::fit_mixed_ordinal_bounded(
+      *pt, *mr, robust->stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(fit.has_value());
+  CHECK(fit->theta.allFinite());
+}
+
 TEST_CASE("Mixed ordinal validation rejects malformed stats before fitting") {
   std::mt19937 rng(20240516);
   std::normal_distribution<double> norm(0.0, 1.0);

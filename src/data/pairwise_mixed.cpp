@@ -64,6 +64,24 @@ validate_polyserial_inputs(const Eigen::Ref<const Eigen::VectorXi>& categories,
 }
 
 post_expected<void>
+validate_huber_clip_options(HuberResidualClipOptions options,
+                            std::string_view caller) {
+  if (!std::isfinite(options.k) || options.k <= 0.0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(caller) + ": clipping constant must be finite and positive"));
+  }
+  switch (options.kind) {
+    case HuberResidualClipKind::None:
+    case HuberResidualClipKind::HardHuber:
+    case HuberResidualClipKind::PseudoHuber:
+    case HuberResidualClipKind::TukeyBiweight:
+      return {};
+  }
+  return std::unexpected(make_err(PostError::Kind::NumericIssue,
+      std::string(caller) + ": unknown clip kind"));
+}
+
+post_expected<void>
 validate_continuous_pair_inputs(const Eigen::Ref<const Eigen::VectorXd>& x_i,
                                 const Eigen::Ref<const Eigen::VectorXd>& x_j,
                                 std::string_view caller) {
@@ -478,6 +496,64 @@ Eigen::MatrixXd score_gamma(const Eigen::MatrixXd& scores) {
 }
 
 }  // namespace
+
+post_expected<HuberResidualClipEval>
+eval_huber_residual_clip(double r, HuberResidualClipOptions options) {
+  if (!std::isfinite(r)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "eval_huber_residual_clip: residual must be finite"));
+  }
+  auto ok = validate_huber_clip_options(options, "eval_huber_residual_clip");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+
+  const double ar = std::abs(r);
+  const double k = options.k;
+  HuberResidualClipEval out;
+  switch (options.kind) {
+    case HuberResidualClipKind::None:
+      out.psi = r;
+      out.dpsi = 1.0;
+      out.loss = 0.5 * r * r;
+      break;
+    case HuberResidualClipKind::HardHuber:
+      if (ar < k) {
+        out.psi = r;
+        out.dpsi = 1.0;
+        out.loss = 0.5 * r * r;
+      } else {
+        out.psi = std::copysign(k, r);
+        out.dpsi = 0.0;
+        out.loss = k * (ar - 0.5 * k);
+      }
+      break;
+    case HuberResidualClipKind::PseudoHuber: {
+      const double z = r / k;
+      const double root = std::sqrt(1.0 + z * z);
+      out.psi = r / root;
+      out.dpsi = 1.0 / (root * root * root);
+      out.loss = k * k * (root - 1.0);
+      break;
+    }
+    case HuberResidualClipKind::TukeyBiweight:
+      if (ar < k) {
+        const double z = r / k;
+        const double q = z * z;
+        const double one_minus = 1.0 - q;
+        out.psi = r * one_minus * one_minus;
+        out.dpsi = one_minus * (1.0 - 5.0 * q);
+        out.loss = (k * k / 6.0) *
+                   (1.0 - one_minus * one_minus * one_minus);
+      } else {
+        out.psi = 0.0;
+        out.dpsi = 0.0;
+        out.loss = k * k / 6.0;
+      }
+      break;
+  }
+  out.weight = (ar > 1e-12) ? out.psi / r : out.dpsi;
+  if (!std::isfinite(out.weight)) out.weight = 0.0;
+  return out;
+}
 
 post_expected<std::vector<MixedPairLabel>>
 mixed_pair_labels(const std::vector<std::int32_t>& ordered,

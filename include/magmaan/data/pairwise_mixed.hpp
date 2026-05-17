@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 #include <Eigen/Core>
@@ -8,6 +9,28 @@
 #include "magmaan/expected.hpp"
 
 namespace magmaan::data {
+
+enum class HuberResidualClipKind {
+  None,
+  HardHuber,
+  PseudoHuber,
+  TukeyBiweight,
+};
+
+struct HuberResidualClipOptions {
+  HuberResidualClipKind kind = HuberResidualClipKind::HardHuber;
+  double k = 1.345;
+};
+
+struct HuberResidualClipEval {
+  double psi = 0.0;
+  double dpsi = 0.0;
+  double loss = 0.0;
+  double weight = 1.0;
+};
+
+post_expected<HuberResidualClipEval>
+eval_huber_residual_clip(double r, HuberResidualClipOptions options = {});
 
 struct PolyserialPairMlOptions {
   double rho_lower = -0.999;
@@ -29,6 +52,14 @@ struct PolyserialPairDpdOptions {
   int    max_iter = 72;
   double alpha = 0.3;
   double fd_step = 1e-5;
+};
+
+struct PolyserialPairHuberResidualOptions {
+  double rho_lower = -0.999;
+  double rho_upper = 0.999;
+  int    max_iter = 72;
+  double fd_step = 1e-5;
+  HuberResidualClipOptions clip;
 };
 
 struct PolyserialPairDpdResult {

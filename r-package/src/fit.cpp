@@ -325,6 +325,24 @@ polyserial_dpd_options_from(double alpha) {
   return options;
 }
 
+magmaan::data::MixedOrdinalHuberResidualOptions
+huber_residual_options_from(std::string clip, double k) {
+  magmaan::data::MixedOrdinalHuberResidualOptions options;
+  if (clip == "none") {
+    options.clip.kind = magmaan::data::HuberResidualClipKind::None;
+  } else if (clip == "hard_huber") {
+    options.clip.kind = magmaan::data::HuberResidualClipKind::HardHuber;
+  } else if (clip == "pseudo_huber") {
+    options.clip.kind = magmaan::data::HuberResidualClipKind::PseudoHuber;
+  } else if (clip == "tukey_biweight") {
+    options.clip.kind = magmaan::data::HuberResidualClipKind::TukeyBiweight;
+  } else {
+    Rcpp::stop("magmaan: unknown Huber residual clip kind '%s'", clip);
+  }
+  options.clip.k = k;
+  return options;
+}
+
 Rcpp::List pairwise_ordinal_diagnostics_to_r(
     const std::vector<magmaan::data::PairwiseOrdinalBlockDiagnostics>& d) {
   Rcpp::List out(static_cast<R_xlen_t>(d.size()));
@@ -372,6 +390,44 @@ Rcpp::List mixed_polyserial_dpd_diagnostics_to_r(
         Rcpp::_["objective"] = objective,
         Rcpp::_["moment_influence"] = Rcpp::wrap(block.moment_influence),
         Rcpp::_["gamma"] = Rcpp::wrap(block.gamma));
+  }
+  return out;
+}
+
+Rcpp::List mixed_huber_residual_diagnostics_to_r(
+    const std::vector<magmaan::data::MixedOrdinalHuberResidualBlockDiagnostics>& d) {
+  Rcpp::List out(static_cast<R_xlen_t>(d.size()));
+  for (std::size_t b = 0; b < d.size(); ++b) {
+    const auto& block = d[b];
+    const R_xlen_t n = static_cast<R_xlen_t>(block.robust_pairs.size());
+    Rcpp::IntegerVector i(n), j(n), moment_index(n);
+    Rcpp::CharacterVector kind(n);
+    for (R_xlen_t r = 0; r < n; ++r) {
+      const auto& pair = block.robust_pairs[static_cast<std::size_t>(r)];
+      i[r] = pair.i + 1;
+      j[r] = pair.j + 1;
+      moment_index[r] = pair.moment_index + 1;
+      kind[r] = pair.kind == magmaan::data::MixedPairKind::ordinal_ordinal
+          ? "ordinal_ordinal"
+          : (pair.kind == magmaan::data::MixedPairKind::continuous_ordinal
+                 ? "continuous_ordinal"
+                 : "continuous_continuous");
+    }
+    Rcpp::DataFrame pairs = Rcpp::DataFrame::create(
+        Rcpp::_["i"] = i,
+        Rcpp::_["j"] = j,
+        Rcpp::_["moment_index"] = moment_index,
+        Rcpp::_["kind"] = kind,
+        Rcpp::_["stringsAsFactors"] = false);
+    out[static_cast<R_xlen_t>(b)] = Rcpp::List::create(
+        Rcpp::_["pairs"] = pairs,
+        Rcpp::_["rho"] = Rcpp::wrap(block.rho),
+        Rcpp::_["objective"] = Rcpp::wrap(block.objective),
+        Rcpp::_["moment_influence"] = Rcpp::wrap(block.moment_influence),
+        Rcpp::_["gamma"] = Rcpp::wrap(block.gamma),
+        Rcpp::_["min_eigen_r"] = block.min_eigen_r,
+        Rcpp::_["raw_min_eigen_r"] = block.raw_min_eigen_r,
+        Rcpp::_["r_repair_applied"] = block.r_repair_applied);
   }
   return out;
 }
@@ -864,6 +920,46 @@ Rcpp::List data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl(
   out["robust_method"] = "polyserial_dpd";
   out["alpha"] = alpha;
   out["diagnostics"] = mixed_polyserial_dpd_diagnostics_to_r(
+      out_or->block_diagnostics);
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List data_mixed_ordinal_stats_huber_residual_from_raw_impl(
+    SEXP X, SEXP ordered_mask, std::string clip = "hard_huber",
+    double k = 1.345) {
+  auto blocks = matrix_blocks_from_arg(X);
+  std::vector<std::vector<std::int32_t>> ordered;
+  ordered.reserve(blocks.size());
+  if (Rf_isMatrix(ordered_mask)) {
+    Rcpp::IntegerMatrix M(ordered_mask);
+    if (blocks.size() != 1)
+      Rcpp::stop("magmaan: ordered_mask must be a list for multi-group data");
+    std::vector<std::int32_t> row(static_cast<std::size_t>(M.ncol()));
+    for (R_xlen_t j = 0; j < M.ncol(); ++j) row[static_cast<std::size_t>(j)] = M(0, j);
+    ordered.push_back(std::move(row));
+  } else if (TYPEOF(ordered_mask) == VECSXP) {
+    Rcpp::List L(ordered_mask);
+    if (static_cast<std::size_t>(L.size()) != blocks.size())
+      Rcpp::stop("magmaan: ordered_mask block count does not match X");
+    for (R_xlen_t b = 0; b < L.size(); ++b) {
+      Rcpp::IntegerVector v(L[b]);
+      ordered.push_back(Rcpp::as<std::vector<std::int32_t>>(v));
+    }
+  } else {
+    Rcpp::IntegerVector v(ordered_mask);
+    if (blocks.size() != 1)
+      Rcpp::stop("magmaan: ordered_mask must be a list for multi-group data");
+    ordered.push_back(Rcpp::as<std::vector<std::int32_t>>(v));
+  }
+  auto out_or = magmaan::data::mixed_ordinal_stats_huber_residual_from_data(
+      blocks, ordered, huber_residual_options_from(clip, k));
+  if (!out_or.has_value()) stop_post(out_or.error());
+  Rcpp::List out = mixed_ordinal_stats_to_r(out_or->stats);
+  out["robust_method"] = "huber_residual";
+  out["clip"] = clip;
+  out["k"] = k;
+  out["diagnostics"] = mixed_huber_residual_diagnostics_to_r(
       out_or->block_diagnostics);
   return out;
 }

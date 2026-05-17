@@ -236,6 +236,18 @@ Remaining work, in suggested order:
   residual is Pearson, probability-scale, or score-scale; specify the tuning
   constant, ML limit, smoothness/derivative convention, objective, estimating
   equations, and how casewise influence/Gamma and robust-R repair are rebuilt.
+- **M/L.** Finish the mixed ordinal Huberized Pearson-residual implementation
+  checklist:
+  - [x] Add hard Huber, pseudo-Huber, Tukey biweight, and no-clip residual
+    clipping options.
+  - [x] Add experimental C++/R access for mixed ordinal Huberized residual
+    stats.
+  - [x] Rebuild mixed moment influence, Gamma/NACOV, and DWLS/WLS weights while
+    keeping continuous-only moments ordinary.
+  - [ ] Tighten the shared bread/influence derivation for thresholds when only
+    polyserial links carry ordinal information.
+  - [ ] Add broader Monte Carlo checks for Gamma conditioning and weight
+    stability under sparse ordinal categories and contaminated polyserial tails.
 - **M.** Add Huberized-residual simulation checks against the existing
   h-weighted and DPD all-ordinal SEM paths: clean ML limit, sparse-cell
   behavior, contaminated-cell downweighting, positive DWLS diagonals, and stable

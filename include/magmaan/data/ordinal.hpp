@@ -59,6 +59,50 @@ struct MixedOrdinalPolyserialDpdStats {
   std::vector<MixedOrdinalPolyserialDpdBlockDiagnostics> block_diagnostics;
 };
 
+enum class MixedOrdinalCorrelationRepairKind {
+  None,
+  Error,
+  Ridge,
+  Shrinkage,
+};
+
+struct MixedOrdinalCorrelationRepairOptions {
+  MixedOrdinalCorrelationRepairKind kind =
+      MixedOrdinalCorrelationRepairKind::None;
+  double min_eigenvalue = 1e-8;
+};
+
+struct MixedOrdinalHuberResidualOptions {
+  double rho_lower = -0.999;
+  double rho_upper = 0.999;
+  int    max_iter = 90;
+  double ftol = 1e-10;
+  double gtol = 2e-5;
+  double fd_step = 1e-5;
+  double min_threshold_spacing = 1e-6;
+  bool   lavaan_adjust_2x2 = true;
+  HuberResidualClipOptions clip;
+  MixedOrdinalCorrelationRepairOptions correlation_repair;
+};
+
+struct MixedOrdinalHuberResidualBlockDiagnostics {
+  std::vector<MixedPairLabel> robust_pairs;
+  Eigen::VectorXd rho;
+  Eigen::VectorXd objective;
+  Eigen::MatrixXd moment_influence;
+  Eigen::MatrixXd gamma;
+  double min_eigen_r = 0.0;
+  double raw_min_eigen_r = 0.0;
+  bool   r_repair_applied = false;
+  double r_ridge = 0.0;
+  double r_shrinkage_intensity = 0.0;
+};
+
+struct MixedOrdinalHuberResidualStats {
+  MixedOrdinalStats stats;
+  std::vector<MixedOrdinalHuberResidualBlockDiagnostics> block_diagnostics;
+};
+
 post_expected<OrdinalStats>
 ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& X);
 
@@ -71,5 +115,11 @@ mixed_ordinal_stats_polyserial_dpd_from_data(
     const std::vector<Eigen::MatrixXd>& X,
     const std::vector<std::vector<std::int32_t>>& ordered,
     PolyserialPairDpdOptions options = {});
+
+post_expected<MixedOrdinalHuberResidualStats>
+mixed_ordinal_stats_huber_residual_from_data(
+    const std::vector<Eigen::MatrixXd>& X,
+    const std::vector<std::vector<std::int32_t>>& ordered,
+    MixedOrdinalHuberResidualOptions options = {});
 
 }  // namespace magmaan::data

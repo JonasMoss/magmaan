@@ -336,10 +336,17 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
 
 data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
                                              missing = c("listwise", "error"),
-                                             polyserial = c("ml", "dpd"),
-                                             alpha = 0.3) {
+                                             polyserial = c("ml", "dpd", "huber_residual"),
+                                             alpha = 0.3,
+                                             clip = c("hard_huber", "pseudo_huber",
+                                                      "tukey_biweight", "none"),
+                                             k = NULL) {
   missing <- match.arg(missing)
   polyserial <- match.arg(polyserial)
+  clip <- match.arg(clip)
+  if (is.null(k)) {
+    k <- if (identical(clip, "tukey_biweight")) 4.685 else 1.345
+  }
   if (!is.data.frame(x)) stop("data_mixed_ordinal_stats_from_df(): `x` must be a data.frame")
   model <- as_magmaan_model_spec(model)
   ordered <- if (is.null(ordered)) model$ordered else as.character(ordered)
@@ -427,7 +434,9 @@ data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = N
     polyserial,
     ml = data_mixed_ordinal_stats_from_raw_impl(X, ordered_mask),
     dpd = data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl(
-      X, ordered_mask, alpha = alpha)
+      X, ordered_mask, alpha = alpha),
+    huber_residual = data_mixed_ordinal_stats_huber_residual_from_raw_impl(
+      X, ordered_mask, clip = clip, k = k)
   )
   out$X <- X
   out$ov_names <- ov_by_group

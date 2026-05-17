@@ -181,6 +181,14 @@ golden `parTable()` fixtures.
   output contract matches the h-weighted SEM path, but the composite objective
   is density power divergence with tuning `alpha`; `alpha = 0` delegates to
   the default ML/lavaan-compatible stats path.
+- Experimental mixed continuous/ordinal Huberized Pearson-residual stats are
+  available under `data::mixed_ordinal_stats_huber_residual_from_data()`.
+  Hard Huber, pseudo-Huber, Tukey biweight, and no-clip residual options are
+  exposed for ordinal-containing threshold/correlation/polyserial rows while
+  continuous-only means, variances, and covariances remain ordinary moments.
+  The path rebuilds casewise moment influence, Gamma/NACOV, and DWLS/WLS
+  weights and is a simulation-checked methods comparator rather than a
+  lavaan-backed compatibility claim.
 - Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
   complete/listwise ordinal data, exposing pair labels, count/adjustment
   diagnostics, fitted fixed-threshold rho diagnostics, fitted expected/residual
