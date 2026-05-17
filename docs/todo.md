@@ -186,36 +186,43 @@ Remaining work, in suggested order:
 Done when: each unsupported statistical feature is either implemented with
 oracle/fixture backing or remains clearly outside the public contract.
 
-## 4. Robust pairwise estimators
+## 4. Robust ordinal moment estimators
 
-Intent: turn the planning notes in `resources/alternative_estimators/` into
-incremental robust polychoric/polyserial estimators without changing default
-lavaan-compatible behavior.
+Intent: extend the experimental robust ordinal moment builders without changing
+default lavaan-compatible behavior.
 
 Contracts:
 
 - Default ordinal behavior remains ML with lavaan-style marginal thresholds and
   must continue to reproduce existing ordinal fixtures.
-- Robust methods are experimental until diagnostics, influence/Gamma, and at
-  least one SEM integration mode are fixture-backed.
+- Shared-threshold all-ordinal h-weighted and DPD moment builders are already
+  SEM-facing experimental paths: they rebuild thresholds, polychorics, NACOV,
+  DWLS/WLS weights, and casewise moment influence/Gamma under one threshold
+  block per ordinal variable.
+- Pair-local threshold estimators are diagnostics/prototypes only. They are not
+  a path for constructing SEM moments.
 - Mixed continuous/ordinal robust estimators should stay explicitly separated
-  from the default lavaan-compatible mixed path.
+  from the default lavaan-compatible mixed path, and need a shared-marginal
+  threshold contract before any robust polyserial SEM integration.
 - R should expose only predefined robust methods; arbitrary C++ h-functions
   remain internal until a concrete methods use case exists.
 
 Remaining work, in suggested order:
 
-- **M/L.** After shared-threshold h/DPD simulation use, decide whether
-  Hellinger and Huberized residual fitting are worth adding as lower-priority
-  experimental comparators.
-- **M/L.** Design SEM-level mixed DPD integration for polyserial pairs. The
-  current `MixedOrdinalStats` layout has shared marginal thresholds, while the
-  current full DPD polyserial primitive is bivariate/pair-local; do not inject
-  pair-specific thresholds into shared-threshold moments.
-- **M/L.** Add a sandwich/Gamma calculation for full pair-local polyserial DPD
-  only if it remains useful as a bivariate diagnostic. It cannot be checked
-  against robcat, so validation should use finite-difference estimating-equation
-  derivatives plus Monte Carlo covariance checks in `checks/robust_polychoric`.
+- **M/L.** Design a Huberized-residual all-ordinal shared-threshold moment
+  builder as the next experimental comparator. Decide whether the clipped
+  residual is Pearson, probability-scale, or score-scale; specify the tuning
+  constant, ML limit, smoothness/derivative convention, objective, estimating
+  equations, and how casewise influence/Gamma and robust-R repair are rebuilt.
+- **M.** Add Huberized-residual simulation checks against the existing
+  h-weighted and DPD all-ordinal SEM paths: clean ML limit, sparse-cell
+  behavior, contaminated-cell downweighting, positive DWLS diagonals, and stable
+  repaired correlation influence columns.
+- **M/L.** If mixed robust SEM moments are still useful, design them from the
+  shared-marginal side: shared ordinal thresholds, robust continuous marginal
+  moments, fixed-shared-threshold polyserial association equations, and a
+  coherent mixed Gamma/NACOV rebuild. Do not use pair-local thresholds for
+  `MixedOrdinalStats`.
 
 Done when: robust polychoric/polyserial alternatives are selectable where their
 moment contracts are designed, default ML fixtures are unchanged, diagnostics
