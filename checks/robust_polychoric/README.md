@@ -9,7 +9,7 @@ The current driver checks four surfaces:
 - pair-local h-weighted polychoric estimates, comparing the empirical
   covariance of `sqrt(N) * theta_hat` to the average sandwich Gamma returned by
   `data::ordinal_pair_h_weighted_influence()`;
-- an all-ordinal Holzinger-Swineford-style correlation-matrix moment vector,
+- an all-ordinal Holzinger-Swineford-style shared-threshold moment vector,
   comparing empirical `sqrt(N)` moment covariance to `OrdinalStats::NACOV`;
 - a pair-level full polyserial DPD comparison between ML and
   `data::fit_polyserial_pair_joint_dpd()`, which jointly moves the continuous
@@ -17,10 +17,9 @@ The current driver checks four surfaces:
 - an HS-style ordinal CFA fit, comparing empirical `sqrt(N)` parameter
   covariance to `N * robust_ordinal(...).vcov`.
 
-The all-ordinal checks use the experimental h-weighted WMA hard-cap path. Full
-polyserial DPD is intentionally pair-local here; SEM-level mixed DPD integration
-needs an explicit design for pair-local thresholds in the shared
-`MixedOrdinalStats` moment/Gamma layout.
+The all-ordinal SEM checks use the experimental shared-threshold h-weighted WMA
+hard-cap path. Full polyserial DPD is intentionally pair-level here; SEM-level
+mixed DPD still needs its own shared-threshold `MixedOrdinalStats` integration.
 
 Terminology: DPD means density power divergence. robcat parity applies only to
 the h-score/WMA C-estimators, not to DPD.

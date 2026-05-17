@@ -11,6 +11,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
+#include <Eigen/LU>
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
@@ -139,6 +140,154 @@ struct CorrelationRepairResult {
   double shrinkage = 0.0;
 };
 
+enum class SharedRobustOrdinalKind {
+  HWeighted,
+  Dpd,
+};
+
+struct SharedRobustOrdinalOptions {
+  SharedRobustOrdinalKind kind = SharedRobustOrdinalKind::HWeighted;
+  PolychoricHScoreOptions h_score;
+  double alpha = 0.3;
+  double rho_lower = -0.999;
+  double rho_upper = 0.999;
+  int max_iter = 90;
+  double ftol = 1e-10;
+  double gtol = 2e-5;
+  double fd_step = 1e-5;
+  double min_threshold_spacing = 1e-6;
+  bool lavaan_adjust_2x2 = true;
+  PairwiseOrdinalCorrelationRepairOptions correlation_repair;
+};
+
+struct SharedOrdinalPairTable {
+  Eigen::Index i = 0;
+  Eigen::Index j = 0;
+  Eigen::Index corr_index = 0;
+  Eigen::MatrixXd counts;
+  Eigen::MatrixXd adjusted_counts;
+};
+
+bool h_score_is_ml_like_local(const PolychoricHScoreOptions& h_options) noexcept {
+  return h_options.kind == PolychoricHScoreKind::ML ||
+         (h_options.kind == PolychoricHScoreKind::WmaHardCap &&
+          h_options.k == std::numeric_limits<double>::infinity());
+}
+
+Eigen::MatrixXd adjusted_polychoric_table_local(const Eigen::MatrixXd& counts) {
+  Eigen::MatrixXd out = counts;
+  if (out.rows() == 2 && out.cols() == 2) {
+    std::vector<Eigen::Index> zeros;
+    for (Eigen::Index r = 0; r < 2; ++r) {
+      for (Eigen::Index c = 0; c < 2; ++c) {
+        if (out(r, c) == 0.0) zeros.push_back(r * 2 + c);
+      }
+    }
+    if (zeros.size() == 1) {
+      const Eigen::Index z = zeros[0];
+      if (z == 0 || z == 3) {
+        out(0, 0) += 0.5;
+        out(1, 1) += 0.5;
+        out(1, 0) -= 0.5;
+        out(0, 1) -= 0.5;
+      } else {
+        out(0, 0) -= 0.5;
+        out(1, 1) -= 0.5;
+        out(1, 0) += 0.5;
+        out(0, 1) += 0.5;
+      }
+    }
+  }
+  return out.cwiseMax(0.0);
+}
+
+double encode_rho_local(double rho, double lower, double upper) noexcept {
+  const double mid = 0.5 * (lower + upper);
+  const double half = 0.5 * (upper - lower);
+  const double z = std::clamp((rho - mid) / half, -0.999999, 0.999999);
+  return 0.5 * std::log((1.0 + z) / (1.0 - z));
+}
+
+double decode_rho_local(double z, double lower, double upper) noexcept {
+  const double mid = 0.5 * (lower + upper);
+  const double half = 0.5 * (upper - lower);
+  return mid + half * std::tanh(z);
+}
+
+Eigen::VectorXd encode_shared_ordinal_params(
+    const Eigen::VectorXd& thresholds,
+    const Eigen::MatrixXd& R,
+    const std::vector<std::int32_t>& levels,
+    const std::vector<Eigen::Index>& th_start,
+    double rho_lower,
+    double rho_upper,
+    double min_spacing) {
+  const Eigen::Index p = R.rows();
+  const Eigen::Index nth = thresholds.size();
+  const Eigen::Index ncorr = p * (p - 1) / 2;
+  Eigen::VectorXd z(nth + ncorr);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const Eigen::Index start = th_start[static_cast<std::size_t>(j)];
+    const Eigen::Index len =
+        static_cast<Eigen::Index>(levels[static_cast<std::size_t>(j)] - 1);
+    if (len <= 0) continue;
+    z(start) = thresholds(start);
+    for (Eigen::Index k = 1; k < len; ++k) {
+      z(start + k) = std::log(std::max(
+          min_spacing, thresholds(start + k) - thresholds(start + k - 1) -
+                           min_spacing));
+    }
+  }
+  Eigen::Index cidx = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      z(nth + cidx++) = encode_rho_local(R(i, j), rho_lower, rho_upper);
+    }
+  }
+  return z;
+}
+
+void decode_shared_ordinal_params(
+    const Eigen::VectorXd& z,
+    const std::vector<std::int32_t>& levels,
+    const std::vector<Eigen::Index>& th_start,
+    double rho_lower,
+    double rho_upper,
+    double min_spacing,
+    Eigen::VectorXd& thresholds,
+    std::vector<Eigen::VectorXd>& th_by_var,
+    Eigen::MatrixXd& R) {
+  const Eigen::Index p = static_cast<Eigen::Index>(levels.size());
+  const Eigen::Index nth = th_start.empty() ? 0 :
+      th_start.back() + static_cast<Eigen::Index>(levels.back() - 1);
+  thresholds = Eigen::VectorXd::Zero(nth);
+  th_by_var.assign(static_cast<std::size_t>(p), Eigen::VectorXd{});
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const Eigen::Index start = th_start[static_cast<std::size_t>(j)];
+    const Eigen::Index len =
+        static_cast<Eigen::Index>(levels[static_cast<std::size_t>(j)] - 1);
+    th_by_var[static_cast<std::size_t>(j)].resize(len);
+    if (len <= 0) continue;
+    thresholds(start) = z(start);
+    th_by_var[static_cast<std::size_t>(j)](0) = thresholds(start);
+    for (Eigen::Index k = 1; k < len; ++k) {
+      const double gap = min_spacing + std::exp(std::clamp(
+          z(start + k), -30.0, 30.0));
+      thresholds(start + k) = thresholds(start + k - 1) + gap;
+      th_by_var[static_cast<std::size_t>(j)](k) = thresholds(start + k);
+    }
+  }
+
+  R = Eigen::MatrixXd::Identity(p, p);
+  Eigen::Index cidx = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      R(i, j) = R(j, i) = decode_rho_local(
+          z(nth + cidx++), rho_lower, rho_upper);
+    }
+  }
+}
+
 post_expected<CorrelationRepairResult>
 repair_correlation_if_requested(
     const Eigen::MatrixXd& R,
@@ -244,6 +393,139 @@ Eigen::MatrixXd expected_pair_counts(double total,
   return out;
 }
 
+Eigen::VectorXd ordinal_pair_cell_log_score_local(
+    Eigen::Index ci,
+    Eigen::Index cj,
+    const Eigen::Ref<const Eigen::VectorXd>& th_i,
+    const Eigen::Ref<const Eigen::VectorXd>& th_j,
+    double rho) {
+  const Eigen::Index nth_i = th_i.size();
+  const Eigen::Index nth_j = th_j.size();
+  Eigen::VectorXd out = Eigen::VectorXd::Zero(nth_i + nth_j + 1);
+  const Eigen::Index n_levels_i = nth_i + 1;
+  const Eigen::Index n_levels_j = nth_j + 1;
+  const double lo_i = (ci == 0) ? -kInf : th_i(ci - 1);
+  const double hi_i = (ci + 1 == n_levels_i) ? kInf : th_i(ci);
+  const double lo_j = (cj == 0) ? -kInf : th_j(cj - 1);
+  const double hi_j = (cj + 1 == n_levels_j) ? kInf : th_j(cj);
+  const double lik = std::max(
+      kProbFloor, ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho));
+  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
+
+  for (Eigen::Index a = 0; a < nth_i; ++a) {
+    const double t = th_i(a);
+    const double z = normal_pdf(t) *
+        (normal_cdf((hi_j - rho * t) / sd) -
+         normal_cdf((lo_j - rho * t) / sd));
+    if (ci == a) out(a) += z / lik;
+    if (ci == a + 1) out(a) -= z / lik;
+  }
+  for (Eigen::Index a = 0; a < nth_j; ++a) {
+    const double t = th_j(a);
+    const double z = normal_pdf(t) *
+        (normal_cdf((hi_i - rho * t) / sd) -
+         normal_cdf((lo_i - rho * t) / sd));
+    if (cj == a) out(nth_i + a) += z / lik;
+    if (cj == a + 1) out(nth_i + a) -= z / lik;
+  }
+  out(out.size() - 1) =
+      ordinal_bvn_rect_drho(lo_i, hi_i, lo_j, hi_j, rho) / lik;
+  return out;
+}
+
+void add_pair_score_to_global(Eigen::Ref<Eigen::VectorXd> global,
+                              const Eigen::VectorXd& local,
+                              Eigen::Index nth,
+                              Eigen::Index start_i,
+                              Eigen::Index start_j,
+                              Eigen::Index nth_i,
+                              Eigen::Index nth_j,
+                              Eigen::Index corr_index,
+                              double scale) {
+  if (nth_i > 0) {
+    global.segment(start_i, nth_i).noalias() +=
+        scale * local.head(nth_i);
+  }
+  if (nth_j > 0) {
+    global.segment(start_j, nth_j).noalias() +=
+        scale * local.segment(nth_i, nth_j);
+  }
+  global(nth + corr_index) += scale * local(local.size() - 1);
+}
+
+double shared_pair_objective(
+    const Eigen::MatrixXd& counts,
+    const Eigen::VectorXd& th_i,
+    const Eigen::VectorXd& th_j,
+    double rho,
+    const SharedRobustOrdinalOptions& options) {
+  const double total = counts.sum();
+  double out = 0.0;
+  for (Eigen::Index a = 0; a < counts.rows(); ++a) {
+    const double lo_i = (a == 0) ? -kInf : th_i(a - 1);
+    const double hi_i = (a + 1 == counts.rows()) ? kInf : th_i(a);
+    for (Eigen::Index b = 0; b < counts.cols(); ++b) {
+      const double lo_j = (b == 0) ? -kInf : th_j(b - 1);
+      const double hi_j = (b + 1 == counts.cols()) ? kInf : th_j(b);
+      const double p = std::max(
+          kProbFloor, ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho));
+      const double f = counts(a, b) / total;
+      if (options.kind == SharedRobustOrdinalKind::HWeighted) {
+        auto h = eval_polychoric_h_score(f / p, options.h_score);
+        if (!h.has_value()) return std::numeric_limits<double>::infinity();
+        out += p * h->phi;
+      } else {
+        const double alpha = options.alpha;
+        const double p_alpha = std::pow(p, alpha);
+        out += p * p_alpha - ((1.0 + alpha) / alpha) * f * p_alpha;
+      }
+    }
+  }
+  return out;
+}
+
+double shared_ordinal_objective(
+    const Eigen::VectorXd& z,
+    const std::vector<std::int32_t>& levels,
+    const std::vector<Eigen::Index>& th_start,
+    const std::vector<SharedOrdinalPairTable>& pairs,
+    const SharedRobustOrdinalOptions& options) {
+  Eigen::VectorXd thresholds;
+  std::vector<Eigen::VectorXd> th_by_var;
+  Eigen::MatrixXd R;
+  decode_shared_ordinal_params(
+      z, levels, th_start, options.rho_lower, options.rho_upper,
+      options.min_threshold_spacing, thresholds, th_by_var, R);
+  double out = 0.0;
+  for (const auto& pair : pairs) {
+    out += shared_pair_objective(
+        pair.adjusted_counts, th_by_var[static_cast<std::size_t>(pair.i)],
+        th_by_var[static_cast<std::size_t>(pair.j)], R(pair.i, pair.j),
+        options);
+  }
+  return out;
+}
+
+Eigen::VectorXd shared_ordinal_gradient(
+    const Eigen::VectorXd& z,
+    const std::vector<std::int32_t>& levels,
+    const std::vector<Eigen::Index>& th_start,
+    const std::vector<SharedOrdinalPairTable>& pairs,
+    const SharedRobustOrdinalOptions& options) {
+  Eigen::VectorXd grad(z.size());
+  for (Eigen::Index k = 0; k < z.size(); ++k) {
+    const double h = options.fd_step * std::max(1.0, std::abs(z(k)));
+    Eigen::VectorXd zp = z;
+    Eigen::VectorXd zm = z;
+    zp(k) += h;
+    zm(k) -= h;
+    grad(k) = (shared_ordinal_objective(zp, levels, th_start, pairs, options) -
+               shared_ordinal_objective(zm, levels, th_start, pairs, options)) /
+              (2.0 * h);
+  }
+  return grad;
+}
+
 post_expected<void>
 threshold_layout_for_block(const OrdinalStats& stats,
                            std::size_t b,
@@ -296,6 +578,179 @@ threshold_layout_for_block(const OrdinalStats& stats,
     }
   }
   return {};
+}
+
+Eigen::VectorXd shared_ordinal_estimating_equation(
+    const Eigen::VectorXd& thresholds,
+    const std::vector<Eigen::VectorXd>& th_by_var,
+    const Eigen::MatrixXd& R,
+    const std::vector<std::int32_t>& levels,
+    const std::vector<Eigen::Index>& th_start,
+    const std::vector<SharedOrdinalPairTable>& pairs,
+    const SharedRobustOrdinalOptions& options) {
+  const Eigen::Index nth = thresholds.size();
+  const Eigen::Index p = R.rows();
+  const Eigen::Index mdim = nth + p * (p - 1) / 2;
+  Eigen::VectorXd out = Eigen::VectorXd::Zero(mdim);
+  for (const auto& pair : pairs) {
+    const auto& th_i = th_by_var[static_cast<std::size_t>(pair.i)];
+    const auto& th_j = th_by_var[static_cast<std::size_t>(pair.j)];
+    const Eigen::Index nth_i = th_i.size();
+    const Eigen::Index nth_j = th_j.size();
+    const Eigen::Index si = th_start[static_cast<std::size_t>(pair.i)];
+    const Eigen::Index sj = th_start[static_cast<std::size_t>(pair.j)];
+    const double rho = R(pair.i, pair.j);
+    const double total = pair.adjusted_counts.sum();
+    for (Eigen::Index a = 0; a < levels[static_cast<std::size_t>(pair.i)]; ++a) {
+      const double lo_i = (a == 0) ? -kInf : th_i(a - 1);
+      const double hi_i = (a + 1 == levels[static_cast<std::size_t>(pair.i)])
+          ? kInf : th_i(a);
+      for (Eigen::Index b = 0; b < levels[static_cast<std::size_t>(pair.j)]; ++b) {
+        const double lo_j = (b == 0) ? -kInf : th_j(b - 1);
+        const double hi_j = (b + 1 == levels[static_cast<std::size_t>(pair.j)])
+            ? kInf : th_j(b);
+        const double pcell = std::max(
+            kProbFloor, ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho));
+        const double f = pair.adjusted_counts(a, b) / total;
+        const Eigen::VectorXd score =
+            ordinal_pair_cell_log_score_local(a, b, th_i, th_j, rho);
+        double scale = 0.0;
+        if (options.kind == SharedRobustOrdinalKind::HWeighted) {
+          auto h = eval_polychoric_h_score(f / pcell, options.h_score);
+          if (!h.has_value()) return Eigen::VectorXd::Constant(
+              mdim, std::numeric_limits<double>::quiet_NaN());
+          scale = h->h * pcell;
+        } else {
+          scale = (pcell - f) * std::pow(pcell, options.alpha);
+        }
+        add_pair_score_to_global(out, score, nth, si, sj, nth_i, nth_j,
+                                 pair.corr_index, scale);
+      }
+    }
+  }
+  return out;
+}
+
+Eigen::MatrixXd shared_ordinal_casewise_psi(
+    const Eigen::MatrixXi& Xcat,
+    const Eigen::VectorXd& thresholds,
+    const std::vector<Eigen::VectorXd>& th_by_var,
+    const Eigen::MatrixXd& R,
+    const std::vector<Eigen::Index>& th_start,
+    const std::vector<SharedOrdinalPairTable>& pairs,
+    const SharedRobustOrdinalOptions& options) {
+  const Eigen::Index n = Xcat.rows();
+  const Eigen::Index nth = thresholds.size();
+  const Eigen::Index p = R.rows();
+  const Eigen::Index mdim = nth + p * (p - 1) / 2;
+  Eigen::MatrixXd psi = Eigen::MatrixXd::Zero(n, mdim);
+  for (const auto& pair : pairs) {
+    const auto& th_i = th_by_var[static_cast<std::size_t>(pair.i)];
+    const auto& th_j = th_by_var[static_cast<std::size_t>(pair.j)];
+    const Eigen::Index nth_i = th_i.size();
+    const Eigen::Index nth_j = th_j.size();
+    const Eigen::Index si = th_start[static_cast<std::size_t>(pair.i)];
+    const Eigen::Index sj = th_start[static_cast<std::size_t>(pair.j)];
+    const double rho = R(pair.i, pair.j);
+    const double total = pair.adjusted_counts.sum();
+    for (Eigen::Index row = 0; row < n; ++row) {
+      const Eigen::Index ci = Xcat(row, pair.i);
+      const Eigen::Index cj = Xcat(row, pair.j);
+      const double lo_i = (ci == 0) ? -kInf : th_i(ci - 1);
+      const double hi_i = (ci + 1 == th_i.size() + 1) ? kInf : th_i(ci);
+      const double lo_j = (cj == 0) ? -kInf : th_j(cj - 1);
+      const double hi_j = (cj + 1 == th_j.size() + 1) ? kInf : th_j(cj);
+      const double pcell = std::max(
+          kProbFloor, ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho));
+      const Eigen::VectorXd score =
+          ordinal_pair_cell_log_score_local(ci, cj, th_i, th_j, rho);
+      double scale = 1.0;
+      if (options.kind == SharedRobustOrdinalKind::HWeighted) {
+        const double t = pair.adjusted_counts(ci, cj) / (total * pcell);
+        auto h = eval_polychoric_h_score(t, options.h_score);
+        scale = h.has_value() ? h->dh : std::numeric_limits<double>::quiet_NaN();
+      } else {
+        scale = std::pow(pcell, options.alpha);
+      }
+      Eigen::VectorXd row_psi = psi.row(row).transpose();
+      add_pair_score_to_global(row_psi, score, nth, si, sj, nth_i, nth_j,
+                               pair.corr_index, scale);
+      psi.row(row) = row_psi.transpose();
+    }
+  }
+  psi.rowwise() -= psi.colwise().mean();
+  return psi;
+}
+
+Eigen::MatrixXd shared_ordinal_bread_numeric(
+    const Eigen::VectorXd& thresholds,
+    const Eigen::MatrixXd& R,
+    const std::vector<std::int32_t>& levels,
+    const std::vector<Eigen::Index>& th_start,
+    const std::vector<SharedOrdinalPairTable>& pairs,
+    const SharedRobustOrdinalOptions& options) {
+  const Eigen::Index nth = thresholds.size();
+  const Eigen::Index p = R.rows();
+  const Eigen::Index mdim = nth + p * (p - 1) / 2;
+  Eigen::VectorXd theta(mdim);
+  theta.head(nth) = thresholds;
+  Eigen::Index cidx = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      theta(nth + cidx++) = R(i, j);
+    }
+  }
+
+  auto unpack_g = [&](const Eigen::VectorXd& x) {
+    Eigen::VectorXd th = x.head(nth);
+    std::vector<Eigen::VectorXd> by_var(static_cast<std::size_t>(p));
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const Eigen::Index start = th_start[static_cast<std::size_t>(j)];
+      const Eigen::Index len =
+          static_cast<Eigen::Index>(levels[static_cast<std::size_t>(j)] - 1);
+      by_var[static_cast<std::size_t>(j)] = th.segment(start, len);
+    }
+    Eigen::MatrixXd r = Eigen::MatrixXd::Identity(p, p);
+    Eigen::Index rc = 0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j + 1; i < p; ++i) {
+        r(i, j) = r(j, i) = std::clamp(
+            x(nth + rc++), options.rho_lower, options.rho_upper);
+      }
+    }
+    return shared_ordinal_estimating_equation(
+        th, by_var, r, levels, th_start, pairs, options);
+  };
+
+  Eigen::MatrixXd bread(mdim, mdim);
+  for (Eigen::Index k = 0; k < mdim; ++k) {
+    double h = options.fd_step * std::max(1.0, std::abs(theta(k)));
+    if (k < nth) {
+      for (Eigen::Index j = 0; j < p; ++j) {
+        const Eigen::Index start = th_start[static_cast<std::size_t>(j)];
+        const Eigen::Index len =
+            static_cast<Eigen::Index>(levels[static_cast<std::size_t>(j)] - 1);
+        if (k < start || k >= start + len) continue;
+        if (k > start) {
+          h = std::min(h, 0.25 * (theta(k) - theta(k - 1)));
+        }
+        if (k + 1 < start + len) {
+          h = std::min(h, 0.25 * (theta(k + 1) - theta(k)));
+        }
+      }
+      h = std::max(h, 1e-7);
+    }
+    Eigen::VectorXd xp = theta;
+    Eigen::VectorXd xm = theta;
+    xp(k) += h;
+    xm(k) -= h;
+    if (k >= nth) {
+      xp(k) = std::min(options.rho_upper, xp(k));
+      xm(k) = std::max(options.rho_lower, xm(k));
+    }
+    bread.col(k) = (unpack_g(xp) - unpack_g(xm)) / (xp(k) - xm(k));
+  }
+  return 0.5 * (bread + bread.transpose());
 }
 
 }  // namespace
@@ -576,11 +1031,31 @@ ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs) {
 }
 
 post_expected<PairwiseOrdinalStats>
-pairwise_ordinal_stats_h_weighted_from_integer_data(
+pairwise_ordinal_stats_shared_robust_from_integer_data(
     const std::vector<Eigen::MatrixXd>& Xs,
-    PairwiseOrdinalHWeightedStatsOptions options) {
-  auto h_ok = eval_polychoric_h_score(1.0, options.rho.h_score);
-  if (!h_ok.has_value()) return std::unexpected(h_ok.error());
+    SharedRobustOrdinalOptions options) {
+  if (!std::isfinite(options.rho_lower) || !std::isfinite(options.rho_upper) ||
+      !(options.rho_lower > -1.0) || !(options.rho_upper < 1.0) ||
+      !(options.rho_lower < options.rho_upper) || options.max_iter < 1 ||
+      !(std::isfinite(options.ftol) && options.ftol > 0.0) ||
+      !(std::isfinite(options.gtol) && options.gtol > 0.0) ||
+      !(std::isfinite(options.fd_step) && options.fd_step > 0.0) ||
+      !(std::isfinite(options.min_threshold_spacing) &&
+        options.min_threshold_spacing > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "pairwise_ordinal_stats_shared_robust_from_integer_data: invalid options"));
+  }
+  if (options.kind == SharedRobustOrdinalKind::HWeighted) {
+    auto h_ok = eval_polychoric_h_score(1.0, options.h_score);
+    if (!h_ok.has_value()) return std::unexpected(h_ok.error());
+    if (h_score_is_ml_like_local(options.h_score)) {
+      return pairwise_ordinal_stats_from_integer_data(Xs);
+    }
+  } else if (!(std::isfinite(options.alpha) && options.alpha > 0.0)) {
+    if (options.alpha == 0.0) return pairwise_ordinal_stats_from_integer_data(Xs);
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "pairwise_ordinal_stats_shared_robust_from_integer_data: invalid DPD alpha"));
+  }
 
   auto base_or = pairwise_ordinal_stats_from_integer_data(Xs);
   if (!base_or.has_value()) return std::unexpected(base_or.error());
@@ -590,9 +1065,11 @@ pairwise_ordinal_stats_h_weighted_from_integer_data(
     const auto& X = Xs[b];
     const Eigen::Index n = X.rows();
     const Eigen::Index p = X.cols();
+    const auto& levels = out.stats.n_levels[b];
     const Eigen::Index nth = out.stats.thresholds[b].size();
     const Eigen::Index ncorr = p * (p - 1) / 2;
     const Eigen::Index mdim = nth + ncorr;
+    if (ncorr == 0) continue;
 
     std::vector<Eigen::VectorXd> th_by_var;
     std::vector<Eigen::Index> th_start;
@@ -607,113 +1084,183 @@ pairwise_ordinal_stats_h_weighted_from_integer_data(
       }
     }
 
-    Eigen::MatrixXd R = Eigen::MatrixXd::Identity(p, p);
-    Eigen::MatrixXd IF = Eigen::MatrixXd::Zero(n, mdim);
-    if (nth > 0) {
-      IF.leftCols(nth) =
-          out.block_diagnostics[b].moment_influence.leftCols(nth);
-    }
-
-    std::vector<OrdinalPairDiagnostics> pair_diag;
-    pair_diag.reserve(static_cast<std::size_t>(ncorr));
+    std::vector<SharedOrdinalPairTable> pairs;
+    pairs.reserve(static_cast<std::size_t>(ncorr));
     Eigen::Index corr_idx = 0;
     for (Eigen::Index j = 0; j < p; ++j) {
       for (Eigen::Index i = j + 1; i < p; ++i) {
         const Eigen::VectorXi xi = Xcat.col(i);
         const Eigen::VectorXi xj = Xcat.col(j);
         auto tab_or = ordinal_pair_table(
-            xi, xj, out.stats.n_levels[b][static_cast<std::size_t>(i)],
-            out.stats.n_levels[b][static_cast<std::size_t>(j)]);
+            xi, xj, levels[static_cast<std::size_t>(i)],
+            levels[static_cast<std::size_t>(j)]);
         if (!tab_or.has_value()) return std::unexpected(tab_or.error());
-        auto rho_or = fit_ordinal_pair_rho_h_weighted(
-            *tab_or, th_by_var[static_cast<std::size_t>(i)],
-            th_by_var[static_cast<std::size_t>(j)], options.rho);
-        if (!rho_or.has_value()) return std::unexpected(rho_or.error());
-
-        const double rho = rho_or->rho;
-        R(i, j) = R(j, i) = rho;
-        auto influence_or = ordinal_pair_h_weighted_influence(
-            *tab_or, th_by_var[static_cast<std::size_t>(i)],
-            th_by_var[static_cast<std::size_t>(j)], rho,
-            OrdinalPairHWeightedInfluenceOptions{
-                .fd_step = options.influence_fd_step,
-                .h_score = options.rho.h_score});
-        if (!influence_or.has_value()) {
-          return std::unexpected(influence_or.error());
-        }
-        auto scores_or = ordinal_pair_scores(
-            xi, xj, rho, th_by_var[static_cast<std::size_t>(i)],
-            th_by_var[static_cast<std::size_t>(j)]);
-        if (!scores_or.has_value()) return std::unexpected(scores_or.error());
-
-        const Eigen::Index nth_i =
-            th_by_var[static_cast<std::size_t>(i)].size();
-        const Eigen::Index nth_j =
-            th_by_var[static_cast<std::size_t>(j)].size();
-        const Eigen::Index pair_nth = nth_i + nth_j;
-        const Eigen::Index last = pair_nth;
-        const double bread_rr = influence_or->bread(last, last);
-        if (!std::isfinite(bread_rr) || std::abs(bread_rr) <= 1e-12) {
-          return std::unexpected(make_err(PostError::Kind::NumericIssue,
-              "pairwise_ordinal_stats_h_weighted_from_integer_data: singular rho bread"));
-        }
-
-        Eigen::VectorXd psi_rho(n);
-        for (Eigen::Index row = 0; row < n; ++row) {
-          const int ci = xi(row);
-          const int cj = xj(row);
-          psi_rho(row) =
-              influence_or->dh_values(ci, cj) * scores_or->rho(row);
-        }
-        psi_rho.array() -= psi_rho.mean();
-        Eigen::VectorXd threshold_adjust = Eigen::VectorXd::Zero(n);
-        if (pair_nth > 0) {
-          Eigen::MatrixXd pair_if = Eigen::MatrixXd::Zero(n, pair_nth);
-          pair_if.leftCols(nth_i) =
-              IF.block(0, th_start[static_cast<std::size_t>(i)], n, nth_i);
-          pair_if.rightCols(nth_j) =
-              IF.block(0, th_start[static_cast<std::size_t>(j)], n, nth_j);
-          threshold_adjust =
-              pair_if * influence_or->bread.row(last).head(pair_nth).transpose();
-        }
-        IF.col(nth + corr_idx) =
-            -(psi_rho - threshold_adjust) / bread_rr;
-
-        pair_diag.push_back(OrdinalPairDiagnostics{
-            .label = OrdinalPairLabel{
-                .block = static_cast<std::int32_t>(b),
-                .i = static_cast<std::int32_t>(i),
-                .j = static_cast<std::int32_t>(j),
-                .n_levels_i = out.stats.n_levels[b][static_cast<std::size_t>(i)],
-                .n_levels_j = out.stats.n_levels[b][static_cast<std::size_t>(j)]},
-            .rho = rho,
-            .negloglik = rho_or->objective,
-            .objective = rho_or->objective,
-            .score = rho_or->score,
-            .iterations = rho_or->iterations,
-            .h_weighted = true,
-            .converged = rho_or->converged,
-            .hit_lower = rho_or->hit_lower,
-            .hit_upper = rho_or->hit_upper,
-            .n_obs = static_cast<std::int64_t>(tab_or->sum()),
-            .n_missing = 0,
-            .ridge_applied = false,
-            .ridge = 0.0,
-            .shrinkage_applied = false,
-            .shrinkage_intensity = 0.0,
-            .counts = *tab_or,
-            .adjusted_counts = rho_or->adjusted_counts,
-            .expected_counts = rho_or->expected_counts,
-            .residual_counts = rho_or->residual_counts,
-            .pearson_residuals = rho_or->pearson_residuals,
-            .weights = rho_or->weights});
-        ++corr_idx;
+        Eigen::MatrixXd adjusted = options.lavaan_adjust_2x2
+            ? adjusted_polychoric_table_local(*tab_or)
+            : Eigen::MatrixXd(*tab_or);
+        pairs.push_back(SharedOrdinalPairTable{
+            .i = i,
+            .j = j,
+            .corr_index = corr_idx++,
+            .counts = std::move(*tab_or),
+            .adjusted_counts = std::move(adjusted)});
       }
+    }
+
+    Eigen::VectorXd z = encode_shared_ordinal_params(
+        out.stats.thresholds[b], out.stats.R[b], levels, th_start,
+        options.rho_lower, options.rho_upper, options.min_threshold_spacing);
+    double f = shared_ordinal_objective(z, levels, th_start, pairs, options);
+    if (!std::isfinite(f)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "pairwise_ordinal_stats_shared_robust_from_integer_data: non-finite starting objective"));
+    }
+
+    int iterations = 0;
+    bool converged = false;
+    for (; iterations < options.max_iter; ++iterations) {
+      Eigen::VectorXd grad = shared_ordinal_gradient(
+          z, levels, th_start, pairs, options);
+      if (!grad.allFinite()) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "pairwise_ordinal_stats_shared_robust_from_integer_data: non-finite gradient"));
+      }
+      if (grad.lpNorm<Eigen::Infinity>() <= options.gtol) {
+        converged = true;
+        break;
+      }
+      const double grad_sq = grad.squaredNorm();
+      double step = 0.6;
+      bool accepted = false;
+      bool ftol_stop = false;
+      for (int ls = 0; ls < 36; ++ls) {
+        const Eigen::VectorXd candidate = z - step * grad;
+        const double fc = shared_ordinal_objective(
+            candidate, levels, th_start, pairs, options);
+        if (std::isfinite(fc) && fc < f - 1e-4 * step * grad_sq) {
+          ftol_stop = std::abs(f - fc) <=
+              options.ftol * std::max(1.0, std::abs(f));
+          z = candidate;
+          f = fc;
+          accepted = true;
+          break;
+        }
+        step *= 0.5;
+      }
+      if (!accepted) break;
+      if (ftol_stop) {
+        ++iterations;
+        converged = true;
+        break;
+      }
+    }
+
+    Eigen::VectorXd thresholds;
+    Eigen::MatrixXd R;
+    decode_shared_ordinal_params(
+        z, levels, th_start, options.rho_lower, options.rho_upper,
+        options.min_threshold_spacing, thresholds, th_by_var, R);
+
+    Eigen::MatrixXd psi = shared_ordinal_casewise_psi(
+        Xcat, thresholds, th_by_var, R, th_start, pairs, options);
+    Eigen::MatrixXd bread = shared_ordinal_bread_numeric(
+        thresholds, R, levels, th_start, pairs, options);
+    if (!psi.allFinite() || !bread.allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "pairwise_ordinal_stats_shared_robust_from_integer_data: non-finite sandwich components"));
+    }
+    Eigen::FullPivLU<Eigen::MatrixXd> lu(bread);
+    lu.setThreshold(1e-10);
+    if (lu.rank() < bread.rows()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "pairwise_ordinal_stats_shared_robust_from_integer_data: singular bread"));
+    }
+    const Eigen::MatrixXd bread_inv =
+        lu.solve(Eigen::MatrixXd::Identity(mdim, mdim));
+    Eigen::MatrixXd IF = -psi * bread_inv.transpose();
+
+    std::vector<OrdinalPairDiagnostics> pair_diag;
+    pair_diag.reserve(static_cast<std::size_t>(ncorr));
+    for (const auto& pair : pairs) {
+      const auto& th_i = th_by_var[static_cast<std::size_t>(pair.i)];
+      const auto& th_j = th_by_var[static_cast<std::size_t>(pair.j)];
+      const double rho = R(pair.i, pair.j);
+      const double total = pair.adjusted_counts.sum();
+      Eigen::MatrixXd probs = Eigen::MatrixXd::Zero(
+          pair.adjusted_counts.rows(), pair.adjusted_counts.cols());
+      Eigen::MatrixXd expected = probs;
+      Eigen::MatrixXd residual = probs;
+      Eigen::MatrixXd pearson = probs;
+      Eigen::MatrixXd weights = Eigen::MatrixXd::Ones(
+          pair.adjusted_counts.rows(), pair.adjusted_counts.cols());
+      double objective = 0.0;
+      double score = 0.0;
+      for (Eigen::Index a = 0; a < pair.adjusted_counts.rows(); ++a) {
+        const double lo_i = (a == 0) ? -kInf : th_i(a - 1);
+        const double hi_i = (a + 1 == pair.adjusted_counts.rows())
+            ? kInf : th_i(a);
+        for (Eigen::Index c = 0; c < pair.adjusted_counts.cols(); ++c) {
+          const double lo_j = (c == 0) ? -kInf : th_j(c - 1);
+          const double hi_j = (c + 1 == pair.adjusted_counts.cols())
+              ? kInf : th_j(c);
+          const double raw_p = ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho);
+          const double pcell = std::max(kProbFloor, raw_p);
+          const double fhat = pair.adjusted_counts(a, c) / total;
+          probs(a, c) = pcell;
+          expected(a, c) = total * pcell;
+          residual(a, c) = pair.adjusted_counts(a, c) - expected(a, c);
+          pearson(a, c) = residual(a, c) /
+              std::sqrt(std::max(kProbFloor, expected(a, c)));
+          if (options.kind == SharedRobustOrdinalKind::HWeighted) {
+            auto h = eval_polychoric_h_score(fhat / pcell, options.h_score);
+            if (!h.has_value()) return std::unexpected(h.error());
+            weights(a, c) = fhat > 0.0 ? h->h / (fhat / pcell) : 1.0;
+            objective += pcell * h->phi;
+            if (raw_p > kProbFloor) {
+              score += h->h * ordinal_bvn_rect_drho(lo_i, hi_i, lo_j, hi_j, rho);
+            }
+          } else {
+            weights(a, c) = std::pow(pcell, options.alpha);
+            objective += pcell * weights(a, c) -
+                         ((1.0 + options.alpha) / options.alpha) *
+                             fhat * weights(a, c);
+          }
+        }
+      }
+      const double width = options.rho_upper - options.rho_lower;
+      pair_diag.push_back(OrdinalPairDiagnostics{
+          .label = OrdinalPairLabel{
+              .block = static_cast<std::int32_t>(b),
+              .i = static_cast<std::int32_t>(pair.i),
+              .j = static_cast<std::int32_t>(pair.j),
+              .n_levels_i = levels[static_cast<std::size_t>(pair.i)],
+              .n_levels_j = levels[static_cast<std::size_t>(pair.j)]},
+          .rho = rho,
+          .negloglik = objective,
+          .objective = objective,
+          .score = score,
+          .iterations = iterations,
+          .h_weighted = options.kind == SharedRobustOrdinalKind::HWeighted,
+          .converged = converged,
+          .hit_lower = std::abs(rho - options.rho_lower) <= 1e-8 * width,
+          .hit_upper = std::abs(rho - options.rho_upper) <= 1e-8 * width,
+          .n_obs = static_cast<std::int64_t>(pair.counts.sum()),
+          .n_missing = 0,
+          .ridge_applied = false,
+          .ridge = 0.0,
+          .shrinkage_applied = false,
+          .shrinkage_intensity = 0.0,
+          .counts = pair.counts,
+          .adjusted_counts = pair.adjusted_counts,
+          .expected_counts = std::move(expected),
+          .residual_counts = std::move(residual),
+          .pearson_residuals = std::move(pearson),
+          .weights = std::move(weights)});
     }
 
     auto r_repair_or = repair_correlation_if_requested(
         R, options.correlation_repair,
-        "pairwise_ordinal_stats_h_weighted_from_integer_data: block " +
+        "pairwise_ordinal_stats_shared_robust_from_integer_data: block " +
             std::to_string(b) + " robust R");
     if (!r_repair_or.has_value()) return std::unexpected(r_repair_or.error());
     R = std::move(r_repair_or->R);
@@ -730,25 +1277,25 @@ pairwise_ordinal_stats_h_weighted_from_integer_data(
       }
     }
 
-    Eigen::MatrixXd gamma =
-        (IF.transpose() * IF) / static_cast<double>(n);
+    Eigen::MatrixXd gamma = (IF.transpose() * IF) / static_cast<double>(n);
     gamma = 0.5 * (gamma + gamma.transpose());
     if (!gamma.allFinite()) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "pairwise_ordinal_stats_h_weighted_from_integer_data: non-finite Gamma"));
+          "pairwise_ordinal_stats_shared_robust_from_integer_data: non-finite Gamma"));
     }
     Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(mdim, mdim);
     for (Eigen::Index k = 0; k < mdim; ++k) {
       const double v = gamma(k, k);
       if (!std::isfinite(v) || v <= 0.0) {
         return std::unexpected(make_err(PostError::Kind::NumericIssue,
-            "pairwise_ordinal_stats_h_weighted_from_integer_data: non-positive Gamma diagonal"));
+            "pairwise_ordinal_stats_shared_robust_from_integer_data: non-positive Gamma diagonal"));
       }
       W_dwls(k, k) = 1.0 / v;
     }
-    auto W_wls_or = symmetric_inverse_pd(gamma, "h-weighted ordinal Gamma");
+    auto W_wls_or = symmetric_inverse_pd(gamma, "shared robust ordinal Gamma");
     if (!W_wls_or.has_value()) return std::unexpected(W_wls_or.error());
 
+    out.stats.thresholds[b] = std::move(thresholds);
     out.stats.R[b] = std::move(R);
     out.stats.NACOV[b] = gamma;
     out.stats.W_dwls[b] = std::move(W_dwls);
@@ -762,8 +1309,46 @@ pairwise_ordinal_stats_h_weighted_from_integer_data(
     out.block_diagnostics[b].r_ridge = r_repair_or->ridge;
     out.block_diagnostics[b].r_shrinkage_intensity = r_repair_or->shrinkage;
   }
-
   return out;
+}
+
+post_expected<PairwiseOrdinalStats>
+pairwise_ordinal_stats_h_weighted_from_integer_data(
+    const std::vector<Eigen::MatrixXd>& Xs,
+    PairwiseOrdinalHWeightedStatsOptions options) {
+  return pairwise_ordinal_stats_shared_robust_from_integer_data(
+      Xs, SharedRobustOrdinalOptions{
+              .kind = SharedRobustOrdinalKind::HWeighted,
+              .h_score = options.rho.h_score,
+              .rho_lower = options.rho.rho_lower,
+              .rho_upper = options.rho.rho_upper,
+              .max_iter = options.max_iter,
+              .ftol = options.ftol,
+              .gtol = options.gtol,
+              .fd_step = options.fd_step,
+              .min_threshold_spacing = options.min_threshold_spacing,
+              .lavaan_adjust_2x2 = options.rho.lavaan_adjust_2x2,
+              .correlation_repair = options.correlation_repair});
+}
+
+post_expected<PairwiseOrdinalStats>
+pairwise_ordinal_stats_dpd_from_integer_data(
+    const std::vector<Eigen::MatrixXd>& Xs,
+    PairwiseOrdinalDpdStatsOptions options) {
+  return pairwise_ordinal_stats_shared_robust_from_integer_data(
+      Xs, SharedRobustOrdinalOptions{
+              .kind = SharedRobustOrdinalKind::Dpd,
+              .h_score = {},
+              .alpha = options.alpha,
+              .rho_lower = options.rho_lower,
+              .rho_upper = options.rho_upper,
+              .max_iter = options.max_iter,
+              .ftol = options.ftol,
+              .gtol = options.gtol,
+              .fd_step = options.fd_step,
+              .min_threshold_spacing = options.min_threshold_spacing,
+              .lavaan_adjust_2x2 = options.lavaan_adjust_2x2,
+              .correlation_repair = options.correlation_repair});
 }
 
 post_expected<MixedOrdinalStats>

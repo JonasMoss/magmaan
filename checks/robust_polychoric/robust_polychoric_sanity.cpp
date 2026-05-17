@@ -253,6 +253,8 @@ PairwiseOrdinalHWeightedStatsOptions robust_options() {
   opts.rho.h_score = PolychoricHScoreOptions{
       .kind = PolychoricHScoreKind::WmaHardCap,
       .k = 1.30};
+  opts.max_iter = 18;
+  opts.gtol = 8e-5;
   return opts;
 }
 
@@ -554,9 +556,6 @@ CompareSummary run_sem_check(const Config& cfg, std::mt19937_64& rng) {
   }
 
   const auto opts = robust_options();
-  const magmaan::optim::LbfgsBOptimizer opt(magmaan::optim::LbfgsBOptions{
-      .max_iter = 3500, .ftol = 1e-11, .gtol = 1e-7});
-
   std::vector<Eigen::VectorXd> estimates;
   std::vector<Eigen::MatrixXd> vcovs_n;
   int failed = 0;
@@ -568,9 +567,14 @@ CompareSummary run_sem_check(const Config& cfg, std::mt19937_64& rng) {
       ++failed;
       continue;
     }
+    auto x0 = magmaan::estimate::ordinal_start_values(*pt, *rep, stats->stats);
+    if (!x0.has_value()) {
+      ++failed;
+      continue;
+    }
     auto est = magmaan::estimate::fit_ordinal_bounded(
         *pt, *rep, stats->stats, magmaan::estimate::Bounds{},
-        magmaan::estimate::OrdinalWeightKind::DWLS, opt);
+        magmaan::estimate::OrdinalWeightKind::DWLS, *x0);
     if (!est.has_value() || !est->theta.allFinite()) {
       ++failed;
       continue;
@@ -614,8 +618,8 @@ int main(int argc, char** argv) {
   std::cout << "\nInterpretation: diag ratios near 1 and modest relative "
                "Frobenius error are the desired Monte Carlo pattern. "
                "The HS checks are contaminated simulations. The polyserial "
-               "line exercises the package pair-local full DPD primitive; "
+               "line exercises the package pair-level full DPD primitive; "
                "SEM-level mixed DPD integration is intentionally absent until "
-               "pair-local thresholds have a designed moment/Gamma contract.\n";
+               "a shared-threshold mixed moment/Gamma contract is implemented.\n";
   return 0;
 }
