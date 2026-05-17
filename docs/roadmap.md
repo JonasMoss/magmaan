@@ -188,8 +188,10 @@ golden `parTable()` fixtures.
   continuous-only means, variances, and covariances remain ordinary moments.
   The path rebuilds casewise moment influence, Gamma/NACOV, and DWLS/WLS
   weights, including the single-ordinal case where threshold uncertainty enters
-  only through polyserial links, and is a simulation-checked methods comparator
-  rather than a lavaan-backed compatibility claim.
+  only through polyserial links. Unit-level simulation checks cover the no-clip
+  ML limit, contaminated polyserial tails, sparse ordinal margins, positive
+  DWLS diagonals, finite Gamma conditioning, and DPD comparator stability. This
+  remains a methods comparator rather than a lavaan-backed compatibility claim.
 - Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
   complete/listwise ordinal data, exposing pair labels, count/adjustment
   diagnostics, fitted fixed-threshold rho diagnostics, fitted expected/residual
