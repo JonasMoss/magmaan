@@ -44,28 +44,29 @@ Contracts:
 - Examples should demonstrate the explicit post-fit workflow rather than hide
   inference behind `magmaan()`.
 
+Completed checks:
+
+- [x] **S. Ordinal R documentation.** `r-package/README.md` covers
+  `model_spec()` with `ordered` and `parameterization = "delta"`,
+  all-ordinal and mixed sample-stat builders, high-level DWLS/WLS dispatch,
+  explicit robust reporting, and the current theta rejection boundary.
+- [x] **S. R staged examples.** Examples cover the intended estimate-only
+  workflow followed by explicit post-fit SEs/z tests, Satorra-Bentler, fit
+  measures, defined parameters, nested tests, the FIML missing-data boundary,
+  and complete-data observed-exogenous `fixed_x = TRUE/FALSE`.
+- [x] **S. Scalar-invariance latent-mean rescaling coverage.** The unbounded
+  ML path is fixture-backed, and a focused LBFGS-B integration test confirms
+  the bounded variance-box path fits the scalar-invariance multi-group
+  meanstructure fixture.
+
 Remaining work, in suggested order:
 
-- **S.** Keep ordinal R documentation current as wrappers evolve. The
-  `r-package/README.md` boundary now covers `model_spec()` with `ordered` and
-  `parameterization = "delta"`, all-ordinal and mixed sample-stat builders,
-  high-level DWLS/WLS dispatch, explicit robust reporting, and the current
-  theta rejection boundary.
-- **S.** Keep R examples current as staged surfaces evolve. Current examples
-  cover the intended workflow (estimate-only `magmaan()`, then explicit
-  post-fit SEs/z tests, Satorra-Bentler, fit measures, defined parameters, and
-  nested tests), the FIML missing-data boundary, and the complete-data
-  observed-exogenous `fixed_x = TRUE/FALSE` boundary.
 - **M.** Add a lavaan-backed complete/listwise mixed categorical boundary
   fixture. The remaining blocker is the mixed NACOV/weight path, which still
   drifts past the documented loose tolerance for a sparse 4-category indicator.
 - **M/L.** Add ordinal multi-group LS weighting/equality-constraint fixtures,
   plus mean-structure LS cases that exercise Ceres and SNLLS where semantically
   appropriate.
-- **S.** Keep scalar-invariance latent-mean rescaling coverage current. The
-  unbounded ML path is fixture-backed, and a focused LBFGS-B integration test
-  confirms the bounded variance-box path fits the scalar-invariance
-  multi-group meanstructure fixture.
 - **S/M.** Deepen parity coverage for non-ML post-fit surfaces. Add a full
   5-factor bfi FIML case once convergence on the wider model is confirmed, then
   gate FIML/LS standard SEs and LS/ordinal CFI/TLI/RMSEA/SRMR as those surfaces
