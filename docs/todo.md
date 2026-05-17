@@ -50,10 +50,12 @@ Remaining work, in suggested order:
   `ordered` and `parameterization = "delta"`, ordinal sample-stat builders,
   mixed ordinal sample-stat builders, and ordinal/mixed DWLS/WLS fitting
   wrappers.
-- **S/M.** Add examples for the intended workflow: estimation first, then
-  optional SEs, robust tests, fit measures, defined parameters, and nested
-  tests. Include public fixed.x and missing-data boundaries where users are
-  likely to hit them.
+- **S.** `r-package/examples/staged_workflow.R` and `fit_measures.R` now cover
+  the intended workflow (estimate-only `magmaan()`, then explicit SEs/z tests,
+  Satorra-Bentler, fit measures, defined parameters, and the LR nested test).
+  The missing-data boundary is in `fiml.R`; a dedicated complete-data `fixed.x`
+  example (observed exogenous variables, `fixed_x = TRUE/FALSE`) is still worth
+  adding where users are likely to hit it.
 - **M.** Add a lavaan-backed complete/listwise mixed categorical boundary
   fixture. The remaining blocker is the mixed NACOV/weight path, which still
   drifts past the documented loose tolerance for a sparse 4-category indicator.
@@ -104,10 +106,13 @@ Remaining work, in suggested order:
 - **M/L.** Design the Python binding surface around a friendly top-level API
   and a `magmaan.core` submodule for primitives, keeping names aligned with the
   C++ namespace layout where possible.
-- **S/M.** Add examples for the staged API design: ordinal polychoric DWLS with
-  WLSMV-style robust reporting, complete-data ML with Satorra-Bentler,
-  complete-data ML with observed-information SEs, and FIML with MLR-style robust
-  reporting.
+- **S/M.** Continue the staged-API examples. `observed_information_se.R` now
+  covers complete-data ML observed-information SEs; Satorra-Bentler and ordinal
+  DWLS/WLS robust reporting are in `constraints_and_satorra_bentler.R` and
+  `ordinal_dwls_wls.R`. FIML with MLR-style robust reporting still needs an R
+  example, blocked on exposing the C++ FIML MLR sandwich / Yuan-Bentler
+  machinery through a `magmaan_core` binding — no FIML-robust entry point
+  exists today.
 
 Done when: new code naturally uses the target namespaces, friendly R/Python
 users see a small staged API, and methods developers can still choose primitive
@@ -180,6 +185,15 @@ Remaining work, in suggested order:
   `modification_indices` overloads; decide the structural-regression absent-row
   contract; regenerate `tests/fixtures/score/` once the public surface is
   stable.
+- **M/L.** Resolve the Satorra-2000 nested-test parity gap. `nestedTest()`
+  computes the H1-anchored reduced-form scaled difference test and diverges from
+  lavaan's `lavTestLRT(method = "satorra.2000")` for strongly-binding
+  restrictions (~13% on the scaling factor in the worst case observed). magmaan
+  faithfully implements the reduced form (verified by independent
+  reconstruction); the open question is lavaan's variant and which is canonical.
+  See `docs/satorra2000_parity.md` for the evidence, ruled-out causes, and next
+  steps. Re-enable a nested-test parity check in
+  `r-package/examples/nested_test_satorra2000.R` once resolved.
 - **XL, deferred.** Reopen nonlinear equality constraints, inequality
   constraints, or active-bound inference only with an explicit statistical
   design and reporting contract.

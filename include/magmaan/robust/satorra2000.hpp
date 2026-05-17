@@ -55,6 +55,12 @@ using estimate::EqConstraints;
 //
 // Multi-group: pooled P = Σ_g weight_g · Π_α_gᵀ · V_g · Π_α_g, with
 //             weight_g = n_g / N_total to match lavaan's ML F = Σ_g f_g · F_g.
+//
+// LAVAAN PARITY (open): this is the H1-anchored reduced form. Its scaled
+// difference statistic diverges from lavaan's `lavTestLRT(method =
+// "satorra.2000")` for strongly-binding restrictions (~13% observed worst
+// case). magmaan faithfully implements the reduced form; lavaan's variant is
+// not yet characterised. See docs/satorra2000_parity.md.
 // ============================================================================
 
 // Per-group inputs at θ̂_H1.  Caller is responsible for ensuring Σ is the
