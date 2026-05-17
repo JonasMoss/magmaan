@@ -111,19 +111,38 @@ Contracts:
 
 - Thin R wrappers should mirror C++ primitive signatures over time; fit-list
   helpers may remain as explicit convenience adapters.
+- User-facing APIs should be staged and explicit: model/data construction,
+  point estimation, and post-fit inference/reporting are separate choices.
+- Primitive APIs should remain available for methods work without crowding the
+  friendly R namespace.
 - New C++ code should use `spec`, `lavaan`, `estimate`, `optim`, `nt`, `gls`,
   and `data` directly.
 
 Remaining work, in suggested order:
 
+- [ ] **M/L.** Formalize the staged C++ facade after the prototype settles.
+  Keep it as value objects over the existing primitives (`Model`, `Data`,
+  `Fit`, `Analysis`, `Summary`) rather than a second estimator implementation.
 - [ ] **S/M.** Continue migrating R post-fit helpers from opaque fit-list
   unpacking toward explicit primitive-shaped entry points, keeping convenience
   aliases only where they do not obscure the contract.
+- [ ] **M.** Replace the broad R primitive export strategy with a small
+  friendly namespace plus a single `magmaan_core` primitive escape hatch.
+  `magmaan_core` should mirror C++-shaped entry points while ordinary tab
+  completion stays focused on staged user workflows.
+- [ ] **M/L.** Design the Python binding surface around a friendly top-level
+  API and a `magmaan.core` submodule for primitives, keeping names aligned with
+  the C++ namespace layout where possible.
+- [ ] **S/M.** Add examples for the staged API design: ordinal polychoric DWLS
+  with WLSMV-style robust reporting, complete-data ML with Satorra-Bentler,
+  complete-data ML with observed-information SEs, and FIML with MLR-style
+  robust reporting.
 - [ ] **M, later transition cleanup.** After the compatibility window, remove
   the old `fit/*` and `partable/*` shim headers and their transition tests.
 
-Done when: new code naturally uses the target namespaces and R users can choose
-primitive post-fit operations without depending on hidden fit-list unpacking.
+Done when: new code naturally uses the target namespaces, friendly R/Python
+users see a small staged API, and methods developers can still choose primitive
+post-fit operations without depending on hidden fit-list unpacking.
 
 ## 2. Benchmarks and performance baselines
 
