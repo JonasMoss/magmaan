@@ -20,7 +20,7 @@ model <- "visual =~ x1 + x2 + x3"
 
 spec_mean <- model_spec(model, meanstructure = TRUE)
 data_mean <- df_to_data(hs, spec_mean)
-fit_mean <- fit_ml(spec_mean, data_mean)
+fit_mean <- magmaan_core$fit_ml(spec_mean, data_mean)
 lav_mean <- lavaan::cfa(model, data = hs, meanstructure = TRUE)
 check_partable("single-group meanstructure", fit_mean, lav_mean)
 
@@ -28,7 +28,7 @@ group_labels <- unique(as.character(hs$school))
 spec_group <- model_spec(model, group = "school", group_labels = group_labels,
                          meanstructure = TRUE)
 data_group <- df_to_data(hs, spec_group, group = "school")
-fit_group <- fit_ml(spec_group, data_group)
+fit_group <- magmaan_core$fit_ml(spec_group, data_group)
 lav_group <- lavaan::cfa(model, data = hs, group = "school",
                          meanstructure = TRUE)
 check_partable("multi-group meanstructure", fit_group, lav_group, tol = 5e-4)
