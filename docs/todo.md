@@ -186,72 +186,7 @@ Remaining work, in suggested order:
 Done when: each unsupported statistical feature is either implemented with
 oracle/fixture backing or remains clearly outside the public contract.
 
-## 4. Robust ordinal moment estimators
-
-Intent: extend the experimental robust ordinal moment builders without changing
-default lavaan-compatible behavior.
-
-Contracts:
-
-- Default ordinal behavior remains ML with lavaan-style marginal thresholds and
-  must continue to reproduce existing ordinal fixtures.
-- Shared-threshold all-ordinal h-weighted and DPD moment builders are already
-  SEM-facing experimental paths: they rebuild thresholds, polychorics, NACOV,
-  DWLS/WLS weights, and casewise moment influence/Gamma under one threshold
-  block per ordinal variable.
-- Pair-local threshold estimators are diagnostics/prototypes only. They are not
-  a path for constructing SEM moments.
-- Mixed continuous/ordinal polyserial DPD now has a shared-marginal SEM-facing
-  path for continuous-ordinal associations; broader robust mixed moments need
-  their own contract.
-- R should expose only predefined robust methods; arbitrary C++ h-functions
-  remain internal until a concrete methods use case exists.
-
-Completed implementation slices:
-
-- [x] All-ordinal shared-threshold h-weighted SEM stats: shared thresholds,
-  robust polychorics, casewise moment influence/Gamma, NACOV, and DWLS/WLS
-  weights.
-- [x] All-ordinal shared-threshold DPD SEM stats with the same moment/Gamma
-  contract and `alpha = 0` ML limit.
-- [x] All-ordinal shared-threshold Huberized Pearson-residual SEM stats with
-  hard Huber, pseudo-Huber, Tukey biweight, and no-clip options; no-clip
-  delegates to the ML/lavaan-compatible stats path, and robust-R repair scales
-  correlation influence columns before Gamma/weights are rebuilt.
-- [x] Huberized-residual simulation checks against the existing h-weighted and
-  DPD all-ordinal SEM paths: clean ML limit, sparse-cell behavior,
-  contaminated-cell downweighting, positive DWLS diagonals, and stable repaired
-  correlation influence columns.
-- [x] Mixed continuous/ordinal fixed-marginal polyserial DPD: shared ordinal
-  thresholds, existing continuous marginals, DPD continuous-ordinal
-  associations, mixed moment influence/Gamma, NACOV, DWLS/WLS weights, and
-  DWLS fitting coverage.
-- [x] Mixed continuous/ordinal Huberized Pearson-residual stats: ordinal-only
-  and continuous-ordinal links are robustified, continuous-only moments remain
-  ordinary, single-ordinal threshold/rho influence is rebuilt jointly, and
-  sparse contaminated simulations check Gamma conditioning and weights.
-- [x] Pair-local threshold estimators are documented as diagnostics/prototypes,
-  not SEM moment builders.
-- [x] Broader mixed robustness is not part of this line: continuous marginal
-  moments and continuous-continuous covariance equations stay ordinary moment
-  estimates unless a separate design reopens them.
-- [x] Experimental robust moment builders are exposed through the
-  methods-developer surfaces: R `magmaan_core` wrappers/examples and the
-  staged C++ facade in `src/api/sem.hpp`. This covers all-ordinal h-weighted,
-  all-ordinal DPD, mixed fixed-marginal polyserial DPD, mixed Huberized
-  residual stats, and the staged C++ all-ordinal Huberized residual builder
-  without changing the default lavaan-compatible data builders.
-
-Remaining work, in suggested order:
-
-- None in this Huberized-residual slice at the moment.
-
-Done when: robust polychoric/polyserial alternatives are selectable where their
-moment contracts are designed, default ML fixtures are unchanged, diagnostics
-make robustness visible, and at least one robust method has a Gamma path usable
-by ordinal DWLS/WLS robust reporting.
-
-## 5. Composite models
+## 4. Composite models
 
 Intent: decide whether magmaan supports lavaan's new composite-variable
 semantics for `<~`, then implement the smallest lavaan-backed complete-data ML
