@@ -1,16 +1,28 @@
-## magmaan R bindings — Satorra (2000) scaled nested-model χ² test on
-## Holzinger-Swineford × school (configural vs metric invariance), cross-checked
-## against lavaan's `lavTestLRT(method = "satorra.2000")`.
+## magmaan R bindings — Satorra (2000) scaled nested-model χ² test, via
+## `nestedTest()`, on Holzinger-Swineford × school (configural vs metric
+## invariance).
 ##
 ## Run from the repo root (after `R CMD INSTALL r-package`):
 ##     Rscript r-package/examples/nested_test_satorra2000.R
+##
+## `nestedTest()` reports four p-values for H1 ⊃ H0: the naïve χ²(m), the
+## Satorra-Bentler scaled correction, the mean-and-variance adjustment, and the
+## exact Imhof mixture tail.
+##
+## NOTE ON LAVAAN PARITY. magmaan's scaled difference statistic is the
+## *H1-anchored reduced-form* Satorra-2000 test (everything evaluated at the H1
+## fit). lavaan's `lavTestLRT(method = "satorra.2000")` computes a different
+## variant; the two agree on the unscaled difference and df exactly, but the
+## *scaled* statistic diverges for strongly-binding restrictions. On this
+## example metric invariance nearly holds on the HS data, so the restriction
+## barely binds and the two happen to be close — but that is not a parity
+## guarantee. See docs/satorra2000_parity.md. This example therefore checks
+## only the unscaled difference and df against lavaan, and shows lavaan's scaled
+## statistic for reference, not as a parity check.
 
 suppressMessages({ library(magmaan); library(lavaan) })
 
-ok  <- function(cond) if (isTRUE(cond)) "ok" else "MISMATCH"
-mok <- function(a, b, tol = 1e-2)
-  if (isTRUE(all.equal(unname(as.numeric(a)),
-                       unname(as.numeric(b)), tolerance = tol))) "ok" else "MISMATCH"
+ok <- function(cond) if (isTRUE(cond)) "ok" else "MISMATCH"
 
 hs    <- HolzingerSwineford1939
 vars  <- paste0("x", 1:9)
@@ -41,7 +53,7 @@ res <- nestedTest(fit_H1 = fit_cfg, fit_H0 = fit_met, data = Xg)
 cat("\n=== magmaan: nestedTest(fit_cfg, fit_met) ===\n")
 print(res)
 
-## ---- cross-check vs lavaan -------------------------------------------------
+## ---- lavaan, for reference -------------------------------------------------
 
 lav_cfg <- lavaan::cfa(m_cfg, data = df_hs, group = "school",
                        estimator = "MLM")
@@ -52,26 +64,32 @@ lav_lr  <- lavaan::lavTestLRT(lav_cfg, lav_met, method = "satorra.2000")
 cat("\n=== lavaan::lavTestLRT(., method = 'satorra.2000') ===\n")
 print(lav_lr)
 
-## The "scaled" row in lavaan's table is the SB scaled test on the difference;
-## extract its statistic and df.  Layout: rows 1 = H1 (NA Δχ²), 2 = H0 (Δχ², Δdf, p).
-lav_T   <- as.numeric(lav_lr[2, "Chisq diff"])
-lav_df  <- as.numeric(lav_lr[2, "Df diff"])
-lav_p   <- as.numeric(lav_lr[2, "Pr(>Chisq)"])
+## Layout: rows 1 = H1 (NA Δχ²), 2 = H0 (Δχ², Δdf, p).
+lav_df       <- as.numeric(lav_lr[2, "Df diff"])
+lav_unscaled <- as.numeric(fitMeasures(lav_met, "chisq") -
+                           fitMeasures(lav_cfg, "chisq"))
+lav_scaled   <- as.numeric(lav_lr[2, "Chisq diff"])
 
-cat("\n--- cross-check: magmaan vs lavaan -------------------------------\n")
-## NB: lavaan's `method = "satorra.2000"` and our `compute_satorra2000` can
-## differ in the n vs (n−1) divisor on Γ̂, so we cross-check to a relative
-## tolerance of 1% on the scaled stat and 5% on the p-value.  The eigenvalue
-## spectrum itself should be within those bounds too.
-cat(sprintf("  Δχ² (scaled):    magmaan = %.4f   lavaan = %.4f   %s\n",
-            res$T_scaled, lav_T, mok(res$T_scaled, lav_T, tol = 1e-2)))
-cat(sprintf("  Δdf:             magmaan = %d       lavaan = %d        %s\n",
+## ---- checks: unscaled difference + df only ---------------------------------
+## These are exact across implementations. The *scaled* statistic is variant-
+## dependent (see the header note / docs/satorra2000_parity.md) and is shown
+## for reference only.
+cat("\n--- magmaan vs lavaan -------------------------------------------\n")
+cat(sprintf("  Δdf:              magmaan = %d        lavaan = %d         %s\n",
             res$df_diff, as.integer(lav_df),
             ok(identical(as.integer(res$df_diff), as.integer(lav_df)))))
-cat(sprintf("  p (scaled):      magmaan = %.4g   lavaan = %.4g   %s\n",
-            res$p_scaled, lav_p, mok(res$p_scaled, lav_p, tol = 5e-2)))
-cat(sprintf("  ĉ (scale factor): %.6f\n", res$scale_c))
-cat(sprintf("  d̂₀ (adj. df):     %.6f\n", res$adjust_d0))
-cat(sprintf("  Imhof mixture p:  %.6g\n", res$p_mixture))
+cat(sprintf("  Δχ² (unscaled):   magmaan = %.4f   lavaan = %.4f   %s\n",
+            res$T_diff, lav_unscaled,
+            ok(isTRUE(all.equal(res$T_diff, lav_unscaled, tolerance = 1e-3)))))
+cat(sprintf("  Δχ² (scaled):     magmaan = %.4f   lavaan = %.4f   (different variants — reference only)\n",
+            res$T_scaled, lav_scaled))
+cat(sprintf("  ĉ (magmaan scale factor): %.6f\n", res$scale_c))
+cat(sprintf("  d̂₀ (adj. df):             %.6f\n", res$adjust_d0))
+cat(sprintf("  Imhof mixture p:          %.6g\n", res$p_mixture))
 cat("\nEigenvalues:\n")
 print(res$eigenvalues)
+
+stopifnot(identical(as.integer(res$df_diff), as.integer(lav_df)))
+stopifnot(isTRUE(all.equal(res$T_diff, lav_unscaled, tolerance = 1e-3)))
+
+cat("\nnestedTest() Satorra-2000 workflow: ok\n")
