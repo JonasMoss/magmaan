@@ -1,4 +1,4 @@
-#include "magmaan/nt/robust.hpp"
+#include "magmaan/robust/robust.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -13,7 +13,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/constraints.hpp"        // EqConstraints / build_eq_constraints
-#include "magmaan/nt/infer.hpp"          // information_observed_{analytic,fd}
+#include "magmaan/inference/inference.hpp"          // information_observed_{analytic,fd}
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"

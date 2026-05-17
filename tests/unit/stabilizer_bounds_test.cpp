@@ -13,7 +13,7 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/op.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 // Phase-1 stabilizer bound builders. The data-derived builders mirror lavaan's
 // `optim.bounds` algorithm (lavaan/R/lav_partable_bounds.R); the expected

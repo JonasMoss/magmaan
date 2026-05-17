@@ -21,7 +21,7 @@
 #include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 namespace {
 

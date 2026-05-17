@@ -10,7 +10,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/fit.hpp"
-#include "magmaan/nt/measures.hpp"
+#include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"

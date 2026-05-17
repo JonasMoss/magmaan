@@ -12,12 +12,12 @@
 
 #include "../oracle.hpp"
 #include "magmaan/estimate/fit.hpp"
-#include "magmaan/nt/infer.hpp"
+#include "magmaan/inference/inference.hpp"
 #include "magmaan/data/sample_stats.hpp"
-#include "magmaan/nt/standardize.hpp"
+#include "magmaan/measures/standardized.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 // Post-hoc standardized-solution parity vs lavaan::standardizedSolution(fit,
 // type = "std.lv" / "std.all"). Distinct from std_lv_golden_test.cpp, which

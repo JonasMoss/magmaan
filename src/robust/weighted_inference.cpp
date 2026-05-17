@@ -1,4 +1,4 @@
-#include "magmaan/estimate/weighted_inference.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -15,7 +15,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/estimate/constraints.hpp"
-#include "magmaan/nt/infer.hpp"
+#include "magmaan/inference/inference.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 

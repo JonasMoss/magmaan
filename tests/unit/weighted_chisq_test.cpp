@@ -4,8 +4,8 @@
 
 #include <Eigen/Core>
 
-#include "magmaan/nt/infer.hpp"        // chi2_pvalue (oracle for closed forms)
-#include "magmaan/nt/robust.hpp"
+#include "magmaan/inference/inference.hpp"        // chi2_pvalue (oracle for closed forms)
+#include "magmaan/robust/robust.hpp"
 
 
 namespace {

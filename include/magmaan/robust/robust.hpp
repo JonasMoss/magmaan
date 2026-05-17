@@ -13,10 +13,10 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/spec/partable.hpp"
-#include "magmaan/nt/weighted_chisq.hpp"
-#include "magmaan/nt/restriction.hpp"
-#include "magmaan/nt/satorra2000.hpp"
-#include "magmaan/nt/lr_test_satorra.hpp"
+#include "magmaan/robust/weighted_chisq.hpp"
+#include "magmaan/robust/restriction.hpp"
+#include "magmaan/robust/satorra2000.hpp"
+#include "magmaan/robust/lr_test_satorra.hpp"
 
 namespace magmaan::nt::robust {
 

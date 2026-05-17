@@ -15,12 +15,12 @@
 
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/data/raw_data.hpp"
-#include "magmaan/nt/infer.hpp"
+#include "magmaan/inference/inference.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 #include "../inference_bundle.hpp"
 

@@ -8,7 +8,7 @@
 
 #include "internal.hpp"
 
-#include "magmaan/nt/robust.hpp"
+#include "magmaan/robust/robust.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/ordinal.hpp"

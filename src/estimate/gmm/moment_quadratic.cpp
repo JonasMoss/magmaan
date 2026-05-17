@@ -1,4 +1,4 @@
-#include "magmaan/gmm/moment_quadratic.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
 
 #include <cmath>
 #include <cstddef>

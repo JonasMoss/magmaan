@@ -38,10 +38,10 @@
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
-#include "magmaan/nt/ml.hpp"
+#include "magmaan/estimate/nt.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 #include "magmaan/spec/start_hints.hpp"
 
 #ifdef MAGMAAN_WITH_CERES

@@ -7,9 +7,9 @@
 
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/fit.hpp"
-#include "magmaan/gmm/moment_quadratic.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/data/raw_data.hpp"
-#include "magmaan/nt/robust.hpp"
+#include "magmaan/robust/robust.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/spec/partable.hpp"

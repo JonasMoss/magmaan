@@ -1,4 +1,4 @@
-#include "magmaan/estimate/dls_weight.hpp"
+#include "magmaan/estimate/gmm/dls_weight.hpp"
 
 #include <cstddef>
 #include <string>

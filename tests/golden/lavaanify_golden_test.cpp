@@ -13,8 +13,8 @@
 #include "../oracle.hpp"
 #include "magmaan/parse/op.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/lavaan/partable_view.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/compat/lavaan/partable_view.hpp"
+#include "magmaan/spec/build.hpp"
 #include "magmaan/spec/partable.hpp"
 #include "magmaan/spec/start_hints.hpp"
 

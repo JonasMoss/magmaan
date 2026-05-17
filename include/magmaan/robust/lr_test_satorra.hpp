@@ -8,7 +8,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/model/matrix_rep.hpp"
-#include "magmaan/nt/satorra2000.hpp"
+#include "magmaan/robust/satorra2000.hpp"
 #include "magmaan/spec/partable.hpp"
 
 namespace magmaan::nt::robust {

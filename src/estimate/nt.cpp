@@ -1,4 +1,4 @@
-#include "magmaan/nt/ml.hpp"
+#include "magmaan/estimate/nt.hpp"
 
 #include <cmath>
 #include <cstddef>

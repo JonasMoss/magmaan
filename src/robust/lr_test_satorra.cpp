@@ -1,4 +1,4 @@
-#include "magmaan/nt/lr_test_satorra.hpp"
+#include "magmaan/robust/lr_test_satorra.hpp"
 
 #include <cmath>
 #include <cstddef>
@@ -9,9 +9,9 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
-#include "magmaan/nt/infer.hpp"        // chi2_pvalue, noncentral_chisq_cdf
-#include "magmaan/nt/restriction.hpp"      // restriction_alpha_from_K
-#include "magmaan/nt/weighted_chisq.hpp"   // imhof_upper
+#include "magmaan/inference/inference.hpp"        // chi2_pvalue, noncentral_chisq_cdf
+#include "magmaan/robust/restriction.hpp"      // restriction_alpha_from_K
+#include "magmaan/robust/weighted_chisq.hpp"   // imhof_upper
 #include "magmaan/model/model_evaluator.hpp"
 
 #include "detail_vech.hpp"                // vech_len

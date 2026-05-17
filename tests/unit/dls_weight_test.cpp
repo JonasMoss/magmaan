@@ -12,13 +12,13 @@
 #include "../test_fit.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
-#include "magmaan/estimate/dls_weight.hpp"
+#include "magmaan/estimate/gmm/dls_weight.hpp"
 #include "magmaan/estimate/start_values.hpp"
-#include "magmaan/gmm/moment_quadratic.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 using magmaan::data::RawData;
 using magmaan::data::SampleStats;

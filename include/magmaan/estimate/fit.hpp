@@ -5,7 +5,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
-#include "magmaan/gmm/moment_quadratic.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "magmaan/nt/infer.hpp"      // Estimates (via fit.hpp), noncentral_chisq_cdf
+#include "magmaan/inference/inference.hpp"      // Estimates (via fit.hpp), noncentral_chisq_cdf
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/spec/partable.hpp"

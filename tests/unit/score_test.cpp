@@ -12,10 +12,10 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/fit.hpp"
-#include "magmaan/nt/score.hpp"
+#include "magmaan/inference/score.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
-#include "magmaan/spec/lavaanify.hpp"
+#include "magmaan/spec/build.hpp"
 
 using magmaan::data::SampleStats;
 using magmaan::estimate::Estimates;

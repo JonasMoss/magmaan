@@ -1,4 +1,4 @@
-#include "magmaan/gmm/gp.hpp"
+#include "magmaan/estimate/gmm/gp.hpp"
 
 #include <cstdint>
 #include <memory>
