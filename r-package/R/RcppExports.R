@@ -61,6 +61,10 @@ data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl <- function(X, ordered_mas
     .Call(`_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl`, X, ordered_mask, alpha)
 }
 
+data_mixed_ordinal_stats_huber_residual_from_raw_impl <- function(X, ordered_mask, clip = "hard_huber", k = 1.345) {
+    .Call(`_magmaan_data_mixed_ordinal_stats_huber_residual_from_raw_impl`, X, ordered_mask, clip, k)
+}
+
 fit_dwls_ordinal_impl <- function(partable, ordinal_stats, lbfgsb = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_dwls_ordinal_impl`, partable, ordinal_stats, lbfgsb, bounds)
 }

@@ -249,6 +249,18 @@ inline Result<Data> data_from_mixed_ordinal_polyserial_dpd(
   return Data::from_mixed_ordinal(std::move(stats->stats));
 }
 
+inline Result<Data> data_from_mixed_ordinal_huber_residual(
+    const Model &, const std::vector<Eigen::MatrixXd> &blocks,
+    const std::vector<std::vector<std::int32_t>> &ordered,
+    data::MixedOrdinalHuberResidualOptions options = {}) {
+  auto stats = data::mixed_ordinal_stats_huber_residual_from_data(
+      blocks, ordered, options);
+  if (!stats) {
+    return std::unexpected(make_error(ErrorStage::Data, stats.error()));
+  }
+  return Data::from_mixed_ordinal(std::move(stats->stats));
+}
+
 enum class OptimizerKind : std::uint8_t {
   Lbfgs,
   Ceres,

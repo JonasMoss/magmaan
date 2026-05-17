@@ -143,11 +143,13 @@ struct CorrelationRepairResult {
 enum class SharedRobustOrdinalKind {
   HWeighted,
   Dpd,
+  HuberResidual,
 };
 
 struct SharedRobustOrdinalOptions {
   SharedRobustOrdinalKind kind = SharedRobustOrdinalKind::HWeighted;
   PolychoricHScoreOptions h_score;
+  HuberResidualClipOptions clip;
   double alpha = 0.3;
   double rho_lower = -0.999;
   double rho_upper = 0.999;
@@ -159,6 +161,31 @@ struct SharedRobustOrdinalOptions {
   bool lavaan_adjust_2x2 = true;
   PairwiseOrdinalCorrelationRepairOptions correlation_repair;
 };
+
+double pearson_cell_residual(double f, double p, double total) noexcept {
+  return std::sqrt(std::max(1.0, total)) * (f - p) /
+         std::sqrt(std::max(kProbFloor, p));
+}
+
+double clipped_cell_frequency(double f,
+                              double p,
+                              double total,
+                              const HuberResidualClipOptions& clip) {
+  const double r = pearson_cell_residual(f, p, total);
+  auto c = eval_huber_residual_clip(r, clip);
+  if (!c.has_value()) return std::numeric_limits<double>::quiet_NaN();
+  return p + c->psi * std::sqrt(std::max(kProbFloor, p) /
+                                std::max(1.0, total));
+}
+
+double clipped_cell_derivative(double f,
+                               double p,
+                               double total,
+                               const HuberResidualClipOptions& clip) {
+  const double r = pearson_cell_residual(f, p, total);
+  auto c = eval_huber_residual_clip(r, clip);
+  return c.has_value() ? c->dpsi : std::numeric_limits<double>::quiet_NaN();
+}
 
 struct SharedOrdinalPairTable {
   Eigen::Index i = 0;
@@ -474,10 +501,15 @@ double shared_pair_objective(
         auto h = eval_polychoric_h_score(f / p, options.h_score);
         if (!h.has_value()) return std::numeric_limits<double>::infinity();
         out += p * h->phi;
-      } else {
+      } else if (options.kind == SharedRobustOrdinalKind::Dpd) {
         const double alpha = options.alpha;
         const double p_alpha = std::pow(p, alpha);
         out += p * p_alpha - ((1.0 + alpha) / alpha) * f * p_alpha;
+      } else {
+        const double r = pearson_cell_residual(f, p, total);
+        auto c = eval_huber_residual_clip(r, options.clip);
+        if (!c.has_value()) return std::numeric_limits<double>::infinity();
+        out += p * c->loss;
       }
     }
   }
@@ -620,8 +652,10 @@ Eigen::VectorXd shared_ordinal_estimating_equation(
           if (!h.has_value()) return Eigen::VectorXd::Constant(
               mdim, std::numeric_limits<double>::quiet_NaN());
           scale = h->h * pcell;
-        } else {
+        } else if (options.kind == SharedRobustOrdinalKind::Dpd) {
           scale = (pcell - f) * std::pow(pcell, options.alpha);
+        } else {
+          scale = clipped_cell_frequency(f, pcell, total, options.clip);
         }
         add_pair_score_to_global(out, score, nth, si, sj, nth_i, nth_j,
                                  pair.corr_index, scale);
@@ -669,8 +703,11 @@ Eigen::MatrixXd shared_ordinal_casewise_psi(
         const double t = pair.adjusted_counts(ci, cj) / (total * pcell);
         auto h = eval_polychoric_h_score(t, options.h_score);
         scale = h.has_value() ? h->dh : std::numeric_limits<double>::quiet_NaN();
-      } else {
+      } else if (options.kind == SharedRobustOrdinalKind::Dpd) {
         scale = std::pow(pcell, options.alpha);
+      } else {
+        const double f = pair.adjusted_counts(ci, cj) / total;
+        scale = clipped_cell_derivative(f, pcell, total, options.clip);
       }
       Eigen::VectorXd row_psi = psi.row(row).transpose();
       add_pair_score_to_global(row_psi, score, nth, si, sj, nth_i, nth_j,
@@ -1051,10 +1088,14 @@ pairwise_ordinal_stats_shared_robust_from_integer_data(
     if (h_score_is_ml_like_local(options.h_score)) {
       return pairwise_ordinal_stats_from_integer_data(Xs);
     }
-  } else if (!(std::isfinite(options.alpha) && options.alpha > 0.0)) {
+  } else if (options.kind == SharedRobustOrdinalKind::Dpd &&
+             !(std::isfinite(options.alpha) && options.alpha > 0.0)) {
     if (options.alpha == 0.0) return pairwise_ordinal_stats_from_integer_data(Xs);
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "pairwise_ordinal_stats_shared_robust_from_integer_data: invalid DPD alpha"));
+  } else if (options.kind == SharedRobustOrdinalKind::HuberResidual) {
+    auto clip_ok = eval_huber_residual_clip(0.0, options.clip);
+    if (!clip_ok.has_value()) return std::unexpected(clip_ok.error());
   }
 
   auto base_or = pairwise_ordinal_stats_from_integer_data(Xs);
@@ -1219,11 +1260,22 @@ pairwise_ordinal_stats_shared_robust_from_integer_data(
             if (raw_p > kProbFloor) {
               score += h->h * ordinal_bvn_rect_drho(lo_i, hi_i, lo_j, hi_j, rho);
             }
-          } else {
+          } else if (options.kind == SharedRobustOrdinalKind::Dpd) {
             weights(a, c) = std::pow(pcell, options.alpha);
             objective += pcell * weights(a, c) -
                          ((1.0 + options.alpha) / options.alpha) *
                              fhat * weights(a, c);
+          } else {
+            const double r = pearson_cell_residual(fhat, pcell, total);
+            auto h = eval_huber_residual_clip(r, options.clip);
+            if (!h.has_value()) return std::unexpected(h.error());
+            weights(a, c) = h->weight;
+            objective += pcell * h->loss;
+            if (raw_p > kProbFloor) {
+              score += clipped_cell_frequency(fhat, pcell, total, options.clip) *
+                       ordinal_bvn_rect_drho(lo_i, hi_i, lo_j, hi_j, rho) /
+                       pcell;
+            }
           }
         }
       }
@@ -1320,6 +1372,7 @@ pairwise_ordinal_stats_h_weighted_from_integer_data(
       Xs, SharedRobustOrdinalOptions{
               .kind = SharedRobustOrdinalKind::HWeighted,
               .h_score = options.rho.h_score,
+              .clip = {},
               .rho_lower = options.rho.rho_lower,
               .rho_upper = options.rho.rho_upper,
               .max_iter = options.max_iter,
@@ -1339,6 +1392,7 @@ pairwise_ordinal_stats_dpd_from_integer_data(
       Xs, SharedRobustOrdinalOptions{
               .kind = SharedRobustOrdinalKind::Dpd,
               .h_score = {},
+              .clip = {},
               .alpha = options.alpha,
               .rho_lower = options.rho_lower,
               .rho_upper = options.rho_upper,
@@ -1748,6 +1802,397 @@ mixed_ordinal_stats_polyserial_dpd_from_data(
     const std::vector<std::vector<std::int32_t>>& ordered,
     PolyserialPairDpdOptions options) {
   return mixed_ordinal_stats_from_data_impl(Xs, ordered, true, options);
+}
+
+namespace {
+
+double mixed_polyserial_prob_unchecked(int cat,
+                                       double u,
+                                       double rho,
+                                       const Eigen::VectorXd& th) noexcept {
+  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
+  const double lo = (cat == 0) ? -kInf : th(cat - 1);
+  const double hi = (cat == th.size()) ? kInf : th(cat);
+  return std::max(kProbFloor,
+                  normal_cdf((hi - rho * u) / sd) -
+                      normal_cdf((lo - rho * u) / sd));
+}
+
+double polyserial_huber_objective_unchecked(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    double rho,
+    const HuberResidualClipOptions& clip) {
+  if (clip.kind == HuberResidualClipKind::None) {
+    double nll = 0.0;
+    for (Eigen::Index r = 0; r < categories.size(); ++r) {
+      nll -= std::log(mixed_polyserial_prob_unchecked(
+          categories(r), u(r), rho, thresholds));
+    }
+    return nll / static_cast<double>(categories.size());
+  }
+  double out = 0.0;
+  const Eigen::Index nlev = thresholds.size() + 1;
+  for (Eigen::Index r = 0; r < categories.size(); ++r) {
+    for (Eigen::Index c = 0; c < nlev; ++c) {
+      const double p = mixed_polyserial_prob_unchecked(
+          static_cast<int>(c), u(r), rho, thresholds);
+      const double f = (categories(r) == c) ? 1.0 : 0.0;
+      const double e = (f - p) / std::sqrt(std::max(kProbFloor, p));
+      auto clipped = eval_huber_residual_clip(e, clip);
+      if (!clipped.has_value()) return std::numeric_limits<double>::infinity();
+      out += p * clipped->loss;
+    }
+  }
+  return out / static_cast<double>(categories.size());
+}
+
+post_expected<PolyserialPairDpdResult>
+fit_polyserial_pair_rho_huber_residual_local(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    const PolyserialPairHuberResidualOptions& options) {
+  auto clip_ok = eval_huber_residual_clip(0.0, options.clip);
+  if (!clip_ok.has_value()) return std::unexpected(clip_ok.error());
+  if (!std::isfinite(options.rho_lower) || !std::isfinite(options.rho_upper) ||
+      !(options.rho_lower > -1.0) || !(options.rho_upper < 1.0) ||
+      !(options.rho_lower < options.rho_upper) || options.max_iter < 1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "fit_polyserial_pair_rho_huber_residual: invalid options"));
+  }
+  if (options.clip.kind == HuberResidualClipKind::None) {
+    auto ml = fit_polyserial_pair_rho_ml(
+        categories, u, thresholds,
+        PolyserialPairMlOptions{.rho_lower = options.rho_lower,
+                                .rho_upper = options.rho_upper,
+                                .max_iter = options.max_iter});
+    if (!ml.has_value()) return std::unexpected(ml.error());
+    PolyserialPairDpdResult out;
+    out.rho = ml->rho;
+    out.objective = ml->negloglik / static_cast<double>(categories.size());
+    out.iterations = ml->iterations;
+    out.hit_lower = ml->hit_lower;
+    out.hit_upper = ml->hit_upper;
+    return out;
+  }
+
+  PolyserialPairDpdResult out;
+  double lo = options.rho_lower;
+  double hi = options.rho_upper;
+  constexpr double invphi = 0.6180339887498948482;
+  double c = hi - invphi * (hi - lo);
+  double d = lo + invphi * (hi - lo);
+  double fc = polyserial_huber_objective_unchecked(
+      categories, u, thresholds, c, options.clip);
+  double fd = polyserial_huber_objective_unchecked(
+      categories, u, thresholds, d, options.clip);
+  for (int it = 0; it < options.max_iter; ++it) {
+    out.iterations = it + 1;
+    if (fc < fd) {
+      hi = d;
+      d = c;
+      fd = fc;
+      c = hi - invphi * (hi - lo);
+      fc = polyserial_huber_objective_unchecked(
+          categories, u, thresholds, c, options.clip);
+    } else {
+      lo = c;
+      c = d;
+      fc = fd;
+      d = lo + invphi * (hi - lo);
+      fd = polyserial_huber_objective_unchecked(
+          categories, u, thresholds, d, options.clip);
+    }
+  }
+  out.rho = 0.5 * (lo + hi);
+  out.objective = polyserial_huber_objective_unchecked(
+      categories, u, thresholds, out.rho, options.clip);
+  const double width = options.rho_upper - options.rho_lower;
+  out.hit_lower = std::abs(out.rho - options.rho_lower) <= 1e-8 * width;
+  out.hit_upper = std::abs(out.rho - options.rho_upper) <= 1e-8 * width;
+  return out;
+}
+
+PairwiseOrdinalCorrelationRepairOptions
+pairwise_repair_from_mixed(MixedOrdinalCorrelationRepairOptions options) {
+  PairwiseOrdinalCorrelationRepairKind kind =
+      PairwiseOrdinalCorrelationRepairKind::None;
+  switch (options.kind) {
+    case MixedOrdinalCorrelationRepairKind::None:
+      kind = PairwiseOrdinalCorrelationRepairKind::None;
+      break;
+    case MixedOrdinalCorrelationRepairKind::Error:
+      kind = PairwiseOrdinalCorrelationRepairKind::Error;
+      break;
+    case MixedOrdinalCorrelationRepairKind::Ridge:
+      kind = PairwiseOrdinalCorrelationRepairKind::Ridge;
+      break;
+    case MixedOrdinalCorrelationRepairKind::Shrinkage:
+      kind = PairwiseOrdinalCorrelationRepairKind::Shrinkage;
+      break;
+  }
+  return PairwiseOrdinalCorrelationRepairOptions{
+      .kind = kind,
+      .min_eigenvalue = options.min_eigenvalue};
+}
+
+Eigen::VectorXd polyserial_huber_scaled_rho_scores(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    double rho,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    const HuberResidualClipOptions& clip) {
+  auto scores_or = polyserial_pair_scores(categories, u, rho, thresholds);
+  if (!scores_or.has_value()) {
+    return Eigen::VectorXd::Constant(categories.size(),
+        std::numeric_limits<double>::quiet_NaN());
+  }
+  if (clip.kind == HuberResidualClipKind::None) return scores_or->rho;
+  Eigen::VectorXd out = scores_or->rho;
+  for (Eigen::Index r = 0; r < categories.size(); ++r) {
+    const double p = mixed_polyserial_prob_unchecked(
+        categories(r), u(r), rho, thresholds);
+    const double e = (1.0 - p) / std::sqrt(std::max(kProbFloor, p));
+    auto clipped = eval_huber_residual_clip(e, clip);
+    if (!clipped.has_value()) {
+      out(r) = std::numeric_limits<double>::quiet_NaN();
+    } else {
+      out(r) *= clipped->dpsi;
+    }
+  }
+  out.array() -= out.mean();
+  return out;
+}
+
+}  // namespace
+
+post_expected<MixedOrdinalHuberResidualStats>
+mixed_ordinal_stats_huber_residual_from_data(
+    const std::vector<Eigen::MatrixXd>& Xs,
+    const std::vector<std::vector<std::int32_t>>& ordered,
+    MixedOrdinalHuberResidualOptions options) {
+  auto clip_ok = eval_huber_residual_clip(0.0, options.clip);
+  if (!clip_ok.has_value()) return std::unexpected(clip_ok.error());
+  if (!std::isfinite(options.rho_lower) || !std::isfinite(options.rho_upper) ||
+      !(options.rho_lower > -1.0) || !(options.rho_upper < 1.0) ||
+      !(options.rho_lower < options.rho_upper) || options.max_iter < 1 ||
+      !(std::isfinite(options.fd_step) && options.fd_step > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "mixed_ordinal_stats_huber_residual_from_data: invalid options"));
+  }
+
+  auto base_or = mixed_ordinal_stats_from_data_impl(
+      Xs, ordered, true, PolyserialPairDpdOptions{.alpha = 0.0});
+  if (!base_or.has_value()) return std::unexpected(base_or.error());
+
+  MixedOrdinalHuberResidualStats out;
+  out.stats = std::move(base_or->stats);
+  out.block_diagnostics.reserve(Xs.size());
+
+  for (std::size_t b = 0; b < Xs.size(); ++b) {
+    const auto& X = Xs[b];
+    const Eigen::Index n = X.rows();
+    const Eigen::Index p = X.cols();
+    MixedOrdinalStats& stats = out.stats;
+    Eigen::MatrixXd IF = base_or->block_diagnostics[b].moment_influence;
+    Eigen::MatrixXd R = stats.R[b];
+    Eigen::VectorXd thresholds = stats.thresholds[b];
+
+    std::vector<Eigen::Index> ordinal_cols;
+    std::vector<int> ordinal_pos(static_cast<std::size_t>(p), -1);
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (ordered[b][static_cast<std::size_t>(j)] != 0) {
+        ordinal_pos[static_cast<std::size_t>(j)] =
+            static_cast<int>(ordinal_cols.size());
+        ordinal_cols.push_back(j);
+      }
+    }
+
+    Eigen::MatrixXd ordinal_robust_if;
+    bool have_ordinal_robust_if = false;
+    double ordinal_raw_min_eigen = 0.0;
+    double ordinal_min_eigen = 0.0;
+    bool ordinal_repair_applied = false;
+    double ordinal_ridge = 0.0;
+    double ordinal_shrinkage = 0.0;
+    if (ordinal_cols.size() >= 2) {
+      Eigen::MatrixXd Xord(n, static_cast<Eigen::Index>(ordinal_cols.size()));
+      for (Eigen::Index k = 0; k < Xord.cols(); ++k) {
+        Xord.col(k) = X.col(ordinal_cols[static_cast<std::size_t>(k)]);
+      }
+      auto ord_or = pairwise_ordinal_stats_shared_robust_from_integer_data(
+          {Xord}, SharedRobustOrdinalOptions{
+                      .kind = SharedRobustOrdinalKind::HuberResidual,
+                      .h_score = {},
+                      .clip = options.clip,
+                      .alpha = 0.0,
+                      .rho_lower = options.rho_lower,
+                      .rho_upper = options.rho_upper,
+                      .max_iter = options.max_iter,
+                      .ftol = options.ftol,
+                      .gtol = options.gtol,
+                      .fd_step = options.fd_step,
+                      .min_threshold_spacing = options.min_threshold_spacing,
+                      .lavaan_adjust_2x2 = options.lavaan_adjust_2x2,
+                      .correlation_repair =
+                          pairwise_repair_from_mixed(options.correlation_repair)});
+      if (!ord_or.has_value()) return std::unexpected(ord_or.error());
+      thresholds = ord_or->stats.thresholds[0];
+      ordinal_robust_if = ord_or->block_diagnostics[0].moment_influence;
+      have_ordinal_robust_if = true;
+      ordinal_raw_min_eigen = ord_or->block_diagnostics[0].raw_min_eigen_r;
+      ordinal_min_eigen = ord_or->block_diagnostics[0].min_eigen_r;
+      ordinal_repair_applied = ord_or->block_diagnostics[0].r_repair_applied;
+      ordinal_ridge = ord_or->block_diagnostics[0].r_ridge;
+      ordinal_shrinkage =
+          ord_or->block_diagnostics[0].r_shrinkage_intensity;
+      IF.leftCols(thresholds.size()) =
+          ordinal_robust_if.leftCols(thresholds.size());
+      for (Eigen::Index oj = 0; oj < static_cast<Eigen::Index>(ordinal_cols.size()); ++oj) {
+        for (Eigen::Index oi = oj + 1; oi < static_cast<Eigen::Index>(ordinal_cols.size()); ++oi) {
+          const Eigen::Index i = ordinal_cols[static_cast<std::size_t>(oi)];
+          const Eigen::Index j = ordinal_cols[static_cast<std::size_t>(oj)];
+          R(i, j) = R(j, i) = ord_or->stats.R[0](oi, oj);
+        }
+      }
+    }
+
+    std::vector<Eigen::VectorXd> th_by_var(static_cast<std::size_t>(p));
+    std::vector<Eigen::Index> th_start(static_cast<std::size_t>(p), -1);
+    for (Eigen::Index k = 0; k < thresholds.size(); ++k) {
+      const Eigen::Index ov =
+          stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      if (stats.threshold_level[b][static_cast<std::size_t>(k)] == 1) {
+        th_start[static_cast<std::size_t>(ov)] = k;
+      }
+    }
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (ordered[b][static_cast<std::size_t>(j)] == 0) continue;
+      const Eigen::Index start = th_start[static_cast<std::size_t>(j)];
+      const Eigen::Index len =
+          static_cast<Eigen::Index>(stats.n_levels[b][static_cast<std::size_t>(j)] - 1);
+      th_by_var[static_cast<std::size_t>(j)] = thresholds.segment(start, len);
+    }
+
+    Eigen::VectorXd mean = stats.mean[b];
+    Eigen::VectorXd var = Eigen::VectorXd::Zero(p);
+    Eigen::MatrixXd U = Eigen::MatrixXd::Zero(n, p);
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (ordered[b][static_cast<std::size_t>(j)] != 0) continue;
+      var(j) = R(j, j);
+      const double sd = std::sqrt(var(j));
+      U.col(j) = (X.col(j).array() - mean(j)) / sd;
+    }
+
+    MixedOrdinalHuberResidualBlockDiagnostics diag;
+    diag.raw_min_eigen_r = ordinal_raw_min_eigen;
+    diag.min_eigen_r = ordinal_min_eigen;
+    diag.r_repair_applied = ordinal_repair_applied;
+    diag.r_ridge = ordinal_ridge;
+    diag.r_shrinkage_intensity = ordinal_shrinkage;
+    std::vector<double> rho_diag;
+    std::vector<double> obj_diag;
+    Eigen::Index assoc_count = 0;
+    const Eigen::Index nth = thresholds.size();
+    const Eigen::Index n_cont = std::count(ordered[b].begin(), ordered[b].end(), 0);
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j + 1; i < p; ++i) {
+        const bool oi = ordered[b][static_cast<std::size_t>(i)] != 0;
+        const bool oj = ordered[b][static_cast<std::size_t>(j)] != 0;
+        const Eigen::Index moment_index = nth + 2 * n_cont + assoc_count;
+        if (oi && oj) {
+          const int oi_pos = ordinal_pos[static_cast<std::size_t>(i)];
+          const int oj_pos = ordinal_pos[static_cast<std::size_t>(j)];
+          Eigen::Index ord_corr = 0;
+          for (int cj = 0; cj < oj_pos; ++cj) {
+            ord_corr += static_cast<Eigen::Index>(ordinal_cols.size()) - cj - 1;
+          }
+          ord_corr += oi_pos - oj_pos - 1;
+          if (have_ordinal_robust_if) {
+            IF.col(moment_index) =
+                ordinal_robust_if.col(nth + ord_corr);
+          }
+          diag.robust_pairs.push_back(MixedPairLabel{
+              .i = static_cast<std::int32_t>(i),
+              .j = static_cast<std::int32_t>(j),
+              .moment_index = static_cast<std::int32_t>(moment_index),
+              .kind = MixedPairKind::ordinal_ordinal});
+          rho_diag.push_back(R(i, j));
+          obj_diag.push_back(0.0);
+        } else if (oi || oj) {
+          const Eigen::Index o = oi ? i : j;
+          const Eigen::Index c = oi ? j : i;
+          Eigen::VectorXi cat(n);
+          for (Eigen::Index r = 0; r < n; ++r) {
+            cat(r) = static_cast<int>(X(r, o)) - 1;
+          }
+          const double sd = std::sqrt(var(c));
+          auto fit_or = fit_polyserial_pair_rho_huber_residual_local(
+              cat, U.col(c), th_by_var[static_cast<std::size_t>(o)],
+              PolyserialPairHuberResidualOptions{
+                  .rho_lower = options.rho_lower,
+                  .rho_upper = options.rho_upper,
+                  .max_iter = options.max_iter,
+                  .fd_step = options.fd_step,
+                  .clip = options.clip});
+          if (!fit_or.has_value()) return std::unexpected(fit_or.error());
+          const double rho = fit_or->rho;
+          R(i, j) = R(j, i) = rho * sd;
+          Eigen::VectorXd sc = polyserial_huber_scaled_rho_scores(
+              cat, U.col(c), rho, th_by_var[static_cast<std::size_t>(o)],
+              options.clip);
+          if (!sc.allFinite()) {
+            return std::unexpected(make_err(PostError::Kind::NumericIssue,
+                "mixed_ordinal_stats_huber_residual_from_data: non-finite polyserial scores"));
+          }
+          double bread = sc.squaredNorm();
+          if (!(bread > 1e-12) || !std::isfinite(bread)) bread = 1.0;
+          IF.col(moment_index) = static_cast<double>(n) * sc / bread * sd;
+          diag.robust_pairs.push_back(MixedPairLabel{
+              .i = static_cast<std::int32_t>(i),
+              .j = static_cast<std::int32_t>(j),
+              .moment_index = static_cast<std::int32_t>(moment_index),
+              .kind = MixedPairKind::continuous_ordinal});
+          rho_diag.push_back(rho);
+          obj_diag.push_back(fit_or->objective);
+        }
+        ++assoc_count;
+      }
+    }
+
+    Eigen::MatrixXd NACOV = (IF.transpose() * IF) / static_cast<double>(n);
+    NACOV = 0.5 * (NACOV + NACOV.transpose());
+    Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(NACOV.rows(), NACOV.cols());
+    for (Eigen::Index k = 0; k < NACOV.rows(); ++k) {
+      const double v = NACOV(k, k);
+      if (!std::isfinite(v) || v <= 0.0) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "mixed_ordinal_stats_huber_residual_from_data: non-positive Gamma diagonal"));
+      }
+      W_dwls(k, k) = 1.0 / v;
+    }
+    auto W_wls_or = symmetric_inverse_pd(NACOV, "mixed Huber residual Gamma");
+    if (!W_wls_or.has_value()) return std::unexpected(W_wls_or.error());
+
+    stats.thresholds[b] = std::move(thresholds);
+    stats.R[b] = std::move(R);
+    stats.moments[b] = mixed_moment_vector(
+        stats.R[b], stats.mean[b], ordered[b], stats.thresholds[b]);
+    stats.NACOV[b] = NACOV;
+    stats.W_dwls[b] = std::move(W_dwls);
+    stats.W_wls[b] = std::move(*W_wls_or);
+    diag.rho = Eigen::Map<Eigen::VectorXd>(
+        rho_diag.data(), static_cast<Eigen::Index>(rho_diag.size()));
+    diag.objective = Eigen::Map<Eigen::VectorXd>(
+        obj_diag.data(), static_cast<Eigen::Index>(obj_diag.size()));
+    diag.moment_influence = std::move(IF);
+    diag.gamma = stats.NACOV[b];
+    out.block_diagnostics.push_back(std::move(diag));
+  }
+
+  return out;
 }
 
 }  // namespace magmaan::data

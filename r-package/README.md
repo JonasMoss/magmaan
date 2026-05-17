@@ -84,6 +84,12 @@ Ordinal support is intentionally narrow and mirrors the C++ delta-path:
   `magmaan_core$data_ordinal_stats_from_df(..., robust = "h_weighted")`,
   `robust = "dpd"`, or
   `magmaan_core$data_mixed_ordinal_stats_from_df(..., polyserial = "dpd")`.
+  The mixed path also exposes the experimental Pearson-residual clipping
+  comparator with
+  `polyserial = "huber_residual"` and `clip = "hard_huber"`,
+  `"pseudo_huber"`, `"tukey_biweight"`, or `"none"`. In that path,
+  ordinal-containing threshold/correlation/polyserial rows are rebuilt from
+  clipped residual influence; continuous-only moments remain ordinary.
   Defaults remain the lavaan-compatible ML moment builders.
 - Robust ordinal reporting is explicit: call
   `magmaan_core$infer_ordinal_robust(fit, ordinal_stats, weight = "")` after a

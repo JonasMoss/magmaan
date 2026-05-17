@@ -54,6 +54,7 @@ magmaan_core <- local({
     "data_ordinal_stats_dpd_from_raw_impl",
     "data_mixed_ordinal_stats_from_raw_impl",
     "data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl",
+    "data_mixed_ordinal_stats_huber_residual_from_raw_impl",
     "compute_defined_impl",
     "infer_information_expected",
     "infer_information_observed_fd",
