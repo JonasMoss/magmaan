@@ -201,6 +201,16 @@ golden `parTable()` fixtures.
   ML limit, contaminated polyserial tails, sparse ordinal margins, positive
   DWLS diagonals, finite Gamma conditioning, and DPD comparator stability. This
   remains a methods comparator rather than a lavaan-backed compatibility claim.
+- Robust ordinal moment builders are experimental methods-developer surfaces,
+  not changes to the default lavaan-compatible ordinal builders. SEM-facing
+  robust builders use shared ordinal thresholds and rebuild moment influence,
+  Gamma/NACOV, and DWLS/WLS weights under the robust equations. Pair-local
+  threshold estimators remain diagnostics/prototypes rather than SEM moment
+  constructors. Mixed robust builders currently robustify ordinal-only and
+  continuous-ordinal links only; continuous marginal moments and
+  continuous-continuous covariances remain ordinary unless a separate design
+  reopens them. R exposes predefined robust methods only; arbitrary C++
+  h-functions remain internal.
 - Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
   complete/listwise ordinal data, exposing pair labels, count/adjustment
   diagnostics, fitted fixed-threshold rho diagnostics, fitted expected/residual
