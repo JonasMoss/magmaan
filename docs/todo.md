@@ -137,8 +137,10 @@ Remaining work, in suggested order:
   with WLSMV-style robust reporting, complete-data ML with Satorra-Bentler,
   complete-data ML with observed-information SEs, and FIML with MLR-style
   robust reporting.
-- [ ] **M, later transition cleanup.** After the compatibility window, remove
+- [x] **M, later transition cleanup.** After the compatibility window, remove
   the old `fit/*` and `partable/*` shim headers and their transition tests.
+  (`fit/*` and `gls/*` were removed with the GMM-core refactor; the orphaned
+  `partable/*` forwarding shims were removed once nothing referenced them.)
 
 Done when: new code naturally uses the target namespaces, friendly R/Python
 users see a small staged API, and methods developers can still choose primitive
