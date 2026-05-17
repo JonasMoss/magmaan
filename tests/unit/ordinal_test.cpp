@@ -2203,6 +2203,53 @@ TEST_CASE("Huber residual clipping API covers hard, smooth, Tukey, and no-clip")
   CHECK(tukey->dpsi == doctest::Approx(0.0));
 }
 
+TEST_CASE("Mixed ordinal Huber residual no-clip preserves single-ordinal ML Gamma") {
+  std::mt19937 rng(20260519);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(360, 3);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta > -0.65) + (eta > 0.45);
+    X(i, 1) = 0.8 * eta + 0.6 * norm(rng);
+    X(i, 2) = 0.55 * eta + 0.84 * norm(rng);
+  }
+  for (Eigen::Index i = 0; i < 18; ++i) {
+    X(i, 0) = 1.0;
+    X(i, 1) = 5.5 + 0.02 * static_cast<double>(i);
+  }
+  std::vector<std::vector<std::int32_t>> ordered = {{1, 0, 0}};
+
+  auto base = magmaan::data::mixed_ordinal_stats_from_data({X}, ordered);
+  auto none = magmaan::data::mixed_ordinal_stats_huber_residual_from_data(
+      {X}, ordered,
+      magmaan::data::MixedOrdinalHuberResidualOptions{
+          .clip = magmaan::data::HuberResidualClipOptions{
+              .kind = magmaan::data::HuberResidualClipKind::None},
+          .correlation_repair = {}});
+  auto robust = magmaan::data::mixed_ordinal_stats_huber_residual_from_data(
+      {X}, ordered,
+      magmaan::data::MixedOrdinalHuberResidualOptions{
+          .clip = magmaan::data::HuberResidualClipOptions{
+              .kind = magmaan::data::HuberResidualClipKind::HardHuber,
+              .k = 1.345},
+          .correlation_repair = {}});
+  REQUIRE(base.has_value());
+  REQUIRE(none.has_value());
+  REQUIRE(robust.has_value());
+
+  CHECK(none->stats.thresholds[0].isApprox(base->thresholds[0], 0.0));
+  CHECK(none->stats.R[0].isApprox(base->R[0], 1e-12));
+  CHECK(none->stats.NACOV[0].isApprox(base->NACOV[0], 1e-10));
+  CHECK(none->block_diagnostics[0].gamma.isApprox(
+      (none->block_diagnostics[0].moment_influence.transpose() *
+       none->block_diagnostics[0].moment_influence) /
+          static_cast<double>(none->stats.n_obs[0]),
+      1e-12));
+  CHECK(robust->stats.W_dwls[0].diagonal().minCoeff() > 0.0);
+  CHECK(robust->block_diagnostics[0].robust_pairs.size() == 2);
+  CHECK_FALSE(robust->stats.NACOV[0].isApprox(base->NACOV[0], 1e-6));
+}
+
 TEST_CASE("Mixed ordinal Huber residual stats rebuild Gamma and preserve continuous moments") {
   std::mt19937 rng(20260518);
   std::normal_distribution<double> norm(0.0, 1.0);

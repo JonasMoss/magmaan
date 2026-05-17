@@ -244,7 +244,7 @@ Remaining work, in suggested order:
     stats.
   - [x] Rebuild mixed moment influence, Gamma/NACOV, and DWLS/WLS weights while
     keeping continuous-only moments ordinary.
-  - [ ] Tighten the shared bread/influence derivation for thresholds when only
+  - [x] Tighten the shared bread/influence derivation for thresholds when only
     polyserial links carry ordinal information.
   - [ ] Add broader Monte Carlo checks for Gamma conditioning and weight
     stability under sparse ordinal categories and contaminated polyserial tails.
