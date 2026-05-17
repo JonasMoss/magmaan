@@ -1,168 +1,157 @@
-# Satorra-2000 nested-test parity gap
+# Satorra-2000 nested-test lavaan parity
 
-**Status:** open — under investigation. Recorded 2026-05-17.
+**Status:** resolved 2026-05-17. This was not a confirmed lavaan bug.
 
-This document records a discrepancy between magmaan's Satorra-2000 scaled
-nested-model difference test and lavaan's `lavTestLRT(method = "satorra.2000")`.
-It is *not* a confirmed implementation bug in magmaan; the evidence below shows
-magmaan faithfully implements one standard, well-defined form of the test. The
-open question is which variant is canonical and whether magmaan should match
-lavaan's specific construction. Treat the numbers here as a starting point for a
-careful re-derivation, not as a settled conclusion.
+The apparent parity gap between magmaan's `nestedTest()` and lavaan's
+`lavTestLRT(method = "satorra.2000")` came from lavaan's `A.method` default,
+not from the Satorra-2000 scaling formula itself.
 
-## Summary
+For parameter-nested models, magmaan's restriction matrix matches lavaan's
+`A.method = "exact"` path. magmaan's `T_scaled` is the mean-scaled statistic
+`T / c`, so the matching lavaan call also sets `scaled.shifted = FALSE`.
+lavaan's documented default is `A.method = "delta"`, which constructs the
+restriction Jacobian from the column spaces of the two models' moment
+Jacobians. That default is useful when models are nested only in the
+covariance/moment sense, but it is not the same restriction Jacobian as the
+explicit parameter equality in simple parameter-nested comparisons.
 
-`nestedTest()` (C++ `robust::lr_test_satorra2000_from_data` →
-`compute_satorra2000`) and lavaan's `lavTestLRT(method = "satorra.2000")` agree
-on the *unscaled* difference statistic exactly, but disagree on the *scaled*
-difference statistic — i.e. on the scaling factor `c` (equivalently, the
-generalised eigenvalues `λ`). The disagreement grows with how strongly the
-restriction binds:
+## Bottom line
 
-| restriction (single-group HS 3-factor CFA) | binding? | magmaan `c` | lavaan s2000 `c` | gap |
-|---|---|---|---|---|
-| `visual =~ x2 == x3` (loadings ≈ equal in H1) | weak | 0.7471 | 0.7499 | 0.4% |
-| `speed =~ x8 == x9` | moderate | 0.8651 | 0.8393 | 3.1% |
-| `textual =~ x5 == x6` (loadings differ ≈ 0.19 in H1) | strong | 1.4462 | 1.2810 | 12.9% |
-| 2-group metric invariance (m = 6, ≈ holds on HS) | weak | 1.0667 | 1.0604 | 0.6% |
-
-The naive unscaled difference (`χ²_H0 − χ²_H1`) matches lavaan exactly in every
-case, and the normal-theory (`gamma = "NT"`) path correctly collapses every
-eigenvalue to 1. The discrepancy is confined to the empirical-Γ scaling factor.
-
-Because the existing example `nested_test_satorra2000.R` exercises only the
-2-group metric-invariance case — where metric invariance nearly holds on the HS
-data, so the restriction barely binds — the gap there is 0.6% and the example's
-lavaan cross-check passed. That masked the issue. The cross-check has since been
-removed from that example (see "Examples" below).
-
-## What magmaan computes
-
-`compute_satorra2000` implements the reduced `m × m` generalised-eigenvalue form
-of the Satorra-2000 difference test, with **every quantity evaluated at the H1
-fit** `θ̂_H1`. For a nested pair H1 ⊃ H0 with restriction Jacobian `A` (m × r1,
-the orthonormal basis of the H0 restriction in H1's parameter space):
-
-```
-P = Δᵀ V Δ                         (r1 × r1, expected information at θ̂_H1)
-C = A P⁻¹ Aᵀ                       (m × m)
-S = A P⁻¹ Δᵀ V Γ V Δ P⁻¹ Aᵀ        (m × m)
-λ = generalised eigenvalues of (S, C);   c = mean(λ);   T_scaled = T_diff / c
-```
-
-where `Δ = ∂σ/∂θ` at `θ̂_H1`, `V = Γ_NT(Σ̂_H1)⁻¹` the normal-theory weight at the
-H1 model-implied moments, and `Γ` the empirical fourth-moment ACOV of the
-sample moments (n divisor). This is the standard reduced form of the
-H1-anchored difference test: `λ` are exactly the non-zero eigenvalues of `Uᵈ Γ`
-with `Uᵈ = V Δ P⁻¹ Aᵀ C⁻¹ A P⁻¹ Δᵀ V`, the H1-anchored difference of the two
-models' residual-weight matrices. See `include/magmaan/robust/satorra2000.hpp`.
-
-## Evidence that magmaan faithfully implements that form
-
-The reduced form above was reconstructed **independently in R** from lavaan's
-*own* `delta`, `WLS.V` and `gamma` matrices for the H1 fit, with no magmaan code
-in the path:
+Use this as the lavaan parity target for magmaan's current `nestedTest()`:
 
 ```r
-indep_scale <- function(fit_h1, free_i, free_j) {
-  D <- as.matrix(lavInspect(fit_h1, "delta"))   # ∂σ/∂θ at θ̂_H1
-  V <- as.matrix(lavInspect(fit_h1, "WLS.V"))   # normal-theory weight
-  G <- as.matrix(lavInspect(fit_h1, "gamma"))   # empirical Γ
-  A <- matrix(0, 1, ncol(D))
-  A[1, free_i] <-  1 / sqrt(2)
-  A[1, free_j] <- -1 / sqrt(2)
-  Pinv <- solve(t(D) %*% V %*% D)
-  C    <- A %*% Pinv %*% t(A)
-  S    <- A %*% Pinv %*% (t(D) %*% V %*% G %*% V %*% D) %*% Pinv %*% t(A)
-  as.numeric(S / C)
+lavTestLRT(fit_h1, fit_h0, method = "satorra.2000",
+           A.method = "exact", scaled.shifted = FALSE)
+```
+
+Do not use lavaan's bare default as an oracle for parameter-nested equality
+constraints:
+
+```r
+lavTestLRT(fit_h1, fit_h0, method = "satorra.2000")
+```
+
+That call uses `A.method = "delta"`. The difference can be tiny for weakly
+binding restrictions and visible for strongly binding restrictions. It also
+uses `scaled.shifted = TRUE`, so for `m > 1` it reports lavaan's
+scaled-shifted statistic rather than the mean-scaled `T / c` statistic.
+
+## Evidence
+
+For three single-group Holzinger-Swineford CFA restrictions, the original
+report compared magmaan to lavaan's default `A.method = "delta"`:
+
+| restriction | lavaan `A.method = "delta"` scale | lavaan `A.method = "exact"` scale | magmaan scale |
+|---|---:|---:|---:|
+| `visual =~ x2 == x3` | 0.749899281 | 0.747094573 | 0.7471 |
+| `speed =~ x8 == x9` | 0.839290405 | 0.865142793 | 0.8651 |
+| `textual =~ x5 == x6` | 1.280963205 | 1.446237750 | 1.4462 |
+
+The strongly binding `textual =~ x5 == x6` case produced the alarming 12.9%
+gap only because it compared magmaan's exact parameter-restriction matrix with
+lavaan's delta-method covariance-nesting matrix.
+
+Reconstructing lavaan's formula in R confirms this diagnosis. With
+`Delta = lavInspect(fit_h1, "delta")`, `V = lavInspect(fit_h1, "WLS.V")`,
+`Gamma = lavInspect(fit_h1, "gamma")`, and
+`P = t(Delta) %*% V %*% Delta`, the only switch needed to move between the two
+answers is the restriction matrix `A`:
+
+```r
+calc_scale <- function(fit_h1, A) {
+  D <- as.matrix(lavInspect(fit_h1, "delta"))
+  V <- as.matrix(lavInspect(fit_h1, "WLS.V"))
+  G <- as.matrix(lavInspect(fit_h1, "gamma"))
+  P_inv <- solve(t(D) %*% V %*% D)
+  C_inv <- MASS::ginv(A %*% P_inv %*% t(A))
+  PAAPAAP <- P_inv %*% t(A) %*% C_inv %*% A %*% P_inv
+  sum(diag(V %*% G %*% V %*% D %*% PAAPAAP %*% t(D))) / nrow(A)
 }
 ```
 
-This reproduces magmaan's `nestedTest()` scaling factor to all printed digits
-(0.7471, 0.8651, 1.4462 for the three single-group cases). So magmaan's C++ is a
-faithful implementation of the reduced-form formula — the magmaan-vs-lavaan gap
-is a difference in the *definition of the test*, not a coding error in
-`compute_satorra2000`.
+For `textual =~ x5 == x6`, lavaan's two `A` matrices differ materially:
 
-## What this is *not*
+```r
+A_delta <- lavaan:::lav_test_diff_a(fit_h1, fit_h0,
+                                    method = "delta", reference = "H1")
+A_exact <- lavaan:::lav_test_diff_a(fit_h1, fit_h0,
+                                    method = "exact", reference = "H1")
+```
 
-Ruled out as the cause of the gap:
+`A_exact` has the expected two non-zero entries for the loading equality
+(`L5 - L6`). `A_delta` is dense in several H1 free parameters because it is a
+moment-Jacobian column-space construction. Plugging `A_delta` into equation 23
+reproduces lavaan's default scale 1.280963205; plugging `A_exact` into the same
+equation reproduces magmaan and lavaan's explicit exact scale 1.446237750.
 
-- **The n vs n−1 divisor on Γ̂.** That is an O(1/N) ≈ 0.3% effect on HS
-  (N = 301); the observed gap is ~13%. (The comment previously in
-  `nested_test_satorra2000.R` blaming the divisor was a misdiagnosis and has
-  been corrected.)
-- **The `:=` defined-parameter row.** Removing it from H1 leaves the scaling
-  factor unchanged.
-- **Single- vs multi-group per se.** A single-group weak restriction
-  (`visual x2 == x3`) matches lavaan to 0.4%; the gap tracks how strongly the
-  restriction binds, not the group count.
-- **The `auto.cov.lv.x` duplication bug.** That was a separate, real defect
-  (now fixed); it does not touch the Satorra-2000 path.
+## Relation to Satorra (2000)
 
-## What lavaan does (partially characterised)
+Satorra's setup defines restrictions through a parameter-space constraint
+function `a(delta) = a0` with full-row-rank Jacobian `A`. In the special case
+where the restriction is equating parameters to specific values, the paper
+spells out that `A` can be taken as a selector for the restricted parameter
+components. The scaled restricted-test statistic uses
 
-lavaan's `lavTestLRT(method = "satorra.2000")` dispatches to
-`lav_test_diff_Satorra2000`. It is **not** the H1-anchored reduced form:
+```text
+U = V * Delta * P^-1 * A' * (A * P^-1 * A')^-1 * A * P^-1 * Delta' * V
+c = tr(U * Gamma) / m
+```
 
-- A naive two-model difference `Uᵈ = U₀ − U₁`, with each `U` built from its own
-  fit's `V` and `Δ` (so `U₀` uses `Σ̂_H0`, `U₁` uses `Σ̂_H1`), gave values
-  inconsistent with both magmaan *and* lavaan (≈ 0.18 / 0.31 / 0.13) in a quick
-  reconstruction — so either that is not lavaan's construction or the
-  eigenvalue extraction in that reconstruction was wrong. To be pinned down.
-- A *common-V* two-model difference `U₀ − U₁` (both with `V` from the same fit)
-  collapses algebraically back to the H1-anchored reduced form — i.e. it equals
-  magmaan. So lavaan's variant is neither of those simple forms.
+with the multi-sample trace written equivalently as a weighted group sum. This
+is the formula in lavaan's `lav_test_diff_satorra2000` and in magmaan's
+`compute_satorra2000`; the parity issue was the choice of `A`, not the trace
+formula.
 
-For context, lavaan's three difference-test methods on the strongly-binding
-`textual x5 == x6` case bracket magmaan's value:
+Primary sources checked:
 
-| method | scaling factor `c` |
-|---|---|
-| lavaan `satorra.bentler.2001` | 1.2320 |
-| lavaan `satorra.2000` | 1.2810 |
-| lavaan `satorra.bentler.2010` | 1.3721 |
-| magmaan `nestedTest` (H1-anchored reduced form) | 1.4462 |
-
-magmaan's per-model Satorra-Bentler scaling factors are themselves correct:
-`c_H1 = 1.05482`, `c_H0 = 1.06191` match lavaan, and the hand-computed
-Satorra-Bentler-2001 difference scale `(df₁·c₁ − df₀·c₀)/(df₁ − df₀) = 1.2320`
-reproduces lavaan's `satorra.bentler.2001` exactly. The gap is specific to the
-*eigenvalue-based* difference test.
-
-## Open questions / next steps
-
-1. Read `lav_test_diff_Satorra2000` in the lavaan source and characterise its
-   construction exactly (which model anchors `Δ`, `V`, `Σ̂`; which `Γ`; whether
-   it uses a full `p* × p*` `Uᵈ Γ` spectrum or a reduced form).
-2. Re-derive the Satorra (2000) difference test from the paper and decide which
-   construction is canonical — the H1-anchored reduced form, lavaan's variant,
-   or both as asymptotically-equivalent estimators of the same limit.
-3. Decide whether magmaan should match lavaan's `satorra.2000` for oracle
-   parity, or document the difference as an intentional, defensible choice.
-4. If the math says lavaan's `satorra.2000` is the outlier, prepare a minimal
-   reproducible example and file a lavaan issue.
-5. Once resolved, re-enable a nested-test parity check in
-   `r-package/examples/nested_test_satorra2000.R`.
+- Satorra, A. (1999/2000), *Scaled and adjusted restricted tests in
+  multi-sample analysis of moment structures*, especially equations 22-23 and
+  the parameter-restriction special case.
+- lavaan `lavTestLRT` documentation: `A.method = "exact"` requires
+  parameter-nested models; `A.method = "delta"` only requires covariance-matrix
+  nesting. The same documentation also notes that `scaled.shifted` controls the
+  Satorra-2000 scaled-shifted statistic.
+- lavaan `R/lav_test_diff.R`: `lav_test_diff_satorra2000` uses the same
+  equation-23 trace form after computing `A`.
 
 ## Reproduction
 
 ```r
-suppressMessages({ library(magmaan); library(lavaan) })
-df <- as.data.frame(HolzingerSwineford1939[paste0("x", 1:9)])
-h1 <- "visual=~x1+x2+x3\ntextual=~x4+L5*x5+L6*x6\nspeed=~x7+x8+x9"
-h0 <- "visual=~x1+x2+x3\ntextual=~x4+Lt*x5+Lt*x6\nspeed=~x7+x8+x9"
+suppressMessages(library(lavaan))
 
-f1 <- magmaan(h1, df, estimator = "ML", se = "none", test = "none")
-f0 <- magmaan(h0, df, estimator = "ML", se = "none", test = "none")
-nt <- nestedTest(fit_H1 = f1, fit_H0 = f0, data = df)
+df <- as.data.frame(HolzingerSwineford1939[paste0("x", 1:9)])
+h1 <- "visual=~x1+x2+x3
+       textual=~x4+L5*x5+L6*x6
+       speed=~x7+x8+x9"
+h0 <- "visual=~x1+x2+x3
+       textual=~x4+Lt*x5+Lt*x6
+       speed=~x7+x8+x9"
 
 l1 <- cfa(h1, data = df, estimator = "MLM")
 l0 <- cfa(h0, data = df, estimator = "MLM")
-lr <- lavTestLRT(l1, l0, method = "satorra.2000")
 
-cat("magmaan scaling c :", nt$scale_c, "\n")                       # ≈ 1.4462
-cat("lavaan  scaling c :",
-    (fitMeasures(l0,"chisq") - fitMeasures(l1,"chisq")) /
-    lr[2, "Chisq diff"], "\n")                                     # ≈ 1.2810
+lr_delta <- lavTestLRT(l1, l0, method = "satorra.2000",
+                       scaled.shifted = FALSE)
+lr_exact <- lavTestLRT(l1, l0, method = "satorra.2000",
+                       A.method = "exact", scaled.shifted = FALSE)
+Tdiff <- fitMeasures(l0, "chisq") - fitMeasures(l1, "chisq")
+
+c(delta = Tdiff / lr_delta[2, "Chisq diff"],
+  exact = Tdiff / lr_exact[2, "Chisq diff"])
+#    delta    exact
+# 1.280963 1.446238
 ```
+
+## Project decision
+
+magmaan should continue using the exact parameter-nesting restriction matrix for
+`nestedTest()`, because that is the natural contract for two lavaanified models
+differing by shared labels or explicit linear `==` constraints. Its reported
+`T_scaled` is the mean-scaled `T / c` statistic; the separate adjusted and
+mixture p-values cover the other Satorra-2000 distributional summaries.
+
+For lavaan-facing examples and parity checks, compare against
+`lavTestLRT(..., method = "satorra.2000", A.method = "exact",
+scaled.shifted = FALSE)`. It is still reasonable to mention lavaan's
+delta-method default in examples, but only as a documented alternative for
+covariance-nested comparisons, not as a magmaan oracle.

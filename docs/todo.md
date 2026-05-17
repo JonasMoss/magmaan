@@ -185,15 +185,6 @@ Remaining work, in suggested order:
   `modification_indices` overloads; decide the structural-regression absent-row
   contract; regenerate `tests/fixtures/score/` once the public surface is
   stable.
-- **M/L.** Resolve the Satorra-2000 nested-test parity gap. `nestedTest()`
-  computes the H1-anchored reduced-form scaled difference test and diverges from
-  lavaan's `lavTestLRT(method = "satorra.2000")` for strongly-binding
-  restrictions (~13% on the scaling factor in the worst case observed). magmaan
-  faithfully implements the reduced form (verified by independent
-  reconstruction); the open question is lavaan's variant and which is canonical.
-  See `docs/satorra2000_parity.md` for the evidence, ruled-out causes, and next
-  steps. Re-enable a nested-test parity check in
-  `r-package/examples/nested_test_satorra2000.R` once resolved.
 - **XL, deferred.** Reopen nonlinear equality constraints, inequality
   constraints, or active-bound inference only with an explicit statistical
   design and reporting contract.
