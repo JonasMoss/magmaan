@@ -126,9 +126,9 @@ Contracts:
 
 Remaining work, in suggested order:
 
-- **S.** Record local build-loop timings after major workflow changes: no-op
-  build, touched core TU, touched test TU, labeled `ctest`, `test-dev`, and the
-  three R install modes.
+- **S.** Keep the build-loop timings table in `docs/roadmap.md` (Local build
+  workflow) current after major workflow changes: no-op build, touched/edited
+  core and test TUs, `ctest`, `test-dev`, and the three R install modes.
 - **S/M.** Extend benchmark case coverage beyond the current complete-data ML
   scaffold to FIML, ULS, GLS, WLS, ordinal DWLS/WLS, and mixed categorical
   models.

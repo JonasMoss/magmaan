@@ -402,6 +402,30 @@ golden `parTable()` fixtures.
   wrapper work, and `just r-install-ceres` is the explicit Ceres-enabled R
   path.
 
+#### Build-loop timings
+
+Snapshot taken after the directory/namespace refactor (commit `11e67f4`), on a
+13th-gen i7-1355U (12 threads), clang 19.1.7, with ccache and mold enabled.
+Wall-clock; approximate orientation, not a benchmark.
+
+| Loop step (`just` recipe)                   | Time   | Notes |
+|---------------------------------------------|--------|-------|
+| no-op `fast` build (`just fast`)            | 0.01 s | nothing changed |
+| touched core TU, `fast`                     | 1.2 s  | mtime only — ccache hit, relink `libmagmaan` + test exes |
+| edited core TU, `fast`                      | 7.5 s  | content change — cold clang compile of one core TU |
+| touched test TU, `fast`                     | 0.5 s  | mtime only — ccache hit, relink one test exe |
+| edited test TU, `fast`                      | 5.6 s  | content change — cold compile of one test TU |
+| C++ suite (`just test-fast`)                | 90 s   | 394 tests; no-op build + `ctest` |
+| C++ suite minus parity (`just test-quick`)  | 58 s   | 390 tests; the parity cases are ~half the full run |
+| sanitizer suite (`just test-dev`)           | 287 s  | 399 ASan/UBSan tests, plus a one-time 158 s build to carry the `dev` tree past the refactor |
+| R install, opt (`just r-install`)           | 12 s   | warm core; rebuilds the 5 R-glue TUs + link |
+| R install, fast (`just r-install-fast`)     | 15 s   | warm core |
+| R install, Ceres (`just r-install-ceres`)   | 123 s  | includes a one-time post-refactor rebuild of the Ceres core; ~15 s once warm |
+
+The everyday inner loop (edit a core file, `just test-quick`) is about a
+minute; the sanitizer suite and the Ceres R path are minutes-scale and run
+deliberately rather than on every change.
+
 ### Argument-minimality sweep
 
 One core architecture rule is that functions should take exactly the data they
