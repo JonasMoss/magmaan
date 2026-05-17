@@ -105,11 +105,11 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
       continue;
     }
 
-    magmaan::spec::LavaanifyOptions opts;
+    magmaan::spec::BuildOptions opts;
     opts.n_groups = exp.value("n_groups", 1);
     opts.meanstructure = exp.value("meanstructure", true);
     opts.fixed_x = exp.value("fixed_x", true);
-    auto pt = magmaan::spec::lavaanify(*fp, opts);
+    auto pt = magmaan::spec::build(*fp, opts);
     if (!pt.has_value()) {
       failures.push_back(id + ": lavaanify — " + pt.error().detail);
       continue;

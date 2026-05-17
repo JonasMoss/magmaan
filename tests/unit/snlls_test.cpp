@@ -21,7 +21,7 @@ using magmaan::model::ModelEvaluator;
 using magmaan::model::build_matrix_rep;
 using magmaan::optim::LbfgsOptions;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
+using magmaan::spec::build;
 
 namespace {
 
@@ -33,7 +33,7 @@ struct Handles {
 Handles handles_for(std::string_view src) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE(pt.has_value());
   auto rep = build_matrix_rep(*pt);
   REQUIRE(rep.has_value());

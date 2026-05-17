@@ -12,7 +12,7 @@ using magmaan::model::Cell;
 using magmaan::model::MatId;
 using magmaan::model::MatrixRep;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
+using magmaan::spec::build;
 
 namespace {
 
@@ -20,7 +20,7 @@ MatrixRep must_build(std::string_view src) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
   magmaan::spec::LatentNames names;
-  auto pt = lavaanify(*fp, {}, nullptr, &names);
+  auto pt = build(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt, &names);
   REQUIRE_MESSAGE(mr.has_value(),

@@ -19,7 +19,7 @@
 #include "magmaan/spec/build.hpp"
 
 // Stage D of the ParTable split refactor: the `std_lv` knob on
-// LavaanifyOptions. These goldens pin a CFA fitted with `std.lv = TRUE`
+// BuildOptions. These goldens pin a CFA fitted with `std.lv = TRUE`
 // (latent variances fixed at 1, all loadings free) against
 // `lavaan::cfa(model, data, std.lv = TRUE)` — fixtures under
 // tests/fixtures/fit_stdlv/ are produced by the dedicated section in
@@ -72,9 +72,9 @@ TEST_CASE("std.lv goldens — θ̂/SE/χ²/df match lavaan(std.lv=TRUE)") {
     auto fp = magmaan::parse::Parser::parse(model);
     if (!fp.has_value()) { failures.push_back(id + ": parse"); continue; }
 
-    magmaan::spec::LavaanifyOptions opts;
+    magmaan::spec::BuildOptions opts;
     opts.std_lv = true;
-    auto pt = magmaan::spec::lavaanify(*fp, opts);
+    auto pt = magmaan::spec::build(*fp, opts);
     if (!pt.has_value()) {
       failures.push_back(id + ": lavaanify — " + pt.error().detail);
       continue;
@@ -169,7 +169,7 @@ TEST_CASE("std.lv goldens — θ̂/SE/χ²/df match lavaan(std.lv=TRUE)") {
     // 5) Bijectivity: the same model under the (default) marker convention
     //    must reach the same #df and the same χ² — marker and std.lv are
     //    bijective reparameterizations of one fit.
-    auto pt_m = magmaan::spec::lavaanify(*fp);   // marker (default)
+    auto pt_m = magmaan::spec::build(*fp);   // marker (default)
     auto mr_m = magmaan::model::build_matrix_rep(*pt_m);
     if (pt_m.has_value() && mr_m.has_value()) {
       auto est_m = magmaan::test::fit(*pt_m, *mr_m, samp);

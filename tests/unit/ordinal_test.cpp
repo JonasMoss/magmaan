@@ -1282,7 +1282,7 @@ TEST_CASE("Pairwise ordinal h-weighted stats preserve ML limit") {
       "x3 ~*~ 1*x3\n";
   auto fp = magmaan::parse::Parser::parse(syntax);
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp);
+  auto pt = magmaan::spec::build(*fp);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -1974,7 +1974,7 @@ TEST_CASE("Ordinal rows round-trip through lavaan-shaped partables and matrix_re
       "x3 ~*~ 1*x3\n";
   auto fp = magmaan::parse::Parser::parse(syntax);
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp);
+  auto pt = magmaan::spec::build(*fp);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -2024,7 +2024,7 @@ TEST_CASE("Ordinal delta preparation fixes response variances and compacts free 
   auto fp = magmaan::parse::Parser::parse(syntax);
   REQUIRE(fp.has_value());
   magmaan::spec::Starts starts;
-  auto pt = magmaan::spec::lavaanify(*fp, {}, &starts);
+  auto pt = magmaan::spec::build(*fp, {}, &starts);
   REQUIRE(pt.has_value());
   const std::int32_t old_n = pt->n_free();
   starts.hint.resize(static_cast<std::size_t>(old_n),
@@ -2097,7 +2097,7 @@ TEST_CASE("Ordinal theta parameterization is a valid reparameterization of delta
       "x1 ~*~ 1*x1\nx2 ~*~ 1*x2\nx3 ~*~ 1*x3\nx4 ~*~ 1*x4\n";
   auto fp = magmaan::parse::Parser::parse(syntax);
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp);
+  auto pt = magmaan::spec::build(*fp);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -2157,7 +2157,7 @@ TEST_CASE("Ordinal robust reporting returns sandwich SEs and scaled-test eigenva
       "x4 ~*~ 1*x4\n";
   auto fp = magmaan::parse::Parser::parse(syntax);
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp);
+  auto pt = magmaan::spec::build(*fp);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -2213,7 +2213,7 @@ TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments
   CHECK(stats->R[0](2, 2) > 0.0);
   CHECK(stats->R[0](3, 3) > 0.0);
 
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.meanstructure = true;
 
   const char* th_syntax =
@@ -2224,7 +2224,7 @@ TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments
       "x2 ~*~ 1*x2\n";
   auto fpt = magmaan::parse::Parser::parse(th_syntax);
   REQUIRE(fpt.has_value());
-  auto pt2 = magmaan::spec::lavaanify(*fpt, opts);
+  auto pt2 = magmaan::spec::build(*fpt, opts);
   REQUIRE(pt2.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt2);
   REQUIRE(mr.has_value());
@@ -2289,7 +2289,7 @@ TEST_CASE("Mixed ordinal polyserial DPD keeps shared marginals and fits DWLS") {
   CHECK(robust->block_diagnostics[0].dpd_fits.size() == 4);
   CHECK(robust->block_diagnostics[0].dpd_fits[0].weights.allFinite());
 
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.meanstructure = true;
   auto fp = magmaan::parse::Parser::parse(
       "f =~ x1 + x2 + x3 + x4\n"
@@ -2298,7 +2298,7 @@ TEST_CASE("Mixed ordinal polyserial DPD keeps shared marginals and fits DWLS") {
       "x1 ~*~ 1*x1\n"
       "x2 ~*~ 1*x2\n");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -2439,7 +2439,7 @@ TEST_CASE("Mixed ordinal Huber residual stats rebuild Gamma and preserve continu
   CHECK(robust->block_diagnostics[0].robust_pairs.size() == 5);
   CHECK(robust->block_diagnostics[0].rho.size() == 5);
 
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.meanstructure = true;
   auto fp = magmaan::parse::Parser::parse(
       "f =~ x1 + x2 + x3 + x4\n"
@@ -2448,7 +2448,7 @@ TEST_CASE("Mixed ordinal Huber residual stats rebuild Gamma and preserve continu
       "x1 ~*~ 1*x1\n"
       "x2 ~*~ 1*x2\n");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -2559,7 +2559,7 @@ TEST_CASE("Mixed ordinal validation rejects malformed stats before fitting") {
       {X}, std::vector<std::vector<std::int32_t>>{{1, 1, 0, 0}});
   REQUIRE(stats.has_value());
 
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.meanstructure = true;
   auto fp = magmaan::parse::Parser::parse(
       "f =~ x1 + x2 + x3 + x4\n"
@@ -2568,7 +2568,7 @@ TEST_CASE("Mixed ordinal validation rejects malformed stats before fitting") {
       "x1 ~*~ 1*x1\n"
       "x2 ~*~ 1*x2\n");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -2623,14 +2623,14 @@ TEST_CASE("Mixed ordinal theta parameterization fails explicitly") {
       {X}, std::vector<std::vector<std::int32_t>>{{1, 0, 0}});
   REQUIRE(stats.has_value());
 
-  magmaan::spec::LavaanifyOptions opts;
+  magmaan::spec::BuildOptions opts;
   opts.meanstructure = true;
   auto fp = magmaan::parse::Parser::parse(
       "f =~ x1 + x2 + x3\n"
       "x1 | t1 + t2\n"
       "x1 ~*~ 1*x1\n");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp, opts);
+  auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE(pt.has_value());
   auto prep = magmaan::estimate::prepare_mixed_ordinal_partable(
       *pt, *stats, magmaan::estimate::OrdinalParameterization::Theta);

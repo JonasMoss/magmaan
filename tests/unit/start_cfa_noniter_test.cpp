@@ -22,7 +22,6 @@ using magmaan::model::build_matrix_rep;
 using magmaan::model::MatrixRep;
 using magmaan::parse::Parser;
 using magmaan::spec::LatentStructure;
-using magmaan::spec::lavaanify;
 
 namespace {
 
@@ -34,7 +33,7 @@ struct Built {
 Built build(std::string_view src) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = magmaan::spec::build(*fp);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());

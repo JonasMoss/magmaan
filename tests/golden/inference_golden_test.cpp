@@ -72,9 +72,9 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
     if (!fp.has_value()) { failures.push_back(e.id + ": parse"); continue; }
     // Pass meanstructure through so explicit `~ 1` rows + the auto-add
     // semantics (ν free, α fixed at 0) match lavaan's cfa(meanstructure=TRUE).
-    magmaan::spec::LavaanifyOptions opts;
+    magmaan::spec::BuildOptions opts;
     opts.meanstructure = e.meanstructure;
-    auto pt = magmaan::spec::lavaanify(*fp, opts);
+    auto pt = magmaan::spec::build(*fp, opts);
     if (!pt.has_value()) { failures.push_back(e.id + ": lavaanify"); continue; }
     auto mr = magmaan::model::build_matrix_rep(*pt);
     if (!mr.has_value()) { failures.push_back(e.id + ": matrix_rep"); continue; }

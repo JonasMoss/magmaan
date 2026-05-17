@@ -12,11 +12,11 @@
 namespace magmaan::spec {
 
 // Knobs that lavaan exposes via cfa() / sem() / lavaan() entry points.
-// We surface them on a single LavaanifyOptions because we only have one
+// We surface them on a single BuildOptions because we only have one
 // entry point. Defaults match lavaan's cfa()/sem() defaults (the choices
 // practitioners expect): variances and exo-LV covariances auto-added,
 // marker indicator auto-fixed to 1, fixed.x mirrors lavaan exactly.
-struct LavaanifyOptions {
+struct BuildOptions {
   bool auto_var       = true;   // residual variances for endogenous OV; LV variances
   bool auto_cov_lv_x  = true;   // covariances among exogenous latents
   bool auto_cov_y     = false;  // covariances among endogenous LV/OV (for SEM with multiple y)
@@ -70,7 +70,7 @@ struct LavaanifyOptions {
 // the verbal model (variable names by id, per-row labels/plabels, group var +
 // level labels). Left null when the caller only needs the structural LatentStructure.
 partable_expected<LatentStructure>
-lavaanify(const parse::FlatPartable& flat, const LavaanifyOptions& opts = {},
+build(const parse::FlatPartable& flat, const BuildOptions& opts = {},
           Starts* out_starts = nullptr, LatentNames* out_names = nullptr);
 
 // Recompute `s.eq_groups` / `s.has_unenforced_constraints` from the model's

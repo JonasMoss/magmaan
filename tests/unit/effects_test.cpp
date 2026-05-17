@@ -23,7 +23,7 @@ using magmaan::test::expected_inference;
 using magmaan::model::build_matrix_rep;
 using magmaan::model::ModelEvaluator;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
+using magmaan::spec::build;
 
 namespace {
 
@@ -45,7 +45,7 @@ TEST_CASE("Effects: := value and delta-method SE on a^2 of a labeled loading") {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
   magmaan::spec::LatentNames names;
-  auto pt = lavaanify(*fp, {}, nullptr, &names);
+  auto pt = build(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -95,7 +95,7 @@ TEST_CASE("Effects: := with a product of two labeled loadings") {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
   magmaan::spec::LatentNames names;
-  auto pt = lavaanify(*fp, {}, nullptr, &names);
+  auto pt = build(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -145,7 +145,7 @@ TEST_CASE("Effects: chained := (one definition references an earlier one)") {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
   magmaan::spec::LatentNames names;
-  auto pt = lavaanify(*fp, {}, nullptr, &names);
+  auto pt = build(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -196,7 +196,7 @@ TEST_CASE("Effects: := resolves .pN. plabels (free and fixed rows)") {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
   magmaan::spec::LatentNames names;
-  auto pt = lavaanify(*fp, {}, nullptr, &names);
+  auto pt = build(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
@@ -244,7 +244,7 @@ TEST_CASE("Effects: circular := definitions error cleanly") {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
   magmaan::spec::LatentNames names;
-  auto pt = lavaanify(*fp, {}, nullptr, &names);
+  auto pt = build(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
 
   const Eigen::Index nf = pt->n_free();
@@ -260,7 +260,7 @@ TEST_CASE("Effects: circular := definitions error cleanly") {
   auto fp2 = Parser::parse("f =~ x1 + a*x2 + x3\nd := d + 1");
   REQUIRE(fp2.has_value());
   magmaan::spec::LatentNames names2;
-  auto pt2 = lavaanify(*fp2, {}, nullptr, &names2);
+  auto pt2 = build(*fp2, {}, nullptr, &names2);
   REQUIRE(pt2.has_value());
   magmaan::estimate::Estimates est2;
   est2.theta = Eigen::VectorXd::Zero(pt2->n_free());
@@ -276,7 +276,7 @@ TEST_CASE("Effects: := referencing an unknown label errors clearly") {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
   magmaan::spec::LatentNames names;
-  auto pt = lavaanify(*fp, {}, nullptr, &names);
+  auto pt = build(*fp, {}, nullptr, &names);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());

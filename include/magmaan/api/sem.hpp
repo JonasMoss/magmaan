@@ -80,7 +80,7 @@ inline Error make_error(ErrorStage stage, PostError error) {
 }
 
 struct ModelOptions {
-  spec::LavaanifyOptions lavaanify;
+  spec::BuildOptions build;
 };
 
 class Model {
@@ -94,7 +94,7 @@ public:
 
     spec::Starts starts;
     spec::LatentNames names;
-    auto structure = spec::lavaanify(*flat, options.lavaanify, &starts, &names);
+    auto structure = spec::build(*flat, options.build, &starts, &names);
     if (!structure) {
       return std::unexpected(make_error(ErrorStage::Model, structure.error()));
     }

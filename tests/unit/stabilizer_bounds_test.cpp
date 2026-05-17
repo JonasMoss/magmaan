@@ -37,7 +37,7 @@ constexpr double kInf = std::numeric_limits<double>::infinity();
 LatentStructure must_parse(std::string_view src) {
   auto fp = magmaan::parse::Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp);
+  auto pt = magmaan::spec::build(*fp);
   REQUIRE(pt.has_value());
   return std::move(*pt);
 }

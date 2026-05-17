@@ -15,14 +15,14 @@ using magmaan::model::build_matrix_rep;
 using magmaan::model::ImpliedMoments;
 using magmaan::model::ModelEvaluator;
 using magmaan::parse::Parser;
-using magmaan::spec::lavaanify;
+using magmaan::spec::build;
 
 namespace {
 
 ModelEvaluator must_build(std::string_view src) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
-  auto pt = lavaanify(*fp);
+  auto pt = build(*fp);
   REQUIRE(pt.has_value());
   auto mr = build_matrix_rep(*pt);
   REQUIRE(mr.has_value());

@@ -63,7 +63,7 @@ TEST_CASE("fit_measures: CFI, TLI, RMSEA on a known nontrivial fit") {
       "textual =~ x4 + x5 + x6\n"
       "speed =~ x7 + x8 + x9");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp);  REQUIRE(pt.has_value());
+  auto pt = magmaan::spec::build(*fp);  REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt); REQUIRE(mr.has_value());
 
   std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
@@ -187,7 +187,7 @@ TEST_CASE("fit_extras: saturated 1F model — SRMR ≈ 0, logl == unrestricted_l
   // every residual vanishes: SRMR ≈ 0, F_ML ≈ 0, logl ≈ saturated logl.
   auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
-  auto pt = magmaan::spec::lavaanify(*fp);  REQUIRE(pt.has_value());
+  auto pt = magmaan::spec::build(*fp);  REQUIRE(pt.has_value());
   auto mr = magmaan::model::build_matrix_rep(*pt); REQUIRE(mr.has_value());
 
   std::ifstream in(std::string(MAGMAAN_FIXTURES_DIR) +
