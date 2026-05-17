@@ -256,23 +256,17 @@ golden `parTable()` fixtures.
   work, exposing fixed-threshold rho ML, likelihood, casewise threshold/rho
   scores, and pairwise score Gamma. The mixed sample-stat builder now reuses
   this kernel for polyserial associations.
-- Experimental fixed-marginal DPD polyserial rho fitting is available for
-  mixed continuous/ordinal robustness work. It keeps the mixed builder's
-  lavaan-style marginal thresholds and continuous mean/variance estimates,
-  attenuates observations by joint-density `p(x, y)^alpha`, and a separate
-  mixed sample-stat builder can swap DPD polyserial pairs into
-  `MixedOrdinalStats` without changing the default ML/lavaan-compatible path.
-  DPD here means density power divergence and is not part of robcat parity.
-- Experimental fixed-marginal fixed-reference density-ratio h-weighted
-  polyserial rho fitting is available for mixed continuous/ordinal robustness
-  checks. It uses the same lavaan-style marginal estimates, delegates ML-like
-  h-scores to the ML rho kernel, attenuates low joint-density observations
-  using the rho=0 fixed-reference joint density and the shared h-score family,
-  and is exposed through a separate mixed sample-stat builder.
-- Mixed DPD and h-weighted polyserial NACOV construction uses the corresponding
-  scalar robust estimating equation with numeric sandwich bread for rho and
-  numeric threshold cross-bread. This avoids applying the ML information
-  identity to non-ML robust estimators.
+- Experimental pair-local full DPD polyserial fitting is available under
+  `data::fit_polyserial_pair_joint_dpd()`. It jointly estimates continuous
+  mean/scale, ordinal thresholds, and rho with DPD tuning `alpha`, and returns
+  probabilities, joint densities, and `f(x, y)^alpha` attenuation weights. DPD
+  here means density power divergence and is not part of robcat parity.
+- The earlier fixed-marginal/fixed-threshold robust polyserial prototypes and
+  mixed-stat builders have been retired. Robust mixed SEM integration now
+  needs an explicit design because `MixedOrdinalStats` has shared marginal
+  thresholds, while full pair-local polyserial DPD estimates pair-specific
+  nuisance thresholds. No mixed DPD/h-weighted polyserial NACOV path is exposed
+  until that moment/Gamma contract is chosen.
 - Public complete-data mixed pair helpers also expose continuous-continuous
   normal pair likelihood/diagnostics, casewise mean/variance/covariance scores,
   score Gamma, and labels for the exact threshold, negative-mean, variance,
@@ -419,12 +413,12 @@ developer step.
   fixed.x robust LS still follows lavaan's conditional exogenous bookkeeping
   and is not part of the generic continuous adapter coverage.
 - Mixed categorical NACOV/weight, fit, and robust-reporting parity is
-  intentionally looser than the all-ordinal path, but pairwise polyserial,
-  fixed-marginal DPD and h-weighted polyserial, and continuous-normal
-  score/Gamma primitives are exposed for follow-on inference work. Local
-  simulation checks compare the mixed robust Gamma paths against empirical
-  moment covariance and include a package-external full polyserial DPD
-  prototype for fixed-marginal/full-estimator comparisons.
+  intentionally looser than the all-ordinal path, but pairwise polyserial ML,
+  pair-local full DPD polyserial, and continuous-normal score/Gamma primitives
+  are exposed for follow-on inference work. Local simulation checks exercise
+  the all-ordinal robust Gamma path and compare pair-level full polyserial DPD
+  against ML under continuous-tail/category discordance; mixed SEM-level
+  robust DPD Gamma remains a design item.
 - Observed-pair ordinal table kernels are pair-level primitives only. Missing
   ordinal SEM estimation is limited to the explicit pairwise observed-data
   composite prototype; shared-threshold multivariate missing ordinal modeling
