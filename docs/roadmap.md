@@ -187,8 +187,9 @@ golden `parTable()` fixtures.
   exposed for ordinal-containing threshold/correlation/polyserial rows while
   continuous-only means, variances, and covariances remain ordinary moments.
   The path rebuilds casewise moment influence, Gamma/NACOV, and DWLS/WLS
-  weights and is a simulation-checked methods comparator rather than a
-  lavaan-backed compatibility claim.
+  weights, including the single-ordinal case where threshold uncertainty enters
+  only through polyserial links, and is a simulation-checked methods comparator
+  rather than a lavaan-backed compatibility claim.
 - Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
   complete/listwise ordinal data, exposing pair labels, count/adjustment
   diagnostics, fitted fixed-threshold rho diagnostics, fitted expected/residual

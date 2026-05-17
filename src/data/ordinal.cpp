@@ -1966,6 +1966,81 @@ Eigen::VectorXd polyserial_huber_scaled_rho_scores(
   return out;
 }
 
+struct PolyserialHuberScoreBlock {
+  Eigen::VectorXd rho;
+  Eigen::MatrixXd thresholds;
+};
+
+PolyserialHuberScoreBlock polyserial_huber_scaled_scores(
+    const Eigen::Ref<const Eigen::VectorXi>& categories,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    double rho,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds,
+    const HuberResidualClipOptions& clip) {
+  auto scores_or = polyserial_pair_scores(categories, u, rho, thresholds);
+  if (!scores_or.has_value()) {
+    return PolyserialHuberScoreBlock{
+        .rho = Eigen::VectorXd::Constant(categories.size(),
+            std::numeric_limits<double>::quiet_NaN()),
+        .thresholds = Eigen::MatrixXd::Constant(
+            categories.size(), thresholds.size(),
+            std::numeric_limits<double>::quiet_NaN())};
+  }
+  if (clip.kind == HuberResidualClipKind::None) {
+    return PolyserialHuberScoreBlock{
+        .rho = scores_or->rho,
+        .thresholds = scores_or->thresholds};
+  }
+
+  PolyserialHuberScoreBlock out{
+      .rho = scores_or->rho,
+      .thresholds = scores_or->thresholds};
+  for (Eigen::Index r = 0; r < categories.size(); ++r) {
+    const double p = mixed_polyserial_prob_unchecked(
+        categories(r), u(r), rho, thresholds);
+    const double e = (1.0 - p) / std::sqrt(std::max(kProbFloor, p));
+    auto clipped = eval_huber_residual_clip(e, clip);
+    if (!clipped.has_value()) {
+      out.rho(r) = std::numeric_limits<double>::quiet_NaN();
+      out.thresholds.row(r).array() =
+          std::numeric_limits<double>::quiet_NaN();
+    } else {
+      out.rho(r) *= clipped->dpsi;
+      out.thresholds.row(r) *= clipped->dpsi;
+    }
+  }
+  out.rho.array() -= out.rho.mean();
+  out.thresholds.rowwise() -= out.thresholds.colwise().mean();
+  return out;
+}
+
+post_expected<Eigen::MatrixXd> mixed_marginal_threshold_scores(
+    const Eigen::MatrixXd& X,
+    const std::vector<std::int32_t>& ordered,
+    const std::vector<Eigen::VectorXd>& th_by_var,
+    const std::vector<Eigen::Index>& th_start,
+    Eigen::Index nth) {
+  Eigen::MatrixXd scores = Eigen::MatrixXd::Zero(X.rows(), nth);
+  for (Eigen::Index r = 0; r < X.rows(); ++r) {
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      if (ordered[static_cast<std::size_t>(j)] == 0) continue;
+      const int c = static_cast<int>(X(r, j)) - 1;
+      const auto& thj = th_by_var[static_cast<std::size_t>(j)];
+      if (c < 0 || c > thj.size()) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "mixed Huber residual threshold scores: category outside range"));
+      }
+      const double lo = (c == 0) ? -kInf : thj(c - 1);
+      const double hi = (c == thj.size()) ? kInf : thj(c);
+      const double pr = std::max(kProbFloor, normal_cdf(hi) - normal_cdf(lo));
+      const Eigen::Index base = th_start[static_cast<std::size_t>(j)];
+      if (c < thj.size()) scores(r, base + c) += normal_pdf(thj(c)) / pr;
+      if (c > 0) scores(r, base + c - 1) -= normal_pdf(thj(c - 1)) / pr;
+    }
+  }
+  return scores;
+}
+
 }  // namespace
 
 post_expected<MixedOrdinalHuberResidualStats>
@@ -2097,6 +2172,39 @@ mixed_ordinal_stats_huber_residual_from_data(
     Eigen::Index assoc_count = 0;
     const Eigen::Index nth = thresholds.size();
     const Eigen::Index n_cont = std::count(ordered[b].begin(), ordered[b].end(), 0);
+    const Eigen::Index n_assoc = p * (p - 1) / 2;
+    const bool rebuild_polyserial_bread = ordinal_cols.size() == 1;
+    Eigen::MatrixXd SC_TH;
+    Eigen::MatrixXd A11_inv;
+    std::vector<Eigen::VectorXd> assoc_scores;
+    std::vector<Eigen::VectorXd> assoc_if_scale;
+    Eigen::MatrixXd A21;
+    Eigen::VectorXd A22_diag;
+    if (rebuild_polyserial_bread) {
+      auto sc_th_or = mixed_marginal_threshold_scores(
+          X, ordered[b], th_by_var, th_start, nth);
+      if (!sc_th_or.has_value()) return std::unexpected(sc_th_or.error());
+      SC_TH = std::move(*sc_th_or);
+      Eigen::MatrixXd A11 = Eigen::MatrixXd::Zero(nth, nth);
+      const Eigen::MatrixXd inner_th = SC_TH.transpose() * SC_TH;
+      for (Eigen::Index col : ordinal_cols) {
+        const Eigen::Index start = th_start[static_cast<std::size_t>(col)];
+        const Eigen::Index len = static_cast<Eigen::Index>(
+            stats.n_levels[b][static_cast<std::size_t>(col)] - 1);
+        A11.block(start, start, len, len) =
+            inner_th.block(start, start, len, len);
+      }
+      auto A11_inv_or = symmetric_inverse_pd(
+          A11, "mixed Huber residual threshold information matrix");
+      if (!A11_inv_or.has_value()) return std::unexpected(A11_inv_or.error());
+      A11_inv = std::move(*A11_inv_or);
+      assoc_scores.assign(static_cast<std::size_t>(n_assoc),
+                          Eigen::VectorXd::Zero(n));
+      assoc_if_scale.assign(static_cast<std::size_t>(n_assoc),
+                            Eigen::VectorXd::Ones(n));
+      A21 = Eigen::MatrixXd::Zero(n_assoc, nth);
+      A22_diag = Eigen::VectorXd::Ones(n_assoc);
+    }
     for (Eigen::Index j = 0; j < p; ++j) {
       for (Eigen::Index i = j + 1; i < p; ++i) {
         const bool oi = ordered[b][static_cast<std::size_t>(i)] != 0;
@@ -2150,6 +2258,28 @@ mixed_ordinal_stats_huber_residual_from_data(
           double bread = sc.squaredNorm();
           if (!(bread > 1e-12) || !std::isfinite(bread)) bread = 1.0;
           IF.col(moment_index) = static_cast<double>(n) * sc / bread * sd;
+          if (rebuild_polyserial_bread) {
+            auto score_block = polyserial_huber_scaled_scores(
+                cat, U.col(c), rho, th_by_var[static_cast<std::size_t>(o)],
+                options.clip);
+            if (!score_block.rho.allFinite() ||
+                !score_block.thresholds.allFinite()) {
+              return std::unexpected(make_err(PostError::Kind::NumericIssue,
+                  "mixed_ordinal_stats_huber_residual_from_data: non-finite polyserial sandwich scores"));
+            }
+            const Eigen::Index so = th_start[static_cast<std::size_t>(o)];
+            assoc_scores[static_cast<std::size_t>(assoc_count)] =
+                score_block.rho;
+            assoc_if_scale[static_cast<std::size_t>(assoc_count)] =
+                Eigen::VectorXd::Constant(n, sd);
+            A21.block(assoc_count, so, 1, score_block.thresholds.cols()) =
+                score_block.rho.transpose() * score_block.thresholds;
+            const double robust_bread = score_block.rho.squaredNorm();
+            A22_diag(assoc_count) =
+                (robust_bread > 1e-12 && std::isfinite(robust_bread))
+                    ? robust_bread
+                    : 1.0;
+          }
           diag.robust_pairs.push_back(MixedPairLabel{
               .i = static_cast<std::int32_t>(i),
               .j = static_cast<std::int32_t>(j),
@@ -2159,6 +2289,40 @@ mixed_ordinal_stats_huber_residual_from_data(
           obj_diag.push_back(fit_or->objective);
         }
         ++assoc_count;
+      }
+    }
+
+    if (rebuild_polyserial_bread) {
+      Eigen::MatrixXd SC = Eigen::MatrixXd::Zero(n, nth + n_assoc);
+      SC.leftCols(nth) = SC_TH;
+      for (Eigen::Index k = 0; k < n_assoc; ++k) {
+        SC.col(nth + k) = assoc_scores[static_cast<std::size_t>(k)];
+      }
+      Eigen::MatrixXd B_inv =
+          Eigen::MatrixXd::Zero(nth + n_assoc, nth + n_assoc);
+      const Eigen::MatrixXd A22_inv = A22_diag.cwiseInverse().asDiagonal();
+      B_inv.block(0, 0, nth, nth) = A11_inv;
+      B_inv.block(nth, 0, n_assoc, nth).noalias() =
+          -A22_inv * A21 * A11_inv;
+      B_inv.block(nth, nth, n_assoc, n_assoc) = A22_inv;
+      Eigen::MatrixXd IF_est =
+          static_cast<double>(n) * SC * B_inv.transpose();
+      for (Eigen::Index k = 0; k < n_assoc; ++k) {
+        IF_est.col(nth + k).array() *=
+            assoc_if_scale[static_cast<std::size_t>(k)].array();
+      }
+      IF.leftCols(nth) = IF_est.leftCols(nth);
+      Eigen::Index assoc_pos = 0;
+      for (Eigen::Index j = 0; j < p; ++j) {
+        for (Eigen::Index i = j + 1; i < p; ++i) {
+          const bool oi = ordered[b][static_cast<std::size_t>(i)] != 0;
+          const bool oj = ordered[b][static_cast<std::size_t>(j)] != 0;
+          if (oi || oj) {
+            const Eigen::Index moment_index = nth + 2 * n_cont + assoc_pos;
+            IF.col(moment_index) = IF_est.col(nth + assoc_pos);
+          }
+          ++assoc_pos;
+        }
       }
     }
 
