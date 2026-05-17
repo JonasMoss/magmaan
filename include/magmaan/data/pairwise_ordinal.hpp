@@ -169,8 +169,26 @@ struct PairwiseOrdinalCorrelationRepairOptions {
 
 struct PairwiseOrdinalHWeightedStatsOptions {
   OrdinalPairHWeightedOptions rho;
+  int    max_iter = 90;
+  double ftol = 1e-10;
+  double gtol = 2e-5;
+  double fd_step = 1e-5;
+  double min_threshold_spacing = 1e-6;
   // Retained for source compatibility; h-weighted influence bread is analytic.
   double influence_fd_step = 1e-5;
+  PairwiseOrdinalCorrelationRepairOptions correlation_repair;
+};
+
+struct PairwiseOrdinalDpdStatsOptions {
+  double rho_lower = -0.999;
+  double rho_upper = 0.999;
+  int    max_iter = 90;
+  double ftol = 1e-10;
+  double gtol = 2e-5;
+  double fd_step = 1e-5;
+  double min_threshold_spacing = 1e-6;
+  bool   lavaan_adjust_2x2 = true;
+  double alpha = 0.3;
   PairwiseOrdinalCorrelationRepairOptions correlation_repair;
 };
 
@@ -342,5 +360,10 @@ post_expected<PairwiseOrdinalStats>
 pairwise_ordinal_stats_h_weighted_from_integer_data(
     const std::vector<Eigen::MatrixXd>& X,
     PairwiseOrdinalHWeightedStatsOptions options = {});
+
+post_expected<PairwiseOrdinalStats>
+pairwise_ordinal_stats_dpd_from_integer_data(
+    const std::vector<Eigen::MatrixXd>& X,
+    PairwiseOrdinalDpdStatsOptions options = {});
 
 }  // namespace magmaan::data

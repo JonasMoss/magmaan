@@ -158,28 +158,29 @@ golden `parTable()` fixtures.
   probability-Hessian bread, centered `h'(t)`-weighted meat rows, influence
   rows, score Gamma, and sandwich Gamma with `S'S / n` scaling. The WMA
   hard-cap derivative convention is pinned as `dh(t) = 1[t < k]`, so the exact
-  kink uses derivative zero. This is the robust pairwise Gamma primitive; the
-  stats-builder integration is the separate Option A path below.
+  kink uses derivative zero. This remains the robust bivariate Gamma primitive
+  used for pair-level validation.
 - Experimental pair-local all-ordinal density power divergence fitting under
   `data::fit_ordinal_pair_joint_dpd()`. It estimates pair-local thresholds and
   rho with DPD tuning `alpha`, delegates `alpha = 0` to joint ML, and returns
   probabilities, expected/residual/Pearson tables, and `p^alpha` attenuation
   weights. This is the main non-h-score bivariate comparator and is not yet
   wired into SEM moment/Gamma construction.
-- Experimental all-ordinal SEM integration Option A under
-  `data::pairwise_ordinal_stats_h_weighted_from_integer_data()`. It preserves
-  lavaan-style shared marginal thresholds and metadata, replaces the
-  polychoric correlation block with fixed-threshold h-weighted rhos, rebuilds
-  casewise moment influence/Gamma from marginal-threshold influence plus
-  robust rho influence, and refreshes DWLS/WLS weights. Optional robust-R
-  handling records the raw minimum eigenvalue and can either fail explicitly or
-  repair low-eigen correlation matrices by ridge/shrinkage toward the identity,
-  with the same transformation applied to the correlation influence columns
-  before Gamma and weights are rebuilt. The result is an ordinary
-  `OrdinalStats`/`PairwiseOrdinalStats` payload consumable by the existing
-  ordinal LS fitting and robust reporting surfaces. This remains experimental
-  and separate from the default lavaan-compatible
-  `ordinal_stats_from_integer_data()` path.
+- Experimental all-ordinal SEM integration under
+  `data::pairwise_ordinal_stats_h_weighted_from_integer_data()` now uses a
+  shared-threshold composite h-score estimator: one threshold block per ordinal
+  variable plus one polychoric correlation per pair are optimized jointly under
+  the h-weighted objective. It rebuilds casewise moment influence/Gamma from
+  the shared robust estimating equations and refreshes DWLS/WLS weights.
+  Optional robust-R handling records the raw minimum eigenvalue and can either
+  fail explicitly or repair low-eigen correlation matrices by ridge/shrinkage
+  toward the identity, with the same transformation applied to the correlation
+  influence columns before Gamma and weights are rebuilt.
+- Experimental all-ordinal shared-threshold DPD stats are available under
+  `data::pairwise_ordinal_stats_dpd_from_integer_data()`. The parameter and
+  output contract matches the h-weighted SEM path, but the composite objective
+  is density power divergence with tuning `alpha`; `alpha = 0` delegates to
+  the default ML/lavaan-compatible stats path.
 - Public all-ordinal pairwise ML kernel and `PairwiseOrdinalStats` wrapper for
   complete/listwise ordinal data, exposing pair labels, count/adjustment
   diagnostics, fitted fixed-threshold rho diagnostics, fitted expected/residual

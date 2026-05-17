@@ -304,14 +304,15 @@ Remaining work, in suggested order:
   probability-Hessian bread, influence rows, score Gamma, and sandwich Gamma;
   unit coverage pins ML and `hard_cap(k = Inf)` limits, `S'S / n` scaling,
   downweighting, and `dh(t) = 0` at the WMA hard-cap kink.)
-- [x] **M/L.** Add the first SEM integration mode: shared lavaan-style marginal
-  thresholds plus robust rhos as experimental Option A before attempting
-  shared-threshold composite h-score estimation.
-  (`data::pairwise_ordinal_stats_h_weighted_from_integer_data()` preserves the
-  shared marginal-threshold layout, swaps in fixed-threshold h-weighted rhos,
-  rebuilds moment influence/Gamma and DWLS/WLS weights, and returns fit-ready
-  `PairwiseOrdinalStats`; tests pin the ML point-estimate limit, robust-rho
-  replacement, Gamma scaling, and `fit_ordinal_bounded()` compatibility.)
+- [x] **M/L.** Replace the old fixed-threshold robust-rho Option A with a
+  shared-threshold h-score SEM path.
+  (`data::pairwise_ordinal_stats_h_weighted_from_integer_data()` now optimizes
+  one threshold block per ordinal variable plus one polychoric correlation per
+  pair under the h-weighted composite objective, then rebuilds
+  moment-influence/Gamma and DWLS/WLS weights from the shared robust estimating
+  equations. Tests pin the ML limit, shared-threshold movement under finite
+  caps, Gamma scaling, correlation repair, and `fit_ordinal_bounded()`
+  compatibility.)
 - [x] **M.** Handle indefinite/low-eigen robust correlation matrices
   explicitly with minimum-eigen diagnostics and optional error, ridge, or
   shrinkage policies.
@@ -324,9 +325,15 @@ Remaining work, in suggested order:
   (`data::fit_ordinal_pair_joint_dpd()` estimates pair-local thresholds and
   rho, delegates `alpha = 0` to joint ML, and exposes `p^alpha` attenuation
   weights plus the same table diagnostics as the h-weighted path.)
-- [ ] **M/L.** Decide, after simulation use, whether ordinal-pair DPD deserves
-  fixed-shared-threshold and SEM Option A/Gamma integration. Keep Hellinger and
-  Huberized residual fitting as lower-priority experimental comparators.
+- [x] **M/L.** Add all-ordinal shared-threshold DPD SEM stats.
+  (`data::pairwise_ordinal_stats_dpd_from_integer_data()` uses the same
+  shared threshold/correlation parameter layout as the h-score SEM path,
+  optimizes the density-power-divergence composite objective, delegates
+  `alpha = 0` to the default ML stats path, and exposes fit-ready
+  `PairwiseOrdinalStats` with sandwich Gamma.)
+- [ ] **M/L.** After shared-threshold h/DPD simulation use, decide whether
+  Hellinger and Huberized residual fitting are worth adding as lower-priority
+  experimental comparators.
 - [x] **M.** Pin the h-score estimators against the canonical robcat R package
   (Welz, Mair & Alfons, 2026; vendored in `external/robcat`). The WMA hard cap
   is the same C-estimator as robcat `polycor`: `robcat polycor(c=C)` ≡ magmaan
@@ -371,16 +378,16 @@ Remaining work, in suggested order:
   tail/category discordance.
 - [ ] **M/L.** Design SEM-level mixed DPD integration for polyserial pairs.
   The current `MixedOrdinalStats` layout has shared marginal thresholds, while
-  full DPD polyserial estimation has pair-local nuisance thresholds. Do not
-  silently inject pair-specific thresholds into shared-threshold moments; choose
-  either a composite/pair-local moment contract or an explicitly justified
-  shared-threshold robust estimator, then implement the matching sandwich
-  Gamma.
+  the current full DPD polyserial primitive is only bivariate/pair-local. Do
+  not silently inject pair-specific thresholds into shared-threshold moments;
+  implement a mixed shared-threshold DPD estimator with one threshold block per
+  ordinal variable, one mean/variance block per continuous variable, and the
+  matching sandwich Gamma.
 - [ ] **M/L.** Add a sandwich/Gamma calculation for full pair-local
-  polyserial DPD before using it for SEM robust inference. It cannot be checked
-  against robcat because DPD is not a robcat estimator, so validation should use
-  finite-difference estimating-equation derivatives plus Monte Carlo covariance
-  checks in `checks/robust_polychoric`.
+  polyserial DPD only if it remains useful as a bivariate diagnostic. It cannot
+  be checked against robcat because DPD is not a robcat estimator, so
+  validation should use finite-difference estimating-equation derivatives plus
+  Monte Carlo covariance checks in `checks/robust_polychoric`.
 
 Done when: robust polychoric/polyserial alternatives are selectable where their
 moment contracts are designed, default ML fixtures are unchanged, diagnostics

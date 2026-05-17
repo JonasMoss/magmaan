@@ -1142,7 +1142,7 @@ TEST_CASE("Pairwise ordinal stats diagnostics report lavaan 2x2 adjustment") {
   CHECK(std::isfinite(pairwise->block_diagnostics[0].min_eigen_r));
 }
 
-TEST_CASE("Pairwise ordinal h-weighted stats preserve shared-threshold ML limit") {
+TEST_CASE("Pairwise ordinal h-weighted stats preserve ML limit") {
   Eigen::MatrixXd X(24, 3);
   Eigen::Index r = 0;
   for (int rep = 0; rep < 4; ++rep) {
@@ -1175,7 +1175,7 @@ TEST_CASE("Pairwise ordinal h-weighted stats preserve shared-threshold ML limit"
           static_cast<double>(robust->stats.n_obs[0]),
       1e-12));
   for (const auto& pd : robust->block_diagnostics[0].pair_diagnostics) {
-    CHECK(pd.h_weighted);
+    CHECK_FALSE(pd.h_weighted);
     CHECK(pd.converged);
     CHECK(pd.weights.rows() == pd.counts.rows());
     CHECK(pd.weights.cols() == pd.counts.cols());
@@ -1201,7 +1201,7 @@ TEST_CASE("Pairwise ordinal h-weighted stats preserve shared-threshold ML limit"
   CHECK(std::isfinite(fit->fmin));
 }
 
-TEST_CASE("Pairwise ordinal h-weighted stats replace rhos and robust Gamma") {
+TEST_CASE("Pairwise ordinal h-weighted stats jointly estimate shared thresholds and Gamma") {
   using magmaan::data::PolychoricHScoreKind;
   using magmaan::data::PolychoricHScoreOptions;
 
@@ -1221,18 +1221,8 @@ TEST_CASE("Pairwise ordinal h-weighted stats replace rhos and robust Gamma") {
       {X}, options);
   REQUIRE(robust.has_value());
 
-  const Eigen::VectorXd th0 =
-      base->stats.thresholds[0].segment(0, 2);
-  const Eigen::VectorXd th1 =
-      base->stats.thresholds[0].segment(2, 2);
-  auto direct = magmaan::data::fit_ordinal_pair_rho_h_weighted(
-      counts.transpose(), th1, th0,
-      magmaan::data::OrdinalPairHWeightedOptions{
-          .h_score = options.rho.h_score});
-  REQUIRE(direct.has_value());
-
-  CHECK(robust->stats.thresholds[0].isApprox(base->stats.thresholds[0], 0.0));
-  CHECK(robust->stats.R[0](1, 0) == doctest::Approx(direct->rho));
+  CHECK_FALSE(robust->stats.thresholds[0].isApprox(
+      base->stats.thresholds[0], 1e-6));
   CHECK(std::abs(robust->stats.R[0](1, 0) - base->stats.R[0](1, 0)) > 1e-4);
   CHECK(robust->stats.NACOV[0].isApprox(
       (robust->block_diagnostics[0].moment_influence.transpose() *
@@ -1244,11 +1234,47 @@ TEST_CASE("Pairwise ordinal h-weighted stats replace rhos and robust Gamma") {
   REQUIRE(robust->block_diagnostics[0].pair_diagnostics.size() == 1);
   const auto& pd = robust->block_diagnostics[0].pair_diagnostics[0];
   CHECK(pd.h_weighted);
-  CHECK(pd.converged);
-  CHECK(pd.objective == doctest::Approx(direct->objective));
-  CHECK(pd.weights.isApprox(direct->weights, 1e-12));
+  CHECK(pd.weights.rows() == counts.cols());
+  CHECK(pd.weights.cols() == counts.rows());
   CHECK(pd.weights(2, 0) < 1.0);
-  CHECK(pd.expected_counts.isApprox(direct->expected_counts, 1e-12));
+  CHECK(pd.expected_counts.sum() == doctest::Approx(pd.adjusted_counts.sum()));
+  CHECK(pd.expected_counts.allFinite());
+}
+
+TEST_CASE("Pairwise ordinal DPD stats jointly estimate shared thresholds") {
+  Eigen::MatrixXd counts(3, 3);
+  counts << 594.0, 365.0, 858.0,
+            453.0, 715.0, 372.0,
+            311.0, 614.0, 718.0;
+  const Eigen::MatrixXd X = ordinal_data_from_pair_counts(counts);
+  auto base = magmaan::data::pairwise_ordinal_stats_from_integer_data({X});
+  REQUIRE(base.has_value());
+
+  magmaan::data::PairwiseOrdinalDpdStatsOptions options;
+  options.alpha = 0.35;
+  auto robust = magmaan::data::pairwise_ordinal_stats_dpd_from_integer_data(
+      {X}, options);
+  REQUIRE(robust.has_value());
+  options.alpha = 0.0;
+  auto ml_limit = magmaan::data::pairwise_ordinal_stats_dpd_from_integer_data(
+      {X}, options);
+  REQUIRE(ml_limit.has_value());
+  CHECK(ml_limit->stats.thresholds[0].isApprox(base->stats.thresholds[0], 0.0));
+  CHECK(ml_limit->stats.R[0].isApprox(base->stats.R[0], 0.0));
+  CHECK_FALSE(robust->stats.thresholds[0].isApprox(
+      base->stats.thresholds[0], 1e-6));
+  CHECK(std::abs(robust->stats.R[0](1, 0) - base->stats.R[0](1, 0)) > 1e-4);
+  CHECK(robust->stats.NACOV[0].isApprox(
+      (robust->block_diagnostics[0].moment_influence.transpose() *
+       robust->block_diagnostics[0].moment_influence) /
+          static_cast<double>(robust->stats.n_obs[0]),
+      1e-12));
+  CHECK(robust->stats.W_dwls[0].diagonal().minCoeff() > 0.0);
+  REQUIRE(robust->block_diagnostics[0].pair_diagnostics.size() == 1);
+  const auto& pd = robust->block_diagnostics[0].pair_diagnostics[0];
+  CHECK_FALSE(pd.h_weighted);
+  CHECK(pd.weights.minCoeff() > 0.0);
+  CHECK(pd.expected_counts.sum() == doctest::Approx(pd.adjusted_counts.sum()));
 }
 
 TEST_CASE("Pairwise ordinal h-weighted stats repair low-eigen robust R on request") {
@@ -1267,7 +1293,12 @@ TEST_CASE("Pairwise ordinal h-weighted stats repair low-eigen robust R on reques
     }
   }
 
-  auto raw = magmaan::data::pairwise_ordinal_stats_h_weighted_from_integer_data({X});
+  magmaan::data::PairwiseOrdinalHWeightedStatsOptions raw_options;
+  raw_options.rho.h_score = magmaan::data::PolychoricHScoreOptions{
+      .kind = magmaan::data::PolychoricHScoreKind::WmaHardCap,
+      .k = 1.30};
+  auto raw = magmaan::data::pairwise_ordinal_stats_h_weighted_from_integer_data(
+      {X}, raw_options);
   REQUIRE(raw.has_value());
   const auto& raw_bd = raw->block_diagnostics[0];
   CHECK(raw_bd.raw_min_eigen_r == doctest::Approx(raw_bd.min_eigen_r));
@@ -1277,6 +1308,7 @@ TEST_CASE("Pairwise ordinal h-weighted stats repair low-eigen robust R on reques
   REQUIRE(raw_bd.min_eigen_r < 0.95);
 
   magmaan::data::PairwiseOrdinalHWeightedStatsOptions err_options;
+  err_options.rho.h_score = raw_options.rho.h_score;
   err_options.correlation_repair.kind =
       magmaan::data::PairwiseOrdinalCorrelationRepairKind::Error;
   err_options.correlation_repair.min_eigenvalue = 0.95;
@@ -1286,6 +1318,7 @@ TEST_CASE("Pairwise ordinal h-weighted stats repair low-eigen robust R on reques
   CHECK(err.error().detail.find("minimum eigenvalue") != std::string::npos);
 
   magmaan::data::PairwiseOrdinalHWeightedStatsOptions shrink_options;
+  shrink_options.rho.h_score = raw_options.rho.h_score;
   shrink_options.correlation_repair.kind =
       magmaan::data::PairwiseOrdinalCorrelationRepairKind::Shrinkage;
   shrink_options.correlation_repair.min_eigenvalue = 0.95;
@@ -1317,6 +1350,7 @@ TEST_CASE("Pairwise ordinal h-weighted stats repair low-eigen robust R on reques
   }
 
   magmaan::data::PairwiseOrdinalHWeightedStatsOptions ridge_options;
+  ridge_options.rho.h_score = raw_options.rho.h_score;
   ridge_options.correlation_repair.kind =
       magmaan::data::PairwiseOrdinalCorrelationRepairKind::Ridge;
   ridge_options.correlation_repair.min_eigenvalue = 0.95;

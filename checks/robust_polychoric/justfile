@@ -21,7 +21,7 @@ build:
 
 quick: build
     mkdir -p results
-    {{bin}} --n=800 --pair-reps=50 --matrix-reps=30 --polyserial-reps=24 --sem-reps=12 | tee results/quick.txt
+    {{bin}} --n=300 --pair-reps=15 --matrix-reps=3 --polyserial-reps=6 --sem-reps=3 | tee results/quick.txt
 
 all: build
     mkdir -p results
