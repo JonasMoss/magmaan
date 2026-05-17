@@ -508,6 +508,15 @@ build_group_template(const parse::FlatPartable& flat,
     }
     for (std::size_t i = 0; i + 1 < exo_lv.items.size(); ++i) {
       for (std::size_t j = i + 1; j < exo_lv.items.size(); ++j) {
+        // Skip pairs the user already wrote: an explicit `f_i ~~ f_j` row
+        // (labelled, fixed, or bare) wins, exactly as auto.var and random.x
+        // defer to user variance/covariance rows. Without this guard a
+        // user-specified exogenous-latent covariance gets a duplicate auto
+        // row — a second free parameter for the same moment, which makes the
+        // information matrix rank-deficient.
+        if (covariance_already_present(rows, exo_lv.items[i], exo_lv.items[j])) {
+          continue;
+        }
         rows.push_back(make_pending(/*user=*/0, exo_lv.items[i],
                                     parse::Op::Covariance, exo_lv.items[j]));
       }
