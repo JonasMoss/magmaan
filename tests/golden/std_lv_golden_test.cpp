@@ -94,19 +94,19 @@ TEST_CASE("std.lv goldens — θ̂/SE/χ²/df match lavaan(std.lv=TRUE)") {
     }
     const auto& est = *est_or;
 
-    auto info_or = magmaan::nt::infer::information_expected(*pt, *mr, samp, est);
+    auto info_or = magmaan::inference::information_expected(*pt, *mr, samp, est);
     if (!info_or.has_value()) {
       failures.push_back(id + ": information_expected — " + info_or.error().detail);
       continue;
     }
-    auto vcov_or = magmaan::nt::infer::vcov(*info_or, *pt);
+    auto vcov_or = magmaan::inference::vcov(*info_or, *pt);
     if (!vcov_or.has_value()) {
       failures.push_back(id + ": vcov — " + vcov_or.error().detail);
       continue;
     }
-    const Eigen::VectorXd se_v = magmaan::nt::infer::se(*vcov_or);
-    const double          chi2 = magmaan::nt::infer::chi2_stat(samp, est);
-    auto df_or = magmaan::nt::infer::df_stat(*pt, samp);
+    const Eigen::VectorXd se_v = magmaan::inference::se(*vcov_or);
+    const double          chi2 = magmaan::inference::chi2_stat(samp, est);
+    auto df_or = magmaan::inference::df_stat(*pt, samp);
     if (!df_or.has_value()) {
       failures.push_back(id + ": df_stat — " + df_or.error().detail);
       continue;
@@ -174,8 +174,8 @@ TEST_CASE("std.lv goldens — θ̂/SE/χ²/df match lavaan(std.lv=TRUE)") {
     if (pt_m.has_value() && mr_m.has_value()) {
       auto est_m = magmaan::test::fit(*pt_m, *mr_m, samp);
       if (est_m.has_value()) {
-        const double chi2_m = magmaan::nt::infer::chi2_stat(samp, *est_m);
-        auto df_m_or = magmaan::nt::infer::df_stat(*pt_m, samp);
+        const double chi2_m = magmaan::inference::chi2_stat(samp, *est_m);
+        auto df_m_or = magmaan::inference::df_stat(*pt_m, samp);
         if (df_m_or.has_value()) {
           if (*df_m_or != df) {
             failures.push_back(id + ": marker/std.lv df disagree"); ok = false;

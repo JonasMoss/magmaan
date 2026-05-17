@@ -17,7 +17,7 @@
 
 #include "detail_vech.hpp"
 
-namespace magmaan::nt {
+namespace magmaan::estimate {
 
 using data::SampleStats;
 
@@ -447,4 +447,4 @@ ml_objective(const model::ModelEvaluator& ev, const SampleStats& s) {
   return prob;
 }
 
-}  // namespace magmaan::nt
+}  // namespace magmaan::estimate

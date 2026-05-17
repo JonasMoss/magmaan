@@ -22,7 +22,7 @@
 
 #include "detail_vech.hpp"
 
-namespace magmaan::nt::fiml {
+namespace magmaan::estimate::fiml {
 
 using data::RawData;
 using data::SampleStats;
@@ -31,7 +31,7 @@ using estimate::EqConstraints;
 using estimate::build_eq_constraints;
 using estimate::resolve_fixed_x_from_sample;
 using estimate::simple_start_values;
-using nt::measures::BaselineFit;
+using measures::BaselineFit;
 
 namespace {
 
@@ -1679,4 +1679,4 @@ fit_fiml(spec::LatentStructure pt,
   return Estimates{con.expand(out_or->x), out_or->fmin, out_or->iterations};
 }
 
-}  // namespace magmaan::nt::fiml
+}  // namespace magmaan::estimate::fiml

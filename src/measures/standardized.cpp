@@ -15,7 +15,7 @@
 
 #include "detail_vech.hpp"
 
-namespace magmaan::nt::standardize {
+namespace magmaan::measures::standardize {
 
 using data::SampleStats;
 using estimate::Estimates;
@@ -365,4 +365,4 @@ standardize_all(const spec::LatentStructure& pt,
   return out;
 }
 
-}  // namespace magmaan::nt::standardize
+}  // namespace magmaan::measures::standardize

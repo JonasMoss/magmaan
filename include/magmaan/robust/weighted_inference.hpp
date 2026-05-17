@@ -18,9 +18,9 @@ namespace magmaan::estimate {
 
 using data::RawData;
 using data::SampleStats;
-using nt::robust::MeanVarAdjustedResult;
-using nt::robust::SatorraBentlerResult;
-using nt::robust::ScaledShiftedResult;
+using robust::MeanVarAdjustedResult;
+using robust::SatorraBentlerResult;
+using robust::ScaledShiftedResult;
 
 struct WeightedMomentBlock {
   Eigen::MatrixXd jacobian;  // model moments wrt full free theta
@@ -35,9 +35,9 @@ struct WeightedRobustResult {
   Eigen::VectorXd eigvals;
   double chisq_standard = 0.0;
   int df = 0;
-  nt::robust::SatorraBentlerResult satorra_bentler;
-  nt::robust::MeanVarAdjustedResult mean_var_adjusted;
-  nt::robust::ScaledShiftedResult scaled_shifted;
+  robust::SatorraBentlerResult satorra_bentler;
+  robust::MeanVarAdjustedResult mean_var_adjusted;
+  robust::ScaledShiftedResult scaled_shifted;
 };
 
 post_expected<WeightedRobustResult>

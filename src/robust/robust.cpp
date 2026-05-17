@@ -20,11 +20,11 @@
 
 #include "detail_vech.hpp"
 
-namespace magmaan::nt::robust {
+namespace magmaan::robust {
 
 using data::gamma_nt;
-using infer::information_observed_analytic;
-using infer::information_observed_fd;
+using inference::information_observed_analytic;
+using inference::information_observed_fd;
 
 using data::RawData;
 using data::SampleStats;
@@ -1195,4 +1195,4 @@ robust_se(spec::LatentStructure        pt,
   return sandwich_finish(s, meat);
 }
 
-}  // namespace magmaan::nt::robust
+}  // namespace magmaan::robust

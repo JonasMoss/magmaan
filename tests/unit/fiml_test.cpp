@@ -126,7 +126,7 @@ double log_det_pd(const Eigen::MatrixXd& A) {
 
 TEST_CASE("FIML: prepare compresses rows into observed-value patterns") {
   const auto raw = small_missing_raw();
-  magmaan::nt::fiml::FIML fiml;
+  magmaan::estimate::fiml::FIML fiml;
   auto cache_or = fiml.prepare(raw);
   REQUIRE(cache_or.has_value());
   const auto& cache = *cache_or;
@@ -152,7 +152,7 @@ TEST_CASE("FIML: prepare compresses rows into observed-value patterns") {
 TEST_CASE("FIML: analytic gradient matches finite differences") {
   auto built = build_mean_model("f =~ x1 + x2 + x3");
   const auto raw = small_missing_raw();
-  magmaan::nt::fiml::FIML fiml;
+  magmaan::estimate::fiml::FIML fiml;
   auto cache = fiml.prepare(raw);
   REQUIRE(cache.has_value());
 
@@ -212,13 +212,13 @@ TEST_CASE("fit_fiml: complete-data path fits a saturated mean CFA near zero grad
   magmaan::optim::LbfgsOptions opts;
   opts.max_iter = 100;
   auto est = magmaan::estimate::fit_fiml(*built.pt, *built.rep, raw, theta0,
-                                         magmaan::nt::fiml::FIML{}, opts);
+                                         magmaan::estimate::fiml::FIML{}, opts);
   if (!est.has_value()) {
     FAIL(est.error().detail);
     return;
   }
 
-  magmaan::nt::fiml::FIML fiml;
+  magmaan::estimate::fiml::FIML fiml;
   auto cache = fiml.prepare(raw);
   REQUIRE(cache.has_value());
   auto ev = magmaan::model::ModelEvaluator::build(*built.pt, *built.rep);
@@ -259,16 +259,16 @@ TEST_CASE("FIML complete-data objective and gradient match ML up to constants") 
   auto eval = built.ev.evaluate(theta, true, true);
   REQUIRE(eval.has_value());
 
-  magmaan::nt::fiml::FIML fiml;
+  magmaan::estimate::fiml::FIML fiml;
   auto fiml_cache = fiml.prepare(raw);
   REQUIRE(fiml_cache.has_value());
   auto fiml_vg = fiml.value_gradient(raw, *fiml_cache, eval->moments,
                                      eval->J_sigma, eval->J_mu);
   REQUIRE(fiml_vg.has_value());
 
-  auto ml_cache = magmaan::nt::ml_prepare(*samp);
+  auto ml_cache = magmaan::estimate::ml_prepare(*samp);
   REQUIRE(ml_cache.has_value());
-  auto ml_vg = magmaan::nt::ml_value_gradient(*samp, *ml_cache, eval->moments,
+  auto ml_vg = magmaan::estimate::ml_value_gradient(*samp, *ml_cache, eval->moments,
                                               eval->J_sigma, eval->J_mu);
   REQUIRE(ml_vg.has_value());
 
@@ -313,12 +313,12 @@ TEST_CASE("fiml_extras: complete data matches SampleStats fit_extras") {
   magmaan::optim::LbfgsOptions opts;
   opts.max_iter = 100;
   auto est = magmaan::estimate::fit_fiml(*built.pt, *built.rep, raw, theta0,
-                                         magmaan::nt::fiml::FIML{}, opts);
+                                         magmaan::estimate::fiml::FIML{}, opts);
   REQUIRE(est.has_value());
 
-  auto fiml_fx = magmaan::nt::fiml::fiml_extras(*built.pt, *built.rep, raw, *est);
+  auto fiml_fx = magmaan::estimate::fiml::fiml_extras(*built.pt, *built.rep, raw, *est);
   REQUIRE(fiml_fx.has_value());
-  auto ml_fx = magmaan::nt::measures::fit_extras(*built.pt, *built.rep, *samp, *est);
+  auto ml_fx = magmaan::measures::fit_extras(*built.pt, *built.rep, *samp, *est);
   REQUIRE(ml_fx.has_value());
 
   CHECK(fiml_fx->logl == doctest::Approx(ml_fx->logl).epsilon(1e-9));
@@ -353,9 +353,9 @@ TEST_CASE("fiml_baseline_chi2: complete data matches SampleStats baseline") {
   auto samp = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp.has_value());
 
-  auto fiml_bl = magmaan::nt::fiml::fiml_baseline_chi2(raw);
+  auto fiml_bl = magmaan::estimate::fiml::fiml_baseline_chi2(raw);
   REQUIRE(fiml_bl.has_value());
-  const auto ml_bl = magmaan::nt::measures::baseline_chi2(*samp);
+  const auto ml_bl = magmaan::measures::baseline_chi2(*samp);
 
   CHECK(fiml_bl->chi2 == doctest::Approx(ml_bl.chi2).epsilon(1e-10));
   CHECK(fiml_bl->df == ml_bl.df);
@@ -386,7 +386,7 @@ TEST_CASE("fiml_robust_mlr: multi-block H1 trace handles unequal row counts") {
   est.theta = theta0;
 
   constexpr int df = 4;
-  auto rob = magmaan::nt::fiml::fiml_robust_mlr(*built.pt, *built.rep, raw,
+  auto rob = magmaan::estimate::fiml::fiml_robust_mlr(*built.pt, *built.rep, raw,
                                                 est, df, /*chisq=*/8.0);
   REQUIRE_MESSAGE(rob.has_value(),
       "fiml_robust_mlr failed: " <<
@@ -406,7 +406,7 @@ TEST_CASE("fiml_robust_mlr: multi-block H1 trace handles unequal row counts") {
 
 TEST_CASE("fiml_baseline_chi2: missing data produces finite baseline") {
   const auto raw = well_conditioned_missing_raw();
-  auto bl = magmaan::nt::fiml::fiml_baseline_chi2(raw);
+  auto bl = magmaan::estimate::fiml::fiml_baseline_chi2(raw);
   if (!bl.has_value()) {
     FAIL(bl.error().detail);
     return;
@@ -423,7 +423,7 @@ TEST_CASE("fiml_baseline_chi2: rejects a column with no observed values") {
     raw.X[0](r, 1) = std::numeric_limits<double>::quiet_NaN();
   }
 
-  auto bl = magmaan::nt::fiml::fiml_baseline_chi2(raw);
+  auto bl = magmaan::estimate::fiml::fiml_baseline_chi2(raw);
   REQUIRE(!bl.has_value());
   CHECK(bl.error().detail.find("column 1 has no observed values") !=
         std::string::npos);

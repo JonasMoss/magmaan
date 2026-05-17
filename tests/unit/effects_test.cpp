@@ -16,7 +16,7 @@
 
 #include "../inference_bundle.hpp"
 
-using magmaan::nt::effects::compute_defined;
+using magmaan::measures::effects::compute_defined;
 using magmaan::data::SampleStats;
 using magmaan::test::analytic_observed_inference;
 using magmaan::test::expected_inference;

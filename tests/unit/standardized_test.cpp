@@ -22,8 +22,8 @@
 
 using magmaan::data::SampleStats;
 using magmaan::test::expected_inference;
-using magmaan::nt::standardize::standardize_all;
-using magmaan::nt::standardize::standardize_lv;
+using magmaan::measures::standardize::standardize_all;
+using magmaan::measures::standardize::standardize_lv;
 using magmaan::model::build_matrix_rep;
 using magmaan::model::ModelEvaluator;
 using magmaan::parse::Parser;

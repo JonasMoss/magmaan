@@ -7,7 +7,7 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/spec/partable.hpp"
 
-namespace magmaan::nt::measures {
+namespace magmaan::measures {
 
 using data::SampleStats;
 using estimate::Estimates;
@@ -110,4 +110,4 @@ fit_extras(spec::LatentStructure        pt,
            const SampleStats&        samp,
            const Estimates&          est);
 
-}  // namespace magmaan::nt::measures
+}  // namespace magmaan::measures

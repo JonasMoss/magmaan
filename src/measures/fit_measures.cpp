@@ -19,11 +19,11 @@
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
-namespace magmaan::nt::measures {
+namespace magmaan::measures {
 
 using estimate::build_eq_constraints;
 using estimate::resolve_fixed_x_from_sample;
-using infer::noncentral_chisq_cdf;
+using inference::noncentral_chisq_cdf;
 
 using data::SampleStats;
 using estimate::Estimates;
@@ -365,4 +365,4 @@ fit_extras(spec::LatentStructure        pt,
   return out;
 }
 
-}  // namespace magmaan::nt::measures
+}  // namespace magmaan::measures

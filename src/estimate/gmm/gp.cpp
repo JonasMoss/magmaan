@@ -18,7 +18,7 @@
 #include "magmaan/optim/problem.hpp"
 #include "magmaan/spec/partable.hpp"
 
-namespace magmaan::gmm {
+namespace magmaan::estimate::gmm {
 
 namespace {
 
@@ -270,4 +270,4 @@ gp(const optim::GmmProblem& base, const spec::LatentStructure& pt,
   return GpProblem{std::move(out), cls->beta0};
 }
 
-}  // namespace magmaan::gmm
+}  // namespace magmaan::estimate::gmm

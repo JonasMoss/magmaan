@@ -15,7 +15,7 @@
 
 #include "detail_vech.hpp"
 
-namespace magmaan::nt::robust {
+namespace magmaan::robust {
 
 using estimate::EqConstraints;
 
@@ -277,4 +277,4 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
   return out;
 }
 
-}  // namespace magmaan::nt::robust
+}  // namespace magmaan::robust

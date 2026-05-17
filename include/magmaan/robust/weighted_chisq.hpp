@@ -2,7 +2,7 @@
 
 #include <Eigen/Core>
 
-namespace magmaan::nt::robust {
+namespace magmaan::robust {
 
 
 // Tail probability of a weighted sum of independent central χ²₁ variates:
@@ -35,4 +35,4 @@ double imhof_upper(const Eigen::Ref<const Eigen::VectorXd>& lambda,
                    double rel_tol         = 1e-7,
                    int    max_doublings   = 8);
 
-}  // namespace magmaan::nt::robust
+}  // namespace magmaan::robust

@@ -15,14 +15,14 @@
 #include "magmaan/parse/op.hpp"
 #include "magmaan/spec/partable.hpp"
 
-namespace magmaan::nt::infer {
+namespace magmaan::inference {
 
 using estimate::build_eq_constraints;
 using estimate::EqConstraints;
 using estimate::resolve_fixed_x_from_sample;
-using fiml::FIML;
-using fiml::fiml_start_sample_stats;
-using fiml::validate_fiml_fixed_x_missing_policy;
+using estimate::fiml::FIML;
+using estimate::fiml::fiml_start_sample_stats;
+using estimate::fiml::validate_fiml_fixed_x_missing_policy;
 
 enum class ScoreCandidateKind : std::uint8_t {
   FixedParam,
@@ -105,7 +105,7 @@ modification_indices(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const SampleStats& samp,
                      const Estimates& est,
-                     const gmm::Weight& weight);
+                     const estimate::gmm::Weight& weight);
 
 post_expected<ScoreTestTable>
 modification_indices_fiml(spec::LatentStructure pt,
@@ -127,7 +127,7 @@ score_tests(spec::LatentStructure pt,
             const model::MatrixRep& rep,
             const SampleStats& samp,
             const Estimates& est,
-            const gmm::Weight& weight);
+            const estimate::gmm::Weight& weight);
 
 post_expected<ScoreTestTable>
 score_tests_fiml(spec::LatentStructure pt,
@@ -137,4 +137,4 @@ score_tests_fiml(spec::LatentStructure pt,
                  FIML discrepancy = {},
                  double h_step = 1e-4);
 
-}  // namespace magmaan::nt::infer
+}  // namespace magmaan::inference

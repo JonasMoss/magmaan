@@ -22,9 +22,9 @@
 
 namespace {
 
-magmaan::nt::robust::GammaSource parse_gamma(const std::string& s) {
-  if (s == "NT" || s == "nt") return magmaan::nt::robust::GammaSource::NT;
-  return magmaan::nt::robust::GammaSource::Empirical;
+magmaan::robust::GammaSource parse_gamma(const std::string& s) {
+  if (s == "NT" || s == "nt") return magmaan::robust::GammaSource::NT;
+  return magmaan::robust::GammaSource::Empirical;
 }
 
 }  // namespace
@@ -95,14 +95,14 @@ Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
   }
 
   // ── Run the orchestrator ──────────────────────────────────────────────
-  auto r_or = magmaan::nt::robust::lr_test_satorra2000_from_data(
+  auto r_or = magmaan::robust::lr_test_satorra2000_from_data(
       ctx_H1.pt, ctx_H1.rep, est_H1.theta,
       *K_H1_or, *K_H0_or,
       Xs, means, n_g, w_g,
       T_H0, T_H1, df_H0, df_H1,
       parse_gamma(gamma));
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
-  const magmaan::nt::robust::LRSatorra2000Result& r = *r_or;
+  const magmaan::robust::LRSatorra2000Result& r = *r_or;
 
   Rcpp::CharacterVector warns(static_cast<R_xlen_t>(r.warnings.size()));
   for (std::size_t k = 0; k < r.warnings.size(); ++k) {

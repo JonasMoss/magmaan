@@ -125,7 +125,7 @@ inline void read_group_attrs(SEXP df, std::string& group_var,
 // `LatentNames`. The data.frame's `ustart` column is split inside
 // `from_lavaan_partable` (a fixed row's value → `fixed_value`; a free row's
 // value → a start hint on `.starts`).
-inline magmaan::lavaan::ParsedLavaanParTable parse_partable_df(Rcpp::DataFrame df) {
+inline magmaan::compat::lavaan::ParsedLavaanParTable parse_partable_df(Rcpp::DataFrame df) {
   auto col = [&](const char* nm) -> SEXP {
     if (!df.containsElementNamed(nm))
       Rcpp::stop("magmaan: partable data.frame is missing required column '%s'", nm);
@@ -141,7 +141,7 @@ inline magmaan::lavaan::ParsedLavaanParTable parse_partable_df(Rcpp::DataFrame d
   std::vector<std::string> plab  = Rcpp::as<std::vector<std::string>>(col("plabel"));
 
   const std::size_t m = static_cast<std::size_t>(id.size());
-  magmaan::lavaan::LavaanParTable lvpt;
+  magmaan::compat::lavaan::LavaanParTable lvpt;
   lvpt.id.resize(m); lvpt.user.resize(m); lvpt.lhs.resize(m); lvpt.op.resize(m);
   lvpt.rhs.resize(m); lvpt.block.resize(m); lvpt.group.resize(m); lvpt.free.resize(m);
   lvpt.exo.resize(m); lvpt.ustart.resize(m); lvpt.label.resize(m); lvpt.plabel.resize(m);
@@ -161,7 +161,7 @@ inline magmaan::lavaan::ParsedLavaanParTable parse_partable_df(Rcpp::DataFrame d
     lvpt.plabel[i] = plab[i];
   }
   read_group_attrs(df, lvpt.group_var, lvpt.group_labels);
-  return magmaan::lavaan::from_lavaan_partable(lvpt);
+  return magmaan::compat::lavaan::from_lavaan_partable(lvpt);
 }
 
 inline bool has_meanstructure(const magmaan::spec::LatentStructure& pt) {
@@ -185,8 +185,8 @@ inline Rcpp::DataFrame partable_df(const magmaan::spec::LatentStructure& structu
                                    const magmaan::spec::LatentNames& names,
                                    const magmaan::estimate::Estimates& est,
                                    const magmaan::spec::Starts* starts = nullptr) {
-  const magmaan::lavaan::LavaanParTable pt =
-      magmaan::lavaan::to_lavaan_partable(structure, names, starts ? *starts : magmaan::spec::Starts{});
+  const magmaan::compat::lavaan::LavaanParTable pt =
+      magmaan::compat::lavaan::to_lavaan_partable(structure, names, starts ? *starts : magmaan::spec::Starts{});
   const R_xlen_t nrow = static_cast<R_xlen_t>(pt.size());
   Rcpp::IntegerVector id(nrow), user(nrow), block(nrow), group(nrow), freev(nrow), exo(nrow);
   Rcpp::CharacterVector lhs(nrow), op(nrow), rhs(nrow), label(nrow), plabel(nrow);
@@ -455,7 +455,7 @@ inline Ctx make_ctx(magmaan::spec::LatentStructure pt, magmaan::spec::LatentName
                         /*reorder=*/true);
 }
 
-inline magmaan::lavaan::ParsedLavaanParTable partable_from_arg(SEXP partable, const char* fn) {
+inline magmaan::compat::lavaan::ParsedLavaanParTable partable_from_arg(SEXP partable, const char* fn) {
   if (TYPEOF(partable) == STRSXP)
     Rcpp::stop("magmaan: %s() takes a partable data.frame (e.g. from lavaan_lavaanify()), "
                "not a model-syntax string — call lavaan_lavaanify() first", fn);

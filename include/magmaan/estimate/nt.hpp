@@ -21,7 +21,7 @@
 // F_ML = 0 at the saturated model. Not a sum of squares ⇒ scalar form only;
 // `ml_objective` packages it as an optimizer-ready `optim::ScalarProblem`.
 
-namespace magmaan::nt {
+namespace magmaan::estimate {
 
 using data::SampleStats;
 
@@ -76,4 +76,4 @@ ml_gradient_block(const SampleStats& s, const model::ImpliedMoments& m,
 fit_expected<optim::ScalarProblem>
 ml_objective(const model::ModelEvaluator& ev, const SampleStats& s);
 
-}  // namespace magmaan::nt
+}  // namespace magmaan::estimate

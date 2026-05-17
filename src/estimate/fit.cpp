@@ -221,7 +221,7 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   const model::ModelEvaluator& ev = pre->ev;
   const EqConstraints& con = pre->con;
 
-  auto obj_or = nt::ml_objective(ev, samp);
+  auto obj_or = estimate::ml_objective(ev, samp);
   if (!obj_or.has_value()) return std::unexpected(obj_or.error());
   const optim::ScalarProblem prob = std::move(*obj_or);
 

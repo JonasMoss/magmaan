@@ -5,7 +5,7 @@
 
 #include <Eigen/Core>
 
-namespace magmaan::nt::robust {
+namespace magmaan::robust {
 
 
 namespace {
@@ -125,4 +125,4 @@ double imhof_upper(const Eigen::Ref<const Eigen::VectorXd>& lambda,
   return std::clamp(p, 0.0, 1.0);
 }
 
-}  // namespace magmaan::nt::robust
+}  // namespace magmaan::robust

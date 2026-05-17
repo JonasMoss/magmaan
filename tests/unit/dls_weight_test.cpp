@@ -63,8 +63,8 @@ Model build_model(std::string_view src, bool meanstructure) {
   return Model{std::move(*pt), std::move(*mr)};
 }
 
-double max_block_diff(const magmaan::gmm::Weight& a,
-                      const magmaan::gmm::Weight& b) {
+double max_block_diff(const magmaan::estimate::gmm::Weight& a,
+                      const magmaan::estimate::gmm::Weight& b) {
   REQUIRE(a.size() == b.size());
   double d = 0.0;
   for (std::size_t i = 0; i < a.size(); ++i) {
@@ -92,7 +92,7 @@ TEST_CASE("dls_weight: a=0 reproduces the normal-theory (GLS) weight") {
     auto x0 = est::simple_start_values(m.pt, m.rep, *samp, {});
     REQUIRE(x0.has_value());
 
-    auto nt = magmaan::gmm::normal_theory_weight(*ev, *samp, *x0);
+    auto nt = magmaan::estimate::gmm::normal_theory_weight(*ev, *samp, *x0);
     REQUIRE(nt.has_value());
     auto dls = dls_weight(*ev, *samp, raw, *x0, {0.0});
     REQUIRE(dls.has_value());

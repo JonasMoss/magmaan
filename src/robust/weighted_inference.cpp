@@ -25,9 +25,9 @@ namespace magmaan::estimate {
 
 using data::RawData;
 using data::SampleStats;
-using nt::robust::MeanVarAdjustedResult;
-using nt::robust::SatorraBentlerResult;
-using nt::robust::ScaledShiftedResult;
+using robust::MeanVarAdjustedResult;
+using robust::SatorraBentlerResult;
+using robust::ScaledShiftedResult;
 
 namespace {
 
@@ -417,7 +417,7 @@ continuous_ls_chisq(data::SampleStats samp,
   if (weight.empty()) {
     // ULS — Browne's residual-based normal-theory statistic (N·F_ULS is not
     // itself asymptotically χ²).
-    auto br = nt::infer::browne_residual_nt(std::move(pt), rep, samp, est);
+    auto br = inference::browne_residual_nt(std::move(pt), rep, samp, est);
     if (!br.has_value()) return std::unexpected(br.error());
     const double n_used = *n - static_cast<double>(samp.S.size());
     if (!(n_used > 0.0)) {
@@ -535,9 +535,9 @@ robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
   } else {
     out.eigvals.resize(0);
   }
-  out.satorra_bentler = nt::robust::satorra_bentler(out.chisq_standard, out.df, out.eigvals);
-  out.mean_var_adjusted = nt::robust::mean_var_adjusted(out.chisq_standard, out.df, out.eigvals);
-  out.scaled_shifted = nt::robust::scaled_shifted(out.chisq_standard, out.df, out.eigvals);
+  out.satorra_bentler = robust::satorra_bentler(out.chisq_standard, out.df, out.eigvals);
+  out.mean_var_adjusted = robust::mean_var_adjusted(out.chisq_standard, out.df, out.eigvals);
+  out.scaled_shifted = robust::scaled_shifted(out.chisq_standard, out.df, out.eigvals);
   return out;
 }
 

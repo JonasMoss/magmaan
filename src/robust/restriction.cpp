@@ -10,7 +10,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 
-namespace magmaan::nt::robust {
+namespace magmaan::robust {
 
 using estimate::EqConstraints;
 
@@ -120,4 +120,4 @@ restriction_alpha_from_K(const EqConstraints& K_H1,
   return RestrictionAlpha{std::move(A), std::move(b)};
 }
 
-}  // namespace magmaan::nt::robust
+}  // namespace magmaan::robust

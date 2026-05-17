@@ -25,14 +25,14 @@
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
-namespace magmaan::nt::infer {
+namespace magmaan::inference {
 
 using estimate::build_eq_constraints;
 using estimate::EqConstraints;
 using estimate::resolve_fixed_x_from_sample;
-using fiml::FIML;
-using fiml::fiml_start_sample_stats;
-using fiml::validate_fiml_fixed_x_missing_policy;
+using estimate::fiml::FIML;
+using estimate::fiml::fiml_start_sample_stats;
+using estimate::fiml::validate_fiml_fixed_x_missing_policy;
 
 using data::RawData;
 using data::SampleStats;
@@ -247,9 +247,9 @@ evaluate_augmented_ml(const spec::LatentStructure& pt,
   if (!eval.has_value()) {
     return std::unexpected(model_to_post(eval.error()));
   }
-  auto cache = nt::ml_prepare(samp);
+  auto cache = estimate::ml_prepare(samp);
   if (!cache.has_value()) return std::unexpected(fit_to_post(cache.error()));
-  auto vg = nt::ml_value_gradient(samp, *cache, eval->moments,
+  auto vg = estimate::ml_value_gradient(samp, *cache, eval->moments,
                                   eval->J_sigma, eval->J_mu);
   if (!vg.has_value()) return std::unexpected(fit_to_post(vg.error()));
   score_full = -score_scale * vg->gradient;
@@ -266,13 +266,13 @@ evaluate_augmented_ls(const spec::LatentStructure& pt,
                       const model::MatrixRep& rep,
                       const SampleStats& samp,
                       const Estimates& est,
-                      const gmm::Weight& weight,
+                      const estimate::gmm::Weight& weight,
                       double n_total,
                       Eigen::VectorXd& score_full,
                       Eigen::MatrixXd& info_full) {
   auto ev = build_eval(pt, rep);
   if (!ev.has_value()) return std::unexpected(ev.error());
-  auto prob = gmm::residuals(*ev, samp, est.theta, weight);
+  auto prob = estimate::gmm::residuals(*ev, samp, est.theta, weight);
   if (!prob.has_value()) return std::unexpected(fit_to_post(prob.error()));
   auto r = prob->r(est.theta);
   if (!r.has_value()) return std::unexpected(fit_to_post(r.error()));
@@ -449,7 +449,7 @@ struct ContinuousMlEvaluator {
 struct ContinuousLsEvaluator {
   const model::MatrixRep& rep;
   const SampleStats& samp;
-  gmm::Weight weight;
+  estimate::gmm::Weight weight;
   double n_total;
 
   post_expected<spec::LatentStructure>
@@ -742,7 +742,7 @@ modification_indices(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const SampleStats& samp,
                      const Estimates& est,
-                     const gmm::Weight& weight) {
+                     const estimate::gmm::Weight& weight) {
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
@@ -757,7 +757,7 @@ score_tests(spec::LatentStructure pt,
             const model::MatrixRep& rep,
             const SampleStats& samp,
             const Estimates& est,
-            const gmm::Weight& weight) {
+            const estimate::gmm::Weight& weight) {
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
@@ -805,4 +805,4 @@ score_tests_fiml(spec::LatentStructure pt,
   return equality_release_tests(std::move(pt), rep, est, ev);
 }
 
-}  // namespace magmaan::nt::infer
+}  // namespace magmaan::inference

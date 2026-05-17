@@ -217,11 +217,11 @@ TEST_CASE("rls_chi2: matches lavaan browne.residual.nt.model on 3F Holzinger") {
   im.sigma.assign(im_or->sigma.begin(), im_or->sigma.end());
   im.mu.assign(im_or->mu.begin(), im_or->mu.end());
 
-  auto t_rls = magmaan::nt::infer::rls_chi2(samp, im);
+  auto t_rls = magmaan::inference::rls_chi2(samp, im);
   REQUIRE(t_rls.has_value());
   CHECK(*t_rls == doctest::Approx(81.3677).epsilon(1e-3));
 
-  auto t_rls_theta = magmaan::nt::infer::rls_chi2(
+  auto t_rls_theta = magmaan::inference::rls_chi2(
       *h.pt, *h.rep, samp, est.theta);
   REQUIRE(t_rls_theta.has_value());
   CHECK(*t_rls_theta == doctest::Approx(*t_rls).epsilon(1e-12));
@@ -258,7 +258,7 @@ TEST_CASE("rls_chi2: zero on saturated 1F CFA") {
   im.sigma.assign(im_or->sigma.begin(), im_or->sigma.end());
   im.mu.assign(im_or->mu.begin(), im_or->mu.end());
 
-  auto t_rls = magmaan::nt::infer::rls_chi2(samp, im);
+  auto t_rls = magmaan::inference::rls_chi2(samp, im);
   REQUIRE(t_rls.has_value());
   CHECK(std::abs(*t_rls) < 1e-6);
 }
@@ -291,7 +291,7 @@ TEST_CASE("browne_residual_nt: matches lavaan on 3F Holzinger") {
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
   auto est = magmaan::test::fit(*h.pt, *h.rep, samp).value();
-  auto t_or = magmaan::nt::infer::browne_residual_nt(*h.pt, *h.rep, samp, est);
+  auto t_or = magmaan::inference::browne_residual_nt(*h.pt, *h.rep, samp, est);
   REQUIRE(t_or.has_value());
   CHECK(*t_or == doctest::Approx(77.9034).epsilon(1e-3));
 }
@@ -319,7 +319,7 @@ TEST_CASE("browne_residual_nt: zero on saturated 1F CFA") {
   samp.n_obs.push_back(j["n_obs"].get<std::int64_t>());
 
   auto est = magmaan::test::fit(*h.pt, *h.rep, samp).value();
-  auto t_or = magmaan::nt::infer::browne_residual_nt(*h.pt, *h.rep, samp, est);
+  auto t_or = magmaan::inference::browne_residual_nt(*h.pt, *h.rep, samp, est);
   REQUIRE(t_or.has_value());
   CHECK(std::abs(*t_or) < 1e-6);
 }
@@ -348,8 +348,8 @@ TEST_CASE("browne_residual_adf: empirical Gamma approaches NT on MVN data") {
   auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
   auto est = magmaan::test::fit(*h.pt, *h.rep, *samp_or).value();
-  auto nt_or = magmaan::nt::infer::browne_residual_nt(*h.pt, *h.rep, *samp_or, est);
-  auto adf_or = magmaan::nt::infer::browne_residual_adf(*h.pt, *h.rep, *samp_or, raw, est);
+  auto nt_or = magmaan::inference::browne_residual_nt(*h.pt, *h.rep, *samp_or, est);
+  auto adf_or = magmaan::inference::browne_residual_adf(*h.pt, *h.rep, *samp_or, raw, est);
   REQUIRE(nt_or.has_value());
   REQUIRE(adf_or.has_value());
   CHECK(*adf_or == doctest::Approx(*nt_or).epsilon(0.20));
@@ -370,7 +370,7 @@ TEST_CASE("browne_residual_adf: zero on saturated model") {
   auto samp_or = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp_or.has_value());
   auto est = magmaan::test::fit(*h.pt, *h.rep, *samp_or).value();
-  auto adf_or = magmaan::nt::infer::browne_residual_adf(*h.pt, *h.rep, *samp_or, raw, est);
+  auto adf_or = magmaan::inference::browne_residual_adf(*h.pt, *h.rep, *samp_or, raw, est);
   REQUIRE(adf_or.has_value());
   CHECK(std::abs(*adf_or) < 1e-6);
 }
@@ -387,7 +387,7 @@ TEST_CASE("chi2_stat: chi2 = n · fmin") {
   est.theta = Eigen::VectorXd::Zero(3);                // unused
   est.fmin  = 0.04321;
 
-  CHECK(magmaan::nt::infer::chi2_stat(samp, est) ==
+  CHECK(magmaan::inference::chi2_stat(samp, est) ==
         doctest::Approx(301.0 * 0.04321).epsilon(1e-12));
 }
 
@@ -545,15 +545,15 @@ TEST_CASE("z_test: per-parameter z = θ̂_k / SE_k and chi²(1) p-value") {
   est.theta << 1.0, 0.5, -2.0;
   Eigen::VectorXd se_v(3);
   se_v << 0.25, 0.0, 1.0;
-  const auto zt = magmaan::nt::infer::z_test(est, se_v);
+  const auto zt = magmaan::inference::z_test(est, se_v);
   CHECK(zt.z(0) == doctest::Approx(4.0));
   CHECK(zt.p_value(0) ==
-        doctest::Approx(magmaan::nt::infer::chi2_pvalue(16.0, 1)).epsilon(1e-12));
+        doctest::Approx(magmaan::inference::chi2_pvalue(16.0, 1)).epsilon(1e-12));
   CHECK(std::isnan(zt.z(1)));        // SE = 0
   CHECK(std::isnan(zt.p_value(1)));
   CHECK(zt.z(2) == doctest::Approx(-2.0));
   CHECK(zt.p_value(2) ==
-        doctest::Approx(magmaan::nt::infer::chi2_pvalue(4.0, 1)).epsilon(1e-12));
+        doctest::Approx(magmaan::inference::chi2_pvalue(4.0, 1)).epsilon(1e-12));
 }
 
 TEST_CASE("wald_test: single-parameter restriction matches (θ̂_k / SE_k)²") {
@@ -588,7 +588,7 @@ TEST_CASE("wald_test: single-parameter restriction matches (θ̂_k / SE_k)²") {
   R(0, 0) = 1.0;
   Eigen::VectorXd q(1); q(0) = 0.0;
 
-  auto wald_or = magmaan::nt::infer::wald_test(R, q, est, inf.vcov);
+  auto wald_or = magmaan::inference::wald_test(R, q, est, inf.vcov);
   REQUIRE(wald_or.has_value());
   CHECK(wald_or->df == 1);
   const double expected = (est.theta(0) / inf.se(0)) * (est.theta(0) / inf.se(0));
@@ -604,12 +604,12 @@ TEST_CASE("wald_test: rank-deficient R errors out") {
   R << 1, 0, 0,
        1, 0, 0;
   Eigen::VectorXd q = Eigen::VectorXd::Zero(2);
-  auto w = magmaan::nt::infer::wald_test(R, q, est, vcov);
+  auto w = magmaan::inference::wald_test(R, q, est, vcov);
   REQUIRE_FALSE(w.has_value());
 }
 
 TEST_CASE("chi2_pvalue: classic spot checks against R's pchisq") {
-  using magmaan::nt::infer::chi2_pvalue;
+  using magmaan::inference::chi2_pvalue;
   // pchisq(3.84, 1, lower.tail=FALSE) ≈ 0.05
   CHECK(chi2_pvalue(3.8414588, 1) == doctest::Approx(0.05).epsilon(1e-5));
   // pchisq(7.815, 3, lower.tail=FALSE) ≈ 0.05
@@ -625,8 +625,8 @@ TEST_CASE("chi2_pvalue: classic spot checks against R's pchisq") {
 }
 
 TEST_CASE("noncentral_chisq_cdf: spot checks against R's pchisq(x, df, ncp)") {
-  using magmaan::nt::infer::chi2_pvalue;
-  using magmaan::nt::infer::noncentral_chisq_cdf;
+  using magmaan::inference::chi2_pvalue;
+  using magmaan::inference::noncentral_chisq_cdf;
 
   // ncp == 0 ⇒ central χ²(df) CDF (= 1 − chi2_pvalue) for several (x, df).
   for (auto [x, df] : {std::pair{2.0, 3}, std::pair{12.5, 7},
@@ -918,8 +918,8 @@ TEST_CASE("information_observed_analytic matches FD for mean structure") {
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {100};
 
   auto est = magmaan::test::fit(*h.pt, *h.rep, samp).value();
-  auto an_or = magmaan::nt::infer::information_observed_analytic(*h.pt, *h.rep, samp, est);
-  auto fd_or = magmaan::nt::infer::information_observed_fd(*h.pt, *h.rep, samp, est);
+  auto an_or = magmaan::inference::information_observed_analytic(*h.pt, *h.rep, samp, est);
+  auto fd_or = magmaan::inference::information_observed_fd(*h.pt, *h.rep, samp, est);
   REQUIRE_MESSAGE(an_or.has_value(),
       "Analytic failed: " << (an_or.has_value() ? "" : an_or.error().detail));
   REQUIRE_MESSAGE(fd_or.has_value(),
@@ -940,8 +940,8 @@ TEST_CASE("information_observed_analytic matches FD for structural latent means"
   samp.S = {S};  samp.mean = {mean};  samp.n_obs = {180};
 
   auto est = magmaan::test::fit(*h.pt, *h.rep, samp).value();
-  auto an_or = magmaan::nt::infer::information_observed_analytic(*h.pt, *h.rep, samp, est);
-  auto fd_or = magmaan::nt::infer::information_observed_fd(*h.pt, *h.rep, samp, est);
+  auto an_or = magmaan::inference::information_observed_analytic(*h.pt, *h.rep, samp, est);
+  auto fd_or = magmaan::inference::information_observed_fd(*h.pt, *h.rep, samp, est);
   REQUIRE_MESSAGE(an_or.has_value(),
       "Analytic failed: " << (an_or.has_value() ? "" : an_or.error().detail));
   REQUIRE_MESSAGE(fd_or.has_value(),

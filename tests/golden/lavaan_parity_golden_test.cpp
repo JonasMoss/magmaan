@@ -352,16 +352,16 @@ TEST_CASE("lavaan-parity ML — magmaan reproduces lavaan on real data") {
     }
 
     // fit measures — CFI/TLI/RMSEA + logl/AIC/BIC/SRMR.
-    const double chi2 = magmaan::nt::infer::chi2_stat(samp, est);
-    auto df_or = magmaan::nt::infer::df_stat(*pt, samp);
-    auto fx_or = magmaan::nt::measures::fit_extras(*pt, *mr, samp, est);
+    const double chi2 = magmaan::inference::chi2_stat(samp, est);
+    auto df_or = magmaan::inference::df_stat(*pt, samp);
+    auto fx_or = magmaan::measures::fit_extras(*pt, *mr, samp, est);
     if (!df_or.has_value()) {
       fail("df_stat — " + df_or.error().detail);
     } else if (!fx_or.has_value()) {
       fail("fit_extras — " + fx_or.error().detail);
     } else {
-      const auto bl = magmaan::nt::measures::baseline_chi2(samp);
-      const auto fm = magmaan::nt::measures::fit_measures(chi2, *df_or, bl, samp);
+      const auto bl = magmaan::measures::baseline_chi2(samp);
+      const auto fm = magmaan::measures::fit_measures(chi2, *df_or, bl, samp);
       const auto& fx = *fx_or;
       const auto& mref = ref["fit_measures"];
       auto cmp = [&](const char* name, double ours, const char* key,
@@ -507,8 +507,8 @@ TEST_CASE("lavaan-parity FIML — bfi missing=ml") {
            std::to_string(ref["npar"].get<int>()));
 
     // baseline + global fit measures (cfi/tli/rmsea). SRMR has no FIML path.
-    auto bl_or = magmaan::nt::fiml::fiml_baseline_chi2(*pt, raw);
-    auto start_or = magmaan::nt::fiml::fiml_start_sample_stats(raw);
+    auto bl_or = magmaan::estimate::fiml::fiml_baseline_chi2(*pt, raw);
+    auto start_or = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
     if (!bl_or.has_value()) {
       fail("fiml_baseline_chi2 — " + bl_or.error().detail);
     } else if (!start_or.has_value()) {
@@ -519,7 +519,7 @@ TEST_CASE("lavaan-parity FIML — bfi missing=ml") {
         fail("baseline_chisq mismatch");
       if (bl.df != ref["baseline_df"].get<int>())
         fail("baseline_df mismatch");
-      const auto fm = magmaan::nt::measures::fit_measures(fx.chi2, df, bl,
+      const auto fm = magmaan::measures::fit_measures(fx.chi2, df, bl,
                                                           *start_or);
       cmp("cfi",            fm.cfi,            "cfi",            1e-3);
       cmp("tli",            fm.tli,            "tli",            1e-3);
@@ -532,7 +532,7 @@ TEST_CASE("lavaan-parity FIML — bfi missing=ml") {
     // robust MLR reporting (lavaan missing="ml", estimator="MLR").
     if (ref.contains("robust") && !ref["robust"].is_null() && df > 0) {
       const auto& rref = ref["robust"];
-      auto rob_or = magmaan::nt::fiml::fiml_robust_mlr(*pt, *mr, raw, est, df,
+      auto rob_or = magmaan::estimate::fiml::fiml_robust_mlr(*pt, *mr, raw, est, df,
                                                        fx.chi2);
       if (!rob_or.has_value()) {
         fail("fiml_robust_mlr — " + rob_or.error().detail);
@@ -657,8 +657,8 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
                                       magmaan::estimate::Bounds{},
                                       magmaan::estimate::Backend::Lbfgs, opt);
       }
-      magmaan::gmm::Weight w;
-      if (!is_uls) w = magmaan::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
+      magmaan::estimate::gmm::Weight w;
+      if (!is_uls) w = magmaan::estimate::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
       return magmaan::test::fit_gmm(*pt, *mr, samp, w,
                                     magmaan::estimate::Bounds{},
                                     magmaan::estimate::Backend::Lbfgs, opt);
@@ -676,7 +676,7 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
     if ((est.theta - theta_l).cwiseAbs().maxCoeff() > 1e-3)
       fail(e + ": max|θ̂ − θ̂_lavaan| > 1e-3");
 
-    auto df_or = magmaan::nt::infer::df_stat(*pt, samp);
+    auto df_or = magmaan::inference::df_stat(*pt, samp);
     if (!df_or.has_value()) {
       fail(e + ": df_stat — " + df_or.error().detail);
     } else if (*df_or != fit["df"].get<int>()) {
@@ -698,15 +698,15 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
     // 2·N·fmin convention, which diverges from lavaan's reported chi-square by
     // an estimator-convention amount — gated loosely, mirroring ls_golden.
     // The moment weight is the only estimator selector: empty ⇒ ULS.
-    magmaan::gmm::Weight weight;
+    magmaan::estimate::gmm::Weight weight;
     if (is_gls) {
       auto ev = magmaan::model::ModelEvaluator::build(*pt, *mr);
       REQUIRE(ev.has_value());
-      auto w = magmaan::gmm::normal_theory_weight(*ev, samp, est.theta);
+      auto w = magmaan::estimate::gmm::normal_theory_weight(*ev, samp, est.theta);
       REQUIRE(w.has_value());
       weight = *w;
     } else if (!is_uls) {
-      weight = magmaan::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
+      weight = magmaan::estimate::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
     }
     double chisq = 0.0;
     auto c = magmaan::estimate::continuous_ls_chisq(samp, *pt, *mr, est, weight);
@@ -727,7 +727,7 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
       if (fit.contains("robust") && !fit["robust"].is_null()) {
         const auto& rref = fit["robust"];
         auto rob_or = magmaan::estimate::robust_continuous_ls(
-            *pt, *mr, samp, est, magmaan::gmm::Weight{},
+            *pt, *mr, samp, est, magmaan::estimate::gmm::Weight{},
             matrices_from_blocks(rref["gamma"]));
         if (!rob_or.has_value()) {
           fail("ULS robust — " + rob_or.error().detail);

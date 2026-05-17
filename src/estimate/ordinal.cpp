@@ -30,14 +30,14 @@
 namespace magmaan::estimate {
 
 using data::SampleStats;
-using nt::infer::ScoreCandidate;
-using nt::infer::ScoreCandidateKind;
-using nt::infer::ScoreTestResult;
-using nt::infer::ScoreTestTable;
-using nt::infer::chi2_pvalue;
-using nt::robust::MeanVarAdjustedResult;
-using nt::robust::SatorraBentlerResult;
-using nt::robust::ScaledShiftedResult;
+using inference::ScoreCandidate;
+using inference::ScoreCandidateKind;
+using inference::ScoreTestResult;
+using inference::ScoreTestTable;
+using inference::chi2_pvalue;
+using robust::MeanVarAdjustedResult;
+using robust::SatorraBentlerResult;
+using robust::ScaledShiftedResult;
 using optim::LbfgsOptions;
 
 namespace {
@@ -1247,8 +1247,8 @@ post_expected<Eigen::MatrixXd> invert_score_spd(const Eigen::MatrixXd& A,
   return ldlt.solve(Eigen::MatrixXd::Identity(A.rows(), A.cols()));
 }
 
-post_expected<nt::infer::ScoreTestResult>
-ordinal_score_for_direction(const nt::infer::ScoreCandidate& candidate,
+post_expected<inference::ScoreTestResult>
+ordinal_score_for_direction(const inference::ScoreCandidate& candidate,
                             const Eigen::VectorXd& score_full,
                             const Eigen::MatrixXd& info_full,
                             const Eigen::MatrixXd& K_nuisance,
@@ -1270,13 +1270,13 @@ ordinal_score_for_direction(const nt::infer::ScoreCandidate& candidate,
     return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
         "ordinal score efficient information is not positive"));
   }
-  nt::infer::ScoreTestResult out;
+  inference::ScoreTestResult out;
   out.candidate = candidate;
   out.score = score_eff;
   out.information = info_eff;
   out.mi = (score_eff * score_eff) / info_eff;
   out.df = 1;
-  out.p_value = nt::infer::chi2_pvalue(out.mi, 1);
+  out.p_value = inference::chi2_pvalue(out.mi, 1);
   out.epc = score_eff / info_eff;
   return out;
 }
@@ -1339,7 +1339,7 @@ void ordinal_add_free_group(spec::LatentStructure& pt, std::int32_t old_n) {
 }
 
 template <class Stats, class ResidualFn, class JacobianFn, class PrepareFn>
-post_expected<nt::infer::ScoreTestTable>
+post_expected<inference::ScoreTestTable>
 ordinal_modification_indices_impl(spec::LatentStructure pt,
                                   const model::MatrixRep& rep,
                                   const Stats& stats,
@@ -1364,7 +1364,7 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
   if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
   const double n_total = static_cast<double>(*N_or);
 
-  nt::infer::ScoreTestTable table;
+  inference::ScoreTestTable table;
   for (std::size_t row = 0; row < pt.size(); ++row) {
     if (!ordinal_fixed_candidate(pt, rep, row)) continue;
     spec::LatentStructure aug = pt;
@@ -1406,8 +1406,8 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
 
     Eigen::VectorXd direction = Eigen::VectorXd::Zero(score.size());
     direction(score.size() - 1) = 1.0;
-    nt::infer::ScoreCandidate cand;
-    cand.kind = nt::infer::ScoreCandidateKind::FixedParam;
+    inference::ScoreCandidate cand;
+    cand.kind = inference::ScoreCandidateKind::FixedParam;
     cand.row = row;
     cand.op = pt.op[row];
     cand.lhs_var = pt.lhs_var[row];
@@ -1422,7 +1422,7 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
 }
 
 template <class Stats, class ResidualFn, class JacobianFn, class PrepareFn>
-post_expected<nt::infer::ScoreTestTable>
+post_expected<inference::ScoreTestTable>
 ordinal_score_tests_impl(spec::LatentStructure pt,
                          const model::MatrixRep& rep,
                          const Stats& stats,
@@ -1443,7 +1443,7 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
   }
   auto con = build_eq_constraints(pt);
   if (!con.has_value()) return std::unexpected(con.error());
-  nt::infer::ScoreTestTable table;
+  inference::ScoreTestTable table;
   if (!con->active()) return table;
   auto N_or = total_n_obs(stats);
   if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
@@ -1475,8 +1475,8 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
   for (Eigen::Index row = 0; row < con->A_eq.rows(); ++row) {
     auto d = ordinal_release_direction(*con, row);
     if (!d.has_value()) return std::unexpected(d.error());
-    nt::infer::ScoreCandidate cand;
-    cand.kind = nt::infer::ScoreCandidateKind::EqualityRelease;
+    inference::ScoreCandidate cand;
+    cand.kind = inference::ScoreCandidateKind::EqualityRelease;
     cand.row = static_cast<std::size_t>(row);
     cand.op = parse::Op::EqConstraint;
     auto res = ordinal_score_for_direction(cand, score, info, con->K(), *d);
@@ -1487,7 +1487,7 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
 
 }  // namespace
 
-post_expected<nt::infer::ScoreTestTable>
+post_expected<inference::ScoreTestTable>
 modification_indices_ordinal(spec::LatentStructure pt,
                              const model::MatrixRep& rep,
                              const data::OrdinalStats& stats,
@@ -1518,7 +1518,7 @@ modification_indices_ordinal(spec::LatentStructure pt,
                                            prepare_fn);
 }
 
-post_expected<nt::infer::ScoreTestTable>
+post_expected<inference::ScoreTestTable>
 score_tests_ordinal(spec::LatentStructure pt,
                     const model::MatrixRep& rep,
                     const data::OrdinalStats& stats,
@@ -1548,7 +1548,7 @@ score_tests_ordinal(spec::LatentStructure pt,
                                   residual_fn, jacobian_fn, prepare_fn);
 }
 
-post_expected<nt::infer::ScoreTestTable>
+post_expected<inference::ScoreTestTable>
 modification_indices_mixed_ordinal(spec::LatentStructure pt,
                                    const model::MatrixRep& rep,
                                    const data::MixedOrdinalStats& stats,
@@ -1577,7 +1577,7 @@ modification_indices_mixed_ordinal(spec::LatentStructure pt,
                                            prepare_fn);
 }
 
-post_expected<nt::infer::ScoreTestTable>
+post_expected<inference::ScoreTestTable>
 score_tests_mixed_ordinal(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const data::MixedOrdinalStats& stats,

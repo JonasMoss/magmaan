@@ -71,7 +71,7 @@ std::vector<Eigen::MatrixXd> matrices_from_blocks(const nlohmann::json& blocks) 
 
 // The moment-quadratic weight for a continuous LS estimator: empty ⇒ ULS;
 // `WLS.V` from the fixture ⇒ WLS; the normal-theory weight ⇒ GLS.
-magmaan::gmm::Weight ls_estimator_weight(
+magmaan::estimate::gmm::Weight ls_estimator_weight(
     const std::string& estimator, const nlohmann::json& fit,
     const magmaan::spec::LatentStructure& pt,
     const magmaan::model::MatrixRep& rep,
@@ -79,11 +79,11 @@ magmaan::gmm::Weight ls_estimator_weight(
     const magmaan::estimate::Estimates& est) {
   if (estimator == "ULS") return {};
   if (estimator == "WLS") {
-    return magmaan::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
+    return magmaan::estimate::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
   }
   auto ev = magmaan::model::ModelEvaluator::build(pt, rep);
   REQUIRE(ev.has_value());
-  auto w = magmaan::gmm::normal_theory_weight(*ev, samp, est.theta);
+  auto w = magmaan::estimate::gmm::normal_theory_weight(*ev, samp, est.theta);
   REQUIRE(w.has_value());
   return *w;
 }
@@ -196,7 +196,7 @@ bool check_estimate(const std::string& id,
     return false;
   }
 
-  auto df_or = magmaan::nt::infer::df_stat(pt, samp);
+  auto df_or = magmaan::inference::df_stat(pt, samp);
   if (!df_or.has_value()) {
     failures.push_back(id + "/" + estimator + ": df_stat — " +
                        df_or.error().detail);
@@ -263,7 +263,7 @@ bool check_uls_robust(const std::string& id,
   if (!fit.contains("robust") || fit["robust"].is_null()) return true;
   const auto& robust = fit["robust"];
   auto rob_or = magmaan::estimate::robust_continuous_ls(
-      pt, rep, samp, est, magmaan::gmm::Weight{},
+      pt, rep, samp, est, magmaan::estimate::gmm::Weight{},
       matrices_from_blocks(robust["gamma"]));
   if (!rob_or.has_value()) {
     failures.push_back(id + "/ULS robust: robust_continuous_ls — " +
@@ -357,7 +357,7 @@ TEST_CASE("continuous LS fixtures: ULS/GLS/WLS bounded fits match lavaan") {
       } else {
         est_or = magmaan::test::fit_gmm(
             handles->pt, handles->rep, samp,
-            magmaan::gmm::Weight(matrices_from_blocks(fit["WLS.V"])),
+            magmaan::estimate::gmm::Weight(matrices_from_blocks(fit["WLS.V"])),
             magmaan::estimate::Bounds{}, magmaan::estimate::Backend::Lbfgs, opt);
       }
 

@@ -162,7 +162,7 @@ double objective(ModelEvaluator& ev, const SampleStats& samp,
                  const Eigen::VectorXd& theta) {
   auto sm = ev.sigma(theta);
   if (!sm.has_value()) return std::numeric_limits<double>::infinity();
-  auto f = magmaan::nt::ml_value(samp, *sm);
+  auto f = magmaan::estimate::ml_value(samp, *sm);
   return f.has_value() ? *f : std::numeric_limits<double>::infinity();
 }
 
@@ -172,7 +172,7 @@ Eigen::VectorXd grad_analytic(ModelEvaluator& ev, const SampleStats& samp,
   auto sm = ev.sigma(theta);
   auto J = ev.dsigma_dtheta(theta);
   if (!sm.has_value() || !J.has_value()) return {};
-  auto g = magmaan::nt::ml_gradient(samp, *sm, *J);
+  auto g = magmaan::estimate::ml_gradient(samp, *sm, *J);
   return g.has_value() ? *g : Eigen::VectorXd{};
 }
 

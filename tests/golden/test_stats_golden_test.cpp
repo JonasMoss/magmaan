@@ -90,11 +90,11 @@ TEST_CASE("test-stat goldens — z / p-value / Wald vs lavaan") {
     if (!est_or.has_value()) { failures.push_back(e.id + ": fit — " + est_or.error().detail); continue; }
     const auto& est = *est_or;
 
-    auto info_or = magmaan::nt::infer::information_expected(*pt, *mr, samp, est);
+    auto info_or = magmaan::inference::information_expected(*pt, *mr, samp, est);
     if (!info_or.has_value()) { failures.push_back(e.id + ": information_expected — " + info_or.error().detail); continue; }
-    auto vcov_or = magmaan::nt::infer::vcov(*info_or, *pt);
+    auto vcov_or = magmaan::inference::vcov(*info_or, *pt);
     if (!vcov_or.has_value()) { failures.push_back(e.id + ": vcov — " + vcov_or.error().detail); continue; }
-    const Eigen::VectorXd se_v = magmaan::nt::infer::se(*vcov_or);
+    const Eigen::VectorXd se_v = magmaan::inference::se(*vcov_or);
     const Eigen::MatrixXd& vcov_m = *vcov_or;
 
     bool ok = true;
@@ -103,7 +103,7 @@ TEST_CASE("test-stat goldens — z / p-value / Wald vs lavaan") {
     // 1) z / two-sided p-value. Our chi2_pvalue(z², 1) == pchisq(z², 1, lower=FALSE)
     //    == lavaan's 2·pnorm(-|z|), so both should agree to round-off; assert
     //    z to 1e-3 (smooth in θ̂; θ̂ matches lavaan only to ~2e-6) and p to 1e-6.
-    const auto z_arr = magmaan::nt::infer::z_test(est, se_v);
+    const auto z_arr = magmaan::inference::z_test(est, se_v);
     const auto& pe_z = exp["pe_z"];
     const auto& pe_p = exp["pe_pvalue"];
     if (static_cast<std::size_t>(z_arr.z.size()) != pe_z.size()) {
@@ -138,7 +138,7 @@ TEST_CASE("test-stat goldens — z / p-value / Wald vs lavaan") {
       Eigen::MatrixXd R = Eigen::MatrixXd::Zero(1, est.theta.size());
       R(0, k) = 1.0;
       Eigen::VectorXd q = Eigen::VectorXd::Zero(1);
-      auto w_or = magmaan::nt::infer::wald_test(R, q, est, vcov_m);
+      auto w_or = magmaan::inference::wald_test(R, q, est, vcov_m);
       if (!w_or.has_value()) { failures.push_back(e.id + ": wald_test — " + w_or.error().detail); continue; }
       const double chi2_l = exp["wald_l1_eq0_chi2"].get<double>();
       const int    df_l   = exp["wald_l1_eq0_df"].get<int>();
@@ -152,7 +152,7 @@ TEST_CASE("test-stat goldens — z / p-value / Wald vs lavaan") {
                       w_or->chi2, chi2_l);
         failures.push_back(e.id + ": " + buf); ok = false;
       }
-      const double p_ours = magmaan::nt::infer::chi2_pvalue(w_or->chi2, w_or->df);
+      const double p_ours = magmaan::inference::chi2_pvalue(w_or->chi2, w_or->df);
       if (std::abs(p_ours - p_l) > 1e-6) {
         std::snprintf(buf, sizeof(buf), "wald p ours=%.3e lavaan=%.3e", p_ours, p_l);
         failures.push_back(e.id + ": " + buf); ok = false;

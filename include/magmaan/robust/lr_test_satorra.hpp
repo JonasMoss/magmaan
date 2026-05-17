@@ -11,7 +11,7 @@
 #include "magmaan/robust/satorra2000.hpp"
 #include "magmaan/spec/partable.hpp"
 
-namespace magmaan::nt::robust {
+namespace magmaan::robust {
 
 using estimate::EqConstraints;
 
@@ -88,4 +88,4 @@ lr_test_satorra2000_from_data(
     int                                  df_H1,
     GammaSource                          gamma = GammaSource::Empirical);
 
-}  // namespace magmaan::nt::robust
+}  // namespace magmaan::robust

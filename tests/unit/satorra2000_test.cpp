@@ -65,7 +65,7 @@ Eigen::MatrixXd dense_V(const Eigen::MatrixXd& Sigma) {
 // Naïve full-UΓ eigenvalues — the textbook computation Satorra-2000 replaces.
 // Always builds the dense p* × p* matrices.
 Eigen::VectorXd naive_satorra_eigvals(
-    const std::vector<magmaan::nt::robust::SatorraGroup>& groups,
+    const std::vector<magmaan::robust::SatorraGroup>& groups,
     const Eigen::MatrixXd&               A_alpha) {
   const Eigen::Index r1 = A_alpha.cols();
   const Eigen::Index m  = A_alpha.rows();
@@ -152,7 +152,7 @@ TEST_CASE("compute_satorra2000: 2-var saturated, σ₁₂=0 restriction") {
   Eigen::MatrixXd A_alpha(1, 3);
   A_alpha << 0, 1, 0;
 
-  magmaan::nt::robust::SatorraGroup gr{
+  magmaan::robust::SatorraGroup gr{
       /*Pi_alpha=*/Pi_alpha,
       /*Sigma   =*/S,                 // Σ̂_g(θ̂_H1) = S since saturated
       /*X       =*/X,
@@ -161,8 +161,8 @@ TEST_CASE("compute_satorra2000: 2-var saturated, σ₁₂=0 restriction") {
       /*n_g     =*/static_cast<std::int32_t>(n),
   };
 
-  auto fast_or = magmaan::nt::robust::compute_satorra2000({gr}, A_alpha,
-                                          magmaan::nt::robust::GammaSource::Empirical);
+  auto fast_or = magmaan::robust::compute_satorra2000({gr}, A_alpha,
+                                          magmaan::robust::GammaSource::Empirical);
   REQUIRE(fast_or.has_value());
   const Eigen::VectorXd ev_fast   = fast_or->eigenvalues;
   const Eigen::VectorXd ev_naive = naive_satorra_eigvals({gr}, A_alpha);
@@ -200,9 +200,9 @@ TEST_CASE("compute_satorra2000: NT-Γ sanity (all eigvals → 1)") {
   A_alpha << 0, 1, 0, 0, 0, 0,
              0, 0, 1, 0, 0, 0;
 
-  magmaan::nt::robust::SatorraGroup gr{Pi_alpha, S, X, mean, 1.0,
+  magmaan::robust::SatorraGroup gr{Pi_alpha, S, X, mean, 1.0,
                       static_cast<std::int32_t>(n)};
-  auto r = magmaan::nt::robust::compute_satorra2000({gr}, A_alpha, magmaan::nt::robust::GammaSource::NT);
+  auto r = magmaan::robust::compute_satorra2000({gr}, A_alpha, magmaan::robust::GammaSource::NT);
   REQUIRE(r.has_value());
   CHECK(r->eigenvalues.size() == 2);
   for (Eigen::Index k = 0; k < r->eigenvalues.size(); ++k) {
@@ -220,10 +220,10 @@ TEST_CASE("compute_satorra2000: degenerate m=0 (H0 ≡ H1)") {
   Eigen::MatrixXd Xc   = X.rowwise() - mean.transpose();
   Eigen::MatrixXd S    = (Xc.transpose() * Xc) / static_cast<double>(n);
 
-  magmaan::nt::robust::SatorraGroup gr{Eigen::MatrixXd::Identity(3, 3), S, X, mean, 1.0,
+  magmaan::robust::SatorraGroup gr{Eigen::MatrixXd::Identity(3, 3), S, X, mean, 1.0,
                       static_cast<std::int32_t>(n)};
   const Eigen::MatrixXd A_alpha = Eigen::MatrixXd::Zero(0, 3);
-  auto r = magmaan::nt::robust::compute_satorra2000({gr}, A_alpha);
+  auto r = magmaan::robust::compute_satorra2000({gr}, A_alpha);
   REQUIRE(r.has_value());
   CHECK(r->C.size() == 0);
   CHECK(r->S.size() == 0);
@@ -237,7 +237,7 @@ TEST_CASE("compute_satorra2000: degenerate m=0 (H0 ≡ H1)") {
 TEST_CASE("lr_test_satorra2000: low-level p-value wrap") {
   // Synthesise a SatorraDiffResult with hand-picked eigenvalues so all four
   // p-value formulas can be cross-checked against closed forms.
-  magmaan::nt::robust::SatorraDiffResult sd;
+  magmaan::robust::SatorraDiffResult sd;
   Eigen::VectorXd eig(3);
   eig << 1.5, 1.0, 0.5;   // Σλ = 3, Σλ² = 3.5
   sd.eigenvalues    = eig;
@@ -245,18 +245,18 @@ TEST_CASE("lr_test_satorra2000: low-level p-value wrap") {
   sd.trace_CinvS_sq = eig.squaredNorm();   // 3.5
 
   const double T_diff = 7.0;
-  auto r_or = magmaan::nt::robust::lr_test_satorra2000(T_diff, sd);
+  auto r_or = magmaan::robust::lr_test_satorra2000(T_diff, sd);
   REQUIRE(r_or.has_value());
   const auto& r = *r_or;
 
   CHECK(r.df_diff == 3);
   CHECK(r.T_diff  == doctest::Approx(T_diff));
-  CHECK(r.p_unscaled == doctest::Approx(magmaan::nt::infer::chi2_pvalue(T_diff, 3)));
+  CHECK(r.p_unscaled == doctest::Approx(magmaan::inference::chi2_pvalue(T_diff, 3)));
 
   // Scaled: ĉ = 3/3 = 1; T_scaled = 7.
   CHECK(r.scale_c  == doctest::Approx(1.0));
   CHECK(r.T_scaled == doctest::Approx(7.0));
-  CHECK(r.p_scaled == doctest::Approx(magmaan::nt::infer::chi2_pvalue(7.0, 3)));
+  CHECK(r.p_scaled == doctest::Approx(magmaan::inference::chi2_pvalue(7.0, 3)));
 
   // Adjusted: d̂₀ = 9/3.5 = 2.5714…; T_adj = 7 · 2.5714 / 3 = 6.0.
   const double d0_expected  = 9.0 / 3.5;
@@ -265,19 +265,19 @@ TEST_CASE("lr_test_satorra2000: low-level p-value wrap") {
   CHECK(r.T_adjusted == doctest::Approx(Tadj_expected));
   // p_adjusted = 1 − pchisq(Tadj, d̂₀).
   const double p_adj_expected =
-      1.0 - magmaan::nt::infer::noncentral_chisq_cdf(Tadj_expected, d0_expected, 0.0);
+      1.0 - magmaan::inference::noncentral_chisq_cdf(Tadj_expected, d0_expected, 0.0);
   CHECK(r.p_adjusted == doctest::Approx(p_adj_expected));
 
   // Mixture p-value matches `imhof_upper` directly.
-  CHECK(r.p_mixture == doctest::Approx(magmaan::nt::robust::imhof_upper(eig, T_diff)));
+  CHECK(r.p_mixture == doctest::Approx(magmaan::robust::imhof_upper(eig, T_diff)));
 }
 
 TEST_CASE("lr_test_satorra2000: degenerate (m = 0)") {
-  magmaan::nt::robust::SatorraDiffResult sd;
+  magmaan::robust::SatorraDiffResult sd;
   sd.eigenvalues    = Eigen::VectorXd::Zero(0);
   sd.trace_CinvS    = 0.0;
   sd.trace_CinvS_sq = 0.0;
-  auto r_or = magmaan::nt::robust::lr_test_satorra2000(0.0, sd);
+  auto r_or = magmaan::robust::lr_test_satorra2000(0.0, sd);
   REQUIRE(r_or.has_value());
   const auto& r = *r_or;
   CHECK(r.df_diff == 0);
@@ -298,10 +298,10 @@ TEST_CASE("compute_satorra2000: rejects singular pooled info") {
   const Eigen::Index n = 10;
   const Eigen::MatrixXd X    = Eigen::MatrixXd::Random(n, 2);
   const Eigen::VectorXd mean = X.colwise().mean();
-  magmaan::nt::robust::SatorraGroup gr{Pi_alpha, S, X, mean, 1.0,
+  magmaan::robust::SatorraGroup gr{Pi_alpha, S, X, mean, 1.0,
                       static_cast<std::int32_t>(n)};
   Eigen::MatrixXd A_alpha(1, 4);
   A_alpha << 1, 0, 0, -1;
-  auto r = magmaan::nt::robust::compute_satorra2000({gr}, A_alpha);
+  auto r = magmaan::robust::compute_satorra2000({gr}, A_alpha);
   CHECK_FALSE(r.has_value());
 }

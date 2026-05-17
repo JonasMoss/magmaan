@@ -21,7 +21,7 @@
 #include "magmaan/spec/partable.hpp"
 #include "magmaan/spec/start_hints.hpp"
 
-namespace magmaan::nt::fiml {
+namespace magmaan::estimate::fiml {
 
 using data::RawData;
 using data::SampleStats;
@@ -30,7 +30,7 @@ using estimate::EqConstraints;
 using estimate::build_eq_constraints;
 using estimate::resolve_fixed_x_from_sample;
 using estimate::simple_start_values;
-using nt::measures::BaselineFit;
+using measures::BaselineFit;
 
 struct FIMLPattern {
   std::size_t block = 0;
@@ -172,12 +172,12 @@ fit_fiml(spec::LatentStructure pt,
          FIML discrepancy = {},
          optim::LbfgsOptions opts = {});
 
-}  // namespace magmaan::nt::fiml
+}  // namespace magmaan::estimate::fiml
 
 namespace magmaan::estimate {
 
-using nt::fiml::FIMLExtras;
-using nt::fiml::fit_fiml;
-using nt::fiml::fiml_extras;
+using estimate::fiml::FIMLExtras;
+using estimate::fiml::fit_fiml;
+using estimate::fiml::fiml_extras;
 
 }  // namespace magmaan::estimate

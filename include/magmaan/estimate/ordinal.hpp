@@ -18,14 +18,14 @@
 namespace magmaan::estimate {
 
 using data::SampleStats;
-using nt::infer::ScoreCandidate;
-using nt::infer::ScoreCandidateKind;
-using nt::infer::ScoreTestResult;
-using nt::infer::ScoreTestTable;
-using nt::infer::chi2_pvalue;
-using nt::robust::MeanVarAdjustedResult;
-using nt::robust::SatorraBentlerResult;
-using nt::robust::ScaledShiftedResult;
+using inference::ScoreCandidate;
+using inference::ScoreCandidateKind;
+using inference::ScoreTestResult;
+using inference::ScoreTestTable;
+using inference::chi2_pvalue;
+using robust::MeanVarAdjustedResult;
+using robust::SatorraBentlerResult;
+using robust::ScaledShiftedResult;
 
 enum class OrdinalWeightKind {
   DWLS,
@@ -43,9 +43,9 @@ struct OrdinalRobustResult {
   Eigen::VectorXd eigvals;           // nonzero U-Gamma eigenvalues
   double chisq_standard = 0.0;       // N * F_min
   int df = 0;
-  nt::robust::SatorraBentlerResult satorra_bentler;
-  nt::robust::MeanVarAdjustedResult mean_var_adjusted;
-  nt::robust::ScaledShiftedResult scaled_shifted;
+  robust::SatorraBentlerResult satorra_bentler;
+  robust::MeanVarAdjustedResult mean_var_adjusted;
+  robust::ScaledShiftedResult scaled_shifted;
 };
 
 fit_expected<void>
@@ -84,28 +84,28 @@ robust_mixed_ordinal(spec::LatentStructure pt,
                      const Estimates& est,
                      OrdinalWeightKind weights);
 
-post_expected<nt::infer::ScoreTestTable>
+post_expected<inference::ScoreTestTable>
 modification_indices_ordinal(spec::LatentStructure pt,
                              const model::MatrixRep& rep,
                              const data::OrdinalStats& stats,
                              const Estimates& est,
                              OrdinalWeightKind weights);
 
-post_expected<nt::infer::ScoreTestTable>
+post_expected<inference::ScoreTestTable>
 score_tests_ordinal(spec::LatentStructure pt,
                     const model::MatrixRep& rep,
                     const data::OrdinalStats& stats,
                     const Estimates& est,
                     OrdinalWeightKind weights);
 
-post_expected<nt::infer::ScoreTestTable>
+post_expected<inference::ScoreTestTable>
 modification_indices_mixed_ordinal(spec::LatentStructure pt,
                                    const model::MatrixRep& rep,
                                    const data::MixedOrdinalStats& stats,
                                    const Estimates& est,
                                    OrdinalWeightKind weights);
 
-post_expected<nt::infer::ScoreTestTable>
+post_expected<inference::ScoreTestTable>
 score_tests_mixed_ordinal(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const data::MixedOrdinalStats& stats,

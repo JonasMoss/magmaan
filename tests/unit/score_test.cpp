@@ -72,7 +72,7 @@ SampleStats sample_from_fixture(const nlohmann::json& j) {
   return samp;
 }
 
-bool has_covariance_candidate(const magmaan::nt::infer::ScoreTestTable& table) {
+bool has_covariance_candidate(const magmaan::inference::ScoreTestTable& table) {
   for (const auto& row : table.rows) {
     if (row.candidate.op == magmaan::parse::Op::Covariance &&
         row.mi >= 0.0 && row.information > 0.0 &&
@@ -105,7 +105,7 @@ TEST_CASE("modification_indices: complete ML reports finite fixed-row tests") {
   auto est = magmaan::test::fit(h.pt, h.rep, samp);
   REQUIRE(est.has_value());
 
-  auto mi = magmaan::nt::infer::modification_indices(h.pt, h.rep, samp, *est);
+  auto mi = magmaan::inference::modification_indices(h.pt, h.rep, samp, *est);
   REQUIRE(mi.has_value());
   CHECK(has_covariance_candidate(*mi));
 }
@@ -119,8 +119,8 @@ TEST_CASE("modification_indices: ULS uses LS residual information") {
                                     magmaan::estimate::Bounds{});
   REQUIRE(est.has_value());
 
-  auto mi = magmaan::nt::infer::modification_indices(h.pt, h.rep, samp, *est,
-                                                     magmaan::gmm::Weight{});
+  auto mi = magmaan::inference::modification_indices(h.pt, h.rep, samp, *est,
+                                                     magmaan::estimate::gmm::Weight{});
   REQUIRE(mi.has_value());
   CHECK(has_covariance_candidate(*mi));
 }
@@ -132,10 +132,10 @@ TEST_CASE("score_tests: equality releases are reported in constrained ML models"
   auto est = magmaan::test::fit(h.pt, h.rep, samp);
   REQUIRE(est.has_value());
 
-  auto st = magmaan::nt::infer::score_tests(h.pt, h.rep, samp, *est);
+  auto st = magmaan::inference::score_tests(h.pt, h.rep, samp, *est);
   REQUIRE(st.has_value());
   REQUIRE(st->rows.size() >= 1);
-  CHECK(st->rows[0].candidate.kind == magmaan::nt::infer::ScoreCandidateKind::EqualityRelease);
+  CHECK(st->rows[0].candidate.kind == magmaan::inference::ScoreCandidateKind::EqualityRelease);
   CHECK(st->rows[0].mi >= 0.0);
   CHECK(std::isfinite(st->rows[0].epc));
 }
@@ -146,7 +146,7 @@ TEST_CASE("score_tests: equality releases are reported in constrained ML models"
 
 namespace {
 
-namespace inf = magmaan::nt::infer;
+namespace inf = magmaan::inference;
 
 // HS 2-factor sample covariance (lavInspect(cfa(...), "sampstat")$cov on
 // HolzingerSwineford1939, x1..x6 — the N-divisor covariance magmaan consumes).

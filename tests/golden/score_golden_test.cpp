@@ -229,12 +229,12 @@ std::string op_string(magmaan::parse::Op op) {
   return std::string(magmaan::parse::to_string(op));
 }
 
-const magmaan::nt::infer::ScoreTestResult*
-find_mi_row(const magmaan::nt::infer::ScoreTestTable& table,
+const magmaan::inference::ScoreTestResult*
+find_mi_row(const magmaan::inference::ScoreTestTable& table,
             const magmaan::spec::LatentNames& names,
             const nlohmann::json& want) {
   for (const auto& row : table.rows) {
-    if (row.candidate.kind != magmaan::nt::infer::ScoreCandidateKind::FixedParam) {
+    if (row.candidate.kind != magmaan::inference::ScoreCandidateKind::FixedParam) {
       continue;
     }
     const std::size_t r = row.candidate.row;
@@ -254,7 +254,7 @@ magmaan::estimate::Estimates estimates_from_fixture(const nlohmann::json& fit) {
 }
 
 bool compare_modindices(const std::string& id,
-                        const magmaan::nt::infer::ScoreTestTable& got,
+                        const magmaan::inference::ScoreTestTable& got,
                         const magmaan::spec::LatentNames& names,
                         const nlohmann::json& want_rows,
                         double mi_tol,
@@ -283,7 +283,7 @@ bool compare_modindices(const std::string& id,
 }
 
 bool compare_score_tests(const std::string& id,
-                         const magmaan::nt::infer::ScoreTestTable& got,
+                         const magmaan::inference::ScoreTestTable& got,
                          const nlohmann::json& want,
                          double mi_tol,
                          double p_tol,
@@ -328,15 +328,15 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
 
     const std::string kind = exp["kind"].get<std::string>();
     const auto& fit = exp["fit"];
-    magmaan::nt::infer::ScoreTestTable mi;
-    magmaan::nt::infer::ScoreTestTable st;
+    magmaan::inference::ScoreTestTable mi;
+    magmaan::inference::ScoreTestTable st;
     bool ok = true;
 
     if (kind == "ml") {
       const auto samp = sample_stats_from_fixture(fit);
       const auto est = estimates_from_fixture(fit);
-      auto mi_or = magmaan::nt::infer::modification_indices(h->pt, h->rep, samp, est);
-      auto st_or = magmaan::nt::infer::score_tests(h->pt, h->rep, samp, est);
+      auto mi_or = magmaan::inference::modification_indices(h->pt, h->rep, samp, est);
+      auto st_or = magmaan::inference::score_tests(h->pt, h->rep, samp, est);
       if (!mi_or.has_value() || !st_or.has_value()) {
         failures.push_back(id + ": score path failed");
         continue;
@@ -350,9 +350,9 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
     } else if (kind == "fiml") {
       const auto raw = raw_from_fixture(exp);
       const auto est = estimates_from_fixture(fit);
-      auto mi_or = magmaan::nt::infer::modification_indices_fiml(h->pt, h->rep, raw,
+      auto mi_or = magmaan::inference::modification_indices_fiml(h->pt, h->rep, raw,
                                                            est);
-      auto st_or = magmaan::nt::infer::score_tests_fiml(h->pt, h->rep, raw, est);
+      auto st_or = magmaan::inference::score_tests_fiml(h->pt, h->rep, raw, est);
       if (!mi_or.has_value() || !st_or.has_value()) {
         failures.push_back(id + ": FIML score path failed");
         continue;
@@ -366,10 +366,10 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
     } else if (kind == "ls") {
       const auto samp = sample_stats_from_fixture(fit);
       const auto est = estimates_from_fixture(fit);
-      auto mi_or = magmaan::nt::infer::modification_indices(
-          h->pt, h->rep, samp, est, magmaan::gmm::Weight{});
-      auto st_or = magmaan::nt::infer::score_tests(
-          h->pt, h->rep, samp, est, magmaan::gmm::Weight{});
+      auto mi_or = magmaan::inference::modification_indices(
+          h->pt, h->rep, samp, est, magmaan::estimate::gmm::Weight{});
+      auto st_or = magmaan::inference::score_tests(
+          h->pt, h->rep, samp, est, magmaan::estimate::gmm::Weight{});
       if (!mi_or.has_value() || !st_or.has_value()) {
         failures.push_back(id + ": ULS score path failed");
         continue;

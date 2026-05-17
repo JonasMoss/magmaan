@@ -78,15 +78,15 @@ void check_gp_gradient_matches_fd(bool gls_weight) {
   auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
   REQUIRE(x0.has_value());
 
-  magmaan::gmm::Weight w;
+  magmaan::estimate::gmm::Weight w;
   if (gls_weight) {
-    auto W = magmaan::gmm::normal_theory_weight(*ev, samp, *x0);
+    auto W = magmaan::estimate::gmm::normal_theory_weight(*ev, samp, *x0);
     REQUIRE(W.has_value());
     w = std::move(*W);
   }
-  auto base = magmaan::gmm::residuals(*ev, samp, *x0, w);
+  auto base = magmaan::estimate::gmm::residuals(*ev, samp, *x0, w);
   REQUIRE(base.has_value());
-  auto prof = magmaan::gmm::gp(*base, h.pt, *ev, *x0);
+  auto prof = magmaan::estimate::gmm::gp(*base, h.pt, *ev, *x0);
   REQUIRE(prof.has_value());
 
   const magmaan::optim::ScalarProblem sp =
@@ -154,7 +154,7 @@ TEST_CASE("SNLLS: GLS and WLS agree with full LS on a feasible 1F covariance") {
   REQUIRE(gls.has_value());
   CHECK(gls->fmin < 1e-10);
 
-  magmaan::gmm::Weight wls{Eigen::MatrixXd::Identity(6, 6)};
+  magmaan::estimate::gmm::Weight wls{Eigen::MatrixXd::Identity(6, 6)};
   auto wls_est = magmaan::estimate::fit_snlls(h.pt, h.rep, samp, *x0, wls,
                                               Backend::Lbfgs, snlls_opts());
   REQUIRE(wls_est.has_value());

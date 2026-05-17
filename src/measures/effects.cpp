@@ -17,7 +17,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/parse/flat_partable.hpp"
 
-namespace magmaan::nt::effects {
+namespace magmaan::measures::effects {
 
 using estimate::Estimates;
 
@@ -310,4 +310,4 @@ compute_defined(const parse::FlatPartable& flat,
   return out;
 }
 
-}  // namespace magmaan::nt::effects
+}  // namespace magmaan::measures::effects

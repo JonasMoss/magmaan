@@ -134,7 +134,7 @@ TEST_CASE("LS path: WLS / Ceres recovers Sigma on a 1F-feasible cov") {
   samp.S = {make_1f_S()};
   samp.n_obs = {301};
 
-  magmaan::gmm::Weight wls{Eigen::MatrixXd::Identity(6, 6)};
+  magmaan::estimate::gmm::Weight wls{Eigen::MatrixXd::Identity(6, 6)};
   auto est = magmaan::test::fit_gmm(*pt, *mr, samp, wls, Bounds{},
                                     Backend::Ceres);
   REQUIRE(est.has_value());

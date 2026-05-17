@@ -122,17 +122,17 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
     }
     const auto& est = *est_or;
 
-    const double chi2 = magmaan::nt::infer::chi2_stat(samp, est);
-    auto df_or = magmaan::nt::infer::df_stat(*pt, samp);
+    const double chi2 = magmaan::inference::chi2_stat(samp, est);
+    auto df_or = magmaan::inference::df_stat(*pt, samp);
     if (!df_or.has_value()) {
       failures.push_back(e.id + ": df_stat — " + df_or.error().detail);
       continue;
     }
     const int df = *df_or;
-    const auto bl = magmaan::nt::measures::baseline_chi2(samp);
-    const auto fm = magmaan::nt::measures::fit_measures(chi2, df, bl, samp);
+    const auto bl = magmaan::measures::baseline_chi2(samp);
+    const auto fm = magmaan::measures::fit_measures(chi2, df, bl, samp);
 
-    auto fx_or = magmaan::nt::measures::fit_extras(*pt, *mr, samp, est);
+    auto fx_or = magmaan::measures::fit_extras(*pt, *mr, samp, est);
     if (!fx_or.has_value()) {
       failures.push_back(e.id + ": fit_extras — " + fx_or.error().detail);
       continue;

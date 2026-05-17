@@ -156,14 +156,14 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
     }
     const auto& fx = *fx_or;
 
-    auto start_samp_or = magmaan::nt::fiml::fiml_start_sample_stats(raw);
+    auto start_samp_or = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
     if (!start_samp_or.has_value()) {
       failures.push_back(id + ": fiml_start_sample_stats — " +
                          start_samp_or.error().detail);
       continue;
     }
 
-    auto bl_or = magmaan::nt::fiml::fiml_baseline_chi2(*pt, raw);
+    auto bl_or = magmaan::estimate::fiml::fiml_baseline_chi2(*pt, raw);
     if (!bl_or.has_value()) {
       failures.push_back(id + ": fiml_baseline_chi2 — " +
                          bl_or.error().detail);
@@ -176,7 +176,7 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
       continue;
     }
     const int df = exp["df"].get<int>();
-    const auto fm = magmaan::nt::measures::fit_measures(fx.chi2, df, bl,
+    const auto fm = magmaan::measures::fit_measures(fx.chi2, df, bl,
                                                         *start_samp_or);
 
     const auto& th = exp["theta_hat"];
@@ -305,7 +305,7 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
         exp.contains("mlr_chisq_scaled") &&
         finite_json(exp["mlr_chisq_scaled"]) &&
         df > 0) {
-      auto rob_or = magmaan::nt::fiml::fiml_robust_mlr(
+      auto rob_or = magmaan::estimate::fiml::fiml_robust_mlr(
           *pt, *mr, raw, est, df, fx.chi2);
       if (!rob_or.has_value()) {
         failures.push_back(id + ": fiml_robust_mlr — " +

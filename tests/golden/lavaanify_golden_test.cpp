@@ -26,14 +26,14 @@ namespace {
 // plabel). NaN is written as JSON null to match the R `na = "null"` choice.
 nlohmann::json ptable_to_json(std::string_view input,
                               std::string_view corpus_id,
-                              const magmaan::lavaan::LavaanParTable& pt) {
+                              const magmaan::compat::lavaan::LavaanParTable& pt) {
   using magmaan::test::op_to_lavaan_string;
   nlohmann::json j;
   j["_meta"] = {
       {"format_version", 1},
       {"fixture_kind",   "ptable"},
       {"corpus_id",      std::string(corpus_id)},
-      {"tool",           "magmaan::lavaanify"}};
+      {"tool",           "magmaan::compat::lavaanify"}};
   j["input"] = std::string(input);
 
   nlohmann::json rows = nlohmann::json::array();
@@ -300,7 +300,7 @@ TEST_CASE("ptable goldens — every corpus entry that lavaanify can handle") {
     }
 
     auto got = ptable_to_json(e.model, e.id,
-                              magmaan::lavaan::to_lavaan_partable(*pt, names, starts));
+                              magmaan::compat::lavaan::to_lavaan_partable(*pt, names, starts));
     auto d = diff_ptable_semantic(magmaan::test::strip_meta(got),
                                   magmaan::test::strip_meta(exp));
     if (d.empty()) ++passed;

@@ -10,7 +10,7 @@
 #include "magmaan/spec/partable.hpp"
 #include "magmaan/spec/start_hints.hpp"
 
-namespace magmaan::lavaan {
+namespace magmaan::compat::lavaan {
 
 // A lavaan-shaped projection of the model: the columns lavaan's `parTable()`
 // carries, in struct-of-arrays form. This is *not* the in-memory model
@@ -83,4 +83,4 @@ struct ParsedLavaanParTable {
 // malformed model the way a hand-edited lavaan parTable would.
 ParsedLavaanParTable from_lavaan_partable(const LavaanParTable& pt);
 
-}  // namespace magmaan::lavaan
+}  // namespace magmaan::compat::lavaan
