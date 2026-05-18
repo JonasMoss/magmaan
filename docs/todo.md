@@ -71,6 +71,10 @@ Contracts:
   reporting, fit measures, standardization, and diagnostics. "Relevant" means
   functions that methods work would naturally call directly, not only
   implementation details hidden inside another primitive.
+- `magmaan_core` is an exploratory audit surface during this phase, not yet a
+  stability promise. It should be broad enough to reveal awkward names,
+  misplaced namespaces, missing primitives, and over-composed helpers before
+  the small friendly API is blessed.
 - Direct C++ exports should be thin wrappers named
   `<namespace>_<function_name>` from the R side, reflecting the C++ namespace
   layout. Pure R helpers that compose those primitives should use ordinary
@@ -96,7 +100,9 @@ Remaining work, in suggested order:
   C++ primitive surface and add thin R bindings for missing relevant
   primitives. Prioritize functions that let R scripts construct models/data,
   run fits, compute post-fit quantities, compare diagnostics, and reproduce
-  validation paths without depending on opaque fit-list unpacking.
+  validation paths without depending on opaque fit-list unpacking. While doing
+  this, classify exposed names as good, awkward, misplaced, missing, or
+  compatibility-only so the scaffold produces a concrete API cleanup list.
 - **S/M.** Normalize R binding names to the
   `<namespace>_<function_name>` convention for direct C++ exports. Keep
   existing aliases only when useful for compatibility during exploration, and
