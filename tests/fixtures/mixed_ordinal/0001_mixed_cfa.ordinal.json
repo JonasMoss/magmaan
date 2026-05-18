@@ -8,6 +8,7 @@
   },
   "input": "f =~ x1 + x2 + y1 + y2",
   "ordered": ["x1", "x2"],
+  "missing": "none",
   "ordered_mask": [
     {
       "block": 0,

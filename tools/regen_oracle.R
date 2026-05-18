@@ -997,6 +997,23 @@ ordinal_cases <- list(
                           seed = 131L),
        ordered = paste0("x", 1:4),
        group = NULL,
+       fit = TRUE),
+  # Multi-group ordinal equality boundary: the shared `a` label is replicated
+  # across groups and becomes one cross-group loading equality constraint.
+  list(id = "0012_2group_equal_loading_3cat_cfa",
+       model = paste("f =~ x1 + a*x2 + x3 + x4", sep = "\n"),
+       data = {
+         d1 <- make_ord_df(300, list(c(-0.75, 0.25), c(-0.55, 0.60),
+                                     c(-0.90, 0.10), c(-0.50, 0.70)),
+                           seed = 151L)
+         d2 <- make_ord_df(280, list(c(-0.55, 0.50), c(-0.80, 0.30),
+                                     c(-0.65, 0.40), c(-0.95, 0.20)),
+                           seed = 157L)
+         d1$school <- "Pasteur"; d2$school <- "Grant-White"
+         rbind(d1, d2)
+       },
+       ordered = paste0("x", 1:4),
+       group = "school",
        fit = TRUE)
 )
 
@@ -1100,6 +1117,35 @@ make_mixed_ord_df <- function(n, seed = 42L) {
   )
 }
 
+make_sparse_mixed_ord_df <- function(n, seed = 143L) {
+  set.seed(seed)
+  eta <- rnorm(n)
+  x1 <- ordered(cut(eta + rnorm(n, sd = 0.72),
+                    c(-Inf, -1.95, -0.10, 1.80, Inf),
+                    labels = FALSE),
+                levels = 1:4)
+  x2 <- ordered(cut(0.60 * eta + rnorm(n, sd = 0.82),
+                    c(-Inf, -0.45, 0.50, Inf),
+                    labels = FALSE),
+                levels = 1:3)
+  out <- data.frame(
+    x1 = x1,
+    x2 = x2,
+    y1 = 0.78 * eta + rnorm(n, sd = 0.76) + 0.10,
+    y2 = 0.50 * eta + rnorm(n, sd = 0.95) - 0.15
+  )
+  # Exercise lavaan's complete/listwise categorical boundary while keeping the
+  # committed C++ fixture complete-data: lavaan drops these rows before
+  # computing WLS moments, and we serialize that same complete-case matrix.
+  out$y1[seq(9L, n, by = 47L)] <- NA_real_
+  out$x1[seq(17L, n, by = 53L)] <- NA
+  out
+}
+
+listwise_mixed_data <- function(df, ov) {
+  df[stats::complete.cases(df[, ov, drop = FALSE]), , drop = FALSE]
+}
+
 mixed_ordered_to_matrix <- function(df, ov, ordered) {
   mat <- matrix(NA_real_, nrow(df), length(ov), dimnames = list(NULL, ov))
   for (j in seq_along(ov)) {
@@ -1134,24 +1180,40 @@ mixed_cases <- list(
        model = "f =~ x1 + x2 + y1 + y2",
        data = make_mixed_ord_df(360, seed = 42L),
        ordered = c("x1", "x2"),
-       ov = c("x1", "x2", "y1", "y2"))
+       ov = c("x1", "x2", "y1", "y2")),
+  list(id = "0002_sparse_4cat_listwise_mixed_cfa",
+       model = "f =~ x1 + x2 + y1 + y2",
+       data = make_sparse_mixed_ord_df(520, seed = 143L),
+       ordered = c("x1", "x2"),
+       ov = c("x1", "x2", "y1", "y2"),
+       listwise = TRUE)
 )
 
 regenerated_mixed_ord <- character(0)
 for (mc in mixed_cases) {
-  fit_wls <- cfa(mc$model, data = mc$data, ordered = mc$ordered,
-                 estimator = "WLS", parameterization = "delta")
-  fit_dwls <- cfa(mc$model, data = mc$data, ordered = mc$ordered,
-                  estimator = "DWLS", parameterization = "delta")
-  fit_dwls_robust <- cfa(mc$model, data = mc$data, ordered = mc$ordered,
-                         estimator = "DWLS", parameterization = "delta",
-                         se = "robust.sem",
-                         test = c("standard", "satorra.bentler",
-                                  "mean.var.adjusted", "scaled.shifted"))
+  missing_args <- if (isTRUE(mc$listwise)) list(missing = "listwise") else list()
+  fit_wls <- do.call(cfa, c(list(model = mc$model, data = mc$data,
+                                 ordered = mc$ordered, estimator = "WLS",
+                                 parameterization = "delta"), missing_args))
+  fit_dwls <- do.call(cfa, c(list(model = mc$model, data = mc$data,
+                                  ordered = mc$ordered, estimator = "DWLS",
+                                  parameterization = "delta"), missing_args))
+  fit_dwls_robust <- do.call(cfa, c(list(model = mc$model, data = mc$data,
+                                         ordered = mc$ordered,
+                                         estimator = "DWLS",
+                                         parameterization = "delta",
+                                         se = "robust.sem",
+                                         test = c("standard",
+                                                  "satorra.bentler",
+                                                  "mean.var.adjusted",
+                                                  "scaled.shifted")),
+                                    missing_args))
   fits <- list(DWLS = ordinal_fit_json(fit_dwls),
                WLS = ordinal_fit_json(fit_wls))
   fits$DWLS$robust <- ordinal_robust_json(fit_dwls_robust)
 
+  data_for_cpp <- if (isTRUE(mc$listwise)) listwise_mixed_data(mc$data, mc$ov)
+                  else mc$data
   mask <- as.integer(mc$ov %in% mc$ordered)
   payload <- list(
     `_meta` = list(format_version = 1L,
@@ -1161,9 +1223,11 @@ for (mc in mixed_cases) {
                    lavaan_version = installed),
     input = mc$model,
     ordered = mc$ordered,
+    missing = if (isTRUE(mc$listwise)) "listwise" else "none",
     ordered_mask = list(list(block = 0L, mask = mask)),
     blocks = list(list(block = 0L, label = "",
-                       matrix = unname(mixed_ordered_to_matrix(mc$data, mc$ov,
+                       matrix = unname(mixed_ordered_to_matrix(data_for_cpp,
+                                                               mc$ov,
                                                                mc$ordered)))),
     sample_stats = mixed_samp_json(fit_wls),
     fits = fits
