@@ -102,6 +102,16 @@ bool covariance_already_present(const std::vector<PendingRow>& rows,
   return false;
 }
 
+bool regression_already_present(const std::vector<PendingRow>& rows,
+                                std::string_view lhs,
+                                std::string_view rhs) {
+  for (const auto& r : rows) {
+    if (r.op != parse::Op::Regression) continue;
+    if (r.lhs == lhs && r.rhs == rhs) return true;
+  }
+  return false;
+}
+
 // === Step 3: user modifier application =====================================
 //
 // Helper: pick the effective ModifierAtom for group `group_idx` (0-based).
@@ -522,6 +532,27 @@ build_group_template(const parse::FlatPartable& flat,
       }
     }
   }
+  if (opts.auto_cov_y) {
+    OrderedSet endo_lv;
+    for (const auto& fr : flat.rows) {
+      if (fr.op == parse::Op::Regression && v.lv.contains(fr.lhs)) {
+        endo_lv.insert(fr.lhs);
+      }
+    }
+    for (std::size_t i = 0; i + 1 < endo_lv.items.size(); ++i) {
+      for (std::size_t j = i + 1; j < endo_lv.items.size(); ++j) {
+        const auto& lhs = endo_lv.items[i];
+        const auto& rhs = endo_lv.items[j];
+        if (covariance_already_present(rows, lhs, rhs)) continue;
+        if (regression_already_present(rows, lhs, rhs) ||
+            regression_already_present(rows, rhs, lhs)) {
+          continue;
+        }
+        rows.push_back(make_pending(/*user=*/0, lhs,
+                                    parse::Op::Covariance, rhs));
+      }
+    }
+  }
   // Latent scaling — three mutually-exclusive conventions. `std.lv`: fix each
   // LV variance at 1 (auto.fix.first forced off, lavaan-style). `effect_coding`:
   // leave *everything* free (loadings + LV variance) — the scale is set instead
@@ -539,9 +570,9 @@ build_group_template(const parse::FlatPartable& flat,
     apply_fixed_x(v, rows);
   }
   // meanstructure: auto-add ν for every observed variable that doesn't already
-  // have an `~1` row, and α (fixed at 0) for every user latent that doesn't
-  // either. Fixed.x observed exogenous means are data-given; other observed
-  // intercepts stay free.
+  // have an `~1` row, and α for every user latent that doesn't either. SEM/CFA
+  // defaults are free ν / fixed-zero α; growth mode flips those defaults.
+  // Fixed.x observed exogenous means remain data-given.
   if (opts.meanstructure) {
     auto intercept_present = [&](std::string_view name) {
       for (const auto& r : rows) {
@@ -566,12 +597,14 @@ build_group_template(const parse::FlatPartable& flat,
       }
       rows.push_back(std::move(p));
     };
-    for (const auto& ov : v.ov_ind.items)  add_intercept(ov, false);
-    for (const auto& ov : v.ov_y.items)    add_intercept(ov, false);
+    const bool fix_ov = !opts.int_ov_free;
+    const bool fix_lv = !opts.int_lv_free;
+    for (const auto& ov : v.ov_ind.items)  add_intercept(ov, fix_ov);
+    for (const auto& ov : v.ov_y.items)    add_intercept(ov, fix_ov);
     for (const auto& ov : v.ov_x.items)
-      add_intercept(ov, false, opts.fixed_x);
-    for (const auto& ov : v.ov_misc.items) add_intercept(ov, false);
-    for (const auto& lv : v.lv.items)      add_intercept(lv, true);
+      add_intercept(ov, fix_ov, opts.fixed_x);
+    for (const auto& ov : v.ov_misc.items) add_intercept(ov, fix_ov);
+    for (const auto& lv : v.lv.items)      add_intercept(lv, fix_lv);
   }
   return rows;
 }

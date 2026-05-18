@@ -736,7 +736,7 @@ inline Result<FitMeasuresResult> fit_measures(const Fit &fit) {
     auto t = test(fit, standard_chi_square());
     if (!t)
       return std::unexpected(t.error());
-    auto baseline = measures::baseline_chi2(*stats);
+    auto baseline = measures::baseline_chi2(fit.model().structure(), *stats);
     auto indices =
         measures::fit_measures(t->statistic, t->df, baseline, *stats);
     auto extras = measures::fit_extras(fit.model().structure(),

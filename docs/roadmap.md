@@ -501,12 +501,11 @@ developer step.
 
 - Complete-data and FIML support are fixture-backed only for the documented
   estimator/model slices.
-- The `lavaan::growth()` identification defaults (observed-variable intercepts
-  fixed to zero, latent growth-factor means freely estimated) are not
-  replicated. Latent growth models fit, but the mean-structure rows must be
-  spelled out explicitly in the model syntax; magmaan has no `growth()`-
-  equivalent option, so for the same syntax its free set differs from lavaan's
-  (`demo_growth_linear` is a tracked parity gap — see `docs/todo.md`).
+- The complete-data ML parity layer includes the `lavaan::growth()` defaults
+  for linear latent growth models: observed-variable intercepts are fixed to
+  zero, latent growth-factor means are freely estimated, and the relevant
+  growth-factor covariance is auto-added. The R boundary exposes this through
+  `model_spec(..., model_type = "growth")`.
 - FIML with missing observed exogenous variables under `fixed.x = TRUE`
   remains unsupported.
 - FIML score tests and modification indices use observed-pattern gradients

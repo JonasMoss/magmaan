@@ -7,7 +7,8 @@ available through the `magmaan_core` object for interactive methods work.
 Convenience helpers are limited to R-side composition:
 
 - `model_spec()` calls the parser/lavaanify wrapper and stores the syntax plus
-  lavaanify options.
+  lavaanify options, including `model_type = "growth"` for lavaan-style linear
+  growth defaults.
 - `df_to_data()` selects model variables from a data frame, handles optional
   grouping, and calls the C++ raw-data sample-statistics wrapper.
 - `magmaan(model, data, estimator, groups)` is the high-level estimate-only

@@ -88,6 +88,59 @@ BaselineFit baseline_chi2(const SampleStats& samp) noexcept {
   return out;
 }
 
+BaselineFit baseline_chi2(const spec::LatentStructure& pt,
+                          const SampleStats& samp) noexcept {
+  BaselineFit out = baseline_chi2(samp);
+
+  std::vector<Eigen::Index> exo_idx;
+  {
+    std::unordered_set<std::int32_t> exo_vars;
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.exo[i] != 1) continue;
+      if (i < pt.lhs_var.size() && pt.lhs_var[i] >= 0) exo_vars.insert(pt.lhs_var[i]);
+      if (i < pt.rhs_var.size() && pt.rhs_var[i] >= 0) exo_vars.insert(pt.rhs_var[i]);
+    }
+    std::unordered_set<Eigen::Index> seen;
+    for (std::int32_t v : exo_vars) {
+      if (v < 0 || static_cast<std::size_t>(v) >= pt.ov_pos.size()) continue;
+      const std::int32_t pos = pt.ov_pos[static_cast<std::size_t>(v)];
+      if (pos < 0) continue;
+      const Eigen::Index idx = static_cast<Eigen::Index>(pos);
+      if (seen.insert(idx).second) exo_idx.push_back(idx);
+    }
+    std::sort(exo_idx.begin(), exo_idx.end());
+  }
+  if (exo_idx.size() < 2) return out;
+
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const auto& S = samp.S[b];
+    const Eigen::Index p = S.rows();
+    if (exo_idx.back() >= p) continue;
+    const Eigen::Index px = static_cast<Eigen::Index>(exo_idx.size());
+    Eigen::MatrixXd Sxx(px, px);
+    for (Eigen::Index r = 0; r < px; ++r) {
+      for (Eigen::Index c = 0; c < px; ++c) {
+        Sxx(r, c) = S(exo_idx[static_cast<std::size_t>(r)],
+                      exo_idx[static_cast<std::size_t>(c)]);
+      }
+    }
+    Eigen::LLT<Eigen::MatrixXd> llt(Sxx);
+    if (llt.info() != Eigen::Success) continue;
+    double log_det_Sxx = 0.0;
+    for (Eigen::Index i = 0; i < px; ++i)
+      log_det_Sxx += std::log(llt.matrixL()(i, i));
+    log_det_Sxx *= 2.0;
+    double log_det_diag = 0.0;
+    for (Eigen::Index i = 0; i < px; ++i) log_det_diag += std::log(Sxx(i, i));
+    const double F_b = log_det_diag - log_det_Sxx;
+    out.chi2 -= static_cast<double>(samp.n_obs[b]) * F_b;
+  }
+  const int px = static_cast<int>(exo_idx.size());
+  out.df -= px * (px - 1) / 2;
+  if (out.df < 0) out.df = 0;
+  return out;
+}
+
 FitMeasures fit_measures(double             chi2_user,
                          int                df_user,
                          const BaselineFit& baseline,

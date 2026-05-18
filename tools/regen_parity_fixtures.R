@@ -86,9 +86,11 @@ load_dataset <- function(package, name, vars = NULL) {
 # are threaded through for multi-group cases — model_spec derives n_groups from
 # length(group_labels), so group_labels must be supplied when group is set.
 align_magmaan_free <- function(model, lavaan_free, meanstructure,
-                               auto_cov_y = TRUE, group = NULL,
+                               auto_cov_y = TRUE, model_type = "sem",
+                               group = NULL,
                                group_labels = NULL) {
   mspec <- magmaan::model_spec(model, auto_cov_y = auto_cov_y,
+                               model_type = model_type,
                                meanstructure = meanstructure,
                                group = group, group_labels = group_labels)
   mfree <- mspec$partable[mspec$partable$free > 0, , drop = FALSE]
@@ -214,7 +216,9 @@ emit_ml <- function(id) {
 
   lpt <- lavaan::parTable(fit)
   lfree <- lpt[lpt$free > 0, , drop = FALSE]
-  al <- align_magmaan_free(model, lfree, meanstructure)
+  model_type <- if (identical(case$lavaan_function, "growth")) "growth" else "sem"
+  al <- align_magmaan_free(model, lfree, meanstructure,
+                           model_type = model_type)
   mfree <- al$mfree
   idx <- al$idx
   aligned <- al$aligned

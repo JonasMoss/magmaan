@@ -8,6 +8,7 @@ model_spec <- function(syntax,
                        effect_coding = FALSE,
                        fixed_x = TRUE,
                        meanstructure = FALSE,
+                       model_type = c("sem", "growth"),
                        ordered = NULL,
                        parameterization = "delta",
                        group = NULL,
@@ -15,6 +16,15 @@ model_spec <- function(syntax,
   dots <- list(...)
   if (length(dots)) {
     stop("model_spec(): unused arguments: ", paste(names(dots), collapse = ", "))
+  }
+  model_type <- match.arg(model_type)
+  if (identical(model_type, "growth")) {
+    meanstructure <- TRUE
+    int_ov_free <- FALSE
+    int_lv_free <- TRUE
+  } else {
+    int_ov_free <- TRUE
+    int_lv_free <- FALSE
   }
   parameterization <- match.arg(parameterization, c("delta", "theta"))
   ordered <- if (is.null(ordered)) character() else as.character(ordered)
@@ -31,6 +41,7 @@ model_spec <- function(syntax,
     effect_coding = effect_coding,
     fixed_x = fixed_x,
     meanstructure = meanstructure,
+    model_type = model_type,
     ordered = ordered,
     parameterization = parameterization
   )
@@ -44,6 +55,8 @@ model_spec <- function(syntax,
     effect_coding = effect_coding,
     fixed_x = fixed_x,
     meanstructure = meanstructure,
+    int_ov_free = int_ov_free,
+    int_lv_free = int_lv_free,
     n_groups = n_groups,
     group_var = group_var,
     group_labels = group_labels
