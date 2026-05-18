@@ -1,9 +1,90 @@
+compat_lavaan_lavaanify <- lavaan_lavaanify
+
+data_ordinal_stats_from_raw <- data_ordinal_stats_from_raw_impl
+data_ordinal_stats_h_weighted_from_raw <- data_ordinal_stats_h_weighted_from_raw_impl
+data_ordinal_stats_dpd_from_raw <- data_ordinal_stats_dpd_from_raw_impl
+data_mixed_ordinal_stats_from_raw <- data_mixed_ordinal_stats_from_raw_impl
+data_shrink_mixed_ordinal_stats <- data_shrink_mixed_ordinal_stats_impl
+data_mixed_ordinal_stats_polyserial_dpd_from_raw <- data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl
+data_mixed_ordinal_stats_huber_residual_from_raw <- data_mixed_ordinal_stats_huber_residual_from_raw_impl
+
+estimate_fit <- fit_fit
+estimate_ml <- fit_ml_impl
+estimate_fiml <- fit_fiml_impl
+estimate_uls <- fit_uls_impl
+estimate_gls <- fit_gls_impl
+estimate_wls <- fit_wls_impl
+estimate_dwls_ordinal <- fit_dwls_ordinal_impl
+estimate_wls_ordinal <- fit_wls_ordinal_impl
+estimate_dwls_mixed_ordinal <- fit_dwls_mixed_ordinal_impl
+estimate_wls_mixed_ordinal <- fit_wls_mixed_ordinal_impl
+estimate_uls_snlls <- fit_uls_snlls_impl
+estimate_gls_snlls <- fit_gls_snlls_impl
+estimate_wls_snlls <- fit_wls_snlls_impl
+estimate_uls_ceres <- fit_uls_ceres_impl
+estimate_gls_ceres <- fit_gls_ceres_impl
+estimate_wls_ceres <- fit_wls_ceres_impl
+estimate_uls_snlls_ceres <- fit_uls_snlls_ceres_impl
+estimate_gls_snlls_ceres <- fit_gls_snlls_ceres_impl
+estimate_wls_snlls_ceres <- fit_wls_snlls_ceres_impl
+estimate_start_values <- fit_start_values
+
+inference_information_expected <- infer_information_expected
+inference_information_observed_fd <- infer_information_observed_fd
+inference_information_observed_analytic <- infer_information_observed_analytic
+inference_vcov <- infer_vcov
+inference_vcov_partable <- infer_vcov_partable
+inference_vcov_fit <- infer_vcov_fit
+inference_se <- infer_se
+inference_chi2_stat <- infer_chi2_stat
+inference_df_stat <- infer_df_stat
+inference_z_test <- infer_z_test
+inference_z_test_theta <- infer_z_test_theta
+inference_z_test_fit <- infer_z_test_fit
+inference_chi2_pvalue <- infer_chi2_pvalue
+inference_wald_test <- infer_wald_test
+inference_wald_test_theta <- infer_wald_test_theta
+inference_wald_test_fit <- infer_wald_test_fit
+inference_browne_residual_nt <- infer_browne_residual_nt
+inference_rls_chi2 <- infer_rls_chi2
+inference_rls_chi2_sample <- infer_rls_chi2_sample
+inference_rls_chi2_fit <- infer_rls_chi2_fit
+
+robust_lr_test_satorra2000 <- infer_lr_test_satorra2000
+robust_lr_test_satorra_bentler2001 <- infer_lr_test_satorra_bentler2001
+robust_lr_test_satorra_bentler2010 <- infer_lr_test_satorra_bentler2010
+robust_build_u_factor <- infer_build_u_factor
+robust_build_u_factor_parts <- infer_build_u_factor_parts
+robust_build_u_factor_fit <- infer_build_u_factor_fit
+robust_reduced_gamma_nt <- infer_reduced_gamma_nt
+robust_reduced_gamma_sample <- infer_reduced_gamma_sample
+robust_reduced_gamma_unbiased <- infer_reduced_gamma_unbiased
+robust_ugamma_eigenvalues <- infer_ugamma_eigenvalues
+robust_satorra_bentler <- infer_satorra_bentler
+robust_mean_var_adjusted <- infer_mean_var_adjusted
+robust_scaled_shifted <- infer_scaled_shifted
+robust_casewise_contributions <- infer_casewise_contributions
+robust_empirical_gamma <- infer_empirical_gamma
+robust_gamma_nt <- infer_gamma_nt
+robust_ordinal <- infer_ordinal_robust
+robust_mixed_ordinal <- infer_mixed_ordinal_robust
+robust_se <- infer_robust_se
+robust_se_parts <- infer_robust_se_parts
+robust_se_fit <- infer_robust_se_fit
+robust_se_raw <- infer_robust_se_raw
+robust_se_raw_parts <- infer_robust_se_raw_parts
+robust_se_raw_fit <- infer_robust_se_raw_fit
+
+measures_baseline <- infer_baseline
+measures_compute_defined <- compute_defined_impl
+
 magmaan_core <- local({
   groups <- list(
     parse = c(
       "parse_parse"
     ),
     compat_lavaan = c(
+      "compat_lavaan_lavaanify",
       "lavaan_lavaanify",
       "lavaan_compare_partable"
     ),
@@ -13,6 +94,13 @@ magmaan_core <- local({
     ),
     data = c(
       "data_sample_stats_from_raw",
+      "data_ordinal_stats_from_raw",
+      "data_ordinal_stats_h_weighted_from_raw",
+      "data_ordinal_stats_dpd_from_raw",
+      "data_mixed_ordinal_stats_from_raw",
+      "data_shrink_mixed_ordinal_stats",
+      "data_mixed_ordinal_stats_polyserial_dpd_from_raw",
+      "data_mixed_ordinal_stats_huber_residual_from_raw",
       "data_ordinal_stats_from_raw_impl",
       "data_ordinal_stats_h_weighted_from_raw_impl",
       "data_ordinal_stats_dpd_from_raw_impl",
@@ -22,6 +110,27 @@ magmaan_core <- local({
       "data_mixed_ordinal_stats_huber_residual_from_raw_impl"
     ),
     estimate = c(
+      "estimate_fit",
+      "estimate_ml",
+      "estimate_fiml",
+      "estimate_uls",
+      "estimate_gls",
+      "estimate_wls",
+      "estimate_dwls_ordinal",
+      "estimate_wls_ordinal",
+      "estimate_dwls_mixed_ordinal",
+      "estimate_wls_mixed_ordinal",
+      "estimate_uls_snlls",
+      "estimate_gls_snlls",
+      "estimate_wls_snlls",
+      "estimate_uls_ceres",
+      "estimate_gls_ceres",
+      "estimate_wls_ceres",
+      "estimate_uls_snlls_ceres",
+      "estimate_gls_snlls_ceres",
+      "estimate_wls_snlls_ceres",
+      "estimate_start_values",
+      "estimate_fiml_robust_mlr",
       "fit_fit",
       "fit_ml_impl",
       "fit_fiml_impl",
@@ -42,10 +151,31 @@ magmaan_core <- local({
       "fit_gls_snlls_ceres_impl",
       "fit_wls_snlls_ceres_impl",
       "fit_start_values",
-      "fit_sample_stats",
-      "estimate_fiml_robust_mlr"
+      "fit_sample_stats"
     ),
     inference = c(
+      "inference_information_expected",
+      "inference_information_observed_fd",
+      "inference_information_observed_analytic",
+      "inference_vcov",
+      "inference_vcov_partable",
+      "inference_vcov_fit",
+      "inference_se",
+      "inference_chi2_stat",
+      "inference_df_stat",
+      "inference_z_test",
+      "inference_z_test_theta",
+      "inference_z_test_fit",
+      "inference_chi2_pvalue",
+      "inference_wald_test",
+      "inference_wald_test_theta",
+      "inference_wald_test_fit",
+      "inference_browne_residual_nt",
+      "inference_rls_chi2",
+      "inference_rls_chi2_sample",
+      "inference_rls_chi2_fit",
+      "inference_modification_indices",
+      "inference_score_tests",
       "infer_information_expected",
       "infer_information_observed_fd",
       "infer_information_observed_analytic",
@@ -61,11 +191,33 @@ magmaan_core <- local({
       "infer_wald_test_theta",
       "infer_browne_residual_nt",
       "infer_rls_chi2",
-      "infer_rls_chi2_sample",
-      "inference_modification_indices",
-      "inference_score_tests"
+      "infer_rls_chi2_sample"
     ),
     robust = c(
+      "robust_lr_test_satorra2000",
+      "robust_lr_test_satorra_bentler2001",
+      "robust_lr_test_satorra_bentler2010",
+      "robust_build_u_factor",
+      "robust_build_u_factor_parts",
+      "robust_build_u_factor_fit",
+      "robust_reduced_gamma_nt",
+      "robust_reduced_gamma_sample",
+      "robust_reduced_gamma_unbiased",
+      "robust_ugamma_eigenvalues",
+      "robust_satorra_bentler",
+      "robust_mean_var_adjusted",
+      "robust_scaled_shifted",
+      "robust_casewise_contributions",
+      "robust_empirical_gamma",
+      "robust_gamma_nt",
+      "robust_ordinal",
+      "robust_mixed_ordinal",
+      "robust_se",
+      "robust_se_parts",
+      "robust_se_fit",
+      "robust_se_raw",
+      "robust_se_raw_parts",
+      "robust_se_raw_fit",
       "infer_lr_test_satorra2000",
       "infer_lr_test_satorra_bentler2001",
       "infer_lr_test_satorra_bentler2010",
@@ -89,6 +241,7 @@ magmaan_core <- local({
       "infer_robust_se_raw_parts"
     ),
     measures = c(
+      "measures_baseline",
       "infer_baseline",
       "measures_fit",
       "measures_standardize_lv",
@@ -96,6 +249,7 @@ magmaan_core <- local({
       "measures_residuals",
       "measures_standardized_residuals",
       "measures_factor_scores",
+      "measures_compute_defined",
       "compute_defined_impl"
     ),
     helpers = c(

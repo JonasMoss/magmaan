@@ -102,10 +102,10 @@ Remaining work, in suggested order:
   scripts construct models/data, run fits, compute post-fit quantities,
   compare diagnostics, and reproduce validation paths without depending on
   opaque fit-list unpacking.
-- **S/M.** Normalize R binding names to the
-  `<namespace>_<function_name>` convention for direct C++ exports. Keep
-  existing aliases only when useful for compatibility during exploration, and
-  make pure R helpers plain, compositional names.
+- **S/M.** Continue migrating R examples and development scripts to the
+  canonical `<namespace>_<function_name>` names. The alias scaffold has landed;
+  old `fit_*`, `infer_*`, and `_impl` spellings remain as compatibility hooks
+  while the exploratory scripts settle.
 - **S/M.** Continue staged R examples using package-qualified calls. Existing
   examples cover complete-data ML observed-information SEs, Satorra-Bentler
   reporting, ordinal DWLS/WLS robust reporting, high-level estimate-only
@@ -145,6 +145,11 @@ Completed checks:
   exposes `measures_residuals()`, `measures_standardized_residuals()`, and
   `measures_factor_scores()` over the C++ post-fit accessors; the
   package-qualified `post_fit_primitives.R` example now exercises them.
+- [x] **S/M. R primitive alias normalization slice.** `magmaan_core` now
+  publishes canonical `compat_lavaan_*`, `estimate_*`, `inference_*`,
+  `robust_*`, and `measures_*` aliases while keeping the old `lavaan_*`,
+  `fit_*`, `infer_*`, and `_impl` names available for compatibility; the
+  broad post-fit and staged workflow examples use the canonical names.
 
 Done when: new code naturally uses the target namespaces, R scripts can reach
 the relevant C++ primitive graph through predictable names, friendly R users
