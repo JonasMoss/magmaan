@@ -57,6 +57,7 @@ data_redistributable <- c(
   bfi_5factor          = TRUE,   # psychTools::bfi                (GPL-2 | GPL-3)
   mplus_ex5_1          = FALSE,  # Mplus User's Guide example -- licensing TBD
   bfi_fiml             = TRUE,   # psychTools::bfi                (GPL-2 | GPL-3)
+  bfi_fiml_5factor     = TRUE,   # psychTools::bfi                (GPL-2 | GPL-3)
   hs_3factor_ls        = TRUE,   # lavaan::HolzingerSwineford1939 (GPL-3)
   hs_3factor_ls_mg_configural = TRUE,  # lavaan::HolzingerSwineford1939 (GPL-3)
   hs_3factor_ls_mg_metric     = TRUE,  # lavaan::HolzingerSwineford1939 (GPL-3)
@@ -109,15 +110,29 @@ parity_cases <- list(
   bfi_5factor          = list(family = "ML"),
   mplus_ex5_1          = list(family = "ML"),
 
-  # FIML over genuine bfi missingness. A 2-factor 10-item model keeps the
-  # heaviest fit in the suite tractable; the full 5-factor model is a noted
-  # follow-up (docs/todo.md).
+  # FIML over genuine bfi missingness. A 2-factor 10-item model keeps robust
+  # MLR post-fit checks tractable; the full model below gates wider convergence.
   bfi_fiml = list(
     family = "FIML",
     model  = paste("neuro =~ N1 + N2 + N3 + N4 + N5",
                    "extra =~ E1 + E2 + E3 + E4 + E5", sep = "\n"),
     package = "psychTools", dataset = "bfi",
     ov = c(paste0("N", 1:5), paste0("E", 1:5))),
+
+  # Full 5-factor bfi FIML over all 25 personality items. This is the deeper
+  # real-data missingness gate; the smaller bfi_fiml fixture remains the quick
+  # sentinel for the same code path.
+  bfi_fiml_5factor = list(
+    family = "FIML",
+    model  = paste("agreeableness     =~ A1 + A2 + A3 + A4 + A5",
+                   "conscientiousness =~ C1 + C2 + C3 + C4 + C5",
+                   "extraversion      =~ E1 + E2 + E3 + E4 + E5",
+                   "neuroticism       =~ N1 + N2 + N3 + N4 + N5",
+                   "openness          =~ O1 + O2 + O3 + O4 + O5",
+                   sep = "\n"),
+    package = "psychTools", dataset = "bfi",
+    ov = c(paste0("A", 1:5), paste0("C", 1:5), paste0("E", 1:5),
+           paste0("N", 1:5), paste0("O", 1:5))),
 
   # Continuous ULS / GLS / WLS on the Holzinger-Swineford 3-factor CFA.
   hs_3factor_ls = list(

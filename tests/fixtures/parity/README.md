@@ -29,7 +29,7 @@ Each parity case belongs to one of four families, one C++ `TEST_CASE` each:
 | family | cases | what it exercises |
 |---|---|---|
 | `ML` | `hs_3factor_cfa`, `bollen_democracy_sem`, `demo_growth_linear`, `bfi_5factor`, `mplus_ex5_1` | complete-data normal-theory ML |
-| `FIML` | `bfi_fiml` | raw-data full-information ML over genuine missingness |
+| `FIML` | `bfi_fiml`, `bfi_fiml_5factor` | raw-data full-information ML over genuine missingness |
 | `LS` | `hs_3factor_ls`, `hs_3factor_ls_mg_configural`, `hs_3factor_ls_mg_metric` | continuous ULS / GLS / WLS — single- and multi-group (HS by school: configural + metric invariance) |
 | `ordinal` | `bfi_ordinal_dwls` | ordinal DWLS / WLS on integer Likert data |
 
@@ -104,13 +104,13 @@ additionally carries a `robust` block.
 
 ## What this layer does *not* gate
 
-magmaan's post-fit API exposes no *standard-SE* path for FIML or LS, and no
-LS/ordinal fit-measure (cfi/tli/rmsea/srmr) path. The parity test gates every
-quantity lavaan exposes that magmaan can also produce:
+magmaan's post-fit API exposes no *standard-SE* path for FIML or LS, no FIML
+SRMR path, and no LS/ordinal fit-measure (cfi/tli/rmsea/srmr) path. The parity
+test gates every quantity lavaan exposes that magmaan can also produce:
 
 | family | gated | not gated |
 |---|---|---|
-| `FIML` | theta, logl, unrestricted_logl, chi2, df, AIC/BIC/BIC2, npar, baseline, CFI/TLI/RMSEA, robust MLR SEs + scaled test | standard `missing="ml"` SE, SRMR |
+| `FIML` | theta, logl, unrestricted_logl, chi2, df, AIC/BIC/BIC2, npar, baseline, CFI/TLI/RMSEA on both bfi missing-data cases; robust MLR SEs + scaled test on the smaller two-factor bfi case | standard `missing="ml"` SE, SRMR; wide-model robust MLR timing |
 | `LS` | theta, chi2, df, npar, robust ULS SEs + scaled tests | CFI/TLI/RMSEA/SRMR, GLS/WLS SEs |
 | `ordinal` | theta, chi2, df, robust SEs + scaled tests | CFI/TLI/RMSEA/SRMR |
 
@@ -146,6 +146,7 @@ raw-data ingestion sub-check is skipped.
 | `bfi_5factor` | `psychTools::bfi` | yes | psychTools, GPL-2 \| GPL-3 |
 | `mplus_ex5_1` | Mplus User's Guide ex5.1 | no | redistribution not cleared |
 | `bfi_fiml` | `psychTools::bfi` | yes | psychTools, GPL-2 \| GPL-3 |
+| `bfi_fiml_5factor` | `psychTools::bfi` | yes | psychTools, GPL-2 \| GPL-3 |
 | `hs_3factor_ls` | `lavaan::HolzingerSwineford1939` | yes | lavaan, GPL-3 |
 | `hs_3factor_ls_mg_configural` | `lavaan::HolzingerSwineford1939` | yes | lavaan, GPL-3 |
 | `hs_3factor_ls_mg_metric` | `lavaan::HolzingerSwineford1939` | yes | lavaan, GPL-3 |

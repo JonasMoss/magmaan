@@ -44,37 +44,8 @@ Contracts:
 - Examples should demonstrate the explicit post-fit workflow rather than hide
   inference behind `magmaan()`.
 
-Completed checks:
-
-- [x] **S. Ordinal R documentation.** `r-package/README.md` covers
-  `model_spec()` with `ordered` and `parameterization = "delta"`,
-  all-ordinal and mixed sample-stat builders, high-level DWLS/WLS dispatch,
-  explicit robust reporting, and the current theta rejection boundary.
-- [x] **S. R staged examples.** Examples cover the intended estimate-only
-  workflow followed by explicit post-fit SEs/z tests, Satorra-Bentler, fit
-  measures, defined parameters, nested tests, the FIML missing-data boundary,
-  and complete-data observed-exogenous `fixed_x = TRUE/FALSE`.
-- [x] **S. Scalar-invariance latent-mean rescaling coverage.** The unbounded
-  ML path is fixture-backed, and a focused LBFGS-B integration test confirms
-  the bounded variance-box path fits the scalar-invariance multi-group
-  meanstructure fixture.
-- [x] **M. Mixed categorical complete/listwise sparse boundary.** A
-  lavaan-backed sparse 4-category mixed continuous/ordinal fixture now gates
-  listwise complete-case sample statistics, mixed NACOV/DWLS/WLS weights,
-  DWLS/WLS fits, and DWLS robust reporting. The mixed NACOV influence rows now
-  include the variance delta-method contribution for continuous-ordinal
-  covariance moments.
-- [x] **M/L. Ordinal multi-group LS equality and mean-structure backend
-  coverage.** Ordinal DWLS/WLS fixtures now include a two-group loading
-  equality boundary. Continuous mean-structure LS fixtures now cross-check
-  SNLLS against the full LS path, and Ceres against LBFGS-B in Ceres builds.
-
 Remaining work, in suggested order:
 
-- **S/M.** Deepen parity coverage for non-ML post-fit surfaces. Add a full
-  5-factor bfi FIML case once convergence on the wider model is confirmed, then
-  gate FIML/LS standard SEs and LS/ordinal CFI/TLI/RMSEA/SRMR as those surfaces
-  land.
 - **M/L.** Bring `demo_growth_linear` to lavaan parity. magmaan has no
   `growth()` equivalent, so its free set does not align with lavaan's
   (`magmaan_aligned = false` in the fixture); keep it as a soft known gap until
@@ -119,6 +90,10 @@ Remaining work, in suggested order:
   example, blocked on exposing the C++ FIML MLR sandwich / Yuan-Bentler
   machinery through a `magmaan_core` binding — no FIML-robust entry point
   exists today.
+- **M/L.** Land explicit primitive surfaces for post-fit quantities that are
+  not currently produced by magmaan: standard SEs for FIML/LS, FIML SRMR, and
+  estimator-appropriate LS/ordinal CFI/TLI/RMSEA/SRMR. Add lavaan parity gates
+  as each surface becomes semantically defined.
 
 Done when: new code naturally uses the target namespaces, friendly R/Python
 users see a small staged API, and methods developers can still choose primitive
@@ -173,22 +148,6 @@ Contracts:
 - Nonlinear constraints, inequality constraints, and nonstandard active-bound
   inference stay outside the regular inference surface until their theory and
   reporting are explicit.
-
-Completed checks:
-
-- [x] **M. Empirical-Bayes DLS weight builder.** DLS now has a fixed-scalar
-  weight builder plus an empirical-Bayes scalar estimator/convenience builder
-  layered on the existing LS weight surface, with unit coverage for endpoint
-  exactness, scalar direction under normal vs heavy-tailed data, delegation to
-  `dls_weight()`, and an advisory `checks/dls/` Monte Carlo driver. The scalar
-  follows the Du & Wu (2024) empirical-Bayes weight-selection direction by
-  estimating the stable fourth-moment departure from `Gamma_NT` after
-  subtracting casewise-product noise.
-- [x] **M. Modification-index option surface.** `ModificationIndexOptions`
-  now threads through complete ML, LS, FIML, ordinal DWLS, and mixed ordinal
-  DWLS modification-index calls, with lavaan-backed score fixtures covering
-  fixed rows plus generated absent covariance rows. Generated structural
-  regressions stay outside the contract.
 
 Remaining work, in suggested order:
 
