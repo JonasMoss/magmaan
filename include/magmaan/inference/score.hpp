@@ -108,10 +108,27 @@ modification_indices(spec::LatentStructure pt,
                      const estimate::gmm::Weight& weight);
 
 post_expected<ScoreTestTable>
+modification_indices(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const SampleStats& samp,
+                     const Estimates& est,
+                     const estimate::gmm::Weight& weight,
+                     const ModificationIndexOptions& options);
+
+post_expected<ScoreTestTable>
 modification_indices_fiml(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const RawData& raw,
                           const Estimates& est,
+                          FIML discrepancy = {},
+                          double h_step = 1e-4);
+
+post_expected<ScoreTestTable>
+modification_indices_fiml(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          const ModificationIndexOptions& options,
                           FIML discrepancy = {},
                           double h_step = 1e-4);
 

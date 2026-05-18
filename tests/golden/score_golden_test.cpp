@@ -233,14 +233,23 @@ const magmaan::inference::ScoreTestResult*
 find_mi_row(const magmaan::inference::ScoreTestTable& table,
             const magmaan::spec::LatentNames& names,
             const nlohmann::json& want) {
+  auto var_name = [&](std::int32_t v) -> std::string {
+    if (v >= 0 && static_cast<std::size_t>(v) < names.var_name.size()) {
+      return names.var_name[static_cast<std::size_t>(v)];
+    }
+    return {};
+  };
   for (const auto& row : table.rows) {
     if (row.candidate.kind != magmaan::inference::ScoreCandidateKind::FixedParam) {
       continue;
     }
     const std::size_t r = row.candidate.row;
-    if (r >= names.row_lhs.size() || r >= names.row_rhs.size()) continue;
-    if (names.row_lhs[r] == want["lhs"].get<std::string>() &&
-        names.row_rhs[r] == want["rhs"].get<std::string>() &&
+    const std::string lhs = r < names.row_lhs.size() ? names.row_lhs[r]
+                                                     : var_name(row.candidate.lhs_var);
+    const std::string rhs = r < names.row_rhs.size() ? names.row_rhs[r]
+                                                     : var_name(row.candidate.rhs_var);
+    if (lhs == want["lhs"].get<std::string>() &&
+        rhs == want["rhs"].get<std::string>() &&
         op_string(row.candidate.op) == want["op"].get<std::string>() &&
         row.candidate.group == want["group"].get<int>()) {
       return &row;
@@ -330,12 +339,15 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
     const auto& fit = exp["fit"];
     magmaan::inference::ScoreTestTable mi;
     magmaan::inference::ScoreTestTable st;
+    magmaan::inference::ModificationIndexOptions mi_opts;
+    mi_opts.candidates = magmaan::inference::ScoreCandidateSet::WithAbsentRows;
     bool ok = true;
 
     if (kind == "ml") {
       const auto samp = sample_stats_from_fixture(fit);
       const auto est = estimates_from_fixture(fit);
-      auto mi_or = magmaan::inference::modification_indices(h->pt, h->rep, samp, est);
+      auto mi_or = magmaan::inference::modification_indices(h->pt, h->rep, samp,
+                                                            est, mi_opts);
       auto st_or = magmaan::inference::score_tests(h->pt, h->rep, samp, est);
       if (!mi_or.has_value() || !st_or.has_value()) {
         failures.push_back(id + ": score path failed");
@@ -351,7 +363,7 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
       const auto raw = raw_from_fixture(exp);
       const auto est = estimates_from_fixture(fit);
       auto mi_or = magmaan::inference::modification_indices_fiml(h->pt, h->rep, raw,
-                                                           est);
+                                                           est, mi_opts);
       auto st_or = magmaan::inference::score_tests_fiml(h->pt, h->rep, raw, est);
       if (!mi_or.has_value() || !st_or.has_value()) {
         failures.push_back(id + ": FIML score path failed");
@@ -367,7 +379,7 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
       const auto samp = sample_stats_from_fixture(fit);
       const auto est = estimates_from_fixture(fit);
       auto mi_or = magmaan::inference::modification_indices(
-          h->pt, h->rep, samp, est, magmaan::estimate::gmm::Weight{});
+          h->pt, h->rep, samp, est, magmaan::estimate::gmm::Weight{}, mi_opts);
       auto st_or = magmaan::inference::score_tests(
           h->pt, h->rep, samp, est, magmaan::estimate::gmm::Weight{});
       if (!mi_or.has_value() || !st_or.has_value()) {
@@ -390,7 +402,7 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
       const auto est = estimates_from_fixture(fit);
       auto mi_or = magmaan::estimate::modification_indices_ordinal(
           h->pt, h->rep, *stats, est,
-          magmaan::estimate::OrdinalWeightKind::DWLS);
+          magmaan::estimate::OrdinalWeightKind::DWLS, mi_opts);
       auto st_or = magmaan::estimate::score_tests_ordinal(
           h->pt, h->rep, *stats, est,
           magmaan::estimate::OrdinalWeightKind::DWLS);
@@ -415,7 +427,7 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
       const auto est = estimates_from_fixture(fit);
       auto mi_or = magmaan::estimate::modification_indices_mixed_ordinal(
           h->pt, h->rep, *stats, est,
-          magmaan::estimate::OrdinalWeightKind::DWLS);
+          magmaan::estimate::OrdinalWeightKind::DWLS, mi_opts);
       auto st_or = magmaan::estimate::score_tests_mixed_ordinal(
           h->pt, h->rep, *stats, est,
           magmaan::estimate::OrdinalWeightKind::DWLS);

@@ -92,6 +92,14 @@ modification_indices_ordinal(spec::LatentStructure pt,
                              OrdinalWeightKind weights);
 
 post_expected<inference::ScoreTestTable>
+modification_indices_ordinal(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const data::OrdinalStats& stats,
+                             const Estimates& est,
+                             OrdinalWeightKind weights,
+                             const inference::ModificationIndexOptions& options);
+
+post_expected<inference::ScoreTestTable>
 score_tests_ordinal(spec::LatentStructure pt,
                     const model::MatrixRep& rep,
                     const data::OrdinalStats& stats,
@@ -104,6 +112,14 @@ modification_indices_mixed_ordinal(spec::LatentStructure pt,
                                    const data::MixedOrdinalStats& stats,
                                    const Estimates& est,
                                    OrdinalWeightKind weights);
+
+post_expected<inference::ScoreTestTable>
+modification_indices_mixed_ordinal(spec::LatentStructure pt,
+                                   const model::MatrixRep& rep,
+                                   const data::MixedOrdinalStats& stats,
+                                   const Estimates& est,
+                                   OrdinalWeightKind weights,
+                                   const inference::ModificationIndexOptions& options);
 
 post_expected<inference::ScoreTestTable>
 score_tests_mixed_ordinal(spec::LatentStructure pt,
