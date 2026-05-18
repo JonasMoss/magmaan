@@ -78,9 +78,6 @@ Contracts:
 
 Remaining work, in suggested order:
 
-- **M/L.** Formalize the staged C++ facade after the prototype settles. Keep it
-  as value objects over the existing primitives (`Model`, `Data`, `Fit`,
-  `Analysis`, `Summary`) rather than a second estimator implementation.
 - **S/M.** Continue migrating R post-fit helpers from opaque fit-list unpacking
   toward explicit primitive-shaped entry points, keeping convenience aliases
   only where they do not obscure the contract.
@@ -98,6 +95,13 @@ Remaining work, in suggested order:
   not currently produced by magmaan: standard SEs for FIML/LS, FIML SRMR, and
   estimator-appropriate LS/ordinal CFI/TLI/RMSEA/SRMR. Add lavaan parity gates
   as each surface becomes semantically defined.
+
+Completed checks:
+
+- [x] **M/L. Staged C++ facade.** `magmaan::api` is now a compiling facade
+  over the implemented model/data/fit and explicit post-fit primitives, with
+  dedicated `api` tests covering ML, LS, FIML, ordinal DWLS/WLS, and
+  `Analysis` chaining.
 
 Done when: new code naturally uses the target namespaces, friendly R/Python
 users see a small staged API, and methods developers can still choose primitive

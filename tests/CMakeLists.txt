@@ -125,6 +125,9 @@ magmaan_add_test_target(magmaan_test_ordinal ordinal
   golden/ordinal_golden_test.cpp
   golden/pairwise_golden_test.cpp)
 
+magmaan_add_test_target(magmaan_test_api api
+  unit/api_sem_test.cpp)
+
 # Depth coverage: real-data lavaan-parity goldens. Its own executable because
 # it fits the full real datasets (largest is bfi at 2436×25) — heavier than
 # the synthetic-corpus tests, and isolable via `ctest -L parity`.
