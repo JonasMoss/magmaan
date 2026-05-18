@@ -365,6 +365,14 @@ lr_test_satorra2000(const Fit &h1, const Fit &h0, const data::RawData &raw,
 Result<robust::LRSatorra2000Result>
 lr_test_satorra2000(const Fit &h1, const Fit &h0, const data::RawData &raw,
                     robust::Satorra2000Options options);
+Result<robust::LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2001(
+    const Fit &h1, const Fit &h0, const data::RawData &raw,
+    robust::GammaSource gamma = robust::GammaSource::Empirical);
+Result<robust::LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2010(
+    const Fit &h1, const Fit &h0, const data::RawData &raw,
+    robust::GammaSource gamma = robust::GammaSource::Empirical);
 
 struct Summary {
   Fit fit;

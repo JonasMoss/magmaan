@@ -320,6 +320,61 @@ TEST_CASE("lr_test_satorra2000: degenerate (m = 0)") {
   CHECK(r.p_mixture  == doctest::Approx(1.0));
 }
 
+TEST_CASE("lr_test_satorra_bentler2001: lavaan difference formula") {
+  const double T1 = 12.0;
+  const double T0 = 25.0;
+  const int df1 = 5;
+  const int df0 = 8;
+  const double c1 = 1.10;
+  const double c0 = 1.40;
+
+  auto r_or = magmaan::robust::lr_test_satorra_bentler2001(
+      T0, T1, df0, df1, c0, c1);
+  REQUIRE(r_or.has_value());
+  const auto& r = *r_or;
+
+  const double cd = (8.0 * c0 - 5.0 * c1) / 3.0;
+  CHECK(r.df_diff == 3);
+  CHECK(r.T_diff == doctest::Approx(13.0));
+  CHECK(r.scale_c == doctest::Approx(cd));
+  CHECK(r.T_scaled == doctest::Approx(13.0 / cd));
+  CHECK(r.p_value == doctest::Approx(
+      magmaan::inference::chi2_pvalue(r.T_scaled, 3)));
+  CHECK(std::isnan(r.c_hybrid));
+}
+
+TEST_CASE("lr_test_satorra_bentler2001: negative scale reports NaN") {
+  auto r_or = magmaan::robust::lr_test_satorra_bentler2001(
+      25.0, 12.0, 8, 5, 0.20, 2.00);
+  REQUIRE(r_or.has_value());
+  const auto& r = *r_or;
+  CHECK(r.scale_c < 0.0);
+  CHECK(std::isnan(r.T_scaled));
+  CHECK(std::isnan(r.p_value));
+  CHECK_FALSE(r.warnings.empty());
+}
+
+TEST_CASE("lr_test_satorra_bentler2010: uses hybrid scale") {
+  const double T1 = 12.0;
+  const double T0 = 25.0;
+  const int df1 = 5;
+  const int df0 = 8;
+  const double c0 = 1.40;
+  const double c10 = 1.05;
+
+  auto r_or = magmaan::robust::lr_test_satorra_bentler2010(
+      T0, T1, df0, df1, c0, c10);
+  REQUIRE(r_or.has_value());
+  const auto& r = *r_or;
+
+  const double cd = (8.0 * c0 - 5.0 * c10) / 3.0;
+  CHECK(r.df_diff == 3);
+  CHECK(r.scale_c == doctest::Approx(cd));
+  CHECK(r.T_scaled == doctest::Approx(13.0 / cd));
+  CHECK(r.c_H1 == doctest::Approx(c10));
+  CHECK(r.c_hybrid == doctest::Approx(c10));
+}
+
 // ── Error: P singular (over-parameterised Π) ──────────────────────────────
 
 TEST_CASE("compute_satorra2000: rejects singular pooled info") {

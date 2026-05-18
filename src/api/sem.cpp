@@ -1157,6 +1157,60 @@ lr_test_satorra2000(const Fit &h1, const Fit &h0, const data::RawData &raw,
   return post_result(std::move(result));
 }
 
+Result<robust::LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2001(const Fit &h1, const Fit &h0,
+                            const data::RawData &raw,
+                            robust::GammaSource gamma) {
+  auto ok1 = require_complete_ml(h1, "lr_test_satorra_bentler2001()");
+  if (!ok1) {
+    return std::unexpected(ok1.error());
+  }
+  auto ok0 = require_complete_ml(h0, "lr_test_satorra_bentler2001()");
+  if (!ok0) {
+    return std::unexpected(ok0.error());
+  }
+  auto t1 = test(h1, standard_chi_square());
+  if (!t1) {
+    return std::unexpected(t1.error());
+  }
+  auto t0 = test(h0, standard_chi_square());
+  if (!t0) {
+    return std::unexpected(t0.error());
+  }
+  auto result = robust::lr_test_satorra_bentler2001_from_data(
+      h1.model().structure(), h1.model().matrix_rep(), h1.estimates().theta,
+      h0.model().structure(), h0.model().matrix_rep(), h0.estimates().theta,
+      raw, t0->statistic, t1->statistic, t0->df, t1->df, gamma);
+  return post_result(std::move(result));
+}
+
+Result<robust::LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2010(const Fit &h1, const Fit &h0,
+                            const data::RawData &raw,
+                            robust::GammaSource gamma) {
+  auto ok1 = require_complete_ml(h1, "lr_test_satorra_bentler2010()");
+  if (!ok1) {
+    return std::unexpected(ok1.error());
+  }
+  auto ok0 = require_complete_ml(h0, "lr_test_satorra_bentler2010()");
+  if (!ok0) {
+    return std::unexpected(ok0.error());
+  }
+  auto t1 = test(h1, standard_chi_square());
+  if (!t1) {
+    return std::unexpected(t1.error());
+  }
+  auto t0 = test(h0, standard_chi_square());
+  if (!t0) {
+    return std::unexpected(t0.error());
+  }
+  auto result = robust::lr_test_satorra_bentler2010_from_data(
+      h1.model().structure(), h1.model().matrix_rep(), h0.estimates().theta,
+      h0.model().structure(), h0.model().matrix_rep(), h0.estimates().theta,
+      raw, t0->statistic, t1->statistic, t0->df, t1->df, gamma);
+  return post_result(std::move(result));
+}
+
 Analysis::Analysis(Model model, Data data)
     : model_(std::make_shared<Model>(std::move(model))),
       data_(std::make_shared<Data>(std::move(data))) {}

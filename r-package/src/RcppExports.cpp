@@ -698,6 +698,42 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_lr_test_satorra_bentler2001
+Rcpp::List infer_lr_test_satorra_bentler2001(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, double T_H1, int df_H1, double T_H0, int df_H0, std::string gamma);
+RcppExport SEXP _magmaan_infer_lr_test_satorra_bentler2001(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP T_H1SEXP, SEXP df_H1SEXP, SEXP T_H0SEXP, SEXP df_H0SEXP, SEXP gammaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type X_per_group(X_per_groupSEXP);
+    Rcpp::traits::input_parameter< double >::type T_H1(T_H1SEXP);
+    Rcpp::traits::input_parameter< int >::type df_H1(df_H1SEXP);
+    Rcpp::traits::input_parameter< double >::type T_H0(T_H0SEXP);
+    Rcpp::traits::input_parameter< int >::type df_H0(df_H0SEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_lr_test_satorra_bentler2001(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_lr_test_satorra_bentler2010
+Rcpp::List infer_lr_test_satorra_bentler2010(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, double T_H1, int df_H1, double T_H0, int df_H0, std::string gamma);
+RcppExport SEXP _magmaan_infer_lr_test_satorra_bentler2010(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP T_H1SEXP, SEXP df_H1SEXP, SEXP T_H0SEXP, SEXP df_H0SEXP, SEXP gammaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type X_per_group(X_per_groupSEXP);
+    Rcpp::traits::input_parameter< double >::type T_H1(T_H1SEXP);
+    Rcpp::traits::input_parameter< int >::type df_H1(df_H1SEXP);
+    Rcpp::traits::input_parameter< double >::type T_H0(T_H0SEXP);
+    Rcpp::traits::input_parameter< int >::type df_H0(df_H0SEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_lr_test_satorra_bentler2010(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_build_u_factor
 Rcpp::List infer_build_u_factor(Rcpp::List fit, std::string bread, std::string moments);
 RcppExport SEXP _magmaan_infer_build_u_factor(SEXP fitSEXP, SEXP breadSEXP, SEXP momentsSEXP) {
@@ -1003,6 +1039,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_rls_chi2", (DL_FUNC) &_magmaan_infer_rls_chi2, 2},
     {"_magmaan_infer_rls_chi2_sample", (DL_FUNC) &_magmaan_infer_rls_chi2_sample, 2},
     {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 9},
+    {"_magmaan_infer_lr_test_satorra_bentler2001", (DL_FUNC) &_magmaan_infer_lr_test_satorra_bentler2001, 8},
+    {"_magmaan_infer_lr_test_satorra_bentler2010", (DL_FUNC) &_magmaan_infer_lr_test_satorra_bentler2010, 8},
     {"_magmaan_infer_build_u_factor", (DL_FUNC) &_magmaan_infer_build_u_factor, 3},
     {"_magmaan_infer_build_u_factor_parts", (DL_FUNC) &_magmaan_infer_build_u_factor_parts, 5},
     {"_magmaan_infer_reduced_gamma_nt", (DL_FUNC) &_magmaan_infer_reduced_gamma_nt, 1},

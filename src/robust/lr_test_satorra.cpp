@@ -2,14 +2,17 @@
 
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <utility>
 
 #include <Eigen/Core>
 
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/inference/inference.hpp"        // chi2_pvalue, noncentral_chisq_cdf
+#include "magmaan/robust/robust.hpp"
 #include "magmaan/robust/restriction.hpp"      // restriction_alpha_from_K
 #include "magmaan/robust/weighted_chisq.hpp"   // imhof_upper
 #include "magmaan/model/model_evaluator.hpp"
@@ -28,6 +31,128 @@ namespace {
 
 PostError make_err(PostError::Kind k, std::string detail) {
   return PostError{k, std::move(detail)};
+}
+
+double quiet_nan() {
+  return std::numeric_limits<double>::quiet_NaN();
+}
+
+Eigen::VectorXd denom_from_sample(const data::SampleStats& samp) {
+  Eigen::VectorXd denom(static_cast<Eigen::Index>(samp.n_obs.size()));
+  for (Eigen::Index i = 0; i < denom.size(); ++i) {
+    denom(i) = static_cast<double>(samp.n_obs[static_cast<std::size_t>(i)]);
+  }
+  return denom;
+}
+
+struct SingleModelScale {
+  double scale_c = quiet_nan();
+  Eigen::VectorXd eigenvalues;
+  std::vector<std::string> warnings;
+};
+
+post_expected<SingleModelScale>
+single_model_satorra_bentler_scale(const spec::LatentStructure& pt,
+                                   const model::MatrixRep&      rep,
+                                   const Eigen::VectorXd&       theta,
+                                   const data::SampleStats&     samp,
+                                   const data::RawData&         raw,
+                                   int                          df,
+                                   GammaSource                  gamma,
+                                   std::string                  label) {
+  SingleModelScale out;
+  if (df <= 0) {
+    out.scale_c = 1.0;
+    out.eigenvalues = Eigen::VectorXd::Zero(0);
+    return out;
+  }
+
+  estimate::Estimates est;
+  est.theta = theta;
+  auto uf_or = build_u_factor(pt, rep, samp, est,
+                              {Information::Expected,
+                               WeightMoments::Structured,
+                               ScoreCovariance::Empirical});
+  if (!uf_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        label + ": build_u_factor failed: " + uf_or.error().detail));
+  }
+
+  post_expected<Eigen::MatrixXd> M_or;
+  if (gamma == GammaSource::NT) {
+    M_or = reduced_gamma_nt(*uf_or);
+  } else {
+    auto zc_or = casewise_contributions(raw, samp, uf_or->has_means);
+    if (!zc_or.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          label + ": casewise_contributions failed: " + zc_or.error().detail));
+    }
+    const Eigen::VectorXd denom = denom_from_sample(samp);
+    M_or = reduced_gamma_sample(*uf_or, *zc_or, denom);
+  }
+  if (!M_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        label + ": reduced Gamma failed: " + M_or.error().detail));
+  }
+
+  auto ev_or = ugamma_eigenvalues(*M_or);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        label + ": ugamma_eigenvalues failed: " + ev_or.error().detail));
+  }
+  out.eigenvalues = std::move(*ev_or);
+  out.scale_c = satorra_bentler(1.0, df, out.eigenvalues).scale_c;
+  if (!std::isfinite(out.scale_c)) {
+    out.warnings.emplace_back(label + ": single-model scaling factor is not finite");
+  }
+  return out;
+}
+
+LRSatorraBentlerDiffResult degenerate_sb_diff(double T_diff,
+                                              std::string method) {
+  LRSatorraBentlerDiffResult out;
+  out.T_diff = T_diff;
+  out.df_diff = 0;
+  out.scale_c = quiet_nan();
+  out.T_scaled = T_diff;
+  out.p_value = 1.0;
+  out.c_H0 = 1.0;
+  out.c_H1 = 1.0;
+  if (std::abs(T_diff) > 1e-8) {
+    out.warnings.emplace_back(
+        method + ": df_diff = 0 but T_diff = " + std::to_string(T_diff) +
+        " — H0 and H1 should give identical test statistics. Result is "
+        "degenerate.");
+  }
+  return out;
+}
+
+LRSatorraBentlerDiffResult
+finalize_sb_diff(double T_H0, double T_H1, int df_H0, int df_H1,
+                 double c_H0, double c_H1, double c_hybrid,
+                 double scale_c, std::string method) {
+  LRSatorraBentlerDiffResult out;
+  out.T_diff = T_H0 - T_H1;
+  out.df_diff = df_H0 - df_H1;
+  out.c_H0 = c_H0;
+  out.c_H1 = c_H1;
+  out.c_hybrid = c_hybrid;
+
+  if (out.df_diff == 0) {
+    return degenerate_sb_diff(out.T_diff, method);
+  }
+
+  out.scale_c = scale_c;
+  if (!std::isfinite(scale_c) || scale_c <= 0.0) {
+    out.T_scaled = quiet_nan();
+    out.p_value = quiet_nan();
+    out.warnings.emplace_back(method + ": scaling factor is non-positive or "
+                              "not finite");
+    return out;
+  }
+  out.T_scaled = out.T_diff / scale_c;
+  out.p_value = chi2_pvalue(out.T_scaled, out.df_diff);
+  return out;
 }
 
 LRSatorra2000Result degenerate_result(double T_diff) {
@@ -59,6 +184,157 @@ LRSatorra2000Result degenerate_result(double T_diff) {
 }
 
 }  // namespace
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2001(double T_H0, double T_H1,
+                            int df_H0, int df_H1,
+                            double c_H0, double c_H1) {
+  const int m = df_H0 - df_H1;
+  if (m < 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra_bentler2001: df_H0 − df_H1 is negative; H1 must "
+        "be the less-restricted model"));
+  }
+  if (m == 0) {
+    return degenerate_sb_diff(T_H0 - T_H1, "lr_test_satorra_bentler2001");
+  }
+
+  if (df_H0 == 0) {
+    c_H0 = 1.0;
+  }
+  if (df_H1 == 0) {
+    c_H1 = 1.0;
+  } else if (df_H1 > 0 && std::abs(T_H1) < std::sqrt(std::numeric_limits<double>::epsilon())) {
+    c_H1 = 0.0;
+  }
+
+  const double cd = (static_cast<double>(df_H0) * c_H0 -
+                     static_cast<double>(df_H1) * c_H1) /
+                    static_cast<double>(m);
+  return finalize_sb_diff(T_H0, T_H1, df_H0, df_H1, c_H0, c_H1,
+                          quiet_nan(), cd, "lr_test_satorra_bentler2001");
+}
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2010(double T_H0, double T_H1,
+                            int df_H0, int df_H1,
+                            double c_H0, double c_M10) {
+  const int m = df_H0 - df_H1;
+  if (m < 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra_bentler2010: df_H0 − df_H1 is negative; H1 must "
+        "be the less-restricted model"));
+  }
+  if (m == 0) {
+    return degenerate_sb_diff(T_H0 - T_H1, "lr_test_satorra_bentler2010");
+  }
+
+  if (df_H0 == 0) {
+    c_H0 = 1.0;
+  }
+  if (df_H1 == 0) {
+    c_M10 = 1.0;
+  }
+
+  const double cd = (static_cast<double>(df_H0) * c_H0 -
+                     static_cast<double>(df_H1) * c_M10) /
+                    static_cast<double>(m);
+  return finalize_sb_diff(T_H0, T_H1, df_H0, df_H1, c_H0, c_M10,
+                          c_M10, cd, "lr_test_satorra_bentler2010");
+}
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2001_from_data(
+    const spec::LatentStructure& pt_H1,
+    const model::MatrixRep&      rep_H1,
+    const Eigen::VectorXd&       theta_H1_full,
+    const spec::LatentStructure& pt_H0,
+    const model::MatrixRep&      rep_H0,
+    const Eigen::VectorXd&       theta_H0_full,
+    const data::RawData&         raw,
+    double                       T_H0,
+    double                       T_H1,
+    int                          df_H0,
+    int                          df_H1,
+    GammaSource                  gamma) {
+  auto samp_or = data::sample_stats_from_raw(raw);
+  if (!samp_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra_bentler2001_from_data: sample_stats_from_raw failed: " +
+        samp_or.error().detail));
+  }
+  auto c1_or = single_model_satorra_bentler_scale(
+      pt_H1, rep_H1, theta_H1_full, *samp_or, raw, df_H1, gamma,
+      "lr_test_satorra_bentler2001_from_data/H1");
+  if (!c1_or.has_value()) {
+    return std::unexpected(c1_or.error());
+  }
+  auto c0_or = single_model_satorra_bentler_scale(
+      pt_H0, rep_H0, theta_H0_full, *samp_or, raw, df_H0, gamma,
+      "lr_test_satorra_bentler2001_from_data/H0");
+  if (!c0_or.has_value()) {
+    return std::unexpected(c0_or.error());
+  }
+  auto out_or = lr_test_satorra_bentler2001(
+      T_H0, T_H1, df_H0, df_H1, c0_or->scale_c, c1_or->scale_c);
+  if (!out_or.has_value()) {
+    return std::unexpected(out_or.error());
+  }
+  out_or->warnings.insert(out_or->warnings.end(),
+                          c1_or->warnings.begin(), c1_or->warnings.end());
+  out_or->warnings.insert(out_or->warnings.end(),
+                          c0_or->warnings.begin(), c0_or->warnings.end());
+  return out_or;
+}
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2010_from_data(
+    const spec::LatentStructure& pt_H1,
+    const model::MatrixRep&      rep_H1,
+    const Eigen::VectorXd&       theta_H0_full,
+    const spec::LatentStructure& pt_H0,
+    const model::MatrixRep&      rep_H0,
+    const Eigen::VectorXd&       theta_H0_for_H0,
+    const data::RawData&         raw,
+    double                       T_H0,
+    double                       T_H1,
+    int                          df_H0,
+    int                          df_H1,
+    GammaSource                  gamma) {
+  if (theta_H0_full.size() != theta_H0_for_H0.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra_bentler2010_from_data: H0 theta cannot be injected "
+        "into H1 because the full parameter vectors have different sizes"));
+  }
+  auto samp_or = data::sample_stats_from_raw(raw);
+  if (!samp_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra_bentler2010_from_data: sample_stats_from_raw failed: " +
+        samp_or.error().detail));
+  }
+  auto c0_or = single_model_satorra_bentler_scale(
+      pt_H0, rep_H0, theta_H0_for_H0, *samp_or, raw, df_H0, gamma,
+      "lr_test_satorra_bentler2010_from_data/H0");
+  if (!c0_or.has_value()) {
+    return std::unexpected(c0_or.error());
+  }
+  auto c10_or = single_model_satorra_bentler_scale(
+      pt_H1, rep_H1, theta_H0_full, *samp_or, raw, df_H1, gamma,
+      "lr_test_satorra_bentler2010_from_data/M10");
+  if (!c10_or.has_value()) {
+    return std::unexpected(c10_or.error());
+  }
+  auto out_or = lr_test_satorra_bentler2010(
+      T_H0, T_H1, df_H0, df_H1, c0_or->scale_c, c10_or->scale_c);
+  if (!out_or.has_value()) {
+    return std::unexpected(out_or.error());
+  }
+  out_or->warnings.insert(out_or->warnings.end(),
+                          c0_or->warnings.begin(), c0_or->warnings.end());
+  out_or->warnings.insert(out_or->warnings.end(),
+                          c10_or->warnings.begin(), c10_or->warnings.end());
+  return out_or;
+}
 
 post_expected<LRSatorra2000Result>
 lr_test_satorra2000(double                  T_diff,

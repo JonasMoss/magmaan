@@ -15,8 +15,9 @@
 #include <RcppEigen.h>
 
 #include "internal.hpp"
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/constraints.hpp"
-#include "magmaan/robust/robust.hpp"
+#include "magmaan/robust/lr_test_satorra.hpp"
 #include "magmaan/robust/robust.hpp"
 
 
@@ -30,6 +31,40 @@ magmaan::robust::GammaSource parse_gamma(const std::string& s) {
 magmaan::robust::SatorraAMethod parse_a_method(const std::string& s) {
   if (s == "delta" || s == "Delta") return magmaan::robust::SatorraAMethod::Delta;
   return magmaan::robust::SatorraAMethod::Exact;
+}
+
+magmaan::data::RawData raw_from_group_list(Rcpp::List X_per_group,
+                                           std::size_t G,
+                                           const char* caller) {
+  if (static_cast<std::size_t>(X_per_group.size()) != G) {
+    Rcpp::stop("%s: X_per_group has length %d but the model has %d group(s)",
+               caller, static_cast<int>(X_per_group.size()),
+               static_cast<int>(G));
+  }
+  magmaan::data::RawData raw;
+  raw.X.reserve(G);
+  for (std::size_t g = 0; g < G; ++g) {
+    raw.X.emplace_back(
+        Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(X_per_group[g])));
+  }
+  return raw;
+}
+
+Rcpp::List sb_diff_to_list(const magmaan::robust::LRSatorraBentlerDiffResult& r) {
+  Rcpp::CharacterVector warns(static_cast<R_xlen_t>(r.warnings.size()));
+  for (std::size_t k = 0; k < r.warnings.size(); ++k) {
+    warns[static_cast<R_xlen_t>(k)] = r.warnings[k];
+  }
+  return Rcpp::List::create(
+      Rcpp::_["T_diff"]   = r.T_diff,
+      Rcpp::_["df_diff"]  = r.df_diff,
+      Rcpp::_["scale_c"]  = r.scale_c,
+      Rcpp::_["T_scaled"] = r.T_scaled,
+      Rcpp::_["p_value"]  = r.p_value,
+      Rcpp::_["c_H0"]     = r.c_H0,
+      Rcpp::_["c_H1"]     = r.c_H1,
+      Rcpp::_["c_hybrid"] = r.c_hybrid,
+      Rcpp::_["warnings"] = warns);
 }
 
 }  // namespace
@@ -138,4 +173,57 @@ Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
       Rcpp::_["p_scaled_shifted"] = r.p_scaled_shifted,
       Rcpp::_["p_mixture"]   = r.p_mixture,
       Rcpp::_["warnings"]    = warns);
+}
+
+// infer_lr_test_satorra_bentler2001() — lavaan-compatible SB2001 scaled
+// nested-model LR approximation.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_lr_test_satorra_bentler2001(Rcpp::List  fit_H1,
+                                             Rcpp::List  fit_H0,
+                                             Rcpp::List  X_per_group,
+                                             double      T_H1,
+                                             int         df_H1,
+                                             double      T_H0,
+                                             int         df_H0,
+                                             std::string gamma = "empirical") {
+  magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
+  magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est_H0 = magmaanr::est_from_fit(fit_H0);
+  magmaan::data::RawData raw = raw_from_group_list(
+      X_per_group, ctx_H1.samp.S.size(), "infer_lr_test_satorra_bentler2001");
+
+  auto r_or = magmaan::robust::lr_test_satorra_bentler2001_from_data(
+      ctx_H1.pt, ctx_H1.rep, est_H1.theta,
+      ctx_H0.pt, ctx_H0.rep, est_H0.theta,
+      raw, T_H0, T_H1, df_H0, df_H1, parse_gamma(gamma));
+  if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
+  return sb_diff_to_list(*r_or);
+}
+
+// infer_lr_test_satorra_bentler2010() — lavaan-compatible SB2010 scaled
+// nested-model LR approximation.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_lr_test_satorra_bentler2010(Rcpp::List  fit_H1,
+                                             Rcpp::List  fit_H0,
+                                             Rcpp::List  X_per_group,
+                                             double      T_H1,
+                                             int         df_H1,
+                                             double      T_H0,
+                                             int         df_H0,
+                                             std::string gamma = "empirical") {
+  magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
+  magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est_H0 = magmaanr::est_from_fit(fit_H0);
+  magmaan::data::RawData raw = raw_from_group_list(
+      X_per_group, ctx_H1.samp.S.size(), "infer_lr_test_satorra_bentler2010");
+
+  auto r_or = magmaan::robust::lr_test_satorra_bentler2010_from_data(
+      ctx_H1.pt, ctx_H1.rep, est_H0.theta,
+      ctx_H0.pt, ctx_H0.rep, est_H0.theta,
+      raw, T_H0, T_H1, df_H0, df_H1, parse_gamma(gamma));
+  if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
+  return sb_diff_to_list(*r_or);
 }

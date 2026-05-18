@@ -81,6 +81,8 @@ magmaan_core <- local({
     "infer_rls_chi2_fit",
     "infer_rls_chi2_sample",
     "infer_lr_test_satorra2000",
+    "infer_lr_test_satorra_bentler2001",
+    "infer_lr_test_satorra_bentler2010",
     "infer_build_u_factor",
     "infer_build_u_factor_fit",
     "infer_build_u_factor_parts",

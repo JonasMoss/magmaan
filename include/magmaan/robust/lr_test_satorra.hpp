@@ -1,10 +1,12 @@
 #pragma once
 
+#include <limits>
 #include <string>
 #include <vector>
 
 #include <Eigen/Core>
 
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -25,6 +27,60 @@ struct Satorra2000Options {
   SatorraAMethod a_method = SatorraAMethod::Exact;
   GammaSource    gamma    = GammaSource::Empirical;
 };
+
+struct LRSatorraBentlerDiffResult {
+  double T_diff   = 0.0;
+  int    df_diff  = 0;
+  double scale_c  = 0.0;
+  double T_scaled = 0.0;
+  double p_value  = 0.0;
+
+  double c_H0     = 0.0;
+  double c_H1     = 0.0;
+  double c_hybrid = std::numeric_limits<double>::quiet_NaN();
+
+  std::vector<std::string> warnings;
+};
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2001(double T_H0, double T_H1,
+                            int df_H0, int df_H1,
+                            double c_H0, double c_H1);
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2010(double T_H0, double T_H1,
+                            int df_H0, int df_H1,
+                            double c_H0, double c_M10);
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2001_from_data(
+    const spec::LatentStructure& pt_H1,
+    const model::MatrixRep&      rep_H1,
+    const Eigen::VectorXd&       theta_H1_full,
+    const spec::LatentStructure& pt_H0,
+    const model::MatrixRep&      rep_H0,
+    const Eigen::VectorXd&       theta_H0_full,
+    const data::RawData&         raw,
+    double                       T_H0,
+    double                       T_H1,
+    int                          df_H0,
+    int                          df_H1,
+    GammaSource                  gamma = GammaSource::Empirical);
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2010_from_data(
+    const spec::LatentStructure& pt_H1,
+    const model::MatrixRep&      rep_H1,
+    const Eigen::VectorXd&       theta_H0_full,
+    const spec::LatentStructure& pt_H0,
+    const model::MatrixRep&      rep_H0,
+    const Eigen::VectorXd&       theta_H0_for_H0,
+    const data::RawData&         raw,
+    double                       T_H0,
+    double                       T_H1,
+    int                          df_H0,
+    int                          df_H1,
+    GammaSource                  gamma = GammaSource::Empirical);
 
 // ============================================================================
 // Satorra-2000 nested likelihood-ratio test for two SEM fits H1 ⊃ H0.

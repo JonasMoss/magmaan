@@ -55,8 +55,9 @@ golden `parTable()` fixtures.
   line-search error (see `docs/convergence_diagnostics.md`).
 - Expected information, finite-difference observed information, and analytic
   observed information for covariance and mean-structure models.
-- Vcov/SE, Wald/z tests, chi-square/df helpers, LR/Satorra-2000 nested tests,
-  robust U-Gamma machinery, Satorra-Bentler-family statistics, robust SEs,
+- Vcov/SE, Wald/z tests, chi-square/df helpers, LR/Satorra-2000 and
+  Satorra-Bentler 2001/2010 compatibility nested tests, robust U-Gamma
+  machinery, Satorra-Bentler-family statistics, robust SEs,
   Browne residual NT/ADF, fixed-parameter modification indices,
   equality-release score tests, fit measures including RMSEA close-fit
   p-values, structural-aware standardization, and C++ defined-parameter
