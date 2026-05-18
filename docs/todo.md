@@ -135,8 +135,9 @@ Completed checks:
 - [x] **S/M. R primitive alias normalization slice.** `magmaan_core` now
   publishes canonical `compat_lavaan_*`, `estimate_*`, `inference_*`,
   `robust_*`, and `measures_*` aliases while keeping the old `lavaan_*`,
-  `fit_*`, `infer_*`, and `_impl` names available for compatibility; the
-  broad post-fit and staged workflow examples use the canonical names.
+  `fit_*`, `infer_*`, and `_impl` names available for compatibility but out of
+  the displayed group lists; the broad post-fit and staged workflow examples
+  use the canonical names.
 - [x] **S. Example migration slice.** The observed-information,
   defined-parameter, ordinal DWLS/WLS, FIML MLR, and tutorial
   modification-index / extraction examples now use package-qualified calls and

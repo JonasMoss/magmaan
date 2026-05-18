@@ -310,7 +310,8 @@ golden `parTable()` fixtures.
   `data_ordinal_stats_from_raw(robust = ...)` for all-ordinal data and
   `data_mixed_ordinal_stats_from_raw(polyserial = ..., ordered_mask = ...)`
   for mixed continuous/ordinal data. Method-specific Rcpp names remain
-  compatibility aliases rather than the primary `magmaan_core` data listing.
+  callable compatibility aliases rather than entries in the displayed
+  `magmaan_core` data group.
 - Current ordinal fixtures validate thresholds, polychoric `R`, `NACOV`,
   `WLS.V`, `WLS.VD`, free sets, point estimates, degrees of freedom, and
   chi-square statistics across representative single-group, multi-group,

@@ -37,7 +37,8 @@ families are available as `magmaan_core$...` entries so the C++ architecture is
 still directly inspectable from R without flooding ordinary tab completion.
 Older spellings such as `lavaan_lavaanify()`, `fit_fit()`, `fit_*_impl()`,
 method-specific ordinal data builders, and `infer_*` remain available as
-compatibility aliases during exploration.
+compatibility aliases during exploration, but they are no longer listed in
+`attr(magmaan_core, "groups")` or the compact `magmaan_core` printout.
 Model-dependent post-fit helpers expose primitive-shaped entry points such as
 `magmaan_core$inference_vcov_partable(info, partable)`,
 `magmaan_core$inference_z_test_theta(theta, se)`,
