@@ -78,6 +78,11 @@ Contracts:
 
 Remaining work, in suggested order:
 
+- **M/L, next robust/API refactor.** Apply the robust-test naming policy from
+  `docs/roadmap.md` -> Robust-test naming and compatibility. Keep core names
+  statistical and object-based, move lavaan/Mplus/EQS labels into explicit
+  compatibility wrappers, and consider renaming the public Satorra-2000 helper
+  toward an LRT/nested-model name while documenting the historical aliases.
 - **S/M.** Continue migrating R post-fit helpers from opaque fit-list unpacking
   toward explicit primitive-shaped entry points, keeping convenience aliases
   only where they do not obscure the contract.
