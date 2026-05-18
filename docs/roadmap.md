@@ -58,6 +58,7 @@ golden `parTable()` fixtures.
 - Vcov/SE, Wald/z tests, chi-square/df helpers, LR/Satorra-2000 and
   Satorra-Bentler 2001/2010 compatibility nested tests, robust U-Gamma
   machinery, Satorra-Bentler-family statistics, robust SEs,
+  FMG eigenvalue p-value tests (explicit method/options API, no parser),
   Browne residual NT/ADF, fixed-parameter modification indices,
   equality-release score tests, fit measures including RMSEA close-fit
   p-values, structural-aware standardization, and C++ defined-parameter
