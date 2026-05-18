@@ -62,8 +62,28 @@ inline std::string expr_to_canonical(const Expr& e, int parent_prec) {
         } else if constexpr (std::is_same_v<T, Param>) {
           out = std::string(v.text);
         } else if constexpr (std::is_same_v<T, UnNode>) {
-          out += (v.op == UnOp::Neg) ? "-" : "+";
-          out += expr_to_canonical(*v.arg, /*parent_prec=*/4);
+          switch (v.op) {
+            case UnOp::Neg:
+              out += "-";
+              out += expr_to_canonical(*v.arg, /*parent_prec=*/4);
+              break;
+            case UnOp::Pos:
+              out += "+";
+              out += expr_to_canonical(*v.arg, /*parent_prec=*/4);
+              break;
+            case UnOp::Exp:
+              // A function call is a primary — its own parens self-delimit,
+              // so no precedence-driven wrapping is needed.
+              out += "exp(";
+              out += expr_to_canonical(*v.arg, /*parent_prec=*/0);
+              out += ")";
+              break;
+            case UnOp::Log:
+              out += "log(";
+              out += expr_to_canonical(*v.arg, /*parent_prec=*/0);
+              out += ")";
+              break;
+          }
         } else if constexpr (std::is_same_v<T, BinNode>) {
           const int prec = binop_prec(v.op);
           out += expr_to_canonical(*v.lhs, prec);

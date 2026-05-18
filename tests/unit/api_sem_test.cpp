@@ -176,6 +176,42 @@ TEST_CASE("api continuous LS fits dispatch estimator-aware chi-square") {
   REQUIRE(ls_rob.has_value());
   CHECK(ls_rob->df > 0);
 
+  // fit_measures is exposed for continuous least-squares fits — CFI/TLI/
+  // RMSEA/SRMR are estimator-agnostic functions of the LS χ² and Σ̂(θ̂).
+  const auto uls_fm = magmaan::api::fit_measures(*uls_fit);
+  REQUIRE_OK(uls_fm);
+  CHECK(std::isfinite(uls_fm->indices.cfi));
+  CHECK(std::isfinite(uls_fm->indices.rmsea));
+  REQUIRE(uls_fm->complete_data_extras.has_value());
+  CHECK(std::isfinite(uls_fm->complete_data_extras->srmr));
+  CHECK(uls_fm->complete_data_extras->srmr >= 0.0);
+  const auto gls_fm = magmaan::api::fit_measures(*gls_fit);
+  REQUIRE_OK(gls_fm);
+  CHECK(std::isfinite(gls_fm->indices.cfi));
+  const auto wls_fm = magmaan::api::fit_measures(*wls_fit);
+  REQUIRE_OK(wls_fm);
+  CHECK(std::isfinite(wls_fm->indices.rmsea));
+
+  // Non-robust (information-inverse) standard errors for least-squares fits.
+  const auto uls_se = magmaan::api::standard_errors(
+      *uls_fit, magmaan::api::expected_information());
+  REQUIRE_OK(uls_se);
+  CHECK(uls_se->se.size() == uls_fit->estimates().theta.size());
+  const auto wls_se = magmaan::api::standard_errors(
+      *wls_fit, magmaan::api::expected_information());
+  REQUIRE_OK(wls_se);
+  // The WLS weight here is the identity, so the WLS information matches the
+  // ULS information ⇒ identical standard errors.
+  REQUIRE(wls_se->se.size() == uls_se->se.size());
+  for (Eigen::Index k = 0; k < uls_se->se.size(); ++k) {
+    CHECK(std::isfinite(uls_se->se(k)));
+    CHECK(wls_se->se(k) == doctest::Approx(uls_se->se(k)).epsilon(1e-5));
+  }
+  const auto gls_se = magmaan::api::standard_errors(
+      *gls_fit, magmaan::api::expected_information());
+  REQUIRE_OK(gls_se);
+  CHECK(std::isfinite(gls_se->se(0)));
+
   const auto mi = magmaan::api::modification_indices(*uls_fit);
   REQUIRE_OK(mi);
   const auto scores = magmaan::api::score_tests(*uls_fit);
@@ -244,7 +280,19 @@ TEST_CASE("api FIML exposes likelihood test, fit measures, and MLR reporting") {
 
   const auto fm = magmaan::api::fit_measures(*fit);
   REQUIRE(fm.has_value());
-  CHECK(fm->fiml_extras.has_value());
+  REQUIRE(fm->fiml_extras.has_value());
+  // FIML now also reports SRMR (vs the saturated EM moments).
+  CHECK(std::isfinite(fm->fiml_extras->srmr));
+  CHECK(fm->fiml_extras->srmr >= 0.0);
+
+  // Non-robust FIML standard errors — the inverse observed information.
+  const auto fiml_se = magmaan::api::standard_errors(
+      *fit, magmaan::api::expected_information());
+  REQUIRE_OK(fiml_se);
+  CHECK(fiml_se->se.size() == fit->estimates().theta.size());
+  for (Eigen::Index k = 0; k < fiml_se->se.size(); ++k) {
+    CHECK(fiml_se->se(k) > 0.0);
+  }
 
   const auto mlr = magmaan::api::fiml_robust_mlr(*fit);
   REQUIRE_OK(mlr);
@@ -284,6 +332,11 @@ TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {
   REQUIRE_OK(mi);
   const auto scores = magmaan::api::score_tests(*dwls_fit);
   REQUIRE_OK(scores);
+
+  // fit_measures() is not yet wired for ordinal fits — it fails explicitly
+  // rather than approximating the categorical-independence baseline.
+  const auto ord_fm = magmaan::api::fit_measures(*dwls_fit);
+  CHECK_FALSE(ord_fm.has_value());
 }
 
 TEST_CASE("api Analysis preserves first error and post-fit calls require fit") {

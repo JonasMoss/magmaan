@@ -35,10 +35,29 @@ void eval_pool(const spec::NlConstraint& c, const Eigen::VectorXd& theta,
       case spec::NlExprNode::Kind::Unary: {
         const std::size_t L = static_cast<std::size_t>(nd.lhs);
         const double a = val[L];
-        if (nd.un_op == parse::UnOp::Neg) {
-          val[i] = -a;  g[i] = -g[L];
-        } else {
-          val[i] =  a;  g[i] =  g[L];
+        switch (nd.un_op) {
+          case parse::UnOp::Neg:
+            val[i] = -a;  g[i] = -g[L];
+            break;
+          case parse::UnOp::Pos:
+            val[i] =  a;  g[i] =  g[L];
+            break;
+          case parse::UnOp::Exp: {
+            // (exp u)' = exp(u)·u'
+            const double e = std::exp(a);
+            val[i] = e;  g[i] = e * g[L];
+            break;
+          }
+          case parse::UnOp::Log: {
+            // (log u)' = u'/u. A transient u ≤ 0 mid-optimization surfaces as
+            // a NaN value to the augmented-Lagrangian feasibility check (as
+            // the Pow node does); the gradient denominator is floored so the
+            // L-BFGS step direction stays finite.
+            const double d = (a > 0.0) ? a : 1e-300;
+            val[i] = std::log(a);
+            g[i]   = g[L] / d;
+            break;
+          }
         }
         break;
       }

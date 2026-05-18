@@ -69,8 +69,9 @@ define_param        ::= identifier ':=' expr
 
 
 (* === Expression sublanguage ================================================
-   Used for both `:=` definitions and `==` / `<` / `>` constraints. Functions
-   only enter the AST in v0 if/when O1 (modifier arithmetic) is reopened.
+   Used for both `:=` definitions and `==` / `<` / `>` constraints. The only
+   function calls are the unary `exp` / `log`; an identifier followed by `(`
+   is a function call, an identifier alone is a parameter reference.
    ============================================================================*)
 
 expr                ::= term (('+' | '-') term)*
@@ -78,7 +79,8 @@ term                ::= factor (('*' | '/') factor)*
 factor              ::= power
 power               ::= unary ('^' power)?                 /* right-associative */
 unary               ::= ('+' | '-') unary | primary
-primary             ::= num_lit | identifier | '(' expr ')'
+primary             ::= num_lit | function_call | identifier | '(' expr ')'
+function_call       ::= ('exp' | 'log') '(' expr ')'
 
 
 (* === Rejected operators ====================================================

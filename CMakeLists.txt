@@ -115,6 +115,8 @@ add_library(magmaan STATIC
   src/measures/fit_measures.cpp
   src/measures/standardized.cpp
   src/measures/effects.cpp
+  src/measures/residuals.cpp
+  src/measures/factor_scores.cpp
   src/optim/lbfgs_optimizer.cpp
   src/optim/lbfgsb_optimizer.cpp
   src/optim/trust_region_optimizer.cpp

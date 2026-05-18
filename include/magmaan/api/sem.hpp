@@ -25,7 +25,9 @@
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/inference/score.hpp"
 #include "magmaan/measures/effects.hpp"
+#include "magmaan/measures/factor_scores.hpp"
 #include "magmaan/measures/fit_measures.hpp"
+#include "magmaan/measures/residuals.hpp"
 #include "magmaan/measures/standardized.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
@@ -343,6 +345,11 @@ Result<estimate::OrdinalRobustResult> robust_ordinal(const Fit &fit);
 
 Result<TestResult> test(const Fit &fit, TestSpec spec);
 Result<FitMeasuresResult> fit_measures(const Fit &fit);
+Result<measures::ResidualMoments> residuals(const Fit &fit);
+Result<measures::StandardizedResiduals> standardized_residuals(const Fit &fit);
+Result<measures::FactorScores>
+factor_scores(const Fit &fit, const data::RawData &raw,
+              measures::FactorScoreMethod method);
 Result<inference::ScoreTestTable>
 modification_indices(const Fit &fit,
                      inference::ModificationIndexOptions options = {});

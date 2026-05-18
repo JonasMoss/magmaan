@@ -102,12 +102,29 @@ post_expected<ADValue> eval_bin(const parse::BinNode& b, const Scope& sc) {
 post_expected<ADValue> eval_un(const parse::UnNode& u, const Scope& sc) {
   auto arg_or = eval_expr(*u.arg, sc);
   if (!arg_or.has_value()) return std::unexpected(arg_or.error());
+  const ADValue& a = *arg_or;
   ADValue out;
-  if (u.op == parse::UnOp::Neg) {
-    out.v  = -arg_or->v;
-    out.dv = -arg_or->dv;
-  } else {  // Pos
-    out = *arg_or;
+  switch (u.op) {
+    case parse::UnOp::Neg:
+      out.v  = -a.v;
+      out.dv = -a.dv;
+      break;
+    case parse::UnOp::Pos:
+      out = a;
+      break;
+    case parse::UnOp::Exp:
+      // (exp u)' = exp(u)·u'
+      out.v  = std::exp(a.v);
+      out.dv = out.v * a.dv;
+      break;
+    case parse::UnOp::Log:
+      // (log u)' = u'/u — undefined at u ≤ 0.
+      if (a.v <= 0.0) {
+        return std::unexpected(make_err("log() of a non-positive value"));
+      }
+      out.v  = std::log(a.v);
+      out.dv = a.dv / a.v;
+      break;
   }
   return out;
 }

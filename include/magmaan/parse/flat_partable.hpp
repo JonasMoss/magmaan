@@ -62,11 +62,14 @@ struct FlatRow {
 //
 // Mirrors the `expr` production in docs/grammar/grammar.ebnf. Built by the
 // Pratt parser when a constraint (`==`, `<`, `>`) or define-param (`:=`)
-// statement is recognized. v0 supports identifiers, numeric literals,
-// `+ - * / ^`, unary `+ -`, and parens. No function calls.
+// statement is recognized. Supports identifiers, numeric literals,
+// `+ - * / ^`, unary `+ -`, the unary functions `exp` / `log`, and parens.
 //
 // Closed AST: adding a new variant is an ABI break and requires a major
-// version bump.
+// version bump. The unary functions reuse `UnNode` (single argument) rather
+// than a dedicated function-call node, so `UnOp` spans `Neg/Pos/Exp/Log` —
+// adding a `UnOp` enumerator is still source-compatible but every exhaustive
+// `switch (UnOp)` must be updated.
 
 struct Expr;
 using ExprPtr = std::unique_ptr<Expr>;
@@ -75,7 +78,7 @@ struct Num   { double value = 0.0; };
 struct Param { std::string_view text; };
 
 enum class BinOp : std::uint8_t { Add, Sub, Mul, Div, Pow };
-enum class UnOp  : std::uint8_t { Neg, Pos };
+enum class UnOp  : std::uint8_t { Neg, Pos, Exp, Log };
 
 struct BinNode {
   BinOp   op = BinOp::Add;

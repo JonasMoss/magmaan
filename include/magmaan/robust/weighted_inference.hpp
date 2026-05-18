@@ -66,6 +66,19 @@ continuous_ls_chisq(data::SampleStats samp,
                     const Estimates& est,
                     const gmm::Weight& weight);
 
+// Non-robust (information-inverse) standard errors for a continuous
+// moment-quadratic fit: the npar × npar LS information `Σ_b n_b·Δ_bᵀ W_b Δ_b`,
+// with `Δ_b` the model-moment Jacobian and `W_b` the estimator weight (empty
+// ⇒ ULS identity). Its inverse — through `inference::vcov`, which folds in any
+// equality constraints — is the `se = "standard"` covariance, the non-sandwich
+// counterpart to `robust_continuous_ls`.
+post_expected<Eigen::MatrixXd>
+ls_information(spec::LatentStructure pt,
+               const model::MatrixRep& rep,
+               const data::SampleStats& samp,
+               const Estimates& est,
+               const gmm::Weight& weight);
+
 // Robust (sandwich) inference for a continuous moment-quadratic fit. `weight`
 // follows the same convention as above (empty ⇒ ULS identity weight). `gamma`
 // supplies the per-block moment NACOV directly, or `raw` supplies the raw data
