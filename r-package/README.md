@@ -23,6 +23,11 @@ Convenience helpers are limited to R-side composition:
 - `compute_defined(model, fit, vcov)` evaluates `:=` rows after fitting. The
   caller supplies the covariance matrix explicitly, so expected/observed/robust
   covariance choices stay visible.
+- Friendly post-fit wrappers keep routine inspection explicit without forcing
+  callers through `magmaan_core`: `standardized(fit, vcov, type)` requires the
+  caller-supplied covariance matrix, `stats::residuals(fit, standardized)`,
+  `factor_scores(fit, data, method)` requires complete raw data, and
+  `modification_indices(fit, candidates)` forwards to the scaffold primitive.
 
 Low-level functions such as `compat_lavaan_lavaanify()`,
 `model_matrix_rep()`, `estimate_fit()`, `estimate_*()`,

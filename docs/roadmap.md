@@ -397,6 +397,12 @@ golden `parTable()` fixtures.
   for `:=` rows through R. It keeps covariance selection explicit, supports
   chained definitions, and resolves `.pN.` plabel references using the fitted
   lavaanified model.
+- Friendly R post-fit wrappers expose routine inspection without hiding
+  statistical choices: `standardized(fit, vcov, type)` requires an explicit
+  covariance matrix, `stats::residuals(fit, standardized)` wraps raw or
+  deterministic standardized residuals, `factor_scores(fit, data, method)`
+  requires complete raw data, and `modification_indices(fit, candidates)`
+  forwards to the explicit scaffold primitive.
 - R post-fit inference helpers now separate primitive-shaped entry points from
   fit-list adapters for the first audited slice: vcov, z tests, Wald tests,
   RLS chi-square, U-factor construction, and robust SE helpers can be called

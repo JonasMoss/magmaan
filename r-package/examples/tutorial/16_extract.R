@@ -48,8 +48,8 @@ dfm  <- core$inference_df_stat(fit$partable, ss)
 fm   <- core$measures_fit(fit, chi2, dfm, core$measures_baseline(ss))
 ## fitted()  — the model-implied covariance matrix
 implied <- core$model_implied(fit)
-res <- core$measures_residuals(fit)
-std <- core$measures_standardize_all(fit, vc)
+res <- stats::residuals(fit)
+std <- magmaan::standardized(fit, vc, type = "all")
 
 cat("=== extracting information ===\n")
 ok(near(free$est, lavaan::coef(lav)),          "coef() — point estimates vs lavaan")

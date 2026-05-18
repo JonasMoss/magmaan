@@ -24,13 +24,13 @@ fit <- magmaan::magmaan(model, hs, estimator = "ML", se = "none", test = "none")
 cat("=== modification indices ===\n")
 ok(fit$converged, "magmaan fits the model (prerequisite for modindices)")
 
-mmi <- core$inference_modification_indices(fit, candidates = "all")
-ok(is.data.frame(mmi) && nrow(mmi) > 0L, "magmaan_core modification indices")
+mmi <- magmaan::modification_indices(fit, candidates = "all")
+ok(is.data.frame(mmi) && nrow(mmi) > 0L, "magmaan modification indices")
 
 cat("  lavaan modindices() reference (top 3 by MI):\n")
 mi <- lavaan::modindices(lavaan::cfa(model, data = hs), sort = TRUE)
 print(utils::head(mi[, c("lhs", "op", "rhs", "mi", "epc")], 3), row.names = FALSE)
-cat("  magmaan_core$inference_modification_indices() (top 3 by MI):\n")
+cat("  magmaan::modification_indices() (top 3 by MI):\n")
 print(utils::head(mmi[order(mmi$mi, decreasing = TRUE),
                       c("lhs", "op", "rhs", "mi", "epc")], 3),
       row.names = FALSE)

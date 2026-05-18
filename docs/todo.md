@@ -158,6 +158,10 @@ Completed checks:
   `magmaan_fit` list with source model/spec/options/grouping metadata and a
   restrained print method, while keeping SEs, tests, robust corrections, and
   fit measures as explicit post-fit calls.
+- [x] **S/M. Friendly explicit post-fit wrappers.** Exported
+  `standardized()`, `stats::residuals.magmaan_fit()`, `factor_scores()`, and
+  `modification_indices()` as thin wrappers over `magmaan_core`, preserving
+  explicit covariance and raw-data choices.
 
 Done when: new code naturally uses the target namespaces, R scripts can reach
 the relevant C++ primitive graph through predictable names, friendly R users
