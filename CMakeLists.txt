@@ -103,6 +103,7 @@ add_library(magmaan STATIC
   src/inference/inference.cpp
   src/inference/score.cpp
   src/robust/robust.cpp
+  src/robust/fmg.cpp
   src/robust/restriction.cpp
   src/robust/satorra2000.cpp
   src/robust/lr_test_satorra.cpp

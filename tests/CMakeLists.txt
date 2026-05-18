@@ -107,6 +107,7 @@ magmaan_add_test_target(magmaan_test_inference inference
   unit/standardized_test.cpp
   unit/fit_measures_test.cpp
   unit/robust_test.cpp
+  unit/fmg_test.cpp
   unit/weighted_inference_test.cpp
   unit/restriction_test.cpp
   unit/satorra2000_test.cpp
