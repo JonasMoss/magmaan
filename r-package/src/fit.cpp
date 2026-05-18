@@ -1866,8 +1866,7 @@ Rcpp::List measures_residuals(Rcpp::List fit) {
 
 // measures_standardized_residuals() — mirrors
 // measures::standardized_residuals(); deterministic lavResiduals-style raw and
-// correlation-metric residuals plus SRMR. Asymptotic residual z-statistics are
-// intentionally not part of this primitive yet.
+// correlation-metric residuals, residual SE/z-statistics, and SRMR.
 //
 // [[Rcpp::export]]
 Rcpp::List measures_standardized_residuals(Rcpp::List fit) {
@@ -1881,10 +1880,18 @@ Rcpp::List measures_standardized_residuals(Rcpp::List fit) {
                                               /*square_names=*/true),
       Rcpp::_["cov_cor"] = matrix_blocks_to_r(r_or->cov_cor, ctx.rep.ov_names,
                                               /*square_names=*/true),
+      Rcpp::_["cov_se"] = matrix_blocks_to_r(r_or->cov_se, ctx.rep.ov_names,
+                                             /*square_names=*/true),
+      Rcpp::_["cov_z"] = matrix_blocks_to_r(r_or->cov_z, ctx.rep.ov_names,
+                                            /*square_names=*/true),
       Rcpp::_["mean_raw"] = vector_blocks_to_r(r_or->mean_raw,
                                                ctx.rep.ov_names),
       Rcpp::_["mean_cor"] = vector_blocks_to_r(r_or->mean_cor,
                                                ctx.rep.ov_names),
+      Rcpp::_["mean_se"] = vector_blocks_to_r(r_or->mean_se,
+                                              ctx.rep.ov_names),
+      Rcpp::_["mean_z"] = vector_blocks_to_r(r_or->mean_z,
+                                             ctx.rep.ov_names),
       Rcpp::_["srmr"] = r_or->srmr);
 }
 

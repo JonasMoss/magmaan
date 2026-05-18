@@ -36,5 +36,5 @@ Presentation rule: `attr(magmaan_core, "groups")` lists only the canonical
 surface plus plain R helpers. Historical aliases, method-specific Rcpp bridges,
 and `_impl` names remain callable from `magmaan_core` for old scripts but are
 not included in the displayed groups.
-| `measures::residuals`, `measures::standardized_residuals` | `measures_residuals`, `measures_standardized_residuals` | good | Added in scaffold pass. | Raw and correlation-metric residual accessors; residual z-statistics remain a separate lavaan-oracle task. |
+| `measures::residuals`, `measures::standardized_residuals` | `measures_residuals`, `measures_standardized_residuals` | good | Added in scaffold pass. | Raw and correlation-metric residual accessors; standardized residuals now include lavaan-style continuous residual SE/z-statistics. |
 | `measures::factor_scores` | `measures_factor_scores` | good | Added in scaffold pass. | Complete-data regression and Bartlett scores over caller-supplied raw blocks. |

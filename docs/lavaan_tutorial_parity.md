@@ -240,14 +240,14 @@ delta-method SEs, optional bootstrap SEs.
   - `standardizedSolution` (`standardize_lv` / `standardize_all`): **core ✓ /
     api ✓ / R ✓** through `magmaan_core$measures_standardize_lv()` and
     `magmaan_core$measures_standardize_all()`.
-  - `residuals()` ✓ / `lavResiduals()` ◐ / `lavPredict()` ✓ (core ✓ / api ✓ /
+  - `residuals()` ✓ / `lavResiduals()` ✓ / `lavPredict()` ✓ (core ✓ / api ✓ /
     R ✓):
     - `residuals()` — `measures::residuals` / `api::residuals` expose the raw
       moment residuals `S − Σ̂(θ̂)` (and the mean residuals under a mean
       structure).
     - `lavResiduals()` — `measures::standardized_residuals` / `api::…` expose
-      the raw and correlation-metric (Bentler) residual matrices and the SRMR.
-      The asymptotic-SE z-statistics (`$cov.z`) are a tracked follow-up.
+      the raw and correlation-metric (Bentler) residual matrices, residual
+      SE/z-statistics (`$cov.z` for the default continuous path), and the SRMR.
     - `lavPredict()` — `measures::factor_scores` / `api::factor_scores`
       compute regression (Thurstone) and Bartlett factor scores.
 - **Gaps:**
@@ -264,7 +264,6 @@ tutorial reproduction for the in-scope sections except where noted.
 | Item | Tutorial § | Effort | Notes |
 |---|---|---|---|
 | Inequality constraints + active-bound (chi-bar-squared) inference | 7 | XL | Out of scope; fails with an explicit early error. |
-| `lavResiduals()` asymptotic-SE z-statistics | 16 | M | Raw / correlation-metric residuals + SRMR landed; `$cov.z` needs the residual-ACOV convention pinned to a lavaan oracle. |
 | CFI/TLI/RMSEA/SRMR for ordinal | 11 | L | FIML / continuous-LS landed; ordinal needs the polychoric independence-model baseline. |
 | `group.equal=` / `group.partial=` convenience args | 9 | S | Invariance works via explicit labels. |
 | PML, MLF, MLMVS estimators; `likelihood="wishart"` | 13 | L | Not implemented. |
