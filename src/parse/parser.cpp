@@ -454,6 +454,23 @@ parse_expected<Expr> parse_unary_or_primary(State& st) noexcept {
   }
   if (t.kind == TokenKind::Identifier) {
     st.consume();
+    // `exp(` / `log(` is a unary function call; the same identifier without a
+    // following `(` is an ordinary parameter reference (a user may even label
+    // a parameter `exp`).
+    if ((t.text == "exp" || t.text == "log") &&
+        st.peek().kind == TokenKind::LParen) {
+      const UnOp op = (t.text == "exp") ? UnOp::Exp : UnOp::Log;
+      st.consume();  // '('
+      auto inner = parse_expr(st, 0);
+      if (!inner.has_value()) return std::unexpected(inner.error());
+      if (st.peek().kind != TokenKind::RParen) {
+        return std::unexpected(make_err(
+            ParseError::Kind::ExpectedRhsTerm, st.peek().span,
+            "expected ')' to close exp()/log() argument"));
+      }
+      st.consume();  // ')'
+      return Expr{UnNode{op, std::make_unique<Expr>(std::move(*inner))}};
+    }
     return Expr{Param{t.text}};
   }
   if (t.kind == TokenKind::LParen) {

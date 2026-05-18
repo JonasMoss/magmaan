@@ -60,6 +60,10 @@ struct FIMLExtras {
   double       aic               = 0.0;
   double       bic               = 0.0;
   double       bic2              = 0.0;
+  // Bentler-type SRMR of the model-implied moments against the FIML
+  // saturated (H1, EM) moments — the missing-data analogue of the
+  // complete-data `fit_extras().srmr`.
+  double       srmr              = 0.0;
   int          npar              = 0;
   std::int64_t ntotal            = 0;
 };
@@ -133,6 +137,20 @@ fiml_extras(spec::LatentStructure pt,
             const RawData& raw,
             const Estimates& est,
             FIML discrepancy = {});
+
+// Observed FIML information matrix — the npar × npar `−∂²logl/∂θ²` for a
+// continuous raw-data FIML fit, computed as `(N/2)·H` where `H` is the
+// finite-difference Hessian of the per-observation-averaged deviance. Its
+// inverse (via `inference::vcov`, which folds in any equality constraints) is
+// the *non-robust* missing-data standard error — the `se = "standard"`
+// counterpart to `fiml_robust_mlr`'s sandwich SEs.
+post_expected<Eigen::MatrixXd>
+fiml_observed_information(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          FIML discrepancy = {},
+                          double h_step = 1e-4);
 
 // Robust missing-data reporting for lavaan's continuous FIML MLR corner
 // (`missing = "fiml", estimator = "MLR"`). The sandwich meat is built from

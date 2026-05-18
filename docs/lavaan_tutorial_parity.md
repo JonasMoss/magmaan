@@ -99,13 +99,14 @@ constraints (`b1 > exp(...)`), multiple modifiers on one term.
     latent covariances at 0, mirroring lavaan's partable (`lavaanify_test`).
   - **Nonlinear equality constraints ✓** — `b1 == (b2+b3)^2` is compiled and
     enforced by the augmented-Lagrangian fit path; the constrained vcov / df
-    are Jacobian-projected. Lavaan-parity unit tests in `constraints_test`.
+    are Jacobian-projected. `exp()` / `log()` function calls are supported in
+    constraint and `:=` expressions, and a model carrying *both* a linear and
+    a nonlinear equality constraint fits (the AL runs in the linear-reduced
+    α-space). Lavaan-parity unit tests in `constraints_test`.
 - **Gap:**
   - **Inequality constraints `<` / `>` ✗** — out of scope: estimation would be
     fine but active-bound (chi-bar-squared) inference needs machinery magmaan
     does not have. They fail with an explicit, specific early error.
-  - `exp()` / `log()` inside a constraint expression are not yet parseable
-    (the grammar has `+ - * / ^` only); recorded in `todo.md` §4.
 
 ### §8 — Meanstructures
 
@@ -157,7 +158,9 @@ correlations, `parameterization=`, mixed continuous/ordinal.
 - **Test:** parity `bfi_ordinal_dwls`, ordinal corpus
   (`tests/fixtures/{ordinal,mixed_ordinal}`), `ordinal_golden_test`,
   `robcat_parity_golden_test`; example `ordinal_dwls_wls.R`.
-- **Gap:** CFI/TLI/RMSEA/SRMR are not produced for ordinal fits; mixed
+- **Gap:** CFI/TLI/RMSEA/SRMR are not yet produced for ordinal fits — the
+  categorical independence-model baseline is a tracked follow-up, and
+  `api::fit_measures` fails explicitly for an ordinal fit. Mixed
   continuous/ordinal NACOV/weight parity is looser than all-ordinal (both
   recorded in the backlog).
 
@@ -186,9 +189,14 @@ robust DWLS/ULS (WLSMV, ULSMV, …); `se=`/`test=` robust and bootstrap;
     post-fit calls. This is an architecture difference from lavaan's fit-time
     `estimator="MLR"` string, not a capability gap.
   - DLS: ◐ (explicit weight-matrix builder, not an `estimator=` string).
+  - **Non-robust SEs + fit measures ✓** — `standard_errors()` and
+    `fit_measures()` dispatch per estimator: complete-data ML, FIML, and
+    continuous ULS/GLS/WLS all yield information-inverse SEs and
+    CFI/TLI/RMSEA/SRMR (FIML SRMR is computed against the saturated EM
+    moments). Ordinal fit measures remain a follow-up (see §11).
 - **Test:** parity LS / FIML-MLR / ordinal-robust families; `robust_test`,
-  `weighted_inference_test`; examples `constraints_and_satorra_bentler.R`,
-  `observed_information_se.R`.
+  `weighted_inference_test`, `api_sem_test`; examples
+  `constraints_and_satorra_bentler.R`, `observed_information_se.R`.
 - **Gaps:** bootstrap (`se`/`test="bootstrap"`) ✗; PML, MLF, MLMVS ✗;
   `likelihood="wishart"` ✗. All in the backlog.
 
@@ -210,13 +218,13 @@ delta-method SEs, optional bootstrap SEs.
 
 - **core ✓ / api ✓ / R ✗.** The C++ core and `magmaan::api` compute
   fixed-parameter modification indices, equality-release score tests,
-  absent cross-loading/covariance enumeration, and EPC across the
-  ML / FIML / LS / ordinal paths — but the **R package does not expose them**
-  (`magmaan_core` has no `modification_indices` / `score_tests` binding).
+  absent cross-loading/covariance enumeration, and EPC — raw plus
+  standardized (`sepc.lv` / `sepc.all`, via `fill_standardized_epc`) — across
+  the ML / FIML / LS / ordinal paths, but the **R package does not expose
+  them** (`magmaan_core` has no `modification_indices` / `score_tests`
+  binding).
 - **Test:** `score/` fixtures, `score_golden_test`, `score_test` (C++ only).
-- **Gaps:** no R binding for modification indices (backlog); standardized EPC
-  (`sepc.all`) is not part of the public contract — raw unstandardized EPC
-  only.
+- **Gaps:** no R binding for modification indices (backlog).
 
 ### §16 — Extracting information
 
@@ -231,16 +239,21 @@ delta-method SEs, optional bootstrap SEs.
   - `standardizedSolution` (`standardize_lv` / `standardize_all`): **core ✓ /
     api ✓ / R ✗** — the standardization primitives exist in C++ but are not
     bound in the R package.
+  - `residuals()` ✓ / `lavResiduals()` ◐ / `lavPredict()` ✓ (core ✓ / api ✓):
+    - `residuals()` — `measures::residuals` / `api::residuals` expose the raw
+      moment residuals `S − Σ̂(θ̂)` (and the mean residuals under a mean
+      structure).
+    - `lavResiduals()` — `measures::standardized_residuals` / `api::…` expose
+      the raw and correlation-metric (Bentler) residual matrices and the SRMR.
+      The asymptotic-SE z-statistics (`$cov.z`) are a tracked follow-up.
+    - `lavPredict()` — `measures::factor_scores` / `api::factor_scores`
+      compute regression (Thurstone) and Bartlett factor scores.
 - **Gaps:**
-  - `residuals()` — residual moment matrices (`S − Σ̂`) are not exposed as a
-    helper. Cheap (one subtraction); backlog.
-  - `lavResiduals()` — full standardized-residual table not exposed; SRMR is
-    available through `measures_fit`.
-  - `lavPredict()` — factor scores not implemented. Backlog.
   - `lavInspect()` — no single inspector; model matrices are reachable via
     `model_matrix_rep`.
-  - R-package binding gaps: standardized solution and modification indices
-    have no `magmaan_core` entry point (both are in `magmaan::api`).
+  - R-package binding gaps: the standardized solution, modification indices,
+    and the new residual / factor-score accessors have no `magmaan_core`
+    entry point yet (all are in `magmaan::api`).
 
 ## Deferred backlog
 
@@ -251,16 +264,12 @@ tutorial reproduction for the in-scope sections except where noted.
 |---|---|---|---|
 | Bootstrapping (`se`/`test="bootstrap"`, Bollen-Stine, bootstrap CIs for `:=`) | 13, 14 | L | Principled-RNG design: C++ engine takes an explicit `seed`; each binding forwards its own. |
 | Inequality constraints + active-bound (chi-bar-squared) inference | 7 | XL | Out of scope; fails with an explicit early error. |
-| `residuals()` moment-matrix accessor | 16 | S | `S − model_implied`; trivial. |
-| `lavResiduals()` standardized-residual table | 16 | M | SRMR already in `measures_fit`. |
-| `lavPredict()` / factor scores | 16 | M | Regression / Bartlett scores. |
-| CFI/TLI/RMSEA/SRMR for FIML / LS / ordinal | 11, 13 | L | ML-family fit measures only today. |
-| Standard (non-robust) SEs for FIML / LS | 13 | M | Robust MLR / sandwich SEs exist. |
+| `lavResiduals()` asymptotic-SE z-statistics | 16 | M | Raw / correlation-metric residuals + SRMR landed; `$cov.z` needs the residual-ACOV convention pinned to a lavaan oracle. |
+| CFI/TLI/RMSEA/SRMR for ordinal | 11 | L | FIML / continuous-LS landed; ordinal needs the polychoric independence-model baseline. |
 | `group.equal=` / `group.partial=` convenience args | 9 | S | Invariance works via explicit labels. |
-| Standardized EPC (`sepc.all`) in modification indices | 15 | M | Raw EPC only today. |
 | PML, MLF, MLMVS estimators; `likelihood="wishart"` | 13 | L | Not implemented. |
-| `exp()` / `log()` in constraint/`:=` expressions | 7 | M | Grammar has no function calls; nonlinear constraints are operator-only. |
 | Mean-structure effect coding (`Σν == 0`) | 8 | S | Loadings-only effect coding exists. |
+| R bindings: standardized solution, modification indices, residuals, factor scores | 15, 16 | S/M | `magmaan::api` surfaces exist; `magmaan_core` bindings folded into the `todo.md` §1 R pass. |
 
 ## Informal tests
 

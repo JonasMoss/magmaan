@@ -362,6 +362,35 @@ TEST_CASE("resolve_lin_constraints: compiles a nonlinear `==` into nl_constraint
   CHECK(J.row(0).sum() == doctest::Approx(1.0 - 4.0));
 }
 
+TEST_CASE("nonlinear `==` with exp/log: compiled and AD-evaluated") {
+  // exp() / log() in a nonlinear constraint compile into the node pool and
+  // evaluate (value + θ-gradient) through the forward-mode AD sweep.
+  for (const char* model : {"f =~ x1 + a*x2 + b*x3\na == exp(b)",
+                            "f =~ x1 + a*x2 + b*x3\na == log(b)"}) {
+    auto pt = must_lavaanify(model);
+    REQUIRE(pt.nonlinear_eq_rows.size() == 1);
+    REQUIRE(pt.nl_constraints.size() == 1);
+    auto nl = build_nl_constraints(pt);
+    REQUIRE(nl.m() == 1);
+
+    const bool is_exp =
+        std::string_view(model).find("exp") != std::string_view::npos;
+    const double fb  = is_exp ? std::exp(0.7) : std::log(0.7);
+    const double dfb = is_exp ? std::exp(0.7) : 1.0 / 0.7;
+
+    // h = a − f(b) at θ ≡ 0.7.
+    Eigen::VectorXd theta = Eigen::VectorXd::Constant(pt.n_free(), 0.7);
+    CHECK(nl.h(theta)(0) == doctest::Approx(0.7 - fb));
+    // Jacobian row: ∂h/∂a = 1, ∂h/∂b = −f'(b), every other column 0.
+    const Eigen::MatrixXd J = nl.jacobian(theta);
+    int nonzero = 0;
+    for (Eigen::Index k = 0; k < J.cols(); ++k)
+      if (J(0, k) != 0.0) ++nonzero;
+    CHECK(nonzero == 2);
+    CHECK(J.row(0).sum() == doctest::Approx(1.0 - dfb));
+  }
+}
+
 TEST_CASE("fit: a nonlinear equality constraint (a == b^2) is enforced and matches lavaan") {
   // visual =~ x1 + a*x2 + b*x3 with the nonlinear constraint a == b^2, fit by
   // ML to the HolzingerSwineford1939 x1-x3 N-divisor covariance (n = 301).
@@ -434,6 +463,75 @@ TEST_CASE("inference: vcov / df for a nonlinear-equality model match lavaan") {
   // The two-argument forms (no θ̂) must reject a nonlinear-constraint model.
   CHECK_FALSE(magmaan::inference::vcov(*info_or, pt).has_value());
   CHECK_FALSE(magmaan::inference::df_stat(pt, samp).has_value());
+}
+
+TEST_CASE("fit: general-linear + nonlinear equality constraints in one model") {
+  // f =~ x1 + a*x2 + b*x3 + c*x4 with a general-linear equality `c == a + b`
+  // AND a nonlinear equality `a == b^2`. The AL runs in the linear-reduced
+  // α-space. S is synthesized from Λ = (1, 0.49, 0.7, 1.19) — so b = 0.7,
+  // a = b² = 0.49, c = a + b = 1.19 — with ψ = 1, Θ = 0.5·I.
+  Eigen::Vector4d lam(1.0, 0.49, 0.7, 1.19);
+  Eigen::MatrixXd S = lam * lam.transpose();
+  S.diagonal().array() += 0.5;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {400};
+
+  auto pt = must_lavaanify(
+      "f =~ x1 + a*x2 + b*x3 + c*x4\nc == a + b\na == b^2");
+  REQUIRE(pt.nl_constraints.size() == 1);          // the nonlinear `==`
+  REQUIRE(pt.lin_constraint_d.size() == 1);        // the general-linear `==`
+
+  auto rep = build_matrix_rep(pt).value();
+  auto est_or = magmaan::test::fit(pt, rep, samp);
+  REQUIRE_MESSAGE(est_or.has_value(), "combined-constraint fit failed: "
+      << (est_or.has_value() ? std::string{} : est_or.error().detail));
+  const auto& est = *est_or;
+
+  // The nonlinear constraint h(θ̂) = a − b² is driven to zero.
+  auto nl = build_nl_constraints(pt);
+  CHECK(std::abs(nl.h(est.theta)(0)) < 1e-5);
+
+  // The linear constraint A_eq·θ̂ = b_eq holds — it is built into the
+  // α-reparameterization, so it is satisfied exactly.
+  auto con = build_eq_constraints(pt, /*allow_nonlinear=*/true).value();
+  REQUIRE(con.active());
+  CHECK((con.A_eq * est.theta - con.b_eq).cwiseAbs().maxCoeff() < 1e-8);
+
+  // df adds the linear-constraint rank (1) and the nonlinear rank (1) on top
+  // of the unconstrained 10 − 8 = 2.
+  auto df = magmaan::inference::df_stat(pt, samp, est.theta);
+  REQUIRE(df.has_value());
+  CHECK(*df == 4);
+}
+
+TEST_CASE("fit: shared-label (merge) + nonlinear equality constraints together") {
+  // f =~ x1 + a*x2 + a*x3 + b*x4 — the shared label `a` is a pure-merge linear
+  // equality — plus the nonlinear `b == a^2`. Exercises the pure-merge branch
+  // of the combined-constraint α-space path. S from Λ = (1, 0.7, 0.7, 0.49).
+  Eigen::Vector4d lam(1.0, 0.7, 0.7, 0.49);
+  Eigen::MatrixXd S = lam * lam.transpose();
+  S.diagonal().array() += 0.5;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {400};
+
+  auto pt = must_lavaanify("f =~ x1 + a*x2 + a*x3 + b*x4\nb == a^2");
+  REQUIRE(pt.nl_constraints.size() == 1);
+
+  auto rep = build_matrix_rep(pt).value();
+  auto est_or = magmaan::test::fit(pt, rep, samp);
+  REQUIRE_MESSAGE(est_or.has_value(), "merge + nonlinear fit failed: "
+      << (est_or.has_value() ? std::string{} : est_or.error().detail));
+  const auto& est = *est_or;
+
+  auto nl = build_nl_constraints(pt);
+  CHECK(std::abs(nl.h(est.theta)(0)) < 1e-5);
+
+  // The shared label is a pure-merge reparameterization (con.group populated).
+  auto con = build_eq_constraints(pt, /*allow_nonlinear=*/true).value();
+  REQUIRE(con.active());
+  CHECK_FALSE(con.group.empty());
 }
 
 // === effect coding =========================================================

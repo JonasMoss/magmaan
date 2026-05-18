@@ -87,6 +87,60 @@ TEST_CASE("Effects: := value and delta-method SE on a^2 of a labeled loading") {
         doctest::Approx(4.0 * a_hat * a_hat * a_var).epsilon(1e-8));
 }
 
+TEST_CASE("Effects: := with exp() and log() of a labeled loading") {
+  // `g := exp(a)` and `h := log(a)` exercise the exp/log forward-mode AD in
+  // the `:=` evaluator. A genuine 1-factor S keeps the loading `a` positive
+  // so log(a) is well-defined.
+  const std::string src =
+      "f =~ x1 + a*x2 + x3\ng := exp(a)\nh := log(a)";
+  auto fp = Parser::parse(src);
+  REQUIRE(fp.has_value());
+  magmaan::spec::LatentNames names;
+  auto pt = build(*fp, {}, nullptr, &names);
+  REQUIRE(pt.has_value());
+  auto mr = build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  // S = Λ Λᵀ + Θ for Λ = (1, 0.8, 1.2), ψ = 1, Θ = 0.5·I — a clean
+  // 1-factor structure, so the fitted loading `a` recovers ≈ 0.8 > 0.
+  Eigen::Vector3d lam(1.0, 0.8, 1.2);
+  Eigen::MatrixXd S = lam * lam.transpose();
+  S.diagonal().array() += 0.5;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {300};
+
+  auto est = magmaan::test::fit(*pt, *mr, samp).value();
+  auto inf = expected_inference(*pt, *mr, samp, est).value();
+
+  Eigen::Index a_idx = -1;
+  for (std::size_t i = 0; i < pt->size(); ++i) {
+    if (names.row_label[i] == "a" && pt->free[i] > 0) {
+      a_idx = pt->free[i] - 1;
+      break;
+    }
+  }
+  REQUIRE(a_idx >= 0);
+  const double a_hat = est.theta(a_idx);
+  const double a_se  = inf.se(a_idx);
+  REQUIRE(a_hat > 0.0);
+
+  auto defs = compute_defined(*fp, *pt, names, est, inf.vcov).value();
+  REQUIRE(defs.entries.size() == 2);
+
+  // g := exp(a): ∂g/∂a = exp(a) ⇒ SE = exp(a)·se(a).
+  CHECK(defs.entries[0].name == "g");
+  CHECK(defs.entries[0].value == doctest::Approx(std::exp(a_hat)).epsilon(1e-12));
+  CHECK(defs.entries[0].se ==
+        doctest::Approx(std::exp(a_hat) * a_se).epsilon(1e-8));
+
+  // h := log(a): ∂h/∂a = 1/a ⇒ SE = se(a)/|a|.
+  CHECK(defs.entries[1].name == "h");
+  CHECK(defs.entries[1].value == doctest::Approx(std::log(a_hat)).epsilon(1e-12));
+  CHECK(defs.entries[1].se ==
+        doctest::Approx(a_se / std::abs(a_hat)).epsilon(1e-8));
+}
+
 TEST_CASE("Effects: := with a product of two labeled loadings") {
   // Two labeled loadings; `prod := a * b`. Gradient is [b, a], SE comes
   // from a 2x2 sub-block of vcov.

@@ -122,10 +122,11 @@ Remaining work, in suggested order:
   lavaan/Mplus/EQS labels into explicit compatibility wrappers, and consider
   renaming the public Satorra-2000 helper toward an LRT/nested-model name while
   documenting historical aliases.
-- **M/L.** Land explicit primitive surfaces for post-fit quantities that are
-  not currently produced by magmaan: standard SEs for FIML/LS, FIML SRMR, and
-  estimator-appropriate LS/ordinal CFI/TLI/RMSEA/SRMR. Add lavaan parity gates
-  as each surface becomes semantically defined.
+- **M/L.** Land the remaining estimator-appropriate post-fit primitive:
+  ordinal CFI/TLI/RMSEA/SRMR (the polychoric independence-model baseline).
+  Standard SEs for FIML/LS, FIML SRMR, and LS CFI/TLI/RMSEA/SRMR have landed
+  (see §4). Add lavaan parity gates as each surface becomes semantically
+  defined.
 
 Completed checks:
 
@@ -235,26 +236,48 @@ Remaining work, in suggested order:
   under the active `set.seed()` so reproducibility is automatic; Python and
   the C++ API pass a seed directly. The engine owns the resample + refit loop
   and the Bollen-Stine data transform.
-- **S/M. Expose modification indices in the R package.** The C++ core and
-  `magmaan::api` compute fixed-parameter modification indices and
-  equality-release score tests, but `magmaan_core` has no binding for them —
-  add `modification_indices` / `score_tests` Rcpp wrappers.
-- **S. `residuals()` accessor.** Expose the residual moment matrices
-  `S − Σ̂(θ̂)` (a one-line subtraction over `model_implied`) through the api
-  and R.
-- **M. `lavResiduals()` table.** The full standardized-residual table; SRMR
-  is already in `measures_fit`.
-- **M. `lavPredict()` factor scores.** Regression / Bartlett factor scores.
-- **M. Standardized EPC** (`sepc.all`) in the modification-index output.
-- **M. `exp()` / `log()` in expressions.** Nonlinear `==` constraints and
-  `:=` definitions are operator-only (`+ - * / ^`); function calls need a
-  grammar + evaluator extension (`docs/grammar/grammar.ebnf`, the parser, and
-  the `NlExprNode` / `expr_eval` evaluators).
-- **L. Nonlinear equality + linear equality in one model.** The
-  augmented-Lagrangian path currently rejects a model that carries both; it
-  would run the AL in the linear-constraint-reduced α-space.
-- **M/L. CFI/TLI/RMSEA/SRMR for FIML / LS / ordinal** and standard
-  (non-robust) SEs for FIML / LS — see also section 1.
+- **M. `lavResiduals()` z-statistics.** The deterministic residual metrics
+  landed (`measures::standardized_residuals` — raw, correlation-metric, and
+  SRMR). The asymptotic-SE standardized residuals (`lavResiduals()$cov.z`)
+  still need the residual-ACOV convention (`Γ_NT/N − Δ·vcov·Δᵀ`) pinned
+  against a lavaan oracle before landing.
+- **M/L. CFI/TLI/RMSEA/SRMR for ordinal.** The FIML and continuous-LS slices
+  landed; ordinal DWLS/WLS still needs a polychoric independence-model
+  baseline and a correlation-metric ordinal SRMR. `api::fit_measures` fails
+  explicitly for ordinal fits until then.
+- **S/M. R bindings for the new post-fit accessors.** `residuals`,
+  `standardized_residuals`, `factor_scores`, `modification_indices` /
+  `score_tests`, and the standardized solution have C++ / `magmaan::api`
+  surfaces but no `magmaan_core` binding yet — folded into the §1 R scaffold
+  pass.
+
+Completed:
+
+- [x] **S. `residuals()` accessor.** `measures::residuals` / `api::residuals`
+  — the raw residual moment matrices `S − Σ̂(θ̂)` (plus the mean residuals
+  under a mean structure).
+- [x] **M. `standardized_residuals()` table.** `measures::standardized_residuals`
+  / `api::standardized_residuals` — magmaan's `lavResiduals()`: the raw and
+  correlation-metric (Bentler) residual matrices and the SRMR. The
+  asymptotic-SE z-statistics are tracked above.
+- [x] **M. `lavPredict()` factor scores.** `measures::factor_scores` /
+  `api::factor_scores` — regression (Thurstone) and Bartlett scores.
+- [x] **M. `exp()` / `log()` in expressions.** Function calls now parse,
+  canonical-format, classify (`analyze_linear`), and evaluate with
+  forward-mode AD in both the `:=` evaluator (`expr_eval`) and the
+  nonlinear-constraint evaluator (`nl_constraints`).
+- [x] **L. Nonlinear equality + linear equality in one model.** The
+  augmented-Lagrangian path now runs in the linear-constraint-reduced α-space
+  when a model carries both kinds of equality.
+- [x] **M. Standardized EPC (`sepc.all`).** Already produced in the core /
+  `magmaan::api` modification-index output (`ScoreTestResult.epc_lv` /
+  `epc_all`, filled by `fill_standardized_epc`); only the R binding (above)
+  is outstanding.
+- [x] **M. CFI/TLI/RMSEA/SRMR for FIML and continuous LS**, and **standard
+  (non-robust) SEs for FIML and LS.** `api::fit_measures` and
+  `api::standard_errors` now dispatch per estimator; FIML also reports SRMR
+  against the saturated EM moments, and the FIML observed information is
+  `−∂²logl/∂θ²`.
 
 Done when: the audit doc shows no ◐/✗ rows for the in-scope tutorial sections,
 or each remaining gap is a deliberate, documented out-of-scope decision.

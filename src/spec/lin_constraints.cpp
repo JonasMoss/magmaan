@@ -144,7 +144,21 @@ analyze_linear(const parse::Expr& e, int n_free,
         } else if constexpr (std::is_same_v<T, parse::UnNode>) {
           auto a = analyze_linear(*v.arg, n_free, name_to_free, name_to_fixed);
           if (!a) return std::nullopt;
-          return (v.op == parse::UnOp::Neg) ? scaled(std::move(*a), -1.0) : std::move(*a);
+          switch (v.op) {
+            case parse::UnOp::Neg: return scaled(std::move(*a), -1.0);
+            case parse::UnOp::Pos: return std::move(*a);
+            case parse::UnOp::Exp:
+              // exp() of anything θ-dependent is nonlinear; a constant
+              // argument folds.
+              if (!is_constant(*a)) return std::nullopt;
+              { LinearForm f = zero_form(n_free); f.cst = std::exp(a->cst);
+                return f; }
+            case parse::UnOp::Log:
+              if (!is_constant(*a) || a->cst <= 0.0) return std::nullopt;
+              { LinearForm f = zero_form(n_free); f.cst = std::log(a->cst);
+                return f; }
+          }
+          return std::nullopt;  // unreachable
         } else {  // parse::BinNode
           auto a = analyze_linear(*v.lhs, n_free, name_to_free, name_to_fixed);
           if (!a) return std::nullopt;

@@ -160,22 +160,62 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
   // Lagrangian (the LS sum-of-squares structure is lost once the AL penalty
   // is folded in, so the scalar path is used).
   if (nl.active()) {
-    if (con.active()) {
-      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-          "fit_gmm: models combining linear and nonlinear equality "
-          "constraints are not yet supported"));
-    }
     if (backend == Backend::Ceres) {
       return std::unexpected(fit_err(FitError::Kind::NumericIssue,
           "fit_gmm: the Ceres backend cannot enforce nonlinear equality "
           "constraints"));
     }
-    const optim::ScalarProblem sprob = optim::scalarize(prob);
-    auto h_fn   = [&nl](const Eigen::VectorXd& th) { return nl.h(th); };
-    auto jac_fn = [&nl](const Eigen::VectorXd& th) { return nl.jacobian(th); };
-    auto r = augmented_lagrangian(sprob, h_fn, jac_fn, nl.m(), x0, bounds, opts);
+    if (!con.active()) {
+      const optim::ScalarProblem sprob = optim::scalarize(prob);
+      auto h_fn   = [&nl](const Eigen::VectorXd& th) { return nl.h(th); };
+      auto jac_fn = [&nl](const Eigen::VectorXd& th) { return nl.jacobian(th); };
+      auto r =
+          augmented_lagrangian(sprob, h_fn, jac_fn, nl.m(), x0, bounds, opts);
+      if (!r.has_value()) return std::unexpected(r.error());
+      return Estimates{prob.expand(r->x), r->base_fmin, r->outer_iterations};
+    }
+    // Linear + nonlinear equality constraints together: fold the linear
+    // equalities into the affine α-reparameterization (θ = θ₀ + K·α), then run
+    // the AL on the nonlinear constraints re-expressed in α — h_α(α) = h(θ₀+Kα)
+    // and ∂h_α/∂α = (∂h/∂θ)·K.
+    const optim::GmmProblem prob_a = reparameterize(prob, con);
+    if (con.n_alpha == 0) {  // every parameter pinned by the linear system
+      auto rr = prob_a.r(Eigen::VectorXd(0));
+      if (!rr.has_value()) return std::unexpected(rr.error());
+      return Estimates{prob_a.expand(Eigen::VectorXd(0)),
+                       0.5 * rr->squaredNorm(), 0};
+    }
+    const optim::ScalarProblem sprob_a = optim::scalarize(prob_a);
+    auto h_a = [&nl, &con](const Eigen::VectorXd& a) {
+      return nl.h(con.expand(a));
+    };
+    auto jac_a = [&nl, &con](const Eigen::VectorXd& a) {
+      return Eigen::MatrixXd(nl.jacobian(con.expand(a)) * con.K());
+    };
+    Eigen::VectorXd alpha0 = con.contract(x0);
+    Bounds abounds;
+    const bool pure_merge = !con.group.empty();
+    if (!bounds.empty() && pure_merge) {
+      abounds = fold_alpha_bounds(con, bounds);
+      alpha0  = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
+    }
+    auto r = augmented_lagrangian(sprob_a, h_a, jac_a, nl.m(), alpha0, abounds,
+                                  opts);
     if (!r.has_value()) return std::unexpected(r.error());
-    return Estimates{prob.expand(r->x), r->base_fmin, r->outer_iterations};
+    Eigen::VectorXd theta_hat = prob_a.expand(r->x);
+    if (!bounds.empty() && !pure_merge) {
+      // General-linear α was optimized unbounded — verify θ̂ honors the box.
+      constexpr double tol = 1e-6;
+      for (Eigen::Index k = 0; k < theta_hat.size(); ++k) {
+        if (theta_hat(k) < bounds.lower(k) - tol ||
+            theta_hat(k) > bounds.upper(k) + tol) {
+          return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+              "fit_gmm: general-linear equality drove parameter " +
+                  std::to_string(k) + " past its bound"));
+        }
+      }
+    }
+    return Estimates{std::move(theta_hat), r->base_fmin, r->outer_iterations};
   }
 
   if (!con.active()) {
@@ -259,21 +299,59 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   // Nonlinear equality constraints — minimize via the augmented Lagrangian.
   if (pre->nl.active()) {
     const NonlinearEqConstraints& nl = pre->nl;
-    if (con.active()) {
-      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-          "fit_ml: models combining linear and nonlinear equality "
-          "constraints are not yet supported"));
-    }
     if (backend == Backend::Ceres) {
       return std::unexpected(fit_err(FitError::Kind::NumericIssue,
           "fit_ml: the Ceres backend cannot enforce nonlinear equality "
           "constraints"));
     }
-    auto h_fn   = [&nl](const Eigen::VectorXd& th) { return nl.h(th); };
-    auto jac_fn = [&nl](const Eigen::VectorXd& th) { return nl.jacobian(th); };
-    auto r = augmented_lagrangian(prob, h_fn, jac_fn, nl.m(), x0, bounds, opts);
+    if (!con.active()) {
+      auto h_fn   = [&nl](const Eigen::VectorXd& th) { return nl.h(th); };
+      auto jac_fn = [&nl](const Eigen::VectorXd& th) { return nl.jacobian(th); };
+      auto r =
+          augmented_lagrangian(prob, h_fn, jac_fn, nl.m(), x0, bounds, opts);
+      if (!r.has_value()) return std::unexpected(r.error());
+      return Estimates{prob.expand(r->x), r->base_fmin, r->outer_iterations};
+    }
+    // Linear + nonlinear equality constraints together: fold the linear
+    // equalities into the affine α-reparameterization (θ = θ₀ + K·α), then run
+    // the AL on the nonlinear constraints re-expressed in α — h_α(α) = h(θ₀+Kα)
+    // and ∂h_α/∂α = (∂h/∂θ)·K.
+    const optim::ScalarProblem prob_a = reparameterize(prob, con);
+    if (con.n_alpha == 0) {  // every parameter pinned by the linear system
+      Eigen::VectorXd theta = con.expand(Eigen::VectorXd(0));
+      Eigen::VectorXd scratch(theta.size());
+      const double f = prob.f(theta, scratch);
+      return Estimates{std::move(theta), f, 0};
+    }
+    auto h_a = [&nl, &con](const Eigen::VectorXd& a) {
+      return nl.h(con.expand(a));
+    };
+    auto jac_a = [&nl, &con](const Eigen::VectorXd& a) {
+      return Eigen::MatrixXd(nl.jacobian(con.expand(a)) * con.K());
+    };
+    Eigen::VectorXd alpha0 = con.contract(x0);
+    Bounds abounds;
+    const bool pure_merge = !con.group.empty();
+    if (!bounds.empty() && pure_merge) {
+      abounds = fold_alpha_bounds(con, bounds);
+      alpha0  = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
+    }
+    auto r = augmented_lagrangian(prob_a, h_a, jac_a, nl.m(), alpha0, abounds,
+                                  opts);
     if (!r.has_value()) return std::unexpected(r.error());
-    return Estimates{prob.expand(r->x), r->base_fmin, r->outer_iterations};
+    Eigen::VectorXd theta_hat = prob_a.expand(r->x);
+    if (!bounds.empty() && !pure_merge) {
+      constexpr double tol = 1e-6;
+      for (Eigen::Index k = 0; k < theta_hat.size(); ++k) {
+        if (theta_hat(k) < bounds.lower(k) - tol ||
+            theta_hat(k) > bounds.upper(k) + tol) {
+          return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+              "fit_ml: general-linear equality drove parameter " +
+                  std::to_string(k) + " past its bound"));
+        }
+      }
+    }
+    return Estimates{std::move(theta_hat), r->base_fmin, r->outer_iterations};
   }
 
   if (!con.active()) {

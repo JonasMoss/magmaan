@@ -1397,7 +1397,90 @@ fiml_extras(spec::LatentStructure pt,
   out.bic = -2.0 * out.logl + static_cast<double>(npar) * std::log(N);
   out.bic2 = -2.0 * out.logl + static_cast<double>(npar)
       * std::log((N + 2.0) / 24.0);
+
+  // SRMR — Bentler-type, standardizing the residual of the model-implied
+  // moments against the FIML saturated (H1, EM) moments by the H1 SDs. The
+  // FIML model carries a mean structure, so the p mean residuals join the
+  // p(p+1)/2 covariance residuals.
+  if (sm_or->sigma.size() != cache.block_p.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_extras: implied-moment block count does not match the data"));
+  }
+  double srmr_acc = 0.0;
+  for (std::size_t b = 0; b < cache.block_p.size(); ++b) {
+    Eigen::VectorXd h1_mu;
+    Eigen::MatrixXd h1_sigma;
+    if (auto e = h1_moments_block(raw, cache, start_samp, b, h1_mu, h1_sigma);
+        !e.has_value()) {
+      return std::unexpected(fit_to_post(e.error(), "FIML H1 moments"));
+    }
+    const Eigen::MatrixXd S = 0.5 * (h1_sigma + h1_sigma.transpose());
+    const Eigen::MatrixXd Sigma =
+        0.5 * (sm_or->sigma[b] + sm_or->sigma[b].transpose());
+    const Eigen::Index p = S.rows();
+    if (p == 0) continue;
+
+    double sum_sq = 0.0;
+    for (Eigen::Index col = 0; col < p; ++col) {
+      const double dc = (S(col, col) - Sigma(col, col)) / S(col, col);
+      sum_sq += dc * dc;
+      for (Eigen::Index row = col + 1; row < p; ++row) {
+        const double rij = (S(row, col) - Sigma(row, col)) /
+                           std::sqrt(S(row, row) * S(col, col));
+        sum_sq += rij * rij;
+      }
+    }
+    double pstar = static_cast<double>(p) * static_cast<double>(p + 1) / 2.0;
+    if (b < sm_or->mu.size() && sm_or->mu[b].size() == p &&
+        h1_mu.size() == p) {
+      for (Eigen::Index i = 0; i < p; ++i) {
+        const double mr = (h1_mu(i) - sm_or->mu[b](i)) / std::sqrt(S(i, i));
+        sum_sq += mr * mr;
+      }
+      pstar += static_cast<double>(p);
+    }
+    const double srmr_b = (pstar > 0.0) ? std::sqrt(sum_sq / pstar) : 0.0;
+    const double n_b = (b < start_samp.n_obs.size())
+                           ? static_cast<double>(start_samp.n_obs[b])
+                           : 0.0;
+    if (N > 0.0) srmr_acc += (n_b / N) * srmr_b;
+  }
+  out.srmr = srmr_acc;
   return out;
+}
+
+post_expected<Eigen::MatrixXd>
+fiml_observed_information(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          FIML discrepancy,
+                          double h_step) {
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_observed_information: h_step must be positive"));
+  }
+  auto cache_or = discrepancy.prepare(raw);
+  if (!cache_or.has_value()) {
+    return std::unexpected(fit_to_post(cache_or.error(), "FIML::prepare"));
+  }
+  auto start_or = fiml_start_sample_stats(raw);
+  if (!start_or.has_value()) {
+    return std::unexpected(fit_to_post(start_or.error(),
+        "fiml_start_sample_stats"));
+  }
+  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(),
+        "validate_fiml_fixed_x_missing_policy"));
+  }
+  // H = ∂²F/∂θ² of the per-observation-averaged deviance F. The FIML
+  // log-likelihood is logl = −½(N·F + c), so the observed information is
+  // −∂²logl/∂θ² = ½·N·H.
+  auto H_or = fiml_observed_hessian_fd(pt, rep, raw, *cache_or, *start_or, est,
+                                       discrepancy, h_step);
+  if (!H_or.has_value()) return std::unexpected(H_or.error());
+  const double N = static_cast<double>(cache_or->n_total);
+  return Eigen::MatrixXd(0.5 * N * (*H_or));
 }
 
 post_expected<FIMLRobustMLR>

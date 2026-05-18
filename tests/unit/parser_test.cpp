@@ -5,6 +5,7 @@
 #include <variant>
 
 #include "magmaan/error.hpp"
+#include "magmaan/parse/expr_format.hpp"
 #include "magmaan/parse/flat_partable.hpp"
 #include "magmaan/parse/op.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -250,6 +251,52 @@ TEST_CASE("Pratt: unary minus") {
   const auto* unop = std::get_if<magmaan::parse::UnNode>(bin->lhs.get());
   REQUIRE(unop != nullptr);
   CHECK(unop->op == magmaan::parse::UnOp::Neg);
+}
+
+TEST_CASE("Pratt: exp() / log() function calls") {
+  // d := exp(a) — a unary function call parses to a UnNode{Exp}.
+  {
+    auto fp = must_parse("d := exp(a)");
+    REQUIRE(fp.constraints.size() == 1);
+    const auto* un = std::get_if<magmaan::parse::UnNode>(&fp.constraints[0].rhs);
+    REQUIRE(un != nullptr);
+    CHECK(un->op == magmaan::parse::UnOp::Exp);
+    const auto* arg = std::get_if<magmaan::parse::Param>(un->arg.get());
+    REQUIRE(arg != nullptr);
+    CHECK(arg->text == "a");
+  }
+  // b1 == log(b2 + 1) — the argument may be any expression.
+  {
+    auto fp = must_parse("b1 == log(b2 + 1)");
+    REQUIRE(fp.constraints.size() == 1);
+    const auto* rhs = std::get_if<magmaan::parse::UnNode>(&fp.constraints[0].rhs);
+    REQUIRE(rhs != nullptr);
+    CHECK(rhs->op == magmaan::parse::UnOp::Log);
+    CHECK(std::get_if<magmaan::parse::BinNode>(rhs->arg.get()) != nullptr);
+  }
+  // Canonical text round-trips so resolve_lin_constraints can re-parse it.
+  {
+    auto fp = must_parse("d := exp(a) + log(b*c)");
+    REQUIRE(fp.constraints.size() == 1);
+    CHECK(magmaan::parse::expr_to_canonical(fp.constraints[0].rhs) ==
+          "exp(a)+log(b*c)");
+  }
+}
+
+TEST_CASE("Pratt: a bare `exp` / `log` is an ordinary identifier") {
+  // `exp` not followed by `(` is a parameter reference, not a function.
+  auto fp = must_parse("d := exp + 1");
+  REQUIRE(fp.constraints.size() == 1);
+  const auto* bin = std::get_if<magmaan::parse::BinNode>(&fp.constraints[0].rhs);
+  REQUIRE(bin != nullptr);
+  const auto* lhs = std::get_if<magmaan::parse::Param>(bin->lhs.get());
+  REQUIRE(lhs != nullptr);
+  CHECK(lhs->text == "exp");
+}
+
+TEST_CASE("error: exp() with an unclosed argument") {
+  auto r = Parser::parse("d := exp(a");
+  CHECK_FALSE(r.has_value());
 }
 
 TEST_CASE("Pratt: ^ is right-associative") {

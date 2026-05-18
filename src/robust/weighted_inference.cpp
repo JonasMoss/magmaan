@@ -541,6 +541,46 @@ robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
   return out;
 }
 
+post_expected<Eigen::MatrixXd>
+ls_information(spec::LatentStructure pt,
+               const model::MatrixRep& rep,
+               const data::SampleStats& samp,
+               const Estimates& est,
+               const gmm::Weight& weight) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ls_information: fitted theta length does not match partable"));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  if (auto v = validate_moment_shapes(samp, eval->moments); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  const auto layout = make_layout(samp, eval->moments);
+
+  // Sum the per-block LS information Δ_bᵀ W_b Δ_b, each weighted by n_b. The
+  // result is the full-θ npar × npar information; `inference::vcov` projects
+  // it through any equality constraints.
+  const Eigen::Index q = static_cast<Eigen::Index>(pt.n_free());
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    auto Jb = continuous_moment_jacobian_block(
+        layout, eval->moments, eval->J_sigma, eval->J_mu, b);
+    if (!Jb.has_value()) return std::unexpected(Jb.error());
+    auto Wb = weight_block(weight, layout, b);
+    if (!Wb.has_value()) return std::unexpected(Wb.error());
+    const double n_b = static_cast<double>(samp.n_obs[b]);
+    H.noalias() += n_b * (Jb->transpose() * (*Wb) * (*Jb));
+  }
+  H = 0.5 * (H + H.transpose()).eval();
+  return H;
+}
+
 post_expected<WeightedRobustResult>
 robust_continuous_ls(spec::LatentStructure pt,
                      const model::MatrixRep& rep,

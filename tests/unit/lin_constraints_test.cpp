@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <cmath>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -22,6 +23,9 @@ lp::ExprPtr bin(lp::BinOp op, lp::ExprPtr l, lp::ExprPtr r) {
 }
 lp::ExprPtr neg(lp::ExprPtr a) {
   return std::make_unique<lp::Expr>(lp::UnNode{lp::UnOp::Neg, std::move(a)});
+}
+lp::ExprPtr fn(lp::UnOp op, lp::ExprPtr a) {
+  return std::make_unique<lp::Expr>(lp::UnNode{op, std::move(a)});
 }
 
 // n_free = 3, free indices (1-based): a→1, b→2, c→3; fixed: k = 5.0.
@@ -79,4 +83,16 @@ TEST_CASE("analyze_linear: nonlinear forms are rejected") {
   CHECK_FALSE(an(*bin(lp::BinOp::Div, par("b"), par("c"))).has_value());
   // b / 0   — divide by zero
   CHECK_FALSE(an(*bin(lp::BinOp::Div, par("b"), num(0.0))).has_value());
+}
+
+TEST_CASE("analyze_linear: exp/log fold constants, reject θ-dependent args") {
+  // exp / log of a constant argument fold to a constant LinearForm.
+  check_form(an(*fn(lp::UnOp::Exp, num(2.0))),  0, 0, 0, std::exp(2.0));
+  check_form(an(*fn(lp::UnOp::Log, par("k"))),  0, 0, 0, std::log(5.0));  // k=5
+  // exp / log of anything θ-dependent is nonlinear.
+  CHECK_FALSE(an(*fn(lp::UnOp::Exp, par("b"))).has_value());
+  CHECK_FALSE(an(*fn(lp::UnOp::Log,
+                     bin(lp::BinOp::Add, par("a"), par("c")))).has_value());
+  // log of a non-positive constant is rejected, not folded to NaN.
+  CHECK_FALSE(an(*fn(lp::UnOp::Log, num(-1.0))).has_value());
 }

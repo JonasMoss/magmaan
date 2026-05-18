@@ -686,29 +686,52 @@ Result<Fit> fit(const Model &model, const Data &data,
 TestSpec standard_chi_square() { return TestSpec{}; }
 
 Result<StandardErrors> standard_errors(const Fit &fit, InformationSpec spec) {
-  auto ok = require_complete_ml(fit, "standard_errors()");
-  if (!ok) {
-    return std::unexpected(ok.error());
-  }
-  const auto *stats = fit.data().sample_stats();
-
+  // The non-robust (information-inverse) standard errors. The information
+  // matrix is estimator-specific; `inference::vcov` then inverts it and folds
+  // in any equality constraints — the one shared post-step. Robust SEs are the
+  // separate fiml_robust_mlr() / robust_continuous_ls() / robust_ordinal()
+  // accessors.
   post_expected<Eigen::MatrixXd> info;
-  switch (spec.kind) {
-  case InformationKind::Expected:
-    info = inference::information_expected(fit.model().structure(),
-                                           fit.model().matrix_rep(), *stats,
-                                           fit.estimates());
-    break;
-  case InformationKind::ObservedFiniteDifference:
-    info = inference::information_observed_fd(fit.model().structure(),
-                                              fit.model().matrix_rep(), *stats,
-                                              fit.estimates(), spec.h_step);
-    break;
-  case InformationKind::ObservedAnalytic:
-    info = inference::information_observed_analytic(fit.model().structure(),
-                                                    fit.model().matrix_rep(),
-                                                    *stats, fit.estimates());
-    break;
+  if (fit.estimator() == EstimatorKind::ML && fit.data().sample_stats()) {
+    const auto *stats = fit.data().sample_stats();
+    switch (spec.kind) {
+    case InformationKind::Expected:
+      info = inference::information_expected(fit.model().structure(),
+                                             fit.model().matrix_rep(), *stats,
+                                             fit.estimates());
+      break;
+    case InformationKind::ObservedFiniteDifference:
+      info = inference::information_observed_fd(fit.model().structure(),
+                                                fit.model().matrix_rep(),
+                                                *stats, fit.estimates(),
+                                                spec.h_step);
+      break;
+    case InformationKind::ObservedAnalytic:
+      info = inference::information_observed_analytic(fit.model().structure(),
+                                                      fit.model().matrix_rep(),
+                                                      *stats, fit.estimates());
+      break;
+    }
+  } else if (fit.estimator() == EstimatorKind::FIML && fit.data().raw()) {
+    // FIML exposes a single information notion — the observed −∂²logl/∂θ².
+    // `spec.kind` does not apply; `spec.h_step` tunes the FD Hessian.
+    info = estimate::fiml::fiml_observed_information(
+        fit.model().structure(), fit.model().matrix_rep(), *fit.data().raw(),
+        fit.estimates(), {}, spec.h_step);
+  } else if (is_continuous_ls(fit.estimator()) && fit.data().sample_stats()) {
+    auto weight = ls_weight_for_fit(fit);
+    if (!weight) {
+      return std::unexpected(weight.error());
+    }
+    info = estimate::ls_information(fit.model().structure(),
+                                    fit.model().matrix_rep(),
+                                    *fit.data().sample_stats(),
+                                    fit.estimates(), *weight);
+  } else {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "standard_errors() supports complete-data ML, FIML, and continuous "
+        "least-squares fits"));
   }
   if (!info) {
     return std::unexpected(make_error(ErrorStage::PostFit, info.error()));
@@ -904,10 +927,16 @@ Result<TestResult> test(const Fit &fit, TestSpec spec) {
 
 Result<FitMeasuresResult> fit_measures(const Fit &fit) {
   if (const auto *stats = fit.data().sample_stats()) {
-    if (fit.estimator() != EstimatorKind::ML) {
+    // Complete-data ML and continuous least-squares (ULS/GLS/WLS): the
+    // baseline χ², CFI/TLI/RMSEA, SRMR and information criteria are all
+    // estimator-agnostic functions of T_user/df/Σ̂(θ̂)/S. `test()` already
+    // produces the right model χ² per estimator.
+    if (fit.estimator() != EstimatorKind::ML &&
+        !is_continuous_ls(fit.estimator())) {
       return std::unexpected(make_error(
           ErrorStage::UnsupportedCombination,
-          "fit_measures() currently exposes only complete-data ML and FIML"));
+          "fit_measures() exposes complete-data ML, continuous "
+          "least-squares, and FIML fits"));
     }
     auto t = test(fit, standard_chi_square());
     if (!t) {
@@ -952,9 +981,71 @@ Result<FitMeasuresResult> fit_measures(const Fit &fit) {
                              std::move(*extras)};
   }
 
+  if (fit.data().ordinal() || fit.data().mixed_ordinal()) {
+    // The CFI/TLI baseline for a categorical fit is the polychoric
+    // independence model — a separate estimation that needs its own
+    // lavaan-parity gate. Tracked in docs/todo.md §4; until then ordinal fit
+    // measures fail explicitly rather than approximate. `robust_ordinal()`
+    // already exposes the ordinal model χ² / df and the scaled tests.
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "fit_measures() does not yet cover ordinal DWLS/WLS fits — the "
+        "categorical independence-model baseline is a tracked follow-up; "
+        "use robust_ordinal() for the ordinal model chi-square and df"));
+  }
   return std::unexpected(
       make_error(ErrorStage::UnsupportedCombination,
                  "fit measures are not available for this data type"));
+}
+
+Result<measures::ResidualMoments> residuals(const Fit &fit) {
+  // S − Σ̂(θ̂) needs only θ̂ and the sample moments, so it is exposed for any
+  // fit carried over sample statistics (complete-data ML or least-squares).
+  // FIML / ordinal fits carry raw / categorical data instead and are not
+  // covered here.
+  const auto *stats = fit.data().sample_stats();
+  if (!stats) {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "residuals() requires a fit over sample statistics "
+        "(complete-data ML or least-squares)"));
+  }
+  auto out = measures::residuals(fit.model().structure(),
+                                 fit.model().matrix_rep(), *stats,
+                                 fit.estimates());
+  return post_result(std::move(out));
+}
+
+Result<measures::StandardizedResiduals> standardized_residuals(const Fit &fit) {
+  const auto *stats = fit.data().sample_stats();
+  if (!stats) {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "standardized_residuals() requires a fit over sample statistics "
+        "(complete-data ML or least-squares)"));
+  }
+  auto out = measures::standardized_residuals(fit.model().structure(),
+                                              fit.model().matrix_rep(), *stats,
+                                              fit.estimates());
+  return post_result(std::move(out));
+}
+
+Result<measures::FactorScores>
+factor_scores(const Fit &fit, const data::RawData &raw,
+              measures::FactorScoreMethod method) {
+  // Factor scores are per-observation, so the caller supplies the raw data
+  // explicitly (mirroring robust_se(fit, raw, ...)) — a fit carried over
+  // sample statistics can still score separately-held observations. Ordinal
+  // fits parameterize thresholds rather than a continuous Λ/Θ split and are
+  // not covered.
+  auto ok = require_not_ordinal(fit, "factor_scores()");
+  if (!ok) {
+    return std::unexpected(ok.error());
+  }
+  auto out = measures::factor_scores(fit.model().structure(),
+                                     fit.model().matrix_rep(), raw,
+                                     fit.estimates(), method);
+  return post_result(std::move(out));
 }
 
 Result<inference::ScoreTestTable>
