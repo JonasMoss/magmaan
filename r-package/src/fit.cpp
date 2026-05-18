@@ -505,6 +505,24 @@ huber_residual_options_from(std::string clip, double k) {
   return options;
 }
 
+magmaan::data::PairwiseOrdinalHuberResidualStatsOptions
+ordinal_huber_residual_options_from(std::string clip, double k) {
+  magmaan::data::PairwiseOrdinalHuberResidualStatsOptions options;
+  if (clip == "none") {
+    options.clip.kind = magmaan::data::HuberResidualClipKind::None;
+  } else if (clip == "hard_huber") {
+    options.clip.kind = magmaan::data::HuberResidualClipKind::HardHuber;
+  } else if (clip == "pseudo_huber") {
+    options.clip.kind = magmaan::data::HuberResidualClipKind::PseudoHuber;
+  } else if (clip == "tukey_biweight") {
+    options.clip.kind = magmaan::data::HuberResidualClipKind::TukeyBiweight;
+  } else {
+    Rcpp::stop("magmaan: unknown Huber residual clip kind '%s'", clip);
+  }
+  options.clip.k = k;
+  return options;
+}
+
 Rcpp::List pairwise_ordinal_diagnostics_to_r(
     const std::vector<magmaan::data::PairwiseOrdinalBlockDiagnostics>& d) {
   Rcpp::List out(static_cast<R_xlen_t>(d.size()));
@@ -1046,6 +1064,21 @@ Rcpp::List data_ordinal_stats_dpd_from_raw_impl(SEXP X, double alpha = 0.3) {
   Rcpp::List out = ordinal_stats_to_r(out_or->stats);
   out["robust_method"] = "dpd";
   out["alpha"] = alpha;
+  out["diagnostics"] = pairwise_ordinal_diagnostics_to_r(out_or->block_diagnostics);
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List data_ordinal_stats_huber_residual_from_raw_impl(
+    SEXP X, std::string clip = "hard_huber", double k = 1.345) {
+  auto blocks = matrix_blocks_from_arg(X);
+  auto out_or = magmaan::data::pairwise_ordinal_stats_huber_residual_from_integer_data(
+      blocks, ordinal_huber_residual_options_from(clip, k));
+  if (!out_or.has_value()) stop_post(out_or.error());
+  Rcpp::List out = ordinal_stats_to_r(out_or->stats);
+  out["robust_method"] = "huber_residual";
+  out["clip"] = clip;
+  out["k"] = k;
   out["diagnostics"] = pairwise_ordinal_diagnostics_to_r(out_or->block_diagnostics);
   return out;
 }

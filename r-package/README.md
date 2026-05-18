@@ -31,11 +31,13 @@ Convenience helpers are limited to R-side composition:
 
 Low-level functions such as `compat_lavaan_lavaanify()`,
 `model_matrix_rep()`, `estimate_fit()`, `estimate_*()`,
-`data_sample_stats_from_raw()`, and the `inference_*` / `robust_*` families are
-available as `magmaan_core$...` entries so the C++ architecture is still
-directly inspectable from R without flooding ordinary tab completion. Older
-spellings such as `lavaan_lavaanify()`, `fit_fit()`, `fit_*_impl()`, and
-`infer_*` remain available as compatibility aliases during exploration.
+`data_sample_stats_from_raw()`, `data_ordinal_stats_from_raw()`,
+`data_mixed_ordinal_stats_from_raw()`, and the `inference_*` / `robust_*`
+families are available as `magmaan_core$...` entries so the C++ architecture is
+still directly inspectable from R without flooding ordinary tab completion.
+Older spellings such as `lavaan_lavaanify()`, `fit_fit()`, `fit_*_impl()`,
+method-specific ordinal data builders, and `infer_*` remain available as
+compatibility aliases during exploration.
 Model-dependent post-fit helpers expose primitive-shaped entry points such as
 `magmaan_core$inference_vcov_partable(info, partable)`,
 `magmaan_core$inference_z_test_theta(theta, se)`,
@@ -111,14 +113,17 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
   with a data frame.
 - Experimental robust moment builders are opt-in on the data step:
   `magmaan_core$data_ordinal_stats_from_df(..., robust = "h_weighted")`,
-  `robust = "dpd"`, or
-  `magmaan_core$data_mixed_ordinal_stats_from_df(..., polyserial = "dpd")`.
-  The mixed path also exposes the experimental Pearson-residual clipping
-  comparator with `polyserial = "huber_residual"` and `clip = "hard_huber"`,
-  `"pseudo_huber"`, `"tukey_biweight"`, or `"none"`. In that path,
-  ordinal-containing threshold/correlation/polyserial rows are rebuilt from
-  clipped residual influence; continuous-only moments remain ordinary.
-  Defaults remain the lavaan-compatible ML moment builders.
+  `robust = "dpd"`, or `robust = "huber_residual"`. The raw primitive
+  `magmaan_core$data_ordinal_stats_from_raw(X, robust = ...)` uses the same
+  options, with `"ml"`/`"none"` as the lavaan-compatible default. For mixed
+  continuous/ordinal data, use
+  `magmaan_core$data_mixed_ordinal_stats_from_df(..., polyserial = "dpd")` or
+  `polyserial = "huber_residual"`; the raw primitive takes the same
+  `polyserial =` option plus `ordered_mask`. The Huber residual comparator
+  accepts `clip = "hard_huber"`, `"pseudo_huber"`, `"tukey_biweight"`, or
+  `"none"`. In that path, ordinal-containing threshold/correlation/polyserial
+  rows are rebuilt from clipped residual influence; continuous-only moments
+  remain ordinary. Defaults remain the lavaan-compatible ML moment builders.
 - Robust ordinal reporting is explicit: call
   `magmaan_core$infer_ordinal_robust(fit, ordinal_stats, weight = "")` after a
   DWLS/WLS ordinal fit to compute sandwich SEs and SB-family scaled statistics
