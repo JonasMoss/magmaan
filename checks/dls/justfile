@@ -1,0 +1,31 @@
+set shell := ["bash", "-uc"]
+
+root := "../.."
+build_dir := "build"
+bin := build_dir / "dls_eb_sanity"
+cxx := env_var_or_default("CXX", "clang++")
+
+default:
+    @just --list
+
+build:
+    mkdir -p {{build_dir}}
+    {{cxx}} -std=gnu++23 -g -fPIC -fno-exceptions -fno-rtti \
+      -fvisibility=hidden -fvisibility-inlines-hidden \
+      -DEIGEN_DONT_PARALLELIZE=1 -DEIGEN_INITIALIZE_MATRICES_BY_NAN=1 \
+      -DEIGEN_MAX_ALIGN_BYTES=64 -DEIGEN_NO_AUTOMATIC_RESIZING=1 \
+      -DEIGEN_NO_EXCEPTIONS=1 -DEIGEN_RUNTIME_NO_MALLOC=1 \
+      -I{{root}}/include -I{{root}}/src -isystem /usr/include/eigen3 \
+      -isystem {{root}}/build/fast/_deps/lbfgspp-src/include \
+      dls_eb_sanity.cpp {{root}}/build/fast/libmagmaan.a -o {{bin}}
+
+quick: build
+    mkdir -p results
+    {{bin}} --n=300 --reps=20 | tee results/quick.txt
+
+all: build
+    mkdir -p results
+    {{bin}} --n=800 --reps=200 | tee results/latest.txt
+
+clean:
+    rm -rf {{build_dir}} results

@@ -24,6 +24,8 @@ using magmaan::data::RawData;
 using magmaan::data::SampleStats;
 using magmaan::estimate::dls_weight;
 using magmaan::estimate::DlsWeightOptions;
+using magmaan::estimate::empirical_bayes_dls_mixing_scalar;
+using magmaan::estimate::empirical_bayes_dls_weight;
 using magmaan::model::ModelEvaluator;
 namespace est = magmaan::estimate;
 
@@ -39,6 +41,24 @@ RawData make_raw(int n) {
     const double f = z(rng);
     for (int j = 0; j < 3; ++j) {
       X(i, j) = lam[j] * f + std::sqrt(0.5) * z(rng);
+    }
+  }
+  RawData raw;
+  raw.X.push_back(std::move(X));
+  return raw;
+}
+
+RawData make_heavy_raw(int n) {
+  std::mt19937 rng(20260518u);
+  std::normal_distribution<double> z(0.0, 1.0);
+  std::chi_squared_distribution<double> chi2(5.0);
+  const double lam[3] = {1.0, 0.8, 1.2};
+  Eigen::MatrixXd X(n, 3);
+  for (int i = 0; i < n; ++i) {
+    const double scale = std::sqrt(5.0 / chi2(rng));
+    const double f = scale * z(rng);
+    for (int j = 0; j < 3; ++j) {
+      X(i, j) = lam[j] * f + scale * std::sqrt(0.5) * z(rng);
     }
   }
   RawData raw;
@@ -221,4 +241,60 @@ TEST_CASE("dls_weight: fit_gmm converges with the DLS weight") {
           << (out.has_value() ? "" : out.error().detail));
   CHECK(std::isfinite(out->fmin));
   CHECK(out->iterations > 0);
+}
+
+// ============================================================================
+// Empirical-Bayes scalar selection.
+// ============================================================================
+
+TEST_CASE("empirical_bayes_dls_mixing_scalar shrinks near-normal data toward GLS") {
+  auto raw = make_raw(2000);
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+
+  auto eb = empirical_bayes_dls_mixing_scalar(*samp, raw);
+  REQUIRE(eb.has_value());
+  CHECK(eb->a >= 0.0);
+  CHECK(eb->a <= 1.0);
+  CHECK(eb->observed_delta_norm2 >= 0.0);
+  CHECK(eb->estimated_noise_norm2 >= 0.0);
+  CHECK(eb->a < 0.35);
+}
+
+TEST_CASE("empirical_bayes_dls_mixing_scalar moves heavy-tailed data toward ADF") {
+  auto normal_raw = make_raw(2000);
+  auto normal_samp = magmaan::data::sample_stats_from_raw(normal_raw);
+  REQUIRE(normal_samp.has_value());
+  auto normal_eb = empirical_bayes_dls_mixing_scalar(*normal_samp, normal_raw);
+  REQUIRE(normal_eb.has_value());
+
+  auto heavy_raw = make_heavy_raw(2000);
+  auto heavy_samp = magmaan::data::sample_stats_from_raw(heavy_raw);
+  REQUIRE(heavy_samp.has_value());
+  auto heavy_eb = empirical_bayes_dls_mixing_scalar(*heavy_samp, heavy_raw);
+  REQUIRE(heavy_eb.has_value());
+
+  CHECK(heavy_eb->a > normal_eb->a);
+  CHECK(heavy_eb->a > 0.50);
+  CHECK(heavy_eb->signal_norm2 > 0.0);
+}
+
+TEST_CASE("empirical_bayes_dls_weight delegates to dls_weight at estimated a") {
+  auto raw = make_heavy_raw(600);
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto m = build_model("f =~ x1 + x2 + x3", false);
+  auto ev = ModelEvaluator::build(m.pt, m.rep);
+  REQUIRE(ev.has_value());
+  auto x0 = est::simple_start_values(m.pt, m.rep, *samp, {});
+  REQUIRE(x0.has_value());
+
+  auto eb = empirical_bayes_dls_mixing_scalar(*samp, raw);
+  REQUIRE(eb.has_value());
+  auto direct = dls_weight(*ev, *samp, raw, *x0, {eb->a});
+  REQUIRE(direct.has_value());
+  auto built = empirical_bayes_dls_weight(*ev, *samp, raw, *x0);
+  REQUIRE(built.has_value());
+
+  CHECK(max_block_diff(*direct, *built) < 1e-12);
 }
