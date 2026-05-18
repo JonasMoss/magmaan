@@ -1017,7 +1017,8 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
 
   if (identical(estimator, "FIML")) {
     if (is.data.frame(data)) data <- df_to_fiml_data(data, spec, group = group_var)
-    return(fit_fiml(spec, data, lbfgs = lbfgs))
+    fit <- fit_fiml(spec, data, lbfgs = lbfgs)
+    return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
   }
 
   if (ordinal_requested && estimator %in% c("DWLS", "WLS")) {
@@ -1032,12 +1033,20 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
       }
     }
     if (inherits(data, "magmaan_ordinal_data")) {
-      if (identical(estimator, "DWLS")) return(fit_dwls_ordinal(spec, data, lbfgsb = lbfgsb, bounds = bounds))
-      return(fit_wls_ordinal(spec, data, lbfgsb = lbfgsb, bounds = bounds))
+      fit <- if (identical(estimator, "DWLS")) {
+        fit_dwls_ordinal(spec, data, lbfgsb = lbfgsb, bounds = bounds)
+      } else {
+        fit_wls_ordinal(spec, data, lbfgsb = lbfgsb, bounds = bounds)
+      }
+      return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
     }
     if (inherits(data, "magmaan_mixed_ordinal_data")) {
-      if (identical(estimator, "DWLS")) return(fit_dwls_mixed_ordinal(spec, data, lbfgsb = lbfgsb, bounds = bounds))
-      return(fit_wls_mixed_ordinal(spec, data, lbfgsb = lbfgsb, bounds = bounds))
+      fit <- if (identical(estimator, "DWLS")) {
+        fit_dwls_mixed_ordinal(spec, data, lbfgsb = lbfgsb, bounds = bounds)
+      } else {
+        fit_wls_mixed_ordinal(spec, data, lbfgsb = lbfgsb, bounds = bounds)
+      }
+      return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
     }
     stop("magmaan(): ordinal estimators require a data.frame, magmaan_ordinal_data, or magmaan_mixed_ordinal_data")
   }
@@ -1047,16 +1056,54 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
   }
 
   if (is.data.frame(data)) data <- df_to_data(data, spec, group = group_var, missing = missing)
-  switch(estimator,
-         ML = fit_ml(spec, data, lbfgs = lbfgs),
-         ULS = fit_uls(spec, data, lbfgsb = lbfgsb, bounds = bounds),
-         GLS = fit_gls(spec, data, lbfgsb = lbfgsb, bounds = bounds),
-         WLS = {
-           if (is.null(W)) {
-             stop("magmaan(): continuous WLS requires explicit `W`; categorical WLS requires `ordered =`")
-           }
-           fit_wls(spec, data, W = W, lbfgsb = lbfgsb, bounds = bounds)
-         })
+  fit <- switch(estimator,
+                ML = fit_ml(spec, data, lbfgs = lbfgs),
+                ULS = fit_uls(spec, data, lbfgsb = lbfgsb, bounds = bounds),
+                GLS = fit_gls(spec, data, lbfgsb = lbfgsb, bounds = bounds),
+                WLS = {
+                  if (is.null(W)) {
+                    stop("magmaan(): continuous WLS requires explicit `W`; categorical WLS requires `ordered =`")
+                  }
+                  fit_wls(spec, data, W = W, lbfgsb = lbfgsb, bounds = bounds)
+                })
+  finalize_magmaan_fit(fit, spec, estimator, missing, se, test)
+}
+
+finalize_magmaan_fit <- function(fit, spec, estimator, missing, se, test) {
+  fit$model <- spec
+  fit$syntax <- spec$syntax
+  fit$options <- list(
+    estimator = estimator,
+    missing = missing,
+    se = tolower(as.character(se %||% "none")),
+    test = tolower(as.character(test %||% "none")),
+    ordered = spec$ordered,
+    parameterization = spec$parameterization,
+    model_options = spec$options
+  )
+  fit$ordered <- spec$ordered
+  fit$parameterization <- spec$parameterization
+  fit$group_var <- spec$group_var %||% fit$group_var %||% ""
+  fit$group_labels <- spec$group_labels %||% fit$group_labels %||% character()
+  class(fit) <- c("magmaan_fit", "list")
+  fit
+}
+
+print.magmaan_fit <- function(x, ...) {
+  cat("magmaan fit (estimate only)\n")
+  cat("  estimator: ", x$estimator %||% "unknown", "\n", sep = "")
+  cat("  converged: ", if (isTRUE(x$converged)) "TRUE" else "FALSE", "\n", sep = "")
+  cat("  free parameters: ", x$npar %||% length(x$theta), "\n", sep = "")
+  cat("  observations: ", x$ntotal %||% sum(x$nobs), "\n", sep = "")
+  cat("  groups: ", x$ngroups %||% length(x$nobs), "\n", sep = "")
+  if (length(x$group_labels)) {
+    cat("  group labels: ", paste(x$group_labels, collapse = ", "), "\n", sep = "")
+  }
+  if (length(x$ordered)) {
+    cat("  ordered: ", paste(x$ordered, collapse = ", "), "\n", sep = "")
+  }
+  cat("  post-fit quantities: use magmaan_core primitives explicitly\n")
+  invisible(x)
 }
 
 compute_defined <- function(model, fit, vcov) {

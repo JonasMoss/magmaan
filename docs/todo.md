@@ -154,6 +154,10 @@ Completed checks:
   defined-parameter, ordinal DWLS/WLS, FIML MLR, and tutorial
   modification-index / extraction examples now use package-qualified calls and
   the canonical `magmaan_core` names where they exercise direct primitives.
+- [x] **S. High-level R fit object polish.** `magmaan()` now returns a
+  `magmaan_fit` list with source model/spec/options/grouping metadata and a
+  restrained print method, while keeping SEs, tests, robust corrections, and
+  fit measures as explicit post-fit calls.
 
 Done when: new code naturally uses the target namespaces, R scripts can reach
 the relevant C++ primitive graph through predictable names, friendly R users
