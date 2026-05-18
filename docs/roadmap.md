@@ -77,7 +77,8 @@ golden `parTable()` fixtures.
   models under random-x and complete fixed.x policies, equality-constrained
   structural regressions, dense non-monotone missingness, complete observed-row
   equivalence, multi-group fixed.x with complete exogenous variables and
-  missing outcomes, and explicit mean structures.
+  missing outcomes, explicit mean structures, and a full 25-item five-factor
+  bfi real-data FIML parity case.
 - Post-fit FIML extras include observed-data normal constants, saturated/H1
   likelihood, baseline/independence likelihood accounting, chi-square,
   information criteria, and fit-index inputs for the current fixture tranche.
@@ -482,7 +483,10 @@ Validation has three deliberately separate surfaces:
   gates magmaan against lavaan on the real-data benchmark cases
   (HolzingerSwineford1939, PoliticalDemocracy, Demo.growth, bfi, Mplus ex5.1):
   real sample sizes, real conditioning, real SEs and fit measures, and the
-  raw-data ingestion path. Self-contained fixtures live in
+  raw-data ingestion path. The FIML tranche includes both a quick two-factor
+  bfi missing-data sentinel with robust MLR post-fit reporting and a full
+  25-item five-factor bfi missing-data convergence/global-fit gate.
+  Self-contained fixtures live in
   `tests/fixtures/parity/`; oracle: `tools/regen_parity_fixtures.R`.
 - **Benchmarks** — `benchmarks/` fits *live lavaan* on every run and gates
   timing, not CI correctness. It is R-dependent and advisory; the parity layer
