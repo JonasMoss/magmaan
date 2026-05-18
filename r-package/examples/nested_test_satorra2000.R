@@ -1,11 +1,11 @@
-## magmaan R bindings — Satorra (2000) scaled nested-model χ² test, via
-## `nestedTest()`, on Holzinger-Swineford × school (configural vs metric
+## magmaan R bindings — robust nested-model likelihood-ratio test, via
+## `robust_nested_lrt()`, on Holzinger-Swineford × school (configural vs metric
 ## invariance).
 ##
 ## Run from the repo root (after `R CMD INSTALL r-package`):
 ##     Rscript r-package/examples/nested_test_satorra2000.R
 ##
-## `nestedTest()` reports five p-values for H1 ⊃ H0: the naïve χ²(m), the
+## `robust_nested_lrt()` reports five p-values for H1 ⊃ H0: the naïve χ²(m), the
 ## Satorra-Bentler scaled correction, the mean-and-variance adjustment, the
 ## scaled-and-shifted correction, and the exact Imhof mixture tail.
 ##
@@ -47,9 +47,9 @@ fit_met <- magmaan_core$fit_fit(pt_met, ssg)     # H0  (additional cross-group `
 ## Multi-group: pass per-group raw data as a list (same block order as
 ## fit_cfg$S — which is the order `magmaan_core$data_sample_stats_from_raw()` consumed
 ## above).
-res <- nestedTest(fit_H1 = fit_cfg, fit_H0 = fit_met, data = Xg,
-                  A.method = "exact")
-cat("\n=== magmaan: nestedTest(fit_cfg, fit_met, A.method = 'exact') ===\n")
+res <- magmaan::robust_nested_lrt(fit_H1 = fit_cfg, fit_H0 = fit_met,
+                                  data = Xg, A.method = "exact")
+cat("\n=== magmaan::robust_nested_lrt(fit_cfg, fit_met, A.method = 'exact') ===\n")
 print(res)
 
 ## ---- lavaan, for reference -------------------------------------------------
@@ -95,4 +95,4 @@ stopifnot(identical(as.integer(res$df_diff), as.integer(lav_df)))
 stopifnot(isTRUE(all.equal(res$T_diff, lav_unscaled, tolerance = 1e-3)))
 stopifnot(isTRUE(all.equal(res$T_scaled, lav_scaled, tolerance = 1e-3)))
 
-cat("\nnestedTest() Satorra-2000 workflow: ok\n")
+cat("\nrobust_nested_lrt() restriction-map workflow: ok\n")

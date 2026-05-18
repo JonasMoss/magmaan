@@ -10,6 +10,7 @@
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/inference/score.hpp"
+#include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/spec/partable.hpp"
@@ -46,6 +47,12 @@ struct OrdinalRobustResult {
   robust::SatorraBentlerResult satorra_bentler;
   robust::MeanVarAdjustedResult mean_var_adjusted;
   robust::ScaledShiftedResult scaled_shifted;
+};
+
+struct OrdinalFitMeasures {
+  measures::BaselineFit baseline;
+  measures::FitMeasures indices;
+  double srmr = 0.0;
 };
 
 fit_expected<void>
@@ -194,5 +201,14 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           optim::LbfgsOptions opts = {},
                           OrdinalParameterization parameterization =
                               OrdinalParameterization::Delta);
+
+post_expected<OrdinalFitMeasures>
+fit_measures_ordinal(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const data::OrdinalStats& stats,
+                     const Estimates& est,
+                     OrdinalWeightKind weights,
+                     OrdinalParameterization parameterization =
+                         OrdinalParameterization::Delta);
 
 }  // namespace magmaan::estimate

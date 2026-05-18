@@ -1,4 +1,7 @@
 compat_lavaan_lavaanify <- lavaan_lavaanify
+compat_lavaan_nested_lrt_satorra2000 <- infer_lr_test_satorra2000
+compat_lavaan_nested_lrt_satorra_bentler2001 <- infer_lr_test_satorra_bentler2001
+compat_lavaan_nested_lrt_satorra_bentler2010 <- infer_lr_test_satorra_bentler2010
 
 data_ordinal_stats_from_raw <- data_ordinal_stats_from_raw_impl
 data_ordinal_stats_h_weighted_from_raw <- data_ordinal_stats_h_weighted_from_raw_impl
@@ -53,6 +56,7 @@ inference_rls_chi2_fit <- infer_rls_chi2_fit
 robust_lr_test_satorra2000 <- infer_lr_test_satorra2000
 robust_lr_test_satorra_bentler2001 <- infer_lr_test_satorra_bentler2001
 robust_lr_test_satorra_bentler2010 <- infer_lr_test_satorra_bentler2010
+robust_nested_lrt_restriction_map <- infer_lr_test_satorra2000
 robust_build_u_factor <- infer_build_u_factor
 robust_build_u_factor_parts <- infer_build_u_factor_parts
 robust_build_u_factor_fit <- infer_build_u_factor_fit
@@ -85,6 +89,9 @@ magmaan_core <- local({
     ),
     compat_lavaan = c(
       "compat_lavaan_lavaanify",
+      "compat_lavaan_nested_lrt_satorra2000",
+      "compat_lavaan_nested_lrt_satorra_bentler2001",
+      "compat_lavaan_nested_lrt_satorra_bentler2010",
       "lavaan_lavaanify",
       "lavaan_compare_partable"
     ),
@@ -197,6 +204,7 @@ magmaan_core <- local({
       "robust_lr_test_satorra2000",
       "robust_lr_test_satorra_bentler2001",
       "robust_lr_test_satorra_bentler2010",
+      "robust_nested_lrt_restriction_map",
       "robust_build_u_factor",
       "robust_build_u_factor_parts",
       "robust_build_u_factor_fit",

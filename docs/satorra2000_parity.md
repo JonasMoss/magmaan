@@ -2,7 +2,8 @@
 
 **Status:** resolved 2026-05-17. This was not a confirmed lavaan bug.
 
-The apparent parity gap between magmaan's `nestedTest()` and lavaan's
+The apparent parity gap between magmaan's nested robust LRT helper
+(`robust_nested_lrt()`, historically `nestedTest()`) and lavaan's
 `lavTestLRT(method = "satorra.2000")` came from lavaan's `A.method` default,
 not from the Satorra-2000 scaling formula itself.
 
@@ -17,7 +18,8 @@ explicit parameter equality in simple parameter-nested comparisons.
 
 ## Bottom line
 
-Use this as the lavaan parity target for magmaan's current `nestedTest()`:
+Use this as the lavaan parity target for magmaan's current
+`robust_nested_lrt(method = "restriction_map")`:
 
 ```r
 lavTestLRT(fit_h1, fit_h0, method = "satorra.2000",
@@ -145,12 +147,13 @@ c(delta = Tdiff / lr_delta[2, "Chisq diff"],
 ## Project decision
 
 magmaan should continue using the exact parameter-nesting restriction matrix by
-default for `nestedTest()`, because that is the natural contract for two
-lavaanified models differing by shared labels or explicit linear `==`
-constraints. `A.method = "delta"` is available as an explicit compatibility
-mode for lavaan-style covariance/moment nesting checks. The result reports the
-mean-scaled `T / c`, mean/variance-adjusted, scaled/shifted, and mixture
-distributional summaries from the same Satorra-2000 eigenvalues.
+default for `robust_nested_lrt(method = "restriction_map")`, because that is
+the natural contract for two lavaanified models differing by shared labels or
+explicit linear `==` constraints. `A.method = "delta"` is available as an
+explicit compatibility mode for lavaan-style covariance/moment nesting checks.
+The result reports the mean-scaled `T / c`, mean/variance-adjusted,
+scaled/shifted, and mixture distributional summaries from the same
+Satorra-2000 eigenvalues.
 
 For lavaan-facing examples and parity checks, compare against
 `lavTestLRT(..., method = "satorra.2000", A.method = "exact",

@@ -333,10 +333,13 @@ TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {
   const auto scores = magmaan::api::score_tests(*dwls_fit);
   REQUIRE_OK(scores);
 
-  // fit_measures() is not yet wired for ordinal fits — it fails explicitly
-  // rather than approximating the categorical-independence baseline.
   const auto ord_fm = magmaan::api::fit_measures(*dwls_fit);
-  CHECK_FALSE(ord_fm.has_value());
+  REQUIRE_OK(ord_fm);
+  CHECK(std::isfinite(ord_fm->indices.cfi));
+  CHECK(std::isfinite(ord_fm->indices.rmsea));
+  REQUIRE(ord_fm->ordinal_srmr.has_value());
+  CHECK(std::isfinite(*ord_fm->ordinal_srmr));
+  CHECK(*ord_fm->ordinal_srmr >= 0.0);
 }
 
 TEST_CASE("api Analysis preserves first error and post-fit calls require fit") {

@@ -280,6 +280,7 @@ struct FitMeasuresResult {
   measures::FitMeasures indices;
   std::optional<measures::FitExtras> complete_data_extras;
   std::optional<estimate::fiml::FIMLExtras> fiml_extras;
+  std::optional<double> ordinal_srmr;
 };
 
 struct LrTestResult {

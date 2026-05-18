@@ -100,17 +100,6 @@ Remaining work, in suggested order:
   methods-developer workflow exposes a concrete gap in the current staged API.
   The current `magmaan_core`, friendly fit object, and explicit post-fit
   wrapper surface are sufficient for the next R exploration pass.
-- **M/L, after the R scaffold exposes the current surface.** Apply the
-  robust-test naming policy from `docs/roadmap.md` -> Robust-test naming and
-  compatibility. Keep core names statistical and object-based, move
-  lavaan/Mplus/EQS labels into explicit compatibility wrappers, and consider
-  renaming the public Satorra-2000 helper toward an LRT/nested-model name while
-  documenting historical aliases.
-- **M/L.** Land the remaining estimator-appropriate post-fit primitive:
-  ordinal CFI/TLI/RMSEA/SRMR (the polychoric independence-model baseline).
-  Standard SEs for FIML/LS, FIML SRMR, and LS CFI/TLI/RMSEA/SRMR have landed
-  (see §4). Add lavaan parity gates as each surface becomes semantically
-  defined.
 
 Completed checks:
 
@@ -156,6 +145,15 @@ Completed checks:
   canonical `magmaan_core` names, and the friendly `magmaan_fit` / post-fit
   wrappers are ready for exploratory R use. Future R exploration should open
   specific follow-up tasks instead of keeping this broad scaffold item open.
+- [x] **M/L. Robust-test naming policy slice.** R now exposes
+  `robust_nested_lrt()` as the statistical nested-model LRT helper, keeps
+  `nestedTest()` and lavaan Satorra labels as compatibility aliases, and
+  publishes both `robust_nested_lrt_restriction_map` and
+  `compat_lavaan_nested_lrt_*` aliases through `magmaan_core`.
+- [x] **M/L. Ordinal post-fit fit measures.** All-ordinal DWLS/WLS now expose
+  categorical CFI/TLI/RMSEA/SRMR via the polychoric independence baseline,
+  including WLS threshold nuisance minimization under the full weight matrix;
+  the bfi ordinal parity gate checks DWLS/WLS values against lavaan.
 
 Done when: new code naturally uses the target namespaces, R scripts can reach
 the relevant C++ primitive graph through predictable names, friendly R users

@@ -1720,7 +1720,111 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
   return table;
 }
 
+post_expected<measures::BaselineFit>
+ordinal_baseline_chi2(const data::OrdinalStats& stats,
+                      OrdinalWeightKind weights) {
+  const auto& Ws = weights == OrdinalWeightKind::DWLS ? stats.W_dwls
+                                                       : stats.W_wls;
+
+  measures::BaselineFit out;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index nth = stats.thresholds[b].size();
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    Eigen::VectorXd d = Eigen::VectorXd::Zero(nth + ncorr);
+    d.tail(ncorr) = -corr_lower(stats.R[b]);
+    if (nth > 0 && ncorr > 0) {
+      const Eigen::MatrixXd Wtt = Ws[b].topLeftCorner(nth, nth);
+      const Eigen::MatrixXd Wtc = Ws[b].topRightCorner(nth, ncorr);
+      Eigen::LDLT<Eigen::MatrixXd> ldlt(Wtt);
+      if (ldlt.info() != Eigen::Success) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "ordinal baseline threshold block is not positive definite"));
+      }
+      d.head(nth) = -ldlt.solve(Wtc * d.tail(ncorr));
+    }
+    out.chi2 += static_cast<double>(stats.n_obs[b]) *
+                d.dot(Ws[b] * d);
+    out.df += static_cast<int>(ncorr);
+  }
+  return out;
+}
+
+post_expected<double>
+ordinal_srmr(const data::OrdinalStats& stats,
+             const model::ImpliedMoments& moments,
+             OrdinalParameterization parameterization) {
+  auto N = total_n_obs(stats);
+  if (!N.has_value()) return std::unexpected(fit_to_post(N.error()));
+
+  double out = 0.0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    if (ncorr <= 0) continue;
+    const Eigen::VectorXd implied =
+        parameterization == OrdinalParameterization::Theta
+            ? std_corr_lower(moments.sigma[b])
+            : corr_lower(moments.sigma[b]);
+    const Eigen::VectorXd residual = implied - corr_lower(stats.R[b]);
+    const double block =
+        std::sqrt(residual.squaredNorm() / static_cast<double>(vech_len(p)));
+    out += (static_cast<double>(stats.n_obs[b]) /
+            static_cast<double>(*N)) *
+           block;
+  }
+  return out;
+}
+
 }  // namespace
+
+post_expected<OrdinalFitMeasures>
+fit_measures_ordinal(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const data::OrdinalStats& stats,
+                     const Estimates& est,
+                     OrdinalWeightKind weights,
+                     OrdinalParameterization parameterization) {
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr); !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fit_measures_ordinal: fitted theta length does not match ordinal delta partable"));
+  }
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fit_measures_ordinal: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, false, false);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fit_measures_ordinal: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+
+  auto baseline = ordinal_baseline_chi2(stats, weights);
+  if (!baseline.has_value()) return std::unexpected(baseline.error());
+  auto sr = ordinal_srmr(stats, eval->moments, parameterization);
+  if (!sr.has_value()) return std::unexpected(sr.error());
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  auto N_or = total_n_obs(stats);
+  if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
+  const int df = static_cast<int>(ordinal_moment_rows(stats) - con_or->n_alpha);
+  const double chi2 = static_cast<double>(*N_or) * est.fmin;
+  const measures::FitMeasures indices =
+      measures::fit_measures(chi2, df, *baseline, *N_or, stats.R.size());
+
+  return OrdinalFitMeasures{*baseline, indices, *sr};
+}
 
 post_expected<inference::ScoreTestTable>
 modification_indices_ordinal(spec::LatentStructure pt,
