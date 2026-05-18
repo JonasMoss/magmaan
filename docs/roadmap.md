@@ -291,7 +291,11 @@ golden `parTable()` fixtures.
   chi-square statistics across representative single-group, multi-group,
   skewed, sparse, near-empty, equality-constrained, and multi-group loading
   equality cases.
-- The implemented ordinal boundary is lavaan's delta parameterization.
+- The implemented ordinal LS boundary supports both lavaan delta and theta
+  parameterizations for all-ordinal and mixed continuous/ordinal DWLS/WLS point
+  estimates. Theta post-fit support uses parameterization-aware threshold and
+  association Jacobians for robust ordinal reporting, modification indices,
+  score tests, and standardized-solution reporting.
 - Explicit post-fit robust ordinal reporting returns sandwich SEs plus
   Satorra-Bentler, mean/variance-adjusted, and scaled/shifted statistics from
   the threshold-plus-polychoric moment vector. The implementation now uses a
@@ -299,10 +303,16 @@ golden `parTable()` fixtures.
   LS moment stacks with arbitrary block weights and NACOV matrices.
 - A first mixed continuous/ordinal path builds lavaan-ordered thresholds,
   continuous means/variances, polychoric/polyserial/covariance moments,
-  NACOV/DWLS/WLS weights, and DWLS/WLS delta fits. The lavaan-backed fixtures
-  include a complete/listwise sparse 4-category boundary case; the
+  NACOV/DWLS/WLS weights, and DWLS/WLS delta/theta fits. The lavaan-backed
+  fixtures include a complete/listwise sparse 4-category boundary case; the
   continuous-ordinal covariance influence rows include the variance
   delta-method term needed for stable mixed WLS weighting.
+- Covariance shrinkage is available for both continuous `SampleStats` and
+  mixed continuous/ordinal `MixedOrdinalStats`. Mixed shrinkage leaves
+  thresholds and continuous means in place, transforms the lower-triangle
+  association/covariance block, propagates the moment transformation through
+  `NACOV`, and rebuilds DWLS/WLS weights so C++ and R consume the same shrunk
+  moment stack.
 - Public complete-data polyserial pair kernel for mixed continuous/ordinal
   work, exposing fixed-threshold rho ML, likelihood, casewise threshold/rho
   scores, and pairwise score Gamma. The mixed sample-stat builder now reuses
@@ -394,6 +404,10 @@ golden `parTable()` fixtures.
   mixed continuous/ordinal Huberized residual stats. The staged C++ facade also
   exposes all-ordinal Huberized residual stats. Default ordinal and mixed data
   builders remain lavaan-compatible ML paths.
+- The R `magmaan_core` surface also exposes mixed continuous/ordinal covariance
+  shrinkage as an explicit data transformation, rebuilding mixed moments,
+  `NACOV`, and DWLS/WLS weights before fitting rather than hiding shrinkage
+  inside estimator strings.
 - The R package is intended as a methods-developer interface over the C++
   library, not a second SEM implementation.
 - Standard errors, information matrices, Wald/z tests, robust corrections,
@@ -512,10 +526,12 @@ developer step.
   plus a finite-difference observed information matrix; fixture parity is
   against lavaan's observed-information score output for the covered fixed-row
   and equality-release cases.
-- Theta parameterization for ordinal models remains unsupported.
-- The ordinal parameterization boundary accepts `delta` only for estimation;
-  requested `theta` models fail explicitly instead of falling through to
-  delta-shaped response-scale assumptions.
+- Delta and theta parameterizations are supported for all-ordinal and mixed
+  continuous/ordinal DWLS/WLS point estimates. Ordinal robust reporting,
+  modification indices, score tests, and standardized reporting use the fitted
+  parameterization; remaining lavaan parity is fixture-backed for the covered
+  ordinal slices and smoke-tested where lavaan fixture coverage is not yet
+  available.
 - WLS ordinal point estimates and standard chi-square are lavaan-backed.
   Robust WLS scaled-test reporting remains shape-only because lavaan rejects
   Satorra-Bentler-family `test=` requests with `estimator = "WLS"` for the
@@ -539,9 +555,10 @@ developer step.
 - Browne residual ADF is complete-data only.
 - Score-test EPC is raw, unstandardized EPC only; standardized EPC and absent
   row-generation helpers are not yet part of the public contract.
-- Nonlinear equality constraints and inequality constraints are unsupported.
-- Active bound or inequality inference must not silently report ordinary
-  chi-square/SE theory.
+- Nonlinear equality constraints, inequality constraints, and active-bound
+  inference are unsupported. Reopening any of them requires an explicit
+  statistical design and reporting contract; they must not silently report
+  ordinary chi-square/SE theory.
 
 ## Design Invariants
 

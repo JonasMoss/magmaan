@@ -644,6 +644,59 @@ Eigen::MatrixXd std_corr_jacobian(const Eigen::MatrixXd& Sigma,
   return J;
 }
 
+double mixed_assoc_moment(const Eigen::MatrixXd& Sigma,
+                          const std::vector<std::int32_t>& ordered,
+                          Eigen::Index i,
+                          Eigen::Index j,
+                          OrdinalParameterization param) {
+  if (param == OrdinalParameterization::Delta) return Sigma(i, j);
+  const bool oi = ordered[static_cast<std::size_t>(i)] != 0;
+  const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
+  if (oi && oj) return Sigma(i, j) / std::sqrt(Sigma(i, i) * Sigma(j, j));
+  if (oi != oj) {
+    const Eigen::Index o = oi ? i : j;
+    return Sigma(i, j) / std::sqrt(Sigma(o, o));
+  }
+  return Sigma(i, j);
+}
+
+Eigen::RowVectorXd mixed_assoc_jacobian_row(
+    const Eigen::MatrixXd& Sigma,
+    const Eigen::MatrixXd& J_sigma,
+    Eigen::Index sigma_off,
+    const std::vector<std::int32_t>& ordered,
+    Eigen::Index i,
+    Eigen::Index j,
+    OrdinalParameterization param) {
+  const Eigen::Index p = Sigma.rows();
+  if (param == OrdinalParameterization::Delta) {
+    return J_sigma.row(sigma_off + vech_index(p, i, j));
+  }
+  const bool oi = ordered[static_cast<std::size_t>(i)] != 0;
+  const bool oj = ordered[static_cast<std::size_t>(j)] != 0;
+  const double sij = Sigma(i, j);
+  if (oi && oj) {
+    const double sii = Sigma(i, i);
+    const double sjj = Sigma(j, j);
+    const double inv_i = 1.0 / std::sqrt(sii);
+    const double inv_j = 1.0 / std::sqrt(sjj);
+    return (inv_i * inv_j) * J_sigma.row(sigma_off + vech_index(p, i, j)) -
+           (0.5 * sij * inv_i / sii * inv_j) *
+               J_sigma.row(sigma_off + vech_index(p, i, i)) -
+           (0.5 * sij * inv_i * inv_j / sjj) *
+               J_sigma.row(sigma_off + vech_index(p, j, j));
+  }
+  if (oi != oj) {
+    const Eigen::Index o = oi ? i : j;
+    const double soo = Sigma(o, o);
+    const double inv_o = 1.0 / std::sqrt(soo);
+    return inv_o * J_sigma.row(sigma_off + vech_index(p, i, j)) -
+           (0.5 * sij * inv_o / soo) *
+               J_sigma.row(sigma_off + vech_index(p, o, o));
+  }
+  return J_sigma.row(sigma_off + vech_index(p, i, j));
+}
+
 fit_expected<Eigen::VectorXd>
 ordinal_residuals(const data::OrdinalStats& stats,
                   const ThresholdLayout& layout,
@@ -763,7 +816,9 @@ Eigen::Index ordinal_moment_rows(const data::OrdinalStats& stats) {
 Eigen::MatrixXd ordinal_moment_jacobian(const data::OrdinalStats& stats,
                                         const ThresholdLayout& layout,
                                         const model::ImpliedMoments& moments,
-                                        const Eigen::MatrixXd& J_sigma) {
+                                        const Eigen::MatrixXd& J_sigma,
+                                        const Eigen::VectorXd& theta,
+                                        OrdinalParameterization param) {
   Eigen::MatrixXd out(ordinal_moment_rows(stats), J_sigma.cols());
   Eigen::Index out_off = 0;
   Eigen::Index sigma_off = 0;
@@ -771,13 +826,29 @@ Eigen::MatrixXd ordinal_moment_jacobian(const data::OrdinalStats& stats,
     const Eigen::Index p = stats.R[b].rows();
     const Eigen::Index nth = stats.thresholds[b].size();
     const Eigen::Index ncorr = p * (p - 1) / 2;
+    const Eigen::MatrixXd& Sig = moments.sigma[b];
     Eigen::MatrixXd Jb(nth + ncorr, J_sigma.cols());
     Jb.setZero();
-    for (Eigen::Index k = 0; k < nth; ++k) {
-      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
-      if (fr > 0) Jb(k, fr - 1) = 1.0;
+    if (param == OrdinalParameterization::Theta) {
+      const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+      for (Eigen::Index k = 0; k < nth; ++k) {
+        const Eigen::Index ov =
+            stats.threshold_ov[b][static_cast<std::size_t>(k)];
+        const double sii = Sig(ov, ov);
+        const double inv_sd = 1.0 / std::sqrt(sii);
+        const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+        if (fr > 0) Jb(k, fr - 1) += inv_sd;
+        Jb.row(k) += (-0.5 * it(k) * inv_sd / sii) *
+                     J_sigma.row(sigma_off + vech_index(p, ov, ov));
+      }
+      Jb.bottomRows(ncorr) = std_corr_jacobian(Sig, J_sigma, sigma_off);
+    } else {
+      for (Eigen::Index k = 0; k < nth; ++k) {
+        const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+        if (fr > 0) Jb(k, fr - 1) = 1.0;
+      }
+      Jb.bottomRows(ncorr) = corr_jacobian(Sig, J_sigma, sigma_off);
     }
-    Jb.bottomRows(ncorr) = corr_jacobian(moments.sigma[b], J_sigma, sigma_off);
     out.block(out_off, 0, Jb.rows(), Jb.cols()) = Jb;
     out_off += Jb.rows();
     sigma_off += vech_len(p);
@@ -797,12 +868,21 @@ Eigen::VectorXd mixed_model_moments(const data::MixedOrdinalStats& stats,
                                     const ThresholdLayout& layout,
                                     const model::ImpliedMoments& moments,
                                     const Eigen::VectorXd& theta,
-                                    std::size_t b) {
+                                    std::size_t b,
+                                    OrdinalParameterization param) {
   const Eigen::Index p = stats.R[b].rows();
   Eigen::VectorXd out(stats.moments[b].size());
   Eigen::Index k = 0;
   const Eigen::Index nth = stats.thresholds[b].size();
-  out.segment(k, nth) = implied_thresholds(layout, theta, b);
+  Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+  if (param == OrdinalParameterization::Theta) {
+    for (Eigen::Index h = 0; h < nth; ++h) {
+      const Eigen::Index ov =
+          stats.threshold_ov[b][static_cast<std::size_t>(h)];
+      it(h) /= std::sqrt(moments.sigma[b](ov, ov));
+    }
+  }
+  out.segment(k, nth) = it;
   k += nth;
   for (Eigen::Index j = 0; j < p; ++j) {
     if (stats.ordered[b][static_cast<std::size_t>(j)] == 0) {
@@ -819,7 +899,8 @@ Eigen::VectorXd mixed_model_moments(const data::MixedOrdinalStats& stats,
   }
   for (Eigen::Index j = 0; j < p; ++j) {
     for (Eigen::Index i = j + 1; i < p; ++i) {
-      out(k++) = moments.sigma[b](i, j);
+      out(k++) = mixed_assoc_moment(moments.sigma[b], stats.ordered[b], i, j,
+                                    param);
     }
   }
   return out;
@@ -829,7 +910,9 @@ Eigen::MatrixXd mixed_moment_jacobian(const data::MixedOrdinalStats& stats,
                                       const ThresholdLayout& layout,
                                       const model::ImpliedMoments& moments,
                                       const Eigen::MatrixXd& J_sigma,
-                                      const Eigen::MatrixXd& J_mu) {
+                                      const Eigen::MatrixXd& J_mu,
+                                      const Eigen::VectorXd& theta,
+                                      OrdinalParameterization param) {
   Eigen::MatrixXd out(mixed_moment_rows(stats), J_sigma.cols());
   Eigen::Index out_off = 0;
   Eigen::Index sigma_off = 0;
@@ -842,7 +925,18 @@ Eigen::MatrixXd mixed_moment_jacobian(const data::MixedOrdinalStats& stats,
     Eigen::Index row = 0;
     for (Eigen::Index k = 0; k < nth; ++k) {
       const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
-      if (fr > 0) Jb(row, fr - 1) = 1.0;
+      if (param == OrdinalParameterization::Theta) {
+        const Eigen::Index ov =
+            stats.threshold_ov[b][static_cast<std::size_t>(k)];
+        const double sii = moments.sigma[b](ov, ov);
+        const double inv_sd = 1.0 / std::sqrt(sii);
+        const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+        if (fr > 0) Jb(row, fr - 1) += inv_sd;
+        Jb.row(row) += (-0.5 * it(k) * inv_sd / sii) *
+                       J_sigma.row(sigma_off + vech_index(p, ov, ov));
+      } else if (fr > 0) {
+        Jb(row, fr - 1) = 1.0;
+      }
       ++row;
     }
     for (Eigen::Index j = 0; j < p; ++j) {
@@ -858,14 +952,15 @@ Eigen::MatrixXd mixed_moment_jacobian(const data::MixedOrdinalStats& stats,
     }
     for (Eigen::Index j = 0; j < p; ++j) {
       for (Eigen::Index i = j + 1; i < p; ++i) {
-        Jb.row(row++) = J_sigma.row(sigma_off + vech_index(p, i, j));
+        Jb.row(row++) = mixed_assoc_jacobian_row(
+            moments.sigma[b], J_sigma, sigma_off, stats.ordered[b], i, j,
+            param);
       }
     }
     out.block(out_off, 0, Jb.rows(), Jb.cols()) = Jb;
     out_off += Jb.rows();
     sigma_off += vech_len(p);
     mu_off += p;
-    (void)moments;
   }
   return out;
 }
@@ -875,14 +970,16 @@ mixed_ordinal_residuals(const data::MixedOrdinalStats& stats,
                         const ThresholdLayout& layout,
                         const model::ImpliedMoments& moments,
                         const std::vector<Eigen::MatrixXd>& factors,
-                        const Eigen::VectorXd& theta) {
+                        const Eigen::VectorXd& theta,
+                        OrdinalParameterization param) {
   auto N = total_n_obs(stats);
   if (!N.has_value()) return std::unexpected(N.error());
   Eigen::VectorXd out(mixed_moment_rows(stats));
   Eigen::Index off = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     Eigen::VectorXd d =
-        mixed_model_moments(stats, layout, moments, theta, b) - stats.moments[b];
+        mixed_model_moments(stats, layout, moments, theta, b, param) -
+        stats.moments[b];
     const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) /
                                 static_cast<double>(*N));
     out.segment(off, d.size()) = sw * (factors[b].transpose() * d);
@@ -901,11 +998,14 @@ mixed_ordinal_jacobian(const data::MixedOrdinalStats& stats,
                        const model::ImpliedMoments& moments,
                        const Eigen::MatrixXd& J_sigma,
                        const Eigen::MatrixXd& J_mu,
-                       const std::vector<Eigen::MatrixXd>& factors) {
+                       const std::vector<Eigen::MatrixXd>& factors,
+                       const Eigen::VectorXd& theta,
+                       OrdinalParameterization param) {
   auto N = total_n_obs(stats);
   if (!N.has_value()) return std::unexpected(N.error());
   Eigen::MatrixXd Jfull =
-      mixed_moment_jacobian(stats, layout, moments, J_sigma, J_mu);
+      mixed_moment_jacobian(stats, layout, moments, J_sigma, J_mu, theta,
+                            param);
   Eigen::MatrixXd out(Jfull.rows(), Jfull.cols());
   Eigen::Index off = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
@@ -1057,11 +1157,8 @@ prepare_mixed_ordinal_partable(spec::LatentStructure& pt,
                                 const data::MixedOrdinalStats& stats,
                                 OrdinalParameterization parameterization,
                                 spec::Starts* starts) {
-  if (parameterization == OrdinalParameterization::Delta) {
-    return prepare_mixed_ordinal_delta_partable(pt, stats, starts);
-  }
-  return std::unexpected(make_err(FitError::Kind::NumericIssue,
-      "mixed ordinal theta parameterization is not supported yet; use delta"));
+  (void)parameterization;
+  return prepare_mixed_ordinal_delta_partable(pt, stats, starts);
 }
 
 // Start-value producer for the ordinal delta path. Prepares the partable
@@ -1115,7 +1212,8 @@ robust_ordinal(spec::LatentStructure pt,
                const model::MatrixRep& rep,
                const data::OrdinalStats& stats,
                const Estimates& est,
-               OrdinalWeightKind weights) {
+               OrdinalWeightKind weights,
+               OrdinalParameterization parameterization) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -1146,7 +1244,8 @@ robust_ordinal(spec::LatentStructure pt,
   }
 
   const Eigen::MatrixXd Delta_full =
-      ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma);
+      ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma,
+                              est.theta, parameterization);
 
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
@@ -1185,7 +1284,8 @@ robust_mixed_ordinal(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const data::MixedOrdinalStats& stats,
                      const Estimates& est,
-                     OrdinalWeightKind weights) {
+                     OrdinalWeightKind weights,
+                     OrdinalParameterization parameterization) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
@@ -1213,7 +1313,8 @@ robust_mixed_ordinal(spec::LatentStructure pt,
 
   const Eigen::MatrixXd Delta_full =
       mixed_moment_jacobian(stats, *layout_or, eval->moments,
-                            eval->J_sigma, eval->J_mu);
+                            eval->J_sigma, eval->J_mu, est.theta,
+                            parameterization);
 
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
@@ -1523,7 +1624,7 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
     auto r = residual_fn(stats, *layout, eval->moments, *factors, theta);
     if (!r.has_value()) return std::unexpected(fit_to_post(r.error()));
     auto J = jacobian_fn(stats, *layout, eval->moments, eval->J_sigma,
-                         eval->J_mu, *factors);
+                         eval->J_mu, *factors, theta);
     if (!J.has_value()) return std::unexpected(fit_to_post(J.error()));
 
     const bool generated_absent = row >= work->original_rows;
@@ -1600,7 +1701,7 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
   auto r = residual_fn(stats, *layout, eval->moments, *factors, est.theta);
   if (!r.has_value()) return std::unexpected(fit_to_post(r.error()));
   auto J = jacobian_fn(stats, *layout, eval->moments, eval->J_sigma,
-                       eval->J_mu, *factors);
+                       eval->J_mu, *factors, est.theta);
   if (!J.has_value()) return std::unexpected(fit_to_post(J.error()));
   const Eigen::VectorXd score = -n_total * (J->transpose() * *r);
   Eigen::MatrixXd info = n_total * (J->transpose() * *J);
@@ -1626,10 +1727,11 @@ modification_indices_ordinal(spec::LatentStructure pt,
                              const model::MatrixRep& rep,
                              const data::OrdinalStats& stats,
                              const Estimates& est,
-                             OrdinalWeightKind weights) {
+                             OrdinalWeightKind weights,
+                             OrdinalParameterization parameterization) {
   inference::ModificationIndexOptions options;
   return modification_indices_ordinal(std::move(pt), rep, stats, est, weights,
-                                      options);
+                                      options, parameterization);
 }
 
 post_expected<inference::ScoreTestTable>
@@ -1638,23 +1740,25 @@ modification_indices_ordinal(spec::LatentStructure pt,
                              const data::OrdinalStats& stats,
                              const Estimates& est,
                              OrdinalWeightKind weights,
-                             const inference::ModificationIndexOptions& options) {
-  auto residual_fn = [](const data::OrdinalStats& s,
-                        const ThresholdLayout& layout,
-                        const model::ImpliedMoments& moments,
-                        const std::vector<Eigen::MatrixXd>& factors,
-                        const Eigen::VectorXd& theta) {
+                             const inference::ModificationIndexOptions& options,
+                             OrdinalParameterization parameterization) {
+  auto residual_fn = [parameterization](const data::OrdinalStats& s,
+                                        const ThresholdLayout& layout,
+                                        const model::ImpliedMoments& moments,
+                                        const std::vector<Eigen::MatrixXd>& factors,
+                                        const Eigen::VectorXd& theta) {
     return ordinal_residuals(s, layout, moments, factors, theta,
-                             OrdinalParameterization::Delta);
+                             parameterization);
   };
-  auto jacobian_fn = [](const data::OrdinalStats& s,
-                        const ThresholdLayout& layout,
-                        const model::ImpliedMoments& moments,
-                        const Eigen::MatrixXd& J_sigma,
-                        const Eigen::MatrixXd&,
-                        const std::vector<Eigen::MatrixXd>& factors) {
+  auto jacobian_fn = [parameterization](const data::OrdinalStats& s,
+                                        const ThresholdLayout& layout,
+                                        const model::ImpliedMoments& moments,
+                                        const Eigen::MatrixXd& J_sigma,
+                                        const Eigen::MatrixXd&,
+                                        const std::vector<Eigen::MatrixXd>& factors,
+                                        const Eigen::VectorXd& theta) {
     return ordinal_jacobian(s, layout, moments, J_sigma, factors,
-                            Eigen::VectorXd{}, OrdinalParameterization::Delta);
+                            theta, parameterization);
   };
   auto prepare_fn = [](spec::LatentStructure& p, const data::OrdinalStats& s) {
     return prepare_ordinal_delta_partable(p, s, nullptr);
@@ -1669,23 +1773,25 @@ score_tests_ordinal(spec::LatentStructure pt,
                     const model::MatrixRep& rep,
                     const data::OrdinalStats& stats,
                     const Estimates& est,
-                    OrdinalWeightKind weights) {
-  auto residual_fn = [](const data::OrdinalStats& s,
-                        const ThresholdLayout& layout,
-                        const model::ImpliedMoments& moments,
-                        const std::vector<Eigen::MatrixXd>& factors,
-                        const Eigen::VectorXd& theta) {
+                    OrdinalWeightKind weights,
+                    OrdinalParameterization parameterization) {
+  auto residual_fn = [parameterization](const data::OrdinalStats& s,
+                                        const ThresholdLayout& layout,
+                                        const model::ImpliedMoments& moments,
+                                        const std::vector<Eigen::MatrixXd>& factors,
+                                        const Eigen::VectorXd& theta) {
     return ordinal_residuals(s, layout, moments, factors, theta,
-                             OrdinalParameterization::Delta);
+                             parameterization);
   };
-  auto jacobian_fn = [](const data::OrdinalStats& s,
-                        const ThresholdLayout& layout,
-                        const model::ImpliedMoments& moments,
-                        const Eigen::MatrixXd& J_sigma,
-                        const Eigen::MatrixXd&,
-                        const std::vector<Eigen::MatrixXd>& factors) {
+  auto jacobian_fn = [parameterization](const data::OrdinalStats& s,
+                                        const ThresholdLayout& layout,
+                                        const model::ImpliedMoments& moments,
+                                        const Eigen::MatrixXd& J_sigma,
+                                        const Eigen::MatrixXd&,
+                                        const std::vector<Eigen::MatrixXd>& factors,
+                                        const Eigen::VectorXd& theta) {
     return ordinal_jacobian(s, layout, moments, J_sigma, factors,
-                            Eigen::VectorXd{}, OrdinalParameterization::Delta);
+                            theta, parameterization);
   };
   auto prepare_fn = [](spec::LatentStructure& p, const data::OrdinalStats& s) {
     return prepare_ordinal_delta_partable(p, s, nullptr);
@@ -1699,10 +1805,11 @@ modification_indices_mixed_ordinal(spec::LatentStructure pt,
                                    const model::MatrixRep& rep,
                                    const data::MixedOrdinalStats& stats,
                                    const Estimates& est,
-                                   OrdinalWeightKind weights) {
+                                   OrdinalWeightKind weights,
+                                   OrdinalParameterization parameterization) {
   inference::ModificationIndexOptions options;
   return modification_indices_mixed_ordinal(std::move(pt), rep, stats, est,
-                                            weights, options);
+                                            weights, options, parameterization);
 }
 
 post_expected<inference::ScoreTestTable>
@@ -1712,21 +1819,25 @@ modification_indices_mixed_ordinal(
     const data::MixedOrdinalStats& stats,
     const Estimates& est,
     OrdinalWeightKind weights,
-    const inference::ModificationIndexOptions& options) {
-  auto residual_fn = [](const data::MixedOrdinalStats& s,
-                        const ThresholdLayout& layout,
-                        const model::ImpliedMoments& moments,
-                        const std::vector<Eigen::MatrixXd>& factors,
-                        const Eigen::VectorXd& theta) {
-    return mixed_ordinal_residuals(s, layout, moments, factors, theta);
+    const inference::ModificationIndexOptions& options,
+    OrdinalParameterization parameterization) {
+  auto residual_fn = [parameterization](const data::MixedOrdinalStats& s,
+                                        const ThresholdLayout& layout,
+                                        const model::ImpliedMoments& moments,
+                                        const std::vector<Eigen::MatrixXd>& factors,
+                                        const Eigen::VectorXd& theta) {
+    return mixed_ordinal_residuals(s, layout, moments, factors, theta,
+                                   parameterization);
   };
-  auto jacobian_fn = [](const data::MixedOrdinalStats& s,
-                        const ThresholdLayout& layout,
-                        const model::ImpliedMoments& moments,
-                        const Eigen::MatrixXd& J_sigma,
-                        const Eigen::MatrixXd& J_mu,
-                        const std::vector<Eigen::MatrixXd>& factors) {
-    return mixed_ordinal_jacobian(s, layout, moments, J_sigma, J_mu, factors);
+  auto jacobian_fn = [parameterization](const data::MixedOrdinalStats& s,
+                                        const ThresholdLayout& layout,
+                                        const model::ImpliedMoments& moments,
+                                        const Eigen::MatrixXd& J_sigma,
+                                        const Eigen::MatrixXd& J_mu,
+                                        const std::vector<Eigen::MatrixXd>& factors,
+                                        const Eigen::VectorXd& theta) {
+    return mixed_ordinal_jacobian(s, layout, moments, J_sigma, J_mu, factors,
+                                  theta, parameterization);
   };
   auto prepare_fn = [](spec::LatentStructure& p, const data::MixedOrdinalStats& s) {
     return prepare_mixed_ordinal_delta_partable(p, s, nullptr);
@@ -1741,21 +1852,25 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const data::MixedOrdinalStats& stats,
                           const Estimates& est,
-                          OrdinalWeightKind weights) {
-  auto residual_fn = [](const data::MixedOrdinalStats& s,
-                        const ThresholdLayout& layout,
-                        const model::ImpliedMoments& moments,
-                        const std::vector<Eigen::MatrixXd>& factors,
-                        const Eigen::VectorXd& theta) {
-    return mixed_ordinal_residuals(s, layout, moments, factors, theta);
+                          OrdinalWeightKind weights,
+                          OrdinalParameterization parameterization) {
+  auto residual_fn = [parameterization](const data::MixedOrdinalStats& s,
+                                        const ThresholdLayout& layout,
+                                        const model::ImpliedMoments& moments,
+                                        const std::vector<Eigen::MatrixXd>& factors,
+                                        const Eigen::VectorXd& theta) {
+    return mixed_ordinal_residuals(s, layout, moments, factors, theta,
+                                   parameterization);
   };
-  auto jacobian_fn = [](const data::MixedOrdinalStats& s,
-                        const ThresholdLayout& layout,
-                        const model::ImpliedMoments& moments,
-                        const Eigen::MatrixXd& J_sigma,
-                        const Eigen::MatrixXd& J_mu,
-                        const std::vector<Eigen::MatrixXd>& factors) {
-    return mixed_ordinal_jacobian(s, layout, moments, J_sigma, J_mu, factors);
+  auto jacobian_fn = [parameterization](const data::MixedOrdinalStats& s,
+                                        const ThresholdLayout& layout,
+                                        const model::ImpliedMoments& moments,
+                                        const Eigen::MatrixXd& J_sigma,
+                                        const Eigen::MatrixXd& J_mu,
+                                        const std::vector<Eigen::MatrixXd>& factors,
+                                        const Eigen::VectorXd& theta) {
+    return mixed_ordinal_jacobian(s, layout, moments, J_sigma, J_mu, factors,
+                                  theta, parameterization);
   };
   auto prepare_fn = [](spec::LatentStructure& p, const data::MixedOrdinalStats& s) {
     return prepare_mixed_ordinal_delta_partable(p, s, nullptr);
@@ -1928,7 +2043,8 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           OrdinalWeightKind weights,
                           const Eigen::VectorXd& x0,
                           Backend backend,
-                          LbfgsOptions opts) {
+                          LbfgsOptions opts,
+                          OrdinalParameterization parameterization) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());
   }
@@ -1983,7 +2099,8 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
     return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
         "fit_mixed_ordinal_bounded: start evaluation failed: " + eval0.error().detail));
   }
-  auto r0 = mixed_ordinal_residuals(stats, layout, eval0->moments, factors, x0);
+  auto r0 = mixed_ordinal_residuals(stats, layout, eval0->moments, factors, x0,
+                                    parameterization);
   if (!r0.has_value()) return std::unexpected(r0.error());
   const Eigen::Index n_data = r0->size();
   const Eigen::Index n_eq = con.active() ? con.A_eq.rows() : 0;
@@ -1998,7 +2115,8 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
       return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
           "fit_mixed_ordinal_bounded: evaluate failed: " + eval.error().detail));
     }
-    auto r = mixed_ordinal_residuals(stats, layout, eval->moments, factors, x);
+    auto r = mixed_ordinal_residuals(stats, layout, eval->moments, factors, x,
+                                     parameterization);
     if (!r.has_value()) return std::unexpected(r.error());
     Eigen::VectorXd out(n_total);
     out.head(n_data) = *r;
@@ -2013,7 +2131,8 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
           "fit_mixed_ordinal_bounded: evaluate failed: " + eval.error().detail));
     }
     auto J = mixed_ordinal_jacobian(stats, layout, eval->moments,
-                                    eval->J_sigma, eval->J_mu, factors);
+                                    eval->J_sigma, eval->J_mu, factors, x,
+                                    parameterization);
     if (!J.has_value()) return std::unexpected(J.error());
     Eigen::MatrixXd out(n_total, J->cols());
     out.topRows(n_data) = *J;

@@ -4,12 +4,14 @@
 
 #include <Eigen/Core>
 
+#include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/data/shrinkage.hpp"
 
 using magmaan::data::CovarianceShrinkageKind;
 using magmaan::data::CovarianceShrinkageOptions;
 using magmaan::data::SampleStats;
+using magmaan::data::shrink_mixed_ordinal_stats;
 using magmaan::data::shrink_sample_stats;
 
 namespace {
@@ -192,4 +194,45 @@ TEST_CASE("shrink_sample_stats: estimate_intensity rejects non-Diagonal kinds") 
       one_block(S),
       {CovarianceShrinkageKind::IdentityTarget, 0.0, /*estimate=*/true});
   CHECK_FALSE(r.has_value());
+}
+
+TEST_CASE("shrink_mixed_ordinal_stats: transforms moments and rebuilds weights") {
+  Eigen::MatrixXd X(240, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double t = static_cast<double>(i);
+    const double z = std::sin(0.13 * t) + 0.4 * std::cos(0.07 * t);
+    X(i, 0) = 1.0 + (z > -0.4) + (z > 0.5);
+    X(i, 1) = 1.0 + (std::cos(0.11 * t) > 0.1);
+    X(i, 2) = 0.8 * z + 0.3 * std::sin(0.31 * t);
+    X(i, 3) = 0.7 * z + 0.4 * std::cos(0.23 * t);
+  }
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data(
+      {X}, std::vector<std::vector<std::int32_t>>{{1, 1, 0, 0}});
+  REQUIRE(stats.has_value());
+
+  auto none = shrink_mixed_ordinal_stats(
+      *stats, {CovarianceShrinkageKind::None, 0.8});
+  REQUIRE(none.has_value());
+  CHECK(none->stats.R[0].isApprox(stats->R[0], 0.0));
+  CHECK(none->stats.moments[0].isApprox(stats->moments[0], 0.0));
+  CHECK(none->stats.NACOV[0].isApprox(stats->NACOV[0], 1e-10));
+  CHECK_FALSE(none->block_diagnostics[0].shrunk);
+
+  auto shrunk = shrink_mixed_ordinal_stats(
+      *stats, {CovarianceShrinkageKind::DiagonalTarget, 0.5});
+  REQUIRE(shrunk.has_value());
+  CHECK(shrunk->block_diagnostics[0].shrunk);
+  CHECK(shrunk->block_diagnostics[0].intensity == doctest::Approx(0.5));
+  CHECK(shrunk->stats.thresholds[0].isApprox(stats->thresholds[0], 0.0));
+  CHECK(shrunk->stats.mean[0].isApprox(stats->mean[0], 0.0));
+  CHECK(shrunk->stats.R[0](2, 2) == doctest::Approx(stats->R[0](2, 2)));
+  CHECK(shrunk->stats.R[0](3, 2) == doctest::Approx(0.5 * stats->R[0](3, 2)));
+  CHECK_FALSE(shrunk->stats.moments[0].isApprox(stats->moments[0], 1e-8));
+  CHECK_FALSE(shrunk->stats.NACOV[0].isApprox(stats->NACOV[0], 1e-8));
+  CHECK(shrunk->stats.W_dwls[0].diagonal().minCoeff() > 0.0);
+  CHECK((shrunk->stats.W_wls[0] * shrunk->stats.NACOV[0])
+            .isApprox(Eigen::MatrixXd::Identity(
+                          shrunk->stats.NACOV[0].rows(),
+                          shrunk->stats.NACOV[0].cols()),
+                      1e-6));
 }

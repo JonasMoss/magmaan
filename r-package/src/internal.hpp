@@ -25,6 +25,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/estimate/fit.hpp"              // Estimates
+#include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/inference/inference.hpp"        // information_*, vcov, se, chi2_stat, df_stat
 #include "magmaan/optim/lbfgs_optimizer.hpp"  // LbfgsOptions
 
@@ -32,6 +33,23 @@ namespace lv  = magmaan;
 namespace lvm = magmaan::model;
 
 namespace magmaanr {
+
+inline magmaan::estimate::OrdinalParameterization
+ordinal_parameterization_from_string(const std::string& s) {
+  if (s == "theta" || s == "Theta" || s == "THETA") {
+    return magmaan::estimate::OrdinalParameterization::Theta;
+  }
+  if (s == "delta" || s == "Delta" || s == "DELTA" || s.empty()) {
+    return magmaan::estimate::OrdinalParameterization::Delta;
+  }
+  Rcpp::stop("magmaan: ordinal parameterization must be 'delta' or 'theta' (got '%s')", s);
+}
+
+inline std::string ordinal_parameterization_attr(SEXP x) {
+  SEXP attr = Rf_getAttrib(x, Rf_install("magmaan.parameterization"));
+  if (attr == R_NilValue || Rf_length(attr) < 1) return "delta";
+  return Rcpp::as<std::string>(Rcpp::CharacterVector(attr)[0]);
+}
 
 // ---- error -> R error -------------------------------------------------------
 

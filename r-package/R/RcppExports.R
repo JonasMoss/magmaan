@@ -57,6 +57,10 @@ data_mixed_ordinal_stats_from_raw_impl <- function(X, ordered_mask) {
     .Call(`_magmaan_data_mixed_ordinal_stats_from_raw_impl`, X, ordered_mask)
 }
 
+data_shrink_mixed_ordinal_stats_impl <- function(mixed_stats, kind = "diagonal", intensity = 0, estimate_intensity = FALSE) {
+    .Call(`_magmaan_data_shrink_mixed_ordinal_stats_impl`, mixed_stats, kind, intensity, estimate_intensity)
+}
+
 data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl <- function(X, ordered_mask, alpha = 0.3) {
     .Call(`_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl`, X, ordered_mask, alpha)
 }

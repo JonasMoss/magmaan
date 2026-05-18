@@ -475,8 +475,12 @@ Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
       Rcpp::stop("magmaan: infer_ordinal_robust() needs `weight` when fit$estimator is absent");
     weight = Rcpp::as<std::string>(fit["estimator"]);
   }
+  const std::string parameterization_name = fit.containsElementNamed("parameterization")
+      ? Rcpp::as<std::string>(fit["parameterization"])
+      : "delta";
   auto r_or = magmaan::estimate::robust_ordinal(
-      ctx.pt, ctx.rep, stats, est, ordinal_weight_from_string(weight));
+      ctx.pt, ctx.rep, stats, est, ordinal_weight_from_string(weight),
+      ordinal_parameterization_from_string(parameterization_name));
   if (!r_or.has_value()) stop_post(r_or.error());
   const magmaan::estimate::OrdinalRobustResult& r = *r_or;
   return Rcpp::List::create(
@@ -501,8 +505,12 @@ Rcpp::List infer_mixed_ordinal_robust(Rcpp::List fit, Rcpp::List mixed_stats,
       Rcpp::stop("magmaan: infer_mixed_ordinal_robust() needs `weight` when fit$estimator is absent");
     weight = Rcpp::as<std::string>(fit["estimator"]);
   }
+  const std::string parameterization_name = fit.containsElementNamed("parameterization")
+      ? Rcpp::as<std::string>(fit["parameterization"])
+      : "delta";
   auto r_or = magmaan::estimate::robust_mixed_ordinal(
-      ctx.pt, ctx.rep, stats, est, ordinal_weight_from_string(weight));
+      ctx.pt, ctx.rep, stats, est, ordinal_weight_from_string(weight),
+      ordinal_parameterization_from_string(parameterization_name));
   if (!r_or.has_value()) stop_post(r_or.error());
   const magmaan::estimate::OrdinalRobustResult& r = *r_or;
   return Rcpp::List::create(
