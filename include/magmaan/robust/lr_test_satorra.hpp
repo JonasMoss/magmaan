@@ -9,11 +9,22 @@
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/robust/satorra2000.hpp"
+#include "magmaan/robust/weighted_chisq.hpp"
 #include "magmaan/spec/partable.hpp"
 
 namespace magmaan::robust {
 
 using estimate::EqConstraints;
+
+enum class SatorraAMethod {
+  Exact,
+  Delta
+};
+
+struct Satorra2000Options {
+  SatorraAMethod a_method = SatorraAMethod::Exact;
+  GammaSource    gamma    = GammaSource::Empirical;
+};
 
 // ============================================================================
 // Satorra-2000 nested likelihood-ratio test for two SEM fits H1 ⊃ H0.
@@ -48,6 +59,9 @@ struct LRSatorra2000Result {
   double           adjust_d0;      // d̂₀ = (Σλ)² / Σλ²  (real)
   double           T_adjusted;
   double           p_adjusted;
+
+  ScaledShiftedResult scaled_shifted;
+  double              p_scaled_shifted;
 
   double           p_mixture;      // Imhof tail of T_diff
 
@@ -87,5 +101,25 @@ lr_test_satorra2000_from_data(
     int                                  df_H0,
     int                                  df_H1,
     GammaSource                          gamma = GammaSource::Empirical);
+
+post_expected<LRSatorra2000Result>
+lr_test_satorra2000_from_data(
+    const spec::LatentStructure&     pt_H1,
+    const model::MatrixRep&              rep_H1,
+    const Eigen::VectorXd&               theta_H1_full,
+    const EqConstraints&                 K_H1,
+    const spec::LatentStructure&     pt_H0,
+    const model::MatrixRep&              rep_H0,
+    const Eigen::VectorXd&               theta_H0_full,
+    const EqConstraints&                 K_H0,
+    const std::vector<Eigen::MatrixXd>&  X_per_group,
+    const std::vector<Eigen::VectorXd>&  mean_per_group,
+    const std::vector<std::int32_t>&     n_per_group,
+    const std::vector<double>&           weight_per_group,
+    double                               T_H0,
+    double                               T_H1,
+    int                                  df_H0,
+    int                                  df_H1,
+    Satorra2000Options                   options);
 
 }  // namespace magmaan::robust

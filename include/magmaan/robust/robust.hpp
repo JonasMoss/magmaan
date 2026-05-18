@@ -337,65 +337,6 @@ reduced_gamma_unbiased_casewise(
 post_expected<Eigen::VectorXd>
 ugamma_eigenvalues(const Eigen::Ref<const Eigen::MatrixXd>& M);
 
-// Satorra-Bentler scaled chi²: matches mean of the asymptotic mixture
-// distribution of T_ML.
-//
-//   c = mean(λ) = Σλ / df            (the "scaling correction factor")
-//   T_SB = T_ML / c
-//
-// Under multivariate normality, c → 1 and T_SB → T_ML. Lavaan exposes
-// this as `test = "satorra.bentler"`.
-struct SatorraBentlerResult {
-  double chi2_scaled = 0.0;
-  double scale_c     = 0.0;   // c = Σλ / df
-  int    df          = 0;     // unchanged from T_ML
-};
-SatorraBentlerResult
-satorra_bentler(double                                    t_ml,
-                int                                       df,
-                const Eigen::Ref<const Eigen::VectorXd>&  eigvals) noexcept;
-
-// Satterthwaite mean-and-variance-adjusted chi² (Asparouhov-Muthén 2010,
-// lavaan `test = "mean.var.adjusted"`):
-//
-//   c_mean = Σλ / df,    c_var = Σλ² / df
-//   df_adj  = df · c_mean² / c_var  =  (Σλ)² / Σλ²
-//   T_adj   = T_ML · c_mean / c_var
-//
-// Matches both first two moments of the asymptotic mixture distribution.
-// The df is non-integer; reference distribution is χ²(df_adj). Equivalent
-// to the "Yuan-Bentler T_3" stat under the standard convention.
-struct MeanVarAdjustedResult {
-  double chi2_adj = 0.0;
-  double df_adj   = 0.0;       // non-integer Satterthwaite df
-};
-MeanVarAdjustedResult
-mean_var_adjusted(double                                    t_ml,
-                  int                                       df,
-                  const Eigen::Ref<const Eigen::VectorXd>&  eigvals) noexcept;
-
-// Satorra-Bentler scaled-and-shifted chi² (Satorra-Bentler 2010, lavaan
-// `test = "scaled.shifted"`):
-//
-//   a       = √(df / Σλ²)
-//   b       = df − a · Σλ
-//   T_adj   = T_ML · a + b      (linear transform — both scale and shift)
-//
-// The df stays at `df` (referenced against χ²(df)). Combines mean and
-// variance corrections by a different functional form than the
-// Satterthwaite df-adjustment; chosen by some methodologists because the
-// reference distribution stays integer-df.
-struct ScaledShiftedResult {
-  double chi2_adj = 0.0;
-  int    df       = 0;
-  double scale_a  = 0.0;       // T_adj = T_ML·a + b
-  double shift_b  = 0.0;
-};
-ScaledShiftedResult
-scaled_shifted(double                                    t_ml,
-               int                                       df,
-               const Eigen::Ref<const Eigen::VectorXd>&  eigvals) noexcept;
-
 // ============================================================================
 // Robust ("sandwich") standard errors
 // ============================================================================

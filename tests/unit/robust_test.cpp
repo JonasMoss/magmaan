@@ -918,6 +918,30 @@ TEST_CASE("scaled_shifted: a/b formulas hold") {
   CHECK(r.chi2_adj == doctest::Approx(30.0 * a_expect + b_expect).epsilon(1e-12));
 }
 
+TEST_CASE("weighted chi-square reducers agree from eigenvalues and traces") {
+  Eigen::VectorXd eigvals(4); eigvals << 0.75, 1.25, 2.0, 3.5;
+  const auto moments = magmaan::robust::weighted_chisq_moments(4, eigvals);
+  CHECK(moments.trace == doctest::Approx(eigvals.sum()).epsilon(1e-12));
+  CHECK(moments.trace_sq == doctest::Approx(eigvals.squaredNorm()).epsilon(1e-12));
+
+  const double t = 42.0;
+  const auto sb_ev = magmaan::robust::satorra_bentler(t, 4, eigvals);
+  const auto sb_tr = magmaan::robust::satorra_bentler(t, moments);
+  CHECK(sb_ev.scale_c == doctest::Approx(sb_tr.scale_c).epsilon(1e-12));
+  CHECK(sb_ev.chi2_scaled == doctest::Approx(sb_tr.chi2_scaled).epsilon(1e-12));
+
+  const auto mv_ev = magmaan::robust::mean_var_adjusted(t, 4, eigvals);
+  const auto mv_tr = magmaan::robust::mean_var_adjusted(t, moments);
+  CHECK(mv_ev.df_adj == doctest::Approx(mv_tr.df_adj).epsilon(1e-12));
+  CHECK(mv_ev.chi2_adj == doctest::Approx(mv_tr.chi2_adj).epsilon(1e-12));
+
+  const auto ss_ev = magmaan::robust::scaled_shifted(t, 4, eigvals);
+  const auto ss_tr = magmaan::robust::scaled_shifted(t, moments);
+  CHECK(ss_ev.scale_a == doctest::Approx(ss_tr.scale_a).epsilon(1e-12));
+  CHECK(ss_ev.shift_b == doctest::Approx(ss_tr.shift_b).epsilon(1e-12));
+  CHECK(ss_ev.chi2_adj == doctest::Approx(ss_tr.chi2_adj).epsilon(1e-12));
+}
+
 // Lavaan oracle: 3F Holzinger gives T_ML = 85.30552, df = 24, eigenvalue
 // spectrum with Σλ = 25.31578, Σλ² = 32.12333. So SB = 80.87178,
 // mean.var = 67.22764 (df_adj = 19.95088), scaled.shifted = 75.85281.

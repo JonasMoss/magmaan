@@ -59,4 +59,14 @@ restriction_alpha_from_K(const EqConstraints& K_H1,
                          double               tol_range_F = 1e-8,
                          double               tol_singular = 1e-9);
 
+// lavaan-style `A.method = "delta"` restriction: derive A from the column
+// spaces of the H1/H0 moment Jacobians, both already projected into their
+// reduced parameter spaces.
+post_expected<Eigen::MatrixXd>
+restriction_alpha_delta_from_jacobians(
+    const Eigen::Ref<const Eigen::MatrixXd>& Pi_H1_alpha,
+    const Eigen::Ref<const Eigen::MatrixXd>& Pi_H0_alpha,
+    int                                      expected_m,
+    double                                   tol_singular = 1e-10);
+
 }  // namespace magmaan::robust

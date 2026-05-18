@@ -810,22 +810,53 @@ ugamma_eigenvalues(const Eigen::Ref<const Eigen::MatrixXd>& M) {
   return es.eigenvalues();
 }
 
+WeightedChiSquareMoments
+weighted_chisq_moments(int df,
+                       const Eigen::Ref<const Eigen::VectorXd>& eigvals) noexcept {
+  return WeightedChiSquareMoments{df, eigvals.sum(), eigvals.squaredNorm()};
+}
+
 SatorraBentlerResult
-satorra_bentler(double                                    t_ml,
-                int                                       df,
-                const Eigen::Ref<const Eigen::VectorXd>&  eigvals) noexcept {
+satorra_bentler(double t_ml, const WeightedChiSquareMoments& moments) noexcept {
   SatorraBentlerResult out;
-  out.df = df;
-  if (df <= 0 || eigvals.size() == 0) {
+  out.df = moments.df;
+  if (moments.df <= 0) {
     out.scale_c     = std::numeric_limits<double>::quiet_NaN();
     out.chi2_scaled = std::numeric_limits<double>::quiet_NaN();
     return out;
   }
-  const double sum_lambda = eigvals.sum();
-  const double c          = sum_lambda / static_cast<double>(df);
-  out.scale_c             = c;
-  out.chi2_scaled         = (c > 0.0) ? t_ml / c
-                                      : std::numeric_limits<double>::quiet_NaN();
+  const double c  = moments.trace / static_cast<double>(moments.df);
+  out.scale_c     = c;
+  out.chi2_scaled = (c > 0.0) ? t_ml / c
+                              : std::numeric_limits<double>::quiet_NaN();
+  return out;
+}
+
+SatorraBentlerResult
+satorra_bentler(double                                    t_ml,
+                int                                       df,
+                const Eigen::Ref<const Eigen::VectorXd>&  eigvals) noexcept {
+  if (eigvals.size() == 0) {
+    return satorra_bentler(t_ml, WeightedChiSquareMoments{df, 0.0, 0.0});
+  }
+  return satorra_bentler(t_ml, weighted_chisq_moments(df, eigvals));
+}
+
+MeanVarAdjustedResult
+mean_var_adjusted(double t_ml, const WeightedChiSquareMoments& moments) noexcept {
+  MeanVarAdjustedResult out;
+  if (moments.df <= 0) {
+    out.chi2_adj = std::numeric_limits<double>::quiet_NaN();
+    out.df_adj   = std::numeric_limits<double>::quiet_NaN();
+    return out;
+  }
+  if (!(moments.trace_sq > 0.0)) {
+    out.chi2_adj = std::numeric_limits<double>::quiet_NaN();
+    out.df_adj   = std::numeric_limits<double>::quiet_NaN();
+    return out;
+  }
+  out.df_adj   = (moments.trace * moments.trace) / moments.trace_sq;
+  out.chi2_adj = t_ml * moments.trace / moments.trace_sq;
   return out;
 }
 
@@ -833,21 +864,33 @@ MeanVarAdjustedResult
 mean_var_adjusted(double                                    t_ml,
                   int                                       df,
                   const Eigen::Ref<const Eigen::VectorXd>&  eigvals) noexcept {
-  MeanVarAdjustedResult out;
-  if (df <= 0 || eigvals.size() == 0) {
+  if (eigvals.size() == 0) {
+    return mean_var_adjusted(t_ml, WeightedChiSquareMoments{df, 0.0, 0.0});
+  }
+  return mean_var_adjusted(t_ml, weighted_chisq_moments(df, eigvals));
+}
+
+ScaledShiftedResult
+scaled_shifted(double t_ml, const WeightedChiSquareMoments& moments) noexcept {
+  ScaledShiftedResult out;
+  out.df = moments.df;
+  if (moments.df <= 0) {
     out.chi2_adj = std::numeric_limits<double>::quiet_NaN();
-    out.df_adj   = std::numeric_limits<double>::quiet_NaN();
+    out.scale_a  = std::numeric_limits<double>::quiet_NaN();
+    out.shift_b  = std::numeric_limits<double>::quiet_NaN();
     return out;
   }
-  const double s1 = eigvals.sum();
-  const double s2 = eigvals.squaredNorm();
-  if (!(s2 > 0.0)) {
+  if (!(moments.trace_sq > 0.0)) {
     out.chi2_adj = std::numeric_limits<double>::quiet_NaN();
-    out.df_adj   = std::numeric_limits<double>::quiet_NaN();
+    out.scale_a  = std::numeric_limits<double>::quiet_NaN();
+    out.shift_b  = std::numeric_limits<double>::quiet_NaN();
     return out;
   }
-  out.df_adj   = (s1 * s1) / s2;
-  out.chi2_adj = t_ml * s1 / s2;
+  const double a = std::sqrt(static_cast<double>(moments.df) / moments.trace_sq);
+  const double b = static_cast<double>(moments.df) - a * moments.trace;
+  out.scale_a  = a;
+  out.shift_b  = b;
+  out.chi2_adj = t_ml * a + b;
   return out;
 }
 
@@ -855,28 +898,10 @@ ScaledShiftedResult
 scaled_shifted(double                                    t_ml,
                int                                       df,
                const Eigen::Ref<const Eigen::VectorXd>&  eigvals) noexcept {
-  ScaledShiftedResult out;
-  out.df = df;
-  if (df <= 0 || eigvals.size() == 0) {
-    out.chi2_adj = std::numeric_limits<double>::quiet_NaN();
-    out.scale_a  = std::numeric_limits<double>::quiet_NaN();
-    out.shift_b  = std::numeric_limits<double>::quiet_NaN();
-    return out;
+  if (eigvals.size() == 0) {
+    return scaled_shifted(t_ml, WeightedChiSquareMoments{df, 0.0, 0.0});
   }
-  const double s1 = eigvals.sum();
-  const double s2 = eigvals.squaredNorm();
-  if (!(s2 > 0.0)) {
-    out.chi2_adj = std::numeric_limits<double>::quiet_NaN();
-    out.scale_a  = std::numeric_limits<double>::quiet_NaN();
-    out.shift_b  = std::numeric_limits<double>::quiet_NaN();
-    return out;
-  }
-  const double a = std::sqrt(static_cast<double>(df) / s2);
-  const double b = static_cast<double>(df) - a * s1;
-  out.scale_a  = a;
-  out.shift_b  = b;
-  out.chi2_adj = t_ml * a + b;
-  return out;
+  return scaled_shifted(t_ml, weighted_chisq_moments(df, eigvals));
 }
 
 // ============================================================================
