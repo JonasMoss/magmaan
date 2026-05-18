@@ -1,11 +1,10 @@
-#' Satorra (2000) scaled nested-model χ² difference test.
+#' Scaled nested-model χ² difference tests.
 #'
 #' Compares a restricted model `fit_H0` against the less-restricted superset
-#' `fit_H1` using Satorra's streaming low-rank reduction of the asymptotic
-#' weighted-χ² distribution.  Reports four p-values: unscaled χ²(m), the
-#' Satorra-Bentler mean-correction (`p_scaled`), the mean-and-variance
-#' adjustment (`p_adjusted`), and the exact Imhof mixture-χ² tail
-#' (`p_mixture`).
+#' `fit_H1`. `method = "satorra.2000"` uses Satorra's streaming low-rank
+#' reduction of the asymptotic weighted-χ² distribution. The
+#' `"satorra.bentler.2001"` and `"satorra.bentler.2010"` options mirror
+#' lavaan's compatibility difference-test approximations.
 #'
 #' @param fit_H1   Less-restricted fit from `magmaan::fit_fit()`.
 #' @param fit_H0   More-restricted fit (same lavaanified partable shape,
@@ -19,6 +18,8 @@
 #' @param gamma    `"empirical"` (default — empirical Γ̂, matches lavaan's
 #'                 `estimator = "MLR"` / `"MLM"`) or `"NT"` (normal-theory
 #'                 sanity-check path where all eigenvalues collapse to 1).
+#' @param method   `"satorra.2000"` (default), `"satorra.bentler.2001"`, or
+#'                 `"satorra.bentler.2010"`.
 #' @param A.method `"exact"` (default — exact parameter-nesting restriction)
 #'                 or `"delta"` (lavaan-style covariance/moment Jacobian
 #'                 column-space restriction).
@@ -35,8 +36,12 @@
 #' }
 #' @export
 nestedTest <- function(fit_H1, fit_H0, data, gamma = c("empirical", "NT"),
+                       method = c("satorra.2000",
+                                  "satorra.bentler.2001",
+                                  "satorra.bentler.2010"),
                        A.method = c("exact", "delta")) {
   gamma <- match.arg(gamma)
+  method <- match.arg(method)
   A.method <- match.arg(A.method)
 
   ngroups <- fit_H1$ngroups
@@ -80,13 +85,25 @@ nestedTest <- function(fit_H1, fit_H0, data, gamma = c("empirical", "NT"),
   T_H0  <- infer_chi2_stat(fit_sample_stats(fit_H0), fit_H0$fmin)
   df_H0 <- infer_df_stat(fit_H0$partable, fit_sample_stats(fit_H0))
 
-  res <- infer_lr_test_satorra2000(
-      fit_H1, fit_H0, X_per_group,
-      T_H1 = T_H1, df_H1 = df_H1,
-      T_H0 = T_H0, df_H0 = df_H0,
-      gamma = gamma,
-      a_method = A.method)
+  res <- switch(method,
+    satorra.2000 = infer_lr_test_satorra2000(
+        fit_H1, fit_H0, X_per_group,
+        T_H1 = T_H1, df_H1 = df_H1,
+        T_H0 = T_H0, df_H0 = df_H0,
+        gamma = gamma,
+        a_method = A.method),
+    satorra.bentler.2001 = infer_lr_test_satorra_bentler2001(
+        fit_H1, fit_H0, X_per_group,
+        T_H1 = T_H1, df_H1 = df_H1,
+        T_H0 = T_H0, df_H0 = df_H0,
+        gamma = gamma),
+    satorra.bentler.2010 = infer_lr_test_satorra_bentler2010(
+        fit_H1, fit_H0, X_per_group,
+        T_H1 = T_H1, df_H1 = df_H1,
+        T_H0 = T_H0, df_H0 = df_H0,
+        gamma = gamma))
   res$gamma <- gamma
+  res$method <- method
   res$A.method <- A.method
   class(res) <- c("magmaan_nested_test", "list")
   res
@@ -94,25 +111,37 @@ nestedTest <- function(fit_H1, fit_H0, data, gamma = c("empirical", "NT"),
 
 #' @export
 print.magmaan_nested_test <- function(x, digits = 4L, ...) {
-  cat(sprintf("Satorra (2000) nested-model χ² difference test (Γ = %s, A.method = %s)\n\n",
-              x$gamma, x$A.method %||% "exact"))
-  rows <- data.frame(
-      stat = c(x$T_diff, x$T_scaled, x$T_adjusted,
-               x$scaled_shifted$chi2_adj, x$T_diff),
-      df   = c(x$df_diff, x$df_diff, x$adjust_d0,
-               x$scaled_shifted$df, x$df_diff),
-      pval = c(x$p_unscaled, x$p_scaled, x$p_adjusted,
-               x$scaled_shifted$pvalue, x$p_mixture))
-  rownames(rows) <- c("Unscaled χ²",
-                      "Scaled (Satorra-Bentler)",
-                      "Mean+var adjusted",
-                      "Scaled+shifted",
-                      "Exact mixture (Imhof)")
+  method <- x$method %||% "satorra.2000"
+  cat(sprintf("Scaled nested-model χ² difference test (method = %s, Γ = %s)\n\n",
+              method, x$gamma))
+  if (identical(method, "satorra.2000")) {
+    rows <- data.frame(
+        stat = c(x$T_diff, x$T_scaled, x$T_adjusted,
+                 x$scaled_shifted$chi2_adj, x$T_diff),
+        df   = c(x$df_diff, x$df_diff, x$adjust_d0,
+                 x$scaled_shifted$df, x$df_diff),
+        pval = c(x$p_unscaled, x$p_scaled, x$p_adjusted,
+                 x$scaled_shifted$pvalue, x$p_mixture))
+    rownames(rows) <- c("Unscaled χ²",
+                        "Scaled (Satorra-Bentler)",
+                        "Mean+var adjusted",
+                        "Scaled+shifted",
+                        "Exact mixture (Imhof)")
+  } else {
+    rows <- data.frame(stat = x$T_scaled, df = x$df_diff, pval = x$p_value)
+    rownames(rows) <- "Scaled difference"
+  }
   print(format(rows, digits = digits))
-  cat("\nEigenvalues λ:",
-      paste(format(x$eigenvalues, digits = digits), collapse = ", "),
-      "\nScale ĉ:", format(x$scale_c, digits = digits),
-      "  Adjust d̂₀:", format(x$adjust_d0, digits = digits), "\n")
+  if (identical(method, "satorra.2000")) {
+    cat("\nEigenvalues λ:",
+        paste(format(x$eigenvalues, digits = digits), collapse = ", "),
+        "\nScale ĉ:", format(x$scale_c, digits = digits),
+        "  Adjust d̂₀:", format(x$adjust_d0, digits = digits), "\n")
+  } else {
+    cat("\nScale ĉ:", format(x$scale_c, digits = digits),
+        "  c_H0:", format(x$c_H0, digits = digits),
+        "  c_H1/M10:", format(x$c_H1, digits = digits), "\n")
+  }
   if (length(x$warnings)) {
     cat("\nWarnings:\n  -", paste(x$warnings, collapse = "\n  - "), "\n")
   }

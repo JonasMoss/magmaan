@@ -182,6 +182,50 @@ TEST_CASE("api continuous LS fits dispatch estimator-aware chi-square") {
   REQUIRE_OK(scores);
 }
 
+TEST_CASE("api exposes Satorra-Bentler 2001/2010 nested tests") {
+  const auto h1_model =
+      magmaan::api::model_from_lavaan("f =~ x1 + x2 + x3 + x4");
+  REQUIRE_OK(h1_model);
+  const auto h0_model =
+      magmaan::api::model_from_lavaan("f =~ x1 + a*x2 + a*x3 + x4");
+  REQUIRE_OK(h0_model);
+
+  const auto raw = continuous_raw();
+  const auto stats = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(stats.has_value());
+  const auto h1_data = magmaan::api::data_from_sample_stats(*h1_model, *stats);
+  REQUIRE_OK(h1_data);
+  const auto h0_data = magmaan::api::data_from_sample_stats(*h0_model, *stats);
+  REQUIRE_OK(h0_data);
+
+  const auto h1_fit = magmaan::api::fit(*h1_model, *h1_data, magmaan::api::ml());
+  REQUIRE_OK(h1_fit);
+  const auto h0_fit = magmaan::api::fit(*h0_model, *h0_data, magmaan::api::ml());
+  REQUIRE_OK(h0_fit);
+
+  const auto standard = magmaan::api::lr_test(*h1_fit, *h0_fit);
+  REQUIRE_OK(standard);
+  CHECK(standard->df_diff == 1);
+
+  const auto sb2000 = magmaan::api::lr_test_satorra2000(*h1_fit, *h0_fit, raw);
+  REQUIRE_OK(sb2000);
+  CHECK(sb2000->df_diff == standard->df_diff);
+  CHECK(std::isfinite(sb2000->T_scaled));
+
+  const auto sb2001 =
+      magmaan::api::lr_test_satorra_bentler2001(*h1_fit, *h0_fit, raw);
+  REQUIRE_OK(sb2001);
+  CHECK(sb2001->df_diff == standard->df_diff);
+  CHECK(std::isfinite(sb2001->T_scaled));
+
+  const auto sb2010 =
+      magmaan::api::lr_test_satorra_bentler2010(*h1_fit, *h0_fit, raw);
+  REQUIRE_OK(sb2010);
+  CHECK(sb2010->df_diff == standard->df_diff);
+  CHECK(std::isfinite(sb2010->T_scaled));
+  CHECK(std::isfinite(sb2010->c_hybrid));
+}
+
 TEST_CASE("api FIML exposes likelihood test, fit measures, and MLR reporting") {
   magmaan::api::ModelOptions options;
   options.build.meanstructure = true;

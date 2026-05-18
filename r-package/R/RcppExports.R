@@ -57,7 +57,7 @@ data_mixed_ordinal_stats_from_raw_impl <- function(X, ordered_mask) {
     .Call(`_magmaan_data_mixed_ordinal_stats_from_raw_impl`, X, ordered_mask)
 }
 
-data_shrink_mixed_ordinal_stats_impl <- function(mixed_stats, kind = "diagonal", intensity = 0, estimate_intensity = FALSE) {
+data_shrink_mixed_ordinal_stats_impl <- function(mixed_stats, kind = "diagonal", intensity = 0.0, estimate_intensity = FALSE) {
     .Call(`_magmaan_data_shrink_mixed_ordinal_stats_impl`, mixed_stats, kind, intensity, estimate_intensity)
 }
 
@@ -207,6 +207,14 @@ infer_rls_chi2_sample <- function(sample_stats, implied) {
 
 infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical", a_method = "exact") {
     .Call(`_magmaan_infer_lr_test_satorra2000`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma, a_method)
+}
+
+infer_lr_test_satorra_bentler2001 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical") {
+    .Call(`_magmaan_infer_lr_test_satorra_bentler2001`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma)
+}
+
+infer_lr_test_satorra_bentler2010 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical") {
+    .Call(`_magmaan_infer_lr_test_satorra_bentler2010`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma)
 }
 
 infer_build_u_factor <- function(fit, bread = "expected", moments = "structured") {
