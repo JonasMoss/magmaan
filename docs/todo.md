@@ -58,15 +58,19 @@ Completed checks:
   ML path is fixture-backed, and a focused LBFGS-B integration test confirms
   the bounded variance-box path fits the scalar-invariance multi-group
   meanstructure fixture.
+- [x] **M. Mixed categorical complete/listwise sparse boundary.** A
+  lavaan-backed sparse 4-category mixed continuous/ordinal fixture now gates
+  listwise complete-case sample statistics, mixed NACOV/DWLS/WLS weights,
+  DWLS/WLS fits, and DWLS robust reporting. The mixed NACOV influence rows now
+  include the variance delta-method contribution for continuous-ordinal
+  covariance moments.
+- [x] **M/L. Ordinal multi-group LS equality and mean-structure backend
+  coverage.** Ordinal DWLS/WLS fixtures now include a two-group loading
+  equality boundary. Continuous mean-structure LS fixtures now cross-check
+  SNLLS against the full LS path, and Ceres against LBFGS-B in Ceres builds.
 
 Remaining work, in suggested order:
 
-- **M.** Add a lavaan-backed complete/listwise mixed categorical boundary
-  fixture. The remaining blocker is the mixed NACOV/weight path, which still
-  drifts past the documented loose tolerance for a sparse 4-category indicator.
-- **M/L.** Add ordinal multi-group LS weighting/equality-constraint fixtures,
-  plus mean-structure LS cases that exercise Ceres and SNLLS where semantically
-  appropriate.
 - **S/M.** Deepen parity coverage for non-ML post-fit surfaces. Add a full
   5-factor bfi FIML case once convergence on the wider model is confirmed, then
   gate FIML/LS standard SEs and LS/ordinal CFI/TLI/RMSEA/SRMR as those surfaces

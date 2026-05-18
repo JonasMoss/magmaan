@@ -1764,7 +1764,15 @@ mixed_ordinal_stats_from_data_impl(
         const bool oi = ordered[b][static_cast<std::size_t>(i)] != 0;
         const bool oj = ordered[b][static_cast<std::size_t>(j)] != 0;
         if (oi || oj) {
-          IF.col(pos++) = IF_est.col(nth + assoc_pos);
+          Eigen::VectorXd col = IF_est.col(nth + assoc_pos);
+          if (oi != oj) {
+            const Eigen::Index c = oi ? j : i;
+            const double sd = std::sqrt(var(c));
+            const double rho = R(i, j) / sd;
+            col.array() += (rho / (2.0 * sd)) *
+                ((X.col(c).array() - mean(c)).square() - var(c));
+          }
+          IF.col(pos++) = std::move(col);
         } else {
           IF.col(pos++) =
               ((X.col(i).array() - mean(i)) * (X.col(j).array() - mean(j))).matrix().array() -
@@ -2281,7 +2289,10 @@ mixed_ordinal_stats_huber_residual_from_data(
           }
           double bread = sc.squaredNorm();
           if (!(bread > 1e-12) || !std::isfinite(bread)) bread = 1.0;
-          IF.col(moment_index) = static_cast<double>(n) * sc / bread * sd;
+          Eigen::VectorXd col = static_cast<double>(n) * sc / bread * sd;
+          col.array() += (rho / (2.0 * sd)) *
+              ((X.col(c).array() - mean(c)).square() - var(c));
+          IF.col(moment_index) = std::move(col);
           if (rebuild_polyserial_bread) {
             auto score_block = polyserial_huber_scaled_scores(
                 cat, U.col(c), rho, th_by_var[static_cast<std::size_t>(o)],
@@ -2343,7 +2354,15 @@ mixed_ordinal_stats_huber_residual_from_data(
           const bool oj = ordered[b][static_cast<std::size_t>(j)] != 0;
           if (oi || oj) {
             const Eigen::Index moment_index = nth + 2 * n_cont + assoc_pos;
-            IF.col(moment_index) = IF_est.col(nth + assoc_pos);
+            Eigen::VectorXd col = IF_est.col(nth + assoc_pos);
+            if (oi != oj) {
+              const Eigen::Index c = oi ? j : i;
+              const double sd = std::sqrt(var(c));
+              const double rho = R(i, j) / sd;
+              col.array() += (rho / (2.0 * sd)) *
+                  ((X.col(c).array() - mean(c)).square() - var(c));
+            }
+            IF.col(moment_index) = std::move(col);
           }
           ++assoc_pos;
         }

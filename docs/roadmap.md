@@ -106,7 +106,9 @@ golden `parTable()` fixtures.
 - Continuous LS fixtures cover point estimates, degrees of freedom, and
   estimator-specific chi-square reporting for representative CFA,
   multi-group, labeled-equality, mean-structure, and observed-exogenous
-  fixed.x cases.
+  fixed.x cases. Mean-structure LS fixtures also cross-check SNLLS against
+  the full LS path, and Ceres against LBFGS-B when the Ceres backend is
+  enabled.
 - Continuous ULS/GLS/WLS robust adapters reuse the shared weighted-moment
   sandwich/U-Gamma primitive with either supplied Gamma blocks or raw-data
   Gamma construction. ULS `robust.sem` SEs and Satorra-Bentler-family
@@ -286,7 +288,8 @@ golden `parTable()` fixtures.
 - Current ordinal fixtures validate thresholds, polychoric `R`, `NACOV`,
   `WLS.V`, `WLS.VD`, free sets, point estimates, degrees of freedom, and
   chi-square statistics across representative single-group, multi-group,
-  skewed, sparse, near-empty, and equality-constrained cases.
+  skewed, sparse, near-empty, equality-constrained, and multi-group loading
+  equality cases.
 - The implemented ordinal boundary is lavaan's delta parameterization.
 - Explicit post-fit robust ordinal reporting returns sandwich SEs plus
   Satorra-Bentler, mean/variance-adjusted, and scaled/shifted statistics from
@@ -295,7 +298,10 @@ golden `parTable()` fixtures.
   LS moment stacks with arbitrary block weights and NACOV matrices.
 - A first mixed continuous/ordinal path builds lavaan-ordered thresholds,
   continuous means/variances, polychoric/polyserial/covariance moments,
-  NACOV/DWLS/WLS weights, and DWLS/WLS delta fits.
+  NACOV/DWLS/WLS weights, and DWLS/WLS delta fits. The lavaan-backed fixtures
+  include a complete/listwise sparse 4-category boundary case; the
+  continuous-ordinal covariance influence rows include the variance
+  delta-method term needed for stable mixed WLS weighting.
 - Public complete-data polyserial pair kernel for mixed continuous/ordinal
   work, exposing fixed-threshold rho ML, likelihood, casewise threshold/rho
   scores, and pairwise score Gamma. The mixed sample-stat builder now reuses
@@ -514,11 +520,12 @@ developer step.
 - Continuous LS robust ULS reporting is lavaan-backed for non-fixed.x cases;
   fixed.x robust LS still follows lavaan's conditional exogenous bookkeeping
   and is not part of the generic continuous adapter coverage.
-- Mixed categorical NACOV/weight, fit, and robust-reporting parity is
-  intentionally looser than the all-ordinal path, but pairwise polyserial ML,
-  fixed-marginal polyserial DPD, pair-local full DPD polyserial diagnostics,
-  and continuous-normal score/Gamma primitives are exposed for follow-on
-  inference work. The SEM-facing mixed polyserial DPD path robustifies only
+- Mixed categorical NACOV/weight, fit, and robust-reporting parity remains
+  looser than the all-ordinal path, but now includes a sparse listwise
+  4-category boundary fixture. Pairwise polyserial ML, fixed-marginal
+  polyserial DPD, pair-local full DPD polyserial diagnostics, and
+  continuous-normal score/Gamma primitives are exposed for follow-on inference
+  work. The SEM-facing mixed polyserial DPD path robustifies only
   continuous-ordinal associations; robust continuous marginals and
   continuous-continuous covariances remain outside that contract.
 - Observed-pair ordinal table kernels are pair-level primitives only. Missing

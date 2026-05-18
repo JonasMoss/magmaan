@@ -164,6 +164,50 @@ double total_n(const magmaan::data::SampleStats& samp) noexcept {
   return out;
 }
 
+magmaan::fit_expected<magmaan::estimate::Estimates>
+fit_ls_estimator(const std::string& estimator,
+                 const nlohmann::json& fit,
+                 const LsHandles& handles,
+                 const magmaan::data::SampleStats& samp,
+                 magmaan::estimate::Backend backend,
+                 magmaan::optim::LbfgsOptions opt) {
+  if (estimator == "ULS") {
+    return magmaan::test::fit_gmm(handles.pt, handles.rep, samp, {},
+                                  magmaan::estimate::Bounds{}, backend, opt);
+  }
+  if (estimator == "GLS") {
+    return magmaan::test::fit_gls(handles.pt, handles.rep, samp,
+                                  magmaan::estimate::Bounds{}, backend, opt);
+  }
+  return magmaan::test::fit_gmm(
+      handles.pt, handles.rep, samp,
+      magmaan::estimate::gmm::Weight(matrices_from_blocks(fit["WLS.V"])),
+      magmaan::estimate::Bounds{}, backend, opt);
+}
+
+magmaan::fit_expected<magmaan::estimate::Estimates>
+fit_snlls_estimator(const std::string& estimator,
+                    const nlohmann::json& fit,
+                    const LsHandles& handles,
+                    const magmaan::data::SampleStats& samp,
+                    magmaan::estimate::Backend backend,
+                    magmaan::optim::LbfgsOptions opt) {
+  auto x0 = magmaan::estimate::simple_start_values(
+      handles.pt, handles.rep, samp, {});
+  if (!x0.has_value()) return std::unexpected(x0.error());
+  if (estimator == "GLS") {
+    return magmaan::estimate::fit_snlls_gls(
+        handles.pt, handles.rep, samp, *x0, backend, opt);
+  }
+  magmaan::estimate::gmm::Weight weight;
+  if (estimator == "WLS") {
+    weight = magmaan::estimate::gmm::Weight(
+        matrices_from_blocks(fit["WLS.V"]));
+  }
+  return magmaan::estimate::fit_snlls(
+      handles.pt, handles.rep, samp, *x0, std::move(weight), backend, opt);
+}
+
 bool check_estimate(const std::string& id,
                     const std::string& estimator,
                     const nlohmann::json& fit,
@@ -343,23 +387,9 @@ TEST_CASE("continuous LS fixtures: ULS/GLS/WLS bounded fits match lavaan") {
       const auto& fit = exp["fits"][estimator];
       auto samp = sample_stats_from_fit(fit);
 
-      magmaan::fit_expected<magmaan::estimate::Estimates> est_or =
-          std::unexpected(magmaan::FitError{
-              magmaan::FitError::Kind::NumericIssue, "not run", 0, 0.0});
-      if (estimator == "ULS") {
-        est_or = magmaan::test::fit_gmm(
-            handles->pt, handles->rep, samp, {}, magmaan::estimate::Bounds{},
-            magmaan::estimate::Backend::Lbfgs, opt);
-      } else if (estimator == "GLS") {
-        est_or = magmaan::test::fit_gls(
-            handles->pt, handles->rep, samp, magmaan::estimate::Bounds{},
-            magmaan::estimate::Backend::Lbfgs, opt);
-      } else {
-        est_or = magmaan::test::fit_gmm(
-            handles->pt, handles->rep, samp,
-            magmaan::estimate::gmm::Weight(matrices_from_blocks(fit["WLS.V"])),
-            magmaan::estimate::Bounds{}, magmaan::estimate::Backend::Lbfgs, opt);
-      }
+      auto est_or = fit_ls_estimator(
+          estimator, fit, *handles, samp, magmaan::estimate::Backend::Lbfgs,
+          opt);
 
       if (!est_or.has_value()) {
         failures.push_back(id + "/" + estimator + ": fit — " +
@@ -377,6 +407,106 @@ TEST_CASE("continuous LS fixtures: ULS/GLS/WLS bounded fits match lavaan") {
   for (const auto& f : failures) MESSAGE("  FAIL " << f);
   CHECK(passed == total);
 }
+
+TEST_CASE("continuous mean-structure LS fixtures: SNLLS agrees with full LS") {
+  const std::string dir = magmaan::test::fixtures_dir() + "/ls";
+  const magmaan::optim::LbfgsOptions opt{
+      .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8};
+
+  int total = 0;
+  int passed = 0;
+  std::vector<std::string> failures;
+
+  for (const auto& id : {"0004_two_factor_meanstructure",
+                         "0006_three_factor_meanstructure_hs"}) {
+    auto raw = magmaan::test::read_fixture(dir + "/" + id + ".fit.json");
+    REQUIRE(raw.has_value());
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(exp.is_discarded());
+    auto handles = handles_from_fixture(id, exp, failures);
+    if (!handles.has_value()) continue;
+
+    for (const std::string estimator : {"ULS", "GLS", "WLS"}) {
+      ++total;
+      const auto& fit = exp["fits"][estimator];
+      auto samp = sample_stats_from_fit(fit);
+      auto full = fit_ls_estimator(estimator, fit, *handles, samp,
+                                   magmaan::estimate::Backend::Lbfgs, opt);
+      auto prof = fit_snlls_estimator(estimator, fit, *handles, samp,
+                                      magmaan::estimate::Backend::Lbfgs, opt);
+      if (!full.has_value() || !prof.has_value()) {
+        failures.push_back(std::string(id) + "/" + estimator +
+                           ": full/SNLLS fit failed");
+        continue;
+      }
+      const double d_f = std::abs(full->fmin - prof->fmin);
+      if (d_f > 1e-7) {
+        failures.push_back(std::string(id) + "/" + estimator +
+                           ": |full fmin - SNLLS fmin|=" +
+                           std::to_string(d_f));
+        continue;
+      }
+      ++passed;
+    }
+  }
+
+  MESSAGE("continuous mean-structure SNLLS parity: " << passed << " / "
+                                                     << total << " pass");
+  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+  CHECK(passed == total);
+}
+
+#ifdef MAGMAAN_WITH_CERES
+TEST_CASE("continuous mean-structure LS fixtures: Ceres and LBFGS-B agree") {
+  const std::string dir = magmaan::test::fixtures_dir() + "/ls";
+  const magmaan::optim::LbfgsOptions lbfgsb{
+      .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8};
+  const magmaan::optim::LbfgsOptions ceres{
+      .max_iter = 1000, .ftol = 1e-12, .gtol = 1e-8};
+
+  int total = 0;
+  int passed = 0;
+  std::vector<std::string> failures;
+
+  for (const auto& id : {"0004_two_factor_meanstructure",
+                         "0006_three_factor_meanstructure_hs"}) {
+    auto raw = magmaan::test::read_fixture(dir + "/" + id + ".fit.json");
+    REQUIRE(raw.has_value());
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(exp.is_discarded());
+    auto handles = handles_from_fixture(id, exp, failures);
+    if (!handles.has_value()) continue;
+
+    for (const std::string estimator : {"ULS", "GLS", "WLS"}) {
+      ++total;
+      const auto& fit = exp["fits"][estimator];
+      auto samp = sample_stats_from_fit(fit);
+      auto a = fit_ls_estimator(estimator, fit, *handles, samp,
+                                magmaan::estimate::Backend::Lbfgs, lbfgsb);
+      auto b = fit_ls_estimator(estimator, fit, *handles, samp,
+                                magmaan::estimate::Backend::Ceres, ceres);
+      if (!a.has_value() || !b.has_value()) {
+        failures.push_back(std::string(id) + "/" + estimator +
+                           ": LBFGS-B/Ceres fit failed");
+        continue;
+      }
+      const double d_f = std::abs(a->fmin - b->fmin);
+      if (d_f > 1e-7) {
+        failures.push_back(std::string(id) + "/" + estimator +
+                           ": |LBFGS-B fmin - Ceres fmin|=" +
+                           std::to_string(d_f));
+        continue;
+      }
+      ++passed;
+    }
+  }
+
+  MESSAGE("continuous mean-structure Ceres parity: " << passed << " / "
+                                                     << total << " pass");
+  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+  CHECK(passed == total);
+}
+#endif
 
 TEST_CASE("continuous LS robust ULS fixtures match lavaan robust.sem") {
   const std::string dir = magmaan::test::fixtures_dir() + "/ls";
