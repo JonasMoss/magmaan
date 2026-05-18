@@ -197,8 +197,9 @@ robust DWLS/ULS (WLSMV, ULSMV, …); `se=`/`test=` robust and bootstrap;
 - **Test:** parity LS / FIML-MLR / ordinal-robust families; `robust_test`,
   `weighted_inference_test`, `api_sem_test`; examples
   `constraints_and_satorra_bentler.R`, `observed_information_se.R`.
-- **Gaps:** bootstrap (`se`/`test="bootstrap"`) ✗; PML, MLF, MLMVS ✗;
-  `likelihood="wishart"` ✗. All in the backlog.
+- **Gaps:** PML, MLF, MLMVS ✗; `likelihood="wishart"` ✗. Bootstrap
+  (`se`/`test="bootstrap"`) is deliberately deferred as simulation-engine
+  scope rather than tracked as active tutorial parity work.
 
 ### §14 — Mediation
 
@@ -209,8 +210,8 @@ delta-method SEs, optional bootstrap SEs.
   chained definitions, `.pN.` plabel resolution, delta-method SEs
   (`compute_defined`).
 - **Test:** corpus `0008`, `effects_test`; example `defined_parameters.R`.
-- **Gap:** bootstrap SEs for indirect effects ✗ (backlog) — delta-method SEs
-  are available.
+- **Gap:** none for delta-method defined parameters. Bootstrap SEs for indirect
+  effects are deliberately deferred with the broader simulation-engine question.
 
 ### §15 — Modification indices
 
@@ -262,7 +263,6 @@ tutorial reproduction for the in-scope sections except where noted.
 
 | Item | Tutorial § | Effort | Notes |
 |---|---|---|---|
-| Bootstrapping (`se`/`test="bootstrap"`, Bollen-Stine, bootstrap CIs for `:=`) | 13, 14 | L | Principled-RNG design: C++ engine takes an explicit `seed`; each binding forwards its own. |
 | Inequality constraints + active-bound (chi-bar-squared) inference | 7 | XL | Out of scope; fails with an explicit early error. |
 | `lavResiduals()` asymptotic-SE z-statistics | 16 | M | Raw / correlation-metric residuals + SRMR landed; `$cov.z` needs the residual-ACOV convention pinned to a lavaan oracle. |
 | CFI/TLI/RMSEA/SRMR for ordinal | 11 | L | FIML / continuous-LS landed; ordinal needs the polychoric independence-model baseline. |
