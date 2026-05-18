@@ -1,6 +1,7 @@
 useDynLib(magmaan, .registration = TRUE)
 importFrom(Rcpp, sourceCpp)
 export(compute_defined)
+export(composite_weights)
 export(df_to_data)
 export(df_to_fiml_data)
 export(factor_scores)

@@ -43,15 +43,13 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 
 ## Composite models
 
-The C++ core landed (uncommitted, unit-tested): `<~` parses as `Op::Composite`,
+The C++ core and R binding slice have landed: `<~` parses as `Op::Composite`,
 `spec::build` desugars each composite into a Henseler-Ogasawara reflective
-sub-model, weights and delta-method SEs are recovered post-fit, and
-`compat::lavaan::fold_composites` re-folds the partable back to `<~` shape.
+sub-model, weights and delta-method SEs are recovered post-fit, R-facing
+partables are folded back to `<~` shape, and R exposes a `composite_weights()`
+post-fit accessor.
 Remaining:
 
-- **M.** R-binding wiring: expose `<~` through the R model surface, call
-  `fold_composites` so R sees `<~` rows rather than the H-O expansion, and add
-  a `composite_weights` post-fit accessor.
 - **L.** Lavaan parity validation: collect minimal oracle fixtures — pure
   composite, composite plus common factor, structural regression involving a
   composite — and gate point estimates, implied covariance, df, chi-square,

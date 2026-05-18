@@ -21,6 +21,7 @@
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/measures/effects.hpp"
 #include "magmaan/measures/factor_scores.hpp"
+#include "magmaan/measures/composite_weights.hpp"
 #include "magmaan/measures/standardized.hpp"
 #include "magmaan/measures/residuals.hpp"
 #include "magmaan/estimate/nt.hpp"
@@ -82,6 +83,34 @@ Rcpp::List standardized_to_list(
     const magmaan::measures::standardize::StandardizedSolution& r) {
   return Rcpp::List::create(Rcpp::_["theta"] = Rcpp::wrap(r.theta),
                             Rcpp::_["se"] = Rcpp::wrap(r.se));
+}
+
+Rcpp::DataFrame composite_weights_df(
+    const std::vector<magmaan::measures::composite::CompositeWeights>& rows) {
+  R_xlen_t n = 0;
+  for (const auto& cw : rows) n += static_cast<R_xlen_t>(cw.indicators.size());
+
+  Rcpp::CharacterVector composite(n), indicator(n);
+  Rcpp::IntegerVector group(n);
+  Rcpp::NumericVector weight(n), se(n);
+  R_xlen_t pos = 0;
+  for (const auto& cw : rows) {
+    for (std::size_t j = 0; j < cw.indicators.size(); ++j) {
+      composite[pos] = cw.composite;
+      group[pos] = cw.group;
+      indicator[pos] = cw.indicators[j];
+      weight[pos] = cw.weight(static_cast<Eigen::Index>(j));
+      se[pos] = cw.se(static_cast<Eigen::Index>(j));
+      ++pos;
+    }
+  }
+  return Rcpp::DataFrame::create(
+      Rcpp::_["composite"] = composite,
+      Rcpp::_["group"] = group,
+      Rcpp::_["indicator"] = indicator,
+      Rcpp::_["weight"] = weight,
+      Rcpp::_["se"] = se,
+      Rcpp::_["stringsAsFactors"] = false);
 }
 
 Rcpp::List matrix_blocks_to_r(const std::vector<Eigen::MatrixXd>& blocks,
@@ -1847,6 +1876,20 @@ Rcpp::List measures_standardize_all(Rcpp::List fit, Rcpp::NumericMatrix vcov) {
       ctx.pt, ctx.rep, est, vcov_m);
   if (!r_or.has_value()) stop_post(r_or.error());
   return standardized_to_list(*r_or);
+}
+
+// measures_composite_weights() — recovered `<~` weights and delta-method SEs.
+//
+// [[Rcpp::export]]
+Rcpp::DataFrame measures_composite_weights(Rcpp::List fit,
+                                           Rcpp::NumericMatrix vcov) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
+  auto w_or = magmaan::measures::composite::composite_weights(
+      ctx.pt, ctx.names, est, vcov_m);
+  if (!w_or.has_value()) stop_post(w_or.error());
+  return composite_weights_df(*w_or);
 }
 
 // measures_residuals() — mirrors measures::residuals(); raw S - Sigma-hat

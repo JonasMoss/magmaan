@@ -402,6 +402,11 @@ golden `parTable()` fixtures.
 - Exploratory R bindings cover lavaanify, fitting, sample-stat bundles, robust
   inference, fit measures, model implied moments, LS estimators, SNLLS, Ceres
   paths when enabled, and data-frame-to-model sample statistics.
+- Composite (`<~`) model specifications are visible at the R boundary as
+  folded `<~` partable rows while the hidden expanded Henseler-Ogasawara
+  partable is retained as internal metadata for fitting and post-fit helpers.
+  The R `composite_weights(fit, vcov)` accessor exposes recovered composite
+  weights and delta-method SEs from the C++ post-fit primitive.
 - `magmaan(model, data, estimator, groups)` is the high-level estimate-only
   R convenience. It composes `model_spec()`, data-frame sample-stat/raw-data
   construction, and the matching point-estimation wrapper for complete-data

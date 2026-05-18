@@ -189,6 +189,10 @@ measures_standardize_all <- function(fit, vcov) {
     .Call(`_magmaan_measures_standardize_all`, fit, vcov)
 }
 
+measures_composite_weights <- function(fit, vcov) {
+    .Call(`_magmaan_measures_composite_weights`, fit, vcov)
+}
+
 measures_residuals <- function(fit) {
     .Call(`_magmaan_measures_residuals`, fit)
 }
