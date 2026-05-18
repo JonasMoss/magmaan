@@ -8,8 +8,10 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/estimate/auglag.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/reparameterize.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/estimate/gmm/gp.hpp"
@@ -102,8 +104,9 @@ run_gmm(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
 
 // Shared prelude — resolve fixed.x, build the evaluator, build constraints.
 struct Prelude {
-  model::ModelEvaluator ev;
-  EqConstraints         con;
+  model::ModelEvaluator  ev;
+  EqConstraints          con;   // linear-equality affine reparameterization
+  NonlinearEqConstraints nl;    // nonlinear `==` constraints (augmented-Lagrangian)
 };
 
 fit_expected<Prelude>
@@ -124,12 +127,17 @@ prelude(spec::LatentStructure& pt, const model::MatrixRep& rep,
         std::string(who) + ": x0 size (" + std::to_string(x0.size()) +
             ") != n_free (" + std::to_string(pt.n_free()) + ")"));
   }
-  auto con_or = build_eq_constraints(pt);
+  // `allow_nonlinear`: the ML / GMM composers enforce nonlinear `==` via the
+  // augmented-Lagrangian path, so `build_eq_constraints` builds only the
+  // *linear* reparameterization here instead of rejecting the model. The
+  // SNLLS / FIML / ordinal paths reject nonlinear constraints separately.
+  auto con_or = build_eq_constraints(pt, /*allow_nonlinear=*/true);
   if (!con_or.has_value()) {
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
         std::string(who) + ": constraint: " + con_or.error().detail));
   }
-  return Prelude{std::move(*ev_or), std::move(*con_or)};
+  return Prelude{std::move(*ev_or), std::move(*con_or),
+                 build_nl_constraints(pt)};
 }
 
 }  // namespace
@@ -141,12 +149,34 @@ namespace {
 // the weight is produced.
 fit_expected<Estimates>
 compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
-            const SampleStats& samp, const Eigen::VectorXd& x0,
-            const gmm::Weight& weight, const Bounds& bounds, Backend backend,
-            LbfgsOptions opts) {
+            const NonlinearEqConstraints& nl, const SampleStats& samp,
+            const Eigen::VectorXd& x0, const gmm::Weight& weight,
+            const Bounds& bounds, Backend backend, LbfgsOptions opts) {
   auto prob_or = gmm::residuals(ev, samp, x0, weight);
   if (!prob_or.has_value()) return std::unexpected(prob_or.error());
   const optim::GmmProblem prob = std::move(*prob_or);
+
+  // Nonlinear equality constraints — scalarize and run the augmented
+  // Lagrangian (the LS sum-of-squares structure is lost once the AL penalty
+  // is folded in, so the scalar path is used).
+  if (nl.active()) {
+    if (con.active()) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "fit_gmm: models combining linear and nonlinear equality "
+          "constraints are not yet supported"));
+    }
+    if (backend == Backend::Ceres) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "fit_gmm: the Ceres backend cannot enforce nonlinear equality "
+          "constraints"));
+    }
+    const optim::ScalarProblem sprob = optim::scalarize(prob);
+    auto h_fn   = [&nl](const Eigen::VectorXd& th) { return nl.h(th); };
+    auto jac_fn = [&nl](const Eigen::VectorXd& th) { return nl.jacobian(th); };
+    auto r = augmented_lagrangian(sprob, h_fn, jac_fn, nl.m(), x0, bounds, opts);
+    if (!r.has_value()) return std::unexpected(r.error());
+    return Estimates{prob.expand(r->x), r->base_fmin, r->outer_iterations};
+  }
 
   if (!con.active()) {
     auto out = run_gmm(prob, x0, bounds, backend, opts);
@@ -197,8 +227,8 @@ fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
         LbfgsOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_gmm");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  return compose_gmm(pre->ev, pre->con, samp, x0, weight, bounds, backend,
-                     opts);
+  return compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, weight, bounds,
+                     backend, opts);
 }
 
 fit_expected<Estimates>
@@ -209,7 +239,8 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
   if (!pre.has_value()) return std::unexpected(pre.error());
   auto W = gmm::normal_theory_weight(pre->ev, samp, x0);
   if (!W.has_value()) return std::unexpected(W.error());
-  return compose_gmm(pre->ev, pre->con, samp, x0, *W, bounds, backend, opts);
+  return compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, *W, bounds, backend,
+                     opts);
 }
 
 fit_expected<Estimates>
@@ -224,6 +255,26 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto obj_or = estimate::ml_objective(ev, samp);
   if (!obj_or.has_value()) return std::unexpected(obj_or.error());
   const optim::ScalarProblem prob = std::move(*obj_or);
+
+  // Nonlinear equality constraints — minimize via the augmented Lagrangian.
+  if (pre->nl.active()) {
+    const NonlinearEqConstraints& nl = pre->nl;
+    if (con.active()) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "fit_ml: models combining linear and nonlinear equality "
+          "constraints are not yet supported"));
+    }
+    if (backend == Backend::Ceres) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "fit_ml: the Ceres backend cannot enforce nonlinear equality "
+          "constraints"));
+    }
+    auto h_fn   = [&nl](const Eigen::VectorXd& th) { return nl.h(th); };
+    auto jac_fn = [&nl](const Eigen::VectorXd& th) { return nl.jacobian(th); };
+    auto r = augmented_lagrangian(prob, h_fn, jac_fn, nl.m(), x0, bounds, opts);
+    if (!r.has_value()) return std::unexpected(r.error());
+    return Estimates{prob.expand(r->x), r->base_fmin, r->outer_iterations};
+  }
 
   if (!con.active()) {
     auto out = run_scalar(prob, x0, bounds, backend, opts);
@@ -259,6 +310,11 @@ fit_expected<Estimates>
 compose_snlls(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
               const SampleStats& samp, const Eigen::VectorXd& x0,
               const gmm::Weight& weight, Backend backend, LbfgsOptions opts) {
+  if (!pt.nl_constraints.empty()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_snlls: nonlinear equality constraints are not supported by the "
+        "separable (Golub–Pereyra) least-squares path — use fit_ml or fit_gmm"));
+  }
   auto base_or = gmm::residuals(ev, samp, x0, weight);
   if (!base_or.has_value()) return std::unexpected(base_or.error());
 

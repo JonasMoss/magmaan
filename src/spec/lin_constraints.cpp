@@ -40,6 +40,80 @@ LinearForm combine(LinearForm a, const LinearForm& b, double s) {
   return a;
 }
 
+// True if `e` mentions any identifier that is neither a free parameter nor a
+// fixed cell — i.e. an unknown reference. `analyze_linear` returns
+// `std::nullopt` for *both* a nonlinear expression and an unknown identifier;
+// this separates the two so a malformed `==` row is not mistaken for a
+// well-formed nonlinear one.
+bool expr_has_unknown_id(
+    const parse::Expr& e,
+    const std::unordered_map<std::string_view, int>&    name_to_free,
+    const std::unordered_map<std::string_view, double>& name_to_fixed) {
+  return std::visit(
+      [&](auto&& v) -> bool {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (std::is_same_v<T, parse::Num>) {
+          return false;
+        } else if constexpr (std::is_same_v<T, parse::Param>) {
+          return name_to_free.find(v.text) == name_to_free.end() &&
+                 name_to_fixed.find(v.text) == name_to_fixed.end();
+        } else if constexpr (std::is_same_v<T, parse::UnNode>) {
+          return expr_has_unknown_id(*v.arg, name_to_free, name_to_fixed);
+        } else {  // parse::BinNode
+          return expr_has_unknown_id(*v.lhs, name_to_free, name_to_fixed) ||
+                 expr_has_unknown_id(*v.rhs, name_to_free, name_to_fixed);
+        }
+      },
+      static_cast<const parse::Expr::variant&>(e));
+}
+
+// Compile a parsed expression into the name-free `NlExprNode` pool, resolving
+// each identifier through the constraint name maps. The caller has already
+// run `expr_has_unknown_id`, so every `Param` resolves to a free index or a
+// fixed value. Children are appended before their parent; returns the
+// parent's pool index.
+std::int32_t compile_nl_expr(
+    const parse::Expr& e,
+    const std::unordered_map<std::string_view, int>&    name_to_free,
+    const std::unordered_map<std::string_view, double>& name_to_fixed,
+    std::vector<NlExprNode>& pool) {
+  return std::visit(
+      [&](auto&& v) -> std::int32_t {
+        using T = std::decay_t<decltype(v)>;
+        NlExprNode node;
+        if constexpr (std::is_same_v<T, parse::Num>) {
+          node.kind = NlExprNode::Kind::Const;
+          node.constant = v.value;
+        } else if constexpr (std::is_same_v<T, parse::Param>) {
+          node.kind = NlExprNode::Kind::Param;
+          if (auto it = name_to_free.find(v.text); it != name_to_free.end()) {
+            node.free_idx = it->second - 1;            // 1-based → 0-based
+          } else {
+            node.free_idx = -1;
+            node.constant = name_to_fixed.at(v.text);  // a fixed reference
+          }
+        } else if constexpr (std::is_same_v<T, parse::UnNode>) {
+          const std::int32_t c =
+              compile_nl_expr(*v.arg, name_to_free, name_to_fixed, pool);
+          node.kind  = NlExprNode::Kind::Unary;
+          node.un_op = v.op;
+          node.lhs   = c;
+        } else {  // parse::BinNode
+          const std::int32_t l =
+              compile_nl_expr(*v.lhs, name_to_free, name_to_fixed, pool);
+          const std::int32_t r =
+              compile_nl_expr(*v.rhs, name_to_free, name_to_fixed, pool);
+          node.kind   = NlExprNode::Kind::Binary;
+          node.bin_op = v.op;
+          node.lhs    = l;
+          node.rhs    = r;
+        }
+        pool.push_back(node);
+        return static_cast<std::int32_t>(pool.size() - 1);
+      },
+      static_cast<const parse::Expr::variant&>(e));
+}
+
 }  // namespace
 
 std::optional<LinearForm>
@@ -102,7 +176,10 @@ analyze_linear(const parse::Expr& e, int n_free,
 void resolve_lin_constraints(LatentStructure& pt, const LatentNames& names) {
   pt.lin_constraint_R.clear();
   pt.lin_constraint_d.clear();
-  if (!pt.has_unenforced_constraints) return;  // nothing flagged ⇒ nothing to do
+  pt.nonlinear_eq_rows.clear();
+  pt.nl_constraints.clear();
+  pt.has_inequality_constraints = false;
+  pt.has_unenforced_constraints = false;
   const int n_free = pt.n_free();
 
   // name (row label OR `.pN.` plabel) → 1-based free index (free non-constraint
@@ -125,11 +202,12 @@ void resolve_lin_constraints(LatentStructure& pt, const LatentNames& names) {
     }
   }
 
-  bool has_ineq        = false;
-  bool any_eq_flagged  = false;
   for (std::size_t i = 0; i < pt.size(); ++i) {
     const parse::Op op = pt.op[i];
-    if (op == parse::Op::LtConstraint || op == parse::Op::GtConstraint) { has_ineq = true; continue; }
+    if (op == parse::Op::LtConstraint || op == parse::Op::GtConstraint) {
+      pt.has_inequality_constraints = true;
+      continue;
+    }
     if (op != parse::Op::EqConstraint) continue;
     const std::string& lhs_txt = names.row_lhs[i];
     const std::string& rhs_txt = names.row_rhs[i];
@@ -145,13 +223,40 @@ void resolve_lin_constraints(LatentStructure& pt, const LatentNames& names) {
     auto fp = parse::Parser::parse(snippet);
     if (!fp.has_value() || fp->constraints.empty() ||
         fp->constraints[0].kind != parse::ConstraintKind::Eq) {
-      any_eq_flagged = true;
+      pt.has_unenforced_constraints = true;   // malformed: failed to re-parse
       continue;
     }
     const parse::Constraint& c = fp->constraints[0];
+    // An unknown identifier means the row is malformed — distinct from a
+    // well-formed nonlinear constraint, which `analyze_linear` would also
+    // reject. Classify it before asking whether the expression is affine.
+    if (expr_has_unknown_id(c.lhs, name_to_free, name_to_fixed) ||
+        expr_has_unknown_id(c.rhs, name_to_free, name_to_fixed)) {
+      pt.has_unenforced_constraints = true;
+      continue;
+    }
     auto gl = analyze_linear(c.lhs, n_free, name_to_free, name_to_fixed);
     auto gr = analyze_linear(c.rhs, n_free, name_to_free, name_to_fixed);
-    if (!gl || !gr) { any_eq_flagged = true; continue; }
+    if (!gl || !gr) {
+      // Every identifier is known but the expression is not affine — a
+      // genuine nonlinear equality constraint (`a == b*c`, `b == (c+d)^2`).
+      // Compile `h = lhs − rhs` into the name-free node pool.
+      pt.nonlinear_eq_rows.push_back(static_cast<std::int32_t>(i));
+      NlConstraint nlc;
+      const std::int32_t rl =
+          compile_nl_expr(c.lhs, name_to_free, name_to_fixed, nlc.nodes);
+      const std::int32_t rr =
+          compile_nl_expr(c.rhs, name_to_free, name_to_fixed, nlc.nodes);
+      NlExprNode sub;
+      sub.kind   = NlExprNode::Kind::Binary;
+      sub.bin_op = parse::BinOp::Sub;
+      sub.lhs    = rl;
+      sub.rhs    = rr;
+      nlc.nodes.push_back(sub);
+      nlc.root = static_cast<std::int32_t>(nlc.nodes.size() - 1);
+      pt.nl_constraints.push_back(std::move(nlc));
+      continue;
+    }
     // lhs(θ) == rhs(θ)  ⟺  (gl.coef − gr.coef)·θ = gr.cst − gl.cst.
     pt.lin_constraint_d.push_back(gr->cst - gl->cst);
     pt.lin_constraint_R.reserve(pt.lin_constraint_R.size() +
@@ -161,8 +266,6 @@ void resolve_lin_constraints(LatentStructure& pt, const LatentNames& names) {
                                     gr->coef[static_cast<std::size_t>(k)]);
     }
   }
-
-  if (!has_ineq && !any_eq_flagged) pt.has_unenforced_constraints = false;
 }
 
 }  // namespace magmaan::spec

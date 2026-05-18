@@ -33,8 +33,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // lavaan_lavaanify
-Rcpp::DataFrame lavaan_lavaanify(std::string syntax, bool auto_var, bool auto_cov_lv_x, bool auto_cov_y, bool auto_fix_first, bool std_lv, bool effect_coding, bool fixed_x, bool meanstructure, bool int_ov_free, bool int_lv_free, int n_groups, std::string group_var, Rcpp::Nullable<Rcpp::CharacterVector> group_labels);
-RcppExport SEXP _magmaan_lavaan_lavaanify(SEXP syntaxSEXP, SEXP auto_varSEXP, SEXP auto_cov_lv_xSEXP, SEXP auto_cov_ySEXP, SEXP auto_fix_firstSEXP, SEXP std_lvSEXP, SEXP effect_codingSEXP, SEXP fixed_xSEXP, SEXP meanstructureSEXP, SEXP int_ov_freeSEXP, SEXP int_lv_freeSEXP, SEXP n_groupsSEXP, SEXP group_varSEXP, SEXP group_labelsSEXP) {
+Rcpp::DataFrame lavaan_lavaanify(std::string syntax, bool auto_var, bool auto_cov_lv_x, bool auto_cov_y, bool orthogonal, bool auto_fix_first, bool std_lv, bool effect_coding, bool fixed_x, bool meanstructure, bool int_ov_free, bool int_lv_free, int n_groups, std::string group_var, Rcpp::Nullable<Rcpp::CharacterVector> group_labels);
+RcppExport SEXP _magmaan_lavaan_lavaanify(SEXP syntaxSEXP, SEXP auto_varSEXP, SEXP auto_cov_lv_xSEXP, SEXP auto_cov_ySEXP, SEXP orthogonalSEXP, SEXP auto_fix_firstSEXP, SEXP std_lvSEXP, SEXP effect_codingSEXP, SEXP fixed_xSEXP, SEXP meanstructureSEXP, SEXP int_ov_freeSEXP, SEXP int_lv_freeSEXP, SEXP n_groupsSEXP, SEXP group_varSEXP, SEXP group_labelsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -42,6 +42,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type auto_var(auto_varSEXP);
     Rcpp::traits::input_parameter< bool >::type auto_cov_lv_x(auto_cov_lv_xSEXP);
     Rcpp::traits::input_parameter< bool >::type auto_cov_y(auto_cov_ySEXP);
+    Rcpp::traits::input_parameter< bool >::type orthogonal(orthogonalSEXP);
     Rcpp::traits::input_parameter< bool >::type auto_fix_first(auto_fix_firstSEXP);
     Rcpp::traits::input_parameter< bool >::type std_lv(std_lvSEXP);
     Rcpp::traits::input_parameter< bool >::type effect_coding(effect_codingSEXP);
@@ -52,7 +53,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type n_groups(n_groupsSEXP);
     Rcpp::traits::input_parameter< std::string >::type group_var(group_varSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type group_labels(group_labelsSEXP);
-    rcpp_result_gen = Rcpp::wrap(lavaan_lavaanify(syntax, auto_var, auto_cov_lv_x, auto_cov_y, auto_fix_first, std_lv, effect_coding, fixed_x, meanstructure, int_ov_free, int_lv_free, n_groups, group_var, group_labels));
+    rcpp_result_gen = Rcpp::wrap(lavaan_lavaanify(syntax, auto_var, auto_cov_lv_x, auto_cov_y, orthogonal, auto_fix_first, std_lv, effect_coding, fixed_x, meanstructure, int_ov_free, int_lv_free, n_groups, group_var, group_labels));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -989,7 +990,7 @@ END_RCPP
 static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_version", (DL_FUNC) &_magmaan_version, 0},
     {"_magmaan_parse_parse", (DL_FUNC) &_magmaan_parse_parse, 1},
-    {"_magmaan_lavaan_lavaanify", (DL_FUNC) &_magmaan_lavaan_lavaanify, 14},
+    {"_magmaan_lavaan_lavaanify", (DL_FUNC) &_magmaan_lavaan_lavaanify, 15},
     {"_magmaan_model_matrix_rep", (DL_FUNC) &_magmaan_model_matrix_rep, 1},
     {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 3},
     {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 3},

@@ -483,6 +483,9 @@ inline nlohmann::json modifier_atom_to_json(const parse::ModifierAtom& a) {
         } else if constexpr (std::is_same_v<T, parse::StartValue>) {
           j["kind"] = "start";
           j["value"] = v.value;
+        } else if constexpr (std::is_same_v<T, parse::EqualRef>) {
+          j["kind"] = "equal";
+          j["target"] = std::string(v.text);
         }
       },
       a);
@@ -505,6 +508,9 @@ inline nlohmann::json modifier_to_json(const parse::Modifier& m) {
         } else if constexpr (std::is_same_v<T, parse::StartValue>) {
           j["kind"] = "start";
           j["value"] = v.value;
+        } else if constexpr (std::is_same_v<T, parse::EqualRef>) {
+          j["kind"] = "equal";
+          j["target"] = std::string(v.text);
         } else if constexpr (std::is_same_v<T, parse::GroupVec>) {
           j["kind"] = "group";
           nlohmann::json atoms = nlohmann::json::array();

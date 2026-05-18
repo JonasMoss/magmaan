@@ -5,7 +5,8 @@ contracts for magmaan. It is not the active backlog. Remaining work lives in
 [docs/todo.md](todo.md).
 
 Out of scope for this track: Bayesian SEM, multilevel SEM, latent
-interactions/mixtures, EFA, nonlinear constraints, and end-user lavaan
+interactions/mixtures, EFA, inequality constraints (and active-bound
+inference), and end-user lavaan
 replacement ergonomics.
 
 ## Current State
@@ -44,6 +45,11 @@ golden `parTable()` fixtures.
   identification, start hints, and linear equality constraints.
 - Linear equality constraints through affine reparameterization for ML and
   penalty residuals for bounded LS.
+- Nonlinear equality constraints (`a == b*c`, `b1 == (b2+b3)^2`) for the ML
+  and complete-data LS paths: compiled to name-free expression trees by
+  `resolve_lin_constraints`, enforced by an augmented-Lagrangian outer loop
+  over L-BFGS, with the constrained vcov / df projected through the constraint
+  Jacobian H(θ̂). FIML, ordinal, and the separable (SNLLS) path reject them.
 - Effect coding for loadings.
 
 ### Complete-data ML and inference
@@ -607,10 +613,16 @@ developer step.
 - Browne residual ADF is complete-data only.
 - Score-test EPC is raw, unstandardized EPC only; standardized EPC and absent
   row-generation helpers are not yet part of the public contract.
-- Nonlinear equality constraints, inequality constraints, and active-bound
-  inference are unsupported. Reopening any of them requires an explicit
-  statistical design and reporting contract; they must not silently report
-  ordinary chi-square/SE theory.
+- Nonlinear *equality* constraints are supported for ML and complete-data LS
+  (augmented-Lagrangian fit, Jacobian-projected vcov/df) — but not for FIML,
+  ordinal, or the separable SNLLS path, and not in combination with linear
+  equality constraints in the same model; those combinations fail explicitly.
+  `exp()` / `log()` inside a constraint expression need a grammar extension
+  and are not yet parseable.
+- Inequality constraints (`<` / `>`) and active-bound inference remain
+  unsupported: inequality-constrained estimation needs boundary
+  (chi-bar-squared) asymptotics magmaan does not implement. They fail with an
+  explicit early error rather than silently reporting ordinary χ²/SE theory.
 
 ## Design Invariants
 
@@ -636,4 +648,6 @@ developer step.
 ## Planning Documents
 
 Use this file to understand the current state and contracts before structural
-changes. Use [docs/todo.md](todo.md) to choose or update remaining work.
+changes. Use [docs/todo.md](todo.md) to choose or update remaining work. See
+[docs/lavaan_tutorial_parity.md](lavaan_tutorial_parity.md) for the
+section-by-section audit of magmaan against the lavaan tutorial.

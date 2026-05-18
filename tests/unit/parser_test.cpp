@@ -135,6 +135,17 @@ TEST_CASE("modifier: label via lbl*x") {
   CHECK(l2->text == "b");
 }
 
+TEST_CASE("modifier: equal() reference via equal(\"...\")") {
+  auto fp = must_parse("f =~ x1 + x2 + equal(\"f=~x2\")*x3");
+  REQUIRE(fp.rows.size() == 3);
+  CHECK(fp.rows[0].mod_idx == 0);
+  CHECK(fp.rows[1].mod_idx == 0);
+  const auto* eq =
+      std::get_if<magmaan::parse::EqualRef>(&fp.mods[fp.rows[2].mod_idx]);
+  REQUIRE(eq != nullptr);
+  CHECK(eq->text == "f=~x2");
+}
+
 TEST_CASE("modifier: start-value shorthand v?x") {
   auto fp = must_parse("f =~ 1*x1 + 0.7?x2 + x3");
   REQUIRE(fp.rows.size() == 3);

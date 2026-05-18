@@ -20,6 +20,12 @@ struct BuildOptions {
   bool auto_var       = true;   // residual variances for endogenous OV; LV variances
   bool auto_cov_lv_x  = true;   // covariances among exogenous latents
   bool auto_cov_y     = false;  // covariances among endogenous LV/OV (for SEM with multiple y)
+  // `orthogonal` identification (≙ lavaan `cfa(…, orthogonal = TRUE)`): every
+  // *auto-added* covariance among latent variables is fixed at 0 instead of
+  // freely estimated. The covariance rows are still emitted (free = 0, value
+  // 0) so the partable mirrors lavaan's. An explicit user `f1 ~~ f2` row still
+  // wins. Only affects the rows `auto_cov_lv_x` / `auto_cov_y` generate.
+  bool orthogonal     = false;  // fix auto latent-variable covariances at 0
   bool auto_fix_first = true;   // fix first loading per LV to 1.0 (marker indicator)
   // `std.lv` identification: scale each latent by fixing its `~~`-self
   // variance at 1.0 instead of fixing a marker loading. When true,
@@ -75,12 +81,15 @@ partable_expected<LatentStructure>
 build(const parse::FlatPartable& flat, const BuildOptions& opts = {},
           Starts* out_starts = nullptr, LatentNames* out_names = nullptr);
 
-// Recompute `s.eq_groups` / `s.has_unenforced_constraints` from the model's
-// `==` rows (auto-equality via `.pN.` plabel pairs, explicit `a == b` via row
-// labels — both resolved through `names`) and `<` / `>` rows. `lavaanify` calls
-// this; callers that build a `LatentStructure` from outside (e.g. via
+// Recompute `s.eq_groups` (the parameter-merge partition) from the model's
+// pure-merge `==` rows — auto-equality via `.pN.` plabel pairs and explicit
+// bare `a == b` via row labels, both resolved through `names`. `lavaanify`
+// calls this; callers that build a `LatentStructure` from outside (e.g. via
 // `from_lavaan_partable` on a hand-edited partable) call it too so equality
-// constraints are honored. Safe to call repeatedly.
+// constraints are honored. It must always be followed by
+// `resolve_lin_constraints`, which owns the constraint-classification flags
+// (`has_inequality_constraints` / `nonlinear_eq_rows` /
+// `has_unenforced_constraints`). Safe to call repeatedly.
 void compute_eq_groups(LatentStructure& s, const LatentNames& names);
 
 }  // namespace magmaan::spec

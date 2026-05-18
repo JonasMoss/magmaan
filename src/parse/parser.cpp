@@ -171,6 +171,37 @@ parse_expected<Modifier> parse_start_call(State& st) noexcept {
   return Modifier{StartValue{value}};
 }
 
+// production: equal_call
+//
+//   equal_call ::= 'equal' '(' (string_lit | identifier) ')'
+//
+// Caller has already verified that peek(0) is Identifier "equal" and
+// peek(1) is LParen. The argument names the parameter to tie to — either a
+// quoted "lhs op rhs" string (e.g. equal("visual=~x2")) or a bare label.
+parse_expected<Modifier> parse_equal_call(State& st) noexcept {
+  st.consume();   // Identifier "equal"
+  st.consume();   // LParen
+  const Token& v = st.peek();
+  std::string_view target;
+  if (v.kind == TokenKind::StringLit) {
+    target = strip_quotes(v.text);
+  } else if (v.kind == TokenKind::Identifier) {
+    target = v.text;
+  } else {
+    return std::unexpected(make_err(
+        ParseError::Kind::ModifierEvalFailed, v.span,
+        "equal(...) requires a quoted parameter name or a label identifier"));
+  }
+  st.consume();
+  if (st.peek().kind != TokenKind::RParen) {
+    return std::unexpected(make_err(
+        ParseError::Kind::ModifierEvalFailed, st.peek().span,
+        "expected ')' after equal(...) argument"));
+  }
+  st.consume();
+  return Modifier{EqualRef{target}};
+}
+
 // production: group_vec
 //
 //   group_vec ::= 'c' '(' modifier_atom (',' modifier_atom)* ')'
@@ -218,12 +249,13 @@ parse_expected<Modifier> parse_modifier(State& st) noexcept {
   if (head.kind == TokenKind::Identifier && after.kind == TokenKind::LParen) {
     if (head.text == "c")     return parse_group_vec(st);
     if (head.text == "start") return parse_start_call(st);
+    if (head.text == "equal") return parse_equal_call(st);
     // Any other identifier(...) form is a modifier-evaluator failure: only
-    // c() and start() are defined modifier functions in v0.
+    // c(), start() and equal() are defined modifier functions in v0.
     return std::unexpected(make_err(
         ParseError::Kind::ModifierEvalFailed, head.span,
         std::string("unknown modifier function: '") + std::string(head.text) +
-            "(...)' (only c(...) and start(...) are recognized)"));
+            "(...)' (only c(...), start(...) and equal(...) are recognized)"));
   }
   auto atom_or = parse_modifier_atom(st);
   if (!atom_or.has_value()) return std::unexpected(atom_or.error());

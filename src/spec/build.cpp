@@ -56,6 +56,10 @@ struct PendingRow {
   bool             user_start_value = false;
   double           start_value = kNaN;
   std::string      label;
+  // equal("...") target: when non-empty, this row is tied to the parameter
+  // whose canonical `lhs op rhs` name equals this string. Resolved into a
+  // shared label by build_group_template.
+  std::string      equal_ref;
   // True when the user supplied any modifier OTHER than a bare label
   // (Free / StartValue / FixedValue). When true, auto.fix.first does NOT
   // override this row — the user has spoken about it explicitly.
@@ -112,6 +116,40 @@ bool regression_already_present(const std::vector<PendingRow>& rows,
   return false;
 }
 
+// Build an auto-generated `lhs ~~ rhs` covariance row. Under `orthogonal` the
+// row is fixed at 0 instead of free — lavaan's orthogonal identification keeps
+// the latent-covariance rows in the partable but pins them (free = 0,
+// ustart = 0).
+// Whitespace-stripped copy — normalizes an equal("...") target so it matches
+// the space-free canonical `lhs op rhs` name of a row.
+std::string strip_ws(std::string_view s) {
+  std::string out;
+  out.reserve(s.size());
+  for (char c : s)
+    if (c != ' ' && c != '\t') out += c;
+  return out;
+}
+
+// Canonical `lhs op rhs` name of a row, no spaces (`visual=~x2`, `x1~~x1`,
+// `y~x`, `x1~1`). The form an equal("...") target string is matched against.
+std::string row_canonical_name(const PendingRow& r) {
+  std::string s = r.lhs;
+  s += parse::to_string(r.op);
+  s += r.rhs;
+  return s;
+}
+
+PendingRow make_auto_cov(std::string lhs, std::string rhs, bool orthogonal) {
+  PendingRow p = make_pending(/*user=*/0, std::move(lhs),
+                              parse::Op::Covariance, std::move(rhs));
+  if (orthogonal) {
+    p.user_fixed_value = true;
+    p.fixed_value      = 0.0;
+    p.auto_fixed       = true;
+  }
+  return p;
+}
+
 // === Step 3: user modifier application =====================================
 //
 // Helper: pick the effective ModifierAtom for group `group_idx` (0-based).
@@ -132,6 +170,8 @@ select_group_atom(const parse::Modifier& m, std::int32_t group_idx,
         } else if constexpr (std::is_same_v<T, parse::Label>) {
           out = parse::ModifierAtom{v};
         } else if constexpr (std::is_same_v<T, parse::StartValue>) {
+          out = parse::ModifierAtom{v};
+        } else if constexpr (std::is_same_v<T, parse::EqualRef>) {
           out = parse::ModifierAtom{v};
         } else if constexpr (std::is_same_v<T, parse::GroupVec>) {
           if (static_cast<std::int32_t>(v.per_group.size()) != n_groups) {
@@ -173,6 +213,12 @@ void apply_atom(PendingRow& row, const parse::ModifierAtom& atom) {
           // (see finalize()).
           row.user_start_value = true;
           row.start_value = v.value;
+        } else if constexpr (std::is_same_v<T, parse::EqualRef>) {
+          // equal("...") ties this parameter to another — an explicit
+          // equality statement, so the row opts out of auto.fix.first (it
+          // stays free and tied rather than being pinned to a marker 1.0).
+          row.equal_ref = strip_ws(v.text);
+          row.user_explicit = true;
         }
       },
       atom);
@@ -527,8 +573,8 @@ build_group_template(const parse::FlatPartable& flat,
         if (covariance_already_present(rows, exo_lv.items[i], exo_lv.items[j])) {
           continue;
         }
-        rows.push_back(make_pending(/*user=*/0, exo_lv.items[i],
-                                    parse::Op::Covariance, exo_lv.items[j]));
+        rows.push_back(make_auto_cov(exo_lv.items[i], exo_lv.items[j],
+                                     opts.orthogonal));
       }
     }
   }
@@ -548,8 +594,7 @@ build_group_template(const parse::FlatPartable& flat,
             regression_already_present(rows, rhs, lhs)) {
           continue;
         }
-        rows.push_back(make_pending(/*user=*/0, lhs,
-                                    parse::Op::Covariance, rhs));
+        rows.push_back(make_auto_cov(lhs, rhs, opts.orthogonal));
       }
     }
   }
@@ -564,6 +609,31 @@ build_group_template(const parse::FlatPartable& flat,
     // nothing: all loadings free, `lv ~~ lv` free (from auto.var).
   } else if (opts.auto_fix_first) {
     apply_auto_fix_first(v, rows);
+  }
+  // Resolve equal(...) references. A row carrying an `equal_ref` is tied to
+  // the parameter it names (canonical `lhs op rhs`): magmaan expresses the
+  // tie as a shared label — both rows get the same label, which
+  // `compute_eq_groups` later merges into one free parameter. That is the
+  // equivalent fitted model to lavaan's `.pX. == .pY.` constraint row (same
+  // estimates, same degrees of freedom). Runs before `propagate_fix_via_labels`
+  // so a tie to a fixed parameter still propagates the fix.
+  for (std::size_t i = 0; i < rows.size(); ++i) {
+    if (rows[i].equal_ref.empty()) continue;
+    std::size_t ref = rows.size();
+    for (std::size_t j = 0; j < rows.size(); ++j) {
+      if (j == i) continue;
+      if (row_canonical_name(rows[j]) == rows[i].equal_ref) { ref = j; break; }
+    }
+    if (ref == rows.size()) {
+      return std::unexpected(make_err(
+          PartableError::Kind::UnknownLabelInConstraint,
+          "equal(\"" + rows[i].equal_ref +
+              "\") references a parameter that is not in the model"));
+    }
+    const std::string shared =
+        rows[ref].label.empty() ? rows[i].equal_ref : rows[ref].label;
+    rows[ref].label = shared;
+    rows[i].label   = shared;
   }
   propagate_fix_via_labels(rows);
   if (opts.fixed_x) {
@@ -751,7 +821,10 @@ void compute_eq_groups(LatentStructure& s, const LatentNames& names) {
   const std::int32_t npar = s.n_free();
   s.eq_groups.assign(static_cast<std::size_t>(npar < 0 ? 0 : npar), 0);
   for (std::int32_t k = 0; k < npar; ++k) s.eq_groups[static_cast<std::size_t>(k)] = k;
-  s.has_unenforced_constraints = false;
+  // The constraint-classification flags (`has_inequality_constraints`,
+  // `nonlinear_eq_rows`, `has_unenforced_constraints`) are owned entirely by
+  // `resolve_lin_constraints`, which always runs right after this. This
+  // function only computes the `eq_groups` merge partition.
 
   // Over free (free > 0), non-constraint rows: `.pN.` plabel → 1-based free
   // index (first wins), and user label → list of 1-based free indices, in row
@@ -801,15 +874,16 @@ void compute_eq_groups(LatentStructure& s, const LatentNames& names) {
   for (std::size_t i = 0; i < s.size(); ++i) {
     const parse::Op op = s.op[i];
     if (op == parse::Op::LtConstraint || op == parse::Op::GtConstraint) {
-      s.has_unenforced_constraints = true;
-      continue;
+      continue;  // not a merge; resolve_lin_constraints classifies inequalities
     }
     if (op != parse::Op::EqConstraint) continue;
     const std::string lhs_txt = i < names.row_lhs.size() ? names.row_lhs[i] : std::string{};
     const std::string rhs_txt = i < names.row_rhs.size() ? names.row_rhs[i] : std::string{};
     const std::int32_t li = resolve(lhs_txt);
     const std::int32_t ri = resolve(rhs_txt);
-    if (li < 0 || ri < 0) { s.has_unenforced_constraints = true; continue; }
+    // Not a pure parameter merge (one side isn't a bare free reference) —
+    // leave it for resolve_lin_constraints to reduce or classify.
+    if (li < 0 || ri < 0) continue;
     unite(li, ri);
   }
   if (npar == 0) return;

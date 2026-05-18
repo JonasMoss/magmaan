@@ -29,15 +29,18 @@ analyze_linear(const parse::Expr& e, int n_free,
                const std::unordered_map<std::string_view, int>&    name_to_free,
                const std::unordered_map<std::string_view, double>& name_to_fixed);
 
-// Resolve the model's general-*linear* `==` constraint rows into
-// `pt.lin_constraint_R` / `pt.lin_constraint_d` (`R·θ = d`). Operates on the
-// `==` rows that `compute_eq_groups` could *not* fold into `eq_groups` (a side
-// that isn't a bare parameter reference) — those carry their canonical text on
-// `names.row_lhs` / `names.row_rhs`, which is re-parsed here. A row that's
-// affine becomes a row of R/d; a row that isn't (or names unknown identifiers)
-// stays flagged. Afterwards, if no `<` / `>` row exists and no `==` row was left
-// flagged, clears `pt.has_unenforced_constraints`. Idempotent (clears the R/d
-// vectors first); call right after `compute_eq_groups`.
+// Classify and resolve the model's constraint rows. Recomputes, from scratch:
+//   * `pt.lin_constraint_R` / `pt.lin_constraint_d` — one `R·θ = d` row per
+//     general-*linear* `==` row that `compute_eq_groups` could not fold into
+//     `eq_groups` (`a == 2*b+c`, `Σλ == k`, …);
+//   * `pt.nonlinear_eq_rows` — partable indices of well-formed *nonlinear*
+//     `==` rows (every identifier known, expression not affine);
+//   * `pt.has_inequality_constraints` — a `<` / `>` row is present;
+//   * `pt.has_unenforced_constraints` — a `==` row is malformed (failed to
+//     re-parse, or names an unknown identifier).
+// Non-merge `==` rows carry their canonical text on `names.row_lhs` /
+// `names.row_rhs`, which is re-parsed here. Idempotent (clears every output
+// first); call right after `compute_eq_groups`.
 void resolve_lin_constraints(LatentStructure& pt, const LatentNames& names);
 
 }  // namespace magmaan::spec

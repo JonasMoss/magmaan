@@ -7,9 +7,40 @@
 #include <unordered_map>
 #include <vector>
 
+#include "magmaan/parse/flat_partable.hpp"
 #include "magmaan/parse/op.hpp"
 
 namespace magmaan::spec {
+
+// === Nonlinear equality constraints =========================================
+//
+// A nonlinear `==` row (`a == b*c`, `b1 == (b2+b3)^2`) cannot be reduced to the
+// linear `R·θ = d` form. It is instead compiled — at lavaanify time, by
+// `resolve_lin_constraints`, where identifier resolution is available — into a
+// *name-free* expression tree: every parameter reference becomes a free θ index
+// or a fixed constant. Fit-time evaluation then needs only `LatentStructure`,
+// keeping numeric fitters name-free.
+
+// One node of a flat expression-tree pool. `lhs` / `rhs` index back into the
+// pool; a Unary node uses `lhs` only; Const / Param are leaves.
+struct NlExprNode {
+  enum class Kind : std::uint8_t { Const, Param, Unary, Binary };
+  Kind         kind     = Kind::Const;
+  double       constant = 0.0;            // Const literal, or a fixed Param's value
+  std::int32_t free_idx = -1;             // Param: 0-based θ index; -1 ⇒ fixed Param
+  parse::UnOp  un_op    = parse::UnOp::Pos;
+  parse::BinOp bin_op   = parse::BinOp::Add;
+  std::int32_t lhs      = -1;             // child pool indices
+  std::int32_t rhs      = -1;
+};
+
+// One nonlinear equality constraint as `h(θ) == 0`, with `h = lhs − rhs` of the
+// original `==`. `nodes` is the flat pool (children precede parents); `root` is
+// h's top node.
+struct NlConstraint {
+  std::vector<NlExprNode> nodes;
+  std::int32_t            root = -1;
+};
 
 // === Variable roles =========================================================
 // Lavaan's variable-classification buckets, in the order they affect the
@@ -118,11 +149,30 @@ struct LatentStructure {
   std::vector<double>       lin_constraint_R;
   std::vector<double>       lin_constraint_d;
 
-  // Set when the model carries an `<` / `>` row or a genuinely *nonlinear* `==`
-  // expression (`a == b*c`) — `fit()` then errors (those phases aren't
-  // implemented). Cleared by `resolve_lin_constraints` once every non-bare `==`
-  // row has been reduced to a `lin_constraint_R` row (and no `<`/`>` remain).
+  // Constraint classification, all set by `resolve_lin_constraints` (which
+  // re-parses every non-pure-merge `==` row and scans the `<` / `>` rows):
+  //
+  //   has_inequality_constraints — the model carries a `<` / `>` row. `fit()`
+  //     always errors: inequality-constrained estimation would need boundary
+  //     (chi-bar-squared) asymptotics machinery magmaan does not have.
+  //   nonlinear_eq_rows — partable row indices of well-formed *nonlinear* `==`
+  //     constraints (`a == b*c`, `b1 == (b2+b3)^2`): every identifier is known,
+  //     the expression is not affine. Enforced via the nonlinear-equality path.
+  //   has_unenforced_constraints — a `==` row is *malformed*: it failed to
+  //     re-parse, or references an unknown identifier. `fit()` always errors.
+  //
+  // A plain *linear* `==` either folds into `eq_groups` (a bare merge) or
+  // becomes a `lin_constraint_R` row — neither sets any of these flags.
+  bool                      has_inequality_constraints = false;
+  std::vector<std::int32_t> nonlinear_eq_rows;
   bool                      has_unenforced_constraints = false;
+
+  // Compiled nonlinear equality constraints, parallel to `nonlinear_eq_rows`
+  // (same size and order): `nl_constraints[k]` is the name-free expression
+  // tree for the `==` row at `nonlinear_eq_rows[k]`. Built by
+  // `resolve_lin_constraints`; consumed by the augmented-Lagrangian fit path
+  // and the constrained vcov / df projection.
+  std::vector<NlConstraint> nl_constraints;
 
   // Methods-developer extensibility — for columns magmaan itself doesn't ship.
   std::unordered_map<std::string, std::vector<double>>      extra_real;

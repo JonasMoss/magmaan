@@ -212,3 +212,49 @@ Remaining work, in suggested order:
 Done when: `<~` no longer parses as a rejected operator for the supported
 slice, magmaan partables and implied moments match lavaan composite examples,
 and unsupported composite combinations fail with explicit errors.
+
+## 4. lavaan tutorial parity — deferred items
+
+Intent: close the gaps the lavaan-tutorial audit
+([docs/lavaan_tutorial_parity.md](lavaan_tutorial_parity.md)) surfaced. The
+audit doc is the live checklist; this section is the actionable backlog.
+
+Contracts:
+
+- Each item must stay fixture-backed (or example-backed) on landing, like the
+  rest of magmaan's lavaan-parity claims.
+- Unsupported combinations keep failing explicitly rather than approximating.
+
+Remaining work, in suggested order:
+
+- **L. Bootstrapping.** `se = "bootstrap"`, Bollen-Stine `test = "bootstrap"`,
+  and bootstrap confidence intervals for `:=` defined parameters. Principled
+  RNG design (settled): the C++ resampling engine takes an explicit integer
+  `seed` and is deterministic given it — no language-specific code in the
+  core. Each binding forwards its own seed: the R wrapper draws one integer
+  under the active `set.seed()` so reproducibility is automatic; Python and
+  the C++ API pass a seed directly. The engine owns the resample + refit loop
+  and the Bollen-Stine data transform.
+- **S/M. Expose modification indices in the R package.** The C++ core and
+  `magmaan::api` compute fixed-parameter modification indices and
+  equality-release score tests, but `magmaan_core` has no binding for them —
+  add `modification_indices` / `score_tests` Rcpp wrappers.
+- **S. `residuals()` accessor.** Expose the residual moment matrices
+  `S − Σ̂(θ̂)` (a one-line subtraction over `model_implied`) through the api
+  and R.
+- **M. `lavResiduals()` table.** The full standardized-residual table; SRMR
+  is already in `measures_fit`.
+- **M. `lavPredict()` factor scores.** Regression / Bartlett factor scores.
+- **M. Standardized EPC** (`sepc.all`) in the modification-index output.
+- **M. `exp()` / `log()` in expressions.** Nonlinear `==` constraints and
+  `:=` definitions are operator-only (`+ - * / ^`); function calls need a
+  grammar + evaluator extension (`docs/grammar/grammar.ebnf`, the parser, and
+  the `NlExprNode` / `expr_eval` evaluators).
+- **L. Nonlinear equality + linear equality in one model.** The
+  augmented-Lagrangian path currently rejects a model that carries both; it
+  would run the AL in the linear-constraint-reduced α-space.
+- **M/L. CFI/TLI/RMSEA/SRMR for FIML / LS / ordinal** and standard
+  (non-robust) SEs for FIML / LS — see also section 1.
+
+Done when: the audit doc shows no ◐/✗ rows for the in-scope tutorial sections,
+or each remaining gap is a deliberate, documented out-of-scope decision.
