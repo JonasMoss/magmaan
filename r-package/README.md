@@ -22,17 +22,20 @@ Convenience helpers are limited to R-side composition:
   caller supplies the covariance matrix explicitly, so expected/observed/robust
   covariance choices stay visible.
 
-Low-level functions such as `lavaan_lavaanify()`, `model_matrix_rep()`,
-`fit_fit()`, `fit_*_impl()`, `data_sample_stats_from_raw()`, and the `infer_*`
-family are available as `magmaan_core$...` entries so the C++ architecture is
-still directly inspectable from R without flooding ordinary tab completion.
+Low-level functions such as `compat_lavaan_lavaanify()`,
+`model_matrix_rep()`, `estimate_fit()`, `estimate_*()`,
+`data_sample_stats_from_raw()`, and the `inference_*` / `robust_*` families are
+available as `magmaan_core$...` entries so the C++ architecture is still
+directly inspectable from R without flooding ordinary tab completion. Older
+spellings such as `lavaan_lavaanify()`, `fit_fit()`, `fit_*_impl()`, and
+`infer_*` remain available as compatibility aliases during exploration.
 Model-dependent post-fit helpers expose primitive-shaped entry points such as
-`magmaan_core$infer_vcov_partable(info, partable)`,
-`magmaan_core$infer_z_test_theta(theta, se)`,
-`magmaan_core$infer_wald_test_theta(theta, R, vcov)`,
-`magmaan_core$infer_rls_chi2_sample(sample_stats, implied)`,
-`magmaan_core$infer_build_u_factor_parts(partable, sample_stats, theta)`, and
-`magmaan_core$infer_robust_se*_parts(...)`. Fit-list calls remain available in
+`magmaan_core$inference_vcov_partable(info, partable)`,
+`magmaan_core$inference_z_test_theta(theta, se)`,
+`magmaan_core$inference_wald_test_theta(theta, R, vcov)`,
+`magmaan_core$inference_rls_chi2_sample(sample_stats, implied)`,
+`magmaan_core$robust_build_u_factor_parts(partable, sample_stats, theta)`, and
+`magmaan_core$robust_se*_parts(...)`. Fit-list calls remain available in
 `magmaan_core`, with explicit `*_fit` aliases for scripts that prefer
 adapter-style names.
 
