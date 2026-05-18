@@ -94,13 +94,85 @@ magmaan_se <- function(fit) {
   }, error = function(e) NULL)
 }
 
+scalar_or_na <- function(x) {
+  if (is.null(x) || !length(x)) return(NA_real_)
+  y <- suppressWarnings(as.numeric(x[[1]]))
+  if (!length(y) || is.na(y)) NA_real_ else y
+}
+
+numeric_max_abs <- function(x) {
+  if (is.null(x) || !length(x)) return(NA_real_)
+  y <- suppressWarnings(as.numeric(unlist(x, use.names = FALSE)))
+  y <- y[is.finite(y)]
+  if (!length(y)) NA_real_ else max(abs(y))
+}
+
+first_fit_field <- function(x, fields) {
+  for (field in fields) {
+    if (!is.null(x[[field]])) return(x[[field]])
+  }
+  NULL
+}
+
+safe_lavinspect <- function(fit, what) {
+  tryCatch(lavaan::lavInspect(fit, what), error = function(e) NULL)
+}
+
+lavaan_iterations <- function(fit) {
+  opt <- safe_lavinspect(fit, "optim")
+  scalar_or_na(first_fit_field(opt, c("iterations", "iterationsTotal",
+                                      "niter", "iter")))
+}
+
+lavaan_gradient_norm <- function(fit) {
+  for (what in c("gradient", "dx.free", "dx.all")) {
+    val <- numeric_max_abs(safe_lavinspect(fit, what))
+    if (!is.na(val)) return(val)
+  }
+  opt <- safe_lavinspect(fit, "optim")
+  numeric_max_abs(first_fit_field(opt, c("gradient", "dx", "dx.free",
+                                         "dx.all")))
+}
+
+magmaan_gradient_norm <- function(fit) {
+  numeric_max_abs(first_fit_field(fit, c("gradient_norm", "gradient",
+                                         "grad", "score")))
+}
+
+fit_diagnostics <- function(mfit, lfit, m_fmin, l_fmin) {
+  m_grad <- magmaan_gradient_norm(mfit)
+  l_grad <- lavaan_gradient_norm(lfit)
+  list(
+    magmaan = list(
+      objective = m_fmin,
+      objective_name = "full ML discrepancy F",
+      gradient_norm_inf = m_grad,
+      gradient_norm_note = if (is.na(m_grad)) {
+        "not exposed by the current magmaan fit object"
+      } else "",
+      iterations = scalar_or_na(mfit$iterations),
+      converged = isTRUE(mfit$converged %||% TRUE)
+    ),
+    lavaan = list(
+      objective = l_fmin,
+      objective_name = "lavaan fmin",
+      gradient_norm_inf = l_grad,
+      gradient_norm_note = if (is.na(l_grad)) {
+        "not exposed by this lavaan fit/optimizer"
+      } else "",
+      iterations = lavaan_iterations(lfit),
+      converged = isTRUE(lavaan::lavInspect(lfit, "converged"))
+    )
+  )
+}
+
 ## min / median / p90 / IQR (seconds) for one bench::mark row.
 bench_summary <- function(tm, label) {
   i <- match(label, as.character(tm$expression))
   t <- as.numeric(tm$time[[i]])
   list(min = min(t), median = stats::median(t),
        p90 = unname(stats::quantile(t, 0.9)), iqr = unname(stats::IQR(t)),
-       n = length(t))
+       total = sum(t), n = length(t))
 }
 
 run_case <- function(id) {
@@ -141,6 +213,7 @@ run_case <- function(id) {
   est_diff <- est_max_abs_diff(mfit$partable, l_pt)
   l_fmin <- unname(lavaan::fitMeasures(lfit, "fmin"))
   m_fmin <- mfit$fmin %||% NA_real_
+  out$fit_diagnostics <- fit_diagnostics(mfit, lfit, m_fmin, l_fmin)
 
   ## chi-square: lavaan reports it directly; magmaan's $fmin is the full ML
   ## discrepancy F (lavaan reports F/2), so the ML chi-square is ntotal * F
@@ -228,8 +301,12 @@ rows <- lapply(ids, function(id) {
               res$n_obs %||% "-",
               if (is.null(res$correctness)) "-" else
                 formatC(res$correctness$est_max_abs_diff, format = "g", digits = 3),
-              if (is.null(tm)) "-" else sprintf("%.3fms", tm$magmaan$median * 1e3),
-              if (is.null(tm)) "-" else sprintf("%.3fms", tm$lavaan$median * 1e3),
+              if (is.null(tm)) "-" else sprintf("%.3fms/%sit",
+                                                tm$magmaan$median * 1e3,
+                                                res$fit_diagnostics$magmaan$iterations),
+              if (is.null(tm)) "-" else sprintf("%.3fms/%sit",
+                                                tm$lavaan$median * 1e3,
+                                                res$fit_diagnostics$lavaan$iterations),
               if (nzchar(res$note %||% "")) paste0("  [", res$note, "]") else ""))
   res
 })
