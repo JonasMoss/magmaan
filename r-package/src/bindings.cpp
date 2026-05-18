@@ -176,6 +176,8 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
                                 bool effect_coding = false,
                                 bool fixed_x = true,
                                 bool meanstructure = false,
+                                bool int_ov_free = true,
+                                bool int_lv_free = false,
                                 int n_groups = 1,
                                 std::string group_var = "",
                                 Rcpp::Nullable<Rcpp::CharacterVector> group_labels = R_NilValue) {
@@ -191,6 +193,8 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   opts.effect_coding  = effect_coding; // free all loadings + LV var; adds `Σλ == #indicators`
   opts.fixed_x        = fixed_x;
   opts.meanstructure  = meanstructure;
+  opts.int_ov_free    = int_ov_free;
+  opts.int_lv_free    = int_lv_free;
   opts.n_groups       = n_groups;
   opts.group_var      = group_var;
   if (group_labels.isNotNull())

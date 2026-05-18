@@ -37,7 +37,9 @@ struct BuildOptions {
   // effect coding (`Σν == 0`) is a future sub-step, not yet implemented.
   bool effect_coding  = false;  // free all loadings + LV var; add `Σλ == #indicators`
   bool fixed_x        = true;   // mirror lavaan: data-given exogenous OV moments
-  bool meanstructure  = false;  // auto-add ν (free) for OV and α (fixed at 0) for LV
+  bool meanstructure  = false;  // auto-add ν / α rows, with defaults below
+  bool int_ov_free    = true;   // observed intercepts free by default; growth() sets false
+  bool int_lv_free    = false;  // latent means fixed at 0 by default; growth() sets true
   // Group identity. `n_groups` (≙ lavaan `ngroups`) drives row replication;
   // `group_var` (≙ `group`) names the grouping variable — defaults to "group"
   // when n_groups > 1 and left empty; `group_labels` (≙ `group.label`) names

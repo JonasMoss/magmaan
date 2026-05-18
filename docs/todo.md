@@ -44,12 +44,16 @@ Contracts:
 - Examples should demonstrate the explicit post-fit workflow rather than hide
   inference behind `magmaan()`.
 
+Completed checks:
+
+- [x] **M/L. Growth parity.** `demo_growth_linear` now uses the growth
+  lavaanification defaults: observed-variable intercepts fixed at zero,
+  latent growth-factor means free, and endogenous growth factors covaried
+  under `auto_cov_y`. The fixture is hard-gated with `magmaan_aligned = true`.
+
 Remaining work, in suggested order:
 
-- **M/L.** Bring `demo_growth_linear` to lavaan parity. magmaan has no
-  `growth()` equivalent, so its free set does not align with lavaan's
-  (`magmaan_aligned = false` in the fixture); keep it as a soft known gap until
-  the parameterization matches.
+- None currently queued in this section.
 
 Done when: representative supported estimator/model combinations have fixtures
 or structural tests at the right level, and contributors can discover the

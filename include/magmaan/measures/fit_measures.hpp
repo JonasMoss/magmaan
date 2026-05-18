@@ -26,6 +26,8 @@ struct BaselineFit {
 };
 
 BaselineFit baseline_chi2(const SampleStats& samp) noexcept;
+BaselineFit baseline_chi2(const spec::LatentStructure& pt,
+                          const SampleStats& samp) noexcept;
 
 // Standard practical fit indices — closed-form functions of T_user,
 // df_user, T_baseline, df_baseline, and N.

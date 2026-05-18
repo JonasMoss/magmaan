@@ -209,6 +209,11 @@ TEST_CASE("lavaan-parity ML — magmaan reproduces lavaan on real data") {
     opts.auto_cov_y    = ref.value("auto_cov_y", true);
     opts.meanstructure = ref.value("meanstructure", false);
     opts.n_groups      = ref.value("n_groups", 1);
+    if (ref.value("lavaan_function", std::string{}) == "growth") {
+      opts.meanstructure = true;
+      opts.int_ov_free   = false;
+      opts.int_lv_free   = true;
+    }
     auto pt = magmaan::spec::build(*fp, opts);
     if (!pt.has_value()) {
       failures.push_back(id + ": lavaanify — " + pt.error().detail);
@@ -273,10 +278,9 @@ TEST_CASE("lavaan-parity ML — magmaan reproduces lavaan on real data") {
     // ---- fit ------------------------------------------------------------
     auto est_or = magmaan::test::fit(*pt, *mr, samp);
 
-    // demo_growth_linear and any other case magmaan parameterizes differently
-    // than lavaan are soft known gaps: fit and report, never fail. The
-    // fixture exists so the case auto-promotes to a hard gate once parity is
-    // reached (regen flips magmaan_aligned). See docs/todo.md.
+    // A case magmaan parameterizes differently than lavaan is a soft known
+    // gap: fit and report, never fail. Once regen flips magmaan_aligned, the
+    // same fixture becomes a hard gate automatically.
     const bool aligned = ref.value("magmaan_aligned", false);
     if (!aligned) {
       if (est_or.has_value()) {
@@ -368,7 +372,7 @@ TEST_CASE("lavaan-parity ML — magmaan reproduces lavaan on real data") {
     } else if (!fx_or.has_value()) {
       fail("fit_extras — " + fx_or.error().detail);
     } else {
-      const auto bl = magmaan::measures::baseline_chi2(samp);
+      const auto bl = magmaan::measures::baseline_chi2(*pt, samp);
       const auto fm = magmaan::measures::fit_measures(chi2, *df_or, bl, samp);
       const auto& fx = *fx_or;
       const auto& mref = ref["fit_measures"];

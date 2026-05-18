@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -263,6 +264,55 @@ TEST_CASE("lavaanify: meanstructure auto-adds ν (free) and α (fixed) rows") {
   }
   CHECK(n_nu    == 3);
   CHECK(n_alpha == 1);
+}
+
+TEST_CASE("lavaanify: growth defaults fix OV intercepts and free LV means") {
+  BuildOptions opts;
+  opts.meanstructure = true;
+  opts.auto_cov_y = true;
+  opts.int_ov_free = false;
+  opts.int_lv_free = true;
+
+  auto pt = must_lavaanify(
+      "i =~ 1*t1 + 1*t2 + 1*t3 + 1*t4\n"
+      "s =~ 0*t1 + 1*t2 + 2*t3 + 3*t4\n"
+      "i ~ x1 + x2\n"
+      "s ~ x1 + x2\n"
+      "t1 ~ c1\n"
+      "t2 ~ c2\n"
+      "t3 ~ c3\n"
+      "t4 ~ c4",
+      opts);
+
+  auto row_free = [&](std::string_view lhs, Op op,
+                      std::string_view rhs) -> int {
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.lhs[i] == lhs && pt.op[i] == op && pt.rhs[i] == rhs) {
+        return pt.free[i];
+      }
+    }
+    return -1;
+  };
+  auto row_ustart = [&](std::string_view lhs, Op op,
+                        std::string_view rhs) -> double {
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.lhs[i] == lhs && pt.op[i] == op && pt.rhs[i] == rhs) {
+        return pt.ustart[i];
+      }
+    }
+    return std::numeric_limits<double>::quiet_NaN();
+  };
+
+  CHECK(row_free("t1", Op::Intercept, "") == 0);
+  CHECK(row_free("t2", Op::Intercept, "") == 0);
+  CHECK(row_free("t3", Op::Intercept, "") == 0);
+  CHECK(row_free("t4", Op::Intercept, "") == 0);
+  CHECK(row_ustart("t1", Op::Intercept, "") == doctest::Approx(0.0));
+  CHECK(row_ustart("t4", Op::Intercept, "") == doctest::Approx(0.0));
+
+  CHECK(row_free("i", Op::Intercept, "") > 0);
+  CHECK(row_free("s", Op::Intercept, "") > 0);
+  CHECK(row_free("i", Op::Covariance, "s") > 0);
 }
 
 TEST_CASE("lavaanify: meanstructure does not duplicate user-supplied ~1 rows") {

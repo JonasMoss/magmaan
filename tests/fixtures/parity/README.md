@@ -55,9 +55,8 @@ Common to every family: `case_id`, `model` (or `input` for ordinal),
 
 `magmaan_aligned` is `true` when magmaan's free set matches lavaan's one-to-one.
 When `false`, per-parameter arrays are omitted and the case is a tracked known
-gap — the parity test fits it but only soft-checks it. `demo_growth_linear` is
-currently in this state (magmaan has no `growth()` equivalent; see
-`docs/todo.md`).
+gap — the parity test fits it but only soft-checks it. The current committed
+fixtures are aligned unless a case explicitly carries `magmaan_aligned = false`.
 
 ### ML family
 
