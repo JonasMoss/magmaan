@@ -388,7 +388,11 @@ golden `parTable()` fixtures.
   ML/ULS/GLS/WLS, FIML, and ordinal/mixed DWLS/WLS where the lower-level
   inputs are available. Lavaan-style `se = "none"` and `test = "none"` are
   accepted as explicit point-estimate-only shortcuts; other values error and
-  point users to explicit post-fit inference calls.
+  point users to explicit post-fit inference calls. It returns a `magmaan_fit`
+  list: the raw primitive fit fields plus the source `model_spec`, syntax,
+  estimator options, ordered-variable metadata, parameterization, and grouping
+  metadata. Its print method reports only point-fit status and directs users
+  to explicit post-fit primitives.
 - `compute_defined(model, fit, vcov)` exposes C++ defined-parameter evaluation
   for `:=` rows through R. It keeps covariance selection explicit, supports
   chained definitions, and resolves `.pN.` plabel references using the fitted
