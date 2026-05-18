@@ -505,6 +505,38 @@ final architectural ideal. Thin R wrappers should gradually mirror the C++
 primitive signatures; fit-list helpers can remain as explicit convenience
 adapters layered on top.
 
+### Robust-test naming and compatibility
+
+The core robust-test API should use statistical names for the object being
+computed, not historical SEM estimator labels. The preferred core surface is:
+
+- weighted chi-square mixture tests from explicit eigenvalues or trace
+  summaries;
+- moment reductions of that same mixture: mean-scaled, mean/variance-adjusted,
+  and scaled/shifted;
+- likelihood-ratio / nested-model helpers named for the statistical contract
+  they implement, for example exact restriction-map LRT rather than a default
+  public name centred on "Satorra-2000";
+- robust SEs as named sandwich constructions.
+
+Historical labels remain important for lavaan/Mplus parity, but they belong in
+`compat::lavaan` or similarly explicit compatibility wrappers. This includes
+estimator shortcuts such as `MLM`, `MLMV`, `MLMVS`, and `MLR`, lavaan test
+labels such as `satorra.bentler`, `scaled.shifted`,
+`mean.var.adjusted`, `yuan.bentler`, and `yuan.bentler.mplus`, and legacy
+nested-test formulas such as Satorra-Bentler 2001/2010. The compatibility
+wrappers should bind each label to the exact lavaan/Mplus bundle it denotes;
+they should not expose a combinatorial menu that lets callers freely pair a
+test label with unrelated bread, gamma, vcov, or scaling choices.
+
+`yuan.bentler.mplus` is especially a compatibility target rather than a core
+weighted-mixture reducer. Lavaan's MLR default computes a scalar trace
+difference, H1 minus H0, relying on Mplus-style approximations such as
+`A0 ~= Delta' A1 Delta` and the analogous first-order matrix. The plain
+Yuan-Bentler formula instead constructs the H1 residual-space trace directly.
+Both should be documented when exposed, but neither should force historical
+names into the core naming scheme.
+
 ### Testing and validation
 
 Validation has three deliberately separate surfaces:
