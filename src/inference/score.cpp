@@ -578,6 +578,26 @@ append_absent_rows(spec::LatentStructure pt,
   return pt;
 }
 
+struct ModificationIndexModel {
+  spec::LatentStructure pt;
+  model::MatrixRep rep;
+};
+
+post_expected<ModificationIndexModel>
+prepare_modification_index_model(spec::LatentStructure pt,
+                                 const model::MatrixRep& rep,
+                                 const ModificationIndexOptions& options) {
+  if (options.candidates == ScoreCandidateSet::FixedRowsOnly) {
+    return ModificationIndexModel{std::move(pt), rep};
+  }
+
+  const std::vector<AbsentRow> absent = enumerate_absent_rows(pt, options);
+  pt = append_absent_rows(std::move(pt), absent);
+  auto mr = model::build_matrix_rep(pt);
+  if (!mr.has_value()) return std::unexpected(model_to_post(mr.error()));
+  return ModificationIndexModel{std::move(pt), std::move(*mr)};
+}
+
 // === Standardized EPC =======================================================
 
 // Model-implied standard deviation of variable `v` in block `b`: a latent SD
@@ -680,30 +700,18 @@ modification_indices(spec::LatentStructure pt,
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
 
-  // Optionally fold in statements absent from the model as fixed-at-0 rows,
-  // then place them with a freshly built MatrixRep.
-  spec::LatentStructure work_pt = std::move(pt);
-  model::MatrixRep augmented_rep;
-  const model::MatrixRep* work_rep = &rep;
-  if (options.candidates == ScoreCandidateSet::WithAbsentRows) {
-    const std::vector<AbsentRow> absent =
-        enumerate_absent_rows(work_pt, options);
-    work_pt = append_absent_rows(std::move(work_pt), absent);
-    auto mr = model::build_matrix_rep(work_pt);
-    if (!mr.has_value()) return std::unexpected(model_to_post(mr.error()));
-    augmented_rep = std::move(*mr);
-    work_rep = &augmented_rep;
-  }
+  auto work = prepare_modification_index_model(std::move(pt), rep, options);
+  if (!work.has_value()) return std::unexpected(work.error());
 
-  if (auto e = resolve_fixed_x_from_sample(work_pt, *work_rep, samp);
+  if (auto e = resolve_fixed_x_from_sample(work->pt, work->rep, samp);
       !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  ContinuousMlEvaluator ev{*work_rep, samp, options.information, 0.5 * *n};
-  auto table = fixed_parameter_tests(work_pt, *work_rep, est, ev);
+  ContinuousMlEvaluator ev{work->rep, samp, options.information, 0.5 * *n};
+  auto table = fixed_parameter_tests(work->pt, work->rep, est, ev);
   if (!table.has_value()) return std::unexpected(table.error());
 
-  if (auto e = fill_standardized_epc(*table, work_pt, *work_rep, est);
+  if (auto e = fill_standardized_epc(*table, work->pt, work->rep, est);
       !e.has_value()) {
     return std::unexpected(e.error());
   }
@@ -743,13 +751,35 @@ modification_indices(spec::LatentStructure pt,
                      const SampleStats& samp,
                      const Estimates& est,
                      const estimate::gmm::Weight& weight) {
+  ModificationIndexOptions options;
+  return modification_indices(std::move(pt), rep, samp, est, weight, options);
+}
+
+post_expected<ScoreTestTable>
+modification_indices(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const SampleStats& samp,
+                     const Estimates& est,
+                     const estimate::gmm::Weight& weight,
+                     const ModificationIndexOptions& options) {
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
-  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+
+  auto work = prepare_modification_index_model(std::move(pt), rep, options);
+  if (!work.has_value()) return std::unexpected(work.error());
+
+  if (auto e = resolve_fixed_x_from_sample(work->pt, work->rep, samp);
+      !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  ContinuousLsEvaluator ev{rep, samp, weight, *n};
-  return fixed_parameter_tests(std::move(pt), rep, est, ev);
+  ContinuousLsEvaluator ev{work->rep, samp, weight, *n};
+  auto table = fixed_parameter_tests(work->pt, work->rep, est, ev);
+  if (!table.has_value()) return std::unexpected(table.error());
+  if (auto e = fill_standardized_epc(*table, work->pt, work->rep, est);
+      !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+  return table;
 }
 
 post_expected<ScoreTestTable>
@@ -774,16 +804,40 @@ modification_indices_fiml(spec::LatentStructure pt,
                           const Estimates& est,
                           FIML discrepancy,
                           double h_step) {
-  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
+  ModificationIndexOptions options;
+  return modification_indices_fiml(std::move(pt), rep, raw, est, options,
+                                   discrepancy, h_step);
+}
+
+post_expected<ScoreTestTable>
+modification_indices_fiml(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          const ModificationIndexOptions& options,
+                          FIML discrepancy,
+                          double h_step) {
+  auto work = prepare_modification_index_model(std::move(pt), rep, options);
+  if (!work.has_value()) return std::unexpected(work.error());
+
+  if (auto e = validate_fiml_fixed_x_missing_policy(work->pt, raw);
+      !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
   auto start_samp = fiml_start_sample_stats(raw);
   if (!start_samp.has_value()) return std::unexpected(fit_to_post(start_samp.error()));
-  if (auto e = resolve_fixed_x_from_sample(pt, rep, *start_samp); !e.has_value()) {
+  if (auto e = resolve_fixed_x_from_sample(work->pt, work->rep, *start_samp);
+      !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  FimlEvaluator ev{rep, raw, discrepancy, h_step};
-  return fixed_parameter_tests(std::move(pt), rep, est, ev);
+  FimlEvaluator ev{work->rep, raw, discrepancy, h_step};
+  auto table = fixed_parameter_tests(work->pt, work->rep, est, ev);
+  if (!table.has_value()) return std::unexpected(table.error());
+  if (auto e = fill_standardized_epc(*table, work->pt, work->rep, est);
+      !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+  return table;
 }
 
 post_expected<ScoreTestTable>

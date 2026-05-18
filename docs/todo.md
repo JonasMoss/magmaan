@@ -180,6 +180,11 @@ Completed checks:
   follows the Du & Wu (2024) empirical-Bayes weight-selection direction by
   estimating the stable fourth-moment departure from `Gamma_NT` after
   subtracting casewise-product noise.
+- [x] **M. Modification-index option surface.** `ModificationIndexOptions`
+  now threads through complete ML, LS, FIML, ordinal DWLS, and mixed ordinal
+  DWLS modification-index calls, with lavaan-backed score fixtures covering
+  fixed rows plus generated absent covariance rows. Generated structural
+  regressions stay outside the contract.
 
 Remaining work, in suggested order:
 
@@ -190,10 +195,6 @@ Remaining work, in suggested order:
 - **M/L.** Finish the theta ordinal compatibility slice beyond all-ordinal
   point estimates: mixed continuous/ordinal theta, theta robust inference,
   theta modification indices, and theta standardized-solution reporting.
-- **M.** Thread `ModificationIndexOptions` through the LS, FIML, and ordinal
-  `modification_indices` overloads; decide the structural-regression absent-row
-  contract; regenerate `tests/fixtures/score/` once the public surface is
-  stable.
 - **XL, deferred.** Reopen nonlinear equality constraints, inequality
   constraints, or active-bound inference only with an explicit statistical
   design and reporting contract.

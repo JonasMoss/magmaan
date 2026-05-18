@@ -97,10 +97,12 @@ golden `parTable()` fixtures.
 - Equality-penalty residuals on the LS path.
 - Fixed-parameter modification indices and equality-release score tests reuse
   the estimator-specific LS residual/Jacobian weighting for ULS/GLS/WLS.
-- Representative fixed-row modification-index and equality-release score-test
-  fixtures now pin the shared score surface against lavaan across complete ML,
-  observed-information FIML, continuous ULS, ordinal DWLS, and mixed ordinal
-  DWLS; absent-row generation and standardized EPC remain future work.
+- Representative modification-index and equality-release score-test fixtures
+  now pin fixed rows plus generated absent covariance rows against lavaan across
+  complete ML, observed-information FIML, continuous ULS, ordinal DWLS, and
+  mixed ordinal DWLS. `ModificationIndexOptions` exposes absent cross-loadings
+  and covariances for those paths; generated structural-regression rows remain
+  deliberately out of scope.
 - Continuous LS fixtures cover point estimates, degrees of freedom, and
   estimator-specific chi-square reporting for representative CFA,
   multi-group, labeled-equality, mean-structure, and observed-exogenous

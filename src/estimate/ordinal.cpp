@@ -1,12 +1,15 @@
 #include "magmaan/estimate/ordinal.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <set>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -51,6 +54,10 @@ PostError make_post_err(PostError::Kind k, std::string detail) {
 }
 
 PostError fit_to_post(FitError e) {
+  return make_post_err(PostError::Kind::NumericIssue, std::move(e.detail));
+}
+
+PostError model_to_post(ModelError e) {
   return make_post_err(PostError::Kind::NumericIssue, std::move(e.detail));
 }
 
@@ -1330,6 +1337,120 @@ bool ordinal_fixed_candidate(const spec::LatentStructure& pt,
          (row < rep.cell_for_row.size() && rep.cell_for_row[row].used);
 }
 
+bool ordinal_var_is_latent(const spec::LatentStructure& pt, std::int32_t v) {
+  return v >= 0 && static_cast<std::size_t>(v) < pt.var_role.size() &&
+         pt.var_role[static_cast<std::size_t>(v)] == spec::VarRole::Latent;
+}
+
+bool ordinal_var_is_indicator(const spec::LatentStructure& pt, std::int32_t v) {
+  return v >= 0 && static_cast<std::size_t>(v) < pt.var_role.size() &&
+         pt.var_role[static_cast<std::size_t>(v)] == spec::VarRole::Indicator;
+}
+
+struct OrdinalAbsentRow {
+  parse::Op    op;
+  std::int32_t lhs;
+  std::int32_t rhs;
+  std::int32_t group;
+};
+
+std::vector<OrdinalAbsentRow>
+enumerate_ordinal_absent_rows(
+    const spec::LatentStructure& pt,
+    const inference::ModificationIndexOptions& opts) {
+  std::vector<OrdinalAbsentRow> out;
+  std::vector<std::int32_t> latents;
+  std::vector<std::int32_t> indicators;
+  for (std::int32_t v = 0; v < pt.n_vars; ++v) {
+    if (ordinal_var_is_latent(pt, v)) latents.push_back(v);
+    else if (ordinal_var_is_indicator(pt, v)) indicators.push_back(v);
+  }
+
+  using Key = std::array<std::int32_t, 3>;
+  for (std::int32_t g = 1; g <= pt.n_groups(); ++g) {
+    std::set<Key> present;
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.group[i] != g) continue;
+      const std::int32_t a = pt.lhs_var[i];
+      const std::int32_t b = pt.rhs_var[i];
+      if (pt.op[i] == parse::Op::Measurement) {
+        present.insert({0, a, b});
+      } else if (pt.op[i] == parse::Op::Covariance) {
+        present.insert({1, std::min(a, b), std::max(a, b)});
+      } else if (pt.op[i] == parse::Op::Regression) {
+        present.insert({2, a, b});
+      }
+    }
+
+    if (opts.include_loadings) {
+      for (const std::int32_t f : latents) {
+        for (const std::int32_t x : indicators) {
+          if (!present.count({0, f, x})) {
+            out.push_back({parse::Op::Measurement, f, x, g});
+          }
+        }
+      }
+    }
+    if (opts.include_covariances) {
+      auto cov_pairs = [&](const std::vector<std::int32_t>& vs) {
+        for (std::size_t i = 0; i < vs.size(); ++i) {
+          for (std::size_t j = i + 1; j < vs.size(); ++j) {
+            const std::int32_t a = std::min(vs[i], vs[j]);
+            const std::int32_t b = std::max(vs[i], vs[j]);
+            if (!present.count({1, a, b})) {
+              out.push_back({parse::Op::Covariance, a, b, g});
+            }
+          }
+        }
+      };
+      cov_pairs(indicators);
+      cov_pairs(latents);
+    }
+  }
+  return out;
+}
+
+spec::LatentStructure
+append_ordinal_absent_rows(spec::LatentStructure pt,
+                           const std::vector<OrdinalAbsentRow>& rows) {
+  for (const OrdinalAbsentRow& r : rows) {
+    pt.op.push_back(r.op);
+    pt.lhs_var.push_back(r.lhs);
+    pt.rhs_var.push_back(r.rhs);
+    pt.group.push_back(r.group);
+    pt.free.push_back(0);
+    pt.exo.push_back(0);
+    pt.fixed_value.push_back(0.0);
+  }
+  return pt;
+}
+
+struct OrdinalModificationIndexModel {
+  spec::LatentStructure pt;
+  model::MatrixRep rep;
+  std::size_t original_rows = 0;
+};
+
+post_expected<OrdinalModificationIndexModel>
+prepare_ordinal_modification_index_model(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const inference::ModificationIndexOptions& options) {
+  if (options.candidates == inference::ScoreCandidateSet::FixedRowsOnly) {
+    const std::size_t original_rows = pt.size();
+    return OrdinalModificationIndexModel{std::move(pt), rep, original_rows};
+  }
+
+  const std::size_t original_rows = pt.size();
+  const std::vector<OrdinalAbsentRow> absent =
+      enumerate_ordinal_absent_rows(pt, options);
+  pt = append_ordinal_absent_rows(std::move(pt), absent);
+  auto mr = model::build_matrix_rep(pt);
+  if (!mr.has_value()) return std::unexpected(model_to_post(mr.error()));
+  return OrdinalModificationIndexModel{std::move(pt), std::move(*mr),
+                                       original_rows};
+}
+
 void ordinal_add_free_group(spec::LatentStructure& pt, std::int32_t old_n) {
   if (static_cast<std::int32_t>(pt.eq_groups.size()) == old_n) {
     pt.eq_groups.push_back(old_n);
@@ -1345,29 +1466,34 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
                                   const Stats& stats,
                                   const Estimates& est,
                                   OrdinalWeightKind weights,
+                                  const inference::ModificationIndexOptions& options,
                                   ResidualFn residual_fn,
                                   JacobianFn jacobian_fn,
                                   PrepareFn prepare_fn) {
-  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+  auto work = prepare_ordinal_modification_index_model(std::move(pt), rep,
+                                                       options);
+  if (!work.has_value()) return std::unexpected(work.error());
+
+  if (auto v = validate_stats(stats, work->rep, weights); !v.has_value()) {
     return std::unexpected(fit_to_post(v.error()));
   }
-  if (auto p = prepare_fn(pt, stats); !p.has_value()) {
+  if (auto p = prepare_fn(work->pt, stats); !p.has_value()) {
     return std::unexpected(fit_to_post(p.error()));
   }
-  if (est.theta.size() != pt.n_free()) {
+  if (est.theta.size() != work->pt.n_free()) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "ordinal modification indices: fitted theta length does not match delta partable"));
   }
-  auto con0 = build_eq_constraints(pt);
+  auto con0 = build_eq_constraints(work->pt);
   if (!con0.has_value()) return std::unexpected(con0.error());
   auto N_or = total_n_obs(stats);
   if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
   const double n_total = static_cast<double>(*N_or);
 
   inference::ScoreTestTable table;
-  for (std::size_t row = 0; row < pt.size(); ++row) {
-    if (!ordinal_fixed_candidate(pt, rep, row)) continue;
-    spec::LatentStructure aug = pt;
+  for (std::size_t row = 0; row < work->pt.size(); ++row) {
+    if (!ordinal_fixed_candidate(work->pt, work->rep, row)) continue;
+    spec::LatentStructure aug = work->pt;
     const double fixed_value = aug.fixed_value[row];
     const std::int32_t old_n = aug.n_free();
     aug.free[row] = old_n + 1;
@@ -1378,11 +1504,11 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
     if (est.theta.size() > 0) theta.head(est.theta.size()) = est.theta;
     theta(est.theta.size()) = fixed_value;
 
-    auto layout = make_threshold_layout(aug, rep, stats);
+    auto layout = make_threshold_layout(aug, work->rep, stats);
     if (!layout.has_value()) return std::unexpected(fit_to_post(layout.error()));
     auto factors = weight_factors(stats, weights);
     if (!factors.has_value()) return std::unexpected(fit_to_post(factors.error()));
-    auto ev = model::ModelEvaluator::build(aug, rep);
+    auto ev = model::ModelEvaluator::build(aug, work->rep);
     if (!ev.has_value()) {
       return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
           "ordinal modification indices: ModelEvaluator::build failed: " +
@@ -1400,8 +1526,16 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
                          eval->J_mu, *factors);
     if (!J.has_value()) return std::unexpected(fit_to_post(J.error()));
 
-    const Eigen::VectorXd score = -2.0 * n_total * (J->transpose() * *r);
-    Eigen::MatrixXd info = 2.0 * n_total * (J->transpose() * *J);
+    const bool generated_absent = row >= work->original_rows;
+    // lavaan scores generated all-ordinal absent rows on the single-counted
+    // moment scale; explicit fixed partable rows retain the fixed-row scale.
+    const double moment_scale =
+        (generated_absent && std::is_same_v<Stats, data::OrdinalStats>)
+            ? 1.0
+            : 2.0;
+    const Eigen::VectorXd score =
+        -moment_scale * n_total * (J->transpose() * *r);
+    Eigen::MatrixXd info = moment_scale * n_total * (J->transpose() * *J);
     info = 0.5 * (info + info.transpose());
 
     Eigen::VectorXd direction = Eigen::VectorXd::Zero(score.size());
@@ -1409,10 +1543,10 @@ ordinal_modification_indices_impl(spec::LatentStructure pt,
     inference::ScoreCandidate cand;
     cand.kind = inference::ScoreCandidateKind::FixedParam;
     cand.row = row;
-    cand.op = pt.op[row];
-    cand.lhs_var = pt.lhs_var[row];
-    cand.rhs_var = pt.rhs_var[row];
-    cand.group = pt.group[row];
+    cand.op = work->pt.op[row];
+    cand.lhs_var = work->pt.lhs_var[row];
+    cand.rhs_var = work->pt.rhs_var[row];
+    cand.group = work->pt.group[row];
     Eigen::MatrixXd K_aug = Eigen::MatrixXd::Zero(score.size(), con0->K().cols());
     if (con0->K().rows() > 0) K_aug.topRows(con0->K().rows()) = con0->K();
     auto res = ordinal_score_for_direction(cand, score, info, K_aug, direction);
@@ -1493,6 +1627,18 @@ modification_indices_ordinal(spec::LatentStructure pt,
                              const data::OrdinalStats& stats,
                              const Estimates& est,
                              OrdinalWeightKind weights) {
+  inference::ModificationIndexOptions options;
+  return modification_indices_ordinal(std::move(pt), rep, stats, est, weights,
+                                      options);
+}
+
+post_expected<inference::ScoreTestTable>
+modification_indices_ordinal(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const data::OrdinalStats& stats,
+                             const Estimates& est,
+                             OrdinalWeightKind weights,
+                             const inference::ModificationIndexOptions& options) {
   auto residual_fn = [](const data::OrdinalStats& s,
                         const ThresholdLayout& layout,
                         const model::ImpliedMoments& moments,
@@ -1514,8 +1660,8 @@ modification_indices_ordinal(spec::LatentStructure pt,
     return prepare_ordinal_delta_partable(p, s, nullptr);
   };
   return ordinal_modification_indices_impl(std::move(pt), rep, stats, est,
-                                           weights, residual_fn, jacobian_fn,
-                                           prepare_fn);
+                                           weights, options, residual_fn,
+                                           jacobian_fn, prepare_fn);
 }
 
 post_expected<inference::ScoreTestTable>
@@ -1554,6 +1700,19 @@ modification_indices_mixed_ordinal(spec::LatentStructure pt,
                                    const data::MixedOrdinalStats& stats,
                                    const Estimates& est,
                                    OrdinalWeightKind weights) {
+  inference::ModificationIndexOptions options;
+  return modification_indices_mixed_ordinal(std::move(pt), rep, stats, est,
+                                            weights, options);
+}
+
+post_expected<inference::ScoreTestTable>
+modification_indices_mixed_ordinal(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& est,
+    OrdinalWeightKind weights,
+    const inference::ModificationIndexOptions& options) {
   auto residual_fn = [](const data::MixedOrdinalStats& s,
                         const ThresholdLayout& layout,
                         const model::ImpliedMoments& moments,
@@ -1573,8 +1732,8 @@ modification_indices_mixed_ordinal(spec::LatentStructure pt,
     return prepare_mixed_ordinal_delta_partable(p, s, nullptr);
   };
   return ordinal_modification_indices_impl(std::move(pt), rep, stats, est,
-                                           weights, residual_fn, jacobian_fn,
-                                           prepare_fn);
+                                           weights, options, residual_fn,
+                                           jacobian_fn, prepare_fn);
 }
 
 post_expected<inference::ScoreTestTable>
