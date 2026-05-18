@@ -96,21 +96,10 @@ Contracts:
 
 Remaining work, in suggested order:
 
-- **S/M, continue the R third pass.** Keep extending the
-  [R API scaffold audit](r-api-audit.md) as `magmaan_core` is used in
-  real scripts. Add thin R bindings for missing relevant primitives that let R
-  scripts construct models/data, run fits, compute post-fit quantities,
-  compare diagnostics, and reproduce validation paths without depending on
-  opaque fit-list unpacking.
-- **S/M.** Continue migrating R examples and development scripts to the
-  canonical `<namespace>_<function_name>` names. The alias scaffold has landed;
-  old `fit_*`, `infer_*`, and `_impl` spellings remain as compatibility hooks
-  while the exploratory scripts settle.
-- **S/M.** Continue staged R examples using package-qualified calls. Existing
-  examples cover complete-data ML observed-information SEs, Satorra-Bentler
-  reporting, ordinal DWLS/WLS robust reporting, high-level estimate-only
-  fitting, and FIML MLR reporting; use the next examples to stress-test
-  whether primitive names and helper boundaries feel natural.
+- **S/M, as R exploration reveals it.** Add or rename wrappers only when the
+  methods-developer workflow exposes a concrete gap in the current staged API.
+  The current `magmaan_core`, friendly fit object, and explicit post-fit
+  wrapper surface are sufficient for the next R exploration pass.
 - **M/L, after the R scaffold exposes the current surface.** Apply the
   robust-test naming policy from `docs/roadmap.md` -> Robust-test naming and
   compatibility. Keep core names statistical and object-based, move
@@ -162,6 +151,11 @@ Completed checks:
   `standardized()`, `stats::residuals.magmaan_fit()`, `factor_scores()`, and
   `modification_indices()` as thin wrappers over `magmaan_core`, preserving
   explicit covariance and raw-data choices.
+- [x] **S/M. R scaffold third pass closure.** The audit has no current missing
+  primitive bindings, copy-worthy examples use package-qualified calls and
+  canonical `magmaan_core` names, and the friendly `magmaan_fit` / post-fit
+  wrappers are ready for exploratory R use. Future R exploration should open
+  specific follow-up tasks instead of keeping this broad scaffold item open.
 
 Done when: new code naturally uses the target namespaces, R scripts can reach
 the relevant C++ primitive graph through predictable names, friendly R users
