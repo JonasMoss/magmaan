@@ -19,6 +19,7 @@
 #include "magmaan/spec/partable.hpp"
 #include "magmaan/spec/start_hints.hpp"
 #include "magmaan/spec/build.hpp"     // compute_eq_groups
+#include "magmaan/compat/lavaan/composite_fold.hpp"
 #include "magmaan/compat/lavaan/partable_view.hpp"   // LavaanParTable / to_/from_lavaan_partable
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -103,6 +104,7 @@ inline const char* post_error_kind(lv::PostError::Kind k) {
 inline lv::parse::Op op_from_string(const std::string& s) {
   using O = lv::parse::Op;
   if (s == "=~") return O::Measurement;
+  if (s == "<~") return O::Composite;
   if (s == "~")  return O::Regression;
   if (s == "~~") return O::Covariance;
   if (s == "|")  return O::Threshold;
@@ -137,6 +139,56 @@ inline void read_group_attrs(SEXP df, std::string& group_var,
     group_labels = Rcpp::as<std::vector<std::string>>(gl);
 }
 
+constexpr const char* expanded_partable_attr = "magmaan.expanded_partable";
+
+inline bool has_composite_rows(Rcpp::DataFrame df) {
+  if (!df.containsElementNamed("op")) return false;
+  std::vector<std::string> opstr =
+      Rcpp::as<std::vector<std::string>>(static_cast<SEXP>(df["op"]));
+  for (const std::string& op : opstr)
+    if (op == "<~") return true;
+  return false;
+}
+
+inline std::vector<magmaan::spec::CompositeInfo>
+composite_info_from_folded_df(Rcpp::DataFrame df) {
+  std::vector<magmaan::spec::CompositeInfo> out;
+  if (!df.containsElementNamed("lhs") || !df.containsElementNamed("op") ||
+      !df.containsElementNamed("rhs")) {
+    return out;
+  }
+
+  std::vector<std::string> lhs =
+      Rcpp::as<std::vector<std::string>>(static_cast<SEXP>(df["lhs"]));
+  std::vector<std::string> op =
+      Rcpp::as<std::vector<std::string>>(static_cast<SEXP>(df["op"]));
+  std::vector<std::string> rhs =
+      Rcpp::as<std::vector<std::string>>(static_cast<SEXP>(df["rhs"]));
+
+  auto find_composite = [&](const std::string& name) -> std::size_t {
+    for (std::size_t i = 0; i < out.size(); ++i)
+      if (out[i].composite == name) return i;
+    out.push_back(magmaan::spec::CompositeInfo{});
+    out.back().composite = name;
+    return out.size() - 1;
+  };
+  for (std::size_t i = 0; i < op.size(); ++i) {
+    if (op[i] != "<~") continue;
+    const std::size_t k = find_composite(lhs[i]);
+    bool seen = false;
+    for (const std::string& ind : out[k].indicators) {
+      if (ind == rhs[i]) { seen = true; break; }
+    }
+    if (!seen) out[k].indicators.push_back(rhs[i]);
+  }
+  for (auto& ci : out) {
+    for (std::size_t j = 1; j < ci.indicators.size(); ++j) {
+      ci.excrescent.push_back(".exc." + ci.composite + "." + std::to_string(j));
+    }
+  }
+  return out;
+}
+
 // Parse a (possibly hand-edited) lavaan-shaped partable data.frame back into
 // the in-memory model triple: read the columns into a `LavaanParTable`, then
 // `from_lavaan_partable` re-derives the variable inventory + equality groups +
@@ -144,6 +196,22 @@ inline void read_group_attrs(SEXP df, std::string& group_var,
 // `from_lavaan_partable` (a fixed row's value → `fixed_value`; a free row's
 // value → a start hint on `.starts`).
 inline magmaan::compat::lavaan::ParsedLavaanParTable parse_partable_df(Rcpp::DataFrame df) {
+  std::vector<magmaan::spec::CompositeInfo> composites =
+      composite_info_from_folded_df(df);
+  SEXP expanded = Rf_getAttrib(df, Rf_install(expanded_partable_attr));
+  if (!Rf_isNull(expanded)) {
+    if (!Rf_isFrame(expanded)) {
+      Rcpp::stop("magmaan: `%s` attribute must be a data.frame",
+                 expanded_partable_attr);
+    }
+    df = Rcpp::DataFrame(expanded);
+  } else if (has_composite_rows(df)) {
+    Rcpp::stop("magmaan: folded composite (`<~`) partables need the `%s` "
+               "attribute; rebuild the partable with lavaan_lavaanify() or "
+               "use the original magmaan fit object",
+               expanded_partable_attr);
+  }
+
   auto col = [&](const char* nm) -> SEXP {
     if (!df.containsElementNamed(nm))
       Rcpp::stop("magmaan: partable data.frame is missing required column '%s'", nm);
@@ -179,7 +247,9 @@ inline magmaan::compat::lavaan::ParsedLavaanParTable parse_partable_df(Rcpp::Dat
     lvpt.plabel[i] = plab[i];
   }
   read_group_attrs(df, lvpt.group_var, lvpt.group_labels);
-  return magmaan::compat::lavaan::from_lavaan_partable(lvpt);
+  auto parsed = magmaan::compat::lavaan::from_lavaan_partable(lvpt);
+  if (!composites.empty()) parsed.names.composites = std::move(composites);
+  return parsed;
 }
 
 inline bool has_meanstructure(const magmaan::spec::LatentStructure& pt) {
@@ -196,15 +266,9 @@ inline bool has_constraint_rows(const magmaan::spec::LatentStructure& pt) {
   return false;
 }
 
-// The model triple + fitted estimates -> data.frame (lavaanify columns + est).
-// `starts` (optional): the user start hints, so the reconstructed `ustart`
-// column carries free-row hints (not just fixed-row values). NaN ⇒ R NA.
-inline Rcpp::DataFrame partable_df(const magmaan::spec::LatentStructure& structure,
-                                   const magmaan::spec::LatentNames& names,
-                                   const magmaan::estimate::Estimates& est,
-                                   const magmaan::spec::Starts* starts = nullptr) {
-  const magmaan::compat::lavaan::LavaanParTable pt =
-      magmaan::compat::lavaan::to_lavaan_partable(structure, names, starts ? *starts : magmaan::spec::Starts{});
+inline Rcpp::DataFrame partable_df_from_lavaan(
+    const magmaan::compat::lavaan::LavaanParTable& pt,
+    const magmaan::estimate::Estimates* est = nullptr) {
   const R_xlen_t nrow = static_cast<R_xlen_t>(pt.size());
   Rcpp::IntegerVector id(nrow), user(nrow), block(nrow), group(nrow), freev(nrow), exo(nrow);
   Rcpp::CharacterVector lhs(nrow), op(nrow), rhs(nrow), label(nrow), plabel(nrow);
@@ -224,7 +288,8 @@ inline Rcpp::DataFrame partable_df(const magmaan::spec::LatentStructure& structu
     plabel[i] = pt.plabel[k];
     ustart[i] = pt.ustart[k];
     const std::int32_t f = pt.free[k];
-    est_c[i]  = (f <= 0) ? pt.ustart[k] : est.theta(static_cast<Eigen::Index>(f) - 1);
+    est_c[i]  = (est == nullptr || f <= 0) ? pt.ustart[k]
+                                           : est->theta(static_cast<Eigen::Index>(f) - 1);
   }
   Rcpp::List cols = Rcpp::List::create(
       Rcpp::_["id"] = id, Rcpp::_["lhs"] = lhs, Rcpp::_["op"] = op, Rcpp::_["rhs"] = rhs,
@@ -234,8 +299,28 @@ inline Rcpp::DataFrame partable_df(const magmaan::spec::LatentStructure& structu
   cols.attr("row.names") = Rcpp::IntegerVector::create(NA_INTEGER, -static_cast<int>(nrow));
   cols.attr("class") = "data.frame";
   Rcpp::DataFrame out(cols);
-  attach_group_attrs(out, names.group_var, names.group_labels);
+  attach_group_attrs(out, pt.group_var, pt.group_labels);
   return out;
+}
+
+// The model triple + fitted estimates -> data.frame (lavaanify columns + est).
+// `starts` (optional): the user start hints, so the reconstructed `ustart`
+// column carries free-row hints (not just fixed-row values). NaN ⇒ R NA.
+inline Rcpp::DataFrame partable_df(const magmaan::spec::LatentStructure& structure,
+                                   const magmaan::spec::LatentNames& names,
+                                   const magmaan::estimate::Estimates& est,
+                                   const magmaan::spec::Starts* starts = nullptr) {
+  const magmaan::compat::lavaan::LavaanParTable expanded =
+      magmaan::compat::lavaan::to_lavaan_partable(
+          structure, names, starts ? *starts : magmaan::spec::Starts{});
+  Rcpp::DataFrame expanded_df = partable_df_from_lavaan(expanded, &est);
+  if (names.composites.empty()) return expanded_df;
+
+  const magmaan::compat::lavaan::LavaanParTable folded =
+      magmaan::compat::lavaan::fold_composites(expanded, names.composites);
+  Rcpp::DataFrame folded_df = partable_df_from_lavaan(folded, &est);
+  Rf_setAttrib(folded_df, Rf_install(expanded_partable_attr), expanded_df);
+  return folded_df;
 }
 
 inline magmaan::optim::LbfgsOptions lbfgs_opts_from(Rcpp::Nullable<Rcpp::List> lbfgs) {

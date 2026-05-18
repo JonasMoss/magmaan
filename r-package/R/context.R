@@ -16,6 +16,13 @@ standardized <- function(fit, vcov, type = c("all", "lv")) {
   magmaan_core$measures_standardize_lv(fit, vcov)
 }
 
+composite_weights <- function(fit, vcov) {
+  if (missing(vcov)) {
+    stop("composite_weights(): `vcov` is required; compute it explicitly before calling")
+  }
+  magmaan_core$measures_composite_weights(fit, vcov)
+}
+
 residuals.magmaan_fit <- function(object, standardized = FALSE, ...) {
   if (isTRUE(standardized)) {
     return(magmaan_core$measures_standardized_residuals(object))

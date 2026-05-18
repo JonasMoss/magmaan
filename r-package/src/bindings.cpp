@@ -17,6 +17,7 @@
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/parse/flat_partable.hpp"
 #include "magmaan/spec/build.hpp"
+#include "magmaan/compat/lavaan/composite_fold.hpp"
 #include "magmaan/compat/lavaan/partable_view.hpp"
 
 namespace {
@@ -45,6 +46,9 @@ const char* partable_error_kind(magmaan::PartableError::Kind k) {
     case K::UnknownLabelInConstraint: return "UnknownLabelInConstraint";
     case K::InconsistentModifiers:    return "InconsistentModifiers";
     case K::EmptyModel:               return "EmptyModel";
+    case K::CompositeTooFewIndicators:return "CompositeTooFewIndicators";
+    case K::CompositeOverlap:         return "CompositeOverlap";
+    case K::UnidentifiedComposite:    return "UnidentifiedComposite";
   }
   return "Unknown";
 }
@@ -67,6 +71,65 @@ const char* constraint_kind_str(magmaan::parse::ConstraintKind k) {
 }
 
 std::string sv2s(std::string_view sv) { return std::string(sv); }
+
+void attach_group_attrs(SEXP df, const std::string& group_var,
+                        const std::vector<std::string>& group_labels) {
+  Rf_setAttrib(df, Rf_install("magmaan.group_var"),
+               Rf_mkString(group_var.c_str()));
+  Rcpp::CharacterVector gl(static_cast<R_xlen_t>(group_labels.size()));
+  for (std::size_t i = 0; i < group_labels.size(); ++i)
+    gl[static_cast<R_xlen_t>(i)] = group_labels[i];
+  Rf_setAttrib(df, Rf_install("magmaan.group_labels"), gl);
+}
+
+Rcpp::DataFrame lavaan_partable_df(
+    const magmaan::compat::lavaan::LavaanParTable& pt) {
+  const R_xlen_t n = static_cast<R_xlen_t>(pt.size());
+  Rcpp::IntegerVector id(n), user(n), block(n), group(n), free(n), exo(n);
+  Rcpp::CharacterVector lhs(n), op(n), rhs(n), label(n), plabel(n);
+  Rcpp::NumericVector ustart(n);
+  for (R_xlen_t i = 0; i < n; ++i) {
+    const std::size_t k = static_cast<std::size_t>(i);
+    id[i]     = pt.id[k];
+    user[i]   = pt.user[k];
+    block[i]  = pt.block[k];
+    group[i]  = pt.group[k];
+    free[i]   = pt.free[k];
+    exo[i]    = pt.exo[k];
+    lhs[i]    = pt.lhs[k];
+    op[i]     = sv2s(magmaan::parse::to_string(pt.op[k]));
+    rhs[i]    = pt.rhs[k];
+    label[i]  = pt.label[k];
+    plabel[i] = pt.plabel[k];
+    ustart[i] = pt.ustart[k];   // NaN -> R NaN
+  }
+
+  Rcpp::List cols = Rcpp::List::create(
+      Rcpp::_["id"] = id, Rcpp::_["lhs"] = lhs, Rcpp::_["op"] = op,
+      Rcpp::_["rhs"] = rhs, Rcpp::_["user"] = user, Rcpp::_["block"] = block,
+      Rcpp::_["group"] = group, Rcpp::_["free"] = free, Rcpp::_["exo"] = exo,
+      Rcpp::_["ustart"] = ustart, Rcpp::_["label"] = label,
+      Rcpp::_["plabel"] = plabel);
+
+  for (const auto& kv : pt.extra_real) {
+    cols[kv.first] = Rcpp::NumericVector(kv.second.begin(), kv.second.end());
+  }
+  for (const auto& kv : pt.extra_int) {
+    cols[kv.first] = Rcpp::IntegerVector(kv.second.begin(), kv.second.end());
+  }
+  for (const auto& kv : pt.extra_str) {
+    Rcpp::CharacterVector cv(static_cast<R_xlen_t>(kv.second.size()));
+    for (std::size_t j = 0; j < kv.second.size(); ++j) cv[j] = kv.second[j];
+    cols[kv.first] = cv;
+  }
+
+  cols.attr("row.names") =
+      Rcpp::IntegerVector::create(NA_INTEGER, static_cast<int>(-n));
+  cols.attr("class") = "data.frame";
+  Rcpp::DataFrame df(cols);
+  attach_group_attrs(df, pt.group_var, pt.group_labels);
+  return df;
+}
 
 // One modifier -> a small list describing the variant.
 Rcpp::List describe_modifier(const magmaan::parse::Modifier& m) {
@@ -217,60 +280,12 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   }
   const magmaan::compat::lavaan::LavaanParTable pt =
       magmaan::compat::lavaan::to_lavaan_partable(*pt_or, names, starts);
+  Rcpp::DataFrame expanded = lavaan_partable_df(pt);
+  if (names.composites.empty()) return expanded;
 
-  const R_xlen_t n = static_cast<R_xlen_t>(pt.size());
-  Rcpp::IntegerVector id(n), user(n), block(n), group(n), free(n), exo(n);
-  Rcpp::CharacterVector lhs(n), op(n), rhs(n), label(n), plabel(n);
-  Rcpp::NumericVector ustart(n);
-  for (R_xlen_t i = 0; i < n; ++i) {
-    const std::size_t k = static_cast<std::size_t>(i);
-    id[i]     = pt.id[k];
-    user[i]   = pt.user[k];
-    block[i]  = pt.block[k];
-    group[i]  = pt.group[k];
-    free[i]   = pt.free[k];
-    exo[i]    = pt.exo[k];
-    lhs[i]    = pt.lhs[k];
-    op[i]     = sv2s(magmaan::parse::to_string(pt.op[k]));
-    rhs[i]    = pt.rhs[k];
-    label[i]  = pt.label[k];
-    plabel[i] = pt.plabel[k];
-    ustart[i] = pt.ustart[k];   // NaN → R NaN
-  }
-
-  Rcpp::List cols = Rcpp::List::create(
-      Rcpp::_["id"] = id, Rcpp::_["lhs"] = lhs, Rcpp::_["op"] = op,
-      Rcpp::_["rhs"] = rhs, Rcpp::_["user"] = user, Rcpp::_["block"] = block,
-      Rcpp::_["group"] = group, Rcpp::_["free"] = free, Rcpp::_["exo"] = exo,
-      Rcpp::_["ustart"] = ustart, Rcpp::_["label"] = label,
-      Rcpp::_["plabel"] = plabel);
-
-  // Append methods-developer extension columns under their map keys.
-  for (const auto& kv : pt.extra_real) {
-    cols[kv.first] = Rcpp::NumericVector(kv.second.begin(), kv.second.end());
-  }
-  for (const auto& kv : pt.extra_int) {
-    cols[kv.first] = Rcpp::IntegerVector(kv.second.begin(), kv.second.end());
-  }
-  for (const auto& kv : pt.extra_str) {
-    Rcpp::CharacterVector cv(static_cast<R_xlen_t>(kv.second.size()));
-    for (std::size_t j = 0; j < kv.second.size(); ++j) cv[j] = kv.second[j];
-    cols[kv.first] = cv;
-  }
-
-  // Make it a data.frame (variable column count, so we can't use
-  // DataFrame::create). All columns are int/dbl/chr — no factor conversion,
-  // so stringsAsFactors is moot. "compact" row names = c(NA, -n) => 1..n.
-  cols.attr("row.names") =
-      Rcpp::IntegerVector::create(NA_INTEGER, static_cast<int>(-n));
-  cols.attr("class") = "data.frame";
-  Rcpp::DataFrame df(cols);
-  // Group identity rides as data.frame attributes (table-level metadata,
-  // mirrored back into LatentNames.group_var / .group_labels by parse_partable_df).
-  Rf_setAttrib(df, Rf_install("magmaan.group_var"), Rf_mkString(pt.group_var.c_str()));
-  Rcpp::CharacterVector gl(static_cast<R_xlen_t>(pt.group_labels.size()));
-  for (std::size_t j = 0; j < pt.group_labels.size(); ++j)
-    gl[static_cast<R_xlen_t>(j)] = pt.group_labels[j];
-  Rf_setAttrib(df, Rf_install("magmaan.group_labels"), gl);
+  const magmaan::compat::lavaan::LavaanParTable folded =
+      magmaan::compat::lavaan::fold_composites(pt, names.composites);
+  Rcpp::DataFrame df = lavaan_partable_df(folded);
+  Rf_setAttrib(df, Rf_install("magmaan.expanded_partable"), expanded);
   return df;
 }
