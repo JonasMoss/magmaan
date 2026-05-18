@@ -61,41 +61,61 @@ intended workflow from docs/examples rather than reverse engineering tests.
 
 ## 1. API, R boundary, and namespace cleanup
 
-Intent: keep the public surface coherent while the staged API and R
-methods-developer interface settle.
+Intent: use the R package as an exploratory workbench for the C++ primitive
+surface while the staged public API and namespace layout settle.
 
 Contracts:
 
-- Thin R wrappers should mirror C++ primitive signatures over time; fit-list
-  helpers may remain as explicit convenience adapters.
+- R should expose virtually every relevant C++ primitive used for model
+  construction, data construction, estimation, testing, inference, robust
+  reporting, fit measures, standardization, and diagnostics. "Relevant" means
+  functions that methods work would naturally call directly, not only
+  implementation details hidden inside another primitive.
+- Direct C++ exports should be thin wrappers named
+  `<namespace>_<function_name>` from the R side, reflecting the C++ namespace
+  layout. Pure R helpers that compose those primitives should use ordinary
+  helper names without a namespace prefix.
+- Fit-list helpers may remain as explicit convenience adapters, but every
+  convenience path should be decomposable into visible primitive calls through
+  the R scaffold.
 - User-facing APIs should be staged and explicit: model/data construction,
   point estimation, and post-fit inference/reporting are separate choices.
 - Primitive APIs should remain available for methods work without crowding the
-  friendly R namespace.
+  friendly R namespace; low-level exports live behind `magmaan_core` while
+  friendly helpers stay small and inspectable.
+- R examples and development scripts should avoid `library("magmaan")` and
+  `library("lavaan")`; use explicit package-qualified calls so examples make
+  API boundaries visible.
 - New C++ code should use the target namespaces directly: `parse`, `spec`,
   `model`, `data`, `estimate`, `inference`, `robust`, `measures`, `optim`,
   and `compat::lavaan`.
 
 Remaining work, in suggested order:
 
-- **M/L, next robust/API refactor.** Apply the robust-test naming policy from
-  `docs/roadmap.md` -> Robust-test naming and compatibility. Keep core names
-  statistical and object-based, move lavaan/Mplus/EQS labels into explicit
-  compatibility wrappers, and consider renaming the public Satorra-2000 helper
-  toward an LRT/nested-model name while documenting the historical aliases.
-- **S/M.** Continue migrating R post-fit helpers from opaque fit-list unpacking
-  toward explicit primitive-shaped entry points, keeping convenience aliases
-  only where they do not obscure the contract.
-- **M/L.** Design the Python binding surface around a friendly top-level API
-  and a `magmaan.core` submodule for primitives, keeping names aligned with the
-  C++ namespace layout where possible.
-- **S/M.** Continue the staged-API examples. `observed_information_se.R` now
-  covers complete-data ML observed-information SEs; Satorra-Bentler and ordinal
-  DWLS/WLS robust reporting are in `constraints_and_satorra_bentler.R` and
-  `ordinal_dwls_wls.R`. FIML with MLR-style robust reporting still needs an R
-  example, blocked on exposing the C++ FIML MLR sandwich / Yuan-Bentler
-  machinery through a `magmaan_core` binding — no FIML-robust entry point
-  exists today.
+- **S/M, current R third pass.** Audit `magmaan_core` against the implemented
+  C++ primitive surface and add thin R bindings for missing relevant
+  primitives. Prioritize functions that let R scripts construct models/data,
+  run fits, compute post-fit quantities, compare diagnostics, and reproduce
+  validation paths without depending on opaque fit-list unpacking.
+- **S/M.** Normalize R binding names to the
+  `<namespace>_<function_name>` convention for direct C++ exports. Keep
+  existing aliases only when useful for compatibility during exploration, and
+  make pure R helpers plain, compositional names.
+- **S/M.** Add R bindings and an example for the already implemented C++ FIML
+  MLR robust reporting path: observed-pattern sandwich SEs plus the
+  Yuan-Bentler/Mplus scaled-test traces. The C++ machinery exists; the missing
+  piece is the R scaffold and a legibility example.
+- **S/M.** Continue staged R examples using package-qualified calls. Existing
+  examples cover complete-data ML observed-information SEs, Satorra-Bentler
+  reporting, ordinal DWLS/WLS robust reporting, and high-level estimate-only
+  fitting; use the next examples to stress-test whether primitive names and
+  helper boundaries feel natural.
+- **M/L, after the R scaffold exposes the current surface.** Apply the
+  robust-test naming policy from `docs/roadmap.md` -> Robust-test naming and
+  compatibility. Keep core names statistical and object-based, move
+  lavaan/Mplus/EQS labels into explicit compatibility wrappers, and consider
+  renaming the public Satorra-2000 helper toward an LRT/nested-model name while
+  documenting historical aliases.
 - **M/L.** Land explicit primitive surfaces for post-fit quantities that are
   not currently produced by magmaan: standard SEs for FIML/LS, FIML SRMR, and
   estimator-appropriate LS/ordinal CFI/TLI/RMSEA/SRMR. Add lavaan parity gates
@@ -108,9 +128,10 @@ Completed checks:
   dedicated `api` tests covering ML, LS, FIML, ordinal DWLS/WLS, and
   `Analysis` chaining.
 
-Done when: new code naturally uses the target namespaces, friendly R/Python
-users see a small staged API, and methods developers can still choose primitive
-post-fit operations without depending on hidden fit-list unpacking.
+Done when: new code naturally uses the target namespaces, R scripts can reach
+the relevant C++ primitive graph through predictable names, friendly R users
+see a small staged API, and methods developers can choose primitive post-fit
+operations without depending on hidden fit-list unpacking.
 
 ## 2. Benchmarks and performance baselines
 
