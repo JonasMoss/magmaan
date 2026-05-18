@@ -122,6 +122,17 @@ golden `parTable()` fixtures.
   a matching theta-based `nt::infer::rls_chi2()` overload that builds implied
   moments from the model structure before applying Browne's model-based
   residual quadratic.
+- Distributionally weighted least squares (DLS) is available as an explicit
+  weight-matrix builder over the existing moment-quadratic LS surface. The
+  fixed-scalar builder mixes covariance-moment Gamma matrices between
+  normal-theory GLS and empirical ADF/WLS endpoints, while
+  `empirical_bayes_dls_mixing_scalar()` estimates a global reliability-style
+  scalar from the observed `Gamma_ADF - Gamma_NT` departure and casewise
+  fourth-moment product noise, following the empirical-Bayes weight-selection
+  direction of Du and Wu (2024). `empirical_bayes_dls_weight()` then delegates
+  to the same DLS builder, so modification-index and weighted-moment sandwich
+  paths consume the result exactly like any supplied WLS weight. Local
+  simulation checks live under `checks/dls/`.
 - Separable nonlinear least squares profiling exists for LS estimators where
   conditionally linear parameters can be profiled out.
 

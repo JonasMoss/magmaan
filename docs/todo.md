@@ -170,16 +170,23 @@ Contracts:
   inference stay outside the regular inference surface until their theory and
   reporting are explicit.
 
+Completed checks:
+
+- [x] **M. Empirical-Bayes DLS weight builder.** DLS now has a fixed-scalar
+  weight builder plus an empirical-Bayes scalar estimator/convenience builder
+  layered on the existing LS weight surface, with unit coverage for endpoint
+  exactness, scalar direction under normal vs heavy-tailed data, delegation to
+  `dls_weight()`, and an advisory `checks/dls/` Monte Carlo driver. The scalar
+  follows the Du & Wu (2024) empirical-Bayes weight-selection direction by
+  estimating the stable fourth-moment departure from `Gamma_NT` after
+  subtracting casewise-product noise.
+
 Remaining work, in suggested order:
 
 - **M/L.** Extend covariance shrinkage to `MixedOrdinalStats`. Continuous
   `SampleStats` shrinkage already exists; mixed shrinkage needs the
   `src/data/ordinal.cpp` moment/NACOV rebuild factored into a shared helper so
   R and C++ can shrink consistently.
-- **L.** Add empirical-Bayes DLS as a weight-matrix builder layered on the
-  existing DLS/LS discrepancy and weighted-moment sandwich surfaces. The
-  empirical-Bayes mixing-scalar estimator still needs a methods decision,
-  citation, and a `checks/dls/` Monte Carlo driver.
 - **M/L.** Finish the theta ordinal compatibility slice beyond all-ordinal
   point estimates: mixed continuous/ordinal theta, theta robust inference,
   theta modification indices, and theta standardized-solution reporting.
