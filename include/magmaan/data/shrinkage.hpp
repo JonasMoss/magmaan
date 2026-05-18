@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/expected.hpp"
 
@@ -55,10 +56,25 @@ struct ShrunkSampleStats {
   std::vector<CovarianceRepairResult> block_diagnostics;
 };
 
+struct ShrunkMixedOrdinalStats {
+  MixedOrdinalStats stats;                            // shrunk mixed moments
+  std::vector<CovarianceRepairResult> block_diagnostics;
+};
+
 // Apply covariance shrinkage to every block of `samp`. Means and `n_obs` pass
 // through unchanged. Returns `NumericIssue` on a malformed input or an
 // unsupported `estimate_intensity` combination.
 post_expected<ShrunkSampleStats>
 shrink_sample_stats(const SampleStats& samp, CovarianceShrinkageOptions opts);
+
+// Apply the same covariance shrinkage transformation to the covariance-like
+// portion of `MixedOrdinalStats`: ordinal thresholds and continuous means pass
+// through, while continuous variances and all lower-triangle association rows
+// are transformed with the block covariance/correlation matrix. NACOV and
+// DWLS/WLS weights are rebuilt by delta-method propagation through that same
+// transformation, so C++ and R callers can consume one consistent stats object.
+post_expected<ShrunkMixedOrdinalStats>
+shrink_mixed_ordinal_stats(const MixedOrdinalStats& stats,
+                           CovarianceShrinkageOptions opts);
 
 }  // namespace magmaan::data

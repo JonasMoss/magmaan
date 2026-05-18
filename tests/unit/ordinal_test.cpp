@@ -16,6 +16,7 @@
 #include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/pairwise.hpp"
+#include "magmaan/measures/standardized.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
@@ -2612,29 +2613,82 @@ TEST_CASE("Mixed ordinal validation rejects malformed stats before fitting") {
   }
 }
 
-TEST_CASE("Mixed ordinal theta parameterization fails explicitly") {
-  Eigen::MatrixXd X(80, 3);
+TEST_CASE("Mixed ordinal theta parameterization fits and supports post-fit reporting") {
+  std::mt19937 rng(20260520);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(520, 4);
   for (Eigen::Index i = 0; i < X.rows(); ++i) {
-    X(i, 0) = 1.0 + (i % 3);
-    X(i, 1) = static_cast<double>(i) / 10.0;
-    X(i, 2) = std::sin(static_cast<double>(i));
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta > -0.6) + (eta > 0.4);
+    X(i, 1) = 1.0 + (0.65 * eta + 0.76 * norm(rng) > 0.1);
+    X(i, 2) = 0.8 * eta + 0.6 * norm(rng) + 0.2;
+    X(i, 3) = 0.7 * eta + 0.7 * norm(rng) - 0.1;
   }
   auto stats = magmaan::data::mixed_ordinal_stats_from_data(
-      {X}, std::vector<std::vector<std::int32_t>>{{1, 0, 0}});
+      {X}, std::vector<std::vector<std::int32_t>>{{1, 1, 0, 0}});
   REQUIRE(stats.has_value());
 
   magmaan::spec::BuildOptions opts;
   opts.meanstructure = true;
   auto fp = magmaan::parse::Parser::parse(
-      "f =~ x1 + x2 + x3\n"
+      "f =~ x1 + x2 + x3 + x4\n"
       "x1 | t1 + t2\n"
-      "x1 ~*~ 1*x1\n");
+      "x2 | t1\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n");
   REQUIRE(fp.has_value());
   auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  using magmaan::estimate::OrdinalParameterization;
+  using magmaan::estimate::OrdinalWeightKind;
+  auto delta = magmaan::test::fit_mixed_ordinal_bounded(
+      *pt, *mr, *stats, {}, OrdinalWeightKind::DWLS,
+      magmaan::estimate::Backend::Lbfgs, {}, OrdinalParameterization::Delta);
+  auto theta = magmaan::test::fit_mixed_ordinal_bounded(
+      *pt, *mr, *stats, {}, OrdinalWeightKind::DWLS,
+      magmaan::estimate::Backend::Lbfgs, {}, OrdinalParameterization::Theta);
+  REQUIRE_MESSAGE(delta.has_value(),
+      "delta fit failed: " << (delta.has_value() ? "" : delta.error().detail));
+  REQUIRE_MESSAGE(theta.has_value(),
+      "theta fit failed: " << (theta.has_value() ? "" : theta.error().detail));
+  CHECK(theta->theta.allFinite());
+  CHECK(std::isfinite(theta->fmin));
+  CHECK((theta->theta - delta->theta).cwiseAbs().maxCoeff() > 1e-3);
+
+  auto rob = magmaan::estimate::robust_mixed_ordinal(
+      *pt, *mr, *stats, *theta, OrdinalWeightKind::DWLS,
+      OrdinalParameterization::Theta);
+  REQUIRE(rob.has_value());
+  CHECK(rob->vcov.rows() == theta->theta.size());
+  CHECK(rob->se.allFinite());
+  CHECK(rob->eigvals.size() == rob->df);
+
+  magmaan::inference::ModificationIndexOptions mi_opts;
+  mi_opts.candidates = magmaan::inference::ScoreCandidateSet::WithAbsentRows;
+  auto mi = magmaan::estimate::modification_indices_mixed_ordinal(
+      *pt, *mr, *stats, *theta, OrdinalWeightKind::DWLS, mi_opts,
+      OrdinalParameterization::Theta);
+  REQUIRE(mi.has_value());
+  CHECK_FALSE(mi->rows.empty());
+
+  auto pt_prepared = *pt;
   auto prep = magmaan::estimate::prepare_mixed_ordinal_partable(
-      *pt, *stats, magmaan::estimate::OrdinalParameterization::Theta);
-  REQUIRE_FALSE(prep.has_value());
-  CHECK(prep.error().detail.find("mixed ordinal theta parameterization") !=
-        std::string::npos);
+      pt_prepared, *stats, OrdinalParameterization::Theta);
+  REQUIRE(prep.has_value());
+  auto ev_dbg = magmaan::model::ModelEvaluator::build(pt_prepared, *mr);
+  REQUIRE(ev_dbg.has_value());
+  CHECK(ev_dbg->param_locations().size() ==
+        static_cast<std::size_t>(theta->theta.size()));
+  auto std_all = magmaan::measures::standardize::standardize_all(
+      pt_prepared, *mr, *theta, rob->vcov);
+  REQUIRE_MESSAGE(std_all.has_value(),
+      "standardize_all failed: " <<
+      (std_all.has_value() ? "" : std_all.error().detail));
+  if (std_all.has_value()) {
+    CHECK(std_all->theta.size() == theta->theta.size());
+    CHECK(std_all->se.allFinite());
+  }
 }

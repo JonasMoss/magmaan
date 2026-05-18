@@ -59,13 +59,13 @@ Complete-data ML/ULS/GLS/WLS fit wrappers accept sample moments as
 
 ## Ordinal LS boundary
 
-Ordinal support is intentionally narrow and mirrors the C++ delta-path:
+Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
 
 - Declare ordered indicators with
-  `model_spec(model, ordered = ..., parameterization = "delta")`.
-  `"delta"` is the only supported estimation parameterization at the R
-  boundary; `parameterization = "theta"` is accepted by `model_spec()` only far
-  enough for wrappers to reject it explicitly before fitting.
+  `model_spec(model, ordered = ..., parameterization = "delta")` or
+  `parameterization = "theta"`. Both parameterizations are accepted for
+  all-ordinal and mixed continuous/ordinal DWLS/WLS point estimation, and the
+  fitted parameterization is reused by explicit post-fit robust reporting.
 - For all-ordinal models, build sample statistics with
   `magmaan_core$data_ordinal_stats_from_df()`. Every observed model variable
   must be listed in `ordered`; otherwise use the mixed builder.
@@ -87,6 +87,10 @@ Ordinal support is intentionally narrow and mirrors the C++ delta-path:
 - Returned mixed data follows lavaan's categorical WLS moment order and
   includes `ordered_mask`, `thresholds`, `R`, continuous means, `moments`,
   `NACOV`, `W_dwls`, and `W_wls`.
+- Mixed continuous/ordinal covariance shrinkage is explicit:
+  `magmaan_core$shrink_mixed_ordinal_stats(x, kind = "diagonal",
+  intensity = ...)` transforms the association/covariance block and rebuilds
+  `moments`, `NACOV`, `W_dwls`, and `W_wls` before fitting.
 - Fit all-ordinal data with `magmaan_core$fit_dwls_ordinal()` or
   `magmaan_core$fit_wls_ordinal()`. Fit mixed continuous/ordinal data with
   `magmaan_core$fit_dwls_mixed_ordinal()` or

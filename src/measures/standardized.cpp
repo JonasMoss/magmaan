@@ -127,6 +127,7 @@ standardize_lv(const spec::LatentStructure& pt,
 
   for (std::size_t k = 0; k < locs.size(); ++k) {
     const auto& L = locs[k];
+    if (L.row < 0 || L.block < 0) continue;
     const Eigen::Index ki = static_cast<Eigen::Index>(k);
     switch (L.mat) {
       case model::MatId::Lambda:
@@ -311,6 +312,7 @@ standardize_all(const spec::LatentStructure& pt,
 
   for (std::size_t k = 0; k < locs.size(); ++k) {
     const auto& L = locs[k];
+    if (L.row < 0 || L.block < 0) continue;
     const auto  b = static_cast<std::size_t>(L.block);
     const Eigen::Index ki = static_cast<Eigen::Index>(k);
     switch (L.mat) {

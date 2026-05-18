@@ -75,21 +75,18 @@ robust_ordinal(spec::LatentStructure pt,
                const model::MatrixRep& rep,
                const data::OrdinalStats& stats,
                const Estimates& est,
-               OrdinalWeightKind weights);
+               OrdinalWeightKind weights,
+               OrdinalParameterization parameterization =
+                   OrdinalParameterization::Delta);
 
 post_expected<OrdinalRobustResult>
 robust_mixed_ordinal(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const data::MixedOrdinalStats& stats,
                      const Estimates& est,
-                     OrdinalWeightKind weights);
-
-post_expected<inference::ScoreTestTable>
-modification_indices_ordinal(spec::LatentStructure pt,
-                             const model::MatrixRep& rep,
-                             const data::OrdinalStats& stats,
-                             const Estimates& est,
-                             OrdinalWeightKind weights);
+                     OrdinalWeightKind weights,
+                     OrdinalParameterization parameterization =
+                         OrdinalParameterization::Delta);
 
 post_expected<inference::ScoreTestTable>
 modification_indices_ordinal(spec::LatentStructure pt,
@@ -97,21 +94,27 @@ modification_indices_ordinal(spec::LatentStructure pt,
                              const data::OrdinalStats& stats,
                              const Estimates& est,
                              OrdinalWeightKind weights,
-                             const inference::ModificationIndexOptions& options);
+                             OrdinalParameterization parameterization =
+                                 OrdinalParameterization::Delta);
+
+post_expected<inference::ScoreTestTable>
+modification_indices_ordinal(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const data::OrdinalStats& stats,
+                             const Estimates& est,
+                             OrdinalWeightKind weights,
+                             const inference::ModificationIndexOptions& options,
+                             OrdinalParameterization parameterization =
+                                 OrdinalParameterization::Delta);
 
 post_expected<inference::ScoreTestTable>
 score_tests_ordinal(spec::LatentStructure pt,
                     const model::MatrixRep& rep,
                     const data::OrdinalStats& stats,
                     const Estimates& est,
-                    OrdinalWeightKind weights);
-
-post_expected<inference::ScoreTestTable>
-modification_indices_mixed_ordinal(spec::LatentStructure pt,
-                                   const model::MatrixRep& rep,
-                                   const data::MixedOrdinalStats& stats,
-                                   const Estimates& est,
-                                   OrdinalWeightKind weights);
+                    OrdinalWeightKind weights,
+                    OrdinalParameterization parameterization =
+                        OrdinalParameterization::Delta);
 
 post_expected<inference::ScoreTestTable>
 modification_indices_mixed_ordinal(spec::LatentStructure pt,
@@ -119,19 +122,32 @@ modification_indices_mixed_ordinal(spec::LatentStructure pt,
                                    const data::MixedOrdinalStats& stats,
                                    const Estimates& est,
                                    OrdinalWeightKind weights,
-                                   const inference::ModificationIndexOptions& options);
+                                   OrdinalParameterization parameterization =
+                                       OrdinalParameterization::Delta);
+
+post_expected<inference::ScoreTestTable>
+modification_indices_mixed_ordinal(spec::LatentStructure pt,
+                                   const model::MatrixRep& rep,
+                                   const data::MixedOrdinalStats& stats,
+                                   const Estimates& est,
+                                   OrdinalWeightKind weights,
+                                   const inference::ModificationIndexOptions& options,
+                                   OrdinalParameterization parameterization =
+                                       OrdinalParameterization::Delta);
 
 post_expected<inference::ScoreTestTable>
 score_tests_mixed_ordinal(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const data::MixedOrdinalStats& stats,
                           const Estimates& est,
-                          OrdinalWeightKind weights);
+                          OrdinalWeightKind weights,
+                          OrdinalParameterization parameterization =
+                              OrdinalParameterization::Delta);
 
-// Start-value producers for the ordinal delta path. They run the partable
-// preparation step internally (delta parameterization changes n_free), so the
-// returned vector is sized for the *prepared* partable — exactly what the
-// matching `fit_*_ordinal_bounded` rebuilds. Pass the result straight in.
+// Start-value producers for ordinal LS. They run the partable preparation step
+// internally, so the returned vector is sized for the *prepared* partable —
+// exactly what the matching `fit_*_ordinal_bounded` rebuilds. Pass the result
+// straight in.
 fit_expected<Eigen::VectorXd>
 ordinal_start_values(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
@@ -175,6 +191,8 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           OrdinalWeightKind weights,
                           const Eigen::VectorXd& x0,
                           Backend backend = Backend::Lbfgs,
-                          optim::LbfgsOptions opts = {});
+                          optim::LbfgsOptions opts = {},
+                          OrdinalParameterization parameterization =
+                              OrdinalParameterization::Delta);
 
 }  // namespace magmaan::estimate

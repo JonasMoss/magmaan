@@ -138,38 +138,7 @@ Remaining work, in suggested order:
 Done when: backend recommendations and performance-sensitive refactors can be
 checked against repeatable local benchmark scenarios.
 
-## 3. Statistical feature backlog
-
-Intent: keep unsupported statistical work explicit so it is not mistaken for
-polish.
-
-Contracts:
-
-- Small-sample stabilizers, shrinkage, and DLS should be explicit builders or
-  transformations, not string-mode knobs that alter lavaan-compatible defaults.
-- Theta ordinal support is a separate lavaan compatibility slice from the
-  delta boundary.
-- Nonlinear constraints, inequality constraints, and nonstandard active-bound
-  inference stay outside the regular inference surface until their theory and
-  reporting are explicit.
-
-Remaining work, in suggested order:
-
-- **M/L.** Extend covariance shrinkage to `MixedOrdinalStats`. Continuous
-  `SampleStats` shrinkage already exists; mixed shrinkage needs the
-  `src/data/ordinal.cpp` moment/NACOV rebuild factored into a shared helper so
-  R and C++ can shrink consistently.
-- **M/L.** Finish the theta ordinal compatibility slice beyond all-ordinal
-  point estimates: mixed continuous/ordinal theta, theta robust inference,
-  theta modification indices, and theta standardized-solution reporting.
-- **XL, deferred.** Reopen nonlinear equality constraints, inequality
-  constraints, or active-bound inference only with an explicit statistical
-  design and reporting contract.
-
-Done when: each unsupported statistical feature is either implemented with
-oracle/fixture backing or remains clearly outside the public contract.
-
-## 4. Composite models
+## 3. Composite models
 
 Intent: decide whether magmaan supports lavaan's new composite-variable
 semantics for `<~`, then implement the smallest lavaan-backed complete-data ML

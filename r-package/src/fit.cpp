@@ -15,6 +15,7 @@
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
+#include "magmaan/data/shrinkage.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -614,12 +615,24 @@ Rcpp::List ordinal_fit_result(Ctx& ctx,
                               const magmaan::data::OrdinalStats& stats,
                               const magmaan::estimate::Estimates& est,
                               const magmaan::spec::Starts* starts,
-                              const char* estimator) {
+                              const char* estimator,
+                              const char* parameterization = "delta") {
   Rcpp::List out = fit_result(ctx, est, starts, estimator);
   out["ordinal"] = true;
+  out["parameterization"] = parameterization;
   out["thresholds"] = ordinal_stats_to_r(stats)["thresholds"];
   out["polychoric"] = ordinal_stats_to_r(stats)["R"];
   return out;
+}
+
+magmaan::data::CovarianceShrinkageKind shrinkage_kind_from_string(const std::string& kind) {
+  using K = magmaan::data::CovarianceShrinkageKind;
+  if (kind == "none") return K::None;
+  if (kind == "ridge") return K::Ridge;
+  if (kind == "identity") return K::IdentityTarget;
+  if (kind == "diagonal") return K::DiagonalTarget;
+  if (kind == "constant_correlation") return K::ConstantCorrelation;
+  Rcpp::stop("magmaan: shrinkage kind must be none, ridge, identity, diagonal, or constant_correlation");
 }
 
 #ifdef MAGMAAN_WITH_CERES
@@ -887,6 +900,31 @@ Rcpp::List data_mixed_ordinal_stats_from_raw_impl(SEXP X, SEXP ordered_mask) {
 }
 
 // [[Rcpp::export]]
+Rcpp::List data_shrink_mixed_ordinal_stats_impl(
+    Rcpp::List mixed_stats, std::string kind = "diagonal",
+    double intensity = 0.0, bool estimate_intensity = false) {
+  magmaan::data::MixedOrdinalStats stats = mixed_ordinal_stats_from_arg(mixed_stats);
+  magmaan::data::CovarianceShrinkageOptions opts;
+  opts.kind = shrinkage_kind_from_string(kind);
+  opts.intensity = intensity;
+  opts.estimate_intensity = estimate_intensity;
+  auto out_or = magmaan::data::shrink_mixed_ordinal_stats(stats, opts);
+  if (!out_or.has_value()) stop_post(out_or.error());
+  Rcpp::List out = mixed_ordinal_stats_to_r(out_or->stats);
+  Rcpp::List diag(static_cast<R_xlen_t>(out_or->block_diagnostics.size()));
+  for (std::size_t b = 0; b < out_or->block_diagnostics.size(); ++b) {
+    const auto& d = out_or->block_diagnostics[b];
+    diag[static_cast<R_xlen_t>(b)] = Rcpp::List::create(
+        Rcpp::_["raw_min_eigen"] = d.raw_min_eigen,
+        Rcpp::_["min_eigen"] = d.min_eigen,
+        Rcpp::_["intensity"] = d.intensity,
+        Rcpp::_["shrunk"] = d.shrunk);
+  }
+  out["shrinkage"] = diag;
+  return out;
+}
+
+// [[Rcpp::export]]
 Rcpp::List data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl(
     SEXP X, SEXP ordered_mask, double alpha = 0.3) {
   auto blocks = matrix_blocks_from_arg(X);
@@ -968,6 +1006,8 @@ Rcpp::List data_mixed_ordinal_stats_huber_residual_from_raw_impl(
 Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
                                  Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                                  Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  const std::string parameterization_name = ordinal_parameterization_attr(partable);
+  const auto parameterization = ordinal_parameterization_from_string(parameterization_name);
   magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_dwls_ordinal");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx;
@@ -987,16 +1027,20 @@ Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   auto e_or = magmaan::estimate::fit_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
       magmaan::estimate::OrdinalWeightKind::DWLS, x0,
-      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb));
+      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb),
+      parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
-  return ordinal_fit_result(ctx, stats, est, &starts, "DWLS");
+  return ordinal_fit_result(ctx, stats, est, &starts, "DWLS",
+                            parameterization_name.c_str());
 }
 
 // [[Rcpp::export]]
 Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
                                 Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                                 Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  const std::string parameterization_name = ordinal_parameterization_attr(partable);
+  const auto parameterization = ordinal_parameterization_from_string(parameterization_name);
   magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_ordinal");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx;
@@ -1016,16 +1060,20 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   auto e_or = magmaan::estimate::fit_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
       magmaan::estimate::OrdinalWeightKind::WLS, x0,
-      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb));
+      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb),
+      parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
-  return ordinal_fit_result(ctx, stats, est, &starts, "WLS");
+  return ordinal_fit_result(ctx, stats, est, &starts, "WLS",
+                            parameterization_name.c_str());
 }
 
 // [[Rcpp::export]]
 Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
                                        Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                                        Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  const std::string parameterization_name = ordinal_parameterization_attr(partable);
+  const auto parameterization = ordinal_parameterization_from_string(parameterization_name);
   magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_dwls_mixed_ordinal");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx;
@@ -1046,11 +1094,13 @@ Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
   auto e_or = magmaan::estimate::fit_mixed_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
       magmaan::estimate::OrdinalWeightKind::DWLS, x0,
-      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb));
+      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb),
+      parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   Rcpp::List out = fit_result(ctx, est, &starts, "DWLS");
   out["mixed_ordinal"] = true;
+  out["parameterization"] = parameterization_name;
   return out;
 }
 
@@ -1058,6 +1108,8 @@ Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
 Rcpp::List fit_wls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
                                       Rcpp::Nullable<Rcpp::List> lbfgsb = R_NilValue,
                                       Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+  const std::string parameterization_name = ordinal_parameterization_attr(partable);
+  const auto parameterization = ordinal_parameterization_from_string(parameterization_name);
   magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_wls_mixed_ordinal");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx;
@@ -1078,11 +1130,13 @@ Rcpp::List fit_wls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
   auto e_or = magmaan::estimate::fit_mixed_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
       magmaan::estimate::OrdinalWeightKind::WLS, x0,
-      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb));
+      magmaan::estimate::Backend::Lbfgs, lbfgs_opts_from(lbfgsb),
+      parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   Rcpp::List out = fit_result(ctx, est, &starts, "WLS");
   out["mixed_ordinal"] = true;
+  out["parameterization"] = parameterization_name;
   return out;
 }
 

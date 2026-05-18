@@ -468,10 +468,6 @@ data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = N
 augment_ordinal_partable <- function(model, ordinal_stats) {
   parameterization <- attr(partable_arg(model), "magmaan.parameterization",
                            exact = TRUE) %||% "delta"
-  if (identical(parameterization, "theta")) {
-    stop("augment_ordinal_partable(): theta parameterization is not supported yet; ",
-         "use parameterization = 'delta'")
-  }
   fix_delta_variances <- function(pt, ov_by_group) {
     for (b in seq_along(ov_by_group)) {
       idx <- pt$op == "~~" &
@@ -561,17 +557,13 @@ augment_ordinal_partable <- function(model, ordinal_stats) {
   attr(out, "magmaan.group_var") <- attr(pt, "magmaan.group_var", exact = TRUE)
   attr(out, "magmaan.group_labels") <- attr(pt, "magmaan.group_labels", exact = TRUE)
   attr(out, "magmaan.ordered") <- ordinal_stats$ordered
-  attr(out, "magmaan.parameterization") <- "delta"
+  attr(out, "magmaan.parameterization") <- parameterization
   out
 }
 
 augment_mixed_ordinal_partable <- function(model, mixed_stats) {
   pt <- partable_arg(model)
   parameterization <- attr(pt, "magmaan.parameterization", exact = TRUE) %||% "delta"
-  if (identical(parameterization, "theta")) {
-    stop("augment_mixed_ordinal_partable(): theta parameterization is not supported yet; ",
-         "use parameterization = 'delta'")
-  }
   if (!any(pt$op == "~1")) {
     stop("augment_mixed_ordinal_partable(): mixed categorical fitting requires model_spec(..., meanstructure = TRUE)")
   }
@@ -673,7 +665,24 @@ augment_mixed_ordinal_partable <- function(model, mixed_stats) {
   attr(out, "magmaan.group_var") <- attr(pt, "magmaan.group_var", exact = TRUE)
   attr(out, "magmaan.group_labels") <- attr(pt, "magmaan.group_labels", exact = TRUE)
   attr(out, "magmaan.ordered") <- mixed_stats$ordered
-  attr(out, "magmaan.parameterization") <- "delta"
+  attr(out, "magmaan.parameterization") <- parameterization
+  out
+}
+
+shrink_mixed_ordinal_stats <- function(x, kind = "diagonal", intensity = 0,
+                                       estimate_intensity = FALSE) {
+  if (!inherits(x, "magmaan_mixed_ordinal_data")) {
+    stop("shrink_mixed_ordinal_stats(): `x` must be magmaan mixed ordinal data")
+  }
+  out <- data_shrink_mixed_ordinal_stats_impl(
+    x, kind = kind, intensity = intensity,
+    estimate_intensity = estimate_intensity)
+  out$X <- x$X
+  out$ov_names <- x$ov_names
+  out$ordered <- x$ordered
+  out$group_var <- x$group_var
+  out$group_labels <- x$group_labels
+  class(out) <- c("magmaan_mixed_ordinal_data", "list")
   out
 }
 

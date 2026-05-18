@@ -133,11 +133,14 @@ fit_mixed_ordinal_bounded(const Pt& pt, const Rep& rep, const Stats& stats,
                           estimate::Bounds bounds,
                           estimate::OrdinalWeightKind weights,
                           estimate::Backend backend = estimate::Backend::Lbfgs,
-                          optim::LbfgsOptions opts = {}) {
+                          optim::LbfgsOptions opts = {},
+                          estimate::OrdinalParameterization parameterization =
+                              estimate::OrdinalParameterization::Delta) {
   auto x0 = estimate::mixed_ordinal_start_values(pt, rep, stats, {});
   if (!x0.has_value()) return std::unexpected(x0.error());
   return estimate::fit_mixed_ordinal_bounded(pt, rep, stats, std::move(bounds),
-                                             weights, *x0, backend, opts);
+                                             weights, *x0, backend, opts,
+                                             parameterization);
 }
 
 }  // namespace magmaan::test
