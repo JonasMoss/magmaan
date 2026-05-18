@@ -222,6 +222,34 @@ Risky magmaan scope:
 - experimental estimators exposed as if they were ordinary compatibility paths;
 - public performance claims before workload equivalence is documented.
 
+## Bootstrap As Simulation Scope
+
+Bootstrap support is intentionally not on the active lavaan tutorial parity
+checklist. It may belong in magmaan later, but only if the project grows an
+explicit simulation/resampling layer rather than adding one-off
+`se = "bootstrap"` plumbing to the core inference namespace.
+
+A reasonable future shape would be:
+
+- keep the public C++/R/Python contract seed-based: bindings pass one integer
+  seed, and C++ owns all random draws after that;
+- make the low-level resample/refit loop consume a C++ RNG object by reference,
+  so tests and future simulation drivers can provide a deterministic stream;
+- keep the RNG type project-owned rather than exposing R, NumPy, Boost, or
+  standard-library distribution details across bindings;
+- resample raw rows within group/block, carrying FIML masks with the selected
+  rows when missing-data bootstrap support is designed;
+- treat Bollen-Stine as a C++ data transform plus the same resample/refit loop;
+- evaluate `:=` defined parameters on each successful refit if bootstrap
+  intervals are part of the accepted simulation surface;
+- return the seed, RNG algorithm/version, requested draws, successful draws,
+  failed-draw diagnostics, and bootstrap estimates so runs are auditable and
+  replayable from any binding.
+
+This is deliberately a future scope note, not a backlog item. If simulation
+support becomes a first-class direction, bootstrap can be promoted as one
+resampling primitive within that broader design.
+
 ## Composite Models
 
 Composites deserve extra caution. The `<~` operator is not just another parser

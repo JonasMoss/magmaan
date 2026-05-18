@@ -69,12 +69,6 @@ rows.
 Close the gaps from the live checklist:
 [docs/lavaan_tutorial_parity.md](lavaan_tutorial_parity.md).
 
-- **L.** Bootstrapping: `se = "bootstrap"`, Bollen-Stine `test = "bootstrap"`,
-  and bootstrap confidence intervals for `:=` defined parameters. The C++
-  resampling engine takes an explicit integer `seed`, is deterministic given
-  it, and owns the resample + refit loop and the Bollen-Stine data transform;
-  each binding forwards its own seed (the R wrapper draws one integer under the
-  active `set.seed()`; Python and the C++ API pass a seed directly).
 - **M.** `lavResiduals()` z-statistics: the deterministic residual metrics
   landed (`measures::standardized_residuals`). The asymptotic-SE standardized
   residuals (`lavResiduals()$cov.z`) still need the residual-ACOV convention
