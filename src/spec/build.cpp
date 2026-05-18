@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -17,6 +18,7 @@
 #include "magmaan/parse/expr_format.hpp"
 #include "magmaan/parse/flat_partable.hpp"
 #include "magmaan/parse/op.hpp"
+#include "magmaan/spec/composite_expand.hpp"
 #include "magmaan/spec/lin_constraints.hpp"
 #include "magmaan/spec/partable.hpp"
 
@@ -708,12 +710,29 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
         "effect_coding and std_lv are mutually exclusive identification conventions"));
   }
 
+  // Composite (`<~`) support: rewrite each composite into a Henseler-Ogasawara
+  // reflective sub-model up front, so every step below sees only an ordinary
+  // reflective model. The expanded FlatPartable borrows string storage from
+  // `flat` for its unmodified rows — fine here, `flat` outlives `build()`.
+  CompositeExpansion comp_exp;
+  bool has_composites = false;
+  for (const auto& r : flat.rows)
+    if (r.op == parse::Op::Composite) { has_composites = true; break; }
+  const parse::FlatPartable* flatp = &flat;
+  if (has_composites) {
+    auto exp = expand_composites(flat);
+    if (!exp.has_value()) return std::unexpected(exp.error());
+    comp_exp = std::move(*exp);
+    flatp = &comp_exp.flat;
+  }
+  const parse::FlatPartable& eflat = *flatp;
+
   // Step 2: classify variables (same set across groups in v0 — no
   // group-specific variable structure yet) and build the name-free inventory
   // (var ids, roles, canonical orderings) that matrix_rep otherwise re-derives.
-  const VarSets v = classify_vars(flat.rows);
+  const VarSets v = classify_vars(eflat.rows);
   bool has_regression = false;
-  for (const auto& r : flat.rows)
+  for (const auto& r : eflat.rows)
     if (r.op == parse::Op::Regression) { has_regression = true; break; }
   const VarInventory inv = build_var_inventory(v, has_regression);
 
@@ -723,7 +742,7 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
   // picked up by the post-replication auto-equality scan below.
   std::vector<PendingRow> rows;
   for (std::int32_t g = 1; g <= opts.n_groups; ++g) {
-    auto group_rows_or = build_group_template(flat, opts, v, /*group_idx=*/g - 1);
+    auto group_rows_or = build_group_template(eflat, opts, v, /*group_idx=*/g - 1);
     if (!group_rows_or.has_value()) {
       return std::unexpected(group_rows_or.error());
     }
@@ -745,10 +764,18 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
   // `rows` at their final positions (the constraint rows below are appended
   // after them), so `.p<i+1>.` for the i-th row of `rows` is its plabel.
   if (opts.effect_coding) {
+    // Henseler-Ogasawara loading blocks are self-scaling — they must not pick
+    // up `Σλ == #indicators` effect-coding rows. Skip emergent + excrescent.
+    std::unordered_set<std::string> ho_latents;
+    for (const auto& c : comp_exp.composites) {
+      ho_latents.insert(c.composite);
+      for (const auto& e : c.excrescent) ho_latents.insert(e);
+    }
     struct Bucket { std::string lhs; std::int32_t group = 0; std::vector<std::size_t> plabel_idx; };
     std::vector<Bucket> buckets;
     for (std::size_t i = 0; i < rows.size(); ++i) {
       if (rows[i].op != parse::Op::Measurement) continue;
+      if (ho_latents.count(rows[i].lhs) != 0) continue;
       std::size_t b = 0;
       for (; b < buckets.size(); ++b)
         if (buckets[b].lhs == rows[i].lhs && buckets[b].group == rows[i].group) break;
@@ -772,7 +799,7 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
     }
   }
 
-  append_user_constraints(flat, user_constraint_rows);
+  append_user_constraints(eflat, user_constraint_rows);
 
   // Step 10: row ordering — formula/auto rows first (already grouped), then
   // the constraint rows. `to_lavaan_partable` re-synthesizes the lavaan-shaped
@@ -785,6 +812,7 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
   Starts starts;
   LatentNames names;
   finalize(rows, inv, out, starts, names);
+  names.composites = std::move(comp_exp.composites);
   if (out_starts) *out_starts = std::move(starts);
 
   // Group identity (verbal metadata — lives on `LatentNames`; nothing on the

@@ -48,6 +48,19 @@ TEST_CASE("one-factor CFA: f =~ x1 + x2 + x3") {
   CHECK(fp.rows[2].rhs == "x3");
 }
 
+TEST_CASE("composite: C <~ x1 + x2 + x3 parses to Op::Composite rows") {
+  auto fp = must_parse("C <~ x1 + x2 + x3");
+  REQUIRE(fp.rows.size() == 3);
+  for (std::size_t i = 0; i < 3; ++i) {
+    CHECK(fp.rows[i].lhs == "C");
+    CHECK(fp.rows[i].op == Op::Composite);
+    CHECK(fp.rows[i].mod_idx == 0);
+  }
+  CHECK(fp.rows[0].rhs == "x1");
+  CHECK(fp.rows[1].rhs == "x2");
+  CHECK(fp.rows[2].rhs == "x3");
+}
+
 TEST_CASE("multi-statement: newline-separated") {
   auto fp = must_parse("visual =~ x1 + x2\ntextual =~ x3 + x4");
   REQUIRE(fp.rows.size() == 4);

@@ -33,9 +33,10 @@ statement           ::= formula | constraint | define_param
 
 formula             ::= lhs_list operator rhs_list
 lhs_list            ::= identifier ('+' identifier)*       /* multi-LHS only meaningful for `~` */
-operator            ::= measurement | regression | covariance
+operator            ::= measurement | composite | regression | covariance
                       | threshold | response_scale | rejected_operator
 measurement         ::= '=~'
+composite           ::= '<~'
 regression          ::= '~'
 covariance          ::= '~~'
 threshold           ::= '|'
@@ -89,7 +90,7 @@ function_call       ::= ('exp' | 'log') '(' expr ')'
    than a generic "expected operator" message.
    ============================================================================*)
 
-rejected_operator   ::= '|~' | '<~'
+rejected_operator   ::= '|~'
 
 
 (* === Lexical (terminals) ===================================================

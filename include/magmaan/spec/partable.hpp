@@ -56,6 +56,20 @@ struct NlConstraint {
 //   Latent    : LHS of `=~`                          (lv)
 enum class VarRole : std::uint8_t { Indicator, EndoOv, ExoOv, MiscOv, Latent };
 
+// One composite (`C <~ x1 + x2 + ...`) after Henseler-Ogasawara expansion.
+// `spec::build` rewrites every composite into a reflective sub-model: the
+// emergent latent keeps the user's composite name; the `excrescent` nuisance
+// latents (K-1 of them, for K indicators) span the rest of the indicator
+// space. Carried on `LatentNames` because it is verbal/structural metadata —
+// the output layer reads it to hide excrescent latents and rebuild `<~` rows,
+// and post-fit code reads it to recover the composite weights from the K×K
+// loading block. Nothing on the numeric path branches on it.
+struct CompositeInfo {
+  std::string              composite;    // emergent latent = the user's name
+  std::vector<std::string> indicators;   // composite indicators x1..xK, in order
+  std::vector<std::string> excrescent;   // synthesized nuisance latents (K-1)
+};
+
 // Names that go with a `LatentStructure` — the *verbal* model. Everything in here
 // is for display / round-tripping / parsing; nothing on the model's numeric path
 // (matrix_rep, evaluator, fit, inference) reads it. Sizes: `var_name` is
@@ -71,6 +85,7 @@ struct LatentNames {
   std::vector<std::int8_t>  row_user;     // 0=auto, 1=user-supplied, 2=auto-equality
   std::string               group_var;    // grouping-variable name; "" ⇒ unnamed single group
   std::vector<std::string>  group_labels; // per-group level labels ("1".."n" if unsupplied)
+  std::vector<CompositeInfo> composites;   // one per `<~` composite; empty if none
 };
 
 // Lavaanified model structure — what to estimate, in struct-of-arrays form,

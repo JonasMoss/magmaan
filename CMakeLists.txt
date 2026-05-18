@@ -71,8 +71,10 @@ add_library(magmaan STATIC
   src/parse/lexer.cpp
   src/parse/parser.cpp
   src/spec/build.cpp
+  src/spec/composite_expand.cpp
   src/spec/lin_constraints.cpp
   src/compat/lavaan/partable_view.cpp
+  src/compat/lavaan/composite_fold.cpp
   src/model/matrix_rep.cpp
   src/model/model_evaluator.cpp
   src/data/raw_data.cpp
@@ -115,6 +117,7 @@ add_library(magmaan STATIC
   src/measures/fit_measures.cpp
   src/measures/standardized.cpp
   src/measures/effects.cpp
+  src/measures/composite_weights.cpp
   src/measures/residuals.cpp
   src/measures/factor_scores.cpp
   src/optim/lbfgs_optimizer.cpp

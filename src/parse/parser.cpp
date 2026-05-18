@@ -74,6 +74,7 @@ parse_expected<std::vector<Token>> tokenize(std::string_view src) noexcept {
 // Caller decides whether that's a parse error or an unsupported operator.
 std::optional<Op> op_from_text(std::string_view t) noexcept {
   if (t == "=~") return Op::Measurement;
+  if (t == "<~") return Op::Composite;
   if (t == "~~") return Op::Covariance;
   if (t == "~")  return Op::Regression;
   if (t == "|")  return Op::Threshold;
@@ -86,7 +87,7 @@ std::optional<Op> op_from_text(std::string_view t) noexcept {
 }
 
 bool is_rejected_op(std::string_view t) noexcept {
-  return t == "<~" || t == "|~";
+  return t == "|~";
 }
 
 // Parse a numeric literal token's text into a double. The lexer guarantees
@@ -555,6 +556,7 @@ StatementShape classify_statement(const State& st) noexcept {
         out.op_span = t.span;
         switch (*op_opt) {
           case Op::Measurement:
+          case Op::Composite:
           case Op::Regression:
           case Op::Covariance:
           case Op::Threshold:

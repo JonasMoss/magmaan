@@ -65,7 +65,6 @@ operator:
 | Operator | Why deferred |
 |---|---|
 | `\|~` | Ordinal slope syntax — not needed for the first ordinal LS path. |
-| `<~` | Composite indicators — out of v0 linear-SEM scope. |
 
 The following modifiers are not parsed and produce
 `ParseError::Kind::ModifierEvalFailed` with a helpful message:

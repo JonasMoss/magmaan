@@ -1,0 +1,33 @@
+#pragma once
+
+#include <vector>
+
+#include "magmaan/compat/lavaan/partable_view.hpp"
+#include "magmaan/spec/partable.hpp"  // CompositeInfo
+
+namespace magmaan::compat::lavaan {
+
+// Fold a Henseler-Ogasawara-expanded `LavaanParTable` back into composite
+// (`<~`) shape — the structural dual of `spec::expand_composites`.
+//
+// `expand_composites` desugars each `C <~ x1+...+xK` into a reflective
+// sub-model on the way *in*; `fold_composites` re-folds it on the way *out*:
+// the K×K loading block and the K-1 excrescent latents (their variances and
+// orthogonality covariances) are dropped, and one `<~` row per (composite,
+// indicator, group) is spliced in where the composite's loading block was.
+//
+// This is a display-only projection — it is deliberately *not* round-trippable
+// (`from_lavaan_partable` needs the full H-O rows). The internal model
+// representation is untouched; only this report view is folded. The synthesized
+// `<~` rows carry `free = 0` / `ustart = NaN`: the weights are *derived*
+// quantities, recovered separately by `measures::composite::composite_weights`
+// and joined onto these rows (by composite/indicator/group) when the parameter
+// estimates are assembled.
+//
+// `composites` is `LatentNames::composites`. With an empty list this is an
+// unchanged copy. `extra_*` methods-developer columns are not carried through.
+LavaanParTable
+fold_composites(const LavaanParTable&                    pt,
+                const std::vector<spec::CompositeInfo>&  composites);
+
+}  // namespace magmaan::compat::lavaan

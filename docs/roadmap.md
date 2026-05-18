@@ -49,7 +49,14 @@ golden `parTable()` fixtures.
   and complete-data LS paths: compiled to name-free expression trees by
   `resolve_lin_constraints`, enforced by an augmented-Lagrangian outer loop
   over L-BFGS, with the constrained vcov / df projected through the constraint
-  Jacobian H(θ̂). FIML, ordinal, and the separable (SNLLS) path reject them.
+  Jacobian H(θ̂). They may be combined with linear equality constraints in the
+  same model — the augmented-Lagrangian loop then runs in the
+  linear-constraint-reduced α-space. FIML, ordinal, and the separable (SNLLS)
+  path reject them.
+- The expression sub-language shared by `:=` defined parameters and `==`
+  constraints supports `+ - * / ^`, unary `+ -`, and the unary functions
+  `exp` / `log`; both the defined-parameter evaluator and the
+  nonlinear-constraint evaluator evaluate them with forward-mode AD.
 - Effect coding for loadings.
 
 ### Complete-data ML and inference
@@ -601,7 +608,8 @@ Validation has three deliberately separate surfaces:
 The suite builds as six doctest executables — `magmaan_test_{smoke, spec,
 estimate, inference, ordinal, parity}` — so areas build and run independently
 (`ctest -L parity`). CI never invokes R; fixture regeneration is a manual
-developer step.
+developer step. Property and boundary tests are expected to catch structural
+mistakes early, before they surface as hard-to-debug parity failures.
 
 ## Current Boundaries
 
@@ -648,11 +656,10 @@ developer step.
 - Score-test EPC is raw, unstandardized EPC only; standardized EPC and absent
   row-generation helpers are not yet part of the public contract.
 - Nonlinear *equality* constraints are supported for ML and complete-data LS
-  (augmented-Lagrangian fit, Jacobian-projected vcov/df) — but not for FIML,
-  ordinal, or the separable SNLLS path, and not in combination with linear
-  equality constraints in the same model; those combinations fail explicitly.
-  `exp()` / `log()` inside a constraint expression need a grammar extension
-  and are not yet parseable.
+  (augmented-Lagrangian fit, Jacobian-projected vcov/df), including in
+  combination with linear equality constraints in the same model — but not for
+  FIML, ordinal, or the separable SNLLS path; those combinations fail
+  explicitly.
 - Inequality constraints (`<` / `>`) and active-bound inference remain
   unsupported: inequality-constrained estimation needs boundary
   (chi-bar-squared) asymptotics magmaan does not implement. They fail with an
@@ -665,6 +672,8 @@ developer step.
   values or local copies and return values/errors.
 - No groups == one group. Single-group models use the same block/group shape
   as multi-group models.
+- Unsupported statistical combinations fail with an explicit error rather than
+  silently approximating nearby lavaan-compatible behavior.
 - Lavaan-shaped partables are boundary formats for oracle comparison,
   interchange, and compatibility projection. Core work should prefer the model
   triple plus explicit derived structures.

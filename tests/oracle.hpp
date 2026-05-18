@@ -562,6 +562,7 @@ inline std::string op_to_lavaan_string(parse::Op op) {
     case parse::Op::EqConstraint:  return "==";
     case parse::Op::LtConstraint:  return "<";
     case parse::Op::GtConstraint:  return ">";
+    case parse::Op::Composite:     return "<~";
   }
   return "?";
 }
