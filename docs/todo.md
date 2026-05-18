@@ -100,6 +100,15 @@ Remaining work, in suggested order:
   methods-developer workflow exposes a concrete gap in the current staged API.
   The current `magmaan_core`, friendly fit object, and explicit post-fit
   wrapper surface are sufficient for the next R exploration pass.
+- **M/L. Optional h-weighted polyserial path.** If mixed robust categorical
+  experiments need it, design and implement a polyserial-only h-weighted
+  moment builder rather than treating it as an R wrapper variant. This needs a
+  continuous-ordinal h objective, casewise estimating functions for
+  thresholds/rho, bread/influence/Gamma construction, and splicing into the
+  mixed moment stack so `NACOV`, `W_dwls`, and `W_wls` are rebuilt. The
+  existing all-ordinal h-score variants (`ml`, `wma_hard_cap`, `smooth_cap`,
+  `exp_cap`) already have generic Gamma machinery; the missing piece is the
+  mixed polyserial estimating-equation design.
 
 Completed checks:
 
