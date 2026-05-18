@@ -38,6 +38,12 @@ struct PartableError {
     UnknownLabelInConstraint, // referenced label has no source row
     InconsistentModifiers,    // e.g. start(0.5) AND fixed value on same row
     EmptyModel,               // no formula rows, no constraints
+    CompositeTooFewIndicators,// a `<~` composite has fewer than 2 indicators
+    CompositeOverlap,         // composites share an indicator, a composite name
+                              // is reused as an indicator, or a name is both a
+                              // composite (<~) and a latent factor (=~)
+    UnidentifiedComposite,    // a composite has no relation to any variable
+                              // outside its own indicator set
   };
   Kind        kind   = Kind::BadGroupSpec;
   std::string detail = {};

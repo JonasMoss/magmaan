@@ -1,0 +1,114 @@
+#include "magmaan/compat/lavaan/composite_fold.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+#include "magmaan/parse/op.hpp"
+
+namespace magmaan::compat::lavaan {
+
+LavaanParTable
+fold_composites(const LavaanParTable&                   pt,
+                const std::vector<spec::CompositeInfo>& composites) {
+  if (composites.empty()) return pt;  // copy, unchanged
+
+  // Henseler-Ogasawara latents: emergent + excrescent, and a back-map to the
+  // owning composite. `excrescent` alone drives the variance/orthogonality drop.
+  std::unordered_set<std::string> ho_latent;
+  std::unordered_set<std::string> excrescent;
+  std::unordered_map<std::string, std::size_t> latent_to_comp;
+  for (std::size_t ci = 0; ci < composites.size(); ++ci) {
+    const spec::CompositeInfo& c = composites[ci];
+    ho_latent.insert(c.composite);
+    latent_to_comp.emplace(c.composite, ci);
+    for (const std::string& e : c.excrescent) {
+      ho_latent.insert(e);
+      excrescent.insert(e);
+      latent_to_comp.emplace(e, ci);
+    }
+  }
+  const std::int32_t n_groups = pt.n_groups();
+
+  LavaanParTable out;
+  out.group_var    = pt.group_var;
+  out.group_labels = pt.group_labels;
+  // `extra_*` columns are intentionally not carried through — a folded table
+  // is a display-only projection.
+
+  auto keep_row = [&](std::size_t i) {
+    out.user.push_back(pt.user[i]);
+    out.lhs.push_back(pt.lhs[i]);
+    out.op.push_back(pt.op[i]);
+    out.rhs.push_back(pt.rhs[i]);
+    out.block.push_back(pt.block[i]);
+    out.group.push_back(pt.group[i]);
+    out.free.push_back(pt.free[i]);
+    out.exo.push_back(pt.exo[i]);
+    out.ustart.push_back(pt.ustart[i]);
+    out.label.push_back(pt.label[i]);
+    out.plabel.push_back(pt.plabel[i]);
+  };
+  // One `<~` row per (indicator, group) for composite `ci`. The weight value
+  // is derived (recovered by `composite_weights`), so the row is free = 0 with
+  // a NaN `ustart`.
+  auto emit_composite = [&](std::size_t ci) {
+    const spec::CompositeInfo& c = composites[ci];
+    for (std::int32_t g = 1; g <= n_groups; ++g) {
+      for (const std::string& ind : c.indicators) {
+        out.user.push_back(std::int8_t{1});
+        out.lhs.push_back(c.composite);
+        out.op.push_back(parse::Op::Composite);
+        out.rhs.push_back(ind);
+        out.block.push_back(g);
+        out.group.push_back(g);
+        out.free.push_back(0);
+        out.exo.push_back(std::int8_t{0});
+        out.ustart.push_back(std::numeric_limits<double>::quiet_NaN());
+        out.label.push_back(std::string{});
+        out.plabel.push_back(std::string{});
+      }
+    }
+  };
+
+  std::vector<bool> emitted(composites.size(), false);
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    // A K×K loading-block row: `=~` whose lhs is an H-O latent. Splicing the
+    // `<~` rows in at the first such row keeps the composite where the user
+    // wrote it.
+    if (pt.op[i] == parse::Op::Measurement &&
+        ho_latent.count(pt.lhs[i]) != 0) {
+      const std::size_t ci = latent_to_comp.at(pt.lhs[i]);
+      if (!emitted[ci]) {
+        emitted[ci] = true;
+        emit_composite(ci);
+      }
+      continue;  // drop the loading row
+    }
+    // Excrescent variance / orthogonality rows.
+    if (excrescent.count(pt.lhs[i]) != 0 || excrescent.count(pt.rhs[i]) != 0) {
+      continue;
+    }
+    keep_row(i);
+  }
+  // Defensive: a composite with no loading rows in `pt` still gets its `<~`
+  // rows (shouldn't happen for a well-formed expanded table).
+  for (std::size_t ci = 0; ci < composites.size(); ++ci) {
+    if (!emitted[ci]) emit_composite(ci);
+  }
+
+  // `LavaanParTable::size()` reads `id`, which is filled only now — size the
+  // table from a column populated during the walk.
+  const std::size_t n_rows = out.lhs.size();
+  out.id.resize(n_rows);
+  for (std::size_t i = 0; i < n_rows; ++i) {
+    out.id[i] = static_cast<std::int32_t>(i + 1);
+  }
+  return out;
+}
+
+}  // namespace magmaan::compat::lavaan

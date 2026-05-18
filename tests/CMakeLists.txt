@@ -56,6 +56,8 @@ magmaan_add_test_target(magmaan_test_spec spec
   unit/lexer_test.cpp
   unit/parser_test.cpp
   unit/lavaanify_test.cpp
+  unit/composite_expand_test.cpp
+  unit/composite_fold_test.cpp
   unit/matrix_rep_test.cpp
   unit/model_evaluator_test.cpp
   golden/lexer_golden_test.cpp
@@ -104,6 +106,7 @@ magmaan_add_test_target(magmaan_test_inference inference
   unit/inference_test.cpp
   unit/score_test.cpp
   unit/effects_test.cpp
+  unit/composite_weights_test.cpp
   unit/standardized_test.cpp
   unit/fit_measures_test.cpp
   unit/residuals_test.cpp
