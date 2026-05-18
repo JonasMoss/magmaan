@@ -276,8 +276,8 @@ Completed:
   when a model carries both kinds of equality.
 - [x] **M. Standardized EPC (`sepc.all`).** Already produced in the core /
   `magmaan::api` modification-index output (`ScoreTestResult.epc_lv` /
-  `epc_all`, filled by `fill_standardized_epc`); only the R binding (above)
-  is outstanding.
+  `epc_all`, filled by `fill_standardized_epc`) and exposed through the
+  `magmaan_core$inference_modification_indices()` scaffold.
 - [x] **M. CFI/TLI/RMSEA/SRMR for FIML and continuous LS**, and **standard
   (non-robust) SEs for FIML and LS.** `api::fit_measures` and
   `api::standard_errors` now dispatch per estimator; FIML also reports SRMR
