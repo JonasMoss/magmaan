@@ -53,6 +53,10 @@ data_ordinal_stats_dpd_from_raw_impl <- function(X, alpha = 0.3) {
     .Call(`_magmaan_data_ordinal_stats_dpd_from_raw_impl`, X, alpha)
 }
 
+data_ordinal_stats_huber_residual_from_raw_impl <- function(X, clip = "hard_huber", k = 1.345) {
+    .Call(`_magmaan_data_ordinal_stats_huber_residual_from_raw_impl`, X, clip, k)
+}
+
 data_mixed_ordinal_stats_from_raw_impl <- function(X, ordered_mask) {
     .Call(`_magmaan_data_mixed_ordinal_stats_from_raw_impl`, X, ordered_mask)
 }

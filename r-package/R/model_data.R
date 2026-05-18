@@ -253,14 +253,21 @@ lavaan_compare_partable <- function(x, reference, est_tolerance = NULL,
 
 data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
                                        missing = c("listwise", "error"),
-                                       robust = c("none", "h_weighted", "dpd"),
+                                       robust = c("none", "ml", "h_weighted", "dpd", "huber_residual"),
                                        alpha = 0.3,
                                        h_kind = c("wma_hard_cap", "ml", "smooth_cap", "exp_cap"),
                                        h_k = 1.5, h_a = 1.6, h_b = 2.2,
-                                       h_lambda = 0.2) {
+                                       h_lambda = 0.2,
+                                       clip = c("hard_huber", "pseudo_huber",
+                                                "tukey_biweight", "none"),
+                                       k = NULL) {
   missing <- match.arg(missing)
   robust <- match.arg(robust)
   h_kind <- match.arg(h_kind)
+  clip <- match.arg(clip)
+  if (is.null(k)) {
+    k <- if (identical(clip, "tukey_biweight")) 4.685 else 1.345
+  }
   if (!is.data.frame(x)) stop("data_ordinal_stats_from_df(): `x` must be a data.frame")
   model <- as_magmaan_model_spec(model)
   ordered <- if (is.null(ordered)) model$ordered else as.character(ordered)
@@ -330,12 +337,9 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
   } else {
     X <- list(make_block(rep(TRUE, nrow(x)), ov_by_group[[1L]]))
   }
-  out <- switch(
-    robust,
-    none = data_ordinal_stats_from_raw_impl(X),
-    h_weighted = data_ordinal_stats_h_weighted_from_raw_impl(
-      X, h_kind = h_kind, k = h_k, a = h_a, b = h_b, lambda = h_lambda),
-    dpd = data_ordinal_stats_dpd_from_raw_impl(X, alpha = alpha)
+  out <- data_ordinal_stats_from_raw(
+    X, robust = robust, alpha = alpha, h_kind = h_kind, h_k = h_k,
+    h_a = h_a, h_b = h_b, h_lambda = h_lambda, clip = clip, k = k
   )
   out$X <- X
   out$ov_names <- ov_by_group
@@ -446,13 +450,8 @@ data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = N
     X <- list(blk$X)
     ordered_mask <- list(blk$ordered_mask)
   }
-  out <- switch(
-    polyserial,
-    ml = data_mixed_ordinal_stats_from_raw_impl(X, ordered_mask),
-    dpd = data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl(
-      X, ordered_mask, alpha = alpha),
-    huber_residual = data_mixed_ordinal_stats_huber_residual_from_raw_impl(
-      X, ordered_mask, clip = clip, k = k)
+  out <- data_mixed_ordinal_stats_from_raw(
+    X, ordered_mask, polyserial = polyserial, alpha = alpha, clip = clip, k = k
   )
   out$X <- X
   out$ov_names <- ov_by_group

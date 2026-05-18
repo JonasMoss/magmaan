@@ -3,10 +3,54 @@ compat_lavaan_nested_lrt_satorra2000 <- infer_lr_test_satorra2000
 compat_lavaan_nested_lrt_satorra_bentler2001 <- infer_lr_test_satorra_bentler2001
 compat_lavaan_nested_lrt_satorra_bentler2010 <- infer_lr_test_satorra_bentler2010
 
-data_ordinal_stats_from_raw <- data_ordinal_stats_from_raw_impl
+data_ordinal_stats_from_raw <- function(X, robust = c("ml", "none", "h_weighted", "dpd", "huber_residual"),
+                                        alpha = 0.3,
+                                        h_kind = c("wma_hard_cap", "ml", "smooth_cap", "exp_cap"),
+                                        h_k = 1.5, h_a = 1.6, h_b = 2.2,
+                                        h_lambda = 0.2,
+                                        clip = c("hard_huber", "pseudo_huber",
+                                                 "tukey_biweight", "none"),
+                                        k = NULL) {
+  robust <- match.arg(robust)
+  h_kind <- match.arg(h_kind)
+  clip <- match.arg(clip)
+  if (is.null(k)) {
+    k <- if (identical(clip, "tukey_biweight")) 4.685 else 1.345
+  }
+  switch(
+    robust,
+    ml = data_ordinal_stats_from_raw_impl(X),
+    none = data_ordinal_stats_from_raw_impl(X),
+    h_weighted = data_ordinal_stats_h_weighted_from_raw_impl(
+      X, h_kind = h_kind, k = h_k, a = h_a, b = h_b, lambda = h_lambda),
+    dpd = data_ordinal_stats_dpd_from_raw_impl(X, alpha = alpha),
+    huber_residual = data_ordinal_stats_huber_residual_from_raw_impl(
+      X, clip = clip, k = k)
+  )
+}
 data_ordinal_stats_h_weighted_from_raw <- data_ordinal_stats_h_weighted_from_raw_impl
 data_ordinal_stats_dpd_from_raw <- data_ordinal_stats_dpd_from_raw_impl
-data_mixed_ordinal_stats_from_raw <- data_mixed_ordinal_stats_from_raw_impl
+data_ordinal_stats_huber_residual_from_raw <- data_ordinal_stats_huber_residual_from_raw_impl
+data_mixed_ordinal_stats_from_raw <- function(X, ordered_mask,
+                                              polyserial = c("ml", "dpd", "huber_residual"),
+                                              alpha = 0.3,
+                                              clip = c("hard_huber", "pseudo_huber",
+                                                       "tukey_biweight", "none"),
+                                              k = NULL) {
+  polyserial <- match.arg(polyserial)
+  clip <- match.arg(clip)
+  if (is.null(k)) {
+    k <- if (identical(clip, "tukey_biweight")) 4.685 else 1.345
+  }
+  switch(
+    polyserial,
+    ml = data_mixed_ordinal_stats_from_raw_impl(X, ordered_mask),
+    dpd = data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl(
+      X, ordered_mask, alpha = alpha),
+    huber_residual = data_mixed_ordinal_stats_huber_residual_from_raw_impl(
+      X, ordered_mask, clip = clip, k = k)
+  )
+}
 data_shrink_mixed_ordinal_stats <- data_shrink_mixed_ordinal_stats_impl
 data_mixed_ordinal_stats_polyserial_dpd_from_raw <- data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl
 data_mixed_ordinal_stats_huber_residual_from_raw <- data_mixed_ordinal_stats_huber_residual_from_raw_impl
@@ -102,15 +146,19 @@ magmaan_core <- local({
     data = c(
       "data_sample_stats_from_raw",
       "data_ordinal_stats_from_raw",
+      "data_mixed_ordinal_stats_from_raw",
+      "data_shrink_mixed_ordinal_stats"
+    ),
+    compatibility_data = c(
       "data_ordinal_stats_h_weighted_from_raw",
       "data_ordinal_stats_dpd_from_raw",
-      "data_mixed_ordinal_stats_from_raw",
-      "data_shrink_mixed_ordinal_stats",
+      "data_ordinal_stats_huber_residual_from_raw",
       "data_mixed_ordinal_stats_polyserial_dpd_from_raw",
       "data_mixed_ordinal_stats_huber_residual_from_raw",
       "data_ordinal_stats_from_raw_impl",
       "data_ordinal_stats_h_weighted_from_raw_impl",
       "data_ordinal_stats_dpd_from_raw_impl",
+      "data_ordinal_stats_huber_residual_from_raw_impl",
       "data_mixed_ordinal_stats_from_raw_impl",
       "data_shrink_mixed_ordinal_stats_impl",
       "data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl",

@@ -154,6 +154,12 @@ Completed checks:
   categorical CFI/TLI/RMSEA/SRMR via the polychoric independence baseline,
   including WLS threshold nuisance minimization under the full weight matrix;
   the bfi ordinal parity gate checks DWLS/WLS values against lavaan.
+- [x] **S. Ordinal R data surface cleanup.** `magmaan_core` now lists the
+  canonical data primitives as `data_sample_stats_from_raw`,
+  `data_ordinal_stats_from_raw`, `data_mixed_ordinal_stats_from_raw`, and
+  `data_shrink_mixed_ordinal_stats`; method-specific ordinal builders are
+  option dispatches or compatibility aliases. The all-ordinal Huber residual
+  builder is reachable from R through `robust = "huber_residual"`.
 
 Done when: new code naturally uses the target namespaces, R scripts can reach
 the relevant C++ primitive graph through predictable names, friendly R users
