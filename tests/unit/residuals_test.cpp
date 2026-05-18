@@ -103,6 +103,8 @@ TEST_CASE("standardized_residuals: correlation metric and SRMR are consistent") 
   REQUIRE(sr.has_value());
   REQUIRE(sr->cov_raw.size() == 1);
   REQUIRE(sr->cov_cor.size() == 1);
+  REQUIRE(sr->cov_se.size() == 1);
+  REQUIRE(sr->cov_z.size() == 1);
 
   // cov_raw matches the standalone residuals() accessor.
   auto raw = magmaan::measures::residuals(*pt, *mr, samp, est);
@@ -130,6 +132,18 @@ TEST_CASE("standardized_residuals: correlation metric and SRMR are consistent") 
   REQUIRE(fx.has_value());
   CHECK(sr->srmr == doctest::Approx(fx->srmr).epsilon(1e-12));
 
+  // cov_z matches lavaan's default lavResiduals(type = "cor.bentler")
+  // standardized residual z-statistics for the Holzinger-Swineford CFA.
+  CHECK(sr->cov_z[0](1, 0) == doctest::Approx(-1.99605930).epsilon(1e-4));
+  CHECK(sr->cov_z[0](2, 1) == doctest::Approx(2.68898258).epsilon(1e-4));
+  CHECK(sr->cov_z[0](6, 0) == doctest::Approx(-3.77308971).epsilon(1e-4));
+  CHECK(sr->cov_z[0](7, 6) == doctest::Approx(4.82307041).epsilon(1e-4));
+  CHECK(sr->cov_z[0](8, 7) == doctest::Approx(-4.13205676).epsilon(1e-4));
+  for (Eigen::Index r = 0; r < p; ++r)
+    for (Eigen::Index c = r + 1; c < p; ++c)
+      CHECK(sr->cov_z[0](r, c) ==
+            doctest::Approx(sr->cov_z[0](c, r)).epsilon(1e-12));
+
   // SRMR is the RMS of the lower-triangle correlation residuals (no mean
   // structure ⇒ pstar = p(p+1)/2).
   double sum_sq = 0.0;
@@ -142,6 +156,8 @@ TEST_CASE("standardized_residuals: correlation metric and SRMR are consistent") 
   // No mean structure ⇒ mean residuals are empty.
   CHECK(sr->mean_raw[0].size() == 0);
   CHECK(sr->mean_cor[0].size() == 0);
+  CHECK(sr->mean_se[0].size() == 0);
+  CHECK(sr->mean_z[0].size() == 0);
 }
 
 TEST_CASE("residuals: rejects a θ of the wrong size") {

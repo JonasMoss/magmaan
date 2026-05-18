@@ -63,13 +63,3 @@ Remaining:
 Deferred until the ML slice is lavaan-validated: ordinal composites, FIML/LS
 composites, robust corrections for composites, and composite mean-structure
 rows.
-
-## lavaan tutorial parity
-
-Close the gaps from the live checklist:
-[docs/lavaan_tutorial_parity.md](lavaan_tutorial_parity.md).
-
-- **M.** `lavResiduals()` z-statistics: the deterministic residual metrics
-  landed (`measures::standardized_residuals`). The asymptotic-SE standardized
-  residuals (`lavResiduals()$cov.z`) still need the residual-ACOV convention
-  (`Γ_NT/N − Δ·vcov·Δᵀ`) pinned against a lavaan oracle before landing.

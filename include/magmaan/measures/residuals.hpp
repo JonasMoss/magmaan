@@ -53,15 +53,21 @@ residuals(spec::LatentStructure pt, const model::MatrixRep& rep,
 //   mean_cor[b] = (m̄_i − μ̂_i)/√(s_ii)  (empty for a block without means)
 //   srmr        = Bentler-type SRMR (== fit_extras().srmr)
 //
-// `cov_cor[b]` is returned as a full symmetric matrix. The asymptotic-SE
-// z-statistics (`lavResiduals()$cov.z`) need the residual-ACOV convention
-// pinned against a lavaan oracle and are tracked as a follow-up; this v1
-// covers the metrics that are exact closed forms of S, Σ̂(θ̂), and N.
+// `cov_cor[b]` is returned as a full symmetric matrix. `cov_se` and `cov_z`
+// follow lavaan's default continuous `lavResiduals(type = "cor.bentler")`
+// standardized residual convention: project the H1 normal-theory moment ACOV
+// through the fitted-model tangent space, then rescale by the observed sample
+// variances. Near-zero residuals use lavaan's z-stat safeguard and divide by
+// 1, so exact fitted diagonal residuals remain numerically zero.
 struct StandardizedResiduals {
   std::vector<Eigen::MatrixXd> cov_raw;
   std::vector<Eigen::MatrixXd> cov_cor;
+  std::vector<Eigen::MatrixXd> cov_se;
+  std::vector<Eigen::MatrixXd> cov_z;
   std::vector<Eigen::VectorXd> mean_raw;
   std::vector<Eigen::VectorXd> mean_cor;
+  std::vector<Eigen::VectorXd> mean_se;
+  std::vector<Eigen::VectorXd> mean_z;
   double                       srmr = 0.0;
 };
 

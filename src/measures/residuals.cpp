@@ -2,22 +2,221 @@
 
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include <Eigen/Cholesky>
 #include <Eigen/Core>
 
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/error.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
+#include "magmaan/inference/inference.hpp"
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/model/model_evaluator.hpp"
+
+#include "detail_vech.hpp"
 
 namespace magmaan::measures {
 
 namespace {
 
+using detail::vech_index;
+using detail::vech_len;
+
 PostError make_err(PostError::Kind k, std::string detail) {
   return PostError{k, std::move(detail)};
+}
+
+post_expected<Eigen::MatrixXd>
+invert_spd(const Eigen::MatrixXd& M, const char* what) {
+  Eigen::LLT<Eigen::MatrixXd> llt(M);
+  if (llt.info() != Eigen::Success) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+                                    std::string(what) +
+                                        " is not positive definite"));
+  }
+  return llt.solve(Eigen::MatrixXd::Identity(M.rows(), M.cols()));
+}
+
+double residual_z(double residual, double se) noexcept {
+  if (std::abs(residual) < 1e-4) return residual;
+  if (!std::isfinite(se) || se == 0.0) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return residual / se;
+}
+
+post_expected<void>
+fill_residual_z(spec::LatentStructure pt, const model::MatrixRep& rep,
+                const SampleStats& samp, const Estimates& est,
+                StandardizedResiduals& out) {
+  if (auto e = estimate::resolve_fixed_x_from_sample(pt, rep, samp);
+      !e.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "resolve_fixed_x_from_sample failed: " + e.error().detail));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::build failed: " + ev_or.error().detail));
+  }
+  const auto& ev = *ev_or;
+
+  auto sm_or = ev.sigma(est.theta);
+  if (!sm_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ev.sigma(θ̂) failed: " + sm_or.error().detail));
+  }
+  const auto& sm = *sm_or;
+
+  auto J_or = ev.dsigma_dtheta(est.theta);
+  if (!J_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ev.dsigma_dtheta(θ̂) failed: " + J_or.error().detail));
+  }
+  const Eigen::MatrixXd& J_sigma = *J_or;
+
+  auto Jmu_or = ev.dmu_dtheta(est.theta);
+  if (!Jmu_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ev.dmu_dtheta(θ̂) failed: " + Jmu_or.error().detail));
+  }
+  const Eigen::MatrixXd& J_mu = *Jmu_or;
+
+  auto info_or = inference::information_expected(pt, rep, samp, est);
+  if (!info_or.has_value()) return std::unexpected(info_or.error());
+  auto vcov_or = inference::vcov(*info_or, pt, est.theta);
+  if (!vcov_or.has_value()) return std::unexpected(vcov_or.error());
+  const Eigen::MatrixXd& V = *vcov_or;
+
+  out.cov_se.clear();
+  out.cov_z.clear();
+  out.mean_se.clear();
+  out.mean_z.clear();
+  out.cov_se.reserve(out.cov_cor.size());
+  out.cov_z.reserve(out.cov_cor.size());
+  out.mean_se.reserve(out.mean_cor.size());
+  out.mean_z.reserve(out.mean_cor.size());
+
+  Eigen::Index sigma_cursor = 0;
+  Eigen::Index mu_cursor = 0;
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    if (samp.n_obs.size() <= b) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "SampleStats is missing n_obs for a residual block"));
+    }
+    const Eigen::MatrixXd S = 0.5 * (samp.S[b] + samp.S[b].transpose());
+    const Eigen::MatrixXd Sigma =
+        0.5 * (sm.sigma[b] + sm.sigma[b].transpose());
+    const Eigen::Index p = S.rows();
+    const Eigen::Index pstar = vech_len(p);
+    const bool has_mean =
+        out.mean_cor.size() > b && out.mean_cor[b].size() == p &&
+        J_mu.size() > 0;
+    const Eigen::Index moment_rows = (has_mean ? p : 0) + pstar;
+    const Eigen::Index cov_off = has_mean ? p : 0;
+    const double n_b = static_cast<double>(samp.n_obs[b]);
+    if (n_b <= 0.0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "SampleStats has a non-positive n_obs in residual z-statistics"));
+    }
+
+    auto G_obs_or = data::gamma_nt(S);
+    if (!G_obs_or.has_value()) return std::unexpected(G_obs_or.error());
+    auto G_model_or = data::gamma_nt(Sigma);
+    if (!G_model_or.has_value()) return std::unexpected(G_model_or.error());
+    auto G_model_inv_or = invert_spd(*G_model_or, "model-implied Γ_NT");
+    if (!G_model_inv_or.has_value()) {
+      return std::unexpected(G_model_inv_or.error());
+    }
+
+    Eigen::MatrixXd acov_obs =
+        Eigen::MatrixXd::Zero(moment_rows, moment_rows);
+    Eigen::MatrixXd h1_info =
+        Eigen::MatrixXd::Zero(moment_rows, moment_rows);
+    if (has_mean) {
+      auto Sigma_inv_or = invert_spd(Sigma, "model-implied Σ");
+      if (!Sigma_inv_or.has_value()) {
+        return std::unexpected(Sigma_inv_or.error());
+      }
+      acov_obs.topLeftCorner(p, p) = S / n_b;
+      h1_info.topLeftCorner(p, p) = *Sigma_inv_or;
+    }
+    acov_obs.block(cov_off, cov_off, pstar, pstar) = *G_obs_or / n_b;
+    h1_info.block(cov_off, cov_off, pstar, pstar) = *G_model_inv_or;
+
+    Eigen::MatrixXd Delta = Eigen::MatrixXd::Zero(moment_rows, V.cols());
+    if (has_mean) {
+      if (mu_cursor + p > J_mu.rows()) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "dmu_dtheta row count is too small for residual z-statistics"));
+      }
+      Delta.topRows(p) = J_mu.block(mu_cursor, 0, p, V.cols());
+      mu_cursor += p;
+    }
+    if (sigma_cursor + pstar > J_sigma.rows()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "dsigma_dtheta row count is too small for residual z-statistics"));
+    }
+    Delta.block(cov_off, 0, pstar, V.cols()) =
+        J_sigma.block(sigma_cursor, 0, pstar, V.cols());
+    sigma_cursor += pstar;
+
+    const Eigen::MatrixXd acov_est_unscaled =
+        n_b * (Delta * V * Delta.transpose());
+    const Eigen::MatrixXd Q =
+        Eigen::MatrixXd::Identity(moment_rows, moment_rows) -
+        acov_est_unscaled * h1_info;
+    Eigen::MatrixXd acov_res = Q * acov_obs * Q.transpose();
+    acov_res = 0.5 * (acov_res + acov_res.transpose()).eval();
+
+    Eigen::MatrixXd cov_se = Eigen::MatrixXd::Zero(p, p);
+    Eigen::MatrixXd cov_z = Eigen::MatrixXd::Zero(p, p);
+    for (Eigen::Index c = 0; c < p; ++c) {
+      for (Eigen::Index r = c; r < p; ++r) {
+        const Eigen::Index row = cov_off + vech_index(p, r, c);
+        const double denom = std::sqrt(S(r, r) * S(c, c));
+        const double scale = (denom != 0.0) ? 1.0 / denom : 0.0;
+        const double var = scale * scale * acov_res(row, row);
+        const double se = (var >= 0.0)
+            ? std::sqrt(var)
+            : std::numeric_limits<double>::quiet_NaN();
+        const double z = residual_z(out.cov_cor[b](r, c), se);
+        cov_se(r, c) = se;
+        cov_z(r, c) = z;
+        if (r != c) {
+          cov_se(c, r) = se;
+          cov_z(c, r) = z;
+        }
+      }
+    }
+    out.cov_se.push_back(std::move(cov_se));
+    out.cov_z.push_back(std::move(cov_z));
+
+    if (has_mean) {
+      Eigen::VectorXd mean_se(p);
+      Eigen::VectorXd mean_z(p);
+      for (Eigen::Index i = 0; i < p; ++i) {
+        const double scale = (S(i, i) != 0.0) ? 1.0 / std::sqrt(S(i, i)) : 0.0;
+        const double var = scale * scale * acov_res(i, i);
+        const double se = (var >= 0.0)
+            ? std::sqrt(var)
+            : std::numeric_limits<double>::quiet_NaN();
+        mean_se(i) = se;
+        mean_z(i) = residual_z(out.mean_cor[b](i), se);
+      }
+      out.mean_se.push_back(std::move(mean_se));
+      out.mean_z.push_back(std::move(mean_z));
+    } else {
+      out.mean_se.emplace_back();
+      out.mean_z.emplace_back();
+    }
+  }
+
+  return {};
 }
 
 }  // namespace
@@ -129,6 +328,9 @@ standardized_residuals(spec::LatentStructure pt, const model::MatrixRep& rep,
     } else {
       out.mean_cor.emplace_back();
     }
+  }
+  if (auto z = fill_residual_z(pt, rep, samp, est, out); !z.has_value()) {
+    return std::unexpected(z.error());
   }
   return out;
 }
