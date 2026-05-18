@@ -96,26 +96,21 @@ Contracts:
 
 Remaining work, in suggested order:
 
-- **S/M, current R third pass.** Audit `magmaan_core` against the implemented
-  C++ primitive surface and add thin R bindings for missing relevant
-  primitives. Prioritize functions that let R scripts construct models/data,
-  run fits, compute post-fit quantities, compare diagnostics, and reproduce
-  validation paths without depending on opaque fit-list unpacking. While doing
-  this, classify exposed names as good, awkward, misplaced, missing, or
-  compatibility-only so the scaffold produces a concrete API cleanup list.
+- **S/M, continue the R third pass.** Keep extending the
+  [R API scaffold audit](r-api-audit.md) as `magmaan_core` is used in
+  real scripts. Add thin R bindings for missing relevant primitives that let R
+  scripts construct models/data, run fits, compute post-fit quantities,
+  compare diagnostics, and reproduce validation paths without depending on
+  opaque fit-list unpacking.
 - **S/M.** Normalize R binding names to the
   `<namespace>_<function_name>` convention for direct C++ exports. Keep
   existing aliases only when useful for compatibility during exploration, and
   make pure R helpers plain, compositional names.
-- **S/M.** Add R bindings and an example for the already implemented C++ FIML
-  MLR robust reporting path: observed-pattern sandwich SEs plus the
-  Yuan-Bentler/Mplus scaled-test traces. The C++ machinery exists; the missing
-  piece is the R scaffold and a legibility example.
 - **S/M.** Continue staged R examples using package-qualified calls. Existing
   examples cover complete-data ML observed-information SEs, Satorra-Bentler
-  reporting, ordinal DWLS/WLS robust reporting, and high-level estimate-only
-  fitting; use the next examples to stress-test whether primitive names and
-  helper boundaries feel natural.
+  reporting, ordinal DWLS/WLS robust reporting, high-level estimate-only
+  fitting, and FIML MLR reporting; use the next examples to stress-test
+  whether primitive names and helper boundaries feel natural.
 - **M/L, after the R scaffold exposes the current surface.** Apply the
   robust-test naming policy from `docs/roadmap.md` -> Robust-test naming and
   compatibility. Keep core names statistical and object-based, move
@@ -134,6 +129,18 @@ Completed checks:
   over the implemented model/data/fit and explicit post-fit primitives, with
   dedicated `api` tests covering ML, LS, FIML, ordinal DWLS/WLS, and
   `Analysis` chaining.
+- [x] **S/M. R scaffold audit seed.** `docs/r-api-audit.md` now records the
+  current `magmaan_core` primitive surface and classifies names as good,
+  awkward, misplaced, missing, or compatibility-only.
+- [x] **S/M. FIML MLR R scaffold.** `magmaan_core` exposes
+  `estimate_fiml_robust_mlr()` for observed-pattern sandwich SEs plus
+  Yuan-Bentler/Mplus scaled-test traces, with
+  `r-package/examples/r_scaffold_fiml_mlr.R` as a package-qualified legibility
+  example.
+- [x] **S/M. Post-fit R scaffold slice.** `magmaan_core` exposes
+  `measures_standardize_lv()`, `measures_standardize_all()`,
+  `inference_modification_indices()`, and `inference_score_tests()` over the
+  existing C++ primitives.
 
 Done when: new code naturally uses the target namespaces, R scripts can reach
 the relevant C++ primitive graph through predictable names, friendly R users
@@ -245,11 +252,11 @@ Remaining work, in suggested order:
   landed; ordinal DWLS/WLS still needs a polychoric independence-model
   baseline and a correlation-metric ordinal SRMR. `api::fit_measures` fails
   explicitly for ordinal fits until then.
-- **S/M. R bindings for the new post-fit accessors.** `residuals`,
-  `standardized_residuals`, `factor_scores`, `modification_indices` /
-  `score_tests`, and the standardized solution have C++ / `magmaan::api`
+- **S/M. R bindings for the remaining new post-fit accessors.** `residuals`,
+  `standardized_residuals`, and `factor_scores` have C++ / `magmaan::api`
   surfaces but no `magmaan_core` binding yet — folded into the §1 R scaffold
-  pass.
+  pass. Modification indices, score tests, and standardized solutions are now
+  exposed through the R scaffold.
 
 Completed:
 

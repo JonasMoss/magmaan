@@ -20,9 +20,12 @@
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/measures/effects.hpp"
+#include "magmaan/measures/standardized.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/fiml.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/measures/fit_measures.hpp"
+#include "magmaan/inference/score.hpp"
 
 // [[Rcpp::depends(RcppEigen)]]
 
@@ -71,6 +74,119 @@ Rcpp::List dims_list(const std::vector<lvm::BlockDims>& dd) {
     out[static_cast<R_xlen_t>(b)] = Rcpp::List::create(Rcpp::_["n_observed"] = static_cast<int>(dd[b].n_observed),
                                                        Rcpp::_["n_latent"]   = static_cast<int>(dd[b].n_latent));
   return out;
+}
+
+Rcpp::List standardized_to_list(
+    const magmaan::measures::standardize::StandardizedSolution& r) {
+  return Rcpp::List::create(Rcpp::_["theta"] = Rcpp::wrap(r.theta),
+                            Rcpp::_["se"] = Rcpp::wrap(r.se));
+}
+
+const char* score_candidate_kind_str(
+    magmaan::inference::ScoreCandidateKind kind) {
+  using K = magmaan::inference::ScoreCandidateKind;
+  switch (kind) {
+  case K::FixedParam: return "fixed";
+  case K::EqualityRelease: return "equality_release";
+  }
+  return "unknown";
+}
+
+magmaan::inference::ScoreInformation score_information_from(
+    const std::string& information) {
+  if (information == "observed" || information == "Observed" ||
+      information == "OBSERVED") {
+    return magmaan::inference::ScoreInformation::Observed;
+  }
+  if (information == "expected" || information == "Expected" ||
+      information == "EXPECTED" || information.empty()) {
+    return magmaan::inference::ScoreInformation::Expected;
+  }
+  Rcpp::stop("magmaan: score information must be 'expected' or 'observed' "
+             "(got '%s')", information);
+}
+
+magmaan::inference::ScoreCandidateSet score_candidates_from(
+    const std::string& candidates) {
+  if (candidates == "all" || candidates == "absent" ||
+      candidates == "with_absent") {
+    return magmaan::inference::ScoreCandidateSet::WithAbsentRows;
+  }
+  if (candidates == "fixed" || candidates == "fixed_rows" ||
+      candidates == "fixed_rows_only" || candidates.empty()) {
+    return magmaan::inference::ScoreCandidateSet::FixedRowsOnly;
+  }
+  Rcpp::stop("magmaan: score candidates must be 'fixed' or 'all' (got '%s')",
+             candidates);
+}
+
+magmaan::inference::ModificationIndexOptions modification_options_from(
+    const std::string& information, const std::string& candidates,
+    bool include_loadings, bool include_covariances) {
+  magmaan::inference::ModificationIndexOptions opts;
+  opts.information = score_information_from(information);
+  opts.candidates = score_candidates_from(candidates);
+  opts.include_loadings = include_loadings;
+  opts.include_covariances = include_covariances;
+  return opts;
+}
+
+Rcpp::DataFrame score_table_df(
+    const magmaan::inference::ScoreTestTable& tab,
+    const magmaan::spec::LatentNames& names) {
+  const R_xlen_t n = static_cast<R_xlen_t>(tab.rows.size());
+  Rcpp::CharacterVector kind(n), op(n), lhs(n), rhs(n);
+  Rcpp::IntegerVector row(n), group(n), df(n);
+  Rcpp::NumericVector score(n), information(n), mi(n), pvalue(n), epc(n),
+      epc_lv(n), epc_all(n);
+  for (R_xlen_t i = 0; i < n; ++i) {
+    const auto& r = tab.rows[static_cast<std::size_t>(i)];
+    const auto& c = r.candidate;
+    kind[i] = score_candidate_kind_str(c.kind);
+    row[i] = static_cast<int>(c.row) + 1;
+    op[i] = std::string(magmaan::parse::to_string(c.op));
+    group[i] = c.group;
+    if (c.lhs_var >= 0 &&
+        static_cast<std::size_t>(c.lhs_var) < names.var_name.size()) {
+      lhs[i] = names.var_name[static_cast<std::size_t>(c.lhs_var)];
+    } else if (c.row < names.row_lhs.size()) {
+      lhs[i] = names.row_lhs[c.row];
+    } else {
+      lhs[i] = "";
+    }
+    if (c.rhs_var >= 0 &&
+        static_cast<std::size_t>(c.rhs_var) < names.var_name.size()) {
+      rhs[i] = names.var_name[static_cast<std::size_t>(c.rhs_var)];
+    } else if (c.row < names.row_rhs.size()) {
+      rhs[i] = names.row_rhs[c.row];
+    } else {
+      rhs[i] = "";
+    }
+    score[i] = r.score;
+    information[i] = r.information;
+    mi[i] = r.mi;
+    df[i] = r.df;
+    pvalue[i] = r.p_value;
+    epc[i] = r.epc;
+    epc_lv[i] = r.epc_lv;
+    epc_all[i] = r.epc_all;
+  }
+  return Rcpp::DataFrame::create(
+      Rcpp::_["kind"] = kind,
+      Rcpp::_["row"] = row,
+      Rcpp::_["lhs"] = lhs,
+      Rcpp::_["op"] = op,
+      Rcpp::_["rhs"] = rhs,
+      Rcpp::_["group"] = group,
+      Rcpp::_["score"] = score,
+      Rcpp::_["information"] = information,
+      Rcpp::_["mi"] = mi,
+      Rcpp::_["df"] = df,
+      Rcpp::_["pvalue"] = pvalue,
+      Rcpp::_["epc"] = epc,
+      Rcpp::_["epc.lv"] = epc_lv,
+      Rcpp::_["epc.all"] = epc_all,
+      Rcpp::_["stringsAsFactors"] = false);
 }
 Rcpp::DataFrame cells_df(const std::vector<lvm::Cell>& cells) {
   const R_xlen_t m = static_cast<R_xlen_t>(cells.size());
@@ -1572,6 +1688,167 @@ Rcpp::List measures_fit(Rcpp::List fit, double chi2, int df,
       Rcpp::_["bic2"]              = have ? fx->bic2              : NA_REAL,
       Rcpp::_["npar"]              = have ? fx->npar              : NA_INTEGER,
       Rcpp::_["ntotal"]            = have ? static_cast<double>(fx->ntotal) : NA_REAL);
+}
+
+// estimate_fiml_robust_mlr() — mirrors estimate::fiml::fiml_robust_mlr().
+// Computes observed-pattern sandwich SEs plus Yuan-Bentler/Mplus scaled-test
+// traces for a FIML fit carrying $raw_data.
+//
+// [[Rcpp::export]]
+Rcpp::List estimate_fiml_robust_mlr(Rcpp::List fit, double h_step = 1e-4) {
+  if (!fit.containsElementNamed("raw_data")) {
+    Rcpp::stop("magmaan: estimate_fiml_robust_mlr() requires a FIML fit with $raw_data");
+  }
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
+  auto df_or = magmaan::inference::df_stat(ctx.pt, ctx.samp, est.theta);
+  if (!df_or.has_value()) stop_post(df_or.error());
+  auto extras_or = magmaan::estimate::fiml::fiml_extras(ctx.pt, ctx.rep, raw, est);
+  if (!extras_or.has_value()) stop_post(extras_or.error());
+  auto r_or = magmaan::estimate::fiml::fiml_robust_mlr(
+      ctx.pt, ctx.rep, raw, est, *df_or, extras_or->chi2,
+      magmaan::estimate::fiml::FIML{}, h_step);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return Rcpp::List::create(
+      Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
+      Rcpp::_["se"] = Rcpp::wrap(r_or->se),
+      Rcpp::_["eigvals"] = Rcpp::wrap(r_or->eigvals),
+      Rcpp::_["chisq_scaled"] = r_or->chisq_scaled,
+      Rcpp::_["scaling_factor"] = r_or->scaling_factor,
+      Rcpp::_["trace_ugamma"] = r_or->trace_ugamma,
+      Rcpp::_["trace_ugamma_h1"] = r_or->trace_ugamma_h1,
+      Rcpp::_["trace_ugamma_h0"] = r_or->trace_ugamma_h0,
+      Rcpp::_["df"] = r_or->df,
+      Rcpp::_["ntotal"] = static_cast<double>(r_or->ntotal),
+      Rcpp::_["chisq"] = extras_or->chi2);
+}
+
+// measures_standardize_lv() — mirrors measures::standardize::standardize_lv().
+//
+// [[Rcpp::export]]
+Rcpp::List measures_standardize_lv(Rcpp::List fit, Rcpp::NumericMatrix vcov) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
+  auto r_or = magmaan::measures::standardize::standardize_lv(
+      ctx.pt, ctx.rep, est, vcov_m);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return standardized_to_list(*r_or);
+}
+
+// measures_standardize_all() — mirrors measures::standardize::standardize_all().
+//
+// [[Rcpp::export]]
+Rcpp::List measures_standardize_all(Rcpp::List fit, Rcpp::NumericMatrix vcov) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
+  auto r_or = magmaan::measures::standardize::standardize_all(
+      ctx.pt, ctx.rep, est, vcov_m);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return standardized_to_list(*r_or);
+}
+
+// inference_modification_indices() — mirrors inference::modification_indices()
+// for ML/FIML/continuous LS fit objects. WLS requires an explicit weight matrix
+// because current R fit lists do not retain W.
+//
+// [[Rcpp::export]]
+Rcpp::DataFrame inference_modification_indices(
+    Rcpp::List fit, SEXP weight = R_NilValue,
+    std::string information = "expected", std::string candidates = "fixed",
+    bool include_loadings = true, bool include_covariances = true,
+    double h_step = 1e-4) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"])
+      : "";
+  const auto opts = modification_options_from(
+      information, candidates, include_loadings, include_covariances);
+  magmaan::post_expected<magmaan::inference::ScoreTestTable> out;
+  if (estimator == "FIML") {
+    if (!fit.containsElementNamed("raw_data")) {
+      Rcpp::stop("magmaan: FIML modification indices require fit$raw_data");
+    }
+    magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
+    out = magmaan::inference::modification_indices_fiml(
+        ctx.pt, ctx.rep, raw, est, opts, magmaan::estimate::fiml::FIML{},
+        h_step);
+  } else if (estimator == "ULS") {
+    out = magmaan::inference::modification_indices(
+        ctx.pt, ctx.rep, ctx.samp, est, magmaan::estimate::gmm::Weight{}, opts);
+  } else if (estimator == "GLS") {
+    auto ev_or = magmaan::model::ModelEvaluator::build(ctx.pt, ctx.rep);
+    if (!ev_or.has_value()) stop_model(ev_or.error());
+    auto w_or = magmaan::estimate::gmm::normal_theory_weight(
+        *ev_or, ctx.samp, est.theta);
+    if (!w_or.has_value()) stop_fit(w_or.error());
+    out = magmaan::inference::modification_indices(
+        ctx.pt, ctx.rep, ctx.samp, est, *w_or, opts);
+  } else if (estimator == "WLS") {
+    if (Rf_isNull(weight)) {
+      Rcpp::stop("magmaan: WLS modification indices require explicit `weight`");
+    }
+    auto w = wls_from_arg(weight, ctx.samp.S.size());
+    out = magmaan::inference::modification_indices(
+        ctx.pt, ctx.rep, ctx.samp, est, w, opts);
+  } else if (estimator == "ML" || estimator.empty()) {
+    out = magmaan::inference::modification_indices(
+        ctx.pt, ctx.rep, ctx.samp, est, opts);
+  } else {
+    Rcpp::stop("magmaan: modification indices are not yet exposed for estimator '%s'",
+               estimator);
+  }
+  if (!out.has_value()) stop_post(out.error());
+  return score_table_df(*out, ctx.names);
+}
+
+// inference_score_tests() — mirrors inference::score_tests() for ML/FIML and
+// continuous LS fit objects. WLS requires an explicit weight matrix.
+//
+// [[Rcpp::export]]
+Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
+                                      double h_step = 1e-4) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"])
+      : "";
+  magmaan::post_expected<magmaan::inference::ScoreTestTable> out;
+  if (estimator == "FIML") {
+    if (!fit.containsElementNamed("raw_data")) {
+      Rcpp::stop("magmaan: FIML score tests require fit$raw_data");
+    }
+    magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
+    out = magmaan::inference::score_tests_fiml(
+        ctx.pt, ctx.rep, raw, est, magmaan::estimate::fiml::FIML{}, h_step);
+  } else if (estimator == "ULS") {
+    out = magmaan::inference::score_tests(
+        ctx.pt, ctx.rep, ctx.samp, est, magmaan::estimate::gmm::Weight{});
+  } else if (estimator == "GLS") {
+    auto ev_or = magmaan::model::ModelEvaluator::build(ctx.pt, ctx.rep);
+    if (!ev_or.has_value()) stop_model(ev_or.error());
+    auto w_or = magmaan::estimate::gmm::normal_theory_weight(
+        *ev_or, ctx.samp, est.theta);
+    if (!w_or.has_value()) stop_fit(w_or.error());
+    out = magmaan::inference::score_tests(ctx.pt, ctx.rep, ctx.samp, est,
+                                          *w_or);
+  } else if (estimator == "WLS") {
+    if (Rf_isNull(weight)) {
+      Rcpp::stop("magmaan: WLS score tests require explicit `weight`");
+    }
+    auto w = wls_from_arg(weight, ctx.samp.S.size());
+    out = magmaan::inference::score_tests(ctx.pt, ctx.rep, ctx.samp, est, w);
+  } else if (estimator == "ML" || estimator.empty()) {
+    out = magmaan::inference::score_tests(ctx.pt, ctx.rep, ctx.samp, est);
+  } else {
+    Rcpp::stop("magmaan: score tests are not yet exposed for estimator '%s'",
+               estimator);
+  }
+  if (!out.has_value()) stop_post(out.error());
+  return score_table_df(*out, ctx.names);
 }
 
 // infer_z_test() — mirrors z_test(est, se). `se` is the SE vector from

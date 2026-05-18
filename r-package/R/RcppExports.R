@@ -173,6 +173,26 @@ measures_fit <- function(fit, chi2, df, baseline) {
     .Call(`_magmaan_measures_fit`, fit, chi2, df, baseline)
 }
 
+estimate_fiml_robust_mlr <- function(fit, h_step = 1e-4) {
+    .Call(`_magmaan_estimate_fiml_robust_mlr`, fit, h_step)
+}
+
+measures_standardize_lv <- function(fit, vcov) {
+    .Call(`_magmaan_measures_standardize_lv`, fit, vcov)
+}
+
+measures_standardize_all <- function(fit, vcov) {
+    .Call(`_magmaan_measures_standardize_all`, fit, vcov)
+}
+
+inference_modification_indices <- function(fit, weight = NULL, information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, h_step = 1e-4) {
+    .Call(`_magmaan_inference_modification_indices`, fit, weight, information, candidates, include_loadings, include_covariances, h_step)
+}
+
+inference_score_tests <- function(fit, weight = NULL, h_step = 1e-4) {
+    .Call(`_magmaan_inference_score_tests`, fit, weight, h_step)
+}
+
 infer_z_test <- function(fit, se) {
     .Call(`_magmaan_infer_z_test`, fit, se)
 }
