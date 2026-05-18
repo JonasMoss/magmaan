@@ -144,14 +144,16 @@ c(delta = Tdiff / lr_delta[2, "Chisq diff"],
 
 ## Project decision
 
-magmaan should continue using the exact parameter-nesting restriction matrix for
-`nestedTest()`, because that is the natural contract for two lavaanified models
-differing by shared labels or explicit linear `==` constraints. Its reported
-`T_scaled` is the mean-scaled `T / c` statistic; the separate adjusted and
-mixture p-values cover the other Satorra-2000 distributional summaries.
+magmaan should continue using the exact parameter-nesting restriction matrix by
+default for `nestedTest()`, because that is the natural contract for two
+lavaanified models differing by shared labels or explicit linear `==`
+constraints. `A.method = "delta"` is available as an explicit compatibility
+mode for lavaan-style covariance/moment nesting checks. The result reports the
+mean-scaled `T / c`, mean/variance-adjusted, scaled/shifted, and mixture
+distributional summaries from the same Satorra-2000 eigenvalues.
 
 For lavaan-facing examples and parity checks, compare against
 `lavTestLRT(..., method = "satorra.2000", A.method = "exact",
 scaled.shifted = FALSE)`. It is still reasonable to mention lavaan's
-delta-method default in examples, but only as a documented alternative for
-covariance-nested comparisons, not as a magmaan oracle.
+delta-method option in examples, but only as a documented alternative for
+covariance-nested comparisons, not as the default magmaan oracle.

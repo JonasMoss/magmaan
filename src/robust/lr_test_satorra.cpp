@@ -42,6 +42,12 @@ LRSatorra2000Result degenerate_result(double T_diff) {
   out.adjust_d0   = 0.0;
   out.T_adjusted  = T_diff;
   out.p_adjusted  = 1.0;
+  out.scaled_shifted = ScaledShiftedResult{
+      .chi2_adj = T_diff,
+      .df       = 0,
+      .scale_a  = 1.0,
+      .shift_b  = 0.0};
+  out.p_scaled_shifted = 1.0;
   out.p_mixture   = 1.0;
   if (std::abs(T_diff) > 1e-8) {
     out.warnings.emplace_back(
@@ -100,16 +106,25 @@ lr_test_satorra2000(double                  T_diff,
   }
 
   // Exact mixture tail.
+  out.scaled_shifted = scaled_shifted(
+      T_diff, WeightedChiSquareMoments{out.df_diff, sd.trace_CinvS,
+                                       sd.trace_CinvS_sq});
+  out.p_scaled_shifted =
+      chi2_pvalue(out.scaled_shifted.chi2_adj, out.scaled_shifted.df);
+
   out.p_mixture = imhof_upper(sd.eigenvalues, T_diff);
   return out;
 }
 
 post_expected<LRSatorra2000Result>
 lr_test_satorra2000_from_data(
-    const spec::LatentStructure&     pt,
-    const model::MatrixRep&              rep,
+    const spec::LatentStructure&     pt_H1,
+    const model::MatrixRep&              rep_H1,
     const Eigen::VectorXd&               theta_H1_full,
     const EqConstraints&                 K_H1,
+    const spec::LatentStructure&     pt_H0,
+    const model::MatrixRep&              rep_H0,
+    const Eigen::VectorXd&               theta_H0_full,
     const EqConstraints&                 K_H0,
     const std::vector<Eigen::MatrixXd>&  X_per_group,
     const std::vector<Eigen::VectorXd>&  mean_per_group,
@@ -119,30 +134,16 @@ lr_test_satorra2000_from_data(
     double                               T_H1,
     int                                  df_H0,
     int                                  df_H1,
-    GammaSource                          gamma) {
-  // ── 1. Derive A_α (the restriction in H1's α-space) ───────────────────────
-  auto restr_or = restriction_alpha_from_K(K_H1, K_H0);
-  if (!restr_or.has_value()) {
-    return std::unexpected(restr_or.error());
-  }
-  const Eigen::MatrixXd& A_alpha = restr_or->A;
-
-  // The Satorra-2000 df_diff must equal df_H0 − df_H1; if the caller's df
-  // accounting and the K-matrix-derived restriction rank disagree, surface
-  // it.
-  const int df_diff_from_K = static_cast<int>(A_alpha.rows());
+    Satorra2000Options                   options) {
   const int df_diff_from_T = df_H0 - df_H1;
-  if (df_diff_from_K != df_diff_from_T) {
+  if (df_diff_from_T < 0) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "lr_test_satorra2000_from_data: df_diff mismatch — "
-        "restriction_alpha_from_K returned m = " +
-        std::to_string(df_diff_from_K) + " but df_H0 − df_H1 = " +
-        std::to_string(df_diff_from_T) + " (check that both fits use the "
-        "same lavaanified partable and that the chi²/df pair is consistent)."));
+        "lr_test_satorra2000_from_data: df_H0 − df_H1 is negative; H1 must "
+        "be the less-restricted model"));
   }
 
-  // ── 2. Evaluate Π and Σ at θ̂_H1, per group ─────────────────────────────
-  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  // ── 1. Evaluate Π and Σ at θ̂_H1, per group ─────────────────────────────
+  auto ev_or = model::ModelEvaluator::build(pt_H1, rep_H1);
   if (!ev_or.has_value()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "lr_test_satorra2000_from_data: ModelEvaluator::build failed: " +
@@ -163,6 +164,7 @@ lr_test_satorra2000_from_data(
   }
   const auto&             im     = *im_or;
   const Eigen::MatrixXd&  Pi_th  = *dsig_or;    // stacked p*_all × npar
+  const Eigen::MatrixXd   Pi_H1_alpha_all = Pi_th * K_H1.Kmat;
   const std::size_t       G      = im.sigma.size();
   if (G == 0 || G != X_per_group.size() || G != mean_per_group.size() ||
       G != n_per_group.size() || G != weight_per_group.size()) {
@@ -179,6 +181,52 @@ lr_test_satorra2000_from_data(
         " or theta size " + std::to_string(theta_H1_full.size())));
   }
 
+  // ── 2. Derive A_α (the restriction in H1's α-space) ─────────────────────
+  Eigen::MatrixXd A_alpha;
+  if (options.a_method == SatorraAMethod::Exact) {
+    auto restr_or = restriction_alpha_from_K(K_H1, K_H0);
+    if (!restr_or.has_value()) {
+      return std::unexpected(restr_or.error());
+    }
+    A_alpha = std::move(restr_or->A);
+  } else {
+    auto ev0_or = model::ModelEvaluator::build(pt_H0, rep_H0);
+    if (!ev0_or.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "lr_test_satorra2000_from_data: H0 ModelEvaluator::build failed: " +
+          ev0_or.error().detail));
+    }
+    auto dsig0_or = ev0_or->dsigma_dtheta(theta_H0_full);
+    if (!dsig0_or.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "lr_test_satorra2000_from_data: dsigma_dtheta(θ̂_H0) failed: " +
+          dsig0_or.error().detail));
+    }
+    if (dsig0_or->rows() != Pi_th.rows() ||
+        dsig0_or->cols() != K_H0.Kmat.rows()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "lr_test_satorra2000_from_data: H0 moment Jacobian shape disagrees "
+          "with H1 or K_H0"));
+    }
+    auto A_or = restriction_alpha_delta_from_jacobians(
+        Pi_H1_alpha_all, (*dsig0_or) * K_H0.Kmat, df_diff_from_T);
+    if (!A_or.has_value()) {
+      return std::unexpected(A_or.error());
+    }
+    A_alpha = std::move(*A_or);
+  }
+
+  // The Satorra-2000 df_diff must equal df_H0 − df_H1; if the caller's df
+  // accounting and the derived restriction rank disagree, surface it.
+  const int df_diff_from_A = static_cast<int>(A_alpha.rows());
+  if (df_diff_from_A != df_diff_from_T) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_from_data: df_diff mismatch — derived A has m = " +
+        std::to_string(df_diff_from_A) + " but df_H0 − df_H1 = " +
+        std::to_string(df_diff_from_T) + " (check that both fits use the "
+        "same lavaanified partable and that the chi²/df pair is consistent)."));
+  }
+
   // ── 3. Build per-group SatorraGroup ─────────────────────────────────────
   std::vector<SatorraGroup> groups;
   groups.reserve(G);
@@ -192,8 +240,7 @@ lr_test_satorra2000_from_data(
           + std::to_string(g)));
     }
     // Π_g · K_H1  (p*_g × r1)
-    Eigen::MatrixXd Pi_g       = Pi_th.middleRows(row_off, pstar);
-    Eigen::MatrixXd Pi_alpha_g = Pi_g * K_H1.Kmat;
+    Eigen::MatrixXd Pi_alpha_g = Pi_H1_alpha_all.middleRows(row_off, pstar);
     row_off += pstar;
 
     SatorraGroup sg;
@@ -207,11 +254,34 @@ lr_test_satorra2000_from_data(
   }
 
   // ── 4. Run the core then the p-value wrap ───────────────────────────────
-  auto sd_or = compute_satorra2000(groups, A_alpha, gamma);
+  auto sd_or = compute_satorra2000(groups, A_alpha, options.gamma);
   if (!sd_or.has_value()) {
     return std::unexpected(sd_or.error());
   }
   return lr_test_satorra2000(T_H0 - T_H1, *sd_or);
+}
+
+post_expected<LRSatorra2000Result>
+lr_test_satorra2000_from_data(
+    const spec::LatentStructure&     pt,
+    const model::MatrixRep&              rep,
+    const Eigen::VectorXd&               theta_H1_full,
+    const EqConstraints&                 K_H1,
+    const EqConstraints&                 K_H0,
+    const std::vector<Eigen::MatrixXd>&  X_per_group,
+    const std::vector<Eigen::VectorXd>&  mean_per_group,
+    const std::vector<std::int32_t>&     n_per_group,
+    const std::vector<double>&           weight_per_group,
+    double                               T_H0,
+    double                               T_H1,
+    int                                  df_H0,
+    int                                  df_H1,
+    GammaSource                          gamma) {
+  return lr_test_satorra2000_from_data(
+      pt, rep, theta_H1_full, K_H1, pt, rep, theta_H1_full, K_H0,
+      X_per_group, mean_per_group, n_per_group, weight_per_group,
+      T_H0, T_H1, df_H0, df_H1,
+      Satorra2000Options{.a_method = SatorraAMethod::Exact, .gamma = gamma});
 }
 
 }  // namespace magmaan::robust

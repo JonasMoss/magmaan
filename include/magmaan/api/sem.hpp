@@ -362,6 +362,9 @@ Result<LrTestResult> lr_test(const Fit &h1, const Fit &h0);
 Result<robust::LRSatorra2000Result>
 lr_test_satorra2000(const Fit &h1, const Fit &h0, const data::RawData &raw,
                     robust::GammaSource gamma = robust::GammaSource::Empirical);
+Result<robust::LRSatorra2000Result>
+lr_test_satorra2000(const Fit &h1, const Fit &h0, const data::RawData &raw,
+                    robust::Satorra2000Options options);
 
 struct Summary {
   Fit fit;

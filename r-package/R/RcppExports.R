@@ -205,8 +205,8 @@ infer_rls_chi2_sample <- function(sample_stats, implied) {
     .Call(`_magmaan_infer_rls_chi2_sample`, sample_stats, implied)
 }
 
-infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical") {
-    .Call(`_magmaan_infer_lr_test_satorra2000`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma)
+infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical", a_method = "exact") {
+    .Call(`_magmaan_infer_lr_test_satorra2000`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma, a_method)
 }
 
 infer_build_u_factor <- function(fit, bread = "expected", moments = "structured") {

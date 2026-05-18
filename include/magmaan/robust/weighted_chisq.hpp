@@ -4,6 +4,54 @@
 
 namespace magmaan::robust {
 
+struct WeightedChiSquareMoments {
+  int    df       = 0;
+  double trace    = 0.0;  // Σλ
+  double trace_sq = 0.0;  // Σλ²
+};
+
+WeightedChiSquareMoments
+weighted_chisq_moments(int df,
+                       const Eigen::Ref<const Eigen::VectorXd>& eigvals) noexcept;
+
+// Satorra-Bentler scaled chi²: c = Σλ / df, T_SB = T / c.
+struct SatorraBentlerResult {
+  double chi2_scaled = 0.0;
+  double scale_c     = 0.0;
+  int    df          = 0;
+};
+SatorraBentlerResult
+satorra_bentler(double t_ml, const WeightedChiSquareMoments& moments) noexcept;
+SatorraBentlerResult
+satorra_bentler(double                                    t_ml,
+                int                                       df,
+                const Eigen::Ref<const Eigen::VectorXd>&  eigvals) noexcept;
+
+// Satterthwaite mean-and-variance-adjusted chi².
+struct MeanVarAdjustedResult {
+  double chi2_adj = 0.0;
+  double df_adj   = 0.0;
+};
+MeanVarAdjustedResult
+mean_var_adjusted(double t_ml, const WeightedChiSquareMoments& moments) noexcept;
+MeanVarAdjustedResult
+mean_var_adjusted(double                                    t_ml,
+                  int                                       df,
+                  const Eigen::Ref<const Eigen::VectorXd>&  eigvals) noexcept;
+
+// Scaled-and-shifted chi²: T_adj = T * a + b, df unchanged.
+struct ScaledShiftedResult {
+  double chi2_adj = 0.0;
+  int    df       = 0;
+  double scale_a  = 0.0;
+  double shift_b  = 0.0;
+};
+ScaledShiftedResult
+scaled_shifted(double t_ml, const WeightedChiSquareMoments& moments) noexcept;
+ScaledShiftedResult
+scaled_shifted(double                                    t_ml,
+               int                                       df,
+               const Eigen::Ref<const Eigen::VectorXd>&  eigvals) noexcept;
 
 // Tail probability of a weighted sum of independent central χ²₁ variates:
 //

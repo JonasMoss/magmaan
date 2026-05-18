@@ -27,6 +27,11 @@ magmaan::robust::GammaSource parse_gamma(const std::string& s) {
   return magmaan::robust::GammaSource::Empirical;
 }
 
+magmaan::robust::SatorraAMethod parse_a_method(const std::string& s) {
+  if (s == "delta" || s == "Delta") return magmaan::robust::SatorraAMethod::Delta;
+  return magmaan::robust::SatorraAMethod::Exact;
+}
+
 }  // namespace
 
 // infer_lr_test_satorra2000() — Satorra (2000) scaled nested-model LR test.
@@ -57,17 +62,18 @@ Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
                                      int                  df_H1,
                                      double               T_H0,
                                      int                  df_H0,
-                                     std::string          gamma = "empirical") {
+                                     std::string          gamma = "empirical",
+                                     std::string          a_method = "exact") {
   // ── Build the H1 context (pt, rep, samp) and pull θ̂_H1 ─────────────────
   magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
   const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
+  magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est_H0 = magmaanr::est_from_fit(fit_H0);
 
   // ── Re-derive both K matrices from each fit's partable ────────────────
   auto K_H1_or = magmaan::estimate::build_eq_constraints(ctx_H1.pt);
   if (!K_H1_or.has_value()) magmaanr::stop_post(K_H1_or.error());
-  auto parsed_H0 = magmaanr::partable_from_arg(fit_H0["partable"],
-                                              "infer_lr_test_satorra2000");
-  auto K_H0_or = magmaan::estimate::build_eq_constraints(parsed_H0.structure);
+  auto K_H0_or = magmaan::estimate::build_eq_constraints(ctx_H0.pt);
   if (!K_H0_or.has_value()) magmaanr::stop_post(K_H0_or.error());
 
   // ── Per-group raw data, means, n_g, weights ───────────────────────────
@@ -97,10 +103,14 @@ Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
   // ── Run the orchestrator ──────────────────────────────────────────────
   auto r_or = magmaan::robust::lr_test_satorra2000_from_data(
       ctx_H1.pt, ctx_H1.rep, est_H1.theta,
-      *K_H1_or, *K_H0_or,
+      *K_H1_or,
+      ctx_H0.pt, ctx_H0.rep, est_H0.theta,
+      *K_H0_or,
       Xs, means, n_g, w_g,
       T_H0, T_H1, df_H0, df_H1,
-      parse_gamma(gamma));
+      magmaan::robust::Satorra2000Options{
+          .a_method = parse_a_method(a_method),
+          .gamma = parse_gamma(gamma)});
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   const magmaan::robust::LRSatorra2000Result& r = *r_or;
 
@@ -119,6 +129,13 @@ Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
       Rcpp::_["adjust_d0"]   = r.adjust_d0,
       Rcpp::_["T_adjusted"]  = r.T_adjusted,
       Rcpp::_["p_adjusted"]  = r.p_adjusted,
+      Rcpp::_["scaled_shifted"] = Rcpp::List::create(
+          Rcpp::_["chi2_adj"] = r.scaled_shifted.chi2_adj,
+          Rcpp::_["df"]       = r.scaled_shifted.df,
+          Rcpp::_["scale_a"]  = r.scaled_shifted.scale_a,
+          Rcpp::_["shift_b"]  = r.scaled_shifted.shift_b,
+          Rcpp::_["pvalue"]   = r.p_scaled_shifted),
+      Rcpp::_["p_scaled_shifted"] = r.p_scaled_shifted,
       Rcpp::_["p_mixture"]   = r.p_mixture,
       Rcpp::_["warnings"]    = warns);
 }

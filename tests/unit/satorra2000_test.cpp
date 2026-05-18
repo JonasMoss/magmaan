@@ -211,6 +211,28 @@ TEST_CASE("compute_satorra2000: NT-Γ sanity (all eigvals → 1)") {
   CHECK(r->trace_CinvS == doctest::Approx(2.0).epsilon(1e-12));
 }
 
+TEST_CASE("restriction_alpha_delta_from_jacobians finds moment-column restrictions") {
+  Eigen::MatrixXd Pi1(4, 3);
+  Pi1 << 1, 0, 0,
+         0, 1, 0,
+         0, 0, 1,
+         1, 1, 1;
+  Eigen::MatrixXd H_true(3, 2);
+  H_true << 1, 0,
+            0, 1,
+            1, -1;
+  const Eigen::MatrixXd Pi0 = Pi1 * H_true;
+
+  auto A_or = magmaan::robust::restriction_alpha_delta_from_jacobians(
+      Pi1, Pi0, /*expected_m=*/1);
+  REQUIRE(A_or.has_value());
+  const Eigen::MatrixXd& A = *A_or;
+  REQUIRE(A.rows() == 1);
+  REQUIRE(A.cols() == 3);
+  CHECK((A * H_true).norm() == doctest::Approx(0.0).epsilon(1e-12));
+  CHECK((A * A.transpose())(0, 0) == doctest::Approx(1.0).epsilon(1e-12));
+}
+
 // ── m = 0 degenerate ───────────────────────────────────────────────────────
 
 TEST_CASE("compute_satorra2000: degenerate m=0 (H0 ≡ H1)") {
@@ -268,6 +290,16 @@ TEST_CASE("lr_test_satorra2000: low-level p-value wrap") {
       1.0 - magmaan::inference::noncentral_chisq_cdf(Tadj_expected, d0_expected, 0.0);
   CHECK(r.p_adjusted == doctest::Approx(p_adj_expected));
 
+  // Scaled-shifted: a = sqrt(m / Σλ²), b = m − aΣλ.
+  const double a_expected = std::sqrt(3.0 / 3.5);
+  const double b_expected = 3.0 - a_expected * 3.0;
+  CHECK(r.scaled_shifted.scale_a == doctest::Approx(a_expected));
+  CHECK(r.scaled_shifted.shift_b == doctest::Approx(b_expected));
+  CHECK(r.scaled_shifted.chi2_adj
+        == doctest::Approx(T_diff * a_expected + b_expected));
+  CHECK(r.p_scaled_shifted == doctest::Approx(
+      magmaan::inference::chi2_pvalue(r.scaled_shifted.chi2_adj, 3)));
+
   // Mixture p-value matches `imhof_upper` directly.
   CHECK(r.p_mixture == doctest::Approx(magmaan::robust::imhof_upper(eig, T_diff)));
 }
@@ -284,6 +316,7 @@ TEST_CASE("lr_test_satorra2000: degenerate (m = 0)") {
   CHECK(r.p_unscaled == doctest::Approx(1.0));
   CHECK(r.p_scaled   == doctest::Approx(1.0));
   CHECK(r.p_adjusted == doctest::Approx(1.0));
+  CHECK(r.p_scaled_shifted == doctest::Approx(1.0));
   CHECK(r.p_mixture  == doctest::Approx(1.0));
 }
 

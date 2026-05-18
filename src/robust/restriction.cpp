@@ -1,5 +1,6 @@
 #include "magmaan/robust/restriction.hpp"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -19,6 +20,26 @@ namespace {
 
 PostError make_err(PostError::Kind k, std::string detail) {
   return PostError{k, std::move(detail)};
+}
+
+}  // namespace
+
+namespace {
+
+Eigen::MatrixXd pinv_times(const Eigen::Ref<const Eigen::MatrixXd>& A,
+                           const Eigen::Ref<const Eigen::MatrixXd>& B,
+                           double tol) {
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(
+      A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  const Eigen::VectorXd& s = svd.singularValues();
+  const double scale = s.size() > 0 ? s(0) : 0.0;
+  Eigen::VectorXd inv = Eigen::VectorXd::Zero(s.size());
+  const double cutoff = tol * static_cast<double>(std::max(A.rows(), A.cols())) *
+                        std::max(1.0, scale);
+  for (Eigen::Index i = 0; i < s.size(); ++i) {
+    if (s(i) > cutoff) inv(i) = 1.0 / s(i);
+  }
+  return svd.matrixV() * inv.asDiagonal() * svd.matrixU().transpose() * B;
 }
 
 }  // namespace
@@ -118,6 +139,49 @@ restriction_alpha_from_K(const EqConstraints& K_H1,
   }
 
   return RestrictionAlpha{std::move(A), std::move(b)};
+}
+
+post_expected<Eigen::MatrixXd>
+restriction_alpha_delta_from_jacobians(
+    const Eigen::Ref<const Eigen::MatrixXd>& Pi_H1_alpha,
+    const Eigen::Ref<const Eigen::MatrixXd>& Pi_H0_alpha,
+    int                                      expected_m,
+    double                                   tol_singular) {
+  if (Pi_H1_alpha.rows() != Pi_H0_alpha.rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "restriction_alpha_delta_from_jacobians: H1/H0 moment Jacobians have "
+        "different row counts"));
+  }
+  const Eigen::Index r1 = Pi_H1_alpha.cols();
+  if (expected_m < 0 || expected_m > r1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "restriction_alpha_delta_from_jacobians: expected restriction rank m = " +
+        std::to_string(expected_m) + " is outside [0, r_H1 = " +
+        std::to_string(r1) + "]"));
+  }
+  if (expected_m == 0) {
+    return Eigen::MatrixXd::Zero(0, r1);
+  }
+
+  const Eigen::MatrixXd H = pinv_times(Pi_H1_alpha, Pi_H0_alpha, tol_singular);
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(H, Eigen::ComputeFullU);
+  const Eigen::VectorXd& s = svd.singularValues();
+  const double scale = s.size() > 0 ? s(0) : 0.0;
+  const double cutoff = tol_singular *
+                        static_cast<double>(std::max(H.rows(), H.cols())) *
+                        std::max(1.0, scale);
+  Eigen::Index rank = 0;
+  for (Eigen::Index i = 0; i < s.size(); ++i) {
+    if (s(i) > cutoff) ++rank;
+  }
+  const Eigen::Index null_dim = r1 - rank;
+  if (null_dim != expected_m) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "restriction_alpha_delta_from_jacobians: null-space dimension " +
+        std::to_string(null_dim) + " from H = pinv(Π_H1)Π_H0 does not match "
+        "df_H0−df_H1 = " + std::to_string(expected_m)));
+  }
+  return svd.matrixU().rightCols(expected_m).transpose();
 }
 
 }  // namespace magmaan::robust

@@ -1111,6 +1111,15 @@ Result<LrTestResult> lr_test(const Fit &h1, const Fit &h0) {
 Result<robust::LRSatorra2000Result>
 lr_test_satorra2000(const Fit &h1, const Fit &h0, const data::RawData &raw,
                     robust::GammaSource gamma) {
+  return lr_test_satorra2000(
+      h1, h0, raw,
+      robust::Satorra2000Options{.a_method = robust::SatorraAMethod::Exact,
+                                 .gamma = gamma});
+}
+
+Result<robust::LRSatorra2000Result>
+lr_test_satorra2000(const Fit &h1, const Fit &h0, const data::RawData &raw,
+                    robust::Satorra2000Options options) {
   auto ok1 = require_complete_ml(h1, "lr_test_satorra2000()");
   if (!ok1) {
     return std::unexpected(ok1.error());
@@ -1142,8 +1151,9 @@ lr_test_satorra2000(const Fit &h1, const Fit &h0, const data::RawData &raw,
   const auto n_per_group = block_n32(samp->n_obs);
   auto result = robust::lr_test_satorra2000_from_data(
       h1.model().structure(), h1.model().matrix_rep(), h1.estimates().theta,
-      *k1, *k0, raw.X, samp->mean, n_per_group, block_weights(samp->n_obs),
-      t0->statistic, t1->statistic, t0->df, t1->df, gamma);
+      *k1, h0.model().structure(), h0.model().matrix_rep(), h0.estimates().theta,
+      *k0, raw.X, samp->mean, n_per_group, block_weights(samp->n_obs),
+      t0->statistic, t1->statistic, t0->df, t1->df, options);
   return post_result(std::move(result));
 }
 

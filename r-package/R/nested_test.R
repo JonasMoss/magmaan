@@ -19,6 +19,9 @@
 #' @param gamma    `"empirical"` (default — empirical Γ̂, matches lavaan's
 #'                 `estimator = "MLR"` / `"MLM"`) or `"NT"` (normal-theory
 #'                 sanity-check path where all eigenvalues collapse to 1).
+#' @param A.method `"exact"` (default — exact parameter-nesting restriction)
+#'                 or `"delta"` (lavaan-style covariance/moment Jacobian
+#'                 column-space restriction).
 #'
 #' @return A list of class `magmaan_nested_test` with fields
 #' \describe{
@@ -26,12 +29,15 @@
 #'   \item{eigenvalues}{The m generalised eigenvalues λⱼ.}
 #'   \item{scale_c, T_scaled, p_scaled}{Satorra-Bentler scaled test.}
 #'   \item{adjust_d0, T_adjusted, p_adjusted}{Mean-and-variance adjusted test.}
+#'   \item{scaled_shifted}{Scaled-and-shifted test details.}
 #'   \item{p_mixture}{Exact Pr(Σⱼ λⱼ χ²₁,ⱼ > T_diff) via Imhof.}
 #'   \item{warnings}{Any numerical warnings from the C++ core.}
 #' }
 #' @export
-nestedTest <- function(fit_H1, fit_H0, data, gamma = c("empirical", "NT")) {
+nestedTest <- function(fit_H1, fit_H0, data, gamma = c("empirical", "NT"),
+                       A.method = c("exact", "delta")) {
   gamma <- match.arg(gamma)
+  A.method <- match.arg(A.method)
 
   ngroups <- fit_H1$ngroups
   if (is.null(ngroups) || ngroups < 1) ngroups <- 1L
@@ -78,22 +84,29 @@ nestedTest <- function(fit_H1, fit_H0, data, gamma = c("empirical", "NT")) {
       fit_H1, fit_H0, X_per_group,
       T_H1 = T_H1, df_H1 = df_H1,
       T_H0 = T_H0, df_H0 = df_H0,
-      gamma = gamma)
+      gamma = gamma,
+      a_method = A.method)
   res$gamma <- gamma
+  res$A.method <- A.method
   class(res) <- c("magmaan_nested_test", "list")
   res
 }
 
 #' @export
 print.magmaan_nested_test <- function(x, digits = 4L, ...) {
-  cat("Satorra (2000) nested-model χ² difference test (Γ =", x$gamma, ")\n\n")
+  cat(sprintf("Satorra (2000) nested-model χ² difference test (Γ = %s, A.method = %s)\n\n",
+              x$gamma, x$A.method %||% "exact"))
   rows <- data.frame(
-      stat = c(x$T_diff, x$T_scaled, x$T_adjusted, x$T_diff),
-      df   = c(x$df_diff, x$df_diff, x$adjust_d0, x$df_diff),
-      pval = c(x$p_unscaled, x$p_scaled, x$p_adjusted, x$p_mixture))
+      stat = c(x$T_diff, x$T_scaled, x$T_adjusted,
+               x$scaled_shifted$chi2_adj, x$T_diff),
+      df   = c(x$df_diff, x$df_diff, x$adjust_d0,
+               x$scaled_shifted$df, x$df_diff),
+      pval = c(x$p_unscaled, x$p_scaled, x$p_adjusted,
+               x$scaled_shifted$pvalue, x$p_mixture))
   rownames(rows) <- c("Unscaled χ²",
                       "Scaled (Satorra-Bentler)",
                       "Mean+var adjusted",
+                      "Scaled+shifted",
                       "Exact mixture (Imhof)")
   print(format(rows, digits = digits))
   cat("\nEigenvalues λ:",

@@ -313,6 +313,10 @@ golden `parTable()` fixtures.
   the threshold-plus-polychoric moment vector. The implementation now uses a
   shared weighted-moment sandwich/U-Gamma primitive that can be reused by other
   LS moment stacks with arbitrary block weights and NACOV matrices.
+- Weighted-χ² reducer formulas are shared across eigenvalue and trace-summary
+  callers: Satorra-Bentler, mean/variance-adjusted, and scaled/shifted tests
+  can consume either the UΓ spectrum or `(Σλ, Σλ²)` when a low-rank trick has
+  already computed the traces.
 - A first mixed continuous/ordinal path builds lavaan-ordered thresholds,
   continuous means/variances, polychoric/polyserial/covariance moments,
   NACOV/DWLS/WLS weights, and DWLS/WLS delta/theta fits. The lavaan-backed
@@ -485,9 +489,11 @@ need, and no more. The current C++ core mostly follows this:
   robust U-Gamma reducers, and fit measures are exposed as separate primitives
   rather than as methods on one fitted-object bundle.
 - Satorra-Bentler-family reducers take scalar test statistics, degrees of
-  freedom, and eigenvalues rather than fit objects.
+  freedom, and eigenvalues or trace summaries rather than fit objects.
 - The Satorra-2000 C++ helper takes the model, reparameterization matrices,
-  raw-data pieces, chi-square values, and degrees of freedom explicitly.
+  raw-data pieces, chi-square values, degrees of freedom, and an explicit
+  `A.method` option (`exact` default, `delta` for lavaan-style
+  moment-Jacobian column-space restrictions).
 
 The remaining pressure point is the R boundary. Several exported R wrappers
 currently accept the transparent fit list for convenience and then unpack the
