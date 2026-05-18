@@ -581,6 +581,72 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// estimate_fiml_robust_mlr
+Rcpp::List estimate_fiml_robust_mlr(Rcpp::List fit, double h_step);
+RcppExport SEXP _magmaan_estimate_fiml_robust_mlr(SEXP fitSEXP, SEXP h_stepSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< double >::type h_step(h_stepSEXP);
+    rcpp_result_gen = Rcpp::wrap(estimate_fiml_robust_mlr(fit, h_step));
+    return rcpp_result_gen;
+END_RCPP
+}
+// measures_standardize_lv
+Rcpp::List measures_standardize_lv(Rcpp::List fit, Rcpp::NumericMatrix vcov);
+RcppExport SEXP _magmaan_measures_standardize_lv(SEXP fitSEXP, SEXP vcovSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type vcov(vcovSEXP);
+    rcpp_result_gen = Rcpp::wrap(measures_standardize_lv(fit, vcov));
+    return rcpp_result_gen;
+END_RCPP
+}
+// measures_standardize_all
+Rcpp::List measures_standardize_all(Rcpp::List fit, Rcpp::NumericMatrix vcov);
+RcppExport SEXP _magmaan_measures_standardize_all(SEXP fitSEXP, SEXP vcovSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type vcov(vcovSEXP);
+    rcpp_result_gen = Rcpp::wrap(measures_standardize_all(fit, vcov));
+    return rcpp_result_gen;
+END_RCPP
+}
+// inference_modification_indices
+Rcpp::DataFrame inference_modification_indices(Rcpp::List fit, SEXP weight, std::string information, std::string candidates, bool include_loadings, bool include_covariances, double h_step);
+RcppExport SEXP _magmaan_inference_modification_indices(SEXP fitSEXP, SEXP weightSEXP, SEXP informationSEXP, SEXP candidatesSEXP, SEXP include_loadingsSEXP, SEXP include_covariancesSEXP, SEXP h_stepSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< std::string >::type information(informationSEXP);
+    Rcpp::traits::input_parameter< std::string >::type candidates(candidatesSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_loadings(include_loadingsSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_covariances(include_covariancesSEXP);
+    Rcpp::traits::input_parameter< double >::type h_step(h_stepSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_modification_indices(fit, weight, information, candidates, include_loadings, include_covariances, h_step));
+    return rcpp_result_gen;
+END_RCPP
+}
+// inference_score_tests
+Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight, double h_step);
+RcppExport SEXP _magmaan_inference_score_tests(SEXP fitSEXP, SEXP weightSEXP, SEXP h_stepSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< double >::type h_step(h_stepSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_score_tests(fit, weight, h_step));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_z_test
 Rcpp::List infer_z_test(Rcpp::List fit, Rcpp::NumericVector se);
 RcppExport SEXP _magmaan_infer_z_test(SEXP fitSEXP, SEXP seSEXP) {
@@ -1031,6 +1097,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_df_stat", (DL_FUNC) &_magmaan_infer_df_stat, 2},
     {"_magmaan_infer_baseline", (DL_FUNC) &_magmaan_infer_baseline, 1},
     {"_magmaan_measures_fit", (DL_FUNC) &_magmaan_measures_fit, 4},
+    {"_magmaan_estimate_fiml_robust_mlr", (DL_FUNC) &_magmaan_estimate_fiml_robust_mlr, 2},
+    {"_magmaan_measures_standardize_lv", (DL_FUNC) &_magmaan_measures_standardize_lv, 2},
+    {"_magmaan_measures_standardize_all", (DL_FUNC) &_magmaan_measures_standardize_all, 2},
+    {"_magmaan_inference_modification_indices", (DL_FUNC) &_magmaan_inference_modification_indices, 7},
+    {"_magmaan_inference_score_tests", (DL_FUNC) &_magmaan_inference_score_tests, 3},
     {"_magmaan_infer_z_test", (DL_FUNC) &_magmaan_infer_z_test, 2},
     {"_magmaan_infer_z_test_theta", (DL_FUNC) &_magmaan_infer_z_test_theta, 2},
     {"_magmaan_infer_chi2_pvalue", (DL_FUNC) &_magmaan_infer_chi2_pvalue, 2},
