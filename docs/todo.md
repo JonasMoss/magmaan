@@ -150,6 +150,10 @@ Completed checks:
   `robust_*`, and `measures_*` aliases while keeping the old `lavaan_*`,
   `fit_*`, `infer_*`, and `_impl` names available for compatibility; the
   broad post-fit and staged workflow examples use the canonical names.
+- [x] **S. Example migration slice.** The observed-information,
+  defined-parameter, ordinal DWLS/WLS, FIML MLR, and tutorial
+  modification-index / extraction examples now use package-qualified calls and
+  the canonical `magmaan_core` names where they exercise direct primitives.
 
 Done when: new code naturally uses the target namespaces, R scripts can reach
 the relevant C++ primitive graph through predictable names, friendly R users
