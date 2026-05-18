@@ -93,6 +93,9 @@ magmaan_core <- local({
       "measures_fit",
       "measures_standardize_lv",
       "measures_standardize_all",
+      "measures_residuals",
+      "measures_standardized_residuals",
+      "measures_factor_scores",
       "compute_defined_impl"
     ),
     helpers = c(

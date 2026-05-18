@@ -141,6 +141,10 @@ Completed checks:
   `measures_standardize_lv()`, `measures_standardize_all()`,
   `inference_modification_indices()`, and `inference_score_tests()` over the
   existing C++ primitives.
+- [x] **S/M. Residual and factor-score R scaffold slice.** `magmaan_core`
+  exposes `measures_residuals()`, `measures_standardized_residuals()`, and
+  `measures_factor_scores()` over the C++ post-fit accessors; the
+  package-qualified `post_fit_primitives.R` example now exercises them.
 
 Done when: new code naturally uses the target namespaces, R scripts can reach
 the relevant C++ primitive graph through predictable names, friendly R users
@@ -252,12 +256,6 @@ Remaining work, in suggested order:
   landed; ordinal DWLS/WLS still needs a polychoric independence-model
   baseline and a correlation-metric ordinal SRMR. `api::fit_measures` fails
   explicitly for ordinal fits until then.
-- **S/M. R bindings for the remaining new post-fit accessors.** `residuals`,
-  `standardized_residuals`, and `factor_scores` have C++ / `magmaan::api`
-  surfaces but no `magmaan_core` binding yet — folded into the §1 R scaffold
-  pass. Modification indices, score tests, and standardized solutions are now
-  exposed through the R scaffold.
-
 Completed:
 
 - [x] **S. `residuals()` accessor.** `measures::residuals` / `api::residuals`

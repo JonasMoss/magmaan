@@ -237,9 +237,10 @@ delta-method SEs, optional bootstrap SEs.
     `fitMeasures` (`measures_fit`), `AIC`/`BIC`, `fitted` (model-implied
     moments via `model_implied`): **✓** at all three layers.
   - `standardizedSolution` (`standardize_lv` / `standardize_all`): **core ✓ /
-    api ✓ / R ✗** — the standardization primitives exist in C++ but are not
-    bound in the R package.
-  - `residuals()` ✓ / `lavResiduals()` ◐ / `lavPredict()` ✓ (core ✓ / api ✓):
+    api ✓ / R ✓** through `magmaan_core$measures_standardize_lv()` and
+    `magmaan_core$measures_standardize_all()`.
+  - `residuals()` ✓ / `lavResiduals()` ◐ / `lavPredict()` ✓ (core ✓ / api ✓ /
+    R ✓):
     - `residuals()` — `measures::residuals` / `api::residuals` expose the raw
       moment residuals `S − Σ̂(θ̂)` (and the mean residuals under a mean
       structure).
@@ -251,9 +252,8 @@ delta-method SEs, optional bootstrap SEs.
 - **Gaps:**
   - `lavInspect()` — no single inspector; model matrices are reachable via
     `model_matrix_rep`.
-  - R-package binding gaps: the standardized solution, modification indices,
-    and the new residual / factor-score accessors have no `magmaan_core`
-    entry point yet (all are in `magmaan::api`).
+  - R-package convenience gaps: the current accessors are exploratory
+    `magmaan_core` primitives rather than polished friendly wrappers.
 
 ## Deferred backlog
 
@@ -269,7 +269,6 @@ tutorial reproduction for the in-scope sections except where noted.
 | `group.equal=` / `group.partial=` convenience args | 9 | S | Invariance works via explicit labels. |
 | PML, MLF, MLMVS estimators; `likelihood="wishart"` | 13 | L | Not implemented. |
 | Mean-structure effect coding (`Σν == 0`) | 8 | S | Loadings-only effect coding exists. |
-| R bindings: standardized solution, modification indices, residuals, factor scores | 15, 16 | S/M | `magmaan::api` surfaces exist; `magmaan_core` bindings folded into the `todo.md` §1 R pass. |
 
 ## Informal tests
 

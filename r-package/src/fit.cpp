@@ -20,7 +20,9 @@
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/measures/effects.hpp"
+#include "magmaan/measures/factor_scores.hpp"
 #include "magmaan/measures/standardized.hpp"
+#include "magmaan/measures/residuals.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
@@ -80,6 +82,49 @@ Rcpp::List standardized_to_list(
     const magmaan::measures::standardize::StandardizedSolution& r) {
   return Rcpp::List::create(Rcpp::_["theta"] = Rcpp::wrap(r.theta),
                             Rcpp::_["se"] = Rcpp::wrap(r.se));
+}
+
+Rcpp::List matrix_blocks_to_r(const std::vector<Eigen::MatrixXd>& blocks,
+                              const std::vector<std::vector<std::string>>& names,
+                              bool square_names) {
+  Rcpp::List out(static_cast<R_xlen_t>(blocks.size()));
+  for (std::size_t b = 0; b < blocks.size(); ++b) {
+    Rcpp::NumericMatrix M = Rcpp::wrap(blocks[b]);
+    if (b < names.size()) {
+      Rcpp::CharacterVector nm = Rcpp::wrap(names[b]);
+      M.attr("dimnames") = square_names
+          ? Rcpp::List::create(nm, nm)
+          : Rcpp::List::create(R_NilValue, nm);
+    }
+    out[static_cast<R_xlen_t>(b)] = M;
+  }
+  return out;
+}
+
+Rcpp::List vector_blocks_to_r(const std::vector<Eigen::VectorXd>& blocks,
+                              const std::vector<std::vector<std::string>>& names) {
+  Rcpp::List out(static_cast<R_xlen_t>(blocks.size()));
+  for (std::size_t b = 0; b < blocks.size(); ++b) {
+    Rcpp::NumericVector v = Rcpp::wrap(blocks[b]);
+    if (b < names.size() && v.size() == static_cast<R_xlen_t>(names[b].size())) {
+      v.attr("names") = Rcpp::wrap(names[b]);
+    }
+    out[static_cast<R_xlen_t>(b)] = v;
+  }
+  return out;
+}
+
+magmaan::measures::FactorScoreMethod factor_score_method_from(
+    const std::string& method) {
+  if (method == "regression" || method == "Regression" ||
+      method == "thurstone" || method == "Thurstone") {
+    return magmaan::measures::FactorScoreMethod::Regression;
+  }
+  if (method == "bartlett" || method == "Bartlett") {
+    return magmaan::measures::FactorScoreMethod::Bartlett;
+  }
+  Rcpp::stop("magmaan: factor score method must be 'regression' or 'bartlett' "
+             "(got '%s')", method);
 }
 
 const char* score_candidate_kind_str(
@@ -618,6 +663,27 @@ magmaan::data::RawData fiml_raw_from_arg(const lvm::MatrixRep& rep, SEXP raw_dat
 
     raw.X.push_back(std::move(X));
     raw.mask.push_back(std::move(M));
+  }
+  return raw;
+}
+
+magmaan::data::RawData complete_raw_from_arg(const lvm::MatrixRep& rep,
+                                             SEXP raw_data) {
+  SEXP X_arg = raw_data;
+  if (TYPEOF(raw_data) == VECSXP) {
+    Rcpp::List rd(raw_data);
+    if (rd.containsElementNamed("X")) X_arg = rd["X"];
+  }
+
+  const std::size_t n_blocks = rep.dims.size();
+  magmaan::data::RawData raw;
+  raw.X.reserve(n_blocks);
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    Rcpp::NumericMatrix Xb = block_matrix(X_arg, b, n_blocks, "raw_data$X");
+    const std::vector<int> perm = perm_for_cols(Xb, rep.ov_names[b], "raw_data$X");
+    Eigen::MatrixXd X = reorder_data_cols(Xb, perm);
+    validate_finite_matrix(X, "raw data", b);
+    raw.X.push_back(std::move(X));
   }
   return raw;
 }
@@ -1748,6 +1814,64 @@ Rcpp::List measures_standardize_all(Rcpp::List fit, Rcpp::NumericMatrix vcov) {
       ctx.pt, ctx.rep, est, vcov_m);
   if (!r_or.has_value()) stop_post(r_or.error());
   return standardized_to_list(*r_or);
+}
+
+// measures_residuals() — mirrors measures::residuals(); raw S - Sigma-hat
+// covariance residuals plus mean residuals when the model has means.
+//
+// [[Rcpp::export]]
+Rcpp::List measures_residuals(Rcpp::List fit) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  auto r_or = magmaan::measures::residuals(ctx.pt, ctx.rep, ctx.samp, est);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return Rcpp::List::create(
+      Rcpp::_["cov"] = matrix_blocks_to_r(r_or->cov, ctx.rep.ov_names,
+                                          /*square_names=*/true),
+      Rcpp::_["mean"] = vector_blocks_to_r(r_or->mean, ctx.rep.ov_names));
+}
+
+// measures_standardized_residuals() — mirrors
+// measures::standardized_residuals(); deterministic lavResiduals-style raw and
+// correlation-metric residuals plus SRMR. Asymptotic residual z-statistics are
+// intentionally not part of this primitive yet.
+//
+// [[Rcpp::export]]
+Rcpp::List measures_standardized_residuals(Rcpp::List fit) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  auto r_or = magmaan::measures::standardized_residuals(
+      ctx.pt, ctx.rep, ctx.samp, est);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return Rcpp::List::create(
+      Rcpp::_["cov_raw"] = matrix_blocks_to_r(r_or->cov_raw, ctx.rep.ov_names,
+                                              /*square_names=*/true),
+      Rcpp::_["cov_cor"] = matrix_blocks_to_r(r_or->cov_cor, ctx.rep.ov_names,
+                                              /*square_names=*/true),
+      Rcpp::_["mean_raw"] = vector_blocks_to_r(r_or->mean_raw,
+                                               ctx.rep.ov_names),
+      Rcpp::_["mean_cor"] = vector_blocks_to_r(r_or->mean_cor,
+                                               ctx.rep.ov_names),
+      Rcpp::_["srmr"] = r_or->srmr);
+}
+
+// measures_factor_scores() — mirrors measures::factor_scores(); `raw_data`
+// must contain complete observed data in the model's observed-variable order,
+// or carry column names so it can be reordered.
+//
+// [[Rcpp::export]]
+Rcpp::List measures_factor_scores(Rcpp::List fit, SEXP raw_data,
+                                  std::string method = "regression") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
+  auto r_or = magmaan::measures::factor_scores(
+      ctx.pt, ctx.rep, raw, est, factor_score_method_from(method));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return Rcpp::List::create(
+      Rcpp::_["scores"] = matrix_blocks_to_r(r_or->scores, ctx.rep.lv_names,
+                                             /*square_names=*/false),
+      Rcpp::_["method"] = method);
 }
 
 // inference_modification_indices() — mirrors inference::modification_indices()

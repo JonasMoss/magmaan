@@ -30,5 +30,5 @@ Status meanings:
 | `measures::fit_measures` | `measures_fit` | good | Keep. | Already namespace-shaped. |
 | `measures::standardize::*` | `measures_standardize_lv`, `measures_standardize_all` | good | Added in scaffold pass. | Returns standardized estimates and delta-method SEs. |
 | `measures::effects::compute_defined` | `compute_defined_impl` / `compute_defined` | awkward | Keep helper; rename direct binding later. | Friendly helper is plain R composition; direct binding still has `_impl`. |
-| `api::residuals`, `api::standardized_residuals` or measures equivalents | none | missing | Add after current scaffold is green. | Cheap inspection helpers; useful for R legibility testing. |
-| `api::factor_scores` / `measures::factor_scores` | none | missing | Coordinate with compatibility-agent work before exposing. | Another agent is cleaning up this capability. |
+| `measures::residuals`, `measures::standardized_residuals` | `measures_residuals`, `measures_standardized_residuals` | good | Added in scaffold pass. | Raw and correlation-metric residual accessors; residual z-statistics remain a separate lavaan-oracle task. |
+| `measures::factor_scores` | `measures_factor_scores` | good | Added in scaffold pass. | Complete-data regression and Bartlett scores over caller-supplied raw blocks. |

@@ -617,6 +617,41 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// measures_residuals
+Rcpp::List measures_residuals(Rcpp::List fit);
+RcppExport SEXP _magmaan_measures_residuals(SEXP fitSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    rcpp_result_gen = Rcpp::wrap(measures_residuals(fit));
+    return rcpp_result_gen;
+END_RCPP
+}
+// measures_standardized_residuals
+Rcpp::List measures_standardized_residuals(Rcpp::List fit);
+RcppExport SEXP _magmaan_measures_standardized_residuals(SEXP fitSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    rcpp_result_gen = Rcpp::wrap(measures_standardized_residuals(fit));
+    return rcpp_result_gen;
+END_RCPP
+}
+// measures_factor_scores
+Rcpp::List measures_factor_scores(Rcpp::List fit, SEXP raw_data, std::string method);
+RcppExport SEXP _magmaan_measures_factor_scores(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP methodSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    rcpp_result_gen = Rcpp::wrap(measures_factor_scores(fit, raw_data, method));
+    return rcpp_result_gen;
+END_RCPP
+}
 // inference_modification_indices
 Rcpp::DataFrame inference_modification_indices(Rcpp::List fit, SEXP weight, std::string information, std::string candidates, bool include_loadings, bool include_covariances, double h_step);
 RcppExport SEXP _magmaan_inference_modification_indices(SEXP fitSEXP, SEXP weightSEXP, SEXP informationSEXP, SEXP candidatesSEXP, SEXP include_loadingsSEXP, SEXP include_covariancesSEXP, SEXP h_stepSEXP) {
@@ -1100,6 +1135,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_estimate_fiml_robust_mlr", (DL_FUNC) &_magmaan_estimate_fiml_robust_mlr, 2},
     {"_magmaan_measures_standardize_lv", (DL_FUNC) &_magmaan_measures_standardize_lv, 2},
     {"_magmaan_measures_standardize_all", (DL_FUNC) &_magmaan_measures_standardize_all, 2},
+    {"_magmaan_measures_residuals", (DL_FUNC) &_magmaan_measures_residuals, 1},
+    {"_magmaan_measures_standardized_residuals", (DL_FUNC) &_magmaan_measures_standardized_residuals, 1},
+    {"_magmaan_measures_factor_scores", (DL_FUNC) &_magmaan_measures_factor_scores, 3},
     {"_magmaan_inference_modification_indices", (DL_FUNC) &_magmaan_inference_modification_indices, 7},
     {"_magmaan_inference_score_tests", (DL_FUNC) &_magmaan_inference_score_tests, 3},
     {"_magmaan_infer_z_test", (DL_FUNC) &_magmaan_infer_z_test, 2},

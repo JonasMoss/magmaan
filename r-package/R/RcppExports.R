@@ -185,6 +185,18 @@ measures_standardize_all <- function(fit, vcov) {
     .Call(`_magmaan_measures_standardize_all`, fit, vcov)
 }
 
+measures_residuals <- function(fit) {
+    .Call(`_magmaan_measures_residuals`, fit)
+}
+
+measures_standardized_residuals <- function(fit) {
+    .Call(`_magmaan_measures_standardized_residuals`, fit)
+}
+
+measures_factor_scores <- function(fit, raw_data, method = "regression") {
+    .Call(`_magmaan_measures_factor_scores`, fit, raw_data, method)
+}
+
 inference_modification_indices <- function(fit, weight = NULL, information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, h_step = 1e-4) {
     .Call(`_magmaan_inference_modification_indices`, fit, weight, information, candidates, include_loadings, include_covariances, h_step)
 }
