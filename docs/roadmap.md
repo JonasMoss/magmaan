@@ -321,6 +321,13 @@ golden `parTable()` fixtures.
   the threshold-plus-polychoric moment vector. The implementation now uses a
   shared weighted-moment sandwich/U-Gamma primitive that can be reused by other
   LS moment stacks with arbitrary block weights and NACOV matrices.
+- All-ordinal DWLS/WLS fit measures are exposed through
+  `estimate::fit_measures_ordinal()` and `api::fit_measures()`: CFI/TLI/RMSEA
+  use the categorical independence baseline over the polychoric moment stack,
+  with WLS minimizing threshold nuisance residuals under the full weight
+  matrix, and ordinal SRMR uses the lavaan correlation-metric denominator that
+  includes zero diagonal residuals. The bfi ordinal parity fixture gates DWLS
+  and WLS CFI/TLI/RMSEA/SRMR against lavaan.
 - Weighted-χ² reducer formulas are shared across eigenvalue and trace-summary
   callers: Satorra-Bentler, mean/variance-adjusted, and scaled/shifted tests
   can consume either the UΓ spectrum or `(Σλ, Σλ²)` when a low-rank trick has
@@ -552,6 +559,17 @@ difference, H1 minus H0, relying on Mplus-style approximations such as
 Yuan-Bentler formula instead constructs the H1 residual-space trace directly.
 Both should be documented when exposed, but neither should force historical
 names into the core naming scheme.
+
+The R boundary now stages this policy with `robust_nested_lrt()` as the
+friendly statistical name for nested robust likelihood-ratio work. Its default
+`method = "restriction_map"` names the exact restriction-map contract, while
+`"lavaan_sb2001"` and `"lavaan_sb2010"` are explicit compatibility methods.
+The older `nestedTest()` spelling and lavaan labels (`"satorra.2000"`,
+`"satorra.bentler.2001"`, `"satorra.bentler.2010"`) remain as compatibility
+aliases during exploration. Low-level `magmaan_core` exposes both
+`robust_nested_lrt_restriction_map` and `compat_lavaan_nested_lrt_*` aliases
+over the same C++ primitives so methods scripts can choose the intended
+surface directly.
 
 ### Testing and validation
 

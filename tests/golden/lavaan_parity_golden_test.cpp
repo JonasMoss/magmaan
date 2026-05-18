@@ -903,6 +903,26 @@ TEST_CASE("lavaan-parity ordinal — bfi DWLS/WLS") {
       fail(name + ": chisq = " + std::to_string(chisq) + ", lavaan = " +
            std::to_string(fit["chisq"].get<double>()));
 
+    auto fm_or = magmaan::estimate::fit_measures_ordinal(*pt, *mr, stats, est,
+                                                         kind);
+    if (!fm_or.has_value()) {
+      fail(name + ": fit_measures_ordinal — " + fm_or.error().detail);
+    } else {
+      const auto& fm = *fm_or;
+      if (!close(fm.indices.cfi, fit["cfi"].get<double>(), 2e-3))
+        fail(name + ": CFI = " + std::to_string(fm.indices.cfi) +
+             ", lavaan = " + std::to_string(fit["cfi"].get<double>()));
+      if (!close(fm.indices.tli, fit["tli"].get<double>(), 4e-3))
+        fail(name + ": TLI = " + std::to_string(fm.indices.tli) +
+             ", lavaan = " + std::to_string(fit["tli"].get<double>()));
+      if (!close(fm.indices.rmsea, fit["rmsea"].get<double>(), 2e-3))
+        fail(name + ": RMSEA = " + std::to_string(fm.indices.rmsea) +
+             ", lavaan = " + std::to_string(fit["rmsea"].get<double>()));
+      if (!close(fm.srmr, fit["srmr"].get<double>(), 2e-3))
+        fail(name + ": SRMR = " + std::to_string(fm.srmr) +
+             ", lavaan = " + std::to_string(fit["srmr"].get<double>()));
+    }
+
     // robust SEs + scaled tests — DWLS only.
     if (fit.contains("robust") && !fit["robust"].is_null()) {
       const auto& rref = fit["robust"];

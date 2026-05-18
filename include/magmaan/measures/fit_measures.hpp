@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include "magmaan/inference/inference.hpp"      // Estimates (via fit.hpp), noncentral_chisq_cdf
@@ -62,6 +63,12 @@ struct FitMeasures {
 // `chi2_user` / `df_user` are the model fit statistic and df — typically
 // `chi2_stat(samp, est)` / `df_stat(pt, samp).value()` for the user model,
 // or the corresponding values from a separately-computed test (e.g. Browne).
+FitMeasures fit_measures(double            chi2_user,
+                         int               df_user,
+                         const BaselineFit& baseline,
+                         std::int64_t       n_total,
+                         std::size_t        n_groups) noexcept;
+
 FitMeasures fit_measures(double            chi2_user,
                          int               df_user,
                          const BaselineFit& baseline,

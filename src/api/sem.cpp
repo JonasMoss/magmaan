@@ -952,7 +952,7 @@ Result<FitMeasuresResult> fit_measures(const Fit &fit) {
       return std::unexpected(make_error(ErrorStage::PostFit, extras.error()));
     }
     return FitMeasuresResult{baseline, indices, std::move(*extras),
-                             std::nullopt};
+                             std::nullopt, std::nullopt};
   }
 
   if (const auto *raw = fit.data().raw()) {
@@ -978,20 +978,28 @@ Result<FitMeasuresResult> fit_measures(const Fit &fit) {
       return std::unexpected(make_error(ErrorStage::PostFit, extras.error()));
     }
     return FitMeasuresResult{*baseline, indices, std::nullopt,
-                             std::move(*extras)};
+                             std::move(*extras), std::nullopt};
   }
 
-  if (fit.data().ordinal() || fit.data().mixed_ordinal()) {
-    // The CFI/TLI baseline for a categorical fit is the polychoric
-    // independence model — a separate estimation that needs its own
-    // lavaan-parity gate. Tracked in docs/todo.md §4; until then ordinal fit
-    // measures fail explicitly rather than approximate. `robust_ordinal()`
-    // already exposes the ordinal model χ² / df and the scaled tests.
+  if (const auto *stats = fit.data().ordinal()) {
+    auto fm = estimate::fit_measures_ordinal(
+        fit.model().structure(), fit.model().matrix_rep(), *stats,
+        fit.estimates(), fit.estimator_spec().ordinal_weight,
+        fit.estimator_spec().ordinal_parameterization);
+    if (!fm) {
+      return std::unexpected(make_error(ErrorStage::PostFit, fm.error()));
+    }
+    return FitMeasuresResult{fm->baseline, fm->indices, std::nullopt,
+                             std::nullopt, fm->srmr};
+  }
+
+  if (fit.data().mixed_ordinal()) {
+    // Mixed ordinal fit measures need the mixed polychoric/polyserial
+    // independence baseline; keep that unsupported until the mixed surface has
+    // its own parity gate.
     return std::unexpected(make_error(
         ErrorStage::UnsupportedCombination,
-        "fit_measures() does not yet cover ordinal DWLS/WLS fits — the "
-        "categorical independence-model baseline is a tracked follow-up; "
-        "use robust_ordinal() for the ordinal model chi-square and df"));
+        "fit_measures() does not yet cover mixed ordinal DWLS/WLS fits"));
   }
   return std::unexpected(
       make_error(ErrorStage::UnsupportedCombination,

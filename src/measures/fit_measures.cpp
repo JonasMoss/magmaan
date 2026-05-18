@@ -144,7 +144,8 @@ BaselineFit baseline_chi2(const spec::LatentStructure& pt,
 FitMeasures fit_measures(double             chi2_user,
                          int                df_user,
                          const BaselineFit& baseline,
-                         const SampleStats& samp) noexcept {
+                         std::int64_t        N_total,
+                         std::size_t         n_groups) noexcept {
   FitMeasures out;
   const double T_u  = chi2_user;
   const double T_b  = baseline.chi2;
@@ -172,10 +173,8 @@ FitMeasures fit_measures(double             chi2_user,
   // RMSEA = √(max(0, (T_u − df_u) / (df_u · N))) · √G. The √G multi-group
   // correction is lavaan's convention (Steiger; `lav_fit_rmsea`'s `* sqrt(G)`)
   // — with one group it's the textbook formula.
-  std::int64_t N_total = 0;
-  for (auto n : samp.n_obs) N_total += n;
   const double sqrtG =
-      std::sqrt(static_cast<double>(std::max<std::size_t>(1, samp.S.size())));
+      std::sqrt(static_cast<double>(std::max<std::size_t>(1, n_groups)));
   if (df_u > 0 && N_total > 0) {
     const double num = std::max(0.0, T_u - df_u);
     out.rmsea = std::sqrt(num / (df_u * static_cast<double>(N_total))) * sqrtG;
@@ -211,7 +210,7 @@ FitMeasures fit_measures(double             chi2_user,
   out.rmsea_pvalue = std::numeric_limits<double>::quiet_NaN();
   out.rmsea_notclose_pvalue = std::numeric_limits<double>::quiet_NaN();
   if (df_u > 0.0 && N_total > 0 && std::isfinite(T_u) && T_u >= 0.0) {
-    const double G = static_cast<double>(std::max<std::size_t>(1, samp.S.size()));
+    const double G = static_cast<double>(std::max<std::size_t>(1, n_groups));
     const double ncp_close =
         (static_cast<double>(N_total) * df_u * out.rmsea_close_h0 *
          out.rmsea_close_h0) / G;
@@ -226,6 +225,15 @@ FitMeasures fit_measures(double             chi2_user,
         noncentral_chisq_cdf(T_u, df_u, ncp_notclose);
   }
   return out;
+}
+
+FitMeasures fit_measures(double             chi2_user,
+                         int                df_user,
+                         const BaselineFit& baseline,
+                         const SampleStats& samp) noexcept {
+  std::int64_t N_total = 0;
+  for (auto n : samp.n_obs) N_total += n;
+  return fit_measures(chi2_user, df_user, baseline, N_total, samp.S.size());
 }
 
 post_expected<FitExtras>
