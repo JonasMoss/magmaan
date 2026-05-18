@@ -158,6 +158,49 @@ This avoids a common failure mode: experimental methods code accumulates until
 users cannot tell which parts are polished and which parts are research
 scaffolding.
 
+## Sprawl As Design Reconnaissance
+
+Some of the current breadth is not accidental scope creep. It is design work.
+
+If magmaan only supported clean complete-data ML, expected information,
+standard SEs, and a small set of fit measures, the design could be much tidier.
+It might also be falsely tidy. Robust Satorra-Bentler variants, observed versus
+expected bread, biased versus unbiased Gamma, FIML robust traces, ordinal
+NACOV, DLS weights, h-weighted moments, DPD comparators, and composite
+likelihood prototypes all put different pressure on the same abstractions.
+They reveal which boundaries are real and which only looked good because the
+easy case was too simple.
+
+This suggests a more generous rule:
+
+> Sprawl is acceptable while it is producing architectural information. It
+> becomes a problem when it makes support claims unclear.
+
+The job is not to remove breadth too early. The job is to label what the
+breadth is doing.
+
+Useful labels might be:
+
+- **Architecture probe**: exists to test whether a namespace, result type,
+  matrix contract, or estimator interface generalizes.
+- **Research surface**: an experimental but coherent methods API, useful in
+  its own right.
+- **Diagnostic kernel**: a small callable primitive used to inspect or validate
+  one statistical subproblem.
+- **Compatibility slice**: exists because lavaan exposes or implies a behavior
+  that magmaan wants to match.
+- **Promotion candidate**: experimental today, but intended to become core once
+  the contract and evidence are complete.
+
+This is different from treating everything outside the stable core as generic
+`lab` material. A robust categorical moment builder that is testing future SEM
+estimator boundaries, a diagnostic bivariate ordinal kernel, and a compatibility
+helper for lavaan-shaped partables are not the same kind of thing. They may all
+be non-core, but they serve different design purposes.
+
+The key discipline is to keep exploratory breadth from becoming ambiguous
+public scope. A design probe can be messy internally. A support claim cannot be.
+
 ## Scope Bias
 
 When deciding between breadth and depth, prefer deep completed slices.
