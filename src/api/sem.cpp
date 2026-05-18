@@ -163,7 +163,8 @@ Result<int> fiml_df(const Fit &fit, const data::RawData &raw) {
   if (!stats) {
     return std::unexpected(make_error(ErrorStage::Data, stats.error()));
   }
-  auto df = inference::df_stat(fit.model().structure(), *stats);
+  auto df = inference::df_stat(fit.model().structure(), *stats,
+                               fit.estimates().theta);
   if (!df) {
     return std::unexpected(make_error(ErrorStage::PostFit, df.error()));
   }
@@ -713,7 +714,8 @@ Result<StandardErrors> standard_errors(const Fit &fit, InformationSpec spec) {
     return std::unexpected(make_error(ErrorStage::PostFit, info.error()));
   }
 
-  auto vc = inference::vcov(*info, fit.model().structure());
+  auto vc = inference::vcov(*info, fit.model().structure(),
+                            fit.estimates().theta);
   if (!vc) {
     return std::unexpected(make_error(ErrorStage::PostFit, vc.error()));
   }
@@ -862,7 +864,8 @@ Result<TestResult> test(const Fit &fit, TestSpec spec) {
                      "standard chi-square is not available for this fit"));
     }
 
-    auto df = inference::df_stat(fit.model().structure(), *stats);
+    auto df = inference::df_stat(fit.model().structure(), *stats,
+                               fit.estimates().theta);
     if (!df) {
       return std::unexpected(make_error(ErrorStage::PostFit, df.error()));
     }

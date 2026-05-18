@@ -85,6 +85,9 @@ Rcpp::List describe_modifier(const magmaan::parse::Modifier& m) {
                                     Rcpp::_["value"] = v.value);
         } else if constexpr (std::is_same_v<T, Free>) {
           return Rcpp::List::create(Rcpp::_["kind"] = "free");
+        } else if constexpr (std::is_same_v<T, EqualRef>) {
+          return Rcpp::List::create(Rcpp::_["kind"] = "equal",
+                                    Rcpp::_["target"] = sv2s(v.text));
         } else {  // GroupVec
           Rcpp::List atoms(v.per_group.size());
           for (std::size_t i = 0; i < v.per_group.size(); ++i) {
@@ -100,6 +103,9 @@ Rcpp::List describe_modifier(const magmaan::parse::Modifier& m) {
                   } else if constexpr (std::is_same_v<A, StartValue>) {
                     return Rcpp::List::create(Rcpp::_["kind"] = "start",
                                               Rcpp::_["value"] = a.value);
+                  } else if constexpr (std::is_same_v<A, EqualRef>) {
+                    return Rcpp::List::create(Rcpp::_["kind"] = "equal",
+                                              Rcpp::_["target"] = sv2s(a.text));
                   } else {  // Free
                     return Rcpp::List::create(Rcpp::_["kind"] = "free");
                   }
@@ -171,6 +177,7 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
                                 bool auto_var = true,
                                 bool auto_cov_lv_x = true,
                                 bool auto_cov_y = false,
+                                bool orthogonal = false,
                                 bool auto_fix_first = true,
                                 bool std_lv = false,
                                 bool effect_coding = false,
@@ -188,6 +195,7 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   opts.auto_var       = auto_var;
   opts.auto_cov_lv_x  = auto_cov_lv_x;
   opts.auto_cov_y     = auto_cov_y;
+  opts.orthogonal     = orthogonal;    // fix auto latent covariances at 0 (lavaan orthogonal=)
   opts.auto_fix_first = auto_fix_first;
   opts.std_lv         = std_lv;        // when true, forces auto.fix.first off (lavaan parity)
   opts.effect_coding  = effect_coding; // free all loadings + LV var; adds `Σλ == #indicators`

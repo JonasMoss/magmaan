@@ -11,10 +11,12 @@
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
+#include <Eigen/SVD>
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/matrix_rep.hpp"
@@ -102,19 +104,53 @@ prepare_evaluator(spec::LatentStructure&       pt,
 
 post_expected<Eigen::MatrixXd>
 vcov(const Eigen::MatrixXd&            info,
-     const spec::LatentStructure&  pt) {
-  auto con_or = build_eq_constraints(pt);
+     const spec::LatentStructure&  pt,
+     const Eigen::VectorXd&        theta) {
+  auto con_or = build_eq_constraints(pt, /*allow_nonlinear=*/true);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   const auto& con = *con_or;
-  if (!con.active()) {
-    return invert_spd(info, "information matrix");
+
+  if (pt.nl_constraints.empty()) {
+    // Linear (or no) constraints — the K-reparameterization projection.
+    if (!con.active()) {
+      return invert_spd(info, "information matrix");
+    }
+    const Eigen::MatrixXd K          = con.K();                   // npar × n_alpha
+    const Eigen::MatrixXd info_alpha = K.transpose() * info * K;   // n_alpha²
+    auto vcov_alpha_or = invert_spd(info_alpha,
+                                    "reduced (constrained) information matrix");
+    if (!vcov_alpha_or.has_value()) return std::unexpected(vcov_alpha_or.error());
+    return Eigen::MatrixXd(K * (*vcov_alpha_or) * K.transpose());  // npar × npar
   }
-  const Eigen::MatrixXd K          = con.K();                        // npar × n_alpha
-  const Eigen::MatrixXd info_alpha = K.transpose() * info * K;       // n_alpha × n_alpha
-  auto vcov_alpha_or = invert_spd(info_alpha,
-                                  "reduced (constrained) information matrix");
-  if (!vcov_alpha_or.has_value()) return std::unexpected(vcov_alpha_or.error());
-  return Eigen::MatrixXd(K * (*vcov_alpha_or) * K.transpose());      // npar × npar
+
+  // Nonlinear equality constraints: project onto the null space of the
+  // stacked constraint Jacobian [A_eq ; H(θ̂)] — the exact nonlinear analog
+  // of the linear K-projection above (the constrained estimate is an interior
+  // point of the manifold {θ : h(θ) = 0}).
+  if (theta.size() != info.rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "vcov: a model with nonlinear equality constraints needs θ̂ — pass "
+        "est.theta as the third argument"));
+  }
+  const auto nl = estimate::build_nl_constraints(pt);
+  const Eigen::MatrixXd H    = nl.jacobian(theta);   // m × npar
+  const Eigen::Index    npar = info.rows();
+  Eigen::MatrixXd C(con.A_eq.rows() + H.rows(), npar);
+  if (con.A_eq.rows() > 0) C.topRows(con.A_eq.rows()) = con.A_eq;
+  C.bottomRows(H.rows()) = H;
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(C, Eigen::ComputeFullV);
+  svd.setThreshold(1e-9);
+  const Eigen::Index nz = npar - svd.rank();
+  if (nz <= 0) {
+    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+        "vcov: the equality constraints leave no free dimensions"));
+  }
+  const Eigen::MatrixXd Z      = svd.matrixV().rightCols(nz);   // npar × nz
+  const Eigen::MatrixXd info_z = Z.transpose() * info * Z;
+  auto vcov_z_or = invert_spd(info_z,
+                              "reduced (constrained) information matrix");
+  if (!vcov_z_or.has_value()) return std::unexpected(vcov_z_or.error());
+  return Eigen::MatrixXd(Z * (*vcov_z_or) * Z.transpose());      // npar × npar
 }
 
 Eigen::VectorXd se(const Eigen::MatrixXd& vcov) noexcept {
@@ -138,7 +174,8 @@ Eigen::VectorXd se(const Eigen::MatrixXd& vcov) noexcept {
 
 post_expected<int>
 df_stat(const spec::LatentStructure& pt,
-        const SampleStats&               samp) {
+        const SampleStats&               samp,
+        const Eigen::VectorXd&           theta) {
   int df_moments = 0;
   for (std::size_t b = 0; b < samp.S.size(); ++b) {
     const int p = static_cast<int>(samp.S[b].rows());
@@ -160,11 +197,27 @@ df_stat(const spec::LatentStructure& pt,
   // n_free already reflects the merged free-parameter count (max(pt.free[]));
   // the constraint.rank is added on top — it accounts for general-linear
   // equalities that further reduce dimensionality beyond the eq-group merge.
-  auto con_or = build_eq_constraints(pt);
+  auto con_or = build_eq_constraints(pt, /*allow_nonlinear=*/true);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
+
+  // Each independent nonlinear `==` constraint adds one degree of freedom —
+  // the rank of the constraint Jacobian H = ∂h/∂θ at θ̂.
+  int nl_rank = 0;
+  if (!pt.nl_constraints.empty()) {
+    if (theta.size() != static_cast<Eigen::Index>(pt.n_free())) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "df_stat: a model with nonlinear equality constraints needs θ̂ — "
+          "pass est.theta"));
+    }
+    const auto nl = estimate::build_nl_constraints(pt);
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(nl.jacobian(theta));
+    svd.setThreshold(1e-9);
+    nl_rank = static_cast<int>(svd.rank());
+  }
   return df_moments - fixed_x_moments
        - static_cast<int>(pt.n_free())
-       + static_cast<int>(con_or->rank);
+       + static_cast<int>(con_or->rank)
+       + nl_rank;
 }
 
 // ============================================================================

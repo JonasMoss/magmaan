@@ -2,18 +2,17 @@
 
 #include <cmath>
 #include <cstddef>
-#include <cstdint>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include <Eigen/Core>
 
 #include "magmaan/error.hpp"
+#include "magmaan/estimate/expr_eval.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/parse/flat_partable.hpp"
 
@@ -21,176 +20,23 @@ namespace magmaan::measures::effects {
 
 using estimate::Estimates;
 
+// The forward-mode AD expression evaluator is shared with the nonlinear
+// equality-constraint path — see `magmaan/estimate/expr_eval.hpp`. A `:=` row
+// already evaluated is itself an `ADValue`, so a later `:=` that refers to it
+// reuses the stored value/gradient (chained references) and the delta-method
+// SE of the composite falls out of the accumulated gradient.
+using estimate::ADValue;
+using estimate::collect_params;
+using estimate::DefinedMap;
+using estimate::eval_expr;
+using estimate::FixedMap;
+using estimate::LabelMap;
+using estimate::Scope;
+
 namespace {
 
 PostError make_err(PostError::Kind k, std::string detail) {
   return PostError{k, std::move(detail)};
-}
-
-// Forward-mode AD: each subexpression carries a scalar value and a gradient
-// vector (size n_free) in θ-space. A `:=` row that has already been evaluated
-// is itself an ADValue — so a later `:=` referring to it just reuses the
-// stored value/gradient (chained references), and the delta-method SE of the
-// composite falls out of the accumulated gradient.
-struct ADValue {
-  double          v = 0.0;
-  Eigen::VectorXd dv;  // size n_free
-};
-
-using LabelMap   = std::unordered_map<std::string_view, std::int32_t>;
-using FixedMap   = std::unordered_map<std::string_view, double>;
-using DefinedMap = std::unordered_map<std::string_view, ADValue>;
-
-// Resolution context for one `eval()` pass. References, not copies — the
-// underlying maps outlive the call. `defined` holds every `:=` row that has
-// already been evaluated in dependency order (so all of the current row's
-// `:=` references are present).
-struct Scope {
-  std::size_t            n_free = 0;
-  const Eigen::VectorXd& theta;
-  const LabelMap&        label_to_free;   // user labels + `.pN.` plabels of free rows  → 1-based free idx
-  const FixedMap&        label_to_fixed;  // user labels + `.pN.` plabels of fixed rows → fixed value
-  const DefinedMap&      defined;         // earlier `:=` names → their AD value (θ-space)
-};
-
-post_expected<ADValue> eval(const parse::Expr& e, const Scope& sc);
-
-ADValue zero_ad(std::size_t n_free) {
-  return ADValue{0.0, Eigen::VectorXd::Zero(static_cast<Eigen::Index>(n_free))};
-}
-
-post_expected<ADValue> eval_num(const parse::Num& n, const Scope& sc) {
-  ADValue out = zero_ad(sc.n_free);
-  out.v = n.value;
-  return out;
-}
-
-post_expected<ADValue> eval_param(const parse::Param& p, const Scope& sc) {
-  // A `:=` name shadows a same-named row label inside another `:=` (lavaan
-  // does the same — it strips def names out of the label-resolution list).
-  if (auto it = sc.defined.find(p.text); it != sc.defined.end()) {
-    return it->second;
-  }
-  if (auto it = sc.label_to_free.find(p.text); it != sc.label_to_free.end()) {
-    const auto k = it->second;  // 1-based free index
-    if (k < 1 || static_cast<std::size_t>(k) > sc.n_free) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          std::string("`:=` references '") + std::string(p.text) +
-              "' with free index " + std::to_string(k) + " out of range"));
-    }
-    ADValue out = zero_ad(sc.n_free);
-    out.v = sc.theta(k - 1);
-    out.dv(k - 1) = 1.0;
-    return out;
-  }
-  if (auto it = sc.label_to_fixed.find(p.text); it != sc.label_to_fixed.end()) {
-    ADValue out = zero_ad(sc.n_free);
-    out.v = it->second;  // ∂(fixed)/∂θ = 0
-    return out;
-  }
-  return std::unexpected(make_err(PostError::Kind::NumericIssue,
-      std::string("`:=` references unknown identifier '") + std::string(p.text) +
-          "'; not a labeled row, a `.pN.` plabel, or another `:=` row"));
-}
-
-post_expected<ADValue> eval_bin(const parse::BinNode& b, const Scope& sc) {
-  auto lhs_or = eval(*b.lhs, sc);
-  if (!lhs_or.has_value()) return std::unexpected(lhs_or.error());
-  auto rhs_or = eval(*b.rhs, sc);
-  if (!rhs_or.has_value()) return std::unexpected(rhs_or.error());
-  const ADValue& a = *lhs_or;
-  const ADValue& c = *rhs_or;
-  ADValue out;
-  out.dv.resize(static_cast<Eigen::Index>(sc.n_free));
-  switch (b.op) {
-    case parse::BinOp::Add:
-      out.v  = a.v + c.v;
-      out.dv = a.dv + c.dv;
-      break;
-    case parse::BinOp::Sub:
-      out.v  = a.v - c.v;
-      out.dv = a.dv - c.dv;
-      break;
-    case parse::BinOp::Mul:
-      out.v  = a.v * c.v;
-      out.dv = c.v * a.dv + a.v * c.dv;
-      break;
-    case parse::BinOp::Div:
-      if (c.v == 0.0) {
-        return std::unexpected(make_err(PostError::Kind::NumericIssue,
-            "`:=` division by zero"));
-      }
-      out.v  = a.v / c.v;
-      out.dv = (a.dv * c.v - a.v * c.dv) / (c.v * c.v);  // (a/c)' = (a'c − ac')/c²
-      break;
-    case parse::BinOp::Pow:
-      // (a^c)' = a^c · (c'·log|a| + c·a'/a). With c constant w.r.t. θ the
-      // log|a| term drops out (c.dv == 0); with variable c and a ≤ 0 the
-      // log is undefined.
-      if (c.dv.cwiseAbs().maxCoeff() != 0.0 && a.v <= 0.0) {
-        return std::unexpected(make_err(PostError::Kind::NumericIssue,
-            "`:=` a^b with non-constant exponent requires a > 0"));
-      }
-      out.v = std::pow(a.v, c.v);
-      if (a.v == 0.0 && c.v < 1.0) {
-        return std::unexpected(make_err(PostError::Kind::NumericIssue,
-            "`:=` 0^b with b < 1 has unbounded gradient"));
-      }
-      out.dv = c.v * std::pow(a.v, c.v - 1.0) * a.dv;
-      if (c.dv.cwiseAbs().maxCoeff() != 0.0) {
-        out.dv += out.v * std::log(a.v) * c.dv;
-      }
-      break;
-  }
-  return out;
-}
-
-post_expected<ADValue> eval_un(const parse::UnNode& u, const Scope& sc) {
-  auto arg_or = eval(*u.arg, sc);
-  if (!arg_or.has_value()) return std::unexpected(arg_or.error());
-  ADValue out;
-  if (u.op == parse::UnOp::Neg) {
-    out.v  = -arg_or->v;
-    out.dv = -arg_or->dv;
-  } else {  // Pos
-    out = *arg_or;
-  }
-  return out;
-}
-
-post_expected<ADValue> eval(const parse::Expr& e, const Scope& sc) {
-  return std::visit(
-      [&](auto&& v) -> post_expected<ADValue> {
-        using T = std::decay_t<decltype(v)>;
-        if constexpr (std::is_same_v<T, parse::Num>) {
-          return eval_num(v, sc);
-        } else if constexpr (std::is_same_v<T, parse::Param>) {
-          return eval_param(v, sc);
-        } else if constexpr (std::is_same_v<T, parse::BinNode>) {
-          return eval_bin(v, sc);
-        } else if constexpr (std::is_same_v<T, parse::UnNode>) {
-          return eval_un(v, sc);
-        }
-      },
-      static_cast<const parse::Expr::variant&>(e));
-}
-
-// Collect every `Param` identifier appearing in an expression (with
-// repeats — the caller dedups).
-void collect_params(const parse::Expr& e, std::vector<std::string_view>& out) {
-  std::visit(
-      [&](auto&& v) {
-        using T = std::decay_t<decltype(v)>;
-        if constexpr (std::is_same_v<T, parse::Param>) {
-          out.push_back(v.text);
-        } else if constexpr (std::is_same_v<T, parse::BinNode>) {
-          collect_params(*v.lhs, out);
-          collect_params(*v.rhs, out);
-        } else if constexpr (std::is_same_v<T, parse::UnNode>) {
-          collect_params(*v.arg, out);
-        }
-      },
-      static_cast<const parse::Expr::variant&>(e));
 }
 
 }  // namespace
@@ -289,7 +135,7 @@ compute_defined(const parse::FlatPartable& flat,
   defined.reserve(n);
   for (std::size_t i : order) {
     Scope sc{n_free, est.theta, label_to_free, label_to_fixed, defined};
-    auto ad_or = eval(defs[i]->rhs, sc);
+    auto ad_or = eval_expr(defs[i]->rhs, sc);
     if (!ad_or.has_value()) return std::unexpected(ad_or.error());
     defined.insert_or_assign(defs[i]->name, *ad_or);
     result[i] = std::move(*ad_or);

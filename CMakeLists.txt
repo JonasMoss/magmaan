@@ -96,6 +96,9 @@ add_library(magmaan STATIC
   src/estimate/cfa_utils.cpp
   src/estimate/resolve_fixed_x.cpp
   src/estimate/constraints.cpp
+  src/estimate/expr_eval.cpp
+  src/estimate/nl_constraints.cpp
+  src/estimate/auglag.cpp
   src/estimate/gmm/moment_quadratic.cpp
   src/estimate/gmm/gp.cpp
   src/estimate/gmm/dls_weight.cpp

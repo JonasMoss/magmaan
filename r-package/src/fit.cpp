@@ -1416,7 +1416,10 @@ Rcpp::NumericMatrix infer_information_observed_analytic(Rcpp::List fit) {
 Rcpp::NumericMatrix infer_vcov(Rcpp::NumericMatrix info, Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
   const Eigen::MatrixXd info_m = Rcpp::as<Eigen::MatrixXd>(info);
-  auto r = magmaan::inference::vcov(info_m, ctx.pt);
+  // θ̂ comes along so the constraint Jacobian H(θ̂) can be evaluated when the
+  // model carries nonlinear equality constraints; ignored otherwise.
+  const Eigen::VectorXd theta = Rcpp::as<Eigen::VectorXd>(fit["theta"]);
+  auto r = magmaan::inference::vcov(info_m, ctx.pt, theta);
   if (!r.has_value()) stop_post(r.error());
   return Rcpp::wrap(*r);
 }

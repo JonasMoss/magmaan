@@ -15,6 +15,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/data/sample_stats.hpp"
@@ -26,6 +27,8 @@
 #include "../inference_bundle.hpp"
 
 using magmaan::estimate::build_eq_constraints;
+using magmaan::estimate::build_nl_constraints;
+using magmaan::estimate::NonlinearEqConstraints;
 using magmaan::data::SampleStats;
 using magmaan::test::expected_inference;
 using magmaan::model::build_matrix_rep;
@@ -270,12 +273,167 @@ TEST_CASE("build_eq_constraints: an infeasible linear system errors out") {
   CHECK(con_or.error().detail.find("infeasible") != std::string::npos);
 }
 
-TEST_CASE("build_eq_constraints: a genuinely nonlinear `==` is still rejected") {
+TEST_CASE("build_eq_constraints: a nonlinear `==` is classified, not yet enforced") {
   auto pt = must_lavaanify("f =~ x1 + a*x2 + b*x3\na == b*b");
-  CHECK(pt.has_unenforced_constraints);             // b*b ⇒ not affine ⇒ stays flagged
+  CHECK_FALSE(pt.has_unenforced_constraints);        // well-formed: `a`, `b` known
+  CHECK(pt.nonlinear_eq_rows.size() == 1);           // `b*b` ⇒ nonlinear equality
+  auto con_or = build_eq_constraints(pt);
+  REQUIRE_FALSE(con_or.has_value());                 // not yet enforced by fit()
+  CHECK(con_or.error().kind == magmaan::PostError::Kind::NumericIssue);
+  CHECK(con_or.error().detail.find("nonlinear") != std::string::npos);
+}
+
+TEST_CASE("build_eq_constraints: an inequality constraint gets a specific error") {
+  auto pt = must_lavaanify("f =~ x1 + a*x2 + b*x3\na > b");
+  CHECK(pt.has_inequality_constraints);
+  CHECK_FALSE(pt.has_unenforced_constraints);
+  CHECK(pt.nonlinear_eq_rows.empty());
   auto con_or = build_eq_constraints(pt);
   REQUIRE_FALSE(con_or.has_value());
-  CHECK(con_or.error().kind == magmaan::PostError::Kind::NumericIssue);
+  CHECK(con_or.error().detail.find("inequality") != std::string::npos);
+}
+
+TEST_CASE("build_eq_constraints: an `==` to an unknown parameter is malformed") {
+  auto pt = must_lavaanify("f =~ x1 + a*x2 + x3\na == nope");
+  CHECK(pt.has_unenforced_constraints);
+  CHECK(pt.nonlinear_eq_rows.empty());
+  auto con_or = build_eq_constraints(pt);
+  REQUIRE_FALSE(con_or.has_value());
+  CHECK(con_or.error().detail.find("malformed") != std::string::npos);
+}
+
+// === nonlinear equality constraints ========================================
+
+TEST_CASE("NonlinearEqConstraints: h and jacobian of a hand-built tree") {
+  using magmaan::spec::NlConstraint;
+  using magmaan::spec::NlExprNode;
+  // h = θ0 − θ1^2  (the constraint θ0 == θ1^2).
+  NlExprNode n0; n0.kind = NlExprNode::Kind::Param;  n0.free_idx = 0;   // θ0
+  NlExprNode n1; n1.kind = NlExprNode::Kind::Param;  n1.free_idx = 1;   // θ1
+  NlExprNode n2; n2.kind = NlExprNode::Kind::Const;  n2.constant = 2.0; // 2
+  NlExprNode n3; n3.kind = NlExprNode::Kind::Binary;
+  n3.bin_op = magmaan::parse::BinOp::Pow; n3.lhs = 1; n3.rhs = 2;       // θ1^2
+  NlExprNode n4; n4.kind = NlExprNode::Kind::Binary;
+  n4.bin_op = magmaan::parse::BinOp::Sub; n4.lhs = 0; n4.rhs = 3;       // θ0 − θ1^2
+  NlConstraint c;
+  c.nodes = {n0, n1, n2, n3, n4};
+  c.root  = 4;
+
+  NonlinearEqConstraints nl;
+  nl.rows = {c};
+  nl.npar = 2;
+  REQUIRE(nl.active());
+  CHECK(nl.m() == 1);
+
+  Eigen::VectorXd theta(2);
+  theta << 2.0, 3.0;
+  const Eigen::VectorXd hv = nl.h(theta);
+  REQUIRE(hv.size() == 1);
+  CHECK(hv(0) == doctest::Approx(2.0 - 9.0));   // 2 − 3²
+
+  const Eigen::MatrixXd J = nl.jacobian(theta);
+  REQUIRE(J.rows() == 1);
+  REQUIRE(J.cols() == 2);
+  CHECK(J(0, 0) == doctest::Approx(1.0));        // ∂h/∂θ0
+  CHECK(J(0, 1) == doctest::Approx(-6.0));       // ∂h/∂θ1 = −2·3
+}
+
+TEST_CASE("resolve_lin_constraints: compiles a nonlinear `==` into nl_constraints") {
+  auto pt = must_lavaanify("f =~ x1 + a*x2 + b*x3\na == b*b");
+  REQUIRE(pt.nonlinear_eq_rows.size() == 1);
+  REQUIRE(pt.nl_constraints.size() == 1);
+  CHECK(pt.nl_constraints[0].root >= 0);
+  CHECK_FALSE(pt.nl_constraints[0].nodes.empty());
+
+  auto nl = build_nl_constraints(pt);
+  CHECK(nl.m() == 1);
+  CHECK(nl.npar == pt.n_free());
+
+  // At θ ≡ 2, h = a − b·b = 2 − 4 = −2, whatever free indices `a` and `b`
+  // landed on. The Jacobian row touches exactly those two parameters:
+  // ∂h/∂a = 1, ∂h/∂b = −2b = −4, every other column 0.
+  Eigen::VectorXd theta = Eigen::VectorXd::Constant(pt.n_free(), 2.0);
+  CHECK(nl.h(theta)(0) == doctest::Approx(-2.0));
+  const Eigen::MatrixXd J = nl.jacobian(theta);
+  int nonzero = 0;
+  for (Eigen::Index k = 0; k < J.cols(); ++k)
+    if (J(0, k) != 0.0) ++nonzero;
+  CHECK(nonzero == 2);
+  CHECK(J.row(0).sum() == doctest::Approx(1.0 - 4.0));
+}
+
+TEST_CASE("fit: a nonlinear equality constraint (a == b^2) is enforced and matches lavaan") {
+  // visual =~ x1 + a*x2 + b*x3 with the nonlinear constraint a == b^2, fit by
+  // ML to the HolzingerSwineford1939 x1-x3 N-divisor covariance (n = 301).
+  // Reference values from lavaan 0.6-22 `cfa()` with `a == b^2` in syntax.
+  Eigen::MatrixXd S(3, 3);
+  S << 1.3583698455127435, 0.40737133015270244, 0.57989932234369646,
+       0.40737133015270244, 1.3817838655202481,  0.45106393693226349,
+       0.57989932234369646, 0.45106393693226349, 1.2748648607631261;
+  SampleStats samp;
+  samp.S.push_back(S);
+  samp.n_obs.push_back(301);
+
+  auto pt = must_lavaanify("visual =~ x1 + a*x2 + b*x3\na == b^2");
+  REQUIRE(pt.nl_constraints.size() == 1);
+  auto rep = build_matrix_rep(pt).value();
+  auto est_or = magmaan::test::fit(pt, rep, samp);
+  REQUIRE_MESSAGE(est_or.has_value(), "constrained fit failed: "
+      << (est_or.has_value() ? std::string{} : est_or.error().detail));
+  const auto& est = *est_or;
+  REQUIRE(est.theta.size() == 6);
+
+  // lavaan reference, magmaan free order [a, b, x1~~x1, x2~~x2, x3~~x3, psi].
+  Eigen::VectorXd ref(6);
+  ref << 0.76844012067838263, 0.87660715038973203, 0.75267986994138880,
+         1.04132952146332847, 0.74953748710182533, 0.62738942422421695;
+  for (Eigen::Index k = 0; k < 6; ++k)
+    CHECK(est.theta(k) == doctest::Approx(ref(k)).epsilon(1e-4));
+
+  // The augmented Lagrangian drove the constraint h(θ̂) = a − b² to zero.
+  auto nl = build_nl_constraints(pt);
+  CHECK(std::abs(nl.h(est.theta)(0)) < 1e-5);
+}
+
+TEST_CASE("inference: vcov / df for a nonlinear-equality model match lavaan") {
+  // Same a == b^2 model and HS x1-x3 covariance as the fit test above.
+  Eigen::MatrixXd S(3, 3);
+  S << 1.3583698455127435, 0.40737133015270244, 0.57989932234369646,
+       0.40737133015270244, 1.3817838655202481,  0.45106393693226349,
+       0.57989932234369646, 0.45106393693226349, 1.2748648607631261;
+  SampleStats samp;
+  samp.S.push_back(S);
+  samp.n_obs.push_back(301);
+
+  auto pt  = must_lavaanify("visual =~ x1 + a*x2 + b*x3\na == b^2");
+  auto rep = build_matrix_rep(pt).value();
+  auto est = magmaan::test::fit(pt, rep, samp).value();
+
+  auto info_or = magmaan::inference::information_expected(pt, rep, samp, est);
+  REQUIRE(info_or.has_value());
+
+  // vcov via the null-space projection of the constraint Jacobian H(θ̂).
+  auto vcov_or = magmaan::inference::vcov(*info_or, pt, est.theta);
+  REQUIRE_MESSAGE(vcov_or.has_value(), "constrained vcov failed: "
+      << (vcov_or.has_value() ? std::string{} : vcov_or.error().detail));
+  const Eigen::VectorXd se = magmaan::inference::se(*vcov_or);
+  REQUIRE(se.size() == 6);
+
+  // lavaan reference SEs, free order [a, b, x1~~x1, x2~~x2, x3~~x3, psi].
+  Eigen::VectorXd ref_se(6);
+  ref_se << 0.141589294898072537, 0.080759833430825323, 0.112218326796740542,
+            0.106358953281192381, 0.082513979989703973, 0.124620815146450709;
+  for (Eigen::Index k = 0; k < 6; ++k)
+    CHECK(se(k) == doctest::Approx(ref_se(k)).epsilon(1e-3));
+
+  // The nonlinear `==` adds one degree of freedom (rank of H(θ̂) = 1).
+  auto df_or = magmaan::inference::df_stat(pt, samp, est.theta);
+  REQUIRE(df_or.has_value());
+  CHECK(*df_or == 1);
+
+  // The two-argument forms (no θ̂) must reject a nonlinear-constraint model.
+  CHECK_FALSE(magmaan::inference::vcov(*info_or, pt).has_value());
+  CHECK_FALSE(magmaan::inference::df_stat(pt, samp).has_value());
 }
 
 // === effect coding =========================================================

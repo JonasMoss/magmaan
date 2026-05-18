@@ -66,18 +66,26 @@ std::int32_t compact_groups(const std::vector<std::int32_t>& eq_groups,
 }  // namespace
 
 post_expected<EqConstraints>
-build_eq_constraints(const spec::LatentStructure& pt) {
-  // `<` / `>` rows and genuinely-nonlinear `==` expressions are flagged by
-  // lavaanify (`compute_eq_groups` + `resolve_lin_constraints`); those can't be
-  // reparameterized away.
+build_eq_constraints(const spec::LatentStructure& pt, bool allow_nonlinear) {
+  // Constraint kinds that cannot be reduced to the linear affine
+  // reparameterization, classified by lavaanify (`compute_eq_groups` +
+  // `resolve_lin_constraints`). Each gets a specific error so the caller
+  // knows exactly which kind is unsupported.
+  if (pt.has_inequality_constraints) {
+    return std::unexpected(err(
+        "inequality constraints (`<` / `>`) are not supported: "
+        "inequality-constrained estimation needs boundary (chi-bar-squared) "
+        "asymptotics that magmaan does not implement"));
+  }
+  if (!allow_nonlinear && !pt.nonlinear_eq_rows.empty()) {
+    return std::unexpected(err(
+        "nonlinear equality constraints (e.g. `a == b*c`) are not supported "
+        "by this estimator"));
+  }
   if (pt.has_unenforced_constraints) {
-    bool has_ineq = false;
-    for (parse::Op op : pt.op)
-      if (op == parse::Op::LtConstraint || op == parse::Op::GtConstraint) has_ineq = true;
-    return std::unexpected(err(has_ineq
-        ? "inequality constraints (`<` / `>`) are not yet enforced by fit()"
-        : "this constraint kind (a nonlinear `==` expression) is not yet "
-          "enforced by fit(); only linear equality is supported"));
+    return std::unexpected(err(
+        "malformed `==` constraint: a side failed to parse or references an "
+        "unknown parameter"));
   }
 
   const std::int32_t npar = pt.n_free();

@@ -54,10 +54,11 @@ modifier_sep        ::= '*' | '?'                          /* '?' forces start-v
 
 (* === Modifiers ============================================================= *)
 
-modifier            ::= modifier_atom | group_vec | start_call
+modifier            ::= modifier_atom | group_vec | start_call | equal_call
 modifier_atom       ::= num_lit | NA | identifier | string_lit
 group_vec           ::= 'c' '(' modifier_atom (',' modifier_atom)* ')'
 start_call          ::= 'start' '(' num_lit ')'
+equal_call          ::= 'equal' '(' ( string_lit | identifier ) ')'
 
 
 (* === Constraints =========================================================== *)

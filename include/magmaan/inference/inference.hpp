@@ -79,14 +79,19 @@ information_observed_analytic(spec::LatentStructure       pt,
 
 // Parameter covariance matrix:
 //   * no constraints: vcov = info⁻¹
-//   * with constraints (shared labels / cross-group invariance / general
-//     linear equality): vcov = K · (Kᵀ I K)⁻¹ · Kᵀ, where K is the
-//     reparameterization basis from `build_eq_constraints(pt)`.
+//   * linear equality (shared labels / cross-group invariance / general
+//     linear `==`): vcov = K · (Kᵀ I K)⁻¹ · Kᵀ, K the reparameterization
+//     basis from `build_eq_constraints(pt)`.
+//   * nonlinear equality (`a == b*c`): vcov = Z · (Zᵀ I Z)⁻¹ · Zᵀ, Z an
+//     orthonormal basis of the null space of the constraint Jacobian
+//     H = ∂h/∂θ at θ̂. This needs θ̂ — pass `est.theta` as `theta`; a model
+//     with nonlinear constraints errors when `theta` is omitted.
 // Returns `PostError::InfoMatrixSingular` if the (reduced) information matrix
 // isn't invertible.
 post_expected<Eigen::MatrixXd>
 vcov(const Eigen::MatrixXd&            info,
-     const spec::LatentStructure&  pt);
+     const spec::LatentStructure&  pt,
+     const Eigen::VectorXd&        theta = {});
 
 // Standard errors: √diag(vcov), NaN on a negative diagonal entry. Never fails.
 Eigen::VectorXd se(const Eigen::MatrixXd& vcov) noexcept;
@@ -106,15 +111,18 @@ inline double chi2_stat(const SampleStats& samp,
 }
 
 // Degrees of freedom: Σ_b p_b(p_b+1)/2 (+ Σ_b p_b if the model has mean
-// structure) − fixed_x_moments − n_free + constraint.rank. Pure function of
-// `(pt, samp)` (the n_free count and constraint rank both come from pt;
-// dimensions from samp).
+// structure) − fixed_x_moments − n_free + constraint.rank + nonlinear-`==`
+// rank. The linear part is a pure function of `(pt, samp)`; each independent
+// nonlinear `==` constraint adds rank(H(θ̂)) — pass `est.theta` as `theta`
+// when the model carries nonlinear equality constraints (it errors when
+// omitted).
 //
 // Returns `PostError::NumericIssue` if `pt` carries unenforced or infeasible
 // constraints (propagated from `build_eq_constraints`).
 post_expected<int>
 df_stat(const spec::LatentStructure& pt,
-        const SampleStats&               samp);
+        const SampleStats&               samp,
+        const Eigen::VectorXd&           theta = {});
 
 // =============================================================================
 // Other tests / utilities — unchanged in spirit, just no longer dependent on

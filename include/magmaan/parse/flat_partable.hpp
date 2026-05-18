@@ -14,24 +14,32 @@ namespace magmaan::parse {
 // === Modifier variants ======================================================
 // Mirrors `modifier` and `modifier_atom` in docs/grammar/grammar.ebnf.
 //
-//   ModifierAtom  : a single value (number, label, start value, or NA-as-free).
-//                   Carried inside a GroupVec, one per group.
+//   ModifierAtom  : a single value (number, label, start value, NA-as-free,
+//                   or an equal(...) reference). Carried inside a GroupVec,
+//                   one per group.
 //   Modifier      : an atom OR a group vector (per-group atoms via c(...)).
 //
 // StartValue is produced by both the `?` shorthand (`0.5?x`) and the
 // start(...) function call (`start(0.5)*x`). The two surfaces collapse to
 // the same semantic.
+//
+// EqualRef is produced by the equal(...) function call (`equal("f=~x2")*x3`):
+// it ties this parameter to the one named by `text` (a canonical `lhs op rhs`
+// string, or a bare label). lavaanify resolves the reference into a shared
+// equality.
 
 struct FixedValue { double value = 0.0; };
 struct Label      { std::string_view text; };  // text excludes any surrounding quotes
 struct StartValue { double value = 0.0; };
 struct Free       { };  // explicit NA modifier (free with no value)
+struct EqualRef   { std::string_view text; };  // equal("lhs op rhs") target name
 
-using ModifierAtom = std::variant<FixedValue, Label, StartValue, Free>;
+using ModifierAtom = std::variant<FixedValue, Label, StartValue, Free, EqualRef>;
 
 struct GroupVec { std::vector<ModifierAtom> per_group; };
 
-using Modifier = std::variant<FixedValue, Label, StartValue, Free, GroupVec>;
+using Modifier =
+    std::variant<FixedValue, Label, StartValue, Free, EqualRef, GroupVec>;
 
 // === Flat row ===============================================================
 // One row per parsed RHS term. Multi-term formulas (e.g. `f =~ x1 + x2`)

@@ -172,6 +172,37 @@ TEST_CASE("lavaanify: shared label produces auto-equality constraint row with us
   CHECK(pt.label[2] == "a");
 }
 
+TEST_CASE("lavaanify: equal() modifier ties a loading to a named parameter") {
+  // equal("f=~x2")*x3 ties the x3 loading to the x2 loading. magmaan
+  // expresses the tie as a shared label — the same fitted model as the
+  // shared-label form `f =~ x1 + a*x2 + a*x3`.
+  auto pt = must_lavaanify("f =~ x1 + x2 + equal(\"f=~x2\")*x3");
+  REQUIRE(pt.size() == 8);
+
+  // The x2 and x3 loadings both carry the resolved label, distinct free idx.
+  CHECK(pt.label[1] == "f=~x2");
+  CHECK(pt.label[2] == "f=~x2");
+  CHECK(pt.free[1] != pt.free[2]);
+  CHECK(pt.free[1] > 0);
+  CHECK(pt.free[2] > 0);
+
+  // ... and a synthesized auto-equality row ties their plabels.
+  const std::size_t last = pt.size() - 1;
+  CHECK(pt.op[last]  == Op::EqConstraint);
+  CHECK(pt.lhs[last] == ".p2.");
+  CHECK(pt.rhs[last] == ".p3.");
+}
+
+TEST_CASE("lavaanify: equal() referencing an unknown parameter is rejected") {
+  auto fp = Parser::parse("f =~ x1 + x2 + equal(\"f=~nope\")*x3");
+  REQUIRE(fp.has_value());
+  Starts starts;
+  LatentNames names;
+  auto pt = build(*fp, BuildOptions{}, &starts, &names);
+  REQUIRE_FALSE(pt.has_value());
+  CHECK(pt.error().kind == PartableError::Kind::UnknownLabelInConstraint);
+}
+
 TEST_CASE("lavaanify: regression triggers fixed.x mirror") {
   // y ~ x1 + x2 + x3
   //   → 3 regression rows (free)
@@ -485,6 +516,35 @@ TEST_CASE("lavaanify: 3-factor CFA produces auto-covariances among latents") {
     if (pt.lhs[i] == "textual" && pt.rhs[i] == "speed")   ++lv_cov_count;
   }
   CHECK(lv_cov_count == 3);
+}
+
+TEST_CASE("lavaanify: orthogonal fixes the auto latent covariances at 0") {
+  // lavaan cfa(..., orthogonal = TRUE): the latent-covariance rows are still
+  // emitted but pinned (free = 0, ustart = 0).
+  BuildOptions opts;
+  opts.orthogonal = true;
+  auto pt = must_lavaanify("visual =~ x1 + x2 + x3\n"
+                           "textual =~ x4 + x5 + x6\n"
+                           "speed =~ x7 + x8 + x9", opts);
+  int lv_cov_count = 0;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != Op::Covariance) continue;
+    const bool is_lv_cov =
+        (pt.lhs[i] == "visual"  && pt.rhs[i] == "textual") ||
+        (pt.lhs[i] == "visual"  && pt.rhs[i] == "speed")   ||
+        (pt.lhs[i] == "textual" && pt.rhs[i] == "speed");
+    if (!is_lv_cov) continue;
+    ++lv_cov_count;
+    CHECK(pt.free[i] == 0);       // pinned, not estimated
+    CHECK(pt.ustart[i] == 0.0);   // fixed at 0
+  }
+  CHECK(lv_cov_count == 3);       // rows still present, mirroring lavaan
+  // 6 free loadings + 9 residual var + 3 latent var = 18 free parameters
+  // (the 3 latent covariances are no longer free).
+  int n_free = 0;
+  for (std::size_t i = 0; i < pt.size(); ++i)
+    if (pt.free[i] > n_free) n_free = pt.free[i];
+  CHECK(n_free == 18);
 }
 
 TEST_CASE("lavaanify: a user-written exogenous-latent covariance is not auto-duplicated") {

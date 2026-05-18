@@ -73,12 +73,17 @@ struct EqConstraints {
 // `lin_constraint_d` rows (both precomputed by `lavaanify` /
 // `compute_eq_groups` + `resolve_lin_constraints`).
 //
-// Returns `PostError::Kind::NumericIssue` on:
-//   - `pt.has_unenforced_constraints` set — i.e. an `<` / `>` row, or a
-//     genuinely *nonlinear* `==` expression (`a == b*c`, `a == exp(b)`),
-//     neither of which can be reparameterized away;
+// Returns `PostError::Kind::NumericIssue` (with a kind-specific message) on any
+// constraint it cannot reduce to the affine reparameterization:
+//   - `pt.has_inequality_constraints` — a `<` / `>` row;
+//   - `pt.has_unenforced_constraints` — a malformed `==` row;
+//   - a non-empty `pt.nonlinear_eq_rows` — a nonlinear `==` expression
+//     (`a == b*c`) — *unless* `allow_nonlinear` is set, in which case the
+//     nonlinear rows are simply skipped here (the caller enforces them via the
+//     augmented-Lagrangian path; see `nl_constraints.hpp`);
 //   - an infeasible linear-equality system (`R_full · θ = d` has no solution).
 post_expected<EqConstraints>
-build_eq_constraints(const spec::LatentStructure& pt);
+build_eq_constraints(const spec::LatentStructure& pt,
+                     bool allow_nonlinear = false);
 
 }  // namespace magmaan::estimate
