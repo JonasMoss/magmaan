@@ -31,5 +31,10 @@ Status meanings:
 | `measures::fit_measures` / `estimate::fit_measures_ordinal` | `measures_fit` / API ordinal fit measures | good | Keep; add an R primitive only when ordinal R scripts need direct low-level access. | Continuous/FIML R fit measures remain through `measures_fit`; all-ordinal C++ API now covers categorical CFI/TLI/RMSEA/SRMR. |
 | `measures::standardize::*` | `measures_standardize_lv`, `measures_standardize_all` | good | Added in scaffold pass. | Returns standardized estimates and delta-method SEs. |
 | `measures::effects::compute_defined` | `measures_compute_defined` / `compute_defined_impl` / `compute_defined` | good | Prefer canonical direct primitive; keep helper and old spelling. | Friendly helper is plain R composition. |
+
+Presentation rule: `attr(magmaan_core, "groups")` lists only the canonical
+surface plus plain R helpers. Historical aliases, method-specific Rcpp bridges,
+and `_impl` names remain callable from `magmaan_core` for old scripts but are
+not included in the displayed groups.
 | `measures::residuals`, `measures::standardized_residuals` | `measures_residuals`, `measures_standardized_residuals` | good | Added in scaffold pass. | Raw and correlation-metric residual accessors; residual z-statistics remain a separate lavaan-oracle task. |
 | `measures::factor_scores` | `measures_factor_scores` | good | Added in scaffold pass. | Complete-data regression and Bartlett scores over caller-supplied raw blocks. |

@@ -136,7 +136,6 @@ magmaan_core <- local({
       "compat_lavaan_nested_lrt_satorra2000",
       "compat_lavaan_nested_lrt_satorra_bentler2001",
       "compat_lavaan_nested_lrt_satorra_bentler2010",
-      "lavaan_lavaanify",
       "lavaan_compare_partable"
     ),
     model = c(
@@ -148,21 +147,6 @@ magmaan_core <- local({
       "data_ordinal_stats_from_raw",
       "data_mixed_ordinal_stats_from_raw",
       "data_shrink_mixed_ordinal_stats"
-    ),
-    compatibility_data = c(
-      "data_ordinal_stats_h_weighted_from_raw",
-      "data_ordinal_stats_dpd_from_raw",
-      "data_ordinal_stats_huber_residual_from_raw",
-      "data_mixed_ordinal_stats_polyserial_dpd_from_raw",
-      "data_mixed_ordinal_stats_huber_residual_from_raw",
-      "data_ordinal_stats_from_raw_impl",
-      "data_ordinal_stats_h_weighted_from_raw_impl",
-      "data_ordinal_stats_dpd_from_raw_impl",
-      "data_ordinal_stats_huber_residual_from_raw_impl",
-      "data_mixed_ordinal_stats_from_raw_impl",
-      "data_shrink_mixed_ordinal_stats_impl",
-      "data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl",
-      "data_mixed_ordinal_stats_huber_residual_from_raw_impl"
     ),
     estimate = c(
       "estimate_fit",
@@ -185,28 +169,7 @@ magmaan_core <- local({
       "estimate_gls_snlls_ceres",
       "estimate_wls_snlls_ceres",
       "estimate_start_values",
-      "estimate_fiml_robust_mlr",
-      "fit_fit",
-      "fit_ml_impl",
-      "fit_fiml_impl",
-      "fit_uls_impl",
-      "fit_gls_impl",
-      "fit_wls_impl",
-      "fit_dwls_ordinal_impl",
-      "fit_wls_ordinal_impl",
-      "fit_dwls_mixed_ordinal_impl",
-      "fit_wls_mixed_ordinal_impl",
-      "fit_uls_snlls_impl",
-      "fit_gls_snlls_impl",
-      "fit_wls_snlls_impl",
-      "fit_uls_ceres_impl",
-      "fit_gls_ceres_impl",
-      "fit_wls_ceres_impl",
-      "fit_uls_snlls_ceres_impl",
-      "fit_gls_snlls_ceres_impl",
-      "fit_wls_snlls_ceres_impl",
-      "fit_start_values",
-      "fit_sample_stats"
+      "estimate_fiml_robust_mlr"
     ),
     inference = c(
       "inference_information_expected",
@@ -230,23 +193,7 @@ magmaan_core <- local({
       "inference_rls_chi2_sample",
       "inference_rls_chi2_fit",
       "inference_modification_indices",
-      "inference_score_tests",
-      "infer_information_expected",
-      "infer_information_observed_fd",
-      "infer_information_observed_analytic",
-      "infer_vcov",
-      "infer_vcov_partable",
-      "infer_se",
-      "infer_chi2_stat",
-      "infer_df_stat",
-      "infer_z_test",
-      "infer_z_test_theta",
-      "infer_chi2_pvalue",
-      "infer_wald_test",
-      "infer_wald_test_theta",
-      "infer_browne_residual_nt",
-      "infer_rls_chi2",
-      "infer_rls_chi2_sample"
+      "inference_score_tests"
     ),
     robust = c(
       "robust_lr_test_satorra2000",
@@ -273,40 +220,17 @@ magmaan_core <- local({
       "robust_se_fit",
       "robust_se_raw",
       "robust_se_raw_parts",
-      "robust_se_raw_fit",
-      "infer_lr_test_satorra2000",
-      "infer_lr_test_satorra_bentler2001",
-      "infer_lr_test_satorra_bentler2010",
-      "infer_build_u_factor",
-      "infer_build_u_factor_parts",
-      "infer_reduced_gamma_nt",
-      "infer_reduced_gamma_sample",
-      "infer_reduced_gamma_unbiased",
-      "infer_ugamma_eigenvalues",
-      "infer_satorra_bentler",
-      "infer_mean_var_adjusted",
-      "infer_scaled_shifted",
-      "infer_casewise_contributions",
-      "infer_empirical_gamma",
-      "infer_gamma_nt",
-      "infer_ordinal_robust",
-      "infer_mixed_ordinal_robust",
-      "infer_robust_se",
-      "infer_robust_se_parts",
-      "infer_robust_se_raw",
-      "infer_robust_se_raw_parts"
+      "robust_se_raw_fit"
     ),
     measures = c(
       "measures_baseline",
-      "infer_baseline",
       "measures_fit",
       "measures_standardize_lv",
       "measures_standardize_all",
       "measures_residuals",
       "measures_standardized_residuals",
       "measures_factor_scores",
-      "measures_compute_defined",
-      "compute_defined_impl"
+      "measures_compute_defined"
     ),
     helpers = c(
       "df_to_data",
@@ -331,7 +255,84 @@ magmaan_core <- local({
       "fit_wls_ceres",
       "fit_uls_snlls_ceres",
       "fit_gls_snlls_ceres",
-      "fit_wls_snlls_ceres",
+      "fit_wls_snlls_ceres"
+    )
+  )
+  compatibility_names <- c(
+      "lavaan_lavaanify",
+      "data_ordinal_stats_h_weighted_from_raw",
+      "data_ordinal_stats_dpd_from_raw",
+      "data_ordinal_stats_huber_residual_from_raw",
+      "data_mixed_ordinal_stats_polyserial_dpd_from_raw",
+      "data_mixed_ordinal_stats_huber_residual_from_raw",
+      "data_ordinal_stats_from_raw_impl",
+      "data_ordinal_stats_h_weighted_from_raw_impl",
+      "data_ordinal_stats_dpd_from_raw_impl",
+      "data_ordinal_stats_huber_residual_from_raw_impl",
+      "data_mixed_ordinal_stats_from_raw_impl",
+      "data_shrink_mixed_ordinal_stats_impl",
+      "data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl",
+      "data_mixed_ordinal_stats_huber_residual_from_raw_impl",
+      "fit_fit",
+      "fit_ml_impl",
+      "fit_fiml_impl",
+      "fit_uls_impl",
+      "fit_gls_impl",
+      "fit_wls_impl",
+      "fit_dwls_ordinal_impl",
+      "fit_wls_ordinal_impl",
+      "fit_dwls_mixed_ordinal_impl",
+      "fit_wls_mixed_ordinal_impl",
+      "fit_uls_snlls_impl",
+      "fit_gls_snlls_impl",
+      "fit_wls_snlls_impl",
+      "fit_uls_ceres_impl",
+      "fit_gls_ceres_impl",
+      "fit_wls_ceres_impl",
+      "fit_uls_snlls_ceres_impl",
+      "fit_gls_snlls_ceres_impl",
+      "fit_wls_snlls_ceres_impl",
+      "fit_start_values",
+      "fit_sample_stats",
+      "infer_information_expected",
+      "infer_information_observed_fd",
+      "infer_information_observed_analytic",
+      "infer_vcov",
+      "infer_vcov_partable",
+      "infer_se",
+      "infer_chi2_stat",
+      "infer_df_stat",
+      "infer_z_test",
+      "infer_z_test_theta",
+      "infer_chi2_pvalue",
+      "infer_wald_test",
+      "infer_wald_test_theta",
+      "infer_browne_residual_nt",
+      "infer_rls_chi2",
+      "infer_rls_chi2_sample",
+      "infer_lr_test_satorra2000",
+      "infer_lr_test_satorra_bentler2001",
+      "infer_lr_test_satorra_bentler2010",
+      "infer_build_u_factor",
+      "infer_build_u_factor_parts",
+      "infer_reduced_gamma_nt",
+      "infer_reduced_gamma_sample",
+      "infer_reduced_gamma_unbiased",
+      "infer_ugamma_eigenvalues",
+      "infer_satorra_bentler",
+      "infer_mean_var_adjusted",
+      "infer_scaled_shifted",
+      "infer_casewise_contributions",
+      "infer_empirical_gamma",
+      "infer_gamma_nt",
+      "infer_ordinal_robust",
+      "infer_mixed_ordinal_robust",
+      "infer_robust_se",
+      "infer_robust_se_parts",
+      "infer_robust_se_raw",
+      "infer_robust_se_raw_parts",
+      "infer_baseline",
+      "compute_defined_impl",
       "infer_vcov_fit",
       "infer_z_test_fit",
       "infer_wald_test_fit",
@@ -339,14 +340,25 @@ magmaan_core <- local({
       "infer_build_u_factor_fit",
       "infer_robust_se_fit",
       "infer_robust_se_raw_fit"
-    )
   )
-  core_names <- unique(unlist(groups, use.names = FALSE))
+  core_names <- unique(c(unlist(groups, use.names = FALSE), compatibility_names))
 
   ns <- parent.env(environment())
   out <- list2env(mget(core_names, envir = ns, inherits = FALSE),
                   parent = emptyenv())
   attr(out, "groups") <- groups
+  class(out) <- "magmaan_core"
   lockEnvironment(out, bindings = TRUE)
   out
 })
+
+print.magmaan_core <- function(x, ...) {
+  groups <- attr(x, "groups", exact = TRUE)
+  cat("magmaan_core primitive environment\n")
+  for (nm in names(groups)) {
+    cat("  ", nm, ": ", length(groups[[nm]]), "\n", sep = "")
+  }
+  cat("Use attr(magmaan_core, \"groups\")$<group> to list canonical names.\n")
+  cat("Compatibility aliases remain callable but are not displayed.\n")
+  invisible(x)
+}
