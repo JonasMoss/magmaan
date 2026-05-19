@@ -51,12 +51,17 @@ partables are folded back to `<~` shape, and R exposes a `composite_weights()`
 post-fit accessor.
 Remaining:
 
-- **L.** Lavaan parity validation: collect minimal oracle fixtures — pure
-  composite, composite plus common factor, structural regression involving a
-  composite — and gate point estimates, implied covariance, df, chi-square,
-  SEs, standardization, and fit measures for the complete-data ML composite
-  slice. Multi-group composites are in scope only if lavaan handles them
-  cleanly, including `group.equal = "composite.weights"`.
+- **L.** Lavaan parity validation: minimal oracle fixtures now exist under
+  `tests/fixtures/composite/` for pure composite, composite plus common factor,
+  and structural regression involving a composite. The diagnostic golden is
+  wired but skipped because the current Henseler-Ogasawara expansion is not yet
+  lavaan-native equivalent on point estimates, implied covariance, chi-square,
+  SEs, standardization, and fit measures. Next implementation step: make the
+  complete-data ML composite path match lavaan's native `<~` W-matrix
+  semantics (or prove and implement an equivalent objective/parameterization),
+  then unskip the golden. Multi-group composites are in scope only after the
+  single-group ML slice is green and only if lavaan handles them cleanly,
+  including `group.equal = "composite.weights"`.
 - **S, after parity fixtures are green.** Add composite benchmark cases.
 
 Deferred until the ML slice is lavaan-validated: ordinal composites, FIML/LS

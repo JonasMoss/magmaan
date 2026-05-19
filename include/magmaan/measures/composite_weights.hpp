@@ -30,6 +30,7 @@ struct CompositeWeights {
   std::vector<std::string> indicators;    // x1..xK, in order
   Eigen::VectorXd          weight;        // length K
   Eigen::VectorXd          se;            // length K, delta-method SE
+  Eigen::MatrixXd          vcov;          // K x K covariance of `weight`
 };
 
 // Recover composite weights and their delta-method standard errors from a
