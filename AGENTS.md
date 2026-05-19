@@ -6,8 +6,8 @@ Working rules for coding agents in the magmaan repo.
 
 A C++23 library that ports lavaan's behavior for **linear SEM under
 complete-data normal-theory estimators**. The audience is methods developers,
-not end users. [docs/roadmap.md](docs/roadmap.md) is the current state and
-architecture summary; [docs/todo.md](docs/todo.md) is the active backlog of
+not end users. [docs/architecture/roadmap.md](docs/architecture/roadmap.md) is the current state and
+architecture summary; [docs/backlog/todo.md](docs/backlog/todo.md) is the active backlog of
 remaining work. Read both before structural changes. The old external `latva`
 plan is historical archaeology, not current guidance.
 
@@ -19,7 +19,7 @@ plan is historical archaeology, not current guidance.
   (`Discrepancy`, `Optimizer`, `StandardErrorMethod`, `FitIndex`) and free
   function templates.
 - **Lavaan is the oracle.** Parser, partable, point estimates, SEs, and
-  chi-square statistics match `external/lavaan/` outputs to documented
+  chi-square statistics match installed lavaan output to documented
   tolerances. New fixtures are regenerated via `tests/tools/regen_oracle.R`; CI
   itself never invokes R.
 - **The lavaanified model is the contract.** Held in memory as a triple:
@@ -48,11 +48,12 @@ plan is historical archaeology, not current guidance.
 - `tests/tools/` - maintainer-only fixture-generation scripts (R, etc.).
 - `tests/checks/` - advisory local simulation checks, outside the default test suite.
 - `benchmarks/` - advisory benchmark harness; ignored data/results caches stay local.
-- `research/` - tracked research notes and simulation scripts, not vendored PDFs.
+- `docs/research/` - tracked research notes and simulation scripts, not vendored PDFs.
+- `docs/reference/` - policy for ignored external resources and source mirrors.
 - `docs/grammar/` - `grammar.ebnf` (normative), `lexer.md`, `grammar.md`.
-- `docs/roadmap.md` - current implementation state and design contracts.
-- `docs/todo.md` - active human-readable backlog and remaining milestones.
-- `external/lavaan/` - reference source, never built.
+- `docs/architecture/roadmap.md` - current implementation state and design contracts.
+- `docs/backlog/todo.md` - active human-readable backlog and remaining milestones.
+- `external/` - ignored optional source mirrors for reading upstream code, never built.
 - `r-package/` - exploratory R bindings (Rcpp); consumes the prebuilt
   `libmagmaan.a`, separate from and not part of the C++ build.
 
@@ -143,7 +144,7 @@ matches the namespace.
 
 ### Core vs frontier
 
-The public API is tiered (see [docs/ideas.md](docs/ideas.md)). `core` is the
+The public API is tiered (see [docs/design/ideas.md](docs/design/ideas.md)). `core` is the
 stable, lavaan-parity surface. `frontier` is the research / non-lavaan methods
 surface: it nests **per domain** - `estimate::frontier`, `data::frontier`,
 `robust::frontier`, and so on - never a single top-level `frontier` namespace.
@@ -154,7 +155,7 @@ domain's `frontier` sub-namespace.
 So far `api::frontier`, `estimate::frontier`, and `robust::frontier` exist;
 their headers still sit in the domain directory rather than a
 `<domain>/frontier/` subdirectory, and the `data/` research headers are not yet
-retiered. See `docs/todo.md`.
+retiered. See `docs/backlog/todo.md`.
 
 ## Conventions
 
@@ -165,12 +166,12 @@ retiered. See `docs/todo.md`.
 - Private headers under `src/.../detail_*.hpp` include with relative paths.
 - Comments only when the why is non-obvious. The roadmap and lavaan reference
   together cover the what.
-- Keep `docs/todo.md` as the single active backlog. Remove or fold stale
-  finished planning docs into `docs/roadmap.md` or `docs/todo.md` when a phase
+- Keep `docs/backlog/todo.md` as the single active backlog. Remove or fold stale
+  finished planning docs into `docs/architecture/roadmap.md` or `docs/backlog/todo.md` when a phase
   completes; do not create parallel roadmaps.
-- Keep `docs/roadmap.md` current whenever a change alters implementation
+- Keep `docs/architecture/roadmap.md` current whenever a change alters implementation
   state, architecture, contracts, boundaries, or validation expectations.
-- Keep `docs/todo.md` current whenever a change completes a milestone,
+- Keep `docs/backlog/todo.md` current whenever a change completes a milestone,
   changes priorities, or reveals new remaining work.
 - Commit every finished user request as a coherent completed change before
   handing back, unless the user explicitly asks not to commit. Keep work on the
@@ -178,7 +179,10 @@ retiered. See `docs/todo.md`.
 
 ## Working with the lavaan reference
 
-`external/lavaan/` is the R package. Treat it as read-only spec material. When
-implementing a step, read the formulas (Bollen 1989, Mulaik 2009,
-Yuan-Bentler), not the R source. Use lavaan output, not its code, as the
-oracle.
+`external/` is ignored and optional. It may hold local source mirrors such as
+lavaan or robcat for reading implementation details, but normal tests and CI do
+not depend on it. Fixture regeneration uses installed R packages at the pinned
+versions and writes checked-in JSON; C++ tests consume those fixtures only.
+When implementing a step, read the formulas (Bollen 1989, Mulaik 2009,
+Yuan-Bentler), not the R source. Use package output, not vendored code, as the
+oracle. See `docs/reference/external_resources.md`.

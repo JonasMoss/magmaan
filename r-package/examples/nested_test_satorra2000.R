@@ -16,7 +16,7 @@
 ## moment-Jacobian construction for the restriction matrix and the
 ## scaled-shifted statistic; both can differ from this mean-scaled
 ## parameter-nesting check. Use `A.method = "delta"` explicitly to request the
-## lavaan-style moment-Jacobian construction. See docs/satorra2000_parity.md.
+## lavaan-style moment-Jacobian construction. See docs/validation/satorra2000_parity.md.
 
 suppressMessages({ library(magmaan); library(lavaan) })
 

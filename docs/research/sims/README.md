@@ -30,7 +30,7 @@ relevant categorical estimators are implemented and hardened.
 From the repo root:
 
 ```r
-source("research/sims/r/li_2016_ordinal_sem.R")
+source("docs/research/sims/r/li_2016_ordinal_sem.R")
 
 one <- li2016_generate(n = 300, categories = 5,
                        distribution = "slight", seed = 11)

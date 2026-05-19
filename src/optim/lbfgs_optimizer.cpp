@@ -68,7 +68,7 @@ LbfgsOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
   // measurably along any step before ‖g‖ falls under the absolute `gtol`.
   // When that happens `x` already holds a converged iterate, so we salvage it
   // (see the catch block) rather than discarding a good solution. See
-  // docs/convergence_diagnostics.md.
+  // docs/validation/convergence_diagnostics.md.
   LBFGSpp::LBFGSSolver<double> solver(param);
   int n_iter = 0;
   try {

@@ -5,10 +5,9 @@ CMakeFiles/
 compile_commands.json
 .claude/
 
-# Reference-only material with its own VCS (lavaan source, semTests, …).
+# Optional source mirrors and local resource caches; see docs/reference/external_resources.md.
 external/
 
-# Local reference PDFs, tarballs, and downloaded research material.
 resources/
 
 *.o

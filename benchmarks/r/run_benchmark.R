@@ -34,7 +34,7 @@ for (v in c("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")) {
 }
 
 ## Tolerance -- tunable. Magmaan-vs-lavaan estimate drift is the timing
-## correctness gate (docs/benchmark_plan.md: "correctness gates timing").
+## correctness gate (docs/validation/benchmark_plan.md: "correctness gates timing").
 ## fmin/chi-square are reported diagnostics, not gates: magmaan's $fmin is the
 ## full ML discrepancy F while lavaan reports F/2.
 EST_TOL <- 1e-3

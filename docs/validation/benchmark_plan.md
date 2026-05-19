@@ -5,7 +5,7 @@ public-reporting shape. The scaffold described under Execution Methodology now
 exists (`benchmarks/cases.yml`, the `benchmarks/r/` harness, and active
 lavaan-backed cases spanning complete-data ML, controlled-missingness FIML,
 and continuous ULS/GLS smoke paths); the actionable near-term slice is tracked
-in `docs/todo.md` §2. The lavaan-parity test layer
+in `docs/backlog/todo.md` §2. The lavaan-parity test layer
 (`tests/golden/lavaan_parity_golden_test.cpp`, `tests/fixtures/parity/`) is the
 concrete realization of the correctness gating this document calls for. Public
 headline benchmarking still waits on a more mature R package API.

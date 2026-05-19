@@ -1,6 +1,6 @@
 // robcat-parity golden tests — robust polychoric correlation sanity suite.
 //
-// robcat (Welz, Mair & Alfons, 2026; vendored in external/robcat) is the
+// robcat (Welz, Mair & Alfons, 2026) is the
 // canonical robust polychoric estimator. This suite pins magmaan's bivariate
 // ordinal estimators against it so that any divergence is caught and gets
 // investigated.
@@ -8,7 +8,7 @@
 // === Estimator equivalence (verified from the sources) =====================
 //
 // robcat polycor(c=C) minimises  Σ_k p_k · ρ_fun(f̂_k / p_k)
-//   (external/robcat/src/polycor.cpp:rho_fun_fast, R/polycor.R:polycor), with
+//   (robcat src/polycor.cpp:rho_fun_fast, R/polycor.R:polycor), with
 //   the internal reparametrisation c1 = 0, c2 = C + 1:
 //       ρ_fun(t) = t·log(t)                  for t ≤ C+1
 //       ρ_fun(t) = t·(log(C+1)+1) − (C+1)    for t > C+1

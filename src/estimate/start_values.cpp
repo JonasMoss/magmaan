@@ -124,7 +124,7 @@ simple_start_values(const spec::LatentStructure& pt,
         // covariance with the factor's marker: reverse-keyed indicators then
         // start in the correct orthant, where a flat +0.7 stranded them in
         // the wrong one and could stall the optimizer (see
-        // docs/convergence_diagnostics.md). The magnitude stays 0.7, so
+        // docs/validation/convergence_diagnostics.md). The magnitude stays 0.7, so
         // equality-constrained loadings of the same sign keep a consistent
         // start.
         const bool lv_fixed =

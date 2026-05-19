@@ -6,8 +6,8 @@ the tutorial and *where that is tested*. It is a living checklist — update it
 when capability or coverage changes.
 
 For the current implementation state and architecture see
-[docs/roadmap.md](roadmap.md); for the remaining-work backlog see
-[docs/todo.md](todo.md).
+[docs/architecture/roadmap.md](../architecture/roadmap.md); for the remaining-work backlog see
+[docs/backlog/todo.md](../backlog/todo.md).
 
 ## Scope
 
@@ -258,7 +258,7 @@ delta-method SEs, optional bootstrap SEs.
 
 ## Deferred backlog
 
-Genuine gaps, recorded here and tracked in [docs/todo.md](todo.md). None block
+Genuine gaps, recorded here and tracked in [docs/backlog/todo.md](../backlog/todo.md). None block
 tutorial reproduction for the in-scope sections except where noted.
 
 | Item | Tutorial § | Effort | Notes |

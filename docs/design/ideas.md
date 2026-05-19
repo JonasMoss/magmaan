@@ -2,7 +2,7 @@
 
 This note is a scratchpad for philosophical and scope changes. Most of it is
 not the roadmap, not the backlog, and not a commitment; concrete accepted work
-belongs in [roadmap.md](roadmap.md) or [todo.md](todo.md).
+belongs in [roadmap.md](../architecture/roadmap.md) or [todo.md](../backlog/todo.md).
 
 Two parts are further along. The API-tier sections reflect a May 2026 design
 pass that reached real decisions — most firmly the `frontier` tier name and the
@@ -343,11 +343,11 @@ A possible docs split:
 
 - `README.md` — short identity, current supported headline slices, build loop,
   and caveats.
-- `docs/roadmap.md` — current state and architecture contracts.
-- `docs/todo.md` — accepted remaining work only.
+- `docs/architecture/roadmap.md` — current state and architecture contracts.
+- `docs/backlog/todo.md` — accepted remaining work only.
 - `docs/support.md` — the methods catalog (core/frontier/rejected combinations
   with evidence).
-- `docs/ideas.md` — non-binding sketches like this file.
+- `docs/design/ideas.md` — non-binding sketches like this file.
 
 ## One-Sentence Philosophy
 

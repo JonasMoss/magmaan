@@ -2,7 +2,7 @@
 
 This document summarizes the current implementation state and architectural
 contracts for magmaan. It is not the active backlog. Remaining work lives in
-[docs/todo.md](todo.md).
+[docs/backlog/todo.md](../backlog/todo.md).
 
 Out of scope for this track: Bayesian SEM, multilevel SEM, latent
 interactions/mixtures, EFA, inequality constraints (and active-bound
@@ -66,7 +66,7 @@ golden `parTable()` fixtures.
   free loading by its indicator's covariance with the factor's marker, and the
   unbounded path salvages a converged iterate when the strong-Wolfe line search
   stalls in the flat neighbourhood of the optimum instead of reporting a hard
-  line-search error (see `docs/convergence_diagnostics.md`).
+  line-search error (see `docs/validation/convergence_diagnostics.md`).
 - Expected information, finite-difference observed information, and analytic
   observed information for covariance and mean-structure models.
 - Vcov/SE, Wald/z tests, chi-square/df helpers, LR/Satorra-2000 and
@@ -705,9 +705,9 @@ failures.
 ## Planning Documents
 
 Use this file to understand the current state and contracts before structural
-changes. Use [docs/todo.md](todo.md) to choose or update remaining work. See
-[docs/lavaan_tutorial_parity.md](lavaan_tutorial_parity.md) for the
+changes. Use [docs/backlog/todo.md](../backlog/todo.md) to choose or update remaining work. See
+[docs/validation/lavaan_tutorial_parity.md](../validation/lavaan_tutorial_parity.md) for the
 section-by-section audit of magmaan against the lavaan tutorial. See
-[docs/documentation_proposal.md](documentation_proposal.md) for the proposed
+[docs/design/documentation_proposal.md](../design/documentation_proposal.md) for the proposed
 Quarto manual split, documentation vocabulary, and first documentation
 milestones.

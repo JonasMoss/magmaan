@@ -60,7 +60,7 @@ using estimate::EqConstraints;
 // form. It matches lavaan's `lavTestLRT(method = "satorra.2000",
 // A.method = "exact", scaled.shifted = FALSE)`. lavaan's defaults use
 // `A.method = "delta"` plus the scaled-shifted statistic, and can differ for
-// strongly binding parameter restrictions. See docs/satorra2000_parity.md.
+// strongly binding parameter restrictions. See docs/validation/satorra2000_parity.md.
 // ============================================================================
 
 // Per-group inputs at θ̂_H1.  Caller is responsible for ensuring Σ is the
