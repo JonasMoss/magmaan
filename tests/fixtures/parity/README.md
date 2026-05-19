@@ -9,11 +9,11 @@ gates magmaan against lavaan with **no R at run time**.
 The test suite has three comparison surfaces, kept deliberately distinct:
 
 - **corpus golden tests** (`tests/fixtures/{lexer,flat,ptable,fit,ls,ordinal,
-  ...}`, oracle `tools/regen_oracle.R`) — *breadth*: small synthetic models
+  ...}`, oracle `tests/tools/regen_oracle.R`) — *breadth*: small synthetic models
   that exercise every syntax/operator feature. Cheap and exhaustive over
   surface area, but statistically weak.
 - **parity golden tests** (this directory, oracle
-  `tools/regen_parity_fixtures.R`) — *depth*: real datasets, real N, real
+  `tests/tools/regen_parity_fixtures.R`) — *depth*: real datasets, real N, real
   conditioning, real SEs and fit measures, and the raw-data ingestion path.
 - **`benchmarks/`** — advisory, fits *live lavaan* every run, R-dependent,
   gates timing not CI correctness.
@@ -37,7 +37,7 @@ Each parity case belongs to one of four families, one C++ `TEST_CASE` each:
 
 ```sh
 Rscript benchmarks/r/prepare_case.R all      # once, populates benchmarks/data/
-Rscript tools/regen_parity_fixtures.R        # all cases (or pass case ids)
+Rscript tests/tools/regen_parity_fixtures.R        # all cases (or pass case ids)
 ```
 
 ## Layout

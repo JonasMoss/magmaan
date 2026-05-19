@@ -8,6 +8,9 @@ compile_commands.json
 # Reference-only material with its own VCS (lavaan source, semTests, …).
 external/
 
+# Local reference PDFs, tarballs, and downloaded research material.
+resources/
+
 *.o
 *.obj
 *.a

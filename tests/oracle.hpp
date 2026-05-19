@@ -461,7 +461,7 @@ inline std::string diff_lexer_fixture(std::string_view corpus_id,
 
 // === flat.partable JSON translation =========================================
 //
-// Mirrors the shape produced by tools/regen_oracle.R. Comparing OUR
+// Mirrors the shape produced by tests/tools/regen_oracle.R. Comparing OUR
 // FlatPartable against lavaan's output reduces to:
 //   nlohmann::json got = flat_partable_to_json(parsed);
 //   nlohmann::json exp = json::parse(read_fixture(...));

@@ -24,7 +24,7 @@
 // pins the std.lv *identification convention* (`build(std_lv=TRUE)`); here
 // we fit in the marker parameterization and apply the post-hoc transforms.
 // Fixtures under tests/fixtures/fit_std/ are produced by the dedicated section
-// in tools/regen_oracle.R. Each carries, per free θ index (free-index order):
+// in tests/tools/regen_oracle.R. Each carries, per free θ index (free-index order):
 //   par_lhs/par_op/par_rhs/par_block (for debugging), std_lv_est/std_lv_se,
 //   std_all_est/std_all_se, plus per-block sample_cov (+ sample_mean for the
 //   meanstructure models) and meanstructure/n_groups so the C++ side re-fits.

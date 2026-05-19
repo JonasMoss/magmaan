@@ -20,7 +20,7 @@ plan is historical archaeology, not current guidance.
   function templates.
 - **Lavaan is the oracle.** Parser, partable, point estimates, SEs, and
   chi-square statistics match `external/lavaan/` outputs to documented
-  tolerances. New fixtures are regenerated via `tools/regen_oracle.R`; CI
+  tolerances. New fixtures are regenerated via `tests/tools/regen_oracle.R`; CI
   itself never invokes R.
 - **The lavaanified model is the contract.** Held in memory as a triple:
   `LatentStructure` (what to estimate, name-free, modulo estimator and
@@ -44,8 +44,11 @@ plan is historical archaeology, not current guidance.
 - `tests/unit/` - focused unit tests.
 - `tests/golden/` - fixture-based parity checks against lavaan.
 - `tests/property/` - finite-difference Jacobian checks, etc.
-- `tests/fixtures/` - checked-in JSON. Regenerate via `tools/regen_oracle.R`.
-- `tools/` - maintainer-only scripts (R, etc.).
+- `tests/fixtures/` - checked-in JSON. Regenerate via `tests/tools/regen_oracle.R`.
+- `tests/tools/` - maintainer-only fixture-generation scripts (R, etc.).
+- `tests/checks/` - advisory local simulation checks, outside the default test suite.
+- `benchmarks/` - advisory benchmark harness; ignored data/results caches stay local.
+- `research/` - tracked research notes and simulation scripts, not vendored PDFs.
 - `docs/grammar/` - `grammar.ebnf` (normative), `lexer.md`, `grammar.md`.
 - `docs/roadmap.md` - current implementation state and design contracts.
 - `docs/todo.md` - active human-readable backlog and remaining milestones.

@@ -1,7 +1,7 @@
 # fixture_json.R --- shared lavaan-to-JSON fixture helpers.
 #
-# Side-effect-free function definitions sourced by both tools/regen_oracle.R
-# (synthetic corpus fixtures) and tools/regen_parity_fixtures.R (real-data
+# Side-effect-free function definitions sourced by both tests/tools/regen_oracle.R
+# (synthetic corpus fixtures) and tests/tools/regen_parity_fixtures.R (real-data
 # parity fixtures). Keeping one copy avoids the two oracle scripts drifting
 # in how they serialize lavaan internals.
 #

@@ -20,7 +20,7 @@ hot-path interfaces.
 Lavaan remains the oracle. Parser output, lavaanified partables, point
 estimates, standard errors, and chi-square statistics are compared against
 checked-in lavaan fixtures where support is claimed. Fixture regeneration is
-done with `tools/regen_oracle.R`; CI does not invoke R.
+done with `tests/tools/regen_oracle.R`; CI does not invoke R.
 
 The lavaanified model contract is the triple:
 
@@ -166,7 +166,7 @@ golden `parTable()` fixtures.
   direction of Du and Wu (2024). `empirical_bayes_dls_weight()` then delegates
   to the same DLS builder, so modification-index and weighted-moment sandwich
   paths consume the result exactly like any supplied WLS weight. Local
-  simulation checks live under `checks/dls/`.
+  simulation checks live under `tests/checks/dls/`.
 - Separable nonlinear least squares profiling exists for LS estimators where
   conditionally linear parameters can be profiled out.
 
@@ -602,7 +602,7 @@ Validation has three deliberately separate surfaces:
 - **Corpus golden tests** — breadth. 26 small synthetic models in
   `tests/fixtures/corpus.json` exercise every parser, lavaanify, matrix, fit,
   and inference stage against checked-in lavaan fixtures. Oracle:
-  `tools/regen_oracle.R`.
+  `tests/tools/regen_oracle.R`.
 - **Parity golden tests** — depth. `tests/golden/lavaan_parity_golden_test.cpp`
   gates magmaan against lavaan on the real-data benchmark cases
   (HolzingerSwineford1939, PoliticalDemocracy, Demo.growth, bfi, Mplus ex5.1):
@@ -611,7 +611,7 @@ Validation has three deliberately separate surfaces:
   bfi missing-data sentinel with robust MLR post-fit reporting and a full
   25-item five-factor bfi missing-data convergence/global-fit gate.
   Self-contained fixtures live in
-  `tests/fixtures/parity/`; oracle: `tools/regen_parity_fixtures.R`.
+  `tests/fixtures/parity/`; oracle: `tests/tools/regen_parity_fixtures.R`.
 - **Benchmarks** — `benchmarks/` fits *live lavaan* on every run and gates
   timing, not CI correctness. Active advisory cases include complete-data ML,
   controlled-missingness FIML, and continuous ULS/GLS smoke paths. The harness
