@@ -21,6 +21,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/reparameterize.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/start_values.hpp"
@@ -1985,18 +1986,12 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
 
 namespace {
 
-// Dispatch a bounded least-squares ordinal problem (residual + Jacobian
-// closures, equality penalty rows already folded in) to the chosen backend.
+// Dispatch a bounded least-squares problem (residual + Jacobian closures) to
+// the chosen backend. The problem is driven directly — any equality
+// reparameterization has already been folded into the closures by the caller.
 fit_expected<optim::OptimResult>
-run_ordinal_ls(optim::ResidualFn r, optim::JacobianFn J, Eigen::Index n_resid,
-               const Eigen::VectorXd& x0, const Bounds& bounds,
-               Backend backend, LbfgsOptions opts) {
-  optim::GmmProblem prob;
-  prob.r       = std::move(r);
-  prob.J       = std::move(J);
-  prob.n_resid = n_resid;
-  prob.n_param = x0.size();
-  prob.expand  = [](const Eigen::VectorXd& x) { return x; };
+run_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
+               const Bounds& bounds, Backend backend, LbfgsOptions opts) {
   if (backend == Backend::Ceres) {
 #ifdef MAGMAAN_WITH_CERES
     optim::CeresOptions copts;
@@ -2012,6 +2007,58 @@ run_ordinal_ls(optim::ResidualFn r, optim::JacobianFn J, Eigen::Index n_resid,
 #endif
   }
   return optim::lbfgs(optim::scalarize(prob), x0, bounds, opts);
+}
+
+// Solve a data-only ordinal LS problem `prob` (residual size `prob.n_resid`,
+// `prob.expand` the identity in full θ) under linear equality constraints.
+//
+// Equality constraints are eliminated by the affine reparameterization
+// θ = θ₀ + K·α (same as the ML / GMM path in `fit.cpp`), *not* by a quadratic
+// penalty: a large penalty makes the constrained directions O(μ)-stiff, so the
+// optimizer stalls on function-value stagnation at an FP-path-dependent iterate
+// well short of the true optimum. The reduced α-problem carries no such
+// conditioning and converges on the gradient stop.
+fit_expected<Estimates>
+solve_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
+                 const Bounds& bounds, const EqConstraints& con,
+                 Backend backend, LbfgsOptions opts, const char* who) {
+  if (!con.active()) {
+    auto out = run_ordinal_ls(prob, x0, bounds, backend, opts);
+    if (!out.has_value()) return std::unexpected(out.error());
+    return Estimates{prob.expand(out->x), 2.0 * out->fmin, out->iterations};
+  }
+
+  const optim::GmmProblem prob_a = reparameterize(prob, con);
+  if (con.n_alpha == 0) {  // every parameter pinned by the linear system
+    auto r = prob_a.r(Eigen::VectorXd(0));
+    if (!r.has_value()) return std::unexpected(r.error());
+    return Estimates{prob_a.expand(Eigen::VectorXd(0)), r->squaredNorm(), 0};
+  }
+
+  Eigen::VectorXd alpha0 = con.contract(x0);
+  Bounds abounds;
+  const bool pure_merge = !con.group.empty();
+  if (!bounds.empty() && pure_merge) {
+    abounds = fold_alpha_bounds(con, bounds);
+    alpha0  = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
+  }
+  auto out = run_ordinal_ls(prob_a, alpha0, abounds, backend, opts);
+  if (!out.has_value()) return std::unexpected(out.error());
+  Eigen::VectorXd theta_hat = prob_a.expand(out->x);
+  if (!bounds.empty() && !pure_merge) {
+    // General-linear α was optimized unbounded — verify θ̂ honors the box.
+    constexpr double tol = 1e-6;
+    for (Eigen::Index k = 0; k < theta_hat.size(); ++k) {
+      if (theta_hat(k) < bounds.lower(k) - tol ||
+          theta_hat(k) > bounds.upper(k) + tol) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            std::string(who) +
+                ": general-linear equality drove parameter " +
+                std::to_string(k) + " past its bound"));
+      }
+    }
+  }
+  return Estimates{std::move(theta_hat), 2.0 * out->fmin, out->iterations};
 }
 
 }  // namespace
@@ -2083,60 +2130,32 @@ fit_ordinal_bounded(spec::LatentStructure pt,
   auto r0 = ordinal_residuals(stats, layout, eval0->moments, factors, x0,
                               parameterization);
   if (!r0.has_value()) return std::unexpected(r0.error());
-  const Eigen::Index n_data = r0->size();
-  const Eigen::Index n_eq = con.active() ? con.A_eq.rows() : 0;
-  const Eigen::Index n_total = n_data + n_eq;
-  const double F0 = 0.5 * r0->squaredNorm();
-  const double mu_eq = n_eq > 0 ? std::max(1.0, F0) * 1e10 : 0.0;
-  const double sqrt_mu_eq = std::sqrt(mu_eq);
 
-  auto resid_fn = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
+  optim::GmmProblem prob;
+  prob.n_resid = r0->size();
+  prob.n_param = x0.size();
+  prob.expand  = [](const Eigen::VectorXd& x) { return x; };
+  prob.r = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
     auto eval = ev.evaluate(x, false, false);
     if (!eval.has_value()) {
       return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
           "fit_ordinal_bounded: evaluate failed: " + eval.error().detail));
     }
-    auto r = ordinal_residuals(stats, layout, eval->moments, factors, x,
-                               parameterization);
-    if (!r.has_value()) return std::unexpected(r.error());
-    Eigen::VectorXd out(n_total);
-    out.head(n_data) = *r;
-    if (n_eq > 0) out.tail(n_eq).noalias() = sqrt_mu_eq * (con.A_eq * x - con.b_eq);
-    return out;
+    return ordinal_residuals(stats, layout, eval->moments, factors, x,
+                             parameterization);
   };
-
-  auto jac_fn = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
+  prob.J = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
     auto eval = ev.evaluate(x, true, false);
     if (!eval.has_value()) {
       return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
           "fit_ordinal_bounded: evaluate failed: " + eval.error().detail));
     }
-    auto J = ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
-                              factors, x, parameterization);
-    if (!J.has_value()) return std::unexpected(J.error());
-    Eigen::MatrixXd out(n_total, J->cols());
-    out.topRows(n_data) = *J;
-    if (n_eq > 0) out.bottomRows(n_eq).noalias() = sqrt_mu_eq * con.A_eq;
-    return out;
+    return ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
+                            factors, x, parameterization);
   };
 
-  auto out_or = run_ordinal_ls(resid_fn, jac_fn, n_total, x0, bounds,
-                               backend, opts);
-  if (!out_or.has_value()) return std::unexpected(out_or.error());
-
-  double fmin_data = out_or->fmin;
-  if (n_eq > 0) {
-    const Eigen::VectorXd eq_resid = con.A_eq * out_or->x - con.b_eq;
-    const double eq_max = eq_resid.cwiseAbs().maxCoeff();
-    if (eq_max > 1e-6) {
-      return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          "fit_ordinal_bounded: equality residual exceeded tolerance"));
-    }
-    fmin_data = out_or->fmin - 0.5 * mu_eq * eq_resid.squaredNorm();
-    if (fmin_data < 0.0) fmin_data = 0.0;
-  }
-  return Estimates{std::move(out_or->x), 2.0 * fmin_data,
-                   out_or->iterations};
+  return solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
+                          "fit_ordinal_bounded");
 }
 
 fit_expected<Estimates>
@@ -2206,61 +2225,32 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
   auto r0 = mixed_ordinal_residuals(stats, layout, eval0->moments, factors, x0,
                                     parameterization);
   if (!r0.has_value()) return std::unexpected(r0.error());
-  const Eigen::Index n_data = r0->size();
-  const Eigen::Index n_eq = con.active() ? con.A_eq.rows() : 0;
-  const Eigen::Index n_total = n_data + n_eq;
-  const double F0 = 0.5 * r0->squaredNorm();
-  const double mu_eq = n_eq > 0 ? std::max(1.0, F0) * 1e10 : 0.0;
-  const double sqrt_mu_eq = std::sqrt(mu_eq);
 
-  auto resid_fn = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
+  optim::GmmProblem prob;
+  prob.n_resid = r0->size();
+  prob.n_param = x0.size();
+  prob.expand  = [](const Eigen::VectorXd& x) { return x; };
+  prob.r = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
     auto eval = ev.evaluate(x, false, false);
     if (!eval.has_value()) {
       return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
           "fit_mixed_ordinal_bounded: evaluate failed: " + eval.error().detail));
     }
-    auto r = mixed_ordinal_residuals(stats, layout, eval->moments, factors, x,
-                                     parameterization);
-    if (!r.has_value()) return std::unexpected(r.error());
-    Eigen::VectorXd out(n_total);
-    out.head(n_data) = *r;
-    if (n_eq > 0) out.tail(n_eq).noalias() = sqrt_mu_eq * (con.A_eq * x - con.b_eq);
-    return out;
+    return mixed_ordinal_residuals(stats, layout, eval->moments, factors, x,
+                                   parameterization);
   };
-
-  auto jac_fn = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
+  prob.J = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
     auto eval = ev.evaluate(x, true, true);
     if (!eval.has_value()) {
       return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
           "fit_mixed_ordinal_bounded: evaluate failed: " + eval.error().detail));
     }
-    auto J = mixed_ordinal_jacobian(stats, layout, eval->moments,
-                                    eval->J_sigma, eval->J_mu, factors, x,
-                                    parameterization);
-    if (!J.has_value()) return std::unexpected(J.error());
-    Eigen::MatrixXd out(n_total, J->cols());
-    out.topRows(n_data) = *J;
-    if (n_eq > 0) out.bottomRows(n_eq).noalias() = sqrt_mu_eq * con.A_eq;
-    return out;
+    return mixed_ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
+                                  eval->J_mu, factors, x, parameterization);
   };
 
-  auto out_or = run_ordinal_ls(resid_fn, jac_fn, n_total, x0, bounds,
-                               backend, opts);
-  if (!out_or.has_value()) return std::unexpected(out_or.error());
-
-  double fmin_data = out_or->fmin;
-  if (n_eq > 0) {
-    const Eigen::VectorXd eq_resid = con.A_eq * out_or->x - con.b_eq;
-    const double eq_max = eq_resid.cwiseAbs().maxCoeff();
-    if (eq_max > 1e-6) {
-      return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          "fit_mixed_ordinal_bounded: equality residual exceeded tolerance"));
-    }
-    fmin_data = out_or->fmin - 0.5 * mu_eq * eq_resid.squaredNorm();
-    if (fmin_data < 0.0) fmin_data = 0.0;
-  }
-  return Estimates{std::move(out_or->x), 2.0 * fmin_data,
-                   out_or->iterations};
+  return solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
+                          "fit_mixed_ordinal_bounded");
 }
 
 }  // namespace magmaan::estimate

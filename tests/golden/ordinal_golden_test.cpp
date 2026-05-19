@@ -482,10 +482,8 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
       const double chisq = static_cast<double>(n_total) * est_or->fmin;
       const double d_chisq = std::abs(chisq - lavaan_chisq);
       const double d_theta = max_abs_diff(est_or->theta, lavaan_theta);
-      const double theta_tol =
-          id == "0012_2group_equal_loading_3cat_cfa" ? 2e-2 : 1e-5;
-      const double chisq_tol =
-          id == "0012_2group_equal_loading_3cat_cfa" ? 1.0e-1 : 8e-2;
+      const double theta_tol = 1e-5;
+      const double chisq_tol = 8e-2;
 
       if (!est_or->theta.allFinite() || !std::isfinite(est_or->fmin) ||
           est_or->fmin < 0.0) {
@@ -546,11 +544,9 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
         const double d_ss_shift =
             std::abs(rob_or->scaled_shifted.shift_b -
                      robust["scaled_shifted"]["shift"].get<double>());
-        const bool loose_multigroup_eq =
-            id == "0012_2group_equal_loading_3cat_cfa";
-        const double robust_se_tol = loose_multigroup_eq ? 2e-3 : 3e-4;
-        const double robust_ev_tol = loose_multigroup_eq ? 2e-3 : 2e-4;
-        const double robust_scale_tol = loose_multigroup_eq ? 8e-4 : 2e-4;
+        const double robust_se_tol = 3e-4;
+        const double robust_ev_tol = 2e-4;
+        const double robust_scale_tol = 2e-4;
 
         if (rob_or->df != robust["df"].get<int>() ||
             rob_or->satorra_bentler.df !=

@@ -44,10 +44,10 @@ struct EqConstraints {
   //   A_eq · θ = b_eq      (A_eq is `rank × npar`, full row rank;
   //                         A_eq orthonormal-by-rows in the general path,
   //                         a 0/±1 merge-row matrix in the pure-merge path.)
-  // `fit_bounded` augments the LS residual vector with √μ·(A_eq·θ − b_eq) rows
-  // when constraints are active — same constraint surface as the K-reparam,
-  // but compatible with native per-axis bounds on θ. Empty (0 rows) when
-  // `rank == 0`.
+  // Every fit path enforces equality constraints by the K-reparameterization,
+  // not by penalizing this system; `A_eq` / `b_eq` describe the constraint
+  // surface for inspection and feed the equality-release score tests. Empty
+  // (0 rows) when `rank == 0`.
   Eigen::MatrixXd           A_eq;
   Eigen::VectorXd           b_eq;
   std::vector<std::int32_t> group;           // size npar (pure-merge case only; else empty)

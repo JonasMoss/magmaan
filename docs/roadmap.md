@@ -43,8 +43,9 @@ golden `parTable()` fixtures.
 - Single- and multi-group LISREL matrix representation.
 - Fixed.x resolution, mean structures, marker/std.lv/effect-coding
   identification, start hints, and linear equality constraints.
-- Linear equality constraints through affine reparameterization for ML and
-  penalty residuals for bounded LS.
+- Linear equality constraints through affine reparameterization (θ = θ₀ + K·α)
+  for the ML, GMM/GLS, and bounded ordinal LS paths; per-θ box bounds fold onto
+  the reduced α for the pure-merge case.
 - Nonlinear equality constraints (`a == b*c`, `b1 == (b2+b3)^2`) for the ML
   and complete-data LS paths: compiled to name-free expression trees by
   `resolve_lin_constraints`, enforced by an augmented-Lagrangian outer loop
@@ -122,7 +123,8 @@ golden `parTable()` fixtures.
   value/gradient and residual/Jacobian interfaces.
 - Bounded LS fitting through LBFGS-B and optional Ceres.
 - Automatic nonnegative variance bounds.
-- Equality-penalty residuals on the LS path.
+- Linear equality constraints on the LS path via the affine α-reparameterization
+  (θ = θ₀ + K·α), shared with the ML path — no quadratic penalty.
 - Fixed-parameter modification indices and equality-release score tests reuse
   the estimator-specific LS residual/Jacobian weighting for ULS/GLS/WLS.
 - Representative modification-index and equality-release score-test fixtures
