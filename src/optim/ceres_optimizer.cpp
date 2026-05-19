@@ -90,9 +90,11 @@ private:
 class LsCostFunction : public ceres::CostFunction {
 public:
   LsCostFunction(LsResidualFn r_fn, LsJacobianFn J_fn,
+                 LsEvaluationFn eval_fn,
                  int n_resid, int n_param)
       : r_fn_(std::move(r_fn)),
         J_fn_(std::move(J_fn)),
+        eval_fn_(std::move(eval_fn)),
         n_resid_(n_resid),
         n_param_(n_param) {
     set_num_residuals(n_resid);
@@ -104,6 +106,24 @@ public:
                 double**             jacobians) const override {
     Eigen::Map<const Eigen::VectorXd> x_map(parameters[0], n_param_);
     const Eigen::VectorXd             x = x_map;       // copy for const& bind
+
+    if (jacobians && jacobians[0]) {
+      if (eval_fn_) {
+        auto e = eval_fn_(x);
+        if (!e.has_value()) return false;
+        if (e->residual.size() != n_resid_) return false;
+        if (e->jacobian.rows() != n_resid_ ||
+            e->jacobian.cols() != n_param_) return false;
+        if (!e->residual.allFinite() || !e->jacobian.allFinite()) return false;
+        Eigen::Map<Eigen::VectorXd>(residuals, n_resid_) = e->residual;
+        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic,
+                                 Eigen::RowMajor>>
+            J_out(jacobians[0], n_resid_, n_param_);
+        J_out = e->jacobian;
+        return true;
+      }
+    }
+
     auto r = r_fn_(x);
     if (!r.has_value()) return false;
     if (r->size() != n_resid_) return false;
@@ -127,6 +147,7 @@ public:
 private:
   LsResidualFn r_fn_;
   LsJacobianFn J_fn_;
+  LsEvaluationFn eval_fn_;
   int          n_resid_;
   int          n_param_;
 };
@@ -297,6 +318,7 @@ CeresBoundedOptimizer::minimize(Objective              f,
 fit_expected<LbfgsOutput>
 CeresBoundedOptimizer::minimize_ls(LsResidualFn r_fn,
                                    LsJacobianFn J_fn,
+                                   LsEvaluationFn eval_fn,
                                    Eigen::Index n_resid,
                                    const Eigen::VectorXd& x0,
                                    const Eigen::VectorXd& lower,
@@ -315,7 +337,7 @@ CeresBoundedOptimizer::minimize_ls(LsResidualFn r_fn,
   Eigen::VectorXd theta = x0;
   ceres::Problem problem;
   problem.AddResidualBlock(
-      new LsCostFunction(std::move(r_fn), std::move(J_fn),
+      new LsCostFunction(std::move(r_fn), std::move(J_fn), std::move(eval_fn),
                          static_cast<int>(n_resid), n),
       nullptr,
       theta.data());

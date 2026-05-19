@@ -99,7 +99,8 @@ ceres_lm(const GmmProblem& prob, const Eigen::VectorXd& x0,
   const Eigen::VectorXd upper =
       bounds.empty() ? Eigen::VectorXd::Constant(x0.size(), inf) : bounds.upper;
   auto out =
-      solver.minimize_ls(prob.r, prob.J, prob.n_resid, x0, lower, upper);
+      solver.minimize_ls(prob.r, prob.J, prob.eval, prob.n_resid, x0, lower,
+                         upper);
   if (!out.has_value()) return std::unexpected(out.error());
   return to_result(std::move(*out));
 }
