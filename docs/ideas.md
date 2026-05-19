@@ -27,13 +27,29 @@ That wording preserves the useful pieces:
 The main question is how to distinguish supported work from experimental work
 in a way that is visible in code, docs, tests, and R bindings.
 
+This should separate two questions that are easy to conflate:
+
+- **API status**: what compatibility promise does magmaan make for this
+  function, type, header, wrapper, or result shape?
+- **Statistical status**: what evidence supports the method being computed:
+  lavaan parity, theory, simulation, diagnostic invariants, published work, or
+  local exploratory use?
+
+A method can be statistically important without having a stable software API.
+Likewise, a small diagnostic primitive can have a stable API if its contract is
+simple, useful, and unlikely to change. Published work, informal use, or
+simulation value are evidence for a method, not automatic source-compatibility
+promises.
+
 One possible status vocabulary:
 
 - **Core**: fixture-backed, lavaan-compatible behavior. These paths can be used
   in public examples, benchmarks, and compatibility claims.
-- **Lab**: methods-development primitives with explicit diagnostics and tests,
-  but no broad lavaan-compatibility promise. These may be statistically useful
-  and intentionally exposed, but should be described as experimental.
+- **Experimental**: public methods-development primitives with explicit
+  diagnostics and tests, but unsettled calibration, naming, result shape,
+  supported scope, or source-compatibility promise. These may be statistically
+  useful, citable, and intentionally exposed, but should be described as
+  experimental.
 - **Compat**: projection, naming, and parity helpers whose purpose is matching
   lavaan's surface or oracle outputs, not defining magmaan's internal ontology.
 - **Rejected**: combinations that fail explicitly because the statistical or
@@ -43,15 +59,46 @@ One possible status vocabulary:
 The important rule is that status should not be only prose. It should be
 visible at the boundary where users and contributors meet the project.
 
+## Public Surface Categories
+
+magmaan should probably expose two main public API layers over one
+implementation, plus explicit status-scoped surfaces:
+
+- **Friendly API**: ergonomic staged entry points for ordinary use, currently
+  centered on `magmaan::api` and the exported R helpers. These compose
+  lower-level primitives while keeping statistical choices explicit.
+- **Compositional API**: public power-user primitives in domain namespaces such
+  as `spec`, `model`, `data`, `estimate`, `inference`, `robust`, `measures`,
+  and `optim`. This is the methods-development, simulation, and LLM-readable
+  surface.
+- **Compatibility API**: public surfaces under `compat::*`, especially
+  `compat::lavaan`, whose purpose is matching external naming, projection, or
+  oracle behavior rather than defining magmaan's internal ontology.
+- **Experimental API**: public research primitives whose contract,
+  calibration, naming, result shape, or supported scope may still change.
+  Experimental APIs should stay in their domain namespace, for example
+  `data::experimental` or `optim::experimental`, rather than moving all
+  experiments to one top-level namespace.
+
+Internal implementation details should live in uninstalled headers, `src/`, or
+explicit `detail` / `internal` namespaces. They carry no compatibility promise.
+
+In C++ terms, the practical public boundary is not only symbol visibility. It
+is "installed public header plus documented support status." Namespace names
+communicate intent, but the support matrix and API documentation carry the
+actual compatibility claim. Unless magmaan later decides otherwise, C++ ABI
+stability should not be promised; source-level behavior for documented public
+surfaces is the realistic contract.
+
 ## Should Status Be Namespaces?
 
-Maybe partly, but probably not only.
+Maybe partly, but not as a top-level taxonomy that replaces domain namespaces.
 
 Namespaces are attractive because they make status visible at the call site:
 
 ```cpp
 magmaan::estimate::fit_ml(...)
-magmaan::lab::ordinal::pairwise_joint_composite_objective(...)
+magmaan::data::experimental::pairwise_joint_composite_objective(...)
 magmaan::compat::lavaan::to_lavaan_partable(...)
 ```
 
@@ -63,18 +110,25 @@ This has real advantages:
 - R and Python bindings can mirror the same grouping.
 
 But namespaces alone are too blunt. Some modules contain both stable and
-experimental entry points, and moving every experimental helper under
-`lab::...` could make the implementation noisier than the distinction is worth.
+experimental entry points, and moving every experimental helper into a
+top-level `lab::...` namespace could make the implementation noisier than the
+distinction is worth.
 For example, an ordinal data module may have one lavaan-compatible moment
 builder and several robust experimental builders that share low-level kernels.
+Likewise, a new optimizer should remain conceptually in `optim`; if its public
+contract is unsettled, it can live in `optim::experimental` or an experimental
+optimizer header rather than `lab::optim`.
 
 A hybrid policy may work better:
 
 - Use top-level namespaces for durable conceptual boundaries:
   `parse`, `spec`, `model`, `data`, `estimate`, `inference`, `robust`,
   `measures`, `optim`, `api`, and `compat::lavaan`.
-- Add `lab` namespaces for public experimental surfaces that users may call
-  directly but should not mistake for supported compatibility behavior.
+- Put experimental public surfaces inside the relevant domain namespace, such
+  as `data::experimental`, `estimate::experimental`, or
+  `optim::experimental`.
+- Optionally add a curated top-level `lab` facade later if it is useful as a
+  research-workbench index, but do not make it the owner of every experiment.
 - Keep private shared kernels in ordinary implementation files when they are
   not a public boundary.
 - Require docs and tests to carry the final status claim; the namespace is a
@@ -88,7 +142,7 @@ namespace magmaan::data {
 std::expected<OrdinalStats, Error> ordinal_stats_from_integer_data(...);
 }
 
-namespace magmaan::lab::data {
+namespace magmaan::data::experimental {
 // Experimental methods primitives; tested, but not lavaan compatibility claims.
 std::expected<OrdinalStats, Error>
 pairwise_ordinal_stats_h_weighted_from_integer_data(...);
@@ -104,13 +158,48 @@ Possible R shape:
 
 ```r
 magmaan_core$data_ordinal_stats_from_raw(...)
-magmaan_lab$data_pairwise_ordinal_h_weighted(...)
+magmaan_core$data_experimental_pairwise_ordinal_h_weighted(...)
 magmaan_core$compat_lavaan_lavaanify(...)
 ```
 
 This would keep the friendly namespace small, keep `magmaan_core` broad but
-mostly compatibility-backed, and move explicitly experimental work to a place
-where methods developers can still reach it.
+mostly compatibility-backed, and make explicitly experimental work reachable
+without making it look like an ordinary sibling of the stable compatibility
+path.
+
+The model is similar to the broad pattern used by established C++ and
+scientific libraries: documented public entry points receive compatibility
+discipline; private or underscored/internal implementation details do not; and
+experimental features require a visible opt-in or status marker. For magmaan,
+the closest analogue is: installed public header plus support-matrix entry
+defines public API; `detail` / `internal` / uninstalled headers are private;
+`experimental` namespaces or headers mark public research APIs whose software
+contract may still change.
+
+## Stable vs Experimental
+
+A public function, type, or header can be treated as stable when:
+
+- its statistical and software contract is written down;
+- input ordering, output scaling, group/block conventions, and missing-data
+  behavior are clear;
+- the name, signature, and result shape are considered settled;
+- unsupported combinations fail explicitly;
+- tests support the claim being made: lavaan fixtures for compatibility
+  claims, or invariants, finite-difference checks, diagnostic fixtures,
+  simulation checks, or independent references for non-lavaan behavior;
+- it appears in the support matrix or API documentation;
+- maintainers are willing to deprecate before breaking it.
+
+A public API should remain experimental when any of these are still fluid:
+contract, calibration, argument shape, result fields, supported model/data
+slice, or intended downstream use.
+
+Experimental does not mean untested or uncitable. It means no ordinary source
+compatibility promise yet. A simulation paper should be able to cite magmaan
+and name an experimental surface precisely, but readers should be able to see
+that it was a versioned research primitive rather than a default supported SEM
+workflow.
 
 ## Support Matrix
 
@@ -126,7 +215,7 @@ YAML. It might have rows like:
 | continuous complete-data CFA | ML | estimates, SE, chi-square | Core | lavaan fixtures |
 | continuous raw missing data | FIML | MLR robust report | Core | lavaan fixtures |
 | all-ordinal complete/listwise | DWLS/WLS | estimates, fit measures | Core | lavaan fixtures |
-| all-ordinal pairwise observed missing | composite likelihood | objective diagnostics | Lab | unit fixtures |
+| all-ordinal pairwise observed missing | composite likelihood | objective diagnostics | Experimental | unit fixtures |
 | mixed categorical | h-weighted polyserial | moment builder | Undesigned | design needed |
 | inequality constraints | any | active-bound inference | Rejected | out of scope |
 
@@ -143,7 +232,7 @@ The support matrix should answer:
 Experimental work should be promotable, but promotion should require more than
 passing tests.
 
-A lab feature could become core only when:
+An experimental feature could become core only when:
 
 - the statistical contract is written down;
 - unsupported combinations fail explicitly;
