@@ -15,10 +15,15 @@ ids <- if (length(args) == 1 && identical(args, "all")) {
 for (id in ids) {
   case <- get_case(id)
   data <- load_case_source_data(case)
+  transform_note <- if (is.null(case$data_transform)) "" else {
+    sprintf("; transform=%s", case$data_transform)
+  }
   meta <- write_prepared_data(
     id,
     data,
-    sprintf("%s::%s", case$package %||% case$source_type, case$dataset %||% case$raw_file %||% "manual")
+    sprintf("%s::%s%s", case$package %||% case$source_type,
+            case$dataset %||% case$raw_file %||% "manual",
+            transform_note)
   )
   cat(sprintf("prepared %-28s n=%d p=%d -> %s\n", id, meta$n_obs, length(meta$variables), prepared_data_path(id)))
 }

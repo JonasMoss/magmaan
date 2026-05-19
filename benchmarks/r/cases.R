@@ -12,6 +12,51 @@ benchmark_cases <- list(
     meanstructure = FALSE,
     supported_now = TRUE
   ),
+  hs_3factor_cfa_fiml_masked = list(
+    id = "hs_3factor_cfa_fiml_masked",
+    tier = 0L,
+    status = "active",
+    estimator = "FIML",
+    magmaan_estimator = "FIML",
+    lavaan_estimator = "ML",
+    lavaan_missing = "fiml",
+    source_type = "lavaan_dataset",
+    package = "lavaan",
+    dataset = "HolzingerSwineford1939",
+    variables = paste0("x", 1:9),
+    data_transform = "hs_controlled_missing",
+    lavaan_function = "cfa",
+    meanstructure = TRUE,
+    supported_now = TRUE
+  ),
+  hs_3factor_cfa_uls = list(
+    id = "hs_3factor_cfa_uls",
+    tier = 0L,
+    status = "active",
+    estimator = "ULS",
+    source_type = "lavaan_dataset",
+    package = "lavaan",
+    dataset = "HolzingerSwineford1939",
+    variables = paste0("x", 1:9),
+    lavaan_function = "cfa",
+    meanstructure = FALSE,
+    est_tolerance = 5e-3,
+    supported_now = TRUE
+  ),
+  hs_3factor_cfa_gls = list(
+    id = "hs_3factor_cfa_gls",
+    tier = 0L,
+    status = "active",
+    estimator = "GLS",
+    source_type = "lavaan_dataset",
+    package = "lavaan",
+    dataset = "HolzingerSwineford1939",
+    variables = paste0("x", 1:9),
+    lavaan_function = "cfa",
+    meanstructure = FALSE,
+    est_tolerance = 5e-3,
+    supported_now = TRUE
+  ),
   bollen_democracy_sem = list(
     id = "bollen_democracy_sem",
     tier = 1L,
@@ -121,13 +166,28 @@ get_case <- function(case_id) {
   benchmark_cases[[case_id]]
 }
 
+apply_case_data_transform <- function(case, data) {
+  transform <- case$data_transform %||% ""
+  if (!nzchar(transform)) return(data)
+
+  if (identical(transform, "hs_controlled_missing")) {
+    out <- data
+    out$x2[seq(7L, nrow(out), by = 11L)] <- NA_real_
+    out$x5[seq(5L, nrow(out), by = 13L)] <- NA_real_
+    out$x8[seq(3L, nrow(out), by = 17L)] <- NA_real_
+    return(out)
+  }
+
+  stop("unknown benchmark data transform: ", transform, call. = FALSE)
+}
+
 load_case_source_data <- function(case) {
   if (identical(case$source_type, "lavaan_dataset")) {
     require_pkg("lavaan")
     env <- new.env(parent = emptyenv())
     utils::data(list = case$dataset, package = case$package, envir = env)
     data <- as.data.frame(get(case$dataset, envir = env))
-    return(data[, case$variables, drop = FALSE])
+    return(apply_case_data_transform(case, data[, case$variables, drop = FALSE]))
   }
 
   if (identical(case$source_type, "r_package_dataset")) {
@@ -135,7 +195,7 @@ load_case_source_data <- function(case) {
     env <- new.env(parent = emptyenv())
     utils::data(list = case$dataset, package = case$package, envir = env)
     data <- as.data.frame(get(case$dataset, envir = env))
-    return(data[, case$variables, drop = FALSE])
+    return(apply_case_data_transform(case, data[, case$variables, drop = FALSE]))
   }
 
   if (identical(case$source_type, "stata_dta")) {
@@ -144,7 +204,7 @@ load_case_source_data <- function(case) {
     if (!file.exists(raw_path)) {
       stop("raw Stata data not found; run fetch_data.R or download: ", raw_path, call. = FALSE)
     }
-    return(as.data.frame(haven::read_dta(raw_path)))
+    return(apply_case_data_transform(case, as.data.frame(haven::read_dta(raw_path))))
   }
 
   if (identical(case$source_type, "mplus_dat")) {
@@ -153,7 +213,7 @@ load_case_source_data <- function(case) {
       stop("raw Mplus data not found; run fetch_data.R or download: ", raw_path, call. = FALSE)
     }
     data <- utils::read.table(raw_path, header = FALSE, col.names = case$variables)
-    return(as.data.frame(data))
+    return(apply_case_data_transform(case, as.data.frame(data)))
   }
 
   stop("case does not have an automatic data loader yet: ", case$id, call. = FALSE)

@@ -40,11 +40,11 @@ fit_case <- function(case, model, data) {
   fun(
     model = model,
     data = data,
-    estimator = case$estimator %||% "ML",
+    estimator = case$lavaan_estimator %||% case$estimator %||% "ML",
     meanstructure = isTRUE(case$meanstructure),
     se = "standard",
     test = "standard",
-    missing = "listwise"
+    missing = case$lavaan_missing %||% "listwise"
   )
 }
 
@@ -73,6 +73,8 @@ for (id in ids) {
   payload <- list(
     case_id = id,
     estimator = case$estimator %||% "ML",
+    lavaan_estimator = case$lavaan_estimator %||% case$estimator %||% "ML",
+    lavaan_missing = case$lavaan_missing %||% "listwise",
     reference_engine = "lavaan",
     reference_version = as.character(utils::packageVersion("lavaan")),
     generated_at = format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),

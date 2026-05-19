@@ -10,6 +10,36 @@
   model_type: 3-factor CFA
   current_use: calibration and smoke benchmark
 
+- id: hs_3factor_cfa_fiml_masked
+  tier: 0
+  status: active
+  source: lavaan::HolzingerSwineford1939 with deterministic missingness mask
+  estimator: FIML
+  lavaan_estimator: ML with missing = fiml
+  data_path: raw continuous with missingness
+  model_type: 3-factor CFA
+  current_use: FIML smoke benchmark with controlled missingness
+
+- id: hs_3factor_cfa_uls
+  tier: 0
+  status: active
+  source: lavaan::HolzingerSwineford1939
+  estimator: ULS
+  est_tolerance: 5.0e-3
+  data_path: complete continuous sample statistics
+  model_type: 3-factor CFA
+  current_use: continuous LS smoke benchmark
+
+- id: hs_3factor_cfa_gls
+  tier: 0
+  status: active
+  source: lavaan::HolzingerSwineford1939
+  estimator: GLS
+  est_tolerance: 5.0e-3
+  data_path: complete continuous sample statistics
+  model_type: 3-factor CFA
+  current_use: continuous LS smoke benchmark
+
 - id: bollen_democracy_sem
   tier: 1
   status: active
