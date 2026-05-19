@@ -29,6 +29,15 @@ reparameterize(const optim::GmmProblem& prob, const EqConstraints& con) {
     if (!Jt.has_value()) return std::unexpected(Jt.error());
     return Eigen::MatrixXd(*Jt * con.Kmat);
   };
+  if (prob.eval) {
+    out.eval = [eval = prob.eval, con](
+                   const Eigen::VectorXd& a) -> fit_expected<optim::LsEvaluation> {
+      auto e = eval(con.expand(a));
+      if (!e.has_value()) return std::unexpected(e.error());
+      return optim::LsEvaluation{std::move(e->residual),
+                                 Eigen::MatrixXd(e->jacobian * con.Kmat)};
+    };
+  }
   out.expand = [e = prob.expand, con](const Eigen::VectorXd& a) {
     return e(con.expand(a));
   };

@@ -160,7 +160,7 @@ struct ProfilePoint {
   Eigen::VectorXd theta;
   Eigen::VectorXd residual;
   Eigen::MatrixXd H;
-  Eigen::MatrixXd Jr_beta;
+  Eigen::MatrixXd jacobian;
 };
 
 // Solve the inner linear least-squares for α̂ at a given β.
@@ -170,27 +170,39 @@ profile_at(const optim::GmmProblem& base, const Classification& cls,
   Eigen::VectorXd theta_base = cls.constraints.theta0;
   if (cls.K_beta.cols() > 0) theta_base.noalias() += cls.K_beta * beta;
 
-  auto r0 = base.r(theta_base);
-  if (!r0.has_value()) return std::unexpected(r0.error());
-  auto Jr0 = base.J(theta_base);
-  if (!Jr0.has_value()) return std::unexpected(Jr0.error());
+  Eigen::VectorXd r0;
+  Eigen::MatrixXd Jr0;
+  if (base.eval) {
+    auto e0 = base.eval(theta_base);
+    if (!e0.has_value()) return std::unexpected(e0.error());
+    r0 = std::move(e0->residual);
+    Jr0 = std::move(e0->jacobian);
+  } else {
+    auto r0_or = base.r(theta_base);
+    if (!r0_or.has_value()) return std::unexpected(r0_or.error());
+    auto Jr0_or = base.J(theta_base);
+    if (!Jr0_or.has_value()) return std::unexpected(Jr0_or.error());
+    r0 = std::move(*r0_or);
+    Jr0 = std::move(*Jr0_or);
+  }
 
   ProfilePoint out;
   // H = ∂r/∂α is invariant in the conditionally-linear α (the residual is
   // affine in Θ/Ψ/ν/α), so evaluating it at θ_base is exact — and so is the
   // inner linear least-squares it drives.
-  out.H = *Jr0 * cls.K_alpha;
+  out.H = Jr0 * cls.K_alpha;
 
   const Eigen::Index n_alpha = cls.K_alpha.cols();
   if (n_alpha == 0) {
-    out.residual = *r0;
+    out.residual = std::move(r0);
     out.theta    = theta_base;
-    out.Jr_beta  = *Jr0 * cls.K_beta;
+    out.jacobian = Jr0 * cls.K_beta;
     return out;
   }
 
-  const Eigen::VectorXd alpha_hat = out.H.colPivHouseholderQr().solve(-*r0);
-  out.residual = *r0 + out.H * alpha_hat;
+  const Eigen::ColPivHouseholderQR<Eigen::MatrixXd> H_qr(out.H);
+  const Eigen::VectorXd alpha_hat = H_qr.solve(-r0);
+  out.residual = r0 + out.H * alpha_hat;
   out.theta    = theta_base + cls.K_alpha * alpha_hat;
 
   // The outer (β) Jacobian must be taken at the *profiled* point θ̂(β):
@@ -198,7 +210,11 @@ profile_at(const optim::GmmProblem& base, const Classification& cls,
   // J_β at θ_base would be wrong.
   auto Jr = base.J(out.theta);
   if (!Jr.has_value()) return std::unexpected(Jr.error());
-  out.Jr_beta = *Jr * cls.K_beta;
+  out.jacobian = *Jr * cls.K_beta;
+  if (out.jacobian.cols() > 0) {
+    const Eigen::MatrixXd coeff = H_qr.solve(out.jacobian);
+    out.jacobian.noalias() -= out.H * coeff;
+  }
   return out;
 }
 
@@ -252,13 +268,13 @@ gp(const optim::GmmProblem& base, const spec::LatentStructure& pt,
       -> fit_expected<Eigen::MatrixXd> {
     auto p = profiled(beta);
     if (!p.has_value()) return std::unexpected(p.error());
-    // ∂r/∂β with α profiled out: J_r·K_β projected off the column space of H.
-    Eigen::MatrixXd Jb = p->Jr_beta;
-    if (p->H.cols() > 0) {
-      const Eigen::MatrixXd coeff = p->H.colPivHouseholderQr().solve(Jb);
-      Jb.noalias() -= p->H * coeff;
-    }
-    return Jb;
+    return p->jacobian;
+  };
+  out.eval = [profiled](const Eigen::VectorXd& beta)
+      -> fit_expected<optim::LsEvaluation> {
+    auto p = profiled(beta);
+    if (!p.has_value()) return std::unexpected(p.error());
+    return optim::LsEvaluation{p->residual, p->jacobian};
   };
   out.expand = [profiled, cls](const Eigen::VectorXd& beta) -> Eigen::VectorXd {
     auto p = profiled(beta);
