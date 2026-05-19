@@ -7,6 +7,20 @@ Effort tags: **S** bounded docs/fixtures/wrapper cleanup · **M** focused
 implementation or test slice · **L** new estimator plumbing or cross-module
 semantics · **XL** statistical design/research track before implementation.
 
+## Known failures
+
+- **M.** `ordinal` fixture `0012_2group_equal_loading_3cat_cfa` fails the
+  DWLS/WLS lavaan delta contract under the `opt` build (`-O3 -march=native`)
+  but passes under `dev`. Both estimators land on a different iterate than
+  lavaan — DWLS `theta diff ~0.040`, WLS `theta diff ~0.024`; the other 15/17
+  ordinal fixtures match to ~1e-7. It is the only multi-group
+  equality-constrained ordinal fixture (two-group equal-loading 3-category
+  CFA). Pre-existing — confirmed failing on baseline. Test
+  `ordinal:ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract`
+  in `tests/golden/ordinal_golden_test.cpp`. Investigate whether the
+  multi-group equality-constrained DWLS/WLS path has a genuine flat optimum, a
+  too-tight tolerance, or an FMA-sensitive conditioning bug.
+
 ## API and R boundary
 
 - **S/M.** Add or rename R wrappers only when the methods-developer workflow
