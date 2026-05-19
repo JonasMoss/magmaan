@@ -1,13 +1,9 @@
 library(magmaan)
-library(lavaan)
 
 core <- magmaan_core
 
 times <- as.integer(Sys.getenv("MAGMAAN_KREIBERG_TIMES", "500"))
-opt_profiles <- list(
-  strict = list(max_iter = 5000L, ftol = 1e-12, gtol = 1e-8),
-  matlab_like = list(max_iter = 400L, ftol = 1e-6, gtol = 1e-6)
-)
+lbfgsb <- list(max_iter = 5000L, ftol = 1e-12, gtol = 1e-8)
 ceres <- list(max_iter = 500L, ftol = 1e-10, gtol = 1e-7, ptol = 1e-8)
 
 bollen_model <- "ind60 =~ x1 + x2 + x3
@@ -55,16 +51,6 @@ try_fit <- function(expr) {
                                         class = "magmaan_bench_error"))
 }
 
-lavaan_started_spec <- function(case) {
-  spec <- model_spec(case$model)
-  lav <- lavaan::sem(case$model, data = case$data, estimator = "GLS",
-                     do.fit = FALSE)
-  lav_pt <- lavaan::parTable(lav)
-  free <- spec$partable$free > 0L
-  spec$partable$ustart[free] <- lav_pt$start[free]
-  spec
-}
-
 inf_bounds <- function(spec) {
   npar <- max(spec$partable$free)
   list(lower = rep(-Inf, npar), upper = rep(Inf, npar))
@@ -102,7 +88,7 @@ recover_snlls_iterations <- function(spec, dat, backend, fit, opts) {
   NULL
 }
 
-measure_spec <- function(case, spec, start_scheme, opt_profile, opts, setup_usec) {
+measure_spec <- function(case, spec, setup_usec) {
   dat <- df_to_data(case$data, spec, scaling = "n-1")
 
   rows <- list()
@@ -116,13 +102,11 @@ measure_spec <- function(case, spec, start_scheme, opt_profile, opts, setup_usec
   for (job in jobs) {
     backend <- job$backend
     snlls <- job$snlls
-    fit <- try_fit(fit_one(spec, dat, backend, snlls, opts))
+    fit <- try_fit(fit_one(spec, dat, backend, snlls, lbfgsb))
     label <- if (snlls) "SNLLS" else "ordinary"
     if (inherits(fit, "magmaan_bench_error")) {
       rows[[length(rows) + 1L]] <- data.frame(
         case = case$id,
-        start_scheme = start_scheme,
-        opt_profile = opt_profile,
         method = label,
         backend = backend,
         iterations = NA_integer_,
@@ -134,13 +118,11 @@ measure_spec <- function(case, spec, start_scheme, opt_profile, opts, setup_usec
       )
     } else {
       fit_usec <- elapsed_usec(times, function() {
-        fit_one(spec, dat, backend, snlls, opts)$fmin
+        fit_one(spec, dat, backend, snlls, lbfgsb)$fmin
       })
-      recovered <- if (snlls) recover_snlls_iterations(spec, dat, backend, fit, opts) else NULL
+      recovered <- if (snlls) recover_snlls_iterations(spec, dat, backend, fit, lbfgsb) else NULL
       rows[[length(rows) + 1L]] <- data.frame(
         case = case$id,
-        start_scheme = start_scheme,
-        opt_profile = opt_profile,
         method = label,
         backend = backend,
         iterations = if (is.null(recovered)) fit$iterations else recovered,
@@ -162,15 +144,34 @@ measure_case <- function(case) {
   })
 
   spec <- model_spec(case$model)
-  lav_spec <- lavaan_started_spec(case)
+  measure_spec(case, spec, setup_usec)
+}
 
+ratio_or_na <- function(num, den) {
+  out <- num / den
+  out[!is.finite(out)] <- NA_real_
+  out
+}
+
+ordinary_snlls_ratios <- function(out) {
+  comparable <- out[out$backend %in% c("lbfgsb", "ceres"), ]
   rows <- list()
-  for (profile_name in names(opt_profiles)) {
-    opts <- opt_profiles[[profile_name]]
-    rows[[length(rows) + 1L]] <- measure_spec(case, spec, "magmaan_default",
-                                              profile_name, opts, setup_usec)
-    rows[[length(rows) + 1L]] <- measure_spec(case, lav_spec, "lavaan_explicit",
-                                              profile_name, opts, setup_usec)
+  for (case in unique(comparable$case)) {
+    for (backend in unique(comparable$backend[comparable$case == case])) {
+      ordinary <- comparable[comparable$case == case &
+                               comparable$backend == backend &
+                               comparable$method == "ordinary", ]
+      snlls <- comparable[comparable$case == case &
+                            comparable$backend == backend &
+                            comparable$method == "SNLLS", ]
+      if (!nrow(ordinary) || !nrow(snlls)) next
+      rows[[length(rows) + 1L]] <- data.frame(
+        case = case,
+        backend = backend,
+        iter_ratio = ratio_or_na(ordinary$iterations, snlls$iterations),
+        time_ratio = ratio_or_na(ordinary$fit_usec, snlls$fit_usec)
+      )
+    }
   }
   do.call(rbind, rows)
 }
@@ -189,21 +190,15 @@ print(published_rows, row.names = FALSE)
 
 cat("\nMagmaan pseudo-replication: GLS, setup once, fit-only timing\n")
 out <- do.call(rbind, lapply(cases, measure_case))
-snlls_key <- with(out, paste(case, start_scheme, opt_profile, backend, method,
-                             sep = "\r"))
-baseline_key <- with(out, paste(case, start_scheme, opt_profile, backend,
-                                "SNLLS", sep = "\r"))
-out$iter_ratio <- out$iterations / out$iterations[match(baseline_key, snlls_key)]
-out$time_ratio <- out$fit_usec / out$fit_usec[match(baseline_key, snlls_key)]
-out$iter_ratio[out$backend == "ceres_bfgs"] <- NA_real_
-out$time_ratio[out$backend == "ceres_bfgs"] <- NA_real_
 print(out, digits = 6, row.names = FALSE)
 
+cat("\nComparable ordinary/SNLLS ratios\n")
+print(ordinary_snlls_ratios(out), digits = 6, row.names = FALSE)
+
 cat("\nNotes\n")
-cat("* Timings are magmaan-only and do not reproduce MATLAB BFGS finite-difference gradients.\n")
-cat("* matlab_like uses max_iter=400, ftol=1e-6, gtol=1e-6; Ceres BFGS is dense line-search BFGS with analytic gradients, not MATLAB finite differences.\n")
+cat("* Timings are magmaan-only and use magmaan starting values.\n")
 cat("* Ordinary GLS passes explicit +/-Inf bounds so magmaan dispatches to LBFGS-B and reports solver iterations reliably.\n")
-cat("* ceres_bfgs is SNLLS-only; iter_ratio/time_ratio are NA because there is no matching ordinary Ceres-BFGS row.\n")
+cat("* Ratios are printed only for backends with both ordinary and SNLLS rows; ceres_bfgs is SNLLS-only.\n")
 cat("* cap_recovered means unbounded SNLLS accepted a salvaged L-BFGS iterate; the count is the smallest max_iter cap that succeeds.\n")
 cat("* Kreiberg & Zhou's Geiser depression example is not run: the data are not vendored here, and the model is a higher-order/indicator-specific latent-state model.\n")
 cat("* The HS CFA case is the supported public-data analogue from Kreiberg et al. (2021).\n")
