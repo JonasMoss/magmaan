@@ -42,6 +42,20 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   for Eigen-heavy local builds; keep them disabled unless they improve
   changed-TU rebuilds without worsening no-op or full rebuild ergonomics.
 
+## Ordinal/SNLLS research
+
+- **XL.** Design and prototype SNLLS for all-ordinal delta DWLS/WLS on
+  polychoric moments. The likely scope is a Golub-Pereyra profile over free
+  thresholds plus conditionally linear latent-response covariance pieces, with
+  loadings/structural coefficients as the outer nonlinear block. This needs its
+  own design note before implementation: classify threshold rows outside the
+  current `ModelEvaluator::param_locations()` matrix-cell scheme, prove the
+  delta residual/Jacobian is affine in the proposed profiled block, spell out
+  equality-constraint compatibility, and gate against full ordinal LS plus
+  lavaan-backed fixtures. Theta parameterization and mixed continuous/ordinal
+  SNLLS stay out of this first scope unless the separability argument is made
+  explicit.
+
 ## Composite models
 
 The C++ core and R binding slice have landed: `<~` parses as `Op::Composite`,
