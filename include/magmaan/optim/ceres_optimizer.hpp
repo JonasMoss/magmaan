@@ -116,6 +116,28 @@ private:
   CeresOptions opts_;
 };
 
+// CeresBfgsOptimizer — Ceres line-search minimizer with a dense BFGS direction
+// and Wolfe line search. It is unbounded only, matching Ceres' line-search
+// contract, and is mainly for small research/benchmark comparisons where dense
+// quasi-Newton behavior is desired.
+class CeresBfgsOptimizer {
+public:
+  static constexpr std::string_view name = "ceres-bfgs";
+
+  CeresBfgsOptimizer(CeresOptions opts = {}) noexcept : opts_(opts) {}
+
+  CeresOptions options() const noexcept { return opts_; }
+
+  using Objective = std::function<double(const Eigen::VectorXd& /*x*/,
+                                         Eigen::VectorXd&       /*grad_out*/)>;
+
+  fit_expected<LbfgsOutput>
+  minimize(Objective f, const Eigen::VectorXd& x0) const;
+
+private:
+  CeresOptions opts_;
+};
+
 }  // namespace magmaan::optim
 
 #endif  // MAGMAAN_WITH_CERES

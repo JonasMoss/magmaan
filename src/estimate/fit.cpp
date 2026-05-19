@@ -60,6 +60,10 @@ run_scalar(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
       return std::unexpected(fit_err(FitError::Kind::NumericIssue,
           "Ceres backend applies only to the least-squares path "
           "(fit_gmm / fit_gls); it has no scalar-objective entry point"));
+    case Backend::CeresBfgs:
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "CeresBfgs backend applies only to the least-squares path "
+          "(fit_gmm / fit_gls); it has no scalar-objective entry point"));
     case Backend::Lbfgs:
       break;
   }
@@ -69,12 +73,19 @@ run_scalar(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
 fit_expected<optim::OptimResult>
 run_gmm(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
         const Bounds& bounds, Backend backend, LbfgsOptions opts) {
-  if (backend == Backend::Ceres) {
+  if (backend == Backend::Ceres || backend == Backend::CeresBfgs) {
 #ifdef MAGMAAN_WITH_CERES
     optim::CeresOptions copts;
     copts.max_iter = opts.max_iter;
     copts.ftol     = opts.ftol;
     copts.gtol     = opts.gtol;
+    if (backend == Backend::CeresBfgs) {
+      if (!bounds.empty()) {
+        return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+            "CeresBfgs backend is unbounded and cannot honor box bounds"));
+      }
+      return optim::ceres_bfgs(prob, x0, copts);
+    }
     return optim::ceres_lm(prob, x0, bounds, copts);
 #else
     (void)opts;

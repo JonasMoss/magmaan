@@ -32,9 +32,10 @@ struct Estimates {
 // Optimizer backend selector for the convenience composers below.
 //   Lbfgs       — L-BFGS / L-BFGS-B (the default).
 //   Ceres       — Levenberg–Marquardt; least-squares path only, needs MAGMAAN_WITH_CERES.
+//   CeresBfgs   — Ceres line-search dense BFGS; unbounded least-squares path only.
 //   Nlopt       — NLopt SLSQP cross-check; needs MAGMAAN_WITH_NLOPT.
 //   TrustRegion — CppNumericalSolvers Newton trust-region cross-check; unbounded only.
-enum class Backend { Lbfgs, Ceres, Nlopt, TrustRegion };
+enum class Backend { Lbfgs, Ceres, CeresBfgs, Nlopt, TrustRegion };
 
 // ============================================================================
 // Convenience composers — the template-free core entry points.

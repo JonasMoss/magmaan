@@ -104,6 +104,14 @@ ceres_lm(const GmmProblem& prob, const Eigen::VectorXd& x0,
   if (!out.has_value()) return std::unexpected(out.error());
   return to_result(std::move(*out));
 }
+
+fit_expected<OptimResult>
+ceres_bfgs(const GmmProblem& prob, const Eigen::VectorXd& x0,
+           CeresOptions opts) {
+  auto out = CeresBfgsOptimizer{opts}.minimize(scalarize(prob).f, x0);
+  if (!out.has_value()) return std::unexpected(out.error());
+  return to_result(std::move(*out));
+}
 #endif
 
 #ifdef MAGMAAN_WITH_NLOPT

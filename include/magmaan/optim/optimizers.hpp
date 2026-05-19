@@ -17,6 +17,8 @@
 //                    (unbounded scalar minimizer).
 //   • ceres_lm     — Ceres Levenberg–Marquardt least-squares minimizer
 //                    (only when MAGMAAN_WITH_CERES is set).
+//   • ceres_bfgs   — Ceres line-search dense BFGS least-squares minimizer
+//                    (unbounded only, only when MAGMAAN_WITH_CERES is set).
 //   • nlopt_slsqp  — NLopt SLSQP scalar cross-check (only when
 //                    MAGMAAN_WITH_NLOPT is set).
 //
@@ -53,6 +55,14 @@ trust_region(const ScalarProblem& prob, const Eigen::VectorXd& x0,
 fit_expected<OptimResult>
 ceres_lm(const GmmProblem& prob, const Eigen::VectorXd& x0,
          const Bounds& bounds = {}, CeresOptions opts = {});
+
+// Ceres dense BFGS line-search minimization over the scalarized least-squares
+// objective. This is unbounded: Ceres' line-search minimizer does not support
+// box constraints. Intended for small research / benchmark comparisons against
+// dense quasi-Newton implementations.
+fit_expected<OptimResult>
+ceres_bfgs(const GmmProblem& prob, const Eigen::VectorXd& x0,
+           CeresOptions opts = {});
 #endif
 
 #ifdef MAGMAAN_WITH_NLOPT

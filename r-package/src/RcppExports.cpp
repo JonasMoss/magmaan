@@ -396,6 +396,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fit_gls_snlls_ceres_bfgs_impl
+Rcpp::List fit_gls_snlls_ceres_bfgs_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> ceres, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_gls_snlls_ceres_bfgs_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP ceresSEXP, SEXP boundsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type ceres(ceresSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_gls_snlls_ceres_bfgs_impl(partable, sample_stats, ceres, bounds));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_wls_snlls_ceres_impl
 Rcpp::List fit_wls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats, SEXP W, Rcpp::Nullable<Rcpp::List> ceres, Rcpp::Nullable<Rcpp::List> bounds);
 RcppExport SEXP _magmaan_fit_wls_snlls_ceres_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP WSEXP, SEXP ceresSEXP, SEXP boundsSEXP) {
@@ -1142,6 +1156,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_uls_ceres_impl", (DL_FUNC) &_magmaan_fit_uls_ceres_impl, 4},
     {"_magmaan_fit_uls_snlls_ceres_impl", (DL_FUNC) &_magmaan_fit_uls_snlls_ceres_impl, 4},
     {"_magmaan_fit_gls_snlls_ceres_impl", (DL_FUNC) &_magmaan_fit_gls_snlls_ceres_impl, 4},
+    {"_magmaan_fit_gls_snlls_ceres_bfgs_impl", (DL_FUNC) &_magmaan_fit_gls_snlls_ceres_bfgs_impl, 4},
     {"_magmaan_fit_wls_snlls_ceres_impl", (DL_FUNC) &_magmaan_fit_wls_snlls_ceres_impl, 5},
     {"_magmaan_fit_gls_ceres_impl", (DL_FUNC) &_magmaan_fit_gls_ceres_impl, 4},
     {"_magmaan_fit_wls_ceres_impl", (DL_FUNC) &_magmaan_fit_wls_ceres_impl, 5},
