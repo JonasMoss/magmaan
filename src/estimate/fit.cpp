@@ -1,6 +1,5 @@
 #include "magmaan/estimate/fit.hpp"
 
-#include <limits>
 #include <string>
 #include <utility>
 
@@ -34,22 +33,6 @@ namespace {
 
 FitError fit_err(FitError::Kind kind, std::string detail) {
   return FitError{kind, std::move(detail), 0, 0.0};
-}
-
-// Fold per-θ box bounds onto the constraint-reduced α for a pure-merge
-// reparameterization (each θ_k is a copy of α_{group[k]}).
-Bounds fold_alpha_bounds(const EqConstraints& con, const Bounds& b) {
-  constexpr double kInf = std::numeric_limits<double>::infinity();
-  const Eigen::Index na = con.Kmat.cols();
-  Bounds out;
-  out.lower = Eigen::VectorXd::Constant(na, -kInf);
-  out.upper = Eigen::VectorXd::Constant(na, kInf);
-  for (Eigen::Index k = 0; k < b.lower.size(); ++k) {
-    const auto g = static_cast<Eigen::Index>(con.group[static_cast<std::size_t>(k)]);
-    out.lower(g) = std::max(out.lower(g), b.lower(k));
-    out.upper(g) = std::min(out.upper(g), b.upper(k));
-  }
-  return out;
 }
 
 // Dispatch a scalar-objective optimization by backend. Shared by `fit_ml` and

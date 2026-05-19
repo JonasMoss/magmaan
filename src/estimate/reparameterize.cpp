@@ -1,10 +1,13 @@
 #include "magmaan/estimate/reparameterize.hpp"
 
+#include <algorithm>
+#include <limits>
 #include <utility>
 
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
+#include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/optim/problem.hpp"
 
@@ -48,6 +51,21 @@ reparameterize(const optim::ScalarProblem& prob, const EqConstraints& con) {
   out.expand = [e = prob.expand, con](const Eigen::VectorXd& a) {
     return e(con.expand(a));
   };
+  return out;
+}
+
+Bounds fold_alpha_bounds(const EqConstraints& con, const Bounds& b) {
+  constexpr double kInf = std::numeric_limits<double>::infinity();
+  const Eigen::Index na = con.Kmat.cols();
+  Bounds out;
+  out.lower = Eigen::VectorXd::Constant(na, -kInf);
+  out.upper = Eigen::VectorXd::Constant(na, kInf);
+  for (Eigen::Index k = 0; k < b.lower.size(); ++k) {
+    const auto g =
+        static_cast<Eigen::Index>(con.group[static_cast<std::size_t>(k)]);
+    out.lower(g) = std::max(out.lower(g), b.lower(k));
+    out.upper(g) = std::min(out.upper(g), b.upper(k));
+  }
   return out;
 }
 
