@@ -20,6 +20,13 @@ namespace magmaan::optim {
 using ResidualFn  = std::function<fit_expected<Eigen::VectorXd>(const Eigen::VectorXd&)>;
 // x ↦ whitened Jacobian J̃(x) = ∂r̃/∂x.
 using JacobianFn  = std::function<fit_expected<Eigen::MatrixXd>(const Eigen::VectorXd&)>;
+// x ↦ whitened residual and Jacobian at the same point. Optional fast path for
+// builders that can compute both from one model evaluation.
+struct LsEvaluation {
+  Eigen::VectorXd residual;
+  Eigen::MatrixXd jacobian;
+};
+using LsEvaluationFn = std::function<fit_expected<LsEvaluation>(const Eigen::VectorXd&)>;
 // (x, grad_out) ↦ F(x), writing ∇F into grad_out. +inf signals "x invalid".
 using ObjectiveFn = std::function<double(const Eigen::VectorXd&, Eigen::VectorXd&)>;
 // x ↦ full θ. The optimizer drives `x` (which may be a reduced parameter —
@@ -39,6 +46,7 @@ using LsJacobianFn = JacobianFn;
 struct GmmProblem {
   ResidualFn   r;
   JacobianFn   J;
+  LsEvaluationFn eval;
   Eigen::Index n_resid = 0;
   Eigen::Index n_param = 0;
   ExpandFn     expand;

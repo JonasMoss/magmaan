@@ -119,6 +119,60 @@ TEST_CASE("SNLLS: gp profiled objective gradient matches finite differences") {
   check_gp_gradient_matches_fd(true);                            // GLS weight
 }
 
+TEST_CASE("SNLLS: scalarized profile reuses combined base evaluation") {
+  auto h = handles_for("f =~ x1 + x2 + x3 + x4");
+  SampleStats samp;
+  samp.S = {make_misspecified_1f_S()};
+  samp.n_obs = {301};
+
+  auto ev = ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
+  REQUIRE(x0.has_value());
+  auto base = magmaan::estimate::gmm::residuals(*ev, samp, *x0, {});
+  REQUIRE(base.has_value());
+  REQUIRE(static_cast<bool>(base->eval));
+
+  struct Counts {
+    int r = 0;
+    int J = 0;
+    int eval = 0;
+  } counts;
+
+  magmaan::optim::GmmProblem counted;
+  counted.n_resid = base->n_resid;
+  counted.n_param = base->n_param;
+  counted.expand = base->expand;
+  counted.r = [r = base->r, &counts](const Eigen::VectorXd& x) {
+    ++counts.r;
+    return r(x);
+  };
+  counted.J = [J = base->J, &counts](const Eigen::VectorXd& x) {
+    ++counts.J;
+    return J(x);
+  };
+  counted.eval = [eval = base->eval, &counts](const Eigen::VectorXd& x) {
+    ++counts.eval;
+    return eval(x);
+  };
+
+  auto prof = magmaan::estimate::gmm::gp(counted, h.pt, *ev, *x0);
+  REQUIRE(prof.has_value());
+  const magmaan::optim::ScalarProblem sp =
+      magmaan::optim::scalarize(prof->problem);
+
+  Eigen::VectorXd beta = prof->beta0;
+  beta.array() += 0.03;
+  Eigen::VectorXd grad(beta.size());
+  const double f = sp.f(beta, grad);
+
+  REQUIRE(std::isfinite(f));
+  CHECK(grad.allFinite());
+  CHECK(counts.r == 0);
+  CHECK(counts.eval == 1);
+  CHECK(counts.J == 1);
+}
+
 TEST_CASE("SNLLS: ULS profiles linear block and recovers a feasible 1F covariance") {
   auto h = handles_for("f =~ x1 + x2 + x3");
   SampleStats samp;

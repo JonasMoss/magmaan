@@ -49,8 +49,20 @@ ScalarProblem scalarize(const GmmProblem& prob) {
   // f(x) = ½‖r(x)‖², ∇f(x) = J(x)ᵀ·r(x). A non-finite or wrong-shape
   // residual/Jacobian returns +inf — the "x is invalid, shorten the step"
   // contract every optimizer backend already honors.
-  s.f = [r_fn = prob.r, J_fn = prob.J, n_resid = prob.n_resid](
+  s.f = [r_fn = prob.r, J_fn = prob.J, eval_fn = prob.eval,
+         n_resid = prob.n_resid](
             const Eigen::VectorXd& x, Eigen::VectorXd& grad) -> double {
+    if (eval_fn) {
+      auto e = eval_fn(x);
+      if (!e.has_value() || e->residual.size() != n_resid ||
+          e->jacobian.rows() != n_resid || e->jacobian.cols() != x.size() ||
+          !e->residual.allFinite() || !e->jacobian.allFinite()) {
+        grad.setZero();
+        return std::numeric_limits<double>::infinity();
+      }
+      grad.noalias() = e->jacobian.transpose() * e->residual;
+      return 0.5 * e->residual.squaredNorm();
+    }
     auto r = r_fn(x);
     if (!r.has_value() || r->size() != n_resid || !r->allFinite()) {
       grad.setZero();
