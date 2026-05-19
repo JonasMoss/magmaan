@@ -27,7 +27,7 @@ TEST_CASE("parser flat fixtures match lavaan") {
     auto raw = magmaan::test::read_fixture(path);
     REQUIRE_MESSAGE(raw.has_value(),
                     "missing flat fixture: " << path
-                    << " — run `Rscript tools/regen_oracle.R` to regenerate");
+                    << " — run `Rscript tests/tools/regen_oracle.R` to regenerate");
     auto exp = nlohmann::json::parse(*raw, nullptr, /*allow_exceptions=*/false);
     REQUIRE_MESSAGE(!exp.is_discarded(), "fixture is not valid JSON: " << path);
 

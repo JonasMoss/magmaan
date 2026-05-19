@@ -11,7 +11,7 @@
 #
 # The C++ golden test tests/golden/robcat_parity_golden_test.cpp consumes these
 # with no R at run time. This is a manual developer step; CI never runs R. It
-# is the sibling of tools/regen_oracle.R and tools/regen_parity_fixtures.R.
+# is the sibling of tests/tools/regen_oracle.R and tests/tools/regen_parity_fixtures.R.
 #
 # Estimator equivalence (verified, see the C++ test header):
 #   robcat polycor(c=C)  minimises  sum_k p_k * rho_fun(f_hat_k / p_k)  with
@@ -21,8 +21,8 @@
 #   robcat polycor_mle   == magmaan ML (= WmaHardCap, k = Inf).
 #
 # Usage:
-#   Rscript tools/regen_robcat_fixtures.R                  # all cases
-#   Rscript tools/regen_robcat_fixtures.R clean_3x3_moderate ...   # named cases
+#   Rscript tests/tools/regen_robcat_fixtures.R                  # all cases
+#   Rscript tests/tools/regen_robcat_fixtures.R clean_3x3_moderate ...   # named cases
 #
 # Requires the pinned robcat version (tests/fixtures/robcat_version.txt). If
 # robcat is not installed:
@@ -37,7 +37,7 @@ suppressMessages({
 })
 
 repo <- normalizePath(file.path(dirname(normalizePath(sub(
-  "^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1]))), ".."))
+  "^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1]))), "..", ".."))
 
 # --- robcat version pin ----------------------------------------------------
 pin_path <- file.path(repo, "tests", "fixtures", "robcat_version.txt")

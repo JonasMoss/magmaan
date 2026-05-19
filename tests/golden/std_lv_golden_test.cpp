@@ -23,7 +23,7 @@
 // (latent variances fixed at 1, all loadings free) against
 // `lavaan::cfa(model, data, std.lv = TRUE)` — fixtures under
 // tests/fixtures/fit_stdlv/ are produced by the dedicated section in
-// tools/regen_oracle.R (kept out of the shared corpus so the marker-mode
+// tests/tools/regen_oracle.R (kept out of the shared corpus so the marker-mode
 // golden layers aren't perturbed).
 
 namespace {

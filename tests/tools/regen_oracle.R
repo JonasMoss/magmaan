@@ -7,8 +7,8 @@
 # layers are added in P3+ as the C++ side gains the matching consumers.
 #
 # Usage:
-#   Rscript tools/regen_oracle.R                 # regenerate flat/*.flat.json
-#   Rscript tools/regen_oracle.R --check         # diff against working tree (TODO)
+#   Rscript tests/tools/regen_oracle.R                 # regenerate flat/*.flat.json
+#   Rscript tests/tools/regen_oracle.R --check         # diff against working tree (TODO)
 #
 # The script aborts loudly if the installed lavaan version disagrees with
 # the version pinned in tests/fixtures/lavaan_version.txt.
@@ -20,7 +20,7 @@ suppressMessages({
 
 # --- pinned-version check --------------------------------------------------
 script_dir <- normalizePath(dirname(sub("--file=", "", grep("--file=", commandArgs(trailingOnly = FALSE), value = TRUE)[1])))
-repo_root  <- normalizePath(file.path(script_dir, ".."))
+repo_root  <- normalizePath(file.path(script_dir, "..", ".."))
 fixtures   <- file.path(repo_root, "tests", "fixtures")
 
 pinned    <- trimws(readLines(file.path(fixtures, "lavaan_version.txt"))[1])

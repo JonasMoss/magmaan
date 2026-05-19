@@ -23,7 +23,7 @@
 // 1-factor CFA fitted with `b2 + b3 == 1.5` (lavaan enforces it via its
 // Lagrange path; magmaan by an affine reparam θ = θ₀ + Kα) against
 // `lavaan::cfa(model, data)`. Fixtures live under tests/fixtures/fit_lincon/,
-// produced by the dedicated section in tools/regen_oracle.R (kept out of the
+// produced by the dedicated section in tests/tools/regen_oracle.R (kept out of the
 // shared corpus, like fit_stdlv/).
 
 namespace {

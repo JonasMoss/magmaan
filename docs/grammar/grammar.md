@@ -24,7 +24,7 @@ subset of operators.
    forces fixtures to keep up with grammar changes.
 4. When the grammar changes, the order is: edit `grammar.ebnf` first,
    then update the parser/lexer to match, then regenerate fixtures via
-   `tools/regen_oracle.R`. PR review checks that the EBNF was touched
+   `tests/tools/regen_oracle.R`. PR review checks that the EBNF was touched
    when behavior changed.
 
 ## v0 scope — what is in

@@ -21,7 +21,7 @@
 namespace {
 
 // Translate the lavaan-shaped projection of our model to the same JSON shape
-// that tools/regen_oracle.R writes for the `ptable` layer (one row per object,
+// that tests/tools/regen_oracle.R writes for the `ptable` layer (one row per object,
 // fields: id, user, lhs, op, rhs, block, group, free, exo, ustart, label,
 // plabel). NaN is written as JSON null to match the R `na = "null"` choice.
 nlohmann::json ptable_to_json(std::string_view input,

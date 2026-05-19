@@ -41,7 +41,7 @@
 // inferential target we want to bless.
 //
 // Fixtures: tests/fixtures/robcat/<id>.json, generated once by
-// tools/regen_robcat_fixtures.R (needs R + the pinned robcat version). No R
+// tests/tools/regen_robcat_fixtures.R (needs R + the pinned robcat version). No R
 // runs here — the JSON oracle is frozen and committed.
 //
 //   ./build/fast/tests/magmaan_test_robcat -s
@@ -122,7 +122,7 @@ TEST_CASE("robcat-parity — robust polychoric vs robcat (canonical)") {
     auto raw = magmaan::test::read_fixture(path);
     if (!raw.has_value()) {
       failures.push_back(id +
-                         ": missing fixture — run tools/regen_robcat_fixtures.R");
+                         ": missing fixture — run tests/tools/regen_robcat_fixtures.R");
       continue;
     }
     auto fx = nlohmann::json::parse(*raw, nullptr, /*allow_exceptions=*/false);

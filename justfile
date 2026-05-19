@@ -82,11 +82,11 @@ r-clean:
 
 # Regenerate the lavaan oracle fixtures (needs R + the pinned lavaan version).
 regen-oracle:
-    Rscript tools/regen_oracle.R
+    Rscript tests/tools/regen_oracle.R
 
 # Regenerate the robcat parity fixtures (needs R + the pinned robcat version).
 regen-robcat:
-    Rscript tools/regen_robcat_fixtures.R
+    Rscript tests/tools/regen_robcat_fixtures.R
 
 # C++ tests + R smoke — everything.
 check: test r-check

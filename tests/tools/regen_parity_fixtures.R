@@ -8,7 +8,7 @@
 #
 # The C++ golden test tests/golden/lavaan_parity_golden_test.cpp consumes these
 # with no R at run time. This is a manual developer step; CI never runs R. It
-# is the sibling of tools/regen_oracle.R (synthetic corpus fixtures) and
+# is the sibling of tests/tools/regen_oracle.R (synthetic corpus fixtures) and
 # supersedes the earlier convergence-only fixture generator.
 #
 # Cases are grouped into four families, each fitted and serialized differently:
@@ -18,8 +18,8 @@
 #   ordinal  ordinal DWLS / WLS on integer Likert data
 #
 # Usage:
-#   Rscript tools/regen_parity_fixtures.R                       # all cases
-#   Rscript tools/regen_parity_fixtures.R hs_3factor_cfa ...    # named cases
+#   Rscript tests/tools/regen_parity_fixtures.R                       # all cases
+#   Rscript tests/tools/regen_parity_fixtures.R hs_3factor_cfa ...    # named cases
 #
 # Case definitions and prepared-data loading are reused from benchmarks/r/.
 # Run the benchmark data pipeline first if prepared data is missing:
@@ -32,11 +32,11 @@ suppressMessages({
 })
 
 repo <- normalizePath(file.path(dirname(normalizePath(sub(
-  "^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1]))), ".."))
+  "^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1]))), "..", ".."))
 
 source(file.path(repo, "benchmarks", "r", "common.R"))
 source(file.path(repo, "benchmarks", "r", "cases.R"))
-# Shared lavaan-to-JSON fixture helpers, also used by tools/regen_oracle.R.
+# Shared lavaan-to-JSON fixture helpers, also used by tests/tools/regen_oracle.R.
 source(file.path(repo, "benchmarks", "r", "fixture_json.R"))
 
 # common.R derives benchmark paths from the invoked script's location; when it

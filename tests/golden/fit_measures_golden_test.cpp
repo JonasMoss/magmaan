@@ -214,7 +214,7 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
   }
 
   if (!needs_regen.empty()) {
-    std::string m = "fixtures missing logl/aic/srmr/npar (run tools/regen_oracle.R):";
+    std::string m = "fixtures missing logl/aic/srmr/npar (run tests/tools/regen_oracle.R):";
     for (const auto& id : needs_regen) m += " " + id;
     MESSAGE(m);
   }
