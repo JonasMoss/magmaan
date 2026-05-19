@@ -8,7 +8,7 @@
 #include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/expected.hpp"
 
-namespace magmaan::estimate {
+namespace magmaan::estimate::frontier {
 
 enum class PairwiseCompositeWeighting {
   ObservedPairCount,
@@ -89,4 +89,4 @@ pairwise_ordinal_observed_joint_composite_objective(
     const std::vector<std::vector<std::int32_t>>& n_levels,
     PairwiseOrdinalCompositeOptions options = {});
 
-}  // namespace magmaan::estimate
+}  // namespace magmaan::estimate::frontier

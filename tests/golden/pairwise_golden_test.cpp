@@ -100,7 +100,7 @@ void check_pair_counts(const magmaan::data::OrdinalPairDiagnostics& got,
   CHECK(got.residual_counts.cols() == got.counts.cols());
 }
 
-void check_composite_pair(const magmaan::estimate::PairwiseOrdinalCompositePair& got,
+void check_composite_pair(const magmaan::estimate::frontier::PairwiseOrdinalCompositePair& got,
                           const nlohmann::json& exp) {
   CHECK(got.label.i == exp["i"].get<std::int32_t>());
   CHECK(got.label.j == exp["j"].get<std::int32_t>());
@@ -157,9 +157,9 @@ TEST_CASE("pairwise diagnostics fixtures: complete ordinal wrappers and composit
     check_pair_counts(block_diag.pair_diagnostics[k], block_exp["pairs"][k]);
   }
 
-  auto shared = magmaan::estimate::pairwise_ordinal_composite_objective(
+  auto shared = magmaan::estimate::frontier::pairwise_ordinal_composite_objective(
       *stats, stats->stats.thresholds, stats->stats.R);
-  auto joint = magmaan::estimate::pairwise_ordinal_joint_composite_objective(*stats);
+  auto joint = magmaan::estimate::frontier::pairwise_ordinal_joint_composite_objective(*stats);
   REQUIRE(shared.has_value());
   REQUIRE(joint.has_value());
   const auto& comp_exp = exp["composite"];
@@ -188,7 +188,7 @@ TEST_CASE("pairwise diagnostics fixtures: observed-pair ordinal composites") {
   const auto n_levels = int32_blocks_from_json(exp["n_levels"]);
 
   auto observed =
-      magmaan::estimate::pairwise_ordinal_observed_joint_composite_objective(
+      magmaan::estimate::frontier::pairwise_ordinal_observed_joint_composite_objective(
           blocks, n_levels);
   REQUIRE(observed.has_value());
   const auto& comp_exp = exp["composite"];

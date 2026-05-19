@@ -350,6 +350,8 @@ Result<Data> data_from_mixed_ordinal(const Model &,
   return Data::from_mixed_ordinal(std::move(stats));
 }
 
+namespace frontier {
+
 Result<Data> data_from_ordinal_h_weighted(
     const Model &, const std::vector<Eigen::MatrixXd> &blocks,
     data::PairwiseOrdinalHWeightedStatsOptions options) {
@@ -410,6 +412,8 @@ Result<Data> data_from_mixed_ordinal_huber_residual(
   }
   return Data::from_mixed_ordinal(std::move(stats->stats));
 }
+
+} // namespace frontier
 
 EstimatorSpec EstimatorSpec::optimizer(OptimizerSpec optimizer) const {
   auto out = *this;

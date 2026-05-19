@@ -5,7 +5,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/robust/satorra2000.hpp"
 
-namespace magmaan::robust {
+namespace magmaan::robust::frontier {
 
 // Foldnes-Moss-Gronneberg eigenvalue tests.
 //
@@ -62,4 +62,4 @@ lr_test_fmg(double T_diff,
             const SatorraDiffResult& sd,
             FmgOptions options = {FmgMethod::PenalizedAll, 0.0, true});
 
-}  // namespace magmaan::robust
+}  // namespace magmaan::robust::frontier

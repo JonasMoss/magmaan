@@ -11,7 +11,7 @@
 
 #include "magmaan/error.hpp"
 
-namespace magmaan::estimate {
+namespace magmaan::estimate::frontier {
 
 namespace {
 
@@ -563,4 +563,4 @@ pairwise_ordinal_observed_joint_composite_objective(
   return out;
 }
 
-}  // namespace magmaan::estimate
+}  // namespace magmaan::estimate::frontier

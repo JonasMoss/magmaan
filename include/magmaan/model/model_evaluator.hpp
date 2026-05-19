@@ -1,5 +1,8 @@
 #pragma once
 
+// The numeric face of the lavaanified model: evaluates a parameter vector into
+// implied moments and their Jacobian. See matrix_rep.hpp for the namespace role.
+
 #include <cstddef>
 #include <cstdint>
 #include <vector>

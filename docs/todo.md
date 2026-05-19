@@ -62,3 +62,39 @@ Remaining:
 Deferred until the ML slice is lavaan-validated: ordinal composites, FIML/LS
 composites, robust corrections for composites, and composite mean-structure
 rows.
+
+## Core/frontier layout follow-ups
+
+Deferred from the first core/frontier separation pass, which introduced
+`api::frontier` and retiered `robust/fmg.hpp`, `estimate/gmm/dls_weight.hpp`,
+and `estimate/pairwise.hpp` into `<domain>::frontier`. See
+[docs/ideas.md](ideas.md) for the tier model.
+
+- **M/L.** Retier the `data/` research cluster (`h_score`, `pairwise_ordinal`,
+  `pairwise_mixed`, `shrinkage`) into `data::frontier`. Blocked: core
+  `data/ordinal.{hpp,cpp}` is entangled with these headers — `ordinal.cpp`
+  defines `pairwise_ordinal_stats_from_integer_data` and uses
+  `eval_polychoric_h_score`, the core ordinal options embed
+  `PolychoricHScoreOptions`, and `ordinal.hpp` `#include`s `pairwise_mixed.hpp`.
+  Moving the headers naively inverts the dependency (core → frontier). This
+  work must first untangle `data/ordinal` — separating the core polychoric path
+  from the research builders — then retier. `data/shrinkage.hpp` is the one
+  cleanly separable header and can move first. R glue (`r-package/src/fit.cpp`)
+  calls these `data::` symbols, so the retier needs one R-side requalification
+  and a `just r-check`.
+- **S.** Move the retiered frontier headers into `<domain>/frontier/`
+  subdirectories so directory matches namespace again (`robust/frontier/fmg.hpp`,
+  `estimate/frontier/dls_weight.hpp`, `estimate/frontier/pairwise.hpp`).
+  Header-path moves; needs forwarding shims where `r-package/` includes a path.
+- **L.** Relocate the misplaced `estimate/` files to `spec/`:
+  `constraints.hpp` (24 includers), `nl_constraints.hpp`, `expr_eval.hpp`,
+  `resolve_fixed_x.hpp` (13). A structural relayering — its own pass, with a
+  design note settling whether constraint *evaluation* is `spec` or `estimate`.
+- **M.** Move `auglag.hpp` and `reparameterize.hpp` to `optim/` (optimizer
+  machinery, not estimators); `reparameterize.hpp` is coupled to the
+  `estimate/constraints.hpp` move above.
+- **S/M.** Settle whether `cfa_utils.hpp` belongs in `spec` or `model`;
+  depends on the start-values decision below.
+- **M.** Gather the five start-value producers (`start_values.hpp`) into an
+  `estimate::starts` sub-namespace; `start_values.hpp` has 16 includers and
+  `spec::Starts` is part of the lavaanified-model triple, so this needs care.

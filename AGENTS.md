@@ -27,7 +27,7 @@ plan is historical archaeology, not current guidance.
   identification convention), `LatentNames` (the verbal model: variable names,
   user labels, group var/levels, `.pN.` plabels), and `Starts` (free-param
   start hints). `to_lavaan_partable()` / `from_lavaan_partable()`
-  (`partable/lavaan_view.hpp`) project to/from the familiar lavaan-shaped SoA
+  (`compat/lavaan/partable_view.hpp`) project to/from the familiar lavaan-shaped SoA
   (`LavaanParTable`), which is what the R data.frame and golden `parTable()`
   fixtures compare against. Adding a feature means deciding what each of the
   three carries and what `matrix_rep` / `fit` honor.
@@ -118,21 +118,40 @@ must appear or disappear exactly as lavaan would for the requested model.
 
 ## Namespace Layout
 
-The current public namespace layout is transitional. Prefer target headers for
-new code:
+Each top-level namespace owns a domain; the directory under `include/magmaan/`
+matches the namespace.
 
-- `spec` for model specification, lavaanify, start hints, and linear
-  constraints.
-- `lavaan` for lavaan-shaped partable projection.
-- `estimate` for fit orchestration, bounds, fixed.x, constraints, and SNLLS.
-- `optim` for optimizer concepts and implementations.
-- `nt` for normal-theory ML, inference, robust tests, measures, effects, and
-  standardization.
-- `gls` for ULS/GLS/WLS discrepancies.
-- `data` for raw data and sample statistics.
+- `parse` - lexer, parser, operator enums.
+- `spec` - model specification: lavaanify (`build`), start hints, linear
+  constraints, composite expansion.
+- `compat::lavaan` - lavaan-shaped partable projection and oracle matching.
+- `data` - raw data and sample statistics.
+- `model` - the numeric face of the lavaanified model: LISREL matrix
+  representation (`MatrixRep`) and evaluation (`ModelEvaluator`). Shared by
+  `estimate`, `inference`, `measures`, and `robust`.
+- `estimate` - fit orchestration, ML/FIML/GMM/GLS discrepancies, bounds,
+  constraints, start values, SNLLS; `estimate::gmm` for the moment-quadratic
+  weight machinery.
+- `optim` - optimizer concepts and backends.
+- `inference` - post-fit information, scores, standard errors.
+- `robust` - robust tests (Satorra-Bentler family, weighted inference).
+- `measures` - fit indices, residuals, standardization, effects, factor scores.
+- `api` - the friendly staged entry points.
 
-Old `fit/*` and `partable/*` headers remain as compatibility shims during the
-namespace transition.
+### Core vs frontier
+
+The public API is tiered (see [docs/ideas.md](docs/ideas.md)). `core` is the
+stable, lavaan-parity surface. `frontier` is the research / non-lavaan methods
+surface: it nests **per domain** - `estimate::frontier`, `data::frontier`,
+`robust::frontier`, and so on - never a single top-level `frontier` namespace.
+Friendly frontier entry points live under `api::frontier`. A `frontier` symbol
+carries no deprecation-cycle promise. Put new non-lavaan methods in their
+domain's `frontier` sub-namespace.
+
+So far `api::frontier`, `estimate::frontier`, and `robust::frontier` exist;
+their headers still sit in the domain directory rather than a
+`<domain>/frontier/` subdirectory, and the `data/` research headers are not yet
+retiered. See `docs/todo.md`.
 
 ## Conventions
 
