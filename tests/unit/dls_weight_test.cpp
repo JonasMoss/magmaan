@@ -22,10 +22,10 @@
 
 using magmaan::data::RawData;
 using magmaan::data::SampleStats;
-using magmaan::estimate::dls_weight;
-using magmaan::estimate::DlsWeightOptions;
-using magmaan::estimate::empirical_bayes_dls_mixing_scalar;
-using magmaan::estimate::empirical_bayes_dls_weight;
+using magmaan::estimate::frontier::dls_weight;
+using magmaan::estimate::frontier::DlsWeightOptions;
+using magmaan::estimate::frontier::empirical_bayes_dls_mixing_scalar;
+using magmaan::estimate::frontier::empirical_bayes_dls_weight;
 using magmaan::model::ModelEvaluator;
 namespace est = magmaan::estimate;
 

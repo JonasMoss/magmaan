@@ -9,7 +9,7 @@
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
-namespace magmaan::estimate {
+namespace magmaan::estimate::frontier {
 
 // Browne's distributionally-weighted least squares (DLS) weight builder.
 //
@@ -88,4 +88,4 @@ empirical_bayes_dls_weight(const model::ModelEvaluator& ev,
                            const Eigen::VectorXd& theta0,
                            EmpiricalBayesDlsOptions opts = {});
 
-}  // namespace magmaan::estimate
+}  // namespace magmaan::estimate::frontier

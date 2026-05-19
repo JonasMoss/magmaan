@@ -12,7 +12,7 @@
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/robust/weighted_chisq.hpp"
 
-namespace magmaan::robust {
+namespace magmaan::robust::frontier {
 
 namespace {
 
@@ -361,4 +361,4 @@ lr_test_fmg(double T_diff,
                   sd.eigenvalues, options);
 }
 
-}  // namespace magmaan::robust
+}  // namespace magmaan::robust::frontier

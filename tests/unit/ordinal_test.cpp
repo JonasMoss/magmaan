@@ -1609,7 +1609,7 @@ TEST_CASE("Pairwise ordinal composite objective uses pair diagnostics and explic
   auto pairwise = magmaan::data::pairwise_ordinal_stats_from_integer_data({X});
   REQUIRE(pairwise.has_value());
 
-  auto obj = magmaan::estimate::pairwise_ordinal_composite_objective(
+  auto obj = magmaan::estimate::frontier::pairwise_ordinal_composite_objective(
       *pairwise, pairwise->stats.thresholds, pairwise->stats.R);
   REQUIRE(obj.has_value());
   REQUIRE(obj->blocks.size() == 1);
@@ -1636,11 +1636,11 @@ TEST_CASE("Pairwise ordinal composite objective uses pair diagnostics and explic
     CHECK(pair.residual_counts.isApprox(pair.counts - pair.expected_counts, 1e-12));
   }
 
-  auto sum_obj = magmaan::estimate::pairwise_ordinal_composite_objective(
+  auto sum_obj = magmaan::estimate::frontier::pairwise_ordinal_composite_objective(
       *pairwise, pairwise->stats.thresholds, pairwise->stats.R,
-      magmaan::estimate::PairwiseOrdinalCompositeOptions{
-          .weighting = magmaan::estimate::PairwiseCompositeWeighting::ObservedPairCount,
-          .scaling = magmaan::estimate::PairwiseCompositeScaling::SumNegLogLik});
+      magmaan::estimate::frontier::PairwiseOrdinalCompositeOptions{
+          .weighting = magmaan::estimate::frontier::PairwiseCompositeWeighting::ObservedPairCount,
+          .scaling = magmaan::estimate::frontier::PairwiseCompositeScaling::SumNegLogLik});
   REQUIRE(sum_obj.has_value());
   CHECK(sum_obj->objective == doctest::Approx(expected_nll));
 }
@@ -1658,21 +1658,21 @@ TEST_CASE("Pairwise ordinal composite objective validates implied pair mapping")
 
   auto implied_r = pairwise->stats.R;
   implied_r[0](1, 0) = implied_r[0](0, 1) = 0.25;
-  auto obj = magmaan::estimate::pairwise_ordinal_composite_objective(
+  auto obj = magmaan::estimate::frontier::pairwise_ordinal_composite_objective(
       *pairwise, pairwise->stats.thresholds, implied_r);
   REQUIRE(obj.has_value());
   REQUIRE(obj->blocks[0].pairs.size() == 1);
   CHECK(obj->blocks[0].pairs[0].rho == doctest::Approx(0.25));
 
   implied_r[0](1, 0) = implied_r[0](0, 1) = 1.0;
-  auto bad_rho = magmaan::estimate::pairwise_ordinal_composite_objective(
+  auto bad_rho = magmaan::estimate::frontier::pairwise_ordinal_composite_objective(
       *pairwise, pairwise->stats.thresholds, implied_r);
   REQUIRE_FALSE(bad_rho.has_value());
   CHECK(bad_rho.error().detail.find("inside (-1, 1)") != std::string::npos);
 
   auto bad_thresholds = pairwise->stats.thresholds;
   bad_thresholds[0](0) = std::numeric_limits<double>::quiet_NaN();
-  auto bad_th = magmaan::estimate::pairwise_ordinal_composite_objective(
+  auto bad_th = magmaan::estimate::frontier::pairwise_ordinal_composite_objective(
       *pairwise, bad_thresholds, pairwise->stats.R);
   REQUIRE_FALSE(bad_th.has_value());
   CHECK(bad_th.error().detail.find("non-finite") != std::string::npos);
@@ -1696,7 +1696,7 @@ TEST_CASE("Pairwise ordinal joint composite objective fits complete pair-local m
 
   auto pairwise = magmaan::data::pairwise_ordinal_stats_from_integer_data({X});
   REQUIRE(pairwise.has_value());
-  auto joint = magmaan::estimate::pairwise_ordinal_joint_composite_objective(
+  auto joint = magmaan::estimate::frontier::pairwise_ordinal_joint_composite_objective(
       *pairwise);
   REQUIRE(joint.has_value());
   REQUIRE(joint->blocks.size() == 1);
@@ -1749,11 +1749,11 @@ TEST_CASE("Pairwise ordinal joint composite objective preserves lavaan 2x2 adjus
 
   auto pairwise = magmaan::data::pairwise_ordinal_stats_from_integer_data({X});
   REQUIRE(pairwise.has_value());
-  auto adjusted = magmaan::estimate::pairwise_ordinal_joint_composite_objective(
+  auto adjusted = magmaan::estimate::frontier::pairwise_ordinal_joint_composite_objective(
       *pairwise);
-  auto raw = magmaan::estimate::pairwise_ordinal_joint_composite_objective(
+  auto raw = magmaan::estimate::frontier::pairwise_ordinal_joint_composite_objective(
       *pairwise,
-      magmaan::estimate::PairwiseOrdinalCompositeOptions{
+      magmaan::estimate::frontier::PairwiseOrdinalCompositeOptions{
           .lavaan_adjust_2x2 = false});
   REQUIRE(adjusted.has_value());
   REQUIRE(raw.has_value());
@@ -1782,7 +1782,7 @@ TEST_CASE("Pairwise ordinal observed joint composite objective preserves pairwis
   std::vector<std::vector<std::int32_t>> levels{{3, 2, 2}};
 
   auto observed =
-      magmaan::estimate::pairwise_ordinal_observed_joint_composite_objective(
+      magmaan::estimate::frontier::pairwise_ordinal_observed_joint_composite_objective(
           {X}, levels);
   REQUIRE(observed.has_value());
   REQUIRE(observed->blocks.size() == 1);
@@ -1840,7 +1840,7 @@ TEST_CASE("Pairwise ordinal observed joint composite objective rejects invalid o
                  nan, 2.0,
                  nan, nan;
   auto missing =
-      magmaan::estimate::pairwise_ordinal_observed_joint_composite_objective(
+      magmaan::estimate::frontier::pairwise_ordinal_observed_joint_composite_objective(
           {all_missing}, levels);
   REQUIRE_FALSE(missing.has_value());
   CHECK(missing.error().detail.find("no observed pairs") != std::string::npos);
@@ -1850,7 +1850,7 @@ TEST_CASE("Pairwise ordinal observed joint composite objective rejects invalid o
                   1.0, 2.0,
                   nan, 1.0;
   auto empty =
-      magmaan::estimate::pairwise_ordinal_observed_joint_composite_objective(
+      magmaan::estimate::frontier::pairwise_ordinal_observed_joint_composite_objective(
           {empty_margin}, levels);
   REQUIRE_FALSE(empty.has_value());
   CHECK(empty.error().detail.find("marginal categories") != std::string::npos);

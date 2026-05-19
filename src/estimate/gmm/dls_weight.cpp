@@ -14,7 +14,7 @@
 
 #include "detail_vech.hpp"
 
-namespace magmaan::estimate {
+namespace magmaan::estimate::frontier {
 
 namespace {
 
@@ -264,4 +264,4 @@ empirical_bayes_dls_weight(const model::ModelEvaluator& ev,
   return dls_weight(ev, samp, raw, theta0, DlsWeightOptions{eb->a});
 }
 
-}  // namespace magmaan::estimate
+}  // namespace magmaan::estimate::frontier

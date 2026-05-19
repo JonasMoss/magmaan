@@ -1,5 +1,9 @@
 #pragma once
 
+// The numeric face of the lavaanified model: maps LatentStructure rows to
+// LISREL matrix cells. With model_evaluator.hpp, the magmaan::model namespace
+// is the shared spec->numeric bridge used by estimate/inference/measures/robust.
+
 #include <cstdint>
 #include <string>
 #include <string_view>

@@ -116,7 +116,7 @@ Summary run_condition(std::string name, int condition, const Config& cfg) {
       ++out.failed;
       continue;
     }
-    auto eb = magmaan::estimate::empirical_bayes_dls_mixing_scalar(*samp, raw);
+    auto eb = magmaan::estimate::frontier::empirical_bayes_dls_mixing_scalar(*samp, raw);
     if (!eb.has_value()) {
       ++out.failed;
       continue;

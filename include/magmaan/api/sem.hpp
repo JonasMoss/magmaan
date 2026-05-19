@@ -138,6 +138,10 @@ Result<Data> data_from_raw(const Model &, data::RawData raw);
 Result<Data> data_from_ordinal(const Model &, data::OrdinalStats stats);
 Result<Data> data_from_mixed_ordinal(const Model &,
                                      data::MixedOrdinalStats stats);
+// Frontier (research / non-lavaan) data builders. No deprecation-cycle
+// promise; see docs/ideas.md for the core/frontier tier model.
+namespace frontier {
+
 Result<Data> data_from_ordinal_h_weighted(
     const Model &, const std::vector<Eigen::MatrixXd> &blocks,
     data::PairwiseOrdinalHWeightedStatsOptions options = {});
@@ -155,6 +159,8 @@ Result<Data> data_from_mixed_ordinal_huber_residual(
     const Model &, const std::vector<Eigen::MatrixXd> &blocks,
     const std::vector<std::vector<std::int32_t>> &ordered,
     data::MixedOrdinalHuberResidualOptions options = {});
+
+} // namespace frontier
 
 enum class OptimizerKind : std::uint8_t {
   Lbfgs,
