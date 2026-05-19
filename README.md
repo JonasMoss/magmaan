@@ -1,4 +1,4 @@
-# magmaan <img src="docs/logo/logo_compact.png" align="right" height="170" /></a>
+# magmaan <img src="docs/assets/logo/logo_compact.png" align="right" height="170" /></a>
 
 > "This world ever was, and is, and shall be, an ever-living Fire."
 > - Heraclitus

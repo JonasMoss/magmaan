@@ -65,5 +65,5 @@ ok(is.matrix(res$cov[[1]]),                    "residuals() covariance residuals
 ok(length(std$theta) == length(fit$theta),      "standardizedSolution() primitive")
 
 cat("  not yet implemented: residual z-statistics and bootstrap extraction workflows",
-    "(see docs/lavaan_tutorial_parity.md section 16).\n")
+    "(see docs/validation/lavaan_tutorial_parity.md section 16).\n")
 cat("extracting information: ok\n")

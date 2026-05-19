@@ -139,7 +139,7 @@ Result<Data> data_from_ordinal(const Model &, data::OrdinalStats stats);
 Result<Data> data_from_mixed_ordinal(const Model &,
                                      data::MixedOrdinalStats stats);
 // Frontier (research / non-lavaan) data builders. No deprecation-cycle
-// promise; see docs/ideas.md for the core/frontier tier model.
+// promise; see docs/design/ideas.md for the core/frontier tier model.
 namespace frontier {
 
 Result<Data> data_from_ordinal_h_weighted(

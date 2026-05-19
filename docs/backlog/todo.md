@@ -1,7 +1,7 @@
 # magmaan TODO
 
 Remaining-work backlog. Current state, architecture, and contracts live in
-[docs/roadmap.md](roadmap.md); this file only tracks unfinished work.
+[docs/architecture/roadmap.md](../architecture/roadmap.md); this file only tracks unfinished work.
 
 Effort tags: **S** bounded docs/fixtures/wrapper cleanup · **M** focused
 implementation or test slice · **L** new estimator plumbing or cross-module
@@ -23,9 +23,9 @@ semantics · **XL** statistical design/research track before implementation.
 ## Benchmarks
 
 Advisory local tooling, not a substitute for parity fixtures. Full design:
-[docs/benchmark_plan.md](benchmark_plan.md).
+[docs/validation/benchmark_plan.md](../validation/benchmark_plan.md).
 
-- **S.** Keep the build-loop timings table in `docs/roadmap.md` current after
+- **S.** Keep the build-loop timings table in `docs/architecture/roadmap.md` current after
   major workflow changes.
 - **S/M.** Continue extending benchmark coverage beyond the current
   lavaan-backed complete-data ML, controlled-missingness FIML, and continuous
@@ -68,7 +68,7 @@ rows.
 Deferred from the first core/frontier separation pass, which introduced
 `api::frontier` and retiered `robust/fmg.hpp`, `estimate/gmm/dls_weight.hpp`,
 and `estimate/pairwise.hpp` into `<domain>::frontier`. See
-[docs/ideas.md](ideas.md) for the tier model.
+[docs/design/ideas.md](../design/ideas.md) for the tier model.
 
 - **M/L.** Retier the `data/` research cluster (`h_score`, `pairwise_ordinal`,
   `pairwise_mixed`, `shrinkage`) into `data::frontier`. Blocked: core

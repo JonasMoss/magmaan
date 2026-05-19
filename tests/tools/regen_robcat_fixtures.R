@@ -25,10 +25,11 @@
 #   Rscript tests/tools/regen_robcat_fixtures.R clean_3x3_moderate ...   # named cases
 #
 # Requires the pinned robcat version (tests/fixtures/robcat_version.txt). If
-# robcat is not installed:
-#   R CMD INSTALL resources/robcat_0.2.tar.gz
-# (its dependencies -- Rcpp, ggplot2, mvtnorm, stringr, numDeriv, pracma,
-# Matrix -- must be available first.)
+# the pinned build is not installed, install it from a package repository or
+# from an ignored local source mirror/archive outside Git, e.g.
+#   R CMD INSTALL external/robcat
+# when that checkout exists. Dependencies -- Rcpp, ggplot2, mvtnorm, stringr,
+# numDeriv, pracma, Matrix -- must be available first.
 
 suppressMessages({
   library(robcat)
@@ -45,8 +46,8 @@ pinned <- trimws(readLines(pin_path, warn = FALSE)[1])
 installed <- as.character(utils::packageVersion("robcat"))
 if (!identical(pinned, installed)) {
   stop(sprintf(paste0("robcat version mismatch: pinned %s, installed %s.\n",
-                      "  Reinstall the pinned build:\n",
-                      "    R CMD INSTALL resources/robcat_0.2.tar.gz"),
+                      "  Reinstall the pinned build from a package repository",
+                      " or an ignored local source mirror such as external/robcat."),
                pinned, installed), call. = FALSE)
 }
 

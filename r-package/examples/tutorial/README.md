@@ -27,6 +27,6 @@ Run all: `Rscript r-package/examples/tutorial/run_all.R`
 | `16_extract.R`    | Extracting information |
 
 Out of scope (per the project's scope): tutorial sections *Multilevel SEM* and
-*ESEM/EFA*. See `docs/lavaan_tutorial_parity.md` for the full audit, and
-`docs/todo.md` §4 for the deferred backlog. Where a script notes a gap (e.g.
+*ESEM/EFA*. See `docs/validation/lavaan_tutorial_parity.md` for the full audit,
+and `docs/backlog/todo.md` §4 for the deferred backlog. Where a script notes a gap (e.g.
 modification indices have no R binding yet), that gap is tracked there.
