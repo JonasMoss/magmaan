@@ -27,8 +27,9 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 
 - **S.** Keep the build-loop timings table in `docs/roadmap.md` current after
   major workflow changes.
-- **S/M.** Extend benchmark coverage beyond complete-data ML to FIML, ULS,
-  GLS, WLS, ordinal DWLS/WLS, and mixed categorical models.
+- **S/M.** Continue extending benchmark coverage beyond the current
+  lavaan-backed complete-data ML, controlled-missingness FIML, and continuous
+  ULS/GLS smoke cases to WLS, ordinal DWLS/WLS, and mixed categorical models.
 - **M.** Track objective value, gradient norm, iteration count, wall time, and
   agreement with lavaan-backed estimates where applicable.
 - **M.** Compare LBFGS, LBFGS-B, Ceres, and SNLLS only on semantically

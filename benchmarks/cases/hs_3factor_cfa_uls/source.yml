@@ -1,0 +1,13 @@
+id: hs_3factor_cfa_uls
+source:
+  data: lavaan::HolzingerSwineford1939
+  model: canonical three-factor CFA used throughout lavaan examples
+  url: https://lavaan.ugent.be/tutorial/cfa.html
+license_or_terms: lavaan package data; confirm package license before vendoring raw data
+n: 301
+variables: [x1, x2, x3, x4, x5, x6, x7, x8, x9]
+estimator: ULS
+est_tolerance: 5.0e-3
+status: active
+data_policy: generated into ignored local cache from installed lavaan package
+reference_engine: lavaan

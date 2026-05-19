@@ -59,19 +59,21 @@ lavaan_fit_case <- function(case, model, data, report = c("estimate", "standard"
                 cfa = lavaan::cfa, growth = lavaan::growth,
                 sem = lavaan::sem, lavaan::sem)
   fun(model = model, data = data,
-      estimator = case$estimator %||% "ML",
+      estimator = case$lavaan_estimator %||% case$estimator %||% "ML",
       meanstructure = isTRUE(case$meanstructure),
       se = if (report == "standard") "standard" else "none",
       test = if (report == "standard") "standard" else "none",
-      missing = "listwise")
+      missing = case$lavaan_missing %||% "listwise")
 }
 
 ## magmaan fit, mirroring lavaan cfa/sem/growth defaults as far as the exposed
 ## lavaanify flags allow (auto.cov.y = TRUE is a cfa/sem/growth default).
 magmaan_fit_case <- function(case, model, data) {
-  magmaan::magmaan(model, data, estimator = case$estimator %||% "ML",
+  magmaan::magmaan(model, data,
+                   estimator = case$magmaan_estimator %||% case$estimator %||% "ML",
                    meanstructure = isTRUE(case$meanstructure),
-                   auto_cov_y = TRUE)
+                   auto_cov_y = TRUE,
+                   ordered = case$ordered %||% NULL)
 }
 
 ## Max absolute estimate difference over parameter-table rows present in both,
@@ -145,7 +147,7 @@ fit_diagnostics <- function(mfit, lfit, m_fmin, l_fmin) {
   list(
     magmaan = list(
       objective = m_fmin,
-      objective_name = "full ML discrepancy F",
+      objective_name = "magmaan fit object fmin/objective",
       gradient_norm_inf = m_grad,
       gradient_norm_note = if (is.na(m_grad)) {
         "not exposed by the current magmaan fit object"
@@ -175,13 +177,25 @@ bench_summary <- function(tm, label) {
        total = sum(t), n = length(t))
 }
 
+case_workload_label <- function(case) {
+  estimator <- case$estimator %||% "ML"
+  data_path <- if (identical(case$lavaan_missing %||% "listwise", "fiml")) {
+    "raw-data missing"
+  } else {
+    "complete/listwise"
+  }
+  sprintf("estimate-only %s (%s)", estimator, data_path)
+}
+
 run_case <- function(id) {
   case <- get_case(id)
   data <- read_prepared_data(id)
   model <- read_model(id)
+  est_tol <- case$est_tolerance %||% EST_TOL
 
   out <- list(case_id = id, tier = case$tier %||% NA_integer_,
-              estimator = case$estimator %||% "ML", status = "PASS",
+              estimator = case$estimator %||% "ML",
+              workload = case_workload_label(case), status = "PASS",
               note = "")
 
   mfit <- tryCatch(magmaan_fit_case(case, model, data), error = identity)
@@ -207,7 +221,7 @@ run_case <- function(id) {
   ## Correctness: reuse magmaan's own partable comparator as the structural +
   ## estimate gate, plus an explicit max-abs estimate diff and an fmin check.
   cmp <- tryCatch(
-    magmaan_core$lavaan_compare_partable(mfit, l_pt, est_tolerance = EST_TOL),
+    magmaan_core$lavaan_compare_partable(mfit, l_pt, est_tolerance = est_tol),
     error = function(e) list(ok = NA, counts = integer(),
                              failures = conditionMessage(e)))
   est_diff <- est_max_abs_diff(mfit$partable, l_pt)
@@ -246,16 +260,17 @@ run_case <- function(id) {
   }
 
   out$correctness <- list(
+    est_tolerance = est_tol,
     partable_ok = isTRUE(cmp$ok),
     partable_failure_counts = as.list(cmp$counts),
     est_max_abs_diff = est_diff,
     se_max_abs_diff = se_diff,
     fmin_magmaan = m_fmin, fmin_lavaan = l_fmin,
-    fmin_note = "magmaan $fmin is the full ML discrepancy F; lavaan reports F/2",
+    fmin_note = "objective scaling is estimator-specific; estimate drift is the pass/fail gate",
     chisq_magmaan = m_chisq, chisq_lavaan = l_chisq,
     chisq_abs_diff = chisq_diff, df = l_df)
 
-  est_ok <- !is.na(est_diff) && est_diff <= EST_TOL
+  est_ok <- !is.na(est_diff) && est_diff <= est_tol
   if (!est_ok || !out$magmaan_converged) {
     out$status <- "FAIL"
     failed <- c(if (!est_ok) "estimates",
@@ -287,7 +302,7 @@ cat(sprintf("magmaan benchmark smoke -- magmaan %s, lavaan %s, %s\n",
             as.character(magmaan::version()),
             as.character(utils::packageVersion("lavaan")),
             R.version.string))
-cat(sprintf("workload: estimate-only ML | est tol %.0e | %d cases\n\n",
+cat(sprintf("workload: estimate-only by case | default est tol %.0e | %d cases\n\n",
             EST_TOL, length(ids)))
 
 rows <- lapply(ids, function(id) {
@@ -317,7 +332,7 @@ payload <- list(
   lavaan_version = as.character(utils::packageVersion("lavaan")),
   r_version = R.version.string,
   blas = unname(extSoftVersion()["BLAS"]),
-  workload = "estimate-only ML",
+  workload = "estimate-only by case",
   bench_iterations = BENCH_ITERATIONS,
   tolerances = list(est = EST_TOL),
   cases = rows)

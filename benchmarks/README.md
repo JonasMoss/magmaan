@@ -33,8 +33,11 @@ Rscript benchmarks/r/run_benchmark.R all
 `all` (every case marked `supported_now` in `r/cases.R`). `run_benchmark.R`
 fits each active case with the magmaan R package and with lavaan, validates
 magmaan against the lavaan oracle (estimate drift gate plus reported SE and
-chi-square agreement), times both at the estimate-only workload level, and
-writes a result summary into the ignored `results/` cache.
+chi-square diagnostics where available), times both at the estimate-only
+workload level for that case's estimator/data path, and writes a result
+summary into the ignored `results/` cache. The default estimate tolerance is
+`1e-3`; cases may declare a wider estimator-specific tolerance in `r/cases.R`
+when the advisory benchmark is looser than the parity fixtures.
 
 External cases such as Stata Press and Mplus examples use `fetch_data.R` to
 download raw data into the ignored cache. Cases whose terms are unclear should

@@ -611,8 +611,10 @@ Validation has three deliberately separate surfaces:
   Self-contained fixtures live in
   `tests/fixtures/parity/`; oracle: `tools/regen_parity_fixtures.R`.
 - **Benchmarks** — `benchmarks/` fits *live lavaan* on every run and gates
-  timing, not CI correctness. It is R-dependent and advisory; the parity layer
-  is the bridge that freezes its correctness checks into the gated C++ suite.
+  timing, not CI correctness. Active advisory cases include complete-data ML,
+  controlled-missingness FIML, and continuous ULS/GLS smoke paths. The harness
+  is R-dependent and advisory; the parity layer is the bridge that freezes its
+  correctness checks into the gated C++ suite.
 
 The suite builds as eight doctest executables — `magmaan_test_{smoke, spec,
 estimate, inference, ordinal, api, parity, robcat}` — so areas build and run
