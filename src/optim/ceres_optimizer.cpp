@@ -240,6 +240,38 @@ CeresOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
 }
 
 // ============================================================================
+// CeresBfgsOptimizer — GradientProblemSolver line-search dense BFGS
+// ============================================================================
+
+fit_expected<LbfgsOutput>
+CeresBfgsOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
+  const int n = static_cast<int>(x0.size());
+  ceres::GradientProblem problem(new StdObjectiveFirstOrder(std::move(f), n));
+
+  Eigen::VectorXd theta = x0;
+  ceres::GradientProblemSolver::Options options;
+  apply_options(options, opts_);
+  options.line_search_direction_type = ceres::BFGS;
+  options.line_search_type = ceres::WOLFE;
+
+  ceres::GradientProblemSolver::Summary summary;
+  try {
+    ceres::Solve(options, problem, theta.data(), &summary);
+  } catch (const std::exception& e) {
+    return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
+        std::string("ceres (bfgs) threw: ") + e.what()));
+  }
+  if (summary.termination_type != ceres::CONVERGENCE &&
+      summary.termination_type != ceres::USER_SUCCESS) {
+    return std::unexpected(summary_to_err(summary, "bfgs"));
+  }
+  return LbfgsOutput{
+      std::move(theta),
+      summary.final_cost,
+      static_cast<int>(summary.iterations.size())};
+}
+
+// ============================================================================
 // CeresBoundedOptimizer — Problem API with native bounds
 // ============================================================================
 

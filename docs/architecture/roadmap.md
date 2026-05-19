@@ -122,6 +122,10 @@ golden `parTable()` fixtures.
 - ULS, GLS, and explicit-weight WLS discrepancies with scalar
   value/gradient and residual/Jacobian interfaces.
 - Bounded LS fitting through LBFGS-B and optional Ceres.
+- Optional Ceres dense line-search BFGS is exposed only for unbounded SNLLS LS
+  research comparisons. It consumes the already-profiled nonlinear block, so
+  within-block linear equalities remain compatible through the SNLLS
+  reparameterization, but it is not a general bounded or constrained backend.
 - Automatic nonnegative variance bounds.
 - Linear equality constraints on the LS path via the affine α-reparameterization
   (θ = θ₀ + K·α), shared with the ML path — no quadratic penalty.

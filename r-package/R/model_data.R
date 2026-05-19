@@ -1179,6 +1179,11 @@ fit_gls_snlls_ceres <- function(model, data, ceres = NULL, bounds = NULL) {
                            ceres = ceres, bounds = bounds)
 }
 
+fit_gls_snlls_ceres_bfgs <- function(model, data, ceres = NULL, bounds = NULL) {
+  fit_gls_snlls_ceres_bfgs_impl(partable_arg(model), sample_stats_arg(data),
+                                ceres = ceres, bounds = bounds)
+}
+
 fit_wls_snlls_ceres <- function(model, data, W, ceres = NULL, bounds = NULL) {
   fit_wls_snlls_ceres_impl(partable_arg(model), sample_stats_arg(data), W = W,
                            ceres = ceres, bounds = bounds)

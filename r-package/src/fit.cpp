@@ -1504,6 +1504,28 @@ Rcpp::List fit_gls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats,
 }
 
 // [[Rcpp::export]]
+Rcpp::List fit_gls_snlls_ceres_bfgs_impl(SEXP partable, Rcpp::List sample_stats,
+                                         Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
+                                         Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {
+#ifdef MAGMAAN_WITH_CERES
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls_snlls_ceres_bfgs");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
+                                  sample_stats);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  (void)bounds;  // Ceres BFGS is exposed only for the unbounded SNLLS block
+  auto e_or = magmaan::estimate::fit_snlls_gls(ctx.pt, ctx.rep, ctx.samp, x0,
+      magmaan::estimate::Backend::CeresBfgs, ceres_opts_as_lbfgs(ceres));
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return snlls_fit_result(ctx, est, &starts, "GLS-SNLLS", "ceres-bfgs");
+#else
+  (void)partable; (void)sample_stats; (void)ceres; (void)bounds;
+  Rcpp::stop("magmaan: Ceres backend is not available in this build");
+#endif
+}
+
+// [[Rcpp::export]]
 Rcpp::List fit_wls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
                                     Rcpp::Nullable<Rcpp::List> ceres = R_NilValue,
                                     Rcpp::Nullable<Rcpp::List> bounds = R_NilValue) {

@@ -321,6 +321,12 @@ TEST_CASE("SNLLS: Bollen GLS backend cross-check") {
 #endif
 
 #ifdef MAGMAAN_WITH_CERES
+  auto ceres_bfgs = run(Backend::CeresBfgs, "ceres-bfgs");
+  CHECK(ceres_bfgs.has_value());
+  if (ceres_bfgs.has_value()) {
+    CHECK(ceres_bfgs->fmin == doctest::Approx(lbfgs->fmin).epsilon(1e-5));
+  }
+
   auto ceres = run(Backend::Ceres, "ceres");
   CHECK(ceres.has_value());
   if (ceres.has_value()) {

@@ -113,6 +113,10 @@ fit_gls_snlls_ceres_impl <- function(partable, sample_stats, ceres = NULL, bound
     .Call(`_magmaan_fit_gls_snlls_ceres_impl`, partable, sample_stats, ceres, bounds)
 }
 
+fit_gls_snlls_ceres_bfgs_impl <- function(partable, sample_stats, ceres = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_gls_snlls_ceres_bfgs_impl`, partable, sample_stats, ceres, bounds)
+}
+
 fit_wls_snlls_ceres_impl <- function(partable, sample_stats, W, ceres = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_wls_snlls_ceres_impl`, partable, sample_stats, W, ceres, bounds)
 }
@@ -332,4 +336,3 @@ infer_robust_se_raw <- function(fit, X, bread = "expected", moments = "structure
 infer_robust_se_raw_parts <- function(partable, sample_stats, theta, X, bread = "expected", moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_raw_parts`, partable, sample_stats, theta, X, bread, moments, cov)
 }
-

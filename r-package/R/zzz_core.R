@@ -73,6 +73,7 @@ estimate_gls_ceres <- fit_gls_ceres_impl
 estimate_wls_ceres <- fit_wls_ceres_impl
 estimate_uls_snlls_ceres <- fit_uls_snlls_ceres_impl
 estimate_gls_snlls_ceres <- fit_gls_snlls_ceres_impl
+estimate_gls_snlls_ceres_bfgs <- fit_gls_snlls_ceres_bfgs_impl
 estimate_wls_snlls_ceres <- fit_wls_snlls_ceres_impl
 estimate_start_values <- fit_start_values
 
@@ -256,6 +257,7 @@ magmaan_core <- local({
       "fit_wls_ceres",
       "fit_uls_snlls_ceres",
       "fit_gls_snlls_ceres",
+      "fit_gls_snlls_ceres_bfgs",
       "fit_wls_snlls_ceres"
     )
   )
@@ -292,6 +294,7 @@ magmaan_core <- local({
       "fit_wls_ceres_impl",
       "fit_uls_snlls_ceres_impl",
       "fit_gls_snlls_ceres_impl",
+      "fit_gls_snlls_ceres_bfgs_impl",
       "fit_wls_snlls_ceres_impl",
       "fit_start_values",
       "fit_sample_stats",

@@ -36,9 +36,9 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   salvage path: accepted last iterates can currently surface without a reliable
   solver iteration count, so benchmark scripts should avoid treating a reported
   zero as a real optimizer iteration count.
-- **M.** Compare LBFGS, LBFGS-B, Ceres, and SNLLS only on semantically
-  appropriate cases; include shallow or Heywood-prone LS cases so bounds and
-  conditioning stay visible.
+- **M.** Compare LBFGS, LBFGS-B, Ceres trust-region, Ceres dense BFGS, and
+  SNLLS only on semantically appropriate cases; include shallow or
+  Heywood-prone LS cases so bounds and conditioning stay visible.
 - **M/L, after coverage exists.** Promote the Ceres preset into regular
   validation where relevant without making the default build pay the Ceres
   dependency cost.

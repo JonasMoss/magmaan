@@ -74,6 +74,10 @@ fit_one <- function(spec, dat, backend, snlls, opts) {
     if (snlls) return(core$fit_gls_snlls_ceres(spec, dat, ceres = ceres))
     return(core$fit_gls_ceres(spec, dat, ceres = ceres))
   }
+  if (backend == "ceres_bfgs") {
+    if (!snlls) stop("Ceres BFGS is exposed only for SNLLS", call. = FALSE)
+    return(core$fit_gls_snlls_ceres_bfgs(spec, dat, ceres = ceres))
+  }
   stop("unknown backend: ", backend, call. = FALSE)
 }
 
@@ -90,43 +94,50 @@ measure_spec <- function(case, spec, start_scheme, opt_profile, opts, setup_usec
   dat <- df_to_data(case$data, spec, scaling = "n-1")
 
   rows <- list()
-  for (backend in c("lbfgsb", "ceres")) {
-    for (snlls in c(FALSE, TRUE)) {
-      fit <- try_fit(fit_one(spec, dat, backend, snlls, opts))
-      label <- if (snlls) "SNLLS" else "ordinary"
-      if (inherits(fit, "magmaan_bench_error")) {
-        rows[[length(rows) + 1L]] <- data.frame(
-          case = case$id,
-          start_scheme = start_scheme,
-          opt_profile = opt_profile,
-          method = label,
-          backend = backend,
-          iterations = NA_integer_,
-          fmin = NA_real_,
-          setup_usec = setup_usec,
-          fit_usec = NA_real_,
-          iteration_source = NA_character_,
-          error = fit$error
-        )
-      } else {
-        fit_usec <- elapsed_usec(times, function() {
-          fit_one(spec, dat, backend, snlls, opts)$fmin
-        })
-        recovered <- if (snlls) recover_snlls_iterations(spec, dat, backend, fit, opts) else NULL
-        rows[[length(rows) + 1L]] <- data.frame(
-          case = case$id,
-          start_scheme = start_scheme,
-          opt_profile = opt_profile,
-          method = label,
-          backend = backend,
-          iterations = if (is.null(recovered)) fit$iterations else recovered,
-          fmin = fit$fmin,
-          setup_usec = setup_usec,
-          fit_usec = fit_usec,
-          iteration_source = if (is.null(recovered)) "reported" else "cap_recovered",
-          error = NA_character_
-        )
-      }
+  jobs <- list(
+    list(backend = "lbfgsb", snlls = FALSE),
+    list(backend = "lbfgsb", snlls = TRUE),
+    list(backend = "ceres", snlls = FALSE),
+    list(backend = "ceres", snlls = TRUE),
+    list(backend = "ceres_bfgs", snlls = TRUE)
+  )
+  for (job in jobs) {
+    backend <- job$backend
+    snlls <- job$snlls
+    fit <- try_fit(fit_one(spec, dat, backend, snlls, opts))
+    label <- if (snlls) "SNLLS" else "ordinary"
+    if (inherits(fit, "magmaan_bench_error")) {
+      rows[[length(rows) + 1L]] <- data.frame(
+        case = case$id,
+        start_scheme = start_scheme,
+        opt_profile = opt_profile,
+        method = label,
+        backend = backend,
+        iterations = NA_integer_,
+        fmin = NA_real_,
+        setup_usec = setup_usec,
+        fit_usec = NA_real_,
+        iteration_source = NA_character_,
+        error = fit$error
+      )
+    } else {
+      fit_usec <- elapsed_usec(times, function() {
+        fit_one(spec, dat, backend, snlls, opts)$fmin
+      })
+      recovered <- if (snlls) recover_snlls_iterations(spec, dat, backend, fit, opts) else NULL
+      rows[[length(rows) + 1L]] <- data.frame(
+        case = case$id,
+        start_scheme = start_scheme,
+        opt_profile = opt_profile,
+        method = label,
+        backend = backend,
+        iterations = if (is.null(recovered)) fit$iterations else recovered,
+        fmin = fit$fmin,
+        setup_usec = setup_usec,
+        fit_usec = fit_usec,
+        iteration_source = if (is.null(recovered)) "reported" else "cap_recovered",
+        error = NA_character_
+      )
     }
   }
   do.call(rbind, rows)
@@ -172,12 +183,15 @@ baseline_key <- with(out, paste(case, start_scheme, opt_profile, backend,
                                 "SNLLS", sep = "\r"))
 out$iter_ratio <- out$iterations / out$iterations[match(baseline_key, snlls_key)]
 out$time_ratio <- out$fit_usec / out$fit_usec[match(baseline_key, snlls_key)]
+out$iter_ratio[out$backend == "ceres_bfgs"] <- NA_real_
+out$time_ratio[out$backend == "ceres_bfgs"] <- NA_real_
 print(out, digits = 6, row.names = FALSE)
 
 cat("\nNotes\n")
 cat("* Timings are magmaan-only and do not reproduce MATLAB BFGS finite-difference gradients.\n")
-cat("* matlab_like uses max_iter=400, ftol=1e-6, gtol=1e-6; it is still LBFGS/LBFGS-B, not MATLAB dense BFGS.\n")
+cat("* matlab_like uses max_iter=400, ftol=1e-6, gtol=1e-6; Ceres BFGS is dense line-search BFGS with analytic gradients, not MATLAB finite differences.\n")
 cat("* Ordinary GLS passes explicit +/-Inf bounds so magmaan dispatches to LBFGS-B and reports solver iterations reliably.\n")
+cat("* ceres_bfgs is SNLLS-only; iter_ratio/time_ratio are NA because there is no matching ordinary Ceres-BFGS row.\n")
 cat("* cap_recovered means unbounded SNLLS accepted a salvaged L-BFGS iterate; the count is the smallest max_iter cap that succeeds.\n")
 cat("* Kreiberg & Zhou's Geiser depression example is not run: the data are not vendored here, and the model is a higher-order/indicator-specific latent-state model.\n")
 cat("* The HS CFA case is the supported public-data analogue from Kreiberg et al. (2021).\n")
