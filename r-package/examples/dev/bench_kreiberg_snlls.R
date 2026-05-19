@@ -10,6 +10,19 @@ opt_profiles <- list(
 )
 ceres <- list(max_iter = 500L, ftol = 1e-10, gtol = 1e-7, ptol = 1e-8)
 
+bollen_model <- "ind60 =~ x1 + x2 + x3
+dem60 =~ y1 + y2 + y3 + y4
+dem65 =~ y5 + y6 + y7 + y8
+
+dem60 ~ ind60
+dem65 ~ ind60 + dem60
+
+y1 ~~ y5
+y2 ~~ y4 + y6
+y3 ~~ y7
+y4 ~~ y8
+y6 ~~ y8"
+
 cases <- list(
   list(
     id = "kreiberg_2021_hs_cfa",
@@ -24,8 +37,7 @@ cases <- list(
     id = "kreiberg_2023_bollen_sem",
     note = "Kreiberg & Zhou (2023) SEM-paper Bollen example; same lavaan data/model.",
     published = list(snlls_iter = 26L, ordinary_iter = 230L),
-    model = paste(readLines("benchmarks/cases/bollen_democracy_sem/model.lav"),
-                  collapse = "\n"),
+    model = bollen_model,
     data = lavaan::PoliticalDemocracy
   )
 )
