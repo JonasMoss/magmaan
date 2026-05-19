@@ -2,6 +2,7 @@
 #include "../test_fit.hpp"
 
 #include <Eigen/Core>
+#include <nlohmann/json.hpp>
 
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/fit.hpp"
@@ -14,6 +15,7 @@
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
+#include "../oracle.hpp"
 
 using magmaan::data::SampleStats;
 using magmaan::estimate::Backend;
@@ -40,6 +42,18 @@ Handles handles_for(std::string_view src) {
   return Handles{std::move(*pt), std::move(*rep)};
 }
 
+Handles sem_handles_for(std::string_view src) {
+  auto fp = Parser::parse(src);
+  REQUIRE(fp.has_value());
+  magmaan::spec::BuildOptions opts;
+  opts.auto_cov_y = true;
+  auto pt = build(*fp, opts);
+  REQUIRE(pt.has_value());
+  auto rep = build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+  return Handles{std::move(*pt), std::move(*rep)};
+}
+
 Eigen::Matrix3d make_1f_S() {
   Eigen::Vector3d lambda_true(1.0, 0.85, 0.70);
   const double psi_true = 2.0;
@@ -59,6 +73,10 @@ Eigen::Matrix4d make_misspecified_1f_S() {
 
 LbfgsOptions snlls_opts() {
   return LbfgsOptions{.max_iter = 2000, .ftol = 1e-13, .gtol = 1e-8};
+}
+
+LbfgsOptions matlab_like_opts() {
+  return LbfgsOptions{.max_iter = 400, .ftol = 1e-6, .gtol = 1e-6};
 }
 
 // Black-box check on the Golub–Pereyra problem `gmm::gp` builds: the gradient
@@ -247,6 +265,68 @@ TEST_CASE("SNLLS: covariance-only model is solved by profiling alone") {
   REQUIRE(est.has_value());
   CHECK(est->iterations == 0);
   CHECK(est->fmin < 1e-12);
+}
+
+TEST_CASE("SNLLS: Bollen GLS backend cross-check") {
+  const std::string dir = magmaan::test::fixtures_dir() +
+                          "/parity/bollen_democracy_sem";
+  auto ref_raw = magmaan::test::read_fixture(dir + "/reference.json");
+  auto data_raw = magmaan::test::read_fixture(dir + "/data.json");
+  REQUIRE(ref_raw.has_value());
+  REQUIRE(data_raw.has_value());
+  const auto ref = nlohmann::json::parse(*ref_raw, nullptr, false);
+  const auto data = nlohmann::json::parse(*data_raw, nullptr, false);
+  REQUIRE_FALSE(ref.is_discarded());
+  REQUIRE_FALSE(data.is_discarded());
+
+  auto h = sem_handles_for(ref["model"].get<std::string>());
+  auto raw = magmaan::test::raw_from_fixture(data);
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp_or.has_value());
+  SampleStats samp = std::move(*samp_or);
+  samp.mean.clear();
+
+  auto x0 = magmaan::estimate::fabin_start_values(h.pt, h.rep, samp, {});
+  REQUIRE(x0.has_value());
+  const LbfgsOptions opts = matlab_like_opts();
+
+  auto run = [&](Backend backend, const char* name) {
+    auto est = magmaan::estimate::fit_snlls_gls(h.pt, h.rep, samp, *x0,
+                                                backend, opts);
+    if (est.has_value()) {
+      MESSAGE(std::string(name) << " iterations=" << est->iterations
+                                << " fmin=" << est->fmin);
+    } else {
+      MESSAGE(std::string(name) << " failed: " << est.error().detail);
+    }
+    return est;
+  };
+
+  auto lbfgs = run(Backend::Lbfgs, "lbfgs");
+  REQUIRE(lbfgs.has_value());
+  CHECK(lbfgs->fmin < 0.243);
+
+  auto tr = run(Backend::TrustRegion, "trust-region");
+  CHECK(tr.has_value());
+  if (tr.has_value()) {
+    CHECK(tr->fmin == doctest::Approx(lbfgs->fmin).epsilon(1e-5));
+  }
+
+#ifdef MAGMAAN_WITH_NLOPT
+  auto nlopt = run(Backend::Nlopt, "nlopt-slsqp");
+  CHECK(nlopt.has_value());
+  if (nlopt.has_value()) {
+    CHECK(nlopt->fmin == doctest::Approx(lbfgs->fmin).epsilon(1e-5));
+  }
+#endif
+
+#ifdef MAGMAAN_WITH_CERES
+  auto ceres = run(Backend::Ceres, "ceres");
+  CHECK(ceres.has_value());
+  if (ceres.has_value()) {
+    CHECK(ceres->fmin == doctest::Approx(lbfgs->fmin).epsilon(1e-5));
+  }
+#endif
 }
 
 #ifdef MAGMAAN_WITH_CERES
