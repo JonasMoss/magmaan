@@ -106,7 +106,7 @@ public:
   // cost function is sized once at construction so Ceres can validate shapes.
   // `lower` / `upper` are box bounds on θ (same sentinel as above).
   fit_expected<LbfgsOutput>
-  minimize_ls(LsResidualFn r_fn, LsJacobianFn J_fn,
+  minimize_ls(LsResidualFn r_fn, LsJacobianFn J_fn, LsEvaluationFn eval_fn,
               Eigen::Index n_resid,
               const Eigen::VectorXd& x0,
               const Eigen::VectorXd& lower,

@@ -97,4 +97,37 @@ TEST_CASE("CeresBoundedOptimizer — bound size mismatch is an error value") {
   CHECK(out.error().kind == FitError::Kind::NumericIssue);
 }
 
+TEST_CASE("CeresBoundedOptimizer — LS path reuses combined evaluation") {
+  Eigen::VectorXd target(2);  target << 0.25, -0.75;
+  int r_calls = 0;
+  int J_calls = 0;
+  int eval_calls = 0;
+  auto r = [&](const Eigen::VectorXd& x) -> magmaan::fit_expected<Eigen::VectorXd> {
+    ++r_calls;
+    return x - target;
+  };
+  auto J = [&](const Eigen::VectorXd&) -> magmaan::fit_expected<Eigen::MatrixXd> {
+    ++J_calls;
+    return Eigen::MatrixXd::Identity(2, 2);
+  };
+  auto eval = [&](const Eigen::VectorXd& x)
+      -> magmaan::fit_expected<magmaan::optim::LsEvaluation> {
+    ++eval_calls;
+    return magmaan::optim::LsEvaluation{x - target,
+                                        Eigen::MatrixXd::Identity(2, 2)};
+  };
+
+  CeresBoundedOptimizer opt;
+  const auto inf = std::numeric_limits<double>::infinity();
+  Eigen::VectorXd lb = Eigen::VectorXd::Constant(2, -inf);
+  Eigen::VectorXd ub = Eigen::VectorXd::Constant(2, inf);
+  auto out = opt.minimize_ls(r, J, eval, 2, Eigen::VectorXd::Zero(2), lb, ub);
+
+  REQUIRE(out.has_value());
+  CHECK(out->fmin < 1e-12);
+  CHECK((out->theta_hat - target).norm() < 1e-6);
+  CHECK(eval_calls > 0);
+  CHECK(J_calls == 0);
+}
+
 #endif  // MAGMAAN_WITH_CERES
