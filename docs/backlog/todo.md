@@ -32,6 +32,10 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   ULS/GLS smoke cases to WLS, ordinal DWLS/WLS, and mixed categorical models.
 - **M.** Track objective value, gradient norm, iteration count, wall time, and
   agreement with lavaan-backed estimates where applicable.
+- **S/M.** Fix unbounded L-BFGS convergence diagnostics on the line-search
+  salvage path: accepted last iterates can currently surface without a reliable
+  solver iteration count, so benchmark scripts should avoid treating a reported
+  zero as a real optimizer iteration count.
 - **M.** Compare LBFGS, LBFGS-B, Ceres, and SNLLS only on semantically
   appropriate cases; include shallow or Heywood-prone LS cases so bounds and
   conditioning stay visible.

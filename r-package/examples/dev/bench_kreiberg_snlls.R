@@ -40,10 +40,16 @@ try_fit <- function(expr) {
                                         class = "magmaan_bench_error"))
 }
 
+inf_bounds <- function(spec) {
+  npar <- max(spec$partable$free)
+  list(lower = rep(-Inf, npar), upper = rep(Inf, npar))
+}
+
 fit_one <- function(spec, dat, backend, snlls) {
   if (backend == "lbfgsb") {
     if (snlls) return(core$fit_gls_snlls(spec, dat, lbfgsb = lbfgsb))
-    return(core$fit_gls(spec, dat, lbfgsb = lbfgsb))
+    return(core$fit_gls(spec, dat, lbfgsb = lbfgsb,
+                        bounds = inf_bounds(spec)))
   }
   if (backend == "ceres") {
     if (snlls) return(core$fit_gls_snlls_ceres(spec, dat, ceres = ceres))
@@ -119,6 +125,6 @@ print(out, digits = 6, row.names = FALSE)
 
 cat("\nNotes\n")
 cat("* Timings are magmaan-only and do not reproduce MATLAB BFGS finite-difference gradients.\n")
+cat("* Ordinary GLS passes explicit +/-Inf bounds so magmaan dispatches to LBFGS-B and reports solver iterations reliably.\n")
 cat("* Kreiberg & Zhou's Geiser depression example is not run: the data are not vendored here, and the model is a higher-order/indicator-specific latent-state model.\n")
 cat("* The HS CFA case is the supported public-data analogue from Kreiberg et al. (2021).\n")
-cat("* Bollen ordinary L-BFGS-B may report 0 iterations with magmaan's current GLS starts.\n")
