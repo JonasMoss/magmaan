@@ -128,34 +128,51 @@ lavaan_wls <- function() {
   unname(lavaan::fitMeasures(fit, "chisq"))
 }
 
-snlls_diagnostics <- function(estimator, backend) {
+fit_for <- function(estimator, backend, snlls) {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- switch(
-    paste(estimator, backend, sep = "_"),
-    ULS_lbfgsb = core$fit_uls_snlls(spec, dat, lbfgsb = lbfgsb),
-    ULS_ceres = core$fit_uls_snlls_ceres(spec, dat, ceres = ceres),
-    GLS_lbfgsb = core$fit_gls_snlls(spec, dat, lbfgsb = lbfgsb),
-    GLS_ceres = core$fit_gls_snlls_ceres(spec, dat, ceres = ceres),
-    WLS_lbfgsb = core$fit_wls_snlls(spec, dat, W_wls, lbfgsb = lbfgsb),
-    WLS_ceres = core$fit_wls_snlls_ceres(spec, dat, W_wls, ceres = ceres)
-  )
-  snlls_field <- function(name) {
-    value <- fit[[name]]
-    if (is.null(value) || length(value) == 0L) return(NA_integer_)
-    value[[1L]]
-  }
-  data.frame(
-    method = paste("magmaan", tolower(estimator), "snlls", backend, sep = "_"),
-    iterations = fit$iterations,
-    nonlinear = snlls_field("snlls_nonlinear_npar"),
-    linear = snlls_field("snlls_linear_npar"),
-    profiles = snlls_field("snlls_profile_evaluations"),
-    profile_cache_hits = snlls_field("snlls_profile_cache_hits"),
-    gradients = snlls_field("snlls_gradient_evaluations"),
-    jacobians = snlls_field("snlls_jacobian_evaluations")
+  key <- paste(estimator, if (snlls) "snlls" else "ordinary", backend, sep = "_")
+  switch(
+    key,
+    ULS_ordinary_lbfgsb = core$fit_uls(spec, dat, lbfgsb = lbfgsb),
+    ULS_ordinary_ceres = core$fit_uls_ceres(spec, dat, ceres = ceres),
+    ULS_snlls_lbfgsb = core$fit_uls_snlls(spec, dat, lbfgsb = lbfgsb),
+    ULS_snlls_ceres = core$fit_uls_snlls_ceres(spec, dat, ceres = ceres),
+    GLS_ordinary_lbfgsb = core$fit_gls(spec, dat, lbfgsb = lbfgsb),
+    GLS_ordinary_ceres = core$fit_gls_ceres(spec, dat, ceres = ceres),
+    GLS_snlls_lbfgsb = core$fit_gls_snlls(spec, dat, lbfgsb = lbfgsb),
+    GLS_snlls_ceres = core$fit_gls_snlls_ceres(spec, dat, ceres = ceres),
+    WLS_ordinary_lbfgsb = core$fit_wls(spec, dat, W_wls, lbfgsb = lbfgsb),
+    WLS_ordinary_ceres = core$fit_wls_ceres(spec, dat, W_wls, ceres = ceres),
+    WLS_snlls_lbfgsb = core$fit_wls_snlls(spec, dat, W_wls, lbfgsb = lbfgsb),
+    WLS_snlls_ceres = core$fit_wls_snlls_ceres(spec, dat, W_wls, ceres = ceres)
   )
 }
+
+iteration_diagnostics <- function() {
+  rows <- expand.grid(
+    estimator = c("ULS", "GLS", "WLS"),
+    backend = c("lbfgsb", "ceres"),
+    snlls = c(FALSE, TRUE),
+    stringsAsFactors = FALSE
+  )
+  rows <- rows[order(rows$estimator, rows$backend, rows$snlls), ]
+  diagnostics <- lapply(seq_len(nrow(rows)), function(i) {
+    row <- rows[i, ]
+    fit <- fit_for(row$estimator, row$backend, row$snlls)
+    data.frame(
+      estimator = row$estimator,
+      method = if (row$snlls) "SNLLS" else "ordinary",
+      backend = row$backend,
+      iterations = fit$iterations,
+      fmin = fit$fmin
+    )
+  })
+  do.call(rbind, diagnostics)
+}
+
+cat("\nOptimizer iterations\n")
+print(iteration_diagnostics(), digits = 6, row.names = FALSE)
 
 cat("\nQuick returned statistics\n")
 print(data.frame(
@@ -176,16 +193,6 @@ print(data.frame(
     magmaan_wls_snlls_lbfgsb(), magmaan_wls_snlls_ceres(), lavaan_wls()
   )
 ), digits = 5, row.names = FALSE)
-
-cat("\nSNLLS diagnostics\n")
-print(do.call(rbind, list(
-  snlls_diagnostics("ULS", "lbfgsb"),
-  snlls_diagnostics("ULS", "ceres"),
-  snlls_diagnostics("GLS", "lbfgsb"),
-  snlls_diagnostics("GLS", "ceres"),
-  snlls_diagnostics("WLS", "lbfgsb"),
-  snlls_diagnostics("WLS", "ceres")
-)), row.names = FALSE)
 
 cat("\nULS benchmark\n")
 print(microbenchmark::microbenchmark(
