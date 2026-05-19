@@ -488,9 +488,10 @@ golden `parTable()` fixtures.
   Use `just test-dev` before handing back risky core changes, and prefer
   targeted `ctest --preset dev -R ...` while narrowing failures.
 - The C++ doctest suite is split into labeled executables (`smoke`, `spec`,
-  `estimate`, `inference`, and `ordinal`) behind the aggregate
-  `magmaan_tests` target. This keeps `cmake --build --preset <p> --target
-  magmaan_tests` working while allowing narrower relinks and `ctest -L`.
+  `estimate`, `inference`, `ordinal`, `api`, `parity`, and `robcat`) behind
+  the aggregate `magmaan_tests` target. This keeps
+  `cmake --build --preset <p> --target magmaan_tests` working while allowing
+  narrower relinks and `ctest -L`.
 - R bindings are intentionally outside the default C++ loop. `just r-install`
   links the optimized non-Ceres core, `just r-install-fast` is for interactive
   wrapper work, and `just r-install-ceres` is the explicit Ceres-enabled R
@@ -498,27 +499,29 @@ golden `parTable()` fixtures.
 
 #### Build-loop timings
 
-Snapshot taken after the directory/namespace refactor (commit `11e67f4`), on a
-13th-gen i7-1355U (12 threads), clang 19.1.7, with ccache and mold enabled.
-Wall-clock; approximate orientation, not a benchmark.
+Fast-loop snapshot refreshed on 2026-05-19 (commit `97dd197`), on a 13th-gen
+i7-1355U (12 threads), clang 19.1.7, with ccache and mold enabled.
+Wall-clock; approximate orientation, not a benchmark. Rows marked
+"not remeasured" are older orientation values retained until the corresponding
+loop is refreshed.
 
 | Loop step (`just` recipe)                   | Time   | Notes |
 |---------------------------------------------|--------|-------|
-| no-op `fast` build (`just fast`)            | 0.01 s | nothing changed |
-| touched core TU, `fast`                     | 1.2 s  | mtime only — ccache hit, relink `libmagmaan` + test exes |
-| edited core TU, `fast`                      | 7.5 s  | content change — cold clang compile of one core TU |
-| touched test TU, `fast`                     | 0.5 s  | mtime only — ccache hit, relink one test exe |
-| edited test TU, `fast`                      | 5.6 s  | content change — cold compile of one test TU |
-| C++ suite (`just test-fast`)                | 90 s   | 394 tests; no-op build + `ctest` |
-| C++ suite minus parity (`just test-quick`)  | 58 s   | 390 tests; the parity cases are ~half the full run |
-| sanitizer suite (`just test-dev`)           | 287 s  | 399 ASan/UBSan tests, plus a one-time 158 s build to carry the `dev` tree past the refactor |
-| R install, opt (`just r-install`)           | 12 s   | warm core; rebuilds the 5 R-glue TUs + link |
-| R install, fast (`just r-install-fast`)     | 15 s   | warm core |
-| R install, Ceres (`just r-install-ceres`)   | 123 s  | includes a one-time post-refactor rebuild of the Ceres core; ~15 s once warm |
+| no-op `fast` build (`just fast`)            | 0.03 s | nothing changed |
+| touched core TU, `fast`                     | 1.2 s  | not remeasured; mtime only, ccache hit, relink `libmagmaan` + test exes |
+| edited core TU, `fast`                      | 7.5 s  | not remeasured; content change, cold clang compile of one core TU |
+| touched test TU, `fast`                     | 0.5 s  | not remeasured; mtime only, ccache hit, relink one test exe |
+| edited test TU, `fast`                      | 5.6 s  | not remeasured; content change, cold compile of one test TU |
+| C++ suite (`just test-fast`)                | 81.5 s | 458 tests; no-op build + `ctest` |
+| C++ suite minus parity (`just test-quick`)  | 37.4 s | 454 tests; excludes the 4 parity tests |
+| sanitizer suite (`just test-dev`)           | 287 s  | not remeasured; old ASan/UBSan orientation value |
+| R install, opt (`just r-install`)           | 12 s   | not remeasured; warm core; rebuilds the 5 R-glue TUs + link |
+| R install, fast (`just r-install-fast`)     | 15 s   | not remeasured; warm core |
+| R install, Ceres (`just r-install-ceres`)   | 123 s  | not remeasured; included a one-time post-refactor rebuild of the Ceres core; ~15 s once warm |
 
-The everyday inner loop (edit a core file, `just test-quick`) is about a
-minute; the sanitizer suite and the Ceres R path are minutes-scale and run
-deliberately rather than on every change.
+The everyday inner loop (edit a core file, `just test-quick`) is comfortably
+under a minute on the measured fast tree; the sanitizer suite and the Ceres R
+path are minutes-scale and run deliberately rather than on every change.
 
 ### Argument-minimality sweep
 
@@ -611,11 +614,12 @@ Validation has three deliberately separate surfaces:
   timing, not CI correctness. It is R-dependent and advisory; the parity layer
   is the bridge that freezes its correctness checks into the gated C++ suite.
 
-The suite builds as six doctest executables — `magmaan_test_{smoke, spec,
-estimate, inference, ordinal, parity}` — so areas build and run independently
-(`ctest -L parity`). CI never invokes R; fixture regeneration is a manual
-developer step. Property and boundary tests are expected to catch structural
-mistakes early, before they surface as hard-to-debug parity failures.
+The suite builds as eight doctest executables — `magmaan_test_{smoke, spec,
+estimate, inference, ordinal, api, parity, robcat}` — so areas build and run
+independently (`ctest -L parity`). CI never invokes R; fixture regeneration is
+a manual developer step. Property and boundary tests are expected to catch
+structural mistakes early, before they surface as hard-to-debug parity
+failures.
 
 ## Current Boundaries
 
