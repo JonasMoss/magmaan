@@ -1,6 +1,7 @@
 #include "magmaan/estimate/gmm/gp.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -242,17 +243,17 @@ gp(const optim::GmmProblem& base, const spec::LatentStructure& pt,
   };
   auto cache = std::make_shared<Cache>();
   auto profiled = [base, cls, cache](const Eigen::VectorXd& beta)
-      -> fit_expected<ProfilePoint> {
+      -> fit_expected<std::reference_wrapper<const ProfilePoint>> {
     if (cache->valid && cache->beta.size() == beta.size() &&
         (cache->beta.array() == beta.array()).all()) {
-      return cache->point;
+      return std::cref(cache->point);
     }
     auto p = profile_at(base, *cls, beta);
     if (!p.has_value()) return std::unexpected(p.error());
     cache->valid = true;
     cache->beta  = beta;
-    cache->point = *p;
-    return *p;
+    cache->point = std::move(*p);
+    return std::cref(cache->point);
   };
 
   optim::GmmProblem out;
@@ -262,23 +263,23 @@ gp(const optim::GmmProblem& base, const spec::LatentStructure& pt,
       -> fit_expected<Eigen::VectorXd> {
     auto p = profiled(beta);
     if (!p.has_value()) return std::unexpected(p.error());
-    return p->residual;
+    return p->get().residual;
   };
   out.J = [profiled](const Eigen::VectorXd& beta)
       -> fit_expected<Eigen::MatrixXd> {
     auto p = profiled(beta);
     if (!p.has_value()) return std::unexpected(p.error());
-    return p->jacobian;
+    return p->get().jacobian;
   };
   out.eval = [profiled](const Eigen::VectorXd& beta)
       -> fit_expected<optim::LsEvaluation> {
     auto p = profiled(beta);
     if (!p.has_value()) return std::unexpected(p.error());
-    return optim::LsEvaluation{p->residual, p->jacobian};
+    return optim::LsEvaluation{p->get().residual, p->get().jacobian};
   };
   out.expand = [profiled, cls](const Eigen::VectorXd& beta) -> Eigen::VectorXd {
     auto p = profiled(beta);
-    if (p.has_value()) return p->theta;
+    if (p.has_value()) return p->get().theta;
     Eigen::VectorXd theta = cls->constraints.theta0;
     if (cls->K_beta.cols() > 0) theta.noalias() += cls->K_beta * beta;
     return theta;
