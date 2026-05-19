@@ -1,8 +1,14 @@
 # Non-Binding Ideas
 
-This note is a scratchpad for possible philosophical and scope changes. It is
-not the roadmap, not the backlog, and not a commitment. Concrete accepted work
-still belongs in [roadmap.md](roadmap.md) or [todo.md](todo.md).
+This note is a scratchpad for philosophical and scope changes. Most of it is
+not the roadmap, not the backlog, and not a commitment; concrete accepted work
+belongs in [roadmap.md](roadmap.md) or [todo.md](todo.md).
+
+Two parts are further along. The API-tier sections reflect a May 2026 design
+pass that reached real decisions — most firmly the `frontier` tier name and the
+core/frontier split. The **User-Facing API** section is the opposite: it is
+explicitly *unsettled*, and is written down only so the reasoning is not lost
+when that thread resumes.
 
 ## Public Identity
 
@@ -11,284 +17,243 @@ methods-development workbench, not an end-user lavaan replacement.
 
 A sharper public framing could be:
 
-> magmaan is a verifiable SEM engine and research workbench for lavaan-compatible
-> linear SEM slices, plus explicit experimental methods primitives.
+> magmaan is a verifiable SEM engine and research workbench for
+> lavaan-compatible linear SEM slices, plus explicit frontier methods
+> primitives.
 
 That wording preserves the useful pieces:
 
 - lavaan remains the oracle where compatibility is claimed;
 - methods developers can inspect and compose the primitive graph;
 - the package does not promise lavaan-style one-shot ergonomics;
-- experimental methods work can live in the repo without pretending to be
-  ordinary supported SEM functionality.
+- frontier methods work can live in the repo without pretending to be ordinary
+  supported SEM functionality.
 
-## A Practical Status Model
+## API Status: Two Axes
 
-The main question is how to distinguish supported work from experimental work
-in a way that is visible in code, docs, tests, and R bindings.
+The recurring question is how to distinguish supported work from
+methods-development work so the distinction is visible in code, docs, tests,
+and bindings. Two questions are easy to conflate and must be kept apart:
 
-This should separate two questions that are easy to conflate:
+- **API status** — the source-compatibility promise magmaan makes for a
+  function, type, or header.
+- **Statistical status** — the evidence behind the method: lavaan parity, an
+  independent oracle, simulation, diagnostic invariants, published work, or
+  local exploratory use.
 
-- **API status**: what compatibility promise does magmaan make for this
-  function, type, header, wrapper, or result shape?
-- **Statistical status**: what evidence supports the method being computed:
-  lavaan parity, theory, simulation, diagnostic invariants, published work, or
-  local exploratory use?
+A method can be statistically strong with an unsettled software API, and a
+small primitive can have a settled API while being statistically modest. The
+key consequence: **`core` is an API-status word, not a statistical one.** A
+faithfully ported, paper-validated estimator unrelated to lavaan can still be
+`core` if its software contract is settled and it has its own committed oracle.
+`core` does not mean "lavaan-compatible."
 
-A method can be statistically important without having a stable software API.
-Likewise, a small diagnostic primitive can have a stable API if its contract is
-simple, useful, and unlikely to change. Published work, informal use, or
-simulation value are evidence for a method, not automatic source-compatibility
-promises.
+Status vocabulary:
 
-One possible status vocabulary:
+- **Core** — settled software contract: stable name, signature, and result
+  shape; unsupported combinations fail explicitly; documented; the maintainer
+  will deprecate before breaking it. Evidence may be lavaan parity *or* an
+  independent oracle.
+- **Frontier** — the methods-development tier: public, tested, citable research
+  primitives whose API carries no deprecation-cycle promise. Not a waiting
+  room — a permanent destination (see below).
+- **Compat** — projection and naming helpers under `compat::lavaan` whose job
+  is matching lavaan's surface, not defining magmaan's ontology.
+- **Rejected** — combinations that fail explicitly because the contract is not
+  designed.
+- **Undesigned** — plausible future work with no current contract.
 
-- **Core**: fixture-backed, lavaan-compatible behavior. These paths can be used
-  in public examples, benchmarks, and compatibility claims.
-- **Experimental**: public methods-development primitives with explicit
-  diagnostics and tests, but unsettled calibration, naming, result shape,
-  supported scope, or source-compatibility promise. These may be statistically
-  useful, citable, and intentionally exposed, but should be described as
-  experimental.
-- **Compat**: projection, naming, and parity helpers whose purpose is matching
-  lavaan's surface or oracle outputs, not defining magmaan's internal ontology.
-- **Rejected**: combinations that fail explicitly because the statistical or
-  semantic contract is not designed.
-- **Undesigned**: plausible future work with no current contract.
+Status must be visible where users and contributors meet the project, not only
+in prose.
 
-The important rule is that status should not be only prose. It should be
-visible at the boundary where users and contributors meet the project.
+## Public Surface Layers
 
-## Public Surface Categories
+Over one implementation, magmaan exposes:
 
-magmaan should probably expose two main public API layers over one
-implementation, plus explicit status-scoped surfaces:
+- **Friendly API** — ergonomic entry points for ordinary use (`magmaan::api`
+  and the exported bindings), composing lower-level primitives while keeping
+  statistical choices explicit. Its concrete shape is unsettled — see
+  *User-Facing API* below.
+- **Compositional API** — public power-user primitives in domain namespaces
+  (`spec`, `model`, `data`, `estimate`, `inference`, `robust`, `measures`,
+  `optim`): free functions, no hidden state — the methods-development,
+  simulation, and LLM-readable surface.
+- **Compatibility API** — `compat::lavaan`: lavaan-shaped projection and oracle
+  matching.
+- **Frontier API** — research primitives whose contract may still change.
 
-- **Friendly API**: ergonomic staged entry points for ordinary use, currently
-  centered on `magmaan::api` and the exported R helpers. These compose
-  lower-level primitives while keeping statistical choices explicit.
-- **Compositional API**: public power-user primitives in domain namespaces such
-  as `spec`, `model`, `data`, `estimate`, `inference`, `robust`, `measures`,
-  and `optim`. This is the methods-development, simulation, and LLM-readable
-  surface.
-- **Compatibility API**: public surfaces under `compat::*`, especially
-  `compat::lavaan`, whose purpose is matching external naming, projection, or
-  oracle behavior rather than defining magmaan's internal ontology.
-- **Experimental API**: public research primitives whose contract,
-  calibration, naming, result shape, or supported scope may still change.
-  Experimental APIs should stay in their domain namespace, for example
-  `data::experimental` or `optim::experimental`, rather than moving all
-  experiments to one top-level namespace.
+Internal details live in uninstalled headers, `src/`, or `detail` namespaces
+and carry no promise. magmaan does not promise C++ ABI stability; source-level
+behavior for documented public surfaces is the realistic contract — the Abseil
+stance of API-yes, ABI-no.
 
-Internal implementation details should live in uninstalled headers, `src/`, or
-explicit `detail` / `internal` namespaces. They carry no compatibility promise.
+## The `frontier` Tier
 
-In C++ terms, the practical public boundary is not only symbol visibility. It
-is "installed public header plus documented support status." Namespace names
-communicate intent, but the support matrix and API documentation carry the
-actual compatibility claim. Unless magmaan later decides otherwise, C++ ABI
-stability should not be promised; source-level behavior for documented public
-surfaces is the realistic contract.
+Decided: the non-core methods tier is named **`frontier`** — not "experimental"
+and not "lab" — and it **nests per domain** (`estimate::frontier`,
+`optim::frontier`, `robust::frontier`, …) rather than collecting every
+experiment in one top-level namespace.
 
-## Should Status Be Namespaces?
+Per-domain nesting runs *against* the nearest precedents — Eigen's top-level
+`unsupported/`, scikit-learn's top-level `sklearn.experimental`. It is still
+right for magmaan for a specific reason: those projects put experiments at the
+top because the experiments were usually whole new *domains* with no existing
+home. magmaan's frontier methods almost always do have a home domain — a
+strange optimizer is still an optimizer; a robust estimator is still
+`estimate`. When the frontier thing is a citizen of an existing namespace,
+nesting it there beats exiling it.
 
-Maybe partly, but not as a top-level taxonomy that replaces domain namespaces.
+Naming rationale: `core` / `frontier` is a matched metaphor — both territory
+words — where `core` / `experimental` mixes a place with a process. `frontier`
+also *invites* use where "experimental" and Eigen's "unsupported" repel, and a
+methods repository wants users in. The cost of deviating from precedent here is
+near zero: the *mechanism* — separate namespace, no deprecation promise,
+catalog-as-contract — follows precedent; only the label is local.
 
-Namespaces are attractive because they make status visible at the call site:
+Friction model: in statistics, weak stability expectations are normal —
+convergence failures and contested asymptotics are routine. A hard opt-in gate
+(Eigen's separate include path, scikit-learn's enabling import, Rust's feature
+flag) is therefore overkill. The `frontier` namespace label, plus the evidence
+column of the methods catalog, is proportionate friction.
 
-```cpp
-magmaan::estimate::fit_ml(...)
-magmaan::data::experimental::pairwise_joint_composite_objective(...)
-magmaan::compat::lavaan::to_lavaan_partable(...)
-```
+## Frontier as a Methods Repository
 
-This has real advantages:
+The intent is for `frontier` to grow *large* — a common repository for the many
+published SEM and psychometrika methods that will never be lavaan-parity
+"core", but are worth a verified, composable implementation. Frontier is a
+destination, not a transit lounge.
 
-- experimental APIs are harder to accidentally treat as stable;
-- compatibility code is not confused with the internal model contract;
-- future deprecation or promotion can be done by moving APIs deliberately;
-- R and Python bindings can mirror the same grouping.
+This is sustainable only under one discipline: **every frontier method must be
+a model of an existing extension concept** — `Discrepancy`, `Optimizer`,
+`StandardErrorMethod`, `FitIndex`, a moment/data builder — not a parallel
+re-implementation of the fit machinery. A method that cannot be expressed
+against the concept set is not a failure; it is the most valuable signal the
+frontier produces, because it shows the concept set has a missing slot. The
+failure mode is a silo'd method that forks the engine.
 
-But namespaces alone are too blunt. Some modules contain both stable and
-experimental entry points, and moving every experimental helper into a
-top-level `lab::...` namespace could make the implementation noisier than the
-distinction is worth.
-For example, an ordinal data module may have one lavaan-compatible moment
-builder and several robust experimental builders that share low-level kernels.
-Likewise, a new optimizer should remain conceptually in `optim`; if its public
-contract is unsettled, it can live in `optim::experimental` or an experimental
-optimizer header rather than `lab::optim`.
+Sprawl is acceptable while it produces architectural information; it becomes a
+problem when it makes support claims unclear. So the job is not to remove
+breadth — it is to label what a given piece of breadth is doing:
 
-A hybrid policy may work better:
+- **Architecture probe** — tests whether a namespace, result type, or estimator
+  interface generalizes.
+- **Research surface** — a coherent methods API, useful in its own right.
+- **Diagnostic kernel** — a small primitive that inspects one subproblem.
+- **Compatibility slice** — exists because lavaan implies a behavior to match.
+- **Promotion candidate** — intended for `core` once contract and evidence are
+  complete.
 
-- Use top-level namespaces for durable conceptual boundaries:
-  `parse`, `spec`, `model`, `data`, `estimate`, `inference`, `robust`,
-  `measures`, `optim`, `api`, and `compat::lavaan`.
-- Put experimental public surfaces inside the relevant domain namespace, such
-  as `data::experimental`, `estimate::experimental`, or
-  `optim::experimental`.
-- Optionally add a curated top-level `lab` facade later if it is useful as a
-  research-workbench index, but do not make it the owner of every experiment.
-- Keep private shared kernels in ordinary implementation files when they are
-  not a public boundary.
-- Require docs and tests to carry the final status claim; the namespace is a
-  signal, not the whole contract.
+Entry bar for a method to land in `<domain>::frontier`. Because the maintainer
+is realistically the main contributor for the foreseeable future, this is a
+self-imposed checklist, not a review gate:
 
-Possible C++ shape:
+- a citation;
+- at least one oracle test — the source paper's numbers, a simulation, or
+  finite-difference invariants;
+- explicit `Rejected` errors for the combinations it does not support;
+- a row in the methods catalog.
 
-```cpp
-namespace magmaan::data {
-// Supported lavaan-compatible ordinal statistics.
-std::expected<OrdinalStats, Error> ordinal_stats_from_integer_data(...);
-}
+## Two Maturation Arrows
 
-namespace magmaan::data::experimental {
-// Experimental methods primitives; tested, but not lavaan compatibility claims.
-std::expected<OrdinalStats, Error>
-pairwise_ordinal_stats_h_weighted_from_integer_data(...);
-}
+"Promotion" conflates two orthogonal moves; separate them.
 
-namespace magmaan::compat::lavaan {
-// Compatibility projections and lavaan-shaped views.
-std::expected<LavaanParTable, Error> to_lavaan_partable(...);
-}
-```
+- **Arrow 1 — reach.** A method lands compositional-only in
+  `<domain>::frontier`. Later, a maintainer writes a thin friendly wrapper
+  (`api::frontier::…`) and a binding. This is about *ergonomics*: routine,
+  encouraged, cheap. The method stays `frontier` throughout.
+- **Arrow 2 — contract.** `frontier` → `core`. This is about *evidence and
+  promise*: a committed oracle, a stable owner namespace, and a willingness to
+  deprecate before breaking. Rare. Most methods never take it — and that is the
+  model working, not failing.
 
-Possible R shape:
+A surface can be treated as `core` when its statistical and software contract
+is written down; input ordering, output scaling, group/block conventions, and
+missing-data behavior are clear; name, signature, and result shape are settled;
+unsupported combinations fail explicitly; tests support the specific claim
+(lavaan fixtures for compatibility claims, or invariants / finite-difference /
+simulation / an independent oracle for non-lavaan behavior); it appears in the
+catalog; and the maintainer will deprecate before breaking it.
 
-```r
-magmaan_core$data_ordinal_stats_from_raw(...)
-magmaan_core$data_experimental_pairwise_ordinal_h_weighted(...)
-magmaan_core$compat_lavaan_lavaanify(...)
-```
+`frontier` does not mean untested or uncitable. It means no deprecation-cycle
+promise yet. A paper should be able to cite magmaan and name a frontier surface
+precisely.
 
-This would keep the friendly namespace small, keep `magmaan_core` broad but
-mostly compatibility-backed, and make explicitly experimental work reachable
-without making it look like an ordinary sibling of the stable compatibility
-path.
+## Methods Catalog
 
-The model is similar to the broad pattern used by established C++ and
-scientific libraries: documented public entry points receive compatibility
-discipline; private or underscored/internal implementation details do not; and
-experimental features require a visible opt-in or status marker. For magmaan,
-the closest analogue is: installed public header plus support-matrix entry
-defines public API; `detail` / `internal` / uninstalled headers are private;
-`experimental` namespaces or headers mark public research APIs whose software
-contract may still change.
+The project should keep one catalog recording the status of
+model/estimator/data/post-fit combinations — replacing roadmap prose and making
+scope auditable. At frontier scale it becomes the real discovery tool; the
+namespace is only a coarse signpost.
 
-## Stable vs Experimental
+One row per method or slice: model/data slice, estimator, feature, **API
+status** (core/frontier/compat/rejected/undesigned), **statistical evidence**
+(lavaan fixtures / validated vs source paper / simulation / invariants /
+exploratory), the public entry point, and the header.
 
-A public function, type, or header can be treated as stable when:
+It should answer: is this core, frontier, rejected, or undesigned? Which tests
+support the claim? Which public API exposes it? Which combinations fail
+explicitly? What would promotion (Arrow 2) require?
 
-- its statistical and software contract is written down;
-- input ordering, output scaling, group/block conventions, and missing-data
-  behavior are clear;
-- the name, signature, and result shape are considered settled;
-- unsupported combinations fail explicitly;
-- tests support the claim being made: lavaan fixtures for compatibility
-  claims, or invariants, finite-difference checks, diagnostic fixtures,
-  simulation checks, or independent references for non-lavaan behavior;
-- it appears in the support matrix or API documentation;
-- maintainers are willing to deprecate before breaking it.
+It should be **generated and checked** from per-method metadata, not
+hand-maintained prose — SciPy's lesson is that the explicit list *is* the
+contract, and Stan's is that an ungenerated support list drifts. Likely home:
+`docs/support.md`, or a table generated from YAML.
 
-A public API should remain experimental when any of these are still fluid:
-contract, calibration, argument shape, result fields, supported model/data
-slice, or intended downstream use.
+## User-Facing API (Unsettled)
 
-Experimental does not mean untested or uncitable. It means no ordinary source
-compatibility promise yet. A simulation paper should be able to cite magmaan
-and name an experimental surface precisely, but readers should be able to see
-that it was a versioned research primitive rather than a default supported SEM
-workflow.
+**This section records an in-progress discussion. None of it is decided.** It
+is written down so the reasoning survives until the thread resumes.
 
-## Support Matrix
+Motivation: avoid lavaan's monster fitted object — a god-object of precomputed
+slots plus a stringly-typed `lavInspect(fit, "…")`. That object is bad for
+legibility and for methods research, even though it is convenient for end users
+with good LSP tooling. magmaan's user-facing layer should keep every
+statistical choice — which vcov, which SE, which test — *explicit*; a user who
+wants those choices made for them should use lavaan.
 
-The project could benefit from a single support matrix that records the status
-of model/estimator/data/post-fit combinations. This would reduce the burden on
-roadmap prose and make scope decisions easier to audit.
+Current thinking, all tentative:
 
-The matrix could live in `docs/support.md` or as a generated table sourced from
-YAML. It might have rows like:
+- **Two shapes for two layers.** The compositional layer stays free functions
+  (composable, no hidden state, legible). The friendly layer is *methods on
+  small objects* — methods are LSP-discoverable (type `fit.` and the surface
+  appears); free functions are not. Methods are not the monster: lavaan's
+  monster is a *storage* problem, not a *methods* problem.
+- **`Fit` is small and immutable** — it holds only {model, data, estimates}.
+  Post-fit "poke" methods (`fit.standard_errors(spec)`) compute on demand,
+  return `Result<T>`, and fail fast. This is the methods-research surface.
+- **`Report` is the chain accumulator** — entered explicitly (`fit.report()`);
+  its methods store-and-return the report; `.summary()` renders. It accumulates
+  an append-only *list* per category, not a single slot. Each slot holds
+  `Result<T>`, so the chain is `std::expected`-free and `.summary()` can render
+  a partial report with per-section errors. `.summary()` itself computes
+  nothing — it is a pure renderer of explicitly chosen results, so its content
+  is a pure function of the chain. This rehabilitates, rather than keeps, the
+  current `api::Analysis`.
+- **Results carry their own config.** A result embeds the full configuration
+  that produced it; no API path yields a bare number. "Satorra-Bentler" is not
+  a function but a correction *form* parameterized by a cube (base × Γ × U,
+  plus the form axis); friendly presets are named points in that cube, and
+  unnamed cells display by coordinates. The summary's "ingredient grouping" is
+  then emergent: the renderer de-duplicates results by their embedded config.
+- **No implicit cache.** Sub-ingredients with choice axes (Γ, U) are explicit
+  *values* — computed once, named, passed. Choice-free intrinsics (the Jacobian
+  Δ at θ̂, the implied Σ) *may* be memoized on `Fit` if benchmarks demand it,
+  but never the choice-bearing quantities.
+- **Bindings mirror the C++ shape** — R via R6 (method syntax,
+  autocomplete-discoverable, in the spirit of mlr3), not S4 generics; a future
+  Python binding as a plain class.
 
-| Model/data slice | Estimator | Feature | Status | Evidence |
-|---|---|---|---|---|
-| continuous complete-data CFA | ML | estimates, SE, chi-square | Core | lavaan fixtures |
-| continuous raw missing data | FIML | MLR robust report | Core | lavaan fixtures |
-| all-ordinal complete/listwise | DWLS/WLS | estimates, fit measures | Core | lavaan fixtures |
-| all-ordinal pairwise observed missing | composite likelihood | objective diagnostics | Experimental | unit fixtures |
-| mixed categorical | h-weighted polyserial | moment builder | Undesigned | design needed |
-| inequality constraints | any | active-bound inference | Rejected | out of scope |
+Open questions: the whole shape is unconfirmed; the parameter-estimates table
+wants SE/z/p columns, and multiple SE computations make it uncomfortably wide;
+whether the friendly facade needs a generic templated escape hatch for frontier
+methods or whether `api::frontier::` free functions suffice; and the fate of
+the pre-fit `analyze()` entry point.
 
-The support matrix should answer:
-
-- Is this lavaan-compatible, experimental, rejected, or undesigned?
-- Which tests or fixtures support the claim?
-- Which public API exposes it?
-- Which combinations fail explicitly?
-- What would be required to promote it?
-
-## Promotion Rules
-
-Experimental work should be promotable, but promotion should require more than
-passing tests.
-
-An experimental feature could become core only when:
-
-- the statistical contract is written down;
-- unsupported combinations fail explicitly;
-- lavaan parity exists where lavaan has matching behavior;
-- non-lavaan behavior has its own oracle, simulation check, or documented
-  diagnostic contract;
-- the C++ API has a stable owner namespace;
-- the R surface is thin and decomposable into visible primitives;
-- benchmarks exist if performance is part of the reason for the feature.
-
-This avoids a common failure mode: experimental methods code accumulates until
-users cannot tell which parts are polished and which parts are research
-scaffolding.
-
-## Sprawl As Design Reconnaissance
-
-Some of the current breadth is not accidental scope creep. It is design work.
-
-If magmaan only supported clean complete-data ML, expected information,
-standard SEs, and a small set of fit measures, the design could be much tidier.
-It might also be falsely tidy. Robust Satorra-Bentler variants, observed versus
-expected bread, biased versus unbiased Gamma, FIML robust traces, ordinal
-NACOV, DLS weights, h-weighted moments, DPD comparators, and composite
-likelihood prototypes all put different pressure on the same abstractions.
-They reveal which boundaries are real and which only looked good because the
-easy case was too simple.
-
-This suggests a more generous rule:
-
-> Sprawl is acceptable while it is producing architectural information. It
-> becomes a problem when it makes support claims unclear.
-
-The job is not to remove breadth too early. The job is to label what the
-breadth is doing.
-
-Useful labels might be:
-
-- **Architecture probe**: exists to test whether a namespace, result type,
-  matrix contract, or estimator interface generalizes.
-- **Research surface**: an experimental but coherent methods API, useful in
-  its own right.
-- **Diagnostic kernel**: a small callable primitive used to inspect or validate
-  one statistical subproblem.
-- **Compatibility slice**: exists because lavaan exposes or implies a behavior
-  that magmaan wants to match.
-- **Promotion candidate**: experimental today, but intended to become core once
-  the contract and evidence are complete.
-
-This is different from treating everything outside the stable core as generic
-`lab` material. A robust categorical moment builder that is testing future SEM
-estimator boundaries, a diagnostic bivariate ordinal kernel, and a compatibility
-helper for lavaan-shaped partables are not the same kind of thing. They may all
-be non-core, but they serve different design purposes.
-
-The key discipline is to keep exploratory breadth from becoming ambiguous
-public scope. A design probe can be messy internally. A support claim cannot be.
+Precedents consulted: Stan (the `stan::services` facade over `stan::math` and
+`stan::mcmc`); statsmodels (a `Results` object, post-estimation as
+explicit-argument methods); Eigen `unsupported/`; the tidyverse `lifecycle`
+stages; Abseil (API-yes / ABI-no); Rust stability attributes; the SciPy
+public/private convention; scikit-learn `experimental`; mlr3 (R6).
 
 ## Scope Bias
 
@@ -308,7 +273,7 @@ Risky magmaan scope:
 - broad lavaan tutorial parity as a goal by itself;
 - end-user convenience that hides statistical choices;
 - new syntax before the model ontology is settled;
-- experimental estimators exposed as if they were ordinary compatibility paths;
+- frontier estimators exposed as if they were ordinary compatibility paths;
 - public performance claims before workload equivalence is documented.
 
 ## Bootstrap As Simulation Scope
@@ -356,20 +321,33 @@ A conservative policy:
   until the complete-data ML contract is stable;
 - require explicit rejected errors for unsupported composite combinations.
 
+## Open Refactor Questions
+
+Minor and unresolved, noted so they are not lost. The next working pass is a
+small refactor alongside the core/frontier split.
+
+- `estimate/` may hold things that belong elsewhere — worth an audit.
+- `Starts` and the start-value producers could become a sub-namespace.
+- The role of `model/` is unclear and worth pinning down.
+- Whether an `nt` namespace should regroup FIML and complete-data covariance
+  estimation — probably not: complete-data normal theory is as closely related
+  to the GMM core as it is to FIML, so the current split may already be right.
+
 ## README And Docs Drift
 
-The README should describe the current public contract rather than an older
-snapshot. In particular, it should not say a feature is out of scope if it is
-already implemented for a supported slice.
+The README should describe the current public contract, not an older snapshot;
+in particular it should not call a feature out of scope once it is implemented
+for a supported slice.
 
 A possible docs split:
 
-- `README.md`: short identity, current supported headline slices, build loop,
-  and strong caveats.
-- `docs/roadmap.md`: current state and architecture contracts.
-- `docs/todo.md`: accepted remaining work only.
-- `docs/support.md`: status matrix for supported/lab/rejected combinations.
-- `docs/ideas.md`: non-binding sketches like this file.
+- `README.md` — short identity, current supported headline slices, build loop,
+  and caveats.
+- `docs/roadmap.md` — current state and architecture contracts.
+- `docs/todo.md` — accepted remaining work only.
+- `docs/support.md` — the methods catalog (core/frontier/rejected combinations
+  with evidence).
+- `docs/ideas.md` — non-binding sketches like this file.
 
 ## One-Sentence Philosophy
 
