@@ -707,4 +707,7 @@ failures.
 Use this file to understand the current state and contracts before structural
 changes. Use [docs/todo.md](todo.md) to choose or update remaining work. See
 [docs/lavaan_tutorial_parity.md](lavaan_tutorial_parity.md) for the
-section-by-section audit of magmaan against the lavaan tutorial.
+section-by-section audit of magmaan against the lavaan tutorial. See
+[docs/documentation_proposal.md](documentation_proposal.md) for the proposed
+Quarto manual split, documentation vocabulary, and first documentation
+milestones.
