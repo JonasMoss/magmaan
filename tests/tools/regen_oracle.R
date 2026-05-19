@@ -2127,3 +2127,115 @@ for (m in std_models) {
 
 cat("regenerated", length(regenerated_std), "std-solution fit fixtures under",
     std_dir, "\n")
+
+# === composite model fixtures ==============================================
+# Lavaan's composite (`<~`) ML surface currently needs numerical gradients:
+# with the default analytical-gradient path, lavaan returns starting values.
+# These fixtures deliberately live outside corpus.json because magmaan's
+# in-memory contract expands composites through the Henseler-Ogasawara block,
+# while the public/lavaan-facing contract is folded `<~` rows plus recovered
+# weights.
+composite_dir <- file.path(fixtures, "composite")
+dir.create(composite_dir, showWarnings = FALSE, recursive = TRUE)
+
+composite_models <- list(
+  list(id = "0001_pure_composite_hs",
+       model = paste("C <~ x1 + x2 + x3",
+                     "x4 ~ C",
+                     "x5 ~ C", sep = "\n")),
+  list(id = "0002_composite_factor_hs",
+       model = paste("C <~ x1 + x2 + x3",
+                     "visual =~ x4 + x5 + x6",
+                     "visual ~ C", sep = "\n")),
+  list(id = "0003_composite_structural_hs",
+       model = paste("C <~ x1 + x2 + x3",
+                     "visual =~ x4 + x5 + x6",
+                     "x9 ~ C + visual", sep = "\n"))
+)
+
+rows_for <- function(fit, op_filter) {
+  pe <- parameterEstimates(fit, standardized = TRUE)
+  slv <- standardizedSolution(fit, type = "std.lv")
+  sall <- standardizedSolution(fit, type = "std.all")
+  pe_grp <- if (!is.null(pe$group)) pe$group else rep(1L, nrow(pe))
+  slv_grp <- if (!is.null(slv$group)) slv$group else rep(1L, nrow(slv))
+  sall_grp <- if (!is.null(sall$group)) sall$group else rep(1L, nrow(sall))
+  idx <- which(pe$op %in% op_filter)
+  out <- vector("list", length(idx))
+  for (ii in seq_along(idx)) {
+    i <- idx[ii]
+    h1 <- which(slv$lhs == pe$lhs[i] & slv$op == pe$op[i] &
+                slv$rhs == pe$rhs[i] & slv_grp == pe_grp[i])
+    h2 <- which(sall$lhs == pe$lhs[i] & sall$op == pe$op[i] &
+                sall$rhs == pe$rhs[i] & sall_grp == pe_grp[i])
+    stopifnot(length(h1) == 1L, length(h2) == 1L)
+    out[[ii]] <- list(
+      lhs = as.character(pe$lhs[i]),
+      op = as.character(pe$op[i]),
+      rhs = as.character(pe$rhs[i]),
+      group = as.integer(pe_grp[i]),
+      est = as.numeric(pe$est[i]),
+      se = as.numeric(pe$se[i]),
+      std_lv = as.numeric(slv$est.std[h1]),
+      std_lv_se = as.numeric(slv$se[h1]),
+      std_all = as.numeric(sall$est.std[h2]),
+      std_all_se = as.numeric(sall$se[h2]))
+  }
+  out
+}
+
+regenerated_composite <- character(0)
+for (m in composite_models) {
+  id <- m$id; model <- m$model
+  fit <- suppressWarnings(tryCatch(
+    sem(model = model, data = HolzingerSwineford1939,
+        optim.gradient = "numerical"),
+    error = function(e) e))
+  if (inherits(fit, "error") || !lavInspect(fit, "converged")) {
+    cat("  skip ", id, " (composite sem error / no convergence)\n", sep = "")
+    next
+  }
+
+  fm <- fitMeasures(fit)
+  implied <- lavInspect(fit, "implied")
+  sampstat <- lavInspect(fit, "sampstat")
+
+  payload <- list(
+    `_meta` = list(format_version = 1L, fixture_kind = "composite.fit",
+                   corpus_id = id, tool = "lavaan::sem",
+                   lavaan_version = installed,
+                   optim_gradient = "numerical"),
+    input = model,
+    n_obs = as.integer(lavInspect(fit, "ntotal")),
+    n_obs_per_block = as.integer(lavInspect(fit, "nobs")),
+    chi2 = as.numeric(fm["chisq"]),
+    df = as.integer(fm["df"]),
+    npar = as.integer(fm["npar"]),
+    cfi = as.numeric(fm["cfi"]),
+    tli = as.numeric(fm["tli"]),
+    rmsea = as.numeric(fm["rmsea"]),
+    rmsea_ci_lower = as.numeric(fm["rmsea.ci.lower"]),
+    rmsea_ci_upper = as.numeric(fm["rmsea.ci.upper"]),
+    rmsea_pvalue = as.numeric(fm["rmsea.pvalue"]),
+    srmr = as.numeric(fm["srmr"]),
+    logl = as.numeric(fm["logl"]),
+    unrestricted_logl = as.numeric(fm["unrestricted.logl"]),
+    aic = as.numeric(fm["aic"]),
+    bic = as.numeric(fm["bic"]),
+    bic2 = as.numeric(fm["bic2"]),
+    sample_cov = list(list(block = 0L,
+                           matrix = unname(as.matrix(sampstat$cov)))),
+    implied_sigma = list(list(block = 0L,
+                              matrix = unname(as.matrix(implied$cov)))),
+    weights = rows_for(fit, "<~"),
+    rows = rows_for(fit, c("=~", "~"))
+  )
+
+  out_path <- file.path(composite_dir, paste0(id, ".fit.json"))
+  write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
+             null = "null", na = "null", digits = NA)
+  regenerated_composite <- c(regenerated_composite, out_path)
+}
+
+cat("regenerated", length(regenerated_composite),
+    "composite fixtures under", composite_dir, "\n")

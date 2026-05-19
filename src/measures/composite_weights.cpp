@@ -141,6 +141,7 @@ composite_weights(const spec::LatentStructure& pt,
         }
       }
       const Eigen::MatrixXd cov = jac * vcov * jac.transpose();
+      cw.vcov = cov;
       cw.se.resize(kk);
       for (Eigen::Index p = 0; p < kk; ++p) {
         const double var = cov(p, p);

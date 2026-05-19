@@ -122,6 +122,7 @@ magmaan_add_test_target(magmaan_test_inference inference
   golden/observed_inference_golden_test.cpp
   golden/multigroup_inference_golden_test.cpp
   golden/fit_measures_golden_test.cpp
+  golden/composite_golden_test.cpp
   golden/std_lv_golden_test.cpp
   golden/standardized_golden_test.cpp
   golden/test_stats_golden_test.cpp)

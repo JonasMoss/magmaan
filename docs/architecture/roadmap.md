@@ -409,6 +409,11 @@ golden `parTable()` fixtures.
   partable is retained as internal metadata for fitting and post-fit helpers.
   The R `composite_weights(fit, vcov)` accessor exposes recovered composite
   weights and delta-method SEs from the C++ post-fit primitive.
+- Complete-data ML composite lavaan parity is not yet claimed. Native lavaan
+  `<~` oracle fixtures for pure-composite, composite-plus-factor, and
+  composite-structural HS cases live under `tests/fixtures/composite/`; the
+  corresponding diagnostic golden is intentionally skipped until the C++ ML
+  path matches lavaan's W-matrix semantics (or an equivalent objective).
 - `magmaan(model, data, estimator, groups)` is the high-level estimate-only
   R convenience. It composes `model_spec()`, data-frame sample-stat/raw-data
   construction, and the matching point-estimation wrapper for complete-data
