@@ -44,6 +44,16 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   cases (especially a Geiser/Eid LST covariance input and a documented MTMM
   variant) plus one Boomsma-style simulation design. Keep the runner reporting
   setup time, fit time, whole time, iterations, objective values, and errors.
+- **S/M.** For the SNLLS paper, add a narrow finite-difference-gradient
+  mechanism probe rather than another broad simulation grid. NLopt's
+  gradient-based algorithms (`LD_*`, including L-BFGS) expect caller-supplied
+  gradients; NLopt also provides derivative-free algorithms (`LN_*`, such as
+  BOBYQA), but those are not the same as finite-differencing a BFGS gradient.
+  If the paper needs an empirical Kreiberg-style explanation, add an
+  explicit benchmark wrapper that finite-differences the existing scalar LS
+  objective for ordinary LS and SNLLS under the same line-search optimizer, or
+  report objective-evaluation accounting plus measured objective/Jacobian
+  costs.
 - **M/L.** Decide whether NLopt L-BFGS should replace LBFGS++ as the default
   scalar optimizer. This is not just a search/replace: first add a comparison
   tier showing `Backend::NloptLbfgs` matches the current LBFGS++ path on ML,
