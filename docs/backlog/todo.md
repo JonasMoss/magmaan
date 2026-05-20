@@ -67,6 +67,15 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 
 ## Ordinal/SNLLS research
 
+- **M/L.** Robust ordinal SEM paper track. Follow
+  [docs/research/notes/robust_ordinal_sem_paper_plan.md](../research/notes/robust_ordinal_sem_paper_plan.md):
+  build a paper-local simulation runner that emits tidy CSV for the Welz
+  bivariate contamination design, the Welz/Foldnes-Gronneberg five-variable
+  robust polychoric matrix design, an ordinal CFA downstream design, a Clayton
+  copula stress test, and a small computation benchmark comparing ML, WMA hard
+  cap, smooth h, and Huberized Pearson-residual moments. First milestone:
+  reproduce the known Welz qualitative pattern for Designs 1--2 before adding
+  SEM fits or broad copula grids.
 - **XL.** Design and prototype SNLLS for all-ordinal delta DWLS/WLS on
   polychoric moments. The likely scope is a Golub-Pereyra profile over free
   thresholds plus conditionally linear latent-response covariance pieces, with
