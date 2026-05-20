@@ -164,10 +164,11 @@ Report:
 
 ## Next concrete tasks
 
-1. Build a paper-local simulation runner that writes the tidy CSV schema above.
-2. Start with Design 1 and Design 2 only; verify ML/hard-cap results reproduce
+1. Use `docs/research/sims/r/robust_ordinal_sem_paper.R` to run enough
+   replications for Design 1 and Design 2; verify ML/hard-cap results reproduce
    the known Welz qualitative pattern.
-3. Add smooth h and Huber residual to the same runner before any SEM fitting.
-4. Add the CFA downstream fit only after the moment-level plots are sane.
-5. Decide from early plots whether DPD earns a main-text line or stays in the
+2. Add first plotting/summary helpers for bias, RMSE, convergence, runtime,
+   and minimum eigenvalue of `R`.
+3. Add the CFA downstream fit only after the moment-level plots are sane.
+4. Decide from early plots whether DPD earns a main-text line or stays in the
    code/supplement.

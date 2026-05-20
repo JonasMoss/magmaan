@@ -24,6 +24,10 @@ relevant categorical estimators are implemented and hardened.
 - `r/rhemtulla_2012_categorical_cfa.R` Rhemtulla et al. (2012): two-factor CFA
   with 10 or 20 indicators, 2-7 categories, normal or nonnormal latent response
   variables, five threshold-pattern conditions, and four sample sizes.
+- `r/robust_ordinal_sem_paper.R` robust ordinal SEM paper runner. Its first
+  milestone covers the Welz-style bivariate corner-contamination design and
+  five-variable robust polychoric matrix design, writing tidy CSV rows for ML,
+  WMA hard-cap h, smooth h, and Huberized residual moment builders.
 
 ## Example
 
@@ -36,6 +40,13 @@ one <- li2016_generate(n = 300, categories = 5,
                        distribution = "slight", seed = 11)
 lav <- sim_fit_lavaan(one$model, one$data, ordered = one$ordered,
                       estimator = "DWLS")
+```
+
+Robust ordinal paper smoke run:
+
+```sh
+Rscript docs/research/sims/r/robust_ordinal_sem_paper.R \
+  --reps=1 --n=250 --designs=welz_bivariate --out=/tmp/robust-ordinal.csv
 ```
 
 The fitting helpers are best-effort adapters. They load `lavaan` or `magmaan`
