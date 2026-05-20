@@ -22,6 +22,14 @@
 //                    (unbounded only, only when MAGMAAN_WITH_CERES is set).
 //   • nlopt_slsqp  — NLopt SLSQP scalar cross-check (only when
 //                    MAGMAAN_WITH_NLOPT is set).
+//   • nlopt_bobyqa — NLopt BOBYQA (Powell derivative-free TR). Requires
+//                    finite bounds (only when MAGMAAN_WITH_NLOPT).
+//   • nlopt_tnewton— NLopt LD_TNEWTON_PRECOND_RESTART (Nash truncated Newton).
+//                    Only when MAGMAAN_WITH_NLOPT.
+//   • nlopt_var2   — NLopt LD_VAR2 (Shanno-Phua full BFGS variable-metric).
+//                    Only when MAGMAAN_WITH_NLOPT.
+//   • nlopt_lbfgs  — NLopt's own LBFGS — sanity-check against LBFGS++.
+//                    Only when MAGMAAN_WITH_NLOPT.
 //
 // To run a scalar optimizer on a least-squares problem, `scalarize` it first:
 // `lbfgs(scalarize(gmm_problem), x0, bounds)`.
@@ -80,10 +88,39 @@ ceres_bfgs(const GmmProblem& prob, const Eigen::VectorXd& x0,
 
 #ifdef MAGMAAN_WITH_NLOPT
 // NLopt SLSQP scalar minimization — sequential quadratic programming with box
-// bounds, a different algorithm class from line-search L-BFGS. Used to
-// cross-check fitted optima; an empty `bounds` (the default) is unbounded.
+// bounds (Kraft 1988), a different algorithm class from line-search L-BFGS.
+// Used to cross-check fitted optima; an empty `bounds` (the default) is
+// unbounded.
 fit_expected<OptimResult>
 nlopt_slsqp(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+            const Bounds& bounds = {}, LbfgsOptions opts = {});
+
+// NLopt BOBYQA — Powell 2009 derivative-free quadratic-model trust region.
+// Requires *finite* bounds (no ±infinity sentinels). Useful when the gradient
+// is unreliable near a Heywood boundary or saddle.
+fit_expected<OptimResult>
+nlopt_bobyqa(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+             const Bounds& bounds, LbfgsOptions opts = {});
+
+// NLopt LD_TNEWTON_PRECOND_RESTART — Nash 1985 preconditioned truncated Newton
+// with restart. Explicit second-order via Hessian-vector products + CG inner
+// solve; a fundamentally different curvature scheme from L-BFGS.
+fit_expected<OptimResult>
+nlopt_tnewton(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+              const Bounds& bounds = {}, LbfgsOptions opts = {});
+
+// NLopt LD_VAR2 — Shanno-Phua 1980 full (dense) BFGS variable-metric. The
+// non-limited-memory counterpart to L-BFGS; at SEM-sized n (10–100) the full
+// Hessian update may outperform L-BFGS's history truncation.
+fit_expected<OptimResult>
+nlopt_var2(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+           const Bounds& bounds = {}, LbfgsOptions opts = {});
+
+// NLopt LD_LBFGS — NLopt's own L-BFGS. Sanity-check against LBFGS++ (the
+// default `Lbfgs` backend); the two should agree on most problems but
+// differ in line-search and step-control implementation details.
+fit_expected<OptimResult>
+nlopt_lbfgs(const ScalarProblem& prob, const Eigen::VectorXd& x0,
             const Bounds& bounds = {}, LbfgsOptions opts = {});
 #endif
 

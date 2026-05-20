@@ -123,7 +123,35 @@ TEST_CASE("optimizer cross-check: PORT NL2SOL matches L-BFGS on a feasible ULS f
 #endif  // MAGMAAN_WITH_PORT
 
 #ifdef MAGMAAN_WITH_NLOPT
-TEST_CASE("optimizer cross-check: NLopt SLSQP matches L-BFGS on ML") {
+TEST_CASE("optimizer dispatch: Backend::NloptBobyqa rejects empty bounds") {
+  // BOBYQA requires *finite* bounds. The dispatcher (`optim::nlopt_bobyqa`)
+  // enforces this with a clear error message; NLopt itself tolerates the
+  // ±infinity sentinels opportunistically, so the contract lives at the
+  // dispatcher layer, not the adapter.
+  auto fp = Parser::parse("f =~ x1 + x2 + x3");
+  REQUIRE(fp.has_value());
+  auto pt = build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  SampleStats samp;
+  Eigen::Matrix3d S;  S.setIdentity();  S *= 2.0;
+  samp.S     = {S};
+  samp.n_obs = {300};
+
+  auto est = magmaan::test::fit(*pt, *mr, samp, Bounds{},
+                                Backend::NloptBobyqa);
+  REQUIRE_FALSE(est.has_value());
+  CHECK(est.error().kind == magmaan::FitError::Kind::NumericIssue);
+}
+
+TEST_CASE("optimizer cross-check: NLopt gradient backends match L-BFGS on ML") {
+  // Three new gradient-based NLopt algorithms (TNEWTON, VAR2, NLopt's own
+  // LBFGS) all on the same unbounded ML problem. SLSQP is the existing
+  // cross-check; the new ones add curvature-scheme diversity. BOBYQA is
+  // skipped here because it requires finite bounds — see the dedicated
+  // BOBYQA tests in tests/unit/nlopt_optimizer_test.cpp.
   auto fp = Parser::parse("f =~ x1 + x2 + x3 + x4");
   REQUIRE(fp.has_value());
   auto pt = build(*fp);
@@ -136,12 +164,15 @@ TEST_CASE("optimizer cross-check: NLopt SLSQP matches L-BFGS on ML") {
   samp.n_obs = {300};
 
   auto est_lbfgs = magmaan::test::fit(*pt, *mr, samp, Bounds{}, Backend::Lbfgs);
-  auto est_nlopt = magmaan::test::fit(*pt, *mr, samp, Bounds{}, Backend::Nlopt);
   REQUIRE(est_lbfgs.has_value());
-  REQUIRE(est_nlopt.has_value());
 
-  CHECK(est_nlopt->fmin ==
-        doctest::Approx(est_lbfgs->fmin).epsilon(1e-3));
-  CHECK((est_nlopt->theta - est_lbfgs->theta).cwiseAbs().maxCoeff() < 5e-3);
+  for (auto backend : {Backend::NloptSlsqp, Backend::NloptTnewton,
+                       Backend::NloptVar2, Backend::NloptLbfgs}) {
+    CAPTURE(static_cast<int>(backend));
+    auto est = magmaan::test::fit(*pt, *mr, samp, Bounds{}, backend);
+    REQUIRE(est.has_value());
+    CHECK(est->fmin == doctest::Approx(est_lbfgs->fmin).epsilon(1e-3));
+    CHECK((est->theta - est_lbfgs->theta).cwiseAbs().maxCoeff() < 5e-3);
+  }
 }
 #endif  // MAGMAAN_WITH_NLOPT

@@ -42,12 +42,43 @@ fit_expected<optim::OptimResult>
 run_scalar(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
            const Bounds& bounds, Backend backend, LbfgsOptions opts) {
   switch (backend) {
-    case Backend::Nlopt:
+    case Backend::NloptSlsqp:
 #ifdef MAGMAAN_WITH_NLOPT
       return optim::nlopt_slsqp(prob, x0, bounds, opts);
 #else
       return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-          "Nlopt backend requested but MAGMAAN_WITH_NLOPT is off"));
+          "NloptSlsqp backend requested but MAGMAAN_WITH_NLOPT is off"));
+#endif
+    case Backend::NloptBobyqa:
+#ifdef MAGMAAN_WITH_NLOPT
+      // BOBYQA requires *finite* bounds (no ±infinity sentinels). The free
+      // function enforces this at the optim layer; the dispatch is a clean
+      // pass-through.
+      return optim::nlopt_bobyqa(prob, x0, bounds, opts);
+#else
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "NloptBobyqa backend requested but MAGMAAN_WITH_NLOPT is off"));
+#endif
+    case Backend::NloptTnewton:
+#ifdef MAGMAAN_WITH_NLOPT
+      return optim::nlopt_tnewton(prob, x0, bounds, opts);
+#else
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "NloptTnewton backend requested but MAGMAAN_WITH_NLOPT is off"));
+#endif
+    case Backend::NloptVar2:
+#ifdef MAGMAAN_WITH_NLOPT
+      return optim::nlopt_var2(prob, x0, bounds, opts);
+#else
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "NloptVar2 backend requested but MAGMAAN_WITH_NLOPT is off"));
+#endif
+    case Backend::NloptLbfgs:
+#ifdef MAGMAAN_WITH_NLOPT
+      return optim::nlopt_lbfgs(prob, x0, bounds, opts);
+#else
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "NloptLbfgs backend requested but MAGMAAN_WITH_NLOPT is off"));
 #endif
     case Backend::Port:
 #ifdef MAGMAAN_WITH_PORT

@@ -5,6 +5,7 @@
 
 #include <Eigen/Core>
 
+#include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
@@ -143,17 +144,67 @@ ceres_bfgs(const GmmProblem& prob, const Eigen::VectorXd& x0,
 #endif
 
 #ifdef MAGMAAN_WITH_NLOPT
+namespace {
+
+// Shared body for the NLopt entry points: pack ±infinity bounds into NLopt's
+// ±HUGE_VAL convention, construct a `NloptOptimizer` parameterised over
+// the magmaan-local `NloptAlgorithm`, run it. Each named entry below picks a
+// different algorithm; the rest of the call shape is identical.
 fit_expected<OptimResult>
-nlopt_slsqp(const ScalarProblem& prob, const Eigen::VectorXd& x0,
-            const Bounds& bounds, LbfgsOptions opts) {
+run_nlopt(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+          const Bounds& bounds, LbfgsOptions opts, NloptAlgorithm algo) {
   const double          inf = std::numeric_limits<double>::infinity();
   const Eigen::VectorXd lower =
       bounds.empty() ? Eigen::VectorXd::Constant(x0.size(), -inf) : bounds.lower;
   const Eigen::VectorXd upper =
-      bounds.empty() ? Eigen::VectorXd::Constant(x0.size(), inf) : bounds.upper;
-  auto out = NloptOptimizer{opts}.minimize(prob.f, x0, lower, upper);
+      bounds.empty() ? Eigen::VectorXd::Constant(x0.size(),  inf) : bounds.upper;
+  auto out = NloptOptimizer{opts, algo}.minimize(prob.f, x0, lower, upper);
   if (!out.has_value()) return std::unexpected(out.error());
   return to_result(std::move(*out));
+}
+
+}  // namespace
+
+fit_expected<OptimResult>
+nlopt_slsqp(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+            const Bounds& bounds, LbfgsOptions opts) {
+  return run_nlopt(prob, x0, bounds, opts, NloptAlgorithm::Slsqp);
+}
+
+fit_expected<OptimResult>
+nlopt_bobyqa(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+             const Bounds& bounds, LbfgsOptions opts) {
+  // BOBYQA needs *finite* bounds — there is no analogue of ±HUGE_VAL for a
+  // derivative-free TR that builds a quadratic model from sampled points.
+  // We reject `bounds.empty()` here with a clear error rather than letting
+  // NLopt return NLOPT_INVALID_ARGS with no context.
+  if (bounds.empty()) {
+    return std::unexpected(magmaan::FitError{
+        magmaan::FitError::Kind::NumericIssue,
+        "nlopt BOBYQA requires finite bounds on every coordinate; supply a "
+        "non-empty Bounds with concrete lower/upper, or use a different "
+        "derivative-free backend (none currently wired) for unbounded fits",
+        0, 0.0});
+  }
+  return run_nlopt(prob, x0, bounds, opts, NloptAlgorithm::Bobyqa);
+}
+
+fit_expected<OptimResult>
+nlopt_tnewton(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+              const Bounds& bounds, LbfgsOptions opts) {
+  return run_nlopt(prob, x0, bounds, opts, NloptAlgorithm::Tnewton);
+}
+
+fit_expected<OptimResult>
+nlopt_var2(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+           const Bounds& bounds, LbfgsOptions opts) {
+  return run_nlopt(prob, x0, bounds, opts, NloptAlgorithm::Var2);
+}
+
+fit_expected<OptimResult>
+nlopt_lbfgs(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+            const Bounds& bounds, LbfgsOptions opts) {
+  return run_nlopt(prob, x0, bounds, opts, NloptAlgorithm::Lbfgs);
 }
 #endif
 
