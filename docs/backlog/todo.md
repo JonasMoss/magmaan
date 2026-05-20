@@ -80,10 +80,13 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 - **M/L.** Structured Gamma / model-implied fourth-order paper track
   (`papers/structured-gamma/`). A minimal `estimate::frontier` weight-matrix
   builder now exists for complete-data covariance-only pure CFA and is exposed
-  to R as a WLS-compatible weight. Remaining paper work: use it in the
-  simulation scaffold, compare against NT/ADF/DLS working weights, and decide
-  later whether any positive-definite repair, diagnostics, or broader model
-  classes are needed.
+  to R as a WLS-compatible weight. The paper-local R simulation helper now
+  generates one- and five-factor CFA scenarios, runs NT/ADF/fixed-mix DLS/MI4
+  working-weight fits, records MI4 positive-definiteness failures as data, and
+  writes pilot CSV/R data from `scripts/sim_structured_gamma.R`. Remaining
+  paper work: run and summarize a defensible grid, add any needed
+  positive-definite repair/diagnostics for MI4, and decide later whether broader
+  model classes are needed.
 - **M/L.** Robust ordinal SEM paper track. Follow
   [docs/research/notes/robust_ordinal_sem_paper_plan.md](../research/notes/robust_ordinal_sem_paper_plan.md):
   build a paper-local simulation runner that emits tidy CSV for the Welz
