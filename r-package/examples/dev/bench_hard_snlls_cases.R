@@ -94,8 +94,8 @@ f2 =~ x4 + x5 + x6"
 measure_case <- function(case) {
   rows <- list()
   backends <- c("lbfgsb", "ceres", "ceres_bfgs", "port", "port_nls",
-                "nlopt_slsqp", "nlopt_bobyqa", "nlopt_tnewton",
-                "nlopt_var2", "nlopt_lbfgs")
+                "nlopt_slsqp", "nlopt_tnewton", "nlopt_var2",
+                "nlopt_lbfgs")
   jobs <- as.vector(t(outer(backends, c(FALSE, TRUE), Vectorize(function(b, s) {
     list(list(backend = b, snlls = s))
   }))), mode = "list")
