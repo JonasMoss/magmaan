@@ -1,0 +1,175 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+
+\title{H-Weighted Robust Polychorics}
+\author{}
+\date{\today}
+
+\newcommand{\Rmat}{\widehat R^{(h)}}
+\newcommand{\thetahat}{\widehat\theta^{(h)}}
+\newcommand{\fhat}{\widehat f}
+
+\begin{document}
+\maketitle
+
+\noindent
+Reference: Welz, Mair, and Alfons, ``Robust Estimation of Polychoric
+Correlation,'' \emph{Psychometrika} 91, 247--278, 2026,
+doi: \href{https://doi.org/10.1017/psy.2025.10066}{10.1017/psy.2025.10066}.
+The local paper copy is
+\path{resources/papers/robust_ordinal/welz_etal_2025_robust_polychoric_correlation.pdf}.
+
+\section*{Bivariate model}
+
+Let $X_a$ and $X_b$ be ordinal variables with $K_a$ and $K_b$ categories. The
+polychoric model introduces latent variables $(Z_a,Z_b)$ with standard
+bivariate normal distribution and correlation $\rho$. Thresholds
+\[
+  -\infty = \tau_{a0} < \tau_{a1} < \cdots < \tau_{a,K_a-1}
+  < \tau_{a,K_a} = \infty
+\]
+and similarly for variable $b$ map latent values to ordinal cells. For a cell
+$j=(r,s)$,
+\[
+  p_j(\theta) =
+  \Pr\{\tau_{a,r-1} < Z_a \le \tau_{a,r},
+       \tau_{b,s-1} < Z_b \le \tau_{b,s}; \rho\},
+  \qquad
+  \theta = (\tau_a,\tau_b,\rho).
+\]
+With observed cell count $n_j$ and pair sample size $n$, write
+$\fhat_j=n_j/n$ and
+\[
+  t_j(\theta) = \frac{\fhat_j}{p_j(\theta)}, \qquad
+  s_j(\theta) = \nabla_\theta \log p_j(\theta).
+\]
+
+\section*{H-score definition}
+
+The h-weighted robust polychoric estimator solves
+\[
+  \Psi_h(\theta)
+  =
+  \sum_j p_j(\theta) h\{t_j(\theta)\} s_j(\theta)
+  = 0,
+\]
+or equivalently minimizes the associated minimum-disparity objective when the
+chosen $h$ has a corresponding loss $\Phi$:
+\[
+  Q_h(\theta)
+  =
+  \sum_j p_j(\theta)
+  \Phi\!\left(\frac{\fhat_j}{p_j(\theta)}\right).
+\]
+Ordinary ML is the special case $h(t)=t$. The Welz--Mair--Alfons hard-cap
+choice is
+\[
+  h(t) = \min(t,k),
+\]
+with $k=c+1$ in their notation. The implementation also keeps smooth capped
+variants for optimizer experiments, but the hard cap is the paper-facing
+robust polychoric definition.
+
+\section*{Pair-local versus SEM moments}
+
+For a single bivariate table, the pair-local robust polychoric is the
+correlation component of
+\[
+  \thetahat_{ab}
+  =
+  \arg\min_{\tau_a,\tau_b,\rho}
+  Q_h(\tau_a,\tau_b,\rho),
+  \qquad
+  \widehat\rho_{ab,h} =
+  \rho(\thetahat_{ab}).
+\]
+This is the direct Welz--Mair--Alfons object: thresholds are nuisance
+parameters local to the pair.
+
+For ordinal SEM sample statistics, magmaan uses one shared threshold vector per
+observed variable and one robust correlation per pair. The shared-threshold
+composite target is
+\[
+  \widehat\eta_h =
+  \arg\min_{\{\tau_a\},\{\rho_{ab}\}}
+  \sum_{a<b}\sum_{j\in ab}
+  p_{ab,j}(\tau_a,\tau_b,\rho_{ab})
+  \Phi\!\left(
+    \frac{\widehat f_{ab,j}}
+         {p_{ab,j}(\tau_a,\tau_b,\rho_{ab})}
+  \right).
+\]
+The robust polychoric matrix is then
+\[
+  \Rmat_{aa}=1,
+  \qquad
+  \Rmat_{ab}=\Rmat_{ba}=\widehat\rho_{ab,h}.
+\]
+Because pairwise robust correlations are not automatically positive definite,
+the implementation treats positive-definiteness repair as explicit diagnostics:
+none, error, ridge, or shrinkage toward the identity.
+
+\section*{Sandwich object}
+
+Let $\psi_i(\eta)$ be the stacked h-score contribution for row $i$ in the
+shared-threshold composite estimating equation. At the solution,
+\[
+  A_h =
+  \left.
+  \frac{\partial}{\partial \eta^\top}
+  \left\{
+    \frac{1}{n}\sum_i \psi_i(\eta)
+  \right\}
+  \right|_{\widehat\eta_h},
+  \qquad
+  B_h =
+  \frac{1}{n}\sum_i
+  \psi_i(\widehat\eta_h)\psi_i(\widehat\eta_h)^\top .
+\]
+The moment influence rows are
+\[
+  IF_i = -\psi_i(\widehat\eta_h) A_h^{-\top},
+\]
+and the ordinal moment covariance used downstream is
+\[
+  \Gamma_h = \frac{1}{n}\sum_i IF_i IF_i^\top .
+\]
+The moment order is magmaan's ordinal order: all thresholds first, followed by
+lower-triangle polychorics by columns.
+
+\section*{Current magmaan access}
+
+There is no separate friendly R helper named only for ``robust polychoric
+matrix.'' The matrix is already obtainable from the methods-developer data
+builder without fitting a SEM:
+\begin{verbatim}
+d <- magmaan_core$data_ordinal_stats_from_raw(
+  list(X),
+  robust = "h_weighted",
+  h_kind = "wma_hard_cap",
+  h_k = 1.5
+)
+Rh <- d$R[[1]]
+\end{verbatim}
+For data frames, use:
+\begin{verbatim}
+d <- magmaan_core$data_ordinal_stats_from_df(
+  df, model, robust = "h_weighted"
+)
+Rh <- d$R[[1]]
+\end{verbatim}
+
+The corresponding C++ hooks are:
+\begin{flushleft}\footnotesize
+\path{data::pairwise_ordinal_stats_h_weighted_from_integer_data()}\\
+shared-threshold SEM-grade matrix.
+
+\path{data::fit_ordinal_pair_joint_h_weighted()}\\
+\path{data::fit_ordinal_pair_rho_h_weighted()}\\
+direct bivariate work.
+\end{flushleft}
+
+\end{document}
