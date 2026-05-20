@@ -39,6 +39,11 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 - **M.** Compare LBFGS, LBFGS-B, Ceres trust-region, Ceres dense BFGS, and
   SNLLS only on semantically appropriate cases; include shallow or
   Heywood-prone LS cases so bounds and conditioning stay visible.
+- **S/M.** Extend the paper-local SNLLS benchmark package in
+  `papers/snlls-constrained/r-package/` with the remaining defensible real
+  cases (especially a Geiser/Eid LST covariance input and a documented MTMM
+  variant) plus one Boomsma-style simulation design. Keep the runner reporting
+  setup time, fit time, whole time, iterations, objective values, and errors.
 - **M/L.** Decide whether NLopt L-BFGS should replace LBFGS++ as the default
   scalar optimizer. This is not just a search/replace: first add a comparison
   tier showing `Backend::NloptLbfgs` matches the current LBFGS++ path on ML,
