@@ -77,17 +77,13 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 
 ## Ordinal/SNLLS research
 
-- **XL.** Structured Gamma / model-implied fourth-order paper track
-  (`papers/structured-gamma/`). Do not implement in the C++ core yet. First
-  prototype the paper estimator manually, preferably through existing exported
-  R helpers if the needed fitted-model pieces are already exposed:
-  fit a factor model, recover `Sigma` and loadings, estimate source fourth
-  cumulants by least squares from empirical fourth cumulants, plug them into
-  the structured Gamma formula, and compute oracle relative-efficiency
-  examples against NT/ADF working weights. After the paper-local prototype
-  settles the exact moment indexing, positive-definite repair, and reporting
-  conventions, revisit a C++ implementation as an `estimate::frontier` or
-  `robust::frontier` weight-matrix builder rather than core SEM behavior.
+- **M/L.** Structured Gamma / model-implied fourth-order paper track
+  (`papers/structured-gamma/`). A minimal `estimate::frontier` weight-matrix
+  builder now exists for complete-data covariance-only pure CFA and is exposed
+  to R as a WLS-compatible weight. Remaining paper work: use it in the
+  simulation scaffold, compare against NT/ADF/DLS working weights, and decide
+  later whether any positive-definite repair, diagnostics, or broader model
+  classes are needed.
 - **M/L.** Robust ordinal SEM paper track. Follow
   [docs/research/notes/robust_ordinal_sem_paper_plan.md](../research/notes/robust_ordinal_sem_paper_plan.md):
   build a paper-local simulation runner that emits tidy CSV for the Welz

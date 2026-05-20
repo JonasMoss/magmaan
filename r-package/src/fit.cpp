@@ -27,6 +27,7 @@
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
+#include "magmaan/estimate/gmm/structured_gamma_weight.hpp"
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/inference/score.hpp"
 
@@ -387,6 +388,15 @@ magmaan::estimate::gmm::Weight wls_from_arg(SEXP W, std::size_t n_blocks) {
     Rcpp::stop("magmaan: WLS weights must be a matrix or a list of matrices");
   }
   return weights;
+}
+
+SEXP weight_to_r(const magmaan::estimate::gmm::Weight& W) {
+  if (W.size() == 1) return Rcpp::wrap(W[0]);
+  Rcpp::List out(static_cast<R_xlen_t>(W.size()));
+  for (std::size_t b = 0; b < W.size(); ++b) {
+    out[static_cast<R_xlen_t>(b)] = Rcpp::wrap(W[b]);
+  }
+  return out;
 }
 
 Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
@@ -1451,6 +1461,23 @@ Rcpp::NumericVector fit_start_values(SEXP partable, Rcpp::List sample_stats) {
   auto sv_or = magmaan::estimate::simple_start_values(ctx.pt, ctx.rep, ctx.samp);
   if (!sv_or.has_value()) stop_fit(sv_or.error());
   return Rcpp::wrap(*sv_or);
+}
+
+// estimate_structured_gamma_weight() — explicit MI4 / structured-ADF working
+// weight builder. Returns only W, which is passed to the existing WLS path.
+//
+// [[Rcpp::export]]
+SEXP estimate_structured_gamma_weight(Rcpp::List fit, SEXP raw_data) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
+
+  auto ev_or = lvm::ModelEvaluator::build(ctx.pt, ctx.rep);
+  if (!ev_or.has_value()) stop_model(ev_or.error());
+  auto W_or = magmaan::estimate::frontier::structured_gamma_weight(
+      *ev_or, ctx.rep, ctx.samp, raw, est.theta);
+  if (!W_or.has_value()) stop_fit(W_or.error());
+  return weight_to_r(*W_or);
 }
 
 // model_implied() — mirrors ModelEvaluator::build(pt, rep).sigma(est.theta).

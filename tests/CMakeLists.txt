@@ -89,6 +89,7 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/raw_data_test.cpp
   unit/shrinkage_test.cpp
   unit/dls_weight_test.cpp
+  unit/structured_gamma_weight_test.cpp
   golden/fit_theta_golden_test.cpp
   golden/ls_golden_test.cpp
   golden/fiml_golden_test.cpp

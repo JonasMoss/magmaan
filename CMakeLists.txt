@@ -112,6 +112,7 @@ add_library(magmaan STATIC
   src/estimate/gmm/moment_quadratic.cpp
   src/estimate/gmm/gp.cpp
   src/estimate/gmm/dls_weight.cpp
+  src/estimate/gmm/structured_gamma_weight.cpp
   src/api/sem.cpp
   src/inference/inference.cpp
   src/inference/score.cpp

@@ -105,6 +105,10 @@ fit_start_values <- function(partable, sample_stats) {
     .Call(`_magmaan_fit_start_values`, partable, sample_stats)
 }
 
+estimate_structured_gamma_weight <- function(fit, raw_data) {
+    .Call(`_magmaan_estimate_structured_gamma_weight`, fit, raw_data)
+}
+
 model_implied <- function(fit) {
     .Call(`_magmaan_model_implied`, fit)
 }
@@ -308,4 +312,3 @@ infer_robust_se_raw <- function(fit, X, bread = "expected", moments = "structure
 infer_robust_se_raw_parts <- function(partable, sample_stats, theta, X, bread = "expected", moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_raw_parts`, partable, sample_stats, theta, X, bread, moments, cov)
 }
-
