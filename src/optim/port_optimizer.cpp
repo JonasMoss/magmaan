@@ -28,6 +28,20 @@ int drmngb_(double *b, double *d, double *fx, double *g,
             int *iv, int *liv, int *lv, int *n,
             double *v, double *x);
 int divset_(int *alg, int *iv, int *liv, int *lv, double *v);
+
+// NL2SOL with simple bounds (TOMS 573). Same reverse-comm IV(1) family as
+// drmngb_, but: (a) operates on a *vector* residual r[n] plus its Jacobian
+// dr[nd, p], (b) iv[1] = 1 means "compute R", iv[1] = 2 means "compute J",
+// (c) iv[1] ≤ 0 means "compute R *and* J together" (sub-states used when
+// nd < n or under special modes), (d) iv[1] = 14 is the post-init handshake
+// (storage allocated, please call again). See
+// `third_party/port/cport/drn2gb.c` lines 22-26 for the parameter list and
+// dn2gb.c lines 165-205 for the canonical reverse-comm dispatch.
+int drn2gb_(double *b, double *d, double *dr,
+            int *iv, int *liv, int *lv,
+            int *n, int *nd, int *n1, int *n2, int *p,
+            double *r, double *rd,
+            double *v, double *x);
 }
 
 namespace magmaan::optim {
@@ -260,6 +274,216 @@ PortOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
   return minimize(std::move(f), x0,
                   Eigen::VectorXd::Constant(x0.size(), -inf),
                   Eigen::VectorXd::Constant(x0.size(),  inf));
+}
+
+// =========================================================================
+// PortNlsOptimizer — NL2SOL with simple bounds, LS-shape.
+// =========================================================================
+
+fit_expected<LbfgsOutput>
+PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
+                              LsEvaluationFn eval_fn,
+                              Eigen::Index n_resid,
+                              const Eigen::VectorXd& x0,
+                              const Eigen::VectorXd& lower,
+                              const Eigen::VectorXd& upper) const {
+  if (x0.size() == 0) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "PortNlsOptimizer: empty parameter vector"));
+  }
+  if (n_resid <= 0) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "PortNlsOptimizer: non-positive residual count (n_resid=" +
+            std::to_string(n_resid) + ")"));
+  }
+  if (lower.size() != x0.size() || upper.size() != x0.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "PortNlsOptimizer: bounds size mismatch (lower=" +
+            std::to_string(lower.size()) +
+            ", upper=" + std::to_string(upper.size()) +
+            ", x0=" + std::to_string(x0.size()) + ")"));
+  }
+
+  const int    p   = static_cast<int>(x0.size());
+  const int    n   = static_cast<int>(n_resid);
+  const auto   pu  = static_cast<std::size_t>(p);
+  const auto   nu  = static_cast<std::size_t>(n);
+  // Work-array sizes from drn2gb.c:66-67. We allocate the documented minimum
+  // exactly; PORT's allocator returns iv[1]=15/16 if it needs more (we'd
+  // surface that as an error, but it shouldn't happen with these bounds).
+  const int liv = 4 * p + 82;
+  const int lv  = 105 + p * (2 * p + 20);
+
+  std::vector<int>    iv(static_cast<std::size_t>(liv), 0);
+  std::vector<double> v(static_cast<std::size_t>(lv), 0.0);
+  std::vector<double> d(pu, 1.0);
+  // r[n] is the residual buffer; rd[n] is NL2SOL's regression-diagnostic
+  // scratch (PORT writes into it; we never read it). dr is the n × p
+  // Jacobian; NL2SOL expects Fortran-style column-major, which is exactly
+  // Eigen's default for MatrixXd.
+  std::vector<double> r(nu, 0.0);
+  std::vector<double> rd(nu, 0.0);
+  Eigen::MatrixXd     dr = Eigen::MatrixXd::Zero(n, p);
+  std::vector<double> b(2 * pu);
+  for (std::size_t i = 0; i < pu; ++i) {
+    const auto idx = static_cast<Eigen::Index>(i);
+    const double lo = std::isfinite(lower[idx]) ? lower[idx] : -kPortInf;
+    const double up = std::isfinite(upper[idx]) ? upper[idx] : +kPortInf;
+    b[2 * i]     = lo;
+    b[2 * i + 1] = up;
+  }
+
+  Eigen::VectorXd x = x0;
+
+  // NL2SOL defaults: alg = 1 (vs alg = 2 for SUMSL/HUMSL used by drmngb_).
+  int alg     = 1;
+  int liv_arg = liv;
+  int lv_arg  = lv;
+  divset_(&alg, iv.data(), &liv_arg, &lv_arg, v.data());
+
+  iv[kIv_MxIter] = opts_.max_iter;
+  iv[kIv_MxFCal] = opts_.max_iter * 10;
+
+  // Whole residual vector on each call (`nd = n`, `n1 = 1`, `n2 = n`); NL2SOL
+  // documents this as the simplest mode. nd<n chunking is reserved for huge
+  // residual counts that don't fit in memory, which SEM never hits.
+  int n_arg  = n;
+  int nd_arg = n;
+  int n1_arg = 1;
+  int n2_arg = n;
+  int p_arg  = p;
+
+  // Helpers for the two LS callbacks. Returning false signals an invalid
+  // x — the caller sets PORT's IV(TOOBIG) so the next step is shortened.
+  auto fill_residual = [&](const Eigen::VectorXd& xv) -> bool {
+    auto rv = r_fn(xv);
+    if (!rv.has_value() || rv->size() != n_resid || !rv->allFinite()) {
+      return false;
+    }
+    for (std::size_t i = 0; i < nu; ++i) {
+      r[i] = (*rv)[static_cast<Eigen::Index>(i)];
+    }
+    return true;
+  };
+  auto fill_jacobian = [&](const Eigen::VectorXd& xv) -> bool {
+    auto Jv = J_fn(xv);
+    if (!Jv.has_value() || Jv->rows() != n_resid ||
+        Jv->cols() != x0.size() || !Jv->allFinite()) {
+      return false;
+    }
+    dr = *Jv;  // MatrixXd is column-major; matches NL2SOL's storage of DR.
+    return true;
+  };
+  // Fast-path combined evaluator: when PORT signals iv[1] ≤ 0 it wants both
+  // residual *and* Jacobian at the same x. If the GmmProblem supplied an
+  // `eval` closure that computes both from one model evaluation, use it.
+  auto fill_both = [&](const Eigen::VectorXd& xv) -> bool {
+    if (eval_fn) {
+      auto ev = eval_fn(xv);
+      if (!ev.has_value() ||
+          ev->residual.size() != n_resid ||
+          ev->jacobian.rows() != n_resid ||
+          ev->jacobian.cols() != x0.size() ||
+          !ev->residual.allFinite() ||
+          !ev->jacobian.allFinite()) {
+        return false;
+      }
+      for (std::size_t i = 0; i < nu; ++i) {
+        r[i] = ev->residual[static_cast<Eigen::Index>(i)];
+      }
+      dr = ev->jacobian;
+      return true;
+    }
+    return fill_residual(xv) && fill_jacobian(xv);
+  };
+
+  const int budget_safeguard = 100 * (opts_.max_iter + 1) * 10;
+  int       loop_counter     = 0;
+
+  while (true) {
+    if (++loop_counter > budget_safeguard) {
+      return std::unexpected(make_err(FitError::Kind::OptimizerNonConvergence,
+          "PortNlsOptimizer: reverse-communication loop ran past safeguard "
+          "limit (" + std::to_string(budget_safeguard) + " requests); "
+          "PORT did not signal termination",
+          iv[kIv_NIter], v[kV_F]));
+    }
+
+    drn2gb_(b.data(), d.data(), dr.data(),
+            iv.data(), &liv_arg, &lv_arg,
+            &n_arg, &nd_arg, &n1_arg, &n2_arg, &p_arg,
+            r.data(), rd.data(),
+            v.data(), x.data());
+
+    const int status = iv[kIv_Status];
+
+    // 14 = "storage allocated; please call again" — the post-init handshake
+    // NL2SOL uses on its first iteration. Re-enter the loop without
+    // computing anything.
+    if (status == 14) continue;
+
+    if (status == 1) {
+      // Residual only.
+      iv[kIv_TooBig] = fill_residual(x) ? 0 : 1;
+      continue;
+    }
+    if (status == 2) {
+      // Jacobian only.
+      iv[kIv_TooBig] = fill_jacobian(x) ? 0 : 1;
+      continue;
+    }
+    if (status <= 0) {
+      // NL2SOL wants both residual and Jacobian at the same x (sub-states
+      // -1, -2, -3; or 0 on the very first model evaluation).
+      iv[kIv_TooBig] = fill_both(x) ? 0 : 1;
+      continue;
+    }
+
+    // status >= 3: termination of some kind. Map outside the loop.
+    break;
+  }
+
+  const int    final_status = iv[kIv_Status];
+  const int    n_iter       = iv[kIv_NIter];
+  const double f_final      = v[kV_F];
+
+  switch (final_status) {
+    case PORT_OK_XCONV:
+    case PORT_OK_RFCONV:
+    case PORT_OK_BOTH:
+    case PORT_OK_AFCONV:
+    case PORT_OK_SINGCONV:
+      break;
+    case PORT_FAIL_NOISY:
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "PORT drn2gb: noisy residuals detected (PORT IV(1)=8) — model "
+          "Jacobian inconsistent with residual evaluation to more than "
+          "PORT's noise tolerance",
+          n_iter, f_final));
+    case PORT_FAIL_FALSE:
+      return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
+          "PORT drn2gb: false convergence (PORT IV(1)=9) — step length "
+          "fell below the precision PORT can resolve",
+          n_iter, f_final));
+    case PORT_FAIL_BUDGET:
+      return std::unexpected(make_err(FitError::Kind::OptimizerNonConvergence,
+          "PORT drn2gb: iteration or evaluation budget exhausted "
+          "(PORT IV(1)=10, max_iter=" + std::to_string(opts_.max_iter) + ")",
+          n_iter, f_final));
+    default:
+      return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
+          "PORT drn2gb: solver failure (PORT IV(1)=" +
+              std::to_string(final_status) + ")",
+          n_iter, f_final));
+  }
+
+  if (!std::isfinite(f_final)) {
+    return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
+        "PORT drn2gb: final objective value is non-finite",
+        n_iter, f_final));
+  }
+
+  return LbfgsOutput{std::move(x), f_final, n_iter};
 }
 
 }  // namespace magmaan::optim

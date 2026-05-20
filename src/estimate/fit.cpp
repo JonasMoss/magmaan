@@ -66,6 +66,12 @@ run_scalar(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
       return std::unexpected(fit_err(FitError::Kind::NumericIssue,
           "CeresBfgs backend applies only to the least-squares path "
           "(fit_gmm / fit_gls); it has no scalar-objective entry point"));
+    case Backend::PortNls:
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "PortNls backend applies only to the least-squares path "
+          "(fit_gmm / fit_gls / fit_snlls); it sees the residual structure "
+          "directly and has no scalar-objective entry point — use Port for "
+          "scalar trust-region fits"));
     case Backend::Lbfgs:
       break;
   }
@@ -93,6 +99,16 @@ run_gmm(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
     (void)opts;
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
         "fit_gmm: Ceres backend requested but MAGMAAN_WITH_CERES is off"));
+#endif
+  }
+  if (backend == Backend::PortNls) {
+#ifdef MAGMAAN_WITH_PORT
+    // PortNls drives the multi-residual problem directly through NL2SOL; no
+    // scalarisation. The adapter handles ±infinity bounds internally.
+    return optim::port_nls(prob, x0, bounds, opts);
+#else
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_gmm: PortNls backend requested but MAGMAAN_WITH_PORT is off"));
 #endif
   }
   return run_scalar(optim::scalarize(prob), x0, bounds, backend, opts);

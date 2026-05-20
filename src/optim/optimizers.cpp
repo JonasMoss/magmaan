@@ -98,6 +98,22 @@ port(const ScalarProblem& prob, const Eigen::VectorXd& x0,
   if (!out.has_value()) return std::unexpected(out.error());
   return to_result(std::move(*out));
 }
+
+fit_expected<OptimResult>
+port_nls(const GmmProblem& prob, const Eigen::VectorXd& x0,
+         const Bounds& bounds, LbfgsOptions opts) {
+  // NL2SOL also supports bounds natively (drn2gb is the bounded variant of
+  // drn2g). Same ±infinity sentinel handling as the scalar PORT entry.
+  const double          inf = std::numeric_limits<double>::infinity();
+  const Eigen::VectorXd lower =
+      bounds.empty() ? Eigen::VectorXd::Constant(x0.size(), -inf) : bounds.lower;
+  const Eigen::VectorXd upper =
+      bounds.empty() ? Eigen::VectorXd::Constant(x0.size(),  inf) : bounds.upper;
+  auto out = PortNlsOptimizer{opts}.minimize_ls(
+      prob.r, prob.J, prob.eval, prob.n_resid, x0, lower, upper);
+  if (!out.has_value()) return std::unexpected(out.error());
+  return to_result(std::move(*out));
+}
 #endif
 
 #ifdef MAGMAAN_WITH_CERES

@@ -38,7 +38,12 @@ struct Estimates {
 //               algorithm behind R's `nlminb`; TOMS 611). Needs
 //               MAGMAAN_WITH_PORT (default ON). Replaces the now-retired
 //               CppNumericalSolvers-backed TrustRegion entry.
-enum class Backend { Lbfgs, Ceres, CeresBfgs, Nlopt, Port };
+//   PortNls   — PORT drn2gb NL2SOL adaptive trust region with bounds (the
+//               algorithm behind R's `nls`; TOMS 573 Dennis-Gay-Welsch).
+//               Least-squares path only — sees the multi-residual structure
+//               directly rather than the scalarised ½‖r‖² collapse. Needs
+//               MAGMAAN_WITH_PORT.
+enum class Backend { Lbfgs, Ceres, CeresBfgs, Nlopt, Port, PortNls };
 
 // ============================================================================
 // Convenience composers — the template-free core entry points.

@@ -165,4 +165,201 @@ TEST_CASE("PortOptimizer — bound size mismatch is an error value") {
   CHECK(out.error().kind == FitError::Kind::NumericIssue);
 }
 
+// ============================================================================
+// PortNlsOptimizer — NL2SOL (drn2gb_, TOMS 573, the algorithm behind R `nls`).
+// LS-shape: takes residual + Jacobian closures, sees the multi-residual
+// structure directly. Tests parallel the scalar PortOptimizer cases plus a
+// linear-regression closed-form anchor.
+// ============================================================================
+
+using magmaan::optim::PortNlsOptimizer;
+using magmaan::optim::ResidualFn;
+using magmaan::optim::JacobianFn;
+using magmaan::optim::LsEvaluationFn;
+using magmaan::optim::LsEvaluation;
+
+TEST_CASE("PortNlsOptimizer — linear LS recovers OLS estimate") {
+  // r_i(x) = y_i − X_i · x;  optimum x* = (XᵀX)⁻¹ Xᵀy. Closed-form check —
+  // NL2SOL must hit OLS to machine precision since the problem is exactly
+  // quadratic in x and one Gauss-Newton step suffices.
+  Eigen::MatrixXd X(8, 3);
+  X << 1.0,  0.1,  0.4,
+       1.0, -0.2,  0.1,
+       1.0,  0.5, -0.3,
+       1.0,  0.0,  0.7,
+       1.0,  0.3,  0.2,
+       1.0, -0.4,  0.0,
+       1.0,  0.6, -0.1,
+       1.0,  0.2,  0.5;
+  Eigen::VectorXd beta_true(3);  beta_true << 1.5, -0.7, 2.0;
+  Eigen::VectorXd y = X * beta_true;
+  const Eigen::Index n = X.rows();
+  const Eigen::Index p = X.cols();
+
+  ResidualFn r_fn = [=](const Eigen::VectorXd& x)
+      -> magmaan::fit_expected<Eigen::VectorXd> {
+    return Eigen::VectorXd{y - X * x};
+  };
+  JacobianFn J_fn = [=](const Eigen::VectorXd& x)
+      -> magmaan::fit_expected<Eigen::MatrixXd> {
+    (void)x;
+    return Eigen::MatrixXd{-X};
+  };
+  LsEvaluationFn eval_fn;  // empty — adapter falls back to r_fn + J_fn
+
+  PortNlsOptimizer opt;
+  const auto inf = std::numeric_limits<double>::infinity();
+  Eigen::VectorXd lb = Eigen::VectorXd::Constant(p, -inf);
+  Eigen::VectorXd ub = Eigen::VectorXd::Constant(p,  inf);
+  auto out = opt.minimize_ls(r_fn, J_fn, eval_fn, n,
+                             Eigen::VectorXd::Zero(p), lb, ub);
+  REQUIRE(out.has_value());
+  CHECK(out->fmin < 1e-18);
+  CHECK((out->theta_hat - beta_true).norm() < 1e-8);
+}
+
+TEST_CASE("PortNlsOptimizer — Rosenbrock as LS recovers (1,1)") {
+  // Standard Rosenbrock as a 2-residual LS: r_1 = 10(x_2 - x_1²),
+  // r_2 = 1 - x_1. Half-sum-of-squares is exactly Rosenbrock; the LS-shape
+  // adapter sees the (n=2, p=2) Jacobian directly, exactly as Ceres LM does.
+  const Eigen::Index n = 2;
+  const Eigen::Index p = 2;
+
+  ResidualFn r_fn = [](const Eigen::VectorXd& x)
+      -> magmaan::fit_expected<Eigen::VectorXd> {
+    Eigen::VectorXd r(2);
+    r[0] = 10.0 * (x[1] - x[0] * x[0]);
+    r[1] = 1.0 - x[0];
+    return r;
+  };
+  JacobianFn J_fn = [](const Eigen::VectorXd& x)
+      -> magmaan::fit_expected<Eigen::MatrixXd> {
+    Eigen::MatrixXd J(2, 2);
+    J(0, 0) = -20.0 * x[0];
+    J(0, 1) =  10.0;
+    J(1, 0) =  -1.0;
+    J(1, 1) =   0.0;
+    return J;
+  };
+  LsEvaluationFn eval_fn;
+
+  PortNlsOptimizer opt;
+  const auto inf = std::numeric_limits<double>::infinity();
+  Eigen::VectorXd lb = Eigen::VectorXd::Constant(p, -inf);
+  Eigen::VectorXd ub = Eigen::VectorXd::Constant(p,  inf);
+  Eigen::VectorXd x0(2);  x0 << -1.2, 1.0;
+  auto out = opt.minimize_ls(r_fn, J_fn, eval_fn, n, x0, lb, ub);
+  REQUIRE(out.has_value());
+  CHECK(out->fmin < 1e-12);
+  CHECK((out->theta_hat - Eigen::Vector2d(1.0, 1.0)).norm() < 1e-5);
+}
+
+TEST_CASE("PortNlsOptimizer — combined eval fast path agrees with split") {
+  // When the GmmProblem supplies an `eval` closure that returns both
+  // residual + Jacobian at one shot, the adapter prefers it for the
+  // "compute both" sub-states. Validate that the path agrees with the
+  // split r + J path on the same problem.
+  Eigen::MatrixXd X(5, 2);
+  X << 1.0,  0.3,
+       1.0, -0.2,
+       1.0,  0.5,
+       1.0,  0.0,
+       1.0,  0.7;
+  Eigen::VectorXd beta_true(2);  beta_true << 0.4, -1.1;
+  Eigen::VectorXd y = X * beta_true;
+
+  ResidualFn r_fn = [=](const Eigen::VectorXd& x)
+      -> magmaan::fit_expected<Eigen::VectorXd> {
+    return Eigen::VectorXd{y - X * x};
+  };
+  JacobianFn J_fn = [=](const Eigen::VectorXd& x)
+      -> magmaan::fit_expected<Eigen::MatrixXd> {
+    (void)x;
+    return Eigen::MatrixXd{-X};
+  };
+  LsEvaluationFn eval_fn = [=](const Eigen::VectorXd& x)
+      -> magmaan::fit_expected<LsEvaluation> {
+    return LsEvaluation{Eigen::VectorXd{y - X * x}, Eigen::MatrixXd{-X}};
+  };
+
+  PortNlsOptimizer opt;
+  const auto inf = std::numeric_limits<double>::infinity();
+  Eigen::VectorXd lb = Eigen::VectorXd::Constant(2, -inf);
+  Eigen::VectorXd ub = Eigen::VectorXd::Constant(2,  inf);
+  Eigen::VectorXd x0 = Eigen::VectorXd::Zero(2);
+
+  auto out_split    = opt.minimize_ls(r_fn, J_fn, /*eval*/{},     5, x0, lb, ub);
+  auto out_combined = opt.minimize_ls(r_fn, J_fn,  eval_fn,        5, x0, lb, ub);
+  REQUIRE(out_split.has_value());
+  REQUIRE(out_combined.has_value());
+  CHECK((out_split->theta_hat - out_combined->theta_hat).norm() < 1e-10);
+  CHECK(out_split->fmin == doctest::Approx(out_combined->fmin).epsilon(1e-10));
+}
+
+TEST_CASE("PortNlsOptimizer — lower bound is enforced") {
+  // Linear LS optimum at β = (−1, −1); bound both coordinates ≥ 0 so PORT
+  // must park at the corner. Same structural test as the scalar PortOptimizer
+  // bound case; here exercised through the LS-shape entry.
+  Eigen::MatrixXd X = Eigen::MatrixXd::Identity(2, 2);
+  Eigen::VectorXd target(2);  target << -1.0, -1.0;
+
+  ResidualFn r_fn = [=](const Eigen::VectorXd& x)
+      -> magmaan::fit_expected<Eigen::VectorXd> {
+    return Eigen::VectorXd{target - X * x};
+  };
+  JacobianFn J_fn = [=](const Eigen::VectorXd& x)
+      -> magmaan::fit_expected<Eigen::MatrixXd> {
+    (void)x;
+    return Eigen::MatrixXd{-X};
+  };
+
+  PortNlsOptimizer opt;
+  const auto inf = std::numeric_limits<double>::infinity();
+  Eigen::VectorXd lb(2);  lb << 0.0, 0.0;
+  Eigen::VectorXd ub(2);  ub << inf, inf;
+  Eigen::VectorXd x0(2);  x0 << 0.5, 0.5;        // start feasible
+  auto out = opt.minimize_ls(r_fn, J_fn, /*eval*/{}, 2, x0, lb, ub);
+  REQUIRE(out.has_value());
+  CHECK(out->theta_hat(0) >= -1e-9);
+  CHECK(out->theta_hat(1) >= -1e-9);
+  CHECK(out->theta_hat(0) < 1e-4);
+  CHECK(out->theta_hat(1) < 1e-4);
+}
+
+TEST_CASE("PortNlsOptimizer — empty parameter vector is an error value") {
+  ResidualFn r_fn = [](const Eigen::VectorXd&)
+      -> magmaan::fit_expected<Eigen::VectorXd> {
+    return Eigen::VectorXd::Zero(1);
+  };
+  JacobianFn J_fn = [](const Eigen::VectorXd&)
+      -> magmaan::fit_expected<Eigen::MatrixXd> {
+    return Eigen::MatrixXd::Zero(1, 0);
+  };
+  PortNlsOptimizer opt;
+  auto out = opt.minimize_ls(r_fn, J_fn, /*eval*/{}, 1,
+                             Eigen::VectorXd(0),
+                             Eigen::VectorXd(0), Eigen::VectorXd(0));
+  REQUIRE_FALSE(out.has_value());
+  CHECK(out.error().kind == FitError::Kind::NumericIssue);
+}
+
+TEST_CASE("PortNlsOptimizer — non-positive residual count is an error value") {
+  ResidualFn r_fn = [](const Eigen::VectorXd&)
+      -> magmaan::fit_expected<Eigen::VectorXd> {
+    return Eigen::VectorXd{};
+  };
+  JacobianFn J_fn = [](const Eigen::VectorXd&)
+      -> magmaan::fit_expected<Eigen::MatrixXd> {
+    return Eigen::MatrixXd{};
+  };
+  PortNlsOptimizer opt;
+  const auto inf = std::numeric_limits<double>::infinity();
+  Eigen::VectorXd x0(2);  x0.setZero();
+  Eigen::VectorXd lb = Eigen::VectorXd::Constant(2, -inf);
+  Eigen::VectorXd ub = Eigen::VectorXd::Constant(2,  inf);
+  auto out = opt.minimize_ls(r_fn, J_fn, /*eval*/{}, 0, x0, lb, ub);
+  REQUIRE_FALSE(out.has_value());
+  CHECK(out.error().kind == FitError::Kind::NumericIssue);
+}
+
 #endif  // MAGMAAN_WITH_PORT

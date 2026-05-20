@@ -127,6 +127,15 @@ golden `parTable()` fixtures.
   `third_party/port/` from AMPL/ASL + Fermi-LAT (both BSD-3, manifest in
   `third_party/port/README.md`). Replaces the previous CppNumericalSolvers
   `Backend::TrustRegion`.
+- `Backend::PortNls` is the least-squares-shape counterpart: PORT `drn2gb_`
+  (TOMS 573 NL2SOL adaptive trust region — the algorithm behind R's `nls`).
+  Drives the multi-residual `GmmProblem` directly through reverse
+  communication (alternating R/J requests), so NL2SOL sees the true
+  Gauss-Newton-plus-secant model Hessian instead of the scalarised
+  ½‖r‖² collapse. On non-convex SNLLS problems with multiple local
+  optima (e.g., Bollen's democracy SEM under GLS) it may converge to a
+  different basin than the gradient backends; the cross-check tests
+  document this rather than enforce agreement.
 - `Backend::Ceres` / `Backend::CeresBfgs` cover Ceres Levenberg-Marquardt and
   dense line-search BFGS on the least-squares path (build with
   `MAGMAAN_WITH_CERES=ON`).

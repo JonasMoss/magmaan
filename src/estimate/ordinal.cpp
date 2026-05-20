@@ -2006,6 +2006,17 @@ run_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
         "is off"));
 #endif
   }
+  if (backend == Backend::PortNls) {
+#ifdef MAGMAAN_WITH_PORT
+    // NL2SOL sees the multi-residual structure directly, matching the Ceres
+    // LM dispatch above; no scalarisation.
+    return optim::port_nls(prob, x0, bounds, opts);
+#else
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: PortNls backend requested but MAGMAAN_WITH_PORT "
+        "is off"));
+#endif
+  }
   return optim::lbfgs(optim::scalarize(prob), x0, bounds, opts);
 }
 

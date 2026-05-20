@@ -7,6 +7,7 @@
 
 #include "magmaan/expected.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"   // shared LbfgsOptions / LbfgsOutput
+#include "magmaan/optim/problem.hpp"           // LS callback aliases
 
 namespace magmaan::optim {
 
@@ -71,6 +72,51 @@ class PortOptimizer {
   minimize(Objective f, const Eigen::VectorXd& x0,
            const Eigen::VectorXd& lower,
            const Eigen::VectorXd& upper) const;
+
+ private:
+  PortOptions opts_;
+};
+
+// PortNlsOptimizer — wraps PORT's `drn2gb_` (NL2SOL adaptive trust region with
+// simple bounds; TOMS 573 Dennis-Gay-Welsch). NL2SOL is the algorithm behind
+// R's `nls`: an LS-shape solver that builds an adaptive model of the Hessian
+// blending the Gauss-Newton term JᵀJ with a secant approximation to the
+// second-order residual curvature. It is the canonical answer to "what trust
+// region do I run on a least-squares problem when residuals may be large at
+// the optimum?" — exactly the regime SNLLS occupies for shallow Heywood-prone
+// CFAs.
+//
+// LS-shape interface: takes residual + Jacobian closures, the residual count,
+// start, and optional per-coordinate bounds. Drives drn2gb_ via reverse
+// communication: NL2SOL alternately asks for r(x) and J(x); a non-finite
+// residual or Jacobian sets PORT's IV(TOOBIG), causing the next step to be
+// shortened.
+//
+// Work-array sizes (from drn2gb_ documentation): liv ≥ 4p + 82,
+// lv ≥ 105 + p(2p + 20). For SEM parameter counts (p ≲ 200) these are tiny.
+//
+// Error mapping mirrors the scalar PortOptimizer — same IV(1) family with
+// NL2SOL's specific 3-10 termination code semantics.
+class PortNlsOptimizer {
+ public:
+  static constexpr std::string_view name = "port-nls";
+
+  PortNlsOptimizer(PortOptions opts = {}) noexcept : opts_(opts) {}
+
+  PortOptions options() const noexcept { return opts_; }
+
+  // LS-shape entry. `r_fn` / `J_fn` are the residual / Jacobian closures
+  // (magmaan's `ResidualFn` / `JacobianFn` from `optim/problem.hpp`).
+  // `eval_fn` is the optional combined evaluator; when present and NL2SOL
+  // asks for residuals and Jacobian at the same x (which it sometimes
+  // does), the adapter calls `eval_fn` once instead of `r_fn` + `J_fn`.
+  // `n_resid` is the residual count; `lower`/`upper` may each contain
+  // ±infinity entries for unbounded coordinates.
+  fit_expected<LbfgsOutput>
+  minimize_ls(ResidualFn r_fn, JacobianFn J_fn, LsEvaluationFn eval_fn,
+              Eigen::Index n_resid, const Eigen::VectorXd& x0,
+              const Eigen::VectorXd& lower,
+              const Eigen::VectorXd& upper) const;
 
  private:
   PortOptions opts_;

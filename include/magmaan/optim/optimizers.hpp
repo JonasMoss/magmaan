@@ -50,6 +50,15 @@ ScalarProblem scalarize(const GmmProblem& prob);
 fit_expected<OptimResult>
 port(const ScalarProblem& prob, const Eigen::VectorXd& x0,
      const Bounds& bounds = {}, LbfgsOptions opts = {});
+
+// PORT `drn2gb` LS-shape minimization with simple bounds — NL2SOL adaptive
+// trust region (TOMS 573 Dennis-Gay-Welsch), the same algorithm R's `nls`
+// runs. Drives the multi-residual `GmmProblem` directly (not via
+// `scalarize`), so NL2SOL sees the true residual structure and can build
+// its Gauss-Newton-plus-secant model Hessian. Empty `bounds` ⇒ unbounded.
+fit_expected<OptimResult>
+port_nls(const GmmProblem& prob, const Eigen::VectorXd& x0,
+         const Bounds& bounds = {}, LbfgsOptions opts = {});
 #endif
 
 #ifdef MAGMAAN_WITH_CERES
