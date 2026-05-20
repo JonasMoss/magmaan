@@ -3,6 +3,7 @@ library(magmaan)
 core <- magmaan_core
 times <- as.integer(Sys.getenv("MAGMAAN_HARD_SNLLS_TIMES", "100"))
 lbfgsb <- list(max_iter = 2000L, ftol = 1e-10, gtol = 1e-7)
+ceres <- list(max_iter = 500L, ftol = 1e-10, gtol = 1e-7, ptol = 1e-8)
 
 elapsed_usec <- function(n, fun) {
   invisible(fun())
@@ -22,16 +23,31 @@ inf_bounds <- function(spec) {
   list(lower = rep(-Inf, npar), upper = rep(Inf, npar))
 }
 
-fit_one <- function(spec, dat, estimator, snlls) {
-  if (identical(estimator, "ULS")) {
+fit_one <- function(spec, dat, estimator, backend, snlls) {
+  if (identical(estimator, "ULS") && identical(backend, "lbfgsb")) {
     if (snlls) return(core$fit_uls_snlls(spec, dat, lbfgsb = lbfgsb))
-    return(core$fit_uls(spec, dat, lbfgsb = lbfgsb, bounds = inf_bounds(spec)))
+    return(core$fit_uls(spec, dat, lbfgsb = lbfgsb,
+                        bounds = inf_bounds(spec)))
   }
-  if (identical(estimator, "GLS")) {
+  if (identical(estimator, "ULS") && identical(backend, "ceres")) {
+    if (snlls) return(core$fit_uls_snlls_ceres(spec, dat, ceres = ceres))
+    return(core$fit_uls_ceres(spec, dat, ceres = ceres))
+  }
+  if (identical(estimator, "GLS") && identical(backend, "lbfgsb")) {
     if (snlls) return(core$fit_gls_snlls(spec, dat, lbfgsb = lbfgsb))
-    return(core$fit_gls(spec, dat, lbfgsb = lbfgsb, bounds = inf_bounds(spec)))
+    return(core$fit_gls(spec, dat, lbfgsb = lbfgsb,
+                        bounds = inf_bounds(spec)))
   }
-  stop("unknown estimator: ", estimator, call. = FALSE)
+  if (identical(estimator, "GLS") && identical(backend, "ceres")) {
+    if (snlls) return(core$fit_gls_snlls_ceres(spec, dat, ceres = ceres))
+    return(core$fit_gls_ceres(spec, dat, ceres = ceres))
+  }
+  if (identical(estimator, "GLS") && identical(backend, "ceres_bfgs")) {
+    if (!snlls) stop("Ceres BFGS is exposed only for SNLLS", call. = FALSE)
+    return(core$fit_gls_snlls_ceres_bfgs(spec, dat, ceres = ceres))
+  }
+  stop("unsupported estimator/backend: ", estimator, "/", backend,
+       call. = FALSE)
 }
 
 case_gleser_mtmm <- function() {
@@ -88,30 +104,45 @@ f2 =~ x4 + x5 + x6"
 
 measure_case <- function(case) {
   rows <- list()
-  for (snlls in c(FALSE, TRUE)) {
+  jobs <- list(
+    list(backend = "lbfgsb", snlls = FALSE),
+    list(backend = "lbfgsb", snlls = TRUE),
+    list(backend = "ceres", snlls = FALSE),
+    list(backend = "ceres", snlls = TRUE)
+  )
+  if (identical(case$estimator, "GLS")) {
+    jobs[[length(jobs) + 1L]] <- list(backend = "ceres_bfgs", snlls = TRUE)
+  }
+  for (job in jobs) {
+    backend <- job$backend
+    snlls <- job$snlls
     label <- if (snlls) "SNLLS" else "ordinary"
-    fit <- try_fit(fit_one(case$spec, case$dat, case$estimator, snlls))
+    fit <- try_fit(fit_one(case$spec, case$dat, case$estimator, backend, snlls))
     if (inherits(fit, "magmaan_bench_error")) {
       rows[[length(rows) + 1L]] <- data.frame(
         case = case$id,
         estimator = case$estimator,
+        backend = backend,
         method = label,
         iterations = NA_integer_,
         fmin = NA_real_,
         fit_usec = NA_real_,
+        iteration_source = NA_character_,
         error = fit$error
       )
     } else {
       fit_usec <- elapsed_usec(times, function() {
-        fit_one(case$spec, case$dat, case$estimator, snlls)$fmin
+        fit_one(case$spec, case$dat, case$estimator, backend, snlls)$fmin
       })
       rows[[length(rows) + 1L]] <- data.frame(
         case = case$id,
         estimator = case$estimator,
+        backend = backend,
         method = label,
         iterations = fit$iterations,
         fmin = fit$fmin,
         fit_usec = fit_usec,
+        iteration_source = if (fit$iterations == 0L) "reported_zero" else "reported",
         error = NA_character_
       )
     }
@@ -128,14 +159,21 @@ ratio_or_na <- function(num, den) {
 ordinary_snlls_ratios <- function(out) {
   rows <- list()
   for (case in unique(out$case)) {
-    ordinary <- out[out$case == case & out$method == "ordinary", ]
-    snlls <- out[out$case == case & out$method == "SNLLS", ]
-    if (!nrow(ordinary) || !nrow(snlls)) next
-    rows[[length(rows) + 1L]] <- data.frame(
-      case = case,
-      iter_ratio = ratio_or_na(ordinary$iterations, snlls$iterations),
-      time_ratio = ratio_or_na(ordinary$fit_usec, snlls$fit_usec)
-    )
+    for (backend in unique(out$backend[out$case == case])) {
+      ordinary <- out[out$case == case &
+                        out$backend == backend &
+                        out$method == "ordinary", ]
+      snlls <- out[out$case == case &
+                     out$backend == backend &
+                     out$method == "SNLLS", ]
+      if (!nrow(ordinary) || !nrow(snlls)) next
+      rows[[length(rows) + 1L]] <- data.frame(
+        case = case,
+        backend = backend,
+        iter_ratio = ratio_or_na(ordinary$iterations, snlls$iterations),
+        time_ratio = ratio_or_na(ordinary$fit_usec, snlls$fit_usec)
+      )
+    }
   }
   if (!length(rows)) return(data.frame())
   do.call(rbind, rows)
@@ -168,4 +206,7 @@ print(ordinary_snlls_ratios(out), digits = 6, row.names = FALSE)
 cat("\nNotes\n")
 cat("* The Gleser MTMM/G-study case is ULS-only here because GLS needs a positive-definite sample covariance.\n")
 cat("* semfindr::cfa_dat_heywood is an optional installed-package case; install semfindr to enable it.\n")
+cat("* reported_zero means the backend returned a usable estimate but not a reliable iteration count.\n")
+cat("* ceres_bfgs is SNLLS-only and currently exposed for GLS probes only.\n")
+cat("* Trust-region and NLopt backends exist in C++ checks but are not exposed on this R dev surface.\n")
 cat("* These are convergence and boundary probes first; wall-time ratios are secondary.\n")
