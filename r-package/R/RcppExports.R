@@ -17,28 +17,28 @@ model_matrix_rep <- function(partable) {
     .Call(`_magmaan_model_matrix_rep`, partable)
 }
 
-fit_fit <- function(partable, sample_stats, lbfgs = NULL) {
-    .Call(`_magmaan_fit_fit`, partable, sample_stats, lbfgs)
+fit_fit <- function(partable, sample_stats, optimizer = NULL, control = NULL) {
+    .Call(`_magmaan_fit_fit`, partable, sample_stats, optimizer, control)
 }
 
-fit_ml_impl <- function(partable, sample_stats, lbfgs = NULL) {
-    .Call(`_magmaan_fit_ml_impl`, partable, sample_stats, lbfgs)
+fit_ml_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL) {
+    .Call(`_magmaan_fit_ml_impl`, partable, sample_stats, optimizer, control)
 }
 
 fit_fiml_impl <- function(partable, raw_data, lbfgs = NULL) {
     .Call(`_magmaan_fit_fiml_impl`, partable, raw_data, lbfgs)
 }
 
-fit_uls_impl <- function(partable, sample_stats, lbfgsb = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_uls_impl`, partable, sample_stats, lbfgsb, bounds)
+fit_uls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_uls_impl`, partable, sample_stats, optimizer, control, bounds)
 }
 
-fit_gls_impl <- function(partable, sample_stats, lbfgsb = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_gls_impl`, partable, sample_stats, lbfgsb, bounds)
+fit_gls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_gls_impl`, partable, sample_stats, optimizer, control, bounds)
 }
 
-fit_wls_impl <- function(partable, sample_stats, W, lbfgsb = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_wls_impl`, partable, sample_stats, W, lbfgsb, bounds)
+fit_wls_impl <- function(partable, sample_stats, W, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_wls_impl`, partable, sample_stats, W, optimizer, control, bounds)
 }
 
 data_ordinal_stats_from_raw_impl <- function(X) {
@@ -73,60 +73,32 @@ data_mixed_ordinal_stats_huber_residual_from_raw_impl <- function(X, ordered_mas
     .Call(`_magmaan_data_mixed_ordinal_stats_huber_residual_from_raw_impl`, X, ordered_mask, clip, k)
 }
 
-fit_dwls_ordinal_impl <- function(partable, ordinal_stats, lbfgsb = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_dwls_ordinal_impl`, partable, ordinal_stats, lbfgsb, bounds)
+fit_dwls_ordinal_impl <- function(partable, ordinal_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_dwls_ordinal_impl`, partable, ordinal_stats, optimizer, control, bounds)
 }
 
-fit_wls_ordinal_impl <- function(partable, ordinal_stats, lbfgsb = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_wls_ordinal_impl`, partable, ordinal_stats, lbfgsb, bounds)
+fit_wls_ordinal_impl <- function(partable, ordinal_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_wls_ordinal_impl`, partable, ordinal_stats, optimizer, control, bounds)
 }
 
-fit_dwls_mixed_ordinal_impl <- function(partable, mixed_stats, lbfgsb = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_dwls_mixed_ordinal_impl`, partable, mixed_stats, lbfgsb, bounds)
+fit_dwls_mixed_ordinal_impl <- function(partable, mixed_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_dwls_mixed_ordinal_impl`, partable, mixed_stats, optimizer, control, bounds)
 }
 
-fit_wls_mixed_ordinal_impl <- function(partable, mixed_stats, lbfgsb = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_wls_mixed_ordinal_impl`, partable, mixed_stats, lbfgsb, bounds)
+fit_wls_mixed_ordinal_impl <- function(partable, mixed_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_wls_mixed_ordinal_impl`, partable, mixed_stats, optimizer, control, bounds)
 }
 
-fit_uls_snlls_impl <- function(partable, sample_stats, lbfgsb = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_uls_snlls_impl`, partable, sample_stats, lbfgsb, bounds)
+fit_uls_snlls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_uls_snlls_impl`, partable, sample_stats, optimizer, control, bounds)
 }
 
-fit_gls_snlls_impl <- function(partable, sample_stats, lbfgsb = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_gls_snlls_impl`, partable, sample_stats, lbfgsb, bounds)
+fit_gls_snlls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_gls_snlls_impl`, partable, sample_stats, optimizer, control, bounds)
 }
 
-fit_wls_snlls_impl <- function(partable, sample_stats, W, lbfgsb = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_wls_snlls_impl`, partable, sample_stats, W, lbfgsb, bounds)
-}
-
-fit_uls_ceres_impl <- function(partable, sample_stats, ceres = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_uls_ceres_impl`, partable, sample_stats, ceres, bounds)
-}
-
-fit_uls_snlls_ceres_impl <- function(partable, sample_stats, ceres = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_uls_snlls_ceres_impl`, partable, sample_stats, ceres, bounds)
-}
-
-fit_gls_snlls_ceres_impl <- function(partable, sample_stats, ceres = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_gls_snlls_ceres_impl`, partable, sample_stats, ceres, bounds)
-}
-
-fit_gls_snlls_ceres_bfgs_impl <- function(partable, sample_stats, ceres = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_gls_snlls_ceres_bfgs_impl`, partable, sample_stats, ceres, bounds)
-}
-
-fit_wls_snlls_ceres_impl <- function(partable, sample_stats, W, ceres = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_wls_snlls_ceres_impl`, partable, sample_stats, W, ceres, bounds)
-}
-
-fit_gls_ceres_impl <- function(partable, sample_stats, ceres = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_gls_ceres_impl`, partable, sample_stats, ceres, bounds)
-}
-
-fit_wls_ceres_impl <- function(partable, sample_stats, W, ceres = NULL, bounds = NULL) {
-    .Call(`_magmaan_fit_wls_ceres_impl`, partable, sample_stats, W, ceres, bounds)
+fit_wls_snlls_impl <- function(partable, sample_stats, W, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_wls_snlls_impl`, partable, sample_stats, W, optimizer, control, bounds)
 }
 
 fit_start_values <- function(partable, sample_stats) {
@@ -336,3 +308,4 @@ infer_robust_se_raw <- function(fit, X, bread = "expected", moments = "structure
 infer_robust_se_raw_parts <- function(partable, sample_stats, theta, X, bread = "expected", moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_raw_parts`, partable, sample_stats, theta, X, bread, moments, cov)
 }
+

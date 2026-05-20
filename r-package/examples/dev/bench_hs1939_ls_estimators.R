@@ -9,6 +9,7 @@ model <- "visual  =~ x1 + x2 + x3
 data <- lavaan::HolzingerSwineford1939
 
 times <- as.integer(Sys.getenv("MAGMAAN_BENCH_TIMES", "100"))
+times <- 100
 lbfgsb <- list(max_iter = 5000L, ftol = 1e-12, gtol = 1e-8)
 ceres <- list(max_iter = 500L, ftol = 1e-10, gtol = 1e-7, ptol = 1e-8)
 
@@ -32,84 +33,84 @@ uls_chisq <- function(fit) {
 magmaan_uls_lbfgsb <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_uls(spec, dat, lbfgsb = lbfgsb)
+  fit <- core$fit_uls(spec, dat, optimizer = "lbfgs", control = lbfgsb)
   uls_chisq(fit)
 }
 
 magmaan_uls_ceres <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_uls_ceres(spec, dat, ceres = ceres)
+  fit <- core$fit_uls(spec, dat, optimizer = "ceres", control = ceres)
   uls_chisq(fit)
 }
 
 magmaan_uls_snlls_lbfgsb <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_uls_snlls(spec, dat, lbfgsb = lbfgsb)
+  fit <- core$fit_uls_snlls(spec, dat, optimizer = "lbfgs", control = lbfgsb)
   uls_chisq(fit)
 }
 
 magmaan_uls_snlls_ceres <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_uls_snlls_ceres(spec, dat, ceres = ceres)
+  fit <- core$fit_uls_snlls(spec, dat, optimizer = "ceres", control = ceres)
   uls_chisq(fit)
 }
 
 magmaan_gls_lbfgsb <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_gls(spec, dat, lbfgsb = lbfgsb)
+  fit <- core$fit_gls(spec, dat, optimizer = "lbfgs", control = lbfgsb)
   ls_chisq(fit, dat, multiplier = 2)
 }
 
 magmaan_gls_ceres <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_gls_ceres(spec, dat, ceres = ceres)
+  fit <- core$fit_gls(spec, dat, optimizer = "ceres", control = ceres)
   ls_chisq(fit, dat, multiplier = 2)
 }
 
 magmaan_gls_snlls_lbfgsb <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_gls_snlls(spec, dat, lbfgsb = lbfgsb)
+  fit <- core$fit_gls_snlls(spec, dat, optimizer = "lbfgs", control = lbfgsb)
   ls_chisq(fit, dat, multiplier = 2)
 }
 
 magmaan_gls_snlls_ceres <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_gls_snlls_ceres(spec, dat, ceres = ceres)
+  fit <- core$fit_gls_snlls(spec, dat, optimizer = "ceres", control = ceres)
   ls_chisq(fit, dat, multiplier = 2)
 }
 
 magmaan_wls_lbfgsb <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_wls(spec, dat, W_wls, lbfgsb = lbfgsb)
+  fit <- core$fit_wls(spec, dat, W_wls, optimizer = "lbfgs", control = lbfgsb)
   ls_chisq(fit, dat, multiplier = 2)
 }
 
 magmaan_wls_ceres <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_wls_ceres(spec, dat, W_wls, ceres = ceres)
+  fit <- core$fit_wls(spec, dat, W_wls, optimizer = "ceres", control = ceres)
   ls_chisq(fit, dat, multiplier = 2)
 }
 
 magmaan_wls_snlls_lbfgsb <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_wls_snlls(spec, dat, W_wls, lbfgsb = lbfgsb)
+  fit <- core$fit_wls_snlls(spec, dat, W_wls, optimizer = "lbfgs", control = lbfgsb)
   ls_chisq(fit, dat, multiplier = 2)
 }
 
 magmaan_wls_snlls_ceres <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_wls_snlls_ceres(spec, dat, W_wls, ceres = ceres)
+  fit <- core$fit_wls_snlls(spec, dat, W_wls, optimizer = "ceres", control = ceres)
   ls_chisq(fit, dat, multiplier = 2)
 }
 
@@ -134,18 +135,18 @@ fit_for <- function(estimator, backend, snlls) {
   key <- paste(estimator, if (snlls) "snlls" else "ordinary", backend, sep = "_")
   switch(
     key,
-    ULS_ordinary_lbfgsb = core$fit_uls(spec, dat, lbfgsb = lbfgsb),
-    ULS_ordinary_ceres = core$fit_uls_ceres(spec, dat, ceres = ceres),
-    ULS_snlls_lbfgsb = core$fit_uls_snlls(spec, dat, lbfgsb = lbfgsb),
-    ULS_snlls_ceres = core$fit_uls_snlls_ceres(spec, dat, ceres = ceres),
-    GLS_ordinary_lbfgsb = core$fit_gls(spec, dat, lbfgsb = lbfgsb),
-    GLS_ordinary_ceres = core$fit_gls_ceres(spec, dat, ceres = ceres),
-    GLS_snlls_lbfgsb = core$fit_gls_snlls(spec, dat, lbfgsb = lbfgsb),
-    GLS_snlls_ceres = core$fit_gls_snlls_ceres(spec, dat, ceres = ceres),
-    WLS_ordinary_lbfgsb = core$fit_wls(spec, dat, W_wls, lbfgsb = lbfgsb),
-    WLS_ordinary_ceres = core$fit_wls_ceres(spec, dat, W_wls, ceres = ceres),
-    WLS_snlls_lbfgsb = core$fit_wls_snlls(spec, dat, W_wls, lbfgsb = lbfgsb),
-    WLS_snlls_ceres = core$fit_wls_snlls_ceres(spec, dat, W_wls, ceres = ceres)
+    ULS_ordinary_lbfgsb = core$fit_uls(spec, dat, optimizer = "lbfgs", control = lbfgsb),
+    ULS_ordinary_ceres = core$fit_uls(spec, dat, optimizer = "ceres", control = ceres),
+    ULS_snlls_lbfgsb = core$fit_uls_snlls(spec, dat, optimizer = "lbfgs", control = lbfgsb),
+    ULS_snlls_ceres = core$fit_uls_snlls(spec, dat, optimizer = "ceres", control = ceres),
+    GLS_ordinary_lbfgsb = core$fit_gls(spec, dat, optimizer = "lbfgs", control = lbfgsb),
+    GLS_ordinary_ceres = core$fit_gls(spec, dat, optimizer = "ceres", control = ceres),
+    GLS_snlls_lbfgsb = core$fit_gls_snlls(spec, dat, optimizer = "lbfgs", control = lbfgsb),
+    GLS_snlls_ceres = core$fit_gls_snlls(spec, dat, optimizer = "ceres", control = ceres),
+    WLS_ordinary_lbfgsb = core$fit_wls(spec, dat, W_wls, optimizer = "lbfgs", control = lbfgsb),
+    WLS_ordinary_ceres = core$fit_wls(spec, dat, W_wls, optimizer = "ceres", control = ceres),
+    WLS_snlls_lbfgsb = core$fit_wls_snlls(spec, dat, W_wls, optimizer = "lbfgs", control = lbfgsb),
+    WLS_snlls_ceres = core$fit_wls_snlls(spec, dat, W_wls, optimizer = "ceres", control = ceres)
   )
 }
 

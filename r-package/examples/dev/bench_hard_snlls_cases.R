@@ -25,26 +25,26 @@ inf_bounds <- function(spec) {
 
 fit_one <- function(spec, dat, estimator, backend, snlls) {
   if (identical(estimator, "ULS") && identical(backend, "lbfgsb")) {
-    if (snlls) return(core$fit_uls_snlls(spec, dat, lbfgsb = lbfgsb))
-    return(core$fit_uls(spec, dat, lbfgsb = lbfgsb,
+    if (snlls) return(core$fit_uls_snlls(spec, dat, optimizer = "lbfgs", control = lbfgsb))
+    return(core$fit_uls(spec, dat, optimizer = "lbfgs", control = lbfgsb,
                         bounds = inf_bounds(spec)))
   }
   if (identical(estimator, "ULS") && identical(backend, "ceres")) {
-    if (snlls) return(core$fit_uls_snlls_ceres(spec, dat, ceres = ceres))
-    return(core$fit_uls_ceres(spec, dat, ceres = ceres))
+    if (snlls) return(core$fit_uls_snlls(spec, dat, optimizer = "ceres", control = ceres))
+    return(core$fit_uls(spec, dat, optimizer = "ceres", control = ceres))
   }
   if (identical(estimator, "GLS") && identical(backend, "lbfgsb")) {
-    if (snlls) return(core$fit_gls_snlls(spec, dat, lbfgsb = lbfgsb))
-    return(core$fit_gls(spec, dat, lbfgsb = lbfgsb,
+    if (snlls) return(core$fit_gls_snlls(spec, dat, optimizer = "lbfgs", control = lbfgsb))
+    return(core$fit_gls(spec, dat, optimizer = "lbfgs", control = lbfgsb,
                         bounds = inf_bounds(spec)))
   }
   if (identical(estimator, "GLS") && identical(backend, "ceres")) {
-    if (snlls) return(core$fit_gls_snlls_ceres(spec, dat, ceres = ceres))
-    return(core$fit_gls_ceres(spec, dat, ceres = ceres))
+    if (snlls) return(core$fit_gls_snlls(spec, dat, optimizer = "ceres", control = ceres))
+    return(core$fit_gls(spec, dat, optimizer = "ceres", control = ceres))
   }
   if (identical(estimator, "GLS") && identical(backend, "ceres_bfgs")) {
     if (!snlls) stop("Ceres BFGS is exposed only for SNLLS", call. = FALSE)
-    return(core$fit_gls_snlls_ceres_bfgs(spec, dat, ceres = ceres))
+    return(core$fit_gls_snlls(spec, dat, optimizer = "ceres-bfgs", control = ceres))
   }
   stop("unsupported estimator/backend: ", estimator, "/", backend,
        call. = FALSE)

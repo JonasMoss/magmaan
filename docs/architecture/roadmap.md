@@ -119,6 +119,18 @@ golden `parTable()` fixtures.
 
 ### Optimizer backends
 
+User-facing the optimizer is selected by a single kebab-case `optimizer = "..."`
+string threaded through `magmaan()` and the underlying `fit_ml/fit_uls/fit_gls/
+fit_wls/fit_*_snlls/fit_*_ordinal` entries; the table lives in
+`include/magmaan/estimate/backend_strings.hpp` and parses into the C++
+`Backend` enum. Accepted strings: `"lbfgs"`, `"ceres"`, `"ceres-bfgs"`,
+`"nlopt-slsqp"`, `"nlopt-bobyqa"`, `"nlopt-tnewton"`, `"nlopt-var2"`,
+`"nlopt-lbfgs"`, `"port"`, `"port-nls"`. The R side passes the same string
+through to a single Rcpp shim per fit family — no per-Backend wrapper
+explosion. Solver tuning rides on a generic `control = list(max_iter, ftol,
+gtol, history)` argument.
+
+
 - `Backend::Lbfgs` is the default for scalar discrepancies — LBFGS unbounded
   and LBFGS-B bounded, both via header-only LBFGS++.
 - `Backend::Port` is the trust-region cross-check: vendored PORT (Bell Labs)

@@ -64,17 +64,17 @@ lbfgsb_opts <- function(base_opts, iter_cap = base_opts$max_iter) {
 
 fit_one <- function(spec, dat, backend, snlls, opts) {
   if (backend == "lbfgsb") {
-    if (snlls) return(core$fit_gls_snlls(spec, dat, lbfgsb = opts))
-    return(core$fit_gls(spec, dat, lbfgsb = opts,
+    if (snlls) return(core$fit_gls_snlls(spec, dat, optimizer = "lbfgs", control = opts))
+    return(core$fit_gls(spec, dat, optimizer = "lbfgs", control = opts,
                         bounds = inf_bounds(spec)))
   }
   if (backend == "ceres") {
-    if (snlls) return(core$fit_gls_snlls_ceres(spec, dat, ceres = ceres))
-    return(core$fit_gls_ceres(spec, dat, ceres = ceres))
+    if (snlls) return(core$fit_gls_snlls(spec, dat, optimizer = "ceres", control = ceres))
+    return(core$fit_gls(spec, dat, optimizer = "ceres", control = ceres))
   }
   if (backend == "ceres_bfgs") {
     if (!snlls) stop("Ceres BFGS is exposed only for SNLLS", call. = FALSE)
-    return(core$fit_gls_snlls_ceres_bfgs(spec, dat, ceres = ceres))
+    return(core$fit_gls_snlls(spec, dat, optimizer = "ceres-bfgs", control = ceres))
   }
   stop("unknown backend: ", backend, call. = FALSE)
 }

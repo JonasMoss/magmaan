@@ -68,13 +68,9 @@ estimate_wls_mixed_ordinal <- fit_wls_mixed_ordinal_impl
 estimate_uls_snlls <- fit_uls_snlls_impl
 estimate_gls_snlls <- fit_gls_snlls_impl
 estimate_wls_snlls <- fit_wls_snlls_impl
-estimate_uls_ceres <- fit_uls_ceres_impl
-estimate_gls_ceres <- fit_gls_ceres_impl
-estimate_wls_ceres <- fit_wls_ceres_impl
-estimate_uls_snlls_ceres <- fit_uls_snlls_ceres_impl
-estimate_gls_snlls_ceres <- fit_gls_snlls_ceres_impl
-estimate_gls_snlls_ceres_bfgs <- fit_gls_snlls_ceres_bfgs_impl
-estimate_wls_snlls_ceres <- fit_wls_snlls_ceres_impl
+# Phase 4 retired estimate_*_ceres (separate Rcpp shims per Backend); the
+# unified estimate_uls/gls/wls/*_snlls now take an `optimizer = "..."`
+# string that maps to any of the C++ Backend values (see backend_strings.hpp).
 estimate_start_values <- fit_start_values
 
 inference_information_expected <- infer_information_expected
@@ -163,12 +159,6 @@ magmaan_core <- local({
       "estimate_uls_snlls",
       "estimate_gls_snlls",
       "estimate_wls_snlls",
-      "estimate_uls_ceres",
-      "estimate_gls_ceres",
-      "estimate_wls_ceres",
-      "estimate_uls_snlls_ceres",
-      "estimate_gls_snlls_ceres",
-      "estimate_wls_snlls_ceres",
       "estimate_start_values",
       "estimate_fiml_robust_mlr"
     ),
@@ -251,14 +241,7 @@ magmaan_core <- local({
       "fit_wls_mixed_ordinal",
       "fit_uls_snlls",
       "fit_gls_snlls",
-      "fit_wls_snlls",
-      "fit_uls_ceres",
-      "fit_gls_ceres",
-      "fit_wls_ceres",
-      "fit_uls_snlls_ceres",
-      "fit_gls_snlls_ceres",
-      "fit_gls_snlls_ceres_bfgs",
-      "fit_wls_snlls_ceres"
+      "fit_wls_snlls"
     )
   )
   compatibility_names <- c(
@@ -289,13 +272,6 @@ magmaan_core <- local({
       "fit_uls_snlls_impl",
       "fit_gls_snlls_impl",
       "fit_wls_snlls_impl",
-      "fit_uls_ceres_impl",
-      "fit_gls_ceres_impl",
-      "fit_wls_ceres_impl",
-      "fit_uls_snlls_ceres_impl",
-      "fit_gls_snlls_ceres_impl",
-      "fit_gls_snlls_ceres_bfgs_impl",
-      "fit_wls_snlls_ceres_impl",
       "fit_start_values",
       "fit_sample_stats",
       "infer_information_expected",
