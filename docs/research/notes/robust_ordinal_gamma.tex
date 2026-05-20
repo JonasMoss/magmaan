@@ -1,0 +1,146 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+
+\title{Notes on Smooth H Caps and Robust Ordinal Gamma}
+\author{}
+\date{\today}
+
+\newcommand{\fhat}{\widehat f}
+\newcommand{\Ghat}{\widehat\Gamma}
+
+\begin{document}
+\maketitle
+
+\section*{Context}
+
+These are implementation notes for the robust ordinal SEM paper track, not
+manuscript prose. They summarize two observations from the first pilot run of
+\path{docs/research/sims/r/robust_ordinal_sem_paper.R}.
+
+\section*{Smooth cap tuning}
+
+The current smooth h-score cap is parameterized by two transition points
+$a < b$. It is exactly ML below $a$, transitions smoothly on $[a,b]$, and is
+flat above $b$:
+\[
+  h(t)=t,\quad t \le a,
+  \qquad
+  h'(t)=0,\quad t \ge b.
+\]
+For the implemented quintic smootherstep transition, the plateau is
+\[
+  h_\infty = a + \frac{b-a}{2} = \frac{a+b}{2}.
+\]
+Therefore the pilot setting
+\[
+  a=1.6,\qquad b=2.2
+\]
+does \emph{not} smooth the Welz--Mair--Alfons hard cap with $k=1.6$; it
+smooths to a less aggressive plateau,
+\[
+  h_\infty = 1.9.
+\]
+This explains why the default smooth cap was not an apples-to-apples
+competitor to the WMA hard cap. To smooth a hard cap at $k=1.6$, use a
+transition centered at $1.6$, for example
+\[
+  a=1.3,\qquad b=1.9,
+\]
+or a tighter transition such as
+\[
+  a=1.45,\qquad b=1.75.
+\]
+Early pilot checks show these centered smooth caps track the hard-cap estimates
+much more closely than the original $(1.6,2.2)$ setting.
+
+\section*{Which matrix failed?}
+
+The pilot failures were not failures of the robust polychoric correlation
+matrix $R$. In the pilot CSV, the minimum eigenvalue of $R$ remained positive
+for the failing bivariate cases. The failure arose later, when building the
+full WLS weight matrix from the robust moment covariance:
+\[
+  W_{\mathrm{WLS}} = \Ghat^{-1}.
+\]
+The implementation computes moment influence rows
+\[
+  IF_i = -\psi_i(\widehat\eta) A(\widehat\eta)^{-\top},
+\]
+then forms
+\[
+  \Ghat = \frac{1}{n}\sum_{i=1}^n IF_i IF_i^\top .
+\]
+This matrix is positive semidefinite by construction, but it is not guaranteed
+to be positive definite in finite samples. It can be rank deficient whenever
+the casewise influence matrix does not span every threshold/correlation moment
+direction.
+
+\section*{Why robust Gamma can be singular}
+
+Clipping and h-score caps intentionally remove or attenuate information from
+cells that look implausible under the fitted table. In finite samples, this can
+erase enough directions that $\Ghat$ becomes singular or nearly singular.
+This is especially likely when:
+
+\begin{itemize}
+\item the table is bivariate but the moment vector still contains many
+  thresholds plus one correlation;
+\item high contamination concentrates observations into a few cells;
+\item hard caps or Huber residual clips set derivatives to zero in influential
+  cells;
+\item some categories are sparse, so several threshold directions are only
+  weakly represented;
+\item the bread matrix is itself ill-conditioned, magnifying numerical rank
+  issues in the influence rows.
+\end{itemize}
+
+Thus a non-positive-definite $\Ghat$ is not necessarily evidence that the
+robust correlation estimate is unusable. It mainly says that the full WLS
+weight matrix is not invertible without a regularization decision. DWLS can
+remain usable if the diagonal entries are finite and positive.
+
+\section*{Repair policy to consider}
+
+For the methods-developer surface, keep the raw objects visible and make any
+repair explicit. A defensible contract is:
+
+\begin{enumerate}
+\item always return the robust moments and raw $\Ghat$ when they are finite;
+\item build DWLS weights from the diagonal when the diagonal is positive;
+\item build full WLS weights only after an explicit policy:
+  \begin{itemize}
+  \item error on non-positive-definite $\Ghat$;
+  \item ridge/eigenvalue floor;
+  \item Moore--Penrose or truncated eigenspace pseudoinverse;
+  \item shrinkage toward the diagonal or identity.
+  \end{itemize}
+\item record diagnostics:
+  \[
+    \lambda_{\min}(\Ghat),\quad
+    \kappa(\Ghat),\quad
+    \mathrm{rank}(\Ghat),\quad
+    \text{repair kind and intensity}.
+  \]
+\end{enumerate}
+
+For the paper simulations, the first useful step is diagnostic rather than
+automatic repair: add $\Ghat$ eigenvalue/rank/condition summaries to the CSV.
+Then compare DWLS behavior before deciding whether full WLS repair belongs in
+the main text or only in implementation notes.
+
+\section*{Immediate simulation changes}
+
+\begin{itemize}
+\item Report the centered smooth cap $(a,b)=(1.3,1.9)$ as the primary smooth
+  comparator to WMA $k=1.6$.
+\item Keep the original $(1.6,2.2)$ only as a ``less aggressive smooth cap''
+  sensitivity check if needed.
+\item Add Gamma diagnostics to the runner before scaling replications.
+\item Treat full-WLS failures as data about weight instability, not as missing
+  robust polychoric estimates.
+\end{itemize}
+
+\end{document}
