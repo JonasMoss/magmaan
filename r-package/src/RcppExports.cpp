@@ -378,6 +378,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// estimate_structured_gamma
+SEXP estimate_structured_gamma(Rcpp::List fit, SEXP raw_data);
+RcppExport SEXP _magmaan_estimate_structured_gamma(SEXP fitSEXP, SEXP raw_dataSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(estimate_structured_gamma(fit, raw_data));
+    return rcpp_result_gen;
+END_RCPP
+}
 // estimate_structured_gamma_weight
 SEXP estimate_structured_gamma_weight(Rcpp::List fit, SEXP raw_data);
 RcppExport SEXP _magmaan_estimate_structured_gamma_weight(SEXP fitSEXP, SEXP raw_dataSEXP) {
@@ -1078,6 +1090,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_gls_snlls_impl", (DL_FUNC) &_magmaan_fit_gls_snlls_impl, 5},
     {"_magmaan_fit_wls_snlls_impl", (DL_FUNC) &_magmaan_fit_wls_snlls_impl, 6},
     {"_magmaan_fit_start_values", (DL_FUNC) &_magmaan_fit_start_values, 2},
+    {"_magmaan_estimate_structured_gamma", (DL_FUNC) &_magmaan_estimate_structured_gamma, 2},
     {"_magmaan_estimate_structured_gamma_weight", (DL_FUNC) &_magmaan_estimate_structured_gamma_weight, 2},
     {"_magmaan_model_implied", (DL_FUNC) &_magmaan_model_implied, 1},
     {"_magmaan_infer_information_expected", (DL_FUNC) &_magmaan_infer_information_expected, 1},

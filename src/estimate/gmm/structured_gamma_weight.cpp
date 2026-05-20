@@ -126,9 +126,9 @@ Eigen::VectorXd source_cumulants_ols(const Eigen::MatrixXd& X,
   return B.completeOrthogonalDecomposition().solve(c);
 }
 
-Eigen::MatrixXd structured_gamma(const Eigen::MatrixXd& Lambda,
-                                 const Eigen::MatrixXd& Sigma,
-                                 const Eigen::VectorXd& kappa) {
+Eigen::MatrixXd structured_gamma_from_cumulants(const Eigen::MatrixXd& Lambda,
+                                                const Eigen::MatrixXd& Sigma,
+                                                const Eigen::VectorXd& kappa) {
   const Eigen::Index p = Sigma.rows();
   const Eigen::Index q = Lambda.cols();
   const Eigen::Index pstar = vech_len(p);
@@ -162,8 +162,8 @@ Eigen::MatrixXd structured_gamma(const Eigen::MatrixXd& Lambda,
 
 }  // namespace
 
-fit_expected<gmm::Weight>
-structured_gamma_weight(const model::ModelEvaluator& ev,
+fit_expected<std::vector<Eigen::MatrixXd>>
+structured_gamma_matrix(const model::ModelEvaluator& ev,
                         const model::MatrixRep& rep,
                         const data::SampleStats& samp,
                         const data::RawData& raw,
@@ -188,8 +188,8 @@ structured_gamma_weight(const model::ModelEvaluator& ev,
         "structured_gamma_weight: theta0: " + matrices.error().detail));
   }
 
-  gmm::Weight W;
-  W.reserve(raw.X.size());
+  std::vector<Eigen::MatrixXd> G;
+  G.reserve(raw.X.size());
   for (std::size_t b = 0; b < raw.X.size(); ++b) {
     const model::BlockMatrices& mb = matrices->blocks[b];
     if (mb.Lambda.cols() == 0) {
@@ -201,8 +201,25 @@ structured_gamma_weight(const model::ModelEvaluator& ev,
     const Eigen::VectorXd kappa =
         source_cumulants_ols(raw.X[b], mb.Lambda, eval0->moments.sigma[b]);
     const Eigen::MatrixXd Gamma =
-        structured_gamma(mb.Lambda, eval0->moments.sigma[b], kappa);
+        structured_gamma_from_cumulants(mb.Lambda, eval0->moments.sigma[b], kappa);
+    G.push_back(0.5 * (Gamma + Gamma.transpose()).eval());
+  }
+  return G;
+}
 
+fit_expected<gmm::Weight>
+structured_gamma_weight(const model::ModelEvaluator& ev,
+                        const model::MatrixRep& rep,
+                        const data::SampleStats& samp,
+                        const data::RawData& raw,
+                        const Eigen::VectorXd& theta0) {
+  auto G_or = structured_gamma_matrix(ev, rep, samp, raw, theta0);
+  if (!G_or.has_value()) return std::unexpected(G_or.error());
+
+  gmm::Weight W;
+  W.reserve(G_or->size());
+  for (std::size_t b = 0; b < G_or->size(); ++b) {
+    const Eigen::MatrixXd& Gamma = (*G_or)[b];
     Eigen::LLT<Eigen::MatrixXd> g_llt(Gamma);
     if (g_llt.info() != Eigen::Success) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,

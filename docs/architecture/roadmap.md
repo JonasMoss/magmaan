@@ -226,8 +226,9 @@ gtol, history)` argument.
   complete-data, covariance-only pure CFA. The builder estimates independent
   factor/uniqueness fourth cumulants from raw data, builds the structured
   covariance-moment Gamma, inverts it, and returns an ordinary `gmm::Weight`
-  for the existing WLS path. It is a paper-facing frontier helper, not a new
-  estimator or default.
+  for the existing WLS path. The raw structured Gamma matrix is also exposed so
+  paper-local R code can inspect or regularize it before inversion. It is a
+  paper-facing frontier helper, not a new estimator or default.
 - Separable nonlinear least squares profiling exists for LS estimators where
   conditionally linear parameters can be profiled out.
 

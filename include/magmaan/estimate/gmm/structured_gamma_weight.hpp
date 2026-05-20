@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include <Eigen/Core>
 
 #include "magmaan/data/raw_data.hpp"
@@ -18,9 +20,18 @@ namespace magmaan::estimate::frontier {
 //
 //   X = Lambda eta + epsilon
 //
-// with mutually independent factor and uniqueness sources, plugs them into the
-// structured Gamma formula, and returns W = Gamma^{-1}. The returned
-// `gmm::Weight` is consumed by the ordinary WLS / moment-quadratic path.
+// with mutually independent factor and uniqueness sources, and plugs them into
+// the structured Gamma formula. The raw Gamma builder is exposed separately so
+// paper-local code can inspect or regularize it before inversion.
+fit_expected<std::vector<Eigen::MatrixXd>>
+structured_gamma_matrix(const model::ModelEvaluator& ev,
+                        const model::MatrixRep& rep,
+                        const data::SampleStats& samp,
+                        const data::RawData& raw,
+                        const Eigen::VectorXd& theta0);
+
+// Returns W = Gamma^{-1}. The returned `gmm::Weight` is consumed by the
+// ordinary WLS / moment-quadratic path.
 fit_expected<gmm::Weight>
 structured_gamma_weight(const model::ModelEvaluator& ev,
                         const model::MatrixRep& rep,
