@@ -221,6 +221,13 @@ gtol, history)` argument.
   to the same DLS builder, so modification-index and weighted-moment sandwich
   paths consume the result exactly like any supplied WLS weight. Local
   simulation checks live under `tests/checks/dls/`.
+- Model-implied fourth-order / structured-ADF weights are available as an
+  explicit `estimate::frontier::structured_gamma_weight()` builder for
+  complete-data, covariance-only pure CFA. The builder estimates independent
+  factor/uniqueness fourth cumulants from raw data, builds the structured
+  covariance-moment Gamma, inverts it, and returns an ordinary `gmm::Weight`
+  for the existing WLS path. It is a paper-facing frontier helper, not a new
+  estimator or default.
 - Separable nonlinear least squares profiling exists for LS estimators where
   conditionally linear parameters can be profiled out.
 

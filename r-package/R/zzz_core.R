@@ -160,6 +160,7 @@ magmaan_core <- local({
       "estimate_gls_snlls",
       "estimate_wls_snlls",
       "estimate_start_values",
+      "estimate_structured_gamma_weight",
       "estimate_fiml_robust_mlr"
     ),
     inference = c(
