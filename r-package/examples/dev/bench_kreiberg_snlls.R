@@ -2,7 +2,7 @@ library(magmaan)
 
 core <- magmaan_core
 
-times <- as.integer(Sys.getenv("MAGMAAN_KREIBERG_TIMES", "500"))
+times <- as.integer(Sys.getenv("MAGMAAN_KREIBERG_TIMES", "100"))
 lbfgsb <- list(max_iter = 5000L, ftol = 1e-12, gtol = 1e-8)
 ceres <- list(max_iter = 500L, ftol = 1e-10, gtol = 1e-7, ptol = 1e-8)
 
@@ -68,15 +68,13 @@ fit_one <- function(spec, dat, backend, snlls, opts) {
     return(core$fit_gls(spec, dat, optimizer = "lbfgs", control = opts,
                         bounds = inf_bounds(spec)))
   }
-  if (backend == "ceres") {
-    if (snlls) return(core$fit_gls_snlls(spec, dat, optimizer = "ceres", control = ceres))
-    return(core$fit_gls(spec, dat, optimizer = "ceres", control = ceres))
+  optimizer <- gsub("_", "-", backend, fixed = TRUE)
+  control <- if (startsWith(optimizer, "ceres")) ceres else opts
+  if (snlls) {
+    return(core$fit_gls_snlls(spec, dat, optimizer = optimizer,
+                              control = control))
   }
-  if (backend == "ceres_bfgs") {
-    if (!snlls) stop("Ceres BFGS is exposed only for SNLLS", call. = FALSE)
-    return(core$fit_gls_snlls(spec, dat, optimizer = "ceres-bfgs", control = ceres))
-  }
-  stop("unknown backend: ", backend, call. = FALSE)
+  core$fit_gls(spec, dat, optimizer = optimizer, control = control)
 }
 
 recover_snlls_iterations <- function(spec, dat, backend, fit, opts) {
@@ -92,13 +90,12 @@ measure_spec <- function(case, spec, setup_usec) {
   dat <- df_to_data(case$data, spec, scaling = "n-1")
 
   rows <- list()
-  jobs <- list(
-    list(backend = "lbfgsb", snlls = FALSE),
-    list(backend = "lbfgsb", snlls = TRUE),
-    list(backend = "ceres", snlls = FALSE),
-    list(backend = "ceres", snlls = TRUE),
-    list(backend = "ceres_bfgs", snlls = TRUE)
-  )
+  backends <- c("lbfgsb", "ceres", "ceres_bfgs", "port", "port_nls",
+                "nlopt_slsqp", "nlopt_bobyqa", "nlopt_tnewton",
+                "nlopt_var2", "nlopt_lbfgs")
+  jobs <- as.vector(t(outer(backends, c(FALSE, TRUE), Vectorize(function(b, s) {
+    list(list(backend = b, snlls = s))
+  }))), mode = "list")
   for (job in jobs) {
     backend <- job$backend
     snlls <- job$snlls
@@ -154,7 +151,7 @@ ratio_or_na <- function(num, den) {
 }
 
 ordinary_snlls_ratios <- function(out) {
-  comparable <- out[out$backend %in% c("lbfgsb", "ceres"), ]
+  comparable <- out[is.na(out$error), ]
   rows <- list()
   for (case in unique(comparable$case)) {
     for (backend in unique(comparable$backend[comparable$case == case])) {
@@ -197,8 +194,9 @@ print(ordinary_snlls_ratios(out), digits = 6, row.names = FALSE)
 
 cat("\nNotes\n")
 cat("* Timings are magmaan-only and use magmaan starting values.\n")
-cat("* Ordinary GLS passes explicit +/-Inf bounds so magmaan dispatches to LBFGS-B and reports solver iterations reliably.\n")
-cat("* Ratios are printed only for backends with both ordinary and SNLLS rows; ceres_bfgs is SNLLS-only.\n")
+cat("* The lbfgsb row is the accepted R optimizer string \"lbfgs\" with explicit +/-Inf bounds on ordinary GLS, preserving the historical LBFGS-B comparison row.\n")
+cat("* Other backend labels are accepted R optimizer strings with underscores replacing dashes for data-frame readability.\n")
+cat("* Ratios are printed only for successful backends with both ordinary and SNLLS rows.\n")
 cat("* cap_recovered means unbounded SNLLS accepted a salvaged L-BFGS iterate; the count is the smallest max_iter cap that succeeds.\n")
 cat("* Kreiberg & Zhou's Geiser depression example is not run: the data are not vendored here, and the model is a higher-order/indicator-specific latent-state model.\n")
 cat("* The HS CFA case is the supported public-data analogue from Kreiberg et al. (2021).\n")

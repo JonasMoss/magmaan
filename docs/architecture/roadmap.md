@@ -161,6 +161,11 @@ gtol, history)` argument.
   BFGS (VAR2); NLopt's own L-BFGS as a sanity-check against LBFGS++. All
   five share the one `NloptOptimizer` adapter parameterised over an opaque
   `NloptAlgorithm` enum.
+- The local `ceres` preset is the optional optimizer comparison build: it
+  enables Ceres and NLopt together while PORT remains enabled by default.
+  `just r-install-ceres` mirrors those compile definitions into the R shared
+  object so all accepted optimizer strings are executable from the R dev
+  surface in one install.
 
 ### Least-squares estimators
 
