@@ -26,6 +26,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/estimate/fit.hpp"              // Estimates
+#include "magmaan/estimate/backend_strings.hpp"  // backend_from_string
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/inference/inference.hpp"        // information_*, vcov, se, chi2_stat, df_stat
 #include "magmaan/optim/lbfgs_optimizer.hpp"  // LbfgsOptions
@@ -333,6 +334,21 @@ inline magmaan::optim::LbfgsOptions lbfgs_opts_from(Rcpp::Nullable<Rcpp::List> l
     if (l.containsElementNamed("history"))  o.history  = Rcpp::as<int>(l["history"]);
   }
   return o;
+}
+
+// Parse the user-facing `optimizer = "..."` string into the C++ Backend
+// enum. Empty / NULL ⇒ default "lbfgs". Unknown strings are surfaced as a
+// magmaan-style Rcpp::stop with the accepted-names list — same wording as
+// the C++ backend_from_string error, so users typing `optimizer = "ceres-lm"`
+// get a clear "did you mean..." correction.
+inline magmaan::estimate::Backend
+backend_from_optimizer_arg(Rcpp::Nullable<Rcpp::String> optimizer) {
+  if (optimizer.isNull()) return magmaan::estimate::Backend::Lbfgs;
+  const std::string name = Rcpp::as<std::string>(optimizer.get());
+  if (name.empty()) return magmaan::estimate::Backend::Lbfgs;
+  auto b_or = magmaan::estimate::backend_from_string(name);
+  if (!b_or.has_value()) Rcpp::stop("magmaan: " + b_or.error().detail);
+  return *b_or;
 }
 
 // ---- model context ----------------------------------------------------------

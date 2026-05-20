@@ -4,6 +4,7 @@ MAGMAAN_ROOT := $(abspath $(CURDIR)/../..)
 MAGMAAN_PRESET ?= opt
 MAGMAAN_BUILD ?= $(MAGMAAN_ROOT)/build/$(MAGMAAN_PRESET)
 MAGMAAN_LIB  := $(MAGMAAN_BUILD)/libmagmaan.a
+MAGMAAN_PORT_LIB := $(MAGMAAN_BUILD)/libport.a
 MAGMAAN_NLOPT_LIB := $(MAGMAAN_BUILD)/_deps/nlopt-build/libnlopt.a
 MAGMAAN_WITH_CERES_R ?= 0
 MAGMAAN_WITH_NLOPT_R ?= 0
@@ -12,7 +13,11 @@ MAGMAAN_CONFIG_STAMP := .magmaan-build-config
 CXX_STD       = CXX23
 PKG_CPPFLAGS  = -I$(MAGMAAN_ROOT)/include -DEIGEN_MAX_ALIGN_BYTES=64
 override CXXFLAGS += -O3 -DNDEBUG -march=native
-PKG_LIBS      = $(MAGMAAN_LIB)
+# libmagmaan.a links PRIVATEly against libport.a in the C++ CMake build, so
+# the static archive carries unresolved PORT symbols (drmngb_, drn2gb_, ...).
+# The R shared object must pull in libport.a explicitly or it fails to load
+# with `undefined symbol: drmngb_`. Same pattern Ceres / NLopt already use.
+PKG_LIBS      = $(MAGMAAN_LIB) $(MAGMAAN_PORT_LIB)
 
 ifeq ($(MAGMAAN_WITH_CERES_R),1)
 PKG_CPPFLAGS += -DMAGMAAN_WITH_CERES

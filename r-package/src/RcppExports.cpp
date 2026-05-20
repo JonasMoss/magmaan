@@ -69,28 +69,30 @@ BEGIN_RCPP
 END_RCPP
 }
 // fit_fit
-Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> lbfgs);
-RcppExport SEXP _magmaan_fit_fit(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP lbfgsSEXP) {
+Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control);
+RcppExport SEXP _magmaan_fit_fit(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgs(lbfgsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_fit(partable, sample_stats, lbfgs));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_fit(partable, sample_stats, optimizer, control));
     return rcpp_result_gen;
 END_RCPP
 }
 // fit_ml_impl
-Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> lbfgs);
-RcppExport SEXP _magmaan_fit_ml_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP lbfgsSEXP) {
+Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control);
+RcppExport SEXP _magmaan_fit_ml_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgs(lbfgsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_ml_impl(partable, sample_stats, lbfgs));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_ml_impl(partable, sample_stats, optimizer, control));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -108,45 +110,48 @@ BEGIN_RCPP
 END_RCPP
 }
 // fit_uls_impl
-Rcpp::List fit_uls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_uls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+Rcpp::List fit_uls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_uls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_uls_impl(partable, sample_stats, lbfgsb, bounds));
+    rcpp_result_gen = Rcpp::wrap(fit_uls_impl(partable, sample_stats, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
 // fit_gls_impl
-Rcpp::List fit_gls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_gls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+Rcpp::List fit_gls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_gls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_gls_impl(partable, sample_stats, lbfgsb, bounds));
+    rcpp_result_gen = Rcpp::wrap(fit_gls_impl(partable, sample_stats, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
 // fit_wls_impl
-Rcpp::List fit_wls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_wls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP WSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+Rcpp::List fit_wls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_wls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP WSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
     Rcpp::traits::input_parameter< SEXP >::type W(WSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_wls_impl(partable, sample_stats, W, lbfgsb, bounds));
+    rcpp_result_gen = Rcpp::wrap(fit_wls_impl(partable, sample_stats, W, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -256,201 +261,108 @@ BEGIN_RCPP
 END_RCPP
 }
 // fit_dwls_ordinal_impl
-Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_dwls_ordinal_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_dwls_ordinal_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_dwls_ordinal_impl(partable, ordinal_stats, lbfgsb, bounds));
+    rcpp_result_gen = Rcpp::wrap(fit_dwls_ordinal_impl(partable, ordinal_stats, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
 // fit_wls_ordinal_impl
-Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_wls_ordinal_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_wls_ordinal_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_wls_ordinal_impl(partable, ordinal_stats, lbfgsb, bounds));
+    rcpp_result_gen = Rcpp::wrap(fit_wls_ordinal_impl(partable, ordinal_stats, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
 // fit_dwls_mixed_ordinal_impl
-Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_dwls_mixed_ordinal_impl(SEXP partableSEXP, SEXP mixed_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_dwls_mixed_ordinal_impl(SEXP partableSEXP, SEXP mixed_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type mixed_stats(mixed_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_dwls_mixed_ordinal_impl(partable, mixed_stats, lbfgsb, bounds));
+    rcpp_result_gen = Rcpp::wrap(fit_dwls_mixed_ordinal_impl(partable, mixed_stats, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
 // fit_wls_mixed_ordinal_impl
-Rcpp::List fit_wls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_wls_mixed_ordinal_impl(SEXP partableSEXP, SEXP mixed_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+Rcpp::List fit_wls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_wls_mixed_ordinal_impl(SEXP partableSEXP, SEXP mixed_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type mixed_stats(mixed_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_wls_mixed_ordinal_impl(partable, mixed_stats, lbfgsb, bounds));
+    rcpp_result_gen = Rcpp::wrap(fit_wls_mixed_ordinal_impl(partable, mixed_stats, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
 // fit_uls_snlls_impl
-Rcpp::List fit_uls_snlls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_uls_snlls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+Rcpp::List fit_uls_snlls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_uls_snlls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_uls_snlls_impl(partable, sample_stats, lbfgsb, bounds));
+    rcpp_result_gen = Rcpp::wrap(fit_uls_snlls_impl(partable, sample_stats, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
 // fit_gls_snlls_impl
-Rcpp::List fit_gls_snlls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_gls_snlls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+Rcpp::List fit_gls_snlls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_gls_snlls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_gls_snlls_impl(partable, sample_stats, lbfgsb, bounds));
+    rcpp_result_gen = Rcpp::wrap(fit_gls_snlls_impl(partable, sample_stats, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
 // fit_wls_snlls_impl
-Rcpp::List fit_wls_snlls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W, Rcpp::Nullable<Rcpp::List> lbfgsb, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_wls_snlls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP WSEXP, SEXP lbfgsbSEXP, SEXP boundsSEXP) {
+Rcpp::List fit_wls_snlls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_wls_snlls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP WSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
     Rcpp::traits::input_parameter< SEXP >::type W(WSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgsb(lbfgsbSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_wls_snlls_impl(partable, sample_stats, W, lbfgsb, bounds));
-    return rcpp_result_gen;
-END_RCPP
-}
-// fit_uls_ceres_impl
-Rcpp::List fit_uls_ceres_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> ceres, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_uls_ceres_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP ceresSEXP, SEXP boundsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type ceres(ceresSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_uls_ceres_impl(partable, sample_stats, ceres, bounds));
-    return rcpp_result_gen;
-END_RCPP
-}
-// fit_uls_snlls_ceres_impl
-Rcpp::List fit_uls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> ceres, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_uls_snlls_ceres_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP ceresSEXP, SEXP boundsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type ceres(ceresSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_uls_snlls_ceres_impl(partable, sample_stats, ceres, bounds));
-    return rcpp_result_gen;
-END_RCPP
-}
-// fit_gls_snlls_ceres_impl
-Rcpp::List fit_gls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> ceres, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_gls_snlls_ceres_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP ceresSEXP, SEXP boundsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type ceres(ceresSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_gls_snlls_ceres_impl(partable, sample_stats, ceres, bounds));
-    return rcpp_result_gen;
-END_RCPP
-}
-// fit_gls_snlls_ceres_bfgs_impl
-Rcpp::List fit_gls_snlls_ceres_bfgs_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> ceres, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_gls_snlls_ceres_bfgs_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP ceresSEXP, SEXP boundsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type ceres(ceresSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_gls_snlls_ceres_bfgs_impl(partable, sample_stats, ceres, bounds));
-    return rcpp_result_gen;
-END_RCPP
-}
-// fit_wls_snlls_ceres_impl
-Rcpp::List fit_wls_snlls_ceres_impl(SEXP partable, Rcpp::List sample_stats, SEXP W, Rcpp::Nullable<Rcpp::List> ceres, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_wls_snlls_ceres_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP WSEXP, SEXP ceresSEXP, SEXP boundsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type W(WSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type ceres(ceresSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_wls_snlls_ceres_impl(partable, sample_stats, W, ceres, bounds));
-    return rcpp_result_gen;
-END_RCPP
-}
-// fit_gls_ceres_impl
-Rcpp::List fit_gls_ceres_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> ceres, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_gls_ceres_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP ceresSEXP, SEXP boundsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type ceres(ceresSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_gls_ceres_impl(partable, sample_stats, ceres, bounds));
-    return rcpp_result_gen;
-END_RCPP
-}
-// fit_wls_ceres_impl
-Rcpp::List fit_wls_ceres_impl(SEXP partable, Rcpp::List sample_stats, SEXP W, Rcpp::Nullable<Rcpp::List> ceres, Rcpp::Nullable<Rcpp::List> bounds);
-RcppExport SEXP _magmaan_fit_wls_ceres_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP WSEXP, SEXP ceresSEXP, SEXP boundsSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
-    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type W(WSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type ceres(ceresSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_wls_ceres_impl(partable, sample_stats, W, ceres, bounds));
+    rcpp_result_gen = Rcpp::wrap(fit_wls_snlls_impl(partable, sample_stats, W, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1132,12 +1044,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_parse_parse", (DL_FUNC) &_magmaan_parse_parse, 1},
     {"_magmaan_lavaan_lavaanify", (DL_FUNC) &_magmaan_lavaan_lavaanify, 15},
     {"_magmaan_model_matrix_rep", (DL_FUNC) &_magmaan_model_matrix_rep, 1},
-    {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 3},
-    {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 3},
+    {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 4},
+    {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 4},
     {"_magmaan_fit_fiml_impl", (DL_FUNC) &_magmaan_fit_fiml_impl, 3},
-    {"_magmaan_fit_uls_impl", (DL_FUNC) &_magmaan_fit_uls_impl, 4},
-    {"_magmaan_fit_gls_impl", (DL_FUNC) &_magmaan_fit_gls_impl, 4},
-    {"_magmaan_fit_wls_impl", (DL_FUNC) &_magmaan_fit_wls_impl, 5},
+    {"_magmaan_fit_uls_impl", (DL_FUNC) &_magmaan_fit_uls_impl, 5},
+    {"_magmaan_fit_gls_impl", (DL_FUNC) &_magmaan_fit_gls_impl, 5},
+    {"_magmaan_fit_wls_impl", (DL_FUNC) &_magmaan_fit_wls_impl, 6},
     {"_magmaan_data_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_from_raw_impl, 1},
     {"_magmaan_data_ordinal_stats_h_weighted_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_h_weighted_from_raw_impl, 6},
     {"_magmaan_data_ordinal_stats_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_dpd_from_raw_impl, 2},
@@ -1146,20 +1058,13 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_data_shrink_mixed_ordinal_stats_impl", (DL_FUNC) &_magmaan_data_shrink_mixed_ordinal_stats_impl, 4},
     {"_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl, 3},
     {"_magmaan_data_mixed_ordinal_stats_huber_residual_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_huber_residual_from_raw_impl, 4},
-    {"_magmaan_fit_dwls_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_ordinal_impl, 4},
-    {"_magmaan_fit_wls_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_ordinal_impl, 4},
-    {"_magmaan_fit_dwls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_mixed_ordinal_impl, 4},
-    {"_magmaan_fit_wls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_mixed_ordinal_impl, 4},
-    {"_magmaan_fit_uls_snlls_impl", (DL_FUNC) &_magmaan_fit_uls_snlls_impl, 4},
-    {"_magmaan_fit_gls_snlls_impl", (DL_FUNC) &_magmaan_fit_gls_snlls_impl, 4},
-    {"_magmaan_fit_wls_snlls_impl", (DL_FUNC) &_magmaan_fit_wls_snlls_impl, 5},
-    {"_magmaan_fit_uls_ceres_impl", (DL_FUNC) &_magmaan_fit_uls_ceres_impl, 4},
-    {"_magmaan_fit_uls_snlls_ceres_impl", (DL_FUNC) &_magmaan_fit_uls_snlls_ceres_impl, 4},
-    {"_magmaan_fit_gls_snlls_ceres_impl", (DL_FUNC) &_magmaan_fit_gls_snlls_ceres_impl, 4},
-    {"_magmaan_fit_gls_snlls_ceres_bfgs_impl", (DL_FUNC) &_magmaan_fit_gls_snlls_ceres_bfgs_impl, 4},
-    {"_magmaan_fit_wls_snlls_ceres_impl", (DL_FUNC) &_magmaan_fit_wls_snlls_ceres_impl, 5},
-    {"_magmaan_fit_gls_ceres_impl", (DL_FUNC) &_magmaan_fit_gls_ceres_impl, 4},
-    {"_magmaan_fit_wls_ceres_impl", (DL_FUNC) &_magmaan_fit_wls_ceres_impl, 5},
+    {"_magmaan_fit_dwls_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_ordinal_impl, 5},
+    {"_magmaan_fit_wls_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_ordinal_impl, 5},
+    {"_magmaan_fit_dwls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_mixed_ordinal_impl, 5},
+    {"_magmaan_fit_wls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_mixed_ordinal_impl, 5},
+    {"_magmaan_fit_uls_snlls_impl", (DL_FUNC) &_magmaan_fit_uls_snlls_impl, 5},
+    {"_magmaan_fit_gls_snlls_impl", (DL_FUNC) &_magmaan_fit_gls_snlls_impl, 5},
+    {"_magmaan_fit_wls_snlls_impl", (DL_FUNC) &_magmaan_fit_wls_snlls_impl, 6},
     {"_magmaan_fit_start_values", (DL_FUNC) &_magmaan_fit_start_values, 2},
     {"_magmaan_model_implied", (DL_FUNC) &_magmaan_model_implied, 1},
     {"_magmaan_infer_information_expected", (DL_FUNC) &_magmaan_infer_information_expected, 1},
