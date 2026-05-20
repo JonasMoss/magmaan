@@ -139,8 +139,16 @@ golden `parTable()` fixtures.
 - `Backend::Ceres` / `Backend::CeresBfgs` cover Ceres Levenberg-Marquardt and
   dense line-search BFGS on the least-squares path (build with
   `MAGMAAN_WITH_CERES=ON`).
-- `Backend::Nlopt` exposes NLopt SLSQP for ML and LS scalar paths
-  (`MAGMAAN_WITH_NLOPT=ON`).
+- `Backend::NloptSlsqp` exposes NLopt's SLSQP for ML and LS scalar paths
+  (gradient SQP, Kraft 1988; `MAGMAAN_WITH_NLOPT=ON`).
+- `Backend::NloptBobyqa`, `Backend::NloptTnewton`, `Backend::NloptVar2`,
+  `Backend::NloptLbfgs` round out the NLopt roster with distinct algorithm
+  ideas: Powell 2009 derivative-free quadratic-model trust region (BOBYQA,
+  finite bounds required); Nash 1985 preconditioned truncated Newton with
+  CG inner solve (TNEWTON); Shanno-Phua 1980 full (dense) variable-metric
+  BFGS (VAR2); NLopt's own L-BFGS as a sanity-check against LBFGS++. All
+  five share the one `NloptOptimizer` adapter parameterised over an opaque
+  `NloptAlgorithm` enum.
 
 ### Least-squares estimators
 

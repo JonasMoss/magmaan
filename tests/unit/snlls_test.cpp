@@ -339,7 +339,7 @@ TEST_CASE("SNLLS: Bollen GLS backend cross-check") {
 #endif
 
 #ifdef MAGMAAN_WITH_NLOPT
-  auto nlopt = run(Backend::Nlopt, "nlopt-slsqp");
+  auto nlopt = run(Backend::NloptSlsqp, "nlopt-slsqp");
   CHECK(nlopt.has_value());
   if (nlopt.has_value()) {
     CHECK(nlopt->fmin == doctest::Approx(lbfgs->fmin).epsilon(1e-5));

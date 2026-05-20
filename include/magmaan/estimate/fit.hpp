@@ -30,20 +30,44 @@ struct Estimates {
 };
 
 // Optimizer backend selector for the convenience composers below.
-//   Lbfgs     — L-BFGS / L-BFGS-B (the default).
-//   Ceres     — Levenberg–Marquardt; least-squares path only, needs MAGMAAN_WITH_CERES.
-//   CeresBfgs — Ceres line-search dense BFGS; unbounded least-squares path only.
-//   Nlopt     — NLopt SLSQP cross-check; needs MAGMAAN_WITH_NLOPT.
-//   Port      — PORT drmngb model-Hessian trust region with bounds (the
-//               algorithm behind R's `nlminb`; TOMS 611). Needs
-//               MAGMAAN_WITH_PORT (default ON). Replaces the now-retired
-//               CppNumericalSolvers-backed TrustRegion entry.
-//   PortNls   — PORT drn2gb NL2SOL adaptive trust region with bounds (the
-//               algorithm behind R's `nls`; TOMS 573 Dennis-Gay-Welsch).
-//               Least-squares path only — sees the multi-residual structure
-//               directly rather than the scalarised ½‖r‖² collapse. Needs
-//               MAGMAAN_WITH_PORT.
-enum class Backend { Lbfgs, Ceres, CeresBfgs, Nlopt, Port, PortNls };
+//   Lbfgs        — L-BFGS / L-BFGS-B (the default).
+//   Ceres        — Levenberg–Marquardt; LS path only, needs MAGMAAN_WITH_CERES.
+//   CeresBfgs    — Ceres line-search dense BFGS; unbounded LS path only.
+//   NloptSlsqp   — NLopt SLSQP (Kraft 1988); sequential quadratic programming
+//                  with native box bounds. Needs MAGMAAN_WITH_NLOPT.
+//   NloptBobyqa  — NLopt BOBYQA (Powell 2009); derivative-free quadratic-model
+//                  trust region. Requires *finite* bounds. Needs
+//                  MAGMAAN_WITH_NLOPT.
+//   NloptTnewton — NLopt LD_TNEWTON_PRECOND_RESTART (Nash 1985); preconditioned
+//                  truncated Newton with CG inner solve and restart. Distinct
+//                  curvature scheme from L-BFGS. Needs MAGMAAN_WITH_NLOPT.
+//   NloptVar2    — NLopt LD_VAR2 (Shanno-Phua 1980); *full* (dense) BFGS
+//                  variable-metric. The non-limited-memory counterpart to
+//                  L-BFGS; can outperform L-BFGS at SEM-sized n. Needs
+//                  MAGMAAN_WITH_NLOPT.
+//   NloptLbfgs   — NLopt's own L-BFGS; sanity-check against LBFGS++ as the
+//                  default `Lbfgs` backend.
+//   Port         — PORT drmngb model-Hessian trust region with bounds (the
+//                  algorithm behind R's `nlminb`; TOMS 611). Needs
+//                  MAGMAAN_WITH_PORT (default ON). Replaces the now-retired
+//                  CppNumericalSolvers-backed TrustRegion entry.
+//   PortNls      — PORT drn2gb NL2SOL adaptive trust region with bounds (the
+//                  algorithm behind R's `nls`; TOMS 573 Dennis-Gay-Welsch).
+//                  LS path only — sees the multi-residual structure directly
+//                  rather than the scalarised ½‖r‖² collapse. Needs
+//                  MAGMAAN_WITH_PORT.
+enum class Backend {
+  Lbfgs,
+  Ceres,
+  CeresBfgs,
+  NloptSlsqp,
+  NloptBobyqa,
+  NloptTnewton,
+  NloptVar2,
+  NloptLbfgs,
+  Port,
+  PortNls,
+};
 
 // ============================================================================
 // Convenience composers — the template-free core entry points.
@@ -53,10 +77,10 @@ enum class Backend { Lbfgs, Ceres, CeresBfgs, Nlopt, Port, PortNls };
 // evaluator → build the objective → fold equality constraints → optimize →
 // expand to full θ. `x0` (size pt.n_free()) is the caller-supplied start
 // vector; an empty `bounds` means unbounded. `backend` selects the optimizer
-// (see `Backend` above): `Backend::Ceres` / `Backend::Nlopt` / `Backend::Port`
-// need their build flags, and `Backend::Ceres` applies to the least-squares
-// (gmm) path only. `opts` tunes the optimizer (the Ceres path reads max_iter
-// / ftol / gtol from it).
+// (see `Backend` above): `Backend::Ceres` / `Backend::Nlopt*` / `Backend::Port*`
+// need their build flags, and `Backend::Ceres` / `Backend::PortNls` apply to
+// the least-squares (gmm) path only. `opts` tunes the optimizer (the Ceres
+// path reads max_iter / ftol / gtol from it).
 
 // Normal-theory maximum likelihood. `backend` selects the optimizer; the
 // default L-BFGS, the NLopt SLSQP cross-check, or the PORT (= nlminb)

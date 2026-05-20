@@ -49,6 +49,22 @@ FitError make_err(FitError::Kind k, std::string detail,
   return FitError{k, std::move(detail), iter, fval};
 }
 
+// Translate the public opaque `NloptAlgorithm` enum to NLopt's internal
+// `nlopt_algorithm`. Keeping this conversion in the .cpp keeps the NLopt
+// header out of every translation unit that touches our public interface.
+nlopt_algorithm to_nlopt_algo(NloptAlgorithm a) {
+  switch (a) {
+    case NloptAlgorithm::Slsqp:   return NLOPT_LD_SLSQP;
+    case NloptAlgorithm::Bobyqa:  return NLOPT_LN_BOBYQA;
+    case NloptAlgorithm::Tnewton: return NLOPT_LD_TNEWTON_PRECOND_RESTART;
+    case NloptAlgorithm::Var2:    return NLOPT_LD_VAR2;
+    case NloptAlgorithm::Lbfgs:   return NLOPT_LD_LBFGS;
+  }
+  // Unreachable under -Wswitch-enum; default to SLSQP as a conservative
+  // fall-back in case someone adds an enumerator without updating this.
+  return NLOPT_LD_SLSQP;
+}
+
 }  // namespace
 
 fit_expected<LbfgsOutput>
@@ -64,11 +80,14 @@ NloptOptimizer::minimize(Objective f,
             ", x0=" + std::to_string(x0.size()) + ")"));
   }
 
-  const unsigned n = static_cast<unsigned>(x0.size());
-  nlopt_opt opt = nlopt_create(NLOPT_LD_SLSQP, n);
+  const unsigned        n        = static_cast<unsigned>(x0.size());
+  const nlopt_algorithm raw_algo = to_nlopt_algo(algo_);
+  nlopt_opt             opt      = nlopt_create(raw_algo, n);
   if (!opt) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "NloptOptimizer: nlopt_create failed for n=" + std::to_string(n)));
+        "NloptOptimizer: nlopt_create failed for algorithm " +
+            std::string(nlopt_algorithm_name(raw_algo)) +
+            ", n=" + std::to_string(n)));
   }
 
   // The objective `f` outlives this whole call; NLopt invokes the trampoline
@@ -85,12 +104,14 @@ NloptOptimizer::minimize(Objective f,
   nlopt_set_xtol_rel(opt, opts_.gtol);
   nlopt_set_maxeval(opt, opts_.max_iter);
 
-  // SLSQP requires a feasible start; project x0 into the box defensively
-  // (callers from fit_* already supply feasible starts).
+  // Project x0 into the box defensively (callers from fit_* already supply
+  // feasible starts; SLSQP and BOBYQA hard-require a feasible start, others
+  // tolerate a slight excursion but converge faster from inside the box).
   Eigen::VectorXd theta = x0.cwiseMax(lower).cwiseMin(upper);
   double fmin = std::numeric_limits<double>::quiet_NaN();
   const nlopt_result rc = nlopt_optimize(opt, theta.data(), &fmin);
   const int n_evals = nlopt_get_numevals(opt);
+  const std::string algo_name = nlopt_algorithm_name(raw_algo);
   nlopt_destroy(opt);
 
   switch (rc) {
@@ -103,27 +124,29 @@ NloptOptimizer::minimize(Objective f,
     case NLOPT_MAXEVAL_REACHED:
     case NLOPT_MAXTIME_REACHED:
       return std::unexpected(make_err(FitError::Kind::OptimizerNonConvergence,
-          "nlopt SLSQP: evaluation budget exhausted without convergence",
-          n_evals, fmin));
+          "nlopt " + algo_name + ": evaluation budget exhausted without "
+          "convergence", n_evals, fmin));
     case NLOPT_FORCED_STOP:
       return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
-          "nlopt SLSQP: forced stop", n_evals, fmin));
+          "nlopt " + algo_name + ": forced stop", n_evals, fmin));
     case NLOPT_OUT_OF_MEMORY:
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          "nlopt SLSQP: out of memory"));
+          "nlopt " + algo_name + ": out of memory"));
     case NLOPT_INVALID_ARGS:
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          "nlopt SLSQP: invalid arguments"));
+          "nlopt " + algo_name + ": invalid arguments (BOBYQA requires "
+          "finite bounds; check that lower/upper aren't all ±infinity)"));
     case NLOPT_FAILURE:
     default:
       return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
-          "nlopt SLSQP: generic solver failure", n_evals, fmin));
+          "nlopt " + algo_name + ": generic solver failure",
+          n_evals, fmin));
   }
 
   if (!std::isfinite(fmin)) {
     return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
-        "nlopt SLSQP: final objective is non-finite (model likely "
-        "under-identified or the start too far from a valid region)",
+        "nlopt " + algo_name + ": final objective is non-finite (model "
+        "likely under-identified or the start too far from a valid region)",
         n_evals, fmin));
   }
   return LbfgsOutput{std::move(theta), fmin, n_evals};

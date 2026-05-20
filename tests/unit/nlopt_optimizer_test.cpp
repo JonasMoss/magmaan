@@ -12,6 +12,7 @@
 
 using magmaan::FitError;
 using magmaan::optim::NloptOptimizer;
+using magmaan::optim::NloptAlgorithm;
 
 // ============================================================================
 // Behavioural tests for the NLopt SLSQP adapter — a gradient-based sequential
@@ -78,6 +79,132 @@ TEST_CASE("NloptOptimizer — bound size mismatch is an error value") {
   auto out = opt.minimize(f, x0, lb, ub);
   REQUIRE_FALSE(out.has_value());
   CHECK(out.error().kind == FitError::Kind::NumericIssue);
+}
+
+// ============================================================================
+// Per-algorithm smoke tests for the four new NLopt backends. Each runs the
+// same quadratic + Rosenbrock pair the SLSQP cases above use, plus the
+// algorithm-specific kicker (BOBYQA bounds, etc.). The shared NloptOptimizer
+// adapter is parameterised over `nlopt_algorithm`, so passing the algorithm
+// enum to the constructor is the only difference per test.
+// ============================================================================
+
+namespace {
+
+auto quadratic_objective(const Eigen::Vector3d& c) {
+  return [c](const Eigen::VectorXd& x, Eigen::VectorXd& g) {
+    g = 2.0 * (x - c);
+    return (x - c).squaredNorm();
+  };
+}
+
+auto rosenbrock_objective() {
+  return [](const Eigen::VectorXd& x, Eigen::VectorXd& g) {
+    const double a = 1.0 - x[0];
+    const double b = x[1] - x[0] * x[0];
+    g.resize(2);
+    g[0] = -2.0 * a - 400.0 * x[0] * b;
+    g[1] = 200.0 * b;
+    return a * a + 100.0 * b * b;
+  };
+}
+
+}  // namespace
+
+// --- Powell BOBYQA (derivative-free quadratic-model TR) --------------------
+
+TEST_CASE("NloptOptimizer/BOBYQA — minimizes a bounded quadratic without gradient") {
+  // BOBYQA ignores any gradient the callback writes; the trampoline already
+  // calls the objective with grad=nullptr for derivative-free algorithms.
+  // We supply a callback that writes a gradient anyway — it should be
+  // discarded, and BOBYQA should still find the optimum.
+  Eigen::Vector3d c(1.0, -2.0, 0.5);
+  NloptOptimizer opt({}, NloptAlgorithm::Bobyqa);
+  // BOBYQA requires finite bounds.
+  Eigen::VectorXd lb(3);  lb << -5.0, -5.0, -5.0;
+  Eigen::VectorXd ub(3);  ub <<  5.0,  5.0,  5.0;
+  auto out = opt.minimize(quadratic_objective(c), Eigen::VectorXd::Zero(3),
+                          lb, ub);
+  REQUIRE(out.has_value());
+  CHECK(out->fmin < 1e-6);
+  CHECK((out->theta_hat - c).norm() < 1e-3);
+}
+
+TEST_CASE("NloptOptimizer/BOBYQA — solves Rosenbrock in a generous box") {
+  NloptOptimizer opt({1000, 1e-12, 1e-8, 10}, NloptAlgorithm::Bobyqa);
+  Eigen::VectorXd x0(2);  x0 << -1.2, 1.0;
+  Eigen::VectorXd lb(2);  lb << -10.0, -10.0;
+  Eigen::VectorXd ub(2);  ub <<  10.0,  10.0;
+  auto out = opt.minimize(rosenbrock_objective(), x0, lb, ub);
+  REQUIRE(out.has_value());
+  CHECK(out->fmin < 1e-3);
+  CHECK((out->theta_hat - Eigen::Vector2d(1.0, 1.0)).norm() < 5e-2);
+}
+
+// BOBYQA's empty-bounds rejection lives at the dispatcher (`optim::nlopt_bobyqa`)
+// rather than the low-level adapter, because NLopt's BOBYQA tolerates
+// ±HUGE_VAL bounds opportunistically — we don't want to rely on that
+// undocumented tolerance. That rejection is tested in the optimizers_test
+// file alongside the other dispatcher-level contracts.
+
+// --- Nash truncated Newton (LD_TNEWTON_PRECOND_RESTART) --------------------
+
+TEST_CASE("NloptOptimizer/TNEWTON — minimizes a well-behaved quadratic") {
+  Eigen::Vector3d c(1.0, -2.0, 0.5);
+  NloptOptimizer opt({}, NloptAlgorithm::Tnewton);
+  auto out = opt.minimize(quadratic_objective(c), Eigen::VectorXd::Zero(3));
+  REQUIRE(out.has_value());
+  CHECK(out->fmin < 1e-8);
+  CHECK((out->theta_hat - c).norm() < 1e-4);
+}
+
+TEST_CASE("NloptOptimizer/TNEWTON — solves the Rosenbrock function") {
+  NloptOptimizer opt({1000, 1e-12, 1e-8, 10}, NloptAlgorithm::Tnewton);
+  Eigen::VectorXd x0(2);  x0 << -1.2, 1.0;
+  auto out = opt.minimize(rosenbrock_objective(), x0);
+  REQUIRE(out.has_value());
+  CHECK(out->fmin < 1e-4);
+  CHECK((out->theta_hat - Eigen::Vector2d(1.0, 1.0)).norm() < 5e-2);
+}
+
+// --- Shanno-Phua full BFGS (LD_VAR2) ---------------------------------------
+
+TEST_CASE("NloptOptimizer/VAR2 — minimizes a well-behaved quadratic") {
+  Eigen::Vector3d c(1.0, -2.0, 0.5);
+  NloptOptimizer opt({}, NloptAlgorithm::Var2);
+  auto out = opt.minimize(quadratic_objective(c), Eigen::VectorXd::Zero(3));
+  REQUIRE(out.has_value());
+  CHECK(out->fmin < 1e-8);
+  CHECK((out->theta_hat - c).norm() < 1e-4);
+}
+
+TEST_CASE("NloptOptimizer/VAR2 — solves the Rosenbrock function") {
+  NloptOptimizer opt({1000, 1e-12, 1e-8, 10}, NloptAlgorithm::Var2);
+  Eigen::VectorXd x0(2);  x0 << -1.2, 1.0;
+  auto out = opt.minimize(rosenbrock_objective(), x0);
+  REQUIRE(out.has_value());
+  CHECK(out->fmin < 1e-4);
+  CHECK((out->theta_hat - Eigen::Vector2d(1.0, 1.0)).norm() < 5e-2);
+}
+
+// --- NLopt's own LBFGS (LD_LBFGS) ------------------------------------------
+
+TEST_CASE("NloptOptimizer/LBFGS — minimizes a well-behaved quadratic") {
+  Eigen::Vector3d c(1.0, -2.0, 0.5);
+  NloptOptimizer opt({}, NloptAlgorithm::Lbfgs);
+  auto out = opt.minimize(quadratic_objective(c), Eigen::VectorXd::Zero(3));
+  REQUIRE(out.has_value());
+  CHECK(out->fmin < 1e-8);
+  CHECK((out->theta_hat - c).norm() < 1e-4);
+}
+
+TEST_CASE("NloptOptimizer/LBFGS — solves the Rosenbrock function") {
+  NloptOptimizer opt({1000, 1e-12, 1e-8, 10}, NloptAlgorithm::Lbfgs);
+  Eigen::VectorXd x0(2);  x0 << -1.2, 1.0;
+  auto out = opt.minimize(rosenbrock_objective(), x0);
+  REQUIRE(out.has_value());
+  CHECK(out->fmin < 1e-4);
+  CHECK((out->theta_hat - Eigen::Vector2d(1.0, 1.0)).norm() < 5e-2);
 }
 
 #endif  // MAGMAAN_WITH_NLOPT
