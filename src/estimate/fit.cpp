@@ -49,13 +49,15 @@ run_scalar(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
       return std::unexpected(fit_err(FitError::Kind::NumericIssue,
           "Nlopt backend requested but MAGMAAN_WITH_NLOPT is off"));
 #endif
-    case Backend::TrustRegion:
-      if (!bounds.empty()) {
-        return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-            "TrustRegion backend is unbounded and cannot honor box bounds — "
-            "supply empty bounds, or use the L-BFGS / NLopt backend"));
-      }
-      return optim::trust_region(prob, x0, opts);
+    case Backend::Port:
+#ifdef MAGMAAN_WITH_PORT
+      // PORT drmngb honors box bounds natively; an empty `bounds` is passed
+      // through to the adapter, which fills ±infinity sentinels.
+      return optim::port(prob, x0, bounds, opts);
+#else
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "Port backend requested but MAGMAAN_WITH_PORT is off"));
+#endif
     case Backend::Ceres:
       return std::unexpected(fit_err(FitError::Kind::NumericIssue,
           "Ceres backend applies only to the least-squares path "

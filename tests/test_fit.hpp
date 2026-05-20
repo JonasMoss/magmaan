@@ -46,7 +46,7 @@ auto_bounds(const spec::LatentStructure& pt, estimate::Bounds b) {
 }  // namespace detail
 
 // Normal-theory ML. `backend` selects the optimizer (default L-BFGS; the NLopt
-// SLSQP and trust-region cross-check backends are also accepted).
+// SLSQP and PORT (nlminb) cross-check backends are also accepted).
 template <class Pt, class Rep, class Samp>
 fit_expected<estimate::Estimates>
 fit(const Pt& pt, const Rep& rep, const Samp& samp,

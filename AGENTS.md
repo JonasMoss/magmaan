@@ -54,6 +54,12 @@ plan is historical archaeology, not current guidance.
 - `docs/architecture/roadmap.md` - current implementation state and design contracts.
 - `docs/backlog/todo.md` - active human-readable backlog and remaining milestones.
 - `external/` - ignored optional source mirrors for reading upstream code, never built.
+- `third_party/` - tracked vendored third-party sources that participate in the
+  build. Each subdirectory holds the verbatim upstream sources plus the upstream
+  LICENSE files and a vendor README.md documenting source URL, commit, license,
+  and any local patches. Currently: `third_party/port/` (PORT optimizer
+  routines, AMPL/ASL + Fermi-LAT, BSD-3) — wired into the build via
+  `cmake/PortVendor.cmake`.
 - `r-package/` - exploratory R bindings (Rcpp); consumes the prebuilt
   `libmagmaan.a`, separate from and not part of the C++ build.
 

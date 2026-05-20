@@ -8,7 +8,9 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
-#include "magmaan/optim/trust_region_optimizer.hpp"
+#ifdef MAGMAAN_WITH_PORT
+#include "magmaan/optim/port_optimizer.hpp"
+#endif
 #ifdef MAGMAAN_WITH_CERES
 #include "magmaan/optim/ceres_optimizer.hpp"
 #endif
@@ -80,13 +82,23 @@ ScalarProblem scalarize(const GmmProblem& prob) {
   return s;
 }
 
+#ifdef MAGMAAN_WITH_PORT
 fit_expected<OptimResult>
-trust_region(const ScalarProblem& prob, const Eigen::VectorXd& x0,
-             LbfgsOptions opts) {
-  auto out = TrustRegionOptimizer{opts}.minimize(prob.f, x0);
+port(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+     const Bounds& bounds, LbfgsOptions opts) {
+  // PORT supports bounds natively (drmngb is the bounded variant of dmng).
+  // Unbounded ⇒ pass ±infinity per coordinate; the adapter folds those into
+  // PORT's ±1e308 sentinels internally.
+  const double          inf = std::numeric_limits<double>::infinity();
+  const Eigen::VectorXd lower =
+      bounds.empty() ? Eigen::VectorXd::Constant(x0.size(), -inf) : bounds.lower;
+  const Eigen::VectorXd upper =
+      bounds.empty() ? Eigen::VectorXd::Constant(x0.size(),  inf) : bounds.upper;
+  auto out = PortOptimizer{opts}.minimize(prob.f, x0, lower, upper);
   if (!out.has_value()) return std::unexpected(out.error());
   return to_result(std::move(*out));
 }
+#endif
 
 #ifdef MAGMAAN_WITH_CERES
 fit_expected<OptimResult>
