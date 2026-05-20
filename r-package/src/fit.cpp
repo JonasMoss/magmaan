@@ -1463,6 +1463,24 @@ Rcpp::NumericVector fit_start_values(SEXP partable, Rcpp::List sample_stats) {
   return Rcpp::wrap(*sv_or);
 }
 
+// estimate_structured_gamma() — explicit MI4 / structured-ADF Gamma builder.
+// Returns Gamma itself so paper-local R code can inspect, regularize, or invert
+// it before passing a weight to the existing WLS path.
+//
+// [[Rcpp::export]]
+SEXP estimate_structured_gamma(Rcpp::List fit, SEXP raw_data) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
+
+  auto ev_or = lvm::ModelEvaluator::build(ctx.pt, ctx.rep);
+  if (!ev_or.has_value()) stop_model(ev_or.error());
+  auto G_or = magmaan::estimate::frontier::structured_gamma_matrix(
+      *ev_or, ctx.rep, ctx.samp, raw, est.theta);
+  if (!G_or.has_value()) stop_fit(G_or.error());
+  return weight_to_r(*G_or);
+}
+
 // estimate_structured_gamma_weight() — explicit MI4 / structured-ADF working
 // weight builder. Returns only W, which is passed to the existing WLS path.
 //

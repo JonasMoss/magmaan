@@ -35,6 +35,10 @@ Low-level functions such as `compat_lavaan_lavaanify()`,
 `data_mixed_ordinal_stats_from_raw()`, and the `inference_*` / `robust_*`
 families are available as `magmaan_core$...` entries so the C++ architecture is
 still directly inspectable from R without flooding ordinary tab completion.
+Frontier structured-Gamma helpers are similarly explicit:
+`magmaan_core$estimate_structured_gamma()` returns the raw MI4 Gamma matrix, and
+`magmaan_core$estimate_structured_gamma_weight()` returns its direct inverse for
+continuous WLS when it is already positive definite.
 Older spellings such as `lavaan_lavaanify()`, `fit_fit()`, `fit_*_impl()`,
 method-specific ordinal data builders, and `infer_*` remain available as
 compatibility aliases during exploration, but they are no longer listed in

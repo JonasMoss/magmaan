@@ -105,6 +105,10 @@ fit_start_values <- function(partable, sample_stats) {
     .Call(`_magmaan_fit_start_values`, partable, sample_stats)
 }
 
+estimate_structured_gamma <- function(fit, raw_data) {
+    .Call(`_magmaan_estimate_structured_gamma`, fit, raw_data)
+}
+
 estimate_structured_gamma_weight <- function(fit, raw_data) {
     .Call(`_magmaan_estimate_structured_gamma_weight`, fit, raw_data)
 }
