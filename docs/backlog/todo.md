@@ -39,6 +39,14 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 - **M.** Compare LBFGS, LBFGS-B, Ceres trust-region, Ceres dense BFGS, and
   SNLLS only on semantically appropriate cases; include shallow or
   Heywood-prone LS cases so bounds and conditioning stay visible.
+- **M/L.** Decide whether NLopt L-BFGS should replace LBFGS++ as the default
+  scalar optimizer. This is not just a search/replace: first add a comparison
+  tier showing `Backend::NloptLbfgs` matches the current LBFGS++ path on ML,
+  complete-data LS, bounded ordinal LS, FIML/direct `optim::lbfgs` callers,
+  and augmented-Lagrangian inner solves; document any differences in tolerance
+  semantics (`gtol` vs NLopt `xtol_rel`), iteration/evaluation reporting, and
+  bounded behavior. Only then decide whether the ordinary/default build should
+  pay the NLopt dependency cost or keep NLopt as an optional cross-check.
 - **S/M.** Consolidate optimizer/dependency license accounting before any
   public artifact: document the exact third-party optimizer libraries in use
   (currently LBFGS++ via FetchContent/system package, optional Ceres,
