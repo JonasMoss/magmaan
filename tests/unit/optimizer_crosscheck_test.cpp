@@ -5,6 +5,7 @@
 
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -25,6 +26,8 @@ using magmaan::spec::build;
 //                    the parity golden tests).
 //   • Port         — PORT drmngb model-Hessian trust region (= R nlminb,
 //                    TOMS 611); when MAGMAAN_WITH_PORT.
+//   • PortNls      — PORT drn2gb NL2SOL adaptive trust region (= R nls,
+//                    TOMS 573); LS path only, when MAGMAAN_WITH_PORT.
 //   • Nlopt SLSQP  — sequential quadratic programming (when MAGMAAN_WITH_NLOPT).
 //
 // L-BFGS is the reference because the lavaan-parity goldens already pin it to
@@ -76,6 +79,46 @@ TEST_CASE("optimizer cross-check: PORT drmngb matches L-BFGS on ML") {
   CHECK(est_port->fmin ==
         doctest::Approx(est_lbfgs->fmin).epsilon(1e-3));
   CHECK((est_port->theta - est_lbfgs->theta).cwiseAbs().maxCoeff() < 5e-3);
+}
+#endif  // MAGMAAN_WITH_PORT
+
+#ifdef MAGMAAN_WITH_PORT
+TEST_CASE("optimizer cross-check: PORT NL2SOL matches L-BFGS on a feasible ULS fit") {
+  // Use a feasible-on-the-manifold S so the ULS optimum is unique and
+  // gradient-based / Gauss-Newton solvers must agree. The off-manifold S
+  // above creates a non-trivially-shaped ML problem with a single interior
+  // optimum, which is fine for L-BFGS / Port / SLSQP — but PortNls's
+  // Gauss-Newton-flavoured Hessian model is sensitive to the residual
+  // structure, so we put it on the LS path where it belongs.
+  auto fp = Parser::parse("f =~ x1 + x2 + x3 + x4");
+  REQUIRE(fp.has_value());
+  auto pt = build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  Eigen::Vector4d lambda(1.0, 0.9, 0.8, 0.7);
+  const double    psi = 1.0;
+  Eigen::Vector4d theta(0.5, 0.6, 0.55, 0.7);
+  Eigen::Matrix4d S = lambda * lambda.transpose() * psi +
+                      theta.asDiagonal().toDenseMatrix();
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {300};
+
+  // ULS path: fit_gmm with empty weight ≡ ULS.
+  auto x0 = magmaan::estimate::simple_start_values(*pt, *mr, samp, {});
+  REQUIRE(x0.has_value());
+  auto est_lbfgs = magmaan::estimate::fit_gmm(
+      *pt, *mr, samp, *x0, {}, {}, Backend::Lbfgs);
+  auto est_port_nls = magmaan::estimate::fit_gmm(
+      *pt, *mr, samp, *x0, {}, {}, Backend::PortNls);
+  REQUIRE(est_lbfgs.has_value());
+  REQUIRE(est_port_nls.has_value());
+
+  CHECK(est_port_nls->fmin ==
+        doctest::Approx(est_lbfgs->fmin).epsilon(1e-4));
+  CHECK((est_port_nls->theta - est_lbfgs->theta).cwiseAbs().maxCoeff() < 5e-3);
 }
 #endif  // MAGMAAN_WITH_PORT
 
