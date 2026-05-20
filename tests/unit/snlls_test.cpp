@@ -306,11 +306,13 @@ TEST_CASE("SNLLS: Bollen GLS backend cross-check") {
   REQUIRE(lbfgs.has_value());
   CHECK(lbfgs->fmin < 0.243);
 
-  auto tr = run(Backend::TrustRegion, "trust-region");
-  CHECK(tr.has_value());
-  if (tr.has_value()) {
-    CHECK(tr->fmin == doctest::Approx(lbfgs->fmin).epsilon(1e-5));
+#ifdef MAGMAAN_WITH_PORT
+  auto port = run(Backend::Port, "port");
+  CHECK(port.has_value());
+  if (port.has_value()) {
+    CHECK(port->fmin == doctest::Approx(lbfgs->fmin).epsilon(1e-5));
   }
+#endif
 
 #ifdef MAGMAAN_WITH_NLOPT
   auto nlopt = run(Backend::Nlopt, "nlopt-slsqp");

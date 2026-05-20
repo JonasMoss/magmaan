@@ -3,7 +3,9 @@ cmake_minimum_required(VERSION 3.28)
 project(magmaan
   VERSION      0.0.1
   DESCRIPTION  "C++23 toolkit for linear SEM (lavaan-equivalent core)"
-  LANGUAGES    CXX)
+  LANGUAGES    CXX C)
+# C is enabled for the vendored PORT (Bell Labs) optimizer routines under
+# third_party/port/; see cmake/PortVendor.cmake.
 
 # Honor parent project's settings if we're embedded as a subdir.
 set(MAGMAAN_IS_TOP_LEVEL FALSE)
@@ -15,6 +17,7 @@ option(MAGMAAN_BUILD_TESTS  "Build the magmaan test suite"      ${MAGMAAN_IS_TOP
 option(MAGMAAN_BUILD_BENCH  "Build the magmaan benchmarks"      OFF)
 option(MAGMAAN_WITH_CERES   "Enable the Ceres Solver optimizer backend (optional, heavy first build)"  OFF)
 option(MAGMAAN_WITH_NLOPT   "Enable the NLopt optimizer backend (SLSQP cross-check; augmented-Lagrangian-ready)"  OFF)
+option(MAGMAAN_WITH_PORT    "Enable the vendored PORT (Bell Labs) optimizer backend — nlminb-equivalent trust region (TOMS 611) plus NL2SOL with bounds (TOMS 573)"  ON)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -40,12 +43,6 @@ magmaan_find_or_fetch(NAME lbfgspp
   GIT_TAG        v0.4.0
   FIND_PACKAGE_ARGS CONFIG)
 
-# CppNumericalSolvers — header-only, Eigen-native optimizer collection. We use
-# its Newton trust-region solver as an independent cross-check of the L-BFGS
-# optima (lavaan's nlminb is itself a trust region). v2.0.0 is fetched and
-# patched (a TrustRegionNewton dimension bug); see cmake/CppNumericalSolversFetch.cmake.
-include(CppNumericalSolversFetch)
-
 # Ceres Solver — optional alternative optimizer backend, behind MAGMAAN_WITH_CERES.
 # OFF by default because Ceres is a heavy first build (~5–15 min via FetchContent).
 # The Ceres-specific build flags (no LAPACK / SuiteSparse / glog / gflags /
@@ -61,6 +58,16 @@ endif()
 # Build knobs live in `cmake/NloptFetch.cmake`, mirroring CeresFetch.cmake.
 if(MAGMAAN_WITH_NLOPT)
   include(NloptFetch)
+endif()
+
+# PORT — vendored Bell Labs optimizer routines (f2c-translated C), behind
+# MAGMAAN_WITH_PORT. Default ON because the vendored source is small (~620 KB),
+# self-contained (no external Fortran or libf2c dependency), BSD-3 licensed,
+# and adds the nlminb/nls trust-region algorithms lavaan itself uses. Build
+# knobs live in `cmake/PortVendor.cmake`; vendor manifest in
+# `third_party/port/README.md`.
+if(MAGMAAN_WITH_PORT)
+  include(PortVendor)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -122,7 +129,6 @@ add_library(magmaan STATIC
   src/measures/factor_scores.cpp
   src/optim/lbfgs_optimizer.cpp
   src/optim/lbfgsb_optimizer.cpp
-  src/optim/trust_region_optimizer.cpp
   src/optim/optimizers.cpp)
 add_library(magmaan::magmaan ALIAS magmaan)
 
@@ -140,8 +146,7 @@ target_include_directories(magmaan
 
 target_link_libraries(magmaan
   PUBLIC  magmaan::no_exc_no_rtti Eigen3::Eigen
-  PRIVATE magmaan::warnings magmaan::sanitizers lbfgspp
-          CppNumericalSolvers::CppNumericalSolvers)
+  PRIVATE magmaan::warnings magmaan::sanitizers lbfgspp)
 
 # LBFGS++ has `throw std::invalid_argument` in its Param check. GCC under
 # -fno-exceptions refuses to compile any throw statement (Clang elides it
@@ -156,12 +161,6 @@ set_source_files_properties(src/optim/lbfgs_optimizer.cpp
 # we can catch at the boundary; the rest of magmaan stays -fno-exceptions.
 set_source_files_properties(src/optim/lbfgsb_optimizer.cpp
   PROPERTIES COMPILE_OPTIONS "-fexceptions")
-# Trust-region adapter — CppNumericalSolvers is header-only and compiled into
-# this TU; like the LBFGS++ TUs it may instantiate code that `throw`s, which
-# GCC rejects under -fno-exceptions. Compile just this TU with -fexceptions.
-set_source_files_properties(src/optim/trust_region_optimizer.cpp
-  PROPERTIES COMPILE_OPTIONS "-fexceptions")
-
 # Ceres optimizer adapter — only compiled when MAGMAAN_WITH_CERES=ON. Mirrors
 # the LBFGS++ pattern: TU is `-fexceptions` (Ceres uses exceptions internally,
 # we catch them at the boundary and return FitError values), and a PUBLIC
@@ -183,6 +182,18 @@ if(MAGMAAN_WITH_NLOPT)
   target_sources(magmaan PRIVATE src/optim/nlopt_optimizer.cpp)
   target_link_libraries(magmaan PRIVATE NLopt::nlopt)
   target_compile_definitions(magmaan PUBLIC MAGMAAN_WITH_NLOPT)
+endif()
+
+# PORT optimizer adapter — only compiled when MAGMAAN_WITH_PORT=ON. PORT is a
+# pure C library (f2c-translated Fortran) with no exceptions on either side
+# of the boundary, so unlike the LBFGS++ / Ceres adapters this TU does not
+# need -fexceptions. The `port` static library is defined by
+# `cmake/PortVendor.cmake`. A PUBLIC compile definition lets downstream code
+# (tests, R bindings) detect the build via `#ifdef MAGMAAN_WITH_PORT`.
+if(MAGMAAN_WITH_PORT)
+  target_sources(magmaan PRIVATE src/optim/port_optimizer.cpp)
+  target_link_libraries(magmaan PRIVATE port)
+  target_compile_definitions(magmaan PUBLIC MAGMAAN_WITH_PORT)
 endif()
 
 # ---------------------------------------------------------------------------

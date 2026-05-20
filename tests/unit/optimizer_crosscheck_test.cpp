@@ -23,22 +23,23 @@ using magmaan::spec::build;
 //
 //   • L-BFGS       — line search (the default; validated against lavaan by
 //                    the parity golden tests).
-//   • TrustRegion  — CppNumericalSolvers Newton trust region.
+//   • Port         — PORT drmngb model-Hessian trust region (= R nlminb,
+//                    TOMS 611); when MAGMAAN_WITH_PORT.
 //   • Nlopt SLSQP  — sequential quadratic programming (when MAGMAAN_WITH_NLOPT).
 //
 // L-BFGS is the reference because the lavaan-parity goldens already pin it to
-// lavaan's nlminb result; if SLSQP and the trust region agree with L-BFGS,
-// they agree with lavaan transitively. Tolerances are generous enough to
-// absorb each solver's own default stopping criteria while still proving the
-// three optimizers reach the *same* minimum, not merely the same basin.
+// lavaan's nlminb result; if SLSQP and Port agree with L-BFGS, they agree
+// with lavaan transitively. Tolerances are generous enough to absorb each
+// solver's own default stopping criteria while still proving the optimizers
+// reach the *same* minimum, not merely the same basin.
 // ============================================================================
 
 namespace {
 
 // A 4-indicator covariance built from a 1-factor structure, then mildly
 // perturbed off the 1-factor manifold so the ML fit has a genuine interior
-// optimum (F_ML > 0, all variances positive — no Heywood, so the unbounded
-// trust-region backend applies).
+// optimum (F_ML > 0, all variances positive — no Heywood, so an unbounded
+// fit is well-posed).
 Eigen::Matrix4d make_offmanifold_S() {
   Eigen::Vector4d lambda(1.0, 0.9, 0.8, 0.7);
   const double    psi = 1.5;
@@ -52,7 +53,8 @@ Eigen::Matrix4d make_offmanifold_S() {
 
 }  // namespace
 
-TEST_CASE("optimizer cross-check: trust region matches L-BFGS on ML") {
+#ifdef MAGMAAN_WITH_PORT
+TEST_CASE("optimizer cross-check: PORT drmngb matches L-BFGS on ML") {
   auto fp = Parser::parse("f =~ x1 + x2 + x3 + x4");
   REQUIRE(fp.has_value());
   auto pt = build(*fp);
@@ -64,19 +66,18 @@ TEST_CASE("optimizer cross-check: trust region matches L-BFGS on ML") {
   samp.S = {make_offmanifold_S()};
   samp.n_obs = {300};
 
-  // ML is fit unbounded here (the off-manifold S keeps the optimum interior),
-  // so the unbounded trust-region backend is applicable.
+  // The PORT backend honors bounds natively; an empty Bounds means unbounded.
   auto est_lbfgs = magmaan::test::fit(*pt, *mr, samp, Bounds{}, Backend::Lbfgs);
-  auto est_tr    = magmaan::test::fit(*pt, *mr, samp, Bounds{},
-                                      Backend::TrustRegion);
+  auto est_port  = magmaan::test::fit(*pt, *mr, samp, Bounds{}, Backend::Port);
   REQUIRE(est_lbfgs.has_value());
-  REQUIRE(est_tr.has_value());
+  REQUIRE(est_port.has_value());
 
-  CHECK(est_lbfgs->fmin > 0.0);   // genuine interior optimum, not a saturated fit
-  CHECK(est_tr->fmin ==
+  CHECK(est_lbfgs->fmin > 0.0);
+  CHECK(est_port->fmin ==
         doctest::Approx(est_lbfgs->fmin).epsilon(1e-3));
-  CHECK((est_tr->theta - est_lbfgs->theta).cwiseAbs().maxCoeff() < 5e-3);
+  CHECK((est_port->theta - est_lbfgs->theta).cwiseAbs().maxCoeff() < 5e-3);
 }
+#endif  // MAGMAAN_WITH_PORT
 
 #ifdef MAGMAAN_WITH_NLOPT
 TEST_CASE("optimizer cross-check: NLopt SLSQP matches L-BFGS on ML") {

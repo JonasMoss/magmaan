@@ -117,6 +117,22 @@ golden `parTable()` fixtures.
   underlying fit and post-fit primitives described above. Unsupported
   combinations fail with `api::ErrorStage::UnsupportedCombination`.
 
+### Optimizer backends
+
+- `Backend::Lbfgs` is the default for scalar discrepancies — LBFGS unbounded
+  and LBFGS-B bounded, both via header-only LBFGS++.
+- `Backend::Port` is the trust-region cross-check: vendored PORT (Bell Labs)
+  `drmngb_` (TOMS 611 Dennis-Gay-Welsch model-Hessian trust region; the
+  algorithm behind R's `nlminb`), supports bounds natively. Vendored at
+  `third_party/port/` from AMPL/ASL + Fermi-LAT (both BSD-3, manifest in
+  `third_party/port/README.md`). Replaces the previous CppNumericalSolvers
+  `Backend::TrustRegion`.
+- `Backend::Ceres` / `Backend::CeresBfgs` cover Ceres Levenberg-Marquardt and
+  dense line-search BFGS on the least-squares path (build with
+  `MAGMAAN_WITH_CERES=ON`).
+- `Backend::Nlopt` exposes NLopt SLSQP for ML and LS scalar paths
+  (`MAGMAAN_WITH_NLOPT=ON`).
+
 ### Least-squares estimators
 
 - ULS, GLS, and explicit-weight WLS discrepancies with scalar

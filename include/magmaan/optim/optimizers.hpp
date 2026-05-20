@@ -13,8 +13,9 @@
 //
 //   • lbfgs        — L-BFGS-B scalar minimizer (replaces LbfgsOptimizer +
 //                    LbfgsBOptimizer; an empty `Bounds` means unbounded).
-//   • trust_region — CppNumericalSolvers Newton trust-region cross-check
-//                    (unbounded scalar minimizer).
+//   • port         — PORT drmngb model-Hessian trust region with bounds
+//                    (the algorithm behind R's `nlminb`; TOMS 611).
+//                    Only when MAGMAAN_WITH_PORT is set (default ON).
 //   • ceres_lm     — Ceres Levenberg–Marquardt least-squares minimizer
 //                    (only when MAGMAAN_WITH_CERES is set).
 //   • ceres_bfgs   — Ceres line-search dense BFGS least-squares minimizer
@@ -40,13 +41,16 @@ lbfgs(const ScalarProblem& prob, const Eigen::VectorXd& x0,
 // run on a least-squares problem; carries `n_param` and `expand` through.
 ScalarProblem scalarize(const GmmProblem& prob);
 
-// CppNumericalSolvers Newton trust-region minimization — an independent
-// cross-check of the L-BFGS / SLSQP optima (lavaan's nlminb is itself a trust
-// region). Unbounded only: the trust-region solver has no box-constraint
-// support, so pass an unconstrained `ScalarProblem`.
+#ifdef MAGMAAN_WITH_PORT
+// PORT `drmngb` scalar minimization with simple bounds — Dennis-Gay-Welsch
+// model-Hessian trust region (TOMS 611), the same algorithm R's `nlminb` runs.
+// Empty `bounds` (the default) means unbounded; otherwise `bounds.lower` /
+// `bounds.upper` must each match `x0`'s size, with ±infinity per coordinate
+// translated by the adapter into PORT's ±1e308 sentinels.
 fit_expected<OptimResult>
-trust_region(const ScalarProblem& prob, const Eigen::VectorXd& x0,
-             LbfgsOptions opts = {});
+port(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+     const Bounds& bounds = {}, LbfgsOptions opts = {});
+#endif
 
 #ifdef MAGMAAN_WITH_CERES
 // Ceres Levenberg–Marquardt least-squares minimization — feeds the optimizer

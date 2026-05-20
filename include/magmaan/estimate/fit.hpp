@@ -30,12 +30,15 @@ struct Estimates {
 };
 
 // Optimizer backend selector for the convenience composers below.
-//   Lbfgs       — L-BFGS / L-BFGS-B (the default).
-//   Ceres       — Levenberg–Marquardt; least-squares path only, needs MAGMAAN_WITH_CERES.
-//   CeresBfgs   — Ceres line-search dense BFGS; unbounded least-squares path only.
-//   Nlopt       — NLopt SLSQP cross-check; needs MAGMAAN_WITH_NLOPT.
-//   TrustRegion — CppNumericalSolvers Newton trust-region cross-check; unbounded only.
-enum class Backend { Lbfgs, Ceres, CeresBfgs, Nlopt, TrustRegion };
+//   Lbfgs     — L-BFGS / L-BFGS-B (the default).
+//   Ceres     — Levenberg–Marquardt; least-squares path only, needs MAGMAAN_WITH_CERES.
+//   CeresBfgs — Ceres line-search dense BFGS; unbounded least-squares path only.
+//   Nlopt     — NLopt SLSQP cross-check; needs MAGMAAN_WITH_NLOPT.
+//   Port      — PORT drmngb model-Hessian trust region with bounds (the
+//               algorithm behind R's `nlminb`; TOMS 611). Needs
+//               MAGMAAN_WITH_PORT (default ON). Replaces the now-retired
+//               CppNumericalSolvers-backed TrustRegion entry.
+enum class Backend { Lbfgs, Ceres, CeresBfgs, Nlopt, Port };
 
 // ============================================================================
 // Convenience composers — the template-free core entry points.
@@ -45,15 +48,15 @@ enum class Backend { Lbfgs, Ceres, CeresBfgs, Nlopt, TrustRegion };
 // evaluator → build the objective → fold equality constraints → optimize →
 // expand to full θ. `x0` (size pt.n_free()) is the caller-supplied start
 // vector; an empty `bounds` means unbounded. `backend` selects the optimizer
-// (see `Backend` above): `Backend::Ceres` / `Backend::Nlopt` need their build
-// flags, `Backend::Ceres` applies to the least-squares (gmm) path only, and
-// `Backend::TrustRegion` requires empty bounds. `opts` tunes the optimizer
-// (the Ceres path reads max_iter / ftol / gtol from it).
+// (see `Backend` above): `Backend::Ceres` / `Backend::Nlopt` / `Backend::Port`
+// need their build flags, and `Backend::Ceres` applies to the least-squares
+// (gmm) path only. `opts` tunes the optimizer (the Ceres path reads max_iter
+// / ftol / gtol from it).
 
 // Normal-theory maximum likelihood. `backend` selects the optimizer; the
-// default L-BFGS, the NLopt SLSQP cross-check, or the unbounded trust-region
-// cross-check. `Backend::Ceres` is rejected here — Ceres applies to the
-// least-squares path only.
+// default L-BFGS, the NLopt SLSQP cross-check, or the PORT (= nlminb)
+// trust-region cross-check. `Backend::Ceres` is rejected here — Ceres
+// applies to the least-squares path only.
 fit_expected<Estimates>
 fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
        const SampleStats& samp, const Eigen::VectorXd& x0, Bounds bounds = {},

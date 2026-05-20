@@ -41,9 +41,10 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   Heywood-prone LS cases so bounds and conditioning stay visible.
 - **S/M.** Consolidate optimizer/dependency license accounting before any
   public artifact: document the exact third-party optimizer libraries in use
-  (currently LBFGS++ via FetchContent/system package, optional Ceres, optional
-  NLopt, and CppNumericalSolvers for trust-region checks), their versions, and
-  their redistribution obligations.
+  (currently LBFGS++ via FetchContent/system package, optional Ceres,
+  optional NLopt, and vendored PORT — AMPL/ASL `cport/` plus Fermi-LAT's
+  `drmnfb_routines.c`, both BSD-3, manifest in `third_party/port/README.md`),
+  their versions, and their redistribution obligations.
 - **M/L, after coverage exists.** Promote the Ceres preset into regular
   validation where relevant without making the default build pay the Ceres
   dependency cost.
