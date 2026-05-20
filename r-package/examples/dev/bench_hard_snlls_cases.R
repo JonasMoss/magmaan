@@ -24,30 +24,19 @@ inf_bounds <- function(spec) {
 }
 
 fit_one <- function(spec, dat, estimator, backend, snlls) {
-  if (identical(estimator, "ULS") && identical(backend, "lbfgsb")) {
-    if (snlls) return(core$fit_uls_snlls(spec, dat, optimizer = "lbfgs", control = lbfgsb))
-    return(core$fit_uls(spec, dat, optimizer = "lbfgs", control = lbfgsb,
-                        bounds = inf_bounds(spec)))
-  }
-  if (identical(estimator, "ULS") && identical(backend, "ceres")) {
-    if (snlls) return(core$fit_uls_snlls(spec, dat, optimizer = "ceres", control = ceres))
-    return(core$fit_uls(spec, dat, optimizer = "ceres", control = ceres))
-  }
-  if (identical(estimator, "GLS") && identical(backend, "lbfgsb")) {
-    if (snlls) return(core$fit_gls_snlls(spec, dat, optimizer = "lbfgs", control = lbfgsb))
-    return(core$fit_gls(spec, dat, optimizer = "lbfgs", control = lbfgsb,
-                        bounds = inf_bounds(spec)))
-  }
-  if (identical(estimator, "GLS") && identical(backend, "ceres")) {
-    if (snlls) return(core$fit_gls_snlls(spec, dat, optimizer = "ceres", control = ceres))
-    return(core$fit_gls(spec, dat, optimizer = "ceres", control = ceres))
-  }
-  if (identical(estimator, "GLS") && identical(backend, "ceres_bfgs")) {
-    if (!snlls) stop("Ceres BFGS is exposed only for SNLLS", call. = FALSE)
-    return(core$fit_gls_snlls(spec, dat, optimizer = "ceres-bfgs", control = ceres))
-  }
-  stop("unsupported estimator/backend: ", estimator, "/", backend,
-       call. = FALSE)
+  optimizer <- if (identical(backend, "lbfgsb")) "lbfgs"
+               else gsub("_", "-", backend, fixed = TRUE)
+  control <- if (startsWith(optimizer, "ceres")) ceres else lbfgsb
+  fun <- switch(paste(estimator, if (snlls) "SNLLS" else "ordinary"),
+                "ULS ordinary" = core$fit_uls,
+                "ULS SNLLS" = core$fit_uls_snlls,
+                "GLS ordinary" = core$fit_gls,
+                "GLS SNLLS" = core$fit_gls_snlls,
+                stop("unsupported estimator/method: ", estimator, "/",
+                     if (snlls) "SNLLS" else "ordinary", call. = FALSE))
+  args <- list(spec, dat, optimizer = optimizer, control = control)
+  if (!snlls && identical(backend, "lbfgsb")) args$bounds <- inf_bounds(spec)
+  do.call(fun, args)
 }
 
 case_gleser_mtmm <- function() {
@@ -104,15 +93,12 @@ f2 =~ x4 + x5 + x6"
 
 measure_case <- function(case) {
   rows <- list()
-  jobs <- list(
-    list(backend = "lbfgsb", snlls = FALSE),
-    list(backend = "lbfgsb", snlls = TRUE),
-    list(backend = "ceres", snlls = FALSE),
-    list(backend = "ceres", snlls = TRUE)
-  )
-  if (identical(case$estimator, "GLS")) {
-    jobs[[length(jobs) + 1L]] <- list(backend = "ceres_bfgs", snlls = TRUE)
-  }
+  backends <- c("lbfgsb", "ceres", "ceres_bfgs", "port", "port_nls",
+                "nlopt_slsqp", "nlopt_bobyqa", "nlopt_tnewton",
+                "nlopt_var2", "nlopt_lbfgs")
+  jobs <- as.vector(t(outer(backends, c(FALSE, TRUE), Vectorize(function(b, s) {
+    list(list(backend = b, snlls = s))
+  }))), mode = "list")
   for (job in jobs) {
     backend <- job$backend
     snlls <- job$snlls
@@ -157,15 +143,16 @@ ratio_or_na <- function(num, den) {
 }
 
 ordinary_snlls_ratios <- function(out) {
+  comparable <- out[is.na(out$error), ]
   rows <- list()
-  for (case in unique(out$case)) {
-    for (backend in unique(out$backend[out$case == case])) {
-      ordinary <- out[out$case == case &
-                        out$backend == backend &
-                        out$method == "ordinary", ]
-      snlls <- out[out$case == case &
-                     out$backend == backend &
-                     out$method == "SNLLS", ]
+  for (case in unique(comparable$case)) {
+    for (backend in unique(comparable$backend[comparable$case == case])) {
+      ordinary <- comparable[comparable$case == case &
+                               comparable$backend == backend &
+                               comparable$method == "ordinary", ]
+      snlls <- comparable[comparable$case == case &
+                            comparable$backend == backend &
+                            comparable$method == "SNLLS", ]
       if (!nrow(ordinary) || !nrow(snlls)) next
       rows[[length(rows) + 1L]] <- data.frame(
         case = case,
@@ -207,6 +194,6 @@ cat("\nNotes\n")
 cat("* The Gleser MTMM/G-study case is ULS-only here because GLS needs a positive-definite sample covariance.\n")
 cat("* semfindr::cfa_dat_heywood is an optional installed-package case; install semfindr to enable it.\n")
 cat("* reported_zero means the backend returned a usable estimate but not a reliable iteration count.\n")
-cat("* ceres_bfgs is SNLLS-only and currently exposed for GLS probes only.\n")
-cat("* Trust-region and NLopt backends exist in C++ checks but are not exposed on this R dev surface.\n")
+cat("* The lbfgsb row is the accepted R optimizer string \"lbfgs\" with explicit +/-Inf bounds on ordinary LS, preserving the historical LBFGS-B comparison row.\n")
+cat("* Other backend labels are accepted R optimizer strings with underscores replacing dashes for data-frame readability.\n")
 cat("* These are convergence and boundary probes first; wall-time ratios are secondary.\n")

@@ -82,8 +82,9 @@ ctest --preset ceres
 `dev` is the local debug build (clang++, AddressSanitizer + UBSan). `opt` is
 the local performance-comparison build (Release, no sanitizers,
 `-O3 -DNDEBUG -march=native`). `ceres` is the optional optimized build with the
-Ceres backend enabled. Existing presets such as `asan`, `release`, and `ubsan`
-remain available for compatibility.
+Ceres and NLopt backends enabled; PORT remains enabled by default. Existing
+presets such as `asan`, `release`, and `ubsan` remain available for
+compatibility.
 
 There's a `justfile` at the repo root wrapping the common loops: `just build`,
 `just test` (aliases for the `dev` build plus ctest), `just opt`,

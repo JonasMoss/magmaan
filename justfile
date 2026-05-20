@@ -59,10 +59,10 @@ r-install-fast:
     cmake --build --preset fast --target magmaan
     MAGMAAN_PRESET=fast MAGMAAN_WITH_CERES_R=0 R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
 
-# Ceres-enabled R install, only when exploring the Ceres backend from R.
+# Optional optimizer R install: Ceres + NLopt, with PORT enabled by default.
 r-install-ceres:
     cmake --build --preset ceres --target magmaan
-    MAGMAAN_PRESET=ceres MAGMAAN_WITH_CERES_R=1 R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+    MAGMAAN_PRESET=ceres MAGMAAN_WITH_CERES_R=1 MAGMAAN_WITH_NLOPT_R=1 R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
 
 # Run every r-package/examples/*.R script (the R-side smoke tests vs lavaan).
 r-examples:
