@@ -27,6 +27,12 @@ struct Estimates {
   Eigen::VectorXd theta;     // size = pt.n_free()
   double          fmin       = 0.0;
   int             iterations = 0;
+  // Optimizer evaluation counts: `f_evals` = times the optimizer requested an
+  // objective value, `g_evals` = times it requested a gradient. PORT counts
+  // these separately; NLopt's gradient algorithms request both jointly, so
+  // there `f_evals == g_evals`.
+  int             f_evals = 0;
+  int             g_evals = 0;
 };
 
 // Optimizer backend selector for the convenience composers below.

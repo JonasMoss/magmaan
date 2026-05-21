@@ -20,6 +20,8 @@ struct LbfgsOutput {
   Eigen::VectorXd theta_hat;
   double          fmin = 0.0;
   int             iterations = 0;
+  int             f_evals = 0;
+  int             g_evals = 0;
 };
 
 // LBFGS++ adapter. The objective callable computes value + writes

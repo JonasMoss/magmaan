@@ -149,7 +149,11 @@ NloptOptimizer::minimize(Objective f,
         "likely under-identified or the start too far from a valid region)",
         n_evals, fmin));
   }
-  return LbfgsOutput{std::move(theta), fmin, n_evals};
+  // NLopt exposes no iteration count, only a total evaluation count. Its
+  // gradient algorithms request value and gradient jointly, so every one of
+  // the n_evals callbacks is both a function and a gradient evaluation.
+  return LbfgsOutput{std::move(theta), fmin, /*iterations=*/0,
+                     /*f_evals=*/n_evals, /*g_evals=*/n_evals};
 }
 
 fit_expected<LbfgsOutput>
