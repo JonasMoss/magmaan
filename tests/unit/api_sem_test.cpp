@@ -342,6 +342,77 @@ TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {
   CHECK(*ord_fm->ordinal_srmr >= 0.0);
 }
 
+TEST_CASE("api second-order CFA fits ordinal data and matches the correlated model") {
+  // Nine ordinal (5-level) items, three first-order factors, one general
+  // factor over them — the higher-order + ordinal combination. As with
+  // continuous data, the second-order CFA is a just-identified
+  // reparameterization of the correlated three-factor model, so the two
+  // reach the same chi-square through the DWLS/polychoric path.
+  Eigen::MatrixXd X(500, 9);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double t = static_cast<double>(i);
+    const double g = std::sin(0.13 * t) + 0.5 * std::cos(0.071 * t);
+    const double visual  = g        + 0.45 * std::sin(0.29 * t + 1.0);
+    const double textual = 0.85 * g + 0.45 * std::cos(0.31 * t + 2.0);
+    const double speed   = 0.70 * g + 0.45 * std::sin(0.23 * t + 3.0);
+    const double factor[9] = {visual,  0.9 * visual,  0.8 * visual,
+                              textual, 0.9 * textual, 0.8 * textual,
+                              speed,   0.9 * speed,   0.8 * speed};
+    const double freq[9]  = {0.41, 0.43, 0.47, 0.53, 0.59,
+                             0.61, 0.67, 0.71, 0.73};
+    const double phase[9] = {0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9};
+    for (Eigen::Index j = 0; j < 9; ++j) {
+      const double v = factor[j] + 0.35 * std::sin(freq[j] * t + phase[j]);
+      int level = 1;
+      if (v > -0.65) level = 2;
+      if (v > -0.10) level = 3;
+      if (v >  0.45) level = 4;
+      if (v >  0.95) level = 5;
+      X(i, j) = static_cast<double>(level);
+    }
+  }
+  const auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE_OK(stats);
+
+  // Ordinal models carry explicit threshold (`|`) and scaling (`~*~`) rows —
+  // four thresholds for each 5-level item.
+  std::string ordinal_rows;
+  for (int j = 1; j <= 9; ++j) {
+    const std::string x = "x" + std::to_string(j);
+    ordinal_rows += x + " | t1 + t2 + t3 + t4\n";
+    ordinal_rows += x + " ~*~ 1*" + x + "\n";
+  }
+  const std::string first_order =
+      "visual =~ x1 + x2 + x3\n"
+      "textual =~ x4 + x5 + x6\n"
+      "speed =~ x7 + x8 + x9\n" + ordinal_rows;
+  const std::string second_order =
+      first_order + "general =~ visual + textual + speed\n";
+
+  struct Outcome { double chisq; int df; };
+  auto fit_ord = [&](const std::string& syntax) -> Outcome {
+    const auto model = magmaan::api::model_from_lavaan(syntax);
+    REQUIRE_OK(model);
+    const auto data = magmaan::api::data_from_ordinal(*model, *stats);
+    REQUIRE_OK(data);
+    const auto fit =
+        magmaan::api::fit(*model, *data, magmaan::api::ordinal_dwls());
+    REQUIRE_OK(fit);
+    const auto rob = magmaan::api::robust_ordinal(*fit);
+    REQUIRE_OK(rob);
+    return {rob->chisq_standard, rob->df};
+  };
+
+  const auto m1 = fit_ord(first_order);
+  const auto m2 = fit_ord(second_order);
+  MESSAGE("ordinal first-order:  df=" << m1.df << " chisq=" << m1.chisq);
+  MESSAGE("ordinal second-order: df=" << m2.df << " chisq=" << m2.chisq);
+
+  CHECK(m1.df > 0);
+  CHECK(m2.df == m1.df);
+  CHECK(m2.chisq == doctest::Approx(m1.chisq).epsilon(1e-2));
+}
+
 TEST_CASE("api Analysis preserves first error and post-fit calls require fit") {
   const auto model = magmaan::api::model_from_lavaan("f =~ x1 + x2 + x3 + x4");
   REQUIRE(model.has_value());
