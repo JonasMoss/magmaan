@@ -530,7 +530,8 @@ lr_test_satorra2000_from_data(
   }
 
   // ── 4. Run the core then the p-value wrap ───────────────────────────────
-  auto sd_or = compute_satorra2000(groups, A_alpha, options.gamma);
+  auto sd_or = compute_satorra2000(groups, A_alpha, options.gamma,
+                                   options.computation);
   if (!sd_or.has_value()) {
     return std::unexpected(sd_or.error());
   }

@@ -243,6 +243,21 @@ reduced_gamma_sample(const UFactor&                            uf,
                      const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
                      double                                    denom);
 
+// Reference/materialized counterpart to `reduced_gamma_sample()`.
+// Forms each empirical Γ̂_b = Zc_bᵀZc_b / denom_b explicitly before reducing
+// with B_bᵀΓ̂_bB_b. This is intentionally less memory-frugal; it exists for
+// diagnostics, benchmarks, and parity checks of the reduced casewise algebra.
+post_expected<Eigen::MatrixXd>
+reduced_gamma_sample_materialized(
+    const UFactor&                            uf,
+    const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+    const Eigen::Ref<const Eigen::VectorXd>&  denom);
+post_expected<Eigen::MatrixXd>
+reduced_gamma_sample_materialized(
+    const UFactor&                            uf,
+    const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+    double                                    denom);
+
 // Streaming variant for memory-bounded N. Sums rank-1 outer products
 // (Bᵀ·z_i)(Bᵀ·z_i)ᵀ over rows, divides by `denom` at the end. Use when
 // holding the full `Zc` matrix in memory is undesirable; the loop only

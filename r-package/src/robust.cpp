@@ -305,6 +305,21 @@ Rcpp::NumericMatrix infer_reduced_gamma_sample(Rcpp::List uf, Rcpp::NumericMatri
   return Rcpp::wrap(*m_or);
 }
 
+// infer_reduced_gamma_sample_materialized() — same target as
+// infer_reduced_gamma_sample(), but forms Γ̂ explicitly before reducing.
+// This is a reference/benchmark path, not the memory-frugal production route.
+//
+// [[Rcpp::export]]
+Rcpp::NumericMatrix infer_reduced_gamma_sample_materialized(
+    Rcpp::List uf, Rcpp::NumericMatrix Zc, Rcpp::NumericVector denom) {
+  magmaan::robust::UFactor u = ufactor_from_list(uf);
+  Eigen::MatrixXd Zceig = Rcpp::as<Eigen::MatrixXd>(Zc);
+  Eigen::VectorXd d = Rcpp::as<Eigen::VectorXd>(denom);
+  auto m_or = magmaan::robust::reduced_gamma_sample_materialized(u, Zceig, d);
+  if (!m_or.has_value()) stop_post(m_or.error());
+  return Rcpp::wrap(*m_or);
+}
+
 // infer_reduced_gamma_unbiased() — mirrors reduced_gamma_unbiased(uf, samp,
 // M_sample, M_nt). Browne's distribution-free correction; single-block only.
 // `n` is the total sample size (the sample cov it needs for the rank-1 term is

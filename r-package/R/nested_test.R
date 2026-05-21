@@ -19,6 +19,10 @@
 #' @param A.method `"exact"` (default, exact parameter-nesting restriction)
 #'   or `"delta"` (lavaan-style covariance/moment Jacobian column-space
 #'   restriction).
+#' @param computation `"streaming"` (default, projects casewise empirical
+#'   Gamma contributions before crossproducts) or `"materialized"` (forms the
+#'   full empirical Gamma block before reducing). The latter is mainly a
+#'   diagnostic/reference path for timing the algebraic reduction.
 #'
 #' @return A list of class `magmaan_nested_test`.
 #' @export
@@ -27,10 +31,12 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data,
                               method = c("restriction_map",
                                          "lavaan_sb2001",
                                          "lavaan_sb2010"),
-                              A.method = c("exact", "delta")) {
+                              A.method = c("exact", "delta"),
+                              computation = c("streaming", "materialized")) {
   gamma <- match.arg(gamma)
   method <- match.arg(method)
   A.method <- match.arg(A.method)
+  computation <- match.arg(computation)
 
   ngroups <- fit_H1$ngroups
   if (is.null(ngroups) || ngroups < 1) ngroups <- 1L
@@ -72,7 +78,8 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data,
         T_H1 = T_H1, df_H1 = df_H1,
         T_H0 = T_H0, df_H0 = df_H0,
         gamma = gamma,
-        a_method = A.method),
+        a_method = A.method,
+        computation = computation),
     lavaan_sb2001 = infer_lr_test_satorra_bentler2001(
         fit_H1, fit_H0, X_per_group,
         T_H1 = T_H1, df_H1 = df_H1,
@@ -86,6 +93,7 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data,
   res$gamma <- gamma
   res$method <- method
   res$A.method <- A.method
+  res$computation <- computation
   class(res) <- c("magmaan_nested_test", "list")
   res
 }
@@ -102,15 +110,18 @@ nestedTest <- function(fit_H1, fit_H0, data, gamma = c("empirical", "NT"),
                                   "restriction_map",
                                   "lavaan_sb2001",
                                   "lavaan_sb2010"),
-                       A.method = c("exact", "delta")) {
+                       A.method = c("exact", "delta"),
+                       computation = c("streaming", "materialized")) {
   method <- match.arg(method)
+  computation <- match.arg(computation)
   canonical <- switch(method,
     satorra.2000 = "restriction_map",
     satorra.bentler.2001 = "lavaan_sb2001",
     satorra.bentler.2010 = "lavaan_sb2010",
     method)
   out <- robust_nested_lrt(fit_H1, fit_H0, data, gamma = gamma,
-                           method = canonical, A.method = A.method)
+                           method = canonical, A.method = A.method,
+                           computation = computation)
   out$compat_method <- method
   out
 }
@@ -118,8 +129,9 @@ nestedTest <- function(fit_H1, fit_H0, data, gamma = c("empirical", "NT"),
 #' @export
 print.magmaan_nested_test <- function(x, digits = 4L, ...) {
   method <- x$method %||% "restriction_map"
-  cat(sprintf("Scaled nested-model chi-square difference test (method = %s, Gamma = %s)\n\n",
-              method, x$gamma))
+  comp <- x$computation %||% "streaming"
+  cat(sprintf("Scaled nested-model chi-square difference test (method = %s, Gamma = %s, computation = %s)\n\n",
+              method, x$gamma, comp))
   if (identical(method, "restriction_map")) {
     rows <- data.frame(
         stat = c(x$T_diff, x$T_scaled, x$T_adjusted,

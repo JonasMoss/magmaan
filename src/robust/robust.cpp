@@ -528,6 +528,78 @@ reduced_gamma_sample(const UFactor&                            uf,
 }
 
 post_expected<Eigen::MatrixXd>
+reduced_gamma_sample_materialized(
+    const UFactor&                            uf,
+    const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+    const Eigen::Ref<const Eigen::VectorXd>&  denom) {
+  if (uf.kind != UFactor::Kind::ProjectionExpected) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_sample_materialized: only the ProjectionExpected "
+        "U-factor is supported"));
+  }
+  const Eigen::Index expected_cols =
+      uf.has_means ? uf.total_rows : uf.pstar;
+  if (Zc.cols() != expected_cols) {
+    if (uf.has_means && Zc.cols() == uf.pstar) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "reduced_gamma_sample_materialized: Zc has " +
+              std::to_string(Zc.cols()) +
+              " columns (σ-only) but the UFactor was built with mean "
+              "structure (total_rows = " + std::to_string(uf.total_rows) +
+              "); rebuild Zc via casewise_contributions(raw, samp, "
+              "/*include_means=*/true)"));
+    }
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_sample_materialized: Zc has " +
+            std::to_string(Zc.cols()) + " columns, expected " +
+            std::to_string(expected_cols)));
+  }
+  const Eigen::Index nb = static_cast<Eigen::Index>(uf.blocks.size());
+  if (denom.size() != 1 && denom.size() != nb) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_sample_materialized: denom has length " +
+            std::to_string(denom.size()) + "; expected 1 or " +
+            std::to_string(nb) + " (one per block)"));
+  }
+  if (!(denom.minCoeff() > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_sample_materialized: every denom entry must be > 0"));
+  }
+  const auto denom_b = [&](Eigen::Index b) -> double {
+    return denom.size() == 1 ? denom(0) : denom(b);
+  };
+  const auto block_slice = [&](const UFactor::Block& blk)
+      -> std::pair<Eigen::Index, Eigen::Index> {
+    const Eigen::Index start = (uf.has_means && blk.mu_off >= 0)
+                                   ? blk.mu_off : blk.row_offset;
+    const Eigen::Index size  = (uf.has_means ? blk.p : 0) + blk.pstar;
+    return {start, size};
+  };
+
+  Eigen::MatrixXd M = Eigen::MatrixXd::Zero(uf.df, uf.df);
+  for (Eigen::Index b = 0; b < nb; ++b) {
+    const auto& blk = uf.blocks[static_cast<std::size_t>(b)];
+    const auto [bstart, bsize] = block_slice(blk);
+    const Eigen::MatrixXd Zc_b = Zc.middleCols(bstart, bsize);
+    const Eigen::MatrixXd Gamma_b =
+        (Zc_b.transpose() * Zc_b) / denom_b(b);
+    const Eigen::MatrixXd B_b = uf.B.middleRows(bstart, bsize);
+    M.noalias() += B_b.transpose() * Gamma_b * B_b;
+  }
+  M = 0.5 * (M + M.transpose()).eval();
+  return M;
+}
+
+post_expected<Eigen::MatrixXd>
+reduced_gamma_sample_materialized(
+    const UFactor&                            uf,
+    const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+    double                                    denom) {
+  const Eigen::VectorXd d = Eigen::VectorXd::Constant(1, denom);
+  return reduced_gamma_sample_materialized(uf, Zc, d);
+}
+
+post_expected<Eigen::MatrixXd>
 reduced_gamma_sample_streaming(const UFactor&                       uf,
                                const std::vector<Eigen::VectorXd>&  zc_rows,
                                double                               denom) {

@@ -611,14 +611,17 @@ need, and no more. The current C++ core mostly follows this:
   sample/raw data, starts, discrepancy, and optimizer. They do not take
   parameter names.
 - Information, covariance, SE, chi-square, degrees of freedom, Wald/z tests,
-  robust U-Gamma reducers, and fit measures are exposed as separate primitives
-  rather than as methods on one fitted-object bundle.
+  robust U-Gamma reducers, the materialized empirical-Gamma reference reducer,
+  and fit measures are exposed as separate primitives rather than as methods on
+  one fitted-object bundle.
 - Satorra-Bentler-family reducers take scalar test statistics, degrees of
   freedom, and eigenvalues or trace summaries rather than fit objects.
 - The Satorra-2000 C++ helper takes the model, reparameterization matrices,
   raw-data pieces, chi-square values, degrees of freedom, and an explicit
   `A.method` option (`exact` default, `delta` for lavaan-style
-  moment-Jacobian column-space restrictions).
+  moment-Jacobian column-space restrictions). Its empirical-Gamma computation
+  can run in the default streaming casewise-reduced mode or in a materialized
+  full-Gamma reference mode for diagnostics and benchmarks.
 
 The remaining pressure point is the R boundary. Several exported R wrappers
 currently accept the transparent fit list for convenience and then unpack the
@@ -664,6 +667,9 @@ The R boundary now stages this policy with `robust_nested_lrt()` as the
 friendly statistical name for nested robust likelihood-ratio work. Its default
 `method = "restriction_map"` names the exact restriction-map contract, while
 `"lavaan_sb2001"` and `"lavaan_sb2010"` are explicit compatibility methods.
+The restriction-map route also exposes `computation = "streaming"` versus
+`"materialized"` so paper-local benchmarks can compare the algebra without
+using lavaan as the timing denominator.
 The older `nestedTest()` spelling and lavaan labels (`"satorra.2000"`,
 `"satorra.bentler.2001"`, `"satorra.bentler.2010"`) remain as compatibility
 aliases during exploration. Low-level `magmaan_core` exposes both

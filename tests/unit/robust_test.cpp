@@ -665,6 +665,9 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B") {
   auto M_a_or = magmaan::robust::reduced_gamma_sample(
       *uf_or, *Zc_or, static_cast<double>(n));
   REQUIRE(M_a_or.has_value());
+  auto M_full_or = magmaan::robust::reduced_gamma_sample_materialized(
+      *uf_or, *Zc_or, static_cast<double>(n));
+  REQUIRE(M_full_or.has_value());
 
   // Path 2: explicit Γ̂ then B'Γ̂B.
   auto G_or = magmaan::data::empirical_gamma(raw.X[0]);
@@ -673,6 +676,7 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B") {
       uf_or->B.transpose() * (*G_or) * uf_or->B;
 
   CHECK((*M_a_or - M_b).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK((*M_full_or - M_b).cwiseAbs().maxCoeff() < 1e-10);
 
   // The per-block-divisor vector form: a length-1 vector recycles to the
   // single block, so it must match the scalar overload bit-for-bit. A
@@ -745,6 +749,9 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B with mean structure (G3
   auto M_a_or = magmaan::robust::reduced_gamma_sample(
       *uf_or, *Zc_or, static_cast<double>(n));
   REQUIRE(M_a_or.has_value());
+  auto M_full_or = magmaan::robust::reduced_gamma_sample_materialized(
+      *uf_or, *Zc_or, static_cast<double>(n));
+  REQUIRE(M_full_or.has_value());
 
   // Path 2: explicit means-aware Γ̂_full then Bᵀ · Γ̂_full · B.
   const Eigen::MatrixXd Gamma_full =
@@ -752,6 +759,7 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B with mean structure (G3
   const Eigen::MatrixXd M_b =
       uf_or->B.transpose() * Gamma_full * uf_or->B;
   CHECK((*M_a_or - M_b).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK((*M_full_or - M_b).cwiseAbs().maxCoeff() < 1e-10);
 
   // Shape-mismatch path: σ-only Zc against a means-aware UFactor is rejected
   // with the dedicated "rebuild Zc" message (not the generic shape error).
