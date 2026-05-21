@@ -130,6 +130,15 @@ through to a single Rcpp shim per fit family — no per-Backend wrapper
 explosion. Solver tuning rides on a generic `control = list(max_iter, ftol,
 gtol, history)` argument.
 
+Optimizer outputs carry function/gradient evaluation counts plus a refined
+success status and final stationarity diagnostic. The C++ `OptimResult` and
+`estimate::Estimates` report `OptimStatus` (`Converged`,
+`LineSearchSalvaged`, `SingularConvergence`, or `Unknown`) and a final
+(projected, when bounded) gradient infinity norm when the backend can compute
+one. R fit lists expose these as `optimizer_status` and `grad_norm`; the
+legacy `converged` boolean is now true only for a clean stationary optimizer
+stop rather than any usable non-error return.
+
 
 - `Backend::Lbfgs` is the default for scalar discrepancies — LBFGS unbounded
   and LBFGS-B bounded, both via header-only LBFGS++.

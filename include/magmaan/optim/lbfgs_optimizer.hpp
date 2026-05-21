@@ -6,6 +6,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
+#include "magmaan/optim/problem.hpp"   // OptimStatus
 
 namespace magmaan::optim {
 
@@ -22,6 +23,10 @@ struct LbfgsOutput {
   int             iterations = 0;
   int             f_evals = 0;
   int             g_evals = 0;
+  // Refined success status and the (projected) gradient infinity-norm at the
+  // solution. `grad_inf_norm < 0` means the backend did not compute it.
+  OptimStatus     status        = OptimStatus::Converged;
+  double          grad_inf_norm = -1.0;
 };
 
 // LBFGS++ adapter. The objective callable computes value + writes

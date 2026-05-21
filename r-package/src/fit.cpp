@@ -328,8 +328,17 @@ Rcpp::List fit_result(Ctx& ctx,
     ntotal += ctx.samp.n_obs[b];
   }
 
-  return Rcpp::List::create(
-      Rcpp::_["converged"]     = true,
+  // Refined optimizer status, surfaced to R alongside the boolean `converged`
+  // (which now means "clean stationary stop", not merely "did not error").
+  using magmaan::optim::OptimStatus;
+  const char* opt_status =
+      est.optimizer_status == OptimStatus::Converged           ? "converged"
+      : est.optimizer_status == OptimStatus::LineSearchSalvaged ? "line_search_salvaged"
+      : est.optimizer_status == OptimStatus::SingularConvergence ? "singular_convergence"
+                                                                : "unknown";
+
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["converged"]     = (est.optimizer_status == OptimStatus::Converged),
       Rcpp::_["estimator"]     = estimator,
       Rcpp::_["fmin"]          = est.fmin,
       Rcpp::_["iterations"]    = est.iterations,
@@ -347,6 +356,9 @@ Rcpp::List fit_result(Ctx& ctx,
       Rcpp::_["nobs"]          = nobs_out,
       Rcpp::_["sample_mean"]   = mean_out,
       Rcpp::_["meanstructure"] = ctx.meanstructure);
+  out["optimizer_status"] = opt_status;
+  out["grad_norm"]        = est.grad_inf_norm;
+  return out;
 }
 
 Rcpp::List snlls_fit_result(Ctx& ctx,

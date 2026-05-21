@@ -82,7 +82,8 @@ LbfgsOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
     const double gmax = x.size() > 0 ? grad.cwiseAbs().maxCoeff() : 0.0;
     const double salvage_gtol = std::max(1e-3, 1e3 * opts_.gtol);
     if (std::isfinite(f_at_x) && gmax <= salvage_gtol) {
-      return LbfgsOutput{std::move(x), f_at_x, n_iter};
+      return LbfgsOutput{std::move(x), f_at_x, n_iter, 0, 0,
+                         OptimStatus::LineSearchSalvaged, gmax};
     }
     return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
         std::string("L-BFGS line search failed: ") + e.what() +
@@ -102,7 +103,13 @@ LbfgsOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
         n_iter, fval));
   }
 
-  return LbfgsOutput{std::move(x), fval, n_iter};
+  // LBFGSpp does not return the final gradient; recompute it once at the
+  // solution so callers get a stationarity measure (one extra evaluation).
+  Eigen::VectorXd gfinal = Eigen::VectorXd::Zero(x.size());
+  fn(x, gfinal);
+  const double gnorm = x.size() > 0 ? gfinal.cwiseAbs().maxCoeff() : 0.0;
+  return LbfgsOutput{std::move(x), fval, n_iter, 0, 0,
+                     OptimStatus::Converged, gnorm};
 }
 
 }  // namespace magmaan::optim

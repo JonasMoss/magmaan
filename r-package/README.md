@@ -20,6 +20,10 @@ Convenience helpers are limited to R-side composition:
   corrections, fit measures, defined parameters, and nested tests remain
   explicit post-fit calls. Lavaan-style `se = "none"` and `test = "none"` are
   accepted to make point-estimate-only workflows explicit; other values error.
+  Fit lists include `optimizer_status` and `grad_norm` so methods work can
+  distinguish clean stationary convergence from usable but salvaged or singular
+  optimizer exits. The `converged` boolean is true only for the clean
+  stationary case.
 - `compute_defined(model, fit, vcov)` evaluates `:=` rows after fitting. The
   caller supplies the covariance matrix explicitly, so expected/observed/robust
   covariance choices stay visible.

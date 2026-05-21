@@ -1,5 +1,6 @@
 #include "magmaan/optim/lbfgsb_optimizer.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <limits>
@@ -100,7 +101,21 @@ LbfgsBOptimizer::minimize(Objective f,
         n_iter, fval));
   }
 
-  return LbfgsOutput{std::move(x), fval, n_iter};
+  // LBFGSpp does not return the final gradient; recompute it once and report
+  // the *projected* gradient infinity-norm — components pushing against an
+  // active box bound are zeroed, which is the correct stationarity measure
+  // for a bounded solve (and degrades to the raw norm when bounds are ±inf).
+  Eigen::VectorXd gfinal = Eigen::VectorXd::Zero(x.size());
+  fn(x, gfinal);
+  double gnorm = 0.0;
+  for (Eigen::Index i = 0; i < x.size(); ++i) {
+    double gi = gfinal[i];
+    if (x[i] <= lower[i] && gi > 0.0) gi = 0.0;
+    else if (x[i] >= upper[i] && gi < 0.0) gi = 0.0;
+    gnorm = std::max(gnorm, std::abs(gi));
+  }
+  return LbfgsOutput{std::move(x), fval, n_iter, 0, 0,
+                     OptimStatus::Converged, gnorm};
 }
 
 fit_expected<LbfgsOutput>

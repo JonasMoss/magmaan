@@ -2,6 +2,7 @@
 
 #ifdef MAGMAAN_WITH_PORT
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -228,12 +229,18 @@ PortOptimizer::minimize(Objective f,
   const int    n_iter       = iv[kIv_NIter];
   const double f_final      = v[kV_F];  // PORT's recorded final function value
 
+  OptimStatus opt_status = OptimStatus::Converged;
   switch (final_status) {
     case PORT_OK_XCONV:
     case PORT_OK_RFCONV:
     case PORT_OK_BOTH:
     case PORT_OK_AFCONV:
+      break;
     case PORT_OK_SINGCONV:
+      // Singular convergence: PORT reached a point where its model Hessian is
+      // singular. The fit is usable but the caller should know it was not a
+      // clean stationary stop — a common signature of weak identification.
+      opt_status = OptimStatus::SingularConvergence;
       break;
     case PORT_FAIL_NOISY:
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -264,8 +271,21 @@ PortOptimizer::minimize(Objective f,
         n_iter, f_final));
   }
 
+  // Recompute the gradient at the final point and report the *projected*
+  // infinity-norm: components pushing against an active box bound are zeroed
+  // (degrades to the raw norm when bounds are ±infinity).
+  Eigen::VectorXd gfinal = Eigen::VectorXd::Zero(n);
+  f(x, gfinal);
+  double gnorm = 0.0;
+  for (int i = 0; i < n; ++i) {
+    double gi = gfinal[i];
+    if (x[i] <= lower[i] && gi > 0.0) gi = 0.0;
+    else if (x[i] >= upper[i] && gi < 0.0) gi = 0.0;
+    gnorm = std::max(gnorm, std::abs(gi));
+  }
+
   return LbfgsOutput{std::move(x), f_final, n_iter,
-                     iv[kIv_NFCall], iv[kIv_NGCall]};
+                     iv[kIv_NFCall], iv[kIv_NGCall], opt_status, gnorm};
 }
 
 fit_expected<LbfgsOutput>
@@ -447,12 +467,15 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
   const int    n_iter       = iv[kIv_NIter];
   const double f_final      = v[kV_F];
 
+  OptimStatus opt_status = OptimStatus::Converged;
   switch (final_status) {
     case PORT_OK_XCONV:
     case PORT_OK_RFCONV:
     case PORT_OK_BOTH:
     case PORT_OK_AFCONV:
+      break;
     case PORT_OK_SINGCONV:
+      opt_status = OptimStatus::SingularConvergence;
       break;
     case PORT_FAIL_NOISY:
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -483,7 +506,9 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
         n_iter, f_final));
   }
 
-  return LbfgsOutput{std::move(x), f_final, n_iter};
+  // NL2SOL drives the residual structure directly; a stationarity norm is not
+  // recomputed here (grad_inf_norm left at the -1 "not computed" sentinel).
+  return LbfgsOutput{std::move(x), f_final, n_iter, 0, 0, opt_status, -1.0};
 }
 
 }  // namespace magmaan::optim
