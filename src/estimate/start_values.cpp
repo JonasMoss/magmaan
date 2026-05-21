@@ -176,10 +176,15 @@ simple_start_values(const spec::LatentStructure& pt,
         }
         break;
       case model::MatId::Beta:
-        // Regression coefficients (latent → latent OR via phantom-Λ
-        // observed → observed). Lavaan's "simple" defaults regressions to
-        // 0; we mirror that.
-        start(k) = 0.0;
+        // A Β cell is either a structural regression (`~`) or a higher-order
+        // loading (`=~` with a latent rhs, lowered to a path by matrix_rep).
+        // A regression starts at 0 — lavaan's "simple" default, which we
+        // mirror. A higher-order loading instead starts like an ordinary
+        // loading: 0 would assert the higher-order factor explains none of
+        // its (latent) indicators' covariation, a needlessly cold start that
+        // FABIN cannot warm up — the "indicator" is latent, so it has no
+        // sample-covariance column to read.
+        start(k) = (pt.op[i] == parse::Op::Measurement) ? 0.7 : 0.0;
         break;
       case model::MatId::Nu:
         // Indicator intercept ν_i: start at the sample mean of indicator

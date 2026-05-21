@@ -25,12 +25,21 @@ bool is_constraint_op(parse::Op op) noexcept {
          op == parse::Op::GtConstraint || op == parse::Op::DefineParam;
 }
 
-// Decide which form to use: PureCFA when there are no `~` regressions,
-// else Reduced. `~1` (mean structure) does NOT force Reduced — intercepts
-// live in Nu / Alpha and don't require phantom latents to represent.
+// Decide which form to use: PureCFA when there are no `~` regressions and no
+// higher-order `=~` (a latent measured by another latent), else Reduced. A
+// higher-order measurement is lowered to a latent-on-latent Β path, and Β
+// only exists in the Reduced form. `~1` (mean structure) does NOT force
+// Reduced — intercepts live in Nu / Alpha and need no phantom latents.
 RepForm decide_form(const spec::LatentStructure& pt) noexcept {
   for (std::size_t i = 0; i < pt.size(); ++i) {
     if (pt.op[i] == parse::Op::Regression) return RepForm::Reduced;
+    if (pt.op[i] == parse::Op::Measurement) {
+      const std::int32_t R = pt.rhs_var[i];
+      if (R >= 0 && R < pt.n_vars &&
+          pt.is_user_latent[static_cast<std::size_t>(R)] != 0) {
+        return RepForm::Reduced;
+      }
+    }
   }
   return RepForm::PureCFA;
 }
@@ -133,12 +142,23 @@ build_matrix_rep(const spec::LatentStructure& pt,
 
     switch (op) {
       case parse::Op::Measurement: {
-        // Λ[ind, lat] regardless of form.
-        const auto row_idx = ov_idx(R);
-        const auto col_idx = lv_ext_idx(L);
-        if (row_idx < 0) return unknown_var(R);
-        if (col_idx < 0) return unknown_var(L);
-        c.mat = MatId::Lambda; c.row = row_idx; c.col = col_idx; c.used = true;
+        if (is_user_lv(R)) {
+          // Higher-order measurement `lat_hi =~ lat_lo`: the RHS latent is the
+          // effect, so this is the latent-on-latent path `lat_lo ~ lat_hi` —
+          // Β[effect, cause]. decide_form guarantees Reduced form here.
+          const auto row_idx = lv_ext_idx(R);
+          const auto col_idx = lv_ext_idx(L);
+          if (row_idx < 0) return unknown_var(R);
+          if (col_idx < 0) return unknown_var(L);
+          c.mat = MatId::Beta; c.row = row_idx; c.col = col_idx; c.used = true;
+        } else {
+          // Ordinary measurement: Λ[ind, lat], regardless of form.
+          const auto row_idx = ov_idx(R);
+          const auto col_idx = lv_ext_idx(L);
+          if (row_idx < 0) return unknown_var(R);
+          if (col_idx < 0) return unknown_var(L);
+          c.mat = MatId::Lambda; c.row = row_idx; c.col = col_idx; c.used = true;
+        }
         break;
       }
       case parse::Op::Covariance: {
