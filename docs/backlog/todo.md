@@ -32,10 +32,11 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   ULS/GLS smoke cases to WLS, ordinal DWLS/WLS, and mixed categorical models.
 - **M.** Track objective value, gradient norm, iteration count, wall time, and
   agreement with lavaan-backed estimates where applicable.
-- **S/M.** Fix unbounded L-BFGS convergence diagnostics on the line-search
-  salvage path: accepted last iterates can currently surface without a reliable
-  solver iteration count, so benchmark scripts should avoid treating a reported
-  zero as a real optimizer iteration count.
+- **S/M.** Refine benchmark use of optimizer diagnostics now that fit results
+  expose `optimizer_status` and final gradient norms. Benchmark scripts should
+  distinguish clean convergence from line-search salvage or singular PORT
+  convergence, and still avoid interpreting backend-specific missing iteration
+  counts as real zero-iteration solves.
 - **M.** Compare LBFGS, LBFGS-B, Ceres trust-region, Ceres dense BFGS, and
   SNLLS only on semantically appropriate cases; include shallow or
   Heywood-prone LS cases so bounds and conditioning stay visible.

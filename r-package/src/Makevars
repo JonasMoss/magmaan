@@ -6,8 +6,10 @@ MAGMAAN_BUILD ?= $(MAGMAAN_ROOT)/build/$(MAGMAAN_PRESET)
 MAGMAAN_LIB  := $(MAGMAAN_BUILD)/libmagmaan.a
 MAGMAAN_PORT_LIB := $(MAGMAAN_BUILD)/libport.a
 MAGMAAN_NLOPT_LIB := $(MAGMAAN_BUILD)/_deps/nlopt-build/libnlopt.a
+MAGMAAN_CMAKE_CACHE := $(MAGMAAN_BUILD)/CMakeCache.txt
+MAGMAAN_NLOPT_CACHE_ON := $(shell if test -r "$(MAGMAAN_CMAKE_CACHE)" && grep -q '^MAGMAAN_WITH_NLOPT:BOOL=ON' "$(MAGMAAN_CMAKE_CACHE)"; then printf 1; else printf 0; fi)
 MAGMAAN_WITH_CERES_R ?= 0
-MAGMAAN_WITH_NLOPT_R ?= 0
+MAGMAAN_WITH_NLOPT_R ?= $(MAGMAAN_NLOPT_CACHE_ON)
 MAGMAAN_CONFIG_STAMP := .magmaan-build-config
 
 CXX_STD       = CXX23
@@ -28,9 +30,9 @@ endif
 # carries unresolved nlopt_* symbols; the final R shared object must also
 # link NLopt or it fails to load (undefined symbol: nlopt_get_numevals).
 # magmaan fetches NLopt as a static lib inside the CMake build tree, so we
-# prefer that archive and fall back to a system -lnlopt. Keep
-# MAGMAAN_WITH_NLOPT_R in sync with MAGMAAN_WITH_NLOPT in the build that
-# produced libmagmaan.a (mirrors MAGMAAN_WITH_CERES_R above).
+# prefer that archive and fall back to a system -lnlopt. By default this
+# follows MAGMAAN_WITH_NLOPT in the selected build's CMake cache, but explicit
+# MAGMAAN_WITH_NLOPT_R=0/1 still wins for unusual local builds.
 ifeq ($(MAGMAAN_WITH_NLOPT_R),1)
 PKG_CPPFLAGS += -DMAGMAAN_WITH_NLOPT
 PKG_LIBS     += $(if $(wildcard $(MAGMAAN_NLOPT_LIB)),$(MAGMAAN_NLOPT_LIB),-lnlopt)

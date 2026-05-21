@@ -25,7 +25,7 @@ namespace {
 
 OptimResult to_result(LbfgsOutput out) {
   return OptimResult{std::move(out.theta_hat), out.fmin, out.iterations,
-                     out.f_evals, out.g_evals};
+                     out.f_evals, out.g_evals, out.status, out.grad_inf_norm};
 }
 
 }  // namespace

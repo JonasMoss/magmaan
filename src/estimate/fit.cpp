@@ -265,7 +265,8 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
     auto out = run_gmm(prob, x0, bounds, backend, opts);
     if (!out.has_value()) return std::unexpected(out.error());
     return Estimates{prob.expand(out->x), out->fmin, out->iterations,
-                     out->f_evals, out->g_evals};
+                     out->f_evals, out->g_evals,
+                     out->status, out->grad_inf_norm};
   }
 
   // Constrained: optimize over the reduced α (θ = θ₀ + K·α).
@@ -300,7 +301,8 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
     }
   }
   return Estimates{std::move(theta_hat), out->fmin, out->iterations,
-                   out->f_evals, out->g_evals};
+                   out->f_evals, out->g_evals,
+                   out->status, out->grad_inf_norm};
 }
 
 }  // namespace
@@ -403,7 +405,8 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
     auto out = run_scalar(prob, x0, bounds, backend, opts);
     if (!out.has_value()) return std::unexpected(out.error());
     return Estimates{prob.expand(out->x), out->fmin, out->iterations,
-                     out->f_evals, out->g_evals};
+                     out->f_evals, out->g_evals,
+                     out->status, out->grad_inf_norm};
   }
 
   const optim::ScalarProblem prob_a = reparameterize(prob, con);
@@ -424,7 +427,8 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto out = run_scalar(prob_a, alpha0, abounds, backend, opts);
   if (!out.has_value()) return std::unexpected(out.error());
   return Estimates{prob_a.expand(out->x), out->fmin, out->iterations,
-                   out->f_evals, out->g_evals};
+                   out->f_evals, out->g_evals,
+                   out->status, out->grad_inf_norm};
 }
 
 namespace {
@@ -461,7 +465,8 @@ compose_snlls(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
   auto out = run_gmm(prob, gp_or->beta0, Bounds{}, backend, opts);
   if (!out.has_value()) return std::unexpected(out.error());
   return Estimates{prob.expand(out->x), out->fmin, out->iterations,
-                   out->f_evals, out->g_evals};
+                   out->f_evals, out->g_evals,
+                   out->status, out->grad_inf_norm};
 }
 
 }  // namespace

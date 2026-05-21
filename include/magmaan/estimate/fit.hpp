@@ -8,6 +8,7 @@
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/start_values.hpp"
@@ -33,6 +34,11 @@ struct Estimates {
   // there `f_evals == g_evals`.
   int             f_evals = 0;
   int             g_evals = 0;
+  // Refined optimizer termination status and the (projected) gradient
+  // infinity-norm at the solution. The defaults describe an exact/closed-form
+  // solve where no outer optimizer ran; `grad_inf_norm < 0` means not computed.
+  optim::OptimStatus optimizer_status = optim::OptimStatus::Converged;
+  double             grad_inf_norm    = -1.0;
 };
 
 // Optimizer backend selector for the convenience composers below.
