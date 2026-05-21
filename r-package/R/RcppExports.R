@@ -229,8 +229,8 @@ infer_rls_chi2_sample <- function(sample_stats, implied) {
     .Call(`_magmaan_infer_rls_chi2_sample`, sample_stats, implied)
 }
 
-infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical", a_method = "exact") {
-    .Call(`_magmaan_infer_lr_test_satorra2000`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma, a_method)
+infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical", a_method = "exact", computation = "streaming") {
+    .Call(`_magmaan_infer_lr_test_satorra2000`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma, a_method, computation)
 }
 
 infer_lr_test_satorra_bentler2001 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical") {
@@ -255,6 +255,10 @@ infer_reduced_gamma_nt <- function(uf) {
 
 infer_reduced_gamma_sample <- function(uf, Zc, denom) {
     .Call(`_magmaan_infer_reduced_gamma_sample`, uf, Zc, denom)
+}
+
+infer_reduced_gamma_sample_materialized <- function(uf, Zc, denom) {
+    .Call(`_magmaan_infer_reduced_gamma_sample_materialized`, uf, Zc, denom)
 }
 
 infer_reduced_gamma_unbiased <- function(uf, n, M_sample, M_nt) {

@@ -24,8 +24,9 @@ enum class SatorraAMethod {
 };
 
 struct Satorra2000Options {
-  SatorraAMethod a_method = SatorraAMethod::Exact;
-  GammaSource    gamma    = GammaSource::Empirical;
+  SatorraAMethod   a_method    = SatorraAMethod::Exact;
+  GammaSource      gamma       = GammaSource::Empirical;
+  GammaComputation computation = GammaComputation::Streaming;
 };
 
 struct LRSatorraBentlerDiffResult {

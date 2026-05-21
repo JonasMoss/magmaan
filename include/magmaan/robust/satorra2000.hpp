@@ -80,6 +80,11 @@ enum class GammaSource {
   NT          // Γ_NT(Σ̂)         — sanity check: all eigvals → 1
 };
 
+enum class GammaComputation {
+  Streaming,     // project casewise rows before forming crossproducts
+  Materialized   // form Γ̂ explicitly, then reduce
+};
+
 struct SatorraDiffResult {
   Eigen::MatrixXd          C;                 // m × m
   Eigen::MatrixXd          S;                 // m × m
@@ -100,6 +105,7 @@ struct SatorraDiffResult {
 post_expected<SatorraDiffResult>
 compute_satorra2000(const std::vector<SatorraGroup>& groups,
                     const Eigen::MatrixXd&           A_alpha,
-                    GammaSource                      gamma = GammaSource::Empirical);
+                    GammaSource                      gamma = GammaSource::Empirical,
+                    GammaComputation                 computation = GammaComputation::Streaming);
 
 }  // namespace magmaan::robust

@@ -757,8 +757,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // infer_lr_test_satorra2000
-Rcpp::List infer_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, double T_H1, int df_H1, double T_H0, int df_H0, std::string gamma, std::string a_method);
-RcppExport SEXP _magmaan_infer_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP T_H1SEXP, SEXP df_H1SEXP, SEXP T_H0SEXP, SEXP df_H0SEXP, SEXP gammaSEXP, SEXP a_methodSEXP) {
+Rcpp::List infer_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, double T_H1, int df_H1, double T_H0, int df_H0, std::string gamma, std::string a_method, std::string computation);
+RcppExport SEXP _magmaan_infer_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP T_H1SEXP, SEXP df_H1SEXP, SEXP T_H0SEXP, SEXP df_H0SEXP, SEXP gammaSEXP, SEXP a_methodSEXP, SEXP computationSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -771,7 +771,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type df_H0(df_H0SEXP);
     Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
     Rcpp::traits::input_parameter< std::string >::type a_method(a_methodSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_lr_test_satorra2000(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma, a_method));
+    Rcpp::traits::input_parameter< std::string >::type computation(computationSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_lr_test_satorra2000(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma, a_method, computation));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -860,6 +861,19 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type Zc(ZcSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type denom(denomSEXP);
     rcpp_result_gen = Rcpp::wrap(infer_reduced_gamma_sample(uf, Zc, denom));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_reduced_gamma_sample_materialized
+Rcpp::NumericMatrix infer_reduced_gamma_sample_materialized(Rcpp::List uf, Rcpp::NumericMatrix Zc, Rcpp::NumericVector denom);
+RcppExport SEXP _magmaan_infer_reduced_gamma_sample_materialized(SEXP ufSEXP, SEXP ZcSEXP, SEXP denomSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type uf(ufSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type Zc(ZcSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type denom(denomSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_reduced_gamma_sample_materialized(uf, Zc, denom));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1121,13 +1135,14 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_browne_residual_nt", (DL_FUNC) &_magmaan_infer_browne_residual_nt, 1},
     {"_magmaan_infer_rls_chi2", (DL_FUNC) &_magmaan_infer_rls_chi2, 2},
     {"_magmaan_infer_rls_chi2_sample", (DL_FUNC) &_magmaan_infer_rls_chi2_sample, 2},
-    {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 9},
+    {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 10},
     {"_magmaan_infer_lr_test_satorra_bentler2001", (DL_FUNC) &_magmaan_infer_lr_test_satorra_bentler2001, 8},
     {"_magmaan_infer_lr_test_satorra_bentler2010", (DL_FUNC) &_magmaan_infer_lr_test_satorra_bentler2010, 8},
     {"_magmaan_infer_build_u_factor", (DL_FUNC) &_magmaan_infer_build_u_factor, 3},
     {"_magmaan_infer_build_u_factor_parts", (DL_FUNC) &_magmaan_infer_build_u_factor_parts, 5},
     {"_magmaan_infer_reduced_gamma_nt", (DL_FUNC) &_magmaan_infer_reduced_gamma_nt, 1},
     {"_magmaan_infer_reduced_gamma_sample", (DL_FUNC) &_magmaan_infer_reduced_gamma_sample, 3},
+    {"_magmaan_infer_reduced_gamma_sample_materialized", (DL_FUNC) &_magmaan_infer_reduced_gamma_sample_materialized, 3},
     {"_magmaan_infer_reduced_gamma_unbiased", (DL_FUNC) &_magmaan_infer_reduced_gamma_unbiased, 4},
     {"_magmaan_infer_ugamma_eigenvalues", (DL_FUNC) &_magmaan_infer_ugamma_eigenvalues, 1},
     {"_magmaan_infer_satorra_bentler", (DL_FUNC) &_magmaan_infer_satorra_bentler, 3},

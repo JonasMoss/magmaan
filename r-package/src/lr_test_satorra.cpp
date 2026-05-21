@@ -33,6 +33,13 @@ magmaan::robust::SatorraAMethod parse_a_method(const std::string& s) {
   return magmaan::robust::SatorraAMethod::Exact;
 }
 
+magmaan::robust::GammaComputation parse_gamma_computation(const std::string& s) {
+  if (s == "materialized" || s == "full" || s == "explicit") {
+    return magmaan::robust::GammaComputation::Materialized;
+  }
+  return magmaan::robust::GammaComputation::Streaming;
+}
+
 magmaan::data::RawData raw_from_group_list(Rcpp::List X_per_group,
                                            std::size_t G,
                                            const char* caller) {
@@ -98,7 +105,8 @@ Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
                                      double               T_H0,
                                      int                  df_H0,
                                      std::string          gamma = "empirical",
-                                     std::string          a_method = "exact") {
+                                     std::string          a_method = "exact",
+                                     std::string          computation = "streaming") {
   // ── Build the H1 context (pt, rep, samp) and pull θ̂_H1 ─────────────────
   magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
   const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
@@ -145,7 +153,8 @@ Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
       T_H0, T_H1, df_H0, df_H1,
       magmaan::robust::Satorra2000Options{
           .a_method = parse_a_method(a_method),
-          .gamma = parse_gamma(gamma)});
+          .gamma = parse_gamma(gamma),
+          .computation = parse_gamma_computation(computation)});
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   const magmaan::robust::LRSatorra2000Result& r = *r_or;
 

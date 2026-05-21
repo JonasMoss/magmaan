@@ -164,13 +164,21 @@ TEST_CASE("compute_satorra2000: 2-var saturated, σ₁₂=0 restriction") {
   auto fast_or = magmaan::robust::compute_satorra2000({gr}, A_alpha,
                                           magmaan::robust::GammaSource::Empirical);
   REQUIRE(fast_or.has_value());
+  auto full_or = magmaan::robust::compute_satorra2000(
+      {gr}, A_alpha, magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::GammaComputation::Materialized);
+  REQUIRE(full_or.has_value());
   const Eigen::VectorXd ev_fast   = fast_or->eigenvalues;
+  const Eigen::VectorXd ev_full   = full_or->eigenvalues;
   const Eigen::VectorXd ev_naive = naive_satorra_eigvals({gr}, A_alpha);
 
   INFO("ev_fast   = ", ev_fast.transpose());
+  INFO("ev_full   = ", ev_full.transpose());
   INFO("ev_naive = ", ev_naive.transpose());
   REQUIRE(ev_fast.size() == 1);
+  REQUIRE(ev_full.size() == 1);
   REQUIRE(ev_naive.size() == 1);
+  CHECK(ev_fast(0) == doctest::Approx(ev_full(0)).epsilon(1e-12));
   CHECK(ev_fast(0) == doctest::Approx(ev_naive(0)).epsilon(1e-10));
   // The Satorra-Bentler scale `c` = tr(C⁻¹S)/m equals the single eigenvalue.
   CHECK(fast_or->trace_CinvS == doctest::Approx(ev_fast(0)).epsilon(1e-12));

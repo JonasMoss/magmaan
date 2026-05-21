@@ -61,7 +61,8 @@ Eigen::MatrixXd apply_V_columns(const Eigen::MatrixXd& inv_sigma,
 post_expected<SatorraDiffResult>
 compute_satorra2000(const std::vector<SatorraGroup>& groups,
                     const Eigen::MatrixXd&           A_alpha,
-                    GammaSource                      gamma) {
+                    GammaSource                      gamma,
+                    GammaComputation                 computation) {
   if (groups.empty()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "compute_satorra2000: groups vector is empty"));
@@ -232,9 +233,15 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
       // n_g - 1, but the choice cancels in the scaling factor c = tr(C^-1 S)/m
       // as long as S and the test statistic T agree; standardize on the n
       // divisor everywhere.
-      const Eigen::MatrixXd U_rows = D_rows * D_g;           // n_g × m
-      const double scale = gr.weight / static_cast<double>(gr.n_g);
-      S.noalias() += scale * (U_rows.transpose() * U_rows);
+      if (computation == GammaComputation::Streaming) {
+        const Eigen::MatrixXd U_rows = D_rows * D_g;           // n_g × m
+        const double scale = gr.weight / static_cast<double>(gr.n_g);
+        S.noalias() += scale * (U_rows.transpose() * U_rows);
+      } else {
+        const Eigen::MatrixXd Gamma_hat =
+            (D_rows.transpose() * D_rows) / static_cast<double>(gr.n_g);
+        S.noalias() += gr.weight * (D_g.transpose() * Gamma_hat * D_g);
+      }
     }
   }
   S = 0.5 * (S + S.transpose()).eval();
