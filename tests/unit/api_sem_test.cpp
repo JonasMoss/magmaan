@@ -366,4 +366,72 @@ TEST_CASE("api Analysis preserves first error and post-fit calls require fit") {
   CHECK(ok->test.has_value());
 }
 
+TEST_CASE("api second-order CFA fits and equals the correlated first-order model") {
+  // Nine indicators driven by three first-order factors, themselves driven by
+  // one general factor. A second-order CFA with three first-order factors is a
+  // just-identified reparameterization of the three-factor correlated model,
+  // so the two must reach the same chi-square — a strong end-to-end check that
+  // the higher-order `=~` rows are classified and lowered correctly.
+  Eigen::MatrixXd X(300, 9);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double t = static_cast<double>(i);
+    const double g = std::sin(0.13 * t) + 0.5 * std::cos(0.071 * t);
+    const double visual  = g        + 0.5 * std::sin(0.29 * t + 1.0);
+    const double textual = 0.85 * g + 0.5 * std::cos(0.31 * t + 2.0);
+    const double speed   = 0.70 * g + 0.5 * std::sin(0.23 * t + 3.0);
+    X(i, 0) = visual        + 0.30 * std::sin(0.41 * t + 0.1);
+    X(i, 1) = 0.9 * visual  + 0.30 * std::cos(0.43 * t + 0.2);
+    X(i, 2) = 0.8 * visual  + 0.30 * std::sin(0.47 * t + 0.3);
+    X(i, 3) = textual       + 0.30 * std::cos(0.53 * t + 0.4);
+    X(i, 4) = 0.9 * textual + 0.30 * std::sin(0.59 * t + 0.5);
+    X(i, 5) = 0.8 * textual + 0.30 * std::cos(0.61 * t + 0.6);
+    X(i, 6) = speed         + 0.30 * std::sin(0.67 * t + 0.7);
+    X(i, 7) = 0.9 * speed   + 0.30 * std::cos(0.71 * t + 0.8);
+    X(i, 8) = 0.8 * speed   + 0.30 * std::sin(0.73 * t + 0.9);
+  }
+  magmaan::data::RawData raw;
+  raw.X.push_back(std::move(X));
+  const auto stats = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(stats.has_value());
+
+  const std::string first_order =
+      "visual =~ x1 + x2 + x3\n"
+      "textual =~ x4 + x5 + x6\n"
+      "speed =~ x7 + x8 + x9";
+  const std::string second_order =
+      first_order + "\ngeneral =~ visual + textual + speed";
+
+  struct Outcome { magmaan::api::TestResult test; std::ptrdiff_t npar = 0; };
+  auto fit_chi = [&](const std::string& syntax) -> Outcome {
+    const auto model = magmaan::api::model_from_lavaan(syntax);
+    REQUIRE_OK(model);
+    // 9-column data resolves only if the first-order factors are kept latent;
+    // a misclassification as observed would demand 12 data columns here.
+    const auto data = magmaan::api::data_from_sample_stats(*model, *stats);
+    REQUIRE_OK(data);
+    const auto fit = magmaan::api::fit(*model, *data, magmaan::api::ml());
+    REQUIRE_OK(fit);
+    const auto tst =
+        magmaan::api::test(*fit, magmaan::api::standard_chi_square());
+    REQUIRE_OK(tst);
+    return {*tst, fit->estimates().theta.size()};
+  };
+
+  const auto m1 = fit_chi(first_order);
+  const auto m2 = fit_chi(second_order);
+
+  MESSAGE("first-order: npar=" << m1.npar << " df=" << m1.test.df
+          << " chi2=" << m1.test.statistic);
+  MESSAGE("second-order: npar=" << m2.npar << " df=" << m2.test.df
+          << " chi2=" << m2.test.statistic);
+
+  // A second-order CFA over three first-order factors is a just-identified
+  // reparameterization of the correlated three-factor model: same parameter
+  // count, same degrees of freedom, same chi-square.
+  CHECK(m1.npar == 21);
+  CHECK(m2.npar == m1.npar);
+  CHECK(m2.test.df == m1.test.df);
+  CHECK(m2.test.statistic == doctest::Approx(m1.test.statistic).epsilon(1e-3));
+}
+
 #undef REQUIRE_OK

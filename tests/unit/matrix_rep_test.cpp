@@ -11,6 +11,7 @@ using magmaan::model::build_matrix_rep;
 using magmaan::model::Cell;
 using magmaan::model::MatId;
 using magmaan::model::MatrixRep;
+using magmaan::model::RepForm;
 using magmaan::parse::Parser;
 using magmaan::spec::build;
 
@@ -101,6 +102,55 @@ TEST_CASE("matrix_rep: residual covariance lands in Theta off-diagonal") {
   CHECK(find_cell(mr, MatId::Theta, 0, 1) != nullptr);  // x1 ~~ x2
   CHECK(find_cell(mr, MatId::Theta, 0, 0) != nullptr);  // auto x1 ~~ x1
   CHECK(find_cell(mr, MatId::Theta, 1, 1) != nullptr);  // auto x2 ~~ x2
+}
+
+TEST_CASE("matrix_rep: second-order CFA — higher-order =~ lowers to Beta") {
+  // `general` is measured by three latents. The first-order factors stay
+  // latent (not observed), so the model has 9 observed and 4 latent vars —
+  // the higher-order loadings land in Β, not Λ, and force the Reduced form.
+  auto mr = must_build(
+      "visual =~ x1 + x2 + x3\n"
+      "textual =~ x4 + x5 + x6\n"
+      "speed =~ x7 + x8 + x9\n"
+      "general =~ visual + textual + speed");
+  CHECK(mr.form == RepForm::Reduced);
+  CHECK(mr.dims[0].n_observed == 9);
+  CHECK(mr.dims[0].n_latent   == 4);
+  REQUIRE(mr.ov_names[0] ==
+          std::vector<std::string>{"x1", "x2", "x3", "x4", "x5", "x6",
+                                   "x7", "x8", "x9"});
+  REQUIRE(mr.lv_names[0] ==
+          std::vector<std::string>{"visual", "textual", "speed", "general"});
+
+  // First-order loadings still in Λ.
+  CHECK(find_cell(mr, MatId::Lambda, 0, 0) != nullptr);  // visual =~ x1
+  CHECK(find_cell(mr, MatId::Lambda, 5, 1) != nullptr);  // textual =~ x6
+  CHECK(find_cell(mr, MatId::Lambda, 8, 2) != nullptr);  // speed =~ x9
+
+  // Higher-order loadings in Β[effect, cause]: visual/textual/speed ← general.
+  CHECK(find_cell(mr, MatId::Beta, 0, 3) != nullptr);    // general =~ visual
+  CHECK(find_cell(mr, MatId::Beta, 1, 3) != nullptr);    // general =~ textual
+  CHECK(find_cell(mr, MatId::Beta, 2, 3) != nullptr);    // general =~ speed
+
+  // A first-order factor never appears as a Λ row.
+  CHECK(find_cell(mr, MatId::Lambda, 9, 3) == nullptr);
+}
+
+TEST_CASE("matrix_rep: third-order chain g =~ trait =~ state =~ d") {
+  // Higher-order lowering composes — every latent-on-latent =~ becomes a Β
+  // path, leaving only the bottom =~ rows in Λ.
+  auto mr = must_build(
+      "state1 =~ d1 + d2\n"
+      "state2 =~ d3 + d4\n"
+      "trait =~ state1 + state2\n"
+      "g =~ trait");
+  CHECK(mr.form == RepForm::Reduced);
+  CHECK(mr.dims[0].n_observed == 4);   // d1..d4
+  CHECK(mr.dims[0].n_latent   == 4);   // state1, state2, trait, g
+  CHECK(find_cell(mr, MatId::Lambda, 0, 0) != nullptr);  // state1 =~ d1
+  CHECK(find_cell(mr, MatId::Beta, 0, 2) != nullptr);    // trait =~ state1
+  CHECK(find_cell(mr, MatId::Beta, 1, 2) != nullptr);    // trait =~ state2
+  CHECK(find_cell(mr, MatId::Beta, 2, 3) != nullptr);    // g =~ trait
 }
 
 TEST_CASE("matrix_rep: constraint rows are sentinel cells") {

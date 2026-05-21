@@ -52,11 +52,19 @@ struct VarSets {
 template <class RowSeq>
 VarSets classify_vars(const RowSeq& rows) {
   VarSets v;
+  // Every LHS of `=~` is a latent. Collected in a pass of its own, *before*
+  // the indicator pass, so that a latent which is itself measured by a
+  // higher-order factor (`higher =~ lower`) is recognized as a latent no
+  // matter where its own `lower =~ ...` rows sit in the syntax.
   for (const auto& r : rows) {
-    if (r.op == parse::Op::Measurement) {
-      v.lv.insert(r.lhs);
+    if (r.op == parse::Op::Measurement) v.lv.insert(r.lhs);
+  }
+  // RHS of `=~` is an observed indicator — UNLESS it is itself a latent, in
+  // which case the row is a higher-order measurement: the RHS stays latent
+  // and `matrix_rep` lowers the row to a latent-on-latent Β path.
+  for (const auto& r : rows) {
+    if (r.op == parse::Op::Measurement && !v.lv.contains(r.rhs))
       v.ov_ind.insert(r.rhs);
-    }
   }
   for (const auto& r : rows) {
     if (r.op == parse::Op::Regression || r.op == parse::Op::Intercept) {

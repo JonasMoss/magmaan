@@ -554,10 +554,18 @@ build_group_template(const parse::FlatPartable& flat,
     if (!opts.fixed_x) apply_random_x(v, rows);
   }
   if (opts.auto_cov_lv_x) {
+    // A latent is endogenous — and so excluded from the auto-covariance set —
+    // when it is regressed on something (`~`) OR when it is an indicator of a
+    // higher-order factor (the RHS of a `=~`). The latter keeps a second-order
+    // CFA's first-order factors out of auto.cov.lv.x: their disturbances are
+    // uncorrelated by default, exactly as in lavaan.
     OrderedSet endo_lv;
     for (const auto& fr : flat.rows) {
       if (fr.op == parse::Op::Regression && v.lv.contains(fr.lhs)) {
         endo_lv.insert(fr.lhs);
+      }
+      if (fr.op == parse::Op::Measurement && v.lv.contains(fr.rhs)) {
+        endo_lv.insert(fr.rhs);
       }
     }
     OrderedSet exo_lv;
