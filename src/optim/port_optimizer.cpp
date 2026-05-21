@@ -81,10 +81,9 @@ constexpr int kIv_TooBig   = 1;   // IV(2)  — caller sets to 1 to reject F
 constexpr int kIv_MxFCal   = 16;  // IV(17) — max function evaluations
 constexpr int kIv_MxIter   = 17;  // IV(18) — max iterations
 constexpr int kIv_NIter    = 30;  // IV(31) — iteration count (R)
+constexpr int kIv_NFCall   = 5;   // IV(6)  — function-evaluation count (R)
+constexpr int kIv_NGCall   = 29;  // IV(30) — gradient-evaluation count (R)
 constexpr int kV_F         = 9;   // V(10)  — current function value (R)
-// IV(6)=NFCALL and IV(30)=NGCALL are also available post-fit for callers
-// that want to surface eval counts separately from iterations; the present
-// LbfgsOutput shape carries only `iterations`, so we don't expose them yet.
 
 // PORT requires bounds; "unbounded" means a sentinel near double limits.
 // 1e308 is well inside the dynamic range and matches the convention used in
@@ -265,7 +264,8 @@ PortOptimizer::minimize(Objective f,
         n_iter, f_final));
   }
 
-  return LbfgsOutput{std::move(x), f_final, n_iter};
+  return LbfgsOutput{std::move(x), f_final, n_iter,
+                     iv[kIv_NFCall], iv[kIv_NGCall]};
 }
 
 fit_expected<LbfgsOutput>

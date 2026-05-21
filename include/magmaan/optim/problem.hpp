@@ -66,6 +66,8 @@ struct OptimResult {
   Eigen::VectorXd x;
   double          fmin       = 0.0;
   int             iterations = 0;
+  int             f_evals    = 0;
+  int             g_evals    = 0;
 };
 
 }  // namespace magmaan::optim
