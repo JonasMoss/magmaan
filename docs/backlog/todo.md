@@ -54,6 +54,14 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   objective for ordinary LS and SNLLS under the same line-search optimizer, or
   report objective-evaluation accounting plus measured objective/Jacobian
   costs.
+- **S.** In the SNLLS paper, spell out the implementation problem and solution
+  more explicitly: the hard part is not proving separability, but turning the
+  profiled objective into residual/Jacobian calls an optimizer can trust. Explain
+  why published tensor-gradient derivations are useful as a code blueprint and
+  correctness check, while keeping the main text focused on the projection
+  identity, the affine constraint split, and the fact that magmaan reuses the
+  ordinary LISREL moment Jacobian instead of hand-writing pages of tensor
+  products.
 - **M/L.** Decide whether NLopt L-BFGS should replace LBFGS++ as the default
   scalar optimizer. This is not just a search/replace: first add a comparison
   tier showing `Backend::NloptLbfgs` matches the current LBFGS++ path on ML,
