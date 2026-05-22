@@ -509,16 +509,17 @@ stop rather than any usable non-error return.
   finite-difference gradient for the first native composite optimization
   tranche. `estimate::simple_fcsem_start_values` and
   `estimate::fit_ml_fcsem` provide the first low-level complete-data ML fitting
-  path; the pure-composite HS fixture fits from native starts and matches
-  lavaan's native `<~` objective/implied covariance. SE/Jacobian support and
-  staged API/R exposure are still pending.
-- Complete-data ML composite lavaan parity is not yet claimed. Native lavaan
+  path; the pure-composite, composite-plus-factor, and composite-structural HS
+  fixtures fit from native starts and match lavaan's native `<~`
+  objective/implied covariance plus the lavaan-reported weights, loadings, and
+  regressions. SE/Jacobian support and staged API/R exposure are still pending.
+- Full composite lavaan parity is not yet claimed. Native lavaan
   `<~` oracle fixtures for pure-composite, composite-plus-factor, and
-  composite-structural HS cases live under `tests/fixtures/composite/`; the
-  FC-SEM objective and low-level fitting path currently match the
-  pure-composite fixture, while the corresponding diagnostic golden is
-  intentionally skipped until the broader C++ fitting/post-fit path matches
-  lavaan's W-matrix semantics.
+  composite-structural HS cases live under `tests/fixtures/composite/` and
+  now record lavaan's observed-variable order for the stored sample/implied
+  covariance matrices. The corresponding diagnostic golden is intentionally
+  skipped until native post-fit information, SEs, standardization, and fit
+  measures match lavaan's W-matrix semantics.
 - `magmaan(model, data, estimator, groups)` is the high-level estimate-only
   R convenience. It composes `model_spec()`, data-frame sample-stat/raw-data
   construction, and the matching point-estimation wrapper for complete-data
