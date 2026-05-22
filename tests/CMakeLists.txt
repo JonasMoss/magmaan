@@ -143,7 +143,8 @@ magmaan_add_test_target(magmaan_test_api api
 # the synthetic-corpus tests, and isolable via `ctest -L parity`.
 magmaan_add_test_target(magmaan_test_parity parity
   golden/lavaan_parity_golden_test.cpp
-  golden/geiser_golden_test.cpp)
+  golden/geiser_golden_test.cpp
+  golden/mplus_sem_golden_test.cpp)
 
 # Robust-polychoric sanity suite: magmaan's bivariate ordinal estimators vs
 # the canonical robcat R package. Frozen JSON fixtures (tests/fixtures/robcat/,
