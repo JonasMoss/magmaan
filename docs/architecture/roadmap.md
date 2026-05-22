@@ -237,7 +237,10 @@ stop rather than any usable non-error return.
   C++ golden gates 17 auto-converted Little LISREL measurement models and 21
   curated Newsom lavaan examples; the rest remain catalogued as extracted
   source/data/model formulations with explicit unsupported or not-yet-gated
-  status.
+  status. A consolidated `magmaan_textbook_corpus_v1` index under
+  `tests/fixtures/textbook_corpus/manifest.json` summarizes Geiser, Mplus SEM,
+  Little, and Newsom as one textbook corpus without duplicating their heavy
+  oracle payloads.
 - Continuous ULS/GLS/WLS robust adapters reuse the shared weighted-moment
   sandwich/U-Gamma primitive with either supplied Gamma blocks or raw-data
   Gamma construction. ULS `robust.sem` SEs and Satorra-Bentler-family
