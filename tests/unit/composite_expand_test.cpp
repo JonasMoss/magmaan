@@ -198,6 +198,23 @@ TEST_CASE("fc-sem composite: native mode preserves <~ rows and T metadata") {
   CHECK(fixed_t == 6);
 }
 
+TEST_CASE("fc-sem composite: native mode auto-adds endogenous observed covariance") {
+  BuildOptions opts;
+  opts.composite_mode = CompositeMode::FcSem;
+  const Built b = must_build("C <~ x1 + x2 + x3\n x4 ~ C\n x5 ~ C", opts);
+
+  bool found = false;
+  for (std::size_t i = 0; i < b.pt.size(); ++i) {
+    if (b.pt.op[i] == Op::Covariance && b.pt.lhs[i] == "x4" &&
+        b.pt.rhs[i] == "x5") {
+      found = true;
+      CHECK(b.pt.free[i] > 0);
+      CHECK(b.pt.user[i] == 0);
+    }
+  }
+  CHECK(found);
+}
+
 TEST_CASE("fc-sem composite: known identification checks run before evaluator work") {
   BuildOptions opts;
   opts.composite_mode = CompositeMode::FcSem;

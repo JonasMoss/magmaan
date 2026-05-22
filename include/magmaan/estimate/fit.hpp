@@ -11,6 +11,7 @@
 #include "magmaan/optim/problem.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/model/fcsem_evaluator.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -102,6 +103,15 @@ fit_expected<Estimates>
 fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
        const SampleStats& samp, const Eigen::VectorXd& x0, Bounds bounds = {},
        Backend backend = Backend::Lbfgs, LbfgsOptions opts = {});
+
+// Native FC-SEM maximum likelihood. This is intentionally parallel to
+// `fit_ml`, but uses `model::FcSemEvaluator` instead of MatrixRep/LISREL.
+// Callers provide starts explicitly, typically from
+// `simple_fcsem_start_values`.
+fit_expected<Estimates>
+fit_ml_fcsem(spec::LatentStructure pt, const SampleStats& samp,
+             const Eigen::VectorXd& x0, Bounds bounds = {},
+             Backend backend = Backend::Lbfgs, LbfgsOptions opts = {});
 
 // Moment quadratic. Empty `weight` ⇒ ULS (identity); a caller-supplied weight
 // ⇒ WLS / DWLS.

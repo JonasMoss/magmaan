@@ -36,6 +36,20 @@ simple_start_values(const spec::LatentStructure& pt,
                     const SampleStats& samp,
                     const spec::Starts& starts = {});
 
+// Native FC-SEM simple starts. This mirrors the ordinary simple scheme where
+// cells have the same interpretation, but reads directly from the native
+// `<~` LatentStructure instead of a LISREL MatrixRep:
+//   - user start hints win;
+//   - free composite weights start at 0 (marker weight is fixed by spec);
+//   - free loadings start at ±0.7, signed by marker covariances when possible;
+//   - structural regressions start at 0;
+//   - free observed/phantom residual variances start at 0.5 * sample variance;
+//   - free latent variances start at 0.05 and covariances at 0.
+fit_expected<Eigen::VectorXd>
+simple_fcsem_start_values(const spec::LatentStructure& pt,
+                          const SampleStats& samp,
+                          const spec::Starts& starts = {});
+
 // FABIN variant: FABIN3 weights the instruments by S33⁻¹ (Hägglund 1982);
 // FABIN2 omits that weighting. FABIN3 falls back to FABIN2 per indicator when
 // the instrument submatrix is singular.
