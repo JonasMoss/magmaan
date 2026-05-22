@@ -4,13 +4,22 @@
   "configurePresets": [
     {
       "name": "default",
-      "displayName": "Default (Debug)",
+      "displayName": "Default (Debug, portable toolchain)",
       "binaryDir": "${sourceDir}/build/default",
       "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF",
+        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF"
+      }
+    },
+    {
+      "name": "_local",
+      "displayName": "Local toolchain mix-in (clang + ccache + mold)",
+      "hidden": true,
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_C_COMPILER_LAUNCHER": "ccache",
         "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
         "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=mold",
@@ -20,7 +29,7 @@
     {
       "name": "fast",
       "displayName": "Fast local C++ loop (Debug, no sanitizers)",
-      "inherits": "default",
+      "inherits": "_local",
       "binaryDir": "${sourceDir}/build/fast",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -30,7 +39,7 @@
     {
       "name": "dev",
       "displayName": "Local dev (Debug + ASan/UBSan)",
-      "inherits": "default",
+      "inherits": "_local",
       "binaryDir": "${sourceDir}/build/dev",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -41,7 +50,7 @@
     {
       "name": "opt",
       "displayName": "Local optimized (Release + native CPU)",
-      "inherits": "default",
+      "inherits": "_local",
       "binaryDir": "${sourceDir}/build/opt",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -51,13 +60,14 @@
     },
     {
       "name": "release",
+      "displayName": "Portable Release (no local toolchain assumptions)",
       "inherits": "default",
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
     },
     {
       "name": "asan",
-      "inherits": "default",
+      "inherits": "_local",
       "binaryDir": "${sourceDir}/build/asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -67,7 +77,7 @@
     },
     {
       "name": "ubsan",
-      "inherits": "default",
+      "inherits": "_local",
       "binaryDir": "${sourceDir}/build/ubsan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -78,7 +88,7 @@
     {
       "name": "ceres",
       "displayName": "Optional optimizer optimized (Release + native CPU)",
-      "inherits": "default",
+      "inherits": "_local",
       "binaryDir": "${sourceDir}/build/ceres",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
