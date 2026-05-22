@@ -426,11 +426,7 @@ normal_theory_weight(const model::ModelEvaluator& ev,
       Wb.block(0, 0, p, p) = Sinv;
       off = p;
     }
-    Wb.block(off, off, vech_len(p), vech_len(p)) = Wcov;
-    // Scale the whole block by ½ so the moment quadratic ½·rᵀWr lands on
-    // lavaan's GLS objective scale: the χ² is then 2N·fmin uniformly with
-    // ULS/WLS — GLS is just a WLS with this weight, not a separate criterion.
-    Wb *= 0.5;
+    Wb.block(off, off, vech_len(p), vech_len(p)) = 0.5 * Wcov;
     W.push_back(std::move(Wb));
   }
   return W;

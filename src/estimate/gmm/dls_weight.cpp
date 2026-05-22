@@ -200,13 +200,13 @@ dls_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
         g_llt.solve(Eigen::MatrixXd::Identity(pstar, pstar));
 
     // Assemble the [mean ; vech(cov)] block. The mean block carries the
-    // normal-theory weight 0.5·Sinv regardless of `a` (Browne DLS is
+    // normal-theory GLS weight regardless of `a` (Browne DLS is
     // covariance-only); the mean/covariance cross-block stays zero.
     const Eigen::Index dim = (has_means ? p : 0) + pstar;
     Eigen::MatrixXd Wb = Eigen::MatrixXd::Zero(dim, dim);
     Eigen::Index off = 0;
     if (has_means) {
-      Wb.block(0, 0, p, p) = 0.5 * Sinv;
+      Wb.block(0, 0, p, p) = Sinv;
       off = p;
     }
     Wb.block(off, off, pstar, pstar) = Wcov;

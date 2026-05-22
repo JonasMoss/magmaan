@@ -140,7 +140,8 @@ magmaan_add_test_target(magmaan_test_api api
 # it fits the full real datasets (largest is bfi at 2436×25) — heavier than
 # the synthetic-corpus tests, and isolable via `ctest -L parity`.
 magmaan_add_test_target(magmaan_test_parity parity
-  golden/lavaan_parity_golden_test.cpp)
+  golden/lavaan_parity_golden_test.cpp
+  golden/geiser_golden_test.cpp)
 
 # Robust-polychoric sanity suite: magmaan's bivariate ordinal estimators vs
 # the canonical robcat R package. Frozen JSON fixtures (tests/fixtures/robcat/,
