@@ -188,7 +188,8 @@ ordinary SEM syntax without `<~`. The R frontier mirrors this settled
 single-group ML slice through `fcsem_model_spec()`, `df_to_fcsem_data()`,
 `fit_ml_fcsem()` / `magmaan_fcsem()`, `fcsem_standard_errors()`,
 `fcsem_fit_measures()`, and `fcsem_standardized_rows()`, with a checked
-example under `r-package/examples/fcsem_frontier.R`.
+example under `r-package/examples/fcsem_frontier.R`. Ordinary R SEM helpers and
+native FC-SEM helpers reject each other's prebuilt model/data classes.
 Remaining:
 
 - **L.** Post-fit lavaan parity validation: minimal oracle fixtures exist under

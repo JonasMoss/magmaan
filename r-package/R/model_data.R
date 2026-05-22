@@ -81,6 +81,10 @@ model_spec <- function(syntax,
 }
 
 as_magmaan_model_spec <- function(model) {
+  if (inherits(model, "magmaan_fcsem_model_spec")) {
+    stop("ordinary SEM helpers do not accept native FC-SEM model specs; ",
+         "use fit_ml_fcsem() or magmaan_fcsem()")
+  }
   if (inherits(model, "magmaan_model_spec")) return(model)
   if (is.character(model) && length(model) == 1L) return(model_spec(model))
   if (is.data.frame(model)) {
@@ -907,8 +911,11 @@ fcsem_model_spec <- function(syntax, ...) {
 
 as_fcsem_model_spec <- function(model) {
   if (inherits(model, "magmaan_fcsem_model_spec")) return(model)
+  if (inherits(model, "magmaan_model_spec")) {
+    stop("native FC-SEM helpers require fcsem_model_spec() or a syntax string; ",
+         "ordinary magmaan_model_spec objects are not reinterpreted")
+  }
   if (is.character(model) && length(model) == 1L) return(fcsem_model_spec(model))
-  if (is.list(model) && !is.null(model$syntax)) return(fcsem_model_spec(model$syntax))
   stop("expected a native FC-SEM model spec or model syntax string")
 }
 
@@ -1027,7 +1034,8 @@ fit_ml_fcsem <- function(model, data, missing = c("listwise", "error"),
   missing <- match.arg(missing)
   spec <- as_fcsem_model_spec(model)
   if (is.data.frame(data)) data <- df_to_fcsem_data(data, spec, missing = missing)
-  fit <- fit_ml_fcsem_impl(spec$syntax, sample_stats_arg(data), control = control)
+  fit <- fit_ml_fcsem_impl(spec$syntax, sample_stats_arg(data, allow_fcsem = TRUE),
+                           control = control)
   finalize_fcsem_fit(fit, spec, missing)
 }
 
@@ -1111,6 +1119,10 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
   allowed <- c("ML", "FIML", "ULS", "GLS", "WLS", "DWLS")
   if (!estimator %in% allowed) {
     stop("magmaan(): unsupported estimator '", estimator, "'")
+  }
+  if (inherits(model, "magmaan_fcsem_model_spec") ||
+      inherits(data, "magmaan_fcsem_data")) {
+    stop("magmaan(): native FC-SEM model/data objects require magmaan_fcsem()")
   }
 
   group_var <- if (is.null(groups)) NULL else as.character(groups)[1L]
@@ -1355,11 +1367,19 @@ fit_wls_snlls <- function(model, data, W, optimizer = "lbfgs", control = NULL,
 # wrappers does not.
 
 partable_arg <- function(model) {
+  if (inherits(model, "magmaan_fcsem_model_spec")) {
+    stop("ordinary SEM fit helpers do not accept native FC-SEM model specs; ",
+         "use fit_ml_fcsem() or magmaan_fcsem()")
+  }
   if (inherits(model, "magmaan_model_spec")) return(model$partable)
   model
 }
 
-sample_stats_arg <- function(data) {
+sample_stats_arg <- function(data, allow_fcsem = FALSE) {
+  if (inherits(data, "magmaan_fcsem_data") && !isTRUE(allow_fcsem)) {
+    stop("ordinary SEM fit helpers do not accept native FC-SEM data; ",
+         "use fit_ml_fcsem() or magmaan_fcsem()")
+  }
   if (inherits(data, "magmaan_data")) {
     return(list(S = data$S, mean = data$mean, nobs = data$nobs))
   }
