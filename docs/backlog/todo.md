@@ -71,6 +71,18 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   that now parse/lavaanify cleanly in the local 142-model sweep, and add
   ordinal/mixed parity checks once the desired categorical oracle surface is
   settled.
+- **S/M.** Add a small OpenMx tutorial corpus as an offline second-oracle
+  cross-check, not as a runtime input format. Start with the dormant
+  `openmx_mimic` case in `benchmarks/r/cases.R` and the OpenMx RAM examples
+  noted in `docs/research/vendor-notes/benchmark_zoo.md`; hand-translate each
+  retained model to lavaan syntax, harvest golden values from OpenMx
+  (`mxRun`, `omxGetParameters`, `model$output`, and `mxGetExpected(.,
+  "covariance")`), and tag those fixtures with `_meta.tool = "OpenMx"`.
+  Keep the curated tier small (roughly 3-6 lavaan-expressible SEM/CFA cases,
+  including a mixed continuous/ordinal CFA if licensing and fixture shape are
+  clear), assert magmaan's implied moments against OpenMx's implied covariance
+  to catch translation mistakes, and keep `mxModel`/`mxPath` parsing plus a
+  runtime RAM frontend out of scope for this corpus task.
 - **S/M.** Refine benchmark use of optimizer diagnostics now that fit results
   expose `optimizer_status` and final gradient norms. Benchmark scripts should
   distinguish clean convergence from line-search salvage or singular PORT
