@@ -168,22 +168,89 @@ TEST_CASE("compute_satorra2000: 2-var saturated, σ₁₂=0 restriction") {
       {gr}, A_alpha, magmaan::robust::GammaSource::Empirical,
       magmaan::robust::GammaComputation::Materialized);
   REQUIRE(full_or.has_value());
+  auto dense_or = magmaan::robust::compute_satorra2000(
+      {gr}, A_alpha, magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::GammaComputation::Dense);
+  REQUIRE(dense_or.has_value());
   const Eigen::VectorXd ev_fast   = fast_or->eigenvalues;
   const Eigen::VectorXd ev_full   = full_or->eigenvalues;
+  const Eigen::VectorXd ev_dense  = dense_or->eigenvalues;
   const Eigen::VectorXd ev_naive = naive_satorra_eigvals({gr}, A_alpha);
 
   INFO("ev_fast   = ", ev_fast.transpose());
   INFO("ev_full   = ", ev_full.transpose());
+  INFO("ev_dense  = ", ev_dense.transpose());
   INFO("ev_naive = ", ev_naive.transpose());
   REQUIRE(ev_fast.size() == 1);
   REQUIRE(ev_full.size() == 1);
+  REQUIRE(ev_dense.size() == 1);
   REQUIRE(ev_naive.size() == 1);
   CHECK(ev_fast(0) == doctest::Approx(ev_full(0)).epsilon(1e-12));
+  CHECK(ev_fast(0) == doctest::Approx(ev_dense(0)).epsilon(1e-9));
   CHECK(ev_fast(0) == doctest::Approx(ev_naive(0)).epsilon(1e-10));
   // The Satorra-Bentler scale `c` = tr(C⁻¹S)/m equals the single eigenvalue.
   CHECK(fast_or->trace_CinvS == doctest::Approx(ev_fast(0)).epsilon(1e-12));
   CHECK(fast_or->trace_CinvS_sq
         == doctest::Approx(ev_fast(0) * ev_fast(0)).epsilon(1e-12));
+}
+
+// ── Dense matches Streaming on a two-group model ───────────────────────────
+//
+// The single-group toy oracle above does not exercise the Dense path's
+// block-diagonal q×q assembly across groups.  Here a saturated 3-variable
+// model is fit in two groups of unequal size; Dense and Streaming must return
+// the same restriction-space spectrum.
+
+TEST_CASE("compute_satorra2000: Dense matches Streaming, multi-group") {
+  std::mt19937 rng(0x5a17U);
+  Eigen::MatrixXd Sigma_a(3, 3);
+  Sigma_a << 1.4, 0.5, 0.2,
+             0.5, 1.1, 0.3,
+             0.2, 0.3, 0.9;
+  Eigen::MatrixXd Sigma_b(3, 3);
+  Sigma_b << 1.0, 0.2, 0.1,
+             0.2, 1.3, 0.4,
+             0.1, 0.4, 1.2;
+  const Eigen::Index n_a = 300;
+  const Eigen::Index n_b = 220;
+  const Eigen::MatrixXd Xa = sample_mvn(rng, n_a, Sigma_a);
+  const Eigen::MatrixXd Xb = sample_mvn(rng, n_b, Sigma_b);
+
+  auto make_group = [](const Eigen::MatrixXd& X, double weight) {
+    const Eigen::VectorXd mean = X.colwise().mean();
+    const Eigen::MatrixXd Xc   = X.rowwise() - mean.transpose();
+    const Eigen::MatrixXd S =
+        (Xc.transpose() * Xc) / static_cast<double>(X.rows());
+    return magmaan::robust::SatorraGroup{
+        Eigen::MatrixXd::Identity(6, 6), S, X, mean, weight,
+        static_cast<std::int32_t>(X.rows())};
+  };
+  const double N = static_cast<double>(n_a + n_b);
+  std::vector<magmaan::robust::SatorraGroup> groups{
+      make_group(Xa, static_cast<double>(n_a) / N),
+      make_group(Xb, static_cast<double>(n_b) / N)};
+
+  // Restrict σ_{12} = 0 and σ_{13} = 0  ⇒  m = 2.
+  Eigen::MatrixXd A_alpha(2, 6);
+  A_alpha << 0, 1, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 0;
+
+  auto strm_or = magmaan::robust::compute_satorra2000(
+      groups, A_alpha, magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::GammaComputation::Streaming);
+  auto dense_or = magmaan::robust::compute_satorra2000(
+      groups, A_alpha, magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::GammaComputation::Dense);
+  REQUIRE(strm_or.has_value());
+  REQUIRE(dense_or.has_value());
+  REQUIRE(strm_or->eigenvalues.size() == 2);
+  REQUIRE(dense_or->eigenvalues.size() == 2);
+  INFO("streaming = ", strm_or->eigenvalues.transpose());
+  INFO("dense     = ", dense_or->eigenvalues.transpose());
+  for (Eigen::Index k = 0; k < 2; ++k) {
+    CHECK(dense_or->eigenvalues(k)
+          == doctest::Approx(strm_or->eigenvalues(k)).epsilon(1e-9));
+  }
 }
 
 // ── NT short-circuit: Γ = Γ_NT ⇒ S = C ⇒ eigvals ≡ 1 ───────────────────────

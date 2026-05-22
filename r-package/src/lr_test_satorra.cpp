@@ -37,6 +37,9 @@ magmaan::robust::GammaComputation parse_gamma_computation(const std::string& s) 
   if (s == "materialized" || s == "full" || s == "explicit") {
     return magmaan::robust::GammaComputation::Materialized;
   }
+  if (s == "dense") {
+    return magmaan::robust::GammaComputation::Dense;
+  }
   return magmaan::robust::GammaComputation::Streaming;
 }
 
