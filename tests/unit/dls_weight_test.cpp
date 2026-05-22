@@ -94,11 +94,74 @@ double max_block_diff(const magmaan::estimate::gmm::Weight& a,
   return d;
 }
 
+Eigen::Index vech_index(Eigen::Index p, Eigen::Index r, Eigen::Index c) {
+  if (r < c) std::swap(r, c);
+  Eigen::Index idx = 0;
+  for (Eigen::Index j = 0; j < c; ++j) idx += p - j;
+  return idx + (r - c);
+}
+
+Eigen::MatrixXd expected_symmetric_vech_gls_weight(const Eigen::MatrixXd& Sinv) {
+  const Eigen::Index p = Sinv.rows();
+  const Eigen::Index pstar = p * (p + 1) / 2;
+  Eigen::MatrixXd W = Eigen::MatrixXd::Zero(pstar, pstar);
+  for (Eigen::Index c1 = 0; c1 < p; ++c1) {
+    for (Eigen::Index r1 = c1; r1 < p; ++r1) {
+      const Eigen::Index k1 = vech_index(p, r1, c1);
+      Eigen::MatrixXd E1 = Eigen::MatrixXd::Zero(p, p);
+      E1(r1, c1) = 1.0;
+      E1(c1, r1) = 1.0;
+      const Eigen::MatrixXd A1 = Sinv * E1 * Sinv;
+      for (Eigen::Index c2 = 0; c2 < p; ++c2) {
+        for (Eigen::Index r2 = c2; r2 < p; ++r2) {
+          const Eigen::Index k2 = vech_index(p, r2, c2);
+          Eigen::MatrixXd E2 = Eigen::MatrixXd::Zero(p, p);
+          E2(r2, c2) = 1.0;
+          E2(c2, r2) = 1.0;
+          W(k1, k2) = (A1 * E2).trace();
+        }
+      }
+    }
+  }
+  return W;
+}
+
 }  // namespace
 
 // ============================================================================
 // Endpoint exactness: a = 0 ⇒ GLS, a = 1 ⇒ ADF/WLS.
 // ============================================================================
+
+TEST_CASE("normal_theory_weight: mean-structure GLS uses lavaan block scaling") {
+  auto raw = make_raw(400);
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto m = build_model("f =~ x1 + x2 + x3\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1", true);
+  auto ev = ModelEvaluator::build(m.pt, m.rep);
+  REQUIRE(ev.has_value());
+  auto x0 = est::simple_start_values(m.pt, m.rep, *samp, {});
+  REQUIRE(x0.has_value());
+
+  auto nt = magmaan::estimate::gmm::normal_theory_weight(*ev, *samp, *x0);
+  REQUIRE(nt.has_value());
+  REQUIRE(nt->size() == 1);
+
+  const Eigen::MatrixXd& S = samp->S[0];
+  Eigen::LLT<Eigen::MatrixXd> s_llt(S);
+  REQUIRE(s_llt.info() == Eigen::Success);
+  const Eigen::Index p = S.rows();
+  const Eigen::Index pstar = p * (p + 1) / 2;
+  const Eigen::MatrixXd Sinv = s_llt.solve(Eigen::MatrixXd::Identity(p, p));
+  const Eigen::MatrixXd Wcov = expected_symmetric_vech_gls_weight(Sinv);
+  const Eigen::MatrixXd& W = nt->at(0);
+
+  REQUIRE(W.rows() == p + pstar);
+  CHECK((W.block(0, 0, p, p) - Sinv).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK(W.block(0, p, p, pstar).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK(W.block(p, 0, pstar, p).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK((W.block(p, p, pstar, pstar) - 0.5 * Wcov).cwiseAbs().maxCoeff() <
+        1e-12);
+}
 
 TEST_CASE("dls_weight: a=0 reproduces the normal-theory (GLS) weight") {
   auto raw = make_raw(400);

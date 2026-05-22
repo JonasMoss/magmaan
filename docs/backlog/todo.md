@@ -32,6 +32,11 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   ULS/GLS smoke cases to WLS, ordinal DWLS/WLS, and mixed categorical models.
 - **M.** Track objective value, gradient norm, iteration count, wall time, and
   agreement with lavaan-backed estimates where applicable.
+- **S/M.** Tighten the remaining Geiser GLS parity exceptions now documented
+  in the parity-tier golden: manifest fixed.x path models need a resolved
+  implied-moment comparison surface for exogenous observed moments, and
+  `latent_ar_cross_lagged` needs either a stable same-basin optimizer recipe
+  or a written alternate-optimum note.
 - **S/M.** Refine benchmark use of optimizer diagnostics now that fit results
   expose `optimizer_status` and final gradient norms. Benchmark scripts should
   distinguish clean convergence from line-search salvage or singular PORT

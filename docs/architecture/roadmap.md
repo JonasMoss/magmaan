@@ -202,6 +202,13 @@ stop rather than any usable non-error return.
   fixed.x cases. Mean-structure LS fixtures also cross-check SNLLS against
   the full LS path, and Ceres against LBFGS-B when the Ceres backend is
   enabled.
+- The Geiser textbook GLS corpus is checked in as a parity-tier golden
+  fixture generated from `external/geiser` plus installed lavaan. The test
+  exercises all curated Geiser GLS cases and compares full/PORT and
+  SNLLS/PORT-NLS implied moments against lavaan where the current model
+  surface has strict parity. Manifest fixed.x path cases and the known
+  alternate-basin `latent_ar_cross_lagged` case remain smoke-checked but not
+  used as strict implied-moment parity oracles.
 - Continuous ULS/GLS/WLS robust adapters reuse the shared weighted-moment
   sandwich/U-Gamma primitive with either supplied Gamma blocks or raw-data
   Gamma construction. ULS `robust.sem` SEs and Satorra-Bentler-family
