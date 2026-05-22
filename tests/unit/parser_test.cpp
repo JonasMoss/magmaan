@@ -92,6 +92,17 @@ TEST_CASE("multi-line continuation: leading '+' on next line") {
   CHECK(fp.rows[2].rhs == "x3");
 }
 
+TEST_CASE("multi-line continuation: RHS may start after operator newline") {
+  auto fp = must_parse("posaff15 ~\n b*posaff14");
+  REQUIRE(fp.rows.size() == 1);
+  CHECK(fp.rows[0].op == Op::Regression);
+  CHECK(fp.rows[0].lhs == "posaff15");
+  CHECK(fp.rows[0].rhs == "posaff14");
+  const auto* label = std::get_if<Label>(&fp.mods[fp.rows[0].mod_idx]);
+  REQUIRE(label != nullptr);
+  CHECK(label->text == "b");
+}
+
 TEST_CASE("variance: f ~~ f") {
   auto fp = must_parse("f ~~ f");
   REQUIRE(fp.rows.size() == 1);
@@ -107,6 +118,30 @@ TEST_CASE("regression: y ~ x1 + x2") {
   CHECK(fp.rows[0].lhs == "y");
   CHECK(fp.rows[0].rhs == "x1");
   CHECK(fp.rows[1].rhs == "x2");
+}
+
+TEST_CASE("regression: multi-LHS list expands to repeated rows") {
+  auto fp = must_parse("i + s ~ age");
+  REQUIRE(fp.rows.size() == 2);
+  CHECK(fp.rows[0].op == Op::Regression);
+  CHECK(fp.rows[1].op == Op::Regression);
+  CHECK(fp.rows[0].lhs == "i");
+  CHECK(fp.rows[1].lhs == "s");
+  CHECK(fp.rows[0].rhs == "age");
+  CHECK(fp.rows[1].rhs == "age");
+}
+
+TEST_CASE("rhs list: repeated plus separators are tolerated") {
+  auto fp = must_parse("ksi5 ~~ 0*ksi9 ++ 0*ksi10");
+  REQUIRE(fp.rows.size() == 2);
+  CHECK(fp.rows[0].rhs == "ksi9");
+  CHECK(fp.rows[1].rhs == "ksi10");
+  const auto* f0 = std::get_if<FixedValue>(&fp.mods[fp.rows[0].mod_idx]);
+  const auto* f1 = std::get_if<FixedValue>(&fp.mods[fp.rows[1].mod_idx]);
+  REQUIRE(f0 != nullptr);
+  REQUIRE(f1 != nullptr);
+  CHECK(f0->value == doctest::Approx(0.0));
+  CHECK(f1->value == doctest::Approx(0.0));
 }
 
 TEST_CASE("intercept: y ~ 1") {
@@ -159,6 +194,17 @@ TEST_CASE("modifier: fixed value via n*x") {
   CHECK(fp.rows[1].mod_idx == 0);
 }
 
+TEST_CASE("modifier: signed fixed value via -n*x") {
+  auto fp = must_parse("f =~ -2.5*x1 + -.598*x2");
+  REQUIRE(fp.rows.size() == 2);
+  const auto* f0 = std::get_if<FixedValue>(&fp.mods[fp.rows[0].mod_idx]);
+  const auto* f1 = std::get_if<FixedValue>(&fp.mods[fp.rows[1].mod_idx]);
+  REQUIRE(f0 != nullptr);
+  REQUIRE(f1 != nullptr);
+  CHECK(f0->value == doctest::Approx(-2.5));
+  CHECK(f1->value == doctest::Approx(-0.598));
+}
+
 TEST_CASE("modifier: label via lbl*x") {
   auto fp = must_parse("f =~ a*x1 + a*x2 + b*x3");
   REQUIRE(fp.rows.size() == 3);
@@ -174,14 +220,26 @@ TEST_CASE("modifier: label via lbl*x") {
 }
 
 TEST_CASE("modifier: parenthesized label via (lbl)*x") {
-  auto fp = must_parse("f =~ (a)*x1 + (\"b\")*x2");
-  REQUIRE(fp.rows.size() == 2);
+  auto fp = must_parse("f =~ (a)*x1 + (\"b\")*x2 + (\n c)*x3");
+  REQUIRE(fp.rows.size() == 3);
   const auto* l0 = std::get_if<Label>(&fp.mods[fp.rows[0].mod_idx]);
   const auto* l1 = std::get_if<Label>(&fp.mods[fp.rows[1].mod_idx]);
+  const auto* l2 = std::get_if<Label>(&fp.mods[fp.rows[2].mod_idx]);
   REQUIRE(l0 != nullptr);
   REQUIRE(l1 != nullptr);
+  REQUIRE(l2 != nullptr);
   CHECK(l0->text == "a");
   CHECK(l1->text == "b");
+  CHECK(l2->text == "c");
+}
+
+TEST_CASE("modifier: parenthesized signed fixed value") {
+  auto fp = must_parse("f =~ (-1)*x1 + x2");
+  REQUIRE(fp.rows.size() == 2);
+  const auto* fv = std::get_if<FixedValue>(&fp.mods[fp.rows[0].mod_idx]);
+  REQUIRE(fv != nullptr);
+  CHECK(fv->value == doctest::Approx(-1.0));
+  CHECK(fp.rows[1].mod_idx == 0);
 }
 
 TEST_CASE("modifier: equal() reference via equal(\"...\")") {
@@ -420,6 +478,31 @@ TEST_CASE("modifier: start(v) produces StartValue") {
   REQUIRE(s1 != nullptr);
   CHECK(s0->value == doctest::Approx(0.5));
   CHECK(s1->value == doctest::Approx(0.7));
+}
+
+TEST_CASE("modifier: start(v) accepts signed numeric values") {
+  auto fp = must_parse("i ~~ start(-.029)*lin");
+  REQUIRE(fp.rows.size() == 1);
+  const auto* s = std::get_if<StartValue>(&fp.mods[fp.rows[0].mod_idx]);
+  REQUIRE(s != nullptr);
+  CHECK(s->value == doctest::Approx(-0.029));
+}
+
+TEST_CASE("modifier: chained modifiers lower to repeated flat rows") {
+  auto fp = must_parse("bmi1 ~~ start(1.707)*a*bmi1");
+  REQUIRE(fp.rows.size() == 2);
+  CHECK(fp.rows[0].lhs == "bmi1");
+  CHECK(fp.rows[1].lhs == "bmi1");
+  CHECK(fp.rows[0].op == Op::Covariance);
+  CHECK(fp.rows[1].op == Op::Covariance);
+  CHECK(fp.rows[0].rhs == "bmi1");
+  CHECK(fp.rows[1].rhs == "bmi1");
+  const auto* s = std::get_if<StartValue>(&fp.mods[fp.rows[0].mod_idx]);
+  const auto* l = std::get_if<Label>(&fp.mods[fp.rows[1].mod_idx]);
+  REQUIRE(s != nullptr);
+  REQUIRE(l != nullptr);
+  CHECK(s->value == doctest::Approx(1.707));
+  CHECK(l->text == "a");
 }
 
 TEST_CASE("modifier: c(...) per-group vector") {

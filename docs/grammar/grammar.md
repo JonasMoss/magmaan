@@ -46,17 +46,21 @@ subset of operators.
 | Modifier form | Meaning | Example |
 |---|---|---|
 | `n * x` | fix parameter to `n` | `1*x1`, `0*x2` |
+| `-n * x` | fix parameter to signed numeric value `-n` | `-2.5*x1` |
 | `lbl * x` | label parameter `lbl` (equality via shared label) | `a*x1 + a*x2` |
 | `(lbl) * x` | parenthesized label parameter `lbl` | `(a)*x1 + (a)*x2` |
 | `"lbl" * x` | quoted label | `"my_label" * x1` |
 | `start(v) * x` | starting value | `start(0.5) * x1` |
+| `start(-v) * x` | signed starting value | `start(-0.5) * x1` |
 | `v ? x` | starting-value shorthand | `0.5 ? x1` |
 | `NA * x` | explicitly free (default) | `NA * x1` |
 | `c(m1, m2, ...) * x` | per-group modifier (one entry per group) | `c(1, 1.2) * x1` |
 
 Multi-line formulas continue across `Newline` tokens when a `+` floats
-on either side. Comments use `#` or `!` to end of line. Statements are
-separated by `;` or `Newline`.
+on either side, and the first RHS term may begin on the line after the
+operator. Repeated `+` separators such as `x ++ y` are accepted to match
+lavaan's tolerance in teaching scripts. Comments use `#` or `!` to end of
+line. Statements are separated by `;` or `Newline`.
 
 ## v0 scope — what is out
 
@@ -85,7 +89,8 @@ parser level: an identifier immediately followed by `:` produces
 A `model` is a sequence of `statement`s separated by `;` or newlines.
 A `statement` is one of:
 
-- A **formula**: `lhs_list operator rhs_list`. The LHS is one or more
+- A **formula**: `lhs_list operator rhs_list`, with optional newlines after
+  the operator. The LHS is one or more
   identifiers joined by `+`; in v0 the multi-LHS form is only meaningful
   for `~` (regression). The RHS is one or more `rhs_term`s joined by `+`.
   Threshold formulas use ordinary RHS identifiers such as `t1`, `t2`, and
@@ -93,11 +98,13 @@ A `statement` is one of:
 - A **constraint**: `expr (==|<|>) expr`.
 - A **define-param**: `identifier := expr`.
 
-A `rhs_term` is an optional `modifier`, then `*` or `?`, then an
+A `rhs_term` is an optional chain of `modifier` plus `*` or `?`, then an
 identifier. The `?` separator forces start-value interpretation of the
 modifier; `*` interprets the modifier per its kind (numeric → fixed,
 identifier → label, `NA` → free, `c(...)` → per-group, `start(...)` →
-start value).
+start value). Chained modifiers such as `start(1.7)*a*x` are lowered to
+multiple rows for the same matrix cell; lavaanify merges them and accumulates
+their modifier intent.
 
 The intercept forms are detected by the parser when `regression` is followed
 by a single numeric RHS with no `+` continuation. Bare `y ~ 1` means a free

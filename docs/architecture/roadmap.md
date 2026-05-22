@@ -41,7 +41,9 @@ golden `parTable()` fixtures.
 
 - Lavaan-style syntax parser with normative grammar in `docs/grammar/`,
   including fixed numeric intercept shorthand (`x ~ 0`) and parenthesized
-  modifier labels (`(label)*x`).
+  modifier labels (`(label)*x`), signed numeric modifiers/starts, chained
+  modifiers, multi-LHS regressions, tolerated repeated `+` separators, and
+  RHS continuations after the operator newline.
 - Checked-in lexer, parser, partable, matrix, and fit oracle fixtures.
 - Single- and multi-group LISREL matrix representation.
 - Fixed.x resolution, mean structures, marker/std.lv/effect-coding
@@ -246,7 +248,9 @@ stop rather than any usable non-error return.
   overlap graph (`overlap.json`) plus an empty curation hook
   (`overlap_overrides.json`) so future paper work can find same-data,
   same-syntax, same-shape, and same-oracle-structure examples while preserving
-  every source case as its own fixture record.
+  every source case as its own fixture record. The local external-corpus
+  parser/lavaanify smoke sweep currently accepts all 38 Little catalogue
+  models and all 142 Newsom lavaan models.
 - Continuous ULS/GLS/WLS robust adapters reuse the shared weighted-moment
   sandwich/U-Gamma primitive with either supplied Gamma blocks or raw-data
   Gamma construction. ULS `robust.sem` SEs and Satorra-Bentler-family
