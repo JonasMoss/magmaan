@@ -18,6 +18,7 @@ using magmaan::measures::composite::CompositeWeights;
 using magmaan::parse::Parser;
 using magmaan::spec::build;
 using magmaan::spec::BuildOptions;
+using magmaan::spec::CompositeMode;
 using magmaan::spec::LatentNames;
 using magmaan::spec::LatentStructure;
 
@@ -32,7 +33,9 @@ Model must_build(std::string_view src) {
   auto fp = Parser::parse(src);
   REQUIRE_MESSAGE(fp.has_value(), "parser failed: " << fp.error().detail);
   LatentNames names;
-  auto pt = build(*fp, BuildOptions{}, nullptr, &names);
+  BuildOptions opts;
+  opts.composite_mode = CompositeMode::HenselerOgasawara;
+  auto pt = build(*fp, opts, nullptr, &names);
   REQUIRE_MESSAGE(pt.has_value(), "build failed: " << pt.error().detail);
   return Model{std::move(*pt), std::move(names)};
 }

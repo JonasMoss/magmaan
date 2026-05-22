@@ -49,6 +49,7 @@ const char* partable_error_kind(magmaan::PartableError::Kind k) {
     case K::CompositeTooFewIndicators:return "CompositeTooFewIndicators";
     case K::CompositeOverlap:         return "CompositeOverlap";
     case K::UnidentifiedComposite:    return "UnidentifiedComposite";
+    case K::CompositeModeRequired:    return "CompositeModeRequired";
   }
   return "Unknown";
 }
@@ -255,6 +256,7 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   if (!p.has_value()) stop_parse(p.error());
 
   magmaan::spec::BuildOptions opts;
+  opts.composite_mode = magmaan::spec::CompositeMode::HenselerOgasawara;
   opts.auto_var       = auto_var;
   opts.auto_cov_lv_x  = auto_cov_lv_x;
   opts.auto_cov_y     = auto_cov_y;

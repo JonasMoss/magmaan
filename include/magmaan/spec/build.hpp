@@ -46,10 +46,10 @@ struct BuildOptions {
   bool meanstructure  = false;  // auto-add ν / α rows, with defaults below
   bool int_ov_free    = true;   // observed intercepts free by default; growth() sets false
   bool int_lv_free    = false;  // latent means fixed at 0 by default; growth() sets true
-  // Composite handling. The default remains the historical
-  // Henseler-Ogasawara desugaring so existing callers keep today's behavior;
-  // the native FC-SEM W/T path is opt-in while its evaluator lands.
-  CompositeMode composite_mode = CompositeMode::HenselerOgasawara;
+  // Composite handling. Plain `BuildOptions{}` does not choose a `<~` meaning;
+  // callers that accept composites must explicitly select the historical
+  // Henseler-Ogasawara desugaring or the native FC-SEM W/T path.
+  CompositeMode composite_mode = CompositeMode::None;
   // Group identity. `n_groups` (≙ lavaan `ngroups`) drives row replication;
   // `group_var` (≙ `group`) names the grouping variable — defaults to "group"
   // when n_groups > 1 and left empty; `group_labels` (≙ `group.label`) names

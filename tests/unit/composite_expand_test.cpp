@@ -33,9 +33,15 @@ struct Built {
   LatentNames    names;
 };
 
+BuildOptions ho_options() {
+  BuildOptions opts;
+  opts.composite_mode = CompositeMode::HenselerOgasawara;
+  return opts;
+}
+
 // Parse + build a composite model, asserting success, and bundle the
 // lavaan-shaped projection with the LatentNames (which carries `composites`).
-Built must_build(std::string_view src, BuildOptions opts = {}) {
+Built must_build(std::string_view src, BuildOptions opts) {
   auto fp = Parser::parse(src);
   REQUIRE_MESSAGE(fp.has_value(), "parser failed: " << fp.error().detail);
   Starts starts;
@@ -49,12 +55,20 @@ Built must_build(std::string_view src, BuildOptions opts = {}) {
                std::move(names)};
 }
 
-PartableError::Kind build_error(std::string_view src, BuildOptions opts = {}) {
+Built must_build(std::string_view src) {
+  return must_build(src, ho_options());
+}
+
+PartableError::Kind build_error(std::string_view src, BuildOptions opts) {
   auto fp = Parser::parse(src);
   REQUIRE_MESSAGE(fp.has_value(), "parser failed: " << fp.error().detail);
   auto pt = build(*fp, opts);
   REQUIRE_FALSE(pt.has_value());
   return pt.error().kind;
+}
+
+PartableError::Kind build_error(std::string_view src) {
+  return build_error(src, ho_options());
 }
 
 std::size_t count_free(const LavaanParTable& pt) {
@@ -72,6 +86,11 @@ std::size_t count_op(const LavaanParTable& pt, Op op) {
 }
 
 }  // namespace
+
+TEST_CASE("composite: <~ requires an explicit composite mode") {
+  CHECK(build_error("C <~ x1 + x2 + x3\n y ~ C", BuildOptions{}) ==
+        PartableError::Kind::CompositeModeRequired);
+}
 
 TEST_CASE("composite: C <~ x1+x2+x3 expands to a Henseler-Ogasawara block") {
   // `y ~ C` connects the composite to the structural model — required for

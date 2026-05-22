@@ -7,6 +7,7 @@
 #include <iterator>
 #include <sstream>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include <Eigen/Core>
@@ -468,6 +469,31 @@ TEST_CASE("api frontier exposes native FC-SEM fit and post-fit calls") {
       magmaan::api::frontier::standardized_rows_fcsem(*fit, se->vcov);
   REQUIRE_OK(rows);
   CHECK(rows->size() == j["weights"].size() + j["rows"].size());
+}
+
+TEST_CASE("api composite doors are explicit") {
+  const std::string composite_syntax = "C <~ x1 + x2 + x3\n y ~ C";
+  auto closed = magmaan::api::model_from_lavaan(composite_syntax);
+  REQUIRE_FALSE(closed.has_value());
+  CHECK(closed.error().stage == magmaan::api::ErrorStage::Model);
+  const auto* err =
+      std::get_if<magmaan::PartableError>(&closed.error().underlying);
+  REQUIRE(err != nullptr);
+  CHECK(err->kind == magmaan::PartableError::Kind::CompositeModeRequired);
+
+  magmaan::api::ModelOptions historical;
+  historical.build.composite_mode =
+      magmaan::spec::CompositeMode::HenselerOgasawara;
+  auto opened = magmaan::api::model_from_lavaan(composite_syntax, historical);
+  REQUIRE_OK(opened);
+  CHECK(opened->structure().composite_mode ==
+        magmaan::spec::CompositeMode::HenselerOgasawara);
+
+  auto no_composite =
+      magmaan::api::frontier::model_from_lavaan_fcsem("f =~ x1 + x2 + x3");
+  REQUIRE_FALSE(no_composite.has_value());
+  CHECK(no_composite.error().stage ==
+        magmaan::api::ErrorStage::UnsupportedCombination);
 }
 
 TEST_CASE("api second-order CFA fits ordinal data and matches the correlated model") {

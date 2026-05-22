@@ -44,6 +44,7 @@ struct PartableError {
                               // composite (<~) and a latent factor (=~)
     UnidentifiedComposite,    // a composite has no relation to any variable
                               // outside its own indicator set
+    CompositeModeRequired,    // `<~` is present but no composite mode was selected
   };
   Kind        kind   = Kind::BadGroupSpec;
   std::string detail = {};

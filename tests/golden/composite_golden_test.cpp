@@ -217,7 +217,10 @@ TEST_CASE("composite ML goldens — lavaan parity for fitted public surface" *
     }
 
     Built b;
-    auto pt_or = magmaan::spec::build(*fp, {}, nullptr, &b.names);
+    magmaan::spec::BuildOptions opts;
+    opts.composite_mode =
+        magmaan::spec::CompositeMode::HenselerOgasawara;
+    auto pt_or = magmaan::spec::build(*fp, opts, nullptr, &b.names);
     if (!pt_or.has_value()) {
       failures.push_back(id + ": build — " + pt_or.error().detail);
       continue;

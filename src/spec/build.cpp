@@ -910,16 +910,22 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
         "effect_coding and std_lv are mutually exclusive identification conventions"));
   }
 
-  // Composite (`<~`) support. The historical Henseler-Ogasawara mode rewrites
-  // composites into a reflective sub-model up front, so every step below sees
-  // only ordinary `=~` / `~~` rows. Native FC-SEM keeps the `<~` rows and
-  // carries their W/T contract as explicit composite metadata instead.
+  // Composite (`<~`) support. Callers must choose a composite meaning
+  // explicitly. The historical Henseler-Ogasawara mode rewrites composites into
+  // a reflective sub-model up front, so every step below sees only ordinary
+  // `=~` / `~~` rows. Native FC-SEM keeps the `<~` rows and carries their W/T
+  // contract as explicit composite metadata instead.
   CompositeExpansion comp_exp;
   std::vector<CompositeInfo> native_composites;
   bool has_composites = false;
   for (const auto& r : flat.rows)
     if (r.op == parse::Op::Composite) { has_composites = true; break; }
   const parse::FlatPartable* flatp = &flat;
+  if (has_composites && opts.composite_mode == CompositeMode::None) {
+    return std::unexpected(make_err(
+        PartableError::Kind::CompositeModeRequired,
+        "model contains `<~` composite rows but BuildOptions::composite_mode is None"));
+  }
   if (has_composites && opts.composite_mode == CompositeMode::HenselerOgasawara) {
     auto exp = expand_composites(flat);
     if (!exp.has_value()) return std::unexpected(exp.error());
@@ -1021,7 +1027,7 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
   Starts starts;
   LatentNames names;
   finalize(rows, inv, out, starts, names);
-  if (opts.composite_mode == CompositeMode::FcSem) {
+  if (!native_composites.empty()) {
     out.composite_mode = CompositeMode::FcSem;
     names.composite_mode = CompositeMode::FcSem;
     names.composites = native_composites;
@@ -1035,10 +1041,14 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
       }
       out.composite_blocks.push_back(std::move(b));
     }
-  } else {
+  } else if (!comp_exp.composites.empty()) {
     out.composite_mode = CompositeMode::HenselerOgasawara;
     names.composite_mode = CompositeMode::HenselerOgasawara;
     names.composites = std::move(comp_exp.composites);
+  } else {
+    out.composite_mode = CompositeMode::None;
+    names.composite_mode = CompositeMode::None;
+    names.composites.clear();
   }
   if (out_starts) *out_starts = std::move(starts);
 
