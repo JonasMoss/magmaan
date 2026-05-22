@@ -59,6 +59,15 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   observed-path abort, and add categorical fixtures only for models that match
   magmaan's ordinal/mixed LS surface rather than Mplus logistic/probit response
   models.
+- **S/M.** Extend the Little/Newsom textbook corpora beyond the initial strict
+  tranche. The builders now extract 108 Little LISREL models and 142 Newsom
+  lavaan fit calls, with grouped tracked manifests and strict lavaan-backed
+  C++ parity for the currently supported continuous subset. Remaining work:
+  implement real LISREL `SE` selection and more complex matrix/constraint
+  conversion for Little, promote additional Newsom continuous cases whose
+  lavaan syntax uses parser features magmaan does not yet accept, and add
+  ordinal/mixed parity checks once the desired categorical oracle surface is
+  settled.
 - **S/M.** Refine benchmark use of optimizer diagnostics now that fit results
   expose `optimizer_status` and final gradient norms. Benchmark scripts should
   distinguish clean convergence from line-search salvage or singular PORT
