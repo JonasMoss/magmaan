@@ -38,4 +38,17 @@ stopifnot(all(std$row %in% seq_len(nrow(fit$partable))))
 stopifnot(all(c("std.lv", "std.all") %in% names(std)))
 stopifnot("frontier_fit_ml_fcsem" %in% attr(magmaan_core, "groups")$frontier)
 
+ordinary_spec <- model_spec(model)
+err <- tryCatch(fit_ml_fcsem(ordinary_spec, dat),
+                error = function(e) conditionMessage(e))
+stopifnot(grepl("ordinary magmaan_model_spec", err, fixed = TRUE))
+
+err <- tryCatch(magmaan_core$fit_ml(spec, dat),
+                error = function(e) conditionMessage(e))
+stopifnot(grepl("native FC-SEM model specs", err, fixed = TRUE))
+
+err <- tryCatch(magmaan(spec, dat),
+                error = function(e) conditionMessage(e))
+stopifnot(grepl("magmaan_fcsem", err, fixed = TRUE))
+
 cat("native FC-SEM R frontier workflow: ok\n")
