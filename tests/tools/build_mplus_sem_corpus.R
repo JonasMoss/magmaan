@@ -314,6 +314,7 @@ for (item in raw_inputs) {
     source_input = item$name,
     source_data = data_ref,
     case_dir = case_dir,
+    has_data = nzchar(data_path),
     data_kind = data_kind,
     model_kind = model_kind,
     snlls_candidate = snlls_candidate,
@@ -336,7 +337,10 @@ manifest <- do.call(rbind, rows)
 manifest <- manifest[order(manifest$status, manifest$case_id), ]
 utils::write.csv(manifest, file.path(out_root, "manifest.csv"), row.names = FALSE)
 
-catalogue <- manifest[manifest$status == "retained", , drop = FALSE]
+# A retained case is only a usable catalogue entry when its referenced data
+# file was actually found and copied; otherwise it lives in the manifest only.
+catalogue <- manifest[manifest$status == "retained" & manifest$has_data,
+                      , drop = FALSE]
 if (nrow(catalogue)) {
   catalogue <- transform(
     catalogue,
@@ -345,7 +349,7 @@ if (nrow(catalogue)) {
     family = model_kind,
     provenance = "Mplus User's Guide zip examples",
     generated_model = file.path(case_dir, "model.lav"),
-    generated_data = ifelse(nzchar(source_data), file.path(case_dir, "data.dat"), ""),
+    generated_data = file.path(case_dir, "data.dat"),
     generated_script = "",
     data_kind = ifelse(data_kind == "continuous", "raw", data_kind)
   )

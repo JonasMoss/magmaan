@@ -78,6 +78,58 @@ names_section <- function(lines, start_cmd) {
   toks[nzchar(toks)]
 }
 
+# LISREL SE (select) command: the observed-variable subset for the analysis,
+# given by name or by 1-based index into the LA labels and terminated by "/".
+# Returns indices into `obs` (NA for any token that does not resolve), or an
+# empty vector when the model has no SE command.
+select_indices <- function(lines, obs) {
+  starts <- which(vapply(lines, command, character(1L)) == "SE")
+  if (!length(starts)) return(integer())
+  inline <- sub("(?i)^\\s*SE\\b", "", lines[[starts[[1L]]]], perl = TRUE)
+  rest <- paste(c(inline, section_lines(lines, "SE")), collapse = " ")
+  rest <- sub("/.*$", "", rest)
+  toks <- unlist(strsplit(trimws(rest), "\\s+"))
+  toks <- toks[nzchar(toks)]
+  if (!length(toks)) return(integer())
+  vapply(toks, function(t) {
+    if (grepl("^[0-9]+$", t)) {
+      k <- as.integer(t)
+      if (k >= 1L && k <= length(obs)) k else NA_integer_
+    } else {
+      m <- match(toupper(t), toupper(obs))
+      if (is.na(m)) NA_integer_ else m
+    }
+  }, integer(1L), USE.NAMES = FALSE)
+}
+
+# LISREL RA (raw data) command: read the external free-format data file it
+# names, label the columns from LA, and return the data frame. Returns NULL
+# when there is no RA command, when the model is multi-group (NG>1 / stacked
+# DA blocks -- deferred), or when the file is missing or its column count
+# disagrees with NI/LA.
+read_ra_data <- function(lines, obs_all, source_dir) {
+  ra <- grep("(?i)^\\s*RA\\b", lines, value = TRUE, perl = TRUE)
+  if (!length(ra)) return(NULL)
+  da <- grep("(?i)^\\s*DA\\b", lines, value = TRUE, perl = TRUE)
+  ng <- regmatches(paste(da, collapse = " "),
+                   regexpr("(?i)\\bNG\\s*=\\s*[0-9]+",
+                           paste(da, collapse = " "), perl = TRUE))
+  ngroups <- if (length(ng)) as.integer(sub("(?i).*=", "", ng)) else length(da)
+  if (ngroups > 1L) return(NULL)
+  fi <- regmatches(ra[[1L]], regexpr("(?i)FI\\s*=\\s*\\S+", ra[[1L]],
+                                     perl = TRUE))
+  if (!length(fi)) return(NULL)
+  fname <- basename(sub("(?i)FI\\s*=\\s*", "", fi))
+  hits <- list.files(source_dir, pattern = paste0("^", fname, "$"),
+                     recursive = TRUE, full.names = TRUE, ignore.case = TRUE)
+  if (!length(hits)) return(NULL)
+  d <- tryCatch(utils::read.table(hits[[1L]], header = FALSE),
+                error = function(e) NULL)
+  if (is.null(d) || ncol(d) != length(obs_all)) return(NULL)
+  names(d) <- obs_all
+  d
+}
+
 lower_matrix <- function(vals, n) {
   if (length(vals) < n * (n + 1L) / 2L) return(NULL)
   m <- matrix(0, n, n)
@@ -134,10 +186,6 @@ lavaan_from_lisrel <- function(lines, id, obs, lat) {
   txt <- paste(strip_comments(lines), collapse = "\n")
   mo <- paste(grep("^\\s*MO\\b", lines, ignore.case = TRUE, value = TRUE),
               collapse = " ")
-  if (grepl("(?mi)^\\s*SE\\b", txt, perl = TRUE)) {
-    return(list(model = "", status = "source_only",
-                note = "LISREL selection commands require manual conversion"))
-  }
   if (!grepl("\\bLY\\b", mo, ignore.case = TRUE)) {
     return(list(model = "", status = "source_only",
                 note = "no LY measurement matrix found"))
@@ -235,17 +283,45 @@ for (path in ls8_paths) {
   mean <- numbers_in(section_lines(lines, "ME"))
   if (length(mean) < length(obs)) mean <- rep(NA_real_, length(obs))
   names(mean) <- obs
+  raw_data <- read_ra_data(lines, obs, source_dir)
+
+  # Apply the LISREL SE (select) command before anything downstream: it picks
+  # a subset of the input variables in a given order, and the MODEL matrices
+  # are indexed over that selection, so obs/cov/mean/raw_data must be subset.
+  # A selection naming a variable we cannot resolve leaves the case source-only.
+  se_idx <- select_indices(lines, obs)
+  se_ok <- !length(se_idx) || !anyNA(se_idx)
+  if (length(se_idx) && se_ok) {
+    obs <- obs[se_idx]
+    if (!is.null(cov)) cov <- cov[se_idx, se_idx, drop = FALSE]
+    if (!is.null(raw_data)) raw_data <- raw_data[se_idx]
+    mean <- mean[se_idx]
+    names(mean) <- obs
+  }
+
   lisrel_rel <- file.path("models_lisrel", paste0(id, ".LS8"))
   writeLines(raw, file.path(root, lisrel_rel), useBytes = TRUE)
   data_rel <- ""
+  data_kind_val <- "source"
   if (!is.null(cov)) {
     data_rel <- file.path("data", paste0(id, "_cov.csv"))
     write_matrix(cov, obs, file.path(root, data_rel))
+    data_kind_val <- "summary"
     if (!all(is.na(mean))) {
       write_named_vector(mean, file.path(root, "data", paste0(id, "_mean.csv")))
     }
+  } else if (!is.null(raw_data)) {
+    data_rel <- file.path("data", paste0(id, ".csv"))
+    utils::write.csv(raw_data, file.path(root, data_rel), row.names = FALSE,
+                     na = "")
+    data_kind_val <- "raw"
   }
-  conv <- lavaan_from_lisrel(raw, id, obs, lat)
+  conv <- if (!se_ok) {
+    list(model = "", status = "source_only",
+         note = "SE selection references an unrecognized variable")
+  } else {
+    lavaan_from_lisrel(raw, id, obs, lat)
+  }
   model_rel <- ""
   if (nzchar(conv$model)) {
     model_rel <- file.path("models", paste0(id, ".lav"))
@@ -258,7 +334,7 @@ for (path in ls8_paths) {
     provenance = "Little LISREL examples",
     source_input = sub(paste0("^", root, .Platform$file.sep), "", path),
     source_data = "",
-    data_kind = if (nzchar(data_rel)) "summary" else "source",
+    data_kind = data_kind_val,
     measurement_kind = "continuous",
     observed_only = FALSE,
     generated_data = data_rel,
@@ -279,8 +355,22 @@ for (path in ls8_paths) {
     stringsAsFactors = FALSE)
 }
 
-catalogue <- if (length(rows)) do.call(rbind, rows) else data.frame()
+manifest <- if (length(rows)) do.call(rbind, rows) else data.frame()
+utils::write.csv(manifest, file.path(root, "manifest.csv"), row.names = FALSE,
+                 na = "")
+
+# The catalogue is the harness-runnable subset: rows with both a converted
+# lavaan model and extracted summary data. Complex LISREL models kept as
+# source-only (BE/GA/PH structural matrices, selection or constraint commands)
+# carry no usable model/data pair and stay in the manifest only.
+catalogue <- if (nrow(manifest)) {
+  manifest[manifest$status == "retained" &
+             nzchar(manifest$generated_model) &
+             nzchar(manifest$generated_data), , drop = FALSE]
+} else {
+  manifest
+}
 utils::write.csv(catalogue, file.path(root, "catalogue.csv"), row.names = FALSE,
                  na = "")
-message("Wrote ", nrow(catalogue), " Little catalogue rows to ",
-        file.path(root, "catalogue.csv"))
+message("Wrote ", nrow(catalogue), " runnable Little catalogue rows (",
+        nrow(manifest), " total in manifest) to ", root)
