@@ -98,12 +98,39 @@ double parse_double(std::string_view text) noexcept {
   return v;
 }
 
+bool starts_signed_numlit(const State& st) noexcept {
+  const TokenKind k = st.peek().kind;
+  if (k == TokenKind::NumLit) return true;
+  if (k != TokenKind::Plus && k != TokenKind::Minus) return false;
+  return st.peek(1).kind == TokenKind::NumLit;
+}
+
+// production: signed_num_lit
+//
+//   signed_num_lit ::= ('+' | '-')? num_lit
+parse_expected<double> parse_signed_numlit(State& st,
+                                           std::string_view context) noexcept {
+  double sign = 1.0;
+  if (st.peek().kind == TokenKind::Plus ||
+      st.peek().kind == TokenKind::Minus) {
+    sign = (st.peek().kind == TokenKind::Minus) ? -1.0 : 1.0;
+    st.consume();
+  }
+  const Token& t = st.peek();
+  if (t.kind != TokenKind::NumLit) {
+    return std::unexpected(make_err(
+        ParseError::Kind::ModifierEvalFailed, t.span,
+        std::string(context) + " requires a numeric literal argument"));
+  }
+  st.consume();
+  return sign * parse_double(t.text);
+}
+
 // === RHS term scratch ========================================================
 // Internal-only result of parsing one RHS term. The formula-level code decides
 // whether a numeric RHS term is an intercept (`y ~ 1`, `y ~ 0`) or an error.
 
 struct RawRhsTerm {
-  std::uint32_t    mod_idx   = 0;     // 0 = none
   std::string_view ident_text;        // for identifier terms
   bool             is_numlit = false;
   bool             is_numlit_one = false;  // true iff the literal lone term `1`
@@ -122,39 +149,51 @@ std::string_view strip_quotes(std::string_view quoted) noexcept {
 
 // production: parenthesized_label
 //
-//   parenthesized_label ::= '(' (identifier | string_lit) ')'
+//   parenthesized_label ::= '(' NEWLINE* ( signed_num_lit | identifier
+//                            | string_lit ) NEWLINE* ')'
 parse_expected<ModifierAtom> parse_parenthesized_label(State& st) noexcept {
   st.consume();  // LParen
+  st.skip_newlines();
   const Token& label = st.peek();
-  std::string_view text;
-  if (label.kind == TokenKind::Identifier) {
-    text = label.text;
-  } else if (label.kind == TokenKind::StringLit) {
-    text = strip_quotes(label.text);
+  ModifierAtom atom;
+  if (starts_signed_numlit(st)) {
+    auto value_or = parse_signed_numlit(st, "parenthesized modifier");
+    if (!value_or.has_value()) return std::unexpected(value_or.error());
+    atom = ModifierAtom{FixedValue{*value_or}};
   } else {
-    return std::unexpected(make_err(
-        ParseError::Kind::ModifierEvalFailed, label.span,
-        "parenthesized modifier label requires an identifier or string literal"));
+    std::string_view text;
+    if (label.kind == TokenKind::Identifier) {
+      text = label.text;
+    } else if (label.kind == TokenKind::StringLit) {
+      text = strip_quotes(label.text);
+    } else {
+      return std::unexpected(make_err(
+          ParseError::Kind::ModifierEvalFailed, label.span,
+          "parenthesized modifier requires a number, identifier, or string literal"));
+    }
+    st.consume();
+    atom = ModifierAtom{Label{text}};
   }
-  st.consume();
+  st.skip_newlines();
   if (st.peek().kind != TokenKind::RParen) {
     return std::unexpected(make_err(
         ParseError::Kind::ModifierEvalFailed, st.peek().span,
-        "expected ')' after parenthesized modifier label"));
+        "expected ')' after parenthesized modifier"));
   }
   st.consume();
-  return ModifierAtom{Label{text}};
+  return atom;
 }
 
 // production: modifier_atom
 //
-//   modifier_atom ::= num_lit | NA | identifier | string_lit
+//   modifier_atom ::= signed_num_lit | NA | identifier | string_lit
 //                   | parenthesized_label
 parse_expected<ModifierAtom> parse_modifier_atom(State& st) noexcept {
   const Token& t = st.peek();
-  if (t.kind == TokenKind::NumLit) {
-    st.consume();
-    return ModifierAtom{FixedValue{parse_double(t.text)}};
+  if (starts_signed_numlit(st)) {
+    auto value_or = parse_signed_numlit(st, "modifier atom");
+    if (!value_or.has_value()) return std::unexpected(value_or.error());
+    return ModifierAtom{FixedValue{*value_or}};
   }
   if (t.kind == TokenKind::NA) {
     st.consume();
@@ -180,28 +219,22 @@ parse_expected<ModifierAtom> parse_modifier_atom(State& st) noexcept {
 
 // production: start_call
 //
-//   start_call ::= 'start' '(' num_lit ')'
+//   start_call ::= 'start' '(' signed_num_lit ')'
 //
 // Caller has already verified that peek(0) is Identifier "start" and
 // peek(1) is LParen.
 parse_expected<Modifier> parse_start_call(State& st) noexcept {
   st.consume();   // Identifier "start"
   st.consume();   // LParen
-  const Token& v = st.peek();
-  if (v.kind != TokenKind::NumLit) {
-    return std::unexpected(make_err(
-        ParseError::Kind::ModifierEvalFailed, v.span,
-        "start(...) requires a numeric literal argument"));
-  }
-  const double value = parse_double(v.text);
-  st.consume();
+  auto value_or = parse_signed_numlit(st, "start(...)");
+  if (!value_or.has_value()) return std::unexpected(value_or.error());
   if (st.peek().kind != TokenKind::RParen) {
     return std::unexpected(make_err(
         ParseError::Kind::ModifierEvalFailed, st.peek().span,
         "expected ')' after start(...) argument"));
   }
   st.consume();
-  return Modifier{StartValue{value}};
+  return Modifier{StartValue{*value_or}};
 }
 
 // production: equal_call
@@ -308,11 +341,13 @@ parse_expected<Modifier> parse_modifier(State& st) noexcept {
 bool starts_with_modifier(const State& st) noexcept {
   const Token& h = st.peek(0);
   const Token& a = st.peek(1);
-  if (h.kind == TokenKind::LParen &&
-      (a.kind == TokenKind::Identifier || a.kind == TokenKind::StringLit) &&
-      st.peek(2).kind == TokenKind::RParen &&
-      (st.peek(3).kind == TokenKind::Star ||
-       st.peek(3).kind == TokenKind::Question)) {
+  if (h.kind == TokenKind::LParen) {
+    return true;
+  }
+  if ((h.kind == TokenKind::Plus || h.kind == TokenKind::Minus) &&
+      a.kind == TokenKind::NumLit &&
+      (st.peek(2).kind == TokenKind::Star ||
+       st.peek(2).kind == TokenKind::Question)) {
     return true;
   }
   if (h.kind == TokenKind::Identifier && a.kind == TokenKind::LParen) {
@@ -329,24 +364,16 @@ bool starts_with_modifier(const State& st) noexcept {
 
 // Result of parsing one RHS term, with the parsed modifier (if any).
 struct ParsedRhsTerm {
-  RawRhsTerm              term;
-  std::optional<Modifier> modifier;
+  RawRhsTerm           term;
+  std::vector<Modifier> modifiers;
 };
 
-// production: rhs_term
+// production: modifier_chain
 //
-//   rhs_term ::= modifier modifier_sep identifier
-//              | identifier
-//              | num_lit                   (only valid as intercept; checked above)
-//
-// The lookahead in starts_with_modifier() decides which branch we take
-// without backtracking.
-parse_expected<ParsedRhsTerm> parse_rhs_term_with_mod(State& st) noexcept {
-  const Token& head = st.peek();
-
-  if (starts_with_modifier(st)) {
-    RawRhsTerm out;
-    out.span = head.span;
+//   modifier_chain ::= modifier modifier_sep (modifier modifier_sep)*
+parse_expected<std::vector<Modifier>> parse_modifier_chain(State& st) noexcept {
+  std::vector<Modifier> modifiers;
+  while (starts_with_modifier(st)) {
     auto mod_or = parse_modifier(st);
     if (!mod_or.has_value()) return std::unexpected(mod_or.error());
     const Token& sep = st.peek();
@@ -371,6 +398,28 @@ parse_expected<ParsedRhsTerm> parse_rhs_term_with_mod(State& st) noexcept {
       }
       mod = Modifier{StartValue{fixed->value}};
     }
+    modifiers.push_back(std::move(mod));
+  }
+  return modifiers;
+}
+
+// production: rhs_term
+//
+//   rhs_term ::= modifier_chain identifier
+//              | identifier
+//
+// The lookahead in starts_with_modifier() decides which branch we take
+// without backtracking.
+parse_expected<ParsedRhsTerm> parse_rhs_term_with_mod(State& st) noexcept {
+  const Token& head = st.peek();
+
+  if (starts_with_modifier(st)) {
+    RawRhsTerm out;
+    out.span = head.span;
+    auto mods_or = parse_modifier_chain(st);
+    if (!mods_or.has_value()) return std::unexpected(mods_or.error());
+    std::vector<Modifier> modifiers;
+    std::swap(modifiers, *mods_or);
     // Allow `modifier*1` for label-on-intercept (`x1 ~ n1*1`); the upstream
     // formula path emits an Op::Intercept row with the modifier preserved.
     if (st.peek().kind == TokenKind::NumLit && st.peek().text == "1") {
@@ -380,7 +429,7 @@ parse_expected<ParsedRhsTerm> parse_rhs_term_with_mod(State& st) noexcept {
       out.numlit_value = 1.0;
       out.span = SourceSpan{out.span.begin, one.span.end,
                             out.span.line, out.span.col};
-      return ParsedRhsTerm{out, std::optional<Modifier>{std::move(mod)}};
+      return ParsedRhsTerm{out, std::move(modifiers)};
     }
     if (st.peek().kind != TokenKind::Identifier) {
       return std::unexpected(make_err(
@@ -391,7 +440,7 @@ parse_expected<ParsedRhsTerm> parse_rhs_term_with_mod(State& st) noexcept {
     out.ident_text = id.text;
     out.span = SourceSpan{out.span.begin, id.span.end,
                           out.span.line, out.span.col};
-    return ParsedRhsTerm{out, std::optional<Modifier>{std::move(mod)}};
+    return ParsedRhsTerm{out, std::move(modifiers)};
   }
 
   RawRhsTerm out;
@@ -399,14 +448,14 @@ parse_expected<ParsedRhsTerm> parse_rhs_term_with_mod(State& st) noexcept {
   if (head.kind == TokenKind::Identifier) {
     st.consume();
     out.ident_text = head.text;
-    return ParsedRhsTerm{out, std::nullopt};
+    return ParsedRhsTerm{out, {}};
   }
   if (head.kind == TokenKind::NumLit) {
     st.consume();
     out.is_numlit = true;
     out.is_numlit_one = (head.text == "1");
     out.numlit_value = parse_double(head.text);
-    return ParsedRhsTerm{out, std::nullopt};
+    return ParsedRhsTerm{out, {}};
   }
   return std::unexpected(make_err(
       ParseError::Kind::ExpectedRhsTerm, head.span,
@@ -418,7 +467,8 @@ parse_expected<ParsedRhsTerm> parse_rhs_term_with_mod(State& st) noexcept {
 //
 // One or more rhs_terms separated by `+`. The `+` may sit on either side
 // of a Newline run (multi-line continuation). The list ends when the next
-// non-Newline token is not `+`.
+// non-Newline token is not `+`. Repeated `+` separators are tolerated because
+// lavaan accepts the accidental `x ++ y` form found in some teaching scripts.
 parse_expected<std::vector<ParsedRhsTerm>>
 parse_rhs_list(State& st) noexcept {
   std::vector<ParsedRhsTerm> out;
@@ -435,6 +485,10 @@ parse_rhs_list(State& st) noexcept {
     }
     st.consume();          // consume Plus
     st.skip_newlines();    // allow `+ \n term`
+    while (st.peek().kind == TokenKind::Plus) {
+      st.consume();
+      st.skip_newlines();
+    }
     auto next = parse_rhs_term_with_mod(st);
     if (!next.has_value()) return std::unexpected(next.error());
     out.push_back(std::move(*next));
@@ -677,9 +731,7 @@ parse_define(State& st, FlatPartable& flat,
 
 // production: formula
 //
-//   formula ::= identifier operator rhs_list
-//
-// Multi-LHS (`y1 + y2 ~ x`) is a future slice.
+//   formula ::= lhs_list operator NEWLINE* rhs_list
 parse_expected<void>
 parse_formula(State& st, FlatPartable& flat) noexcept {
   const Token& lhs_tok = st.peek();
@@ -690,7 +742,20 @@ parse_formula(State& st, FlatPartable& flat) noexcept {
             std::string(to_string(lhs_tok.kind))));
   }
   st.consume();
-  const std::string_view lhs_text = lhs_tok.text;
+  std::vector<std::string_view> lhs_texts;
+  lhs_texts.push_back(lhs_tok.text);
+  while (st.peek().kind == TokenKind::Plus) {
+    st.consume();
+    const Token& next_lhs = st.peek();
+    if (next_lhs.kind != TokenKind::Identifier) {
+      return std::unexpected(make_err(
+          ParseError::Kind::ExpectedLhs, next_lhs.span,
+          std::string("expected identifier after '+' in LHS list, got ") +
+              std::string(to_string(next_lhs.kind))));
+    }
+    st.consume();
+    lhs_texts.push_back(next_lhs.text);
+  }
 
   const Token& op_tok = st.peek();
   if (op_tok.kind != TokenKind::Op) {
@@ -715,25 +780,45 @@ parse_formula(State& st, FlatPartable& flat) noexcept {
   Op op = *op_opt;
   st.consume();
 
+  if (lhs_texts.size() > 1 && op != Op::Regression) {
+    return std::unexpected(make_err(
+        ParseError::Kind::ExpectedLhs, op_tok.span,
+        "multi-LHS formulas are only supported for regression '~'"));
+  }
+
+  st.skip_newlines();
   auto rhs_or = parse_rhs_list(st);
   if (!rhs_or.has_value()) return std::unexpected(rhs_or.error());
   std::vector<ParsedRhsTerm>& rhs = *rhs_or;
 
+  auto emit_row = [&](std::string_view lhs, Op row_op, std::string_view rhs_text,
+                      const SourceSpan& span,
+                      const std::vector<Modifier>& modifiers) {
+    if (modifiers.empty()) {
+      flat.rows.push_back(FlatRow{lhs, row_op, rhs_text, /*block=*/1, 0, span});
+      return;
+    }
+    for (const auto& modifier : modifiers) {
+      const std::uint32_t mi = flat.add_modifier(modifier);
+      flat.rows.push_back(FlatRow{lhs, row_op, rhs_text, /*block=*/1, mi,
+                                  span});
+    }
+  };
+
   // Intercept detection: `lhs ~ 1`, fixed numeric shorthand `lhs ~ 0`, or
   // `lhs ~ label*1` / `lhs ~ val*1` / `lhs ~ c(...)*1` -- exactly one numeric
-  // RHS term, with an optional modifier attached. A bare literal `1` remains
+  // RHS term, with optional modifiers attached. A bare literal `1` remains
   // lavaan's free-intercept marker; any other bare numeric literal is lowered
   // to a FixedValue modifier on the synthesized Intercept row.
   if (op == Op::Regression && rhs.size() == 1 && rhs[0].term.is_numlit) {
-    std::uint32_t mi = 0;
-    if (rhs[0].modifier.has_value()) {
-      mi = flat.add_modifier(std::move(*rhs[0].modifier));
-    } else if (!rhs[0].term.is_numlit_one) {
-      mi = flat.add_modifier(Modifier{FixedValue{rhs[0].term.numlit_value}});
+    if (rhs[0].modifiers.empty() && !rhs[0].term.is_numlit_one) {
+      rhs[0].modifiers.push_back(
+          Modifier{FixedValue{rhs[0].term.numlit_value}});
     }
-    flat.rows.push_back(FlatRow{
-        lhs_text, Op::Intercept, std::string_view{}, /*block=*/1,
-        mi, rhs[0].term.span});
+    for (std::string_view lhs : lhs_texts) {
+      emit_row(lhs, Op::Intercept, std::string_view{}, rhs[0].term.span,
+               rhs[0].modifiers);
+    }
     return {};
   }
 
@@ -743,12 +828,9 @@ parse_formula(State& st, FlatPartable& flat) noexcept {
           ParseError::Kind::ExpectedRhsTerm, r.term.span,
           "numeric RHS is only valid as the lone RHS of `~` (intercept form)"));
     }
-    std::uint32_t mi = 0;
-    if (r.modifier.has_value()) {
-      mi = flat.add_modifier(std::move(*r.modifier));
+    for (std::string_view lhs : lhs_texts) {
+      emit_row(lhs, op, r.term.ident_text, r.term.span, r.modifiers);
     }
-    flat.rows.push_back(FlatRow{lhs_text, op, r.term.ident_text,
-                                /*block=*/1, mi, r.term.span});
   }
   return {};
 }
