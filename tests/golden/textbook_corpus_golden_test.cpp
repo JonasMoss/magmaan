@@ -194,6 +194,38 @@ TEST_CASE("Little and Newsom corpus fixtures are well formed") {
   }
 }
 
+TEST_CASE("Textbook corpus v1 manifest is well formed") {
+  const std::string root = magmaan::test::fixtures_dir();
+  auto raw =
+      magmaan::test::read_fixture(root + "/textbook_corpus/manifest.json");
+  REQUIRE(raw.has_value());
+  auto j = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(j.is_discarded());
+  REQUIRE(j.contains("_meta"));
+  REQUIRE(j["_meta"].contains("corpus_id"));
+  CHECK(j["_meta"]["corpus_id"].get<std::string>() ==
+        "magmaan_textbook_corpus_v1");
+  REQUIRE(j.contains("sources"));
+  REQUIRE(j.contains("cases"));
+  REQUIRE(j.contains("counts"));
+  CHECK(j["sources"].size() == 4);
+  CHECK(j["cases"].size() ==
+        static_cast<std::size_t>(j["counts"]["total"].get<int>()));
+  CHECK(j["counts"]["strict_parity"].get<int>() > 0);
+  CHECK(j["counts"]["mixed"].get<int>() > 0);
+  CHECK(j["counts"]["ordinal"].get<int>() > 0);
+  CHECK(j["counts"]["observed_only"].get<int>() > 0);
+
+  for (const auto &source : j["sources"]) {
+    REQUIRE(source.contains("fixture_files"));
+    for (const auto &file : source["fixture_files"]) {
+      const std::string rel = file.get<std::string>();
+      auto fixture = magmaan::test::read_fixture(root + "/" + rel);
+      CHECK_MESSAGE(fixture.has_value(), "missing fixture " << rel);
+    }
+  }
+}
+
 TEST_CASE("Little and Newsom continuous goldens match lavaan") {
   std::vector<std::string> failures;
   int total = 0;

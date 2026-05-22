@@ -62,8 +62,10 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 - **S/M.** Extend the Little/Newsom textbook corpora beyond the initial strict
   tranche. The builders now extract 108 Little LISREL models and 142 Newsom
   lavaan fit calls, with grouped tracked manifests and strict lavaan-backed
-  C++ parity for the currently supported continuous subset. Remaining work:
-  implement real LISREL `SE` selection and more complex matrix/constraint
+  C++ parity for the currently supported continuous subset; the consolidated
+  `magmaan_textbook_corpus_v1` manifest indexes these alongside Geiser and
+  Mplus SEM. Remaining work: implement real LISREL `SE` selection and more
+  complex matrix/constraint
   conversion for Little, promote additional Newsom continuous cases whose
   lavaan syntax uses parser features magmaan does not yet accept, and add
   ordinal/mixed parity checks once the desired categorical oracle surface is
