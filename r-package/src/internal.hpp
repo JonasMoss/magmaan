@@ -141,6 +141,12 @@ inline void read_group_attrs(SEXP df, std::string& group_var,
 }
 
 constexpr const char* expanded_partable_attr = "magmaan.expanded_partable";
+constexpr const char* native_fcsem_partable_attr = "magmaan.fcsem";
+
+inline bool is_true_attr(SEXP x, const char* name) {
+  SEXP attr = Rf_getAttrib(x, Rf_install(name));
+  return !Rf_isNull(attr) && Rf_length(attr) > 0 && Rf_asLogical(attr) == TRUE;
+}
 
 inline bool has_composite_rows(Rcpp::DataFrame df) {
   if (!df.containsElementNamed("op")) return false;
@@ -580,6 +586,10 @@ inline magmaan::compat::lavaan::ParsedLavaanParTable partable_from_arg(SEXP part
                "not a model-syntax string — call lavaan_lavaanify() first", fn);
   if (!Rf_inherits(partable, "data.frame"))
     Rcpp::stop("magmaan: %s(): `partable` must be a data.frame (e.g. from lavaan_lavaanify())", fn);
+  if (is_true_attr(partable, native_fcsem_partable_attr)) {
+    Rcpp::stop("magmaan: %s(): ordinary SEM helpers do not accept native FC-SEM "
+               "partables; use fit_ml_fcsem() or magmaan_fcsem()", fn);
+  }
   return parse_partable_df(Rcpp::DataFrame(partable));
 }
 
@@ -614,7 +624,13 @@ inline Ctx ctx_from_fit(Rcpp::List fit) {
       !fit.containsElementNamed("nobs"))
     Rcpp::stop("magmaan: not a fit object (need partable/S/nobs) — pass the result of fit_fit()");
   SEXP sm = fit.containsElementNamed("sample_mean") ? SEXP(fit["sample_mean"]) : R_NilValue;
-  auto parsed = parse_partable_df(Rcpp::DataFrame(fit["partable"]));
+  SEXP partable = fit["partable"];
+  if (is_true_attr(partable, native_fcsem_partable_attr)) {
+    Rcpp::stop("magmaan: ordinary SEM post-fit helpers do not accept native "
+               "FC-SEM fits; use fcsem_standard_errors(), fcsem_fit_measures(), "
+               "or fcsem_standardized_rows()");
+  }
+  auto parsed = parse_partable_df(Rcpp::DataFrame(partable));
   return ctx_from_parts(std::move(parsed.structure), std::move(parsed.names),
                         fit["S"], fit["nobs"], sm, /*reorder=*/false);
 }

@@ -529,8 +529,8 @@ stop rather than any usable non-error return.
   historical expansion, while `api::frontier::model_from_lavaan_fcsem()` and
   the R FC-SEM helpers select native FC-SEM and require at least one `<~` row.
   R-side ordinary SEM helpers and native FC-SEM helpers reject each other's
-  model/data classes rather than reinterpret a prebuilt object under the other
-  composite semantics.
+  model/data classes and native FC-SEM partable data.frames rather than
+  reinterpret a prebuilt object under the other composite semantics.
 - A parallel native FC-SEM composite spec path is scaffolded behind
   `spec::BuildOptions::composite_mode = CompositeMode::FcSem`. In that mode
   `<~` rows are preserved, the first composite weight is marker-fixed by the
