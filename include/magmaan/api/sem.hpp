@@ -268,6 +268,21 @@ InformationSpec observed_information_analytic();
 
 class Fit;
 
+namespace frontier {
+
+Result<Model> model_from_lavaan_fcsem(std::string_view syntax,
+                                      ModelOptions options = {});
+
+Result<Fit> fit_ml_fcsem(std::shared_ptr<const Model> model,
+                         std::shared_ptr<const Data> data,
+                         OptimizerSpec optimizer = lbfgs(),
+                         StartSpec start = simple_starts());
+Result<Fit> fit_ml_fcsem(const Model &model, const Data &data,
+                         OptimizerSpec optimizer = lbfgs(),
+                         StartSpec start = simple_starts());
+
+} // namespace frontier
+
 struct StandardErrors {
   Eigen::MatrixXd information;
   Eigen::MatrixXd vcov;
@@ -306,6 +321,9 @@ public:
 private:
   friend Result<Fit> fit(std::shared_ptr<const Model>,
                          std::shared_ptr<const Data>, EstimatorSpec);
+  friend Result<Fit> frontier::fit_ml_fcsem(std::shared_ptr<const Model>,
+                                            std::shared_ptr<const Data>,
+                                            OptimizerSpec, StartSpec);
 
   Fit(std::shared_ptr<const Model> model, std::shared_ptr<const Data> data,
       estimate::Estimates estimates, EstimatorSpec estimator);
@@ -352,6 +370,17 @@ Result<estimate::OrdinalRobustResult> robust_ordinal(const Fit &fit);
 
 Result<TestResult> test(const Fit &fit, TestSpec spec);
 Result<FitMeasuresResult> fit_measures(const Fit &fit);
+
+namespace frontier {
+
+Result<StandardErrors> standard_errors_fcsem(
+    const Fit &fit, InformationSpec spec = expected_information());
+Result<FitMeasuresResult> fit_measures_fcsem(const Fit &fit);
+Result<std::vector<measures::standardize::FcSemStandardizedRow>>
+standardized_rows_fcsem(const Fit &fit, const Eigen::MatrixXd &vcov);
+
+} // namespace frontier
+
 Result<measures::ResidualMoments> residuals(const Fit &fit);
 Result<measures::StandardizedResiduals> standardized_residuals(const Fit &fit);
 Result<measures::FactorScores>

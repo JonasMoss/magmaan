@@ -529,13 +529,15 @@ stop rather than any usable non-error return.
   baseline remains the ordinary observed-variable baseline; `fit_extras_fcsem`
   and the existing fit-measure helper match the same lavaan fixture trio for
   chi-square, df, CFI/TLI/RMSEA, SRMR, loglik, AIC, BIC, and sample-size
-  adjusted BIC. Staged API/R exposure is still pending.
+  adjusted BIC. `api::frontier` now exposes a native FC-SEM model builder,
+  complete-data ML fitting, expected SEs, fit measures, and standardized row
+  reporting; R exposure is still pending.
 - Full composite lavaan parity is not yet claimed. Native lavaan
   `<~` oracle fixtures for pure-composite, composite-plus-factor, and
   composite-structural HS cases live under `tests/fixtures/composite/` and
   now record lavaan's observed-variable order for the stored sample/implied
   covariance matrices. The corresponding diagnostic golden is intentionally
-  skipped until the public/R post-fit surface can expose the native W-matrix
+  skipped until the R post-fit surface can expose the native W-matrix
   semantics without implying full lavaan replacement parity.
 - `magmaan(model, data, estimator, groups)` is the high-level estimate-only
   R convenience. It composes `model_spec()`, data-frame sample-stat/raw-data
