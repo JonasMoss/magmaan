@@ -1,12 +1,19 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <fstream>
+#include <iterator>
+#include <sstream>
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
+#include <nlohmann/json.hpp>
 
 #include "magmaan/api/sem.hpp"
+#include "../oracle.hpp"
 
 namespace {
 
@@ -66,6 +73,78 @@ std::string ordinal_syntax() {
          "x2 ~*~ 1*x2\n"
          "x3 ~*~ 1*x3\n"
          "x4 ~*~ 1*x4\n";
+}
+
+nlohmann::json load_fixture_json(const std::string& rel) {
+  const std::string path = magmaan::test::fixtures_dir() + "/" + rel;
+  std::ifstream in(path);
+  REQUIRE_MESSAGE(in.good(), "could not open fixture: " << path);
+  std::stringstream ss;
+  ss << in.rdbuf();
+  auto j = nlohmann::json::parse(ss.str(), nullptr, false);
+  REQUIRE_FALSE(j.is_discarded());
+  return j;
+}
+
+Eigen::MatrixXd matrix_from_json(const nlohmann::json& j) {
+  const Eigen::Index nr = static_cast<Eigen::Index>(j.size());
+  const Eigen::Index nc = nr == 0 ? 0 : static_cast<Eigen::Index>(j[0].size());
+  Eigen::MatrixXd out(nr, nc);
+  for (Eigen::Index r = 0; r < nr; ++r) {
+    for (Eigen::Index c = 0; c < nc; ++c) {
+      out(r, c) = j[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)]
+                      .get<double>();
+    }
+  }
+  return out;
+}
+
+std::vector<std::string> fixture_observed_order(const nlohmann::json& j) {
+  if (j["sample_cov"][0].contains("names")) {
+    return j["sample_cov"][0]["names"].get<std::vector<std::string>>();
+  }
+  return {"x1", "x2", "x3", "x4", "x5"};
+}
+
+std::vector<std::string>
+model_observed_order(const magmaan::api::Model& model) {
+  std::vector<std::string> out;
+  out.reserve(model.structure().ov_order.size());
+  for (const auto id : model.structure().ov_order) {
+    REQUIRE(id >= 0);
+    out.push_back(model.names().var_name[static_cast<std::size_t>(id)]);
+  }
+  return out;
+}
+
+Eigen::MatrixXd reorder_matrix(const Eigen::MatrixXd& raw,
+                               const std::vector<std::string>& source,
+                               const std::vector<std::string>& target) {
+  REQUIRE(raw.rows() == static_cast<Eigen::Index>(source.size()));
+  REQUIRE(raw.cols() == static_cast<Eigen::Index>(source.size()));
+  Eigen::MatrixXd out(target.size(), target.size());
+  for (std::size_t r = 0; r < target.size(); ++r) {
+    const auto sr = std::find(source.begin(), source.end(), target[r]);
+    REQUIRE(sr != source.end());
+    for (std::size_t c = 0; c < target.size(); ++c) {
+      const auto sc = std::find(source.begin(), source.end(), target[c]);
+      REQUIRE(sc != source.end());
+      out(static_cast<Eigen::Index>(r), static_cast<Eigen::Index>(c)) =
+          raw(static_cast<Eigen::Index>(std::distance(source.begin(), sr)),
+              static_cast<Eigen::Index>(std::distance(source.begin(), sc)));
+    }
+  }
+  return out;
+}
+
+magmaan::data::SampleStats fcsem_fixture_stats(
+    const magmaan::api::Model& model, const nlohmann::json& j) {
+  magmaan::data::SampleStats stats;
+  stats.S = {reorder_matrix(matrix_from_json(j["sample_cov"][0]["matrix"]),
+                            fixture_observed_order(j),
+                            model_observed_order(model))};
+  stats.n_obs = {j["n_obs"].get<std::int64_t>()};
+  return stats;
 }
 
 } // namespace
@@ -340,6 +419,55 @@ TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {
   REQUIRE(ord_fm->ordinal_srmr.has_value());
   CHECK(std::isfinite(*ord_fm->ordinal_srmr));
   CHECK(*ord_fm->ordinal_srmr >= 0.0);
+}
+
+TEST_CASE("api frontier exposes native FC-SEM fit and post-fit calls") {
+  const auto j =
+      load_fixture_json("composite/0002_composite_factor_hs.fit.json");
+  auto model = magmaan::api::frontier::model_from_lavaan_fcsem(
+      j["input"].get<std::string>());
+  REQUIRE_OK(model);
+  CHECK(model->structure().composite_mode ==
+        magmaan::spec::CompositeMode::FcSem);
+
+  const auto stats = fcsem_fixture_stats(*model, j);
+  const auto data = magmaan::api::data_from_sample_stats(*model, stats);
+  REQUIRE_OK(data);
+
+  const auto core_fit = magmaan::api::fit(*model, *data, magmaan::api::ml());
+  REQUIRE_FALSE(core_fit.has_value());
+  CHECK(core_fit.error().stage ==
+        magmaan::api::ErrorStage::UnsupportedCombination);
+
+  magmaan::optim::LbfgsOptions opts;
+  opts.max_iter = 4000;
+  const auto fit = magmaan::api::frontier::fit_ml_fcsem(
+      *model, *data, magmaan::api::lbfgs(opts));
+  REQUIRE_OK(fit);
+
+  const auto tst =
+      magmaan::api::test(*fit, magmaan::api::standard_chi_square());
+  REQUIRE_OK(tst);
+  CHECK(tst->statistic == doctest::Approx(j["chi2"].get<double>())
+                              .epsilon(2e-5));
+  CHECK(tst->df == j["df"].get<int>());
+
+  const auto se = magmaan::api::frontier::standard_errors_fcsem(*fit);
+  REQUIRE_OK(se);
+  CHECK(se->se.size() == fit->estimates().theta.size());
+
+  const auto fm = magmaan::api::frontier::fit_measures_fcsem(*fit);
+  REQUIRE_OK(fm);
+  REQUIRE(fm->complete_data_extras.has_value());
+  CHECK(fm->indices.cfi == doctest::Approx(j["cfi"].get<double>())
+                               .epsilon(2e-5));
+  CHECK(fm->complete_data_extras->logl ==
+        doctest::Approx(j["logl"].get<double>()).epsilon(2e-5));
+
+  const auto rows =
+      magmaan::api::frontier::standardized_rows_fcsem(*fit, se->vcov);
+  REQUIRE_OK(rows);
+  CHECK(rows->size() == j["weights"].size() + j["rows"].size());
 }
 
 TEST_CASE("api second-order CFA fits ordinal data and matches the correlated model") {

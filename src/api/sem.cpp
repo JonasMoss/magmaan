@@ -225,6 +225,22 @@ Result<T> post_result(post_expected<T> result) {
   return *result;
 }
 
+bool is_native_fcsem(const Model &model) noexcept {
+  return model.structure().composite_mode == spec::CompositeMode::FcSem;
+}
+
+Result<void> require_native_fcsem_fit(const Fit &fit,
+                                      std::string_view call) {
+  if (!is_native_fcsem(fit.model()) || fit.estimator() != EstimatorKind::ML ||
+      !fit.data().sample_stats()) {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        std::string(call) +
+            " requires a native FC-SEM complete-data ML fit"));
+  }
+  return {};
+}
+
 } // namespace
 
 Error make_error(ErrorStage stage, std::string detail) {
@@ -265,13 +281,17 @@ Result<Model> Model::from_lavaan(std::string_view syntax,
     return std::unexpected(make_error(ErrorStage::Model, structure.error()));
   }
 
-  auto rep = model::build_matrix_rep(*structure, &names);
-  if (!rep) {
-    return std::unexpected(make_error(ErrorStage::Model, rep.error()));
+  model::MatrixRep rep;
+  if (structure->composite_mode != spec::CompositeMode::FcSem) {
+    auto rep_or = model::build_matrix_rep(*structure, &names);
+    if (!rep_or) {
+      return std::unexpected(make_error(ErrorStage::Model, rep_or.error()));
+    }
+    rep = std::move(*rep_or);
   }
 
   return Model(std::string(syntax), std::move(*flat), std::move(*structure),
-               std::move(names), std::move(starts), std::move(*rep), options);
+               std::move(names), std::move(starts), std::move(rep), options);
 }
 
 Model::Model(std::string source, parse::FlatPartable flat,
@@ -351,6 +371,12 @@ Result<Data> data_from_mixed_ordinal(const Model &,
 }
 
 namespace frontier {
+
+Result<Model> model_from_lavaan_fcsem(std::string_view syntax,
+                                      ModelOptions options) {
+  options.build.composite_mode = spec::CompositeMode::FcSem;
+  return Model::from_lavaan(syntax, std::move(options));
+}
 
 Result<Data> data_from_ordinal_h_weighted(
     const Model &, const std::vector<Eigen::MatrixXd> &blocks,
@@ -517,6 +543,12 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
   if (!model || !data) {
     return std::unexpected(
         make_error(ErrorStage::Fit, "fit requires non-null model and data"));
+  }
+
+  if (is_native_fcsem(*model)) {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "native FC-SEM models require api::frontier::fit_ml_fcsem()"));
   }
 
   spec::LatentStructure pt = model->structure();
@@ -686,6 +718,76 @@ Result<Fit> fit(const Model &model, const Data &data,
   return fit(std::make_shared<Model>(model), std::make_shared<Data>(data),
              std::move(estimator));
 }
+
+namespace frontier {
+
+Result<Fit> fit_ml_fcsem(std::shared_ptr<const Model> model,
+                         std::shared_ptr<const Data> data,
+                         OptimizerSpec optimizer, StartSpec start) {
+  if (!model || !data) {
+    return std::unexpected(make_error(
+        ErrorStage::Fit, "fit_ml_fcsem requires non-null model and data"));
+  }
+  if (!is_native_fcsem(*model)) {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "fit_ml_fcsem requires a model built with native FC-SEM composites"));
+  }
+  const auto *stats = data->sample_stats();
+  if (!stats) {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "fit_ml_fcsem requires complete-data sample statistics"));
+  }
+  if (optimizer.kind != OptimizerKind::Lbfgs) {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "fit_ml_fcsem currently supports only the L-BFGS optimizer"));
+  }
+
+  Eigen::VectorXd x0;
+  if (start.kind == StartKind::Explicit) {
+    if (start.theta.size() != model->structure().n_free()) {
+      return std::unexpected(make_error(
+          ErrorStage::Fit,
+          "explicit start vector length does not match model n_free"));
+    }
+    x0 = start.theta;
+  } else if (start.kind == StartKind::Simple) {
+    auto x0_or = estimate::simple_fcsem_start_values(model->structure(),
+                                                     *stats);
+    if (!x0_or) {
+      return std::unexpected(make_error(ErrorStage::Fit, x0_or.error()));
+    }
+    x0 = std::move(*x0_or);
+  } else {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "fit_ml_fcsem currently supports simple or explicit starts"));
+  }
+
+  auto est = estimate::fit_ml_fcsem(model->structure(), *stats, x0, {},
+                                    estimate::Backend::Lbfgs,
+                                    optimizer.lbfgs);
+  if (!est) {
+    return std::unexpected(make_error(ErrorStage::Fit, est.error()));
+  }
+
+  EstimatorSpec estimator = ml();
+  estimator.optimizer_spec = std::move(optimizer);
+  estimator.start_spec = std::move(start);
+  return Fit(std::move(model), std::move(data), std::move(*est),
+             std::move(estimator));
+}
+
+Result<Fit> fit_ml_fcsem(const Model &model, const Data &data,
+                         OptimizerSpec optimizer, StartSpec start) {
+  return fit_ml_fcsem(std::make_shared<Model>(model),
+                      std::make_shared<Data>(data), std::move(optimizer),
+                      std::move(start));
+}
+
+} // namespace frontier
 
 TestSpec standard_chi_square() { return TestSpec{}; }
 
@@ -1009,6 +1111,69 @@ Result<FitMeasuresResult> fit_measures(const Fit &fit) {
       make_error(ErrorStage::UnsupportedCombination,
                  "fit measures are not available for this data type"));
 }
+
+namespace frontier {
+
+Result<StandardErrors> standard_errors_fcsem(const Fit &fit,
+                                             InformationSpec spec) {
+  auto ok = require_native_fcsem_fit(fit, "standard_errors_fcsem()");
+  if (!ok) {
+    return std::unexpected(ok.error());
+  }
+  if (spec.kind != InformationKind::Expected) {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "standard_errors_fcsem currently exposes expected information only"));
+  }
+  auto info = inference::information_expected_fcsem(
+      fit.model().structure(), *fit.data().sample_stats(), fit.estimates());
+  if (!info) {
+    return std::unexpected(make_error(ErrorStage::PostFit, info.error()));
+  }
+  auto vc = inference::vcov(*info, fit.model().structure(),
+                            fit.estimates().theta);
+  if (!vc) {
+    return std::unexpected(make_error(ErrorStage::PostFit, vc.error()));
+  }
+  return StandardErrors{std::move(*info), *vc, inference::se(*vc)};
+}
+
+Result<FitMeasuresResult> fit_measures_fcsem(const Fit &fit) {
+  auto ok = require_native_fcsem_fit(fit, "fit_measures_fcsem()");
+  if (!ok) {
+    return std::unexpected(ok.error());
+  }
+  const auto &stats = *fit.data().sample_stats();
+  const double chi2 = inference::chi2_stat(stats, fit.estimates());
+  auto df = inference::df_stat(fit.model().structure(), stats,
+                               fit.estimates().theta);
+  if (!df) {
+    return std::unexpected(make_error(ErrorStage::PostFit, df.error()));
+  }
+  const auto baseline = measures::baseline_chi2(stats);
+  const auto indices = measures::fit_measures(chi2, *df, baseline, stats);
+  auto extras = measures::fit_extras_fcsem(fit.model().structure(), stats,
+                                           fit.estimates());
+  if (!extras) {
+    return std::unexpected(make_error(ErrorStage::PostFit, extras.error()));
+  }
+  return FitMeasuresResult{baseline, indices, std::move(*extras),
+                           std::nullopt, std::nullopt};
+}
+
+Result<std::vector<measures::standardize::FcSemStandardizedRow>>
+standardized_rows_fcsem(const Fit &fit, const Eigen::MatrixXd &vcov) {
+  auto ok = require_native_fcsem_fit(fit, "standardized_rows_fcsem()");
+  if (!ok) {
+    return std::unexpected(ok.error());
+  }
+  auto rows = measures::standardize::standardized_rows_fcsem(
+      fit.model().structure(), fit.model().names(), *fit.data().sample_stats(),
+      fit.estimates(), vcov);
+  return post_result(std::move(rows));
+}
+
+} // namespace frontier
 
 Result<measures::ResidualMoments> residuals(const Fit &fit) {
   // S − Σ̂(θ̂) needs only θ̂ and the sample moments, so it is exposed for any
