@@ -84,6 +84,7 @@ add_library(magmaan STATIC
   src/compat/lavaan/composite_fold.cpp
   src/model/matrix_rep.cpp
   src/model/model_evaluator.cpp
+  src/model/fcsem_evaluator.cpp
   src/data/raw_data.cpp
   src/data/shrinkage.cpp
   src/data/h_score.cpp

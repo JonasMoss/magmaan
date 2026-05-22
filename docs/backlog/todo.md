@@ -141,21 +141,23 @@ post-fit accessor. A parallel native FC-SEM spec path now exists behind
 `BuildOptions::composite_mode = CompositeMode::FcSem`: it keeps `<~` rows,
 records name-free composite blocks, marker-fixes the first composite weight,
 and emits fixed/derived placeholders for the composite indicator T blocks and
-composite self-variances. The native path is intentionally not evaluable yet.
+composite self-variances. A covariance-only `model::FcSemEvaluator` now
+assembles W/T, derives composite loadings, solves derived composite disturbance
+variances, and matches the pure-HS native lavaan implied-covariance fixture at
+lavaan estimates.
 Remaining:
 
-- **M.** Implement the native FC-SEM matrix/evaluator layer for complete-data,
-  covariance-only ML: assemble W and T, derive
-  `Lambda_c = T W (W' T W)^-1`, build the combined implied covariance, and
-  reject unsupported mean-structure/FIML/LS/ordinal combinations explicitly.
+- **M.** Integrate the native FC-SEM covariance evaluator with complete-data ML:
+  add an objective path, compare objective/chi-square at lavaan estimates, and
+  decide whether the first optimizer tranche uses numerical derivatives to
+  mirror lavaan's current `optim.gradient = "numerical"` requirement.
 - **L.** Lavaan parity validation: minimal oracle fixtures now exist under
   `tests/fixtures/composite/` for pure composite, composite plus common factor,
   and structural regression involving a composite. The diagnostic golden is
-  wired but skipped because no native evaluator/ML path yet matches lavaan's
-  `<~` W-matrix semantics on point estimates, implied covariance, chi-square,
-  SEs, standardization, and fit measures. After the evaluator lands, first
-  compare implied covariance and objective values at lavaan estimates, then fit
-  from starts using numerical derivatives if needed, then unskip the golden.
+  wired but skipped because no native ML path yet matches lavaan's `<~`
+  W-matrix semantics on point estimates, chi-square, SEs, standardization, and
+  fit measures. Next compare objective values at lavaan estimates, then fit from
+  starts using numerical derivatives if needed, then unskip the golden.
   Multi-group composites are in scope only after the single-group ML slice is
   green and only if lavaan handles them cleanly, including
   `group.equal = "composite.weights"`.
