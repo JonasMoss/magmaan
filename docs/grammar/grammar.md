@@ -36,7 +36,8 @@ subset of operators.
 | `~~` | (residual) covariance / variance | `x1 ~~ x2`, `f ~~ f` |
 | `\|` | ordinal threshold | `x1 \| t1 + t2` |
 | `~*~` | latent response scale (delta parameterization) | `x1 ~*~ 1*x1` |
-| `~ 1` | intercept (parser-level, not a single token) | `y ~ 1` |
+| `~ 1` | free intercept/mean (parser-level, not a single token) | `y ~ 1` |
+| `~ n` | fixed intercept/mean at numeric value `n` | `y ~ 0` |
 | `:=` | defined parameter | `indirect := a * b` |
 | `==` | equality constraint | `a == 0.5` |
 | `<` | inequality (upper bound) | `a < 0.5` |
@@ -46,6 +47,7 @@ subset of operators.
 |---|---|---|
 | `n * x` | fix parameter to `n` | `1*x1`, `0*x2` |
 | `lbl * x` | label parameter `lbl` (equality via shared label) | `a*x1 + a*x2` |
+| `(lbl) * x` | parenthesized label parameter `lbl` | `(a)*x1 + (a)*x2` |
 | `"lbl" * x` | quoted label | `"my_label" * x1` |
 | `start(v) * x` | starting value | `start(0.5) * x1` |
 | `v ? x` | starting-value shorthand | `0.5 ? x1` |
@@ -97,10 +99,11 @@ modifier; `*` interprets the modifier per its kind (numeric → fixed,
 identifier → label, `NA` → free, `c(...)` → per-group, `start(...)` →
 start value).
 
-The intercept form `y ~ 1` is detected by the parser when `regression`
-is followed by a single `NumLit` of value 1 with no `+` continuation.
-This is **not** a separate operator at the lexer level — it stays
-context-free.
+The intercept forms are detected by the parser when `regression` is followed
+by a single numeric RHS with no `+` continuation. Bare `y ~ 1` means a free
+intercept/mean; other bare numeric values such as `y ~ 0` are equivalent to
+fixed `y ~ 0*1`. This is **not** a separate operator at the lexer level — it
+stays context-free.
 
 The expression sublanguage is standard precedence-climbing: `+ -` < `* /`
 < `^` (right-associative) < unary `+ -`. No function calls in v0; if a

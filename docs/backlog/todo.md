@@ -67,11 +67,10 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   Mplus SEM, and its advisory overlap graph fingerprints same-data,
   same-syntax, same-shape, and same-oracle-structure cases for future paper
   mining. Remaining work: implement real LISREL `SE` selection and more
-  complex matrix/constraint
-  conversion for Little, promote additional Newsom continuous cases whose
-  lavaan syntax uses parser features magmaan does not yet accept, and add
-  ordinal/mixed parity checks once the desired categorical oracle surface is
-  settled.
+  complex matrix/constraint conversion for Little, rerun the Newsom promotion
+  pass now that fixed numeric intercept shorthand (`x ~ 0`) and parenthesized
+  modifier labels (`(lambda)*x`) parse, and add ordinal/mixed parity checks
+  once the desired categorical oracle surface is settled.
 - **S/M.** Refine benchmark use of optimizer diagnostics now that fit results
   expose `optimizer_status` and final gradient norms. Benchmark scripts should
   distinguish clean convergence from line-search salvage or singular PORT
