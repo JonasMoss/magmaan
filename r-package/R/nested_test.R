@@ -20,9 +20,11 @@
 #'   or `"delta"` (lavaan-style covariance/moment Jacobian column-space
 #'   restriction).
 #' @param computation `"streaming"` (default, projects casewise empirical
-#'   Gamma contributions before crossproducts) or `"materialized"` (forms the
-#'   full empirical Gamma block before reducing). The latter is mainly a
-#'   diagnostic/reference path for timing the algebraic reduction.
+#'   Gamma contributions before crossproducts), `"materialized"` (forms the
+#'   full empirical Gamma block before reducing), or `"dense"` (forms the full
+#'   q-by-q Gamma and U matrices and eigendecomposes the q-by-q product, as
+#'   standard SEM software does). The latter two are diagnostic/reference paths
+#'   for timing the algebraic reduction.
 #'
 #' @return A list of class `magmaan_nested_test`.
 #' @export
@@ -32,7 +34,8 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data,
                                          "lavaan_sb2001",
                                          "lavaan_sb2010"),
                               A.method = c("exact", "delta"),
-                              computation = c("streaming", "materialized")) {
+                              computation = c("streaming", "materialized",
+                                              "dense")) {
   gamma <- match.arg(gamma)
   method <- match.arg(method)
   A.method <- match.arg(A.method)
@@ -111,7 +114,8 @@ nestedTest <- function(fit_H1, fit_H0, data, gamma = c("empirical", "NT"),
                                   "lavaan_sb2001",
                                   "lavaan_sb2010"),
                        A.method = c("exact", "delta"),
-                       computation = c("streaming", "materialized")) {
+                       computation = c("streaming", "materialized",
+                                       "dense")) {
   method <- match.arg(method)
   computation <- match.arg(computation)
   canonical <- switch(method,

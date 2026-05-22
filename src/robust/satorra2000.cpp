@@ -1,6 +1,7 @@
 #include "magmaan/robust/satorra2000.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <string>
 #include <utility>
@@ -178,6 +179,14 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
   Eigen::MatrixXd S = Eigen::MatrixXd::Zero(m, m);
   std::vector<std::string> warnings;
 
+  // Dense-path scratch: the Dense computation forms the full block-diagonal
+  // q×q empirical Γ̂ and the q×q restricted U-matrix instead of the m×m
+  // reduction.  Per-group pieces are collected here and assembled after the
+  // loop;  q_total = Σ_g p*_g.
+  std::vector<Eigen::MatrixXd> dense_gamma;
+  std::vector<Eigen::MatrixXd> dense_dstack;
+  Eigen::Index q_total = 0;
+
   if (gamma == GammaSource::NT) {
     // Sanity-check short-circuit.  Under Γ = Γ_NT and V = Γ_NT⁻¹ the formula
     // S = A · P⁻¹ · Πᵀ · V · Γ · V · Π · P⁻¹ · Aᵀ collapses to
@@ -237,24 +246,85 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
         const Eigen::MatrixXd U_rows = D_rows * D_g;           // n_g × m
         const double scale = gr.weight / static_cast<double>(gr.n_g);
         S.noalias() += scale * (U_rows.transpose() * U_rows);
-      } else {
+      } else if (computation == GammaComputation::Materialized) {
         const Eigen::MatrixXd Gamma_hat =
             (D_rows.transpose() * D_rows) / static_cast<double>(gr.n_g);
         S.noalias() += gr.weight * (D_g.transpose() * Gamma_hat * D_g);
+      } else {  // Dense — collect the full q×q pieces, assemble after the loop.
+        dense_gamma.push_back(
+            (D_rows.transpose() * D_rows) / static_cast<double>(gr.n_g));
+        dense_dstack.push_back(std::sqrt(gr.weight) * D_g);
+        q_total += pstar;
       }
     }
   }
-  S = 0.5 * (S + S.transpose()).eval();
 
-  // ── 6. Eigenvalues of  S · v = λ · C · v
-  Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(
-      S, C, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
-  if (ges.info() != Eigen::Success) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "compute_satorra2000: generalised eigensolver failed (C is likely "
-        "singular — the restriction is degenerate against H1's curvature)"));
+  // ── 6. The m test eigenvalues.
+  Eigen::VectorXd eig;
+  if (computation == GammaComputation::Dense && gamma != GammaSource::NT) {
+    // Dense reference: form the full block-diagonal q×q empirical Γ̂ and the
+    // q×q restricted U-matrix  U_d = D · C⁻¹ · Dᵀ, then read the m non-zero
+    // eigenvalues off the q×q product U_d·Γ̂.  This is the O(q³) computation
+    // the reduction is built to avoid — kept as an auditable strawman.
+    if (q_total < m) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "compute_satorra2000: dense path has q_total < m"));
+    }
+    Eigen::MatrixXd Gamma_block = Eigen::MatrixXd::Zero(q_total, q_total);
+    Eigen::MatrixXd D_stack     = Eigen::MatrixXd::Zero(q_total, m);
+    Eigen::Index off = 0;
+    for (std::size_t g = 0; g < dense_gamma.size(); ++g) {
+      const Eigen::Index qg = dense_gamma[g].rows();
+      Gamma_block.block(off, off, qg, qg) = dense_gamma[g];
+      D_stack.middleRows(off, qg)         = dense_dstack[g];
+      off += qg;
+    }
+    dense_gamma.clear();
+    dense_dstack.clear();
+    // S = Dᵀ·Γ̂·D — the same m×m S the reduced paths accumulate; kept for
+    // result-struct consistency.
+    S = D_stack.transpose() * Gamma_block * D_stack;
+    S = 0.5 * (S + S.transpose()).eval();
+    Eigen::LDLT<Eigen::MatrixXd> ldlt_C(C);
+    if (ldlt_C.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "compute_satorra2000: companion matrix C is not invertible "
+          "(dense path)"));
+    }
+    Eigen::MatrixXd U_d = D_stack * ldlt_C.solve(D_stack.transpose());
+    const Eigen::MatrixXd prod = U_d * Gamma_block;   // q×q, non-symmetric
+    U_d.resize(0, 0);
+    Gamma_block.resize(0, 0);
+    Eigen::EigenSolver<Eigen::MatrixXd> es(prod, /*computeEigenvectors=*/false);
+    if (es.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "compute_satorra2000: dense q×q eigensolver failed"));
+    }
+    Eigen::VectorXd rev   = es.eigenvalues().real();
+    const double imag_max = es.eigenvalues().imag().cwiseAbs().maxCoeff();
+    const double scale_ref = std::max(1.0, rev.cwiseAbs().maxCoeff());
+    if (imag_max > 1e-8 * scale_ref) {
+      warnings.emplace_back(
+          "compute_satorra2000: dense U·Γ spectrum carries imaginary part " +
+          std::to_string(imag_max) + " — real parts used");
+    }
+    // U_d and Γ̂ are both PSD ⇒ the q eigenvalues are real and non-negative;
+    // the m test eigenvalues are the m largest (the rest are ~0).  Ascending.
+    std::sort(rev.data(), rev.data() + rev.size());
+    eig = rev.tail(m);
+  } else {
+    // Reduced paths (and the NT short-circuit): the m generalised
+    // eigenvalues of  S · v = λ · C · v.
+    S = 0.5 * (S + S.transpose()).eval();
+    Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(
+        S, C, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
+    if (ges.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "compute_satorra2000: generalised eigensolver failed (C is likely "
+          "singular — the restriction is degenerate against H1's curvature)"));
+    }
+    eig = ges.eigenvalues();
   }
-  Eigen::VectorXd eig = ges.eigenvalues();
   // Clip tiny round-off negatives (the eigvals are non-negative in exact
   // arithmetic).
   const double clip_thresh = 1e-12 * std::max(1.0, eig.cwiseAbs().maxCoeff());

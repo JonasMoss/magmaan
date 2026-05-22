@@ -5,11 +5,12 @@
 // reduced-Gamma computations and reports the peak heap during that call (via
 // the --wrap malloc counter) plus the process peak RSS.
 //
+//   dense        -> form q x q Gamma and U, eigendecompose q x q (reference)
 //   materialized -> reduced_gamma_sample_materialized (forms the q x q Gamma)
 //   batched      -> reduced_gamma_sample              (forms an n x k block)
 //   rowwise      -> reduced_gamma_sample_streaming    (k x k accumulator only)
 //
-// Usage:  magmaan_mem_profile {materialized|batched|rowwise} [n] [p]
+// Usage:  magmaan_mem_profile {dense|materialized|batched|rowwise} [n] [p]
 
 #include <cstddef>
 #include <cstdint>
@@ -23,6 +24,7 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
@@ -76,8 +78,9 @@ int main(int argc, char** argv) {
   const Eigen::Index p =
       (argc > 3) ? static_cast<Eigen::Index>(std::atol(argv[3])) : 70;
 
-  if (kind != "materialized" && kind != "batched" && kind != "rowwise") {
-    std::fprintf(stderr, "kind must be materialized|batched|rowwise\n");
+  if (kind != "dense" && kind != "materialized" && kind != "batched" &&
+      kind != "rowwise") {
+    std::fprintf(stderr, "kind must be dense|materialized|batched|rowwise\n");
     return 2;
   }
 
@@ -156,6 +159,18 @@ int main(int argc, char** argv) {
     auto M = magmaan::robust::reduced_gamma_sample(*uf, *Zc, denom);
     peak = memprof::peak_bytes();
     ok = M.has_value();
+  } else if (kind == "dense") {
+    // The computation standard SEM software performs: form the full q x q
+    // empirical Gamma and the q x q U = B Bᵀ, then eigendecompose the q x q
+    // product U Gamma. No reduction — the O(q^3) path the factor avoids.
+    base = memprof::current_bytes();
+    memprof::reset_peak();
+    const Eigen::MatrixXd Gamma = ((*Zc).transpose() * (*Zc)) / denom;
+    const Eigen::MatrixXd U     = uf->B * uf->B.transpose();
+    const Eigen::MatrixXd UG    = U * Gamma;
+    Eigen::EigenSolver<Eigen::MatrixXd> es(UG, /*computeEigenvectors=*/false);
+    peak = memprof::peak_bytes();
+    ok = es.info() == Eigen::Success;
   } else {  // materialized
     base = memprof::current_bytes();
     memprof::reset_peak();

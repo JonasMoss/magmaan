@@ -46,16 +46,18 @@ stay as metadata and manual-download notes until they are audited.
 ## C++ memory profiling
 
 `magmaan_mem_profile` is a standalone C++ harness that measures the peak heap of
-the three reduced-Gamma computations in `src/robust/robust.cpp`:
+four Gamma computations: the three reduced ones in `src/robust/robust.cpp` —
 `reduced_gamma_sample` (batched streaming), `reduced_gamma_sample_materialized`
-(the q×q reference), and `reduced_gamma_sample_streaming` (row-by-row).
+(the q×q reference), and `reduced_gamma_sample_streaming` (row-by-row) — plus a
+`dense` path that forms the full q×q Gamma and U and eigendecomposes the q×q
+product, the computation standard SEM software performs.
 
 It is gated behind `MAGMAAN_BUILD_BENCH` and not built by default:
 
 ```sh
 cmake -S . -B build/bench -DMAGMAAN_BUILD_BENCH=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build/bench --target magmaan_mem_profile
-./build/bench/benchmarks/magmaan_mem_profile {materialized|batched|rowwise} [n] [p]
+./build/bench/benchmarks/magmaan_mem_profile {dense|materialized|batched|rowwise} [n] [p]
 ```
 
 The harness builds a synthetic one-factor CFA of size `(n, p)`, fits it with ML,

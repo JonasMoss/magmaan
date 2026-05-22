@@ -82,7 +82,8 @@ enum class GammaSource {
 
 enum class GammaComputation {
   Streaming,     // project casewise rows before forming crossproducts
-  Materialized   // form Γ̂ explicitly, then reduce
+  Materialized,  // form Γ̂ explicitly, then reduce
+  Dense          // form the full q×q Γ̂ and U, eigendecompose q×q (reference)
 };
 
 struct SatorraDiffResult {
