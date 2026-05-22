@@ -1,0 +1,1104 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "newsom.observed",
+    "tool": "tests/tools/regen_little_newsom_fixtures.R",
+    "generated": "2026-05-22 19:02:06 +0200",
+    "lavaan_version": "0.6.22.2560"
+  },
+  "cases": [
+    {
+      "id": "ex14_1",
+      "name": "Newsom ex14.1 fit",
+      "family": "observed model",
+      "source_input": "source/lsem2r/ex14-1.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "lavaan_function": "sem",
+      "meanstructure": true,
+      "fixed_x": true,
+      "model": "   \nbmi1 ~~ bmi1\nbmi2 ~~ bmi2\nbmi3 ~~ bmi3\nbmi4 ~~ bmi4\nbmi5 ~~ bmi5\nbmi6 ~~ bmi6\n",
+      "ov_names": ["bmi1", "bmi2", "bmi3", "bmi4", "bmi5", "bmi6"],
+      "n_obs": 4217,
+      "sample_cov": [
+        [25.5722470657382, 23.4347075396296, 23.0953239289875, 22.6522752102134, 21.9562626484737, 21.8577859297221],
+        [23.4347075396296, 26.1078994802951, 24.2790297561147, 23.8041411076975, 23.0520036361288, 22.9684145086342],
+        [23.0953239289875, 24.2790297561147, 26.859300392769, 24.8793092171352, 24.0503809768708, 24.1426487270194],
+        [22.6522752102134, 23.8041411076975, 24.8793092171352, 27.3648808834436, 24.9078112154403, 24.8877728866421],
+        [21.9562626484737, 23.0520036361288, 24.0503809768708, 24.9078112154403, 27.6510866963091, 26.0057558729398],
+        [21.8577859297221, 22.9684145086342, 24.1426487270194, 24.8877728866421, 26.0057558729398, 29.2320050590941]
+      ],
+      "sample_mean": [27.4052199847369, 27.5640347698101, 27.6791616587593, 27.8818231538747, 27.9683636973873, 27.9753458170825],
+      "lavaan": {
+        "version": "0.6.22.2560",
+        "fmin": 4.6873145258404,
+        "chisq": 39532.8107109379,
+        "df": 15,
+        "npar": 12,
+        "sigma": [
+          [25.5722469249912, 0, 0, 0, 0, 0],
+          [0, 26.1078993365999, 0, 0, 0, 0],
+          [0, 0, 26.8593002449382, 0, 0, 0],
+          [0, 0, 0, 27.3648807328301, 0, 0],
+          [0, 0, 0, 0, 27.6510865441203, 0],
+          [0, 0, 0, 0, 0, 29.2320048982042]
+        ],
+        "mu": [27.4052199847369, 27.5640347698101, 27.6791616587593, 27.8818231538747, 27.9683636973873, 27.9753458170825],
+        "theta": [25.5722469249912, 26.1078993365999, 26.8593002449382, 27.3648807328301, 27.6510865441203, 29.2320048982042, 27.4052199847369, 27.5640347698101, 27.6791616587593, 27.8818231538747, 27.9683636973873, 27.9753458170825],
+        "free_rows": [
+          {
+            "lhs": "bmi1",
+            "op": "~~",
+            "rhs": "bmi1",
+            "group": 1,
+            "free": 1
+          },
+          {
+            "lhs": "bmi2",
+            "op": "~~",
+            "rhs": "bmi2",
+            "group": 1,
+            "free": 2
+          },
+          {
+            "lhs": "bmi3",
+            "op": "~~",
+            "rhs": "bmi3",
+            "group": 1,
+            "free": 3
+          },
+          {
+            "lhs": "bmi4",
+            "op": "~~",
+            "rhs": "bmi4",
+            "group": 1,
+            "free": 4
+          },
+          {
+            "lhs": "bmi5",
+            "op": "~~",
+            "rhs": "bmi5",
+            "group": 1,
+            "free": 5
+          },
+          {
+            "lhs": "bmi6",
+            "op": "~~",
+            "rhs": "bmi6",
+            "group": 1,
+            "free": 6
+          },
+          {
+            "lhs": "bmi1",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 7
+          },
+          {
+            "lhs": "bmi2",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 8
+          },
+          {
+            "lhs": "bmi3",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 9
+          },
+          {
+            "lhs": "bmi4",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 10
+          },
+          {
+            "lhs": "bmi5",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 11
+          },
+          {
+            "lhs": "bmi6",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "ex14_1a",
+      "name": "Newsom ex14.1a fit",
+      "family": "observed model",
+      "source_input": "source/lsem2r/ex14-1a.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "lavaan_function": "sem",
+      "meanstructure": true,
+      "fixed_x": true,
+      "model": "   \nbmi1 ~~ bmi1\nbmi2 ~~ bmi2\nbmi3 ~~ bmi3\nbmi4 ~~ bmi4\nbmi5 ~~ bmi5\nbmi6 ~~ bmi6\n",
+      "ov_names": ["bmi1", "bmi2", "bmi3", "bmi4", "bmi5", "bmi6"],
+      "n_obs": 4217,
+      "sample_cov": [
+        [25.5722470657382, 23.4347075396296, 23.0953239289875, 22.6522752102134, 21.9562626484737, 21.8577859297221],
+        [23.4347075396296, 26.1078994802951, 24.2790297561147, 23.8041411076975, 23.0520036361288, 22.9684145086342],
+        [23.0953239289875, 24.2790297561147, 26.859300392769, 24.8793092171352, 24.0503809768708, 24.1426487270194],
+        [22.6522752102134, 23.8041411076975, 24.8793092171352, 27.3648808834436, 24.9078112154403, 24.8877728866421],
+        [21.9562626484737, 23.0520036361288, 24.0503809768708, 24.9078112154403, 27.6510866963091, 26.0057558729398],
+        [21.8577859297221, 22.9684145086342, 24.1426487270194, 24.8877728866421, 26.0057558729398, 29.2320050590941]
+      ],
+      "sample_mean": [27.4052199847369, 27.5640347698101, 27.6791616587593, 27.8818231538747, 27.9683636973873, 27.9753458170825],
+      "lavaan": {
+        "version": "0.6.22.2560",
+        "fmin": 4.6873145258404,
+        "chisq": 39532.8107109379,
+        "df": 15,
+        "npar": 12,
+        "sigma": [
+          [25.5722469249912, 0, 0, 0, 0, 0],
+          [0, 26.1078993365999, 0, 0, 0, 0],
+          [0, 0, 26.8593002449382, 0, 0, 0],
+          [0, 0, 0, 27.3648807328301, 0, 0],
+          [0, 0, 0, 0, 27.6510865441203, 0],
+          [0, 0, 0, 0, 0, 29.2320048982042]
+        ],
+        "mu": [27.4052199847369, 27.5640347698101, 27.6791616587593, 27.8818231538747, 27.9683636973873, 27.9753458170825],
+        "theta": [25.5722469249912, 26.1078993365999, 26.8593002449382, 27.3648807328301, 27.6510865441203, 29.2320048982042, 27.4052199847369, 27.5640347698101, 27.6791616587593, 27.8818231538747, 27.9683636973873, 27.9753458170825],
+        "free_rows": [
+          {
+            "lhs": "bmi1",
+            "op": "~~",
+            "rhs": "bmi1",
+            "group": 1,
+            "free": 1
+          },
+          {
+            "lhs": "bmi2",
+            "op": "~~",
+            "rhs": "bmi2",
+            "group": 1,
+            "free": 2
+          },
+          {
+            "lhs": "bmi3",
+            "op": "~~",
+            "rhs": "bmi3",
+            "group": 1,
+            "free": 3
+          },
+          {
+            "lhs": "bmi4",
+            "op": "~~",
+            "rhs": "bmi4",
+            "group": 1,
+            "free": 4
+          },
+          {
+            "lhs": "bmi5",
+            "op": "~~",
+            "rhs": "bmi5",
+            "group": 1,
+            "free": 5
+          },
+          {
+            "lhs": "bmi6",
+            "op": "~~",
+            "rhs": "bmi6",
+            "group": 1,
+            "free": 6
+          },
+          {
+            "lhs": "bmi1",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 7
+          },
+          {
+            "lhs": "bmi2",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 8
+          },
+          {
+            "lhs": "bmi3",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 9
+          },
+          {
+            "lhs": "bmi4",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 10
+          },
+          {
+            "lhs": "bmi5",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 11
+          },
+          {
+            "lhs": "bmi6",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "ex14_1c",
+      "name": "Newsom ex14.1c fitmodel14.1c",
+      "family": "observed model",
+      "source_input": "source/lsem2r/ex14-1c.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "lavaan_function": "sem",
+      "meanstructure": true,
+      "fixed_x": true,
+      "model": "\n#estimate mean of bmi1\n#add label such as bmi1 ~ a*1 to constrain equal across groups\nbmi1 ~ 1\n\n#estimate variance of bmi1\n#add label such as bmi1 ~~ b*bmi1 to constrain equal across groups\nbmi1 ~~ bmi1\n\n#estimate covariance with srh1\n#add label such as bmi1 ~~ c*srh1 to constrain equal across groups\nbmi1 ~~ srh1\n",
+      "ov_names": ["bmi1", "srh1"],
+      "n_obs": 8605,
+      "sample_cov": [
+        [26.0463166831753, -1.13056328916897],
+        [-1.13056328916897, 1.42589927556245]
+      ],
+      "sample_mean": [27.2578560545053, 3.33907548846012],
+      "lavaan": {
+        "version": "0.6.22.2560",
+        "fmin": 8.88178419700125e-16,
+        "chisq": 1.52855506030392e-11,
+        "df": 0,
+        "npar": 5,
+        "sigma": [
+          [26.0463168688614, -1.13056346746995],
+          [-1.13056346746995, 1.4258993563267]
+        ],
+        "mu": [27.2578560545053, 3.33907548846012],
+        "theta": [27.2578560545053, 26.0463168688614, -1.13056346746995, 1.4258993563267, 3.33907548846012],
+        "free_rows": [
+          {
+            "lhs": "bmi1",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 1
+          },
+          {
+            "lhs": "bmi1",
+            "op": "~~",
+            "rhs": "bmi1",
+            "group": 1,
+            "free": 2
+          },
+          {
+            "lhs": "bmi1",
+            "op": "~~",
+            "rhs": "srh1",
+            "group": 1,
+            "free": 3
+          },
+          {
+            "lhs": "srh1",
+            "op": "~~",
+            "rhs": "srh1",
+            "group": 1,
+            "free": 4
+          },
+          {
+            "lhs": "srh1",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "ex3_1",
+      "name": "Newsom ex3.1 fit",
+      "family": "observed model",
+      "source_input": "source/lsem2r/ex3-1.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "lavaan_function": "sem",
+      "meanstructure": true,
+      "fixed_x": true,
+      "model": "w1posaff~~w1posaff\n  w2posaff~~w2posaff\n  w1posaff~~w2posaff\n ",
+      "ov_names": ["w1posaff", "w2posaff"],
+      "n_obs": 574,
+      "sample_cov": [
+        [0.397997790430866, 0.197668054729328],
+        [0.197668054729328, 0.441792057691607]
+      ],
+      "sample_mean": [3.03414634146341, 2.92543554006969],
+      "lavaan": {
+        "version": "0.6.22.2560",
+        "fmin": 0,
+        "chisq": 0,
+        "df": 0,
+        "npar": 5,
+        "sigma": [
+          [0.397997793984911, 0.197668055227842],
+          [0.197668055227842, 0.441792050193409]
+        ],
+        "mu": [3.03414634146341, 2.92543554006969],
+        "theta": [0.397997793984911, 0.441792050193409, 0.197668055227842, 3.03414634146341, 2.92543554006969],
+        "free_rows": [
+          {
+            "lhs": "w1posaff",
+            "op": "~~",
+            "rhs": "w1posaff",
+            "group": 1,
+            "free": 1
+          },
+          {
+            "lhs": "w2posaff",
+            "op": "~~",
+            "rhs": "w2posaff",
+            "group": 1,
+            "free": 2
+          },
+          {
+            "lhs": "w1posaff",
+            "op": "~~",
+            "rhs": "w2posaff",
+            "group": 1,
+            "free": 3
+          },
+          {
+            "lhs": "w1posaff",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 4
+          },
+          {
+            "lhs": "w2posaff",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "ex3_1b",
+      "name": "Newsom ex3.1b fitmodel3.1c",
+      "family": "observed model",
+      "source_input": "source/lsem2r/ex3-1b.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "lavaan_function": "sem",
+      "meanstructure": true,
+      "fixed_x": true,
+      "model": " \n    w1posaff ~ a*1 #remove \"a*\" for unconstrained model\n    w2posaff ~ a*1\n    w1posaff~~w2posaff\n  ",
+      "ov_names": ["w1posaff", "w2posaff"],
+      "n_obs": 574,
+      "sample_cov": [
+        [0.397997790430866, 0.197668054729328],
+        [0.197668054729328, 0.441792057691607]
+      ],
+      "sample_mean": [3.03414634146341, 2.92543554006969],
+      "lavaan": {
+        "version": "0.6.22.2560",
+        "fmin": 0.0131213298177459,
+        "chisq": 15.0632866307723,
+        "df": 1,
+        "npar": 4,
+        "sigma": [
+          [0.400398740447161, 0.194742231181072],
+          [0.194742231181072, 0.445357498286652]
+        ],
+        "mu": [2.98514684968172, 2.98514684968172],
+        "theta": [2.98514684968172, 2.98514684968172, 0.194742231181072, 0.400398740447161, 0.445357498286652],
+        "free_rows": [
+          {
+            "lhs": "w1posaff",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 1
+          },
+          {
+            "lhs": "w2posaff",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 2
+          },
+          {
+            "lhs": "w1posaff",
+            "op": "~~",
+            "rhs": "w2posaff",
+            "group": 1,
+            "free": 3
+          },
+          {
+            "lhs": "w1posaff",
+            "op": "~~",
+            "rhs": "w1posaff",
+            "group": 1,
+            "free": 4
+          },
+          {
+            "lhs": "w2posaff",
+            "op": "~~",
+            "rhs": "w2posaff",
+            "group": 1,
+            "free": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "ex3_4a",
+      "name": "Newsom ex3.4a fitmodel3.4a",
+      "family": "observed model",
+      "source_input": "source/lsem2r/ex3-4a.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "lavaan_function": "sem",
+      "meanstructure": true,
+      "fixed_x": true,
+      "model": "\n    w1posaff ~~ w2posaff\n    w2posaff ~~ w3posaff\n    w1posaff ~~ w3posaff\n\t\tw1posaff ~ a*1 \n\t\tw2posaff ~ a*1\n\t\tw3posaff ~ a*1\n    ",
+      "ov_names": ["w1posaff", "w2posaff", "w3posaff"],
+      "n_obs": 574,
+      "sample_cov": [
+        [0.397997790430866, 0.197668054729328, 0.214323106994136],
+        [0.197668054729328, 0.441792057691607, 0.236008085566172],
+        [0.214323106994136, 0.236008085566172, 0.444161395670701]
+      ],
+      "sample_mean": [3.03414634146341, 2.92543554006969, 2.82543554006969],
+      "lavaan": {
+        "version": "0.6.22.2560",
+        "fmin": 0.0500928704373333,
+        "chisq": 57.5066152620587,
+        "df": 2,
+        "npar": 7,
+        "sigma": [
+          [0.406399159786612, 0.196105064882701, 0.203594281600394],
+          [0.196105064882701, 0.442082814682298, 0.238004010546875],
+          [0.203594281600394, 0.238004010546875, 0.457862533271279]
+        ],
+        "mu": [2.94248731268266, 2.94248731268266, 2.94248731268266],
+        "theta": [0.196105064882701, 0.238004010546875, 0.203594281600394, 2.94248731268266, 2.94248731268266, 2.94248731268266, 0.406399159786612, 0.442082814682298, 0.457862533271279],
+        "free_rows": [
+          {
+            "lhs": "w1posaff",
+            "op": "~~",
+            "rhs": "w2posaff",
+            "group": 1,
+            "free": 1
+          },
+          {
+            "lhs": "w2posaff",
+            "op": "~~",
+            "rhs": "w3posaff",
+            "group": 1,
+            "free": 2
+          },
+          {
+            "lhs": "w1posaff",
+            "op": "~~",
+            "rhs": "w3posaff",
+            "group": 1,
+            "free": 3
+          },
+          {
+            "lhs": "w1posaff",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 4
+          },
+          {
+            "lhs": "w2posaff",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 5
+          },
+          {
+            "lhs": "w3posaff",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 6
+          },
+          {
+            "lhs": "w1posaff",
+            "op": "~~",
+            "rhs": "w1posaff",
+            "group": 1,
+            "free": 7
+          },
+          {
+            "lhs": "w2posaff",
+            "op": "~~",
+            "rhs": "w2posaff",
+            "group": 1,
+            "free": 8
+          },
+          {
+            "lhs": "w3posaff",
+            "op": "~~",
+            "rhs": "w3posaff",
+            "group": 1,
+            "free": 9
+          }
+        ]
+      }
+    },
+    {
+      "id": "ex4_1",
+      "name": "Newsom ex4.1 fitmodel4.1",
+      "family": "observed model",
+      "source_input": "source/lsem2r/ex4-1.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "lavaan_function": "sem",
+      "meanstructure": true,
+      "fixed_x": true,
+      "model": "\tw2unw ~ w1unw\n  w1unw~1\n  w2unw~1\n",
+      "ov_names": ["w2unw", "w1unw"],
+      "n_obs": 574,
+      "sample_cov": [
+        [0.653587312378848, 0.250303175007858],
+        [0.250303175007858, 0.674528645485559]
+      ],
+      "sample_mean": [1.98257839721254, 1.97851335656214],
+      "lavaan": {
+        "version": "0.6.22.2560",
+        "fmin": 0,
+        "chisq": 0,
+        "df": 0,
+        "npar": 5,
+        "sigma": [
+          [0.653587312541292, 0.250303175401321],
+          [0.250303175401321, 0.67452864642651]
+        ],
+        "mu": [1.98257839738836, 1.97851335656214],
+        "theta": [0.371078643920265, 1.97851335656214, 1.24839434405715, 0.560705149644433, 0.67452864642651],
+        "free_rows": [
+          {
+            "lhs": "w2unw",
+            "op": "~",
+            "rhs": "w1unw",
+            "group": 1,
+            "free": 1
+          },
+          {
+            "lhs": "w1unw",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 2
+          },
+          {
+            "lhs": "w2unw",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 3
+          },
+          {
+            "lhs": "w2unw",
+            "op": "~~",
+            "rhs": "w2unw",
+            "group": 1,
+            "free": 4
+          },
+          {
+            "lhs": "w1unw",
+            "op": "~~",
+            "rhs": "w1unw",
+            "group": 1,
+            "free": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "ex13_1",
+      "name": "Newsom ex13.1 fit",
+      "family": "observed model",
+      "source_input": "source/lsemr/ex13-1.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "lavaan_function": "sem",
+      "meanstructure": true,
+      "fixed_x": true,
+      "model": "   \nbmi1 ~~ bmi1\nbmi2 ~~ bmi2\nbmi3 ~~ bmi3\nbmi4 ~~ bmi4\nbmi5 ~~ bmi5\nbmi6 ~~ bmi6\n",
+      "ov_names": ["bmi1", "bmi2", "bmi3", "bmi4", "bmi5", "bmi6"],
+      "n_obs": 4217,
+      "sample_cov": [
+        [25.5722470657382, 23.4347075396296, 23.0953239289875, 22.6522752102134, 21.9562626484737, 21.8577859297221],
+        [23.4347075396296, 26.1078994802951, 24.2790297561147, 23.8041411076975, 23.0520036361288, 22.9684145086342],
+        [23.0953239289875, 24.2790297561147, 26.859300392769, 24.8793092171352, 24.0503809768708, 24.1426487270194],
+        [22.6522752102134, 23.8041411076975, 24.8793092171352, 27.3648808834436, 24.9078112154403, 24.8877728866421],
+        [21.9562626484737, 23.0520036361288, 24.0503809768708, 24.9078112154403, 27.6510866963091, 26.0057558729398],
+        [21.8577859297221, 22.9684145086342, 24.1426487270194, 24.8877728866421, 26.0057558729398, 29.2320050590941]
+      ],
+      "sample_mean": [27.4052199847369, 27.5640347698101, 27.6791616587593, 27.8818231538747, 27.9683636973873, 27.9753458170825],
+      "lavaan": {
+        "version": "0.6.22.2560",
+        "fmin": 4.6873145258404,
+        "chisq": 39532.8107109379,
+        "df": 15,
+        "npar": 12,
+        "sigma": [
+          [25.5722469249912, 0, 0, 0, 0, 0],
+          [0, 26.1078993365999, 0, 0, 0, 0],
+          [0, 0, 26.8593002449382, 0, 0, 0],
+          [0, 0, 0, 27.3648807328301, 0, 0],
+          [0, 0, 0, 0, 27.6510865441203, 0],
+          [0, 0, 0, 0, 0, 29.2320048982042]
+        ],
+        "mu": [27.4052199847369, 27.5640347698101, 27.6791616587593, 27.8818231538747, 27.9683636973873, 27.9753458170825],
+        "theta": [25.5722469249912, 26.1078993365999, 26.8593002449382, 27.3648807328301, 27.6510865441203, 29.2320048982042, 27.4052199847369, 27.5640347698101, 27.6791616587593, 27.8818231538747, 27.9683636973873, 27.9753458170825],
+        "free_rows": [
+          {
+            "lhs": "bmi1",
+            "op": "~~",
+            "rhs": "bmi1",
+            "group": 1,
+            "free": 1
+          },
+          {
+            "lhs": "bmi2",
+            "op": "~~",
+            "rhs": "bmi2",
+            "group": 1,
+            "free": 2
+          },
+          {
+            "lhs": "bmi3",
+            "op": "~~",
+            "rhs": "bmi3",
+            "group": 1,
+            "free": 3
+          },
+          {
+            "lhs": "bmi4",
+            "op": "~~",
+            "rhs": "bmi4",
+            "group": 1,
+            "free": 4
+          },
+          {
+            "lhs": "bmi5",
+            "op": "~~",
+            "rhs": "bmi5",
+            "group": 1,
+            "free": 5
+          },
+          {
+            "lhs": "bmi6",
+            "op": "~~",
+            "rhs": "bmi6",
+            "group": 1,
+            "free": 6
+          },
+          {
+            "lhs": "bmi1",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 7
+          },
+          {
+            "lhs": "bmi2",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 8
+          },
+          {
+            "lhs": "bmi3",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 9
+          },
+          {
+            "lhs": "bmi4",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 10
+          },
+          {
+            "lhs": "bmi5",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 11
+          },
+          {
+            "lhs": "bmi6",
+            "op": "~1",
+            "rhs": "",
+            "group": 1,
+            "free": 12
+          }
+        ]
+      }
+    }
+  ],
+  "retained_not_tested": [
+    {
+      "id": "ex12_1a",
+      "name": "Newsom ex12.1a fitmodel12.1a",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex12-1a.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "generated_data": "data/ex12_1a.csv",
+      "generated_model": "models/ex12_1a.lav",
+      "generated_script": "scripts/ex12_1a.R",
+      "group_var": null,
+      "ordered": "",
+      "lavaan_function": "cfa",
+      "estimator": "ML",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    },
+    {
+      "id": "ex12_1b",
+      "name": "Newsom ex12.1b fitmodel12.1b",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex12-1b.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "generated_data": "data/ex12_1b.csv",
+      "generated_model": "models/ex12_1b.lav",
+      "generated_script": "scripts/ex12_1b.R",
+      "group_var": null,
+      "ordered": "",
+      "lavaan_function": "cfa",
+      "estimator": "ML",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    },
+    {
+      "id": "ex12_1c",
+      "name": "Newsom ex12.1c fitmodel12.1c",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex12-1c.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "generated_data": "data/ex12_1c.csv",
+      "generated_model": "models/ex12_1c.lav",
+      "generated_script": "scripts/ex12_1c.R",
+      "group_var": null,
+      "ordered": "",
+      "lavaan_function": "cfa",
+      "estimator": "ML",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    },
+    {
+      "id": "ex12_2",
+      "name": "Newsom ex12.2 fitmodel12.2",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex12-2.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "generated_data": "data/ex12_2.csv",
+      "generated_model": "models/ex12_2.lav",
+      "generated_script": "scripts/ex12_2.R",
+      "group_var": null,
+      "ordered": "",
+      "lavaan_function": "cfa",
+      "estimator": "ML",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    },
+    {
+      "id": "ex12_3",
+      "name": "Newsom ex12.3 fitmodel12.3",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex12-3.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "generated_data": "data/ex12_3.csv",
+      "generated_model": "models/ex12_3.lav",
+      "generated_script": "scripts/ex12_3.R",
+      "group_var": null,
+      "ordered": "",
+      "lavaan_function": "cfa",
+      "estimator": "ML",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    },
+    {
+      "id": "ex14_1b",
+      "name": "Newsom ex14.1b fitmodel14.1b",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex14-1b.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "generated_data": "data/ex14_1b.csv",
+      "generated_model": "models/ex14_1b.lav",
+      "generated_script": "scripts/ex14_1b.R",
+      "group_var": null,
+      "ordered": "",
+      "lavaan_function": "sem",
+      "estimator": "ML",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    },
+    {
+      "id": "ex3_1a",
+      "name": "Newsom ex3.1a fitmodel3.1a",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex3-1a.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "generated_data": "data/ex3_1a.csv",
+      "generated_model": "models/ex3_1a.lav",
+      "generated_script": "scripts/ex3_1a.R",
+      "group_var": null,
+      "ordered": "",
+      "lavaan_function": "sem",
+      "estimator": "ML",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    },
+    {
+      "id": "ex4_2b",
+      "name": "Newsom ex4.2b fitmodel4.2b",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex4-2b.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "ordinal",
+      "observed_only": true,
+      "generated_data": "data/ex4_2b.csv",
+      "generated_model": "models/ex4_2b.lav",
+      "generated_script": "scripts/ex4_2b.R",
+      "group_var": null,
+      "ordered": "w1lea;w2lea",
+      "lavaan_function": "sem",
+      "estimator": "WLSMV",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    },
+    {
+      "id": "ex4_5a",
+      "name": "Newsom ex4.5a fitmodel4.5a",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex4-5a.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "generated_data": "data/ex4_5a.csv",
+      "generated_model": "models/ex4_5a.lav",
+      "generated_script": "scripts/ex4_5a.R",
+      "group_var": null,
+      "ordered": "",
+      "lavaan_function": "sem",
+      "estimator": "ML",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    },
+    {
+      "id": "ex4_5b",
+      "name": "Newsom ex4.5b fitmodel4.5b",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex4-5b.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "generated_data": "data/ex4_5b.csv",
+      "generated_model": "models/ex4_5b.lav",
+      "generated_script": "scripts/ex4_5b.R",
+      "group_var": null,
+      "ordered": "",
+      "lavaan_function": "sem",
+      "estimator": "ML",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    },
+    {
+      "id": "ex4_6",
+      "name": "Newsom ex4.6 fitmodel4.6",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex4-6.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "generated_data": "data/ex4_6.csv",
+      "generated_model": "models/ex4_6.lav",
+      "generated_script": "scripts/ex4_6.R",
+      "group_var": null,
+      "ordered": "",
+      "lavaan_function": "sem",
+      "estimator": "ML",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    },
+    {
+      "id": "ex5_1",
+      "name": "Newsom ex5.1 fitmodel5.2a",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex5-1.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "generated_data": "data/ex5_1.csv",
+      "generated_model": "models/ex5_1.lav",
+      "generated_script": "scripts/ex5_1.R",
+      "group_var": null,
+      "ordered": "",
+      "lavaan_function": "sem",
+      "estimator": "ML",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    },
+    {
+      "id": "ex5_5a",
+      "name": "Newsom ex5.5a fitmodel5.5b",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex5-5a.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "generated_data": "data/ex5_5a.csv",
+      "generated_model": "models/ex5_5a.lav",
+      "generated_script": "scripts/ex5_5a.R",
+      "group_var": null,
+      "ordered": "",
+      "lavaan_function": "sem",
+      "estimator": "ML",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    },
+    {
+      "id": "ex5_6a",
+      "name": "Newsom ex5.6a fitmodel5.6a",
+      "family": "observed model",
+      "provenance": "Newsom Longitudinal SEM R examples",
+      "source_input": "source/lsem2r/ex5-6a.R",
+      "source_data": null,
+      "data_kind": "raw",
+      "measurement_kind": "continuous",
+      "observed_only": true,
+      "generated_data": "data/ex5_6a.csv",
+      "generated_model": "models/ex5_6a.lav",
+      "generated_script": "scripts/ex5_6a.R",
+      "group_var": null,
+      "ordered": "",
+      "lavaan_function": "sem",
+      "estimator": "ML",
+      "meanstructure": true,
+      "fixed_x": true,
+      "strict_parity": false,
+      "status": "retained",
+      "note": "extracted from lavaan R script"
+    }
+  ]
+}

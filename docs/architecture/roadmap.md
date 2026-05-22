@@ -227,6 +227,17 @@ stop rather than any usable non-error return.
   continuous growth examples across ML/ULS/GLS/WLS (24 optimizer fits) and
   records retained observed-path, ordinal, and mixed examples for corpus
   classification without committing Mplus raw data.
+- Local ignored Little and Newsom textbook corpora can be built from
+  `external/little/*.rar` and `external/newsom/*.zip` with
+  `tests/tools/build_little_corpus.R` and
+  `tests/tools/build_newsom_corpus.R`. The shared fixture regen script
+  (`tests/tools/regen_little_newsom_fixtures.R`) writes grouped
+  continuous/ordinal/mixed/observed manifests and lavaan oracles under
+  `tests/fixtures/little/` and `tests/fixtures/newsom/`. The current strict
+  C++ golden gates 17 auto-converted Little LISREL measurement models and 21
+  curated Newsom lavaan examples; the rest remain catalogued as extracted
+  source/data/model formulations with explicit unsupported or not-yet-gated
+  status.
 - Continuous ULS/GLS/WLS robust adapters reuse the shared weighted-moment
   sandwich/U-Gamma primitive with either supplied Gamma blocks or raw-data
   Gamma construction. ULS `robust.sem` SEs and Satorra-Bentler-family
