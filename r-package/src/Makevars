@@ -11,6 +11,7 @@ MAGMAAN_NLOPT_CACHE_ON := $(shell if test -r "$(MAGMAAN_CMAKE_CACHE)" && grep -q
 MAGMAAN_WITH_CERES_R ?= 0
 MAGMAAN_WITH_NLOPT_R ?= $(MAGMAAN_NLOPT_CACHE_ON)
 MAGMAAN_CONFIG_STAMP := .magmaan-build-config
+R_GLUE_HEADERS := $(wildcard *.hpp)
 
 CXX_STD       = CXX23
 PKG_CPPFLAGS  = -I$(MAGMAAN_ROOT)/include -DEIGEN_MAX_ALIGN_BYTES=64
@@ -59,4 +60,4 @@ $(MAGMAAN_CONFIG_STAMP): FORCE
 # (-> "undefined symbol" at load time, the exact footgun this guards). Make the
 # package objects depend on libmagmaan.a: when `magmaan_lib` re-links it, they
 # rebuild. Cheap (a handful of small TUs); a no-op when nothing changed.
-$(OBJECTS): $(MAGMAAN_LIB) $(MAGMAAN_CONFIG_STAMP)
+$(OBJECTS): $(MAGMAAN_LIB) $(MAGMAAN_CONFIG_STAMP) $(R_GLUE_HEADERS)

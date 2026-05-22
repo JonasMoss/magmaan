@@ -85,9 +85,19 @@ as_magmaan_model_spec <- function(model) {
     stop("ordinary SEM helpers do not accept native FC-SEM model specs; ",
          "use fit_ml_fcsem() or magmaan_fcsem()")
   }
-  if (inherits(model, "magmaan_model_spec")) return(model)
+  if (inherits(model, "magmaan_model_spec")) {
+    if (is_native_fcsem_partable(model$partable)) {
+      stop("ordinary SEM helpers do not accept native FC-SEM partables; ",
+           "use fit_ml_fcsem() or magmaan_fcsem()")
+    }
+    return(model)
+  }
   if (is.character(model) && length(model) == 1L) return(model_spec(model))
   if (is.data.frame(model)) {
+    if (is_native_fcsem_partable(model)) {
+      stop("ordinary SEM helpers do not accept native FC-SEM partables; ",
+           "use fit_ml_fcsem() or magmaan_fcsem()")
+    }
     out <- list(
       syntax = NULL,
       partable = model,
@@ -1371,7 +1381,17 @@ partable_arg <- function(model) {
     stop("ordinary SEM fit helpers do not accept native FC-SEM model specs; ",
          "use fit_ml_fcsem() or magmaan_fcsem()")
   }
-  if (inherits(model, "magmaan_model_spec")) return(model$partable)
+  if (inherits(model, "magmaan_model_spec")) {
+    if (is_native_fcsem_partable(model$partable)) {
+      stop("ordinary SEM fit helpers do not accept native FC-SEM partables; ",
+           "use fit_ml_fcsem() or magmaan_fcsem()")
+    }
+    return(model$partable)
+  }
+  if (is_native_fcsem_partable(model)) {
+    stop("ordinary SEM fit helpers do not accept native FC-SEM partables; ",
+         "use fit_ml_fcsem() or magmaan_fcsem()")
+  }
   model
 }
 
@@ -1414,4 +1434,8 @@ require_none_arg <- function(value, arg, what) {
 
 `%||%` <- function(x, y) {
   if (is.null(x)) y else x
+}
+
+is_native_fcsem_partable <- function(x) {
+  is.data.frame(x) && isTRUE(attr(x, "magmaan.fcsem", exact = TRUE))
 }

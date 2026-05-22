@@ -47,6 +47,22 @@ err <- tryCatch(magmaan_core$fit_ml(spec, dat),
                 error = function(e) conditionMessage(e))
 stopifnot(grepl("native FC-SEM model specs", err, fixed = TRUE))
 
+err <- tryCatch(magmaan_core$fit_ml(spec$partable, dat),
+                error = function(e) conditionMessage(e))
+stopifnot(grepl("native FC-SEM partables", err, fixed = TRUE))
+
+err <- tryCatch(df_to_data(df, spec$partable),
+                error = function(e) conditionMessage(e))
+stopifnot(grepl("native FC-SEM partables", err, fixed = TRUE))
+
+err <- tryCatch(magmaan_core$model_matrix_rep(spec$partable),
+                error = function(e) conditionMessage(e))
+stopifnot(grepl("native FC-SEM partables", err, fixed = TRUE))
+
+err <- tryCatch(magmaan_core$inference_information_expected(fit),
+                error = function(e) conditionMessage(e))
+stopifnot(grepl("native FC-SEM fits", err, fixed = TRUE))
+
 err <- tryCatch(magmaan(spec, dat),
                 error = function(e) conditionMessage(e))
 stopifnot(grepl("magmaan_fcsem", err, fixed = TRUE))
