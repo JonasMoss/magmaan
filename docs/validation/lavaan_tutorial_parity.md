@@ -37,9 +37,8 @@ Each section is assessed across the three layers the project ships:
   environment. The R package is a methods-developer interface and exposes a
   *subset* of the C++ api: estimation, information / vcov / SE / z / Wald /
   χ² / df / baseline / fit measures, robust SEs and Satorra-Bentler tests,
-  defined parameters, nested tests, and model-implied moments. It does **not**
-  yet bind the standardized solution or modification indices — those are
-  `magmaan::api`-only (tracked in `todo.md` §4).
+  defined parameters, nested tests, model-implied moments, the standardized
+  solution, and modification indices / score tests.
 
 Legend — Cap: ✓ supported · ◐ partial · ✗ not supported. Test: which checked-in
 test gates it (parity fixture / corpus golden / unit / none).
@@ -217,15 +216,16 @@ delta-method SEs, optional bootstrap SEs.
 
 `modindices(fit, sort=TRUE, minimum.value=)`: `mi`, `epc`, `sepc.all`.
 
-- **core ✓ / api ✓ / R ✗.** The C++ core and `magmaan::api` compute
+- **core ✓ / api ✓ / R ✓.** The C++ core and `magmaan::api` compute
   fixed-parameter modification indices, equality-release score tests,
   absent cross-loading/covariance enumeration, and EPC — raw plus
   standardized (`sepc.lv` / `sepc.all`, via `fill_standardized_epc`) — across
-  the ML / FIML / LS / ordinal paths, but the **R package does not expose
-  them** (`magmaan_core` has no `modification_indices` / `score_tests`
-  binding).
+  the ML / FIML / LS / ordinal paths. The R package exposes them as the
+  friendly `modification_indices()` wrapper plus the
+  `magmaan_core$inference_modification_indices` / `inference_score_tests`
+  primitives.
 - **Test:** `score/` fixtures, `score_golden_test`, `score_test` (C++ only).
-- **Gaps:** no R binding for modification indices (backlog).
+- **Gaps:** none; the R binding has no dedicated R-side parity test.
 
 ### §16 — Extracting information
 

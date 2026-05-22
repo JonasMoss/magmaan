@@ -76,12 +76,13 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   semantics (`gtol` vs NLopt `xtol_rel`), iteration/evaluation reporting, and
   bounded behavior. Only then decide whether the ordinary/default build should
   pay the NLopt dependency cost or keep NLopt as an optional cross-check.
-- **S/M.** Consolidate optimizer/dependency license accounting before any
-  public artifact: document the exact third-party optimizer libraries in use
-  (currently LBFGS++ via FetchContent/system package, optional Ceres,
-  optional NLopt, and vendored PORT — AMPL/ASL `cport/` plus Fermi-LAT's
-  `drmnfb_routines.c`, both BSD-3, manifest in `third_party/port/README.md`),
-  their versions, and their redistribution obligations.
+- **S, before shipping binary artifacts.** The repo now carries an MIT
+  `LICENSE` that also notes the vendored BSD-3 PORT routines, which is
+  sufficient for a source release — LBFGS++, Eigen, Ceres, NLopt, and
+  nlohmann_json are fetched at build time, not redistributed. Before shipping a
+  binary or packaged artifact, extend this to a full dependency-license
+  manifest (LBFGS++, optional Ceres, optional NLopt, vendored PORT) with
+  versions and redistribution obligations.
 - **M/L, after coverage exists.** Promote the Ceres preset into regular
   validation where relevant without making the default build pay the Ceres
   dependency cost.
@@ -91,6 +92,13 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 
 ## Ordinal/SNLLS research
 
+- **S, revisit only if the paper track needs it.** The h-score / WMA robust
+  polychoric path has landed (all-ordinal h-weighted moments; see `roadmap.md`),
+  so its phased plan note has been retired. Design rationale now lives in
+  `docs/research/notes/h-polychorics.tex` and `robust_ordinal_gamma.tex`; the
+  remaining concrete work is the h-weighted polyserial item under "API and R
+  boundary". Revisit the threshold parameterization and positive-definiteness
+  repair policy only if the robust-ordinal paper track demands it.
 - **M/L.** Structured Gamma / model-implied fourth-order paper track
   (`papers/structured-gamma/`). A minimal `estimate::frontier` weight-matrix
   builder now exists for complete-data covariance-only pure CFA and is exposed
