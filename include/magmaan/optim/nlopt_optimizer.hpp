@@ -57,7 +57,7 @@ using NloptOptions = LbfgsOptions;
 // derivative-free algorithms via the `if (grad)` guard NLopt uses to signal
 // "this algorithm doesn't want a gradient."
 //
-// Implements both the `Optimizer` and `BoundedOptimizer` concepts: the
+// Implements both the `Optimizer` and `BoundedOptimizer` interfaces: the
 // unbounded overload delegates to the bounded one with all-±∞ bounds, which
 // NLopt interprets as "no bound on this axis" (±HUGE_VAL == ±infinity).
 // Some algorithms — notably BOBYQA — require *finite* bounds; calling the

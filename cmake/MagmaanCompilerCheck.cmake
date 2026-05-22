@@ -1,5 +1,6 @@
-# Reject toolchains that lack the C++23 features magmaan relies on (chiefly
-# std::expected and std::variant in the configurations we use). AppleClang
+# Reject toolchains that lack the one C++23 feature magmaan relies on:
+# std::expected (the error model). That single feature sets the compiler floor.
+# AppleClang
 # has historically lagged libc++ shipping std::expected, so we refuse it
 # explicitly and ask macOS users to install Homebrew LLVM.
 

@@ -32,7 +32,7 @@ using LbfgsBOptions = LbfgsOptions;
 // objective contract as `LbfgsOptimizer`: callable takes `(x, grad_out)`
 // and returns f(x), writing ∇f into grad_out.
 //
-// Implements **both** the Optimizer and BoundedOptimizer concepts. The
+// Implements **both** the Optimizer and BoundedOptimizer interfaces. The
 // unbounded overload delegates to the bounded overload with
 // `lb = -∞, ub = +∞` — `LBFGSBSolver`'s projection math (`max_step_size`,
 // `proj_grad_norm`) handles infinite bounds without producing NaNs, so
