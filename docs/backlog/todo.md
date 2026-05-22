@@ -64,7 +64,9 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   lavaan fit calls, with grouped tracked manifests and strict lavaan-backed
   C++ parity for the currently supported continuous subset; the consolidated
   `magmaan_textbook_corpus_v1` manifest indexes these alongside Geiser and
-  Mplus SEM. Remaining work: implement real LISREL `SE` selection and more
+  Mplus SEM, and its advisory overlap graph fingerprints same-data,
+  same-syntax, same-shape, and same-oracle-structure cases for future paper
+  mining. Remaining work: implement real LISREL `SE` selection and more
   complex matrix/constraint
   conversion for Little, promote additional Newsom continuous cases whose
   lavaan syntax uses parser features magmaan does not yet accept, and add

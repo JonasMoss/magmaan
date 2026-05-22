@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include <Eigen/Core>
@@ -224,6 +225,94 @@ TEST_CASE("Textbook corpus v1 manifest is well formed") {
       CHECK_MESSAGE(fixture.has_value(), "missing fixture " << rel);
     }
   }
+}
+
+TEST_CASE("Textbook corpus v1 overlap graph is well formed") {
+  const std::string root = magmaan::test::fixtures_dir();
+  auto manifest_raw =
+      magmaan::test::read_fixture(root + "/textbook_corpus/manifest.json");
+  auto overlap_raw =
+      magmaan::test::read_fixture(root + "/textbook_corpus/overlap.json");
+  auto overrides_raw = magmaan::test::read_fixture(
+      root + "/textbook_corpus/overlap_overrides.json");
+  REQUIRE(manifest_raw.has_value());
+  REQUIRE(overlap_raw.has_value());
+  REQUIRE(overrides_raw.has_value());
+
+  auto manifest = nlohmann::json::parse(*manifest_raw, nullptr, false);
+  auto overlap = nlohmann::json::parse(*overlap_raw, nullptr, false);
+  auto overrides = nlohmann::json::parse(*overrides_raw, nullptr, false);
+  REQUIRE_FALSE(manifest.is_discarded());
+  REQUIRE_FALSE(overlap.is_discarded());
+  REQUIRE_FALSE(overrides.is_discarded());
+  REQUIRE(overlap.contains("_meta"));
+  CHECK(overlap["_meta"]["corpus_id"].get<std::string>() ==
+        "magmaan_textbook_corpus_v1");
+  CHECK(overlap["_meta"]["fixture_kind"].get<std::string>() ==
+        "textbook_corpus.overlap");
+  CHECK(overrides["_meta"]["fixture_kind"].get<std::string>() ==
+        "textbook_corpus.overlap_overrides");
+
+  std::unordered_set<std::string> case_ids;
+  for (const auto &c : manifest["cases"]) {
+    case_ids.insert(c["id"].get<std::string>());
+  }
+  REQUIRE(overlap.contains("fingerprints"));
+  REQUIRE(overlap.contains("clusters"));
+  REQUIRE(overlap.contains("edges"));
+  REQUIRE(overlap.contains("counts"));
+  CHECK(overlap["fingerprints"].size() == case_ids.size());
+  CHECK(overlap["counts"]["cases"].get<int>() ==
+        static_cast<int>(case_ids.size()));
+  CHECK(overlap["counts"]["fingerprints"].get<int>() ==
+        static_cast<int>(overlap["fingerprints"].size()));
+  CHECK(overlap["counts"]["clusters"].get<int>() ==
+        static_cast<int>(overlap["clusters"].size()));
+  CHECK(overlap["counts"]["edges"].get<int>() ==
+        static_cast<int>(overlap["edges"].size()));
+
+  for (const auto &fp : overlap["fingerprints"]) {
+    CHECK(case_ids.contains(fp["case_id"].get<std::string>()));
+  }
+
+  const std::unordered_set<std::string> cluster_kinds = {
+      "source_artifact", "data_artifact", "data_shape",
+      "sample_stats",    "syntax_named",  "syntax_shape",
+      "oracle_named",    "oracle_shape",  "family_shape_hint"};
+  for (const auto &cluster : overlap["clusters"]) {
+    REQUIRE(cluster.contains("kind"));
+    CHECK(cluster_kinds.contains(cluster["kind"].get<std::string>()));
+    REQUIRE(cluster.contains("case_ids"));
+    CHECK(cluster["case_ids"].size() >= 2);
+    for (const auto &id : cluster["case_ids"]) {
+      CHECK(case_ids.contains(id.get<std::string>()));
+    }
+  }
+
+  const std::unordered_set<std::string> edge_kinds = {
+      "same_source_artifact",   "same_data_artifact", "same_sample_stats",
+      "same_named_syntax",      "same_model_shape",   "same_oracle_structure",
+      "same_family_shape_hint", "manual_equivalence"};
+  const std::unordered_set<std::string> confidence = {
+      "exact", "canonical", "shape", "heuristic", "manual"};
+  bool has_exact = false;
+  bool has_canonical = false;
+  bool has_shape = false;
+  for (const auto &edge : overlap["edges"]) {
+    CHECK(edge_kinds.contains(edge["kind"].get<std::string>()));
+    const std::string conf = edge["confidence"].get<std::string>();
+    CHECK(confidence.contains(conf));
+    has_exact = has_exact || conf == "exact";
+    has_canonical = has_canonical || conf == "canonical";
+    has_shape = has_shape || conf == "shape";
+    REQUIRE(edge["case_ids"].size() == 2);
+    for (const auto &id : edge["case_ids"]) {
+      CHECK(case_ids.contains(id.get<std::string>()));
+    }
+  }
+  CHECK(has_exact);
+  CHECK(has_canonical);
+  CHECK(has_shape);
 }
 
 TEST_CASE("Little and Newsom continuous goldens match lavaan") {

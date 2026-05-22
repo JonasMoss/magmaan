@@ -240,7 +240,11 @@ stop rather than any usable non-error return.
   status. A consolidated `magmaan_textbook_corpus_v1` index under
   `tests/fixtures/textbook_corpus/manifest.json` summarizes Geiser, Mplus SEM,
   Little, and Newsom as one textbook corpus without duplicating their heavy
-  oracle payloads.
+  oracle payloads. The same directory also carries an advisory generated
+  overlap graph (`overlap.json`) plus an empty curation hook
+  (`overlap_overrides.json`) so future paper work can find same-data,
+  same-syntax, same-shape, and same-oracle-structure examples while preserving
+  every source case as its own fixture record.
 - Continuous ULS/GLS/WLS robust adapters reuse the shared weighted-moment
   sandwich/U-Gamma primitive with either supplied Gamma blocks or raw-data
   Gamma construction. ULS `robust.sem` SEs and Satorra-Bentler-family

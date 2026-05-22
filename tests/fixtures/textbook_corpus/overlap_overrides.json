@@ -1,0 +1,12 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "textbook_corpus.overlap_overrides",
+    "corpus_id": "magmaan_textbook_corpus_v1",
+    "note": "Manual curation hook for advisory overlap edges; empty by default."
+  },
+  "known_equivalent": [],
+  "known_distinct": [],
+  "aliases": {},
+  "notes": []
+}
