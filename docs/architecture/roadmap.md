@@ -524,14 +524,19 @@ stop rather than any usable non-error return.
   `std.lv`/`std.all` values and delta-method SEs for reported free rows.
   `standardized_rows_fcsem` lifts that into a lavaan-like row surface for
   native `<~`, `=~`, and `~` rows, including fixed marker rows with
-  delta-method standardized SEs. Staged API/R exposure is still pending.
+  delta-method standardized SEs. Native FC-SEM df subtracts the composite
+  indicator T-block moments from the user model, while the independence
+  baseline remains the ordinary observed-variable baseline; `fit_extras_fcsem`
+  and the existing fit-measure helper match the same lavaan fixture trio for
+  chi-square, df, CFI/TLI/RMSEA, SRMR, loglik, AIC, BIC, and sample-size
+  adjusted BIC. Staged API/R exposure is still pending.
 - Full composite lavaan parity is not yet claimed. Native lavaan
   `<~` oracle fixtures for pure-composite, composite-plus-factor, and
   composite-structural HS cases live under `tests/fixtures/composite/` and
   now record lavaan's observed-variable order for the stored sample/implied
   covariance matrices. The corresponding diagnostic golden is intentionally
-  skipped until native fit measures and the public/R post-fit surface match
-  lavaan's W-matrix semantics.
+  skipped until the public/R post-fit surface can expose the native W-matrix
+  semantics without implying full lavaan replacement parity.
 - `magmaan(model, data, estimator, groups)` is the high-level estimate-only
   R convenience. It composes `model_spec()`, data-frame sample-stat/raw-data
   construction, and the matching point-estimation wrapper for complete-data

@@ -17,6 +17,7 @@
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/inference/inference.hpp"
+#include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/measures/standardized.hpp"
 #include "magmaan/model/fcsem_evaluator.hpp"
 #include "magmaan/parse/op.hpp"
@@ -564,6 +565,62 @@ TEST_CASE("FC-SEM expected information: SEs match lavaan native fixtures") {
 
       for (const auto& row : j["weights"]) check_row(row);
       for (const auto& row : j["rows"]) check_row(row);
+    }
+  }
+}
+
+TEST_CASE("FC-SEM fit measures: match lavaan native fixtures") {
+  static constexpr const char* fixtures[] = {
+      "composite/0001_pure_composite_hs.fit.json",
+      "composite/0002_composite_factor_hs.fit.json",
+      "composite/0003_composite_structural_hs.fit.json",
+  };
+
+  for (const char* path : fixtures) {
+    SUBCASE(path) {
+      auto j = load_json_fixture(path);
+      Built built = must_build(j["input"].get<std::string>());
+      SampleStats samp = sample_stats_from_composite_fixture(j, built);
+      auto x0 = magmaan::estimate::simple_fcsem_start_values(built.pt, samp);
+      REQUIRE_MESSAGE(x0.has_value(), "starts failed: " << x0.error().detail);
+
+      magmaan::optim::LbfgsOptions opts;
+      opts.max_iter = 4000;
+      auto est = magmaan::estimate::fit_ml_fcsem(
+          built.pt, samp, *x0, {}, magmaan::estimate::Backend::Lbfgs, opts);
+      REQUIRE_MESSAGE(est.has_value(), "fit failed: " << est.error().detail);
+
+      const double chi2 = magmaan::inference::chi2_stat(samp, *est);
+      auto df = magmaan::inference::df_stat(built.pt, samp);
+      REQUIRE_MESSAGE(df.has_value(), "df_stat failed: " << df.error().detail);
+      const auto baseline = magmaan::measures::baseline_chi2(samp);
+      const auto fm = magmaan::measures::fit_measures(chi2, *df, baseline,
+                                                      samp);
+      auto fx = magmaan::measures::fit_extras_fcsem(built.pt, samp, *est);
+      REQUIRE_MESSAGE(fx.has_value(),
+                      "fit_extras_fcsem failed: " << fx.error().detail);
+
+      auto check = [&](std::string_view key, double got, double tol) {
+        INFO(path << " " << key);
+        CHECK(std::abs(got - j[std::string(key)].get<double>()) < tol);
+      };
+
+      check("chi2", chi2, 2e-5);
+      CHECK(*df == j["df"].get<int>());
+      CHECK(fx->npar == j["npar"].get<int>());
+      CHECK(fx->ntotal == j["n_obs"].get<std::int64_t>());
+      check("cfi", fm.cfi, 2e-5);
+      check("tli", fm.tli, 2e-5);
+      check("rmsea", fm.rmsea, 2e-5);
+      check("rmsea_ci_lower", fm.rmsea_ci_lower, 3e-5);
+      check("rmsea_ci_upper", fm.rmsea_ci_upper, 3e-5);
+      check("rmsea_pvalue", fm.rmsea_pvalue, 3e-5);
+      check("srmr", fx->srmr, 3e-5);
+      check("logl", fx->logl, 3e-5);
+      check("unrestricted_logl", fx->unrestricted_logl, 3e-5);
+      check("aic", fx->aic, 3e-5);
+      check("bic", fx->bic, 3e-5);
+      check("bic2", fx->bic2, 3e-5);
     }
   }
 }

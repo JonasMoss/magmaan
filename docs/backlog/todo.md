@@ -174,15 +174,19 @@ the same reported fixture rows. Native `std.lv`/`std.all` standardization now
 uses the FC-SEM evaluator's construct covariance and matches lavaan values/SEs
 for the same free reported fixture rows. `standardized_rows_fcsem` also reports
 native `<~`, `=~`, and `~` rows by lhs/op/rhs/group, including fixed marker
-rows with lavaan-matching standardized SEs.
+rows with lavaan-matching standardized SEs. Native FC-SEM df now subtracts the
+composite indicator T-block moments from the user model, and
+`measures::fit_extras_fcsem` plus the existing fit-measure helper match the
+same native fixtures for chi-square, df, CFI/TLI/RMSEA, SRMR, loglik, AIC, BIC,
+and sample-size-adjusted BIC.
 Remaining:
 
 - **L.** Post-fit lavaan parity validation: minimal oracle fixtures exist under
   `tests/fixtures/composite/` for pure composite, composite plus common factor,
   and structural regression involving a composite. The diagnostic golden is
   wired but skipped because the public native post-fit path does not yet expose
-  lavaan's `<~` W-matrix semantics for fit measures or API/R reporting. Split
-  or unskip it once those post-fit surfaces are available.
+  lavaan's `<~` W-matrix semantics through API/R reporting. Split or unskip it
+  once those post-fit surfaces are available.
 - **M.** Add staged API/R exposure once the native post-fit surface is settled
   enough to expose point estimates and standard errors without implying full
   lavaan replacement parity; until then, keep native FC-SEM on the low-level

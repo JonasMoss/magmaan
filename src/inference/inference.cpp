@@ -276,6 +276,12 @@ df_stat(const spec::LatentStructure& pt,
       df_moments += p;
     }
   }
+  if (pt.composite_mode == spec::CompositeMode::FcSem) {
+    for (const auto& c : pt.composite_blocks) {
+      const int k = static_cast<int>(c.indicator_vars.size());
+      df_moments -= static_cast<int>(samp.S.size()) * k * (k + 1) / 2;
+    }
+  }
   int fixed_x_moments = 0;
   for (std::size_t i = 0; i < pt.size(); ++i) {
     if ((pt.op[i] == parse::Op::Covariance ||
