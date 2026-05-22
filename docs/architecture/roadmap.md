@@ -490,6 +490,14 @@ stop rather than any usable non-error return.
   partable is retained as internal metadata for fitting and post-fit helpers.
   The R `composite_weights(fit, vcov)` accessor exposes recovered composite
   weights and delta-method SEs from the C++ post-fit primitive.
+- A parallel native FC-SEM composite spec path is scaffolded behind
+  `spec::BuildOptions::composite_mode = CompositeMode::FcSem`. In that mode
+  `<~` rows are preserved, the first composite weight is marker-fixed by the
+  ordinary auto-fix-first rule, composite indicator T-block rows and composite
+  self-variance rows are stamped as fixed/derived placeholders, and both verbal
+  `LatentNames::composites` and name-free
+  `LatentStructure::composite_blocks` carry the composite contract. MatrixRep
+  intentionally rejects native `<~` rows until the FC-SEM W/T evaluator lands.
 - Complete-data ML composite lavaan parity is not yet claimed. Native lavaan
   `<~` oracle fixtures for pure-composite, composite-plus-factor, and
   composite-structural HS cases live under `tests/fixtures/composite/`; the

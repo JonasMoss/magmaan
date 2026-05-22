@@ -152,6 +152,174 @@ PendingRow make_auto_cov(std::string lhs, std::string rhs, bool orthogonal) {
   return p;
 }
 
+partable_expected<std::vector<CompositeInfo>>
+collect_native_composites(const parse::FlatPartable& flat) {
+  struct CompositeBuild {
+    std::string              name;
+    std::vector<std::string> indicators;
+  };
+
+  std::vector<CompositeBuild> comps;
+  std::unordered_map<std::string, std::size_t> comp_idx;
+  for (const auto& r : flat.rows) {
+    if (r.op != parse::Op::Composite) continue;
+    const std::string lhs(r.lhs);
+    auto it = comp_idx.find(lhs);
+    std::size_t ci = 0;
+    if (it == comp_idx.end()) {
+      ci = comps.size();
+      comp_idx.emplace(lhs, ci);
+      comps.push_back(CompositeBuild{lhs, {}});
+    } else {
+      ci = it->second;
+    }
+    comps[ci].indicators.emplace_back(r.rhs);
+  }
+
+  std::unordered_map<std::string, std::string> indicator_owner;
+  for (const auto& c : comps) {
+    if (c.indicators.size() < 2) {
+      return std::unexpected(make_err(
+          PartableError::Kind::CompositeTooFewIndicators,
+          "composite '" + c.name + "' has " +
+              std::to_string(c.indicators.size()) +
+              " indicator(s); a composite needs at least 2"));
+    }
+    for (const auto& ind : c.indicators) {
+      auto [it, inserted] = indicator_owner.emplace(ind, c.name);
+      if (!inserted) {
+        return std::unexpected(make_err(
+            PartableError::Kind::CompositeOverlap,
+            "indicator '" + ind + "' is shared by composites '" + it->second +
+                "' and '" + c.name +
+                "'; composite indicator sets must be disjoint"));
+      }
+    }
+  }
+
+  std::unordered_set<std::string> comp_names;
+  for (const auto& c : comps) comp_names.insert(c.name);
+  for (const auto& c : comps) {
+    for (const auto& ind : c.indicators) {
+      if (comp_names.count(ind) != 0) {
+        return std::unexpected(make_err(
+            PartableError::Kind::CompositeOverlap,
+            "composite '" + c.name +
+                "' is itself a composite indicator; nested composites are not "
+                "supported"));
+      }
+    }
+  }
+
+  std::unordered_set<std::string> factor_names;
+  std::unordered_set<std::string> factor_indicators;
+  for (const auto& r : flat.rows) {
+    if (r.op != parse::Op::Measurement) continue;
+    factor_names.insert(std::string(r.lhs));
+    factor_indicators.insert(std::string(r.rhs));
+  }
+  for (const auto& c : comps) {
+    if (factor_names.count(c.name) != 0) {
+      return std::unexpected(make_err(
+          PartableError::Kind::CompositeOverlap,
+          "name '" + c.name +
+              "' is declared both as a composite (<~) and a latent factor "
+              "(=~)"));
+    }
+    for (const auto& ind : c.indicators) {
+      if (factor_indicators.count(ind) != 0) {
+        return std::unexpected(make_err(
+            PartableError::Kind::CompositeOverlap,
+            "indicator '" + ind +
+                "' is used by both a composite (<~) and a latent factor (=~)"));
+      }
+    }
+  }
+
+  auto external_to_composite = [&](const CompositeBuild& c,
+                                   std::string_view name) {
+    if (name == c.name) return false;
+    for (const auto& ind : c.indicators)
+      if (name == ind) return false;
+    return true;
+  };
+  for (const auto& c : comps) {
+    bool connected = false;
+    for (const auto& r : flat.rows) {
+      if (r.op != parse::Op::Regression && r.op != parse::Op::Covariance) {
+        continue;
+      }
+      const bool lhs_is_comp = (r.lhs == c.name);
+      const bool rhs_is_comp = (r.rhs == c.name);
+      if (lhs_is_comp && external_to_composite(c, r.rhs)) connected = true;
+      if (rhs_is_comp && external_to_composite(c, r.lhs)) connected = true;
+      if (connected) break;
+    }
+    if (!connected) {
+      return std::unexpected(make_err(
+          PartableError::Kind::UnidentifiedComposite,
+          "composite '" + c.name +
+              "' has no relation to a variable outside its own indicator set; "
+              "native FC-SEM composites need at least one external `~` or `~~` "
+              "link"));
+    }
+  }
+
+  std::vector<CompositeInfo> out;
+  out.reserve(comps.size());
+  for (auto& c : comps) {
+    CompositeInfo info;
+    info.composite  = std::move(c.name);
+    info.indicators = std::move(c.indicators);
+    out.push_back(std::move(info));
+  }
+  return out;
+}
+
+bool is_native_composite_indicator(const std::vector<CompositeInfo>& composites,
+                                   std::string_view name) {
+  for (const auto& c : composites)
+    for (const auto& ind : c.indicators)
+      if (ind == name) return true;
+  return false;
+}
+
+bool is_native_composite_name(const std::vector<CompositeInfo>& composites,
+                              std::string_view name) {
+  for (const auto& c : composites)
+    if (c.composite == name) return true;
+  return false;
+}
+
+void add_fcsem_fixed_composite_moments(
+    const std::vector<CompositeInfo>& composites,
+    std::vector<PendingRow>&          rows) {
+  for (const auto& c : composites) {
+    for (std::size_t i = 0; i < c.indicators.size(); ++i) {
+      for (std::size_t j = i; j < c.indicators.size(); ++j) {
+        if (covariance_already_present(rows, c.indicators[i],
+                                       c.indicators[j])) {
+          continue;
+        }
+        PendingRow p = make_pending(/*user=*/0, c.indicators[i],
+                                    parse::Op::Covariance, c.indicators[j]);
+        p.user_fixed_value = true;
+        p.fixed_value      = kNaN;  // native FC-SEM T block: sample-filled
+        p.auto_fixed       = true;
+        rows.push_back(std::move(p));
+      }
+    }
+    if (!variance_already_present(rows, c.composite)) {
+      PendingRow p = make_pending(/*user=*/0, c.composite,
+                                  parse::Op::Covariance, c.composite);
+      p.user_fixed_value = true;
+      p.fixed_value      = kNaN;  // derived from W' T W / structural model
+      p.auto_fixed       = true;
+      rows.push_back(std::move(p));
+    }
+  }
+}
+
 // === Step 3: user modifier application =====================================
 //
 // Helper: pick the effective ModifierAtom for group `group_idx` (0-based).
@@ -252,15 +420,17 @@ apply_modifiers_to_rows(const parse::FlatPartable& flat,
 
 // === Step 5: auto.fix.first ================================================
 //
-// For each LV: find the first Measurement row with that LV as LHS, set
-// fixed_value=1.0 — but only if the user did NOT explicitly modify that
+// For each LV: find the first Measurement/native-Composite row with that LV as
+// LHS, set fixed_value=1.0 — but only if the user did NOT explicitly modify that
 // row (Free, StartValue, or FixedValue). A bare label does NOT count as
 // explicit; lavaan still auto-fixes a marker indicator that happens to
 // carry a label.
 void apply_auto_fix_first(const VarSets& v, std::vector<PendingRow>& rows) {
   for (const auto& lv : v.lv.items) {
     for (auto& row : rows) {
-      if (row.op != parse::Op::Measurement) continue;
+      if (row.op != parse::Op::Measurement && row.op != parse::Op::Composite) {
+        continue;
+      }
       if (row.lhs != lv) continue;
       if (!row.user_explicit) {
         row.user_fixed_value = true;
@@ -528,8 +698,9 @@ namespace {
 // group, sets `block`/`group` on each output row, and concatenates.
 partable_expected<std::vector<PendingRow>>
 build_group_template(const parse::FlatPartable& flat,
-                     const BuildOptions&    opts,
+                     const BuildOptions&        opts,
                      const VarSets&             v,
+                     const std::vector<CompositeInfo>& native_composites,
                      std::int32_t               group_idx) {
   std::vector<PendingRow> rows;
   rows.reserve(flat.rows.size() + 16);
@@ -547,10 +718,15 @@ build_group_template(const parse::FlatPartable& flat,
       rows.push_back(make_pending(/*user=*/0, std::string(name),
                                   parse::Op::Covariance, std::string(name)));
     };
-    for (const auto& ov : v.ov_ind.items)  add_var(ov);
+    for (const auto& ov : v.ov_ind.items)
+      if (!is_native_composite_indicator(native_composites, ov)) add_var(ov);
     for (const auto& ov : v.ov_y.items)    add_var(ov);
     for (const auto& ov : v.ov_misc.items) add_var(ov);
-    for (const auto& lv : v.lv.items)      add_var(lv);
+    for (const auto& lv : v.lv.items)
+      if (!is_native_composite_name(native_composites, lv)) add_var(lv);
+    if (!native_composites.empty()) {
+      add_fcsem_fixed_composite_moments(native_composites, rows);
+    }
     if (!opts.fixed_x) apply_random_x(v, rows);
   }
   if (opts.auto_cov_lv_x) {
@@ -718,20 +894,27 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
         "effect_coding and std_lv are mutually exclusive identification conventions"));
   }
 
-  // Composite (`<~`) support: rewrite each composite into a Henseler-Ogasawara
-  // reflective sub-model up front, so every step below sees only an ordinary
-  // reflective model. The expanded FlatPartable borrows string storage from
-  // `flat` for its unmodified rows — fine here, `flat` outlives `build()`.
+  // Composite (`<~`) support. The historical Henseler-Ogasawara mode rewrites
+  // composites into a reflective sub-model up front, so every step below sees
+  // only ordinary `=~` / `~~` rows. Native FC-SEM keeps the `<~` rows and
+  // carries their W/T contract as explicit composite metadata instead.
   CompositeExpansion comp_exp;
+  std::vector<CompositeInfo> native_composites;
   bool has_composites = false;
   for (const auto& r : flat.rows)
     if (r.op == parse::Op::Composite) { has_composites = true; break; }
   const parse::FlatPartable* flatp = &flat;
-  if (has_composites) {
+  if (has_composites && opts.composite_mode == CompositeMode::HenselerOgasawara) {
     auto exp = expand_composites(flat);
     if (!exp.has_value()) return std::unexpected(exp.error());
     comp_exp = std::move(*exp);
     flatp = &comp_exp.flat;
+  } else if (has_composites && opts.composite_mode == CompositeMode::FcSem) {
+    auto comp = collect_native_composites(flat);
+    if (!comp.has_value()) return std::unexpected(comp.error());
+    native_composites = std::move(*comp);
+  } else {
+    comp_exp.composites.clear();
   }
   const parse::FlatPartable& eflat = *flatp;
 
@@ -750,7 +933,9 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
   // picked up by the post-replication auto-equality scan below.
   std::vector<PendingRow> rows;
   for (std::int32_t g = 1; g <= opts.n_groups; ++g) {
-    auto group_rows_or = build_group_template(eflat, opts, v, /*group_idx=*/g - 1);
+    auto group_rows_or = build_group_template(eflat, opts, v,
+                                              native_composites,
+                                              /*group_idx=*/g - 1);
     if (!group_rows_or.has_value()) {
       return std::unexpected(group_rows_or.error());
     }
@@ -820,7 +1005,25 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
   Starts starts;
   LatentNames names;
   finalize(rows, inv, out, starts, names);
-  names.composites = std::move(comp_exp.composites);
+  if (opts.composite_mode == CompositeMode::FcSem) {
+    out.composite_mode = CompositeMode::FcSem;
+    names.composite_mode = CompositeMode::FcSem;
+    names.composites = native_composites;
+    out.composite_blocks.reserve(native_composites.size());
+    for (const auto& c : native_composites) {
+      CompositeBlock b;
+      b.composite_var = inv.lookup(c.composite);
+      b.indicator_vars.reserve(c.indicators.size());
+      for (const auto& ind : c.indicators) {
+        b.indicator_vars.push_back(inv.lookup(ind));
+      }
+      out.composite_blocks.push_back(std::move(b));
+    }
+  } else {
+    out.composite_mode = CompositeMode::HenselerOgasawara;
+    names.composite_mode = CompositeMode::HenselerOgasawara;
+    names.composites = std::move(comp_exp.composites);
+  }
   if (out_starts) *out_starts = std::move(starts);
 
   // Group identity (verbal metadata — lives on `LatentNames`; nothing on the

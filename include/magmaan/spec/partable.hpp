@@ -56,18 +56,34 @@ struct NlConstraint {
 //   Latent    : LHS of `=~`                          (lv)
 enum class VarRole : std::uint8_t { Indicator, EndoOv, ExoOv, MiscOv, Latent };
 
-// One composite (`C <~ x1 + x2 + ...`) after Henseler-Ogasawara expansion.
+// Composite implementation selected at lavaanify time. H-O is the historical
+// desugaring path; FC-SEM is the native W/T path introduced in lavaan 0.6-20.
+enum class CompositeMode : std::uint8_t {
+  HenselerOgasawara,
+  FcSem,
+};
+
+// One user composite (`C <~ x1 + x2 + ...`). In Henseler-Ogasawara mode,
 // `spec::build` rewrites every composite into a reflective sub-model: the
-// emergent latent keeps the user's composite name; the `excrescent` nuisance
-// latents (K-1 of them, for K indicators) span the rest of the indicator
-// space. Carried on `LatentNames` because it is verbal/structural metadata —
-// the output layer reads it to hide excrescent latents and rebuild `<~` rows,
-// and post-fit code reads it to recover the composite weights from the K×K
-// loading block. Nothing on the numeric path branches on it.
+// emergent latent keeps the user's composite name and the `excrescent` nuisance
+// latents (K-1 of them, for K indicators) span the rest of the indicator space.
+// In FC-SEM mode, no expansion happens and `excrescent` is empty.
+//
+// The verbal copy lives on `LatentNames` for output/round-tripping. Native
+// FC-SEM also mirrors the same composite in name-free `LatentStructure`
+// `composite_blocks`, because W/T semantics are part of the numeric contract.
 struct CompositeInfo {
   std::string              composite;    // emergent latent = the user's name
   std::vector<std::string> indicators;   // composite indicators x1..xK, in order
-  std::vector<std::string> excrescent;   // synthesized nuisance latents (K-1)
+  std::vector<std::string> excrescent;   // H-O synthesized nuisance latents
+};
+
+// Name-free FC-SEM composite block: `composite_var` is the construct whose
+// weights live in W; `indicator_vars` are the observed variables forming its T
+// block. Empty for ordinary models and for the Henseler-Ogasawara expansion.
+struct CompositeBlock {
+  std::int32_t              composite_var = -1;
+  std::vector<std::int32_t> indicator_vars;
 };
 
 // Names that go with a `LatentStructure` — the *verbal* model. Everything in here
@@ -86,6 +102,7 @@ struct LatentNames {
   std::string               group_var;    // grouping-variable name; "" ⇒ unnamed single group
   std::vector<std::string>  group_labels; // per-group level labels ("1".."n" if unsupplied)
   std::vector<CompositeInfo> composites;   // one per `<~` composite; empty if none
+  CompositeMode             composite_mode = CompositeMode::HenselerOgasawara;
 };
 
 // Lavaanified model structure — what to estimate, in struct-of-arrays form,
@@ -133,6 +150,12 @@ struct LatentStructure {
   std::vector<std::int32_t> lv_ext_pos;      // size n_vars: index in lv_ext_order, or -1
   std::vector<std::int32_t> lhs_var;         // size n_rows: var id of lhs, or -1
   std::vector<std::int32_t> rhs_var;         // size n_rows: var id of rhs, or -1
+
+  // Native FC-SEM composites. Empty unless `composite_mode == FcSem` and the
+  // model contains `<~` rows. Henseler-Ogasawara composites are represented by
+  // ordinary expanded `=~`/`~~` rows instead.
+  CompositeMode             composite_mode = CompositeMode::HenselerOgasawara;
+  std::vector<CompositeBlock> composite_blocks;
 
   // Per-row group index — 1-based (matches lavaan); 0 for constraint rows.
   // (No multilevel yet: lavaan's `block` equals `group` here. When multilevel

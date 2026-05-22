@@ -32,8 +32,8 @@ struct OrderedSet {
   }
 };
 
-//   lv     : LHS of `=~`
-//   ov_ind : RHS of `=~` (observed indicators)
+//   lv     : LHS of `=~` or native `<~`
+//   ov_ind : RHS of `=~` or native `<~` (observed indicators)
 //   ov_y   : LHS of `~` / `~1` (endogenous observed) — minus latents
 //   ov_x   : RHS of `~` (exogenous observed) — minus latents, indicators, ov.y
 //   ov_misc: observed mentioned only in `~~` rows (no other role)
@@ -57,13 +57,15 @@ VarSets classify_vars(const RowSeq& rows) {
   // higher-order factor (`higher =~ lower`) is recognized as a latent no
   // matter where its own `lower =~ ...` rows sit in the syntax.
   for (const auto& r : rows) {
-    if (r.op == parse::Op::Measurement) v.lv.insert(r.lhs);
+    if (r.op == parse::Op::Measurement || r.op == parse::Op::Composite)
+      v.lv.insert(r.lhs);
   }
   // RHS of `=~` is an observed indicator — UNLESS it is itself a latent, in
   // which case the row is a higher-order measurement: the RHS stays latent
   // and `matrix_rep` lowers the row to a latent-on-latent Β path.
   for (const auto& r : rows) {
-    if (r.op == parse::Op::Measurement && !v.lv.contains(r.rhs))
+    if ((r.op == parse::Op::Measurement || r.op == parse::Op::Composite) &&
+        !v.lv.contains(r.rhs))
       v.ov_ind.insert(r.rhs);
   }
   for (const auto& r : rows) {
