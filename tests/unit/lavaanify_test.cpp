@@ -494,6 +494,44 @@ TEST_CASE("lavaanify: c(...) supplies per-group fixed values") {
   CHECK(f2 == 0);   // fixed in group 2
 }
 
+TEST_CASE("lavaanify: repeated `lhs op rhs` term merges modifiers into one row") {
+  // `f =~ NA*x1 + a*x1` names the same loading cell twice: `NA*` frees it,
+  // `a*` labels it. lavaan merges the two terms into a single parameter; so
+  // must we. Emitting two rows would put two free parameters on one matrix
+  // cell — the assemble step overwrites one, leaving a phantom parameter that
+  // moves nothing yet carries a nonzero analytic gradient (TODO.md item #1).
+  auto pt = must_lavaanify("f =~ NA*x1 + a*x1 + x2 + x3");
+  int loading_x1_rows = 0;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.lhs[i] == "f" && pt.op[i] == Op::Measurement && pt.rhs[i] == "x1") {
+      ++loading_x1_rows;
+      CHECK(pt.free[i] > 0);          // `NA*` freed it (no auto.fix.first)
+      CHECK(pt.label[i] == "a");      // `a*` labelled it
+    }
+  }
+  CHECK(loading_x1_rows == 1);
+  // The marker is free, so x2 is *not* auto-fixed — x1/x2/x3 loadings all free.
+  CHECK(pt.n_free() == 7);            // 3 loadings + 3 resid var + 1 factor var
+}
+
+TEST_CASE("lavaanify: repeated term merges per-group modifiers (NA + c(...))") {
+  // The cross-group measurement-invariance idiom: `NA*x1 + c(a1,a2)*x1` frees
+  // the marker and gives it a per-group label. Each group must end with one
+  // free, labelled loading row for that cell — not two.
+  BuildOptions opts;  opts.n_groups = 2;  opts.group_var = "grp";
+  auto pt = must_lavaanify("f =~ NA*x1 + c(a1,a2)*x1 + x2 + x3", opts);
+  int g1 = 0, g2 = 0;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.lhs[i] != "f" || pt.op[i] != Op::Measurement || pt.rhs[i] != "x1")
+      continue;
+    CHECK(pt.free[i] > 0);
+    if (pt.block[i] == 1) { ++g1; CHECK(pt.label[i] == "a1"); }
+    if (pt.block[i] == 2) { ++g2; CHECK(pt.label[i] == "a2"); }
+  }
+  CHECK(g1 == 1);
+  CHECK(g2 == 1);
+}
+
 TEST_CASE("lavaanify: empty model rejected") {
   // An empty parse would actually fail at the parser level, so we craft a
   // FlatPartable manually with no rows and no constraints.
