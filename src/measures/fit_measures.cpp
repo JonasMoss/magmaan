@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -17,6 +18,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
+#include "magmaan/model/fcsem_evaluator.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 
 namespace magmaan::measures {
@@ -60,6 +62,164 @@ double bisect_zero(F&& f, double lo, double hi) noexcept {
     else                           { hi = mid; }
   }
   return 0.5 * (lo + hi);
+}
+
+post_expected<FitExtras>
+fit_extras_from_implied(const spec::LatentStructure& pt,
+                        const SampleStats& samp,
+                        const model::ImpliedMoments& sm,
+                        std::string_view label) {
+  if (sm.sigma.size() != samp.S.size() || samp.n_obs.size() != samp.S.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(label) +
+            ": SampleStats and implied moments have different block counts"));
+  }
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const int npar = static_cast<int>(con_or->n_alpha);
+
+  FitExtras out;
+  out.npar = npar;
+
+  std::int64_t N_total = 0;
+  for (auto n : samp.n_obs) N_total += n;
+  out.ntotal = N_total;
+
+  // Fixed.x exogenous observed variables — lavaan reports `logl` (and hence
+  // AIC/BIC) conditional on these, subtracting the saturated marginal logl of
+  // the fixed.x block from both H0 and H1.
+  std::vector<Eigen::Index> exo_idx;
+  {
+    std::unordered_set<std::int32_t> exo_vars;
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.exo[i] != 1) continue;
+      if (i < pt.lhs_var.size() && pt.lhs_var[i] >= 0)
+        exo_vars.insert(pt.lhs_var[i]);
+      if (i < pt.rhs_var.size() && pt.rhs_var[i] >= 0)
+        exo_vars.insert(pt.rhs_var[i]);
+    }
+    std::unordered_set<Eigen::Index> seen;
+    for (std::int32_t v : exo_vars) {
+      if (v < 0 || static_cast<std::size_t>(v) >= pt.ov_pos.size()) continue;
+      const std::int32_t pos = pt.ov_pos[static_cast<std::size_t>(v)];
+      if (pos < 0) continue;
+      const Eigen::Index idx = static_cast<Eigen::Index>(pos);
+      if (seen.insert(idx).second) exo_idx.push_back(idx);
+    }
+    std::sort(exo_idx.begin(), exo_idx.end());
+  }
+
+  double logl = 0.0;
+  double logl_unres = 0.0;
+  double srmr_acc = 0.0;
+
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const Eigen::MatrixXd S = 0.5 * (samp.S[b] + samp.S[b].transpose());
+    const Eigen::Index p = S.rows();
+    if (p == 0) continue;
+    if (S.cols() != p || sm.sigma[b].rows() != p || sm.sigma[b].cols() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(label) + ": block " + std::to_string(b) +
+              " S and implied covariance dimensions differ"));
+    }
+    const double n_b = static_cast<double>(samp.n_obs[b]);
+
+    const Eigen::MatrixXd Sigma =
+        0.5 * (sm.sigma[b] + sm.sigma[b].transpose());
+    Eigen::LLT<Eigen::MatrixXd> llt_sig(Sigma);
+    if (llt_sig.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(label) + ": implied Sigma for block " +
+              std::to_string(b) + " is not positive definite at theta-hat"));
+    }
+    const double log_det_sigma = log_det_from_llt(llt_sig);
+    const Eigen::MatrixXd Sigma_inv =
+        llt_sig.solve(Eigen::MatrixXd::Identity(p, p));
+
+    Eigen::LLT<Eigen::MatrixXd> llt_S(S);
+    if (llt_S.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(label) + ": sample S for block " + std::to_string(b) +
+              " is not positive definite"));
+    }
+    const double log_det_S = log_det_from_llt(llt_S);
+    const double tr_S_Sinv = S.cwiseProduct(Sigma_inv).sum();
+
+    const bool has_means_b =
+        (sm.mu.size() > b && sm.mu[b].size() == p) &&
+        (samp.mean.size() > b && samp.mean[b].size() == p);
+    double mahal = 0.0;
+    Eigen::VectorXd mean_res;
+    if (has_means_b) {
+      const Eigen::VectorXd d = samp.mean[b] - sm.mu[b];
+      mahal = d.dot(Sigma_inv * d);
+      mean_res.resize(p);
+      for (Eigen::Index i = 0; i < p; ++i)
+        mean_res(i) = d(i) / std::sqrt(S(i, i));
+    }
+
+    logl += -0.5 * n_b * (static_cast<double>(p) * std::log(two_pi) +
+                          log_det_sigma + tr_S_Sinv + mahal);
+    logl_unres += -0.5 * n_b * (static_cast<double>(p) * std::log(two_pi) +
+                                log_det_S + static_cast<double>(p));
+
+    if (!exo_idx.empty() && exo_idx.back() < p) {
+      const Eigen::Index px = static_cast<Eigen::Index>(exo_idx.size());
+      Eigen::MatrixXd Sxx(px, px);
+      for (Eigen::Index r = 0; r < px; ++r)
+        for (Eigen::Index c = 0; c < px; ++c)
+          Sxx(r, c) = S(exo_idx[static_cast<std::size_t>(r)],
+                        exo_idx[static_cast<std::size_t>(c)]);
+      Eigen::LLT<Eigen::MatrixXd> llt_xx(Sxx);
+      if (llt_xx.info() != Eigen::Success) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            std::string(label) + ": fixed.x exogenous sub-block for block " +
+                std::to_string(b) + " is not positive definite"));
+      }
+      const double marg =
+          -0.5 * n_b *
+          (static_cast<double>(px) * std::log(two_pi) +
+           log_det_from_llt(llt_xx) + static_cast<double>(px));
+      logl -= marg;
+      logl_unres -= marg;
+    }
+
+    double sum_sq = 0.0;
+    for (Eigen::Index c = 0; c < p; ++c) {
+      const double dc = (S(c, c) - Sigma(c, c)) / S(c, c);
+      sum_sq += dc * dc;
+      for (Eigen::Index r = c + 1; r < p; ++r) {
+        const double rij =
+            (S(r, c) - Sigma(r, c)) / std::sqrt(S(r, r) * S(c, c));
+        sum_sq += rij * rij;
+      }
+    }
+    double pstar = static_cast<double>(p) * static_cast<double>(p + 1) / 2.0;
+    if (has_means_b) {
+      sum_sq += mean_res.squaredNorm();
+      pstar += static_cast<double>(p);
+    }
+    const double srmr_b = (pstar > 0.0) ? std::sqrt(sum_sq / pstar) : 0.0;
+    if (N_total > 0) srmr_acc += (n_b / static_cast<double>(N_total)) * srmr_b;
+  }
+
+  out.logl = logl;
+  out.unrestricted_logl = logl_unres;
+  out.srmr = srmr_acc;
+  out.aic = -2.0 * logl + 2.0 * static_cast<double>(npar);
+  out.bic = (N_total > 0)
+                ? -2.0 * logl +
+                      static_cast<double>(npar) *
+                          std::log(static_cast<double>(N_total))
+                : std::numeric_limits<double>::quiet_NaN();
+  out.bic2 = (N_total > 0)
+                 ? -2.0 * logl +
+                       static_cast<double>(npar) *
+                           std::log((static_cast<double>(N_total) + 2.0) /
+                                    24.0)
+                 : std::numeric_limits<double>::quiet_NaN();
+  return out;
 }
 
 }  // namespace
@@ -270,160 +430,35 @@ fit_extras(spec::LatentStructure        pt,
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "ev.sigma(θ̂) failed: " + sm_or.error().detail));
   }
-  const auto& sm = *sm_or;
+  return fit_extras_from_implied(pt, samp, *sm_or, "fit_extras");
+}
 
-  // npar = #free parameters after equality merging (lavaan: max(free), which
-  // for shared-label invariance models equals the post-merge count).
-  auto con_or = build_eq_constraints(pt);
-  if (!con_or.has_value()) return std::unexpected(con_or.error());
-  const int npar = static_cast<int>(con_or->n_alpha);
-
-  FitExtras out;
-  out.npar = npar;
-
-  std::int64_t N_total = 0;
-  for (auto n : samp.n_obs) N_total += n;
-  out.ntotal = N_total;
-
-  // Fixed.x exogenous observed variables — lavaan reports `logl` (and hence
-  // AIC/BIC) *conditional* on these, i.e. with the saturated marginal logl of
-  // the fixed.x block subtracted from both `logl` and `unrestricted_logl`.
-  // Identify them via the name-free partable mirror: `exo == 1` rows name the
-  // fixed.x variables (`lhs_var` / `rhs_var`); `ov_pos[var]` is the column in
-  // the observed ordering (= the row/col of `samp.S[b]`, same for every block).
-  std::vector<Eigen::Index> exo_idx;
-  {
-    std::unordered_set<std::int32_t> exo_vars;
-    for (std::size_t i = 0; i < pt.size(); ++i) {
-      if (pt.exo[i] != 1) continue;
-      if (i < pt.lhs_var.size() && pt.lhs_var[i] >= 0) exo_vars.insert(pt.lhs_var[i]);
-      if (i < pt.rhs_var.size() && pt.rhs_var[i] >= 0) exo_vars.insert(pt.rhs_var[i]);
-    }
-    std::unordered_set<Eigen::Index> seen;
-    for (std::int32_t v : exo_vars) {
-      if (v < 0 || static_cast<std::size_t>(v) >= pt.ov_pos.size()) continue;
-      const std::int32_t pos = pt.ov_pos[static_cast<std::size_t>(v)];
-      if (pos < 0) continue;
-      const Eigen::Index idx = static_cast<Eigen::Index>(pos);
-      if (seen.insert(idx).second) exo_idx.push_back(idx);
-    }
-    std::sort(exo_idx.begin(), exo_idx.end());
+post_expected<FitExtras>
+fit_extras_fcsem(const spec::LatentStructure& pt,
+                 const SampleStats&           samp,
+                 const Estimates&             est) {
+  auto ev_or = model::FcSemEvaluator::build(pt);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "FcSemEvaluator::build failed: " + ev_or.error().detail));
+  }
+  const auto& ev = *ev_or;
+  if (static_cast<std::size_t>(est.theta.size()) != ev.n_free()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "Estimates.theta size " + std::to_string(est.theta.size()) +
+            " != evaluator n_free " + std::to_string(ev.n_free())));
+  }
+  if (samp.S.size() != ev.n_blocks()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "SampleStats and evaluator have different block counts"));
   }
 
-  double logl       = 0.0;   // H0 model
-  double logl_unres = 0.0;   // saturated (h1)
-  double srmr_acc   = 0.0;   // Σ_b (n_b/N)·srmr_b
-
-  for (std::size_t b = 0; b < samp.S.size(); ++b) {
-    const Eigen::MatrixXd S = 0.5 * (samp.S[b] + samp.S[b].transpose());
-    const Eigen::Index p = S.rows();
-    if (p == 0) continue;
-    const double n_b = static_cast<double>(samp.n_obs[b]);
-
-    // Implied Σ̂_b — symmetrize (float non-associativity), Cholesky → PD
-    // check + log|Σ̂| + Σ̂⁻¹.
-    const Eigen::MatrixXd Sigma =
-        0.5 * (sm.sigma[b] + sm.sigma[b].transpose());
-    Eigen::LLT<Eigen::MatrixXd> llt_sig(Sigma);
-    if (llt_sig.info() != Eigen::Success) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "implied Σ for block " + std::to_string(b) +
-              " is not positive definite at θ̂"));
-    }
-    const double log_det_sigma = log_det_from_llt(llt_sig);
-    const Eigen::MatrixXd Sigma_inv =
-        llt_sig.solve(Eigen::MatrixXd::Identity(p, p));
-
-    Eigen::LLT<Eigen::MatrixXd> llt_S(S);
-    if (llt_S.info() != Eigen::Success) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "sample S for block " + std::to_string(b) +
-              " is not positive definite"));
-    }
-    const double log_det_S = log_det_from_llt(llt_S);
-
-    // tr(S · Σ̂⁻¹) — both symmetric, so the trace is the elementwise dot.
-    const double tr_S_Sinv = S.cwiseProduct(Sigma_inv).sum();
-
-    // Mean structure for this block? (model has ~1 rows ⇒ μ̂ populated, and
-    // the caller supplied a sample mean of matching size).
-    const bool has_means_b =
-        (sm.mu.size() > b && sm.mu[b].size() == p) &&
-        (samp.mean.size() > b && samp.mean[b].size() == p);
-    double mahal = 0.0;  // (m̄−μ̂)ᵀ Σ̂⁻¹ (m̄−μ̂)
-    Eigen::VectorXd mean_res;  // (m̄−μ̂)/√(s_ii) — for SRMR's mean term
-    if (has_means_b) {
-      const Eigen::VectorXd d = samp.mean[b] - sm.mu[b];
-      mahal = d.dot(Sigma_inv * d);
-      mean_res.resize(p);
-      for (Eigen::Index i = 0; i < p; ++i)
-        mean_res(i) = d(i) / std::sqrt(S(i, i));
-    }
-
-    // log-likelihoods (lavaan `likelihood = "normal"` ⇒ N divisor).
-    logl       += -0.5 * n_b * (static_cast<double>(p) * std::log(two_pi)
-                                + log_det_sigma + tr_S_Sinv + mahal);
-    logl_unres += -0.5 * n_b * (static_cast<double>(p) * std::log(two_pi)
-                                + log_det_S + static_cast<double>(p));
-
-    // Conditional-on-fixed.x adjustment: subtract this block's fixed.x
-    // exogenous sub-block's saturated marginal logl from both. (The exo
-    // means are always saturated under fixed.x, so their mean term is 0.)
-    if (!exo_idx.empty() && exo_idx.back() < p) {
-      const Eigen::Index px = static_cast<Eigen::Index>(exo_idx.size());
-      Eigen::MatrixXd Sxx(px, px);
-      for (Eigen::Index r = 0; r < px; ++r)
-        for (Eigen::Index c = 0; c < px; ++c)
-          Sxx(r, c) = S(exo_idx[static_cast<std::size_t>(r)],
-                        exo_idx[static_cast<std::size_t>(c)]);
-      Eigen::LLT<Eigen::MatrixXd> llt_xx(Sxx);
-      if (llt_xx.info() != Eigen::Success) {
-        return std::unexpected(make_err(PostError::Kind::NumericIssue,
-            "fixed.x exogenous sub-block for block " + std::to_string(b) +
-                " is not positive definite"));
-      }
-      const double marg = -0.5 * n_b *
-          (static_cast<double>(px) * std::log(two_pi)
-           + log_det_from_llt(llt_xx) + static_cast<double>(px));
-      logl       -= marg;
-      logl_unres -= marg;
-    }
-
-    // SRMR (Bentler type): standardize the residual S − Σ̂ by the *sample*
-    // SDs. vech-sum over the lower triangle including the diagonal; pstar
-    // = p(p+1)/2 (+ p mean residuals when mean structure).
-    double sum_sq = 0.0;
-    for (Eigen::Index c = 0; c < p; ++c) {
-      const double dc = (S(c, c) - Sigma(c, c)) / S(c, c);  // diagonal
-      sum_sq += dc * dc;
-      for (Eigen::Index r = c + 1; r < p; ++r) {
-        const double rij =
-            (S(r, c) - Sigma(r, c)) / std::sqrt(S(r, r) * S(c, c));
-        sum_sq += rij * rij;
-      }
-    }
-    double pstar = static_cast<double>(p) * static_cast<double>(p + 1) / 2.0;
-    if (has_means_b) {
-      sum_sq += mean_res.squaredNorm();
-      pstar  += static_cast<double>(p);
-    }
-    const double srmr_b = (pstar > 0.0) ? std::sqrt(sum_sq / pstar) : 0.0;
-    if (N_total > 0) srmr_acc += (n_b / static_cast<double>(N_total)) * srmr_b;
+  auto sm_or = ev.sigma(samp, est.theta);
+  if (!sm_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "FcSemEvaluator::sigma failed: " + sm_or.error().detail));
   }
-
-  out.logl              = logl;
-  out.unrestricted_logl = logl_unres;
-  out.srmr              = srmr_acc;
-  out.aic  = -2.0 * logl + 2.0 * static_cast<double>(npar);
-  out.bic  = (N_total > 0)
-                 ? -2.0 * logl + static_cast<double>(npar)
-                       * std::log(static_cast<double>(N_total))
-                 : std::numeric_limits<double>::quiet_NaN();
-  out.bic2 = (N_total > 0)
-                 ? -2.0 * logl + static_cast<double>(npar)
-                       * std::log((static_cast<double>(N_total) + 2.0) / 24.0)
-                 : std::numeric_limits<double>::quiet_NaN();
-  return out;
+  return fit_extras_from_implied(pt, samp, *sm_or, "fit_extras_fcsem");
 }
 
 }  // namespace magmaan::measures

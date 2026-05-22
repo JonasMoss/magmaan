@@ -119,4 +119,9 @@ fit_extras(spec::LatentStructure        pt,
            const SampleStats&        samp,
            const Estimates&          est);
 
+post_expected<FitExtras>
+fit_extras_fcsem(const spec::LatentStructure& pt,
+                 const SampleStats&           samp,
+                 const Estimates&             est);
+
 }  // namespace magmaan::measures
