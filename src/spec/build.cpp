@@ -784,6 +784,22 @@ build_group_template(const parse::FlatPartable& flat,
       }
     }
   }
+  if (!native_composites.empty()) {
+    // Lavaan's native `<~` SEM path frees residual covariances among multiple
+    // endogenous observed outcomes even when `auto_cov_y` is otherwise off.
+    for (std::size_t i = 0; i + 1 < v.ov_y.items.size(); ++i) {
+      for (std::size_t j = i + 1; j < v.ov_y.items.size(); ++j) {
+        const auto& lhs = v.ov_y.items[i];
+        const auto& rhs = v.ov_y.items[j];
+        if (covariance_already_present(rows, lhs, rhs)) continue;
+        if (regression_already_present(rows, lhs, rhs) ||
+            regression_already_present(rows, rhs, lhs)) {
+          continue;
+        }
+        rows.push_back(make_auto_cov(lhs, rhs, opts.orthogonal));
+      }
+    }
+  }
   // Latent scaling — three mutually-exclusive conventions. `std.lv`: fix each
   // LV variance at 1 (auto.fix.first forced off, lavaan-style). `effect_coding`:
   // leave *everything* free (loadings + LV variance) — the scale is set instead

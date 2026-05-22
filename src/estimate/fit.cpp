@@ -152,6 +152,12 @@ struct Prelude {
   NonlinearEqConstraints nl;    // nonlinear `==` constraints (augmented-Lagrangian)
 };
 
+struct FcSemPrelude {
+  model::FcSemEvaluator  ev;
+  EqConstraints          con;
+  NonlinearEqConstraints nl;
+};
+
 fit_expected<Prelude>
 prelude(spec::LatentStructure& pt, const model::MatrixRep& rep,
         const SampleStats& samp, const Eigen::VectorXd& x0,
@@ -183,9 +189,122 @@ prelude(spec::LatentStructure& pt, const model::MatrixRep& rep,
                  build_nl_constraints(pt)};
 }
 
+fit_expected<FcSemPrelude>
+prelude_fcsem(spec::LatentStructure& pt, const Eigen::VectorXd& x0,
+              const char* who) {
+  auto ev_or = model::FcSemEvaluator::build(pt);
+  if (!ev_or.has_value()) {
+    return std::unexpected(fit_err(FitError::Kind::InvalidStartValues,
+        std::string(who) + ": FcSemEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  if (x0.size() != static_cast<Eigen::Index>(pt.n_free())) {
+    return std::unexpected(fit_err(FitError::Kind::InvalidStartValues,
+        std::string(who) + ": x0 size (" + std::to_string(x0.size()) +
+            ") != n_free (" + std::to_string(pt.n_free()) + ")"));
+  }
+  auto con_or = build_eq_constraints(pt, /*allow_nonlinear=*/true);
+  if (!con_or.has_value()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": constraint: " + con_or.error().detail));
+  }
+  return FcSemPrelude{std::move(*ev_or), std::move(*con_or),
+                      build_nl_constraints(pt)};
+}
+
 }  // namespace
 
 namespace {
+
+fit_expected<Estimates>
+compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
+                  const NonlinearEqConstraints& nl,
+                  const Eigen::VectorXd& x0, const Bounds& bounds,
+                  Backend backend, LbfgsOptions opts, const char* who) {
+  if (nl.active()) {
+    if (backend == Backend::Ceres) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          std::string(who) +
+              ": the Ceres backend cannot enforce nonlinear equality "
+              "constraints"));
+    }
+    if (!con.active()) {
+      auto h_fn   = [&nl](const Eigen::VectorXd& th) { return nl.h(th); };
+      auto jac_fn = [&nl](const Eigen::VectorXd& th) { return nl.jacobian(th); };
+      auto r =
+          augmented_lagrangian(prob, h_fn, jac_fn, nl.m(), x0, bounds, opts);
+      if (!r.has_value()) return std::unexpected(r.error());
+      return Estimates{prob.expand(r->x), r->base_fmin, r->outer_iterations};
+    }
+
+    const optim::ScalarProblem prob_a = reparameterize(prob, con);
+    if (con.n_alpha == 0) {
+      Eigen::VectorXd theta = con.expand(Eigen::VectorXd(0));
+      Eigen::VectorXd scratch(theta.size());
+      const double f = prob.f(theta, scratch);
+      return Estimates{std::move(theta), f, 0};
+    }
+    auto h_a = [&nl, &con](const Eigen::VectorXd& a) {
+      return nl.h(con.expand(a));
+    };
+    auto jac_a = [&nl, &con](const Eigen::VectorXd& a) {
+      return Eigen::MatrixXd(nl.jacobian(con.expand(a)) * con.K());
+    };
+    Eigen::VectorXd alpha0 = con.contract(x0);
+    Bounds abounds;
+    const bool pure_merge = !con.group.empty();
+    if (!bounds.empty() && pure_merge) {
+      abounds = fold_alpha_bounds(con, bounds);
+      alpha0  = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
+    }
+    auto r = augmented_lagrangian(prob_a, h_a, jac_a, nl.m(), alpha0, abounds,
+                                  opts);
+    if (!r.has_value()) return std::unexpected(r.error());
+    Eigen::VectorXd theta_hat = prob_a.expand(r->x);
+    if (!bounds.empty() && !pure_merge) {
+      constexpr double tol = 1e-6;
+      for (Eigen::Index k = 0; k < theta_hat.size(); ++k) {
+        if (theta_hat(k) < bounds.lower(k) - tol ||
+            theta_hat(k) > bounds.upper(k) + tol) {
+          return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+              std::string(who) +
+                  ": general-linear equality drove parameter " +
+                  std::to_string(k) + " past its bound"));
+        }
+      }
+    }
+    return Estimates{std::move(theta_hat), r->base_fmin, r->outer_iterations};
+  }
+
+  if (!con.active()) {
+    auto out = run_scalar(prob, x0, bounds, backend, opts);
+    if (!out.has_value()) return std::unexpected(out.error());
+    return Estimates{prob.expand(out->x), out->fmin, out->iterations,
+                     out->f_evals, out->g_evals,
+                     out->status, out->grad_inf_norm};
+  }
+
+  const optim::ScalarProblem prob_a = reparameterize(prob, con);
+  if (con.n_alpha == 0) {
+    Eigen::VectorXd theta = con.expand(Eigen::VectorXd(0));
+    Eigen::VectorXd scratch(theta.size());
+    const double f = prob.f(theta, scratch);
+    return Estimates{std::move(theta), f, 0};
+  }
+
+  Eigen::VectorXd alpha0 = con.contract(x0);
+  Bounds abounds;
+  const bool pure_merge = !con.group.empty();
+  if (!bounds.empty() && pure_merge) {
+    abounds = fold_alpha_bounds(con, bounds);
+    alpha0 = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
+  }
+  auto out = run_scalar(prob_a, alpha0, abounds, backend, opts);
+  if (!out.has_value()) return std::unexpected(out.error());
+  return Estimates{prob_a.expand(out->x), out->fmin, out->iterations,
+                   out->f_evals, out->g_evals,
+                   out->status, out->grad_inf_norm};
+}
 
 // Shared moment-quadratic composition: build the LS problem, fold equality
 // constraints, optimize, expand. `fit_gmm` and `fit_gls` differ only in how
@@ -337,98 +456,25 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto pre = prelude(pt, rep, samp, x0, "fit_ml");
   if (!pre.has_value()) return std::unexpected(pre.error());
   const model::ModelEvaluator& ev = pre->ev;
-  const EqConstraints& con = pre->con;
 
   auto obj_or = estimate::ml_objective(ev, samp);
   if (!obj_or.has_value()) return std::unexpected(obj_or.error());
   const optim::ScalarProblem prob = std::move(*obj_or);
+  return compose_scalar_ml(prob, pre->con, pre->nl, x0, bounds, backend, opts,
+                           "fit_ml");
+}
 
-  // Nonlinear equality constraints — minimize via the augmented Lagrangian.
-  if (pre->nl.active()) {
-    const NonlinearEqConstraints& nl = pre->nl;
-    if (backend == Backend::Ceres) {
-      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-          "fit_ml: the Ceres backend cannot enforce nonlinear equality "
-          "constraints"));
-    }
-    if (!con.active()) {
-      auto h_fn   = [&nl](const Eigen::VectorXd& th) { return nl.h(th); };
-      auto jac_fn = [&nl](const Eigen::VectorXd& th) { return nl.jacobian(th); };
-      auto r =
-          augmented_lagrangian(prob, h_fn, jac_fn, nl.m(), x0, bounds, opts);
-      if (!r.has_value()) return std::unexpected(r.error());
-      return Estimates{prob.expand(r->x), r->base_fmin, r->outer_iterations};
-    }
-    // Linear + nonlinear equality constraints together: fold the linear
-    // equalities into the affine α-reparameterization (θ = θ₀ + K·α), then run
-    // the AL on the nonlinear constraints re-expressed in α — h_α(α) = h(θ₀+Kα)
-    // and ∂h_α/∂α = (∂h/∂θ)·K.
-    const optim::ScalarProblem prob_a = reparameterize(prob, con);
-    if (con.n_alpha == 0) {  // every parameter pinned by the linear system
-      Eigen::VectorXd theta = con.expand(Eigen::VectorXd(0));
-      Eigen::VectorXd scratch(theta.size());
-      const double f = prob.f(theta, scratch);
-      return Estimates{std::move(theta), f, 0};
-    }
-    auto h_a = [&nl, &con](const Eigen::VectorXd& a) {
-      return nl.h(con.expand(a));
-    };
-    auto jac_a = [&nl, &con](const Eigen::VectorXd& a) {
-      return Eigen::MatrixXd(nl.jacobian(con.expand(a)) * con.K());
-    };
-    Eigen::VectorXd alpha0 = con.contract(x0);
-    Bounds abounds;
-    const bool pure_merge = !con.group.empty();
-    if (!bounds.empty() && pure_merge) {
-      abounds = fold_alpha_bounds(con, bounds);
-      alpha0  = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
-    }
-    auto r = augmented_lagrangian(prob_a, h_a, jac_a, nl.m(), alpha0, abounds,
-                                  opts);
-    if (!r.has_value()) return std::unexpected(r.error());
-    Eigen::VectorXd theta_hat = prob_a.expand(r->x);
-    if (!bounds.empty() && !pure_merge) {
-      constexpr double tol = 1e-6;
-      for (Eigen::Index k = 0; k < theta_hat.size(); ++k) {
-        if (theta_hat(k) < bounds.lower(k) - tol ||
-            theta_hat(k) > bounds.upper(k) + tol) {
-          return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-              "fit_ml: general-linear equality drove parameter " +
-                  std::to_string(k) + " past its bound"));
-        }
-      }
-    }
-    return Estimates{std::move(theta_hat), r->base_fmin, r->outer_iterations};
-  }
-
-  if (!con.active()) {
-    auto out = run_scalar(prob, x0, bounds, backend, opts);
-    if (!out.has_value()) return std::unexpected(out.error());
-    return Estimates{prob.expand(out->x), out->fmin, out->iterations,
-                     out->f_evals, out->g_evals,
-                     out->status, out->grad_inf_norm};
-  }
-
-  const optim::ScalarProblem prob_a = reparameterize(prob, con);
-  if (con.n_alpha == 0) {
-    Eigen::VectorXd theta = con.expand(Eigen::VectorXd(0));
-    Eigen::VectorXd scratch(theta.size());
-    const double f = prob.f(theta, scratch);
-    return Estimates{std::move(theta), f, 0};
-  }
-
-  Eigen::VectorXd alpha0 = con.contract(x0);
-  Bounds abounds;
-  const bool pure_merge = !con.group.empty();
-  if (!bounds.empty() && pure_merge) {
-    abounds = fold_alpha_bounds(con, bounds);
-    alpha0 = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
-  }
-  auto out = run_scalar(prob_a, alpha0, abounds, backend, opts);
-  if (!out.has_value()) return std::unexpected(out.error());
-  return Estimates{prob_a.expand(out->x), out->fmin, out->iterations,
-                   out->f_evals, out->g_evals,
-                   out->status, out->grad_inf_norm};
+fit_expected<Estimates>
+fit_ml_fcsem(spec::LatentStructure pt, const SampleStats& samp,
+             const Eigen::VectorXd& x0, Bounds bounds, Backend backend,
+             LbfgsOptions opts) {
+  auto pre = prelude_fcsem(pt, x0, "fit_ml_fcsem");
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  auto obj_or = estimate::ml_objective(pre->ev, samp);
+  if (!obj_or.has_value()) return std::unexpected(obj_or.error());
+  const optim::ScalarProblem prob = std::move(*obj_or);
+  return compose_scalar_ml(prob, pre->con, pre->nl, x0, bounds, backend, opts,
+                           "fit_ml_fcsem");
 }
 
 namespace {

@@ -141,9 +141,7 @@ TEST_CASE("FcSemEvaluator: one composite regression matches hand algebra") {
 
 TEST_CASE("FcSemEvaluator: HS pure composite implied covariance matches lavaan fixture") {
   const auto j = load_json_fixture("composite/0001_pure_composite_hs.fit.json");
-  const std::string syntax =
-      j["input"].get<std::string>() + "\n x4 ~~ x5";
-  const Built b = must_build(syntax);
+  const Built b = must_build(j["input"].get<std::string>());
   auto ev = must_eval(b.pt);
 
   SampleStats samp;

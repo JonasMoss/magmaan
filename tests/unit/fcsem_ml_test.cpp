@@ -11,7 +11,9 @@
 #include <nlohmann/json.hpp>
 
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/nt.hpp"
+#include "magmaan/estimate/start_values.hpp"
 #include "magmaan/model/fcsem_evaluator.hpp"
 #include "magmaan/parse/op.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -145,8 +147,7 @@ struct PureHsFixture {
 
 PureHsFixture pure_hs_fixture() {
   auto j = load_json_fixture("composite/0001_pure_composite_hs.fit.json");
-  const std::string syntax = j["input"].get<std::string>() + "\n x4 ~~ x5";
-  Built built = must_build(syntax);
+  Built built = must_build(j["input"].get<std::string>());
   SampleStats samp = sample_stats_from_composite_fixture(j);
   Eigen::VectorXd theta = pure_hs_theta_from_fixture(built, j, samp);
   return PureHsFixture{std::move(j), std::move(built), std::move(samp),
@@ -208,4 +209,32 @@ TEST_CASE("FC-SEM ML: objective supplies central finite-difference gradient") {
   }
 
   CHECK((grad - fd).cwiseAbs().maxCoeff() < 1e-6);
+}
+
+TEST_CASE("FC-SEM ML: fit from native simple starts matches lavaan objective") {
+  auto fx = pure_hs_fixture();
+  auto x0 =
+      magmaan::estimate::simple_fcsem_start_values(fx.built.pt, fx.samp);
+  REQUIRE_MESSAGE(x0.has_value(), "starts failed: " << x0.error().detail);
+  REQUIRE(x0->size() == fx.theta.size());
+
+  magmaan::optim::LbfgsOptions opts;
+  opts.max_iter = 2000;
+  auto est = magmaan::estimate::fit_ml_fcsem(fx.built.pt, fx.samp, *x0, {},
+                                             magmaan::estimate::Backend::Lbfgs,
+                                             opts);
+  REQUIRE_MESSAGE(est.has_value(), "fit failed: " << est.error().detail);
+
+  const double expected_f =
+      fx.j["chi2"].get<double>() / static_cast<double>(fx.j["n_obs"].get<int>());
+  CHECK(std::abs(est->fmin - expected_f) < 1e-6);
+
+  auto ev = FcSemEvaluator::build(fx.built.pt);
+  REQUIRE_MESSAGE(ev.has_value(),
+                  "FcSemEvaluator::build failed: " << ev.error().detail);
+  auto got = ev->sigma(fx.samp, est->theta);
+  REQUIRE_MESSAGE(got.has_value(), "sigma failed: " << got.error().detail);
+  const Eigen::MatrixXd lavaan_sigma =
+      matrix_from_json(fx.j["implied_sigma"][0]["matrix"]);
+  CHECK((got->sigma[0] - lavaan_sigma).cwiseAbs().maxCoeff() < 1e-5);
 }

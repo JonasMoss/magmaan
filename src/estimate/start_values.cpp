@@ -31,6 +31,21 @@ bool is_constraint_op(parse::Op op) noexcept {
          op == parse::Op::GtConstraint || op == parse::Op::DefineParam;
 }
 
+std::int32_t ov_pos(const spec::LatentStructure& pt, std::int32_t var) noexcept {
+  if (var < 0 || var >= pt.n_vars) return -1;
+  return pt.ov_pos[static_cast<std::size_t>(var)];
+}
+
+std::int32_t lv_pos(const spec::LatentStructure& pt, std::int32_t var) noexcept {
+  if (var < 0 || var >= pt.n_vars) return -1;
+  return pt.lv_ext_pos[static_cast<std::size_t>(var)];
+}
+
+bool is_user_lv(const spec::LatentStructure& pt, std::int32_t var) noexcept {
+  return var >= 0 && var < pt.n_vars &&
+         pt.is_user_latent[static_cast<std::size_t>(var)] != 0;
+}
+
 }  // namespace
 
 fit_expected<Eigen::VectorXd>
@@ -200,6 +215,135 @@ simple_start_values(const spec::LatentStructure& pt,
         // Latent mean α_j — start at 0. Lavaan typically auto-fixes
         // latent means at 0 anyway; users specifying α as free usually
         // want it estimated.
+        start(k) = 0.0;
+        break;
+    }
+  }
+  return start;
+}
+
+fit_expected<Eigen::VectorXd>
+simple_fcsem_start_values(const spec::LatentStructure& pt,
+                          const SampleStats& samp,
+                          const spec::Starts& starts) {
+  if (pt.composite_mode != spec::CompositeMode::FcSem ||
+      pt.composite_blocks.empty()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "simple_fcsem_start_values requires a native FC-SEM composite model"));
+  }
+  if (samp.S.size() != static_cast<std::size_t>(pt.n_groups())) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "simple_fcsem_start_values: sample block count does not match model"));
+  }
+
+  const std::int32_t n_free = pt.n_free();
+  Eigen::VectorXd start = Eigen::VectorXd::Zero(n_free);
+  if (n_free == 0) return start;
+  const std::size_t n_hint = starts.hint.size();
+
+  std::vector<std::vector<std::int32_t>> marker_for_lv(
+      static_cast<std::size_t>(pt.n_groups()),
+      std::vector<std::int32_t>(pt.lv_ext_order.size(), -1));
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != parse::Op::Measurement || pt.free[i] != 0 ||
+        pt.group[i] <= 0) {
+      continue;
+    }
+    const std::int32_t lhs = lv_pos(pt, pt.lhs_var[i]);
+    const std::int32_t rhs = ov_pos(pt, pt.rhs_var[i]);
+    if (lhs < 0 || rhs < 0 || !std::isfinite(pt.fixed_value[i]) ||
+        std::abs(pt.fixed_value[i] - 1.0) >= 1e-12) {
+      continue;
+    }
+    const std::size_t b = static_cast<std::size_t>(pt.group[i] - 1);
+    if (b < marker_for_lv.size() &&
+        static_cast<std::size_t>(lhs) < marker_for_lv[b].size()) {
+      marker_for_lv[b][static_cast<std::size_t>(lhs)] = rhs;
+    }
+  }
+
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (is_constraint_op(pt.op[i]) || pt.free[i] == 0) continue;
+    const std::int32_t k = pt.free[i] - 1;
+    if (static_cast<std::size_t>(k) < n_hint &&
+        std::isfinite(starts.hint[static_cast<std::size_t>(k)])) {
+      start(k) = starts.hint[static_cast<std::size_t>(k)];
+      continue;
+    }
+
+    const std::int32_t group = pt.group[i];
+    if (group <= 0) {
+      start(k) = 0.0;
+      continue;
+    }
+    const std::size_t b = static_cast<std::size_t>(group - 1);
+    if (b >= samp.S.size()) {
+      return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+          "simple_fcsem_start_values: block " + std::to_string(b) +
+              " has no SampleStats entry"));
+    }
+    const auto& S = samp.S[b];
+
+    switch (pt.op[i]) {
+      case parse::Op::Composite:
+        start(k) = 0.0;
+        break;
+      case parse::Op::Measurement: {
+        if (is_user_lv(pt, pt.rhs_var[i])) {
+          start(k) = 0.7;
+          break;
+        }
+        const std::int32_t row = ov_pos(pt, pt.rhs_var[i]);
+        const std::int32_t col = lv_pos(pt, pt.lhs_var[i]);
+        const std::int32_t marker =
+            b < marker_for_lv.size() &&
+                    col >= 0 &&
+                    static_cast<std::size_t>(col) < marker_for_lv[b].size()
+                ? marker_for_lv[b][static_cast<std::size_t>(col)]
+                : -1;
+        const bool reverse_keyed =
+            marker >= 0 && row >= 0 && marker < S.rows() && row < S.rows() &&
+            S(row, marker) < 0.0;
+        start(k) = reverse_keyed ? -0.7 : 0.7;
+        break;
+      }
+      case parse::Op::Regression:
+        start(k) = 0.0;
+        break;
+      case parse::Op::Covariance: {
+        if (pt.lhs_var[i] == pt.rhs_var[i]) {
+          const std::int32_t ov = ov_pos(pt, pt.lhs_var[i]);
+          const bool reduced_observed =
+              ov >= 0 && lv_pos(pt, pt.lhs_var[i]) >= 0 &&
+              !is_user_lv(pt, pt.lhs_var[i]);
+          if (reduced_observed) {
+            if (ov >= S.rows()) {
+              return std::unexpected(make_err(
+                  FitError::Kind::InvalidStartValues,
+                  "simple_fcsem_start_values: observed variance index out of "
+                  "sample range"));
+            }
+            start(k) = 0.5 * S(ov, ov);
+          } else if (ov >= 0 && lv_pos(pt, pt.lhs_var[i]) < 0) {
+            if (ov >= S.rows()) {
+              return std::unexpected(make_err(
+                  FitError::Kind::InvalidStartValues,
+                  "simple_fcsem_start_values: observed variance index out of "
+                  "sample range"));
+            }
+            start(k) = 0.5 * S(ov, ov);
+          } else {
+            start(k) = 0.05;
+          }
+        } else {
+          start(k) = 0.0;
+        }
+        break;
+      }
+      case parse::Op::Intercept:
+        start(k) = 0.0;
+        break;
+      default:
         start(k) = 0.0;
         break;
     }
