@@ -490,7 +490,12 @@ stop rather than any usable non-error return.
   folded `<~` partable rows while the hidden expanded Henseler-Ogasawara
   partable is retained as internal metadata for fitting and post-fit helpers.
   The R `composite_weights(fit, vcov)` accessor exposes recovered composite
-  weights and delta-method SEs from the C++ post-fit primitive.
+  weights and delta-method SEs from the C++ post-fit primitive. The C++
+  `BuildOptions` default is `CompositeMode::None`: core callers that accept
+  `<~` must explicitly select either the historical Henseler-Ogasawara
+  expansion or the native FC-SEM path. The R lavaanify boundary selects the
+  historical expansion, while `api::frontier::model_from_lavaan_fcsem()` and
+  the R FC-SEM helpers select native FC-SEM and require at least one `<~` row.
 - A parallel native FC-SEM composite spec path is scaffolded behind
   `spec::BuildOptions::composite_mode = CompositeMode::FcSem`. In that mode
   `<~` rows are preserved, the first composite weight is marker-fixed by the

@@ -19,6 +19,7 @@ using magmaan::parse::Op;
 using magmaan::parse::Parser;
 using magmaan::spec::build;
 using magmaan::spec::BuildOptions;
+using magmaan::spec::CompositeMode;
 using magmaan::spec::LatentNames;
 
 namespace {
@@ -32,7 +33,9 @@ Folded must_fold(std::string_view src) {
   auto fp = Parser::parse(src);
   REQUIRE_MESSAGE(fp.has_value(), "parser failed: " << fp.error().detail);
   LatentNames names;
-  auto pt = build(*fp, BuildOptions{}, nullptr, &names);
+  BuildOptions opts;
+  opts.composite_mode = CompositeMode::HenselerOgasawara;
+  auto pt = build(*fp, opts, nullptr, &names);
   REQUIRE_MESSAGE(pt.has_value(), "build failed: " << pt.error().detail);
   LavaanParTable full = to_lavaan_partable(*pt, names);
   LavaanParTable folded = fold_composites(full, names.composites);

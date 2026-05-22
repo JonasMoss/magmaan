@@ -375,7 +375,14 @@ namespace frontier {
 Result<Model> model_from_lavaan_fcsem(std::string_view syntax,
                                       ModelOptions options) {
   options.build.composite_mode = spec::CompositeMode::FcSem;
-  return Model::from_lavaan(syntax, std::move(options));
+  auto model = Model::from_lavaan(syntax, std::move(options));
+  if (!model) return model;
+  if (model->structure().composite_blocks.empty()) {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "model_from_lavaan_fcsem requires at least one `<~` composite"));
+  }
+  return model;
 }
 
 Result<Data> data_from_ordinal_h_weighted(

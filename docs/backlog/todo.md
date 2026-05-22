@@ -148,10 +148,13 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 ## Composite models
 
 The C++ core and R binding slice have landed: `<~` parses as `Op::Composite`,
-`spec::build` desugars each composite into a Henseler-Ogasawara reflective
-sub-model, weights and delta-method SEs are recovered post-fit, R-facing
-partables are folded back to `<~` shape, and R exposes a `composite_weights()`
-post-fit accessor. A parallel native FC-SEM spec path now exists behind
+and `spec::build` now requires callers to choose a composite meaning explicitly
+(`CompositeMode::None` is the default and errors on `<~`). The historical
+Henseler-Ogasawara reflective sub-model remains available when selected, with
+weights and delta-method SEs recovered post-fit, R-facing partables folded back
+to `<~` shape, and R exposing a `composite_weights()` post-fit accessor. The R
+lavaanify boundary selects this historical expansion explicitly. A parallel
+native FC-SEM spec path now exists behind
 `BuildOptions::composite_mode = CompositeMode::FcSem`: it keeps `<~` rows,
 records name-free composite blocks, marker-fixes the first composite weight,
 and emits fixed/derived placeholders for the composite indicator T blocks and
@@ -180,8 +183,9 @@ composite indicator T-block moments from the user model, and
 same native fixtures for chi-square, df, CFI/TLI/RMSEA, SRMR, loglik, AIC, BIC,
 and sample-size-adjusted BIC. `api::frontier` now exposes the native FC-SEM
 model builder, complete-data ML fit, expected SEs, fit measures, and
-standardized row reporting. The R frontier mirrors this settled single-group
-ML slice through `fcsem_model_spec()`, `df_to_fcsem_data()`,
+standardized row reporting; its model builder selects native FC-SEM and rejects
+ordinary SEM syntax without `<~`. The R frontier mirrors this settled
+single-group ML slice through `fcsem_model_spec()`, `df_to_fcsem_data()`,
 `fit_ml_fcsem()` / `magmaan_fcsem()`, `fcsem_standard_errors()`,
 `fcsem_fit_measures()`, and `fcsem_standardized_rows()`, with a checked
 example under `r-package/examples/fcsem_frontier.R`.

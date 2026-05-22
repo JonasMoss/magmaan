@@ -56,9 +56,12 @@ struct NlConstraint {
 //   Latent    : LHS of `=~`                          (lv)
 enum class VarRole : std::uint8_t { Indicator, EndoOv, ExoOv, MiscOv, Latent };
 
-// Composite implementation selected at lavaanify time. H-O is the historical
-// desugaring path; FC-SEM is the native W/T path introduced in lavaan 0.6-20.
+// Composite implementation selected at lavaanify time. `None` means the caller
+// has not opened a `<~` door; any composite syntax must then fail at
+// `spec::build`. H-O is the historical desugaring path; FC-SEM is the native
+// W/T path introduced in lavaan 0.6-20.
 enum class CompositeMode : std::uint8_t {
+  None,
   HenselerOgasawara,
   FcSem,
 };
@@ -102,7 +105,7 @@ struct LatentNames {
   std::string               group_var;    // grouping-variable name; "" ⇒ unnamed single group
   std::vector<std::string>  group_labels; // per-group level labels ("1".."n" if unsupplied)
   std::vector<CompositeInfo> composites;   // one per `<~` composite; empty if none
-  CompositeMode             composite_mode = CompositeMode::HenselerOgasawara;
+  CompositeMode             composite_mode = CompositeMode::None;
 };
 
 // Lavaanified model structure — what to estimate, in struct-of-arrays form,
@@ -154,7 +157,7 @@ struct LatentStructure {
   // Native FC-SEM composites. Empty unless `composite_mode == FcSem` and the
   // model contains `<~` rows. Henseler-Ogasawara composites are represented by
   // ordinary expanded `=~`/`~~` rows instead.
-  CompositeMode             composite_mode = CompositeMode::HenselerOgasawara;
+  CompositeMode             composite_mode = CompositeMode::None;
   std::vector<CompositeBlock> composite_blocks;
 
   // Per-row group index — 1-based (matches lavaan); 0 for constraint rows.
