@@ -7,6 +7,20 @@ Effort tags: **S** bounded docs/fixtures/wrapper cleanup · **M** focused
 implementation or test slice · **L** new estimator plumbing or cross-module
 semantics · **XL** statistical design/research track before implementation.
 
+## Correctness bugs
+
+- **M/L, highest.** Fix multi-group fits with cross-group linear equality
+  constraints. This surfaced while building the Kline textbook corpus:
+  `guo_mi_configural` fits with only within-group effects-coding constraints,
+  but `guo_mi_weak`, `guo_mi_strong`, and `guo_mi_partial_strong` fail as soon
+  as measurement-invariance constraints such as `a1 == a2` are added. `lavaan`
+  fits the same weak-invariance model (`chisq = 25.5159`, `df = 11`), while
+  magmaan fails under both NLopt L-BFGS (`LineSearchFailed` near the optimum)
+  and PORT (`NumericIssue`, gradient inconsistent with function value). First
+  diagnostic step: add a focused finite-difference check for the objective
+  gradient in the multi-group plus affine linear-constraint path, then turn the
+  Guo weak/strong/partial-strong failures into parity/regression coverage.
+
 ## API and R boundary
 
 - **S/M.** Add or rename R wrappers only when the methods-developer workflow
