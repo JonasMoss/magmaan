@@ -41,9 +41,9 @@ plan is historical archaeology, not current guidance.
 
 - `include/magmaan/` - public headers (stable surface).
 - `src/` - implementations plus private `detail_*.hpp`.
-- `tests/unit/` - focused unit tests.
+- `tests/unit/` - focused unit tests, including finite-difference
+  Jacobian/property checks (`property_test.cpp`).
 - `tests/golden/` - fixture-based parity checks against lavaan.
-- `tests/property/` - finite-difference Jacobian checks, etc.
 - `tests/fixtures/` - checked-in JSON. Regenerate via `tests/tools/regen_oracle.R`.
 - `tests/tools/` - maintainer-only fixture-generation scripts (R, etc.).
 - `tests/checks/` - advisory local simulation checks, outside the default test suite.

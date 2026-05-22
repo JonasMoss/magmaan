@@ -1,6 +1,9 @@
 Package: magmaan
 Title: Exploratory R bindings for the magmaan C++ SEM library
-Version: 0.0.0.9000
+Version: 0.0.1
+Authors@R:
+    person("Jonas", "Moss", email = "jonas.moss@bi.no", role = c("aut", "cre"))
+License: MIT + file LICENSE
 Encoding: UTF-8
 LinkingTo: Rcpp, RcppEigen
 Imports: Rcpp
