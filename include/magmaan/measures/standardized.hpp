@@ -4,6 +4,7 @@
 
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/fit.hpp"          // Estimates
+#include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/spec/partable.hpp"
 
@@ -55,5 +56,20 @@ standardize_all(const spec::LatentStructure& pt,
                 const model::MatrixRep&   rep,
                 const Estimates&          est,
                 const Eigen::MatrixXd&    vcov);
+
+// Native FC-SEM counterparts. They use the FcSemEvaluator's sample-backed W/T
+// covariance semantics and return values/SEs for free rows in θ order, just as
+// the ordinary LISREL standardizers do.
+post_expected<StandardizedSolution>
+standardize_lv_fcsem(const spec::LatentStructure& pt,
+                     const SampleStats&          samp,
+                     const Estimates&            est,
+                     const Eigen::MatrixXd&      vcov);
+
+post_expected<StandardizedSolution>
+standardize_all_fcsem(const spec::LatentStructure& pt,
+                      const SampleStats&          samp,
+                      const Estimates&            est,
+                      const Eigen::MatrixXd&      vcov);
 
 }  // namespace magmaan::measures::standardize

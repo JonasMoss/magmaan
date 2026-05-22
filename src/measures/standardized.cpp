@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <string>
 #include <utility>
@@ -11,7 +12,9 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/model/fcsem_evaluator.hpp"
 #include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/parse/op.hpp"
 
 #include "detail_vech.hpp"
 
@@ -365,6 +368,334 @@ standardize_all(const spec::LatentStructure& pt,
     out.se(k) = (var > 0.0) ? std::sqrt(var) : 0.0;
   }
   return out;
+}
+
+namespace {
+
+bool is_composite_var(const spec::LatentStructure& pt,
+                      std::int32_t var) noexcept {
+  for (const auto& c : pt.composite_blocks)
+    if (c.composite_var == var) return true;
+  return false;
+}
+
+bool is_user_lv(const spec::LatentStructure& pt, std::int32_t var) noexcept {
+  return var >= 0 && var < pt.n_vars &&
+         pt.is_user_latent[static_cast<std::size_t>(var)] != 0;
+}
+
+bool is_latent_like(const spec::LatentStructure& pt,
+                    std::int32_t var) noexcept {
+  return is_user_lv(pt, var) || is_composite_var(pt, var);
+}
+
+std::int32_t ov_pos(const spec::LatentStructure& pt,
+                    std::int32_t var) noexcept {
+  if (var < 0 || var >= pt.n_vars) return -1;
+  return pt.ov_pos[static_cast<std::size_t>(var)];
+}
+
+std::int32_t lv_pos(const spec::LatentStructure& pt,
+                    std::int32_t var) noexcept {
+  if (var < 0 || var >= pt.n_vars) return -1;
+  return pt.lv_ext_pos[static_cast<std::size_t>(var)];
+}
+
+post_expected<double>
+positive_sd(double variance, std::string detail) {
+  if (!std::isfinite(variance) || variance <= 0.0) {
+    return std::unexpected(
+        make_err(PostError::Kind::NumericIssue, std::move(detail)));
+  }
+  return std::sqrt(variance);
+}
+
+post_expected<double>
+row_value_fcsem(const spec::LatentStructure& pt, std::size_t row,
+                Eigen::Ref<const Eigen::VectorXd> theta) {
+  const std::int32_t free = pt.free[row];
+  if (free > 0) {
+    const Eigen::Index k = static_cast<Eigen::Index>(free - 1);
+    if (k < 0 || k >= theta.size()) {
+      return std::unexpected(make_err(
+          PostError::Kind::NumericIssue,
+          "native FC-SEM standardization row has an out-of-range free index"));
+    }
+    return theta(k);
+  }
+  const double v = pt.fixed_value[row];
+  if (!std::isfinite(v)) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "native FC-SEM standardization row has no finite fixed value"));
+  }
+  return v;
+}
+
+enum class FcSemStdKind : std::uint8_t { Lv, All };
+
+struct FcSemScales {
+  std::vector<Eigen::MatrixXd> sigma;
+  std::vector<Eigen::MatrixXd> constructs;
+};
+
+post_expected<FcSemScales>
+fcsem_scales(const model::FcSemEvaluator& ev, const SampleStats& samp,
+             Eigen::Ref<const Eigen::VectorXd> theta) {
+  auto sm_or = ev.sigma(samp, theta);
+  if (!sm_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "native FC-SEM standardization: sigma failed: " +
+            sm_or.error().detail));
+  }
+  auto vc_or = ev.construct_covariance(samp, theta);
+  if (!vc_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "native FC-SEM standardization: construct covariance failed: " +
+            vc_or.error().detail));
+  }
+  return FcSemScales{std::move(sm_or->sigma), std::move(*vc_or)};
+}
+
+post_expected<double>
+construct_sd_fcsem(const spec::LatentStructure& pt, const FcSemScales& sc,
+                   std::size_t block, std::int32_t var) {
+  if (block >= sc.constructs.size()) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "native FC-SEM standardization block is outside construct covariance"));
+  }
+  const std::int32_t pos = lv_pos(pt, var);
+  if (pos < 0) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "native FC-SEM standardization expected a construct endpoint"));
+  }
+  const Eigen::Index i = static_cast<Eigen::Index>(pos);
+  const auto& V = sc.constructs[block];
+  if (i >= V.rows() || i >= V.cols()) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "native FC-SEM construct endpoint is outside covariance dimensions"));
+  }
+  return positive_sd(V(i, i),
+                     "native FC-SEM construct variance is not positive");
+}
+
+post_expected<double>
+observed_sd_fcsem(const spec::LatentStructure& pt, const FcSemScales& sc,
+                  std::size_t block, std::int32_t var) {
+  if (block >= sc.sigma.size()) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "native FC-SEM standardization block is outside implied covariance"));
+  }
+  const std::int32_t pos = ov_pos(pt, var);
+  if (pos < 0) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "native FC-SEM standardization expected an observed endpoint"));
+  }
+  const Eigen::Index i = static_cast<Eigen::Index>(pos);
+  const auto& S = sc.sigma[block];
+  if (i >= S.rows() || i >= S.cols()) {
+    return std::unexpected(make_err(
+        PostError::Kind::NumericIssue,
+        "native FC-SEM observed endpoint is outside covariance dimensions"));
+  }
+  return positive_sd(S(i, i),
+                     "native FC-SEM observed variance is not positive");
+}
+
+post_expected<double>
+fcsem_endpoint_scale(const spec::LatentStructure& pt, const FcSemScales& sc,
+                     std::size_t block, std::int32_t var,
+                     FcSemStdKind kind) {
+  if (kind == FcSemStdKind::Lv) {
+    if (!is_latent_like(pt, var)) return 1.0;
+    return construct_sd_fcsem(pt, sc, block, var);
+  }
+  if (is_latent_like(pt, var)) {
+    return construct_sd_fcsem(pt, sc, block, var);
+  }
+  return observed_sd_fcsem(pt, sc, block, var);
+}
+
+post_expected<double>
+fcsem_standardized_row_value(const spec::LatentStructure& pt,
+                             const model::FcSemEvaluator& ev,
+                             const SampleStats& samp,
+                             Eigen::Ref<const Eigen::VectorXd> theta,
+                             std::size_t row, FcSemStdKind kind) {
+  auto raw_or = row_value_fcsem(pt, row, theta);
+  if (!raw_or.has_value()) return std::unexpected(raw_or.error());
+
+  const std::int32_t group = pt.group[row];
+  if (group <= 0) {
+    return *raw_or;
+  }
+  const std::size_t block = static_cast<std::size_t>(group - 1);
+  auto sc_or = fcsem_scales(ev, samp, theta);
+  if (!sc_or.has_value()) return std::unexpected(sc_or.error());
+  const auto& sc = *sc_or;
+
+  const std::int32_t lhs = pt.lhs_var[row];
+  const std::int32_t rhs = pt.rhs_var[row];
+
+  switch (pt.op[row]) {
+    case parse::Op::Composite: {
+      auto lhs_sd = construct_sd_fcsem(pt, sc, block, lhs);
+      if (!lhs_sd.has_value()) return std::unexpected(lhs_sd.error());
+      double value = *raw_or / *lhs_sd;
+      if (kind == FcSemStdKind::All) {
+        auto rhs_sd = observed_sd_fcsem(pt, sc, block, rhs);
+        if (!rhs_sd.has_value()) return std::unexpected(rhs_sd.error());
+        value *= *rhs_sd;
+      }
+      return value;
+    }
+    case parse::Op::Measurement: {
+      if (is_latent_like(pt, rhs)) {
+        auto pred = fcsem_endpoint_scale(pt, sc, block, lhs, kind);
+        auto out = fcsem_endpoint_scale(pt, sc, block, rhs, kind);
+        if (!pred.has_value()) return std::unexpected(pred.error());
+        if (!out.has_value()) return std::unexpected(out.error());
+        return (*raw_or) * (*pred) / (*out);
+      }
+      auto lhs_sd = construct_sd_fcsem(pt, sc, block, lhs);
+      if (!lhs_sd.has_value()) return std::unexpected(lhs_sd.error());
+      double value = (*raw_or) * (*lhs_sd);
+      if (kind == FcSemStdKind::All) {
+        auto rhs_sd = observed_sd_fcsem(pt, sc, block, rhs);
+        if (!rhs_sd.has_value()) return std::unexpected(rhs_sd.error());
+        value /= *rhs_sd;
+      }
+      return value;
+    }
+    case parse::Op::Regression: {
+      auto pred = fcsem_endpoint_scale(pt, sc, block, rhs, kind);
+      auto out = fcsem_endpoint_scale(pt, sc, block, lhs, kind);
+      if (!pred.has_value()) return std::unexpected(pred.error());
+      if (!out.has_value()) return std::unexpected(out.error());
+      return (*raw_or) * (*pred) / (*out);
+    }
+    case parse::Op::Covariance: {
+      auto lscale = fcsem_endpoint_scale(pt, sc, block, lhs, kind);
+      auto rscale = fcsem_endpoint_scale(pt, sc, block, rhs, kind);
+      if (!lscale.has_value()) return std::unexpected(lscale.error());
+      if (!rscale.has_value()) return std::unexpected(rscale.error());
+      return (*raw_or) / ((*lscale) * (*rscale));
+    }
+    case parse::Op::Intercept:
+    case parse::Op::Threshold:
+    case parse::Op::ResponseScale:
+    case parse::Op::DefineParam:
+    case parse::Op::EqConstraint:
+    case parse::Op::LtConstraint:
+    case parse::Op::GtConstraint:
+      return *raw_or;
+  }
+  return *raw_or;
+}
+
+post_expected<StandardizedSolution>
+standardize_fcsem_impl(const spec::LatentStructure& pt,
+                       const SampleStats& samp,
+                       const Estimates& est,
+                       const Eigen::MatrixXd& vcov,
+                       FcSemStdKind kind,
+                       const char* label) {
+  const Eigen::Index n_free = est.theta.size();
+  if (vcov.rows() != n_free || vcov.cols() != n_free) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(label) +
+            ": vcov shape doesn't match Estimates.theta size"));
+  }
+  if (pt.composite_mode != spec::CompositeMode::FcSem) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": LatentStructure is not a native FC-SEM model"));
+  }
+
+  auto ev_or = model::FcSemEvaluator::build(pt);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": FcSemEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  const auto& ev = *ev_or;
+  if (static_cast<Eigen::Index>(ev.n_free()) != n_free) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(label) +
+            ": evaluator free-parameter count doesn't match Estimates.theta"));
+  }
+
+  Eigen::MatrixXd J = Eigen::MatrixXd::Identity(n_free, n_free);
+  Eigen::VectorXd theta_std = est.theta;
+
+  auto fill_fd_row = [&](Eigen::Index ki,
+                         std::size_t row) -> post_expected<void> {
+    auto val_or =
+        fcsem_standardized_row_value(pt, ev, samp, est.theta, row, kind);
+    if (!val_or.has_value()) return std::unexpected(val_or.error());
+    theta_std(ki) = *val_or;
+    J.row(ki).setZero();
+    for (Eigen::Index j = 0; j < n_free; ++j) {
+      const double h = 1e-6 * std::max(1.0, std::abs(est.theta(j)));
+      Eigen::VectorXd tp = est.theta;
+      Eigen::VectorXd tm = est.theta;
+      tp(j) += h;
+      tm(j) -= h;
+      auto vp = fcsem_standardized_row_value(pt, ev, samp, tp, row, kind);
+      auto vm = fcsem_standardized_row_value(pt, ev, samp, tm, row, kind);
+      if (!vp.has_value()) return std::unexpected(vp.error());
+      if (!vm.has_value()) return std::unexpected(vm.error());
+      J(ki, j) = (*vp - *vm) / (2.0 * h);
+    }
+    return {};
+  };
+
+  for (std::size_t row = 0; row < pt.size(); ++row) {
+    if (pt.free[row] <= 0) continue;
+    if (pt.group[row] <= 0 || pt.is_constraint_row(row)) continue;
+    const Eigen::Index ki = static_cast<Eigen::Index>(pt.free[row] - 1);
+    if (ki < 0 || ki >= n_free) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(label) +
+              ": free parameter index is outside Estimates.theta"));
+    }
+    auto row_or = fill_fd_row(ki, row);
+    if (!row_or.has_value()) return std::unexpected(row_or.error());
+  }
+
+  StandardizedSolution out;
+  out.theta = std::move(theta_std);
+  const Eigen::MatrixXd JV = J * vcov;
+  out.se.resize(n_free);
+  for (Eigen::Index k = 0; k < n_free; ++k) {
+    const double var = JV.row(k).dot(J.row(k));
+    out.se(k) = (var > 0.0) ? std::sqrt(var) : 0.0;
+  }
+  return out;
+}
+
+}  // namespace
+
+post_expected<StandardizedSolution>
+standardize_lv_fcsem(const spec::LatentStructure& pt,
+                     const SampleStats& samp,
+                     const Estimates& est,
+                     const Eigen::MatrixXd& vcov) {
+  return standardize_fcsem_impl(pt, samp, est, vcov, FcSemStdKind::Lv,
+                                "standardize_lv_fcsem");
+}
+
+post_expected<StandardizedSolution>
+standardize_all_fcsem(const spec::LatentStructure& pt,
+                      const SampleStats& samp,
+                      const Estimates& est,
+                      const Eigen::MatrixXd& vcov) {
+  return standardize_fcsem_impl(pt, samp, est, vcov, FcSemStdKind::All,
+                                "standardize_all_fcsem");
 }
 
 }  // namespace magmaan::measures::standardize

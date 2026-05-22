@@ -26,6 +26,13 @@ class FcSemEvaluator {
   sigma(const data::SampleStats& samp,
         Eigen::Ref<const Eigen::VectorXd> theta) const;
 
+  // Total covariance of the extended construct vector η, one block per group.
+  // Includes native composite constructs, ordinary factors, and reduced-form
+  // observed outcomes/predictors in the same lv_ext ordering as LatentStructure.
+  model_expected<std::vector<Eigen::MatrixXd>>
+  construct_covariance(const data::SampleStats& samp,
+                       Eigen::Ref<const Eigen::VectorXd> theta) const;
+
   // Numerical dvech(Σ) / dθ. Native FC-SEM depends on the sample-backed T
   // block, so the Jacobian takes the same SampleStats as sigma().
   model_expected<Eigen::MatrixXd>
