@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <cstddef>
+#include <cmath>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -19,34 +20,39 @@ using magmaan::parse::Op;
 using magmaan::parse::Parser;
 using magmaan::spec::build;
 using magmaan::spec::BuildOptions;
+using magmaan::spec::CompositeMode;
 using magmaan::spec::LatentNames;
+using magmaan::spec::LatentStructure;
 using magmaan::spec::Starts;
 
 namespace {
 
 struct Built {
   LavaanParTable pt;
+  LatentStructure s;
   LatentNames    names;
 };
 
 // Parse + build a composite model, asserting success, and bundle the
 // lavaan-shaped projection with the LatentNames (which carries `composites`).
-Built must_build(std::string_view src) {
+Built must_build(std::string_view src, BuildOptions opts = {}) {
   auto fp = Parser::parse(src);
   REQUIRE_MESSAGE(fp.has_value(), "parser failed: " << fp.error().detail);
   Starts starts;
   LatentNames names;
-  auto pt = build(*fp, BuildOptions{}, &starts, &names);
+  auto pt = build(*fp, opts, &starts, &names);
   REQUIRE_MESSAGE(pt.has_value(),
                   "build failed: kind=" << static_cast<int>(pt.error().kind)
                                         << " — " << pt.error().detail);
-  return Built{to_lavaan_partable(*pt, names, starts), std::move(names)};
+  LatentStructure s = *pt;
+  return Built{to_lavaan_partable(*pt, names, starts), std::move(s),
+               std::move(names)};
 }
 
-PartableError::Kind build_error(std::string_view src) {
+PartableError::Kind build_error(std::string_view src, BuildOptions opts = {}) {
   auto fp = Parser::parse(src);
   REQUIRE_MESSAGE(fp.has_value(), "parser failed: " << fp.error().detail);
-  auto pt = build(*fp, BuildOptions{});
+  auto pt = build(*fp, opts);
   REQUIRE_FALSE(pt.has_value());
   return pt.error().kind;
 }
@@ -147,5 +153,61 @@ TEST_CASE("composite: overlapping indicator sets are rejected") {
 
 TEST_CASE("composite: a name cannot be both composite and factor") {
   CHECK(build_error("C <~ x1 + x2\n C =~ y1 + y2") ==
+        PartableError::Kind::CompositeOverlap);
+}
+
+TEST_CASE("fc-sem composite: native mode preserves <~ rows and T metadata") {
+  BuildOptions opts;
+  opts.composite_mode = CompositeMode::FcSem;
+  const Built b = must_build("C <~ x1 + x2 + x3\n y ~ C", opts);
+
+  CHECK(b.s.composite_mode == CompositeMode::FcSem);
+  CHECK(b.names.composite_mode == CompositeMode::FcSem);
+  REQUIRE(b.names.composites.size() == 1);
+  CHECK(b.names.composites[0].composite == "C");
+  CHECK(b.names.composites[0].indicators ==
+        std::vector<std::string>{"x1", "x2", "x3"});
+  CHECK(b.names.composites[0].excrescent.empty());
+  REQUIRE(b.s.composite_blocks.size() == 1);
+  CHECK(b.s.composite_blocks[0].indicator_vars.size() == 3);
+
+  CHECK(count_op(b.pt, Op::Composite) == 3);
+  CHECK(count_op(b.pt, Op::Measurement) == 0);
+
+  CHECK(b.pt.lhs[0] == "C");
+  CHECK(b.pt.op[0] == Op::Composite);
+  CHECK(b.pt.rhs[0] == "x1");
+  CHECK(b.pt.free[0] == 0);
+  CHECK(b.pt.ustart[0] == 1.0);
+  CHECK(b.pt.free[1] > 0);
+  CHECK(b.pt.free[2] > 0);
+
+  std::size_t fixed_t = 0;
+  for (std::size_t i = 0; i < b.pt.size(); ++i) {
+    const bool is_t_row =
+        b.pt.op[i] == Op::Covariance &&
+        ((b.pt.lhs[i] == "x1" || b.pt.lhs[i] == "x2" ||
+          b.pt.lhs[i] == "x3") &&
+         (b.pt.rhs[i] == "x1" || b.pt.rhs[i] == "x2" ||
+          b.pt.rhs[i] == "x3"));
+    if (!is_t_row) continue;
+    CHECK(b.pt.free[i] == 0);
+    CHECK(std::isnan(b.pt.ustart[i]));
+    ++fixed_t;
+  }
+  CHECK(fixed_t == 6);
+}
+
+TEST_CASE("fc-sem composite: known identification checks run before evaluator work") {
+  BuildOptions opts;
+  opts.composite_mode = CompositeMode::FcSem;
+
+  CHECK(build_error("C <~ x1", opts) ==
+        PartableError::Kind::CompositeTooFewIndicators);
+  CHECK(build_error("C <~ x1 + x2\n D <~ x2 + x3", opts) ==
+        PartableError::Kind::CompositeOverlap);
+  CHECK(build_error("C <~ x1 + x2 + x3", opts) ==
+        PartableError::Kind::UnidentifiedComposite);
+  CHECK(build_error("C <~ x1 + x2\n F =~ x1 + y1\n y ~ C", opts) ==
         PartableError::Kind::CompositeOverlap);
 }

@@ -137,20 +137,28 @@ The C++ core and R binding slice have landed: `<~` parses as `Op::Composite`,
 `spec::build` desugars each composite into a Henseler-Ogasawara reflective
 sub-model, weights and delta-method SEs are recovered post-fit, R-facing
 partables are folded back to `<~` shape, and R exposes a `composite_weights()`
-post-fit accessor.
+post-fit accessor. A parallel native FC-SEM spec path now exists behind
+`BuildOptions::composite_mode = CompositeMode::FcSem`: it keeps `<~` rows,
+records name-free composite blocks, marker-fixes the first composite weight,
+and emits fixed/derived placeholders for the composite indicator T blocks and
+composite self-variances. The native path is intentionally not evaluable yet.
 Remaining:
 
+- **M.** Implement the native FC-SEM matrix/evaluator layer for complete-data,
+  covariance-only ML: assemble W and T, derive
+  `Lambda_c = T W (W' T W)^-1`, build the combined implied covariance, and
+  reject unsupported mean-structure/FIML/LS/ordinal combinations explicitly.
 - **L.** Lavaan parity validation: minimal oracle fixtures now exist under
   `tests/fixtures/composite/` for pure composite, composite plus common factor,
   and structural regression involving a composite. The diagnostic golden is
-  wired but skipped because the current Henseler-Ogasawara expansion is not yet
-  lavaan-native equivalent on point estimates, implied covariance, chi-square,
-  SEs, standardization, and fit measures. Next implementation step: make the
-  complete-data ML composite path match lavaan's native `<~` W-matrix
-  semantics (or prove and implement an equivalent objective/parameterization),
-  then unskip the golden. Multi-group composites are in scope only after the
-  single-group ML slice is green and only if lavaan handles them cleanly,
-  including `group.equal = "composite.weights"`.
+  wired but skipped because no native evaluator/ML path yet matches lavaan's
+  `<~` W-matrix semantics on point estimates, implied covariance, chi-square,
+  SEs, standardization, and fit measures. After the evaluator lands, first
+  compare implied covariance and objective values at lavaan estimates, then fit
+  from starts using numerical derivatives if needed, then unskip the golden.
+  Multi-group composites are in scope only after the single-group ML slice is
+  green and only if lavaan handles them cleanly, including
+  `group.equal = "composite.weights"`.
 - **S, after parity fixtures are green.** Add composite benchmark cases.
 
 Deferred until the ML slice is lavaan-validated: ordinal composites, FIML/LS

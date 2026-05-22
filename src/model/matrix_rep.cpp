@@ -220,6 +220,11 @@ build_matrix_rep(const spec::LatentStructure& pt,
         }
         break;
       }
+      case parse::Op::Composite:
+        return std::unexpected(make_err(
+            ModelError::Kind::UnsupportedRowKind,
+            "native composite (<~) rows require the FC-SEM evaluator; use the "
+            "Henseler-Ogasawara composite mode for the LISREL MatrixRep path"));
       default:
         break;
     }
