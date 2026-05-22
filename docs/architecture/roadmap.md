@@ -497,18 +497,23 @@ stop rather than any usable non-error return.
   self-variance rows are stamped as fixed/derived placeholders, and both verbal
   `LatentNames::composites` and name-free
   `LatentStructure::composite_blocks` carry the composite contract. MatrixRep
-  intentionally rejects native `<~` rows until the FC-SEM W/T evaluator lands.
+  intentionally rejects native `<~` rows because native FC-SEM is evaluated by
+  a separate W/T evaluator rather than the ordinary LISREL matrix path.
 - The first native FC-SEM covariance evaluator exists as
   `model::FcSemEvaluator`. It assembles W and sample-backed T blocks, derives
   composite loadings, solves the derived composite disturbance variances through
   the structural system, and returns implied covariance matrices. The evaluator
-  is covariance-only and separate from the ordinary LISREL `ModelEvaluator`;
-  optimizer/objective integration and SE/Jacobian support are still pending.
+  is covariance-only and separate from the ordinary LISREL `ModelEvaluator`.
+  `estimate::ml_objective(FcSemEvaluator, SampleStats)` wraps it in the
+  complete-data normal-theory ML discrepancy and supplies a central
+  finite-difference gradient for the first native composite optimization
+  tranche. Full fit orchestration and SE/Jacobian support are still pending.
 - Complete-data ML composite lavaan parity is not yet claimed. Native lavaan
   `<~` oracle fixtures for pure-composite, composite-plus-factor, and
   composite-structural HS cases live under `tests/fixtures/composite/`; the
-  corresponding diagnostic golden is intentionally skipped until the C++ ML
-  path matches lavaan's W-matrix semantics (or an equivalent objective).
+  FC-SEM objective currently matches the pure-composite lavaan chi-square at
+  lavaan estimates, while the corresponding diagnostic golden is intentionally
+  skipped until the C++ fitting path matches lavaan's W-matrix semantics.
 - `magmaan(model, data, estimator, groups)` is the high-level estimate-only
   R convenience. It composes `model_spec()`, data-frame sample-stat/raw-data
   construction, and the matching point-estimation wrapper for complete-data
