@@ -96,6 +96,64 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fcsem_model_spec_impl
+Rcpp::List fcsem_model_spec_impl(std::string syntax);
+RcppExport SEXP _magmaan_fcsem_model_spec_impl(SEXP syntaxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type syntax(syntaxSEXP);
+    rcpp_result_gen = Rcpp::wrap(fcsem_model_spec_impl(syntax));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fit_ml_fcsem_impl
+Rcpp::List fit_ml_fcsem_impl(std::string syntax, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> control);
+RcppExport SEXP _magmaan_fit_ml_fcsem_impl(SEXP syntaxSEXP, SEXP sample_statsSEXP, SEXP controlSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type syntax(syntaxSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_ml_fcsem_impl(syntax, sample_stats, control));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fcsem_standard_errors_impl
+Rcpp::List fcsem_standard_errors_impl(Rcpp::List fit);
+RcppExport SEXP _magmaan_fcsem_standard_errors_impl(SEXP fitSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    rcpp_result_gen = Rcpp::wrap(fcsem_standard_errors_impl(fit));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fcsem_fit_measures_impl
+Rcpp::List fcsem_fit_measures_impl(Rcpp::List fit);
+RcppExport SEXP _magmaan_fcsem_fit_measures_impl(SEXP fitSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    rcpp_result_gen = Rcpp::wrap(fcsem_fit_measures_impl(fit));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fcsem_standardized_rows_impl
+Rcpp::DataFrame fcsem_standardized_rows_impl(Rcpp::List fit, Rcpp::NumericMatrix vcov);
+RcppExport SEXP _magmaan_fcsem_standardized_rows_impl(SEXP fitSEXP, SEXP vcovSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type vcov(vcovSEXP);
+    rcpp_result_gen = Rcpp::wrap(fcsem_standardized_rows_impl(fit, vcov));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_fiml_impl
 Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data, Rcpp::Nullable<Rcpp::List> lbfgs);
 RcppExport SEXP _magmaan_fit_fiml_impl(SEXP partableSEXP, SEXP raw_dataSEXP, SEXP lbfgsSEXP) {
@@ -1084,6 +1142,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_model_matrix_rep", (DL_FUNC) &_magmaan_model_matrix_rep, 1},
     {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 4},
     {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 4},
+    {"_magmaan_fcsem_model_spec_impl", (DL_FUNC) &_magmaan_fcsem_model_spec_impl, 1},
+    {"_magmaan_fit_ml_fcsem_impl", (DL_FUNC) &_magmaan_fit_ml_fcsem_impl, 3},
+    {"_magmaan_fcsem_standard_errors_impl", (DL_FUNC) &_magmaan_fcsem_standard_errors_impl, 1},
+    {"_magmaan_fcsem_fit_measures_impl", (DL_FUNC) &_magmaan_fcsem_fit_measures_impl, 1},
+    {"_magmaan_fcsem_standardized_rows_impl", (DL_FUNC) &_magmaan_fcsem_standardized_rows_impl, 2},
     {"_magmaan_fit_fiml_impl", (DL_FUNC) &_magmaan_fit_fiml_impl, 3},
     {"_magmaan_fit_uls_impl", (DL_FUNC) &_magmaan_fit_uls_impl, 5},
     {"_magmaan_fit_gls_impl", (DL_FUNC) &_magmaan_fit_gls_impl, 5},

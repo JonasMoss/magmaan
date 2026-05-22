@@ -531,14 +531,19 @@ stop rather than any usable non-error return.
   chi-square, df, CFI/TLI/RMSEA, SRMR, loglik, AIC, BIC, and sample-size
   adjusted BIC. `api::frontier` now exposes a native FC-SEM model builder,
   complete-data ML fitting, expected SEs, fit measures, and standardized row
-  reporting; R exposure is still pending.
+  reporting. The R frontier mirrors that slice with `fcsem_model_spec()`,
+  `df_to_fcsem_data()`, `fit_ml_fcsem()` / `magmaan_fcsem()`,
+  `fcsem_standard_errors()`, `fcsem_fit_measures()`, and
+  `fcsem_standardized_rows()`, plus `magmaan_core$frontier_*` aliases for
+  method-development workflows.
 - Full composite lavaan parity is not yet claimed. Native lavaan
   `<~` oracle fixtures for pure-composite, composite-plus-factor, and
   composite-structural HS cases live under `tests/fixtures/composite/` and
   now record lavaan's observed-variable order for the stored sample/implied
-  covariance matrices. The corresponding diagnostic golden is intentionally
-  skipped until the R post-fit surface can expose the native W-matrix
-  semantics without implying full lavaan replacement parity.
+  covariance matrices. The corresponding diagnostic golden remains
+  intentionally skipped until we decide how much native W-matrix fixture
+  parity belongs in the low-level C++ tests versus the R frontier examples;
+  the new R bridge is not a lavaan replacement interface.
 - `magmaan(model, data, estimator, groups)` is the high-level estimate-only
   R convenience. It composes `model_spec()`, data-frame sample-stat/raw-data
   construction, and the matching point-estimation wrapper for complete-data

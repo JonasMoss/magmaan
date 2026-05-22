@@ -144,6 +144,199 @@ Rcpp::List vector_blocks_to_r(const std::vector<Eigen::VectorXd>& blocks,
   return out;
 }
 
+std::vector<std::string>
+fcsem_observed_names(const magmaan::spec::LatentStructure& pt,
+                     const magmaan::spec::LatentNames& names) {
+  std::vector<std::string> out;
+  out.reserve(pt.ov_order.size());
+  for (std::int32_t id : pt.ov_order) {
+    if (id < 0 || static_cast<std::size_t>(id) >= names.var_name.size()) {
+      Rcpp::stop("magmaan: native FC-SEM observed-variable inventory is invalid");
+    }
+    out.push_back(names.var_name[static_cast<std::size_t>(id)]);
+  }
+  return out;
+}
+
+struct FcSemCtx {
+  magmaan::spec::LatentStructure pt;
+  magmaan::spec::LatentNames names;
+  magmaan::spec::Starts starts;
+  magmaan::data::SampleStats samp;
+  std::vector<std::string> ov_names;
+};
+
+FcSemCtx fcsem_model_from_syntax(const std::string& syntax) {
+  auto flat = magmaan::parse::Parser::parse(syntax);
+  if (!flat.has_value()) {
+    const auto& e = flat.error();
+    Rcpp::stop("magmaan parse error at %u:%u (bytes %u..%u): %s",
+               e.span.line, e.span.col, e.span.begin, e.span.end, e.detail);
+  }
+  magmaan::spec::BuildOptions opts;
+  opts.composite_mode = magmaan::spec::CompositeMode::FcSem;
+  magmaan::spec::Starts starts;
+  magmaan::spec::LatentNames names;
+  auto pt_or = magmaan::spec::build(*flat, opts, &starts, &names);
+  if (!pt_or.has_value()) {
+    Rcpp::stop("magmaan lavaanify error: %s", pt_or.error().detail);
+  }
+  if (pt_or->composite_mode != magmaan::spec::CompositeMode::FcSem ||
+      pt_or->composite_blocks.empty()) {
+    Rcpp::stop("magmaan: native FC-SEM requires at least one `<~` composite");
+  }
+  if (pt_or->n_groups() != 1) {
+    Rcpp::stop("magmaan: native FC-SEM R frontier currently supports one group");
+  }
+
+  FcSemCtx ctx;
+  ctx.pt = std::move(*pt_or);
+  ctx.names = std::move(names);
+  ctx.starts = std::move(starts);
+  ctx.ov_names = fcsem_observed_names(ctx.pt, ctx.names);
+  return ctx;
+}
+
+magmaan::data::SampleStats fcsem_sample_stats_from_arg(
+    Rcpp::List sample_stats, const std::vector<std::string>& ov_names) {
+  if (!sample_stats.containsElementNamed("S") ||
+      !sample_stats.containsElementNamed("nobs")) {
+    Rcpp::stop("magmaan: native FC-SEM sample_stats must contain $S and $nobs");
+  }
+  Rcpp::List Sl = TYPEOF(sample_stats["S"]) == VECSXP
+      ? Rcpp::List(sample_stats["S"])
+      : Rcpp::List::create(Rcpp::NumericMatrix(sample_stats["S"]));
+  Rcpp::IntegerVector nobs = Rcpp::as<Rcpp::IntegerVector>(sample_stats["nobs"]);
+  if (Sl.size() != 1 || nobs.size() != 1) {
+    Rcpp::stop("magmaan: native FC-SEM R frontier currently supports one group");
+  }
+  const int nb = nobs[0];
+  if (nb == NA_INTEGER || nb <= 0) {
+    Rcpp::stop("magmaan: native FC-SEM nobs must be a positive integer");
+  }
+
+  Rcpp::NumericMatrix S0(Sl[0]);
+  const std::vector<int> perm = perm_for_cols(S0, ov_names, "S");
+  magmaan::data::SampleStats out;
+  out.S.push_back(reorder_cov(S0, perm));
+  validate_finite_matrix(out.S.back(), "sample covariance", 0);
+  out.n_obs.push_back(static_cast<std::int64_t>(nb));
+  return out;
+}
+
+FcSemCtx fcsem_ctx_from_syntax_sample_stats(const std::string& syntax,
+                                            Rcpp::List sample_stats) {
+  FcSemCtx ctx = fcsem_model_from_syntax(syntax);
+  ctx.samp = fcsem_sample_stats_from_arg(sample_stats, ctx.ov_names);
+  return ctx;
+}
+
+FcSemCtx fcsem_ctx_from_fit(Rcpp::List fit) {
+  if (!fit.containsElementNamed("fcsem") || !Rcpp::as<bool>(fit["fcsem"]) ||
+      !fit.containsElementNamed("syntax")) {
+    Rcpp::stop("magmaan: expected a native FC-SEM fit object");
+  }
+  Rcpp::List ss = Rcpp::List::create(
+      Rcpp::_["S"] = fit["S"],
+      Rcpp::_["nobs"] = fit["nobs"]);
+  return fcsem_ctx_from_syntax_sample_stats(Rcpp::as<std::string>(fit["syntax"]),
+                                            ss);
+}
+
+Rcpp::DataFrame fcsem_partable_df(
+    const magmaan::spec::LatentStructure& pt,
+    const magmaan::spec::LatentNames& names,
+    const magmaan::spec::Starts& starts,
+    const magmaan::estimate::Estimates* est = nullptr) {
+  const magmaan::compat::lavaan::LavaanParTable native =
+      magmaan::compat::lavaan::to_lavaan_partable(pt, names, starts);
+  Rcpp::DataFrame out = partable_df_from_lavaan(native, est);
+  Rf_setAttrib(out, Rf_install("magmaan.fcsem"), Rf_ScalarLogical(1));
+  return out;
+}
+
+Rcpp::List fcsem_fit_result(FcSemCtx& ctx,
+                            const magmaan::estimate::Estimates& est,
+                            const std::string& syntax) {
+  Rcpp::NumericMatrix S0 = Rcpp::wrap(ctx.samp.S[0]);
+  Rcpp::CharacterVector nm = Rcpp::wrap(ctx.ov_names);
+  S0.attr("dimnames") = Rcpp::List::create(nm, nm);
+  Rcpp::List S_out = Rcpp::List::create(S0);
+  Rcpp::IntegerVector nobs_out =
+      Rcpp::IntegerVector::create(static_cast<int>(ctx.samp.n_obs[0]));
+
+  using magmaan::optim::OptimStatus;
+  const char* opt_status =
+      est.optimizer_status == OptimStatus::Converged           ? "converged"
+      : est.optimizer_status == OptimStatus::LineSearchSalvaged ? "line_search_salvaged"
+      : est.optimizer_status == OptimStatus::SingularConvergence ? "singular_convergence"
+                                                                : "unknown";
+
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["converged"]     = (est.optimizer_status == OptimStatus::Converged),
+      Rcpp::_["estimator"]     = "FCSEM-ML",
+      Rcpp::_["fmin"]          = est.fmin,
+      Rcpp::_["iterations"]    = est.iterations,
+      Rcpp::_["f_evals"]       = est.f_evals,
+      Rcpp::_["g_evals"]       = est.g_evals,
+      Rcpp::_["npar"]          = static_cast<int>(ctx.pt.n_free()),
+      Rcpp::_["ngroups"]       = 1,
+      Rcpp::_["ntotal"]        = static_cast<int>(ctx.samp.n_obs[0]),
+      Rcpp::_["group_var"]     = "",
+      Rcpp::_["group_labels"]  = Rcpp::CharacterVector::create(),
+      Rcpp::_["theta"]         = Rcpp::wrap(est.theta),
+      Rcpp::_["ov_names"]      = Rcpp::wrap(ctx.ov_names),
+      Rcpp::_["partable"]      = fcsem_partable_df(ctx.pt, ctx.names,
+                                                   ctx.starts, &est),
+      Rcpp::_["S"]             = S_out,
+      Rcpp::_["nobs"]          = nobs_out,
+      Rcpp::_["sample_mean"]   = R_NilValue,
+      Rcpp::_["meanstructure"] = false,
+      Rcpp::_["syntax"]        = syntax,
+      Rcpp::_["fcsem"]         = true);
+  out["optimizer_status"] = opt_status;
+  out["grad_norm"] = est.grad_inf_norm;
+  return out;
+}
+
+Rcpp::DataFrame fcsem_standardized_rows_df(
+    const std::vector<magmaan::measures::standardize::FcSemStandardizedRow>& rows) {
+  const R_xlen_t n = static_cast<R_xlen_t>(rows.size());
+  Rcpp::IntegerVector row(n), group(n), freev(n);
+  Rcpp::CharacterVector lhs(n), op(n), rhs(n);
+  Rcpp::NumericVector est(n), se(n), std_lv(n), std_lv_se(n), std_all(n),
+      std_all_se(n);
+  for (R_xlen_t i = 0; i < n; ++i) {
+    const auto& r = rows[static_cast<std::size_t>(i)];
+    row[i] = static_cast<int>(r.row) + 1;
+    lhs[i] = r.lhs;
+    op[i] = std::string(magmaan::parse::to_string(r.op));
+    rhs[i] = r.rhs;
+    group[i] = r.group;
+    freev[i] = r.free;
+    est[i] = r.est;
+    se[i] = r.se;
+    std_lv[i] = r.std_lv;
+    std_lv_se[i] = r.std_lv_se;
+    std_all[i] = r.std_all;
+    std_all_se[i] = r.std_all_se;
+  }
+  return Rcpp::DataFrame::create(
+      Rcpp::_["row"] = row,
+      Rcpp::_["lhs"] = lhs,
+      Rcpp::_["op"] = op,
+      Rcpp::_["rhs"] = rhs,
+      Rcpp::_["group"] = group,
+      Rcpp::_["free"] = freev,
+      Rcpp::_["est"] = est,
+      Rcpp::_["se"] = se,
+      Rcpp::_["std.lv"] = std_lv,
+      Rcpp::_["std.lv.se"] = std_lv_se,
+      Rcpp::_["std.all"] = std_all,
+      Rcpp::_["std.all.se"] = std_all_se,
+      Rcpp::_["stringsAsFactors"] = false);
+}
+
 magmaan::measures::FactorScoreMethod factor_score_method_from(
     const std::string& method) {
   if (method == "regression" || method == "Regression" ||
@@ -965,6 +1158,100 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "ML");
+}
+
+// fcsem_model_spec() — build the native, non-folded FC-SEM partable directly
+// from syntax. This is the R frontier analogue of api::frontier::model_spec().
+//
+// [[Rcpp::export]]
+Rcpp::List fcsem_model_spec_impl(std::string syntax) {
+  FcSemCtx ctx = fcsem_model_from_syntax(syntax);
+  return Rcpp::List::create(
+      Rcpp::_["syntax"]   = syntax,
+      Rcpp::_["partable"] = fcsem_partable_df(ctx.pt, ctx.names, ctx.starts),
+      Rcpp::_["ov_names"] = Rcpp::wrap(ctx.ov_names));
+}
+
+// fit_ml_fcsem() — native FC-SEM ML, using covariance-only sample statistics.
+// Starts come from simple_fcsem_start_values(); optimization currently uses
+// the same LBFGS control list as the ordinary R ML bridge.
+//
+// [[Rcpp::export]]
+Rcpp::List fit_ml_fcsem_impl(std::string syntax, Rcpp::List sample_stats,
+                             Rcpp::Nullable<Rcpp::List> control = R_NilValue) {
+  FcSemCtx ctx = fcsem_ctx_from_syntax_sample_stats(syntax, sample_stats);
+  auto x0_or = magmaan::estimate::simple_fcsem_start_values(ctx.pt, ctx.samp);
+  if (!x0_or.has_value()) stop_fit(x0_or.error());
+  auto e_or = magmaan::estimate::fit_ml_fcsem(
+      ctx.pt, ctx.samp, *x0_or, {}, magmaan::estimate::Backend::Lbfgs,
+      lbfgs_opts_from(control));
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return fcsem_fit_result(ctx, est, syntax);
+}
+
+// [[Rcpp::export]]
+Rcpp::List fcsem_standard_errors_impl(Rcpp::List fit) {
+  FcSemCtx ctx = fcsem_ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  auto info_or =
+      magmaan::inference::information_expected_fcsem(ctx.pt, ctx.samp, est);
+  if (!info_or.has_value()) stop_post(info_or.error());
+  auto vcov_or = magmaan::inference::vcov(*info_or, ctx.pt, est.theta);
+  if (!vcov_or.has_value()) stop_post(vcov_or.error());
+  return Rcpp::List::create(
+      Rcpp::_["information"] = Rcpp::wrap(*info_or),
+      Rcpp::_["vcov"]        = Rcpp::wrap(*vcov_or),
+      Rcpp::_["se"]          = Rcpp::wrap(magmaan::inference::se(*vcov_or)));
+}
+
+// [[Rcpp::export]]
+Rcpp::List fcsem_fit_measures_impl(Rcpp::List fit) {
+  FcSemCtx ctx = fcsem_ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const double chi2 = magmaan::inference::chi2_stat(ctx.samp, est);
+  auto df_or = magmaan::inference::df_stat(ctx.pt, ctx.samp, est.theta);
+  if (!df_or.has_value()) stop_post(df_or.error());
+  const magmaan::measures::BaselineFit bl =
+      magmaan::measures::baseline_chi2(ctx.samp);
+  const magmaan::measures::FitMeasures fm =
+      magmaan::measures::fit_measures(chi2, *df_or, bl, ctx.samp);
+  auto fx_or = magmaan::measures::fit_extras_fcsem(ctx.pt, ctx.samp, est);
+  if (!fx_or.has_value()) stop_post(fx_or.error());
+  return Rcpp::List::create(
+      Rcpp::_["chisq"]                  = chi2,
+      Rcpp::_["df"]                     = *df_or,
+      Rcpp::_["baseline.chisq"]         = bl.chi2,
+      Rcpp::_["baseline.df"]            = bl.df,
+      Rcpp::_["cfi"]                    = fm.cfi,
+      Rcpp::_["tli"]                    = fm.tli,
+      Rcpp::_["rmsea"]                  = fm.rmsea,
+      Rcpp::_["rmsea.ci.lower"]         = fm.rmsea_ci_lower,
+      Rcpp::_["rmsea.ci.upper"]         = fm.rmsea_ci_upper,
+      Rcpp::_["rmsea.pvalue"]           = fm.rmsea_pvalue,
+      Rcpp::_["rmsea.close.h0"]         = fm.rmsea_close_h0,
+      Rcpp::_["rmsea.notclose.pvalue"]  = fm.rmsea_notclose_pvalue,
+      Rcpp::_["rmsea.notclose.h0"]      = fm.rmsea_notclose_h0,
+      Rcpp::_["srmr"]                   = fx_or->srmr,
+      Rcpp::_["logl"]                   = fx_or->logl,
+      Rcpp::_["unrestricted.logl"]      = fx_or->unrestricted_logl,
+      Rcpp::_["aic"]                    = fx_or->aic,
+      Rcpp::_["bic"]                    = fx_or->bic,
+      Rcpp::_["bic2"]                   = fx_or->bic2,
+      Rcpp::_["npar"]                   = fx_or->npar,
+      Rcpp::_["ntotal"]                 = static_cast<double>(fx_or->ntotal));
+}
+
+// [[Rcpp::export]]
+Rcpp::DataFrame fcsem_standardized_rows_impl(Rcpp::List fit,
+                                             Rcpp::NumericMatrix vcov) {
+  FcSemCtx ctx = fcsem_ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
+  auto rows_or = magmaan::measures::standardize::standardized_rows_fcsem(
+      ctx.pt, ctx.names, ctx.samp, est, vcov_m);
+  if (!rows_or.has_value()) stop_post(rows_or.error());
+  return fcsem_standardized_rows_df(*rows_or);
 }
 
 // fit_fiml() — mirrors estimate::fit_fiml(pt, rep, raw, FIML{}, LbfgsOptimizer).

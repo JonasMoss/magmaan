@@ -25,6 +25,26 @@ fit_ml_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL
     .Call(`_magmaan_fit_ml_impl`, partable, sample_stats, optimizer, control)
 }
 
+fcsem_model_spec_impl <- function(syntax) {
+    .Call(`_magmaan_fcsem_model_spec_impl`, syntax)
+}
+
+fit_ml_fcsem_impl <- function(syntax, sample_stats, control = NULL) {
+    .Call(`_magmaan_fit_ml_fcsem_impl`, syntax, sample_stats, control)
+}
+
+fcsem_standard_errors_impl <- function(fit) {
+    .Call(`_magmaan_fcsem_standard_errors_impl`, fit)
+}
+
+fcsem_fit_measures_impl <- function(fit) {
+    .Call(`_magmaan_fcsem_fit_measures_impl`, fit)
+}
+
+fcsem_standardized_rows_impl <- function(fit, vcov) {
+    .Call(`_magmaan_fcsem_standardized_rows_impl`, fit, vcov)
+}
+
 fit_fiml_impl <- function(partable, raw_data, lbfgs = NULL) {
     .Call(`_magmaan_fit_fiml_impl`, partable, raw_data, lbfgs)
 }
