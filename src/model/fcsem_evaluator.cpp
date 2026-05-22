@@ -105,69 +105,32 @@ inline Eigen::Index vech_len(Eigen::Index p) noexcept {
   return p * (p + 1) / 2;
 }
 
-}  // namespace
+struct FcSemEvaluation {
+  ImpliedMoments moments;
+  std::vector<Eigen::MatrixXd> construct_covariance;
+};
 
-model_expected<FcSemEvaluator>
-FcSemEvaluator::build(const spec::LatentStructure& pt) {
-  if (pt.composite_mode != spec::CompositeMode::FcSem ||
-      pt.composite_blocks.empty()) {
-    return std::unexpected(make_err(
-        ModelError::Kind::UnsupportedRowKind,
-        "FcSemEvaluator requires a native FC-SEM composite model"));
-  }
-  if (pt.ov_order.empty() || pt.lv_ext_order.empty()) {
-    return std::unexpected(make_err(
-        ModelError::Kind::EmptyMatrix,
-        "native FC-SEM model has no observed or construct variables"));
-  }
-  for (const auto& c : pt.composite_blocks) {
-    if (lv_pos(pt, c.composite_var) < 0) {
-      return std::unexpected(make_err(
-          ModelError::Kind::UnknownVariable,
-          "composite construct is not in the extended latent ordering"));
-    }
-    if (c.indicator_vars.size() < 2) {
-      return std::unexpected(make_err(
-          ModelError::Kind::UnsupportedRowKind,
-          "native FC-SEM composite has fewer than two indicators"));
-    }
-    for (auto v : c.indicator_vars) {
-      if (ov_pos(pt, v) < 0) {
-        return std::unexpected(make_err(
-            ModelError::Kind::UnknownVariable,
-            "composite indicator is not in the observed ordering"));
-      }
-    }
-  }
-
-  FcSemEvaluator out;
-  out.pt_ = &pt;
-  out.n_free_ = static_cast<std::size_t>(pt.n_free());
-  out.n_blocks_ = static_cast<std::size_t>(pt.n_groups());
-  out.p_ = static_cast<Eigen::Index>(pt.ov_order.size());
-  out.m_ = static_cast<Eigen::Index>(pt.lv_ext_order.size());
-  return out;
-}
-
-model_expected<ImpliedMoments>
-FcSemEvaluator::sigma(const data::SampleStats& samp,
-                      Eigen::Ref<const Eigen::VectorXd> theta) const {
-  const auto& pt = *pt_;
-  if (static_cast<std::size_t>(theta.size()) != n_free_) {
+model_expected<FcSemEvaluation>
+evaluate_fcsem(const spec::LatentStructure& pt, std::size_t n_free,
+               std::size_t n_blocks, Eigen::Index p_, Eigen::Index m_,
+               const data::SampleStats& samp,
+               Eigen::Ref<const Eigen::VectorXd> theta) {
+  if (static_cast<std::size_t>(theta.size()) != n_free) {
     return std::unexpected(make_err(
         ModelError::Kind::UnknownVariable,
         std::string("theta has size ") + std::to_string(theta.size()) +
-            "; FcSemEvaluator expects " + std::to_string(n_free_)));
+            "; FcSemEvaluator expects " + std::to_string(n_free)));
   }
-  if (samp.S.size() != n_blocks_) {
+  if (samp.S.size() != n_blocks) {
     return std::unexpected(make_err(
         ModelError::Kind::EmptyMatrix,
         "sample covariance block count does not match the model"));
   }
 
-  ImpliedMoments out;
-  out.sigma.reserve(n_blocks_);
-  out.mu.reserve(n_blocks_);
+  FcSemEvaluation out;
+  out.moments.sigma.reserve(n_blocks);
+  out.moments.mu.reserve(n_blocks);
+  out.construct_covariance.reserve(n_blocks);
 
   std::vector<Eigen::Index> derived_idx;
   derived_idx.reserve(pt.composite_blocks.size());
@@ -175,7 +138,7 @@ FcSemEvaluator::sigma(const data::SampleStats& samp,
     derived_idx.push_back(static_cast<Eigen::Index>(lv_pos(pt, c.composite_var)));
   }
 
-  for (std::size_t b = 0; b < n_blocks_; ++b) {
+  for (std::size_t b = 0; b < n_blocks; ++b) {
     const auto& S = samp.S[b];
     if (S.rows() != p_ || S.cols() != p_) {
       return std::unexpected(make_err(
@@ -395,11 +358,73 @@ FcSemEvaluator::sigma(const data::SampleStats& samp,
     const Eigen::MatrixXd Veta = A * Psi * A.transpose();
     Eigen::MatrixXd Sigma = Lambda * Veta * Lambda.transpose() + Theta;
     Sigma = 0.5 * (Sigma + Sigma.transpose());
-    out.sigma.push_back(std::move(Sigma));
-    out.mu.emplace_back();
+    out.construct_covariance.push_back(0.5 * (Veta + Veta.transpose()));
+    out.moments.sigma.push_back(std::move(Sigma));
+    out.moments.mu.emplace_back();
   }
 
   return out;
+}
+
+}  // namespace
+
+model_expected<FcSemEvaluator>
+FcSemEvaluator::build(const spec::LatentStructure& pt) {
+  if (pt.composite_mode != spec::CompositeMode::FcSem ||
+      pt.composite_blocks.empty()) {
+    return std::unexpected(make_err(
+        ModelError::Kind::UnsupportedRowKind,
+        "FcSemEvaluator requires a native FC-SEM composite model"));
+  }
+  if (pt.ov_order.empty() || pt.lv_ext_order.empty()) {
+    return std::unexpected(make_err(
+        ModelError::Kind::EmptyMatrix,
+        "native FC-SEM model has no observed or construct variables"));
+  }
+  for (const auto& c : pt.composite_blocks) {
+    if (lv_pos(pt, c.composite_var) < 0) {
+      return std::unexpected(make_err(
+          ModelError::Kind::UnknownVariable,
+          "composite construct is not in the extended latent ordering"));
+    }
+    if (c.indicator_vars.size() < 2) {
+      return std::unexpected(make_err(
+          ModelError::Kind::UnsupportedRowKind,
+          "native FC-SEM composite has fewer than two indicators"));
+    }
+    for (auto v : c.indicator_vars) {
+      if (ov_pos(pt, v) < 0) {
+        return std::unexpected(make_err(
+            ModelError::Kind::UnknownVariable,
+            "composite indicator is not in the observed ordering"));
+      }
+    }
+  }
+
+  FcSemEvaluator out;
+  out.pt_ = &pt;
+  out.n_free_ = static_cast<std::size_t>(pt.n_free());
+  out.n_blocks_ = static_cast<std::size_t>(pt.n_groups());
+  out.p_ = static_cast<Eigen::Index>(pt.ov_order.size());
+  out.m_ = static_cast<Eigen::Index>(pt.lv_ext_order.size());
+  return out;
+}
+
+model_expected<ImpliedMoments>
+FcSemEvaluator::sigma(const data::SampleStats& samp,
+                      Eigen::Ref<const Eigen::VectorXd> theta) const {
+  auto eval = evaluate_fcsem(*pt_, n_free_, n_blocks_, p_, m_, samp, theta);
+  if (!eval.has_value()) return std::unexpected(eval.error());
+  return std::move(eval->moments);
+}
+
+model_expected<std::vector<Eigen::MatrixXd>>
+FcSemEvaluator::construct_covariance(
+    const data::SampleStats& samp,
+    Eigen::Ref<const Eigen::VectorXd> theta) const {
+  auto eval = evaluate_fcsem(*pt_, n_free_, n_blocks_, p_, m_, samp, theta);
+  if (!eval.has_value()) return std::unexpected(eval.error());
+  return std::move(eval->construct_covariance);
 }
 
 model_expected<Eigen::MatrixXd>
