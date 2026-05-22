@@ -217,6 +217,16 @@ stop rather than any usable non-error return.
   surface has strict parity. Manifest fixed.x path cases and the known
   alternate-basin `latent_ar_cross_lagged` case remain smoke-checked but not
   used as strict implied-moment parity oracles.
+- A local ignored Mplus SEM source corpus can be built from
+  `external/MPLUS/*.zip` into `external/mplus_sem` with
+  `tests/tools/build_mplus_sem_corpus.R`. The tracked oracle layer
+  (`tests/tools/regen_mplus_sem_fixtures.R`,
+  `tests/fixtures/mplus_sem/`, and
+  `tests/golden/mplus_sem_golden_test.cpp`) freezes derived lavaan sample
+  statistics and estimates only. The current strict tranche gates six
+  continuous growth examples across ML/ULS/GLS/WLS (24 optimizer fits) and
+  records retained observed-path, ordinal, and mixed examples for corpus
+  classification without committing Mplus raw data.
 - Continuous ULS/GLS/WLS robust adapters reuse the shared weighted-moment
   sandwich/U-Gamma primitive with either supplied Gamma blocks or raw-data
   Gamma construction. ULS `robust.sem` SEs and Satorra-Bentler-family
@@ -765,6 +775,9 @@ Validation has three deliberately separate surfaces:
   25-item five-factor bfi missing-data convergence/global-fit gate.
   Self-contained fixtures live in
   `tests/fixtures/parity/`; oracle: `tests/tools/regen_parity_fixtures.R`.
+  The same parity executable also includes the Mplus SEM corpus golden,
+  generated from local `external/mplus_sem` into
+  `tests/fixtures/mplus_sem/`.
 - **Benchmarks** — `benchmarks/` fits *live lavaan* on every run and gates
   timing, not CI correctness. Active advisory cases include complete-data ML,
   controlled-missingness FIML, and continuous ULS/GLS smoke paths. The harness

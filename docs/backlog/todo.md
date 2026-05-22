@@ -50,6 +50,15 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   implied-moment comparison surface for exogenous observed moments, and
   `latent_ar_cross_lagged` needs either a stable same-basin optimizer recipe
   or a written alternate-optimum note.
+- **S/M.** Extend the new Mplus SEM corpus beyond the v1 strict growth tranche.
+  `external/mplus_sem` now retains 80 first-pass translations and the tracked
+  fixtures gate six continuous growth cases across ML/ULS/GLS/WLS. Remaining
+  follow-ups: repair or hand-translate the skipped growth/CFA cases whose
+  automatic Mplus-to-lavaan conversion is malformed, decide how to test
+  observed-only path models without exercising the current saturated
+  observed-path abort, and add categorical fixtures only for models that match
+  magmaan's ordinal/mixed LS surface rather than Mplus logistic/probit response
+  models.
 - **S/M.** Refine benchmark use of optimizer diagnostics now that fit results
   expose `optimizer_status` and final gradient norms. Benchmark scripts should
   distinguish clean convergence from line-search salvage or singular PORT
