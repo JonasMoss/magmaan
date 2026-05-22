@@ -26,6 +26,13 @@ class FcSemEvaluator {
   sigma(const data::SampleStats& samp,
         Eigen::Ref<const Eigen::VectorXd> theta) const;
 
+  // Numerical dvech(Σ) / dθ. Native FC-SEM depends on the sample-backed T
+  // block, so the Jacobian takes the same SampleStats as sigma().
+  model_expected<Eigen::MatrixXd>
+  dsigma_dtheta(const data::SampleStats& samp,
+                Eigen::Ref<const Eigen::VectorXd> theta,
+                double rel_step = 1e-6) const;
+
  private:
   const spec::LatentStructure* pt_ = nullptr;
   std::size_t n_free_ = 0;

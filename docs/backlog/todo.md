@@ -152,19 +152,23 @@ central finite-difference gradient path for native `<~`. The low-level
 the pure-composite, composite-plus-factor, and composite-structural HS native
 fixtures from starts and matches lavaan's objective, implied covariance,
 weights, loadings, and regressions. The composite fixtures now carry lavaan's
-observed-variable order for stored covariance matrices.
+observed-variable order for stored covariance matrices. Native post-fit
+expected information also exists: `FcSemEvaluator::dsigma_dtheta` computes a
+central finite-difference covariance Jacobian, and
+`inference::information_expected_fcsem` yields vcov/SEs matching lavaan for
+the same reported fixture rows.
 Remaining:
 
 - **L.** Post-fit lavaan parity validation: minimal oracle fixtures exist under
   `tests/fixtures/composite/` for pure composite, composite plus common factor,
   and structural regression involving a composite. The diagnostic golden is
-  wired but skipped because no native post-fit path yet matches lavaan's `<~`
-  W-matrix semantics on SEs, standardization, and fit measures. Add FC-SEM
-  numerical Jacobian/information support, then unskip or split the golden once
-  post-fit surfaces are available.
-- **M.** Add staged API/R exposure only after the single-group native ML
-  fixtures are green through point estimates; until then, keep native FC-SEM
-  on the low-level C++ surface.
+  wired but skipped because the public native post-fit path does not yet expose
+  lavaan's `<~` W-matrix semantics for standardization and fit measures. Split
+  or unskip it once those post-fit surfaces are available.
+- **M.** Add staged API/R exposure once the native post-fit surface is settled
+  enough to expose point estimates and standard errors without implying full
+  lavaan replacement parity; until then, keep native FC-SEM on the low-level
+  C++ surface.
   Multi-group composites are in scope only after the single-group ML slice is
   green and only if lavaan handles them cleanly, including
   `group.equal = "composite.weights"`.

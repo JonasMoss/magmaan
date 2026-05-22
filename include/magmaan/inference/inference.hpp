@@ -10,6 +10,7 @@
 #include "magmaan/estimate/fit.hpp"          // Estimates
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/model/fcsem_evaluator.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/spec/partable.hpp"
 
@@ -46,6 +47,14 @@ information_expected(spec::LatentStructure       pt,
                      const model::MatrixRep&         rep,
                      const SampleStats&              samp,
                      const Estimates&                est);
+
+// Native FC-SEM counterpart. Uses the sample-backed FcSemEvaluator and its
+// numerical covariance Jacobian; covariance-only in the current tranche.
+post_expected<Eigen::MatrixXd>
+information_expected_fcsem(spec::LatentStructure       pt,
+                           const SampleStats&          samp,
+                           const Estimates&            est,
+                           double                      rel_step = 1e-6);
 
 // Observed-information matrix via central-difference Hessian of the analytic
 // ML gradient.

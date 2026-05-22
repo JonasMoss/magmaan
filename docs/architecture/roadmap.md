@@ -512,14 +512,18 @@ stop rather than any usable non-error return.
   path; the pure-composite, composite-plus-factor, and composite-structural HS
   fixtures fit from native starts and match lavaan's native `<~`
   objective/implied covariance plus the lavaan-reported weights, loadings, and
-  regressions. SE/Jacobian support and staged API/R exposure are still pending.
+  regressions. `FcSemEvaluator::dsigma_dtheta` supplies a central
+  finite-difference covariance Jacobian, and
+  `inference::information_expected_fcsem` uses it for native expected
+  information/vcov; the same three fixtures now match lavaan SEs for reported
+  weights, loadings, and regressions. Staged API/R exposure is still pending.
 - Full composite lavaan parity is not yet claimed. Native lavaan
   `<~` oracle fixtures for pure-composite, composite-plus-factor, and
   composite-structural HS cases live under `tests/fixtures/composite/` and
   now record lavaan's observed-variable order for the stored sample/implied
   covariance matrices. The corresponding diagnostic golden is intentionally
-  skipped until native post-fit information, SEs, standardization, and fit
-  measures match lavaan's W-matrix semantics.
+  skipped until native standardization, fit measures, and the public/R
+  post-fit surface match lavaan's W-matrix semantics.
 - `magmaan(model, data, estimator, groups)` is the high-level estimate-only
   R convenience. It composes `model_spec()`, data-frame sample-stat/raw-data
   construction, and the matching point-estimation wrapper for complete-data

@@ -95,6 +95,16 @@ void set_symmetric(Eigen::MatrixXd& M, Eigen::Index r, Eigen::Index c,
   if (r != c) M(c, r) = value;
 }
 
+inline Eigen::Index vech_index(Eigen::Index p, Eigen::Index r,
+                               Eigen::Index c) noexcept {
+  if (r < c) std::swap(r, c);
+  return c * p - (c * (c - 1)) / 2 + (r - c);
+}
+
+inline Eigen::Index vech_len(Eigen::Index p) noexcept {
+  return p * (p + 1) / 2;
+}
+
 }  // namespace
 
 model_expected<FcSemEvaluator>
@@ -390,6 +400,73 @@ FcSemEvaluator::sigma(const data::SampleStats& samp,
   }
 
   return out;
+}
+
+model_expected<Eigen::MatrixXd>
+FcSemEvaluator::dsigma_dtheta(const data::SampleStats& samp,
+                              Eigen::Ref<const Eigen::VectorXd> theta,
+                              double rel_step) const {
+  if (!(rel_step > 0.0) || !std::isfinite(rel_step)) {
+    return std::unexpected(make_err(
+        ModelError::Kind::UnsupportedRowKind,
+        "FC-SEM covariance Jacobian step must be positive and finite"));
+  }
+  auto base = sigma(samp, theta);
+  if (!base.has_value()) return std::unexpected(base.error());
+
+  Eigen::Index total_vech = 0;
+  for (const auto& Sig : base->sigma) {
+    if (Sig.rows() != Sig.cols()) {
+      return std::unexpected(make_err(
+          ModelError::Kind::EmptyMatrix,
+          "FC-SEM implied covariance block is not square"));
+    }
+    total_vech += vech_len(Sig.rows());
+  }
+
+  Eigen::MatrixXd J =
+      Eigen::MatrixXd::Zero(total_vech, static_cast<Eigen::Index>(n_free_));
+  if (n_free_ == 0) return J;
+
+  for (std::size_t k = 0; k < n_free_; ++k) {
+    const Eigen::Index col = static_cast<Eigen::Index>(k);
+    const double h = rel_step * std::max(1.0, std::abs(theta(col)));
+    Eigen::VectorXd plus = theta;
+    Eigen::VectorXd minus = theta;
+    plus(col) += h;
+    minus(col) -= h;
+
+    auto sp = sigma(samp, plus);
+    if (!sp.has_value()) return std::unexpected(sp.error());
+    auto sm = sigma(samp, minus);
+    if (!sm.has_value()) return std::unexpected(sm.error());
+    if (sp->sigma.size() != base->sigma.size() ||
+        sm->sigma.size() != base->sigma.size()) {
+      return std::unexpected(make_err(
+          ModelError::Kind::EmptyMatrix,
+          "FC-SEM covariance Jacobian block count changed under perturbation"));
+    }
+
+    Eigen::Index off = 0;
+    for (std::size_t b = 0; b < base->sigma.size(); ++b) {
+      const Eigen::Index p = base->sigma[b].rows();
+      if (sp->sigma[b].rows() != p || sp->sigma[b].cols() != p ||
+          sm->sigma[b].rows() != p || sm->sigma[b].cols() != p) {
+        return std::unexpected(make_err(
+            ModelError::Kind::EmptyMatrix,
+            "FC-SEM covariance Jacobian block shape changed under "
+            "perturbation"));
+      }
+      const Eigen::MatrixXd dS = (sp->sigma[b] - sm->sigma[b]) / (2.0 * h);
+      for (Eigen::Index c = 0; c < p; ++c) {
+        for (Eigen::Index r = c; r < p; ++r) {
+          J(off + vech_index(p, r, c), col) = dS(r, c);
+        }
+      }
+      off += vech_len(p);
+    }
+  }
+  return J;
 }
 
 }  // namespace magmaan::model
