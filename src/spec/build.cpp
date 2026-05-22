@@ -397,9 +397,12 @@ void apply_atom(PendingRow& row, const parse::ModifierAtom& atom) {
 partable_expected<void>
 apply_modifiers_to_rows(const parse::FlatPartable& flat,
                         std::vector<PendingRow>& rows,
+                        const std::vector<std::size_t>& flat_to_row,
                         std::int32_t group_idx, std::int32_t n_groups) {
-  // rows[i] corresponds 1:1 to flat.rows[i] in this initial slice (before
-  // we add any auto rows). Auto rows are appended later.
+  // `flat_to_row[i]` is the PendingRow that flat.rows[i] feeds: usually a
+  // distinct row each, but repeated `lhs op rhs` terms in one block
+  // (`f =~ NA*x1 + c(a,b)*x1`) share one row, so their modifiers accumulate
+  // onto a single parameter — matching lavaan's per-term modifier merge.
   for (std::size_t i = 0; i < flat.rows.size(); ++i) {
     const auto& fr = flat.rows[i];
     if (fr.mod_idx == 0) continue;
@@ -409,7 +412,7 @@ apply_modifiers_to_rows(const parse::FlatPartable& flat,
                                          std::string(parse::to_string(fr.op)) +
                                          " " + std::string(fr.rhs));
     if (!atom_or.has_value()) return std::unexpected(atom_or.error());
-    apply_atom(rows[i], *atom_or);
+    apply_atom(rows[flat_to_row[i]], *atom_or);
   }
   return {};
 }
@@ -704,11 +707,34 @@ build_group_template(const parse::FlatPartable& flat,
                      std::int32_t               group_idx) {
   std::vector<PendingRow> rows;
   rows.reserve(flat.rows.size() + 16);
-  for (const auto& r : flat.rows) {
-    rows.push_back(make_pending(/*user=*/1, std::string(r.lhs), r.op,
-                                std::string(r.rhs)));
+  // Merge repeated `lhs op rhs` terms within one block into a single row.
+  // `f =~ NA*x1 + c(a,b)*x1` is two parsed terms for one loading cell; lavaan
+  // collapses such repeats and merges their modifiers. Without the merge each
+  // term becomes its own free parameter writing the same matrix cell — the
+  // second silently overwrites the first, leaving a phantom parameter that
+  // moves nothing yet still carries a nonzero analytic gradient.
+  std::vector<std::size_t> flat_to_row(flat.rows.size());
+  std::unordered_map<std::string, std::size_t> row_of_term;
+  for (std::size_t i = 0; i < flat.rows.size(); ++i) {
+    const auto& r = flat.rows[i];
+    std::string key;
+    key.reserve(r.lhs.size() + r.rhs.size() + 8);
+    key.append(r.lhs);
+    key.push_back('\x1f');
+    key.push_back(static_cast<char>(r.op));
+    key.push_back('\x1f');
+    key.append(r.rhs);
+    key.push_back('\x1f');
+    key.append(std::to_string(r.block));
+    auto [it, inserted] = row_of_term.try_emplace(std::move(key), rows.size());
+    flat_to_row[i] = it->second;
+    if (inserted) {
+      rows.push_back(make_pending(/*user=*/1, std::string(r.lhs), r.op,
+                                  std::string(r.rhs)));
+    }
   }
-  if (auto e = apply_modifiers_to_rows(flat, rows, group_idx, opts.n_groups);
+  if (auto e = apply_modifiers_to_rows(flat, rows, flat_to_row, group_idx,
+                                       opts.n_groups);
       !e.has_value()) {
     return std::unexpected(e.error());
   }

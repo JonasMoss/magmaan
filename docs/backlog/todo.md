@@ -9,17 +9,16 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Correctness bugs
 
-- **M/L, highest.** Fix multi-group fits with cross-group linear equality
-  constraints. This surfaced while building the Kline textbook corpus:
-  `guo_mi_configural` fits with only within-group effects-coding constraints,
-  but `guo_mi_weak`, `guo_mi_strong`, and `guo_mi_partial_strong` fail as soon
-  as measurement-invariance constraints such as `a1 == a2` are added. `lavaan`
-  fits the same weak-invariance model (`chisq = 25.5159`, `df = 11`), while
-  magmaan fails under both NLopt L-BFGS (`LineSearchFailed` near the optimum)
-  and PORT (`NumericIssue`, gradient inconsistent with function value). First
-  diagnostic step: add a focused finite-difference check for the objective
-  gradient in the multi-group plus affine linear-constraint path, then turn the
-  Guo weak/strong/partial-strong failures into parity/regression coverage.
+- **S/M.** Add Kline-corpus parity coverage for the Guo measurement-invariance
+  models (`guo_mi_weak`, `guo_mi_strong`, `guo_mi_partial_strong`). The
+  underlying bug — duplicated formula terms (`NA*LM1 + c(a1,a2)*LM1`) becoming
+  two partable rows for one matrix cell, leaving a phantom parameter that moved
+  the analytic gradient but not the model moments — is fixed: `lavaanify` now
+  merges repeated `lhs op rhs` terms within a block (`src/spec/build.cpp`,
+  `build_group_template`), and `guo_mi_weak` fits to the lavaan reference
+  (`chisq = 25.5159`, `df = 11`) under both L-BFGS and PORT. Root-cause
+  regression tests live in `lavaanify_test.cpp`; what remains is wiring the
+  finalized `external/kline` corpus into an end-to-end parity test.
 
 ## API and R boundary
 
