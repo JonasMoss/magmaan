@@ -14,8 +14,8 @@ namespace magmaan::estimate {
 // free parameter vector:
 //
 //   θ_full (size npar)  =  θ₀  +  K · α,    α (size n_alpha = npar − rank)
-//   K (npar × n_alpha)  =  orthonormal basis of ker(R_full), the stacked
-//                          constraint Jacobian
+//   K (npar × n_alpha)  =  basis of ker(R_full), the stacked constraint
+//                          Jacobian
 //   θ₀ (size npar)      =  a particular (min-norm) solution of R_full · θ = d
 //   rank                =  npar − n_alpha   (# independent equality constraints;
 //                          df increases by `rank` vs. the unconstrained model)
@@ -32,14 +32,17 @@ namespace magmaan::estimate {
 //     `n_alpha` / `rank` describe it directly — bit-identical to the P9-phase-1
 //     representation. (`group` is then a convenience field; the transform
 //     methods always go through `Kmat`.)
-//   * With general-linear rows: `K` is a general orthonormal basis, `θ₀ ≠ 0` in
-//     general, and `group` is left empty (the reparam is no longer a pure merge).
+//   * With general-linear rows: `K` is a direct sum of orthonormal bases, one
+//     per connected constraint component. This preserves separable blocks such
+//     as loading-only and intercept-only effect-coding constraints while still
+//     describing the same affine surface. `θ₀ ≠ 0` in general, and `group` is
+//     left empty (the reparam is no longer a pure merge).
 //
 // The unconstrained case is the identity reparameterization: `group[k] = k`,
 // `K = I`, `θ₀ = 0`, `n_alpha = npar`, `rank = 0`, `active() == false`.
 struct EqConstraints {
   Eigen::VectorXd           theta0;          // size npar; the particular solution
-  Eigen::MatrixXd           Kmat;            // npar × n_alpha; the (orthonormal) basis
+  Eigen::MatrixXd           Kmat;            // npar × n_alpha; kernel basis
   // Affine constraint system, equivalent to "θ lies on the manifold θ₀ + K·α":
   //   A_eq · θ = b_eq      (A_eq is `rank × npar`, full row rank;
   //                         A_eq orthonormal-by-rows in the general path,

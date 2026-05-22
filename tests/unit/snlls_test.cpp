@@ -42,6 +42,16 @@ Handles handles_for(std::string_view src) {
   return Handles{std::move(*pt), std::move(*rep)};
 }
 
+Handles handles_for(std::string_view src, magmaan::spec::BuildOptions opts) {
+  auto fp = Parser::parse(src);
+  REQUIRE(fp.has_value());
+  auto pt = build(*fp, opts);
+  REQUIRE(pt.has_value());
+  auto rep = build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+  return Handles{std::move(*pt), std::move(*rep)};
+}
+
 Handles sem_handles_for(std::string_view src) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
@@ -259,6 +269,24 @@ TEST_CASE("SNLLS: strict compatibility rejects cross-block equality") {
   if (!est.has_value()) {
     CHECK(est.error().detail.find("SNLLS compatibility") != std::string::npos);
   }
+}
+
+TEST_CASE("SNLLS: block-separated linear constraints stay compatible") {
+  magmaan::spec::BuildOptions opts;
+  opts.effect_coding = true;
+  auto h = handles_for(
+      "f1 =~ x1 + x2 + x3 + x4\n"
+      "f2 =~ x5 + x6 + x7 + x8\n"
+      "x1 ~ t1*1\nx2 ~ t2*1\nx3 ~ t3*1\nx4 ~ t4*1\n"
+      "x5 ~ t5*1\nx6 ~ t6*1\nx7 ~ t7*1\nx8 ~ t8*1\n"
+      "t1 + t2 + t3 + t4 == 0\n"
+      "t5 + t6 + t7 + t8 == 0",
+      opts);
+  auto ev = ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+
+  const Eigen::VectorXd x0 = Eigen::VectorXd::Zero(h.pt.n_free());
+  CHECK(magmaan::estimate::gmm::gp_compatible(h.pt, *ev, x0));
 }
 
 TEST_CASE("SNLLS: covariance-only model is solved by profiling alone") {
