@@ -13,9 +13,10 @@ replacement ergonomics.
 
 magmaan is a C++23 library for methods developers working on linear SEM. It is
 built under `-fno-exceptions -fno-rtti`, Eigen runs under
-`EIGEN_NO_EXCEPTIONS`, and fallible APIs return `std::expected<T, Error>`.
-Extension points are concepts and free function templates rather than virtual
-hot-path interfaces.
+`EIGEN_NO_EXCEPTIONS`, and fallible APIs return `std::expected<T, Error>` —
+the single C++23 feature the library depends on. Extension points are free
+function templates over structural (duck-typed) interfaces rather than virtual
+hot-path interfaces or `concept` constraints.
 
 Lavaan remains the oracle. Parser output, lavaanified partables, point
 estimates, standard errors, and chi-square statistics are compared against
@@ -812,8 +813,8 @@ failures.
 - Lavaan-shaped partables are boundary formats for oracle comparison,
   interchange, and compatibility projection. Core work should prefer the model
   triple plus explicit derived structures.
-- Extension points remain concepts and free functions, not virtual hot-path
-  interfaces.
+- Extension points remain free function templates over structural interfaces,
+  not virtual hot-path interfaces or `concept` constraints.
 - Parser behavior follows `docs/grammar/grammar.ebnf`; if parser code and the
   EBNF disagree, the parser is wrong.
 - Function signatures should be argument-minimal. A computation should receive

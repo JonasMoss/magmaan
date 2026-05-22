@@ -14,10 +14,14 @@ plan is historical archaeology, not current guidance.
 ## Non-negotiables
 
 - **C++23**, built with `-fno-exceptions -fno-rtti`. Eigen runs under
-  `EIGEN_NO_EXCEPTIONS`. Failures are values: `std::expected<T, Error>`.
-- **No virtual functions on the hot path.** Extension is via concepts
-  (`Discrepancy`, `Optimizer`, `StandardErrorMethod`, `FitIndex`) and free
-  function templates.
+  `EIGEN_NO_EXCEPTIONS`. Failures are values: `std::expected<T, Error>`. The
+  C++23 floor is carried by exactly that one feature — `std::expected` is the
+  error model — a deliberate single-feature dependency (GCC 13 / Clang 17).
+- **No virtual functions on the hot path.** Extension is via free function
+  templates over structural (duck-typed) interfaces: `Discrepancy`,
+  `Optimizer`, `StandardErrorMethod`, and `FitIndex` are documented
+  member-function conventions a type must provide, not C++ `concept`s. magmaan
+  deliberately uses no `concept`/`requires` constraints.
 - **Lavaan is the oracle.** Parser, partable, point estimates, SEs, and
   chi-square statistics match installed lavaan output to documented
   tolerances. New fixtures are regenerated via `tests/tools/regen_oracle.R`; CI
@@ -143,7 +147,7 @@ matches the namespace.
 - `estimate` - fit orchestration, ML/FIML/GMM/GLS discrepancies, bounds,
   constraints, start values, SNLLS; `estimate::gmm` for the moment-quadratic
   weight machinery.
-- `optim` - optimizer concepts and backends.
+- `optim` - optimizer interfaces and backends.
 - `inference` - post-fit information, scores, standard errors.
 - `robust` - robust tests (Satorra-Bentler family, weighted inference).
 - `measures` - fit indices, residuals, standardization, effects, factor scores.

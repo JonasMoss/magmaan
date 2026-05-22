@@ -58,7 +58,7 @@ private:
 // CeresBoundedOptimizer — uses Ceres' `Problem` API with per-parameter
 // `SetParameterLowerBound`/`SetParameterUpperBound`. The unbounded overload
 // delegates to the GradientProblemSolver path internally, so the same
-// optimizer satisfies both the `Optimizer` and `BoundedOptimizer` concepts —
+// optimizer satisfies both the `Optimizer` and `BoundedOptimizer` interfaces —
 // callers pick at compile time via `fit<>` (unbounded) vs `fit_bounded<>`
 // (bounded).
 //
