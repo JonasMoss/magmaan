@@ -1,5 +1,16 @@
 #!/usr/bin/env Rscript
 
+# Regenerate the Geiser-corpus parity fixtures consumed by
+# tests/golden/geiser_golden_test.cpp. One fixture file per estimator:
+#
+#   tests/fixtures/geiser/gls_reference.json   GLS  (normal-theory weight)
+#   tests/fixtures/geiser/uls_reference.json   ULS  (identity weight)
+#
+# Each case carries the model, sample statistics, and the lavaan oracle
+# (objective, implied moments, free estimates). The C++ golden test fits
+# magmaan's own estimator end to end and checks it against the oracle. This is
+# a manual developer step; CI never runs R.
+
 suppressPackageStartupMessages({
   library(jsonlite)
   library(lavaan)
@@ -26,11 +37,11 @@ geiser_root_meta <- if (startsWith(geiser_root, paste0(repo_root, .Platform$file
   geiser_root
 }
 
-out_path <- Sys.getenv("MAGMAAN_GEISER_FIXTURE", unset = "")
-if (!nzchar(out_path)) {
-  out_path <- file.path(repo_root, "tests", "fixtures", "geiser", "gls_reference.json")
+out_dir <- Sys.getenv("MAGMAAN_GEISER_FIXTURE_DIR", unset = "")
+if (!nzchar(out_dir)) {
+  out_dir <- file.path(repo_root, "tests", "fixtures", "geiser")
 }
-dir.create(dirname(out_path), recursive = TRUE, showWarnings = FALSE)
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 as_plain_matrix <- function(x) {
   unname(as.matrix(x))
@@ -107,7 +118,7 @@ case_payload <- function(case) {
     label = case$label,
     family = case$family,
     data_kind = case$data_kind,
-    estimator = "GLS",
+    estimator = case$estimator,
     meanstructure = TRUE,
     fixed_x = TRUE,
     model = case$model,
@@ -126,26 +137,32 @@ case_payload <- function(case) {
   )
 }
 
-cases <- geiser_corpus_cases(geiser_root, weights = "GLS")
-payload_cases <- list()
-for (nm in names(cases)) {
-  case <- cases[[nm]]
-  message("geiser fixture: ", case$geiser_id)
-  payload_cases[[length(payload_cases) + 1L]] <- case_payload(case)
+# Build, fit, and serialize every Geiser case under one estimator.
+generate <- function(estimator) {
+  cases <- geiser_corpus_cases(geiser_root, weights = estimator)
+  payload_cases <- list()
+  for (nm in names(cases)) {
+    case <- cases[[nm]]
+    message("geiser fixture (", estimator, "): ", case$geiser_id)
+    payload_cases[[length(payload_cases) + 1L]] <- case_payload(case)
+  }
+
+  payload <- list(
+    `_meta` = list(
+      format_version = 1L,
+      fixture_kind = paste0("geiser.", tolower(estimator)),
+      tool = "tests/tools/regen_geiser_fixtures.R",
+      generated = format(Sys.time(), "%Y-%m-%d %H:%M:%S %z"),
+      geiser_root = geiser_root_meta,
+      lavaan_version = as.character(utils::packageDescription("lavaan")$Version)
+    ),
+    cases = payload_cases
+  )
+
+  out_path <- file.path(out_dir, paste0(tolower(estimator), "_reference.json"))
+  jsonlite::write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
+                       digits = NA, null = "null")
+  message("Wrote ", out_path)
 }
 
-payload <- list(
-  `_meta` = list(
-    format_version = 1L,
-    fixture_kind = "geiser.gls",
-    tool = "tests/tools/regen_geiser_fixtures.R",
-    generated = format(Sys.time(), "%Y-%m-%d %H:%M:%S %z"),
-    geiser_root = geiser_root_meta,
-    lavaan_version = as.character(utils::packageDescription("lavaan")$Version)
-  ),
-  cases = payload_cases
-)
-
-jsonlite::write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
-                     digits = NA, null = "null")
-message("Wrote ", out_path)
+for (estimator in c("GLS", "ULS")) generate(estimator)

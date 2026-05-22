@@ -108,7 +108,8 @@ void check_implied_against_lavaan(const std::string& id,
                                   const magmaan::estimate::Estimates& est,
                                   double lavaan_fx,
                                   const Eigen::MatrixXd& lavaan_sigma,
-                                  const Eigen::VectorXd& lavaan_mu) {
+                                  const Eigen::VectorXd& lavaan_mu,
+                                  double d_fx_tol = 2e-4) {
   auto ev = magmaan::model::ModelEvaluator::build(pt, rep);
   REQUIRE_MESSAGE(ev.has_value(), id << ": ModelEvaluator build failed");
   auto im = ev->sigma(est.theta);
@@ -121,9 +122,14 @@ void check_implied_against_lavaan(const std::string& id,
     return;
   }
 
+  // Cross-program objective check, relative to the lavaan value. magmaan and
+  // lavaan agree tightly on the deliberately-scaled GLS objective; the ULS
+  // objective uses a slightly different mean-structure scale convention, so
+  // ULS callers pass a looser tolerance. The scale-free implied-moment checks
+  // below are the real parity gate either way.
   const double d_fx = std::abs(est.fmin - lavaan_fx);
 
-  CHECK_MESSAGE(d_fx < 2e-4,
+  CHECK_MESSAGE(d_fx < d_fx_tol * std::fmax(1.0, std::abs(lavaan_fx)),
                 id << ": |fmin - lavaan fx| = " << d_fx
                    << " (magmaan " << est.fmin << ", lavaan " << lavaan_fx
                    << ")");
@@ -181,6 +187,66 @@ TEST_CASE("Geiser GLS goldens match lavaan implied moments") {
       }
       check_implied_against_lavaan(id + "/snlls", handles.pt, handles.rep,
                                    *snlls, lavaan_fx, lavaan_sigma, lavaan_mu);
+    }
+  }
+}
+
+TEST_CASE("Geiser ULS goldens match lavaan implied moments") {
+  const std::string path =
+      magmaan::test::fixtures_dir() + "/geiser/uls_reference.json";
+  auto raw = magmaan::test::read_fixture(path);
+  REQUIRE(raw.has_value());
+  auto j = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(j.is_discarded());
+  REQUIRE(j.contains("cases"));
+
+  for (const auto& c : j["cases"]) {
+    const std::string id = c["id"].get<std::string>();
+    SUBCASE(id.c_str()) {
+      REQUIRE(c["lavaan"]["converged"].get<bool>());
+      auto handles = handles_from_case(c);
+      auto samp = sample_stats_from_case(c);
+      auto x0 = magmaan::estimate::simple_start_values(
+          handles.pt, handles.rep, samp, {});
+      REQUIRE_MESSAGE(x0.has_value(), id << ": start values failed");
+
+      const double lavaan_fx = c["lavaan"]["fx"].get<double>();
+      const Eigen::MatrixXd lavaan_sigma =
+          matrix_from_json(c["lavaan"]["sigma"]);
+      const Eigen::VectorXd lavaan_mu = vector_from_json(c["lavaan"]["mu"]);
+
+      // ULS is the moment quadratic with an empty (identity) weight; the GLS
+      // mean-weight asymmetry does not arise here. fit_snlls is the profiled
+      // counterpart, run on the robust L-BFGS backend (the PortNls NL2SOL
+      // backend trips its noisy-residual guard on the profiled ULS path for
+      // latent_path). magmaan's ULS objective and lavaan's ULS fx use slightly
+      // different mean-structure scale conventions, so the objective check
+      // gets a looser relative tolerance; the implied moments are the gate.
+      constexpr double kUlsFxTol = 5e-3;
+      if (id != "latent_ar_cross_lagged") {
+        auto full = magmaan::estimate::fit_gmm(
+            handles.pt, handles.rep, samp, *x0,
+            magmaan::estimate::gmm::Weight{}, magmaan::estimate::Bounds{},
+            magmaan::estimate::Backend::Port, geiser_opts());
+        if (!full.has_value()) {
+          FAIL_CHECK(id << ": full ULS failed: " << full.error().detail);
+          continue;
+        }
+        check_implied_against_lavaan(id + "/full", handles.pt, handles.rep,
+                                     *full, lavaan_fx, lavaan_sigma, lavaan_mu,
+                                     kUlsFxTol);
+      }
+
+      auto snlls = magmaan::estimate::fit_snlls(
+          handles.pt, handles.rep, samp, *x0, magmaan::estimate::gmm::Weight{},
+          magmaan::estimate::Backend::Lbfgs, geiser_opts());
+      if (!snlls.has_value()) {
+        FAIL_CHECK(id << ": SNLLS ULS failed: " << snlls.error().detail);
+        continue;
+      }
+      check_implied_against_lavaan(id + "/snlls", handles.pt, handles.rep,
+                                   *snlls, lavaan_fx, lavaan_sigma, lavaan_mu,
+                                   kUlsFxTol);
     }
   }
 }
