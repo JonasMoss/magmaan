@@ -72,6 +72,8 @@ estimate_wls_snlls <- fit_wls_snlls_impl
 # unified estimate_uls/gls/wls/*_snlls now take an `optimizer = "..."`
 # string that maps to any of the C++ Backend values (see backend_strings.hpp).
 estimate_start_values <- fit_start_values
+frontier_fcsem_model_spec <- fcsem_model_spec_impl
+frontier_fit_ml_fcsem <- fit_ml_fcsem_impl
 
 inference_information_expected <- infer_information_expected
 inference_information_observed_fd <- infer_information_observed_fd
@@ -123,6 +125,9 @@ robust_se_raw_fit <- infer_robust_se_raw_fit
 
 measures_baseline <- infer_baseline
 measures_compute_defined <- compute_defined_impl
+frontier_fcsem_standard_errors <- fcsem_standard_errors_impl
+frontier_fcsem_fit_measures <- fcsem_fit_measures_impl
+frontier_fcsem_standardized_rows <- fcsem_standardized_rows_impl
 
 magmaan_core <- local({
   groups <- list(
@@ -228,9 +233,17 @@ magmaan_core <- local({
       "measures_factor_scores",
       "measures_compute_defined"
     ),
+    frontier = c(
+      "frontier_fcsem_model_spec",
+      "frontier_fit_ml_fcsem",
+      "frontier_fcsem_standard_errors",
+      "frontier_fcsem_fit_measures",
+      "frontier_fcsem_standardized_rows"
+    ),
     helpers = c(
       "df_to_data",
       "df_to_fiml_data",
+      "df_to_fcsem_data",
       "data_ordinal_stats_from_df",
       "data_mixed_ordinal_stats_from_df",
       "shrink_mixed_ordinal_stats",
@@ -245,7 +258,12 @@ magmaan_core <- local({
       "fit_wls_mixed_ordinal",
       "fit_uls_snlls",
       "fit_gls_snlls",
-      "fit_wls_snlls"
+      "fit_wls_snlls",
+      "fit_ml_fcsem",
+      "magmaan_fcsem",
+      "fcsem_standard_errors",
+      "fcsem_fit_measures",
+      "fcsem_standardized_rows"
     )
   )
   compatibility_names <- c(
@@ -276,6 +294,11 @@ magmaan_core <- local({
       "fit_uls_snlls_impl",
       "fit_gls_snlls_impl",
       "fit_wls_snlls_impl",
+      "fcsem_model_spec_impl",
+      "fit_ml_fcsem_impl",
+      "fcsem_standard_errors_impl",
+      "fcsem_fit_measures_impl",
+      "fcsem_standardized_rows_impl",
       "fit_start_values",
       "fit_sample_stats",
       "infer_information_expected",

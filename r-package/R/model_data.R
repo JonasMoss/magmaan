@@ -893,64 +893,200 @@ df_to_fiml_data <- function(x, model, group = NULL) {
   out
 }
 
+fcsem_model_spec <- function(syntax, ...) {
+  dots <- list(...)
+  if (length(dots)) {
+    stop("fcsem_model_spec(): unused arguments: ",
+         paste(names(dots), collapse = ", "))
+  }
+  out <- fcsem_model_spec_impl(syntax)
+  out$options <- list(composite_mode = "fcsem")
+  class(out) <- c("magmaan_fcsem_model_spec", "list")
+  out
+}
+
+as_fcsem_model_spec <- function(model) {
+  if (inherits(model, "magmaan_fcsem_model_spec")) return(model)
+  if (is.character(model) && length(model) == 1L) return(fcsem_model_spec(model))
+  if (is.list(model) && !is.null(model$syntax)) return(fcsem_model_spec(model$syntax))
+  stop("expected a native FC-SEM model spec or model syntax string")
+}
+
+df_to_fcsem_data <- function(x, model, missing = c("listwise", "error"),
+                             scaling = c("n", "n-1")) {
+  missing <- match.arg(missing)
+  scaling <- match.arg(scaling)
+  if (!is.data.frame(x)) {
+    stop("df_to_fcsem_data(): `x` must be a data.frame")
+  }
+  model <- as_fcsem_model_spec(model)
+  ov <- model$ov_names
+  miss_cols <- setdiff(ov, names(x))
+  if (length(miss_cols)) {
+    stop("df_to_fcsem_data(): data is missing observed variables: ",
+         paste(miss_cols, collapse = ", "))
+  }
+  block <- x[, ov, drop = FALSE]
+  bad_type <- names(block)[!vapply(block, is.numeric, logical(1))]
+  if (length(bad_type)) {
+    stop("df_to_fcsem_data(): observed variables must be numeric: ",
+         paste(bad_type, collapse = ", "))
+  }
+  cc <- stats::complete.cases(block)
+  if (!all(cc)) {
+    if (missing == "error") {
+      stop("df_to_fcsem_data(): missing observed values")
+    }
+    block <- block[cc, , drop = FALSE]
+  }
+  if (nrow(block) < 2L) {
+    stop("df_to_fcsem_data(): fewer than 2 complete rows")
+  }
+  mat <- as.matrix(block)
+  if (any(!is.finite(mat))) {
+    stop("df_to_fcsem_data(): non-finite observed value")
+  }
+  X <- list(mat)
+  ss <- data_sample_stats_from_raw(X)
+  if (scaling == "n-1") {
+    ss$S[[1L]] <- ss$S[[1L]] * ss$nobs[[1L]] / (ss$nobs[[1L]] - 1L)
+  }
+  dimnames(ss$S[[1L]]) <- list(ov, ov)
+  if (!is.null(ss$mean)) names(ss$mean[[1L]]) <- ov
+  out <- c(ss, list(
+    X = X,
+    ov_names = list(ov),
+    group_var = "",
+    group_labels = character(),
+    scaling = scaling
+  ))
+  class(out) <- c("magmaan_fcsem_data", "magmaan_data", "list")
+  out
+}
+
 # Per-estimator entry points. Each takes an `optimizer = "lbfgs"` (default)
 # string + a generic `control = list(...)` of solver tuning knobs (the union
 # of LbfgsOptions and Ceres extras; see the C++ `Backend` enum docstring for
 # the supported strings).
-fit_ml <- function(model, data, optimizer = "lbfgs", control = NULL) {
+solver_control_arg <- function(control, lbfgsb = NULL, lbfgs = NULL,
+                               fn = "fit") {
+  used <- c(lbfgsb = !is.null(lbfgsb), lbfgs = !is.null(lbfgs))
+  if (sum(used) > 1L) {
+    stop(fn, "(): pass at most one of deprecated `lbfgsb` and `lbfgs`")
+  }
+  if (any(used)) {
+    if (!is.null(control)) {
+      stop(fn, "(): pass either `control` or deprecated `",
+           names(used)[used][[1L]], "`, not both")
+    }
+    return(if (used[["lbfgsb"]]) lbfgsb else lbfgs)
+  }
+  control
+}
+
+fit_ml <- function(model, data, optimizer = "lbfgs", control = NULL,
+                   lbfgsb = NULL, lbfgs = NULL) {
+  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_ml")
   fit_ml_impl(partable_arg(model), sample_stats_arg(data),
               optimizer = optimizer, control = control)
 }
 
-fit_fiml <- function(model, data, optimizer = "lbfgs", control = NULL) {
+fit_fiml <- function(model, data, optimizer = "lbfgs", control = NULL,
+                     lbfgsb = NULL, lbfgs = NULL) {
   if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
   # FIML currently hardcodes LBFGS at the C++ layer (`src/estimate/fiml.cpp`
   # bypasses Backend); the optimizer/control args are accepted for shape
   # parity with the rest of the family, and the LBFGS-only path uses them.
+  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_fiml")
   fit_fiml_impl(partable_arg(model), fiml_data_arg(data), lbfgs = control)
 }
 
 fit_uls <- function(model, data, optimizer = "lbfgs", control = NULL,
-                    bounds = NULL) {
+                    bounds = NULL, lbfgsb = NULL, lbfgs = NULL) {
+  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_uls")
   fit_uls_impl(partable_arg(model), sample_stats_arg(data),
                optimizer = optimizer, control = control, bounds = bounds)
 }
 
 fit_gls <- function(model, data, optimizer = "lbfgs", control = NULL,
-                    bounds = NULL) {
+                    bounds = NULL, lbfgsb = NULL, lbfgs = NULL) {
+  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_gls")
   fit_gls_impl(partable_arg(model), sample_stats_arg(data),
                optimizer = optimizer, control = control, bounds = bounds)
 }
 
 fit_wls <- function(model, data, W, optimizer = "lbfgs", control = NULL,
-                    bounds = NULL) {
+                    bounds = NULL, lbfgsb = NULL, lbfgs = NULL) {
+  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_wls")
   fit_wls_impl(partable_arg(model), sample_stats_arg(data), W = W,
                optimizer = optimizer, control = control, bounds = bounds)
 }
 
+fit_ml_fcsem <- function(model, data, missing = c("listwise", "error"),
+                         control = NULL) {
+  missing <- match.arg(missing)
+  spec <- as_fcsem_model_spec(model)
+  if (is.data.frame(data)) data <- df_to_fcsem_data(data, spec, missing = missing)
+  fit <- fit_ml_fcsem_impl(spec$syntax, sample_stats_arg(data), control = control)
+  finalize_fcsem_fit(fit, spec, missing)
+}
+
+magmaan_fcsem <- function(model, data, ..., missing = c("listwise", "error"),
+                          control = NULL) {
+  dots <- list(...)
+  if (length(dots)) {
+    stop("magmaan_fcsem(): unused arguments: ",
+         paste(names(dots), collapse = ", "))
+  }
+  fit_ml_fcsem(model, data, missing = missing, control = control)
+}
+
+fcsem_standard_errors <- function(fit) {
+  fcsem_standard_errors_impl(fit)
+}
+
+fcsem_fit_measures <- function(fit) {
+  fcsem_fit_measures_impl(fit)
+}
+
+fcsem_standardized_rows <- function(fit, vcov = NULL) {
+  if (is.null(vcov)) vcov <- fcsem_standard_errors(fit)$vcov
+  fcsem_standardized_rows_impl(fit, vcov)
+}
+
 fit_dwls_ordinal <- function(model, data, optimizer = "lbfgs",
-                             control = NULL, bounds = NULL) {
+                             control = NULL, bounds = NULL,
+                             lbfgsb = NULL, lbfgs = NULL) {
+  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_dwls_ordinal")
   pt <- augment_ordinal_partable(model, data)
   fit_dwls_ordinal_impl(pt, data, optimizer = optimizer,
                         control = control, bounds = bounds)
 }
 
 fit_wls_ordinal <- function(model, data, optimizer = "lbfgs",
-                            control = NULL, bounds = NULL) {
+                            control = NULL, bounds = NULL,
+                            lbfgsb = NULL, lbfgs = NULL) {
+  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_wls_ordinal")
   pt <- augment_ordinal_partable(model, data)
   fit_wls_ordinal_impl(pt, data, optimizer = optimizer,
                        control = control, bounds = bounds)
 }
 
 fit_dwls_mixed_ordinal <- function(model, data, optimizer = "lbfgs",
-                                   control = NULL, bounds = NULL) {
+                                   control = NULL, bounds = NULL,
+                                   lbfgsb = NULL, lbfgs = NULL) {
+  control <- solver_control_arg(control, lbfgsb, lbfgs,
+                                "fit_dwls_mixed_ordinal")
   pt <- augment_mixed_ordinal_partable(model, data)
   fit_dwls_mixed_ordinal_impl(pt, data, optimizer = optimizer,
                               control = control, bounds = bounds)
 }
 
 fit_wls_mixed_ordinal <- function(model, data, optimizer = "lbfgs",
-                                  control = NULL, bounds = NULL) {
+                                  control = NULL, bounds = NULL,
+                                  lbfgsb = NULL, lbfgs = NULL) {
+  control <- solver_control_arg(control, lbfgsb, lbfgs,
+                                "fit_wls_mixed_ordinal")
   pt <- augment_mixed_ordinal_partable(model, data)
   fit_wls_mixed_ordinal_impl(pt, data, optimizer = optimizer,
                              control = control, bounds = bounds)
@@ -990,6 +1126,10 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
   }
 
   dots <- list(...)
+  control <- solver_control_arg(control, dots[["lbfgsb"]], dots[["lbfgs"]],
+                                "magmaan")
+  dots[["lbfgsb"]] <- NULL
+  dots[["lbfgs"]] <- NULL
   if (inherits(model, "magmaan_model_spec")) {
     if (length(dots)) {
       stop("magmaan(): model option arguments are only accepted when `model` is a syntax string")
@@ -1096,6 +1236,22 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
   finalize_magmaan_fit(fit, spec, estimator, missing, se, test)
 }
 
+finalize_fcsem_fit <- function(fit, spec, missing) {
+  fit$model <- spec
+  fit$syntax <- spec$syntax
+  fit$options <- list(
+    estimator = "FCSEM-ML",
+    missing = missing,
+    model_options = spec$options
+  )
+  fit$ordered <- character()
+  fit$parameterization <- "delta"
+  fit$group_var <- ""
+  fit$group_labels <- character()
+  class(fit) <- c("magmaan_fcsem_fit", "magmaan_fit", "list")
+  fit
+}
+
 finalize_magmaan_fit <- function(fit, spec, estimator, missing, se, test) {
   fit$model <- spec
   fit$syntax <- spec$syntax
@@ -1168,21 +1324,24 @@ infer_robust_se_raw_fit <- function(fit, X, bread = "expected",
 }
 
 fit_uls_snlls <- function(model, data, optimizer = "lbfgs", control = NULL,
-                          bounds = NULL) {
+                          bounds = NULL, lbfgsb = NULL, lbfgs = NULL) {
+  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_uls_snlls")
   fit_uls_snlls_impl(partable_arg(model), sample_stats_arg(data),
                      optimizer = optimizer, control = control,
                      bounds = bounds)
 }
 
 fit_gls_snlls <- function(model, data, optimizer = "lbfgs", control = NULL,
-                          bounds = NULL) {
+                          bounds = NULL, lbfgsb = NULL, lbfgs = NULL) {
+  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_gls_snlls")
   fit_gls_snlls_impl(partable_arg(model), sample_stats_arg(data),
                      optimizer = optimizer, control = control,
                      bounds = bounds)
 }
 
 fit_wls_snlls <- function(model, data, W, optimizer = "lbfgs", control = NULL,
-                          bounds = NULL) {
+                          bounds = NULL, lbfgsb = NULL, lbfgs = NULL) {
+  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_wls_snlls")
   fit_wls_snlls_impl(partable_arg(model), sample_stats_arg(data), W = W,
                      optimizer = optimizer, control = control,
                      bounds = bounds)

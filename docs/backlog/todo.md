@@ -180,21 +180,21 @@ composite indicator T-block moments from the user model, and
 same native fixtures for chi-square, df, CFI/TLI/RMSEA, SRMR, loglik, AIC, BIC,
 and sample-size-adjusted BIC. `api::frontier` now exposes the native FC-SEM
 model builder, complete-data ML fit, expected SEs, fit measures, and
-standardized row reporting.
+standardized row reporting. The R frontier mirrors this settled single-group
+ML slice through `fcsem_model_spec()`, `df_to_fcsem_data()`,
+`fit_ml_fcsem()` / `magmaan_fcsem()`, `fcsem_standard_errors()`,
+`fcsem_fit_measures()`, and `fcsem_standardized_rows()`, with a checked
+example under `r-package/examples/fcsem_frontier.R`.
 Remaining:
 
 - **L.** Post-fit lavaan parity validation: minimal oracle fixtures exist under
   `tests/fixtures/composite/` for pure composite, composite plus common factor,
   and structural regression involving a composite. The diagnostic golden is
-  wired but skipped because the R native post-fit path does not yet expose
-  lavaan's `<~` W-matrix semantics. Split or unskip it once that surface is
-  available.
-- **M.** Add staged R exposure once the native post-fit surface is settled
-  enough to expose point estimates and standard errors without implying full
-  lavaan replacement parity; until then, keep native FC-SEM on the C++
-  frontier surface.
-  Multi-group composites are in scope only after the single-group ML slice is
-  green and only if lavaan handles them cleanly, including
+  wired but skipped while we decide whether native W-matrix parity belongs in
+  low-level C++ fixture tests, an R frontier diagnostic, or both.
+- **M/L.** Multi-group composites are in scope only after the single-group ML
+  and R frontier slices stay green and only if lavaan handles them cleanly,
+  including
   `group.equal = "composite.weights"`.
 - **S, after parity fixtures are green.** Add composite benchmark cases.
 
