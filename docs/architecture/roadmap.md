@@ -66,7 +66,10 @@ golden `parTable()` fixtures.
   free loading by its indicator's covariance with the factor's marker, and the
   unbounded path salvages a converged iterate when the strong-Wolfe line search
   stalls in the flat neighbourhood of the optimum instead of reporting a hard
-  line-search error (see `docs/validation/convergence_diagnostics.md`).
+  line-search error.
+- Discrepancy-scale convention: magmaan's `fmin` is the full ML discrepancy
+  `F`, whereas lavaan reports `F/2` — magmaan's `fmin` at the optimum equals
+  twice lavaan's.
 - Expected information, finite-difference observed information, and analytic
   observed information for covariance and mean-structure models.
 - Vcov/SE, Wald/z tests, chi-square/df helpers, LR/Satorra-2000 and
