@@ -1,9 +1,11 @@
 #include "magmaan/estimate/nt.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include <Eigen/Cholesky>
@@ -12,6 +14,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/model/fcsem_evaluator.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/optim/problem.hpp"
 
@@ -29,8 +32,46 @@ FitError make_err(FitError::Kind k, std::string detail) {
   return FitError{k, std::move(detail), 0, 0.0};
 }
 
+FitError model_err(const ModelError& e, std::string_view who) {
+  FitError::Kind kind = FitError::Kind::NumericIssue;
+  if (e.kind == ModelError::Kind::NonPositiveDefinite) {
+    kind = FitError::Kind::NonPositiveDefiniteSigma;
+  }
+  return make_err(kind, std::string(who) + ": " + e.detail);
+}
+
 using detail::vech_index;
 using detail::vech_len;
+
+fit_expected<double>
+fcsem_ml_value(const model::FcSemEvaluator& ev, const SampleStats& s,
+               const MlCache& cache, const Eigen::VectorXd& theta) {
+  auto m = ev.sigma(s, theta);
+  if (!m.has_value()) {
+    return std::unexpected(model_err(m.error(), "FC-SEM ML"));
+  }
+  return ml_value(s, cache, *m);
+}
+
+fit_expected<Eigen::VectorXd>
+fcsem_ml_gradient_fd(const model::FcSemEvaluator& ev, const SampleStats& s,
+                     const MlCache& cache, const Eigen::VectorXd& theta) {
+  constexpr double rel_step = 1e-6;
+  Eigen::VectorXd grad(theta.size());
+  for (Eigen::Index k = 0; k < theta.size(); ++k) {
+    const double h = rel_step * std::max(1.0, std::abs(theta(k)));
+    Eigen::VectorXd plus = theta;
+    Eigen::VectorXd minus = theta;
+    plus(k) += h;
+    minus(k) -= h;
+    auto fp = fcsem_ml_value(ev, s, cache, plus);
+    if (!fp.has_value()) return std::unexpected(fp.error());
+    auto fm = fcsem_ml_value(ev, s, cache, minus);
+    if (!fm.has_value()) return std::unexpected(fm.error());
+    grad(k) = (*fp - *fm) / (2.0 * h);
+  }
+  return grad;
+}
 
 }  // namespace
 
@@ -443,6 +484,32 @@ ml_objective(const model::ModelEvaluator& ev, const SampleStats& s) {
     }
     grad = std::move(vg->gradient);
     return vg->value;
+  };
+  return prob;
+}
+
+fit_expected<optim::ScalarProblem>
+ml_objective(const model::FcSemEvaluator& ev, const SampleStats& s) {
+  auto cache = ml_prepare(s);
+  if (!cache.has_value()) return std::unexpected(cache.error());
+
+  optim::ScalarProblem prob;
+  prob.n_param = static_cast<Eigen::Index>(ev.n_free());
+  prob.expand = [](const Eigen::VectorXd& x) { return x; };
+  prob.f = [&ev, s, mc = std::move(*cache)](
+               const Eigen::VectorXd& x, Eigen::VectorXd& grad) -> double {
+    auto f = fcsem_ml_value(ev, s, mc, x);
+    if (!f.has_value()) {
+      grad.setZero();
+      return kInf;
+    }
+    auto g = fcsem_ml_gradient_fd(ev, s, mc, x);
+    if (!g.has_value()) {
+      grad.setZero();
+      return kInf;
+    }
+    grad = std::move(*g);
+    return *f;
   };
   return prob;
 }

@@ -9,6 +9,7 @@
 
 #include "magmaan/expected.hpp"
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/model/fcsem_evaluator.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/optim/problem.hpp"
 
@@ -75,5 +76,12 @@ ml_gradient_block(const SampleStats& s, const model::ImpliedMoments& m,
 // outlive the returned `ScalarProblem` (its closure borrows it by reference).
 fit_expected<optim::ScalarProblem>
 ml_objective(const model::ModelEvaluator& ev, const SampleStats& s);
+
+// Native FC-SEM counterpart. The value is the same normal-theory ML
+// discrepancy, but Σ(θ) is assembled by FcSemEvaluator; the first tranche uses
+// central finite differences for ∇F, matching lavaan's current numerical
+// gradient requirement for `<~`.
+fit_expected<optim::ScalarProblem>
+ml_objective(const model::FcSemEvaluator& ev, const SampleStats& s);
 
 }  // namespace magmaan::estimate
