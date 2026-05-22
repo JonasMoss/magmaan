@@ -43,6 +43,32 @@ External cases such as Stata Press and Mplus examples use `fetch_data.R` to
 download raw data into the ignored cache. Cases whose terms are unclear should
 stay as metadata and manual-download notes until they are audited.
 
+## C++ memory profiling
+
+`magmaan_mem_profile` is a standalone C++ harness that measures the peak heap of
+the three reduced-Gamma computations in `src/robust/robust.cpp`:
+`reduced_gamma_sample` (batched streaming), `reduced_gamma_sample_materialized`
+(the q×q reference), and `reduced_gamma_sample_streaming` (row-by-row).
+
+It is gated behind `MAGMAAN_BUILD_BENCH` and not built by default:
+
+```sh
+cmake -S . -B build/bench -DMAGMAAN_BUILD_BENCH=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build/bench --target magmaan_mem_profile
+./build/bench/benchmarks/magmaan_mem_profile {materialized|batched|rowwise} [n] [p]
+```
+
+The harness builds a synthetic one-factor CFA of size `(n, p)`, fits it with ML,
+forms the U-factor and casewise-contribution matrix, runs one chosen
+computation, and prints the peak heap it allocated plus the process peak RSS.
+
+`malloc_peak.{hpp,cpp}` installs the peak counter at the `malloc` layer via
+linker `--wrap`. This is necessary because Eigen's dynamic matrices allocate
+through `aligned_malloc` → `std::malloc`, bypassing `operator new`; an
+`operator new` counter would miss them. Cross-check against Valgrind Massif
+(`valgrind --tool=massif ./magmaan_mem_profile ...`) — the two agree to within
+about 0.02%.
+
 ## Outstanding
 
 - License audit: the Stata Press and Mplus example datasets are fetched into
