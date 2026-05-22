@@ -498,6 +498,12 @@ stop rather than any usable non-error return.
   `LatentNames::composites` and name-free
   `LatentStructure::composite_blocks` carry the composite contract. MatrixRep
   intentionally rejects native `<~` rows until the FC-SEM W/T evaluator lands.
+- The first native FC-SEM covariance evaluator exists as
+  `model::FcSemEvaluator`. It assembles W and sample-backed T blocks, derives
+  composite loadings, solves the derived composite disturbance variances through
+  the structural system, and returns implied covariance matrices. The evaluator
+  is covariance-only and separate from the ordinary LISREL `ModelEvaluator`;
+  optimizer/objective integration and SE/Jacobian support are still pending.
 - Complete-data ML composite lavaan parity is not yet claimed. Native lavaan
   `<~` oracle fixtures for pure-composite, composite-plus-factor, and
   composite-structural HS cases live under `tests/fixtures/composite/`; the
