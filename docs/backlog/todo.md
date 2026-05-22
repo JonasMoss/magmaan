@@ -172,16 +172,17 @@ central finite-difference covariance Jacobian, and
 `inference::information_expected_fcsem` yields vcov/SEs matching lavaan for
 the same reported fixture rows. Native `std.lv`/`std.all` standardization now
 uses the FC-SEM evaluator's construct covariance and matches lavaan values/SEs
-for the same free reported fixture rows.
+for the same free reported fixture rows. `standardized_rows_fcsem` also reports
+native `<~`, `=~`, and `~` rows by lhs/op/rhs/group, including fixed marker
+rows with lavaan-matching standardized SEs.
 Remaining:
 
 - **L.** Post-fit lavaan parity validation: minimal oracle fixtures exist under
   `tests/fixtures/composite/` for pure composite, composite plus common factor,
   and structural regression involving a composite. The diagnostic golden is
   wired but skipped because the public native post-fit path does not yet expose
-  lavaan's `<~` W-matrix semantics for fit measures or fixed-row/public
-  row-level reporting. Split or unskip it once those post-fit surfaces are
-  available.
+  lavaan's `<~` W-matrix semantics for fit measures or API/R reporting. Split
+  or unskip it once those post-fit surfaces are available.
 - **M.** Add staged API/R exposure once the native post-fit surface is settled
   enough to expose point estimates and standard errors without implying full
   lavaan replacement parity; until then, keep native FC-SEM on the low-level

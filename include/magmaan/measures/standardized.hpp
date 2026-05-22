@@ -1,11 +1,18 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <string>
+#include <vector>
+
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/fit.hpp"          // Estimates
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/parse/op.hpp"
 #include "magmaan/spec/partable.hpp"
 
 namespace magmaan::measures::standardize {
@@ -18,6 +25,25 @@ using estimate::Estimates;
 struct StandardizedSolution {
   Eigen::VectorXd theta;
   Eigen::VectorXd se;
+};
+
+// Native FC-SEM row-level report. Unlike `StandardizedSolution`, this includes
+// fixed marker rows (`free == 0`) because lavaan reports their standardized
+// values and delta-method SEs even though they are not entries in θ.
+struct FcSemStandardizedRow {
+  std::size_t  row = 0;      // 0-based LatentStructure row index
+  std::string  lhs;
+  parse::Op    op = parse::Op::Regression;
+  std::string  rhs;
+  std::int32_t group = 1;
+  std::int32_t free = 0;     // 1-based θ index, 0 for fixed
+
+  double est = std::numeric_limits<double>::quiet_NaN();
+  double se = 0.0;
+  double std_lv = std::numeric_limits<double>::quiet_NaN();
+  double std_lv_se = 0.0;
+  double std_all = std::numeric_limits<double>::quiet_NaN();
+  double std_all_se = 0.0;
 };
 
 // `std.lv` standardization: latent variables are scaled to unit total
@@ -71,5 +97,12 @@ standardize_all_fcsem(const spec::LatentStructure& pt,
                       const SampleStats&          samp,
                       const Estimates&            est,
                       const Eigen::MatrixXd&      vcov);
+
+post_expected<std::vector<FcSemStandardizedRow>>
+standardized_rows_fcsem(const spec::LatentStructure& pt,
+                        const spec::LatentNames&     names,
+                        const SampleStats&           samp,
+                        const Estimates&             est,
+                        const Eigen::MatrixXd&       vcov);
 
 }  // namespace magmaan::measures::standardize

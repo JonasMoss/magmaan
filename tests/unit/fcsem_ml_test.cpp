@@ -613,6 +613,12 @@ TEST_CASE("FC-SEM standardization: std.lv/std.all match lavaan native fixtures")
       REQUIRE(sall->theta.size() == est->theta.size());
       REQUIRE(sall->se.size() == est->theta.size());
 
+      auto rows = magmaan::measures::standardize::standardized_rows_fcsem(
+          built.pt, built.names, samp, *est, *vc);
+      REQUIRE_MESSAGE(rows.has_value(),
+                      "standardized_rows_fcsem failed: "
+                          << rows.error().detail);
+
       auto check_row = [&](const nlohmann::json& row) {
         const auto lhs = row["lhs"].get<std::string>();
         const auto op = op_from_json(row["op"].get<std::string>());
@@ -633,8 +639,34 @@ TEST_CASE("FC-SEM standardization: std.lv/std.all match lavaan native fixtures")
               4e-3);
       };
 
+      auto check_reported_row = [&](const nlohmann::json& row) {
+        const auto lhs = row["lhs"].get<std::string>();
+        const auto op = op_from_json(row["op"].get<std::string>());
+        const auto rhs = row["rhs"].get<std::string>();
+        const int group = row.value("group", 1);
+        const auto it = std::find_if(
+            rows->begin(), rows->end(), [&](const auto& got) {
+              return got.lhs == lhs && got.op == op && got.rhs == rhs &&
+                     got.group == group;
+            });
+        REQUIRE_MESSAGE(it != rows->end(), "missing reported row " << lhs
+                                      << " " << row["op"].get<std::string>()
+                                      << " " << rhs);
+        INFO(lhs << " " << row["op"].get<std::string>() << " " << rhs);
+        CHECK(std::abs(it->est - row["est"].get<double>()) < 5e-4);
+        CHECK(std::abs(it->se - row["se"].get<double>()) < 4e-3);
+        CHECK(std::abs(it->std_lv - row["std_lv"].get<double>()) < 8e-4);
+        CHECK(std::abs(it->std_lv_se - row["std_lv_se"].get<double>()) <
+              4e-3);
+        CHECK(std::abs(it->std_all - row["std_all"].get<double>()) < 8e-4);
+        CHECK(std::abs(it->std_all_se - row["std_all_se"].get<double>()) <
+              4e-3);
+      };
+
       for (const auto& row : j["weights"]) check_row(row);
       for (const auto& row : j["rows"]) check_row(row);
+      for (const auto& row : j["weights"]) check_reported_row(row);
+      for (const auto& row : j["rows"]) check_reported_row(row);
     }
   }
 }

@@ -698,4 +698,124 @@ standardize_all_fcsem(const spec::LatentStructure& pt,
                                 "standardize_all_fcsem");
 }
 
+namespace {
+
+bool fcsem_reported_op(parse::Op op) noexcept {
+  return op == parse::Op::Composite || op == parse::Op::Measurement ||
+         op == parse::Op::Regression;
+}
+
+post_expected<double>
+fcsem_standardized_row_se(const spec::LatentStructure& pt,
+                          const model::FcSemEvaluator& ev,
+                          const SampleStats& samp,
+                          const Estimates& est,
+                          const Eigen::MatrixXd& vcov,
+                          std::size_t row,
+                          FcSemStdKind kind) {
+  const Eigen::Index n_free = est.theta.size();
+  Eigen::RowVectorXd grad = Eigen::RowVectorXd::Zero(n_free);
+  for (Eigen::Index j = 0; j < n_free; ++j) {
+    const double h = 1e-6 * std::max(1.0, std::abs(est.theta(j)));
+    Eigen::VectorXd tp = est.theta;
+    Eigen::VectorXd tm = est.theta;
+    tp(j) += h;
+    tm(j) -= h;
+    auto vp = fcsem_standardized_row_value(pt, ev, samp, tp, row, kind);
+    auto vm = fcsem_standardized_row_value(pt, ev, samp, tm, row, kind);
+    if (!vp.has_value()) return std::unexpected(vp.error());
+    if (!vm.has_value()) return std::unexpected(vm.error());
+    grad(j) = (*vp - *vm) / (2.0 * h);
+  }
+  const double var = (grad * vcov * grad.transpose())(0, 0);
+  return (var > 0.0) ? std::sqrt(var) : 0.0;
+}
+
+}  // namespace
+
+post_expected<std::vector<FcSemStandardizedRow>>
+standardized_rows_fcsem(const spec::LatentStructure& pt,
+                        const spec::LatentNames& names,
+                        const SampleStats& samp,
+                        const Estimates& est,
+                        const Eigen::MatrixXd& vcov) {
+  const Eigen::Index n_free = est.theta.size();
+  if (vcov.rows() != n_free || vcov.cols() != n_free) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "standardized_rows_fcsem: vcov shape doesn't match Estimates.theta "
+        "size"));
+  }
+  if (pt.composite_mode != spec::CompositeMode::FcSem) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "standardized_rows_fcsem: LatentStructure is not a native FC-SEM "
+        "model"));
+  }
+  if (names.row_lhs.size() != pt.size() || names.row_rhs.size() != pt.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "standardized_rows_fcsem: LatentNames row columns do not match "
+        "LatentStructure"));
+  }
+
+  auto ev_or = model::FcSemEvaluator::build(pt);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "standardized_rows_fcsem: FcSemEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  const auto& ev = *ev_or;
+  if (static_cast<Eigen::Index>(ev.n_free()) != n_free) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "standardized_rows_fcsem: evaluator free-parameter count doesn't "
+        "match Estimates.theta"));
+  }
+
+  std::vector<FcSemStandardizedRow> out;
+  for (std::size_t row = 0; row < pt.size(); ++row) {
+    if (pt.group[row] <= 0 || pt.is_constraint_row(row)) continue;
+    if (!fcsem_reported_op(pt.op[row])) continue;
+
+    auto est_or = row_value_fcsem(pt, row, est.theta);
+    if (!est_or.has_value()) return std::unexpected(est_or.error());
+    auto slv_or =
+        fcsem_standardized_row_value(pt, ev, samp, est.theta, row,
+                                     FcSemStdKind::Lv);
+    if (!slv_or.has_value()) return std::unexpected(slv_or.error());
+    auto sall_or =
+        fcsem_standardized_row_value(pt, ev, samp, est.theta, row,
+                                     FcSemStdKind::All);
+    if (!sall_or.has_value()) return std::unexpected(sall_or.error());
+    auto slv_se_or = fcsem_standardized_row_se(
+        pt, ev, samp, est, vcov, row, FcSemStdKind::Lv);
+    if (!slv_se_or.has_value()) return std::unexpected(slv_se_or.error());
+    auto sall_se_or = fcsem_standardized_row_se(
+        pt, ev, samp, est, vcov, row, FcSemStdKind::All);
+    if (!sall_se_or.has_value()) return std::unexpected(sall_se_or.error());
+
+    FcSemStandardizedRow r;
+    r.row = row;
+    r.lhs = names.row_lhs[row];
+    r.op = pt.op[row];
+    r.rhs = names.row_rhs[row];
+    r.group = pt.group[row];
+    r.free = pt.free[row];
+    r.est = *est_or;
+    if (pt.free[row] > 0) {
+      const Eigen::Index k = static_cast<Eigen::Index>(pt.free[row] - 1);
+      if (k < 0 || k >= n_free) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "standardized_rows_fcsem: free parameter index is outside "
+            "Estimates.theta"));
+      }
+      const double var = vcov(k, k);
+      r.se = (var > 0.0) ? std::sqrt(var) : 0.0;
+    }
+    r.std_lv = *slv_or;
+    r.std_lv_se = *slv_se_or;
+    r.std_all = *sall_or;
+    r.std_all_se = *sall_se_or;
+    out.push_back(std::move(r));
+  }
+  return out;
+}
+
 }  // namespace magmaan::measures::standardize
