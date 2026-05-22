@@ -115,11 +115,35 @@ TEST_CASE("intercept: y ~ 1") {
   CHECK(fp.rows[0].op == Op::Intercept);
   CHECK(fp.rows[0].lhs == "y");
   CHECK(fp.rows[0].rhs.empty());
+  CHECK(fp.rows[0].mod_idx == 0);
+}
+
+TEST_CASE("intercept: bare numeric shorthand fixes the mean") {
+  auto fp = must_parse("y ~ 0\nz ~ 2.5");
+  REQUIRE(fp.rows.size() == 2);
+
+  CHECK(fp.rows[0].op == Op::Intercept);
+  CHECK(fp.rows[0].lhs == "y");
+  REQUIRE(fp.rows[0].mod_idx != 0);
+  const auto* y_fixed = std::get_if<FixedValue>(&fp.mods[fp.rows[0].mod_idx]);
+  REQUIRE(y_fixed != nullptr);
+  CHECK(y_fixed->value == doctest::Approx(0.0));
+
+  CHECK(fp.rows[1].op == Op::Intercept);
+  CHECK(fp.rows[1].lhs == "z");
+  REQUIRE(fp.rows[1].mod_idx != 0);
+  const auto* z_fixed = std::get_if<FixedValue>(&fp.mods[fp.rows[1].mod_idx]);
+  REQUIRE(z_fixed != nullptr);
+  CHECK(z_fixed->value == doctest::Approx(2.5));
 }
 
 TEST_CASE("intercept does not mis-fire when other terms are present") {
-  // `y ~ 1 + x` — the bare `1` cannot mix with other terms in v0.
+  // `y ~ 1 + x` / `y ~ 0 + x` -- numeric intercept shorthand cannot mix with
+  // other terms in v0.
   auto r = Parser::parse("y ~ 1 + x");
+  REQUIRE_FALSE(r.has_value());
+  CHECK(r.error().kind == ParseError::Kind::ExpectedRhsTerm);
+  r = Parser::parse("y ~ 0 + x");
   REQUIRE_FALSE(r.has_value());
   CHECK(r.error().kind == ParseError::Kind::ExpectedRhsTerm);
 }
@@ -147,6 +171,17 @@ TEST_CASE("modifier: label via lbl*x") {
   CHECK(l0->text == "a");
   CHECK(l1->text == "a");
   CHECK(l2->text == "b");
+}
+
+TEST_CASE("modifier: parenthesized label via (lbl)*x") {
+  auto fp = must_parse("f =~ (a)*x1 + (\"b\")*x2");
+  REQUIRE(fp.rows.size() == 2);
+  const auto* l0 = std::get_if<Label>(&fp.mods[fp.rows[0].mod_idx]);
+  const auto* l1 = std::get_if<Label>(&fp.mods[fp.rows[1].mod_idx]);
+  REQUIRE(l0 != nullptr);
+  REQUIRE(l1 != nullptr);
+  CHECK(l0->text == "a");
+  CHECK(l1->text == "b");
 }
 
 TEST_CASE("modifier: equal() reference via equal(\"...\")") {
@@ -214,6 +249,13 @@ TEST_CASE("constraint: a > 0 and d < 1") {
   REQUIRE(fp.constraints.size() == 2);
   CHECK(fp.constraints[0].kind == magmaan::parse::ConstraintKind::Gt);
   CHECK(fp.constraints[1].kind == magmaan::parse::ConstraintKind::Lt);
+}
+
+TEST_CASE("constraint: numeric RHS can be adjacent to minus") {
+  auto fp = must_parse("nu1 == 0- nu2 - nu3");
+  REQUIRE(fp.constraints.size() == 1);
+  CHECK(magmaan::parse::expr_to_canonical(fp.constraints[0].rhs) ==
+        "0-nu2-nu3");
 }
 
 TEST_CASE("constraint: chained statements via ;") {

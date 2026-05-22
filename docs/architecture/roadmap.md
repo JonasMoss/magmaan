@@ -39,7 +39,9 @@ golden `parTable()` fixtures.
 
 ### Parser, lavaanify, and matrix representation
 
-- Lavaan-style syntax parser with normative grammar in `docs/grammar/`.
+- Lavaan-style syntax parser with normative grammar in `docs/grammar/`,
+  including fixed numeric intercept shorthand (`x ~ 0`) and parenthesized
+  modifier labels (`(label)*x`).
 - Checked-in lexer, parser, partable, matrix, and fit oracle fixtures.
 - Single- and multi-group LISREL matrix representation.
 - Fixed.x resolution, mean structures, marker/std.lv/effect-coding

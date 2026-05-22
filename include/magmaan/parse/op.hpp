@@ -14,8 +14,8 @@ enum class Op : std::uint8_t {
   Covariance,     // ~~
   Threshold,      // |
   ResponseScale,  // ~*~
-  Intercept,      // ~1 (synthesized by the parser when `~` is followed by
-                  //     a single `1` term with no modifier)
+  Intercept,      // ~1 / fixed numeric intercept shorthand (synthesized by
+                  //     the parser when `~` has a single numeric RHS)
   DefineParam,    // :=  (parsed in P4)
   EqConstraint,   // ==  (parsed in P4)
   LtConstraint,   // <   (parsed in P4)

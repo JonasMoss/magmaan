@@ -99,13 +99,15 @@ double parse_double(std::string_view text) noexcept {
 }
 
 // === RHS term scratch ========================================================
-// Internal-only result of parsing one RHS term. The formula-level code
-// decides whether a bare-NumLit term is an intercept (`y ~ 1`) or an error.
+// Internal-only result of parsing one RHS term. The formula-level code decides
+// whether a numeric RHS term is an intercept (`y ~ 1`, `y ~ 0`) or an error.
 
 struct RawRhsTerm {
   std::uint32_t    mod_idx   = 0;     // 0 = none
   std::string_view ident_text;        // for identifier terms
-  bool             is_numlit_one = false;  // true iff the lone term `1`
+  bool             is_numlit = false;
+  bool             is_numlit_one = false;  // true iff the literal lone term `1`
+  double           numlit_value = 0.0;
   SourceSpan       span      = {};
 };
 
@@ -118,9 +120,36 @@ std::string_view strip_quotes(std::string_view quoted) noexcept {
   return quoted;
 }
 
+// production: parenthesized_label
+//
+//   parenthesized_label ::= '(' (identifier | string_lit) ')'
+parse_expected<ModifierAtom> parse_parenthesized_label(State& st) noexcept {
+  st.consume();  // LParen
+  const Token& label = st.peek();
+  std::string_view text;
+  if (label.kind == TokenKind::Identifier) {
+    text = label.text;
+  } else if (label.kind == TokenKind::StringLit) {
+    text = strip_quotes(label.text);
+  } else {
+    return std::unexpected(make_err(
+        ParseError::Kind::ModifierEvalFailed, label.span,
+        "parenthesized modifier label requires an identifier or string literal"));
+  }
+  st.consume();
+  if (st.peek().kind != TokenKind::RParen) {
+    return std::unexpected(make_err(
+        ParseError::Kind::ModifierEvalFailed, st.peek().span,
+        "expected ')' after parenthesized modifier label"));
+  }
+  st.consume();
+  return ModifierAtom{Label{text}};
+}
+
 // production: modifier_atom
 //
 //   modifier_atom ::= num_lit | NA | identifier | string_lit
+//                   | parenthesized_label
 parse_expected<ModifierAtom> parse_modifier_atom(State& st) noexcept {
   const Token& t = st.peek();
   if (t.kind == TokenKind::NumLit) {
@@ -139,10 +168,13 @@ parse_expected<ModifierAtom> parse_modifier_atom(State& st) noexcept {
     st.consume();
     return ModifierAtom{Label{strip_quotes(t.text)}};
   }
+  if (t.kind == TokenKind::LParen) {
+    return parse_parenthesized_label(st);
+  }
   return std::unexpected(make_err(
       ParseError::Kind::ModifierEvalFailed, t.span,
       std::string("expected a modifier atom (number, NA, identifier, or "
-                  "string literal), got ") +
+                  "string literal, optionally parenthesized), got ") +
           std::string(to_string(t.kind))));
 }
 
@@ -240,7 +272,7 @@ parse_expected<Modifier> parse_group_vec(State& st) noexcept {
 
 // production: modifier
 //
-//   modifier ::= modifier_atom | group_vec | start_call
+//   modifier ::= modifier_atom | group_vec | start_call | equal_call
 //
 // Decides between the three by lookahead on peek(0)/peek(1). Caller is
 // responsible for confirming the next-after-modifier token is `*` or `?`.
@@ -276,6 +308,13 @@ parse_expected<Modifier> parse_modifier(State& st) noexcept {
 bool starts_with_modifier(const State& st) noexcept {
   const Token& h = st.peek(0);
   const Token& a = st.peek(1);
+  if (h.kind == TokenKind::LParen &&
+      (a.kind == TokenKind::Identifier || a.kind == TokenKind::StringLit) &&
+      st.peek(2).kind == TokenKind::RParen &&
+      (st.peek(3).kind == TokenKind::Star ||
+       st.peek(3).kind == TokenKind::Question)) {
+    return true;
+  }
   if (h.kind == TokenKind::Identifier && a.kind == TokenKind::LParen) {
     return true;
   }
@@ -332,12 +371,13 @@ parse_expected<ParsedRhsTerm> parse_rhs_term_with_mod(State& st) noexcept {
       }
       mod = Modifier{StartValue{fixed->value}};
     }
-    // Allow `modifier*1` for label-on-intercept (`x1 ~ n1*1`) — the upstream
-    // formula path checks `op==Regression && is_numlit_one && modifier.has_value()`
-    // and emits an Op::Intercept row with the modifier preserved.
+    // Allow `modifier*1` for label-on-intercept (`x1 ~ n1*1`); the upstream
+    // formula path emits an Op::Intercept row with the modifier preserved.
     if (st.peek().kind == TokenKind::NumLit && st.peek().text == "1") {
       const Token& one = st.consume();
+      out.is_numlit = true;
       out.is_numlit_one = true;
+      out.numlit_value = 1.0;
       out.span = SourceSpan{out.span.begin, one.span.end,
                             out.span.line, out.span.col};
       return ParsedRhsTerm{out, std::optional<Modifier>{std::move(mod)}};
@@ -361,15 +401,12 @@ parse_expected<ParsedRhsTerm> parse_rhs_term_with_mod(State& st) noexcept {
     out.ident_text = head.text;
     return ParsedRhsTerm{out, std::nullopt};
   }
-  if (head.kind == TokenKind::NumLit && head.text == "1") {
-    st.consume();
-    out.is_numlit_one = true;
-    return ParsedRhsTerm{out, std::nullopt};
-  }
   if (head.kind == TokenKind::NumLit) {
-    return std::unexpected(make_err(
-        ParseError::Kind::ExpectedRhsTerm, head.span,
-        "bare numeric literal is only valid as the intercept form `~ 1`"));
+    st.consume();
+    out.is_numlit = true;
+    out.is_numlit_one = (head.text == "1");
+    out.numlit_value = parse_double(head.text);
+    return ParsedRhsTerm{out, std::nullopt};
   }
   return std::unexpected(make_err(
       ParseError::Kind::ExpectedRhsTerm, head.span,
@@ -682,16 +719,17 @@ parse_formula(State& st, FlatPartable& flat) noexcept {
   if (!rhs_or.has_value()) return std::unexpected(rhs_or.error());
   std::vector<ParsedRhsTerm>& rhs = *rhs_or;
 
-  // Intercept detection: `lhs ~ 1` or `lhs ~ label*1` / `lhs ~ val*1` /
-  // `lhs ~ c(...)*1` — exactly one bare-NumLit-one term, with an optional
-  // modifier (label, fixed value, per-group `c(...)`) attached. The modifier
-  // is preserved into the Intercept row so scalar-invariance models can
-  // express shared-label intercepts (`x1 ~ n1*1` ≙ ν_x1 shared across
-  // groups via union-find on `n1`).
-  if (op == Op::Regression && rhs.size() == 1 && rhs[0].term.is_numlit_one) {
+  // Intercept detection: `lhs ~ 1`, fixed numeric shorthand `lhs ~ 0`, or
+  // `lhs ~ label*1` / `lhs ~ val*1` / `lhs ~ c(...)*1` -- exactly one numeric
+  // RHS term, with an optional modifier attached. A bare literal `1` remains
+  // lavaan's free-intercept marker; any other bare numeric literal is lowered
+  // to a FixedValue modifier on the synthesized Intercept row.
+  if (op == Op::Regression && rhs.size() == 1 && rhs[0].term.is_numlit) {
     std::uint32_t mi = 0;
     if (rhs[0].modifier.has_value()) {
       mi = flat.add_modifier(std::move(*rhs[0].modifier));
+    } else if (!rhs[0].term.is_numlit_one) {
+      mi = flat.add_modifier(Modifier{FixedValue{rhs[0].term.numlit_value}});
     }
     flat.rows.push_back(FlatRow{
         lhs_text, Op::Intercept, std::string_view{}, /*block=*/1,
@@ -700,10 +738,10 @@ parse_formula(State& st, FlatPartable& flat) noexcept {
   }
 
   for (auto& r : rhs) {
-    if (r.term.is_numlit_one) {
+    if (r.term.is_numlit) {
       return std::unexpected(make_err(
           ParseError::Kind::ExpectedRhsTerm, r.term.span,
-          "bare '1' is only valid as the lone RHS of `~` (intercept form)"));
+          "numeric RHS is only valid as the lone RHS of `~` (intercept form)"));
     }
     std::uint32_t mi = 0;
     if (r.modifier.has_value()) {

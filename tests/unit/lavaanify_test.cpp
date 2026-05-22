@@ -370,6 +370,31 @@ TEST_CASE("lavaanify: meanstructure does not duplicate user-supplied ~1 rows") {
   CHECK(f_count  == 1);
 }
 
+TEST_CASE("lavaanify: bare numeric intercept shorthand fixes the row") {
+  BuildOptions opts;
+  opts.meanstructure = true;
+  auto pt = must_lavaanify("f =~ x1 + x2 + x3\nx1 ~ 0\nf ~ 0", opts);
+
+  int x1_count = 0, f_count = 0;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != Op::Intercept) continue;
+    if (pt.lhs[i] == "x1") {
+      ++x1_count;
+      CHECK(pt.free[i] == 0);
+      CHECK(pt.ustart[i] == doctest::Approx(0.0));
+      CHECK(pt.user[i] == 1);
+    }
+    if (pt.lhs[i] == "f") {
+      ++f_count;
+      CHECK(pt.free[i] == 0);
+      CHECK(pt.ustart[i] == doctest::Approx(0.0));
+      CHECK(pt.user[i] == 1);
+    }
+  }
+  CHECK(x1_count == 1);
+  CHECK(f_count == 1);
+}
+
 TEST_CASE("lavaanify: c(...) modifier with wrong arity is rejected") {
   // n_groups defaults to 1, so a 2-atom c() doesn't match.
   auto fp = Parser::parse("f =~ c(1, 1)*x1 + c(NA, NA)*x2");

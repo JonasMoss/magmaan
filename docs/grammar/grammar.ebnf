@@ -42,11 +42,13 @@ covariance          ::= '~~'
 threshold           ::= '|'
 response_scale      ::= '~*~'
 
-(* The intercept form `y ~ 1` is recognized by the parser when `regression`
-   is followed by an `intercept_rhs`. We do NOT lex `~1` as a single token
-   to keep tokenization context-free. *)
+(* Intercept forms are recognized by the parser when `regression` is followed
+   by an `intercept_rhs`. Bare `1` means a free intercept/mean; any other bare
+   numeric literal means a fixed intercept/mean at that value. Modifier-on-1
+   forms such as `label*1` and `0*1` preserve the modifier. We do NOT lex
+   `~1` as a single token to keep tokenization context-free. *)
 rhs_list            ::= intercept_rhs | rhs_term ('+' rhs_term)*
-intercept_rhs       ::= '1'                                /* only valid after `~` */
+intercept_rhs       ::= num_lit | modifier modifier_sep '1' /* only valid after `~` */
 
 rhs_term            ::= modifier modifier_sep identifier
                       | identifier
@@ -57,6 +59,8 @@ modifier_sep        ::= '*' | '?'                          /* '?' forces start-v
 
 modifier            ::= modifier_atom | group_vec | start_call | equal_call
 modifier_atom       ::= num_lit | NA | identifier | string_lit
+                      | parenthesized_label
+parenthesized_label ::= '(' ( identifier | string_lit ) ')'
 group_vec           ::= 'c' '(' modifier_atom (',' modifier_atom)* ')'
 start_call          ::= 'start' '(' num_lit ')'
 equal_call          ::= 'equal' '(' ( string_lit | identifier ) ')'
