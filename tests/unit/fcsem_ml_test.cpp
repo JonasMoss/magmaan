@@ -16,6 +16,7 @@
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/start_values.hpp"
+#include "magmaan/inference/inference.hpp"
 #include "magmaan/model/fcsem_evaluator.hpp"
 #include "magmaan/parse/op.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -110,6 +111,20 @@ std::optional<double> row_value(const LatentStructure& pt,
     if (pt.free[i] > 0) return theta(pt.free[i] - 1);
     if (std::isfinite(pt.fixed_value[i])) return pt.fixed_value[i];
     return std::nullopt;
+  }
+  return std::nullopt;
+}
+
+std::optional<Eigen::Index> row_free_index(const LatentStructure& pt,
+                                           const LatentNames& names,
+                                           std::string_view lhs, Op op,
+                                           std::string_view rhs) {
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (names.row_lhs[i] != lhs || pt.op[i] != op || names.row_rhs[i] != rhs) {
+      continue;
+    }
+    if (pt.free[i] <= 0) return std::nullopt;
+    return static_cast<Eigen::Index>(pt.free[i] - 1);
   }
   return std::nullopt;
 }
@@ -499,6 +514,55 @@ TEST_CASE("FC-SEM ML: fit from native simple starts matches lavaan objective") {
                                   << " " << rhs);
         CHECK(std::abs(*got_value - row["est"].get<double>()) < 1e-4);
       }
+    }
+  }
+}
+
+TEST_CASE("FC-SEM expected information: SEs match lavaan native fixtures") {
+  static constexpr const char* fixtures[] = {
+      "composite/0001_pure_composite_hs.fit.json",
+      "composite/0002_composite_factor_hs.fit.json",
+      "composite/0003_composite_structural_hs.fit.json",
+  };
+
+  for (const char* path : fixtures) {
+    SUBCASE(path) {
+      auto j = load_json_fixture(path);
+      Built built = must_build(j["input"].get<std::string>());
+      SampleStats samp = sample_stats_from_composite_fixture(j, built);
+      auto x0 = magmaan::estimate::simple_fcsem_start_values(built.pt, samp);
+      REQUIRE_MESSAGE(x0.has_value(), "starts failed: " << x0.error().detail);
+
+      magmaan::optim::LbfgsOptions opts;
+      opts.max_iter = 4000;
+      auto est = magmaan::estimate::fit_ml_fcsem(
+          built.pt, samp, *x0, {}, magmaan::estimate::Backend::Lbfgs, opts);
+      REQUIRE_MESSAGE(est.has_value(), "fit failed: " << est.error().detail);
+
+      auto info =
+          magmaan::inference::information_expected_fcsem(built.pt, samp, *est);
+      REQUIRE_MESSAGE(info.has_value(),
+                      "information failed: " << info.error().detail);
+      auto vc = magmaan::inference::vcov(*info, built.pt, est->theta);
+      REQUIRE_MESSAGE(vc.has_value(), "vcov failed: " << vc.error().detail);
+      const Eigen::VectorXd se = magmaan::inference::se(*vc);
+
+      auto check_row = [&](const nlohmann::json& row) {
+        const auto lhs = row["lhs"].get<std::string>();
+        const auto op = op_from_json(row["op"].get<std::string>());
+        const auto rhs = row["rhs"].get<std::string>();
+        const auto idx = row_free_index(built.pt, built.names, lhs, op, rhs);
+        if (!idx.has_value()) {
+          CHECK(row["se"].get<double>() == doctest::Approx(0.0));
+          return;
+        }
+        REQUIRE(*idx >= 0);
+        REQUIRE(*idx < se.size());
+        CHECK(std::abs(se(*idx) - row["se"].get<double>()) < 3e-3);
+      };
+
+      for (const auto& row : j["weights"]) check_row(row);
+      for (const auto& row : j["rows"]) check_row(row);
     }
   }
 }

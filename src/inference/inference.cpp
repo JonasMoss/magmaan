@@ -90,6 +90,96 @@ prepare_evaluator(spec::LatentStructure&       pt,
   return ev;
 }
 
+PostError model_err(const ModelError& e, std::string_view who) {
+  return make_err(PostError::Kind::NumericIssue,
+                  std::string(who) + ": " + e.detail);
+}
+
+post_expected<Eigen::MatrixXd>
+expected_info_covariance_only(const SampleStats& samp,
+                              const model::ImpliedMoments& sm,
+                              const Eigen::MatrixXd& J,
+                              Eigen::Index n_free,
+                              std::string_view who) {
+  const std::size_t n_blocks = samp.S.size();
+  if (sm.sigma.size() != n_blocks || samp.n_obs.size() != n_blocks) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(who) +
+            ": SampleStats and implied moments have different block counts"));
+  }
+
+  std::vector<Eigen::MatrixXd> SigmaInv(n_blocks);
+  std::vector<double>          weight(n_blocks, 0.0);
+  std::vector<Eigen::Index>    p_dim(n_blocks, 0);
+  std::vector<Eigen::Index>    vech_off(n_blocks, 0);
+
+  Eigen::Index running = 0;
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    if (samp.S[b].rows() != sm.sigma[b].rows() ||
+        samp.S[b].cols() != sm.sigma[b].cols()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(who) + ": block " + std::to_string(b) +
+              " S and Σ have different shapes"));
+    }
+    const Eigen::MatrixXd Sigma_b =
+        0.5 * (sm.sigma[b] + sm.sigma[b].transpose());
+    const Eigen::Index p = Sigma_b.rows();
+    Eigen::LLT<Eigen::MatrixXd> llt(Sigma_b);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(who) + ": implied Σ for block " +
+              std::to_string(b) + " is not positive definite at θ̂"));
+    }
+    SigmaInv[b] = llt.solve(Eigen::MatrixXd::Identity(p, p));
+    weight[b]   = static_cast<double>(samp.n_obs[b]) / 2.0;
+    p_dim[b]    = p;
+    vech_off[b] = running;
+    running += vech_len(p);
+  }
+  if (J.rows() != running || J.cols() != n_free) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(who) + ": Jacobian shape " +
+            std::to_string(J.rows()) + "x" + std::to_string(J.cols()) +
+            " does not match expected " + std::to_string(running) + "x" +
+            std::to_string(n_free)));
+  }
+
+  std::vector<std::vector<Eigen::MatrixXd>> T(
+      static_cast<std::size_t>(n_free), std::vector<Eigen::MatrixXd>(n_blocks));
+  Eigen::MatrixXd M;
+  for (Eigen::Index k = 0; k < n_free; ++k) {
+    for (std::size_t b = 0; b < n_blocks; ++b) {
+      const Eigen::Index p = p_dim[b];
+      M.setZero(p, p);
+      for (Eigen::Index c = 0; c < p; ++c) {
+        for (Eigen::Index r = c; r < p; ++r) {
+          const double v = J(vech_off[b] + vech_index(p, r, c), k);
+          M(r, c) = v;
+          if (r != c) M(c, r) = v;
+        }
+      }
+      T[static_cast<std::size_t>(k)][b].noalias() = SigmaInv[b] * M;
+    }
+  }
+
+  Eigen::MatrixXd info = Eigen::MatrixXd::Zero(n_free, n_free);
+  for (Eigen::Index a = 0; a < n_free; ++a) {
+    for (Eigen::Index b = a; b < n_free; ++b) {
+      double acc = 0.0;
+      for (std::size_t blk = 0; blk < n_blocks; ++blk) {
+        const auto& Ta = T[static_cast<std::size_t>(a)][blk];
+        const auto& Tb = T[static_cast<std::size_t>(b)][blk];
+        const double per_block =
+            (Ta.transpose().array() * Tb.array()).sum();
+        acc += weight[blk] * per_block;
+      }
+      info(a, b) = acc;
+      if (a != b) info(b, a) = acc;
+    }
+  }
+  return info;
+}
+
 }  // namespace
 
 // ============================================================================
@@ -366,6 +456,44 @@ information_expected(spec::LatentStructure       pt,
   }
 
   return info;
+}
+
+post_expected<Eigen::MatrixXd>
+information_expected_fcsem(spec::LatentStructure       pt,
+                           const SampleStats&          samp,
+                           const Estimates&            est,
+                           double                      rel_step) {
+  auto ev_or = model::FcSemEvaluator::build(pt);
+  if (!ev_or.has_value()) {
+    return std::unexpected(model_err(ev_or.error(),
+                                     "information_expected_fcsem build"));
+  }
+  const auto& ev = *ev_or;
+  if (static_cast<std::size_t>(est.theta.size()) != ev.n_free()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "information_expected_fcsem: Estimates.theta size " +
+            std::to_string(est.theta.size()) + " != evaluator n_free " +
+            std::to_string(ev.n_free())));
+  }
+  if (samp.S.size() != ev.n_blocks()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "information_expected_fcsem: SampleStats and evaluator have different "
+        "block counts"));
+  }
+
+  auto sm_or = ev.sigma(samp, est.theta);
+  if (!sm_or.has_value()) {
+    return std::unexpected(model_err(sm_or.error(),
+                                     "information_expected_fcsem sigma"));
+  }
+  auto J_or = ev.dsigma_dtheta(samp, est.theta, rel_step);
+  if (!J_or.has_value()) {
+    return std::unexpected(model_err(J_or.error(),
+                                     "information_expected_fcsem jacobian"));
+  }
+  return expected_info_covariance_only(
+      samp, *sm_or, *J_or, static_cast<Eigen::Index>(ev.n_free()),
+      "information_expected_fcsem");
 }
 
 // ============================================================================
