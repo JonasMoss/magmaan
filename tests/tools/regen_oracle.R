@@ -2224,8 +2224,10 @@ for (m in composite_models) {
     bic = as.numeric(fm["bic"]),
     bic2 = as.numeric(fm["bic2"]),
     sample_cov = list(list(block = 0L,
+                           names = unname(colnames(as.matrix(sampstat$cov))),
                            matrix = unname(as.matrix(sampstat$cov)))),
     implied_sigma = list(list(block = 0L,
+                              names = unname(colnames(as.matrix(implied$cov))),
                               matrix = unname(as.matrix(implied$cov)))),
     weights = rows_for(fit, "<~"),
     rows = rows_for(fit, c("=~", "~"))

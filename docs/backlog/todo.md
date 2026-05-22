@@ -145,18 +145,16 @@ composite self-variances. A covariance-only `model::FcSemEvaluator` now
 assembles W/T, derives composite loadings, solves derived composite disturbance
 variances, and matches the pure-HS native lavaan implied-covariance fixture at
 lavaan estimates. `estimate::ml_objective(FcSemEvaluator, SampleStats)` now
-wraps that evaluator in the complete-data ML discrepancy, matches the pure-HS
-lavaan chi-square at lavaan estimates, and supplies the first central
-finite-difference gradient path for native `<~`. Low-level native fitting also
-exists: `estimate::simple_fcsem_start_values` and `estimate::fit_ml_fcsem`
-fit the pure-HS native fixture from starts and match lavaan's objective and
-implied covariance.
+wraps that evaluator in the complete-data ML discrepancy, matches the HS
+native lavaan chi-square fixtures at lavaan estimates, and supplies the first
+central finite-difference gradient path for native `<~`. The low-level
+`estimate::simple_fcsem_start_values` and `estimate::fit_ml_fcsem` path fits
+the pure-composite, composite-plus-factor, and composite-structural HS native
+fixtures from starts and matches lavaan's objective, implied covariance,
+weights, loadings, and regressions. The composite fixtures now carry lavaan's
+observed-variable order for stored covariance matrices.
 Remaining:
 
-- **M/L.** Broaden native FC-SEM ML parity beyond the pure-composite fixture:
-  fit the composite-plus-factor and composite-structural HS fixtures from
-  native starts, compare point estimates/objective/implied covariance, and
-  tighten start/bounds policy only where those fixtures show a real need.
 - **L.** Post-fit lavaan parity validation: minimal oracle fixtures exist under
   `tests/fixtures/composite/` for pure composite, composite plus common factor,
   and structural regression involving a composite. The diagnostic golden is
