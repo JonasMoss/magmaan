@@ -182,6 +182,12 @@ bool eval_jac_g(ipindex n, ipnumber* x, bool, ipindex m, ipindex nele_jac,
   return true;
 }
 
+bool eval_h(ipindex, ipnumber*, bool, ipnumber, ipindex, ipnumber*, bool,
+            ipindex nele_hess, ipindex*, ipindex*, ipnumber*,
+            UserDataPtr) {
+  return nele_hess == 0;
+}
+
 bool add_str_option(IpoptProblem nlp, const char* key, const char* val) {
   return AddIpoptStrOption(nlp, const_cast<char*>(key),
                            const_cast<char*>(val));
@@ -250,7 +256,7 @@ solve_ipopt(const ConstrainedScalarProblem& prob,
   IpoptProblem nlp = CreateIpoptProblem(
       n, ptr(x_L), ptr(x_U), mc, ptr(g_L), ptr(g_U), nele_jac,
       /*nele_hess=*/0, /*index_style=*/0, eval_f, eval_g, eval_grad_f,
-      eval_jac_g, nullptr);
+      eval_jac_g, eval_h);
   if (!nlp) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "IpoptOptimizer: CreateIpoptProblem failed"));

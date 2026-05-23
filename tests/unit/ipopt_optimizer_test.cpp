@@ -27,7 +27,10 @@ TEST_CASE("IPOPT optimizer minimizes an unconstrained quadratic") {
   Eigen::Vector2d x0;
   x0 << 10.0, 10.0;
   auto out = magmaan::optim::ipopt(prob, x0, {}, OptimOptions{});
-  REQUIRE(out.has_value());
+  if (!out.has_value()) {
+    FAIL(out.error().detail);
+    return;
+  }
   CHECK(out->x(0) == doctest::Approx(1.0).epsilon(1e-7));
   CHECK(out->x(1) == doctest::Approx(-2.0).epsilon(1e-7));
 }
@@ -47,7 +50,10 @@ TEST_CASE("IPOPT optimizer honors box bounds") {
   b.upper = Eigen::VectorXd::Constant(1, 10.0);
   Eigen::VectorXd x0 = Eigen::VectorXd::Constant(1, 4.0);
   auto out = magmaan::optim::ipopt(prob, x0, b, OptimOptions{});
-  REQUIRE(out.has_value());
+  if (!out.has_value()) {
+    FAIL(out.error().detail);
+    return;
+  }
   CHECK(out->x(0) == doctest::Approx(0.0).epsilon(1e-7));
 }
 
@@ -81,7 +87,10 @@ TEST_CASE("IPOPT optimizer enforces a nonlinear equality constraint") {
   Eigen::Vector2d x0;
   x0 << 0.25, 0.5;
   auto out = magmaan::optim::ipopt_constrained(prob, x0, {}, OptimOptions{});
-  REQUIRE(out.has_value());
+  if (!out.has_value()) {
+    FAIL(out.error().detail);
+    return;
+  }
   CHECK(std::abs(out->x(0) - out->x(1) * out->x(1)) < 1e-7);
   CHECK(out->fmin < 0.1);
 }

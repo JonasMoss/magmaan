@@ -419,8 +419,10 @@ TEST_CASE("fit: a nonlinear equality constraint (a == b^2) is enforced and match
   auto est_or = magmaan::test::fit(
       pt, rep, samp, magmaan::estimate::Bounds{},
       magmaan::estimate::Backend::Ipopt);
-  REQUIRE_MESSAGE(est_or.has_value(), "constrained fit failed: "
-      << (est_or.has_value() ? std::string{} : est_or.error().detail));
+  if (!est_or.has_value()) {
+    FAIL("constrained fit failed: " << est_or.error().detail);
+    return;
+  }
   const auto& est = *est_or;
   REQUIRE(est.theta.size() == 6);
 
@@ -448,9 +450,14 @@ TEST_CASE("inference: vcov / df for a nonlinear-equality model match lavaan") {
 
   auto pt  = must_lavaanify("visual =~ x1 + a*x2 + b*x3\na == b^2");
   auto rep = build_matrix_rep(pt).value();
-  auto est = magmaan::test::fit(
+  auto est_or = magmaan::test::fit(
       pt, rep, samp, magmaan::estimate::Bounds{},
-      magmaan::estimate::Backend::Ipopt).value();
+      magmaan::estimate::Backend::Ipopt);
+  if (!est_or.has_value()) {
+    FAIL("constrained fit failed: " << est_or.error().detail);
+    return;
+  }
+  const auto& est = *est_or;
 
   auto info_or = magmaan::inference::information_expected(pt, rep, samp, est);
   REQUIRE(info_or.has_value());
@@ -500,8 +507,10 @@ TEST_CASE("fit: general-linear + nonlinear equality constraints in one model") {
   auto est_or = magmaan::test::fit(
       pt, rep, samp, magmaan::estimate::Bounds{},
       magmaan::estimate::Backend::Ipopt);
-  REQUIRE_MESSAGE(est_or.has_value(), "combined-constraint fit failed: "
-      << (est_or.has_value() ? std::string{} : est_or.error().detail));
+  if (!est_or.has_value()) {
+    FAIL("combined-constraint fit failed: " << est_or.error().detail);
+    return;
+  }
   const auto& est = *est_or;
 
   // The nonlinear constraint h(θ̂) = a − b² is driven to zero.
@@ -539,8 +548,10 @@ TEST_CASE("fit: shared-label (merge) + nonlinear equality constraints together")
   auto est_or = magmaan::test::fit(
       pt, rep, samp, magmaan::estimate::Bounds{},
       magmaan::estimate::Backend::Ipopt);
-  REQUIRE_MESSAGE(est_or.has_value(), "merge + nonlinear fit failed: "
-      << (est_or.has_value() ? std::string{} : est_or.error().detail));
+  if (!est_or.has_value()) {
+    FAIL("merge + nonlinear fit failed: " << est_or.error().detail);
+    return;
+  }
   const auto& est = *est_or;
 
   auto nl = build_nl_constraints(pt);
