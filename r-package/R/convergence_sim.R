@@ -3,6 +3,10 @@ convergence_sim_catalog <- function() {
     design = c(
       "dejonckere_simple_2025",
       "dejonckere_simple_2022",
+      "dejonckere_shrinkage_2023_study1",
+      "dejonckere_shrinkage_2023_study2_6",
+      "dejonckere_shrinkage_2023_study2_14",
+      "dejonckere_shrinkage_2023_study2_18",
       "dejonckere_crossloading_2025",
       "dejonckere_crossloading_2022",
       "dejonckere_msst_2025",
@@ -11,21 +15,54 @@ convergence_sim_catalog <- function() {
     reference = c(
       "De Jonckere and Rosseel (2025), Study 1",
       "De Jonckere and Rosseel (2022), Study 1",
+      "De Jonckere and Rosseel (2023), Study 1",
+      "De Jonckere and Rosseel (2023), Study 2, 6 observed variables",
+      "De Jonckere and Rosseel (2023), Study 2, 14 observed variables",
+      "De Jonckere and Rosseel (2023), Study 2, 18 observed variables",
       "De Jonckere and Rosseel (2025), Study 2",
       "De Jonckere and Rosseel (2022), Study 2",
       "De Jonckere and Rosseel (2025), Study 3",
       "Ludtke, Ulitzsch, and Robitzsch (2021), Simulation Study 1"
     ),
-    default_n = c(20L, 20L, 20L, 20L, 10L, 30L),
+    default_n = c(20L, 20L, 20L, 20L, 20L, 20L, 20L, 20L, 10L, 30L),
     notes = c(
       "Two-factor latent regression, beta = 0.1, reliability-0.1 indicators.",
       "Two-factor latent regression, beta = 0.25, symmetric loadings.",
+      "Two-factor latent regression, beta in {0.1, 0.3}; shrinkage-target paper setup.",
+      "Two-factor latent regression, beta in {0, 0.25, 1, 2}; three indicators per factor.",
+      "Two-factor latent regression, beta in {0, 0.25, 1, 2}; seven indicators per factor.",
+      "Two-factor latent regression, beta in {0, 0.25, 1, 2}; nine indicators per factor.",
       "Three-factor chain SEM with three crossloadings and small latent residual variances.",
       "Three-factor chain SEM with three crossloadings and beta = c(0.6, 0.6).",
       "Second-order MSST helper using the OSF loadings and latent variance defaults.",
       "Two-factor CFA, standardized loading 0.5, rho in {0.3, 0.5, 0.7}."
     ),
     stringsAsFactors = FALSE
+  )
+}
+
+convergence_sim <- function(design = convergence_sim_catalog()$design, ...) {
+  design <- match.arg(design)
+  switch(
+    design,
+    dejonckere_simple_2025 =
+      convergence_sim_dejonckere_simple(variant = "2025", ...),
+    dejonckere_simple_2022 =
+      convergence_sim_dejonckere_simple(variant = "2022", ...),
+    dejonckere_shrinkage_2023_study1 =
+      convergence_sim_dejonckere_shrinkage(study = "study1", ...),
+    dejonckere_shrinkage_2023_study2_6 =
+      convergence_sim_dejonckere_shrinkage(study = "study2", indicators = 3L, ...),
+    dejonckere_shrinkage_2023_study2_14 =
+      convergence_sim_dejonckere_shrinkage(study = "study2", indicators = 7L, ...),
+    dejonckere_shrinkage_2023_study2_18 =
+      convergence_sim_dejonckere_shrinkage(study = "study2", indicators = 9L, ...),
+    dejonckere_crossloading_2025 =
+      convergence_sim_dejonckere_crossloading(variant = "2025", ...),
+    dejonckere_crossloading_2022 =
+      convergence_sim_dejonckere_crossloading(variant = "2022", ...),
+    dejonckere_msst_2025 = convergence_sim_dejonckere_msst(...),
+    ludtke_cfa_2021 = convergence_sim_ludtke_cfa(...)
   )
 }
 
@@ -168,6 +205,87 @@ convergence_sim_dejonckere_crossloading <- function(n = 20L,
   )
 }
 
+convergence_sim_dejonckere_shrinkage <- function(n = 20L,
+                                                 study = c("study1", "study2"),
+                                                 indicators = NULL,
+                                                 beta = NULL,
+                                                 seed = NULL) {
+  study <- match.arg(study)
+  n <- .conv_positive_int(n, "n")
+  if (identical(study, "study1")) {
+    if (is.null(indicators)) indicators <- 3L
+    if (is.null(beta)) beta <- 0.1
+    reference <- "De Jonckere and Rosseel (2023), Study 1"
+    design <- "dejonckere_shrinkage_2023_study1"
+  } else {
+    if (is.null(indicators)) indicators <- 3L
+    if (is.null(beta)) beta <- 0.25
+    reference <- paste0(
+      "De Jonckere and Rosseel (2023), Study 2, ",
+      2L * as.integer(indicators), " observed variables"
+    )
+    design <- paste0("dejonckere_shrinkage_2023_study2_", 2L * as.integer(indicators))
+  }
+
+  indicators <- .conv_positive_int(indicators, "indicators")
+  if (!indicators %in% c(3L, 7L, 9L)) {
+    stop("`indicators` must be 3, 7, or 9", call. = FALSE)
+  }
+  beta <- .conv_scalar_numeric(beta, "beta")
+  if (identical(study, "study1") && indicators != 3L) {
+    stop("Study 1 uses `indicators = 3`", call. = FALSE)
+  }
+
+  loadings <- switch(
+    as.character(indicators),
+    `3` = c(1.0, 0.8, 0.6),
+    `7` = c(1.0, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3),
+    `9` = c(1.0, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.3, 0.2)
+  )
+  y_names <- paste0("y", seq_len(indicators))
+  x_names <- paste0("x", seq_len(indicators))
+  ov_names <- c(y_names, x_names)
+
+  lambda <- matrix(0, nrow = length(ov_names), ncol = 2L)
+  lambda[seq_len(indicators), 1L] <- loadings
+  lambda[indicators + seq_len(indicators), 2L] <- loadings
+  latent_cov <- matrix(c(1 + beta^2, beta, beta, 1), 2L, 2L)
+  residual_var <- rep(1, length(ov_names))
+  sigma <- lambda %*% latent_cov %*% t(lambda) + diag(residual_var, length(ov_names))
+  dimnames(sigma) <- list(ov_names, ov_names)
+
+  analysis <- paste(
+    paste("Y =~", paste(y_names, collapse = " + ")),
+    paste("X =~", paste(x_names, collapse = " + ")),
+    "Y ~ X",
+    sep = "\n"
+  )
+  population <- paste(
+    .conv_loading_row("Y", y_names, loadings),
+    .conv_loading_row("X", x_names, loadings),
+    sprintf("Y ~ %.15g*X", beta),
+    "Y ~~ 1*Y",
+    "X ~~ 1*X",
+    paste(paste0(ov_names, " ~~ 1*", ov_names), collapse = "\n"),
+    sep = "\n"
+  )
+  .conv_pack(
+    design = design,
+    reference = reference,
+    n = n,
+    ov_names = ov_names,
+    sigma = sigma,
+    analysis_syntax = analysis,
+    population_syntax = population,
+    seed = seed,
+    truth = list(beta = beta, loadings = loadings, latent_cov = latent_cov,
+                 residual_var = residual_var,
+                 shrinkage_targets = c("identity", "constant_correlation",
+                                       "constant_variance", "model_based",
+                                       "ledoit_wolf"))
+  )
+}
+
 convergence_sim_dejonckere_msst <- function(n = 10L,
                                             state_loadings = c(1.0, 0.5, 1.3),
                                             trait_loadings = c(1.0, 0.5, 1.3),
@@ -304,6 +422,11 @@ convergence_sim_ludtke_cfa <- function(n = 30L,
   paste(eta1, eta2, eta3, "eta2 ~ eta1", "eta3 ~ eta2", sep = "\n")
 }
 
+.conv_loading_row <- function(factor, ov_names, loadings) {
+  terms <- paste0(format(loadings, scientific = FALSE), "*", ov_names)
+  paste(factor, "=~", paste(terms, collapse = " + "))
+}
+
 .conv_pack <- function(design, reference, n, ov_names, sigma, analysis_syntax,
                        population_syntax, seed, truth) {
   sigma <- .conv_near_pd(sigma)
@@ -326,6 +449,16 @@ convergence_sim_ludtke_cfa <- function(n = 30L,
   )
   class(out) <- c("magmaan_convergence_sim", "list")
   out
+}
+
+print.magmaan_convergence_sim <- function(x, ...) {
+  cat("<magmaan_convergence_sim>\n", sep = "")
+  cat("  design:    ", x$design, "\n", sep = "")
+  cat("  reference: ", x$reference, "\n", sep = "")
+  cat("  n:         ", x$n, "\n", sep = "")
+  cat("  variables: ", length(x$population_mean), "\n", sep = "")
+  if (!is.null(x$seed)) cat("  seed:      ", x$seed, "\n", sep = "")
+  invisible(x)
 }
 
 .conv_simulate_mvn <- function(n, mean, cov, seed = NULL) {
