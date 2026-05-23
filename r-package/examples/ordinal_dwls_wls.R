@@ -54,13 +54,13 @@ stopifnot(length(moments) == nrow(d$W_dwls[[1]]))
 stopifnot(length(moments) == nrow(d$W_wls[[1]]))
 
 fit_dwls <- core$fit_dwls_ordinal(
-  m, d, lbfgsb = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+  m, d, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
 fit_wls <- core$fit_wls_ordinal(
-  m, d, lbfgsb = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+  m, d, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
 fit_dwls_h <- core$fit_dwls_ordinal(
-  m, d_h, lbfgsb = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+  m, d_h, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
 fit_dwls_dpd <- core$fit_dwls_ordinal(
-  m, d_dpd, lbfgsb = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+  m, d_dpd, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
 
 stopifnot(isTRUE(fit_dwls$ordinal), identical(fit_dwls$estimator, "DWLS"))
 stopifnot(isTRUE(fit_wls$ordinal), identical(fit_wls$estimator, "WLS"))
@@ -103,7 +103,7 @@ stopifnot(nrow(d_mixed_dpd$NACOV[[1]]) == nrow(d_mixed$NACOV[[1]]))
 stopifnot(identical(d_mixed_dpd$thresholds, d_mixed$thresholds))
 fit_mixed_dpd <- core$fit_dwls_mixed_ordinal(
   m_mixed, d_mixed_dpd,
-  lbfgsb = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+  control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
 stopifnot(isTRUE(fit_mixed_dpd$mixed_ordinal))
 stopifnot(all(is.finite(fit_mixed_dpd$theta)))
 

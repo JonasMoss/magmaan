@@ -475,10 +475,10 @@ TEST_CASE("FC-SEM ML: fit from native simple starts matches lavaan objective") {
       REQUIRE_MESSAGE(x0.has_value(), "starts failed: " << x0.error().detail);
       REQUIRE(x0->size() == built.pt.n_free());
 
-      magmaan::optim::LbfgsOptions opts;
+      magmaan::optim::OptimOptions opts;
       opts.max_iter = 4000;
       auto est = magmaan::estimate::fit_ml_fcsem(
-          built.pt, samp, *x0, {}, magmaan::estimate::Backend::Lbfgs, opts);
+          built.pt, samp, *x0, {}, magmaan::estimate::Backend::NloptLbfgs, opts);
       REQUIRE_MESSAGE(est.has_value(), "fit failed: " << est.error().detail);
 
       const double expected_f =
@@ -535,10 +535,10 @@ TEST_CASE("FC-SEM expected information: SEs match lavaan native fixtures") {
       auto x0 = magmaan::estimate::simple_fcsem_start_values(built.pt, samp);
       REQUIRE_MESSAGE(x0.has_value(), "starts failed: " << x0.error().detail);
 
-      magmaan::optim::LbfgsOptions opts;
+      magmaan::optim::OptimOptions opts;
       opts.max_iter = 4000;
       auto est = magmaan::estimate::fit_ml_fcsem(
-          built.pt, samp, *x0, {}, magmaan::estimate::Backend::Lbfgs, opts);
+          built.pt, samp, *x0, {}, magmaan::estimate::Backend::NloptLbfgs, opts);
       REQUIRE_MESSAGE(est.has_value(), "fit failed: " << est.error().detail);
 
       auto info =
@@ -584,10 +584,10 @@ TEST_CASE("FC-SEM fit measures: match lavaan native fixtures") {
       auto x0 = magmaan::estimate::simple_fcsem_start_values(built.pt, samp);
       REQUIRE_MESSAGE(x0.has_value(), "starts failed: " << x0.error().detail);
 
-      magmaan::optim::LbfgsOptions opts;
+      magmaan::optim::OptimOptions opts;
       opts.max_iter = 4000;
       auto est = magmaan::estimate::fit_ml_fcsem(
-          built.pt, samp, *x0, {}, magmaan::estimate::Backend::Lbfgs, opts);
+          built.pt, samp, *x0, {}, magmaan::estimate::Backend::NloptLbfgs, opts);
       REQUIRE_MESSAGE(est.has_value(), "fit failed: " << est.error().detail);
 
       const double chi2 = magmaan::inference::chi2_stat(samp, *est);
@@ -640,10 +640,10 @@ TEST_CASE("FC-SEM standardization: std.lv/std.all match lavaan native fixtures")
       auto x0 = magmaan::estimate::simple_fcsem_start_values(built.pt, samp);
       REQUIRE_MESSAGE(x0.has_value(), "starts failed: " << x0.error().detail);
 
-      magmaan::optim::LbfgsOptions opts;
+      magmaan::optim::OptimOptions opts;
       opts.max_iter = 4000;
       auto est = magmaan::estimate::fit_ml_fcsem(
-          built.pt, samp, *x0, {}, magmaan::estimate::Backend::Lbfgs, opts);
+          built.pt, samp, *x0, {}, magmaan::estimate::Backend::NloptLbfgs, opts);
       REQUIRE_MESSAGE(est.has_value(), "fit failed: " << est.error().detail);
 
       auto info =

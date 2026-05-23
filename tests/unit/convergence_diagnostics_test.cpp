@@ -39,7 +39,7 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/estimate/nt.hpp"
-#include "magmaan/optim/lbfgs_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
 #include "magmaan/spec/start_hints.hpp"
@@ -203,7 +203,7 @@ magmaan::spec::Starts hint_start(const Eigen::VectorXd& v) {
 // Fit with a given optimizer + start, print outcome and distance to theta-hat.
 void report_fit(const char* tag, const magmaan::spec::LatentStructure& pt,
                 const magmaan::model::MatrixRep& mr, const SampleStats& samp,
-                magmaan::optim::LbfgsOptions opts, const magmaan::spec::Starts& s,
+                magmaan::optim::OptimOptions opts, const magmaan::spec::Starts& s,
                 const Eigen::VectorXd& theta_hat) {
   auto x0_or = simple_start_values(pt, mr, samp, s);
   if (!x0_or.has_value()) {
@@ -211,7 +211,7 @@ void report_fit(const char* tag, const magmaan::spec::LatentStructure& pt,
     return;
   }
   auto est = magmaan::estimate::fit_ml(pt, mr, samp, *x0_or, {},
-                                       magmaan::estimate::Backend::Lbfgs, opts);
+                                       magmaan::estimate::Backend::NloptLbfgs, opts);
   if (est.has_value()) {
     const double dist = (est->theta - theta_hat).cwiseAbs().maxCoeff();
     std::printf("       %-28s OK    fmin=%.6f iters=%-4d max|theta-hat|=%.2e\n",
@@ -318,21 +318,21 @@ void run_diagnostics(const std::string& name) {
   }
 
   // ---- Phase 3: start-value sensitivity --------------------------------
-  std::printf("[P3] estimate::fit from different starts (default LBFGS):\n");
-  const magmaan::optim::LbfgsOptions lbfgs_default{};
-  report_fit("magmaan heuristic", c.pt, c.mr, c.samp, lbfgs_default,
+  std::printf("[P3] estimate::fit from different starts (default NLopt L-BFGS):\n");
+  const magmaan::optim::OptimOptions nlopt_default{};
+  report_fit("magmaan heuristic", c.pt, c.mr, c.samp, nlopt_default,
              magmaan::spec::Starts{}, f.theta_hat);
-  report_fit("lavaan theta-hat", c.pt, c.mr, c.samp, lbfgs_default,
+  report_fit("lavaan theta-hat", c.pt, c.mr, c.samp, nlopt_default,
              hint_start(f.theta_hat), f.theta_hat);
-  report_fit("lavaan start values", c.pt, c.mr, c.samp, lbfgs_default,
+  report_fit("lavaan start values", c.pt, c.mr, c.samp, nlopt_default,
              hint_start(f.theta_start), f.theta_hat);
 
   // Regression guard: the default heuristic start must reach lavaan's optimum.
   // This is the bug the investigation fixed -- if it regresses, this fails.
   {
     auto est = magmaan::estimate::fit_ml(c.pt, c.mr, c.samp, x0, {},
-                                         magmaan::estimate::Backend::Lbfgs,
-                                         lbfgs_default);
+                                         magmaan::estimate::Backend::NloptLbfgs,
+                                         nlopt_default);
     CHECK_MESSAGE(est.has_value(),
                   "ML must converge from the default heuristic start");
     if (est.has_value()) {
@@ -342,9 +342,9 @@ void run_diagnostics(const std::string& name) {
   }
 
   // ---- Phase 4: optimizer / line-search comparison ---------------------
-  std::printf("[P4] LBFGS gtol sweep (heuristic start | lavaan theta-hat):\n");
+  std::printf("[P4] NLopt L-BFGS gtol sweep (heuristic start | lavaan theta-hat):\n");
   for (double gt : {1e-7, 1e-5, 1e-3, 1e-1}) {
-    magmaan::optim::LbfgsOptions o;
+    magmaan::optim::OptimOptions o;
     o.gtol = gt;
     char t1[48], t2[48];
     std::snprintf(t1, sizeof t1, "gtol=%.0e heuristic", gt);
@@ -355,7 +355,7 @@ void run_diagnostics(const std::string& name) {
                hint_start(f.theta_hat), f.theta_hat);
   }
   {
-    magmaan::optim::LbfgsOptions o;
+    magmaan::optim::OptimOptions o;
     o.max_iter = 20000;
     report_fit("max_iter=20000 heuristic", c.pt, c.mr, c.samp,
                o, magmaan::spec::Starts{},
@@ -364,10 +364,10 @@ void run_diagnostics(const std::string& name) {
 #ifdef MAGMAAN_WITH_CERES
   std::printf("[P4] Ceres trust-region:\n");
   report_fit("ceres / heuristic", c.pt, c.mr, c.samp,
-             magmaan::optim::LbfgsOptions{}, magmaan::spec::Starts{},
+             magmaan::optim::OptimOptions{}, magmaan::spec::Starts{},
              f.theta_hat);
   report_fit("ceres / lavaan theta-hat", c.pt, c.mr, c.samp,
-             magmaan::optim::LbfgsOptions{}, hint_start(f.theta_hat),
+             magmaan::optim::OptimOptions{}, hint_start(f.theta_hat),
              f.theta_hat);
 #else
   std::printf("[P4] Ceres backend not built (configure with the `ceres` preset)\n");

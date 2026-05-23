@@ -234,10 +234,10 @@ TEST_CASE("composite ML goldens — lavaan parity for fitted public surface" *
     b.rep = std::move(*rep_or);
 
     auto samp = sample_stats_from_fixture(exp);
-    magmaan::optim::LbfgsOptions fit_opts;
+    magmaan::optim::OptimOptions fit_opts;
     fit_opts.max_iter = 5000;
     auto est_or = magmaan::test::fit(
-        b.pt, b.rep, samp, {}, magmaan::estimate::Backend::Lbfgs, fit_opts);
+        b.pt, b.rep, samp, {}, magmaan::estimate::Backend::NloptLbfgs, fit_opts);
     if (!est_or.has_value()) {
       failures.push_back(id + ": fit — " + est_or.error().detail);
       continue;

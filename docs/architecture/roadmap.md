@@ -67,11 +67,10 @@ golden `parTable()` fixtures.
 
 ### Complete-data ML and inference
 
-- Normal-theory ML fitting through LBFGS. Heuristic start values sign each
-  free loading by its indicator's covariance with the factor's marker, and the
-  unbounded path salvages a converged iterate when the strong-Wolfe line search
-  stalls in the flat neighbourhood of the optimum instead of reporting a hard
-  line-search error.
+- Normal-theory ML fitting defaults to NLopt L-BFGS. Heuristic start values
+  sign each free loading by its indicator's covariance with the factor's
+  marker, and terminal audit records projected-gradient stationarity at the
+  returned iterate so soft optimizer failures can be classified by geometry.
 - Discrepancy-scale convention: magmaan's `fmin` is the full ML discrepancy
   `F`, whereas lavaan reports `F/2` — magmaan's `fmin` at the optimum equals
   twice lavaan's.
@@ -95,7 +94,7 @@ golden `parTable()` fixtures.
 - Direct observed-pattern ML over raw continuous data with missingness masks.
 - Rows are compressed into observed-value patterns; the observed-pattern
   objective and analytic gradient reuse `ModelEvaluator` Jacobians.
-- `fit_fiml()` optimizes with LBFGS.
+- `fit_fiml()` currently optimizes directly with NLopt L-BFGS.
 - Current checked-in fixtures cover single- and multi-group CFA, three-factor
   CFA, labeled equality CFA, latent structural models, observed-variable path
   models under random-x and complete fixed.x policies, equality-constrained
@@ -131,7 +130,7 @@ User-facing the optimizer is selected by a single kebab-case `optimizer = "..."`
 string threaded through `magmaan()` and the underlying `fit_ml/fit_uls/fit_gls/
 fit_wls/fit_*_snlls/fit_*_ordinal` entries; the table lives in
 `include/magmaan/estimate/backend_strings.hpp` and parses into the C++
-`Backend` enum. Accepted strings: `"lbfgs"`, `"ceres"`, `"ceres-bfgs"`,
+`Backend` enum. Accepted strings: `"ceres"`, `"ceres-bfgs"`,
 `"nlopt-slsqp"`, `"nlopt-bobyqa"`, `"nlopt-tnewton"`, `"nlopt-var2"`,
 `"nlopt-lbfgs"`, `"port"`, `"port-nls"`. The R side passes the same string
 through to a single Rcpp shim per fit family — no per-Backend wrapper
@@ -148,8 +147,9 @@ legacy `converged` boolean is now true only for a clean stationary optimizer
 stop rather than any usable non-error return.
 
 
-- `Backend::Lbfgs` is the default for scalar discrepancies — LBFGS unbounded
-  and LBFGS-B bounded, both via header-only LBFGS++.
+- `Backend::NloptLbfgs` is the current default for scalar discrepancies. NLopt
+  is a required dependency in the ordinary build, so the default is always
+  available.
 - `Backend::Port` is the trust-region cross-check: vendored PORT (Bell Labs)
   `drmngb_` (TOMS 611 Dennis-Gay-Welsch model-Hessian trust region; the
   algorithm behind R's `nlminb`), supports bounds natively. Vendored at
@@ -169,18 +169,18 @@ stop rather than any usable non-error return.
   dense line-search BFGS on the least-squares path (build with
   `MAGMAAN_WITH_CERES=ON`).
 - `Backend::NloptSlsqp` exposes NLopt's SLSQP for ML and LS scalar paths
-  (gradient SQP, Kraft 1988; `MAGMAAN_WITH_NLOPT=ON`).
+  (gradient SQP, Kraft 1988).
 - `Backend::NloptBobyqa`, `Backend::NloptTnewton`, `Backend::NloptVar2`,
   `Backend::NloptLbfgs` round out the NLopt roster with distinct algorithm
   ideas: Powell 2009 derivative-free quadratic-model trust region (BOBYQA,
   finite bounds required); Nash 1985 preconditioned truncated Newton with
   CG inner solve (TNEWTON); Shanno-Phua 1980 full (dense) variable-metric
-  BFGS (VAR2); NLopt's own L-BFGS as a sanity-check against LBFGS++. All
-  five share the one `NloptOptimizer` adapter parameterised over an opaque
+  BFGS (VAR2); and NLopt's own L-BFGS. All five share the one
+  `NloptOptimizer` adapter parameterised over an opaque
   `NloptAlgorithm` enum.
 - The local `ceres` preset is the optional optimizer comparison build: it
-  enables Ceres and NLopt together while PORT remains enabled by default.
-  `just r-install-ceres` mirrors those compile definitions into the R shared
+  enables Ceres while NLopt and PORT remain enabled by default. `just
+  r-install-ceres` mirrors the Ceres compile definition into the R shared
   object so all accepted optimizer strings are executable from the R dev
   surface in one install.
 
@@ -188,7 +188,7 @@ stop rather than any usable non-error return.
 
 - ULS, GLS, and explicit-weight WLS discrepancies with scalar
   value/gradient and residual/Jacobian interfaces.
-- Bounded LS fitting through LBFGS-B and optional Ceres.
+- Bounded LS fitting through scalar NLopt L-BFGS and optional Ceres.
 - Optional Ceres dense line-search BFGS is exposed only for unbounded SNLLS LS
   research comparisons. It consumes the already-profiled nonlinear block, so
   within-block linear equalities remain compatible through the SNLLS
@@ -212,7 +212,7 @@ stop rather than any usable non-error return.
   estimator-specific chi-square reporting for representative CFA,
   multi-group, labeled-equality, mean-structure, and observed-exogenous
   fixed.x cases. Mean-structure LS fixtures also cross-check SNLLS against
-  the full LS path, and Ceres against LBFGS-B when the Ceres backend is
+  the full LS path, and Ceres against NLopt L-BFGS when the Ceres backend is
   enabled.
 - The Geiser textbook GLS corpus is checked in as a parity-tier golden
   fixture generated from `external/geiser` plus installed lavaan. The test

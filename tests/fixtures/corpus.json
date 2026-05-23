@@ -125,7 +125,7 @@
       "id":            "0026_two_factor_meanstructure_hs",
       "model":         "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1\nx4 ~ 1\nx5 ~ 1\nx6 ~ 1",
       "meanstructure": true,
-      "notes":         "Single-group 2F + meanstructure on HS (6 indicators). df = 27 − 19 = 8. Avoids the G5b LBFGS 3F+means convergence issue. Reference for FD-observed meanstructure parity + G3b robust-SE goldens."
+      "notes":         "Single-group 2F + meanstructure on HS (6 indicators). df = 27 − 19 = 8. Avoids the G5b 3F+means convergence corner. Reference for FD-observed meanstructure parity + G3b robust-SE goldens."
     },
     {
       "id":            "0023_scalar_invariance_3f_hs",

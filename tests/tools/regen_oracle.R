@@ -2024,8 +2024,8 @@ std_models <- list(
   # Configural 2-group + meanstructure — exercises the free ν intercepts'
   # std.all rescaling (and the factor covariances' std.lv → correlation in
   # both groups). A single-group 3F + meanstructure variant is intentionally
-  # omitted: our LBFGS line search currently fails on it (the 2-group fit is
-  # fine), and chasing that convergence corner is out of scope for this pass.
+  # omitted: this convergence corner is out of scope for this pass (the
+  # 2-group fit is fine).
   list(id = "0003_three_factor_hs_2group",
        model = paste("visual =~ x1 + x2 + x3",
                      "textual =~ x4 + x5 + x6",

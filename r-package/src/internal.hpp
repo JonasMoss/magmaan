@@ -29,7 +29,7 @@
 #include "magmaan/estimate/backend_strings.hpp"  // backend_from_string
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/inference/inference.hpp"        // information_*, vcov, se, chi2_stat, df_stat
-#include "magmaan/optim/lbfgs_optimizer.hpp"  // LbfgsOptions
+#include "magmaan/optim/problem.hpp"  // OptimOptions
 
 namespace lv  = magmaan;
 namespace lvm = magmaan::model;
@@ -330,10 +330,10 @@ inline Rcpp::DataFrame partable_df(const magmaan::spec::LatentStructure& structu
   return folded_df;
 }
 
-inline magmaan::optim::LbfgsOptions lbfgs_opts_from(Rcpp::Nullable<Rcpp::List> lbfgs) {
-  magmaan::optim::LbfgsOptions o;  // struct defaults
-  if (lbfgs.isNotNull()) {
-    Rcpp::List l(lbfgs.get());
+inline magmaan::optim::OptimOptions optim_opts_from(Rcpp::Nullable<Rcpp::List> control) {
+  magmaan::optim::OptimOptions o;  // struct defaults
+  if (control.isNotNull()) {
+    Rcpp::List l(control.get());
     if (l.containsElementNamed("max_iter")) o.max_iter = Rcpp::as<int>(l["max_iter"]);
     if (l.containsElementNamed("ftol"))     o.ftol     = Rcpp::as<double>(l["ftol"]);
     if (l.containsElementNamed("gtol"))     o.gtol     = Rcpp::as<double>(l["gtol"]);
@@ -343,15 +343,15 @@ inline magmaan::optim::LbfgsOptions lbfgs_opts_from(Rcpp::Nullable<Rcpp::List> l
 }
 
 // Parse the user-facing `optimizer = "..."` string into the C++ Backend
-// enum. Empty / NULL ⇒ default "lbfgs". Unknown strings are surfaced as a
+// enum. Empty / NULL ⇒ default "nlopt-lbfgs". Unknown strings are surfaced as a
 // magmaan-style Rcpp::stop with the accepted-names list — same wording as
 // the C++ backend_from_string error, so users typing `optimizer = "ceres-lm"`
 // get a clear "did you mean..." correction.
 inline magmaan::estimate::Backend
 backend_from_optimizer_arg(Rcpp::Nullable<Rcpp::String> optimizer) {
-  if (optimizer.isNull()) return magmaan::estimate::Backend::Lbfgs;
+  if (optimizer.isNull()) return magmaan::estimate::Backend::NloptLbfgs;
   const std::string name = Rcpp::as<std::string>(optimizer.get());
-  if (name.empty()) return magmaan::estimate::Backend::Lbfgs;
+  if (name.empty()) return magmaan::estimate::Backend::NloptLbfgs;
   auto b_or = magmaan::estimate::backend_from_string(name);
   if (!b_or.has_value()) Rcpp::stop("magmaan: " + b_or.error().detail);
   return *b_or;

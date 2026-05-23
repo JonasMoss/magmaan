@@ -19,7 +19,7 @@
 #include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/model/matrix_rep.hpp"
-#include "magmaan/optim/lbfgsb_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/lavaanify.hpp"
 

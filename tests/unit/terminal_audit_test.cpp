@@ -65,8 +65,8 @@ TEST_CASE("terminal_audit — displaced quadratic is non-stationary, advisory Un
   CHECK_FALSE(a.stationary);
   CHECK(a.grad_inf_norm == doctest::Approx(1.0));
   CHECK(a.advisory_status == OptimStatus::Unknown);
-  // RHS is tol * (1 + |f|) = 2e-6 * (1 + 0.5) = 3e-6, definitely < 1.
-  CHECK(a.stationarity_rhs == doctest::Approx(3e-6));
+  // RHS is tol * (1 + |f|) = 1e-6 * (1 + 0.5) = 1.5e-6, definitely < 1.
+  CHECK(a.stationarity_rhs == doctest::Approx(1.5e-6));
 }
 
 TEST_CASE("terminal_audit — at lower bound with outward gradient is stationary") {
@@ -139,8 +139,8 @@ TEST_CASE("terminal_audit — inconsistent reported_f flagged") {
 
 TEST_CASE("terminal_audit — RELATIVE stationarity tolerance scales with |f|") {
   // f at optimum with a fake huge scale: construct a (correct) stationary
-  // point where |f| = 1e6 and the gradient is exactly 0. The audit's RHS is
-  // tol * (1 + |f|) ≈ 2.0; a non-zero gradient of magnitude < 2 should still
+  // point where |f| = 1e6 and the gradient is small. The audit's RHS is
+  // tol * (1 + |f|) ≈ 1.0; a non-zero gradient of magnitude < 1 should still
   // be accepted as stationary. (This documents the scale-invariance of the
   // test — a fixed-absolute threshold would mis-classify here.)
   const auto f = [](const Eigen::VectorXd&, Eigen::VectorXd& g) {
@@ -151,25 +151,47 @@ TEST_CASE("terminal_audit — RELATIVE stationarity tolerance scales with |f|") 
   TerminalAudit a = audit_terminal_iterate(
       f, x, /*reported_f=*/1e6, unbounded_lower(2), unbounded_upper(2));
   CHECK(a.stationary);
-  CHECK(a.stationarity_rhs == doctest::Approx(2.0 + 2e-6).epsilon(1e-6));
+  CHECK(a.stationarity_rhs == doctest::Approx(1.0 + 1e-6).epsilon(1e-6));
   CHECK(a.grad_inf_norm == doctest::Approx(0.5));
 }
 
-TEST_CASE("terminal_audit — one-ppm ML line-search remainder is salvageable") {
+TEST_CASE("terminal_audit — calibration: a 2e-6 tolerance would salvage a "
+          "one-ppm ML line-search remainder") {
+  // Synthetic anchor for the calibration-study conversation: an ML fit
+  // where the optimizer's reported objective is ~0.192 and the recomputed
+  // projected-gradient infinity-norm is ~1.27e-6 (a "one-ppm" remainder).
+  // Under the strict v1 default (`stationarity_tol = 1e-6`) this would
+  // NOT salvage (rhs ≈ 1.192e-6 < gnorm). With an explicit looser
+  // tolerance of 2e-6 it would (rhs ≈ 2.38e-6 > gnorm). Both branches
+  // documented here so the calibration discussion has a reproducible
+  // reference point — and so a future study can wire this case into a
+  // gallery without re-deriving the numbers. See `docs/design/terminal-audit.md`
+  // "Tolerance calibration" for the broader study sketch.
   const auto f = [](const Eigen::VectorXd&, Eigen::VectorXd& g) {
     g = Eigen::VectorXd::Constant(g.size(), 1.2664784776461602e-6);
     return 0.19217060692071364;
   };
   Eigen::VectorXd x(8);
   x.setZero();
-  TerminalAudit a = audit_terminal_iterate(
+
+  // Strict v1 default: NOT stationary.
+  TerminalAudit strict = audit_terminal_iterate(
       f, x, /*reported_f=*/0.19217060692071364, unbounded_lower(8),
       unbounded_upper(8));
+  CHECK_FALSE(strict.stationary);
+  CHECK(strict.grad_inf_norm == doctest::Approx(1.2664784776461602e-6));
+  CHECK(strict.stationarity_rhs == doctest::Approx(1.1921706069207137e-6));
 
-  CHECK(a.stationary);
-  CHECK(a.f_consistent);
-  CHECK(a.grad_inf_norm == doctest::Approx(1.2664784776461602e-6));
-  CHECK(a.stationarity_rhs == doctest::Approx(2.3843412138414273e-6));
+  // Looser tolerance the calibration study may end up endorsing or
+  // rejecting: stationary under 2e-6.
+  TerminalAuditOptions loose;
+  loose.stationarity_tol = 2e-6;
+  TerminalAudit salvaged = audit_terminal_iterate(
+      f, x, /*reported_f=*/0.19217060692071364, unbounded_lower(8),
+      unbounded_upper(8), loose);
+  CHECK(salvaged.stationary);
+  CHECK(salvaged.f_consistent);
+  CHECK(salvaged.stationarity_rhs == doctest::Approx(2.3843412138414273e-6));
 }
 
 TEST_CASE("terminal_audit — bounds-size mismatch returns null audit, does not crash") {

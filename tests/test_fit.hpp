@@ -24,7 +24,7 @@
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/estimate/fiml.hpp"
-#include "magmaan/optim/lbfgs_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 
 namespace magmaan::test {
 
@@ -45,28 +45,28 @@ auto_bounds(const spec::LatentStructure& pt, estimate::Bounds b) {
 
 }  // namespace detail
 
-// Normal-theory ML. `backend` selects the optimizer (default L-BFGS; the NLopt
-// SLSQP and PORT (nlminb) cross-check backends are also accepted).
+// Normal-theory ML. `backend` selects the optimizer (default NLopt L-BFGS; the
+// NLopt SLSQP and PORT (nlminb) cross-check backends are also accepted).
 template <class Pt, class Rep, class Samp>
 fit_expected<estimate::Estimates>
 fit(const Pt& pt, const Rep& rep, const Samp& samp,
     estimate::Bounds bounds = {},
-    estimate::Backend backend = estimate::Backend::Lbfgs,
-    optim::LbfgsOptions opts = {}) {
+    estimate::Backend backend = estimate::Backend::NloptLbfgs,
+    optim::OptimOptions opts = {}) {
   auto x0 = estimate::simple_start_values(pt, rep, samp, {});
   if (!x0.has_value()) return std::unexpected(x0.error());
   return estimate::fit_ml(pt, rep, samp, *x0, std::move(bounds), backend, opts);
 }
 
-// Normal-theory ML with box bounds (LBFGS-B); an empty `bounds` auto-derives
+// Normal-theory ML with box bounds; an empty `bounds` auto-derives
 // the variance bounds from the partable.
 template <class Pt, class Rep, class Samp>
 fit_expected<estimate::Estimates>
 fit_bounded(const Pt& pt, const Rep& rep, const Samp& samp,
-            estimate::Bounds bounds, optim::LbfgsOptions opts = {}) {
+            estimate::Bounds bounds, optim::OptimOptions opts = {}) {
   auto b = detail::auto_bounds(pt, std::move(bounds));
   if (!b.has_value()) return std::unexpected(b.error());
-  return fit(pt, rep, samp, std::move(*b), estimate::Backend::Lbfgs, opts);
+  return fit(pt, rep, samp, std::move(*b), estimate::Backend::NloptLbfgs, opts);
 }
 
 // Moment-quadratic least squares: an empty `weight` ⇒ ULS, a caller-supplied
@@ -75,8 +75,8 @@ template <class Pt, class Rep, class Samp>
 fit_expected<estimate::Estimates>
 fit_gmm(const Pt& pt, const Rep& rep, const Samp& samp,
         estimate::gmm::Weight weight = {}, estimate::Bounds bounds = {},
-        estimate::Backend backend = estimate::Backend::Lbfgs,
-        optim::LbfgsOptions opts = {}) {
+        estimate::Backend backend = estimate::Backend::NloptLbfgs,
+        optim::OptimOptions opts = {}) {
   auto x0 = estimate::simple_start_values(pt, rep, samp, {});
   if (!x0.has_value()) return std::unexpected(x0.error());
   auto b = detail::auto_bounds(pt, std::move(bounds));
@@ -90,8 +90,8 @@ template <class Pt, class Rep, class Samp>
 fit_expected<estimate::Estimates>
 fit_gls(const Pt& pt, const Rep& rep, const Samp& samp,
         estimate::Bounds bounds = {},
-        estimate::Backend backend = estimate::Backend::Lbfgs,
-        optim::LbfgsOptions opts = {}) {
+        estimate::Backend backend = estimate::Backend::NloptLbfgs,
+        optim::OptimOptions opts = {}) {
   auto x0 = estimate::simple_start_values(pt, rep, samp, {});
   if (!x0.has_value()) return std::unexpected(x0.error());
   auto b = detail::auto_bounds(pt, std::move(bounds));
@@ -103,7 +103,7 @@ fit_gls(const Pt& pt, const Rep& rep, const Samp& samp,
 template <class Pt, class Rep, class Raw>
 fit_expected<estimate::Estimates>
 fit_fiml(const Pt& pt, const Rep& rep, const Raw& raw,
-         optim::LbfgsOptions opts = {}) {
+         optim::OptimOptions opts = {}) {
   auto samp = estimate::fiml::fiml_start_sample_stats(raw);
   if (!samp.has_value()) return std::unexpected(samp.error());
   auto x0 = estimate::simple_start_values(pt, rep, *samp, {});
@@ -116,8 +116,8 @@ template <class Pt, class Rep, class Stats>
 fit_expected<estimate::Estimates>
 fit_ordinal_bounded(const Pt& pt, const Rep& rep, const Stats& stats,
                     estimate::Bounds bounds, estimate::OrdinalWeightKind weights,
-                    estimate::Backend backend = estimate::Backend::Lbfgs,
-                    optim::LbfgsOptions opts = {},
+                    estimate::Backend backend = estimate::Backend::NloptLbfgs,
+                    optim::OptimOptions opts = {},
                     estimate::OrdinalParameterization parameterization =
                         estimate::OrdinalParameterization::Delta) {
   auto x0 = estimate::ordinal_start_values(pt, rep, stats, {});
@@ -132,8 +132,8 @@ fit_expected<estimate::Estimates>
 fit_mixed_ordinal_bounded(const Pt& pt, const Rep& rep, const Stats& stats,
                           estimate::Bounds bounds,
                           estimate::OrdinalWeightKind weights,
-                          estimate::Backend backend = estimate::Backend::Lbfgs,
-                          optim::LbfgsOptions opts = {},
+                          estimate::Backend backend = estimate::Backend::NloptLbfgs,
+                          optim::OptimOptions opts = {},
                           estimate::OrdinalParameterization parameterization =
                               estimate::OrdinalParameterization::Delta) {
   auto x0 = estimate::mixed_ordinal_start_values(pt, rep, stats, {});

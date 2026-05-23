@@ -981,60 +981,37 @@ df_to_fcsem_data <- function(x, model, missing = c("listwise", "error"),
   out
 }
 
-# Per-estimator entry points. Each takes an `optimizer = "lbfgs"` (default)
+# Per-estimator entry points. Each takes an `optimizer = "nlopt-lbfgs"` (default)
 # string + a generic `control = list(...)` of solver tuning knobs (the union
-# of LbfgsOptions and Ceres extras; see the C++ `Backend` enum docstring for
+# of OptimOptions and Ceres extras; see the C++ `Backend` enum docstring for
 # the supported strings).
-solver_control_arg <- function(control, lbfgsb = NULL, lbfgs = NULL,
-                               fn = "fit") {
-  used <- c(lbfgsb = !is.null(lbfgsb), lbfgs = !is.null(lbfgs))
-  if (sum(used) > 1L) {
-    stop(fn, "(): pass at most one of deprecated `lbfgsb` and `lbfgs`")
-  }
-  if (any(used)) {
-    if (!is.null(control)) {
-      stop(fn, "(): pass either `control` or deprecated `",
-           names(used)[used][[1L]], "`, not both")
-    }
-    return(if (used[["lbfgsb"]]) lbfgsb else lbfgs)
-  }
-  control
-}
-
-fit_ml <- function(model, data, optimizer = "lbfgs", control = NULL,
-                   lbfgsb = NULL, lbfgs = NULL) {
-  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_ml")
+fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL) {
   fit_ml_impl(partable_arg(model), sample_stats_arg(data),
               optimizer = optimizer, control = control)
 }
 
-fit_fiml <- function(model, data, optimizer = "lbfgs", control = NULL,
-                     lbfgsb = NULL, lbfgs = NULL) {
+fit_fiml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL) {
   if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
-  # FIML currently hardcodes LBFGS at the C++ layer (`src/estimate/fiml.cpp`
+  # FIML currently hardcodes NLopt L-BFGS at the C++ layer (`src/estimate/fiml.cpp`
   # bypasses Backend); the optimizer/control args are accepted for shape
-  # parity with the rest of the family, and the LBFGS-only path uses them.
-  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_fiml")
-  fit_fiml_impl(partable_arg(model), fiml_data_arg(data), lbfgs = control)
+  # parity with the rest of the family, and the optimizer-specific path uses them.
+  fit_fiml_impl(partable_arg(model), fiml_data_arg(data), control = control)
 }
 
-fit_uls <- function(model, data, optimizer = "lbfgs", control = NULL,
-                    bounds = NULL, lbfgsb = NULL, lbfgs = NULL) {
-  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_uls")
+fit_uls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
+                    bounds = NULL) {
   fit_uls_impl(partable_arg(model), sample_stats_arg(data),
                optimizer = optimizer, control = control, bounds = bounds)
 }
 
-fit_gls <- function(model, data, optimizer = "lbfgs", control = NULL,
-                    bounds = NULL, lbfgsb = NULL, lbfgs = NULL) {
-  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_gls")
+fit_gls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
+                    bounds = NULL) {
   fit_gls_impl(partable_arg(model), sample_stats_arg(data),
                optimizer = optimizer, control = control, bounds = bounds)
 }
 
-fit_wls <- function(model, data, W, optimizer = "lbfgs", control = NULL,
-                    bounds = NULL, lbfgsb = NULL, lbfgs = NULL) {
-  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_wls")
+fit_wls <- function(model, data, W, optimizer = "nlopt-lbfgs", control = NULL,
+                    bounds = NULL) {
   fit_wls_impl(partable_arg(model), sample_stats_arg(data), W = W,
                optimizer = optimizer, control = control, bounds = bounds)
 }
@@ -1072,39 +1049,29 @@ fcsem_standardized_rows <- function(fit, vcov = NULL) {
   fcsem_standardized_rows_impl(fit, vcov)
 }
 
-fit_dwls_ordinal <- function(model, data, optimizer = "lbfgs",
-                             control = NULL, bounds = NULL,
-                             lbfgsb = NULL, lbfgs = NULL) {
-  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_dwls_ordinal")
+fit_dwls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
+                             control = NULL, bounds = NULL) {
   pt <- augment_ordinal_partable(model, data)
   fit_dwls_ordinal_impl(pt, data, optimizer = optimizer,
                         control = control, bounds = bounds)
 }
 
-fit_wls_ordinal <- function(model, data, optimizer = "lbfgs",
-                            control = NULL, bounds = NULL,
-                            lbfgsb = NULL, lbfgs = NULL) {
-  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_wls_ordinal")
+fit_wls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
+                            control = NULL, bounds = NULL) {
   pt <- augment_ordinal_partable(model, data)
   fit_wls_ordinal_impl(pt, data, optimizer = optimizer,
                        control = control, bounds = bounds)
 }
 
-fit_dwls_mixed_ordinal <- function(model, data, optimizer = "lbfgs",
-                                   control = NULL, bounds = NULL,
-                                   lbfgsb = NULL, lbfgs = NULL) {
-  control <- solver_control_arg(control, lbfgsb, lbfgs,
-                                "fit_dwls_mixed_ordinal")
+fit_dwls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
+                                   control = NULL, bounds = NULL) {
   pt <- augment_mixed_ordinal_partable(model, data)
   fit_dwls_mixed_ordinal_impl(pt, data, optimizer = optimizer,
                               control = control, bounds = bounds)
 }
 
-fit_wls_mixed_ordinal <- function(model, data, optimizer = "lbfgs",
-                                  control = NULL, bounds = NULL,
-                                  lbfgsb = NULL, lbfgs = NULL) {
-  control <- solver_control_arg(control, lbfgsb, lbfgs,
-                                "fit_wls_mixed_ordinal")
+fit_wls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
+                                  control = NULL, bounds = NULL) {
   pt <- augment_mixed_ordinal_partable(model, data)
   fit_wls_mixed_ordinal_impl(pt, data, optimizer = optimizer,
                              control = control, bounds = bounds)
@@ -1114,7 +1081,7 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
                     ordered = NULL, parameterization = "delta",
                     missing = c("listwise", "error"),
                     se = "none", test = "none",
-                    W = NULL, optimizer = "lbfgs", control = NULL,
+                    W = NULL, optimizer = "nlopt-lbfgs", control = NULL,
                     bounds = NULL) {
   missing <- match.arg(missing)
   require_none_arg(se, "se", "standard errors")
@@ -1148,10 +1115,6 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
   }
 
   dots <- list(...)
-  control <- solver_control_arg(control, dots[["lbfgsb"]], dots[["lbfgs"]],
-                                "magmaan")
-  dots[["lbfgsb"]] <- NULL
-  dots[["lbfgs"]] <- NULL
   if (inherits(model, "magmaan_model_spec")) {
     if (length(dots)) {
       stop("magmaan(): model option arguments are only accepted when `model` is a syntax string")
@@ -1345,25 +1308,22 @@ infer_robust_se_raw_fit <- function(fit, X, bread = "expected",
   infer_robust_se_raw(fit, X, bread = bread, moments = moments, cov = cov)
 }
 
-fit_uls_snlls <- function(model, data, optimizer = "lbfgs", control = NULL,
-                          bounds = NULL, lbfgsb = NULL, lbfgs = NULL) {
-  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_uls_snlls")
+fit_uls_snlls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
+                          bounds = NULL) {
   fit_uls_snlls_impl(partable_arg(model), sample_stats_arg(data),
                      optimizer = optimizer, control = control,
                      bounds = bounds)
 }
 
-fit_gls_snlls <- function(model, data, optimizer = "lbfgs", control = NULL,
-                          bounds = NULL, lbfgsb = NULL, lbfgs = NULL) {
-  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_gls_snlls")
+fit_gls_snlls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
+                          bounds = NULL) {
   fit_gls_snlls_impl(partable_arg(model), sample_stats_arg(data),
                      optimizer = optimizer, control = control,
                      bounds = bounds)
 }
 
-fit_wls_snlls <- function(model, data, W, optimizer = "lbfgs", control = NULL,
-                          bounds = NULL, lbfgsb = NULL, lbfgs = NULL) {
-  control <- solver_control_arg(control, lbfgsb, lbfgs, "fit_wls_snlls")
+fit_wls_snlls <- function(model, data, W, optimizer = "nlopt-lbfgs", control = NULL,
+                          bounds = NULL) {
   fit_wls_snlls_impl(partable_arg(model), sample_stats_arg(data), W = W,
                      optimizer = optimizer, control = control,
                      bounds = bounds)

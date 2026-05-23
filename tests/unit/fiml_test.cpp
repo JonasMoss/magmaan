@@ -17,7 +17,7 @@
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/nt.hpp"
-#include "magmaan/optim/lbfgs_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
 
@@ -209,7 +209,7 @@ TEST_CASE("fit_fiml: complete-data path fits a saturated mean CFA near zero grad
   magmaan::data::RawData raw;
   raw.X.push_back((Z * L.transpose()).rowwise() + truth->mu[0].transpose());
 
-  magmaan::optim::LbfgsOptions opts;
+  magmaan::optim::OptimOptions opts;
   opts.max_iter = 100;
   auto est = magmaan::estimate::fit_fiml(*built.pt, *built.rep, raw, theta0,
                                          magmaan::estimate::fiml::FIML{}, opts);
@@ -310,7 +310,7 @@ TEST_CASE("fiml_extras: complete data matches SampleStats fit_extras") {
   auto samp = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp.has_value());
 
-  magmaan::optim::LbfgsOptions opts;
+  magmaan::optim::OptimOptions opts;
   opts.max_iter = 100;
   auto est = magmaan::estimate::fit_fiml(*built.pt, *built.rep, raw, theta0,
                                          magmaan::estimate::fiml::FIML{}, opts);

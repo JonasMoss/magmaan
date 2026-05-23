@@ -12,7 +12,7 @@
 #include "magmaan/inference/score.hpp"
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/model/matrix_rep.hpp"
-#include "magmaan/optim/lbfgs_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/spec/partable.hpp"
 #include "magmaan/spec/start_hints.hpp"
 
@@ -169,8 +169,9 @@ mixed_ordinal_start_values(spec::LatentStructure pt,
 
 // Ordinal DWLS / WLS fit. The model is fitted as a bounded least-squares
 // problem in the thresholds + polychoric correlations; `backend` selects the
-// optimizer (L-BFGS-B or, with MAGMAAN_WITH_CERES, Ceres LM). `opts` tunes the
-// optimizer (the Ceres path reads max_iter / ftol / gtol from it).
+// optimizer (NLopt L-BFGS by default, or Ceres LM when MAGMAAN_WITH_CERES is
+// enabled). `opts` tunes the optimizer; Ceres reads max_iter / ftol / gtol
+// from it.
 //
 // `parameterization` selects the lavaan-compatible ordinal parameterization.
 // `Delta` (the default) compares the implied latent-response covariances
@@ -185,8 +186,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                     Bounds bounds,
                     OrdinalWeightKind weights,
                     const Eigen::VectorXd& x0,
-                    Backend backend = Backend::Lbfgs,
-                    optim::LbfgsOptions opts = {},
+                    Backend backend = Backend::NloptLbfgs,
+                    optim::OptimOptions opts = {},
                     OrdinalParameterization parameterization =
                         OrdinalParameterization::Delta);
 
@@ -197,8 +198,8 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           Bounds bounds,
                           OrdinalWeightKind weights,
                           const Eigen::VectorXd& x0,
-                          Backend backend = Backend::Lbfgs,
-                          optim::LbfgsOptions opts = {},
+                          Backend backend = Backend::NloptLbfgs,
+                          optim::OptimOptions opts = {},
                           OrdinalParameterization parameterization =
                               OrdinalParameterization::Delta);
 

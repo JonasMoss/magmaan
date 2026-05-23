@@ -250,7 +250,7 @@ TEST_CASE("U·Γ_NT eigenvalues all 1 on 3F Holzinger (over-identified, df=24)")
 TEST_CASE("U·Γ_NT eigenvalues all 1 on 2F+meanstructure (G3b)") {
   // Synthetic 2F + meanstructure on 6 indicators (3 per factor) — random PD
   // S + random mean vector. The eigenvalue identity is a structural property
-  // of (B, Γ_NT) and doesn't depend on fixture data. Avoids the LBFGS
+  // of (B, Γ_NT) and doesn't depend on fixture data. Avoids the historical
   // single-group 3F+means convergence issue (G5b) by using 2F.
   //   p = 6 → cov moments = 21; mean moments = 6; total_rows = 27.
   //   Free: 4 λ + 2 ψ + 1 ψ_12 + 6 θ + 6 ν = 19; df = 27 − 19 = 8.

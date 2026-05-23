@@ -1,7 +1,5 @@
 #include "magmaan/optim/nlopt_optimizer.hpp"
 
-#ifdef MAGMAAN_WITH_NLOPT
-
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -69,7 +67,7 @@ nlopt_algorithm to_nlopt_algo(NloptAlgorithm a) {
 
 }  // namespace
 
-fit_expected<LbfgsOutput>
+fit_expected<OptimOutput>
 NloptOptimizer::minimize(Objective f,
                          const Eigen::VectorXd& x0,
                          const Eigen::VectorXd& lower,
@@ -205,14 +203,14 @@ NloptOptimizer::minimize(Objective f,
   // NLopt exposes no iteration count, only a total evaluation count. Its
   // gradient algorithms request value and gradient jointly, so every one of
   // the n_evals callbacks is both a function and a gradient evaluation.
-  LbfgsOutput out{std::move(theta), fmin, /*iterations=*/0,
+  OptimOutput out{std::move(theta), fmin, /*iterations=*/0,
                   /*f_evals=*/n_evals, /*g_evals=*/n_evals,
                   opt_status, a.grad_inf_norm};
   out.audit = std::move(a);
   return out;
 }
 
-fit_expected<LbfgsOutput>
+fit_expected<OptimOutput>
 NloptOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
   const double inf = std::numeric_limits<double>::infinity();
   return minimize(std::move(f), x0,
@@ -221,5 +219,3 @@ NloptOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
 }
 
 }  // namespace magmaan::optim
-
-#endif  // MAGMAAN_WITH_NLOPT

@@ -75,7 +75,7 @@ overrides the wrapper's actual returned status).
 
 ```cpp
 struct TerminalAuditOptions {
-  double stationarity_tol  = 2e-6;
+  double stationarity_tol  = 1e-6;
   double active_bound_tol  = 1e-12;
   double f_consistency_rel = 1e-6;
 };
@@ -84,9 +84,13 @@ struct TerminalAuditOptions {
 - `stationarity_tol` is **relative**: an absolute threshold would mis-classify
   across a 290-model corpus where `|f|` spans many orders of magnitude. The
   test reduces to `tol` when `|f| ≪ 1` and scales with `|f|` when `|f| ≫ 1`.
-  The default is two parts per million, which keeps ordinary ML line-search
-  noise-floor stops salvageable without admitting the 1e-3-scale
-  non-stationary textbook-corpus failures.
+  The default is one part per million pending a corpus-wide calibration
+  study (see "Tolerance calibration" below). The looser 2e-6 an earlier
+  revision used was anchored to a single observed ML noise-floor case;
+  that anecdote isn't a strong enough basis for the default. Until the
+  study lands, v1 ships the strict value — the audit's primary value is
+  the *record* (`fit$audit$stationary` and the geometric numbers on every
+  fit), and the salvage promotion is intentionally conservative.
 - `active_bound_tol` is a coordinate-distance threshold for the
   projected-gradient construction — masking a gradient component, not a
   diagnostic readout.
@@ -116,14 +120,12 @@ point, surface that — but this is a semantics-change separate from v1.
 
 | Backend | File | Soft-failure sites that now audit |
 |---|---|---|
-| `LbfgsOptimizer` (LBFGS++) | `src/optim/lbfgs_optimizer.cpp` | line-search throw; max-iter (refactor of pre-existing ad-hoc `max(1e-3, 1e3·gtol)` salvage) |
-| `LbfgsBOptimizer` (LBFGS++) | `src/optim/lbfgsb_optimizer.cpp` | line-search throw; max-iter |
 | `NloptOptimizer` (NLopt C API) | `src/optim/nlopt_optimizer.cpp` | `MAXEVAL/MAXTIME`; `FORCED_STOP`; generic `FAILURE`; `ROUNDOFF_LIMITED` (kept as salvaged regardless, audit fills `grad_inf_norm`) |
 | `PortOptimizer` (PORT `drmngb`) | `src/optim/port_optimizer.cpp` | IV(1)=8 noisy; IV(1)=9 false convergence; IV(1)=10 budget; IV(1)≥11 other; IV(1)=7 singular keeps `SingularConvergence` |
 
 Every success path also calls the audit so `OptimResult::grad_inf_norm` has
-a single source of truth (the four bespoke projected-gradient loops are
-gone). The audit costs one extra `f(x, grad)` evaluation per fit — exactly
+a single source of truth (the bespoke projected-gradient loops are gone).
+The audit costs one extra `f(x, grad)` evaluation per fit — exactly
 what the success paths already did inline.
 
 **Not wired in v1:** `PortNlsOptimizer` and `ceres_lm` (residual-driven,
@@ -244,9 +246,9 @@ some directions of the constraint-reduced α space; the optimizer's line
 search stopped because no further `f` decrease was measurable, and the
 non-zero gradient remains.
 
-This is exactly the distinction the audit was built to make. The
-pre-existing `LbfgsOptimizer` salvage at `max(1e-3, 1e3·gtol)` wouldn't have
-caught these either (`0.0015 > 1e-3` borderline, `0.0073 ≫ 1e-3`), so v1
+This is exactly the distinction the audit was built to make. The previous
+ad-hoc salvage at `max(1e-3, 1e3·gtol)` wouldn't have caught these either
+(`0.0015 > 1e-3` borderline, `0.0073 ≫ 1e-3`), so v1
 introduces no behavioral regression on previously-salvaged iterates while
 adding principled stationarity verification everywhere. The honest
 classification of `ex5_4` / `ex5_4c` as **non-stationary** points to the
@@ -269,10 +271,46 @@ fixed by tolerance tuning.
 3. **LS-backend audit wiring** (`PortNlsOptimizer`, `ceres_lm`):
    residual-driven, no scalar `ObjectiveFn`.
 4. **Per-estimator tolerance tuning.** Every backend uses the same
-   `TerminalAuditOptions` defaults. The `stationarity_tol = 2e-6` v1 pick
-   clears ordinary one-ppm line-search remainders while still rejecting the
-   non-stationary Newsom cases; tuning per estimator-class is a follow-up if
-   a specific class genuinely needs it.
+   `TerminalAuditOptions` defaults. The `stationarity_tol = 1e-6` v1 pick
+   is intentionally strict pending a corpus-wide calibration study (see
+   "Tolerance calibration" below); per-estimator tuning may emerge from
+   that study if ML / GLS / ULS / DWLS / FIML show systematically different
+   gradient noise floors.
+
+## Tolerance calibration (open follow-up)
+
+The right calibration question isn't "what value of `gnorm` is 'small'" —
+that has no model-independent answer. It's "what value of `gnorm` reliably
+predicts that downstream inference (SE, χ², LRT, fit measures) gives the
+same answer on this iterate that it would at the geometric optimum." That
+reframes the threshold as empirically testable.
+
+Sketch of a study that would pin it down:
+
+1. **Salvage-candidate gallery.** Across our corpora (geiser, kline, brown,
+   mplus, little, newsom, paper, textbook) under each estimator, identify
+   fits where (a) the optimizer's primary return is a soft failure AND
+   (b) at least one other backend (or lavaan) converges cleanly. That's the
+   population where salvage actually has a chance to matter.
+2. **Record both `θ_failed` and `θ_true`.** Per candidate, capture the
+   recomputed `‖Pg‖∞`, the function gap, `‖θ_f − θ_t‖`, SE deltas, χ² /
+   RMSEA / CFI deltas.
+3. **Threshold = the largest `T`** such that every candidate with
+   `‖Pg‖∞ ≤ T·(1+|f|)` has inferential deltas under (say) 1% relative.
+4. **Stratify by estimator.** Distinct evaluators carry distinct
+   cancellation floors (the Newsom GLS investigation already showed GLS's
+   floor is materially worse than ML's). The right answer may be a vector
+   indexed by estimator.
+5. **Distribution-aware reporting.** A density plot of "true-optimum
+   `‖Pg‖∞`" per estimator across the corpus gives the natural calibration
+   band; the threshold should sit a comfortable margin above the upper
+   whisker.
+
+The infrastructure for step 1-2 is what the corpus-survey and
+convergence-sim scripts already do; adding the audit fields to their
+output yields the per-candidate data essentially for free. The study
+becomes a small Quarto report that re-runs as the corpus grows — a living
+calibration rather than a one-shot.
 5. **`fit$converged` boolean semantics:** unchanged.
 6. **`snlls_profile_fallback` plumbing:** the flag exists on
    `FitDiagnostics` and surfaces to R, but the v1 SNLLS expand site leaves

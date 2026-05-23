@@ -19,8 +19,8 @@ magmaan should eventually have three benchmark layers with different audiences:
 2. Internal regression suite: repeatable timings and diagnostics that make
    optimizer, sample-statistic, matrix-representation, and inference changes
    measurable.
-3. Backend comparison suite: magmaan-only comparisons of LBFGS, LBFGS-B,
-   Ceres, and profiled/SNLLS variants where those backends are statistically
+3. Backend comparison suite: magmaan-only comparisons of NLopt, PORT, Ceres,
+   and profiled/SNLLS variants where those backends are statistically
    equivalent and semantically appropriate.
 
 The public claim should be narrow and defensible: speed for supported linear
@@ -335,8 +335,8 @@ Track:
 
 For optimizer/backend decisions, benchmark only appropriate comparisons:
 
-- ML continuous: LBFGS and any future ML-compatible backends.
-- Bounded LS: LBFGS-B and Ceres.
+- ML continuous: NLopt L-BFGS, PORT, and other ML-compatible backends.
+- Bounded LS: NLopt L-BFGS, PORT, and Ceres where semantically appropriate.
 - Profiled LS: non-profiled vs SNLLS for ULS/GLS/WLS, with both point
   agreement and profile diagnostics.
 - Ordinal/mixed LS: DWLS/WLS with full sample-stat construction separated from

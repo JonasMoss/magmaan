@@ -49,8 +49,8 @@
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/measures/fit_measures.hpp"
-#include "magmaan/optim/lbfgs_optimizer.hpp"
-#include "magmaan/optim/lbfgsb_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
 
@@ -453,7 +453,7 @@ void run_fiml_parity_case(const std::string& parity_dir, const std::string& id,
   const magmaan::data::RawData raw = magmaan::test::raw_from_fixture(data_json);
 
   auto est_or = magmaan::test::fit_fiml(
-      *pt, *mr, raw, magmaan::optim::LbfgsOptions{.max_iter = 12000});
+      *pt, *mr, raw, magmaan::optim::OptimOptions{.max_iter = 12000});
 
   // magmaan_aligned soft-gate: a real-data case magmaan parameterizes
   // differently than lavaan is reported, not failed (mirrors the ML tranche).
@@ -646,7 +646,7 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
     samp.S[b] *= nb / (nb - 1.0);
   }
 
-  const magmaan::optim::LbfgsOptions opt{
+  const magmaan::optim::OptimOptions opt{
       .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8};
 
   auto fail = [&](const std::string& m) {
@@ -680,13 +680,13 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
       if (is_gls) {
         return magmaan::test::fit_gls(*pt, *mr, samp,
                                       magmaan::estimate::Bounds{},
-                                      magmaan::estimate::Backend::Lbfgs, opt);
+                                      magmaan::estimate::Backend::NloptLbfgs, opt);
       }
       magmaan::estimate::gmm::Weight w;
       if (!is_uls) w = magmaan::estimate::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
       return magmaan::test::fit_gmm(*pt, *mr, samp, w,
                                     magmaan::estimate::Bounds{},
-                                    magmaan::estimate::Backend::Lbfgs, opt);
+                                    magmaan::estimate::Backend::NloptLbfgs, opt);
     }();
     if (!est_or.has_value()) {
       fail(e + ": fit — " + est_or.error().detail);
@@ -841,7 +841,7 @@ TEST_CASE("lavaan-parity ordinal — bfi DWLS/WLS") {
   auto mr = magmaan::model::build_matrix_rep(*pt);
   REQUIRE(mr.has_value());
 
-  const magmaan::optim::LbfgsOptions opt{
+  const magmaan::optim::OptimOptions opt{
       .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8};
 
   const std::int64_t n_total = std::accumulate(
@@ -865,7 +865,7 @@ TEST_CASE("lavaan-parity ordinal — bfi DWLS/WLS") {
 
     auto est_or = magmaan::test::fit_ordinal_bounded(
         *pt, *mr, stats, magmaan::estimate::Bounds{}, kind,
-        magmaan::estimate::Backend::Lbfgs, opt);
+        magmaan::estimate::Backend::NloptLbfgs, opt);
     if (!est_or.has_value()) {
       fail(name + ": fit_ordinal_bounded — " + est_or.error().detail);
       continue;

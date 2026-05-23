@@ -76,11 +76,8 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/snlls_test.cpp
   unit/bounds_test.cpp
   unit/stabilizer_bounds_test.cpp
-  unit/lbfgs_optimizer_test.cpp
-  unit/lbfgsb_optimizer_test.cpp
   unit/terminal_audit_test.cpp
   unit/fit_diagnostics_test.cpp
-  unit/lbfgsb_integration_test.cpp
   unit/ceres_optimizer_test.cpp
   unit/ceres_integration_test.cpp
   unit/nlopt_optimizer_test.cpp

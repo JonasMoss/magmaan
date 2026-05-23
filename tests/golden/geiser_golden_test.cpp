@@ -15,7 +15,7 @@
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
-#include "magmaan/optim/lbfgs_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
 
@@ -68,8 +68,8 @@ Handles handles_from_case(const nlohmann::json& c) {
   return Handles{std::move(*pt), std::move(*rep)};
 }
 
-magmaan::optim::LbfgsOptions geiser_opts() {
-  return magmaan::optim::LbfgsOptions{
+magmaan::optim::OptimOptions geiser_opts() {
+  return magmaan::optim::OptimOptions{
       .max_iter = 4000,
       .ftol = 1e-12,
       .gtol = 1e-8,
@@ -217,7 +217,7 @@ TEST_CASE("Geiser ULS goldens match lavaan implied moments") {
 
       // ULS is the moment quadratic with an empty (identity) weight; the GLS
       // mean-weight asymmetry does not arise here. fit_snlls is the profiled
-      // counterpart, run on the robust L-BFGS backend (the PortNls NL2SOL
+      // counterpart, run on the default NLopt L-BFGS backend (the PortNls NL2SOL
       // backend trips its noisy-residual guard on the profiled ULS path for
       // latent_path). magmaan's ULS objective and lavaan's ULS fx use slightly
       // different mean-structure scale conventions, so the objective check
@@ -239,7 +239,7 @@ TEST_CASE("Geiser ULS goldens match lavaan implied moments") {
 
       auto snlls = magmaan::estimate::fit_snlls(
           handles.pt, handles.rep, samp, *x0, magmaan::estimate::gmm::Weight{},
-          magmaan::estimate::Backend::Lbfgs, geiser_opts());
+          magmaan::estimate::Backend::NloptLbfgs, geiser_opts());
       if (!snlls.has_value()) {
         FAIL_CHECK(id << ": SNLLS ULS failed: " << snlls.error().detail);
         continue;

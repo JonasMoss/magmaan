@@ -30,7 +30,7 @@
 #include "magmaan/measures/residuals.hpp"
 #include "magmaan/measures/standardized.hpp"
 #include "magmaan/model/matrix_rep.hpp"
-#include "magmaan/optim/lbfgs_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/flat_partable.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/robust/lr_test_satorra.hpp"
@@ -163,20 +163,16 @@ Result<Data> data_from_mixed_ordinal_huber_residual(
 } // namespace frontier
 
 enum class OptimizerKind : std::uint8_t {
-  Lbfgs,
+  NloptLbfgs,
   Ceres,
 };
 
 struct OptimizerSpec {
-  OptimizerKind kind = OptimizerKind::Lbfgs;
-  optim::LbfgsOptions lbfgs;
+  OptimizerKind kind = OptimizerKind::NloptLbfgs;
+  optim::OptimOptions options;
 };
 
-inline OptimizerSpec lbfgs(optim::LbfgsOptions options = {}) {
-  return OptimizerSpec{OptimizerKind::Lbfgs, options};
-}
-
-inline OptimizerSpec ceres(optim::LbfgsOptions options = {}) {
+inline OptimizerSpec ceres(optim::OptimOptions options = {}) {
   return OptimizerSpec{OptimizerKind::Ceres, options};
 }
 
@@ -224,7 +220,7 @@ enum class EstimatorKind : std::uint8_t {
 
 struct EstimatorSpec {
   EstimatorKind kind = EstimatorKind::ML;
-  OptimizerSpec optimizer_spec = lbfgs();
+  OptimizerSpec optimizer_spec = {};
   StartSpec start_spec = simple_starts();
   BoundsMode bounds_mode = BoundsMode::None;
   estimate::Bounds bounds;
@@ -275,10 +271,10 @@ Result<Model> model_from_lavaan_fcsem(std::string_view syntax,
 
 Result<Fit> fit_ml_fcsem(std::shared_ptr<const Model> model,
                          std::shared_ptr<const Data> data,
-                         OptimizerSpec optimizer = lbfgs(),
+                         OptimizerSpec optimizer = {},
                          StartSpec start = simple_starts());
 Result<Fit> fit_ml_fcsem(const Model &model, const Data &data,
-                         OptimizerSpec optimizer = lbfgs(),
+                         OptimizerSpec optimizer = {},
                          StartSpec start = simple_starts());
 
 } // namespace frontier

@@ -1,7 +1,5 @@
 #include <doctest/doctest.h>
 
-#ifdef MAGMAAN_WITH_NLOPT
-
 #include <cmath>
 #include <limits>
 
@@ -206,5 +204,3 @@ TEST_CASE("NloptOptimizer/LBFGS — solves the Rosenbrock function") {
   CHECK(out->fmin < 1e-4);
   CHECK((out->theta_hat - Eigen::Vector2d(1.0, 1.0)).norm() < 5e-2);
 }
-
-#endif  // MAGMAAN_WITH_NLOPT

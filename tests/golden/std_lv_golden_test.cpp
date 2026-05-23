@@ -116,13 +116,14 @@ TEST_CASE("std.lv goldens — θ̂/SE/χ²/df match lavaan(std.lv=TRUE)") {
     bool ok = true;
     char buf[256];
 
-    // 1) θ̂ — LBFGS vs lavaan's nlminb converge to slightly different points
-    //    on the flat section of the ML surface (objective equal to machine
-    //    precision; see fit_theta_golden_test.cpp's note). Under std.lv the
-    //    loadings are O(1) rather than O(residual-variance), so the absolute
-    //    disagreement scales up to ~4e-6 — 5e-6 is the honest comparable-
-    //    optimizer tolerance here. The χ² (≤1e-3) and SE (≤1e-4) checks below
-    //    are the substantive ones; revisit if we wire nlminb directly.
+    // 1) θ̂ — magmaan's optimizer and lavaan's nlminb converge to slightly
+    //    different points on the flat section of the ML surface (objective
+    //    equal to machine precision; see fit_theta_golden_test.cpp's note).
+    //    Under std.lv the loadings are O(1) rather than O(residual-variance),
+    //    so the absolute disagreement scales up to ~4e-6 — 5e-6 is the honest
+    //    comparable-optimizer tolerance here. The χ² (≤1e-3) and SE (≤1e-4)
+    //    checks below are the substantive ones; revisit if we wire nlminb
+    //    directly.
     const auto& th = exp["theta_hat"];
     if (static_cast<std::size_t>(est.theta.size()) != th.size()) {
       failures.push_back(id + ": n_free mismatch"); continue;

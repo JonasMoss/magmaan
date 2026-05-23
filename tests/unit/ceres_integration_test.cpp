@@ -10,7 +10,7 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/estimate/fit.hpp"
-#include "magmaan/optim/lbfgsb_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
@@ -20,8 +20,7 @@
 using magmaan::estimate::Bounds;
 using magmaan::optim::CeresBoundedOptimizer;
 using magmaan::optim::CeresOptions;
-using magmaan::optim::LbfgsBOptimizer;
-using magmaan::optim::LbfgsBOptions;
+using magmaan::optim::OptimOptions;
 using magmaan::data::SampleStats;
 using magmaan::model::build_matrix_rep;
 using magmaan::parse::Parser;
@@ -92,20 +91,19 @@ TEST_CASE("CeresBoundedOptimizer + ULS — multi-residual LS adapter converges "
   CHECK(est_or->theta.tail(3).minCoeff() >= -1e-12);
 }
 
-TEST_CASE("LbfgsBOptimizer + ULS — Heywood-prone S: LS-adapter path honors "
+TEST_CASE("NLopt L-BFGS + ULS — Heywood-prone S: scalarized path honors "
           "bounds, fit converges to finite F") {
   // A random PD `S` outside the 1F manifold: ULS unconstrained would drift
   // θ_resid negative (Heywood case). The auto-derived lower bound of 0 on
   // residual variances should keep the fit on the boundary, with finite F.
   //
-  // Runs via the LBFGS-B LS adapter rather than Ceres: at a Heywood-degenerate
+  // Runs via the scalar NLopt L-BFGS path rather than Ceres: at a Heywood-degenerate
   // optimum the loadings can grow unboundedly to compensate for a pinned
   // residual variance, which produces an arbitrarily ill-conditioned
-  // Jacobian. LBFGS-B's projected-gradient path handles this gracefully
+  // Jacobian. The projected-gradient path handles this gracefully
   // (the projection zeros the active-set direction); Ceres' LM termination
   // criteria can't easily distinguish "stuck at a bound" from "still making
-  // progress" without an interior-point reformulation. Both paths route
-  // through the LS adapter (`minimize_ls`); only the optimizer differs.
+  // progress" without an interior-point reformulation.
   auto fp = Parser::parse("f =~ x1 + x2 + x3");
   REQUIRE(fp.has_value());
   auto pt = build(*fp);
@@ -122,12 +120,12 @@ TEST_CASE("LbfgsBOptimizer + ULS — Heywood-prone S: LS-adapter path honors "
 
   // ULS landscape is shallow at convergence — match the existing ULS
   // bounded path's tolerance combo (see `uls_test.cpp` cov+mean recovery).
-  const magmaan::optim::LbfgsOptions opt{
+  const magmaan::optim::OptimOptions opt{
       .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9};
   auto est_or = magmaan::test::fit_gmm(*pt, *mr, samp, {}, Bounds{},
-                                       magmaan::estimate::Backend::Lbfgs, opt);
+                                       magmaan::estimate::Backend::NloptLbfgs, opt);
   if (!est_or.has_value()) {
-    MESSAGE("fit_gmm(ULS, LBFGS-B) failed: "
+    MESSAGE("fit_gmm(ULS, NLopt L-BFGS) failed: "
             << "kind=" << static_cast<int>(est_or.error().kind)
             << " detail=" << est_or.error().detail);
   }

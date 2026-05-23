@@ -155,15 +155,15 @@ BEGIN_RCPP
 END_RCPP
 }
 // fit_fiml_impl
-Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data, Rcpp::Nullable<Rcpp::List> lbfgs);
-RcppExport SEXP _magmaan_fit_fiml_impl(SEXP partableSEXP, SEXP raw_dataSEXP, SEXP lbfgsSEXP) {
+Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data, Rcpp::Nullable<Rcpp::List> control);
+RcppExport SEXP _magmaan_fit_fiml_impl(SEXP partableSEXP, SEXP raw_dataSEXP, SEXP controlSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
-    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type lbfgs(lbfgsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_fiml_impl(partable, raw_data, lbfgs));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_fiml_impl(partable, raw_data, control));
     return rcpp_result_gen;
 END_RCPP
 }

@@ -42,7 +42,7 @@ using inference::chi2_pvalue;
 using robust::MeanVarAdjustedResult;
 using robust::SatorraBentlerResult;
 using robust::ScaledShiftedResult;
-using optim::LbfgsOptions;
+using optim::OptimOptions;
 
 namespace {
 
@@ -1991,7 +1991,7 @@ namespace {
 // reparameterization has already been folded into the closures by the caller.
 fit_expected<optim::OptimResult>
 run_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
-               const Bounds& bounds, Backend backend, LbfgsOptions opts) {
+               const Bounds& bounds, Backend backend, OptimOptions opts) {
   if (backend == Backend::Ceres) {
 #ifdef MAGMAAN_WITH_CERES
     optim::CeresOptions copts;
@@ -2017,7 +2017,7 @@ run_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
         "is off"));
 #endif
   }
-  return optim::lbfgs(optim::scalarize(prob), x0, bounds, opts);
+  return optim::nlopt_lbfgs(optim::scalarize(prob), x0, bounds, opts);
 }
 
 // Solve a data-only ordinal LS problem `prob` (residual size `prob.n_resid`,
@@ -2032,7 +2032,7 @@ run_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
 fit_expected<Estimates>
 solve_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
                  const Bounds& bounds, const EqConstraints& con,
-                 Backend backend, LbfgsOptions opts, const char* who) {
+                 Backend backend, OptimOptions opts, const char* who) {
   if (!con.active()) {
     auto out = run_ordinal_ls(prob, x0, bounds, backend, opts);
     if (!out.has_value()) return std::unexpected(out.error());
@@ -2082,7 +2082,7 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                     OrdinalWeightKind weights,
                     const Eigen::VectorXd& x0,
                     Backend backend,
-                    LbfgsOptions opts,
+                    OptimOptions opts,
                     OrdinalParameterization parameterization) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());
@@ -2177,7 +2177,7 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           OrdinalWeightKind weights,
                           const Eigen::VectorXd& x0,
                           Backend backend,
-                          LbfgsOptions opts,
+                          OptimOptions opts,
                           OrdinalParameterization parameterization) {
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());

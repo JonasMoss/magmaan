@@ -19,7 +19,7 @@
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
-#include "magmaan/optim/lbfgs_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
 
@@ -133,8 +133,8 @@ std::optional<Handles> handles_from_case(const nlohmann::json &c,
   return Handles{std::move(*pt), std::move(*rep)};
 }
 
-magmaan::optim::LbfgsOptions paper_corpus_opts() {
-  return magmaan::optim::LbfgsOptions{
+magmaan::optim::OptimOptions paper_corpus_opts() {
+  return magmaan::optim::OptimOptions{
       .max_iter = 7000,
       .ftol = 1e-13,
       .gtol = 1e-8,
@@ -270,7 +270,7 @@ TEST_CASE("zxqvn paper corpus ML fit matches lavaan") {
   auto samp = sample_stats_from_fit(fit);
   auto est_or = magmaan::test::fit(handles->pt, handles->rep, samp,
                                    magmaan::estimate::Bounds{},
-                                   magmaan::estimate::Backend::Lbfgs, opt);
+                                   magmaan::estimate::Backend::NloptLbfgs, opt);
   if (!est_or.has_value()) {
     FAIL(est_or.error().detail);
   }

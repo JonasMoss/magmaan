@@ -14,7 +14,7 @@ model <- "f =~ x1 + x2 + x3"
 fit_ml_high <- magmaan::magmaan(model, df, estimator = "ML", se = "none", test = "none")
 fit_uls_high <- magmaan::magmaan(
   model, df, estimator = "ULS",
-  lbfgsb = list(max_iter = 2000, ftol = 1e-12, gtol = 1e-8)
+  control = list(max_iter = 2000, ftol = 1e-12, gtol = 1e-8)
 )
 fit_group_high <- magmaan::magmaan(model, df, estimator = "ML", groups = "school")
 fit_group_spec_high <- magmaan::magmaan(magmaan::model_spec(model, group = "school"), df,
@@ -50,7 +50,7 @@ ord <- data.frame(
 )
 fit_dwls_high <- magmaan::magmaan(
   model, ord, estimator = "DWLS", ordered = c("x1", "x2", "x3"),
-  lbfgsb = list(max_iter = 3000, ftol = 1e-12, gtol = 1e-8)
+  control = list(max_iter = 3000, ftol = 1e-12, gtol = 1e-8)
 )
 stopifnot(isTRUE(fit_dwls_high$ordinal))
 stopifnot(identical(fit_dwls_high$estimator, "DWLS"))

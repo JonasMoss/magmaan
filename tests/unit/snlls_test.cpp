@@ -11,7 +11,7 @@
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
-#include "magmaan/optim/lbfgs_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
@@ -21,7 +21,7 @@ using magmaan::data::SampleStats;
 using magmaan::estimate::Backend;
 using magmaan::model::ModelEvaluator;
 using magmaan::model::build_matrix_rep;
-using magmaan::optim::LbfgsOptions;
+using magmaan::optim::OptimOptions;
 using magmaan::parse::Parser;
 using magmaan::spec::build;
 
@@ -81,12 +81,12 @@ Eigen::Matrix4d make_misspecified_1f_S() {
   return S;
 }
 
-LbfgsOptions snlls_opts() {
-  return LbfgsOptions{.max_iter = 2000, .ftol = 1e-13, .gtol = 1e-8};
+OptimOptions snlls_opts() {
+  return OptimOptions{.max_iter = 2000, .ftol = 1e-13, .gtol = 1e-8};
 }
 
-LbfgsOptions matlab_like_opts() {
-  return LbfgsOptions{.max_iter = 400, .ftol = 1e-6, .gtol = 1e-6};
+OptimOptions matlab_like_opts() {
+  return OptimOptions{.max_iter = 400, .ftol = 1e-6, .gtol = 1e-6};
 }
 
 // Black-box check on the Golub–Pereyra problem `gmm::gp` builds: the gradient
@@ -210,7 +210,7 @@ TEST_CASE("SNLLS: ULS profiles linear block and recovers a feasible 1F covarianc
   auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
   REQUIRE(x0.has_value());
   auto est = magmaan::estimate::fit_snlls(h.pt, h.rep, samp, *x0, {},
-                                          Backend::Lbfgs, snlls_opts());
+                                          Backend::NloptLbfgs, snlls_opts());
   if (!est.has_value()) {
     MESSAGE("SNLLS ULS failed: " << est.error().detail);
   }
@@ -232,19 +232,19 @@ TEST_CASE("SNLLS: GLS and WLS agree with full LS on a feasible 1F covariance") {
   REQUIRE(x0.has_value());
 
   auto gls = magmaan::estimate::fit_snlls_gls(h.pt, h.rep, samp, *x0,
-                                              Backend::Lbfgs, snlls_opts());
+                                              Backend::NloptLbfgs, snlls_opts());
   REQUIRE(gls.has_value());
   CHECK(gls->fmin < 1e-10);
 
   magmaan::estimate::gmm::Weight wls{Eigen::MatrixXd::Identity(6, 6)};
   auto wls_est = magmaan::estimate::fit_snlls(h.pt, h.rep, samp, *x0, wls,
-                                              Backend::Lbfgs, snlls_opts());
+                                              Backend::NloptLbfgs, snlls_opts());
   REQUIRE(wls_est.has_value());
   CHECK(wls_est->fmin < 1e-10);
 
 #ifdef MAGMAAN_WITH_PORT
   // PortNls — same feasible 1F problem; the unique global optimum lets us
-  // pin PortNls to the same fmin ≈ 0 as L-BFGS without worrying about
+  // pin PortNls to the same fmin ≈ 0 as NLopt L-BFGS without worrying about
   // multi-modality. If PortNls converges anywhere else here, that's a
   // genuine adapter bug, not a non-convex multiple-local-optimum issue.
   auto port_nls_gls = magmaan::estimate::fit_snlls_gls(
@@ -264,7 +264,7 @@ TEST_CASE("SNLLS: strict compatibility rejects cross-block equality") {
   auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
   REQUIRE(x0.has_value());
   auto est = magmaan::estimate::fit_snlls(h.pt, h.rep, samp, *x0, {},
-                                          Backend::Lbfgs, snlls_opts());
+                                          Backend::NloptLbfgs, snlls_opts());
   REQUIRE_FALSE(est.has_value());
   if (!est.has_value()) {
     CHECK(est.error().detail.find("SNLLS compatibility") != std::string::npos);
@@ -301,7 +301,7 @@ TEST_CASE("SNLLS: covariance-only model is solved by profiling alone") {
   auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
   REQUIRE(x0.has_value());
   auto est = magmaan::estimate::fit_snlls(h.pt, h.rep, samp, *x0, {},
-                                          Backend::Lbfgs, snlls_opts());
+                                          Backend::NloptLbfgs, snlls_opts());
   REQUIRE(est.has_value());
   CHECK(est->iterations == 0);
   CHECK(est->fmin < 1e-12);
@@ -328,7 +328,7 @@ TEST_CASE("SNLLS: Bollen GLS backend cross-check") {
 
   auto x0 = magmaan::estimate::fabin_start_values(h.pt, h.rep, samp, {});
   REQUIRE(x0.has_value());
-  const LbfgsOptions opts = matlab_like_opts();
+  const OptimOptions opts = matlab_like_opts();
 
   auto run = [&](Backend backend, const char* name) {
     auto est = magmaan::estimate::fit_snlls_gls(h.pt, h.rep, samp, *x0,
@@ -342,15 +342,15 @@ TEST_CASE("SNLLS: Bollen GLS backend cross-check") {
     return est;
   };
 
-  auto lbfgs = run(Backend::Lbfgs, "lbfgs");
-  REQUIRE(lbfgs.has_value());
-  CHECK(lbfgs->fmin < 0.243);
+  auto nlopt_lbfgs = run(Backend::NloptLbfgs, "nlopt-lbfgs");
+  REQUIRE(nlopt_lbfgs.has_value());
+  CHECK(nlopt_lbfgs->fmin < 0.243);
 
 #ifdef MAGMAAN_WITH_PORT
   auto port = run(Backend::Port, "port");
   CHECK(port.has_value());
   if (port.has_value()) {
-    CHECK(port->fmin == doctest::Approx(lbfgs->fmin).epsilon(1e-5));
+    CHECK(port->fmin == doctest::Approx(nlopt_lbfgs->fmin).epsilon(1e-5));
   }
 
   // PortNls is the Gauss-Newton-flavoured NL2SOL trust region (R's `nls`).
@@ -366,25 +366,23 @@ TEST_CASE("SNLLS: Bollen GLS backend cross-check") {
   CHECK(port_nls.has_value());
 #endif
 
-#ifdef MAGMAAN_WITH_NLOPT
   auto nlopt = run(Backend::NloptSlsqp, "nlopt-slsqp");
   CHECK(nlopt.has_value());
   if (nlopt.has_value()) {
-    CHECK(nlopt->fmin == doctest::Approx(lbfgs->fmin).epsilon(1e-5));
+    CHECK(nlopt->fmin == doctest::Approx(nlopt_lbfgs->fmin).epsilon(1e-5));
   }
-#endif
 
 #ifdef MAGMAAN_WITH_CERES
   auto ceres_bfgs = run(Backend::CeresBfgs, "ceres-bfgs");
   CHECK(ceres_bfgs.has_value());
   if (ceres_bfgs.has_value()) {
-    CHECK(ceres_bfgs->fmin == doctest::Approx(lbfgs->fmin).epsilon(1e-5));
+    CHECK(ceres_bfgs->fmin == doctest::Approx(nlopt_lbfgs->fmin).epsilon(1e-5));
   }
 
   auto ceres = run(Backend::Ceres, "ceres");
   CHECK(ceres.has_value());
   if (ceres.has_value()) {
-    CHECK(ceres->fmin == doctest::Approx(lbfgs->fmin).epsilon(1e-5));
+    CHECK(ceres->fmin == doctest::Approx(nlopt_lbfgs->fmin).epsilon(1e-5));
   }
 #endif
 }

@@ -121,9 +121,10 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   from genuinely non-stationary same-objective points (e.g., Newsom
   `ex5_4`/`ex5_4c`) and to justify any default `TerminalAuditOptions`
   tolerance change in `docs/design/terminal-audit.md`.
-- **M.** Compare LBFGS, LBFGS-B, Ceres trust-region, Ceres dense BFGS, and
-  SNLLS only on semantically appropriate cases; include shallow or
-  Heywood-prone LS cases so bounds and conditioning stay visible.
+- **M.** Compare NLopt L-BFGS/SLSQP/VAR2/TNEWTON/BOBYQA, PORT/PORT-NLS,
+  Ceres trust-region, Ceres dense BFGS, and SNLLS only on semantically
+  appropriate cases; include shallow or Heywood-prone LS cases so bounds and
+  conditioning stay visible.
 - **S/M.** Extend the paper-local SNLLS benchmark package in
   `papers/snlls-constrained/r-package/` with the remaining defensible real
   cases (especially a Geiser/Eid LST covariance input and a documented MTMM
@@ -147,21 +148,25 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   identity, the affine constraint split, and the fact that magmaan reuses the
   ordinary LISREL moment Jacobian instead of hand-writing pages of tensor
   products.
-- **M/L.** Decide whether NLopt L-BFGS should replace LBFGS++ as the default
-  scalar optimizer. This is not just a search/replace: first add a comparison
-  tier showing `Backend::NloptLbfgs` matches the current LBFGS++ path on ML,
-  complete-data LS, bounded ordinal LS, FIML/direct `optim::lbfgs` callers,
-  and augmented-Lagrangian inner solves; document any differences in tolerance
-  semantics (`gtol` vs NLopt `xtol_rel`), iteration/evaluation reporting, and
-  bounded behavior. Only then decide whether the ordinary/default build should
-  pay the NLopt dependency cost or keep NLopt as an optional cross-check.
+- **M/L.** Revisit the provisional default-backend choice once the optimizer
+  comparison studies land. `Backend::NloptLbfgs` is now the default and NLopt
+  is a required dependency, but the final default should still be justified
+  across ML, complete-data LS, bounded ordinal LS, FIML/direct optimizer
+  callers, and augmented-Lagrangian inner solves. Document tolerance semantics
+  (`gtol` vs NLopt `xtol_rel`), iteration/evaluation reporting, and bounded
+  behavior before changing the default again.
+- **M, default-backend follow-up.** Re-enable the tests skipped during the
+  optimizer rip-out once the provisional default is studied: DLS GMM and ordinal
+  theta zero-iteration expectations, three synthetic API ML staged/nested
+  paths, and the Little/Newsom continuous corpus check currently exposing
+  `newsom/ex5_5b` under NLopt L-BFGS.
 - **S, before shipping binary artifacts.** The repo now carries an MIT
   `LICENSE` that also notes the vendored BSD-3 PORT routines, which is
-  sufficient for a source release — LBFGS++, Eigen, Ceres, NLopt, and
-  nlohmann_json are fetched at build time, not redistributed. Before shipping a
+  sufficient for a source release — Eigen, Ceres, NLopt, and nlohmann_json are
+  fetched at build time, not redistributed. Before shipping a
   binary or packaged artifact, extend this to a full dependency-license
-  manifest (LBFGS++, optional Ceres, optional NLopt, vendored PORT) with
-  versions and redistribution obligations.
+  manifest (Eigen, optional Ceres, required NLopt, vendored PORT, and test-only
+  nlohmann_json) with versions and redistribution obligations.
 - **M/L, after coverage exists.** Promote the Ceres preset into regular
   validation where relevant without making the default build pay the Ceres
   dependency cost.

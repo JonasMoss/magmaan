@@ -12,8 +12,7 @@ namespace {
 // The canonical kebab-case mapping. Entry order matches the Backend enum
 // declaration order in `fit.hpp` for grep-ability — when a new backend lands
 // in the enum, this table should grow alongside it.
-constexpr std::array<std::pair<std::string_view, Backend>, 10> kBackendTable{{
-    {"lbfgs",         Backend::Lbfgs},
+constexpr std::array<std::pair<std::string_view, Backend>, 9> kBackendTable{{
     {"ceres",         Backend::Ceres},
     {"ceres-bfgs",    Backend::CeresBfgs},
     {"nlopt-slsqp",   Backend::NloptSlsqp},

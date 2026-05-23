@@ -107,7 +107,7 @@ Result<estimate::Bounds> ordinal_bounds_for(const EstimatorSpec &spec) {
 
 estimate::Backend backend_from(const OptimizerSpec &optimizer) {
   return optimizer.kind == OptimizerKind::Ceres ? estimate::Backend::Ceres
-                                                : estimate::Backend::Lbfgs;
+                                                : estimate::Backend::NloptLbfgs;
 }
 
 bool is_continuous_ls(EstimatorKind kind) noexcept {
@@ -572,10 +572,10 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
           make_error(ErrorStage::UnsupportedCombination,
                      "FIML facade fitting does not accept bounds"));
     }
-    if (estimator.optimizer_spec.kind != OptimizerKind::Lbfgs) {
+    if (estimator.optimizer_spec.kind != OptimizerKind::NloptLbfgs) {
       return std::unexpected(
           make_error(ErrorStage::UnsupportedCombination,
-                     "FIML currently supports only the L-BFGS optimizer"));
+                     "FIML currently supports only the NLopt L-BFGS optimizer"));
     }
 
     auto start_stats = estimate::fiml::fiml_start_sample_stats(*raw);
@@ -589,7 +589,7 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
     }
 
     auto est = estimate::fiml::fit_fiml(pt, rep, *raw, *x0, {},
-                                        estimator.optimizer_spec.lbfgs);
+                                        estimator.optimizer_spec.options);
     if (!est) {
       return std::unexpected(make_error(ErrorStage::Fit, est.error()));
     }
@@ -613,7 +613,7 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
     }
     auto est = estimate::fit_ordinal_bounded(
         pt, rep, *stats, *bounds, estimator.ordinal_weight, *x0,
-        backend_from(estimator.optimizer_spec), estimator.optimizer_spec.lbfgs,
+        backend_from(estimator.optimizer_spec), estimator.optimizer_spec.options,
         estimator.ordinal_parameterization);
     if (!est) {
       return std::unexpected(make_error(ErrorStage::Fit, est.error()));
@@ -644,7 +644,7 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
     }
     auto est = estimate::fit_mixed_ordinal_bounded(
         pt, rep, *stats, *bounds, estimator.ordinal_weight, *x0,
-        backend_from(estimator.optimizer_spec), estimator.optimizer_spec.lbfgs,
+        backend_from(estimator.optimizer_spec), estimator.optimizer_spec.options,
         estimator.ordinal_parameterization);
     if (!est) {
       return std::unexpected(make_error(ErrorStage::Fit, est.error()));
@@ -679,24 +679,24 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
   fit_expected<estimate::Estimates> est;
   switch (estimator.kind) {
   case EstimatorKind::ML:
-    if (estimator.optimizer_spec.kind != OptimizerKind::Lbfgs) {
+    if (estimator.optimizer_spec.kind != OptimizerKind::NloptLbfgs) {
       return std::unexpected(
           make_error(ErrorStage::UnsupportedCombination,
-                     "ML currently supports only the L-BFGS optimizer"));
+                     "ML currently supports only the NLopt L-BFGS optimizer"));
     }
     est = estimate::fit_ml(pt, rep, *stats, *x0, *bounds,
-                           estimate::Backend::Lbfgs,
-                           estimator.optimizer_spec.lbfgs);
+                           estimate::Backend::NloptLbfgs,
+                           estimator.optimizer_spec.options);
     break;
   case EstimatorKind::ULS:
     est = estimate::fit_gmm(pt, rep, *stats, *x0, {}, *bounds,
                             backend_from(estimator.optimizer_spec),
-                            estimator.optimizer_spec.lbfgs);
+                            estimator.optimizer_spec.options);
     break;
   case EstimatorKind::GLS:
     est = estimate::fit_gls(pt, rep, *stats, *x0, *bounds,
                             backend_from(estimator.optimizer_spec),
-                            estimator.optimizer_spec.lbfgs);
+                            estimator.optimizer_spec.options);
     break;
   case EstimatorKind::WLS:
     if (estimator.weight.empty()) {
@@ -706,7 +706,7 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
     }
     est = estimate::fit_gmm(pt, rep, *stats, *x0, estimator.weight, *bounds,
                             backend_from(estimator.optimizer_spec),
-                            estimator.optimizer_spec.lbfgs);
+                            estimator.optimizer_spec.options);
     break;
   case EstimatorKind::FIML:
   case EstimatorKind::DWLS:
@@ -746,10 +746,10 @@ Result<Fit> fit_ml_fcsem(std::shared_ptr<const Model> model,
         ErrorStage::UnsupportedCombination,
         "fit_ml_fcsem requires complete-data sample statistics"));
   }
-  if (optimizer.kind != OptimizerKind::Lbfgs) {
+  if (optimizer.kind != OptimizerKind::NloptLbfgs) {
     return std::unexpected(make_error(
         ErrorStage::UnsupportedCombination,
-        "fit_ml_fcsem currently supports only the L-BFGS optimizer"));
+        "fit_ml_fcsem currently supports only the NLopt L-BFGS optimizer"));
   }
 
   Eigen::VectorXd x0;
@@ -774,8 +774,8 @@ Result<Fit> fit_ml_fcsem(std::shared_ptr<const Model> model,
   }
 
   auto est = estimate::fit_ml_fcsem(model->structure(), *stats, x0, {},
-                                    estimate::Backend::Lbfgs,
-                                    optimizer.lbfgs);
+                                    estimate::Backend::NloptLbfgs,
+                                    optimizer.options);
   if (!est) {
     return std::unexpected(make_error(ErrorStage::Fit, est.error()));
   }

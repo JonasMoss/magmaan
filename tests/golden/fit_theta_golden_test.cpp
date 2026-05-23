@@ -126,8 +126,8 @@ TEST_CASE("fit goldens — θ̂ matches lavaan on real data (≤1e-6)") {
       if (d > max_diff) max_diff = d;
     }
     // Plan target was ≤1e-6 on θ̂. We hit ~1e-6 on the smaller models;
-    // the 21-parameter 3F CFA lands at ~1.03e-6 because LBFGS and
-    // lavaan's `nlminb` converge to slightly different points on a flat
+    // the 21-parameter 3F CFA lands at ~1.03e-6 because magmaan's optimizer
+    // and lavaan's `nlminb` converge to slightly different points on a flat
     // section of the ML surface (the objective at both points is equal
     // to machine precision). 2e-6 is the honest comparable-optimizer-
     // disagreement tolerance; revisit if we wire `nlminb` directly.

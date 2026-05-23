@@ -25,7 +25,7 @@ stopifnot(!all(d$mask[[1L]]))
 stopifnot(identical(colnames(d$X[[1L]]), d$ov_names[[1L]]))
 stopifnot(identical(d$nobs[[1L]], nrow(df)))
 
-fit <- magmaan_core$fit_fiml(m, d, lbfgs = list(max_iter = 4000, ftol = 1e-12, gtol = 1e-8))
+fit <- magmaan_core$fit_fiml(m, d, control = list(max_iter = 4000, ftol = 1e-12, gtol = 1e-8))
 lav <- cfa(model, data = df, missing = "fiml", meanstructure = TRUE)
 est <- match_est(fit$partable, parTable(lav))
 stopifnot(max(abs(est[, "magmaan"] - est[, "lavaan"])) < 2e-4)

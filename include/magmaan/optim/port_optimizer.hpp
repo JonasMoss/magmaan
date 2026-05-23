@@ -6,18 +6,16 @@
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
-#include "magmaan/optim/lbfgs_optimizer.hpp"   // shared LbfgsOptions / LbfgsOutput
-#include "magmaan/optim/problem.hpp"           // LS callback aliases
+#include "magmaan/optim/problem.hpp"   // OptimOptions / OptimOutput / LS aliases
 
 namespace magmaan::optim {
 
-// PORT tuning reuses `LbfgsOptions` for interface parity with the other
+// PORT tuning reuses `OptimOptions` for interface parity with the other
 // adapters (the public option-vocabulary across magmaan's optimizers is one
 // shared struct). PORT carries its own well-tuned step-control defaults
 // internally; only `max_iter` (mapped to PORT's IV(MXITER)) is forwarded,
 // matching the cross-backend convention that the option struct's tolerance
-// fields tune scalar L-BFGS by default.
-using PortOptions = LbfgsOptions;
+// fields tune scalar optimizers by default.
 
 // PortOptimizer — wraps PORT's `drmngb_` (Dennis-Gay-Welsch model-Hessian
 // trust region with simple bounds; TOMS 611). PORT is the algorithm behind
@@ -52,29 +50,29 @@ class PortOptimizer {
  public:
   static constexpr std::string_view name = "port";
 
-  PortOptimizer(PortOptions opts = {}) noexcept : opts_(opts) {}
+  PortOptimizer(OptimOptions opts = {}) noexcept : opts_(opts) {}
 
-  PortOptions options() const noexcept { return opts_; }
+  OptimOptions options() const noexcept { return opts_; }
 
   using Objective = std::function<double(const Eigen::VectorXd& /*x*/,
                                          Eigen::VectorXd&       /*grad_out*/)>;
 
   // Unbounded entry point. Implemented in terms of the bounded overload
   // with ±1e308 sentinels per coordinate.
-  fit_expected<LbfgsOutput>
+  fit_expected<OptimOutput>
   minimize(Objective f, const Eigen::VectorXd& x0) const;
 
   // Bounded entry point. `lower`/`upper` must each match `x0`'s size; use
   // ±std::numeric_limits<double>::infinity() on coordinates that are
   // genuinely unbounded (the adapter translates them to PORT's ±1e308
   // sentinels at the call boundary).
-  fit_expected<LbfgsOutput>
+  fit_expected<OptimOutput>
   minimize(Objective f, const Eigen::VectorXd& x0,
            const Eigen::VectorXd& lower,
            const Eigen::VectorXd& upper) const;
 
  private:
-  PortOptions opts_;
+  OptimOptions opts_;
 };
 
 // PortNlsOptimizer — wraps PORT's `drn2gb_` (NL2SOL adaptive trust region with
@@ -101,9 +99,9 @@ class PortNlsOptimizer {
  public:
   static constexpr std::string_view name = "port-nls";
 
-  PortNlsOptimizer(PortOptions opts = {}) noexcept : opts_(opts) {}
+  PortNlsOptimizer(OptimOptions opts = {}) noexcept : opts_(opts) {}
 
-  PortOptions options() const noexcept { return opts_; }
+  OptimOptions options() const noexcept { return opts_; }
 
   // LS-shape entry. `r_fn` / `J_fn` are the residual / Jacobian closures
   // (magmaan's `ResidualFn` / `JacobianFn` from `optim/problem.hpp`).
@@ -112,14 +110,14 @@ class PortNlsOptimizer {
   // does), the adapter calls `eval_fn` once instead of `r_fn` + `J_fn`.
   // `n_resid` is the residual count; `lower`/`upper` may each contain
   // ±infinity entries for unbounded coordinates.
-  fit_expected<LbfgsOutput>
+  fit_expected<OptimOutput>
   minimize_ls(ResidualFn r_fn, JacobianFn J_fn, LsEvaluationFn eval_fn,
               Eigen::Index n_resid, const Eigen::VectorXd& x0,
               const Eigen::VectorXd& lower,
               const Eigen::VectorXd& upper) const;
 
  private:
-  PortOptions opts_;
+  OptimOptions opts_;
 };
 
 }  // namespace magmaan::optim
