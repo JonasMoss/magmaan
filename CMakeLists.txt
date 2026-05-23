@@ -84,6 +84,7 @@ add_library(magmaan STATIC
   src/model/matrix_rep.cpp
   src/model/model_evaluator.cpp
   src/model/fcsem_evaluator.cpp
+  src/model/auto_identification.cpp
   src/data/raw_data.cpp
   src/data/shrinkage.cpp
   src/data/h_score.cpp

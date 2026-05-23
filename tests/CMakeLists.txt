@@ -61,6 +61,7 @@ magmaan_add_test_target(magmaan_test_spec spec
   unit/matrix_rep_test.cpp
   unit/model_evaluator_test.cpp
   unit/fcsem_evaluator_test.cpp
+  unit/auto_identification_test.cpp
   golden/lexer_golden_test.cpp
   golden/parser_golden_test.cpp
   golden/lavaanify_golden_test.cpp

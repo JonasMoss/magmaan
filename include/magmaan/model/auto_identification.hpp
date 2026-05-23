@@ -1,0 +1,58 @@
+#pragma once
+
+// Frontier / experimental: marker <-> std_lv identification swap.
+//
+// Exposed to R only via the `frontier_*` aliases in r-package/R/zzz_core.R.
+// Not part of the core stable API. See
+// experiments/02-latent_metric_identification/ for the validation that
+// established the predicate set (0 false positives on the textbook corpus).
+//
+// Three free functions, all operating on the SoA `LavaanParTable` view:
+//
+//   is_std_lv_admissible(marker_pt, std_lv_pt?)
+//       Structural check that the per-factor rescaling
+//       (lambda' = lambda / c_f, psi' = c_f^2 * psi) is a bijection between
+//       marker and std_lv. When `std_lv_pt` is supplied, also checks
+//       n_free(marker) == n_free(std_lv) as a safety net for lavaan quirks
+//       (e.g. user-supplied `1*indicator` modifiers that survive
+//       std.lv=TRUE).
+//
+//   partable_marker_to_std_lv(marker_pt)
+//       Produces the std_lv counterpart by mutating the marker partable
+//       in place: free the auto_fix_first loading on each latent, fix the
+//       latent variance to 1, renumber free indices. Avoids the cost of a
+//       second `lavaanify` call from R.
+//
+//   backconvert_std_lv_to_marker(marker_pt, std_lv_est)
+//       Per-factor rescaling of std_lv-coord estimates back to marker
+//       coords. Returns a vector aligned with the std_lv partable rows
+//       (which equals the marker partable rows under `partable_marker_to_std_lv`).
+
+#include <string>
+
+#include "magmaan/compat/lavaan/partable_view.hpp"
+
+#include <Eigen/Core>
+
+namespace magmaan::model {
+
+struct AdmissibilityVerdict {
+  bool        admissible;
+  std::string reason;  // empty when admissible
+};
+
+AdmissibilityVerdict is_std_lv_admissible(
+    const compat::lavaan::LavaanParTable& marker_pt);
+
+AdmissibilityVerdict is_std_lv_admissible(
+    const compat::lavaan::LavaanParTable& marker_pt,
+    const compat::lavaan::LavaanParTable& std_lv_pt);
+
+compat::lavaan::LavaanParTable partable_marker_to_std_lv(
+    const compat::lavaan::LavaanParTable& marker_pt);
+
+Eigen::VectorXd backconvert_std_lv_to_marker(
+    const compat::lavaan::LavaanParTable& marker_pt,
+    const Eigen::Ref<const Eigen::VectorXd>& std_lv_est);
+
+}  // namespace magmaan::model

@@ -816,6 +816,41 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// frontier_is_std_lv_admissible_impl
+Rcpp::List frontier_is_std_lv_admissible_impl(Rcpp::DataFrame marker_partable, Rcpp::Nullable<Rcpp::DataFrame> std_lv_partable);
+RcppExport SEXP _magmaan_frontier_is_std_lv_admissible_impl(SEXP marker_partableSEXP, SEXP std_lv_partableSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::DataFrame >::type marker_partable(marker_partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::DataFrame> >::type std_lv_partable(std_lv_partableSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_is_std_lv_admissible_impl(marker_partable, std_lv_partable));
+    return rcpp_result_gen;
+END_RCPP
+}
+// frontier_partable_marker_to_std_lv_impl
+Rcpp::DataFrame frontier_partable_marker_to_std_lv_impl(Rcpp::DataFrame marker_partable);
+RcppExport SEXP _magmaan_frontier_partable_marker_to_std_lv_impl(SEXP marker_partableSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::DataFrame >::type marker_partable(marker_partableSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_partable_marker_to_std_lv_impl(marker_partable));
+    return rcpp_result_gen;
+END_RCPP
+}
+// frontier_backconvert_std_lv_to_marker_impl
+Rcpp::NumericVector frontier_backconvert_std_lv_to_marker_impl(Rcpp::DataFrame marker_partable, Rcpp::NumericVector std_lv_est);
+RcppExport SEXP _magmaan_frontier_backconvert_std_lv_to_marker_impl(SEXP marker_partableSEXP, SEXP std_lv_estSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::DataFrame >::type marker_partable(marker_partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type std_lv_est(std_lv_estSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_backconvert_std_lv_to_marker_impl(marker_partable, std_lv_est));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_lr_test_satorra2000
 Rcpp::List infer_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List X_per_group, double T_H1, int df_H1, double T_H0, int df_H0, std::string gamma, std::string a_method, std::string computation);
 RcppExport SEXP _magmaan_infer_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP X_per_groupSEXP, SEXP T_H1SEXP, SEXP df_H1SEXP, SEXP T_H0SEXP, SEXP df_H0SEXP, SEXP gammaSEXP, SEXP a_methodSEXP, SEXP computationSEXP) {
@@ -1200,6 +1235,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_browne_residual_nt", (DL_FUNC) &_magmaan_infer_browne_residual_nt, 1},
     {"_magmaan_infer_rls_chi2", (DL_FUNC) &_magmaan_infer_rls_chi2, 2},
     {"_magmaan_infer_rls_chi2_sample", (DL_FUNC) &_magmaan_infer_rls_chi2_sample, 2},
+    {"_magmaan_frontier_is_std_lv_admissible_impl", (DL_FUNC) &_magmaan_frontier_is_std_lv_admissible_impl, 2},
+    {"_magmaan_frontier_partable_marker_to_std_lv_impl", (DL_FUNC) &_magmaan_frontier_partable_marker_to_std_lv_impl, 1},
+    {"_magmaan_frontier_backconvert_std_lv_to_marker_impl", (DL_FUNC) &_magmaan_frontier_backconvert_std_lv_to_marker_impl, 2},
     {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 10},
     {"_magmaan_infer_lr_test_satorra_bentler2001", (DL_FUNC) &_magmaan_infer_lr_test_satorra_bentler2001, 8},
     {"_magmaan_infer_lr_test_satorra_bentler2010", (DL_FUNC) &_magmaan_infer_lr_test_satorra_bentler2010, 8},

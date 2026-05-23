@@ -27,6 +27,7 @@
 #include "magmaan/measures/composite_weights.hpp"
 #include "magmaan/measures/standardized.hpp"
 #include "magmaan/measures/residuals.hpp"
+#include "magmaan/model/auto_identification.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/fiml.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
@@ -2557,4 +2558,96 @@ Rcpp::List infer_rls_chi2_sample(Rcpp::List sample_stats, Rcpp::List implied) {
   auto s_or = magmaan::inference::rls_chi2(samp, im);
   if (!s_or.has_value()) stop_post(s_or.error());
   return Rcpp::List::create(Rcpp::_["statistic"] = *s_or);
+}
+
+// ---- frontier: marker <-> std_lv identification swap --------------------
+// Exposed to R only via the `frontier_*` aliases in r-package/R/zzz_core.R.
+// Implementation lives in src/model/auto_identification.cpp.
+
+namespace {
+
+magmaan::compat::lavaan::LavaanParTable lavaan_pt_from_df(
+    Rcpp::DataFrame df) {
+  auto col = [&](const char* nm) -> SEXP {
+    if (!df.containsElementNamed(nm))
+      Rcpp::stop("magmaan: partable data.frame is missing required column '%s'", nm);
+    return df[nm];
+  };
+  Rcpp::IntegerVector id(col("id")), user(col("user")), block(col("block")),
+      group(col("group")), freev(col("free")), exo(col("exo"));
+  Rcpp::NumericVector ustart(col("ustart"));
+  std::vector<std::string> lhs   = Rcpp::as<std::vector<std::string>>(col("lhs"));
+  std::vector<std::string> opstr = Rcpp::as<std::vector<std::string>>(col("op"));
+  std::vector<std::string> rhs   = Rcpp::as<std::vector<std::string>>(col("rhs"));
+  std::vector<std::string> label = Rcpp::as<std::vector<std::string>>(col("label"));
+  std::vector<std::string> plab  = Rcpp::as<std::vector<std::string>>(col("plabel"));
+
+  const std::size_t m = static_cast<std::size_t>(id.size());
+  magmaan::compat::lavaan::LavaanParTable lvpt;
+  lvpt.id.resize(m); lvpt.user.resize(m); lvpt.lhs.resize(m); lvpt.op.resize(m);
+  lvpt.rhs.resize(m); lvpt.block.resize(m); lvpt.group.resize(m);
+  lvpt.free.resize(m); lvpt.exo.resize(m); lvpt.ustart.resize(m);
+  lvpt.label.resize(m); lvpt.plabel.resize(m);
+  for (std::size_t i = 0; i < m; ++i) {
+    const R_xlen_t ri = static_cast<R_xlen_t>(i);
+    lvpt.id[i]     = id[ri];
+    lvpt.user[i]   = static_cast<std::int8_t>(user[ri]);
+    lvpt.lhs[i]    = lhs[i];
+    lvpt.op[i]     = op_from_string(opstr[i]);
+    lvpt.rhs[i]    = rhs[i];
+    lvpt.block[i]  = block[ri];
+    lvpt.group[i]  = group[ri];
+    lvpt.free[i]   = freev[ri];
+    lvpt.exo[i]    = static_cast<std::int8_t>(exo[ri]);
+    lvpt.ustart[i] = ustart[ri];
+    lvpt.label[i]  = label[i];
+    lvpt.plabel[i] = plab[i];
+  }
+  return lvpt;
+}
+
+}  // namespace
+
+// [[Rcpp::export]]
+Rcpp::List frontier_is_std_lv_admissible_impl(
+    Rcpp::DataFrame marker_partable,
+    Rcpp::Nullable<Rcpp::DataFrame> std_lv_partable) {
+  const auto marker_pt = lavaan_pt_from_df(marker_partable);
+  magmaan::model::AdmissibilityVerdict v;
+  if (std_lv_partable.isNotNull()) {
+    const auto std_lv_pt = lavaan_pt_from_df(std_lv_partable.get());
+    v = magmaan::model::is_std_lv_admissible(marker_pt, std_lv_pt);
+  } else {
+    v = magmaan::model::is_std_lv_admissible(marker_pt);
+  }
+  return Rcpp::List::create(Rcpp::_["admissible"] = v.admissible,
+                            Rcpp::_["reason"]    = v.reason);
+}
+
+// [[Rcpp::export]]
+Rcpp::DataFrame frontier_partable_marker_to_std_lv_impl(
+    Rcpp::DataFrame marker_partable) {
+  const auto marker_pt = lavaan_pt_from_df(marker_partable);
+  const auto std_lv_pt = magmaan::model::partable_marker_to_std_lv(marker_pt);
+  return magmaanr::partable_df_from_lavaan(std_lv_pt);
+}
+
+// [[Rcpp::export]]
+Rcpp::NumericVector frontier_backconvert_std_lv_to_marker_impl(
+    Rcpp::DataFrame marker_partable,
+    Rcpp::NumericVector std_lv_est) {
+  const auto marker_pt = lavaan_pt_from_df(marker_partable);
+  const std::size_t n = marker_pt.size();
+  if (static_cast<std::size_t>(std_lv_est.size()) != n) {
+    Rcpp::stop("frontier_backconvert: length(std_lv_est) (%d) != partable rows (%d)",
+               static_cast<int>(std_lv_est.size()), static_cast<int>(n));
+  }
+  Eigen::Map<const Eigen::VectorXd> est_map(
+      &std_lv_est[0], static_cast<Eigen::Index>(n));
+  const Eigen::VectorXd out =
+      magmaan::model::backconvert_std_lv_to_marker(marker_pt, est_map);
+  Rcpp::NumericVector r_out(static_cast<R_xlen_t>(n));
+  for (std::size_t i = 0; i < n; ++i)
+    r_out[static_cast<R_xlen_t>(i)] = out[static_cast<Eigen::Index>(i)];
+  return r_out;
 }
