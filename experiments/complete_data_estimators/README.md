@@ -1,7 +1,7 @@
 # Complete-Data Estimator Timing
 
 This small experiment compares magmaan's complete-data estimators across the
-continuous complete-data textbook fixtures:
+checked-out textbook corpus at `corpus/textbook-corpus`:
 
 - `NT`: normal-theory ML, via `magmaan_core$fit_ml()`.
 - `ULS`: unweighted least squares, via `magmaan_core$fit_uls()`.
@@ -9,8 +9,10 @@ continuous complete-data textbook fixtures:
 
 The comparison is curiosity-grade rather than a correctness claim. The report
 focuses on wall time and timing ratios, using geometric means for aggregate
-comparisons. Categorical and mixed fixtures are outside this experiment because
-these estimator paths expect complete-data continuous sample statistics.
+comparisons. Ordered and non-complete-data cases are excluded up front because
+these estimator paths expect complete-data continuous sample statistics; cases
+that still fail during model construction or fitting are summarized in the
+report.
 
 ## Run
 
@@ -23,7 +25,7 @@ just r-install
 Quick smoke:
 
 ```sh
-Rscript experiments/complete_data_estimators/run_experiment.R --reps 1 --cases '^geiser::latent_regression$'
+Rscript experiments/complete_data_estimators/run_experiment.R --reps 1 --cases 'brown_2015_tab4_1_neuroticism_extraversion'
 ```
 
 Default experiment:
@@ -47,3 +49,5 @@ is also ignored.
 - `results/pairs_vs_nt.csv`: ULS/GLS paired against NT by case and replicate.
 - `results/case_summary.csv`: label-sorted case-level timing summary.
 - `results/group_summary.csv`: total, subcorpus, and tag timing summaries.
+- `results/coverage.csv`: corpus rows considered, timed candidates, and
+  pre-timing skip reasons.

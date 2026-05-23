@@ -22,8 +22,10 @@ fits_path <- file.path(results_dir, "fits.csv")
 pairs_path <- file.path(results_dir, "pairs_vs_nt.csv")
 case_path <- file.path(results_dir, "case_summary.csv")
 group_path <- file.path(results_dir, "group_summary.csv")
+coverage_path <- file.path(results_dir, "coverage.csv")
 if (!file.exists(fits_path) || !file.exists(pairs_path) ||
-    !file.exists(case_path) || !file.exists(group_path)) {
+    !file.exists(case_path) || !file.exists(group_path) ||
+    !file.exists(coverage_path)) {
   stop("Missing experiment CSVs. Run: Rscript run_experiment.R")
 }
 
@@ -37,6 +39,7 @@ fits <- utils::read.csv(fits_path, check.names = FALSE)
 pairs <- utils::read.csv(pairs_path, check.names = FALSE)
 case_summary <- utils::read.csv(case_path, check.names = FALSE)
 group_summary <- utils::read.csv(group_path, check.names = FALSE)
+coverage <- utils::read.csv(coverage_path, check.names = FALSE)
 
 pair_ok <- pairs[pairs$status == "OK" &
                    is.finite(pairs$elapsed_ratio_estimator_over_nt) &
@@ -71,7 +74,7 @@ theme_set(theme_minimal(base_size = 12))
 ```
 
 This report compares wall time for three complete-data continuous estimator
-paths in magmaan:
+paths in magmaan across the checked-out textbook corpus:
 
 - **NT**: normal-theory ML via `fit_ml()`
 - **ULS**: unweighted least squares via `fit_uls()`
@@ -85,13 +88,23 @@ NT. Aggregates use geometric means, which are the natural average for ratios.
 
 ```{r}
 total <- group_summary[group_summary$group_kind == "Total", , drop = FALSE]
+all_tags <- sort(unique(unlist(strsplit(as.character(coverage$tags), ";", fixed = TRUE))))
+all_tags <- all_tags[nzchar(all_tags)]
+timed_coverage <- coverage[coverage$coverage_status == "timed_candidate", , drop = FALSE]
+preload_skips <- coverage[coverage$coverage_status != "timed_candidate", , drop = FALSE]
+complete_case_ids <- unique(pair_ok$case_id)
 overview <- data.frame(
-  Metric = c("Continuous Cases", "Textbook Subcorpora", "Tags", "Replicates",
+  Metric = c("Corpus Cases Considered", "Timed Candidates",
+             "Cases With Complete Timing Pairs", "Pre-Timing Skips",
+             "Textbook Subcorpora", "Tags", "Replicates",
              "Fit Rows", "Complete Timing Pairs", "Fit Errors/Skips"),
   Value = c(
-    length(unique(fits$case_id)),
-    length(unique(fits$source)),
-    length(unique(fits$family)),
+    nrow(coverage),
+    nrow(timed_coverage),
+    length(complete_case_ids),
+    nrow(preload_skips),
+    length(unique(coverage$source)),
+    length(all_tags),
     if (nrow(fits)) max(fits$replicate, na.rm = TRUE) else NA_integer_,
     nrow(fits),
     nrow(pair_ok),
@@ -119,6 +132,29 @@ total_table$`Faster Than NT` <- fmt_pct(total_table$`Faster Than NT`)
 total_table$`Median NT ms` <- fmt_ms(total_table$`Median NT ms`)
 total_table$`Median Estimator ms` <- fmt_ms(total_table$`Median Estimator ms`)
 knitr::kable(total_table, row.names = FALSE)
+```
+
+## Corpus Coverage
+
+```{r}
+coverage_status <- as.data.frame(table(coverage$coverage_status),
+                                 stringsAsFactors = FALSE)
+names(coverage_status) <- c("Status", "Cases")
+knitr::kable(coverage_status, row.names = FALSE)
+```
+
+```{r}
+if (nrow(preload_skips)) {
+  skip_counts <- sort(table(preload_skips$skip_reason), decreasing = TRUE)
+  skip_summary <- data.frame(
+    Reason = names(skip_counts),
+    Cases = as.integer(skip_counts),
+    stringsAsFactors = FALSE
+  )
+  knitr::kable(skip_summary, row.names = FALSE)
+} else {
+  knitr::kable(data.frame(Note = "No cases were skipped before timing."))
+}
 ```
 
 ## Overall Timing Ratios
@@ -239,18 +275,36 @@ drawing conclusions.
 
 ```{r}
 if (nrow(pair_ok)) {
-  outliers <- pair_ok
-  outliers$log_abs_ratio <- abs(log(outliers$elapsed_ratio_estimator_over_nt))
-  outliers <- outliers[order(-outliers$log_abs_ratio), ]
-  outliers <- head(outliers, 20L)
-  out <- outliers[, c("label", "source", "family", "estimator", "replicate",
-                      "nt_elapsed_sec", "estimator_elapsed_sec",
-                      "elapsed_ratio_estimator_over_nt")]
-  names(out) <- c("Label", "Subcorpus", "Tag", "Estimator", "Rep",
-                  "NT ms", "Estimator ms", "Ratio")
-  out$`NT ms` <- fmt_ms(1000 * out$`NT ms`)
-  out$`Estimator ms` <- fmt_ms(1000 * out$`Estimator ms`)
-  out$Ratio <- fmt_ratio(out$Ratio)
+  outliers <- do.call(rbind, lapply(split(pair_ok, paste(pair_ok$case_id, pair_ok$estimator)), function(x) {
+    data.frame(
+      Label = x$label[[1L]],
+      Subcorpus = x$source[[1L]],
+      Tag = x$primary_tag[[1L]],
+      Estimator = x$estimator[[1L]],
+      Reps = nrow(x),
+      `Median NT ms` = 1000 * median_na(x$nt_elapsed_sec),
+      `Median Estimator ms` = 1000 * median_na(x$estimator_elapsed_sec),
+      `Median Ratio` = median_na(x$elapsed_ratio_estimator_over_nt),
+      `Min Ratio` = min(x$elapsed_ratio_estimator_over_nt, na.rm = TRUE),
+      `Max Ratio` = max(x$elapsed_ratio_estimator_over_nt, na.rm = TRUE),
+      `Median |d Chi Sq|` = median_na(x$abs_naive_chisq_diff),
+      `Median Max |d Par|` = median_na(x$param_max_abs_diff),
+      check.names = FALSE
+    )
+  }))
+  outliers$log_abs_ratio <- abs(log(outliers$`Median Ratio`))
+  outliers <- head(outliers[order(-outliers$log_abs_ratio), ], 20L)
+  out <- outliers[, c("Label", "Subcorpus", "Tag", "Estimator", "Reps",
+                      "Median NT ms", "Median Estimator ms",
+                      "Median Ratio", "Min Ratio", "Max Ratio",
+                      "Median |d Chi Sq|", "Median Max |d Par|")]
+  out$`Median NT ms` <- fmt_ms(out$`Median NT ms`)
+  out$`Median Estimator ms` <- fmt_ms(out$`Median Estimator ms`)
+  out$`Median Ratio` <- fmt_ratio(out$`Median Ratio`)
+  out$`Min Ratio` <- fmt_ratio(out$`Min Ratio`)
+  out$`Max Ratio` <- fmt_ratio(out$`Max Ratio`)
+  out$`Median |d Chi Sq|` <- fmt_num(out$`Median |d Chi Sq|`)
+  out$`Median Max |d Par|` <- fmt_num(out$`Median Max |d Par|`)
   knitr::kable(out, row.names = FALSE)
 }
 ```
@@ -280,12 +334,23 @@ if (nrow(pair_ok)) {
 
 ```{r}
 if (nrow(problem_rows)) {
-  keep <- c("case_id", "label", "source", "family",
-            "estimator", "replicate", "status", "error")
-  problems <- problem_rows[keep]
-  names(problems) <- c("Case", "Label", "Subcorpus", "Tag",
-                       "Estimator", "Rep", "Status", "Error")
-  knitr::kable(head(problems, 80L), row.names = FALSE)
+  problem_summary <- do.call(rbind, lapply(split(problem_rows, problem_rows$error), function(x) {
+    data.frame(
+      Status = paste(sort(unique(x$status)), collapse = ";"),
+      Cases = length(unique(x$case_id)),
+      Rows = nrow(x),
+      Error = x$error[[1L]],
+      stringsAsFactors = FALSE
+    )
+  }))
+  problem_summary <- problem_summary[order(-problem_summary$Rows, problem_summary$Error), ]
+  knitr::kable(head(problem_summary, 20L), row.names = FALSE)
+
+  examples <- unique(problem_rows[, c("case_id", "label", "source",
+                                      "primary_tag", "status", "error")])
+  examples <- examples[order(examples$source, examples$case_id), ]
+  names(examples) <- c("Case", "Label", "Subcorpus", "Tag", "Status", "Error")
+  knitr::kable(head(examples, 40L), row.names = FALSE)
 } else {
   knitr::kable(data.frame(Note = "No skipped or failed fit rows."))
 }
