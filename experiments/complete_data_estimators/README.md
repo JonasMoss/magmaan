@@ -1,16 +1,16 @@
 # Complete-Data Estimator Timing
 
 This small experiment compares magmaan's complete-data estimators across the
-textbook corpus:
+continuous complete-data textbook fixtures:
 
 - `NT`: normal-theory ML, via `magmaan_core$fit_ml()`.
 - `ULS`: unweighted least squares, via `magmaan_core$fit_uls()`.
 - `GLS`: generalized least squares, via `magmaan_core$fit_gls()`.
 
-The comparison is curiosity-grade rather than a correctness claim. It records
-wall time, optimizer diagnostics, parameter-estimate drift from NT, implied
-moment drift from NT, and a naive chi-square-like statistic computed as
-`magmaan_core$infer_chi2_stat(sample_stats, fit$fmin)`.
+The comparison is curiosity-grade rather than a correctness claim. The report
+focuses on wall time and timing ratios, using geometric means for aggregate
+comparisons. Categorical and mixed fixtures are outside this experiment because
+these estimator paths expect complete-data continuous sample statistics.
 
 ## Run
 
@@ -45,4 +45,5 @@ is also ignored.
 
 - `results/fits.csv`: one row per attempted estimator fit.
 - `results/pairs_vs_nt.csv`: ULS/GLS paired against NT by case and replicate.
-- `results/case_summary.csv`: label-sorted case-level timing and drift summary.
+- `results/case_summary.csv`: label-sorted case-level timing summary.
+- `results/group_summary.csv`: total, subcorpus, and tag timing summaries.
