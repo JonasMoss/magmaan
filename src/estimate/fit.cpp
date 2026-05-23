@@ -126,14 +126,12 @@ run_gmm(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
 }
 
 fit_expected<optim::OptimResult>
-run_ipopt_constrained(const optim::ScalarProblem& prob,
-                      const optim::ConstraintFn& h,
-                      const optim::ConstraintJacFn& J_h,
-                      Eigen::Index n_constraint,
-                      const Eigen::VectorXd& x0, const Bounds& bounds,
-                      OptimOptions opts, const char* who) {
-#ifdef MAGMAAN_WITH_IPOPT
-  (void)who;
+run_scalar_constrained(const optim::ScalarProblem& prob,
+                       const optim::ConstraintFn& h,
+                       const optim::ConstraintJacFn& J_h,
+                       Eigen::Index n_constraint,
+                       const Eigen::VectorXd& x0, const Bounds& bounds,
+                       Backend backend, OptimOptions opts, const char* who) {
   optim::ConstrainedScalarProblem cprob;
   cprob.objective         = prob;
   cprob.h                 = h;
@@ -141,21 +139,28 @@ run_ipopt_constrained(const optim::ScalarProblem& prob,
   cprob.n_constraint      = n_constraint;
   cprob.constraint_lower  = Eigen::VectorXd::Zero(n_constraint);
   cprob.constraint_upper  = Eigen::VectorXd::Zero(n_constraint);
-  return optim::ipopt_constrained(cprob, x0, bounds, opts);
+
+  switch (backend) {
+    case Backend::NloptSlsqp:
+      return optim::nlopt_slsqp_constrained(cprob, x0, bounds, opts);
+    case Backend::Ipopt:
+#ifdef MAGMAAN_WITH_IPOPT
+      return optim::ipopt_constrained(cprob, x0, bounds, opts);
 #else
-  (void)prob;
-  (void)h;
-  (void)J_h;
-  (void)n_constraint;
-  (void)x0;
-  (void)bounds;
-  (void)opts;
-  return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-      std::string(who) +
-          ": nonlinear equality constraints require the IPOPT backend; "
-          "reconfigure with MAGMAAN_WITH_IPOPT=ON and use optimizer "
-          "\"ipopt\""));
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          std::string(who) +
+              ": nonlinear equality constraints require optimizer "
+              "\"nlopt-slsqp\" or an IPOPT-enabled build with optimizer "
+              "\"ipopt\""));
 #endif
+    default:
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          std::string(who) +
+              ": nonlinear equality constraints require optimizer "
+              "\"nlopt-slsqp\" or \"ipopt\""));
+  }
+  return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+      "unknown constrained optimizer backend"));
 }
 
 // Shared prelude — resolve fixed.x, build the evaluator, build constraints.
@@ -235,18 +240,12 @@ compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
                   const Eigen::VectorXd& x0, const Bounds& bounds,
                   Backend backend, OptimOptions opts, const char* who) {
   if (nl.active()) {
-    if (backend != Backend::Ipopt) {
-      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-          std::string(who) +
-              ": nonlinear equality constraints require the IPOPT backend; "
-              "use optimizer \"ipopt\""));
-    }
     if (!con.active()) {
       auto h_fn   = [&nl](const Eigen::VectorXd& th) { return nl.h(th); };
       auto jac_fn = [&nl](const Eigen::VectorXd& th) { return nl.jacobian(th); };
       auto r =
-          run_ipopt_constrained(prob, h_fn, jac_fn, nl.m(), x0, bounds, opts,
-                                who);
+          run_scalar_constrained(prob, h_fn, jac_fn, nl.m(), x0, bounds,
+                                 backend, opts, who);
       if (!r.has_value()) return std::unexpected(r.error());
       return Estimates{prob.expand(r->x), r->fmin, r->iterations,
                        r->f_evals, r->g_evals, r->status, r->grad_inf_norm,
@@ -273,8 +272,8 @@ compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
       abounds = fold_alpha_bounds(con, bounds);
       alpha0  = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
     }
-    auto r = run_ipopt_constrained(prob_a, h_a, jac_a, nl.m(), alpha0,
-                                   abounds, opts, who);
+    auto r = run_scalar_constrained(prob_a, h_a, jac_a, nl.m(), alpha0,
+                                    abounds, backend, opts, who);
     if (!r.has_value()) return std::unexpected(r.error());
     Eigen::VectorXd theta_hat = prob_a.expand(r->x);
     if (!bounds.empty() && !pure_merge) {
@@ -338,30 +337,27 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
   if (!prob_or.has_value()) return std::unexpected(prob_or.error());
   const optim::GmmProblem prob = std::move(*prob_or);
 
-  // Nonlinear equality constraints — scalarize and let IPOPT drive the NLP.
-  // The LS sum-of-squares structure is not exposed to IPOPT in v1; exact
-  // Hessian support is tracked separately.
+  // Nonlinear equality constraints — scalarize and let a constrained scalar
+  // optimizer drive the NLP. The LS sum-of-squares structure is not exposed to
+  // the constrained optimizers in v1; exact Hessian support is tracked
+  // separately.
   if (nl.active()) {
-    if (backend != Backend::Ipopt) {
-      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-          "fit_gmm: nonlinear equality constraints require the IPOPT backend; "
-          "use optimizer \"ipopt\""));
-    }
     if (!con.active()) {
       const optim::ScalarProblem sprob = optim::scalarize(prob);
       auto h_fn   = [&nl](const Eigen::VectorXd& th) { return nl.h(th); };
       auto jac_fn = [&nl](const Eigen::VectorXd& th) { return nl.jacobian(th); };
       auto r =
-          run_ipopt_constrained(sprob, h_fn, jac_fn, nl.m(), x0, bounds, opts,
-                                "fit_gmm");
+          run_scalar_constrained(sprob, h_fn, jac_fn, nl.m(), x0, bounds,
+                                 backend, opts, "fit_gmm");
       if (!r.has_value()) return std::unexpected(r.error());
       return Estimates{prob.expand(r->x), r->fmin, r->iterations,
                        r->f_evals, r->g_evals, r->status, r->grad_inf_norm,
                        std::move(r->audit)};
     }
     // Linear + nonlinear equality constraints together: fold the linear
-    // equalities into the affine α-reparameterization (θ = θ₀ + K·α), then run
-    // IPOPT on the nonlinear constraints re-expressed in α:
+    // equalities into the affine α-reparameterization (θ = θ₀ + K·α), then
+    // run the constrained scalar optimizer on the nonlinear constraints
+    // re-expressed in α:
     // h_α(α) = h(θ₀+Kα), ∂h_α/∂α = (∂h/∂θ)·K.
     const optim::GmmProblem prob_a = reparameterize(prob, con);
     if (con.n_alpha == 0) {  // every parameter pinned by the linear system
@@ -384,8 +380,8 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
       abounds = fold_alpha_bounds(con, bounds);
       alpha0  = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
     }
-    auto r = run_ipopt_constrained(sprob_a, h_a, jac_a, nl.m(), alpha0,
-                                   abounds, opts, "fit_gmm");
+    auto r = run_scalar_constrained(sprob_a, h_a, jac_a, nl.m(), alpha0,
+                                    abounds, backend, opts, "fit_gmm");
     if (!r.has_value()) return std::unexpected(r.error());
     Eigen::VectorXd theta_hat = prob_a.expand(r->x);
     if (!bounds.empty() && !pure_merge) {

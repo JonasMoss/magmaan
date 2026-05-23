@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <limits>
+#include <string>
 
 #include <Eigen/Core>
 
@@ -9,8 +10,10 @@
 #include "magmaan/optim/nlopt_optimizer.hpp"
 
 using magmaan::FitError;
+using magmaan::optim::ConstrainedScalarProblem;
 using magmaan::optim::NloptOptimizer;
 using magmaan::optim::NloptAlgorithm;
+using magmaan::optim::ScalarProblem;
 
 // ============================================================================
 // Behavioural tests for the NLopt SLSQP adapter — a gradient-based sequential
@@ -77,6 +80,106 @@ TEST_CASE("NloptOptimizer — bound size mismatch is an error value") {
   auto out = opt.minimize(f, x0, lb, ub);
   REQUIRE_FALSE(out.has_value());
   CHECK(out.error().kind == FitError::Kind::NumericIssue);
+}
+
+TEST_CASE("NloptOptimizer/SLSQP — enforces a nonlinear equality constraint") {
+  ScalarProblem obj;
+  obj.n_param = 2;
+  obj.expand = [](const Eigen::VectorXd& x) { return x; };
+  obj.f = [](const Eigen::VectorXd& x, Eigen::VectorXd& grad) {
+    Eigen::Vector2d target;
+    target << 1.0, 1.0;
+    grad = x - target;
+    return 0.5 * (x - target).squaredNorm();
+  };
+
+  ConstrainedScalarProblem prob;
+  prob.objective = obj;
+  prob.n_constraint = 1;
+  prob.constraint_lower = Eigen::VectorXd::Zero(1);
+  prob.constraint_upper = Eigen::VectorXd::Zero(1);
+  prob.h = [](const Eigen::VectorXd& x) {
+    Eigen::VectorXd h(1);
+    h(0) = x(0) - x(1) * x(1);
+    return h;
+  };
+  prob.J_h = [](const Eigen::VectorXd& x) {
+    Eigen::MatrixXd J(1, 2);
+    J << 1.0, -2.0 * x(1);
+    return J;
+  };
+
+  const double inf = std::numeric_limits<double>::infinity();
+  Eigen::Vector2d x0;
+  x0 << 0.25, 0.5;
+  auto out = NloptOptimizer{}.minimize_constrained(
+      prob, x0, Eigen::VectorXd::Constant(2, -inf),
+      Eigen::VectorXd::Constant(2,  inf));
+  REQUIRE(out.has_value());
+  CHECK(std::abs(out->theta_hat(0) -
+                 out->theta_hat(1) * out->theta_hat(1)) < 1e-7);
+  CHECK(out->fmin < 0.1);
+}
+
+TEST_CASE("NloptOptimizer/SLSQP — constrained path accepts equal nonzero targets") {
+  ScalarProblem obj;
+  obj.n_param = 1;
+  obj.expand = [](const Eigen::VectorXd& x) { return x; };
+  obj.f = [](const Eigen::VectorXd& x, Eigen::VectorXd& grad) {
+    grad = Eigen::VectorXd::Constant(1, x(0));
+    return 0.5 * x(0) * x(0);
+  };
+
+  ConstrainedScalarProblem prob;
+  prob.objective = obj;
+  prob.n_constraint = 1;
+  prob.constraint_lower = Eigen::VectorXd::Constant(1, 2.0);
+  prob.constraint_upper = Eigen::VectorXd::Constant(1, 2.0);
+  prob.h = [](const Eigen::VectorXd& x) { return x; };
+  prob.J_h = [](const Eigen::VectorXd&) {
+    Eigen::MatrixXd J(1, 1);
+    J(0, 0) = 1.0;
+    return J;
+  };
+
+  const double inf = std::numeric_limits<double>::infinity();
+  Eigen::VectorXd x0 = Eigen::VectorXd::Constant(1, 0.0);
+  auto out = NloptOptimizer{}.minimize_constrained(
+      prob, x0, Eigen::VectorXd::Constant(1, -inf),
+      Eigen::VectorXd::Constant(1,  inf));
+  REQUIRE(out.has_value());
+  CHECK(out->theta_hat(0) == doctest::Approx(2.0).epsilon(1e-8));
+}
+
+TEST_CASE("NloptOptimizer/SLSQP — constrained path rejects inequalities") {
+  ScalarProblem obj;
+  obj.n_param = 1;
+  obj.expand = [](const Eigen::VectorXd& x) { return x; };
+  obj.f = [](const Eigen::VectorXd& x, Eigen::VectorXd& grad) {
+    grad = Eigen::VectorXd::Constant(1, x(0));
+    return 0.5 * x(0) * x(0);
+  };
+
+  ConstrainedScalarProblem prob;
+  prob.objective = obj;
+  prob.n_constraint = 1;
+  prob.constraint_lower = Eigen::VectorXd::Zero(1);
+  prob.constraint_upper = Eigen::VectorXd::Constant(1, 1.0);
+  prob.h = [](const Eigen::VectorXd& x) { return x; };
+  prob.J_h = [](const Eigen::VectorXd&) {
+    Eigen::MatrixXd J(1, 1);
+    J(0, 0) = 1.0;
+    return J;
+  };
+
+  const double inf = std::numeric_limits<double>::infinity();
+  Eigen::VectorXd x0 = Eigen::VectorXd::Constant(1, 0.0);
+  auto out = NloptOptimizer{}.minimize_constrained(
+      prob, x0, Eigen::VectorXd::Constant(1, -inf),
+      Eigen::VectorXd::Constant(1,  inf));
+  REQUIRE_FALSE(out.has_value());
+  CHECK(out.error().kind == FitError::Kind::NumericIssue);
+  CHECK(out.error().detail.find("equality") != std::string::npos);
 }
 
 // ============================================================================

@@ -18,7 +18,8 @@
 //                    (only when MAGMAAN_WITH_CERES is set).
 //   • ceres_bfgs   — Ceres line-search dense BFGS least-squares minimizer
 //                    (unbounded only, only when MAGMAAN_WITH_CERES is set).
-//   • nlopt_slsqp  — NLopt SLSQP scalar cross-check.
+//   • nlopt_slsqp  — NLopt SLSQP scalar cross-check; constrained variant
+//                    accepts nonlinear equality constraints.
 //   • nlopt_bobyqa — NLopt BOBYQA (Powell derivative-free TR). Requires
 //                    finite bounds.
 //   • nlopt_tnewton— NLopt LD_TNEWTON_PRECOND_RESTART (Nash truncated Newton).
@@ -99,6 +100,14 @@ ipopt_constrained(const ConstrainedScalarProblem& prob,
 fit_expected<OptimResult>
 nlopt_slsqp(const ScalarProblem& prob, const Eigen::VectorXd& x0,
             const Bounds& bounds = {}, OptimOptions opts = {});
+
+// NLopt SLSQP scalar nonlinear programming with simple bounds and nonlinear
+// equality constraints. Equality constraints are encoded by identical
+// lower/upper entries in `prob.constraint_lower` / `prob.constraint_upper`.
+fit_expected<OptimResult>
+nlopt_slsqp_constrained(const ConstrainedScalarProblem& prob,
+                        const Eigen::VectorXd& x0,
+                        const Bounds& bounds = {}, OptimOptions opts = {});
 
 // NLopt BOBYQA — Powell 2009 derivative-free quadratic-model trust region.
 // Requires *finite* bounds (no ±infinity sentinels). Useful when the gradient
