@@ -1,0 +1,187 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "paper_corpus.reference",
+    "corpus_id": "magmaan_paper_corpus_zxqvn_v1",
+    "tool": "tests/tools/regen_paper_corpus_fixtures.R",
+    "generated": "2026-05-23 08:12:50 +0200",
+    "lavaan_version": "0.6.22.2560",
+    "raw_storage": "external/paper_corpus/zxqvn/raw"
+  },
+  "cases": [
+    {
+      "id": "zxqvn_affect_mediation",
+      "source": "zxqvn",
+      "source_title": "Positive anticipated affective reactions increase pro-environmental behavior",
+      "source_url": "https://osf.io/zxqvn/",
+      "model": "affect =~ positive + negative\nPEBT2 ~ intention + affect + PEBT1\nintention ~ affect + PEBT1\naffect ~ PEBT1",
+      "lavaan_function": "sem",
+      "estimator": "ML",
+      "meanstructure": false,
+      "fixed_x": true,
+      "observed_variables": ["positive", "negative", "PEBT2", "intention", "PEBT1"],
+      "cluster_variable": "participant_id",
+      "core_surface": "complete-data ML point estimates without clustered SEs",
+      "unsupported_surfaces": [
+        {
+          "kind": "clustered_standard_errors",
+          "note": "The source script fits sem(..., cluster = 'participant_id'). Cluster-robust SEs/intercepts are catalogued but not tested in the core complete-data ML parity fixture."
+        }
+      ],
+      "source_files": [
+        {
+          "name": "analysis_code.R",
+          "url": "https://osf.io/download/9zxmr/",
+          "md5": "ba3af148608f42bba127dcd68ef44fe6",
+          "sha256": "61ce7473bf50cf679af2428328bd7c633facb4c71d05e05dd8afd411ddc47778"
+        },
+        {
+          "name": "data.rdata",
+          "url": "https://osf.io/download/3z8t2/",
+          "md5": "9d778b146e383e40f84cfe82d3e2ede3",
+          "sha256": "b7506610f5b1e1e3516bd1c7def2b36e74bb12c650ae85868f38a8ca940750aa"
+        }
+      ],
+      "data_summary": {
+        "wide_rows": 995,
+        "long_rows": 6944,
+        "behavior_count": 7,
+        "cluster_count": 992,
+        "behaviors": ["shower", "notcar", "lamps", "protein", "sortwaste", "hangdry", "temp"],
+        "transformation": "Base-R equivalent of source pivot_longer over behavior-specific PEBT1/PEBT2/positive/negative/intention columns, 0-1 rescaling, and Gender != 3 filtering."
+      },
+      "fits": {
+        "ML": {
+          "converged": true,
+          "theta_hat": [-0.742850918269595, 0.289154151553495, 0.228902829926388, 0.391961601622465, 0.337569432542686, 0.674651291758946, 0.535923203369555, 0.0601274583542448, 0.0495761082648317, 0.0350364281110896, 0.0206878458162216, 0.0250022747239994],
+          "free_rows": [
+            {
+              "lhs": "affect",
+              "op": "=~",
+              "rhs": "negative",
+              "group": 1,
+              "free": 1,
+              "est": -0.742850918269595
+            },
+            {
+              "lhs": "PEBT2",
+              "op": "~",
+              "rhs": "intention",
+              "group": 1,
+              "free": 2,
+              "est": 0.289154151553495
+            },
+            {
+              "lhs": "PEBT2",
+              "op": "~",
+              "rhs": "affect",
+              "group": 1,
+              "free": 3,
+              "est": 0.228902829926388
+            },
+            {
+              "lhs": "PEBT2",
+              "op": "~",
+              "rhs": "PEBT1",
+              "group": 1,
+              "free": 4,
+              "est": 0.391961601622465
+            },
+            {
+              "lhs": "intention",
+              "op": "~",
+              "rhs": "affect",
+              "group": 1,
+              "free": 5,
+              "est": 0.337569432542686
+            },
+            {
+              "lhs": "intention",
+              "op": "~",
+              "rhs": "PEBT1",
+              "group": 1,
+              "free": 6,
+              "est": 0.674651291758946
+            },
+            {
+              "lhs": "affect",
+              "op": "~",
+              "rhs": "PEBT1",
+              "group": 1,
+              "free": 7,
+              "est": 0.535923203369555
+            },
+            {
+              "lhs": "positive",
+              "op": "~~",
+              "rhs": "positive",
+              "group": 1,
+              "free": 8,
+              "est": 0.0601274583542448
+            },
+            {
+              "lhs": "negative",
+              "op": "~~",
+              "rhs": "negative",
+              "group": 1,
+              "free": 9,
+              "est": 0.0495761082648317
+            },
+            {
+              "lhs": "PEBT2",
+              "op": "~~",
+              "rhs": "PEBT2",
+              "group": 1,
+              "free": 10,
+              "est": 0.0350364281110896
+            },
+            {
+              "lhs": "intention",
+              "op": "~~",
+              "rhs": "intention",
+              "group": 1,
+              "free": 11,
+              "est": 0.0206878458162216
+            },
+            {
+              "lhs": "affect",
+              "op": "~~",
+              "rhs": "affect",
+              "group": 1,
+              "free": 12,
+              "est": 0.0250022747239994
+            }
+          ],
+          "fmin": 0.000454082548069223,
+          "chisq": 6.30629842758538,
+          "df": 2,
+          "npar": 12,
+          "sample_cov": [
+            [0.117719764493499, -0.0427824974798387, 0.0544445037339533, 0.0602251879834595, 0.0613043827662113],
+            [-0.0427824974798387, 0.0813571257270143, -0.0405526948886019, -0.0451875270017281, -0.0446259026706742],
+            [0.0544445037339533, -0.0405526948886019, 0.10532150036865, 0.0827154545033739, 0.0864667452772277],
+            [0.0602251879834595, -0.0451875270017281, 0.0827154545033739, 0.106595268525757, 0.0970803738582126],
+            [0.0613043827662113, -0.0446259026706742, 0.0864667452772277, 0.0970803738582126, 0.113469634752477]
+          ],
+          "sample_mean": null,
+          "n_obs": 6944,
+          "sigma": [
+            [0.117719764433534, -0.0427824974562633, 0.05450308862714, 0.0604676286272884, 0.0608110101417207],
+            [-0.0427824974562633, 0.0813571257860835, -0.0404876694352001, -0.044918433451366, -0.0451735147246789],
+            [0.05450308862714, -0.0404876694352001, 0.105321500363545, 0.082715454559299, 0.0864667452174623],
+            [0.0604676286272884, -0.044918433451366, 0.082715454559299, 0.106595268519499, 0.0970803738470623],
+            [0.0608110101417207, -0.0451735147246789, 0.0864667452174623, 0.0970803738470623, 0.113469634752477]
+          ],
+          "mu": null
+        }
+      },
+      "clustered_reference": {
+        "converged": true,
+        "npar": 16,
+        "df": 2,
+        "chisq": 6.30629842758538,
+        "point_estimates_match_core": true
+      }
+    }
+  ]
+}

@@ -69,11 +69,12 @@ seeds <- list(
     platform = "osf",
     node_id = "zxqvn",
     role = "empirical_candidate",
-    priority = "promote_first",
-    promotion_status = "promote_first",
+    priority = "promoted",
+    promotion_status = "promoted_core_ml",
     note = paste(
-      "Compact empirical mediation/SEM candidate with small RData. Clustered",
-      "SE behavior should be catalogued separately from core point-estimate parity."
+      "Compact empirical mediation/SEM case promoted to a core complete-data",
+      "ML point-estimate fixture. Clustered SE behavior remains catalogued",
+      "outside the core parity surface."
     )
   ),
   list(
@@ -364,6 +365,7 @@ payload <- list(
     seed_nodes = length(nodes),
     scouted = count(function(x) x$status %in% c("scouted", "scouted_with_errors")),
     promote_first = count(function(x) identical(x$promotion_status, "promote_first")),
+    promoted = count(function(x) grepl("^promoted", x$promotion_status %||% "")),
     files = sum_field("file_count"),
     folders = sum_field("folder_count"),
     child_nodes = sum_field("child_node_count"),
