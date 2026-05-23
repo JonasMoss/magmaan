@@ -1,5 +1,5 @@
 ---
-title: "Latent Metric Identification Experiment"
+title: "Latent Metric Identification — Pipeline Timing"
 format: html
 execute:
   echo: false
@@ -23,105 +23,191 @@ hits <- result_candidates[file.exists(file.path(result_candidates, "fits.csv"))]
 results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
 fits_path <- file.path(results_dir, "fits.csv")
 pairs_path <- file.path(results_dir, "pairs.csv")
-summary_path <- file.path(results_dir, "summary.csv")
 
-if (!file.exists(fits_path) || !file.exists(pairs_path) || !file.exists(summary_path)) {
+if (!file.exists(fits_path) || !file.exists(pairs_path)) {
   stop("Missing experiment CSVs. Run: Rscript run_experiment.R")
 }
 
 fits <- utils::read.csv(fits_path, check.names = FALSE)
 pairs <- utils::read.csv(pairs_path, check.names = FALSE)
-summary <- utils::read.csv(summary_path, check.names = FALSE)
 
-fmt_num <- function(x, digits = 3) {
-  ifelse(is.na(x), "", formatC(x, format = "g", digits = digits))
+ok <- pairs[pairs$status == "OK" &
+              is.finite(pairs$elapsed_ratio_std_lv_over_marker), ]
+valid <- ok[ok$same_implied_moments %in% TRUE, ]
+
+skip_rows <- fits[fits$status == "SKIP" &
+                    grepl("scale-equivalent", fits$error, fixed = TRUE), ]
+n_skip_npar <- length(unique(skip_rows$case_id))
+n_err <- sum(fits$status == "ERROR", na.rm = TRUE)
+n_mismatch <- sum(pairs$material_mismatch, na.rm = TRUE)
+
+n_cases <- length(unique(fits$case_id))
+n_backends <- length(unique(pairs$backend))
+n_reps <- if (nrow(pairs)) max(pairs$replicate, na.rm = TRUE) else NA_integer_
+
+fmt_pct <- function(x) sprintf("%.1f%%", 100 * x)
+fmt_ratio <- function(x) formatC(x, format = "f", digits = 3)
+fmt_us <- function(x) sprintf("%.0f μs", x * 1e6)
+```
+
+The question this experiment answers: **if a user specifies a model in the
+familiar marker form, would magmaan win by internally converting to `std_lv`,
+fitting there, then back-converting to marker for the user?** That trades a
+(usually faster) fit against the cost of a spec rebuild and a parameter
+rescaling pass.
+
+## Headline
+
+Pairs are kept only if both fits converged AND landed at the same implied
+moments (Δσ < 1e-5). Pairs where the two parameterizations disagree on the
+model itself are not comparable on time and are excluded from these summaries.
+
+```{r}
+#| results: asis
+if (nrow(valid)) {
+  fr <- valid$elapsed_ratio_std_lv_over_marker
+  pr <- valid$pipeline_ratio_std_lv_over_marker
+  fqs <- stats::quantile(fr, c(0.25, 0.5, 0.75), na.rm = TRUE)
+  pqs <- stats::quantile(pr, c(0.25, 0.5, 0.75), na.rm = TRUE)
+  cat(sprintf(
+    paste0(
+      "Across **%d cases**, **%d backends**, %d reps — **%d valid ",
+      "pairs** out of %d OK pairs.\n\n",
+      "- **Fit only** (current question): `std_lv / marker` = **%s** ",
+      "(IQR %s–%s); `std_lv` faster on **%s** of pairs.\n",
+      "- **Full pipeline** (spec build + fit + backconvert vs spec build + ",
+      "fit): ratio = **%s** (IQR %s–%s); `std_lv`-route faster on **%s** of pairs.\n"
+    ),
+    n_cases, n_backends, n_reps, nrow(valid), nrow(ok),
+    fmt_ratio(fqs[[2L]]), fmt_ratio(fqs[[1L]]), fmt_ratio(fqs[[3L]]),
+    fmt_pct(mean(fr < 1, na.rm = TRUE)),
+    fmt_ratio(pqs[[2L]]), fmt_ratio(pqs[[1L]]), fmt_ratio(pqs[[3L]]),
+    fmt_pct(mean(pr < 1, na.rm = TRUE))
+  ))
+} else {
+  cat("No valid pairs to summarize.\n")
 }
 ```
 
-This experiment asks whether fixed latent-variance identification (`std_lv`)
-changes numerical estimation behavior relative to marker-loading
-identification, holding the implied model constant. Raw parameter estimates are
-not compared directly because the two parameterizations use different latent
-metrics.
+## Per-backend summary
 
 ```{r}
-case_count <- length(unique(fits$case_id))
-attempts <- nrow(fits)
-ok <- sum(fits$status == "OK", na.rm = TRUE)
-skips <- sum(fits$status == "SKIP", na.rm = TRUE)
-errors <- sum(fits$status == "ERROR", na.rm = TRUE)
-overview <- data.frame(
-  cases = case_count,
-  fit_rows = attempts,
-  ok = ok,
-  skipped = skips,
-  errors = errors,
-  pair_rows = nrow(pairs)
-)
-knitr::kable(overview)
+if (nrow(ok)) {
+  by_be <- split(ok, ok$backend)
+  rows <- lapply(by_be, function(x) {
+    vx <- x[x$same_implied_moments %in% TRUE, ]
+    fr <- vx$elapsed_ratio_std_lv_over_marker
+    pr <- vx$pipeline_ratio_std_lv_over_marker
+    data.frame(
+      backend = x$backend[[1L]],
+      ok_pairs = nrow(x),
+      valid_pairs = nrow(vx),
+      `fit ratio` = if (nrow(vx)) fmt_ratio(stats::median(fr, na.rm = TRUE)) else "—",
+      `pipeline ratio` = if (nrow(vx)) fmt_ratio(stats::median(pr, na.rm = TRUE)) else "—",
+      `pipeline faster` = if (nrow(vx)) fmt_pct(mean(pr < 1, na.rm = TRUE)) else "—",
+      `same implied moments` = fmt_pct(mean(x$same_implied_moments, na.rm = TRUE)),
+      check.names = FALSE,
+      stringsAsFactors = FALSE
+    )
+  })
+  knitr::kable(do.call(rbind, rows), row.names = FALSE)
+}
 ```
 
-## Summary
+## Per-step breakdown
+
+Median wall time per pipeline step across valid pairs. Spec build is one call
+to `model_spec()` (lavaanify + partable). Fit is the `fit_ml` call. Backconvert
+is a vectorized R pass that rescales loadings, latent variances, latent
+covariances, and latent regressions.
 
 ```{r}
-summary_display <- summary
-numeric_cols <- vapply(summary_display, is.numeric, logical(1))
-summary_display[numeric_cols] <- lapply(summary_display[numeric_cols], fmt_num)
-knitr::kable(summary_display)
+if (nrow(valid)) {
+  rows <- data.frame(
+    step = c("spec build", "fit", "backconvert"),
+    marker = c(fmt_us(stats::median(valid$marker_spec_sec, na.rm = TRUE)),
+               fmt_us(stats::median(valid$marker_elapsed_sec, na.rm = TRUE)),
+               "—"),
+    std_lv = c(fmt_us(stats::median(valid$std_lv_spec_sec, na.rm = TRUE)),
+               fmt_us(stats::median(valid$std_lv_elapsed_sec, na.rm = TRUE)),
+               fmt_us(stats::median(valid$std_lv_backconvert_sec, na.rm = TRUE))),
+    stringsAsFactors = FALSE
+  )
+  knitr::kable(rows, row.names = FALSE,
+               col.names = c("step", "marker", "std_lv"))
+}
 ```
 
-## Pairwise Timing
+## Pipeline ratio distribution
 
-The ratio below is `std_lv / marker`; values below 1 favor fixed latent
-variance on elapsed time.
+`log10(pipeline_std_lv_route / pipeline_marker_route)`; below zero means the
+`std_lv`-with-backconvert route wins. Dashed line at zero.
 
 ```{r}
-complete_pairs <- pairs[pairs$status == "OK" &
-                          is.finite(pairs$elapsed_ratio_std_lv_over_marker), ]
-if (nrow(complete_pairs)) {
-  boxplot(elapsed_ratio_std_lv_over_marker ~ backend,
-          data = complete_pairs,
-          ylab = "elapsed ratio: std_lv / marker",
-          xlab = "backend",
-          log = "y")
+#| fig-width: 7
+#| fig-height: 4
+if (nrow(valid)) {
+  valid$log_ratio <- log10(valid$pipeline_ratio_std_lv_over_marker)
+  op <- par(mar = c(4, 6, 1, 1))
+  boxplot(log_ratio ~ backend, data = valid, horizontal = TRUE,
+          xlab = "log10(pipeline_ratio std_lv / marker)",
+          ylab = "", las = 1, outline = FALSE, col = "grey90")
+  stripchart(log_ratio ~ backend, data = valid, add = TRUE, vertical = FALSE,
+             method = "jitter", jitter = 0.15, pch = 16,
+             col = grDevices::adjustcolor("steelblue", alpha.f = 0.3))
+  abline(v = 0, lty = 2, col = "gray40")
+  par(op)
+} else {
+  plot.new(); text(0.5, 0.5, "no data")
+}
+```
+
+## Pipeline ratio vs marker fit cost
+
+Each point is a `(case, backend, rep)` pair. The horizontal axis is the
+marker-side fit cost (where dominant cost lives); the vertical axis is the
+pipeline ratio. As fit time grows, the fixed overhead (spec + backconvert)
+becomes a smaller fraction and the ratio should approach the fit-only ratio.
+
+```{r}
+#| fig-width: 7
+#| fig-height: 4
+if (nrow(valid)) {
+  op <- par(mar = c(4, 4, 1, 1))
+  plot(valid$marker_elapsed_sec * 1e3,
+       valid$pipeline_ratio_std_lv_over_marker,
+       log = "xy",
+       xlab = "marker fit time (ms)",
+       ylab = "pipeline ratio std_lv / marker",
+       pch = 16,
+       col = grDevices::adjustcolor(
+         ifelse(valid$backend == "port", "darkorange", "steelblue"),
+         alpha.f = 0.4))
   abline(h = 1, lty = 2, col = "gray40")
-} else {
-  plot.new()
-  text(0.5, 0.5, "No complete pair rows")
+  legend("topright", legend = sort(unique(valid$backend)),
+         pch = 16, col = c("steelblue", "darkorange"), bty = "n")
+  par(op)
 }
 ```
 
-## Largest Differences
-
-These rows highlight the largest implied-moment or objective differences. Large
-values mean the two runs did not land at the same numerical solution and should
-be inspected before interpreting speed or gradient differences.
+## Caveats
 
 ```{r}
-if (nrow(pairs)) {
-  ranked <- pairs[order(-pairs$material_mismatch,
-                        -pairs$implied_sigma_max_abs_diff,
-                        -pairs$abs_fmin_diff), ]
-  keep <- c("case_id", "backend", "replicate", "status",
-            "marker_optimizer_status", "std_lv_optimizer_status",
-            "abs_fmin_diff", "implied_sigma_max_abs_diff",
-            "implied_mu_max_abs_diff", "elapsed_ratio_std_lv_over_marker",
-            "grad_norm_ratio_std_lv_over_marker")
-  top <- head(ranked[keep], 20L)
-  numeric_cols <- vapply(top, is.numeric, logical(1))
-  top[numeric_cols] <- lapply(top[numeric_cols], fmt_num)
-  knitr::kable(top)
-}
-```
-
-## Fit Errors And Skips
-
-```{r}
-problem_rows <- fits[fits$status != "OK", ]
-if (nrow(problem_rows)) {
-  keep <- c("case_id", "backend", "parameterization", "replicate", "status", "error")
-  knitr::kable(head(problem_rows[keep], 40L))
-} else {
-  knitr::kable(data.frame(note = "No skipped or failed fit rows."))
-}
+#| results: asis
+cat(sprintf(
+  paste0(
+    "- **%d** case(s) skipped because `marker` and `std_lv` did not produce ",
+    "the same number of free parameters (multi-factor / invariance models ",
+    "whose loading-vs-variance fix isn't scale-equivalent).\n",
+    "- **%d** pair(s) excluded from the timing summary because the two ",
+    "parameterizations did not land at the same implied moments ",
+    "(Δsigma > 1e-5 or Δfmin > 1e-5) — these are the cases where `std_lv` ",
+    "is **not admissible** as an internal substitute; see `results/pairs.csv`.\n",
+    "- **%d** fit error(s); see `results/fits.csv`.\n",
+    "- The backconvert step is implemented in vectorized R for this study. ",
+    "A C++ implementation would be substantially cheaper still, shifting the ",
+    "pipeline ratio toward the fit-only ratio for small models.\n"
+  ),
+  n_skip_npar, n_mismatch, n_err
+))
 ```

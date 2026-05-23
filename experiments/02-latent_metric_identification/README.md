@@ -5,8 +5,13 @@ This experiment compares two equivalent latent-scale identification conventions:
 - `marker`: first loading fixed, latent variance free.
 - `std_lv`: latent variance fixed, first loading free.
 
-It runs complete-data ML fits over strict continuous textbook-corpus fixtures and
+It runs complete-data ML fits over continuous textbook-corpus fixtures and
 records optimizer diagnostics, timing, and model-implied moment agreement.
+The case filter is `measurement_kind == "continuous"`, not `observed_only`,
+and the model contains at least one `=~` operator. Cases where the two
+parameterizations would not produce the same number of free parameters
+(e.g. multi-factor models with cross-loading equality constraints) are
+skipped automatically.
 
 ## Run
 
@@ -19,14 +24,18 @@ just r-install
 Quick smoke:
 
 ```sh
-Rscript experiments/latent_metric_identification/run_experiment.R --reps 1 --backends nlopt-lbfgs
+Rscript experiments/02-latent_metric_identification/run_experiment.R --reps 1 --cases ^geiser
 ```
 
-Default experiment:
+Default experiment (10 reps × `nlopt-lbfgs,port` × all eligible cases):
 
 ```sh
-Rscript experiments/latent_metric_identification/run_experiment.R
+Rscript experiments/02-latent_metric_identification/run_experiment.R
 ```
+
+The runner prints a headline summary at the end (median elapsed ratio,
+% std_lv faster, per-backend medians, skip/error counts) so the result is
+readable without rendering the report.
 
 Render the report:
 

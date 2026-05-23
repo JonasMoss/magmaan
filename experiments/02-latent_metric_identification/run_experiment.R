@@ -121,15 +121,15 @@ normalize_case <- function(manifest_case, fixture_case) {
 
 usable_case <- function(case) {
   !is.null(case) && !is.null(case$model) &&
-    !is.null(case$sample_cov) && !is.na(case$n_obs)
+    !is.null(case$sample_cov) && !is.na(case$n_obs) &&
+    grepl("=~", case$model, fixed = TRUE)
 }
 
 load_experiment_cases <- function(fixtures_dir, case_regex = NULL) {
   manifest_path <- file.path(fixtures_dir, "textbook_corpus", "manifest.json")
   manifest <- jsonlite::read_json(manifest_path, simplifyVector = FALSE)
   candidates <- Filter(function(x) {
-    isTRUE(x$strict_parity) &&
-      identical(x$measurement_kind %||% "", "continuous") &&
+    identical(x$measurement_kind %||% "", "continuous") &&
       !isTRUE(x$observed_only)
   }, manifest$cases)
   if (!is.null(case_regex)) {
@@ -189,8 +189,44 @@ n_free <- function(spec) {
   sum(spec$partable$free > 0L, na.rm = TRUE)
 }
 
+backconvert_std_lv_to_marker <- function(std_fit, marker_partable) {
+  std_pt <- std_fit$partable
+  est <- std_pt$est
+  m_pt <- marker_partable
+  lhs <- std_pt$lhs; rhs <- std_pt$rhs; op <- std_pt$op
+  is_load <- op == "=~"
+  latents <- unique(lhs[is_load])
+
+  # c_per[f] = estimated value in std_lv of the loading that marker fixes to 1
+  marker_anchors <- m_pt$op == "=~" & m_pt$free == 0 &
+                    !is.na(m_pt$ustart) & m_pt$ustart == 1
+  anchor_key <- paste0(m_pt$lhs[marker_anchors], "\r", m_pt$rhs[marker_anchors])
+  std_key <- paste0(lhs, "\r", rhs)
+  anchor_idx <- match(anchor_key, std_key)
+  c_per <- setNames(rep(1, length(latents)), latents)
+  ok <- !is.na(anchor_idx)
+  if (any(ok)) c_per[m_pt$lhs[marker_anchors][ok]] <- est[anchor_idx[ok]]
+
+  lhs_c <- c_per[lhs]; lhs_c[is.na(lhs_c)] <- 1
+  rhs_c <- c_per[rhs]; rhs_c[is.na(rhs_c)] <- 1
+  out <- est
+  # loadings: divide by c[lhs]
+  out[is_load] <- est[is_load] / lhs_c[is_load]
+  # latent variances: multiply by c[lhs]^2
+  is_lv_var <- op == "~~" & lhs == rhs & lhs %in% latents
+  out[is_lv_var] <- est[is_lv_var] * lhs_c[is_lv_var]^2
+  # latent covariances: multiply by c[lhs] * c[rhs]
+  is_lv_cov <- op == "~~" & lhs != rhs & lhs %in% latents & rhs %in% latents
+  out[is_lv_cov] <- est[is_lv_cov] * lhs_c[is_lv_cov] * rhs_c[is_lv_cov]
+  # regressions: multiply by c[lhs] / c[rhs]
+  is_reg <- op == "~"
+  out[is_reg] <- est[is_reg] * lhs_c[is_reg] / rhs_c[is_reg]
+  out
+}
+
 new_fit_row <- function(case, backend, parameterization, rep, status,
-                        error = "", fit = NULL, elapsed_sec = NA_real_) {
+                        error = "", fit = NULL, elapsed_sec = NA_real_,
+                        spec_sec = NA_real_, backconvert_sec = NA_real_) {
   diag <- fit$diagnostics %||% list()
   audit <- fit$audit %||% list()
   data.frame(
@@ -204,7 +240,13 @@ new_fit_row <- function(case, backend, parameterization, rep, status,
     replicate = as.integer(rep),
     status = status,
     error = error,
+    spec_sec = spec_sec,
     elapsed_sec = elapsed_sec,
+    backconvert_sec = backconvert_sec,
+    pipeline_sec = {
+      parts <- c(spec_sec, elapsed_sec, backconvert_sec)
+      if (all(is.na(parts))) NA_real_ else sum(parts, na.rm = TRUE)
+    },
     fmin = as.numeric(fit$fmin %||% NA_real_),
     iterations = as.integer(fit$iterations %||% NA_integer_),
     f_evals = as.integer(fit$f_evals %||% NA_integer_),
@@ -224,37 +266,59 @@ new_fit_row <- function(case, backend, parameterization, rep, status,
   )
 }
 
-fit_case_once <- function(case, spec, data, backend, parameterization, rep, control) {
-  start <- Sys.time()
+fit_case_once <- function(case, data, backend, parameterization, rep, control,
+                          marker_partable = NULL) {
+  spec_start <- Sys.time()
+  spec <- tryCatch(build_spec(case, parameterization), error = identity)
+  spec_sec <- as.numeric(difftime(Sys.time(), spec_start, units = "secs"))
+  if (inherits(spec, "error")) {
+    return(list(
+      row = new_fit_row(case, backend, parameterization, rep, "ERROR",
+                        error = paste("model_spec:", conditionMessage(spec)),
+                        spec_sec = spec_sec),
+      fit = NULL, implied = NULL
+    ))
+  }
+
+  fit_start <- Sys.time()
   fit <- tryCatch({
     magmaan::magmaan_core$fit_ml(
       spec, data, optimizer = backend, control = control
     )
   }, error = identity)
-  elapsed <- as.numeric(difftime(Sys.time(), start, units = "secs"))
+  fit_sec <- as.numeric(difftime(Sys.time(), fit_start, units = "secs"))
   if (inherits(fit, "error")) {
     return(list(
       row = new_fit_row(case, backend, parameterization, rep, "ERROR",
-                        error = conditionMessage(fit), elapsed_sec = elapsed),
-      fit = NULL,
-      implied = NULL
+                        error = conditionMessage(fit),
+                        spec_sec = spec_sec, elapsed_sec = fit_sec),
+      fit = NULL, implied = NULL
     ))
   }
+
+  backconvert_sec <- NA_real_
+  if (identical(parameterization, "std_lv") && !is.null(marker_partable)) {
+    bc_start <- Sys.time()
+    tryCatch(backconvert_std_lv_to_marker(fit, marker_partable),
+             error = function(e) NULL)
+    backconvert_sec <- as.numeric(difftime(Sys.time(), bc_start, units = "secs"))
+  }
+
   implied <- tryCatch(magmaan::magmaan_core$model_implied(fit), error = identity)
   if (inherits(implied, "error")) {
     return(list(
       row = new_fit_row(case, backend, parameterization, rep, "ERROR",
                         error = paste("model_implied:", conditionMessage(implied)),
-                        fit = fit, elapsed_sec = elapsed),
-      fit = fit,
-      implied = NULL
+                        fit = fit, spec_sec = spec_sec, elapsed_sec = fit_sec,
+                        backconvert_sec = backconvert_sec),
+      fit = fit, implied = NULL
     ))
   }
   list(
     row = new_fit_row(case, backend, parameterization, rep, "OK",
-                      fit = fit, elapsed_sec = elapsed),
-    fit = fit,
-    implied = implied
+                      fit = fit, spec_sec = spec_sec, elapsed_sec = fit_sec,
+                      backconvert_sec = backconvert_sec),
+    fit = fit, implied = implied
   )
 }
 
@@ -298,9 +362,15 @@ pair_row <- function(case, backend, rep, marker, stdlv) {
     std_lv_optimizer_status = s$optimizer_status,
     marker_converged = m$converged,
     std_lv_converged = s$converged,
+    marker_spec_sec = m$spec_sec,
+    std_lv_spec_sec = s$spec_sec,
     marker_elapsed_sec = m$elapsed_sec,
     std_lv_elapsed_sec = s$elapsed_sec,
+    std_lv_backconvert_sec = s$backconvert_sec,
+    marker_pipeline_sec = m$pipeline_sec,
+    std_lv_pipeline_sec = s$pipeline_sec,
     elapsed_ratio_std_lv_over_marker = ratio_or_na(s$elapsed_sec, m$elapsed_sec),
+    pipeline_ratio_std_lv_over_marker = ratio_or_na(s$pipeline_sec, m$pipeline_sec),
     fmin_marker = m$fmin,
     fmin_std_lv = s$fmin,
     fmin_diff_std_lv_minus_marker = s$fmin - m$fmin,
@@ -428,10 +498,12 @@ for (case in cases) {
   }
 
   data <- sample_stats(case)
+  marker_partable_ref <- specs$marker$partable
   for (backend in args$backends) {
     for (rep in seq_len(args$reps)) {
-      marker <- fit_case_once(case, specs$marker, data, backend, "marker", rep, control)
-      stdlv <- fit_case_once(case, specs$std_lv, data, backend, "std_lv", rep, control)
+      marker <- fit_case_once(case, data, backend, "marker", rep, control)
+      stdlv <- fit_case_once(case, data, backend, "std_lv", rep, control,
+                              marker_partable = marker_partable_ref)
       fits[[length(fits) + 1L]] <- marker$row
       fits[[length(fits) + 1L]] <- stdlv$row
       pairs[[length(pairs) + 1L]] <- pair_row(case, backend, rep, marker, stdlv)
@@ -460,3 +532,54 @@ cat(sprintf(
   file.path(results_dir, "pairs.csv"),
   file.path(results_dir, "summary.csv")
 ))
+
+ok_pairs <- if (nrow(pairs_df)) pairs_df[pairs_df$status == "OK" &
+                          is.finite(pairs_df$elapsed_ratio_std_lv_over_marker), ] else
+                          pairs_df
+valid_pairs <- if (nrow(ok_pairs)) ok_pairs[ok_pairs$same_implied_moments %in% TRUE, ] else ok_pairs
+n_skip_npar <- if (nrow(fits_df)) {
+  skip_rows <- fits_df[fits_df$status == "SKIP" &
+                       grepl("scale-equivalent", fits_df$error, fixed = TRUE), ]
+  length(unique(skip_rows$case_id))
+} else 0L
+n_err <- if (nrow(fits_df)) sum(fits_df$status == "ERROR", na.rm = TRUE) else 0
+n_mismatch <- if (nrow(pairs_df)) sum(pairs_df$material_mismatch, na.rm = TRUE) else 0
+
+cat("\n=== summary ===\n")
+cat(sprintf("cases attempted: %d (skipped for npar mismatch: %d)\n",
+            length(cases), n_skip_npar))
+cat(sprintf("backends: %s; reps: %d; OK pairs: %d (valid: %d)\n",
+            paste(args$backends, collapse = ","), args$reps,
+            nrow(ok_pairs), nrow(valid_pairs)))
+fmt_us <- function(x) sprintf("%6.0f us", x * 1e6)
+if (nrow(valid_pairs)) {
+  fit_r <- valid_pairs$elapsed_ratio_std_lv_over_marker
+  pipe_r <- valid_pairs$pipeline_ratio_std_lv_over_marker
+  qs_fit <- stats::quantile(fit_r, c(0.25, 0.5, 0.75), na.rm = TRUE)
+  qs_pipe <- stats::quantile(pipe_r, c(0.25, 0.5, 0.75), na.rm = TRUE)
+  cat(sprintf("fit-only ratio   std_lv/marker: median=%.3f (IQR %.3f-%.3f); std_lv faster on %.1f%%\n",
+              qs_fit[[2L]], qs_fit[[1L]], qs_fit[[3L]],
+              mean(fit_r < 1, na.rm = TRUE) * 100))
+  cat(sprintf("pipeline ratio   std_lv/marker: median=%.3f (IQR %.3f-%.3f); std_lv faster on %.1f%%\n",
+              qs_pipe[[2L]], qs_pipe[[1L]], qs_pipe[[3L]],
+              mean(pipe_r < 1, na.rm = TRUE) * 100))
+  cat("per-step medians:\n")
+  cat(sprintf("  spec build (marker) %s   (std_lv) %s\n",
+              fmt_us(stats::median(valid_pairs$marker_spec_sec, na.rm = TRUE)),
+              fmt_us(stats::median(valid_pairs$std_lv_spec_sec, na.rm = TRUE))))
+  cat(sprintf("  fit        (marker) %s   (std_lv) %s\n",
+              fmt_us(stats::median(valid_pairs$marker_elapsed_sec, na.rm = TRUE)),
+              fmt_us(stats::median(valid_pairs$std_lv_elapsed_sec, na.rm = TRUE))))
+  cat(sprintf("  backconvert (std_lv only)    %s\n",
+              fmt_us(stats::median(valid_pairs$std_lv_backconvert_sec, na.rm = TRUE))))
+  for (be in args$backends) {
+    sub <- valid_pairs[valid_pairs$backend == be, ]
+    if (!nrow(sub)) next
+    cat(sprintf("  %-14s n=%4d  fit_med=%.3f  pipe_med=%.3f  pipe_faster=%.1f%%\n",
+                be, nrow(sub),
+                stats::median(sub$elapsed_ratio_std_lv_over_marker, na.rm = TRUE),
+                stats::median(sub$pipeline_ratio_std_lv_over_marker, na.rm = TRUE),
+                mean(sub$pipeline_ratio_std_lv_over_marker < 1, na.rm = TRUE) * 100))
+  }
+}
+cat(sprintf("material mismatches: %d; fit errors: %d\n", n_mismatch, n_err))
