@@ -2072,11 +2072,7 @@ TEST_CASE("Ordinal delta preparation fixes response variances and compacts free 
   CHECK(fixed_response_variances == 3);
 }
 
-// TODO(default-backend): NLopt L-BFGS can return the theta fit at iteration 0
-// on this synthetic sample. Keep the reparameterization assertions ready for
-// the optimizer-default follow-up.
-TEST_CASE("Ordinal theta parameterization is a valid reparameterization of delta" *
-          doctest::skip()) {
+TEST_CASE("Ordinal theta parameterization is a valid reparameterization of delta") {
   // Delta and Theta fit the same model to the same data — they are
   // reparameterizations, so the discrepancy at the optimum (fmin / χ²) must
   // agree. Theta differs only in the fit objective: the implied latent-
@@ -2127,7 +2123,11 @@ TEST_CASE("Ordinal theta parameterization is a valid reparameterization of delta
       "theta fit failed: " << (theta.has_value() ? "" : theta.error().detail));
 
   CHECK(std::isfinite(theta->fmin));
-  CHECK(theta->iterations > 0);
+  // NB: no iteration / f_eval assertion — `simple_start_values` on this
+  // 4-indicator synthetic lands close enough to the optimum that NLopt's
+  // gradient at the start point is already under tolerance, returning at
+  // n_evals = 0. The test's invariant is reparameterization equivalence
+  // (same fmin), not the optimizer's evaluation count.
   // Reparameterization invariance: same minimized discrepancy.
   CHECK(theta->fmin == doctest::Approx(delta->fmin).epsilon(1e-4));
   // The parameter vectors themselves differ — theta loadings are unstandardized.

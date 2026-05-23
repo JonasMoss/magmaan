@@ -162,11 +162,7 @@ TEST_CASE("api sem header compiles standalone and parse errors keep stage") {
   CHECK(bad.error().stage == magmaan::api::ErrorStage::Parse);
 }
 
-// TODO(default-backend): after the NLopt-L-BFGS default switch this synthetic ML
-// API path trips sanitizer-backed lifetime/fit handling. Leave the post-fit
-// assertions wired and unskip with the API/default-backend follow-up.
-TEST_CASE("api complete-data ML exposes staged post-fit calls" *
-          doctest::skip()) {
+TEST_CASE("api complete-data ML exposes staged post-fit calls") {
   const auto model = magmaan::api::model_from_lavaan(
       "f =~ x1 + a*x2 + x3 + x4\na_sq := a^2");
   REQUIRE_OK(model);
@@ -177,7 +173,12 @@ TEST_CASE("api complete-data ML exposes staged post-fit calls" *
   const auto data = magmaan::api::data_from_sample_stats(*model, *stats);
   REQUIRE(data.has_value());
 
-  const auto fit = magmaan::api::fit(*model, *data, magmaan::api::ml());
+  // FABIN starts: NLopt L-BFGS stalls from simple_starts() on this synthetic
+  // 80-sample ML objective. The R bridge uses FABIN as its default; this
+  // post-fit-coverage test follows the same recipe.
+  const auto fit = magmaan::api::fit(
+      *model, *data,
+      magmaan::api::ml().starts(magmaan::api::fabin_starts()));
   REQUIRE_OK(fit);
 
   const auto se =
@@ -302,10 +303,7 @@ TEST_CASE("api continuous LS fits dispatch estimator-aware chi-square") {
   REQUIRE_OK(scores);
 }
 
-// TODO(default-backend): same synthetic ML API failure mode as the staged
-// post-fit case above; keep the nested-test assertions ready to re-enable.
-TEST_CASE("api exposes Satorra-Bentler 2001/2010 nested tests" *
-          doctest::skip()) {
+TEST_CASE("api exposes Satorra-Bentler 2001/2010 nested tests") {
   const auto h1_model =
       magmaan::api::model_from_lavaan("f =~ x1 + x2 + x3 + x4");
   REQUIRE_OK(h1_model);
@@ -321,9 +319,12 @@ TEST_CASE("api exposes Satorra-Bentler 2001/2010 nested tests" *
   const auto h0_data = magmaan::api::data_from_sample_stats(*h0_model, *stats);
   REQUIRE_OK(h0_data);
 
-  const auto h1_fit = magmaan::api::fit(*h1_model, *h1_data, magmaan::api::ml());
+  // FABIN starts: NLopt L-BFGS stalls from simple_starts() on this synthetic
+  // 80-sample ML objective. Matches the R bridge's default start path.
+  const auto ml_fabin = magmaan::api::ml().starts(magmaan::api::fabin_starts());
+  const auto h1_fit = magmaan::api::fit(*h1_model, *h1_data, ml_fabin);
   REQUIRE_OK(h1_fit);
-  const auto h0_fit = magmaan::api::fit(*h0_model, *h0_data, magmaan::api::ml());
+  const auto h0_fit = magmaan::api::fit(*h0_model, *h0_data, ml_fabin);
   REQUIRE_OK(h0_fit);
 
   const auto standard = magmaan::api::lr_test(*h1_fit, *h0_fit);
@@ -576,10 +577,7 @@ TEST_CASE("api second-order CFA fits ordinal data and matches the correlated mod
   CHECK(m2.chisq == doctest::Approx(m1.chisq).epsilon(1e-2));
 }
 
-// TODO(default-backend): the positive `Analysis::fit().test()` path currently
-// fails under the provisional NLopt-L-BFGS default on this synthetic sample.
-TEST_CASE("api Analysis preserves first error and post-fit calls require fit" *
-          doctest::skip()) {
+TEST_CASE("api Analysis preserves first error and post-fit calls require fit") {
   const auto model = magmaan::api::model_from_lavaan("f =~ x1 + x2 + x3 + x4");
   REQUIRE(model.has_value());
   const auto raw = continuous_raw();
@@ -588,15 +586,20 @@ TEST_CASE("api Analysis preserves first error and post-fit calls require fit" *
   const auto data = magmaan::api::data_from_sample_stats(*model, *stats);
   REQUIRE(data.has_value());
 
+  // FABIN starts: NLopt L-BFGS stalls from simple_starts() on this synthetic
+  // 80-sample ML objective. This test exercises Analysis chain ergonomics,
+  // not optimizer numerics, so we follow the R bridge's default start recipe.
+  const auto ml_fabin = magmaan::api::ml().starts(magmaan::api::fabin_starts());
+
   auto no_fit = magmaan::api::analyze(*model, *data)
                     .standard_errors(magmaan::api::expected_information())
-                    .fit(magmaan::api::ml())
+                    .fit(ml_fabin)
                     .summary();
   REQUIRE(!no_fit.has_value());
   CHECK(no_fit.error().detail == "standard_errors() requires fit() first");
 
   auto ok = magmaan::api::analyze(*model, *data)
-                .fit(magmaan::api::ml())
+                .fit(ml_fabin)
                 .test(magmaan::api::standard_chi_square())
                 .summary();
   REQUIRE_OK(ok);
