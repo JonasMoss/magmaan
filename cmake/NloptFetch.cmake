@@ -1,9 +1,9 @@
 # NLopt — optional optimizer backend, fetched on demand. Mirrors CeresFetch.cmake.
 #
-# magmaan only needs NLopt's C-API algorithms (SLSQP for the cross-check now,
-# AUGLAG for nonlinear constraints later), so every language binding and the
-# NLopt test suite are switched off, and the library is built static so it
-# links straight into libmagmaan.a. The knobs are set as cache variables
+# magmaan only needs NLopt's C-API algorithms for scalar optimizer
+# cross-checks, so every language binding and the NLopt test suite are
+# switched off, and the library is built static so it links straight into
+# libmagmaan.a. The knobs are set as cache variables
 # BEFORE `magmaan_find_or_fetch` so FetchContent picks them up when NLopt's
 # CMakeLists.txt is added to the build.
 #

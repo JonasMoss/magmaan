@@ -212,7 +212,9 @@ TEST_CASE("fit_fiml: complete-data path fits a saturated mean CFA near zero grad
   magmaan::optim::OptimOptions opts;
   opts.max_iter = 100;
   auto est = magmaan::estimate::fit_fiml(*built.pt, *built.rep, raw, theta0,
-                                         magmaan::estimate::fiml::FIML{}, opts);
+                                         magmaan::estimate::fiml::FIML{},
+                                         magmaan::estimate::Backend::NloptLbfgs,
+                                         opts);
   if (!est.has_value()) {
     FAIL(est.error().detail);
     return;
@@ -313,7 +315,9 @@ TEST_CASE("fiml_extras: complete data matches SampleStats fit_extras") {
   magmaan::optim::OptimOptions opts;
   opts.max_iter = 100;
   auto est = magmaan::estimate::fit_fiml(*built.pt, *built.rep, raw, theta0,
-                                         magmaan::estimate::fiml::FIML{}, opts);
+                                         magmaan::estimate::fiml::FIML{},
+                                         magmaan::estimate::Backend::NloptLbfgs,
+                                         opts);
   REQUIRE(est.has_value());
 
   auto fiml_fx = magmaan::estimate::fiml::fiml_extras(*built.pt, *built.rep, raw, *est);

@@ -83,7 +83,7 @@ struct EqConstraints {
 //   - a non-empty `pt.nonlinear_eq_rows` — a nonlinear `==` expression
 //     (`a == b*c`) — *unless* `allow_nonlinear` is set, in which case the
 //     nonlinear rows are simply skipped here (the caller enforces them via the
-//     augmented-Lagrangian path; see `nl_constraints.hpp`);
+//     IPOPT nonlinear-constraint path; see `nl_constraints.hpp`);
 //   - an infeasible linear-equality system (`R_full · θ = d` has no solution).
 post_expected<EqConstraints>
 build_eq_constraints(const spec::LatentStructure& pt,

@@ -155,15 +155,16 @@ BEGIN_RCPP
 END_RCPP
 }
 // fit_fiml_impl
-Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data, Rcpp::Nullable<Rcpp::List> control);
-RcppExport SEXP _magmaan_fit_fiml_impl(SEXP partableSEXP, SEXP raw_dataSEXP, SEXP controlSEXP) {
+Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control);
+RcppExport SEXP _magmaan_fit_fiml_impl(SEXP partableSEXP, SEXP raw_dataSEXP, SEXP optimizerSEXP, SEXP controlSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_fiml_impl(partable, raw_data, control));
+    rcpp_result_gen = Rcpp::wrap(fit_fiml_impl(partable, raw_data, optimizer, control));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1147,7 +1148,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fcsem_standard_errors_impl", (DL_FUNC) &_magmaan_fcsem_standard_errors_impl, 1},
     {"_magmaan_fcsem_fit_measures_impl", (DL_FUNC) &_magmaan_fcsem_fit_measures_impl, 1},
     {"_magmaan_fcsem_standardized_rows_impl", (DL_FUNC) &_magmaan_fcsem_standardized_rows_impl, 2},
-    {"_magmaan_fit_fiml_impl", (DL_FUNC) &_magmaan_fit_fiml_impl, 3},
+    {"_magmaan_fit_fiml_impl", (DL_FUNC) &_magmaan_fit_fiml_impl, 4},
     {"_magmaan_fit_uls_impl", (DL_FUNC) &_magmaan_fit_uls_impl, 5},
     {"_magmaan_fit_gls_impl", (DL_FUNC) &_magmaan_fit_gls_impl, 5},
     {"_magmaan_fit_wls_impl", (DL_FUNC) &_magmaan_fit_wls_impl, 6},

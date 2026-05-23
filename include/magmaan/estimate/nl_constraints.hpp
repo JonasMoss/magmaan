@@ -20,8 +20,8 @@ namespace magmaan::estimate {
 //
 // These are constraints with *clean* asymptotics: the constrained estimate is
 // an interior point of the lower-dimensional manifold `{θ : h(θ) = 0}`. The
-// augmented-Lagrangian fit path drives `h(θ̂) → 0`; the constrained vcov / df
-// project with the Jacobian `H = ∂h/∂θ` evaluated at θ̂.
+// IPOPT drives `h(θ̂) → 0`; the constrained vcov / df project with the
+// Jacobian `H = ∂h/∂θ` evaluated at θ̂.
 struct NonlinearEqConstraints {
   std::vector<spec::NlConstraint> rows;   // one compiled tree per nonlinear `==`
   std::int32_t                    npar = 0;

@@ -35,6 +35,10 @@ using ObjectiveFn = std::function<double(const Eigen::VectorXd&, Eigen::VectorXd
 // x ↦ full θ. The optimizer drives `x` (which may be a reduced parameter —
 // profiled β, or constraint-reduced α); `expand` recovers the full vector.
 using ExpandFn    = std::function<Eigen::VectorXd(const Eigen::VectorXd&)>;
+// Nonlinear optimizer constraints in the driven coordinate system.
+// `h(x)` is the constraint residual vector and `J_h(x)` its Jacobian.
+using ConstraintFn    = std::function<Eigen::VectorXd(const Eigen::VectorXd&)>;
+using ConstraintJacFn = std::function<Eigen::MatrixXd(const Eigen::VectorXd&)>;
 
 // LS-shape callback aliases — the single-argument residual / Jacobian closures
 // the bounded optimizers' `minimize_ls` overloads take. Identical to
@@ -61,6 +65,18 @@ struct ScalarProblem {
   ObjectiveFn  f;
   Eigen::Index n_param = 0;
   ExpandFn     expand;
+};
+
+// Scalar nonlinear program: minimize F(x) subject to
+// constraint_lower <= h(x) <= constraint_upper and simple bounds on x. Equality
+// constraints use identical lower/upper entries, e.g. 0 == h_j(x).
+struct ConstrainedScalarProblem {
+  ScalarProblem   objective;
+  ConstraintFn    h;
+  ConstraintJacFn J_h;
+  Eigen::Index    n_constraint = 0;
+  Eigen::VectorXd constraint_lower;
+  Eigen::VectorXd constraint_upper;
 };
 
 // Optimizer termination status. The error path (`fit_expected`'s unexpected

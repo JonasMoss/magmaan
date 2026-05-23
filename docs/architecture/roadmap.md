@@ -53,12 +53,12 @@ golden `parTable()` fixtures.
   the reduced α for the pure-merge case.
 - Nonlinear equality constraints (`a == b*c`, `b1 == (b2+b3)^2`) for the ML
   and complete-data LS paths: compiled to name-free expression trees by
-  `resolve_lin_constraints`, enforced by an augmented-Lagrangian outer loop
-  over L-BFGS, with the constrained vcov / df projected through the constraint
-  Jacobian H(θ̂). They may be combined with linear equality constraints in the
-  same model — the augmented-Lagrangian loop then runs in the
-  linear-constraint-reduced α-space. FIML, ordinal, and the separable (SNLLS)
-  path reject them.
+  `resolve_lin_constraints`, enforced by the optional IPOPT interior-point
+  backend with limited-memory Hessian approximation, with the constrained vcov
+  / df projected through the constraint Jacobian H(θ̂). They may be combined
+  with linear equality constraints in the same model — IPOPT then runs in the
+  linear-constraint-reduced α-space. FIML has the same IPOPT-only nonlinear
+  constraint support; ordinal and the separable (SNLLS) path reject them.
 - The expression sub-language shared by `:=` defined parameters and `==`
   constraints supports `+ - * / ^`, unary `+ -`, and the unary functions
   `exp` / `log`; both the defined-parameter evaluator and the
@@ -132,8 +132,8 @@ fit_wls/fit_*_snlls/fit_*_ordinal` entries; the table lives in
 `include/magmaan/estimate/backend_strings.hpp` and parses into the C++
 `Backend` enum. Accepted strings: `"ceres"`, `"ceres-bfgs"`,
 `"nlopt-slsqp"`, `"nlopt-bobyqa"`, `"nlopt-tnewton"`, `"nlopt-var2"`,
-`"nlopt-lbfgs"`, `"port"`, `"port-nls"`. The R side passes the same string
-through to a single Rcpp shim per fit family — no per-Backend wrapper
+`"nlopt-lbfgs"`, `"ipopt"`, `"port"`, `"port-nls"`. The R side passes the same
+string through to a single Rcpp shim per fit family — no per-Backend wrapper
 explosion. Solver tuning rides on a generic `control = list(max_iter, ftol,
 gtol, history)` argument.
 
@@ -168,6 +168,11 @@ stop rather than any usable non-error return.
 - `Backend::Ceres` / `Backend::CeresBfgs` cover Ceres Levenberg-Marquardt and
   dense line-search BFGS on the least-squares path (build with
   `MAGMAAN_WITH_CERES=ON`).
+- `Backend::Ipopt` is the optional system-IPOPT interior-point backend (build
+  with `MAGMAAN_WITH_IPOPT=ON`). It is available as a general scalar optimizer
+  and is the only backend that accepts nonlinear equality constraints. v1 uses
+  IPOPT's limited-memory Hessian approximation, so magmaan supplies objective
+  gradients and constraint Jacobians but not exact Lagrangian Hessians.
 - `Backend::NloptSlsqp` exposes NLopt's SLSQP for ML and LS scalar paths
   (gradient SQP, Kraft 1988).
 - `Backend::NloptBobyqa`, `Backend::NloptTnewton`, `Backend::NloptVar2`,
@@ -178,11 +183,12 @@ stop rather than any usable non-error return.
   BFGS (VAR2); and NLopt's own L-BFGS. All five share the one
   `NloptOptimizer` adapter parameterised over an opaque
   `NloptAlgorithm` enum.
-- The local `ceres` preset is the optional optimizer comparison build: it
-  enables Ceres while NLopt and PORT remain enabled by default. `just
-  r-install-ceres` mirrors the Ceres compile definition into the R shared
-  object so all accepted optimizer strings are executable from the R dev
-  surface in one install.
+- The local `ceres` and `ipopt` presets are optional optimizer comparison
+  builds. Ceres is FetchContent-managed; IPOPT is deliberately a system
+  dependency because its BLAS/LAPACK and sparse-linear-solver stack is a
+  toolchain choice. `just r-install-ceres` and `just r-install-ipopt` mirror
+  the relevant compile definition into the R shared object so the accepted
+  optimizer strings are executable from the R dev surface in one install.
 
 ### Least-squares estimators
 
@@ -869,11 +875,10 @@ failures.
 - Browne residual ADF is complete-data only.
 - Score-test EPC is raw, unstandardized EPC only; standardized EPC and absent
   row-generation helpers are not yet part of the public contract.
-- Nonlinear *equality* constraints are supported for ML and complete-data LS
-  (augmented-Lagrangian fit, Jacobian-projected vcov/df), including in
+- Nonlinear *equality* constraints are supported for ML, complete-data LS, and
+  FIML through the IPOPT backend (Jacobian-projected vcov/df), including in
   combination with linear equality constraints in the same model — but not for
-  FIML, ordinal, or the separable SNLLS path; those combinations fail
-  explicitly.
+  ordinal or the separable SNLLS path; those combinations fail explicitly.
 - Inequality constraints (`<` / `>`) and active-bound inference remain
   unsupported: inequality-constrained estimation needs boundary
   (chi-bar-squared) asymptotics magmaan does not implement. They fail with an

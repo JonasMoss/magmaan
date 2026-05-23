@@ -65,6 +65,9 @@ struct Estimates {
 //                  variable-metric. The non-limited-memory counterpart to
 //                  L-BFGS; can outperform L-BFGS at SEM-sized n.
 //   NloptLbfgs   — NLopt's own L-BFGS; current default scalar backend.
+//   Ipopt        — IPOPT interior-point backend with limited-memory Hessian
+//                  approximation. Needs MAGMAAN_WITH_IPOPT. General scalar
+//                  backend and the only nonlinear-equality constraint backend.
 //   Port         — PORT drmngb model-Hessian trust region with bounds (the
 //                  algorithm behind R's `nlminb`; TOMS 611). Needs
 //                  MAGMAAN_WITH_PORT (default ON). Replaces the now-retired
@@ -82,6 +85,7 @@ enum class Backend {
   NloptTnewton,
   NloptVar2,
   NloptLbfgs,
+  Ipopt,
   Port,
   PortNls,
 };

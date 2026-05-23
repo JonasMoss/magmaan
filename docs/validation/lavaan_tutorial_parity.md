@@ -97,10 +97,10 @@ constraints (`b1 > exp(...)`), multiple modifiers on one term.
   - **`orthogonal=` ✓** — `model_spec(..., orthogonal = TRUE)` fixes the auto
     latent covariances at 0, mirroring lavaan's partable (`lavaanify_test`).
   - **Nonlinear equality constraints ✓** — `b1 == (b2+b3)^2` is compiled and
-    enforced by the augmented-Lagrangian fit path; the constrained vcov / df
-    are Jacobian-projected. `exp()` / `log()` function calls are supported in
+    enforced by the IPOPT fit path; the constrained vcov / df are
+    Jacobian-projected. `exp()` / `log()` function calls are supported in
     constraint and `:=` expressions, and a model carrying *both* a linear and
-    a nonlinear equality constraint fits (the AL runs in the linear-reduced
+    a nonlinear equality constraint fits (IPOPT runs in the linear-reduced
     α-space). Lavaan-parity unit tests in `constraints_test`.
 - **Gap:**
   - **Inequality constraints `<` / `>` ✗** — out of scope: estimation would be

@@ -179,15 +179,16 @@ fiml_baseline_chi2(const spec::LatentStructure& pt,
                    const RawData& raw,
                    FIML discrepancy = {});
 
-// Full-information ML fit over raw continuous data. `opts` tunes the
-// unbounded NLopt L-BFGS optimizer; equality constraints are folded in via
-// the θ = θ₀ + K·α reparameterization.
+// Full-information ML fit over raw continuous data. `backend` selects the
+// scalar optimizer (NLopt L-BFGS by default, optional IPOPT when enabled);
+// equality constraints are folded in via the θ = θ₀ + K·α reparameterization.
 fit_expected<Estimates>
 fit_fiml(spec::LatentStructure pt,
          const model::MatrixRep& rep,
          const RawData& raw,
          const Eigen::VectorXd& x0,      // start values, size pt.n_free()
          FIML discrepancy = {},
+         Backend backend = Backend::NloptLbfgs,
          optim::OptimOptions opts = {});
 
 }  // namespace magmaan::estimate::fiml

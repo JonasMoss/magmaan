@@ -61,13 +61,21 @@ ok(f_orth$converged && est_match(f_orth, l_orth), "orthogonal = TRUE")
 ## --- nonlinear equality constraint: a == b^2 -------------------------------
 m_nl <- "visual =~ x1 + a*x2 + b*x3
          a == b^2"
-f_nl <- magmaan(m_nl, hs[, c("x1","x2","x3")], estimator = "ML",
-                se = "none", test = "none")
-l_nl <- cfa(m_nl, data = hs[, c("x1","x2","x3")])
-ok(f_nl$converged && est_match(f_nl, l_nl), "nonlinear constraint a == b^2")
-## the augmented-Lagrangian fit satisfies the constraint at the solution
-a_hat <- f_nl$partable$est[f_nl$partable$lhs == "visual" & f_nl$partable$rhs == "x2"][1]
-b_hat <- f_nl$partable$est[f_nl$partable$lhs == "visual" & f_nl$partable$rhs == "x3"][1]
-ok(near(a_hat, b_hat^2, 1e-5),                 "  constraint h(theta) = a - b^2 ~ 0")
+f_nl <- tryCatch(
+  magmaan(m_nl, hs[, c("x1","x2","x3")], estimator = "ML",
+          optimizer = "ipopt", se = "none", test = "none"),
+  error = function(e) e)
+if (inherits(f_nl, "error") && grepl("IPOPT|ipopt", conditionMessage(f_nl))) {
+  cat(sprintf("  %-44s %s\n", "nonlinear constraint a == b^2",
+              "skipped (IPOPT not enabled)"))
+} else {
+  if (inherits(f_nl, "error")) stop(f_nl)
+  l_nl <- cfa(m_nl, data = hs[, c("x1","x2","x3")])
+  ok(f_nl$converged && est_match(f_nl, l_nl), "nonlinear constraint a == b^2")
+  ## IPOPT satisfies the constraint at the solution when nonlinear constraints are enabled
+  a_hat <- f_nl$partable$est[f_nl$partable$lhs == "visual" & f_nl$partable$rhs == "x2"][1]
+  b_hat <- f_nl$partable$est[f_nl$partable$lhs == "visual" & f_nl$partable$rhs == "x3"][1]
+  ok(near(a_hat, b_hat^2, 1e-5),               "  constraint h(theta) = a - b^2 ~ 0")
+}
 
 cat("model syntax 2: ok\n")

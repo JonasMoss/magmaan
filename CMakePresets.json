@@ -96,6 +96,18 @@
         "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG -march=native",
         "MAGMAAN_WITH_CERES": "ON"
       }
+    },
+    {
+      "name": "ipopt",
+      "displayName": "Optional IPOPT optimizer (Release + native CPU)",
+      "inherits": "_local",
+      "binaryDir": "${sourceDir}/build/ipopt",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG -march=native",
+        "MAGMAAN_WITH_IPOPT": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -106,7 +118,8 @@
     { "name": "release", "configurePreset": "release" },
     { "name": "asan",    "configurePreset": "asan" },
     { "name": "ubsan",   "configurePreset": "ubsan" },
-    { "name": "ceres",   "configurePreset": "ceres" }
+    { "name": "ceres",   "configurePreset": "ceres" },
+    { "name": "ipopt",   "configurePreset": "ipopt" }
   ],
   "testPresets": [
     {
@@ -121,6 +134,7 @@
     { "name": "release", "inherits": "default", "configurePreset": "release" },
     { "name": "asan",    "inherits": "default", "configurePreset": "asan" },
     { "name": "ubsan",   "inherits": "default", "configurePreset": "ubsan" },
-    { "name": "ceres",   "inherits": "default", "configurePreset": "ceres" }
+    { "name": "ceres",   "inherits": "default", "configurePreset": "ceres" },
+    { "name": "ipopt",   "inherits": "default", "configurePreset": "ipopt" }
   ]
 }

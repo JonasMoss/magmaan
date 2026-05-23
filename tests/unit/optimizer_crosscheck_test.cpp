@@ -4,6 +4,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/estimate/bounds.hpp"
+#include "magmaan/estimate/backend_strings.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/sample_stats.hpp"
@@ -55,6 +56,13 @@ Eigen::Matrix4d make_offmanifold_S() {
 }
 
 }  // namespace
+
+TEST_CASE("optimizer dispatch: Backend::Ipopt string round-trips") {
+  auto backend = magmaan::estimate::backend_from_string("ipopt");
+  REQUIRE(backend.has_value());
+  CHECK(*backend == Backend::Ipopt);
+  CHECK(magmaan::estimate::backend_name(Backend::Ipopt) == "ipopt");
+}
 
 #ifdef MAGMAAN_WITH_PORT
 TEST_CASE("optimizer cross-check: PORT drmngb matches NLopt L-BFGS on ML") {
