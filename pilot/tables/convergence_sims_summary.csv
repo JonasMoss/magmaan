@@ -1,0 +1,9 @@
+"design","optimizer","n_cells","converged","convergence_rate","error_rate","median_elapsed_sec","median_iterations","median_fmin_abs_diff_lavaan","top_error_kind"
+"dejonckere_crossloading_2025","lbfgs",2,0,0,0,0.0025,0,,
+"dejonckere_crossloading_2025","nlopt-lbfgs",2,2,1,0,0.0015,0,,
+"dejonckere_shrinkage_2023_study1","lbfgs",2,1,0.5,0.5,0.0095,66,,"OptimizerNonConvergence (1)"
+"dejonckere_shrinkage_2023_study1","nlopt-lbfgs",2,2,1,0,0.0015,0,,
+"dejonckere_simple_2025","lbfgs",2,0,0,1,0.0185,,,"OptimizerNonConvergence (2)"
+"dejonckere_simple_2025","nlopt-lbfgs",2,2,1,0,0.002,0,,
+"ludtke_cfa_2021","lbfgs",2,0,0,1,0.016,,,"LineSearchFailed (1)"
+"ludtke_cfa_2021","nlopt-lbfgs",2,2,1,0,0.0015,0,,
