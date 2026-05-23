@@ -2,18 +2,20 @@
 
 Reconnaissance date: 2026-05-22.
 
-Status update: the first tracked scout now exists as
-`tests/tools/scout_paper_corpus.R` plus
-`tests/fixtures/paper_corpus/scout_manifest.json`. It inventories the seed OSF
+Status update: the first tracked scout now lives in the ignored nested
+`external/paper_corpus` repository. Its export,
+`tests/fixtures/paper_corpus/scout_manifest.json`, inventories the seed OSF
 nodes below, scans only small code files for lavaan-shaped signals, and keeps
-raw downloads out of the repository.
+raw downloads out of magmaan history.
 
 Promotion update: `zxqvn` is now the first promoted paper-corpus fixture.
-`tests/tools/regen_paper_corpus_fixtures.R` reads ignored raw files from
-`external/paper_corpus/zxqvn/raw/` and writes
-`tests/fixtures/paper_corpus/zxqvn_reference.json`, which freezes the core
-complete-data ML point-estimate surface. The source script's clustered-SE
-option is recorded as catalogued but outside this first parity surface.
+`external/paper_corpus/scripts/export_magmaan.R` reads tracked minimal derived
+files from the nested corpus repo and writes
+`external/paper_corpus/exports/magmaan/zxqvn_reference.json`; magmaan's bridge
+script copies that export to `tests/fixtures/paper_corpus/zxqvn_reference.json`.
+The fixture freezes the core complete-data ML point-estimate surface. The
+source script's clustered-SE option is recorded as catalogued but outside this
+first parity surface.
 
 The goal is a future `paper_corpus` alongside the textbook corpus: empirical or
 methods-paper SEM examples with reusable model syntax and data, preferably
@@ -135,11 +137,11 @@ catalogued separately from the linear SEM core parity surface.
 
 ## Proposed First Pass
 
-1. Done: build a read-only OSF scout script under `tests/tools/`.
+1. Done: build a read-only OSF scout script under `external/paper_corpus/scripts/`.
 2. Done: seed it with the nodes above plus a small manually maintained query result
    list.
 3. Done: write a tracked scout manifest with file inventories and lavaan-detection
-   summaries, but do not commit raw OSF downloads.
+   summaries, but do not commit raw OSF downloads to magmaan.
 4. Partly done: promote `hwkem` and `zxqvn` first:
    - `hwkem` for realistic longitudinal CFA/SEM/RI-CLPM complexity.
    - Done: `zxqvn` for a compact empirical mediation SEM with small data.

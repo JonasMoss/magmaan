@@ -81,15 +81,14 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   ordinal/mixed parity checks once the desired categorical oracle surface is
   settled.
 - **S/M.** Promote the remaining first paper-corpus seed and broaden the
-  paper-corpus fixture surface. `tests/tools/scout_paper_corpus.R` now writes
-  `tests/fixtures/paper_corpus/scout_manifest.json` from seven public OSF seed
-  nodes, and `zxqvn` is promoted into
-  `tests/fixtures/paper_corpus/zxqvn_reference.json` as a core complete-data ML
-  point-estimate fixture. Remaining work: promote `hwkem`, document
-  license/data-handling for that richer source, extract supported lavaan
-  model/data pairs, classify RI-CLPM pieces outside the core parity surface
-  where needed, and decide whether clustered-SE handling should become a later
-  paper-corpus inference fixture.
+  paper-corpus fixture surface. `external/paper_corpus` now owns scouting,
+  minimal derived lavaan cases, validation, and magmaan JSON exports; magmaan
+  consumes copied snapshots under `tests/fixtures/paper_corpus/`. `zxqvn` is
+  promoted as a core complete-data ML point-estimate fixture. Remaining work:
+  promote `hwkem`, document license/data-handling for that richer source,
+  extract supported lavaan model/data pairs, classify RI-CLPM pieces outside
+  the core parity surface where needed, and decide whether clustered-SE
+  handling should become a later paper-corpus inference fixture.
 - **S/M.** Add a small OpenMx tutorial corpus as an offline second-oracle
   cross-check, not as a runtime input format. Start with the dormant
   `openmx_mimic` case in `benchmarks/r/cases.R` and the OpenMx RAM examples

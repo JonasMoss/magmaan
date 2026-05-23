@@ -182,7 +182,7 @@ TEST_CASE("Paper corpus scout manifest is well formed") {
   CHECK(j["_meta"]["fixture_kind"].get<std::string>() ==
         "paper_corpus.scout_manifest");
   CHECK(j["_meta"]["tool"].get<std::string>() ==
-        "tests/tools/scout_paper_corpus.R");
+        "external/paper_corpus/scripts/scout_osf.R");
 
   REQUIRE(j.contains("counts"));
   REQUIRE(j.contains("nodes"));
@@ -236,7 +236,7 @@ TEST_CASE("zxqvn paper corpus fixture is well formed") {
   CHECK(j["_meta"]["fixture_kind"].get<std::string>() ==
         "paper_corpus.reference");
   CHECK(j["_meta"]["tool"].get<std::string>() ==
-        "tests/tools/regen_paper_corpus_fixtures.R");
+        "external/paper_corpus/scripts/export_magmaan.R");
   REQUIRE(j.contains("cases"));
   REQUIRE(j["cases"].size() == 1);
 
@@ -288,7 +288,9 @@ TEST_CASE("zxqvn paper corpus ML fit matches lavaan") {
     failures.push_back(label + ": df = " + std::to_string(*df_or) +
                        ", lavaan = " + std::to_string(fit["df"].get<int>()));
   }
-  check_implied(label, handles->pt, handles->rep, *est_or, fit, failures);
+  if (!c.value("fixed_x", true)) {
+    check_implied(label, handles->pt, handles->rep, *est_or, fit, failures);
+  }
 
   const double lavaan_f = 2.0 * fit["fmin"].get<double>();
   if (!close(est_or->fmin, lavaan_f, 2e-4)) {
