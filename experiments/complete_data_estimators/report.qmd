@@ -1,0 +1,195 @@
+---
+title: "Complete-Data Estimator Timing"
+format: html
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path), dirname(getwd())))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"), candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates, "fits.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+
+fits_path <- file.path(results_dir, "fits.csv")
+pairs_path <- file.path(results_dir, "pairs_vs_nt.csv")
+summary_path <- file.path(results_dir, "case_summary.csv")
+if (!file.exists(fits_path) || !file.exists(pairs_path) || !file.exists(summary_path)) {
+  stop("Missing experiment CSVs. Run: Rscript run_experiment.R")
+}
+
+fits <- utils::read.csv(fits_path, check.names = FALSE)
+pairs <- utils::read.csv(pairs_path, check.names = FALSE)
+case_summary <- utils::read.csv(summary_path, check.names = FALSE)
+
+fmt_num <- function(x, digits = 3) {
+  ifelse(is.na(x), "", formatC(x, format = "g", digits = digits))
+}
+fmt_ms <- function(x) {
+  ifelse(is.na(x), "", sprintf("%.3f", 1000 * x))
+}
+fmt_ratio <- function(x) {
+  ifelse(is.na(x), "", sprintf("%.3f", x))
+}
+fmt_pct <- function(x) {
+  ifelse(is.na(x), "", sprintf("%.1f%%", 100 * x))
+}
+median_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) return(NA_real_)
+  stats::median(x)
+}
+```
+
+This is a curiosity-grade comparison of complete-data estimator paths in
+magmaan. `NT` is normal-theory ML. `ULS` and `GLS` are the complete-data GMM
+least-squares paths. Parameter estimates, implied moments, and a naive
+chi-square-like value are compared back to NT.
+
+The naive chi-square column is exactly
+`magmaan_core$infer_chi2_stat(sample_stats, fit$fmin)`. For ULS/GLS this is a
+rough common-scale diagnostic, not an official test statistic.
+
+## Run Overview
+
+```{r}
+overview <- data.frame(
+  cases = length(unique(fits$case_id)),
+  labels = length(unique(fits$label)),
+  fit_rows = nrow(fits),
+  pair_rows = nrow(pairs),
+  ok_fits = sum(fits$status == "OK", na.rm = TRUE),
+  errors = sum(fits$status == "ERROR", na.rm = TRUE),
+  skips = sum(fits$status == "SKIP", na.rm = TRUE),
+  stringsAsFactors = FALSE
+)
+knitr::kable(overview)
+```
+
+## Estimator Summary
+
+```{r}
+fit_ok <- fits[fits$status == "OK", ]
+pair_ok <- pairs[pairs$status == "OK", ]
+
+fit_rows <- lapply(split(fit_ok, fit_ok$estimator), function(x) {
+  data.frame(
+    estimator = x$estimator[[1]],
+    ok_fits = nrow(x),
+    convergence_rate = mean(x$converged, na.rm = TRUE),
+    median_elapsed_ms = median_na(x$elapsed_sec) * 1000,
+    median_f_evals = median_na(x$f_evals),
+    median_g_evals = median_na(x$g_evals),
+    median_grad_norm = median_na(x$grad_norm),
+    stringsAsFactors = FALSE
+  )
+})
+fit_table <- do.call(rbind, fit_rows)
+fit_table$convergence_rate <- fmt_pct(fit_table$convergence_rate)
+fit_table$median_elapsed_ms <- fmt_num(fit_table$median_elapsed_ms)
+fit_table$median_f_evals <- fmt_num(fit_table$median_f_evals)
+fit_table$median_g_evals <- fmt_num(fit_table$median_g_evals)
+fit_table$median_grad_norm <- fmt_num(fit_table$median_grad_norm)
+knitr::kable(fit_table, row.names = FALSE)
+```
+
+## Drift From NT
+
+```{r}
+if (nrow(pair_ok)) {
+  pair_rows <- lapply(split(pair_ok, pair_ok$estimator), function(x) {
+    data.frame(
+      estimator = x$estimator[[1]],
+      ok_pairs = nrow(x),
+      median_elapsed_ratio_vs_nt = median_na(x$elapsed_ratio_estimator_over_nt),
+      median_param_max_abs_diff = median_na(x$param_max_abs_diff),
+      median_param_rms_diff = median_na(x$param_rms_diff),
+      median_sigma_max_abs_diff = median_na(x$implied_sigma_max_abs_diff),
+      median_naive_chisq_diff = median_na(x$naive_chisq_diff_estimator_minus_nt),
+      median_abs_naive_chisq_diff = median_na(x$abs_naive_chisq_diff),
+      stringsAsFactors = FALSE
+    )
+  })
+  drift_table <- do.call(rbind, pair_rows)
+  num <- vapply(drift_table, is.numeric, logical(1))
+  drift_table[num] <- lapply(drift_table[num], fmt_num)
+  knitr::kable(drift_table, row.names = FALSE)
+}
+```
+
+## Timing Ratios
+
+Ratio below is estimator elapsed time divided by NT elapsed time for the same
+case and replicate. Values below 1 mean the estimator was faster than NT in this
+run.
+
+```{r}
+#| fig-width: 7
+#| fig-height: 4
+if (nrow(pair_ok) && any(is.finite(pair_ok$elapsed_ratio_estimator_over_nt))) {
+  op <- par(mar = c(4, 5, 1, 1))
+  boxplot(elapsed_ratio_estimator_over_nt ~ estimator,
+          data = pair_ok,
+          log = "y",
+          ylab = "elapsed ratio vs NT",
+          xlab = "estimator",
+          outline = FALSE,
+          col = "grey90")
+  stripchart(elapsed_ratio_estimator_over_nt ~ estimator,
+             data = pair_ok,
+             add = TRUE,
+             vertical = TRUE,
+             method = "jitter",
+             jitter = 0.15,
+             pch = 16,
+             col = grDevices::adjustcolor("steelblue", alpha.f = 0.35))
+  abline(h = 1, lty = 2, col = "gray40")
+  par(op)
+} else {
+  plot.new(); text(0.5, 0.5, "No complete pairs")
+}
+```
+
+## Label-Sorted Case Table
+
+```{r}
+display <- case_summary[order(case_summary$label, case_summary$case_id), ]
+keep <- c("label", "source", "family",
+          "nt_time_sec", "uls_time_sec", "gls_time_sec",
+          "uls_elapsed_ratio_over_nt", "gls_elapsed_ratio_over_nt",
+          "uls_param_max_abs_diff", "gls_param_max_abs_diff",
+          "uls_chisq_diff_vs_nt", "gls_chisq_diff_vs_nt")
+display <- display[keep]
+for (col in c("nt_time_sec", "uls_time_sec", "gls_time_sec")) {
+  display[[col]] <- fmt_ms(display[[col]])
+}
+for (col in c("uls_elapsed_ratio_over_nt", "gls_elapsed_ratio_over_nt")) {
+  display[[col]] <- fmt_ratio(display[[col]])
+}
+for (col in c("uls_param_max_abs_diff", "gls_param_max_abs_diff",
+              "uls_chisq_diff_vs_nt", "gls_chisq_diff_vs_nt")) {
+  display[[col]] <- fmt_num(display[[col]])
+}
+names(display) <- c("label", "source", "family",
+                    "NT ms", "ULS ms", "GLS ms",
+                    "ULS/NT", "GLS/NT",
+                    "ULS max |dpar|", "GLS max |dpar|",
+                    "ULS naive dchisq", "GLS naive dchisq")
+knitr::kable(display, row.names = FALSE)
+```
+
+## Fit Errors And Skips
+
+```{r}
+problem_rows <- fits[fits$status != "OK", ]
+if (nrow(problem_rows)) {
+  keep <- c("case_id", "label", "estimator", "replicate", "status", "error")
+  knitr::kable(head(problem_rows[keep], 60L), row.names = FALSE)
+} else {
+  knitr::kable(data.frame(note = "No skipped or failed fit rows."))
+}
+```
