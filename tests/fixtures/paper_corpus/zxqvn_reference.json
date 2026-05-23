@@ -3,10 +3,10 @@
     "format_version": 1,
     "fixture_kind": "paper_corpus.reference",
     "corpus_id": "magmaan_paper_corpus_zxqvn_v1",
-    "tool": "tests/tools/regen_paper_corpus_fixtures.R",
-    "generated": "2026-05-23 08:12:50 +0200",
+    "tool": "external/paper_corpus/scripts/export_magmaan.R",
+    "generated": "2026-05-23 08:34:16 +0200",
     "lavaan_version": "0.6.22.2560",
-    "raw_storage": "external/paper_corpus/zxqvn/raw"
+    "corpus_manifest": "external/paper_corpus/manifest.json"
   },
   "cases": [
     {
@@ -32,12 +32,14 @@
         {
           "name": "analysis_code.R",
           "url": "https://osf.io/download/9zxmr/",
+          "path": "raw/zxqvn/analysis_code.R",
           "md5": "ba3af148608f42bba127dcd68ef44fe6",
           "sha256": "61ce7473bf50cf679af2428328bd7c633facb4c71d05e05dd8afd411ddc47778"
         },
         {
           "name": "data.rdata",
           "url": "https://osf.io/download/3z8t2/",
+          "path": "raw/zxqvn/data.rdata",
           "md5": "9d778b146e383e40f84cfe82d3e2ede3",
           "sha256": "b7506610f5b1e1e3516bd1c7def2b36e74bb12c650ae85868f38a8ca940750aa"
         }
@@ -48,7 +50,7 @@
         "behavior_count": 7,
         "cluster_count": 992,
         "behaviors": ["shower", "notcar", "lamps", "protein", "sortwaste", "hangdry", "temp"],
-        "transformation": "Base-R equivalent of source pivot_longer over behavior-specific PEBT1/PEBT2/positive/negative/intention columns, 0-1 rescaling, and Gender != 3 filtering."
+        "transformation": "Pivot behavior-specific PEBT1/PEBT2/positive/negative/intention columns to long form, rescale PEBT/intention from 1-5 to 0-1, rescale affect ratings from 0-100 to 0-1, and filter Gender != 3."
       },
       "fits": {
         "ML": {

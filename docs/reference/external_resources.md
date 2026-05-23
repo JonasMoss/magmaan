@@ -18,6 +18,12 @@ Tracked research notes and simulation scripts live under `docs/research/`.
 such as lavaan, semTests, or robcat when reading implementation details. It is
 not part of the build, not part of CI, and not a required test input.
 
+`external/paper_corpus` is a special ignored nested Git repository for curated
+paper-corpus work. It owns raw downloads, tracked minimal derived data/models,
+raw-to-derived validation, and magmaan-facing JSON exports. magmaan consumes
+only copied export snapshots under `tests/fixtures/paper_corpus/`; default
+C++ tests do not read the nested repository.
+
 Fixture regeneration uses installed R packages at the pinned versions recorded
 in `tests/fixtures/`, then writes self-contained JSON fixtures. The checked-in
 C++ tests consume those fixtures only; they do not run R and do not read

@@ -3,8 +3,8 @@
     "format_version": 1,
     "fixture_kind": "paper_corpus.scout_manifest",
     "corpus_id": "magmaan_paper_corpus_scout_v1",
-    "tool": "tests/tools/scout_paper_corpus.R",
-    "generated": "2026-05-23 08:18:53 +0200",
+    "tool": "external/paper_corpus/scripts/scout_osf.R",
+    "generated": "2026-05-23 08:42:58 +0200",
     "source_note": "OSF API metadata plus small-code scans; raw downloads are not tracked.",
     "max_scan_bytes": 250000
   },
