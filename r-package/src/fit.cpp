@@ -1204,8 +1204,8 @@ Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats,
 
 // fit_ml() — public ML spelling. Threads through an `optimizer` string and
 // optional `control` list. Backends:
-//   "nlopt-lbfgs" (default), "port", "nlopt-slsqp", "nlopt-tnewton",
-//   "nlopt-var2"  (any scalar-shape backend)
+//   "nlopt-lbfgs" (default), "ipopt", "port", "nlopt-slsqp",
+//   "nlopt-tnewton", "nlopt-var2"  (any scalar-shape backend)
 // "ceres" / "ceres-bfgs" are rejected — Ceres applies to the LS path only.
 // "nlopt-bobyqa" requires finite bounds, supplied via `bounds = NULL`. Since
 // ML doesn't currently take a bounds argument we leave that error to surface
@@ -1329,6 +1329,7 @@ Rcpp::DataFrame fcsem_standardized_rows_impl(Rcpp::List fit,
 //
 // [[Rcpp::export]]
 Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
+                         Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
                          Rcpp::Nullable<Rcpp::List> control = R_NilValue) {
   magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_fiml");
   magmaan::spec::Starts starts = std::move(parsed.starts);
@@ -1351,9 +1352,10 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
   if (!ctx.meanstructure) ctx.samp.mean.clear();
 
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_fiml(
       ctx.pt, ctx.rep, raw, x0, magmaan::estimate::fiml::FIML{},
-      optim_opts_from(control));
+      backend, optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fiml_fit_result(ctx, raw, est, &starts);

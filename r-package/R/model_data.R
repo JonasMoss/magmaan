@@ -992,10 +992,8 @@ fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL) {
 
 fit_fiml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL) {
   if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
-  # FIML currently hardcodes NLopt L-BFGS at the C++ layer (`src/estimate/fiml.cpp`
-  # bypasses Backend); the optimizer/control args are accepted for shape
-  # parity with the rest of the family, and the optimizer-specific path uses them.
-  fit_fiml_impl(partable_arg(model), fiml_data_arg(data), control = control)
+  fit_fiml_impl(partable_arg(model), fiml_data_arg(data),
+                optimizer = optimizer, control = control)
 }
 
 fit_uls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,

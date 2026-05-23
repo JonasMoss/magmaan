@@ -211,8 +211,8 @@ struct LatentStructure {
   // Compiled nonlinear equality constraints, parallel to `nonlinear_eq_rows`
   // (same size and order): `nl_constraints[k]` is the name-free expression
   // tree for the `==` row at `nonlinear_eq_rows[k]`. Built by
-  // `resolve_lin_constraints`; consumed by the augmented-Lagrangian fit path
-  // and the constrained vcov / df projection.
+  // `resolve_lin_constraints`; consumed by the IPOPT constrained fit path and
+  // the constrained vcov / df projection.
   std::vector<NlConstraint> nl_constraints;
 
   // Methods-developer extensibility — for columns magmaan itself doesn't ship.

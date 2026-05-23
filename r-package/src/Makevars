@@ -7,6 +7,9 @@ MAGMAAN_LIB  := $(MAGMAAN_BUILD)/libmagmaan.a
 MAGMAAN_PORT_LIB := $(MAGMAAN_BUILD)/libport.a
 MAGMAAN_NLOPT_LIB := $(MAGMAAN_BUILD)/_deps/nlopt-build/libnlopt.a
 MAGMAAN_WITH_CERES_R ?= 0
+MAGMAAN_WITH_IPOPT_R ?= 0
+MAGMAAN_IPOPT_CPPFLAGS := $(shell pkg-config --cflags ipopt 2>/dev/null)
+MAGMAAN_IPOPT_LIBS := $(shell pkg-config --libs ipopt 2>/dev/null)
 MAGMAAN_CONFIG_STAMP := .magmaan-build-config
 R_GLUE_HEADERS := $(wildcard *.hpp)
 
@@ -24,6 +27,11 @@ PKG_CPPFLAGS += -DMAGMAAN_WITH_CERES
 PKG_LIBS     += -lceres -lglog -lgflags
 endif
 
+ifeq ($(MAGMAAN_WITH_IPOPT_R),1)
+PKG_CPPFLAGS += -DMAGMAAN_WITH_IPOPT $(MAGMAAN_IPOPT_CPPFLAGS)
+PKG_LIBS     += $(MAGMAAN_IPOPT_LIBS)
+endif
+
 # Make sure libmagmaan.a is current before linking the
 # R glue. Incremental: a no-op (~1s) when nothing changed in the C++ tree.
 $(SHLIB): magmaan_lib
@@ -35,7 +43,7 @@ magmaan_lib:
 
 $(MAGMAAN_CONFIG_STAMP): FORCE
 	@tmp="$@.tmp"; \
-	printf '%s\n' "MAGMAAN_PRESET=$(MAGMAAN_PRESET)" "MAGMAAN_BUILD=$(MAGMAAN_BUILD)" "MAGMAAN_WITH_CERES_R=$(MAGMAAN_WITH_CERES_R)" > "$$tmp"; \
+	printf '%s\n' "MAGMAAN_PRESET=$(MAGMAAN_PRESET)" "MAGMAAN_BUILD=$(MAGMAAN_BUILD)" "MAGMAAN_WITH_CERES_R=$(MAGMAAN_WITH_CERES_R)" "MAGMAAN_WITH_IPOPT_R=$(MAGMAAN_WITH_IPOPT_R)" > "$$tmp"; \
 	if test -r "$@" && cmp -s "$$tmp" "$@"; then rm "$$tmp"; else mv "$$tmp" "$@"; fi
 
 # R's auto-generated package Makefile only tracks .cpp -> .o; it has no idea

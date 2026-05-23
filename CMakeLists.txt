@@ -17,6 +17,7 @@ option(MAGMAAN_BUILD_TESTS  "Build the magmaan test suite"      ${MAGMAAN_IS_TOP
 option(MAGMAAN_BUILD_BENCH  "Build the magmaan benchmarks"      OFF)
 option(MAGMAAN_WITH_CERES   "Enable the Ceres Solver optimizer backend (optional, heavy first build)"  OFF)
 option(MAGMAAN_WITH_PORT    "Enable the vendored PORT (Bell Labs) optimizer backend — nlminb-equivalent trust region (TOMS 611) plus NL2SOL with bounds (TOMS 573)"  ON)
+option(MAGMAAN_WITH_IPOPT   "Enable the IPOPT interior-point optimizer backend (optional system dependency)" OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -42,6 +43,14 @@ magmaan_find_or_fetch(NAME Eigen3
 # `cmake/CeresFetch.cmake` so the top-level CMakeLists stays tidy.
 if(MAGMAAN_WITH_CERES)
   include(CeresFetch)
+endif()
+
+# IPOPT — optional system-provided interior-point optimizer. We deliberately do
+# not FetchContent IPOPT: its BLAS/LAPACK and sparse-linear-solver stack is a
+# toolchain choice, so enabling this backend means pointing CMake/pkg-config at
+# an installed IPOPT.
+if(MAGMAAN_WITH_IPOPT)
+  include(IpoptFind)
 endif()
 
 # NLopt — required scalar optimizer backend. Lightweight C library; its L-BFGS
@@ -99,7 +108,6 @@ add_library(magmaan STATIC
   src/estimate/constraints.cpp
   src/estimate/expr_eval.cpp
   src/estimate/nl_constraints.cpp
-  src/estimate/auglag.cpp
   src/estimate/diagnostics.cpp
   src/estimate/gmm/moment_quadratic.cpp
   src/estimate/gmm/gp.cpp
@@ -165,6 +173,14 @@ if(MAGMAAN_WITH_PORT)
   target_sources(magmaan PRIVATE src/optim/port_optimizer.cpp)
   target_link_libraries(magmaan PRIVATE port)
   target_compile_definitions(magmaan PUBLIC MAGMAAN_WITH_PORT)
+endif()
+
+# IPOPT optimizer adapter — only compiled when MAGMAAN_WITH_IPOPT=ON. The
+# adapter uses IPOPT's C interface and limited-memory Hessian approximation.
+if(MAGMAAN_WITH_IPOPT)
+  target_sources(magmaan PRIVATE src/optim/ipopt_optimizer.cpp)
+  target_link_libraries(magmaan PRIVATE ${MAGMAAN_IPOPT_TARGET})
+  target_compile_definitions(magmaan PUBLIC MAGMAAN_WITH_IPOPT)
 endif()
 
 # ---------------------------------------------------------------------------

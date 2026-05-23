@@ -43,6 +43,14 @@ opt:
 test-opt: opt
     ctest --preset opt
 
+# Build the optional IPOPT optimizer tree (requires system IPOPT).
+ipopt:
+    cmake --build --preset ipopt
+
+# Build + run the optional IPOPT optimizer test suite.
+test-ipopt: ipopt
+    ctest --preset ipopt
+
 # Back-compatible alias for the normal local C++ build.
 build: fast
 
@@ -63,6 +71,11 @@ r-install-fast:
 r-install-ceres:
     cmake --build --preset ceres --target magmaan
     MAGMAAN_PRESET=ceres MAGMAAN_WITH_CERES_R=1 R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+
+# Optional optimizer R install: IPOPT, with NLopt and PORT enabled by default.
+r-install-ipopt:
+    cmake --build --preset ipopt --target magmaan
+    MAGMAAN_PRESET=ipopt MAGMAAN_WITH_IPOPT_R=1 R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
 
 # Run every r-package/examples/*.R script (the R-side smoke tests vs lavaan).
 r-examples:

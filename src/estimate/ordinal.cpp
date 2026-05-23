@@ -2017,6 +2017,15 @@ run_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
         "is off"));
 #endif
   }
+  if (backend == Backend::Ipopt) {
+#ifdef MAGMAAN_WITH_IPOPT
+    return optim::ipopt(optim::scalarize(prob), x0, bounds, opts);
+#else
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: IPOPT backend requested but MAGMAAN_WITH_IPOPT "
+        "is off"));
+#endif
+  }
   return optim::nlopt_lbfgs(optim::scalarize(prob), x0, bounds, opts);
 }
 

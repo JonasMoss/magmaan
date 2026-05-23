@@ -22,10 +22,9 @@
 //     in the pure-merge case (residual to roundoff) and tiny under
 //     general-linear constraints. A non-tiny residual means the expansion
 //     itself is broken — a hard correctness signal worth surfacing.
-//   - Nonlinear equality constraint residual at θ̂. The AL outer loop drives
+//   - Nonlinear equality constraint residual at θ̂. IPOPT drives
 //     `h(θ̂) → 0`; recording the achieved infinity-norm tells the user
-//     whether AL actually converged the constraints (separate from whether
-//     the augmented objective stopped).
+//     whether the nonlinear-constraint solve actually converged.
 //   - Active-bound set on the FULL expanded θ — this is the Heywood-case
 //     detector: a variance parameter at its 0 bound has a one-sided
 //     derivative, and the standard info-matrix SE for it is not valid.
@@ -84,8 +83,7 @@ struct DiagnosticsOptions {
   // exceeding 1e-8 is a correctness signal that the expansion machinery,
   // not the optimizer, is misbehaving.
   double lin_eq_residual_tol = 1e-8;
-  // AL outer convergence target for nonlinear constraints (same scale as
-  // the existing AL path's outer stop).
+  // Nonlinear equality feasibility target.
   double nl_eq_residual_tol  = 1e-6;
 };
 

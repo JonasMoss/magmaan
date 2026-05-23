@@ -50,9 +50,9 @@ void eval_pool(const spec::NlConstraint& c, const Eigen::VectorXd& theta,
           }
           case parse::UnOp::Log: {
             // (log u)' = u'/u. A transient u ≤ 0 mid-optimization surfaces as
-            // a NaN value to the augmented-Lagrangian feasibility check (as
+            // a NaN value to the nonlinear optimizer feasibility check (as
             // the Pow node does); the gradient denominator is floored so the
-            // L-BFGS step direction stays finite.
+            // step direction stays finite.
             const double d = (a > 0.0) ? a : 1e-300;
             val[i] = std::log(a);
             g[i]   = g[L] / d;

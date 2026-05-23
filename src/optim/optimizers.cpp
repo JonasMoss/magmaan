@@ -13,6 +13,9 @@
 #ifdef MAGMAAN_WITH_CERES
 #include "magmaan/optim/ceres_optimizer.hpp"
 #endif
+#ifdef MAGMAAN_WITH_IPOPT
+#include "magmaan/optim/ipopt_optimizer.hpp"
+#endif
 #include "magmaan/optim/nlopt_optimizer.hpp"
 
 namespace magmaan::optim {
@@ -121,6 +124,35 @@ fit_expected<OptimResult>
 ceres_bfgs(const GmmProblem& prob, const Eigen::VectorXd& x0,
            CeresOptions opts) {
   auto out = CeresBfgsOptimizer{opts}.minimize(scalarize(prob).f, x0);
+  if (!out.has_value()) return std::unexpected(out.error());
+  return to_result(std::move(*out));
+}
+#endif
+
+#ifdef MAGMAAN_WITH_IPOPT
+fit_expected<OptimResult>
+ipopt(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+      const Bounds& bounds, OptimOptions opts) {
+  const double          inf = std::numeric_limits<double>::infinity();
+  const Eigen::VectorXd lower =
+      bounds.empty() ? Eigen::VectorXd::Constant(x0.size(), -inf) : bounds.lower;
+  const Eigen::VectorXd upper =
+      bounds.empty() ? Eigen::VectorXd::Constant(x0.size(),  inf) : bounds.upper;
+  auto out = IpoptOptimizer{opts}.minimize(prob.f, x0, lower, upper);
+  if (!out.has_value()) return std::unexpected(out.error());
+  return to_result(std::move(*out));
+}
+
+fit_expected<OptimResult>
+ipopt_constrained(const ConstrainedScalarProblem& prob,
+                  const Eigen::VectorXd& x0,
+                  const Bounds& bounds, OptimOptions opts) {
+  const double          inf = std::numeric_limits<double>::infinity();
+  const Eigen::VectorXd lower =
+      bounds.empty() ? Eigen::VectorXd::Constant(x0.size(), -inf) : bounds.lower;
+  const Eigen::VectorXd upper =
+      bounds.empty() ? Eigen::VectorXd::Constant(x0.size(),  inf) : bounds.upper;
+  auto out = IpoptOptimizer{opts}.minimize_constrained(prob, x0, lower, upper);
   if (!out.has_value()) return std::unexpected(out.error());
   return to_result(std::move(*out));
 }

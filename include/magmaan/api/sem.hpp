@@ -165,6 +165,7 @@ Result<Data> data_from_mixed_ordinal_huber_residual(
 enum class OptimizerKind : std::uint8_t {
   NloptLbfgs,
   Ceres,
+  Ipopt,
 };
 
 struct OptimizerSpec {
@@ -174,6 +175,10 @@ struct OptimizerSpec {
 
 inline OptimizerSpec ceres(optim::OptimOptions options = {}) {
   return OptimizerSpec{OptimizerKind::Ceres, options};
+}
+
+inline OptimizerSpec ipopt(optim::OptimOptions options = {}) {
+  return OptimizerSpec{OptimizerKind::Ipopt, options};
 }
 
 enum class StartKind : std::uint8_t {

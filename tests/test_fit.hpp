@@ -103,12 +103,13 @@ fit_gls(const Pt& pt, const Rep& rep, const Samp& samp,
 template <class Pt, class Rep, class Raw>
 fit_expected<estimate::Estimates>
 fit_fiml(const Pt& pt, const Rep& rep, const Raw& raw,
-         optim::OptimOptions opts = {}) {
+         optim::OptimOptions opts = {},
+         estimate::Backend backend = estimate::Backend::NloptLbfgs) {
   auto samp = estimate::fiml::fiml_start_sample_stats(raw);
   if (!samp.has_value()) return std::unexpected(samp.error());
   auto x0 = estimate::simple_start_values(pt, rep, *samp, {});
   if (!x0.has_value()) return std::unexpected(x0.error());
-  return estimate::fit_fiml(pt, rep, raw, *x0, {}, opts);
+  return estimate::fit_fiml(pt, rep, raw, *x0, {}, backend, opts);
 }
 
 // Ordinal DWLS / WLS. `parameterization` selects Delta (default) or Theta.

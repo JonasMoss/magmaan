@@ -152,9 +152,15 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   comparison studies land. `Backend::NloptLbfgs` is now the default and NLopt
   is a required dependency, but the final default should still be justified
   across ML, complete-data LS, bounded ordinal LS, FIML/direct optimizer
-  callers, and augmented-Lagrangian inner solves. Document tolerance semantics
-  (`gtol` vs NLopt `xtol_rel`), iteration/evaluation reporting, and bounded
-  behavior before changing the default again.
+  callers, augmented-Lagrangian inner solves, and nonlinear-constraint paths
+  (NLopt SLSQP and IPOPT). Document tolerance semantics (`gtol` vs NLopt
+  `xtol_rel`), iteration/evaluation reporting, and bounded behavior before
+  changing the default again.
+- **M.** Maybe add exact Hessians for IPOPT. The first IPOPT adapter uses
+  limited-memory Hessian approximation and supplies objective gradients plus
+  nonlinear-constraint Jacobians only. Revisit after the optimizer comparison
+  work clarifies whether exact objective / Lagrangian Hessians materially help
+  ML, GLS/WLS/ULS, or nonlinear-constraint fits.
 - **S/M, newsom corpus.** The Little/Newsom continuous golden
   (`tests/golden/textbook_corpus_golden_test.cpp`) is currently skipped because
   NLopt L-BFGS does not converge `newsom/ex5_5b` from `simple_start_values`.
@@ -167,8 +173,9 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   sufficient for a source release — Eigen, Ceres, NLopt, and nlohmann_json are
   fetched at build time, not redistributed. Before shipping a
   binary or packaged artifact, extend this to a full dependency-license
-  manifest (Eigen, optional Ceres, required NLopt, vendored PORT, and test-only
-  nlohmann_json) with versions and redistribution obligations.
+  manifest (Eigen, optional Ceres, required NLopt, optional IPOPT, vendored
+  PORT, and test-only nlohmann_json) with versions and redistribution
+  obligations.
 - **M/L, after coverage exists.** Promote the Ceres preset into regular
   validation where relevant without making the default build pay the Ceres
   dependency cost.
@@ -307,9 +314,8 @@ and `estimate/pairwise.hpp` into `<domain>::frontier`. See
   `constraints.hpp` (24 includers), `nl_constraints.hpp`, `expr_eval.hpp`,
   `resolve_fixed_x.hpp` (13). A structural relayering — its own pass, with a
   design note settling whether constraint *evaluation* is `spec` or `estimate`.
-- **M.** Move `auglag.hpp` and `reparameterize.hpp` to `optim/` (optimizer
-  machinery, not estimators); `reparameterize.hpp` is coupled to the
-  `estimate/constraints.hpp` move above.
+- **M.** Move `reparameterize.hpp` to `optim/` (optimizer machinery, not an
+  estimator); it is coupled to the `estimate/constraints.hpp` move above.
 - **S/M.** Settle whether `cfa_utils.hpp` belongs in `spec` or `model`;
   depends on the start-values decision below.
 - **M.** Gather the five start-value producers (`start_values.hpp`) into an

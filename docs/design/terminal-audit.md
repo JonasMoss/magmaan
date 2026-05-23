@@ -181,9 +181,9 @@ L2 never blocks a fit. It records what downstream consumers need:
   by construction; a residual exceeding `lin_eq_residual_tol` signals the
   expansion itself is misbehaving (a correctness signal, not an optimizer
   signal).
-- `nl_eq_residual` / `_inf` — the AL outer loop drives `h(θ̂) → 0`; recording
-  the achieved infinity-norm tells the user whether AL actually converged
-  the constraints (separate from whether the augmented objective stopped).
+- `nl_eq_residual` / `_inf` — IPOPT drives `h(θ̂) → 0`; recording the achieved
+  infinity-norm tells the user whether the nonlinear constraints were actually
+  satisfied (separate from the optimizer's terminal status).
 - `active_bounds_full` — the Heywood-case detector: a variance at its 0
   bound has a one-sided derivative, and the standard info-matrix SE for it
   is not valid. Downstream `magmaan_se()` etc. can flag or fall back.

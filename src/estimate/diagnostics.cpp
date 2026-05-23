@@ -64,9 +64,8 @@ finalize_fit_diagnostics(const Eigen::VectorXd&        theta_full,
   // No active linear constraints ⇒ residual is 0, satisfied is true (defaults).
 
   // --- Nonlinear equality constraint residual ---------------------------
-  // The augmented-Lagrangian outer loop drives `h(θ̂) → 0`; recording the
-  // achieved infinity-norm tells the user whether AL actually converged the
-  // constraints (separate from whether the augmented objective stopped).
+  // IPOPT drives `h(θ̂) → 0`; recording the achieved infinity-norm tells the
+  // user whether the nonlinear-constraint solve actually converged.
   // `nl.h()` is sized to `nl.m()`, which `active() == false` reports as 0 —
   // we still evaluate so `nl_eq_residual` is well-defined as the empty vector.
   if (nl.active() && nl.npar == theta_full.size()) {

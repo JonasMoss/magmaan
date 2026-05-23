@@ -5,6 +5,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"   // CeresOptions — stub-safe without MAGMAAN_WITH_CERES
+#include "magmaan/optim/ipopt_optimizer.hpp"   // IpoptOptimizer — stub-safe without MAGMAAN_WITH_IPOPT
 #include "magmaan/optim/problem.hpp"
 
 // Optimizers as free functions, called directly — no `fit()` wrapper, no
@@ -23,6 +24,8 @@
 //   • nlopt_tnewton— NLopt LD_TNEWTON_PRECOND_RESTART (Nash truncated Newton).
 //   • nlopt_var2   — NLopt LD_VAR2 (Shanno-Phua full BFGS variable-metric).
 //   • nlopt_lbfgs  — NLopt's own L-BFGS, the current scalar default.
+//   • ipopt        — IPOPT interior-point scalar NLP backend. Supports box
+//                    bounds and nonlinear constraints when MAGMAAN_WITH_IPOPT.
 //
 // To run a scalar optimizer on a least-squares problem, `scalarize` it first:
 // `nlopt_lbfgs(scalarize(gmm_problem), x0, bounds)`.
@@ -70,6 +73,23 @@ ceres_lm(const GmmProblem& prob, const Eigen::VectorXd& x0,
 fit_expected<OptimResult>
 ceres_bfgs(const GmmProblem& prob, const Eigen::VectorXd& x0,
            CeresOptions opts = {});
+#endif
+
+#ifdef MAGMAAN_WITH_IPOPT
+// IPOPT interior-point scalar minimization with simple bounds. v1 uses IPOPT's
+// limited-memory Hessian approximation, so the caller supplies only the
+// objective and gradient. Empty `bounds` means unbounded.
+fit_expected<OptimResult>
+ipopt(const ScalarProblem& prob, const Eigen::VectorXd& x0,
+      const Bounds& bounds = {}, OptimOptions opts = {});
+
+// IPOPT scalar nonlinear programming with simple bounds and nonlinear
+// constraints. Equality constraints are encoded by identical lower/upper
+// entries in `prob.constraint_lower` / `prob.constraint_upper`.
+fit_expected<OptimResult>
+ipopt_constrained(const ConstrainedScalarProblem& prob,
+                  const Eigen::VectorXd& x0,
+                  const Bounds& bounds = {}, OptimOptions opts = {});
 #endif
 
 // NLopt SLSQP scalar minimization — sequential quadratic programming with box

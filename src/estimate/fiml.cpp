@@ -17,6 +17,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/optim/problem.hpp"
 
@@ -1672,6 +1673,7 @@ fit_fiml(spec::LatentStructure pt,
          const RawData& raw,
          const Eigen::VectorXd& x0,
          FIML discrepancy,
+         Backend backend,
          optim::OptimOptions opts) {
   if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
     return std::unexpected(e.error());
@@ -1704,13 +1706,14 @@ fit_fiml(spec::LatentStructure pt,
   auto cache_or = discrepancy.prepare(raw);
   if (!cache_or.has_value()) return std::unexpected(cache_or.error());
 
-  auto con_or = build_eq_constraints(pt);
+  auto con_or = build_eq_constraints(pt, /*allow_nonlinear=*/true);
   if (!con_or.has_value()) {
     return std::unexpected(FitError{
         FitError::Kind::NumericIssue,
         "constraint: " + con_or.error().detail, 0, 0.0});
   }
   const EqConstraints& con = *con_or;
+  const NonlinearEqConstraints nl = build_nl_constraints(pt);
 
   auto eval_at = [&](const Eigen::VectorXd& x,
                      Eigen::VectorXd& grad) -> double {
@@ -1729,18 +1732,89 @@ fit_fiml(spec::LatentStructure pt,
     return vg->value;
   };
 
+  auto run_fiml_scalar = [&](const optim::ScalarProblem& prob,
+                             const Eigen::VectorXd& start)
+      -> fit_expected<optim::OptimResult> {
+    switch (backend) {
+      case Backend::NloptLbfgs:
+        return optim::nlopt_lbfgs(prob, start, {}, opts);
+      case Backend::Ipopt:
+#ifdef MAGMAAN_WITH_IPOPT
+        return optim::ipopt(prob, start, {}, opts);
+#else
+        return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+            "fit_fiml: IPOPT backend requested but MAGMAAN_WITH_IPOPT is off"));
+#endif
+      default:
+        return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+            "fit_fiml: requested optimizer backend is not supported; use "
+            "nlopt-lbfgs or ipopt"));
+    }
+  };
+
+  auto run_fiml_constrained = [&](const optim::ScalarProblem& prob,
+                                  const optim::ConstraintFn& h,
+                                  const optim::ConstraintJacFn& J_h,
+                                  std::int32_t m,
+                                  const Eigen::VectorXd& start)
+      -> fit_expected<optim::OptimResult> {
+    if (backend != Backend::Ipopt) {
+      return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+          "fit_fiml: nonlinear equality constraints require optimizer "
+          "\"ipopt\""));
+    }
+#ifdef MAGMAAN_WITH_IPOPT
+    optim::ConstrainedScalarProblem cprob;
+    cprob.objective = prob;
+    cprob.h = h;
+    cprob.J_h = J_h;
+    cprob.n_constraint = m;
+    cprob.constraint_lower = Eigen::VectorXd::Zero(m);
+    cprob.constraint_upper = Eigen::VectorXd::Zero(m);
+    return optim::ipopt_constrained(cprob, start, {}, opts);
+#else
+    (void)prob;
+    (void)h;
+    (void)J_h;
+    (void)m;
+    (void)start;
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        "fit_fiml: nonlinear equality constraints require the IPOPT backend; "
+        "reconfigure with MAGMAAN_WITH_IPOPT=ON and use optimizer \"ipopt\""));
+#endif
+  };
+
   if (!con.active()) {
     optim::ScalarProblem prob;
     prob.f       = eval_at;
     prob.n_param = x0.size();
     prob.expand  = [](const Eigen::VectorXd& x) { return x; };
-    auto out_or = optim::nlopt_lbfgs(prob, x0, {}, opts);
+    fit_expected<optim::OptimResult> out_or;
+    if (nl.active()) {
+      auto h_fn   = [&nl](const Eigen::VectorXd& th) { return nl.h(th); };
+      auto jac_fn = [&nl](const Eigen::VectorXd& th) { return nl.jacobian(th); };
+      out_or = run_fiml_constrained(prob, h_fn, jac_fn, nl.m(), x0);
+    } else {
+      out_or = run_fiml_scalar(prob, x0);
+    }
     if (!out_or.has_value()) return std::unexpected(out_or.error());
-    return Estimates{std::move(out_or->x), out_or->fmin, out_or->iterations};
+    return Estimates{prob.expand(out_or->x), out_or->fmin, out_or->iterations,
+                     out_or->f_evals, out_or->g_evals, out_or->status,
+                     out_or->grad_inf_norm, std::move(out_or->audit)};
   }
 
   if (con.n_alpha == 0) {
     Eigen::VectorXd theta = con.expand(Eigen::VectorXd(0));
+    if (nl.active()) {
+      const Eigen::VectorXd h = nl.h(theta);
+      const double viol = h.size() > 0 ? h.cwiseAbs().maxCoeff() : 0.0;
+      if (viol > 1e-6 || !std::isfinite(viol)) {
+        return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+            "fit_fiml: nonlinear equality constraints are infeasible at the "
+            "fully linear-constrained point; violation " +
+                std::to_string(viol)));
+      }
+    }
     Eigen::VectorXd scratch(theta.size());
     const double f = eval_at(theta, scratch);
     return Estimates{std::move(theta), f, 0};
@@ -1757,9 +1831,23 @@ fit_fiml(spec::LatentStructure pt,
     grad_a = con.reduce_gradient(grad_x);
     return v;
   };
-  auto out_or = optim::nlopt_lbfgs(prob_a, con.contract(x0), {}, opts);
+  const Eigen::VectorXd alpha0 = con.contract(x0);
+  fit_expected<optim::OptimResult> out_or;
+  if (nl.active()) {
+    auto h_a = [&nl, &con](const Eigen::VectorXd& a) {
+      return nl.h(con.expand(a));
+    };
+    auto jac_a = [&nl, &con](const Eigen::VectorXd& a) {
+      return Eigen::MatrixXd(nl.jacobian(con.expand(a)) * con.K());
+    };
+    out_or = run_fiml_constrained(prob_a, h_a, jac_a, nl.m(), alpha0);
+  } else {
+    out_or = run_fiml_scalar(prob_a, alpha0);
+  }
   if (!out_or.has_value()) return std::unexpected(out_or.error());
-  return Estimates{con.expand(out_or->x), out_or->fmin, out_or->iterations};
+  return Estimates{con.expand(out_or->x), out_or->fmin, out_or->iterations,
+                   out_or->f_evals, out_or->g_evals, out_or->status,
+                   out_or->grad_inf_norm, std::move(out_or->audit)};
 }
 
 }  // namespace magmaan::estimate::fiml

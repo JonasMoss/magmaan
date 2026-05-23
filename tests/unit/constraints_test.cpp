@@ -278,7 +278,7 @@ TEST_CASE("build_eq_constraints: a nonlinear `==` is classified, not yet enforce
   CHECK_FALSE(pt.has_unenforced_constraints);        // well-formed: `a`, `b` known
   CHECK(pt.nonlinear_eq_rows.size() == 1);           // `b*b` ⇒ nonlinear equality
   auto con_or = build_eq_constraints(pt);
-  REQUIRE_FALSE(con_or.has_value());                 // not yet enforced by fit()
+  REQUIRE_FALSE(con_or.has_value());                 // skipped only with allow_nonlinear
   CHECK(con_or.error().kind == magmaan::PostError::Kind::NumericIssue);
   CHECK(con_or.error().detail.find("nonlinear") != std::string::npos);
 }
@@ -391,6 +391,16 @@ TEST_CASE("nonlinear `==` with exp/log: compiled and AD-evaluated") {
   }
 }
 
+TEST_CASE("fit: nonlinear equality constraints require the IPOPT backend") {
+  auto samp = fixture_samp_3();
+  auto pt = must_lavaanify("f =~ x1 + a*x2 + b*x3\na == b^2");
+  auto rep = build_matrix_rep(pt).value();
+  auto est_or = magmaan::test::fit(pt, rep, samp);
+  REQUIRE_FALSE(est_or.has_value());
+  CHECK(est_or.error().detail.find("ipopt") != std::string::npos);
+}
+
+#ifdef MAGMAAN_WITH_IPOPT
 TEST_CASE("fit: a nonlinear equality constraint (a == b^2) is enforced and matches lavaan") {
   // visual =~ x1 + a*x2 + b*x3 with the nonlinear constraint a == b^2, fit by
   // ML to the HolzingerSwineford1939 x1-x3 N-divisor covariance (n = 301).
@@ -406,7 +416,9 @@ TEST_CASE("fit: a nonlinear equality constraint (a == b^2) is enforced and match
   auto pt = must_lavaanify("visual =~ x1 + a*x2 + b*x3\na == b^2");
   REQUIRE(pt.nl_constraints.size() == 1);
   auto rep = build_matrix_rep(pt).value();
-  auto est_or = magmaan::test::fit(pt, rep, samp);
+  auto est_or = magmaan::test::fit(
+      pt, rep, samp, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::Ipopt);
   REQUIRE_MESSAGE(est_or.has_value(), "constrained fit failed: "
       << (est_or.has_value() ? std::string{} : est_or.error().detail));
   const auto& est = *est_or;
@@ -419,7 +431,7 @@ TEST_CASE("fit: a nonlinear equality constraint (a == b^2) is enforced and match
   for (Eigen::Index k = 0; k < 6; ++k)
     CHECK(est.theta(k) == doctest::Approx(ref(k)).epsilon(1e-4));
 
-  // The augmented Lagrangian drove the constraint h(θ̂) = a − b² to zero.
+  // IPOPT drove the constraint h(θ̂) = a − b² to zero.
   auto nl = build_nl_constraints(pt);
   CHECK(std::abs(nl.h(est.theta)(0)) < 1e-5);
 }
@@ -436,7 +448,9 @@ TEST_CASE("inference: vcov / df for a nonlinear-equality model match lavaan") {
 
   auto pt  = must_lavaanify("visual =~ x1 + a*x2 + b*x3\na == b^2");
   auto rep = build_matrix_rep(pt).value();
-  auto est = magmaan::test::fit(pt, rep, samp).value();
+  auto est = magmaan::test::fit(
+      pt, rep, samp, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::Ipopt).value();
 
   auto info_or = magmaan::inference::information_expected(pt, rep, samp, est);
   REQUIRE(info_or.has_value());
@@ -467,7 +481,7 @@ TEST_CASE("inference: vcov / df for a nonlinear-equality model match lavaan") {
 
 TEST_CASE("fit: general-linear + nonlinear equality constraints in one model") {
   // f =~ x1 + a*x2 + b*x3 + c*x4 with a general-linear equality `c == a + b`
-  // AND a nonlinear equality `a == b^2`. The AL runs in the linear-reduced
+  // AND a nonlinear equality `a == b^2`. IPOPT runs in the linear-reduced
   // α-space. S is synthesized from Λ = (1, 0.49, 0.7, 1.19) — so b = 0.7,
   // a = b² = 0.49, c = a + b = 1.19 — with ψ = 1, Θ = 0.5·I.
   Eigen::Vector4d lam(1.0, 0.49, 0.7, 1.19);
@@ -483,7 +497,9 @@ TEST_CASE("fit: general-linear + nonlinear equality constraints in one model") {
   REQUIRE(pt.lin_constraint_d.size() == 1);        // the general-linear `==`
 
   auto rep = build_matrix_rep(pt).value();
-  auto est_or = magmaan::test::fit(pt, rep, samp);
+  auto est_or = magmaan::test::fit(
+      pt, rep, samp, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::Ipopt);
   REQUIRE_MESSAGE(est_or.has_value(), "combined-constraint fit failed: "
       << (est_or.has_value() ? std::string{} : est_or.error().detail));
   const auto& est = *est_or;
@@ -520,7 +536,9 @@ TEST_CASE("fit: shared-label (merge) + nonlinear equality constraints together")
   REQUIRE(pt.nl_constraints.size() == 1);
 
   auto rep = build_matrix_rep(pt).value();
-  auto est_or = magmaan::test::fit(pt, rep, samp);
+  auto est_or = magmaan::test::fit(
+      pt, rep, samp, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::Ipopt);
   REQUIRE_MESSAGE(est_or.has_value(), "merge + nonlinear fit failed: "
       << (est_or.has_value() ? std::string{} : est_or.error().detail));
   const auto& est = *est_or;
@@ -533,6 +551,7 @@ TEST_CASE("fit: shared-label (merge) + nonlinear equality constraints together")
   REQUIRE(con.active());
   CHECK_FALSE(con.group.empty());
 }
+#endif  // MAGMAAN_WITH_IPOPT
 
 // === effect coding =========================================================
 
