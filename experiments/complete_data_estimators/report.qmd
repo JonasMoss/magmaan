@@ -1,6 +1,9 @@
 ---
 title: "Complete-Data Estimator Timing"
-format: html
+format:
+  html:
+    toc: true
+    number-sections: false
 execute:
   echo: false
   warning: false
@@ -17,20 +20,35 @@ results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
 
 fits_path <- file.path(results_dir, "fits.csv")
 pairs_path <- file.path(results_dir, "pairs_vs_nt.csv")
-summary_path <- file.path(results_dir, "case_summary.csv")
-if (!file.exists(fits_path) || !file.exists(pairs_path) || !file.exists(summary_path)) {
+case_path <- file.path(results_dir, "case_summary.csv")
+group_path <- file.path(results_dir, "group_summary.csv")
+if (!file.exists(fits_path) || !file.exists(pairs_path) ||
+    !file.exists(case_path) || !file.exists(group_path)) {
   stop("Missing experiment CSVs. Run: Rscript run_experiment.R")
 }
 
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  stop("The report requires ggplot2. Install it or inspect the CSVs directly.")
+}
+
+library(ggplot2)
+
 fits <- utils::read.csv(fits_path, check.names = FALSE)
 pairs <- utils::read.csv(pairs_path, check.names = FALSE)
-case_summary <- utils::read.csv(summary_path, check.names = FALSE)
+case_summary <- utils::read.csv(case_path, check.names = FALSE)
+group_summary <- utils::read.csv(group_path, check.names = FALSE)
+
+pair_ok <- pairs[pairs$status == "OK" &
+                   is.finite(pairs$elapsed_ratio_estimator_over_nt) &
+                   pairs$elapsed_ratio_estimator_over_nt > 0, , drop = FALSE]
+fit_ok <- fits[fits$status == "OK" & is.finite(fits$elapsed_sec), , drop = FALSE]
+problem_rows <- fits[fits$status != "OK", , drop = FALSE]
 
 fmt_num <- function(x, digits = 3) {
   ifelse(is.na(x), "", formatC(x, format = "g", digits = digits))
 }
 fmt_ms <- function(x) {
-  ifelse(is.na(x), "", sprintf("%.3f", 1000 * x))
+  ifelse(is.na(x), "", sprintf("%.3f", x))
 }
 fmt_ratio <- function(x) {
   ifelse(is.na(x), "", sprintf("%.3f", x))
@@ -38,158 +56,237 @@ fmt_ratio <- function(x) {
 fmt_pct <- function(x) {
   ifelse(is.na(x), "", sprintf("%.1f%%", 100 * x))
 }
+geo_mean <- function(x) {
+  x <- x[is.finite(x) & x > 0]
+  if (!length(x)) return(NA_real_)
+  exp(mean(log(x)))
+}
 median_na <- function(x) {
   x <- x[is.finite(x)]
   if (!length(x)) return(NA_real_)
   stats::median(x)
 }
+ratio_breaks <- c(0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50)
+theme_set(theme_minimal(base_size = 12))
 ```
 
-This is a curiosity-grade comparison of complete-data estimator paths in
-magmaan. `NT` is normal-theory ML. `ULS` and `GLS` are the complete-data GMM
-least-squares paths. Parameter estimates, implied moments, and a naive
-chi-square-like value are compared back to NT.
+This report compares wall time for three complete-data continuous estimator
+paths in magmaan:
 
-The naive chi-square column is exactly
-`magmaan_core$infer_chi2_stat(sample_stats, fit$fmin)`. For ULS/GLS this is a
-rough common-scale diagnostic, not an official test statistic.
+- **NT**: normal-theory ML via `fit_ml()`
+- **ULS**: unweighted least squares via `fit_uls()`
+- **GLS**: generalized least squares via `fit_gls()`
 
-## Run Overview
+Timing ratios are computed within each `(case, replicate)` pair as
+`estimator_time / NT_time`. Values below 1 mean the estimator was faster than
+NT. Aggregates use geometric means, which are the natural average for ratios.
+
+## Executive Summary
 
 ```{r}
+total <- group_summary[group_summary$group_kind == "Total", , drop = FALSE]
 overview <- data.frame(
-  cases = length(unique(fits$case_id)),
-  labels = length(unique(fits$label)),
-  fit_rows = nrow(fits),
-  pair_rows = nrow(pairs),
-  ok_fits = sum(fits$status == "OK", na.rm = TRUE),
-  errors = sum(fits$status == "ERROR", na.rm = TRUE),
-  skips = sum(fits$status == "SKIP", na.rm = TRUE),
-  stringsAsFactors = FALSE
+  Metric = c("Continuous Cases", "Textbook Subcorpora", "Tags", "Replicates",
+             "Fit Rows", "Complete Timing Pairs", "Fit Errors/Skips"),
+  Value = c(
+    length(unique(fits$case_id)),
+    length(unique(fits$source)),
+    length(unique(fits$family)),
+    if (nrow(fits)) max(fits$replicate, na.rm = TRUE) else NA_integer_,
+    nrow(fits),
+    nrow(pair_ok),
+    nrow(problem_rows)
+  ),
+  check.names = FALSE
 )
-knitr::kable(overview)
+knitr::kable(overview, row.names = FALSE)
 ```
-
-## Estimator Summary
 
 ```{r}
-fit_ok <- fits[fits$status == "OK", ]
-pair_ok <- pairs[pairs$status == "OK", ]
-
-fit_rows <- lapply(split(fit_ok, fit_ok$estimator), function(x) {
-  data.frame(
-    estimator = x$estimator[[1]],
-    ok_fits = nrow(x),
-    convergence_rate = mean(x$converged, na.rm = TRUE),
-    median_elapsed_ms = median_na(x$elapsed_sec) * 1000,
-    median_f_evals = median_na(x$f_evals),
-    median_g_evals = median_na(x$g_evals),
-    median_grad_norm = median_na(x$grad_norm),
-    stringsAsFactors = FALSE
-  )
-})
-fit_table <- do.call(rbind, fit_rows)
-fit_table$convergence_rate <- fmt_pct(fit_table$convergence_rate)
-fit_table$median_elapsed_ms <- fmt_num(fit_table$median_elapsed_ms)
-fit_table$median_f_evals <- fmt_num(fit_table$median_f_evals)
-fit_table$median_g_evals <- fmt_num(fit_table$median_g_evals)
-fit_table$median_grad_norm <- fmt_num(fit_table$median_grad_norm)
-knitr::kable(fit_table, row.names = FALSE)
+total_table <- total[, c("estimator", "n_cases", "n_pairs",
+                         "geometric_mean_ratio", "median_ratio",
+                         "p25_ratio", "p75_ratio",
+                         "share_faster_than_nt",
+                         "median_nt_ms", "median_estimator_ms")]
+names(total_table) <- c("Estimator", "Cases", "Pairs", "Geomean Ratio",
+                        "Median Ratio", "P25", "P75", "Faster Than NT",
+                        "Median NT ms", "Median Estimator ms")
+total_table$`Geomean Ratio` <- fmt_ratio(total_table$`Geomean Ratio`)
+total_table$`Median Ratio` <- fmt_ratio(total_table$`Median Ratio`)
+total_table$P25 <- fmt_ratio(total_table$P25)
+total_table$P75 <- fmt_ratio(total_table$P75)
+total_table$`Faster Than NT` <- fmt_pct(total_table$`Faster Than NT`)
+total_table$`Median NT ms` <- fmt_ms(total_table$`Median NT ms`)
+total_table$`Median Estimator ms` <- fmt_ms(total_table$`Median Estimator ms`)
+knitr::kable(total_table, row.names = FALSE)
 ```
 
-## Drift From NT
-
-```{r}
-if (nrow(pair_ok)) {
-  pair_rows <- lapply(split(pair_ok, pair_ok$estimator), function(x) {
-    data.frame(
-      estimator = x$estimator[[1]],
-      ok_pairs = nrow(x),
-      median_elapsed_ratio_vs_nt = median_na(x$elapsed_ratio_estimator_over_nt),
-      median_param_max_abs_diff = median_na(x$param_max_abs_diff),
-      median_param_rms_diff = median_na(x$param_rms_diff),
-      median_sigma_max_abs_diff = median_na(x$implied_sigma_max_abs_diff),
-      median_naive_chisq_diff = median_na(x$naive_chisq_diff_estimator_minus_nt),
-      median_abs_naive_chisq_diff = median_na(x$abs_naive_chisq_diff),
-      stringsAsFactors = FALSE
-    )
-  })
-  drift_table <- do.call(rbind, pair_rows)
-  num <- vapply(drift_table, is.numeric, logical(1))
-  drift_table[num] <- lapply(drift_table[num], fmt_num)
-  knitr::kable(drift_table, row.names = FALSE)
-}
-```
-
-## Timing Ratios
-
-Ratio below is estimator elapsed time divided by NT elapsed time for the same
-case and replicate. Values below 1 mean the estimator was faster than NT in this
-run.
+## Overall Timing Ratios
 
 ```{r}
 #| fig-width: 7
-#| fig-height: 4
-if (nrow(pair_ok) && any(is.finite(pair_ok$elapsed_ratio_estimator_over_nt))) {
-  op <- par(mar = c(4, 5, 1, 1))
-  boxplot(elapsed_ratio_estimator_over_nt ~ estimator,
-          data = pair_ok,
-          log = "y",
-          ylab = "elapsed ratio vs NT",
-          xlab = "estimator",
-          outline = FALSE,
-          col = "grey90")
-  stripchart(elapsed_ratio_estimator_over_nt ~ estimator,
-             data = pair_ok,
-             add = TRUE,
-             vertical = TRUE,
-             method = "jitter",
-             jitter = 0.15,
-             pch = 16,
-             col = grDevices::adjustcolor("steelblue", alpha.f = 0.35))
-  abline(h = 1, lty = 2, col = "gray40")
-  par(op)
-} else {
-  plot.new(); text(0.5, 0.5, "No complete pairs")
+#| fig-height: 4.5
+if (nrow(pair_ok)) {
+  ggplot(pair_ok, aes(estimator, elapsed_ratio_estimator_over_nt,
+                     color = estimator)) +
+    geom_boxplot(outlier.shape = NA, width = 0.55, alpha = 0.15) +
+    geom_jitter(width = 0.16, height = 0, alpha = 0.35, size = 1.2) +
+    geom_hline(yintercept = 1, linetype = "dashed", color = "gray35") +
+    scale_y_log10(breaks = ratio_breaks) +
+    labs(x = NULL, y = "Timing Ratio vs NT (log scale)",
+         title = "Estimator Timing Ratios",
+         subtitle = "Each point is one case/replicate pair") +
+    theme(legend.position = "none")
 }
 ```
 
-## Label-Sorted Case Table
+## Subcorpus Breakdown
 
 ```{r}
-display <- case_summary[order(case_summary$label, case_summary$case_id), ]
-keep <- c("label", "source", "family",
-          "nt_time_sec", "uls_time_sec", "gls_time_sec",
-          "uls_elapsed_ratio_over_nt", "gls_elapsed_ratio_over_nt",
-          "uls_param_max_abs_diff", "gls_param_max_abs_diff",
-          "uls_chisq_diff_vs_nt", "gls_chisq_diff_vs_nt")
-display <- display[keep]
-for (col in c("nt_time_sec", "uls_time_sec", "gls_time_sec")) {
-  display[[col]] <- fmt_ms(display[[col]])
-}
-for (col in c("uls_elapsed_ratio_over_nt", "gls_elapsed_ratio_over_nt")) {
-  display[[col]] <- fmt_ratio(display[[col]])
-}
-for (col in c("uls_param_max_abs_diff", "gls_param_max_abs_diff",
-              "uls_chisq_diff_vs_nt", "gls_chisq_diff_vs_nt")) {
-  display[[col]] <- fmt_num(display[[col]])
-}
-names(display) <- c("label", "source", "family",
-                    "NT ms", "ULS ms", "GLS ms",
-                    "ULS/NT", "GLS/NT",
-                    "ULS max |dpar|", "GLS max |dpar|",
-                    "ULS naive dchisq", "GLS naive dchisq")
-knitr::kable(display, row.names = FALSE)
+subcorpus <- group_summary[group_summary$group_kind == "Subcorpus", , drop = FALSE]
+subcorpus <- subcorpus[order(subcorpus$group, subcorpus$estimator), ]
+sub_table <- subcorpus[, c("group", "estimator", "n_cases", "n_pairs",
+                           "geometric_mean_ratio", "median_ratio",
+                           "share_faster_than_nt")]
+names(sub_table) <- c("Subcorpus", "Estimator", "Cases", "Pairs",
+                      "Geomean Ratio", "Median Ratio", "Faster Than NT")
+sub_table$`Geomean Ratio` <- fmt_ratio(sub_table$`Geomean Ratio`)
+sub_table$`Median Ratio` <- fmt_ratio(sub_table$`Median Ratio`)
+sub_table$`Faster Than NT` <- fmt_pct(sub_table$`Faster Than NT`)
+knitr::kable(sub_table, row.names = FALSE)
 ```
 
-## Fit Errors And Skips
+```{r}
+#| fig-width: 8
+#| fig-height: 5
+if (nrow(pair_ok)) {
+  ggplot(pair_ok, aes(estimator, elapsed_ratio_estimator_over_nt,
+                     color = estimator)) +
+    geom_boxplot(outlier.shape = NA, width = 0.55, alpha = 0.12) +
+    geom_jitter(width = 0.16, height = 0, alpha = 0.25, size = 0.9) +
+    geom_hline(yintercept = 1, linetype = "dashed", color = "gray40") +
+    scale_y_log10(breaks = ratio_breaks) +
+    facet_wrap(~ source, nrow = 1) +
+    labs(x = NULL, y = "Timing Ratio vs NT (log scale)",
+         title = "Timing Ratios By Subcorpus") +
+    theme(legend.position = "none")
+}
+```
+
+## Tag Breakdown
 
 ```{r}
-problem_rows <- fits[fits$status != "OK", ]
+tag_summary <- group_summary[group_summary$group_kind == "Tag", , drop = FALSE]
+tag_summary <- tag_summary[order(tag_summary$estimator,
+                                 tag_summary$geometric_mean_ratio), ]
+tag_summary$tag_label <- factor(tag_summary$group,
+                                levels = rev(unique(tag_summary$group)))
+
+tag_table <- tag_summary[, c("group", "estimator", "n_cases", "n_pairs",
+                             "geometric_mean_ratio", "p25_ratio", "p75_ratio")]
+names(tag_table) <- c("Tag", "Estimator", "Cases", "Pairs",
+                      "Geomean Ratio", "P25", "P75")
+tag_table$`Geomean Ratio` <- fmt_ratio(tag_table$`Geomean Ratio`)
+tag_table$P25 <- fmt_ratio(tag_table$P25)
+tag_table$P75 <- fmt_ratio(tag_table$P75)
+knitr::kable(tag_table, row.names = FALSE)
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+if (nrow(tag_summary)) {
+  ggplot(tag_summary,
+         aes(geometric_mean_ratio, tag_label, color = estimator)) +
+    geom_errorbarh(aes(xmin = p25_ratio, xmax = p75_ratio),
+                   height = 0.18, alpha = 0.45,
+                   position = position_dodge(width = 0.45)) +
+    geom_point(size = 2.2, position = position_dodge(width = 0.45)) +
+    geom_vline(xintercept = 1, linetype = "dashed", color = "gray40") +
+    scale_x_log10(breaks = ratio_breaks) +
+    labs(x = "Geometric Mean Timing Ratio vs NT (log scale)",
+         y = NULL,
+         color = "Estimator",
+         title = "Geometric Mean Ratios By Tag",
+         subtitle = "Horizontal bars show interquartile ranges") +
+    theme(legend.position = "bottom")
+}
+```
+
+## Wall Time Scale
+
+```{r}
+#| fig-width: 8
+#| fig-height: 4.5
+if (nrow(fit_ok)) {
+  fit_ok$elapsed_ms <- 1000 * fit_ok$elapsed_sec
+  ggplot(fit_ok, aes(estimator, elapsed_ms, color = estimator)) +
+    geom_boxplot(outlier.shape = NA, width = 0.55, alpha = 0.12) +
+    geom_jitter(width = 0.16, height = 0, alpha = 0.25, size = 0.9) +
+    scale_y_log10() +
+    facet_wrap(~ source, nrow = 1) +
+    labs(x = NULL, y = "Wall Time (ms, log scale)",
+         title = "Raw Wall Times By Subcorpus") +
+    theme(legend.position = "none")
+}
+```
+
+## Outliers To Inspect
+
+These are not automatically bad results. They are the timing pairs that most
+deviate from NT on a multiplicative scale and are worth eyeballing before
+drawing conclusions.
+
+```{r}
+if (nrow(pair_ok)) {
+  outliers <- pair_ok
+  outliers$log_abs_ratio <- abs(log(outliers$elapsed_ratio_estimator_over_nt))
+  outliers <- outliers[order(-outliers$log_abs_ratio), ]
+  outliers <- head(outliers, 20L)
+  out <- outliers[, c("label", "source", "family", "estimator", "replicate",
+                      "nt_elapsed_sec", "estimator_elapsed_sec",
+                      "elapsed_ratio_estimator_over_nt")]
+  names(out) <- c("Label", "Subcorpus", "Tag", "Estimator", "Rep",
+                  "NT ms", "Estimator ms", "Ratio")
+  out$`NT ms` <- fmt_ms(1000 * out$`NT ms`)
+  out$`Estimator ms` <- fmt_ms(1000 * out$`Estimator ms`)
+  out$Ratio <- fmt_ratio(out$Ratio)
+  knitr::kable(out, row.names = FALSE)
+}
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 5
+if (nrow(pair_ok)) {
+  plot_df <- pair_ok
+  plot_df$nt_ms <- 1000 * plot_df$nt_elapsed_sec
+  ggplot(plot_df, aes(nt_ms, elapsed_ratio_estimator_over_nt,
+                      color = source, shape = estimator)) +
+    geom_point(alpha = 0.6, size = 1.8) +
+    geom_hline(yintercept = 1, linetype = "dashed", color = "gray40") +
+    scale_x_log10() +
+    scale_y_log10(breaks = ratio_breaks) +
+    labs(x = "NT Wall Time (ms, log scale)",
+         y = "Timing Ratio vs NT (log scale)",
+         color = "Subcorpus",
+         shape = "Estimator",
+         title = "Outliers Against NT Fit Cost") +
+    theme(legend.position = "bottom")
+}
+```
+
+## Fit Failures And Skips
+
+```{r}
 if (nrow(problem_rows)) {
-  keep <- c("case_id", "label", "estimator", "replicate", "status", "error")
-  knitr::kable(head(problem_rows[keep], 60L), row.names = FALSE)
+  keep <- c("case_id", "label", "source", "family",
+            "estimator", "replicate", "status", "error")
+  problems <- problem_rows[keep]
+  names(problems) <- c("Case", "Label", "Subcorpus", "Tag",
+                       "Estimator", "Rep", "Status", "Error")
+  knitr::kable(head(problems, 80L), row.names = FALSE)
 } else {
-  knitr::kable(data.frame(note = "No skipped or failed fit rows."))
+  knitr::kable(data.frame(Note = "No skipped or failed fit rows."))
 }
 ```

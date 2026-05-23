@@ -20,14 +20,14 @@ parse_args <- function(args) {
     reps = 10L,
     backend = "nlopt-lbfgs",
     case_regex = NULL,
-    include_observed = FALSE
+    include_observed = TRUE
   )
   i <- 1L
   while (i <= length(args)) {
     arg <- args[[i]]
     if (arg %in% c("-h", "--help")) {
       cat(
-        "Usage: Rscript run_experiment.R [--reps N] [--backend NAME] [--cases REGEX] [--include-observed]\n",
+        "Usage: Rscript run_experiment.R [--reps N] [--backend NAME] [--cases REGEX] [--latent-only]\n",
         "\n",
         "Defaults: --reps 10 --backend nlopt-lbfgs\n",
         sep = ""
@@ -53,6 +53,8 @@ parse_args <- function(args) {
       out$case_regex <- sub("^--cases=", "", arg)
     } else if (arg == "--include-observed") {
       out$include_observed <- TRUE
+    } else if (arg == "--latent-only") {
+      out$include_observed <- FALSE
     } else {
       stop("unknown argument: ", arg, call. = FALSE)
     }
@@ -395,19 +397,63 @@ case_summary <- function(fits, pairs) {
       gls_time_sec = med_time("GLS"),
       uls_elapsed_ratio_over_nt = med_pair("ULS", "elapsed_ratio_estimator_over_nt"),
       gls_elapsed_ratio_over_nt = med_pair("GLS", "elapsed_ratio_estimator_over_nt"),
-      nt_naive_chisq = med_chi("NT"),
-      uls_naive_chisq = med_chi("ULS"),
-      gls_naive_chisq = med_chi("GLS"),
-      uls_chisq_diff_vs_nt = med_pair("ULS", "naive_chisq_diff_estimator_minus_nt"),
-      gls_chisq_diff_vs_nt = med_pair("GLS", "naive_chisq_diff_estimator_minus_nt"),
-      uls_param_max_abs_diff = med_pair("ULS", "param_max_abs_diff"),
-      gls_param_max_abs_diff = med_pair("GLS", "param_max_abs_diff"),
-      uls_sigma_max_abs_diff = med_pair("ULS", "implied_sigma_max_abs_diff"),
-      gls_sigma_max_abs_diff = med_pair("GLS", "implied_sigma_max_abs_diff"),
+      nt_ok = sum(f$estimator == "NT" & f$status == "OK", na.rm = TRUE),
+      uls_ok = sum(f$estimator == "ULS" & f$status == "OK", na.rm = TRUE),
+      gls_ok = sum(f$estimator == "GLS" & f$status == "OK", na.rm = TRUE),
       stringsAsFactors = FALSE
     )
   })
   do.call(rbind, rows)
+}
+
+geo_mean <- function(x) {
+  x <- x[is.finite(x) & x > 0]
+  if (!length(x)) return(NA_real_)
+  exp(mean(log(x)))
+}
+
+quantile_na <- function(x, p) {
+  x <- x[is.finite(x)]
+  if (!length(x)) return(NA_real_)
+  unname(stats::quantile(x, p, names = FALSE))
+}
+
+one_group_summary <- function(x, group_kind, group) {
+  rows <- lapply(split(x, x$estimator), function(y) {
+    ratio <- y$elapsed_ratio_estimator_over_nt
+    data.frame(
+      group_kind = group_kind,
+      group = group,
+      estimator = y$estimator[[1L]],
+      n_pairs = nrow(y),
+      n_cases = length(unique(y$case_id)),
+      geometric_mean_ratio = geo_mean(ratio),
+      median_ratio = median_na(ratio),
+      p25_ratio = quantile_na(ratio, 0.25),
+      p75_ratio = quantile_na(ratio, 0.75),
+      share_faster_than_nt = mean(ratio < 1, na.rm = TRUE),
+      median_nt_ms = 1000 * median_na(y$nt_elapsed_sec),
+      median_estimator_ms = 1000 * median_na(y$estimator_elapsed_sec),
+      stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, rows)
+}
+
+group_summary <- function(pairs) {
+  ok <- pairs[pairs$status == "OK" &
+                is.finite(pairs$elapsed_ratio_estimator_over_nt) &
+                pairs$elapsed_ratio_estimator_over_nt > 0, , drop = FALSE]
+  if (!nrow(ok)) return(data.frame())
+  rows <- list(one_group_summary(ok, "Total", "All"))
+  rows <- c(rows, lapply(split(ok, ok$source), function(x) {
+    one_group_summary(x, "Subcorpus", x$source[[1L]])
+  }))
+  rows <- c(rows, lapply(split(ok, ok$family), function(x) {
+    one_group_summary(x, "Tag", x$family[[1L]])
+  }))
+  out <- do.call(rbind, rows)
+  out[order(out$group_kind, out$group, out$estimator), , drop = FALSE]
 }
 
 write_csv <- function(x, path) {
@@ -486,14 +532,17 @@ for (case in cases) {
 fits_df <- if (length(fits)) do.call(rbind, fits) else data.frame()
 pairs_df <- if (length(pairs)) do.call(rbind, pairs) else data.frame()
 summary_df <- if (nrow(fits_df)) case_summary(fits_df, pairs_df) else data.frame()
+group_df <- if (nrow(pairs_df)) group_summary(pairs_df) else data.frame()
 
 write_csv(fits_df, file.path(results_dir, "fits.csv"))
 write_csv(pairs_df, file.path(results_dir, "pairs_vs_nt.csv"))
 write_csv(summary_df, file.path(results_dir, "case_summary.csv"))
+write_csv(group_df, file.path(results_dir, "group_summary.csv"))
 
 cat(sprintf(
-  "\nwrote %s, %s, %s\n",
+  "\nwrote %s, %s, %s, %s\n",
   file.path(results_dir, "fits.csv"),
   file.path(results_dir, "pairs_vs_nt.csv"),
-  file.path(results_dir, "case_summary.csv")
+  file.path(results_dir, "case_summary.csv"),
+  file.path(results_dir, "group_summary.csv")
 ))
