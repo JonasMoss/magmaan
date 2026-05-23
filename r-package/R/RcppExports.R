@@ -121,8 +121,8 @@ fit_wls_snlls_impl <- function(partable, sample_stats, W, optimizer = NULL, cont
     .Call(`_magmaan_fit_wls_snlls_impl`, partable, sample_stats, W, optimizer, control, bounds)
 }
 
-fit_start_values <- function(partable, sample_stats) {
-    .Call(`_magmaan_fit_start_values`, partable, sample_stats)
+fit_start_values <- function(partable, sample_stats, start = NULL) {
+    .Call(`_magmaan_fit_start_values`, partable, sample_stats, start)
 }
 
 estimate_structured_gamma <- function(fit, raw_data) {
@@ -340,3 +340,4 @@ infer_robust_se_raw <- function(fit, X, bread = "expected", moments = "structure
 infer_robust_se_raw_parts <- function(partable, sample_stats, theta, X, bread = "expected", moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_raw_parts`, partable, sample_stats, theta, X, bread, moments, cov)
 }
+

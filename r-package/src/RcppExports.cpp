@@ -426,14 +426,15 @@ BEGIN_RCPP
 END_RCPP
 }
 // fit_start_values
-Rcpp::NumericVector fit_start_values(SEXP partable, Rcpp::List sample_stats);
-RcppExport SEXP _magmaan_fit_start_values(SEXP partableSEXP, SEXP sample_statsSEXP) {
+Rcpp::NumericVector fit_start_values(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> start);
+RcppExport SEXP _magmaan_fit_start_values(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP startSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_start_values(partable, sample_stats));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type start(startSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_start_values(partable, sample_stats, start));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1167,7 +1168,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_uls_snlls_impl", (DL_FUNC) &_magmaan_fit_uls_snlls_impl, 5},
     {"_magmaan_fit_gls_snlls_impl", (DL_FUNC) &_magmaan_fit_gls_snlls_impl, 5},
     {"_magmaan_fit_wls_snlls_impl", (DL_FUNC) &_magmaan_fit_wls_snlls_impl, 6},
-    {"_magmaan_fit_start_values", (DL_FUNC) &_magmaan_fit_start_values, 2},
+    {"_magmaan_fit_start_values", (DL_FUNC) &_magmaan_fit_start_values, 3},
     {"_magmaan_estimate_structured_gamma", (DL_FUNC) &_magmaan_estimate_structured_gamma, 2},
     {"_magmaan_estimate_structured_gamma_weight", (DL_FUNC) &_magmaan_estimate_structured_gamma_weight, 2},
     {"_magmaan_model_implied", (DL_FUNC) &_magmaan_model_implied, 1},
