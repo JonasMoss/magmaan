@@ -111,6 +111,8 @@ estimate::Backend backend_from(const OptimizerSpec &optimizer) {
     return estimate::Backend::Ceres;
   case OptimizerKind::Ipopt:
     return estimate::Backend::Ipopt;
+  case OptimizerKind::NloptSlsqp:
+    return estimate::Backend::NloptSlsqp;
   case OptimizerKind::NloptLbfgs:
     return estimate::Backend::NloptLbfgs;
   }
@@ -580,10 +582,11 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
                      "FIML facade fitting does not accept bounds"));
     }
     if (estimator.optimizer_spec.kind != OptimizerKind::NloptLbfgs &&
+        estimator.optimizer_spec.kind != OptimizerKind::NloptSlsqp &&
         estimator.optimizer_spec.kind != OptimizerKind::Ipopt) {
       return std::unexpected(
           make_error(ErrorStage::UnsupportedCombination,
-                     "FIML currently supports only the NLopt L-BFGS or IPOPT optimizer"));
+                     "FIML currently supports only the NLopt L-BFGS, NLopt SLSQP, or IPOPT optimizer"));
     }
 
     auto start_stats = estimate::fiml::fiml_start_sample_stats(*raw);
@@ -689,10 +692,11 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
   switch (estimator.kind) {
   case EstimatorKind::ML:
     if (estimator.optimizer_spec.kind != OptimizerKind::NloptLbfgs &&
+        estimator.optimizer_spec.kind != OptimizerKind::NloptSlsqp &&
         estimator.optimizer_spec.kind != OptimizerKind::Ipopt) {
       return std::unexpected(
           make_error(ErrorStage::UnsupportedCombination,
-                     "ML currently supports only the NLopt L-BFGS or IPOPT optimizer"));
+                     "ML currently supports only the NLopt L-BFGS, NLopt SLSQP, or IPOPT optimizer"));
     }
     est = estimate::fit_ml(pt, rep, *stats, *x0, *bounds,
                            backend_from(estimator.optimizer_spec),
@@ -757,10 +761,11 @@ Result<Fit> fit_ml_fcsem(std::shared_ptr<const Model> model,
         "fit_ml_fcsem requires complete-data sample statistics"));
   }
   if (optimizer.kind != OptimizerKind::NloptLbfgs &&
+      optimizer.kind != OptimizerKind::NloptSlsqp &&
       optimizer.kind != OptimizerKind::Ipopt) {
     return std::unexpected(make_error(
         ErrorStage::UnsupportedCombination,
-        "fit_ml_fcsem currently supports only the NLopt L-BFGS or IPOPT optimizer"));
+        "fit_ml_fcsem currently supports only the NLopt L-BFGS, NLopt SLSQP, or IPOPT optimizer"));
   }
 
   Eigen::VectorXd x0;

@@ -1736,6 +1736,8 @@ fit_fiml(spec::LatentStructure pt,
                              const Eigen::VectorXd& start)
       -> fit_expected<optim::OptimResult> {
     switch (backend) {
+      case Backend::NloptSlsqp:
+        return optim::nlopt_slsqp(prob, start, {}, opts);
       case Backend::NloptLbfgs:
         return optim::nlopt_lbfgs(prob, start, {}, opts);
       case Backend::Ipopt:
@@ -1748,7 +1750,7 @@ fit_fiml(spec::LatentStructure pt,
       default:
         return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
             "fit_fiml: requested optimizer backend is not supported; use "
-            "nlopt-lbfgs or ipopt"));
+            "nlopt-lbfgs, nlopt-slsqp, or ipopt"));
     }
   };
 
@@ -1758,12 +1760,6 @@ fit_fiml(spec::LatentStructure pt,
                                   std::int32_t m,
                                   const Eigen::VectorXd& start)
       -> fit_expected<optim::OptimResult> {
-    if (backend != Backend::Ipopt) {
-      return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
-          "fit_fiml: nonlinear equality constraints require optimizer "
-          "\"ipopt\""));
-    }
-#ifdef MAGMAAN_WITH_IPOPT
     optim::ConstrainedScalarProblem cprob;
     cprob.objective = prob;
     cprob.h = h;
@@ -1771,17 +1767,24 @@ fit_fiml(spec::LatentStructure pt,
     cprob.n_constraint = m;
     cprob.constraint_lower = Eigen::VectorXd::Zero(m);
     cprob.constraint_upper = Eigen::VectorXd::Zero(m);
-    return optim::ipopt_constrained(cprob, start, {}, opts);
+    if (backend == Backend::NloptSlsqp) {
+      return optim::nlopt_slsqp_constrained(cprob, start, {}, opts);
+    }
+#ifdef MAGMAAN_WITH_IPOPT
+    if (backend == Backend::Ipopt) {
+      return optim::ipopt_constrained(cprob, start, {}, opts);
+    }
 #else
-    (void)prob;
-    (void)h;
-    (void)J_h;
-    (void)m;
-    (void)start;
-    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
-        "fit_fiml: nonlinear equality constraints require the IPOPT backend; "
-        "reconfigure with MAGMAAN_WITH_IPOPT=ON and use optimizer \"ipopt\""));
+    if (backend == Backend::Ipopt) {
+      return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+          "fit_fiml: nonlinear equality constraints require optimizer "
+          "\"nlopt-slsqp\" or an IPOPT-enabled build with optimizer "
+          "\"ipopt\""));
+    }
 #endif
+    return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
+        "fit_fiml: nonlinear equality constraints require optimizer "
+        "\"nlopt-slsqp\" or \"ipopt\""));
   };
 
   if (!con.active()) {

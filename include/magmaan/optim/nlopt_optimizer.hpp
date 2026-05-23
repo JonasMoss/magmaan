@@ -85,6 +85,17 @@ class NloptOptimizer {
            const Eigen::VectorXd& lower,
            const Eigen::VectorXd& upper) const;
 
+  // Bounded scalar nonlinear program. This is currently meaningful only for
+  // SLSQP: the problem must encode equality constraints by identical
+  // constraint lower/upper entries. Other NLopt algorithms are rejected with a
+  // NumericIssue because they do not support magmaan's nonlinear-constraint
+  // contract.
+  fit_expected<OptimOutput>
+  minimize_constrained(const ConstrainedScalarProblem& prob,
+                       const Eigen::VectorXd& x0,
+                       const Eigen::VectorXd& lower,
+                       const Eigen::VectorXd& upper) const;
+
   // Unbounded minimization — equivalent to passing all-±∞ bounds. NLopt
   // algorithms that require finite bounds (BOBYQA) will return
   // NLOPT_INVALID_ARGS, surfaced here as NumericIssue.

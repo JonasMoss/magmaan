@@ -53,12 +53,13 @@ golden `parTable()` fixtures.
   the reduced α for the pure-merge case.
 - Nonlinear equality constraints (`a == b*c`, `b1 == (b2+b3)^2`) for the ML
   and complete-data LS paths: compiled to name-free expression trees by
-  `resolve_lin_constraints`, enforced by the optional IPOPT interior-point
-  backend with limited-memory Hessian approximation, with the constrained vcov
-  / df projected through the constraint Jacobian H(θ̂). They may be combined
-  with linear equality constraints in the same model — IPOPT then runs in the
-  linear-constraint-reduced α-space. FIML has the same IPOPT-only nonlinear
-  constraint support; ordinal and the separable (SNLLS) path reject them.
+  `resolve_lin_constraints`, enforced by NLopt SLSQP or the optional IPOPT
+  interior-point backend, with the constrained vcov / df projected through the
+  constraint Jacobian H(θ̂). They may be combined with linear equality
+  constraints in the same model — the constrained optimizer then runs in the
+  linear-constraint-reduced α-space. FIML has the same NLopt SLSQP / IPOPT
+  nonlinear constraint support; ordinal and the separable (SNLLS) path reject
+  them.
 - The expression sub-language shared by `:=` defined parameters and `==`
   constraints supports `+ - * / ^`, unary `+ -`, and the unary functions
   `exp` / `log`; both the defined-parameter evaluator and the
@@ -170,11 +171,12 @@ stop rather than any usable non-error return.
   `MAGMAAN_WITH_CERES=ON`).
 - `Backend::Ipopt` is the optional system-IPOPT interior-point backend (build
   with `MAGMAAN_WITH_IPOPT=ON`). It is available as a general scalar optimizer
-  and is the only backend that accepts nonlinear equality constraints. v1 uses
-  IPOPT's limited-memory Hessian approximation, so magmaan supplies objective
-  gradients and constraint Jacobians but not exact Lagrangian Hessians.
-- `Backend::NloptSlsqp` exposes NLopt's SLSQP for ML and LS scalar paths
-  (gradient SQP, Kraft 1988).
+  and accepts nonlinear equality constraints. v1 uses IPOPT's limited-memory
+  Hessian approximation, so magmaan supplies objective gradients and
+  constraint Jacobians but not exact Lagrangian Hessians.
+- `Backend::NloptSlsqp` exposes NLopt's SLSQP for ML, FIML, and LS scalar
+  paths (gradient SQP, Kraft 1988). It accepts simple bounds and nonlinear
+  equality constraints via analytic constraint Jacobians.
 - `Backend::NloptBobyqa`, `Backend::NloptTnewton`, `Backend::NloptVar2`,
   `Backend::NloptLbfgs` round out the NLopt roster with distinct algorithm
   ideas: Powell 2009 derivative-free quadratic-model trust region (BOBYQA,
@@ -876,9 +878,10 @@ failures.
 - Score-test EPC is raw, unstandardized EPC only; standardized EPC and absent
   row-generation helpers are not yet part of the public contract.
 - Nonlinear *equality* constraints are supported for ML, complete-data LS, and
-  FIML through the IPOPT backend (Jacobian-projected vcov/df), including in
-  combination with linear equality constraints in the same model — but not for
-  ordinal or the separable SNLLS path; those combinations fail explicitly.
+  FIML through NLopt SLSQP or the IPOPT backend (Jacobian-projected vcov/df),
+  including in combination with linear equality constraints in the same model
+  — but not for ordinal or the separable SNLLS path; those combinations fail
+  explicitly.
 - Inequality constraints (`<` / `>`) and active-bound inference remain
   unsupported: inequality-constrained estimation needs boundary
   (chi-bar-squared) asymptotics magmaan does not implement. They fail with an

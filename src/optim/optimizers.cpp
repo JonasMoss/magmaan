@@ -186,6 +186,22 @@ nlopt_slsqp(const ScalarProblem& prob, const Eigen::VectorXd& x0,
 }
 
 fit_expected<OptimResult>
+nlopt_slsqp_constrained(const ConstrainedScalarProblem& prob,
+                        const Eigen::VectorXd& x0,
+                        const Bounds& bounds, OptimOptions opts) {
+  const double          inf = std::numeric_limits<double>::infinity();
+  const Eigen::VectorXd lower =
+      bounds.empty() ? Eigen::VectorXd::Constant(x0.size(), -inf) : bounds.lower;
+  const Eigen::VectorXd upper =
+      bounds.empty() ? Eigen::VectorXd::Constant(x0.size(),  inf) : bounds.upper;
+  auto out =
+      NloptOptimizer{opts, NloptAlgorithm::Slsqp}.minimize_constrained(
+          prob, x0, lower, upper);
+  if (!out.has_value()) return std::unexpected(out.error());
+  return to_result(std::move(*out));
+}
+
+fit_expected<OptimResult>
 nlopt_bobyqa(const ScalarProblem& prob, const Eigen::VectorXd& x0,
              const Bounds& bounds, OptimOptions opts) {
   // BOBYQA needs *finite* bounds — there is no analogue of ±HUGE_VAL for a

@@ -391,13 +391,70 @@ TEST_CASE("nonlinear `==` with exp/log: compiled and AD-evaluated") {
   }
 }
 
-TEST_CASE("fit: nonlinear equality constraints require the IPOPT backend") {
+TEST_CASE("fit: nonlinear equality constraints require a constrained backend") {
   auto samp = fixture_samp_3();
   auto pt = must_lavaanify("f =~ x1 + a*x2 + b*x3\na == b^2");
   auto rep = build_matrix_rep(pt).value();
   auto est_or = magmaan::test::fit(pt, rep, samp);
   REQUIRE_FALSE(est_or.has_value());
-  CHECK(est_or.error().detail.find("ipopt") != std::string::npos);
+  CHECK(est_or.error().detail.find("nlopt-slsqp") != std::string::npos);
+}
+
+TEST_CASE("fit: nonlinear equality constraints accept the NLopt SLSQP backend") {
+  Eigen::MatrixXd S(3, 3);
+  S << 1.3583698455127435, 0.40737133015270244, 0.57989932234369646,
+       0.40737133015270244, 1.3817838655202481,  0.45106393693226349,
+       0.57989932234369646, 0.45106393693226349, 1.2748648607631261;
+  SampleStats samp;
+  samp.S.push_back(S);
+  samp.n_obs.push_back(301);
+
+  auto pt = must_lavaanify("visual =~ x1 + a*x2 + b*x3\na == b^2");
+  auto rep = build_matrix_rep(pt).value();
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 2000;
+  auto est_or = magmaan::test::fit(
+      pt, rep, samp, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(est_or.has_value(), "SLSQP constrained fit failed: "
+      << (est_or.has_value() ? std::string{} : est_or.error().detail));
+  const auto& est = *est_or;
+
+  Eigen::VectorXd ref(6);
+  ref << 0.76844012067838263, 0.87660715038973203, 0.75267986994138880,
+         1.04132952146332847, 0.74953748710182533, 0.62738942422421695;
+  for (Eigen::Index k = 0; k < 6; ++k)
+    CHECK(est.theta(k) == doctest::Approx(ref(k)).epsilon(1e-4));
+
+  auto nl = build_nl_constraints(pt);
+  CHECK(std::abs(nl.h(est.theta)(0)) < 1e-5);
+}
+
+TEST_CASE("fit_gmm: linear and nonlinear equality constraints accept NLopt SLSQP") {
+  Eigen::Vector4d lam(1.0, 0.49, 0.7, 1.19);
+  Eigen::MatrixXd S = lam * lam.transpose();
+  S.diagonal().array() += 0.5;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {400};
+
+  auto pt = must_lavaanify(
+      "f =~ x1 + a*x2 + b*x3 + c*x4\nc == a + b\na == b^2");
+  auto rep = build_matrix_rep(pt).value();
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 2000;
+  auto est_or = magmaan::test::fit_gmm(
+      pt, rep, samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(est_or.has_value(), "SLSQP constrained GMM fit failed: "
+      << (est_or.has_value() ? std::string{} : est_or.error().detail));
+
+  auto nl = build_nl_constraints(pt);
+  CHECK(std::abs(nl.h(est_or->theta)(0)) < 1e-5);
+
+  auto con = build_eq_constraints(pt, /*allow_nonlinear=*/true).value();
+  REQUIRE(con.active());
+  CHECK((con.A_eq * est_or->theta - con.b_eq).cwiseAbs().maxCoeff() < 1e-8);
 }
 
 #ifdef MAGMAAN_WITH_IPOPT

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <string>
 #include <utility>
@@ -13,6 +14,22 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/optim/terminal_audit.hpp"
+
+namespace {
+
+constexpr double kInvalidConstraintResidual = 1e20;
+
+struct NloptConstraintData {
+  const magmaan::optim::ConstrainedScalarProblem* prob = nullptr;
+};
+
+void fill_invalid_constraint(unsigned m, unsigned n, double* result,
+                             double* grad) {
+  std::fill_n(result, m, kInvalidConstraintResidual);
+  if (grad) std::fill_n(grad, static_cast<std::size_t>(m) * n, 0.0);
+}
+
+}  // namespace
 
 // NLopt's objective callback type `nlopt_func` is declared inside the
 // `extern "C"` block of <nlopt.h>, so the trampoline we hand to
@@ -38,6 +55,49 @@ static double magmaan_nlopt_objective(unsigned n, const double* x,
   if (grad) Eigen::Map<Eigen::VectorXd>(grad, n) = g;
   return v;
 }
+
+static void magmaan_nlopt_equality_mconstraint(unsigned m, double* result,
+                                               unsigned n, const double* x,
+                                               double* grad, void* data) {
+  auto* cdata = static_cast<NloptConstraintData*>(data);
+  if (!cdata || !cdata->prob) {
+    fill_invalid_constraint(m, n, result, grad);
+    return;
+  }
+
+  const auto& prob = *cdata->prob;
+  const Eigen::Map<const Eigen::VectorXd> x_map(x, n);
+  const Eigen::VectorXd xv = x_map;
+  const Eigen::VectorXd h = prob.h(xv);
+  const bool h_ok = h.size() == static_cast<Eigen::Index>(m) && h.allFinite();
+
+  Eigen::MatrixXd J;
+  bool J_ok = true;
+  if (grad) {
+    J = prob.J_h(xv);
+    J_ok = J.rows() == static_cast<Eigen::Index>(m) &&
+           J.cols() == static_cast<Eigen::Index>(n) && J.allFinite();
+  }
+
+  if (!h_ok || !J_ok) {
+    fill_invalid_constraint(m, n, result, grad);
+    return;
+  }
+
+  const Eigen::VectorXd target = prob.constraint_lower;
+  for (unsigned i = 0; i < m; ++i) {
+    result[i] = h[static_cast<Eigen::Index>(i)] -
+                target[static_cast<Eigen::Index>(i)];
+  }
+  if (grad) {
+    for (unsigned i = 0; i < m; ++i) {
+      for (unsigned j = 0; j < n; ++j) {
+        grad[i * n + j] =
+            J(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j));
+      }
+    }
+  }
+}
 }  // extern "C"
 
 namespace magmaan::optim {
@@ -47,6 +107,78 @@ namespace {
 FitError make_err(FitError::Kind k, std::string detail,
                   int iter = 0, double fval = 0.0) {
   return FitError{k, std::move(detail), iter, fval};
+}
+
+fit_expected<OptimOutput>
+finish_nlopt_result(nlopt_result rc, const std::string& algo_name,
+                    int n_evals, double fmin, Eigen::VectorXd theta,
+                    const ObjectiveFn& f, const Eigen::VectorXd& lower,
+                    const Eigen::VectorXd& upper,
+                    const std::string& invalid_args_detail) {
+  switch (rc) {
+    case NLOPT_OUT_OF_MEMORY:
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "nlopt " + algo_name + ": out of memory"));
+    case NLOPT_INVALID_ARGS:
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "nlopt " + algo_name + ": " + invalid_args_detail));
+    default:
+      break;
+  }
+  if (!std::isfinite(fmin)) {
+    return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
+        "nlopt " + algo_name + ": final objective is non-finite (model "
+        "likely under-identified or the start too far from a valid region)",
+        n_evals, fmin));
+  }
+
+  TerminalAudit a = audit_terminal_iterate(f, theta, fmin, lower, upper);
+
+  OptimStatus opt_status = OptimStatus::Converged;
+  switch (rc) {
+    case NLOPT_SUCCESS:
+    case NLOPT_STOPVAL_REACHED:
+    case NLOPT_FTOL_REACHED:
+    case NLOPT_XTOL_REACHED:
+      break;
+    case NLOPT_ROUNDOFF_LIMITED:
+      opt_status = OptimStatus::LineSearchSalvaged;
+      break;
+    case NLOPT_MAXEVAL_REACHED:
+    case NLOPT_MAXTIME_REACHED:
+      if (a.stationary) {
+        opt_status = OptimStatus::LineSearchSalvaged;
+      } else {
+        return std::unexpected(make_err(FitError::Kind::OptimizerNonConvergence,
+            "nlopt " + algo_name + ": evaluation budget exhausted without "
+            "convergence", n_evals, fmin));
+      }
+      break;
+    case NLOPT_FORCED_STOP:
+      if (a.stationary) {
+        opt_status = OptimStatus::LineSearchSalvaged;
+      } else {
+        return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
+            "nlopt " + algo_name + ": forced stop", n_evals, fmin));
+      }
+      break;
+    case NLOPT_FAILURE:
+    default:
+      if (a.stationary) {
+        opt_status = OptimStatus::LineSearchSalvaged;
+      } else {
+        return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
+            "nlopt " + algo_name + ": generic solver failure",
+            n_evals, fmin));
+      }
+      break;
+  }
+
+  OptimOutput out{std::move(theta), fmin, /*iterations=*/0,
+                  /*f_evals=*/n_evals, /*g_evals=*/n_evals,
+                  opt_status, a.grad_inf_norm};
+  out.audit = std::move(a);
+  return out;
 }
 
 // Translate the public opaque `NloptAlgorithm` enum to NLopt's internal
@@ -131,83 +263,100 @@ NloptOptimizer::minimize(Objective f,
   // satisfies the relative stationarity test promotes the result to
   // `LineSearchSalvaged` rather than discarding a converged iterate.
 
-  // Hard-failure short-circuits — no usable iterate to audit.
-  switch (rc) {
-    case NLOPT_OUT_OF_MEMORY:
-      return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          "nlopt " + algo_name + ": out of memory"));
-    case NLOPT_INVALID_ARGS:
-      return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          "nlopt " + algo_name + ": invalid arguments (BOBYQA requires "
-          "finite bounds; check that lower/upper aren't all ±infinity)"));
-    default:
-      break;
-  }
-  if (!std::isfinite(fmin)) {
-    return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
-        "nlopt " + algo_name + ": final objective is non-finite (model "
-        "likely under-identified or the start too far from a valid region)",
-        n_evals, fmin));
-  }
+  return finish_nlopt_result(
+      rc, algo_name, n_evals, fmin, std::move(theta), f, lower, upper,
+      "invalid arguments (BOBYQA requires finite bounds; check that "
+      "lower/upper aren't all ±infinity)");
+}
 
-  // Soft path: run the audit once, then decide based on the return code
-  // PLUS the geometric verdict. The audit handles its own bounds projection
-  // (the inline loop the old success path used now lives there).
-  TerminalAudit a = audit_terminal_iterate(f, theta, fmin, lower, upper);
-
-  OptimStatus opt_status = OptimStatus::Converged;
-  switch (rc) {
-    case NLOPT_SUCCESS:
-    case NLOPT_STOPVAL_REACHED:
-    case NLOPT_FTOL_REACHED:
-    case NLOPT_XTOL_REACHED:
-      // Backend says "clean stop"; v1 does not downgrade even if the audit
-      // disagrees (that's a separate semantics-change PR). Leave as Converged.
-      break;
-    case NLOPT_ROUNDOFF_LIMITED:
-      // Backend says "result usable but roundoff halted the search short of
-      // tolerances." Previously unconditionally mapped to LineSearchSalvaged;
-      // we keep that classification — the audit's grad_inf_norm now backs it.
-      opt_status = OptimStatus::LineSearchSalvaged;
-      break;
-    case NLOPT_MAXEVAL_REACHED:
-    case NLOPT_MAXTIME_REACHED:
-      if (a.stationary) {
-        opt_status = OptimStatus::LineSearchSalvaged;
-      } else {
-        return std::unexpected(make_err(FitError::Kind::OptimizerNonConvergence,
-            "nlopt " + algo_name + ": evaluation budget exhausted without "
-            "convergence", n_evals, fmin));
-      }
-      break;
-    case NLOPT_FORCED_STOP:
-      if (a.stationary) {
-        opt_status = OptimStatus::LineSearchSalvaged;
-      } else {
-        return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
-            "nlopt " + algo_name + ": forced stop", n_evals, fmin));
-      }
-      break;
-    case NLOPT_FAILURE:
-    default:
-      if (a.stationary) {
-        opt_status = OptimStatus::LineSearchSalvaged;
-      } else {
-        return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
-            "nlopt " + algo_name + ": generic solver failure",
-            n_evals, fmin));
-      }
-      break;
+fit_expected<OptimOutput>
+NloptOptimizer::minimize_constrained(const ConstrainedScalarProblem& prob,
+                                     const Eigen::VectorXd& x0,
+                                     const Eigen::VectorXd& lower,
+                                     const Eigen::VectorXd& upper) const {
+  if (algo_ != NloptAlgorithm::Slsqp) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "NloptOptimizer: nonlinear constraints are supported only by SLSQP"));
+  }
+  if (lower.size() != x0.size() || upper.size() != x0.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "NloptOptimizer: bounds size mismatch (lower=" +
+            std::to_string(lower.size()) +
+            ", upper=" + std::to_string(upper.size()) +
+            ", x0=" + std::to_string(x0.size()) + ")"));
+  }
+  const Eigen::Index m = prob.n_constraint;
+  if (m <= 0) {
+    return minimize(prob.objective.f, x0, lower, upper);
+  }
+  if (!prob.objective.f || !prob.h || !prob.J_h) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "NloptOptimizer: constrained problem is missing objective or "
+        "constraint callbacks"));
+  }
+  if (prob.constraint_lower.size() != m || prob.constraint_upper.size() != m) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "NloptOptimizer: constraint bound size mismatch (lower=" +
+            std::to_string(prob.constraint_lower.size()) +
+            ", upper=" + std::to_string(prob.constraint_upper.size()) +
+            ", constraints=" + std::to_string(m) + ")"));
+  }
+  if (!prob.constraint_lower.allFinite() ||
+      !prob.constraint_upper.allFinite()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "NloptOptimizer: constraint equality targets must be finite"));
+  }
+  if ((prob.constraint_lower - prob.constraint_upper).cwiseAbs().maxCoeff() >
+      0.0) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "NloptOptimizer: SLSQP constrained path currently supports only "
+        "equality constraints encoded by identical lower/upper entries"));
   }
 
-  // NLopt exposes no iteration count, only a total evaluation count. Its
-  // gradient algorithms request value and gradient jointly, so every one of
-  // the n_evals callbacks is both a function and a gradient evaluation.
-  OptimOutput out{std::move(theta), fmin, /*iterations=*/0,
-                  /*f_evals=*/n_evals, /*g_evals=*/n_evals,
-                  opt_status, a.grad_inf_norm};
-  out.audit = std::move(a);
-  return out;
+  const unsigned        n        = static_cast<unsigned>(x0.size());
+  const unsigned        n_con    = static_cast<unsigned>(m);
+  const nlopt_algorithm raw_algo = to_nlopt_algo(algo_);
+  nlopt_opt             opt      = nlopt_create(raw_algo, n);
+  if (!opt) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "NloptOptimizer: nlopt_create failed for algorithm " +
+            std::string(nlopt_algorithm_name(raw_algo)) +
+            ", n=" + std::to_string(n)));
+  }
+
+  nlopt_set_min_objective(opt, &magmaan_nlopt_objective,
+                          const_cast<ObjectiveFn*>(&prob.objective.f));
+  nlopt_set_lower_bounds(opt, lower.data());
+  nlopt_set_upper_bounds(opt, upper.data());
+
+  NloptConstraintData cdata{&prob};
+  const Eigen::VectorXd tol =
+      Eigen::VectorXd::Constant(m, std::max(opts_.gtol, 1e-12));
+  const nlopt_result constraint_rc = nlopt_add_equality_mconstraint(
+      opt, n_con, &magmaan_nlopt_equality_mconstraint, &cdata, tol.data());
+  if (constraint_rc < 0) {
+    const std::string algo_name = nlopt_algorithm_name(raw_algo);
+    nlopt_destroy(opt);
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "nlopt " + algo_name +
+            ": failed to add equality constraints to SLSQP"));
+  }
+
+  nlopt_set_ftol_rel(opt, opts_.ftol);
+  nlopt_set_xtol_rel(opt, opts_.gtol);
+  nlopt_set_maxeval(opt, opts_.max_iter);
+
+  Eigen::VectorXd theta = x0.cwiseMax(lower).cwiseMin(upper);
+  double fmin = std::numeric_limits<double>::quiet_NaN();
+  const nlopt_result rc = nlopt_optimize(opt, theta.data(), &fmin);
+  const int n_evals = nlopt_get_numevals(opt);
+  const std::string algo_name = nlopt_algorithm_name(raw_algo);
+  nlopt_destroy(opt);
+
+  return finish_nlopt_result(
+      rc, algo_name, n_evals, fmin, std::move(theta), prob.objective.f,
+      lower, upper, "invalid arguments (check SLSQP constraint dimensions, "
+      "constraint tolerances, and bounds)");
 }
 
 fit_expected<OptimOutput>

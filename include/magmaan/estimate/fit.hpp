@@ -55,7 +55,8 @@ struct Estimates {
 //   Ceres        — Levenberg–Marquardt; LS path only, needs MAGMAAN_WITH_CERES.
 //   CeresBfgs    — Ceres line-search dense BFGS; unbounded LS path only.
 //   NloptSlsqp   — NLopt SLSQP (Kraft 1988); sequential quadratic programming
-//                  with native box bounds.
+//                  with native box bounds and nonlinear equality constraints
+//                  on scalar ML/LS/FIML paths.
 //   NloptBobyqa  — NLopt BOBYQA (Powell 2009); derivative-free quadratic-model
 //                  trust region. Requires *finite* bounds.
 //   NloptTnewton — NLopt LD_TNEWTON_PRECOND_RESTART (Nash 1985); preconditioned
@@ -67,7 +68,8 @@ struct Estimates {
 //   NloptLbfgs   — NLopt's own L-BFGS; current default scalar backend.
 //   Ipopt        — IPOPT interior-point backend with limited-memory Hessian
 //                  approximation. Needs MAGMAAN_WITH_IPOPT. General scalar
-//                  backend and the only nonlinear-equality constraint backend.
+//                  backend and an optional nonlinear-equality constraint
+//                  backend alongside NLopt SLSQP.
 //   Port         — PORT drmngb model-Hessian trust region with bounds (the
 //                  algorithm behind R's `nlminb`; TOMS 611). Needs
 //                  MAGMAAN_WITH_PORT (default ON). Replaces the now-retired

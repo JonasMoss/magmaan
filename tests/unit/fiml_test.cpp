@@ -16,6 +16,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/estimate/fiml.hpp"
+#include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -234,6 +235,36 @@ TEST_CASE("fit_fiml: complete-data path fits a saturated mean CFA near zero grad
     return;
   }
   CHECK(vg->gradient.cwiseAbs().maxCoeff() < 1e-4);
+}
+
+TEST_CASE("fit_fiml: nonlinear equality constraints accept NLopt SLSQP") {
+  auto built = build_mean_model("f =~ x1 + a*x2 + b*x3\na == b^2");
+
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.7);
+  theta0(0) = 0.49;
+  theta0(1) = 0.7;
+  theta0.tail(3) << 1.0, 2.0, 3.0;
+  auto truth = built.ev.sigma(theta0);
+  REQUIRE(truth.has_value());
+  Eigen::LLT<Eigen::MatrixXd> llt(truth->sigma[0]);
+  REQUIRE(llt.info() == Eigen::Success);
+  const Eigen::MatrixXd L = llt.matrixL();
+  const Eigen::MatrixXd Z = deterministic_z(24, 3);
+
+  magmaan::data::RawData raw;
+  raw.X.push_back((Z * L.transpose()).rowwise() + truth->mu[0].transpose());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 300;
+  auto est = magmaan::estimate::fit_fiml(
+      *built.pt, *built.rep, raw, theta0, magmaan::estimate::fiml::FIML{},
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(est.has_value(), "SLSQP constrained FIML failed: "
+      << (est.has_value() ? std::string{} : est.error().detail));
+
+  auto nl = magmaan::estimate::build_nl_constraints(*built.pt);
+  CHECK(std::abs(nl.h(est->theta)(0)) < 1e-5);
 }
 
 TEST_CASE("FIML complete-data objective and gradient match ML up to constants") {
