@@ -40,8 +40,11 @@ solutions, or ugly local basins.
 The root `r-package/` exports the initial simulation factories:
 
 ```r
+convergence_sim("dejonckere_simple_2025")
+convergence_sim("dejonckere_shrinkage_2023_study2_14")
 convergence_sim_dejonckere_simple()
 convergence_sim_dejonckere_crossloading()
+convergence_sim_dejonckere_shrinkage()
 convergence_sim_dejonckere_msst()
 convergence_sim_ludtke_cfa()
 convergence_sim_catalog()
