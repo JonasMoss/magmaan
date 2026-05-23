@@ -9,6 +9,8 @@
 
 #include "internal.hpp"
 
+#include <cctype>
+
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/estimate/ordinal.hpp"
@@ -45,14 +47,60 @@ namespace {
 Rcpp::List audit_to_r(const magmaan::optim::TerminalAudit& a);
 Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d);
 
+std::string start_name_from_arg(Rcpp::Nullable<Rcpp::String> start,
+                                const char* caller,
+                                const char* default_name) {
+  if (start.isNull()) return default_name;
+  std::string name = Rcpp::as<std::string>(start.get());
+  for (char& ch : name) {
+    if (ch == '_') ch = '-';
+    else ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  }
+  if (name.empty() || name == "default" || name == "lavaan" ||
+      name == "fabin") {
+    return "fabin3";
+  }
+  if (name == "simple" || name == "fabin2" || name == "fabin3" ||
+      name == "guttman" || name == "guttman1952" ||
+      name == "bentler" || name == "bentler1982" ||
+      name == "jamesstein" || name == "james-stein" || name == "js") {
+    return name;
+  }
+  Rcpp::stop("magmaan: %s(): unsupported start '%s' "
+             "(accepted: simple, fabin2, fabin3, guttman, bentler1982, jamesstein)",
+             caller, name.c_str());
+  return default_name;
+}
+
 // The estimate::fit* core takes an explicit start vector. These helpers
 // compute the starting values from a parsed model and abort to R on failure.
-// The R-facing layer owns the choice of starting algorithm; the default is
-// FABIN3 (Hägglund 1982), matching lavaan's default.
+// The R-facing layer owns the choice of starting algorithm; ordinary fits
+// default to FABIN3 (Hägglund 1982), matching lavaan's default.
 Eigen::VectorXd start_values_or_stop(const Ctx& ctx,
-                                     const magmaan::spec::Starts& starts) {
-  auto x = magmaan::estimate::fabin_start_values(ctx.pt, ctx.rep, ctx.samp,
-                                                 starts);
+                                     const magmaan::spec::Starts& starts,
+                                     const std::string& start_name = "fabin3") {
+  magmaan::fit_expected<Eigen::VectorXd> x;
+  if (start_name == "simple") {
+    x = magmaan::estimate::simple_start_values(ctx.pt, ctx.rep, ctx.samp,
+                                               starts);
+  } else if (start_name == "fabin2") {
+    x = magmaan::estimate::fabin_start_values(
+        ctx.pt, ctx.rep, ctx.samp, starts,
+        magmaan::estimate::FabinVariant::Fabin2);
+  } else if (start_name == "guttman" || start_name == "guttman1952") {
+    x = magmaan::estimate::guttman_start_values(ctx.pt, ctx.rep, ctx.samp,
+                                                starts);
+  } else if (start_name == "bentler" || start_name == "bentler1982") {
+    x = magmaan::estimate::bentler1982_start_values(ctx.pt, ctx.rep,
+                                                    ctx.samp, starts);
+  } else if (start_name == "jamesstein" || start_name == "james-stein" ||
+             start_name == "js") {
+    x = magmaan::estimate::jamesstein_start_values(ctx.pt, ctx.rep, ctx.samp,
+                                                   starts);
+  } else {
+    x = magmaan::estimate::fabin_start_values(ctx.pt, ctx.rep, ctx.samp,
+                                              starts);
+  }
   if (!x.has_value()) stop_fit(x.error());
   return std::move(*x);
 }
@@ -1819,19 +1867,21 @@ Rcpp::List fit_wls_snlls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
 // to the unified per-family entries above; the C++ Backend enum is the
 // single dispatch surface.
 
-// fit_start_values() — mirrors simple_start_values(pt, rep, samp). Returns the
-// theta-ordered start vector (length npar). `sample_stats` as in fit_fit();
-// values used verbatim.
+// fit_start_values() — returns a theta-ordered start vector (length npar).
+// `sample_stats` is as in fit_fit(); values are used verbatim. The default
+// remains "simple" for backward compatibility with the old helper.
 //
 // [[Rcpp::export]]
-Rcpp::NumericVector fit_start_values(SEXP partable, Rcpp::List sample_stats) {
+Rcpp::NumericVector fit_start_values(
+    SEXP partable, Rcpp::List sample_stats,
+    Rcpp::Nullable<Rcpp::String> start = R_NilValue) {
   magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_start_values");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
                                   sample_stats);
-  auto sv_or = magmaan::estimate::simple_start_values(ctx.pt, ctx.rep, ctx.samp);
-  if (!sv_or.has_value()) stop_fit(sv_or.error());
-  return Rcpp::wrap(*sv_or);
+  const std::string start_name =
+      start_name_from_arg(start, "fit_start_values", "simple");
+  return Rcpp::wrap(start_values_or_stop(ctx, starts, start_name));
 }
 
 // estimate_structured_gamma() — explicit MI4 / structured-ADF Gamma builder.
