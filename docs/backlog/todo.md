@@ -106,6 +106,21 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   distinguish clean convergence from line-search salvage or singular PORT
   convergence, and still avoid interpreting backend-specific missing iteration
   counts as real zero-iteration solves.
+- **XL.** Design an optimizer terminal-point "ultimate verifier" track. The
+  goal is to turn the provisional audit tolerance into an empirically justified
+  convergence certificate for SEM fits rather than a hand-tuned cutoff. Build
+  an offline verifier that records the backend-independent L1 residual
+  `||projected_gradient||_inf / (1 + |f_recomputed|)`, objective/parameter
+  gaps to lavaan or certified fixtures where available, cross-backend
+  same-basin agreement, PD margins, active bounds, and constraint residuals
+  over the Geiser/Mplus/Little/Newsom/paper corpora. Add a high-precision
+  check mode (`long double`, MPFR/Boost.Multiprecision, or an R `Rmpfr`
+  helper) that re-evaluates `f` and the gradient at reported terminal points
+  and optionally performs a few high-precision local refinement steps. Use the
+  resulting CSV/report to separate ordinary line-search noise-floor salvages
+  from genuinely non-stationary same-objective points (e.g., Newsom
+  `ex5_4`/`ex5_4c`) and to justify any default `TerminalAuditOptions`
+  tolerance change in `docs/design/terminal-audit.md`.
 - **M.** Compare LBFGS, LBFGS-B, Ceres trust-region, Ceres dense BFGS, and
   SNLLS only on semantically appropriate cases; include shallow or
   Heywood-prone LS cases so bounds and conditioning stay visible.
