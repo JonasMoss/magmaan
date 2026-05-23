@@ -285,11 +285,7 @@ TEST_CASE("dls_weight: rejects raw data with missingness") {
 // End-to-end: the DLS weight drives a moment-quadratic fit.
 // ============================================================================
 
-// TODO(default-backend): NLopt L-BFGS can accept this start point with zero
-// reported iterations. Revisit iteration-accounting expectations with the
-// default-backend study instead of baking in retired-backend behavior.
-TEST_CASE("dls_weight: fit_gmm converges with the DLS weight" *
-          doctest::skip()) {
+TEST_CASE("dls_weight: fit_gmm converges with the DLS weight") {
   auto raw = make_raw(400);
   auto samp = magmaan::data::sample_stats_from_raw(raw);
   REQUIRE(samp.has_value());
@@ -307,7 +303,9 @@ TEST_CASE("dls_weight: fit_gmm converges with the DLS weight" *
       "fit_gmm with DLS weight failed: "
           << (out.has_value() ? "" : out.error().detail));
   CHECK(std::isfinite(out->fmin));
-  CHECK(out->iterations > 0);
+  // NLopt fills iterations = 0 by design (see src/optim/nlopt_optimizer.cpp);
+  // f_evals > 0 is the backend-portable "the optimizer actually ran" check.
+  CHECK(out->f_evals > 0);
 }
 
 // ============================================================================

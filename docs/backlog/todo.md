@@ -155,11 +155,13 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   callers, and augmented-Lagrangian inner solves. Document tolerance semantics
   (`gtol` vs NLopt `xtol_rel`), iteration/evaluation reporting, and bounded
   behavior before changing the default again.
-- **M, default-backend follow-up.** Re-enable the tests skipped during the
-  optimizer rip-out once the provisional default is studied: DLS GMM and ordinal
-  theta zero-iteration expectations, three synthetic API ML staged/nested
-  paths, and the Little/Newsom continuous corpus check currently exposing
-  `newsom/ex5_5b` under NLopt L-BFGS.
+- **S/M, newsom corpus.** The Little/Newsom continuous golden
+  (`tests/golden/textbook_corpus_golden_test.cpp`) is currently skipped because
+  NLopt L-BFGS does not converge `newsom/ex5_5b` from `simple_start_values`.
+  Same family as the documented `ex12_3` case in
+  [`docs/backlog/newsom-corpus-failures.md`](newsom-corpus-failures.md): NLopt
+  stalling early on a structurally awkward ML objective. Unskip once the
+  starting-value path or harness-level cross-backend fallback handles it.
 - **S, before shipping binary artifacts.** The repo now carries an MIT
   `LICENSE` that also notes the vendored BSD-3 PORT routines, which is
   sufficient for a source release — Eigen, Ceres, NLopt, and nlohmann_json are
