@@ -45,6 +45,15 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   ULS/GLS smoke cases to WLS, ordinal DWLS/WLS, and mixed categorical models.
 - **M.** Track objective value, gradient norm, iteration count, wall time, and
   agreement with lavaan-backed estimates where applicable.
+- **M/L.** Convergence-note / start-value portfolio paper track
+  (`papers/convergence-note/`). The skeleton, local resources, and first R
+  simulation factories now exist for the De Jonckere-Rosseel small-sample SEM
+  designs and the Ludtke-Ulitzsch-Robitzsch weak-loading CFA design. Next
+  milestones: add runners that compare simple/FABIN/Guttman/Bentler/James-Stein
+  starts, bounded random starts, and screened portfolios under equal budgets;
+  filter genuinely hard cases by final gradient norm, objective gap,
+  admissibility, PD margin, and multistart basin disagreement rather than
+  optimizer failure alone.
 - **S/M.** Tighten the remaining Geiser GLS parity exceptions now documented
   in the parity-tier golden: manifest fixed.x path models need a resolved
   implied-moment comparison surface for exogenous observed moments, and
