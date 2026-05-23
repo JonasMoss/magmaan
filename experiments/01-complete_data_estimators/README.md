@@ -25,19 +25,19 @@ just r-install
 Quick smoke:
 
 ```sh
-Rscript experiments/complete_data_estimators/run_experiment.R --reps 1 --cases 'brown_2015_tab4_1_neuroticism_extraversion'
+Rscript experiments/01-complete_data_estimators/run_experiment.R --reps 1 --cases 'brown_2015_tab4_1_neuroticism_extraversion'
 ```
 
 Default experiment:
 
 ```sh
-Rscript experiments/complete_data_estimators/run_experiment.R
+Rscript experiments/01-complete_data_estimators/run_experiment.R
 ```
 
 Render the report:
 
 ```sh
-(cd experiments/complete_data_estimators && quarto render report.qmd)
+(cd experiments/01-complete_data_estimators && quarto render report.qmd)
 ```
 
 Generated CSV files live under `results/` and are ignored by git; `report.html`
