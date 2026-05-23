@@ -110,6 +110,7 @@ add_library(magmaan STATIC
   src/estimate/expr_eval.cpp
   src/estimate/nl_constraints.cpp
   src/estimate/auglag.cpp
+  src/estimate/diagnostics.cpp
   src/estimate/gmm/moment_quadratic.cpp
   src/estimate/gmm/gp.cpp
   src/estimate/gmm/dls_weight.cpp
@@ -132,7 +133,8 @@ add_library(magmaan STATIC
   src/measures/factor_scores.cpp
   src/optim/lbfgs_optimizer.cpp
   src/optim/lbfgsb_optimizer.cpp
-  src/optim/optimizers.cpp)
+  src/optim/optimizers.cpp
+  src/optim/terminal_audit.cpp)
 add_library(magmaan::magmaan ALIAS magmaan)
 
 target_compile_features(magmaan PUBLIC cxx_std_23)

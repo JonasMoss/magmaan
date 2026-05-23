@@ -6,7 +6,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
-#include "magmaan/optim/problem.hpp"   // OptimStatus
+#include "magmaan/optim/problem.hpp"   // OptimStatus, TerminalAudit
 
 namespace magmaan::optim {
 
@@ -27,6 +27,11 @@ struct LbfgsOutput {
   // solution. `grad_inf_norm < 0` means the backend did not compute it.
   OptimStatus     status        = OptimStatus::Converged;
   double          grad_inf_norm = -1.0;
+  // Terminal audit at the returned point. Default-constructed (sentinels,
+  // `stationary = false`) when the wrapper did not run an audit. The
+  // `= {}` keeps existing `LbfgsOutput{...}` aggregate-inits passing under
+  // `-Wmissing-field-initializers`.
+  TerminalAudit   audit         = {};
 };
 
 // LBFGS++ adapter. The objective callable computes value + writes

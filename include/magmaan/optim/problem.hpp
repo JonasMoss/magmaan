@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
+#include <limits>
+#include <vector>
 
 #include <Eigen/Core>
 
@@ -71,6 +74,52 @@ enum class OptimStatus {
   Unknown,              // backend did not report a refined status
 };
 
+// --- Terminal audit -------------------------------------------------------
+//
+// The types belong here (alongside OptimStatus / OptimResult) because they
+// are part of the optimizer's contract: every scalar backend may carry a
+// TerminalAudit on its OptimResult / LbfgsOutput. The free-function declaration
+// and the narrative rationale live in `terminal_audit.hpp`, which includes
+// this header.
+
+// Knobs for `audit_terminal_iterate`. All defaults are the v1 settled values;
+// callers (the four scalar backends) pass these unchanged for now.
+struct TerminalAuditOptions {
+  // Stationarity test is RELATIVE: ‖Pg‖_∞ ≤ stationarity_tol · (1 + |f|).
+  // Default 2e-6 is loose enough to clear noise-floor ML/GLS endgames where
+  // the gradient sits just above one part per million of the objective scale,
+  // while still rejecting the 1e-3-scale non-stationary textbook-corpus cases.
+  // A scale-invariant test is the only one that's correct across a 290-model
+  // corpus where |f| ranges over many orders of magnitude.
+  double stationarity_tol  = 2e-6;
+  // Coordinate distance at which we declare `x[i]` to be on a finite bound,
+  // for the projected-gradient construction. Small absolute — we are masking
+  // a gradient component, not measuring active-set membership for inference.
+  double active_bound_tol  = 1e-12;
+  // RELATIVE consistency check: |f(x) − reported_f| ≤ f_consistency_rel ·
+  // (1 + |reported_f|). This catches "backend left last-tried point, not
+  // best" — a gross-divergence detector, not a precision measurement.
+  double f_consistency_rel = 1e-6;
+};
+
+// What the audit found. Plain struct, carried up via `LbfgsOutput` /
+// `OptimResult` and surfaced to R as the nested `fit$audit` sub-record. Never
+// produces a `FitError` — observation only.
+struct TerminalAudit {
+  bool        stationary       = false;
+  double      grad_inf_norm    = -1.0;   // -1 sentinel = could not compute
+  double      stationarity_rhs = -1.0;   // the tol · (1 + |f|) it compared against
+  double      f_recomputed     = std::numeric_limits<double>::quiet_NaN();
+  bool        f_consistent     = false;
+  bool        f_finite         = false;
+  // Active set in DRIVEN coordinates (size matches optimizer's x):
+  // {-1 = at lower, 0 = interior, +1 = at upper}. Distinct from L2's
+  // `active_bounds_full`, which indexes the expanded θ.
+  std::vector<std::int8_t> active_set;
+  // Advisory only — the wrapper owns the actual returned status.
+  OptimStatus advisory_status  = OptimStatus::Unknown;
+};
+
 // Optimizer output. `x` is in the driven parameter space; the caller applies
 // the problem's `expand` to recover full θ.
 struct OptimResult {
@@ -83,6 +132,13 @@ struct OptimResult {
   // returned point. `grad_inf_norm < 0` means the backend did not compute it.
   OptimStatus     status        = OptimStatus::Converged;
   double          grad_inf_norm = -1.0;
+  // Terminal audit at the returned point. Default-constructed (`stationary
+  // = false`, sentinels) when the wrapper did not run an audit — e.g. on a
+  // hard failure that bypasses it, or on a backend not wired in v1. The
+  // `= {}` is load-bearing: without it, `-Wmissing-field-initializers`
+  // would force every existing `OptimResult{...}` aggregate-init site to add
+  // a trailing `, {}`.
+  TerminalAudit   audit         = {};
 };
 
 }  // namespace magmaan::optim

@@ -281,7 +281,8 @@ compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
     if (!out.has_value()) return std::unexpected(out.error());
     return Estimates{prob.expand(out->x), out->fmin, out->iterations,
                      out->f_evals, out->g_evals,
-                     out->status, out->grad_inf_norm};
+                     out->status, out->grad_inf_norm,
+                     std::move(out->audit)};
   }
 
   const optim::ScalarProblem prob_a = reparameterize(prob, con);
@@ -303,7 +304,8 @@ compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
   if (!out.has_value()) return std::unexpected(out.error());
   return Estimates{prob_a.expand(out->x), out->fmin, out->iterations,
                    out->f_evals, out->g_evals,
-                   out->status, out->grad_inf_norm};
+                   out->status, out->grad_inf_norm,
+                   std::move(out->audit)};
 }
 
 // Shared moment-quadratic composition: build the LS problem, fold equality
@@ -385,7 +387,8 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
     if (!out.has_value()) return std::unexpected(out.error());
     return Estimates{prob.expand(out->x), out->fmin, out->iterations,
                      out->f_evals, out->g_evals,
-                     out->status, out->grad_inf_norm};
+                     out->status, out->grad_inf_norm,
+                     std::move(out->audit)};
   }
 
   // Constrained: optimize over the reduced α (θ = θ₀ + K·α).
@@ -421,10 +424,25 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
   }
   return Estimates{std::move(theta_hat), out->fmin, out->iterations,
                    out->f_evals, out->g_evals,
-                   out->status, out->grad_inf_norm};
+                   out->status, out->grad_inf_norm,
+                   std::move(out->audit)};
 }
 
 }  // namespace
+
+// Attach the L2 fit-finalization audit. Called from every public fit_* entry
+// point that has a `pre->ev` / `pre->con` / `pre->nl` in scope — i.e. all
+// MatrixRep paths (fit_ml/fit_gls/fit_gmm/fit_snlls/fit_snlls_gls). The
+// FCSEM path uses a different evaluator and is excluded; its diagnostics
+// stay default-initialized. `static` for internal linkage — the helper
+// lives outside the anonymous namespaces only because both anon blocks
+// (220-431, 506-543) bracket their own compose_* helpers; placing it here
+// keeps it callable from all the fit_* entry points below.
+static void attach_diagnostics(Estimates& est, const Prelude& pre,
+                               const Bounds& bounds) {
+  est.diagnostics = finalize_fit_diagnostics(est.theta, pre.ev, pre.con,
+                                             pre.nl, bounds);
+}
 
 fit_expected<Estimates>
 fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
@@ -433,8 +451,11 @@ fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
         LbfgsOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_gmm");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  return compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, weight, bounds,
-                     backend, opts);
+  auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, weight, bounds,
+                         backend, opts);
+  if (!est.has_value()) return est;
+  attach_diagnostics(*est, *pre, bounds);
+  return est;
 }
 
 fit_expected<Estimates>
@@ -445,8 +466,11 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
   if (!pre.has_value()) return std::unexpected(pre.error());
   auto W = gmm::normal_theory_weight(pre->ev, samp, x0);
   if (!W.has_value()) return std::unexpected(W.error());
-  return compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, *W, bounds, backend,
-                     opts);
+  auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, *W, bounds,
+                         backend, opts);
+  if (!est.has_value()) return est;
+  attach_diagnostics(*est, *pre, bounds);
+  return est;
 }
 
 fit_expected<Estimates>
@@ -460,8 +484,11 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto obj_or = estimate::ml_objective(ev, samp);
   if (!obj_or.has_value()) return std::unexpected(obj_or.error());
   const optim::ScalarProblem prob = std::move(*obj_or);
-  return compose_scalar_ml(prob, pre->con, pre->nl, x0, bounds, backend, opts,
-                           "fit_ml");
+  auto est = compose_scalar_ml(prob, pre->con, pre->nl, x0, bounds, backend,
+                               opts, "fit_ml");
+  if (!est.has_value()) return est;
+  attach_diagnostics(*est, *pre, bounds);
+  return est;
 }
 
 fit_expected<Estimates>
@@ -512,7 +539,8 @@ compose_snlls(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
   if (!out.has_value()) return std::unexpected(out.error());
   return Estimates{prob.expand(out->x), out->fmin, out->iterations,
                    out->f_evals, out->g_evals,
-                   out->status, out->grad_inf_norm};
+                   out->status, out->grad_inf_norm,
+                   std::move(out->audit)};
 }
 
 }  // namespace
@@ -523,7 +551,12 @@ fit_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,
           gmm::Weight weight, Backend backend, LbfgsOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_snlls");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  return compose_snlls(pt, pre->ev, samp, x0, weight, backend, opts);
+  auto est = compose_snlls(pt, pre->ev, samp, x0, weight, backend, opts);
+  if (!est.has_value()) return est;
+  // SNLLS has no box bounds on the nonlinear block; attach_diagnostics
+  // reads `bounds.empty()` correctly and reports no active bounds.
+  attach_diagnostics(*est, *pre, Bounds{});
+  return est;
 }
 
 fit_expected<Estimates>
@@ -534,7 +567,10 @@ fit_snlls_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
   if (!pre.has_value()) return std::unexpected(pre.error());
   auto W = gmm::normal_theory_weight(pre->ev, samp, x0);
   if (!W.has_value()) return std::unexpected(W.error());
-  return compose_snlls(pt, pre->ev, samp, x0, *W, backend, opts);
+  auto est = compose_snlls(pt, pre->ev, samp, x0, *W, backend, opts);
+  if (!est.has_value()) return est;
+  attach_diagnostics(*est, *pre, Bounds{});
+  return est;
 }
 
 }  // namespace magmaan::estimate

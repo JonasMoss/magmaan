@@ -10,6 +10,7 @@
 #include "internal.hpp"
 
 #include "magmaan/estimate/bounds.hpp"
+#include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/ordinal.hpp"
@@ -36,6 +37,13 @@
 using namespace magmaanr;
 
 namespace {
+
+// Forward declarations for the two terminal-audit converters. The full
+// definitions live next to `fit_result` further down; they are declared
+// up here so `fcsem_fit_result` (defined before `fit_result` in this TU)
+// can call them.
+Rcpp::List audit_to_r(const magmaan::optim::TerminalAudit& a);
+Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d);
 
 // The estimate::fit* core takes an explicit start vector. These helpers
 // compute the starting values from a parsed model and abort to R on failure.
@@ -296,6 +304,11 @@ Rcpp::List fcsem_fit_result(FcSemCtx& ctx,
       Rcpp::_["fcsem"]         = true);
   out["optimizer_status"] = opt_status;
   out["grad_norm"] = est.grad_inf_norm;
+  out["audit"] = audit_to_r(est.audit);
+  // FCSEM fits do not run the L2 finalization audit (different evaluator
+  // type); diagnostics is default-constructed and surfaces as the "audit
+  // did not run" schema slot.
+  out["diagnostics"] = diagnostics_to_r(est.diagnostics);
   return out;
 }
 
@@ -495,6 +508,59 @@ Rcpp::DataFrame structural_cells_df(const std::vector<lvm::StructuralCell>& sc) 
   return Rcpp::DataFrame(l);
 }
 
+// Convert a TerminalAudit (L1, driven coordinates) to an R sub-list. Surfaced
+// as `fit$audit` — same mapping for OptimStatus as the existing `optimizer_status`
+// string. `active_set` carries {-1, 0, +1} per driven coordinate, distinct
+// from L2's `active_bounds_full` (which indexes the expanded θ).
+Rcpp::List audit_to_r(const magmaan::optim::TerminalAudit& a) {
+  using magmaan::optim::OptimStatus;
+  const char* advisory =
+      a.advisory_status == OptimStatus::Converged           ? "converged"
+      : a.advisory_status == OptimStatus::LineSearchSalvaged ? "line_search_salvaged"
+      : a.advisory_status == OptimStatus::SingularConvergence ? "singular_convergence"
+                                                              : "unknown";
+  Rcpp::IntegerVector active(static_cast<R_xlen_t>(a.active_set.size()));
+  for (std::size_t i = 0; i < a.active_set.size(); ++i)
+    active[static_cast<R_xlen_t>(i)] = static_cast<int>(a.active_set[i]);
+  return Rcpp::List::create(
+      Rcpp::_["stationary"]       = a.stationary,
+      Rcpp::_["grad_inf_norm"]    = a.grad_inf_norm,
+      Rcpp::_["stationarity_rhs"] = a.stationarity_rhs,
+      Rcpp::_["f_recomputed"]     = a.f_recomputed,
+      Rcpp::_["f_consistent"]     = a.f_consistent,
+      Rcpp::_["f_finite"]         = a.f_finite,
+      Rcpp::_["active_set"]       = active,
+      Rcpp::_["advisory_status"]  = advisory);
+}
+
+// Convert FitDiagnostics (L2, expanded θ) to an R sub-list. Surfaced as
+// `fit$diagnostics`. Active-bound indices are converted 0-based → 1-based at
+// the R boundary so they index `theta`/`partable` rows directly in R.
+Rcpp::List diagnostics_to_r(const magmaan::estimate::FitDiagnostics& d) {
+  Rcpp::LogicalVector sigma_pd(static_cast<R_xlen_t>(d.sigma_pd_per_block.size()));
+  for (std::size_t b = 0; b < d.sigma_pd_per_block.size(); ++b)
+    sigma_pd[static_cast<R_xlen_t>(b)] = d.sigma_pd_per_block[b];
+
+  Rcpp::IntegerVector at_lo(d.active_bounds_full.at_lower.begin(),
+                            d.active_bounds_full.at_lower.end());
+  Rcpp::IntegerVector at_up(d.active_bounds_full.at_upper.begin(),
+                            d.active_bounds_full.at_upper.end());
+  for (R_xlen_t i = 0; i < at_lo.size(); ++i) at_lo[i] += 1;
+  for (R_xlen_t i = 0; i < at_up.size(); ++i) at_up[i] += 1;
+
+  return Rcpp::List::create(
+      Rcpp::_["sigma_pd_per_block"]     = sigma_pd,
+      Rcpp::_["sigma_pd_all"]           = d.sigma_pd_all,
+      Rcpp::_["lin_eq_residual_inf"]    = d.lin_eq_residual_inf,
+      Rcpp::_["lin_eq_satisfied"]       = d.lin_eq_satisfied,
+      Rcpp::_["nl_eq_residual"]         = Rcpp::wrap(d.nl_eq_residual),
+      Rcpp::_["nl_eq_residual_inf"]     = d.nl_eq_residual_inf,
+      Rcpp::_["nl_eq_satisfied"]        = d.nl_eq_satisfied,
+      Rcpp::_["active_bounds_lower"]    = at_lo,
+      Rcpp::_["active_bounds_upper"]    = at_up,
+      Rcpp::_["snlls_profile_fallback"] = d.snlls_profile_fallback);
+}
+
 Rcpp::List fit_result(Ctx& ctx,
                       const magmaan::estimate::Estimates& est,
                       const magmaan::spec::Starts* starts,
@@ -551,6 +617,8 @@ Rcpp::List fit_result(Ctx& ctx,
       Rcpp::_["meanstructure"] = ctx.meanstructure);
   out["optimizer_status"] = opt_status;
   out["grad_norm"]        = est.grad_inf_norm;
+  out["audit"]            = audit_to_r(est.audit);
+  out["diagnostics"]      = diagnostics_to_r(est.diagnostics);
   return out;
 }
 

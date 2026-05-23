@@ -14,6 +14,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/optim/terminal_audit.hpp"
 
 // NLopt's objective callback type `nlopt_func` is declared inside the
 // `extern "C"` block of <nlopt.h>, so the trampoline we hand to
@@ -115,26 +116,25 @@ NloptOptimizer::minimize(Objective f,
   const std::string algo_name = nlopt_algorithm_name(raw_algo);
   nlopt_destroy(opt);
 
-  OptimStatus opt_status = OptimStatus::Converged;
+  // Classify the NLopt return code by what kind of iterate we have in hand:
+  //   - SUCCESS / TOL-reached / ROUNDOFF_LIMITED: usable `theta`, `fmin`
+  //   - MAXEVAL/MAXTIME, FORCED_STOP, generic FAILURE: usable `theta`, `fmin`
+  //     (NLopt writes the best point into `x` even on these failure codes) —
+  //     the audit decides by geometry whether to salvage.
+  //   - OUT_OF_MEMORY / INVALID_ARGS / non-finite `fmin`: no usable iterate;
+  //     bail immediately without invoking the audit.
+  //
+  // The primary bug this audit fixes: NLopt's L-BFGS returns `NLOPT_FAILURE`
+  // when its line search cannot find a measurable decrease step — which is
+  // exactly what happens at the optimum of a near-perfect-fit GLS objective
+  // (Newsom ex5_4: magmaan marches to f=0.00301331, matching SNLLS to 6 digits
+  // and lavaan to 5, then NLopt declares failure). The audit recomputes ∇f at
+  // the returned `theta`, projects it against any active bounds, and if it
+  // satisfies the relative stationarity test promotes the result to
+  // `LineSearchSalvaged` rather than discarding a converged iterate.
+
+  // Hard-failure short-circuits — no usable iterate to audit.
   switch (rc) {
-    case NLOPT_SUCCESS:
-    case NLOPT_STOPVAL_REACHED:
-    case NLOPT_FTOL_REACHED:
-    case NLOPT_XTOL_REACHED:
-      break;
-    case NLOPT_ROUNDOFF_LIMITED:
-      // Result is still the best found and usable, but roundoff halted the
-      // search short of the tolerances — not a clean stationary stop.
-      opt_status = OptimStatus::LineSearchSalvaged;
-      break;
-    case NLOPT_MAXEVAL_REACHED:
-    case NLOPT_MAXTIME_REACHED:
-      return std::unexpected(make_err(FitError::Kind::OptimizerNonConvergence,
-          "nlopt " + algo_name + ": evaluation budget exhausted without "
-          "convergence", n_evals, fmin));
-    case NLOPT_FORCED_STOP:
-      return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
-          "nlopt " + algo_name + ": forced stop", n_evals, fmin));
     case NLOPT_OUT_OF_MEMORY:
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "nlopt " + algo_name + ": out of memory"));
@@ -142,40 +142,74 @@ NloptOptimizer::minimize(Objective f,
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "nlopt " + algo_name + ": invalid arguments (BOBYQA requires "
           "finite bounds; check that lower/upper aren't all ±infinity)"));
-    case NLOPT_FAILURE:
     default:
-      return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
-          "nlopt " + algo_name + ": generic solver failure",
-          n_evals, fmin));
+      break;
   }
-
   if (!std::isfinite(fmin)) {
     return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
         "nlopt " + algo_name + ": final objective is non-finite (model "
         "likely under-identified or the start too far from a valid region)",
         n_evals, fmin));
   }
-  // Recompute the gradient at the solution and report its projected
-  // infinity-norm (components against an active box bound zeroed; degrades to
-  // the raw norm when bounds are ±infinity).
-  Eigen::VectorXd gfinal = Eigen::VectorXd::Zero(n);
-  f(theta, gfinal);
-  double gnorm = 0.0;
-  for (unsigned i = 0; i < n; ++i) {
-    double gi = gfinal[static_cast<Eigen::Index>(i)];
-    if (theta[static_cast<Eigen::Index>(i)] <= lower[static_cast<Eigen::Index>(i)] && gi > 0.0) {
-      gi = 0.0;
-    } else if (theta[static_cast<Eigen::Index>(i)] >= upper[static_cast<Eigen::Index>(i)] && gi < 0.0) {
-      gi = 0.0;
-    }
-    gnorm = std::max(gnorm, std::abs(gi));
+
+  // Soft path: run the audit once, then decide based on the return code
+  // PLUS the geometric verdict. The audit handles its own bounds projection
+  // (the inline loop the old success path used now lives there).
+  TerminalAudit a = audit_terminal_iterate(f, theta, fmin, lower, upper);
+
+  OptimStatus opt_status = OptimStatus::Converged;
+  switch (rc) {
+    case NLOPT_SUCCESS:
+    case NLOPT_STOPVAL_REACHED:
+    case NLOPT_FTOL_REACHED:
+    case NLOPT_XTOL_REACHED:
+      // Backend says "clean stop"; v1 does not downgrade even if the audit
+      // disagrees (that's a separate semantics-change PR). Leave as Converged.
+      break;
+    case NLOPT_ROUNDOFF_LIMITED:
+      // Backend says "result usable but roundoff halted the search short of
+      // tolerances." Previously unconditionally mapped to LineSearchSalvaged;
+      // we keep that classification — the audit's grad_inf_norm now backs it.
+      opt_status = OptimStatus::LineSearchSalvaged;
+      break;
+    case NLOPT_MAXEVAL_REACHED:
+    case NLOPT_MAXTIME_REACHED:
+      if (a.stationary) {
+        opt_status = OptimStatus::LineSearchSalvaged;
+      } else {
+        return std::unexpected(make_err(FitError::Kind::OptimizerNonConvergence,
+            "nlopt " + algo_name + ": evaluation budget exhausted without "
+            "convergence", n_evals, fmin));
+      }
+      break;
+    case NLOPT_FORCED_STOP:
+      if (a.stationary) {
+        opt_status = OptimStatus::LineSearchSalvaged;
+      } else {
+        return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
+            "nlopt " + algo_name + ": forced stop", n_evals, fmin));
+      }
+      break;
+    case NLOPT_FAILURE:
+    default:
+      if (a.stationary) {
+        opt_status = OptimStatus::LineSearchSalvaged;
+      } else {
+        return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
+            "nlopt " + algo_name + ": generic solver failure",
+            n_evals, fmin));
+      }
+      break;
   }
+
   // NLopt exposes no iteration count, only a total evaluation count. Its
   // gradient algorithms request value and gradient jointly, so every one of
   // the n_evals callbacks is both a function and a gradient evaluation.
-  return LbfgsOutput{std::move(theta), fmin, /*iterations=*/0,
-                     /*f_evals=*/n_evals, /*g_evals=*/n_evals,
-                     opt_status, gnorm};
+  LbfgsOutput out{std::move(theta), fmin, /*iterations=*/0,
+                  /*f_evals=*/n_evals, /*g_evals=*/n_evals,
+                  opt_status, a.grad_inf_norm};
+  out.audit = std::move(a);
+  return out;
 }
 
 fit_expected<LbfgsOutput>
