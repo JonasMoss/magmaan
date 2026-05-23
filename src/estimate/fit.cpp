@@ -133,6 +133,7 @@ run_ipopt_constrained(const optim::ScalarProblem& prob,
                       const Eigen::VectorXd& x0, const Bounds& bounds,
                       OptimOptions opts, const char* who) {
 #ifdef MAGMAAN_WITH_IPOPT
+  (void)who;
   optim::ConstrainedScalarProblem cprob;
   cprob.objective         = prob;
   cprob.h                 = h;
