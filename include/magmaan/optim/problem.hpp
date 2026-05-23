@@ -11,11 +11,11 @@
 
 // The contract between objective builders and optimizers.
 //
-// Objective builders (`gmm::residuals`, `gmm::gp`, `estimate::ml_objective`) package a
-// model + sample into one of two plain structs of closures; optimizers
-// (`optim::lbfgs`, `optim::ceres_lm`) consume them. No templates, no concepts —
-// the closures are `std::function`, so the optimizer never sees the builder's
-// type. Composition happens at the call site.
+// Objective builders (`gmm::residuals`, `gmm::gp`, `estimate::ml_objective`)
+// package a model + sample into one of two plain structs of closures;
+// optimizers (`optim::nlopt_lbfgs`, `optim::ceres_lm`) consume them. No
+// templates, no concepts — the closures are `std::function`, so the optimizer
+// never sees the builder's type. Composition happens at the call site.
 
 namespace magmaan::optim {
 
@@ -74,11 +74,18 @@ enum class OptimStatus {
   Unknown,              // backend did not report a refined status
 };
 
+struct OptimOptions {
+  int    max_iter = 1000;
+  double ftol     = 1e-10;   // matches lavaan's optim.ftol default
+  double gtol     = 1e-7;    // matches lavaan's optim.gradtol default
+  int    history  = 10;      // optimizer history where supported
+};
+
 // --- Terminal audit -------------------------------------------------------
 //
 // The types belong here (alongside OptimStatus / OptimResult) because they
 // are part of the optimizer's contract: every scalar backend may carry a
-// TerminalAudit on its OptimResult / LbfgsOutput. The free-function declaration
+// TerminalAudit on its OptimResult / OptimOutput. The free-function declaration
 // and the narrative rationale live in `terminal_audit.hpp`, which includes
 // this header.
 
@@ -86,12 +93,19 @@ enum class OptimStatus {
 // callers (the four scalar backends) pass these unchanged for now.
 struct TerminalAuditOptions {
   // Stationarity test is RELATIVE: ‖Pg‖_∞ ≤ stationarity_tol · (1 + |f|).
-  // Default 2e-6 is loose enough to clear noise-floor ML/GLS endgames where
-  // the gradient sits just above one part per million of the objective scale,
-  // while still rejecting the 1e-3-scale non-stationary textbook-corpus cases.
-  // A scale-invariant test is the only one that's correct across a 290-model
-  // corpus where |f| ranges over many orders of magnitude.
-  double stationarity_tol  = 2e-6;
+  // Default 1e-6 is the strict choice pending a corpus-wide calibration
+  // study. The looser 2e-6 default an earlier revision used was calibrated
+  // against a single observed ML noise-floor remainder; that anecdotal basis
+  // wasn't strong enough to keep as the default. The intended calibration
+  // (per the design doc) compares audit-stationary points against downstream
+  // SE/χ²/LRT at the genuine optimum, stratifies by estimator, and picks the
+  // threshold above which the gradient norm reliably predicts
+  // inference-equivalence. Until that study lands, the audit's primary
+  // value is the record (every fit gets `fit$audit$stationary` and friends),
+  // and the salvage promotion is intentionally conservative. The relative
+  // shape is the only one that's correct across a corpus where |f| spans
+  // many orders of magnitude — keep that whichever way the tolerance tunes.
+  double stationarity_tol  = 1e-6;
   // Coordinate distance at which we declare `x[i]` to be on a finite bound,
   // for the projected-gradient construction. Small absolute — we are masking
   // a gradient component, not measuring active-set membership for inference.
@@ -102,7 +116,7 @@ struct TerminalAuditOptions {
   double f_consistency_rel = 1e-6;
 };
 
-// What the audit found. Plain struct, carried up via `LbfgsOutput` /
+// What the audit found. Plain struct, carried up via `OptimOutput` /
 // `OptimResult` and surfaced to R as the nested `fit$audit` sub-record. Never
 // produces a `FitError` — observation only.
 struct TerminalAudit {
@@ -118,6 +132,23 @@ struct TerminalAudit {
   std::vector<std::int8_t> active_set;
   // Advisory only — the wrapper owns the actual returned status.
   OptimStatus advisory_status  = OptimStatus::Unknown;
+};
+
+struct OptimOutput {
+  Eigen::VectorXd theta_hat;
+  double          fmin = 0.0;
+  int             iterations = 0;
+  int             f_evals = 0;
+  int             g_evals = 0;
+  // Refined success status and the (projected) gradient infinity-norm at the
+  // solution. `grad_inf_norm < 0` means the backend did not compute it.
+  OptimStatus     status        = OptimStatus::Converged;
+  double          grad_inf_norm = -1.0;
+  // Terminal audit at the returned point. Default-constructed (sentinels,
+  // `stationary = false`) when the wrapper did not run an audit. The
+  // `= {}` keeps existing `OptimOutput{...}` aggregate-inits passing under
+  // `-Wmissing-field-initializers`.
+  TerminalAudit   audit         = {};
 };
 
 // Optimizer output. `x` is in the driven parameter space; the caller applies

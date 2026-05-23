@@ -45,8 +45,8 @@ fcsem_standardized_rows_impl <- function(fit, vcov) {
     .Call(`_magmaan_fcsem_standardized_rows_impl`, fit, vcov)
 }
 
-fit_fiml_impl <- function(partable, raw_data, lbfgs = NULL) {
-    .Call(`_magmaan_fit_fiml_impl`, partable, raw_data, lbfgs)
+fit_fiml_impl <- function(partable, raw_data, control = NULL) {
+    .Call(`_magmaan_fit_fiml_impl`, partable, raw_data, control)
 }
 
 fit_uls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {

@@ -599,7 +599,7 @@ TEST_CASE("constraints: multi-group shared-label LS fits via K-reparameterizatio
   // are equated across groups (cross-group metric invariance). fit_bounded's
   // LS path reparameterizes θ = θ₀ + K·α and optimizes the reduced bounded
   // problem — exact constraints, no penalty. The earlier 1e10-penalty path
-  // made LBFGS-B's Cauchy-point search loop forever on this model.
+  // made the bounded quasi-Newton search loop forever on this model.
   BuildOptions opts;
   opts.n_groups = 2;
   auto pt  = must_lavaanify("f =~ x1 + l2*x2 + l3*x3", opts);
@@ -615,11 +615,11 @@ TEST_CASE("constraints: multi-group shared-label LS fits via K-reparameterizatio
   samp.S = {cov1f(2.0), cov1f(2.6)};
   samp.n_obs = {180, 150};
 
-  const magmaan::optim::LbfgsOptions opt{
+  const magmaan::optim::OptimOptions opt{
       .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9};
   auto est_or = magmaan::test::fit_gmm(
       pt, rep, samp, {}, magmaan::estimate::Bounds{},
-      magmaan::estimate::Backend::Lbfgs, opt);
+      magmaan::estimate::Backend::NloptLbfgs, opt);
   REQUIRE_MESSAGE(est_or.has_value(),
       "constrained multi-group LS fit failed: "
           << (est_or.has_value() ? "" : est_or.error().detail));
@@ -650,11 +650,11 @@ TEST_CASE("constraints: general-linear equality LS fits via K-reparameterization
   samp.S = {S};
   samp.n_obs = {250};
 
-  const magmaan::optim::LbfgsOptions opt{
+  const magmaan::optim::OptimOptions opt{
       .max_iter = 5000, .ftol = 1e-14, .gtol = 1e-9};
   auto est_or = magmaan::test::fit_gmm(
       pt, rep, samp, {}, magmaan::estimate::Bounds{},
-      magmaan::estimate::Backend::Lbfgs, opt);
+      magmaan::estimate::Backend::NloptLbfgs, opt);
   REQUIRE_MESSAGE(est_or.has_value(),
       "general-linear LS fit failed: "
           << (est_or.has_value() ? "" : est_or.error().detail));

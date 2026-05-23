@@ -95,7 +95,7 @@ constexpr double kPortInf = 1e308;
 
 }  // namespace
 
-fit_expected<LbfgsOutput>
+fit_expected<OptimOutput>
 PortOptimizer::minimize(Objective f,
                         const Eigen::VectorXd& x0,
                         const Eigen::VectorXd& lower,
@@ -155,7 +155,7 @@ PortOptimizer::minimize(Objective f,
   divset_(&alg, iv.data(), &liv_arg, &lv_arg, v.data());
 
   // Forward our caller-supplied tuning. PORT's other tolerance defaults
-  // (AFCTOL, RFCTOL, XCTOL) match the spirit of LBFGS's defaults closely
+  // (AFCTOL, RFCTOL, XCTOL) match the spirit of the shared defaults closely
   // enough that we leave them; the iteration cap is what callers most
   // commonly tighten.
   iv[kIv_MxIter] = opts_.max_iter;
@@ -312,13 +312,13 @@ PortOptimizer::minimize(Objective f,
       break;
   }
 
-  LbfgsOutput out{std::move(x), f_final, n_iter,
+  OptimOutput out{std::move(x), f_final, n_iter,
                   iv[kIv_NFCall], iv[kIv_NGCall], opt_status, a.grad_inf_norm};
   out.audit = std::move(a);
   return out;
 }
 
-fit_expected<LbfgsOutput>
+fit_expected<OptimOutput>
 PortOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
   const double inf = std::numeric_limits<double>::infinity();
   return minimize(std::move(f), x0,
@@ -330,7 +330,7 @@ PortOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
 // PortNlsOptimizer — NL2SOL with simple bounds, LS-shape.
 // =========================================================================
 
-fit_expected<LbfgsOutput>
+fit_expected<OptimOutput>
 PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
                               LsEvaluationFn eval_fn,
                               Eigen::Index n_resid,
@@ -538,7 +538,7 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
 
   // NL2SOL drives the residual structure directly; a stationarity norm is not
   // recomputed here (grad_inf_norm left at the -1 "not computed" sentinel).
-  return LbfgsOutput{std::move(x), f_final, n_iter, 0, 0, opt_status, -1.0};
+  return OptimOutput{std::move(x), f_final, n_iter, 0, 0, opt_status, -1.0};
 }
 
 }  // namespace magmaan::optim

@@ -18,7 +18,7 @@
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/shrinkage.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
-#include "magmaan/optim/lbfgsb_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/measures/effects.hpp"
 #include "magmaan/measures/factor_scores.hpp"
@@ -1149,10 +1149,10 @@ magmaan::data::CovarianceShrinkageKind shrinkage_kind_from_string(const std::str
   Rcpp::stop("magmaan: shrinkage kind must be none, ridge, identity, diagonal, or constant_correlation");
 }
 
-// The Phase 3-era `ceres_opts_from` / `ceres_opts_as_lbfgs` helpers were
+// The Phase 3-era Ceres-specific option helpers were
 // retired in Phase 4 alongside the per-Ceres Rcpp shim explosion. All
-// optimizer-control fields now route through `lbfgs_opts_from(control)` in
-// internal.hpp — the LbfgsOptions struct (max_iter / ftol / gtol / history)
+// optimizer-control fields now route through `optim_opts_from(control)` in
+// internal.hpp — the OptimOptions struct (max_iter / ftol / gtol / history)
 // is the shared option vocabulary across magmaan's optimizer roster, and
 // Ceres-specific extras (ptol / verbose) were already dropped on the old
 // path, so the unified control list is behaviour-preserving.
@@ -1204,8 +1204,8 @@ Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats,
 
 // fit_ml() — public ML spelling. Threads through an `optimizer` string and
 // optional `control` list. Backends:
-//   "lbfgs"          (default), "port", "nlopt-slsqp", "nlopt-tnewton",
-//   "nlopt-var2", "nlopt-lbfgs"  (any scalar-shape backend)
+//   "nlopt-lbfgs" (default), "port", "nlopt-slsqp", "nlopt-tnewton",
+//   "nlopt-var2"  (any scalar-shape backend)
 // "ceres" / "ceres-bfgs" are rejected — Ceres applies to the LS path only.
 // "nlopt-bobyqa" requires finite bounds, supplied via `bounds = NULL`. Since
 // ML doesn't currently take a bounds argument we leave that error to surface
@@ -1222,7 +1222,7 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_ml(ctx.pt, ctx.rep, ctx.samp, x0,
-      magmaan::estimate::Bounds{}, backend, lbfgs_opts_from(control));
+      magmaan::estimate::Bounds{}, backend, optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "ML");
@@ -1242,7 +1242,7 @@ Rcpp::List fcsem_model_spec_impl(std::string syntax) {
 
 // fit_ml_fcsem() — native FC-SEM ML, using covariance-only sample statistics.
 // Starts come from simple_fcsem_start_values(); optimization currently uses
-// the same LBFGS control list as the ordinary R ML bridge.
+// the same optimizer control list as the ordinary R ML bridge.
 //
 // [[Rcpp::export]]
 Rcpp::List fit_ml_fcsem_impl(std::string syntax, Rcpp::List sample_stats,
@@ -1251,8 +1251,8 @@ Rcpp::List fit_ml_fcsem_impl(std::string syntax, Rcpp::List sample_stats,
   auto x0_or = magmaan::estimate::simple_fcsem_start_values(ctx.pt, ctx.samp);
   if (!x0_or.has_value()) stop_fit(x0_or.error());
   auto e_or = magmaan::estimate::fit_ml_fcsem(
-      ctx.pt, ctx.samp, *x0_or, {}, magmaan::estimate::Backend::Lbfgs,
-      lbfgs_opts_from(control));
+      ctx.pt, ctx.samp, *x0_or, {}, magmaan::estimate::Backend::NloptLbfgs,
+      optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fcsem_fit_result(ctx, est, syntax);
@@ -1322,14 +1322,14 @@ Rcpp::DataFrame fcsem_standardized_rows_impl(Rcpp::List fit,
   return fcsem_standardized_rows_df(*rows_or);
 }
 
-// fit_fiml() — mirrors estimate::fit_fiml(pt, rep, raw, FIML{}, LbfgsOptimizer).
+// fit_fiml() — mirrors estimate::fit_fiml(pt, rep, raw, FIML{}).
 // `raw_data` is a magmaan_fiml_data object from df_to_fiml_data(), or a list
 // with $X and optional $mask. Missing values are retained in $X and represented
 // by $mask; columns are reordered to the model's observed-variable order.
 //
 // [[Rcpp::export]]
 Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
-                         Rcpp::Nullable<Rcpp::List> lbfgs = R_NilValue) {
+                         Rcpp::Nullable<Rcpp::List> control = R_NilValue) {
   magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_fiml");
   magmaan::spec::Starts starts = std::move(parsed.starts);
 
@@ -1353,14 +1353,14 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
   auto e_or = magmaan::estimate::fit_fiml(
       ctx.pt, ctx.rep, raw, x0, magmaan::estimate::fiml::FIML{},
-      lbfgs_opts_from(lbfgs));
+      optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fiml_fit_result(ctx, raw, est, &starts);
 }
 
 // fit_uls() — composes fit_gmm(pt, rep, samp, x0, {}, bounds, backend).
-// `optimizer` selects the backend (default "lbfgs"); "ceres" / "ceres-bfgs"
+// `optimizer` selects the backend (default "nlopt-lbfgs"); "ceres" / "ceres-bfgs"
 // dispatch to the Ceres LS path, "port-nls" to PORT NL2SOL, etc.
 //
 // [[Rcpp::export]]
@@ -1375,7 +1375,7 @@ Rcpp::List fit_uls_impl(SEXP partable, Rcpp::List sample_stats,
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_gmm(ctx.pt, ctx.rep, ctx.samp, x0,
-      {}, bounds_from_nullable(bounds), backend, lbfgs_opts_from(control));
+      {}, bounds_from_nullable(bounds), backend, optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "ULS");
@@ -1395,7 +1395,7 @@ Rcpp::List fit_gls_impl(SEXP partable, Rcpp::List sample_stats,
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_gls(ctx.pt, ctx.rep, ctx.samp, x0,
-      bounds_from_nullable(bounds), backend, lbfgs_opts_from(control));
+      bounds_from_nullable(bounds), backend, optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "GLS");
@@ -1417,7 +1417,7 @@ Rcpp::List fit_wls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_gmm(ctx.pt, ctx.rep, ctx.samp, x0,
       std::move(wls), bounds_from_nullable(bounds),
-      backend, lbfgs_opts_from(control));
+      backend, optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "WLS");
@@ -1633,7 +1633,7 @@ Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   auto e_or = magmaan::estimate::fit_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
       magmaan::estimate::OrdinalWeightKind::DWLS, x0,
-      backend_from_optimizer_arg(optimizer), lbfgs_opts_from(control),
+      backend_from_optimizer_arg(optimizer), optim_opts_from(control),
       parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
@@ -1667,7 +1667,7 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   auto e_or = magmaan::estimate::fit_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
       magmaan::estimate::OrdinalWeightKind::WLS, x0,
-      backend_from_optimizer_arg(optimizer), lbfgs_opts_from(control),
+      backend_from_optimizer_arg(optimizer), optim_opts_from(control),
       parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
@@ -1702,7 +1702,7 @@ Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
   auto e_or = magmaan::estimate::fit_mixed_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
       magmaan::estimate::OrdinalWeightKind::DWLS, x0,
-      backend_from_optimizer_arg(optimizer), lbfgs_opts_from(control),
+      backend_from_optimizer_arg(optimizer), optim_opts_from(control),
       parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
@@ -1739,7 +1739,7 @@ Rcpp::List fit_wls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
   auto e_or = magmaan::estimate::fit_mixed_ordinal_bounded(
       ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
       magmaan::estimate::OrdinalWeightKind::WLS, x0,
-      backend_from_optimizer_arg(optimizer), lbfgs_opts_from(control),
+      backend_from_optimizer_arg(optimizer), optim_opts_from(control),
       parameterization);
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
@@ -1762,7 +1762,7 @@ Rcpp::List fit_uls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
   (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_snlls(ctx.pt, ctx.rep, ctx.samp, x0,
-      {}, backend, lbfgs_opts_from(control));
+      {}, backend, optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return snlls_fit_result(ctx, est, &starts, "ULS-SNLLS",
@@ -1782,7 +1782,7 @@ Rcpp::List fit_gls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
   (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_snlls_gls(ctx.pt, ctx.rep, ctx.samp, x0,
-      backend, lbfgs_opts_from(control));
+      backend, optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return snlls_fit_result(ctx, est, &starts, "GLS-SNLLS",
@@ -1803,7 +1803,7 @@ Rcpp::List fit_wls_snlls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
   (void)bounds;  // SNLLS optimizes the unbounded nonlinear (Λ, Β) block
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_snlls(ctx.pt, ctx.rep, ctx.samp, x0,
-      std::move(wls), backend, lbfgs_opts_from(control));
+      std::move(wls), backend, optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return snlls_fit_result(ctx, est, &starts, "WLS-SNLLS",

@@ -40,46 +40,21 @@ FitError fit_err(FitError::Kind kind, std::string detail) {
 // point — it is a least-squares-only backend — and is rejected here.
 fit_expected<optim::OptimResult>
 run_scalar(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
-           const Bounds& bounds, Backend backend, LbfgsOptions opts) {
+           const Bounds& bounds, Backend backend, OptimOptions opts) {
   switch (backend) {
     case Backend::NloptSlsqp:
-#ifdef MAGMAAN_WITH_NLOPT
       return optim::nlopt_slsqp(prob, x0, bounds, opts);
-#else
-      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-          "NloptSlsqp backend requested but MAGMAAN_WITH_NLOPT is off"));
-#endif
     case Backend::NloptBobyqa:
-#ifdef MAGMAAN_WITH_NLOPT
       // BOBYQA requires *finite* bounds (no ±infinity sentinels). The free
       // function enforces this at the optim layer; the dispatch is a clean
       // pass-through.
       return optim::nlopt_bobyqa(prob, x0, bounds, opts);
-#else
-      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-          "NloptBobyqa backend requested but MAGMAAN_WITH_NLOPT is off"));
-#endif
     case Backend::NloptTnewton:
-#ifdef MAGMAAN_WITH_NLOPT
       return optim::nlopt_tnewton(prob, x0, bounds, opts);
-#else
-      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-          "NloptTnewton backend requested but MAGMAAN_WITH_NLOPT is off"));
-#endif
     case Backend::NloptVar2:
-#ifdef MAGMAAN_WITH_NLOPT
       return optim::nlopt_var2(prob, x0, bounds, opts);
-#else
-      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-          "NloptVar2 backend requested but MAGMAAN_WITH_NLOPT is off"));
-#endif
     case Backend::NloptLbfgs:
-#ifdef MAGMAAN_WITH_NLOPT
       return optim::nlopt_lbfgs(prob, x0, bounds, opts);
-#else
-      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
-          "NloptLbfgs backend requested but MAGMAAN_WITH_NLOPT is off"));
-#endif
     case Backend::Port:
 #ifdef MAGMAAN_WITH_PORT
       // PORT drmngb honors box bounds natively; an empty `bounds` is passed
@@ -103,15 +78,14 @@ run_scalar(const optim::ScalarProblem& prob, const Eigen::VectorXd& x0,
           "(fit_gmm / fit_gls / fit_snlls); it sees the residual structure "
           "directly and has no scalar-objective entry point — use Port for "
           "scalar trust-region fits"));
-    case Backend::Lbfgs:
-      break;
   }
-  return optim::lbfgs(prob, x0, bounds, opts);
+  return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+      "unknown optimizer backend"));
 }
 
 fit_expected<optim::OptimResult>
 run_gmm(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
-        const Bounds& bounds, Backend backend, LbfgsOptions opts) {
+        const Bounds& bounds, Backend backend, OptimOptions opts) {
   if (backend == Backend::Ceres || backend == Backend::CeresBfgs) {
 #ifdef MAGMAAN_WITH_CERES
     optim::CeresOptions copts;
@@ -220,7 +194,7 @@ fit_expected<Estimates>
 compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
                   const NonlinearEqConstraints& nl,
                   const Eigen::VectorXd& x0, const Bounds& bounds,
-                  Backend backend, LbfgsOptions opts, const char* who) {
+                  Backend backend, OptimOptions opts, const char* who) {
   if (nl.active()) {
     if (backend == Backend::Ceres) {
       return std::unexpected(fit_err(FitError::Kind::NumericIssue,
@@ -315,7 +289,7 @@ fit_expected<Estimates>
 compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
             const NonlinearEqConstraints& nl, const SampleStats& samp,
             const Eigen::VectorXd& x0, const gmm::Weight& weight,
-            const Bounds& bounds, Backend backend, LbfgsOptions opts) {
+            const Bounds& bounds, Backend backend, OptimOptions opts) {
   auto prob_or = gmm::residuals(ev, samp, x0, weight);
   if (!prob_or.has_value()) return std::unexpected(prob_or.error());
   const optim::GmmProblem prob = std::move(*prob_or);
@@ -448,7 +422,7 @@ fit_expected<Estimates>
 fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
         const SampleStats& samp, const Eigen::VectorXd& x0,
         gmm::Weight weight, Bounds bounds, Backend backend,
-        LbfgsOptions opts) {
+        OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_gmm");
   if (!pre.has_value()) return std::unexpected(pre.error());
   auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, weight, bounds,
@@ -461,7 +435,7 @@ fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
 fit_expected<Estimates>
 fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
         const SampleStats& samp, const Eigen::VectorXd& x0,
-        Bounds bounds, Backend backend, LbfgsOptions opts) {
+        Bounds bounds, Backend backend, OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_gls");
   if (!pre.has_value()) return std::unexpected(pre.error());
   auto W = gmm::normal_theory_weight(pre->ev, samp, x0);
@@ -476,7 +450,7 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
 fit_expected<Estimates>
 fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
        const SampleStats& samp, const Eigen::VectorXd& x0, Bounds bounds,
-       Backend backend, LbfgsOptions opts) {
+       Backend backend, OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_ml");
   if (!pre.has_value()) return std::unexpected(pre.error());
   const model::ModelEvaluator& ev = pre->ev;
@@ -494,7 +468,7 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
 fit_expected<Estimates>
 fit_ml_fcsem(spec::LatentStructure pt, const SampleStats& samp,
              const Eigen::VectorXd& x0, Bounds bounds, Backend backend,
-             LbfgsOptions opts) {
+             OptimOptions opts) {
   auto pre = prelude_fcsem(pt, x0, "fit_ml_fcsem");
   if (!pre.has_value()) return std::unexpected(pre.error());
   auto obj_or = estimate::ml_objective(pre->ev, samp);
@@ -511,7 +485,7 @@ namespace {
 fit_expected<Estimates>
 compose_snlls(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
               const SampleStats& samp, const Eigen::VectorXd& x0,
-              const gmm::Weight& weight, Backend backend, LbfgsOptions opts) {
+              const gmm::Weight& weight, Backend backend, OptimOptions opts) {
   if (!pt.nl_constraints.empty()) {
     return std::unexpected(fit_err(FitError::Kind::NumericIssue,
         "fit_snlls: nonlinear equality constraints are not supported by the "
@@ -548,7 +522,7 @@ compose_snlls(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
 fit_expected<Estimates>
 fit_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,
           const SampleStats& samp, const Eigen::VectorXd& x0,
-          gmm::Weight weight, Backend backend, LbfgsOptions opts) {
+          gmm::Weight weight, Backend backend, OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_snlls");
   if (!pre.has_value()) return std::unexpected(pre.error());
   auto est = compose_snlls(pt, pre->ev, samp, x0, weight, backend, opts);
@@ -562,7 +536,7 @@ fit_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,
 fit_expected<Estimates>
 fit_snlls_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
               const SampleStats& samp, const Eigen::VectorXd& x0,
-              Backend backend, LbfgsOptions opts) {
+              Backend backend, OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_snlls_gls");
   if (!pre.has_value()) return std::unexpected(pre.error());
   auto W = gmm::normal_theory_weight(pre->ev, samp, x0);

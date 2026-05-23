@@ -1672,7 +1672,7 @@ fit_fiml(spec::LatentStructure pt,
          const RawData& raw,
          const Eigen::VectorXd& x0,
          FIML discrepancy,
-         optim::LbfgsOptions opts) {
+         optim::OptimOptions opts) {
   if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
     return std::unexpected(e.error());
   }
@@ -1734,7 +1734,7 @@ fit_fiml(spec::LatentStructure pt,
     prob.f       = eval_at;
     prob.n_param = x0.size();
     prob.expand  = [](const Eigen::VectorXd& x) { return x; };
-    auto out_or = optim::lbfgs(prob, x0, {}, opts);
+    auto out_or = optim::nlopt_lbfgs(prob, x0, {}, opts);
     if (!out_or.has_value()) return std::unexpected(out_or.error());
     return Estimates{std::move(out_or->x), out_or->fmin, out_or->iterations};
   }
@@ -1757,7 +1757,7 @@ fit_fiml(spec::LatentStructure pt,
     grad_a = con.reduce_gradient(grad_x);
     return v;
   };
-  auto out_or = optim::lbfgs(prob_a, con.contract(x0), {}, opts);
+  auto out_or = optim::nlopt_lbfgs(prob_a, con.contract(x0), {}, opts);
   if (!out_or.has_value()) return std::unexpected(out_or.error());
   return Estimates{con.expand(out_or->x), out_or->fmin, out_or->iterations};
 }

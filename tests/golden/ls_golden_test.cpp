@@ -18,7 +18,7 @@
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/inference/inference.hpp"
-#include "magmaan/optim/lbfgsb_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -170,7 +170,7 @@ fit_ls_estimator(const std::string& estimator,
                  const LsHandles& handles,
                  const magmaan::data::SampleStats& samp,
                  magmaan::estimate::Backend backend,
-                 magmaan::optim::LbfgsOptions opt) {
+                 magmaan::optim::OptimOptions opt) {
   if (estimator == "ULS") {
     return magmaan::test::fit_gmm(handles.pt, handles.rep, samp, {},
                                   magmaan::estimate::Bounds{}, backend, opt);
@@ -191,7 +191,7 @@ fit_snlls_estimator(const std::string& estimator,
                     const LsHandles& handles,
                     const magmaan::data::SampleStats& samp,
                     magmaan::estimate::Backend backend,
-                    magmaan::optim::LbfgsOptions opt) {
+                    magmaan::optim::OptimOptions opt) {
   auto x0 = magmaan::estimate::simple_start_values(
       handles.pt, handles.rep, samp, {});
   if (!x0.has_value()) return std::unexpected(x0.error());
@@ -360,7 +360,7 @@ bool check_uls_robust(const std::string& id,
 
 TEST_CASE("continuous LS fixtures: ULS/GLS/WLS bounded fits match lavaan") {
   const std::string dir = magmaan::test::fixtures_dir() + "/ls";
-  const magmaan::optim::LbfgsOptions opt{
+  const magmaan::optim::OptimOptions opt{
       .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8};
 
   int total = 0;
@@ -388,7 +388,7 @@ TEST_CASE("continuous LS fixtures: ULS/GLS/WLS bounded fits match lavaan") {
       auto samp = sample_stats_from_fit(fit);
 
       auto est_or = fit_ls_estimator(
-          estimator, fit, *handles, samp, magmaan::estimate::Backend::Lbfgs,
+          estimator, fit, *handles, samp, magmaan::estimate::Backend::NloptLbfgs,
           opt);
 
       if (!est_or.has_value()) {
@@ -410,7 +410,7 @@ TEST_CASE("continuous LS fixtures: ULS/GLS/WLS bounded fits match lavaan") {
 
 TEST_CASE("continuous mean-structure LS fixtures: SNLLS agrees with full LS") {
   const std::string dir = magmaan::test::fixtures_dir() + "/ls";
-  const magmaan::optim::LbfgsOptions opt{
+  const magmaan::optim::OptimOptions opt{
       .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8};
 
   int total = 0;
@@ -431,9 +431,9 @@ TEST_CASE("continuous mean-structure LS fixtures: SNLLS agrees with full LS") {
       const auto& fit = exp["fits"][estimator];
       auto samp = sample_stats_from_fit(fit);
       auto full = fit_ls_estimator(estimator, fit, *handles, samp,
-                                   magmaan::estimate::Backend::Lbfgs, opt);
+                                   magmaan::estimate::Backend::NloptLbfgs, opt);
       auto prof = fit_snlls_estimator(estimator, fit, *handles, samp,
-                                      magmaan::estimate::Backend::Lbfgs, opt);
+                                      magmaan::estimate::Backend::NloptLbfgs, opt);
       if (!full.has_value() || !prof.has_value()) {
         failures.push_back(std::string(id) + "/" + estimator +
                            ": full/SNLLS fit failed");
@@ -457,11 +457,11 @@ TEST_CASE("continuous mean-structure LS fixtures: SNLLS agrees with full LS") {
 }
 
 #ifdef MAGMAAN_WITH_CERES
-TEST_CASE("continuous mean-structure LS fixtures: Ceres and LBFGS-B agree") {
+TEST_CASE("continuous mean-structure LS fixtures: Ceres and NLopt L-BFGS agree") {
   const std::string dir = magmaan::test::fixtures_dir() + "/ls";
-  const magmaan::optim::LbfgsOptions lbfgsb{
+  const magmaan::optim::OptimOptions nlopt{
       .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8};
-  const magmaan::optim::LbfgsOptions ceres{
+  const magmaan::optim::OptimOptions ceres{
       .max_iter = 1000, .ftol = 1e-12, .gtol = 1e-8};
 
   int total = 0;
@@ -482,18 +482,18 @@ TEST_CASE("continuous mean-structure LS fixtures: Ceres and LBFGS-B agree") {
       const auto& fit = exp["fits"][estimator];
       auto samp = sample_stats_from_fit(fit);
       auto a = fit_ls_estimator(estimator, fit, *handles, samp,
-                                magmaan::estimate::Backend::Lbfgs, lbfgsb);
+                                magmaan::estimate::Backend::NloptLbfgs, nlopt);
       auto b = fit_ls_estimator(estimator, fit, *handles, samp,
                                 magmaan::estimate::Backend::Ceres, ceres);
       if (!a.has_value() || !b.has_value()) {
         failures.push_back(std::string(id) + "/" + estimator +
-                           ": LBFGS-B/Ceres fit failed");
+                           ": NLopt L-BFGS/Ceres fit failed");
         continue;
       }
       const double d_f = std::abs(a->fmin - b->fmin);
       if (d_f > 1e-7) {
         failures.push_back(std::string(id) + "/" + estimator +
-                           ": |LBFGS-B fmin - Ceres fmin|=" +
+                           ": |NLopt L-BFGS fmin - Ceres fmin|=" +
                            std::to_string(d_f));
         continue;
       }
@@ -510,7 +510,7 @@ TEST_CASE("continuous mean-structure LS fixtures: Ceres and LBFGS-B agree") {
 
 TEST_CASE("continuous LS robust ULS fixtures match lavaan robust.sem") {
   const std::string dir = magmaan::test::fixtures_dir() + "/ls";
-  const magmaan::optim::LbfgsOptions opt{
+  const magmaan::optim::OptimOptions opt{
       .max_iter = 10000, .ftol = 1e-14, .gtol = 1e-8};
 
   int total = 0;
@@ -541,7 +541,7 @@ TEST_CASE("continuous LS robust ULS fixtures match lavaan robust.sem") {
     auto samp = sample_stats_from_fit(fit);
     auto est_or = magmaan::test::fit_gmm(
         handles->pt, handles->rep, samp, {}, magmaan::estimate::Bounds{},
-        magmaan::estimate::Backend::Lbfgs, opt);
+        magmaan::estimate::Backend::NloptLbfgs, opt);
     if (!est_or.has_value()) {
       failures.push_back(id + "/ULS robust: fit — " +
                          est_or.error().detail);

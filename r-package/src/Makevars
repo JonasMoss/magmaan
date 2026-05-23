@@ -6,37 +6,22 @@ MAGMAAN_BUILD ?= $(MAGMAAN_ROOT)/build/$(MAGMAAN_PRESET)
 MAGMAAN_LIB  := $(MAGMAAN_BUILD)/libmagmaan.a
 MAGMAAN_PORT_LIB := $(MAGMAAN_BUILD)/libport.a
 MAGMAAN_NLOPT_LIB := $(MAGMAAN_BUILD)/_deps/nlopt-build/libnlopt.a
-MAGMAAN_CMAKE_CACHE := $(MAGMAAN_BUILD)/CMakeCache.txt
-MAGMAAN_NLOPT_CACHE_ON := $(shell if test -r "$(MAGMAAN_CMAKE_CACHE)" && grep -q '^MAGMAAN_WITH_NLOPT:BOOL=ON' "$(MAGMAAN_CMAKE_CACHE)"; then printf 1; else printf 0; fi)
 MAGMAAN_WITH_CERES_R ?= 0
-MAGMAAN_WITH_NLOPT_R ?= $(MAGMAAN_NLOPT_CACHE_ON)
 MAGMAAN_CONFIG_STAMP := .magmaan-build-config
 R_GLUE_HEADERS := $(wildcard *.hpp)
 
 CXX_STD       = CXX23
 PKG_CPPFLAGS  = -I$(MAGMAAN_ROOT)/include -DEIGEN_MAX_ALIGN_BYTES=64
 override CXXFLAGS += -O3 -DNDEBUG -march=native
-# libmagmaan.a links PRIVATEly against libport.a in the C++ CMake build, so
-# the static archive carries unresolved PORT symbols (drmngb_, drn2gb_, ...).
-# The R shared object must pull in libport.a explicitly or it fails to load
-# with `undefined symbol: drmngb_`. Same pattern Ceres / NLopt already use.
-PKG_LIBS      = $(MAGMAAN_LIB) $(MAGMAAN_PORT_LIB)
+# libmagmaan.a links PRIVATEly against libport.a and libnlopt.a in the C++
+# CMake build, so the static archive carries unresolved PORT/NLopt symbols.
+# The R shared object must pull them in explicitly or it fails to load with an
+# undefined symbol. Prefer the fetched NLopt archive and fall back to -lnlopt.
+PKG_LIBS      = $(MAGMAAN_LIB) $(MAGMAAN_PORT_LIB) $(if $(wildcard $(MAGMAAN_NLOPT_LIB)),$(MAGMAAN_NLOPT_LIB),-lnlopt)
 
 ifeq ($(MAGMAAN_WITH_CERES_R),1)
 PKG_CPPFLAGS += -DMAGMAAN_WITH_CERES
 PKG_LIBS     += -lceres -lglog -lgflags
-endif
-
-# When libmagmaan.a is built with the optional NLopt backend, the archive
-# carries unresolved nlopt_* symbols; the final R shared object must also
-# link NLopt or it fails to load (undefined symbol: nlopt_get_numevals).
-# magmaan fetches NLopt as a static lib inside the CMake build tree, so we
-# prefer that archive and fall back to a system -lnlopt. By default this
-# follows MAGMAAN_WITH_NLOPT in the selected build's CMake cache, but explicit
-# MAGMAAN_WITH_NLOPT_R=0/1 still wins for unusual local builds.
-ifeq ($(MAGMAAN_WITH_NLOPT_R),1)
-PKG_CPPFLAGS += -DMAGMAAN_WITH_NLOPT
-PKG_LIBS     += $(if $(wildcard $(MAGMAAN_NLOPT_LIB)),$(MAGMAAN_NLOPT_LIB),-lnlopt)
 endif
 
 # Make sure libmagmaan.a is current before linking the
@@ -50,7 +35,7 @@ magmaan_lib:
 
 $(MAGMAAN_CONFIG_STAMP): FORCE
 	@tmp="$@.tmp"; \
-	printf '%s\n' "MAGMAAN_PRESET=$(MAGMAAN_PRESET)" "MAGMAAN_BUILD=$(MAGMAAN_BUILD)" "MAGMAAN_WITH_CERES_R=$(MAGMAAN_WITH_CERES_R)" "MAGMAAN_WITH_NLOPT_R=$(MAGMAAN_WITH_NLOPT_R)" > "$$tmp"; \
+	printf '%s\n' "MAGMAAN_PRESET=$(MAGMAAN_PRESET)" "MAGMAAN_BUILD=$(MAGMAAN_BUILD)" "MAGMAAN_WITH_CERES_R=$(MAGMAAN_WITH_CERES_R)" > "$$tmp"; \
 	if test -r "$@" && cmp -s "$$tmp" "$@"; then rm "$$tmp"; else mv "$$tmp" "$@"; fi
 
 # R's auto-generated package Makefile only tracks .cpp -> .o; it has no idea

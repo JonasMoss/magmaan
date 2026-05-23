@@ -16,7 +16,6 @@ endif()
 option(MAGMAAN_BUILD_TESTS  "Build the magmaan test suite"      ${MAGMAAN_IS_TOP_LEVEL})
 option(MAGMAAN_BUILD_BENCH  "Build the magmaan benchmarks"      OFF)
 option(MAGMAAN_WITH_CERES   "Enable the Ceres Solver optimizer backend (optional, heavy first build)"  OFF)
-option(MAGMAAN_WITH_NLOPT   "Enable the NLopt optimizer backend (SLSQP cross-check; augmented-Lagrangian-ready)"  OFF)
 option(MAGMAAN_WITH_PORT    "Enable the vendored PORT (Bell Labs) optimizer backend — nlminb-equivalent trust region (TOMS 611) plus NL2SOL with bounds (TOMS 573)"  ON)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -36,13 +35,6 @@ magmaan_find_or_fetch(NAME Eigen3
   GIT_TAG        3.4.0
   FIND_PACKAGE_ARGS CONFIG)
 
-# LBFGS++ — header-only L-BFGS solver. We use the standard unconstrained
-# `LBFGSSolver`. lbfgspp depends on Eigen (which we just fetched).
-magmaan_find_or_fetch(NAME lbfgspp
-  GIT_REPOSITORY https://github.com/yixuan/LBFGSpp.git
-  GIT_TAG        v0.4.0
-  FIND_PACKAGE_ARGS CONFIG)
-
 # Ceres Solver — optional alternative optimizer backend, behind MAGMAAN_WITH_CERES.
 # OFF by default because Ceres is a heavy first build (~5–15 min via FetchContent).
 # The Ceres-specific build flags (no LAPACK / SuiteSparse / glog / gflags /
@@ -52,13 +44,11 @@ if(MAGMAAN_WITH_CERES)
   include(CeresFetch)
 endif()
 
-# NLopt — optional optimizer backend, behind MAGMAAN_WITH_NLOPT. Lightweight C
-# library; the SLSQP algorithm gives a sequential-quadratic-programming
-# cross-check, and AUGLAG is reserved for future nonlinear-constraint support.
+# NLopt — required scalar optimizer backend. Lightweight C library; its L-BFGS
+# algorithm is the current default, while SLSQP / BOBYQA / TNEWTON / VAR2 give
+# optimizer-family cross-checks.
 # Build knobs live in `cmake/NloptFetch.cmake`, mirroring CeresFetch.cmake.
-if(MAGMAAN_WITH_NLOPT)
-  include(NloptFetch)
-endif()
+include(NloptFetch)
 
 # PORT — vendored Bell Labs optimizer routines (f2c-translated C), behind
 # MAGMAAN_WITH_PORT. Default ON because the vendored source is small (~620 KB),
@@ -131,8 +121,7 @@ add_library(magmaan STATIC
   src/measures/composite_weights.cpp
   src/measures/residuals.cpp
   src/measures/factor_scores.cpp
-  src/optim/lbfgs_optimizer.cpp
-  src/optim/lbfgsb_optimizer.cpp
+  src/optim/nlopt_optimizer.cpp
   src/optim/optimizers.cpp
   src/optim/terminal_audit.cpp)
 add_library(magmaan::magmaan ALIAS magmaan)
@@ -151,26 +140,13 @@ target_include_directories(magmaan
 
 target_link_libraries(magmaan
   PUBLIC  magmaan::no_exc_no_rtti Eigen3::Eigen
-  PRIVATE magmaan::warnings magmaan::sanitizers lbfgspp)
+  PRIVATE magmaan::warnings magmaan::sanitizers NLopt::nlopt)
 
-# LBFGS++ has `throw std::invalid_argument` in its Param check. GCC under
-# -fno-exceptions refuses to compile any throw statement (Clang elides it
-# silently). Compile just this TU with -fexceptions; we never invoke the
-# throw path with our default parameters, but the binary needs to accept
-# the source.
-set_source_files_properties(src/optim/lbfgs_optimizer.cpp
-  PROPERTIES COMPILE_OPTIONS "-fexceptions")
-# LBFGS-B adapter — same rationale: LBFGSBSolver's More–Thuente line search
-# throws std::runtime_error on exhaustion, and LBFGSBParam::check_param
-# can throw std::invalid_argument. Compile this TU with -fexceptions so
-# we can catch at the boundary; the rest of magmaan stays -fno-exceptions.
-set_source_files_properties(src/optim/lbfgsb_optimizer.cpp
-  PROPERTIES COMPILE_OPTIONS "-fexceptions")
 # Ceres optimizer adapter — only compiled when MAGMAAN_WITH_CERES=ON. Mirrors
-# the LBFGS++ pattern: TU is `-fexceptions` (Ceres uses exceptions internally,
-# we catch them at the boundary and return FitError values), and a PUBLIC
-# compile definition lets downstream code (tests, R bindings) detect the
-# build configuration via `#ifdef MAGMAAN_WITH_CERES`.
+# the old exception-isolated optimizer pattern: TU is `-fexceptions` (Ceres
+# uses exceptions internally, we catch them at the boundary and return FitError
+# values), and a PUBLIC compile definition lets downstream code (tests, R
+# bindings) detect the build configuration via `#ifdef MAGMAAN_WITH_CERES`.
 if(MAGMAAN_WITH_CERES)
   target_sources(magmaan PRIVATE src/optim/ceres_optimizer.cpp)
   target_link_libraries(magmaan PRIVATE Ceres::ceres)
@@ -179,22 +155,12 @@ if(MAGMAAN_WITH_CERES)
     PROPERTIES COMPILE_OPTIONS "-fexceptions")
 endif()
 
-# NLopt optimizer adapter — only compiled when MAGMAAN_WITH_NLOPT=ON. The
-# adapter uses NLopt's C API (`<nlopt.h>`, return-code based), so unlike the
-# Ceres TU it needs no -fexceptions. A PUBLIC compile definition lets
-# downstream code (tests, R bindings) detect the build via `#ifdef`.
-if(MAGMAAN_WITH_NLOPT)
-  target_sources(magmaan PRIVATE src/optim/nlopt_optimizer.cpp)
-  target_link_libraries(magmaan PRIVATE NLopt::nlopt)
-  target_compile_definitions(magmaan PUBLIC MAGMAAN_WITH_NLOPT)
-endif()
-
 # PORT optimizer adapter — only compiled when MAGMAAN_WITH_PORT=ON. PORT is a
 # pure C library (f2c-translated Fortran) with no exceptions on either side
-# of the boundary, so unlike the LBFGS++ / Ceres adapters this TU does not
-# need -fexceptions. The `port` static library is defined by
-# `cmake/PortVendor.cmake`. A PUBLIC compile definition lets downstream code
-# (tests, R bindings) detect the build via `#ifdef MAGMAAN_WITH_PORT`.
+# of the boundary, so unlike the Ceres adapter this TU does not need
+# -fexceptions. The `port` static library is defined by `cmake/PortVendor.cmake`.
+# A PUBLIC compile definition lets downstream code (tests, R bindings) detect
+# the build via `#ifdef MAGMAAN_WITH_PORT`.
 if(MAGMAAN_WITH_PORT)
   target_sources(magmaan PRIVATE src/optim/port_optimizer.cpp)
   target_link_libraries(magmaan PRIVATE port)

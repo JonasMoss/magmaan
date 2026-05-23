@@ -20,7 +20,7 @@
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
-#include "magmaan/optim/lbfgs_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/spec/build.hpp"
@@ -118,8 +118,8 @@ std::optional<Handles> handles_from_case(const nlohmann::json& c,
   return Handles{std::move(*pt), std::move(*rep)};
 }
 
-magmaan::optim::LbfgsOptions mplus_opts() {
-  return magmaan::optim::LbfgsOptions{
+magmaan::optim::OptimOptions mplus_opts() {
+  return magmaan::optim::OptimOptions{
       .max_iter = 7000,
       .ftol = 1e-13,
       .gtol = 1e-8,
@@ -230,7 +230,7 @@ TEST_CASE("Mplus SEM continuous goldens match lavaan") {
       if (estimator == "ML") {
         auto est_or = magmaan::test::fit(handles->pt, handles->rep, samp,
                                          magmaan::estimate::Bounds{},
-                                         magmaan::estimate::Backend::Lbfgs, opt);
+                                         magmaan::estimate::Backend::NloptLbfgs, opt);
         if (!est_or.has_value()) {
           failures.push_back(label + ": fit - " + est_or.error().detail);
           continue;
@@ -259,17 +259,17 @@ TEST_CASE("Mplus SEM continuous goldens match lavaan") {
         if (estimator == "ULS") {
           est_or = magmaan::test::fit_gmm(
               handles->pt, handles->rep, samp, weight,
-              magmaan::estimate::Bounds{}, magmaan::estimate::Backend::Lbfgs,
+              magmaan::estimate::Bounds{}, magmaan::estimate::Backend::NloptLbfgs,
               opt);
         } else if (estimator == "GLS") {
           est_or = magmaan::test::fit_gls(
               handles->pt, handles->rep, samp, magmaan::estimate::Bounds{},
-              magmaan::estimate::Backend::Lbfgs, opt);
+              magmaan::estimate::Backend::NloptLbfgs, opt);
         } else if (estimator == "WLS") {
           weight = magmaan::estimate::gmm::Weight(matrices_from_blocks(fit["WLS.V"]));
           est_or = magmaan::test::fit_gmm(
               handles->pt, handles->rep, samp, weight,
-              magmaan::estimate::Bounds{}, magmaan::estimate::Backend::Lbfgs,
+              magmaan::estimate::Bounds{}, magmaan::estimate::Backend::NloptLbfgs,
               opt);
         } else {
           failures.push_back(label + ": unknown estimator");

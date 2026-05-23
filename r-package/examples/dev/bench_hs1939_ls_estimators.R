@@ -10,7 +10,7 @@ data <- lavaan::HolzingerSwineford1939
 
 times <- as.integer(Sys.getenv("MAGMAAN_BENCH_TIMES", "100"))
 times <- 100
-lbfgsb <- list(max_iter = 5000L, ftol = 1e-12, gtol = 1e-8)
+nlopt <- list(max_iter = 5000L, ftol = 1e-12, gtol = 1e-8)
 ceres <- list(max_iter = 500L, ftol = 1e-10, gtol = 1e-7, ptol = 1e-8)
 
 lav_wls_ref <- lavaan::cfa(model, data, estimator = "WLS", baseline = FALSE)
@@ -30,10 +30,10 @@ uls_chisq <- function(fit) {
     sum(fit$nobs - 1L) / sum(fit$nobs)
 }
 
-magmaan_uls_lbfgsb <- function() {
+magmaan_uls_nlopt <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_uls(spec, dat, optimizer = "lbfgs", control = lbfgsb)
+  fit <- core$fit_uls(spec, dat, optimizer = "nlopt-lbfgs", control = nlopt)
   uls_chisq(fit)
 }
 
@@ -44,10 +44,10 @@ magmaan_uls_ceres <- function() {
   uls_chisq(fit)
 }
 
-magmaan_uls_snlls_lbfgsb <- function() {
+magmaan_uls_snlls_nlopt <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_uls_snlls(spec, dat, optimizer = "lbfgs", control = lbfgsb)
+  fit <- core$fit_uls_snlls(spec, dat, optimizer = "nlopt-lbfgs", control = nlopt)
   uls_chisq(fit)
 }
 
@@ -58,10 +58,10 @@ magmaan_uls_snlls_ceres <- function() {
   uls_chisq(fit)
 }
 
-magmaan_gls_lbfgsb <- function() {
+magmaan_gls_nlopt <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_gls(spec, dat, optimizer = "lbfgs", control = lbfgsb)
+  fit <- core$fit_gls(spec, dat, optimizer = "nlopt-lbfgs", control = nlopt)
   ls_chisq(fit, dat, multiplier = 2)
 }
 
@@ -72,10 +72,10 @@ magmaan_gls_ceres <- function() {
   ls_chisq(fit, dat, multiplier = 2)
 }
 
-magmaan_gls_snlls_lbfgsb <- function() {
+magmaan_gls_snlls_nlopt <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_gls_snlls(spec, dat, optimizer = "lbfgs", control = lbfgsb)
+  fit <- core$fit_gls_snlls(spec, dat, optimizer = "nlopt-lbfgs", control = nlopt)
   ls_chisq(fit, dat, multiplier = 2)
 }
 
@@ -86,10 +86,10 @@ magmaan_gls_snlls_ceres <- function() {
   ls_chisq(fit, dat, multiplier = 2)
 }
 
-magmaan_wls_lbfgsb <- function() {
+magmaan_wls_nlopt <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_wls(spec, dat, W_wls, optimizer = "lbfgs", control = lbfgsb)
+  fit <- core$fit_wls(spec, dat, W_wls, optimizer = "nlopt-lbfgs", control = nlopt)
   ls_chisq(fit, dat, multiplier = 2)
 }
 
@@ -100,10 +100,10 @@ magmaan_wls_ceres <- function() {
   ls_chisq(fit, dat, multiplier = 2)
 }
 
-magmaan_wls_snlls_lbfgsb <- function() {
+magmaan_wls_snlls_nlopt <- function() {
   spec <- model_spec(model)
   dat <- df_to_data(data, spec, scaling = "n-1")
-  fit <- core$fit_wls_snlls(spec, dat, W_wls, optimizer = "lbfgs", control = lbfgsb)
+  fit <- core$fit_wls_snlls(spec, dat, W_wls, optimizer = "nlopt-lbfgs", control = nlopt)
   ls_chisq(fit, dat, multiplier = 2)
 }
 
@@ -135,17 +135,17 @@ fit_for <- function(estimator, backend, snlls) {
   key <- paste(estimator, if (snlls) "snlls" else "ordinary", backend, sep = "_")
   switch(
     key,
-    ULS_ordinary_lbfgsb = core$fit_uls(spec, dat, optimizer = "lbfgs", control = lbfgsb),
+    ULS_ordinary_nlopt = core$fit_uls(spec, dat, optimizer = "nlopt-lbfgs", control = nlopt),
     ULS_ordinary_ceres = core$fit_uls(spec, dat, optimizer = "ceres", control = ceres),
-    ULS_snlls_lbfgsb = core$fit_uls_snlls(spec, dat, optimizer = "lbfgs", control = lbfgsb),
+    ULS_snlls_nlopt = core$fit_uls_snlls(spec, dat, optimizer = "nlopt-lbfgs", control = nlopt),
     ULS_snlls_ceres = core$fit_uls_snlls(spec, dat, optimizer = "ceres", control = ceres),
-    GLS_ordinary_lbfgsb = core$fit_gls(spec, dat, optimizer = "lbfgs", control = lbfgsb),
+    GLS_ordinary_nlopt = core$fit_gls(spec, dat, optimizer = "nlopt-lbfgs", control = nlopt),
     GLS_ordinary_ceres = core$fit_gls(spec, dat, optimizer = "ceres", control = ceres),
-    GLS_snlls_lbfgsb = core$fit_gls_snlls(spec, dat, optimizer = "lbfgs", control = lbfgsb),
+    GLS_snlls_nlopt = core$fit_gls_snlls(spec, dat, optimizer = "nlopt-lbfgs", control = nlopt),
     GLS_snlls_ceres = core$fit_gls_snlls(spec, dat, optimizer = "ceres", control = ceres),
-    WLS_ordinary_lbfgsb = core$fit_wls(spec, dat, W_wls, optimizer = "lbfgs", control = lbfgsb),
+    WLS_ordinary_nlopt = core$fit_wls(spec, dat, W_wls, optimizer = "nlopt-lbfgs", control = nlopt),
     WLS_ordinary_ceres = core$fit_wls(spec, dat, W_wls, optimizer = "ceres", control = ceres),
-    WLS_snlls_lbfgsb = core$fit_wls_snlls(spec, dat, W_wls, optimizer = "lbfgs", control = lbfgsb),
+    WLS_snlls_nlopt = core$fit_wls_snlls(spec, dat, W_wls, optimizer = "nlopt-lbfgs", control = nlopt),
     WLS_snlls_ceres = core$fit_wls_snlls(spec, dat, W_wls, optimizer = "ceres", control = ceres)
   )
 }
@@ -153,7 +153,7 @@ fit_for <- function(estimator, backend, snlls) {
 iteration_diagnostics <- function() {
   rows <- expand.grid(
     estimator = c("ULS", "GLS", "WLS"),
-    backend = c("lbfgsb", "ceres"),
+    backend = c("nlopt", "ceres"),
     snlls = c(FALSE, TRUE),
     stringsAsFactors = FALSE
   )
@@ -178,28 +178,28 @@ print(iteration_diagnostics(), digits = 6, row.names = FALSE)
 cat("\nQuick returned statistics\n")
 print(data.frame(
   method = c(
-    "magmaan_uls_lbfgsb", "magmaan_uls_ceres",
-    "magmaan_uls_snlls_lbfgsb", "magmaan_uls_snlls_ceres", "lavaan_uls",
-    "magmaan_gls_lbfgsb", "magmaan_gls_ceres",
-    "magmaan_gls_snlls_lbfgsb", "magmaan_gls_snlls_ceres", "lavaan_gls",
-    "magmaan_wls_lbfgsb", "magmaan_wls_ceres",
-    "magmaan_wls_snlls_lbfgsb", "magmaan_wls_snlls_ceres", "lavaan_wls"
+    "magmaan_uls_nlopt", "magmaan_uls_ceres",
+    "magmaan_uls_snlls_nlopt", "magmaan_uls_snlls_ceres", "lavaan_uls",
+    "magmaan_gls_nlopt", "magmaan_gls_ceres",
+    "magmaan_gls_snlls_nlopt", "magmaan_gls_snlls_ceres", "lavaan_gls",
+    "magmaan_wls_nlopt", "magmaan_wls_ceres",
+    "magmaan_wls_snlls_nlopt", "magmaan_wls_snlls_ceres", "lavaan_wls"
   ),
   statistic = c(
-    magmaan_uls_lbfgsb(), magmaan_uls_ceres(),
-    magmaan_uls_snlls_lbfgsb(), magmaan_uls_snlls_ceres(), lavaan_uls(),
-    magmaan_gls_lbfgsb(), magmaan_gls_ceres(),
-    magmaan_gls_snlls_lbfgsb(), magmaan_gls_snlls_ceres(), lavaan_gls(),
-    magmaan_wls_lbfgsb(), magmaan_wls_ceres(),
-    magmaan_wls_snlls_lbfgsb(), magmaan_wls_snlls_ceres(), lavaan_wls()
+    magmaan_uls_nlopt(), magmaan_uls_ceres(),
+    magmaan_uls_snlls_nlopt(), magmaan_uls_snlls_ceres(), lavaan_uls(),
+    magmaan_gls_nlopt(), magmaan_gls_ceres(),
+    magmaan_gls_snlls_nlopt(), magmaan_gls_snlls_ceres(), lavaan_gls(),
+    magmaan_wls_nlopt(), magmaan_wls_ceres(),
+    magmaan_wls_snlls_nlopt(), magmaan_wls_snlls_ceres(), lavaan_wls()
   )
 ), digits = 5, row.names = FALSE)
 
 cat("\nULS benchmark\n")
 print(microbenchmark::microbenchmark(
-  magmaan_lbfgsb = magmaan_uls_lbfgsb(),
+  magmaan_nlopt = magmaan_uls_nlopt(),
   magmaan_ceres = magmaan_uls_ceres(),
-  magmaan_snlls_lbfgsb = magmaan_uls_snlls_lbfgsb(),
+  magmaan_snlls_nlopt = magmaan_uls_snlls_nlopt(),
   magmaan_snlls_ceres = magmaan_uls_snlls_ceres(),
   lavaan = lavaan_uls(),
   times = times
@@ -207,9 +207,9 @@ print(microbenchmark::microbenchmark(
 
 cat("\nGLS benchmark\n")
 print(microbenchmark::microbenchmark(
-  magmaan_lbfgsb = magmaan_gls_lbfgsb(),
+  magmaan_nlopt = magmaan_gls_nlopt(),
   magmaan_ceres = magmaan_gls_ceres(),
-  magmaan_snlls_lbfgsb = magmaan_gls_snlls_lbfgsb(),
+  magmaan_snlls_nlopt = magmaan_gls_snlls_nlopt(),
   magmaan_snlls_ceres = magmaan_gls_snlls_ceres(),
   lavaan = lavaan_gls(),
   times = times
@@ -217,9 +217,9 @@ print(microbenchmark::microbenchmark(
 
 cat("\nWLS benchmark\n")
 print(microbenchmark::microbenchmark(
-  magmaan_lbfgsb = magmaan_wls_lbfgsb(),
+  magmaan_nlopt = magmaan_wls_nlopt(),
   magmaan_ceres = magmaan_wls_ceres(),
-  magmaan_snlls_lbfgsb = magmaan_wls_snlls_lbfgsb(),
+  magmaan_snlls_nlopt = magmaan_wls_snlls_nlopt(),
   magmaan_snlls_ceres = magmaan_wls_snlls_ceres(),
   lavaan = lavaan_wls(),
   times = times

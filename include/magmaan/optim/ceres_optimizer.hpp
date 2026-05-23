@@ -17,14 +17,14 @@ struct CeresBoundedOptimizer;
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
-#include "magmaan/optim/problem.hpp"           // LsResidualFn / LsJacobianFn
-#include "magmaan/optim/lbfgs_optimizer.hpp"   // shared LbfgsOutput return type
+#include "magmaan/optim/problem.hpp"   // OptimOutput / LS callback aliases
 
 namespace magmaan::optim {
 
 // Tuning knobs for both Ceres backends. The defaults match Ceres' own
-// `Solver::Options` defaults, with a tighter `max_iter` than LBFGS++'s 1000
-// because trust-region usually converges in far fewer iterations.
+// `Solver::Options` defaults, with a tighter `max_iter` than the shared
+// scalar-optimizer default because trust-region usually converges in far
+// fewer iterations.
 struct CeresOptions {
   int    max_iter = 500;
   double ftol     = 1e-10;   // function tolerance
@@ -34,9 +34,9 @@ struct CeresOptions {
 };
 
 // CeresOptimizer — uses Ceres' `GradientProblemSolver` (general-purpose
-// unconstrained nonlinear minimization with value + gradient). Drop-in for
-// `LbfgsOptimizer`: same `minimize(Objective, x0)` signature, same return
-// shape. No bounds — use `CeresBoundedOptimizer` when bounds are needed.
+// unconstrained nonlinear minimization with value + gradient). Same
+// `minimize(Objective, x0)` signature and return shape as the scalar
+// optimizers. No bounds — use `CeresBoundedOptimizer` when bounds are needed.
 class CeresOptimizer {
 public:
   static constexpr std::string_view name = "ceres-gradient";
@@ -48,7 +48,7 @@ public:
   using Objective = std::function<double(const Eigen::VectorXd& /*x*/,
                                          Eigen::VectorXd&       /*grad_out*/)>;
 
-  fit_expected<LbfgsOutput>
+  fit_expected<OptimOutput>
   minimize(Objective f, const Eigen::VectorXd& x0) const;
 
 private:
@@ -90,13 +90,13 @@ public:
                                          Eigen::VectorXd&       /*grad_out*/)>;
 
   // Unbounded overload — required to satisfy `Optimizer<>`.
-  fit_expected<LbfgsOutput>
+  fit_expected<OptimOutput>
   minimize(Objective f, const Eigen::VectorXd& x0) const;
 
   // Bounded overload — required to satisfy `BoundedOptimizer<>`.
   // `lower` / `upper` must have the same size as `x0`; per-coordinate
   // ±std::numeric_limits<double>::infinity() means "no bound on this axis".
-  fit_expected<LbfgsOutput>
+  fit_expected<OptimOutput>
   minimize(Objective f, const Eigen::VectorXd& x0,
            const Eigen::VectorXd& lower,
            const Eigen::VectorXd& upper) const;
@@ -105,7 +105,7 @@ public:
   // `n_resid` is the size of `r_fn`'s output (and `J_fn`'s row count); the
   // cost function is sized once at construction so Ceres can validate shapes.
   // `lower` / `upper` are box bounds on θ (same sentinel as above).
-  fit_expected<LbfgsOutput>
+  fit_expected<OptimOutput>
   minimize_ls(LsResidualFn r_fn, LsJacobianFn J_fn, LsEvaluationFn eval_fn,
               Eigen::Index n_resid,
               const Eigen::VectorXd& x0,
@@ -131,7 +131,7 @@ public:
   using Objective = std::function<double(const Eigen::VectorXd& /*x*/,
                                          Eigen::VectorXd&       /*grad_out*/)>;
 
-  fit_expected<LbfgsOutput>
+  fit_expected<OptimOutput>
   minimize(Objective f, const Eigen::VectorXd& x0) const;
 
 private:

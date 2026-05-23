@@ -15,7 +15,7 @@ fit_expected<AugLagResult>
 augmented_lagrangian(const optim::ScalarProblem& base, const ConstraintFn& h,
                      const ConstraintJacFn& jac, std::int32_t m,
                      const Eigen::VectorXd& x0, const Bounds& bounds,
-                     LbfgsOptions opts, AugLagOptions al) {
+                     OptimOptions opts, AugLagOptions al) {
   Eigen::VectorXd x      = x0;
   Eigen::VectorXd lambda = Eigen::VectorXd::Zero(m);
   double rho             = al.rho0;
@@ -40,7 +40,7 @@ augmented_lagrangian(const optim::ScalarProblem& base, const ConstraintFn& h,
       return F + lambda.dot(hv) + 0.5 * rho * hv.squaredNorm();
     };
 
-    auto res = optim::lbfgs(inner, x, bounds, opts);
+    auto res = optim::nlopt_lbfgs(inner, x, bounds, opts);
     if (!res.has_value()) return std::unexpected(res.error());
     x = std::move(res->x);
 

@@ -6,9 +6,9 @@
 
 // Terminal audit for optimizer iterates.
 //
-// "Optimizers propose, the audit disposes." NLopt, LBFGSpp, and PORT all
+// "Optimizers propose, the audit disposes." NLopt and PORT both
 // confuse two distinct things: (a) the search machinery's procedural verdict
-// ("line search couldn't satisfy strong-Wolfe", "trust-region predicted
+// ("line search could not find a measurable decrease", "trust-region predicted
 // reduction disagreed with actual") and (b) the geometric fact at the returned
 // point (is the projected gradient small enough that we are sitting on a
 // first-order stationary point?). For near-perfect-fit GLS models — the

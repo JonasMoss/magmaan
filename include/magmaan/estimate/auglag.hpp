@@ -6,7 +6,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/estimate/bounds.hpp"
-#include "magmaan/estimate/fit.hpp"        // fit_expected, LbfgsOptions, Bounds
+#include "magmaan/estimate/fit.hpp"        // fit_expected, OptimOptions, Bounds
 #include "magmaan/optim/problem.hpp"
 
 namespace magmaan::estimate {
@@ -40,7 +40,7 @@ using ConstraintJacFn = std::function<Eigen::MatrixXd(const Eigen::VectorXd&)>;
 //
 //   L_ρ(x) = F(x) + λᵀh(x) + (ρ/2)‖h(x)‖²
 //
-// over x with L-BFGS (honoring `bounds`), then updates λ ← λ + ρ·h(x) and
+// over x with NLopt L-BFGS (honoring `bounds`), then updates λ ← λ + ρ·h(x) and
 // raises ρ when the constraint violation fails to shrink. The reported
 // `base_fmin` is the un-penalized F(x̂) — the discrepancy / chi-square need it,
 // not the penalized value. Errors (`FitError::Kind::NumericIssue`) when the
@@ -49,6 +49,6 @@ fit_expected<AugLagResult>
 augmented_lagrangian(const optim::ScalarProblem& base, const ConstraintFn& h,
                      const ConstraintJacFn& jac, std::int32_t m,
                      const Eigen::VectorXd& x0, const Bounds& bounds,
-                     LbfgsOptions opts, AugLagOptions al = {});
+                     OptimOptions opts, AugLagOptions al = {});
 
 }  // namespace magmaan::estimate

@@ -33,7 +33,7 @@ opt <- list(max_iter = 3000, ftol = 1e-12, gtol = 1e-9)
 
 cat("=== estimators ===\n")
 for (est in c("ML", "ULS", "GLS")) {
-  fit <- magmaan(model, hs, estimator = est, lbfgsb = opt,
+  fit <- magmaan(model, hs, estimator = est, control = opt,
                  se = "none", test = "none")
   lav <- cfa(model, data = hs, estimator = est)
   ok(fit$converged && est_match(fit, lav, tol = 1e-2),

@@ -94,8 +94,7 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG -march=native",
-        "MAGMAAN_WITH_CERES": "ON",
-        "MAGMAAN_WITH_NLOPT": "ON"
+        "MAGMAAN_WITH_CERES": "ON"
       }
     }
   ],

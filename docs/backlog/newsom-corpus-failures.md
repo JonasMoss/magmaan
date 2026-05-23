@@ -28,11 +28,10 @@ was measurable, but the iterate is **not** geometrically stationary.
 | ex5_4  | converged, 28 iter, chisq 3.5/2     | LineSearchFailed (audit: gnorm 1.5e-3 ≫ 1e-6)         |
 | ex5_4c | converged, 33 iter, chisq 10.8/9    | LineSearchFailed (audit: gnorm 7.3e-3 ≫ 1e-6)         |
 
-The pre-existing `LbfgsOptimizer` ad-hoc salvage at `max(1e-3, 1e3·gtol)`
-(now refactored to call the audit) wouldn't have caught these either —
-`0.0015 > 1e-3` is borderline and `0.0073 ≫ 1e-3`. The audit's verdict
-("genuinely non-stationary") is honest, and points to the real next
-investigation rather than masking it with a looser tolerance:
+The previous ad-hoc salvage at `max(1e-3, 1e3·gtol)` would not have
+caught these either — `0.0015 > 1e-3` is borderline and `0.0073 ≫ 1e-3`.
+The audit's verdict ("genuinely non-stationary") is honest, and points to the
+real next investigation rather than masking it with a looser tolerance:
 
 - **The Full GLS objective/gradient evaluator has cancellation noise near a
   near-perfect fit.** PORT's `IV(1)=8` ("noisy gradient detected") detected

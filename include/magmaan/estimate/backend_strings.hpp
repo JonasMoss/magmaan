@@ -10,9 +10,8 @@ namespace magmaan::estimate {
 
 // Bidirectional string ↔ Backend mapping. The kebab-case spellings match the
 // `static constexpr std::string_view name` member each optimizer adapter
-// already carries (e.g. `LbfgsOptimizer::name == "lbfgs"`,
-// `PortNlsOptimizer::name == "port-nls"`), so the table is human-recognisable
-// and stays in sync with the adapter naming convention.
+// already carries (e.g. `PortNlsOptimizer::name == "port-nls"`), so the table
+// is human-recognisable and stays in sync with the adapter naming convention.
 //
 // Used by the R bindings layer to thread a user-facing `optimizer = "..."`
 // string argument through one Rcpp shim per fit family — replacing the older
@@ -20,14 +19,13 @@ namespace magmaan::estimate {
 // per-Backend shims.
 //
 // Recognised strings (kebab-case):
-//   "lbfgs"          → Backend::Lbfgs        (L-BFGS / L-BFGS-B, the default)
 //   "ceres"          → Backend::Ceres        (Ceres LM; needs MAGMAAN_WITH_CERES)
 //   "ceres-bfgs"     → Backend::CeresBfgs    (Ceres dense-BFGS line search)
 //   "nlopt-slsqp"    → Backend::NloptSlsqp   (Kraft 1988 SQP)
 //   "nlopt-bobyqa"   → Backend::NloptBobyqa  (Powell 2009 DF TR)
 //   "nlopt-tnewton"  → Backend::NloptTnewton (Nash 1985 truncated Newton)
 //   "nlopt-var2"     → Backend::NloptVar2    (Shanno-Phua 1980 full BFGS)
-//   "nlopt-lbfgs"    → Backend::NloptLbfgs   (NLopt's own L-BFGS)
+//   "nlopt-lbfgs"    → Backend::NloptLbfgs   (NLopt's own L-BFGS, current default)
 //   "port"           → Backend::Port         (drmngb_, = R nlminb)
 //   "port-nls"       → Backend::PortNls      (drn2gb_, = R nls)
 //

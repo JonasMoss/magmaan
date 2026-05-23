@@ -16,7 +16,6 @@ build:
       -DEIGEN_MAX_ALIGN_BYTES=64 -DEIGEN_NO_AUTOMATIC_RESIZING=1 \
       -DEIGEN_NO_EXCEPTIONS=1 -DEIGEN_RUNTIME_NO_MALLOC=1 \
       -I{{root}}/include -I{{root}}/src -isystem /usr/include/eigen3 \
-      -isystem {{root}}/build/fast/_deps/lbfgspp-src/include \
       robust_polychoric_sanity.cpp {{root}}/build/fast/libmagmaan.a -o {{bin}}
 
 quick: build

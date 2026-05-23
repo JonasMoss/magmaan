@@ -11,7 +11,7 @@
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/measures/fit_measures.hpp"
-#include "magmaan/optim/lbfgs_optimizer.hpp"
+#include "magmaan/optim/problem.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/data/sample_stats.hpp"
@@ -180,15 +180,15 @@ fiml_baseline_chi2(const spec::LatentStructure& pt,
                    FIML discrepancy = {});
 
 // Full-information ML fit over raw continuous data. `opts` tunes the
-// (unbounded) L-BFGS optimizer; equality constraints are folded in via the
-// θ = θ₀ + K·α reparameterization.
+// unbounded NLopt L-BFGS optimizer; equality constraints are folded in via
+// the θ = θ₀ + K·α reparameterization.
 fit_expected<Estimates>
 fit_fiml(spec::LatentStructure pt,
          const model::MatrixRep& rep,
          const RawData& raw,
          const Eigen::VectorXd& x0,      // start values, size pt.n_free()
          FIML discrepancy = {},
-         optim::LbfgsOptions opts = {});
+         optim::OptimOptions opts = {});
 
 }  // namespace magmaan::estimate::fiml
 

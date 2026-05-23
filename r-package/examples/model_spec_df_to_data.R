@@ -17,9 +17,9 @@ stopifnot(max(abs(d$S[[1]] - manual$S[[1]])) < 1e-12)
 stopifnot(max(abs(d$mean[[1]] - manual$mean[[1]])) < 1e-12)
 
 fit_ml_ <- magmaan_core$fit_ml(m, d)
-fit_uls_ <- magmaan_core$fit_uls(m, d, lbfgsb = list(max_iter = 2000, ftol = 1e-12, gtol = 1e-8))
-fit_gls_ <- magmaan_core$fit_gls(m, d, lbfgsb = list(max_iter = 2000, ftol = 1e-12, gtol = 1e-8))
-fit_wls_ <- magmaan_core$fit_wls(m, d, diag(6), lbfgsb = list(max_iter = 2000, ftol = 1e-12, gtol = 1e-8))
+fit_uls_ <- magmaan_core$fit_uls(m, d, control = list(max_iter = 2000, ftol = 1e-12, gtol = 1e-8))
+fit_gls_ <- magmaan_core$fit_gls(m, d, control = list(max_iter = 2000, ftol = 1e-12, gtol = 1e-8))
+fit_wls_ <- magmaan_core$fit_wls(m, d, diag(6), control = list(max_iter = 2000, ftol = 1e-12, gtol = 1e-8))
 
 stopifnot(fit_ml_$estimator == "ML")
 stopifnot(fit_uls_$estimator == "ULS")

@@ -41,7 +41,7 @@ FitError summary_to_err(const Summary& s, const char* who) {
   if (s.termination_type == ceres::FAILURE ||
       s.termination_type == ceres::USER_FAILURE) {
     // The most common Ceres FAILURE is a step-length collapse, which is the
-    // moral equivalent of LBFGS++'s line-search failure.
+    // moral equivalent of a line-search failure.
     return make_err(FitError::Kind::LineSearchFailed, std::move(msg));
   }
   return make_err(FitError::Kind::NumericIssue, std::move(msg));
@@ -213,7 +213,7 @@ void apply_options(ceres::Solver::Options& o, const CeresOptions& opts) {
 // CeresOptimizer — GradientProblemSolver
 // ============================================================================
 
-fit_expected<LbfgsOutput>
+fit_expected<OptimOutput>
 CeresOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
   const int n = static_cast<int>(x0.size());
   // ceres::GradientProblem takes ownership of the FirstOrderFunction*.
@@ -233,7 +233,7 @@ CeresOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
       summary.termination_type != ceres::USER_SUCCESS) {
     return std::unexpected(summary_to_err(summary, "gradient"));
   }
-  return LbfgsOutput{
+  return OptimOutput{
       std::move(theta),
       summary.final_cost,
       static_cast<int>(summary.iterations.size())};
@@ -243,7 +243,7 @@ CeresOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
 // CeresBfgsOptimizer — GradientProblemSolver line-search dense BFGS
 // ============================================================================
 
-fit_expected<LbfgsOutput>
+fit_expected<OptimOutput>
 CeresBfgsOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
   const int n = static_cast<int>(x0.size());
   ceres::GradientProblem problem(new StdObjectiveFirstOrder(std::move(f), n));
@@ -265,7 +265,7 @@ CeresBfgsOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
       summary.termination_type != ceres::USER_SUCCESS) {
     return std::unexpected(summary_to_err(summary, "bfgs"));
   }
-  return LbfgsOutput{
+  return OptimOutput{
       std::move(theta),
       summary.final_cost,
       static_cast<int>(summary.iterations.size())};
@@ -275,7 +275,7 @@ CeresBfgsOptimizer::minimize(Objective f, const Eigen::VectorXd& x0) const {
 // CeresBoundedOptimizer — Problem API with native bounds
 // ============================================================================
 
-fit_expected<LbfgsOutput>
+fit_expected<OptimOutput>
 CeresBoundedOptimizer::minimize(Objective              f,
                                 const Eigen::VectorXd& x0) const {
   // Unbounded path: delegate to the GradientProblemSolver, which avoids the
@@ -285,7 +285,7 @@ CeresBoundedOptimizer::minimize(Objective              f,
   return CeresOptimizer{opts_}.minimize(std::move(f), x0);
 }
 
-fit_expected<LbfgsOutput>
+fit_expected<OptimOutput>
 CeresBoundedOptimizer::minimize(Objective              f,
                                 const Eigen::VectorXd& x0,
                                 const Eigen::VectorXd& lower,
@@ -337,7 +337,7 @@ CeresBoundedOptimizer::minimize(Objective              f,
 
   // summary.final_cost is ½·r₀² = ½·(2F + ε) = F + ε/2; back-transform.
   const double fmin = std::max(0.0, summary.final_cost - 0.5 * kSqrtEps);
-  return LbfgsOutput{
+  return OptimOutput{
       std::move(theta),
       fmin,
       static_cast<int>(summary.iterations.size())};
@@ -347,7 +347,7 @@ CeresBoundedOptimizer::minimize(Objective              f,
 // CeresBoundedOptimizer::minimize_ls — true multi-residual LS path
 // ============================================================================
 
-fit_expected<LbfgsOutput>
+fit_expected<OptimOutput>
 CeresBoundedOptimizer::minimize_ls(LsResidualFn r_fn,
                                    LsJacobianFn J_fn,
                                    LsEvaluationFn eval_fn,
@@ -404,7 +404,7 @@ CeresBoundedOptimizer::minimize_ls(LsResidualFn r_fn,
   }
 
   // Ceres' final_cost is already ½‖r‖² — no sqrt-trick back-transform.
-  return LbfgsOutput{
+  return OptimOutput{
       std::move(theta),
       std::max(0.0, summary.final_cost),
       static_cast<int>(summary.iterations.size())};
