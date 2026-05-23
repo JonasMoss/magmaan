@@ -1,0 +1,241 @@
+#include "magmaan/model/auto_identification.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+namespace magmaan::model {
+
+namespace {
+
+using compat::lavaan::LavaanParTable;
+using parse::Op;
+
+constexpr double kFixedTol = 1e-12;
+
+inline bool is_one(double v) noexcept {
+  return std::isfinite(v) && std::abs(v - 1.0) <= kFixedTol;
+}
+
+inline bool is_zero(double v) noexcept {
+  return std::isfinite(v) && std::abs(v) <= kFixedTol;
+}
+
+inline std::unordered_set<std::string> collect_latents(const LavaanParTable& pt) {
+  std::unordered_set<std::string> out;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] == Op::Measurement) out.insert(pt.lhs[i]);
+  }
+  return out;
+}
+
+inline AdmissibilityVerdict reject(std::string reason) {
+  return AdmissibilityVerdict{false, std::move(reason)};
+}
+
+}  // namespace
+
+AdmissibilityVerdict is_std_lv_admissible(const LavaanParTable& marker_pt) {
+  // Predicate 4: no equality / definition / inequality rows.
+  for (std::size_t i = 0; i < marker_pt.size(); ++i) {
+    const Op op = marker_pt.op[i];
+    if (op == Op::EqConstraint || op == Op::DefineParam ||
+        op == Op::LtConstraint || op == Op::GtConstraint) {
+      return reject("partable contains ==/:=/</> constraint rows");
+    }
+  }
+
+  // Predicate 5: no label appears on more than one row.
+  {
+    std::unordered_map<std::string, std::size_t> seen;
+    for (std::size_t i = 0; i < marker_pt.size(); ++i) {
+      const std::string& lab = marker_pt.label[i];
+      if (lab.empty()) continue;
+      auto [it, fresh] = seen.try_emplace(lab, i);
+      if (!fresh) {
+        return reject("duplicated label: " + lab);
+      }
+    }
+  }
+
+  const auto latents = collect_latents(marker_pt);
+
+  // Predicate 6: no higher-order factor.
+  for (std::size_t i = 0; i < marker_pt.size(); ++i) {
+    if (marker_pt.op[i] == Op::Measurement &&
+        latents.count(marker_pt.rhs[i])) {
+      return reject("higher-order factor (latent appears as rhs of =~)");
+    }
+  }
+
+  // Predicate 7: exactly one fixed loading per latent.
+  {
+    std::unordered_map<std::string, int> fixed_count;
+    for (const auto& f : latents) fixed_count[f] = 0;
+    for (std::size_t i = 0; i < marker_pt.size(); ++i) {
+      if (marker_pt.op[i] == Op::Measurement && marker_pt.free[i] == 0) {
+        auto it = fixed_count.find(marker_pt.lhs[i]);
+        if (it != fixed_count.end()) ++it->second;
+      }
+    }
+    for (const auto& [f, n] : fixed_count) {
+      if (n != 1) {
+        return reject("latent " + f + " has " + std::to_string(n) +
+                      " fixed loadings (need exactly 1)");
+      }
+    }
+  }
+
+  // Predicates 8 + 9: restricted fixed values.
+  for (std::size_t i = 0; i < marker_pt.size(); ++i) {
+    if (marker_pt.free[i] != 0) continue;
+    const Op op = marker_pt.op[i];
+    const std::string& lhs = marker_pt.lhs[i];
+    const std::string& rhs = marker_pt.rhs[i];
+    const double v = marker_pt.ustart[i];
+    const bool lhs_lat = latents.count(lhs) > 0;
+    const bool rhs_lat = latents.count(rhs) > 0;
+
+    if (op == Op::Measurement) {
+      if (!is_one(v)) {
+        return reject("fixed loading " + lhs + "=~" + rhs +
+                      " at value other than 1");
+      }
+    } else if (op == Op::Covariance) {
+      if (lhs == rhs && lhs_lat) {
+        return reject("latent variance " + lhs + "~~" + rhs +
+                      " fixed (must be free in marker)");
+      }
+      if (lhs_lat || rhs_lat) {
+        if (!is_zero(v)) {
+          return reject("fixed nonzero latent covariance " + lhs + "~~" +
+                        rhs);
+        }
+      }
+    } else if (op == Op::Regression) {
+      if ((lhs_lat || rhs_lat) && !is_zero(v)) {
+        return reject("fixed nonzero regression " + lhs + "~" + rhs +
+                      " touches a latent");
+      }
+    } else if (op == Op::Intercept) {
+      if (lhs_lat && !is_zero(v)) {
+        return reject("fixed nonzero latent intercept " + lhs + "~1");
+      }
+    }
+  }
+
+  return AdmissibilityVerdict{true, {}};
+}
+
+AdmissibilityVerdict is_std_lv_admissible(const LavaanParTable& marker_pt,
+                                          const LavaanParTable& std_lv_pt) {
+  auto v = is_std_lv_admissible(marker_pt);
+  if (!v.admissible) return v;
+  const auto n_marker = marker_pt.n_free();
+  const auto n_std_lv = std_lv_pt.n_free();
+  if (n_marker != n_std_lv) {
+    return reject("npar mismatch after swap (marker=" +
+                  std::to_string(n_marker) + ", std_lv=" +
+                  std::to_string(n_std_lv) + ")");
+  }
+  return AdmissibilityVerdict{true, {}};
+}
+
+LavaanParTable partable_marker_to_std_lv(const LavaanParTable& marker_pt) {
+  LavaanParTable out = marker_pt;
+  const auto latents = collect_latents(out);
+
+  // Free each marker anchor (op=='=~', free==0, ustart==1) — clear its ustart.
+  // Fix each latent variance (op=='~~' with lhs==rhs latent) at 1.
+  for (std::size_t i = 0; i < out.size(); ++i) {
+    if (out.op[i] == Op::Measurement && out.free[i] == 0 &&
+        is_one(out.ustart[i]) && latents.count(out.lhs[i])) {
+      // anchor → freed; theta index will be assigned in the renumber pass
+      out.free[i] = -1;  // sentinel: needs new free index
+      out.ustart[i] = std::numeric_limits<double>::quiet_NaN();
+    } else if (out.op[i] == Op::Covariance &&
+               out.lhs[i] == out.rhs[i] &&
+               latents.count(out.lhs[i])) {
+      // latent variance → fixed at 1
+      out.free[i] = 0;
+      out.ustart[i] = 1.0;
+    }
+  }
+
+  // Renumber free indices to be consecutive 1..k, mapping old → new.
+  // Rows with free > 0 keep their relative order; rows with free == -1
+  // (just-freed anchors) get assigned next available indices in row order.
+  std::unordered_map<std::int32_t, std::int32_t> remap;
+  std::int32_t next = 0;
+  for (std::size_t i = 0; i < out.size(); ++i) {
+    if (out.free[i] > 0) {
+      auto [it, fresh] = remap.try_emplace(out.free[i], 0);
+      if (fresh) it->second = ++next;
+      out.free[i] = it->second;
+    } else if (out.free[i] == -1) {
+      out.free[i] = ++next;
+    }
+  }
+  return out;
+}
+
+Eigen::VectorXd backconvert_std_lv_to_marker(
+    const LavaanParTable& marker_pt,
+    const Eigen::Ref<const Eigen::VectorXd>& std_lv_est) {
+  const std::size_t n = marker_pt.size();
+  Eigen::VectorXd out = std_lv_est;
+  if (static_cast<std::size_t>(std_lv_est.size()) != n) return out;
+
+  const auto latents = collect_latents(marker_pt);
+
+  // c_f = std_lv estimate of the marker anchor loading for each latent f.
+  std::unordered_map<std::string, double> c_per;
+  for (const auto& f : latents) c_per[f] = 1.0;
+  for (std::size_t i = 0; i < n; ++i) {
+    if (marker_pt.op[i] == Op::Measurement && marker_pt.free[i] == 0 &&
+        is_one(marker_pt.ustart[i])) {
+      auto it = c_per.find(marker_pt.lhs[i]);
+      if (it != c_per.end()) it->second = std_lv_est[static_cast<Eigen::Index>(i)];
+    }
+  }
+
+  auto c_or_one = [&](const std::string& name) -> double {
+    auto it = c_per.find(name);
+    return it == c_per.end() ? 1.0 : it->second;
+  };
+
+  for (std::size_t i = 0; i < n; ++i) {
+    const Op op = marker_pt.op[i];
+    const std::string& lhs = marker_pt.lhs[i];
+    const std::string& rhs = marker_pt.rhs[i];
+    const auto idx = static_cast<Eigen::Index>(i);
+    const double e = std_lv_est[idx];
+    const bool lhs_lat = latents.count(lhs) > 0;
+    const bool rhs_lat = latents.count(rhs) > 0;
+
+    if (op == Op::Measurement) {
+      const double cl = c_or_one(lhs);
+      const double cr = rhs_lat ? c_or_one(rhs) : 1.0;
+      out[idx] = e * cr / cl;
+    } else if (op == Op::Covariance && lhs == rhs && lhs_lat) {
+      const double cl = c_or_one(lhs);
+      out[idx] = e * cl * cl;
+    } else if (op == Op::Covariance && lhs != rhs && lhs_lat && rhs_lat) {
+      out[idx] = e * c_or_one(lhs) * c_or_one(rhs);
+    } else if (op == Op::Regression) {
+      const double cl = lhs_lat ? c_or_one(lhs) : 1.0;
+      const double cr = rhs_lat ? c_or_one(rhs) : 1.0;
+      out[idx] = e * cl / cr;
+    } else if (op == Op::Intercept && lhs_lat) {
+      out[idx] = e * c_or_one(lhs);
+    }
+  }
+  return out;
+}
+
+}  // namespace magmaan::model

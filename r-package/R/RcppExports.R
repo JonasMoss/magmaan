@@ -249,6 +249,18 @@ infer_rls_chi2_sample <- function(sample_stats, implied) {
     .Call(`_magmaan_infer_rls_chi2_sample`, sample_stats, implied)
 }
 
+frontier_is_std_lv_admissible_impl <- function(marker_partable, std_lv_partable) {
+    .Call(`_magmaan_frontier_is_std_lv_admissible_impl`, marker_partable, std_lv_partable)
+}
+
+frontier_partable_marker_to_std_lv_impl <- function(marker_partable) {
+    .Call(`_magmaan_frontier_partable_marker_to_std_lv_impl`, marker_partable)
+}
+
+frontier_backconvert_std_lv_to_marker_impl <- function(marker_partable, std_lv_est) {
+    .Call(`_magmaan_frontier_backconvert_std_lv_to_marker_impl`, marker_partable, std_lv_est)
+}
+
 infer_lr_test_satorra2000 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical", a_method = "exact", computation = "streaming") {
     .Call(`_magmaan_infer_lr_test_satorra2000`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma, a_method, computation)
 }

@@ -291,3 +291,4 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   Rf_setAttrib(df, Rf_install("magmaan.expanded_partable"), expanded);
   return df;
 }
+
