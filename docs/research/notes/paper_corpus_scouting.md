@@ -8,6 +8,13 @@ Status update: the first tracked scout now exists as
 nodes below, scans only small code files for lavaan-shaped signals, and keeps
 raw downloads out of the repository.
 
+Promotion update: `zxqvn` is now the first promoted paper-corpus fixture.
+`tests/tools/regen_paper_corpus_fixtures.R` reads ignored raw files from
+`external/paper_corpus/zxqvn/raw/` and writes
+`tests/fixtures/paper_corpus/zxqvn_reference.json`, which freezes the core
+complete-data ML point-estimate surface. The source script's clustered-SE
+option is recorded as catalogued but outside this first parity surface.
+
 The goal is a future `paper_corpus` alongside the textbook corpus: empirical or
 methods-paper SEM examples with reusable model syntax and data, preferably
 discovered automatically from public repositories. The first implementation
@@ -133,8 +140,8 @@ catalogued separately from the linear SEM core parity surface.
    list.
 3. Done: write a tracked scout manifest with file inventories and lavaan-detection
    summaries, but do not commit raw OSF downloads.
-4. Next: promote `hwkem` and `zxqvn` first:
+4. Partly done: promote `hwkem` and `zxqvn` first:
    - `hwkem` for realistic longitudinal CFA/SEM/RI-CLPM complexity.
-   - `zxqvn` for a compact empirical mediation SEM with small data.
+   - Done: `zxqvn` for a compact empirical mediation SEM with small data.
 5. Next: generate lavaan oracle fixtures only after each promoted case has a clear
    license/data handling note and a supported magmaan surface classification.
