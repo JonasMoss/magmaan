@@ -1,17 +1,30 @@
 # Resources
 
-Local PDFs and reference material for the convergence-note paper.
+Local PDFs and reference material for the convergence-note paper. Keep this
+directory curated: paper PDFs, small replication-code archives, and short
+indexes are welcome; generated simulation output and broad source mirrors are
+not.
 
-The initial papers moved here from the repository-level `resources/papers/`
-cache are:
+## Papers
 
-- De Jonckere and Rosseel (2022), bounded estimation in small-sample SEM.
-- De Jonckere and Rosseel (2025), bounded random starts in small-sample SEM.
-- Ludtke, Ulitzsch, and Robitzsch (2021), penalized/Bayesian CFA in small
+- `De Jonckere and Rosseel 2022 - Using bounded estimation to avoid nonconvergence in small sample SEM - published.pdf`:
+  published bounded-estimation paper.
+- `Jonckere and Rosseel 2025 - A note on using random starting values in small sample SEM.pdf`:
+  published bounded-random-start paper.
+- `Ludtke et al. 2021 - A comparison of penalized maximum likelihood estima ... stimating confirmatory factor analysis models with small sample sizes.pdf`:
+  penalized/Bayesian CFA comparison in small
   samples.
-- `osfstorage-archive.zip`, the OSF replication archive for De Jonckere and
-  Rosseel (2025). It contains the simulation scripts used to define the exact
-  2025 population models and bounded-random-start reruns.
 
-Generated data, broad external mirrors, and large scratch outputs should stay
-out of this directory unless they are deliberately curated paper inputs.
+## Expanded OSF resources
+
+- `dejonckere_rosseel_2025_random_starts_osf/`: replication archive for the
+  bounded-random-start paper. The simulation scripts define the population
+  models and bounded-random-start reruns used in the 2025 note.
+- `dejonckere_rosseel_2023_model_based_shrinkage_osf/`: replication archive for
+  the model-based shrinkage-target note. This is start-adjacent rather than a
+  start-value paper: it stabilizes small-sample covariance input by replacing
+  `S` with `(1 - lambda) S + lambda T`, where `T` is a model-based target.
+
+The raw `osfstorage-archive*.zip` downloads and duplicate standalone OSF
+preprint PDFs were removed after expansion. The older bounded-estimation
+preprint was replaced by the published 2022 PDF.
