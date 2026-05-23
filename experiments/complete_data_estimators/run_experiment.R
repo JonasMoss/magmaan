@@ -20,7 +20,8 @@ parse_args <- function(args) {
     reps = 10L,
     backend = "nlopt-lbfgs",
     case_regex = NULL,
-    include_observed = TRUE
+    include_observed = TRUE,
+    corpus_dir = NULL
   )
   i <- 1L
   while (i <= length(args)) {
@@ -29,7 +30,7 @@ parse_args <- function(args) {
       cat(
         "Usage: Rscript run_experiment.R [--reps N] [--backend NAME] [--cases REGEX] [--latent-only]\n",
         "\n",
-        "Defaults: --reps 10 --backend nlopt-lbfgs\n",
+        "Defaults: --reps 10 --backend nlopt-lbfgs --corpus ../../corpus/textbook-corpus\n",
         sep = ""
       )
       quit(save = "no", status = 0L)
@@ -55,6 +56,12 @@ parse_args <- function(args) {
       out$include_observed <- TRUE
     } else if (arg == "--latent-only") {
       out$include_observed <- FALSE
+    } else if (arg == "--corpus") {
+      i <- i + 1L
+      if (i > length(args)) stop("--corpus requires a value", call. = FALSE)
+      out$corpus_dir <- args[[i]]
+    } else if (startsWith(arg, "--corpus=")) {
+      out$corpus_dir <- sub("^--corpus=", "", arg)
     } else {
       stop("unknown argument: ", arg, call. = FALSE)
     }
@@ -75,6 +82,24 @@ require_pkg <- function(package) {
   invisible(TRUE)
 }
 
+read_matrix_csv <- function(path) {
+  df <- utils::read.csv(
+    path, stringsAsFactors = FALSE, check.names = FALSE, row.names = 1
+  )
+  out <- as.matrix(df)
+  storage.mode(out) <- "double"
+  out
+}
+
+read_vector_csv <- function(path) {
+  df <- utils::read.csv(
+    path, stringsAsFactors = FALSE, check.names = FALSE, row.names = 1
+  )
+  out <- df[[1L]]
+  names(out) <- rownames(df)
+  as.numeric(out)
+}
+
 matrix_from_json <- function(x) {
   if (is.null(x)) return(NULL)
   out <- do.call(rbind, lapply(x, function(row) as.numeric(unlist(row, use.names = FALSE))))
@@ -87,7 +112,36 @@ vector_from_json <- function(x) {
   as.numeric(unlist(x, use.names = FALSE))
 }
 
-find_case <- function(path, id) {
+collapse_tags <- function(tags) {
+  tags <- as.character(tags %||% character())
+  tags <- tags[nzchar(tags)]
+  if (!length(tags)) return("")
+  paste(tags, collapse = ";")
+}
+
+primary_tag <- function(tags) {
+  tags <- as.character(tags %||% character())
+  tags <- tags[nzchar(tags)]
+  if (!length(tags)) return("")
+  tags[[1L]]
+}
+
+has_latent_variable <- function(model) {
+  is.character(model) && length(model) == 1L && grepl("=~", model, fixed = TRUE)
+}
+
+case_observed_only <- function(model) {
+  !has_latent_variable(model)
+}
+
+case_regex_match <- function(row, case_regex) {
+  if (is.null(case_regex)) return(TRUE)
+  fields <- c(row$case_id %||% "", row$book %||% "", row$primary_class %||% "",
+              row$tags %||% "", row$case_dir %||% "")
+  any(grepl(case_regex, fields))
+}
+
+fixture_find_case <- function(path, id) {
   ref <- jsonlite::read_json(path, simplifyVector = FALSE)
   hits <- Filter(function(x) identical(x$id %||% "", id), ref$cases %||% list())
   if (!length(hits)) return(NULL)
@@ -102,15 +156,23 @@ fixture_value <- function(case, field) {
   NULL
 }
 
-normalize_case <- function(manifest_case, fixture_case) {
+normalize_fixture_case <- function(manifest_case, fixture_case) {
   sample_cov <- fixture_value(fixture_case, "sample_cov")
   n_obs <- fixture_value(fixture_case, "n_obs")
+  tag <- manifest_case$family %||% fixture_case$family %||%
+    fixture_case$model_kind %||% ""
   list(
     id = manifest_case$id,
     source = manifest_case$source,
+    subcorpus = manifest_case$source,
     source_case_id = manifest_case$source_case_id,
     label = manifest_case$label %||% fixture_case$name %||% fixture_case$title %||% fixture_case$label %||% manifest_case$id,
-    family = manifest_case$family %||% fixture_case$family %||% fixture_case$model_kind %||% "",
+    family = tag,
+    primary_tag = tag,
+    tags = tag,
+    data_kind = "summary",
+    fidelity_tier = "",
+    n_groups = 1L,
     observed_only = isTRUE(manifest_case$observed_only),
     strict_parity = isTRUE(manifest_case$strict_parity),
     model = fixture_case$model,
@@ -119,20 +181,47 @@ normalize_case <- function(manifest_case, fixture_case) {
     model_type = if (identical(fixture_case$lavaan_function %||% "", "growth") ||
                      identical(fixture_case$model_kind %||% "", "growth")) "growth" else "sem",
     n_obs = as.integer(n_obs),
-    sample_cov = matrix_from_json(sample_cov),
-    sample_mean = vector_from_json(fixture_value(fixture_case, "sample_mean"))
+    group_var = NULL,
+    group_labels = NULL,
+    sample_cov = list(matrix_from_json(sample_cov)),
+    sample_mean = {
+      mean <- vector_from_json(fixture_value(fixture_case, "sample_mean"))
+      if (is.null(mean)) NULL else list(mean)
+    },
+    raw = NULL
   )
 }
 
 usable_case <- function(case, include_observed = FALSE) {
   !is.null(case) && !is.null(case$model) &&
-    !is.null(case$sample_cov) && !is.na(case$n_obs) &&
+    (!is.null(case$raw) || !is.null(case$sample_cov)) &&
+    length(case$n_obs) > 0L && !anyNA(case$n_obs) &&
     (include_observed || !isTRUE(case$observed_only)) &&
     (include_observed || grepl("=~", case$model, fixed = TRUE))
 }
 
-load_experiment_cases <- function(fixtures_dir, case_regex = NULL,
-                                  include_observed = FALSE) {
+coverage_row <- function(case_id, label, source, primary_tag, tags, data_kind,
+                         n_groups, n_obs_total, lavaan_function, fidelity_tier,
+                         status, reason = "") {
+  data.frame(
+    case_id = case_id %||% "",
+    label = label %||% "",
+    source = source %||% "",
+    primary_tag = primary_tag %||% "",
+    tags = tags %||% "",
+    data_kind = data_kind %||% "",
+    n_groups = as.integer(n_groups %||% NA_integer_),
+    n_obs_total = as.integer(n_obs_total %||% NA_integer_),
+    lavaan_function = lavaan_function %||% "",
+    fidelity_tier = fidelity_tier %||% "",
+    coverage_status = status,
+    skip_reason = reason,
+    stringsAsFactors = FALSE
+  )
+}
+
+load_fixture_experiment_cases <- function(fixtures_dir, case_regex = NULL,
+                                          include_observed = FALSE) {
   manifest_path <- file.path(fixtures_dir, "textbook_corpus", "manifest.json")
   manifest <- jsonlite::read_json(manifest_path, simplifyVector = FALSE)
   candidates <- Filter(function(x) {
@@ -143,14 +232,15 @@ load_experiment_cases <- function(fixtures_dir, case_regex = NULL,
   }
 
   out <- list()
+  coverage <- list()
   for (mc in candidates) {
     loaded <- NULL
     for (rel in mc$oracle_files %||% character()) {
       path <- file.path(fixtures_dir, rel)
       if (!file.exists(path)) next
-      fc <- find_case(path, mc$source_case_id)
+      fc <- fixture_find_case(path, mc$source_case_id)
       if (!is.null(fc)) {
-        candidate <- normalize_case(mc, fc)
+        candidate <- normalize_fixture_case(mc, fc)
         if (usable_case(candidate, include_observed)) {
           loaded <- candidate
           break
@@ -160,24 +250,226 @@ load_experiment_cases <- function(fixtures_dir, case_regex = NULL,
     }
     if (usable_case(loaded, include_observed)) {
       out[[loaded$id]] <- loaded
+      coverage[[length(coverage) + 1L]] <- coverage_row(
+        loaded$id, loaded$label, loaded$source, loaded$primary_tag, loaded$tags,
+        loaded$data_kind, loaded$n_groups, sum(loaded$n_obs),
+        loaded$model_type, loaded$fidelity_tier, "timed_candidate"
+      )
+    } else {
+      coverage[[length(coverage) + 1L]] <- coverage_row(
+        mc$id, mc$label %||% mc$id, mc$source, mc$family %||% "",
+        mc$family %||% "", "summary", 1L, NA_integer_,
+        "", "", "skipped_preload", "no fixture sample statistics"
+      )
     }
   }
-  out
+  list(
+    cases = out,
+    coverage = if (length(coverage)) do.call(rbind, coverage) else data.frame(),
+    source = "tests/fixtures/textbook_corpus"
+  )
+}
+
+load_corpus_case <- function(corpus_dir, row, include_observed = TRUE) {
+  case_dir <- file.path(corpus_dir, row$case_dir)
+  meta_path <- file.path(case_dir, "meta.json")
+  model_path <- file.path(case_dir, "model.lav")
+  meta <- jsonlite::read_json(meta_path, simplifyVector = FALSE)
+  model <- paste(readLines(model_path, warn = FALSE), collapse = "\n")
+  tags <- as.character(meta$tags %||% character())
+  options <- meta$model_options
+  data <- meta$data
+  data_kind <- data$kind %||% row$data_kind %||% ""
+  n_groups <- as.integer(data$n_groups %||% row$n_groups %||% 1L)
+  n_obs <- as.integer(unlist(data$n_obs %||% row$n_obs_total, use.names = FALSE))
+  if (!length(n_obs)) n_obs <- as.integer(row$n_obs_total %||% NA_integer_)
+
+  base_coverage <- function(status, reason = "") {
+    coverage_row(
+      meta$case_id %||% row$case_id,
+      meta$label %||% row$case_id,
+      meta$book %||% row$book,
+      primary_tag(tags),
+      collapse_tags(tags),
+      data_kind,
+      n_groups,
+      sum(n_obs, na.rm = TRUE),
+      meta$lavaan_function %||% row$lavaan_function,
+      meta$fidelity_tier %||% row$fidelity_tier,
+      status,
+      reason
+    )
+  }
+
+  if (isTRUE(meta$out_of_scope %||% FALSE)) {
+    return(list(case = NULL, coverage = base_coverage("skipped_preload", "out of scope")))
+  }
+  if (length(options$ordered %||% character())) {
+    return(list(case = NULL, coverage = base_coverage("skipped_preload", "ordered indicators")))
+  }
+  if (!identical(options$missing %||% "none", "none")) {
+    return(list(case = NULL, coverage = base_coverage("skipped_preload", "not complete data")))
+  }
+  if (!include_observed && case_observed_only(model)) {
+    return(list(case = NULL, coverage = base_coverage("skipped_preload", "observed-only model")))
+  }
+
+  files <- data$files %||% list()
+  sample_cov <- NULL
+  sample_mean <- NULL
+  raw <- NULL
+  if (identical(data_kind, "summary")) {
+    cov_files <- as.character(unlist(files$sample_cov %||% character()))
+    mean_files <- as.character(unlist(files$sample_mean %||% character()))
+    if (!length(cov_files)) {
+      return(list(case = NULL, coverage = base_coverage("skipped_preload", "no sample covariance")))
+    }
+    sample_cov <- lapply(cov_files, function(path) read_matrix_csv(file.path(case_dir, path)))
+    sample_mean <- lapply(mean_files, function(path) read_vector_csv(file.path(case_dir, path)))
+    if (!length(sample_mean)) sample_mean <- NULL
+  } else if (identical(data_kind, "raw")) {
+    raw_path <- files$raw %||% ""
+    if (!nzchar(raw_path)) {
+      return(list(case = NULL, coverage = base_coverage("skipped_preload", "no raw data file")))
+    }
+    raw <- utils::read.csv(
+      file.path(case_dir, raw_path),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  } else {
+    return(list(case = NULL, coverage = base_coverage("skipped_preload", paste("unsupported data kind:", data_kind))))
+  }
+
+  group_var <- data$group_var %||% NULL
+  group_labels <- NULL
+  if (n_groups > 1L) {
+    if (identical(data_kind, "raw") && !is.null(group_var) &&
+        nzchar(group_var) && group_var %in% names(raw)) {
+      group <- raw[[group_var]]
+      group_labels <- if (is.factor(group)) levels(group) else unique(as.character(group))
+    } else {
+      group_labels <- paste0("g", seq_len(n_groups))
+    }
+  }
+
+  case <- list(
+    id = meta$case_id %||% row$case_id,
+    source = meta$book %||% row$book,
+    subcorpus = meta$book %||% row$book,
+    source_case_id = meta$case_id %||% row$case_id,
+    label = meta$label %||% row$case_id,
+    family = primary_tag(tags),
+    primary_tag = primary_tag(tags),
+    tags = collapse_tags(tags),
+    data_kind = data_kind,
+    fidelity_tier = meta$fidelity_tier %||% row$fidelity_tier %||% "",
+    observed_only = case_observed_only(model),
+    strict_parity = identical(meta$fidelity_tier %||% "", "book_verified"),
+    model = model,
+    meanstructure = isTRUE(options$meanstructure),
+    fixed_x = isTRUE(options$fixed_x %||% TRUE),
+    model_type = if (identical(meta$lavaan_function %||% "", "growth")) "growth" else "sem",
+    n_groups = n_groups,
+    n_obs = n_obs,
+    group_var = group_var,
+    group_labels = group_labels,
+    sample_cov = sample_cov,
+    sample_mean = sample_mean,
+    raw = raw
+  )
+  list(case = case, coverage = base_coverage("timed_candidate"))
+}
+
+load_corpus_experiment_cases <- function(corpus_dir, case_regex = NULL,
+                                         include_observed = TRUE) {
+  manifest_path <- file.path(corpus_dir, "manifest.csv")
+  manifest <- utils::read.csv(manifest_path, stringsAsFactors = FALSE)
+  keep <- vapply(seq_len(nrow(manifest)), function(i) {
+    case_regex_match(manifest[i, , drop = FALSE], case_regex)
+  }, logical(1))
+  manifest <- manifest[keep, , drop = FALSE]
+
+  cases <- list()
+  coverage <- list()
+  for (i in seq_len(nrow(manifest))) {
+    row <- manifest[i, , drop = FALSE]
+    loaded <- tryCatch(
+      load_corpus_case(corpus_dir, row, include_observed = include_observed),
+      error = function(e) {
+        coverage <- coverage_row(
+          row$case_id, row$case_id, row$book, row$primary_class, row$tags,
+          row$data_kind, row$n_groups, row$n_obs_total, row$lavaan_function,
+          row$fidelity_tier, "skipped_preload", conditionMessage(e)
+        )
+        list(case = NULL, coverage = coverage)
+      }
+    )
+    coverage[[length(coverage) + 1L]] <- loaded$coverage
+    if (!is.null(loaded$case) && usable_case(loaded$case, include_observed)) {
+      cases[[loaded$case$id]] <- loaded$case
+    }
+  }
+  list(
+    cases = cases,
+    coverage = if (length(coverage)) do.call(rbind, coverage) else data.frame(),
+    source = corpus_dir
+  )
+}
+
+load_experiment_cases <- function(repo_dir, corpus_dir = NULL, case_regex = NULL,
+                                  include_observed = TRUE) {
+  if (is.null(corpus_dir)) {
+    corpus_dir <- file.path(repo_dir, "corpus", "textbook-corpus")
+  }
+  corpus_manifest <- file.path(corpus_dir, "manifest.csv")
+  if (file.exists(corpus_manifest)) {
+    return(load_corpus_experiment_cases(
+      normalizePath(corpus_dir, mustWork = TRUE),
+      case_regex = case_regex,
+      include_observed = include_observed
+    ))
+  }
+  load_fixture_experiment_cases(
+    file.path(repo_dir, "tests", "fixtures"),
+    case_regex = case_regex,
+    include_observed = include_observed
+  )
 }
 
 sample_stats <- function(case) {
-  out <- list(S = list(case$sample_cov), nobs = as.integer(case$n_obs))
-  if (!is.null(case$sample_mean)) out$mean <- list(case$sample_mean)
+  out <- list(S = case$sample_cov, nobs = as.integer(case$n_obs))
+  if (!is.null(case$sample_mean)) out$mean <- case$sample_mean
   out
 }
 
 build_spec <- function(case) {
-  magmaan::model_spec(
-    case$model,
+  args <- list(
+    syntax = case$model,
     fixed_x = case$fixed_x,
     meanstructure = case$meanstructure,
     model_type = case$model_type
   )
+  if (!is.null(case$group_var) && nzchar(case$group_var %||% "")) {
+    args$group <- case$group_var
+  }
+  if (!is.null(case$group_labels) && length(case$group_labels)) {
+    args$group_labels <- case$group_labels
+  }
+  do.call(magmaan::model_spec, args)
+}
+
+build_data <- function(case, spec) {
+  if (!is.null(case$raw)) {
+    return(magmaan::df_to_data(
+      case$raw,
+      spec,
+      group = case$group_var,
+      missing = "error",
+      scaling = "n"
+    ))
+  }
+  sample_stats(case)
 }
 
 fit_function <- function(estimator) {
@@ -237,6 +529,33 @@ fit_case_once <- function(case, spec, data, estimator, rep, backend, control) {
   )
 }
 
+scalar_int <- function(x, default = NA_integer_) {
+  if (is.null(x) || !length(x)) return(as.integer(default))
+  as.integer(x[[1L]])
+}
+
+scalar_num <- function(x, default = NA_real_) {
+  if (is.null(x) || !length(x)) return(as.numeric(default))
+  as.numeric(x[[1L]])
+}
+
+scalar_chr <- function(x, default = NA_character_) {
+  if (is.null(x) || !length(x)) return(as.character(default))
+  as.character(x[[1L]])
+}
+
+scalar_lgl <- function(x, default = NA) {
+  if (is.null(x) || !length(x)) return(as.logical(default))
+  as.logical(x[[1L]])
+}
+
+all_lgl <- function(x, default = NA) {
+  if (is.null(x) || !length(x)) return(as.logical(default))
+  x <- as.logical(x)
+  if (all(is.na(x))) return(as.logical(default))
+  all(x, na.rm = TRUE)
+}
+
 new_fit_row <- function(case, estimator, rep, status, error = "",
                         fit = NULL, data = NULL, elapsed_sec = NA_real_) {
   diag <- fit$diagnostics %||% list()
@@ -246,6 +565,11 @@ new_fit_row <- function(case, estimator, rep, status, error = "",
     source_case_id = case$source_case_id,
     label = case$label,
     family = case$family,
+    primary_tag = case$primary_tag,
+    tags = case$tags,
+    data_kind = case$data_kind,
+    n_groups = as.integer(case$n_groups %||% 1L),
+    fidelity_tier = case$fidelity_tier,
     strict_parity = case$strict_parity,
     estimator = estimator,
     replicate = as.integer(rep),
@@ -255,15 +579,15 @@ new_fit_row <- function(case, estimator, rep, status, error = "",
     fmin = as.numeric(fit$fmin %||% NA_real_),
     naive_chisq = if (is.null(fit) || is.null(data)) NA_real_ else safe_chisq(data, fit),
     df = if (is.null(fit) || is.null(data)) NA_integer_ else safe_df(data, fit),
-    iterations = as.integer(fit$iterations %||% NA_integer_),
-    f_evals = as.integer(fit$f_evals %||% NA_integer_),
-    g_evals = as.integer(fit$g_evals %||% NA_integer_),
-    optimizer_status = as.character(fit$optimizer_status %||% NA_character_),
-    converged = as.logical(fit$converged %||% NA),
-    grad_norm = as.numeric(fit$grad_norm %||% NA_real_),
-    npar = as.integer(fit$npar %||% NA_integer_),
-    ntotal = as.integer(fit$ntotal %||% case$n_obs),
-    sigma_pd_all = as.logical(diag$sigma_pd_all %||% NA),
+    iterations = scalar_int(fit$iterations),
+    f_evals = scalar_int(fit$f_evals),
+    g_evals = scalar_int(fit$g_evals),
+    optimizer_status = scalar_chr(fit$optimizer_status),
+    converged = scalar_lgl(fit$converged),
+    grad_norm = scalar_num(fit$grad_norm),
+    npar = scalar_int(fit$npar),
+    ntotal = scalar_int(fit$ntotal, sum(as.integer(case$n_obs), na.rm = TRUE)),
+    sigma_pd_all = all_lgl(diag$sigma_pd_all),
     stringsAsFactors = FALSE
   )
 }
@@ -330,6 +654,11 @@ pair_row <- function(case, rep, nt, other) {
     source_case_id = case$source_case_id,
     label = case$label,
     family = case$family,
+    primary_tag = case$primary_tag,
+    tags = case$tags,
+    data_kind = case$data_kind,
+    n_groups = as.integer(case$n_groups %||% 1L),
+    fidelity_tier = case$fidelity_tier,
     strict_parity = case$strict_parity,
     estimator = oth$estimator,
     replicate = as.integer(rep),
@@ -377,7 +706,9 @@ mean_logical <- function(x) {
 }
 
 case_summary <- function(fits, pairs) {
-  labels <- unique(fits[, c("case_id", "source", "label", "family", "strict_parity")])
+  labels <- unique(fits[, c("case_id", "source", "label", "family",
+                            "primary_tag", "tags", "data_kind", "n_groups",
+                            "fidelity_tier", "strict_parity")])
   labels <- labels[order(labels$label, labels$case_id), , drop = FALSE]
   rows <- lapply(seq_len(nrow(labels)), function(i) {
     row <- labels[i, , drop = FALSE]
@@ -391,6 +722,11 @@ case_summary <- function(fits, pairs) {
       source = row$source,
       label = row$label,
       family = row$family,
+      primary_tag = row$primary_tag,
+      tags = row$tags,
+      data_kind = row$data_kind,
+      n_groups = row$n_groups,
+      fidelity_tier = row$fidelity_tier,
       strict_parity = row$strict_parity,
       nt_time_sec = med_time("NT"),
       uls_time_sec = med_time("ULS"),
@@ -440,6 +776,11 @@ one_group_summary <- function(x, group_kind, group) {
   do.call(rbind, rows)
 }
 
+row_has_tag <- function(tags, tag) {
+  parts <- strsplit(as.character(tags %||% ""), ";", fixed = TRUE)
+  vapply(parts, function(x) tag %in% x, logical(1))
+}
+
 group_summary <- function(pairs) {
   ok <- pairs[pairs$status == "OK" &
                 is.finite(pairs$elapsed_ratio_estimator_over_nt) &
@@ -449,8 +790,10 @@ group_summary <- function(pairs) {
   rows <- c(rows, lapply(split(ok, ok$source), function(x) {
     one_group_summary(x, "Subcorpus", x$source[[1L]])
   }))
-  rows <- c(rows, lapply(split(ok, ok$family), function(x) {
-    one_group_summary(x, "Tag", x$family[[1L]])
+  tags <- sort(unique(unlist(strsplit(as.character(ok$tags), ";", fixed = TRUE))))
+  tags <- tags[nzchar(tags)]
+  rows <- c(rows, lapply(tags, function(tag) {
+    one_group_summary(ok[row_has_tag(ok$tags, tag), , drop = FALSE], "Tag", tag)
   }))
   out <- do.call(rbind, rows)
   out[order(out$group_kind, out$group, out$estimator), , drop = FALSE]
@@ -468,19 +811,26 @@ require_pkg("magmaan")
 
 experiment_dir <- dirname(script_path())
 repo_dir <- normalizePath(file.path(experiment_dir, "..", ".."), mustWork = TRUE)
-fixtures_dir <- file.path(repo_dir, "tests", "fixtures")
 results_dir <- file.path(experiment_dir, "results")
 control <- list(max_iter = 6000L, ftol = 1e-12, gtol = 1e-8, history = 10L)
 estimators <- c("NT", "ULS", "GLS")
 
-cases <- load_experiment_cases(
-  fixtures_dir,
+loaded <- load_experiment_cases(
+  repo_dir,
+  corpus_dir = args$corpus_dir,
   case_regex = args$case_regex,
   include_observed = args$include_observed
 )
+cases <- loaded$cases
+coverage_df <- loaded$coverage
 cat(sprintf(
-  "complete-data estimator experiment: %d cases, estimators=%s, reps=%d, backend=%s\n",
-  length(cases), paste(estimators, collapse = ","), args$reps, args$backend
+  "complete-data estimator experiment: source=%s, corpus rows=%d, timed candidates=%d, estimators=%s, reps=%d, backend=%s\n",
+  loaded$source,
+  nrow(coverage_df),
+  length(cases),
+  paste(estimators, collapse = ","),
+  args$reps,
+  args$backend
 ))
 
 fits <- list()
@@ -501,7 +851,20 @@ for (case in cases) {
     next
   }
 
-  data <- sample_stats(case)
+  data <- tryCatch(build_data(case, spec), error = identity)
+  if (inherits(data, "error")) {
+    for (rep in seq_len(args$reps)) {
+      for (estimator in estimators) {
+        fits[[length(fits) + 1L]] <- new_fit_row(
+          case, estimator, rep, "SKIP",
+          error = paste("data:", conditionMessage(data))
+        )
+      }
+    }
+    cat(sprintf("  %-48s SKIP data: %s\n", case$id, conditionMessage(data)))
+    next
+  }
+
   for (rep in seq_len(args$reps)) {
     results <- setNames(vector("list", length(estimators)), estimators)
     for (estimator in estimators) {
@@ -538,11 +901,13 @@ write_csv(fits_df, file.path(results_dir, "fits.csv"))
 write_csv(pairs_df, file.path(results_dir, "pairs_vs_nt.csv"))
 write_csv(summary_df, file.path(results_dir, "case_summary.csv"))
 write_csv(group_df, file.path(results_dir, "group_summary.csv"))
+write_csv(coverage_df, file.path(results_dir, "coverage.csv"))
 
 cat(sprintf(
-  "\nwrote %s, %s, %s, %s\n",
+  "\nwrote %s, %s, %s, %s, %s\n",
   file.path(results_dir, "fits.csv"),
   file.path(results_dir, "pairs_vs_nt.csv"),
   file.path(results_dir, "case_summary.csv"),
-  file.path(results_dir, "group_summary.csv")
+  file.path(results_dir, "group_summary.csv"),
+  file.path(results_dir, "coverage.csv")
 ))
