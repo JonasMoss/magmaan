@@ -145,6 +145,7 @@ magmaan_add_test_target(magmaan_test_parity parity
   golden/lavaan_parity_golden_test.cpp
   golden/geiser_golden_test.cpp
   golden/mplus_sem_golden_test.cpp
+  golden/paper_corpus_golden_test.cpp
   golden/textbook_corpus_golden_test.cpp)
 
 # Robust-polychoric sanity suite: magmaan's bivariate ordinal estimators vs
