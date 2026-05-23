@@ -2,6 +2,12 @@
 
 Reconnaissance date: 2026-05-22.
 
+Status update: the first tracked scout now exists as
+`tests/tools/scout_paper_corpus.R` plus
+`tests/fixtures/paper_corpus/scout_manifest.json`. It inventories the seed OSF
+nodes below, scans only small code files for lavaan-shaped signals, and keeps
+raw downloads out of the repository.
+
 The goal is a future `paper_corpus` alongside the textbook corpus: empirical or
 methods-paper SEM examples with reusable model syntax and data, preferably
 discovered automatically from public repositories. The first implementation
@@ -122,13 +128,13 @@ catalogued separately from the linear SEM core parity surface.
 
 ## Proposed First Pass
 
-1. Build a read-only OSF scout script under `tests/tools/`.
-2. Seed it with the nodes above plus a small manually maintained query result
+1. Done: build a read-only OSF scout script under `tests/tools/`.
+2. Done: seed it with the nodes above plus a small manually maintained query result
    list.
-3. Write a tracked scout manifest with file inventories and lavaan-detection
+3. Done: write a tracked scout manifest with file inventories and lavaan-detection
    summaries, but do not commit raw OSF downloads.
-4. Promote `hwkem` and `zxqvn` first:
+4. Next: promote `hwkem` and `zxqvn` first:
    - `hwkem` for realistic longitudinal CFA/SEM/RI-CLPM complexity.
    - `zxqvn` for a compact empirical mediation SEM with small data.
-5. Generate lavaan oracle fixtures only after each promoted case has a clear
+5. Next: generate lavaan oracle fixtures only after each promoted case has a clear
    license/data handling note and a supported magmaan surface classification.

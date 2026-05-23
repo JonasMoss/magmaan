@@ -80,6 +80,15 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   that now parse/lavaanify cleanly in the local 142-model sweep, and add
   ordinal/mixed parity checks once the desired categorical oracle surface is
   settled.
+- **S/M.** Promote the new paper-corpus scout into first lavaan-backed
+  empirical fixtures. `tests/tools/scout_paper_corpus.R` now writes
+  `tests/fixtures/paper_corpus/scout_manifest.json` from seven public OSF seed
+  nodes, with `hwkem` and `zxqvn` marked as first-promotion candidates.
+  Remaining work: document license/data-handling for each promoted source,
+  download only the retained data into ignored local storage, extract the
+  supported lavaan model/data pairs, classify clustered-SE or RI-CLPM pieces
+  outside the core parity surface where needed, and then add checked-in lavaan
+  oracle fixtures.
 - **S/M.** Add a small OpenMx tutorial corpus as an offline second-oracle
   cross-check, not as a runtime input format. Start with the dormant
   `openmx_mimic` case in `benchmarks/r/cases.R` and the OpenMx RAM examples
