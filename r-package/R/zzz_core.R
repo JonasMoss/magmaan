@@ -74,6 +74,9 @@ estimate_wls_snlls <- fit_wls_snlls_impl
 estimate_start_values <- fit_start_values
 frontier_fcsem_model_spec <- fcsem_model_spec_impl
 frontier_fit_ml_fcsem <- fit_ml_fcsem_impl
+frontier_is_std_lv_admissible <- is_std_lv_admissible_impl
+frontier_backconvert_std_lv_to_marker <- backconvert_std_lv_to_marker_impl
+frontier_fit_ml_auto_identification <- fit_ml_auto_identification_impl
 
 inference_information_expected <- infer_information_expected
 inference_information_observed_fd <- infer_information_observed_fd
@@ -238,7 +241,10 @@ magmaan_core <- local({
       "frontier_fit_ml_fcsem",
       "frontier_fcsem_standard_errors",
       "frontier_fcsem_fit_measures",
-      "frontier_fcsem_standardized_rows"
+      "frontier_fcsem_standardized_rows",
+      "frontier_is_std_lv_admissible",
+      "frontier_backconvert_std_lv_to_marker",
+      "frontier_fit_ml_auto_identification"
     ),
     helpers = c(
       "df_to_data",
@@ -299,6 +305,9 @@ magmaan_core <- local({
       "fcsem_standard_errors_impl",
       "fcsem_fit_measures_impl",
       "fcsem_standardized_rows_impl",
+      "is_std_lv_admissible_impl",
+      "backconvert_std_lv_to_marker_impl",
+      "fit_ml_auto_identification_impl",
       "fit_start_values",
       "fit_sample_stats",
       "infer_information_expected",
