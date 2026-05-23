@@ -18,11 +18,11 @@ convergence_sim_catalog <- function() {
     ),
     default_n = c(20L, 20L, 20L, 20L, 10L, 30L),
     notes = c(
-      "Two-factor latent regression, beta = 0.1, asymmetric Y loadings.",
+      "Two-factor latent regression, beta = 0.1, reliability-0.1 indicators.",
       "Two-factor latent regression, beta = 0.25, symmetric loadings.",
-      "Three-factor chain SEM with three crossloadings and beta = c(0.1, 0.2).",
+      "Three-factor chain SEM with three crossloadings and small latent residual variances.",
       "Three-factor chain SEM with three crossloadings and beta = c(0.6, 0.6).",
-      "Second-order MSST helper using reported loadings/errors plus explicit defaults.",
+      "Second-order MSST helper using the OSF loadings and latent variance defaults.",
       "Two-factor CFA, standardized loading 0.5, rho in {0.3, 0.5, 0.7}."
     ),
     stringsAsFactors = FALSE
@@ -44,7 +44,13 @@ convergence_sim_dejonckere_simple <- function(n = 20L,
   lambda <- matrix(0, nrow = 6L, ncol = 2L)
   lambda[1:3, 1L] <- lambda_x
   lambda[4:6, 2L] <- lambda_y
-  theta <- diag(1, 6L)
+  residual_var <- if (identical(variant, "2025")) {
+    c((1 - 0.1) * 1.0 * lambda_x^2 / 0.1,
+      (1 - 0.1) * (1 + beta^2) * lambda_y^2 / 0.1)
+  } else {
+    rep(1, 6L)
+  }
+  theta <- diag(residual_var, 6L)
   ov_names <- c(paste0("x", 1:3), paste0("y", 1:3))
   sigma <- lambda %*% latent_cov %*% t(lambda) + theta
   dimnames(sigma) <- list(ov_names, ov_names)
@@ -55,18 +61,17 @@ convergence_sim_dejonckere_simple <- function(n = 20L,
     "Y ~ X",
     sep = "\n"
   )
+  residual_rows <- paste(
+    paste0(ov_names, " ~~ ", format(residual_var, scientific = FALSE), "*", ov_names),
+    collapse = "\n"
+  )
   population <- paste(
     sprintf("X =~ 1*x1 + %.15g*x2 + %.15g*x3", lambda_x[2L], lambda_x[3L]),
     sprintf("Y =~ 1*y1 + %.15g*y2 + %.15g*y3", lambda_y[2L], lambda_y[3L]),
     sprintf("Y ~ %.15g*X", beta),
     "X ~~ 1*X",
     "Y ~~ 1*Y",
-    "x1 ~~ 1*x1",
-    "x2 ~~ 1*x2",
-    "x3 ~~ 1*x3",
-    "y1 ~~ 1*y1",
-    "y2 ~~ 1*y2",
-    "y3 ~~ 1*y3",
+    residual_rows,
     sep = "\n"
   )
   .conv_pack(
@@ -79,7 +84,7 @@ convergence_sim_dejonckere_simple <- function(n = 20L,
     population_syntax = population,
     seed = seed,
     truth = list(beta = beta, lambda_x = lambda_x, lambda_y = lambda_y,
-                 latent_cov = latent_cov, residual_var = rep(1, 6L))
+                 latent_cov = latent_cov, residual_var = residual_var)
   )
 }
 
@@ -106,7 +111,12 @@ convergence_sim_dejonckere_crossloading <- function(n = 20L,
   B[2L, 1L] <- beta[1L]
   B[3L, 2L] <- beta[2L]
   A <- solve(diag(3L) - B)
-  psi <- diag(1, 3L)
+  latent_residual_var <- if (identical(variant, "2025")) {
+    c(0.49, 0.3136, 0.3136)
+  } else {
+    rep(1, 3L)
+  }
+  psi <- diag(latent_residual_var, 3L)
   latent_cov <- A %*% psi %*% t(A)
 
   lambda <- matrix(0, nrow = 9L, ncol = 3L)
@@ -122,16 +132,24 @@ convergence_sim_dejonckere_crossloading <- function(n = 20L,
   dimnames(sigma) <- list(ov_names, ov_names)
 
   analysis <- .conv_crossloading_syntax(fit_model)
+  latent_variance_rows <- paste(
+    paste0(paste0("eta", 1:3), " ~~ ",
+           format(latent_residual_var, scientific = FALSE), "*",
+           paste0("eta", 1:3)),
+    collapse = "\n"
+  )
+  residual_rows <- paste(
+    paste0(ov_names, " ~~ ", format(residual_var, scientific = FALSE), "*", ov_names),
+    collapse = "\n"
+  )
   population <- paste(
     "eta1 =~ 1*y1 + 1*y2 + 1*y3 + 0.3*y4",
     "eta2 =~ 1*y4 + 1*y5 + 1*y6 + 0.3*y7",
     "eta3 =~ 1*y7 + 1*y8 + 1*y9 + 0.3*y6",
     sprintf("eta2 ~ %.15g*eta1", beta[1L]),
     sprintf("eta3 ~ %.15g*eta2", beta[2L]),
-    "eta1 ~~ 1*eta1",
-    "eta2 ~~ 1*eta2",
-    "eta3 ~~ 1*eta3",
-    paste0(ov_names, " ~~ ", format(residual_var, scientific = FALSE), "*", ov_names),
+    latent_variance_rows,
+    residual_rows,
     sep = "\n"
   )
   .conv_pack(
@@ -144,7 +162,9 @@ convergence_sim_dejonckere_crossloading <- function(n = 20L,
     population_syntax = population,
     seed = seed,
     truth = list(beta = beta, lambda = lambda, latent_cov = latent_cov,
-                 residual_var = residual_var, fit_model = fit_model)
+                 residual_var = residual_var,
+                 latent_residual_var = latent_residual_var,
+                 fit_model = fit_model)
   )
 }
 
@@ -152,8 +172,8 @@ convergence_sim_dejonckere_msst <- function(n = 10L,
                                             state_loadings = c(1.0, 0.5, 1.3),
                                             trait_loadings = c(1.0, 0.5, 1.3),
                                             measurement_error = c(0.6, 0.25, 0.7),
-                                            trait_var = 1.0,
-                                            state_residual_var = rep(1.0, 3L),
+                                            trait_var = 0.6,
+                                            state_residual_var = c(0.6, 0.25, 0.7),
                                             seed = NULL) {
   n <- .conv_positive_int(n, "n")
   state_loadings <- .conv_numeric_vector(state_loadings, 3L, "state_loadings")
@@ -206,9 +226,10 @@ convergence_sim_dejonckere_msst <- function(n = 10L,
                  state_residual_var = state_residual_var,
                  state_cov = state_cov,
                  note = paste(
-                   "Defaults use the values reported in the paper plus explicit",
-                   "trait/state variance defaults; check against OSF before",
-                   "using this design for paper results."
+                   "Defaults use the OSF script's state and trait loading",
+                   "values plus its theta1/eta residual variance values.",
+                   "The OSF syntax labels observed residual variances rather",
+                   "than fixing them, so measurement_error remains explicit."
                  ))
   )
 }
@@ -241,13 +262,17 @@ convergence_sim_ludtke_cfa <- function(n = 30L,
     "f1 ~~ f2",
     sep = "\n"
   )
+  residual_rows <- paste(
+    paste0(ov_names, " ~~ ", format(residual_var, scientific = FALSE), "*", ov_names),
+    collapse = "\n"
+  )
   population <- paste(
     sprintf("f1 =~ %.15g*x1 + %.15g*x2 + %.15g*x3", loading, loading, loading),
     sprintf("f2 =~ %.15g*y1 + %.15g*y2 + %.15g*y3", loading, loading, loading),
     sprintf("f1 ~~ %.15g*f2", rho),
     "f1 ~~ 1*f1",
     "f2 ~~ 1*f2",
-    paste0(ov_names, " ~~ ", format(residual_var, scientific = FALSE), "*", ov_names),
+    residual_rows,
     sep = "\n"
   )
   .conv_pack(

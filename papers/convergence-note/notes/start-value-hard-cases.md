@@ -49,7 +49,11 @@ Study 1 is a two-factor latent regression:
 - Indicators: three per latent.
 - Population: marker loadings `lambda1 = lambda4 = 1`; other loadings
   `lambda2 = 0.8`, `lambda3 = 0.6`, `lambda5 = 0.7`, `lambda6 = 0.9`;
-  latent/residual variances reported as `1.0`; `beta = 0.1`.
+  latent residual variances `1.0`; `beta = 0.1`.
+- OSF detail: indicator residual variances are set from reliability `0.1`, not
+  to `1.0`. For the exogenous factor they are
+  `9 * lambda^2`; for the endogenous factor they are
+  `9 * (1 + beta^2) * lambda^2`.
 - Data: 1000 datasets, `N = 20`.
 - Filter: keep cases where lavaan and OpenMx agree on convergence or failure.
 - Convergence definition: optimizer success and standard errors computable.
@@ -64,7 +68,7 @@ Study 2 is a crossloading chain SEM:
 - Main loadings: `1.0`.
 - Crossloadings: `lambda4`, `lambda8`, and `lambda9` are `0.3`.
 - Structural regressions: `beta1 = 0.1`, `beta2 = 0.2`.
-- Latent residual variances: `1.0`.
+- Latent residual variances in the OSF script: `0.49`, `0.3136`, `0.3136`.
 - Indicator residual variances: `0.51` for `y1,y2,y3,y5,y8,y9`; `0.2895` for
   `y4,y6,y7`.
 - Data: 1000 datasets, `N = 20`.
@@ -78,12 +82,16 @@ Study 3 is a multistate-single-trait model:
 - Reported state loadings: `1, 0.5, 1.3`.
 - Reported trait loadings: `1, 0.5, 1.3`.
 - Reported measurement errors: `0.6, 0.25, 0.7`.
+- OSF detail: the script fixes the trait variance `vartheta1` to `0.6` through
+  a same-named defined parameter, and similarly gives state residual variances
+  `psi1 = 0.6`, `psi2 = 0.25`, `psi3 = 0.7`.
+- Caveat: the observed residual variances are labels (`eps11`, etc.) in the
+  OSF population model rather than literal fixed numeric modifiers. Before final
+  paper results, mirror lavaan's `simulateData()` handling exactly or replace
+  the syntax with an explicit covariance generator.
 - Data: 1000 datasets, `N = 10`.
 - Result: 385 default failures, 221 rescued within 150 random-start attempts.
   All rescued cases have at least one negative variance.
-- Caveat: the paper says the remaining true values live in the OSF repository,
-  so the current magmaan helper uses explicit defaults until we mirror the OSF
-  script.
 
 For magmaan, the most useful cases are likely not the default failures alone.
 The richest targets are the cases that stay failed after many starts, the cases
