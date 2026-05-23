@@ -13,6 +13,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/optim/terminal_audit.hpp"
 
 // PORT entry points exposed by the vendored third_party/port/ library.
 // f2c-translated Fortran: every parameter is a pointer (Fortran's
@@ -229,63 +230,92 @@ PortOptimizer::minimize(Objective f,
   const int    n_iter       = iv[kIv_NIter];
   const double f_final      = v[kV_F];  // PORT's recorded final function value
 
-  OptimStatus opt_status = OptimStatus::Converged;
-  switch (final_status) {
-    case PORT_OK_XCONV:
-    case PORT_OK_RFCONV:
-    case PORT_OK_BOTH:
-    case PORT_OK_AFCONV:
-      break;
-    case PORT_OK_SINGCONV:
-      // Singular convergence: PORT reached a point where its model Hessian is
-      // singular. The fit is usable but the caller should know it was not a
-      // clean stationary stop — a common signature of weak identification.
-      opt_status = OptimStatus::SingularConvergence;
-      break;
-    case PORT_FAIL_NOISY:
-      return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          "PORT drmngb: noisy objective detected (PORT IV(1)=8) — the model "
-          "evaluator's gradient is inconsistent with its function value to "
-          "more than PORT's noise tolerance",
-          n_iter, f_final));
-    case PORT_FAIL_FALSE:
-      return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
-          "PORT drmngb: false convergence (PORT IV(1)=9) — the step length "
-          "fell below the precision PORT can resolve",
-          n_iter, f_final));
-    case PORT_FAIL_BUDGET:
-      return std::unexpected(make_err(FitError::Kind::OptimizerNonConvergence,
-          "PORT drmngb: iteration or evaluation budget exhausted "
-          "(PORT IV(1)=10, max_iter=" + std::to_string(opts_.max_iter) + ")",
-          n_iter, f_final));
-    default:
-      return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
-          "PORT drmngb: solver failure (PORT IV(1)=" +
-              std::to_string(final_status) + ")",
-          n_iter, f_final));
-  }
-
+  // Hard failure short-circuit: a non-finite final objective means PORT has
+  // no usable iterate. Bail before invoking the audit.
   if (!std::isfinite(f_final)) {
     return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
         "PORT drmngb: final objective value is non-finite",
         n_iter, f_final));
   }
 
-  // Recompute the gradient at the final point and report the *projected*
-  // infinity-norm: components pushing against an active box bound are zeroed
-  // (degrades to the raw norm when bounds are ±infinity).
-  Eigen::VectorXd gfinal = Eigen::VectorXd::Zero(n);
-  f(x, gfinal);
-  double gnorm = 0.0;
-  for (int i = 0; i < n; ++i) {
-    double gi = gfinal[i];
-    if (x[i] <= lower[i] && gi > 0.0) gi = 0.0;
-    else if (x[i] >= upper[i] && gi < 0.0) gi = 0.0;
-    gnorm = std::max(gnorm, std::abs(gi));
+  // Run the audit once on the final iterate. The audit takes the same
+  // bounds PORT just used, so the projected-gradient construction matches the
+  // inline loop the old success path implemented by hand. The audit then
+  // informs the soft-failure classification below: any IV code whose iterate
+  // is geometrically stationary is promoted to LineSearchSalvaged instead of
+  // discarded as a hard FitError.
+  TerminalAudit a = audit_terminal_iterate(f, x, f_final, lower, upper);
+
+  OptimStatus opt_status = OptimStatus::Converged;
+  switch (final_status) {
+    case PORT_OK_XCONV:
+    case PORT_OK_RFCONV:
+    case PORT_OK_BOTH:
+    case PORT_OK_AFCONV:
+      // Clean stop — v1 does not downgrade even if the audit disagrees.
+      break;
+    case PORT_OK_SINGCONV:
+      // Singular convergence: PORT reached a point where its model Hessian is
+      // singular. The fit is usable but the caller should know it was not a
+      // clean stationary stop — a common signature of weak identification.
+      // The audit fills `grad_inf_norm`; the status stays SingularConvergence.
+      opt_status = OptimStatus::SingularConvergence;
+      break;
+    case PORT_FAIL_NOISY:
+      // IV(1)=8 fires when PORT's internal consistency check between the
+      // trust-region model's predicted reduction and the actual reduction
+      // judges the gradient inconsistent with the function value — precisely
+      // the floating-point cancellation signature near a near-perfect-fit
+      // optimum. If the audit's geometric verdict says we're stationary, the
+      // iterate is a salvageable success (NOTE: semantic shift from before;
+      // pre-audit this always returned NumericIssue).
+      if (a.stationary) {
+        opt_status = OptimStatus::LineSearchSalvaged;
+      } else {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "PORT drmngb: noisy objective detected (PORT IV(1)=8) — the model "
+            "evaluator's gradient is inconsistent with its function value to "
+            "more than PORT's noise tolerance, and the audit confirmed "
+            "non-stationarity at the returned iterate",
+            n_iter, f_final));
+      }
+      break;
+    case PORT_FAIL_FALSE:
+      if (a.stationary) {
+        opt_status = OptimStatus::LineSearchSalvaged;
+      } else {
+        return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
+            "PORT drmngb: false convergence (PORT IV(1)=9) — the step length "
+            "fell below the precision PORT can resolve",
+            n_iter, f_final));
+      }
+      break;
+    case PORT_FAIL_BUDGET:
+      if (a.stationary) {
+        opt_status = OptimStatus::LineSearchSalvaged;
+      } else {
+        return std::unexpected(make_err(FitError::Kind::OptimizerNonConvergence,
+            "PORT drmngb: iteration or evaluation budget exhausted "
+            "(PORT IV(1)=10, max_iter=" + std::to_string(opts_.max_iter) + ")",
+            n_iter, f_final));
+      }
+      break;
+    default:
+      if (a.stationary) {
+        opt_status = OptimStatus::LineSearchSalvaged;
+      } else {
+        return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
+            "PORT drmngb: solver failure (PORT IV(1)=" +
+                std::to_string(final_status) + ")",
+            n_iter, f_final));
+      }
+      break;
   }
 
-  return LbfgsOutput{std::move(x), f_final, n_iter,
-                     iv[kIv_NFCall], iv[kIv_NGCall], opt_status, gnorm};
+  LbfgsOutput out{std::move(x), f_final, n_iter,
+                  iv[kIv_NFCall], iv[kIv_NGCall], opt_status, a.grad_inf_norm};
+  out.audit = std::move(a);
+  return out;
 }
 
 fit_expected<LbfgsOutput>

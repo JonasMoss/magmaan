@@ -248,6 +248,36 @@ for (path in script_paths) {
     }
     observed_only <- !grepl("=~", strip_model_comments(model), fixed = TRUE)
     id <- if (length(fits) == 1L) base_id else paste(base_id, sanitize_id(fit$lhs), sep = "_")
+
+    # A fixed-weight GLS/ULS/ADF fit needs a positive-definite listwise
+    # complete-data covariance of the model's observed variables. Models whose
+    # listwise covariance is degenerate -- e.g. FIML pattern-mixture models
+    # that regress on dropout indicators which go near-constant among complete
+    # cases -- are out of fixed-weight scope: record them but keep them out of
+    # the runnable catalogue (no model/data files written).
+    cov_ov <- intersect(ov, names(data))
+    cc <- data[stats::complete.cases(data[, cov_ov, drop = FALSE]),
+               cov_ov, drop = FALSE]
+    cov_pd <- length(cov_ov) >= 1L && nrow(cc) > length(cov_ov) &&
+      tryCatch({ chol(stats::cov(cc)); TRUE }, error = function(e) FALSE)
+    if (!cov_pd) {
+      rows[[length(rows) + 1L]] <- data.frame(
+        id = id,
+        name = paste("Newsom", gsub("_", ".", base_id), fit$lhs),
+        family = if (observed_only) "observed model" else "latent SEM",
+        provenance = "Newsom Longitudinal SEM R examples",
+        source_input = source_rel, source_data = "", data_kind = "raw",
+        measurement_kind = measurement_kind, observed_only = observed_only,
+        generated_data = "", generated_model = "", generated_script = "",
+        group_var = "", ordered = paste(ordered_present, collapse = ";"),
+        lavaan_function = fun, estimator = estimator, meanstructure = TRUE,
+        fixed_x = TRUE, strict_parity = FALSE,
+        status = "degenerate_covariance",
+        note = paste("listwise complete-data covariance not positive definite",
+                     "-- FIML/missing-data model, out of fixed-weight scope"),
+        stringsAsFactors = FALSE)
+      next
+    }
     model_rel <- file.path("models", paste0(id, ".lav"))
     data_rel <- file.path("data", paste0(id, ".csv"))
     script_rel <- file.path("scripts", paste0(id, ".R"))

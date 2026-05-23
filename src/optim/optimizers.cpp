@@ -24,8 +24,10 @@ namespace magmaan::optim {
 namespace {
 
 OptimResult to_result(LbfgsOutput out) {
-  return OptimResult{std::move(out.theta_hat), out.fmin, out.iterations,
-                     out.f_evals, out.g_evals, out.status, out.grad_inf_norm};
+  OptimResult r{std::move(out.theta_hat), out.fmin, out.iterations,
+                out.f_evals, out.g_evals, out.status, out.grad_inf_norm};
+  r.audit = std::move(out.audit);
+  return r;
 }
 
 }  // namespace

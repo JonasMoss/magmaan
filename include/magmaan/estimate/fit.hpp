@@ -5,6 +5,7 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
+#include "magmaan/estimate/diagnostics.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/optim/lbfgs_optimizer.hpp"
@@ -40,6 +41,15 @@ struct Estimates {
   // solve where no outer optimizer ran; `grad_inf_norm < 0` means not computed.
   optim::OptimStatus optimizer_status = optim::OptimStatus::Converged;
   double             grad_inf_norm    = -1.0;
+  // Terminal audit at the optimizer's returned iterate (driven coordinates).
+  // Filled by the wrapping `compose_*` paths; default-constructed for closed-
+  // form or hard-failure paths that never invoke an optimizer. The `= {}`
+  // keeps existing `Estimates{...}` aggregate inits passing under
+  // `-Wmissing-field-initializers`. See `optim::TerminalAudit`.
+  optim::TerminalAudit  audit        = {};
+  // Fit finalization diagnostics on full θ (implied-Σ PD per group, linear /
+  // nonlinear equality residuals, bounds active set). See `FitDiagnostics`.
+  FitDiagnostics        diagnostics  = {};
 };
 
 // Optimizer backend selector for the convenience composers below.

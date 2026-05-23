@@ -12,6 +12,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/optim/terminal_audit.hpp"
 
 namespace magmaan::optim {
 
@@ -80,9 +81,27 @@ LbfgsBOptimizer::minimize(Objective f,
   // -fno-exceptions boundary. We catch and convert to a FitError value.
   LBFGSpp::LBFGSBSolver<double> solver(param);
   int n_iter = 0;
+
+  // The audit honours `lower`/`upper` for the projected-gradient construction —
+  // a KKT-shaped first-order check for box bounds, identical in spirit to the
+  // hand-rolled loop the old success path used.
+  const ObjectiveFn audit_fn =
+      [&fn](const Eigen::VectorXd& xi, Eigen::VectorXd& g) { return fn(xi, g); };
+
   try {
     n_iter = solver.minimize(fn, x, fval, lower, upper);
   } catch (const std::exception& e) {
+    // Line search failed. The audit looks at the last accepted `x` and
+    // decides by geometry whether it's a salvageable stationary stop or a
+    // genuine mid-descent failure. The previous behaviour discarded every
+    // such iterate as `LineSearchFailed`.
+    TerminalAudit a = audit_terminal_iterate(audit_fn, x, fval, lower, upper);
+    if (a.stationary) {
+      LbfgsOutput out{std::move(x), a.f_recomputed, n_iter, 0, 0,
+                      OptimStatus::LineSearchSalvaged, a.grad_inf_norm};
+      out.audit = std::move(a);
+      return out;
+    }
     return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
         std::string("L-BFGS-B line search failed: ") + e.what() +
         " (consider tighter starts or a different optimizer backend)",
@@ -96,26 +115,27 @@ LbfgsBOptimizer::minimize(Objective f,
         n_iter, fval));
   }
   if (n_iter >= opts_.max_iter) {
+    // Budget exhausted. Same geometric test as the line-search throw.
+    TerminalAudit a = audit_terminal_iterate(audit_fn, x, fval, lower, upper);
+    if (a.stationary) {
+      LbfgsOutput out{std::move(x), a.f_recomputed, n_iter, 0, 0,
+                      OptimStatus::LineSearchSalvaged, a.grad_inf_norm};
+      out.audit = std::move(a);
+      return out;
+    }
     return std::unexpected(make_err(FitError::Kind::OptimizerNonConvergence,
         "max_iter reached without convergence",
         n_iter, fval));
   }
 
-  // LBFGSpp does not return the final gradient; recompute it once and report
-  // the *projected* gradient infinity-norm — components pushing against an
-  // active box bound are zeroed, which is the correct stationarity measure
-  // for a bounded solve (and degrades to the raw norm when bounds are ±inf).
-  Eigen::VectorXd gfinal = Eigen::VectorXd::Zero(x.size());
-  fn(x, gfinal);
-  double gnorm = 0.0;
-  for (Eigen::Index i = 0; i < x.size(); ++i) {
-    double gi = gfinal[i];
-    if (x[i] <= lower[i] && gi > 0.0) gi = 0.0;
-    else if (x[i] >= upper[i] && gi < 0.0) gi = 0.0;
-    gnorm = std::max(gnorm, std::abs(gi));
-  }
-  return LbfgsOutput{std::move(x), fval, n_iter, 0, 0,
-                     OptimStatus::Converged, gnorm};
+  // Success path: the audit replaces the hand-rolled projected-gradient loop,
+  // and the returned `audit.grad_inf_norm` is the same projected ‖g‖_∞ that
+  // used to be computed inline.
+  TerminalAudit a = audit_terminal_iterate(audit_fn, x, fval, lower, upper);
+  LbfgsOutput out{std::move(x), fval, n_iter, 0, 0,
+                  OptimStatus::Converged, a.grad_inf_norm};
+  out.audit = std::move(a);
+  return out;
 }
 
 fit_expected<LbfgsOutput>
