@@ -13,9 +13,15 @@ cases, records CSV output, then builds compact CSV/TeX summaries.
 From the repository root:
 
 ```sh
-Rscript pilot/scripts/run_convergence_sims.R
-Rscript pilot/scripts/run_textbook_subset.R
-Rscript pilot/scripts/build_tables.R
+Rscript papers/convergence-note/pilot/scripts/run_convergence_sims.R
+Rscript papers/convergence-note/pilot/scripts/run_textbook_subset.R
+Rscript papers/convergence-note/pilot/scripts/build_tables.R
+```
+
+Or from `papers/convergence-note/pilot/`:
+
+```sh
+make
 ```
 
 The scripts require an installed `magmaan` R package built from this checkout.

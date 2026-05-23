@@ -1,6 +1,13 @@
 #!/usr/bin/env Rscript
 
-source("pilot/scripts/pilot-lib.R")
+args <- commandArgs(FALSE)
+file_arg <- sub("^--file=", "", grep("^--file=", args, value = TRUE)[1L])
+script_dir <- if (!is.na(file_arg)) {
+  dirname(normalizePath(file_arg, mustWork = TRUE))
+} else {
+  file.path("papers", "convergence-note", "pilot", "scripts")
+}
+source(file.path(script_dir, "pilot-lib.R"))
 
 pilot_ensure_dirs()
 pilot_require_magmaan()

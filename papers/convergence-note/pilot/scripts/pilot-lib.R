@@ -12,7 +12,7 @@ pilot_repo_root <- function(start = getwd()) {
 }
 
 pilot_path <- function(...) {
-  file.path(pilot_repo_root(), "pilot", ...)
+  file.path(pilot_repo_root(), "papers", "convergence-note", "pilot", ...)
 }
 
 pilot_ensure_dirs <- function() {
