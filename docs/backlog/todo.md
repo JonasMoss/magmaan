@@ -54,6 +54,11 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   filter genuinely hard cases by final gradient norm, objective gap,
   admissibility, PD margin, and multistart basin disagreement rather than
   optimizer failure alone.
+- **M.** Extend the new near-singular ML continuation experiment
+  (`experiments/04-near_singular_ml_continuation`) beyond the first
+  diagonal-ridge path: compare diagonal vs scaled-identity targets, direct ML
+  vs ULS/GLS-start ladders, and explicit cost-normalized budgets on
+  rank-near-deficient sample covariance cases.
 - **S/M.** Tighten the remaining Geiser GLS parity exceptions now documented
   in the parity-tier golden: manifest fixed.x path models need a resolved
   implied-moment comparison surface for exogenous observed moments, and

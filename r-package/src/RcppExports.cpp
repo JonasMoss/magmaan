@@ -145,6 +145,25 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// frontier_fit_ml_ridge_continuation_impl
+Rcpp::List frontier_fit_ml_ridge_continuation_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds, Rcpp::Nullable<Rcpp::NumericVector> alphas, std::string target, bool include_endpoint, double diagonal_floor);
+RcppExport SEXP _magmaan_frontier_fit_ml_ridge_continuation_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP alphasSEXP, SEXP targetSEXP, SEXP include_endpointSEXP, SEXP diagonal_floorSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type alphas(alphasSEXP);
+    Rcpp::traits::input_parameter< std::string >::type target(targetSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_endpoint(include_endpointSEXP);
+    Rcpp::traits::input_parameter< double >::type diagonal_floor(diagonal_floorSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_fit_ml_ridge_continuation_impl(partable, sample_stats, optimizer, control, bounds, alphas, target, include_endpoint, diagonal_floor));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fcsem_model_spec_impl
 Rcpp::List fcsem_model_spec_impl(std::string syntax);
 RcppExport SEXP _magmaan_fcsem_model_spec_impl(SEXP syntaxSEXP) {
@@ -1232,6 +1251,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_bounds_loading_impl", (DL_FUNC) &_magmaan_bounds_loading_impl, 2},
     {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 5},
     {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 5},
+    {"_magmaan_frontier_fit_ml_ridge_continuation_impl", (DL_FUNC) &_magmaan_frontier_fit_ml_ridge_continuation_impl, 9},
     {"_magmaan_fcsem_model_spec_impl", (DL_FUNC) &_magmaan_fcsem_model_spec_impl, 1},
     {"_magmaan_fit_ml_fcsem_impl", (DL_FUNC) &_magmaan_fit_ml_fcsem_impl, 3},
     {"_magmaan_fcsem_standard_errors_impl", (DL_FUNC) &_magmaan_fcsem_standard_errors_impl, 1},

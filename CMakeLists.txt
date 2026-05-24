@@ -94,6 +94,7 @@ add_library(magmaan STATIC
   src/estimate/fit.cpp
   src/estimate/backend_strings.cpp
   src/estimate/nt.cpp
+  src/estimate/ml_continuation.cpp
   src/estimate/fiml.cpp
   src/estimate/reparameterize.cpp
   src/estimate/bounds.cpp

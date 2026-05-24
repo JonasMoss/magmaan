@@ -1,0 +1,32 @@
+---
+title: "Near-Singular ML Continuation"
+format: html
+---
+
+```{r}
+fits_path <- file.path("results", "fits.csv")
+summary_path <- file.path("results", "summary.csv")
+if (!file.exists(fits_path) || !file.exists(summary_path)) {
+  stop("Run `Rscript run_experiment.R` first.")
+}
+fits <- read.csv(fits_path)
+summary <- read.csv(summary_path)
+summary
+```
+
+```{r}
+aggregate(
+  cbind(converged, ok, total_f_evals, elapsed_sec, grad_norm) ~ method,
+  fits,
+  function(x) {
+    if (is.logical(x)) mean(x, na.rm = TRUE) else median(x, na.rm = TRUE)
+  }
+)
+```
+
+```{r}
+fits[order(fits$replicate, fits$method),
+     c("replicate", "method", "sample_min_eigen", "sample_condition",
+       "converged", "optimizer_status", "fmin", "grad_norm",
+       "total_f_evals", "elapsed_sec")]
+```
