@@ -138,6 +138,13 @@ string through to a single Rcpp shim per fit family — no per-Backend wrapper
 explosion. Solver tuning rides on a generic `control = list(max_iter, ftol,
 gtol, history)` argument.
 
+The R complete-data ML and LS helpers also expose box constraints through
+`bounds = list(lower, upper)` or the named bound builders
+`bounds_variance()` / `bounds_pos_var()`, `bounds_standard()`,
+`bounds_wide()`, and `bounds_loading()`. The high-level `magmaan()` ML, ULS,
+GLS, WLS, and ordinal LS paths thread the same bounds object into the C++
+fit layer; FIML remains unbounded at the R surface.
+
 Optimizer outputs carry function/gradient evaluation counts plus a refined
 success status and final stationarity diagnostic. The C++ `OptimResult` and
 `estimate::Estimates` report `OptimStatus` (`Converged`,

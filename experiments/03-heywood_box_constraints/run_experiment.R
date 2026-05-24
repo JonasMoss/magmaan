@@ -246,10 +246,11 @@ lavaan_fit_row <- function(case, sim, bounds, rstarts) {
   )
 }
 
-magmaan_fit_row <- function(case, sim, optimizer) {
+magmaan_fit_row <- function(case, sim, optimizer, bounds) {
   started <- proc.time()[["elapsed"]]
   fit <- try(
     magmaan::magmaan(sim$analysis_syntax, sim$data, estimator = "ML",
+                     bounds = bounds,
                      optimizer = optimizer,
                      control = list(max_iter = 5000, ftol = 1e-10,
                                     gtol = 1e-7)),
@@ -266,7 +267,7 @@ magmaan_fit_row <- function(case, sim, optimizer) {
       seed = case$seed,
       engine = "magmaan",
       estimator = "ML",
-      bounds = "none",
+      bounds = bounds,
       optimizer = optimizer,
       ok = FALSE,
       converged = FALSE,
@@ -297,7 +298,7 @@ magmaan_fit_row <- function(case, sim, optimizer) {
     seed = case$seed,
     engine = "magmaan",
     estimator = "ML",
-    bounds = "none",
+    bounds = bounds,
     optimizer = optimizer,
     ok = TRUE,
     converged = isTRUE(fit$converged),
@@ -374,10 +375,12 @@ main <- function() {
     message(case$case_key, " ", i, "/", nrow(cases))
     sim <- magmaan::convergence_sim(case$design, n = case$n, seed = case$seed)
 
-    k_mag <- k_mag + 1L
-    magmaan_rows[[k_mag]] <- magmaan_fit_row(case, sim, args$optimizer)
-
     for (bounds in args$bounds) {
+      message("  magmaan bounds=", bounds)
+      k_mag <- k_mag + 1L
+      magmaan_rows[[k_mag]] <- magmaan_fit_row(case, sim, args$optimizer,
+                                               bounds)
+
       for (rstarts in args$rstarts) {
         message("  lavaan bounds=", bounds, " rstarts=", rstarts)
         k_lav <- k_lav + 1L
@@ -389,7 +392,7 @@ main <- function() {
   lavaan_out <- do.call(rbind, lavaan_rows)
   magmaan_out <- do.call(rbind, magmaan_rows)
   write_csv(lavaan_out, experiment_path("results", "lavaan_bounds.csv"))
-  write_csv(magmaan_out, experiment_path("results", "magmaan_unbounded.csv"))
+  write_csv(magmaan_out, experiment_path("results", "magmaan_bounds.csv"))
 
   summary <- summarize_lavaan_bounds(lavaan_out)
   write_csv(summary, experiment_path("results", "summary.csv"))
@@ -397,10 +400,12 @@ main <- function() {
   surface_gap <- data.frame(
     component = c("magmaan::magmaan(... estimator='ML', bounds=)",
                   "magmaan::fit_ml()",
+                  "magmaan::bounds_*()",
                   "C++ estimate::fit_ml(...)"),
-    bounds_threaded = c(FALSE, FALSE, TRUE),
-    note = c("high-level R argument exists but ML branch currently calls fit_ml() without bounds",
-             "R wrapper has no bounds formal",
+    bounds_threaded = c(TRUE, TRUE, TRUE, TRUE),
+    note = c("high-level ML branch forwards bounds to fit_ml()",
+             "R wrapper has a bounds formal and forwards it to the Rcpp ML shim",
+             "R exposes variance, standard, wide, and loading bound builders",
              "core fitting function accepts Bounds and native bounded optimizers"),
     stringsAsFactors = FALSE
   )

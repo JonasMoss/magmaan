@@ -68,6 +68,11 @@ estimate_wls_mixed_ordinal <- fit_wls_mixed_ordinal_impl
 estimate_uls_snlls <- fit_uls_snlls_impl
 estimate_gls_snlls <- fit_gls_snlls_impl
 estimate_wls_snlls <- fit_wls_snlls_impl
+estimate_bounds_variance <- bounds_variance
+estimate_bounds_pos_var <- bounds_pos_var
+estimate_bounds_standard <- bounds_standard
+estimate_bounds_wide <- bounds_wide
+estimate_bounds_loading <- bounds_loading
 # Phase 4 retired estimate_*_ceres (separate Rcpp shims per Backend); the
 # unified estimate_uls/gls/wls/*_snlls now take an `optimizer = "..."`
 # string that maps to any of the C++ Backend values (see backend_strings.hpp).
@@ -168,6 +173,11 @@ magmaan_core <- local({
       "estimate_uls_snlls",
       "estimate_gls_snlls",
       "estimate_wls_snlls",
+      "estimate_bounds_variance",
+      "estimate_bounds_pos_var",
+      "estimate_bounds_standard",
+      "estimate_bounds_wide",
+      "estimate_bounds_loading",
       "estimate_start_values",
       "estimate_structured_gamma",
       "estimate_structured_gamma_weight",
@@ -258,6 +268,11 @@ magmaan_core <- local({
       "fit_uls",
       "fit_gls",
       "fit_wls",
+      "bounds_variance",
+      "bounds_pos_var",
+      "bounds_standard",
+      "bounds_wide",
+      "bounds_loading",
       "fit_dwls_ordinal",
       "fit_wls_ordinal",
       "fit_dwls_mixed_ordinal",
@@ -289,6 +304,10 @@ magmaan_core <- local({
       "data_mixed_ordinal_stats_huber_residual_from_raw_impl",
       "fit_fit",
       "fit_ml_impl",
+      "bounds_variance_impl",
+      "bounds_standard_impl",
+      "bounds_wide_impl",
+      "bounds_loading_impl",
       "fit_fiml_impl",
       "fit_uls_impl",
       "fit_gls_impl",

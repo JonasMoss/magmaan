@@ -14,10 +14,10 @@ latent variances. This experiment asks the next question:
 
 ## Current Scope
 
-The C++ ML fitting path accepts bounds, but the current R ML wrapper does not
-thread `bounds` through for `estimator = "ML"`. Until that R surface is exposed,
-the runner uses lavaan bounded ML as a reference probe and records a magmaan
-unbounded baseline.
+Both the C++ ML fitting path and the R `magmaan(..., estimator = "ML")` surface
+accept bounds. The runner fits lavaan and magmaan under the same named bound
+presets (`none`, `pos.var`, `standard`, `wide`) so the boundary geometry can be
+inspected directly.
 
 The bounded problem is a different optimization problem from lavaan parity:
 active variance bounds should be judged with KKT/active-bound diagnostics, not
@@ -54,7 +54,7 @@ Render the report:
 Generated files live under `results/` and are ignored by git:
 
 - `lavaan_bounds.csv`: lavaan ML fits by case, bound mode, and random-start count.
-- `magmaan_unbounded.csv`: magmaan unbounded ML baseline for the same cases.
+- `magmaan_bounds.csv`: magmaan ML fits by case and bound mode.
 - `summary.csv`: compact per-case/per-bound summary.
 - `surface_gap.csv`: current magmaan R bounds-surface status.
 
@@ -63,4 +63,3 @@ Generated files live under `results/` and are ignored by git:
 - Cases: `study3_msst:997,study3_msst:805,study3_msst:592`.
 - Bound modes: `none,pos.var,standard,wide`.
 - Lavaan random-start counts: `0,150`.
-

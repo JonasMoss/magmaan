@@ -17,12 +17,28 @@ model_matrix_rep <- function(partable) {
     .Call(`_magmaan_model_matrix_rep`, partable)
 }
 
-fit_fit <- function(partable, sample_stats, optimizer = NULL, control = NULL) {
-    .Call(`_magmaan_fit_fit`, partable, sample_stats, optimizer, control)
+bounds_variance_impl <- function(partable) {
+    .Call(`_magmaan_bounds_variance_impl`, partable)
 }
 
-fit_ml_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL) {
-    .Call(`_magmaan_fit_ml_impl`, partable, sample_stats, optimizer, control)
+bounds_standard_impl <- function(partable, sample_stats) {
+    .Call(`_magmaan_bounds_standard_impl`, partable, sample_stats)
+}
+
+bounds_wide_impl <- function(partable, sample_stats) {
+    .Call(`_magmaan_bounds_wide_impl`, partable, sample_stats)
+}
+
+bounds_loading_impl <- function(partable, sample_stats) {
+    .Call(`_magmaan_bounds_loading_impl`, partable, sample_stats)
+}
+
+fit_fit <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_fit`, partable, sample_stats, optimizer, control, bounds)
+}
+
+fit_ml_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_ml_impl`, partable, sample_stats, optimizer, control, bounds)
 }
 
 fcsem_model_spec_impl <- function(syntax) {
@@ -352,4 +368,3 @@ infer_robust_se_raw <- function(fit, X, bread = "expected", moments = "structure
 infer_robust_se_raw_parts <- function(partable, sample_stats, theta, X, bread = "expected", moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_raw_parts`, partable, sample_stats, theta, X, bread, moments, cov)
 }
-

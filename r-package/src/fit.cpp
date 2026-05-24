@@ -693,6 +693,12 @@ magmaan::estimate::Bounds bounds_from_nullable(Rcpp::Nullable<Rcpp::List> bounds
   return out;
 }
 
+Rcpp::List bounds_to_r(const magmaan::estimate::Bounds& bounds) {
+  return Rcpp::List::create(
+      Rcpp::_["lower"] = Rcpp::wrap(bounds.lower),
+      Rcpp::_["upper"] = Rcpp::wrap(bounds.upper));
+}
+
 magmaan::estimate::gmm::Weight wls_from_arg(SEXP W, std::size_t n_blocks) {
   std::vector<Eigen::MatrixXd> weights;
   weights.reserve(n_blocks);
@@ -1235,6 +1241,48 @@ Rcpp::List model_matrix_rep(SEXP partable) {
       Rcpp::_["structural_cells"] = structural_cells_df(rep.structural_cells));
 }
 
+// [[Rcpp::export]]
+Rcpp::List bounds_variance_impl(SEXP partable) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "bounds_variance");
+  auto b_or = magmaan::estimate::variance_bounds(parsed.structure);
+  if (!b_or.has_value()) stop_post(b_or.error());
+  return bounds_to_r(*b_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List bounds_standard_impl(SEXP partable, Rcpp::List sample_stats) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "bounds_standard");
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
+                                  std::move(parsed.names), sample_stats);
+  auto b_or = magmaan::estimate::standard_bounds(ctx.pt, ctx.samp);
+  if (!b_or.has_value()) stop_post(b_or.error());
+  return bounds_to_r(*b_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List bounds_wide_impl(SEXP partable, Rcpp::List sample_stats) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "bounds_wide");
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
+                                  std::move(parsed.names), sample_stats);
+  auto b_or = magmaan::estimate::wide_bounds(ctx.pt, ctx.samp);
+  if (!b_or.has_value()) stop_post(b_or.error());
+  return bounds_to_r(*b_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List bounds_loading_impl(SEXP partable, Rcpp::List sample_stats) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "bounds_loading");
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
+                                  std::move(parsed.names), sample_stats);
+  auto b_or = magmaan::estimate::loading_bounds(ctx.pt, ctx.samp);
+  if (!b_or.has_value()) stop_post(b_or.error());
+  return bounds_to_r(*b_or);
+}
+
 // =============================================================================
 
 // fit_fit() declaration — the historical entry point lives as a thin alias of
@@ -1242,13 +1290,15 @@ Rcpp::List model_matrix_rep(SEXP partable) {
 // fit_ml_impl so the alias can call it.
 Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
                        Rcpp::Nullable<Rcpp::String> optimizer,
-                       Rcpp::Nullable<Rcpp::List>   control);
+                       Rcpp::Nullable<Rcpp::List>   control,
+                       Rcpp::Nullable<Rcpp::List>   bounds);
 
 // [[Rcpp::export]]
 Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats,
                    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
-                   Rcpp::Nullable<Rcpp::List>   control   = R_NilValue) {
-  return fit_ml_impl(partable, sample_stats, optimizer, control);
+                   Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+                   Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue) {
+  return fit_ml_impl(partable, sample_stats, optimizer, control, bounds);
 }
 
 // fit_ml() — public ML spelling. Threads through an `optimizer` string and
@@ -1256,14 +1306,13 @@ Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats,
 //   "nlopt-lbfgs" (default), "ipopt", "port", "nlopt-slsqp",
 //   "nlopt-tnewton", "nlopt-var2"  (any scalar-shape backend)
 // "ceres" / "ceres-bfgs" are rejected — Ceres applies to the LS path only.
-// "nlopt-bobyqa" requires finite bounds, supplied via `bounds = NULL`. Since
-// ML doesn't currently take a bounds argument we leave that error to surface
-// from the dispatcher.
+// "nlopt-bobyqa" requires finite bounds, supplied via `bounds`.
 //
 // [[Rcpp::export]]
 Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
                        Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
-                       Rcpp::Nullable<Rcpp::List>   control   = R_NilValue) {
+                       Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+                       Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue) {
   magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_ml");
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure), std::move(parsed.names),
@@ -1271,7 +1320,7 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_ml(ctx.pt, ctx.rep, ctx.samp, x0,
-      magmaan::estimate::Bounds{}, backend, optim_opts_from(control));
+      bounds_from_nullable(bounds), backend, optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "ML");

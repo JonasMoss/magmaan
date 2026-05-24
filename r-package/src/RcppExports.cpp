@@ -68,9 +68,56 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// bounds_variance_impl
+Rcpp::List bounds_variance_impl(SEXP partable);
+RcppExport SEXP _magmaan_bounds_variance_impl(SEXP partableSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    rcpp_result_gen = Rcpp::wrap(bounds_variance_impl(partable));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bounds_standard_impl
+Rcpp::List bounds_standard_impl(SEXP partable, Rcpp::List sample_stats);
+RcppExport SEXP _magmaan_bounds_standard_impl(SEXP partableSEXP, SEXP sample_statsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    rcpp_result_gen = Rcpp::wrap(bounds_standard_impl(partable, sample_stats));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bounds_wide_impl
+Rcpp::List bounds_wide_impl(SEXP partable, Rcpp::List sample_stats);
+RcppExport SEXP _magmaan_bounds_wide_impl(SEXP partableSEXP, SEXP sample_statsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    rcpp_result_gen = Rcpp::wrap(bounds_wide_impl(partable, sample_stats));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bounds_loading_impl
+Rcpp::List bounds_loading_impl(SEXP partable, Rcpp::List sample_stats);
+RcppExport SEXP _magmaan_bounds_loading_impl(SEXP partableSEXP, SEXP sample_statsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    rcpp_result_gen = Rcpp::wrap(bounds_loading_impl(partable, sample_stats));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_fit
-Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control);
-RcppExport SEXP _magmaan_fit_fit(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP) {
+Rcpp::List fit_fit(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_fit(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -78,13 +125,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_fit(partable, sample_stats, optimizer, control));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_fit(partable, sample_stats, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
 // fit_ml_impl
-Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control);
-RcppExport SEXP _magmaan_fit_ml_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP) {
+Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_ml_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -92,7 +140,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
-    rcpp_result_gen = Rcpp::wrap(fit_ml_impl(partable, sample_stats, optimizer, control));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_ml_impl(partable, sample_stats, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1177,8 +1226,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_parse_parse", (DL_FUNC) &_magmaan_parse_parse, 1},
     {"_magmaan_lavaan_lavaanify", (DL_FUNC) &_magmaan_lavaan_lavaanify, 15},
     {"_magmaan_model_matrix_rep", (DL_FUNC) &_magmaan_model_matrix_rep, 1},
-    {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 4},
-    {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 4},
+    {"_magmaan_bounds_variance_impl", (DL_FUNC) &_magmaan_bounds_variance_impl, 1},
+    {"_magmaan_bounds_standard_impl", (DL_FUNC) &_magmaan_bounds_standard_impl, 2},
+    {"_magmaan_bounds_wide_impl", (DL_FUNC) &_magmaan_bounds_wide_impl, 2},
+    {"_magmaan_bounds_loading_impl", (DL_FUNC) &_magmaan_bounds_loading_impl, 2},
+    {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 5},
+    {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 5},
     {"_magmaan_fcsem_model_spec_impl", (DL_FUNC) &_magmaan_fcsem_model_spec_impl, 1},
     {"_magmaan_fit_ml_fcsem_impl", (DL_FUNC) &_magmaan_fit_ml_fcsem_impl, 3},
     {"_magmaan_fcsem_standard_errors_impl", (DL_FUNC) &_magmaan_fcsem_standard_errors_impl, 1},
