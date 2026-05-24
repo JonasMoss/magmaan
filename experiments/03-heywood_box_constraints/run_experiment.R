@@ -140,6 +140,12 @@ safe_max_abs <- function(x) {
   max(x)
 }
 
+finite_median <- function(v) {
+  v <- v[is.finite(v)]
+  if (!length(v)) return(NA_real_)
+  stats::median(v)
+}
+
 variance_summary <- function(partable) {
   lv_names <- unique(as.character(partable$lhs[partable$op == "=~"]))
   var_rows <- partable$op == "~~" & partable$lhs == partable$rhs
@@ -331,11 +337,6 @@ summarize_lavaan_bounds <- function(x) {
                                           sep = "\r"), drop = TRUE)
   rows <- lapply(groups, function(idx) {
     y <- x[idx, , drop = FALSE]
-    finite_median <- function(v) {
-      v <- v[is.finite(v)]
-      if (!length(v)) return(NA_real_)
-      stats::median(v)
-    }
     data.frame(
       case_key = y$case_key[1L],
       bounds = y$bounds[1L],
@@ -355,6 +356,63 @@ summarize_lavaan_bounds <- function(x) {
   out <- do.call(rbind, rows)
   row.names(out) <- NULL
   out[order(out$case_key, out$bounds, out$rstarts), , drop = FALSE]
+}
+
+summarize_magmaan_bounds <- function(x) {
+  x$admissible_variances <- x$n_neg_ov_var == 0L & x$n_neg_lv_var == 0L
+  x$active_variance_bound_count <- x$n_zeroish_ov_var + x$n_zeroish_lv_var
+  groups <- split(seq_len(nrow(x)), paste(x$case_key, x$bounds, sep = "\r"),
+                  drop = TRUE)
+  rows <- lapply(groups, function(idx) {
+    y <- x[idx, , drop = FALSE]
+    data.frame(
+      case_key = y$case_key[1L],
+      bounds = y$bounds[1L],
+      ok = mean(y$ok %in% TRUE),
+      converged = mean(y$converged %in% TRUE),
+      stationary = mean(y$audit_stationary %in% TRUE),
+      admissible_variances = mean(y$admissible_variances %in% TRUE),
+      fmin = finite_median(y$fmin),
+      grad_inf_norm = finite_median(y$grad_inf_norm),
+      active_variance_bound_count =
+        finite_median(y$active_variance_bound_count),
+      audit_status = paste(unique(y$audit_status[!is.na(y$audit_status) &
+                                                   nzchar(y$audit_status)]),
+                           collapse = " | "),
+      error = paste(unique(y$error[!is.na(y$error) & nzchar(y$error)]),
+                    collapse = " | "),
+      stringsAsFactors = FALSE
+    )
+  })
+  out <- do.call(rbind, rows)
+  row.names(out) <- NULL
+  out[order(out$case_key, out$bounds), , drop = FALSE]
+}
+
+compare_lavaan_magmaan <- function(lavaan_summary, magmaan_summary) {
+  merged <- merge(lavaan_summary, magmaan_summary,
+                  by = c("case_key", "bounds"), all = TRUE,
+                  suffixes = c("_lavaan", "_magmaan"), sort = FALSE)
+  out <- data.frame(
+    case_key = merged$case_key,
+    bounds = merged$bounds,
+    lavaan_rstarts = merged$rstarts,
+    lavaan_converged = merged$converged_lavaan,
+    lavaan_admissible = merged$admissible_variances_lavaan,
+    lavaan_active_variance_bounds =
+      merged$active_variance_bound_count_lavaan,
+    lavaan_fmin = merged$fmin_lavaan,
+    magmaan_converged = merged$converged_magmaan,
+    magmaan_stationary = merged$stationary,
+    magmaan_admissible = merged$admissible_variances_magmaan,
+    magmaan_active_variance_bounds =
+      merged$active_variance_bound_count_magmaan,
+    magmaan_fmin = merged$fmin_magmaan,
+    fmin_gap_magmaan_minus_2_lavaan =
+      merged$fmin_magmaan - 2.0 * merged$fmin_lavaan,
+    stringsAsFactors = FALSE
+  )
+  out[order(out$case_key, out$bounds, out$lavaan_rstarts), , drop = FALSE]
 }
 
 main <- function() {
@@ -395,7 +453,11 @@ main <- function() {
   write_csv(magmaan_out, experiment_path("results", "magmaan_bounds.csv"))
 
   summary <- summarize_lavaan_bounds(lavaan_out)
+  magmaan_summary <- summarize_magmaan_bounds(magmaan_out)
+  comparison <- compare_lavaan_magmaan(summary, magmaan_summary)
   write_csv(summary, experiment_path("results", "summary.csv"))
+  write_csv(magmaan_summary, experiment_path("results", "magmaan_summary.csv"))
+  write_csv(comparison, experiment_path("results", "engine_comparison.csv"))
 
   surface_gap <- data.frame(
     component = c("magmaan::magmaan(... estimator='ML', bounds=)",

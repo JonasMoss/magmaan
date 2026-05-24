@@ -17,8 +17,90 @@ read_result <- function(name) {
 
 lavaan_bounds <- read_result("lavaan_bounds.csv")
 magmaan_bounds <- read_result("magmaan_bounds.csv")
-summary <- read_result("summary.csv")
+lavaan_summary <- read_result("summary.csv")
+magmaan_summary <- read_result("magmaan_summary.csv")
+engine_comparison <- read_result("engine_comparison.csv")
 surface_gap <- read_result("surface_gap.csv")
+
+yes_no <- function(x) {
+  ifelse(is.na(x), NA_character_, ifelse(x >= 1, "yes", "no"))
+}
+
+fmt <- function(x, digits = 4) {
+  ifelse(is.na(x), NA_character_, formatC(x, digits = digits, format = "fg"))
+}
+
+comparison0 <- engine_comparison[engine_comparison$lavaan_rstarts == 0L, ]
+headline <- comparison0[comparison0$bounds %in% c("none", "pos.var"), ]
+headline <- headline[, c("case_key", "bounds",
+                         "lavaan_converged", "lavaan_admissible",
+                         "lavaan_active_variance_bounds",
+                         "magmaan_converged", "magmaan_stationary",
+                         "magmaan_admissible",
+                         "magmaan_active_variance_bounds",
+                         "fmin_gap_magmaan_minus_2_lavaan")]
+headline[] <- Map(function(col, name) {
+  if (name %in% c("lavaan_converged", "lavaan_admissible",
+                  "magmaan_converged", "magmaan_stationary",
+                  "magmaan_admissible")) {
+    return(yes_no(col))
+  }
+  if (name == "fmin_gap_magmaan_minus_2_lavaan") return(fmt(col, 6))
+  col
+}, headline, names(headline))
+
+posvar0 <- comparison0[comparison0$bounds == "pos.var", ]
+posvar_admissible <- sum(posvar0$lavaan_admissible == 1 &
+                           posvar0$magmaan_admissible == 1, na.rm = TRUE)
+posvar_gap <- max(abs(posvar0$fmin_gap_magmaan_minus_2_lavaan), na.rm = TRUE)
+
+posvar_r0 <- engine_comparison[engine_comparison$bounds == "pos.var" &
+                                 engine_comparison$lavaan_rstarts == 0L,
+                               c("case_key", "lavaan_fmin")]
+posvar_r150 <- engine_comparison[engine_comparison$bounds == "pos.var" &
+                                   engine_comparison$lavaan_rstarts == 150L,
+                                 c("case_key", "lavaan_fmin")]
+names(posvar_r0)[2L] <- "lavaan_fmin_r0"
+names(posvar_r150)[2L] <- "lavaan_fmin_r150"
+posvar_random <- merge(posvar_r0, posvar_r150, by = "case_key", all = TRUE)
+posvar_random$delta <- posvar_random$lavaan_fmin_r150 -
+  posvar_random$lavaan_fmin_r0
+random_improved <- posvar_random$case_key[posvar_random$delta < -1e-6]
+random_improved <- if (length(random_improved)) {
+  paste(random_improved, collapse = ", ")
+} else {
+  "none"
+}
+
+wide0 <- comparison0[comparison0$bounds == "wide", ]
+wide_admissible <- sum(wide0$lavaan_admissible == 1 &
+                         wide0$magmaan_admissible == 1, na.rm = TRUE)
+
+finding_summary <- data.frame(
+  check = c(
+    "pos.var admissibility",
+    "pos.var objective agreement",
+    "pos.var random-start sensitivity",
+    "wide admissibility"
+  ),
+  result = c(
+    paste0(posvar_admissible, "/", nrow(posvar0),
+           " regular-start cases admissible in both engines"),
+    paste0("max |magmaan_fmin - 2 * lavaan_fmin| = ",
+           formatC(posvar_gap, digits = 4, format = "fg")),
+    paste0("lavaan rstarts=150 found a lower pos.var basin for: ",
+           random_improved),
+    paste0(wide_admissible, "/", nrow(wide0),
+           " regular-start cases admissible in both engines")
+  ),
+  takeaway = c(
+    "The clean positive result is about nonnegative variance bounds.",
+    "Regular-start magmaan matches regular-start lavaan for pos.var.",
+    "Bounds do not remove the local-basin/start-value problem.",
+    "Wide is a loose lavaan box, not a nonnegative-variance constraint."
+  ),
+  stringsAsFactors = FALSE
+)
 ```
 
 ## Question
@@ -30,6 +112,62 @@ definite.
 
 This experiment asks whether variance box constraints turn those cases into
 admissible boundary optima.
+
+## Short Answer
+
+Yes, the results matter, but narrowly. This is a mechanism probe, not a broad
+success-rate benchmark. The useful question is whether the same sample
+covariance that gives an unbounded Heywood solution can be fit as a constrained
+boundary optimum when variance parameters are required to be nonnegative.
+
+The clean pattern to look for is:
+
+- `bounds = "none"` converges but has negative variance estimates;
+- `bounds = "pos.var"` converges with no negative variance estimates;
+- the constrained solution has active variance bounds;
+- magmaan's `fmin` matches `2 * lavaan_fmin` to numerical tolerance;
+
+then the experiment says something concrete: the failure mode is not just "the
+optimizer got confused." It is the geometry of the unbounded SEM problem. The
+bounded problem has a legitimate constrained optimum on the boundary, and our
+convergence checks must be KKT/projected-gradient checks rather than ordinary
+interior-gradient checks.
+
+The `standard` and `wide` rows are supporting probes, not the central claim.
+`standard` is another nonnegative-ish lavaan box in these cases, but `wide` is
+a deliberately loose box and can still allow negative variances. Also, lavaan's
+`rstarts = 150` condition checks basin sensitivity; if it finds a lower
+objective than the regular start, bounds helped admissibility but did not solve
+the start-value problem.
+
+What it does *not* say: bounds should become a statistical default, random
+starts are unnecessary, or ordinary interior standard errors are automatically
+valid at a boundary solution.
+
+## Headline Pattern
+
+```{r}
+knitr::kable(headline, row.names = FALSE)
+```
+
+Read this table as a small decision grid. The `none` rows show the unbounded ML
+target. The `pos.var` rows show the smallest intervention: only free variance
+diagonals get lower bound zero. `fmin_gap_magmaan_minus_2_lavaan` should be
+near zero when magmaan and lavaan reached the same constrained objective value,
+because magmaan reports the full ML discrepancy and lavaan reports half.
+
+## Default Run Findings
+
+```{r}
+knitr::kable(finding_summary, row.names = FALSE)
+```
+
+The headline is therefore: `pos.var` is doing real work. It turns the default
+hard cases into admissible constrained fits and magmaan agrees with lavaan's
+regular-start objective. But there is still a basin problem in at least one
+case: lavaan random starts find a lower `pos.var` objective for
+`study3_msst:805`. So the result matters most as evidence for two separate
+engineering requirements: bounded optimization and better start portfolios.
 
 ## R Surface Status
 
@@ -44,16 +182,32 @@ magmaan's `fmin` is the full discrepancy, while lavaan reports half of it.
 ## Lavaan Bounded ML
 
 ```{r}
-summary[order(summary$case_key, summary$bounds, summary$rstarts), ]
+knitr::kable(lavaan_summary[order(lavaan_summary$case_key,
+                                  lavaan_summary$bounds,
+                                  lavaan_summary$rstarts), ],
+             row.names = FALSE, digits = 4)
 ```
 
 ## Magmaan Bounded ML
 
 ```{r}
-magmaan_bounds[, c("case_key", "bounds", "converged", "fmin", "grad_inf_norm",
-                   "audit_stationary", "audit_status",
-                   "min_ov_var", "min_lv_var",
-                   "n_neg_ov_var", "n_neg_lv_var", "error")]
+knitr::kable(magmaan_summary[, c("case_key", "bounds", "converged",
+                                 "stationary", "admissible_variances", "fmin",
+                                 "grad_inf_norm",
+                                 "active_variance_bound_count",
+                                 "audit_status", "error")],
+             row.names = FALSE, digits = 4)
+```
+
+## Engine Agreement
+
+```{r}
+knitr::kable(engine_comparison[, c(
+  "case_key", "bounds", "lavaan_rstarts",
+  "lavaan_converged", "lavaan_admissible",
+  "magmaan_converged", "magmaan_stationary", "magmaan_admissible",
+  "fmin_gap_magmaan_minus_2_lavaan"
+)], row.names = FALSE, digits = 6)
 ```
 
 ## Boundary Interpretation
@@ -61,3 +215,30 @@ magmaan_bounds[, c("case_key", "bounds", "converged", "fmin", "grad_inf_norm",
 For bounded fits, a large raw gradient is not automatically a failure. If a
 variance is active at its lower bound, the relevant diagnostic is a KKT
 condition for the constrained problem, not unconstrained stationarity.
+
+That is why this experiment tracks both variance admissibility and active
+bounds. A boundary optimum should generally have a nonzero raw gradient in some
+bounded coordinates. The sign of the gradient, together with the active set, is
+what matters. In magmaan this is surfaced through the terminal audit's
+projected-gradient stationarity and the fit diagnostics' active-bound indices.
+
+## Practical Takeaway
+
+For these hard small-sample MSST cases, the result is worth keeping around as a
+regression and design probe:
+
+- It justifies exposing bounds in R, because the exact question cannot be
+  studied honestly from the R surface without them.
+- It gives a compact sanity check that nonnegative variance boxes can turn an
+  inadmissible unbounded solution into an admissible constrained one.
+- It forces convergence reporting to separate optimizer stationarity from SEM
+  admissibility and from inference readiness.
+
+It should not yet drive a default-policy change. Boundary solutions are
+statistically delicate: they may be a reasonable constrained estimate, but they
+can also be a symptom of small samples, misspecification, weak identification,
+or a model that wants to leave the admissible parameter space. The next
+experiment should ask when bounded starts, bounded optimization, and screened
+start portfolios improve the probability of finding a useful local solution
+across a larger portfolio, and how often the solution is truly boundary-active
+versus merely protected from a bad basin.
