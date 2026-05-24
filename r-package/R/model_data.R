@@ -1060,7 +1060,7 @@ fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
 
 frontier_fit_ml_ridge_continuation <- function(
     model, data, optimizer = "nlopt-lbfgs", control = NULL, bounds = NULL,
-    alphas = NULL, target = c("diagonal", "scaled_identity"),
+    alphas = NULL, target = c("diagonal", "scaled_identity", "identity"),
     include_endpoint = TRUE, diagonal_floor = 1e-8,
     missing = c("listwise", "error")) {
   target <- match.arg(target)

@@ -91,3 +91,29 @@ TEST_CASE("ml ridge continuation rejects invalid path values") {
       {}, cont);
   CHECK_FALSE(fit.has_value());
 }
+
+TEST_CASE("ml ridge continuation accepts raw identity target") {
+  auto model = build_model("f =~ x1 + x2 + x3 + x4");
+  auto samp = near_singular_cfa_stats();
+  auto x0 = magmaan::estimate::simple_start_values(model.pt, model.rep, samp,
+                                                   {});
+  REQUIRE(x0.has_value());
+
+  magmaan::estimate::frontier::MlRidgeContinuationOptions cont;
+  cont.alphas = {0.1};
+  cont.target =
+      magmaan::estimate::frontier::MlContinuationTarget::Identity;
+
+  magmaan::optim::OptimOptions opt;
+  opt.max_iter = 400;
+  auto fit = magmaan::estimate::frontier::fit_ml_ridge_continuation(
+      model.pt, model.rep, samp, *x0, {}, magmaan::estimate::Backend::NloptLbfgs,
+      opt, cont);
+  REQUIRE_MESSAGE(fit.has_value(),
+                  "identity-target continuation failed: "
+                      << (fit.has_value() ? "" : fit.error().detail));
+  REQUIRE(fit->steps.size() == 2);
+  CHECK(fit->steps[0].alpha == doctest::Approx(0.1));
+  CHECK(fit->steps[1].alpha == doctest::Approx(0.0));
+  CHECK(fit->final_sample_stats.S[0].isApprox(samp.S[0], 1e-14));
+}

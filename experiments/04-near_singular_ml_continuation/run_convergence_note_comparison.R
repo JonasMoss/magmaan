@@ -34,6 +34,19 @@ parse_csv_numeric <- function(x) {
   as.numeric(out[nzchar(out)])
 }
 
+lambda_profile_path <- function(profile, custom = NULL) {
+  switch(
+    profile,
+    legacy = c(0.50, 0.20, 0.10, 0.05, 0.01),
+    light = c(0.10, 0.05, 0.02, 0.01, 0.005),
+    endpoint = c(0.20, 0.10, 0.05, 0.025, 0.0125, 0.006, 0.003, 0.001),
+    dense = c(0.50, 0.35, 0.25, 0.18, 0.13, 0.09, 0.06, 0.04,
+              0.025, 0.015, 0.008),
+    custom = custom,
+    stop("unknown lambda profile: ", profile, call. = FALSE)
+  )
+}
+
 parse_args <- function(args) {
   out <- list(
     reps = 100L,
@@ -41,7 +54,9 @@ parse_args <- function(args) {
     optimizer = "nlopt-lbfgs",
     max_iter = 5000L,
     progress_every = 25L,
-    alphas = c(0.50, 0.20, 0.10, 0.05, 0.01),
+    alphas = NULL,
+    profiles = c("legacy", "light", "endpoint", "dense"),
+    targets = c("diagonal", "scaled_identity", "identity"),
     designs = c(
       "dejonckere_simple_2025",
       "dejonckere_crossloading_2025",
@@ -49,6 +64,7 @@ parse_args <- function(args) {
       "ludtke_cfa_2021"
     )
   )
+  profiles_seen <- FALSE
   i <- 1L
   while (i <= length(args)) {
     arg <- args[[i]]
@@ -58,7 +74,9 @@ parse_args <- function(args) {
         "Usage: Rscript run_convergence_note_comparison.R ",
         "[--reps 100] [--seed 20260523] ",
         "[--designs dejonckere_simple_2025,...] ",
-        "[--alphas 0.5,0.2,0.1,0.05,0.01] ",
+        "[--targets diagonal,scaled_identity,identity] ",
+        "[--profiles legacy,light,endpoint,dense] ",
+        "[--alphas 0.5,0.2,0.1] ",
         "[--optimizer nlopt-lbfgs] [--max-iter 5000] ",
         "[--progress-every 25]\n",
         sep = ""
@@ -82,6 +100,11 @@ parse_args <- function(args) {
     else if (arg == "--max-iter") out$max_iter <- as.integer(need_value())
     else if (arg == "--progress-every") out$progress_every <- as.integer(need_value())
     else if (arg == "--alphas") out$alphas <- parse_csv_numeric(need_value())
+    else if (arg == "--profiles") {
+      out$profiles <- parse_csv(need_value())
+      profiles_seen <- TRUE
+    }
+    else if (arg == "--targets") out$targets <- parse_csv(need_value())
     else if (arg == "--designs") out$designs <- parse_csv(need_value())
     else stop("unknown argument: ", arg, call. = FALSE)
     i <- i + 1L
@@ -92,8 +115,26 @@ parse_args <- function(args) {
   if (out$reps < 1L || out$max_iter < 1L || out$progress_every < 1L) {
     stop("reps, max_iter, and progress_every must be positive", call. = FALSE)
   }
-  if (!length(out$alphas) || anyNA(out$alphas)) {
+  if (!is.null(out$alphas) && (!length(out$alphas) || anyNA(out$alphas))) {
     stop("alphas must be a non-empty numeric CSV", call. = FALSE)
+  }
+  if (!is.null(out$alphas) && !profiles_seen) {
+    out$profiles <- "custom"
+  }
+  allowed_profiles <- c("legacy", "light", "endpoint", "dense", "custom")
+  unknown_profiles <- setdiff(out$profiles, allowed_profiles)
+  if (length(unknown_profiles)) {
+    stop("unknown lambda profile(s): ", paste(unknown_profiles, collapse = ", "),
+         call. = FALSE)
+  }
+  if ("custom" %in% out$profiles && is.null(out$alphas)) {
+    stop("profile 'custom' requires --alphas", call. = FALSE)
+  }
+  allowed_targets <- c("diagonal", "scaled_identity", "identity")
+  unknown_targets <- setdiff(out$targets, allowed_targets)
+  if (length(unknown_targets)) {
+    stop("unknown continuation target(s): ",
+         paste(unknown_targets, collapse = ", "), call. = FALSE)
   }
   if (!length(out$designs) || any(!nzchar(out$designs))) {
     stop("designs must be a non-empty CSV", call. = FALSE)
@@ -108,7 +149,7 @@ safe_condition <- function(S) {
     condition = if (min(ev) > 0) max(ev) / min(ev) else Inf)
 }
 
-fit_one <- function(method, spec, dat, optimizer, control, alphas) {
+fit_one <- function(method, spec, dat, optimizer, control, alphas, target) {
   warnings <- character()
   started <- proc.time()[["elapsed"]]
   fit <- withCallingHandlers(
@@ -119,7 +160,7 @@ fit_one <- function(method, spec, dat, optimizer, control, alphas) {
       } else {
         magmaan::magmaan_core$frontier_fit_ml_ridge_continuation(
           spec, dat, optimizer = optimizer, control = control,
-          alphas = alphas)
+          alphas = alphas, target = target)
       },
       silent = TRUE
     ),
@@ -151,12 +192,12 @@ failure_stage <- function(error) {
   as.numeric(sub("stage alpha=", "", regmatches(error, hit)))
 }
 
-fit_row <- function(design, rep, seed, sim, method, spec, dat, optimizer,
-                    control, alphas, sample_diag) {
-  got <- fit_one(method, spec, dat, optimizer, control, alphas)
+fit_row <- function(design, rep, seed, sim, method, lambda_profile, target,
+                    spec, dat, optimizer, control, alphas, sample_diag) {
+  got <- fit_one(method, spec, dat, optimizer, control, alphas, target)
   fit <- got$fit
   error <- if (inherits(fit, "try-error")) as.character(fit) else ""
-  endpoint_path <- c(alphas, 0)
+  endpoint_path <- if (identical(method, "baseline_ml")) 0 else c(alphas, 0)
   base <- data.frame(
     design = design,
     replicate = rep,
@@ -165,6 +206,8 @@ fit_row <- function(design, rep, seed, sim, method, spec, dat, optimizer,
     p = ncol(sim$data),
     optimizer = optimizer,
     method = method,
+    lambda_profile = lambda_profile,
+    target = target,
     alpha_path = paste(endpoint_path, collapse = ","),
     sample_min_eigen = sample_diag[["min"]],
     sample_condition = sample_diag[["condition"]],
@@ -223,11 +266,17 @@ fit_row <- function(design, rep, seed, sim, method, spec, dat, optimizer,
 }
 
 summarize_results <- function(rows) {
-  groups <- split(rows, interaction(rows$design, rows$method, drop = TRUE))
+  groups <- split(
+    rows,
+    interaction(rows$design, rows$method, rows$lambda_profile, rows$target,
+                drop = TRUE)
+  )
   out <- lapply(groups, function(x) {
     data.frame(
       design = x$design[[1L]],
       method = x$method[[1L]],
+      lambda_profile = x$lambda_profile[[1L]],
+      target = x$target[[1L]],
       attempts = nrow(x),
       ok = sum(x$ok, na.rm = TRUE),
       converged = sum(x$converged, na.rm = TRUE),
@@ -248,7 +297,7 @@ summarize_results <- function(rows) {
     )
   })
   out <- do.call(rbind, out)
-  out[order(out$design, out$method), ]
+  out[order(out$design, out$method, out$lambda_profile, out$target), ]
 }
 
 paired_summary <- function(rows) {
@@ -262,11 +311,17 @@ paired_summary <- function(rows) {
     by.x = c("base_design", "base_replicate"),
     by.y = c("cont_design", "cont_replicate")
   )
-  groups <- split(paired, paired$base_design)
+  groups <- split(
+    paired,
+    interaction(paired$base_design, paired$cont_lambda_profile,
+                paired$cont_target, drop = TRUE)
+  )
   out <- lapply(groups, function(x) {
     both <- x$base_converged & x$cont_converged
     data.frame(
       design = x$base_design[[1L]],
+      lambda_profile = x$cont_lambda_profile[[1L]],
+      target = x$cont_target[[1L]],
       reps = nrow(x),
       both_converged = mean(both),
       baseline_only = mean(x$base_converged & !x$cont_converged),
@@ -280,7 +335,7 @@ paired_summary <- function(rows) {
     )
   })
   out <- do.call(rbind, out)
-  out[order(out$design), ]
+  out[order(out$design, out$lambda_profile, out$target), ]
 }
 
 main <- function() {
@@ -299,7 +354,8 @@ main <- function() {
   }
 
   control <- list(max_iter = args$max_iter, ftol = 1e-10, gtol = 1e-7)
-  rows <- vector("list", length(args$designs) * args$reps * 2L)
+  n_scenarios <- length(args$profiles) * length(args$targets)
+  rows <- vector("list", length(args$designs) * args$reps * (1L + n_scenarios))
   pos <- 1L
 
   for (design in args$designs) {
@@ -312,13 +368,19 @@ main <- function() {
       spec <- magmaan::model_spec(sim$analysis_syntax)
       dat <- magmaan::df_to_data(sim$data, spec)
       sample_diag <- safe_condition(dat$S[[1L]])
-      rows[[pos]] <- fit_row(design, rep, seed, sim, "baseline_ml", spec, dat,
-                             args$optimizer, control, args$alphas, sample_diag)
+      rows[[pos]] <- fit_row(design, rep, seed, sim, "baseline_ml", "none",
+                             "none", spec, dat, args$optimizer, control,
+                             numeric(), sample_diag)
       pos <- pos + 1L
-      rows[[pos]] <- fit_row(design, rep, seed, sim, "ridge_continuation", spec,
-                             dat, args$optimizer, control, args$alphas,
-                             sample_diag)
-      pos <- pos + 1L
+      for (profile in args$profiles) {
+        alphas <- lambda_profile_path(profile, args$alphas)
+        for (target in args$targets) {
+          rows[[pos]] <- fit_row(
+            design, rep, seed, sim, "ridge_continuation", profile, target,
+            spec, dat, args$optimizer, control, alphas, sample_diag)
+          pos <- pos + 1L
+        }
+      }
     }
   }
 

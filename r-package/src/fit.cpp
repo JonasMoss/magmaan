@@ -213,7 +213,15 @@ const char* optim_status_to_r(magmaan::optim::OptimStatus status) {
 const char* continuation_target_to_r(
     magmaan::estimate::frontier::MlContinuationTarget target) {
   using Target = magmaan::estimate::frontier::MlContinuationTarget;
-  return target == Target::Diagonal ? "diagonal" : "scaled_identity";
+  switch (target) {
+    case Target::Diagonal:
+      return "diagonal";
+    case Target::ScaledIdentity:
+      return "scaled_identity";
+    case Target::Identity:
+      return "identity";
+  }
+  return "unknown";
 }
 
 magmaan::estimate::frontier::MlContinuationTarget
@@ -227,11 +235,12 @@ continuation_target_from_string(const std::string& target) {
   if (key.empty() || key == "diagonal" || key == "diag") {
     return Target::Diagonal;
   }
-  if (key == "scaled_identity" || key == "identity" || key == "scale_identity") {
+  if (key == "scaled_identity" || key == "scale_identity") {
     return Target::ScaledIdentity;
   }
+  if (key == "identity" || key == "raw_identity") return Target::Identity;
   Rcpp::stop("magmaan: continuation target must be 'diagonal' or "
-             "'scaled_identity' (got '%s')", target.c_str());
+             "'scaled_identity' or 'identity' (got '%s')", target.c_str());
 }
 
 Rcpp::List continuation_to_r(
