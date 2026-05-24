@@ -23,6 +23,16 @@ The bounded problem is a different optimization problem from lavaan parity:
 active variance bounds should be judged with KKT/active-bound diagnostics, not
 with the ordinary unconstrained gradient alone.
 
+The report is meant to answer a narrow question. If unbounded ML converges to
+negative variances but `pos.var` converges with no negative variances and
+active lower bounds, the problem is not simply an optimizer failure. It is
+evidence that the unconstrained SEM optimum lies outside the admissible
+variance region, while the bounded problem has a boundary optimum. That matters
+for engineering convergence checks; it does not by itself justify turning
+bounds into a statistical default. The `standard` and `wide` lavaan boxes are
+included as supporting probes; `wide` is deliberately loose and can still admit
+negative variance estimates.
+
 ## Run
 
 Install the R package first if needed:
@@ -56,6 +66,9 @@ Generated files live under `results/` and are ignored by git:
 - `lavaan_bounds.csv`: lavaan ML fits by case, bound mode, and random-start count.
 - `magmaan_bounds.csv`: magmaan ML fits by case and bound mode.
 - `summary.csv`: compact per-case/per-bound summary.
+- `magmaan_summary.csv`: compact magmaan summary by case and bound mode.
+- `engine_comparison.csv`: lavaan-vs-magmaan objective/admissibility comparison,
+  with magmaan's full-discrepancy `fmin` compared to `2 * lavaan_fmin`.
 - `surface_gap.csv`: current magmaan R bounds-surface status.
 
 ## Defaults
