@@ -16,22 +16,25 @@ latent variances. This experiment asks the next question:
 
 Both the C++ ML fitting path and the R `magmaan(..., estimator = "ML")` surface
 accept bounds. The runner fits lavaan and magmaan under the same named bound
-presets (`none`, `pos.var`, `standard`, `wide`) so the boundary geometry can be
-inspected directly.
+presets (`none`, `pos.var`, `standard`, `wide`) and the same identification
+conditions (`marker`, `std.lv`) so the boundary geometry can be inspected
+directly.
 
 The bounded problem is a different optimization problem from lavaan parity:
 active variance bounds should be judged with KKT/active-bound diagnostics, not
 with the ordinary unconstrained gradient alone.
 
-The report is meant to answer a narrow question. If unbounded ML converges to
-negative variances but `pos.var` converges with no negative variances and
-active lower bounds, the problem is not simply an optimizer failure. It is
-evidence that the unconstrained SEM optimum lies outside the admissible
-variance region, while the bounded problem has a boundary optimum. That matters
-for engineering convergence checks; it does not by itself justify turning
-bounds into a statistical default. The `standard` and `wide` lavaan boxes are
-included as supporting probes; `wide` is deliberately loose and can still admit
-negative variance estimates.
+The report is meant to answer two narrow questions. First, if unbounded ML
+converges to negative variances but `pos.var` converges with no negative
+variances and active lower bounds, the problem is not simply an optimizer
+failure. It is evidence that the unconstrained SEM optimum lies outside the
+admissible variance region, while the bounded problem has a boundary optimum.
+Second, if `std.lv` without bounds still has negative observed variances, the
+Heywood behavior is not merely a marker-identification artifact. These results
+matter for engineering convergence checks; they do not by themselves justify
+turning bounds or `std.lv` into statistical defaults. The `standard` and `wide`
+lavaan boxes are included as supporting probes; `wide` is deliberately loose
+and can still admit negative variance estimates.
 
 ## Run
 
@@ -71,8 +74,12 @@ Generated files live under `results/` and are ignored by git:
   with magmaan's full-discrepancy `fmin` compared to `2 * lavaan_fmin`.
 - `surface_gap.csv`: current magmaan R bounds-surface status.
 
+All fit-output files include an `identification` column with `marker` and
+`std.lv` conditions.
+
 ## Defaults
 
 - Cases: `study3_msst:997,study3_msst:805,study3_msst:592`.
+- Identification: `marker,std.lv`.
 - Bound modes: `none,pos.var,standard,wide`.
 - Lavaan random-start counts: `0,150`.

@@ -32,16 +32,15 @@ fmt <- function(x, digits = 4) {
 
 comparison0 <- engine_comparison[engine_comparison$lavaan_rstarts == 0L, ]
 headline <- comparison0[comparison0$bounds %in% c("none", "pos.var"), ]
-headline <- headline[, c("case_key", "bounds",
-                         "lavaan_converged", "lavaan_admissible",
-                         "lavaan_active_variance_bounds",
-                         "magmaan_converged", "magmaan_stationary",
-                         "magmaan_admissible",
+headline <- headline[, c("case_key", "identification", "bounds",
+                         "lavaan_admissible",
+                         "lavaan_n_neg_ov_var", "lavaan_n_neg_lv_var",
+                         "magmaan_stationary", "magmaan_admissible",
+                         "magmaan_n_neg_ov_var", "magmaan_n_neg_lv_var",
                          "magmaan_active_variance_bounds",
                          "fmin_gap_magmaan_minus_2_lavaan")]
 headline[] <- Map(function(col, name) {
-  if (name %in% c("lavaan_converged", "lavaan_admissible",
-                  "magmaan_converged", "magmaan_stationary",
+  if (name %in% c("lavaan_admissible", "magmaan_stationary",
                   "magmaan_admissible")) {
     return(yes_no(col))
   }
@@ -50,22 +49,39 @@ headline[] <- Map(function(col, name) {
 }, headline, names(headline))
 
 posvar0 <- comparison0[comparison0$bounds == "pos.var", ]
-posvar_admissible <- sum(posvar0$lavaan_admissible == 1 &
-                           posvar0$magmaan_admissible == 1, na.rm = TRUE)
-posvar_gap <- max(abs(posvar0$fmin_gap_magmaan_minus_2_lavaan), na.rm = TRUE)
+marker_posvar0 <- posvar0[posvar0$identification == "marker", ]
+marker_posvar_good <- sum(marker_posvar0$lavaan_converged == 1 &
+                            marker_posvar0$lavaan_admissible == 1 &
+                            marker_posvar0$magmaan_converged == 1 &
+                            marker_posvar0$magmaan_stationary == 1 &
+                            marker_posvar0$magmaan_admissible == 1,
+                          na.rm = TRUE)
+marker_posvar_gap <- max(
+  abs(marker_posvar0$fmin_gap_magmaan_minus_2_lavaan),
+  na.rm = TRUE
+)
+
+stdlv_posvar0 <- posvar0[posvar0$identification == "std.lv", ]
+stdlv_posvar_lavaan_converged <- sum(stdlv_posvar0$lavaan_converged == 1,
+                                     na.rm = TRUE)
+stdlv_posvar_gap <- max(abs(stdlv_posvar0$fmin_gap_magmaan_minus_2_lavaan),
+                        na.rm = TRUE)
 
 posvar_r0 <- engine_comparison[engine_comparison$bounds == "pos.var" &
                                  engine_comparison$lavaan_rstarts == 0L,
-                               c("case_key", "lavaan_fmin")]
+                               c("case_key", "identification", "lavaan_fmin")]
 posvar_r150 <- engine_comparison[engine_comparison$bounds == "pos.var" &
                                    engine_comparison$lavaan_rstarts == 150L,
-                                 c("case_key", "lavaan_fmin")]
-names(posvar_r0)[2L] <- "lavaan_fmin_r0"
-names(posvar_r150)[2L] <- "lavaan_fmin_r150"
-posvar_random <- merge(posvar_r0, posvar_r150, by = "case_key", all = TRUE)
+                                 c("case_key", "identification", "lavaan_fmin")]
+names(posvar_r0)[3L] <- "lavaan_fmin_r0"
+names(posvar_r150)[3L] <- "lavaan_fmin_r150"
+posvar_random <- merge(posvar_r0, posvar_r150,
+                       by = c("case_key", "identification"), all = TRUE)
 posvar_random$delta <- posvar_random$lavaan_fmin_r150 -
   posvar_random$lavaan_fmin_r0
-random_improved <- posvar_random$case_key[posvar_random$delta < -1e-6]
+random_improved <- paste(posvar_random$case_key,
+                         posvar_random$identification, sep = "/")
+random_improved <- random_improved[posvar_random$delta < -1e-6]
 random_improved <- if (length(random_improved)) {
   paste(random_improved, collapse = ", ")
 } else {
@@ -76,26 +92,59 @@ wide0 <- comparison0[comparison0$bounds == "wide", ]
 wide_admissible <- sum(wide0$lavaan_admissible == 1 &
                          wide0$magmaan_admissible == 1, na.rm = TRUE)
 
+stdlv_none0 <- comparison0[comparison0$bounds == "none" &
+                             comparison0$identification == "std.lv", ]
+stdlv_none_admissible <- sum(stdlv_none0$lavaan_admissible == 1 &
+                               stdlv_none0$magmaan_admissible == 1,
+                             na.rm = TRUE)
+
+stdlv_probe <- comparison0[comparison0$bounds == "none",
+                           c("case_key", "identification",
+                             "lavaan_admissible",
+                             "lavaan_min_ov_var", "lavaan_min_lv_var",
+                             "magmaan_admissible",
+                             "magmaan_min_ov_var", "magmaan_min_lv_var")]
+stdlv_probe[] <- Map(function(col, name) {
+  if (name %in% c("lavaan_admissible", "magmaan_admissible")) {
+    return(yes_no(col))
+  }
+  if (name %in% c("lavaan_min_ov_var", "lavaan_min_lv_var",
+                  "magmaan_min_ov_var", "magmaan_min_lv_var")) {
+    return(fmt(col, 5))
+  }
+  col
+}, stdlv_probe, names(stdlv_probe))
+
 finding_summary <- data.frame(
   check = c(
-    "pos.var admissibility",
-    "pos.var objective agreement",
+    "std.lv without bounds",
+    "marker pos.var",
+    "marker pos.var objective agreement",
+    "std.lv pos.var caveat",
     "pos.var random-start sensitivity",
     "wide admissibility"
   ),
   result = c(
-    paste0(posvar_admissible, "/", nrow(posvar0),
-           " regular-start cases admissible in both engines"),
+    paste0(stdlv_none_admissible, "/", nrow(stdlv_none0),
+           " std.lv regular-start cases admissible in both engines"),
+    paste0(marker_posvar_good, "/", nrow(marker_posvar0),
+           " regular-start marker cases converged, stationary, and admissible in both engines"),
     paste0("max |magmaan_fmin - 2 * lavaan_fmin| = ",
-           formatC(posvar_gap, digits = 4, format = "fg")),
+           formatC(marker_posvar_gap, digits = 4, format = "fg")),
+    paste0("lavaan regular-start convergence ",
+           stdlv_posvar_lavaan_converged, "/", nrow(stdlv_posvar0),
+           "; max finite fmin gap = ",
+           formatC(stdlv_posvar_gap, digits = 4, format = "fg")),
     paste0("lavaan rstarts=150 found a lower pos.var basin for: ",
            random_improved),
     paste0(wide_admissible, "/", nrow(wide0),
            " regular-start cases admissible in both engines")
   ),
   takeaway = c(
-    "The clean positive result is about nonnegative variance bounds.",
-    "Regular-start magmaan matches regular-start lavaan for pos.var.",
+    "The latent metric alone does not remove the Heywood behavior.",
+    "The clean positive result remains marker identification plus nonnegative variance bounds.",
+    "Regular-start marker magmaan matches regular-start marker lavaan for pos.var.",
+    "The bounded std.lv rows are diagnostic, not an engine-parity claim.",
     "Bounds do not remove the local-basin/start-value problem.",
     "Wide is a loose lavaan box, not a nonnegative-variance constraint."
   ),
@@ -112,6 +161,10 @@ definite.
 
 This experiment asks whether variance box constraints turn those cases into
 admissible boundary optima.
+
+It now also asks a smaller identification question: without any bounds, does
+`std.lv` merely remove latent-variance Heywoods by fixing factor variances, or
+does the changed metric produce an admissible solution?
 
 ## Short Answer
 
@@ -140,6 +193,12 @@ a deliberately loose box and can still allow negative variances. Also, lavaan's
 objective than the regular start, bounds helped admissibility but did not solve
 the start-value problem.
 
+The `std.lv` rows answer a different question. They change the latent metric,
+not the feasible set for residual variances. A successful `std.lv` row without
+bounds would therefore be evidence that the marker metric was part of the
+numerical problem. A failed `std.lv` row, especially one with negative observed
+variances, says the Heywood behavior is not merely a latent-scale artifact.
+
 What it does *not* say: bounds should become a statistical default, random
 starts are unnecessary, or ordinary interior standard errors are automatically
 valid at a boundary solution.
@@ -156,18 +215,33 @@ diagonals get lower bound zero. `fmin_gap_magmaan_minus_2_lavaan` should be
 near zero when magmaan and lavaan reached the same constrained objective value,
 because magmaan reports the full ML discrepancy and lavaan reports half.
 
+## std.lv Without Bounds
+
+```{r}
+knitr::kable(stdlv_probe, row.names = FALSE)
+```
+
+Under `std.lv`, latent variances are fixed to one. The useful read is therefore
+the observed-variance columns. If these are still negative without bounds, the
+metric swap did not solve the admissibility problem; it only removed one place
+where the problem can be expressed.
+
 ## Default Run Findings
 
 ```{r}
 knitr::kable(finding_summary, row.names = FALSE)
 ```
 
-The headline is therefore: `pos.var` is doing real work. It turns the default
-hard cases into admissible constrained fits and magmaan agrees with lavaan's
-regular-start objective. But there is still a basin problem in at least one
-case: lavaan random starts find a lower `pos.var` objective for
-`study3_msst:805`. So the result matters most as evidence for two separate
-engineering requirements: bounded optimization and better start portfolios.
+The marker-identification headline is therefore: `pos.var` is doing real work.
+It turns the default hard cases into admissible constrained fits and magmaan
+agrees with lavaan's regular-start objective. But there is still a basin
+problem in at least one case: lavaan random starts find a lower `pos.var`
+objective for `study3_msst:805/marker`. The `std.lv` rows add a different
+lesson: the metric swap alone does not remove the observed-variance Heywoods,
+and bounded `std.lv` regular-start lavaan is not stable enough here to treat as
+an objective-agreement check. So the result matters most as evidence for two
+separate engineering requirements: bounded optimization and better start
+portfolios.
 
 ## R Surface Status
 
@@ -183,6 +257,7 @@ magmaan's `fmin` is the full discrepancy, while lavaan reports half of it.
 
 ```{r}
 knitr::kable(lavaan_summary[order(lavaan_summary$case_key,
+                                  lavaan_summary$identification,
                                   lavaan_summary$bounds,
                                   lavaan_summary$rstarts), ],
              row.names = FALSE, digits = 4)
@@ -191,7 +266,8 @@ knitr::kable(lavaan_summary[order(lavaan_summary$case_key,
 ## Magmaan Bounded ML
 
 ```{r}
-knitr::kable(magmaan_summary[, c("case_key", "bounds", "converged",
+knitr::kable(magmaan_summary[, c("case_key", "identification", "bounds",
+                                 "converged",
                                  "stationary", "admissible_variances", "fmin",
                                  "grad_inf_norm",
                                  "active_variance_bound_count",
@@ -203,7 +279,7 @@ knitr::kable(magmaan_summary[, c("case_key", "bounds", "converged",
 
 ```{r}
 knitr::kable(engine_comparison[, c(
-  "case_key", "bounds", "lavaan_rstarts",
+  "case_key", "identification", "bounds", "lavaan_rstarts",
   "lavaan_converged", "lavaan_admissible",
   "magmaan_converged", "magmaan_stationary", "magmaan_admissible",
   "fmin_gap_magmaan_minus_2_lavaan"
