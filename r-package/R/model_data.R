@@ -1058,6 +1058,24 @@ fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
               optimizer = optimizer, control = control, bounds = b)
 }
 
+frontier_fit_ml_ridge_continuation <- function(
+    model, data, optimizer = "nlopt-lbfgs", control = NULL, bounds = NULL,
+    alphas = NULL, target = c("diagonal", "scaled_identity"),
+    include_endpoint = TRUE, diagonal_floor = 1e-8,
+    missing = c("listwise", "error")) {
+  target <- match.arg(target)
+  missing <- match.arg(missing)
+  b <- bounds_arg(bounds, model, data, "frontier_fit_ml_ridge_continuation")
+  if (is.data.frame(data)) data <- df_to_data(data, model, missing = missing)
+  frontier_fit_ml_ridge_continuation_impl(
+    partable_arg(model), sample_stats_arg(data),
+    optimizer = optimizer, control = control, bounds = b,
+    alphas = alphas, target = target,
+    include_endpoint = isTRUE(include_endpoint),
+    diagonal_floor = diagonal_floor
+  )
+}
+
 fit_fiml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL) {
   if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
   fit_fiml_impl(partable_arg(model), fiml_data_arg(data),

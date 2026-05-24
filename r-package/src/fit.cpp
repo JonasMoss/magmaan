@@ -30,6 +30,7 @@
 #include "magmaan/model/auto_identification.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/fiml.hpp"
+#include "magmaan/estimate/ml_continuation.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/estimate/gmm/structured_gamma_weight.hpp"
 #include "magmaan/measures/fit_measures.hpp"
@@ -199,6 +200,98 @@ Rcpp::List vector_blocks_to_r(const std::vector<Eigen::VectorXd>& blocks,
     out[static_cast<R_xlen_t>(b)] = v;
   }
   return out;
+}
+
+const char* optim_status_to_r(magmaan::optim::OptimStatus status) {
+  using magmaan::optim::OptimStatus;
+  return status == OptimStatus::Converged           ? "converged"
+       : status == OptimStatus::LineSearchSalvaged ? "line_search_salvaged"
+       : status == OptimStatus::SingularConvergence ? "singular_convergence"
+                                                    : "unknown";
+}
+
+const char* continuation_target_to_r(
+    magmaan::estimate::frontier::MlContinuationTarget target) {
+  using Target = magmaan::estimate::frontier::MlContinuationTarget;
+  return target == Target::Diagonal ? "diagonal" : "scaled_identity";
+}
+
+magmaan::estimate::frontier::MlContinuationTarget
+continuation_target_from_string(const std::string& target) {
+  std::string key = target;
+  for (char& ch : key) {
+    if (ch == '-') ch = '_';
+    else ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  }
+  using Target = magmaan::estimate::frontier::MlContinuationTarget;
+  if (key.empty() || key == "diagonal" || key == "diag") {
+    return Target::Diagonal;
+  }
+  if (key == "scaled_identity" || key == "identity" || key == "scale_identity") {
+    return Target::ScaledIdentity;
+  }
+  Rcpp::stop("magmaan: continuation target must be 'diagonal' or "
+             "'scaled_identity' (got '%s')", target.c_str());
+}
+
+Rcpp::List continuation_to_r(
+    const magmaan::estimate::frontier::MlRidgeContinuationResult& result,
+    magmaan::estimate::frontier::MlContinuationTarget target) {
+  const R_xlen_t n = static_cast<R_xlen_t>(result.steps.size());
+  Rcpp::IntegerVector step(n), iterations(n), f_evals(n), g_evals(n);
+  Rcpp::NumericVector alpha(n), min_ev(n), max_ev(n), condition(n), fmin(n),
+      grad_norm(n);
+  Rcpp::LogicalVector converged(n), sigma_pd_all(n);
+  Rcpp::CharacterVector optimizer_status(n);
+
+  Eigen::Index npar = 0;
+  if (!result.steps.empty()) npar = result.steps.front().estimates.theta.size();
+  Eigen::MatrixXd theta_path(n, npar);
+
+  for (R_xlen_t i = 0; i < n; ++i) {
+    const auto& s = result.steps[static_cast<std::size_t>(i)];
+    step[i] = static_cast<int>(i + 1);
+    alpha[i] = s.alpha;
+    min_ev[i] = s.min_sample_eigen;
+    max_ev[i] = s.max_sample_eigen;
+    condition[i] = s.sample_condition;
+    fmin[i] = s.estimates.fmin;
+    iterations[i] = s.estimates.iterations;
+    f_evals[i] = s.estimates.f_evals;
+    g_evals[i] = s.estimates.g_evals;
+    grad_norm[i] = s.estimates.grad_inf_norm;
+    converged[i] =
+        s.estimates.optimizer_status == magmaan::optim::OptimStatus::Converged;
+    sigma_pd_all[i] = s.estimates.diagnostics.sigma_pd_all;
+    optimizer_status[i] = optim_status_to_r(s.estimates.optimizer_status);
+    if (s.estimates.theta.size() == npar) {
+      theta_path.row(i) = s.estimates.theta.transpose();
+    }
+  }
+
+  Rcpp::DataFrame path = Rcpp::DataFrame::create(
+      Rcpp::_["step"] = step,
+      Rcpp::_["alpha"] = alpha,
+      Rcpp::_["min_sample_eigen"] = min_ev,
+      Rcpp::_["max_sample_eigen"] = max_ev,
+      Rcpp::_["sample_condition"] = condition,
+      Rcpp::_["converged"] = converged,
+      Rcpp::_["optimizer_status"] = optimizer_status,
+      Rcpp::_["fmin"] = fmin,
+      Rcpp::_["grad_norm"] = grad_norm,
+      Rcpp::_["iterations"] = iterations,
+      Rcpp::_["f_evals"] = f_evals,
+      Rcpp::_["g_evals"] = g_evals,
+      Rcpp::_["sigma_pd_all"] = sigma_pd_all,
+      Rcpp::_["stringsAsFactors"] = false);
+
+  return Rcpp::List::create(
+      Rcpp::_["target"] = continuation_target_to_r(target),
+      Rcpp::_["path"] = path,
+      Rcpp::_["theta"] = Rcpp::wrap(theta_path),
+      Rcpp::_["total_iterations"] = result.total_iterations,
+      Rcpp::_["total_f_evals"] = result.total_f_evals,
+      Rcpp::_["total_g_evals"] = result.total_g_evals);
 }
 
 std::vector<std::string>
@@ -1324,6 +1417,53 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "ML");
+}
+
+// frontier_fit_ml_ridge_continuation() — complete-data ML through a covariance
+// continuation path, warm-starting each stage from the previous fit.
+//
+// [[Rcpp::export]]
+Rcpp::List frontier_fit_ml_ridge_continuation_impl(
+    SEXP partable, Rcpp::List sample_stats,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue,
+    Rcpp::Nullable<Rcpp::NumericVector> alphas = R_NilValue,
+    std::string target = "diagonal",
+    bool include_endpoint = true,
+    double diagonal_floor = 1e-8) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "frontier_fit_ml_ridge_continuation");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
+                                  std::move(parsed.names), sample_stats);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
+
+  magmaan::estimate::frontier::MlRidgeContinuationOptions cont;
+  if (alphas.isNotNull()) {
+    Rcpp::NumericVector av(alphas.get());
+    cont.alphas.clear();
+    cont.alphas.reserve(static_cast<std::size_t>(av.size()));
+    for (R_xlen_t i = 0; i < av.size(); ++i) cont.alphas.push_back(av[i]);
+  }
+  cont.target = continuation_target_from_string(target);
+  cont.include_endpoint = include_endpoint;
+  cont.diagonal_floor = diagonal_floor;
+
+  auto fit_or = magmaan::estimate::frontier::fit_ml_ridge_continuation(
+      ctx.pt, ctx.rep, ctx.samp, x0, bounds_from_nullable(bounds), backend,
+      optim_opts_from(control), cont);
+  if (!fit_or.has_value()) stop_fit(fit_or.error());
+
+  magmaan::estimate::frontier::MlRidgeContinuationResult fit =
+      std::move(*fit_or);
+  Ctx final_ctx = ctx;
+  final_ctx.samp = fit.final_sample_stats;
+  Rcpp::List out = fit_result(final_ctx, fit.final, &starts, "ML");
+  out["frontier_method"] = "ml_ridge_continuation";
+  out["continuation"] = continuation_to_r(fit, cont.target);
+  return out;
 }
 
 // fcsem_model_spec() — build the native, non-folded FC-SEM partable directly

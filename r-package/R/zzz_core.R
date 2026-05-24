@@ -254,7 +254,8 @@ magmaan_core <- local({
       "frontier_fcsem_standardized_rows",
       "frontier_is_std_lv_admissible",
       "frontier_backconvert_std_lv_to_marker",
-      "frontier_fit_ml_auto_identification"
+      "frontier_fit_ml_auto_identification",
+      "frontier_fit_ml_ridge_continuation"
     ),
     helpers = c(
       "df_to_data",
@@ -321,6 +322,7 @@ magmaan_core <- local({
       "fit_wls_snlls_impl",
       "fcsem_model_spec_impl",
       "fit_ml_fcsem_impl",
+      "frontier_fit_ml_ridge_continuation_impl",
       "fcsem_standard_errors_impl",
       "fcsem_fit_measures_impl",
       "fcsem_standardized_rows_impl",
