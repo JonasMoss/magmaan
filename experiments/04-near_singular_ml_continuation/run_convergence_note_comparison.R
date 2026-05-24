@@ -132,6 +132,19 @@ fit_one <- function(method, spec, dat, optimizer, control, alphas) {
   list(fit = fit, elapsed = elapsed, warning = paste(unique(warnings), collapse = " | "))
 }
 
+audit_field <- function(fit, name, default = NA) {
+  if (is.null(fit$audit) || is.null(fit$audit[[name]])) return(default)
+  fit$audit[[name]]
+}
+
+audit_converged <- function(fit) {
+  stationary <- audit_field(fit, "stationary", NA)
+  if (length(stationary) == 1L && !is.na(stationary)) {
+    return(isTRUE(stationary))
+  }
+  isTRUE(fit$converged)
+}
+
 failure_stage <- function(error) {
   hit <- regexpr("stage alpha=[0-9.eE+-]+", error)
   if (hit[[1L]] < 0L) return(NA_real_)
@@ -157,9 +170,16 @@ fit_row <- function(design, rep, seed, sim, method, spec, dat, optimizer,
     sample_condition = sample_diag[["condition"]],
     ok = !inherits(fit, "try-error"),
     converged = FALSE,
+    optimizer_converged = FALSE,
     optimizer_status = NA_character_,
     fmin = NA_real_,
     grad_norm = NA_real_,
+    audit_stationary = NA,
+    audit_grad_inf_norm = NA_real_,
+    audit_stationarity_rhs = NA_real_,
+    audit_f_consistent = NA,
+    audit_f_finite = NA,
+    audit_advisory_status = NA_character_,
     iterations = NA_integer_,
     f_evals = NA_integer_,
     g_evals = NA_integer_,
@@ -176,10 +196,17 @@ fit_row <- function(design, rep, seed, sim, method, spec, dat, optimizer,
   )
   if (inherits(fit, "try-error")) return(base)
 
-  base$converged <- isTRUE(fit$converged)
+  base$converged <- audit_converged(fit)
+  base$optimizer_converged <- isTRUE(fit$converged)
   base$optimizer_status <- fit$optimizer_status %||% NA_character_
   base$fmin <- fit$fmin %||% NA_real_
   base$grad_norm <- fit$grad_norm %||% NA_real_
+  base$audit_stationary <- audit_field(fit, "stationary", NA)
+  base$audit_grad_inf_norm <- audit_field(fit, "grad_inf_norm", NA_real_)
+  base$audit_stationarity_rhs <- audit_field(fit, "stationarity_rhs", NA_real_)
+  base$audit_f_consistent <- audit_field(fit, "f_consistent", NA)
+  base$audit_f_finite <- audit_field(fit, "f_finite", NA)
+  base$audit_advisory_status <- audit_field(fit, "advisory_status", NA_character_)
   base$iterations <- fit$iterations %||% NA_integer_
   base$f_evals <- fit$f_evals %||% NA_integer_
   base$g_evals <- fit$g_evals %||% NA_integer_
@@ -204,12 +231,19 @@ summarize_results <- function(rows) {
       attempts = nrow(x),
       ok = sum(x$ok, na.rm = TRUE),
       converged = sum(x$converged, na.rm = TRUE),
+      optimizer_converged = sum(x$optimizer_converged, na.rm = TRUE),
       ok_rate = mean(x$ok, na.rm = TRUE),
       converged_rate = mean(x$converged, na.rm = TRUE),
+      optimizer_converged_rate = mean(x$optimizer_converged, na.rm = TRUE),
       line_search_failures = sum(grepl("LineSearchFailed", x$error, fixed = TRUE)),
+      line_search_salvaged = sum(x$optimizer_status == "line_search_salvaged",
+                                 na.rm = TRUE),
       median_total_f_evals = stats::median(x$total_f_evals, na.rm = TRUE),
       median_elapsed_sec = stats::median(x$elapsed_sec, na.rm = TRUE),
-      median_grad_norm = stats::median(x$grad_norm, na.rm = TRUE),
+      median_audit_grad_inf_norm = stats::median(
+        x$audit_grad_inf_norm, na.rm = TRUE),
+      median_audit_stationarity_rhs = stats::median(
+        x$audit_stationarity_rhs, na.rm = TRUE),
       stringsAsFactors = FALSE
     )
   })

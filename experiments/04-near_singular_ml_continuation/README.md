@@ -65,6 +65,10 @@ Generated files live under `results/` and are ignored by git:
 The comparison is research tooling, not a default recommendation. Continuation
 spends more optimizer calls than a single ML fit, so use `total_iterations`,
 `total_f_evals`, and `total_g_evals` when comparing cost.
+The `converged` columns in the generated CSVs use magmaan's terminal audit,
+not the raw backend stop code: the final point must satisfy the lavaan-style
+projected-gradient check (`||Pg||_inf <= 0.001` by default). The raw optimizer
+verdict is retained separately as `optimizer_converged` / `optimizer_status`.
 
 The runner defaults to `optimizer = "port"` because the trust-region backend is
 stable enough to make the path diagnostics visible. Passing

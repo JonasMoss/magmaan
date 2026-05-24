@@ -32,10 +32,15 @@ is a hot-started chain of multiple fits.
 `ridge_continuation` is the hot-started sequence above.
 
 `attempts` is the number of attempted fits. `ok` means the wrapper returned a
-fit object instead of an error. `converged` means the optimizer reported
-convergence. `*_rate` is the corresponding proportion. `line_search_failures`
-counts trapped L-BFGS line-search errors. `median_total_f_evals` is the median
-number of objective evaluations, counting all stages for continuation.
+fit object instead of an error. `converged` means the terminal audit accepted
+the final point as stationary, using magmaan's lavaan-style default
+`||projected gradient||_inf <= 0.001`. `optimizer_converged` is narrower: it
+means the backend itself reported a clean stop. A line-search salvage can fail
+that optimizer flag while still passing the audit. `line_search_failures`
+counts trapped hard L-BFGS line-search errors. `line_search_salvaged` counts
+non-clean backend stops whose returned point passed the audit.
+`median_total_f_evals` is the median number of objective evaluations, counting
+all stages for continuation.
 
 The paired table is often the most interpretable one. `baseline_only` means the
 direct fit converged and continuation did not. `continuation_only` means
@@ -61,7 +66,8 @@ summary
 ```{r}
 fits[order(fits$replicate, fits$method),
      c("replicate", "method", "sample_min_eigen", "sample_condition",
-       "ok", "converged", "optimizer_status", "fmin", "grad_norm",
+       "ok", "converged", "optimizer_converged", "optimizer_status",
+       "fmin", "audit_grad_inf_norm", "audit_stationarity_rhs",
        "total_f_evals", "elapsed_sec", "error")]
 ```
 
@@ -102,7 +108,7 @@ if (exists("cn_summary") && exists("cn_paired")) {
     " of replicates across designs. The continuation path converged in ",
     pct(min(continuation$converged_rate)), " to ",
     pct(max(continuation$converged_rate)),
-    ". Paired rescues (`continuation_only`) were ",
+    " by the terminal-audit criterion. Paired rescues (`continuation_only`) were ",
     pct(min(cn_paired$continuation_only)), " to ",
     pct(max(cn_paired$continuation_only)),
     ", while paired losses (`baseline_only`) were ",
@@ -117,8 +123,10 @@ if (exists("cn_summary") && exists("cn_paired")) {
 ## Current Takeaway
 
 On the convergence-note designs, this first continuation path is not a
-recommendation yet. It can rescue a small number of direct L-BFGS failures, but
-it more often introduces a line-search failure at one of the intermediate
-stages. The final objective values are essentially the same when both methods
-converge, so the current issue is the stability of the path, not a different
-endpoint.
+recommendation yet. The audit-based table is stricter than the raw optimizer
+table: several direct L-BFGS fits that report a clean backend stop still fail
+the lavaan-style gradient check. Continuation rescues a few of those audited
+failures, but it still loses more paired replicates than it rescues and spends
+more objective evaluations. The final objective values are essentially the same
+when both methods pass the audit, so the current issue is path stability and
+terminal stationarity, not a different endpoint.
