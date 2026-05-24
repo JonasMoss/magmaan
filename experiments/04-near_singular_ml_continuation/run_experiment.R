@@ -40,6 +40,7 @@ parse_args <- function(args) {
     seed = 20260524L,
     optimizer = "port",
     max_iter = 1000L,
+    target = "diagonal",
     alphas = c(0.50, 0.20, 0.10, 0.05, 0.01)
   )
   i <- 1L
@@ -51,7 +52,8 @@ parse_args <- function(args) {
         "Usage: Rscript run_experiment.R [--reps 50] [--n 8] [--p 6] ",
         "[--loading 0.995] [--residual 0.01] ",
         "[--alphas 0.5,0.2,0.1,0.05,0.01] ",
-        "[--optimizer port] [--max-iter 1000] [--seed 20260524]\n",
+        "[--target diagonal] [--optimizer port] [--max-iter 1000] ",
+        "[--seed 20260524]\n",
         sep = ""
       )
       quit(save = "no", status = 0L)
@@ -74,6 +76,7 @@ parse_args <- function(args) {
     else if (arg == "--residual") out$residual <- as.numeric(need_value())
     else if (arg == "--seed") out$seed <- as.integer(need_value())
     else if (arg == "--optimizer") out$optimizer <- need_value()
+    else if (arg == "--target") out$target <- need_value()
     else if (arg == "--max-iter") out$max_iter <- as.integer(need_value())
     else if (arg == "--alphas") out$alphas <- parse_csv_numeric(need_value())
     else stop("unknown argument: ", arg, call. = FALSE)
@@ -91,6 +94,10 @@ parse_args <- function(args) {
   }
   if (!length(out$alphas) || anyNA(out$alphas)) {
     stop("alphas must be a non-empty numeric CSV", call. = FALSE)
+  }
+  if (!out$target %in% c("diagonal", "scaled_identity", "identity")) {
+    stop("target must be one of diagonal, scaled_identity, or identity",
+         call. = FALSE)
   }
   out
 }
@@ -116,7 +123,7 @@ simulate_case <- function(n, p, loading, residual, seed) {
   as.data.frame(X)
 }
 
-fit_one <- function(method, spec, dat, optimizer, control, alphas) {
+fit_one <- function(method, spec, dat, optimizer, control, alphas, target) {
   warnings <- character()
   started <- proc.time()[["elapsed"]]
   fit <- withCallingHandlers(
@@ -127,7 +134,7 @@ fit_one <- function(method, spec, dat, optimizer, control, alphas) {
       } else {
         magmaan::magmaan_core$frontier_fit_ml_ridge_continuation(
           spec, dat, optimizer = optimizer, control = control,
-          alphas = alphas)
+          alphas = alphas, target = target)
       },
       silent = TRUE
     ),
@@ -154,13 +161,14 @@ audit_converged <- function(fit) {
 }
 
 fit_row <- function(rep, seed, method, spec, dat, optimizer, control, alphas,
-                    sample_diag) {
-  got <- fit_one(method, spec, dat, optimizer, control, alphas)
+                    target, sample_diag) {
+  got <- fit_one(method, spec, dat, optimizer, control, alphas, target)
   fit <- got$fit
   base <- data.frame(
     replicate = rep,
     seed = seed,
     method = method,
+    target = if (identical(method, "baseline_ml")) NA_character_ else target,
     n = dat$nobs[[1L]],
     p = length(dat$ov_names[[1L]]),
     sample_min_eigen = sample_diag[["min"]],
@@ -267,10 +275,11 @@ main <- function() {
     dat <- magmaan::df_to_data(df, spec)
     sample_diag <- safe_condition(dat$S[[1L]])
     rows[[pos]] <- fit_row(r, seed, "baseline_ml", spec, dat, args$optimizer,
-                           control, args$alphas, sample_diag)
+                           control, args$alphas, args$target, sample_diag)
     pos <- pos + 1L
     rows[[pos]] <- fit_row(r, seed, "ridge_continuation", spec, dat,
-                           args$optimizer, control, args$alphas, sample_diag)
+                           args$optimizer, control, args$alphas, args$target,
+                           sample_diag)
     pos <- pos + 1L
   }
 

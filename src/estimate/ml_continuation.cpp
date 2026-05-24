@@ -64,6 +64,9 @@ target_matrix(const Eigen::MatrixXd& S, MlContinuationTarget target,
   if (target == MlContinuationTarget::Diagonal) {
     return diag.asDiagonal();
   }
+  if (target == MlContinuationTarget::Identity) {
+    return Eigen::MatrixXd::Identity(p, p);
+  }
 
   double scale = diag.mean();
   if (!std::isfinite(scale) || scale < diagonal_floor) {

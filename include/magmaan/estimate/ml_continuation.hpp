@@ -19,6 +19,7 @@ namespace magmaan::estimate::frontier {
 enum class MlContinuationTarget : std::uint8_t {
   Diagonal,
   ScaledIdentity,
+  Identity,
 };
 
 struct MlRidgeContinuationOptions {
@@ -49,10 +50,10 @@ struct MlRidgeContinuationResult {
 //
 //   S_alpha = (1 - alpha) S + alpha T(S)
 //
-// where T(S) is either diag(S) or a scale-matched identity matrix. Each stage
-// warm-starts from the previous stage's estimate; with the default options the
-// last stage is alpha = 0, so the returned `final` estimate is the ordinary ML
-// endpoint for the caller's original sample statistics.
+// where T(S) is diag(S), a scale-matched identity matrix, or the raw identity
+// matrix. Each stage warm-starts from the previous stage's estimate; with the
+// default options the last stage is alpha = 0, so the returned `final` estimate
+// is the ordinary ML endpoint for the caller's original sample statistics.
 fit_expected<MlRidgeContinuationResult>
 fit_ml_ridge_continuation(
     spec::LatentStructure pt, const model::MatrixRep& rep,

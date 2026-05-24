@@ -12,8 +12,8 @@ ordinary ML problems to blended covariance matrices,
 S_lambda = (1 - lambda) S + lambda T(S),
 ```
 
-where `T(S)` is the diagonal target in these runs. The wrapper calls the
-tuning parameter `alpha`, but it is the same object as `lambda` here.
+where `T(S)` is the chosen shrinkage target. The wrapper calls the tuning
+parameter `alpha`, but it is the same object as `lambda` here.
 
 The default sequence is:
 
@@ -25,6 +25,23 @@ The final `0.00` stage is appended automatically when `include_endpoint =
 TRUE`. That final stage is the original ML problem. Each stage is a full ML fit,
 and its parameter vector is used as the start value for the next stage, so this
 is a hot-started chain of multiple fits.
+
+The comparison grid now tries three targets:
+
+```text
+diagonal         T(S) = diag(S)
+scaled_identity  T(S) = mean(diag(S)) I
+identity         T(S) = I
+```
+
+and four fixed lambda profiles:
+
+```text
+legacy    0.50, 0.20, 0.10, 0.05, 0.01, 0
+light     0.10, 0.05, 0.02, 0.01, 0.005, 0
+endpoint  0.20, 0.10, 0.05, 0.025, 0.0125, 0.006, 0.003, 0.001, 0
+dense     0.50, 0.35, 0.25, 0.18, 0.13, 0.09, 0.06, 0.04, 0.025, 0.015, 0.008, 0
+```
 
 ## How To Read The Tables
 
@@ -86,13 +103,33 @@ if (!file.exists(cn_summary_path) || !file.exists(cn_paired_path)) {
 } else {
   cn_summary <- read.csv(cn_summary_path)
   cn_paired <- read.csv(cn_paired_path)
-  cn_summary
+  cn_summary[, c("design", "method", "lambda_profile", "target",
+                 "converged_rate", "optimizer_converged_rate",
+                 "line_search_failures", "line_search_salvaged",
+                 "median_total_f_evals", "median_audit_grad_inf_norm")]
 }
 ```
 
 ```{r}
 if (exists("cn_paired")) {
-  cn_paired
+  cn_paired[, c("design", "lambda_profile", "target", "both_converged",
+                "baseline_only", "continuation_only", "neither",
+                "median_fmin_diff_cont_minus_base")]
+}
+```
+
+```{r}
+if (exists("cn_summary")) {
+  cont <- cn_summary[cn_summary$method == "ridge_continuation", ]
+  top <- do.call(
+    rbind,
+    lapply(split(cont, cont$design), function(x) {
+      x[order(-x$converged_rate, x$median_total_f_evals), ][1L, ]
+    })
+  )
+  top[, c("design", "lambda_profile", "target", "converged_rate",
+          "line_search_failures", "median_total_f_evals",
+          "median_audit_grad_inf_norm")]
 }
 ```
 
@@ -100,15 +137,23 @@ if (exists("cn_paired")) {
 if (exists("cn_summary") && exists("cn_paired")) {
   baseline <- cn_summary[cn_summary$method == "baseline_ml", ]
   continuation <- cn_summary[cn_summary$method == "ridge_continuation", ]
+  best <- do.call(
+    rbind,
+    lapply(split(continuation, continuation$design), function(x) {
+      x[order(-x$converged_rate, x$median_total_f_evals), ][1L, ]
+    })
+  )
   pct <- function(x) paste0(round(100 * x), "%")
   cat(
     "In this run, direct ML converged in ",
     pct(min(baseline$converged_rate)), " to ",
     pct(max(baseline$converged_rate)),
-    " of replicates across designs. The continuation path converged in ",
-    pct(min(continuation$converged_rate)), " to ",
-    pct(max(continuation$converged_rate)),
-    " by the terminal-audit criterion. Paired rescues (`continuation_only`) were ",
+    " of replicates across designs. The best continuation profile per design ",
+    "converged in ",
+    pct(min(best$converged_rate)), " to ",
+    pct(max(best$converged_rate)),
+    " by the terminal-audit criterion. Across all continuation scenarios, ",
+    "paired rescues (`continuation_only`) were ",
     pct(min(cn_paired$continuation_only)), " to ",
     pct(max(cn_paired$continuation_only)),
     ", while paired losses (`baseline_only`) were ",

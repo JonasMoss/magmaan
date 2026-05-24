@@ -17,6 +17,7 @@ The R surface is exposed as
 `magmaan_core$frontier_fit_ml_ridge_continuation()`.
 The default path is `0.50, 0.20, 0.10, 0.05, 0.01, 0.00`; the last endpoint is
 appended by the C++/R wrapper when `include_endpoint = TRUE`.
+Available targets are `diagonal`, `scaled_identity`, and `identity`.
 
 ## Run
 
@@ -43,6 +44,14 @@ Convergence-note comparison:
 ```sh
 Rscript experiments/04-near_singular_ml_continuation/run_convergence_note_comparison.R
 ```
+
+By default, the convergence-note runner crosses targets
+`diagonal,scaled_identity,identity` with four lambda profiles:
+
+- `legacy`: `0.50,0.20,0.10,0.05,0.01,0`
+- `light`: `0.10,0.05,0.02,0.01,0.005,0`
+- `endpoint`: `0.20,0.10,0.05,0.025,0.0125,0.006,0.003,0.001,0`
+- `dense`: `0.50,0.35,0.25,0.18,0.13,0.09,0.06,0.04,0.025,0.015,0.008,0`
 
 Render the report:
 

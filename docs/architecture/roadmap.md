@@ -74,8 +74,8 @@ golden `parTable()` fixtures.
   returned iterate so soft optimizer failures can be classified by geometry.
 - A frontier complete-data ML covariance-continuation path fits
   `S_alpha = (1 - alpha) S + alpha T(S)` with `T(S)` either diagonal or
-  scaled identity, warm-starting each stage and ending at `alpha = 0` by
-  default. The C++ primitive is
+  identity-like (`mean(diag(S)) I` or raw `I`), warm-starting each stage and
+  ending at `alpha = 0` by default. The C++ primitive is
   `estimate::frontier::fit_ml_ridge_continuation()` and the R research surface
   is `magmaan_core$frontier_fit_ml_ridge_continuation()`.
 - Discrepancy-scale convention: magmaan's `fmin` is the full ML discrepancy
