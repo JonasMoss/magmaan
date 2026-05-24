@@ -16,7 +16,7 @@ read_result <- function(name) {
 }
 
 lavaan_bounds <- read_result("lavaan_bounds.csv")
-magmaan_unbounded <- read_result("magmaan_unbounded.csv")
+magmaan_bounds <- read_result("magmaan_bounds.csv")
 summary <- read_result("summary.csv")
 surface_gap <- read_result("surface_gap.csv")
 ```
@@ -37,9 +37,9 @@ admissible boundary optima.
 surface_gap
 ```
 
-At the time of this experiment, lavaan bounded ML is the reference probe. The
-magmaan C++ core accepts bounds for ML, but the R ML wrapper does not yet expose
-that path.
+The R surface now threads the named bound presets through complete-data ML, so
+the same cases can be inspected with lavaan and magmaan. Remember that
+magmaan's `fmin` is the full discrepancy, while lavaan reports half of it.
 
 ## Lavaan Bounded ML
 
@@ -47,12 +47,13 @@ that path.
 summary[order(summary$case_key, summary$bounds, summary$rstarts), ]
 ```
 
-## Magmaan Unbounded Baseline
+## Magmaan Bounded ML
 
 ```{r}
-magmaan_unbounded[, c("case_key", "converged", "fmin", "grad_inf_norm",
-                      "min_ov_var", "min_lv_var",
-                      "n_neg_ov_var", "n_neg_lv_var", "error")]
+magmaan_bounds[, c("case_key", "bounds", "converged", "fmin", "grad_inf_norm",
+                   "audit_stationary", "audit_status",
+                   "min_ov_var", "min_lv_var",
+                   "n_neg_ov_var", "n_neg_lv_var", "error")]
 ```
 
 ## Boundary Interpretation
@@ -60,4 +61,3 @@ magmaan_unbounded[, c("case_key", "converged", "fmin", "grad_inf_norm",
 For bounded fits, a large raw gradient is not automatically a failure. If a
 variance is active at its lower bound, the relevant diagnostic is a KKT
 condition for the constrained problem, not unconstrained stationarity.
-

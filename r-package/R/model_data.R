@@ -981,13 +981,81 @@ df_to_fcsem_data <- function(x, model, missing = c("listwise", "error"),
   out
 }
 
+bounds_sample_stats_arg <- function(model, data, caller) {
+  if (is.null(data)) {
+    stop(caller, "(): this bounds preset requires continuous sample statistics")
+  }
+  if (is.data.frame(data)) data <- df_to_data(data, model)
+  sample_stats_arg(data)
+}
+
+bounds_variance <- function(model) {
+  bounds_variance_impl(partable_arg(model))
+}
+
+bounds_pos_var <- bounds_variance
+
+bounds_standard <- function(model, data) {
+  if (missing(data)) stop("bounds_standard(): `data` is required")
+  bounds_standard_impl(partable_arg(model),
+                       bounds_sample_stats_arg(model, data, "bounds_standard"))
+}
+
+bounds_wide <- function(model, data) {
+  if (missing(data)) stop("bounds_wide(): `data` is required")
+  bounds_wide_impl(partable_arg(model),
+                   bounds_sample_stats_arg(model, data, "bounds_wide"))
+}
+
+bounds_loading <- function(model, data) {
+  if (missing(data)) stop("bounds_loading(): `data` is required")
+  bounds_loading_impl(partable_arg(model),
+                      bounds_sample_stats_arg(model, data, "bounds_loading"))
+}
+
+bounds_is_none <- function(bounds) {
+  if (is.null(bounds)) return(TRUE)
+  if (!is.character(bounds) || length(bounds) != 1L || is.na(bounds)) {
+    return(FALSE)
+  }
+  key <- trimws(tolower(bounds[[1L]]))
+  key <- gsub("_", "-", key, fixed = TRUE)
+  key %in% c("none", "no", "false", "unbounded")
+}
+
+bounds_arg <- function(bounds, model, data = NULL, caller = "fit") {
+  if (bounds_is_none(bounds)) return(NULL)
+  if (is.list(bounds)) {
+    if (is.null(bounds$lower) || is.null(bounds$upper)) {
+      stop(caller, "(): `bounds` list must contain `lower` and `upper`")
+    }
+    return(bounds)
+  }
+  if (!is.character(bounds) || length(bounds) != 1L || is.na(bounds)) {
+    stop(caller, "(): `bounds` must be NULL, a list(lower, upper), ",
+         "or one of 'pos.var', 'standard', 'wide', 'loading'")
+  }
+  key <- trimws(tolower(bounds[[1L]]))
+  key <- gsub("_", "-", key, fixed = TRUE)
+  if (key %in% c("none", "no", "false", "unbounded")) return(NULL)
+  if (key %in% c("pos.var", "pos-var", "variance", "variance-bounds")) {
+    return(bounds_variance(model))
+  }
+  if (key %in% c("standard")) return(bounds_standard(model, data))
+  if (key %in% c("wide", "default")) return(bounds_wide(model, data))
+  if (key %in% c("loading", "loadings")) return(bounds_loading(model, data))
+  stop(caller, "(): unsupported `bounds` preset '", bounds[[1L]], "'")
+}
+
 # Per-estimator entry points. Each takes an `optimizer = "nlopt-lbfgs"` (default)
 # string + a generic `control = list(...)` of solver tuning knobs (the union
 # of OptimOptions and Ceres extras; see the C++ `Backend` enum docstring for
 # the supported strings).
-fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL) {
+fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
+                   bounds = NULL) {
+  b <- bounds_arg(bounds, model, data, "fit_ml")
   fit_ml_impl(partable_arg(model), sample_stats_arg(data),
-              optimizer = optimizer, control = control)
+              optimizer = optimizer, control = control, bounds = b)
 }
 
 fit_fiml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL) {
@@ -998,20 +1066,23 @@ fit_fiml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL) {
 
 fit_uls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                     bounds = NULL) {
+  b <- bounds_arg(bounds, model, data, "fit_uls")
   fit_uls_impl(partable_arg(model), sample_stats_arg(data),
-               optimizer = optimizer, control = control, bounds = bounds)
+               optimizer = optimizer, control = control, bounds = b)
 }
 
 fit_gls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                     bounds = NULL) {
+  b <- bounds_arg(bounds, model, data, "fit_gls")
   fit_gls_impl(partable_arg(model), sample_stats_arg(data),
-               optimizer = optimizer, control = control, bounds = bounds)
+               optimizer = optimizer, control = control, bounds = b)
 }
 
 fit_wls <- function(model, data, W, optimizer = "nlopt-lbfgs", control = NULL,
                     bounds = NULL) {
+  b <- bounds_arg(bounds, model, data, "fit_wls")
   fit_wls_impl(partable_arg(model), sample_stats_arg(data), W = W,
-               optimizer = optimizer, control = control, bounds = bounds)
+               optimizer = optimizer, control = control, bounds = b)
 }
 
 fit_ml_fcsem <- function(model, data, missing = c("listwise", "error"),
@@ -1050,29 +1121,33 @@ fcsem_standardized_rows <- function(fit, vcov = NULL) {
 fit_dwls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                              control = NULL, bounds = NULL) {
   pt <- augment_ordinal_partable(model, data)
+  b <- bounds_arg(bounds, pt, caller = "fit_dwls_ordinal")
   fit_dwls_ordinal_impl(pt, data, optimizer = optimizer,
-                        control = control, bounds = bounds)
+                        control = control, bounds = b)
 }
 
 fit_wls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                             control = NULL, bounds = NULL) {
   pt <- augment_ordinal_partable(model, data)
+  b <- bounds_arg(bounds, pt, caller = "fit_wls_ordinal")
   fit_wls_ordinal_impl(pt, data, optimizer = optimizer,
-                       control = control, bounds = bounds)
+                       control = control, bounds = b)
 }
 
 fit_dwls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                                    control = NULL, bounds = NULL) {
   pt <- augment_mixed_ordinal_partable(model, data)
+  b <- bounds_arg(bounds, pt, caller = "fit_dwls_mixed_ordinal")
   fit_dwls_mixed_ordinal_impl(pt, data, optimizer = optimizer,
-                              control = control, bounds = bounds)
+                              control = control, bounds = b)
 }
 
 fit_wls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                                   control = NULL, bounds = NULL) {
   pt <- augment_mixed_ordinal_partable(model, data)
+  b <- bounds_arg(bounds, pt, caller = "fit_wls_mixed_ordinal")
   fit_wls_mixed_ordinal_impl(pt, data, optimizer = optimizer,
-                             control = control, bounds = bounds)
+                             control = control, bounds = b)
 }
 
 magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
@@ -1158,6 +1233,9 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
     inherits(data, "magmaan_mixed_ordinal_data")
 
   if (identical(estimator, "FIML")) {
+    if (!bounds_is_none(bounds)) {
+      stop("magmaan(): `bounds` are not currently supported for estimator = 'FIML'")
+    }
     if (is.data.frame(data)) data <- df_to_fiml_data(data, spec, group = group_var)
     fit <- fit_fiml(spec, data, optimizer = optimizer, control = control)
     return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
@@ -1204,7 +1282,7 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
   if (is.data.frame(data)) data <- df_to_data(data, spec, group = group_var, missing = missing)
   fit <- switch(estimator,
                 ML = fit_ml(spec, data, optimizer = optimizer,
-                            control = control),
+                            control = control, bounds = bounds),
                 ULS = fit_uls(spec, data, optimizer = optimizer,
                               control = control, bounds = bounds),
                 GLS = fit_gls(spec, data, optimizer = optimizer,
@@ -1308,23 +1386,26 @@ infer_robust_se_raw_fit <- function(fit, X, bread = "expected",
 
 fit_uls_snlls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                           bounds = NULL) {
+  b <- bounds_arg(bounds, model, data, "fit_uls_snlls")
   fit_uls_snlls_impl(partable_arg(model), sample_stats_arg(data),
                      optimizer = optimizer, control = control,
-                     bounds = bounds)
+                     bounds = b)
 }
 
 fit_gls_snlls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                           bounds = NULL) {
+  b <- bounds_arg(bounds, model, data, "fit_gls_snlls")
   fit_gls_snlls_impl(partable_arg(model), sample_stats_arg(data),
                      optimizer = optimizer, control = control,
-                     bounds = bounds)
+                     bounds = b)
 }
 
 fit_wls_snlls <- function(model, data, W, optimizer = "nlopt-lbfgs", control = NULL,
                           bounds = NULL) {
+  b <- bounds_arg(bounds, model, data, "fit_wls_snlls")
   fit_wls_snlls_impl(partable_arg(model), sample_stats_arg(data), W = W,
                      optimizer = optimizer, control = control,
-                     bounds = bounds)
+                     bounds = b)
 }
 
 # Phase 4 retired the `fit_*_ceres` family — callers now pass
