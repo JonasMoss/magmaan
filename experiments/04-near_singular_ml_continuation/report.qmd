@@ -165,13 +165,28 @@ if (exists("cn_summary") && exists("cn_paired")) {
 }
 ```
 
-## Current Takeaway
+## Conclusion
 
-On the convergence-note designs, this first continuation path is not a
-recommendation yet. The audit-based table is stricter than the raw optimizer
-table: several direct L-BFGS fits that report a clean backend stop still fail
-the lavaan-style gradient check. Continuation rescues a few of those audited
-failures, but it still loses more paired replicates than it rescues and spends
-more objective evaluations. The final objective values are essentially the same
-when both methods pass the audit, so the current issue is path stability and
-terminal stationarity, not a different endpoint.
+This experiment does not support covariance continuation as a default
+convergence aid for the current ML path. The idea is simple and attractive:
+solve a slightly regularized covariance problem, then hot-start ordinary ML
+from there. In these simulations, however, the extra stages mostly add more
+places for L-BFGS to fail.
+
+The most useful outcome is diagnostic. Using magmaan's terminal audit changes
+the story relative to raw optimizer return codes: some fits that look like
+clean optimizer stops are not stationary by the lavaan-style gradient check.
+So future convergence studies should continue reporting audit convergence, not
+only backend status.
+
+Among the continuation variants, lighter lambda paths were generally better
+than the original coarse path, and `scaled_identity` was the most consistent
+target. Raw identity was sometimes competitive, but not enough to change the
+overall conclusion. The best continuation variant still trailed direct ML on
+the convergence-note designs and required more objective evaluations.
+
+The practical decision is to close this branch of the experiment for now. Keep
+the code as frontier research tooling, but do not promote it as a recommended
+estimation strategy. More promising next directions are different starts,
+bounded or screened multi-start portfolios, and cost-normalized optimizer
+comparisons using the same terminal-audit criterion.
