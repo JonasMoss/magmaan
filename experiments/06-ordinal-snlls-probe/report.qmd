@@ -1,0 +1,176 @@
+---
+title: "Ordinal LS / SNLLS probe"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path)))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"),
+                              candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates, "fits.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+
+fits_path <- file.path(results_dir, "fits.csv")
+construction_path <- file.path(results_dir, "construction.csv")
+attempts_path <- file.path(results_dir, "attempts.csv")
+metadata_path <- file.path(results_dir, "metadata.csv")
+if (!file.exists(fits_path)) {
+  stop("Missing fits.csv. Run: Rscript run_experiment.R")
+}
+
+fits <- utils::read.csv(fits_path, check.names = FALSE,
+                        stringsAsFactors = FALSE)
+construction <- utils::read.csv(construction_path, check.names = FALSE,
+                                stringsAsFactors = FALSE)
+attempts <- utils::read.csv(attempts_path, check.names = FALSE,
+                            stringsAsFactors = FALSE)
+metadata <- utils::read.csv(metadata_path, check.names = FALSE,
+                            stringsAsFactors = FALSE)
+
+fmt_ms <- function(x) ifelse(is.na(x), "", sprintf("%.2f", x))
+fmt_num <- function(x) ifelse(is.na(x), "", sprintf("%.4g", x))
+fmt_diff <- function(x) ifelse(is.na(x), "", sprintf("%.2e", x))
+meta_value <- function(key) metadata$value[match(key, metadata$key)]
+```
+
+This experiment asks a narrow question: how much of the current ordinal
+least-squares cost is moment construction, how much is the fit, and what
+happens if we try to route ordinal data through ULS or SNLLS today?
+
+The important caveat is that **native ordinal SNLLS is not implemented in this
+codebase yet**. The SNLLS condition below is a proxy: it runs continuous ULS
+SNLLS on the polychoric correlation matrix and ignores thresholds. The ULS
+condition is also a proxy: identity weights are injected through the current
+DWLS weight slot. DWLS and WLS are the native ordinal estimators.
+
+## Run
+
+```{r}
+data.frame(
+  item = metadata$key,
+  value = metadata$value,
+  check.names = FALSE
+) |>
+  knitr::kable(row.names = FALSE)
+```
+
+## Cases
+
+The cases are checked-in repo fixtures: two synthetic ordinal CFA fixtures and
+the BFI ordinal parity fixture.
+
+```{r}
+case_table <- construction[, c("case_label", "source", "n_obs", "n_vars",
+                               "levels", "n_moments",
+                               "n_threshold_moments", "n_assoc_moments",
+                               "construct_ms_median")]
+names(case_table) <- c("Case", "Source", "n", "Observed vars", "Levels",
+                       "Moment dim", "Thresholds", "Associations",
+                       "Construction ms")
+case_table$`Construction ms` <- fmt_ms(case_table$`Construction ms`)
+knitr::kable(case_table, row.names = FALSE)
+```
+
+Construction here is the full current ordinal data build:
+`data_ordinal_stats_from_df()` estimates thresholds and polychorics, builds
+`NACOV`, and materializes both `W_dwls` and `W_wls`. This experiment therefore
+separates construction from fitting, but it does not isolate DWLS-only weight
+construction from WLS-only weight construction.
+
+## Fit Timings
+
+```{r}
+fit_table <- fits[, c("case_label", "condition", "status", "fit_ms_median",
+                      "whole_ms_median", "iterations", "optimizer_status",
+                      "grad_norm", "fmin", "max_abs_theta_diff")]
+names(fit_table) <- c("Case", "Condition", "Status", "Fit ms",
+                      "Whole ms", "Iterations", "Optimizer", "Grad norm",
+                      "fmin", "Max |theta diff|")
+fit_table$`Fit ms` <- fmt_ms(fit_table$`Fit ms`)
+fit_table$`Whole ms` <- fmt_ms(fit_table$`Whole ms`)
+fit_table$`Grad norm` <- fmt_num(fit_table$`Grad norm`)
+fit_table$fmin <- fmt_num(fit_table$fmin)
+fit_table$`Max |theta diff|` <- fmt_diff(fit_table$`Max |theta diff|`)
+knitr::kable(fit_table, row.names = FALSE)
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 4
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  library(ggplot2)
+  ok <- fits[fits$status == "ok", ]
+  ok$condition <- factor(
+    ok$condition,
+    levels = c("DWLS", "WLS", "ULS_identity_proxy",
+               "ULS_SNLLS_polychoric_proxy")
+  )
+  ggplot(ok, aes(condition, fit_ms_median, fill = condition)) +
+    geom_col(width = 0.62, show.legend = FALSE) +
+    facet_wrap(~ case_label, scales = "free_y") +
+    labs(x = NULL, y = "Median fit-only milliseconds",
+         title = "Fit-only cost after ordinal moments are already built") +
+    theme_minimal(base_size = 12) +
+    theme(axis.text.x = element_text(angle = 30, hjust = 1))
+} else {
+  cat("ggplot2 not installed; skipping figure.")
+}
+```
+
+## Unsupported Attempts
+
+```{r}
+attempt_table <- attempts[, c("case_label", "condition", "status", "message")]
+names(attempt_table) <- c("Case", "Attempt", "Status", "Message")
+knitr::kable(attempt_table, row.names = FALSE)
+```
+
+These failures are expected with the current surface. `magmaan(...,
+estimator = "ULS", ordered = ...)` does not dispatch to an ordinal ULS
+objective, and `fit_uls_snlls()` accepts continuous sample statistics rather
+than ordinal threshold-plus-polychoric moment objects.
+
+## Reading
+
+The current ordinal path is a bounded least-squares problem over thresholds
+and polychoric correlations. DWLS and WLS differ only in the weight selected
+from the already-built ordinal statistics. The identity-weight ULS proxy uses
+the same residual stack as DWLS/WLS, so it is a useful fit-loop comparison, but
+it is not a public estimator contract.
+
+The polychoric SNLLS proxy is even narrower: it answers "what if we fit the
+polychoric correlation matrix as if it were continuous covariance input?"
+That can be a useful performance smoke test for the separable continuous path,
+but it is not ordinal SNLLS because it drops threshold residuals and does not
+profile the ordinal parameter blocks.
+
+## What Must Change
+
+Native ordinal ULS would need one small API/enum extension: add an identity
+weight option to the ordinal weight kind, expose `fit_uls_ordinal()` on the
+R side, and document chi-square semantics for the identity-weight
+threshold-plus-polychoric objective.
+
+Native ordinal SNLLS is a larger design item. The implementation needs an
+ordinal residual/Jacobian path that includes thresholds, classifies threshold
+rows outside the current matrix-cell parameter-location scheme, proves which
+latent-response covariance pieces remain conditionally linear, and exposes a
+profiled bounded ordinal fit entry guarded against the existing DWLS/WLS
+fixtures.
+
+## Reproduce
+
+```sh
+Rscript experiments/06-ordinal-snlls-probe/run_experiment.R
+(cd experiments/06-ordinal-snlls-probe && quarto render report.qmd)
+```
