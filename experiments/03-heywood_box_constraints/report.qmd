@@ -1,0 +1,63 @@
+---
+title: "Heywood Box-Constraint Experiment"
+format:
+  html:
+    toc: true
+---
+
+```{r}
+#| echo: false
+read_result <- function(name) {
+  path <- file.path("results", name)
+  if (!file.exists(path)) {
+    stop("Missing result file: ", path, ". Run run_experiment.R first.")
+  }
+  read.csv(path, stringsAsFactors = FALSE)
+}
+
+lavaan_bounds <- read_result("lavaan_bounds.csv")
+magmaan_unbounded <- read_result("magmaan_unbounded.csv")
+summary <- read_result("summary.csv")
+surface_gap <- read_result("surface_gap.csv")
+```
+
+## Question
+
+The random-start cartography found stationary ML solutions for the hard Study 3
+MSST cases, but those solutions were usually inadmissible: negative observed or
+latent variance parameters even when the implied covariance matrix was positive
+definite.
+
+This experiment asks whether variance box constraints turn those cases into
+admissible boundary optima.
+
+## R Surface Status
+
+```{r}
+surface_gap
+```
+
+At the time of this experiment, lavaan bounded ML is the reference probe. The
+magmaan C++ core accepts bounds for ML, but the R ML wrapper does not yet expose
+that path.
+
+## Lavaan Bounded ML
+
+```{r}
+summary[order(summary$case_key, summary$bounds, summary$rstarts), ]
+```
+
+## Magmaan Unbounded Baseline
+
+```{r}
+magmaan_unbounded[, c("case_key", "converged", "fmin", "grad_inf_norm",
+                      "min_ov_var", "min_lv_var",
+                      "n_neg_ov_var", "n_neg_lv_var", "error")]
+```
+
+## Boundary Interpretation
+
+For bounded fits, a large raw gradient is not automatically a failure. If a
+variance is active at its lower bound, the relevant diagnostic is a KKT
+condition for the constrained problem, not unconstrained stationarity.
+
