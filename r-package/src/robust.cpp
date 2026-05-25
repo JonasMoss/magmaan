@@ -29,7 +29,8 @@ magmaan::robust::Information info_from_string(const std::string& s) {
 magmaan::robust::WeightMoments moments_from_string(const std::string& s) {
   if (s == "structured")   return magmaan::robust::WeightMoments::Structured;
   if (s == "unstructured") return magmaan::robust::WeightMoments::Unstructured;
-  Rcpp::stop("magmaan: `moments` must be 'structured' or 'unstructured' (got '%s')", s);
+  if (s == "pairwise")     return magmaan::robust::WeightMoments::Pairwise;
+  Rcpp::stop("magmaan: `moments` must be 'structured', 'unstructured', or 'pairwise' (got '%s')", s);
 }
 magmaan::robust::ScoreCovariance cov_from_string(const std::string& s) {
   if (s == "model_implied")   return magmaan::robust::ScoreCovariance::ModelImplied;
@@ -38,7 +39,12 @@ magmaan::robust::ScoreCovariance cov_from_string(const std::string& s) {
   Rcpp::stop("magmaan: `cov` must be 'model_implied', 'empirical', or 'browne_unbiased' (got '%s')", s);
 }
 const char* moments_to_string(magmaan::robust::WeightMoments m) {
-  return m == magmaan::robust::WeightMoments::Structured ? "structured" : "unstructured";
+  switch (m) {
+    case magmaan::robust::WeightMoments::Structured:   return "structured";
+    case magmaan::robust::WeightMoments::Unstructured: return "unstructured";
+    case magmaan::robust::WeightMoments::Pairwise:     return "pairwise";
+  }
+  return "structured";
 }
 const char* ufactor_kind_to_string(magmaan::robust::UFactor::Kind k) {
   return k == magmaan::robust::UFactor::Kind::ProjectionExpected ? "ProjectionExpected" : "ObservedHessian";
@@ -296,6 +302,46 @@ Rcpp::List infer_build_u_factor_parts(SEXP partable, Rcpp::List sample_stats,
 Rcpp::NumericMatrix infer_reduced_gamma_nt(Rcpp::List uf) {
   magmaan::robust::UFactor u = ufactor_from_list(uf);
   auto m_or = magmaan::robust::reduced_gamma_nt(u);
+  if (!m_or.has_value()) stop_post(m_or.error());
+  return Rcpp::wrap(*m_or);
+}
+
+// infer_build_u_factor_pairwise() — sibling of infer_build_u_factor for the
+// WeightMoments::Pairwise bread. `X` is the raw data (matrix or list of
+// per-group matrices); `mask` is the optional logical mask. The fit's
+// sample_stats (Ŝ_pw, mean, nobs) plus θ̂ come from `fit`. Returns the
+// same transparent UFactor list as infer_build_u_factor().
+//
+// [[Rcpp::export]]
+Rcpp::List infer_build_u_factor_pairwise(Rcpp::List fit, SEXP X,
+                                         SEXP mask = R_NilValue,
+                                         std::string bread = "expected") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = raw_from_data_args(X, mask);
+  auto pw_or = magmaan::data::pairwise_sample_stats(raw);
+  if (!pw_or.has_value()) stop_post(pw_or.error());
+  magmaan::robust::InferenceSpec spec = spec_from(bread, "pairwise");
+  auto uf_or = magmaan::robust::build_u_factor(ctx.pt, ctx.rep, ctx.samp, est,
+                                                raw, *pw_or, spec);
+  if (!uf_or.has_value()) stop_post(uf_or.error());
+  return ufactor_to_list(*uf_or);
+}
+
+// infer_reduced_gamma_nt_pairwise() — mirrors reduced_gamma_nt_pairwise(uf,
+// raw, pw). Operator-only NT^pw meat reduction; eigenvalues are all ~1 when
+// paired with a Pairwise-bread UFactor (the bread-meat collapse), and
+// carry the SB-style scaling when paired with a Structured / Unstructured
+// bread.
+//
+// [[Rcpp::export]]
+Rcpp::NumericMatrix infer_reduced_gamma_nt_pairwise(Rcpp::List uf, SEXP X,
+                                                    SEXP mask = R_NilValue) {
+  magmaan::robust::UFactor u = ufactor_from_list(uf);
+  magmaan::data::RawData raw = raw_from_data_args(X, mask);
+  auto pw_or = magmaan::data::pairwise_sample_stats(raw);
+  if (!pw_or.has_value()) stop_post(pw_or.error());
+  auto m_or = magmaan::robust::reduced_gamma_nt_pairwise(u, raw, *pw_or);
   if (!m_or.has_value()) stop_post(m_or.error());
   return Rcpp::wrap(*m_or);
 }

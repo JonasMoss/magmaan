@@ -1072,6 +1072,33 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_build_u_factor_pairwise
+Rcpp::List infer_build_u_factor_pairwise(Rcpp::List fit, SEXP X, SEXP mask, std::string bread);
+RcppExport SEXP _magmaan_infer_build_u_factor_pairwise(SEXP fitSEXP, SEXP XSEXP, SEXP maskSEXP, SEXP breadSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type mask(maskSEXP);
+    Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_build_u_factor_pairwise(fit, X, mask, bread));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_reduced_gamma_nt_pairwise
+Rcpp::NumericMatrix infer_reduced_gamma_nt_pairwise(Rcpp::List uf, SEXP X, SEXP mask);
+RcppExport SEXP _magmaan_infer_reduced_gamma_nt_pairwise(SEXP ufSEXP, SEXP XSEXP, SEXP maskSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type uf(ufSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type mask(maskSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_reduced_gamma_nt_pairwise(uf, X, mask));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_reduced_gamma_sample
 Rcpp::NumericMatrix infer_reduced_gamma_sample(Rcpp::List uf, Rcpp::NumericMatrix Zc, Rcpp::NumericVector denom);
 RcppExport SEXP _magmaan_infer_reduced_gamma_sample(SEXP ufSEXP, SEXP ZcSEXP, SEXP denomSEXP) {
@@ -1525,6 +1552,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_build_u_factor", (DL_FUNC) &_magmaan_infer_build_u_factor, 3},
     {"_magmaan_infer_build_u_factor_parts", (DL_FUNC) &_magmaan_infer_build_u_factor_parts, 5},
     {"_magmaan_infer_reduced_gamma_nt", (DL_FUNC) &_magmaan_infer_reduced_gamma_nt, 1},
+    {"_magmaan_infer_build_u_factor_pairwise", (DL_FUNC) &_magmaan_infer_build_u_factor_pairwise, 4},
+    {"_magmaan_infer_reduced_gamma_nt_pairwise", (DL_FUNC) &_magmaan_infer_reduced_gamma_nt_pairwise, 3},
     {"_magmaan_infer_reduced_gamma_sample", (DL_FUNC) &_magmaan_infer_reduced_gamma_sample, 3},
     {"_magmaan_infer_reduced_gamma_sample_from_gamma", (DL_FUNC) &_magmaan_infer_reduced_gamma_sample_from_gamma, 2},
     {"_magmaan_infer_robust_test_moments_both_breads_zc", (DL_FUNC) &_magmaan_infer_robust_test_moments_both_breads_zc, 4},

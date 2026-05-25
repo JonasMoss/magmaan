@@ -321,6 +321,14 @@ infer_reduced_gamma_nt <- function(uf) {
     .Call(`_magmaan_infer_reduced_gamma_nt`, uf)
 }
 
+infer_build_u_factor_pairwise <- function(fit, X, mask = NULL, bread = "expected") {
+    .Call(`_magmaan_infer_build_u_factor_pairwise`, fit, X, mask, bread)
+}
+
+infer_reduced_gamma_nt_pairwise <- function(uf, X, mask = NULL) {
+    .Call(`_magmaan_infer_reduced_gamma_nt_pairwise`, uf, X, mask)
+}
+
 infer_reduced_gamma_sample <- function(uf, Zc, denom) {
     .Call(`_magmaan_infer_reduced_gamma_sample`, uf, Zc, denom)
 }
@@ -432,3 +440,4 @@ infer_robust_se_both_breads_raw <- function(fit, X, moments = "structured", cov 
 infer_robust_se_both_breads_zc <- function(fit, Zc, n_total, moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_both_breads_zc`, fit, Zc, n_total, moments, cov)
 }
+

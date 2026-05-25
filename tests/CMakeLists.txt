@@ -121,6 +121,7 @@ magmaan_add_test_target(magmaan_test_inference inference
   unit/factor_scores_test.cpp
   unit/robust_test.cpp
   unit/pairwise_casewise_test.cpp
+  unit/pairwise_inference_test.cpp
   unit/fmg_test.cpp
   unit/weighted_inference_test.cpp
   unit/restriction_test.cpp

@@ -103,7 +103,17 @@ enum class Information { Expected, Observed };
 //                  `h1.information = "structured"`.
 //   Unstructured = M = S  (sample)        — `h1.information = "unstructured"`;
 //                  the weight `browne_residual_nt` uses.
-enum class WeightMoments { Structured, Unstructured };
+//   Pairwise     = use `data::gamma_nt_pairwise(raw, pw)[b]` directly as the
+//                  bread's Γ (not `Γ_NT(Σ̂_b)`). Requires raw data + a
+//                  `PairwiseSampleStats` — the build_u_factor overload that
+//                  takes those arguments must be used. With matching
+//                  `cov = ModelImplied` meat (`reduced_gamma_nt_pairwise`)
+//                  the sandwich SE collapses to `(1/N)·A⁻¹` (the naive
+//                  expected vcov on a Γ_NT^pw weight); with `cov =
+//                  Empirical` meat (`Ψ̂'Ψ̂/n`) it becomes the pairwise +
+//                  non-normal robust SE — the principled SE for a
+//                  pairwise SEM fit.
+enum class WeightMoments { Structured, Unstructured, Pairwise };
 
 // The "meat" — the ACOV estimate of vech(S).
 //   ModelImplied   = Γ_NT(M):  SE sandwich collapses to bread⁻¹ (= the naive
@@ -203,6 +213,25 @@ build_u_factor(spec::LatentStructure        pt,
                const SampleStats&        samp,
                const Estimates&          est,
                InferenceSpec             spec = {});
+
+// Overload for `spec.moments == Pairwise`. Builds the per-block bread Γ
+// from `data::gamma_nt_pairwise(raw, pw)[b]` instead of `gamma_nt(Σ̂_b)` /
+// `gamma_nt(S_b)`. `raw` must carry the missingness mask; `pw` must match
+// `raw`'s block layout (typically `data::pairwise_sample_stats(raw)`).
+// `spec.moments` is required to be `Pairwise` here — the other two values
+// route to the existing 5-arg overload.
+//
+// The μ-block of the bread (when `has_means`) keeps the existing
+// `LLT(Σ̂_b)` convention — same compromise as `fit_gls_pairwise`'s μ-block
+// weight. The pairwise μ ACOV is still in `docs/backlog/speculative.md`.
+post_expected<UFactor>
+build_u_factor(spec::LatentStructure                pt,
+               const model::MatrixRep&              rep,
+               const SampleStats&                   samp,
+               const Estimates&                     est,
+               const RawData&                       raw,
+               const data::PairwiseSampleStats&     pw,
+               InferenceSpec                        spec);
 
 // Both-breads pair. Runs `build_u_factor`'s shared phase once (Δ-stacking,
 // per-block Γ_NT Cholesky, `A = L_Γ⁻¹·Δ` per-block solve) and only re-runs
@@ -408,6 +437,31 @@ pairwise_casewise_contributions(const RawData& raw,
 // here by construction).
 post_expected<Eigen::MatrixXd>
 reduced_gamma_nt(const UFactor& uf);
+
+// (b') Pairwise normal-theory Γ_NT^pw — the missing-data analogue of
+// `reduced_gamma_nt(uf)`, computed via the pattern-grouped expectation
+// identity without materialising the p* × p* `Γ_NT^pw` matrix. For each
+// distinct missingness pattern k in `raw.mask[b]`, builds the row-scaled
+// `B̃_k = diag(a_k/π̂)·B` (σ-rows masked-and-rescaled by per-pair
+// availability), applies the existing `Γ_NT(Σ̂_b)` operator column-by-
+// column, and accumulates `(n_k/n) · B̃_k'·(Γ_NT·B̃_k)`. Operator path:
+// O(K·df·p³ + K·df²·p*) per block, where K is the # distinct patterns.
+//
+// Used as the meat for SB-style chi-square scaling on a pairwise fit
+// where you want the model-implied (not empirical) meat. Paired with a
+// `WeightMoments::Pairwise` UFactor produces the bread-meat collapse —
+// `U·Γ_NT^pw` is a rank-df projector, eigenvalues ≈ (1, …, 1). Paired
+// with a `WeightMoments::Structured` UFactor gives the SB correction
+// that accounts for the pairwise ACOV mismatch.
+//
+// μ-block treatment matches `data::gamma_nt_pairwise`: cov-only on the
+// σ-segment via the pattern-grouped operator; μ-segment uses the
+// existing complete-data operator (`Σ̂_b` on the μ residual). Full
+// pairwise μ ACOV stays in `docs/backlog/speculative.md`.
+post_expected<Eigen::MatrixXd>
+reduced_gamma_nt_pairwise(const UFactor&                       uf,
+                          const RawData&                       raw,
+                          const data::PairwiseSampleStats&     pw);
 
 // (c) Browne's unbiased Γ_u (distribution-free, complete-data, simple
 // setting only). Closed form:
