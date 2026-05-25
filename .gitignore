@@ -11,7 +11,10 @@ external/
 resources/
 
 # Local paper projects live here as independent nested git repositories.
-papers/
+# Shared convention and style docs are the exceptions that live in magmaan.
+papers/*
+!papers/AGENTS.md
+!papers/STYLE.md
 
 *.o
 *.obj
