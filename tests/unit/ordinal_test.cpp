@@ -246,6 +246,116 @@ TEST_CASE("OrdinalWeightPlan encodes fit-only Gamma cost rules") {
   CHECK(inference.materialization == OrdinalGammaMaterialization::Full);
 }
 
+TEST_CASE("Cached ordinal DWLS fit consumes diagonal Gamma only") {
+  std::mt19937 rng(20260525);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(500, 3);
+  const double loading[3] = {0.90, 0.78, 0.68};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.45) + (y > 0.55);
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  auto moments = magmaan::data::ordinal_moments_from_stats(*stats);
+  auto cache = magmaan::data::ordinal_gamma_cache_from_diagonal(
+      {stats->NACOV[0].diagonal()});
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, moments, {});
+  REQUIRE(x0.has_value());
+  auto plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::DWLS);
+  auto legacy = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0);
+  auto cached = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, moments, &cache, {}, plan, *x0);
+  REQUIRE_MESSAGE(legacy.has_value(),
+      "legacy DWLS failed: " << (legacy.has_value() ? "" : legacy.error().detail));
+  REQUIRE_MESSAGE(cached.has_value(),
+      "cached DWLS failed: " << (cached.has_value() ? "" : cached.error().detail));
+
+  CHECK(cached->fmin == doctest::Approx(legacy->fmin).epsilon(1e-8));
+  CHECK((cached->theta - legacy->theta).cwiseAbs().maxCoeff() < 1e-6);
+  REQUIRE(cache.block_count() == 1);
+  CHECK(cache.blocks[0].has_diagonal);
+  CHECK(cache.blocks[0].has_dwls_weight);
+  CHECK_FALSE(cache.blocks[0].has_full);
+  CHECK_FALSE(cache.blocks[0].has_wls_weight);
+}
+
+TEST_CASE("Cached ordinal ULS fit does not require Gamma") {
+  Eigen::MatrixXd X(240, 3);
+  Eigen::Index r = 0;
+  for (int rep = 0; rep < 10; ++rep) {
+    for (int x1 = 1; x1 <= 3; ++x1) {
+      for (int x2 = 1; x2 <= 3; ++x2) {
+        for (int x3 = 1; x3 <= 3; ++x3) {
+          if (r >= X.rows()) break;
+          X(r, 0) = x1;
+          X(r, 1) = x2;
+          X(r, 2) = x3;
+          ++r;
+        }
+      }
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  auto moments = magmaan::data::ordinal_moments_from_stats(*stats);
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, moments, {});
+  REQUIRE(x0.has_value());
+
+  magmaan::data::OrdinalGammaCache cache;
+  cache.blocks.resize(1);
+  auto plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::ULS);
+  auto fit = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, moments, &cache, {}, plan, *x0);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "cached ULS failed: " << (fit.has_value() ? "" : fit.error().detail));
+  CHECK(std::isfinite(fit->fmin));
+  CHECK_FALSE(cache.blocks[0].has_diagonal);
+  CHECK_FALSE(cache.blocks[0].has_full);
+  CHECK_FALSE(cache.blocks[0].has_dwls_weight);
+  CHECK_FALSE(cache.blocks[0].has_wls_weight);
+}
+
 TEST_CASE("Polychoric h-score API evaluates predefined caps") {
   using magmaan::data::PolychoricHScoreKind;
   using magmaan::data::PolychoricHScoreOptions;

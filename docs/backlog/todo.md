@@ -56,9 +56,11 @@ semantics · **XL** statistical design/research track before implementation.
   inference cache reuse, mixed ordinal data, and constrained thresholds. Landed:
   the initial C++ `OrdinalMoments` / `MixedOrdinalMoments`,
   `OrdinalGammaCache`, and `OrdinalWeightPlan` skeleton behind the legacy
-  `OrdinalStats` / `MixedOrdinalStats` adapters. Next slice: route new
-  fit-only all-ordinal ULS/DWLS entry points through the cache so ULS requests
-  no Gamma and DWLS requests only diagonal Gamma.
+  `OrdinalStats` / `MixedOrdinalStats` adapters, plus a fit-only all-ordinal
+  `OrdinalMoments` path where ULS requests no Gamma and DWLS requests only
+  diagonal Gamma. Next slice: implement free-threshold (`H = I`) profiling so
+  ULS/DWLS optimize only the active correlation block and reconstruct
+  thresholds from observed sample thresholds.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
