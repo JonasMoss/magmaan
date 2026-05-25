@@ -1,0 +1,194 @@
+---
+title: "Maydeu-Olivares (2017) replication"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path)))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"),
+                              candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates, "metadata.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+read_csv_safely <- function(name) {
+  p <- file.path(results_dir, name)
+  if (!file.exists(p)) return(NULL)
+  utils::read.csv(p, check.names = FALSE, stringsAsFactors = FALSE)
+}
+meta       <- read_csv_safely("metadata.csv")
+cells      <- read_csv_safely("cells.csv")
+thresholds <- read_csv_safely("thresholds.csv")
+se_long    <- read_csv_safely("fits_se.csv")
+chi2_long  <- read_csv_safely("fits_chi2.csv")
+sum_se     <- read_csv_safely("summary_se.csv")
+sum_chi2   <- read_csv_safely("summary_chi2.csv")
+parity     <- read_csv_safely("lavaan_parity.csv")
+if (is.null(meta) || is.null(sum_se) || is.null(sum_chi2)) {
+  stop("Missing result CSVs. Run: Rscript run_experiment.R")
+}
+fmt_pct   <- function(x) ifelse(is.na(x), "", sprintf("%.2f", x))
+fmt_pct3  <- function(x) ifelse(is.na(x), "", sprintf("%.3f", x))
+fmt_num   <- function(x) ifelse(is.na(x), "", sprintf("%.4g", x))
+dist_pretty <- function(d) {
+  c(norm = "skew=0, kurt=0", kurt2 = "skew=0, kurt=2",
+    skew_kurt = "skew=-2, kurt=3.18")[d]
+}
+```
+
+This experiment reproduces the simulation in
+**Maydeu-Olivares (2017), "Maximum Likelihood Estimation of Structural
+Equation Models for Continuous Data: Standard Errors and Goodness of Fit"**
+against magmaan's own ML inference. The paper compares seven standard-error
+methods and five χ² adjustments on a two-factor CFA fit unidimensionally
+under three nonnormality regimes, three sample sizes, two model sizes, and
+three degrees of misspecification.
+
+## Run
+
+```{r}
+knitr::kable(meta, row.names = FALSE)
+```
+
+## Threshold sets
+
+Item-level nonnormality is induced by 5-category discretization of MVN data
+at thresholds chosen so the marginal moments hit the (skew, excess-kurt)
+targets.
+
+```{r}
+knitr::kable(thresholds, row.names = FALSE,
+             col.names = c("dist", "skew target", "kurt target",
+                           "skew achieved", "kurt achieved",
+                           "τ₁", "τ₂", "τ₃", "τ₄", "loss"),
+             digits = 4)
+```
+
+## Cell grid
+
+```{r}
+knitr::kable(cells, row.names = FALSE)
+```
+
+## Standard-error relative bias
+
+Mean relative bias of factor-loading SEs across replicates, by method.
+Negative values indicate the SEs are too small (variability of `θ̂`
+underestimated). Maydeu-Olivares' Table 2 cutoff for "trivial bias" is
+|·| < 0.10.
+
+```{r}
+if (!is.null(sum_se)) {
+  sum_se$dist <- dist_pretty(sum_se$dist)
+  sum_se$mean_rel_bias_se <- fmt_pct(sum_se$mean_rel_bias_se)
+  wide <- stats::reshape(sum_se[, c("n_items", "rho", "dist", "N",
+                                    "method", "mean_rel_bias_se")],
+                          idvar = c("n_items", "rho", "dist", "N"),
+                          timevar = "method", direction = "wide")
+  names(wide) <- sub("^mean_rel_bias_se\\.", "", names(wide))
+  wide <- wide[order(wide$n_items, wide$rho, wide$dist, wide$N), ]
+  knitr::kable(wide, row.names = FALSE)
+}
+```
+
+## χ² Type I error / power
+
+Empirical rejection rate at the 5% nominal level. With ρ = 1.0 the
+unidimensional model is correctly specified — these cells give the Type I
+error. ρ = 0.8 and ρ = 0.4 give the power for "minor" and "large"
+misspecification.
+
+Bradley's accuracy band for Type I error is `[0.025, 0.075]` (paper
+convention). Cells outside that band are highlighted in the prose below.
+
+```{r}
+if (!is.null(sum_chi2)) {
+  sum_chi2$dist <- dist_pretty(sum_chi2$dist)
+  sum_chi2$reject_05 <- fmt_pct3(sum_chi2$reject_05)
+  wide <- stats::reshape(sum_chi2[, c("n_items", "rho", "dist", "N",
+                                      "stat_name", "reject_05")],
+                          idvar = c("n_items", "rho", "dist", "N"),
+                          timevar = "stat_name", direction = "wide")
+  names(wide) <- sub("^reject_05\\.", "", names(wide))
+  wide <- wide[order(wide$n_items, wide$rho, wide$dist, wide$N), ]
+  knitr::kable(wide, row.names = FALSE)
+}
+```
+
+## RMSEA: sample vs population
+
+Mean sample RMSEA across replicates, by χ² adjustment.
+
+```{r}
+if (!is.null(sum_chi2)) {
+  sum_chi2$mean_rmsea <- fmt_pct3(sum_chi2$mean_rmsea)
+  wide <- stats::reshape(sum_chi2[, c("n_items", "rho", "dist", "N",
+                                      "stat_name", "mean_rmsea")],
+                          idvar = c("n_items", "rho", "dist", "N"),
+                          timevar = "stat_name", direction = "wide")
+  names(wide) <- sub("^mean_rmsea\\.", "", names(wide))
+  wide <- wide[order(wide$n_items, wide$rho, wide$dist, wide$N), ]
+  knitr::kable(wide, row.names = FALSE)
+}
+```
+
+## SRMR
+
+Mean SRMR across replicates (SRMR is identical across χ² rows by
+construction, so we show it once per cell).
+
+```{r}
+if (!is.null(sum_chi2)) {
+  srmr_table <- unique(sum_chi2[, c("n_items", "rho", "dist", "N", "mean_srmr")])
+  srmr_table$mean_srmr <- fmt_pct3(srmr_table$mean_srmr)
+  srmr_table <- srmr_table[order(srmr_table$n_items, srmr_table$rho,
+                                  srmr_table$dist, srmr_table$N), ]
+  knitr::kable(srmr_table, row.names = FALSE)
+}
+```
+
+## Lavaan parity check
+
+Only present when the runner was invoked with `--lavaan-parity`. Compares
+magmaan to lavaan on rep 1 of each cell. ML and MLM are compared on the
+statistic; MLMV and MLR are compared via the upper-tail p-value because
+magmaan uses Satterthwaite-df parameterization and lavaan uses the
+scaled-shifted linear transform — different parameterizations of the same
+asymptotic adjustment.
+
+```{r}
+if (!is.null(parity) && nrow(parity) > 0L) {
+  parity$dist <- dist_pretty(parity$dist)
+  parity$magmaan <- fmt_num(parity$magmaan)
+  parity$lavaan  <- fmt_num(parity$lavaan)
+  parity$abs_diff <- fmt_num(parity$abs_diff)
+  knitr::kable(parity, row.names = FALSE)
+} else {
+  cat("(no lavaan parity table — run with `--lavaan-parity`)\n")
+}
+```
+
+## Notes and caveats
+
+- Default `--reps 10` is for fast iteration; the rejection rates and bias
+  estimates are noisy at this size. The paper uses `--reps 1000`. Per
+  internal style, no Monte-Carlo error bars are reported.
+- Threshold sets are produced by numerical moment-matching with
+  deterministic restarts — the table is reproducible across runs.
+- Categories may be empty for extreme distributions at small `N` — in the
+  `skew_kurt` set the upper two categories are rare, so a few rows may have
+  fewer than 5 observed levels. ML treats the integer codes as continuous
+  regardless.
+- MLM, MLMV, and MLR-exp share the same SE (`bread=expected,
+  meat=empirical` sandwich); they differ only in the χ² adjustment.
+- MLR uses `bread=observed, meat=empirical`.
+- MLF uses the new `inference_information_cross_products` primitive
+  introduced for this experiment.
