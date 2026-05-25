@@ -114,8 +114,8 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   for ULS/DWLS/WLS fit-only cells across free, fixed, and shared thresholds.
   Landed next: a separate fit-plus-inference robust-reporting experiment for
   DWLS/WLS cache reuse against the legacy materialized robust path. Remaining:
-  raw-data lazy construction boundaries, opt-build larger grids when needed,
-  and any R/API wrapper polish justified by those results.
+  raw-data lazy construction boundaries, larger/literature-grade speed grids
+  when needed, and any R/API wrapper polish justified by those results.
 - **M/L.** Add a two-stage EM/saturated-covariance missing-data research path
   for comparison with direct FIML and pairwise covariance methods. Stage 1
   (saturated EM moments + sandwich ACOV ingredients) is now exposed as
@@ -158,6 +158,14 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   consumer needs them.
 - **M.** Track objective value, gradient norm, iteration count, wall time, and
   agreement with lavaan-backed estimates where applicable.
+- **S/M.** Extend the ordinal SNLLS speed pilot
+  (`experiments/11-ordinal-snlls-speed`) when the paper needs stronger timing
+  evidence. Landed: a native C++ benchmark target comparing bounded versus
+  SNLLS all-ordinal delta fits across a Kreiberg-style repeated-measure family,
+  one worked repeated-measure example, and threshold stress cells. The first
+  opt pilot uses `q <= 6`; open follow-up is the full `q <= 12` literature-like
+  sweep, optional lavaan context rows, and raw/lazy ordinal statistic
+  construction timing once that builder exists.
 - **M/L.** Convergence-note / start-value portfolio paper track
   (`papers/convergence-note/`). The skeleton, local resources, and first R
   simulation factories now exist for the De Jonckere-Rosseel small-sample SEM
