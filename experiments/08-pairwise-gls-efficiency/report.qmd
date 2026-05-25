@@ -60,40 +60,49 @@ How do they rank in finite samples under realistic missing patterns?
 
 ## Short Answer
 
-`FIML  ≈  Γ_NT^pw GLS  >  pairwise ML  >  Σ-only GLS`. The headline
-finding: **Γ_NT^pw GLS is statistically interchangeable with FIML**
-across every cell tested, while running through the same GLS
-pipeline. ML pays a small (~1–11%) asymptotic-efficiency penalty;
-Σ-only GLS pays a similar penalty plus catastrophic-tail risk under
-MCAR.
+`FIML  ≥  Γ_NT^pw GLS  >  pairwise ML  ≈  Σ-only GLS`. Γ_NT^pw GLS
+gets you most of the way to FIML — exact under MCAR, lagging by
+≈ 1–6% under MAR — while the other two pairwise variants lag by
+3–13% (plus the Σ-only catastrophic-tail risk).
 
 Key points:
 
-- **Γ_NT^pw GLS matches FIML to within Monte Carlo noise** —
-  trace-MSE ratios `Γ_NT^pw ÷ FIML` are in [0.99, 1.06] across all
-  twelve missing-data cells, with 6/12 cells showing Γ_NT^pw
-  marginally beating FIML. Both estimators use the asymptotically
-  efficient ACOV under MAR, so first-order theory predicts this
-  equivalence, and the data confirms it. The implementation paths
-  differ — FIML iterates over the full likelihood; Γ_NT^pw GLS
-  factors the same information through a pairwise-corrected weight
-  matrix — but the resulting estimates are essentially the same.
-- **Pairwise ML loses ~1–11% to FIML** uniformly. Same first-order
-  story as Γ_NT^pw GLS in theory; the gap comes from ML's use of the
-  Σ-only-equivalent weight implicitly built into the complete-data
-  log-likelihood applied to `Ŝ_pw`.
-- **Σ-only GLS strictly dominated by everything else**. Tied with ML
-  under MAR (asymptotic equivalence), but blows up under
-  small-n / heavy-MCAR conditioning catastrophes (n=200/30%/MCAR:
-  3.4× FIML's MSE). No reason to use it.
+- **Under MCAR, Γ_NT^pw GLS ≈ FIML.** Ratios in [0.99, 1.00]
+  across n × rate cells, with no clear sign. The pairwise summary
+  `Ŝ_pw` is asymptotically nearly sufficient for (μ, Σ) when
+  missingness is independent of values — pairwise overlap counts are
+  random subsamples, no information is lost beyond the obvious
+  per-pair sample-size hit, and the asymptotically efficient pairwise
+  weight `Γ_NT^pw` recovers that information.
+
+- **Under MAR, Γ_NT^pw GLS lags FIML by a small but consistent
+  margin** — ≤ 1% at 15% missing, ~5% at 30% missing. The gap is
+  real (stable across n at 200 / 500 / 1000) and points to a
+  theoretical fact: the pairwise summary `Ŝ_pw` is lossy under MAR.
+  Each pair's covariance is computed on its own overlap subsample, so
+  information about three-way and higher joint patterns is discarded.
+  FIML keeps that information through the full per-pattern likelihood.
+  The gap is small because the SB-2005 MAR rules used here only
+  involve light dependency on two predictors; richer MAR designs
+  (planned-monotone, attrition with multi-variable triggers) would
+  open the gap further.
+
+- **Pairwise ML and Σ-only GLS sit ~1–11% behind FIML** — these are
+  first-order asymptotically equivalent to each other (both use a
+  weight equivalent to `Γ_NT(Σ̂)⁻¹` ignoring the pairwise overlap
+  structure). Σ-only also carries the small-n / heavy-MCAR
+  catastrophic-tail risk (n=200/30%/MCAR: 3.4× FIML's MSE).
+
 - Complete-data fits agree to floating-point round-off, as expected.
 
-So the take-away: the existence of Γ_NT^pw GLS means we have a
-pairwise estimator that recovers all of FIML's asymptotic efficiency
-without ever evaluating the missing-data likelihood. That's the
-"statistically justified pairwise" framing the Savalei-Bentler
-literature has been chasing — formalised here through the
-ugamma-fast / Van Praag derivation.
+The take-away: Γ_NT^pw GLS is **asymptotically efficient among
+estimators based on `Ŝ_pw`** — the best weighting of the pairwise
+summary. It's not asymptotically equivalent to FIML in general, but
+under simple MCAR / mild MAR patterns the pairwise summary loses
+little enough that the gap collapses. That makes Γ_NT^pw GLS the
+right default *if* you want a pairwise pipeline; if you can afford
+to evaluate the full missing-data likelihood, FIML remains the
+asymptotic-efficiency winner.
 
 ## Evidence
 
@@ -128,10 +137,11 @@ knitr::kable(
   caption = paste(
     "Trace of per-parameter empirical MSE for the four estimators and",
     "their pairwise-vs-FIML MSE ratios. Ratios > 1 mean FIML is more",
-    "efficient than the named pairwise estimator. Γ_NT^pw is",
-    "statistically indistinguishable from FIML (ratios in [0.99, 1.06];",
-    "six of twelve cells favour Γ_NT^pw). Σ-only GLS catastrophe at",
-    "n=200/30%/MCAR. rate = 0 cells (degeneracy reference) omitted."
+    "efficient than the named pairwise estimator. Γ_NT^pw matches FIML",
+    "under MCAR (ratios ~1.00) and lags by 1–6% under MAR — small but",
+    "stable across n, reflecting information the pairwise summary",
+    "discards. Σ-only GLS catastrophe at n=200/30%/MCAR. rate = 0",
+    "cells (degeneracy reference) omitted."
   )
 )
 ```
@@ -168,10 +178,10 @@ ggplot(plot_long,
 ```
 
 Green is FIML (the oracle); blue Γ_NT^pw GLS; orange pairwise ML;
-red Σ-only GLS. The green and blue bars are visually identical in
-every cell — FIML and Γ_NT^pw GLS are statistically interchangeable.
-Σ-only GLS's catastrophe at MCAR / n = 200 / 30% remains the most
-visible outlier.
+red Σ-only GLS. Green and blue bars are visually identical under
+MCAR; under MAR a small consistent gap opens (FIML lower) at the
+30% rate. Σ-only GLS's catastrophe at MCAR / n = 200 / 30% remains
+the most visible outlier.
 
 ### Why ML strictly dominates Σ-only GLS
 
