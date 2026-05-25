@@ -21,26 +21,22 @@ semantics · **XL** statistical design/research track before implementation.
   finalized `corpus/textbook-corpus/raw/kline` corpus into an end-to-end
   parity test.
 
-- **S.** **ADF/WLS weight builder should tolerance-trim Γ̂ before inversion** —
-  At small N with a binary covariate, the empirical Browne NACOV is
-  positive-definite to working precision but has condition number ≈ 10¹⁷
-  along one cross-third-moment direction. Today's
-  `snlls_adf_weight(include_means=TRUE)` path computes `chol2inv(chol(Γ̂))`
-  unconditionally; that succeeds (smallest eigenvalue technically > 0) but
-  amplifies the singular direction by ~10¹⁶, so a machine-precision
-  residual `||r|| ≈ 10⁻⁸` at a saturated fit produces `||W·r|| ≈ 10⁸` and
-  the KKT projected-gradient audit fires on what is analytically a zero
-  gradient. Replace with a tolerance-aware pseudoinverse at cutoff
-  `tol · max(eig(Γ̂))` (default e.g. `tol = 1e-12`); zero out below-cutoff
-  eigendirections before inverting. Same fix likely applies to the
-  block-diagonal `snlls_adf_weight(include_means=FALSE)` path. Surface:
-  `src/estimate/gmm/dls_weight.cpp` (and the paper-side wrapper
-  `r-package/R/core-cases.R::snlls_adf_weight`). Reproducer:
-  `muthen_2017_ch2_ex2_1__adf` (Hayes PROTEST mediation; N=129; binary
-  treatment 41/88 split; saturated path model; Γ̂ has 8 well-conditioned
-  eigenvalues 10.4 → 0.09 plus one at 7.5×10⁻¹⁷). Per-element diagnosis at
-  `papers/snlls-constrained/reports/lcs-objective-gap.md` (the §B‴ writeup
-  also covers this side finding).
+- **Low priority, S/M.** **ADF/WLS Γ̂ inversion policy and conditioned KKT
+  diagnostics** — At small N with a binary covariate, the empirical Browne
+  NACOV can be positive-definite to working precision but numerically rank
+  deficient. Reproducer: `muthen_2017_ch2_ex2_1__adf` (Hayes PROTEST
+  mediation; N=129; binary treatment 41/88 split; saturated path model; Γ̂ has
+  8 well-conditioned eigenvalues 10.4 → 0.09 plus one at 7.5×10⁻¹⁷). The
+  strict `chol2inv(chol(Γ̂))` audit amplifies machine residuals at a saturated
+  fit and reports a non-stationary projected gradient, while the
+  `experiments/00-lavaan-parity` conditioned diagnostic trims Γ̂ to rank 8/9
+  and gives `conditioned_grad_inf ≈ 9e-15`. Do not silently replace the ADF/WLS
+  objective. If this moves into C++, make it an explicit rank-revealing helper
+  or policy (`strict` vs `spectral_truncate`) that returns diagnostics such as
+  rank, tolerance, `rcond`, dropped rank, retained weighted residual, and
+  conditioned projected-gradient norm. The experiment report now treats this
+  as diagnostic telemetry only; core fitting/inference should stay strict until
+  a downstream need justifies an explicit API.
 
 ## API and R boundary
 

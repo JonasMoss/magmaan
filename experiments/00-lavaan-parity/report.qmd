@@ -118,6 +118,12 @@ meta_value <- function(key) {
   background: #f0fdf4;
   margin: 1rem 0;
 }
+.caveat-box {
+  border-left: 4px solid #92400e;
+  padding: 0.7rem 1rem;
+  background: #fffbeb;
+  margin: 1rem 0;
+}
 .audit-table {
   border-collapse: collapse;
   width: 100%;
@@ -168,6 +174,17 @@ lavaan-only cache and reruns just magmaan's audit. The targeted refit is not a
 full sweep: it reruns only the 24 v7 disagreement cells and projects the
 current failure surface under the assumption that the `r v7_agreement_cells`
 v7 agreement cells did not regress.
+
+<div class="caveat-box">
+<strong>ADF conditioning caveat.</strong> The conditioned ADF columns are
+diagnostic telemetry only. They apply a rank-revealing spectral trim to the
+empirical Browne NACOV and ask whether the KKT audit is stationary on the
+retained numerical subspace. They do not replace the primary full-weight ADF
+objective, do not change magmaan's optimizer behavior, and should not be read
+as a silent fallback estimator. A conditioned pass with a strict-audit failure
+means "the full inverse is numerically unstable here," not "the ADF objective
+was changed and the mismatch disappeared."
+</div>
 
 ## Oracle Cache
 
