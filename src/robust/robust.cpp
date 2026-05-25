@@ -342,12 +342,28 @@ prepare_evaluator(spec::LatentStructure&       pt,
 // build_u_factor
 // ============================================================================
 
-post_expected<UFactor>
-build_u_factor(spec::LatentStructure        pt,
-               const model::MatrixRep&   rep,
-               const SampleStats&        samp,
-               const Estimates&          est,
-               InferenceSpec             spec) {
+namespace {
+
+// ── UFactor shared/tail decomposition ──────────────────────────────────────
+// `build_u_factor` mass-shares Δ stacking + Γ_NT Cholesky + A = L⁻¹·Δ between
+// the two bread variants. This carrier captures the result of the shared
+// phase so that (a) the existing single-bread `build_u_factor` and (b) the
+// new `build_u_factor_pair` can compose against the same setup, with only
+// the bread tail (QR for Expected; H_obs for Observed) re-run per copy.
+struct UFactorShared {
+  UFactor base;            // bread-independent fields populated; kind/B/A/H_obs_inv/df left default
+  Eigen::MatrixXd A;       // total_rows × q, = L_Γ⁻¹·Δ (per-block, dual-segment when has_means)
+  Eigen::MatrixXd K_con;   // npar × n_alpha when active; empty otherwise
+  Eigen::Index    q       = 0;
+  double          N_total = 0.0;
+};
+
+post_expected<UFactorShared>
+build_u_factor_shared(spec::LatentStructure        pt,
+                      const model::MatrixRep&   rep,
+                      const SampleStats&        samp,
+                      const Estimates&          est,
+                      WeightMoments             moments) {
   auto ev_or = prepare_evaluator(pt, rep, samp, est);
   if (!ev_or.has_value()) return std::unexpected(ev_or.error());
   auto& ev = *ev_or;
@@ -382,16 +398,17 @@ build_u_factor(spec::LatentStructure        pt,
   }
 
   // Per-block geometry + LLTs. M_b is Σ̂_b (structured) or S_b (unstructured)
-  // per `spec.moments`. Σ̂_b and S_b are both copied into the block — the
+  // per `moments`. Σ̂_b and S_b are both copied into the block — the
   // evaluator's internal Σ̂ buffer is overwritten by later sigma() calls, and
   // `reduced_gamma_nt` needs whichever moments matched the bread. With mean
   // structure, `llt_M` (= LLT(M_b)) is the μ-block's Cholesky.
-  UFactor uf;
-  uf.moments    = spec.moments;
+  UFactorShared sh;
+  UFactor& uf = sh.base;
+  uf.moments    = moments;
   uf.has_means  = has_means;
   uf.blocks.resize(samp.S.size());
-  double N_total = 0.0;
-  for (auto n : samp.n_obs) N_total += static_cast<double>(n);
+  sh.N_total = 0.0;
+  for (auto n : samp.n_obs) sh.N_total += static_cast<double>(n);
   Eigen::Index row_cursor = 0;
   for (std::size_t b = 0; b < samp.S.size(); ++b) {
     const Eigen::Index p     = samp.S[b].rows();
@@ -407,7 +424,7 @@ build_u_factor(spec::LatentStructure        pt,
     blk.Sigma_hat  = im_or->sigma[b];
     blk.S          = samp.S[b];
     const Eigen::MatrixXd& W_moments =
-        (spec.moments == WeightMoments::Structured) ? blk.Sigma_hat : blk.S;
+        (moments == WeightMoments::Structured) ? blk.Sigma_hat : blk.S;
     auto G_or = gamma_nt(W_moments);
     if (!G_or.has_value()) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -483,84 +500,88 @@ build_u_factor(spec::LatentStructure        pt,
     return std::unexpected(make_err(con_or.error().kind,
         "build_u_factor: " + con_or.error().detail));
   }
-  Eigen::MatrixXd K_con;   // empty ⇒ no constraints
   Eigen::MatrixXd Delta = std::move(Delta_full);
   if (con_or->active()) {
-    K_con = con_or->K();
-    Delta = (Delta * K_con).eval();
+    sh.K_con = con_or->K();
+    Delta = (Delta * sh.K_con).eval();
   }
-  const Eigen::Index q = Delta.cols();
+  sh.q = Delta.cols();
 
   // Per-block dual-segment triangular solve A_b = L_Γ_block⁻¹·Δ_b.
-  Eigen::MatrixXd A = Eigen::MatrixXd::Zero(uf.total_rows, q);
+  sh.A = Eigen::MatrixXd::Zero(uf.total_rows, sh.q);
   for (const auto& blk : uf.blocks) {
-    apply_L_inv_block(blk, has_means, Delta, A);
+    apply_L_inv_block(blk, has_means, Delta, sh.A);
   }
+  return sh;
+}
 
-  // ── Observed-Hessian bread (the MLR convention) ────────────────────────
-  // U = L_Γ⁻ᵀ·(I − A·H_obs⁻¹·Aᵀ)·L_Γ⁻¹  (not idempotent). We don't form U;
-  // store A and H_obs⁻¹ and let `reduced_gamma_*` assemble the spectrum.
-  if (spec.bread == Information::Observed) {
-    // Observed Hessian (q × q) in the *per-unit* units of ΔᵀWΔ = AᵀA.
-    // `information_observed_analytic` returns the total observed info =
-    // N·(per-unit Hessian/2)·2 = N·(per-unit info) at θ̂; dividing by N
-    // gives the per-unit form, which equals AᵀA up to the H2 residual term.
-    // FD fallback for models the analytic path can't do (e.g. mean structure).
-    // The matrix is the *unprojected* npar×npar total observed info; /N
-    // gives the per-unit form; project through K to the n_alpha space
-    // (= AᵀA with the reparameterized Δ·K). Trivial when K_con is empty.
-    Eigen::MatrixXd H_obs;
-    if (auto h_or = information_observed_analytic(pt, rep, samp, est);
-        h_or.has_value()) {
-      H_obs = (*h_or) / N_total;
-    } else if (auto fd_or = information_observed_fd(pt, rep, samp, est);
-               fd_or.has_value()) {
-      H_obs = (*fd_or) / N_total;
-    } else {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "build_u_factor: could not compute the observed Hessian"));
-    }
-    if (K_con.size() > 0) H_obs = (K_con.transpose() * H_obs * K_con).eval();
-    H_obs = 0.5 * (H_obs + H_obs.transpose()).eval();
-    Eigen::LLT<Eigen::MatrixXd> llt_H(H_obs);
-    Eigen::MatrixXd H_inv;
-    if (llt_H.info() == Eigen::Success) {
-      H_inv = llt_H.solve(Eigen::MatrixXd::Identity(q, q));
-    } else {
-      Eigen::LDLT<Eigen::MatrixXd> ldlt_H(H_obs);
-      if (ldlt_H.info() != Eigen::Success) {
-        return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
-            "build_u_factor: observed Hessian is not invertible"));
-      }
-      H_inv = ldlt_H.solve(Eigen::MatrixXd::Identity(q, q));
-    }
-    uf.kind      = UFactor::Kind::ObservedHessian;
-    uf.A         = std::move(A);
-    uf.H_obs_inv = std::move(H_inv);
-    uf.df        = uf.total_rows - q;  // the χ²-reference df
-    if (uf.df <= 0) {
-      return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
-          "build_u_factor: model is saturated (df ≤ 0)"));
-    }
-    return uf;
+// Observed-Hessian tail: consumes the shared setup and produces an
+// ObservedHessian UFactor. Needs `pt/rep/samp/est` to compute H_obs.
+post_expected<UFactor>
+finish_u_factor_observed(const UFactorShared&            sh,
+                         const spec::LatentStructure& pt,
+                         const model::MatrixRep&      rep,
+                         const SampleStats&           samp,
+                         const Estimates&             est) {
+  UFactor uf = sh.base;
+  Eigen::MatrixXd H_obs;
+  if (auto h_or = information_observed_analytic(pt, rep, samp, est);
+      h_or.has_value()) {
+    H_obs = (*h_or) / sh.N_total;
+  } else if (auto fd_or = information_observed_fd(pt, rep, samp, est);
+             fd_or.has_value()) {
+    H_obs = (*fd_or) / sh.N_total;
+  } else {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "build_u_factor: could not compute the observed Hessian"));
   }
+  if (sh.K_con.size() > 0) H_obs = (sh.K_con.transpose() * H_obs * sh.K_con).eval();
+  H_obs = 0.5 * (H_obs + H_obs.transpose()).eval();
+  Eigen::LLT<Eigen::MatrixXd> llt_H(H_obs);
+  Eigen::MatrixXd H_inv;
+  if (llt_H.info() == Eigen::Success) {
+    H_inv = llt_H.solve(Eigen::MatrixXd::Identity(sh.q, sh.q));
+  } else {
+    Eigen::LDLT<Eigen::MatrixXd> ldlt_H(H_obs);
+    if (ldlt_H.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+          "build_u_factor: observed Hessian is not invertible"));
+    }
+    H_inv = ldlt_H.solve(Eigen::MatrixXd::Identity(sh.q, sh.q));
+  }
+  uf.kind      = UFactor::Kind::ObservedHessian;
+  uf.A         = sh.A;
+  uf.H_obs_inv = std::move(H_inv);
+  uf.df        = uf.total_rows - sh.q;
+  if (uf.df <= 0) {
+    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+        "build_u_factor: model is saturated (df ≤ 0)"));
+  }
+  return uf;
+}
+
+// Expected-info projection tail: consumes the shared setup and produces a
+// ProjectionExpected UFactor (`U = B·Bᵀ`).
+post_expected<UFactor>
+finish_u_factor_expected(const UFactorShared& sh) {
+  UFactor uf = sh.base;
 
   // ── Expected-info projection bread (`U = B·Bᵀ`) ─────────────────────────
   // QR of A → orthonormal basis N of ker(Aᵀ). Trailing (total_rows − rank(A))
   // columns of Q form the basis. We assume full column rank of A (=
   // full column rank of Δ in the Γ_NT-metric); if not, the trailing
   // columns still span ker(Aᵀ) but `df` is larger than `total_rows − q`.
-  Eigen::HouseholderQR<Eigen::MatrixXd> qr(A);
+  Eigen::HouseholderQR<Eigen::MatrixXd> qr(sh.A);
   // Estimate rank via the absolute diagonal of R. Cheap and adequate for
   // SEM sizes — rank-deficient Δ is a "your model is broken" condition
   // and the SE methods would already complain.
   const Eigen::MatrixXd R = qr.matrixQR().topLeftCorner(
-      std::min(uf.total_rows, q), q).triangularView<Eigen::Upper>();
+      std::min(uf.total_rows, sh.q), sh.q).triangularView<Eigen::Upper>();
   const double tol = std::numeric_limits<double>::epsilon() *
-                     static_cast<double>(std::max(uf.total_rows, q)) *
+                     static_cast<double>(std::max(uf.total_rows, sh.q)) *
                      R.diagonal().cwiseAbs().maxCoeff();
   Eigen::Index r_eff = 0;
-  for (Eigen::Index k = 0; k < std::min(uf.total_rows, q); ++k)
+  for (Eigen::Index k = 0; k < std::min(uf.total_rows, sh.q); ++k)
     if (std::abs(R(k, k)) > tol) ++r_eff;
   const Eigen::Index df_global = uf.total_rows - r_eff;
   if (df_global <= 0) {
@@ -580,10 +601,46 @@ build_u_factor(spec::LatentStructure        pt,
   // Per-block dual-segment adjoint solve: B_b = L_Γ_block⁻ᵀ·N_b.
   uf.B = Eigen::MatrixXd::Zero(uf.total_rows, df_global);
   for (const auto& blk : uf.blocks) {
-    apply_L_invT_block(blk, has_means, N, uf.B);
+    apply_L_invT_block(blk, uf.has_means, N, uf.B);
   }
-
+  uf.kind = UFactor::Kind::ProjectionExpected;
   return uf;
+}
+
+}  // namespace
+
+// Public `build_u_factor`: thin composition of `build_u_factor_shared` plus
+// the matching bread tail. Kept binary-identical to the prior implementation.
+post_expected<UFactor>
+build_u_factor(spec::LatentStructure        pt,
+               const model::MatrixRep&   rep,
+               const SampleStats&        samp,
+               const Estimates&          est,
+               InferenceSpec             spec) {
+  auto sh_or = build_u_factor_shared(pt, rep, samp, est, spec.moments);
+  if (!sh_or.has_value()) return std::unexpected(sh_or.error());
+  if (spec.bread == Information::Observed) {
+    return finish_u_factor_observed(*sh_or, pt, rep, samp, est);
+  }
+  return finish_u_factor_expected(*sh_or);
+}
+
+// Both-breads pair: shared phase once + both bread tails. Equivalent to two
+// single-bread `build_u_factor` calls but skips the duplicated Δ-stacking,
+// Γ_NT Cholesky, and `A = L⁻¹·Δ` per-block solve.
+post_expected<UFactorPair>
+build_u_factor_pair(spec::LatentStructure        pt,
+                    const model::MatrixRep&   rep,
+                    const SampleStats&        samp,
+                    const Estimates&          est,
+                    WeightMoments             moments) {
+  auto sh_or = build_u_factor_shared(pt, rep, samp, est, moments);
+  if (!sh_or.has_value()) return std::unexpected(sh_or.error());
+  auto e_or = finish_u_factor_expected(*sh_or);
+  if (!e_or.has_value()) return std::unexpected(e_or.error());
+  auto o_or = finish_u_factor_observed(*sh_or, pt, rep, samp, est);
+  if (!o_or.has_value()) return std::unexpected(o_or.error());
+  return UFactorPair{std::move(*e_or), std::move(*o_or)};
 }
 
 // ============================================================================
@@ -766,20 +823,12 @@ robust_test_moments_both_breads(
     const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
     const Eigen::Ref<const Eigen::VectorXd>&  denom,
     WeightMoments                             moments) {
-  auto uf_e_or = build_u_factor(
-      pt, rep, samp, est,
-      {Information::Expected, moments, ScoreCovariance::Empirical});
-  if (!uf_e_or.has_value()) return std::unexpected(uf_e_or.error());
-  auto e_or = reduced_gamma_sample_moments_impl(*uf_e_or, Zc, denom);
+  auto pair_or = build_u_factor_pair(std::move(pt), rep, samp, est, moments);
+  if (!pair_or.has_value()) return std::unexpected(pair_or.error());
+  auto e_or = reduced_gamma_sample_moments_impl(pair_or->expected, Zc, denom);
   if (!e_or.has_value()) return std::unexpected(e_or.error());
-
-  auto uf_o_or = build_u_factor(
-      std::move(pt), rep, samp, est,
-      {Information::Observed, moments, ScoreCovariance::Empirical});
-  if (!uf_o_or.has_value()) return std::unexpected(uf_o_or.error());
-  auto o_or = reduced_gamma_sample_moments_impl(*uf_o_or, Zc, denom);
+  auto o_or = reduced_gamma_sample_moments_impl(pair_or->observed, Zc, denom);
   if (!o_or.has_value()) return std::unexpected(o_or.error());
-
   return RobustTestMomentsBothBreads{*e_or, *o_or};
 }
 
@@ -805,22 +854,14 @@ robust_test_moments_both_breads_from_gamma(
     const Estimates&                          est,
     const Eigen::Ref<const Eigen::MatrixXd>&  gamma_hat,
     WeightMoments                             moments) {
-  auto uf_e_or = build_u_factor(
-      pt, rep, samp, est,
-      {Information::Expected, moments, ScoreCovariance::Empirical});
-  if (!uf_e_or.has_value()) return std::unexpected(uf_e_or.error());
-  auto e_or =
-      reduced_gamma_sample_moments_from_gamma_impl(*uf_e_or, gamma_hat);
+  auto pair_or = build_u_factor_pair(std::move(pt), rep, samp, est, moments);
+  if (!pair_or.has_value()) return std::unexpected(pair_or.error());
+  auto e_or = reduced_gamma_sample_moments_from_gamma_impl(
+      pair_or->expected, gamma_hat);
   if (!e_or.has_value()) return std::unexpected(e_or.error());
-
-  auto uf_o_or = build_u_factor(
-      std::move(pt), rep, samp, est,
-      {Information::Observed, moments, ScoreCovariance::Empirical});
-  if (!uf_o_or.has_value()) return std::unexpected(uf_o_or.error());
-  auto o_or =
-      reduced_gamma_sample_moments_from_gamma_impl(*uf_o_or, gamma_hat);
+  auto o_or = reduced_gamma_sample_moments_from_gamma_impl(
+      pair_or->observed, gamma_hat);
   if (!o_or.has_value()) return std::unexpected(o_or.error());
-
   return RobustTestMomentsBothBreads{*e_or, *o_or};
 }
 

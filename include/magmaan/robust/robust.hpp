@@ -204,6 +204,24 @@ build_u_factor(spec::LatentStructure        pt,
                const Estimates&          est,
                InferenceSpec             spec = {});
 
+// Both-breads pair. Runs `build_u_factor`'s shared phase once (Δ-stacking,
+// per-block Γ_NT Cholesky, `A = L_Γ⁻¹·Δ` per-block solve) and only re-runs
+// the bread-specific tail twice — QR-of-A for Expected, observed Hessian
+// compute-and-invert for Observed. Equivalent to two single-bread
+// `build_u_factor` calls (same `moments`) but skips one full shared pass.
+// Used by `robust_test_moments_both_breads` for the χ² adjustments path.
+struct UFactorPair {
+  UFactor expected;
+  UFactor observed;
+};
+
+post_expected<UFactorPair>
+build_u_factor_pair(spec::LatentStructure        pt,
+                    const model::MatrixRep&   rep,
+                    const SampleStats&        samp,
+                    const Estimates&          est,
+                    WeightMoments             moments = WeightMoments::Structured);
+
 // ============================================================================
 // Three Γ-reduction functions — each returns M_Γ = Bᵀ·Γ·B (df × df, sym).
 // ============================================================================

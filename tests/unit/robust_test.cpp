@@ -1328,6 +1328,47 @@ TEST_CASE("robust_se: Observed bread works for multi-block mean structures") {
   CHECK((rob_or->se.array() > 0.0).all());
 }
 
+TEST_CASE("build_u_factor_pair matches two single-bread build_u_factor calls") {
+  // The pair entry point hoists the shared phase (Δ-stacking, Γ_NT
+  // Cholesky, A = L⁻¹·Δ) out of the bread variation. It must give the same
+  // UFactor fields the two single-bread calls would produce.
+  auto ctx = load_and_fit(
+      "visual =~ x1 + x2 + x3\n"
+      "textual =~ x4 + x5 + x6\n"
+      "speed =~ x7 + x8 + x9",
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
+
+  auto uf_e_or = magmaan::robust::build_u_factor(
+      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est,
+      {magmaan::robust::Information::Expected,
+       magmaan::robust::WeightMoments::Structured,
+       magmaan::robust::ScoreCovariance::Empirical});
+  REQUIRE(uf_e_or.has_value());
+  auto uf_o_or = magmaan::robust::build_u_factor(
+      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est,
+      {magmaan::robust::Information::Observed,
+       magmaan::robust::WeightMoments::Structured,
+       magmaan::robust::ScoreCovariance::Empirical});
+  REQUIRE(uf_o_or.has_value());
+
+  auto pair_or = magmaan::robust::build_u_factor_pair(
+      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est,
+      magmaan::robust::WeightMoments::Structured);
+  REQUIRE(pair_or.has_value());
+
+  // Expected member: kind/df/B/total_rows/pstar identical.
+  CHECK(pair_or->expected.kind == uf_e_or->kind);
+  CHECK(pair_or->expected.df == uf_e_or->df);
+  CHECK(pair_or->expected.total_rows == uf_e_or->total_rows);
+  CHECK(pair_or->expected.pstar == uf_e_or->pstar);
+  CHECK((pair_or->expected.B - uf_e_or->B).cwiseAbs().maxCoeff() < 1e-12);
+  // Observed member: A and H_obs_inv identical, df identical.
+  CHECK(pair_or->observed.kind == uf_o_or->kind);
+  CHECK(pair_or->observed.df == uf_o_or->df);
+  CHECK((pair_or->observed.A - uf_o_or->A).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK((pair_or->observed.H_obs_inv - uf_o_or->H_obs_inv).cwiseAbs().maxCoeff() < 1e-12);
+}
+
 TEST_CASE("robust_se_both_breads matches two single-bread robust_se calls") {
   // The both-breads entry point hoists `robust_setup` and the meat build out
   // of the bread variation. It must give bit-identical SE vectors to running
