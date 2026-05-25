@@ -803,6 +803,37 @@ int main(int argc, char** argv) {
         auto cache = make_fit_cache(stats, estimator);
         Row row = base;
         row.estimator = estimator_name(estimator);
+        row.path = "snlls_full_thresholds";
+        row.cache_setup_ms = cache.cache_setup.median_ms;
+        row.weight_setup_ms = cache.weight_setup.median_ms;
+        if (!cache.error.empty()) {
+          row.status = "error";
+          row.error = cache.error;
+        } else {
+          auto result = run_timed_fit(
+              row, reps,
+              [&]() {
+                return magmaan::estimate::fit_ordinal_snlls_full_thresholds(
+                    pt, rep, moments, cache.cache_ptr, plan, x0,
+                    Backend::NloptLbfgs, opts);
+              },
+              have_profiled_bounded ? &profiled_bounded_ref : nullptr,
+              have_full_bounded ? &full_bounded_ref : nullptr);
+          row = result.row;
+          const auto flags = cache_flags(cache.cache_ptr);
+          row.cache_blocks = flags.block_count;
+          row.cache_has_diagonal = flags.has_diagonal;
+          row.cache_has_full = flags.has_full;
+          row.cache_has_dwls_weight = flags.has_dwls_weight;
+          row.cache_has_wls_weight = flags.has_wls_weight;
+        }
+        write_row(out, row);
+      }
+
+      {
+        auto cache = make_fit_cache(stats, estimator);
+        Row row = base;
+        row.estimator = estimator_name(estimator);
         row.path = "snlls";
         row.cache_setup_ms = cache.cache_setup.median_ms;
         row.weight_setup_ms = cache.weight_setup.median_ms;

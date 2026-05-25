@@ -77,7 +77,8 @@ struct Classification {
 // parameter to profile.
 fit_expected<Classification>
 classify(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
-         const Eigen::VectorXd& theta_start) {
+         const Eigen::VectorXd& theta_start,
+         const std::vector<GpBlockKind>* override_kinds = nullptr) {
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) {
     return std::unexpected(fit_err(
@@ -91,12 +92,24 @@ classify(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
         FitError::Kind::NumericIssue,
         "SNLLS compatibility: parameter-location count does not match n_free"));
   }
+  if (override_kinds != nullptr &&
+      static_cast<std::int32_t>(override_kinds->size()) != pt.n_free()) {
+    return std::unexpected(fit_err(
+        FitError::Kind::NumericIssue,
+        "SNLLS compatibility: block-kind override count does not match n_free"));
+  }
 
   Classification out;
   out.constraints = std::move(con);
   std::vector<BlockKind> full_kind(locs.size(), BlockKind::None);
   for (std::size_t k = 0; k < locs.size(); ++k) {
-    full_kind[k] = block_kind_for(locs[k].mat);
+    if (override_kinds != nullptr) {
+      full_kind[k] = (*override_kinds)[k] == GpBlockKind::Linear
+                         ? BlockKind::Linear
+                         : BlockKind::Nonlinear;
+    } else {
+      full_kind[k] = block_kind_for(locs[k].mat);
+    }
     if (full_kind[k] == BlockKind::None) {
       return std::unexpected(fit_err(
           FitError::Kind::NumericIssue,
@@ -228,9 +241,10 @@ bool gp_compatible(const spec::LatentStructure& pt,
 }
 
 fit_expected<GpProblem>
-gp(const optim::GmmProblem& base, const spec::LatentStructure& pt,
-   const model::ModelEvaluator& ev, const Eigen::VectorXd& theta0) {
-  auto cls_or = classify(pt, ev, theta0);
+gp_impl(const optim::GmmProblem& base, const spec::LatentStructure& pt,
+        const model::ModelEvaluator& ev, const Eigen::VectorXd& theta0,
+        const std::vector<GpBlockKind>* override_kinds) {
+  auto cls_or = classify(pt, ev, theta0, override_kinds);
   if (!cls_or.has_value()) return std::unexpected(cls_or.error());
   auto cls = std::make_shared<Classification>(std::move(*cls_or));
 
@@ -288,6 +302,19 @@ gp(const optim::GmmProblem& base, const spec::LatentStructure& pt,
       std::move(out), cls->beta0,
       static_cast<std::int32_t>(cls->beta_cols.size()),
       static_cast<std::int32_t>(cls->alpha_cols.size())};
+}
+
+fit_expected<GpProblem>
+gp(const optim::GmmProblem& base, const spec::LatentStructure& pt,
+   const model::ModelEvaluator& ev, const Eigen::VectorXd& theta0) {
+  return gp_impl(base, pt, ev, theta0, nullptr);
+}
+
+fit_expected<GpProblem>
+gp(const optim::GmmProblem& base, const spec::LatentStructure& pt,
+   const model::ModelEvaluator& ev, const Eigen::VectorXd& theta0,
+   const std::vector<GpBlockKind>& block_kinds) {
+  return gp_impl(base, pt, ev, theta0, &block_kinds);
 }
 
 }  // namespace magmaan::estimate::gmm

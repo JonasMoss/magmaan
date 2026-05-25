@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 #include <Eigen/Core>
 
@@ -19,6 +20,11 @@
 // closure transform, parallel to `estimate::reparameterize`.
 
 namespace magmaan::estimate::gmm {
+
+enum class GpBlockKind : std::uint8_t {
+  Nonlinear,
+  Linear,
+};
 
 // True iff the model + start point can be profiled: it has conditionally-
 // linear free parameters and no equality constraint mixes a nonlinear with a
@@ -49,5 +55,10 @@ struct GpProblem {
 fit_expected<GpProblem>
 gp(const optim::GmmProblem& base, const spec::LatentStructure& pt,
    const model::ModelEvaluator& ev, const Eigen::VectorXd& theta0);
+
+fit_expected<GpProblem>
+gp(const optim::GmmProblem& base, const spec::LatentStructure& pt,
+   const model::ModelEvaluator& ev, const Eigen::VectorXd& theta0,
+   const std::vector<GpBlockKind>& block_kinds);
 
 }  // namespace magmaan::estimate::gmm
