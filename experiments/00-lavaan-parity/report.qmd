@@ -209,16 +209,38 @@ if (nrow(current_failures)) {
                     "fmin Ratio", "Error", "Status")
     html_table(tbl, status_col = "Status", limit = NULL)
   } else {
+    adf_cols <- c("adf_gamma_rank", "adf_gamma_dim",
+                  "adf_conditioning_warning",
+                  "adf_conditioned_fmin",
+                  "adf_conditioned_grad_inf",
+                  "adf_conditioned_stationary")
+    for (nm in setdiff(adf_cols, names(current_failures))) {
+      current_failures[[nm]] <- NA
+    }
     tbl <- current_failures[, c("case_id", "classification", "weight",
                                 "audit_grad_inf", "magmaan_fmin",
-                                "lavaan_fx_bare", "fmin_ratio"),
+                                "lavaan_fx_bare", "fmin_ratio",
+                                "adf_gamma_rank", "adf_gamma_dim",
+                                "adf_conditioning_warning",
+                                "adf_conditioned_fmin",
+                                "adf_conditioned_grad_inf",
+                                "adf_conditioned_stationary"),
                             drop = FALSE]
+    tbl$adf_gamma_rank <- ifelse(
+      is.na(tbl$adf_gamma_rank), "",
+      paste0(tbl$adf_gamma_rank, "/", tbl$adf_gamma_dim)
+    )
     tbl$audit_grad_inf <- fmt_num(tbl$audit_grad_inf)
     tbl$magmaan_fmin <- fmt_num(tbl$magmaan_fmin)
     tbl$lavaan_fx_bare <- fmt_num(tbl$lavaan_fx_bare)
     tbl$fmin_ratio <- fmt_num(tbl$fmin_ratio)
+    tbl$adf_gamma_dim <- NULL
+    tbl$adf_conditioned_fmin <- fmt_num(tbl$adf_conditioned_fmin)
+    tbl$adf_conditioned_grad_inf <- fmt_num(tbl$adf_conditioned_grad_inf)
     names(tbl) <- c("Case", "Classification", "Weight", "Audit Grad Inf",
-                    "magmaan fmin", "lavaan fmin bare", "fmin Ratio")
+                    "magmaan fmin", "lavaan fmin bare", "fmin Ratio",
+                    "ADF Γ Rank", "ADF Warning", "Conditioned fmin",
+                    "Conditioned Grad Inf", "Conditioned Stationary")
     html_table(tbl, status_col = "Classification", limit = NULL)
   }
 } else {
