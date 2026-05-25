@@ -3001,10 +3001,6 @@ fit_ordinal_snlls(spec::LatentStructure pt,
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "fit_ordinal_snlls: currently supports delta parameterization only"));
   }
-  if (plan.estimator == data::OrdinalEstimatorKind::WLS) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "fit_ordinal_snlls: WLS Schur profiling is a later ordinal SNLLS slice"));
-  }
   if (auto v = validate_moments(moments, rep); !v.has_value()) {
     return std::unexpected(v.error());
   }
