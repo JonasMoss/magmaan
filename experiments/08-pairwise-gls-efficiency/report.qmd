@@ -1,0 +1,146 @@
+---
+title: "Pairwise GLS Efficiency: Σ-only vs Γ_NT^pw Weight"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path), dirname(getwd())))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"),
+                              candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates,
+                                                "summary.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+summary_path  <- file.path(results_dir, "summary.csv")
+metadata_path <- file.path(results_dir, "metadata.csv")
+if (!file.exists(summary_path)) {
+  stop("Missing results/summary.csv. Run: Rscript run_experiment.R")
+}
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  stop("The report requires ggplot2.")
+}
+library(ggplot2)
+summary_df <- utils::read.csv(summary_path, check.names = FALSE)
+summary_df$miss_label <- sprintf("%g%%", 100 * summary_df$miss_rate)
+metadata <- if (file.exists(metadata_path))
+  utils::read.csv(metadata_path, check.names = FALSE) else NULL
+meta_lookup <- function(key, default = "") {
+  if (is.null(metadata)) return(default)
+  row <- metadata[metadata$key == key, , drop = FALSE]
+  if (nrow(row) == 0L) default else as.character(row$value[[1L]])
+}
+n_reps     <- meta_lookup("reps", "?")
+seed_base  <- meta_lookup("seed_base", "?")
+```
+
+## Question
+
+Two pairwise GLS variants are available for fitting an SEM to incomplete
+continuous data: the literature default with the Σ-only weight
+`Γ_NT(Σ̂_pw)⁻¹` and the asymptotically efficient variant with the
+`Γ_NT^pw⁻¹` weight. Does the asymptotic gain materialise at finite
+samples and realistic missing rates?
+
+## Short Answer
+
+Under Savalei-Bentler 2005 MCAR with a 9-indicator one-factor CFA, the
+`Γ_NT^pw` weight is uniformly more efficient at non-zero missing rates,
+with the gap growing with the missing rate and shrinking with n. The
+gap is **modest in the central cells** (1–10% trace-MSE reduction at
+n ≥ 500 and moderate missingness) but **becomes large in the
+small-n / heavy-missing corner** because the Σ-only weight produces
+occasional catastrophic fits there — one rep in 200 with sum-of-squared
+errors > 500 vs ~1 for `Γ_NT^pw`. So the asymptotic-efficiency story is
+small; the **robustness** story is the more interesting finding.
+Complete-data fits agree to floating-point round-off, as expected.
+
+## Evidence
+
+```{r evidence-table}
+tbl <- summary_df[, c("n", "miss_label", "reps",
+                       "trace_mse_sigma", "trace_mse_gamma",
+                       "eff_ratio_mse")]
+tbl$trace_mse_sigma <- round(tbl$trace_mse_sigma, 4)
+tbl$trace_mse_gamma <- round(tbl$trace_mse_gamma, 4)
+tbl$eff_ratio_mse <- round(tbl$eff_ratio_mse, 3)
+names(tbl) <- c("n", "Missing %", "Reps",
+                "Trace MSE Σ-only", "Trace MSE Γ_NT^pw",
+                "MSE Ratio (Σ ÷ Γ_NT^pw)")
+knitr::kable(tbl,
+             caption = "Trace of per-parameter empirical MSE across replications. Ratio > 1 means the Γ_NT^pw weight is more efficient.")
+```
+
+```{r evidence-plot, fig.width=7, fig.height=4}
+ggplot(summary_df,
+       aes(x = miss_rate, y = eff_ratio_mse,
+           colour = factor(n), group = factor(n))) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey50") +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.6) +
+  scale_x_continuous(labels = scales::percent) +
+  labs(
+    x = "Missing rate (MCAR, intact = x1)",
+    y = "Efficiency ratio  (trace MSE Σ-only ÷ trace MSE Γ_NT^pw)",
+    colour = "n"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "right")
+```
+
+The horizontal dashed line is the no-effect reference. Values strictly
+above 1 mean the Γ_NT^pw-weighted fit has smaller empirical MSE.
+
+## Caveats
+
+- One model only — 1-factor / 9 indicators / loadings ≈ 0.7. The
+  efficiency gap will scale with df (here 27) and with how strongly
+  Γ_NT^pw differs from Γ_NT(Σ̂_pw), which itself depends on the
+  missing-pattern structure.
+- MCAR only. MAR is the harder, more interesting case and is left for
+  a follow-up cell.
+- Skipped: standard errors, chi-square tests, FIML / complete-data ML
+  reference rows. The trace metric is a sufficient statistic for
+  asymptotic efficiency under the correct-model assumption used here;
+  finite-sample inference quality is a separate question.
+- `r n_reps` replications per cell (seed base `r seed_base`). The
+  results for the high-missing / small-n cells carry visible Monte
+  Carlo noise; bump `--reps` if a particular cell deserves more weight.
+- The n = 200 / rate = 30% cell's headline ratio is dominated by a
+  handful of catastrophic Σ-only fits (one rep with summed squared
+  error > 500 of 200 reps; median is ~1.4). Median per-rep behaviour
+  shows a much smaller gap. The blow-ups have a clear diagnostic:
+  on the worst rep, `Ŝ_pw` itself is well-conditioned (cond ≈ 49),
+  but `Γ_NT(Ŝ_pw)` carries condition number ≈ 2400 (smallest
+  eigenvalue ≈ 0.012) while `Γ_NT^pw` carries condition number ≈ 150
+  (smallest eigenvalue ≈ 0.24) — a ~16× difference. The MCAR-with-intact
+  Hadamard factor `Ω` has diagonal entries `1/(1-rate)` that pump up
+  variance components, regularising the near-singular directions of
+  `Γ_NT(Ŝ_pw)`. This is **not** a generic property of `Γ_NT^pw` over
+  `Γ_NT(Ŝ_pw)`: with a different missing pattern (MAR, planned-pattern,
+  …) the two could flip. The propagation `Ŝ_pw` non-PD ⇒
+  `Γ_NT(Ŝ_pw)` singular ⇒ `Γ_NT^pw` singular still holds in the limit;
+  under this specific MCAR-with-intact design, the regularising
+  side-effect is what we're seeing.
+- The Σ-only-weight fit is reached by passing `samp.S = Ŝ_pw` into the
+  existing `magmaan_core$estimate_gls`; the Γ_NT^pw fit is
+  `magmaan_core$estimate_gls_pairwise`. Both reduce to the same fit on
+  complete data — the rate-0 rows in the table verify this at machine
+  precision.
+
+## Reproduce
+
+```bash
+cd experiments/08-pairwise-gls-efficiency
+Rscript run_experiment.R          # full run (≈ minutes)
+Rscript run_experiment.R --smoke  # quick check
+quarto render report.qmd
+```

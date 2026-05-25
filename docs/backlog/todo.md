@@ -110,20 +110,16 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   Σ-only-weight variant remains accessible by handing
   `samp.S = pw.S` to the existing `fit_gls`; both reduce to the same fit on
   complete data (C++ unit test in tests/unit/pairwise_gls_test.cpp).
-  Still open:
-  * Inference-side pairwise NT reducer
-    `robust::reduced_gamma_nt_pairwise(uf, raw, pw)` — same Γ_NT^pw
-    machinery but projects through `uf.B` to df×df for the U-Gamma /
-    Satorra-Bentler test path instead of materializing the p*×p* GLS
-    weight.
-  * Pairwise μ ACOV for `fit_gls_pairwise` mean-structure models — for v0
-    the μ-block of the GLS weight keeps the Σ-only convention `Ŝ_pw⁻¹`.
-  * `experiments/NN-pairwise-gls-efficiency/` — small MAR simulation
-    comparing Σ-only vs Γ_NT^pw GLS at varying n, missing rate, p.
-  Parked: pairwise Browne-unbiased — the literal eq. 19 form is expensive
-  and the paper's pragmatic fallback would need its own bias study
-  (would-be paper-section rather than core machinery); revisit only when a
-  downstream project actually needs it.
+  Open: **`experiments/NN-pairwise-gls-efficiency/`** — the live research
+  question on whether the asymptotically-efficient Γ_NT^pw weight pays off
+  in finite samples. Scope: one-factor CFA at p ∈ {5, 10, 20} (overidentified
+  df > 0 so the weight bites), n ∈ {200, 500, 1000, 2000}, MCAR rates
+  {10%, 25%, 40%} plus one MAR design. Comparators: Σ-only-weight GLS,
+  Γ_NT^pw GLS, complete-data ML oracle, FIML. Outcomes: per-parameter MSE,
+  wall time, divergence-from-truth ratio. Remaining inference-side
+  Γ_NT^pw plumbing, pairwise μ ACOV, and pairwise Browne-unbiased live in
+  [`speculative.md`](speculative.md) — none committed until a downstream
+  consumer needs them.
 - **M.** Track objective value, gradient norm, iteration count, wall time, and
   agreement with lavaan-backed estimates where applicable.
 - **M/L.** Convergence-note / start-value portfolio paper track
