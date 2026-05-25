@@ -243,6 +243,22 @@ reduced_gamma_sample(const UFactor&                            uf,
                      const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
                      double                                    denom);
 
+// Caller-supplied empirical Γ̂ counterpart. `gamma_hat` is the stacked
+// block-diagonal moment covariance in the same column layout as Zc:
+// cov-only ⇒ Σ_b p_b*; means ⇒ Σ_b (p_b + p_b*). Each diagonal block must
+// already use the intended divisor/scaling, e.g. Γ̂_b = Zc_bᵀZc_b / n_b for
+// the usual multi-block robust test. For a single block this is simply
+// `crossprod(Zc) / n`.
+//
+// This is algebraically the same reduction as `reduced_gamma_sample()`:
+//   BᵀΓ̂B == (ZcB)ᵀ(ZcB)/n
+// but lets callers reuse a Γ̂ matrix they already materialized for sandwich
+// SEs or benchmarking.
+post_expected<Eigen::MatrixXd>
+reduced_gamma_sample_from_gamma(
+    const UFactor&                            uf,
+    const Eigen::Ref<const Eigen::MatrixXd>&  gamma_hat);
+
 // Reference/materialized counterpart to `reduced_gamma_sample()`.
 // Forms each empirical Γ̂_b = Zc_bᵀZc_b / denom_b explicitly before reducing
 // with B_bᵀΓ̂_bB_b. This is intentionally less memory-frugal; it exists for

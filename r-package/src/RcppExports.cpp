@@ -1027,6 +1027,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_reduced_gamma_sample_from_gamma
+Rcpp::NumericMatrix infer_reduced_gamma_sample_from_gamma(Rcpp::List uf, Rcpp::NumericMatrix gamma_hat);
+RcppExport SEXP _magmaan_infer_reduced_gamma_sample_from_gamma(SEXP ufSEXP, SEXP gamma_hatSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type uf(ufSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type gamma_hat(gamma_hatSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_reduced_gamma_sample_from_gamma(uf, gamma_hat));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_reduced_gamma_sample_materialized
 Rcpp::NumericMatrix infer_reduced_gamma_sample_materialized(Rcpp::List uf, Rcpp::NumericMatrix Zc, Rcpp::NumericVector denom);
 RcppExport SEXP _magmaan_infer_reduced_gamma_sample_materialized(SEXP ufSEXP, SEXP ZcSEXP, SEXP denomSEXP) {
@@ -1318,6 +1330,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_build_u_factor_parts", (DL_FUNC) &_magmaan_infer_build_u_factor_parts, 5},
     {"_magmaan_infer_reduced_gamma_nt", (DL_FUNC) &_magmaan_infer_reduced_gamma_nt, 1},
     {"_magmaan_infer_reduced_gamma_sample", (DL_FUNC) &_magmaan_infer_reduced_gamma_sample, 3},
+    {"_magmaan_infer_reduced_gamma_sample_from_gamma", (DL_FUNC) &_magmaan_infer_reduced_gamma_sample_from_gamma, 2},
     {"_magmaan_infer_reduced_gamma_sample_materialized", (DL_FUNC) &_magmaan_infer_reduced_gamma_sample_materialized, 3},
     {"_magmaan_infer_reduced_gamma_unbiased", (DL_FUNC) &_magmaan_infer_reduced_gamma_unbiased, 4},
     {"_magmaan_infer_ugamma_eigenvalues", (DL_FUNC) &_magmaan_infer_ugamma_eigenvalues, 1},

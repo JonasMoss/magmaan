@@ -528,6 +528,78 @@ reduced_gamma_sample(const UFactor&                            uf,
 }
 
 post_expected<Eigen::MatrixXd>
+reduced_gamma_sample_from_gamma(
+    const UFactor&                            uf,
+    const Eigen::Ref<const Eigen::MatrixXd>&  gamma_hat) {
+  const Eigen::Index expected_dim =
+      uf.has_means ? uf.total_rows : uf.pstar;
+  if (gamma_hat.rows() != expected_dim || gamma_hat.cols() != expected_dim) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_sample_from_gamma: Γ̂ is " +
+            std::to_string(gamma_hat.rows()) + "×" +
+            std::to_string(gamma_hat.cols()) + ", expected " +
+            std::to_string(expected_dim) + "×" +
+            std::to_string(expected_dim) +
+            (uf.has_means ? " (μ-rows + σ-rows per block)" : " (σ-only)")));
+  }
+  const Eigen::Index nb = static_cast<Eigen::Index>(uf.blocks.size());
+  const auto block_slice = [&](const UFactor::Block& blk)
+      -> std::pair<Eigen::Index, Eigen::Index> {
+    const Eigen::Index start = (uf.has_means && blk.mu_off >= 0)
+                                   ? blk.mu_off : blk.row_offset;
+    const Eigen::Index size  = (uf.has_means ? blk.p : 0) + blk.pstar;
+    return {start, size};
+  };
+
+  if (uf.kind == UFactor::Kind::ObservedHessian) {
+    Eigen::MatrixXd Mtilde =
+        Eigen::MatrixXd::Zero(uf.total_rows, uf.total_rows);
+    for (Eigen::Index b = 0; b < nb; ++b) {
+      const auto& blk = uf.blocks[static_cast<std::size_t>(b)];
+      const auto [bstart, bsize] = block_slice(blk);
+      const Eigen::MatrixXd G_b =
+          gamma_hat.block(bstart, bstart, bsize, bsize);
+      Eigen::MatrixXd L_inv_G_b = Eigen::MatrixXd::Zero(bsize, bsize);
+      if (uf.has_means && blk.mu_off >= 0) {
+        L_inv_G_b.topRows(blk.p) =
+            blk.llt_M.matrixL().solve(G_b.topRows(blk.p));
+      }
+      const Eigen::Index sigma_row_in_block = uf.has_means ? blk.p : 0;
+      L_inv_G_b.middleRows(sigma_row_in_block, blk.pstar) =
+          blk.llt_gamma_nt.matrixL().solve(
+              G_b.middleRows(sigma_row_in_block, blk.pstar));
+
+      Eigen::MatrixXd M_b = Eigen::MatrixXd::Zero(bsize, bsize);
+      if (uf.has_means && blk.mu_off >= 0) {
+        M_b.leftCols(blk.p) =
+            blk.llt_M.matrixL().solve(
+                L_inv_G_b.leftCols(blk.p).transpose()).transpose();
+      }
+      const Eigen::Index sigma_col_in_block = uf.has_means ? blk.p : 0;
+      M_b.middleCols(sigma_col_in_block, blk.pstar) =
+          blk.llt_gamma_nt.matrixL().solve(
+              L_inv_G_b.middleCols(sigma_col_in_block, blk.pstar)
+                  .transpose()).transpose();
+      Mtilde.block(bstart, bstart, bsize, bsize) = std::move(M_b);
+    }
+    Mtilde = 0.5 * (Mtilde + Mtilde.transpose()).eval();
+    return symm_product_eigbasis(Mtilde, observed_C(uf));
+  }
+
+  Eigen::MatrixXd M = Eigen::MatrixXd::Zero(uf.df, uf.df);
+  for (Eigen::Index b = 0; b < nb; ++b) {
+    const auto& blk = uf.blocks[static_cast<std::size_t>(b)];
+    const auto [bstart, bsize] = block_slice(blk);
+    const Eigen::MatrixXd B_b = uf.B.middleRows(bstart, bsize);
+    const Eigen::MatrixXd G_b =
+        gamma_hat.block(bstart, bstart, bsize, bsize);
+    M.noalias() += B_b.transpose() * G_b * B_b;
+  }
+  M = 0.5 * (M + M.transpose()).eval();
+  return M;
+}
+
+post_expected<Eigen::MatrixXd>
 reduced_gamma_sample_materialized(
     const UFactor&                            uf,
     const Eigen::Ref<const Eigen::MatrixXd>&  Zc,

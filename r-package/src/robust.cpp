@@ -305,6 +305,22 @@ Rcpp::NumericMatrix infer_reduced_gamma_sample(Rcpp::List uf, Rcpp::NumericMatri
   return Rcpp::wrap(*m_or);
 }
 
+// infer_reduced_gamma_sample_from_gamma() — same robust-test reduction as
+// infer_reduced_gamma_sample(), but the caller supplies the already-materialized
+// empirical Γ̂ matrix in the stacked moment layout. For multi-block models each
+// diagonal block must already carry the intended divisor/scaling.
+//
+// [[Rcpp::export]]
+Rcpp::NumericMatrix infer_reduced_gamma_sample_from_gamma(
+    Rcpp::List uf, Rcpp::NumericMatrix gamma_hat) {
+  magmaan::robust::UFactor u = ufactor_from_list(uf);
+  Eigen::Map<const Eigen::MatrixXd> G(gamma_hat.begin(), gamma_hat.nrow(),
+                                      gamma_hat.ncol());
+  auto m_or = magmaan::robust::reduced_gamma_sample_from_gamma(u, G);
+  if (!m_or.has_value()) stop_post(m_or.error());
+  return Rcpp::wrap(*m_or);
+}
+
 // infer_reduced_gamma_sample_materialized() — same target as
 // infer_reduced_gamma_sample(), but forms Γ̂ explicitly before reducing.
 // This is a reference/benchmark path, not the memory-frugal production route.
