@@ -243,6 +243,7 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
                                 bool auto_cov_y = false,
                                 bool orthogonal = false,
                                 bool auto_fix_first = true,
+                                bool auto_fix_single = true,
                                 bool std_lv = false,
                                 bool effect_coding = false,
                                 bool fixed_x = true,
@@ -260,16 +261,17 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   opts.auto_var       = auto_var;
   opts.auto_cov_lv_x  = auto_cov_lv_x;
   opts.auto_cov_y     = auto_cov_y;
-  opts.orthogonal     = orthogonal;    // fix auto latent covariances at 0 (lavaan orthogonal=)
-  opts.auto_fix_first = auto_fix_first;
-  opts.std_lv         = std_lv;        // when true, forces auto.fix.first off (lavaan parity)
-  opts.effect_coding  = effect_coding; // free all loadings + LV var; adds `Σλ == #indicators`
-  opts.fixed_x        = fixed_x;
-  opts.meanstructure  = meanstructure;
-  opts.int_ov_free    = int_ov_free;
-  opts.int_lv_free    = int_lv_free;
-  opts.n_groups       = n_groups;
-  opts.group_var      = group_var;
+  opts.orthogonal      = orthogonal;    // fix auto latent covariances at 0 (lavaan orthogonal=)
+  opts.auto_fix_first  = auto_fix_first;
+  opts.auto_fix_single = auto_fix_single;
+  opts.std_lv          = std_lv;        // when true, forces auto.fix.first off (lavaan parity)
+  opts.effect_coding   = effect_coding; // free all loadings + LV var; adds `Σλ == #indicators`
+  opts.fixed_x         = fixed_x;
+  opts.meanstructure   = meanstructure;
+  opts.int_ov_free     = int_ov_free;
+  opts.int_lv_free     = int_lv_free;
+  opts.n_groups        = n_groups;
+  opts.group_var       = group_var;
   if (group_labels.isNotNull())
     opts.group_labels = Rcpp::as<std::vector<std::string>>(group_labels.get());
 
@@ -291,4 +293,3 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   Rf_setAttrib(df, Rf_install("magmaan.expanded_partable"), expanded);
   return df;
 }
-

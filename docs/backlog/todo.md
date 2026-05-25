@@ -21,15 +21,6 @@ semantics · **XL** statistical design/research track before implementation.
   finalized `corpus/textbook-corpus/raw/kline` corpus into an end-to-end
   parity test.
 
-- **S.** **`auto.fix.single`-style parity gap on single-indicator latents** —
-  `little_2013_ch3_fig_3_6_1indicator__gls` surfaced this. lavaan fixes the
-  residual variance of a single-indicator latent's lone indicator to zero by
-  default; magmaan auto-frees it in `src/spec/build.cpp:741`. Likely a
-  one-line default-flip in the auto-spec routine alongside the existing
-  `auto.fix.first` / `auto.cov.y` toggles. Same kind of fix as the
-  `auto.cov.y` extension that landed under §B2 of the snlls-constrained
-  paper TODO.
-
 - **S.** **ADF/WLS weight builder should tolerance-trim Γ̂ before inversion** —
   At small N with a binary covariate, the empirical Browne NACOV is
   positive-definite to working precision but has condition number ≈ 10¹⁷

@@ -52,7 +52,8 @@ golden `parTable()` fixtures.
   keeps latent-change-score and single-indicator state chains on the same
   state vector as their autoregressions.
 - Fixed.x resolution, mean structures, marker/std.lv/effect-coding
-  identification, start hints, and linear equality constraints.
+  identification, lavaan-style single-indicator residual fixing, start hints,
+  and linear equality constraints.
 - Linear equality constraints through affine reparameterization (θ = θ₀ + K·α)
   for the ML, GMM/GLS, and bounded ordinal LS paths; per-θ box bounds fold onto
   the reduced α for the pure-merge case.
