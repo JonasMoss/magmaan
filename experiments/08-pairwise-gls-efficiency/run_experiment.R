@@ -169,16 +169,23 @@ apply_missingness <- function(X, mechanism, rate, seed) {
   apply_sb2005_mar(X, rate, predictors = 1:2, seed = seed)
 }
 
-# Build a magmaan partable for "f =~ x1 + ... + xp" via lavaanify.
+# Build a magmaan partable for "f =~ x1 + ... + xp" via lavaanify, with
+# mean structure included — required for FIML, and harmless for ML/GLS
+# (intercepts enter as additional free parameters with true value 0). This
+# keeps the partable identical across all four estimators so their
+# per-parameter estimates are directly comparable.
 build_partable <- function(p) {
   rhs <- paste(paste0("x", seq_len(p)), collapse = " + ")
   model <- paste0("f =~ ", rhs)
   lavaan::lavaanify(model, fixed.x = FALSE,
                     auto.var = TRUE, auto.fix.first = TRUE,
-                    auto.cov.lv.x = TRUE)
+                    auto.cov.lv.x = TRUE,
+                    meanstructure = TRUE,
+                    int.lv.free = FALSE, int.ov.free = TRUE)
 }
 
-# True θ in the (lavaanify) free-parameter order.
+# True θ in the (lavaanify) free-parameter order. Intercepts have true
+# value 0 because the simulated data is mean-centred.
 true_theta <- function(partable, m) {
   is_free <- partable$free > 0L
   ord <- partable$free[is_free]
@@ -194,6 +201,8 @@ true_theta <- function(partable, m) {
     } else if (r$op == "~~" && r$lhs == r$rhs && r$lhs != "f") {
       idx <- as.integer(sub("^x", "", r$lhs))
       vals[i] <- m$theta_res[idx]
+    } else if (r$op == "~1") {
+      vals[i] <- 0.0
     } else {
       vals[i] <- NA_real_
     }
@@ -201,13 +210,18 @@ true_theta <- function(partable, m) {
   vals[order(ord)]
 }
 
-# Fit all three estimators on one (X, mask) pair:
+# Fit all four estimators on one (X, mask) pair:
 #   sigma — fit_gls with samp.S = Ŝ_pw                  (Σ-only weight)
 #   gamma — fit_gls_pairwise(raw, pw)                   (Γ_NT^pw weight)
 #   ml    — fit_ml      with samp.S = Ŝ_pw              (Savalei-Bentler 2005
 #                                                        pairwise covariance ML;
 #                                                        asymptotically first-order
 #                                                        equivalent to sigma)
+#   fiml  — fit_fiml(partable, raw_data)                (oracle: direct
+#                                                        missing-data ML; uses
+#                                                        the full incomplete-data
+#                                                        likelihood, not a
+#                                                        pairwise summary)
 # Also records cond(Γ_NT(Ŝ_pw)) and cond(Γ_NT^pw) — the conditioning
 # diagnostic the story turns on. Returns NA estimates for any path that
 # errored (e.g. ML when Ŝ_pw is non-PD).
@@ -244,12 +258,17 @@ fit_triple <- function(X, mask, partable, n_par) {
     magmaan::magmaan_core$estimate_ml(partable, sample_pw)),
     error = function(e) na_theta)
   t4 <- Sys.time()
+  fiml_or <- tryCatch(pull_theta(
+    magmaan::magmaan_core$estimate_fiml(partable, list(X = X, mask = mask))),
+    error = function(e) na_theta)
+  t5 <- Sys.time()
 
   list(
-    sigma = sigma_or, gamma = gamma_or, ml = ml_or,
+    sigma = sigma_or, gamma = gamma_or, ml = ml_or, fiml = fiml_or,
     t_sigma = as.numeric(t2 - t1, units = "secs"),
     t_gamma = as.numeric(t3 - t2, units = "secs"),
     t_ml    = as.numeric(t4 - t3, units = "secs"),
+    t_fiml  = as.numeric(t5 - t4, units = "secs"),
     cond_sigma = c_sigma,
     cond_gamma = c_gamma
   )
@@ -323,9 +342,11 @@ main <- function() {
         est_sigma  = res$sigma,
         est_gamma  = res$gamma,
         est_ml     = res$ml,
+        est_fiml   = res$fiml,
         t_sigma    = res$t_sigma,
         t_gamma    = res$t_gamma,
         t_ml       = res$t_ml,
+        t_fiml     = res$t_fiml,
         cond_sigma = res$cond_sigma,
         cond_gamma = res$cond_gamma
       )
@@ -346,19 +367,24 @@ main <- function() {
     mch <- cells_uniq$mechanism[i]
     cell <- fits[fits$n == n & fits$miss_rate == rt &
                  fits$mechanism == mch, , drop = FALSE]
-    var_sigma <- numeric(n_par); var_gamma <- numeric(n_par); var_ml <- numeric(n_par)
-    mse_sigma <- numeric(n_par); mse_gamma <- numeric(n_par); mse_ml <- numeric(n_par)
+    var_sigma <- numeric(n_par); var_gamma <- numeric(n_par)
+    var_ml    <- numeric(n_par); var_fiml  <- numeric(n_par)
+    mse_sigma <- numeric(n_par); mse_gamma <- numeric(n_par)
+    mse_ml    <- numeric(n_par); mse_fiml  <- numeric(n_par)
     for (k in seq_len(n_par)) {
       cl <- cell[cell$par_idx == k, ]
       var_sigma[k] <- stats::var(cl$est_sigma, na.rm = TRUE)
       var_gamma[k] <- stats::var(cl$est_gamma, na.rm = TRUE)
       var_ml[k]    <- stats::var(cl$est_ml,    na.rm = TRUE)
+      var_fiml[k]  <- stats::var(cl$est_fiml,  na.rm = TRUE)
       bias_s <- mean(cl$est_sigma, na.rm = TRUE) - cl$theta_true[[1L]]
       bias_g <- mean(cl$est_gamma, na.rm = TRUE) - cl$theta_true[[1L]]
       bias_m <- mean(cl$est_ml,    na.rm = TRUE) - cl$theta_true[[1L]]
+      bias_f <- mean(cl$est_fiml,  na.rm = TRUE) - cl$theta_true[[1L]]
       mse_sigma[k] <- var_sigma[k] + bias_s^2
       mse_gamma[k] <- var_gamma[k] + bias_g^2
       mse_ml[k]    <- var_ml[k]    + bias_m^2
+      mse_fiml[k]  <- var_fiml[k]  + bias_f^2
     }
     cond_cells <- cell[!duplicated(cell$rep), c("cond_sigma", "cond_gamma")]
     # Count reps where each estimator returned all-finite θ̂ (per-param NA
@@ -373,21 +399,30 @@ main <- function() {
     summary_rows[[i]] <- data.frame(
       n = n, miss_rate = rt, mechanism = mch,
       reps = length(rep_ids),
-      reps_ml_ok = sum(fin_ok("est_ml")),
+      reps_ml_ok    = sum(fin_ok("est_ml")),
       reps_sigma_ok = sum(fin_ok("est_sigma")),
       reps_gamma_ok = sum(fin_ok("est_gamma")),
+      reps_fiml_ok  = sum(fin_ok("est_fiml")),
       trace_var_sigma = sum(var_sigma),
       trace_var_gamma = sum(var_gamma),
       trace_var_ml    = sum(var_ml),
+      trace_var_fiml  = sum(var_fiml),
       trace_mse_sigma = sum(mse_sigma),
       trace_mse_gamma = sum(mse_gamma),
       trace_mse_ml    = sum(mse_ml),
+      trace_mse_fiml  = sum(mse_fiml),
       eff_ratio_mse_sigma_vs_gamma = sum(mse_sigma) / sum(mse_gamma),
       eff_ratio_mse_ml_vs_gamma    = sum(mse_ml)    / sum(mse_gamma),
       eff_ratio_mse_ml_vs_sigma    = sum(mse_ml)    / sum(mse_sigma),
+      # Ratios > 1 mean FIML is more efficient than the named pairwise
+      # estimator (so it's the "FIML / pairwise" loss ratio).
+      eff_ratio_mse_sigma_vs_fiml = sum(mse_sigma) / sum(mse_fiml),
+      eff_ratio_mse_ml_vs_fiml    = sum(mse_ml)    / sum(mse_fiml),
+      eff_ratio_mse_gamma_vs_fiml = sum(mse_gamma) / sum(mse_fiml),
       mean_t_sigma = mean(cell$t_sigma, na.rm = TRUE),
       mean_t_gamma = mean(cell$t_gamma, na.rm = TRUE),
       mean_t_ml    = mean(cell$t_ml,    na.rm = TRUE),
+      mean_t_fiml  = mean(cell$t_fiml,  na.rm = TRUE),
       median_cond_sigma = stats::median(cond_cells$cond_sigma),
       median_cond_gamma = stats::median(cond_cells$cond_gamma),
       q95_cond_sigma    = stats::quantile(cond_cells$cond_sigma, 0.95, names = FALSE),
