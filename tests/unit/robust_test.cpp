@@ -698,6 +698,38 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B") {
   REQUIRE(M_obs_gamma_or.has_value());
   CHECK((*M_obs_zc_or - *M_obs_gamma_or).cwiseAbs().maxCoeff() < 1e-9);
 
+  const auto close_moment = [](double a, double b) {
+    return std::abs(a - b) <= 1e-8 * std::max(1.0, std::abs(b));
+  };
+  const auto moments_from_M = [](int df, const Eigen::MatrixXd& M) {
+    return magmaan::robust::WeightedChiSquareMoments{
+        df, M.diagonal().sum(), M.squaredNorm()};
+  };
+  const auto exp_ref = moments_from_M(static_cast<int>(uf_or->df), *M_a_or);
+  const auto obs_ref =
+      moments_from_M(static_cast<int>(uf_obs_or->df), *M_obs_zc_or);
+  auto both_zc_or = magmaan::robust::robust_test_moments_both_breads(
+      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est, *Zc_or,
+      static_cast<double>(n), magmaan::robust::WeightMoments::Structured);
+  REQUIRE(both_zc_or.has_value());
+  auto both_gamma_or =
+      magmaan::robust::robust_test_moments_both_breads_from_gamma(
+          *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est, *G_or,
+          magmaan::robust::WeightMoments::Structured);
+  REQUIRE(both_gamma_or.has_value());
+  CHECK(both_zc_or->expected.df == exp_ref.df);
+  CHECK(close_moment(both_zc_or->expected.trace, exp_ref.trace));
+  CHECK(close_moment(both_zc_or->expected.trace_sq, exp_ref.trace_sq));
+  CHECK(both_zc_or->observed.df == obs_ref.df);
+  CHECK(close_moment(both_zc_or->observed.trace, obs_ref.trace));
+  CHECK(close_moment(both_zc_or->observed.trace_sq, obs_ref.trace_sq));
+  CHECK(both_gamma_or->expected.df == exp_ref.df);
+  CHECK(close_moment(both_gamma_or->expected.trace, exp_ref.trace));
+  CHECK(close_moment(both_gamma_or->expected.trace_sq, exp_ref.trace_sq));
+  CHECK(both_gamma_or->observed.df == obs_ref.df);
+  CHECK(close_moment(both_gamma_or->observed.trace, obs_ref.trace));
+  CHECK(close_moment(both_gamma_or->observed.trace_sq, obs_ref.trace_sq));
+
   // The per-block-divisor vector form: a length-1 vector recycles to the
   // single block, so it must match the scalar overload bit-for-bit. A
   // length-n vector with n ≠ {1, n_blocks} is rejected.
@@ -798,6 +830,15 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B with mean structure (G3
   auto M_bad_gamma_or =
       magmaan::robust::reduced_gamma_sample_from_gamma(*uf_or, Gamma_sigma);
   CHECK_FALSE(M_bad_gamma_or.has_value());
+  auto moments_bad_or = magmaan::robust::robust_test_moments_both_breads(
+      *h.pt, *h.rep, samp_seed, *est_or, *Zc_sigma_or,
+      static_cast<double>(n), magmaan::robust::WeightMoments::Structured);
+  CHECK_FALSE(moments_bad_or.has_value());
+  auto moments_bad_gamma_or =
+      magmaan::robust::robust_test_moments_both_breads_from_gamma(
+          *h.pt, *h.rep, samp_seed, *est_or, Gamma_sigma,
+          magmaan::robust::WeightMoments::Structured);
+  CHECK_FALSE(moments_bad_gamma_or.has_value());
 }
 
 // ----------------------------------------------------------------------------

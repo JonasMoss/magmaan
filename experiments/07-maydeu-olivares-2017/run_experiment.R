@@ -241,22 +241,40 @@ build_cell_ctx <- function(cell) {
   )
 }
 
-# ── χ² reduced-matrix pipeline ──────────────────────────────────────────────
-# Build UFactor, reduce sample Γ̂ through B, return the df × df symmetric
-# matrix M = B'Γ̂B itself. The SB / MV-adj / SS adjustments need only
-# `tr(M)` and `tr(M²)` — eigenvalues are wasted work — so we feed M directly
-# into the `_M`-suffixed χ² primitives. `Zc` and `denom` are passed in so we
-# don't re-compute them across bread variants.
-ugamma_M_zc <- function(fit, Zc, denom, bread) {
-  uf <- core$robust_build_u_factor(fit, bread = bread, moments = "structured")
-  M <- core$robust_reduced_gamma_sample_zc(uf, Zc, denom)
-  list(M = M, df = as.integer(uf$df))
+# ── χ² trace-moment pipeline ────────────────────────────────────────────────
+# SB / MV-adj / scaled-shifted need only tr(M) and tr(M²). Ask magmaan for
+# those moments for both expected and observed breads in one C++ call, avoiding
+# UFactor list roundtrips and full df × df matrices at the R boundary.
+sb_from_moments <- function(T, mom) {
+  df <- as.integer(mom$df %||% NA_integer_)
+  tr <- as.numeric(mom$trace %||% NA_real_)
+  if (!is.finite(T) || !is.finite(tr) || !is.finite(df) || df <= 0) {
+    return(list(stat = NA_real_, df = NA_integer_))
+  }
+  c_scale <- tr / df
+  list(stat = if (c_scale > 0) T / c_scale else NA_real_, df = df)
 }
 
-ugamma_M_gamma <- function(fit, gamma_hat, bread) {
-  uf <- core$robust_build_u_factor(fit, bread = bread, moments = "structured")
-  M <- core$robust_reduced_gamma_sample_from_gamma(uf, gamma_hat)
-  list(M = M, df = as.integer(uf$df))
+mv_from_moments <- function(T, mom) {
+  tr <- as.numeric(mom$trace %||% NA_real_)
+  tr2 <- as.numeric(mom$trace_sq %||% NA_real_)
+  if (!is.finite(T) || !is.finite(tr) || !is.finite(tr2) || tr2 <= 0) {
+    return(list(stat = NA_real_, df = NA_real_))
+  }
+  list(stat = T * tr / tr2, df = tr * tr / tr2)
+}
+
+ss_from_moments <- function(T, mom) {
+  df <- as.integer(mom$df %||% NA_integer_)
+  tr <- as.numeric(mom$trace %||% NA_real_)
+  tr2 <- as.numeric(mom$trace_sq %||% NA_real_)
+  if (!is.finite(T) || !is.finite(df) || df <= 0 ||
+      !is.finite(tr) || !is.finite(tr2) || tr2 <= 0) {
+    return(list(stat = NA_real_, df = NA_integer_))
+  }
+  a <- sqrt(df / tr2)
+  b <- df - a * tr
+  list(stat = T * a + b, df = df)
 }
 
 # ── Per-replicate fit pipeline ──────────────────────────────────────────────
@@ -339,43 +357,32 @@ fit_one_rep <- function(cell_ctx, threshold_taus, N, seed, robust_track,
   T_ML <- core$inference_chi2_stat(samp, fit$fmin)
   df_ML <- core$inference_df_stat(fit$partable, samp)
 
-  # Build the reduced df × df symmetric matrix M for each bread; the
-  # adjustments below take M directly (tr(M), tr(M²)) and skip the O(k³)
-  # eigendecomposition entirely.
-  mat_E <- tryCatch({
+  # Build trace moments for both breads in one C++ call; the adjustments below
+  # never need the reduced matrix itself.
+  test_moments <- tryCatch({
     if (identical(robust_track, "gamma")) {
-      ugamma_M_gamma(fit, gamma_hat, "expected")
+      core$robust_test_moments_both_breads_gamma(
+        fit, gamma_hat, moments = "structured")
     } else {
-      ugamma_M_zc(fit, Zc, denom, "expected")
+      core$robust_test_moments_both_breads_zc(
+        fit, Zc, denom, moments = "structured")
     }
   }, error = function(e) e)
-  mat_O <- tryCatch({
-    if (identical(robust_track, "gamma")) {
-      ugamma_M_gamma(fit, gamma_hat, "observed")
-    } else {
-      ugamma_M_zc(fit, Zc, denom, "observed")
-    }
-  }, error = function(e) e)
-  # Field names differ by adjustment:
-  #   satorra_bentler_M   → list(chi2_scaled, scale_c, df)
-  #   mean_var_adjusted_M → list(chi2_adj,    df_adj)
-  #   scaled_shifted_M    → list(chi2_adj,    df, scale_a, shift_b)
-  pick_chi2 <- function(fun, mat_pack, stat_field, df_field) {
-    if (inherits(mat_pack, "error")) return(list(stat = NA_real_, df = NA_integer_))
-    res <- tryCatch(fun(T_ML, as.integer(mat_pack$df), mat_pack$M),
-                    error = function(e) e)
-    if (inherits(res, "error")) return(list(stat = NA_real_, df = NA_integer_))
-    list(stat = as.numeric(res[[stat_field]] %||% NA_real_),
-         df = as.integer(res[[df_field]] %||% mat_pack$df))
+
+  pick_moments <- function(which) {
+    if (inherits(test_moments, "error")) return(NULL)
+    test_moments[[which]] %||% NULL
   }
-  T_MLM    <- pick_chi2(core$robust_satorra_bentler_M,    mat_E,
-                        "chi2_scaled", "df")
-  T_MLMV   <- pick_chi2(core$robust_mean_var_adjusted_M,  mat_E,
-                        "chi2_adj", "df_adj")
-  T_MLR    <- pick_chi2(core$robust_scaled_shifted_M,     mat_O,
-                        "chi2_adj", "df")
-  T_MLR_e  <- pick_chi2(core$robust_scaled_shifted_M,     mat_E,
-                        "chi2_adj", "df")
+  mom_E <- pick_moments("expected")
+  mom_O <- pick_moments("observed")
+  T_MLM   <- if (is.null(mom_E)) list(stat = NA_real_, df = NA_integer_) else
+    sb_from_moments(T_ML, mom_E)
+  T_MLMV  <- if (is.null(mom_E)) list(stat = NA_real_, df = NA_real_) else
+    mv_from_moments(T_ML, mom_E)
+  T_MLR   <- if (is.null(mom_O)) list(stat = NA_real_, df = NA_integer_) else
+    ss_from_moments(T_ML, mom_O)
+  T_MLR_e <- if (is.null(mom_E)) list(stat = NA_real_, df = NA_integer_) else
+    ss_from_moments(T_ML, mom_E)
 
   # ── RMSEA / SRMR ────────────────────────────────────────────────────────
   rmsea_from <- function(T, df, N) {

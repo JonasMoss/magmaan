@@ -313,6 +313,14 @@ infer_reduced_gamma_sample_from_gamma <- function(uf, gamma_hat) {
     .Call(`_magmaan_infer_reduced_gamma_sample_from_gamma`, uf, gamma_hat)
 }
 
+infer_robust_test_moments_both_breads_zc <- function(fit, Zc, denom, moments = "structured") {
+    .Call(`_magmaan_infer_robust_test_moments_both_breads_zc`, fit, Zc, denom, moments)
+}
+
+infer_robust_test_moments_both_breads_gamma <- function(fit, gamma_hat, moments = "structured") {
+    .Call(`_magmaan_infer_robust_test_moments_both_breads_gamma`, fit, gamma_hat, moments)
+}
+
 infer_reduced_gamma_sample_materialized <- function(uf, Zc, denom) {
     .Call(`_magmaan_infer_reduced_gamma_sample_materialized`, uf, Zc, denom)
 }
