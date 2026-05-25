@@ -231,6 +231,21 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                     Backend backend = Backend::NloptLbfgs,
                     optim::OptimOptions opts = {});
 
+// Golub-Pereyra profiled all-ordinal delta LS over the cache-aware
+// free-threshold correlation objective. Thresholds are eliminated first, then
+// conditionally linear covariance parameters are profiled by the SNLLS engine.
+// The first slice supports ULS and DWLS; WLS is rejected until the ordinal
+// Schur-weight SNLLS path is validated.
+fit_expected<Estimates>
+fit_ordinal_snlls(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const data::OrdinalMoments& moments,
+                  data::OrdinalGammaCache* gamma_cache,
+                  data::OrdinalWeightPlan plan,
+                  const Eigen::VectorXd& x0,
+                  Backend backend = Backend::NloptLbfgs,
+                  optim::OptimOptions opts = {});
+
 fit_expected<Estimates>
 fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
