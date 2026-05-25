@@ -26,7 +26,8 @@ struct BuildOptions {
   // 0) so the partable mirrors lavaan's. An explicit user `f1 ~~ f2` row still
   // wins. Only affects the rows `auto_cov_lv_x` / `auto_cov_y` generate.
   bool orthogonal     = false;  // fix auto latent-variable covariances at 0
-  bool auto_fix_first = true;   // fix first loading per LV to 1.0 (marker indicator)
+  bool auto_fix_first  = true;  // fix first loading per LV to 1.0 (marker indicator)
+  bool auto_fix_single = true;  // fix auto residual variance for lone observed indicator
   // `std.lv` identification: scale each latent by fixing its `~~`-self
   // variance at 1.0 instead of fixing a marker loading. When true,
   // auto.fix.first is forced off regardless of `auto_fix_first` (lavaan does

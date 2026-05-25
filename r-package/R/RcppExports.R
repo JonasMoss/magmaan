@@ -9,8 +9,8 @@ parse_parse <- function(syntax) {
     .Call(`_magmaan_parse_parse`, syntax)
 }
 
-lavaan_lavaanify <- function(syntax, auto_var = TRUE, auto_cov_lv_x = TRUE, auto_cov_y = FALSE, orthogonal = FALSE, auto_fix_first = TRUE, std_lv = FALSE, effect_coding = FALSE, fixed_x = TRUE, meanstructure = FALSE, int_ov_free = TRUE, int_lv_free = FALSE, n_groups = 1L, group_var = "", group_labels = NULL) {
-    .Call(`_magmaan_lavaan_lavaanify`, syntax, auto_var, auto_cov_lv_x, auto_cov_y, orthogonal, auto_fix_first, std_lv, effect_coding, fixed_x, meanstructure, int_ov_free, int_lv_free, n_groups, group_var, group_labels)
+lavaan_lavaanify <- function(syntax, auto_var = TRUE, auto_cov_lv_x = TRUE, auto_cov_y = FALSE, orthogonal = FALSE, auto_fix_first = TRUE, auto_fix_single = TRUE, std_lv = FALSE, effect_coding = FALSE, fixed_x = TRUE, meanstructure = FALSE, int_ov_free = TRUE, int_lv_free = FALSE, n_groups = 1L, group_var = "", group_labels = NULL) {
+    .Call(`_magmaan_lavaan_lavaanify`, syntax, auto_var, auto_cov_lv_x, auto_cov_y, orthogonal, auto_fix_first, auto_fix_single, std_lv, effect_coding, fixed_x, meanstructure, int_ov_free, int_lv_free, n_groups, group_var, group_labels)
 }
 
 model_matrix_rep <- function(partable) {
@@ -432,4 +432,3 @@ infer_robust_se_both_breads_raw <- function(fit, X, moments = "structured", cov 
 infer_robust_se_both_breads_zc <- function(fit, Zc, n_total, moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_both_breads_zc`, fit, Zc, n_total, moments, cov)
 }
-

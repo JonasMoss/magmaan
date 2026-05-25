@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -39,6 +40,14 @@ LavaanParTable must_lavaanify(std::string_view src, BuildOptions opts = {}) {
                   "lavaanify failed: kind=" << static_cast<int>(pt.error().kind)
                   << " — " << pt.error().detail);
   return to_lavaan_partable(*pt, names, starts);
+}
+
+std::size_t find_row(const LavaanParTable& pt, std::string_view lhs, Op op,
+                     std::string_view rhs) {
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.lhs[i] == lhs && pt.op[i] == op && pt.rhs[i] == rhs) return i;
+  }
+  return pt.size();
 }
 
 }  // namespace
@@ -80,6 +89,50 @@ TEST_CASE("lavaanify: 1-factor CFA produces 4 rows (3 loadings + 1 var auto.fix.
 
   // n_free should equal the count of free rows (2 free loadings + 4 variances)
   CHECK(pt.n_free() == 6);
+}
+
+TEST_CASE("lavaanify: auto_fix_single fixes auto-added residual variance") {
+  auto pt = must_lavaanify("f =~ x1");
+  REQUIRE(pt.size() == 3);
+
+  const auto loading = find_row(pt, "f", Op::Measurement, "x1");
+  REQUIRE(loading < pt.size());
+  CHECK(pt.free[loading] == 0);
+  CHECK(pt.ustart[loading] == 1.0);
+
+  const auto residual = find_row(pt, "x1", Op::Covariance, "x1");
+  REQUIRE(residual < pt.size());
+  CHECK(pt.user[residual] == 0);
+  CHECK(pt.free[residual] == 0);
+  CHECK(pt.ustart[residual] == 0.0);
+
+  const auto latent_var = find_row(pt, "f", Op::Covariance, "f");
+  REQUIRE(latent_var < pt.size());
+  CHECK(pt.user[latent_var] == 0);
+  CHECK(pt.free[latent_var] > 0);
+  CHECK(pt.n_free() == 1);
+}
+
+TEST_CASE("lavaanify: auto_fix_single leaves explicit residual variance alone") {
+  auto pt = must_lavaanify("f =~ x1\nx1 ~~ x1");
+  const auto residual = find_row(pt, "x1", Op::Covariance, "x1");
+  REQUIRE(residual < pt.size());
+  CHECK(pt.user[residual] == 1);
+  CHECK(pt.free[residual] > 0);
+  CHECK(std::isnan(pt.ustart[residual]));
+  CHECK(pt.n_free() == 2);
+}
+
+TEST_CASE("lavaanify: auto_fix_single can be disabled") {
+  BuildOptions opts;
+  opts.auto_fix_single = false;
+  auto pt = must_lavaanify("f =~ x1", opts);
+  const auto residual = find_row(pt, "x1", Op::Covariance, "x1");
+  REQUIRE(residual < pt.size());
+  CHECK(pt.user[residual] == 0);
+  CHECK(pt.free[residual] > 0);
+  CHECK(std::isnan(pt.ustart[residual]));
+  CHECK(pt.n_free() == 2);
 }
 
 TEST_CASE("lavaanify: std_lv frees the first loading and fixes the LV variance at 1") {

@@ -37,6 +37,11 @@ Eigen::MatrixXd matrix_from_json(const nlohmann::json &j) {
 }
 
 Eigen::VectorXd vector_from_json(const nlohmann::json &j) {
+  if (j.is_number()) {
+    Eigen::VectorXd out(1);
+    out(0) = j.get<double>();
+    return out;
+  }
   Eigen::VectorXd out(static_cast<Eigen::Index>(j.size()));
   for (Eigen::Index i = 0; i < out.size(); ++i) {
     out(i) = j[static_cast<std::size_t>(i)].get<double>();
@@ -244,6 +249,50 @@ void check_newsom_lcs_case_at_lavaan_theta(std::string_view case_id) {
   CHECK_MESSAGE(d_mu < 1e-8, case_id << ": max|mu - lavaan| = " << d_mu);
 }
 
+void check_little_single_indicator_case_at_lavaan_theta() {
+  constexpr std::string_view case_id =
+      "little_2013_ch3_fig_3_6_1indicator";
+  const std::string case_dir = repo_root_from_fixtures() +
+      "/corpus/textbook-corpus/cases/little_2013/" + std::string(case_id);
+  auto model_raw = magmaan::test::read_fixture(case_dir + "/model.lav");
+  REQUIRE_MESSAGE(model_raw.has_value(), "missing model for " << case_id);
+  const auto meta = read_json_or_fail(case_dir + "/meta.json");
+  const auto ref = read_json_or_fail(case_dir + "/expected/lavaan_ml.json");
+
+  auto flat = magmaan::parse::Parser::parse(*model_raw);
+  REQUIRE_MESSAGE(flat.has_value(), case_id << ": parse - "
+                                            << flat.error().detail);
+  magmaan::spec::BuildOptions opts;
+  opts.meanstructure = meta["model_options"].value("meanstructure", false);
+  opts.fixed_x = meta["model_options"].value("fixed_x", true);
+  opts.auto_cov_y = meta.value("lavaan_function", std::string{}) == "sem";
+  auto pt = magmaan::spec::build(*flat, opts);
+  REQUIRE_MESSAGE(pt.has_value(), case_id << ": lavaanify - "
+                                          << pt.error().detail);
+  auto rep = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE_MESSAGE(rep.has_value(), case_id << ": matrix_rep - "
+                                           << rep.error().detail);
+  auto ev = magmaan::model::ModelEvaluator::build(*pt, *rep);
+  REQUIRE_MESSAGE(ev.has_value(), case_id << ": evaluator - "
+                                          << ev.error().detail);
+
+  const Eigen::VectorXd theta = vector_from_json(ref["theta"]);
+  REQUIRE_MESSAGE(static_cast<std::size_t>(theta.size()) == ev->n_free(),
+                  case_id << ": theta size " << theta.size()
+                          << " != n_free " << ev->n_free());
+  auto im = ev->sigma(theta);
+  REQUIRE_MESSAGE(im.has_value(), case_id << ": sigma - "
+                                          << im.error().detail);
+  const double d_sigma =
+      max_abs_diff(im->sigma[0], matrix_from_json(ref["implied"]["sigma"]));
+  CHECK_MESSAGE(d_sigma < 1e-8,
+                case_id << ": max|Sigma - lavaan| = " << d_sigma);
+  REQUIRE(!im->mu.empty());
+  const double d_mu =
+      max_abs_diff(im->mu[0], vector_from_json(ref["implied"]["mu"]));
+  CHECK_MESSAGE(d_mu < 1e-8, case_id << ": max|mu - lavaan| = " << d_mu);
+}
+
 } // namespace
 
 TEST_CASE("Little and Newsom corpus fixtures are well formed") {
@@ -379,6 +428,10 @@ TEST_CASE("Textbook corpus v1 overlap graph is well formed") {
 
 TEST_CASE("Newsom LCS promoted-observed implied moments match lavaan at theta") {
   check_newsom_lcs_case_at_lavaan_theta("newsom_2015_ex9_3");
+}
+
+TEST_CASE("Little single-indicator implied moments match lavaan at theta") {
+  check_little_single_indicator_case_at_lavaan_theta();
 }
 
 // TODO(default-backend): the provisional NLopt-L-BFGS default exposes a

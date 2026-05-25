@@ -445,6 +445,38 @@ void apply_auto_fix_first(const VarSets& v, std::vector<PendingRow>& rows) {
   }
 }
 
+// === Step 5a: auto.fix.single ==============================================
+//
+// For a latent measured by exactly one observed indicator, lavaan fixes the
+// indicator's residual variance at 0 by default. Only auto-added variance rows
+// are eligible here; an explicit user `x ~~ x` row suppresses auto.var and
+// remains under user control.
+void apply_auto_fix_single(const VarSets& v, std::vector<PendingRow>& rows) {
+  for (const auto& lv : v.lv.items) {
+    const std::string* indicator = nullptr;
+    std::size_t n_indicators = 0;
+    for (const auto& row : rows) {
+      if (row.op != parse::Op::Measurement) continue;
+      if (row.lhs != lv) continue;
+      if (!v.ov_ind.contains(row.rhs)) continue;
+      indicator = &row.rhs;
+      ++n_indicators;
+      if (n_indicators > 1) break;
+    }
+    if (n_indicators != 1 || indicator == nullptr) continue;
+
+    for (auto& row : rows) {
+      if (row.op != parse::Op::Covariance) continue;
+      if (row.lhs != *indicator || row.rhs != *indicator) continue;
+      if (row.user != 0 || row.user_explicit) break;
+      row.user_fixed_value = true;
+      row.fixed_value      = 0.0;
+      row.auto_fixed       = true;
+      break;
+    }
+  }
+}
+
 // === Step 5 (std.lv variant) ===============================================
 //
 // `std.lv` identification: instead of fixing a marker loading, scale each
@@ -754,6 +786,9 @@ build_group_template(const parse::FlatPartable& flat,
       add_fcsem_fixed_composite_moments(native_composites, rows);
     }
     if (!opts.fixed_x) apply_random_x(v, rows);
+  }
+  if (opts.auto_fix_single) {
+    apply_auto_fix_single(v, rows);
   }
   if (opts.auto_cov_lv_x) {
     // A latent is endogenous — and so excluded from the auto-covariance set —
