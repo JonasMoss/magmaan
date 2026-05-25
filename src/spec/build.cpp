@@ -791,16 +791,39 @@ build_group_template(const parse::FlatPartable& flat,
     }
   }
   if (opts.auto_cov_y) {
-    OrderedSet endo_lv;
+    // Match lavaan's `lvov.names.y` (R/lav_partable_flat.R:227): pair up the
+    // *terminal* endogenous variables — latent or observed — and add
+    // residual covariances between them. "Endogenous" = appears as LHS of a
+    // Regression. "Terminal" = does NOT appear as RHS of any Regression.
+    // Without the terminal filter a 3-wave path model would correlate every
+    // pair of endogenous OVs; lavaan only correlates the wave-3 (last)
+    // outcomes. Without the OV-Y branch a path model with no latents (e.g.
+    // newsom_2015_ex5_6a) silently drops the terminal residual covariance
+    // lavaan auto-adds. Both packages then honour explicit user `~~` rows
+    // via `covariance_already_present`; the formative-composite path below
+    // overrides this with its own (no-terminal-filter) loop when active.
+    OrderedSet endogenous, predictors;
     for (const auto& fr : flat.rows) {
-      if (fr.op == parse::Op::Regression && v.lv.contains(fr.lhs)) {
-        endo_lv.insert(fr.lhs);
-      }
+      if (fr.op != parse::Op::Regression) continue;
+      // lavaan's `lvov.names.y = c(lv.names.y, ov.y)` excludes measurement
+      // indicators from `ov.y` (an indicator that is also a regression target
+      // is still an indicator for moment-vector purposes). `v.ov_y` in
+      // magmaan does NOT exclude indicators (see classify_vars), so apply
+      // the exclusion here.
+      const bool endo_lv = v.lv.contains(fr.lhs);
+      const bool endo_ov_y =
+          v.ov_y.contains(fr.lhs) && !v.ov_ind.contains(fr.lhs);
+      if (endo_lv || endo_ov_y) endogenous.insert(fr.lhs);
+      predictors.insert(fr.rhs);
     }
-    for (std::size_t i = 0; i + 1 < endo_lv.items.size(); ++i) {
-      for (std::size_t j = i + 1; j < endo_lv.items.size(); ++j) {
-        const auto& lhs = endo_lv.items[i];
-        const auto& rhs = endo_lv.items[j];
+    OrderedSet terminals;
+    for (const auto& name : endogenous.items) {
+      if (!predictors.contains(name)) terminals.insert(name);
+    }
+    for (std::size_t i = 0; i + 1 < terminals.items.size(); ++i) {
+      for (std::size_t j = i + 1; j < terminals.items.size(); ++j) {
+        const auto& lhs = terminals.items[i];
+        const auto& rhs = terminals.items[j];
         if (covariance_already_present(rows, lhs, rhs)) continue;
         if (regression_already_present(rows, lhs, rhs) ||
             regression_already_present(rows, rhs, lhs)) {
