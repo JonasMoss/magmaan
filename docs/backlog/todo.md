@@ -68,8 +68,10 @@ semantics · **XL** statistical design/research track before implementation.
   All-ordinal delta SNLLS for ULS/DWLS/WLS now reuses the profiled correlation
   objective, fixes thresholds away before the generic Golub-Pereyra split, and
   returns estimates in the ordinary prepared ordinal partable coordinate, with
-  WLS using the Schur-complement profiled weight. Next slice: mixed ordinal and
-  constrained-threshold generalization, then benchmark instrumentation.
+  WLS using the Schur-complement profiled weight. Fixed threshold rows now stay
+  in the profiled full-moment objective for ULS/DWLS/WLS and are covered for
+  bounded fits plus WLS SNLLS. Next slice: mixed ordinal and shared/equality
+  threshold-map generalization, then benchmark instrumentation.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into

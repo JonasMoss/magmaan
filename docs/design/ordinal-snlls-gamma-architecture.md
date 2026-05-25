@@ -163,11 +163,12 @@ Partition the ordinal residual as
 
 ```text
 e = [e_tau; e_rho]
-  = [tau_hat - H alpha_tau; rho_hat - rho_star(beta, alpha_sigma)]
+  = [tau_hat - (H alpha_tau + c); rho_hat - rho_star(beta, alpha_sigma)]
 ```
 
-where `H` maps threshold parameters to implied thresholds. For unconstrained
-automatic thresholds, `H = I`.
+where `H` maps threshold parameters to implied thresholds and `c` carries fixed
+threshold constants. For unconstrained automatic thresholds, `H = I` and
+`c = 0`.
 
 ### ULS and DWLS, `H = I`
 
@@ -219,12 +220,14 @@ threshold/correlation cross-block matters.
 For equality-constrained or otherwise linearly mapped thresholds:
 
 ```text
-alpha_tau = (H' W_tt H)^-1 H' (W_tt tau_hat + W_tr e_r)
+alpha_tau = (H' W_tt H)^-1 H' (W_tt (tau_hat - c) + W_tr e_r)
 ```
 
-This is a later slice. The first implementation should hard-code/support the
-free-threshold `H = I` case and fail clearly when a model requires the general
-threshold map.
+The implementation now covers the identity/free-threshold case and the
+selector-map case where some threshold rows are fixed constants and the
+remaining free thresholds are unique. Shared labels, equality-constrained
+thresholds, and general linear threshold maps remain a later slice and should
+still fail clearly.
 
 ## Fit-Only Cost Rules
 
@@ -236,8 +239,9 @@ These are the rules the implementation and experiments should enforce.
 | DWLS | profile exactly | diagonal only for active non-threshold moments | diagonal inverse |
 | WLS | profile with Schur complement | full relevant Gamma or inverse/factor blocks | full/profiled WLS |
 
-For non-free thresholds, ULS/DWLS may need threshold residuals and threshold
-diagonal weights. That is not the first target.
+For fixed threshold rows, ULS/DWLS keep the threshold residuals in the profiled
+full moment vector and DWLS consumes the corresponding diagonal Gamma entries.
+Shared/equality-constrained thresholds still require the general map above.
 
 ## Inference Rules
 
@@ -261,10 +265,10 @@ intentionally.
 The first ordinal SNLLS target is:
 
 - all-ordinal, delta parameterization
-- free thresholds (`H = I`)
+- free thresholds (`H = I`) plus fixed threshold rows
 - ULS and DWLS first
 - WLS second, using the profiled Schur-complement weight
-- no threshold equality constraints
+- no shared/equality-constrained threshold labels
 - no mixed continuous/ordinal path until the all-ordinal path is stable
 
 The nonlinear SNLLS block should operate on the profiled ordinal correlation
@@ -346,10 +350,14 @@ extend cache during inference."
    Add fit-plus-inference and inference-only cache extension paths. Verify that
    robust ordinal SE/test results match the current materialized NACOV path.
 
-8. **Mixed ordinal / constrained thresholds.**
-   Generalize only after the all-ordinal free-threshold path is stable.
+8. **Fixed threshold rows.**
+   Keep fixed threshold residuals in the profiled full-moment objective and
+   verify bounded and SNLLS parity against the unprofiled path.
 
-9. **Experiments.**
+9. **Mixed ordinal / constrained thresholds.**
+   Generalize only after the all-ordinal free/fixed-threshold path is stable.
+
+10. **Experiments.**
    Add fit-only and fit-plus-inference ordinal experiments with explicit setup
    time accounting.
 
