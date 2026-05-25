@@ -182,6 +182,94 @@ finite_ratio <- function(num, den) {
   out
 }
 
+empty_conditioned_audit <- function() {
+  list(
+    adf_gamma_dim = NA_integer_,
+    adf_gamma_rank = NA_integer_,
+    adf_gamma_rcond = NA_real_,
+    adf_gamma_tol = NA_real_,
+    adf_gamma_min_eigen = NA_real_,
+    adf_gamma_max_eigen = NA_real_,
+    adf_conditioning_warning = NA,
+    adf_conditioned_fmin = NA_real_,
+    adf_conditioned_grad_inf = NA_real_,
+    adf_conditioned_stationary = NA
+  )
+}
+
+conditioned_adf_weight <- function(data, include_means) {
+  X <- as.matrix(data)
+  Gamma <- if (isTRUE(include_means)) {
+    magmaan::magmaan_core$robust_empirical_gamma_with_means(X)
+  } else {
+    magmaan::magmaan_core$robust_empirical_gamma(X)
+  }
+  Gamma <- 0.5 * (Gamma + t(Gamma))
+  eig <- eigen(Gamma, symmetric = TRUE)
+  values <- eig$values
+  scale <- max(abs(values), 1)
+  tol <- nrow(Gamma) * .Machine$double.eps * scale
+  keep <- values > tol
+  if (!any(keep)) {
+    stop("conditioned ADF weight has numerical rank zero", call. = FALSE)
+  }
+
+  Q <- eig$vectors[, keep, drop = FALSE]
+  A <- sweep(Q, 2L, 1 / sqrt(values[keep]), `*`)
+  W <- tcrossprod(A)
+  W <- 0.5 * (W + t(W))
+  list(
+    W = W,
+    dim = nrow(Gamma),
+    rank = sum(keep),
+    rcond = rcond(Gamma),
+    tol = tol,
+    min_eigen = min(values),
+    max_eigen = max(values),
+    warning = any(!keep) || any(values < -tol)
+  )
+}
+
+conditioned_adf_audit <- function(case, prob, theta_full, estimator) {
+  out <- empty_conditioned_audit()
+  if (!toupper(case$estimator) %in% c("ADF", "WLS")) return(out)
+  if (!identical(estimator, "WLS") || is.null(case$data)) return(out)
+
+  diag <- tryCatch(
+    conditioned_adf_weight(
+      case$data,
+      include_means = isTRUE(case$model_spec_args$meanstructure)
+    ),
+    error = function(e) structure(list(error = conditionMessage(e)),
+                                  class = "audit_parity_conditioned_error"))
+  if (inherits(diag, "audit_parity_conditioned_error")) {
+    out$adf_conditioning_warning <- TRUE
+    return(out)
+  }
+
+  ev <- tryCatch(
+    magmaan::magmaan_core$evaluate_at(
+      prob$spec, prob$dat, as.numeric(theta_full),
+      estimator = "WLS", W = diag$W),
+    error = function(e) structure(list(error = conditionMessage(e)),
+                                  class = "audit_parity_conditioned_error"))
+
+  out$adf_gamma_dim <- diag$dim
+  out$adf_gamma_rank <- diag$rank
+  out$adf_gamma_rcond <- diag$rcond
+  out$adf_gamma_tol <- diag$tol
+  out$adf_gamma_min_eigen <- diag$min_eigen
+  out$adf_gamma_max_eigen <- diag$max_eigen
+  out$adf_conditioning_warning <- isTRUE(diag$warning)
+  if (!inherits(ev, "audit_parity_conditioned_error")) {
+    out$adf_conditioned_fmin <- ev$fmin
+    out$adf_conditioned_grad_inf <-
+      as.numeric(ev$audit$grad_inf_norm %||% NA_real_)
+    out$adf_conditioned_stationary <- isTRUE(ev$audit$stationary)
+  }
+  out
+}
+
 oracle_root <- function() file.path(results_dir(create = TRUE), "lavaan-oracle")
 
 resolve_oracle_run <- function(run_id) {
@@ -234,6 +322,13 @@ empty_audit_row <- function(case, lav = NULL, error = NA_character_) {
     magmaan_fmin = NA_real_, magmaan_iter = NA_integer_,
     audit_advisory = NA_character_, audit_grad_inf = NA_real_,
     audit_stationary = NA,
+    adf_gamma_dim = NA_integer_, adf_gamma_rank = NA_integer_,
+    adf_gamma_rcond = NA_real_, adf_gamma_tol = NA_real_,
+    adf_gamma_min_eigen = NA_real_, adf_gamma_max_eigen = NA_real_,
+    adf_conditioning_warning = NA,
+    adf_conditioned_fmin = NA_real_,
+    adf_conditioned_grad_inf = NA_real_,
+    adf_conditioned_stationary = NA,
     error = error, stringsAsFactors = FALSE
   )
 }
@@ -304,7 +399,11 @@ audit_cached_lavaan <- function(case, lav, estimates) {
 
   n_total <- sum(unlist(prob$dat$nobs))
   bessel <- audit_bessel(case, n_total)
-  data.frame(
+  conditioned <- as.data.frame(
+    conditioned_adf_audit(case, prob, theta_full, estimator),
+    stringsAsFactors = FALSE
+  )
+  cbind(data.frame(
     case_id = case$id, book = case$corpus, family = case$family,
     weight = case$estimator,
     n_free_mag = nrow(free_pt), n_free_lav = lav$n_free_lav,
@@ -316,8 +415,8 @@ audit_cached_lavaan <- function(case, lav, estimates) {
     audit_advisory = as.character(ev$audit$advisory_status %||% NA),
     audit_grad_inf = as.numeric(ev$audit$grad_inf_norm %||% NA_real_),
     audit_stationary = isTRUE(ev$audit$stationary),
-    error = NA_character_, stringsAsFactors = FALSE
-  )
+    stringsAsFactors = FALSE
+  ), conditioned, data.frame(error = NA_character_, stringsAsFactors = FALSE))
 }
 
 audit_lavaan_oracle <- function(run_id) {
@@ -366,6 +465,13 @@ audit_lavaan_oracle <- function(run_id) {
         magmaan_fmin = NA_real_, magmaan_iter = NA_integer_,
         audit_advisory = NA_character_, audit_grad_inf = NA_real_,
         audit_stationary = NA,
+        adf_gamma_dim = NA_integer_, adf_gamma_rank = NA_integer_,
+        adf_gamma_rcond = NA_real_, adf_gamma_tol = NA_real_,
+        adf_gamma_min_eigen = NA_real_, adf_gamma_max_eigen = NA_real_,
+        adf_conditioning_warning = NA,
+        adf_conditioned_fmin = NA_real_,
+        adf_conditioned_grad_inf = NA_real_,
+        adf_conditioned_stationary = NA,
         error = "case missing from corpus_cases", stringsAsFactors = FALSE)
       next
     }
