@@ -80,19 +80,22 @@ parse_args <- function(args) {
   out
 }
 
+first_existing <- function(paths) {
+  hit <- paths[file.exists(paths) | dir.exists(paths)]
+  if (length(hit)) hit[[1L]] else paths[[1L]]
+}
+
 repo_path <- function(...) file.path(repo_root(), ...)
-paper_dir <- function() repo_path("papers", "snlls-constrained")
+paper_dir <- function() {
+  first_existing(repo_path("papers", c("snlls-continuous",
+                                       "snlls-constrained")))
+}
 paper_report <- function(...) file.path(paper_dir(), "reports", ...)
 paper_raw <- function(...) file.path(paper_dir(), "results", "raw", ...)
 paper_dev_audit <- function(...) file.path(paper_dir(), "dev", "audits", ...)
 paper_script <- function(...) file.path(paper_dir(), "scripts", ...)
 paper_dev_script <- function(...) file.path(paper_dir(), "dev", "scripts", ...)
 paper_supplement <- function(...) file.path(paper_dir(), "supplement", ...)
-
-first_existing <- function(paths) {
-  hit <- paths[file.exists(paths) | dir.exists(paths)]
-  if (length(hit)) hit[[1L]] else paths[[1L]]
-}
 
 paper_audit_dir <- function(run_id) {
   first_existing(c(
@@ -160,6 +163,11 @@ load_paper_package <- function() {
 read_csv <- function(path) {
   utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE,
                   na.strings = c("", "NA"))
+}
+
+read_csv_keep_empty <- function(path) {
+  utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE,
+                  na.strings = "NA")
 }
 
 boolish <- function(x) {
@@ -315,8 +323,18 @@ audit_cached_lavaan <- function(case, lav, estimates) {
 audit_lavaan_oracle <- function(run_id) {
   load_paper_package()
   oracle <- resolve_oracle_run(run_id)
-  fits <- read_csv(file.path(oracle$path, "lavaan_fits.csv"))
-  estimates <- read_csv(file.path(oracle$path, "lavaan_estimates.csv"))
+  fits_rds <- file.path(oracle$path, "lavaan_fits.rds")
+  estimates_rds <- file.path(oracle$path, "lavaan_estimates.rds")
+  fits <- if (file.exists(fits_rds)) {
+    readRDS(fits_rds)
+  } else {
+    read_csv(file.path(oracle$path, "lavaan_fits.csv"))
+  }
+  estimates <- if (file.exists(estimates_rds)) {
+    readRDS(estimates_rds)
+  } else {
+    read_csv_keep_empty(file.path(oracle$path, "lavaan_estimates.csv"))
+  }
   oracle_meta <- read_csv(file.path(oracle$path, "metadata.csv"))
 
   corpus_root <- snlls_corpus_root(paper_dir())
