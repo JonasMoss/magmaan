@@ -70,8 +70,10 @@ semantics · **XL** statistical design/research track before implementation.
   returns estimates in the ordinary prepared ordinal partable coordinate, with
   WLS using the Schur-complement profiled weight. Fixed threshold rows now stay
   in the profiled full-moment objective for ULS/DWLS/WLS and are covered for
-  bounded fits plus WLS SNLLS. Next slice: mixed ordinal and shared/equality
-  threshold-map generalization, then benchmark instrumentation.
+  bounded fits plus WLS SNLLS. Threshold-local shared-label / bare-merge
+  equality groups now share threshold-map columns and are covered for bounded
+  fits plus WLS SNLLS. Next slice: mixed ordinal and general linear
+  threshold-map support, then benchmark instrumentation.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into

@@ -476,13 +476,16 @@ struct ThresholdLayout {
 struct ThresholdProfile {
   std::vector<std::int32_t> active_full;
   std::vector<char> is_threshold;
+  std::vector<std::int32_t> threshold_coord;
   Eigen::VectorXd full_template;
+  std::int32_t n_threshold_coord = 0;
 };
 
 struct ThresholdFixedProfile {
   spec::LatentStructure pt;
   Eigen::VectorXd x0;
   std::vector<std::int32_t> reduced_to_full;
+  ThresholdProfile profile;
   Eigen::VectorXd full_template;
 };
 
@@ -573,8 +576,10 @@ make_threshold_profile(const spec::LatentStructure& pt,
   }
   ThresholdProfile profile;
   profile.is_threshold.assign(static_cast<std::size_t>(n_free), 0);
+  profile.threshold_coord.assign(static_cast<std::size_t>(n_free), -1);
   profile.full_template = x0;
 
+  std::vector<std::int32_t> threshold_free;
   for (std::size_t b = 0; b < stats.thresholds.size(); ++b) {
     for (Eigen::Index k = 0; k < stats.thresholds[b].size(); ++k) {
       const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
@@ -591,20 +596,50 @@ make_threshold_profile(const spec::LatentStructure& pt,
             "ordinal threshold profiling does not support shared thresholds"));
       }
       profile.is_threshold[idx] = 1;
+      threshold_free.push_back(fr);
       profile.full_template(fr - 1) = stats.thresholds[b](k);
     }
   }
 
   if (static_cast<std::int32_t>(pt.eq_groups.size()) == n_free) {
+    std::int32_t max_group = -1;
+    for (std::int32_t k = 0; k < n_free; ++k) {
+      const std::int32_t group = pt.eq_groups[static_cast<std::size_t>(k)];
+      if (group < 0) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "ordinal threshold profiling found malformed equality groups"));
+      }
+      max_group = std::max(max_group, group);
+    }
+    std::vector<char> group_has_other(static_cast<std::size_t>(max_group + 1), 0);
+    for (std::int32_t k = 0; k < n_free; ++k) {
+      const std::int32_t group = pt.eq_groups[static_cast<std::size_t>(k)];
+      if (profile.is_threshold[static_cast<std::size_t>(k)] == 0) {
+        group_has_other[static_cast<std::size_t>(group)] = 1;
+      }
+    }
     for (std::int32_t t = 0; t < n_free; ++t) {
       if (profile.is_threshold[static_cast<std::size_t>(t)] == 0) continue;
       const std::int32_t group = pt.eq_groups[static_cast<std::size_t>(t)];
-      for (std::int32_t k = 0; k < n_free; ++k) {
-        if (k != t && pt.eq_groups[static_cast<std::size_t>(k)] == group) {
-          return std::unexpected(make_err(FitError::Kind::NumericIssue,
-              "ordinal threshold profiling does not support equality-constrained thresholds"));
-        }
+      if (group_has_other[static_cast<std::size_t>(group)] != 0) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "ordinal threshold profiling does not support equality constraints between thresholds and non-threshold parameters"));
       }
+    }
+    std::vector<std::int32_t> group_to_coord(static_cast<std::size_t>(max_group + 1), -1);
+    for (std::int32_t fr : threshold_free) {
+      const std::int32_t group = pt.eq_groups[static_cast<std::size_t>(fr - 1)];
+      if (group_to_coord[static_cast<std::size_t>(group)] < 0) {
+        group_to_coord[static_cast<std::size_t>(group)] =
+            profile.n_threshold_coord++;
+      }
+      profile.threshold_coord[static_cast<std::size_t>(fr - 1)] =
+          group_to_coord[static_cast<std::size_t>(group)];
+    }
+  } else {
+    for (std::int32_t fr : threshold_free) {
+      profile.threshold_coord[static_cast<std::size_t>(fr - 1)] =
+          profile.n_threshold_coord++;
     }
   }
 
@@ -679,6 +714,43 @@ Bounds profile_bounds(const ThresholdProfile& profile, const Bounds& bounds) {
   return out;
 }
 
+fit_expected<void>
+ensure_no_unprofiled_equality_constraints(const spec::LatentStructure& pt,
+                                          const ThresholdProfile& profile) {
+  const std::int32_t n_free = pt.n_free();
+  if (!pt.lin_constraint_d.empty()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: profiled ordinal fit-only path does not yet support general linear equality constraints"));
+  }
+  if (static_cast<std::int32_t>(pt.eq_groups.size()) != n_free) return {};
+
+  std::int32_t max_group = -1;
+  for (std::int32_t k = 0; k < n_free; ++k) {
+    const std::int32_t group = pt.eq_groups[static_cast<std::size_t>(k)];
+    if (group < 0) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: malformed equality groups"));
+    }
+    max_group = std::max(max_group, group);
+  }
+  std::vector<std::int32_t> group_size(static_cast<std::size_t>(max_group + 1), 0);
+  std::vector<char> group_has_other(static_cast<std::size_t>(max_group + 1), 0);
+  for (std::int32_t k = 0; k < n_free; ++k) {
+    const std::int32_t group = pt.eq_groups[static_cast<std::size_t>(k)];
+    ++group_size[static_cast<std::size_t>(group)];
+    if (profile.is_threshold[static_cast<std::size_t>(k)] == 0) {
+      group_has_other[static_cast<std::size_t>(group)] = 1;
+    }
+  }
+  for (std::size_t g = 0; g < group_size.size(); ++g) {
+    if (group_size[g] > 1 && group_has_other[g] != 0) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: profiled ordinal fit-only path does not yet support non-threshold equality constraints"));
+    }
+  }
+  return {};
+}
+
 fit_expected<ThresholdFixedProfile>
 fix_thresholds_for_snlls(spec::LatentStructure pt,
                          const ThresholdLayout& layout,
@@ -721,7 +793,8 @@ fix_thresholds_for_snlls(spec::LatentStructure pt,
   out.pt = std::move(pt);
   out.x0 = Eigen::VectorXd::Zero(out.pt.n_free());
   out.reduced_to_full.assign(static_cast<std::size_t>(out.pt.n_free()), 0);
-  out.full_template = std::move(profile.full_template);
+  out.full_template = profile.full_template;
+  out.profile = std::move(profile);
   std::vector<char> seen(static_cast<std::size_t>(out.pt.n_free()), 0);
   for (std::size_t row = 0; row < out.pt.size(); ++row) {
     const std::int32_t old = old_free[row];
@@ -846,6 +919,7 @@ fit_expected<ProfiledWeightBlock>
 make_profiled_weight_block(const Eigen::VectorXd& thresholds,
                            const std::vector<std::int32_t>& free,
                            const std::vector<double>& fixed,
+                           const ThresholdProfile& profile,
                            const Eigen::MatrixXd& W,
                            const Eigen::MatrixXd& factor,
                            std::string_view context,
@@ -871,8 +945,6 @@ make_profiled_weight_block(const Eigen::VectorXd& thresholds,
   const Eigen::Index mdim = W.rows();
   const Eigen::Index ncorr = mdim - nth;
   Eigen::VectorXd fixed_contrib = Eigen::VectorXd::Zero(nth);
-  std::vector<std::int32_t> threshold_free;
-  threshold_free.reserve(static_cast<std::size_t>(nth));
   for (Eigen::Index k = 0; k < nth; ++k) {
     const std::int32_t fr = free[static_cast<std::size_t>(k)];
     if (fr < 0) {
@@ -884,20 +956,22 @@ make_profiled_weight_block(const Eigen::VectorXd& thresholds,
       fixed_contrib(k) = fixed[static_cast<std::size_t>(k)];
       continue;
     }
-    if (std::find(threshold_free.begin(), threshold_free.end(), fr) !=
-        threshold_free.end()) {
+    if (fr > static_cast<std::int32_t>(profile.threshold_coord.size()) ||
+        profile.threshold_coord[static_cast<std::size_t>(fr - 1)] < 0 ||
+        profile.threshold_coord[static_cast<std::size_t>(fr - 1)] >=
+            profile.n_threshold_coord) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          std::string(context) +
-              ": shared threshold profiling is not yet supported"));
+          std::string(context) + ": threshold profiling metadata mismatch"));
     }
-    threshold_free.push_back(fr);
   }
 
   Eigen::MatrixXd H =
-      Eigen::MatrixXd::Zero(nth, static_cast<Eigen::Index>(threshold_free.size()));
-  Eigen::Index col = 0;
+      Eigen::MatrixXd::Zero(nth, profile.n_threshold_coord);
   for (Eigen::Index k = 0; k < nth; ++k) {
-    if (free[static_cast<std::size_t>(k)] > 0) H(k, col++) = 1.0;
+    const std::int32_t fr = free[static_cast<std::size_t>(k)];
+    if (fr > 0) {
+      H(k, profile.threshold_coord[static_cast<std::size_t>(fr - 1)]) = 1.0;
+    }
   }
 
   Eigen::VectorXd threshold_intercept = fixed_contrib;
@@ -948,6 +1022,7 @@ make_profiled_weight_block(const Eigen::VectorXd& thresholds,
 fit_expected<ProfiledWeightWorkspace>
 profiled_weight_workspace(const data::OrdinalMoments& moments,
                           const ThresholdLayout& layout,
+                          const ThresholdProfile& profile,
                           data::OrdinalGammaCache* cache,
                           const data::OrdinalWeightPlan& plan) {
   ProfiledWeightWorkspace out;
@@ -998,7 +1073,7 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
       const Eigen::Index mdim = nth + ncorr;
       const Eigen::MatrixXd I = Eigen::MatrixXd::Identity(mdim, mdim);
       auto block = make_profiled_weight_block(
-          moments.thresholds[b], layout.free[b], layout.fixed[b], I, I,
+          moments.thresholds[b], layout.free[b], layout.fixed[b], profile, I, I,
           "fit_ordinal_bounded", b);
       if (!block.has_value()) return std::unexpected(block.error());
       out.blocks.push_back(std::move(*block));
@@ -1040,7 +1115,7 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
                 std::to_string(b)));
       }
       auto block = make_profiled_weight_block(
-          moments.thresholds[b], layout.free[b], layout.fixed[b], W,
+          moments.thresholds[b], layout.free[b], layout.fixed[b], profile, W,
           llt.matrixL(), "fit_ordinal_bounded", b);
       if (!block.has_value()) return std::unexpected(block.error());
       out.blocks.push_back(std::move(*block));
@@ -1095,7 +1170,7 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
       factor(k, k) = std::sqrt(w);
     }
     auto block = make_profiled_weight_block(
-        moments.thresholds[b], layout.free[b], layout.fixed[b], W, factor,
+        moments.thresholds[b], layout.free[b], layout.fixed[b], profile, W, factor,
         "fit_ordinal_bounded", b);
     if (!block.has_value()) return std::unexpected(block.error());
     out.blocks.push_back(std::move(*block));
@@ -3027,7 +3102,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
   }
   Bounds active_bounds = profile_bounds(profile, bounds);
 
-  auto weights_or = profiled_weight_workspace(moments, layout, gamma_cache, plan);
+  auto weights_or =
+      profiled_weight_workspace(moments, layout, profile, gamma_cache, plan);
   if (!weights_or.has_value()) return std::unexpected(weights_or.error());
   const auto& profiled_weights = *weights_or;
 
@@ -3037,8 +3113,10 @@ fit_ordinal_bounded(spec::LatentStructure pt,
         "constraint: " + con_or.error().detail));
   }
   if (con_or->active()) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "fit_ordinal_bounded: profiled ordinal fit-only path does not yet support equality constraints"));
+    auto constraint_check = ensure_no_unprofiled_equality_constraints(pt, profile);
+    if (!constraint_check.has_value()) {
+      return std::unexpected(constraint_check.error());
+    }
   }
 
   auto eval0 = ev.evaluate(x0, false, false);
@@ -3138,8 +3216,8 @@ fit_ordinal_snlls(spec::LatentStructure pt,
   }
   ThresholdFixedProfile threshold_fixed = std::move(*threshold_fixed_or);
 
-  auto profiled_weights_or = profiled_weight_workspace(moments, layout,
-                                                       gamma_cache, plan);
+  auto profiled_weights_or = profiled_weight_workspace(
+      moments, layout, threshold_fixed.profile, gamma_cache, plan);
   if (!profiled_weights_or.has_value()) {
     return std::unexpected(profiled_weights_or.error());
   }

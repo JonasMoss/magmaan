@@ -225,8 +225,8 @@ alpha_tau = (H' W_tt H)^-1 H' (W_tt (tau_hat - c) + W_tr e_r)
 
 The implementation now covers the identity/free-threshold case and the
 selector-map case where some threshold rows are fixed constants and the
-remaining free thresholds are unique. Shared labels, equality-constrained
-thresholds, and general linear threshold maps remain a later slice and should
+remaining free thresholds are unique or merged by a pure threshold-local
+equality group. General linear threshold maps remain a later slice and should
 still fail clearly.
 
 ## Fit-Only Cost Rules
@@ -241,7 +241,8 @@ These are the rules the implementation and experiments should enforce.
 
 For fixed threshold rows, ULS/DWLS keep the threshold residuals in the profiled
 full moment vector and DWLS consumes the corresponding diagonal Gamma entries.
-Shared/equality-constrained thresholds still require the general map above.
+Threshold-local shared-label or bare-merge equalities use the same map; general
+linear threshold constraints still require the broader map above.
 
 ## Inference Rules
 
@@ -265,10 +266,11 @@ intentionally.
 The first ordinal SNLLS target is:
 
 - all-ordinal, delta parameterization
-- free thresholds (`H = I`) plus fixed threshold rows
+- free thresholds (`H = I`), fixed threshold rows, and threshold-local pure
+  merge equalities
 - ULS and DWLS first
 - WLS second, using the profiled Schur-complement weight
-- no shared/equality-constrained threshold labels
+- no general linear threshold constraints
 - no mixed continuous/ordinal path until the all-ordinal path is stable
 
 The nonlinear SNLLS block should operate on the profiled ordinal correlation
@@ -354,10 +356,16 @@ extend cache during inference."
    Keep fixed threshold residuals in the profiled full-moment objective and
    verify bounded and SNLLS parity against the unprofiled path.
 
-9. **Mixed ordinal / constrained thresholds.**
-   Generalize only after the all-ordinal free/fixed-threshold path is stable.
+9. **Threshold-local pure-merge constraints.**
+   Let shared-label / bare-merge threshold equality groups share columns in the
+   threshold map and verify bounded plus SNLLS parity against the unprofiled
+   constrained path.
 
-10. **Experiments.**
+10. **Mixed ordinal / general threshold maps.**
+   Generalize only after the all-ordinal free/fixed/pure-merge threshold path is
+   stable.
+
+11. **Experiments.**
    Add fit-only and fit-plus-inference ordinal experiments with explicit setup
    time accounting.
 

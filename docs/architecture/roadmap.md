@@ -488,16 +488,18 @@ stop rather than any usable non-error return.
   thresholds. Fixed threshold rows are kept as threshold residuals in the
   profiled full-moment objective, so ULS/DWLS/WLS can compare against the
   ordinary unprofiled ordinal objective without promoting fixed thresholds back
-  into optimizer coordinates. The cache-aware WLS path uses the full
-  inverse-weight threshold/correlation blocks, applies the equivalent profiled
-  affine threshold/correlation residual transform, and reconstructs thresholds
-  with the profiled cross-block formula.
+  into optimizer coordinates. Threshold-local shared-label / bare-merge
+  equality groups share threshold-map columns while non-threshold equalities
+  remain outside this cache-aware fit-only path. The cache-aware WLS path uses
+  the full inverse-weight threshold/correlation blocks, applies the equivalent
+  profiled affine threshold/correlation residual transform, and reconstructs
+  thresholds with the profiled cross-block formula.
   Fit-plus-inference and inference-only all-ordinal plans can also reuse a
   full `OrdinalGammaCache` for robust DWLS/WLS reporting: DWLS materializes
   diagonal weights from the full Gamma when needed, WLS materializes the full
   inverse weight, and the robust result matches the legacy materialized
   `OrdinalStats` path. The all-ordinal SNLLS entry point reuses the same
-  free/fixed-threshold profiled objective for delta ULS/DWLS/WLS:
+  free/fixed/pure-merge-threshold profiled objective for delta ULS/DWLS/WLS:
   thresholds are fixed out before the generic Golub-Pereyra classifier sees the
   problem, conditionally linear covariance parameters are profiled, WLS uses the
   same affine full-weight transform, and the returned vector is reconstructed in
