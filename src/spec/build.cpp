@@ -448,9 +448,11 @@ void apply_auto_fix_first(const VarSets& v, std::vector<PendingRow>& rows) {
 // === Step 5a: auto.fix.single ==============================================
 //
 // For a latent measured by exactly one observed indicator, lavaan fixes the
-// indicator's residual variance at 0 by default. Only auto-added variance rows
-// are eligible here; an explicit user `x ~~ x` row suppresses auto.var and
-// remains under user control.
+// indicator's residual variance at 0 by default. If that indicator is also
+// mentioned by another measurement row, even with a fixed zero loading, lavaan
+// leaves the residual variance free. Only auto-added variance rows are eligible
+// here; an explicit user `x ~~ x` row suppresses auto.var and remains under user
+// control.
 void apply_auto_fix_single(const VarSets& v, std::vector<PendingRow>& rows) {
   for (const auto& lv : v.lv.items) {
     const std::string* indicator = nullptr;
@@ -464,6 +466,16 @@ void apply_auto_fix_single(const VarSets& v, std::vector<PendingRow>& rows) {
       if (n_indicators > 1) break;
     }
     if (n_indicators != 1 || indicator == nullptr) continue;
+
+    std::size_t n_indicator_uses = 0;
+    for (const auto& row : rows) {
+      if (row.op != parse::Op::Measurement) continue;
+      if (row.rhs != *indicator) continue;
+      if (!v.lv.contains(row.lhs)) continue;
+      ++n_indicator_uses;
+      if (n_indicator_uses > 1) break;
+    }
+    if (n_indicator_uses != 1) continue;
 
     for (auto& row : rows) {
       if (row.op != parse::Op::Covariance) continue;
