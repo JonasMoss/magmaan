@@ -645,6 +645,178 @@ TEST_CASE("Cached ordinal profiling keeps fixed threshold rows in the objective"
   CHECK_FALSE(snlls_wls_cache.blocks[0].has_dwls_weight);
 }
 
+TEST_CASE("Cached ordinal profiling handles shared threshold labels") {
+  std::mt19937 rng(20260530);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(560, 4);
+  const double loading[4] = {0.84, 0.76, 0.68, 0.60};
+  const double shift[4] = {-0.15, 0.10, 0.00, 0.05};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = shift[j] + loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.55) + (y > 0.45);
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  REQUIRE(std::abs(stats->thresholds[0](0) - stats->thresholds[0](2)) >
+          0.01);
+  auto moments = magmaan::data::ordinal_moments_from_stats(*stats);
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | a*t1 + t2\n"
+      "x2 | a*t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, moments, {});
+  REQUIRE(x0.has_value());
+
+  auto pt_prepared = *pt;
+  auto prep = magmaan::estimate::prepare_ordinal_delta_partable(
+      pt_prepared, moments);
+  REQUIRE(prep.has_value());
+  std::vector<Eigen::Index> shared_threshold_free;
+  std::int32_t shared_group = -1;
+  for (std::size_t row = 0; row < pt_prepared.size(); ++row) {
+    if (pt_prepared.op[row] != magmaan::parse::Op::Threshold ||
+        pt_prepared.free[row] <= 0) {
+      continue;
+    }
+    const std::int32_t group =
+        pt_prepared.eq_groups[static_cast<std::size_t>(pt_prepared.free[row] - 1)];
+    int count = 0;
+    for (std::size_t other = 0; other < pt_prepared.size(); ++other) {
+      if (pt_prepared.op[other] == magmaan::parse::Op::Threshold &&
+          pt_prepared.free[other] > 0 &&
+          pt_prepared.eq_groups[static_cast<std::size_t>(
+              pt_prepared.free[other] - 1)] == group) {
+        ++count;
+      }
+    }
+    if (count == 2) {
+      shared_group = group;
+      break;
+    }
+  }
+  REQUIRE(shared_group >= 0);
+  for (std::size_t row = 0; row < pt_prepared.size(); ++row) {
+    if (pt_prepared.op[row] == magmaan::parse::Op::Threshold &&
+        pt_prepared.free[row] > 0 &&
+        pt_prepared.eq_groups[static_cast<std::size_t>(
+            pt_prepared.free[row] - 1)] == shared_group) {
+      shared_threshold_free.push_back(pt_prepared.free[row] - 1);
+    }
+  }
+  REQUIRE(shared_threshold_free.size() == 2);
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 300;
+  opts.ftol = 1e-10;
+  opts.gtol = 1e-7;
+
+  auto uls_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::ULS,
+      magmaan::data::OrdinalMomentParameterization::Delta,
+      magmaan::data::OrdinalThresholdMode::FixedOrConstrained);
+  auto uls_cached = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, moments, nullptr, {}, uls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(uls_cached.has_value(),
+      "cached ULS failed: "
+          << (uls_cached.has_value() ? "" : uls_cached.error().detail));
+  CHECK(std::isfinite(uls_cached->fmin));
+  CHECK(uls_cached->theta(shared_threshold_free[0]) ==
+        doctest::Approx(uls_cached->theta(shared_threshold_free[1])).epsilon(1e-12));
+
+  auto dwls_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::DWLS,
+      magmaan::data::OrdinalMomentParameterization::Delta,
+      magmaan::data::OrdinalThresholdMode::FixedOrConstrained);
+  auto dwls_cache = magmaan::data::ordinal_gamma_cache_from_diagonal(
+      {stats->NACOV[0].diagonal()});
+  auto dwls_legacy = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto dwls_cached = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, moments, &dwls_cache, {}, dwls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(dwls_legacy.has_value(),
+      "legacy DWLS failed: "
+          << (dwls_legacy.has_value() ? "" : dwls_legacy.error().detail));
+  REQUIRE_MESSAGE(dwls_cached.has_value(),
+      "cached DWLS failed: "
+          << (dwls_cached.has_value() ? "" : dwls_cached.error().detail));
+  CHECK(dwls_cached->fmin ==
+        doctest::Approx(dwls_legacy->fmin).epsilon(1e-8));
+  CHECK((dwls_cached->theta - dwls_legacy->theta).cwiseAbs().maxCoeff() <
+        2e-5);
+  CHECK(dwls_cache.blocks[0].has_diagonal);
+  CHECK_FALSE(dwls_cache.blocks[0].has_full);
+  CHECK_FALSE(dwls_cache.blocks[0].has_dwls_weight);
+
+  auto wls_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::WLS,
+      magmaan::data::OrdinalMomentParameterization::Delta,
+      magmaan::data::OrdinalThresholdMode::FixedOrConstrained);
+  magmaan::data::OrdinalGammaCache wls_cache;
+  wls_cache.blocks.resize(1);
+  wls_cache.blocks[0].gamma = stats->NACOV[0];
+  wls_cache.blocks[0].has_full = true;
+  auto wls_legacy = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::WLS, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto wls_cached = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, moments, &wls_cache, {}, wls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(wls_legacy.has_value(),
+      "legacy WLS failed: "
+          << (wls_legacy.has_value() ? "" : wls_legacy.error().detail));
+  REQUIRE_MESSAGE(wls_cached.has_value(),
+      "cached WLS failed: "
+          << (wls_cached.has_value() ? "" : wls_cached.error().detail));
+  CHECK(wls_cached->fmin ==
+        doctest::Approx(wls_legacy->fmin).epsilon(1e-7));
+  CHECK((wls_cached->theta - wls_legacy->theta).cwiseAbs().maxCoeff() <
+        5e-5);
+  CHECK(wls_cache.blocks[0].has_full);
+  CHECK(wls_cache.blocks[0].has_wls_weight);
+  CHECK_FALSE(wls_cache.blocks[0].has_dwls_weight);
+
+  magmaan::data::OrdinalGammaCache snlls_wls_cache;
+  snlls_wls_cache.blocks.resize(1);
+  snlls_wls_cache.blocks[0].gamma = stats->NACOV[0];
+  snlls_wls_cache.blocks[0].has_full = true;
+  auto wls_snlls = magmaan::estimate::fit_ordinal_snlls(
+      *pt, *mr, moments, &snlls_wls_cache, wls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(wls_snlls.has_value(),
+      "SNLLS WLS failed: "
+          << (wls_snlls.has_value() ? "" : wls_snlls.error().detail));
+  CHECK(wls_snlls->fmin ==
+        doctest::Approx(wls_cached->fmin).epsilon(1e-8));
+  CHECK((wls_snlls->theta - wls_cached->theta).cwiseAbs().maxCoeff() <
+        5e-5);
+  CHECK(snlls_wls_cache.blocks[0].has_full);
+  CHECK(snlls_wls_cache.blocks[0].has_wls_weight);
+  CHECK_FALSE(snlls_wls_cache.blocks[0].has_dwls_weight);
+}
+
 TEST_CASE("Cached ordinal ULS fit does not require Gamma") {
   Eigen::MatrixXd X(240, 3);
   Eigen::Index r = 0;
