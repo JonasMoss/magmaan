@@ -379,8 +379,10 @@ struct Row {
   bool cache_has_full = false;
   bool cache_has_dwls_weight = false;
   bool cache_has_wls_weight = false;
-  double theta_diff_bounded = quiet_nan();
-  double fmin_diff_bounded = quiet_nan();
+  double theta_diff_profiled_bounded = quiet_nan();
+  double fmin_diff_profiled_bounded = quiet_nan();
+  double theta_diff_full_bounded = quiet_nan();
+  double fmin_diff_full_bounded = quiet_nan();
 };
 
 void write_header(std::ostream& out) {
@@ -391,8 +393,9 @@ void write_header(std::ostream& out) {
          "fit_median_ms,fit_min_ms,fit_max_ms,fmin,iterations,f_evals,"
          "g_evals,optimizer_status,grad_inf_norm,n_nonlinear,n_linear,"
          "cache_blocks,cache_has_diagonal,cache_has_full,"
-         "cache_has_dwls_weight,cache_has_wls_weight,theta_diff_bounded,"
-         "fmin_diff_bounded\n";
+         "cache_has_dwls_weight,cache_has_wls_weight,"
+         "theta_diff_profiled_bounded,fmin_diff_profiled_bounded,"
+         "theta_diff_full_bounded,fmin_diff_full_bounded\n";
 }
 
 void write_row(std::ostream& out, const Row& row) {
@@ -415,7 +418,10 @@ void write_row(std::ostream& out, const Row& row) {
       << bool_csv(row.cache_has_full) << ','
       << bool_csv(row.cache_has_dwls_weight) << ','
       << bool_csv(row.cache_has_wls_weight) << ','
-      << row.theta_diff_bounded << ',' << row.fmin_diff_bounded << '\n';
+      << row.theta_diff_profiled_bounded << ','
+      << row.fmin_diff_profiled_bounded << ','
+      << row.theta_diff_full_bounded << ','
+      << row.fmin_diff_full_bounded << '\n';
 }
 
 void fill_estimate_fields(Row& row, const Estimates& est) {
@@ -437,7 +443,8 @@ struct TimedFitResult {
 
 template <class FitFn>
 TimedFitResult run_timed_fit(Row base, int reps, FitFn&& fit_fn,
-                             const Estimates* bounded_ref) {
+                             const Estimates* profiled_bounded_ref,
+                             const Estimates* full_bounded_ref) {
   Estimates last;
   std::string error;
   const auto timed = measure_reps(reps, [&]() {
@@ -458,9 +465,15 @@ TimedFitResult run_timed_fit(Row base, int reps, FitFn&& fit_fn,
   base.fit_min_ms = timed.timing.min_ms;
   base.fit_max_ms = timed.timing.max_ms;
   fill_estimate_fields(base, last);
-  if (bounded_ref != nullptr) {
-    base.theta_diff_bounded = theta_max_abs_diff(last, *bounded_ref);
-    base.fmin_diff_bounded = std::abs(last.fmin - bounded_ref->fmin);
+  if (profiled_bounded_ref != nullptr) {
+    base.theta_diff_profiled_bounded =
+        theta_max_abs_diff(last, *profiled_bounded_ref);
+    base.fmin_diff_profiled_bounded =
+        std::abs(last.fmin - profiled_bounded_ref->fmin);
+  }
+  if (full_bounded_ref != nullptr) {
+    base.theta_diff_full_bounded = theta_max_abs_diff(last, *full_bounded_ref);
+    base.fmin_diff_full_bounded = std::abs(last.fmin - full_bounded_ref->fmin);
   }
   return {.row = base, .have_estimate = true, .estimate = std::move(last)};
 }
@@ -719,14 +732,42 @@ int main(int argc, char** argv) {
           OrdinalMomentParameterization::Delta,
           plan_threshold_mode(cell.threshold_mode));
 
-      Estimates bounded_ref;
-      bool have_bounded = false;
+      Estimates full_bounded_ref;
+      bool have_full_bounded = false;
+      if (estimator != OrdinalEstimatorKind::ULS) {
+        const auto weight_kind =
+            estimator == OrdinalEstimatorKind::DWLS
+                ? magmaan::estimate::OrdinalWeightKind::DWLS
+                : magmaan::estimate::OrdinalWeightKind::WLS;
+        Row row = base;
+        row.estimator = estimator_name(estimator);
+        row.path = "full_bounded";
+        auto result = run_timed_fit(
+            row, reps,
+            [&]() {
+              return magmaan::estimate::fit_ordinal_bounded(
+                  pt, rep, stats, {}, weight_kind, x0, Backend::NloptLbfgs,
+                  opts);
+            },
+            nullptr, nullptr);
+        row = result.row;
+        if (result.have_estimate) {
+          have_full_bounded = true;
+          full_bounded_ref = std::move(result.estimate);
+          row.theta_diff_full_bounded = 0.0;
+          row.fmin_diff_full_bounded = 0.0;
+        }
+        write_row(out, row);
+      }
+
+      Estimates profiled_bounded_ref;
+      bool have_profiled_bounded = false;
 
       {
         auto cache = make_fit_cache(stats, estimator);
         Row row = base;
         row.estimator = estimator_name(estimator);
-        row.path = "bounded";
+        row.path = "threshold_profiled_bounded";
         row.cache_setup_ms = cache.cache_setup.median_ms;
         row.weight_setup_ms = cache.weight_setup.median_ms;
         if (!cache.error.empty()) {
@@ -740,7 +781,7 @@ int main(int argc, char** argv) {
                     pt, rep, moments, cache.cache_ptr, {}, plan, x0,
                     Backend::NloptLbfgs, opts);
               },
-              nullptr);
+              nullptr, have_full_bounded ? &full_bounded_ref : nullptr);
           row = result.row;
           const auto flags = cache_flags(cache.cache_ptr);
           row.cache_blocks = flags.block_count;
@@ -749,10 +790,10 @@ int main(int argc, char** argv) {
           row.cache_has_dwls_weight = flags.has_dwls_weight;
           row.cache_has_wls_weight = flags.has_wls_weight;
           if (result.have_estimate) {
-            have_bounded = true;
-            bounded_ref = std::move(result.estimate);
-            row.theta_diff_bounded = 0.0;
-            row.fmin_diff_bounded = 0.0;
+            have_profiled_bounded = true;
+            profiled_bounded_ref = std::move(result.estimate);
+            row.theta_diff_profiled_bounded = 0.0;
+            row.fmin_diff_profiled_bounded = 0.0;
           }
         }
         write_row(out, row);
@@ -776,7 +817,8 @@ int main(int argc, char** argv) {
                     pt, rep, moments, cache.cache_ptr, plan, x0,
                     Backend::NloptLbfgs, opts);
               },
-              have_bounded ? &bounded_ref : nullptr);
+              have_profiled_bounded ? &profiled_bounded_ref : nullptr,
+              have_full_bounded ? &full_bounded_ref : nullptr);
           row = result.row;
           const auto flags = cache_flags(cache.cache_ptr);
           row.cache_blocks = flags.block_count;

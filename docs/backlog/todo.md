@@ -156,12 +156,16 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   agreement with lavaan-backed estimates where applicable.
 - **S/M.** Extend the ordinal SNLLS speed pilot
   (`experiments/11-ordinal-snlls-speed`) when the paper needs stronger timing
-  evidence. Landed: a native C++ benchmark target comparing bounded versus
-  SNLLS all-ordinal delta fits across a Kreiberg-style repeated-measure family,
-  one worked repeated-measure example, and threshold stress cells. The first
-  opt pilot uses `q <= 6`; open follow-up is the full `q <= 12` literature-like
-  sweep, optional lavaan context rows, and raw/lazy ordinal statistic
-  construction timing once that builder exists.
+  evidence. Landed: a native C++ benchmark target comparing full bounded
+  DWLS/WLS, threshold-profiled bounded, and SNLLS all-ordinal delta fits across
+  a Kreiberg-style repeated-measure family, one worked repeated-measure
+  example, and threshold stress cells. The report now separates the
+  full-to-profiled gain from the profiled-to-SNLLS gain; ULS has only the
+  profiled bounded versus SNLLS split because no legacy full direct ULS
+  comparator is wired into the pilot. The first opt pilot uses `q <= 6`; open
+  follow-up is the full `q <= 12` literature-like sweep, optional lavaan
+  context rows, and raw/lazy ordinal statistic construction timing once that
+  builder exists.
 - **M/L.** Convergence-note / start-value portfolio paper track
   (`papers/convergence-note/`). The skeleton, local resources, and first R
   simulation factories now exist for the De Jonckere-Rosseel small-sample SEM
