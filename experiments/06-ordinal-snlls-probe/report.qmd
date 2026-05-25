@@ -1,5 +1,5 @@
 ---
-title: "Ordinal LS / SNLLS probe"
+title: "Ordinal workspace and SNLLS probe"
 format:
   html:
     toc: true
@@ -17,91 +17,128 @@ input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
 candidate_dirs <- unique(c(getwd(), dirname(input_path)))
 result_candidates <- unique(c(file.path(candidate_dirs, "results"),
                               candidate_dirs))
-hits <- result_candidates[file.exists(file.path(result_candidates, "fits.csv"))]
+hits <- result_candidates[file.exists(file.path(result_candidates,
+                                                "workspace.csv"))]
 results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
 
-fits_path <- file.path(results_dir, "fits.csv")
-construction_path <- file.path(results_dir, "construction.csv")
-attempts_path <- file.path(results_dir, "attempts.csv")
+workspace_path <- file.path(results_dir, "workspace.csv")
 metadata_path <- file.path(results_dir, "metadata.csv")
-if (!file.exists(fits_path)) {
-  stop("Missing fits.csv. Run: Rscript run_experiment.R")
+if (!file.exists(workspace_path)) {
+  stop("Missing workspace.csv. Run: Rscript run_experiment.R --smoke")
 }
 
-fits <- utils::read.csv(fits_path, check.names = FALSE,
-                        stringsAsFactors = FALSE)
-construction <- utils::read.csv(construction_path, check.names = FALSE,
-                                stringsAsFactors = FALSE)
-attempts <- utils::read.csv(attempts_path, check.names = FALSE,
-                            stringsAsFactors = FALSE)
+workspace <- utils::read.csv(workspace_path, check.names = FALSE,
+                             stringsAsFactors = FALSE)
 metadata <- utils::read.csv(metadata_path, check.names = FALSE,
                             stringsAsFactors = FALSE)
 
+meta_value <- function(key) metadata$value[match(key, metadata$key)]
 fmt_ms <- function(x) ifelse(is.na(x), "", sprintf("%.2f", x))
 fmt_num <- function(x) ifelse(is.na(x), "", sprintf("%.4g", x))
 fmt_diff <- function(x) ifelse(is.na(x), "", sprintf("%.2e", x))
-meta_value <- function(key) metadata$value[match(key, metadata$key)]
+max_or_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) NA_real_ else max(x)
+}
+median_or_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) NA_real_ else stats::median(x)
+}
+
+workspace$Path <- factor(
+  workspace$path,
+  levels = c("materialized_bounded", "cache_bounded", "cache_snlls"),
+  labels = c("Materialized bounded", "Cache bounded", "Cache SNLLS")
+)
+workspace$Thresholds <- factor(
+  workspace$threshold_mode,
+  levels = c("free", "fixed_or_shared", "linear_map"),
+  labels = c("Free", "Fixed", "Shared")
+)
+ok <- workspace[workspace$fit_status == "ok", ]
 ```
 
-This experiment asks a narrow question: how much of the current ordinal
-least-squares cost is moment construction, how much is the fit, and what
-happens if we try to route ordinal data through ULS or SNLLS today?
+## Question
 
-The important caveat is that **native ordinal SNLLS is not implemented in this
-codebase yet**. The SNLLS condition below is a proxy: it runs continuous ULS
-SNLLS on the polychoric correlation matrix and ignores thresholds. The ULS
-condition is also a proxy: identity weights are injected through the current
-DWLS weight slot. DWLS and WLS are the native ordinal estimators.
+Now that all-ordinal delta fitting has a cache-aware path and a native
+Golub-Pereyra SNLLS path, this experiment asks what those paths buy us:
+
+- Do cache-aware bounded fits reproduce the existing materialized DWLS/WLS
+  results?
+- Does ordinal SNLLS land on the same objective as bounded fitting?
+- Which Gamma/weight pieces are actually materialized for ULS, DWLS, and WLS?
+
+## Short Answer
+
+The smoke design is a correctness-and-shape probe, not a final performance
+claim. In the generated cells, cache-aware bounded fits agree with the
+materialized bounded path for DWLS/WLS, and cache-aware SNLLS agrees with
+cache-aware bounded fits to numerical tolerance.
+
+The materialization flags show the intended workspace split: ULS carries no
+Gamma cache, fit-only DWLS keeps only the diagonal Gamma, and WLS uses the full
+Gamma plus the WLS weight. That is the main engineering result this experiment
+is meant to keep visible.
 
 ## Run
 
 ```{r}
 data.frame(
-  item = metadata$key,
-  value = metadata$value,
+  Item = metadata$key,
+  Value = metadata$value,
   check.names = FALSE
 ) |>
   knitr::kable(row.names = FALSE)
 ```
 
-## Cases
-
-The cases are checked-in repo fixtures: two synthetic ordinal CFA fixtures and
-the BFI ordinal parity fixture.
+## Status
 
 ```{r}
-case_table <- construction[, c("case_label", "source", "n_obs", "n_vars",
-                               "levels", "n_moments",
-                               "n_threshold_moments", "n_assoc_moments",
-                               "construct_ms_median")]
-names(case_table) <- c("Case", "Source", "n", "Observed vars", "Levels",
-                       "Moment dim", "Thresholds", "Associations",
-                       "Construction ms")
-case_table$`Construction ms` <- fmt_ms(case_table$`Construction ms`)
-knitr::kable(case_table, row.names = FALSE)
+status <- aggregate(
+  seed ~ Thresholds + estimator + Path + fit_status,
+  data = workspace,
+  FUN = length
+)
+names(status) <- c("Thresholds", "Estimator", "Path", "Status", "Rows")
+knitr::kable(status, row.names = FALSE)
 ```
 
-Construction here is the full current ordinal data build:
-`data_ordinal_stats_from_df()` estimates thresholds and polychorics, builds
-`NACOV`, and materializes both `W_dwls` and `W_wls`. This experiment therefore
-separates construction from fitting, but it does not isolate DWLS-only weight
-construction from WLS-only weight construction.
-
-## Fit Timings
+## Equivalence
 
 ```{r}
-fit_table <- fits[, c("case_label", "condition", "status", "fit_ms_median",
-                      "whole_ms_median", "iterations", "optimizer_status",
-                      "grad_norm", "fmin", "max_abs_theta_diff")]
-names(fit_table) <- c("Case", "Condition", "Status", "Fit ms",
-                      "Whole ms", "Iterations", "Optimizer", "Grad norm",
-                      "fmin", "Max |theta diff|")
-fit_table$`Fit ms` <- fmt_ms(fit_table$`Fit ms`)
-fit_table$`Whole ms` <- fmt_ms(fit_table$`Whole ms`)
-fit_table$`Grad norm` <- fmt_num(fit_table$`Grad norm`)
-fit_table$fmin <- fmt_num(fit_table$fmin)
-fit_table$`Max |theta diff|` <- fmt_diff(fit_table$`Max |theta diff|`)
-knitr::kable(fit_table, row.names = FALSE)
+equiv <- aggregate(
+  cbind(theta_diff_bounded, fmin_diff_bounded,
+        theta_diff_legacy, fmin_diff_legacy) ~ Thresholds + estimator + Path,
+  data = ok,
+  FUN = max_or_na,
+  na.action = na.pass
+)
+names(equiv) <- c("Thresholds", "Estimator", "Path",
+                  "Max |theta - bounded|", "Max |fmin - bounded|",
+                  "Max |theta - materialized|", "Max |fmin - materialized|")
+for (j in 4:ncol(equiv)) equiv[[j]] <- fmt_diff(equiv[[j]])
+knitr::kable(equiv, row.names = FALSE)
+```
+
+`Materialized bounded` is available only for DWLS and WLS because the old
+ordinal API has no identity-weight ULS estimator. `Cache SNLLS` is compared to
+the cache-aware bounded fit for every estimator and, where available, to the
+materialized bounded fit.
+
+## Cost Shape
+
+```{r}
+cost <- aggregate(
+  cbind(fit_median_ms, cache_setup_ms, weight_setup_ms,
+        stats_ms, starts_ms) ~ estimator + Path,
+  data = ok,
+  FUN = median_or_na,
+  na.action = na.pass
+)
+names(cost) <- c("Estimator", "Path", "Fit ms", "Cache setup ms",
+                 "Weight setup ms", "Stats ms", "Starts ms")
+for (j in 3:ncol(cost)) cost[[j]] <- fmt_ms(cost[[j]])
+knitr::kable(cost, row.names = FALSE)
 ```
 
 ```{r}
@@ -109,68 +146,55 @@ knitr::kable(fit_table, row.names = FALSE)
 #| fig-height: 4
 if (requireNamespace("ggplot2", quietly = TRUE)) {
   library(ggplot2)
-  ok <- fits[fits$status == "ok", ]
-  ok$condition <- factor(
-    ok$condition,
-    levels = c("DWLS", "WLS", "ULS_identity_proxy",
-               "ULS_SNLLS_polychoric_proxy")
-  )
-  ggplot(ok, aes(condition, fit_ms_median, fill = condition)) +
-    geom_col(width = 0.62, show.legend = FALSE) +
-    facet_wrap(~ case_label, scales = "free_y") +
-    labs(x = NULL, y = "Median fit-only milliseconds",
-         title = "Fit-only cost after ordinal moments are already built") +
+  ggplot(ok, aes(Path, fit_median_ms, fill = estimator)) +
+    geom_col(position = "dodge", width = 0.7) +
+    facet_grid(Thresholds ~ p, labeller = label_both) +
+    labs(x = NULL, y = "Median fit milliseconds") +
     theme_minimal(base_size = 12) +
-    theme(axis.text.x = element_text(angle = 30, hjust = 1))
+    theme(axis.text.x = element_text(angle = 25, hjust = 1))
 } else {
   cat("ggplot2 not installed; skipping figure.")
 }
 ```
 
-## Unsupported Attempts
+The `stats_ms` column is intentionally separate from fit timing. It is the
+current full ordinal statistic construction from integer data, including NACOV
+and legacy DWLS/WLS weights. The cache setup columns measure only the adapter
+work after those statistics already exist.
+
+## Workspace Flags
 
 ```{r}
-attempt_table <- attempts[, c("case_label", "condition", "status", "message")]
-names(attempt_table) <- c("Case", "Attempt", "Status", "Message")
-knitr::kable(attempt_table, row.names = FALSE)
+flags <- unique(ok[, c("estimator", "Path", "cache_blocks",
+                      "cache_has_diagonal", "cache_has_full",
+                      "cache_has_dwls_weight", "cache_has_wls_weight")])
+names(flags) <- c("Estimator", "Path", "Cache blocks", "Diagonal Gamma",
+                  "Full Gamma", "DWLS weight", "WLS weight")
+knitr::kable(flags[order(flags$Estimator, flags$Path), ], row.names = FALSE)
 ```
 
-These failures are expected with the current surface. `magmaan(...,
-estimator = "ULS", ordered = ...)` does not dispatch to an ordinal ULS
-objective, and `fit_uls_snlls()` accepts continuous sample statistics rather
-than ordinal threshold-plus-polychoric moment objects.
+For fit-only DWLS, the cache-aware path does not materialize a DWLS weight
+matrix; it uses the diagonal Gamma directly. WLS necessarily materializes the
+full inverse weight. ULS uses identity weights and therefore has no cache.
 
-## Reading
+## Caveats
 
-The current ordinal path is a bounded least-squares problem over thresholds
-and polychoric correlations. DWLS and WLS differ only in the weight selected
-from the already-built ordinal statistics. The identity-weight ULS proxy uses
-the same residual stack as DWLS/WLS, so it is a useful fit-loop comparison, but
-it is not a public estimator contract.
+This is an advisory benchmark harness. It uses synthetic single-group
+all-ordinal CFA cells, the delta parameterization, and the NLopt L-BFGS
+backend. Mixed ordinal/continuous data, theta parameterization, robust
+fit-plus-inference reuse, and R-facing convenience wrappers are separate
+follow-up experiments.
 
-The polychoric SNLLS proxy is even narrower: it answers "what if we fit the
-polychoric correlation matrix as if it were continuous covariance input?"
-That can be a useful performance smoke test for the separable continuous path,
-but it is not ordinal SNLLS because it drops threshold residuals and does not
-profile the ordinal parameter blocks.
-
-## What Must Change
-
-Native ordinal ULS would need one small API/enum extension: add an identity
-weight option to the ordinal weight kind, expose `fit_uls_ordinal()` on the
-R side, and document chi-square semantics for the identity-weight
-threshold-plus-polychoric objective.
-
-Native ordinal SNLLS is a larger design item. The implementation needs an
-ordinal residual/Jacobian path that includes thresholds, classifies threshold
-rows outside the current matrix-cell parameter-location scheme, proves which
-latent-response covariance pieces remain conditionally linear, and exposes a
-profiled bounded ordinal fit entry guarded against the existing DWLS/WLS
-fixtures.
+The runner still begins by constructing legacy `OrdinalStats` so we can compare
+against the existing path in one executable. A future raw-data lazy-workspace
+experiment should split threshold/polychoric estimation, diagonal Gamma, full
+Gamma, and weight inversion at their true construction boundaries.
 
 ## Reproduce
 
 ```sh
-Rscript experiments/06-ordinal-snlls-probe/run_experiment.R
+Rscript experiments/06-ordinal-snlls-probe/run_experiment.R --smoke --preset fast
 (cd experiments/06-ordinal-snlls-probe && quarto render report.qmd)
 ```
+
+For less noisy timings, use `--preset opt` and increase `--reps`.
