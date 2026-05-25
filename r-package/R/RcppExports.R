@@ -77,6 +77,10 @@ fit_uls_impl <- function(partable, sample_stats, optimizer = NULL, control = NUL
     .Call(`_magmaan_fit_uls_impl`, partable, sample_stats, optimizer, control, bounds)
 }
 
+fit_gls_pairwise_impl <- function(partable, X, mask = NULL, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_gls_pairwise_impl`, partable, X, mask, optimizer, control, bounds)
+}
+
 fit_gls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_gls_impl`, partable, sample_stats, optimizer, control, bounds)
 }
@@ -367,6 +371,10 @@ data_sample_stats_from_raw <- function(X) {
 
 data_pairwise_sample_stats <- function(X, mask = NULL) {
     .Call(`_magmaan_data_pairwise_sample_stats`, X, mask)
+}
+
+data_gamma_nt_pairwise <- function(X, mask = NULL) {
+    .Call(`_magmaan_data_gamma_nt_pairwise`, X, mask)
 }
 
 infer_pairwise_casewise_contributions <- function(X, mask = NULL, include_means = FALSE) {

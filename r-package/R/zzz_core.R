@@ -61,6 +61,7 @@ estimate_fiml <- fit_fiml_impl
 estimate_saturated_em_moments <- saturated_em_moments_impl
 estimate_uls <- fit_uls_impl
 estimate_gls <- fit_gls_impl
+estimate_gls_pairwise <- fit_gls_pairwise_impl
 estimate_wls <- fit_wls_impl
 estimate_dwls_ordinal <- fit_dwls_ordinal_impl
 estimate_wls_ordinal <- fit_wls_ordinal_impl
@@ -176,6 +177,7 @@ magmaan_core <- local({
     data = c(
       "data_sample_stats_from_raw",
       "data_pairwise_sample_stats",
+      "data_gamma_nt_pairwise",
       "data_ordinal_stats_from_raw",
       "data_mixed_ordinal_stats_from_raw",
       "data_shrink_mixed_ordinal_stats"
@@ -187,6 +189,7 @@ magmaan_core <- local({
       "estimate_saturated_em_moments",
       "estimate_uls",
       "estimate_gls",
+      "estimate_gls_pairwise",
       "estimate_wls",
       "estimate_dwls_ordinal",
       "estimate_wls_ordinal",
@@ -404,6 +407,8 @@ magmaan_core <- local({
       "infer_casewise_contributions",
       "infer_pairwise_casewise_contributions",
       "data_pairwise_sample_stats",
+      "data_gamma_nt_pairwise",
+      "fit_gls_pairwise_impl",
       "infer_empirical_gamma",
       "infer_gamma_nt",
       "infer_ordinal_robust",

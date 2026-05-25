@@ -263,6 +263,22 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fit_gls_pairwise_impl
+Rcpp::List fit_gls_pairwise_impl(SEXP partable, SEXP X, SEXP mask, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_gls_pairwise_impl(SEXP partableSEXP, SEXP XSEXP, SEXP maskSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type mask(maskSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_gls_pairwise_impl(partable, X, mask, optimizer, control, bounds));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_gls_impl
 Rcpp::List fit_gls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
 RcppExport SEXP _magmaan_fit_gls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
@@ -1219,6 +1235,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// data_gamma_nt_pairwise
+Rcpp::List data_gamma_nt_pairwise(SEXP X, SEXP mask);
+RcppExport SEXP _magmaan_data_gamma_nt_pairwise(SEXP XSEXP, SEXP maskSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type mask(maskSEXP);
+    rcpp_result_gen = Rcpp::wrap(data_gamma_nt_pairwise(X, mask));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_pairwise_casewise_contributions
 Rcpp::NumericMatrix infer_pairwise_casewise_contributions(SEXP X, SEXP mask, bool include_means);
 RcppExport SEXP _magmaan_infer_pairwise_casewise_contributions(SEXP XSEXP, SEXP maskSEXP, SEXP include_meansSEXP) {
@@ -1435,6 +1463,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_fiml_impl", (DL_FUNC) &_magmaan_fit_fiml_impl, 4},
     {"_magmaan_saturated_em_moments_impl", (DL_FUNC) &_magmaan_saturated_em_moments_impl, 2},
     {"_magmaan_fit_uls_impl", (DL_FUNC) &_magmaan_fit_uls_impl, 5},
+    {"_magmaan_fit_gls_pairwise_impl", (DL_FUNC) &_magmaan_fit_gls_pairwise_impl, 6},
     {"_magmaan_fit_gls_impl", (DL_FUNC) &_magmaan_fit_gls_impl, 5},
     {"_magmaan_fit_wls_impl", (DL_FUNC) &_magmaan_fit_wls_impl, 6},
     {"_magmaan_evaluate_at_impl", (DL_FUNC) &_magmaan_evaluate_at_impl, 7},
@@ -1508,6 +1537,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_casewise_contributions", (DL_FUNC) &_magmaan_infer_casewise_contributions, 2},
     {"_magmaan_data_sample_stats_from_raw", (DL_FUNC) &_magmaan_data_sample_stats_from_raw, 1},
     {"_magmaan_data_pairwise_sample_stats", (DL_FUNC) &_magmaan_data_pairwise_sample_stats, 2},
+    {"_magmaan_data_gamma_nt_pairwise", (DL_FUNC) &_magmaan_data_gamma_nt_pairwise, 2},
     {"_magmaan_infer_pairwise_casewise_contributions", (DL_FUNC) &_magmaan_infer_pairwise_casewise_contributions, 3},
     {"_magmaan_infer_empirical_gamma", (DL_FUNC) &_magmaan_infer_empirical_gamma, 1},
     {"_magmaan_infer_gamma_nt", (DL_FUNC) &_magmaan_infer_gamma_nt, 1},

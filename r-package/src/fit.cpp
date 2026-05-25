@@ -1702,6 +1702,77 @@ Rcpp::List fit_uls_impl(SEXP partable, Rcpp::List sample_stats,
   return fit_result(ctx, est, &starts, "ULS");
 }
 
+// fit_gls_pairwise() — composes fit_gls_pairwise(pt, rep, raw, pw, x0,
+// bounds, backend). Pairwise covariance from raw incomplete data with the
+// Γ_NT^pw weight (asymptotically efficient under MAR; breaks the trace
+// identity); see fit.hpp for the design context. `X` is a numeric matrix
+// (single group) or a list of per-group matrices; `mask` is an optional
+// logical matrix / list of logical matrices.
+//
+// [[Rcpp::export]]
+Rcpp::List fit_gls_pairwise_impl(SEXP partable, SEXP X,
+                                 SEXP mask = R_NilValue,
+                                 Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+                                 Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+                                 Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_gls_pairwise");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.names = std::move(parsed.names);
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  if (ctx.rep.ov_names.empty() || ctx.rep.ov_names[0].empty())
+    Rcpp::stop("magmaan: model has no observed variables");
+
+  // Reorder raw columns to the model's observed-variable order using the
+  // existing FIML helper, then re-pack into a plain RawData via the shared
+  // raw_from_data_args path (handles mask layout and NA detection uniformly).
+  magmaan::data::RawData raw_reordered = fiml_raw_from_arg(ctx.rep, X);
+  // Pack the reordered data back into the X/mask format expected by
+  // raw_from_data_args — easier than threading both reorder and the
+  // multi-block parsing through a single helper.
+  const std::size_t nb = raw_reordered.X.size();
+  Rcpp::List X_list(static_cast<R_xlen_t>(nb));
+  Rcpp::List mask_list(static_cast<R_xlen_t>(nb));
+  for (std::size_t b = 0; b < nb; ++b) {
+    X_list[static_cast<R_xlen_t>(b)] = Rcpp::wrap(raw_reordered.X[b]);
+    if (b < raw_reordered.mask.size()) {
+      const auto& Mb = raw_reordered.mask[b];
+      Rcpp::LogicalMatrix Mr(Mb.rows(), Mb.cols());
+      for (Eigen::Index i = 0; i < Mb.rows(); ++i)
+        for (Eigen::Index j = 0; j < Mb.cols(); ++j)
+          Mr(i, j) = Mb(i, j) != 0;
+      mask_list[static_cast<R_xlen_t>(b)] = Mr;
+    }
+  }
+  SEXP X_arg = X_list;
+  SEXP mask_arg = raw_reordered.mask.empty() ? R_NilValue : SEXP(mask_list);
+  magmaan::data::RawData raw = raw_from_data_args(X_arg, mask_arg);
+
+  auto pw_or = magmaan::data::pairwise_sample_stats(raw);
+  if (!pw_or.has_value()) stop_post(pw_or.error());
+
+  // Layout / sample-stats packing for the standard ctx_from_* path.
+  ctx.samp.S = pw_or->S;
+  ctx.samp.mean = pw_or->mean;
+  ctx.samp.n_obs = pw_or->n_obs;
+  ctx.ov_names = ctx.rep.ov_names[0];
+  ctx.meanstructure = has_meanstructure(ctx.pt);
+  if (!ctx.meanstructure) ctx.samp.mean.clear();
+
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
+  auto e_or = magmaan::estimate::fit_gls_pairwise(
+      ctx.pt, ctx.rep, raw, *pw_or, x0, bounds_from_nullable(bounds),
+      backend, optim_opts_from(control));
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return fit_result(ctx, est, &starts, "GLSpw");
+}
+
 // fit_gls() — composes fit_gls(pt, rep, samp, x0, bounds, backend).
 //
 // [[Rcpp::export]]

@@ -1,0 +1,81 @@
+#pragma once
+
+#include <cstdint>
+#include <vector>
+
+#include <Eigen/Core>
+
+#include "magmaan/expected.hpp"
+#include "magmaan/data/raw_data.hpp"
+
+namespace magmaan::data {
+
+// Per-block Van-Praag-style pairwise covariance summaries for incomplete
+// continuous data. The covariance entry `S[b](j, ℓ)` is computed from cases
+// for which both variables j and ℓ are observed in block b, using the
+// pair-specific means inside the same overlap set:
+//
+//   A_t(j,ℓ) = R_tj · R_tℓ              (joint-observed indicator)
+//   n_(j,ℓ)  = Σ_t A_t(j,ℓ)             (overlap count)
+//   π̂_(j,ℓ)  = n_(j,ℓ) / n_b           (overlap availability)
+//   m̄^(j,ℓ)_j = (1/n_(j,ℓ)) Σ_t A_t(j,ℓ) · x_tj          (pairwise mean)
+//   S[b](j,ℓ) = (1/n_(j,ℓ)) Σ_t A_t(j,ℓ) · (x_tj − m̄^(j,ℓ)_j)
+//                                            · (x_tℓ − m̄^(j,ℓ)_ℓ)
+//
+// The diagonal `S[b](j, j)` reduces to the marginal-column N-divisor variance.
+// `mean[b]` holds the marginal column means (using all cases on which
+// variable j is observed) — these are exposed because most downstream callers
+// want both the per-pair pairwise mean (folded into `S`) and the marginal
+// per-column mean.
+//
+// The Van Praag / Savalei-Bentler (2005) and Gold-Bentler-Kim (2003) pairwise
+// covariance estimators share these moments; the asymptotic covariance terms
+// they need are built on top via `robust::pairwise_casewise_contributions`.
+struct PairwiseSampleStats {
+  std::vector<Eigen::VectorXd>      mean;     // marginal column means (size p)
+  std::vector<Eigen::MatrixXd>      S;        // pairwise covariance (p × p)
+  std::vector<Eigen::MatrixXd>      pi_hat;   // π̂_(j,ℓ) = n_(j,ℓ) / n (p × p)
+  std::vector<Eigen::MatrixXi>      n_pair;   // overlap counts n_(j,ℓ) (p × p)
+  std::vector<std::int64_t>         n_obs;    // n_b (rows in block b)
+};
+
+// Build `PairwiseSampleStats` from raw data with optional missingness mask.
+// When `raw.mask` is empty, falls through to the complete-data identity: every
+// entry of `pi_hat[b]` is 1, `n_pair[b]` is `n_b`, and `S[b]` equals the usual
+// N-divisor sample covariance — so callers can treat this as a drop-in
+// generalisation of `sample_stats_from_raw` for the pairwise setting.
+//
+// Returns `NumericIssue` if any block has < 2 rows, zero columns, a variable
+// with no observed values, or a variable pair with no joint observations.
+post_expected<PairwiseSampleStats>
+pairwise_sample_stats(const RawData& raw);
+
+// Van-Praag-style normal-theory ACOV under MAR — the missing-data analogue
+// of `gamma_nt(Σ)`. Returns one p*×p* matrix per block,
+//
+//   Γ_NT^pw[a, b] = (π_{a,b} / (π_a · π_b)) · Γ_NT(Σ̂_pw)[a, b],
+//
+// where π_a = π̂_(j,ℓ) is the pair availability (from
+// `PairwiseSampleStats::pi_hat`) and π_{a,b} is the four-way joint overlap
+// probability. Computed without enumerating the p*² four-way overlaps
+// directly via the pattern-grouped expectation identity
+//
+//   Γ_NT^pw = E_R[ diag(A/π̂) · Γ_NT(Σ̂_pw) · diag(A/π̂) ]
+//           ≈ Σ_k (n_k/n) · diag(a_k/π̂_diag) · Γ_NT(Σ̂_pw) · diag(a_k/π̂_diag),
+//
+// summed over the K distinct missingness patterns in the block. Cost per
+// block: O(p⁴) for `gamma_nt(Σ̂_pw)` once + O(K·p*²) for the K rescalings.
+//
+// Complete-data degeneracy: with no mask, K = 1 and a_1 ≡ 1, π̂_diag ≡ 1, so
+// the sum collapses to `gamma_nt(Σ̂_pw[b])` exactly.
+//
+// Used as the asymptotically-efficient GLS weight by
+// `estimate::fit_gls_pairwise`. The Σ-only fallback (running the existing
+// `fit_gls` on `pw.S` as if it were a complete-data covariance) skips this
+// entirely and uses `Γ_NT(Σ̂_pw)⁻¹` directly — the Savalei-Bentler 2005 /
+// Gold-Bentler-Kim 2003 literature convention, simpler and consistent but
+// asymptotically suboptimal under MAR.
+post_expected<std::vector<Eigen::MatrixXd>>
+gamma_nt_pairwise(const RawData& raw, const PairwiseSampleStats& pw);
+
+}  // namespace magmaan::data
