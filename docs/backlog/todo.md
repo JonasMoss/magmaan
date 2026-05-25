@@ -77,8 +77,12 @@ semantics · **XL** statistical design/research track before implementation.
   such as effect-coding-style constraints; theta parameterization in the
   cache-aware/profiled/SNLLS path; reduced-Gamma robust-inference products that
   avoid full materialization where possible; and only-when-needed R/API polish.
-  Next practical slice: benchmark instrumentation and all-ordinal delta
-  experiments before returning to the remaining estimator generalizations.
+  First benchmark slice landed as `magmaan_ordinal_workspace_bench` plus
+  `experiments/06-ordinal-snlls-probe`: it covers all-ordinal delta fit-only
+  ULS/DWLS/WLS across free, fixed, and shared threshold models and checks
+  cache/materialization flags plus agreement with bounded/materialized paths.
+  Next practical slices are fit-plus-inference timing, raw/lazy Gamma
+  construction boundaries, then the remaining estimator generalizations.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
@@ -96,13 +100,16 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 - **S/M.** Continue extending benchmark coverage beyond the current
   lavaan-backed complete-data ML, controlled-missingness FIML, and continuous
   ULS/GLS smoke cases to WLS, ordinal DWLS/WLS, and mixed categorical models.
-- **M.** Add ordinal SNLLS/Gamma workspace experiment instrumentation for the
+- **M.** Extend ordinal SNLLS/Gamma workspace experiment instrumentation for the
   new all-ordinal delta path: report moment construction, diagonal Gamma, full
   Gamma, weight materialization, optimizer time, post-fit inference time when
   requested, objective/gradient diagnostics, iteration counts, cache
   materialization flags, and agreement with the legacy materialized ordinal
-  path. First comparisons should cover ULS/DWLS/WLS fit-only and
-  fit-plus-inference plans across free, fixed, and pure-merge threshold models.
+  path. Landed first: a C++ advisory benchmark target and experiment runner
+  for ULS/DWLS/WLS fit-only cells across free, fixed, and shared thresholds.
+  Remaining: fit-plus-inference/robust reuse timing, raw-data lazy construction
+  boundaries, opt-build larger grids, and any R/API wrapper polish justified by
+  those results.
 - **M/L.** Add a two-stage EM/saturated-covariance missing-data research path
   for comparison with direct FIML and pairwise covariance methods. Stage 1
   (saturated EM moments + sandwich ACOV ingredients) is now exposed as
