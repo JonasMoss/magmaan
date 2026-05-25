@@ -309,6 +309,10 @@ infer_reduced_gamma_sample <- function(uf, Zc, denom) {
     .Call(`_magmaan_infer_reduced_gamma_sample`, uf, Zc, denom)
 }
 
+infer_reduced_gamma_sample_from_gamma <- function(uf, gamma_hat) {
+    .Call(`_magmaan_infer_reduced_gamma_sample_from_gamma`, uf, gamma_hat)
+}
+
 infer_reduced_gamma_sample_materialized <- function(uf, Zc, denom) {
     .Call(`_magmaan_infer_reduced_gamma_sample_materialized`, uf, Zc, denom)
 }

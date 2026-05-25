@@ -7,7 +7,7 @@
 #
 # Usage:
 #   Rscript run_experiment.R [--reps N] [--cells FILTER] [--seed-base S]
-#                            [--lavaan-parity]
+#                            [--robust-track zc|gamma] [--lavaan-parity]
 #
 # `--cells FILTER` is a comma-separated list of `key=value` pairs (e.g.
 # `n_items=16,N=200`) that restrict the 54-cell crossed design to a subset.
@@ -30,13 +30,14 @@ script_path <- function() {
 
 parse_args <- function(args) {
   out <- list(reps = 10L, cells_filter = NULL, seed_base = 20260524L,
-              lavaan_parity = FALSE)
+              robust_track = "zc", lavaan_parity = FALSE)
   i <- 1L
   while (i <= length(args)) {
     a <- args[[i]]
     if (a %in% c("-h", "--help")) {
       cat("Usage: Rscript run_experiment.R [--reps N] [--cells FILTER] ",
-          "[--seed-base S] [--lavaan-parity]\n", sep = "")
+          "[--seed-base S] [--robust-track zc|gamma] ",
+          "[--lavaan-parity]\n", sep = "")
       quit(save = "no", status = 0L)
     } else if (a == "--reps") {
       i <- i + 1L; out$reps <- as.integer(args[[i]])
@@ -50,6 +51,10 @@ parse_args <- function(args) {
       i <- i + 1L; out$seed_base <- as.integer(args[[i]])
     } else if (startsWith(a, "--seed-base=")) {
       out$seed_base <- as.integer(sub("^--seed-base=", "", a))
+    } else if (a == "--robust-track") {
+      i <- i + 1L; out$robust_track <- args[[i]]
+    } else if (startsWith(a, "--robust-track=")) {
+      out$robust_track <- sub("^--robust-track=", "", a)
     } else if (a == "--lavaan-parity") {
       out$lavaan_parity <- TRUE
     } else {
@@ -59,6 +64,9 @@ parse_args <- function(args) {
   }
   if (!is.finite(out$reps) || out$reps < 1L) {
     stop("--reps must be a positive integer", call. = FALSE)
+  }
+  if (!(out$robust_track %in% c("zc", "gamma"))) {
+    stop("--robust-track must be 'zc' or 'gamma'", call. = FALSE)
   }
   out
 }
@@ -239,9 +247,15 @@ build_cell_ctx <- function(cell) {
 # `tr(M)` and `tr(M²)` — eigenvalues are wasted work — so we feed M directly
 # into the `_M`-suffixed χ² primitives. `Zc` and `denom` are passed in so we
 # don't re-compute them across bread variants.
-ugamma_M <- function(fit, Zc, denom, bread) {
+ugamma_M_zc <- function(fit, Zc, denom, bread) {
   uf <- core$robust_build_u_factor(fit, bread = bread, moments = "structured")
-  M <- core$robust_reduced_gamma_sample(uf, Zc, denom)
+  M <- core$robust_reduced_gamma_sample_zc(uf, Zc, denom)
+  list(M = M, df = as.integer(uf$df))
+}
+
+ugamma_M_gamma <- function(fit, gamma_hat, bread) {
+  uf <- core$robust_build_u_factor(fit, bread = bread, moments = "structured")
+  M <- core$robust_reduced_gamma_sample_from_gamma(uf, gamma_hat)
   list(M = M, df = as.integer(uf$df))
 }
 
@@ -249,7 +263,7 @@ ugamma_M <- function(fit, Zc, denom, bread) {
 # `cell_ctx` carries everything that's constant across the reps of a cell:
 # the population covariance (with cached chol), the pre-built magmaan_model_spec,
 # and the variable-name vector. Built once per cell in the main loop.
-fit_one_rep <- function(cell_ctx, threshold_taus, N, seed,
+fit_one_rep <- function(cell_ctx, threshold_taus, N, seed, robust_track,
                         keep_parity = FALSE) {
   pop <- cell_ctx$pop
   p <- nrow(pop$Sigma)
@@ -277,17 +291,11 @@ fit_one_rep <- function(cell_ctx, threshold_taus, N, seed,
   loading_free_idx <- pt$free[loading_idx]
   loading_names <- paste0(pt$rhs[loading_idx])
 
-  # Shared casewise contributions. Whether the cheapest sandwich form is
-  # (Zc·WΔ)ᵀ(Zc·WΔ) (Zc-overload of robust_se) or WΔᵀ·Γ̂·WΔ (gamma_hat
-  # overload) depends on the shape: the former is O(N · p* · q), the latter
-  # is O(p*² · q + p*·q²). For Maydeu's design N ∈ {200, 500, 1000} dominates
-  # p* ∈ {136, 528}, so the γ̂ path wins; for N ≤ p* (e.g. very small samples
-  # or larger models) prefer `core$robust_se_zc(fit, Zc, N_total, ...)`.
   Zc <- core$robust_casewise_contributions(fit$partable, X)
   N_total <- nrow(X)
   denom <- as.numeric(unlist(fit$nobs, use.names = FALSE))
   if (!length(denom)) denom <- N_total
-  gamma_hat <- crossprod(Zc) / N_total
+  gamma_hat <- if (identical(robust_track, "gamma")) crossprod(Zc) / N_total else NULL
   samp <- core$fit_sample_stats(fit)
 
   # ── Six SE methods ──────────────────────────────────────────────────────
@@ -313,13 +321,17 @@ fit_one_rep <- function(cell_ctx, threshold_taus, N, seed,
 
   # MLM/MLMV/MLR-exp share the sandwich SE (bread=expected, cov=empirical);
   # MLR uses bread=observed. The both_breads call runs robust_setup once and
-  # returns both SE vectors, skipping the duplicated Δ-stacking / Γ_NT
-  # Cholesky / WΔ work that two single-bread calls would pay.
-  pair <- tryCatch(
-    core$robust_se_both_breads(fit, gamma_hat,
-                               moments = "structured", cov = "empirical"),
-    error = function(e) e
-  )
+  # returns both SE vectors. `--robust-track` chooses whether the shared meat
+  # is reduced from casewise Zc or from a materialized gamma_hat.
+  pair <- tryCatch({
+    if (identical(robust_track, "gamma")) {
+      core$robust_se_both_breads(fit, gamma_hat,
+                                 moments = "structured", cov = "empirical")
+    } else {
+      core$robust_se_both_breads_zc(fit, Zc, N_total,
+                                    moments = "structured", cov = "empirical")
+    }
+  }, error = function(e) e)
   se_MLM <- if (inherits(pair, "error")) NULL else pair$expected$se
   se_MLR <- if (inherits(pair, "error")) NULL else pair$observed$se
 
@@ -330,10 +342,20 @@ fit_one_rep <- function(cell_ctx, threshold_taus, N, seed,
   # Build the reduced df × df symmetric matrix M for each bread; the
   # adjustments below take M directly (tr(M), tr(M²)) and skip the O(k³)
   # eigendecomposition entirely.
-  mat_E <- tryCatch(ugamma_M(fit, Zc, denom, "expected"),
-                    error = function(e) e)
-  mat_O <- tryCatch(ugamma_M(fit, Zc, denom, "observed"),
-                    error = function(e) e)
+  mat_E <- tryCatch({
+    if (identical(robust_track, "gamma")) {
+      ugamma_M_gamma(fit, gamma_hat, "expected")
+    } else {
+      ugamma_M_zc(fit, Zc, denom, "expected")
+    }
+  }, error = function(e) e)
+  mat_O <- tryCatch({
+    if (identical(robust_track, "gamma")) {
+      ugamma_M_gamma(fit, gamma_hat, "observed")
+    } else {
+      ugamma_M_zc(fit, Zc, denom, "observed")
+    }
+  }, error = function(e) e)
   # Field names differ by adjustment:
   #   satorra_bentler_M   → list(chi2_scaled, scale_c, df)
   #   mean_var_adjusted_M → list(chi2_adj,    df_adj)
@@ -456,9 +478,9 @@ threshold_sets <- setNames(lapply(unique(cell_grid$dist), function(nm) {
 
 # ── Run ─────────────────────────────────────────────────────────────────────
 cat(sprintf(
-  "maydeu-olivares-2017: magmaan %s, %s, reps=%d, cells=%d\n",
+  "maydeu-olivares-2017: magmaan %s, %s, reps=%d, cells=%d, robust_track=%s\n",
   as.character(utils::packageVersion("magmaan")),
-  R.version.string, args$reps, nrow(cell_grid)
+  R.version.string, args$reps, nrow(cell_grid), args$robust_track
 ))
 
 # Write the threshold table once.
@@ -503,7 +525,8 @@ for (ci in seq_len(nrow(cell_grid))) {
   for (rep_idx in seq_len(args$reps)) {
     seed <- args$seed_base + ci * 10000L + rep_idx
     keep_parity <- isTRUE(args$lavaan_parity) && rep_idx == 1L
-    out <- fit_one_rep(ctx, taus, cell$N, seed, keep_parity = keep_parity)
+    out <- fit_one_rep(ctx, taus, cell$N, seed, args$robust_track,
+                       keep_parity = keep_parity)
     if (!isTRUE(out$ok)) {
       rep_fail <- rep_fail + 1L
       next
@@ -620,11 +643,12 @@ if (!is.null(summary_chi2)) {
 # ── Metadata ────────────────────────────────────────────────────────────────
 meta <- data.frame(
   key = c("magmaan_version", "R_version", "reps", "seed_base",
-          "cells_filter", "lavaan_parity",
+          "cells_filter", "robust_track", "lavaan_parity",
           "n_cells", "n_se_rows", "n_chi2_rows", "total_seconds"),
   value = c(as.character(utils::packageVersion("magmaan")),
             R.version.string, args$reps, args$seed_base,
             args$cells_filter %||% "",
+            args$robust_track,
             isTRUE(args$lavaan_parity),
             nrow(cell_grid), nrow(se_long), nrow(chi2_long),
             sprintf("%.2f", t_global1 - t_global0)),

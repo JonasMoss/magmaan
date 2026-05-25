@@ -672,11 +672,31 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B") {
   // Path 2: explicit Γ̂ then B'Γ̂B.
   auto G_or = magmaan::data::empirical_gamma(raw.X[0]);
   REQUIRE(G_or.has_value());
+  auto M_gamma_or =
+      magmaan::robust::reduced_gamma_sample_from_gamma(*uf_or, *G_or);
+  REQUIRE(M_gamma_or.has_value());
   const Eigen::MatrixXd M_b =
       uf_or->B.transpose() * (*G_or) * uf_or->B;
 
   CHECK((*M_a_or - M_b).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK((*M_gamma_or - M_b).cwiseAbs().maxCoeff() < 1e-10);
   CHECK((*M_full_or - M_b).cwiseAbs().maxCoeff() < 1e-10);
+
+  // Observed-Hessian U-factors do not expose a simple B basis, but the
+  // caller-supplied Γ̂ path must still agree with the Zc reduction.
+  auto uf_obs_or = magmaan::robust::build_u_factor(
+      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est,
+      {magmaan::robust::Information::Observed,
+       magmaan::robust::WeightMoments::Structured,
+       magmaan::robust::ScoreCovariance::Empirical});
+  REQUIRE(uf_obs_or.has_value());
+  auto M_obs_zc_or = magmaan::robust::reduced_gamma_sample(
+      *uf_obs_or, *Zc_or, static_cast<double>(n));
+  REQUIRE(M_obs_zc_or.has_value());
+  auto M_obs_gamma_or =
+      magmaan::robust::reduced_gamma_sample_from_gamma(*uf_obs_or, *G_or);
+  REQUIRE(M_obs_gamma_or.has_value());
+  CHECK((*M_obs_zc_or - *M_obs_gamma_or).cwiseAbs().maxCoeff() < 1e-9);
 
   // The per-block-divisor vector form: a length-1 vector recycles to the
   // single block, so it must match the scalar overload bit-for-bit. A
@@ -756,9 +776,13 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B with mean structure (G3
   // Path 2: explicit means-aware Γ̂_full then Bᵀ · Γ̂_full · B.
   const Eigen::MatrixXd Gamma_full =
       (Zc_or->transpose() * (*Zc_or)) / static_cast<double>(n);
+  auto M_gamma_or =
+      magmaan::robust::reduced_gamma_sample_from_gamma(*uf_or, Gamma_full);
+  REQUIRE(M_gamma_or.has_value());
   const Eigen::MatrixXd M_b =
       uf_or->B.transpose() * Gamma_full * uf_or->B;
   CHECK((*M_a_or - M_b).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK((*M_gamma_or - M_b).cwiseAbs().maxCoeff() < 1e-10);
   CHECK((*M_full_or - M_b).cwiseAbs().maxCoeff() < 1e-10);
 
   // Shape-mismatch path: σ-only Zc against a means-aware UFactor is rejected
@@ -769,6 +793,11 @@ TEST_CASE("reduced_gamma_sample matches explicit B'Γ̂B with mean structure (G3
   auto M_bad_or = magmaan::robust::reduced_gamma_sample(
       *uf_or, *Zc_sigma_or, static_cast<double>(n));
   CHECK_FALSE(M_bad_or.has_value());
+  const Eigen::MatrixXd Gamma_sigma =
+      (Zc_sigma_or->transpose() * (*Zc_sigma_or)) / static_cast<double>(n);
+  auto M_bad_gamma_or =
+      magmaan::robust::reduced_gamma_sample_from_gamma(*uf_or, Gamma_sigma);
+  CHECK_FALSE(M_bad_gamma_or.has_value());
 }
 
 // ----------------------------------------------------------------------------
