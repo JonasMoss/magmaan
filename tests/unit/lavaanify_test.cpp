@@ -346,6 +346,74 @@ TEST_CASE("lavaanify: growth defaults fix OV intercepts and free LV means") {
   CHECK(row_free("i", Op::Covariance, "s") > 0);
 }
 
+TEST_CASE("lavaanify: auto_cov_y pairs terminal endogenous OV-Y "
+          "(newsom_2015_ex5_6a pattern)") {
+  // Three-wave cross-lagged panel path model with no latents — lavaan's
+  // sem() default `auto.cov.y = TRUE` adds the residual covariance between
+  // the two wave-3 (terminal) endogenous Ys (`w3posaff ~~ w3unw`) but does
+  // NOT correlate the wave-2 Ys (`w2posaff`, `w2unw`) because they are
+  // non-terminal (they predict the wave-3 outcomes). magmaan's
+  // `auto_cov_y` must produce the same single auto-row.
+  BuildOptions opts;
+  opts.meanstructure = true;
+  opts.auto_cov_y = true;
+  auto pt = must_lavaanify(
+      "w2posaff ~ w1unw\n"
+      "w3posaff ~ w2unw\n"
+      "w2unw ~ w1posaff\n"
+      "w3unw ~ w2posaff\n"
+      "w2posaff ~ w1posaff\n"
+      "w3posaff ~ w2posaff\n"
+      "w2unw ~ w1unw\n"
+      "w3unw ~ w2unw",
+      opts);
+
+  auto count_cov = [&](std::string_view a, std::string_view b) {
+    int n = 0;
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.op[i] != Op::Covariance) continue;
+      if ((pt.lhs[i] == a && pt.rhs[i] == b) ||
+          (pt.lhs[i] == b && pt.rhs[i] == a)) ++n;
+    }
+    return n;
+  };
+
+  // Terminal pair: auto-added (1 row, free).
+  CHECK(count_cov("w3posaff", "w3unw") == 1);
+  // Non-terminal pair: must NOT be auto-added.
+  CHECK(count_cov("w2posaff", "w2unw") == 0);
+  // Cross-wave pairs that are also regressions are guarded out by
+  // `regression_already_present`.
+  CHECK(count_cov("w2posaff", "w3posaff") == 0);
+  CHECK(count_cov("w2unw", "w3unw") == 0);
+}
+
+TEST_CASE("lavaanify: auto_cov_y respects explicit user covariance row") {
+  // When the user writes `w3posaff ~~ 0*w3unw` to constrain the auto-row,
+  // magmaan must NOT add a duplicate free auto-row (same parity as lavaan).
+  BuildOptions opts;
+  opts.meanstructure = true;
+  opts.auto_cov_y = true;
+  auto pt = must_lavaanify(
+      "w2posaff ~ w1unw\n"
+      "w3posaff ~ w2unw\n"
+      "w3unw ~ w2posaff\n"
+      "w2unw ~ w1posaff\n"
+      "w3posaff ~~ 0*w3unw",
+      opts);
+  int n = 0, free_sum = 0;
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != Op::Covariance) continue;
+    if ((pt.lhs[i] == "w3posaff" && pt.rhs[i] == "w3unw") ||
+        (pt.lhs[i] == "w3unw" && pt.rhs[i] == "w3posaff")) {
+      ++n;
+      free_sum += pt.free[i];
+    }
+  }
+  CHECK(n == 1);          // not duplicated
+  CHECK(free_sum == 0);   // user fixed it at 0
+}
+
 TEST_CASE("lavaanify: meanstructure does not duplicate user-supplied ~1 rows") {
   BuildOptions opts;
   opts.meanstructure = true;
