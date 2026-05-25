@@ -270,6 +270,41 @@ TEST_CASE("ModelEvaluator: mean structure — μ depends on Λ·α when latent m
   CHECK(sm->mu[0](2) == doctest::Approx(1.4));
 }
 
+TEST_CASE("ModelEvaluator: promoted observed indicator feeds the Reduced state chain") {
+  auto ev = must_build(
+      "Deta2 =~ 1*bmi2\n"
+      "bmi2 ~ 1*bmi1\n"
+      "i =~ 1*bmi1\n"
+      "Deta2 ~ 2*1\n"
+      "i ~ 10*1\n"
+      "bmi1 ~ 0*1\n"
+      "bmi2 ~ 0*1\n"
+      "Deta2 ~~ 3*Deta2\n"
+      "i ~~ 4*i\n"
+      "Deta2 ~~ 0*i\n"
+      "bmi1 ~~ 0*bmi1\n"
+      "bmi2 ~~ 0*bmi2");
+  REQUIRE(ev.n_free() == 0);
+
+  Eigen::VectorXd theta(0);
+  auto sm = ev.sigma(theta);
+  REQUIRE(sm.has_value());
+  REQUIRE(sm->sigma.size() == 1);
+  REQUIRE(sm->mu.size() == 1);
+  REQUIRE(sm->sigma[0].rows() == 2);
+  REQUIRE(sm->sigma[0].cols() == 2);
+  REQUIRE(sm->mu[0].size() == 2);
+
+  // ov order is bmi2, bmi1. The promoted bmi2 state is Deta2 + bmi1,
+  // and bmi1 is measured from i.
+  CHECK(sm->mu[0](0) == doctest::Approx(12.0));
+  CHECK(sm->mu[0](1) == doctest::Approx(10.0));
+  CHECK(sm->sigma[0](0, 0) == doctest::Approx(7.0));
+  CHECK(sm->sigma[0](1, 0) == doctest::Approx(4.0));
+  CHECK(sm->sigma[0](0, 1) == doctest::Approx(4.0));
+  CHECK(sm->sigma[0](1, 1) == doctest::Approx(4.0));
+}
+
 TEST_CASE("ModelEvaluator: no mean structure → ImpliedMoments.mu is empty") {
   // The default — no `~1` rows — keeps μ empty so downstream consumers
   // (ML, inference) can detect "covariance-only" via `mu.empty()`.

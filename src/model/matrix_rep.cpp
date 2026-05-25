@@ -142,10 +142,13 @@ build_matrix_rep(const spec::LatentStructure& pt,
 
     switch (op) {
       case parse::Op::Measurement: {
-        if (is_user_lv(R)) {
-          // Higher-order measurement `lat_hi =~ lat_lo`: the RHS latent is the
-          // effect, so this is the latent-on-latent path `lat_lo ~ lat_hi` —
-          // Β[effect, cause]. decide_form guarantees Reduced form here.
+        if (is_user_lv(R) ||
+            (out.form == RepForm::Reduced && lv_ext_idx(R) >= 0)) {
+          // Higher-order measurement `lat_hi =~ lat_lo`, and Reduced-form
+          // measurement of a promoted observed variable `lat =~ ov.y`, both
+          // target an extended-latent state. Lower them to Beta[effect, cause]
+          // so the structural chain flows through the same phantom state that
+          // the observed variable measures by identity.
           const auto row_idx = lv_ext_idx(R);
           const auto col_idx = lv_ext_idx(L);
           if (row_idx < 0) return unknown_var(R);

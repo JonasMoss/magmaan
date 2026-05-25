@@ -46,6 +46,11 @@ golden `parTable()` fixtures.
   RHS continuations after the operator newline.
 - Checked-in lexer, parser, partable, matrix, and fit oracle fixtures.
 - Single- and multi-group LISREL matrix representation.
+- Reduced LISREL lowers measurement rows whose RHS observed variable is already
+  promoted into `lv_ext_order` into the structural `Beta` matrix, while keeping
+  the mechanically inserted `Lambda[observed, phantom] = 1` identity. This
+  keeps latent-change-score and single-indicator state chains on the same
+  state vector as their autoregressions.
 - Fixed.x resolution, mean structures, marker/std.lv/effect-coding
   identification, start hints, and linear equality constraints.
 - Linear equality constraints through affine reparameterization (θ = θ₀ + K·α)
