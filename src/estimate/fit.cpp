@@ -3,6 +3,7 @@
 #include <string>
 #include <utility>
 
+#include <Eigen/Cholesky>
 #include <Eigen/Core>
 
 #include "magmaan/error.hpp"
@@ -486,6 +487,90 @@ fit_gls(spec::LatentStructure pt, const model::MatrixRep& rep,
   auto W = gmm::normal_theory_weight(pre->ev, samp, x0);
   if (!W.has_value()) return std::unexpected(W.error());
   auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, *W, bounds,
+                         backend, opts);
+  if (!est.has_value()) return est;
+  attach_diagnostics(*est, *pre, bounds);
+  return est;
+}
+
+fit_expected<Estimates>
+fit_gls_pairwise(spec::LatentStructure pt, const model::MatrixRep& rep,
+                 const data::RawData& raw,
+                 const data::PairwiseSampleStats& pw,
+                 const Eigen::VectorXd& x0, Bounds bounds, Backend backend,
+                 OptimOptions opts) {
+  // Pack pairwise stats into a SampleStats so the existing prelude / layout
+  // machinery sees the same shape it expects.
+  SampleStats samp;
+  samp.S     = pw.S;
+  samp.mean  = pw.mean;
+  samp.n_obs = pw.n_obs;
+
+  auto pre = prelude(pt, rep, samp, x0, "fit_gls_pairwise");
+  if (!pre.has_value()) return std::unexpected(pre.error());
+
+  // Detect mean structure by probing the evaluator at x0 — mirrors how
+  // `gmm::normal_theory_weight` determines the G3b layout.
+  auto eval0 = pre->ev.evaluate(x0, false, false);
+  if (!eval0.has_value()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_gls_pairwise: model evaluation at x0 failed"));
+  }
+  if (eval0->moments.sigma.size() != samp.S.size()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_gls_pairwise: evaluator block count mismatches pw"));
+  }
+
+  // Materialize Γ_NT^pw per block.
+  auto gnt_pw_or = data::gamma_nt_pairwise(raw, pw);
+  if (!gnt_pw_or.has_value()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_gls_pairwise: gamma_nt_pairwise failed: " +
+        gnt_pw_or.error().detail));
+  }
+  const auto& gnt_pw = *gnt_pw_or;
+
+  // Build per-block W in the [μ (if any) | σ-vech] G3b layout.
+  gmm::Weight W;
+  W.reserve(samp.S.size());
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const Eigen::Index p = samp.S[b].rows();
+    const Eigen::Index pstar = p * (p + 1) / 2;
+    const bool has_means_b = (b < eval0->moments.mu.size())
+                          && (eval0->moments.mu[b].size() > 0);
+    const Eigen::Index block_rows = (has_means_b ? p : 0) + pstar;
+
+    // σ-block: W_σ = (Γ_NT^pw)⁻¹.
+    Eigen::LLT<Eigen::MatrixXd> llt(gnt_pw[b]);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "fit_gls_pairwise: Γ_NT^pw not positive definite in block " +
+          std::to_string(b)));
+    }
+    Eigen::MatrixXd Wsigma =
+        llt.solve(Eigen::MatrixXd::Identity(pstar, pstar));
+    Wsigma = (0.5 * (Wsigma + Wsigma.transpose())).eval();
+
+    Eigen::MatrixXd Wb = Eigen::MatrixXd::Zero(block_rows, block_rows);
+    Eigen::Index off = 0;
+    if (has_means_b) {
+      // μ-block: keep the Σ-only convention `Ŝ^pw⁻¹` for v0. Pairwise μ ACOV
+      // (Hadamard `π_jk/(π_j π_k)` on Σ̂_pw) is a v1 extension once needed.
+      Eigen::LLT<Eigen::MatrixXd> s_llt(samp.S[b]);
+      if (s_llt.info() != Eigen::Success) {
+        return std::unexpected(fit_err(FitError::Kind::NonPositiveDefiniteSample,
+            "fit_gls_pairwise: pairwise S not positive definite in block " +
+            std::to_string(b)));
+      }
+      Wb.block(0, 0, p, p) =
+          s_llt.solve(Eigen::MatrixXd::Identity(p, p));
+      off = p;
+    }
+    Wb.block(off, off, pstar, pstar) = Wsigma;
+    W.push_back(std::move(Wb));
+  }
+
+  auto est = compose_gmm(pre->ev, pre->con, pre->nl, samp, x0, W, bounds,
                          backend, opts);
   if (!est.has_value()) return est;
   attach_diagnostics(*est, *pre, bounds);

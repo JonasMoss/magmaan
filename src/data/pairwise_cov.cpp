@@ -1,0 +1,273 @@
+#include "magmaan/data/pairwise_cov.hpp"
+
+#include <cstddef>
+#include <string>
+
+#include <Eigen/Core>
+
+#include "magmaan/error.hpp"
+#include "magmaan/expected.hpp"
+
+namespace magmaan::data {
+
+namespace {
+
+PostError make_err(PostError::Kind k, std::string detail) {
+  return PostError{k, std::move(detail)};
+}
+
+}  // namespace
+
+post_expected<PairwiseSampleStats>
+pairwise_sample_stats(const RawData& raw) {
+  if (raw.X.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "pairwise_sample_stats: RawData.X is empty"));
+  }
+  const bool has_mask = !raw.mask.empty();
+  if (has_mask && raw.mask.size() != raw.X.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "pairwise_sample_stats: mask and X have inconsistent block counts"));
+  }
+
+  PairwiseSampleStats out;
+  const std::size_t B = raw.X.size();
+  out.mean.reserve(B);
+  out.S.reserve(B);
+  out.pi_hat.reserve(B);
+  out.n_pair.reserve(B);
+  out.n_obs.reserve(B);
+
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::MatrixXd& X = raw.X[b];
+    const Eigen::Index n = X.rows();
+    const Eigen::Index p = X.cols();
+    if (n < 2) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "pairwise_sample_stats: block " + std::to_string(b) +
+              " has < 2 rows; covariance undefined"));
+    }
+    if (p == 0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "pairwise_sample_stats: block " + std::to_string(b) +
+              " has 0 columns"));
+    }
+    if (has_mask) {
+      const auto& M = raw.mask[b];
+      if (M.rows() != n || M.cols() != p) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "pairwise_sample_stats: mask block " + std::to_string(b) +
+                " shape mismatch"));
+      }
+    }
+
+    auto observed = [&](Eigen::Index r, Eigen::Index c) -> bool {
+      if (!has_mask) return std::isfinite(X(r, c));
+      return raw.mask[b](r, c) != 0;
+    };
+
+    // Marginal column means.
+    Eigen::VectorXd mean = Eigen::VectorXd::Zero(p);
+    Eigen::VectorXi marg_count = Eigen::VectorXi::Zero(p);
+    for (Eigen::Index r = 0; r < n; ++r) {
+      for (Eigen::Index c = 0; c < p; ++c) {
+        if (!observed(r, c)) continue;
+        if (!std::isfinite(X(r, c))) {
+          return std::unexpected(make_err(PostError::Kind::NumericIssue,
+              "pairwise_sample_stats: non-finite observed value at block " +
+                  std::to_string(b) + ", row " + std::to_string(r) +
+                  ", col " + std::to_string(c)));
+        }
+        mean(c) += X(r, c);
+        marg_count(c) += 1;
+      }
+    }
+    for (Eigen::Index c = 0; c < p; ++c) {
+      if (marg_count(c) <= 0) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "pairwise_sample_stats: block " + std::to_string(b) +
+                " column " + std::to_string(c) + " has no observed values"));
+      }
+      mean(c) /= static_cast<double>(marg_count(c));
+    }
+
+    // Pairwise overlap counts, pairwise means per pair, and Van Praag
+    // pairwise covariance using those pairwise means.
+    Eigen::MatrixXi n_pair = Eigen::MatrixXi::Zero(p, p);
+    Eigen::MatrixXd S      = Eigen::MatrixXd::Zero(p, p);
+    Eigen::MatrixXd pi_hat = Eigen::MatrixXd::Zero(p, p);
+
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index k = j; k < p; ++k) {
+        double sum_j = 0.0;
+        double sum_k = 0.0;
+        std::int64_t cnt = 0;
+        for (Eigen::Index r = 0; r < n; ++r) {
+          if (!observed(r, j) || !observed(r, k)) continue;
+          sum_j += X(r, j);
+          sum_k += X(r, k);
+          ++cnt;
+        }
+        if (cnt <= 0) {
+          return std::unexpected(make_err(PostError::Kind::NumericIssue,
+              "pairwise_sample_stats: block " + std::to_string(b) +
+                  " variable pair (" + std::to_string(j) + "," +
+                  std::to_string(k) + ") has no joint observations"));
+        }
+        const double inv_cnt = 1.0 / static_cast<double>(cnt);
+        const double m_j = sum_j * inv_cnt;
+        const double m_k = sum_k * inv_cnt;
+
+        double acc = 0.0;
+        for (Eigen::Index r = 0; r < n; ++r) {
+          if (!observed(r, j) || !observed(r, k)) continue;
+          acc += (X(r, j) - m_j) * (X(r, k) - m_k);
+        }
+        const double s_jk = acc * inv_cnt;
+        S(j, k) = s_jk;
+        S(k, j) = s_jk;
+        n_pair(j, k) = static_cast<int>(cnt);
+        n_pair(k, j) = n_pair(j, k);
+        const double pi = static_cast<double>(cnt) / static_cast<double>(n);
+        pi_hat(j, k) = pi;
+        pi_hat(k, j) = pi;
+      }
+    }
+
+    out.mean.push_back(std::move(mean));
+    out.S.push_back(std::move(S));
+    out.pi_hat.push_back(std::move(pi_hat));
+    out.n_pair.push_back(std::move(n_pair));
+    out.n_obs.push_back(static_cast<std::int64_t>(n));
+  }
+  return out;
+}
+
+namespace {
+
+// Lower-tri column-major vech index of (j, ℓ) with j ≥ ℓ. Mirrors
+// `detail::vech_index` in src/detail_vech.hpp — duplicated here only because
+// detail_vech.hpp is an internal header for the robust/raw_data TUs; pulling
+// it in from the data layer would create a circular taxonomy.
+constexpr Eigen::Index vech_idx(Eigen::Index p, Eigen::Index j, Eigen::Index l) {
+  return l * p - (l * (l - 1)) / 2 + (j - l);
+}
+
+}  // namespace
+
+post_expected<std::vector<Eigen::MatrixXd>>
+gamma_nt_pairwise(const RawData& raw, const PairwiseSampleStats& pw) {
+  if (raw.X.size() != pw.S.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "gamma_nt_pairwise: RawData and PairwiseSampleStats block count "
+        "mismatch"));
+  }
+  const bool has_mask = !raw.mask.empty();
+  if (has_mask && raw.mask.size() != raw.X.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "gamma_nt_pairwise: mask and X have inconsistent block counts"));
+  }
+
+  std::vector<Eigen::MatrixXd> out;
+  out.reserve(raw.X.size());
+
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    const Eigen::Index n = raw.X[b].rows();
+    const Eigen::Index p = pw.S[b].rows();
+    const Eigen::Index pstar = p * (p + 1) / 2;
+
+    auto observed = [&](Eigen::Index r, Eigen::Index c) -> bool {
+      if (!has_mask) return std::isfinite(raw.X[b](r, c));
+      return raw.mask[b](r, c) != 0;
+    };
+
+    // Inner kernel: Γ_NT(Σ̂_pw) for this block.
+    auto gnt_or = gamma_nt(pw.S[b]);
+    if (!gnt_or.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "gamma_nt_pairwise: gamma_nt failed on block " + std::to_string(b) +
+              ": " + gnt_or.error().detail));
+    }
+    const Eigen::MatrixXd& G = *gnt_or;
+    if (G.rows() != pstar || G.cols() != pstar) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "gamma_nt_pairwise: gamma_nt returned unexpected shape"));
+    }
+
+    // p*-vector of per-component availabilities (the diagonal of pi_hat
+    // expanded to vech order: π̂_a = pi_hat(j, ℓ) for a = (j, ℓ)).
+    Eigen::VectorXd pi_diag(pstar);
+    for (Eigen::Index ll = 0; ll < p; ++ll) {
+      for (Eigen::Index jj = ll; jj < p; ++jj) {
+        pi_diag(vech_idx(p, jj, ll)) = pw.pi_hat[b](jj, ll);
+      }
+    }
+    if (!(pi_diag.minCoeff() > 0.0)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "gamma_nt_pairwise: π̂ has a zero entry on block " +
+              std::to_string(b) + " (pair with no joint observations)"));
+    }
+
+    if (!has_mask) {
+      // Complete data: a_k ≡ 1, π̂_diag ≡ 1 → Γ_NT^pw = Γ_NT(Σ̂_pw).
+      out.push_back(G);
+      continue;
+    }
+
+    // Pattern enumeration: hash each row's (p-bit) observed pattern, group
+    // rows with the same pattern. K = number of distinct patterns ≤ min(n,
+    // 2^p). For each pattern, build the p*-vector a_k of per-pair
+    // availabilities and accumulate (n_k/n) · diag(a_k/π̂_diag) · G ·
+    // diag(a_k/π̂_diag).
+    std::vector<Eigen::Index> pattern_id(static_cast<std::size_t>(n));
+    std::vector<std::vector<bool>> patterns;
+    std::vector<Eigen::Index>     pattern_count;
+    patterns.reserve(static_cast<std::size_t>(n));
+    pattern_count.reserve(static_cast<std::size_t>(n));
+    for (Eigen::Index r = 0; r < n; ++r) {
+      std::vector<bool> sig(static_cast<std::size_t>(p));
+      for (Eigen::Index c = 0; c < p; ++c)
+        sig[static_cast<std::size_t>(c)] = observed(r, c);
+      auto it = patterns.end();
+      for (auto pi = patterns.begin(); pi != patterns.end(); ++pi) {
+        if (*pi == sig) { it = pi; break; }
+      }
+      Eigen::Index pid = 0;
+      if (it == patterns.end()) {
+        pid = static_cast<Eigen::Index>(patterns.size());
+        patterns.push_back(std::move(sig));
+        pattern_count.push_back(1);
+      } else {
+        pid = static_cast<Eigen::Index>(it - patterns.begin());
+        pattern_count[static_cast<std::size_t>(pid)] += 1;
+      }
+      pattern_id[static_cast<std::size_t>(r)] = pid;
+    }
+
+    Eigen::MatrixXd Gpw = Eigen::MatrixXd::Zero(pstar, pstar);
+    const double inv_n = 1.0 / static_cast<double>(n);
+    for (std::size_t k = 0; k < patterns.size(); ++k) {
+      const auto& sig = patterns[k];
+      // Per-pair availability a_k as a p*-vector; rescale by 1/π̂_diag.
+      Eigen::VectorXd scale = Eigen::VectorXd::Zero(pstar);
+      for (Eigen::Index ll = 0; ll < p; ++ll) {
+        if (!sig[static_cast<std::size_t>(ll)]) continue;
+        for (Eigen::Index jj = ll; jj < p; ++jj) {
+          if (!sig[static_cast<std::size_t>(jj)]) continue;
+          const Eigen::Index a = vech_idx(p, jj, ll);
+          scale(a) = 1.0 / pi_diag(a);
+        }
+      }
+      const double w = static_cast<double>(pattern_count[k]) * inv_n;
+      // (n_k/n) · diag(scale) · G · diag(scale)
+      // Vectorized: row-and-column scale, then add into accumulator.
+      Gpw.noalias() +=
+          w * (scale.asDiagonal() * G * scale.asDiagonal());
+    }
+    Gpw = (0.5 * (Gpw + Gpw.transpose())).eval();
+    out.push_back(std::move(Gpw));
+  }
+  return out;
+}
+
+}  // namespace magmaan::data

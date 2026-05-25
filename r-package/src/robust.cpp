@@ -511,63 +511,6 @@ Rcpp::List data_sample_stats_from_raw(SEXP X) {
                             Rcpp::_["nobs"] = nv);
 }
 
-namespace {
-
-// Build a (possibly multi-block) RawData from a plain `X` / optional `mask`
-// argument pair — no model/partable needed. Used by the Van-Praag pairwise
-// methods-developer surface, where the saturated estimator has no structural
-// restrictions and the caller may not have a partable on hand.
-magmaan::data::RawData raw_from_data_args(SEXP X_arg, SEXP mask_arg) {
-  const std::size_t n_blocks = TYPEOF(X_arg) == VECSXP
-      ? static_cast<std::size_t>(Rcpp::List(X_arg).size())
-      : 1u;
-  if (n_blocks == 0) Rcpp::stop("magmaan: data has no blocks");
-
-  magmaan::data::RawData raw;
-  raw.X.reserve(n_blocks);
-  bool any_missing = false;
-  std::vector<Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>> masks;
-  masks.reserve(n_blocks);
-  const bool has_mask = !Rf_isNull(mask_arg);
-
-  for (std::size_t b = 0; b < n_blocks; ++b) {
-    Rcpp::NumericMatrix Xb = block_matrix(X_arg, b, n_blocks, "data$X");
-    const int n = Xb.nrow();
-    const int p = Xb.ncol();
-    Eigen::MatrixXd X(n, p);
-    Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M(n, p);
-
-    Rcpp::LogicalMatrix Mb;
-    if (has_mask) {
-      Mb = block_mask_matrix(mask_arg, b, n_blocks, "data$mask");
-      if (Mb.nrow() != n || Mb.ncol() != p)
-        Rcpp::stop("magmaan: data$mask block %d has shape %dx%d but data$X has %dx%d",
-                   static_cast<int>(b + 1), Mb.nrow(), Mb.ncol(), n, p);
-    }
-    for (int r = 0; r < n; ++r) {
-      for (int k = 0; k < p; ++k) {
-        const double x = Xb(r, k);
-        const bool observed = has_mask
-            ? (Mb(r, k) != NA_LOGICAL && Mb(r, k) != 0)
-            : std::isfinite(x);
-        if (observed && !std::isfinite(x)) {
-          Rcpp::stop("magmaan: data$mask marks a non-finite value as observed "
-                     "in block %d, row %d", static_cast<int>(b + 1), r + 1);
-        }
-        M(r, k) = static_cast<std::uint8_t>(observed ? 1 : 0);
-        X(r, k) = observed ? x : std::numeric_limits<double>::quiet_NaN();
-        if (!observed) any_missing = true;
-      }
-    }
-    raw.X.push_back(std::move(X));
-    masks.push_back(std::move(M));
-  }
-  if (any_missing) raw.mask = std::move(masks);
-  return raw;
-}
-
-}  // namespace
-
 // data_pairwise_sample_stats() — mirrors data::pairwise_sample_stats(raw).
 // Takes raw data (matrix or list of per-group matrices) and an optional
 // missingness mask (1 = observed). Returns the per-block bundle of marginal
@@ -598,6 +541,26 @@ Rcpp::List data_pairwise_sample_stats(SEXP X, SEXP mask = R_NilValue) {
       Rcpp::_["pi_hat"] = Pi,
       Rcpp::_["n_pair"] = Np,
       Rcpp::_["nobs"]   = nv);
+}
+
+// data_gamma_nt_pairwise() — mirrors data::gamma_nt_pairwise(raw, pw).
+// Returns one p*×p* matrix per block. Useful for inspecting the materialized
+// Γ_NT^pw weight directly (e.g. to compose `fit_wls` by hand for the
+// efficiency study) and for symmetry/PD checks.
+//
+// [[Rcpp::export]]
+Rcpp::List data_gamma_nt_pairwise(SEXP X, SEXP mask = R_NilValue) {
+  magmaan::data::RawData raw = raw_from_data_args(X, mask);
+  auto pw_or = magmaan::data::pairwise_sample_stats(raw);
+  if (!pw_or.has_value()) stop_post(pw_or.error());
+  auto g_or = magmaan::data::gamma_nt_pairwise(raw, *pw_or);
+  if (!g_or.has_value()) stop_post(g_or.error());
+  const R_xlen_t nb = static_cast<R_xlen_t>(g_or->size());
+  Rcpp::List out(nb);
+  for (R_xlen_t b = 0; b < nb; ++b) {
+    out[b] = Rcpp::wrap((*g_or)[static_cast<std::size_t>(b)]);
+  }
+  return out;
 }
 
 // infer_pairwise_casewise_contributions() — mirrors

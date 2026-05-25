@@ -86,6 +86,7 @@ add_library(magmaan STATIC
   src/model/fcsem_evaluator.cpp
   src/model/auto_identification.cpp
   src/data/raw_data.cpp
+  src/data/pairwise_cov.cpp
   src/data/shrinkage.cpp
   src/data/h_score.cpp
   src/data/pairwise_mixed.cpp

@@ -73,6 +73,7 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/ml_continuation_test.cpp
   unit/fcsem_ml_test.cpp
   unit/fiml_test.cpp
+  unit/pairwise_gls_test.cpp
   unit/start_fabin_test.cpp
   unit/start_cfa_noniter_test.cpp
   unit/snlls_test.cpp
@@ -117,6 +118,7 @@ magmaan_add_test_target(magmaan_test_inference inference
   unit/residuals_test.cpp
   unit/factor_scores_test.cpp
   unit/robust_test.cpp
+  unit/pairwise_casewise_test.cpp
   unit/fmg_test.cpp
   unit/weighted_inference_test.cpp
   unit/restriction_test.cpp
