@@ -25,8 +25,15 @@ experiment_results_dir <- function(create = FALSE) {
   out
 }
 
-paper_dir <- file.path(repo_root(), "papers", "snlls-constrained")
-pkg_dir <- file.path(paper_dir, "r-package")
+paper_dir <- function() {
+  candidates <- file.path(repo_root(), "papers",
+                          c("snlls-continuous", "snlls-constrained"))
+  hits <- candidates[dir.exists(candidates)]
+  if (length(hits)) hits[[1L]] else candidates[[1L]]
+}
+
+paper_root <- paper_dir()
+pkg_dir <- file.path(paper_root, "r-package")
 require_pkg("pkgload")
 pkgload::load_all(pkg_dir, quiet = TRUE)
 
@@ -152,7 +159,7 @@ audit_one <- function(case) {
 }
 
 v7_candidates <- file.path(
-  paper_dir,
+  paper_root,
   c(file.path("reports", "pilot-data", "audit-parity-v7"),
     file.path("results", "raw", "pilot-data", "audit-parity-v7")),
   "lavaan_audit_parity_disagree.csv")
@@ -163,7 +170,7 @@ if (!length(v7_hits)) {
 }
 v7_path <- v7_hits[[1L]]
 v7_disagree <- utils::read.csv(v7_path, stringsAsFactors = FALSE)
-corpus_root <- snlls_corpus_root(paper_dir)
+corpus_root <- snlls_corpus_root(paper_root)
 
 need <- unique(v7_disagree[, c("book", "weight")])
 all_cases <- list()

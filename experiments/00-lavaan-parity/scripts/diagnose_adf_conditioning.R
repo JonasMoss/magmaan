@@ -25,8 +25,15 @@ experiment_results_dir <- function(create = FALSE) {
   out
 }
 
-paper_dir <- file.path(repo_root(), "papers", "snlls-constrained")
-pkg_dir <- file.path(paper_dir, "r-package")
+paper_dir <- function() {
+  candidates <- file.path(repo_root(), "papers",
+                          c("snlls-continuous", "snlls-constrained"))
+  hits <- candidates[dir.exists(candidates)]
+  if (length(hits)) hits[[1L]] else candidates[[1L]]
+}
+
+paper_root <- paper_dir()
+pkg_dir <- file.path(paper_root, "r-package")
 require_pkg("pkgload")
 require_pkg("lavaan")
 pkgload::load_all(pkg_dir, quiet = TRUE)
@@ -42,7 +49,7 @@ canon_keys <- function(df) {
   df
 }
 
-corpus_root <- snlls_corpus_root(paper_dir)
+corpus_root <- snlls_corpus_root(paper_root)
 cases <- corpus_cases(corpus_root, weights = "ADF", books = "muthen_2017")
 hit <- grep("muthen_2017_ch2_ex2_1__adf$", names(cases), value = TRUE)[[1L]]
 case <- cases[[hit]]

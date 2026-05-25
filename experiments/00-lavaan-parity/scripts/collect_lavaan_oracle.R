@@ -25,6 +25,13 @@ experiment_results_dir <- function(create = FALSE) {
   out
 }
 
+paper_dir <- function() {
+  candidates <- file.path(repo_root(), "papers",
+                          c("snlls-continuous", "snlls-constrained"))
+  hits <- candidates[dir.exists(candidates)]
+  if (length(hits)) hits[[1L]] else candidates[[1L]]
+}
+
 parse_args <- function(args) {
   out <- list(
     run_id = "",
@@ -46,7 +53,8 @@ parse_args <- function(args) {
         "[--install-latest-lavaan] [--repos URL] [--lib PATH]\n",
         "\n",
         "Fits the corpus cells with lavaan only and writes ",
-        "results/lavaan-oracle/<run-id>/{lavaan_fits,lavaan_estimates,metadata}.csv.\n",
+        "results/lavaan-oracle/<run-id>/{lavaan_fits,lavaan_estimates,metadata}.csv ",
+        "plus RDS copies for exact replay.\n",
         "Use --install-latest-lavaan to install the newest CRAN lavaan before fitting.\n",
         sep = ""
       )
@@ -90,6 +98,12 @@ package_field <- function(package, field) {
   desc <- utils::packageDescription(package)
   value <- desc[[field]]
   if (is.null(value) || is.na(value)) "" else as.character(value)
+}
+
+write_precise_csv <- function(x, path) {
+  old <- options(digits = 17)
+  on.exit(options(old), add = TRUE)
+  write_csv(x, path)
 }
 
 default_run_id <- function() {
@@ -166,14 +180,14 @@ if (isTRUE(args$install_latest_lavaan)) {
 require_pkg("pkgload")
 require_pkg("lavaan")
 
-paper_dir <- file.path(repo_root(), "papers", "snlls-constrained")
-pkg_dir <- file.path(paper_dir, "r-package")
+paper_root <- paper_dir()
+pkg_dir <- file.path(paper_root, "r-package")
 pkgload::load_all(pkg_dir, quiet = TRUE)
 
 run_id <- args$run_id
 if (!nzchar(run_id)) run_id <- default_run_id()
 
-corpus_root <- snlls_corpus_root(paper_dir)
+corpus_root <- snlls_corpus_root(paper_root)
 cases <- corpus_cases(corpus_root, weights = args$weights, books = args$books)
 if (is.finite(args$limit) && args$limit > 0L) {
   cases <- cases[seq_len(min(length(cases), args$limit))]
@@ -210,13 +224,16 @@ estimates <- if (length(estimate_rows)) {
              est = numeric(), stringsAsFactors = FALSE)
 }
 
-write_csv(fits, file.path(out_dir, "lavaan_fits.csv"))
-write_csv(estimates, file.path(out_dir, "lavaan_estimates.csv"))
+write_precise_csv(fits, file.path(out_dir, "lavaan_fits.csv"))
+write_precise_csv(estimates, file.path(out_dir, "lavaan_estimates.csv"))
+saveRDS(fits, file.path(out_dir, "lavaan_fits.rds"))
+saveRDS(estimates, file.path(out_dir, "lavaan_estimates.rds"))
 write_metadata(
   file.path(out_dir, "metadata.csv"),
   values = list(
     oracle_run = run_id,
     generated = format(Sys.time(), "%Y-%m-%d %H:%M:%S %z"),
+    paper_dir = paper_root,
     corpus_root = corpus_root,
     books = if (is.null(args$books)) "all" else paste(args$books, collapse = ","),
     weights = paste(args$weights, collapse = ","),
