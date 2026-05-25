@@ -27,6 +27,12 @@ semantics · **XL** statistical design/research track before implementation.
   exposes a concrete gap in the staged API; the current `magmaan_core`,
   `magmaan_fit`, and post-fit wrapper surface is otherwise sufficient for the
   next R exploration pass.
+- **L/XL.** Implement the ordinal SNLLS / Gamma workspace split sketched in
+  [docs/design/ordinal-snlls-gamma-architecture.md](../design/ordinal-snlls-gamma-architecture.md):
+  separate ordinal moments from lazy Gamma/weight construction, support
+  fit-only ULS/DWLS without full Gamma materialization, add the free-threshold
+  (`H = I`) profiling path first, then extend to WLS Schur-complement profiling,
+  inference cache reuse, mixed ordinal data, and constrained thresholds.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
