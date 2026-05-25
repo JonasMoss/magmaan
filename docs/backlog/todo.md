@@ -21,6 +21,36 @@ semantics · **XL** statistical design/research track before implementation.
   finalized `corpus/textbook-corpus/raw/kline` corpus into an end-to-end
   parity test.
 
+- **S.** **`auto.fix.single`-style parity gap on single-indicator latents** —
+  `little_2013_ch3_fig_3_6_1indicator__gls` surfaced this. lavaan fixes the
+  residual variance of a single-indicator latent's lone indicator to zero by
+  default; magmaan auto-frees it in `src/spec/build.cpp:741`. Likely a
+  one-line default-flip in the auto-spec routine alongside the existing
+  `auto.fix.first` / `auto.cov.y` toggles. Same kind of fix as the
+  `auto.cov.y` extension that landed under §B2 of the snlls-constrained
+  paper TODO.
+
+- **S.** **ADF/WLS weight builder should tolerance-trim Γ̂ before inversion** —
+  At small N with a binary covariate, the empirical Browne NACOV is
+  positive-definite to working precision but has condition number ≈ 10¹⁷
+  along one cross-third-moment direction. Today's
+  `snlls_adf_weight(include_means=TRUE)` path computes `chol2inv(chol(Γ̂))`
+  unconditionally; that succeeds (smallest eigenvalue technically > 0) but
+  amplifies the singular direction by ~10¹⁶, so a machine-precision
+  residual `||r|| ≈ 10⁻⁸` at a saturated fit produces `||W·r|| ≈ 10⁸` and
+  the KKT projected-gradient audit fires on what is analytically a zero
+  gradient. Replace with a tolerance-aware pseudoinverse at cutoff
+  `tol · max(eig(Γ̂))` (default e.g. `tol = 1e-12`); zero out below-cutoff
+  eigendirections before inverting. Same fix likely applies to the
+  block-diagonal `snlls_adf_weight(include_means=FALSE)` path. Surface:
+  `src/estimate/gmm/dls_weight.cpp` (and the paper-side wrapper
+  `r-package/R/core-cases.R::snlls_adf_weight`). Reproducer:
+  `muthen_2017_ch2_ex2_1__adf` (Hayes PROTEST mediation; N=129; binary
+  treatment 41/88 split; saturated path model; Γ̂ has 8 well-conditioned
+  eigenvalues 10.4 → 0.09 plus one at 7.5×10⁻¹⁷). Per-element diagnosis at
+  `papers/snlls-constrained/reports/lcs-objective-gap.md` (the §B‴ writeup
+  also covers this side finding).
+
 ## API and R boundary
 
 - **S/M.** Add or rename R wrappers only when the methods-developer workflow

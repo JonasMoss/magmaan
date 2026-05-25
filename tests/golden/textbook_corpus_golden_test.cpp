@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -62,6 +63,25 @@ double max_abs_diff(const Eigen::VectorXd &a, const Eigen::VectorXd &b) {
 
 bool close(double a, double b, double tol) {
   return std::abs(a - b) <= tol * std::max(1.0, std::abs(b));
+}
+
+std::string repo_root_from_fixtures() {
+  const std::string fixtures = magmaan::test::fixtures_dir();
+  const std::string suffix = "/tests/fixtures";
+  if (fixtures.size() >= suffix.size() &&
+      fixtures.compare(fixtures.size() - suffix.size(), suffix.size(),
+                       suffix) == 0) {
+    return fixtures.substr(0, fixtures.size() - suffix.size());
+  }
+  return fixtures + "/../..";
+}
+
+nlohmann::json read_json_or_fail(const std::string &path) {
+  auto raw = magmaan::test::read_fixture(path);
+  REQUIRE_MESSAGE(raw.has_value(), "missing " << path);
+  auto j = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_MESSAGE(!j.is_discarded(), "invalid JSON " << path);
+  return j;
 }
 
 magmaan::data::SampleStats sample_stats_from_case(const nlohmann::json &c) {
@@ -180,6 +200,48 @@ void check_json_file_exists(const std::string &corpus,
   auto j = nlohmann::json::parse(*raw, nullptr, false);
   CHECK_MESSAGE(!j.is_discarded(), corpus << "/" << name << " is invalid");
   CHECK_MESSAGE(j.contains("_meta"), corpus << "/" << name << " lacks _meta");
+}
+
+void check_newsom_lcs_case_at_lavaan_theta(std::string_view case_id) {
+  const std::string case_dir = repo_root_from_fixtures() +
+      "/corpus/textbook-corpus/cases/newsom_2015/" + std::string(case_id);
+  auto model_raw = magmaan::test::read_fixture(case_dir + "/model.lav");
+  REQUIRE_MESSAGE(model_raw.has_value(), "missing model for " << case_id);
+  const auto meta = read_json_or_fail(case_dir + "/meta.json");
+  const auto ref = read_json_or_fail(case_dir + "/expected/lavaan_ml.json");
+
+  auto flat = magmaan::parse::Parser::parse(*model_raw);
+  REQUIRE_MESSAGE(flat.has_value(), case_id << ": parse - "
+                                            << flat.error().detail);
+  magmaan::spec::BuildOptions opts;
+  opts.meanstructure = meta["model_options"].value("meanstructure", false);
+  opts.fixed_x = meta["model_options"].value("fixed_x", true);
+  opts.auto_cov_y = meta.value("lavaan_function", std::string{}) == "sem";
+  auto pt = magmaan::spec::build(*flat, opts);
+  REQUIRE_MESSAGE(pt.has_value(), case_id << ": lavaanify - "
+                                          << pt.error().detail);
+  auto rep = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE_MESSAGE(rep.has_value(), case_id << ": matrix_rep - "
+                                           << rep.error().detail);
+  auto ev = magmaan::model::ModelEvaluator::build(*pt, *rep);
+  REQUIRE_MESSAGE(ev.has_value(), case_id << ": evaluator - "
+                                          << ev.error().detail);
+
+  const Eigen::VectorXd theta = vector_from_json(ref["theta"]);
+  REQUIRE_MESSAGE(static_cast<std::size_t>(theta.size()) == ev->n_free(),
+                  case_id << ": theta size " << theta.size()
+                          << " != n_free " << ev->n_free());
+  auto im = ev->sigma(theta);
+  REQUIRE_MESSAGE(im.has_value(), case_id << ": sigma - "
+                                          << im.error().detail);
+  const double d_sigma =
+      max_abs_diff(im->sigma[0], matrix_from_json(ref["implied"]["sigma"]));
+  CHECK_MESSAGE(d_sigma < 1e-8,
+                case_id << ": max|Sigma - lavaan| = " << d_sigma);
+  REQUIRE(!im->mu.empty());
+  const double d_mu =
+      max_abs_diff(im->mu[0], vector_from_json(ref["implied"]["mu"]));
+  CHECK_MESSAGE(d_mu < 1e-8, case_id << ": max|mu - lavaan| = " << d_mu);
 }
 
 } // namespace
@@ -313,6 +375,10 @@ TEST_CASE("Textbook corpus v1 overlap graph is well formed") {
   CHECK(has_exact);
   CHECK(has_canonical);
   CHECK(has_shape);
+}
+
+TEST_CASE("Newsom LCS promoted-observed implied moments match lavaan at theta") {
+  check_newsom_lcs_case_at_lavaan_theta("newsom_2015_ex9_3");
 }
 
 // TODO(default-backend): the provisional NLopt-L-BFGS default exposes a

@@ -38,6 +38,14 @@ const Cell* find_cell(const MatrixRep& mr, MatId mat,
   return nullptr;
 }
 
+bool has_structural_cell(const MatrixRep& mr, MatId mat,
+                         std::int16_t row, std::int16_t col) {
+  for (const auto& c : mr.structural_cells) {
+    if (c.mat == mat && c.row == row && c.col == col) return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 TEST_CASE("matrix_rep: 1F CFA — Lambda 3×1, Theta 3×3 diag, Psi 1×1") {
@@ -134,6 +142,21 @@ TEST_CASE("matrix_rep: second-order CFA — higher-order =~ lowers to Beta") {
 
   // A first-order factor never appears as a Λ row.
   CHECK(find_cell(mr, MatId::Lambda, 9, 3) == nullptr);
+}
+
+TEST_CASE("matrix_rep: measurement of a promoted observed state lowers to Beta") {
+  auto mr = must_build(
+      "Deta2 =~ 1*bmi2\n"
+      "bmi2 ~ 1*bmi1");
+  CHECK(mr.form == RepForm::Reduced);
+  REQUIRE(mr.ov_names[0] == std::vector<std::string>{"bmi2", "bmi1"});
+  REQUIRE(mr.lv_names[0] == std::vector<std::string>{"Deta2", "bmi2", "bmi1"});
+
+  CHECK(has_structural_cell(mr, MatId::Lambda, 0, 1));  // bmi2 measures phantom bmi2
+  CHECK(has_structural_cell(mr, MatId::Lambda, 1, 2));  // bmi1 measures phantom bmi1
+  CHECK(find_cell(mr, MatId::Beta, 1, 0) != nullptr);   // Deta2 =~ bmi2 => bmi2 <- Deta2
+  CHECK(find_cell(mr, MatId::Beta, 1, 2) != nullptr);   // bmi2 ~ bmi1
+  CHECK(find_cell(mr, MatId::Lambda, 0, 0) == nullptr);
 }
 
 TEST_CASE("matrix_rep: third-order chain g =~ trait =~ state =~ d") {
