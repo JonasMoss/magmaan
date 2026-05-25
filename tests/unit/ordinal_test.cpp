@@ -321,6 +321,129 @@ TEST_CASE("Cached ordinal DWLS fit consumes diagonal Gamma only") {
   CHECK_FALSE(cache.blocks[0].has_wls_weight);
 }
 
+TEST_CASE("Cached ordinal DWLS fit-plus-inference reuses Gamma for robust reporting") {
+  std::mt19937 rng(20260527);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(560, 4);
+  const double loading[4] = {0.88, 0.80, 0.72, 0.64};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.50) + (y > 0.45);
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  auto moments = magmaan::data::ordinal_moments_from_stats(*stats);
+
+  magmaan::data::OrdinalGammaCache fit_cache;
+  fit_cache.blocks.resize(1);
+  fit_cache.blocks[0].gamma = stats->NACOV[0];
+  fit_cache.blocks[0].has_full = true;
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, moments, {});
+  REQUIRE(x0.has_value());
+  auto fit_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitPlusInference,
+      magmaan::data::OrdinalEstimatorKind::DWLS);
+  auto cached_fit = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, moments, &fit_cache, {}, fit_plan, *x0);
+  REQUIRE_MESSAGE(cached_fit.has_value(),
+      "cached DWLS fit-plus-inference failed: "
+          << (cached_fit.has_value() ? "" : cached_fit.error().detail));
+  CHECK(fit_cache.blocks[0].has_full);
+  CHECK(fit_cache.blocks[0].has_diagonal);
+  CHECK(fit_cache.blocks[0].has_dwls_weight);
+  CHECK_FALSE(fit_cache.blocks[0].has_wls_weight);
+
+  auto materialized_rob = magmaan::estimate::robust_ordinal(
+      *pt, *mr, *stats, *cached_fit,
+      magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(materialized_rob.has_value(),
+      "materialized robust ordinal failed: "
+          << (materialized_rob.has_value() ? "" : materialized_rob.error().detail));
+
+  magmaan::data::OrdinalGammaCache inference_cache;
+  inference_cache.blocks.resize(1);
+  inference_cache.blocks[0].gamma = stats->NACOV[0];
+  inference_cache.blocks[0].has_full = true;
+  auto infer_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::InferenceOnly,
+      magmaan::data::OrdinalEstimatorKind::DWLS);
+  auto cached_rob = magmaan::estimate::robust_ordinal(
+      *pt, *mr, moments, inference_cache, *cached_fit, infer_plan);
+  REQUIRE_MESSAGE(cached_rob.has_value(),
+      "cached robust ordinal failed: "
+          << (cached_rob.has_value() ? "" : cached_rob.error().detail));
+
+  CHECK(inference_cache.blocks[0].has_full);
+  CHECK(inference_cache.blocks[0].has_diagonal);
+  CHECK(inference_cache.blocks[0].has_dwls_weight);
+  CHECK_FALSE(inference_cache.blocks[0].has_wls_weight);
+  CHECK(cached_rob->chisq_standard ==
+        doctest::Approx(materialized_rob->chisq_standard).epsilon(1e-12));
+  CHECK(cached_rob->df == materialized_rob->df);
+  CHECK((cached_rob->se - materialized_rob->se).cwiseAbs().maxCoeff() < 1e-10);
+  CHECK((cached_rob->vcov - materialized_rob->vcov).cwiseAbs().maxCoeff() <
+        1e-10);
+  CHECK((cached_rob->eigvals - materialized_rob->eigvals)
+            .cwiseAbs()
+            .maxCoeff() < 1e-10);
+
+  auto materialized_wls_rob = magmaan::estimate::robust_ordinal(
+      *pt, *mr, *stats, *cached_fit,
+      magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE_MESSAGE(materialized_wls_rob.has_value(),
+      "materialized WLS robust ordinal failed: "
+          << (materialized_wls_rob.has_value()
+                  ? ""
+                  : materialized_wls_rob.error().detail));
+
+  magmaan::data::OrdinalGammaCache wls_cache;
+  wls_cache.blocks.resize(1);
+  wls_cache.blocks[0].gamma = stats->NACOV[0];
+  wls_cache.blocks[0].has_full = true;
+  auto wls_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::InferenceOnly,
+      magmaan::data::OrdinalEstimatorKind::WLS);
+  auto cached_wls_rob = magmaan::estimate::robust_ordinal(
+      *pt, *mr, moments, wls_cache, *cached_fit, wls_plan);
+  REQUIRE_MESSAGE(cached_wls_rob.has_value(),
+      "cached WLS robust ordinal failed: "
+          << (cached_wls_rob.has_value() ? "" : cached_wls_rob.error().detail));
+  CHECK(wls_cache.blocks[0].has_full);
+  CHECK(wls_cache.blocks[0].has_wls_weight);
+  CHECK_FALSE(wls_cache.blocks[0].has_dwls_weight);
+  CHECK((cached_wls_rob->se - materialized_wls_rob->se)
+            .cwiseAbs()
+            .maxCoeff() < 1e-10);
+  CHECK((cached_wls_rob->vcov - materialized_wls_rob->vcov)
+            .cwiseAbs()
+            .maxCoeff() < 1e-10);
+  CHECK((cached_wls_rob->eigvals - materialized_wls_rob->eigvals)
+            .cwiseAbs()
+            .maxCoeff() < 1e-10);
+}
+
 TEST_CASE("Cached ordinal WLS fit uses Schur threshold profiling") {
   std::mt19937 rng(20260526);
   std::normal_distribution<double> norm(0.0, 1.0);
