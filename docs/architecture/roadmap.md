@@ -481,9 +481,12 @@ stop rather than any usable non-error return.
   compatibility adapters that materialize full NACOV plus DWLS/WLS weights.
 - The all-ordinal fit-only path can now consume `OrdinalMoments` plus an
   `OrdinalWeightPlan`: ULS builds identity weights and does not touch Gamma,
-  while DWLS materializes only diagonal Gamma-derived weights from
-  `OrdinalGammaCache`. Full WLS Schur-complement profiling remains a later
-  ordinal workspace slice.
+  while DWLS consumes only diagonal Gamma entries from `OrdinalGammaCache`.
+  For free-threshold delta models (`H = I`), the cache-aware ULS/DWLS path
+  profiles thresholds out of the optimizer, drives only the active correlation
+  block, and reconstructs returned threshold estimates from the observed sample
+  thresholds. Full WLS Schur-complement profiling remains a later ordinal
+  workspace slice.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
   thin R wrappers for ordinal stats plus DWLS/WLS fits.
 - The R ordinal data boundary exposes consolidated dispatchers:
