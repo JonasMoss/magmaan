@@ -72,8 +72,13 @@ semantics · **XL** statistical design/research track before implementation.
   in the profiled full-moment objective for ULS/DWLS/WLS and are covered for
   bounded fits plus WLS SNLLS. Threshold-local shared-label / bare-merge
   equality groups now share threshold-map columns and are covered for bounded
-  fits plus WLS SNLLS. Next slice: mixed ordinal and general linear
-  threshold-map support, then benchmark instrumentation.
+  fits plus WLS SNLLS. Remaining C++ estimator work on this track:
+  cache-aware mixed continuous/ordinal fitting; general linear threshold maps
+  such as effect-coding-style constraints; theta parameterization in the
+  cache-aware/profiled/SNLLS path; reduced-Gamma robust-inference products that
+  avoid full materialization where possible; and only-when-needed R/API polish.
+  Next practical slice: benchmark instrumentation and all-ordinal delta
+  experiments before returning to the remaining estimator generalizations.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
@@ -91,6 +96,13 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 - **S/M.** Continue extending benchmark coverage beyond the current
   lavaan-backed complete-data ML, controlled-missingness FIML, and continuous
   ULS/GLS smoke cases to WLS, ordinal DWLS/WLS, and mixed categorical models.
+- **M.** Add ordinal SNLLS/Gamma workspace experiment instrumentation for the
+  new all-ordinal delta path: report moment construction, diagonal Gamma, full
+  Gamma, weight materialization, optimizer time, post-fit inference time when
+  requested, objective/gradient diagnostics, iteration counts, cache
+  materialization flags, and agreement with the legacy materialized ordinal
+  path. First comparisons should cover ULS/DWLS/WLS fit-only and
+  fit-plus-inference plans across free, fixed, and pure-merge threshold models.
 - **M/L.** Add a two-stage EM/saturated-covariance missing-data research path
   for comparison with direct FIML and pairwise covariance methods. Stage 1
   (saturated EM moments + sandwich ACOV ingredients) is now exposed as
@@ -320,17 +332,11 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   cap, smooth h, and Huberized Pearson-residual moments. First milestone:
   reproduce the known Welz qualitative pattern for Designs 1--2 before adding
   SEM fits or broad copula grids.
-- **XL.** Design and prototype SNLLS for all-ordinal delta DWLS/WLS on
-  polychoric moments. The likely scope is a Golub-Pereyra profile over free
-  thresholds plus conditionally linear latent-response covariance pieces, with
-  loadings/structural coefficients as the outer nonlinear block. This needs its
-  own design note before implementation: classify threshold rows outside the
-  current `ModelEvaluator::param_locations()` matrix-cell scheme, prove the
-  delta residual/Jacobian is affine in the proposed profiled block, spell out
-  equality-constraint compatibility, and gate against full ordinal LS plus
-  lavaan-backed fixtures. Theta parameterization and mixed continuous/ordinal
-  SNLLS stay out of this first scope unless the separability argument is made
-  explicit.
+- **M/L.** Ordinal SNLLS follow-up research. The all-ordinal delta
+  ULS/DWLS/WLS prototype now exists for free, fixed, and pure-merge threshold
+  models. Use experiments to decide whether the next paper-facing C++ work
+  should be theta-profiled SNLLS, mixed continuous/ordinal SNLLS, general
+  linear threshold maps, or reduced-Gamma inference plumbing.
 
 ## Composite models
 
