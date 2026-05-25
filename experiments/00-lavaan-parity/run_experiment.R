@@ -407,9 +407,9 @@ classify_disagreement <- function(x) {
   out <- rep("gradient verdict split", nrow(x))
   out[grepl("little_2013_ch3_fig_3_6_1indicator", x$case_id, fixed = TRUE)] <-
     "auto.fix.single parity gap"
+  out[is.finite(ratio) & ratio > 2] <- "LCS / phantom-latent objective gap"
   out[grepl("muthen_2017_ch2_ex2_1__adf", x$case_id, fixed = TRUE)] <-
     "ADF conditioning side finding"
-  out[is.finite(ratio) & ratio > 2] <- "LCS / phantom-latent objective gap"
   out[is.finite(x$audit_grad_inf) & x$audit_grad_inf < 1e-2] <-
     "tolerance-boundary gradient verdict"
   out
