@@ -51,39 +51,58 @@ samples and realistic missing rates?
 
 ## Short Answer
 
-Asymptotic efficiency is **not the story**: under both Savalei-Bentler
-2005 MCAR and the SB-2005 MAR design, the two weights produce nearly
-identical fits at moderate-to-large n. Trace-MSE ratios stay in
-[1.00, 1.10] for every cell except one (n = 200, MCAR, 30%) where the
-Σ-only weight is occasionally catastrophically ill-conditioned.
+`Γ_NT^pw` is **uniformly more efficient** than the Σ-only weight, in
+every cell, under both missing mechanisms. The size of the gap depends
+strongly on the mechanism:
 
-**The interesting effect is that occasional catastrophe under MCAR, and
-its absence under MAR**:
+- **Under SB-2005 MAR** the gain is the basic asymptotic-efficiency
+  effect: trace-MSE ratios 1.01–1.08 (small but consistent), per-rep
+  win rate 54–78% — Γ_NT^pw wins more often than Σ-only but not
+  overwhelmingly.
+- **Under SB-2005 MCAR-with-intact** the gain is larger because of a
+  side-effect of the missingness geometry: the Hadamard factor `Ω` has
+  diagonal entries `1/(1−rate)` that pump up variance components and
+  regularise the smallest eigendirections of `Γ_NT(Ŝ_pw)`.
+  cond-number ratios run 1.7×–4.7× in `Γ_NT^pw`'s favour, per-rep win
+  rate 96–100%, and the n = 200 / 30% cell shows a catastrophic
+  trace-MSE ratio of 3.7× (Σ-only occasionally blows up; Γ_NT^pw
+  stays bounded).
+- Under MAR, the conditioning gap collapses to 1.06×–1.20× — the
+  asymptotic-efficiency effect is still there, but the MCAR-style
+  regularisation bonus is gone.
 
-- Under MCAR-with-intact-x1, `Γ_NT(Ŝ_pw)` carries condition numbers ~2×
-  to ~5× larger than `Γ_NT^pw`. The MCAR-with-intact Hadamard factor
-  `Ω` has diagonal entries `1/(1−rate)` that pump up variance components
-  and regularise the smallest eigendirections of `Γ_NT(Ŝ_pw)`. This is
-  a happenstance of the missingness geometry, not a generic property.
-- Under SB-2005 MAR, the conditioning gap collapses (ratio ≤ 1.2× across
-  all cells). The 3-rule MAR design produces non-uniform Ω entries that
-  don't preferentially regularise the noisy directions, so the two
-  weights are essentially equivalent.
-
-So `fit_gls_pairwise` is **not** a generally better-conditioned fit than
-`fit_gls(Ŝ_pw)`. Its only practical advantage is under MCAR-with-intact
-at small n and heavy missingness, where it avoids occasional blow-ups of
-the literature path. Otherwise the two are interchangeable.
-
-Complete-data fits agree to floating-point round-off, as expected.
+So the take-away is *both* asymptotic efficiency *and* numerical
+robustness favour Γ_NT^pw, modestly under MAR and pronouncedly under
+MCAR-with-intact. Complete-data fits agree to floating-point round-off,
+as expected.
 
 ## Evidence
 
 ```{r evidence-table}
+fits_path <- file.path(results_dir, "fits.csv")
+fits <- if (file.exists(fits_path))
+  utils::read.csv(fits_path, check.names = FALSE) else NULL
+win_df <- NULL
+if (!is.null(fits)) {
+  agg <- aggregate(
+    cbind(sse_s = (fits$est_sigma - fits$theta_true)^2,
+          sse_g = (fits$est_gamma - fits$theta_true)^2)
+      ~ n + miss_rate + mechanism + rep,
+    data = fits, FUN = sum
+  )
+  agg$g_wins <- agg$sse_g < agg$sse_s
+  win_df <- aggregate(g_wins ~ n + miss_rate + mechanism,
+                       data = agg, FUN = mean)
+  names(win_df)[4L] <- "pct_gamma_wins"
+}
+
 tbl <- summary_df[summary_df$miss_rate > 0,
                   c("n", "miss_rate", "mechanism", "miss_label",
                     "trace_mse_sigma", "trace_mse_gamma", "eff_ratio_mse",
                     "median_cond_sigma", "median_cond_gamma")]
+if (!is.null(win_df))
+  tbl <- merge(tbl, win_df, by = c("n", "miss_rate", "mechanism"),
+               all.x = TRUE)
 tbl$cond_ratio <- tbl$median_cond_sigma / tbl$median_cond_gamma
 tbl <- tbl[order(tbl$n, tbl$miss_rate, tbl$mechanism), ]
 tbl$trace_mse_sigma   <- round(tbl$trace_mse_sigma, 3)
@@ -93,22 +112,28 @@ tbl$median_cond_sigma <- round(tbl$median_cond_sigma)
 tbl$median_cond_gamma <- round(tbl$median_cond_gamma)
 tbl$cond_ratio        <- round(tbl$cond_ratio, 2)
 tbl$mechanism         <- toupper(tbl$mechanism)
-tbl$miss_rate         <- NULL
-tbl <- tbl[, c("n", "mechanism", "miss_label",
-               "trace_mse_sigma", "trace_mse_gamma", "eff_ratio_mse",
-               "median_cond_sigma", "median_cond_gamma", "cond_ratio")]
-names(tbl) <- c("n", "Mechanism", "Missing %",
+if (!is.null(win_df))
+  tbl$pct_gamma_wins  <- sprintf("%.0f%%", 100 * tbl$pct_gamma_wins)
+keep_cols <- c("n", "mechanism", "miss_label",
+               "trace_mse_sigma", "trace_mse_gamma", "eff_ratio_mse")
+if (!is.null(win_df)) keep_cols <- c(keep_cols, "pct_gamma_wins")
+keep_cols <- c(keep_cols, "median_cond_sigma", "median_cond_gamma",
+               "cond_ratio")
+tbl <- tbl[, keep_cols]
+nice_names <- c("n", "Mechanism", "Missing %",
                 "Trace MSE Σ-only", "Trace MSE Γ_NT^pw", "MSE Ratio",
+                if (!is.null(win_df)) "% Reps Γ_NT^pw wins" else NULL,
                 "Median cond Σ", "Median cond Γ_NT^pw", "Cond Ratio")
+names(tbl) <- nice_names
 knitr::kable(
   tbl,
   caption = paste(
-    "Trace of per-parameter empirical MSE and median weight-matrix condition",
-    "number across replications. MSE Ratio = trace MSE Σ-only ÷ trace MSE",
-    "Γ_NT^pw; values > 1 mean Γ_NT^pw is more efficient. Cond Ratio is the",
-    "matching ratio of median condition numbers; values > 1 mean Γ_NT^pw is",
-    "better-conditioned. rate = 0 cells (degeneracy reference) are omitted",
-    "from the table; see the metadata file for them."
+    "Trace of per-parameter empirical MSE, per-rep win rate for the Γ_NT^pw",
+    "weight, and median weight-matrix condition numbers across replications.",
+    "MSE Ratio = trace MSE Σ-only ÷ trace MSE Γ_NT^pw; values > 1 mean",
+    "Γ_NT^pw is more efficient. Cond Ratio is the matching ratio of median",
+    "condition numbers; values > 1 mean Γ_NT^pw is better-conditioned.",
+    "rate = 0 cells (degeneracy reference) are omitted."
   )
 )
 ```
