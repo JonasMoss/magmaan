@@ -86,6 +86,29 @@ information_observed_analytic(spec::LatentStructure       pt,
                               const SampleStats&              samp,
                               const Estimates&                est);
 
+// Cross-products information matrix (parameter-level outer product of
+// casewise ML scores):
+//
+//   I_XP = Σ_i s_i s_iᵀ ,    s_i = ∂ℓ_i/∂θ |_{θ̂}
+//
+// Mplus calls the SE built from this method "MLF". Computed as
+// `(Z_c · WΔ)ᵀ · (Z_c · WΔ)` where Z_c is the block-stacked matrix of
+// centred per-case moment contributions (μ-rows on top of σ-vech rows when
+// the model has mean structure — the G3b layout shared with
+// `robust::casewise_contributions`) and WΔ is the block-stacked
+// score-weight Jacobian W_b · Δ_b = Γ_NT(Σ̂_b)⁻¹ · ∂vech(Σ_b)/∂θ, plus the
+// μ-segment Σ̂_b⁻¹ · ∂μ_b/∂θ when means are modelled. Per-block scaling
+// (n_b/N) falls out of stacking — each row of Z_c contributes only through
+// its block's WΔ slice. Under MVN, I_XP → expected information as N → ∞.
+//
+// Errors when Σ̂_b is non-PD at θ̂ (`InfoMatrixSingular`).
+post_expected<Eigen::MatrixXd>
+information_cross_products(spec::LatentStructure       pt,
+                           const model::MatrixRep&         rep,
+                           const SampleStats&              samp,
+                           const RawData&                  raw,
+                           const Estimates&                est);
+
 // Parameter covariance matrix:
 //   * no constraints: vcov = info⁻¹
 //   * linear equality (shared labels / cross-group invariance / general

@@ -1328,6 +1328,47 @@ TEST_CASE("robust_se: Observed bread works for multi-block mean structures") {
   CHECK((rob_or->se.array() > 0.0).all());
 }
 
+TEST_CASE("robust_se_both_breads matches two single-bread robust_se calls") {
+  // The both-breads entry point hoists `robust_setup` and the meat build out
+  // of the bread variation. It must give bit-identical SE vectors to running
+  // `robust_se` twice (once per bread) on the same fit + Γ̂.
+  auto ctx = load_and_fit(
+      "visual =~ x1 + x2 + x3\n"
+      "textual =~ x4 + x5 + x6\n"
+      "speed =~ x7 + x8 + x9",
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
+  const Eigen::MatrixXd Sigma_hat = implied_sigma(ctx.handles, ctx.est.theta);
+  auto G_or = magmaan::data::gamma_nt(Sigma_hat);
+  REQUIRE(G_or.has_value());
+
+  // Two reference single-bread runs.
+  auto e_or = magmaan::robust::robust_se(
+      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est, *G_or,
+      {magmaan::robust::Information::Expected,
+       magmaan::robust::WeightMoments::Structured,
+       magmaan::robust::ScoreCovariance::Empirical});
+  REQUIRE(e_or.has_value());
+  auto o_or = magmaan::robust::robust_se(
+      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est, *G_or,
+      {magmaan::robust::Information::Observed,
+       magmaan::robust::WeightMoments::Structured,
+       magmaan::robust::ScoreCovariance::Empirical});
+  REQUIRE(o_or.has_value());
+
+  // Both-breads call.
+  auto pair_or = magmaan::robust::robust_se_both_breads(
+      *ctx.handles.pt, *ctx.handles.rep, ctx.samp, ctx.est, *G_or,
+      magmaan::robust::WeightMoments::Structured,
+      magmaan::robust::ScoreCovariance::Empirical);
+  REQUIRE(pair_or.has_value());
+
+  // Bit-identical (modulo bytewise float reordering) is the standard here.
+  CHECK((pair_or->expected.se - e_or->se).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK((pair_or->observed.se - o_or->se).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK((pair_or->expected.vcov - e_or->vcov).cwiseAbs().maxCoeff() < 1e-12);
+  CHECK((pair_or->observed.vcov - o_or->vcov).cwiseAbs().maxCoeff() < 1e-12);
+}
+
 TEST_CASE("robust_se: ScoreCovariance::BrowneUnbiased errors cleanly") {
   auto ctx = load_and_fit(
       "visual =~ x1 + x2 + x3\n"

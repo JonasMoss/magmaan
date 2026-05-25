@@ -13,6 +13,7 @@
 
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
+#include "magmaan/estimate/evaluate.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/data/ordinal.hpp"
@@ -1083,24 +1084,6 @@ Rcpp::List mixed_huber_residual_diagnostics_to_r(
   return out;
 }
 
-Rcpp::LogicalMatrix block_mask_matrix(SEXP M, std::size_t b, std::size_t n_blocks,
-                                      const char* what) {
-  if (Rf_isMatrix(M)) {
-    if (n_blocks != 1)
-      Rcpp::stop("magmaan: the model has %d groups; pass a list of %d per-group %s matrices",
-                 static_cast<int>(n_blocks), static_cast<int>(n_blocks), what);
-    return Rcpp::LogicalMatrix(M);
-  }
-  if (TYPEOF(M) != VECSXP)
-    Rcpp::stop("magmaan: %s must be a logical matrix (single-group) or a list of "
-               "per-group logical matrices", what);
-  Rcpp::List Ml(M);
-  if (static_cast<std::size_t>(Ml.size()) != n_blocks)
-    Rcpp::stop("magmaan: %s is a list of %d matrices but the model has %d groups",
-               what, static_cast<int>(Ml.size()), static_cast<int>(n_blocks));
-  return Rcpp::LogicalMatrix(Ml[static_cast<R_xlen_t>(b)]);
-}
-
 magmaan::data::RawData fiml_raw_from_arg(const lvm::MatrixRep& rep, SEXP raw_data) {
   SEXP X_arg = raw_data;
   SEXP mask_arg = R_NilValue;
@@ -1608,6 +1591,95 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
   return fiml_fit_result(ctx, raw, est, &starts);
 }
 
+// saturated_em_moments_impl() — Stage-1 of the Savalei-Bentler (2009) two-stage
+// missing-data path. Takes raw data only (no `partable`/spec needed because the
+// saturated model has no structural restrictions) and returns the per-block EM
+// mean and covariance plus the block-diagonal saturated information `H`,
+// score-covariance `J`, and sandwich `ACOV = H^{-1} J H^{-1}`. See the C++
+// `SaturatedMoments` doc comment for the η = (μ, vech(Σ)) layout convention.
+//
+// [[Rcpp::export]]
+Rcpp::List saturated_em_moments_impl(SEXP raw_data, double h_step = 1e-4) {
+  SEXP X_arg = raw_data;
+  SEXP mask_arg = R_NilValue;
+  if (TYPEOF(raw_data) == VECSXP) {
+    Rcpp::List rd(raw_data);
+    if (rd.containsElementNamed("X")) {
+      X_arg = rd["X"];
+      if (rd.containsElementNamed("mask")) mask_arg = rd["mask"];
+    }
+  }
+
+  const std::size_t n_blocks = TYPEOF(X_arg) == VECSXP
+      ? static_cast<std::size_t>(Rcpp::List(X_arg).size())
+      : 1u;
+  if (n_blocks == 0) Rcpp::stop("magmaan: saturated_em_moments needs at least one data block");
+
+  magmaan::data::RawData raw;
+  raw.X.reserve(n_blocks);
+  bool any_missing = false;
+  std::vector<Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>> masks;
+  masks.reserve(n_blocks);
+
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    Rcpp::NumericMatrix Xb = block_matrix(X_arg, b, n_blocks, "data$X");
+    const int n = Xb.nrow();
+    const int p = Xb.ncol();
+    Eigen::MatrixXd X(n, p);
+    Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M(n, p);
+
+    Rcpp::LogicalMatrix Mb;
+    const bool has_mask = !Rf_isNull(mask_arg);
+    if (has_mask) {
+      Mb = block_mask_matrix(mask_arg, b, n_blocks, "data$mask");
+      if (Mb.nrow() != n || Mb.ncol() != p)
+        Rcpp::stop("magmaan: data$mask block %d has shape %dx%d but data$X has %dx%d",
+                   static_cast<int>(b + 1), Mb.nrow(), Mb.ncol(), n, p);
+    }
+
+    for (int r = 0; r < n; ++r) {
+      for (int k = 0; k < p; ++k) {
+        const double x = Xb(r, k);
+        const bool observed = has_mask
+            ? (Mb(r, k) != NA_LOGICAL && Mb(r, k) != 0)
+            : std::isfinite(x);
+        if (observed && !std::isfinite(x)) {
+          Rcpp::stop("magmaan: data$mask marks a non-finite value as observed "
+                     "in block %d, row %d", static_cast<int>(b + 1), r + 1);
+        }
+        M(r, k) = static_cast<std::uint8_t>(observed ? 1 : 0);
+        X(r, k) = observed ? x : std::numeric_limits<double>::quiet_NaN();
+        if (!observed) any_missing = true;
+      }
+    }
+    raw.X.push_back(std::move(X));
+    masks.push_back(std::move(M));
+  }
+  if (any_missing) raw.mask = std::move(masks);
+
+  auto out_or = magmaan::estimate::fiml::saturated_em_moments(raw, h_step);
+  if (!out_or.has_value()) stop_post(out_or.error());
+  const auto& out = *out_or;
+
+  const R_xlen_t nb = static_cast<R_xlen_t>(out.mean.size());
+  Rcpp::List mean_out(nb), cov_out(nb);
+  Rcpp::IntegerVector nobs(nb);
+  for (R_xlen_t b = 0; b < nb; ++b) {
+    const std::size_t bi = static_cast<std::size_t>(b);
+    mean_out[b] = Rcpp::wrap(out.mean[bi]);
+    cov_out[b]  = Rcpp::wrap(out.cov[bi]);
+    nobs[b]     = static_cast<int>(out.n_obs[bi]);
+  }
+
+  return Rcpp::List::create(
+      Rcpp::Named("mean") = mean_out,
+      Rcpp::Named("cov")  = cov_out,
+      Rcpp::Named("n_obs") = nobs,
+      Rcpp::Named("H")    = Rcpp::wrap(out.H),
+      Rcpp::Named("J")    = Rcpp::wrap(out.J),
+      Rcpp::Named("acov") = Rcpp::wrap(out.acov));
+}
+
 // fit_uls() — composes fit_gmm(pt, rep, samp, x0, {}, bounds, backend).
 // `optimizer` selects the backend (default "nlopt-lbfgs"); "ceres" / "ceres-bfgs"
 // dispatch to the Ceres LS path, "port-nls" to PORT NL2SOL, etc.
@@ -1670,6 +1742,81 @@ Rcpp::List fit_wls_impl(SEXP partable, Rcpp::List sample_stats, SEXP W,
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return fit_result(ctx, est, &starts, "WLS");
+}
+
+// evaluate_at() — no-optimizer companion to fit_uls/gls/wls/ml. Runs the
+// terminal audit at an externally-supplied θ (e.g. lavaan's `theta_hat`),
+// reusing the same objective builders the fit composers use so the audit
+// asks the same KKT-projected-gradient question as it would at the end of
+// a normal fit. The return shape is identical to the fit_* impls'
+// (`fit_result` is the same helper), with `audit`/`diagnostics` carrying
+// the verdict and `iterations = 0`, `f_evals = g_evals = 1` reflecting
+// that no optimizer was invoked. `audit_options` lets a caller flip
+// stationarity_mode / absolute_tol from the lavaan-compatible defaults.
+namespace {
+inline magmaan::optim::TerminalAuditOptions
+audit_opts_from(Rcpp::Nullable<Rcpp::List> audit_options) {
+  magmaan::optim::TerminalAuditOptions o;  // struct defaults: Absolute, 1e-3
+  if (audit_options.isNotNull()) {
+    Rcpp::List l(audit_options.get());
+    if (l.containsElementNamed("stationarity_mode")) {
+      const std::string m = Rcpp::as<std::string>(l["stationarity_mode"]);
+      if      (m == "absolute") o.stationarity_mode =
+          magmaan::optim::TerminalAuditOptions::StationarityMode::Absolute;
+      else if (m == "relative") o.stationarity_mode =
+          magmaan::optim::TerminalAuditOptions::StationarityMode::Relative;
+      else Rcpp::stop("magmaan: audit_options$stationarity_mode must be "
+                      "\"absolute\" or \"relative\" (got \"%s\")", m);
+    }
+    if (l.containsElementNamed("absolute_tol"))
+      o.absolute_tol = Rcpp::as<double>(l["absolute_tol"]);
+    if (l.containsElementNamed("stationarity_tol"))
+      o.stationarity_tol = Rcpp::as<double>(l["stationarity_tol"]);
+    if (l.containsElementNamed("active_bound_tol"))
+      o.active_bound_tol = Rcpp::as<double>(l["active_bound_tol"]);
+    if (l.containsElementNamed("f_consistency_rel"))
+      o.f_consistency_rel = Rcpp::as<double>(l["f_consistency_rel"]);
+  }
+  return o;
+}
+}  // namespace
+
+// [[Rcpp::export]]
+Rcpp::List evaluate_at_impl(
+    SEXP partable, Rcpp::List sample_stats,
+    Rcpp::NumericVector theta, std::string estimator,
+    Rcpp::Nullable<Rcpp::RObject> W = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>    bounds = R_NilValue,
+    Rcpp::Nullable<Rcpp::List>    audit_options = R_NilValue) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "evaluate_at");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
+                                  std::move(parsed.names), sample_stats);
+
+  magmaan::estimate::Estimator est_enum;
+  if      (estimator == "ULS") est_enum = magmaan::estimate::Estimator::ULS;
+  else if (estimator == "GLS") est_enum = magmaan::estimate::Estimator::GLS;
+  else if (estimator == "WLS") est_enum = magmaan::estimate::Estimator::WLS;
+  else if (estimator == "ML")  est_enum = magmaan::estimate::Estimator::ML;
+  else Rcpp::stop("magmaan: evaluate_at: estimator must be one of "
+                  "\"ULS\", \"GLS\", \"WLS\", \"ML\" (got \"%s\")", estimator);
+
+  magmaan::estimate::gmm::Weight wls;
+  if (est_enum == magmaan::estimate::Estimator::WLS) {
+    if (W.isNull())
+      Rcpp::stop("magmaan: evaluate_at: estimator = \"WLS\" requires a "
+                 "non-NULL W weight matrix (or list of matrices for "
+                 "multi-group)");
+    wls = wls_from_arg(Rcpp::RObject(W.get()), ctx.samp.S.size());
+  }
+
+  const Eigen::VectorXd theta_vec = Rcpp::as<Eigen::VectorXd>(theta);
+  auto e_or = magmaan::estimate::evaluate_at(
+      ctx.pt, ctx.rep, ctx.samp, theta_vec, est_enum, wls,
+      bounds_from_nullable(bounds), audit_opts_from(audit_options));
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  return fit_result(ctx, *e_or, &starts, estimator.c_str());
 }
 
 // [[Rcpp::export]]
@@ -2177,6 +2324,23 @@ Rcpp::NumericMatrix infer_information_observed_analytic(Rcpp::List fit) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   auto r = magmaan::inference::information_observed_analytic(ctx.pt, ctx.rep, ctx.samp, est);
+  if (!r.has_value()) stop_post(r.error());
+  return Rcpp::wrap(*r);
+}
+
+// infer_information_cross_products() — mirrors information_cross_products(...).
+// Parameter-level outer-product-of-scores Σᵢ sᵢsᵢᵀ at θ̂. Needs raw data
+// (per-case moment contributions). Mplus calls the SE built from this method
+// "MLF".
+//
+// [[Rcpp::export]]
+Rcpp::NumericMatrix infer_information_cross_products(Rcpp::List fit,
+                                                     SEXP raw_data) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
+  auto r = magmaan::inference::information_cross_products(
+      ctx.pt, ctx.rep, ctx.samp, raw, est);
   if (!r.has_value()) stop_post(r.error());
   return Rcpp::wrap(*r);
 }

@@ -10,6 +10,7 @@
 #include "magmaan/estimate/fit.hpp"          // Estimates
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/data/pairwise_cov.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/spec/partable.hpp"
@@ -341,6 +342,37 @@ post_expected<Eigen::MatrixXd>
 casewise_contributions(const RawData& raw, const SampleStats& samp,
                        bool include_means = false);
 
+// Van-Praag-style pairwise casewise contributions Ψ̂ for incomplete continuous
+// data. Per-block layout mirrors `casewise_contributions(raw, samp,
+// include_means)`: rows stacked block-by-block, columns block-stacked into
+// `[μ-cols | σ-vech cols]` per block (μ-cols omitted when `include_means =
+// false`, the cov-only layout). For row `t` in block `b`:
+//
+//   σ-segment, component a = (j, ℓ):
+//     ψ̂_ta = (A_t(j,ℓ) / π̂_(j,ℓ)) · ( q_ta − Ŝ_(j,ℓ) )
+//     q_ta = (x_tj − m̄^(j,ℓ)_j)(x_tℓ − m̄^(j,ℓ)_ℓ)        if A_t(j,ℓ) = 1
+//          = 0                                              if A_t(j,ℓ) = 0
+//
+//   μ-segment, variable j (only when `include_means = true`):
+//     ψ̂_tj_μ = (R_tj / π̂_j) · ( x_tj − m̄_j )            if R_tj = 1
+//            = 0                                            if R_tj = 0
+//
+// The σ-side uses pair-specific Van Praag means inside each overlap set
+// (the same means that `pairwise_sample_stats` uses to build `Ŝ`); the μ
+// side uses the marginal column mean and the marginal availability
+// `π̂_j = π̂_(j,j) = pi_hat(j, j)` already in `PairwiseSampleStats`. On
+// complete data both segments reduce to the complete-data forms produced
+// by `casewise_contributions(raw, samp, include_means)`.
+//
+// Ψ̂ plugs directly into `reduced_gamma_sample(uf, Ψ̂, n_b)` and the
+// downstream U-Gamma / SB / mean-var / scaled-shifted machinery — the
+// projection algebra is identical to the complete-data case, only the
+// influence-function rows change.
+post_expected<Eigen::MatrixXd>
+pairwise_casewise_contributions(const RawData& raw,
+                                const data::PairwiseSampleStats& pw,
+                                bool include_means = false);
+
 // (b) Normal-theory Γ_NT — operator-only, never forms Γ_NT. The "meat"
 // moments match the bread: if `uf.moments == Structured` it uses Σ̂_b, if
 // `Unstructured` it uses S_b.
@@ -467,5 +499,65 @@ robust_se(spec::LatentStructure        pt,
           InferenceSpec             spec = {Information::Expected,
                                             WeightMoments::Structured,
                                             ScoreCovariance::Empirical});
+
+// Zc-overload: caller supplies casewise contributions directly. Same
+// `(Z_c·WΔ)ᵀ·(Z_c·WΔ)/N_total` meat as the raw-data overload, but skips the
+// internal `casewise_contributions` rebuild — useful in simulation loops
+// where the same Zc feeds multiple sandwich/eigvalue calls. Zc must match
+// the layout from `casewise_contributions(raw, samp, include_means)`:
+// cov-only ⇒ `(Σ_b n_b) × (Σ_b p_b*)`; means ⇒ same N with per-block
+// [μ-cols | σ-vech cols] (G3b layout). `n_total` is the divisor used in the
+// meat (the natural choice is `sum(samp.n_obs)`).
+post_expected<RobustSeResult>
+robust_se(spec::LatentStructure                     pt,
+          const model::MatrixRep&                   rep,
+          const SampleStats&                        samp,
+          const Estimates&                          est,
+          const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+          double                                    n_total,
+          InferenceSpec                             spec = {Information::Expected,
+                                                            WeightMoments::Structured,
+                                                            ScoreCovariance::Empirical});
+
+// Both-breads pair. Runs `robust_setup` once and produces the sandwich SE
+// vectors for both `bread = Expected` and `bread = Observed` against the
+// same meat — avoids re-stacking Δ, re-Choleskying Γ_NT(M_b), and rebuilding
+// WΔ on the second call. The Observed Hessian is the only bread-specific
+// cost. `moments` and `cov` apply to both members of the pair (this is the
+// typical use case: same Γ̂, different bread). Three overloads to mirror
+// the single-bread `robust_se`: caller-supplied Γ̂, raw data, or pre-computed
+// casewise contributions Zc.
+struct RobustSeBothBreads {
+  RobustSeResult expected;   // bread = Expected
+  RobustSeResult observed;   // bread = Observed
+};
+
+post_expected<RobustSeBothBreads>
+robust_se_both_breads(spec::LatentStructure        pt,
+                      const model::MatrixRep&   rep,
+                      const SampleStats&        samp,
+                      const Estimates&          est,
+                      const Eigen::MatrixXd&    gamma_hat,
+                      WeightMoments             moments = WeightMoments::Structured,
+                      ScoreCovariance           cov     = ScoreCovariance::Empirical);
+
+post_expected<RobustSeBothBreads>
+robust_se_both_breads(spec::LatentStructure        pt,
+                      const model::MatrixRep&   rep,
+                      const SampleStats&        samp,
+                      const Estimates&          est,
+                      const RawData&            raw,
+                      WeightMoments             moments = WeightMoments::Structured,
+                      ScoreCovariance           cov     = ScoreCovariance::Empirical);
+
+post_expected<RobustSeBothBreads>
+robust_se_both_breads(spec::LatentStructure                     pt,
+                      const model::MatrixRep&                   rep,
+                      const SampleStats&                        samp,
+                      const Estimates&                          est,
+                      const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+                      double                                    n_total,
+                      WeightMoments                             moments = WeightMoments::Structured,
+                      ScoreCovariance                           cov     = ScoreCovariance::Empirical);
 
 }  // namespace magmaan::robust

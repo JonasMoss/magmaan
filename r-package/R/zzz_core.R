@@ -58,6 +58,7 @@ data_mixed_ordinal_stats_huber_residual_from_raw <- data_mixed_ordinal_stats_hub
 estimate_fit <- fit_fit
 estimate_ml <- fit_ml_impl
 estimate_fiml <- fit_fiml_impl
+estimate_saturated_em_moments <- saturated_em_moments_impl
 estimate_uls <- fit_uls_impl
 estimate_gls <- fit_gls_impl
 estimate_wls <- fit_wls_impl
@@ -68,6 +69,7 @@ estimate_wls_mixed_ordinal <- fit_wls_mixed_ordinal_impl
 estimate_uls_snlls <- fit_uls_snlls_impl
 estimate_gls_snlls <- fit_gls_snlls_impl
 estimate_wls_snlls <- fit_wls_snlls_impl
+estimate_evaluate_at <- evaluate_at_impl
 estimate_bounds_variance <- bounds_variance
 estimate_bounds_pos_var <- bounds_pos_var
 estimate_bounds_standard <- bounds_standard
@@ -86,6 +88,7 @@ frontier_fit_ml_auto_identification <- fit_ml_auto_identification_impl
 inference_information_expected <- infer_information_expected
 inference_information_observed_fd <- infer_information_observed_fd
 inference_information_observed_analytic <- infer_information_observed_analytic
+inference_information_cross_products <- infer_information_cross_products
 inference_vcov <- infer_vcov
 inference_vcov_partable <- infer_vcov_partable
 inference_vcov_fit <- infer_vcov_fit
@@ -124,8 +127,13 @@ robust_ugamma_eigenvalues <- infer_ugamma_eigenvalues
 robust_satorra_bentler <- infer_satorra_bentler
 robust_mean_var_adjusted <- infer_mean_var_adjusted
 robust_scaled_shifted <- infer_scaled_shifted
+# Trace-form path for SB / MV-adj / SS without an eigendecomposition: use
+# `robust_test_moments_both_breads_{zc,gamma}` to get the moments straight
+# from C++ and apply the closed-form scaling in R (see Maydeu experiment).
 robust_casewise_contributions <- infer_casewise_contributions
+robust_pairwise_casewise_contributions <- infer_pairwise_casewise_contributions
 robust_empirical_gamma <- infer_empirical_gamma
+robust_empirical_gamma_with_means <- infer_empirical_gamma_with_means
 robust_gamma_nt <- infer_gamma_nt
 robust_ordinal <- infer_ordinal_robust
 robust_mixed_ordinal <- infer_mixed_ordinal_robust
@@ -135,6 +143,13 @@ robust_se_fit <- infer_robust_se_fit
 robust_se_raw <- infer_robust_se_raw
 robust_se_raw_parts <- infer_robust_se_raw_parts
 robust_se_raw_fit <- infer_robust_se_raw_fit
+robust_se_zc <- infer_robust_se_zc
+# Pair entry points — run robust_se setup once and return both
+# `bread = expected` and `bread = observed` sandwich SEs. Prefer these in
+# simulation hot loops; the single-bread variants above re-run setup.
+robust_se_both_breads <- infer_robust_se_both_breads
+robust_se_both_breads_raw <- infer_robust_se_both_breads_raw
+robust_se_both_breads_zc <- infer_robust_se_both_breads_zc
 
 measures_baseline <- infer_baseline
 measures_compute_defined <- compute_defined_impl
@@ -160,6 +175,7 @@ magmaan_core <- local({
     ),
     data = c(
       "data_sample_stats_from_raw",
+      "data_pairwise_sample_stats",
       "data_ordinal_stats_from_raw",
       "data_mixed_ordinal_stats_from_raw",
       "data_shrink_mixed_ordinal_stats"
@@ -168,6 +184,7 @@ magmaan_core <- local({
       "estimate_fit",
       "estimate_ml",
       "estimate_fiml",
+      "estimate_saturated_em_moments",
       "estimate_uls",
       "estimate_gls",
       "estimate_wls",
@@ -178,6 +195,7 @@ magmaan_core <- local({
       "estimate_uls_snlls",
       "estimate_gls_snlls",
       "estimate_wls_snlls",
+      "estimate_evaluate_at",
       "estimate_bounds_variance",
       "estimate_bounds_pos_var",
       "estimate_bounds_standard",
@@ -192,6 +210,7 @@ magmaan_core <- local({
       "inference_information_expected",
       "inference_information_observed_fd",
       "inference_information_observed_analytic",
+      "inference_information_cross_products",
       "inference_vcov",
       "inference_vcov_partable",
       "inference_vcov_fit",
@@ -234,7 +253,9 @@ magmaan_core <- local({
       "robust_mean_var_adjusted",
       "robust_scaled_shifted",
       "robust_casewise_contributions",
+      "robust_pairwise_casewise_contributions",
       "robust_empirical_gamma",
+      "robust_empirical_gamma_with_means",
       "robust_gamma_nt",
       "robust_ordinal",
       "robust_mixed_ordinal",
@@ -243,7 +264,11 @@ magmaan_core <- local({
       "robust_se_fit",
       "robust_se_raw",
       "robust_se_raw_parts",
-      "robust_se_raw_fit"
+      "robust_se_raw_fit",
+      "robust_se_zc",
+      "robust_se_both_breads",
+      "robust_se_both_breads_raw",
+      "robust_se_both_breads_zc"
     ),
     measures = c(
       "measures_baseline",
@@ -291,6 +316,7 @@ magmaan_core <- local({
       "fit_uls_snlls",
       "fit_gls_snlls",
       "fit_wls_snlls",
+      "evaluate_at",
       "fit_ml_fcsem",
       "magmaan_fcsem",
       "fcsem_standard_errors",
@@ -330,6 +356,7 @@ magmaan_core <- local({
       "fit_uls_snlls_impl",
       "fit_gls_snlls_impl",
       "fit_wls_snlls_impl",
+      "evaluate_at_impl",
       "fcsem_model_spec_impl",
       "fit_ml_fcsem_impl",
       "frontier_fit_ml_ridge_continuation_impl",
@@ -344,6 +371,7 @@ magmaan_core <- local({
       "infer_information_expected",
       "infer_information_observed_fd",
       "infer_information_observed_analytic",
+      "infer_information_cross_products",
       "infer_vcov",
       "infer_vcov_partable",
       "infer_se",
@@ -374,6 +402,8 @@ magmaan_core <- local({
       "infer_mean_var_adjusted",
       "infer_scaled_shifted",
       "infer_casewise_contributions",
+      "infer_pairwise_casewise_contributions",
+      "data_pairwise_sample_stats",
       "infer_empirical_gamma",
       "infer_gamma_nt",
       "infer_ordinal_robust",
@@ -391,7 +421,11 @@ magmaan_core <- local({
       "infer_rls_chi2_fit",
       "infer_build_u_factor_fit",
       "infer_robust_se_fit",
-      "infer_robust_se_raw_fit"
+      "infer_robust_se_raw_fit",
+      "infer_robust_se_zc",
+      "infer_robust_se_both_breads",
+      "infer_robust_se_both_breads_raw",
+      "infer_robust_se_both_breads_zc"
   )
   core_names <- unique(c(unlist(groups, use.names = FALSE), compatibility_names))
 
