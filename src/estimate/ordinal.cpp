@@ -21,6 +21,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/gmm/gp.hpp"
 #include "magmaan/estimate/reparameterize.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/data/sample_stats.hpp"
@@ -478,6 +479,13 @@ struct ThresholdProfile {
   Eigen::VectorXd full_template;
 };
 
+struct ThresholdFixedProfile {
+  spec::LatentStructure pt;
+  Eigen::VectorXd x0;
+  std::vector<std::int32_t> reduced_to_full;
+  Eigen::VectorXd full_template;
+};
+
 struct ProfiledWeightBlock {
   Eigen::MatrixXd factor;
   Eigen::MatrixXd threshold_from_corr;
@@ -661,6 +669,92 @@ Bounds profile_bounds(const ThresholdProfile& profile, const Bounds& bounds) {
     const Eigen::Index full = profile.active_full[static_cast<std::size_t>(k)];
     out.lower(k) = bounds.lower(full);
     out.upper(k) = bounds.upper(full);
+  }
+  return out;
+}
+
+fit_expected<ThresholdFixedProfile>
+fix_thresholds_for_snlls(spec::LatentStructure pt,
+                         const ThresholdLayout& layout,
+                         const data::OrdinalStats& stats,
+                         const Eigen::VectorXd& x0) {
+  auto profile_or = make_free_threshold_profile(pt, layout, stats, x0);
+  if (!profile_or.has_value()) return std::unexpected(profile_or.error());
+  ThresholdProfile profile = std::move(*profile_or);
+
+  const std::int32_t old_n = pt.n_free();
+  const std::vector<std::int32_t> old_free = pt.free;
+  std::vector<char> remove_free(static_cast<std::size_t>(old_n) + 1, 0);
+  for (std::size_t row = 0; row < pt.size(); ++row) {
+    if (pt.op[row] != parse::Op::Threshold || pt.group[row] <= 0) continue;
+    const std::size_t b = static_cast<std::size_t>(pt.group[row] - 1);
+    if (b >= layout.free.size()) continue;
+    const std::int32_t fr = pt.free[row];
+    if (fr <= 0 || fr > old_n) continue;
+    Eigen::Index kth = -1;
+    for (Eigen::Index k = 0;
+         k < static_cast<Eigen::Index>(layout.free[b].size()); ++k) {
+      if (layout.free[b][static_cast<std::size_t>(k)] == fr) {
+        kth = k;
+        break;
+      }
+    }
+    if (kth < 0) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_snlls: threshold row has no profiling metadata"));
+    }
+    remove_free[static_cast<std::size_t>(fr)] = 1;
+    pt.free[row] = 0;
+    pt.fixed_value[row] = stats.thresholds[b](kth);
+  }
+
+  auto compact = compact_free_set(pt, remove_free, nullptr);
+  if (!compact.has_value()) return std::unexpected(compact.error());
+
+  ThresholdFixedProfile out;
+  out.pt = std::move(pt);
+  out.x0 = Eigen::VectorXd::Zero(out.pt.n_free());
+  out.reduced_to_full.assign(static_cast<std::size_t>(out.pt.n_free()), 0);
+  out.full_template = std::move(profile.full_template);
+  std::vector<char> seen(static_cast<std::size_t>(out.pt.n_free()), 0);
+  for (std::size_t row = 0; row < out.pt.size(); ++row) {
+    const std::int32_t old = old_free[row];
+    const std::int32_t neu = out.pt.free[row];
+    if (old <= 0 || neu <= 0) continue;
+    if (old > x0.size() || neu > out.x0.size()) {
+      return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+          "fit_ordinal_snlls: threshold-fixed start mapping is inconsistent"));
+    }
+    const std::size_t j = static_cast<std::size_t>(neu - 1);
+    out.x0(neu - 1) = x0(old - 1);
+    out.reduced_to_full[j] = old;
+    seen[j] = 1;
+  }
+  for (std::size_t j = 0; j < seen.size(); ++j) {
+    if (seen[j] == 0 || out.reduced_to_full[j] <= 0) {
+      return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+          "fit_ordinal_snlls: threshold-fixed start vector is incomplete"));
+    }
+  }
+  return out;
+}
+
+fit_expected<Eigen::VectorXd>
+expand_threshold_fixed_theta(const ThresholdFixedProfile& profile,
+                             const Eigen::VectorXd& theta_reduced) {
+  if (theta_reduced.size() !=
+      static_cast<Eigen::Index>(profile.reduced_to_full.size())) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_snlls: profiled solution has the wrong length"));
+  }
+  Eigen::VectorXd out = profile.full_template;
+  for (Eigen::Index k = 0; k < theta_reduced.size(); ++k) {
+    const std::int32_t full = profile.reduced_to_full[static_cast<std::size_t>(k)];
+    if (full <= 0 || full > out.size()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_snlls: profiled solution mapping is inconsistent"));
+    }
+    out(full - 1) = theta_reduced(k);
   }
   return out;
 }
@@ -2890,6 +2984,172 @@ fit_ordinal_bounded(spec::LatentStructure pt,
   if (!theta_or.has_value()) return std::unexpected(theta_or.error());
   est->theta = std::move(*theta_or);
   return est;
+}
+
+fit_expected<Estimates>
+fit_ordinal_snlls(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const data::OrdinalMoments& moments,
+                  data::OrdinalGammaCache* gamma_cache,
+                  data::OrdinalWeightPlan plan,
+                  const Eigen::VectorXd& x0,
+                  Backend backend,
+                  OptimOptions opts) {
+  const OrdinalParameterization parameterization =
+      to_estimate_parameterization(plan.parameterization);
+  if (parameterization != OrdinalParameterization::Delta) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_snlls: currently supports delta parameterization only"));
+  }
+  if (plan.estimator == data::OrdinalEstimatorKind::WLS) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_snlls: WLS Schur profiling is a later ordinal SNLLS slice"));
+  }
+  if (auto v = validate_moments(moments, rep); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+
+  data::OrdinalStats stats = stats_adapter(moments);
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(p.error());
+  }
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(layout_or.error());
+  const ThresholdLayout& layout = *layout_or;
+
+  if (x0.size() != pt.n_free()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "fit_ordinal_snlls: x0 size (" + std::to_string(x0.size()) +
+            ") != prepared partable n_free (" +
+            std::to_string(pt.n_free()) + ")"));
+  }
+
+  auto profiled_weights_or = profiled_weight_workspace(moments, gamma_cache,
+                                                       plan);
+  if (!profiled_weights_or.has_value()) {
+    return std::unexpected(profiled_weights_or.error());
+  }
+  const ProfiledWeightWorkspace& profiled_weights = *profiled_weights_or;
+
+  auto threshold_fixed_or = fix_thresholds_for_snlls(pt, layout, stats, x0);
+  if (!threshold_fixed_or.has_value()) {
+    return std::unexpected(threshold_fixed_or.error());
+  }
+  ThresholdFixedProfile threshold_fixed = std::move(*threshold_fixed_or);
+
+  auto ev_reduced_or = model::ModelEvaluator::build(threshold_fixed.pt, rep);
+  if (!ev_reduced_or.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "fit_ordinal_snlls: ModelEvaluator::build failed: " +
+            ev_reduced_or.error().detail));
+  }
+  auto ev_full_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_full_or.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "fit_ordinal_snlls: full ModelEvaluator::build failed: " +
+            ev_full_or.error().detail));
+  }
+  auto ev_reduced = std::move(*ev_reduced_or);
+  auto ev_full = std::move(*ev_full_or);
+
+  auto eval0 = ev_reduced.evaluate(threshold_fixed.x0, true, false);
+  if (!eval0.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "fit_ordinal_snlls: start evaluation failed: " + eval0.error().detail));
+  }
+  auto r0 = profiled_ordinal_residuals(moments, eval0->moments,
+                                       profiled_weights);
+  if (!r0.has_value()) return std::unexpected(r0.error());
+
+  optim::GmmProblem base;
+  base.n_resid = r0->size();
+  base.n_param = threshold_fixed.x0.size();
+  base.expand = [](const Eigen::VectorXd& x) { return x; };
+  base.r = [&](const Eigen::VectorXd& theta)
+      -> fit_expected<Eigen::VectorXd> {
+    auto eval = ev_reduced.evaluate(theta, false, false);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "fit_ordinal_snlls: evaluate failed: " + eval.error().detail));
+    }
+    return profiled_ordinal_residuals(moments, eval->moments,
+                                      profiled_weights);
+  };
+  base.J = [&](const Eigen::VectorXd& theta)
+      -> fit_expected<Eigen::MatrixXd> {
+    auto eval = ev_reduced.evaluate(theta, true, false);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "fit_ordinal_snlls: evaluate failed: " + eval.error().detail));
+    }
+    return profiled_ordinal_jacobian(moments, eval->moments, eval->J_sigma,
+                                     profiled_weights);
+  };
+  base.eval = [&](const Eigen::VectorXd& theta)
+      -> fit_expected<optim::LsEvaluation> {
+    auto eval = ev_reduced.evaluate(theta, true, false);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "fit_ordinal_snlls: evaluate failed: " + eval.error().detail));
+    }
+    auto r = profiled_ordinal_residuals(moments, eval->moments,
+                                        profiled_weights);
+    if (!r.has_value()) return std::unexpected(r.error());
+    auto J = profiled_ordinal_jacobian(moments, eval->moments, eval->J_sigma,
+                                       profiled_weights);
+    if (!J.has_value()) return std::unexpected(J.error());
+    return optim::LsEvaluation{std::move(*r), std::move(*J)};
+  };
+
+  auto gp_or = gmm::gp(base, threshold_fixed.pt, ev_reduced,
+                      threshold_fixed.x0);
+  if (!gp_or.has_value()) return std::unexpected(gp_or.error());
+  const optim::GmmProblem& prob = gp_or->problem;
+
+  Eigen::VectorXd theta_reduced;
+  double fmin = 0.0;
+  int iterations = 0;
+  int f_evals = 0;
+  int g_evals = 0;
+  optim::OptimStatus status = optim::OptimStatus::Converged;
+  double grad_inf_norm = -1.0;
+  optim::TerminalAudit audit;
+
+  if (prob.n_param == 0) {
+    auto r = prob.r(Eigen::VectorXd(0));
+    if (!r.has_value()) return std::unexpected(r.error());
+    theta_reduced = prob.expand(Eigen::VectorXd(0));
+    fmin = r->squaredNorm();
+  } else {
+    auto out = run_ordinal_ls(prob, gp_or->beta0, Bounds{}, backend, opts);
+    if (!out.has_value()) return std::unexpected(out.error());
+    theta_reduced = prob.expand(out->x);
+    fmin = 2.0 * out->fmin;
+    iterations = out->iterations;
+    f_evals = out->f_evals;
+    g_evals = out->g_evals;
+    status = out->status;
+    grad_inf_norm = out->grad_inf_norm;
+    audit = std::move(out->audit);
+  }
+
+  auto theta_full_or =
+      expand_threshold_fixed_theta(threshold_fixed, theta_reduced);
+  if (!theta_full_or.has_value()) return std::unexpected(theta_full_or.error());
+  auto eval_hat = ev_full.evaluate(*theta_full_or, false, false);
+  if (!eval_hat.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+        "fit_ordinal_snlls: final reconstruction evaluate failed: " +
+            eval_hat.error().detail));
+  }
+  auto theta_final_or = reconstruct_profiled_thresholds(
+      stats, layout, eval_hat->moments, profiled_weights, *theta_full_or);
+  if (!theta_final_or.has_value()) {
+    return std::unexpected(theta_final_or.error());
+  }
+  return Estimates{std::move(*theta_final_or), fmin, iterations, f_evals,
+                   g_evals, status, grad_inf_norm, std::move(audit)};
 }
 
 fit_expected<Estimates>

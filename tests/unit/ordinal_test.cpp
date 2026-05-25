@@ -568,6 +568,106 @@ TEST_CASE("Cached ordinal ULS fit does not require Gamma") {
   CHECK_FALSE(cache.blocks[0].has_wls_weight);
 }
 
+TEST_CASE("Ordinal SNLLS profiles thresholds and linear covariance block") {
+  std::mt19937 rng(20260528);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(620, 4);
+  const double loading[4] = {0.90, 0.82, 0.74, 0.66};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.45) + (y > 0.50);
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  auto moments = magmaan::data::ordinal_moments_from_stats(*stats);
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, moments, {});
+  REQUIRE(x0.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 300;
+  opts.ftol = 1e-10;
+  opts.gtol = 1e-7;
+
+  auto uls_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::ULS);
+  auto uls_bounded = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, moments, nullptr, {}, uls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto uls_snlls = magmaan::estimate::fit_ordinal_snlls(
+      *pt, *mr, moments, nullptr, uls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(uls_bounded.has_value(),
+      "bounded ULS failed: "
+          << (uls_bounded.has_value() ? "" : uls_bounded.error().detail));
+  REQUIRE_MESSAGE(uls_snlls.has_value(),
+      "SNLLS ULS failed: "
+          << (uls_snlls.has_value() ? "" : uls_snlls.error().detail));
+  CHECK(uls_snlls->fmin ==
+        doctest::Approx(uls_bounded->fmin).epsilon(1e-8));
+  CHECK((uls_snlls->theta - uls_bounded->theta).cwiseAbs().maxCoeff() < 2e-5);
+
+  auto pt_prepared = *pt;
+  auto prep = magmaan::estimate::prepare_ordinal_delta_partable(
+      pt_prepared, moments);
+  REQUIRE(prep.has_value());
+  for (std::size_t row = 0; row < pt_prepared.size(); ++row) {
+    if (pt_prepared.op[row] == magmaan::parse::Op::Threshold &&
+        pt_prepared.free[row] > 0) {
+      CHECK(uls_snlls->theta(pt_prepared.free[row] - 1) ==
+            doctest::Approx((*x0)(pt_prepared.free[row] - 1)));
+    }
+  }
+
+  auto dwls_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::DWLS);
+  auto bounded_cache = magmaan::data::ordinal_gamma_cache_from_diagonal(
+      {stats->NACOV[0].diagonal()});
+  auto snlls_cache = magmaan::data::ordinal_gamma_cache_from_diagonal(
+      {stats->NACOV[0].diagonal()});
+  auto dwls_bounded = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, moments, &bounded_cache, {}, dwls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto dwls_snlls = magmaan::estimate::fit_ordinal_snlls(
+      *pt, *mr, moments, &snlls_cache, dwls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(dwls_bounded.has_value(),
+      "bounded DWLS failed: "
+          << (dwls_bounded.has_value() ? "" : dwls_bounded.error().detail));
+  REQUIRE_MESSAGE(dwls_snlls.has_value(),
+      "SNLLS DWLS failed: "
+          << (dwls_snlls.has_value() ? "" : dwls_snlls.error().detail));
+  CHECK(dwls_snlls->fmin ==
+        doctest::Approx(dwls_bounded->fmin).epsilon(1e-8));
+  CHECK((dwls_snlls->theta - dwls_bounded->theta).cwiseAbs().maxCoeff() <
+        2e-5);
+  CHECK(snlls_cache.blocks[0].has_diagonal);
+  CHECK_FALSE(snlls_cache.blocks[0].has_full);
+  CHECK_FALSE(snlls_cache.blocks[0].has_dwls_weight);
+}
+
 TEST_CASE("Polychoric h-score API evaluates predefined caps") {
   using magmaan::data::PolychoricHScoreKind;
   using magmaan::data::PolychoricHScoreOptions;
