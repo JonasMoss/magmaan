@@ -3,7 +3,7 @@
     "format_version": 1,
     "fixture_kind": "mplus_sem.continuous",
     "tool": "tests/tools/regen_mplus_sem_fixtures.R",
-    "generated": "2026-05-22 19:00:15 +0200",
+    "generated": "2026-05-23 19:09:18 +0200",
     "lavaan_version": "0.6.22.2560"
   },
   "cases": [

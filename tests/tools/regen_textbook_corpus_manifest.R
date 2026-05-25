@@ -192,27 +192,27 @@ payload <- list(
   sources = list(
     source_summary("geiser", "Geiser textbook corpus",
                    c("geiser/gls_reference.json", "geiser/uls_reference.json"),
-                   "external/geiser"),
+                   "corpus/textbook-corpus/raw/geiser"),
     source_summary("mplus_sem", "Mplus SEM textbook corpus",
                    c("mplus_sem/manifest.json",
                      "mplus_sem/continuous_reference.json",
                      "mplus_sem/ordinal_reference.json",
                      "mplus_sem/mixed_reference.json"),
-                   "external/mplus_sem"),
+                   "corpus/textbook-corpus/raw/mplus_sem"),
     source_summary("little", "Little LISREL textbook corpus",
                    c("little/manifest.json",
                      "little/continuous_reference.json",
                      "little/ordinal_reference.json",
                      "little/mixed_reference.json",
                      "little/observed_reference.json"),
-                   "external/little"),
+                   "corpus/textbook-corpus/raw/little"),
     source_summary("newsom", "Newsom longitudinal SEM textbook corpus",
                    c("newsom/manifest.json",
                      "newsom/continuous_reference.json",
                      "newsom/ordinal_reference.json",
                      "newsom/mixed_reference.json",
                      "newsom/observed_reference.json"),
-                   "external/newsom")
+                   "corpus/textbook-corpus/raw/newsom")
   ),
   cases = cases
 )

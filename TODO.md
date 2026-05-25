@@ -15,7 +15,7 @@
 > — see `docs/backlog/todo.md`.
 
 **Priority: highest.** Surfaced 2026-05-22 while building the Kline textbook
-test corpus (`papers/snlls-constrained/extern/kline-corpus/`).
+test corpus (`corpus/textbook-corpus/raw/kline/`).
 
 ### Symptom
 
@@ -49,9 +49,7 @@ linear block. That is expected behaviour, not this bug.)
 
 ### Problematic cases (clear link)
 
-In the Kline corpus bundle — currently
-`papers/snlls-constrained/extern/kline-corpus/`, moving to
-`external/kline/` when that bundle is finalized:
+In the Kline corpus bundle at `corpus/textbook-corpus/raw/kline/`:
 
 | example | `models/…` | `data/…` | magmaan |
 |---|---|---|---|

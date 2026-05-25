@@ -18,6 +18,11 @@ Tracked research notes and simulation scripts live under `docs/research/`.
 such as lavaan, semTests, or robcat when reading implementation details. It is
 not part of the build, not part of CI, and not a required test input.
 
+Textbook-corpus material (raw Mplus, Brown, Geiser, Kline, Little, Newsom
+bundles) does **not** live here — it lives under the textbook-corpus submodule
+at `corpus/textbook-corpus/raw/<book>/`, which is itself gitignored. The
+parent-repo build/regen scripts under `tests/tools/` read from there.
+
 `external/paper_corpus` is a special ignored nested Git repository for curated
 paper-corpus work. It owns raw downloads, tracked minimal derived data/models,
 raw-to-derived validation, and magmaan-facing JSON exports. magmaan consumes

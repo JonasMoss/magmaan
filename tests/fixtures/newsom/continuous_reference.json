@@ -3,7 +3,7 @@
     "format_version": 1,
     "fixture_kind": "newsom.continuous",
     "tool": "tests/tools/regen_little_newsom_fixtures.R",
-    "generated": "2026-05-22 19:02:06 +0200",
+    "generated": "2026-05-23 19:09:09 +0200",
     "lavaan_version": "0.6.22.2560"
   },
   "cases": [
@@ -3310,9 +3310,9 @@
       "data_kind": "raw",
       "measurement_kind": "continuous",
       "observed_only": false,
-      "generated_data": "data/ex14_4a.csv",
-      "generated_model": "models/ex14_4a.lav",
-      "generated_script": "scripts/ex14_4a.R",
+      "generated_data": "",
+      "generated_model": "",
+      "generated_script": "",
       "group_var": null,
       "ordered": "",
       "lavaan_function": "sem",
@@ -3320,8 +3320,8 @@
       "meanstructure": true,
       "fixed_x": true,
       "strict_parity": false,
-      "status": "retained",
-      "note": "extracted from lavaan R script"
+      "status": "degenerate_covariance",
+      "note": "listwise complete-data covariance not positive definite -- FIML/missing-data model, out of fixed-weight scope"
     },
     {
       "id": "ex14_4b",
@@ -3333,9 +3333,9 @@
       "data_kind": "raw",
       "measurement_kind": "continuous",
       "observed_only": false,
-      "generated_data": "data/ex14_4b.csv",
-      "generated_model": "models/ex14_4b.lav",
-      "generated_script": "scripts/ex14_4b.R",
+      "generated_data": "",
+      "generated_model": "",
+      "generated_script": "",
       "group_var": null,
       "ordered": "",
       "lavaan_function": "sem",
@@ -3343,8 +3343,8 @@
       "meanstructure": true,
       "fixed_x": true,
       "strict_parity": false,
-      "status": "retained",
-      "note": "extracted from lavaan R script"
+      "status": "degenerate_covariance",
+      "note": "listwise complete-data covariance not positive definite -- FIML/missing-data model, out of fixed-weight scope"
     },
     {
       "id": "ex2_3",
@@ -4483,9 +4483,9 @@
       "data_kind": "raw",
       "measurement_kind": "continuous",
       "observed_only": false,
-      "generated_data": "data/ex7_5a.csv",
-      "generated_model": "models/ex7_5a.lav",
-      "generated_script": "scripts/ex7_5a.R",
+      "generated_data": "",
+      "generated_model": "",
+      "generated_script": "",
       "group_var": null,
       "ordered": "",
       "lavaan_function": "growth",
@@ -4493,8 +4493,8 @@
       "meanstructure": true,
       "fixed_x": true,
       "strict_parity": false,
-      "status": "retained",
-      "note": "extracted from lavaan R script"
+      "status": "degenerate_covariance",
+      "note": "listwise complete-data covariance not positive definite -- FIML/missing-data model, out of fixed-weight scope"
     },
     {
       "id": "ex7_6a",
@@ -5104,9 +5104,9 @@
       "data_kind": "raw",
       "measurement_kind": "continuous",
       "observed_only": false,
-      "generated_data": "data/ex3_7g.csv",
-      "generated_model": "models/ex3_7g.lav",
-      "generated_script": "scripts/ex3_7g.R",
+      "generated_data": "",
+      "generated_model": "",
+      "generated_script": "",
       "group_var": null,
       "ordered": "",
       "lavaan_function": "sem",
@@ -5114,8 +5114,8 @@
       "meanstructure": true,
       "fixed_x": true,
       "strict_parity": false,
-      "status": "retained",
-      "note": "extracted from lavaan R script"
+      "status": "degenerate_covariance",
+      "note": "listwise complete-data covariance not positive definite -- FIML/missing-data model, out of fixed-weight scope"
     },
     {
       "id": "ex5_3",
@@ -5127,9 +5127,9 @@
       "data_kind": "raw",
       "measurement_kind": "continuous",
       "observed_only": false,
-      "generated_data": "data/ex5_3.csv",
-      "generated_model": "models/ex5_3.lav",
-      "generated_script": "scripts/ex5_3.R",
+      "generated_data": "",
+      "generated_model": "",
+      "generated_script": "",
       "group_var": null,
       "ordered": "",
       "lavaan_function": "sem",
@@ -5137,8 +5137,8 @@
       "meanstructure": true,
       "fixed_x": true,
       "strict_parity": false,
-      "status": "retained",
-      "note": "extracted from lavaan R script"
+      "status": "degenerate_covariance",
+      "note": "listwise complete-data covariance not positive definite -- FIML/missing-data model, out of fixed-weight scope"
     },
     {
       "id": "ex5_4c",

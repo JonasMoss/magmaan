@@ -1,8 +1,9 @@
 #!/usr/bin/env Rscript
 
 # Regenerate checked-in Little/Newsom corpus fixtures from the ignored curated
-# external/little and external/newsom corpora. The builders create the corpora;
-# this script fits strict lavaan-backed cases and writes compact JSON oracles.
+# corpora at corpus/textbook-corpus/raw/little and
+# corpus/textbook-corpus/raw/newsom. The builders create the corpora; this
+# script fits strict lavaan-backed cases and writes compact JSON oracles.
 
 suppressPackageStartupMessages({
   library(jsonlite)
@@ -145,7 +146,7 @@ write_json_file <- function(payload, path) {
 }
 
 build_payloads <- function(corpus) {
-  root <- file.path(repo_root, "external", corpus)
+  root <- file.path(repo_root, "corpus", "textbook-corpus", "raw", corpus)
   catalogue <- utils::read.csv(file.path(root, "catalogue.csv"),
                                stringsAsFactors = FALSE, check.names = FALSE)
   out_dir <- file.path(out_base, corpus)

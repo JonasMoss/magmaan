@@ -1,11 +1,12 @@
 #!/usr/bin/env Rscript
 
-# Build the ignored external/mplus_sem corpus from raw Mplus zip archives.
+# Build the ignored corpus/textbook-corpus/raw/mplus_sem corpus from raw Mplus
+# zip archives.
 #
 # This script is a maintainer convenience: it extracts the raw .inp examples,
 # deduplicates by input-file content, classifies scope, translates the MODEL
 # block to lavaan syntax, and writes a stable per-case folder. The resulting
-# external/mplus_sem tree is intentionally not tracked; checked-in tests consume
+# raw/mplus_sem tree is intentionally not tracked; checked-in tests consume
 # only derived fixtures generated from it.
 
 suppressPackageStartupMessages({
@@ -19,11 +20,15 @@ repo_root <- normalizePath(file.path(dirname(normalizePath(
   sub("^--file=", "", script_arg))), "..", ".."))
 
 zip_root <- Sys.getenv("MPLUS_SEM_ZIP_ROOT", unset = "")
-if (!nzchar(zip_root)) zip_root <- file.path(repo_root, "external", "MPLUS")
+if (!nzchar(zip_root)) {
+  zip_root <- file.path(repo_root, "corpus", "textbook-corpus", "raw", "MPLUS")
+}
 zip_root <- normalizePath(zip_root, mustWork = TRUE)
 
 out_root <- Sys.getenv("MPLUS_SEM_ROOT", unset = "")
-if (!nzchar(out_root)) out_root <- file.path(repo_root, "external", "mplus_sem")
+if (!nzchar(out_root)) {
+  out_root <- file.path(repo_root, "corpus", "textbook-corpus", "raw", "mplus_sem")
+}
 
 zips <- sort(Sys.glob(file.path(zip_root, "*.zip")))
 if (!length(zips)) stop("No .zip archives found under ", zip_root, call. = FALSE)
@@ -364,7 +369,7 @@ if (nrow(catalogue)) {
 readme <- c(
   "# Mplus SEM corpus",
   "",
-  "Ignored local corpus built from raw `external/MPLUS/*.zip` archives.",
+  "Ignored local corpus built from raw `corpus/textbook-corpus/raw/MPLUS/*.zip` archives.",
   "The checked-in test suite does not commit Mplus raw data; it commits only",
   "derived sample statistics and lavaan oracle outputs under",
   "`tests/fixtures/mplus_sem/`.",
