@@ -1,0 +1,173 @@
+---
+title: "magmaan vs lavaan: speed bench"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path)))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"), candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates, "zoo.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+
+zoo_path <- file.path(results_dir, "zoo.csv")
+geiser_path <- file.path(results_dir, "geiser.csv")
+if (!file.exists(zoo_path)) {
+  stop("Missing zoo.csv. Run: Rscript run_experiment.R")
+}
+
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  stop("This report requires ggplot2.")
+}
+library(ggplot2)
+
+zoo <- utils::read.csv(zoo_path, check.names = FALSE, stringsAsFactors = FALSE)
+geiser <- if (file.exists(geiser_path)) {
+  utils::read.csv(geiser_path, check.names = FALSE, stringsAsFactors = FALSE)
+} else NULL
+
+fmt_ms <- function(x) ifelse(is.na(x), "", sprintf("%.3f", x))
+fmt_speedup <- function(x) ifelse(is.na(x), "", sprintf("%.1f×", x))
+theme_set(theme_minimal(base_size = 12))
+```
+
+How fast is magmaan compared to lavaan on the same models? Two complementary
+slices below: a *headline* slice on five real published latent-variable models
+from Geiser (2013), and a small *zoo* slice on classic lavaan tutorial models
+that the benchmark harness already validates against the lavaan oracle.
+
+Both slices time **estimate-only** workloads (`se = "none"`, `test = "none"`
+in lavaan) at **single-threaded** BLAS / OpenMP. Magmaan's free-parameter
+estimates agree with the lavaan oracle to better than `1e-3` (max absolute) on
+every case shown.
+
+## Headline: Geiser (2013) corpus
+
+Five real published latent-variable models from Geiser's textbook, drawn from
+the SNLLS paper's `snlls_geiser_corpus_lavaan.csv` table (committed under
+`papers/snlls-constrained/tables/`). magmaan's `full` and `snlls` columns are
+the same fit reported at two backend choices; both are well under a
+millisecond at this scale.
+
+```{r}
+if (!is.null(geiser)) {
+  ge <- geiser
+  ge$Speedup <- fmt_speedup(ge$speedup)
+  out <- data.frame(
+    Model = ge$model,
+    `Lavaan ms` = fmt_ms(ge$lavaan_ms),
+    `magmaan ms (full ML)` = fmt_ms(ge$magmaan_full_ms),
+    `magmaan ms (SNLLS)`   = fmt_ms(ge$magmaan_snlls_ms),
+    Speedup = ge$Speedup,
+    check.names = FALSE
+  )
+  knitr::kable(out, row.names = FALSE,
+               align = c("l", "r", "r", "r", "r"))
+} else {
+  cat("`results/geiser.csv` not present; run `Rscript run_experiment.R` first.\n")
+}
+```
+
+```{r}
+#| fig-width: 7
+#| fig-height: 3.6
+if (!is.null(geiser)) {
+  g <- geiser
+  g$model <- factor(g$model, levels = g$model[order(g$speedup)])
+  ggplot(g, aes(speedup, model)) +
+    geom_col(fill = "#7a3b2c", width = 0.55) +
+    geom_text(aes(label = sprintf("%.1f×", speedup)),
+              hjust = -0.1, size = 3.6, color = "gray25") +
+    scale_x_continuous(expand = expansion(mult = c(0, 0.18))) +
+    labs(x = "lavaan / magmaan median wall time",
+         y = NULL,
+         title = "Geiser 2013 corpus: lavaan-to-magmaan speedup",
+         subtitle = "estimate-only workload, single thread")
+}
+```
+
+## Zoo: classic lavaan tutorial models
+
+Re-run live in this experiment off the `benchmarks/` harness, on lavaan's
+in-package datasets:
+
+- **Holzinger-Swineford 3-factor CFA** (`HolzingerSwineford1939`, n=301, 9
+  indicators) at three estimators: ML, ULS, GLS.
+- **Bollen industrialization/democracy SEM** (`PoliticalDemocracy`, n=75,
+  11 observed variables, latent regressions + residual covariances).
+- **`Demo.growth` linear latent growth curve** (n=400, 4 waves + 2
+  time-varying covariates + 4 controls, with mean structure).
+
+Speedup = `lavaan_ms_median / magmaan_ms_median`.
+
+```{r}
+zoo_out <- data.frame(
+  Model = zoo$label,
+  Estimator = zoo$estimator,
+  `n` = zoo$n_obs,
+  `Obs vars` = zoo$n_vars,
+  Params = zoo$npar,
+  `Lavaan ms` = fmt_ms(zoo$lavaan_ms_median),
+  `magmaan ms` = fmt_ms(zoo$magmaan_ms_median),
+  Speedup = fmt_speedup(zoo$speedup),
+  `Max |Δθ|` = sprintf("%.1e", zoo$est_max_abs_diff),
+  check.names = FALSE
+)
+knitr::kable(zoo_out, row.names = FALSE,
+             align = c("l", "l", "r", "r", "r", "r", "r", "r", "r"))
+```
+
+```{r}
+#| fig-width: 7
+#| fig-height: 3.8
+zoo$display <- paste0(zoo$label, " (", zoo$estimator, ")")
+zoo$display <- factor(zoo$display, levels = zoo$display[order(zoo$speedup)])
+ggplot(zoo, aes(speedup, display)) +
+  geom_col(fill = "#2c4e7a", width = 0.55) +
+  geom_text(aes(label = sprintf("%.1f×", speedup)),
+            hjust = -0.1, size = 3.6, color = "gray25") +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.18))) +
+  labs(x = "lavaan / magmaan median wall time",
+       y = NULL,
+       title = "Tutorial-model zoo: lavaan-to-magmaan speedup",
+       subtitle = "estimate-only workload, single thread, parity-validated to 1e-3")
+```
+
+## Methodology
+
+- **Estimate-only**: magmaan via `magmaan::magmaan()`; lavaan with
+  `se = "none"`, `test = "none"`. The post-fit machinery (standard errors,
+  test statistics, fit indices) is excluded — both libraries are timed on the
+  *core fit loop*.
+- **Single-threaded**: `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, and
+  `MKL_NUM_THREADS` are set to `1` before R loads BLAS. The Geiser-corpus
+  numbers were produced with the same protocol; see `papers/snlls-constrained`.
+- **Iterations**: 30 per case via `bench::mark`. Times are medians.
+- **Correctness gate**: each zoo case's magmaan estimates must agree with the
+  lavaan oracle to `1e-3` (max absolute over free parameters) before timing is
+  reported. The harness that enforces this is
+  `benchmarks/r/run_benchmark.R`.
+
+## Reproduce
+
+```sh
+Rscript experiments/05-lavaan-speed-bench/run_experiment.R
+(cd experiments/05-lavaan-speed-bench && quarto render report.qmd)
+```
+
+## See also
+
+- [`docs/validation/lavaan_tutorial_parity.md`](../../docs/validation/lavaan_tutorial_parity.md) — central lavaan-tutorial parity audit.
+- [`benchmarks/README.md`](../../benchmarks/README.md) — the live magmaan-vs-lavaan harness this experiment is built on.
+- The deeper Geiser-corpus study (estimator timing, convergence) lives in the
+  separate SNLLS paper repository; its frozen `snlls_geiser_corpus_lavaan.csv`
+  is copied here as [`results/geiser.csv`](results/geiser.csv).
