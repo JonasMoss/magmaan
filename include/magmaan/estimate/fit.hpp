@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include <Eigen/Core>
 
 #include "magmaan/error.hpp"
@@ -51,6 +53,14 @@ struct Estimates {
   // Fit finalization diagnostics on full θ (implied-Σ PD per group, linear /
   // nonlinear equality residuals, bounds active set). See `FitDiagnostics`.
   FitDiagnostics        diagnostics  = {};
+  // SNLLS profile shape: `n_nonlinear` is the β-block size the outer
+  // optimizer sees, `n_linear` is the α-block size that Golub–Pereyra
+  // profiled out. Populated only by `fit_snlls` / `fit_snlls_gls` /
+  // `fit_snlls_wls`; the default `-1` flags "no separable split applies"
+  // (full-θ paths, FCSEM, FIML). Surfaced through the SNLLS R wrapper for
+  // the corpus speed tables.
+  std::int32_t          n_nonlinear  = -1;
+  std::int32_t          n_linear     = -1;
 };
 
 // Optimizer backend selector for the convenience composers below.

@@ -305,6 +305,30 @@ TEST_CASE("SNLLS: covariance-only model is solved by profiling alone") {
   REQUIRE(est.has_value());
   CHECK(est->iterations == 0);
   CHECK(est->fmin < 1e-12);
+  // Three variance/covariance parameters all profile out — no β block.
+  CHECK(est->n_nonlinear == 0);
+  CHECK(est->n_linear == 3);
+}
+
+TEST_CASE("SNLLS: reports β/α block sizes on a 1F covariance model") {
+  // Single-factor CFA, marker-coded: x1's loading fixed at 1, x2/x3 loadings
+  // free → 2 nonlinear (β) parameters. Three residual variances + one latent
+  // variance → 4 linear (α) parameters. The split is a property of the spec,
+  // so both the closed-form (covariance-only) and outer-optimizer paths in
+  // `compose_snlls` should populate the same n_nonlinear / n_linear counts.
+  auto h = handles_for("f =~ x1 + x2 + x3");
+  SampleStats samp;
+  samp.S = {make_1f_S()};
+  samp.n_obs = {301};
+
+  auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
+  REQUIRE(x0.has_value());
+  auto est = magmaan::estimate::fit_snlls(h.pt, h.rep, samp, *x0, {},
+                                          Backend::NloptLbfgs, snlls_opts());
+  REQUIRE(est.has_value());
+  CHECK(est->n_nonlinear == 2);
+  CHECK(est->n_linear == 4);
+  CHECK(est->n_nonlinear + est->n_linear == h.pt.n_free());
 }
 
 TEST_CASE("SNLLS: Bollen GLS backend cross-check") {

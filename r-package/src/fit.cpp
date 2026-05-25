@@ -782,6 +782,16 @@ Rcpp::List snlls_fit_result(Ctx& ctx,
   Rcpp::List out = fit_result(ctx, est, starts, estimator);
   out["backend"] = backend;
   out["snlls_compatible"] = true;
+  // SNLLS profile shape: the outer optimizer drives n_nonlinear (β block);
+  // n_linear (α block) is profiled out in closed form. The sentinel `-1` in
+  // Estimates would mean "no separable split applied" — it should never reach
+  // this path, so map negatives to NA so callers can guard cleanly anyway.
+  out["n_nonlinear"] = est.n_nonlinear >= 0
+      ? Rcpp::IntegerVector::create(est.n_nonlinear)
+      : Rcpp::IntegerVector::create(NA_INTEGER);
+  out["n_linear"] = est.n_linear >= 0
+      ? Rcpp::IntegerVector::create(est.n_linear)
+      : Rcpp::IntegerVector::create(NA_INTEGER);
   return out;
 }
 

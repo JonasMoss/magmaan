@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
@@ -27,9 +29,18 @@ bool gp_compatible(const spec::LatentStructure& pt,
 
 // The profiled problem plus the β start point. `problem` drives only the
 // nonlinear β; `problem.expand` recovers full θ (β plus the profiled α̂(β)).
+//
+// `n_nonlinear` is the β-block size (what the outer optimizer sees) and
+// `n_linear` is the α-block size (profiled out). They are the column counts
+// of `K_β` and `K_α` after the equality-constraint reduction, so
+// `n_nonlinear + n_linear` equals the reduced parameter dimension q (≤ n_free)
+// and `n_nonlinear == problem.n_param`. Reported up the chain so callers (and
+// the corpus speed tables) can show how much of the model SNLLS profiled out.
 struct GpProblem {
   optim::GmmProblem problem;
   Eigen::VectorXd   beta0;
+  std::int32_t      n_nonlinear = 0;
+  std::int32_t      n_linear    = 0;
 };
 
 // Profile the linear parameters out of `base` (the θ-space GmmProblem from
