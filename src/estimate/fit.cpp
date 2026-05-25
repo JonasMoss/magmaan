@@ -633,18 +633,24 @@ compose_snlls(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
   if (prob.n_param == 0) {
     auto r = prob.r(Eigen::VectorXd(0));
     if (!r.has_value()) return std::unexpected(r.error());
-    return Estimates{prob.expand(Eigen::VectorXd(0)),
-                     0.5 * r->squaredNorm(), 0};
+    Estimates est{prob.expand(Eigen::VectorXd(0)),
+                  0.5 * r->squaredNorm(), 0};
+    est.n_nonlinear = gp_or->n_nonlinear;
+    est.n_linear    = gp_or->n_linear;
+    return est;
   }
 
   // The nonlinear block (Λ, Β) carries no box bounds, so β is optimized
   // unbounded; variance non-negativity lives on the profiled-out α.
   auto out = run_gmm(prob, gp_or->beta0, Bounds{}, backend, opts);
   if (!out.has_value()) return std::unexpected(out.error());
-  return Estimates{prob.expand(out->x), out->fmin, out->iterations,
-                   out->f_evals, out->g_evals,
-                   out->status, out->grad_inf_norm,
-                   std::move(out->audit)};
+  Estimates est{prob.expand(out->x), out->fmin, out->iterations,
+                out->f_evals, out->g_evals,
+                out->status, out->grad_inf_norm,
+                std::move(out->audit)};
+  est.n_nonlinear = gp_or->n_nonlinear;
+  est.n_linear    = gp_or->n_linear;
+  return est;
 }
 
 }  // namespace

@@ -284,7 +284,10 @@ gp(const optim::GmmProblem& base, const spec::LatentStructure& pt,
     if (cls->K_beta.cols() > 0) theta.noalias() += cls->K_beta * beta;
     return theta;
   };
-  return GpProblem{std::move(out), cls->beta0};
+  return GpProblem{
+      std::move(out), cls->beta0,
+      static_cast<std::int32_t>(cls->beta_cols.size()),
+      static_cast<std::int32_t>(cls->alpha_cols.size())};
 }
 
 }  // namespace magmaan::estimate::gmm
