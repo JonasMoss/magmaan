@@ -78,7 +78,10 @@ Runners should:
 
 Keep reusable harness mechanics out of individual experiments when they recur.
 Shared path, metadata, seed, result I/O, and formatting helpers may live in a
-small support package under `experiments/_support/`. Do not put SEM logic or
+small support package under `experiments/_support/` (`magmaan.experiments`).
+Runners may source `experiments/_support/R/helpers.R` directly so they work
+without a separate package install, but the package itself must remain
+installable with `R CMD INSTALL experiments/_support`. Do not put SEM logic or
 experiment-specific statistical decisions in that package.
 
 ## Reports

@@ -12,21 +12,20 @@
 # `--cells FILTER` is a comma-separated list of `key=value` pairs (e.g.
 # `n_items=16,N=200`) that restrict the 54-cell crossed design to a subset.
 
-`%||%` <- function(x, y) {
-  if (is.null(x) || length(x) == 0L) return(y)
-  if (length(x) == 1L && is.na(x)) return(y)
-  x
-}
-
-script_path <- function() {
+.support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
   file_arg <- grep("^--file=", args, value = TRUE)
   if (length(file_arg)) {
-    return(normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE))
+    script <- normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE)
+  } else {
+    ofile <- tryCatch(sys.frames()[[1L]]$ofile, error = function(e) NULL)
+    script <- normalizePath(if (is.null(ofile)) "run_experiment.R" else ofile,
+                            mustWork = FALSE)
   }
-  normalizePath(sys.frames()[[1L]]$ofile %||% "run_experiment.R",
-                mustWork = FALSE)
+  file.path(dirname(dirname(script)), "_support", "R", "helpers.R")
 }
+source(.support_helpers())
+rm(.support_helpers)
 
 parse_args <- function(args) {
   out <- list(reps = 10L, cells_filter = NULL, seed_base = 20260524L,
@@ -73,22 +72,11 @@ parse_args <- function(args) {
 
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 
-experiment_dir <- dirname(script_path())
-project_root <- normalizePath(file.path(experiment_dir, "..", ".."),
-                              mustWork = TRUE)
-results_dir <- file.path(experiment_dir, "results")
-dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
+project_root <- repo_root()
+results_dir <- ensure_results_dir()
 
-for (v in c("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")) {
-  do.call(Sys.setenv, stats::setNames(list("1"), v))
-}
+set_single_threaded_math()
 
-require_pkg <- function(p) {
-  if (!requireNamespace(p, quietly = TRUE)) {
-    stop("required R package not installed: ", p, call. = FALSE)
-  }
-  invisible(TRUE)
-}
 require_pkg("magmaan")
 core <- magmaan::magmaan_core
 
@@ -648,21 +636,21 @@ if (!is.null(summary_chi2)) {
 }
 
 # ── Metadata ────────────────────────────────────────────────────────────────
-meta <- data.frame(
-  key = c("magmaan_version", "R_version", "reps", "seed_base",
-          "cells_filter", "robust_track", "lavaan_parity",
-          "n_cells", "n_se_rows", "n_chi2_rows", "total_seconds"),
-  value = c(as.character(utils::packageVersion("magmaan")),
-            R.version.string, args$reps, args$seed_base,
-            args$cells_filter %||% "",
-            args$robust_track,
-            isTRUE(args$lavaan_parity),
-            nrow(cell_grid), nrow(se_long), nrow(chi2_long),
-            sprintf("%.2f", t_global1 - t_global0)),
-  stringsAsFactors = FALSE
+meta <- metadata_frame(
+  values = list(
+    reps = args$reps,
+    seed_base = args$seed_base,
+    cells_filter = args$cells_filter,
+    robust_track = args$robust_track,
+    lavaan_parity = isTRUE(args$lavaan_parity),
+    n_cells = nrow(cell_grid),
+    n_se_rows = nrow(se_long),
+    n_chi2_rows = nrow(chi2_long),
+    total_seconds = sprintf("%.2f", t_global1 - t_global0)
+  ),
+  packages = "magmaan"
 )
-utils::write.csv(meta, file.path(results_dir, "metadata.csv"),
-                 row.names = FALSE)
+write_csv(meta, file.path(results_dir, "metadata.csv"))
 cat(sprintf("\ndone in %.1fs — wrote results to %s\n",
             t_global1 - t_global0, results_dir))
 

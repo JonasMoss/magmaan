@@ -1,19 +1,19 @@
 #!/usr/bin/env Rscript
 
-`%||%` <- function(x, y) {
-  if (is.null(x) || length(x) == 0) return(y)
-  if (length(x) == 1L && is.na(x)) return(y)
-  x
-}
-
-script_path <- function() {
+.support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
   file_arg <- grep("^--file=", args, value = TRUE)
   if (length(file_arg)) {
-    return(normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE))
+    script <- normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE)
+  } else {
+    ofile <- tryCatch(sys.frames()[[1L]]$ofile, error = function(e) NULL)
+    script <- normalizePath(if (is.null(ofile)) "run_experiment.R" else ofile,
+                            mustWork = FALSE)
   }
-  normalizePath(sys.frames()[[1L]]$ofile %||% "run_experiment.R", mustWork = FALSE)
+  file.path(dirname(dirname(script)), "_support", "R", "helpers.R")
 }
+source(.support_helpers())
+rm(.support_helpers)
 
 parse_args <- function(args) {
   out <- list(
@@ -63,13 +63,6 @@ parse_args <- function(args) {
     stop("--backends must name at least one optimizer", call. = FALSE)
   }
   out
-}
-
-require_pkg <- function(package) {
-  if (!requireNamespace(package, quietly = TRUE)) {
-    stop("required R package is not installed: ", package, call. = FALSE)
-  }
-  invisible(TRUE)
 }
 
 matrix_from_json <- function(x) {
@@ -433,20 +426,13 @@ summarize_pairs <- function(pairs) {
   do.call(rbind, rows)
 }
 
-write_csv <- function(x, path) {
-  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
-  utils::write.csv(x, path, row.names = FALSE, na = "")
-  invisible(path)
-}
-
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 require_pkg("jsonlite")
 require_pkg("magmaan")
 
-experiment_dir <- dirname(script_path())
-repo_dir <- normalizePath(file.path(experiment_dir, "..", ".."), mustWork = TRUE)
+repo_dir <- repo_root()
 fixtures_dir <- file.path(repo_dir, "tests", "fixtures")
-results_dir <- file.path(experiment_dir, "results")
+results_dir <- ensure_results_dir()
 control <- list(max_iter = 6000L, ftol = 1e-12, gtol = 1e-8, history = 10L)
 
 cases <- load_experiment_cases(fixtures_dir, args$case_regex)
@@ -525,12 +511,26 @@ summary_df <- summarize_pairs(pairs_df)
 write_csv(fits_df, file.path(results_dir, "fits.csv"))
 write_csv(pairs_df, file.path(results_dir, "pairs.csv"))
 write_csv(summary_df, file.path(results_dir, "summary.csv"))
+write_metadata(
+  file.path(results_dir, "metadata.csv"),
+  values = list(
+    reps = args$reps,
+    backends = args$backends,
+    case_regex = args$case_regex,
+    n_cases = length(cases),
+    n_fit_rows = nrow(fits_df),
+    n_pair_rows = nrow(pairs_df),
+    fixtures_dir = fixtures_dir
+  ),
+  packages = c("jsonlite", "magmaan")
+)
 
 cat(sprintf(
-  "\nwrote %s, %s, %s\n",
+  "\nwrote %s, %s, %s, %s\n",
   file.path(results_dir, "fits.csv"),
   file.path(results_dir, "pairs.csv"),
-  file.path(results_dir, "summary.csv")
+  file.path(results_dir, "summary.csv"),
+  file.path(results_dir, "metadata.csv")
 ))
 
 ok_pairs <- if (nrow(pairs_df)) pairs_df[pairs_df$status == "OK" &

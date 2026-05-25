@@ -8,21 +8,20 @@
 # Usage:
 #   Rscript experiments/06-ordinal-snlls-probe/run_experiment.R [--reps N]
 
-`%||%` <- function(x, y) {
-  if (is.null(x) || length(x) == 0L) return(y)
-  if (length(x) == 1L && is.na(x)) return(y)
-  x
-}
-
-script_path <- function() {
+.support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
   file_arg <- grep("^--file=", args, value = TRUE)
   if (length(file_arg)) {
-    return(normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE))
+    script <- normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE)
+  } else {
+    ofile <- tryCatch(sys.frames()[[1L]]$ofile, error = function(e) NULL)
+    script <- normalizePath(if (is.null(ofile)) "run_experiment.R" else ofile,
+                            mustWork = FALSE)
   }
-  normalizePath(sys.frames()[[1L]]$ofile %||% "run_experiment.R",
-                mustWork = FALSE)
+  file.path(dirname(dirname(script)), "_support", "R", "helpers.R")
 }
+source(.support_helpers())
+rm(.support_helpers)
 
 parse_args <- function(args) {
   out <- list(reps = 5L, case_regex = NULL, max_iter = 4000L,
@@ -70,22 +69,10 @@ parse_args <- function(args) {
 
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 
-experiment_dir <- dirname(script_path())
-project_root <- normalizePath(file.path(experiment_dir, "..", ".."),
-                              mustWork = TRUE)
-results_dir <- file.path(experiment_dir, "results")
-dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
+project_root <- repo_root()
+results_dir <- ensure_results_dir()
 
-for (v in c("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")) {
-  do.call(Sys.setenv, stats::setNames(list("1"), v))
-}
-
-require_pkg <- function(package) {
-  if (!requireNamespace(package, quietly = TRUE)) {
-    stop("required R package is not installed: ", package, call. = FALSE)
-  }
-  invisible(TRUE)
-}
+set_single_threaded_math()
 
 require_pkg("jsonlite")
 require_pkg("magmaan")
@@ -443,36 +430,23 @@ for (case in cases) {
   }
 }
 
-metadata <- data.frame(
-  key = c("magmaan_version", "R_version", "reps", "max_iter",
-          "case_regex", "include_bfi", "construction_scope"),
-  value = c(
-    as.character(utils::packageVersion("magmaan")),
-    R.version.string,
-    as.character(args$reps),
-    as.character(args$max_iter),
-    args$case_regex %||% "",
-    as.character(args$include_bfi),
-    paste(
+metadata <- metadata_frame(
+  values = list(
+    reps = args$reps,
+    max_iter = args$max_iter,
+    case_regex = args$case_regex,
+    include_bfi = args$include_bfi,
+    construction_scope = paste(
       "data_ordinal_stats_from_df builds thresholds, polychorics,",
       "NACOV, W_dwls, and W_wls together"
     )
   ),
-  stringsAsFactors = FALSE
+  packages = c("jsonlite", "magmaan")
 )
 
-write_or_empty <- function(rows, path) {
-  if (length(rows)) {
-    utils::write.csv(do.call(rbind, rows), path, row.names = FALSE)
-  } else {
-    utils::write.csv(data.frame(), path, row.names = FALSE)
-  }
-}
-
-utils::write.csv(metadata, file.path(results_dir, "metadata.csv"),
-                 row.names = FALSE)
-write_or_empty(construction_rows, file.path(results_dir, "construction.csv"))
-write_or_empty(fit_rows, file.path(results_dir, "fits.csv"))
-write_or_empty(attempt_rows, file.path(results_dir, "attempts.csv"))
+write_csv(metadata, file.path(results_dir, "metadata.csv"))
+write_rows(construction_rows, file.path(results_dir, "construction.csv"))
+write_rows(fit_rows, file.path(results_dir, "fits.csv"))
+write_rows(attempt_rows, file.path(results_dir, "attempts.csv"))
 
 cat(sprintf("wrote %s\n", results_dir))
