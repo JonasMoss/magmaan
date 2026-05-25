@@ -51,62 +51,109 @@ samples and realistic missing rates?
 
 ## Short Answer
 
-Under Savalei-Bentler 2005 MCAR with a 9-indicator one-factor CFA, the
-`Γ_NT^pw` weight is uniformly more efficient at non-zero missing rates,
-with the gap growing with the missing rate and shrinking with n. The
-gap is **modest in the central cells** (1–10% trace-MSE reduction at
-n ≥ 500 and moderate missingness) but **becomes large in the
-small-n / heavy-missing corner** because the Σ-only weight produces
-occasional catastrophic fits there — one rep in 200 with sum-of-squared
-errors > 500 vs ~1 for `Γ_NT^pw`. So the asymptotic-efficiency story is
-small; the **robustness** story is the more interesting finding.
+Asymptotic efficiency is **not the story**: under both Savalei-Bentler
+2005 MCAR and the SB-2005 MAR design, the two weights produce nearly
+identical fits at moderate-to-large n. Trace-MSE ratios stay in
+[1.00, 1.10] for every cell except one (n = 200, MCAR, 30%) where the
+Σ-only weight is occasionally catastrophically ill-conditioned.
+
+**The interesting effect is that occasional catastrophe under MCAR, and
+its absence under MAR**:
+
+- Under MCAR-with-intact-x1, `Γ_NT(Ŝ_pw)` carries condition numbers ~2×
+  to ~5× larger than `Γ_NT^pw`. The MCAR-with-intact Hadamard factor
+  `Ω` has diagonal entries `1/(1−rate)` that pump up variance components
+  and regularise the smallest eigendirections of `Γ_NT(Ŝ_pw)`. This is
+  a happenstance of the missingness geometry, not a generic property.
+- Under SB-2005 MAR, the conditioning gap collapses (ratio ≤ 1.2× across
+  all cells). The 3-rule MAR design produces non-uniform Ω entries that
+  don't preferentially regularise the noisy directions, so the two
+  weights are essentially equivalent.
+
+So `fit_gls_pairwise` is **not** a generally better-conditioned fit than
+`fit_gls(Ŝ_pw)`. Its only practical advantage is under MCAR-with-intact
+at small n and heavy missingness, where it avoids occasional blow-ups of
+the literature path. Otherwise the two are interchangeable.
+
 Complete-data fits agree to floating-point round-off, as expected.
 
 ## Evidence
 
 ```{r evidence-table}
-tbl <- summary_df[, c("n", "miss_label", "reps",
-                       "trace_mse_sigma", "trace_mse_gamma",
-                       "eff_ratio_mse")]
-tbl$trace_mse_sigma <- round(tbl$trace_mse_sigma, 4)
-tbl$trace_mse_gamma <- round(tbl$trace_mse_gamma, 4)
-tbl$eff_ratio_mse <- round(tbl$eff_ratio_mse, 3)
-names(tbl) <- c("n", "Missing %", "Reps",
-                "Trace MSE Σ-only", "Trace MSE Γ_NT^pw",
-                "MSE Ratio (Σ ÷ Γ_NT^pw)")
-knitr::kable(tbl,
-             caption = "Trace of per-parameter empirical MSE across replications. Ratio > 1 means the Γ_NT^pw weight is more efficient.")
+tbl <- summary_df[summary_df$miss_rate > 0,
+                  c("n", "miss_rate", "mechanism", "miss_label",
+                    "trace_mse_sigma", "trace_mse_gamma", "eff_ratio_mse",
+                    "median_cond_sigma", "median_cond_gamma")]
+tbl$cond_ratio <- tbl$median_cond_sigma / tbl$median_cond_gamma
+tbl <- tbl[order(tbl$n, tbl$miss_rate, tbl$mechanism), ]
+tbl$trace_mse_sigma   <- round(tbl$trace_mse_sigma, 3)
+tbl$trace_mse_gamma   <- round(tbl$trace_mse_gamma, 3)
+tbl$eff_ratio_mse     <- round(tbl$eff_ratio_mse, 3)
+tbl$median_cond_sigma <- round(tbl$median_cond_sigma)
+tbl$median_cond_gamma <- round(tbl$median_cond_gamma)
+tbl$cond_ratio        <- round(tbl$cond_ratio, 2)
+tbl$mechanism         <- toupper(tbl$mechanism)
+tbl$miss_rate         <- NULL
+tbl <- tbl[, c("n", "mechanism", "miss_label",
+               "trace_mse_sigma", "trace_mse_gamma", "eff_ratio_mse",
+               "median_cond_sigma", "median_cond_gamma", "cond_ratio")]
+names(tbl) <- c("n", "Mechanism", "Missing %",
+                "Trace MSE Σ-only", "Trace MSE Γ_NT^pw", "MSE Ratio",
+                "Median cond Σ", "Median cond Γ_NT^pw", "Cond Ratio")
+knitr::kable(
+  tbl,
+  caption = paste(
+    "Trace of per-parameter empirical MSE and median weight-matrix condition",
+    "number across replications. MSE Ratio = trace MSE Σ-only ÷ trace MSE",
+    "Γ_NT^pw; values > 1 mean Γ_NT^pw is more efficient. Cond Ratio is the",
+    "matching ratio of median condition numbers; values > 1 mean Γ_NT^pw is",
+    "better-conditioned. rate = 0 cells (degeneracy reference) are omitted",
+    "from the table; see the metadata file for them."
+  )
+)
 ```
 
-```{r evidence-plot, fig.width=7, fig.height=4}
-ggplot(summary_df,
-       aes(x = miss_rate, y = eff_ratio_mse,
-           colour = factor(n), group = factor(n))) +
+```{r evidence-plot, fig.width=7.5, fig.height=4.2}
+plot_df <- summary_df[summary_df$miss_rate > 0, , drop = FALSE]
+plot_df$mechanism <- toupper(plot_df$mechanism)
+plot_df$n_label <- factor(paste0("n = ", plot_df$n),
+                          levels = paste0("n = ", sort(unique(plot_df$n))))
+plot_df$cond_ratio <- plot_df$median_cond_sigma / plot_df$median_cond_gamma
+ggplot(plot_df,
+       aes(x = miss_rate, y = cond_ratio,
+           colour = mechanism, group = mechanism)) +
   geom_hline(yintercept = 1, linetype = "dashed", colour = "grey50") +
   geom_line(linewidth = 0.9) +
   geom_point(size = 2.6) +
+  facet_wrap(~ n_label) +
   scale_x_continuous(labels = scales::percent) +
+  scale_colour_manual(values = c(MCAR = "#1f78b4", MAR = "#e31a1c")) +
   labs(
-    x = "Missing rate (MCAR, intact = x1)",
-    y = "Efficiency ratio  (trace MSE Σ-only ÷ trace MSE Γ_NT^pw)",
-    colour = "n"
+    x = "Missing rate",
+    y = "Conditioning ratio  cond(Γ_NT(Ŝ_pw)) / cond(Γ_NT^pw)",
+    colour = "Mechanism"
   ) +
   theme_minimal(base_size = 11) +
   theme(panel.grid.minor = element_blank(),
         legend.position = "right")
 ```
 
-The horizontal dashed line is the no-effect reference. Values strictly
-above 1 mean the Γ_NT^pw-weighted fit has smaller empirical MSE.
+Dashed line is the no-effect reference. Under MCAR the conditioning
+ratio climbs to 2×–5× — `Γ_NT^pw` is meaningfully better conditioned.
+Under MAR it stays in [1.05, 1.20] across every cell — the regularising
+effect is gone.
 
 ## Caveats
 
 - One model only — 1-factor / 9 indicators / loadings ≈ 0.7. The
   efficiency gap will scale with df (here 27) and with how strongly
-  Γ_NT^pw differs from Γ_NT(Σ̂_pw), which itself depends on the
+  `Γ_NT^pw` differs from `Γ_NT(Σ̂_pw)`, which itself depends on the
   missing-pattern structure.
-- MCAR only. MAR is the harder, more interesting case and is left for
-  a follow-up cell.
+- Two missing mechanisms: SB-2005 MCAR (intact = x1) and SB-2005 MAR
+  (predictors = x1, x2). Other realistic patterns — planned-monotone,
+  attrition, multi-anchor MAR — could plausibly tip the conditioning
+  ratio further in either direction. The reported gap is for these
+  two designs specifically.
 - Skipped: standard errors, chi-square tests, FIML / complete-data ML
   reference rows. The trace metric is a sufficient statistic for
   asymptotic efficiency under the correct-model assumption used here;
@@ -114,22 +161,17 @@ above 1 mean the Γ_NT^pw-weighted fit has smaller empirical MSE.
 - `r n_reps` replications per cell (seed base `r seed_base`). The
   results for the high-missing / small-n cells carry visible Monte
   Carlo noise; bump `--reps` if a particular cell deserves more weight.
-- The n = 200 / rate = 30% cell's headline ratio is dominated by a
-  handful of catastrophic Σ-only fits (one rep with summed squared
-  error > 500 of 200 reps; median is ~1.4). Median per-rep behaviour
-  shows a much smaller gap. The blow-ups have a clear diagnostic:
-  on the worst rep, `Ŝ_pw` itself is well-conditioned (cond ≈ 49),
-  but `Γ_NT(Ŝ_pw)` carries condition number ≈ 2400 (smallest
-  eigenvalue ≈ 0.012) while `Γ_NT^pw` carries condition number ≈ 150
-  (smallest eigenvalue ≈ 0.24) — a ~16× difference. The MCAR-with-intact
-  Hadamard factor `Ω` has diagonal entries `1/(1-rate)` that pump up
-  variance components, regularising the near-singular directions of
-  `Γ_NT(Ŝ_pw)`. This is **not** a generic property of `Γ_NT^pw` over
-  `Γ_NT(Ŝ_pw)`: with a different missing pattern (MAR, planned-pattern,
-  …) the two could flip. The propagation `Ŝ_pw` non-PD ⇒
-  `Γ_NT(Ŝ_pw)` singular ⇒ `Γ_NT^pw` singular still holds in the limit;
-  under this specific MCAR-with-intact design, the regularising
-  side-effect is what we're seeing.
+- The n = 200 / rate = 30% MCAR cell's headline MSE ratio (≈ 3.7) is
+  dominated by a handful of catastrophic Σ-only fits (one rep with
+  summed squared error > 500 out of 200 reps; median is ~1.4). The
+  blow-ups track the conditioning numbers exactly. The same cell under
+  MAR gives a ratio of 1.08 with no comparable outliers.
+- Singularity does propagate algebraically: `Ŝ_pw` singular implies
+  `Γ_NT(Ŝ_pw)` singular implies `Γ_NT^pw` singular. The finite-sample
+  conditioning advantage under MCAR is a happenstance of the Hadamard
+  factor Ω, not a generic theorem. The MAR cells in this experiment
+  confirm that the advantage is mechanism-specific, not estimator-
+  generic.
 - The Σ-only-weight fit is reached by passing `samp.S = Ŝ_pw` into the
   existing `magmaan_core$estimate_gls`; the Γ_NT^pw fit is
   `magmaan_core$estimate_gls_pairwise`. Both reduce to the same fit on

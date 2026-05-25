@@ -29,7 +29,8 @@ parse_args <- function(args) {
     smoke = FALSE,
     seed_base = 20260610L,
     n_grid = c(200L, 500L, 1000L),
-    miss_grid = c(0.0, 0.15, 0.30)
+    miss_grid = c(0.0, 0.15, 0.30),
+    mechanisms = c("mcar", "mar")
   )
   i <- 1L
   while (i <= length(args)) {
@@ -37,20 +38,33 @@ parse_args <- function(args) {
     if (arg %in% c("-h", "--help")) {
       cat(
         "Usage: Rscript run_experiment.R [--reps N] [--smoke] [--seed-base S]\n",
+        "                                [--mcar-only] [--mar-only]\n",
         "\n",
         "  --reps N         Monte Carlo replications per cell (default 200).\n",
-        "  --smoke          Tiny run: 5 reps, n grid {100, 300}, missing grid {0, 0.2}.\n",
+        "  --smoke          Tiny run: 5 reps, n grid {100, 300}, rates {0, 0.2}.\n",
         "  --seed-base S    Deterministic seed base (default 20260610).\n",
+        "  --mcar-only      Skip MAR cells.\n",
+        "  --mar-only       Skip MCAR cells (rate=0 still included for the\n",
+        "                   degeneracy reference, evaluated as MCAR).\n",
         "  --help           Show this message.\n",
         "\n",
         "Design: 1-factor CFA, 9 indicators (Study-0 calibration);\n",
-        "  n   ∈ {200, 500, 1000}\n",
-        "  rate ∈ {0%, 15%, 30%}   (Savalei-Bentler 2005 MCAR; intact = 1)\n",
+        "  n         ∈ {200, 500, 1000}\n",
+        "  rate      ∈ {0%, 15%, 30%}\n",
+        "  mechanism ∈ {MCAR, MAR}  (Savalei-Bentler 2005)\n",
+        "    MCAR: intact = x1, MCAR rate on x2..x9.\n",
+        "    MAR:  predictors = x1, x2 (intact); 3-rule design from\n",
+        "          papers/pairwise-robust-sem missingness.R.\n",
         "  estimators: GLSpw_Sigma (Σ-only weight), GLSpw_Gamma (Γ_NT^pw weight)\n",
-        "  outcome: trace of per-parameter empirical MSE\n",
+        "  outcome: trace of per-parameter empirical MSE; conditioning of\n",
+        "          Γ_NT(Ŝ_pw) and Γ_NT^pw per fit.\n",
         sep = ""
       )
       quit(save = "no", status = 0L)
+    } else if (arg == "--mcar-only") {
+      out$mechanisms <- "mcar"
+    } else if (arg == "--mar-only") {
+      out$mechanisms <- "mar"
     } else if (arg == "--reps") {
       i <- i + 1L
       out$reps <- as.integer(args[[i]])
@@ -119,6 +133,42 @@ apply_sb2005_mcar <- function(X, rate, intact = 1L, seed = NULL) {
   list(X = Xm, mask = !drop)
 }
 
+# Savalei-Bentler 2005 MAR: sourced from the paper's r-package. The 3-rule
+# design (calibrated to hit `rate` on average) ties missingness in target
+# columns to two intact predictor columns. Different Ω structure than MCAR —
+# overlaps are not uniform across pairs, so this is the test of whether the
+# Γ_NT^pw conditioning advantage from MCAR-with-intact is a generic effect
+# or a happenstance of uniform-Ω geometry.
+.sb2005_mar_path <- function() {
+  candidates <- c(
+    file.path("..", "..", "papers", "pairwise-robust-sem", "r-package",
+              "R", "missingness.R"),
+    file.path("..", "..", "..", "papers", "pairwise-robust-sem", "r-package",
+              "R", "missingness.R")
+  )
+  hits <- candidates[file.exists(candidates)]
+  if (!length(hits)) {
+    stop("Cannot locate papers/pairwise-robust-sem/r-package/R/missingness.R; ",
+         "checked: ", paste(candidates, collapse = "; "), call. = FALSE)
+  }
+  hits[[1L]]
+}
+sys.source(.sb2005_mar_path(), envir = environment())
+
+apply_sb2005_mar <- function(X, rate, predictors = 1:2, seed = NULL) {
+  if (rate <= 0) return(list(X = X, mask = matrix(TRUE, nrow(X), ncol(X))))
+  df <- as.data.frame(X)
+  res <- sb2005_mar(df, rate = rate, predictors = predictors, seed = seed,
+                   calibrate = TRUE)
+  list(X = as.matrix(res$data), mask = !res$mask)
+}
+
+apply_missingness <- function(X, mechanism, rate, seed) {
+  if (rate <= 0 || identical(mechanism, "mcar"))
+    return(apply_sb2005_mcar(X, rate, intact = 1L, seed = seed))
+  apply_sb2005_mar(X, rate, predictors = 1:2, seed = seed)
+}
+
 # Build a magmaan partable for "f =~ x1 + ... + xp" via lavaanify.
 build_partable <- function(p) {
   rhs <- paste(paste0("x", seq_len(p)), collapse = " + ")
@@ -151,11 +201,24 @@ true_theta <- function(partable, m) {
   vals[order(ord)]
 }
 
-# Fit both estimators on one (X, mask) pair. Returns named list of two
-# numeric vectors (θ̂ in free-parameter order) plus per-fit wall times.
+# Fit both estimators on one (X, mask) pair. Also records the condition
+# number of Γ_NT(Ŝ_pw) and Γ_NT^pw — the diagnostic the conditioning
+# story turns on.
 fit_both <- function(X, mask, partable) {
   pw <- magmaan::magmaan_core$data_pairwise_sample_stats(X, mask)
   sample_pw <- list(S = pw$S, mean = pw$mean, nobs = pw$nobs)
+
+  # Weight-matrix conditioning, computed once before fitting. Skips the
+  # eigendecomposition if the matrix is tiny / cheap (always cheap at p = 9).
+  S_pw <- pw$S[[1L]]
+  G_sigma <- magmaan::magmaan_core$robust_gamma_nt(S_pw)
+  G_pw    <- magmaan::magmaan_core$data_gamma_nt_pairwise(X, mask)[[1L]]
+  cond_of <- function(M) {
+    e <- eigen(M, symmetric = TRUE, only.values = TRUE)$values
+    list(min = min(e), max = max(e), cond = max(e) / max(min(e), .Machine$double.eps))
+  }
+  c_sigma <- cond_of(G_sigma)
+  c_gamma <- cond_of(G_pw)
 
   t1 <- Sys.time()
   fit_sigma <- magmaan::magmaan_core$estimate_gls(partable, sample_pw)
@@ -172,7 +235,9 @@ fit_both <- function(X, mask, partable) {
     sigma = theta_sigma,
     gamma = theta_gamma,
     t_sigma = as.numeric(t2 - t1, units = "secs"),
-    t_gamma = as.numeric(t3 - t2, units = "secs")
+    t_gamma = as.numeric(t3 - t2, units = "secs"),
+    cond_sigma = c_sigma$cond,
+    cond_gamma = c_gamma$cond
   )
 }
 
@@ -193,61 +258,78 @@ main <- function() {
 
   cat(sprintf("[exp08] p=%d, %d free params, %d reps, seed_base=%d\n",
               m$p, n_par, opts$reps, opts$seed_base))
-  cat(sprintf("[exp08] n grid:    %s\n",    paste(opts$n_grid, collapse = ", ")))
-  cat(sprintf("[exp08] miss grid: %s\n",
+  cat(sprintf("[exp08] n grid:        %s\n",
+              paste(opts$n_grid, collapse = ", ")))
+  cat(sprintf("[exp08] rate grid:     %s\n",
               paste(sprintf("%g", opts$miss_grid), collapse = ", ")))
+  cat(sprintf("[exp08] mechanisms:    %s\n",
+              paste(opts$mechanisms, collapse = ", ")))
+
+  # rate = 0 is always evaluated as MCAR (degeneracy reference); MAR at
+  # rate = 0 is identical and skipped to avoid duplicate rows.
+  cells <- expand.grid(
+    n = opts$n_grid, rate = opts$miss_grid,
+    mechanism = opts$mechanisms, stringsAsFactors = FALSE
+  )
+  cells <- cells[!(cells$mechanism == "mar" & cells$rate == 0), , drop = FALSE]
 
   fits_rows <- list()
   row_id <- 0L
-  for (n in opts$n_grid) {
-    for (rate in opts$miss_grid) {
-      for (rep in seq_len(opts$reps)) {
-        seed <- opts$seed_base + 1000L * n + as.integer(round(rate * 100)) * 100L + rep
-        X <- simulate_cfa(n, Sigma, seed)
-        miss <- apply_sb2005_mcar(X, rate, intact = 1L, seed = seed + 1L)
-        # Guarantee no fully-missing row (already true with intact = 1, but
-        # belt-and-braces).
-        keep <- rowSums(miss$mask) > 0L
-        Xk <- miss$X[keep, , drop = FALSE]
-        mk <- miss$mask[keep, , drop = FALSE]
-        storage.mode(mk) <- "logical"
+  for (i in seq_len(nrow(cells))) {
+    n <- cells$n[i]
+    rate <- cells$rate[i]
+    mech <- cells$mechanism[i]
+    for (rep in seq_len(opts$reps)) {
+      seed <- opts$seed_base + 1000L * n +
+              as.integer(round(rate * 100)) * 100L + rep +
+              (if (mech == "mar") 7L else 0L)  # decorrelate MAR/MCAR seeds
+      X <- simulate_cfa(n, Sigma, seed)
+      miss <- apply_missingness(X, mech, rate, seed + 1L)
+      keep <- rowSums(miss$mask) > 0L
+      Xk <- miss$X[keep, , drop = FALSE]
+      mk <- miss$mask[keep, , drop = FALSE]
+      storage.mode(mk) <- "logical"
 
-        res <- tryCatch(
-          fit_both(Xk, mk, partable),
-          error = function(e) {
-            warning(sprintf("fit failed: n=%d rate=%.2f rep=%d: %s",
-                            n, rate, rep, conditionMessage(e)),
-                    call. = FALSE)
-            NULL
-          }
-        )
-        if (is.null(res)) next
-        row_id <- row_id + 1L
-        fits_rows[[length(fits_rows) + 1L]] <- data.frame(
-          row_id = row_id,
-          n = n, miss_rate = rate, rep = rep,
-          par_idx = seq_len(n_par),
-          theta_true = theta_star,
-          est_sigma  = res$sigma,
-          est_gamma  = res$gamma,
-          t_sigma    = res$t_sigma,
-          t_gamma    = res$t_gamma
-        )
-      }
-      cat(sprintf("[exp08] cell n=%d rate=%.2f done (%d reps)\n",
-                  n, rate, opts$reps))
+      res <- tryCatch(
+        fit_both(Xk, mk, partable),
+        error = function(e) {
+          warning(sprintf("fit failed: n=%d rate=%.2f mech=%s rep=%d: %s",
+                          n, rate, mech, rep, conditionMessage(e)),
+                  call. = FALSE)
+          NULL
+        }
+      )
+      if (is.null(res)) next
+      row_id <- row_id + 1L
+      fits_rows[[length(fits_rows) + 1L]] <- data.frame(
+        row_id = row_id,
+        n = n, miss_rate = rate, mechanism = mech, rep = rep,
+        par_idx = seq_len(n_par),
+        theta_true = theta_star,
+        est_sigma  = res$sigma,
+        est_gamma  = res$gamma,
+        t_sigma    = res$t_sigma,
+        t_gamma    = res$t_gamma,
+        cond_sigma = res$cond_sigma,
+        cond_gamma = res$cond_gamma
+      )
     }
+    cat(sprintf("[exp08] cell n=%d rate=%.2f mech=%s done (%d reps)\n",
+                n, rate, mech, opts$reps))
   }
 
   fits <- do.call(rbind, fits_rows)
 
-  # Per-cell summary: empirical variance, bias², MSE, trace.
+  # Per-cell summary: empirical variance, bias², MSE, trace; plus conditioning
+  # statistics so the report can talk about Γ_NT(Ŝ_pw) vs Γ_NT^pw geometry.
   summary_rows <- list()
-  cells <- unique(fits[, c("n", "miss_rate")])
-  for (i in seq_len(nrow(cells))) {
-    n  <- cells$n[i]
-    rt <- cells$miss_rate[i]
-    cell <- fits[fits$n == n & fits$miss_rate == rt, , drop = FALSE]
+  cells_uniq <- unique(fits[, c("n", "miss_rate", "mechanism")])
+  for (i in seq_len(nrow(cells_uniq))) {
+    n   <- cells_uniq$n[i]
+    rt  <- cells_uniq$miss_rate[i]
+    mch <- cells_uniq$mechanism[i]
+    cell <- fits[fits$n == n & fits$miss_rate == rt &
+                 fits$mechanism == mch, , drop = FALSE]
     var_sigma <- numeric(n_par); var_gamma <- numeric(n_par)
     mse_sigma <- numeric(n_par); mse_gamma <- numeric(n_par)
     for (k in seq_len(n_par)) {
@@ -259,8 +341,9 @@ main <- function() {
       mse_sigma[k] <- var_sigma[k] + bias_s^2
       mse_gamma[k] <- var_gamma[k] + bias_g^2
     }
+    cond_cells <- cell[!duplicated(cell$rep), c("cond_sigma", "cond_gamma")]
     summary_rows[[i]] <- data.frame(
-      n = n, miss_rate = rt,
+      n = n, miss_rate = rt, mechanism = mch,
       reps = length(unique(cell$rep)),
       trace_var_sigma = sum(var_sigma),
       trace_var_gamma = sum(var_gamma),
@@ -269,11 +352,16 @@ main <- function() {
       eff_ratio_var = sum(var_sigma) / sum(var_gamma),
       eff_ratio_mse = sum(mse_sigma) / sum(mse_gamma),
       mean_t_sigma = mean(cell$t_sigma, na.rm = TRUE),
-      mean_t_gamma = mean(cell$t_gamma, na.rm = TRUE)
+      mean_t_gamma = mean(cell$t_gamma, na.rm = TRUE),
+      median_cond_sigma = stats::median(cond_cells$cond_sigma),
+      median_cond_gamma = stats::median(cond_cells$cond_gamma),
+      q95_cond_sigma    = stats::quantile(cond_cells$cond_sigma, 0.95, names = FALSE),
+      q95_cond_gamma    = stats::quantile(cond_cells$cond_gamma, 0.95, names = FALSE)
     )
   }
   summary_df <- do.call(rbind, summary_rows)
-  summary_df <- summary_df[order(summary_df$n, summary_df$miss_rate), ]
+  summary_df <- summary_df[order(summary_df$n, summary_df$miss_rate,
+                                 summary_df$mechanism), ]
 
   fits_path    <- experiment_path("results", "fits.csv")
   summary_path <- experiment_path("results", "summary.csv")
