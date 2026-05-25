@@ -1,0 +1,455 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{natbib}
+\usepackage{url}
+
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\vecl}{\operatorname{vecl}}
+\newcommand{\trans}{^{\mathsf T}}
+\newcommand{\magmaan}{\texttt{magmaan}}
+\newcommand{\lavaan}{\texttt{lavaan}}
+\newcommand{\SNLLS}{\mathrm{SNLLS}}
+\newcommand{\ULS}{\mathrm{ULS}}
+\newcommand{\DWLS}{\mathrm{DWLS}}
+\newcommand{\WLS}{\mathrm{WLS}}
+
+\title{Separable Least Squares for Ordinal Structural Equation Models}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Separable nonlinear least squares (SNLLS) profiles the conditionally linear
+parameters in fixed-weight least-squares estimation of continuous structural
+equation models. Ordinal SEM is not a plug-in application of the same
+reduction. Its least-squares target contains thresholds and latent-response
+correlations, and the full weight matrix couples the two blocks. This note
+sketches an ordinal SNLLS formulation. Thresholds are represented as an
+ordinal measurement layer outside the LISREL covariance block, free thresholds
+can be profiled analytically, and full WLS threshold profiling changes the
+effective correlation weight through a Schur complement. The resulting
+correlation problem can reuse the spirit of continuous SNLLS, but only after
+the ordinal moment vector, threshold constraints, and response-scale
+parameterization are made explicit.
+\end{abstract}
+
+\section{Motivation}
+\label{sec:motivation}
+
+Fixed-weight least-squares estimation of continuous structural equation models
+compares sample means and covariances with the corresponding model-implied
+moments. In the usual LISREL notation \citep{joreskog1996lisrel},
+\begin{align}
+  \Sigma(\theta)
+    &=
+    \Lambda(I-B)^{-1}\Psi(I-B)^{-\mathsf T}\Lambda\trans+\Theta, \\
+  \mu(\theta)
+    &=
+    \nu+\Lambda(I-B)^{-1}\alpha.
+\end{align}
+With sample moments \(s=(\bar x\trans,\vech(S)\trans)\trans\) and model moments
+\(m(\theta)=(\mu(\theta)\trans,\vech\{\Sigma(\theta)\}\trans)\trans\), the
+criterion is
+\begin{equation}
+  F(\theta)
+  =
+  \frac{1}{2}\{s-m(\theta)\}\trans W\{s-m(\theta)\}.
+  \label{eq:continuous-ls}
+\end{equation}
+SNLLS applies the variable-projection idea of
+\citet{golub1973differentiation,golub2003separable}: for fixed directed
+parameters, the remaining covariance and mean parameters enter
+\(m(\theta)\) affinely, so they can be recovered by an inner linear
+least-squares solve. This gives a smaller outer optimization over the directed
+block only \citep{kreiberg2021cfa,kreiberg2023sem,ernst2023trek}.
+
+Ordinal SEM changes the object being fitted. The observed categorical
+variables are treated as coarsened versions of latent continuous responses
+\citep{muthen1984categorical}. For an ordinal variable \(Y_j\) with
+\(K_j\) categories, introduce a latent response \(Y_j^\star\) and thresholds
+\[
+  -\infty=\tau_{j0}<\tau_{j1}<\cdots<\tau_{j,K_j-1}<\tau_{j,K_j}=\infty,
+  \qquad
+  Y_j=k
+  \Longleftrightarrow
+  \tau_{j,k-1}<Y_j^\star\leq\tau_{jk}.
+\]
+The polychoric stage estimates thresholds and latent-response correlations
+\citep{olsson1979polychoric}. Thus the observed least-squares moment vector is
+not merely \(\vech(S)\). It is an augmented vector
+\begin{equation}
+  s_o =
+  \begin{bmatrix}
+    \hat\tau \\
+    \hat\rho
+  \end{bmatrix},
+  \label{eq:ordinal-sample-moments}
+\end{equation}
+where \(\hat\tau\) stacks all finite thresholds and \(\hat\rho\) stacks the
+off-diagonal latent-response correlations. This is why ordinal SNLLS is not a
+simple call to the continuous SNLLS routine with \(S\) replaced by a
+polychoric matrix.
+
+The purpose of this note is to state the difference cleanly. The thresholds
+belong to the measurement model but not to \(\Sigma(\theta)\). They can be
+represented as lavaan-style partable rows, for example with the threshold
+operator \texttt{|}, while the LISREL block continues to define the
+latent-response covariance or correlation structure. The ordinal least-squares
+criterion binds these pieces together through the moment vector and its weight.
+
+\section{Ordinal moment criterion}
+\label{sec:criterion}
+
+Let \(R^\star(\theta)\) be the model-implied latent-response correlation
+matrix for the ordinal observed variables. In a delta-style parameterization
+the diagonal of \(R^\star(\theta)\) is fixed to one; in a covariance
+parameterization, \(R^\star(\theta)=D(\theta)^{-1/2}
+\Sigma^\star(\theta)D(\theta)^{-1/2}\) with
+\(D(\theta)=\diag\{\Sigma^\star(\theta)\}\). Write
+\[
+  \rho(\theta)=\vecl\{R^\star(\theta)\},
+\]
+where \(\vecl\) stacks the strict lower triangle. The model-implied ordinal
+moment vector is
+\begin{equation}
+  m_o(\theta,\gamma)
+  =
+  \begin{bmatrix}
+    \tau(\gamma) \\
+    \rho(\theta)
+  \end{bmatrix},
+  \label{eq:ordinal-model-moments}
+\end{equation}
+where \(\gamma\) collects threshold parameters. The fixed-weight ordinal
+least-squares criterion is
+\begin{equation}
+  F_o(\theta,\gamma)
+  =
+  \frac{1}{2}
+  \{s_o-m_o(\theta,\gamma)\}\trans
+  W_o
+  \{s_o-m_o(\theta,\gamma)\}.
+  \label{eq:ordinal-ls}
+\end{equation}
+The choices \(\ULS\), \(\DWLS\), and \(\WLS\) differ only through \(W_o\).
+For \(\ULS\), \(W_o=I\). For \(\DWLS\), \(W_o\) is diagonal. For full
+\(\WLS\), \(W_o\) is the inverse, or generalized inverse, of the asymptotic
+covariance matrix of \((\hat\tau\trans,\hat\rho\trans)\trans\)
+\citep{browne1984adf,bollen1989sem}. In practice, categorical SEM software
+often estimates parameters with a diagonal weight while retaining the full
+weight machinery for robust standard errors and test statistics
+\citep{flora2004ordinal,li2016ordinal,rosseel2012lavaan}.
+
+\begin{remark}[Why polychorics are not enough]
+The polychoric correlation matrix gives \(\hat\rho\), and the asymptotic
+moment covariance gives the raw material for \(W_o\). But the continuous
+criterion \eqref{eq:continuous-ls} is built on covariance cells, including
+diagonals, while the ordinal criterion \eqref{eq:ordinal-ls} is built on
+thresholds and off-diagonal correlations. The model side must therefore expose
+both \(\tau(\gamma)\) and \(\rho(\theta)\), and the weight matrix must be
+conformed to this augmented vector.
+\end{remark}
+
+\section{Threshold profiling}
+\label{sec:threshold-profiling}
+
+Thresholds are the part of the ordinal problem that is most visibly absent
+from the continuous LISREL covariance block. They are also the easiest part to
+profile. Suppose the threshold model is affine:
+\begin{equation}
+  \tau(\gamma)=\tau_0+H\gamma.
+  \label{eq:threshold-affine}
+\end{equation}
+The matrix \(H\) encodes free thresholds, equality labels, fixed thresholds,
+and invariance restrictions. With
+\[
+  d_\tau=\hat\tau-\tau_0,
+  \qquad
+  d_\rho(\theta)=\hat\rho-\rho(\theta),
+  \qquad
+  W_o=
+  \begin{bmatrix}
+    W_{\tau\tau} & W_{\tau\rho}\\
+    W_{\rho\tau} & W_{\rho\rho}
+  \end{bmatrix},
+\]
+the criterion can be written as a quadratic function of \(\gamma\):
+\[
+  F_o(\theta,\gamma)
+  =
+  \frac{1}{2}
+  \begin{bmatrix}
+    d_\tau-H\gamma \\
+    d_\rho(\theta)
+  \end{bmatrix}\trans
+  W_o
+  \begin{bmatrix}
+    d_\tau-H\gamma \\
+    d_\rho(\theta)
+  \end{bmatrix}.
+\]
+For fixed \(\theta\), the profiled threshold estimate is
+\begin{equation}
+  \hat\gamma(\theta)
+  =
+  \{H\trans W_{\tau\tau}H\}^{+}
+  H\trans
+  \{W_{\tau\tau}d_\tau+W_{\tau\rho}d_\rho(\theta)\},
+  \label{eq:threshold-profile-general}
+\end{equation}
+where \(+\) denotes the Moore--Penrose inverse. If \(H\) has full column rank
+and \(W_{\tau\tau}\) is positive definite on its span, this is an ordinary
+weighted least-squares solve \citep{golub2013matrix,magnus1999matrix}.
+
+\begin{proposition}[Free-threshold profiling]
+\label{prop:free-threshold}
+If every finite threshold is freely estimated, so that \(H=I\) and
+\(\tau_0=0\), profiling thresholds out of \eqref{eq:ordinal-ls} gives the
+correlation-only criterion
+\begin{equation}
+  F_{o,p}(\theta)
+  =
+  \frac{1}{2}d_\rho(\theta)\trans
+  \left(
+    W_{\rho\rho}
+    -
+    W_{\rho\tau}W_{\tau\tau}^{-1}W_{\tau\rho}
+  \right)
+  d_\rho(\theta).
+  \label{eq:threshold-schur}
+\end{equation}
+\end{proposition}
+
+\noindent
+The result is immediate from minimizing the quadratic over the unrestricted
+threshold residual. The profiled threshold residual is not generally zero:
+\[
+  \hat\tau-\hat\gamma(\theta)
+  =
+  -W_{\tau\tau}^{-1}W_{\tau\rho}d_\rho(\theta).
+\]
+It is zero only when the threshold and correlation blocks are uncoupled by the
+weight.
+
+\begin{remark}[Full WLS versus DWLS and ULS]
+For \(\ULS\) and \(\DWLS\), \(W_{\tau\rho}=0\), so free thresholds profile to
+their sample estimates and the remaining fit is a correlation-only least
+squares problem with the identity or diagonal correlation weights. For full
+\(\WLS\), the threshold-correlation block is generally nonzero, so profiling
+thresholds changes the correlation weight by the Schur complement in
+\eqref{eq:threshold-schur}. If \(W_o=\Gamma_o^{-1}\), where
+\(\Gamma_o\) is partitioned conformably with \(s_o\), the Schur complement in
+\eqref{eq:threshold-schur} equals the inverse of the marginal covariance block
+for \(\hat\rho\). Thus ``use the polychoric matrix and the lower-right block of
+the inverse weight'' is not the same operation as profiling free thresholds.
+\end{remark}
+
+Constrained thresholds are the case that makes the ordinal layer visible. A
+fixed threshold, an equality label across items, or a multi-group threshold
+invariance restriction reduces the span of \(H\). Then threshold residuals
+cannot be eliminated, and the profiled objective keeps the part of
+\(d_\tau\) orthogonal to the threshold design, as well as its coupling with
+\(d_\rho(\theta)\). This is why threshold syntax is not merely display
+metadata: it defines a linear model for the threshold block.
+
+\section{Ordinal SNLLS after threshold profiling}
+\label{sec:ordinal-snlls}
+
+After thresholds have either been profiled or retained explicitly, the
+remaining nonlinear problem concerns the model-implied latent-response
+correlations. The continuous SNLLS split still suggests a useful reduction,
+but it must be stated on the ordinal moment scale.
+
+Let \(b\) collect the directed parameters, such as free entries of
+\(\Lambda\) and \(B\), and let \(c\) collect the variance, covariance, and mean
+parameters that are conditionally linear in the continuous LISREL moment map.
+For fixed \(b\), the latent-response covariance matrix has the affine form
+\begin{equation}
+  \sigma^\star(b,c)=\sigma^\star_0(b)+M^\star(b)c,
+  \label{eq:latent-response-affine}
+\end{equation}
+where \(\sigma^\star\) is a vectorized covariance representation. Continuous
+SNLLS applies directly to this form. Ordinal SNLLS applies directly only if
+the ordinal parameterization preserves the relevant affine map from \(c\) to
+the fitted ordinal moments.
+
+The clean case is a delta-style all-ordinal model in which the
+latent-response variances are fixed to one and the fitted moments are the
+strict lower-triangular covariance entries, which are also correlations. Then
+\[
+  \rho(b,c)=\rho_0(b)+M_\rho(b)c,
+\]
+and, after free-threshold profiling, the ordinal criterion is again separable:
+\begin{equation}
+  F_{\SNLLS,o}(b)
+  =
+  \min_c
+  \frac{1}{2}
+  \{d_\rho-\rho_0(b)-M_\rho(b)c\}\trans
+  W_{\rho\mid\tau}
+  \{d_\rho-\rho_0(b)-M_\rho(b)c\},
+  \label{eq:ordinal-snlls-clean}
+\end{equation}
+where \(W_{\rho\mid\tau}\) is the identity, a diagonal matrix, or the
+threshold-profiled WLS weight from \eqref{eq:threshold-schur}. Conditional on
+\(b\), the inner solution is again a linear least-squares solve. This is the
+closest ordinal analogue of continuous SNLLS.
+
+The less clean case is an unconstrained covariance parameterization in which
+the model-implied correlations are obtained by standardizing a covariance
+matrix:
+\[
+  \rho_{ij}(b,c)
+  =
+  \frac{\Sigma^\star_{ij}(b,c)}
+       {\{\Sigma^\star_{ii}(b,c)\Sigma^\star_{jj}(b,c)\}^{1/2}}.
+\]
+Even if \(\Sigma^\star(b,c)\) is affine in \(c\), the standardized correlation
+map is not. Then the continuous SNLLS profile does not carry over without an
+additional scale parameterization or a constrained inner solve that enforces
+the response variances. The same issue appears in mixed continuous-ordinal
+models, where some observed moments are covariances and others are
+latent-response correlations.
+
+\begin{proposition}[Sufficient condition for ordinal separability]
+\label{prop:ordinal-separable}
+Suppose (i) thresholds follow the affine model \eqref{eq:threshold-affine},
+(ii) threshold profiling is performed by \eqref{eq:threshold-profile-general}
+or thresholds are included as part of the inner linear block, and
+(iii) conditional on directed parameters \(b\), the fitted non-threshold
+ordinal moments are affine in a block \(c\). Then the fixed-weight ordinal
+least-squares problem is separable in \((b,c,\gamma)\). The outer objective is
+obtained by one linear least-squares solve for thresholds and one linear
+least-squares solve for \(c\) at each trial value of \(b\), or by a single
+combined linear solve when the two blocks are retained together.
+\end{proposition}
+
+\begin{remark}
+Condition (iii) is the substantive ordinal restriction. It is automatic for
+continuous covariance moments and for ordinal correlation moments under a
+parameterization that fixes the response variances before the least-squares
+map is formed. It is not automatic for a generic covariance-to-correlation
+standardization.
+\end{remark}
+
+\section{Estimator variants}
+\label{sec:variants}
+
+The same notation separates four estimators that are easily conflated.
+
+\begin{description}
+\item[ULS.]
+Use \(W_o=I\). With free thresholds, the threshold block profiles away and
+the outer problem fits only \(\hat\rho-\rho(\theta)\) by unweighted least
+squares. This is the lightest ordinal SNLLS target.
+
+\item[DWLS.]
+Use a diagonal \(W_o\). With free thresholds, the threshold block again
+profiles away, but the correlation residuals receive diagonal weights from
+the asymptotic variances of the estimated polychoric correlations. This is the
+natural analogue of the parameter-estimation step in common categorical SEM
+workflows.
+
+\item[Profiled WLS.]
+Start from the full \(W_o\), profile free thresholds, and fit correlations
+with \(W_{\rho\mid\tau}\) from \eqref{eq:threshold-schur}. This is cheaper
+than carrying the full threshold-correlation residual through the outer
+optimizer, but it is not the same as DWLS and not the same as using the
+lower-right block of \(W_o\).
+
+\item[Full ordinal WLS.]
+Retain thresholds and correlations in one residual vector and use the full
+weight \(W_o\). This is the direct minimum-distance estimator for the
+augmented ordinal moment vector. It is the most faithful to the moment
+criterion, but it is also where weight construction and inversion dominate
+the computational story.
+\end{description}
+
+This classification gives a natural benchmarking design for a later paper
+revision: separate construction of thresholds, polychorics, \(\Gamma_o\), and
+the inverted weights from the repeated optimizer cost, then compare full
+optimization with ordinal SNLLS under each weight choice. No such simulations
+are part of the present note.
+
+\section{Implementation implications}
+\label{sec:implementation}
+
+The representation should mirror the statistical decomposition. The LISREL
+matrix representation continues to own \(\Sigma^\star(\theta)\) and
+\(\mu(\theta)\). Thresholds live beside it as ordinal measurement rows, not
+inside the covariance formula. The sample side owns the estimated thresholds,
+polychoric correlations, and their asymptotic covariance. The fitting adapter
+constructs the ordinal residual vector and applies the selected weight.
+
+For \magmaan{}, this suggests an implementation boundary rather than a source
+change in this note:
+\[
+  \text{partable threshold rows}
+  \quad+\quad
+  \text{ordinal sample statistics}
+  \quad\longrightarrow\quad
+  \text{ordinal SNLLS adapter}.
+\]
+The adapter would expose three explicit choices:
+\begin{enumerate}
+\item whether thresholds are free, fixed, or constrained through a design
+  matrix \(H\);
+\item whether the non-threshold moment map is already affine in the profiled
+  block or requires response-scale handling;
+\item whether the weight is \(\ULS\), \(\DWLS\), profiled \(\WLS\), or full
+  \(\WLS\).
+\end{enumerate}
+This is deliberately not a change to the core LISREL evaluator. The point is
+that ordinal SEM adds a measurement side layer and a different moment vector,
+not a new formula for \(\Sigma(\theta)\).
+
+\section{Open problems}
+\label{sec:open}
+
+Several details decide whether ordinal SNLLS is merely neat or actually useful.
+First, the response-scale parameterization must be chosen so that the inner
+linear solve is well-defined for ordinary CFA and SEM examples. Second,
+threshold constraints need a lavaan-compatible interpretation: right-hand
+threshold slots such as \texttt{t1}, \texttt{t2}, and \texttt{t3} should be
+validated as ordered slots, while labels before \texttt{*} define equality
+constraints. Third, multi-group threshold invariance is just a structured
+choice of \(H\), but it needs to be materialized before the profiler sees the
+problem. Fourth, the full-WLS and profiled-WLS distinction should be tested
+numerically, because the Schur-complement weight may behave differently from
+both DWLS and the unprofiled full criterion in small samples.
+
+\section{Discussion}
+\label{sec:discussion}
+
+Ordinal SNLLS is a separate methodological object from continuous SNLLS. The
+continuous reduction profiles parameters in a covariance and mean moment map.
+The ordinal reduction must first decide what to do with thresholds and with
+the covariance-to-correlation scale of the latent responses. Once those
+decisions are explicit, the attractive case is simple: free thresholds profile
+analytically, ULS and DWLS collapse to correlation-only criteria, and full WLS
+collapses through a Schur-complement weight. The remaining correlation fit can
+then use the same variable-projection machinery as continuous SNLLS when the
+response-scale parameterization preserves conditional linearity.
+
+That is the small but real contribution. Polychoric correlations and Gamma are
+the correct ingredients, but the recipe is different: the estimator lives on an
+augmented threshold-correlation moment vector. Treating the threshold layer
+explicitly is what makes ordinal SNLLS a method rather than an implementation
+trick.
+
+\bibliographystyle{plainnat}
+\bibliography{ordinal-snlls}
+
+\end{document}
