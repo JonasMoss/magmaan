@@ -920,15 +920,29 @@ TEST_CASE("Ordinal SNLLS profiles thresholds and linear covariance block") {
   auto uls_snlls = magmaan::estimate::fit_ordinal_snlls(
       *pt, *mr, moments, nullptr, uls_plan, *x0,
       magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto uls_snlls_full_thresholds =
+      magmaan::estimate::fit_ordinal_snlls_full_thresholds(
+          *pt, *mr, moments, nullptr, uls_plan, *x0,
+          magmaan::estimate::Backend::NloptLbfgs, opts);
   REQUIRE_MESSAGE(uls_bounded.has_value(),
       "bounded ULS failed: "
           << (uls_bounded.has_value() ? "" : uls_bounded.error().detail));
   REQUIRE_MESSAGE(uls_snlls.has_value(),
       "SNLLS ULS failed: "
           << (uls_snlls.has_value() ? "" : uls_snlls.error().detail));
+  REQUIRE_MESSAGE(uls_snlls_full_thresholds.has_value(),
+      "full-threshold SNLLS ULS failed: "
+          << (uls_snlls_full_thresholds.has_value()
+                  ? ""
+                  : uls_snlls_full_thresholds.error().detail));
   CHECK(uls_snlls->fmin ==
         doctest::Approx(uls_bounded->fmin).epsilon(1e-8));
   CHECK((uls_snlls->theta - uls_bounded->theta).cwiseAbs().maxCoeff() < 2e-5);
+  CHECK(uls_snlls_full_thresholds->fmin ==
+        doctest::Approx(uls_bounded->fmin).epsilon(1e-8));
+  CHECK((uls_snlls_full_thresholds->theta - uls_bounded->theta)
+            .cwiseAbs()
+            .maxCoeff() < 2e-5);
 
   auto pt_prepared = *pt;
   auto prep = magmaan::estimate::prepare_ordinal_delta_partable(
@@ -955,16 +969,32 @@ TEST_CASE("Ordinal SNLLS profiles thresholds and linear covariance block") {
   auto dwls_snlls = magmaan::estimate::fit_ordinal_snlls(
       *pt, *mr, moments, &snlls_cache, dwls_plan, *x0,
       magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto full_threshold_dwls_cache = magmaan::data::ordinal_gamma_cache_from_diagonal(
+      {stats->NACOV[0].diagonal()});
+  auto dwls_snlls_full_thresholds =
+      magmaan::estimate::fit_ordinal_snlls_full_thresholds(
+          *pt, *mr, moments, &full_threshold_dwls_cache, dwls_plan, *x0,
+          magmaan::estimate::Backend::NloptLbfgs, opts);
   REQUIRE_MESSAGE(dwls_bounded.has_value(),
       "bounded DWLS failed: "
           << (dwls_bounded.has_value() ? "" : dwls_bounded.error().detail));
   REQUIRE_MESSAGE(dwls_snlls.has_value(),
       "SNLLS DWLS failed: "
           << (dwls_snlls.has_value() ? "" : dwls_snlls.error().detail));
+  REQUIRE_MESSAGE(dwls_snlls_full_thresholds.has_value(),
+      "full-threshold SNLLS DWLS failed: "
+          << (dwls_snlls_full_thresholds.has_value()
+                  ? ""
+                  : dwls_snlls_full_thresholds.error().detail));
   CHECK(dwls_snlls->fmin ==
         doctest::Approx(dwls_bounded->fmin).epsilon(1e-8));
   CHECK((dwls_snlls->theta - dwls_bounded->theta).cwiseAbs().maxCoeff() <
         2e-5);
+  CHECK(dwls_snlls_full_thresholds->fmin ==
+        doctest::Approx(dwls_bounded->fmin).epsilon(1e-8));
+  CHECK((dwls_snlls_full_thresholds->theta - dwls_bounded->theta)
+            .cwiseAbs()
+            .maxCoeff() < 2e-5);
   CHECK(snlls_cache.blocks[0].has_diagonal);
   CHECK_FALSE(snlls_cache.blocks[0].has_full);
   CHECK_FALSE(snlls_cache.blocks[0].has_dwls_weight);
@@ -980,25 +1010,112 @@ TEST_CASE("Ordinal SNLLS profiles thresholds and linear covariance block") {
   snlls_wls_cache.blocks.resize(1);
   snlls_wls_cache.blocks[0].gamma = stats->NACOV[0];
   snlls_wls_cache.blocks[0].has_full = true;
+  magmaan::data::OrdinalGammaCache full_threshold_wls_cache;
+  full_threshold_wls_cache.blocks.resize(1);
+  full_threshold_wls_cache.blocks[0].gamma = stats->NACOV[0];
+  full_threshold_wls_cache.blocks[0].has_full = true;
   auto wls_bounded = magmaan::estimate::fit_ordinal_bounded(
       *pt, *mr, moments, &bounded_wls_cache, {}, wls_plan, *x0,
       magmaan::estimate::Backend::NloptLbfgs, opts);
   auto wls_snlls = magmaan::estimate::fit_ordinal_snlls(
       *pt, *mr, moments, &snlls_wls_cache, wls_plan, *x0,
       magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto wls_snlls_full_thresholds =
+      magmaan::estimate::fit_ordinal_snlls_full_thresholds(
+          *pt, *mr, moments, &full_threshold_wls_cache, wls_plan, *x0,
+          magmaan::estimate::Backend::NloptLbfgs, opts);
   REQUIRE_MESSAGE(wls_bounded.has_value(),
       "bounded WLS failed: "
           << (wls_bounded.has_value() ? "" : wls_bounded.error().detail));
   REQUIRE_MESSAGE(wls_snlls.has_value(),
       "SNLLS WLS failed: "
           << (wls_snlls.has_value() ? "" : wls_snlls.error().detail));
+  REQUIRE_MESSAGE(wls_snlls_full_thresholds.has_value(),
+      "full-threshold SNLLS WLS failed: "
+          << (wls_snlls_full_thresholds.has_value()
+                  ? ""
+                  : wls_snlls_full_thresholds.error().detail));
   CHECK(wls_snlls->fmin ==
         doctest::Approx(wls_bounded->fmin).epsilon(1e-8));
   CHECK((wls_snlls->theta - wls_bounded->theta).cwiseAbs().maxCoeff() <
         3e-5);
+  CHECK(wls_snlls_full_thresholds->fmin ==
+        doctest::Approx(wls_bounded->fmin).epsilon(1e-8));
+  CHECK((wls_snlls_full_thresholds->theta - wls_bounded->theta)
+            .cwiseAbs()
+            .maxCoeff() < 3e-5);
   CHECK(snlls_wls_cache.blocks[0].has_full);
   CHECK(snlls_wls_cache.blocks[0].has_wls_weight);
   CHECK_FALSE(snlls_wls_cache.blocks[0].has_dwls_weight);
+}
+
+TEST_CASE("Ordinal full-threshold SNLLS accepts linear threshold constraints") {
+  std::mt19937 rng(20260602);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(520, 4);
+  const double loading[4] = {0.86, 0.79, 0.72, 0.68};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.55) + (y > 0.45);
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  auto moments = magmaan::data::ordinal_moments_from_stats(*stats);
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | a*t1 + b*t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n"
+      "a + b == 0\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, moments, {});
+  REQUIRE(x0.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 300;
+  opts.ftol = 1e-10;
+  opts.gtol = 1e-7;
+
+  auto bounded = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::DWLS);
+  auto cache =
+      magmaan::data::ordinal_gamma_cache_from_diagonal({stats->NACOV[0].diagonal()});
+  auto snlls = magmaan::estimate::fit_ordinal_snlls_full_thresholds(
+      *pt, *mr, moments, &cache, plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+
+  REQUIRE_MESSAGE(bounded.has_value(),
+      "bounded DWLS failed: "
+          << (bounded.has_value() ? "" : bounded.error().detail));
+  REQUIRE_MESSAGE(snlls.has_value(),
+      "full-threshold SNLLS DWLS failed: "
+          << (snlls.has_value() ? "" : snlls.error().detail));
+  CHECK(snlls->fmin == doctest::Approx(bounded->fmin).epsilon(1e-8));
+  CHECK((snlls->theta - bounded->theta).cwiseAbs().maxCoeff() < 3e-5);
+
+  auto profiled = magmaan::estimate::fit_ordinal_snlls(
+      *pt, *mr, moments, &cache, plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  CHECK_FALSE(profiled.has_value());
 }
 
 TEST_CASE("Polychoric h-score API evaluates predefined caps") {

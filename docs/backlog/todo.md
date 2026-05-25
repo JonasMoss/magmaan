@@ -61,18 +61,21 @@ semantics · **XL** statistical design/research track before implementation.
   same free-threshold delta path. Cache-aware fit-plus-inference and
   inference-only robust DWLS/WLS reporting now reuse a full
   `OrdinalGammaCache` and match the legacy materialized `OrdinalStats` path.
-  All-ordinal delta SNLLS for ULS/DWLS/WLS now reuses the profiled correlation
-  objective, fixes thresholds away before the generic Golub-Pereyra split, and
-  returns estimates in the ordinary prepared ordinal partable coordinate, with
-  WLS using the Schur-complement profiled weight. Fixed threshold rows now stay
-  in the profiled full-moment objective for ULS/DWLS/WLS and are covered for
-  bounded fits plus WLS SNLLS. Threshold-local shared-label / bare-merge
-  equality groups now share threshold-map columns and are covered for bounded
-  fits plus WLS SNLLS. Remaining C++ estimator work on this track:
-  cache-aware mixed continuous/ordinal fitting; general linear threshold maps
-  such as effect-coding-style constraints; theta parameterization in the
-  cache-aware/profiled/SNLLS path; reduced-Gamma robust-inference products that
-  avoid full materialization where possible; and only-when-needed R/API polish.
+  All-ordinal delta SNLLS for ULS/DWLS/WLS now has both the default
+  threshold-profiled path, which fixes thresholds away before the generic
+  Golub-Pereyra split, and a full-threshold path, which keeps the full
+  threshold+correlation moment stack and treats threshold free parameters as
+  Golub-Pereyra linear coordinates. Fixed threshold rows now stay in the
+  profiled full-moment objective for ULS/DWLS/WLS and are covered for bounded
+  fits plus WLS SNLLS. Threshold-local shared-label / bare-merge equality
+  groups now share threshold-map columns and are covered for bounded fits plus
+  WLS SNLLS; general linear threshold constraints are supported by the
+  full-threshold SNLLS path. Remaining C++ estimator work on this track:
+  cache-aware mixed continuous/ordinal fitting; threshold-profiled general
+  linear maps such as effect-coding-style constraints; theta parameterization
+  in the cache-aware/profiled/SNLLS path; reduced-Gamma robust-inference
+  products that avoid full materialization where possible; and only-when-needed
+  R/API polish.
   First benchmark slice landed as `magmaan_ordinal_workspace_bench` plus
   `experiments/06-ordinal-snlls-probe`: it covers all-ordinal delta fit-only
   ULS/DWLS/WLS across free, fixed, and shared threshold models and checks
@@ -157,15 +160,16 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 - **S/M.** Extend the ordinal SNLLS speed pilot
   (`experiments/11-ordinal-snlls-speed`) when the paper needs stronger timing
   evidence. Landed: a native C++ benchmark target comparing full bounded
-  DWLS/WLS, threshold-profiled bounded, and SNLLS all-ordinal delta fits across
-  a Kreiberg-style repeated-measure family, one worked repeated-measure
-  example, and threshold stress cells. The report now separates the
-  full-to-profiled gain from the profiled-to-SNLLS gain; ULS has only the
-  profiled bounded versus SNLLS split because no legacy full direct ULS
-  comparator is wired into the pilot. The first opt pilot uses `q <= 6`; open
-  follow-up is the full `q <= 12` literature-like sweep, optional lavaan
-  context rows, and raw/lazy ordinal statistic construction timing once that
-  builder exists.
+  DWLS/WLS, threshold-profiled bounded, full-threshold SNLLS, and
+  threshold-profiled SNLLS all-ordinal delta fits across a Kreiberg-style
+  repeated-measure family, one worked repeated-measure example, and threshold
+  stress cells. The report now separates the full-to-profiled bounded gain,
+  the full-bounded-to-full-threshold-SNLLS gain, and the incremental threshold
+  profiling gain inside SNLLS; ULS has only the cache-aware comparator paths
+  because no legacy full direct ULS comparator is wired into the pilot. The
+  first opt pilot uses `q <= 6`; open follow-up is the full `q <= 12`
+  literature-like sweep, optional lavaan context rows, and raw/lazy ordinal
+  statistic construction timing once that builder exists.
 - **M/L.** Convergence-note / start-value portfolio paper track
   (`papers/convergence-note/`). The skeleton, local resources, and first R
   simulation factories now exist for the De Jonckere-Rosseel small-sample SEM

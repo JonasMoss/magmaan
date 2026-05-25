@@ -714,6 +714,48 @@ Bounds profile_bounds(const ThresholdProfile& profile, const Bounds& bounds) {
   return out;
 }
 
+fit_expected<std::vector<gmm::GpBlockKind>>
+ordinal_gp_block_kinds(const spec::LatentStructure& pt,
+                       const ThresholdLayout& layout,
+                       const model::ModelEvaluator& ev) {
+  std::vector<gmm::GpBlockKind> out(
+      static_cast<std::size_t>(pt.n_free()), gmm::GpBlockKind::Nonlinear);
+  std::vector<char> is_threshold(static_cast<std::size_t>(pt.n_free()), 0);
+  for (std::size_t b = 0; b < layout.free.size(); ++b) {
+    for (const std::int32_t fr : layout.free[b]) {
+      if (fr <= 0) continue;
+      if (fr > pt.n_free()) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_snlls_full_thresholds: threshold free index out of range"));
+      }
+      is_threshold[static_cast<std::size_t>(fr - 1)] = 1;
+      out[static_cast<std::size_t>(fr - 1)] = gmm::GpBlockKind::Linear;
+    }
+  }
+
+  const auto locs = ev.param_locations();
+  if (static_cast<std::int32_t>(locs.size()) != pt.n_free()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_snlls_full_thresholds: parameter-location count does not match n_free"));
+  }
+  for (std::int32_t k = 0; k < pt.n_free(); ++k) {
+    if (is_threshold[static_cast<std::size_t>(k)] != 0) continue;
+    switch (locs[static_cast<std::size_t>(k)].mat) {
+      case model::MatId::Lambda:
+      case model::MatId::Beta:
+        out[static_cast<std::size_t>(k)] = gmm::GpBlockKind::Nonlinear;
+        break;
+      case model::MatId::Theta:
+      case model::MatId::Psi:
+      case model::MatId::Nu:
+      case model::MatId::Alpha:
+        out[static_cast<std::size_t>(k)] = gmm::GpBlockKind::Linear;
+        break;
+    }
+  }
+  return out;
+}
+
 fit_expected<void>
 ensure_no_unprofiled_equality_constraints(const spec::LatentStructure& pt,
                                           const ThresholdProfile& profile) {
@@ -911,6 +953,110 @@ weight_factors(const data::OrdinalStats& stats, OrdinalWeightKind kind) {
               std::to_string(b)));
     }
     out.push_back(llt.matrixL());
+  }
+  return out;
+}
+
+fit_expected<std::vector<Eigen::MatrixXd>>
+full_weight_factors(const data::OrdinalMoments& moments,
+                    data::OrdinalGammaCache* cache,
+                    const data::OrdinalWeightPlan& plan) {
+  std::vector<Eigen::MatrixXd> out;
+  out.reserve(moments.R.size());
+  if (plan.purpose == data::OrdinalWorkspacePurpose::InferenceOnly) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_snlls_full_thresholds: OrdinalWeightPlan purpose cannot be inference-only"));
+  }
+  const bool fit_plus_inference =
+      plan.purpose == data::OrdinalWorkspacePurpose::FitPlusInference;
+
+  if (plan.estimator == data::OrdinalEstimatorKind::ULS) {
+    if (fit_plus_inference && cache == nullptr) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_snlls_full_thresholds: ULS fit-plus-inference requires an OrdinalGammaCache"));
+    }
+    for (std::size_t b = 0; b < moments.R.size(); ++b) {
+      const Eigen::Index p = moments.R[b].rows();
+      const Eigen::Index mdim =
+          moments.thresholds[b].size() + p * (p - 1) / 2;
+      out.push_back(Eigen::MatrixXd::Identity(mdim, mdim));
+    }
+    return out;
+  }
+
+  if (cache == nullptr) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_snlls_full_thresholds: weighted ordinal fit requires an OrdinalGammaCache"));
+  }
+  if (cache->blocks.size() != moments.R.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_snlls_full_thresholds: OrdinalGammaCache block count mismatch"));
+  }
+
+  if (plan.estimator == data::OrdinalEstimatorKind::WLS) {
+    if (plan.materialization != data::OrdinalGammaMaterialization::Full) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_snlls_full_thresholds: WLS requires full Gamma"));
+    }
+    auto ok = data::ordinal_gamma_cache_ensure_wls_weights(*cache);
+    if (!ok.has_value()) return std::unexpected(post_to_fit(ok.error()));
+    for (std::size_t b = 0; b < moments.R.size(); ++b) {
+      const Eigen::Index p = moments.R[b].rows();
+      const Eigen::Index mdim =
+          moments.thresholds[b].size() + p * (p - 1) / 2;
+      const Eigen::MatrixXd& W = cache->blocks[b].w_wls;
+      if (W.rows() != mdim || W.cols() != mdim || !matrix_all_finite(W)) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_snlls_full_thresholds: WLS weight dimension mismatch in block " +
+                std::to_string(b)));
+      }
+      Eigen::LLT<Eigen::MatrixXd> llt(W);
+      if (llt.info() != Eigen::Success) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_snlls_full_thresholds: WLS weight is not positive definite in block " +
+                std::to_string(b)));
+      }
+      out.push_back(llt.matrixL());
+    }
+    return out;
+  }
+
+  const data::OrdinalGammaMaterialization expected =
+      fit_plus_inference ? data::OrdinalGammaMaterialization::Full
+                         : data::OrdinalGammaMaterialization::Diagonal;
+  if (plan.materialization != expected) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        fit_plus_inference
+            ? "fit_ordinal_snlls_full_thresholds: DWLS fit-plus-inference requires full Gamma"
+            : "fit_ordinal_snlls_full_thresholds: DWLS fit-only requires diagonal Gamma"));
+  }
+  post_expected<void> ok =
+      fit_plus_inference ? data::ordinal_gamma_cache_ensure_dwls_weights(*cache)
+                         : data::ordinal_gamma_cache_ensure_diagonal(*cache);
+  if (!ok.has_value()) return std::unexpected(post_to_fit(ok.error()));
+  for (std::size_t b = 0; b < moments.R.size(); ++b) {
+    const Eigen::Index p = moments.R[b].rows();
+    const Eigen::Index mdim =
+        moments.thresholds[b].size() + p * (p - 1) / 2;
+    const Eigen::VectorXd diagonal = fit_plus_inference
+                                         ? cache->blocks[b].w_dwls.diagonal()
+                                         : cache->blocks[b].diagonal;
+    if (diagonal.size() != mdim || !vector_all_finite(diagonal)) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_snlls_full_thresholds: DWLS diagonal dimension mismatch in block " +
+              std::to_string(b)));
+    }
+    Eigen::MatrixXd factor = Eigen::MatrixXd::Zero(mdim, mdim);
+    for (Eigen::Index k = 0; k < mdim; ++k) {
+      const double v = fit_plus_inference ? diagonal(k) : 1.0 / diagonal(k);
+      if (!std::isfinite(v) || v <= 0.0) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_snlls_full_thresholds: DWLS diagonal is not positive in block " +
+                std::to_string(b)));
+      }
+      factor(k, k) = std::sqrt(v);
+    }
+    out.push_back(std::move(factor));
   }
   return out;
 }
@@ -3334,7 +3480,146 @@ fit_ordinal_snlls(spec::LatentStructure pt,
     return std::unexpected(theta_final_or.error());
   }
   return Estimates{std::move(*theta_final_or), fmin, iterations, f_evals,
-                   g_evals, status, grad_inf_norm, std::move(audit)};
+                   g_evals, status, grad_inf_norm, std::move(audit), {},
+                   gp_or->n_nonlinear, gp_or->n_linear};
+}
+
+fit_expected<Estimates>
+fit_ordinal_snlls_full_thresholds(spec::LatentStructure pt,
+                                  const model::MatrixRep& rep,
+                                  const data::OrdinalMoments& moments,
+                                  data::OrdinalGammaCache* gamma_cache,
+                                  data::OrdinalWeightPlan plan,
+                                  const Eigen::VectorXd& x0,
+                                  Backend backend,
+                                  OptimOptions opts) {
+  const OrdinalParameterization parameterization =
+      to_estimate_parameterization(plan.parameterization);
+  if (parameterization != OrdinalParameterization::Delta) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_snlls_full_thresholds: currently supports delta parameterization only"));
+  }
+  if (auto v = validate_moments(moments, rep); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+
+  data::OrdinalStats stats = stats_adapter(moments);
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(p.error());
+  }
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(layout_or.error());
+  const ThresholdLayout& layout = *layout_or;
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "fit_ordinal_snlls_full_thresholds: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto ev = std::move(*ev_or);
+
+  if (x0.size() != pt.n_free()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "fit_ordinal_snlls_full_thresholds: x0 size (" +
+            std::to_string(x0.size()) + ") != prepared partable n_free (" +
+            std::to_string(pt.n_free()) + ")"));
+  }
+
+  auto factors_or = full_weight_factors(moments, gamma_cache, plan);
+  if (!factors_or.has_value()) return std::unexpected(factors_or.error());
+  const auto& factors = *factors_or;
+
+  auto block_kinds_or = ordinal_gp_block_kinds(pt, layout, ev);
+  if (!block_kinds_or.has_value()) return std::unexpected(block_kinds_or.error());
+  const auto& block_kinds = *block_kinds_or;
+
+  auto eval0 = ev.evaluate(x0, true, false);
+  if (!eval0.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "fit_ordinal_snlls_full_thresholds: start evaluation failed: " +
+            eval0.error().detail));
+  }
+  auto r0 = ordinal_residuals(stats, layout, eval0->moments, factors, x0,
+                              parameterization);
+  if (!r0.has_value()) return std::unexpected(r0.error());
+
+  optim::GmmProblem base;
+  base.n_resid = r0->size();
+  base.n_param = x0.size();
+  base.expand = [](const Eigen::VectorXd& x) { return x; };
+  base.r = [&](const Eigen::VectorXd& theta) -> fit_expected<Eigen::VectorXd> {
+    auto eval = ev.evaluate(theta, false, false);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "fit_ordinal_snlls_full_thresholds: evaluate failed: " +
+              eval.error().detail));
+    }
+    return ordinal_residuals(stats, layout, eval->moments, factors, theta,
+                             parameterization);
+  };
+  base.J = [&](const Eigen::VectorXd& theta) -> fit_expected<Eigen::MatrixXd> {
+    auto eval = ev.evaluate(theta, true, false);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "fit_ordinal_snlls_full_thresholds: evaluate failed: " +
+              eval.error().detail));
+    }
+    return ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
+                            factors, theta, parameterization);
+  };
+  base.eval = [&](const Eigen::VectorXd& theta)
+      -> fit_expected<optim::LsEvaluation> {
+    auto eval = ev.evaluate(theta, true, false);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "fit_ordinal_snlls_full_thresholds: evaluate failed: " +
+              eval.error().detail));
+    }
+    auto r = ordinal_residuals(stats, layout, eval->moments, factors, theta,
+                               parameterization);
+    if (!r.has_value()) return std::unexpected(r.error());
+    auto J = ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
+                              factors, theta, parameterization);
+    if (!J.has_value()) return std::unexpected(J.error());
+    return optim::LsEvaluation{std::move(*r), std::move(*J)};
+  };
+
+  auto gp_or = gmm::gp(base, pt, ev, x0, block_kinds);
+  if (!gp_or.has_value()) return std::unexpected(gp_or.error());
+  const optim::GmmProblem& prob = gp_or->problem;
+
+  Eigen::VectorXd theta_hat;
+  double fmin = 0.0;
+  int iterations = 0;
+  int f_evals = 0;
+  int g_evals = 0;
+  optim::OptimStatus status = optim::OptimStatus::Converged;
+  double grad_inf_norm = -1.0;
+  optim::TerminalAudit audit;
+
+  if (prob.n_param == 0) {
+    auto r = prob.r(Eigen::VectorXd(0));
+    if (!r.has_value()) return std::unexpected(r.error());
+    theta_hat = prob.expand(Eigen::VectorXd(0));
+    fmin = r->squaredNorm();
+  } else {
+    auto out = run_ordinal_ls(prob, gp_or->beta0, Bounds{}, backend, opts);
+    if (!out.has_value()) return std::unexpected(out.error());
+    theta_hat = prob.expand(out->x);
+    fmin = 2.0 * out->fmin;
+    iterations = out->iterations;
+    f_evals = out->f_evals;
+    g_evals = out->g_evals;
+    status = out->status;
+    grad_inf_norm = out->grad_inf_norm;
+    audit = std::move(out->audit);
+  }
+
+  return Estimates{std::move(theta_hat), fmin, iterations, f_evals, g_evals,
+                   status, grad_inf_norm, std::move(audit), {},
+                   gp_or->n_nonlinear, gp_or->n_linear};
 }
 
 fit_expected<Estimates>

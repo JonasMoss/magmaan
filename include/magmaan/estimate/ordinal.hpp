@@ -246,6 +246,20 @@ fit_ordinal_snlls(spec::LatentStructure pt,
                   Backend backend = Backend::NloptLbfgs,
                   optim::OptimOptions opts = {});
 
+// Golub-Pereyra profiled all-ordinal delta LS over the full threshold +
+// correlation moment objective. Thresholds remain in the LS moment stack and
+// enter the GP linear block with the other conditionally-linear parameters,
+// so linear threshold constraints can be handled by the GP constraint basis.
+fit_expected<Estimates>
+fit_ordinal_snlls_full_thresholds(spec::LatentStructure pt,
+                                  const model::MatrixRep& rep,
+                                  const data::OrdinalMoments& moments,
+                                  data::OrdinalGammaCache* gamma_cache,
+                                  data::OrdinalWeightPlan plan,
+                                  const Eigen::VectorXd& x0,
+                                  Backend backend = Backend::NloptLbfgs,
+                                  optim::OptimOptions opts = {});
+
 fit_expected<Estimates>
 fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           const model::MatrixRep& rep,

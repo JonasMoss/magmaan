@@ -160,9 +160,10 @@ write_metadata(
   values = list(
     experiment = "11-ordinal-snlls-speed",
     question = paste(
-      "Compare full bounded, threshold-profiled bounded, and SNLLS",
-      "all-ordinal delta fit speed across a Kreiberg-style repeated-measure",
-      "family, one worked example, and threshold stress cells."
+      "Compare full bounded, threshold-profiled bounded, full-threshold",
+      "SNLLS, and threshold-profiled SNLLS all-ordinal delta fit speed",
+      "across a Kreiberg-style repeated-measure family, one worked example,",
+      "and threshold stress cells."
     ),
     preset = args$preset,
     smoke = args$smoke,
