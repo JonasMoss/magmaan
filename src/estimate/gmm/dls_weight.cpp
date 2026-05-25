@@ -159,24 +159,54 @@ dls_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
   for (std::size_t b = 0; b < samp.S.size(); ++b) {
     const Eigen::MatrixXd& S = samp.S[b];
     const Eigen::MatrixXd& X = raw.X[b];
-    const Eigen::Index p = S.rows();
+    const Eigen::Index p     = S.rows();
+    const Eigen::Index pstar = p * (p + 1) / 2;
 
-    // Sinv — the normal-theory weight on the mean block.
-    Eigen::LLT<Eigen::MatrixXd> s_llt(S);
-    if (s_llt.info() != Eigen::Success) {
-      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSample,
-          "dls_weight: block " + std::to_string(b) +
-          " sample covariance is not positive definite"));
-    }
-    const Eigen::MatrixXd Sinv = s_llt.solve(Eigen::MatrixXd::Identity(p, p));
-
-    // Γ_NT (from S) and Γ_ADF (from raw data) over vech(cov); mix them.
+    // Γ_NT (from S) — needed in both meanstructure branches below.
     auto g_nt = data::gamma_nt(S);
     if (!g_nt.has_value()) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "dls_weight: block " + std::to_string(b) + ": " +
           g_nt.error().detail));
     }
+
+    if (has_means) {
+      // Browne-1984 stacked NACOV for `s = [m̄; vech(S)]`. The NT side has
+      // a zero mean–vech cross-block (third moments vanish under MVN) so
+      // Γ_NT_full is the block diagonal blockdiag(S, Γ_NT). The ADF side
+      // is the full empirical stacked NACOV — its cross-block carries
+      // the population third moments. Interpolate at the matrix level
+      // and invert the whole (p+p*) × (p+p*) result; at a = 0 this
+      // collapses to W = blockdiag(S⁻¹, Γ_NT⁻¹) bit-identically to the
+      // old per-block path.
+      Eigen::MatrixXd gamma_nt_full =
+          Eigen::MatrixXd::Zero(p + pstar, p + pstar);
+      gamma_nt_full.topLeftCorner(p, p)             = S;
+      gamma_nt_full.bottomRightCorner(pstar, pstar) = *g_nt;
+
+      auto g_adf_full = data::empirical_gamma_with_means(X);
+      if (!g_adf_full.has_value()) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "dls_weight: block " + std::to_string(b) + ": " +
+            g_adf_full.error().detail));
+      }
+      const Eigen::MatrixXd gamma_dls_full =
+          (1.0 - opts.a) * gamma_nt_full + opts.a * (*g_adf_full);
+
+      Eigen::LLT<Eigen::MatrixXd> gf_llt(gamma_dls_full);
+      if (gf_llt.info() != Eigen::Success) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "dls_weight: block " + std::to_string(b) +
+            " stacked Γ is not positive definite (the raw data may have too "
+            "few rows for the ADF weight with meanstructure)"));
+      }
+      W.push_back(gf_llt.solve(
+          Eigen::MatrixXd::Identity(p + pstar, p + pstar)));
+      continue;
+    }
+
+    // Vech-only path (no meanstructure) — unchanged from prior behaviour:
+    // mix the two p* × p* Γ matrices and invert.
     auto g_adf = data::empirical_gamma(X);
     if (!g_adf.has_value()) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -186,7 +216,7 @@ dls_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
     const Eigen::MatrixXd gamma_dls =
         (1.0 - opts.a) * (*g_nt) + opts.a * (*g_adf);
 
-    // W_DLS,cov = Γ_DLS⁻¹. At a = 0 this equals gmm::normal_theory_weight's
+    // W_DLS = Γ_DLS⁻¹. At a = 0 this equals gmm::normal_theory_weight's
     // covariance block (its 0.5 scaling cancels the symmetric-basis factor 2).
     Eigen::LLT<Eigen::MatrixXd> g_llt(gamma_dls);
     if (g_llt.info() != Eigen::Success) {
@@ -195,22 +225,7 @@ dls_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
           " mixed Γ is not positive definite (the raw data may have too few "
           "rows for the ADF weight)"));
     }
-    const Eigen::Index pstar = gamma_dls.rows();
-    const Eigen::MatrixXd Wcov =
-        g_llt.solve(Eigen::MatrixXd::Identity(pstar, pstar));
-
-    // Assemble the [mean ; vech(cov)] block. The mean block carries the
-    // normal-theory GLS weight regardless of `a` (Browne DLS is
-    // covariance-only); the mean/covariance cross-block stays zero.
-    const Eigen::Index dim = (has_means ? p : 0) + pstar;
-    Eigen::MatrixXd Wb = Eigen::MatrixXd::Zero(dim, dim);
-    Eigen::Index off = 0;
-    if (has_means) {
-      Wb.block(0, 0, p, p) = Sinv;
-      off = p;
-    }
-    Wb.block(off, off, pstar, pstar) = Wcov;
-    W.push_back(std::move(Wb));
+    W.push_back(g_llt.solve(Eigen::MatrixXd::Identity(pstar, pstar)));
   }
   return W;
 }

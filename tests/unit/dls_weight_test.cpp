@@ -212,6 +212,80 @@ TEST_CASE("dls_weight: a=1 covariance block is the ADF (empirical) weight") {
 // Intermediate a: the covariance block inverts to the convex blend of Γ.
 // ============================================================================
 
+TEST_CASE("dls_weight: a=1 with meanstructure reproduces Browne-1984 full NACOV") {
+  // With meanstructure the moment vector is [m̄ ; vech(S)] and Browne-1984
+  // sets W = Γ̂_full⁻¹ where Γ̂_full is the stacked empirical NACOV
+  // (including the third-moment cross-block). Inverting the returned
+  // weight should recover exactly that stacked NACOV.
+  auto raw = make_raw(400);
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto m = build_model("f =~ x1 + x2 + x3\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1", true);
+  auto ev = ModelEvaluator::build(m.pt, m.rep);
+  REQUIRE(ev.has_value());
+  auto x0 = est::simple_start_values(m.pt, m.rep, *samp, {});
+  REQUIRE(x0.has_value());
+
+  auto dls = dls_weight(*ev, *samp, raw, *x0, {1.0});
+  REQUIRE(dls.has_value());
+
+  auto g_adf_full = magmaan::data::empirical_gamma_with_means(raw.X[0]);
+  REQUIRE(g_adf_full.has_value());
+
+  Eigen::LLT<Eigen::MatrixXd> llt(dls->at(0));
+  REQUIRE(llt.info() == Eigen::Success);
+  const Eigen::MatrixXd gamma_back =
+      llt.solve(Eigen::MatrixXd::Identity(dls->at(0).rows(),
+                                          dls->at(0).cols()));
+  CHECK((gamma_back - *g_adf_full).cwiseAbs().maxCoeff() < 1e-8);
+}
+
+TEST_CASE("dls_weight: intermediate a with meanstructure interpolates the "
+          "full stacked NACOV") {
+  // Confirms the matrix-level interpolation:
+  //   Γ_DLS_full = (1-a)·blockdiag(S, Γ_NT) + a·Γ̂_ADF_full
+  // Inverting the returned W must recover that blend, cross-block and all.
+  auto raw = make_raw(400);
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto m = build_model("f =~ x1 + x2 + x3\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1", true);
+  auto ev = ModelEvaluator::build(m.pt, m.rep);
+  REQUIRE(ev.has_value());
+  auto x0 = est::simple_start_values(m.pt, m.rep, *samp, {});
+  REQUIRE(x0.has_value());
+
+  const double a = 0.35;
+  auto dls = dls_weight(*ev, *samp, raw, *x0, {a});
+  REQUIRE(dls.has_value());
+
+  auto g_nt = magmaan::data::gamma_nt(samp->S[0]);
+  auto g_adf_full = magmaan::data::empirical_gamma_with_means(raw.X[0]);
+  REQUIRE(g_nt.has_value());
+  REQUIRE(g_adf_full.has_value());
+
+  const Eigen::Index p = samp->S[0].rows();
+  const Eigen::Index pstar = p * (p + 1) / 2;
+  Eigen::MatrixXd gamma_nt_full =
+      Eigen::MatrixXd::Zero(p + pstar, p + pstar);
+  gamma_nt_full.topLeftCorner(p, p)             = samp->S[0];
+  gamma_nt_full.bottomRightCorner(pstar, pstar) = *g_nt;
+  const Eigen::MatrixXd gamma_mix =
+      (1.0 - a) * gamma_nt_full + a * (*g_adf_full);
+
+  Eigen::LLT<Eigen::MatrixXd> llt(dls->at(0));
+  REQUIRE(llt.info() == Eigen::Success);
+  const Eigen::MatrixXd gamma_back =
+      llt.solve(Eigen::MatrixXd::Identity(dls->at(0).rows(),
+                                          dls->at(0).cols()));
+  CHECK((gamma_back - gamma_mix).cwiseAbs().maxCoeff() < 1e-8);
+
+  // Sanity: the cross-block of gamma_back is a·(empirical cross), so it's
+  // a strictly positive fraction of the empirical cross-block.
+  const double cb_back = gamma_back.topRightCorner(p, pstar).cwiseAbs().maxCoeff();
+  const double cb_emp  = g_adf_full->topRightCorner(p, pstar).cwiseAbs().maxCoeff();
+  CHECK(cb_back == doctest::Approx(a * cb_emp).epsilon(1e-8));
+}
+
 TEST_CASE("dls_weight: intermediate a mixes the two Gamma matrices") {
   auto raw = make_raw(400);
   auto samp = magmaan::data::sample_stats_from_raw(raw);

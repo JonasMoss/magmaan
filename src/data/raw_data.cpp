@@ -20,6 +20,51 @@ PostError make_err(PostError::Kind k, std::string detail) {
 
 using detail::vech_lower;
 
+// Shared Zc-casewise machinery. Both `empirical_gamma` (vech-only ADF
+// fourth-moment matrix) and `empirical_gamma_with_means` (full stacked
+// NACOV including the mean–vech cross-block, per Browne 1984 with
+// meanstructure) need the same per-row centered moments. Computing them
+// once here keeps the casewise pipeline single-sourced — any future change
+// to the centering convention propagates to both consumers automatically.
+struct CenteredMoments {
+  Eigen::MatrixXd Xc;   // (n × p)     row i = x_i − m̄
+  Eigen::MatrixXd Dc;   // (n × p*)    row i = vech((x_i − m̄)(x_i − m̄)ᵀ) − vech(S_N)
+};
+
+post_expected<CenteredMoments>
+build_centered_moments(const Eigen::Ref<const Eigen::MatrixXd>& X,
+                       const char* fname) {
+  const Eigen::Index n = X.rows();
+  const Eigen::Index p = X.cols();
+  if (n < 2) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(fname) + ": need at least 2 observations"));
+  }
+  if (p == 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(fname) + ": data matrix has 0 columns"));
+  }
+  const Eigen::Index pstar = p * (p + 1) / 2;
+
+  CenteredMoments cm;
+  const Eigen::VectorXd mean = X.colwise().mean();
+  cm.Xc = X.rowwise() - mean.transpose();
+
+  // For each row build d_i = vech(Xc.row(i) · Xc.row(i)ᵀ). Subtract the
+  // sample mean of D rows to match Browne 1984's empirical NACOV — that
+  // mean equals vech(S_N) by construction, so the centered Dc carries the
+  // moment-deviation rows (1/n)·Σ Dc·Dcᵀ = Γ̂_ADF integrates to.
+  cm.Dc.resize(n, pstar);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const Eigen::VectorXd xi = cm.Xc.row(i).transpose();
+    const Eigen::MatrixXd outer = xi * xi.transpose();
+    cm.Dc.row(i) = vech_lower(outer).transpose();
+  }
+  const Eigen::VectorXd dbar = cm.Dc.colwise().mean();
+  cm.Dc.rowwise() -= dbar.transpose();
+  return cm;
+}
+
 }  // namespace
 
 post_expected<SampleStats>
@@ -65,39 +110,39 @@ sample_stats_from_raw(const RawData& raw) {
 
 post_expected<Eigen::MatrixXd>
 empirical_gamma(const Eigen::Ref<const Eigen::MatrixXd>& X) {
+  auto cm = build_centered_moments(X, "empirical_gamma");
+  if (!cm) return std::unexpected(cm.error());
+  const double inv_n = 1.0 / static_cast<double>(X.rows());
+  return Eigen::MatrixXd(cm->Dc.transpose() * cm->Dc * inv_n);
+}
+
+post_expected<Eigen::MatrixXd>
+empirical_gamma_with_means(const Eigen::Ref<const Eigen::MatrixXd>& X) {
+  auto cm = build_centered_moments(X, "empirical_gamma_with_means");
+  if (!cm) return std::unexpected(cm.error());
   const Eigen::Index n = X.rows();
   const Eigen::Index p = X.cols();
-  if (n < 2) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "empirical_gamma: need at least 2 observations"));
-  }
-  if (p == 0) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "empirical_gamma: data matrix has 0 columns"));
-  }
   const Eigen::Index pstar = p * (p + 1) / 2;
+  const double inv_n = 1.0 / static_cast<double>(n);
 
-  // Centered data and N-divisor sample cov.
-  const Eigen::VectorXd mean = X.colwise().mean();
-  const Eigen::MatrixXd Xc   = X.rowwise() - mean.transpose();
-  const Eigen::MatrixXd S    = (Xc.transpose() * Xc) / static_cast<double>(n);
-  const Eigen::VectorXd s_vech = vech_lower(S);
-
-  // For each row build d_i = vech(x_i x_iᵀ) (centered already, so
-  // x_i is Xc.row(i)). Accumulate Γ̂ = (1/n) Σ (d_i - vech(S))(d_i - vech(S))ᵀ.
-  Eigen::MatrixXd D(n, pstar);   // row i = d_i
-  for (Eigen::Index i = 0; i < n; ++i) {
-    const Eigen::VectorXd xi = Xc.row(i).transpose();
-    const Eigen::MatrixXd outer = xi * xi.transpose();
-    D.row(i) = vech_lower(outer).transpose();
-  }
-  // Subtract sample mean of D rows — note this equals vech(S) by
-  // construction, so equivalent to subtracting s_vech. Use the
-  // empirical mean of D to keep the formula numerically clean
-  // (avoids drift if S has slight asymmetry).
-  const Eigen::VectorXd dbar = D.colwise().mean();
-  D.rowwise() -= dbar.transpose();
-  Eigen::MatrixXd Gamma = (D.transpose() * D) / static_cast<double>(n);
+  // Stacked NACOV per Browne 1984 with meanstructure (matches lavaan's
+  // `lav_samplestats_gamma.R:374-407`): rows of the unstacked Z matrix
+  // are [y_i ; vech((y_i − ȳ)(y_i − ȳ)ᵀ)]. After colMeans subtraction,
+  // Zc = [Xc ; Dc] (Xc is centered y, Dc is centered vech outer product).
+  // The four sub-blocks of (1/n)·Zcᵀ·Zc:
+  //   top-left     : (1/n)·Xcᵀ·Xc     = S_N (N-divisor sample cov)
+  //   top-right    : (1/n)·Xcᵀ·Dc     = empirical third-moment cross-block
+  //   bottom-left  : transpose of top-right
+  //   bottom-right : (1/n)·Dcᵀ·Dc     = Γ̂_ADF (the existing `empirical_gamma`)
+  //
+  // Under multivariate normality the cross-block vanishes (third moments
+  // = 0 by symmetry); under any skewed distribution it carries the
+  // population third moments that lavaan plugs in for proper ADF/WLS.
+  Eigen::MatrixXd Gamma(p + pstar, p + pstar);
+  Gamma.topLeftCorner(p, p)            = cm->Xc.transpose() * cm->Xc * inv_n;
+  Gamma.topRightCorner(p, pstar)       = cm->Xc.transpose() * cm->Dc * inv_n;
+  Gamma.bottomLeftCorner(pstar, p)     = Gamma.topRightCorner(p, pstar).transpose();
+  Gamma.bottomRightCorner(pstar, pstar) = cm->Dc.transpose() * cm->Dc * inv_n;
   return Gamma;
 }
 

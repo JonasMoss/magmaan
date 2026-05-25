@@ -74,6 +74,33 @@ sample_stats_from_raw(const RawData& raw);
 post_expected<Eigen::MatrixXd>
 empirical_gamma(const Eigen::Ref<const Eigen::MatrixXd>& X);
 
+// Full stacked NACOV including the mean–vech cross-block — Browne 1984's
+// ADF/WLS weight matrix under meanstructure. The empirical analog of
+//
+//   z_i  = [ y_i ; vech((y_i − ȳ)(y_i − ȳ)ᵀ) ]
+//   Γ̂    = (1/n) · Σ_i (z_i − z̄)(z_i − z̄)ᵀ
+//
+// laid out as a single (p+p*) × (p+p*) matrix:
+//
+//   ┌ (1/n) Σ (y_i − ȳ)(y_i − ȳ)ᵀ      (1/n) Σ (y_i − ȳ)(D_i − D̄)ᵀ   ┐
+//   │      = S_N                                = third-moment cross    │
+//   │ (1/n) Σ (D_i − D̄)(y_i − ȳ)ᵀ      (1/n) Σ (D_i − D̄)(D_i − D̄)ᵀ │
+//   │      = cross.transpose()                  = `empirical_gamma(X)`  │
+//   └                                                                   ┘
+//
+// where D_i = vech((y_i − ȳ)(y_i − ȳ)ᵀ). Matches lavaan's
+// `lav_samplestats_gamma.R:374-407` with `gamma_n_minus_one = FALSE`.
+// Under multivariate normality the cross-block vanishes (third moments
+// = 0); under any skewed distribution it carries the population third
+// moments that proper Browne-1984 ADF requires. Use this whenever the
+// stacked sample-moment vector includes means; the standalone
+// `empirical_gamma(X)` is only valid when the moment vector is vech(S)
+// alone (or under normality).
+//
+// Returns `PostError::NumericIssue` if `X` has fewer than 2 rows.
+post_expected<Eigen::MatrixXd>
+empirical_gamma_with_means(const Eigen::Ref<const Eigen::MatrixXd>& X);
+
 // Normal-theory ACOV of vech(S) computed from Σ alone:
 //
 //   Γ_NT[ (i,j), (k,l) ] = σ_ik · σ_jl + σ_il · σ_jk     (i ≤ j, k ≤ l)
