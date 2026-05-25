@@ -13,16 +13,17 @@ Each paper's AGENTS.md declares a `Profile:` line. Three options:
 
 | Profile | Target journals | Math | Theorems | Default body (pages) | Brief slot |
 |---|---|---|---|---|---|
-| **Math** | Psychometrika, BJMSP | dense | yes, in body | **17–22** | Short Note, <10 pp |
-| **Applied** | SEM, MBR | moderate, in displays | rare | **10–14** | Notes & Comments, <10 pp |
+| **Math** | Psychometrika, BJMSP, JEBS | dense | yes, in body | **17–22** | Short Note, <10 pp |
+| **Applied** | SEM, MBR, Psychological Methods (also EPM for measurement work) | moderate, in displays | rare | **10–14** | Notes & Comments, <10 pp |
 | **Tool** | BRM | light, tutorial OK | almost never | **11–14** | Short Report, <10 pp |
 
 Pages are total published pages (manuscript including refs), from a
 2020–2025 OpenAlex pull of articles ≥ 5 pages across the listed journals.
 Targets are the **lower quartile** of each journal cluster, on the
-default-aim-short rule. Real medians: Psychometrika 26, BJMSP 25, MBR 19,
-SEM 14, BRM 18. A paper may overshoot when there is content to justify it;
-it should not overshoot by default.
+default-aim-short rule. Real medians: Psychometrika 26, BJMSP 25, JEBS 29
+(the longest cluster), MBR 19, Psychological Methods 19, EPM 25, SEM 14,
+BRM 18. A paper may overshoot when there is content to justify it; it
+should not overshoot by default.
 
 What each profile expects beyond length:
 
