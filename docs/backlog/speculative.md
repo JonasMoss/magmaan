@@ -9,25 +9,16 @@ failure) appears.
 
 ## Pairwise covariance / missing-data side
 
-### Inference-side pairwise NT reducer
+### ~~Inference-side pairwise NT reducer~~ — landed
 
-`robust::reduced_gamma_nt_pairwise(uf, raw, pw)` — same Γ_NT^pw machinery
-as the GLS-side `data::gamma_nt_pairwise`, but projects through the
-U-factor `B` to a df × df matrix instead of materializing the full
-p* × p*. Slots into the existing `reduced_gamma_*` family and feeds the
-model-implied-meat Satorra-Bentler / mean-variance-adjusted /
-scaled-shifted chi-square corrections on pairwise-GLS fits.
-
-**Alternative already available.** Pass the empirical influence matrix
-`Ψ̂` from `robust::pairwise_casewise_contributions(raw, pw, include_means)`
-into `reduced_gamma_sample(uf, Ψ̂, n)`. That gives the same SB / MV / SS
-corrections with the *empirical* meat — the missing-data MLR / Huber-White
-corner, which is what most incomplete-data robust SEM work reports
-anyway.
-
-**Build if.** A specific paper or comparator row needs model-implied-meat
-SB chi-square on pairwise data (e.g. `pairwise-robust-sem` wants the
-NT-meat row in addition to the empirical-meat row).
+`robust::reduced_gamma_nt_pairwise(uf, raw, pw)` is now in
+`include/magmaan/robust/robust.hpp`, with a sibling `WeightMoments::Pairwise`
+value and the `build_u_factor(pt, rep, samp, est, raw, pw, spec)` overload
+that builds the U-factor with `(Γ_NT^pw)⁻¹` as the bread. R surface:
+`magmaan_core$robust_build_u_factor_pairwise(fit, X, mask, bread)` and
+`magmaan_core$robust_reduced_gamma_nt_pairwise(uf, X, mask)`. Tests in
+`tests/unit/pairwise_inference_test.cpp`; R demo at
+`r-package/examples/pairwise_robust_se.R`.
 
 ### Pairwise μ ACOV for `fit_gls_pairwise` mean-structure models
 

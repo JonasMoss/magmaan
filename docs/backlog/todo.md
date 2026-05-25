@@ -151,10 +151,15 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   df > 0 so the weight bites), n ∈ {200, 500, 1000, 2000}, MCAR rates
   {10%, 25%, 40%} plus one MAR design. Comparators: Σ-only-weight GLS,
   Γ_NT^pw GLS, complete-data ML oracle, FIML. Outcomes: per-parameter MSE,
-  wall time, divergence-from-truth ratio. Remaining inference-side
-  Γ_NT^pw plumbing, pairwise μ ACOV, and pairwise Browne-unbiased live in
-  [`speculative.md`](speculative.md) — none committed until a downstream
-  consumer needs them.
+  wall time, divergence-from-truth ratio. Now landed at
+  `experiments/08-pairwise-gls-efficiency/` (with MAR, FIML oracle) and
+  `experiments/09-pairwise-fit-speed/`. Inference-side Γ_NT^pw plumbing
+  has also landed: `WeightMoments::Pairwise` bread in `build_u_factor`,
+  `robust::reduced_gamma_nt_pairwise` meat reducer, and the matching R
+  surface — see `tests/unit/pairwise_inference_test.cpp` and
+  `r-package/examples/pairwise_robust_se.R` for the {bread × meat} 2×2
+  validation. Remaining open items (pairwise μ ACOV, pairwise
+  Browne-unbiased) stay in [`speculative.md`](speculative.md).
 - **M.** Track objective value, gradient norm, iteration count, wall time, and
   agreement with lavaan-backed estimates where applicable.
 - **S/M.** Extend the ordinal SNLLS speed pilot

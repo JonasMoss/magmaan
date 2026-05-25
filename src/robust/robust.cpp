@@ -359,11 +359,13 @@ struct UFactorShared {
 };
 
 post_expected<UFactorShared>
-build_u_factor_shared(spec::LatentStructure        pt,
-                      const model::MatrixRep&   rep,
-                      const SampleStats&        samp,
-                      const Estimates&          est,
-                      WeightMoments             moments) {
+build_u_factor_shared(spec::LatentStructure                       pt,
+                      const model::MatrixRep&                     rep,
+                      const SampleStats&                          samp,
+                      const Estimates&                            est,
+                      WeightMoments                               moments,
+                      const RawData*                              raw = nullptr,
+                      const data::PairwiseSampleStats*            pw  = nullptr) {
   auto ev_or = prepare_evaluator(pt, rep, samp, est);
   if (!ev_or.has_value()) return std::unexpected(ev_or.error());
   auto& ev = *ev_or;
@@ -402,6 +404,31 @@ build_u_factor_shared(spec::LatentStructure        pt,
   // evaluator's internal Σ̂ buffer is overwritten by later sigma() calls, and
   // `reduced_gamma_nt` needs whichever moments matched the bread. With mean
   // structure, `llt_M` (= LLT(M_b)) is the μ-block's Cholesky.
+  // For the Pairwise bread: materialise Γ_NT^pw once for all blocks.
+  // Validate raw + pw consistency with samp up-front so per-block errors
+  // surface together. The μ-block weight stays at LLT(Σ̂_b) — see header
+  // doc-comment.
+  std::vector<Eigen::MatrixXd> gamma_nt_pw_blocks;
+  if (moments == WeightMoments::Pairwise) {
+    if (raw == nullptr || pw == nullptr) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "build_u_factor: WeightMoments::Pairwise requires non-null raw "
+          "and PairwiseSampleStats arguments"));
+    }
+    if (raw->X.size() != samp.S.size() || pw->S.size() != samp.S.size()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "build_u_factor: WeightMoments::Pairwise raw/pw block count "
+          "must match SampleStats"));
+    }
+    auto gnt_pw_or = data::gamma_nt_pairwise(*raw, *pw);
+    if (!gnt_pw_or.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "build_u_factor: gamma_nt_pairwise failed: " +
+          gnt_pw_or.error().detail));
+    }
+    gamma_nt_pw_blocks = std::move(*gnt_pw_or);
+  }
+
   UFactorShared sh;
   UFactor& uf = sh.base;
   uf.moments    = moments;
@@ -423,15 +450,29 @@ build_u_factor_shared(spec::LatentStructure        pt,
     blk.n_obs      = static_cast<Eigen::Index>(samp.n_obs[b]);
     blk.Sigma_hat  = im_or->sigma[b];
     blk.S          = samp.S[b];
+    // M_moments_for_mu: the μ-block of the bread always uses Σ̂_b (Structured)
+    // / S_b (Unstructured); for Pairwise we fall back to Σ̂_b for the μ-block,
+    // consistent with `fit_gls_pairwise`'s convention.
     const Eigen::MatrixXd& W_moments =
-        (moments == WeightMoments::Structured) ? blk.Sigma_hat : blk.S;
-    auto G_or = gamma_nt(W_moments);
-    if (!G_or.has_value()) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "build_u_factor: gamma_nt failed for block " + std::to_string(b) +
-              ": " + G_or.error().detail));
+        (moments == WeightMoments::Unstructured) ? blk.S : blk.Sigma_hat;
+    Eigen::MatrixXd G_b;
+    if (moments == WeightMoments::Pairwise) {
+      G_b = std::move(gamma_nt_pw_blocks[b]);
+      if (G_b.rows() != pstar || G_b.cols() != pstar) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "build_u_factor: gamma_nt_pairwise returned wrong shape in "
+            "block " + std::to_string(b)));
+      }
+    } else {
+      auto G_or = gamma_nt(W_moments);
+      if (!G_or.has_value()) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "build_u_factor: gamma_nt failed for block " +
+            std::to_string(b) + ": " + G_or.error().detail));
+      }
+      G_b = std::move(*G_or);
     }
-    blk.llt_gamma_nt = Eigen::LLT<Eigen::MatrixXd>(*G_or);
+    blk.llt_gamma_nt = Eigen::LLT<Eigen::MatrixXd>(G_b);
     if (blk.llt_gamma_nt.info() != Eigen::Success) {
       return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
           "build_u_factor: Γ_NT(weight moments) not positive definite in "
@@ -617,7 +658,37 @@ build_u_factor(spec::LatentStructure        pt,
                const SampleStats&        samp,
                const Estimates&          est,
                InferenceSpec             spec) {
+  if (spec.moments == WeightMoments::Pairwise) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "build_u_factor: WeightMoments::Pairwise requires the raw-data "
+        "overload (pass `raw` and `pw`)"));
+  }
   auto sh_or = build_u_factor_shared(pt, rep, samp, est, spec.moments);
+  if (!sh_or.has_value()) return std::unexpected(sh_or.error());
+  if (spec.bread == Information::Observed) {
+    return finish_u_factor_observed(*sh_or, pt, rep, samp, est);
+  }
+  return finish_u_factor_expected(*sh_or);
+}
+
+// Public `build_u_factor` for the Pairwise bread. `spec.moments` must be
+// `Pairwise`. Threads `raw` + `pw` into the shared-phase Cholesky so the
+// resulting L_Γ factors `Γ_NT^pw_b` per block.
+post_expected<UFactor>
+build_u_factor(spec::LatentStructure                pt,
+               const model::MatrixRep&              rep,
+               const SampleStats&                   samp,
+               const Estimates&                     est,
+               const RawData&                       raw,
+               const data::PairwiseSampleStats&     pw,
+               InferenceSpec                        spec) {
+  if (spec.moments != WeightMoments::Pairwise) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "build_u_factor(raw, pw): spec.moments must be Pairwise; use the "
+        "5-arg overload for Structured/Unstructured"));
+  }
+  auto sh_or = build_u_factor_shared(pt, rep, samp, est, spec.moments,
+                                     &raw, &pw);
   if (!sh_or.has_value()) return std::unexpected(sh_or.error());
   if (spec.bread == Information::Observed) {
     return finish_u_factor_observed(*sh_or, pt, rep, samp, est);
@@ -1185,6 +1256,136 @@ reduced_gamma_nt(const UFactor& uf) {
   }
   Eigen::MatrixXd M = uf.B.transpose() * GB;
   M = 0.5 * (M + M.transpose()).eval();
+  return M;
+}
+
+// ============================================================================
+// reduced_gamma_nt_pairwise — operator-only, never forms Γ_NT^pw.
+// ============================================================================
+
+post_expected<Eigen::MatrixXd>
+reduced_gamma_nt_pairwise(const UFactor&                       uf,
+                          const RawData&                       raw,
+                          const data::PairwiseSampleStats&     pw) {
+  if (uf.kind != UFactor::Kind::ProjectionExpected) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_nt_pairwise: only the ProjectionExpected U-factor "
+        "is supported"));
+  }
+  if (uf.blocks.size() != raw.X.size() || uf.blocks.size() != pw.S.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_nt_pairwise: UFactor / raw / pw block count mismatch"));
+  }
+  const bool has_mask = !raw.mask.empty();
+  if (has_mask && raw.mask.size() != raw.X.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_nt_pairwise: mask and X block counts disagree"));
+  }
+
+  Eigen::MatrixXd M = Eigen::MatrixXd::Zero(uf.df, uf.df);
+  Eigen::MatrixXd H_buf;
+  Eigen::MatrixXd B_scaled(uf.total_rows, uf.df);
+  Eigen::MatrixXd GB_b(uf.total_rows, uf.df);
+
+  for (std::size_t b = 0; b < uf.blocks.size(); ++b) {
+    const auto& blk = uf.blocks[b];
+    const Eigen::Index p     = blk.p;
+    const Eigen::Index pstar = blk.pstar;
+    const Eigen::Index n_b   = blk.n_obs;
+    if (raw.X[b].cols() != p || pw.pi_hat[b].rows() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "reduced_gamma_nt_pairwise: block " + std::to_string(b) +
+          " dimension mismatch between UFactor (p=" + std::to_string(p) +
+          "), raw, and pw"));
+    }
+
+    // p*-vector of per-pair availabilities π̂_a, vech-ordered. By
+    // construction `pairwise_sample_stats` guarantees π̂_a > 0.
+    const Eigen::MatrixXd& pi_hat_mat = pw.pi_hat[b];
+    Eigen::VectorXd pi_diag(pstar);
+    for (Eigen::Index ll = 0; ll < p; ++ll) {
+      for (Eigen::Index jj = ll; jj < p; ++jj) {
+        pi_diag(detail::vech_index(p, jj, ll)) = pi_hat_mat(jj, ll);
+      }
+    }
+    if (!(pi_diag.minCoeff() > 0.0)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "reduced_gamma_nt_pairwise: zero π̂ entry in block " +
+          std::to_string(b) + " — pair with no joint observations"));
+    }
+
+    auto observed = [&](Eigen::Index r, Eigen::Index c) -> bool {
+      if (!has_mask) return std::isfinite(raw.X[b](r, c));
+      return raw.mask[b](r, c) != 0;
+    };
+
+    if (!has_mask) {
+      // Complete data: every pattern has a_k ≡ 1 and π̂ ≡ 1; the pattern-
+      // grouped sum collapses to one apply_gamma_nt_block per column.
+      GB_b.setZero();
+      for (Eigen::Index c = 0; c < uf.df; ++c) {
+        apply_gamma_nt_block(blk, uf.has_means, uf.moments,
+                             uf.B.col(c), GB_b.col(c), H_buf);
+      }
+      M.noalias() += uf.B.transpose() * GB_b;
+      continue;
+    }
+
+    // Enumerate distinct missingness patterns in raw.mask[b].
+    std::vector<std::vector<bool>> patterns;
+    std::vector<Eigen::Index>      pattern_count;
+    const Eigen::Index n_rows = raw.X[b].rows();
+    patterns.reserve(static_cast<std::size_t>(n_rows));
+    pattern_count.reserve(static_cast<std::size_t>(n_rows));
+    for (Eigen::Index r = 0; r < n_rows; ++r) {
+      std::vector<bool> sig(static_cast<std::size_t>(p));
+      for (Eigen::Index c = 0; c < p; ++c)
+        sig[static_cast<std::size_t>(c)] = observed(r, c);
+      auto it = patterns.end();
+      for (auto pi = patterns.begin(); pi != patterns.end(); ++pi) {
+        if (*pi == sig) { it = pi; break; }
+      }
+      if (it == patterns.end()) {
+        patterns.push_back(std::move(sig));
+        pattern_count.push_back(1);
+      } else {
+        pattern_count[static_cast<std::size_t>(it - patterns.begin())] += 1;
+      }
+    }
+
+    const double inv_n_b = 1.0 / static_cast<double>(n_b);
+    for (std::size_t k = 0; k < patterns.size(); ++k) {
+      const auto& sig = patterns[k];
+
+      // Row-scale B's σ-rows by a_k/π̂ per pair; μ-rows pass through
+      // unchanged (the μ-block of Γ_NT^pw matches the bread's Σ̂_b
+      // convention — same compromise as `data::gamma_nt_pairwise`).
+      B_scaled = uf.B;
+      for (Eigen::Index ll = 0; ll < p; ++ll) {
+        const bool ll_obs = sig[static_cast<std::size_t>(ll)];
+        for (Eigen::Index jj = ll; jj < p; ++jj) {
+          const bool jj_obs = sig[static_cast<std::size_t>(jj)];
+          const Eigen::Index a = detail::vech_index(p, jj, ll);
+          const double s = (jj_obs && ll_obs) ? (1.0 / pi_diag(a)) : 0.0;
+          B_scaled.row(blk.row_offset + a) *= s;
+        }
+      }
+
+      // Apply Γ_NT(Σ̂_b) operator column-by-column on B_scaled.
+      GB_b.setZero();
+      for (Eigen::Index c = 0; c < uf.df; ++c) {
+        apply_gamma_nt_block(blk, uf.has_means, uf.moments,
+                             B_scaled.col(c), GB_b.col(c), H_buf);
+      }
+
+      // Accumulate (n_k/n_b) · B_scaled' · GB_b. The μ-row contribution
+      // is unscaled and sums to 1 over k; the σ-row contribution carries
+      // the pairwise scaling and aggregates to Γ_NT^pw's σ-block.
+      const double w = static_cast<double>(pattern_count[k]) * inv_n_b;
+      M.noalias() += w * (B_scaled.transpose() * GB_b);
+    }
+  }
+  M = (0.5 * (M + M.transpose())).eval();
   return M;
 }
 

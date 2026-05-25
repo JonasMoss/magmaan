@@ -115,7 +115,9 @@ robust_nested_lrt_restriction_map <- infer_lr_test_satorra2000
 robust_build_u_factor <- infer_build_u_factor
 robust_build_u_factor_parts <- infer_build_u_factor_parts
 robust_build_u_factor_fit <- infer_build_u_factor_fit
+robust_build_u_factor_pairwise <- infer_build_u_factor_pairwise
 robust_reduced_gamma_nt <- infer_reduced_gamma_nt
+robust_reduced_gamma_nt_pairwise <- infer_reduced_gamma_nt_pairwise
 robust_reduced_gamma_sample <- infer_reduced_gamma_sample
 robust_reduced_gamma_sample_zc <- infer_reduced_gamma_sample
 robust_reduced_gamma_sample_from_gamma <- infer_reduced_gamma_sample_from_gamma
@@ -242,7 +244,9 @@ magmaan_core <- local({
       "robust_build_u_factor",
       "robust_build_u_factor_parts",
       "robust_build_u_factor_fit",
+      "robust_build_u_factor_pairwise",
       "robust_reduced_gamma_nt",
+      "robust_reduced_gamma_nt_pairwise",
       "robust_reduced_gamma_sample",
       "robust_reduced_gamma_sample_zc",
       "robust_reduced_gamma_sample_from_gamma",
@@ -393,7 +397,9 @@ magmaan_core <- local({
       "infer_lr_test_satorra_bentler2010",
       "infer_build_u_factor",
       "infer_build_u_factor_parts",
+      "infer_build_u_factor_pairwise",
       "infer_reduced_gamma_nt",
+      "infer_reduced_gamma_nt_pairwise",
       "infer_reduced_gamma_sample",
       "infer_reduced_gamma_sample_from_gamma",
       "infer_robust_test_moments_both_breads_zc",
