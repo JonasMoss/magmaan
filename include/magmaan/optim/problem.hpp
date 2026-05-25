@@ -105,23 +105,41 @@ struct OptimOptions {
 // and the narrative rationale live in `terminal_audit.hpp`, which includes
 // this header.
 
-// Knobs for `audit_terminal_iterate`. All defaults are the v1 settled values;
-// callers (the four scalar backends) pass these unchanged for now.
+// Knobs for `audit_terminal_iterate`. v1 defaults are tuned to match lavaan's
+// own `check.gradient = TRUE` / `optim.dx.tol = 0.001` convergence post-check
+// for cross-package comparability — see docs/design/terminal-audit.md and
+// the backlog "Tolerance calibration" entry. The shape of the test (relative
+// vs absolute) is genuinely under-calibrated for SEM workloads; the Relative
+// mode below stays available as a research-grade alternative.
 struct TerminalAuditOptions {
-  // Stationarity test is RELATIVE: ‖Pg‖_∞ ≤ stationarity_tol · (1 + |f|).
-  // Default 1e-6 is the strict choice pending a corpus-wide calibration
-  // study. The looser 2e-6 default an earlier revision used was calibrated
-  // against a single observed ML noise-floor remainder; that anecdotal basis
-  // wasn't strong enough to keep as the default. The intended calibration
-  // (per the design doc) compares audit-stationary points against downstream
-  // SE/χ²/LRT at the genuine optimum, stratifies by estimator, and picks the
-  // threshold above which the gradient norm reliably predicts
-  // inference-equivalence. Until that study lands, the audit's primary
-  // value is the record (every fit gets `fit$audit$stationary` and friends),
-  // and the salvage promotion is intentionally conservative. The relative
-  // shape is the only one that's correct across a corpus where |f| spans
-  // many orders of magnitude — keep that whichever way the tolerance tunes.
+  // Whether the stationarity test compares the projected-gradient norm
+  // against an absolute or a relative right-hand side.
+  //
+  //   Absolute (v1 default): ‖Pg‖_∞ ≤ absolute_tol.
+  //     Matches lavaan: a fit is non-stationary if any non-bound coordinate
+  //     has |∂f/∂θ| greater than `absolute_tol`. Cross-package honest;
+  //     defensible without a magmaan-specific calibration study.
+  //
+  //   Relative: ‖Pg‖_∞ ≤ stationarity_tol · (1 + |f|).
+  //     The strict-but-uncalibrated choice the earlier audit used. Kept
+  //     because |f| spans many orders of magnitude across the SEM corpus,
+  //     so an absolute threshold may under- or over-reject at the extremes.
+  //     Flip to this mode (and tune `stationarity_tol`) once an empirical
+  //     calibration study justifies it.
+  //
+  // This is the first hard design call in magmaan and the calibration is
+  // genuinely unstable — the choice is encoded as a mode rather than baked
+  // in so the experiment is one option flip away.
+  enum class StationarityMode { Absolute, Relative };
+  StationarityMode stationarity_mode = StationarityMode::Absolute;
+
+  // Used by Absolute mode. Default 1e-3 matches lavaan's `optim.dx.tol`.
+  double absolute_tol      = 1e-3;
+  // Used by Relative mode. Default 1e-6 is the strict choice from the
+  // earlier relative-only audit; only consulted when `stationarity_mode`
+  // is `Relative`.
   double stationarity_tol  = 1e-6;
+
   // Coordinate distance at which we declare `x[i]` to be on a finite bound,
   // for the projected-gradient construction. Small absolute — we are masking
   // a gradient component, not measuring active-set membership for inference.

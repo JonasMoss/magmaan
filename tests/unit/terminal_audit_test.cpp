@@ -65,8 +65,31 @@ TEST_CASE("terminal_audit — displaced quadratic is non-stationary, advisory Un
   CHECK_FALSE(a.stationary);
   CHECK(a.grad_inf_norm == doctest::Approx(1.0));
   CHECK(a.advisory_status == OptimStatus::Unknown);
-  // RHS is tol * (1 + |f|) = 1e-6 * (1 + 0.5) = 1.5e-6, definitely < 1.
-  CHECK(a.stationarity_rhs == doctest::Approx(1.5e-6));
+  // v1 default is Absolute mode: rhs == absolute_tol == 1e-3, well under 1.
+  CHECK(a.stationarity_rhs == doctest::Approx(1e-3));
+}
+
+TEST_CASE("terminal_audit — Absolute mode rhs is constant in |f|") {
+  // Two stationary fits at the same gradient (~0) but vastly different |f|:
+  // both must declare stationary, and both must report rhs == absolute_tol
+  // (the lavaan-equivalent default; no |f|-dependent scaling).
+  const auto big_f = [](const Eigen::VectorXd&, Eigen::VectorXd& g) {
+    g.setZero();
+    return 1e6;
+  };
+  const auto small_f = [](const Eigen::VectorXd&, Eigen::VectorXd& g) {
+    g.setZero();
+    return 1e-8;
+  };
+  Eigen::VectorXd x(2); x.setZero();
+  TerminalAudit a1 = audit_terminal_iterate(
+      big_f, x, /*reported_f=*/1e6, unbounded_lower(2), unbounded_upper(2));
+  TerminalAudit a2 = audit_terminal_iterate(
+      small_f, x, /*reported_f=*/1e-8, unbounded_lower(2), unbounded_upper(2));
+  CHECK(a1.stationary);
+  CHECK(a2.stationary);
+  CHECK(a1.stationarity_rhs == doctest::Approx(1e-3));
+  CHECK(a2.stationarity_rhs == doctest::Approx(1e-3));
 }
 
 TEST_CASE("terminal_audit — at lower bound with outward gradient is stationary") {
@@ -137,36 +160,45 @@ TEST_CASE("terminal_audit — inconsistent reported_f flagged") {
   CHECK_FALSE(a.f_consistent);
 }
 
-TEST_CASE("terminal_audit — RELATIVE stationarity tolerance scales with |f|") {
-  // f at optimum with a fake huge scale: construct a (correct) stationary
-  // point where |f| = 1e6 and the gradient is small. The audit's RHS is
-  // tol * (1 + |f|) ≈ 1.0; a non-zero gradient of magnitude < 1 should still
-  // be accepted as stationary. (This documents the scale-invariance of the
-  // test — a fixed-absolute threshold would mis-classify here.)
+TEST_CASE("terminal_audit — Relative mode rhs scales with |f|") {
+  // Documents the Relative-mode behaviour kept available for the calibration
+  // study (and for users who flip the mode explicitly). |f| = 1e6 and a
+  // gradient of 0.5 is stationary under Relative (rhs ≈ 1.0) but would NOT
+  // be under the Absolute default (rhs == 1e-3).
   const auto f = [](const Eigen::VectorXd&, Eigen::VectorXd& g) {
     g = Eigen::VectorXd::Constant(g.size(), 0.5);   // |g|_inf = 0.5
     return 1e6;
   };
   Eigen::VectorXd x(2); x << 0.0, 0.0;
+  TerminalAuditOptions rel;
+  rel.stationarity_mode = TerminalAuditOptions::StationarityMode::Relative;
   TerminalAudit a = audit_terminal_iterate(
-      f, x, /*reported_f=*/1e6, unbounded_lower(2), unbounded_upper(2));
+      f, x, /*reported_f=*/1e6, unbounded_lower(2), unbounded_upper(2), rel);
   CHECK(a.stationary);
   CHECK(a.stationarity_rhs == doctest::Approx(1.0 + 1e-6).epsilon(1e-6));
   CHECK(a.grad_inf_norm == doctest::Approx(0.5));
+
+  // Cross-check: the same fit is NOT stationary under the v1 Absolute default,
+  // because absolute_tol = 1e-3 < |g|_inf = 0.5.
+  TerminalAudit abs_a = audit_terminal_iterate(
+      f, x, /*reported_f=*/1e6, unbounded_lower(2), unbounded_upper(2));
+  CHECK_FALSE(abs_a.stationary);
+  CHECK(abs_a.stationarity_rhs == doctest::Approx(1e-3));
 }
 
-TEST_CASE("terminal_audit — calibration: a 2e-6 tolerance would salvage a "
-          "one-ppm ML line-search remainder") {
+TEST_CASE("terminal_audit — Relative calibration: a 2e-6 tolerance would "
+          "salvage a one-ppm ML line-search remainder") {
   // Synthetic anchor for the calibration-study conversation: an ML fit
   // where the optimizer's reported objective is ~0.192 and the recomputed
   // projected-gradient infinity-norm is ~1.27e-6 (a "one-ppm" remainder).
-  // Under the strict v1 default (`stationarity_tol = 1e-6`) this would
-  // NOT salvage (rhs ≈ 1.192e-6 < gnorm). With an explicit looser
-  // tolerance of 2e-6 it would (rhs ≈ 2.38e-6 > gnorm). Both branches
-  // documented here so the calibration discussion has a reproducible
-  // reference point — and so a future study can wire this case into a
-  // gallery without re-deriving the numbers. See `docs/design/terminal-audit.md`
-  // "Tolerance calibration" for the broader study sketch.
+  // Under strict Relative-mode (`stationarity_tol = 1e-6`) this would NOT
+  // salvage (rhs ≈ 1.192e-6 < gnorm). With an explicit looser tolerance of
+  // 2e-6 it would (rhs ≈ 2.38e-6 > gnorm). Both branches use explicit
+  // Relative mode here so the case is unaffected by the v1 Absolute default;
+  // the future calibration study can wire this case into a gallery without
+  // re-deriving the numbers. Note: under the v1 Absolute default this fit
+  // would trivially salvage (rhs = 1e-3 ≫ gnorm). See
+  // `docs/design/terminal-audit.md` "Tolerance calibration" for the study sketch.
   const auto f = [](const Eigen::VectorXd&, Eigen::VectorXd& g) {
     g = Eigen::VectorXd::Constant(g.size(), 1.2664784776461602e-6);
     return 0.19217060692071364;
@@ -174,17 +206,21 @@ TEST_CASE("terminal_audit — calibration: a 2e-6 tolerance would salvage a "
   Eigen::VectorXd x(8);
   x.setZero();
 
-  // Strict v1 default: NOT stationary.
+  // Strict Relative: NOT stationary.
+  TerminalAuditOptions strict_rel;
+  strict_rel.stationarity_mode = TerminalAuditOptions::StationarityMode::Relative;
+  // strict_rel.stationarity_tol left at default 1e-6
   TerminalAudit strict = audit_terminal_iterate(
       f, x, /*reported_f=*/0.19217060692071364, unbounded_lower(8),
-      unbounded_upper(8));
+      unbounded_upper(8), strict_rel);
   CHECK_FALSE(strict.stationary);
   CHECK(strict.grad_inf_norm == doctest::Approx(1.2664784776461602e-6));
   CHECK(strict.stationarity_rhs == doctest::Approx(1.1921706069207137e-6));
 
-  // Looser tolerance the calibration study may end up endorsing or
+  // Looser Relative the calibration study may end up endorsing or
   // rejecting: stationary under 2e-6.
   TerminalAuditOptions loose;
+  loose.stationarity_mode = TerminalAuditOptions::StationarityMode::Relative;
   loose.stationarity_tol = 2e-6;
   TerminalAudit salvaged = audit_terminal_iterate(
       f, x, /*reported_f=*/0.19217060692071364, unbounded_lower(8),

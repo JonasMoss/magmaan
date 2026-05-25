@@ -75,22 +75,43 @@ overrides the wrapper's actual returned status).
 
 ```cpp
 struct TerminalAuditOptions {
+  enum class StationarityMode { Absolute, Relative };
+  StationarityMode stationarity_mode = StationarityMode::Absolute;
+  double absolute_tol      = 1e-3;
   double stationarity_tol  = 1e-6;
   double active_bound_tol  = 1e-12;
   double f_consistency_rel = 1e-6;
 };
 ```
 
-- `stationarity_tol` is **relative**: an absolute threshold would mis-classify
-  across a 290-model corpus where `|f|` spans many orders of magnitude. The
-  test reduces to `tol` when `|f| ≪ 1` and scales with `|f|` when `|f| ≫ 1`.
-  The default is one part per million pending a corpus-wide calibration
-  study (see "Tolerance calibration" below). The looser 2e-6 an earlier
-  revision used was anchored to a single observed ML noise-floor case;
-  that anecdote isn't a strong enough basis for the default. Until the
-  study lands, v1 ships the strict value — the audit's primary value is
-  the *record* (`fit$audit$stationary` and the geometric numbers on every
-  fit), and the salvage promotion is intentionally conservative.
+- `stationarity_mode` selects the shape of the stationarity test.
+
+  - **Absolute (v1 default)**: `‖Pg‖_∞ ≤ absolute_tol`. The default
+    `absolute_tol = 1e-3` matches lavaan's `optim.dx.tol` default (lavaan's
+    `check.gradient = TRUE` path applies the same KKT-aware projected-
+    gradient check at that tolerance). v1 ships Absolute so that magmaan's
+    convergence verdict is on the same yardstick as lavaan's, which makes
+    cross-package comparisons honest without an internal calibration study
+    we don't yet have.
+  - **Relative**: `‖Pg‖_∞ ≤ stationarity_tol · (1 + |f|)`. The shape an
+    earlier revision shipped as the default. The argument for Relative is
+    that `|f|` spans many orders of magnitude across the SEM corpus, so an
+    absolute threshold may under- or over-reject at the extremes. The
+    argument against is that there is no calibration study justifying a
+    specific relative tolerance against downstream inference (SE, χ²,
+    LRT), so the choice is opinionated. Relative remains available as a
+    research-grade alternative, and the test file
+    `tests/unit/terminal_audit_test.cpp` keeps explicit Relative-mode
+    coverage so the path doesn't bit-rot.
+
+  This is the first genuinely hard design call in magmaan and the choice
+  is genuinely unstable. The mode flag encodes the decision in one place
+  so future experiments are one option flip away; the "Tolerance
+  calibration" section below sketches the empirical work that would let
+  us revisit the default with data instead of a defensive choice.
+
+- `absolute_tol` is consulted only in Absolute mode. `stationarity_tol` is
+  consulted only in Relative mode. They are not interchangeable.
 - `active_bound_tol` is a coordinate-distance threshold for the
   projected-gradient construction — masking a gradient component, not a
   diagnostic readout.
@@ -271,19 +292,23 @@ fixed by tolerance tuning.
 3. **LS-backend audit wiring** (`PortNlsOptimizer`, `ceres_lm`):
    residual-driven, no scalar `ObjectiveFn`.
 4. **Per-estimator tolerance tuning.** Every backend uses the same
-   `TerminalAuditOptions` defaults. The `stationarity_tol = 1e-6` v1 pick
-   is intentionally strict pending a corpus-wide calibration study (see
-   "Tolerance calibration" below); per-estimator tuning may emerge from
-   that study if ML / GLS / ULS / DWLS / FIML show systematically different
-   gradient noise floors.
+   `TerminalAuditOptions` defaults. The v1 Absolute / 1e-3 default is a
+   defensive cross-package match (lavaan), not a calibrated choice; per-
+   estimator tuning, or a switch to Relative with a calibrated tolerance,
+   may emerge from the "Tolerance calibration" study below if ML / GLS /
+   ULS / DWLS / FIML show systematically different gradient noise floors.
 
 ## Tolerance calibration (open follow-up)
 
-The right calibration question isn't "what value of `gnorm` is 'small'" —
-that has no model-independent answer. It's "what value of `gnorm` reliably
-predicts that downstream inference (SE, χ², LRT, fit measures) gives the
-same answer on this iterate that it would at the geometric optimum." That
-reframes the threshold as empirically testable.
+v1 ships Absolute mode at `absolute_tol = 1e-3` because that matches
+lavaan's `check.gradient` default and makes cross-package convergence
+comparisons honest without a magmaan-specific calibration study. The
+default is therefore defensive, not calibrated — the real question is:
+*what stationarity threshold reliably predicts that downstream inference
+gives the same answer on this iterate that it would at the geometric
+optimum?* That question doesn't have a model-independent answer, and it's
+the same question whether the threshold is absolute or relative. Until a
+study answers it, matching lavaan is the conservative cross-package choice.
 
 Sketch of a study that would pin it down:
 
@@ -296,7 +321,9 @@ Sketch of a study that would pin it down:
    recomputed `‖Pg‖∞`, the function gap, `‖θ_f − θ_t‖`, SE deltas, χ² /
    RMSEA / CFI deltas.
 3. **Threshold = the largest `T`** such that every candidate with
-   `‖Pg‖∞ ≤ T·(1+|f|)` has inferential deltas under (say) 1% relative.
+   either `‖Pg‖∞ ≤ T` (Absolute mode) or `‖Pg‖∞ ≤ T·(1+|f|)` (Relative
+   mode) has inferential deltas under (say) 1% relative. The mode itself
+   is part of what the study should decide.
 4. **Stratify by estimator.** Distinct evaluators carry distinct
    cancellation floors (the Newsom GLS investigation already showed GLS's
    floor is materially worse than ML's). The right answer may be a vector
