@@ -208,6 +208,9 @@ const char* optim_status_to_r(magmaan::optim::OptimStatus status) {
   return status == OptimStatus::Converged           ? "converged"
        : status == OptimStatus::LineSearchSalvaged ? "line_search_salvaged"
        : status == OptimStatus::SingularConvergence ? "singular_convergence"
+       : status == OptimStatus::NoisyObjective     ? "noisy_objective"
+       : status == OptimStatus::FalseConvergence   ? "false_convergence"
+       : status == OptimStatus::BudgetExhausted    ? "budget_exhausted"
                                                     : "unknown";
 }
 
@@ -426,11 +429,7 @@ Rcpp::List fcsem_fit_result(FcSemCtx& ctx,
       Rcpp::IntegerVector::create(static_cast<int>(ctx.samp.n_obs[0]));
 
   using magmaan::optim::OptimStatus;
-  const char* opt_status =
-      est.optimizer_status == OptimStatus::Converged           ? "converged"
-      : est.optimizer_status == OptimStatus::LineSearchSalvaged ? "line_search_salvaged"
-      : est.optimizer_status == OptimStatus::SingularConvergence ? "singular_convergence"
-                                                                : "unknown";
+  const char* opt_status = optim_status_to_r(est.optimizer_status);
 
   Rcpp::List out = Rcpp::List::create(
       Rcpp::_["converged"]     = (est.optimizer_status == OptimStatus::Converged),
@@ -665,12 +664,7 @@ Rcpp::DataFrame structural_cells_df(const std::vector<lvm::StructuralCell>& sc) 
 // string. `active_set` carries {-1, 0, +1} per driven coordinate, distinct
 // from L2's `active_bounds_full` (which indexes the expanded θ).
 Rcpp::List audit_to_r(const magmaan::optim::TerminalAudit& a) {
-  using magmaan::optim::OptimStatus;
-  const char* advisory =
-      a.advisory_status == OptimStatus::Converged           ? "converged"
-      : a.advisory_status == OptimStatus::LineSearchSalvaged ? "line_search_salvaged"
-      : a.advisory_status == OptimStatus::SingularConvergence ? "singular_convergence"
-                                                              : "unknown";
+  const char* advisory = optim_status_to_r(a.advisory_status);
   Rcpp::IntegerVector active(static_cast<R_xlen_t>(a.active_set.size()));
   for (std::size_t i = 0; i < a.active_set.size(); ++i)
     active[static_cast<R_xlen_t>(i)] = static_cast<int>(a.active_set[i]);
@@ -742,11 +736,7 @@ Rcpp::List fit_result(Ctx& ctx,
   // Refined optimizer status, surfaced to R alongside the boolean `converged`
   // (which now means "clean stationary stop", not merely "did not error").
   using magmaan::optim::OptimStatus;
-  const char* opt_status =
-      est.optimizer_status == OptimStatus::Converged           ? "converged"
-      : est.optimizer_status == OptimStatus::LineSearchSalvaged ? "line_search_salvaged"
-      : est.optimizer_status == OptimStatus::SingularConvergence ? "singular_convergence"
-                                                                : "unknown";
+  const char* opt_status = optim_status_to_r(est.optimizer_status);
 
   Rcpp::List out = Rcpp::List::create(
       Rcpp::_["converged"]     = (est.optimizer_status == OptimStatus::Converged),

@@ -293,39 +293,26 @@ PortOptimizer::minimize(Objective f,
       // trust-region model's predicted reduction and the actual reduction
       // judges the gradient inconsistent with the function value — precisely
       // the floating-point cancellation signature near a near-perfect-fit
-      // optimum. If the audit's geometric verdict says we're stationary, the
-      // iterate is a salvageable success (NOTE: semantic shift from before;
-      // pre-audit this always returned NumericIssue).
-      if (a.stationary) {
-        opt_status = OptimStatus::LineSearchSalvaged;
-      } else {
-        return std::unexpected(make_err(FitError::Kind::NumericIssue,
-            "PORT drmngb: noisy objective detected (PORT IV(1)=8) — the model "
-            "evaluator's gradient is inconsistent with its function value to "
-            "more than PORT's noise tolerance, and the audit confirmed "
-            "non-stationarity at the returned iterate",
-            n_iter, f_final));
-      }
+      // optimum. The audit's geometric stationarity verdict is sharper than
+      // PORT's heuristic: stationary iterates promote to LineSearchSalvaged
+      // (clean for downstream callers); non-stationary iterates still come
+      // back tagged so R can read theta / fmin / grad_inf and decide policy.
+      // Paper dev/audits/convergence-audit-notes.md §3.2 documents 7 corpus
+      // rows this rescues from the rejection bucket.
+      opt_status = a.stationary ? OptimStatus::LineSearchSalvaged
+                                : OptimStatus::NoisyObjective;
       break;
     case PORT_FAIL_FALSE:
-      if (a.stationary) {
-        opt_status = OptimStatus::LineSearchSalvaged;
-      } else {
-        return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
-            "PORT drmngb: false convergence (PORT IV(1)=9) — the step length "
-            "fell below the precision PORT can resolve",
-            n_iter, f_final));
-      }
+      // IV(1)=9: PORT's step-length floor; same disposition.
+      opt_status = a.stationary ? OptimStatus::LineSearchSalvaged
+                                : OptimStatus::FalseConvergence;
       break;
     case PORT_FAIL_BUDGET:
-      if (a.stationary) {
-        opt_status = OptimStatus::LineSearchSalvaged;
-      } else {
-        return std::unexpected(make_err(FitError::Kind::OptimizerNonConvergence,
-            "PORT drmngb: iteration or evaluation budget exhausted "
-            "(PORT IV(1)=10, max_iter=" + std::to_string(opts_.max_iter) + ")",
-            n_iter, f_final));
-      }
+      // IV(1)=10: max_iter or max_fevals hit. Under uniform-stop (paper
+      // §D, ftol = 0), this fires routinely at iterates the audit confirms
+      // as stationary — the audit is the gate, not PORT's RFCTOL.
+      opt_status = a.stationary ? OptimStatus::LineSearchSalvaged
+                                : OptimStatus::BudgetExhausted;
       break;
     default:
       if (a.stationary) {
@@ -544,21 +531,20 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
       opt_status = OptimStatus::SingularConvergence;
       break;
     case PORT_FAIL_NOISY:
-      return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          "PORT drn2gb: noisy residuals detected (PORT IV(1)=8) — model "
-          "Jacobian inconsistent with residual evaluation to more than "
-          "PORT's noise tolerance",
-          n_iter, f_final));
     case PORT_FAIL_FALSE:
-      return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
-          "PORT drn2gb: false convergence (PORT IV(1)=9) — step length "
-          "fell below the precision PORT can resolve",
-          n_iter, f_final));
     case PORT_FAIL_BUDGET:
-      return std::unexpected(make_err(FitError::Kind::OptimizerNonConvergence,
-          "PORT drn2gb: iteration or evaluation budget exhausted "
-          "(PORT IV(1)=10, max_iter=" + std::to_string(opts_.max_iter) + ")",
-          n_iter, f_final));
+      // PORT IV(1) = 8 / 9 / 10. Same disposition as the scalar drmngb
+      // adapter above (sibling switch arms): hand the iterate back tagged
+      // so R-level callers can read fmin / theta and the audit-parity
+      // sweep can apply its own check. NL2SOL does not recompute a
+      // stationarity norm at the wrapper level (grad_inf_norm stays at
+      // the -1 sentinel below), so the salvage-to-LineSearchSalvaged
+      // shortcut the drmngb path uses does not apply here — that's the
+      // caller's job. See dev/audits/convergence-audit-notes.md §3.2.
+      opt_status = final_status == PORT_FAIL_NOISY  ? OptimStatus::NoisyObjective
+                 : final_status == PORT_FAIL_FALSE  ? OptimStatus::FalseConvergence
+                                                    : OptimStatus::BudgetExhausted;
+      break;
     default:
       return std::unexpected(make_err(FitError::Kind::LineSearchFailed,
           "PORT drn2gb: solver failure (PORT IV(1)=" +
