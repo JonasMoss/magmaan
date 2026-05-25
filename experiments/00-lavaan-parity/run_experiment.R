@@ -18,10 +18,17 @@ rm(.support_helpers)
 parse_args <- function(args) {
   out <- list(
     audit_run = "audit-parity-v7",
+    oracle_run = "latest",
     refit_csv = "/tmp/refit_disagreements_v8.csv",
+    from_oracle = FALSE,
+    collect_lavaan = FALSE,
+    install_latest_lavaan = FALSE,
     run_full = FALSE,
     run_lcs = FALSE,
-    run_refit = FALSE
+    run_refit = FALSE,
+    books = NULL,
+    weights = NULL,
+    limit = NA_integer_
   )
   i <- 1L
   while (i <= length(args)) {
@@ -30,10 +37,16 @@ parse_args <- function(args) {
     if (arg %in% c("-h", "--help")) {
       cat(
         "Usage: Rscript run_experiment.R [--audit-run RUN_ID] ",
-        "[--refit-csv PATH] [--run-full] [--run-lcs] [--run-refit]\n",
+        "[--refit-csv PATH] [--from-oracle] [--collect-lavaan] ",
+        "[--oracle-run RUN_ID] [--install-latest-lavaan] ",
+        "[--books IDS] [--weights IDS] [--limit N] ",
+        "[--run-full] [--run-lcs] [--run-refit]\n",
         "\n",
         "Default copies the existing paper-side audit-parity-v7 outputs and ",
         "the /tmp v8 refit CSV if present.\n",
+        "Use --collect-lavaan once to cache lavaan-only fits under ",
+        "results/lavaan-oracle/<run-id>, then --from-oracle to rerun only ",
+        "the magmaan audit against that cache.\n",
         sep = ""
       )
       quit(save = "no", status = 0L)
@@ -50,10 +63,17 @@ parse_args <- function(args) {
       args[[i]]
     }
     if (arg == "--audit-run") out$audit_run <- need_value()
+    else if (arg == "--oracle-run") out$oracle_run <- need_value()
     else if (arg == "--refit-csv") out$refit_csv <- need_value()
+    else if (arg == "--from-oracle") out$from_oracle <- TRUE
+    else if (arg == "--collect-lavaan") out$collect_lavaan <- TRUE
+    else if (arg == "--install-latest-lavaan") out$install_latest_lavaan <- TRUE
     else if (arg == "--run-full") out$run_full <- TRUE
     else if (arg == "--run-lcs") out$run_lcs <- TRUE
     else if (arg == "--run-refit") out$run_refit <- TRUE
+    else if (arg == "--books") out$books <- parse_csv_arg(need_value())
+    else if (arg == "--weights") out$weights <- parse_csv_arg(need_value())
+    else if (arg == "--limit") out$limit <- as.integer(need_value())
     else stop("unknown argument: ", arg, call. = FALSE)
     i <- i + 1L
   }
@@ -63,7 +83,51 @@ parse_args <- function(args) {
 repo_path <- function(...) file.path(repo_root(), ...)
 paper_dir <- function() repo_path("papers", "snlls-constrained")
 paper_report <- function(...) file.path(paper_dir(), "reports", ...)
+paper_raw <- function(...) file.path(paper_dir(), "results", "raw", ...)
+paper_dev_audit <- function(...) file.path(paper_dir(), "dev", "audits", ...)
 paper_script <- function(...) file.path(paper_dir(), "scripts", ...)
+paper_dev_script <- function(...) file.path(paper_dir(), "dev", "scripts", ...)
+paper_supplement <- function(...) file.path(paper_dir(), "supplement", ...)
+
+first_existing <- function(paths) {
+  hit <- paths[file.exists(paths) | dir.exists(paths)]
+  if (length(hit)) hit[[1L]] else paths[[1L]]
+}
+
+paper_audit_dir <- function(run_id) {
+  first_existing(c(
+    paper_report("pilot-data", run_id),
+    paper_raw("pilot-data", run_id)
+  ))
+}
+
+paper_lcs_dir <- function() {
+  first_existing(c(
+    paper_report("lcs-objective-gap"),
+    paper_dev_audit("lcs-objective-gap")
+  ))
+}
+
+paper_lcs_driver <- function() {
+  first_existing(c(
+    paper_script("diagnose_lcs_disagreement.R"),
+    paper_dev_script("diagnose_lcs_disagreement.R")
+  ))
+}
+
+paper_supplement_driver <- function() {
+  first_existing(c(
+    paper_report("lavaan-audit-parity.qmd"),
+    paper_supplement("lavaan-audit-parity.qmd")
+  ))
+}
+
+paper_lcs_writeup <- function() {
+  first_existing(c(
+    paper_report("lcs-objective-gap.md"),
+    paper_dev_audit("lcs-objective-gap.md")
+  ))
+}
 
 copy_required <- function(from, to) {
   if (!file.exists(from)) stop("missing required source: ", from, call. = FALSE)
@@ -79,12 +143,18 @@ copy_optional <- function(from, to) {
   TRUE
 }
 
-run_script <- function(path) {
+run_script <- function(path, args = character()) {
   if (!file.exists(path)) stop("missing script: ", path, call. = FALSE)
-  status <- system2("Rscript", path)
+  status <- system2("Rscript", c(path, args))
   if (!identical(status, 0L)) {
     stop("script failed: ", path, call. = FALSE)
   }
+}
+
+load_paper_package <- function() {
+  require_pkg("pkgload")
+  pkgload::load_all(file.path(paper_dir(), "r-package"), quiet = TRUE)
+  invisible(TRUE)
 }
 
 read_csv <- function(path) {
@@ -102,6 +172,216 @@ finite_ratio <- function(num, den) {
   ok <- is.finite(num) & is.finite(den) & abs(den) > 0
   out[ok] <- num[ok] / den[ok]
   out
+}
+
+oracle_root <- function() file.path(results_dir(create = TRUE), "lavaan-oracle")
+
+resolve_oracle_run <- function(run_id) {
+  root <- oracle_root()
+  if (identical(run_id, "latest")) {
+    latest <- file.path(root, "LATEST")
+    if (!file.exists(latest)) {
+      stop("No lavaan oracle cache exists yet. Run `Rscript ",
+           "experiments/00-lavaan-parity/run_experiment.R --collect-lavaan` ",
+           "first, or pass --audit-run to use a paper-side combined sweep.",
+           call. = FALSE)
+    }
+    run_id <- trimws(readLines(latest, warn = FALSE)[[1L]])
+  }
+  path <- file.path(root, run_id)
+  if (!dir.exists(path)) {
+    stop("missing lavaan oracle cache: ", path, call. = FALSE)
+  }
+  list(run_id = run_id, path = path)
+}
+
+read_meta_value <- function(meta, key, default = "") {
+  if (!nrow(meta) || !"key" %in% names(meta) || !"value" %in% names(meta)) {
+    return(default)
+  }
+  hit <- meta$value[meta$key == key]
+  if (length(hit)) hit[[1L]] else default
+}
+
+canon_keys <- function(df) {
+  swap <- df$op == "~~" & df$lhs > df$rhs
+  if (any(swap)) {
+    lhs <- df$lhs[swap]
+    df$lhs[swap] <- df$rhs[swap]
+    df$rhs[swap] <- lhs
+  }
+  df
+}
+
+empty_audit_row <- function(case, lav = NULL, error = NA_character_) {
+  data.frame(
+    case_id = case$id, book = case$corpus, family = case$family,
+    weight = case$estimator,
+    n_free_mag = NA_integer_,
+    n_free_lav = if (!is.null(lav)) lav$n_free_lav else NA_integer_,
+    n_matched = NA_integer_,
+    lavaan_converged = if (!is.null(lav)) lav$lavaan_converged else NA,
+    lavaan_fx = if (!is.null(lav)) lav$lavaan_fx else NA_real_,
+    lavaan_fx_bare = NA_real_,
+    magmaan_fmin = NA_real_, magmaan_iter = NA_integer_,
+    audit_advisory = NA_character_, audit_grad_inf = NA_real_,
+    audit_stationary = NA,
+    error = error, stringsAsFactors = FALSE
+  )
+}
+
+audit_bessel <- function(case, n_total) {
+  if (is.null(n_total) || !is.finite(n_total) || n_total <= 1) return(1)
+  if (toupper(case$estimator) %in% c("GLS", "WLS", "ADF", "ULS", "DWLS")) {
+    (n_total - 1) / n_total
+  } else {
+    1
+  }
+}
+
+audit_cached_lavaan <- function(case, lav, estimates) {
+  if (!is.na(lav$error)) {
+    return(empty_audit_row(case, lav, paste0("lavaan-cache: ", lav$error)))
+  }
+
+  prob <- tryCatch(snlls_make_problem(case),
+                   error = function(e) structure(
+                     list(error = conditionMessage(e)),
+                     class = "audit_parity_magmaan_error"))
+  if (inherits(prob, "audit_parity_magmaan_error")) {
+    return(empty_audit_row(case, lav, paste0("magmaan-prep: ", prob$error)))
+  }
+
+  pt <- as.data.frame(prob$spec$partable)
+  pt$row_idx <- seq_len(nrow(pt))
+  free_pt <- pt[pt$free > 0L, , drop = FALSE]
+  if (!"group" %in% names(free_pt)) free_pt$group <- 1L
+  free_pt <- canon_keys(free_pt)
+  lav_est <- canon_keys(estimates)
+  matched <- merge(free_pt[, c("row_idx", "lhs", "op", "rhs", "group")],
+                   lav_est[, c("lhs", "op", "rhs", "group", "est"),
+                           drop = FALSE],
+                   by = c("lhs", "op", "rhs", "group"), sort = FALSE)
+  prob$spec$partable$ustart[matched$row_idx] <- matched$est
+
+  ss <- magmaan:::sample_stats_arg(prob$dat)
+  pt_for_starts <- magmaan:::partable_arg(prob$spec)
+  theta_full <- tryCatch(
+    magmaan::magmaan_core$fit_start_values(pt_for_starts, ss),
+    error = function(e) structure(list(error = conditionMessage(e)),
+                                  class = "audit_parity_magmaan_error"))
+  if (inherits(theta_full, "audit_parity_magmaan_error")) {
+    out <- empty_audit_row(case, lav,
+                           paste0("magmaan-starts: ", theta_full$error))
+    out$n_free_mag <- nrow(free_pt)
+    out$n_matched <- nrow(matched)
+    return(out)
+  }
+
+  estimator <- toupper(case$estimator)
+  if (identical(estimator, "ADF")) estimator <- "WLS"
+  ev <- tryCatch(
+    magmaan::magmaan_core$evaluate_at(
+      prob$spec, prob$dat, as.numeric(theta_full),
+      estimator = estimator,
+      W = if (estimator == "WLS") prob$W else NULL),
+    error = function(e) structure(list(error = conditionMessage(e)),
+                                  class = "audit_parity_magmaan_error"))
+  if (inherits(ev, "audit_parity_magmaan_error")) {
+    out <- empty_audit_row(case, lav, paste0("magmaan-eval: ", ev$error))
+    out$n_free_mag <- nrow(free_pt)
+    out$n_matched <- nrow(matched)
+    return(out)
+  }
+
+  n_total <- sum(unlist(prob$dat$nobs))
+  bessel <- audit_bessel(case, n_total)
+  data.frame(
+    case_id = case$id, book = case$corpus, family = case$family,
+    weight = case$estimator,
+    n_free_mag = nrow(free_pt), n_free_lav = lav$n_free_lav,
+    n_matched = nrow(matched),
+    lavaan_converged = isTRUE(lav$lavaan_converged),
+    lavaan_fx = lav$lavaan_fx,
+    lavaan_fx_bare = lav$lavaan_fx / bessel,
+    magmaan_fmin = ev$fmin, magmaan_iter = 0L,
+    audit_advisory = as.character(ev$audit$advisory_status %||% NA),
+    audit_grad_inf = as.numeric(ev$audit$grad_inf_norm %||% NA_real_),
+    audit_stationary = isTRUE(ev$audit$stationary),
+    error = NA_character_, stringsAsFactors = FALSE
+  )
+}
+
+audit_lavaan_oracle <- function(run_id) {
+  load_paper_package()
+  oracle <- resolve_oracle_run(run_id)
+  fits <- read_csv(file.path(oracle$path, "lavaan_fits.csv"))
+  estimates <- read_csv(file.path(oracle$path, "lavaan_estimates.csv"))
+  oracle_meta <- read_csv(file.path(oracle$path, "metadata.csv"))
+
+  corpus_root <- snlls_corpus_root(paper_dir())
+  need <- unique(fits[, c("book", "weight"), drop = FALSE])
+  all_cases <- list()
+  for (i in seq_len(nrow(need))) {
+    all_cases <- c(all_cases, corpus_cases(corpus_root,
+                                           weights = need$weight[[i]],
+                                           books = need$book[[i]]))
+  }
+
+  rows <- vector("list", nrow(fits))
+  started <- Sys.time()
+  for (i in seq_len(nrow(fits))) {
+    key <- fits$case_id[[i]]
+    if (i %% 25L == 1L || i == nrow(fits)) {
+      elapsed <- round(as.numeric(difftime(Sys.time(), started,
+                                           units = "secs")))
+      message(sprintf("[%3d/%3d  %3ds] audit %s", i, nrow(fits), elapsed,
+                      key))
+    }
+    if (!key %in% names(all_cases)) {
+      rows[[i]] <- data.frame(
+        case_id = key, book = fits$book[[i]], family = fits$family[[i]],
+        weight = fits$weight[[i]], n_free_mag = NA_integer_,
+        n_free_lav = fits$n_free_lav[[i]], n_matched = NA_integer_,
+        lavaan_converged = fits$lavaan_converged[[i]],
+        lavaan_fx = fits$lavaan_fx[[i]], lavaan_fx_bare = NA_real_,
+        magmaan_fmin = NA_real_, magmaan_iter = NA_integer_,
+        audit_advisory = NA_character_, audit_grad_inf = NA_real_,
+        audit_stationary = NA,
+        error = "case missing from corpus_cases", stringsAsFactors = FALSE)
+      next
+    }
+    rows[[i]] <- audit_cached_lavaan(
+      all_cases[[key]], fits[i, , drop = FALSE],
+      estimates[estimates$case_id == key, , drop = FALSE])
+  }
+  parity <- do.call(rbind, rows)
+  ok <- parity[is.na(parity$error), , drop = FALSE]
+  disagree <- ok[ok$lavaan_converged != ok$audit_stationary, , drop = FALSE]
+  meta <- data.frame(
+    run_id = paste0("oracle-", oracle$run_id),
+    generated = format(Sys.time(), "%Y-%m-%d %H:%M:%S %z"),
+    oracle_run = oracle$run_id,
+    oracle_path = oracle$path,
+    oracle_generated = read_meta_value(oracle_meta, "generated"),
+    corpus_root = corpus_root,
+    books = read_meta_value(oracle_meta, "books", "from oracle"),
+    weights = read_meta_value(oracle_meta, "weights", "from oracle"),
+    lavaan_version = read_meta_value(oracle_meta, "lavaan_version"),
+    n_cells = nrow(parity),
+    n_with_both_fits = nrow(ok),
+    n_lavaan_only_error = sum(grepl("^lavaan-cache:", parity$error)),
+    n_magmaan_only_error = sum(grepl("^magmaan", parity$error)),
+    n_agree_converged = sum(ok$lavaan_converged & ok$audit_stationary),
+    n_agree_failed = sum(!ok$lavaan_converged & !ok$audit_stationary),
+    n_lavaan_yes_audit_no = sum(ok$lavaan_converged & !ok$audit_stationary),
+    n_lavaan_no_audit_yes = sum(!ok$lavaan_converged & ok$audit_stationary),
+    elapsed_seconds = as.numeric(difftime(Sys.time(), started, units = "secs")),
+    stringsAsFactors = FALSE
+  )
+  list(parity = parity, disagree = disagree, meta = meta,
+       source = oracle$path, oracle_run = oracle$run_id,
+       lavaan_version = meta$lavaan_version[[1L]])
 }
 
 classify_disagreement <- function(x) {
@@ -184,8 +464,31 @@ refit_summary <- function(refit) {
 
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 
+if (isTRUE(args$collect_lavaan)) {
+  collect_args <- character()
+  if (!identical(args$oracle_run, "latest")) {
+    collect_args <- c(collect_args, "--run-id", args$oracle_run)
+  }
+  if (isTRUE(args$install_latest_lavaan)) {
+    collect_args <- c(collect_args, "--install-latest-lavaan")
+  }
+  if (!is.null(args$books)) {
+    collect_args <- c(collect_args, "--books", paste(args$books, collapse = ","))
+  }
+  if (!is.null(args$weights)) {
+    collect_args <- c(collect_args, "--weights",
+                      paste(args$weights, collapse = ","))
+  }
+  if (is.finite(args$limit) && args$limit > 0L) {
+    collect_args <- c(collect_args, "--limit", as.character(args$limit))
+  }
+  run_script(experiment_path("scripts", "collect_lavaan_oracle.R"),
+             collect_args)
+  args$from_oracle <- TRUE
+}
+
 if (isTRUE(args$run_full)) run_script(paper_script("run_lavaan_audit_parity.R"))
-if (isTRUE(args$run_lcs)) run_script(paper_script("diagnose_lcs_disagreement.R"))
+if (isTRUE(args$run_lcs)) run_script(paper_lcs_driver())
 if (isTRUE(args$run_refit)) {
   run_script(experiment_path("scripts", "refit_disagreements.R"))
   args$refit_csv <- file.path(results_dir(create = TRUE), "refit-disagreements",
@@ -193,18 +496,44 @@ if (isTRUE(args$run_refit)) {
 }
 
 results <- ensure_results_dir()
-audit_src <- paper_report("pilot-data", args$audit_run)
+audit_src <- paper_audit_dir(args$audit_run)
 audit_dst <- file.path(results, "audit-parity")
-lcs_src <- paper_report("lcs-objective-gap")
+lcs_src <- paper_lcs_dir()
 lcs_dst <- file.path(results, "lcs-objective-gap")
 refit_dst <- file.path(results, "refit-disagreements")
 
-copy_required(file.path(audit_src, "lavaan_audit_parity.csv"),
-              file.path(audit_dst, "lavaan_audit_parity.csv"))
-copy_required(file.path(audit_src, "lavaan_audit_parity_disagree.csv"),
-              file.path(audit_dst, "lavaan_audit_parity_disagree.csv"))
-copy_required(file.path(audit_src, "lavaan_audit_parity_meta.csv"),
-              file.path(audit_dst, "lavaan_audit_parity_meta.csv"))
+audit_mode <- if (isTRUE(args$from_oracle)) "cached lavaan oracle" else
+  "paper combined sweep"
+oracle_run <- ""
+oracle_path <- ""
+lavaan_version <- ""
+
+if (isTRUE(args$from_oracle)) {
+  oracle_audit <- audit_lavaan_oracle(args$oracle_run)
+  parity <- oracle_audit$parity
+  disagree <- oracle_audit$disagree
+  meta <- oracle_audit$meta
+  oracle_run <- oracle_audit$oracle_run
+  oracle_path <- oracle_audit$source
+  lavaan_version <- oracle_audit$lavaan_version
+  write_csv(parity, file.path(audit_dst, "lavaan_audit_parity.csv"))
+  write_csv(disagree, file.path(audit_dst, "lavaan_audit_parity_disagree.csv"))
+  write_csv(meta, file.path(audit_dst, "lavaan_audit_parity_meta.csv"))
+  audit_src <- oracle_path
+} else {
+  copy_required(file.path(audit_src, "lavaan_audit_parity.csv"),
+                file.path(audit_dst, "lavaan_audit_parity.csv"))
+  copy_required(file.path(audit_src, "lavaan_audit_parity_disagree.csv"),
+                file.path(audit_dst, "lavaan_audit_parity_disagree.csv"))
+  copy_required(file.path(audit_src, "lavaan_audit_parity_meta.csv"),
+                file.path(audit_dst, "lavaan_audit_parity_meta.csv"))
+  parity <- read_csv(file.path(audit_dst, "lavaan_audit_parity.csv"))
+  disagree <- read_csv(file.path(audit_dst, "lavaan_audit_parity_disagree.csv"))
+  meta <- read_csv(file.path(audit_dst, "lavaan_audit_parity_meta.csv"))
+  if ("lavaan_version" %in% names(meta)) {
+    lavaan_version <- meta$lavaan_version[[1L]]
+  }
+}
 
 copy_required(file.path(lcs_src, "summary.csv"),
               file.path(lcs_dst, "summary.csv"))
@@ -215,9 +544,6 @@ for (path in list.files(lcs_src, pattern = "\\.csv$", full.names = TRUE)) {
 has_refit <- copy_optional(args$refit_csv,
                            file.path(refit_dst, "refit_disagreements_v8.csv"))
 
-parity <- read_csv(file.path(audit_dst, "lavaan_audit_parity.csv"))
-disagree <- read_csv(file.path(audit_dst, "lavaan_audit_parity_disagree.csv"))
-meta <- read_csv(file.path(audit_dst, "lavaan_audit_parity_meta.csv"))
 lcs_summary <- read_csv(file.path(lcs_dst, "summary.csv"))
 refit <- if (has_refit) {
   read_csv(file.path(refit_dst, "refit_disagreements_v8.csv"))
@@ -230,7 +556,7 @@ disagree$fmin_ratio <- finite_ratio(disagree$magmaan_fmin,
 disagree$classification <- classify_disagreement(disagree)
 write_csv(disagree, file.path(results, "audit_disagreements_enriched.csv"))
 
-if (nrow(refit)) {
+if (nrow(refit) && !isTRUE(args$from_oracle)) {
   refit$v7_ratio <- finite_ratio(refit$v7_magmaan_fmin, refit$v7_lav_fx_bare)
   refit$v8_ratio <- finite_ratio(refit$v8_magmaan_fmin, refit$v8_lav_fx_bare)
   current_failures <- refit[!boolish(refit$v8_agrees) | !is.na(refit$v8_err),
@@ -246,26 +572,33 @@ write_csv(refit_summary(refit), file.path(results, "refit_summary.csv"))
 write_csv(current_failures, file.path(results, "current_failures.csv"))
 
 drivers <- data.frame(
-  driver = c("full audit sweep", "LCS moment diagnosis",
+  driver = c("lavaan oracle collector", "cached-oracle magmaan audit",
+             "legacy full audit sweep", "LCS moment diagnosis",
              "v7 disagreement refit", "ADF conditioning probe",
              "paper supplement", "LCS diagnosis writeup"),
   path = c(
+    experiment_path("scripts", "collect_lavaan_oracle.R"),
+    experiment_path("run_experiment.R"),
     paper_script("run_lavaan_audit_parity.R"),
-    paper_script("diagnose_lcs_disagreement.R"),
+    paper_lcs_driver(),
     experiment_path("scripts", "refit_disagreements.R"),
     experiment_path("scripts", "diagnose_adf_conditioning.R"),
-    paper_report("lavaan-audit-parity.qmd"),
-    paper_report("lcs-objective-gap.md")
+    paper_supplement_driver(),
+    paper_lcs_writeup()
   ),
   role = c(
-    "756-cell lavaan self-report vs magmaan terminal-audit sweep",
+    "slow lavaan-only theta_hat/objective/convergence cache",
+    "fresh magmaan evaluate_at audit against cached lavaan theta_hat",
+    "756-cell combined lavaan self-report vs magmaan terminal-audit sweep",
     "side-by-side implied/sample moments on three LCS target cells",
     "targeted refit of the 24 audit-parity-v7 disagreement cells",
     "eigendecomposition of the saturated Muthen ADF conditioning case",
     "original Quarto supplement consumed by the paper",
     "diagnostic narrative for the LCS / phantom-latent objective gap"
   ),
-  expected_runtime = c("about 1 h", "about 30 s", "about 3 s", "about 1 s",
+  expected_runtime = c("slow, about lavaan side of full sweep",
+                       "fast relative to lavaan collection",
+                       "about 1 h", "about 30 s", "about 3 s", "about 1 s",
                        "render only", "read only"),
   stringsAsFactors = FALSE
 )
@@ -274,8 +607,12 @@ write_csv(drivers, file.path(results, "driver_inventory.csv"))
 write_metadata(
   file.path(results, "metadata.csv"),
   values = list(
+    audit_mode = audit_mode,
     audit_run = args$audit_run,
     audit_source = audit_src,
+    oracle_run = oracle_run,
+    oracle_path = oracle_path,
+    lavaan_version = lavaan_version,
     lcs_source = lcs_src,
     refit_source = if (has_refit) args$refit_csv else "",
     has_refit = has_refit,
@@ -286,7 +623,10 @@ write_metadata(
 )
 
 cat(sprintf(
-  "copied %s: %d audit cells, %d v7 disagreements, %d current/projected failures\n",
-  args$audit_run, nrow(parity), nrow(disagree), nrow(current_failures)
+  "%s: %d audit cells, %d disagreements, %d current/projected failures\n",
+  audit_mode, nrow(parity), nrow(disagree), nrow(current_failures)
 ))
+if (nzchar(oracle_run)) {
+  cat(sprintf("used lavaan oracle '%s' from %s\n", oracle_run, oracle_path))
+}
 cat(sprintf("wrote normalized tables to %s\n", results))
