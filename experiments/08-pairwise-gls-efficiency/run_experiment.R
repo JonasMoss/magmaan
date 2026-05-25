@@ -201,43 +201,57 @@ true_theta <- function(partable, m) {
   vals[order(ord)]
 }
 
-# Fit both estimators on one (X, mask) pair. Also records the condition
-# number of Γ_NT(Ŝ_pw) and Γ_NT^pw — the diagnostic the conditioning
-# story turns on.
-fit_both <- function(X, mask, partable) {
+# Fit all three estimators on one (X, mask) pair:
+#   sigma — fit_gls with samp.S = Ŝ_pw                  (Σ-only weight)
+#   gamma — fit_gls_pairwise(raw, pw)                   (Γ_NT^pw weight)
+#   ml    — fit_ml      with samp.S = Ŝ_pw              (Savalei-Bentler 2005
+#                                                        pairwise covariance ML;
+#                                                        asymptotically first-order
+#                                                        equivalent to sigma)
+# Also records cond(Γ_NT(Ŝ_pw)) and cond(Γ_NT^pw) — the conditioning
+# diagnostic the story turns on. Returns NA estimates for any path that
+# errored (e.g. ML when Ŝ_pw is non-PD).
+fit_triple <- function(X, mask, partable, n_par) {
   pw <- magmaan::magmaan_core$data_pairwise_sample_stats(X, mask)
   sample_pw <- list(S = pw$S, mean = pw$mean, nobs = pw$nobs)
 
-  # Weight-matrix conditioning, computed once before fitting. Skips the
-  # eigendecomposition if the matrix is tiny / cheap (always cheap at p = 9).
   S_pw <- pw$S[[1L]]
   G_sigma <- magmaan::magmaan_core$robust_gamma_nt(S_pw)
   G_pw    <- magmaan::magmaan_core$data_gamma_nt_pairwise(X, mask)[[1L]]
   cond_of <- function(M) {
     e <- eigen(M, symmetric = TRUE, only.values = TRUE)$values
-    list(min = min(e), max = max(e), cond = max(e) / max(min(e), .Machine$double.eps))
+    max(e) / max(min(e), .Machine$double.eps)
   }
   c_sigma <- cond_of(G_sigma)
   c_gamma <- cond_of(G_pw)
 
-  t1 <- Sys.time()
-  fit_sigma <- magmaan::magmaan_core$estimate_gls(partable, sample_pw)
-  t2 <- Sys.time()
-  fit_gamma <- magmaan::magmaan_core$estimate_gls_pairwise(partable, X, mask)
-  t3 <- Sys.time()
+  pull_theta <- function(fit) {
+    pt <- fit$partable
+    pt$est[pt$free > 0][order(pt$free[pt$free > 0])]
+  }
+  na_theta <- rep(NA_real_, n_par)
 
-  pt_s <- fit_sigma$partable
-  pt_g <- fit_gamma$partable
-  theta_sigma <- pt_s$est[pt_s$free > 0][order(pt_s$free[pt_s$free > 0])]
-  theta_gamma <- pt_g$est[pt_g$free > 0][order(pt_g$free[pt_g$free > 0])]
+  t1 <- Sys.time()
+  sigma_or <- tryCatch(pull_theta(
+    magmaan::magmaan_core$estimate_gls(partable, sample_pw)),
+    error = function(e) na_theta)
+  t2 <- Sys.time()
+  gamma_or <- tryCatch(pull_theta(
+    magmaan::magmaan_core$estimate_gls_pairwise(partable, X, mask)),
+    error = function(e) na_theta)
+  t3 <- Sys.time()
+  ml_or <- tryCatch(pull_theta(
+    magmaan::magmaan_core$estimate_ml(partable, sample_pw)),
+    error = function(e) na_theta)
+  t4 <- Sys.time()
 
   list(
-    sigma = theta_sigma,
-    gamma = theta_gamma,
+    sigma = sigma_or, gamma = gamma_or, ml = ml_or,
     t_sigma = as.numeric(t2 - t1, units = "secs"),
     t_gamma = as.numeric(t3 - t2, units = "secs"),
-    cond_sigma = c_sigma$cond,
-    cond_gamma = c_gamma$cond
+    t_ml    = as.numeric(t4 - t3, units = "secs"),
+    cond_sigma = c_sigma,
+    cond_gamma = c_gamma
   )
 }
 
@@ -291,7 +305,7 @@ main <- function() {
       storage.mode(mk) <- "logical"
 
       res <- tryCatch(
-        fit_both(Xk, mk, partable),
+        fit_triple(Xk, mk, partable, n_par),
         error = function(e) {
           warning(sprintf("fit failed: n=%d rate=%.2f mech=%s rep=%d: %s",
                           n, rate, mech, rep, conditionMessage(e)),
@@ -308,8 +322,10 @@ main <- function() {
         theta_true = theta_star,
         est_sigma  = res$sigma,
         est_gamma  = res$gamma,
+        est_ml     = res$ml,
         t_sigma    = res$t_sigma,
         t_gamma    = res$t_gamma,
+        t_ml       = res$t_ml,
         cond_sigma = res$cond_sigma,
         cond_gamma = res$cond_gamma
       )
@@ -330,29 +346,48 @@ main <- function() {
     mch <- cells_uniq$mechanism[i]
     cell <- fits[fits$n == n & fits$miss_rate == rt &
                  fits$mechanism == mch, , drop = FALSE]
-    var_sigma <- numeric(n_par); var_gamma <- numeric(n_par)
-    mse_sigma <- numeric(n_par); mse_gamma <- numeric(n_par)
+    var_sigma <- numeric(n_par); var_gamma <- numeric(n_par); var_ml <- numeric(n_par)
+    mse_sigma <- numeric(n_par); mse_gamma <- numeric(n_par); mse_ml <- numeric(n_par)
     for (k in seq_len(n_par)) {
       cl <- cell[cell$par_idx == k, ]
-      var_sigma[k] <- stats::var(cl$est_sigma)
-      var_gamma[k] <- stats::var(cl$est_gamma)
-      bias_s <- mean(cl$est_sigma) - cl$theta_true[[1L]]
-      bias_g <- mean(cl$est_gamma) - cl$theta_true[[1L]]
+      var_sigma[k] <- stats::var(cl$est_sigma, na.rm = TRUE)
+      var_gamma[k] <- stats::var(cl$est_gamma, na.rm = TRUE)
+      var_ml[k]    <- stats::var(cl$est_ml,    na.rm = TRUE)
+      bias_s <- mean(cl$est_sigma, na.rm = TRUE) - cl$theta_true[[1L]]
+      bias_g <- mean(cl$est_gamma, na.rm = TRUE) - cl$theta_true[[1L]]
+      bias_m <- mean(cl$est_ml,    na.rm = TRUE) - cl$theta_true[[1L]]
       mse_sigma[k] <- var_sigma[k] + bias_s^2
       mse_gamma[k] <- var_gamma[k] + bias_g^2
+      mse_ml[k]    <- var_ml[k]    + bias_m^2
     }
     cond_cells <- cell[!duplicated(cell$rep), c("cond_sigma", "cond_gamma")]
+    # Count reps where each estimator returned all-finite θ̂ (per-param NA
+    # in any row of a rep is treated as a failed rep for that estimator).
+    rep_ids <- unique(cell$rep)
+    fin_ok <- function(col) {
+      vapply(rep_ids, function(r) {
+        v <- cell[[col]][cell$rep == r]
+        all(is.finite(v))
+      }, logical(1L))
+    }
     summary_rows[[i]] <- data.frame(
       n = n, miss_rate = rt, mechanism = mch,
-      reps = length(unique(cell$rep)),
+      reps = length(rep_ids),
+      reps_ml_ok = sum(fin_ok("est_ml")),
+      reps_sigma_ok = sum(fin_ok("est_sigma")),
+      reps_gamma_ok = sum(fin_ok("est_gamma")),
       trace_var_sigma = sum(var_sigma),
       trace_var_gamma = sum(var_gamma),
+      trace_var_ml    = sum(var_ml),
       trace_mse_sigma = sum(mse_sigma),
       trace_mse_gamma = sum(mse_gamma),
-      eff_ratio_var = sum(var_sigma) / sum(var_gamma),
-      eff_ratio_mse = sum(mse_sigma) / sum(mse_gamma),
+      trace_mse_ml    = sum(mse_ml),
+      eff_ratio_mse_sigma_vs_gamma = sum(mse_sigma) / sum(mse_gamma),
+      eff_ratio_mse_ml_vs_gamma    = sum(mse_ml)    / sum(mse_gamma),
+      eff_ratio_mse_ml_vs_sigma    = sum(mse_ml)    / sum(mse_sigma),
       mean_t_sigma = mean(cell$t_sigma, na.rm = TRUE),
       mean_t_gamma = mean(cell$t_gamma, na.rm = TRUE),
+      mean_t_ml    = mean(cell$t_ml,    na.rm = TRUE),
       median_cond_sigma = stats::median(cond_cells$cond_sigma),
       median_cond_gamma = stats::median(cond_cells$cond_gamma),
       q95_cond_sigma    = stats::quantile(cond_cells$cond_sigma, 0.95, names = FALSE),
