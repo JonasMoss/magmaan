@@ -44,8 +44,10 @@ median_or_na <- function(x) {
   if (!length(x)) NA_real_ else stats::median(x)
 }
 
-speed$Method <- factor(speed$path, levels = c("bounded", "snlls"),
-                       labels = c("Bounded", "SNLLS"))
+method_levels <- c("full_bounded", "threshold_profiled_bounded", "snlls")
+method_labels <- c("Full bounded", "Threshold-profiled bounded", "SNLLS")
+speed$Method <- factor(speed$path, levels = method_levels,
+                       labels = method_labels)
 speed$Design <- factor(
   speed$design,
   levels = c("kreiberg_scaling", "worked_example", "threshold_stress"),
@@ -62,14 +64,22 @@ wide <- reshape(
   direction = "wide"
 )
 names(wide) <- sub("^fit_median_ms\\.", "", names(wide))
-wide$speedup <- wide$bounded / wide$snlls
+for (name in method_levels) {
+  if (!name %in% names(wide)) wide[[name]] <- NA_real_
+}
+wide$profile_gain <- wide$full_bounded / wide$threshold_profiled_bounded
+wide$snlls_incremental <- wide$threshold_profiled_bounded / wide$snlls
+wide$total_gain <- wide$full_bounded / wide$snlls
 ```
 
 ## Question
 
 This pilot asks whether ordinal SNLLS shows the same basic speed pattern as
 the continuous Kreiberg-style SNLLS examples once thresholds and ordinal
-weights are in the objective.
+weights are in the objective. It now separates three costs where available:
+legacy full bounded fitting, threshold-profiled bounded fitting, and SNLLS.
+The full direct bounded comparator is included for DWLS/WLS; ULS has the
+threshold-profiled bounded versus SNLLS comparison.
 
 The design deliberately includes three views:
 
@@ -80,11 +90,15 @@ The design deliberately includes three views:
 
 ## Short Answer
 
-In this pilot, SNLLS is faster than bounded fitting in the repeated-measure
-ordinal cells while matching the bounded objective to numerical tolerance.
-The result is not yet a paper-grade simulation: statistic construction is still
-the legacy full ordinal builder, and the design is synthetic. But it is the
-right first sign that the Kreiberg-style scaling story survives ordinalization.
+In this pilot, the full direct comparator is a useful diagnostic rather than a
+guaranteed slower baseline: fit-only timings can favor the legacy full bounded
+path after statistic construction is excluded. The robust signal is the
+profiled-to-SNLLS comparison, which measures the gain from eliminating the
+nonlinear threshold block from the optimizer. The fitted solutions match the
+bounded objectives to numerical tolerance. The result is not yet a paper-grade
+simulation: statistic construction is still the legacy full ordinal builder,
+and the design is synthetic. But it is the right first sign that the
+Kreiberg-style scaling story survives ordinalization.
 
 ## Run
 
@@ -110,13 +124,16 @@ knitr::kable(status, row.names = FALSE)
 
 ```{r}
 agreement <- aggregate(
-  cbind(theta_diff_bounded, fmin_diff_bounded) ~ Design + estimator + Method,
+  cbind(theta_diff_profiled_bounded, fmin_diff_profiled_bounded,
+        theta_diff_full_bounded, fmin_diff_full_bounded) ~
+    Design + estimator + Method,
   data = ok,
   FUN = max_or_na,
   na.action = na.pass
 )
 names(agreement) <- c("Design", "Estimator", "Method",
-                      "Max |theta - bounded|", "Max |fmin - bounded|")
+                      "Max |theta - profiled|", "Max |fmin - profiled|",
+                      "Max |theta - full|", "Max |fmin - full|")
 for (j in 4:ncol(agreement)) agreement[[j]] <- fmt_diff(agreement[[j]])
 knitr::kable(agreement, row.names = FALSE)
 ```
@@ -124,31 +141,53 @@ knitr::kable(agreement, row.names = FALSE)
 ## Speedup
 
 ```{r}
-summary <- aggregate(speedup ~ design + estimator, data = wide,
-                     FUN = median_or_na)
+summary <- aggregate(cbind(profile_gain, snlls_incremental, total_gain) ~
+                       design + estimator,
+                     data = wide,
+                     FUN = median_or_na,
+                     na.action = na.pass)
 summary$Design <- factor(
   summary$design,
   levels = c("kreiberg_scaling", "worked_example", "threshold_stress"),
   labels = c("Kreiberg scaling", "Worked example", "Threshold stress")
 )
-summary$`Median bounded / SNLLS` <- fmt_num(summary$speedup)
-knitr::kable(summary[, c("Design", "estimator", "Median bounded / SNLLS")],
+summary$`Full / profiled` <- fmt_num(summary$profile_gain)
+summary$`Profiled / SNLLS` <- fmt_num(summary$snlls_incremental)
+summary$`Full / SNLLS` <- fmt_num(summary$total_gain)
+knitr::kable(summary[, c("Design", "estimator", "Full / profiled",
+                         "Profiled / SNLLS", "Full / SNLLS")],
              row.names = FALSE,
-             col.names = c("Design", "Estimator", "Median Bounded / SNLLS"))
+             col.names = c("Design", "Estimator", "Full / Profiled",
+                           "Profiled / SNLLS", "Full / SNLLS"))
 ```
+
+Ratios greater than one favor the denominator. `Full / Profiled` can be below
+one because the pilot excludes statistic construction and compares different
+bounded objective implementations, not just the presence or absence of
+threshold profiling.
 
 ```{r}
 #| fig-width: 8
-#| fig-height: 4
+#| fig-height: 5
 if (requireNamespace("ggplot2", quietly = TRUE)) {
   library(ggplot2)
   scaling <- wide[wide$design == "kreiberg_scaling", ]
-  ggplot(scaling, aes(q, speedup, color = estimator)) +
+  plot_data <- rbind(
+    transform(scaling[is.finite(scaling$profile_gain), ],
+              Ratio = profile_gain, Comparison = "Full / profiled"),
+    transform(scaling[is.finite(scaling$snlls_incremental), ],
+              Ratio = snlls_incremental,
+              Comparison = "Profiled / SNLLS"),
+    transform(scaling[is.finite(scaling$total_gain), ],
+              Ratio = total_gain, Comparison = "Full / SNLLS")
+  )
+  ggplot(plot_data, aes(q, Ratio, color = estimator)) +
     geom_hline(yintercept = 1, linetype = 2, color = "grey50") +
     geom_line() +
     geom_point(size = 2) +
+    facet_wrap(~ Comparison, scales = "free_y") +
     labs(x = "Indicators per factor (q)",
-         y = "Bounded / SNLLS fit-time ratio",
+         y = "Fit-time ratio",
          color = "Estimator") +
     theme_minimal(base_size = 12)
 } else {
@@ -161,12 +200,20 @@ if (requireNamespace("ggplot2", quietly = TRUE)) {
 ```{r}
 worked <- wide[wide$design == "worked_example", ]
 worked_table <- worked[, c("case_id", "q", "p", "categories", "estimator",
-                           "bounded", "snlls", "speedup")]
+                           "full_bounded", "threshold_profiled_bounded",
+                           "snlls", "profile_gain", "snlls_incremental",
+                           "total_gain")]
 names(worked_table) <- c("Case", "q", "p", "Categories", "Estimator",
-                         "Bounded ms", "SNLLS ms", "Bounded / SNLLS")
-worked_table$`Bounded ms` <- fmt_ms(worked_table$`Bounded ms`)
+                         "Full bounded ms", "Profiled bounded ms",
+                         "SNLLS ms", "Full / profiled",
+                         "Profiled / SNLLS", "Full / SNLLS")
+worked_table$`Full bounded ms` <- fmt_ms(worked_table$`Full bounded ms`)
+worked_table$`Profiled bounded ms` <-
+  fmt_ms(worked_table$`Profiled bounded ms`)
 worked_table$`SNLLS ms` <- fmt_ms(worked_table$`SNLLS ms`)
-worked_table$`Bounded / SNLLS` <- fmt_num(worked_table$`Bounded / SNLLS`)
+worked_table$`Full / profiled` <- fmt_num(worked_table$`Full / profiled`)
+worked_table$`Profiled / SNLLS` <- fmt_num(worked_table$`Profiled / SNLLS`)
+worked_table$`Full / SNLLS` <- fmt_num(worked_table$`Full / SNLLS`)
 knitr::kable(worked_table, row.names = FALSE)
 ```
 
@@ -175,10 +222,14 @@ knitr::kable(worked_table, row.names = FALSE)
 ```{r}
 stress <- wide[wide$design == "threshold_stress", ]
 stress_table <- stress[, c("categories", "threshold_balance",
-                           "threshold_mode", "estimator", "speedup")]
+                           "threshold_mode", "estimator", "profile_gain",
+                           "snlls_incremental", "total_gain")]
 names(stress_table) <- c("Categories", "Threshold balance",
-                         "Threshold mode", "Estimator", "Bounded / SNLLS")
-stress_table$`Bounded / SNLLS` <- fmt_num(stress_table$`Bounded / SNLLS`)
+                         "Threshold mode", "Estimator", "Full / profiled",
+                         "Profiled / SNLLS", "Full / SNLLS")
+stress_table$`Full / profiled` <- fmt_num(stress_table$`Full / profiled`)
+stress_table$`Profiled / SNLLS` <- fmt_num(stress_table$`Profiled / SNLLS`)
+stress_table$`Full / SNLLS` <- fmt_num(stress_table$`Full / SNLLS`)
 knitr::kable(stress_table[order(stress_table$Categories,
                                 stress_table$`Threshold balance`,
                                 stress_table$`Threshold mode`,
@@ -207,7 +258,9 @@ knitr::kable(cost, row.names = FALSE)
 Fit timing excludes statistic construction, but `stats_ms` is shown because the
 current pilot still starts from legacy `OrdinalStats`, which estimates
 polychorics, full NACOV, and legacy DWLS/WLS weights. A raw/lazy ordinal
-builder is the next experiment if we want end-to-end speed claims.
+builder is the next experiment if we want end-to-end speed claims. The
+`full_bounded` rows use that materialized legacy path directly for DWLS/WLS;
+the profiled bounded and SNLLS rows reuse the ordinal moment/Gamma cache.
 
 ## Caveats
 
@@ -215,7 +268,8 @@ This is a speed pilot, not a simulation study. It uses one synthetic
 repeated-measure model family, all-ordinal complete data, the delta
 parameterization, and NLopt L-BFGS. It does not compare against lavaan timing,
 mixed ordinal data, theta parameterization, robust reporting, or alternate
-optimizers.
+optimizers. There is no full direct ULS comparator in this run, so ULS only
+supports the profiled bounded versus SNLLS split.
 
 The default runner caps the Kreiberg-style scaling grid at `q <= 8` to keep
 the preliminary run practical. Use `--max-q 12` for the fuller literature-like
