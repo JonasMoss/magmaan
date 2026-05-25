@@ -792,6 +792,174 @@ Eigen::MatrixXd shared_ordinal_bread_numeric(
 
 }  // namespace
 
+OrdinalMoments ordinal_moments_from_stats(const OrdinalStats& stats) {
+  return OrdinalMoments{
+      .R = stats.R,
+      .thresholds = stats.thresholds,
+      .threshold_ov = stats.threshold_ov,
+      .threshold_level = stats.threshold_level,
+      .n_obs = stats.n_obs,
+      .n_levels = stats.n_levels,
+      .ov_names = stats.ov_names};
+}
+
+MixedOrdinalMoments
+mixed_ordinal_moments_from_stats(const MixedOrdinalStats& stats) {
+  return MixedOrdinalMoments{
+      .R = stats.R,
+      .mean = stats.mean,
+      .ordered = stats.ordered,
+      .thresholds = stats.thresholds,
+      .threshold_ov = stats.threshold_ov,
+      .threshold_level = stats.threshold_level,
+      .moments = stats.moments,
+      .n_obs = stats.n_obs,
+      .n_levels = stats.n_levels,
+      .ov_names = stats.ov_names};
+}
+
+OrdinalGammaCache ordinal_gamma_cache_from_stats(const OrdinalStats& stats) {
+  OrdinalGammaCache cache;
+  cache.blocks.resize(stats.NACOV.size());
+  for (std::size_t b = 0; b < stats.NACOV.size(); ++b) {
+    auto& block = cache.blocks[b];
+    block.gamma = stats.NACOV[b];
+    block.has_full = true;
+    block.diagonal = stats.NACOV[b].diagonal();
+    block.has_diagonal = true;
+    if (b < stats.W_dwls.size()) {
+      block.w_dwls = stats.W_dwls[b];
+      block.has_dwls_weight = true;
+    }
+    if (b < stats.W_wls.size()) {
+      block.w_wls = stats.W_wls[b];
+      block.has_wls_weight = true;
+    }
+  }
+  return cache;
+}
+
+OrdinalGammaCache
+ordinal_gamma_cache_from_stats(const MixedOrdinalStats& stats) {
+  OrdinalGammaCache cache;
+  cache.blocks.resize(stats.NACOV.size());
+  for (std::size_t b = 0; b < stats.NACOV.size(); ++b) {
+    auto& block = cache.blocks[b];
+    block.gamma = stats.NACOV[b];
+    block.has_full = true;
+    block.diagonal = stats.NACOV[b].diagonal();
+    block.has_diagonal = true;
+    if (b < stats.W_dwls.size()) {
+      block.w_dwls = stats.W_dwls[b];
+      block.has_dwls_weight = true;
+    }
+    if (b < stats.W_wls.size()) {
+      block.w_wls = stats.W_wls[b];
+      block.has_wls_weight = true;
+    }
+  }
+  return cache;
+}
+
+OrdinalGammaCache
+ordinal_gamma_cache_from_diagonal(const std::vector<Eigen::VectorXd>& diagonal) {
+  OrdinalGammaCache cache;
+  cache.blocks.resize(diagonal.size());
+  for (std::size_t b = 0; b < diagonal.size(); ++b) {
+    cache.blocks[b].diagonal = diagonal[b];
+    cache.blocks[b].has_diagonal = true;
+  }
+  return cache;
+}
+
+OrdinalWeightPlan ordinal_weight_plan(
+    OrdinalWorkspacePurpose purpose,
+    OrdinalEstimatorKind estimator,
+    OrdinalMomentParameterization parameterization,
+    OrdinalThresholdMode threshold_mode) {
+  OrdinalGammaMaterialization materialization =
+      OrdinalGammaMaterialization::None;
+  if (purpose == OrdinalWorkspacePurpose::FitOnly) {
+    if (estimator == OrdinalEstimatorKind::DWLS) {
+      materialization = OrdinalGammaMaterialization::Diagonal;
+    } else if (estimator == OrdinalEstimatorKind::WLS) {
+      materialization = OrdinalGammaMaterialization::Full;
+    }
+  } else {
+    materialization = OrdinalGammaMaterialization::Full;
+  }
+  return OrdinalWeightPlan{
+      .purpose = purpose,
+      .estimator = estimator,
+      .parameterization = parameterization,
+      .threshold_mode = threshold_mode,
+      .materialization = materialization};
+}
+
+post_expected<void> ordinal_gamma_cache_ensure_diagonal(
+    OrdinalGammaCache& cache) {
+  for (std::size_t b = 0; b < cache.blocks.size(); ++b) {
+    auto& block = cache.blocks[b];
+    if (block.has_diagonal) continue;
+    if (!block.has_full) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "OrdinalGammaCache block " + std::to_string(b) +
+              " has no full Gamma to derive a diagonal from"));
+    }
+    if (block.gamma.rows() != block.gamma.cols() || !block.gamma.allFinite()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "OrdinalGammaCache block " + std::to_string(b) +
+              " full Gamma is not a finite square matrix"));
+    }
+    block.diagonal = block.gamma.diagonal();
+    block.has_diagonal = true;
+  }
+  return {};
+}
+
+post_expected<void> ordinal_gamma_cache_ensure_dwls_weights(
+    OrdinalGammaCache& cache) {
+  auto diag_ok = ordinal_gamma_cache_ensure_diagonal(cache);
+  if (!diag_ok.has_value()) return std::unexpected(diag_ok.error());
+  for (std::size_t b = 0; b < cache.blocks.size(); ++b) {
+    auto& block = cache.blocks[b];
+    if (block.has_dwls_weight) continue;
+    const Eigen::Index n = block.diagonal.size();
+    block.w_dwls = Eigen::MatrixXd::Zero(n, n);
+    for (Eigen::Index k = 0; k < n; ++k) {
+      const double v = block.diagonal(k);
+      if (!std::isfinite(v) || v <= 0.0) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "OrdinalGammaCache block " + std::to_string(b) +
+                " has a non-positive Gamma diagonal"));
+      }
+      block.w_dwls(k, k) = 1.0 / v;
+    }
+    block.has_dwls_weight = true;
+  }
+  return {};
+}
+
+post_expected<void> ordinal_gamma_cache_ensure_wls_weights(
+    OrdinalGammaCache& cache) {
+  for (std::size_t b = 0; b < cache.blocks.size(); ++b) {
+    auto& block = cache.blocks[b];
+    if (block.has_wls_weight) continue;
+    if (!block.has_full) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "OrdinalGammaCache block " + std::to_string(b) +
+              " has no full Gamma for WLS weight construction"));
+    }
+    auto inv_or = symmetric_inverse_pd(
+        block.gamma, "OrdinalGammaCache block " + std::to_string(b) +
+                         " full Gamma");
+    if (!inv_or.has_value()) return std::unexpected(inv_or.error());
+    block.w_wls = std::move(*inv_or);
+    block.has_wls_weight = true;
+  }
+  return {};
+}
+
 post_expected<PairwiseOrdinalStats>
 pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs) {
   if (Xs.empty()) {

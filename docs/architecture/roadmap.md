@@ -473,6 +473,12 @@ stop rather than any usable non-error return.
   composite likelihood, not multivariate MAR ordinal FIML.
 - Muthen-style all-ordinal NACOV construction for thresholds plus
   polychorics.
+- A first internal ordinal workspace split is in place: `OrdinalMoments` /
+  `MixedOrdinalMoments` carry observed statistics and metadata only,
+  `OrdinalGammaCache` records which Gamma/weight pieces are materialized, and
+  `OrdinalWeightPlan` encodes the fit-only ULS/DWLS/WLS Gamma cost rules. The
+  legacy `OrdinalStats` and `MixedOrdinalStats` structs remain the
+  compatibility adapters that materialize full NACOV plus DWLS/WLS weights.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
   thin R wrappers for ordinal stats plus DWLS/WLS fits.
 - The R ordinal data boundary exposes consolidated dispatchers:

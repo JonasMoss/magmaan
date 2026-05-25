@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -46,6 +47,116 @@ struct MixedOrdinalStats {
   std::vector<std::vector<std::int32_t>> n_levels;
   std::vector<std::vector<std::string>> ov_names;
 };
+
+// Observed all-ordinal moment metadata without Gamma/NACOV or fit weights.
+// This is the non-breaking split point for cache-aware ordinal fitting: legacy
+// `OrdinalStats` remains the compatibility adapter that materializes all
+// pieces.
+struct OrdinalMoments {
+  std::vector<Eigen::MatrixXd> R;
+  std::vector<Eigen::VectorXd> thresholds;
+  std::vector<std::vector<std::int32_t>> threshold_ov;
+  std::vector<std::vector<std::int32_t>> threshold_level;
+  std::vector<std::int64_t> n_obs;
+  std::vector<std::vector<std::int32_t>> n_levels;
+  std::vector<std::vector<std::string>> ov_names;
+};
+
+// Observed mixed continuous/ordinal moment metadata without Gamma/NACOV or fit
+// weights. Moment order matches `MixedOrdinalStats::moments`.
+struct MixedOrdinalMoments {
+  std::vector<Eigen::MatrixXd> R;
+  std::vector<Eigen::VectorXd> mean;
+  std::vector<std::vector<std::int32_t>> ordered;
+  std::vector<Eigen::VectorXd> thresholds;
+  std::vector<std::vector<std::int32_t>> threshold_ov;
+  std::vector<std::vector<std::int32_t>> threshold_level;
+  std::vector<Eigen::VectorXd> moments;
+  std::vector<std::int64_t> n_obs;
+  std::vector<std::vector<std::int32_t>> n_levels;
+  std::vector<std::vector<std::string>> ov_names;
+};
+
+enum class OrdinalWorkspacePurpose {
+  FitOnly,
+  FitPlusInference,
+  InferenceOnly,
+};
+
+enum class OrdinalEstimatorKind {
+  ULS,
+  DWLS,
+  WLS,
+};
+
+enum class OrdinalMomentParameterization {
+  Delta,
+  Theta,
+};
+
+enum class OrdinalThresholdMode {
+  FreeIdentity,
+  LinearMap,
+  FixedOrConstrained,
+};
+
+enum class OrdinalGammaMaterialization {
+  None,
+  Diagonal,
+  Full,
+  Reduced,
+};
+
+struct OrdinalWeightPlan {
+  OrdinalWorkspacePurpose purpose = OrdinalWorkspacePurpose::FitOnly;
+  OrdinalEstimatorKind estimator = OrdinalEstimatorKind::DWLS;
+  OrdinalMomentParameterization parameterization =
+      OrdinalMomentParameterization::Delta;
+  OrdinalThresholdMode threshold_mode = OrdinalThresholdMode::FreeIdentity;
+  OrdinalGammaMaterialization materialization =
+      OrdinalGammaMaterialization::Diagonal;
+};
+
+struct OrdinalGammaCacheBlock {
+  Eigen::VectorXd diagonal;
+  Eigen::MatrixXd gamma;
+  Eigen::MatrixXd w_dwls;
+  Eigen::MatrixXd w_wls;
+  bool has_diagonal = false;
+  bool has_full = false;
+  bool has_dwls_weight = false;
+  bool has_wls_weight = false;
+};
+
+struct OrdinalGammaCache {
+  std::vector<OrdinalGammaCacheBlock> blocks;
+
+  std::size_t block_count() const noexcept { return blocks.size(); }
+};
+
+OrdinalMoments ordinal_moments_from_stats(const OrdinalStats& stats);
+MixedOrdinalMoments
+mixed_ordinal_moments_from_stats(const MixedOrdinalStats& stats);
+
+OrdinalGammaCache ordinal_gamma_cache_from_stats(const OrdinalStats& stats);
+OrdinalGammaCache
+ordinal_gamma_cache_from_stats(const MixedOrdinalStats& stats);
+OrdinalGammaCache
+ordinal_gamma_cache_from_diagonal(const std::vector<Eigen::VectorXd>& diagonal);
+
+OrdinalWeightPlan ordinal_weight_plan(
+    OrdinalWorkspacePurpose purpose,
+    OrdinalEstimatorKind estimator,
+    OrdinalMomentParameterization parameterization =
+        OrdinalMomentParameterization::Delta,
+    OrdinalThresholdMode threshold_mode = OrdinalThresholdMode::FreeIdentity);
+
+post_expected<void> ordinal_gamma_cache_ensure_diagonal(
+    OrdinalGammaCache& cache);
+post_expected<void> ordinal_gamma_cache_ensure_dwls_weights(
+    OrdinalGammaCache& cache);
+post_expected<void> ordinal_gamma_cache_ensure_wls_weights(
+    OrdinalGammaCache& cache);
 
 struct MixedOrdinalPolyserialDpdBlockDiagnostics {
   std::vector<MixedPairLabel> dpd_pairs;
