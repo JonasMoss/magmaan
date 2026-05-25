@@ -62,6 +62,17 @@ PostError model_to_post(ModelError e) {
   return make_post_err(PostError::Kind::NumericIssue, std::move(e.detail));
 }
 
+FitError post_to_fit(PostError e) {
+  return make_err(FitError::Kind::NumericIssue, std::move(e.detail));
+}
+
+OrdinalParameterization to_estimate_parameterization(
+    data::OrdinalMomentParameterization parameterization) {
+  return parameterization == data::OrdinalMomentParameterization::Theta
+      ? OrdinalParameterization::Theta
+      : OrdinalParameterization::Delta;
+}
+
 Eigen::Index vech_index(Eigen::Index p, Eigen::Index r, Eigen::Index c) noexcept {
   return c * p - (c * (c - 1)) / 2 + (r - c);
 }
@@ -101,6 +112,18 @@ fit_expected<std::int64_t> total_n_obs(const data::MixedOrdinalStats& s) {
         "MixedOrdinalStats has non-positive total n_obs"));
   }
   return total;
+}
+
+data::OrdinalStats stats_adapter(const data::OrdinalMoments& moments) {
+  data::OrdinalStats stats;
+  stats.R = moments.R;
+  stats.thresholds = moments.thresholds;
+  stats.threshold_ov = moments.threshold_ov;
+  stats.threshold_level = moments.threshold_level;
+  stats.n_obs = moments.n_obs;
+  stats.n_levels = moments.n_levels;
+  stats.ov_names = moments.ov_names;
+  return stats;
 }
 
 fit_expected<void> validate_stats(const data::OrdinalStats& s,
@@ -157,6 +180,43 @@ fit_expected<void> validate_stats(const data::OrdinalStats& s,
     if (llt.info() != Eigen::Success) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "OrdinalStats weight matrix is not positive definite in block " +
+              std::to_string(b)));
+    }
+  }
+  return {};
+}
+
+fit_expected<void> validate_moments(const data::OrdinalMoments& s,
+                                    const model::MatrixRep& rep) {
+  const std::size_t nb = rep.dims.size();
+  if (s.R.size() != nb || s.thresholds.size() != nb ||
+      s.threshold_ov.size() != nb || s.threshold_level.size() != nb ||
+      s.n_obs.size() != nb || s.n_levels.size() != nb) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "OrdinalMoments block counts do not match MatrixRep"));
+  }
+  for (std::size_t b = 0; b < nb; ++b) {
+    const Eigen::Index p = rep.dims[b].n_observed;
+    if (s.R[b].rows() != p || s.R[b].cols() != p) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "OrdinalMoments R dimension mismatch in block " + std::to_string(b)));
+    }
+    if (static_cast<Eigen::Index>(s.threshold_ov[b].size()) !=
+            s.thresholds[b].size() ||
+        static_cast<Eigen::Index>(s.threshold_level[b].size()) !=
+            s.thresholds[b].size()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "OrdinalMoments threshold metadata mismatch in block " +
+              std::to_string(b)));
+    }
+    if (s.n_obs[b] <= 0) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "OrdinalMoments n_obs must be positive in block " +
+              std::to_string(b)));
+    }
+    if (!matrix_all_finite(s.R[b]) || !vector_all_finite(s.thresholds[b])) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "OrdinalMoments contains non-finite values in block " +
               std::to_string(b)));
     }
   }
@@ -540,6 +600,87 @@ weight_factors(const data::OrdinalStats& stats, OrdinalWeightKind kind) {
     out.push_back(llt.matrixL());
   }
   return out;
+}
+
+fit_expected<std::vector<Eigen::MatrixXd>>
+weight_factors_from_matrices(const std::vector<Eigen::MatrixXd>& Ws,
+                             std::string_view what) {
+  std::vector<Eigen::MatrixXd> out;
+  out.reserve(Ws.size());
+  for (std::size_t b = 0; b < Ws.size(); ++b) {
+    Eigen::LLT<Eigen::MatrixXd> llt(Ws[b]);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(what) + " weight matrix is not positive definite in block " +
+              std::to_string(b)));
+    }
+    out.push_back(llt.matrixL());
+  }
+  return out;
+}
+
+fit_expected<std::vector<Eigen::MatrixXd>>
+fit_only_weight_factors(const data::OrdinalMoments& moments,
+                        data::OrdinalGammaCache* cache,
+                        const data::OrdinalWeightPlan& plan) {
+  std::vector<Eigen::MatrixXd> Ws;
+  Ws.reserve(moments.R.size());
+  if (plan.purpose != data::OrdinalWorkspacePurpose::FitOnly) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: OrdinalWeightPlan purpose must be fit-only"));
+  }
+  if (plan.threshold_mode != data::OrdinalThresholdMode::FreeIdentity) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: cached path currently requires free thresholds"));
+  }
+
+  if (plan.estimator == data::OrdinalEstimatorKind::ULS) {
+    if (plan.materialization != data::OrdinalGammaMaterialization::None) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: ULS fit-only plan must request no Gamma"));
+    }
+    for (std::size_t b = 0; b < moments.R.size(); ++b) {
+      const Eigen::Index p = moments.R[b].rows();
+      const Eigen::Index mdim =
+          moments.thresholds[b].size() + p * (p - 1) / 2;
+      Ws.push_back(Eigen::MatrixXd::Identity(mdim, mdim));
+    }
+    return weight_factors_from_matrices(Ws, "ordinal ULS");
+  }
+
+  if (plan.estimator == data::OrdinalEstimatorKind::WLS) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: cached full-WLS ordinal profiling is not implemented"));
+  }
+
+  if (plan.materialization != data::OrdinalGammaMaterialization::Diagonal) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: DWLS fit-only plan must request diagonal Gamma"));
+  }
+  if (cache == nullptr) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: DWLS requires an OrdinalGammaCache"));
+  }
+  if (cache->blocks.size() != moments.R.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: OrdinalGammaCache block count mismatch"));
+  }
+  auto ok = data::ordinal_gamma_cache_ensure_dwls_weights(*cache);
+  if (!ok.has_value()) return std::unexpected(post_to_fit(ok.error()));
+
+  for (std::size_t b = 0; b < moments.R.size(); ++b) {
+    const Eigen::Index p = moments.R[b].rows();
+    const Eigen::Index mdim =
+        moments.thresholds[b].size() + p * (p - 1) / 2;
+    const Eigen::MatrixXd& W = cache->blocks[b].w_dwls;
+    if (W.rows() != mdim || W.cols() != mdim || !matrix_all_finite(W)) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: cached DWLS weight dimension mismatch in block " +
+              std::to_string(b)));
+    }
+    Ws.push_back(W);
+  }
+  return weight_factors_from_matrices(Ws, "ordinal DWLS cache");
 }
 
 fit_expected<std::vector<Eigen::MatrixXd>>
@@ -1108,6 +1249,14 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
 }
 
 fit_expected<void>
+prepare_ordinal_delta_partable(spec::LatentStructure& pt,
+                                const data::OrdinalMoments& moments,
+                                spec::Starts* starts) {
+  data::OrdinalStats stats = stats_adapter(moments);
+  return prepare_ordinal_delta_partable(pt, stats, starts);
+}
+
+fit_expected<void>
 prepare_ordinal_partable(spec::LatentStructure& pt,
                          const data::OrdinalStats& stats,
                          OrdinalParameterization parameterization,
@@ -1118,6 +1267,15 @@ prepare_ordinal_partable(spec::LatentStructure& pt,
   // implied moments are standardized), not in the partable layout.
   (void)parameterization;
   return prepare_ordinal_delta_partable(pt, stats, starts);
+}
+
+fit_expected<void>
+prepare_ordinal_partable(spec::LatentStructure& pt,
+                         const data::OrdinalMoments& moments,
+                         OrdinalParameterization parameterization,
+                         spec::Starts* starts) {
+  (void)parameterization;
+  return prepare_ordinal_delta_partable(pt, moments, starts);
 }
 
 fit_expected<void>
@@ -1186,6 +1344,15 @@ ordinal_start_values(spec::LatentStructure pt,
   Eigen::VectorXd x0 = std::move(*x0_or);
   seed_threshold_starts(x0, *layout_or, stats);
   return x0;
+}
+
+fit_expected<Eigen::VectorXd>
+ordinal_start_values(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const data::OrdinalMoments& moments,
+                     spec::Starts starts) {
+  data::OrdinalStats stats = stats_adapter(moments);
+  return ordinal_start_values(std::move(pt), rep, stats, std::move(starts));
 }
 
 fit_expected<Eigen::VectorXd>
@@ -2132,6 +2299,105 @@ fit_ordinal_bounded(spec::LatentStructure pt,
   }
 
   auto factors_or = weight_factors(stats, weights);
+  if (!factors_or.has_value()) return std::unexpected(factors_or.error());
+  const auto& factors = *factors_or;
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "constraint: " + con_or.error().detail));
+  }
+  const EqConstraints& con = *con_or;
+
+  auto eval0 = ev.evaluate(x0, false, false);
+  if (!eval0.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "fit_ordinal_bounded: start evaluation failed: " + eval0.error().detail));
+  }
+  auto r0 = ordinal_residuals(stats, layout, eval0->moments, factors, x0,
+                              parameterization);
+  if (!r0.has_value()) return std::unexpected(r0.error());
+
+  optim::GmmProblem prob;
+  prob.n_resid = r0->size();
+  prob.n_param = x0.size();
+  prob.expand  = [](const Eigen::VectorXd& x) { return x; };
+  prob.r = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
+    auto eval = ev.evaluate(x, false, false);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "fit_ordinal_bounded: evaluate failed: " + eval.error().detail));
+    }
+    return ordinal_residuals(stats, layout, eval->moments, factors, x,
+                             parameterization);
+  };
+  prob.J = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
+    auto eval = ev.evaluate(x, true, false);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "fit_ordinal_bounded: evaluate failed: " + eval.error().detail));
+    }
+    return ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
+                            factors, x, parameterization);
+  };
+
+  return solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
+                          "fit_ordinal_bounded");
+}
+
+fit_expected<Estimates>
+fit_ordinal_bounded(spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const data::OrdinalMoments& moments,
+                    data::OrdinalGammaCache* gamma_cache,
+                    Bounds bounds,
+                    data::OrdinalWeightPlan plan,
+                    const Eigen::VectorXd& x0,
+                    Backend backend,
+                    OptimOptions opts) {
+  const OrdinalParameterization parameterization =
+      to_estimate_parameterization(plan.parameterization);
+  if (auto v = validate_moments(moments, rep); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  data::OrdinalStats stats = stats_adapter(moments);
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(p.error());
+  }
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(layout_or.error());
+  const ThresholdLayout& layout = *layout_or;
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "ModelEvaluator::build failed: " + ev_or.error().detail));
+  }
+  auto ev = std::move(*ev_or);
+
+  if (x0.size() != pt.n_free()) {
+    return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+        "fit_ordinal_bounded: x0 size (" + std::to_string(x0.size()) +
+            ") != prepared partable n_free (" +
+            std::to_string(pt.n_free()) + ")"));
+  }
+
+  if (bounds.empty()) {
+    auto b_or = bounds_from_partable(pt);
+    if (!b_or.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: bounds_from_partable failed: " +
+              b_or.error().detail));
+    }
+    bounds = std::move(*b_or);
+  }
+  if (bounds.lower.size() != x0.size() || bounds.upper.size() != x0.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "fit_ordinal_bounded: bounds size mismatch"));
+  }
+
+  auto factors_or = fit_only_weight_factors(moments, gamma_cache, plan);
   if (!factors_or.has_value()) return std::unexpected(factors_or.error());
   const auto& factors = *factors_or;
 

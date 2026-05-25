@@ -61,8 +61,19 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
                                 spec::Starts* starts = nullptr);
 
 fit_expected<void>
+prepare_ordinal_delta_partable(spec::LatentStructure& pt,
+                                const data::OrdinalMoments& moments,
+                                spec::Starts* starts = nullptr);
+
+fit_expected<void>
 prepare_ordinal_partable(spec::LatentStructure& pt,
                          const data::OrdinalStats& stats,
+                         OrdinalParameterization parameterization,
+                         spec::Starts* starts = nullptr);
+
+fit_expected<void>
+prepare_ordinal_partable(spec::LatentStructure& pt,
+                         const data::OrdinalMoments& moments,
                          OrdinalParameterization parameterization,
                          spec::Starts* starts = nullptr);
 
@@ -162,6 +173,12 @@ ordinal_start_values(spec::LatentStructure pt,
                      spec::Starts starts = {});
 
 fit_expected<Eigen::VectorXd>
+ordinal_start_values(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const data::OrdinalMoments& moments,
+                     spec::Starts starts = {});
+
+fit_expected<Eigen::VectorXd>
 mixed_ordinal_start_values(spec::LatentStructure pt,
                            const model::MatrixRep& rep,
                            const data::MixedOrdinalStats& stats,
@@ -190,6 +207,22 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                     optim::OptimOptions opts = {},
                     OrdinalParameterization parameterization =
                         OrdinalParameterization::Delta);
+
+// Fit-only all-ordinal LS over moment metadata plus an explicit Gamma cache.
+// `ULS` uses identity weights and does not touch the cache. `DWLS` asks the
+// cache for diagonal Gamma-derived weights only. Full WLS profiling is a later
+// ordinal workspace slice; use the legacy `OrdinalStats` overload for the
+// current materialized WLS path.
+fit_expected<Estimates>
+fit_ordinal_bounded(spec::LatentStructure pt,
+                    const model::MatrixRep& rep,
+                    const data::OrdinalMoments& moments,
+                    data::OrdinalGammaCache* gamma_cache,
+                    Bounds bounds,
+                    data::OrdinalWeightPlan plan,
+                    const Eigen::VectorXd& x0,
+                    Backend backend = Backend::NloptLbfgs,
+                    optim::OptimOptions opts = {});
 
 fit_expected<Estimates>
 fit_mixed_ordinal_bounded(spec::LatentStructure pt,

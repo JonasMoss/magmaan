@@ -479,6 +479,11 @@ stop rather than any usable non-error return.
   `OrdinalWeightPlan` encodes the fit-only ULS/DWLS/WLS Gamma cost rules. The
   legacy `OrdinalStats` and `MixedOrdinalStats` structs remain the
   compatibility adapters that materialize full NACOV plus DWLS/WLS weights.
+- The all-ordinal fit-only path can now consume `OrdinalMoments` plus an
+  `OrdinalWeightPlan`: ULS builds identity weights and does not touch Gamma,
+  while DWLS materializes only diagonal Gamma-derived weights from
+  `OrdinalGammaCache`. Full WLS Schur-complement profiling remains a later
+  ordinal workspace slice.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
   thin R wrappers for ordinal stats plus DWLS/WLS fits.
 - The R ordinal data boundary exposes consolidated dispatchers:
