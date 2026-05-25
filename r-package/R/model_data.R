@@ -1103,6 +1103,32 @@ fit_wls <- function(model, data, W, optimizer = "nlopt-lbfgs", control = NULL,
                optimizer = optimizer, control = control, bounds = b)
 }
 
+# evaluate_at() — no-optimizer companion. Runs the same terminal audit /
+# diagnostics suite the fit_* paths run, but at an externally-supplied
+# `theta` (e.g. a parameter vector returned by lavaan or by a published
+# reference) instead of at an optimizer's terminal iterate. Same objective
+# the matching fit_* would minimise, same bounds defaults, same audit
+# tolerances. Returns the standard fit-result list — `iterations = 0`,
+# `f_evals = g_evals = 1`, `audit` and `diagnostics` populated.
+#
+# `theta` must be a numeric vector of length `model$partable[free > 0, ]`
+# (i.e. matching what `fit_*` would return as `$theta`). `estimator` selects
+# the moment objective; `W` is required for `"WLS"`. `bounds = NULL` applies
+# `variance_bounds(model)` (lavaan's `pos.var` preset) — pass an explicit
+# `list(lower = ..., upper = ...)` to override, or one of the bound preset
+# names accepted by `fit_*`. `audit_options` accepts the same fields as the
+# C++ `TerminalAuditOptions` struct (e.g.
+# `list(stationarity_mode = "absolute", absolute_tol = 1e-3)`).
+evaluate_at <- function(model, data, theta,
+                        estimator = c("ULS", "GLS", "WLS", "ML"),
+                        W = NULL, bounds = NULL, audit_options = NULL) {
+  estimator <- match.arg(estimator)
+  b <- bounds_arg(bounds, model, data, "evaluate_at")
+  evaluate_at_impl(partable_arg(model), sample_stats_arg(data),
+                   theta = as.numeric(theta), estimator = estimator,
+                   W = W, bounds = b, audit_options = audit_options)
+}
+
 fit_ml_fcsem <- function(model, data, missing = c("listwise", "error"),
                          control = NULL) {
   missing <- match.arg(missing)
