@@ -19,6 +19,12 @@
 source(.support_helpers())
 rm(.support_helpers)
 
+experiment_results_dir <- function(create = FALSE) {
+  out <- file.path(dirname(dirname(script_path())), "results")
+  if (isTRUE(create)) dir.create(out, recursive = TRUE, showWarnings = FALSE)
+  out
+}
+
 paper_dir <- file.path(repo_root(), "papers", "snlls-constrained")
 pkg_dir <- file.path(paper_dir, "r-package")
 require_pkg("pkgload")
@@ -145,9 +151,17 @@ audit_one <- function(case) {
   )
 }
 
-v7_path <- file.path(
-  paper_dir, "reports", "pilot-data", "audit-parity-v7",
+v7_candidates <- file.path(
+  paper_dir,
+  c(file.path("reports", "pilot-data", "audit-parity-v7"),
+    file.path("results", "raw", "pilot-data", "audit-parity-v7")),
   "lavaan_audit_parity_disagree.csv")
+v7_hits <- v7_candidates[file.exists(v7_candidates)]
+if (!length(v7_hits)) {
+  stop("missing audit-parity-v7 disagreement CSV in: ",
+       paste(v7_candidates, collapse = ", "), call. = FALSE)
+}
+v7_path <- v7_hits[[1L]]
 v7_disagree <- utils::read.csv(v7_path, stringsAsFactors = FALSE)
 corpus_root <- snlls_corpus_root(paper_dir)
 
@@ -196,7 +210,8 @@ cmp$v8_ratio <- ifelse(abs(cmp$v8_lav_fx_bare) > 0,
 cmp$v8_agrees <- !is.na(cmp$v8_audit_stat) & !is.na(cmp$v8_lav_conv) &
   (cmp$v8_audit_stat == cmp$v8_lav_conv)
 
-out_dir <- file.path(results_dir(create = TRUE), "refit-disagreements")
+out_dir <- file.path(experiment_results_dir(create = TRUE),
+                     "refit-disagreements")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 out_csv <- file.path(out_dir, "refit_disagreements_v8.csv")
 write_csv(cmp, out_csv)

@@ -161,12 +161,30 @@ audit stationarity verdict. This is a convergence-verdict validation, not a
 new estimator, not a fixture generator, and not the benchmark speed surface.
 </div>
 
-The tables below read the latest normalized outputs copied by
-`run_experiment.R`. By default that is the last full sweep,
-`r meta_value("audit_run")`, plus the targeted v8 refit CSV if present. The
-targeted refit is not a full sweep: it reruns only the 24 v7 disagreement
-cells and projects the current failure surface under the assumption that the
-`r v7_agreement_cells` v7 agreement cells did not regress.
+The tables below read the latest normalized outputs written by
+`run_experiment.R`. Plain `run_experiment.R` copies the legacy paper-side
+combined sweep, `r meta_value("audit_run")`; `--from-oracle` instead reuses a
+lavaan-only cache and reruns just magmaan's audit. The targeted refit is not a
+full sweep: it reruns only the 24 v7 disagreement cells and projects the
+current failure surface under the assumption that the `r v7_agreement_cells`
+v7 agreement cells did not regress.
+
+## Oracle Cache
+
+```{r}
+#| results: asis
+cache_tbl <- data.frame(
+  Field = c("Audit Mode", "Audit Source", "Oracle Run", "lavaan Version",
+            "Refit Source"),
+  Value = c(meta_value("audit_mode"), meta_value("audit_source"),
+            meta_value("oracle_run"), meta_value("lavaan_version"),
+            meta_value("refit_source")),
+  stringsAsFactors = FALSE
+)
+cache_tbl <- cache_tbl[!is.na(cache_tbl$Value) & nzchar(cache_tbl$Value),
+                       , drop = FALSE]
+html_table(cache_tbl, limit = NULL)
+```
 
 ## Current Failures
 
@@ -307,7 +325,15 @@ Rscript experiments/00-lavaan-parity/run_experiment.R
 (cd experiments/00-lavaan-parity && quarto render report.qmd)
 ```
 
-Run the long full sweep only when needed:
+Collect a new lavaan-only oracle cache using the newest CRAN lavaan, then audit
+current magmaan against that cached oracle:
+
+```sh
+Rscript experiments/00-lavaan-parity/run_experiment.R --collect-lavaan --install-latest-lavaan
+Rscript experiments/00-lavaan-parity/run_experiment.R --from-oracle
+```
+
+Run the legacy combined paper sweep only when needed:
 
 ```sh
 Rscript experiments/00-lavaan-parity/run_experiment.R --run-full
@@ -318,5 +344,5 @@ Run the cheap targeted probes:
 ```sh
 Rscript experiments/00-lavaan-parity/scripts/refit_disagreements.R
 Rscript experiments/00-lavaan-parity/scripts/diagnose_adf_conditioning.R
-Rscript papers/snlls-constrained/scripts/diagnose_lcs_disagreement.R
+Rscript experiments/00-lavaan-parity/run_experiment.R --run-lcs
 ```

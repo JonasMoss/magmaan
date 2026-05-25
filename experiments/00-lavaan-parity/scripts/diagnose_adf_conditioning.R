@@ -19,6 +19,12 @@
 source(.support_helpers())
 rm(.support_helpers)
 
+experiment_results_dir <- function(create = FALSE) {
+  out <- file.path(dirname(dirname(script_path())), "results")
+  if (isTRUE(create)) dir.create(out, recursive = TRUE, showWarnings = FALSE)
+  out
+}
+
 paper_dir <- file.path(repo_root(), "papers", "snlls-constrained")
 pkg_dir <- file.path(paper_dir, "r-package")
 require_pkg("pkgload")
@@ -116,7 +122,7 @@ eig <- data.frame(index = seq_along(gamma_eigen),
                   eigenvalue = gamma_eigen,
                   stringsAsFactors = FALSE)
 
-out_dir <- file.path(results_dir(create = TRUE), "adf-conditioning")
+out_dir <- file.path(experiment_results_dir(create = TRUE), "adf-conditioning")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 write_csv(summary, file.path(out_dir, "muthen_adf_conditioning_summary.csv"))
 write_csv(eig, file.path(out_dir, "muthen_adf_gamma_eigenvalues.csv"))
