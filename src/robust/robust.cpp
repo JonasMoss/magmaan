@@ -166,11 +166,6 @@ observed_moments_from_mtilde(const UFactor& uf,
       (CM.array() * CM.transpose().array()).sum()};
 }
 
-WeightedChiSquareMoments
-reduced_matrix_moments(int df, const Eigen::Ref<const Eigen::MatrixXd>& M) {
-  return WeightedChiSquareMoments{df, M.diagonal().sum(), M.squaredNorm()};
-}
-
 post_expected<WeightedChiSquareMoments>
 reduced_gamma_sample_moments_impl(
     const UFactor&                            uf,
@@ -241,7 +236,7 @@ reduced_gamma_sample_moments_impl(
     M.noalias() += (ZcB_b.transpose() * ZcB_b) / denom_b(b);
   }
   M = 0.5 * (M + M.transpose()).eval();
-  return reduced_matrix_moments(static_cast<int>(uf.df), M);
+  return weighted_chisq_moments_from_M(static_cast<int>(uf.df), M);
 }
 
 post_expected<WeightedChiSquareMoments>
@@ -307,7 +302,7 @@ reduced_gamma_sample_moments_from_gamma_impl(
     M.noalias() += B_b.transpose() * G_b * B_b;
   }
   M = 0.5 * (M + M.transpose()).eval();
-  return reduced_matrix_moments(static_cast<int>(uf.df), M);
+  return weighted_chisq_moments_from_M(static_cast<int>(uf.df), M);
 }
 
 // Mirror `prepare_evaluator` in inference.cpp — kept duplicated to avoid
@@ -991,6 +986,127 @@ casewise_contributions(const RawData& raw, const SampleStats& samp,
   return Zc;
 }
 
+post_expected<Eigen::MatrixXd>
+pairwise_casewise_contributions(const RawData& raw,
+                                const data::PairwiseSampleStats& pw,
+                                bool include_means) {
+  if (raw.X.size() != pw.S.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "pairwise_casewise_contributions: RawData and PairwiseSampleStats "
+        "block count mismatch"));
+  }
+  if (include_means && pw.mean.size() != pw.S.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "pairwise_casewise_contributions: include_means requested but "
+        "PairwiseSampleStats.mean has wrong block count"));
+  }
+  const bool has_mask = !raw.mask.empty();
+  if (has_mask && raw.mask.size() != raw.X.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "pairwise_casewise_contributions: mask and X have inconsistent "
+        "block counts"));
+  }
+
+  Eigen::Index n_rows = 0;
+  Eigen::Index n_cols = 0;
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    const Eigen::Index p = pw.S[b].rows();
+    n_rows += raw.X[b].rows();
+    n_cols += (include_means ? p : 0) + p * (p + 1) / 2;
+  }
+  Eigen::MatrixXd Psi = Eigen::MatrixXd::Zero(n_rows, n_cols);
+
+  Eigen::Index row_cursor = 0;
+  Eigen::Index col_cursor = 0;
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    const Eigen::MatrixXd& X      = raw.X[b];
+    const Eigen::MatrixXd& S      = pw.S[b];
+    const Eigen::MatrixXd& pi_hat = pw.pi_hat[b];
+    const Eigen::Index n = X.rows();
+    const Eigen::Index p = X.cols();
+    if (p != S.rows() || p != pi_hat.rows()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "pairwise_casewise_contributions: block " + std::to_string(b) +
+              " raw cols (" + std::to_string(p) +
+              ") ≠ PairwiseSampleStats dim (" + std::to_string(S.rows()) + ")"));
+    }
+    if (include_means && pw.mean[b].size() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "pairwise_casewise_contributions: block " + std::to_string(b) +
+              " marginal mean has wrong length"));
+    }
+    if (has_mask) {
+      const auto& M = raw.mask[b];
+      if (M.rows() != n || M.cols() != p) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "pairwise_casewise_contributions: mask block " +
+                std::to_string(b) + " shape mismatch"));
+      }
+    }
+
+    auto observed = [&](Eigen::Index r, Eigen::Index c) -> bool {
+      if (!has_mask) return std::isfinite(X(r, c));
+      return raw.mask[b](r, c) != 0;
+    };
+
+    // Pair-specific means: pair_mean(j, k) = m̄^(j,k)_j, the mean of variable
+    // j over rows where both j and k are observed. Asymmetric in (j, k).
+    Eigen::MatrixXd pair_mean = Eigen::MatrixXd::Zero(p, p);
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index k = 0; k < p; ++k) {
+        double sum_j = 0.0;
+        std::int64_t cnt = 0;
+        for (Eigen::Index r = 0; r < n; ++r) {
+          if (!observed(r, j) || !observed(r, k)) continue;
+          sum_j += X(r, j);
+          ++cnt;
+        }
+        if (cnt <= 0) {
+          return std::unexpected(make_err(PostError::Kind::NumericIssue,
+              "pairwise_casewise_contributions: block " + std::to_string(b) +
+                  " pair (" + std::to_string(j) + "," + std::to_string(k) +
+                  ") has no joint observations"));
+        }
+        pair_mean(j, k) = sum_j / static_cast<double>(cnt);
+      }
+    }
+
+    const Eigen::Index pstar = p * (p + 1) / 2;
+    const Eigen::Index mu_col_off    = include_means ? col_cursor : Eigen::Index{-1};
+    const Eigen::Index sigma_col_off =
+        include_means ? col_cursor + p : col_cursor;
+    for (Eigen::Index t = 0; t < n; ++t) {
+      // μ-segment (G3b only): ψ̂_tj_μ = (x_tj − m̄_j) / π̂_j when R_tj = 1.
+      if (include_means) {
+        for (Eigen::Index j = 0; j < p; ++j) {
+          if (!observed(t, j)) continue;
+          const double pi_j = pi_hat(j, j);
+          Psi(row_cursor + t, mu_col_off + j) =
+              (X(t, j) - pw.mean[b](j)) / pi_j;
+        }
+      }
+      // σ-segment: column-major lower-tri vech, outer col k, inner row j ≥ k.
+      for (Eigen::Index k = 0; k < p; ++k) {
+        if (!observed(t, k)) continue;
+        for (Eigen::Index j = k; j < p; ++j) {
+          if (!observed(t, j)) continue;
+          const double q_tjk =
+              (X(t, j) - pair_mean(j, k)) * (X(t, k) - pair_mean(k, j));
+          const double pi = pi_hat(j, k);
+          // pi_hat is > 0 by construction (every reachable pair has ≥ 1
+          // overlap, otherwise pairwise_sample_stats would have errored).
+          const double psi = (q_tjk - S(j, k)) / pi;
+          const Eigen::Index idx = sigma_col_off + detail::vech_index(p, j, k);
+          Psi(row_cursor + t, idx) = psi;
+        }
+      }
+    }
+    row_cursor += n;
+    col_cursor += (include_means ? p : 0) + pstar;
+  }
+  return Psi;
+}
+
 // ============================================================================
 // reduced_gamma_nt — operator-only, never forms Γ_NT.
 // ============================================================================
@@ -1190,6 +1306,15 @@ weighted_chisq_moments(int df,
   return WeightedChiSquareMoments{df, eigvals.sum(), eigvals.squaredNorm()};
 }
 
+WeightedChiSquareMoments
+weighted_chisq_moments_from_M(int df,
+                              const Eigen::Ref<const Eigen::MatrixXd>& M) noexcept {
+  // tr(M) and tr(M²) = ‖M‖_F² for symmetric M. M is symmetric by construction
+  // (returned by `reduced_gamma_sample` / `reduced_gamma_nt` /
+  // `reduced_gamma_unbiased`), so no symmetrization needed.
+  return WeightedChiSquareMoments{df, M.diagonal().sum(), M.squaredNorm()};
+}
+
 SatorraBentlerResult
 satorra_bentler(double t_ml, const WeightedChiSquareMoments& moments) noexcept {
   SatorraBentlerResult out;
@@ -1300,8 +1425,38 @@ struct RobustSetup {
   bool            has_means  = false;
   Eigen::MatrixXd K_con;             // npar × n_alpha (0/1); empty ⇒ identity
   Eigen::MatrixXd WDelta;            // total_rows × q
-  Eigen::MatrixXd bread;             // q × q  (A1, or H_obs_α)
+  Eigen::MatrixXd bread_expected;    // q × q — A1 (always populated)
+  Eigen::MatrixXd bread;             // q × q  (A1, or H_obs_α — selected per spec)
 };
+
+// Observed-bread helper, factored out of `robust_setup` so the same code
+// path is shared between (a) `robust_se(...)` with `spec.bread == Observed`,
+// and (b) `robust_se_both_breads(...)` which needs both breads at once.
+//
+//   H_obs_α = Kᵀ · (information_observed / N_total) · K
+//
+// `K_con` empty ⇒ identity (no equality-constraint reparameterization).
+post_expected<Eigen::MatrixXd>
+compute_bread_observed(const spec::LatentStructure& pt,
+                       const model::MatrixRep&     rep,
+                       const SampleStats&          samp,
+                       const Estimates&            est,
+                       const Eigen::MatrixXd&      K_con,
+                       double                      N_total) {
+  Eigen::MatrixXd H_obs;
+  if (auto h_or = information_observed_analytic(pt, rep, samp, est);
+      h_or.has_value()) {
+    H_obs = (*h_or) / N_total;
+  } else if (auto fd_or = information_observed_fd(pt, rep, samp, est);
+             fd_or.has_value()) {
+    H_obs = (*fd_or) / N_total;
+  } else {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_se: could not compute the observed Hessian"));
+  }
+  if (K_con.size() > 0) H_obs = (K_con.transpose() * H_obs * K_con).eval();
+  return Eigen::MatrixXd(0.5 * (H_obs + H_obs.transpose()).eval());
+}
 
 post_expected<RobustSetup>
 robust_setup(spec::LatentStructure pt, const model::MatrixRep& rep,
@@ -1471,24 +1626,16 @@ robust_setup(spec::LatentStructure pt, const model::MatrixRep& rep,
   }
 
   // The "bread": A1 (per-unit GLS/Fisher) for Expected; the per-unit observed
-  // Hessian (projected through K) for Observed. `*InfoSE.info`
-  // is the *unprojected* total observed info; /N → per-unit; Kᵀ(·)K → α-space.
+  // Hessian (projected through K) for Observed. The Expected bread always
+  // comes for free from the per-block A_b loop above; the Observed bread
+  // needs a separate `information_observed_analytic` call.
+  s.bread_expected = std::move(bread_exp);
   if (spec.bread == Information::Expected) {
-    s.bread = std::move(bread_exp);
+    s.bread = s.bread_expected;
   } else {
-    Eigen::MatrixXd H_obs;
-    if (auto h_or = information_observed_analytic(pt, rep, samp, est);
-        h_or.has_value()) {
-      H_obs = (*h_or) / s.N_total;
-    } else if (auto fd_or = information_observed_fd(pt, rep, samp, est);
-               fd_or.has_value()) {
-      H_obs = (*fd_or) / s.N_total;
-    } else {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "robust_se: could not compute the observed Hessian"));
-    }
-    if (s.K_con.size() > 0) H_obs = (s.K_con.transpose() * H_obs * s.K_con).eval();
-    s.bread = 0.5 * (H_obs + H_obs.transpose()).eval();
+    auto bo_or = compute_bread_observed(pt, rep, samp, est, s.K_con, s.N_total);
+    if (!bo_or.has_value()) return std::unexpected(bo_or.error());
+    s.bread = std::move(*bo_or);
   }
   return s;
 }
@@ -1592,6 +1739,166 @@ robust_se(spec::LatentStructure        pt,
   const Eigen::MatrixXd ZcWDelta = Zc * s.WDelta;          // N_total × q
   const Eigen::MatrixXd meat = (ZcWDelta.transpose() * ZcWDelta) / s.N_total;
   return sandwich_finish(s, meat);
+}
+
+post_expected<RobustSeResult>
+robust_se(spec::LatentStructure                     pt,
+          const model::MatrixRep&                   rep,
+          const SampleStats&                        samp,
+          const Estimates&                          est,
+          const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+          double                                    n_total,
+          InferenceSpec                             spec) {
+  auto setup_or =
+      robust_setup(std::move(pt), rep, samp, est, spec, /*gamma_hat=*/false);
+  if (!setup_or.has_value()) return std::unexpected(setup_or.error());
+  const auto& s = *setup_or;
+  const Eigen::Index expected_cols =
+      s.has_means ? s.total_rows : s.pstar;
+  if (Zc.cols() != expected_cols) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_se: Z_c has " + std::to_string(Zc.cols()) +
+            " columns, expected " + std::to_string(expected_cols) +
+            (s.has_means ? " ([μ; σ] per block)" : " (σ-only)")));
+  }
+  if (!(n_total > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_se: n_total must be positive"));
+  }
+  // Same (Z_c·WΔ)ᵀ(Z_c·WΔ) / n_total path as the raw-data overload — skips
+  // the internal `casewise_contributions` rebuild for callers that already
+  // hold Zc.
+  const Eigen::MatrixXd ZcWDelta = Zc * s.WDelta;
+  const Eigen::MatrixXd meat = (ZcWDelta.transpose() * ZcWDelta) / n_total;
+  return sandwich_finish(s, meat);
+}
+
+// ── robust_se_both_breads — three overloads ────────────────────────────────
+// Each one:
+//   1. Runs `robust_setup` once with spec.bread = Expected; this populates
+//      `s.bread_expected = A1` as a byproduct of the shared per-block loop.
+//   2. Computes the Observed bread (the only bread-specific cost — the
+//      observed Hessian) via `compute_bread_observed`.
+//   3. Builds the meat once (gamma_hat / Zc / casewise depending on overload).
+//   4. Calls `sandwich_finish` twice against the shared meat with the two
+//      breads — cheap q×q inversions and a final K_con expansion.
+//
+// Net saving vs two single-bread calls: one fewer pass through the
+// expensive Δ-stacking + Γ_NT Cholesky + WΔ build + Zc/γ̂ pipeline.
+
+namespace {
+
+// Helper: take a `RobustSetup` produced with bread=Expected and run
+// sandwich_finish against it once with the Expected bread and once with the
+// Observed bread. The two `sandwich_finish` calls only differ in which
+// bread is inverted.
+post_expected<RobustSeBothBreads>
+finish_both_breads(const RobustSetup&     s_expected,
+                   const Eigen::MatrixXd& bread_observed,
+                   const Eigen::MatrixXd& meat) {
+  auto e_or = sandwich_finish(s_expected, meat);
+  if (!e_or.has_value()) return std::unexpected(e_or.error());
+  // Swap in the Observed bread for the second sandwich. Cheap because we
+  // only touch the `bread` field; all the heavy fields (WΔ, K_con, etc.)
+  // are shared and untouched.
+  RobustSetup s_observed = s_expected;
+  s_observed.bread = bread_observed;
+  auto o_or = sandwich_finish(s_observed, meat);
+  if (!o_or.has_value()) return std::unexpected(o_or.error());
+  return RobustSeBothBreads{std::move(*e_or), std::move(*o_or)};
+}
+
+}  // namespace
+
+post_expected<RobustSeBothBreads>
+robust_se_both_breads(spec::LatentStructure        pt,
+                      const model::MatrixRep&   rep,
+                      const SampleStats&        samp,
+                      const Estimates&          est,
+                      const Eigen::MatrixXd&    gamma_hat,
+                      WeightMoments             moments,
+                      ScoreCovariance           cov) {
+  // Drive shared setup with bread=Expected so we pay zero observed-Hessian
+  // cost when only the Expected bread is asked for inside `robust_setup`.
+  InferenceSpec spec{Information::Expected, moments, cov};
+  auto setup_or =
+      robust_setup(pt, rep, samp, est, spec, /*gamma_hat=*/true);
+  if (!setup_or.has_value()) return std::unexpected(setup_or.error());
+  const auto& s = *setup_or;
+  const Eigen::Index expected_dim = s.has_means ? s.total_rows : s.pstar;
+  if (gamma_hat.rows() != expected_dim || gamma_hat.cols() != expected_dim) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_se_both_breads: Γ̂ is " + std::to_string(gamma_hat.rows()) +
+            "×" + std::to_string(gamma_hat.cols()) + ", expected " +
+            std::to_string(expected_dim) + "×" + std::to_string(expected_dim) +
+            (s.has_means ? " (μ-rows + σ-rows per block)" : " (σ-only)")));
+  }
+  auto bo_or = compute_bread_observed(pt, rep, samp, est, s.K_con, s.N_total);
+  if (!bo_or.has_value()) return std::unexpected(bo_or.error());
+  const Eigen::MatrixXd meat = s.WDelta.transpose() * gamma_hat * s.WDelta;
+  return finish_both_breads(s, *bo_or, meat);
+}
+
+post_expected<RobustSeBothBreads>
+robust_se_both_breads(spec::LatentStructure        pt,
+                      const model::MatrixRep&   rep,
+                      const SampleStats&        samp,
+                      const Estimates&          est,
+                      const RawData&            raw,
+                      WeightMoments             moments,
+                      ScoreCovariance           cov) {
+  InferenceSpec spec{Information::Expected, moments, cov};
+  auto setup_or =
+      robust_setup(pt, rep, samp, est, spec, /*gamma_hat=*/false);
+  if (!setup_or.has_value()) return std::unexpected(setup_or.error());
+  const auto& s = *setup_or;
+  auto Zc_or = casewise_contributions(raw, samp, /*include_means=*/s.has_means);
+  if (!Zc_or.has_value()) return std::unexpected(Zc_or.error());
+  const Eigen::MatrixXd& Zc = *Zc_or;
+  const Eigen::Index expected_cols = s.has_means ? s.total_rows : s.pstar;
+  if (Zc.cols() != expected_cols) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_se_both_breads: Z_c has " + std::to_string(Zc.cols()) +
+            " columns, expected " + std::to_string(expected_cols) +
+            (s.has_means ? " ([μ; σ] per block)" : " (σ-only)")));
+  }
+  auto bo_or = compute_bread_observed(pt, rep, samp, est, s.K_con, s.N_total);
+  if (!bo_or.has_value()) return std::unexpected(bo_or.error());
+  const Eigen::MatrixXd ZcWDelta = Zc * s.WDelta;
+  const Eigen::MatrixXd meat = (ZcWDelta.transpose() * ZcWDelta) / s.N_total;
+  return finish_both_breads(s, *bo_or, meat);
+}
+
+post_expected<RobustSeBothBreads>
+robust_se_both_breads(spec::LatentStructure                     pt,
+                      const model::MatrixRep&                   rep,
+                      const SampleStats&                        samp,
+                      const Estimates&                          est,
+                      const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+                      double                                    n_total,
+                      WeightMoments                             moments,
+                      ScoreCovariance                           cov) {
+  InferenceSpec spec{Information::Expected, moments, cov};
+  auto setup_or =
+      robust_setup(pt, rep, samp, est, spec, /*gamma_hat=*/false);
+  if (!setup_or.has_value()) return std::unexpected(setup_or.error());
+  const auto& s = *setup_or;
+  const Eigen::Index expected_cols = s.has_means ? s.total_rows : s.pstar;
+  if (Zc.cols() != expected_cols) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_se_both_breads: Z_c has " + std::to_string(Zc.cols()) +
+            " columns, expected " + std::to_string(expected_cols) +
+            (s.has_means ? " ([μ; σ] per block)" : " (σ-only)")));
+  }
+  if (!(n_total > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_se_both_breads: n_total must be positive"));
+  }
+  auto bo_or = compute_bread_observed(pt, rep, samp, est, s.K_con, s.N_total);
+  if (!bo_or.has_value()) return std::unexpected(bo_or.error());
+  const Eigen::MatrixXd ZcWDelta = Zc * s.WDelta;
+  const Eigen::MatrixXd meat = (ZcWDelta.transpose() * ZcWDelta) / n_total;
+  return finish_both_breads(s, *bo_or, meat);
 }
 
 }  // namespace magmaan::robust

@@ -511,6 +511,113 @@ Rcpp::List data_sample_stats_from_raw(SEXP X) {
                             Rcpp::_["nobs"] = nv);
 }
 
+namespace {
+
+// Build a (possibly multi-block) RawData from a plain `X` / optional `mask`
+// argument pair — no model/partable needed. Used by the Van-Praag pairwise
+// methods-developer surface, where the saturated estimator has no structural
+// restrictions and the caller may not have a partable on hand.
+magmaan::data::RawData raw_from_data_args(SEXP X_arg, SEXP mask_arg) {
+  const std::size_t n_blocks = TYPEOF(X_arg) == VECSXP
+      ? static_cast<std::size_t>(Rcpp::List(X_arg).size())
+      : 1u;
+  if (n_blocks == 0) Rcpp::stop("magmaan: data has no blocks");
+
+  magmaan::data::RawData raw;
+  raw.X.reserve(n_blocks);
+  bool any_missing = false;
+  std::vector<Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>> masks;
+  masks.reserve(n_blocks);
+  const bool has_mask = !Rf_isNull(mask_arg);
+
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    Rcpp::NumericMatrix Xb = block_matrix(X_arg, b, n_blocks, "data$X");
+    const int n = Xb.nrow();
+    const int p = Xb.ncol();
+    Eigen::MatrixXd X(n, p);
+    Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M(n, p);
+
+    Rcpp::LogicalMatrix Mb;
+    if (has_mask) {
+      Mb = block_mask_matrix(mask_arg, b, n_blocks, "data$mask");
+      if (Mb.nrow() != n || Mb.ncol() != p)
+        Rcpp::stop("magmaan: data$mask block %d has shape %dx%d but data$X has %dx%d",
+                   static_cast<int>(b + 1), Mb.nrow(), Mb.ncol(), n, p);
+    }
+    for (int r = 0; r < n; ++r) {
+      for (int k = 0; k < p; ++k) {
+        const double x = Xb(r, k);
+        const bool observed = has_mask
+            ? (Mb(r, k) != NA_LOGICAL && Mb(r, k) != 0)
+            : std::isfinite(x);
+        if (observed && !std::isfinite(x)) {
+          Rcpp::stop("magmaan: data$mask marks a non-finite value as observed "
+                     "in block %d, row %d", static_cast<int>(b + 1), r + 1);
+        }
+        M(r, k) = static_cast<std::uint8_t>(observed ? 1 : 0);
+        X(r, k) = observed ? x : std::numeric_limits<double>::quiet_NaN();
+        if (!observed) any_missing = true;
+      }
+    }
+    raw.X.push_back(std::move(X));
+    masks.push_back(std::move(M));
+  }
+  if (any_missing) raw.mask = std::move(masks);
+  return raw;
+}
+
+}  // namespace
+
+// data_pairwise_sample_stats() — mirrors data::pairwise_sample_stats(raw).
+// Takes raw data (matrix or list of per-group matrices) and an optional
+// missingness mask (1 = observed). Returns the per-block bundle of marginal
+// column means, pairwise N-divisor covariance, pairwise availability π̂ =
+// n_(j,ℓ)/n, overlap counts n_(j,ℓ), and block sample sizes.
+//
+// [[Rcpp::export]]
+Rcpp::List data_pairwise_sample_stats(SEXP X, SEXP mask = R_NilValue) {
+  magmaan::data::RawData raw = raw_from_data_args(X, mask);
+  auto pw_or = magmaan::data::pairwise_sample_stats(raw);
+  if (!pw_or.has_value()) stop_post(pw_or.error());
+  const magmaan::data::PairwiseSampleStats& pw = *pw_or;
+
+  const R_xlen_t nb = static_cast<R_xlen_t>(pw.S.size());
+  Rcpp::List Sl(nb), Ml(nb), Pi(nb), Np(nb);
+  Rcpp::IntegerVector nv(nb);
+  for (R_xlen_t b = 0; b < nb; ++b) {
+    const std::size_t bi = static_cast<std::size_t>(b);
+    Sl[b] = Rcpp::wrap(pw.S[bi]);
+    Ml[b] = Rcpp::wrap(pw.mean[bi]);
+    Pi[b] = Rcpp::wrap(pw.pi_hat[bi]);
+    Np[b] = Rcpp::wrap(pw.n_pair[bi]);
+    nv[b] = static_cast<int>(pw.n_obs[bi]);
+  }
+  return Rcpp::List::create(
+      Rcpp::_["S"]      = Sl,
+      Rcpp::_["mean"]   = Ml,
+      Rcpp::_["pi_hat"] = Pi,
+      Rcpp::_["n_pair"] = Np,
+      Rcpp::_["nobs"]   = nv);
+}
+
+// infer_pairwise_casewise_contributions() — mirrors
+// robust::pairwise_casewise_contributions(raw, pairwise_sample_stats(raw)).
+// Returns the Van-Praag influence matrix Ψ̂ (N x Σ_b p_b*) ready to be passed
+// into infer_reduced_gamma_sample(uf, Psi, nobs) for the same U-Gamma
+// machinery as the complete-data case.
+//
+// [[Rcpp::export]]
+Rcpp::NumericMatrix infer_pairwise_casewise_contributions(
+    SEXP X, SEXP mask = R_NilValue, bool include_means = false) {
+  magmaan::data::RawData raw = raw_from_data_args(X, mask);
+  auto pw_or = magmaan::data::pairwise_sample_stats(raw);
+  if (!pw_or.has_value()) stop_post(pw_or.error());
+  auto psi_or = magmaan::robust::pairwise_casewise_contributions(
+      raw, *pw_or, include_means);
+  if (!psi_or.has_value()) stop_post(psi_or.error());
+  return Rcpp::wrap(*psi_or);
+}
+
 // infer_empirical_gamma() — mirrors empirical_gamma(X). Returns the p* x p*
 // fourth-moment ACOV of vech(S) (vech = lower-tri column-major).
 //
@@ -529,6 +636,20 @@ Rcpp::NumericMatrix infer_empirical_gamma(Rcpp::NumericMatrix X) {
 Rcpp::NumericMatrix infer_gamma_nt(Rcpp::NumericMatrix Sigma) {
   Eigen::MatrixXd Seig = Rcpp::as<Eigen::MatrixXd>(Sigma);
   auto g_or = magmaan::data::gamma_nt(Seig);
+  if (!g_or.has_value()) stop_post(g_or.error());
+  return Rcpp::wrap(*g_or);
+}
+
+// infer_empirical_gamma_with_means() — mirrors empirical_gamma_with_means(X).
+// Returns the (p + p*) × (p + p*) stacked NACOV for the moment vector
+// [m̄ ; vech(S)] — Browne 1984 with meanstructure. The vech-vech sub-block
+// equals infer_empirical_gamma(X) bit-for-bit; the cross-block carries the
+// empirical third moments that vanish only under normality.
+//
+// [[Rcpp::export]]
+Rcpp::NumericMatrix infer_empirical_gamma_with_means(Rcpp::NumericMatrix X) {
+  Eigen::MatrixXd Xeig = Rcpp::as<Eigen::MatrixXd>(X);
+  auto g_or = magmaan::data::empirical_gamma_with_means(Xeig);
   if (!g_or.has_value()) stop_post(g_or.error());
   return Rcpp::wrap(*g_or);
 }
@@ -682,4 +803,94 @@ Rcpp::List infer_robust_se_raw_parts(SEXP partable, Rcpp::List sample_stats,
   if (!r_or.has_value()) stop_post(r_or.error());
   return Rcpp::List::create(Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
                             Rcpp::_["se"]   = Rcpp::wrap(r_or->se));
+}
+
+// infer_robust_se_zc() — Zc-overload of robust_se. Caller supplies the
+// (N_total × C) casewise contributions matrix from
+// `infer_casewise_contributions()` plus the total sample size; we skip the
+// internal `casewise_contributions` rebuild AND any Γ̂ materialisation. Use
+// this in simulation hot loops where the same Zc feeds multiple sandwich
+// (bread = expected vs observed) and χ² eigvalue calls.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_robust_se_zc(Rcpp::List fit, Rcpp::NumericMatrix Zc,
+                              double n_total,
+                              std::string bread = "expected",
+                              std::string moments = "structured",
+                              std::string cov = "empirical") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  // Zero-copy view of the R matrix — avoids a per-call O(N·p*) memcpy that's
+  // very visible in simulation hot loops where the same Zc feeds back-to-back
+  // bread=expected / bread=observed calls.
+  Eigen::Map<const Eigen::MatrixXd> Zc_m(Zc.begin(), Zc.nrow(), Zc.ncol());
+  auto r_or = magmaan::robust::robust_se(ctx.pt, ctx.rep, ctx.samp, est,
+                                             Zc_m, n_total,
+                                             spec_from(bread, moments, cov));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return Rcpp::List::create(Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
+                            Rcpp::_["se"]   = Rcpp::wrap(r_or->se));
+}
+
+// --- robust_se_both_breads — three overloads ----------------------------------
+// Run the shared robust_se setup (Δ-stacking, Γ_NT Cholesky, WΔ) ONCE and
+// return both bread=expected and bread=observed sandwich SE vectors. Avoids
+// recomputing the Δ pipeline on the second bread. Returns a 2-level list:
+//   list(expected = list(vcov, se), observed = list(vcov, se)).
+
+namespace {
+Rcpp::List pair_to_list(const magmaan::robust::RobustSeBothBreads& r) {
+  return Rcpp::List::create(
+      Rcpp::_["expected"] = Rcpp::List::create(
+          Rcpp::_["vcov"] = Rcpp::wrap(r.expected.vcov),
+          Rcpp::_["se"]   = Rcpp::wrap(r.expected.se)),
+      Rcpp::_["observed"] = Rcpp::List::create(
+          Rcpp::_["vcov"] = Rcpp::wrap(r.observed.vcov),
+          Rcpp::_["se"]   = Rcpp::wrap(r.observed.se)));
+}
+}  // namespace
+
+// [[Rcpp::export]]
+Rcpp::List infer_robust_se_both_breads(Rcpp::List fit,
+                                       Rcpp::NumericMatrix gamma_hat,
+                                       std::string moments = "structured",
+                                       std::string cov = "empirical") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const Eigen::MatrixXd G = Rcpp::as<Eigen::MatrixXd>(gamma_hat);
+  auto r_or = magmaan::robust::robust_se_both_breads(
+      ctx.pt, ctx.rep, ctx.samp, est, G,
+      moments_from_string(moments), cov_from_string(cov));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return pair_to_list(*r_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List infer_robust_se_both_breads_raw(Rcpp::List fit, SEXP X,
+                                           std::string moments = "structured",
+                                           std::string cov = "empirical") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = raw_from_arg(ctx.rep, X);
+  auto r_or = magmaan::robust::robust_se_both_breads(
+      ctx.pt, ctx.rep, ctx.samp, est, raw,
+      moments_from_string(moments), cov_from_string(cov));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return pair_to_list(*r_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List infer_robust_se_both_breads_zc(Rcpp::List fit,
+                                          Rcpp::NumericMatrix Zc,
+                                          double n_total,
+                                          std::string moments = "structured",
+                                          std::string cov = "empirical") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  Eigen::Map<const Eigen::MatrixXd> Zc_m(Zc.begin(), Zc.nrow(), Zc.ncol());
+  auto r_or = magmaan::robust::robust_se_both_breads(
+      ctx.pt, ctx.rep, ctx.samp, est, Zc_m, n_total,
+      moments_from_string(moments), cov_from_string(cov));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return pair_to_list(*r_or);
 }

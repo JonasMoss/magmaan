@@ -21,6 +21,7 @@
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/robust/robust.hpp"   // robust::casewise_contributions
 
 #include "detail_vech.hpp"
 
@@ -894,6 +895,182 @@ information_observed_analytic(spec::LatentStructure       pt,
     if (has_means) mu_off += p;
   }
 
+  return info;
+}
+
+// ============================================================================
+// information_cross_products — Σ_i s_i s_iᵀ at θ̂, parameter-level OPG.
+//
+// Built from the casewise score factorisation
+//   s_i = (W_b · Δ_b)ᵀ · z_i,b ,  z_i,b = [x_i − m̄_b ; vech((x_i − m̄_b)(...)ᵀ) − vech(S_b)]
+// stacked block-diagonal across groups. The OPG is then
+//   I_XP = Σ_i s_i s_iᵀ = (Z_c · WΔ)ᵀ · (Z_c · WΔ)
+// with per-block (n_b/N) weighting absorbed into the block-diagonal stacking
+// (each row of Z_c hits only its block's WΔ slice, so Σ_b n_b · ... falls
+// out naturally — total N-scaled, matching `information_expected`'s
+// convention so the same `vcov(info, pt)` path works downstream).
+// ============================================================================
+
+post_expected<Eigen::MatrixXd>
+information_cross_products(spec::LatentStructure       pt,
+                           const model::MatrixRep&     rep,
+                           const SampleStats&          samp,
+                           const RawData&              raw,
+                           const Estimates&            est) {
+  auto ev_or = prepare_evaluator(pt, rep, samp, est);
+  if (!ev_or.has_value()) return std::unexpected(ev_or.error());
+  const auto& ev = *ev_or;
+
+  const auto n_blocks = samp.S.size();
+
+  // Σ̂, Δσ, Δμ at θ̂.
+  auto sm_or = ev.sigma(est.theta);
+  if (!sm_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "information_cross_products: sigma(θ̂) failed: " + sm_or.error().detail));
+  }
+  const auto& sm = *sm_or;
+
+  auto Jsig_or = ev.dsigma_dtheta(est.theta);
+  if (!Jsig_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "information_cross_products: dsigma_dtheta failed: " +
+            Jsig_or.error().detail));
+  }
+  const Eigen::MatrixXd& J_sigma = *Jsig_or;
+
+  auto Jmu_or = ev.dmu_dtheta(est.theta);
+  if (!Jmu_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "information_cross_products: dmu_dtheta failed: " + Jmu_or.error().detail));
+  }
+  const Eigen::MatrixXd& J_mu = *Jmu_or;
+  const bool has_means = (J_mu.size() > 0);
+
+  const Eigen::Index n_free = static_cast<Eigen::Index>(ev.n_free());
+
+  // Per-block geometry: μ on top of σ when has_means; σ-only otherwise.
+  // Mirrors `robust::casewise_contributions` / `robust_setup`.
+  struct BlockGeom {
+    Eigen::Index p          = 0;
+    Eigen::Index pstar      = 0;
+    Eigen::Index mu_off     = -1;     // start row in the stacked layout (-1 ⇒ no means)
+    Eigen::Index row_offset = 0;      // σ-segment start row
+    Eigen::LLT<Eigen::MatrixXd> llt_gamma_nt;   // Cholesky of Γ_NT(Σ̂_b) (p* × p*)
+    Eigen::LLT<Eigen::MatrixXd> llt_sigma;      // Cholesky of Σ̂_b (used for the μ-block of W)
+  };
+  std::vector<BlockGeom> blocks(n_blocks);
+
+  Eigen::Index total_rows = 0;
+  Eigen::Index sigma_vech_total = 0;
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const Eigen::MatrixXd Sigma_b =
+        0.5 * (sm.sigma[b] + sm.sigma[b].transpose());
+    const Eigen::Index p = Sigma_b.rows();
+    auto& blk = blocks[b];
+    blk.p          = p;
+    blk.pstar      = vech_len(p);
+    blk.mu_off     = has_means ? total_rows : Eigen::Index{-1};
+    if (has_means) total_rows += p;
+    blk.row_offset = total_rows;
+    total_rows    += blk.pstar;
+    sigma_vech_total += blk.pstar;
+
+    auto G_or = data::gamma_nt(Sigma_b);
+    if (!G_or.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "information_cross_products: gamma_nt failed for block " +
+              std::to_string(b) + ": " + G_or.error().detail));
+    }
+    blk.llt_gamma_nt = Eigen::LLT<Eigen::MatrixXd>(*G_or);
+    if (blk.llt_gamma_nt.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+          "information_cross_products: Γ_NT(Σ̂) is not positive definite in "
+          "block " + std::to_string(b)));
+    }
+    if (has_means) {
+      blk.llt_sigma = Eigen::LLT<Eigen::MatrixXd>(Sigma_b);
+      if (blk.llt_sigma.info() != Eigen::Success) {
+        return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+            "information_cross_products: Σ̂ is not positive definite in "
+            "block " + std::to_string(b)));
+      }
+    }
+  }
+  if (J_sigma.rows() != sigma_vech_total) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "information_cross_products: Δσ row count " +
+            std::to_string(J_sigma.rows()) + " ≠ Σ_b p_b* = " +
+            std::to_string(sigma_vech_total)));
+  }
+  if (has_means) {
+    Eigen::Index p_total = 0;
+    for (const auto& blk : blocks) p_total += blk.p;
+    if (J_mu.rows() != p_total) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "information_cross_products: Δμ row count " +
+              std::to_string(J_mu.rows()) + " ≠ Σ_b p_b = " +
+              std::to_string(p_total)));
+    }
+    if (J_mu.cols() != n_free) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "information_cross_products: Δμ cols " +
+              std::to_string(J_mu.cols()) + " ≠ Δσ cols " +
+              std::to_string(n_free)));
+    }
+  }
+
+  // Stack Δ_full = [Δμ_b; Δσ_b] per block in the global (μ on top of σ
+  // within each block) layout — matches casewise_contributions.
+  Eigen::MatrixXd Delta_full = Eigen::MatrixXd::Zero(total_rows, n_free);
+  {
+    Eigen::Index s_cursor = 0;
+    Eigen::Index m_cursor = 0;
+    for (const auto& blk : blocks) {
+      if (has_means) {
+        Delta_full.block(blk.mu_off, 0, blk.p, n_free) =
+            J_mu.block(m_cursor, 0, blk.p, n_free);
+        m_cursor += blk.p;
+      }
+      Delta_full.block(blk.row_offset, 0, blk.pstar, n_free) =
+          J_sigma.block(s_cursor, 0, blk.pstar, n_free);
+      s_cursor += blk.pstar;
+    }
+  }
+
+  // WΔ per block: W = Γ_NT(Σ̂_b)⁻¹ on the σ-segment, Σ̂_b⁻¹ on the μ-segment
+  // (the μ-block of Γ_NT in the [μ; σ] stacked-moment convention is just Σ̂_b).
+  // Two triangular solves per block: A = L⁻¹·Δ, then WΔ = L⁻ᵀ·A.
+  Eigen::MatrixXd WDelta = Eigen::MatrixXd::Zero(total_rows, n_free);
+  for (const auto& blk : blocks) {
+    if (has_means) {
+      const auto Dmu_b = Delta_full.middleRows(blk.mu_off, blk.p);
+      const Eigen::MatrixXd A_mu = blk.llt_sigma.matrixL().solve(Dmu_b);
+      WDelta.middleRows(blk.mu_off, blk.p) =
+          blk.llt_sigma.matrixU().solve(A_mu);
+    }
+    const auto Dsig_b = Delta_full.middleRows(blk.row_offset, blk.pstar);
+    const Eigen::MatrixXd A_sig = blk.llt_gamma_nt.matrixL().solve(Dsig_b);
+    WDelta.middleRows(blk.row_offset, blk.pstar) =
+        blk.llt_gamma_nt.matrixU().solve(A_sig);
+  }
+
+  // Z_c — block-stacked casewise contributions (μ-cols then σ-vech cols per
+  // block when has_means; σ-vech-only otherwise). Same layout as Delta_full
+  // along the moment axis, so Z_c · WΔ gives the per-case score matrix.
+  auto Zc_or = robust::casewise_contributions(raw, samp, has_means);
+  if (!Zc_or.has_value()) return std::unexpected(Zc_or.error());
+  const Eigen::MatrixXd& Zc = *Zc_or;
+  if (Zc.cols() != total_rows) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "information_cross_products: Z_c has " + std::to_string(Zc.cols()) +
+            " columns, expected " + std::to_string(total_rows)));
+  }
+
+  // I_XP = (Z_c · WΔ)ᵀ · (Z_c · WΔ). Total (N-scaled) OPG, no /N.
+  const Eigen::MatrixXd ZcWDelta = Zc * WDelta;                  // N × n_free
+  Eigen::MatrixXd info = ZcWDelta.transpose() * ZcWDelta;        // n_free × n_free
+  info = 0.5 * (info + info.transpose()).eval();
   return info;
 }
 

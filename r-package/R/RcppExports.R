@@ -69,6 +69,10 @@ fit_fiml_impl <- function(partable, raw_data, optimizer = NULL, control = NULL) 
     .Call(`_magmaan_fit_fiml_impl`, partable, raw_data, optimizer, control)
 }
 
+saturated_em_moments_impl <- function(raw_data, h_step = 1e-4) {
+    .Call(`_magmaan_saturated_em_moments_impl`, raw_data, h_step)
+}
+
 fit_uls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_uls_impl`, partable, sample_stats, optimizer, control, bounds)
 }
@@ -79,6 +83,10 @@ fit_gls_impl <- function(partable, sample_stats, optimizer = NULL, control = NUL
 
 fit_wls_impl <- function(partable, sample_stats, W, optimizer = NULL, control = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_wls_impl`, partable, sample_stats, W, optimizer, control, bounds)
+}
+
+evaluate_at_impl <- function(partable, sample_stats, theta, estimator, W = NULL, bounds = NULL, audit_options = NULL) {
+    .Call(`_magmaan_evaluate_at_impl`, partable, sample_stats, theta, estimator, W, bounds, audit_options)
 }
 
 data_ordinal_stats_from_raw_impl <- function(X) {
@@ -167,6 +175,10 @@ infer_information_observed_fd <- function(fit, h_step = 1e-4) {
 
 infer_information_observed_analytic <- function(fit) {
     .Call(`_magmaan_infer_information_observed_analytic`, fit)
+}
+
+infer_information_cross_products <- function(fit, raw_data) {
+    .Call(`_magmaan_infer_information_cross_products`, fit, raw_data)
 }
 
 infer_vcov <- function(info, fit) {
@@ -353,12 +365,24 @@ data_sample_stats_from_raw <- function(X) {
     .Call(`_magmaan_data_sample_stats_from_raw`, X)
 }
 
+data_pairwise_sample_stats <- function(X, mask = NULL) {
+    .Call(`_magmaan_data_pairwise_sample_stats`, X, mask)
+}
+
+infer_pairwise_casewise_contributions <- function(X, mask = NULL, include_means = FALSE) {
+    .Call(`_magmaan_infer_pairwise_casewise_contributions`, X, mask, include_means)
+}
+
 infer_empirical_gamma <- function(X) {
     .Call(`_magmaan_infer_empirical_gamma`, X)
 }
 
 infer_gamma_nt <- function(Sigma) {
     .Call(`_magmaan_infer_gamma_nt`, Sigma)
+}
+
+infer_empirical_gamma_with_means <- function(X) {
+    .Call(`_magmaan_infer_empirical_gamma_with_means`, X)
 }
 
 infer_ordinal_robust <- function(fit, ordinal_stats, weight = "") {
@@ -384,3 +408,20 @@ infer_robust_se_raw <- function(fit, X, bread = "expected", moments = "structure
 infer_robust_se_raw_parts <- function(partable, sample_stats, theta, X, bread = "expected", moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_raw_parts`, partable, sample_stats, theta, X, bread, moments, cov)
 }
+
+infer_robust_se_zc <- function(fit, Zc, n_total, bread = "expected", moments = "structured", cov = "empirical") {
+    .Call(`_magmaan_infer_robust_se_zc`, fit, Zc, n_total, bread, moments, cov)
+}
+
+infer_robust_se_both_breads <- function(fit, gamma_hat, moments = "structured", cov = "empirical") {
+    .Call(`_magmaan_infer_robust_se_both_breads`, fit, gamma_hat, moments, cov)
+}
+
+infer_robust_se_both_breads_raw <- function(fit, X, moments = "structured", cov = "empirical") {
+    .Call(`_magmaan_infer_robust_se_both_breads_raw`, fit, X, moments, cov)
+}
+
+infer_robust_se_both_breads_zc <- function(fit, Zc, n_total, moments = "structured", cov = "empirical") {
+    .Call(`_magmaan_infer_robust_se_both_breads_zc`, fit, Zc, n_total, moments, cov)
+}
+

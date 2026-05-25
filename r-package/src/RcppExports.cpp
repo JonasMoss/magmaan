@@ -236,6 +236,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// saturated_em_moments_impl
+Rcpp::List saturated_em_moments_impl(SEXP raw_data, double h_step);
+RcppExport SEXP _magmaan_saturated_em_moments_impl(SEXP raw_dataSEXP, SEXP h_stepSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    Rcpp::traits::input_parameter< double >::type h_step(h_stepSEXP);
+    rcpp_result_gen = Rcpp::wrap(saturated_em_moments_impl(raw_data, h_step));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_uls_impl
 Rcpp::List fit_uls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
 RcppExport SEXP _magmaan_fit_uls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
@@ -279,6 +291,23 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
     rcpp_result_gen = Rcpp::wrap(fit_wls_impl(partable, sample_stats, W, optimizer, control, bounds));
+    return rcpp_result_gen;
+END_RCPP
+}
+// evaluate_at_impl
+Rcpp::List evaluate_at_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::NumericVector theta, std::string estimator, Rcpp::Nullable<Rcpp::RObject> W, Rcpp::Nullable<Rcpp::List> bounds, Rcpp::Nullable<Rcpp::List> audit_options);
+RcppExport SEXP _magmaan_evaluate_at_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP thetaSEXP, SEXP estimatorSEXP, SEXP WSEXP, SEXP boundsSEXP, SEXP audit_optionsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< std::string >::type estimator(estimatorSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::RObject> >::type W(WSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type audit_options(audit_optionsSEXP);
+    rcpp_result_gen = Rcpp::wrap(evaluate_at_impl(partable, sample_stats, theta, estimator, W, bounds, audit_options));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -572,6 +601,18 @@ BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     rcpp_result_gen = Rcpp::wrap(infer_information_observed_analytic(fit));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_information_cross_products
+Rcpp::NumericMatrix infer_information_cross_products(Rcpp::List fit, SEXP raw_data);
+RcppExport SEXP _magmaan_infer_information_cross_products(SEXP fitSEXP, SEXP raw_dataSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_information_cross_products(fit, raw_data));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1166,6 +1207,31 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// data_pairwise_sample_stats
+Rcpp::List data_pairwise_sample_stats(SEXP X, SEXP mask);
+RcppExport SEXP _magmaan_data_pairwise_sample_stats(SEXP XSEXP, SEXP maskSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type mask(maskSEXP);
+    rcpp_result_gen = Rcpp::wrap(data_pairwise_sample_stats(X, mask));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_pairwise_casewise_contributions
+Rcpp::NumericMatrix infer_pairwise_casewise_contributions(SEXP X, SEXP mask, bool include_means);
+RcppExport SEXP _magmaan_infer_pairwise_casewise_contributions(SEXP XSEXP, SEXP maskSEXP, SEXP include_meansSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type mask(maskSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_means(include_meansSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_pairwise_casewise_contributions(X, mask, include_means));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_empirical_gamma
 Rcpp::NumericMatrix infer_empirical_gamma(Rcpp::NumericMatrix X);
 RcppExport SEXP _magmaan_infer_empirical_gamma(SEXP XSEXP) {
@@ -1185,6 +1251,17 @@ BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type Sigma(SigmaSEXP);
     rcpp_result_gen = Rcpp::wrap(infer_gamma_nt(Sigma));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_empirical_gamma_with_means
+Rcpp::NumericMatrix infer_empirical_gamma_with_means(Rcpp::NumericMatrix X);
+RcppExport SEXP _magmaan_infer_empirical_gamma_with_means(SEXP XSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X(XSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_empirical_gamma_with_means(X));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1278,6 +1355,65 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_robust_se_zc
+Rcpp::List infer_robust_se_zc(Rcpp::List fit, Rcpp::NumericMatrix Zc, double n_total, std::string bread, std::string moments, std::string cov);
+RcppExport SEXP _magmaan_infer_robust_se_zc(SEXP fitSEXP, SEXP ZcSEXP, SEXP n_totalSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type Zc(ZcSEXP);
+    Rcpp::traits::input_parameter< double >::type n_total(n_totalSEXP);
+    Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
+    Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_robust_se_zc(fit, Zc, n_total, bread, moments, cov));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_robust_se_both_breads
+Rcpp::List infer_robust_se_both_breads(Rcpp::List fit, Rcpp::NumericMatrix gamma_hat, std::string moments, std::string cov);
+RcppExport SEXP _magmaan_infer_robust_se_both_breads(SEXP fitSEXP, SEXP gamma_hatSEXP, SEXP momentsSEXP, SEXP covSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type gamma_hat(gamma_hatSEXP);
+    Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_robust_se_both_breads(fit, gamma_hat, moments, cov));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_robust_se_both_breads_raw
+Rcpp::List infer_robust_se_both_breads_raw(Rcpp::List fit, SEXP X, std::string moments, std::string cov);
+RcppExport SEXP _magmaan_infer_robust_se_both_breads_raw(SEXP fitSEXP, SEXP XSEXP, SEXP momentsSEXP, SEXP covSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_robust_se_both_breads_raw(fit, X, moments, cov));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_robust_se_both_breads_zc
+Rcpp::List infer_robust_se_both_breads_zc(Rcpp::List fit, Rcpp::NumericMatrix Zc, double n_total, std::string moments, std::string cov);
+RcppExport SEXP _magmaan_infer_robust_se_both_breads_zc(SEXP fitSEXP, SEXP ZcSEXP, SEXP n_totalSEXP, SEXP momentsSEXP, SEXP covSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type Zc(ZcSEXP);
+    Rcpp::traits::input_parameter< double >::type n_total(n_totalSEXP);
+    Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_robust_se_both_breads_zc(fit, Zc, n_total, moments, cov));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_version", (DL_FUNC) &_magmaan_version, 0},
@@ -1297,9 +1433,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fcsem_fit_measures_impl", (DL_FUNC) &_magmaan_fcsem_fit_measures_impl, 1},
     {"_magmaan_fcsem_standardized_rows_impl", (DL_FUNC) &_magmaan_fcsem_standardized_rows_impl, 2},
     {"_magmaan_fit_fiml_impl", (DL_FUNC) &_magmaan_fit_fiml_impl, 4},
+    {"_magmaan_saturated_em_moments_impl", (DL_FUNC) &_magmaan_saturated_em_moments_impl, 2},
     {"_magmaan_fit_uls_impl", (DL_FUNC) &_magmaan_fit_uls_impl, 5},
     {"_magmaan_fit_gls_impl", (DL_FUNC) &_magmaan_fit_gls_impl, 5},
     {"_magmaan_fit_wls_impl", (DL_FUNC) &_magmaan_fit_wls_impl, 6},
+    {"_magmaan_evaluate_at_impl", (DL_FUNC) &_magmaan_evaluate_at_impl, 7},
     {"_magmaan_data_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_from_raw_impl, 1},
     {"_magmaan_data_ordinal_stats_h_weighted_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_h_weighted_from_raw_impl, 6},
     {"_magmaan_data_ordinal_stats_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_dpd_from_raw_impl, 2},
@@ -1322,6 +1460,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_information_expected", (DL_FUNC) &_magmaan_infer_information_expected, 1},
     {"_magmaan_infer_information_observed_fd", (DL_FUNC) &_magmaan_infer_information_observed_fd, 2},
     {"_magmaan_infer_information_observed_analytic", (DL_FUNC) &_magmaan_infer_information_observed_analytic, 1},
+    {"_magmaan_infer_information_cross_products", (DL_FUNC) &_magmaan_infer_information_cross_products, 2},
     {"_magmaan_infer_vcov", (DL_FUNC) &_magmaan_infer_vcov, 2},
     {"_magmaan_infer_vcov_partable", (DL_FUNC) &_magmaan_infer_vcov_partable, 2},
     {"_magmaan_infer_se", (DL_FUNC) &_magmaan_infer_se, 1},
@@ -1368,14 +1507,21 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_scaled_shifted", (DL_FUNC) &_magmaan_infer_scaled_shifted, 3},
     {"_magmaan_infer_casewise_contributions", (DL_FUNC) &_magmaan_infer_casewise_contributions, 2},
     {"_magmaan_data_sample_stats_from_raw", (DL_FUNC) &_magmaan_data_sample_stats_from_raw, 1},
+    {"_magmaan_data_pairwise_sample_stats", (DL_FUNC) &_magmaan_data_pairwise_sample_stats, 2},
+    {"_magmaan_infer_pairwise_casewise_contributions", (DL_FUNC) &_magmaan_infer_pairwise_casewise_contributions, 3},
     {"_magmaan_infer_empirical_gamma", (DL_FUNC) &_magmaan_infer_empirical_gamma, 1},
     {"_magmaan_infer_gamma_nt", (DL_FUNC) &_magmaan_infer_gamma_nt, 1},
+    {"_magmaan_infer_empirical_gamma_with_means", (DL_FUNC) &_magmaan_infer_empirical_gamma_with_means, 1},
     {"_magmaan_infer_ordinal_robust", (DL_FUNC) &_magmaan_infer_ordinal_robust, 3},
     {"_magmaan_infer_mixed_ordinal_robust", (DL_FUNC) &_magmaan_infer_mixed_ordinal_robust, 3},
     {"_magmaan_infer_robust_se", (DL_FUNC) &_magmaan_infer_robust_se, 5},
     {"_magmaan_infer_robust_se_parts", (DL_FUNC) &_magmaan_infer_robust_se_parts, 7},
     {"_magmaan_infer_robust_se_raw", (DL_FUNC) &_magmaan_infer_robust_se_raw, 5},
     {"_magmaan_infer_robust_se_raw_parts", (DL_FUNC) &_magmaan_infer_robust_se_raw_parts, 7},
+    {"_magmaan_infer_robust_se_zc", (DL_FUNC) &_magmaan_infer_robust_se_zc, 6},
+    {"_magmaan_infer_robust_se_both_breads", (DL_FUNC) &_magmaan_infer_robust_se_both_breads, 4},
+    {"_magmaan_infer_robust_se_both_breads_raw", (DL_FUNC) &_magmaan_infer_robust_se_both_breads_raw, 4},
+    {"_magmaan_infer_robust_se_both_breads_zc", (DL_FUNC) &_magmaan_infer_robust_se_both_breads_zc, 5},
     {NULL, NULL, 0}
 };
 

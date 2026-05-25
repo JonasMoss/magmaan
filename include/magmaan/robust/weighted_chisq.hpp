@@ -14,6 +14,17 @@ WeightedChiSquareMoments
 weighted_chisq_moments(int df,
                        const Eigen::Ref<const Eigen::VectorXd>& eigvals) noexcept;
 
+// Same moments computed directly from the reduced df × df symmetric matrix
+// `M = BᵀΓ̂B`. Skips the O(k³) eigendecomposition entirely:
+//   trace    = tr(UΓ̂) = tr(M)         = M.diagonal().sum()      — O(k)
+//   trace_sq = tr((UΓ̂)²) = tr(M²)      = ‖M‖_F² (M symmetric)    — O(k²)
+// Use this when only mean / mean+variance adjustments are needed (SB, MV-adj,
+// scaled-shifted). Keep `weighted_chisq_moments(df, eigvals)` for callers
+// that need the spectrum itself (Satorra 2000 mixture p-values, Imhof tail).
+WeightedChiSquareMoments
+weighted_chisq_moments_from_M(int df,
+                              const Eigen::Ref<const Eigen::MatrixXd>& M) noexcept;
+
 // Satorra-Bentler scaled chi²: c = Σλ / df, T_SB = T / c.
 struct SatorraBentlerResult {
   double chi2_scaled = 0.0;

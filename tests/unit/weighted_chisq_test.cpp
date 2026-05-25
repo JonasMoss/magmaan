@@ -19,6 +19,30 @@ Eigen::VectorXd vec(std::initializer_list<double> v) {
 
 }  // namespace
 
+// ── Trace-form moments parity ───────────────────────────────────────────────
+
+TEST_CASE("weighted_chisq_moments_from_M matches eigvals form on symmetric M") {
+  // Random symmetric M of varying sizes. trace = tr(M) = Σλ;
+  // trace_sq = ‖M‖_F² = tr(M²) = Σλ². The two builders must agree to
+  // machine precision (modulo eigensolve roundoff in the eigvals path).
+  std::mt19937 rng(0xC0FFEE);
+  std::normal_distribution<double> normal(0.0, 1.0);
+  for (int k : {3, 7, 12, 50}) {
+    Eigen::MatrixXd A(k, k);
+    for (int i = 0; i < k; ++i)
+      for (int j = 0; j < k; ++j) A(i, j) = normal(rng);
+    const Eigen::MatrixXd M = 0.5 * (A + A.transpose());   // symmetric
+    auto eig_or = magmaan::robust::ugamma_eigenvalues(M);
+    REQUIRE(eig_or.has_value());
+    const auto from_eig = magmaan::robust::weighted_chisq_moments(k, *eig_or);
+    const auto from_M   = magmaan::robust::weighted_chisq_moments_from_M(k, M);
+    INFO("k=", k);
+    CHECK(from_M.df       == from_eig.df);
+    CHECK(from_M.trace    == doctest::Approx(from_eig.trace).epsilon(1e-12));
+    CHECK(from_M.trace_sq == doctest::Approx(from_eig.trace_sq).epsilon(1e-12));
+  }
+}
+
 // ── Closed-form cross-checks ────────────────────────────────────────────────
 
 TEST_CASE("imhof_upper: single λ collapses to a scaled χ²(1)") {

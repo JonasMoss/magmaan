@@ -355,6 +355,51 @@ TEST_CASE("browne_residual_adf: empirical Gamma approaches NT on MVN data") {
   CHECK(*adf_or == doctest::Approx(*nt_or).epsilon(0.20));
 }
 
+TEST_CASE("information_cross_products → information_expected on MVN data") {
+  // Information equality: under MVN at the true parameter (and asymptotically
+  // at the MLE), the OPG estimator Σ_i s_i s_iᵀ converges to the expected
+  // Fisher info Δᵀ W Δ. Sample MVN with a known Σ at moderate N and check
+  // the two information matrices agree within sampling noise.
+  auto h = must_model("f =~ x1 + x2 + x3 + x4");
+
+  Eigen::MatrixXd Sigma(4, 4);
+  Sigma << 1.00, 0.72, 0.63, 0.54,
+           0.72, 1.30, 0.70, 0.60,
+           0.63, 0.70, 1.10, 0.66,
+           0.54, 0.60, 0.66, 1.20;
+  Eigen::LLT<Eigen::MatrixXd> llt(Sigma);
+  REQUIRE(llt.info() == Eigen::Success);
+
+  std::mt19937 rng(424242);
+  std::normal_distribution<double> zdist(0.0, 1.0);
+  magmaan::data::RawData raw;
+  raw.X.emplace_back(8000, 4);
+  for (Eigen::Index r = 0; r < raw.X[0].rows(); ++r) {
+    Eigen::VectorXd z(4);
+    for (Eigen::Index c = 0; c < 4; ++c) z(c) = zdist(rng);
+    raw.X[0].row(r) = (llt.matrixL() * z).transpose();
+  }
+
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp_or.has_value());
+  auto est = magmaan::test::fit(*h.pt, *h.rep, *samp_or).value();
+
+  auto exp_or = magmaan::inference::information_expected(
+      *h.pt, *h.rep, *samp_or, est);
+  REQUIRE(exp_or.has_value());
+  auto xp_or = magmaan::inference::information_cross_products(
+      *h.pt, *h.rep, *samp_or, raw, est);
+  REQUIRE(xp_or.has_value());
+
+  const Eigen::MatrixXd& I_E  = *exp_or;
+  const Eigen::MatrixXd& I_XP = *xp_or;
+  REQUIRE(I_E.rows() == I_XP.rows());
+  // OPG variance is high; 15% relative Frobenius distance at N = 8000 is a
+  // realistic tolerance for a 1F CFA (saturated). Tighten if/when needed.
+  const double rel = (I_XP - I_E).norm() / I_E.norm();
+  CHECK(rel < 0.15);
+}
+
 TEST_CASE("browne_residual_adf: zero on saturated model") {
   auto h = must_model("f =~ x1 + x2 + x3");
 
