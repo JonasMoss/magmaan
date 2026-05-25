@@ -123,6 +123,18 @@ TEST_CASE("lavaanify: auto_fix_single leaves explicit residual variance alone") 
   CHECK(pt.n_free() == 2);
 }
 
+TEST_CASE("lavaanify: auto_fix_single leaves shared zero-loading indicator alone") {
+  auto pt = must_lavaanify(
+      "NegLevl =~ 1*NegT1\n"
+      "NegLin =~ 0*NegT1 + NegT2 + NegT3 + 1*NegT4");
+
+  const auto residual = find_row(pt, "NegT1", Op::Covariance, "NegT1");
+  REQUIRE(residual < pt.size());
+  CHECK(pt.user[residual] == 0);
+  CHECK(pt.free[residual] > 0);
+  CHECK(std::isnan(pt.ustart[residual]));
+}
+
 TEST_CASE("lavaanify: auto_fix_single can be disabled") {
   BuildOptions opts;
   opts.auto_fix_single = false;
