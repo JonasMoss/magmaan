@@ -1,0 +1,138 @@
+---
+title: "Pairwise Fit Speed: ML, Σ-only GLS, Γ_NT^pw GLS"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path), dirname(getwd())))
+hits <- file.path(candidate_dirs, "results")
+hits <- hits[file.exists(file.path(hits, "summary.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+summary_df <- utils::read.csv(file.path(results_dir, "summary.csv"),
+                              check.names = FALSE)
+if (!requireNamespace("ggplot2", quietly = TRUE))
+  stop("The report requires ggplot2.")
+library(ggplot2)
+metadata <- utils::read.csv(file.path(results_dir, "metadata.csv"),
+                            check.names = FALSE)
+meta <- function(k, d = "") {
+  v <- metadata$value[metadata$key == k]
+  if (!length(v)) d else as.character(v[[1L]])
+}
+```
+
+## Question
+
+Three pairwise estimators of an SEM on incomplete continuous data —
+which one is fastest? Trivial follow-up to experiment 08, which
+established a Γ_NT^pw GLS ≥ pairwise ML > Σ-only GLS ranking on
+statistical efficiency. Inference cost likely dominates the total
+wall-time downstream, so the absolute differences here are mostly a
+sanity check.
+
+## Short Answer
+
+**Pairwise ML is uniformly the fastest** — 1.2× faster than the GLS
+variants at the 5-indicator model and 4×–5× faster at the
+9-indicator model. The two GLS variants are roughly comparable to
+each other (within ~50% in either direction across cells), both
+several times slower than ML at the medium model size.
+
+Absolute wall-times stay sub-25 ms per fit at p = 9, so the gap is
+unlikely to matter for one-off model fitting. It does matter for
+Monte-Carlo simulations (~1000 reps × ~10 cells: 4 minutes of GLS vs
+50 seconds of ML), which is exactly the place pairwise estimators get
+benchmarked.
+
+## Evidence
+
+```{r evidence-table}
+estimator_pretty <- c(sigma = "Σ-only GLS", ml = "Pairwise ML",
+                      gamma = "Γ_NT^pw GLS")
+model_pretty <- c(brown_1f5i = "Brown-style 1F·5I",
+                  hs1939_3f9i = "HS-1939-style 3F·9I")
+tbl <- summary_df
+tbl$Estimator <- estimator_pretty[tbl$estimator]
+tbl$Model     <- model_pretty[tbl$model]
+tbl$Mechanism <- toupper(tbl$mechanism)
+tbl$median_ms <- round(tbl$median_ms, 2)
+tbl$mad_ms    <- round(tbl$mad_ms, 2)
+tbl$ratio_to_fastest <- round(tbl$ratio_to_fastest, 2)
+out <- tbl[, c("Model", "Mechanism", "Estimator",
+               "median_ms", "mad_ms", "ratio_to_fastest")]
+names(out) <- c("Model", "Mechanism", "Estimator",
+                "Median (ms)", "MAD (ms)", "× Slower than Fastest")
+knitr::kable(out, caption = paste(
+  "Median per-fit wall-time across microbenchmark replications.",
+  "MAD is the median absolute deviation; ratio gives the relative slowdown",
+  "vs the fastest estimator in the (Model, Mechanism) cell."
+))
+```
+
+```{r evidence-plot, fig.width=7.5, fig.height=3.6}
+plot_df <- summary_df
+plot_df$estimator_pretty <- factor(
+  estimator_pretty[plot_df$estimator],
+  levels = c("Σ-only GLS", "Pairwise ML", "Γ_NT^pw GLS"))
+plot_df$model_pretty <- model_pretty[plot_df$model]
+plot_df$mechanism <- toupper(plot_df$mechanism)
+ggplot(plot_df,
+       aes(x = estimator_pretty, y = median_ms, fill = mechanism)) +
+  geom_col(position = position_dodge(width = 0.75), width = 0.7) +
+  geom_errorbar(aes(ymin = pmax(median_ms - mad_ms, 0),
+                    ymax = median_ms + mad_ms),
+                position = position_dodge(width = 0.75), width = 0.2,
+                linewidth = 0.4) +
+  facet_wrap(~ model_pretty, scales = "free_y") +
+  scale_fill_manual(values = c(MCAR = "#1f78b4", MAR = "#e31a1c")) +
+  labs(x = NULL, y = "Median fit time (ms)", fill = "Mechanism") +
+  theme_minimal(base_size = 11) +
+  theme(panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 15, hjust = 1),
+        legend.position = "top")
+```
+
+ML's per-iteration cost in magmaan is dominated by a Cholesky on Σ(θ)
+and a log-det/trace pair; the GLS path additionally evaluates a
+p* × p* weighted quadratic at each iteration, which grows as p⁴. At
+p = 9 (p* = 45) that's already a meaningful constant. At p = 5
+(p* = 15) it's not.
+
+The MCAR vs MAR comparison shows essentially no effect on speed —
+the missingness only changes which `apply_missingness` function ran
+once at setup; the fitting cost is the same.
+
+## Caveats
+
+- Two models only. The qualitative story (ML ≪ GLS at meaningful p)
+  is expected to hold up across larger CFA / SEM designs, but the
+  multiplier at, say, p = 30 / 3-factor / cross-loadings isn't tested.
+- One sample size (n = `r meta("n", "?")`), one missing rate
+  (`r meta("rate", "?")`). Speed at p, p* sizes isn't strongly
+  sensitive to n once the data fits in cache; missing rate affects
+  the upstream `pairwise_sample_stats` call but that's outside the
+  microbenchmark window.
+- `microbenchmark` reports wall-time only; we don't separate optimizer
+  inner iterations from per-iteration cost. A spike in iter count for
+  a poorly-conditioned weight would show up here as a slow median.
+- Inference (SE, chi-square, etc.) is not benchmarked. The user's prior
+  expectation was that inference cost dominates the total runtime of a
+  pairwise-SEM analysis; this experiment doesn't contradict that.
+
+## Reproduce
+
+```bash
+cd experiments/09-pairwise-fit-speed
+Rscript run_experiment.R --smoke    # quick check
+Rscript run_experiment.R            # full bench (≈ 3 s)
+quarto render report.qmd
+```
