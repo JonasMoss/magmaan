@@ -259,6 +259,43 @@ reduced_gamma_sample_from_gamma(
     const UFactor&                            uf,
     const Eigen::Ref<const Eigen::MatrixXd>&  gamma_hat);
 
+// Fast robust-test path for SB / MV-adj / scaled-shifted adjustments.
+// Returns the trace moments needed by those adjustments for both
+// bread=Expected and bread=Observed without returning the full reduced
+// df × df matrix to the caller. Matrix-returning reducers above remain the
+// diagnostic / spectrum path.
+struct RobustTestMomentsBothBreads {
+  WeightedChiSquareMoments expected;  // bread = Expected
+  WeightedChiSquareMoments observed;  // bread = Observed
+};
+
+post_expected<RobustTestMomentsBothBreads>
+robust_test_moments_both_breads(
+    spec::LatentStructure                     pt,
+    const model::MatrixRep&                   rep,
+    const SampleStats&                        samp,
+    const Estimates&                          est,
+    const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+    const Eigen::Ref<const Eigen::VectorXd>&  denom,
+    WeightMoments                             moments = WeightMoments::Structured);
+post_expected<RobustTestMomentsBothBreads>
+robust_test_moments_both_breads(
+    spec::LatentStructure                     pt,
+    const model::MatrixRep&                   rep,
+    const SampleStats&                        samp,
+    const Estimates&                          est,
+    const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+    double                                    denom,
+    WeightMoments                             moments = WeightMoments::Structured);
+post_expected<RobustTestMomentsBothBreads>
+robust_test_moments_both_breads_from_gamma(
+    spec::LatentStructure                     pt,
+    const model::MatrixRep&                   rep,
+    const SampleStats&                        samp,
+    const Estimates&                          est,
+    const Eigen::Ref<const Eigen::MatrixXd>&  gamma_hat,
+    WeightMoments                             moments = WeightMoments::Structured);
+
 // Reference/materialized counterpart to `reduced_gamma_sample()`.
 // Forms each empirical Γ̂_b = Zc_bᵀZc_b / denom_b explicitly before reducing
 // with B_bᵀΓ̂_bB_b. This is intentionally less memory-frugal; it exists for

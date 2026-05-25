@@ -748,9 +748,9 @@ need, and no more. The current C++ core mostly follows this:
   parameter names.
 - Information, covariance, SE, chi-square, degrees of freedom, Wald/z tests,
   robust U-Gamma reducers, both casewise-Zc and caller-supplied-Gamma robust
-  test reductions, the materialized empirical-Gamma reference reducer, and fit
-  measures are exposed as separate primitives rather than as methods on one
-  fitted-object bundle.
+  test reductions, both-bread robust test trace-moment reducers, the
+  materialized empirical-Gamma reference reducer, and fit measures are exposed
+  as separate primitives rather than as methods on one fitted-object bundle.
 - Satorra-Bentler-family reducers take scalar test statistics, degrees of
   freedom, and eigenvalues or trace summaries rather than fit objects.
 - The Satorra-2000 C++ helper takes the model, reparameterization matrices,

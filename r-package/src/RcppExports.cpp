@@ -1039,6 +1039,33 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_robust_test_moments_both_breads_zc
+Rcpp::List infer_robust_test_moments_both_breads_zc(Rcpp::List fit, Rcpp::NumericMatrix Zc, Rcpp::NumericVector denom, std::string moments);
+RcppExport SEXP _magmaan_infer_robust_test_moments_both_breads_zc(SEXP fitSEXP, SEXP ZcSEXP, SEXP denomSEXP, SEXP momentsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type Zc(ZcSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type denom(denomSEXP);
+    Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_robust_test_moments_both_breads_zc(fit, Zc, denom, moments));
+    return rcpp_result_gen;
+END_RCPP
+}
+// infer_robust_test_moments_both_breads_gamma
+Rcpp::List infer_robust_test_moments_both_breads_gamma(Rcpp::List fit, Rcpp::NumericMatrix gamma_hat, std::string moments);
+RcppExport SEXP _magmaan_infer_robust_test_moments_both_breads_gamma(SEXP fitSEXP, SEXP gamma_hatSEXP, SEXP momentsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type gamma_hat(gamma_hatSEXP);
+    Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_robust_test_moments_both_breads_gamma(fit, gamma_hat, moments));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_reduced_gamma_sample_materialized
 Rcpp::NumericMatrix infer_reduced_gamma_sample_materialized(Rcpp::List uf, Rcpp::NumericMatrix Zc, Rcpp::NumericVector denom);
 RcppExport SEXP _magmaan_infer_reduced_gamma_sample_materialized(SEXP ufSEXP, SEXP ZcSEXP, SEXP denomSEXP) {
@@ -1331,6 +1358,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_reduced_gamma_nt", (DL_FUNC) &_magmaan_infer_reduced_gamma_nt, 1},
     {"_magmaan_infer_reduced_gamma_sample", (DL_FUNC) &_magmaan_infer_reduced_gamma_sample, 3},
     {"_magmaan_infer_reduced_gamma_sample_from_gamma", (DL_FUNC) &_magmaan_infer_reduced_gamma_sample_from_gamma, 2},
+    {"_magmaan_infer_robust_test_moments_both_breads_zc", (DL_FUNC) &_magmaan_infer_robust_test_moments_both_breads_zc, 4},
+    {"_magmaan_infer_robust_test_moments_both_breads_gamma", (DL_FUNC) &_magmaan_infer_robust_test_moments_both_breads_gamma, 3},
     {"_magmaan_infer_reduced_gamma_sample_materialized", (DL_FUNC) &_magmaan_infer_reduced_gamma_sample_materialized, 3},
     {"_magmaan_infer_reduced_gamma_unbiased", (DL_FUNC) &_magmaan_infer_reduced_gamma_unbiased, 4},
     {"_magmaan_infer_ugamma_eigenvalues", (DL_FUNC) &_magmaan_infer_ugamma_eigenvalues, 1},

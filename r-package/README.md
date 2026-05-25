@@ -55,6 +55,8 @@ Model-dependent post-fit helpers expose primitive-shaped entry points such as
 `magmaan_core$robust_build_u_factor_parts(partable, sample_stats, theta)`, and
 `magmaan_core$robust_reduced_gamma_sample_zc(...)` /
 `magmaan_core$robust_reduced_gamma_sample_gamma(...)`,
+`magmaan_core$robust_test_moments_both_breads_zc(...)` /
+`magmaan_core$robust_test_moments_both_breads_gamma(...)`, and
 `magmaan_core$robust_se*_parts(...)`. Fit-list calls remain available in
 `magmaan_core`, with explicit `*_fit` aliases for scripts that prefer
 adapter-style names.

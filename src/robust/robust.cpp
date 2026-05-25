@@ -147,6 +147,169 @@ Eigen::MatrixXd symm_product_eigbasis(const Eigen::MatrixXd& Mtilde,
   return 0.5 * (out + out.transpose()).eval();
 }
 
+std::pair<Eigen::Index, Eigen::Index>
+uf_block_slice(const UFactor& uf, const UFactor::Block& blk) {
+  const Eigen::Index start = (uf.has_means && blk.mu_off >= 0)
+                                 ? blk.mu_off : blk.row_offset;
+  const Eigen::Index size  = (uf.has_means ? blk.p : 0) + blk.pstar;
+  return {start, size};
+}
+
+WeightedChiSquareMoments
+observed_moments_from_mtilde(const UFactor& uf,
+                             const Eigen::MatrixXd& Mtilde) {
+  const Eigen::MatrixXd C = observed_C(uf);
+  const Eigen::MatrixXd CM = C * Mtilde;
+  return WeightedChiSquareMoments{
+      static_cast<int>(uf.df),
+      CM.trace(),
+      (CM.array() * CM.transpose().array()).sum()};
+}
+
+WeightedChiSquareMoments
+reduced_matrix_moments(int df, const Eigen::Ref<const Eigen::MatrixXd>& M) {
+  return WeightedChiSquareMoments{df, M.diagonal().sum(), M.squaredNorm()};
+}
+
+post_expected<WeightedChiSquareMoments>
+reduced_gamma_sample_moments_impl(
+    const UFactor&                            uf,
+    const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+    const Eigen::Ref<const Eigen::VectorXd>&  denom) {
+  const Eigen::Index expected_cols =
+      uf.has_means ? uf.total_rows : uf.pstar;
+  if (Zc.cols() != expected_cols) {
+    if (uf.has_means && Zc.cols() == uf.pstar) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "robust_test_moments_both_breads: Zc has " +
+              std::to_string(Zc.cols()) +
+              " columns (sigma-only) but the UFactor was built with mean "
+              "structure (total_rows = " + std::to_string(uf.total_rows) +
+              "); rebuild Zc with mean contributions"));
+    }
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_test_moments_both_breads: Zc has " +
+            std::to_string(Zc.cols()) + " columns, expected " +
+            std::to_string(expected_cols)));
+  }
+  const Eigen::Index nb = static_cast<Eigen::Index>(uf.blocks.size());
+  if (denom.size() != 1 && denom.size() != nb) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_test_moments_both_breads: denom has length " +
+            std::to_string(denom.size()) + "; expected 1 or " +
+            std::to_string(nb) + " (one per block)"));
+  }
+  if (!(denom.minCoeff() > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_test_moments_both_breads: every denom entry must be > 0"));
+  }
+  const auto denom_b = [&](Eigen::Index b) -> double {
+    return denom.size() == 1 ? denom(0) : denom(b);
+  };
+
+  if (uf.kind == UFactor::Kind::ObservedHessian) {
+    Eigen::MatrixXd Mtilde =
+        Eigen::MatrixXd::Zero(uf.total_rows, uf.total_rows);
+    for (Eigen::Index b = 0; b < nb; ++b) {
+      const auto& blk = uf.blocks[static_cast<std::size_t>(b)];
+      const auto [bstart, bsize] = uf_block_slice(uf, blk);
+      Eigen::MatrixXd ZcLw_b(Zc.rows(), bsize);
+      if (uf.has_means && blk.mu_off >= 0) {
+        const Eigen::MatrixXd Xb_mu = Zc.middleCols(blk.mu_off, blk.p);
+        ZcLw_b.leftCols(blk.p) =
+            blk.llt_M.matrixL().solve(Xb_mu.transpose()).transpose();
+      }
+      const Eigen::Index sigma_col_in_block = uf.has_means ? blk.p : 0;
+      const Eigen::MatrixXd Xb_sig =
+          Zc.middleCols(blk.row_offset, blk.pstar);
+      ZcLw_b.middleCols(sigma_col_in_block, blk.pstar) =
+          blk.llt_gamma_nt.matrixL().solve(Xb_sig.transpose()).transpose();
+      Mtilde.block(bstart, bstart, bsize, bsize)
+          .noalias() += (ZcLw_b.transpose() * ZcLw_b) / denom_b(b);
+    }
+    Mtilde = 0.5 * (Mtilde + Mtilde.transpose()).eval();
+    return observed_moments_from_mtilde(uf, Mtilde);
+  }
+
+  Eigen::MatrixXd M = Eigen::MatrixXd::Zero(uf.df, uf.df);
+  for (Eigen::Index b = 0; b < nb; ++b) {
+    const auto& blk = uf.blocks[static_cast<std::size_t>(b)];
+    const auto [bstart, bsize] = uf_block_slice(uf, blk);
+    const Eigen::MatrixXd ZcB_b =
+        Zc.middleCols(bstart, bsize) *
+        uf.B.middleRows(bstart, bsize);
+    M.noalias() += (ZcB_b.transpose() * ZcB_b) / denom_b(b);
+  }
+  M = 0.5 * (M + M.transpose()).eval();
+  return reduced_matrix_moments(static_cast<int>(uf.df), M);
+}
+
+post_expected<WeightedChiSquareMoments>
+reduced_gamma_sample_moments_from_gamma_impl(
+    const UFactor&                            uf,
+    const Eigen::Ref<const Eigen::MatrixXd>&  gamma_hat) {
+  const Eigen::Index expected_dim =
+      uf.has_means ? uf.total_rows : uf.pstar;
+  if (gamma_hat.rows() != expected_dim || gamma_hat.cols() != expected_dim) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_test_moments_both_breads_from_gamma: gamma_hat is " +
+            std::to_string(gamma_hat.rows()) + "x" +
+            std::to_string(gamma_hat.cols()) + ", expected " +
+            std::to_string(expected_dim) + "x" +
+            std::to_string(expected_dim) +
+            (uf.has_means ? " (mu-rows + sigma-rows per block)"
+                          : " (sigma-only)")));
+  }
+  const Eigen::Index nb = static_cast<Eigen::Index>(uf.blocks.size());
+
+  if (uf.kind == UFactor::Kind::ObservedHessian) {
+    Eigen::MatrixXd Mtilde =
+        Eigen::MatrixXd::Zero(uf.total_rows, uf.total_rows);
+    for (Eigen::Index b = 0; b < nb; ++b) {
+      const auto& blk = uf.blocks[static_cast<std::size_t>(b)];
+      const auto [bstart, bsize] = uf_block_slice(uf, blk);
+      const Eigen::MatrixXd G_b =
+          gamma_hat.block(bstart, bstart, bsize, bsize);
+      Eigen::MatrixXd L_inv_G_b = Eigen::MatrixXd::Zero(bsize, bsize);
+      if (uf.has_means && blk.mu_off >= 0) {
+        L_inv_G_b.topRows(blk.p) =
+            blk.llt_M.matrixL().solve(G_b.topRows(blk.p));
+      }
+      const Eigen::Index sigma_row_in_block = uf.has_means ? blk.p : 0;
+      L_inv_G_b.middleRows(sigma_row_in_block, blk.pstar) =
+          blk.llt_gamma_nt.matrixL().solve(
+              G_b.middleRows(sigma_row_in_block, blk.pstar));
+
+      Eigen::MatrixXd M_b = Eigen::MatrixXd::Zero(bsize, bsize);
+      if (uf.has_means && blk.mu_off >= 0) {
+        M_b.leftCols(blk.p) =
+            blk.llt_M.matrixL().solve(
+                L_inv_G_b.leftCols(blk.p).transpose()).transpose();
+      }
+      const Eigen::Index sigma_col_in_block = uf.has_means ? blk.p : 0;
+      M_b.middleCols(sigma_col_in_block, blk.pstar) =
+          blk.llt_gamma_nt.matrixL().solve(
+              L_inv_G_b.middleCols(sigma_col_in_block, blk.pstar)
+                  .transpose()).transpose();
+      Mtilde.block(bstart, bstart, bsize, bsize) = std::move(M_b);
+    }
+    Mtilde = 0.5 * (Mtilde + Mtilde.transpose()).eval();
+    return observed_moments_from_mtilde(uf, Mtilde);
+  }
+
+  Eigen::MatrixXd M = Eigen::MatrixXd::Zero(uf.df, uf.df);
+  for (Eigen::Index b = 0; b < nb; ++b) {
+    const auto& blk = uf.blocks[static_cast<std::size_t>(b)];
+    const auto [bstart, bsize] = uf_block_slice(uf, blk);
+    const Eigen::MatrixXd B_b = uf.B.middleRows(bstart, bsize);
+    const Eigen::MatrixXd G_b =
+        gamma_hat.block(bstart, bstart, bsize, bsize);
+    M.noalias() += B_b.transpose() * G_b * B_b;
+  }
+  M = 0.5 * (M + M.transpose()).eval();
+  return reduced_matrix_moments(static_cast<int>(uf.df), M);
+}
+
 // Mirror `prepare_evaluator` in inference.cpp — kept duplicated to avoid
 // promoting a private helper across translation units. Resolves fixed.x
 // `fixed_value`s from the sample (matches `fit()` pattern), then builds and
@@ -597,6 +760,73 @@ reduced_gamma_sample_from_gamma(
   }
   M = 0.5 * (M + M.transpose()).eval();
   return M;
+}
+
+post_expected<RobustTestMomentsBothBreads>
+robust_test_moments_both_breads(
+    spec::LatentStructure                     pt,
+    const model::MatrixRep&                   rep,
+    const SampleStats&                        samp,
+    const Estimates&                          est,
+    const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+    const Eigen::Ref<const Eigen::VectorXd>&  denom,
+    WeightMoments                             moments) {
+  auto uf_e_or = build_u_factor(
+      pt, rep, samp, est,
+      {Information::Expected, moments, ScoreCovariance::Empirical});
+  if (!uf_e_or.has_value()) return std::unexpected(uf_e_or.error());
+  auto e_or = reduced_gamma_sample_moments_impl(*uf_e_or, Zc, denom);
+  if (!e_or.has_value()) return std::unexpected(e_or.error());
+
+  auto uf_o_or = build_u_factor(
+      std::move(pt), rep, samp, est,
+      {Information::Observed, moments, ScoreCovariance::Empirical});
+  if (!uf_o_or.has_value()) return std::unexpected(uf_o_or.error());
+  auto o_or = reduced_gamma_sample_moments_impl(*uf_o_or, Zc, denom);
+  if (!o_or.has_value()) return std::unexpected(o_or.error());
+
+  return RobustTestMomentsBothBreads{*e_or, *o_or};
+}
+
+post_expected<RobustTestMomentsBothBreads>
+robust_test_moments_both_breads(
+    spec::LatentStructure                     pt,
+    const model::MatrixRep&                   rep,
+    const SampleStats&                        samp,
+    const Estimates&                          est,
+    const Eigen::Ref<const Eigen::MatrixXd>&  Zc,
+    double                                    denom,
+    WeightMoments                             moments) {
+  const Eigen::VectorXd d = Eigen::VectorXd::Constant(1, denom);
+  return robust_test_moments_both_breads(
+      std::move(pt), rep, samp, est, Zc, d, moments);
+}
+
+post_expected<RobustTestMomentsBothBreads>
+robust_test_moments_both_breads_from_gamma(
+    spec::LatentStructure                     pt,
+    const model::MatrixRep&                   rep,
+    const SampleStats&                        samp,
+    const Estimates&                          est,
+    const Eigen::Ref<const Eigen::MatrixXd>&  gamma_hat,
+    WeightMoments                             moments) {
+  auto uf_e_or = build_u_factor(
+      pt, rep, samp, est,
+      {Information::Expected, moments, ScoreCovariance::Empirical});
+  if (!uf_e_or.has_value()) return std::unexpected(uf_e_or.error());
+  auto e_or =
+      reduced_gamma_sample_moments_from_gamma_impl(*uf_e_or, gamma_hat);
+  if (!e_or.has_value()) return std::unexpected(e_or.error());
+
+  auto uf_o_or = build_u_factor(
+      std::move(pt), rep, samp, est,
+      {Information::Observed, moments, ScoreCovariance::Empirical});
+  if (!uf_o_or.has_value()) return std::unexpected(uf_o_or.error());
+  auto o_or =
+      reduced_gamma_sample_moments_from_gamma_impl(*uf_o_or, gamma_hat);
+  if (!o_or.has_value()) return std::unexpected(o_or.error());
+
+  return RobustTestMomentsBothBreads{*e_or, *o_or};
 }
 
 post_expected<Eigen::MatrixXd>

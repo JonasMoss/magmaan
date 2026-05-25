@@ -57,6 +57,20 @@ magmaan::robust::InferenceSpec spec_from(const std::string& bread, const std::st
   return s;
 }
 
+Rcpp::List chisq_moments_to_list(
+    const magmaan::robust::WeightedChiSquareMoments& m) {
+  return Rcpp::List::create(Rcpp::_["df"] = m.df,
+                            Rcpp::_["trace"] = m.trace,
+                            Rcpp::_["trace_sq"] = m.trace_sq);
+}
+
+Rcpp::List test_moments_pair_to_list(
+    const magmaan::robust::RobustTestMomentsBothBreads& r) {
+  return Rcpp::List::create(
+      Rcpp::_["expected"] = chisq_moments_to_list(r.expected),
+      Rcpp::_["observed"] = chisq_moments_to_list(r.observed));
+}
+
 magmaan::estimate::OrdinalWeightKind ordinal_weight_from_string(const std::string& s) {
   if (s == "DWLS" || s == "dwls") return magmaan::estimate::OrdinalWeightKind::DWLS;
   if (s == "WLS" || s == "wls") return magmaan::estimate::OrdinalWeightKind::WLS;
@@ -319,6 +333,39 @@ Rcpp::NumericMatrix infer_reduced_gamma_sample_from_gamma(
   auto m_or = magmaan::robust::reduced_gamma_sample_from_gamma(u, G);
   if (!m_or.has_value()) stop_post(m_or.error());
   return Rcpp::wrap(*m_or);
+}
+
+// infer_robust_test_moments_both_breads_zc() — fit-level fast path for robust
+// test adjustments. Builds expected/observed U-factors in C++ and returns only
+// df, tr(M), and tr(M^2) for each bread, avoiding UFactor list roundtrips and
+// full reduced-M matrices at the R boundary.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_robust_test_moments_both_breads_zc(
+    Rcpp::List fit, Rcpp::NumericMatrix Zc, Rcpp::NumericVector denom,
+    std::string moments = "structured") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  Eigen::Map<const Eigen::MatrixXd> Zc_m(Zc.begin(), Zc.nrow(), Zc.ncol());
+  const Eigen::VectorXd d = Rcpp::as<Eigen::VectorXd>(denom);
+  auto r_or = magmaan::robust::robust_test_moments_both_breads(
+      ctx.pt, ctx.rep, ctx.samp, est, Zc_m, d, moments_from_string(moments));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return test_moments_pair_to_list(*r_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List infer_robust_test_moments_both_breads_gamma(
+    Rcpp::List fit, Rcpp::NumericMatrix gamma_hat,
+    std::string moments = "structured") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  Eigen::Map<const Eigen::MatrixXd> G(gamma_hat.begin(), gamma_hat.nrow(),
+                                      gamma_hat.ncol());
+  auto r_or = magmaan::robust::robust_test_moments_both_breads_from_gamma(
+      ctx.pt, ctx.rep, ctx.samp, est, G, moments_from_string(moments));
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return test_moments_pair_to_list(*r_or);
 }
 
 // infer_reduced_gamma_sample_materialized() — same target as

@@ -116,6 +116,8 @@ robust_reduced_gamma_sample <- infer_reduced_gamma_sample
 robust_reduced_gamma_sample_zc <- infer_reduced_gamma_sample
 robust_reduced_gamma_sample_from_gamma <- infer_reduced_gamma_sample_from_gamma
 robust_reduced_gamma_sample_gamma <- infer_reduced_gamma_sample_from_gamma
+robust_test_moments_both_breads_zc <- infer_robust_test_moments_both_breads_zc
+robust_test_moments_both_breads_gamma <- infer_robust_test_moments_both_breads_gamma
 robust_reduced_gamma_sample_materialized <- infer_reduced_gamma_sample_materialized
 robust_reduced_gamma_unbiased <- infer_reduced_gamma_unbiased
 robust_ugamma_eigenvalues <- infer_ugamma_eigenvalues
@@ -223,6 +225,8 @@ magmaan_core <- local({
       "robust_reduced_gamma_sample_zc",
       "robust_reduced_gamma_sample_from_gamma",
       "robust_reduced_gamma_sample_gamma",
+      "robust_test_moments_both_breads_zc",
+      "robust_test_moments_both_breads_gamma",
       "robust_reduced_gamma_sample_materialized",
       "robust_reduced_gamma_unbiased",
       "robust_ugamma_eigenvalues",
@@ -361,6 +365,8 @@ magmaan_core <- local({
       "infer_reduced_gamma_nt",
       "infer_reduced_gamma_sample",
       "infer_reduced_gamma_sample_from_gamma",
+      "infer_robust_test_moments_both_breads_zc",
+      "infer_robust_test_moments_both_breads_gamma",
       "infer_reduced_gamma_sample_materialized",
       "infer_reduced_gamma_unbiased",
       "infer_ugamma_eigenvalues",
