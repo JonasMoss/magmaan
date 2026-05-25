@@ -492,12 +492,12 @@ stop rather than any usable non-error return.
   full `OrdinalGammaCache` for robust DWLS/WLS reporting: DWLS materializes
   diagonal weights from the full Gamma when needed, WLS materializes the full
   inverse weight, and the robust result matches the legacy materialized
-  `OrdinalStats` path. A first all-ordinal SNLLS entry point now reuses the
-  same free-threshold profiled correlation objective for delta ULS/DWLS:
+  `OrdinalStats` path. The all-ordinal SNLLS entry point reuses the same
+  free-threshold profiled correlation objective for delta ULS/DWLS/WLS:
   thresholds are fixed out before the generic Golub-Pereyra classifier sees the
-  problem, conditionally linear covariance parameters are profiled, and the
-  returned vector is reconstructed in the ordinary prepared ordinal partable
-  coordinate. WLS SNLLS remains a follow-on validation slice.
+  problem, conditionally linear covariance parameters are profiled, WLS uses the
+  Schur-complement correlation weight, and the returned vector is reconstructed
+  in the ordinary prepared ordinal partable coordinate.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
   thin R wrappers for ordinal stats plus DWLS/WLS fits.
 - The R ordinal data boundary exposes consolidated dispatchers:

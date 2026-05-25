@@ -234,8 +234,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
 // Golub-Pereyra profiled all-ordinal delta LS over the cache-aware
 // free-threshold correlation objective. Thresholds are eliminated first, then
 // conditionally linear covariance parameters are profiled by the SNLLS engine.
-// The first slice supports ULS and DWLS; WLS is rejected until the ordinal
-// Schur-weight SNLLS path is validated.
+// ULS uses identity weights, DWLS uses diagonal Gamma weights, and WLS uses the
+// Schur-complement profiled weight from the full Gamma cache.
 fit_expected<Estimates>
 fit_ordinal_snlls(spec::LatentStructure pt,
                   const model::MatrixRep& rep,

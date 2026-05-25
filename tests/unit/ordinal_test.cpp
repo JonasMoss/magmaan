@@ -666,6 +666,37 @@ TEST_CASE("Ordinal SNLLS profiles thresholds and linear covariance block") {
   CHECK(snlls_cache.blocks[0].has_diagonal);
   CHECK_FALSE(snlls_cache.blocks[0].has_full);
   CHECK_FALSE(snlls_cache.blocks[0].has_dwls_weight);
+
+  auto wls_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::WLS);
+  magmaan::data::OrdinalGammaCache bounded_wls_cache;
+  bounded_wls_cache.blocks.resize(1);
+  bounded_wls_cache.blocks[0].gamma = stats->NACOV[0];
+  bounded_wls_cache.blocks[0].has_full = true;
+  magmaan::data::OrdinalGammaCache snlls_wls_cache;
+  snlls_wls_cache.blocks.resize(1);
+  snlls_wls_cache.blocks[0].gamma = stats->NACOV[0];
+  snlls_wls_cache.blocks[0].has_full = true;
+  auto wls_bounded = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, moments, &bounded_wls_cache, {}, wls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto wls_snlls = magmaan::estimate::fit_ordinal_snlls(
+      *pt, *mr, moments, &snlls_wls_cache, wls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(wls_bounded.has_value(),
+      "bounded WLS failed: "
+          << (wls_bounded.has_value() ? "" : wls_bounded.error().detail));
+  REQUIRE_MESSAGE(wls_snlls.has_value(),
+      "SNLLS WLS failed: "
+          << (wls_snlls.has_value() ? "" : wls_snlls.error().detail));
+  CHECK(wls_snlls->fmin ==
+        doctest::Approx(wls_bounded->fmin).epsilon(1e-8));
+  CHECK((wls_snlls->theta - wls_bounded->theta).cwiseAbs().maxCoeff() <
+        3e-5);
+  CHECK(snlls_wls_cache.blocks[0].has_full);
+  CHECK(snlls_wls_cache.blocks[0].has_wls_weight);
+  CHECK_FALSE(snlls_wls_cache.blocks[0].has_dwls_weight);
 }
 
 TEST_CASE("Polychoric h-score API evaluates predefined caps") {

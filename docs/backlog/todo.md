@@ -65,10 +65,11 @@ semantics · **XL** statistical design/research track before implementation.
   same free-threshold delta path. Cache-aware fit-plus-inference and
   inference-only robust DWLS/WLS reporting now reuse a full
   `OrdinalGammaCache` and match the legacy materialized `OrdinalStats` path.
-  All-ordinal delta SNLLS for ULS/DWLS now reuses the profiled correlation
+  All-ordinal delta SNLLS for ULS/DWLS/WLS now reuses the profiled correlation
   objective, fixes thresholds away before the generic Golub-Pereyra split, and
-  returns estimates in the ordinary prepared ordinal partable coordinate. Next
-  slice: WLS SNLLS over the Schur-complement profiled weight.
+  returns estimates in the ordinary prepared ordinal partable coordinate, with
+  WLS using the Schur-complement profiled weight. Next slice: mixed ordinal and
+  constrained-threshold generalization, then benchmark instrumentation.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
