@@ -1,0 +1,204 @@
+---
+title: "Ordinal inference cache probe"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path)))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"),
+                              candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates,
+                                                "inference_workspace.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+
+workspace_path <- file.path(results_dir, "inference_workspace.csv")
+metadata_path <- file.path(results_dir, "metadata.csv")
+if (!file.exists(workspace_path)) {
+  stop("Missing inference_workspace.csv. Run: Rscript run_experiment.R --smoke")
+}
+
+workspace <- utils::read.csv(workspace_path, check.names = FALSE,
+                             stringsAsFactors = FALSE)
+metadata <- utils::read.csv(metadata_path, check.names = FALSE,
+                            stringsAsFactors = FALSE)
+
+fmt_ms <- function(x) ifelse(is.na(x), "", sprintf("%.2f", x))
+fmt_num <- function(x) ifelse(is.na(x), "", sprintf("%.4g", x))
+fmt_diff <- function(x) ifelse(is.na(x), "", sprintf("%.2e", x))
+max_or_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) NA_real_ else max(x)
+}
+median_or_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) NA_real_ else stats::median(x)
+}
+
+workspace$Path <- factor(
+  workspace$path,
+  levels = c("materialized_bounded_robust",
+             "cache_fit_only_then_inference",
+             "cache_fit_plus_inference_reuse"),
+  labels = c("Materialized", "Fit-only + separate inference",
+             "Fit-plus-inference reuse")
+)
+workspace$Thresholds <- factor(
+  workspace$threshold_mode,
+  levels = c("free", "fixed", "shared"),
+  labels = c("Free", "Fixed", "Shared")
+)
+ok <- workspace[workspace$status == "ok", ]
+```
+
+## Question
+
+This experiment is the inference companion to the ordinal fit-only workspace
+probe. It asks whether carrying a full cache through fitting helps when robust
+ordinal reporting is requested immediately after a bounded DWLS/WLS fit.
+
+The compared paths are:
+
+- `Materialized`: legacy `OrdinalStats` fit and robust reporting.
+- `Fit-only + separate inference`: minimal fit cache, then a separate full
+  inference cache for robust reporting.
+- `Fit-plus-inference reuse`: one full cache prepared for the fit and reused
+  by robust reporting.
+
+## Short Answer
+
+The smoke design should be read as a shape and equivalence check. Cache-aware
+robust reporting matches the legacy materialized path, and the reuse path makes
+the duplicated inference setup explicit: the separate path pays for an
+additional full Gamma/weight cache, while the fit-plus-inference path reuses
+the cache already attached to the fit.
+
+## Run
+
+```{r}
+data.frame(
+  Item = metadata$key,
+  Value = metadata$value,
+  check.names = FALSE
+) |>
+  knitr::kable(row.names = FALSE)
+```
+
+## Status
+
+```{r}
+status <- aggregate(
+  seed ~ Thresholds + estimator + Path + status,
+  data = workspace,
+  FUN = length
+)
+names(status) <- c("Thresholds", "Estimator", "Path", "Status", "Rows")
+knitr::kable(status, row.names = FALSE)
+```
+
+## Equivalence
+
+```{r}
+equiv <- aggregate(
+  cbind(theta_diff_legacy, fmin_diff_legacy, se_diff_legacy,
+        vcov_diff_legacy, chisq_diff_legacy) ~ Thresholds + estimator + Path,
+  data = ok,
+  FUN = max_or_na,
+  na.action = na.pass
+)
+names(equiv) <- c("Thresholds", "Estimator", "Path",
+                  "Max |theta - legacy|", "Max |fmin - legacy|",
+                  "Max |SE - legacy|", "Max |vcov - legacy|",
+                  "Max |chisq - legacy|")
+for (j in 4:ncol(equiv)) equiv[[j]] <- fmt_diff(equiv[[j]])
+knitr::kable(equiv, row.names = FALSE)
+```
+
+## Cost Shape
+
+```{r}
+cost <- aggregate(
+  cbind(fit_cache_setup_ms, fit_weight_setup_ms,
+        inference_cache_setup_ms, inference_weight_setup_ms,
+        fit_median_ms, robust_median_ms) ~ estimator + Path,
+  data = ok,
+  FUN = median_or_na,
+  na.action = na.pass
+)
+names(cost) <- c("Estimator", "Path", "Fit cache setup ms",
+                 "Fit weight setup ms", "Inference cache setup ms",
+                 "Inference weight setup ms", "Fit ms", "Robust ms")
+for (j in 3:ncol(cost)) cost[[j]] <- fmt_ms(cost[[j]])
+knitr::kable(cost, row.names = FALSE)
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 4
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  library(ggplot2)
+  plot_data <- ok
+  plot_data$total_fit_robust_ms <-
+    plot_data$fit_median_ms + plot_data$robust_median_ms
+  ggplot(plot_data, aes(Path, total_fit_robust_ms, fill = estimator)) +
+    geom_col(position = "dodge", width = 0.7) +
+    facet_grid(Thresholds ~ p, labeller = label_both) +
+    labs(x = NULL, y = "Median fit + robust milliseconds") +
+    theme_minimal(base_size = 12) +
+    theme(axis.text.x = element_text(angle = 25, hjust = 1))
+} else {
+  cat("ggplot2 not installed; skipping figure.")
+}
+```
+
+The figure excludes cache setup columns so fit and robust reporting are not
+mixed with one-time materialization. The setup table above is the better place
+to see where duplicated full-Gamma or weight work appears.
+
+## Cache Flags
+
+```{r}
+flags <- unique(ok[, c("estimator", "Path",
+                      "fit_cache_has_diagonal", "fit_cache_has_full",
+                      "fit_cache_has_dwls_weight", "fit_cache_has_wls_weight",
+                      "inference_cache_has_diagonal",
+                      "inference_cache_has_full",
+                      "inference_cache_has_dwls_weight",
+                      "inference_cache_has_wls_weight")])
+names(flags) <- c("Estimator", "Path", "Fit diagonal", "Fit full",
+                  "Fit DWLS weight", "Fit WLS weight",
+                  "Inference diagonal", "Inference full",
+                  "Inference DWLS weight", "Inference WLS weight")
+knitr::kable(flags[order(flags$Estimator, flags$Path), ], row.names = FALSE)
+```
+
+For DWLS, fit-only fitting needs only the diagonal Gamma; robust reporting
+needs full Gamma and a DWLS diagonal weight matrix. For WLS, both fitting and
+robust reporting need the full WLS weight, so separate fit/inference caches
+duplicate the inversion unless the fit-plus-inference cache is reused.
+
+## Caveats
+
+This is still an advisory synthetic benchmark. It covers bounded all-ordinal
+delta DWLS/WLS with robust reporting. It does not cover ULS robust inference,
+SNLLS followed by robust reporting, theta parameterization, mixed ordinal data,
+or a raw-data lazy Gamma builder that avoids constructing legacy `OrdinalStats`
+up front.
+
+## Reproduce
+
+```sh
+Rscript experiments/10-ordinal-inference-cache-probe/run_experiment.R --smoke --preset fast
+(cd experiments/10-ordinal-inference-cache-probe && quarto render report.qmd)
+```
+
+For less noisy timings, use `--preset opt` and increase `--reps`.
