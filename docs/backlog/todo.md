@@ -61,8 +61,8 @@ semantics · **XL** statistical design/research track before implementation.
   diagonal Gamma. Landed next: free-threshold (`H = I`) delta profiling for
   that ULS/DWLS path, so the optimizer sees only the active correlation block
   and returned threshold estimates are reconstructed from observed sample
-  thresholds. Next slice: full-WLS Schur-complement profiling, followed by
-  inference cache reuse.
+  thresholds. Full-WLS Schur-complement profiling is now also wired for the
+  same free-threshold delta path. Next slice: inference cache reuse.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into

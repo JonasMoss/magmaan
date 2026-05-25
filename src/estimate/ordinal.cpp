@@ -478,6 +478,15 @@ struct ThresholdProfile {
   Eigen::VectorXd full_template;
 };
 
+struct ProfiledWeightBlock {
+  Eigen::MatrixXd factor;
+  Eigen::MatrixXd threshold_from_corr;
+};
+
+struct ProfiledWeightWorkspace {
+  std::vector<ProfiledWeightBlock> blocks;
+};
+
 fit_expected<ThresholdLayout>
 make_threshold_layout(const spec::LatentStructure& pt,
                       const model::MatrixRep& rep,
@@ -733,29 +742,12 @@ weight_factors(const data::OrdinalStats& stats, OrdinalWeightKind kind) {
   return out;
 }
 
-fit_expected<std::vector<Eigen::MatrixXd>>
-weight_factors_from_matrices(const std::vector<Eigen::MatrixXd>& Ws,
-                             std::string_view what) {
-  std::vector<Eigen::MatrixXd> out;
-  out.reserve(Ws.size());
-  for (std::size_t b = 0; b < Ws.size(); ++b) {
-    Eigen::LLT<Eigen::MatrixXd> llt(Ws[b]);
-    if (llt.info() != Eigen::Success) {
-      return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          std::string(what) + " weight matrix is not positive definite in block " +
-              std::to_string(b)));
-    }
-    out.push_back(llt.matrixL());
-  }
-  return out;
-}
-
-fit_expected<std::vector<Eigen::MatrixXd>>
-fit_only_weight_factors(const data::OrdinalMoments& moments,
-                        data::OrdinalGammaCache* cache,
-                        const data::OrdinalWeightPlan& plan) {
-  std::vector<Eigen::MatrixXd> Ws;
-  Ws.reserve(moments.R.size());
+fit_expected<ProfiledWeightWorkspace>
+profiled_weight_workspace(const data::OrdinalMoments& moments,
+                          data::OrdinalGammaCache* cache,
+                          const data::OrdinalWeightPlan& plan) {
+  ProfiledWeightWorkspace out;
+  out.blocks.reserve(moments.R.size());
   if (plan.purpose != data::OrdinalWorkspacePurpose::FitOnly) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "fit_ordinal_bounded: OrdinalWeightPlan purpose must be fit-only"));
@@ -773,14 +765,70 @@ fit_only_weight_factors(const data::OrdinalMoments& moments,
     for (std::size_t b = 0; b < moments.R.size(); ++b) {
       const Eigen::Index p = moments.R[b].rows();
       const Eigen::Index ncorr = p * (p - 1) / 2;
-      Ws.push_back(Eigen::MatrixXd::Identity(ncorr, ncorr));
+      out.blocks.push_back(ProfiledWeightBlock{
+          .factor = Eigen::MatrixXd::Identity(ncorr, ncorr),
+          .threshold_from_corr =
+              Eigen::MatrixXd::Zero(moments.thresholds[b].size(), ncorr)});
     }
-    return weight_factors_from_matrices(Ws, "ordinal ULS");
+    return out;
   }
 
   if (plan.estimator == data::OrdinalEstimatorKind::WLS) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "fit_ordinal_bounded: cached full-WLS ordinal profiling is not implemented"));
+    if (plan.materialization != data::OrdinalGammaMaterialization::Full) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: WLS fit-only plan must request full Gamma"));
+    }
+    if (cache == nullptr) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: WLS requires an OrdinalGammaCache"));
+    }
+    if (cache->blocks.size() != moments.R.size()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: OrdinalGammaCache block count mismatch"));
+    }
+    auto ok = data::ordinal_gamma_cache_ensure_wls_weights(*cache);
+    if (!ok.has_value()) return std::unexpected(post_to_fit(ok.error()));
+
+    for (std::size_t b = 0; b < moments.R.size(); ++b) {
+      const Eigen::Index p = moments.R[b].rows();
+      const Eigen::Index nth = moments.thresholds[b].size();
+      const Eigen::Index ncorr = p * (p - 1) / 2;
+      const Eigen::Index mdim = nth + ncorr;
+      const Eigen::MatrixXd& W = cache->blocks[b].w_wls;
+      if (W.rows() != mdim || W.cols() != mdim || !matrix_all_finite(W)) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_bounded: cached WLS weight dimension mismatch in block " +
+                std::to_string(b)));
+      }
+      const Eigen::MatrixXd Wtt = W.block(0, 0, nth, nth);
+      const Eigen::MatrixXd Wtr = W.block(0, nth, nth, ncorr);
+      const Eigen::MatrixXd Wrt = W.block(nth, 0, ncorr, nth);
+      const Eigen::MatrixXd Wrr = W.block(nth, nth, ncorr, ncorr);
+      Eigen::LLT<Eigen::MatrixXd> llt_tt(Wtt);
+      if (llt_tt.info() != Eigen::Success) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_bounded: WLS threshold block is not positive definite in block " +
+                std::to_string(b)));
+      }
+      Eigen::MatrixXd T = llt_tt.solve(Wtr);
+      if (!T.allFinite()) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_bounded: WLS threshold profiling solve failed in block " +
+                std::to_string(b)));
+      }
+      Eigen::MatrixXd W_profile = Wrr - Wrt * T;
+      W_profile = 0.5 * (W_profile + W_profile.transpose());
+      Eigen::LLT<Eigen::MatrixXd> llt_profile(W_profile);
+      if (llt_profile.info() != Eigen::Success) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_bounded: profiled WLS weight is not positive definite in block " +
+                std::to_string(b)));
+      }
+      out.blocks.push_back(ProfiledWeightBlock{
+          .factor = llt_profile.matrixL(),
+          .threshold_from_corr = std::move(T)});
+    }
+    return out;
   }
 
   if (plan.materialization != data::OrdinalGammaMaterialization::Diagonal) {
@@ -820,9 +868,17 @@ fit_only_weight_factors(const data::OrdinalMoments& moments,
       }
       W(k, k) = 1.0 / v;
     }
-    Ws.push_back(W);
+    Eigen::LLT<Eigen::MatrixXd> llt(W);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: profiled DWLS weight is not positive definite in block " +
+              std::to_string(b)));
+    }
+    out.blocks.push_back(ProfiledWeightBlock{
+        .factor = llt.matrixL(),
+        .threshold_from_corr = Eigen::MatrixXd::Zero(nth, ncorr)});
   }
-  return weight_factors_from_matrices(Ws, "ordinal DWLS cache");
+  return out;
 }
 
 fit_expected<std::vector<Eigen::MatrixXd>>
@@ -1091,9 +1147,13 @@ ordinal_jacobian(const data::OrdinalStats& stats,
 fit_expected<Eigen::VectorXd>
 profiled_ordinal_residuals(const data::OrdinalMoments& stats,
                            const model::ImpliedMoments& moments,
-                           const std::vector<Eigen::MatrixXd>& factors) {
+                           const ProfiledWeightWorkspace& weights) {
   auto N = total_n_obs(stats);
   if (!N.has_value()) return std::unexpected(N.error());
+  if (weights.blocks.size() != stats.R.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "profiled ordinal residuals received mismatched weight blocks"));
+  }
   Eigen::Index n_total = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
@@ -1107,7 +1167,8 @@ profiled_ordinal_residuals(const data::OrdinalMoments& stats,
     Eigen::VectorXd d = corr_lower(moments.sigma[b]) - corr_lower(stats.R[b]);
     const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) /
                                 static_cast<double>(*N));
-    out.segment(off, ncorr) = sw * (factors[b].transpose() * d);
+    out.segment(off, ncorr) =
+        sw * (weights.blocks[b].factor.transpose() * d);
     off += ncorr;
   }
   if (!out.allFinite()) {
@@ -1121,9 +1182,13 @@ fit_expected<Eigen::MatrixXd>
 profiled_ordinal_jacobian(const data::OrdinalMoments& stats,
                           const model::ImpliedMoments& moments,
                           const Eigen::MatrixXd& J_sigma,
-                          const std::vector<Eigen::MatrixXd>& factors) {
+                          const ProfiledWeightWorkspace& weights) {
   auto N = total_n_obs(stats);
   if (!N.has_value()) return std::unexpected(N.error());
+  if (weights.blocks.size() != stats.R.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "profiled ordinal Jacobian received mismatched weight blocks"));
+  }
   Eigen::Index n_total = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
@@ -1140,9 +1205,45 @@ profiled_ordinal_jacobian(const data::OrdinalMoments& stats,
     const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) /
                                 static_cast<double>(*N));
     out.block(out_off, 0, ncorr, J_sigma.cols()) =
-        sw * (factors[b].transpose() * Jb);
+        sw * (weights.blocks[b].factor.transpose() * Jb);
     out_off += ncorr;
     sigma_off += vech_len(p);
+  }
+  return out;
+}
+
+fit_expected<Eigen::VectorXd>
+reconstruct_profiled_thresholds(const data::OrdinalStats& stats,
+                                const ThresholdLayout& layout,
+                                const model::ImpliedMoments& moments,
+                                const ProfiledWeightWorkspace& weights,
+                                const Eigen::VectorXd& theta) {
+  if (weights.blocks.size() != stats.R.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "profiled ordinal reconstruction received mismatched weight blocks"));
+  }
+  Eigen::VectorXd out = theta;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index nth = stats.thresholds[b].size();
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    if (weights.blocks[b].threshold_from_corr.rows() != nth ||
+        weights.blocks[b].threshold_from_corr.cols() != ncorr) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "profiled ordinal reconstruction found a threshold map dimension mismatch"));
+    }
+    const Eigen::VectorXd d_corr =
+        corr_lower(moments.sigma[b]) - corr_lower(stats.R[b]);
+    const Eigen::VectorXd tau =
+        stats.thresholds[b] - weights.blocks[b].threshold_from_corr * d_corr;
+    if (!tau.allFinite()) {
+      return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
+          "profiled ordinal reconstruction produced non-finite thresholds"));
+    }
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+      if (fr > 0) out(fr - 1) = tau(k);
+    }
   }
   return out;
 }
@@ -2606,9 +2707,9 @@ fit_ordinal_bounded(spec::LatentStructure pt,
   }
   Bounds active_bounds = profile_bounds(profile, bounds);
 
-  auto factors_or = fit_only_weight_factors(moments, gamma_cache, plan);
-  if (!factors_or.has_value()) return std::unexpected(factors_or.error());
-  const auto& factors = *factors_or;
+  auto weights_or = profiled_weight_workspace(moments, gamma_cache, plan);
+  if (!weights_or.has_value()) return std::unexpected(weights_or.error());
+  const auto& profiled_weights = *weights_or;
 
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) {
@@ -2625,7 +2726,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
     return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
         "fit_ordinal_bounded: start evaluation failed: " + eval0.error().detail));
   }
-  auto r0 = profiled_ordinal_residuals(moments, eval0->moments, factors);
+  auto r0 = profiled_ordinal_residuals(moments, eval0->moments,
+                                       profiled_weights);
   if (!r0.has_value()) return std::unexpected(r0.error());
 
   Eigen::VectorXd active_x0 = profile_contract(profile, x0);
@@ -2642,7 +2744,8 @@ fit_ordinal_bounded(spec::LatentStructure pt,
       return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
           "fit_ordinal_bounded: evaluate failed: " + eval.error().detail));
     }
-    return profiled_ordinal_residuals(moments, eval->moments, factors);
+    return profiled_ordinal_residuals(moments, eval->moments,
+                                      profiled_weights);
   };
   prob.J = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
     const Eigen::VectorXd theta = profile_expand(profile, x);
@@ -2652,14 +2755,26 @@ fit_ordinal_bounded(spec::LatentStructure pt,
           "fit_ordinal_bounded: evaluate failed: " + eval.error().detail));
     }
     auto J_full = profiled_ordinal_jacobian(moments, eval->moments,
-                                            eval->J_sigma, factors);
+                                            eval->J_sigma, profiled_weights);
     if (!J_full.has_value()) return std::unexpected(J_full.error());
     return profile_jacobian(profile, *J_full);
   };
 
-  return solve_ordinal_ls(prob, active_x0, active_bounds, EqConstraints{},
-                          backend, opts,
-                          "fit_ordinal_bounded");
+  auto est = solve_ordinal_ls(prob, active_x0, active_bounds, EqConstraints{},
+                              backend, opts,
+                              "fit_ordinal_bounded");
+  if (!est.has_value()) return std::unexpected(est.error());
+  auto eval_hat = ev.evaluate(est->theta, false, false);
+  if (!eval_hat.has_value()) {
+    return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+        "fit_ordinal_bounded: final reconstruction evaluate failed: " +
+            eval_hat.error().detail));
+  }
+  auto theta_or = reconstruct_profiled_thresholds(
+      stats, layout, eval_hat->moments, profiled_weights, est->theta);
+  if (!theta_or.has_value()) return std::unexpected(theta_or.error());
+  est->theta = std::move(*theta_or);
+  return est;
 }
 
 fit_expected<Estimates>
