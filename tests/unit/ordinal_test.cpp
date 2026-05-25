@@ -282,13 +282,24 @@ TEST_CASE("Cached ordinal DWLS fit consumes diagonal Gamma only") {
 
   auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, moments, {});
   REQUIRE(x0.has_value());
+  auto pt_prepared = *pt;
+  auto prep = magmaan::estimate::prepare_ordinal_delta_partable(
+      pt_prepared, moments);
+  REQUIRE(prep.has_value());
+  Eigen::VectorXd x0_profile = *x0;
+  for (std::size_t row = 0; row < pt_prepared.size(); ++row) {
+    if (pt_prepared.op[row] == magmaan::parse::Op::Threshold &&
+        pt_prepared.free[row] > 0) {
+      x0_profile(pt_prepared.free[row] - 1) += 1.25;
+    }
+  }
   auto plan = magmaan::data::ordinal_weight_plan(
       magmaan::data::OrdinalWorkspacePurpose::FitOnly,
       magmaan::data::OrdinalEstimatorKind::DWLS);
   auto legacy = magmaan::estimate::fit_ordinal_bounded(
       *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0);
   auto cached = magmaan::estimate::fit_ordinal_bounded(
-      *pt, *mr, moments, &cache, {}, plan, *x0);
+      *pt, *mr, moments, &cache, {}, plan, x0_profile);
   REQUIRE_MESSAGE(legacy.has_value(),
       "legacy DWLS failed: " << (legacy.has_value() ? "" : legacy.error().detail));
   REQUIRE_MESSAGE(cached.has_value(),
@@ -296,9 +307,16 @@ TEST_CASE("Cached ordinal DWLS fit consumes diagonal Gamma only") {
 
   CHECK(cached->fmin == doctest::Approx(legacy->fmin).epsilon(1e-8));
   CHECK((cached->theta - legacy->theta).cwiseAbs().maxCoeff() < 1e-6);
+  for (std::size_t row = 0; row < pt_prepared.size(); ++row) {
+    if (pt_prepared.op[row] == magmaan::parse::Op::Threshold &&
+        pt_prepared.free[row] > 0) {
+      CHECK(cached->theta(pt_prepared.free[row] - 1) ==
+            doctest::Approx((*x0)(pt_prepared.free[row] - 1)));
+    }
+  }
   REQUIRE(cache.block_count() == 1);
   CHECK(cache.blocks[0].has_diagonal);
-  CHECK(cache.blocks[0].has_dwls_weight);
+  CHECK_FALSE(cache.blocks[0].has_dwls_weight);
   CHECK_FALSE(cache.blocks[0].has_full);
   CHECK_FALSE(cache.blocks[0].has_wls_weight);
 }

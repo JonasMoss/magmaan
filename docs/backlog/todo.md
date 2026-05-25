@@ -58,9 +58,11 @@ semantics · **XL** statistical design/research track before implementation.
   `OrdinalGammaCache`, and `OrdinalWeightPlan` skeleton behind the legacy
   `OrdinalStats` / `MixedOrdinalStats` adapters, plus a fit-only all-ordinal
   `OrdinalMoments` path where ULS requests no Gamma and DWLS requests only
-  diagonal Gamma. Next slice: implement free-threshold (`H = I`) profiling so
-  ULS/DWLS optimize only the active correlation block and reconstruct
-  thresholds from observed sample thresholds.
+  diagonal Gamma. Landed next: free-threshold (`H = I`) delta profiling for
+  that ULS/DWLS path, so the optimizer sees only the active correlation block
+  and returned threshold estimates are reconstructed from observed sample
+  thresholds. Next slice: full-WLS Schur-complement profiling, followed by
+  inference cache reuse.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
