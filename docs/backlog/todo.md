@@ -53,7 +53,12 @@ semantics · **XL** statistical design/research track before implementation.
   separate ordinal moments from lazy Gamma/weight construction, support
   fit-only ULS/DWLS without full Gamma materialization, add the free-threshold
   (`H = I`) profiling path first, then extend to WLS Schur-complement profiling,
-  inference cache reuse, mixed ordinal data, and constrained thresholds.
+  inference cache reuse, mixed ordinal data, and constrained thresholds. Landed:
+  the initial C++ `OrdinalMoments` / `MixedOrdinalMoments`,
+  `OrdinalGammaCache`, and `OrdinalWeightPlan` skeleton behind the legacy
+  `OrdinalStats` / `MixedOrdinalStats` adapters. Next slice: route new
+  fit-only all-ordinal ULS/DWLS entry points through the cache so ULS requests
+  no Gamma and DWLS requests only diagonal Gamma.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into

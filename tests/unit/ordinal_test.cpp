@@ -165,6 +165,87 @@ double symmetric_condition_number(const Eigen::MatrixXd& x) {
 
 }  // namespace
 
+TEST_CASE("Ordinal workspace adapters split moments from Gamma cache") {
+  magmaan::data::OrdinalStats stats;
+  Eigen::MatrixXd R(2, 2);
+  R << 1.0, 0.35,
+       0.35, 1.0;
+  Eigen::VectorXd thresholds(2);
+  thresholds << -0.25, 0.40;
+  Eigen::MatrixXd gamma(3, 3);
+  gamma << 4.0, 0.2, 0.1,
+           0.2, 3.0, 0.3,
+           0.1, 0.3, 2.0;
+  stats.R.push_back(R);
+  stats.thresholds.push_back(thresholds);
+  stats.threshold_ov.push_back({0, 1});
+  stats.threshold_level.push_back({1, 1});
+  stats.NACOV.push_back(gamma);
+  stats.W_dwls.push_back(gamma.diagonal().cwiseInverse().asDiagonal());
+  stats.W_wls.push_back(gamma.inverse());
+  stats.n_obs.push_back(80);
+  stats.n_levels.push_back({2, 2});
+  stats.ov_names.push_back({"y1", "y2"});
+
+  auto moments = magmaan::data::ordinal_moments_from_stats(stats);
+  CHECK(moments.R[0].isApprox(stats.R[0], 0.0));
+  CHECK(moments.thresholds[0].isApprox(stats.thresholds[0], 0.0));
+  CHECK(moments.threshold_ov[0] == stats.threshold_ov[0]);
+  CHECK(moments.n_obs[0] == 80);
+  CHECK(moments.ov_names[0][1] == "y2");
+
+  auto cache = magmaan::data::ordinal_gamma_cache_from_stats(stats);
+  REQUIRE(cache.block_count() == 1);
+  CHECK(cache.blocks[0].has_full);
+  CHECK(cache.blocks[0].has_diagonal);
+  CHECK(cache.blocks[0].has_dwls_weight);
+  CHECK(cache.blocks[0].has_wls_weight);
+  CHECK(cache.blocks[0].gamma.isApprox(gamma, 0.0));
+  CHECK(cache.blocks[0].diagonal.isApprox(gamma.diagonal(), 0.0));
+}
+
+TEST_CASE("OrdinalGammaCache can materialize DWLS without full Gamma") {
+  Eigen::VectorXd diagonal(3);
+  diagonal << 2.0, 4.0, 5.0;
+  auto cache = magmaan::data::ordinal_gamma_cache_from_diagonal({diagonal});
+
+  REQUIRE(cache.block_count() == 1);
+  CHECK(cache.blocks[0].has_diagonal);
+  CHECK_FALSE(cache.blocks[0].has_full);
+  CHECK_FALSE(cache.blocks[0].has_dwls_weight);
+
+  auto dwls = magmaan::data::ordinal_gamma_cache_ensure_dwls_weights(cache);
+  REQUIRE(dwls.has_value());
+  CHECK(cache.blocks[0].has_dwls_weight);
+  CHECK(cache.blocks[0].w_dwls.diagonal().isApprox(
+      diagonal.cwiseInverse(), 0.0));
+
+  auto wls = magmaan::data::ordinal_gamma_cache_ensure_wls_weights(cache);
+  CHECK_FALSE(wls.has_value());
+}
+
+TEST_CASE("OrdinalWeightPlan encodes fit-only Gamma cost rules") {
+  using magmaan::data::OrdinalEstimatorKind;
+  using magmaan::data::OrdinalGammaMaterialization;
+  using magmaan::data::OrdinalWorkspacePurpose;
+
+  auto uls = magmaan::data::ordinal_weight_plan(
+      OrdinalWorkspacePurpose::FitOnly, OrdinalEstimatorKind::ULS);
+  CHECK(uls.materialization == OrdinalGammaMaterialization::None);
+
+  auto dwls = magmaan::data::ordinal_weight_plan(
+      OrdinalWorkspacePurpose::FitOnly, OrdinalEstimatorKind::DWLS);
+  CHECK(dwls.materialization == OrdinalGammaMaterialization::Diagonal);
+
+  auto wls = magmaan::data::ordinal_weight_plan(
+      OrdinalWorkspacePurpose::FitOnly, OrdinalEstimatorKind::WLS);
+  CHECK(wls.materialization == OrdinalGammaMaterialization::Full);
+
+  auto inference = magmaan::data::ordinal_weight_plan(
+      OrdinalWorkspacePurpose::FitPlusInference, OrdinalEstimatorKind::DWLS);
+  CHECK(inference.materialization == OrdinalGammaMaterialization::Full);
+}
+
 TEST_CASE("Polychoric h-score API evaluates predefined caps") {
   using magmaan::data::PolychoricHScoreKind;
   using magmaan::data::PolychoricHScoreOptions;
