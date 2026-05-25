@@ -485,19 +485,23 @@ stop rather than any usable non-error return.
   For free-threshold delta models (`H = I`), the cache-aware ULS/DWLS path
   profiles thresholds out of the optimizer, drives only the active correlation
   block, and reconstructs returned threshold estimates from the observed sample
-  thresholds. The cache-aware WLS path uses the full inverse-weight
-  threshold/correlation blocks, optimizes with the Schur-complement correlation
-  weight, and reconstructs thresholds with the profiled cross-block formula.
+  thresholds. Fixed threshold rows are kept as threshold residuals in the
+  profiled full-moment objective, so ULS/DWLS/WLS can compare against the
+  ordinary unprofiled ordinal objective without promoting fixed thresholds back
+  into optimizer coordinates. The cache-aware WLS path uses the full
+  inverse-weight threshold/correlation blocks, applies the equivalent profiled
+  affine threshold/correlation residual transform, and reconstructs thresholds
+  with the profiled cross-block formula.
   Fit-plus-inference and inference-only all-ordinal plans can also reuse a
   full `OrdinalGammaCache` for robust DWLS/WLS reporting: DWLS materializes
   diagonal weights from the full Gamma when needed, WLS materializes the full
   inverse weight, and the robust result matches the legacy materialized
   `OrdinalStats` path. The all-ordinal SNLLS entry point reuses the same
-  free-threshold profiled correlation objective for delta ULS/DWLS/WLS:
+  free/fixed-threshold profiled objective for delta ULS/DWLS/WLS:
   thresholds are fixed out before the generic Golub-Pereyra classifier sees the
   problem, conditionally linear covariance parameters are profiled, WLS uses the
-  Schur-complement correlation weight, and the returned vector is reconstructed
-  in the ordinary prepared ordinal partable coordinate.
+  same affine full-weight transform, and the returned vector is reconstructed in
+  the ordinary prepared ordinal partable coordinate.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
   thin R wrappers for ordinal stats plus DWLS/WLS fits.
 - The R ordinal data boundary exposes consolidated dispatchers:
