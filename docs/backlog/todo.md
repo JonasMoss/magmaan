@@ -81,8 +81,13 @@ semantics · **XL** statistical design/research track before implementation.
   `experiments/06-ordinal-snlls-probe`: it covers all-ordinal delta fit-only
   ULS/DWLS/WLS across free, fixed, and shared threshold models and checks
   cache/materialization flags plus agreement with bounded/materialized paths.
-  Next practical slices are fit-plus-inference timing, raw/lazy Gamma
-  construction boundaries, then the remaining estimator generalizations.
+  The fit-plus-inference companion also landed as
+  `magmaan_ordinal_inference_workspace_bench` plus
+  `experiments/10-ordinal-inference-cache-probe`, comparing legacy
+  materialized robust reporting, minimal fit-only plus separate inference
+  caches, and shared fit-plus-inference cache reuse for all-ordinal delta
+  DWLS/WLS. Next practical slices are raw/lazy Gamma construction boundaries,
+  then the remaining estimator generalizations.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
@@ -107,9 +112,10 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   materialization flags, and agreement with the legacy materialized ordinal
   path. Landed first: a C++ advisory benchmark target and experiment runner
   for ULS/DWLS/WLS fit-only cells across free, fixed, and shared thresholds.
-  Remaining: fit-plus-inference/robust reuse timing, raw-data lazy construction
-  boundaries, opt-build larger grids, and any R/API wrapper polish justified by
-  those results.
+  Landed next: a separate fit-plus-inference robust-reporting experiment for
+  DWLS/WLS cache reuse against the legacy materialized robust path. Remaining:
+  raw-data lazy construction boundaries, opt-build larger grids when needed,
+  and any R/API wrapper polish justified by those results.
 - **M/L.** Add a two-stage EM/saturated-covariance missing-data research path
   for comparison with direct FIML and pairwise covariance methods. Stage 1
   (saturated EM moments + sandwich ACOV ingredients) is now exposed as
