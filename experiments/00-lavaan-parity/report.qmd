@@ -1,0 +1,322 @@
+---
+title: "lavaan audit parity"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+options(width = 120)
+
+candidate_dirs <- c(getwd(), dirname(getwd()),
+                    file.path("experiments", "00-lavaan-parity"))
+result_candidates <- unique(file.path(candidate_dirs, "results"))
+hits <- result_candidates[file.exists(file.path(result_candidates,
+                                                "audit_summary.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+need_file <- function(name) {
+  path <- file.path(results_dir, name)
+  if (!file.exists(path)) {
+    stop("Missing results/", name,
+         ". Run `Rscript experiments/00-lavaan-parity/run_experiment.R` first.",
+         call. = FALSE)
+  }
+  path
+}
+read_result <- function(name) {
+  utils::read.csv(need_file(name), stringsAsFactors = FALSE,
+                  check.names = FALSE, na.strings = c("", "NA"))
+}
+read_optional <- function(name) {
+  path <- file.path(results_dir, name)
+  if (!file.exists(path)) return(data.frame())
+  utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE,
+                  na.strings = c("", "NA"))
+}
+
+audit_summary <- read_result("audit_summary.csv")
+current_failures <- read_result("current_failures.csv")
+v7_disagree <- read_result("audit_disagreements_enriched.csv")
+by_book <- read_result("audit_by_book.csv")
+by_weight <- read_result("audit_by_weight.csv")
+refit_summary <- read_result("refit_summary.csv")
+lcs_summary <- read_result(file.path("lcs-objective-gap", "summary.csv"))
+drivers <- read_result("driver_inventory.csv")
+metadata <- read_result("metadata.csv")
+v7_agreement_cells <- as.integer(audit_summary$n_with_both_fits[[1L]] -
+                                   nrow(v7_disagree))
+refit <- read_optional(file.path("refit-disagreements",
+                                 "refit_disagreements_v8.csv"))
+
+fmt_num <- function(x, digits = 3) {
+  ifelse(is.na(x), "", formatC(x, format = "g", digits = digits))
+}
+fmt_pct <- function(x) {
+  ifelse(is.na(x), "", sprintf("%.1f%%", 100 * x))
+}
+html_escape <- function(x) {
+  x <- as.character(x)
+  x[is.na(x)] <- ""
+  x <- gsub("&", "&amp;", x, fixed = TRUE)
+  x <- gsub("<", "&lt;", x, fixed = TRUE)
+  x <- gsub(">", "&gt;", x, fixed = TRUE)
+  x <- gsub('"', "&quot;", x, fixed = TRUE)
+  x
+}
+html_table <- function(x, status_col = NULL, limit = 30L) {
+  if (is.null(x) || !nrow(x)) {
+    cat("<p class=\"empty-table\">No rows.</p>\n")
+    return(invisible(NULL))
+  }
+  if (!is.null(limit) && nrow(x) > limit) x <- x[seq_len(limit), , drop = FALSE]
+  classes <- rep("", nrow(x))
+  if (!is.null(status_col) && status_col %in% names(x)) {
+    status <- tolower(as.character(x[[status_col]]))
+    classes[grepl("fail|disagree|conditioning|gap", status)] <- " class=\"status-fail\""
+    classes[grepl("error", status)] <- " class=\"status-error\""
+    classes[grepl("agree|pass", status)] <- " class=\"status-pass\""
+  }
+  cat("<table class=\"audit-table\"><thead><tr>")
+  cat(paste0("<th>", html_escape(names(x)), "</th>", collapse = ""))
+  cat("</tr></thead><tbody>\n")
+  for (i in seq_len(nrow(x))) {
+    cat("<tr", classes[[i]], ">")
+    cat(paste0("<td>", html_escape(x[i, , drop = TRUE]), "</td>",
+               collapse = ""))
+    cat("</tr>\n")
+  }
+  cat("</tbody></table>\n")
+}
+meta_value <- function(key) {
+  hit <- metadata$value[metadata$key == key]
+  if (length(hit)) hit[[1L]] else ""
+}
+```
+
+<style>
+.scope-box {
+  border-left: 4px solid #475569;
+  padding: 0.7rem 1rem;
+  background: #f8fafc;
+  margin: 1rem 0;
+}
+.failure-box {
+  border-left: 4px solid #b91c1c;
+  padding: 0.7rem 1rem;
+  background: #fff1f2;
+  margin: 1rem 0;
+}
+.pass-box {
+  border-left: 4px solid #15803d;
+  padding: 0.7rem 1rem;
+  background: #f0fdf4;
+  margin: 1rem 0;
+}
+.audit-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0 1.4rem 0;
+  font-size: 0.92rem;
+}
+.audit-table th,
+.audit-table td {
+  border: 1px solid #d7dde5;
+  padding: 0.35rem 0.45rem;
+  vertical-align: top;
+}
+.audit-table th {
+  background: #e2e8f0;
+}
+.audit-table tr.status-fail td {
+  background: #fff1f2;
+}
+.audit-table tr.status-error td {
+  background: #fffbeb;
+}
+.audit-table tr.status-pass td {
+  background: #f8fafc;
+}
+.empty-table {
+  color: #64748b;
+  font-style: italic;
+}
+</style>
+
+## Scope
+
+<div class="scope-box">
+This experiment presents the paper-side lavaan audit-parity validation in a
+single inspectable place. The full sweep fits each SNLLS textbook-corpus
+<code>(case, weight)</code> cell in <code>lavaan</code>, aligns lavaan's
+returned free-parameter vector to magmaan's model, evaluates the same point
+with <code>magmaan_core$evaluate_at()</code>, and compares lavaan's
+<code>lavInspect(fit, "converged")</code> self-report with magmaan's terminal
+audit stationarity verdict. This is a convergence-verdict validation, not a
+new estimator, not a fixture generator, and not the benchmark speed surface.
+</div>
+
+The tables below read the latest normalized outputs copied by
+`run_experiment.R`. By default that is the last full sweep,
+`r meta_value("audit_run")`, plus the targeted v8 refit CSV if present. The
+targeted refit is not a full sweep: it reruns only the 24 v7 disagreement
+cells and projects the current failure surface under the assumption that the
+`r v7_agreement_cells` v7 agreement cells did not regress.
+
+## Current Failures
+
+```{r}
+#| results: asis
+if (nrow(current_failures)) {
+  cat("<div class=\"failure-box\"><strong>Current/projected failures are shown first.</strong> ",
+      "When the v8 refit table is present, this block is based on the 24-cell targeted refit; ",
+      "otherwise it falls back to the v7 disagreement table.</div>\n", sep = "")
+  if ("v8_agrees" %in% names(current_failures)) {
+    tbl <- current_failures[, c("case", "v8_lav_conv", "v8_audit_stat",
+                                "v8_grad_inf", "v8_magmaan_fmin",
+                                "v8_lav_fx_bare", "v8_ratio", "v8_err"),
+                            drop = FALSE]
+    tbl$v8_grad_inf <- fmt_num(tbl$v8_grad_inf)
+    tbl$v8_magmaan_fmin <- fmt_num(tbl$v8_magmaan_fmin)
+    tbl$v8_lav_fx_bare <- fmt_num(tbl$v8_lav_fx_bare)
+    tbl$v8_ratio <- fmt_num(tbl$v8_ratio)
+    tbl$Status <- "current failure"
+    names(tbl) <- c("Case", "lavaan Converged", "Audit Stationary",
+                    "Audit Grad Inf", "magmaan fmin", "lavaan fmin bare",
+                    "fmin Ratio", "Error", "Status")
+    html_table(tbl, status_col = "Status", limit = NULL)
+  } else {
+    tbl <- current_failures[, c("case_id", "classification", "weight",
+                                "audit_grad_inf", "magmaan_fmin",
+                                "lavaan_fx_bare", "fmin_ratio"),
+                            drop = FALSE]
+    tbl$audit_grad_inf <- fmt_num(tbl$audit_grad_inf)
+    tbl$magmaan_fmin <- fmt_num(tbl$magmaan_fmin)
+    tbl$lavaan_fx_bare <- fmt_num(tbl$lavaan_fx_bare)
+    tbl$fmin_ratio <- fmt_num(tbl$fmin_ratio)
+    names(tbl) <- c("Case", "Classification", "Weight", "Audit Grad Inf",
+                    "magmaan fmin", "lavaan fmin bare", "fmin Ratio")
+    html_table(tbl, status_col = "Classification", limit = NULL)
+  }
+} else {
+  cat("<div class=\"pass-box\"><strong>No current/projected failures.</strong></div>\n")
+}
+```
+
+## Block A: Full-Sweep Headline
+
+```{r}
+#| results: asis
+headline <- audit_summary
+headline$agreement_rate <- fmt_pct(headline$agreement_rate)
+names(headline) <- c("Audit Run", "Cells", "Cells With Both Fits", "Errors",
+                     "Agree", "lavaan Yes / Audit No",
+                     "lavaan No / Audit Yes", "Agreement Rate")
+html_table(headline, limit = NULL)
+```
+
+```{r}
+#| results: asis
+if (nrow(refit_summary)) {
+  html_table(refit_summary, limit = NULL)
+}
+```
+
+## Block B: Disagreements From The Last Full Sweep
+
+These are the v7 off-diagonal cells before the targeted v8 refit. The
+classification column separates the LCS / phantom-latent objective gap, the
+single-indicator `auto.fix.single` parity gap, the Muthen ADF conditioning side
+finding, and ordinary gradient-verdict splits.
+
+```{r}
+#| results: asis
+tbl <- v7_disagree[, c("case_id", "classification", "book", "family", "weight",
+                       "lavaan_converged", "audit_stationary",
+                       "audit_grad_inf", "magmaan_fmin", "lavaan_fx_bare",
+                       "fmin_ratio"),
+                   drop = FALSE]
+for (nm in c("audit_grad_inf", "magmaan_fmin", "lavaan_fx_bare",
+             "fmin_ratio")) {
+  tbl[[nm]] <- fmt_num(tbl[[nm]])
+}
+names(tbl) <- c("Case", "Classification", "Book", "Family", "Weight",
+                "lavaan Converged", "Audit Stationary", "Audit Grad Inf",
+                "magmaan fmin", "lavaan fmin bare", "fmin Ratio")
+html_table(tbl, status_col = "Classification", limit = NULL)
+```
+
+## Block C: Breakdown By Book And Weight
+
+```{r}
+#| results: asis
+book_tbl <- by_book
+book_tbl$agreement_rate <- fmt_pct(book_tbl$agreement_rate)
+names(book_tbl) <- c("Block", "Book", "Cells", "Agree",
+                     "lavaan Yes / Audit No", "lavaan No / Audit Yes",
+                     "Agreement Rate")
+html_table(book_tbl, limit = NULL)
+```
+
+```{r}
+#| results: asis
+weight_tbl <- by_weight
+weight_tbl$agreement_rate <- fmt_pct(weight_tbl$agreement_rate)
+names(weight_tbl) <- c("Block", "Weight", "Cells", "Agree",
+                       "lavaan Yes / Audit No", "lavaan No / Audit Yes",
+                       "Agreement Rate")
+html_table(weight_tbl, limit = NULL)
+```
+
+## Block D: LCS Objective-Gap Probe
+
+The LCS probe compares `Σhat(theta_hat)`, `muhat(theta_hat)`, sample
+covariances, and sample means element by element on three target cells. It
+diagnoses the old large fmin-ratio outliers as an implied-moment assembly
+problem in LCS / phantom-latent patterns.
+
+```{r}
+#| results: asis
+lcs_tbl <- lcs_summary
+for (nm in c("magmaan_fmin", "lavaan_fx", "ratio", "audit_grad_inf",
+             "worst_magmaan", "worst_lavaan", "worst_diff",
+             "worst_rel_diff")) {
+  if (nm %in% names(lcs_tbl)) lcs_tbl[[nm]] <- fmt_num(lcs_tbl[[nm]])
+}
+html_table(lcs_tbl, limit = NULL)
+```
+
+## Block E: Driver Inventory
+
+```{r}
+#| results: asis
+html_table(drivers, limit = NULL)
+```
+
+## Reproduce
+
+Normalize existing outputs and render this report:
+
+```sh
+Rscript experiments/00-lavaan-parity/run_experiment.R
+(cd experiments/00-lavaan-parity && quarto render report.qmd)
+```
+
+Run the long full sweep only when needed:
+
+```sh
+Rscript experiments/00-lavaan-parity/run_experiment.R --run-full
+```
+
+Run the cheap targeted probes:
+
+```sh
+Rscript experiments/00-lavaan-parity/scripts/refit_disagreements.R
+Rscript experiments/00-lavaan-parity/scripts/diagnose_adf_conditioning.R
+Rscript papers/snlls-constrained/scripts/diagnose_lcs_disagreement.R
+```
