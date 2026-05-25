@@ -1,0 +1,232 @@
+---
+title: "Ordinal SNLLS speed pilot"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path)))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"),
+                              candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates,
+                                                "speed.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+
+speed_path <- file.path(results_dir, "speed.csv")
+metadata_path <- file.path(results_dir, "metadata.csv")
+if (!file.exists(speed_path)) {
+  stop("Missing speed.csv. Run: Rscript run_experiment.R --smoke")
+}
+
+speed <- utils::read.csv(speed_path, check.names = FALSE,
+                         stringsAsFactors = FALSE)
+metadata <- utils::read.csv(metadata_path, check.names = FALSE,
+                            stringsAsFactors = FALSE)
+
+fmt_ms <- function(x) ifelse(is.na(x), "", sprintf("%.2f", x))
+fmt_num <- function(x) ifelse(is.na(x), "", sprintf("%.3g", x))
+fmt_diff <- function(x) ifelse(is.na(x), "", sprintf("%.2e", x))
+max_or_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) NA_real_ else max(x)
+}
+median_or_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) NA_real_ else stats::median(x)
+}
+
+speed$Method <- factor(speed$path, levels = c("bounded", "snlls"),
+                       labels = c("Bounded", "SNLLS"))
+speed$Design <- factor(
+  speed$design,
+  levels = c("kreiberg_scaling", "worked_example", "threshold_stress"),
+  labels = c("Kreiberg scaling", "Worked example", "Threshold stress")
+)
+ok <- speed[speed$status == "ok", ]
+
+wide <- reshape(
+  ok[, c("design", "case_id", "q", "p", "categories", "threshold_balance",
+         "threshold_mode", "estimator", "path", "fit_median_ms")],
+  idvar = c("design", "case_id", "q", "p", "categories",
+            "threshold_balance", "threshold_mode", "estimator"),
+  timevar = "path",
+  direction = "wide"
+)
+names(wide) <- sub("^fit_median_ms\\.", "", names(wide))
+wide$speedup <- wide$bounded / wide$snlls
+```
+
+## Question
+
+This pilot asks whether ordinal SNLLS shows the same basic speed pattern as
+the continuous Kreiberg-style SNLLS examples once thresholds and ordinal
+weights are in the objective.
+
+The design deliberately includes three views:
+
+- a repeated-measure four-factor family indexed by indicators per factor `q`;
+- one worked repeated-measure example for table/prose use;
+- an ordinal-specific threshold stress slice varying categories, balance, and
+  fixed/shared threshold constraints.
+
+## Short Answer
+
+In this pilot, SNLLS is faster than bounded fitting in the repeated-measure
+ordinal cells while matching the bounded objective to numerical tolerance.
+The result is not yet a paper-grade simulation: statistic construction is still
+the legacy full ordinal builder, and the design is synthetic. But it is the
+right first sign that the Kreiberg-style scaling story survives ordinalization.
+
+## Run
+
+```{r}
+data.frame(
+  Item = metadata$key,
+  Value = metadata$value,
+  check.names = FALSE
+) |>
+  knitr::kable(row.names = FALSE)
+```
+
+## Status
+
+```{r}
+status <- aggregate(seed ~ Design + estimator + Method + status,
+                    data = speed, FUN = length)
+names(status) <- c("Design", "Estimator", "Method", "Status", "Rows")
+knitr::kable(status, row.names = FALSE)
+```
+
+## Agreement
+
+```{r}
+agreement <- aggregate(
+  cbind(theta_diff_bounded, fmin_diff_bounded) ~ Design + estimator + Method,
+  data = ok,
+  FUN = max_or_na,
+  na.action = na.pass
+)
+names(agreement) <- c("Design", "Estimator", "Method",
+                      "Max |theta - bounded|", "Max |fmin - bounded|")
+for (j in 4:ncol(agreement)) agreement[[j]] <- fmt_diff(agreement[[j]])
+knitr::kable(agreement, row.names = FALSE)
+```
+
+## Speedup
+
+```{r}
+summary <- aggregate(speedup ~ design + estimator, data = wide,
+                     FUN = median_or_na)
+summary$Design <- factor(
+  summary$design,
+  levels = c("kreiberg_scaling", "worked_example", "threshold_stress"),
+  labels = c("Kreiberg scaling", "Worked example", "Threshold stress")
+)
+summary$`Median bounded / SNLLS` <- fmt_num(summary$speedup)
+knitr::kable(summary[, c("Design", "estimator", "Median bounded / SNLLS")],
+             row.names = FALSE,
+             col.names = c("Design", "Estimator", "Median Bounded / SNLLS"))
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 4
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  library(ggplot2)
+  scaling <- wide[wide$design == "kreiberg_scaling", ]
+  ggplot(scaling, aes(q, speedup, color = estimator)) +
+    geom_hline(yintercept = 1, linetype = 2, color = "grey50") +
+    geom_line() +
+    geom_point(size = 2) +
+    labs(x = "Indicators per factor (q)",
+         y = "Bounded / SNLLS fit-time ratio",
+         color = "Estimator") +
+    theme_minimal(base_size = 12)
+} else {
+  cat("ggplot2 not installed; skipping figure.")
+}
+```
+
+## Worked Example
+
+```{r}
+worked <- wide[wide$design == "worked_example", ]
+worked_table <- worked[, c("case_id", "q", "p", "categories", "estimator",
+                           "bounded", "snlls", "speedup")]
+names(worked_table) <- c("Case", "q", "p", "Categories", "Estimator",
+                         "Bounded ms", "SNLLS ms", "Bounded / SNLLS")
+worked_table$`Bounded ms` <- fmt_ms(worked_table$`Bounded ms`)
+worked_table$`SNLLS ms` <- fmt_ms(worked_table$`SNLLS ms`)
+worked_table$`Bounded / SNLLS` <- fmt_num(worked_table$`Bounded / SNLLS`)
+knitr::kable(worked_table, row.names = FALSE)
+```
+
+## Threshold Stress
+
+```{r}
+stress <- wide[wide$design == "threshold_stress", ]
+stress_table <- stress[, c("categories", "threshold_balance",
+                           "threshold_mode", "estimator", "speedup")]
+names(stress_table) <- c("Categories", "Threshold balance",
+                         "Threshold mode", "Estimator", "Bounded / SNLLS")
+stress_table$`Bounded / SNLLS` <- fmt_num(stress_table$`Bounded / SNLLS`)
+knitr::kable(stress_table[order(stress_table$Categories,
+                                stress_table$`Threshold balance`,
+                                stress_table$`Threshold mode`,
+                                stress_table$Estimator), ],
+             row.names = FALSE)
+```
+
+Threshold stress keeps the same repeated-measure covariance model but changes
+the ordinal layer. This is where fixed and shared threshold rows can erode or
+preserve the profiling advantage.
+
+## Cost Context
+
+```{r}
+cost <- aggregate(cbind(stats_ms, cache_setup_ms, weight_setup_ms) ~
+                    Design + estimator + Method,
+                  data = ok,
+                  FUN = median_or_na,
+                  na.action = na.pass)
+names(cost) <- c("Design", "Estimator", "Method", "Stats ms",
+                 "Cache setup ms", "Weight setup ms")
+for (j in 4:ncol(cost)) cost[[j]] <- fmt_ms(cost[[j]])
+knitr::kable(cost, row.names = FALSE)
+```
+
+Fit timing excludes statistic construction, but `stats_ms` is shown because the
+current pilot still starts from legacy `OrdinalStats`, which estimates
+polychorics, full NACOV, and legacy DWLS/WLS weights. A raw/lazy ordinal
+builder is the next experiment if we want end-to-end speed claims.
+
+## Caveats
+
+This is a speed pilot, not a simulation study. It uses one synthetic
+repeated-measure model family, all-ordinal complete data, the delta
+parameterization, and NLopt L-BFGS. It does not compare against lavaan timing,
+mixed ordinal data, theta parameterization, robust reporting, or alternate
+optimizers.
+
+The default runner caps the Kreiberg-style scaling grid at `q <= 8` to keep
+the preliminary run practical. Use `--max-q 12` for the fuller literature-like
+range.
+
+## Reproduce
+
+```sh
+Rscript experiments/11-ordinal-snlls-speed/run_experiment.R --smoke --preset fast
+(cd experiments/11-ordinal-snlls-speed && quarto render report.qmd)
+```
+
+For less noisy timings, use `--preset opt`, increase `--reps`, and optionally
+run `--max-q 12`.
