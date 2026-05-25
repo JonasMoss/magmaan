@@ -1,14 +1,32 @@
 # magmaan <img src="docs/assets/logo/logo_compact.png" align="right" height="170" />
 
-> "This world ever was, and is, and shall be, an ever-living Fire."
-> - Heraclitus
+`magmaan` is the subterranean cousin of `lavaan`. It's C++23 toolkit for methods developers and simulation ethusiasts working on linear SEM, with a focus on modularity, extensibility, and full control over moving parts.
 
-`magmaan` is the subterranean cousin of `lavaan`: a C++23 toolkit for methods developers working on linear SEM, with a focus on modularity, extensibility, and full control over moving parts.
+* **Status:** alpha (v0.0.1). No API-stability promise yet, the lavaan-parity core should stabilize first.
 
-**Status:** alpha (v0.0.1) — no API-stability promise yet; the lavaan-parity core should stabilize first
-**Language:** C++23, built with `-fno-exceptions -fno-rtti`
-**Scope:** linear SEM by ML and FIML, plus ULS/GLS/(D)WLS least squares — continuous and ordinal/categorical data, with Satorra-Bentler-family robust tests
-**Philosophy:** lavaan is the oracle; failures are values; APIs stay explicit and composable
+* **Language:** C++23, built with `-fno-exceptions -fno-rtti`.
+
+* **Scope:** Estimation and inference for linear SEM + convenience functions.
+
+* **Philosophy:** `lavaan` is the oracle, failures are values, APIs stay explicit and composable.
+
+`magmaan` is heavily tasted against `lavaan`, and the two libraries agree n nb    on a massive corpus of models. See ((todo: add lavan parity document in experiments)) for details. 
+
+
+## Speed
+
+`magmaan` fits SEM models orders of magnitue faster than `lavaan`.
+
+| Model                                        | Estimator | lavaan ms | magmaan ms | Speedup |
+| -------------------------------------------- | --------- | --------: | ---------: | ------: |
+| Latent state-trait (Geiser 2013)             | ML        |     103.7 |       1.28 |    103× |
+| Latent state strict invariance (Geiser 2013) | ML        |      34.6 |       0.63 |     80× |
+| Three-factor CFA (Geiser 2013)               | ML        |      32.6 |       0.73 |     73× |
+| HS 3-factor CFA                              | ULS       |      31.2 |       0.78 |     40× |
+| HS 3-factor CFA (masked)                     | FIML      |      59.4 |       1.53 |     39× |
+| Bollen democracy SEM                         | ML        |      33.8 |       1.49 |     23× |
+
+(TODO: Link to more detail benchmark.)
 
 
 ## Build
@@ -30,21 +48,3 @@ ctest --preset opt
 AddressSanitizer + UBSan. `just` wraps the usual loops: `just build`,
 `just test`, `just opt`, `just test-opt`, `just r-check`, and `just check`.
 
-## Scope Boundary
-
-**Currently out of scope:**
-* Multilevel SEM
-* Latent interactions/mixtures
-* Inequality constraints (and active-bound inference)
-* Non-interior solutions / non-standard asymptotics
-
-**Probably always out of scope:**
-* Bayesian models
-* EFA
-* IRT
-
-## License
-
-magmaan is released under the MIT License (see [`LICENSE`](LICENSE)). The
-vendored PORT optimizer routines under `third_party/port/` are BSD-3-Clause;
-their upstream license files live alongside the sources.
