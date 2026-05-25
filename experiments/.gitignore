@@ -1,0 +1,7 @@
+**/resources/
+**/.quarto/
+**/report.html
+**/report_files/
+**/results/*
+!**/results/
+!**/results/.gitignore

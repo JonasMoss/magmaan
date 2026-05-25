@@ -1,2 +1,4 @@
-report.html
-report_files/
+/.quarto/
+/report.html
+/report_files/
+/resources/
