@@ -1,5 +1,5 @@
 ---
-title: "Pairwise Estimator Efficiency: ML, Σ-only GLS, Γ_NT^pw GLS"
+title: "Pairwise Estimator Efficiency: FIML, Γ_NT^pw GLS, ML, Σ-only GLS"
 format:
   html:
     toc: true
@@ -43,48 +43,57 @@ seed_base  <- meta_lookup("seed_base", "?")
 
 ## Question
 
-Three estimators take a pairwise sample covariance `Ŝ_pw` and fit an
-SEM:
+Four estimators fit an SEM on incomplete continuous data:
 
-- **Σ-only GLS** — `fit_gls` with `samp.S = Ŝ_pw` and `W =
-  Γ_NT(Ŝ_pw)⁻¹`. Trace form, asymptotically suboptimal under MAR.
-- **Pairwise ML** — `fit_ml` with `samp.S = Ŝ_pw`. The
-  Savalei-Bentler (2005) / Gold-Bentler-Kim (2003) canonical pairwise
-  estimator; *first-order asymptotically equivalent* to Σ-only GLS,
-  differing only in higher-order finite-sample terms.
+- **Σ-only GLS** — `fit_gls(samp.S = Ŝ_pw)`, trace form with the
+  Σ-only weight `Γ_NT(Ŝ_pw)⁻¹`. Asymptotically suboptimal under MAR.
+- **Pairwise ML** — `fit_ml(samp.S = Ŝ_pw)`, the Savalei-Bentler
+  (2005) / Gold-Bentler-Kim (2003) canonical pairwise estimator;
+  first-order asymptotically equivalent to Σ-only GLS.
 - **Γ_NT^pw GLS** — `fit_gls_pairwise(raw, pw)`, the asymptotically
   efficient quadratic-form variant with `W = (Γ_NT^pw)⁻¹`.
+- **FIML (oracle)** — `fit_fiml(raw_data)`, direct missing-data ML
+  using the full incomplete-data likelihood (not a pairwise summary).
+  The asymptotic-efficiency upper bound under MAR.
 
-How do they actually rank in finite samples under realistic missing
-patterns?
+How do they rank in finite samples under realistic missing patterns?
 
 ## Short Answer
 
-`Γ_NT^pw GLS  ≥  pairwise ML  >  Σ-only GLS`, consistently. Pick
-`Γ_NT^pw` for headline efficiency; pick pairwise ML for the literature
-default plus excellent robustness; never pick Σ-only GLS.
+`FIML  ≈  Γ_NT^pw GLS  >  pairwise ML  >  Σ-only GLS`. The headline
+finding: **Γ_NT^pw GLS is statistically interchangeable with FIML**
+across every cell tested, while running through the same GLS
+pipeline. ML pays a small (~1–11%) asymptotic-efficiency penalty;
+Σ-only GLS pays a similar penalty plus catastrophic-tail risk under
+MCAR.
 
 Key points:
 
-- **Γ_NT^pw is uniformly most efficient** but only modestly so vs ML
-  (1–9% trace-MSE reduction; per-rep win rate 50–94%). Asymptotic
-  efficiency theory materialises but with small magnitude.
-- **Pairwise ML strictly dominates Σ-only GLS in finite samples** (ML
-  wins 46–96% of reps; MSE ratio 0.32–1.00, "lower is ML better"),
-  even though they share first-order asymptotic theory. The reason: ML
-  has no weight matrix to amplify, while Σ-only GLS amplifies any
-  ill-conditioning of `Γ_NT(Ŝ_pw)` quadratically. At n = 200 / 30%
-  MCAR, this produces a 3.4× MSE gap.
-- **Under MAR (no MCAR-with-intact conditioning bonus)**, ML and
-  Σ-only GLS are nearly tied (ML wins 46–70% of reps, MSE ratio ~1.0)
-  — the asymptotic-equivalence prediction in action. The MCAR
-  separation is the conditioning side-effect we identified earlier.
+- **Γ_NT^pw GLS matches FIML to within Monte Carlo noise** —
+  trace-MSE ratios `Γ_NT^pw ÷ FIML` are in [0.99, 1.06] across all
+  twelve missing-data cells, with 6/12 cells showing Γ_NT^pw
+  marginally beating FIML. Both estimators use the asymptotically
+  efficient ACOV under MAR, so first-order theory predicts this
+  equivalence, and the data confirms it. The implementation paths
+  differ — FIML iterates over the full likelihood; Γ_NT^pw GLS
+  factors the same information through a pairwise-corrected weight
+  matrix — but the resulting estimates are essentially the same.
+- **Pairwise ML loses ~1–11% to FIML** uniformly. Same first-order
+  story as Γ_NT^pw GLS in theory; the gap comes from ML's use of the
+  Σ-only-equivalent weight implicitly built into the complete-data
+  log-likelihood applied to `Ŝ_pw`.
+- **Σ-only GLS strictly dominated by everything else**. Tied with ML
+  under MAR (asymptotic equivalence), but blows up under
+  small-n / heavy-MCAR conditioning catastrophes (n=200/30%/MCAR:
+  3.4× FIML's MSE). No reason to use it.
 - Complete-data fits agree to floating-point round-off, as expected.
 
-So pairwise ML's century-old reputation as the canonical pairwise
-estimator is well-earned: it captures essentially all of the
-finite-sample value over Σ-only GLS, and gives up only a small
-asymptotic-efficiency margin to the theoretically optimal Γ_NT^pw.
+So the take-away: the existence of Γ_NT^pw GLS means we have a
+pairwise estimator that recovers all of FIML's asymptotic efficiency
+without ever evaluating the missing-data likelihood. That's the
+"statistically justified pairwise" framing the Savalei-Bentler
+literature has been chasing — formalised here through the
+ugamma-fast / Van Praag derivation.
 
 ## Evidence
 
@@ -92,84 +101,64 @@ asymptotic-efficiency margin to the theoretically optimal Γ_NT^pw.
 fits_path <- file.path(results_dir, "fits.csv")
 fits <- if (file.exists(fits_path))
   utils::read.csv(fits_path, check.names = FALSE) else NULL
-win_df <- NULL
-if (!is.null(fits)) {
-  agg <- aggregate(
-    cbind(sse_s = (fits$est_sigma - fits$theta_true)^2,
-          sse_g = (fits$est_gamma - fits$theta_true)^2,
-          sse_m = (fits$est_ml    - fits$theta_true)^2)
-      ~ n + miss_rate + mechanism + rep,
-    data = fits, FUN = sum
-  )
-  win_df <- aggregate(
-    cbind(g_beats_s = sse_g < sse_s,
-          g_beats_m = sse_g < sse_m,
-          m_beats_s = sse_m < sse_s)
-    ~ n + miss_rate + mechanism, data = agg, FUN = mean
-  )
-}
 
 tbl <- summary_df[summary_df$miss_rate > 0,
                   c("n", "miss_rate", "mechanism", "miss_label",
-                    "trace_mse_ml", "trace_mse_sigma", "trace_mse_gamma",
-                    "eff_ratio_mse_ml_vs_gamma",
-                    "eff_ratio_mse_sigma_vs_gamma",
-                    "eff_ratio_mse_ml_vs_sigma")]
-if (!is.null(win_df)) tbl <- merge(tbl, win_df,
-                                   by = c("n", "miss_rate", "mechanism"),
-                                   all.x = TRUE)
+                    "trace_mse_fiml", "trace_mse_gamma",
+                    "trace_mse_ml", "trace_mse_sigma",
+                    "eff_ratio_mse_gamma_vs_fiml",
+                    "eff_ratio_mse_ml_vs_fiml",
+                    "eff_ratio_mse_sigma_vs_fiml")]
 tbl <- tbl[order(tbl$n, tbl$miss_rate, tbl$mechanism), ]
-fmt_ratio <- function(r, w) sprintf("%.3f (%.0f%%)", r, 100 * w)
-tbl$Σ_vs_Γ  <- fmt_ratio(tbl$eff_ratio_mse_sigma_vs_gamma, tbl$g_beats_s)
-tbl$ML_vs_Γ <- fmt_ratio(tbl$eff_ratio_mse_ml_vs_gamma,    tbl$g_beats_m)
-tbl$ML_vs_Σ <- fmt_ratio(tbl$eff_ratio_mse_ml_vs_sigma,    tbl$m_beats_s)
 out <- data.frame(
   n         = tbl$n,
   Mechanism = toupper(tbl$mechanism),
   "Missing %" = tbl$miss_label,
-  "Trace MSE ML"      = round(tbl$trace_mse_ml,    3),
-  "Trace MSE Σ-only"  = round(tbl$trace_mse_sigma, 3),
-  "Trace MSE Γ_NT^pw" = round(tbl$trace_mse_gamma, 3),
-  "Σ ÷ Γ"  = tbl$Σ_vs_Γ,
-  "ML ÷ Γ" = tbl$ML_vs_Γ,
-  "ML ÷ Σ" = tbl$ML_vs_Σ,
+  "FIML"     = round(tbl$trace_mse_fiml,  3),
+  "Γ_NT^pw"  = round(tbl$trace_mse_gamma, 3),
+  "ML"       = round(tbl$trace_mse_ml,    3),
+  "Σ-only"   = round(tbl$trace_mse_sigma, 3),
+  "Γ ÷ FIML"  = sprintf("%.3f", tbl$eff_ratio_mse_gamma_vs_fiml),
+  "ML ÷ FIML" = sprintf("%.3f", tbl$eff_ratio_mse_ml_vs_fiml),
+  "Σ ÷ FIML"  = sprintf("%.3f", tbl$eff_ratio_mse_sigma_vs_fiml),
   check.names = FALSE
 )
 knitr::kable(
   out,
   caption = paste(
-    "Trace of per-parameter empirical MSE for the three pairwise estimators,",
-    "plus the three pairwise MSE ratios with the per-rep win rate of the",
-    "first-named estimator in parentheses. Ratios > 1 mean the second",
-    "estimator (denominator) is more efficient. Γ_NT^pw is uniformly the",
-    "most efficient; ML strictly dominates Σ-only GLS in every cell (its",
-    "MSE ratio is ≤ 1, win rate ≥ 46% with the asymptotic-equivalence",
-    "draw at n = 1000 / 30% MAR). rate = 0 cells (degeneracy reference)",
-    "are omitted."
+    "Trace of per-parameter empirical MSE for the four estimators and",
+    "their pairwise-vs-FIML MSE ratios. Ratios > 1 mean FIML is more",
+    "efficient than the named pairwise estimator. Γ_NT^pw is",
+    "statistically indistinguishable from FIML (ratios in [0.99, 1.06];",
+    "six of twelve cells favour Γ_NT^pw). Σ-only GLS catastrophe at",
+    "n=200/30%/MCAR. rate = 0 cells (degeneracy reference) omitted."
   )
 )
 ```
 
-```{r evidence-plot, fig.width=7.5, fig.height=4.4}
+```{r evidence-plot, fig.width=8, fig.height=4.6}
 plot_df <- summary_df[summary_df$miss_rate > 0, , drop = FALSE]
 plot_long <- rbind(
-  data.frame(plot_df, estimator = "Σ-only GLS",  trace = plot_df$trace_mse_sigma),
-  data.frame(plot_df, estimator = "Pairwise ML", trace = plot_df$trace_mse_ml),
-  data.frame(plot_df, estimator = "Γ_NT^pw GLS", trace = plot_df$trace_mse_gamma)
+  data.frame(plot_df, estimator = "FIML (oracle)", trace = plot_df$trace_mse_fiml),
+  data.frame(plot_df, estimator = "Γ_NT^pw GLS",   trace = plot_df$trace_mse_gamma),
+  data.frame(plot_df, estimator = "Pairwise ML",   trace = plot_df$trace_mse_ml),
+  data.frame(plot_df, estimator = "Σ-only GLS",    trace = plot_df$trace_mse_sigma)
 )
 plot_long$mechanism <- toupper(plot_long$mechanism)
 plot_long$n_label <- factor(paste0("n = ", plot_long$n),
                             levels = paste0("n = ", sort(unique(plot_long$n))))
 plot_long$estimator <- factor(plot_long$estimator,
-                              levels = c("Σ-only GLS", "Pairwise ML", "Γ_NT^pw GLS"))
+                              levels = c("FIML (oracle)", "Γ_NT^pw GLS",
+                                         "Pairwise ML", "Σ-only GLS"))
 ggplot(plot_long,
        aes(x = factor(miss_rate), y = trace,
            fill = estimator)) +
   geom_col(position = position_dodge(width = 0.8), width = 0.7) +
   facet_grid(mechanism ~ n_label) +
-  scale_fill_manual(values = c("Σ-only GLS"  = "#e31a1c",
-                               "Pairwise ML" = "#fdbf6f",
-                               "Γ_NT^pw GLS" = "#1f78b4")) +
+  scale_fill_manual(values = c("FIML (oracle)" = "#33a02c",
+                               "Γ_NT^pw GLS"   = "#1f78b4",
+                               "Pairwise ML"   = "#fdbf6f",
+                               "Σ-only GLS"    = "#e31a1c")) +
   labs(x = "Missing rate", y = "Trace of empirical MSE",
        fill = NULL) +
   theme_minimal(base_size = 11) +
@@ -178,10 +167,11 @@ ggplot(plot_long,
         strip.text = element_text(size = 10))
 ```
 
-Σ-only GLS is the red bar; ML the orange; Γ_NT^pw the blue. The
-catastrophic Σ-only bar at MCAR / n = 200 / 30% is the outlier story
-from the earlier write-up; everywhere else the three bars are visually
-close, with the ordering Γ_NT^pw ≤ ML ≤ Σ-only consistent.
+Green is FIML (the oracle); blue Γ_NT^pw GLS; orange pairwise ML;
+red Σ-only GLS. The green and blue bars are visually identical in
+every cell — FIML and Γ_NT^pw GLS are statistically interchangeable.
+Σ-only GLS's catastrophe at MCAR / n = 200 / 30% remains the most
+visible outlier.
 
 ### Why ML strictly dominates Σ-only GLS
 
@@ -242,13 +232,21 @@ effect is gone, and the asymptotic-equivalence prediction takes over.
   attrition, multi-anchor MAR — could plausibly tip the conditioning
   ratio further in either direction. The reported gap is for these
   two designs specifically.
-- Skipped: standard errors, chi-square tests, FIML / complete-data ML
-  reference rows. The trace metric is a sufficient statistic for
-  asymptotic efficiency under the correct-model assumption used here;
-  finite-sample inference quality is a separate question. Pairwise ML
-  is included now as the literature default, but no FIML / direct ML
-  on the complete data — that's the oracle row a paper-grade version
-  would want.
+- Skipped: standard errors, chi-square tests. The trace metric is a
+  sufficient statistic for asymptotic efficiency under the
+  correct-model assumption used here; finite-sample inference quality
+  is a separate question (next experiment).
+- FIML is the asymptotic-efficiency upper bound under MAR and serves
+  as the oracle row here. The data-generating mechanism is correct
+  multivariate normality with SB-2005 MAR / MCAR; under
+  misspecification (nonnormality, MNAR) the FIML-as-oracle framing
+  weakens.
+- Per-parameter MSE is summed across all 27 free parameters
+  (8 loadings + factor variance + 9 residual variances + 9
+  intercepts). The intercepts are nuisance parameters with true value
+  0; they contribute roughly uniformly across estimators. Separating
+  structural from intercept MSE (not done here) might tighten the
+  pairwise-vs-FIML comparison further.
 - `r n_reps` replications per cell (seed base `r seed_base`). The
   results for the high-missing / small-n cells carry visible Monte
   Carlo noise; bump `--reps` if a particular cell deserves more weight.
