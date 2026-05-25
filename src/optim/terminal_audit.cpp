@@ -69,8 +69,16 @@ TerminalAudit audit_terminal_iterate(
   a.grad_inf_norm = gnorm;
 
   if (a.f_finite) {
-    a.stationarity_rhs = opts.stationarity_tol * (1.0 + std::abs(f_rec));
-    a.stationary       = gnorm <= a.stationarity_rhs;
+    // v1: Absolute mode is the default, matching lavaan's `optim.dx.tol`.
+    // Relative mode remains available pending an empirical calibration of
+    // the SEM-side stationarity test (see docs/design/terminal-audit.md
+    // and the backlog "Tolerance calibration" entry).
+    if (opts.stationarity_mode == TerminalAuditOptions::StationarityMode::Absolute) {
+      a.stationarity_rhs = opts.absolute_tol;
+    } else {
+      a.stationarity_rhs = opts.stationarity_tol * (1.0 + std::abs(f_rec));
+    }
+    a.stationary = gnorm <= a.stationarity_rhs;
   }
 
   // v1 advisory policy: report Converged ONLY when geometrically stationary.
