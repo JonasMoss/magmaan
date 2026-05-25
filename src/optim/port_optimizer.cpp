@@ -86,6 +86,16 @@ constexpr int kIv_NIter    = 30;  // IV(31) — iteration count (R)
 constexpr int kIv_NFCall   = 5;   // IV(6)  — function-evaluation count (R)
 constexpr int kIv_NGCall   = 29;  // IV(30) — gradient-evaluation count (R)
 constexpr int kV_F         = 9;   // V(10)  — current function value (R)
+// Tolerance slots in the V array. PORT runs four independent stop tests off
+// these (da7sst.c:65-68, 101-168); the wrapper sets RFCTOL from the caller's
+// ftol and zeroes AFCTOL / XCTOL so PORT's absolute-fmin and relative-step
+// criteria don't fire ahead of the wrapper-level terminal-audit gradient
+// gate. Indices follow PORT source (da7sst.c:253-258, dv7dfl.c:55-61):
+//   V(31) AFCTOL (absolute fmin),  V(32) RFCTOL (relative fmin),
+//   V(33) XCTOL  (relative step),  V(34) XFTOL  (relative x-or-f).
+constexpr int kV_AfcTol    = 30;  // V(31) — absolute fmin tolerance
+constexpr int kV_RfcTol    = 31;  // V(32) — relative fmin tolerance (= ftol)
+constexpr int kV_XcTol     = 32;  // V(33) — relative-step tolerance
 
 // PORT requires bounds; "unbounded" means a sentinel near double limits.
 // 1e308 is well inside the dynamic range and matches the convention used in
@@ -154,10 +164,27 @@ PortOptimizer::minimize(Objective f,
   int lv_arg  = lv;
   divset_(&alg, iv.data(), &liv_arg, &lv_arg, v.data());
 
-  // Forward our caller-supplied tuning. PORT's other tolerance defaults
-  // (AFCTOL, RFCTOL, XCTOL) match the spirit of the shared defaults closely
-  // enough that we leave them; the iteration cap is what callers most
-  // commonly tighten.
+  // Forward our caller-supplied tuning. PORT runs four independent stop
+  // tests off the V-array tolerance slots (da7sst.c:65-68); RFCTOL is the
+  // canonical relative-fmin gate so opts_.ftol routes there. opts_.gtol
+  // is intentionally not routed into PORT: the wrapper-level terminal
+  // audit (terminal_audit.cpp) applies the same projected-gradient
+  // stationarity check uniformly across every backend, and any
+  // backend-internal duplicate would shadow the audit's verdict.
+  //
+  // opts_.ftol == 0 signals the paper's "uniform-stop" mode (see paper
+  // dev/todo.md §D): the harness sets ftol = 0 to make PORT's RFCTOL
+  // impossible to satisfy so the audit drives termination. In that mode
+  // we also zero V(XCTOL) and V(AFCTOL) so PORT's relative-step and
+  // absolute-fmin tests don't fire ahead of the audit; in normal mode
+  // we leave them at PORT's divset_ defaults so well-formed problems
+  // converge cleanly (zeroing them unconditionally lets PORT iterate
+  // past sensible stops on LS paths and trip its noise detector).
+  v[kV_RfcTol] = opts_.ftol;
+  if (opts_.ftol == 0.0) {
+    v[kV_XcTol]  = 0.0;
+    v[kV_AfcTol] = 0.0;
+  }
   iv[kIv_MxIter] = opts_.max_iter;
   iv[kIv_MxFCal] = opts_.max_iter * 10;  // generous; PORT lifts this only if max_iter is otherwise binding
 
@@ -391,6 +418,15 @@ PortNlsOptimizer::minimize_ls(ResidualFn r_fn, JacobianFn J_fn,
   int lv_arg  = lv;
   divset_(&alg, iv.data(), &liv_arg, &lv_arg, v.data());
 
+  // Same tolerance discipline as the SUMSL/HUMSL adapter above: caller's
+  // ftol → V(RFCTOL) always; V(AFCTOL) and V(XCTOL) zeroed only in the
+  // uniform-stop mode (opts_.ftol == 0) so PORT's defaults still drive
+  // normal-mode convergence on well-formed LS problems.
+  v[kV_RfcTol] = opts_.ftol;
+  if (opts_.ftol == 0.0) {
+    v[kV_XcTol]  = 0.0;
+    v[kV_AfcTol] = 0.0;
+  }
   iv[kIv_MxIter] = opts_.max_iter;
   iv[kIv_MxFCal] = opts_.max_iter * 10;
 
