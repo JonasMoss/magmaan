@@ -73,6 +73,7 @@ set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/ml_continuation_test.cpp
   unit/fcsem_ml_test.cpp
   unit/fiml_test.cpp
+  unit/saturated_em_moments_test.cpp
   unit/pairwise_gls_test.cpp
   unit/start_fabin_test.cpp
   unit/start_cfa_noniter_test.cpp

@@ -1667,6 +1667,99 @@ fiml_baseline_chi2(const spec::LatentStructure& pt,
                                  discrepancy);
 }
 
+post_expected<SaturatedMoments>
+saturated_em_moments(const RawData& raw, double h_step) {
+  if (auto ok = validate_raw_shape(raw); !ok.has_value()) {
+    return std::unexpected(fit_to_post(ok.error(), "saturated_em_moments"));
+  }
+
+  FIML discrepancy{};
+  auto cache_or = discrepancy.prepare(raw);
+  if (!cache_or.has_value()) {
+    return std::unexpected(fit_to_post(cache_or.error(),
+        "saturated_em_moments: FIML::prepare"));
+  }
+  const FIMLCache& cache = *cache_or;
+
+  auto start_samp_or = fiml_start_sample_stats(raw);
+  if (!start_samp_or.has_value()) {
+    return std::unexpected(fit_to_post(start_samp_or.error(),
+        "saturated_em_moments: fiml_start_sample_stats"));
+  }
+  const SampleStats& start_samp = *start_samp_or;
+
+  const std::size_t B = raw.X.size();
+  if (B == 0 || cache.block_p.size() != B) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "saturated_em_moments: empty or inconsistent block layout"));
+  }
+
+  // Block-stacked η = (μ_1, vech(Σ_1), μ_2, vech(Σ_2), …); column-major
+  // lower-triangle vech matches `fiml_saturated_scores_block` and
+  // `robust::casewise_contributions(include_means = true)`.
+  std::vector<Eigen::Index> q_b(B);
+  std::vector<Eigen::Index> off_b(B + 1, 0);
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index p = cache.block_p[b];
+    q_b[b] = p + detail::vech_len(p);
+    off_b[b + 1] = off_b[b] + q_b[b];
+  }
+  const Eigen::Index Q = off_b.back();
+
+  SaturatedMoments out;
+  out.mean.resize(B);
+  out.cov.resize(B);
+  out.n_obs.resize(B);
+  out.H = Eigen::MatrixXd::Zero(Q, Q);
+  out.J = Eigen::MatrixXd::Zero(Q, Q);
+
+  for (std::size_t b = 0; b < B; ++b) {
+    Eigen::VectorXd mu_b;
+    Eigen::MatrixXd Sigma_b;
+    if (auto e = h1_moments_block(raw, cache, start_samp, b, mu_b, Sigma_b);
+        !e.has_value()) {
+      return std::unexpected(fit_to_post(e.error(),
+          "saturated_em_moments: H1 EM block " + std::to_string(b)));
+    }
+
+    auto scores_or = fiml_saturated_scores_block(raw, b, mu_b, Sigma_b);
+    if (!scores_or.has_value()) {
+      return std::unexpected(scores_or.error());
+    }
+    auto H_or = fiml_saturated_hessian_fd_block(raw, b, mu_b, Sigma_b, h_step);
+    if (!H_or.has_value()) {
+      return std::unexpected(H_or.error());
+    }
+
+    // The block helpers report scores as deviance gradients (∂(−2logL)/∂η) and
+    // H as the FD Hessian of mean deviance. Convert to log-likelihood scale:
+    //   information  H_b = (n_b / 2) · H_dev_mean
+    //   score cov    J_b = (1 / 4) · scoresᵀ scores
+    const Eigen::MatrixXd& scores_dev = *scores_or;
+    const Eigen::MatrixXd& H_dev_mean = *H_or;
+    const double n_b = static_cast<double>(raw.X[b].rows());
+    const Eigen::Index q = q_b[b];
+    const Eigen::Index off = off_b[b];
+    out.H.block(off, off, q, q) = (n_b / 2.0) * H_dev_mean;
+    out.J.block(off, off, q, q) =
+        0.25 * (scores_dev.transpose() * scores_dev);
+
+    out.mean[b] = std::move(mu_b);
+    out.cov[b]  = std::move(Sigma_b);
+    out.n_obs[b] = static_cast<std::int64_t>(raw.X[b].rows());
+  }
+
+  auto Hinv_or = invert_symmetric(out.H,
+      "saturated_em_moments: aggregated saturated information");
+  if (!Hinv_or.has_value()) {
+    return std::unexpected(Hinv_or.error());
+  }
+  const Eigen::MatrixXd Hinv = *Hinv_or;
+  out.acov = Hinv * out.J * Hinv;
+  out.acov = (0.5 * (out.acov + out.acov.transpose())).eval();
+  return out;
+}
+
 fit_expected<Estimates>
 fit_fiml(spec::LatentStructure pt,
          const model::MatrixRep& rep,

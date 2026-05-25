@@ -68,6 +68,29 @@ struct FIMLExtras {
   std::int64_t ntotal            = 0;
 };
 
+// Saturated (H1) ML/EM moments under missingness, packaged as a
+// methods-developer surface for the Savalei-Bentler (2009) two-stage approach.
+// Per block, η_b = (μ_b, vech(Σ_b)) with column-major lower-triangle vech (the
+// same layout `fiml_saturated_scores_block` and `robust::casewise_contributions`
+// use with `include_means = true`). The block-stacked η has
+// `Σ_b (p_b + p_b·(p_b+1)/2)` entries; `H` and `J` are block-diagonal across
+// blocks because multi-group observations are independent.
+//
+// Convention: `H` and `J` are reported in *log-likelihood* (not deviance) units.
+//   H_b = -∂² logL_b / ∂η_b ∂η_bᵀ  (summed over rows of block b)
+//   J_b = Σ_r (∂logL_r / ∂η_b)(∂logL_r / ∂η_b)ᵀ
+//   acov = H⁻¹ J H⁻¹ — the sandwich asymptotic covariance of η̂_S; in finite
+//   samples it carries 1/n_total units, matching the standard
+//   `√n (η̂_S - η_S) → N(0, n·acov)` interpretation.
+struct SaturatedMoments {
+  std::vector<Eigen::VectorXd> mean;   // μ̂_S per block (size p_b)
+  std::vector<Eigen::MatrixXd> cov;    // Σ̂_S per block (p_b × p_b)
+  std::vector<std::int64_t>    n_obs;  // rows per block
+  Eigen::MatrixXd              H;      // block-diagonal saturated information
+  Eigen::MatrixXd              J;      // block-diagonal saturated score covariance
+  Eigen::MatrixXd              acov;   // sandwich ACOV(η̂_S) = H⁻¹ J H⁻¹
+};
+
 struct FIMLRobustMLR {
   Eigen::MatrixXd vcov;
   Eigen::VectorXd se;
@@ -166,6 +189,15 @@ fiml_robust_mlr(spec::LatentStructure pt,
                 FIML discrepancy = {},
                 double h_step = 1e-4);
 
+// Saturated (H1) ML/EM moments — runs the EM iteration that already drives
+// FIML's H1 likelihood accounting, then aggregates per-block scores and
+// finite-difference Hessians into a block-diagonal `(H, J, H⁻¹JH⁻¹)`.
+// Multi-group safe; takes raw data only (no `LatentStructure` is needed because
+// the saturated model has no structural restrictions). See `SaturatedMoments`
+// for the η layout and scaling conventions.
+post_expected<SaturatedMoments>
+saturated_em_moments(const RawData& raw, double h_step = 1e-4);
+
 // FIML independence/baseline chi-square for raw continuous data with missing
 // values. Unlike complete-data `baseline_chi2(SampleStats)`, this evaluates the
 // diagonal normal model directly over observed-value patterns and compares it
@@ -196,7 +228,9 @@ fit_fiml(spec::LatentStructure pt,
 namespace magmaan::estimate {
 
 using estimate::fiml::FIMLExtras;
+using estimate::fiml::SaturatedMoments;
 using estimate::fiml::fit_fiml;
 using estimate::fiml::fiml_extras;
+using estimate::fiml::saturated_em_moments;
 
 }  // namespace magmaan::estimate
