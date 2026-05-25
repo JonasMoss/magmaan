@@ -93,6 +93,7 @@ add_library(magmaan STATIC
   src/data/pairwise_ordinal.cpp
   src/data/ordinal.cpp
   src/estimate/fit.cpp
+  src/estimate/evaluate.cpp
   src/estimate/backend_strings.cpp
   src/estimate/nt.cpp
   src/estimate/ml_continuation.cpp
