@@ -43,6 +43,13 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 - **S/M.** Continue extending benchmark coverage beyond the current
   lavaan-backed complete-data ML, controlled-missingness FIML, and continuous
   ULS/GLS smoke cases to WLS, ordinal DWLS/WLS, and mixed categorical models.
+- **M/L.** Add a two-stage EM/saturated-covariance missing-data research path
+  for comparison with direct FIML and pairwise covariance methods. First expose
+  saturated missing-data ML/EM mean and covariance estimates, plus the
+  asymptotic covariance ingredients needed by the Savalei-Bentler two-stage
+  correction, as an explicit methods-developer surface. Use it initially as a
+  paper/simulation comparator for `papers/pairwise-robust-sem/`, not as a new
+  default estimator.
 - **M.** Track objective value, gradient norm, iteration count, wall time, and
   agreement with lavaan-backed estimates where applicable.
 - **M/L.** Convergence-note / start-value portfolio paper track
