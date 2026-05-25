@@ -8,20 +8,20 @@
 # Usage:
 #   Rscript experiments/05-lavaan-speed-bench/run_experiment.R [--iters N]
 
-`%||%` <- function(x, y) {
-  if (is.null(x) || length(x) == 0L) return(y)
-  if (length(x) == 1L && is.na(x)) return(y)
-  x
-}
-
-script_path <- function() {
+.support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
   file_arg <- grep("^--file=", args, value = TRUE)
   if (length(file_arg)) {
-    return(normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE))
+    script <- normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE)
+  } else {
+    ofile <- tryCatch(sys.frames()[[1L]]$ofile, error = function(e) NULL)
+    script <- normalizePath(if (is.null(ofile)) "run_experiment.R" else ofile,
+                            mustWork = FALSE)
   }
-  normalizePath(sys.frames()[[1L]]$ofile %||% "run_experiment.R", mustWork = FALSE)
+  file.path(dirname(dirname(script)), "_support", "R", "helpers.R")
 }
+source(.support_helpers())
+rm(.support_helpers)
 
 parse_args <- function(args) {
   out <- list(iters = 30L)
@@ -47,14 +47,13 @@ parse_args <- function(args) {
 
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 
-experiment_dir <- dirname(script_path())
-project_root <- normalizePath(file.path(experiment_dir, "..", ".."), mustWork = TRUE)
+project_root <- repo_root()
 bench_r <- file.path(project_root, "benchmarks", "r")
-results_dir <- file.path(experiment_dir, "results")
-dir.create(results_dir, recursive = TRUE, showWarnings = FALSE)
+results_dir <- ensure_results_dir()
 
 source(file.path(bench_r, "common.R"))
 source(file.path(bench_r, "cases.R"))
+source(file.path(project_root, "experiments", "_support", "R", "helpers.R"))
 
 bench_dir_abs <- file.path(project_root, "benchmarks")
 read_prepared_data_abs <- function(case_id) {
@@ -71,9 +70,7 @@ read_model_abs <- function(case_id) {
   paste(readLines(path, warn = FALSE), collapse = "\n")
 }
 
-for (v in c("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")) {
-  do.call(Sys.setenv, stats::setNames(list("1"), v))
-}
+set_single_threaded_math()
 
 require_pkg("lavaan")
 require_pkg("bench")
@@ -213,3 +210,15 @@ if (file.exists(geiser_src)) {
 }
 
 cat(sprintf("wrote %s\n", zoo_path))
+write_metadata(
+  file.path(results_dir, "metadata.csv"),
+  values = list(
+    iters = args$iters,
+    curated_cases = CURATED,
+    n_zoo_rows = nrow(zoo),
+    geiser_source = if (file.exists(geiser_src)) geiser_src else "",
+    single_threaded_math = TRUE
+  ),
+  packages = c("bench", "lavaan", "magmaan")
+)
+cat(sprintf("wrote %s\n", file.path(results_dir, "metadata.csv")))

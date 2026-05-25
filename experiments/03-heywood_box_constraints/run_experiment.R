@@ -1,34 +1,19 @@
 #!/usr/bin/env Rscript
 
-`%||%` <- function(x, y) {
-  if (is.null(x) || length(x) == 0L) return(y)
-  if (length(x) == 1L && is.na(x)) return(y)
-  x
-}
-
-repo_root <- function(start = getwd()) {
-  path <- normalizePath(start, mustWork = TRUE)
-  repeat {
-    if (file.exists(file.path(path, "CMakeLists.txt")) &&
-        file.exists(file.path(path, "r-package", "DESCRIPTION"))) {
-      return(path)
-    }
-    parent <- dirname(path)
-    if (identical(parent, path)) stop("Could not find magmaan repository root")
-    path <- parent
+.support_helpers <- function() {
+  args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", args, value = TRUE)
+  if (length(file_arg)) {
+    script <- normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE)
+  } else {
+    ofile <- tryCatch(sys.frames()[[1L]]$ofile, error = function(e) NULL)
+    script <- normalizePath(if (is.null(ofile)) "run_experiment.R" else ofile,
+                            mustWork = FALSE)
   }
+  file.path(dirname(dirname(script)), "_support", "R", "helpers.R")
 }
-
-experiment_dir <- function() {
-  file.path(repo_root(), "experiments", "03-heywood_box_constraints")
-}
-
-experiment_path <- function(...) file.path(experiment_dir(), ...)
-
-parse_csv_arg <- function(x) {
-  out <- trimws(strsplit(x, ",", fixed = TRUE)[[1L]])
-  out[nzchar(out)]
-}
+source(.support_helpers())
+rm(.support_helpers)
 
 parse_args <- function(args) {
   out <- list(
@@ -113,13 +98,6 @@ normalize_identifications <- function(x) {
 identification_options <- function(identification) {
   std_lv <- identical(identification, "std.lv")
   list(std_lv = std_lv, auto_fix_first = !std_lv)
-}
-
-require_pkg <- function(package) {
-  if (!requireNamespace(package, quietly = TRUE)) {
-    stop("required R package is not installed: ", package, call. = FALSE)
-  }
-  invisible(TRUE)
 }
 
 case_catalog <- function() {
@@ -364,12 +342,6 @@ magmaan_fit_row <- function(case, sim, optimizer, identification, bounds) {
   )
 }
 
-write_csv <- function(x, path) {
-  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
-  utils::write.csv(x, path, row.names = FALSE, na = "")
-  message("Wrote ", path)
-}
-
 summarize_lavaan_bounds <- function(x) {
   x$admissible_variances <- x$n_neg_ov_var == 0L & x$n_neg_lv_var == 0L
   x$active_variance_bound_count <- x$n_zeroish_ov_var + x$n_zeroish_lv_var
@@ -483,7 +455,7 @@ main <- function() {
   require_pkg("magmaan")
   require_pkg("lavaan")
 
-  dir.create(experiment_path("results"), recursive = TRUE, showWarnings = FALSE)
+  ensure_results_dir()
   cases <- parse_cases(args$cases)
 
   lavaan_rows <- list()
@@ -539,6 +511,20 @@ main <- function() {
     stringsAsFactors = FALSE
   )
   write_csv(surface_gap, experiment_path("results", "surface_gap.csv"))
+  write_metadata(
+    experiment_path("results", "metadata.csv"),
+    values = list(
+      cases = args$cases,
+      identifications = args$identifications,
+      bounds = args$bounds,
+      rstarts = args$rstarts,
+      optimizer = args$optimizer,
+      n_cases = nrow(cases),
+      n_lavaan_rows = nrow(lavaan_out),
+      n_magmaan_rows = nrow(magmaan_out)
+    ),
+    packages = c("magmaan", "lavaan")
+  )
 
   cat("\nHeadline summary\n")
   print(summary[order(summary$case_key, summary$identification,

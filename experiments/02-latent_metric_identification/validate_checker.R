@@ -4,26 +4,26 @@
 # same_implied_moments signal from results/pairs.csv. Does NOT refit anything;
 # rebuilds marker specs only to run the checker.
 
-`%||%` <- function(x, y) {
-  if (is.null(x) || length(x) == 0) return(y)
-  if (length(x) == 1L && is.na(x)) return(y)
-  x
-}
-
-script_path <- function() {
+.support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
   file_arg <- grep("^--file=", args, value = TRUE)
-  if (length(file_arg))
-    return(normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE))
-  normalizePath(sys.frames()[[1L]]$ofile %||% "validate_checker.R",
-                mustWork = FALSE)
+  if (length(file_arg)) {
+    script <- normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE)
+  } else {
+    ofile <- tryCatch(sys.frames()[[1L]]$ofile, error = function(e) NULL)
+    script <- normalizePath(if (is.null(ofile)) "validate_checker.R" else ofile,
+                            mustWork = FALSE)
+  }
+  file.path(dirname(dirname(script)), "_support", "R", "helpers.R")
 }
+source(.support_helpers())
+rm(.support_helpers)
 
-experiment_dir <- dirname(script_path())
-repo_dir <- normalizePath(file.path(experiment_dir, "..", ".."), mustWork = TRUE)
+experiment_dir_path <- experiment_dir()
+repo_dir <- repo_root()
 fixtures_dir <- file.path(repo_dir, "tests", "fixtures")
-results_dir <- file.path(experiment_dir, "results")
-pairs_path <- file.path(results_dir, "pairs.csv")
+results_dir_path <- results_dir()
+pairs_path <- file.path(results_dir_path, "pairs.csv")
 
 if (!file.exists(pairs_path))
   stop("Run run_experiment.R first; missing ", pairs_path, call. = FALSE)
@@ -39,15 +39,13 @@ is_std_lv_admissible <- function(marker_spec, std_lv_spec = NULL) {
 
 # Pull only the helper definitions out of run_experiment.R (everything before
 # `args <- parse_args(...)`).
-runner_src <- readLines(file.path(experiment_dir, "run_experiment.R"))
+runner_src <- readLines(file.path(experiment_dir_path, "run_experiment.R"))
 entry_line <- grep("^args <- parse_args", runner_src)[[1L]]
 helpers_env <- new.env(parent = globalenv())
 eval(parse(text = runner_src[seq_len(entry_line - 1L)]), envir = helpers_env)
 
-if (!requireNamespace("jsonlite", quietly = TRUE))
-  stop("jsonlite not installed", call. = FALSE)
-if (!requireNamespace("magmaan", quietly = TRUE))
-  stop("magmaan not installed", call. = FALSE)
+require_pkg("jsonlite")
+require_pkg("magmaan")
 
 pairs <- utils::read.csv(pairs_path, check.names = FALSE)
 cases <- helpers_env$load_experiment_cases(fixtures_dir)

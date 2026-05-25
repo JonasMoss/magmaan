@@ -1,29 +1,21 @@
 #!/usr/bin/env Rscript
 
-`%||%` <- function(x, y) {
-  if (is.null(x) || length(x) == 0L) return(y)
-  if (length(x) == 1L && is.na(x)) return(y)
-  x
-}
-
-repo_root <- function(start = getwd()) {
-  path <- normalizePath(start, mustWork = TRUE)
-  repeat {
-    if (file.exists(file.path(path, "CMakeLists.txt")) &&
-        file.exists(file.path(path, "r-package", "DESCRIPTION"))) {
-      return(path)
-    }
-    parent <- dirname(path)
-    if (identical(parent, path)) stop("Could not find magmaan repository root")
-    path <- parent
+.support_helpers <- function() {
+  args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", args, value = TRUE)
+  if (length(file_arg)) {
+    script <- normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE)
+  } else {
+    ofile <- tryCatch(sys.frames()[[1L]]$ofile, error = function(e) NULL)
+    script <- normalizePath(
+      if (is.null(ofile)) "run_convergence_note_comparison.R" else ofile,
+      mustWork = FALSE
+    )
   }
+  file.path(dirname(dirname(script)), "_support", "R", "helpers.R")
 }
-
-experiment_dir <- function() {
-  file.path(repo_root(), "experiments", "04-near_singular_ml_continuation")
-}
-
-experiment_path <- function(...) file.path(experiment_dir(), ...)
+source(.support_helpers())
+rm(.support_helpers)
 
 parse_csv <- function(x) {
   trimws(strsplit(x, ",", fixed = TRUE)[[1L]])
@@ -340,11 +332,9 @@ paired_summary <- function(rows) {
 
 main <- function() {
   args <- parse_args(commandArgs(trailingOnly = TRUE))
-  dir.create(experiment_path("results"), showWarnings = FALSE, recursive = TRUE)
+  ensure_results_dir()
 
-  if (!requireNamespace("magmaan", quietly = TRUE)) {
-    stop("Install the local R package first, e.g. `just r-install`", call. = FALSE)
-  }
+  require_pkg("magmaan", "Install the local R package first, e.g. `just r-install`")
 
   catalog <- magmaan::convergence_sim_catalog()
   unknown <- setdiff(args$designs, catalog$design)
@@ -388,12 +378,25 @@ main <- function() {
   summary <- summarize_results(rows)
   paired <- paired_summary(rows)
 
-  write.csv(rows, experiment_path("results", "convergence_note_fits.csv"),
-            row.names = FALSE)
-  write.csv(summary, experiment_path("results", "convergence_note_summary.csv"),
-            row.names = FALSE)
-  write.csv(paired, experiment_path("results", "convergence_note_paired.csv"),
-            row.names = FALSE)
+  write_csv(rows, experiment_path("results", "convergence_note_fits.csv"))
+  write_csv(summary, experiment_path("results", "convergence_note_summary.csv"))
+  write_csv(paired, experiment_path("results", "convergence_note_paired.csv"))
+  write_metadata(
+    experiment_path("results", "convergence_note_metadata.csv"),
+    values = list(
+      reps = args$reps,
+      seed = args$seed,
+      optimizer = args$optimizer,
+      max_iter = args$max_iter,
+      progress_every = args$progress_every,
+      profiles = args$profiles,
+      targets = args$targets,
+      designs = args$designs,
+      alphas = args$alphas,
+      n_fit_rows = nrow(rows)
+    ),
+    packages = "magmaan"
+  )
 
   print(summary, row.names = FALSE)
   print(paired, row.names = FALSE)

@@ -1,19 +1,19 @@
 #!/usr/bin/env Rscript
 
-`%||%` <- function(x, y) {
-  if (is.null(x) || length(x) == 0) return(y)
-  if (length(x) == 1L && is.na(x)) return(y)
-  x
-}
-
-script_path <- function() {
+.support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
   file_arg <- grep("^--file=", args, value = TRUE)
   if (length(file_arg)) {
-    return(normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE))
+    script <- normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE)
+  } else {
+    ofile <- tryCatch(sys.frames()[[1L]]$ofile, error = function(e) NULL)
+    script <- normalizePath(if (is.null(ofile)) "run_experiment.R" else ofile,
+                            mustWork = FALSE)
   }
-  normalizePath(sys.frames()[[1L]]$ofile %||% "run_experiment.R", mustWork = FALSE)
+  file.path(dirname(dirname(script)), "_support", "R", "helpers.R")
 }
+source(.support_helpers())
+rm(.support_helpers)
 
 parse_args <- function(args) {
   out <- list(
@@ -73,13 +73,6 @@ parse_args <- function(args) {
   out$backend <- trimws(out$backend)
   if (!nzchar(out$backend)) stop("--backend must be nonempty", call. = FALSE)
   out
-}
-
-require_pkg <- function(package) {
-  if (!requireNamespace(package, quietly = TRUE)) {
-    stop("required R package is not installed: ", package, call. = FALSE)
-  }
-  invisible(TRUE)
 }
 
 read_matrix_csv <- function(path) {
@@ -799,19 +792,12 @@ group_summary <- function(pairs) {
   out[order(out$group_kind, out$group, out$estimator), , drop = FALSE]
 }
 
-write_csv <- function(x, path) {
-  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
-  utils::write.csv(x, path, row.names = FALSE, na = "")
-  invisible(path)
-}
-
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 require_pkg("jsonlite")
 require_pkg("magmaan")
 
-experiment_dir <- dirname(script_path())
-repo_dir <- normalizePath(file.path(experiment_dir, "..", ".."), mustWork = TRUE)
-results_dir <- file.path(experiment_dir, "results")
+repo_dir <- repo_root()
+results_dir <- ensure_results_dir()
 control <- list(max_iter = 6000L, ftol = 1e-12, gtol = 1e-8, history = 10L)
 estimators <- c("NT", "ULS", "GLS")
 
@@ -902,12 +888,30 @@ write_csv(pairs_df, file.path(results_dir, "pairs_vs_nt.csv"))
 write_csv(summary_df, file.path(results_dir, "case_summary.csv"))
 write_csv(group_df, file.path(results_dir, "group_summary.csv"))
 write_csv(coverage_df, file.path(results_dir, "coverage.csv"))
+write_metadata(
+  file.path(results_dir, "metadata.csv"),
+  values = list(
+    reps = args$reps,
+    backend = args$backend,
+    case_regex = args$case_regex,
+    include_observed = args$include_observed,
+    corpus_dir = args$corpus_dir,
+    estimators = estimators,
+    source = loaded$source,
+    n_cases = length(cases),
+    n_coverage_rows = nrow(coverage_df),
+    n_fit_rows = nrow(fits_df),
+    n_pair_rows = nrow(pairs_df)
+  ),
+  packages = c("jsonlite", "magmaan")
+)
 
 cat(sprintf(
-  "\nwrote %s, %s, %s, %s, %s\n",
+  "\nwrote %s, %s, %s, %s, %s, %s\n",
   file.path(results_dir, "fits.csv"),
   file.path(results_dir, "pairs_vs_nt.csv"),
   file.path(results_dir, "case_summary.csv"),
   file.path(results_dir, "group_summary.csv"),
-  file.path(results_dir, "coverage.csv")
+  file.path(results_dir, "coverage.csv"),
+  file.path(results_dir, "metadata.csv")
 ))

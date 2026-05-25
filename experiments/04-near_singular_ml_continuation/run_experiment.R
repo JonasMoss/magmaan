@@ -1,34 +1,19 @@
 #!/usr/bin/env Rscript
 
-`%||%` <- function(x, y) {
-  if (is.null(x) || length(x) == 0L) return(y)
-  if (length(x) == 1L && is.na(x)) return(y)
-  x
-}
-
-repo_root <- function(start = getwd()) {
-  path <- normalizePath(start, mustWork = TRUE)
-  repeat {
-    if (file.exists(file.path(path, "CMakeLists.txt")) &&
-        file.exists(file.path(path, "r-package", "DESCRIPTION"))) {
-      return(path)
-    }
-    parent <- dirname(path)
-    if (identical(parent, path)) stop("Could not find magmaan repository root")
-    path <- parent
+.support_helpers <- function() {
+  args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", args, value = TRUE)
+  if (length(file_arg)) {
+    script <- normalizePath(sub("^--file=", "", file_arg[[1L]]), mustWork = TRUE)
+  } else {
+    ofile <- tryCatch(sys.frames()[[1L]]$ofile, error = function(e) NULL)
+    script <- normalizePath(if (is.null(ofile)) "run_experiment.R" else ofile,
+                            mustWork = FALSE)
   }
+  file.path(dirname(dirname(script)), "_support", "R", "helpers.R")
 }
-
-experiment_dir <- function() {
-  file.path(repo_root(), "experiments", "04-near_singular_ml_continuation")
-}
-
-experiment_path <- function(...) file.path(experiment_dir(), ...)
-
-parse_csv_numeric <- function(x) {
-  out <- trimws(strsplit(x, ",", fixed = TRUE)[[1L]])
-  as.numeric(out[nzchar(out)])
-}
+source(.support_helpers())
+rm(.support_helpers)
 
 parse_args <- function(args) {
   out <- list(
@@ -258,11 +243,9 @@ summarize_results <- function(rows) {
 
 main <- function() {
   args <- parse_args(commandArgs(trailingOnly = TRUE))
-  dir.create(experiment_path("results"), showWarnings = FALSE, recursive = TRUE)
+  ensure_results_dir()
 
-  if (!requireNamespace("magmaan", quietly = TRUE)) {
-    stop("Install the local R package first, e.g. `just r-install`", call. = FALSE)
-  }
+  require_pkg("magmaan", "Install the local R package first, e.g. `just r-install`")
 
   spec <- magmaan::model_spec(model_syntax(args$p))
   control <- list(max_iter = args$max_iter)
@@ -285,8 +268,25 @@ main <- function() {
 
   rows <- do.call(rbind, rows)
   summary <- summarize_results(rows)
-  write.csv(rows, experiment_path("results", "fits.csv"), row.names = FALSE)
-  write.csv(summary, experiment_path("results", "summary.csv"), row.names = FALSE)
+  write_csv(rows, experiment_path("results", "fits.csv"))
+  write_csv(summary, experiment_path("results", "summary.csv"))
+  write_metadata(
+    experiment_path("results", "metadata.csv"),
+    values = list(
+      reps = args$reps,
+      n = args$n,
+      p = args$p,
+      loading = args$loading,
+      residual = args$residual,
+      seed = args$seed,
+      optimizer = args$optimizer,
+      max_iter = args$max_iter,
+      target = args$target,
+      alphas = args$alphas,
+      n_fit_rows = nrow(rows)
+    ),
+    packages = "magmaan"
+  )
 
   print(summary, row.names = FALSE)
   cat("Wrote ", experiment_path("results", "fits.csv"), "\n", sep = "")

@@ -1,0 +1,11 @@
+Package: magmaan.experiments
+Title: Shared Helpers for Magmaan Experiments
+Version: 0.0.0.9000
+Authors@R:
+    person("Jonas", "Moss", email = "jonas.moss@bi.no", role = c("aut", "cre"))
+Description: Small non-statistical helpers for repo-local magmaan experiments:
+    path discovery, result CSV writing, metadata capture, package checks, and
+    simple argument parsing utilities.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
