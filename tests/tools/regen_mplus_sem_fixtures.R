@@ -1,9 +1,10 @@
 #!/usr/bin/env Rscript
 
-# Regenerate Mplus SEM corpus parity fixtures from external/mplus_sem.
+# Regenerate Mplus SEM corpus parity fixtures from
+# corpus/textbook-corpus/raw/mplus_sem.
 #
-# The external corpus is local/ignored and may contain raw Mplus data. This
-# script fits retained test-candidate cases with lavaan and writes only derived
+# The raw corpus is local/ignored and may contain raw Mplus data. This script
+# fits retained test-candidate cases with lavaan and writes only derived
 # sample statistics plus lavaan oracle quantities to tests/fixtures/mplus_sem/.
 
 suppressPackageStartupMessages({
@@ -21,7 +22,9 @@ repo_root <- normalizePath(file.path(dirname(normalizePath(
 source(file.path(repo_root, "benchmarks", "r", "fixture_json.R"))
 
 corpus_root <- Sys.getenv("MPLUS_SEM_ROOT", unset = "")
-if (!nzchar(corpus_root)) corpus_root <- file.path(repo_root, "external", "mplus_sem")
+if (!nzchar(corpus_root)) {
+  corpus_root <- file.path(repo_root, "corpus", "textbook-corpus", "raw", "mplus_sem")
+}
 corpus_root <- normalizePath(corpus_root, mustWork = TRUE)
 
 out_dir <- Sys.getenv("MAGMAAN_MPLUS_SEM_FIXTURE_DIR", unset = "")

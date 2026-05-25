@@ -29,7 +29,9 @@ if (!requireNamespace("pkgload", quietly = TRUE)) {
 pkgload::load_all(pkg_dir, quiet = TRUE)
 
 geiser_root <- Sys.getenv("SNLLS_GEISER_ROOT", unset = "")
-if (!nzchar(geiser_root)) geiser_root <- file.path(repo_root, "external", "geiser")
+if (!nzchar(geiser_root)) {
+  geiser_root <- file.path(repo_root, "corpus", "textbook-corpus", "raw", "geiser")
+}
 geiser_root <- normalizePath(geiser_root, mustWork = TRUE)
 geiser_root_meta <- if (startsWith(geiser_root, paste0(repo_root, .Platform$file.sep))) {
   sub(paste0("^", repo_root, .Platform$file.sep), "", geiser_root)

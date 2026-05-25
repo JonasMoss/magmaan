@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 
-# Build the ignored external/little corpus from Little's RAR archives.
+# Build the ignored corpus/textbook-corpus/raw/little corpus from Little's RAR
+# archives.
 #
 # The source material is LISREL 8 syntax plus LISREL output. We preserve every
 # .LS8 model, extract embedded summary statistics when present, and emit a
@@ -14,7 +15,9 @@ repo_root <- normalizePath(file.path(dirname(normalizePath(
   sub("^--file=", "", script_arg))), "..", ".."))
 
 root <- Sys.getenv("LITTLE_ROOT", unset = "")
-if (!nzchar(root)) root <- file.path(repo_root, "external", "little")
+if (!nzchar(root)) {
+  root <- file.path(repo_root, "corpus", "textbook-corpus", "raw", "little")
+}
 root <- normalizePath(root, mustWork = TRUE)
 
 source_dir <- file.path(root, "source")

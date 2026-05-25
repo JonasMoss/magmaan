@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 
-# Build the ignored external/newsom corpus from the raw Newsom zip archives.
+# Build the ignored corpus/textbook-corpus/raw/newsom corpus from the raw
+# Newsom zip archives.
 #
 # The source zips contain lavaan R scripts plus shared raw .dat files. This
 # script extracts every R example it can evaluate safely, writes one prepared
@@ -19,7 +20,9 @@ repo_root <- normalizePath(file.path(dirname(normalizePath(
   sub("^--file=", "", script_arg))), "..", ".."))
 
 root <- Sys.getenv("NEWSOM_ROOT", unset = "")
-if (!nzchar(root)) root <- file.path(repo_root, "external", "newsom")
+if (!nzchar(root)) {
+  root <- file.path(repo_root, "corpus", "textbook-corpus", "raw", "newsom")
+}
 root <- normalizePath(root, mustWork = TRUE)
 
 source_dir <- file.path(root, "source")

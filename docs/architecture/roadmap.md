@@ -236,14 +236,16 @@ stop rather than any usable non-error return.
   the full LS path, and Ceres against NLopt L-BFGS when the Ceres backend is
   enabled.
 - The Geiser textbook GLS corpus is checked in as a parity-tier golden
-  fixture generated from `external/geiser` plus installed lavaan. The test
+  fixture generated from `corpus/textbook-corpus/raw/geiser` plus installed
+  lavaan. The test
   exercises all curated Geiser GLS cases and compares full/PORT and
   SNLLS/PORT-NLS implied moments against lavaan where the current model
   surface has strict parity. Manifest fixed.x path cases and the known
   alternate-basin `latent_ar_cross_lagged` case remain smoke-checked but not
   used as strict implied-moment parity oracles.
 - A local ignored Mplus SEM source corpus can be built from
-  `external/MPLUS/*.zip` into `external/mplus_sem` with
+  `corpus/textbook-corpus/raw/MPLUS/*.zip` into
+  `corpus/textbook-corpus/raw/mplus_sem` with
   `tests/tools/build_mplus_sem_corpus.R`. The tracked oracle layer
   (`tests/tools/regen_mplus_sem_fixtures.R`,
   `tests/fixtures/mplus_sem/`, and
@@ -253,7 +255,8 @@ stop rather than any usable non-error return.
   records retained observed-path, ordinal, and mixed examples for corpus
   classification without committing Mplus raw data.
 - Local ignored Little and Newsom textbook corpora can be built from
-  `external/little/*.rar` and `external/newsom/*.zip` with
+  `corpus/textbook-corpus/raw/little/*.rar` and
+  `corpus/textbook-corpus/raw/newsom/*.zip` with
   `tests/tools/build_little_corpus.R` and
   `tests/tools/build_newsom_corpus.R`. The shared fixture regen script
   (`tests/tools/regen_little_newsom_fixtures.R`) writes grouped
@@ -269,7 +272,7 @@ stop rather than any usable non-error return.
   overlap graph (`overlap.json`) plus an empty curation hook
   (`overlap_overrides.json`) so future paper work can find same-data,
   same-syntax, same-shape, and same-oracle-structure examples while preserving
-  every source case as its own fixture record. The local external-corpus
+  every source case as its own fixture record. The local raw-corpus
   parser/lavaanify smoke sweep currently accepts all 38 Little catalogue
   models and all 142 Newsom lavaan models.
 - Paper-corpus curation now lives in the ignored nested Git repository
@@ -832,7 +835,7 @@ Validation has three deliberately separate surfaces:
   Self-contained fixtures live in
   `tests/fixtures/parity/`; oracle: `tests/tools/regen_parity_fixtures.R`.
   The same parity executable also includes the Mplus SEM corpus golden,
-  generated from local `external/mplus_sem` into
+  generated from local `corpus/textbook-corpus/raw/mplus_sem` into
   `tests/fixtures/mplus_sem/`.
 - **Benchmarks** — `benchmarks/` fits *live lavaan* on every run and gates
   timing, not CI correctness. Active advisory cases include complete-data ML,

@@ -55,5 +55,5 @@ only takes the bare-label form.
 magmaan::model_spec("f =~ x1 + x2 + x3\n x1 ~ 0", meanstructure = TRUE)
 ```
 
-Corpus exemplars: `external/newsom/models/ex1_2a.lav` (Gap 1),
-`external/newsom/models/ex14_2a.lav` (Gap 2).
+Corpus exemplars: `corpus/textbook-corpus/raw/newsom/models/ex1_2a.lav` (Gap 1),
+`corpus/textbook-corpus/raw/newsom/models/ex14_2a.lav` (Gap 2).

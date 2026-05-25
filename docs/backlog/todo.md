@@ -18,7 +18,8 @@ semantics · **XL** statistical design/research track before implementation.
   `build_group_template`), and `guo_mi_weak` fits to the lavaan reference
   (`chisq = 25.5159`, `df = 11`) under both L-BFGS and PORT. Root-cause
   regression tests live in `lavaanify_test.cpp`; what remains is wiring the
-  finalized `external/kline` corpus into an end-to-end parity test.
+  finalized `corpus/textbook-corpus/raw/kline` corpus into an end-to-end
+  parity test.
 
 ## API and R boundary
 
@@ -44,12 +45,49 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   lavaan-backed complete-data ML, controlled-missingness FIML, and continuous
   ULS/GLS smoke cases to WLS, ordinal DWLS/WLS, and mixed categorical models.
 - **M/L.** Add a two-stage EM/saturated-covariance missing-data research path
-  for comparison with direct FIML and pairwise covariance methods. First expose
-  saturated missing-data ML/EM mean and covariance estimates, plus the
-  asymptotic covariance ingredients needed by the Savalei-Bentler two-stage
-  correction, as an explicit methods-developer surface. Use it initially as a
-  paper/simulation comparator for `papers/pairwise-robust-sem/`, not as a new
-  default estimator.
+  for comparison with direct FIML and pairwise covariance methods. Stage 1
+  (saturated EM moments + sandwich ACOV ingredients) is now exposed as
+  `magmaan::estimate::fiml::saturated_em_moments` / R
+  `magmaan_core$estimate_saturated_em_moments` — the methods-developer surface
+  Savalei-Bentler (2009) needs. Stage 2 (second-stage SEM fit + Savalei-Bentler
+  corrected chi-square / SEs as a packaged `estimator = "ML2S"`) and the
+  `pairwise-robust-sem` simulation row that consumes Stage 1 are still open.
+- **M/L.** Van-Praag pairwise covariance machinery for the ugamma-fast
+  pairwise-incomplete section and the pairwise rows of `papers/pairwise-robust-sem/`.
+  Landed: `magmaan::data::pairwise_sample_stats` (per-block N-divisor pairwise
+  cov, marginal means, availability π̂, overlap counts) and
+  `magmaan::robust::pairwise_casewise_contributions(..., include_means)` —
+  the Van Praag influence matrix Ψ̂ in the same block-stacked
+  `[μ-cols | σ-vech cols]` G3b layout as `casewise_contributions`, so it
+  plugs into existing `reduced_gamma_sample` / U-Gamma plumbing unchanged.
+  R surface: `magmaan_core$data_pairwise_sample_stats`,
+  `magmaan_core$robust_pairwise_casewise_contributions(X, mask, include_means)`.
+  Pairwise normal-theory Γ_NT^pw is now materialized as a data primitive:
+  `data::gamma_nt_pairwise(raw, pw)` returns the per-block p*×p* matrix via
+  the pattern-grouped identity
+  `Γ_NT^pw = Σ_k (n_k/n)·diag(a_k/π̂)·Γ_NT(Ŝ_pw)·diag(a_k/π̂)`. Plus a
+  packaged pairwise-GLS fit `estimate::fit_gls_pairwise(pt, rep, raw, pw,
+  x0, ...)` that weights by `(Γ_NT^pw)⁻¹` — the asymptotically efficient
+  variant under MAR. R surface:
+  `magmaan_core$data_gamma_nt_pairwise(X, mask)`,
+  `magmaan_core$estimate_gls_pairwise(partable, X, mask)`. The literature
+  Σ-only-weight variant remains accessible by handing
+  `samp.S = pw.S` to the existing `fit_gls`; both reduce to the same fit on
+  complete data (C++ unit test in tests/unit/pairwise_gls_test.cpp).
+  Still open:
+  * Inference-side pairwise NT reducer
+    `robust::reduced_gamma_nt_pairwise(uf, raw, pw)` — same Γ_NT^pw
+    machinery but projects through `uf.B` to df×df for the U-Gamma /
+    Satorra-Bentler test path instead of materializing the p*×p* GLS
+    weight.
+  * Pairwise μ ACOV for `fit_gls_pairwise` mean-structure models — for v0
+    the μ-block of the GLS weight keeps the Σ-only convention `Ŝ_pw⁻¹`.
+  * `experiments/NN-pairwise-gls-efficiency/` — small MAR simulation
+    comparing Σ-only vs Γ_NT^pw GLS at varying n, missing rate, p.
+  Parked: pairwise Browne-unbiased — the literal eq. 19 form is expensive
+  and the paper's pragmatic fallback would need its own bias study
+  (would-be paper-section rather than core machinery); revisit only when a
+  downstream project actually needs it.
 - **M.** Track objective value, gradient norm, iteration count, wall time, and
   agreement with lavaan-backed estimates where applicable.
 - **M/L.** Convergence-note / start-value portfolio paper track
@@ -73,7 +111,7 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   `latent_ar_cross_lagged` needs either a stable same-basin optimizer recipe
   or a written alternate-optimum note.
 - **S/M.** Extend the new Mplus SEM corpus beyond the v1 strict growth tranche.
-  `external/mplus_sem` now retains 80 first-pass translations and the tracked
+  `corpus/textbook-corpus/raw/mplus_sem` now retains 80 first-pass translations and the tracked
   fixtures gate six continuous growth cases across ML/ULS/GLS/WLS. Remaining
   follow-ups: repair or hand-translate the skipped growth/CFA cases whose
   automatic Mplus-to-lavaan conversion is malformed, decide how to test
@@ -134,6 +172,20 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   from genuinely non-stationary same-objective points (e.g., Newsom
   `ex5_4`/`ex5_4c`) and to justify any default `TerminalAuditOptions`
   tolerance change in `docs/design/terminal-audit.md`.
+- **M/L.** Decide whether `TerminalAuditOptions::stationarity_mode` should
+  stay at Absolute (lavaan-matched) or switch to Relative once the verifier
+  track above has data. v1 ships Absolute at `absolute_tol = 1e-3` to match
+  lavaan's `check.gradient = TRUE` / `optim.dx.tol = 0.001` default; this is
+  the first hard design call in magmaan and the calibration is genuinely
+  unstable. The choice was made for cross-package honesty (every SEM
+  package's convergence numbers should answer the same question), not from
+  evidence that 1e-3 absolute is the right SEM-side noise floor. The
+  Relative code path is fully wired and unit-test-covered
+  (`tests/unit/terminal_audit_test.cpp`) so the experiment is one option
+  flip away once the data exists; see `docs/design/terminal-audit.md`
+  "Tolerance calibration" for the experimental sketch and
+  `papers/snlls-constrained/reports/convergence-audit-notes.md` for the
+  conversation that motivated the v1 default.
 - **M.** Compare NLopt L-BFGS/SLSQP/VAR2/TNEWTON/BOBYQA, PORT/PORT-NLS,
   Ceres trust-region, Ceres dense BFGS, and SNLLS only on semantically
   appropriate cases; include shallow or Heywood-prone LS cases so bounds and
