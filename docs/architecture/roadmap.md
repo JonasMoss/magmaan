@@ -485,8 +485,9 @@ stop rather than any usable non-error return.
   For free-threshold delta models (`H = I`), the cache-aware ULS/DWLS path
   profiles thresholds out of the optimizer, drives only the active correlation
   block, and reconstructs returned threshold estimates from the observed sample
-  thresholds. Full WLS Schur-complement profiling remains a later ordinal
-  workspace slice.
+  thresholds. The cache-aware WLS path uses the full inverse-weight
+  threshold/correlation blocks, optimizes with the Schur-complement correlation
+  weight, and reconstructs thresholds with the profiled cross-block formula.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
   thin R wrappers for ordinal stats plus DWLS/WLS fits.
 - The R ordinal data boundary exposes consolidated dispatchers:
