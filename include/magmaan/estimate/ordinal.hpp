@@ -98,6 +98,14 @@ robust_ordinal(spec::LatentStructure pt,
                    OrdinalParameterization::Delta);
 
 post_expected<OrdinalRobustResult>
+robust_ordinal(spec::LatentStructure pt,
+               const model::MatrixRep& rep,
+               const data::OrdinalMoments& moments,
+               data::OrdinalGammaCache& gamma_cache,
+               const Estimates& est,
+               data::OrdinalWeightPlan plan);
+
+post_expected<OrdinalRobustResult>
 robust_mixed_ordinal(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
                      const data::MixedOrdinalStats& stats,
@@ -208,11 +216,10 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                     OrdinalParameterization parameterization =
                         OrdinalParameterization::Delta);
 
-// Fit-only all-ordinal LS over moment metadata plus an explicit Gamma cache.
-// `ULS` uses identity weights and does not touch the cache. `DWLS` asks the
-// cache for diagonal Gamma-derived weights only. Full WLS profiling is a later
-// ordinal workspace slice; use the legacy `OrdinalStats` overload for the
-// current materialized WLS path.
+// Cache-aware all-ordinal LS over moment metadata plus an explicit Gamma cache.
+// `FitOnly` keeps ULS/DWLS cheap: ULS uses identity weights and DWLS asks only
+// for diagonal Gamma. `FitPlusInference` may materialize the full cache pieces
+// needed by a later cache-aware robust_ordinal() call.
 fit_expected<Estimates>
 fit_ordinal_bounded(spec::LatentStructure pt,
                     const model::MatrixRep& rep,

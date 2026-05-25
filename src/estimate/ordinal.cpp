@@ -748,19 +748,48 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
                           const data::OrdinalWeightPlan& plan) {
   ProfiledWeightWorkspace out;
   out.blocks.reserve(moments.R.size());
-  if (plan.purpose != data::OrdinalWorkspacePurpose::FitOnly) {
+  if (plan.purpose == data::OrdinalWorkspacePurpose::InferenceOnly) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "fit_ordinal_bounded: OrdinalWeightPlan purpose must be fit-only"));
+        "fit_ordinal_bounded: OrdinalWeightPlan purpose cannot be inference-only"));
   }
   if (plan.threshold_mode != data::OrdinalThresholdMode::FreeIdentity) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "fit_ordinal_bounded: cached path currently requires free thresholds"));
   }
+  const bool fit_plus_inference =
+      plan.purpose == data::OrdinalWorkspacePurpose::FitPlusInference;
 
   if (plan.estimator == data::OrdinalEstimatorKind::ULS) {
-    if (plan.materialization != data::OrdinalGammaMaterialization::None) {
+    const data::OrdinalGammaMaterialization expected =
+        fit_plus_inference ? data::OrdinalGammaMaterialization::Full
+                           : data::OrdinalGammaMaterialization::None;
+    if (plan.materialization != expected) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          "fit_ordinal_bounded: ULS fit-only plan must request no Gamma"));
+          fit_plus_inference
+              ? "fit_ordinal_bounded: ULS fit-plus-inference plan must request full Gamma"
+              : "fit_ordinal_bounded: ULS fit-only plan must request no Gamma"));
+    }
+    if (fit_plus_inference) {
+      if (cache == nullptr) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_bounded: ULS fit-plus-inference requires an OrdinalGammaCache"));
+      }
+      if (cache->blocks.size() != moments.R.size()) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_bounded: OrdinalGammaCache block count mismatch"));
+      }
+      for (std::size_t b = 0; b < moments.R.size(); ++b) {
+        const Eigen::Index p = moments.R[b].rows();
+        const Eigen::Index mdim =
+            moments.thresholds[b].size() + p * (p - 1) / 2;
+        const auto& block = cache->blocks[b];
+        if (!block.has_full || block.gamma.rows() != mdim ||
+            block.gamma.cols() != mdim || !matrix_all_finite(block.gamma)) {
+          return std::unexpected(make_err(FitError::Kind::NumericIssue,
+              "fit_ordinal_bounded: ULS fit-plus-inference requires full Gamma in block " +
+                  std::to_string(b)));
+        }
+      }
     }
     for (std::size_t b = 0; b < moments.R.size(); ++b) {
       const Eigen::Index p = moments.R[b].rows();
@@ -831,9 +860,14 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
     return out;
   }
 
-  if (plan.materialization != data::OrdinalGammaMaterialization::Diagonal) {
+  const data::OrdinalGammaMaterialization expected =
+      fit_plus_inference ? data::OrdinalGammaMaterialization::Full
+                         : data::OrdinalGammaMaterialization::Diagonal;
+  if (plan.materialization != expected) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "fit_ordinal_bounded: DWLS fit-only plan must request diagonal Gamma"));
+        fit_plus_inference
+            ? "fit_ordinal_bounded: DWLS fit-plus-inference plan must request full Gamma"
+            : "fit_ordinal_bounded: DWLS fit-only plan must request diagonal Gamma"));
   }
   if (cache == nullptr) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -843,7 +877,9 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "fit_ordinal_bounded: OrdinalGammaCache block count mismatch"));
   }
-  auto ok = data::ordinal_gamma_cache_ensure_diagonal(*cache);
+  post_expected<void> ok =
+      fit_plus_inference ? data::ordinal_gamma_cache_ensure_dwls_weights(*cache)
+                         : data::ordinal_gamma_cache_ensure_diagonal(*cache);
   if (!ok.has_value()) return std::unexpected(post_to_fit(ok.error()));
 
   for (std::size_t b = 0; b < moments.R.size(); ++b) {
@@ -1747,6 +1783,85 @@ robust_ordinal(spec::LatentStructure pt,
   auto out = robust_weighted_moments(blocks, K, est.fmin);
   if (!out.has_value()) return std::unexpected(out.error());
   return ordinal_result_from_weighted(*out);
+}
+
+post_expected<OrdinalRobustResult>
+robust_ordinal(spec::LatentStructure pt,
+               const model::MatrixRep& rep,
+               const data::OrdinalMoments& moments,
+               data::OrdinalGammaCache& gamma_cache,
+               const Estimates& est,
+               data::OrdinalWeightPlan plan) {
+  if (plan.purpose == data::OrdinalWorkspacePurpose::FitOnly) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal: cache-aware inference requires a fit-plus-inference "
+        "or inference-only plan"));
+  }
+  if (plan.materialization != data::OrdinalGammaMaterialization::Full) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal: cache-aware inference currently requires full Gamma"));
+  }
+  OrdinalWeightKind weight_kind;
+  if (plan.estimator == data::OrdinalEstimatorKind::DWLS) {
+    weight_kind = OrdinalWeightKind::DWLS;
+  } else if (plan.estimator == data::OrdinalEstimatorKind::WLS) {
+    weight_kind = OrdinalWeightKind::WLS;
+  } else {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal: cache-aware inference currently supports DWLS/WLS"));
+  }
+
+  if (auto v = validate_moments(moments, rep); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (gamma_cache.blocks.size() != moments.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "robust_ordinal: OrdinalGammaCache block count mismatch"));
+  }
+  for (std::size_t b = 0; b < moments.R.size(); ++b) {
+    const Eigen::Index p = moments.R[b].rows();
+    const Eigen::Index mdim =
+        moments.thresholds[b].size() + p * (p - 1) / 2;
+    auto& block = gamma_cache.blocks[b];
+    if (!block.has_full || block.gamma.rows() != mdim ||
+        block.gamma.cols() != mdim || !matrix_all_finite(block.gamma)) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "robust_ordinal: full Gamma missing or malformed in block " +
+              std::to_string(b)));
+    }
+    for (Eigen::Index k = 0; k < mdim; ++k) {
+      if (!(block.gamma(k, k) > 0.0)) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "robust_ordinal: full Gamma diagonal is not positive in block " +
+                std::to_string(b)));
+      }
+    }
+  }
+
+  post_expected<void> weights_ok =
+      weight_kind == OrdinalWeightKind::DWLS
+          ? data::ordinal_gamma_cache_ensure_dwls_weights(gamma_cache)
+          : data::ordinal_gamma_cache_ensure_wls_weights(gamma_cache);
+  if (!weights_ok.has_value()) return std::unexpected(weights_ok.error());
+
+  data::OrdinalStats stats = stats_adapter(moments);
+  stats.NACOV.reserve(gamma_cache.blocks.size());
+  if (weight_kind == OrdinalWeightKind::DWLS) {
+    stats.W_dwls.reserve(gamma_cache.blocks.size());
+  } else {
+    stats.W_wls.reserve(gamma_cache.blocks.size());
+  }
+  for (const auto& block : gamma_cache.blocks) {
+    stats.NACOV.push_back(block.gamma);
+    if (weight_kind == OrdinalWeightKind::DWLS) {
+      stats.W_dwls.push_back(block.w_dwls);
+    } else {
+      stats.W_wls.push_back(block.w_wls);
+    }
+  }
+
+  return robust_ordinal(std::move(pt), rep, stats, est, weight_kind,
+                        to_estimate_parameterization(plan.parameterization));
 }
 
 post_expected<OrdinalRobustResult>

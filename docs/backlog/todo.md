@@ -62,7 +62,11 @@ semantics · **XL** statistical design/research track before implementation.
   that ULS/DWLS path, so the optimizer sees only the active correlation block
   and returned threshold estimates are reconstructed from observed sample
   thresholds. Full-WLS Schur-complement profiling is now also wired for the
-  same free-threshold delta path. Next slice: inference cache reuse.
+  same free-threshold delta path. Cache-aware fit-plus-inference and
+  inference-only robust DWLS/WLS reporting now reuse a full
+  `OrdinalGammaCache` and match the legacy materialized `OrdinalStats` path.
+  Next slice: all-ordinal SNLLS ULS/DWLS over the profiled correlation
+  objective, then WLS.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into

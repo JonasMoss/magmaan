@@ -488,6 +488,11 @@ stop rather than any usable non-error return.
   thresholds. The cache-aware WLS path uses the full inverse-weight
   threshold/correlation blocks, optimizes with the Schur-complement correlation
   weight, and reconstructs thresholds with the profiled cross-block formula.
+  Fit-plus-inference and inference-only all-ordinal plans can also reuse a
+  full `OrdinalGammaCache` for robust DWLS/WLS reporting: DWLS materializes
+  diagonal weights from the full Gamma when needed, WLS materializes the full
+  inverse weight, and the robust result matches the legacy materialized
+  `OrdinalStats` path.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
   thin R wrappers for ordinal stats plus DWLS/WLS fits.
 - The R ordinal data boundary exposes consolidated dispatchers:
