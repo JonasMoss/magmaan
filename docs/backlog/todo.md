@@ -92,12 +92,14 @@ semantics · **XL** statistical design/research track before implementation.
   threshold constraints intentionally reject in threshold-profiled fitting and
   fit through full bounded / full-threshold SNLLS. The construction-boundary
   benchmark also landed as `magmaan_ordinal_construction_bench` plus
-  `experiments/13-ordinal-construction-boundary`: it shows the current raw
-  all-ordinal boundary remains eager, materializing full `OrdinalStats`, full
-  Gamma, DWLS weights, and the WLS inverse before cache-aware fit paths choose
-  what they use. Next practical slice is a raw/lazy all-ordinal builder that
-  can return `OrdinalMoments` plus only the requested Gamma materialization,
-  then the remaining estimator generalizations.
+  `experiments/13-ordinal-construction-boundary`; it now includes
+  `ordinal_workspace_from_integer_data()`, where fit-only ULS returns
+  `OrdinalMoments` without Gamma and fit-only DWLS returns `OrdinalMoments`
+  plus the exact Gamma diagonal without full Gamma/WLS inverse materialization.
+  The opt pilot shows ULS construction gets a clear reduction while exact DWLS
+  diagonal construction remains dominated by score/Gamma-diagonal work. Next
+  practical slices are end-to-end timing with lazy construction included, then
+  the remaining estimator generalizations.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
@@ -188,8 +190,8 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   profiling gain inside SNLLS; ULS has only the cache-aware comparator paths
   because no legacy full direct ULS comparator is wired into the pilot. The
   first opt pilot uses `q <= 6`; open follow-up is the full `q <= 12`
-  literature-like sweep, optional lavaan context rows, and raw/lazy ordinal
-  statistic construction timing once that builder exists.
+  literature-like sweep, optional lavaan context rows, and end-to-end rows that
+  use `ordinal_workspace_from_integer_data()` for lazy ULS/DWLS construction.
 - **S.** Extend the ordinal threshold-constraint support experiment
   (`experiments/12-ordinal-threshold-constraints`) only if the paper needs
   broader constraint evidence. The first opt pilot is single-group ordinal CFA:
@@ -199,13 +201,13 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   multi-group threshold-invariance/equality examples once the C++ or R-facing
   experiment harness can express groups without pulling in fixture generation.
 - **S/M.** Extend the ordinal construction-boundary experiment
-  (`experiments/13-ordinal-construction-boundary`) if the raw/lazy builder
-  lands or if the paper needs end-to-end construction evidence. The first opt
-  pilot times eager legacy stats construction, projection to `OrdinalMoments`,
-  diagonal/full Gamma cache copies, DWLS weight construction, and WLS
-  reinversion across all-ordinal synthetic blocks up to `p = 16`, `c = 5`.
-  Open follow-up: add rows for a true lazy ULS/DWLS construction path once that
-  C++ boundary exists.
+  (`experiments/13-ordinal-construction-boundary`) if the paper needs broader
+  construction evidence. The first lazy opt pilot times fit-only ULS/DWLS raw
+  workspace construction against eager legacy stats construction, projection
+  to `OrdinalMoments`, diagonal/full Gamma cache copies, DWLS weight
+  construction, and WLS reinversion across all-ordinal synthetic blocks up to
+  `p = 16`, `c = 5`. Open follow-up: include these lazy rows in an end-to-end
+  ordinal SNLLS speed run.
 - **M/L.** Convergence-note / start-value portfolio paper track
   (`papers/convergence-note/`). The skeleton, local resources, and first R
   simulation factories now exist for the De Jonckere-Rosseel small-sample SEM
@@ -397,7 +399,7 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   ULS/DWLS/WLS prototype now exists for free, fixed, and pure-merge threshold
   models, and the full-threshold SNLLS path supports general linear threshold
   constraints. Use experiments to decide whether the next paper-facing C++ work
-  should be a raw/lazy all-ordinal construction boundary, theta-profiled SNLLS,
+  should be end-to-end lazy-construction SNLLS timing, theta-profiled SNLLS,
   mixed continuous/ordinal SNLLS, threshold-profiled general linear maps, or
   reduced-Gamma inference plumbing.
 

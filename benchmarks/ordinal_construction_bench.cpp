@@ -320,16 +320,79 @@ int main(int argc, char **argv) {
     const Eigen::MatrixXd data =
         simulate_ordinal_data(cell.n, cell.p, cell.categories, cell.seed);
 
+    const int n_thresholds = cell.p * (cell.categories - 1);
+    const int n_correlations = (cell.p * (cell.p - 1)) / 2;
+    const int moment_dim = n_thresholds + n_correlations;
+    const double gamma_mb = static_cast<double>(moment_dim) *
+                            static_cast<double>(moment_dim) * 8.0 / 1e6;
+    const double diagonal_mb = static_cast<double>(moment_dim) * 8.0 / 1e6;
+
+    Row base;
+    base.design = cell.design;
+    base.seed = cell.seed;
+    base.n = cell.n;
+    base.p = cell.p;
+    base.categories = cell.categories;
+    base.reps = reps;
+    base.n_thresholds = n_thresholds;
+    base.n_correlations = n_correlations;
+    base.moment_dim = moment_dim;
+    base.gamma_mb = gamma_mb;
+    base.diagonal_mb = diagonal_mb;
+
+    {
+      Row row = base;
+      row.operation = "lazy_uls_workspace_from_raw";
+      row.has_moments = true;
+      auto result =
+          run_operation(row, reps, [&](double &checksum, std::string &error) {
+            auto plan = magmaan::data::ordinal_weight_plan(
+                magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+                magmaan::data::OrdinalEstimatorKind::ULS);
+            auto workspace = magmaan::data::ordinal_workspace_from_integer_data(
+                {data}, plan);
+            if (!workspace.has_value()) {
+              error = workspace.error().detail;
+              return false;
+            }
+            checksum += workspace->moments.R[0](0, 0);
+            checksum += workspace->moments.thresholds[0].sum();
+            checksum += static_cast<double>(workspace->moments.n_obs[0]);
+            checksum +=
+                static_cast<double>(workspace->gamma_cache.block_count());
+            return true;
+          });
+      write_row(out, result.row);
+    }
+
+    {
+      Row row = base;
+      row.operation = "lazy_dwls_workspace_from_raw";
+      row.has_moments = true;
+      row.has_diagonal = true;
+      auto result =
+          run_operation(row, reps, [&](double &checksum, std::string &error) {
+            auto plan = magmaan::data::ordinal_weight_plan(
+                magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+                magmaan::data::OrdinalEstimatorKind::DWLS);
+            auto workspace = magmaan::data::ordinal_workspace_from_integer_data(
+                {data}, plan);
+            if (!workspace.has_value()) {
+              error = workspace.error().detail;
+              return false;
+            }
+            checksum += workspace->moments.R[0](0, 0);
+            checksum += workspace->moments.thresholds[0].sum();
+            checksum += static_cast<double>(workspace->moments.n_obs[0]);
+            checksum += workspace->gamma_cache.blocks[0].diagonal.sum();
+            return true;
+          });
+      write_row(out, result.row);
+    }
+
     OrdinalStats stats;
     {
-      Row row;
-      row.design = cell.design;
-      row.seed = cell.seed;
-      row.n = cell.n;
-      row.p = cell.p;
-      row.categories = cell.categories;
-      row.reps = reps;
-      row.n_correlations = (cell.p * (cell.p - 1)) / 2;
+      Row row = base;
       row.operation = "legacy_stats_full";
       row.has_moments = true;
       row.has_diagonal = true;
@@ -357,35 +420,8 @@ int main(int argc, char **argv) {
         std::cerr << "ordinal stats failed: " << result.row.error << "\n";
         return 1;
       }
-      const int nth = static_cast<int>(stats.thresholds[0].size());
-      const int mdim = static_cast<int>(stats.NACOV[0].rows());
-      result.row.n_thresholds = nth;
-      result.row.moment_dim = mdim;
-      result.row.gamma_mb =
-          static_cast<double>(mdim) * static_cast<double>(mdim) * 8.0 / 1e6;
-      result.row.diagonal_mb = static_cast<double>(mdim) * 8.0 / 1e6;
       write_row(out, result.row);
     }
-
-    const int n_thresholds = static_cast<int>(stats.thresholds[0].size());
-    const int n_correlations = (cell.p * (cell.p - 1)) / 2;
-    const int moment_dim = static_cast<int>(stats.NACOV[0].rows());
-    const double gamma_mb = static_cast<double>(moment_dim) *
-                            static_cast<double>(moment_dim) * 8.0 / 1e6;
-    const double diagonal_mb = static_cast<double>(moment_dim) * 8.0 / 1e6;
-
-    Row base;
-    base.design = cell.design;
-    base.seed = cell.seed;
-    base.n = cell.n;
-    base.p = cell.p;
-    base.categories = cell.categories;
-    base.reps = reps;
-    base.n_thresholds = n_thresholds;
-    base.n_correlations = n_correlations;
-    base.moment_dim = moment_dim;
-    base.gamma_mb = gamma_mb;
-    base.diagonal_mb = diagonal_mb;
 
     {
       Row row = base;

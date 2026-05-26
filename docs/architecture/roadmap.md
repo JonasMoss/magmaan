@@ -512,10 +512,11 @@ stop rather than any usable non-error return.
   profiled and full-threshold paths, while general linear threshold constraints
   are rejected by threshold-profiled fitting and accepted by the full bounded
   and full-threshold SNLLS paths. `experiments/13-ordinal-construction-boundary`
-  measures the current raw construction boundary and confirms it remains eager:
-  `ordinal_stats_from_integer_data()` materializes full `OrdinalStats`, full
-  Gamma, DWLS weights, and the WLS inverse before cache-aware fit paths choose
-  which pieces they actually need.
+  now compares the legacy eager constructor with
+  `ordinal_workspace_from_integer_data()`: fit-only ULS returns
+  `OrdinalMoments` without Gamma, fit-only DWLS returns `OrdinalMoments` plus
+  the Gamma diagonal, and WLS/fit-plus-inference still fall back to full
+  `OrdinalStats`/Gamma materialization.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
   thin R wrappers for ordinal stats plus DWLS/WLS fits.
 - The R ordinal data boundary exposes consolidated dispatchers:

@@ -151,9 +151,9 @@ write_metadata(
   values = list(
     experiment = "13-ordinal-construction-boundary",
     question = paste(
-      "Measure current all-ordinal construction boundaries: legacy full",
-      "OrdinalStats materialization, projection to OrdinalMoments, and",
-      "diagonal/full/WLS cache setup costs."
+      "Measure all-ordinal construction boundaries: lazy fit-only ULS/DWLS",
+      "workspace construction, legacy full OrdinalStats materialization,",
+      "projection to OrdinalMoments, and diagonal/full/WLS cache setup costs."
     ),
     preset = args$preset,
     smoke = args$smoke,
