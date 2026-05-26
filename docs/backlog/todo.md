@@ -104,8 +104,14 @@ semantics · **XL** statistical design/research track before implementation.
   ULS/DWLS, and it now stratifies all fit and end-to-end rows by delta/theta
   parameterization. Theta is tracked as cache-aware bounded plus
   threshold-only SNLLS profiling because standardized theta covariance moments
-  are nonlinear in the remaining block. Next practical slices are the
-  remaining estimator generalizations.
+  are nonlinear in the remaining block. Landed mixed slice: materialized
+  mixed continuous/ordinal delta SNLLS via
+  `fit_mixed_ordinal_snlls_full_thresholds()`, matching existing bounded mixed
+  DWLS/WLS on a focused unit test. Remaining C++ estimator work on this track:
+  lazy/cache-aware mixed Gamma construction, mixed theta SNLLS, threshold-profiled
+  general linear maps such as effect-coding-style constraints, reduced-Gamma
+  robust-inference products that avoid full materialization where possible, and
+  only-when-needed R/API polish.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
@@ -411,9 +417,11 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   ULS/DWLS/WLS prototype now exists for free, fixed, and pure-merge threshold
   models, the all-ordinal theta path covers cache-aware bounded/SNLLS point
   estimation, and the full-threshold SNLLS path supports general linear
-  threshold constraints. Use experiments to decide whether the next
-  paper-facing C++ work should be mixed continuous/ordinal SNLLS,
-  threshold-profiled general linear maps, or reduced-Gamma inference plumbing.
+  threshold constraints. Mixed continuous/ordinal delta SNLLS now exists for
+  the materialized full-threshold DWLS/WLS path. Use experiments to decide
+  whether the next paper-facing C++ work should be lazy/cache-aware mixed
+  construction, mixed theta SNLLS, threshold-profiled general linear maps, or
+  reduced-Gamma inference plumbing.
 
 ## Composite models
 
