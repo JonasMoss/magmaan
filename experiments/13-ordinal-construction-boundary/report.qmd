@@ -41,6 +41,8 @@ median_or_na <- function(x) {
 }
 
 operation_levels <- c(
+  "lazy_uls_workspace_from_raw",
+  "lazy_dwls_workspace_from_raw",
   "legacy_stats_full",
   "moments_projection_from_stats",
   "cache_diagonal_from_legacy_gamma",
@@ -51,6 +53,8 @@ operation_levels <- c(
   "wls_weight_reinvert_full_gamma"
 )
 operation_labels <- c(
+  "Lazy ULS workspace",
+  "Lazy DWLS workspace",
   "Legacy full stats",
   "Project moments",
   "Copy diagonal cache",
@@ -79,6 +83,10 @@ for (name in operation_levels) {
 }
 wide$wls_reinvert_share <- wide$wls_weight_reinvert_full_gamma /
   wide$legacy_stats_full
+wide$lazy_uls_share <- wide$lazy_uls_workspace_from_raw /
+  wide$legacy_stats_full
+wide$lazy_dwls_share <- wide$lazy_dwls_workspace_from_raw /
+  wide$legacy_stats_full
 wide$diag_cache_share <- wide$cache_diagonal_from_legacy_gamma /
   wide$legacy_stats_full
 wide$moments_share <- wide$moments_projection_from_stats /
@@ -89,9 +97,12 @@ wide$full_gamma_mb_per_diag_mb <- wide$gamma_mb / wide$diagonal_mb
 ## Question
 
 The ordinal SNLLS speed pilot times fitting after the legacy ordinal statistic
-builder has already run. This experiment asks what that hides. It times the
-current all-ordinal construction boundary:
+builder has already run. This experiment asks what that hides, and now times
+the lazy fit-only boundary alongside the legacy all-ordinal constructor:
 
+- lazy raw construction for fit-only ULS, returning `OrdinalMoments` only;
+- lazy raw construction for fit-only DWLS, returning `OrdinalMoments` plus the
+  Gamma diagonal;
 - `OrdinalStats` from raw integer categories, which currently estimates
   thresholds/polychorics, builds full `NACOV`, and materializes DWLS/WLS
   weights;
@@ -101,17 +112,15 @@ current all-ordinal construction boundary:
 
 ## Short Answer
 
-The current public raw boundary is still eager. `ordinal_stats_from_integer_data`
-materializes the full Gamma and WLS inverse before any fit path gets to choose
-ULS, DWLS, WLS, profiled thresholds, or SNLLS. The cache-aware fitting code is
-therefore proving that downstream consumers can avoid *using* full Gamma, but
-not yet that raw construction can avoid *building* it.
+The lazy raw boundary is now real for fit-only ULS/DWLS. ULS stops after
+thresholds and polychoric `R`; DWLS additionally computes the Gamma diagonal
+without materializing the full square Gamma or WLS inverse. WLS and
+fit-plus-inference still fall back to the eager legacy path.
 
-That makes the next C++ target crisp: add a raw/lazy all-ordinal builder that
-can return `OrdinalMoments` plus only the requested Gamma materialization. The
-first useful version should support fit-only ULS/DWLS without full Gamma or WLS
-inverse construction; WLS and robust inference can continue to request full
-Gamma.
+This turns the earlier caveat into a measurable implementation split. The
+remaining question is whether the ULS/DWLS construction savings are large
+enough, relative to pairwise polychoric estimation itself, to matter in the
+paper-facing end-to-end speed story.
 
 ## Run
 
@@ -153,12 +162,16 @@ of inverting it again for a cache.
 
 ```{r}
 summary <- wide[, c("p", "categories", "moment_dim", "legacy_stats_full",
-                    "moments_share", "diag_cache_share",
+                    "lazy_uls_share", "lazy_dwls_share", "moments_share",
+                    "diag_cache_share",
                     "wls_reinvert_share")]
 names(summary) <- c("p", "Categories", "Moment dim", "Legacy full stats ms",
+                    "Lazy ULS / legacy", "Lazy DWLS / legacy",
                     "Moments / legacy", "Diagonal cache / legacy",
                     "WLS reinvert / legacy")
 summary$`Legacy full stats ms` <- fmt_ms(summary$`Legacy full stats ms`)
+summary$`Lazy ULS / legacy` <- fmt_ratio(summary$`Lazy ULS / legacy`)
+summary$`Lazy DWLS / legacy` <- fmt_ratio(summary$`Lazy DWLS / legacy`)
 summary$`Moments / legacy` <- fmt_ratio(summary$`Moments / legacy`)
 summary$`Diagonal cache / legacy` <- fmt_ratio(summary$`Diagonal cache / legacy`)
 summary$`WLS reinvert / legacy` <- fmt_ratio(summary$`WLS reinvert / legacy`)
@@ -167,9 +180,10 @@ knitr::kable(summary[order(summary$p, summary$Categories), ],
 ```
 
 Ratios are relative to the eager legacy `OrdinalStats` construction for the
-same synthetic data block. Values near zero do not mean those operations are
-unimportant generally; they mean the current public raw boundary has already
-paid the larger estimation and full-Gamma costs.
+same synthetic data block. The lazy rows start from raw categories and are the
+actual construction alternatives for fit-only ULS/DWLS. The cache-copy rows
+start after legacy stats already exist, so they remain boundary probes rather
+than alternatives to raw construction.
 
 ```{r}
 #| fig-width: 8
@@ -204,9 +218,9 @@ knitr::kable(payload[order(payload$p, payload$Categories), ],
              row.names = FALSE)
 ```
 
-This is the memory side of the same boundary: a fit-only DWLS path only needs
-the Gamma diagonal, while the legacy constructor always creates the full square
-matrix and its WLS inverse.
+This is the memory side of the same boundary: fit-only ULS needs no Gamma,
+fit-only DWLS needs only the Gamma diagonal, while the legacy constructor
+always creates the full square matrix and its WLS inverse.
 
 ## Reproduce
 

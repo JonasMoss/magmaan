@@ -134,6 +134,11 @@ struct OrdinalGammaCache {
   std::size_t block_count() const noexcept { return blocks.size(); }
 };
 
+struct OrdinalWorkspace {
+  OrdinalMoments moments;
+  OrdinalGammaCache gamma_cache;
+};
+
 OrdinalMoments ordinal_moments_from_stats(const OrdinalStats& stats);
 MixedOrdinalMoments
 mixed_ordinal_moments_from_stats(const MixedOrdinalStats& stats);
@@ -157,6 +162,10 @@ post_expected<void> ordinal_gamma_cache_ensure_dwls_weights(
     OrdinalGammaCache& cache);
 post_expected<void> ordinal_gamma_cache_ensure_wls_weights(
     OrdinalGammaCache& cache);
+
+post_expected<OrdinalWorkspace> ordinal_workspace_from_integer_data(
+    const std::vector<Eigen::MatrixXd>& X,
+    OrdinalWeightPlan plan = {});
 
 struct MixedOrdinalPolyserialDpdBlockDiagnostics {
   std::vector<MixedPairLabel> dpd_pairs;

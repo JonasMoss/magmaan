@@ -246,6 +246,119 @@ TEST_CASE("OrdinalWeightPlan encodes fit-only Gamma cost rules") {
   CHECK(inference.materialization == OrdinalGammaMaterialization::Full);
 }
 
+TEST_CASE("Ordinal raw workspace builder honors fit-only materialization") {
+  std::mt19937 rng(20260609);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(420, 4);
+  const double loading[4] = {0.88, 0.80, 0.72, 0.64};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.55) + (y > 0.45);
+    }
+  }
+
+  auto legacy = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(legacy.has_value());
+
+  auto uls_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::ULS);
+  auto uls = magmaan::data::ordinal_workspace_from_integer_data({X}, uls_plan);
+  REQUIRE(uls.has_value());
+  REQUIRE(uls->moments.R.size() == 1);
+  CHECK(uls->moments.R[0].isApprox(legacy->R[0], 0.0));
+  CHECK(uls->moments.thresholds[0].isApprox(legacy->thresholds[0], 0.0));
+  CHECK(uls->moments.threshold_ov[0] == legacy->threshold_ov[0]);
+  CHECK(uls->moments.threshold_level[0] == legacy->threshold_level[0]);
+  CHECK(uls->moments.n_levels[0] == legacy->n_levels[0]);
+  CHECK(uls->gamma_cache.block_count() == 0);
+
+  auto dwls_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::DWLS);
+  auto dwls =
+      magmaan::data::ordinal_workspace_from_integer_data({X}, dwls_plan);
+  REQUIRE(dwls.has_value());
+  REQUIRE(dwls->gamma_cache.block_count() == 1);
+  CHECK(dwls->moments.R[0].isApprox(legacy->R[0], 0.0));
+  CHECK(dwls->moments.thresholds[0].isApprox(legacy->thresholds[0], 0.0));
+  CHECK(dwls->gamma_cache.blocks[0].has_diagonal);
+  CHECK_FALSE(dwls->gamma_cache.blocks[0].has_full);
+  CHECK_FALSE(dwls->gamma_cache.blocks[0].has_dwls_weight);
+  CHECK_FALSE(dwls->gamma_cache.blocks[0].has_wls_weight);
+  CHECK(dwls->gamma_cache.blocks[0].diagonal.isApprox(
+      legacy->NACOV[0].diagonal(), 1e-8));
+
+  auto wls_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::WLS);
+  auto wls = magmaan::data::ordinal_workspace_from_integer_data({X}, wls_plan);
+  REQUIRE(wls.has_value());
+  REQUIRE(wls->gamma_cache.block_count() == 1);
+  CHECK(wls->gamma_cache.blocks[0].has_full);
+  CHECK(wls->gamma_cache.blocks[0].has_wls_weight);
+}
+
+TEST_CASE("Cached ordinal DWLS fit consumes lazy raw workspace diagonal") {
+  std::mt19937 rng(20260610);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(500, 3);
+  const double loading[3] = {0.90, 0.78, 0.68};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.45) + (y > 0.55);
+    }
+  }
+
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  auto plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::DWLS);
+  auto workspace =
+      magmaan::data::ordinal_workspace_from_integer_data({X}, plan);
+  REQUIRE(workspace.has_value());
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  auto x0 = magmaan::estimate::ordinal_start_values(
+      *pt, *mr, workspace->moments, {});
+  REQUIRE(x0.has_value());
+  auto legacy = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0);
+  auto cached = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, workspace->moments, &workspace->gamma_cache, {}, plan, *x0);
+  REQUIRE_MESSAGE(legacy.has_value(),
+      "legacy DWLS failed: " << (legacy.has_value() ? "" : legacy.error().detail));
+  REQUIRE_MESSAGE(cached.has_value(),
+      "cached DWLS failed: " << (cached.has_value() ? "" : cached.error().detail));
+
+  CHECK(cached->fmin == doctest::Approx(legacy->fmin).epsilon(1e-8));
+  CHECK((cached->theta - legacy->theta).cwiseAbs().maxCoeff() < 1e-6);
+  REQUIRE(workspace->gamma_cache.block_count() == 1);
+  CHECK(workspace->gamma_cache.blocks[0].has_diagonal);
+  CHECK_FALSE(workspace->gamma_cache.blocks[0].has_full);
+}
+
 TEST_CASE("Cached ordinal DWLS fit consumes diagonal Gamma only") {
   std::mt19937 rng(20260525);
   std::normal_distribution<double> norm(0.0, 1.0);
