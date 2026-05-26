@@ -8,6 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include <algorithm>
+#include <Eigen/Cholesky>
 #include <Eigen/Core>
 #include <Eigen/QR>
 
@@ -175,7 +177,76 @@ struct ProfilePoint {
   Eigen::VectorXd residual;
   Eigen::MatrixXd H;
   Eigen::MatrixXd jacobian;
+  // Telemetry: which path the α-solve took. False on the n_alpha == 0
+  // closed-form short-circuit (no solve happens) — readers must gate on
+  // whether an α-block existed before attributing this to a fast/fallback
+  // choice. See `docs/design/snlls-fast-alpha-solve.md`.
+  bool used_fast_solve = false;
 };
+
+// Gate on `rcond(HᵀH)` for the fast Cholesky-on-normal-equations α-solve
+// in `profile_at`. Higham (Accuracy and Stability of Numerical Algorithms,
+// 2nd ed., Thm 20.4) bounds the Cholesky-NE residual relative error at
+// `O(u · κ(HᵀH))`; the loss vs the rank-revealing QR is ≤ 1 digit when
+// `rcond(HᵀH) > √u ≈ 1.49e-8` in double. The 1e-7 gate adds ~6× headroom
+// for Hager's optimistic-bias rcond estimator and any extra amplification
+// from the residual product. See `docs/design/snlls-fast-alpha-solve.md`.
+constexpr double kFastSolveThreshold = 1e-7;
+
+// Hager 1-norm reciprocal-condition-number estimator
+// (Higham §15.2 / LAPACK ?POCON), specialized for a symmetric-PD matrix
+// whose Cholesky factor is already in hand. Returns 1 / (‖A‖₁·‖A⁻¹‖₁),
+// which is an *upper* bound on the true rcond (Hager's iterate is a
+// lower bound on ‖A⁻¹‖₁). Returns 0.0 on any numeric pathology — that
+// forces the caller to fall back to the rank-revealing path.
+//
+// Cost: at most 6 triangular back-solves through the supplied factor,
+// O(p²) total — negligible against the O(n·p²) already spent forming
+// `A = HᵀH`.
+double rcond_pocon_sym(const Eigen::LLT<Eigen::MatrixXd>& llt,
+                       const Eigen::MatrixXd& A) {
+  const Eigen::Index p = A.rows();
+  if (p == 0) return 0.0;
+  const double norm_A = A.cwiseAbs().colwise().sum().maxCoeff();
+  if (norm_A == 0.0) return 0.0;
+
+  Eigen::VectorXd x = Eigen::VectorXd::Constant(p, 1.0 / static_cast<double>(p));
+  double gamma = 0.0;
+  for (int k = 0; k < 5; ++k) {
+    Eigen::VectorXd y = llt.solve(x);
+    if (!y.allFinite()) return 0.0;
+    gamma = y.lpNorm<1>();
+    Eigen::VectorXd xi(p);
+    for (Eigen::Index i = 0; i < p; ++i) {
+      xi(i) = (y(i) >= 0.0) ? 1.0 : -1.0;
+    }
+    Eigen::VectorXd z = llt.solve(xi);  // A symmetric ⇒ A⁻ᵀ = A⁻¹
+    if (!z.allFinite()) return 0.0;
+    Eigen::Index j;
+    const double zmax = z.cwiseAbs().maxCoeff(&j);
+    if (k > 0 && zmax <= z.dot(x)) break;
+    x.setZero();
+    x(j) = 1.0;
+  }
+
+  // Higham eq. 15.5 polishing step: alternating signed ramp.
+  if (p > 1) {
+    Eigen::VectorXd b(p);
+    const double scale = static_cast<double>(p - 1);
+    for (Eigen::Index i = 0; i < p; ++i) {
+      const double s = (i % 2 == 0) ? 1.0 : -1.0;
+      b(i) = s * (1.0 + static_cast<double>(i) / scale);
+    }
+    const Eigen::VectorXd y2 = llt.solve(b);
+    if (y2.allFinite()) {
+      const double gamma2 = 2.0 * y2.lpNorm<1>() / (3.0 * static_cast<double>(p));
+      gamma = std::max(gamma, gamma2);
+    }
+  }
+
+  if (gamma == 0.0 || !std::isfinite(gamma)) return 0.0;
+  return 1.0 / (norm_A * gamma);
+}
 
 // Solve the inner linear least-squares for α̂ at a given β.
 fit_expected<ProfilePoint>
@@ -214,10 +285,29 @@ profile_at(const optim::GmmProblem& base, const Classification& cls,
     return out;
   }
 
-  const Eigen::ColPivHouseholderQR<Eigen::MatrixXd> H_qr(out.H);
-  const Eigen::VectorXd alpha_hat = H_qr.solve(-r0);
+  // Two-path α-solve. Try Cholesky-on-normal-equations first; fall back
+  // to rank-revealing QR if the Gram is not numerically PD or if the
+  // estimated rcond drops below `kFastSolveThreshold`. Whichever path
+  // wins is reused for the β-gauge back-solve below so both consumers
+  // see the same inverse.
+  const Eigen::MatrixXd HtH = out.H.transpose() * out.H;
+  Eigen::LLT<Eigen::MatrixXd> llt(HtH);
+  Eigen::ColPivHouseholderQR<Eigen::MatrixXd> H_qr;
+  bool used_fast = false;
+  if (llt.info() == Eigen::Success &&
+      rcond_pocon_sym(llt, HtH) > kFastSolveThreshold) {
+    used_fast = true;
+  }
+  if (!used_fast) {
+    H_qr.compute(out.H);
+  }
+
+  const Eigen::VectorXd alpha_hat = used_fast
+      ? Eigen::VectorXd(llt.solve(out.H.transpose() * (-r0)))
+      : Eigen::VectorXd(H_qr.solve(-r0));
   out.residual = r0 + out.H * alpha_hat;
   out.theta    = theta_base + cls.K_alpha * alpha_hat;
+  out.used_fast_solve = used_fast;
 
   // The outer (β) Jacobian must be taken at the *profiled* point θ̂(β):
   // ∂r/∂Λ depends on the latent (co)variances Ψ that α̂ has just set, so
@@ -226,7 +316,9 @@ profile_at(const optim::GmmProblem& base, const Classification& cls,
   if (!Jr.has_value()) return std::unexpected(Jr.error());
   out.jacobian = *Jr * cls.K_beta;
   if (out.jacobian.cols() > 0) {
-    const Eigen::MatrixXd coeff = H_qr.solve(out.jacobian);
+    const Eigen::MatrixXd coeff = used_fast
+        ? Eigen::MatrixXd(llt.solve(out.H.transpose() * out.jacobian))
+        : Eigen::MatrixXd(H_qr.solve(out.jacobian));
     out.jacobian.noalias() -= out.H * coeff;
   }
   return out;
@@ -256,7 +348,16 @@ gp_impl(const optim::GmmProblem& base, const spec::LatentStructure& pt,
     ProfilePoint    point;
   };
   auto cache = std::make_shared<Cache>();
-  auto profiled = [base, cls, cache](const Eigen::VectorXd& beta)
+  // Shared with the closure below and surfaced through `GpProblem` so
+  // callers can read the final tallies after the outer optimizer
+  // returns. Each successful `profile_at()` cache miss with a non-empty
+  // α-block bumps exactly one of these.
+  auto n_alpha_solve_fast     = std::make_shared<std::int32_t>(0);
+  auto n_alpha_solve_fallback = std::make_shared<std::int32_t>(0);
+  const bool has_alpha = cls->K_alpha.cols() > 0;
+  auto profiled = [base, cls, cache, n_alpha_solve_fast,
+                   n_alpha_solve_fallback, has_alpha](
+                      const Eigen::VectorXd& beta)
       -> fit_expected<std::reference_wrapper<const ProfilePoint>> {
     if (cache->valid && cache->beta.size() == beta.size() &&
         (cache->beta.array() == beta.array()).all()) {
@@ -264,6 +365,10 @@ gp_impl(const optim::GmmProblem& base, const spec::LatentStructure& pt,
     }
     auto p = profile_at(base, *cls, beta);
     if (!p.has_value()) return std::unexpected(p.error());
+    if (has_alpha) {
+      if (p->used_fast_solve) ++(*n_alpha_solve_fast);
+      else                    ++(*n_alpha_solve_fallback);
+    }
     cache->valid = true;
     cache->beta  = beta;
     cache->point = std::move(*p);
@@ -301,7 +406,9 @@ gp_impl(const optim::GmmProblem& base, const spec::LatentStructure& pt,
   return GpProblem{
       std::move(out), cls->beta0,
       static_cast<std::int32_t>(cls->beta_cols.size()),
-      static_cast<std::int32_t>(cls->alpha_cols.size())};
+      static_cast<std::int32_t>(cls->alpha_cols.size()),
+      std::move(n_alpha_solve_fast),
+      std::move(n_alpha_solve_fallback)};
 }
 
 fit_expected<GpProblem>

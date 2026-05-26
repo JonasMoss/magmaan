@@ -61,6 +61,13 @@ struct Estimates {
   // the corpus speed tables.
   std::int32_t          n_nonlinear  = -1;
   std::int32_t          n_linear     = -1;
+  // SNLLS inner-solve telemetry: number of `profile_at()` cache misses
+  // that took the fast Cholesky-on-normal-equations path vs the
+  // rank-revealing QR fallback. Populated alongside `n_nonlinear` /
+  // `n_linear`; the default `-1` flags "no separable split applies".
+  // See `docs/design/snlls-fast-alpha-solve.md` for the gate semantics.
+  std::int32_t          n_alpha_solve_fast     = -1;
+  std::int32_t          n_alpha_solve_fallback = -1;
 };
 
 // Optimizer backend selector for the convenience composers below.
