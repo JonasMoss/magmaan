@@ -1,0 +1,218 @@
+---
+title: "Ordinal construction boundary"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path)))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"),
+                              candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates,
+                                                "construction.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+
+construction_path <- file.path(results_dir, "construction.csv")
+metadata_path <- file.path(results_dir, "metadata.csv")
+if (!file.exists(construction_path)) {
+  stop("Missing construction.csv. Run: Rscript run_experiment.R --smoke")
+}
+
+construction <- utils::read.csv(construction_path, check.names = FALSE,
+                                stringsAsFactors = FALSE)
+metadata <- utils::read.csv(metadata_path, check.names = FALSE,
+                            stringsAsFactors = FALSE)
+
+fmt_ms <- function(x) ifelse(is.na(x), "", sprintf("%.3f", x))
+fmt_num <- function(x) ifelse(is.na(x), "", sprintf("%.3g", x))
+fmt_ratio <- function(x) ifelse(is.na(x), "", sprintf("%.3g", x))
+median_or_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) NA_real_ else stats::median(x)
+}
+
+operation_levels <- c(
+  "legacy_stats_full",
+  "moments_projection_from_stats",
+  "cache_diagonal_from_legacy_gamma",
+  "cache_full_gamma_copy",
+  "cache_from_stats_copy_all",
+  "extract_diagonal_from_full_gamma",
+  "dwls_weight_from_diagonal",
+  "wls_weight_reinvert_full_gamma"
+)
+operation_labels <- c(
+  "Legacy full stats",
+  "Project moments",
+  "Copy diagonal cache",
+  "Copy full Gamma",
+  "Copy all from stats",
+  "Extract diagonal from full",
+  "DWLS weight from diagonal",
+  "Reinvert WLS weight"
+)
+construction$Operation <- factor(construction$operation,
+                                 levels = operation_levels,
+                                 labels = operation_labels)
+ok <- construction[construction$status == "ok", ]
+
+wide <- reshape(
+  ok[, c("design", "n", "p", "categories", "moment_dim", "gamma_mb",
+         "diagonal_mb", "operation", "median_ms")],
+  idvar = c("design", "n", "p", "categories", "moment_dim", "gamma_mb",
+            "diagonal_mb"),
+  timevar = "operation",
+  direction = "wide"
+)
+names(wide) <- sub("^median_ms\\.", "", names(wide))
+for (name in operation_levels) {
+  if (!name %in% names(wide)) wide[[name]] <- NA_real_
+}
+wide$wls_reinvert_share <- wide$wls_weight_reinvert_full_gamma /
+  wide$legacy_stats_full
+wide$diag_cache_share <- wide$cache_diagonal_from_legacy_gamma /
+  wide$legacy_stats_full
+wide$moments_share <- wide$moments_projection_from_stats /
+  wide$legacy_stats_full
+wide$full_gamma_mb_per_diag_mb <- wide$gamma_mb / wide$diagonal_mb
+```
+
+## Question
+
+The ordinal SNLLS speed pilot times fitting after the legacy ordinal statistic
+builder has already run. This experiment asks what that hides. It times the
+current all-ordinal construction boundary:
+
+- `OrdinalStats` from raw integer categories, which currently estimates
+  thresholds/polychorics, builds full `NACOV`, and materializes DWLS/WLS
+  weights;
+- projection from that full object to `OrdinalMoments`;
+- diagonal/full Gamma cache copies and weight construction from already
+  materialized legacy pieces.
+
+## Short Answer
+
+The current public raw boundary is still eager. `ordinal_stats_from_integer_data`
+materializes the full Gamma and WLS inverse before any fit path gets to choose
+ULS, DWLS, WLS, profiled thresholds, or SNLLS. The cache-aware fitting code is
+therefore proving that downstream consumers can avoid *using* full Gamma, but
+not yet that raw construction can avoid *building* it.
+
+That makes the next C++ target crisp: add a raw/lazy all-ordinal builder that
+can return `OrdinalMoments` plus only the requested Gamma materialization. The
+first useful version should support fit-only ULS/DWLS without full Gamma or WLS
+inverse construction; WLS and robust inference can continue to request full
+Gamma.
+
+## Run
+
+```{r}
+data.frame(
+  Item = metadata$key,
+  Value = metadata$value,
+  check.names = FALSE
+) |>
+  knitr::kable(row.names = FALSE)
+```
+
+## Status
+
+```{r}
+status <- aggregate(seed ~ p + categories + Operation + status,
+                    data = construction, FUN = length)
+names(status) <- c("p", "Categories", "Operation", "Status", "Rows")
+knitr::kable(status[order(status$p, status$Categories, status$Operation), ],
+             row.names = FALSE)
+```
+
+## Timing
+
+```{r}
+timing <- ok[, c("p", "categories", "moment_dim", "Operation", "median_ms")]
+names(timing) <- c("p", "Categories", "Moment dim", "Operation",
+                   "Median ms")
+timing$`Median ms` <- fmt_ms(timing$`Median ms`)
+knitr::kable(timing[order(timing$p, timing$Categories, timing$Operation), ],
+             row.names = FALSE)
+```
+
+These rows are not additive. They are boundary probes. For example, "Reinvert
+WLS weight" starts from an already available full Gamma and isolates the cost
+of inverting it again for a cache.
+
+## Relative Costs
+
+```{r}
+summary <- wide[, c("p", "categories", "moment_dim", "legacy_stats_full",
+                    "moments_share", "diag_cache_share",
+                    "wls_reinvert_share")]
+names(summary) <- c("p", "Categories", "Moment dim", "Legacy full stats ms",
+                    "Moments / legacy", "Diagonal cache / legacy",
+                    "WLS reinvert / legacy")
+summary$`Legacy full stats ms` <- fmt_ms(summary$`Legacy full stats ms`)
+summary$`Moments / legacy` <- fmt_ratio(summary$`Moments / legacy`)
+summary$`Diagonal cache / legacy` <- fmt_ratio(summary$`Diagonal cache / legacy`)
+summary$`WLS reinvert / legacy` <- fmt_ratio(summary$`WLS reinvert / legacy`)
+knitr::kable(summary[order(summary$p, summary$Categories), ],
+             row.names = FALSE)
+```
+
+Ratios are relative to the eager legacy `OrdinalStats` construction for the
+same synthetic data block. Values near zero do not mean those operations are
+unimportant generally; they mean the current public raw boundary has already
+paid the larger estimation and full-Gamma costs.
+
+```{r}
+#| fig-width: 8
+#| fig-height: 5
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  library(ggplot2)
+  plot_data <- ok
+  ggplot(plot_data, aes(moment_dim, median_ms, color = Operation)) +
+    geom_line(aes(group = interaction(Operation, categories))) +
+    geom_point(size = 2) +
+    facet_wrap(~ categories, labeller = label_both, scales = "free_y") +
+    scale_y_log10() +
+    labs(x = "Moment dimension", y = "Median ms, log scale",
+         color = "Operation") +
+    theme_minimal(base_size = 12)
+} else {
+  cat("ggplot2 not installed; skipping figure.")
+}
+```
+
+## Payload Size
+
+```{r}
+payload <- unique(wide[, c("p", "categories", "moment_dim", "gamma_mb",
+                           "diagonal_mb", "full_gamma_mb_per_diag_mb")])
+names(payload) <- c("p", "Categories", "Moment dim", "Full Gamma MB",
+                    "Diagonal MB", "Full / diagonal bytes")
+payload$`Full Gamma MB` <- fmt_num(payload$`Full Gamma MB`)
+payload$`Diagonal MB` <- fmt_num(payload$`Diagonal MB`)
+payload$`Full / diagonal bytes` <- fmt_num(payload$`Full / diagonal bytes`)
+knitr::kable(payload[order(payload$p, payload$Categories), ],
+             row.names = FALSE)
+```
+
+This is the memory side of the same boundary: a fit-only DWLS path only needs
+the Gamma diagonal, while the legacy constructor always creates the full square
+matrix and its WLS inverse.
+
+## Reproduce
+
+```sh
+Rscript experiments/13-ordinal-construction-boundary/run_experiment.R --smoke --preset fast
+(cd experiments/13-ordinal-construction-boundary && quarto render report.qmd)
+```
+
+For the preliminary sweep used here, run with `--preset opt --reps 3 --max-p 16`.
