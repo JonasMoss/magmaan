@@ -35,6 +35,7 @@ using magmaan::data::OrdinalThresholdMode;
 using magmaan::data::OrdinalWorkspacePurpose;
 using magmaan::estimate::Backend;
 using magmaan::estimate::Estimates;
+using magmaan::estimate::OrdinalParameterization;
 
 constexpr double quiet_nan() {
   return std::numeric_limits<double>::quiet_NaN();
@@ -138,6 +139,23 @@ std::string estimator_name(OrdinalEstimatorKind estimator) {
       return "WLS";
   }
   return "unknown";
+}
+
+std::string parameterization_name(OrdinalMomentParameterization parameterization) {
+  switch (parameterization) {
+    case OrdinalMomentParameterization::Delta:
+      return "delta";
+    case OrdinalMomentParameterization::Theta:
+      return "theta";
+  }
+  return "unknown";
+}
+
+OrdinalParameterization fit_parameterization(
+    OrdinalMomentParameterization parameterization) {
+  return parameterization == OrdinalMomentParameterization::Theta
+             ? OrdinalParameterization::Theta
+             : OrdinalParameterization::Delta;
 }
 
 std::string threshold_mode_name(OrdinalThresholdMode mode) {
@@ -704,6 +722,9 @@ int main(int argc, char** argv) {
       OrdinalEstimatorKind::ULS,
       OrdinalEstimatorKind::DWLS,
       OrdinalEstimatorKind::WLS};
+  const std::vector<OrdinalMomentParameterization> parameterizations = {
+      OrdinalMomentParameterization::Delta,
+      OrdinalMomentParameterization::Theta};
 
   for (const auto& cell : design) {
     const int p = 4 * cell.q;
@@ -800,241 +821,247 @@ int main(int argc, char** argv) {
     base.starts_ms = starts_timed.timing.median_ms;
 
     for (const auto estimator : estimators) {
-      const auto plan = magmaan::data::ordinal_weight_plan(
-          OrdinalWorkspacePurpose::FitOnly, estimator,
-          OrdinalMomentParameterization::Delta,
-          plan_threshold_mode(cell.threshold_mode));
+      for (const auto parameterization : parameterizations) {
+        const auto plan = magmaan::data::ordinal_weight_plan(
+            OrdinalWorkspacePurpose::FitOnly, estimator, parameterization,
+            plan_threshold_mode(cell.threshold_mode));
+        const auto bounded_parameterization =
+            fit_parameterization(parameterization);
+        Row parameterized_base = base;
+        parameterized_base.parameterization =
+            parameterization_name(parameterization);
 
-      Estimates full_bounded_ref;
-      bool have_full_bounded = false;
-      if (estimator != OrdinalEstimatorKind::ULS) {
-        const auto weight_kind =
-            estimator == OrdinalEstimatorKind::DWLS
-                ? magmaan::estimate::OrdinalWeightKind::DWLS
-                : magmaan::estimate::OrdinalWeightKind::WLS;
-        Row row = base;
-        row.estimator = estimator_name(estimator);
-        row.path = "full_bounded";
-        auto result = run_timed_fit(
-            row, reps,
-            [&]() {
-              return magmaan::estimate::fit_ordinal_bounded(
-                  pt, rep, stats, {}, weight_kind, x0, Backend::NloptLbfgs,
-                  opts);
-            },
-            nullptr, nullptr);
-        row = result.row;
-        if (result.have_estimate) {
-          have_full_bounded = true;
-          full_bounded_ref = std::move(result.estimate);
-          row.theta_diff_full_bounded = 0.0;
-          row.fmin_diff_full_bounded = 0.0;
-        }
-        write_row(out, row);
-      }
-
-      Estimates profiled_bounded_ref;
-      bool have_profiled_bounded = false;
-
-      {
-        auto cache = make_fit_cache(stats, estimator);
-        Row row = base;
-        row.estimator = estimator_name(estimator);
-        row.path = "threshold_profiled_bounded";
-        row.cache_setup_ms = cache.cache_setup.median_ms;
-        row.weight_setup_ms = cache.weight_setup.median_ms;
-        if (!cache.error.empty()) {
-          row.status = "error";
-          row.error = cache.error;
-        } else {
+        Estimates full_bounded_ref;
+        bool have_full_bounded = false;
+        if (estimator != OrdinalEstimatorKind::ULS) {
+          const auto weight_kind =
+              estimator == OrdinalEstimatorKind::DWLS
+                  ? magmaan::estimate::OrdinalWeightKind::DWLS
+                  : magmaan::estimate::OrdinalWeightKind::WLS;
+          Row row = parameterized_base;
+          row.estimator = estimator_name(estimator);
+          row.path = "full_bounded";
           auto result = run_timed_fit(
               row, reps,
               [&]() {
                 return magmaan::estimate::fit_ordinal_bounded(
-                    pt, rep, moments, cache.ptr(), {}, plan, x0,
-                    Backend::NloptLbfgs, opts);
+                    pt, rep, stats, {}, weight_kind, x0, Backend::NloptLbfgs,
+                    opts, bounded_parameterization);
               },
-              nullptr, have_full_bounded ? &full_bounded_ref : nullptr);
+              nullptr, nullptr);
           row = result.row;
-          const auto flags = cache_flags(cache.ptr());
-          row.cache_blocks = flags.block_count;
-          row.cache_has_diagonal = flags.has_diagonal;
-          row.cache_has_full = flags.has_full;
-          row.cache_has_dwls_weight = flags.has_dwls_weight;
-          row.cache_has_wls_weight = flags.has_wls_weight;
           if (result.have_estimate) {
-            have_profiled_bounded = true;
-            profiled_bounded_ref = std::move(result.estimate);
-            row.theta_diff_profiled_bounded = 0.0;
-            row.fmin_diff_profiled_bounded = 0.0;
+            have_full_bounded = true;
+            full_bounded_ref = std::move(result.estimate);
+            row.theta_diff_full_bounded = 0.0;
+            row.fmin_diff_full_bounded = 0.0;
           }
+          write_row(out, row);
         }
-        write_row(out, row);
-      }
 
-      {
-        auto cache = make_fit_cache(stats, estimator);
-        Row row = base;
-        row.estimator = estimator_name(estimator);
-        row.path = "snlls_full_thresholds";
-        row.cache_setup_ms = cache.cache_setup.median_ms;
-        row.weight_setup_ms = cache.weight_setup.median_ms;
-        if (!cache.error.empty()) {
-          row.status = "error";
-          row.error = cache.error;
-        } else {
-          auto result = run_timed_fit(
+        Estimates profiled_bounded_ref;
+        bool have_profiled_bounded = false;
+
+        {
+          auto cache = make_fit_cache(stats, estimator);
+          Row row = parameterized_base;
+          row.estimator = estimator_name(estimator);
+          row.path = "threshold_profiled_bounded";
+          row.cache_setup_ms = cache.cache_setup.median_ms;
+          row.weight_setup_ms = cache.weight_setup.median_ms;
+          if (!cache.error.empty()) {
+            row.status = "error";
+            row.error = cache.error;
+          } else {
+            auto result = run_timed_fit(
+                row, reps,
+                [&]() {
+                  return magmaan::estimate::fit_ordinal_bounded(
+                      pt, rep, moments, cache.ptr(), {}, plan, x0,
+                      Backend::NloptLbfgs, opts);
+                },
+                nullptr, have_full_bounded ? &full_bounded_ref : nullptr);
+            row = result.row;
+            const auto flags = cache_flags(cache.ptr());
+            row.cache_blocks = flags.block_count;
+            row.cache_has_diagonal = flags.has_diagonal;
+            row.cache_has_full = flags.has_full;
+            row.cache_has_dwls_weight = flags.has_dwls_weight;
+            row.cache_has_wls_weight = flags.has_wls_weight;
+            if (result.have_estimate) {
+              have_profiled_bounded = true;
+              profiled_bounded_ref = std::move(result.estimate);
+              row.theta_diff_profiled_bounded = 0.0;
+              row.fmin_diff_profiled_bounded = 0.0;
+            }
+          }
+          write_row(out, row);
+        }
+
+        {
+          auto cache = make_fit_cache(stats, estimator);
+          Row row = parameterized_base;
+          row.estimator = estimator_name(estimator);
+          row.path = "snlls_full_thresholds";
+          row.cache_setup_ms = cache.cache_setup.median_ms;
+          row.weight_setup_ms = cache.weight_setup.median_ms;
+          if (!cache.error.empty()) {
+            row.status = "error";
+            row.error = cache.error;
+          } else {
+            auto result = run_timed_fit(
+                row, reps,
+                [&]() {
+                  return magmaan::estimate::fit_ordinal_snlls_full_thresholds(
+                      pt, rep, moments, cache.ptr(), plan, x0,
+                      Backend::NloptLbfgs, opts);
+                },
+                have_profiled_bounded ? &profiled_bounded_ref : nullptr,
+                have_full_bounded ? &full_bounded_ref : nullptr);
+            row = result.row;
+            const auto flags = cache_flags(cache.ptr());
+            row.cache_blocks = flags.block_count;
+            row.cache_has_diagonal = flags.has_diagonal;
+            row.cache_has_full = flags.has_full;
+            row.cache_has_dwls_weight = flags.has_dwls_weight;
+            row.cache_has_wls_weight = flags.has_wls_weight;
+          }
+          write_row(out, row);
+        }
+
+        {
+          auto cache = make_fit_cache(stats, estimator);
+          Row row = parameterized_base;
+          row.estimator = estimator_name(estimator);
+          row.path = "snlls";
+          row.cache_setup_ms = cache.cache_setup.median_ms;
+          row.weight_setup_ms = cache.weight_setup.median_ms;
+          if (!cache.error.empty()) {
+            row.status = "error";
+            row.error = cache.error;
+          } else {
+            auto result = run_timed_fit(
+                row, reps,
+                [&]() {
+                  return magmaan::estimate::fit_ordinal_snlls(
+                      pt, rep, moments, cache.ptr(), plan, x0,
+                      Backend::NloptLbfgs, opts);
+                },
+                have_profiled_bounded ? &profiled_bounded_ref : nullptr,
+                have_full_bounded ? &full_bounded_ref : nullptr);
+            row = result.row;
+            const auto flags = cache_flags(cache.ptr());
+            row.cache_blocks = flags.block_count;
+            row.cache_has_diagonal = flags.has_diagonal;
+            row.cache_has_full = flags.has_full;
+            row.cache_has_dwls_weight = flags.has_dwls_weight;
+            row.cache_has_wls_weight = flags.has_wls_weight;
+          }
+          write_row(out, row);
+        }
+
+        {
+          Row row = parameterized_base;
+          row.estimator = estimator_name(estimator);
+          row.path = "snlls_e2e_legacy";
+          row.construction = "legacy_stats";
+          CacheFlags last_flags;
+          auto result = run_timed_estimate(
               row, reps,
-              [&]() {
-                return magmaan::estimate::fit_ordinal_snlls_full_thresholds(
-                    pt, rep, moments, cache.ptr(), plan, x0,
+              [&](Estimates &last, std::string &error) {
+                auto computed =
+                    magmaan::data::ordinal_stats_from_integer_data({data});
+                if (!computed.has_value()) {
+                  error = computed.error().detail;
+                  return false;
+                }
+                auto local_moments =
+                    magmaan::data::ordinal_moments_from_stats(*computed);
+                auto starts = magmaan::estimate::ordinal_start_values(
+                    pt, rep, local_moments, {});
+                if (!starts.has_value()) {
+                  error = starts.error().detail;
+                  return false;
+                }
+                auto cache = make_fit_cache_unmeasured(*computed, estimator);
+                if (!cache.error.empty()) {
+                  error = cache.error;
+                  return false;
+                }
+                last_flags = cache_flags(cache.ptr());
+                auto fit = magmaan::estimate::fit_ordinal_snlls(
+                    pt, rep, local_moments, cache.ptr(), plan, *starts,
                     Backend::NloptLbfgs, opts);
+                if (!fit.has_value()) {
+                  error = fit.error().detail;
+                  return false;
+                }
+                last = *fit;
+                return true;
               },
               have_profiled_bounded ? &profiled_bounded_ref : nullptr,
               have_full_bounded ? &full_bounded_ref : nullptr);
           row = result.row;
-          const auto flags = cache_flags(cache.ptr());
-          row.cache_blocks = flags.block_count;
-          row.cache_has_diagonal = flags.has_diagonal;
-          row.cache_has_full = flags.has_full;
-          row.cache_has_dwls_weight = flags.has_dwls_weight;
-          row.cache_has_wls_weight = flags.has_wls_weight;
+          row.cache_blocks = last_flags.block_count;
+          row.cache_has_diagonal = last_flags.has_diagonal;
+          row.cache_has_full = last_flags.has_full;
+          row.cache_has_dwls_weight = last_flags.has_dwls_weight;
+          row.cache_has_wls_weight = last_flags.has_wls_weight;
+          write_row(out, row);
         }
-        write_row(out, row);
-      }
 
-      {
-        auto cache = make_fit_cache(stats, estimator);
-        Row row = base;
-        row.estimator = estimator_name(estimator);
-        row.path = "snlls";
-        row.cache_setup_ms = cache.cache_setup.median_ms;
-        row.weight_setup_ms = cache.weight_setup.median_ms;
-        if (!cache.error.empty()) {
-          row.status = "error";
-          row.error = cache.error;
-        } else {
-          auto result = run_timed_fit(
+        if (estimator == OrdinalEstimatorKind::ULS ||
+            estimator == OrdinalEstimatorKind::DWLS) {
+          Row row = parameterized_base;
+          row.estimator = estimator_name(estimator);
+          row.path = "snlls_e2e_lazy";
+          row.construction = "lazy_workspace";
+          row.stats_ms = quiet_nan();
+          row.moments_ms = quiet_nan();
+          row.starts_ms = quiet_nan();
+          row.cache_setup_ms = quiet_nan();
+          row.weight_setup_ms = quiet_nan();
+          CacheFlags last_flags;
+          auto result = run_timed_estimate(
               row, reps,
-              [&]() {
-                return magmaan::estimate::fit_ordinal_snlls(
-                    pt, rep, moments, cache.ptr(), plan, x0,
+              [&](Estimates &last, std::string &error) {
+                auto workspace =
+                    magmaan::data::ordinal_workspace_from_integer_data({data},
+                                                                       plan);
+                if (!workspace.has_value()) {
+                  error = workspace.error().detail;
+                  return false;
+                }
+                auto starts = magmaan::estimate::ordinal_start_values(
+                    pt, rep, workspace->moments, {});
+                if (!starts.has_value()) {
+                  error = starts.error().detail;
+                  return false;
+                }
+                auto *cache_ptr = workspace->gamma_cache.block_count() == 0
+                                      ? nullptr
+                                      : &workspace->gamma_cache;
+                last_flags = cache_flags(cache_ptr);
+                auto fit = magmaan::estimate::fit_ordinal_snlls(
+                    pt, rep, workspace->moments, cache_ptr, plan, *starts,
                     Backend::NloptLbfgs, opts);
+                if (!fit.has_value()) {
+                  error = fit.error().detail;
+                  return false;
+                }
+                last = *fit;
+                return true;
               },
               have_profiled_bounded ? &profiled_bounded_ref : nullptr,
               have_full_bounded ? &full_bounded_ref : nullptr);
           row = result.row;
-          const auto flags = cache_flags(cache.ptr());
-          row.cache_blocks = flags.block_count;
-          row.cache_has_diagonal = flags.has_diagonal;
-          row.cache_has_full = flags.has_full;
-          row.cache_has_dwls_weight = flags.has_dwls_weight;
-          row.cache_has_wls_weight = flags.has_wls_weight;
+          row.cache_blocks = last_flags.block_count;
+          row.cache_has_diagonal = last_flags.has_diagonal;
+          row.cache_has_full = last_flags.has_full;
+          row.cache_has_dwls_weight = last_flags.has_dwls_weight;
+          row.cache_has_wls_weight = last_flags.has_wls_weight;
+          write_row(out, row);
         }
-        write_row(out, row);
-      }
-
-      {
-        Row row = base;
-        row.estimator = estimator_name(estimator);
-        row.path = "snlls_e2e_legacy";
-        row.construction = "legacy_stats";
-        CacheFlags last_flags;
-        auto result = run_timed_estimate(
-            row, reps,
-            [&](Estimates& last, std::string& error) {
-              auto computed =
-                  magmaan::data::ordinal_stats_from_integer_data({data});
-              if (!computed.has_value()) {
-                error = computed.error().detail;
-                return false;
-              }
-              auto local_moments =
-                  magmaan::data::ordinal_moments_from_stats(*computed);
-              auto starts = magmaan::estimate::ordinal_start_values(
-                  pt, rep, local_moments, {});
-              if (!starts.has_value()) {
-                error = starts.error().detail;
-                return false;
-              }
-              auto cache = make_fit_cache_unmeasured(*computed, estimator);
-              if (!cache.error.empty()) {
-                error = cache.error;
-                return false;
-              }
-              last_flags = cache_flags(cache.ptr());
-              auto fit = magmaan::estimate::fit_ordinal_snlls(
-                  pt, rep, local_moments, cache.ptr(), plan, *starts,
-                  Backend::NloptLbfgs, opts);
-              if (!fit.has_value()) {
-                error = fit.error().detail;
-                return false;
-              }
-              last = *fit;
-              return true;
-            },
-            have_profiled_bounded ? &profiled_bounded_ref : nullptr,
-            have_full_bounded ? &full_bounded_ref : nullptr);
-        row = result.row;
-        row.cache_blocks = last_flags.block_count;
-        row.cache_has_diagonal = last_flags.has_diagonal;
-        row.cache_has_full = last_flags.has_full;
-        row.cache_has_dwls_weight = last_flags.has_dwls_weight;
-        row.cache_has_wls_weight = last_flags.has_wls_weight;
-        write_row(out, row);
-      }
-
-      if (estimator == OrdinalEstimatorKind::ULS ||
-          estimator == OrdinalEstimatorKind::DWLS) {
-        Row row = base;
-        row.estimator = estimator_name(estimator);
-        row.path = "snlls_e2e_lazy";
-        row.construction = "lazy_workspace";
-        row.stats_ms = quiet_nan();
-        row.moments_ms = quiet_nan();
-        row.starts_ms = quiet_nan();
-        row.cache_setup_ms = quiet_nan();
-        row.weight_setup_ms = quiet_nan();
-        CacheFlags last_flags;
-        auto result = run_timed_estimate(
-            row, reps,
-            [&](Estimates& last, std::string& error) {
-              auto workspace =
-                  magmaan::data::ordinal_workspace_from_integer_data({data},
-                                                                     plan);
-              if (!workspace.has_value()) {
-                error = workspace.error().detail;
-                return false;
-              }
-              auto starts = magmaan::estimate::ordinal_start_values(
-                  pt, rep, workspace->moments, {});
-              if (!starts.has_value()) {
-                error = starts.error().detail;
-                return false;
-              }
-              auto* cache_ptr = workspace->gamma_cache.block_count() == 0
-                                    ? nullptr
-                                    : &workspace->gamma_cache;
-              last_flags = cache_flags(cache_ptr);
-              auto fit = magmaan::estimate::fit_ordinal_snlls(
-                  pt, rep, workspace->moments, cache_ptr, plan, *starts,
-                  Backend::NloptLbfgs, opts);
-              if (!fit.has_value()) {
-                error = fit.error().detail;
-                return false;
-              }
-              last = *fit;
-              return true;
-            },
-            have_profiled_bounded ? &profiled_bounded_ref : nullptr,
-            have_full_bounded ? &full_bounded_ref : nullptr);
-        row = result.row;
-        row.cache_blocks = last_flags.block_count;
-        row.cache_has_diagonal = last_flags.has_diagonal;
-        row.cache_has_full = last_flags.has_full;
-        row.cache_has_dwls_weight = last_flags.has_dwls_weight;
-        row.cache_has_wls_weight = last_flags.has_wls_weight;
-        write_row(out, row);
       }
     }
   }

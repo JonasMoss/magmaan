@@ -32,9 +32,10 @@ speed <- utils::read.csv(speed_path, check.names = FALSE,
 metadata <- utils::read.csv(metadata_path, check.names = FALSE,
                             stringsAsFactors = FALSE)
 for (name in c("construction", "total_median_ms", "total_min_ms",
-               "total_max_ms")) {
+               "total_max_ms", "parameterization")) {
   if (!name %in% names(speed)) speed[[name]] <- NA
 }
+speed$parameterization[is.na(speed$parameterization)] <- "delta"
 
 fmt_ms <- function(x) ifelse(is.na(x), "", sprintf("%.2f", x))
 fmt_num <- function(x) ifelse(is.na(x), "", sprintf("%.3g", x))
@@ -57,6 +58,11 @@ method_labels <- c("Full bounded", "Threshold-profiled bounded",
                    "Legacy raw-to-SNLLS", "Lazy raw-to-SNLLS")
 speed$Method <- factor(speed$path, levels = method_levels,
                        labels = method_labels)
+speed$Parameterization <- factor(
+  speed$parameterization,
+  levels = c("delta", "theta"),
+  labels = c("Delta", "Theta")
+)
 speed$timed_ms <- ifelse(is.finite(speed$total_median_ms),
                          speed$total_median_ms, speed$fit_median_ms)
 speed$Design <- factor(
@@ -68,13 +74,20 @@ ok <- speed[speed$status == "ok", ]
 
 wide <- reshape(
   ok[, c("design", "case_id", "q", "p", "categories", "threshold_balance",
-         "threshold_mode", "estimator", "path", "fit_median_ms")],
+         "threshold_mode", "parameterization", "estimator", "path",
+         "fit_median_ms")],
   idvar = c("design", "case_id", "q", "p", "categories",
-            "threshold_balance", "threshold_mode", "estimator"),
+            "threshold_balance", "threshold_mode", "parameterization",
+            "estimator"),
   timevar = "path",
   direction = "wide"
 )
 names(wide) <- sub("^fit_median_ms\\.", "", names(wide))
+wide$Parameterization <- factor(
+  wide$parameterization,
+  levels = c("delta", "theta"),
+  labels = c("Delta", "Theta")
+)
 for (name in fit_method_levels) {
   if (!name %in% names(wide)) wide[[name]] <- NA_real_
 }
@@ -88,9 +101,11 @@ e2e <- ok[ok$path %in% e2e_levels, ]
 if (nrow(e2e)) {
   wide_e2e <- reshape(
     e2e[, c("design", "case_id", "q", "p", "categories", "threshold_balance",
-            "threshold_mode", "estimator", "path", "timed_ms")],
+            "threshold_mode", "parameterization", "estimator", "path",
+            "timed_ms")],
     idvar = c("design", "case_id", "q", "p", "categories",
-              "threshold_balance", "threshold_mode", "estimator"),
+              "threshold_balance", "threshold_mode", "parameterization",
+              "estimator"),
     timevar = "path",
     direction = "wide"
   )
@@ -107,12 +122,18 @@ if (nrow(e2e)) {
     categories = integer(),
     threshold_balance = character(),
     threshold_mode = character(),
+    parameterization = character(),
     estimator = character(),
     snlls_e2e_legacy = numeric(),
     snlls_e2e_lazy = numeric(),
     stringsAsFactors = FALSE
   )
 }
+wide_e2e$Parameterization <- factor(
+  wide_e2e$parameterization,
+  levels = c("delta", "theta"),
+  labels = c("Delta", "Theta")
+)
 wide_e2e$lazy_gain <- wide_e2e$snlls_e2e_legacy /
   wide_e2e$snlls_e2e_lazy
 ```
@@ -123,10 +144,11 @@ This pilot asks whether ordinal SNLLS shows the same basic speed pattern as
 the continuous Kreiberg-style SNLLS examples once thresholds and ordinal
 weights are in the objective. It now separates four costs where available:
 legacy full bounded fitting, threshold-profiled bounded fitting,
-full-threshold SNLLS, and threshold-profiled SNLLS. It also adds raw-data-to-fit
-SNLLS rows that compare the legacy eager ordinal constructor against the lazy
-fit-only workspace constructor for ULS/DWLS. The full direct bounded comparator
-is included for DWLS/WLS; ULS has the cache-aware comparator paths.
+full-threshold SNLLS, and threshold-profiled SNLLS, for both delta and theta
+parameterizations. It also adds raw-data-to-fit SNLLS rows that compare the
+legacy eager ordinal constructor against the lazy fit-only workspace constructor
+for ULS/DWLS. The full direct bounded comparator is included for DWLS/WLS; ULS
+has the cache-aware comparator paths.
 
 The design deliberately includes three views:
 
@@ -139,10 +161,12 @@ The design deliberately includes three views:
 
 In this pilot, the full direct comparator is a useful diagnostic rather than a
 guaranteed slower baseline: fit-only timings can favor the legacy full bounded
-path after statistic construction is excluded. The full-threshold SNLLS row
-profiles thresholds as ordinary Golub-Pereyra linear parameters, while the
-threshold-profiled SNLLS row applies the ordinal threshold map first and then
-profiles the remaining conditionally-linear covariance block. The fitted
+path after statistic construction is excluded. For delta, the full-threshold
+SNLLS row profiles thresholds as ordinary Golub-Pereyra linear parameters,
+while the threshold-profiled SNLLS row applies the ordinal threshold map first
+and then profiles the remaining conditionally-linear covariance block. For
+theta, the standardized covariance moments make that covariance block
+nonlinear, so SNLLS profiles threshold free parameters only. The fitted
 solutions match the bounded objectives to numerical tolerance.
 
 The end-to-end rows are the construction-aware check: legacy rows rebuild
@@ -167,9 +191,11 @@ data.frame(
 ## Status
 
 ```{r}
-status <- aggregate(seed ~ Design + estimator + Method + status,
+status <- aggregate(seed ~ Design + Parameterization + estimator + Method +
+                      status,
                     data = speed, FUN = length)
-names(status) <- c("Design", "Estimator", "Method", "Status", "Rows")
+names(status) <- c("Design", "Parameterization", "Estimator", "Method",
+                   "Status", "Rows")
 knitr::kable(status, row.names = FALSE)
 ```
 
@@ -179,15 +205,15 @@ knitr::kable(status, row.names = FALSE)
 agreement <- aggregate(
   cbind(theta_diff_profiled_bounded, fmin_diff_profiled_bounded,
         theta_diff_full_bounded, fmin_diff_full_bounded) ~
-    Design + estimator + Method,
+    Design + Parameterization + estimator + Method,
   data = ok,
   FUN = max_or_na,
   na.action = na.pass
 )
-names(agreement) <- c("Design", "Estimator", "Method",
+names(agreement) <- c("Design", "Parameterization", "Estimator", "Method",
                       "Max |theta - profiled|", "Max |fmin - profiled|",
                       "Max |theta - full|", "Max |fmin - full|")
-for (j in 4:ncol(agreement)) agreement[[j]] <- fmt_diff(agreement[[j]])
+for (j in 5:ncol(agreement)) agreement[[j]] <- fmt_diff(agreement[[j]])
 knitr::kable(agreement, row.names = FALSE)
 ```
 
@@ -196,7 +222,7 @@ knitr::kable(agreement, row.names = FALSE)
 ```{r}
 summary <- aggregate(cbind(profile_gain, full_snlls_gain, snlls_incremental,
                            threshold_snlls_gain, total_gain) ~
-                       design + estimator,
+                       design + Parameterization + estimator,
                      data = wide,
                      FUN = median_or_na,
                      na.action = na.pass)
@@ -211,13 +237,15 @@ summary$`Profiled / profiled SNLLS` <- fmt_num(summary$snlls_incremental)
 summary$`Full-threshold / profiled SNLLS` <-
   fmt_num(summary$threshold_snlls_gain)
 summary$`Full / profiled SNLLS` <- fmt_num(summary$total_gain)
-knitr::kable(summary[, c("Design", "estimator", "Full / profiled",
+knitr::kable(summary[, c("Design", "Parameterization", "estimator",
+                         "Full / profiled",
                          "Full / full-threshold SNLLS",
                          "Profiled / profiled SNLLS",
                          "Full-threshold / profiled SNLLS",
                          "Full / profiled SNLLS")],
              row.names = FALSE,
-             col.names = c("Design", "Estimator", "Full / Profiled",
+             col.names = c("Design", "Parameterization", "Estimator",
+                           "Full / Profiled",
                            "Full / Full-Threshold SNLLS",
                            "Profiled / Profiled SNLLS",
                            "Full-Threshold / Profiled SNLLS",
@@ -250,14 +278,16 @@ if (requireNamespace("ggplot2", quietly = TRUE)) {
     transform(scaling[is.finite(scaling$total_gain), ],
               Ratio = total_gain, Comparison = "Full / profiled SNLLS")
   )
-  ggplot(plot_data, aes(q, Ratio, color = estimator)) +
+  ggplot(plot_data, aes(q, Ratio, color = estimator,
+                        linetype = Parameterization)) +
     geom_hline(yintercept = 1, linetype = 2, color = "grey50") +
     geom_line() +
     geom_point(size = 2) +
     facet_wrap(~ Comparison, scales = "free_y") +
     labs(x = "Indicators per factor (q)",
          y = "Fit-time ratio",
-         color = "Estimator") +
+         color = "Estimator",
+         linetype = "Parameterization") +
     theme_minimal(base_size = 12)
 } else {
   cat("ggplot2 not installed; skipping figure.")
@@ -268,12 +298,14 @@ if (requireNamespace("ggplot2", quietly = TRUE)) {
 
 ```{r}
 worked <- wide[wide$design == "worked_example", ]
-worked_table <- worked[, c("case_id", "q", "p", "categories", "estimator",
-                           "full_bounded", "threshold_profiled_bounded",
+worked_table <- worked[, c("case_id", "q", "p", "categories",
+                           "Parameterization", "estimator", "full_bounded",
+                           "threshold_profiled_bounded",
                            "snlls_full_thresholds", "snlls", "profile_gain",
                            "full_snlls_gain", "snlls_incremental",
                            "threshold_snlls_gain", "total_gain")]
-names(worked_table) <- c("Case", "q", "p", "Categories", "Estimator",
+names(worked_table) <- c("Case", "q", "p", "Categories",
+                         "Parameterization", "Estimator",
                          "Full bounded ms", "Profiled bounded ms",
                          "Full-threshold SNLLS ms",
                          "Profiled SNLLS ms", "Full / profiled",
@@ -304,11 +336,13 @@ knitr::kable(worked_table, row.names = FALSE)
 ```{r}
 stress <- wide[wide$design == "threshold_stress", ]
 stress_table <- stress[, c("categories", "threshold_balance",
-                           "threshold_mode", "estimator", "profile_gain",
-                           "full_snlls_gain", "snlls_incremental",
-                           "threshold_snlls_gain", "total_gain")]
+                           "threshold_mode", "Parameterization", "estimator",
+                           "profile_gain", "full_snlls_gain",
+                           "snlls_incremental", "threshold_snlls_gain",
+                           "total_gain")]
 names(stress_table) <- c("Categories", "Threshold balance",
-                         "Threshold mode", "Estimator", "Full / profiled",
+                         "Threshold mode", "Parameterization", "Estimator",
+                         "Full / profiled",
                          "Full / full-threshold SNLLS",
                          "Profiled / profiled SNLLS",
                          "Full-threshold / profiled SNLLS",
@@ -325,6 +359,7 @@ stress_table$`Full / profiled SNLLS` <-
 knitr::kable(stress_table[order(stress_table$Categories,
                                 stress_table$`Threshold balance`,
                                 stress_table$`Threshold mode`,
+                                stress_table$Parameterization,
                                 stress_table$Estimator), ],
              row.names = FALSE)
 ```
@@ -338,7 +373,8 @@ preserve the profiling advantage.
 ```{r}
 if (nrow(wide_e2e)) {
   e2e_summary <- aggregate(cbind(snlls_e2e_legacy, snlls_e2e_lazy,
-                                 lazy_gain) ~ design + estimator,
+                                 lazy_gain) ~ design + Parameterization +
+                             estimator,
                            data = wide_e2e,
                            FUN = median_or_na,
                            na.action = na.pass)
@@ -352,11 +388,12 @@ if (nrow(wide_e2e)) {
   e2e_summary$`Lazy raw-to-SNLLS ms` <-
     fmt_ms(e2e_summary$snlls_e2e_lazy)
   e2e_summary$`Legacy / lazy` <- fmt_num(e2e_summary$lazy_gain)
-  knitr::kable(e2e_summary[, c("Design", "estimator",
+  knitr::kable(e2e_summary[, c("Design", "Parameterization", "estimator",
                                "Legacy raw-to-SNLLS ms",
                                "Lazy raw-to-SNLLS ms", "Legacy / lazy")],
                row.names = FALSE,
-               col.names = c("Design", "Estimator", "Legacy Raw-to-SNLLS ms",
+               col.names = c("Design", "Parameterization", "Estimator",
+                             "Legacy Raw-to-SNLLS ms",
                              "Lazy Raw-to-SNLLS ms", "Legacy / Lazy"))
 } else {
   cat("No end-to-end rows in this result file.")
@@ -375,13 +412,15 @@ if (requireNamespace("ggplot2", quietly = TRUE)) {
   library(ggplot2)
   e2e_scaling <- wide_e2e[wide_e2e$design == "kreiberg_scaling" &
                             is.finite(wide_e2e$lazy_gain), ]
-  ggplot(e2e_scaling, aes(q, lazy_gain, color = estimator)) +
+  ggplot(e2e_scaling, aes(q, lazy_gain, color = estimator,
+                          linetype = Parameterization)) +
     geom_hline(yintercept = 1, linetype = 2, color = "grey50") +
     geom_line() +
     geom_point(size = 2) +
     labs(x = "Indicators per factor (q)",
          y = "Legacy / lazy raw-to-SNLLS time",
-         color = "Estimator") +
+         color = "Estimator",
+         linetype = "Parameterization") +
     theme_minimal(base_size = 12)
 } else {
   cat("ggplot2 not installed; skipping figure.")
@@ -392,13 +431,13 @@ if (requireNamespace("ggplot2", quietly = TRUE)) {
 
 ```{r}
 cost <- aggregate(cbind(stats_ms, cache_setup_ms, weight_setup_ms) ~
-                    Design + estimator + Method,
+                    Design + Parameterization + estimator + Method,
                   data = ok,
                   FUN = median_or_na,
                   na.action = na.pass)
-names(cost) <- c("Design", "Estimator", "Method", "Stats ms",
-                 "Cache setup ms", "Weight setup ms")
-for (j in 4:ncol(cost)) cost[[j]] <- fmt_ms(cost[[j]])
+names(cost) <- c("Design", "Parameterization", "Estimator", "Method",
+                 "Stats ms", "Cache setup ms", "Weight setup ms")
+for (j in 5:ncol(cost)) cost[[j]] <- fmt_ms(cost[[j]])
 knitr::kable(cost, row.names = FALSE)
 ```
 
@@ -412,13 +451,15 @@ SNLLS rows reuse the ordinal moment/Gamma cache.
 ## Caveats
 
 This is a speed pilot, not a simulation study. It uses one synthetic
-repeated-measure model family, all-ordinal complete data, the delta
-parameterization, and NLopt L-BFGS. It does not compare against lavaan timing,
-mixed ordinal data, theta parameterization, robust reporting, or alternate
-optimizers. There is no full direct ULS comparator in this run, so ULS only
-supports the cache-aware bounded/SNLLS splits. The end-to-end rows include
-raw category construction and starts, but still assume the parsed/lavaanified
-model has already been built.
+repeated-measure model family, all-ordinal complete data, delta/theta
+parameterizations, and NLopt L-BFGS. It does not compare against lavaan timing,
+mixed ordinal data, robust reporting, or alternate optimizers. There is no full
+direct ULS comparator in this run, so ULS only supports the cache-aware
+bounded/SNLLS splits. In theta rows, the `threshold_profiled_bounded` label is
+the cache-aware bounded comparator and the two SNLLS labels both use
+threshold-only Golub-Pereyra profiling. The end-to-end rows include raw
+category construction and starts, but still assume the parsed/lavaanified model
+has already been built.
 
 The default runner caps the Kreiberg-style scaling grid at `q <= 8` to keep
 the preliminary run practical. Use `--max-q 12` for the fuller literature-like

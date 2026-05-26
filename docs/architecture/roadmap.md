@@ -521,10 +521,12 @@ stop rather than any usable non-error return.
   `OrdinalMoments` without Gamma, fit-only DWLS returns `OrdinalMoments` plus
   the Gamma diagonal, and WLS/fit-plus-inference still fall back to full
   `OrdinalStats`/Gamma materialization. `experiments/11-ordinal-snlls-speed`
-  now also includes construction-aware raw-to-SNLLS rows: the legacy row
-  rebuilds `OrdinalStats`/moments/starts/cache inside the timed operation,
-  while the lazy ULS/DWLS row rebuilds `OrdinalWorkspace`, starts, and the
-  profiled SNLLS fit.
+  now includes delta/theta timing rows plus construction-aware raw-to-SNLLS
+  rows: the legacy row rebuilds `OrdinalStats`/moments/starts/cache inside the
+  timed operation, while the lazy ULS/DWLS row rebuilds `OrdinalWorkspace`,
+  starts, and the profiled SNLLS fit. Theta rows use the cache-aware bounded
+  comparator and threshold-only SNLLS profiling, so the report keeps them
+  separate from delta's threshold-plus-covariance profiling split.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
   thin R wrappers for ordinal stats plus DWLS/WLS fits.
 - The R ordinal data boundary exposes consolidated dispatchers:
