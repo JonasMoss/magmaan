@@ -433,3 +433,116 @@ TEST_CASE("SNLLS: Ceres backend recovers a feasible 1F covariance") {
   CHECK((samp.S[0] - sm.sigma[0]).cwiseAbs().maxCoeff() < 1e-5);
 }
 #endif
+
+// === fast α-solve telemetry ============================================
+//
+// The Golub–Pereyra inner α-solve in `profile_at()` tries Cholesky on
+// the normal-equations Gram first and falls back to rank-revealing QR
+// when the rcond gate doesn't clear. These tests verify the counters
+// reach `Estimates`, that the fast path fires on well-conditioned
+// problems, and that the fallback fires (without breaking the fit) when
+// the Gram is near-singular. See `docs/design/snlls-fast-alpha-solve.md`.
+
+TEST_CASE("SNLLS: fast α-solve fires on a well-conditioned 1F covariance") {
+  auto h = handles_for("f =~ x1 + x2 + x3");
+  SampleStats samp;
+  samp.S = {make_1f_S()};
+  samp.n_obs = {301};
+
+  auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
+  REQUIRE(x0.has_value());
+  auto est = magmaan::estimate::fit_snlls_gls(h.pt, h.rep, samp, *x0,
+                                              Backend::NloptLbfgs, snlls_opts());
+  REQUIRE(est.has_value());
+  CHECK(est->fmin < 1e-10);
+  // Counters surface through the SNLLS path with non-sentinel values.
+  CHECK(est->n_alpha_solve_fast >= 0);
+  CHECK(est->n_alpha_solve_fallback >= 0);
+  // At least one cache miss happened (the optimizer evaluates at β0).
+  CHECK(est->n_alpha_solve_fast + est->n_alpha_solve_fallback > 0);
+  // Well-conditioned Gram → fast path should win every cache miss.
+  CHECK(est->n_alpha_solve_fallback == 0);
+  CHECK(est->n_alpha_solve_fast > 0);
+}
+
+TEST_CASE("SNLLS: fast α-solve accounting on a 2F CFA") {
+  auto h = handles_for(
+      "f1 =~ x1 + x2 + x3\n"
+      "f2 =~ x4 + x5 + x6\n"
+      "f1 ~~ f2");
+  // Construct a population-implied covariance for the model, so the fit
+  // converges crisply and we can read clean accounting from the counters.
+  Eigen::MatrixXd Lambda = Eigen::MatrixXd::Zero(6, 2);
+  Lambda << 1.0, 0.0,
+            0.9, 0.0,
+            0.8, 0.0,
+            0.0, 1.0,
+            0.0, 0.85,
+            0.0, 0.75;
+  Eigen::Matrix2d Phi;
+  Phi << 1.5, 0.6,
+         0.6, 1.2;
+  Eigen::VectorXd theta(6);
+  theta << 0.7, 0.5, 0.6, 0.65, 0.55, 0.4;
+  Eigen::MatrixXd S = Lambda * Phi * Lambda.transpose() +
+                      theta.asDiagonal().toDenseMatrix();
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {500};
+
+  auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
+  REQUIRE(x0.has_value());
+  auto est = magmaan::estimate::fit_snlls_gls(h.pt, h.rep, samp, *x0,
+                                              Backend::NloptLbfgs, snlls_opts());
+  REQUIRE(est.has_value());
+  CHECK(est->fmin < 1e-8);
+  CHECK(est->n_alpha_solve_fast > 0);
+  CHECK(est->n_alpha_solve_fallback == 0);
+}
+
+TEST_CASE("SNLLS: fast α-solve falls back cleanly on near-singular Gram") {
+  // A 5-indicator 1F model fit against a rank-near-1 covariance. The
+  // residual-variance columns of the α-Jacobian become near-collinear
+  // (every indicator wants almost the same residual variance), so the
+  // Gram HᵀH has a small eigenvalue and the rcond gate should trip the
+  // QR fallback on at least one cache miss. The fit still has to
+  // succeed — QR's column pivoting handles the near-rank deficiency.
+  auto h = handles_for("f =~ x1 + x2 + x3 + x4 + x5");
+  Eigen::MatrixXd S(5, 5);
+  const double off = 0.9999999;
+  S << 1.0, off, off, off, off,
+       off, 1.0, off, off, off,
+       off, off, 1.0, off, off,
+       off, off, off, 1.0, off,
+       off, off, off, off, 1.0;
+  SampleStats samp;
+  samp.S = {S};
+  samp.n_obs = {300};
+
+  auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
+  REQUIRE(x0.has_value());
+  auto est = magmaan::estimate::fit_snlls_gls(h.pt, h.rep, samp, *x0,
+                                              Backend::NloptLbfgs, snlls_opts());
+  REQUIRE(est.has_value());
+  CHECK(std::isfinite(est->fmin));
+  CHECK(est->n_alpha_solve_fast + est->n_alpha_solve_fallback > 0);
+  // At least one cache miss should have fallen back to QR.
+  CHECK(est->n_alpha_solve_fallback >= 1);
+}
+
+TEST_CASE("SNLLS: alpha-solve counters are sentinel-NA on full-θ paths") {
+  // `fit_ml` etc. don't run the SNLLS path. The Estimates default keeps
+  // the counters at -1 so the R wrapper can map them to NA cleanly.
+  auto h = handles_for("f =~ x1 + x2 + x3");
+  SampleStats samp;
+  samp.S = {make_1f_S()};
+  samp.n_obs = {301};
+
+  auto x0 = magmaan::estimate::simple_start_values(h.pt, h.rep, samp, {});
+  REQUIRE(x0.has_value());
+  auto est = magmaan::estimate::fit_ml(h.pt, h.rep, samp, *x0, {},
+                                       Backend::NloptLbfgs, matlab_like_opts());
+  REQUIRE(est.has_value());
+  CHECK(est->n_alpha_solve_fast == -1);
+  CHECK(est->n_alpha_solve_fallback == -1);
+}

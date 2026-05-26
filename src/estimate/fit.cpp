@@ -637,6 +637,10 @@ compose_snlls(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
                   0.5 * r->squaredNorm(), 0};
     est.n_nonlinear = gp_or->n_nonlinear;
     est.n_linear    = gp_or->n_linear;
+    if (gp_or->n_alpha_solve_fast)
+      est.n_alpha_solve_fast = *gp_or->n_alpha_solve_fast;
+    if (gp_or->n_alpha_solve_fallback)
+      est.n_alpha_solve_fallback = *gp_or->n_alpha_solve_fallback;
     return est;
   }
 
@@ -650,6 +654,10 @@ compose_snlls(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
                 std::move(out->audit)};
   est.n_nonlinear = gp_or->n_nonlinear;
   est.n_linear    = gp_or->n_linear;
+  if (gp_or->n_alpha_solve_fast)
+    est.n_alpha_solve_fast = *gp_or->n_alpha_solve_fast;
+  if (gp_or->n_alpha_solve_fallback)
+    est.n_alpha_solve_fallback = *gp_or->n_alpha_solve_fallback;
   return est;
 }
 

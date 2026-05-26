@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include <Eigen/Core>
@@ -47,6 +48,13 @@ struct GpProblem {
   Eigen::VectorXd   beta0;
   std::int32_t      n_nonlinear = 0;
   std::int32_t      n_linear    = 0;
+  // Live counters of `profile_at()` cache misses that took the fast
+  // Cholesky-on-normal-equations path vs the rank-revealing QR fallback.
+  // Shared with the closure that drives the cache; safe to read after the
+  // outer optimizer has returned. Null on legacy construction paths.
+  // See `docs/design/snlls-fast-alpha-solve.md`.
+  std::shared_ptr<const std::int32_t> n_alpha_solve_fast;
+  std::shared_ptr<const std::int32_t> n_alpha_solve_fallback;
 };
 
 // Profile the linear parameters out of `base` (the θ-space GmmProblem from

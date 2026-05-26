@@ -782,6 +782,15 @@ Rcpp::List snlls_fit_result(Ctx& ctx,
   out["n_linear"] = est.n_linear >= 0
       ? Rcpp::IntegerVector::create(est.n_linear)
       : Rcpp::IntegerVector::create(NA_INTEGER);
+  // SNLLS inner-solve telemetry: count of `profile_at()` cache misses that
+  // took the fast Cholesky-on-normal-equations path vs the rank-revealing
+  // QR fallback. Same sentinel semantics as `n_nonlinear` / `n_linear`.
+  out["n_alpha_solve_fast"] = est.n_alpha_solve_fast >= 0
+      ? Rcpp::IntegerVector::create(est.n_alpha_solve_fast)
+      : Rcpp::IntegerVector::create(NA_INTEGER);
+  out["n_alpha_solve_fallback"] = est.n_alpha_solve_fallback >= 0
+      ? Rcpp::IntegerVector::create(est.n_alpha_solve_fallback)
+      : Rcpp::IntegerVector::create(NA_INTEGER);
   return out;
 }
 
