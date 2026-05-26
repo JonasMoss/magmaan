@@ -163,8 +163,9 @@ write_metadata(
       "Compare full bounded, threshold-profiled bounded, full-threshold",
       "SNLLS, and threshold-profiled SNLLS all-ordinal delta/theta fit speed",
       "across a Kreiberg-style repeated-measure family, one worked example,",
-      "and threshold stress cells, with raw-to-SNLLS legacy/lazy construction",
-      "rows for ULS/DWLS."
+      "threshold stress cells, and a mixed continuous/ordinal delta slice,",
+      "with raw-to-SNLLS legacy/lazy construction rows for ULS/DWLS and",
+      "raw-to-fit mixed bounded/SNLLS rows."
     ),
     preset = args$preset,
     smoke = args$smoke,

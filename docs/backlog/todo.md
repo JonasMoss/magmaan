@@ -206,10 +206,13 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   next: the benchmark and report now split every row by delta/theta
   parameterization; theta rows intentionally use the cache-aware bounded
   comparator and threshold-only SNLLS profiling rather than delta's
-  threshold-plus-covariance profiling split. The latest opt smoke pilot covers
-  the compact `--smoke` grid with `q <= 4`; open follow-up is the fuller
-  `q <= 12` literature-like sweep and optional lavaan context rows if the
-  paper needs them.
+  threshold-plus-covariance profiling split. Landed mixed extension: the same
+  experiment now includes mixed continuous/ordinal delta rows comparing
+  materialized full bounded DWLS/WLS with materialized full-threshold SNLLS,
+  plus raw-to-fit mixed bounded/SNLLS construction timings. The latest opt
+  smoke pilot covers the compact `--smoke` grid with `q <= 4`; open follow-up
+  is the fuller `q <= 12` literature-like sweep and optional lavaan context
+  rows if the paper needs them.
 - **S.** Extend the ordinal threshold-constraint support experiment
   (`experiments/12-ordinal-threshold-constraints`) only if the paper needs
   broader constraint evidence. The first opt pilot is single-group ordinal CFA:
