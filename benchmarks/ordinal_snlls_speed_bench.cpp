@@ -30,6 +30,7 @@ namespace {
 using magmaan::data::OrdinalEstimatorKind;
 using magmaan::data::OrdinalGammaCache;
 using magmaan::data::OrdinalMomentParameterization;
+using magmaan::data::MixedOrdinalStats;
 using magmaan::data::OrdinalStats;
 using magmaan::data::OrdinalThresholdMode;
 using magmaan::data::OrdinalWorkspacePurpose;
@@ -229,6 +230,63 @@ std::string make_repeated_model_syntax(int q, int categories,
   return syntax.str();
 }
 
+int mixed_ordinal_index(int factor, int j, int q) {
+  return factor * (2 * q) + j + 1;
+}
+
+int mixed_continuous_index(int factor, int j, int q) {
+  return factor * (2 * q) + q + j + 1;
+}
+
+std::string make_mixed_repeated_model_syntax(int q, int categories) {
+  std::ostringstream syntax;
+  for (int f = 0; f < 4; ++f) {
+    syntax << "f" << (f + 1) << " =~ ";
+    bool first = true;
+    for (int j = 0; j < q; ++j) {
+      if (!first) syntax << " + ";
+      first = false;
+      syntax << "x" << mixed_ordinal_index(f, j, q);
+    }
+    for (int j = 0; j < q; ++j) {
+      if (!first) syntax << " + ";
+      first = false;
+      syntax << "x" << mixed_continuous_index(f, j, q);
+    }
+    syntax << "\n";
+  }
+
+  for (int j = 0; j < q; ++j) {
+    syntax << "x" << mixed_ordinal_index(0, j, q) << " ~~ x"
+           << mixed_ordinal_index(1, j, q) << "\n";
+    syntax << "x" << mixed_ordinal_index(2, j, q) << " ~~ x"
+           << mixed_ordinal_index(3, j, q) << "\n";
+    syntax << "x" << mixed_continuous_index(0, j, q) << " ~~ x"
+           << mixed_continuous_index(1, j, q) << "\n";
+    syntax << "x" << mixed_continuous_index(2, j, q) << " ~~ x"
+           << mixed_continuous_index(3, j, q) << "\n";
+  }
+
+  const int n_threshold = categories - 1;
+  for (int f = 0; f < 4; ++f) {
+    for (int j = 0; j < q; ++j) {
+      syntax << "x" << mixed_ordinal_index(f, j, q) << " | ";
+      for (int k = 1; k <= n_threshold; ++k) {
+        if (k > 1) syntax << " + ";
+        syntax << "t" << k;
+      }
+      syntax << "\n";
+    }
+  }
+  for (int f = 0; f < 4; ++f) {
+    for (int j = 0; j < q; ++j) {
+      const int idx = mixed_ordinal_index(f, j, q);
+      syntax << "x" << idx << " ~*~ 1*x" << idx << "\n";
+    }
+  }
+  return syntax.str();
+}
+
 Eigen::MatrixXd equicor_chol(int size, double rho) {
   Eigen::MatrixXd cor = Eigen::MatrixXd::Constant(size, size, rho);
   cor.diagonal().setOnes();
@@ -246,6 +304,37 @@ Eigen::MatrixXd repeated_residual_chol(int q, double residual_var,
     theta(q + j, j) = residual_cov;
     theta(2 * q + j, 3 * q + j) = residual_cov;
     theta(3 * q + j, 2 * q + j) = residual_cov;
+  }
+  Eigen::LLT<Eigen::MatrixXd> llt(theta);
+  return llt.matrixL();
+}
+
+Eigen::MatrixXd mixed_residual_chol(int q, double residual_cov) {
+  const int p = 8 * q;
+  Eigen::MatrixXd theta = Eigen::MatrixXd::Identity(p, p);
+  for (int f = 0; f < 4; ++f) {
+    for (int j = 0; j < q; ++j) {
+      const int cont = mixed_continuous_index(f, j, q) - 1;
+      theta(cont, cont) = 0.70;
+    }
+  }
+  for (int j = 0; j < q; ++j) {
+    const int o1 = mixed_ordinal_index(0, j, q) - 1;
+    const int o2 = mixed_ordinal_index(1, j, q) - 1;
+    const int o3 = mixed_ordinal_index(2, j, q) - 1;
+    const int o4 = mixed_ordinal_index(3, j, q) - 1;
+    const int c1 = mixed_continuous_index(0, j, q) - 1;
+    const int c2 = mixed_continuous_index(1, j, q) - 1;
+    const int c3 = mixed_continuous_index(2, j, q) - 1;
+    const int c4 = mixed_continuous_index(3, j, q) - 1;
+    theta(o1, o2) = residual_cov;
+    theta(o2, o1) = residual_cov;
+    theta(o3, o4) = residual_cov;
+    theta(o4, o3) = residual_cov;
+    theta(c1, c2) = 0.70 * residual_cov;
+    theta(c2, c1) = 0.70 * residual_cov;
+    theta(c3, c4) = 0.70 * residual_cov;
+    theta(c4, c3) = 0.70 * residual_cov;
   }
   Eigen::LLT<Eigen::MatrixXd> llt(theta);
   return llt.matrixL();
@@ -284,6 +373,56 @@ Eigen::MatrixXd simulate_repeated_ordinal(int n, int q, int categories,
     }
   }
   return x;
+}
+
+Eigen::MatrixXd simulate_repeated_mixed(int n, int q, int categories,
+                                        const std::string& balance, int seed,
+                                        double loading = 0.7,
+                                        double factor_cor = 0.3,
+                                        double residual_cov = 0.2) {
+  std::mt19937 rng(static_cast<std::mt19937::result_type>(seed));
+  std::normal_distribution<double> norm(0.0, 1.0);
+  const int p = 8 * q;
+  const auto thresholds = thresholds_for_categories(categories, balance);
+  const Eigen::MatrixXd factor_L = equicor_chol(4, factor_cor);
+  const Eigen::MatrixXd resid_L = mixed_residual_chol(q, residual_cov);
+
+  Eigen::MatrixXd x(n, p);
+  for (Eigen::Index i = 0; i < x.rows(); ++i) {
+    Eigen::VectorXd z_eta(4);
+    for (Eigen::Index k = 0; k < z_eta.size(); ++k) z_eta(k) = norm(rng);
+    const Eigen::VectorXd eta = factor_L * z_eta;
+    Eigen::VectorXd z_eps(p);
+    for (Eigen::Index k = 0; k < z_eps.size(); ++k) z_eps(k) = norm(rng);
+    const Eigen::VectorXd eps = resid_L * z_eps;
+    for (int f = 0; f < 4; ++f) {
+      for (int j = 0; j < q; ++j) {
+        const int ord = mixed_ordinal_index(f, j, q) - 1;
+        const double y_ord = loading * eta(f) + eps(ord);
+        int category = 1;
+        for (const double threshold : thresholds) {
+          if (y_ord > threshold) ++category;
+        }
+        x(i, ord) = static_cast<double>(category);
+
+        const int cont = mixed_continuous_index(f, j, q) - 1;
+        const double mean = 0.10 * static_cast<double>(f + 1) -
+                            0.04 * static_cast<double>(j + 1);
+        x(i, cont) = mean + loading * eta(f) + eps(cont);
+      }
+    }
+  }
+  return x;
+}
+
+std::vector<std::int32_t> mixed_ordered_mask(int q) {
+  std::vector<std::int32_t> ordered(static_cast<std::size_t>(8 * q), 0);
+  for (int f = 0; f < 4; ++f) {
+    for (int j = 0; j < q; ++j) {
+      ordered[static_cast<std::size_t>(mixed_ordinal_index(f, j, q) - 1)] = 1;
+    }
+  }
+  return ordered;
 }
 
 int moment_dimension(int p, int categories) {
@@ -386,12 +525,15 @@ double theta_max_abs_diff(const Estimates& lhs, const Estimates& rhs) {
 }
 
 struct Row {
+  std::string data_kind = "ordinal";
   std::string design;
   std::string case_id;
   int seed = 0;
   int n = 0;
   int q = 0;
   int p = 0;
+  int n_ordered = 0;
+  int n_continuous = 0;
   int categories = 0;
   std::string threshold_balance;
   std::string threshold_mode;
@@ -438,7 +580,8 @@ struct Row {
 };
 
 void write_header(std::ostream& out) {
-  out << "design,case_id,seed,n,q,p,categories,threshold_balance,"
+  out << "data_kind,design,case_id,seed,n,q,p,n_ordered,n_continuous,"
+         "categories,threshold_balance,"
          "threshold_mode,reps,max_iter,n_free,n_thresholds,moment_dim,"
          "parameterization,estimator,path,construction,status,error,"
          "model_setup_ms,stats_ms,moments_ms,starts_ms,"
@@ -453,9 +596,11 @@ void write_header(std::ostream& out) {
 }
 
 void write_row(std::ostream& out, const Row& row) {
-  out << csv_escape(row.design) << ',' << csv_escape(row.case_id) << ','
-      << row.seed << ',' << row.n << ',' << row.q << ',' << row.p << ','
-      << row.categories << ',' << csv_escape(row.threshold_balance) << ','
+  out << csv_escape(row.data_kind) << ',' << csv_escape(row.design) << ','
+      << csv_escape(row.case_id) << ',' << row.seed << ',' << row.n << ','
+      << row.q << ',' << row.p << ',' << row.n_ordered << ','
+      << row.n_continuous << ',' << row.categories << ','
+      << csv_escape(row.threshold_balance) << ','
       << csv_escape(row.threshold_mode) << ',' << row.reps << ','
       << row.max_iter << ',' << row.n_free << ',' << row.n_thresholds << ','
       << row.moment_dim << ',' << csv_escape(row.parameterization) << ','
@@ -570,6 +715,7 @@ TimedFitResult run_timed_estimate(Row base, int reps, Fn&& fn,
 }
 
 struct DesignCell {
+  bool mixed = false;
   std::string design;
   std::string case_id;
   int n = 0;
@@ -610,6 +756,34 @@ std::vector<DesignCell> make_design(bool smoke, int seed_base, int max_q) {
                  .seed = seed_base + offset});
   ++offset;
 
+  const int mixed_max_q = smoke ? 1
+                                : std::max(1, std::min(4, capped_max_q / 2));
+  for (int q = 1; q <= mixed_max_q; ++q) {
+    out.push_back({.mixed = true,
+                   .design = "mixed_scaling",
+                   .case_id = "mixed_q" + std::to_string(q),
+                   .n = smoke ? 500 : 1500,
+                   .q = q,
+                   .categories = 5,
+                   .threshold_balance = "symmetric",
+                   .threshold_mode = OrdinalThresholdMode::FreeIdentity,
+                   .seed = seed_base + offset});
+    ++offset;
+  }
+
+  const int mixed_worked_q = smoke ? 1 : 3;
+  out.push_back({.mixed = true,
+                 .design = "mixed_worked_example",
+                 .case_id = "mixed_repeated_q" +
+                            std::to_string(mixed_worked_q),
+                 .n = smoke ? 500 : 1500,
+                 .q = mixed_worked_q,
+                 .categories = 5,
+                 .threshold_balance = "symmetric",
+                 .threshold_mode = OrdinalThresholdMode::FreeIdentity,
+                 .seed = seed_base + offset});
+  ++offset;
+
   const std::vector<int> categories =
       smoke ? std::vector<int>{3, 5} : std::vector<int>{2, 3, 5, 7};
   const std::vector<std::string> balances =
@@ -641,6 +815,228 @@ std::vector<DesignCell> make_design(bool smoke, int seed_base, int max_q) {
   }
 
   return out;
+}
+
+bool run_mixed_cell(std::ostream& out,
+                    const DesignCell& cell,
+                    int reps,
+                    int max_iter,
+                    const magmaan::optim::OptimOptions& opts) {
+  const int p = 8 * cell.q;
+  const int n_ordered = 4 * cell.q;
+  const int n_continuous = 4 * cell.q;
+  const Eigen::MatrixXd data =
+      simulate_repeated_mixed(cell.n, cell.q, cell.categories,
+                              cell.threshold_balance, cell.seed);
+  const auto ordered = mixed_ordered_mask(cell.q);
+  const std::string syntax =
+      make_mixed_repeated_model_syntax(cell.q, cell.categories);
+
+  magmaan::spec::LatentStructure pt;
+  magmaan::model::MatrixRep rep;
+  const auto model_timed = measure_reps(1, [&]() {
+    auto flat = magmaan::parse::Parser::parse(syntax);
+    if (!flat.has_value()) {
+      std::cerr << "mixed parse failed: " << flat.error().detail << "\n";
+      return false;
+    }
+    magmaan::spec::BuildOptions build_opts;
+    build_opts.meanstructure = true;
+    auto built = magmaan::spec::build(*flat, build_opts);
+    if (!built.has_value()) {
+      std::cerr << "mixed lavaanify failed: " << built.error().detail << "\n";
+      return false;
+    }
+    auto matrix_rep = magmaan::model::build_matrix_rep(*built);
+    if (!matrix_rep.has_value()) {
+      std::cerr << "mixed matrix rep failed: " << matrix_rep.error().detail
+                << "\n";
+      return false;
+    }
+    pt = *built;
+    rep = *matrix_rep;
+    return true;
+  });
+  if (!model_timed.ok) return false;
+
+  MixedOrdinalStats stats;
+  std::string stats_error;
+  const auto stats_timed = measure_reps(1, [&]() {
+    auto computed = magmaan::data::mixed_ordinal_stats_from_data(
+        {data}, {ordered});
+    if (!computed.has_value()) {
+      stats_error = computed.error().detail;
+      return false;
+    }
+    stats = *computed;
+    return true;
+  });
+  if (!stats_timed.ok) {
+    std::cerr << "mixed ordinal stats failed: " << stats_error << "\n";
+    return false;
+  }
+
+  Eigen::VectorXd x0;
+  std::string starts_error;
+  const auto starts_timed = measure_reps(1, [&]() {
+    auto starts = magmaan::estimate::mixed_ordinal_start_values(pt, rep, stats,
+                                                                {});
+    if (!starts.has_value()) {
+      starts_error = starts.error().detail;
+      return false;
+    }
+    x0 = *starts;
+    return true;
+  });
+  if (!starts_timed.ok) {
+    std::cerr << "mixed ordinal starts failed: " << starts_error << "\n";
+    return false;
+  }
+
+  Row base;
+  base.data_kind = "mixed";
+  base.design = cell.design;
+  base.case_id = cell.case_id;
+  base.seed = cell.seed;
+  base.n = cell.n;
+  base.q = cell.q;
+  base.p = p;
+  base.n_ordered = n_ordered;
+  base.n_continuous = n_continuous;
+  base.categories = cell.categories;
+  base.threshold_balance = cell.threshold_balance;
+  base.threshold_mode = threshold_mode_name(cell.threshold_mode);
+  base.reps = reps;
+  base.max_iter = max_iter;
+  base.n_free = static_cast<int>(x0.size());
+  base.n_thresholds =
+      stats.thresholds.empty() ? 0
+                               : static_cast<int>(stats.thresholds[0].size());
+  base.moment_dim =
+      stats.moments.empty() ? 0 : static_cast<int>(stats.moments[0].size());
+  base.model_setup_ms = model_timed.timing.median_ms;
+  base.stats_ms = stats_timed.timing.median_ms;
+  base.starts_ms = starts_timed.timing.median_ms;
+  base.parameterization = "delta";
+
+  const std::vector<OrdinalEstimatorKind> estimators = {
+      OrdinalEstimatorKind::DWLS, OrdinalEstimatorKind::WLS};
+  for (const auto estimator : estimators) {
+    const auto weight_kind = estimator == OrdinalEstimatorKind::DWLS
+                                 ? magmaan::estimate::OrdinalWeightKind::DWLS
+                                 : magmaan::estimate::OrdinalWeightKind::WLS;
+
+    Estimates full_bounded_ref;
+    bool have_full_bounded = false;
+
+    {
+      Row row = base;
+      row.estimator = estimator_name(estimator);
+      row.path = "full_bounded";
+      auto result = run_timed_fit(
+          row, reps,
+          [&]() {
+            return magmaan::estimate::fit_mixed_ordinal_bounded(
+                pt, rep, stats, {}, weight_kind, x0, Backend::NloptLbfgs,
+                opts, OrdinalParameterization::Delta);
+          },
+          nullptr, nullptr);
+      row = result.row;
+      if (result.have_estimate) {
+        have_full_bounded = true;
+        full_bounded_ref = std::move(result.estimate);
+        row.theta_diff_full_bounded = 0.0;
+        row.fmin_diff_full_bounded = 0.0;
+      }
+      write_row(out, row);
+    }
+
+    {
+      Row row = base;
+      row.estimator = estimator_name(estimator);
+      row.path = "snlls_full_thresholds";
+      auto result = run_timed_fit(
+          row, reps,
+          [&]() {
+            return magmaan::estimate::fit_mixed_ordinal_snlls_full_thresholds(
+                pt, rep, stats, weight_kind, x0, Backend::NloptLbfgs, opts,
+                OrdinalParameterization::Delta);
+          },
+          nullptr, have_full_bounded ? &full_bounded_ref : nullptr);
+      write_row(out, result.row);
+    }
+
+    {
+      Row row = base;
+      row.estimator = estimator_name(estimator);
+      row.path = "full_bounded_e2e_legacy";
+      row.construction = "mixed_stats";
+      auto result = run_timed_estimate(
+          row, reps,
+          [&](Estimates& last, std::string& error) {
+            auto computed = magmaan::data::mixed_ordinal_stats_from_data(
+                {data}, {ordered});
+            if (!computed.has_value()) {
+              error = computed.error().detail;
+              return false;
+            }
+            auto starts = magmaan::estimate::mixed_ordinal_start_values(
+                pt, rep, *computed, {});
+            if (!starts.has_value()) {
+              error = starts.error().detail;
+              return false;
+            }
+            auto fit = magmaan::estimate::fit_mixed_ordinal_bounded(
+                pt, rep, *computed, {}, weight_kind, *starts,
+                Backend::NloptLbfgs, opts, OrdinalParameterization::Delta);
+            if (!fit.has_value()) {
+              error = fit.error().detail;
+              return false;
+            }
+            last = *fit;
+            return true;
+          },
+          nullptr, have_full_bounded ? &full_bounded_ref : nullptr);
+      write_row(out, result.row);
+    }
+
+    {
+      Row row = base;
+      row.estimator = estimator_name(estimator);
+      row.path = "snlls_full_thresholds_e2e_legacy";
+      row.construction = "mixed_stats";
+      auto result = run_timed_estimate(
+          row, reps,
+          [&](Estimates& last, std::string& error) {
+            auto computed = magmaan::data::mixed_ordinal_stats_from_data(
+                {data}, {ordered});
+            if (!computed.has_value()) {
+              error = computed.error().detail;
+              return false;
+            }
+            auto starts = magmaan::estimate::mixed_ordinal_start_values(
+                pt, rep, *computed, {});
+            if (!starts.has_value()) {
+              error = starts.error().detail;
+              return false;
+            }
+            auto fit =
+                magmaan::estimate::fit_mixed_ordinal_snlls_full_thresholds(
+                    pt, rep, *computed, weight_kind, *starts,
+                    Backend::NloptLbfgs, opts, OrdinalParameterization::Delta);
+            if (!fit.has_value()) {
+              error = fit.error().detail;
+              return false;
+            }
+            last = *fit;
+            return true;
+          },
+          nullptr, have_full_bounded ? &full_bounded_ref : nullptr);
+      write_row(out, result.row);
+    }
+  }
+
+  return true;
 }
 
 void print_help(const char* argv0) {
@@ -727,6 +1123,11 @@ int main(int argc, char** argv) {
       OrdinalMomentParameterization::Theta};
 
   for (const auto& cell : design) {
+    if (cell.mixed) {
+      if (!run_mixed_cell(out, cell, reps, max_iter, opts)) return 1;
+      continue;
+    }
+
     const int p = 4 * cell.q;
     const Eigen::MatrixXd data = simulate_repeated_ordinal(
         cell.n, cell.q, cell.categories, cell.threshold_balance, cell.seed);
@@ -805,6 +1206,8 @@ int main(int argc, char** argv) {
     base.n = cell.n;
     base.q = cell.q;
     base.p = p;
+    base.n_ordered = p;
+    base.n_continuous = 0;
     base.categories = cell.categories;
     base.threshold_balance = cell.threshold_balance;
     base.threshold_mode = threshold_mode_name(cell.threshold_mode);

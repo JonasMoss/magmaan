@@ -526,7 +526,10 @@ stop rather than any usable non-error return.
   timed operation, while the lazy ULS/DWLS row rebuilds `OrdinalWorkspace`,
   starts, and the profiled SNLLS fit. Theta rows use the cache-aware bounded
   comparator and threshold-only SNLLS profiling, so the report keeps them
-  separate from delta's threshold-plus-covariance profiling split.
+  separate from delta's threshold-plus-covariance profiling split. The same
+  benchmark/report now includes mixed continuous/ordinal delta rows comparing
+  materialized full bounded DWLS/WLS with materialized full-threshold SNLLS,
+  plus raw-to-fit mixed bounded/SNLLS construction timings.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
   thin R wrappers for ordinal stats plus DWLS/WLS fits.
 - The R ordinal data boundary exposes consolidated dispatchers:
