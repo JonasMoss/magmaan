@@ -717,7 +717,8 @@ Bounds profile_bounds(const ThresholdProfile& profile, const Bounds& bounds) {
 fit_expected<std::vector<gmm::GpBlockKind>>
 ordinal_gp_block_kinds(const spec::LatentStructure& pt,
                        const ThresholdLayout& layout,
-                       const model::ModelEvaluator& ev) {
+                       const model::ModelEvaluator& ev,
+                       OrdinalParameterization parameterization) {
   std::vector<gmm::GpBlockKind> out(
       static_cast<std::size_t>(pt.n_free()), gmm::GpBlockKind::Nonlinear);
   std::vector<char> is_threshold(static_cast<std::size_t>(pt.n_free()), 0);
@@ -732,6 +733,7 @@ ordinal_gp_block_kinds(const spec::LatentStructure& pt,
       out[static_cast<std::size_t>(fr - 1)] = gmm::GpBlockKind::Linear;
     }
   }
+  if (parameterization == OrdinalParameterization::Theta) return out;
 
   const auto locs = ev.param_locations();
   if (static_cast<std::int32_t>(locs.size()) != pt.n_free()) {
@@ -3200,10 +3202,6 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                     OptimOptions opts) {
   const OrdinalParameterization parameterization =
       to_estimate_parameterization(plan.parameterization);
-  if (parameterization != OrdinalParameterization::Delta) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "fit_ordinal_bounded: profiled ordinal fit-only path currently supports delta parameterization only"));
-  }
   if (auto v = validate_moments(moments, rep); !v.has_value()) {
     return std::unexpected(v.error());
   }
@@ -3228,6 +3226,67 @@ fit_ordinal_bounded(spec::LatentStructure pt,
         "fit_ordinal_bounded: x0 size (" + std::to_string(x0.size()) +
             ") != prepared partable n_free (" +
             std::to_string(pt.n_free()) + ")"));
+  }
+  if (parameterization == OrdinalParameterization::Theta) {
+    if (bounds.empty()) {
+      auto b_or = bounds_from_partable(pt);
+      if (!b_or.has_value()) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "fit_ordinal_bounded: bounds_from_partable failed: " +
+                b_or.error().detail));
+      }
+      bounds = std::move(*b_or);
+    }
+    if (bounds.lower.size() != x0.size() || bounds.upper.size() != x0.size()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: bounds size mismatch"));
+    }
+    auto factors_or = full_weight_factors(moments, gamma_cache, plan);
+    if (!factors_or.has_value()) return std::unexpected(factors_or.error());
+    const auto& factors = *factors_or;
+
+    auto con_or = build_eq_constraints(pt);
+    if (!con_or.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "constraint: " + con_or.error().detail));
+    }
+    const EqConstraints& con = *con_or;
+
+    auto eval0 = ev.evaluate(x0, false, false);
+    if (!eval0.has_value()) {
+      return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
+          "fit_ordinal_bounded: start evaluation failed: " +
+              eval0.error().detail));
+    }
+    auto r0 = ordinal_residuals(stats, layout, eval0->moments, factors, x0,
+                                parameterization);
+    if (!r0.has_value()) return std::unexpected(r0.error());
+
+    optim::GmmProblem prob;
+    prob.n_resid = r0->size();
+    prob.n_param = x0.size();
+    prob.expand = [](const Eigen::VectorXd& x) { return x; };
+    prob.r = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::VectorXd> {
+      auto eval = ev.evaluate(x, false, false);
+      if (!eval.has_value()) {
+        return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+            "fit_ordinal_bounded: evaluate failed: " + eval.error().detail));
+      }
+      return ordinal_residuals(stats, layout, eval->moments, factors, x,
+                               parameterization);
+    };
+    prob.J = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
+      auto eval = ev.evaluate(x, true, false);
+      if (!eval.has_value()) {
+        return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+            "fit_ordinal_bounded: evaluate failed: " + eval.error().detail));
+      }
+      return ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
+                              factors, x, parameterization);
+    };
+
+    return solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
+                            "fit_ordinal_bounded");
   }
   auto profile_or = make_threshold_profile(pt, layout, stats, x0);
   if (!profile_or.has_value()) return std::unexpected(profile_or.error());
@@ -3332,9 +3391,9 @@ fit_ordinal_snlls(spec::LatentStructure pt,
                   OptimOptions opts) {
   const OrdinalParameterization parameterization =
       to_estimate_parameterization(plan.parameterization);
-  if (parameterization != OrdinalParameterization::Delta) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "fit_ordinal_snlls: currently supports delta parameterization only"));
+  if (parameterization == OrdinalParameterization::Theta) {
+    return fit_ordinal_snlls_full_thresholds(
+        std::move(pt), rep, moments, gamma_cache, plan, x0, backend, opts);
   }
   if (auto v = validate_moments(moments, rep); !v.has_value()) {
     return std::unexpected(v.error());
@@ -3495,10 +3554,6 @@ fit_ordinal_snlls_full_thresholds(spec::LatentStructure pt,
                                   OptimOptions opts) {
   const OrdinalParameterization parameterization =
       to_estimate_parameterization(plan.parameterization);
-  if (parameterization != OrdinalParameterization::Delta) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "fit_ordinal_snlls_full_thresholds: currently supports delta parameterization only"));
-  }
   if (auto v = validate_moments(moments, rep); !v.has_value()) {
     return std::unexpected(v.error());
   }
@@ -3531,7 +3586,8 @@ fit_ordinal_snlls_full_thresholds(spec::LatentStructure pt,
   if (!factors_or.has_value()) return std::unexpected(factors_or.error());
   const auto& factors = *factors_or;
 
-  auto block_kinds_or = ordinal_gp_block_kinds(pt, layout, ev);
+  auto block_kinds_or =
+      ordinal_gp_block_kinds(pt, layout, ev, parameterization);
   if (!block_kinds_or.has_value()) return std::unexpected(block_kinds_or.error());
   const auto& block_kinds = *block_kinds_or;
 

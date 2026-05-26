@@ -503,7 +503,11 @@ stop rather than any usable non-error return.
   thresholds are fixed out before the generic Golub-Pereyra classifier sees the
   problem, conditionally linear covariance parameters are profiled, WLS uses the
   same affine full-weight transform, and the returned vector is reconstructed in
-  the ordinary prepared ordinal partable coordinate. A second full-threshold
+  the ordinary prepared ordinal partable coordinate. For theta, cache-aware
+  bounded fitting uses the full standardized threshold/correlation moment
+  objective with the requested ULS/DWLS/WLS cache materialization, and SNLLS
+  profiles only threshold free parameters because the standardized covariance
+  moments make the remaining covariance block nonlinear. A second full-threshold
   ordinal SNLLS entry point keeps the full threshold+correlation moment stack
   and marks threshold free parameters as Golub-Pereyra linear coordinates, so
   linear threshold constraints remain compatible without using the ordinal
@@ -536,9 +540,11 @@ stop rather than any usable non-error return.
   equality cases.
 - The implemented ordinal LS boundary supports both lavaan delta and theta
   parameterizations for all-ordinal and mixed continuous/ordinal DWLS/WLS point
-  estimates. Theta post-fit support uses parameterization-aware threshold and
-  association Jacobians for robust ordinal reporting, modification indices,
-  score tests, and standardized-solution reporting.
+  estimates, and the all-ordinal cache-aware/SNLLS path now covers theta for
+  ULS/DWLS/WLS point estimation. Theta post-fit support uses
+  parameterization-aware threshold and association Jacobians for robust ordinal
+  reporting, modification indices, score tests, and standardized-solution
+  reporting.
 - Explicit post-fit robust ordinal reporting returns sandwich SEs plus
   Satorra-Bentler, mean/variance-adjusted, and scaled/shifted statistics from
   the threshold-plus-polychoric moment vector. The implementation now uses a
