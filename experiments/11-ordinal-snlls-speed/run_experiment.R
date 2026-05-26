@@ -161,7 +161,7 @@ write_metadata(
     experiment = "11-ordinal-snlls-speed",
     question = paste(
       "Compare full bounded, threshold-profiled bounded, full-threshold",
-      "SNLLS, and threshold-profiled SNLLS all-ordinal delta fit speed",
+      "SNLLS, and threshold-profiled SNLLS all-ordinal delta/theta fit speed",
       "across a Kreiberg-style repeated-measure family, one worked example,",
       "and threshold stress cells, with raw-to-SNLLS legacy/lazy construction",
       "rows for ULS/DWLS."

@@ -101,7 +101,11 @@ semantics · **XL** statistical design/research track before implementation.
   diagonal construction remains dominated by score/Gamma-diagonal work. The
   ordinal SNLLS speed pilot now includes raw-to-SNLLS legacy/lazy rows that
   time construction, starts, cache setup, and profiled SNLLS together for
-  ULS/DWLS. Next practical slices are the remaining estimator generalizations.
+  ULS/DWLS, and it now stratifies all fit and end-to-end rows by delta/theta
+  parameterization. Theta is tracked as cache-aware bounded plus
+  threshold-only SNLLS profiling because standardized theta covariance moments
+  are nonlinear in the remaining block. Next practical slices are the
+  remaining estimator generalizations.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
@@ -192,10 +196,14 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   profiling gain inside SNLLS; ULS has only the cache-aware comparator paths
   because no legacy full direct ULS comparator is wired into the pilot. Landed
   next: raw-to-SNLLS legacy/lazy rows using
-  `ordinal_workspace_from_integer_data()` for ULS/DWLS construction. The first
-  opt pilot uses `q <= 6`; open follow-up is the full `q <= 12`
-  literature-like sweep and optional lavaan context rows if the paper needs
-  them.
+  `ordinal_workspace_from_integer_data()` for ULS/DWLS construction. Landed
+  next: the benchmark and report now split every row by delta/theta
+  parameterization; theta rows intentionally use the cache-aware bounded
+  comparator and threshold-only SNLLS profiling rather than delta's
+  threshold-plus-covariance profiling split. The latest opt smoke pilot covers
+  the compact `--smoke` grid with `q <= 4`; open follow-up is the fuller
+  `q <= 12` literature-like sweep and optional lavaan context rows if the
+  paper needs them.
 - **S.** Extend the ordinal threshold-constraint support experiment
   (`experiments/12-ordinal-threshold-constraints`) only if the paper needs
   broader constraint evidence. The first opt pilot is single-group ordinal CFA:
