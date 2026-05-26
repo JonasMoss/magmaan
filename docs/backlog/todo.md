@@ -123,12 +123,16 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   when needed, and any R/API wrapper polish justified by those results.
 - **M/L.** Add a two-stage EM/saturated-covariance missing-data research path
   for comparison with direct FIML and pairwise covariance methods. Stage 1
-  (saturated EM moments + sandwich ACOV ingredients) is now exposed as
+  (saturated EM moments + sandwich ACOV ingredients) is exposed as
   `magmaan::estimate::fiml::saturated_em_moments` / R
   `magmaan_core$estimate_saturated_em_moments` — the methods-developer surface
-  Savalei-Bentler (2009) needs. Stage 2 (second-stage SEM fit + Savalei-Bentler
-  corrected chi-square / SEs as a packaged `estimator = "ML2S"`) and the
-  `pairwise-robust-sem` simulation row that consumes Stage 1 are still open.
+  Savalei-Bentler (2009) needs. Stage 2 point estimate is now wrapped as
+  `magmaan_core$estimate_two_stage_em(partable, raw_data, kind = c("ml","gls"))`
+  (pure R glue: saturated EM → `estimate_gls`/`estimate_ml` on the EM
+  moments). Used as the MSE comparator row in
+  `experiments/08-pairwise-gls-efficiency/`. Still open: a packaged
+  `estimator = "ML2S"` surface with the Savalei-Bentler corrected chi-square
+  and SEs (consuming the Stage 1 `(H, J, ACOV)` ingredients).
 - **M/L.** Van-Praag pairwise covariance machinery for the ugamma-fast
   pairwise-incomplete section and the pairwise rows of `papers/pairwise-robust-sem/`.
   Landed: `magmaan::data::pairwise_sample_stats` (per-block N-divisor pairwise

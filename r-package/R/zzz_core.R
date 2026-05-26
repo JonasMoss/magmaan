@@ -59,6 +59,7 @@ estimate_fit <- fit_fit
 estimate_ml <- fit_ml_impl
 estimate_fiml <- fit_fiml_impl
 estimate_saturated_em_moments <- saturated_em_moments_impl
+estimate_two_stage_em <- estimate_two_stage_em_impl
 estimate_uls <- fit_uls_impl
 estimate_gls <- fit_gls_impl
 estimate_gls_pairwise <- fit_gls_pairwise_impl
@@ -189,6 +190,7 @@ magmaan_core <- local({
       "estimate_ml",
       "estimate_fiml",
       "estimate_saturated_em_moments",
+      "estimate_two_stage_em",
       "estimate_uls",
       "estimate_gls",
       "estimate_gls_pairwise",
