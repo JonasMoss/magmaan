@@ -70,12 +70,13 @@ semantics · **XL** statistical design/research track before implementation.
   fits plus WLS SNLLS. Threshold-local shared-label / bare-merge equality
   groups now share threshold-map columns and are covered for bounded fits plus
   WLS SNLLS; general linear threshold constraints are supported by the
-  full-threshold SNLLS path. Remaining C++ estimator work on this track:
-  cache-aware mixed continuous/ordinal fitting; threshold-profiled general
-  linear maps such as effect-coding-style constraints; theta parameterization
-  in the cache-aware/profiled/SNLLS path; reduced-Gamma robust-inference
-  products that avoid full materialization where possible; and only-when-needed
-  R/API polish.
+  full-threshold SNLLS path. All-ordinal theta now also works through the
+  cache-aware bounded path and SNLLS: the theta SNLLS path profiles threshold
+  free parameters but keeps the standardized covariance block nonlinear.
+  Remaining C++ estimator work on this track: cache-aware mixed
+  continuous/ordinal fitting; threshold-profiled general linear maps such as
+  effect-coding-style constraints; reduced-Gamma robust-inference products that
+  avoid full materialization where possible; and only-when-needed R/API polish.
   First benchmark slice landed as `magmaan_ordinal_workspace_bench` plus
   `experiments/06-ordinal-snlls-probe`: it covers all-ordinal delta fit-only
   ULS/DWLS/WLS across free, fixed, and shared threshold models and checks
@@ -400,9 +401,10 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   SEM fits or broad copula grids.
 - **M/L.** Ordinal SNLLS follow-up research. The all-ordinal delta
   ULS/DWLS/WLS prototype now exists for free, fixed, and pure-merge threshold
-  models, and the full-threshold SNLLS path supports general linear threshold
-  constraints. Use experiments to decide whether the next paper-facing C++ work
-  should be theta-profiled SNLLS, mixed continuous/ordinal SNLLS,
+  models, the all-ordinal theta path covers cache-aware bounded/SNLLS point
+  estimation, and the full-threshold SNLLS path supports general linear
+  threshold constraints. Use experiments to decide whether the next
+  paper-facing C++ work should be mixed continuous/ordinal SNLLS,
   threshold-profiled general linear maps, or reduced-Gamma inference plumbing.
 
 ## Composite models
