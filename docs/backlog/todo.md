@@ -97,9 +97,10 @@ semantics · **XL** statistical design/research track before implementation.
   `OrdinalMoments` without Gamma and fit-only DWLS returns `OrdinalMoments`
   plus the exact Gamma diagonal without full Gamma/WLS inverse materialization.
   The opt pilot shows ULS construction gets a clear reduction while exact DWLS
-  diagonal construction remains dominated by score/Gamma-diagonal work. Next
-  practical slices are end-to-end timing with lazy construction included, then
-  the remaining estimator generalizations.
+  diagonal construction remains dominated by score/Gamma-diagonal work. The
+  ordinal SNLLS speed pilot now includes raw-to-SNLLS legacy/lazy rows that
+  time construction, starts, cache setup, and profiled SNLLS together for
+  ULS/DWLS. Next practical slices are the remaining estimator generalizations.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
@@ -188,10 +189,12 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   stress cells. The report now separates the full-to-profiled bounded gain,
   the full-bounded-to-full-threshold-SNLLS gain, and the incremental threshold
   profiling gain inside SNLLS; ULS has only the cache-aware comparator paths
-  because no legacy full direct ULS comparator is wired into the pilot. The
-  first opt pilot uses `q <= 6`; open follow-up is the full `q <= 12`
-  literature-like sweep, optional lavaan context rows, and end-to-end rows that
-  use `ordinal_workspace_from_integer_data()` for lazy ULS/DWLS construction.
+  because no legacy full direct ULS comparator is wired into the pilot. Landed
+  next: raw-to-SNLLS legacy/lazy rows using
+  `ordinal_workspace_from_integer_data()` for ULS/DWLS construction. The first
+  opt pilot uses `q <= 6`; open follow-up is the full `q <= 12`
+  literature-like sweep and optional lavaan context rows if the paper needs
+  them.
 - **S.** Extend the ordinal threshold-constraint support experiment
   (`experiments/12-ordinal-threshold-constraints`) only if the paper needs
   broader constraint evidence. The first opt pilot is single-group ordinal CFA:
@@ -206,8 +209,8 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   workspace construction against eager legacy stats construction, projection
   to `OrdinalMoments`, diagonal/full Gamma cache copies, DWLS weight
   construction, and WLS reinversion across all-ordinal synthetic blocks up to
-  `p = 16`, `c = 5`. Open follow-up: include these lazy rows in an end-to-end
-  ordinal SNLLS speed run.
+  `p = 16`, `c = 5`. Its lazy rows are now carried into the end-to-end ordinal
+  SNLLS speed run.
 - **M/L.** Convergence-note / start-value portfolio paper track
   (`papers/convergence-note/`). The skeleton, local resources, and first R
   simulation factories now exist for the De Jonckere-Rosseel small-sample SEM
@@ -399,9 +402,8 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   ULS/DWLS/WLS prototype now exists for free, fixed, and pure-merge threshold
   models, and the full-threshold SNLLS path supports general linear threshold
   constraints. Use experiments to decide whether the next paper-facing C++ work
-  should be end-to-end lazy-construction SNLLS timing, theta-profiled SNLLS,
-  mixed continuous/ordinal SNLLS, threshold-profiled general linear maps, or
-  reduced-Gamma inference plumbing.
+  should be theta-profiled SNLLS, mixed continuous/ordinal SNLLS,
+  threshold-profiled general linear maps, or reduced-Gamma inference plumbing.
 
 ## Composite models
 
