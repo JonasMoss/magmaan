@@ -3462,6 +3462,71 @@ TEST_CASE("Mixed ordinal stats and DWLS fit use continuous and threshold moments
   CHECK(rob->se.allFinite());
 }
 
+TEST_CASE("Mixed ordinal full-threshold SNLLS matches bounded DWLS/WLS") {
+  std::mt19937 rng(20260612);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(560, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta > -0.7) + (eta > 0.35);
+    X(i, 1) = 1.0 + (0.68 * eta + 0.74 * norm(rng) > 0.05);
+    X(i, 2) = 0.82 * eta + 0.57 * norm(rng) + 0.15;
+    X(i, 3) = 0.63 * eta + 0.78 * norm(rng) - 0.12;
+  }
+  const std::vector<std::vector<std::int32_t>> ordered = {{1, 1, 0, 0}};
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data({X}, ordered);
+  REQUIRE(stats.has_value());
+
+  magmaan::spec::BuildOptions build_opts;
+  build_opts.meanstructure = true;
+  auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3 + x4\n"
+                                          "x1 | t1 + t2\n"
+                                          "x2 | t1\n"
+                                          "x1 ~*~ 1*x1\n"
+                                          "x2 ~*~ 1*x2\n");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp, build_opts);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::mixed_ordinal_start_values(*pt, *mr, *stats, {});
+  REQUIRE(x0.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 500;
+  opts.ftol = 1e-10;
+  opts.gtol = 1e-7;
+
+  auto check_weight = [&](magmaan::estimate::OrdinalWeightKind weight) {
+    auto bounded = magmaan::estimate::fit_mixed_ordinal_bounded(
+        *pt, *mr, *stats, {}, weight, *x0,
+        magmaan::estimate::Backend::NloptLbfgs, opts);
+    auto snlls = magmaan::estimate::fit_mixed_ordinal_snlls_full_thresholds(
+        *pt, *mr, *stats, weight, *x0, magmaan::estimate::Backend::NloptLbfgs,
+        opts);
+    REQUIRE_MESSAGE(bounded.has_value(),
+                    "mixed bounded failed: "
+                        << (bounded.has_value() ? "" : bounded.error().detail));
+    REQUIRE_MESSAGE(snlls.has_value(),
+                    "mixed SNLLS failed: "
+                        << (snlls.has_value() ? "" : snlls.error().detail));
+    CHECK(snlls->fmin == doctest::Approx(bounded->fmin).epsilon(2e-6));
+    CHECK((snlls->theta - bounded->theta).cwiseAbs().maxCoeff() < 8e-4);
+    CHECK(snlls->n_nonlinear > 0);
+    CHECK(snlls->n_linear > 0);
+  };
+
+  check_weight(magmaan::estimate::OrdinalWeightKind::DWLS);
+  check_weight(magmaan::estimate::OrdinalWeightKind::WLS);
+
+  auto theta = magmaan::estimate::fit_mixed_ordinal_snlls_full_thresholds(
+      *pt, *mr, *stats, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts,
+      magmaan::estimate::OrdinalParameterization::Theta);
+  REQUIRE_FALSE(theta.has_value());
+  CHECK(theta.error().detail.find("only delta") != std::string::npos);
+}
+
 TEST_CASE("Mixed ordinal polyserial DPD keeps shared marginals and fits DWLS") {
   std::mt19937 rng(20260517);
   std::normal_distribution<double> norm(0.0, 1.0);

@@ -3773,4 +3773,152 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           "fit_mixed_ordinal_bounded");
 }
 
+fit_expected<Estimates>
+fit_mixed_ordinal_snlls_full_thresholds(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    OrdinalWeightKind weights,
+    const Eigen::VectorXd& x0,
+    Backend backend,
+    OptimOptions opts,
+    OrdinalParameterization parameterization) {
+  if (parameterization != OrdinalParameterization::Delta) {
+    return std::unexpected(
+        make_err(FitError::Kind::NumericIssue,
+                 "fit_mixed_ordinal_snlls_full_thresholds: only delta "
+                 "parameterization is currently supported"));
+  }
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(p.error());
+  }
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(layout_or.error());
+  const ThresholdLayout& layout = *layout_or;
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(
+        FitError::Kind::InvalidStartValues,
+        "fit_mixed_ordinal_snlls_full_thresholds: ModelEvaluator::build "
+        "failed: " +
+            ev_or.error().detail));
+  }
+  auto ev = std::move(*ev_or);
+
+  if (x0.size() != pt.n_free()) {
+    return std::unexpected(make_err(
+        FitError::Kind::InvalidStartValues,
+        "fit_mixed_ordinal_snlls_full_thresholds: x0 size (" +
+            std::to_string(x0.size()) + ") != prepared partable n_free (" +
+            std::to_string(pt.n_free()) + ")"));
+  }
+
+  auto factors_or = weight_factors(stats, weights);
+  if (!factors_or.has_value()) return std::unexpected(factors_or.error());
+  const auto& factors = *factors_or;
+
+  auto block_kinds_or =
+      ordinal_gp_block_kinds(pt, layout, ev, parameterization);
+  if (!block_kinds_or.has_value()) {
+    return std::unexpected(block_kinds_or.error());
+  }
+  const auto& block_kinds = *block_kinds_or;
+
+  auto eval0 = ev.evaluate(x0, true, true);
+  if (!eval0.has_value()) {
+    return std::unexpected(make_err(
+        FitError::Kind::InvalidStartValues,
+        "fit_mixed_ordinal_snlls_full_thresholds: start evaluation failed: " +
+            eval0.error().detail));
+  }
+  auto r0 = mixed_ordinal_residuals(stats, layout, eval0->moments, factors, x0,
+                                    parameterization);
+  if (!r0.has_value()) return std::unexpected(r0.error());
+
+  optim::GmmProblem base;
+  base.n_resid = r0->size();
+  base.n_param = x0.size();
+  base.expand = [](const Eigen::VectorXd& x) { return x; };
+  base.r = [&](const Eigen::VectorXd& theta) -> fit_expected<Eigen::VectorXd> {
+    auto eval = ev.evaluate(theta, false, false);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(
+          FitError::Kind::NonPositiveDefiniteSigma,
+          "fit_mixed_ordinal_snlls_full_thresholds: evaluate failed: " +
+              eval.error().detail));
+    }
+    return mixed_ordinal_residuals(stats, layout, eval->moments, factors, theta,
+                                   parameterization);
+  };
+  base.J = [&](const Eigen::VectorXd& theta) -> fit_expected<Eigen::MatrixXd> {
+    auto eval = ev.evaluate(theta, true, true);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(
+          FitError::Kind::NonPositiveDefiniteSigma,
+          "fit_mixed_ordinal_snlls_full_thresholds: evaluate failed: " +
+              eval.error().detail));
+    }
+    return mixed_ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
+                                  eval->J_mu, factors, theta, parameterization);
+  };
+  base.eval =
+      [&](const Eigen::VectorXd& theta) -> fit_expected<optim::LsEvaluation> {
+    auto eval = ev.evaluate(theta, true, true);
+    if (!eval.has_value()) {
+      return std::unexpected(make_err(
+          FitError::Kind::NonPositiveDefiniteSigma,
+          "fit_mixed_ordinal_snlls_full_thresholds: evaluate failed: " +
+              eval.error().detail));
+    }
+    auto r = mixed_ordinal_residuals(stats, layout, eval->moments, factors,
+                                     theta, parameterization);
+    if (!r.has_value()) return std::unexpected(r.error());
+    auto J =
+        mixed_ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
+                               eval->J_mu, factors, theta, parameterization);
+    if (!J.has_value()) return std::unexpected(J.error());
+    return optim::LsEvaluation{std::move(*r), std::move(*J)};
+  };
+
+  auto gp_or = gmm::gp(base, pt, ev, x0, block_kinds);
+  if (!gp_or.has_value()) return std::unexpected(gp_or.error());
+  const optim::GmmProblem& prob = gp_or->problem;
+
+  Eigen::VectorXd theta_hat;
+  double fmin = 0.0;
+  int iterations = 0;
+  int f_evals = 0;
+  int g_evals = 0;
+  optim::OptimStatus status = optim::OptimStatus::Converged;
+  double grad_inf_norm = -1.0;
+  optim::TerminalAudit audit;
+
+  if (prob.n_param == 0) {
+    auto r = prob.r(Eigen::VectorXd(0));
+    if (!r.has_value()) return std::unexpected(r.error());
+    theta_hat = prob.expand(Eigen::VectorXd(0));
+    fmin = r->squaredNorm();
+  } else {
+    auto out = run_ordinal_ls(prob, gp_or->beta0, Bounds{}, backend, opts);
+    if (!out.has_value()) return std::unexpected(out.error());
+    theta_hat = prob.expand(out->x);
+    fmin = 2.0 * out->fmin;
+    iterations = out->iterations;
+    f_evals = out->f_evals;
+    g_evals = out->g_evals;
+    status = out->status;
+    grad_inf_norm = out->grad_inf_norm;
+    audit = std::move(out->audit);
+  }
+
+  return Estimates{std::move(theta_hat), fmin, iterations, f_evals, g_evals,
+                   status, grad_inf_norm, std::move(audit), {},
+                   gp_or->n_nonlinear, gp_or->n_linear};
+}
+
 }  // namespace magmaan::estimate

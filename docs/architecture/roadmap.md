@@ -565,7 +565,13 @@ stop rather than any usable non-error return.
   already computed the traces.
 - A first mixed continuous/ordinal path builds lavaan-ordered thresholds,
   continuous means/variances, polychoric/polyserial/covariance moments,
-  NACOV/DWLS/WLS weights, and DWLS/WLS delta/theta fits. The lavaan-backed
+  NACOV/DWLS/WLS weights, and DWLS/WLS delta/theta fits. Mixed delta SNLLS now
+  has a materialized-stats full-threshold entry point,
+  `estimate::fit_mixed_ordinal_snlls_full_thresholds()`, that profiles the
+  conditionally linear threshold, mean, variance, and covariance parameters
+  through the generic Golub-Pereyra split and matches bounded mixed DWLS/WLS on
+  a focused unit test. Mixed theta SNLLS, lazy mixed Gamma construction, and
+  threshold-profiled mixed objectives remain later slices. The lavaan-backed
   fixtures include a complete/listwise sparse 4-category boundary case; the
   continuous-ordinal covariance influence rows include the variance
   delta-method term needed for stable mixed WLS weighting.
