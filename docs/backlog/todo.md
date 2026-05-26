@@ -90,9 +90,14 @@ semantics · **XL** statistical design/research track before implementation.
   `experiments/12-ordinal-threshold-constraints`: shared-label thresholds fit
   through both profiled and full-threshold paths, while general linear
   threshold constraints intentionally reject in threshold-profiled fitting and
-  fit through full bounded / full-threshold SNLLS. Next practical slices are
-  raw/lazy Gamma construction boundaries, then the remaining estimator
-  generalizations.
+  fit through full bounded / full-threshold SNLLS. The construction-boundary
+  benchmark also landed as `magmaan_ordinal_construction_bench` plus
+  `experiments/13-ordinal-construction-boundary`: it shows the current raw
+  all-ordinal boundary remains eager, materializing full `OrdinalStats`, full
+  Gamma, DWLS weights, and the WLS inverse before cache-aware fit paths choose
+  what they use. Next practical slice is a raw/lazy all-ordinal builder that
+  can return `OrdinalMoments` plus only the requested Gamma materialization,
+  then the remaining estimator generalizations.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
@@ -193,6 +198,14 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   and accepted by full bounded plus full-threshold SNLLS. Open follow-up:
   multi-group threshold-invariance/equality examples once the C++ or R-facing
   experiment harness can express groups without pulling in fixture generation.
+- **S/M.** Extend the ordinal construction-boundary experiment
+  (`experiments/13-ordinal-construction-boundary`) if the raw/lazy builder
+  lands or if the paper needs end-to-end construction evidence. The first opt
+  pilot times eager legacy stats construction, projection to `OrdinalMoments`,
+  diagonal/full Gamma cache copies, DWLS weight construction, and WLS
+  reinversion across all-ordinal synthetic blocks up to `p = 16`, `c = 5`.
+  Open follow-up: add rows for a true lazy ULS/DWLS construction path once that
+  C++ boundary exists.
 - **M/L.** Convergence-note / start-value portfolio paper track
   (`papers/convergence-note/`). The skeleton, local resources, and first R
   simulation factories now exist for the De Jonckere-Rosseel small-sample SEM
@@ -384,8 +397,9 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   ULS/DWLS/WLS prototype now exists for free, fixed, and pure-merge threshold
   models, and the full-threshold SNLLS path supports general linear threshold
   constraints. Use experiments to decide whether the next paper-facing C++ work
-  should be theta-profiled SNLLS, mixed continuous/ordinal SNLLS,
-  threshold-profiled general linear maps, or reduced-Gamma inference plumbing.
+  should be a raw/lazy all-ordinal construction boundary, theta-profiled SNLLS,
+  mixed continuous/ordinal SNLLS, threshold-profiled general linear maps, or
+  reduced-Gamma inference plumbing.
 
 ## Composite models
 

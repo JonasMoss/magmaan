@@ -511,7 +511,11 @@ stop rather than any usable non-error return.
   validates the split: free/shared-label threshold cases fit through both
   profiled and full-threshold paths, while general linear threshold constraints
   are rejected by threshold-profiled fitting and accepted by the full bounded
-  and full-threshold SNLLS paths.
+  and full-threshold SNLLS paths. `experiments/13-ordinal-construction-boundary`
+  measures the current raw construction boundary and confirms it remains eager:
+  `ordinal_stats_from_integer_data()` materializes full `OrdinalStats`, full
+  Gamma, DWLS weights, and the WLS inverse before cache-aware fit paths choose
+  which pieces they actually need.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
   thin R wrappers for ordinal stats plus DWLS/WLS fits.
 - The R ordinal data boundary exposes consolidated dispatchers:

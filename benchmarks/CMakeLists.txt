@@ -35,6 +35,13 @@ target_link_libraries(magmaan_ordinal_threshold_constraint_bench PRIVATE magmaan
 
 target_compile_features(magmaan_ordinal_threshold_constraint_bench PRIVATE cxx_std_23)
 
+add_executable(magmaan_ordinal_construction_bench
+  ordinal_construction_bench.cpp)
+
+target_link_libraries(magmaan_ordinal_construction_bench PRIVATE magmaan::magmaan)
+
+target_compile_features(magmaan_ordinal_construction_bench PRIVATE cxx_std_23)
+
 # ---------------------------------------------------------------------------
 # magmaan_mem_profile — peak-heap profiler for the reduced-Gamma computations.
 #
