@@ -507,7 +507,11 @@ stop rather than any usable non-error return.
   ordinal SNLLS entry point keeps the full threshold+correlation moment stack
   and marks threshold free parameters as Golub-Pereyra linear coordinates, so
   linear threshold constraints remain compatible without using the ordinal
-  threshold-profiling map.
+  threshold-profiling map. `experiments/12-ordinal-threshold-constraints`
+  validates the split: free/shared-label threshold cases fit through both
+  profiled and full-threshold paths, while general linear threshold constraints
+  are rejected by threshold-profiled fitting and accepted by the full bounded
+  and full-threshold SNLLS paths.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
   thin R wrappers for ordinal stats plus DWLS/WLS fits.
 - The R ordinal data boundary exposes consolidated dispatchers:

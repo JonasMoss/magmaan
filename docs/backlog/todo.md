@@ -85,8 +85,14 @@ semantics · **XL** statistical design/research track before implementation.
   `experiments/10-ordinal-inference-cache-probe`, comparing legacy
   materialized robust reporting, minimal fit-only plus separate inference
   caches, and shared fit-plus-inference cache reuse for all-ordinal delta
-  DWLS/WLS. Next practical slices are raw/lazy Gamma construction boundaries,
-  then the remaining estimator generalizations.
+  DWLS/WLS. A threshold-constraint support slice also landed as
+  `magmaan_ordinal_threshold_constraint_bench` plus
+  `experiments/12-ordinal-threshold-constraints`: shared-label thresholds fit
+  through both profiled and full-threshold paths, while general linear
+  threshold constraints intentionally reject in threshold-profiled fitting and
+  fit through full bounded / full-threshold SNLLS. Next practical slices are
+  raw/lazy Gamma construction boundaries, then the remaining estimator
+  generalizations.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
@@ -175,6 +181,14 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   first opt pilot uses `q <= 6`; open follow-up is the full `q <= 12`
   literature-like sweep, optional lavaan context rows, and raw/lazy ordinal
   statistic construction timing once that builder exists.
+- **S.** Extend the ordinal threshold-constraint support experiment
+  (`experiments/12-ordinal-threshold-constraints`) only if the paper needs
+  broader constraint evidence. The first opt pilot is single-group ordinal CFA:
+  free and shared-label thresholds agree across profiled/full paths; true
+  linear threshold constraints are rejected by threshold-profiled bounded/SNLLS
+  and accepted by full bounded plus full-threshold SNLLS. Open follow-up:
+  multi-group threshold-invariance/equality examples once the C++ or R-facing
+  experiment harness can express groups without pulling in fixture generation.
 - **M/L.** Convergence-note / start-value portfolio paper track
   (`papers/convergence-note/`). The skeleton, local resources, and first R
   simulation factories now exist for the De Jonckere-Rosseel small-sample SEM
@@ -364,9 +378,10 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   SEM fits or broad copula grids.
 - **M/L.** Ordinal SNLLS follow-up research. The all-ordinal delta
   ULS/DWLS/WLS prototype now exists for free, fixed, and pure-merge threshold
-  models. Use experiments to decide whether the next paper-facing C++ work
-  should be theta-profiled SNLLS, mixed continuous/ordinal SNLLS, general
-  linear threshold maps, or reduced-Gamma inference plumbing.
+  models, and the full-threshold SNLLS path supports general linear threshold
+  constraints. Use experiments to decide whether the next paper-facing C++ work
+  should be theta-profiled SNLLS, mixed continuous/ordinal SNLLS,
+  threshold-profiled general linear maps, or reduced-Gamma inference plumbing.
 
 ## Composite models
 

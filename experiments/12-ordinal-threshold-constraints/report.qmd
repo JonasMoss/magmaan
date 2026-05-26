@@ -1,0 +1,235 @@
+---
+title: "Ordinal threshold constraints"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path)))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"),
+                              candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates,
+                                                "threshold_constraints.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+
+constraints_path <- file.path(results_dir, "threshold_constraints.csv")
+metadata_path <- file.path(results_dir, "metadata.csv")
+if (!file.exists(constraints_path)) {
+  stop("Missing threshold_constraints.csv. Run: Rscript run_experiment.R --smoke")
+}
+
+constraints <- utils::read.csv(constraints_path, check.names = FALSE,
+                               stringsAsFactors = FALSE)
+metadata <- utils::read.csv(metadata_path, check.names = FALSE,
+                            stringsAsFactors = FALSE)
+
+fmt_ms <- function(x) ifelse(is.na(x), "", sprintf("%.2f", x))
+fmt_num <- function(x) ifelse(is.na(x), "", sprintf("%.3g", x))
+fmt_diff <- function(x) ifelse(is.na(x), "", sprintf("%.2e", x))
+max_or_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) NA_real_ else max(x)
+}
+median_or_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (!length(x)) NA_real_ else stats::median(x)
+}
+first_text <- function(x) {
+  x <- x[nzchar(x)]
+  if (!length(x)) "" else x[[1L]]
+}
+
+method_levels <- c("full_bounded", "threshold_profiled_bounded",
+                   "full_threshold_snlls", "threshold_profiled_snlls")
+method_labels <- c("Full bounded", "Threshold-profiled bounded",
+                   "Full-threshold SNLLS", "Threshold-profiled SNLLS")
+constraints$Method <- factor(constraints$path, levels = method_levels,
+                             labels = method_labels)
+constraints$Case <- factor(
+  constraints$case_id,
+  levels = c("free_thresholds", "shared_first_threshold",
+             "one_item_symmetric_thresholds",
+             "all_items_symmetric_thresholds"),
+  labels = c("Free thresholds", "Shared first threshold",
+             "One item symmetric thresholds",
+             "All items symmetric thresholds")
+)
+ok <- constraints[constraints$status == "ok", ]
+```
+
+## Question
+
+This experiment asks which ordinal fitting paths can handle equality
+constraints on thresholds. The target use case is small but important:
+threshold constraints should be available when the ordinal layer is part of the
+model, not only when every threshold can be profiled away before optimization.
+
+The design is deliberately single-group ordinal CFA. It avoids the R/lavaan
+grouping machinery so that the C++ estimator behavior is isolated:
+
+- free thresholds;
+- one shared threshold label across items;
+- one linear threshold symmetry constraint, `a + b == 0`;
+- the same symmetry constraint repeated for all items.
+
+## Short Answer
+
+Shared threshold labels are still profileable: the threshold-profiled and
+full-threshold paths agree. General linear threshold constraints are different.
+The threshold-profiled bounded and threshold-profiled SNLLS paths reject them
+because the ordinal threshold map cannot eliminate constrained thresholds. The
+full bounded and full-threshold SNLLS paths keep thresholds in the parameter
+vector and fit the constrained model successfully.
+
+The full-threshold SNLLS row is the main research hook here: thresholds remain
+in the full moment stack and enter the SNLLS decomposition as ordinary
+Golub-Pereyra linear coordinates, so the estimator can support threshold
+constraints without falling back to a fully nonlinear covariance block.
+
+## Run
+
+```{r}
+data.frame(
+  Item = metadata$key,
+  Value = metadata$value,
+  check.names = FALSE
+) |>
+  knitr::kable(row.names = FALSE)
+```
+
+## Support Matrix
+
+```{r}
+support <- aggregate(seed ~ Case + constraint_kind + estimator + Method + status,
+                     data = constraints, FUN = length)
+names(support) <- c("Case", "Constraint", "Estimator", "Method", "Status",
+                    "Rows")
+knitr::kable(support[order(support$Case, support$Estimator, support$Method), ],
+             row.names = FALSE)
+```
+
+```{r}
+errors <- constraints[constraints$status != "ok",
+                      c("Case", "constraint_kind", "estimator", "Method",
+                        "error")]
+if (nrow(errors)) {
+  errors <- aggregate(error ~ Case + constraint_kind + estimator + Method,
+                      data = errors, FUN = first_text)
+  names(errors) <- c("Case", "Constraint", "Estimator", "Method", "Error")
+  knitr::kable(errors[order(errors$Case, errors$Estimator, errors$Method), ],
+               row.names = FALSE)
+}
+```
+
+## Agreement
+
+```{r}
+agreement <- aggregate(
+  cbind(theta_diff_full_bounded, fmin_diff_full_bounded,
+        theta_diff_profiled_bounded, fmin_diff_profiled_bounded) ~
+    Case + constraint_kind + estimator + Method,
+  data = ok,
+  FUN = max_or_na,
+  na.action = na.pass
+)
+names(agreement) <- c("Case", "Constraint", "Estimator", "Method",
+                      "Max |theta - full|", "Max |fmin - full|",
+                      "Max |theta - profiled|", "Max |fmin - profiled|")
+for (j in 5:ncol(agreement)) agreement[[j]] <- fmt_diff(agreement[[j]])
+knitr::kable(agreement[order(agreement$Case, agreement$Estimator,
+                             agreement$Method), ],
+             row.names = FALSE)
+```
+
+`Max |theta - profiled|` is blank for linear threshold-constraint cases because
+the profiled paths intentionally reject those models.
+
+## Timing Context
+
+```{r}
+wide <- reshape(
+  ok[, c("case_id", "constraint_kind", "estimator", "path",
+         "fit_median_ms")],
+  idvar = c("case_id", "constraint_kind", "estimator"),
+  timevar = "path",
+  direction = "wide"
+)
+names(wide) <- sub("^fit_median_ms\\.", "", names(wide))
+for (name in method_levels) {
+  if (!name %in% names(wide)) wide[[name]] <- NA_real_
+}
+wide$profile_gain <- wide$full_bounded / wide$threshold_profiled_bounded
+wide$full_snlls_gain <- wide$full_bounded / wide$full_threshold_snlls
+wide$snlls_incremental <- wide$threshold_profiled_bounded /
+  wide$threshold_profiled_snlls
+wide$threshold_snlls_gain <- wide$full_threshold_snlls /
+  wide$threshold_profiled_snlls
+wide$total_gain <- wide$full_bounded / wide$threshold_profiled_snlls
+wide$Case <- factor(
+  wide$case_id,
+  levels = c("free_thresholds", "shared_first_threshold",
+             "one_item_symmetric_thresholds",
+             "all_items_symmetric_thresholds"),
+  labels = c("Free thresholds", "Shared first threshold",
+             "One item symmetric thresholds",
+             "All items symmetric thresholds")
+)
+
+timing <- wide[, c("Case", "constraint_kind", "estimator", "full_bounded",
+                   "threshold_profiled_bounded", "full_threshold_snlls",
+                   "threshold_profiled_snlls", "profile_gain",
+                   "full_snlls_gain", "threshold_snlls_gain")]
+names(timing) <- c("Case", "Constraint", "Estimator", "Full bounded ms",
+                   "Profiled bounded ms", "Full-threshold SNLLS ms",
+                   "Profiled SNLLS ms", "Full / profiled",
+                   "Full / full-threshold SNLLS",
+                   "Full-threshold / profiled SNLLS")
+for (name in c("Full bounded ms", "Profiled bounded ms",
+               "Full-threshold SNLLS ms", "Profiled SNLLS ms")) {
+  timing[[name]] <- fmt_ms(timing[[name]])
+}
+for (name in c("Full / profiled", "Full / full-threshold SNLLS",
+               "Full-threshold / profiled SNLLS")) {
+  timing[[name]] <- fmt_num(timing[[name]])
+}
+knitr::kable(timing[order(timing$Case, timing$Estimator), ],
+             row.names = FALSE)
+```
+
+Ratios greater than one favor the denominator. Timing is secondary here: these
+are tiny models, fit-only timings exclude statistic construction, and the
+linear-constraint rows have no threshold-profiled comparator by design.
+
+## Cost Context
+
+```{r}
+cost <- aggregate(cbind(cache_setup_ms, weight_setup_ms) ~
+                    Case + constraint_kind + estimator + Method,
+                  data = constraints,
+                  FUN = median_or_na,
+                  na.action = na.pass)
+names(cost) <- c("Case", "Constraint", "Estimator", "Method",
+                 "Cache setup ms", "Weight setup ms")
+for (j in 5:ncol(cost)) cost[[j]] <- fmt_ms(cost[[j]])
+knitr::kable(cost[order(cost$Case, cost$Estimator, cost$Method), ],
+             row.names = FALSE)
+```
+
+## Reproduce
+
+```sh
+Rscript experiments/12-ordinal-threshold-constraints/run_experiment.R --smoke --preset fast
+(cd experiments/12-ordinal-threshold-constraints && quarto render report.qmd)
+```
+
+For less noisy timings, use `--preset opt` and increase `--reps`. This remains
+a support experiment, not an end-to-end timing claim.
