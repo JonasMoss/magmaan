@@ -305,13 +305,25 @@ TEST_CASE("Fisher-ML reaches the direct ML optimum on the Ernst n=25 replicate")
                                            Backend::NloptLbfgs, opts);
   auto est_fisher = magmaan::estimate::fit_ml_fisher(*pt, *mr, samp, *x0,
                                                      Bounds{}, opts);
+  auto est_fisher_snlls = magmaan::estimate::fit_ml_fisher_snlls(
+      *pt, *mr, samp, *x0, Bounds{}, opts);
   REQUIRE(est_ref.has_value());
   REQUIRE(est_fisher.has_value());
+  REQUIRE(est_fisher_snlls.has_value());
 
   CHECK(est_fisher->fmin ==
         doctest::Approx(est_ref->fmin).epsilon(1e-5));
   CHECK((est_fisher->theta - est_ref->theta).cwiseAbs().maxCoeff() < 1e-2);
   CHECK(est_fisher->audit.stationary);
+  CHECK(est_fisher_snlls->fmin ==
+        doctest::Approx(est_ref->fmin).epsilon(1e-5));
+  CHECK((est_fisher_snlls->theta - est_ref->theta).cwiseAbs().maxCoeff() <
+        1e-2);
+  CHECK(est_fisher_snlls->audit.stationary);
+  CHECK(est_fisher_snlls->n_nonlinear >= 0);
+  CHECK(est_fisher_snlls->n_linear > 0);
+  CHECK(est_fisher_snlls->n_nonlinear + est_fisher_snlls->n_linear ==
+        static_cast<std::int32_t>(est_fisher_snlls->theta.size()));
 }
 
 TEST_CASE("IRLS-ML honors shared-label equality constraints") {

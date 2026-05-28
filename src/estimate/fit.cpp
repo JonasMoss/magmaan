@@ -473,10 +473,12 @@ static void attach_diagnostics(Estimates& est, const Prelude& pre,
 
 namespace {
 
+enum class FisherStepKind { Full, SchurSnlls };
+
 fit_expected<Estimates>
 compose_fisher_ml(const Prelude& pre, const SampleStats& samp,
                   const Eigen::VectorXd& x0, const Bounds& bounds,
-                  OptimOptions opts);
+                  OptimOptions opts, FisherStepKind step_kind);
 
 }  // namespace
 
@@ -617,7 +619,18 @@ fit_ml_fisher(spec::LatentStructure pt, const model::MatrixRep& rep,
               Bounds bounds, OptimOptions opts) {
   auto pre = prelude(pt, rep, samp, x0, "fit_ml_fisher");
   if (!pre.has_value()) return std::unexpected(pre.error());
-  return compose_fisher_ml(*pre, samp, x0, bounds, opts);
+  return compose_fisher_ml(*pre, samp, x0, bounds, opts,
+                           FisherStepKind::Full);
+}
+
+fit_expected<Estimates>
+fit_ml_fisher_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,
+                    const SampleStats& samp, const Eigen::VectorXd& x0,
+                    Bounds bounds, OptimOptions opts) {
+  auto pre = prelude(pt, rep, samp, x0, "fit_ml_fisher_snlls");
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  return compose_fisher_ml(*pre, samp, x0, bounds, opts,
+                           FisherStepKind::SchurSnlls);
 }
 
 fit_expected<Estimates>
@@ -878,10 +891,190 @@ solve_fisher_direction(const Eigen::MatrixXd& H,
   return -grad;
 }
 
+enum class FisherBlockKind { None, Nonlinear, Linear };
+
+FisherBlockKind fisher_block_kind_for(model::MatId mat) noexcept {
+  switch (mat) {
+    case model::MatId::Lambda:
+    case model::MatId::Beta:
+      return FisherBlockKind::Nonlinear;
+    case model::MatId::Theta:
+    case model::MatId::Psi:
+    case model::MatId::Nu:
+    case model::MatId::Alpha:
+      return FisherBlockKind::Linear;
+  }
+  return FisherBlockKind::None;
+}
+
+const char* fisher_block_kind_name(FisherBlockKind kind) noexcept {
+  switch (kind) {
+    case FisherBlockKind::None: return "none";
+    case FisherBlockKind::Nonlinear: return "nonlinear";
+    case FisherBlockKind::Linear: return "linear";
+  }
+  return "?";
+}
+
+struct FisherSnllsSplit {
+  std::vector<Eigen::Index> beta_cols;
+  std::vector<Eigen::Index> alpha_cols;
+};
+
+fit_expected<FisherSnllsSplit>
+fisher_snlls_split(const model::ModelEvaluator& ev,
+                   const EqConstraints& con) {
+  const auto locs = ev.param_locations();
+  if (locs.size() != ev.n_free()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_ml_fisher_snlls: parameter-location count does not match "
+        "n_free"));
+  }
+  if (con.Kmat.rows() != static_cast<Eigen::Index>(locs.size())) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_ml_fisher_snlls: equality-constraint basis has wrong row count"));
+  }
+
+  FisherSnllsSplit split;
+  constexpr double tol = 1e-10;
+  for (Eigen::Index c = 0; c < con.Kmat.cols(); ++c) {
+    FisherBlockKind kind = FisherBlockKind::None;
+    for (Eigen::Index r = 0; r < con.Kmat.rows(); ++r) {
+      if (std::abs(con.Kmat(r, c)) <= tol) continue;
+      const FisherBlockKind rk =
+          fisher_block_kind_for(locs[static_cast<std::size_t>(r)].mat);
+      if (rk == FisherBlockKind::None) {
+        return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+            "fit_ml_fisher_snlls: unsupported matrix location in split"));
+      }
+      if (kind == FisherBlockKind::None) {
+        kind = rk;
+      } else if (kind != rk) {
+        return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+            "fit_ml_fisher_snlls: equality/linear constraint basis column " +
+                std::to_string(c + 1) + " mixes " +
+                std::string(fisher_block_kind_name(kind)) + " and " +
+                std::string(fisher_block_kind_name(rk)) + " parameters"));
+      }
+    }
+    if (kind == FisherBlockKind::Nonlinear) split.beta_cols.push_back(c);
+    if (kind == FisherBlockKind::Linear) split.alpha_cols.push_back(c);
+  }
+
+  if (split.alpha_cols.empty()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_ml_fisher_snlls: no conditionally linear free parameters to "
+        "eliminate"));
+  }
+  return split;
+}
+
+Eigen::VectorXd select_vector(const Eigen::VectorXd& x,
+                              const std::vector<Eigen::Index>& idx) {
+  Eigen::VectorXd out(static_cast<Eigen::Index>(idx.size()));
+  for (std::size_t i = 0; i < idx.size(); ++i) {
+    out(static_cast<Eigen::Index>(i)) = x(idx[i]);
+  }
+  return out;
+}
+
+Eigen::MatrixXd select_matrix(const Eigen::MatrixXd& A,
+                              const std::vector<Eigen::Index>& rows,
+                              const std::vector<Eigen::Index>& cols) {
+  Eigen::MatrixXd out(static_cast<Eigen::Index>(rows.size()),
+                      static_cast<Eigen::Index>(cols.size()));
+  for (std::size_t i = 0; i < rows.size(); ++i) {
+    for (std::size_t j = 0; j < cols.size(); ++j) {
+      out(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) =
+          A(rows[i], cols[j]);
+    }
+  }
+  return out;
+}
+
+bool solve_symmetric_system(const Eigen::MatrixXd& A,
+                            const Eigen::MatrixXd& B,
+                            Eigen::MatrixXd& X) {
+  if (A.rows() != A.cols() || A.rows() != B.rows()) return false;
+  if (A.rows() == 0) {
+    X.resize(0, B.cols());
+    return true;
+  }
+
+  const Eigen::MatrixXd Asym = 0.5 * (A + A.transpose());
+  const double scale = std::max(1.0, Asym.cwiseAbs().maxCoeff());
+  for (double ridge : {0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2}) {
+    Eigen::MatrixXd Ar = Asym;
+    if (ridge > 0.0) Ar.diagonal().array() += ridge * scale;
+    Eigen::LDLT<Eigen::MatrixXd> ldlt(Ar);
+    if (ldlt.info() != Eigen::Success) continue;
+    X = ldlt.solve(B);
+    if (X.allFinite()) return true;
+  }
+  return false;
+}
+
+Eigen::VectorXd
+solve_fisher_direction_schur(const Eigen::MatrixXd& H,
+                             const Eigen::VectorXd& grad,
+                             const FisherSnllsSplit& split) {
+  const Eigen::Index q = grad.size();
+  if (q == 0) return Eigen::VectorXd(0);
+  if (split.alpha_cols.empty()) return solve_fisher_direction(H, grad);
+
+  const Eigen::VectorXd ga = select_vector(grad, split.alpha_cols);
+  const Eigen::MatrixXd Haa =
+      select_matrix(H, split.alpha_cols, split.alpha_cols);
+  Eigen::MatrixXd ya_mat;
+  if (!solve_symmetric_system(Haa, ga, ya_mat)) {
+    return solve_fisher_direction(H, grad);
+  }
+  const Eigen::VectorXd ya = ya_mat.col(0);
+
+  Eigen::VectorXd d = Eigen::VectorXd::Zero(q);
+  if (split.beta_cols.empty()) {
+    for (std::size_t i = 0; i < split.alpha_cols.size(); ++i) {
+      d(split.alpha_cols[i]) = -ya(static_cast<Eigen::Index>(i));
+    }
+    if (d.allFinite() && grad.dot(d) < 0.0) return d;
+    return solve_fisher_direction(H, grad);
+  }
+
+  const Eigen::VectorXd gb = select_vector(grad, split.beta_cols);
+  const Eigen::MatrixXd Hbb =
+      select_matrix(H, split.beta_cols, split.beta_cols);
+  const Eigen::MatrixXd Hba =
+      select_matrix(H, split.beta_cols, split.alpha_cols);
+  const Eigen::MatrixXd Hab =
+      select_matrix(H, split.alpha_cols, split.beta_cols);
+
+  Eigen::MatrixXd X;
+  if (!solve_symmetric_system(Haa, Hab, X)) {
+    return solve_fisher_direction(H, grad);
+  }
+  const Eigen::MatrixXd S = Hbb - Hba * X;
+  const Eigen::VectorXd rhs = -(gb - Hba * ya);
+  Eigen::MatrixXd db_mat;
+  if (!solve_symmetric_system(S, rhs, db_mat)) {
+    return solve_fisher_direction(H, grad);
+  }
+  const Eigen::VectorXd db = db_mat.col(0);
+  const Eigen::VectorXd da = -ya - X * db;
+
+  for (std::size_t i = 0; i < split.beta_cols.size(); ++i) {
+    d(split.beta_cols[i]) = db(static_cast<Eigen::Index>(i));
+  }
+  for (std::size_t i = 0; i < split.alpha_cols.size(); ++i) {
+    d(split.alpha_cols[i]) = da(static_cast<Eigen::Index>(i));
+  }
+  if (d.allFinite() && grad.dot(d) < 0.0) return d;
+  return solve_fisher_direction(H, grad);
+}
+
 fit_expected<Estimates>
 compose_fisher_ml(const Prelude& pre, const SampleStats& samp,
                   const Eigen::VectorXd& x0, const Bounds& bounds,
-                  OptimOptions opts) {
+                  OptimOptions opts, FisherStepKind step_kind) {
   const model::ModelEvaluator& ev = pre.ev;
 
   auto obj_or = estimate::ml_objective(ev, samp);
@@ -896,6 +1089,18 @@ compose_fisher_ml(const Prelude& pre, const SampleStats& samp,
   }
 
   const EqConstraints& con = pre.con;
+  FisherSnllsSplit snlls_split;
+  if (step_kind == FisherStepKind::SchurSnlls) {
+    if (!bounds.empty()) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "fit_ml_fisher_snlls: box bounds are not supported by the Schur "
+          "Fisher block-elimination path"));
+    }
+    auto split_or = fisher_snlls_split(ev, con);
+    if (!split_or.has_value()) return std::unexpected(split_or.error());
+    snlls_split = std::move(*split_or);
+  }
+
   const bool driven_reduced = con.active();
   const bool pure_merge = !con.group.empty();
   if (driven_reduced && !bounds.empty() && !pure_merge) {
@@ -977,7 +1182,9 @@ compose_fisher_ml(const Prelude& pre, const SampleStats& samp,
     auto H_or = expected_ml_hessian_f(ev, samp, theta);
     if (!H_or.has_value()) return std::unexpected(H_or.error());
     const Eigen::MatrixXd H_driven = reduce_hessian(*H_or);
-    Eigen::VectorXd d = solve_fisher_direction(H_driven, grad);
+    Eigen::VectorXd d = (step_kind == FisherStepKind::SchurSnlls)
+        ? solve_fisher_direction_schur(H_driven, grad, snlls_split)
+        : solve_fisher_direction(H_driven, grad);
     if (!d.allFinite() || d.size() != driven.size()) {
       return std::unexpected(fit_err(FitError::Kind::NumericIssue,
           "fit_ml_fisher: Fisher direction is non-finite"));
@@ -1065,6 +1272,12 @@ compose_fisher_ml(const Prelude& pre, const SampleStats& samp,
 
   Estimates est{theta, f_cur, iter, total_f_evals, total_g_evals,
                 final_status, audit.grad_inf_norm, std::move(audit)};
+  if (step_kind == FisherStepKind::SchurSnlls) {
+    est.n_nonlinear =
+        static_cast<std::int32_t>(snlls_split.beta_cols.size());
+    est.n_linear =
+        static_cast<std::int32_t>(snlls_split.alpha_cols.size());
+  }
   attach_diagnostics(est, pre, bounds);
   return est;
 }
