@@ -1,0 +1,219 @@
+---
+title: "Ernst IRLS ML Convergence"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path), dirname(getwd())))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"),
+                              candidate_dirs))
+hits <- result_candidates[
+  file.exists(file.path(result_candidates,
+                        "irls_ernst_convergence_summary.csv"))
+]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+
+summary_path <- file.path(results_dir, "irls_ernst_convergence_summary.csv")
+kappa_path <- file.path(results_dir, "irls_ernst_convergence_kappa.csv")
+improper_path <- file.path(results_dir, "irls_ernst_improper_by_n.csv")
+metadata_path <- file.path(results_dir, "metadata.csv")
+if (!file.exists(summary_path) || !file.exists(kappa_path) ||
+    !file.exists(improper_path) || !file.exists(metadata_path)) {
+  stop("Missing experiment CSVs. Run: Rscript run_experiment.R")
+}
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  stop("The report requires ggplot2. Install it or inspect the CSVs directly.")
+}
+
+library(ggplot2)
+summary_n <- utils::read.csv(summary_path, check.names = FALSE)
+summary_k <- utils::read.csv(kappa_path, check.names = FALSE)
+improper_n <- utils::read.csv(improper_path, check.names = FALSE)
+metadata <- utils::read.csv(metadata_path, check.names = FALSE)
+
+meta_value <- function(key) {
+  hit <- metadata$value[metadata$key == key]
+  if (length(hit)) hit[[1L]] else ""
+}
+fmt_pct <- function(x) ifelse(is.na(x), "", sprintf("%.1f%%", 100 * x))
+fmt_num <- function(x, digits = 3) {
+  ifelse(is.na(x), "", formatC(x, format = "g", digits = digits))
+}
+fmt_ms <- function(x) ifelse(is.na(x), "", sprintf("%.3f", x / 1000))
+method_levels <- c("ml-lbfgs", "ml-port", "ml-irls", "ml-irls-snlls")
+method_labels <- c(
+  `ml-lbfgs` = "ML L-BFGS",
+  `ml-port` = "ML PORT",
+  `ml-irls` = "IRLS-ML",
+  `ml-irls-snlls` = "SNLLS-IRLS-ML"
+)
+summary_n$method <- factor(summary_n$method, levels = method_levels)
+summary_k$method <- factor(summary_k$method, levels = method_levels)
+theme_set(theme_minimal(base_size = 12))
+
+method_totals <- do.call(rbind, lapply(split(summary_n, summary_n$method),
+                                       function(x) {
+  data.frame(
+    Method = method_labels[as.character(x$method[[1L]])],
+    Reps = sum(x$reps),
+    `Convergence Rate` = sum(x$n_converged) / sum(x$reps),
+    `Solver Error Rate` = sum(x$n_error) / sum(x$reps),
+    `Median Time ms` = stats::median(x$median_wall_usec, na.rm = TRUE) / 1000,
+    `Median F Evals` = stats::median(x$median_fevals, na.rm = TRUE),
+    check.names = FALSE
+  )
+}))
+```
+
+## Question
+
+Does Fisher-scoring IRLS for complete-data ML improve convergence on the Ernst
+small-sample two-factor SEM design, and does the Golub-Pereyra SNLLS inner step
+help or hurt that story?
+
+The comparison is against direct ML with NLopt L-BFGS and PORT. Convergence is
+the magmaan terminal-audit verdict, not merely the backend return code.
+
+## Short Answer
+
+```{r}
+best <- method_totals[which.max(method_totals$`Convergence Rate`), ]
+worst <- method_totals[which.min(method_totals$`Convergence Rate`), ]
+cat(
+  "Across ", meta_value("n_cells"), " sample-size cells and ",
+  meta_value("reps"), " replicates per cell, the best method was ",
+  best$Method, " with ", fmt_pct(best$`Convergence Rate`),
+  " audit convergence. The weakest was ", worst$Method, " with ",
+  fmt_pct(worst$`Convergence Rate`), ".\n",
+  sep = ""
+)
+```
+
+```{r}
+total_table <- method_totals
+total_table$`Convergence Rate` <- fmt_pct(total_table$`Convergence Rate`)
+total_table$`Solver Error Rate` <- fmt_pct(total_table$`Solver Error Rate`)
+total_table$`Median Time ms` <- sprintf("%.3f", total_table$`Median Time ms`)
+total_table$`Median F Evals` <- fmt_num(total_table$`Median F Evals`)
+knitr::kable(total_table, row.names = FALSE)
+```
+
+## Evidence
+
+```{r}
+#| fig-width: 8
+#| fig-height: 4.8
+ggplot(summary_n,
+       aes(n, convergence_rate, color = method,
+           group = method)) +
+  geom_line(linewidth = 0.7) +
+  geom_point(size = 1.4) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                     limits = c(0, 1)) +
+  scale_color_discrete(labels = method_labels) +
+  labs(x = "Sample Size", y = "Audit Convergence Rate",
+       color = "Method",
+       title = "Convergence By Sample Size") +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+keep_n <- c(10L, 15L, 25L, 40L, 70L, 100L)
+slice <- summary_n[summary_n$n %in% keep_n, ]
+slice <- slice[order(slice$n, slice$method), ]
+table_n <- data.frame(
+  N = slice$n,
+  Method = method_labels[as.character(slice$method)],
+  `Convergence Rate` = fmt_pct(slice$convergence_rate),
+  `Solver Error Rate` = fmt_pct(slice$solver_error_rate),
+  `Median F Evals` = fmt_num(slice$median_fevals),
+  `Median Time ms` = fmt_ms(slice$median_wall_usec),
+  check.names = FALSE
+)
+knitr::kable(table_n, row.names = FALSE)
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 4.8
+ggplot(summary_n,
+       aes(n, median_wall_usec / 1000, color = method,
+           group = method)) +
+  geom_line(linewidth = 0.7) +
+  geom_point(size = 1.4) +
+  scale_y_log10() +
+  scale_color_discrete(labels = method_labels) +
+  labs(x = "Sample Size", y = "Median Wall Time (ms, log scale)",
+       color = "Method",
+       title = "Per-Fit Cost By Sample Size") +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+#| fig-width: 8
+#| fig-height: 4.8
+summary_k$kbin_label <- factor(summary_k$kbin,
+                               levels = unique(summary_k$kbin[order(summary_k$kappa_med)]))
+ggplot(summary_k,
+       aes(kappa_med, convergence_rate, color = method,
+           group = method)) +
+  geom_line(linewidth = 0.7) +
+  geom_point(size = 1.4) +
+  scale_x_log10() +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                     limits = c(0, 1)) +
+  scale_color_discrete(labels = method_labels) +
+  labs(x = "Median kappa(S) In Bin (log scale)",
+       y = "Audit Convergence Rate",
+       color = "Method",
+       title = "Convergence By Sample Covariance Conditioning") +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+imp <- improper_n[improper_n$n %in% keep_n, ]
+imp_table <- data.frame(
+  N = imp$n,
+  Datasets = imp$datasets,
+  `Improper Rate` = fmt_pct(imp$improper_rate),
+  check.names = FALSE
+)
+knitr::kable(imp_table, row.names = FALSE)
+```
+
+## Caveats
+
+This is an engineering convergence check, not a paper-grade Monte Carlo table.
+The default run uses `r meta_value("reps")` replicates per sample-size cell.
+Wall times are single-fit timings inside the simulation loop, so they are good
+for coarse cost ordering but not microbenchmark claims.
+
+The SNLLS-IRLS path is only meaningful for separable models; this Ernst design
+is separable, so the experiment exercises its intended domain rather than its
+applicability boundary.
+
+## Reproduce
+
+```{r}
+repro <- data.frame(
+  Item = c("Command", "Seed Base", "Replicates", "N Values", "Methods"),
+  Value = c(
+    "Rscript run_experiment.R",
+    meta_value("seed_base"),
+    meta_value("reps"),
+    meta_value("n_values"),
+    meta_value("methods")
+  ),
+  check.names = FALSE
+)
+knitr::kable(repro, row.names = FALSE)
+```
