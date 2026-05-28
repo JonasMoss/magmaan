@@ -73,10 +73,13 @@ semantics · **XL** statistical design/research track before implementation.
   full-threshold SNLLS path. All-ordinal theta now also works through the
   cache-aware bounded path and SNLLS: the theta SNLLS path profiles threshold
   free parameters but keeps the standardized covariance block nonlinear.
-  Remaining C++ estimator work on this track: cache-aware mixed
-  continuous/ordinal fitting; threshold-profiled general linear maps such as
-  effect-coding-style constraints; reduced-Gamma robust-inference products that
-  avoid full materialization where possible; and only-when-needed R/API polish.
+  Fit-only mixed DWLS can now build `MixedOrdinalMoments` plus the exact Gamma
+  diagonal through `mixed_ordinal_workspace_from_data()` and feed both bounded
+  and full-threshold mixed SNLLS fits without full Gamma/WLS materialization.
+  Remaining C++ estimator work on this track: lazy mixed WLS construction,
+  mixed theta SNLLS, threshold-profiled general linear maps such as
+  effect-coding-style constraints, reduced-Gamma robust-inference products that
+  avoid full materialization where possible, and only-when-needed R/API polish.
   First benchmark slice landed as `magmaan_ordinal_workspace_bench` plus
   `experiments/06-ordinal-snlls-probe`: it covers all-ordinal delta fit-only
   ULS/DWLS/WLS across free, fixed, and shared threshold models and checks
@@ -107,11 +110,13 @@ semantics · **XL** statistical design/research track before implementation.
   are nonlinear in the remaining block. Landed mixed slice: materialized
   mixed continuous/ordinal delta SNLLS via
   `fit_mixed_ordinal_snlls_full_thresholds()`, matching existing bounded mixed
-  DWLS/WLS on a focused unit test. Remaining C++ estimator work on this track:
-  lazy/cache-aware mixed Gamma construction, mixed theta SNLLS, threshold-profiled
-  general linear maps such as effect-coding-style constraints, reduced-Gamma
-  robust-inference products that avoid full materialization where possible, and
-  only-when-needed R/API polish.
+  DWLS/WLS on a focused unit test. Landed next: lazy fit-only mixed DWLS
+  construction plus mixed-moments bounded/SNLLS overloads, with the speed pilot
+  now timing legacy-versus-lazy mixed DWLS raw-to-fit rows. Remaining C++
+  estimator work on this track: lazy mixed WLS construction, mixed theta SNLLS,
+  threshold-profiled general linear maps such as effect-coding-style
+  constraints, reduced-Gamma robust-inference products that avoid full
+  materialization where possible, and only-when-needed R/API polish.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
@@ -209,10 +214,13 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   threshold-plus-covariance profiling split. Landed mixed extension: the same
   experiment now includes mixed continuous/ordinal delta rows comparing
   materialized full bounded DWLS/WLS with materialized full-threshold SNLLS,
-  plus raw-to-fit mixed bounded/SNLLS construction timings. The latest opt
-  smoke pilot covers the compact `--smoke` grid with `q <= 4`; open follow-up
-  is the fuller `q <= 12` literature-like sweep and optional lavaan context
-  rows if the paper needs them.
+  plus raw-to-fit mixed bounded/SNLLS construction timings. Landed next: mixed
+  DWLS raw-to-fit rows now include the lazy `MixedOrdinalWorkspace` boundary,
+  so the report can separate legacy mixed-stat construction from lazy
+  mixed-moments-plus-Gamma-diagonal construction. The latest opt smoke pilot
+  covers the compact `--smoke` grid with `q <= 4`; open follow-up is the fuller
+  `q <= 12` literature-like sweep and optional lavaan context rows if the paper
+  needs them.
 - **S.** Extend the ordinal threshold-constraint support experiment
   (`experiments/12-ordinal-threshold-constraints`) only if the paper needs
   broader constraint evidence. The first opt pilot is single-group ordinal CFA:
@@ -421,10 +429,11 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   models, the all-ordinal theta path covers cache-aware bounded/SNLLS point
   estimation, and the full-threshold SNLLS path supports general linear
   threshold constraints. Mixed continuous/ordinal delta SNLLS now exists for
-  the materialized full-threshold DWLS/WLS path. Use experiments to decide
-  whether the next paper-facing C++ work should be lazy/cache-aware mixed
-  construction, mixed theta SNLLS, threshold-profiled general linear maps, or
-  reduced-Gamma inference plumbing.
+  the materialized full-threshold DWLS/WLS path, and mixed fit-only DWLS now
+  has a lazy workspace path. Use experiments to decide whether the next
+  paper-facing C++ work should be lazy mixed WLS construction, mixed theta
+  SNLLS, threshold-profiled general linear maps, or reduced-Gamma inference
+  plumbing.
 
 ## Composite models
 

@@ -192,6 +192,12 @@ mixed_ordinal_start_values(spec::LatentStructure pt,
                            const data::MixedOrdinalStats& stats,
                            spec::Starts starts = {});
 
+fit_expected<Eigen::VectorXd>
+mixed_ordinal_start_values(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::MixedOrdinalMoments& moments,
+                           spec::Starts starts = {});
+
 // Ordinal DWLS / WLS fit. The model is fitted as a bounded least-squares
 // problem in the thresholds + polychoric correlations; `backend` selects the
 // optimizer (NLopt L-BFGS by default, or Ceres LM when MAGMAAN_WITH_CERES is
@@ -272,6 +278,17 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           OrdinalParameterization parameterization =
                               OrdinalParameterization::Delta);
 
+fit_expected<Estimates>
+fit_mixed_ordinal_bounded(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const data::MixedOrdinalMoments& moments,
+                          data::OrdinalGammaCache* gamma_cache,
+                          Bounds bounds,
+                          data::OrdinalWeightPlan plan,
+                          const Eigen::VectorXd& x0,
+                          Backend backend = Backend::NloptLbfgs,
+                          optim::OptimOptions opts = {});
+
 // Golub-Pereyra profiled mixed continuous/ordinal delta LS over the full mixed
 // threshold + continuous mean/variance + association moment objective.
 // This first mixed SNLLS entry point intentionally consumes the materialized
@@ -286,6 +303,17 @@ fit_mixed_ordinal_snlls_full_thresholds(
     Backend backend = Backend::NloptLbfgs,
     optim::OptimOptions opts = {},
     OrdinalParameterization parameterization = OrdinalParameterization::Delta);
+
+fit_expected<Estimates>
+fit_mixed_ordinal_snlls_full_thresholds(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalMoments& moments,
+    data::OrdinalGammaCache* gamma_cache,
+    data::OrdinalWeightPlan plan,
+    const Eigen::VectorXd& x0,
+    Backend backend = Backend::NloptLbfgs,
+    optim::OptimOptions opts = {});
 
 post_expected<OrdinalFitMeasures>
 fit_measures_ordinal(spec::LatentStructure pt,

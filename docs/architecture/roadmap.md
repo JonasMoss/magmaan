@@ -529,7 +529,11 @@ stop rather than any usable non-error return.
   separate from delta's threshold-plus-covariance profiling split. The same
   benchmark/report now includes mixed continuous/ordinal delta rows comparing
   materialized full bounded DWLS/WLS with materialized full-threshold SNLLS,
-  plus raw-to-fit mixed bounded/SNLLS construction timings.
+  plus raw-to-fit mixed bounded/SNLLS construction timings. Fit-only mixed
+  DWLS can also build a lazy `MixedOrdinalWorkspace` with
+  `MixedOrdinalMoments` plus the exact Gamma diagonal, so the speed pilot
+  carries legacy-versus-lazy mixed DWLS raw-to-fit rows; mixed WLS still
+  materializes the full Gamma/inverse-weight path.
 - DWLS diagonal weights, full WLS weights, bounded ordinal LS fitting, and
   thin R wrappers for ordinal stats plus DWLS/WLS fits.
 - The R ordinal data boundary exposes consolidated dispatchers:
@@ -573,8 +577,11 @@ stop rather than any usable non-error return.
   `estimate::fit_mixed_ordinal_snlls_full_thresholds()`, that profiles the
   conditionally linear threshold, mean, variance, and covariance parameters
   through the generic Golub-Pereyra split and matches bounded mixed DWLS/WLS on
-  a focused unit test. Mixed theta SNLLS, lazy mixed Gamma construction, and
-  threshold-profiled mixed objectives remain later slices. The lavaan-backed
+  a focused unit test. The fit-only mixed DWLS workspace path now avoids full
+  Gamma/WLS materialization by carrying `MixedOrdinalMoments` plus the Gamma
+  diagonal into bounded and full-threshold SNLLS fits. Mixed theta SNLLS, lazy
+  mixed WLS construction, and threshold-profiled mixed objectives remain later
+  slices. The lavaan-backed
   fixtures include a complete/listwise sparse 4-category boundary case; the
   continuous-ordinal covariance influence rows include the variance
   delta-method term needed for stable mixed WLS weighting.

@@ -60,13 +60,17 @@ fit_method_levels <- c("full_bounded", "threshold_profiled_bounded",
                        "snlls_full_thresholds", "snlls")
 e2e_levels <- c("snlls_e2e_legacy", "snlls_e2e_lazy",
                 "full_bounded_e2e_legacy",
-                "snlls_full_thresholds_e2e_legacy")
+                "snlls_full_thresholds_e2e_legacy",
+                "full_bounded_e2e_lazy",
+                "snlls_full_thresholds_e2e_lazy")
 method_levels <- c(fit_method_levels, e2e_levels)
 method_labels <- c("Full bounded", "Threshold-profiled bounded",
                    "Full-threshold SNLLS", "Threshold-profiled SNLLS",
                    "Legacy raw-to-SNLLS", "Lazy raw-to-SNLLS",
                    "Mixed raw-to-bounded",
-                   "Mixed raw-to-full-threshold SNLLS")
+                   "Mixed raw-to-full-threshold SNLLS",
+                   "Mixed lazy raw-to-bounded",
+                   "Mixed lazy raw-to-full-threshold SNLLS")
 speed$Method <- factor(speed$path, levels = method_levels,
                        labels = method_labels)
 speed$Data <- factor(speed$data_kind,
@@ -154,6 +158,10 @@ if (nrow(e2e)) {
     estimator = character(),
     snlls_e2e_legacy = numeric(),
     snlls_e2e_lazy = numeric(),
+    full_bounded_e2e_legacy = numeric(),
+    snlls_full_thresholds_e2e_legacy = numeric(),
+    full_bounded_e2e_lazy = numeric(),
+    snlls_full_thresholds_e2e_lazy = numeric(),
     stringsAsFactors = FALSE
   )
 }
@@ -172,6 +180,12 @@ wide_e2e$lazy_gain <- wide_e2e$snlls_e2e_legacy /
   wide_e2e$snlls_e2e_lazy
 wide_e2e$mixed_e2e_gain <- wide_e2e$full_bounded_e2e_legacy /
   wide_e2e$snlls_full_thresholds_e2e_legacy
+wide_e2e$mixed_lazy_bounded_gain <- wide_e2e$full_bounded_e2e_legacy /
+  wide_e2e$full_bounded_e2e_lazy
+wide_e2e$mixed_lazy_snlls_gain <- wide_e2e$snlls_full_thresholds_e2e_legacy /
+  wide_e2e$snlls_full_thresholds_e2e_lazy
+wide_e2e$mixed_lazy_e2e_gain <- wide_e2e$full_bounded_e2e_lazy /
+  wide_e2e$snlls_full_thresholds_e2e_lazy
 ```
 
 ## Question
@@ -185,9 +199,11 @@ parameterizations. It also adds raw-data-to-fit SNLLS rows that compare the
 legacy eager ordinal constructor against the lazy fit-only workspace constructor
 for ULS/DWLS. Mixed continuous/ordinal delta rows extend the same full bounded
 versus full-threshold SNLLS comparison, including raw-to-fit rows where mixed
-statistics, starts, and the optimizer are all inside the timed operation. The
-full direct bounded comparator is included for DWLS/WLS; ULS has the
-cache-aware comparator paths.
+statistics, starts, and the optimizer are all inside the timed operation. DWLS
+also has lazy mixed raw-to-fit rows that construct `MixedOrdinalMoments` and
+only the exact Gamma diagonal; WLS remains materialized because it still needs
+the full Gamma/inverse-weight path. The full direct bounded comparator is
+included for DWLS/WLS; ULS has the cache-aware comparator paths.
 
 The design deliberately includes three views:
 
@@ -217,9 +233,10 @@ and fit profiled SNLLS. That makes ULS the cleanest construction win. DWLS is
 more nuanced because exact lazy construction still computes the score work
 needed for the Gamma diagonal. The mixed rows are delta-only and compare the
 materialized mixed full bounded path to materialized mixed full-threshold
-SNLLS; mixed theta SNLLS and lazy mixed Gamma construction are deliberately not
-claimed here. The result is still a pilot, not a paper-grade simulation: the
-design is synthetic and there is no lavaan timing context here.
+SNLLS, with an additional DWLS lazy workspace check at the raw-data boundary.
+Mixed theta SNLLS and lazy mixed WLS construction are deliberately not claimed
+here. The result is still a pilot, not a paper-grade simulation: the design is
+synthetic and there is no lavaan timing context here.
 
 ## Run
 
@@ -489,7 +506,12 @@ if (nrow(mixed_e2e)) {
   mixed_e2e_summary <- aggregate(
     cbind(full_bounded_e2e_legacy,
           snlls_full_thresholds_e2e_legacy,
-          mixed_e2e_gain) ~ design + estimator,
+          mixed_e2e_gain,
+          full_bounded_e2e_lazy,
+          snlls_full_thresholds_e2e_lazy,
+          mixed_lazy_bounded_gain,
+          mixed_lazy_snlls_gain,
+          mixed_lazy_e2e_gain) ~ design + estimator,
     data = mixed_e2e,
     FUN = median_or_na,
     na.action = na.pass
@@ -503,15 +525,35 @@ if (nrow(mixed_e2e)) {
     fmt_ms(mixed_e2e_summary$snlls_full_thresholds_e2e_legacy)
   mixed_e2e_summary$`Bounded / SNLLS` <-
     fmt_num(mixed_e2e_summary$mixed_e2e_gain)
+  mixed_e2e_summary$`Lazy raw-to-bounded ms` <-
+    fmt_ms(mixed_e2e_summary$full_bounded_e2e_lazy)
+  mixed_e2e_summary$`Lazy raw-to-SNLLS ms` <-
+    fmt_ms(mixed_e2e_summary$snlls_full_thresholds_e2e_lazy)
+  mixed_e2e_summary$`Legacy / lazy bounded` <-
+    fmt_num(mixed_e2e_summary$mixed_lazy_bounded_gain)
+  mixed_e2e_summary$`Legacy / lazy SNLLS` <-
+    fmt_num(mixed_e2e_summary$mixed_lazy_snlls_gain)
+  mixed_e2e_summary$`Lazy bounded / SNLLS` <-
+    fmt_num(mixed_e2e_summary$mixed_lazy_e2e_gain)
   knitr::kable(mixed_e2e_summary[, c("Design", "estimator",
                                      "Mixed raw-to-bounded ms",
                                      "Mixed raw-to-SNLLS ms",
-                                     "Bounded / SNLLS")],
+                                     "Bounded / SNLLS",
+                                     "Lazy raw-to-bounded ms",
+                                     "Lazy raw-to-SNLLS ms",
+                                     "Legacy / lazy bounded",
+                                     "Legacy / lazy SNLLS",
+                                     "Lazy bounded / SNLLS")],
                row.names = FALSE,
                col.names = c("Design", "Estimator",
                              "Mixed Raw-to-Bounded ms",
                              "Mixed Raw-to-SNLLS ms",
-                             "Bounded / SNLLS"))
+                             "Bounded / SNLLS",
+                             "Lazy Raw-to-Bounded ms",
+                             "Lazy Raw-to-SNLLS ms",
+                             "Legacy / Lazy Bounded",
+                             "Legacy / Lazy SNLLS",
+                             "Lazy Bounded / SNLLS"))
 }
 ```
 
@@ -519,8 +561,10 @@ These rows include raw ordinal construction, start values, any needed
 Gamma/cache work, and the threshold-profiled SNLLS fit. Ratios greater than
 one favor lazy construction. WLS is legacy-only here because the fit-only WLS
 plan still needs the full Gamma/inverse-weight materialization. The mixed rows
-time raw-data mixed-stat construction, starts, and either full bounded or
-full-threshold SNLLS fitting; ratios greater than one favor SNLLS.
+time raw-data mixed-stat or mixed-workspace construction, starts, and either
+full bounded or full-threshold SNLLS fitting. For mixed DWLS, legacy/lazy ratios
+greater than one favor the lazy workspace; bounded/SNLLS ratios greater than
+one favor SNLLS.
 
 ```{r}
 #| fig-width: 7

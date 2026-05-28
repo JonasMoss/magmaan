@@ -3527,6 +3527,102 @@ TEST_CASE("Mixed ordinal full-threshold SNLLS matches bounded DWLS/WLS") {
   CHECK(theta.error().detail.find("only delta") != std::string::npos);
 }
 
+TEST_CASE("Mixed ordinal fit-only workspace supplies DWLS diagonal fits") {
+  std::mt19937 rng(20260613);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(520, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta > -0.65) + (eta > 0.3);
+    X(i, 1) = 1.0 + (0.66 * eta + 0.75 * norm(rng) > 0.08);
+    X(i, 2) = 0.84 * eta + 0.55 * norm(rng) + 0.12;
+    X(i, 3) = 0.61 * eta + 0.79 * norm(rng) - 0.08;
+  }
+  const std::vector<std::vector<std::int32_t>> ordered = {{1, 1, 0, 0}};
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data({X}, ordered);
+  REQUIRE(stats.has_value());
+
+  auto plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::DWLS,
+      magmaan::data::OrdinalMomentParameterization::Delta);
+  auto workspace =
+      magmaan::data::mixed_ordinal_workspace_from_data({X}, ordered, plan);
+  REQUIRE(workspace.has_value());
+  REQUIRE(workspace->gamma_cache.blocks.size() == 1);
+  CHECK(workspace->gamma_cache.blocks[0].has_diagonal);
+  CHECK_FALSE(workspace->gamma_cache.blocks[0].has_full);
+  CHECK(workspace->moments.moments[0].size() == stats->moments[0].size());
+  const double moment_diff =
+      (workspace->moments.moments[0] - stats->moments[0])
+          .cwiseAbs()
+          .maxCoeff();
+  CHECK(moment_diff < 1e-10);
+  REQUIRE(stats->NACOV.size() == 1);
+  REQUIRE(workspace->gamma_cache.blocks[0].diagonal.size() ==
+          stats->NACOV[0].rows());
+  CHECK((workspace->gamma_cache.blocks[0].diagonal -
+         stats->NACOV[0].diagonal())
+            .cwiseAbs()
+            .maxCoeff() < 1e-8);
+
+  magmaan::spec::BuildOptions build_opts;
+  build_opts.meanstructure = true;
+  auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3 + x4\n"
+                                          "x1 | t1 + t2\n"
+                                          "x2 | t1\n"
+                                          "x1 ~*~ 1*x1\n"
+                                          "x2 ~*~ 1*x2\n");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp, build_opts);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0_full =
+      magmaan::estimate::mixed_ordinal_start_values(*pt, *mr, *stats, {});
+  auto x0_lazy = magmaan::estimate::mixed_ordinal_start_values(
+      *pt, *mr, workspace->moments, {});
+  REQUIRE(x0_full.has_value());
+  REQUIRE(x0_lazy.has_value());
+  REQUIRE(x0_full->size() == x0_lazy->size());
+  CHECK((*x0_full - *x0_lazy).cwiseAbs().maxCoeff() < 1e-10);
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 500;
+  opts.ftol = 1e-10;
+  opts.gtol = 1e-7;
+
+  auto full_bounded = magmaan::estimate::fit_mixed_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS,
+      *x0_full, magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto lazy_bounded = magmaan::estimate::fit_mixed_ordinal_bounded(
+      *pt, *mr, workspace->moments, &workspace->gamma_cache, {}, plan,
+      *x0_lazy, magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto lazy_snlls =
+      magmaan::estimate::fit_mixed_ordinal_snlls_full_thresholds(
+          *pt, *mr, workspace->moments, &workspace->gamma_cache, plan, *x0_lazy,
+          magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(full_bounded.has_value(),
+                  "full mixed bounded failed: "
+                      << (full_bounded.has_value() ? ""
+                                                   : full_bounded.error().detail));
+  REQUIRE_MESSAGE(lazy_bounded.has_value(),
+                  "lazy mixed bounded failed: "
+                      << (lazy_bounded.has_value() ? ""
+                                                   : lazy_bounded.error().detail));
+  REQUIRE_MESSAGE(lazy_snlls.has_value(),
+                  "lazy mixed SNLLS failed: "
+                      << (lazy_snlls.has_value() ? ""
+                                                 : lazy_snlls.error().detail));
+  CHECK(lazy_bounded->fmin ==
+        doctest::Approx(full_bounded->fmin).epsilon(2e-6));
+  CHECK(lazy_snlls->fmin == doctest::Approx(full_bounded->fmin).epsilon(2e-6));
+  CHECK((lazy_bounded->theta - full_bounded->theta).cwiseAbs().maxCoeff() <
+        8e-4);
+  CHECK((lazy_snlls->theta - full_bounded->theta).cwiseAbs().maxCoeff() <
+        8e-4);
+}
+
 TEST_CASE("Mixed ordinal polyserial DPD keeps shared marginals and fits DWLS") {
   std::mt19937 rng(20260517);
   std::normal_distribution<double> norm(0.0, 1.0);
