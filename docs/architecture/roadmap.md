@@ -93,6 +93,13 @@ golden `parTable()` fixtures.
   score up to scale. Linear equality constraints are handled in reduced
   coordinates; nonlinear constraints are rejected, and the SNLLS variant also
   rejects box bounds.
+- Experimental local Fisher scoring for complete-data ML is exposed as
+  `estimate::fit_ml_fisher()` and `magmaan_core$fit_ml_fisher()`. It computes
+  the analytic ML gradient and expected-information Hessian approximation on
+  the true `F_ML` scale, solves a damped local Fisher equation, and accepts
+  steps by Armijo backtracking on the ML objective. This is separate from the
+  IRLS paths above, which reoptimize a frozen GLS subproblem at each outer
+  iterate.
 - Discrepancy-scale convention: magmaan's `fmin` is the full ML discrepancy
   `F`, whereas lavaan reports `F/2` — magmaan's `fmin` at the optimum equals
   twice lavaan's.

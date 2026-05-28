@@ -266,6 +266,54 @@ TEST_CASE("IRLS-ML-SNLLS == IRLS-ML at the optimum (separability cross-check)") 
   CHECK((est_snlls->theta - est_full->theta).cwiseAbs().maxCoeff() < 5e-3);
 }
 
+TEST_CASE("Fisher-ML reaches the direct ML optimum on the Ernst n=25 replicate") {
+  auto fp = Parser::parse("f1 =~ x1 + x2 + x3\n"
+                          "f2 =~ x4 + x5 + x6\n"
+                          "f2 ~ f1");
+  REQUIRE(fp.has_value());
+  auto pt = build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  Eigen::Matrix<double, 6, 6> S;
+  S << 2.5661681014360447, 1.0123531463435886, 0.9068012773014319,
+       0.67423897116130305, 0.051923154768001037, 0.54705557103799585,
+       1.0123531463435886, 1.8421060208134847, 0.27997096108442582,
+       0.9510778710066834, 0.48357874457719119, 0.72748489105184444,
+       0.9068012773014319, 0.27997096108442582, 1.1331147592015471,
+       0.083426833652732499, 0.0091395654434734477,
+       -0.36498061246352559,
+       0.67423897116130305, 0.9510778710066834, 0.083426833652732499,
+       1.9310457158587859, 1.4635971252541156, 0.94572320314657965,
+       0.051923154768001037, 0.48357874457719119, 0.0091395654434734477,
+       1.4635971252541156, 2.4604609182382076, 0.53745781007679938,
+       0.54705557103799585, 0.72748489105184444, -0.36498061246352559,
+       0.94572320314657965, 0.53745781007679938, 1.5458629798366414;
+  SampleStats samp;
+  samp.S     = {S};
+  samp.n_obs = {25};
+
+  auto x0 = magmaan::estimate::simple_start_values(*pt, *mr, samp, {});
+  REQUIRE(x0.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 200;
+  opts.ftol     = 1e-12;
+  opts.gtol     = 1e-8;
+  auto est_ref = magmaan::estimate::fit_ml(*pt, *mr, samp, *x0, Bounds{},
+                                           Backend::NloptLbfgs, opts);
+  auto est_fisher = magmaan::estimate::fit_ml_fisher(*pt, *mr, samp, *x0,
+                                                     Bounds{}, opts);
+  REQUIRE(est_ref.has_value());
+  REQUIRE(est_fisher.has_value());
+
+  CHECK(est_fisher->fmin ==
+        doctest::Approx(est_ref->fmin).epsilon(1e-5));
+  CHECK((est_fisher->theta - est_ref->theta).cwiseAbs().maxCoeff() < 1e-2);
+  CHECK(est_fisher->audit.stationary);
+}
+
 TEST_CASE("IRLS-ML honors shared-label equality constraints") {
   auto fp = Parser::parse("f =~ x1 + a*x2 + a*x3 + x4");
   REQUIRE(fp.has_value());

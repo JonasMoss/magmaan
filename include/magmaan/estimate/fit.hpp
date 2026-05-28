@@ -131,6 +131,17 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
        const SampleStats& samp, const Eigen::VectorXd& x0, Bounds bounds = {},
        Backend backend = Backend::NloptLbfgs, OptimOptions opts = {});
 
+// Normal-theory ML via local Fisher scoring. At each iterate this computes the
+// analytic ML gradient and the expected-information Hessian approximation on
+// the F_ML scale, solves H_E(θ_k) d = -∇F_ML(θ_k), then accepts the step with
+// Armijo backtracking on the true ML objective. Unlike `fit_ml_irls`, this is
+// a local Fisher step rather than a frozen nonlinear GLS reoptimization.
+// `opts.max_iter`, `opts.ftol`, and `opts.gtol` tune the outer scoring loop.
+fit_expected<Estimates>
+fit_ml_fisher(spec::LatentStructure pt, const model::MatrixRep& rep,
+              const SampleStats& samp, const Eigen::VectorXd& x0,
+              Bounds bounds = {}, OptimOptions opts = {});
+
 // Outer-loop controls for `fit_ml_irls`. `max_outer` caps the number of
 // reweight steps; `ftol` and `gtol` decide convergence on, respectively, the
 // relative change in F_ML and the (projected) F_ML gradient infinity norm.

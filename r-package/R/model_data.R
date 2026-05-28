@@ -1061,6 +1061,14 @@ fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
               optimizer = optimizer, control = control, bounds = b)
 }
 
+# Normal-theory ML via local Fisher scoring. This is a damped expected-
+# information step on the true ML objective, not a frozen GLS inner solve.
+fit_ml_fisher <- function(model, data, control = NULL, bounds = NULL) {
+  b <- bounds_arg(bounds, model, data, "fit_ml_fisher")
+  fit_ml_fisher_impl(partable_arg(model), sample_stats_arg(data),
+                     control = control, bounds = b)
+}
+
 # Normal-theory ML via iteratively reweighted GLS (Fisher scoring). Same
 # objective as `fit_ml`, different algorithm — each outer iterate refreshes
 # the expected Fisher information weight W(θ_k) = ½D'(Σ(θ_k)⁻¹⊗Σ(θ_k)⁻¹)D
