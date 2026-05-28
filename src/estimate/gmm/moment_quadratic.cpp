@@ -432,4 +432,53 @@ normal_theory_weight(const model::ModelEvaluator& ev,
   return W;
 }
 
+fit_expected<Weight>
+expected_information_weight(const model::ModelEvaluator& ev,
+                            const data::SampleStats& samp,
+                            const Eigen::VectorXd& theta) {
+  auto eval = ev.evaluate(theta, false, false);
+  if (!eval.has_value()) {
+    return std::unexpected(
+        model_err(eval.error(), "gmm::expected_information_weight: theta"));
+  }
+  if (auto ok = validate_common_shapes(samp, eval->moments,
+                                       "gmm::expected_information_weight");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  const Layout layout = make_layout(samp, eval->moments);
+
+  Weight W;
+  W.reserve(eval->moments.sigma.size());
+  for (std::size_t b = 0; b < eval->moments.sigma.size(); ++b) {
+    const Eigen::MatrixXd& Sigma_b = eval->moments.sigma[b];
+    const Eigen::Index p = Sigma_b.rows();
+    if (!Sigma_b.allFinite()) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "gmm::expected_information_weight: block " + std::to_string(b) +
+              " implied Sigma contains non-finite entries"));
+    }
+    Eigen::LLT<Eigen::MatrixXd> sigma_llt(Sigma_b);
+    if (sigma_llt.info() != Eigen::Success) {
+      return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "gmm::expected_information_weight: block " + std::to_string(b) +
+              " implied Sigma is not positive definite"));
+    }
+    const Eigen::MatrixXd Sigma_inv =
+        sigma_llt.solve(Eigen::MatrixXd::Identity(p, p));
+    const Eigen::MatrixXd Wcov = symmetric_vech_gls_weight(Sigma_inv);
+
+    Eigen::MatrixXd Wb(layout.block_rows[b], layout.block_rows[b]);
+    Wb.setZero();
+    Eigen::Index off = 0;
+    if (layout.has_means) {
+      Wb.block(0, 0, p, p) = Sigma_inv;
+      off = p;
+    }
+    Wb.block(off, off, vech_len(p), vech_len(p)) = 0.5 * Wcov;
+    W.push_back(std::move(Wb));
+  }
+  return W;
+}
+
 }  // namespace magmaan::estimate::gmm

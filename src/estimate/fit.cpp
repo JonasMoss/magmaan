@@ -1,5 +1,7 @@
 #include "magmaan/estimate/fit.hpp"
 
+#include <cmath>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -20,6 +22,7 @@
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/optim/problem.hpp"
+#include "magmaan/optim/terminal_audit.hpp"
 #include "magmaan/spec/partable.hpp"
 
 // Convenience composers: package the data → objective → constraints →
@@ -661,7 +664,323 @@ compose_snlls(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
   return est;
 }
 
+// Strategy for the inner subproblem inside the IRLS outer loop. `FullGls`
+// hands the reweighted GLS problem to `compose_gmm` (the full-θ path);
+// `SnllsGls` profiles out the conditionally-linear block via `compose_snlls`
+// (Golub–Pereyra variable projection) and the outer optimizer sees only β.
+// Both reach the same fixed point on separable models; SNLLS reduces the
+// inner dim and the per-iteration cost.
+enum class IrlsInner { FullGls, SnllsGls };
+
+fit_expected<SampleStats>
+irls_inner_sample_stats(const model::ModelEvaluator& ev,
+                        const SampleStats& samp,
+                        const Eigen::VectorXd& theta) {
+  auto eval = ev.evaluate(theta, false, false);
+  if (!eval.has_value()) {
+    return std::unexpected(
+        fit_err(FitError::Kind::NonPositiveDefiniteSigma,
+                "compose_irls_outer: mean-adjustment theta: " +
+                    eval.error().detail));
+  }
+
+  SampleStats out = samp;
+  for (std::size_t b = 0; b < out.S.size(); ++b) {
+    if (b >= samp.mean.size() || b >= eval->moments.mu.size()) continue;
+    if (samp.mean[b].size() == 0 || eval->moments.mu[b].size() == 0) continue;
+    if (samp.mean[b].size() != eval->moments.mu[b].size()) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "compose_irls_outer: block " + std::to_string(b) +
+              " sample mean and implied mu have different sizes"));
+    }
+    const Eigen::VectorXd d = samp.mean[b] - eval->moments.mu[b];
+    out.S[b] = samp.S[b] + d * d.transpose();
+  }
+  return out;
+}
+
+// Shared IRLS-ML outer loop: refresh the expected Fisher information
+// weight at each iterate, dispatch the inner step to `compose_gmm` or
+// `compose_snlls` per `inner`, Armijo-backtrack on F_ML, exit on
+// projected-gradient stationarity or gradient-gated stagnation. `pre` is
+// the caller's prelude (evaluator + linear/nonlinear constraint shells);
+// `pt` is forwarded so the SNLLS path can hand it to `compose_snlls` for
+// the GP profile.
+fit_expected<Estimates>
+compose_irls_outer(const spec::LatentStructure& pt, const Prelude& pre,
+                   const SampleStats& samp, const Eigen::VectorXd& x0,
+                   const Bounds& bounds, Backend backend, OptimOptions opts,
+                   IrlsOptions irls_opts, IrlsInner inner) {
+  const model::ModelEvaluator& ev = pre.ev;
+
+  auto obj_or = estimate::ml_objective(ev, samp);
+  if (!obj_or.has_value()) return std::unexpected(obj_or.error());
+  const optim::ScalarProblem ml_prob = std::move(*obj_or);
+
+  if (pre.nl.active()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_ml_irls: nonlinear equality constraints are not supported by "
+        "the IRLS outer loop; use fit_ml with optimizer \"nlopt-slsqp\" or "
+        "\"ipopt\""));
+  }
+  if (inner == IrlsInner::SnllsGls && !bounds.empty()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_ml_irls_snlls: box bounds are not supported by the separable "
+        "Golub-Pereyra inner path"));
+  }
+
+  const EqConstraints& con = pre.con;
+  const bool driven_reduced = con.active();
+  const bool pure_merge = !con.group.empty();
+  if (driven_reduced && !bounds.empty() && !pure_merge) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_ml_irls: box bounds with general-linear equality constraints "
+        "are not supported by the IRLS outer loop"));
+  }
+
+  Eigen::VectorXd driven = driven_reduced ? con.contract(x0) : x0;
+  Bounds driven_bounds;
+  if (!bounds.empty()) {
+    driven_bounds = driven_reduced ? fold_alpha_bounds(con, bounds) : bounds;
+    driven = driven.cwiseMax(driven_bounds.lower).cwiseMin(driven_bounds.upper);
+  }
+
+  auto expand_driven = [&con, driven_reduced](const Eigen::VectorXd& z) {
+    return driven_reduced ? con.expand(z) : z;
+  };
+  auto reduce_gradient = [&con, driven_reduced](const Eigen::VectorXd& g) {
+    return driven_reduced ? con.reduce_gradient(g) : g;
+  };
+
+  Eigen::VectorXd theta = expand_driven(driven);
+  Eigen::VectorXd grad_full = Eigen::VectorXd::Zero(theta.size());
+  Eigen::VectorXd grad      = Eigen::VectorXd::Zero(driven.size());
+  double f_cur = ml_prob.f(theta, grad_full);
+  if (!std::isfinite(f_cur)) {
+    return std::unexpected(fit_err(FitError::Kind::NonFiniteObjective,
+        "compose_irls_outer: F_ML(x0) is non-finite"));
+  }
+  grad = reduce_gradient(grad_full);
+
+  // Projected-gradient infinity norm on F_ML, matching `audit_terminal_iterate`
+  // KKT semantics: a coordinate at a finite bound contributes only when its
+  // gradient pushes inward.
+  auto proj_grad_inf = [&](const Eigen::VectorXd& z,
+                           const Eigen::VectorXd& g) {
+    if (g.size() == 0) return 0.0;
+    if (driven_bounds.empty()) return g.cwiseAbs().maxCoeff();
+    constexpr double kBoundTol = 1e-12;
+    double m = 0.0;
+    for (Eigen::Index i = 0; i < z.size(); ++i) {
+      double     gi = g[i];
+      const bool at_lo = std::isfinite(driven_bounds.lower[i]) &&
+                         (z[i] - driven_bounds.lower[i] <= kBoundTol);
+      const bool at_up = std::isfinite(driven_bounds.upper[i]) &&
+                         (driven_bounds.upper[i] - z[i] <= kBoundTol);
+      if (at_lo && gi > 0.0) gi = 0.0;
+      if (at_up && gi < 0.0) gi = 0.0;
+      m = std::max(m, std::abs(gi));
+    }
+    return m;
+  };
+
+  int outer_iter   = 0;
+  int total_f_evals = 1;  // counted the initial value/gradient evaluation
+  int total_g_evals = 1;
+  int stagnation   = 0;   // consecutive outer steps with df below ftol
+  // SNLLS-path telemetry — carried out of the last successful inner call.
+  std::int32_t snlls_n_nonlinear         = -1;
+  std::int32_t snlls_n_linear            = -1;
+  std::int32_t snlls_n_alpha_fast        = -1;
+  std::int32_t snlls_n_alpha_fallback    = -1;
+  optim::OptimStatus final_status = optim::OptimStatus::BudgetExhausted;
+
+  for (int k = 0; k < irls_opts.max_outer; ++k) {
+    // Stationarity check on F_ML at the current iterate — the primary
+    // convergence criterion. ‖proj-∇F_ML‖_∞ ≤ gtol mirrors lavaan's
+    // `check.gradient = TRUE` post-fit audit, applied as a loop guard.
+    if (proj_grad_inf(driven, grad) <= irls_opts.gtol) {
+      final_status = optim::OptimStatus::Converged;
+      break;
+    }
+
+    // Refresh the expected Fisher information weight W(θ_k) at the current
+    // iterate, then solve the inner subproblem to convergence with that
+    // weight frozen. `expected_information_weight` builds W from Σ(θ_k) —
+    // distinct from `normal_theory_weight`, which uses S and stays constant
+    // across iterations (i.e. would collapse IRLS to one-shot GLS).
+    auto inner_samp_or = irls_inner_sample_stats(ev, samp, theta);
+    if (!inner_samp_or.has_value()) return std::unexpected(inner_samp_or.error());
+    const SampleStats& inner_samp = *inner_samp_or;
+
+    auto W_or = gmm::expected_information_weight(ev, inner_samp, theta);
+    if (!W_or.has_value()) return std::unexpected(W_or.error());
+
+    fit_expected<Estimates> inner_or = std::unexpected(
+        fit_err(FitError::Kind::NumericIssue,
+                "compose_irls_outer: unreachable inner-strategy dispatch"));
+    switch (inner) {  // dispatch on the inner-step strategy
+      case IrlsInner::FullGls:
+        inner_or = compose_gmm(ev, pre.con, pre.nl, inner_samp, theta, *W_or,
+                               bounds, backend, opts);
+        break;
+      case IrlsInner::SnllsGls:
+        // Golub–Pereyra path. Profiles α (Θ, Ψ, ν) out, optimizes only β
+        // (Λ, B); `compose_snlls` returns full-θ via the profile's expand.
+        // Box bounds are rejected before entering the loop; the GP β block is
+        // unbounded, same as `fit_snlls_gls`.
+        inner_or = compose_snlls(pt, ev, inner_samp, theta, *W_or, backend,
+                                 opts);
+        break;
+    }
+    if (!inner_or.has_value()) return std::unexpected(inner_or.error());
+    const Eigen::VectorXd& theta_trial  = inner_or->theta;
+    const Eigen::VectorXd  driven_trial =
+        driven_reduced ? con.contract(theta_trial) : theta_trial;
+    total_f_evals += inner_or->f_evals;
+    total_g_evals += inner_or->g_evals;
+    if (inner_or->n_nonlinear >= 0) {
+      snlls_n_nonlinear      = inner_or->n_nonlinear;
+      snlls_n_linear         = inner_or->n_linear;
+      snlls_n_alpha_fast     = inner_or->n_alpha_solve_fast;
+      snlls_n_alpha_fallback = inner_or->n_alpha_solve_fallback;
+    }
+
+    // Armijo backtracking on F_ML along d = θ_trial − θ_k. The inner step
+    // is a descent direction for F_ML at θ_k by construction (the two
+    // gradients agree there up to a factor of two); the line search guards
+    // against overshoot away from the optimum.
+    const Eigen::VectorXd d       = driven_trial - driven;
+    const double          g_dot_d = grad.dot(d);
+    double                alpha   = 1.0;
+    Eigen::VectorXd       driven_new(driven.size());
+    Eigen::VectorXd       theta_new(theta.size());
+    Eigen::VectorXd       grad_full_new = Eigen::VectorXd::Zero(theta.size());
+    Eigen::VectorXd       grad_new = Eigen::VectorXd::Zero(driven.size());
+    double                f_new   = std::numeric_limits<double>::infinity();
+    bool                  armijo_ok = false;
+    // If `g·d ≥ 0` the analytic gradient at θ_k disagrees with the inner
+    // step direction (numerical noise near a stationary point, or an inner
+    // solver that didn't fully converge); fall back to a non-descent-aware
+    // simple-decrease test so we can still accept a step that lowers F_ML.
+    const double slope = (g_dot_d < 0.0) ? g_dot_d : 0.0;
+    for (int bt = 0; bt < irls_opts.armijo_max_backtracks; ++bt) {
+      driven_new = driven + alpha * d;
+      theta_new  = expand_driven(driven_new);
+      f_new      = ml_prob.f(theta_new, grad_full_new);
+      ++total_f_evals;
+      ++total_g_evals;
+      if (std::isfinite(f_new) &&
+          f_new <= f_cur + irls_opts.armijo_c * alpha * slope) {
+        grad_new = reduce_gradient(grad_full_new);
+        armijo_ok = true;
+        break;
+      }
+      alpha *= 0.5;
+    }
+
+    ++outer_iter;
+
+    if (!armijo_ok) {
+      // Could not find a sufficient-decrease step at any α down to
+      // 2^{-armijo_max_backtracks}. Keep the current iterate.
+      final_status = optim::OptimStatus::LineSearchSalvaged;
+      break;
+    }
+
+    const double df = std::abs(f_cur - f_new);
+    driven = driven_new;
+    theta = theta_new;
+    grad  = grad_new;
+    f_cur = f_new;
+
+    if (proj_grad_inf(driven, grad) <= irls_opts.gtol) {
+      final_status = optim::OptimStatus::Converged;
+      break;
+    }
+
+    // Stagnation detector. The F-relative test alone fires falsely after a
+    // heavily-backtracked Armijo step (tiny α ⇒ tiny df even at a non-
+    // stationary iterate); pair it with the gradient norm. Only count a step
+    // as stagnant when *both* the relative F-change is below ftol *and* the
+    // projected gradient norm is within a relative slack of `gtol` —
+    // otherwise small df reflects a heavily-damped step at a still-non-
+    // stationary iterate (keep iterating, the next reweight may help) rather
+    // than convergence. Five consecutive stagnant steps bail as
+    // LineSearchSalvaged.
+    const double rel_gtol_slack = 100.0 * irls_opts.gtol;
+    if (df <= irls_opts.ftol * (std::abs(f_cur) + irls_opts.ftol) &&
+        proj_grad_inf(driven, grad) <= rel_gtol_slack) {
+      ++stagnation;
+      if (stagnation >= 5) {
+        final_status = optim::OptimStatus::LineSearchSalvaged;
+        break;
+      }
+    } else {
+      stagnation = 0;
+    }
+  }
+
+  // Terminal audit on F_ML at the returned iterate, in the same driven
+  // coordinate system the outer loop used (full θ when unconstrained,
+  // equality-reduced α when linear constraints are active).
+  Eigen::VectorXd lower, upper;
+  if (driven_bounds.empty()) {
+    lower = Eigen::VectorXd::Constant(driven.size(),
+                                      -std::numeric_limits<double>::infinity());
+    upper = Eigen::VectorXd::Constant(driven.size(),
+                                       std::numeric_limits<double>::infinity());
+  } else {
+    lower = driven_bounds.lower;
+    upper = driven_bounds.upper;
+  }
+  optim::ObjectiveFn driven_ml =
+      [&](const Eigen::VectorXd& z, Eigen::VectorXd& g) -> double {
+        const Eigen::VectorXd th = expand_driven(z);
+        Eigen::VectorXd g_full(th.size());
+        const double v = ml_prob.f(th, g_full);
+        g = reduce_gradient(g_full);
+        return v;
+      };
+  optim::TerminalAudit audit =
+      optim::audit_terminal_iterate(driven_ml, driven, f_cur, lower, upper);
+  if (final_status == optim::OptimStatus::BudgetExhausted &&
+      audit.stationary) {
+    final_status = optim::OptimStatus::Converged;
+  }
+
+  Estimates est{theta, f_cur, outer_iter, total_f_evals, total_g_evals,
+                final_status, audit.grad_inf_norm, std::move(audit)};
+  est.n_nonlinear            = snlls_n_nonlinear;
+  est.n_linear               = snlls_n_linear;
+  est.n_alpha_solve_fast     = snlls_n_alpha_fast;
+  est.n_alpha_solve_fallback = snlls_n_alpha_fallback;
+  attach_diagnostics(est, pre, bounds);
+  return est;
+}
+
 }  // namespace
+
+fit_expected<Estimates>
+fit_ml_irls(spec::LatentStructure pt, const model::MatrixRep& rep,
+            const SampleStats& samp, const Eigen::VectorXd& x0, Bounds bounds,
+            Backend backend, OptimOptions opts, IrlsOptions irls_opts) {
+  auto pre = prelude(pt, rep, samp, x0, "fit_ml_irls");
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  return compose_irls_outer(pt, *pre, samp, x0, bounds, backend, opts,
+                            irls_opts, IrlsInner::FullGls);
+}
+
+fit_expected<Estimates>
+fit_ml_irls_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,
+                  const SampleStats& samp, const Eigen::VectorXd& x0,
+                  Bounds bounds, Backend backend, OptimOptions opts,
+                  IrlsOptions irls_opts) {
+  auto pre = prelude(pt, rep, samp, x0, "fit_ml_irls_snlls");
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  return compose_irls_outer(pt, *pre, samp, x0, bounds, backend, opts,
+                            irls_opts, IrlsInner::SnllsGls);
+}
 
 fit_expected<Estimates>
 fit_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,

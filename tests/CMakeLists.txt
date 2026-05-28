@@ -70,6 +70,7 @@ magmaan_add_test_target(magmaan_test_spec spec
 
 set(MAGMAAN_ESTIMATE_TEST_SOURCES
   unit/ml_test.cpp
+  unit/ml_irls_test.cpp
   unit/ml_continuation_test.cpp
   unit/fcsem_ml_test.cpp
   unit/fiml_test.cpp

@@ -45,4 +45,14 @@ normal_theory_weight(const model::ModelEvaluator& ev,
                      const data::SampleStats& samp,
                      const Eigen::VectorXd& theta0);
 
+// Expected Fisher information block at θ, layout-matched to `normal_theory_
+// weight`. Same construction (½ D'(·⁻¹ ⊗ ·⁻¹) D on the cov block, ·⁻¹ on the
+// mean block) but built from Σ(θ) instead of S — the Fisher-scoring weight
+// `fit_ml_irls` refreshes at each outer iterate. `theta` must be feasible at
+// `ev` and produce a PD implied Σ in every block.
+fit_expected<Weight>
+expected_information_weight(const model::ModelEvaluator& ev,
+                            const data::SampleStats& samp,
+                            const Eigen::VectorXd& theta);
+
 }  // namespace magmaan::estimate::gmm
