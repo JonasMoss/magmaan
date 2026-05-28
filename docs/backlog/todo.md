@@ -38,6 +38,40 @@ semantics · **XL** statistical design/research track before implementation.
   as diagnostic telemetry only; core fitting/inference should stay strict until
   a downstream need justifies an explicit API.
 
+## Local hardening and validation tooling
+
+Local-first safety tooling for an AI-assisted repo. Design note:
+[docs/validation/local_hardening.md](../validation/local_hardening.md).
+
+- **S/M.** Add a local LLVM coverage lane without touching magmaan proper:
+  a `coverage` CMake preset that injects clang source-coverage flags, plus
+  `just coverage` for a terminal summary and `just coverage-html` for
+  `build/coverage/html/index.html`. Keep profiles, merged `.profdata`, and
+  HTML under ignored `build/coverage/`; filter generated/dependency/test
+  harness paths when reporting core source coverage.
+- **S.** Add a discoverable local JUnit report recipe, e.g.
+  `just test-report`, wrapping `ctest --preset fast --output-junit
+  build/fast/test-results.xml`.
+- **S/M.** Add `just health` as the one-command local cockpit. First slice:
+  `test-quick`, coverage summary, and JUnit XML. Keep the command boring and
+  local; sanitizer, parity-heavy, and optional optimizer lanes can be opt-in or
+  later extensions.
+- **S.** Add `docs/validation/test_ledger.md`: one table per validation area
+  mapping subsystem, oracle, test kind, important files/tests, and known gaps.
+  This should orient maintainers and agents; it is not a second backlog.
+- **S/M.** Add a risk-map section to the test ledger for scary areas such as
+  FIML, ordinal/mixed moments, robust test reductions, optimizer terminal
+  audit, parser/lavaanify, and R boundary reconstruction. Each entry should
+  say "protected by" and name the concrete test files or reports to run.
+- **S.** Adopt a lightweight regression-note convention: when a fixed bug gets
+  a guard test, record the bug shape and the protecting test either near the
+  test or in the test ledger.
+- **M, later.** Layer CI on top only after the local commands are useful:
+  `test-quick` on PRs/pushes, sanitizer validation on main or a schedule,
+  heavy parity/optional optimizer lanes less often, and coverage as an
+  artifact before considering badges. Avoid coverage percentage gates until
+  the report has been calibrated by real maintenance work.
+
 ## API and R boundary
 
 - **S/M.** Add or rename R wrappers only when the methods-developer workflow
