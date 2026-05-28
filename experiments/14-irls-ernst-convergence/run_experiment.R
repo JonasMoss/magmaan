@@ -106,14 +106,14 @@ fit_once <- function(method, spec, dat, control) {
   switch(method,
     `ml-lbfgs` = core$fit_ml(spec, dat, optimizer = "nlopt-lbfgs",
                              control = control),
-    `ml-port` = core$fit_ml(spec, dat, optimizer = "port",
-                            control = control),
+    # `ml-port` = core$fit_ml(spec, dat, optimizer = "port",
+    #                         control = control),
     `ml-fisher` = core$fit_ml_fisher(spec, dat, control = control),
-    `ml-irls` = core$fit_ml_irls(spec, dat, optimizer = "port-nls",
-                                 control = control),
-    `ml-irls-snlls` = core$fit_ml_irls_snlls(spec, dat,
-                                             optimizer = "port-nls",
-                                             control = control),
+    # `ml-irls` = core$fit_ml_irls(spec, dat, optimizer = "port-nls",
+    #                              control = control),
+    # `ml-irls-snlls` = core$fit_ml_irls_snlls(spec, dat,
+    #                                          optimizer = "port-nls",
+    #                                          control = control),
     stop("unknown method: ", method, call. = FALSE)
   )
 }
@@ -129,8 +129,9 @@ main <- function() {
   control <- list(max_iter = args$max_iter, ftol = 1e-12, gtol = 1e-8,
                   irls_max_outer = args$max_iter, irls_ftol = 1e-12,
                   irls_gtol = 1e-8)
-  methods <- c("ml-lbfgs", "ml-port", "ml-fisher",
-               "ml-irls", "ml-irls-snlls")
+  # methods <- c("ml-lbfgs", "ml-port", "ml-fisher",
+  #              "ml-irls", "ml-irls-snlls")
+  methods <- c("ml-lbfgs", "ml-fisher")
   grid <- ernst_design_grid(args$n_values, reps = args$reps, beta = args$beta)
   spec <- magmaan::model_spec(ernst_model())
 
