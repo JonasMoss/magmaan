@@ -1034,6 +1034,83 @@ bool run_mixed_cell(std::ostream& out,
           nullptr, have_full_bounded ? &full_bounded_ref : nullptr);
       write_row(out, result.row);
     }
+
+    if (estimator == OrdinalEstimatorKind::DWLS) {
+      const auto lazy_plan = magmaan::data::ordinal_weight_plan(
+          magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+          magmaan::data::OrdinalEstimatorKind::DWLS,
+          magmaan::data::OrdinalMomentParameterization::Delta);
+      {
+        Row row = base;
+        row.estimator = estimator_name(estimator);
+        row.path = "full_bounded_e2e_lazy";
+        row.construction = "mixed_lazy_workspace";
+        auto result = run_timed_estimate(
+            row, reps,
+            [&](Estimates& last, std::string& error) {
+              auto workspace =
+                  magmaan::data::mixed_ordinal_workspace_from_data(
+                      {data}, {ordered}, lazy_plan);
+              if (!workspace.has_value()) {
+                error = workspace.error().detail;
+                return false;
+              }
+              auto starts = magmaan::estimate::mixed_ordinal_start_values(
+                  pt, rep, workspace->moments, {});
+              if (!starts.has_value()) {
+                error = starts.error().detail;
+                return false;
+              }
+              auto fit = magmaan::estimate::fit_mixed_ordinal_bounded(
+                  pt, rep, workspace->moments, &workspace->gamma_cache, {},
+                  lazy_plan, *starts, Backend::NloptLbfgs, opts);
+              if (!fit.has_value()) {
+                error = fit.error().detail;
+                return false;
+              }
+              last = *fit;
+              return true;
+            },
+            nullptr, have_full_bounded ? &full_bounded_ref : nullptr);
+        write_row(out, result.row);
+      }
+
+      {
+        Row row = base;
+        row.estimator = estimator_name(estimator);
+        row.path = "snlls_full_thresholds_e2e_lazy";
+        row.construction = "mixed_lazy_workspace";
+        auto result = run_timed_estimate(
+            row, reps,
+            [&](Estimates& last, std::string& error) {
+              auto workspace =
+                  magmaan::data::mixed_ordinal_workspace_from_data(
+                      {data}, {ordered}, lazy_plan);
+              if (!workspace.has_value()) {
+                error = workspace.error().detail;
+                return false;
+              }
+              auto starts = magmaan::estimate::mixed_ordinal_start_values(
+                  pt, rep, workspace->moments, {});
+              if (!starts.has_value()) {
+                error = starts.error().detail;
+                return false;
+              }
+              auto fit =
+                  magmaan::estimate::fit_mixed_ordinal_snlls_full_thresholds(
+                      pt, rep, workspace->moments, &workspace->gamma_cache,
+                      lazy_plan, *starts, Backend::NloptLbfgs, opts);
+              if (!fit.has_value()) {
+                error = fit.error().detail;
+                return false;
+              }
+              last = *fit;
+              return true;
+            },
+            nullptr, have_full_bounded ? &full_bounded_ref : nullptr);
+        write_row(out, result.row);
+      }
+    }
   }
 
   return true;

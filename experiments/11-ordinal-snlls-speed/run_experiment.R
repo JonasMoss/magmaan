@@ -165,7 +165,8 @@ write_metadata(
       "across a Kreiberg-style repeated-measure family, one worked example,",
       "threshold stress cells, and a mixed continuous/ordinal delta slice,",
       "with raw-to-SNLLS legacy/lazy construction rows for ULS/DWLS and",
-      "raw-to-fit mixed bounded/SNLLS rows."
+      "raw-to-fit mixed bounded/SNLLS rows, including lazy mixed DWLS",
+      "workspace rows."
     ),
     preset = args$preset,
     smoke = args$smoke,
