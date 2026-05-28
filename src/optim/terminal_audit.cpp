@@ -45,6 +45,7 @@ TerminalAudit audit_terminal_iterate(
   // `active_bound_tol` of it. ±infinity bounds are always interior.
   a.active_set.assign(static_cast<std::size_t>(n), 0);
   double gnorm = 0.0;
+  double gnorm_scaled_num = 0.0;  // max_i |Pg_i| · max(|x_i|, 1)
   for (Eigen::Index i = 0; i < n; ++i) {
     double      gi   = grad[i];
     const bool  lo_finite = std::isfinite(lower[i]);
@@ -65,8 +66,14 @@ TerminalAudit audit_terminal_iterate(
     // && |upper - lower| small.
     const double agi = std::abs(gi);
     if (agi > gnorm) gnorm = agi;
+    const double scale_x = std::max(std::abs(x[i]), 1.0);
+    const double scaled_i = agi * scale_x;
+    if (scaled_i > gnorm_scaled_num) gnorm_scaled_num = scaled_i;
   }
   a.grad_inf_norm = gnorm;
+  if (a.f_finite) {
+    a.grad_scaled_inf = gnorm_scaled_num / std::max(std::abs(f_rec), 1.0);
+  }
 
   if (a.f_finite) {
     // v1: Absolute mode is the default, matching lavaan's `optim.dx.tol`.

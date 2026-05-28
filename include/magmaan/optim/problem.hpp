@@ -175,6 +175,12 @@ struct TerminalAuditOptions {
 struct TerminalAudit {
   bool        stationary       = false;
   double      grad_inf_norm    = -1.0;   // -1 sentinel = could not compute
+  // Scale-aware projected-gradient norm: max_i |Pg_i| · max(|x_i|, 1) /
+  // max(|f|, 1). Always populated when `grad_inf_norm` is, regardless of
+  // the StationarityMode the boolean verdict was taken under. Lets the
+  // analyst apply a relative/nlminb-style stationarity criterion
+  // post-hoc without rerunning the fit.
+  double      grad_scaled_inf  = -1.0;
   double      stationarity_rhs = -1.0;   // the tol · (1 + |f|) it compared against
   double      f_recomputed     = std::numeric_limits<double>::quiet_NaN();
   bool        f_consistent     = false;

@@ -671,6 +671,7 @@ Rcpp::List audit_to_r(const magmaan::optim::TerminalAudit& a) {
   return Rcpp::List::create(
       Rcpp::_["stationary"]       = a.stationary,
       Rcpp::_["grad_inf_norm"]    = a.grad_inf_norm,
+      Rcpp::_["grad_scaled_inf"]  = a.grad_scaled_inf,
       Rcpp::_["stationarity_rhs"] = a.stationarity_rhs,
       Rcpp::_["f_recomputed"]     = a.f_recomputed,
       Rcpp::_["f_consistent"]     = a.f_consistent,
