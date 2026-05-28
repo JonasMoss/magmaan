@@ -131,6 +131,51 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
        const SampleStats& samp, const Eigen::VectorXd& x0, Bounds bounds = {},
        Backend backend = Backend::NloptLbfgs, OptimOptions opts = {});
 
+// Outer-loop controls for `fit_ml_irls`. `max_outer` caps the number of
+// reweight steps; `ftol` and `gtol` decide convergence on, respectively, the
+// relative change in F_ML and the (projected) F_ML gradient infinity norm.
+// `armijo_c` is the sufficient-decrease constant for the backtracking line
+// search that guards each accepted step; `armijo_max_backtracks` caps the
+// halvings before the loop bails as `LineSearchSalvaged`.
+struct IrlsOptions {
+  int    max_outer             = 50;
+  double ftol                  = 1e-10;
+  double gtol                  = 1e-7;
+  double armijo_c              = 1e-4;
+  int    armijo_max_backtracks = 20;
+};
+
+// Normal-theory ML via iteratively reweighted GLS (Fisher scoring). Same ML
+// objective as `fit_ml`, different algorithm: at iterate θ_k the GLS weight
+// W(θ_k) = ½ D'(Σ(θ_k)⁻¹ ⊗ Σ(θ_k)⁻¹) D (the expected Fisher information block)
+// is built from the *current* implied covariance, then an inner GLS solve via
+// `backend` proposes θ_trial; backtracking on F_ML accepts a damped step. With
+// mean structures, the frozen inner covariance target is adjusted by the
+// current mean residual d_k d_k' so the inner score matches the ML score up to
+// a constant factor. Linear equality constraints are handled in reduced
+// coordinates; nonlinear equality constraints are rejected. `backend` names
+// the *inner* LS solver — `PortNls` is the natural default (NL2SOL sees the
+// residual structure directly); any LS-shape backend works. `opts` tunes the
+// inner solve; `irls_opts` tunes the outer loop.
+fit_expected<Estimates>
+fit_ml_irls(spec::LatentStructure pt, const model::MatrixRep& rep,
+            const SampleStats& samp, const Eigen::VectorXd& x0,
+            Bounds bounds = {}, Backend backend = Backend::PortNls,
+            OptimOptions opts = {}, IrlsOptions irls_opts = {});
+
+// SNLLS-flavoured IRLS-ML: outer Fisher reweight on Σ(θ), inner step solves
+// the GLS subproblem with Golub–Pereyra variable projection (β = Λ, B
+// optimized; α = Θ, Ψ, ν closed-form). Same convergence story and outer-loop
+// safeguards as `fit_ml_irls`; rejects box bounds, nonlinear constraints, and
+// the non-separable models `gmm::gp_compatible` rejects. Spirit matches
+// Kreiberg's Matlab SNLRLS reference (`external/kreiberg/snlrls/`); our
+// analytic dΣ/dθ Jacobian and Armijo line search are local additions.
+fit_expected<Estimates>
+fit_ml_irls_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,
+                  const SampleStats& samp, const Eigen::VectorXd& x0,
+                  Bounds bounds = {}, Backend backend = Backend::PortNls,
+                  OptimOptions opts = {}, IrlsOptions irls_opts = {});
+
 // Native FC-SEM maximum likelihood. This is intentionally parallel to
 // `fit_ml`, but uses `model::FcSemEvaluator` instead of MatrixRep/LISREL.
 // Callers provide starts explicitly, typically from

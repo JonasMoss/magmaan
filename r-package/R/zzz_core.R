@@ -57,6 +57,8 @@ data_mixed_ordinal_stats_huber_residual_from_raw <- data_mixed_ordinal_stats_hub
 
 estimate_fit <- fit_fit
 estimate_ml <- fit_ml_impl
+estimate_ml_irls <- fit_ml_irls_impl
+estimate_ml_irls_snlls <- fit_ml_irls_snlls_impl
 estimate_fiml <- fit_fiml_impl
 estimate_saturated_em_moments <- saturated_em_moments_impl
 estimate_two_stage_em <- estimate_two_stage_em_impl
@@ -188,6 +190,8 @@ magmaan_core <- local({
     estimate = c(
       "estimate_fit",
       "estimate_ml",
+      "estimate_ml_irls",
+      "estimate_ml_irls_snlls",
       "estimate_fiml",
       "estimate_saturated_em_moments",
       "estimate_two_stage_em",
@@ -309,6 +313,8 @@ magmaan_core <- local({
       "data_mixed_ordinal_stats_from_df",
       "shrink_mixed_ordinal_stats",
       "fit_ml",
+      "fit_ml_irls",
+      "fit_ml_irls_snlls",
       "fit_fiml",
       "fit_uls",
       "fit_gls",
@@ -350,6 +356,8 @@ magmaan_core <- local({
       "data_mixed_ordinal_stats_huber_residual_from_raw_impl",
       "fit_fit",
       "fit_ml_impl",
+      "fit_ml_irls_impl",
+      "fit_ml_irls_snlls_impl",
       "bounds_variance_impl",
       "bounds_standard_impl",
       "bounds_wide_impl",

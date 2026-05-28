@@ -84,6 +84,15 @@ golden `parTable()` fixtures.
   ending at `alpha = 0` by default. The C++ primitive is
   `estimate::frontier::fit_ml_ridge_continuation()` and the R research surface
   is `magmaan_core$frontier_fit_ml_ridge_continuation()`.
+- Experimental complete-data ML IRLS paths fit the same ML objective through
+  outer Fisher reweighting and inner GLS solves:
+  `estimate::fit_ml_irls()` uses the full parameter block, while
+  `estimate::fit_ml_irls_snlls()` uses Golub-Pereyra profiling for separable
+  models. Mean-structure IRLS adjusts each frozen inner covariance target by
+  the current mean residual outer product so the inner score matches the ML
+  score up to scale. Linear equality constraints are handled in reduced
+  coordinates; nonlinear constraints are rejected, and the SNLLS variant also
+  rejects box bounds.
 - Discrepancy-scale convention: magmaan's `fmin` is the full ML discrepancy
   `F`, whereas lavaan reports `F/2` — magmaan's `fmin` at the optimum equals
   twice lavaan's.

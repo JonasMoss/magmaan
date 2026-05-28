@@ -1421,6 +1421,71 @@ Rcpp::List fit_ml_impl(SEXP partable, Rcpp::List sample_stats,
   return fit_result(ctx, est, &starts, "ML");
 }
 
+// fit_ml_irls() — normal-theory ML via iteratively reweighted GLS (Fisher
+// scoring). Same ML objective as fit_ml(), different algorithm: at iterate θ_k
+// build the expected Fisher information weight W(θ_k) = ½D'(Σ(θ_k)⁻¹⊗Σ(θ_k)⁻¹)D,
+// solve the inner GLS subproblem, accept a damped step via Armijo on F_ML.
+// Mean structures adjust the frozen inner covariance target by the current
+// mean residual d_k d_k' so the inner score matches the ML score up to scale.
+//
+// `optimizer` names the *inner* LS solver. NULL defaults to "port-nls" (the
+// natural LS-shape Gauss-Newton trust region for the inner subproblem);
+// "nlopt-lbfgs" and "ceres" also work but throw away the residual structure.
+// `control` accepts both the inner solver's max_iter / ftol / gtol and the
+// outer-loop irls_max_outer / irls_ftol / irls_gtol / irls_armijo_c knobs.
+//
+// [[Rcpp::export]]
+Rcpp::List fit_ml_irls_impl(SEXP partable, Rcpp::List sample_stats,
+                            Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+                            Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+                            Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "fit_ml_irls");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
+                                  std::move(parsed.names), sample_stats);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::PortNls
+                         : backend_from_optimizer_arg(optimizer);
+  auto e_or = magmaan::estimate::fit_ml_irls(ctx.pt, ctx.rep, ctx.samp, x0,
+      bounds_from_nullable(bounds), backend, optim_opts_from(control),
+      irls_opts_from(control));
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return fit_result(ctx, est, &starts, "ML");
+}
+
+// fit_ml_irls_snlls() — same as fit_ml_irls but each outer iterate's inner
+// GLS subproblem is solved by Golub–Pereyra variable projection (β = Λ, B
+// optimized; α = Θ, Ψ, ν closed-form). Rejects box bounds, nonlinear
+// constraints, and the non-separable models gmm::gp_compatible rejects.
+//
+// [[Rcpp::export]]
+Rcpp::List fit_ml_irls_snlls_impl(SEXP partable, Rcpp::List sample_stats,
+                                  Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+                                  Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+                                  Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "fit_ml_irls_snlls");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
+                                  std::move(parsed.names), sample_stats);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  const magmaan::estimate::Backend backend =
+      optimizer.isNull() ? magmaan::estimate::Backend::PortNls
+                         : backend_from_optimizer_arg(optimizer);
+  auto e_or = magmaan::estimate::fit_ml_irls_snlls(ctx.pt, ctx.rep, ctx.samp,
+      x0, bounds_from_nullable(bounds), backend, optim_opts_from(control),
+      irls_opts_from(control));
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  // Use snlls_fit_result so the n_nonlinear / n_linear columns surface on
+  // the SNLLS speed-survey path the same way fit_snlls_gls's do.
+  return snlls_fit_result(ctx, est, &starts, "ML-IRLS-SNLLS",
+                          std::string(magmaan::estimate::backend_name(backend)).c_str());
+}
+
 // frontier_fit_ml_ridge_continuation() — complete-data ML through a covariance
 // continuation path, warm-starting each stage from the previous fit.
 //

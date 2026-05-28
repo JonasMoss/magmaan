@@ -342,6 +342,30 @@ inline magmaan::optim::OptimOptions optim_opts_from(Rcpp::Nullable<Rcpp::List> c
   return o;
 }
 
+// Pulls IRLS outer-loop knobs out of the same `control` list `optim_opts_from`
+// parses for the inner solver. The `irls_` prefix keeps the inner-solver
+// `max_iter` / `ftol` / `gtol` namespace clean — the two layers share a
+// control list but not field names.
+inline magmaan::estimate::IrlsOptions
+irls_opts_from(Rcpp::Nullable<Rcpp::List> control) {
+  magmaan::estimate::IrlsOptions o;  // struct defaults
+  if (control.isNotNull()) {
+    Rcpp::List l(control.get());
+    if (l.containsElementNamed("irls_max_outer"))
+      o.max_outer = Rcpp::as<int>(l["irls_max_outer"]);
+    if (l.containsElementNamed("irls_ftol"))
+      o.ftol = Rcpp::as<double>(l["irls_ftol"]);
+    if (l.containsElementNamed("irls_gtol"))
+      o.gtol = Rcpp::as<double>(l["irls_gtol"]);
+    if (l.containsElementNamed("irls_armijo_c"))
+      o.armijo_c = Rcpp::as<double>(l["irls_armijo_c"]);
+    if (l.containsElementNamed("irls_armijo_max_backtracks"))
+      o.armijo_max_backtracks =
+          Rcpp::as<int>(l["irls_armijo_max_backtracks"]);
+  }
+  return o;
+}
+
 // Parse the user-facing `optimizer = "..."` string into the C++ Backend
 // enum. Empty / NULL ⇒ default "nlopt-lbfgs". Unknown strings are surfaced as a
 // magmaan-style Rcpp::stop with the accepted-names list — same wording as

@@ -1061,6 +1061,34 @@ fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
               optimizer = optimizer, control = control, bounds = b)
 }
 
+# Normal-theory ML via iteratively reweighted GLS (Fisher scoring). Same
+# objective as `fit_ml`, different algorithm — each outer iterate refreshes
+# the expected Fisher information weight W(θ_k) = ½D'(Σ(θ_k)⁻¹⊗Σ(θ_k)⁻¹)D
+# and solves an inner GLS subproblem; mean structures use the current mean
+# residual to adjust the frozen inner covariance target. An Armijo line search
+# on F_ML guards the step. `optimizer` names the *inner* LS solver; the default
+# "port-nls" (NL2SOL adaptive trust region) sees the residual structure directly.
+# Pass outer-loop knobs through `control` as `irls_max_outer`, `irls_ftol`,
+# `irls_gtol`, `irls_armijo_c`, `irls_armijo_max_backtracks`; the inner
+# solver reads `max_iter` / `ftol` / `gtol` from the same list.
+fit_ml_irls <- function(model, data, optimizer = "port-nls", control = NULL,
+                        bounds = NULL) {
+  b <- bounds_arg(bounds, model, data, "fit_ml_irls")
+  fit_ml_irls_impl(partable_arg(model), sample_stats_arg(data),
+                   optimizer = optimizer, control = control, bounds = b)
+}
+
+# SNLLS-flavoured IRLS-ML: outer Fisher reweight on Sigma(theta), inner step
+# via Golub-Pereyra variable projection (beta = Lambda, B optimized; alpha =
+# Theta, Psi, nu closed-form). Same control vocabulary as `fit_ml_irls`;
+# rejects box bounds, nonlinear constraints, and non-separable models.
+fit_ml_irls_snlls <- function(model, data, optimizer = "port-nls",
+                              control = NULL, bounds = NULL) {
+  b <- bounds_arg(bounds, model, data, "fit_ml_irls_snlls")
+  fit_ml_irls_snlls_impl(partable_arg(model), sample_stats_arg(data),
+                         optimizer = optimizer, control = control, bounds = b)
+}
+
 frontier_fit_ml_ridge_continuation <- function(
     model, data, optimizer = "nlopt-lbfgs", control = NULL, bounds = NULL,
     alphas = NULL, target = c("diagonal", "scaled_identity", "identity"),
