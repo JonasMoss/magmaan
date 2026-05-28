@@ -3623,6 +3623,132 @@ TEST_CASE("Mixed ordinal fit-only workspace supplies DWLS diagonal fits") {
         8e-4);
 }
 
+TEST_CASE("Mixed ordinal full-Gamma cache supplies robust reporting") {
+  std::mt19937 rng(20260614);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(540, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    X(i, 0) = 1.0 + (eta > -0.7) + (eta > 0.35);
+    X(i, 1) = 1.0 + (0.62 * eta + 0.78 * norm(rng) > 0.02);
+    X(i, 2) = 0.80 * eta + 0.62 * norm(rng) + 0.16;
+    X(i, 3) = 0.58 * eta + 0.82 * norm(rng) - 0.05;
+  }
+  const std::vector<std::vector<std::int32_t>> ordered = {{1, 1, 0, 0}};
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data({X}, ordered);
+  REQUIRE(stats.has_value());
+
+  magmaan::spec::BuildOptions build_opts;
+  build_opts.meanstructure = true;
+  auto fp = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3 + x4\n"
+                                          "x1 | t1 + t2\n"
+                                          "x2 | t1\n"
+                                          "x1 ~*~ 1*x1\n"
+                                          "x2 ~*~ 1*x2\n");
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp, build_opts);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  const auto moments = magmaan::data::mixed_ordinal_moments_from_stats(*stats);
+  auto x0 = magmaan::estimate::mixed_ordinal_start_values(
+      *pt, *mr, moments, {});
+  REQUIRE(x0.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 500;
+  opts.ftol = 1e-10;
+  opts.gtol = 1e-7;
+
+  auto full_dwls = magmaan::estimate::fit_mixed_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS,
+      *x0, magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(full_dwls.has_value(),
+      "full mixed DWLS failed: " <<
+      (full_dwls.has_value() ? "" : full_dwls.error().detail));
+
+  auto dwls_cache = magmaan::data::ordinal_gamma_cache_from_stats(*stats);
+  auto dwls_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitPlusInference,
+      magmaan::data::OrdinalEstimatorKind::DWLS,
+      magmaan::data::OrdinalMomentParameterization::Delta);
+  auto cached_dwls = magmaan::estimate::fit_mixed_ordinal_bounded(
+      *pt, *mr, moments, &dwls_cache, {}, dwls_plan, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(cached_dwls.has_value(),
+      "cached mixed DWLS failed: " <<
+      (cached_dwls.has_value() ? "" : cached_dwls.error().detail));
+  CHECK(cached_dwls->fmin == doctest::Approx(full_dwls->fmin).epsilon(2e-6));
+  CHECK((cached_dwls->theta - full_dwls->theta).cwiseAbs().maxCoeff() < 8e-4);
+  CHECK(dwls_cache.blocks[0].has_full);
+  CHECK(dwls_cache.blocks[0].has_diagonal);
+  CHECK(dwls_cache.blocks[0].has_dwls_weight);
+
+  auto materialized_dwls_rob = magmaan::estimate::robust_mixed_ordinal(
+      *pt, *mr, *stats, *cached_dwls,
+      magmaan::estimate::OrdinalWeightKind::DWLS);
+  auto cached_dwls_rob = magmaan::estimate::robust_mixed_ordinal(
+      *pt, *mr, moments, dwls_cache, *cached_dwls, dwls_plan);
+  REQUIRE_MESSAGE(materialized_dwls_rob.has_value(),
+      "materialized mixed DWLS robust failed: " <<
+      (materialized_dwls_rob.has_value()
+           ? ""
+           : materialized_dwls_rob.error().detail));
+  REQUIRE_MESSAGE(cached_dwls_rob.has_value(),
+      "cached mixed DWLS robust failed: " <<
+      (cached_dwls_rob.has_value() ? "" : cached_dwls_rob.error().detail));
+  CHECK(cached_dwls_rob->chisq_standard ==
+        doctest::Approx(materialized_dwls_rob->chisq_standard).epsilon(1e-12));
+  CHECK(cached_dwls_rob->df == materialized_dwls_rob->df);
+  CHECK((cached_dwls_rob->se - materialized_dwls_rob->se)
+            .cwiseAbs()
+            .maxCoeff() < 1e-10);
+  CHECK((cached_dwls_rob->eigvals - materialized_dwls_rob->eigvals)
+            .cwiseAbs()
+            .maxCoeff() < 1e-10);
+  CHECK(cached_dwls_rob->satorra_bentler.chi2_scaled ==
+        doctest::Approx(materialized_dwls_rob->satorra_bentler.chi2_scaled));
+  CHECK(cached_dwls_rob->mean_var_adjusted.chi2_adj ==
+        doctest::Approx(materialized_dwls_rob->mean_var_adjusted.chi2_adj));
+  CHECK(cached_dwls_rob->scaled_shifted.chi2_adj ==
+        doctest::Approx(materialized_dwls_rob->scaled_shifted.chi2_adj));
+
+  auto full_wls = magmaan::estimate::fit_mixed_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::WLS,
+      *x0, magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(full_wls.has_value(),
+      "full mixed WLS failed: " <<
+      (full_wls.has_value() ? "" : full_wls.error().detail));
+  auto materialized_wls_rob = magmaan::estimate::robust_mixed_ordinal(
+      *pt, *mr, *stats, *full_wls,
+      magmaan::estimate::OrdinalWeightKind::WLS);
+
+  auto wls_cache = magmaan::data::ordinal_gamma_cache_from_stats(*stats);
+  auto wls_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::InferenceOnly,
+      magmaan::data::OrdinalEstimatorKind::WLS,
+      magmaan::data::OrdinalMomentParameterization::Delta);
+  auto cached_wls_rob = magmaan::estimate::robust_mixed_ordinal(
+      *pt, *mr, moments, wls_cache, *full_wls, wls_plan);
+  REQUIRE_MESSAGE(materialized_wls_rob.has_value(),
+      "materialized mixed WLS robust failed: " <<
+      (materialized_wls_rob.has_value()
+           ? ""
+           : materialized_wls_rob.error().detail));
+  REQUIRE_MESSAGE(cached_wls_rob.has_value(),
+      "cached mixed WLS robust failed: " <<
+      (cached_wls_rob.has_value() ? "" : cached_wls_rob.error().detail));
+  CHECK(wls_cache.blocks[0].has_full);
+  CHECK(wls_cache.blocks[0].has_wls_weight);
+  CHECK((cached_wls_rob->vcov - materialized_wls_rob->vcov)
+            .cwiseAbs()
+            .maxCoeff() < 1e-10);
+  CHECK((cached_wls_rob->eigvals - materialized_wls_rob->eigvals)
+            .cwiseAbs()
+            .maxCoeff() < 1e-10);
+}
+
 TEST_CASE("Mixed ordinal polyserial DPD keeps shared marginals and fits DWLS") {
   std::mt19937 rng(20260517);
   std::normal_distribution<double> norm(0.0, 1.0);

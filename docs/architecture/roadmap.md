@@ -579,9 +579,13 @@ stop rather than any usable non-error return.
   through the generic Golub-Pereyra split and matches bounded mixed DWLS/WLS on
   a focused unit test. The fit-only mixed DWLS workspace path now avoids full
   Gamma/WLS materialization by carrying `MixedOrdinalMoments` plus the Gamma
-  diagonal into bounded and full-threshold SNLLS fits. Mixed theta SNLLS, lazy
-  mixed WLS construction, and threshold-profiled mixed objectives remain later
-  slices. The lavaan-backed
+  diagonal into bounded and full-threshold SNLLS fits. Mixed full-Gamma cache
+  reuse also covers robust DWLS/WLS reporting through a mixed-moments overload;
+  the mixed ordinal golden test now checks the lavaan robust scaled-test fields
+  with looser tolerances than the all-ordinal path because current mixed
+  scale/eigen parity is approximate. Mixed theta SNLLS, lazy mixed WLS
+  construction, tighter mixed robust scaled-test parity, and
+  threshold-profiled mixed objectives remain later slices. The lavaan-backed
   fixtures include a complete/listwise sparse 4-category boundary case; the
   continuous-ordinal covariance influence rows include the variance
   delta-method term needed for stable mixed WLS weighting.
