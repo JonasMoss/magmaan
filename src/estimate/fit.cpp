@@ -1,9 +1,11 @@
 #include "magmaan/estimate/fit.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
@@ -24,6 +26,8 @@
 #include "magmaan/optim/problem.hpp"
 #include "magmaan/optim/terminal_audit.hpp"
 #include "magmaan/spec/partable.hpp"
+
+#include "detail_vech.hpp"
 
 // Convenience composers: package the data → objective → constraints →
 // optimizer pipeline into a single non-template call. These are the
@@ -467,6 +471,15 @@ static void attach_diagnostics(Estimates& est, const Prelude& pre,
                                              pre.nl, bounds);
 }
 
+namespace {
+
+fit_expected<Estimates>
+compose_fisher_ml(const Prelude& pre, const SampleStats& samp,
+                  const Eigen::VectorXd& x0, const Bounds& bounds,
+                  OptimOptions opts);
+
+}  // namespace
+
 fit_expected<Estimates>
 fit_gmm(spec::LatentStructure pt, const model::MatrixRep& rep,
         const SampleStats& samp, const Eigen::VectorXd& x0,
@@ -599,6 +612,15 @@ fit_ml(spec::LatentStructure pt, const model::MatrixRep& rep,
 }
 
 fit_expected<Estimates>
+fit_ml_fisher(spec::LatentStructure pt, const model::MatrixRep& rep,
+              const SampleStats& samp, const Eigen::VectorXd& x0,
+              Bounds bounds, OptimOptions opts) {
+  auto pre = prelude(pt, rep, samp, x0, "fit_ml_fisher");
+  if (!pre.has_value()) return std::unexpected(pre.error());
+  return compose_fisher_ml(*pre, samp, x0, bounds, opts);
+}
+
+fit_expected<Estimates>
 fit_ml_fcsem(spec::LatentStructure pt, const SampleStats& samp,
              const Eigen::VectorXd& x0, Bounds bounds, Backend backend,
              OptimOptions opts) {
@@ -661,6 +683,389 @@ compose_snlls(const spec::LatentStructure& pt, const model::ModelEvaluator& ev,
     est.n_alpha_solve_fast = *gp_or->n_alpha_solve_fast;
   if (gp_or->n_alpha_solve_fallback)
     est.n_alpha_solve_fallback = *gp_or->n_alpha_solve_fallback;
+  return est;
+}
+
+fit_expected<double>
+total_n_obs_double(const SampleStats& samp, const char* who) {
+  double total = 0.0;
+  for (auto n : samp.n_obs) total += static_cast<double>(n);
+  if (total <= 0.0) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        std::string(who) + ": SampleStats has non-positive total n_obs"));
+  }
+  return total;
+}
+
+// Expected Hessian of F_ML itself, not the N/2-scaled post-fit information
+// matrix. This keeps the Fisher equation local and literal:
+// H_E(θ) d = -∇F_ML(θ).
+fit_expected<Eigen::MatrixXd>
+expected_ml_hessian_f(const model::ModelEvaluator& ev,
+                      const SampleStats& samp,
+                      const Eigen::VectorXd& theta) {
+  using detail::vech_index;
+  using detail::vech_len;
+
+  auto eval = ev.evaluate(theta, true, true);
+  if (!eval.has_value()) {
+    return std::unexpected(fit_err(FitError::Kind::NonPositiveDefiniteSigma,
+        "fit_ml_fisher: expected Hessian evaluate failed: " +
+            eval.error().detail));
+  }
+  const auto& moments = eval->moments;
+  const auto& J       = eval->J_sigma;
+  const auto& Jmu     = eval->J_mu;
+
+  if (samp.S.size() != moments.sigma.size() ||
+      samp.n_obs.size() != samp.S.size()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_ml_fisher: sample moments and implied moments have incompatible "
+        "block counts"));
+  }
+  auto N_or = total_n_obs_double(samp, "fit_ml_fisher");
+  if (!N_or.has_value()) return std::unexpected(N_or.error());
+  const double n_total = *N_or;
+
+  const std::size_t n_blocks = samp.S.size();
+  const std::size_t n_free   = ev.n_free();
+  std::vector<Eigen::MatrixXd> SigmaInv(n_blocks);
+  std::vector<double>          weight(n_blocks, 0.0);
+  std::vector<Eigen::Index>    p_dim(n_blocks, 0);
+  std::vector<Eigen::Index>    vech_off(n_blocks, 0);
+  std::vector<bool>            mean_used(n_blocks, false);
+
+  Eigen::Index running = 0;
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const auto& S = samp.S[b];
+    const Eigen::MatrixXd Sigma =
+        0.5 * (moments.sigma[b] + moments.sigma[b].transpose());
+    if (S.rows() != Sigma.rows() || S.cols() != Sigma.cols()) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "fit_ml_fisher: block " + std::to_string(b) +
+              " S and Sigma have different shapes"));
+    }
+    const Eigen::Index p = Sigma.rows();
+    Eigen::LLT<Eigen::MatrixXd> llt(Sigma);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(fit_err(FitError::Kind::NonPositiveDefiniteSigma,
+          "fit_ml_fisher: implied Sigma is not positive definite in block " +
+              std::to_string(b)));
+    }
+    SigmaInv[b] = llt.solve(Eigen::MatrixXd::Identity(p, p));
+    weight[b]   = static_cast<double>(samp.n_obs[b]) / n_total;
+    p_dim[b]    = p;
+    vech_off[b] = running;
+    running += vech_len(p);
+
+    mean_used[b] = b < samp.mean.size() && b < moments.mu.size() &&
+                   samp.mean[b].size() > 0 && moments.mu[b].size() > 0;
+    if (mean_used[b] && samp.mean[b].size() != p) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "fit_ml_fisher: block " + std::to_string(b) +
+              " sample mean and Sigma have different dimensions"));
+    }
+  }
+
+  if (J.rows() != running ||
+      J.cols() != static_cast<Eigen::Index>(n_free)) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_ml_fisher: covariance Jacobian shape does not match moments"));
+  }
+
+  const bool has_mean_rows = Jmu.size() > 0;
+  std::vector<Eigen::Index> mu_off(n_blocks, 0);
+  if (has_mean_rows) {
+    Eigen::Index running_p = 0;
+    for (std::size_t b = 0; b < n_blocks; ++b) {
+      mu_off[b] = running_p;
+      running_p += p_dim[b];
+    }
+    if (Jmu.rows() != running_p ||
+        Jmu.cols() != static_cast<Eigen::Index>(n_free)) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "fit_ml_fisher: mean Jacobian shape does not match moments"));
+    }
+  }
+
+  std::vector<std::vector<Eigen::MatrixXd>> T(
+      n_free, std::vector<Eigen::MatrixXd>(n_blocks));
+  Eigen::MatrixXd M;
+  for (std::size_t k = 0; k < n_free; ++k) {
+    for (std::size_t b = 0; b < n_blocks; ++b) {
+      const Eigen::Index p = p_dim[b];
+      M.setZero(p, p);
+      for (Eigen::Index c = 0; c < p; ++c) {
+        for (Eigen::Index r = c; r < p; ++r) {
+          const double v = J(vech_off[b] + vech_index(p, r, c),
+                             static_cast<Eigen::Index>(k));
+          M(r, c) = v;
+          if (r != c) M(c, r) = v;
+        }
+      }
+      T[k][b].noalias() = SigmaInv[b] * M;
+    }
+  }
+
+  std::vector<std::vector<Eigen::VectorXd>> eta;
+  if (has_mean_rows) {
+    eta.assign(n_free, std::vector<Eigen::VectorXd>(n_blocks));
+    for (std::size_t k = 0; k < n_free; ++k) {
+      for (std::size_t b = 0; b < n_blocks; ++b) {
+        if (!mean_used[b]) {
+          eta[k][b] = Eigen::VectorXd::Zero(p_dim[b]);
+          continue;
+        }
+        const Eigen::VectorXd nu_kb =
+            Jmu.col(static_cast<Eigen::Index>(k))
+                .segment(mu_off[b], p_dim[b]);
+        eta[k][b].noalias() = SigmaInv[b] * nu_kb;
+      }
+    }
+  }
+
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(
+      static_cast<Eigen::Index>(n_free), static_cast<Eigen::Index>(n_free));
+  for (std::size_t a = 0; a < n_free; ++a) {
+    for (std::size_t b = a; b < n_free; ++b) {
+      double acc = 0.0;
+      for (std::size_t blk = 0; blk < n_blocks; ++blk) {
+        double per_block =
+            (T[a][blk].transpose().array() * T[b][blk].array()).sum();
+        if (has_mean_rows && mean_used[blk]) {
+          const Eigen::VectorXd nu_a =
+              Jmu.col(static_cast<Eigen::Index>(a))
+                  .segment(mu_off[blk], p_dim[blk]);
+          per_block += 2.0 * nu_a.dot(eta[b][blk]);
+        }
+        acc += weight[blk] * per_block;
+      }
+      H(static_cast<Eigen::Index>(a), static_cast<Eigen::Index>(b)) = acc;
+      if (a != b)
+        H(static_cast<Eigen::Index>(b), static_cast<Eigen::Index>(a)) = acc;
+    }
+  }
+
+  if (!H.allFinite()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_ml_fisher: expected Hessian contains non-finite entries"));
+  }
+  return H;
+}
+
+Eigen::VectorXd
+solve_fisher_direction(const Eigen::MatrixXd& H,
+                       const Eigen::VectorXd& grad) {
+  Eigen::MatrixXd A = 0.5 * (H + H.transpose());
+  const double scale =
+      std::max(1.0, A.cwiseAbs().maxCoeff());
+  Eigen::VectorXd step = Eigen::VectorXd::Zero(grad.size());
+
+  for (double ridge : {0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2}) {
+    Eigen::MatrixXd Ar = A;
+    if (ridge > 0.0) {
+      Ar.diagonal().array() += ridge * scale;
+    }
+    Eigen::LDLT<Eigen::MatrixXd> ldlt(Ar);
+    if (ldlt.info() != Eigen::Success) continue;
+    step = ldlt.solve(-grad);
+    if (step.allFinite() && grad.dot(step) < 0.0) return step;
+  }
+
+  // Last-resort descent direction for rank-deficient expected information.
+  // This keeps the globalized scoring loop moving while the terminal audit
+  // still judges the returned point on the true ML gradient.
+  return -grad;
+}
+
+fit_expected<Estimates>
+compose_fisher_ml(const Prelude& pre, const SampleStats& samp,
+                  const Eigen::VectorXd& x0, const Bounds& bounds,
+                  OptimOptions opts) {
+  const model::ModelEvaluator& ev = pre.ev;
+
+  auto obj_or = estimate::ml_objective(ev, samp);
+  if (!obj_or.has_value()) return std::unexpected(obj_or.error());
+  const optim::ScalarProblem ml_prob = std::move(*obj_or);
+
+  if (pre.nl.active()) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_ml_fisher: nonlinear equality constraints are not supported by "
+        "the Fisher scoring path; use fit_ml with optimizer \"nlopt-slsqp\" "
+        "or \"ipopt\""));
+  }
+
+  const EqConstraints& con = pre.con;
+  const bool driven_reduced = con.active();
+  const bool pure_merge = !con.group.empty();
+  if (driven_reduced && !bounds.empty() && !pure_merge) {
+    return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+        "fit_ml_fisher: box bounds with general-linear equality constraints "
+        "are not supported by the Fisher scoring path"));
+  }
+
+  Eigen::VectorXd driven = driven_reduced ? con.contract(x0) : x0;
+  Bounds driven_bounds;
+  if (!bounds.empty()) {
+    driven_bounds = driven_reduced ? fold_alpha_bounds(con, bounds) : bounds;
+    driven = driven.cwiseMax(driven_bounds.lower).cwiseMin(driven_bounds.upper);
+  }
+
+  auto expand_driven = [&con, driven_reduced](const Eigen::VectorXd& z) {
+    return driven_reduced ? con.expand(z) : z;
+  };
+  auto reduce_gradient = [&con, driven_reduced](const Eigen::VectorXd& g) {
+    return driven_reduced ? con.reduce_gradient(g) : g;
+  };
+  auto reduce_hessian = [&con, driven_reduced](const Eigen::MatrixXd& H) {
+    return driven_reduced ? Eigen::MatrixXd(con.K().transpose() * H * con.K())
+                          : H;
+  };
+  auto inside_bounds = [&](const Eigen::VectorXd& z) {
+    if (driven_bounds.empty()) return true;
+    constexpr double tol = 1e-12;
+    for (Eigen::Index i = 0; i < z.size(); ++i) {
+      if (std::isfinite(driven_bounds.lower[i]) &&
+          z[i] < driven_bounds.lower[i] - tol) return false;
+      if (std::isfinite(driven_bounds.upper[i]) &&
+          z[i] > driven_bounds.upper[i] + tol) return false;
+    }
+    return true;
+  };
+  auto proj_grad_inf = [&](const Eigen::VectorXd& z,
+                           const Eigen::VectorXd& g) {
+    if (g.size() == 0) return 0.0;
+    if (driven_bounds.empty()) return g.cwiseAbs().maxCoeff();
+    constexpr double kBoundTol = 1e-12;
+    double m = 0.0;
+    for (Eigen::Index i = 0; i < z.size(); ++i) {
+      double gi = g[i];
+      const bool at_lo = std::isfinite(driven_bounds.lower[i]) &&
+                         (z[i] - driven_bounds.lower[i] <= kBoundTol);
+      const bool at_up = std::isfinite(driven_bounds.upper[i]) &&
+                         (driven_bounds.upper[i] - z[i] <= kBoundTol);
+      if (at_lo && gi > 0.0) gi = 0.0;
+      if (at_up && gi < 0.0) gi = 0.0;
+      m = std::max(m, std::abs(gi));
+    }
+    return m;
+  };
+
+  Eigen::VectorXd theta = expand_driven(driven);
+  Eigen::VectorXd grad_full = Eigen::VectorXd::Zero(theta.size());
+  Eigen::VectorXd grad = Eigen::VectorXd::Zero(driven.size());
+  double f_cur = ml_prob.f(theta, grad_full);
+  if (!std::isfinite(f_cur)) {
+    return std::unexpected(fit_err(FitError::Kind::NonFiniteObjective,
+        "fit_ml_fisher: F_ML(x0) is non-finite"));
+  }
+  grad = reduce_gradient(grad_full);
+
+  int total_f_evals = 1;
+  int total_g_evals = 1;
+  int iter = 0;
+  optim::OptimStatus final_status = optim::OptimStatus::BudgetExhausted;
+  constexpr double armijo_c = 1e-4;
+  constexpr int max_backtracks = 40;
+
+  for (int k = 0; k < opts.max_iter; ++k) {
+    if (proj_grad_inf(driven, grad) <= opts.gtol) {
+      final_status = optim::OptimStatus::Converged;
+      break;
+    }
+
+    auto H_or = expected_ml_hessian_f(ev, samp, theta);
+    if (!H_or.has_value()) return std::unexpected(H_or.error());
+    const Eigen::MatrixXd H_driven = reduce_hessian(*H_or);
+    Eigen::VectorXd d = solve_fisher_direction(H_driven, grad);
+    if (!d.allFinite() || d.size() != driven.size()) {
+      return std::unexpected(fit_err(FitError::Kind::NumericIssue,
+          "fit_ml_fisher: Fisher direction is non-finite"));
+    }
+    const double slope = grad.dot(d);
+    if (!(slope < 0.0)) {
+      d = -grad;
+    }
+
+    double alpha = 1.0;
+    Eigen::VectorXd driven_new(driven.size());
+    Eigen::VectorXd theta_new(theta.size());
+    Eigen::VectorXd grad_full_new = Eigen::VectorXd::Zero(theta.size());
+    Eigen::VectorXd grad_new = Eigen::VectorXd::Zero(driven.size());
+    double f_new = std::numeric_limits<double>::infinity();
+    bool armijo_ok = false;
+    const double descent_slope = grad.dot(d);
+
+    for (int bt = 0; bt < max_backtracks; ++bt) {
+      driven_new = driven + alpha * d;
+      if (!inside_bounds(driven_new)) {
+        alpha *= 0.5;
+        continue;
+      }
+      theta_new = expand_driven(driven_new);
+      f_new = ml_prob.f(theta_new, grad_full_new);
+      ++total_f_evals;
+      ++total_g_evals;
+      if (std::isfinite(f_new) &&
+          f_new <= f_cur + armijo_c * alpha * descent_slope) {
+        grad_new = reduce_gradient(grad_full_new);
+        armijo_ok = true;
+        break;
+      }
+      alpha *= 0.5;
+    }
+
+    ++iter;
+    if (!armijo_ok) {
+      final_status = optim::OptimStatus::LineSearchSalvaged;
+      break;
+    }
+
+    const double df = std::abs(f_cur - f_new);
+    driven = driven_new;
+    theta = theta_new;
+    grad = grad_new;
+    f_cur = f_new;
+
+    if (proj_grad_inf(driven, grad) <= opts.gtol) {
+      final_status = optim::OptimStatus::Converged;
+      break;
+    }
+    if (df <= opts.ftol * (std::abs(f_cur) + opts.ftol) &&
+        proj_grad_inf(driven, grad) <= 100.0 * opts.gtol) {
+      final_status = optim::OptimStatus::LineSearchSalvaged;
+      break;
+    }
+  }
+
+  Eigen::VectorXd lower, upper;
+  if (driven_bounds.empty()) {
+    lower = Eigen::VectorXd::Constant(driven.size(),
+                                      -std::numeric_limits<double>::infinity());
+    upper = Eigen::VectorXd::Constant(driven.size(),
+                                       std::numeric_limits<double>::infinity());
+  } else {
+    lower = driven_bounds.lower;
+    upper = driven_bounds.upper;
+  }
+  optim::ObjectiveFn driven_ml =
+      [&](const Eigen::VectorXd& z, Eigen::VectorXd& g) -> double {
+        const Eigen::VectorXd th = expand_driven(z);
+        Eigen::VectorXd g_full(th.size());
+        const double v = ml_prob.f(th, g_full);
+        g = reduce_gradient(g_full);
+        return v;
+      };
+  optim::TerminalAudit audit =
+      optim::audit_terminal_iterate(driven_ml, driven, f_cur, lower, upper);
+  if (final_status == optim::OptimStatus::BudgetExhausted &&
+      audit.stationary) {
+    final_status = optim::OptimStatus::Converged;
+  }
+
+  Estimates est{theta, f_cur, iter, total_f_evals, total_g_evals,
+                final_status, audit.grad_inf_norm, std::move(audit)};
+  attach_diagnostics(est, pre, bounds);
   return est;
 }
 

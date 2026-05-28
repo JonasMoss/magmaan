@@ -108,6 +108,7 @@ fit_once <- function(method, spec, dat, control) {
                              control = control),
     `ml-port` = core$fit_ml(spec, dat, optimizer = "port",
                             control = control),
+    `ml-fisher` = core$fit_ml_fisher(spec, dat, control = control),
     `ml-irls` = core$fit_ml_irls(spec, dat, optimizer = "port-nls",
                                  control = control),
     `ml-irls-snlls` = core$fit_ml_irls_snlls(spec, dat,
@@ -125,8 +126,11 @@ main <- function() {
   raw_dir <- experiment_path("results", "raw")
   dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
 
-  control <- list(max_iter = args$max_iter, ftol = 1e-12, gtol = 1e-8)
-  methods <- c("ml-lbfgs", "ml-port", "ml-irls", "ml-irls-snlls")
+  control <- list(max_iter = args$max_iter, ftol = 1e-12, gtol = 1e-8,
+                  irls_max_outer = args$max_iter, irls_ftol = 1e-12,
+                  irls_gtol = 1e-8)
+  methods <- c("ml-lbfgs", "ml-port", "ml-fisher",
+               "ml-irls", "ml-irls-snlls")
   grid <- ernst_design_grid(args$n_values, reps = args$reps, beta = args$beta)
   spec <- magmaan::model_spec(ernst_model())
 

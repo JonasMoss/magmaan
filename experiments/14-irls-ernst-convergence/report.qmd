@@ -49,10 +49,12 @@ fmt_num <- function(x, digits = 3) {
   ifelse(is.na(x), "", formatC(x, format = "g", digits = digits))
 }
 fmt_ms <- function(x) ifelse(is.na(x), "", sprintf("%.3f", x / 1000))
-method_levels <- c("ml-lbfgs", "ml-port", "ml-irls", "ml-irls-snlls")
+method_levels <- c("ml-lbfgs", "ml-port", "ml-fisher",
+                   "ml-irls", "ml-irls-snlls")
 method_labels <- c(
   `ml-lbfgs` = "ML L-BFGS",
   `ml-port` = "ML PORT",
+  `ml-fisher` = "ML Fisher",
   `ml-irls` = "IRLS-ML",
   `ml-irls-snlls` = "SNLLS-IRLS-ML"
 )
