@@ -55,10 +55,9 @@ struct Estimates {
   FitDiagnostics        diagnostics  = {};
   // SNLLS profile shape: `n_nonlinear` is the β-block size the outer
   // optimizer sees, `n_linear` is the α-block size that Golub–Pereyra
-  // profiled out. Populated only by `fit_snlls` / `fit_snlls_gls` /
-  // `fit_snlls_wls`; the default `-1` flags "no separable split applies"
-  // (full-θ paths, FCSEM, FIML). Surfaced through the SNLLS R wrapper for
-  // the corpus speed tables.
+  // profiled out. The Fisher-SNLLS path also uses these fields for its local
+  // Schur-complement β/α split. The default `-1` flags "no separable split
+  // applies" (full-θ paths, FCSEM, FIML).
   std::int32_t          n_nonlinear  = -1;
   std::int32_t          n_linear     = -1;
   // SNLLS inner-solve telemetry: number of `profile_at()` cache misses
@@ -141,6 +140,16 @@ fit_expected<Estimates>
 fit_ml_fisher(spec::LatentStructure pt, const model::MatrixRep& rep,
               const SampleStats& samp, const Eigen::VectorXd& x0,
               Bounds bounds = {}, OptimOptions opts = {});
+
+// Fisher-ML with a separable block solve. The scoring equation is still the
+// same expected-information ML system as `fit_ml_fisher`, but the local
+// quadratic is partitioned into nonlinear β (Λ, Β) and conditionally-linear α
+// (Θ, Ψ, ν, α) coordinates and solved through the Schur complement. This is a
+// local Fisher block elimination, not Golub-Pereyra objective profiling.
+fit_expected<Estimates>
+fit_ml_fisher_snlls(spec::LatentStructure pt, const model::MatrixRep& rep,
+                    const SampleStats& samp, const Eigen::VectorXd& x0,
+                    Bounds bounds = {}, OptimOptions opts = {});
 
 // Outer-loop controls for `fit_ml_irls`. `max_outer` caps the number of
 // reweight steps; `ftol` and `gtol` decide convergence on, respectively, the

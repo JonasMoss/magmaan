@@ -1444,6 +1444,28 @@ Rcpp::List fit_ml_fisher_impl(SEXP partable, Rcpp::List sample_stats,
   return fit_result(ctx, est, &starts, "ML-Fisher");
 }
 
+// fit_ml_fisher_snlls() — local Fisher scoring with a Schur-complement solve
+// over the same beta/alpha split used by the SNLLS research paths.
+//
+// [[Rcpp::export]]
+Rcpp::List fit_ml_fisher_snlls_impl(
+    SEXP partable, Rcpp::List sample_stats,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> bounds  = R_NilValue) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "fit_ml_fisher_snlls");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx = ctx_from_sample_stats(std::move(parsed.structure),
+                                  std::move(parsed.names), sample_stats);
+  const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
+  auto e_or = magmaan::estimate::fit_ml_fisher_snlls(
+      ctx.pt, ctx.rep, ctx.samp, x0, bounds_from_nullable(bounds),
+      optim_opts_from(control));
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return fit_result(ctx, est, &starts, "ML-Fisher-SNLLS");
+}
+
 // fit_ml_irls() — normal-theory ML via iteratively reweighted GLS (Fisher
 // scoring). Same ML objective as fit_ml(), different algorithm: at iterate θ_k
 // build the expected Fisher information weight W(θ_k) = ½D'(Σ(θ_k)⁻¹⊗Σ(θ_k)⁻¹)D,

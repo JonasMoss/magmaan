@@ -99,7 +99,10 @@ golden `parTable()` fixtures.
   the true `F_ML` scale, solves a damped local Fisher equation, and accepts
   steps by Armijo backtracking on the ML objective. This is separate from the
   IRLS paths above, which reoptimize a frozen GLS subproblem at each outer
-  iterate.
+  iterate. A companion `estimate::fit_ml_fisher_snlls()` /
+  `magmaan_core$fit_ml_fisher_snlls()` path solves the same local Fisher
+  equation through a Schur complement over the SNLLS β/α split; this is local
+  block elimination, not Golub-Pereyra objective profiling.
 - Discrepancy-scale convention: magmaan's `fmin` is the full ML discrepancy
   `F`, whereas lavaan reports `F/2` — magmaan's `fmin` at the optimum equals
   twice lavaan's.

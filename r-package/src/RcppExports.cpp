@@ -160,6 +160,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fit_ml_fisher_snlls_impl
+Rcpp::List fit_ml_fisher_snlls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_ml_fisher_snlls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type sample_stats(sample_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_ml_fisher_snlls_impl(partable, sample_stats, control, bounds));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_ml_irls_impl
 Rcpp::List fit_ml_irls_impl(SEXP partable, Rcpp::List sample_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
 RcppExport SEXP _magmaan_fit_ml_irls_impl(SEXP partableSEXP, SEXP sample_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
@@ -1527,6 +1541,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_fit", (DL_FUNC) &_magmaan_fit_fit, 5},
     {"_magmaan_fit_ml_impl", (DL_FUNC) &_magmaan_fit_ml_impl, 5},
     {"_magmaan_fit_ml_fisher_impl", (DL_FUNC) &_magmaan_fit_ml_fisher_impl, 4},
+    {"_magmaan_fit_ml_fisher_snlls_impl", (DL_FUNC) &_magmaan_fit_ml_fisher_snlls_impl, 4},
     {"_magmaan_fit_ml_irls_impl", (DL_FUNC) &_magmaan_fit_ml_irls_impl, 5},
     {"_magmaan_fit_ml_irls_snlls_impl", (DL_FUNC) &_magmaan_fit_ml_irls_snlls_impl, 5},
     {"_magmaan_frontier_fit_ml_ridge_continuation_impl", (DL_FUNC) &_magmaan_frontier_fit_ml_ridge_continuation_impl, 9},

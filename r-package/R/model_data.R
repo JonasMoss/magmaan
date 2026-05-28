@@ -1069,6 +1069,15 @@ fit_ml_fisher <- function(model, data, control = NULL, bounds = NULL) {
                      control = control, bounds = b)
 }
 
+# Fisher scoring with local SNLLS-style block elimination: same ML objective
+# and line search as `fit_ml_fisher`, but the Fisher equation is solved through
+# the beta/alpha Schur complement.
+fit_ml_fisher_snlls <- function(model, data, control = NULL, bounds = NULL) {
+  b <- bounds_arg(bounds, model, data, "fit_ml_fisher_snlls")
+  fit_ml_fisher_snlls_impl(partable_arg(model), sample_stats_arg(data),
+                           control = control, bounds = b)
+}
+
 # Normal-theory ML via iteratively reweighted GLS (Fisher scoring). Same
 # objective as `fit_ml`, different algorithm — each outer iterate refreshes
 # the expected Fisher information weight W(θ_k) = ½D'(Σ(θ_k)⁻¹⊗Σ(θ_k)⁻¹)D

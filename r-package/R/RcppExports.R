@@ -45,6 +45,10 @@ fit_ml_fisher_impl <- function(partable, sample_stats, control = NULL, bounds = 
     .Call(`_magmaan_fit_ml_fisher_impl`, partable, sample_stats, control, bounds)
 }
 
+fit_ml_fisher_snlls_impl <- function(partable, sample_stats, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_ml_fisher_snlls_impl`, partable, sample_stats, control, bounds)
+}
+
 fit_ml_irls_impl <- function(partable, sample_stats, optimizer = NULL, control = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_ml_irls_impl`, partable, sample_stats, optimizer, control, bounds)
 }
