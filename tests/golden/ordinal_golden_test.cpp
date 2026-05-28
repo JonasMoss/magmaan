@@ -722,8 +722,11 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
       }
       if (fit_item.value().contains("robust") &&
           !fit_item.value()["robust"].is_null()) {
+        magmaan::estimate::Estimates lavaan_est = *est_or;
+        lavaan_est.theta = lavaan_theta;
+        lavaan_est.fmin = lavaan_chisq / static_cast<double>(n_total);
         auto rob_or = magmaan::estimate::robust_mixed_ordinal(
-            h->pt, h->rep, h->stats, *est_or, kind);
+            h->pt, h->rep, h->stats, lavaan_est, kind);
         if (!rob_or.has_value()) {
           failures.push_back(id + " " + name + ": robust — " +
                              rob_or.error().detail);
@@ -731,15 +734,60 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
         }
         const auto& robust = fit_item.value()["robust"];
         const Eigen::VectorXd lavaan_se = vector_from_json(robust["se"]);
+        const Eigen::VectorXd lavaan_ev = vector_from_json(robust["eigvals"]);
         const double d_se = max_abs_diff(rob_or->se, lavaan_se);
+        const double d_ev = max_abs_diff(rob_or->eigvals, lavaan_ev);
         const double d_standard =
             std::abs(rob_or->chisq_standard -
                      robust["chisq_standard"].get<double>());
+        const double d_sb =
+            std::abs(rob_or->satorra_bentler.chi2_scaled -
+                     robust["satorra_bentler"]["chisq"].get<double>());
+        const double d_sb_scale =
+            std::abs(rob_or->satorra_bentler.scale_c -
+                     robust["satorra_bentler"]["scale"].get<double>());
+        const double d_mv =
+            std::abs(rob_or->mean_var_adjusted.chi2_adj -
+                     robust["mean_var_adjusted"]["chisq"].get<double>());
+        const double d_mv_df =
+            std::abs(rob_or->mean_var_adjusted.df_adj -
+                     robust["mean_var_adjusted"]["df_adj"].get<double>());
+        const double d_ss =
+            std::abs(rob_or->scaled_shifted.chi2_adj -
+                     robust["scaled_shifted"]["chisq"].get<double>());
+        const double d_ss_scale =
+            std::abs((1.0 / rob_or->scaled_shifted.scale_a) -
+                     robust["scaled_shifted"]["scale"].get<double>());
+        const double d_ss_shift =
+            std::abs(rob_or->scaled_shifted.shift_b -
+                     robust["scaled_shifted"]["shift"].get<double>());
+        // Mixed continuous/ordinal robust scaled tests are currently a looser
+        // lavaan guard than the all-ordinal path; the small/sparse mixed
+        // fixtures expose existing scale/eigen drift that is tracked in the
+        // backlog rather than hidden by omitting the assertions.
         if (rob_or->df != robust["df"].get<int>() ||
-            d_se > 3e-2 || d_standard > 2e-1) {
+            rob_or->satorra_bentler.df !=
+                robust["satorra_bentler"]["df"].get<int>() ||
+            rob_or->scaled_shifted.df !=
+                robust["scaled_shifted"]["df"].get<int>() ||
+            d_se > 3e-2 || d_ev > 1e-1 || d_standard > 1e-8 ||
+            d_sb > 4.5e-1 || d_sb_scale > 9e-2 ||
+            d_mv > 4.5e-1 || d_mv_df > 1e-2 ||
+            d_ss > 4.5e-1 || d_ss_scale > 9e-2 ||
+            d_ss_shift > 5e-3) {
           failures.push_back(id + " " + name +
                              ": robust diffs se=" + std::to_string(d_se) +
-                             " standard=" + std::to_string(d_standard));
+                             " eig=" + std::to_string(d_ev) +
+                             " standard=" + std::to_string(d_standard) +
+                             " SB=" + std::to_string(d_sb) +
+                             " SB scale=" + std::to_string(d_sb_scale) +
+                             " mean.var=" + std::to_string(d_mv) +
+                             " mean.var df=" + std::to_string(d_mv_df) +
+                             " scaled.shifted=" + std::to_string(d_ss) +
+                             " scaled.shifted scale=" +
+                             std::to_string(d_ss_scale) +
+                             " scaled.shifted shift=" +
+                             std::to_string(d_ss_shift));
           continue;
         }
       }

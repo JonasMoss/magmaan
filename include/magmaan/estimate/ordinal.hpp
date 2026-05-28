@@ -114,6 +114,14 @@ robust_mixed_ordinal(spec::LatentStructure pt,
                      OrdinalParameterization parameterization =
                          OrdinalParameterization::Delta);
 
+post_expected<OrdinalRobustResult>
+robust_mixed_ordinal(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const data::MixedOrdinalMoments& moments,
+                     data::OrdinalGammaCache& gamma_cache,
+                     const Estimates& est,
+                     data::OrdinalWeightPlan plan);
+
 post_expected<inference::ScoreTestTable>
 modification_indices_ordinal(spec::LatentStructure pt,
                              const model::MatrixRep& rep,

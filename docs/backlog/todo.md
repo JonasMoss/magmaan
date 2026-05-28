@@ -112,11 +112,14 @@ semantics · **XL** statistical design/research track before implementation.
   `fit_mixed_ordinal_snlls_full_thresholds()`, matching existing bounded mixed
   DWLS/WLS on a focused unit test. Landed next: lazy fit-only mixed DWLS
   construction plus mixed-moments bounded/SNLLS overloads, with the speed pilot
-  now timing legacy-versus-lazy mixed DWLS raw-to-fit rows. Remaining C++
-  estimator work on this track: lazy mixed WLS construction, mixed theta SNLLS,
-  threshold-profiled general linear maps such as effect-coding-style
-  constraints, reduced-Gamma robust-inference products that avoid full
-  materialization where possible, and only-when-needed R/API polish.
+  now timing legacy-versus-lazy mixed DWLS raw-to-fit rows. Landed next:
+  mixed full-Gamma cache reuse for robust DWLS/WLS reporting, plus mixed
+  lavaan robust scaled-test golden assertions. Remaining C++ estimator work on
+  this track: tighten mixed robust scaled-test parity beyond the current loose
+  guard, lazy mixed WLS construction, mixed theta SNLLS, threshold-profiled
+  general linear maps such as effect-coding-style constraints, reduced-Gamma
+  robust-inference products that avoid full materialization where possible, and
+  only-when-needed R/API polish.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into
@@ -430,10 +433,12 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   estimation, and the full-threshold SNLLS path supports general linear
   threshold constraints. Mixed continuous/ordinal delta SNLLS now exists for
   the materialized full-threshold DWLS/WLS path, and mixed fit-only DWLS now
-  has a lazy workspace path. Use experiments to decide whether the next
-  paper-facing C++ work should be lazy mixed WLS construction, mixed theta
-  SNLLS, threshold-profiled general linear maps, or reduced-Gamma inference
-  plumbing.
+  has a lazy workspace path. Mixed robust scaled-test fields are now checked
+  against lavaan, but only with loose tolerances; exact mixed scale/eigen parity
+  remains open. Use experiments to decide whether the next paper-facing C++
+  work should be tighter mixed robust inference, lazy mixed WLS construction,
+  mixed theta SNLLS, threshold-profiled general linear maps, or reduced-Gamma
+  inference plumbing.
 
 ## Composite models
 
