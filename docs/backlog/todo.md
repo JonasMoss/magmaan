@@ -43,19 +43,15 @@ semantics · **XL** statistical design/research track before implementation.
 Local-first safety tooling for an AI-assisted repo. Design note:
 [docs/validation/local_hardening.md](../validation/local_hardening.md).
 
-- **S/M.** Add a local LLVM coverage lane without touching magmaan proper:
-  a `coverage` CMake preset that injects clang source-coverage flags, plus
-  `just coverage` for a terminal summary and `just coverage-html` for
-  `build/coverage/html/index.html`. Keep profiles, merged `.profdata`, and
-  HTML under ignored `build/coverage/`; filter generated/dependency/test
-  harness paths when reporting core source coverage.
-- **S.** Add a discoverable local JUnit report recipe, e.g.
-  `just test-report`, wrapping `ctest --preset fast --output-junit
-  build/fast/test-results.xml`.
-- **S/M.** Add `just health` as the one-command local cockpit. First slice:
-  `test-quick`, coverage summary, and JUnit XML. Keep the command boring and
-  local; sanitizer, parity-heavy, and optional optimizer lanes can be opt-in or
-  later extensions.
+- **S.** Calibrate the landed local LLVM coverage lane after its first real
+  run. Initial tooling now exists as a `coverage` CMake preset plus
+  `just coverage` and `just coverage-html`, all writing under ignored
+  `build/coverage/`. Once exercised, adjust the ignore regex, object list, and
+  domain-level interpretation notes as needed.
+- **S.** Calibrate the landed local report/health recipes after first use.
+  Initial tooling now exists as `just test-report`, `just test-quick-report`,
+  and `just health`. Keep the command boring and local; sanitizer,
+  parity-heavy, and optional optimizer lanes can be opt-in or later extensions.
 - **S.** Add `docs/validation/test_ledger.md`: one table per validation area
   mapping subsystem, oracle, test kind, important files/tests, and known gaps.
   This should orient maintainers and agents; it is not a second backlog.

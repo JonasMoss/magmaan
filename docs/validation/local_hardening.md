@@ -26,19 +26,20 @@ next.
 - **Reports should orient future work.** A good report answers "where am I
   unsafe?" faster than it answers "what percentage did I score?"
 
-## Planned Local Tools
+## Local Tools
 
 ### LLVM coverage
 
-The clang-based local toolchain can use LLVM source coverage without changing
-magmaan library code:
+The clang-based local toolchain uses LLVM source coverage without changing
+magmaan library code. The initial local lane is wired through
+`CMakePresets.json` and `justfile`:
 
-- add a `coverage` CMake preset that injects
+- the `coverage` CMake preset injects
   `-fprofile-instr-generate -fcoverage-mapping -O0 -g`;
-- add `just coverage` for a terminal summary;
-- add `just coverage-html` for `build/coverage/html/index.html`;
-- keep raw profiles and merged `.profdata` files under `build/coverage/`;
-- ignore generated/dependency/test-harness paths such as `_deps/`,
+- `just coverage` builds/runs the coverage tree and prints a terminal summary;
+- `just coverage-html` writes `build/coverage/html/index.html`;
+- raw profiles and merged `.profdata` files stay under `build/coverage/`;
+- generated/dependency/test-harness paths such as `_deps/`,
   `third_party/`, and `tests/` when the question is core source coverage.
 
 The useful unit of interpretation is domain-level coverage:
@@ -49,11 +50,12 @@ parse/spec/model/estimate/inference/robust/measures/api
 
 ### Test reports
 
-CTest already supports JUnit XML. A small local recipe should make this
+CTest already supports JUnit XML. The local report recipes make this
 discoverable:
 
 ```sh
-ctest --preset fast --output-junit build/fast/test-results.xml
+just test-report
+just test-quick-report
 ```
 
 This is useful for local dashboards, editor integrations, and eventual CI
@@ -61,13 +63,12 @@ without changing the test suite.
 
 ### One-command health check
 
-A `just health` command should be the maintainer cockpit. The first version can
-stay boring:
+A `just health` command is the maintainer cockpit. The first version stays
+boring:
 
 ```text
-just test-quick
+just test-quick-report
 just coverage
-ctest --preset fast --output-junit build/fast/test-results.xml
 ```
 
 Later versions can add sanitizer or parity lanes deliberately, but the command

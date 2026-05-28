@@ -48,6 +48,21 @@
       }
     },
     {
+      "name": "coverage",
+      "displayName": "Local coverage (Debug + LLVM source coverage)",
+      "inherits": "_local",
+      "binaryDir": "${sourceDir}/build/coverage",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_C_FLAGS_DEBUG": "-O0 -g -fprofile-instr-generate -fcoverage-mapping",
+        "CMAKE_CXX_FLAGS_DEBUG": "-O0 -g -fprofile-instr-generate -fcoverage-mapping",
+        "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=mold -fprofile-instr-generate -fcoverage-mapping",
+        "CMAKE_SHARED_LINKER_FLAGS": "-fuse-ld=mold -fprofile-instr-generate -fcoverage-mapping"
+      }
+    },
+    {
       "name": "opt",
       "displayName": "Local optimized (Release + native CPU)",
       "inherits": "_local",
@@ -114,6 +129,7 @@
     { "name": "default", "configurePreset": "default" },
     { "name": "fast",    "configurePreset": "fast" },
     { "name": "dev",     "configurePreset": "dev" },
+    { "name": "coverage", "configurePreset": "coverage" },
     { "name": "opt",     "configurePreset": "opt" },
     { "name": "release", "configurePreset": "release" },
     { "name": "asan",    "configurePreset": "asan" },
@@ -130,6 +146,7 @@
     },
     { "name": "fast",    "inherits": "default", "configurePreset": "fast" },
     { "name": "dev",     "inherits": "default", "configurePreset": "dev" },
+    { "name": "coverage", "inherits": "default", "configurePreset": "coverage" },
     { "name": "opt",     "inherits": "default", "configurePreset": "opt" },
     { "name": "release", "inherits": "default", "configurePreset": "release" },
     { "name": "asan",    "inherits": "default", "configurePreset": "asan" },
