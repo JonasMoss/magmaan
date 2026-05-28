@@ -1,6 +1,11 @@
 # magmaan dev tasks. `just` runs from the repo root regardless of cwd; bare
 # `just` lists the recipes.
 
+coverage_profiles := "build/coverage/profiles"
+coverage_profdata := "build/coverage/coverage.profdata"
+coverage_html := "build/coverage/html"
+coverage_ignore := "(/_deps/|/third_party/|/tests/|/usr/)"
+
 default:
     @just --list
 
@@ -35,6 +40,60 @@ dev:
 test-dev: dev
     ctest --preset dev
 
+# Build + run the LLVM source-coverage suite and print a terminal report.
+coverage:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cmake --preset coverage
+    cmake --build --preset coverage --target magmaan_tests
+    rm -rf {{coverage_profiles}} {{coverage_profdata}}
+    mkdir -p {{coverage_profiles}}
+    LLVM_PROFILE_FILE="$PWD/{{coverage_profiles}}/%p-%m.profraw" ctest --preset coverage
+    llvm-profdata merge -sparse {{coverage_profiles}}/*.profraw -o {{coverage_profdata}}
+    objects=(
+        build/coverage/tests/magmaan_test_smoke
+        build/coverage/tests/magmaan_test_spec
+        build/coverage/tests/magmaan_test_estimate
+        build/coverage/tests/magmaan_test_inference
+        build/coverage/tests/magmaan_test_ordinal
+        build/coverage/tests/magmaan_test_api
+        build/coverage/tests/magmaan_test_parity
+        build/coverage/tests/magmaan_test_robcat
+    )
+    object_args=()
+    for obj in "${objects[@]:1}"; do
+        object_args+=(--object "$obj")
+    done
+    llvm-cov report "${objects[0]}" "${object_args[@]}" \
+        --instr-profile={{coverage_profdata}} \
+        --ignore-filename-regex='{{coverage_ignore}}'
+
+# Build + run coverage, then write a browsable HTML report.
+coverage-html: coverage
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rm -rf {{coverage_html}}
+    objects=(
+        build/coverage/tests/magmaan_test_smoke
+        build/coverage/tests/magmaan_test_spec
+        build/coverage/tests/magmaan_test_estimate
+        build/coverage/tests/magmaan_test_inference
+        build/coverage/tests/magmaan_test_ordinal
+        build/coverage/tests/magmaan_test_api
+        build/coverage/tests/magmaan_test_parity
+        build/coverage/tests/magmaan_test_robcat
+    )
+    object_args=()
+    for obj in "${objects[@]:1}"; do
+        object_args+=(--object "$obj")
+    done
+    llvm-cov show "${objects[0]}" "${object_args[@]}" \
+        --instr-profile={{coverage_profdata}} \
+        --format=html \
+        --output-dir={{coverage_html}} \
+        --ignore-filename-regex='{{coverage_ignore}}'
+    echo "Coverage HTML: {{coverage_html}}/index.html"
+
 # Build the local optimized tree (Release + native CPU tuning).
 opt:
     cmake --build --preset opt
@@ -56,6 +115,18 @@ build: fast
 
 # Back-compatible alias for the normal local C++ test suite.
 test: test-fast
+
+# Build + run the fast C++ test suite and write JUnit XML.
+test-report: fast
+    ctest --preset fast --output-junit build/fast/test-results.xml
+
+# Build + run the quick fast-suite and write JUnit XML.
+test-quick-report: fast
+    ctest --preset fast -LE parity --output-junit build/fast/test-quick-results.xml
+
+# Local maintainer health check: quick report plus source-coverage summary.
+health: test-quick-report coverage
+    @echo "Health reports: build/fast/test-quick-results.xml and build/coverage/"
 
 # (Re)install the exploratory R bindings against the optimized non-Ceres core.
 r-install:
