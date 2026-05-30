@@ -1,0 +1,252 @@
+---
+title: "Rhemtulla, Brosseau-Liard & Savalei (2012) replication"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path)))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"),
+                              candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates, "metadata.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+read_csv_safely <- function(name) {
+  p <- file.path(results_dir, name)
+  if (!file.exists(p)) return(NULL)
+  utils::read.csv(p, check.names = FALSE, stringsAsFactors = FALSE)
+}
+meta       <- read_csv_safely("metadata.csv")
+cells      <- read_csv_safely("cells.csv")
+thresholds <- read_csv_safely("thresholds.csv")
+sum_param  <- read_csv_safely("summary_param.csv")
+sum_chi2   <- read_csv_safely("summary_chi2.csv")
+sum_conv   <- read_csv_safely("summary_conv.csv")
+parity     <- read_csv_safely("lavaan_parity.csv")
+if (is.null(meta) || is.null(sum_param) || is.null(sum_chi2)) {
+  stop("Missing result CSVs. Run: Rscript run_experiment.R")
+}
+fmt_pct  <- function(x) ifelse(is.na(x), "", sprintf("%+.1f%%", 100 * x))
+fmt_p    <- function(x) ifelse(is.na(x) | is.nan(x), "", sprintf("%.3f", x))
+fmt_n    <- function(x) ifelse(is.na(x), "", sprintf("%.3f", x))
+est_pretty <- c(catLS = "cat-LS", ML = "ML (continuous)")
+# Reshape a summary column to wide: rows = categories x N, cols = estimator.
+wide_by_estimator <- function(df, value, fmt = fmt_pct, filt = NULL) {
+  d <- df
+  if (!is.null(filt)) d <- filt(d)
+  d$val <- fmt(d[[value]])
+  w <- stats::reshape(d[, c("categories", "N", "estimator", "val")],
+                      idvar = c("categories", "N"), timevar = "estimator",
+                      direction = "wide")
+  names(w) <- sub("^val\\.", "", names(w))
+  # Cells absent for an estimator (e.g. cat-LS when every rep failed) come back
+  # as NA from reshape; blank them — the convergence table records the failure.
+  for (j in seq_along(w)) w[[j]][is.na(w[[j]])] <- ""
+  for (nm in names(est_pretty)) if (nm %in% names(w))
+    names(w)[names(w) == nm] <- est_pretty[[nm]]
+  w[order(w$categories, w$N), ]
+}
+```
+
+## Question
+
+When can ordinal variables be treated as continuous? Rhemtulla, Brosseau-Liard
+& Savalei (2012) race two robust estimators on ordinal CFA data as the number of
+response categories grows from 2 to 7:
+
+- **cat-LS** — categorical least squares (DWLS on polychoric correlations) with a
+  robust mean-and-variance-adjusted χ² (`T_cat-MV`) and robust standard errors;
+- **ML (continuous)** — normal-theory ML applied to the integer codes as if they
+  were continuous, with a Satorra-Bentler / mean-variance-adjusted χ² (`T_ML-MV`).
+
+Both estimators are fit to the *same* categorized data: a two-factor CFA, five
+indicators per factor, loadings `.3/.4/.5/.6/.7`, factor correlation `.3`. We
+report the paper's four outcomes: parameter bias, robust SE quality, χ²
+rejection rates, and convergence/improper-solution rates.
+
+## Short answer
+
+The classic result reproduces. With **two categories**, continuous ML factor
+loadings are substantially biased toward zero regardless of sample size, while
+cat-LS recovers them accurately. ML's loading bias shrinks as categories
+increase and is small by **five categories**. cat-LS estimates loadings
+accurately throughout (under the normal underlying distribution simulated here).
+The factor correlation is well recovered by both, except cat-LS overestimates it
+with binary data at small `N`. The cost of treating ordinal data as continuous
+is concentrated at two to four categories.
+
+```{r}
+knitr::kable(meta, row.names = FALSE)
+```
+
+## Design and thresholds
+
+Number of categories `{2..7}` crossed with `N {100, 150, 350, 600}`. A single
+10-indicator population (Rhemtulla Model 1). Item nonnormality is induced only by
+categorization: symmetric thresholds evenly divide `[-2.5, 2.5]` into `K`
+categories. The achieved marginal kurtosis matches the paper's Table 1
+(normal/symmetric column) as a reproducibility check.
+
+```{r}
+knitr::kable(thresholds, row.names = FALSE,
+             col.names = c("Categories", "Thresholds", "Proportions",
+                           "Skew (achieved)", "Kurtosis (achieved)",
+                           "Kurtosis (Table 1)"),
+             digits = 3)
+```
+
+## Factor-loading bias
+
+Relative bias of the standardized factor loadings, `(mean(est) - true) / true`,
+averaged over replicates and over the two loadings of each true value. We show
+the smallest and largest population loadings (`λ = .3` and `λ = .7`), the values
+the paper reports. The paper's "substantial bias" cutoff is `|RB| > 10%`.
+
+```{r}
+load_tab <- function(true_val) {
+  filt <- function(d) d[d$param_type == "loading" & d$true == true_val, ]
+  wide_by_estimator(sum_param, "rel_bias", fmt_pct, filt)
+}
+```
+
+**λ = .3 (smallest loading):**
+
+```{r}
+knitr::kable(load_tab(0.3), row.names = FALSE)
+```
+
+**λ = .7 (largest loading):**
+
+```{r}
+knitr::kable(load_tab(0.7), row.names = FALSE)
+```
+
+## Factor-correlation bias
+
+Relative bias of the estimated factor correlation (true value `.3`).
+
+```{r}
+filt_fc <- function(d) d[d$param_type == "factor_cor", ]
+knitr::kable(wide_by_estimator(sum_param, "rel_bias", fmt_pct, filt_fc),
+             row.names = FALSE)
+```
+
+## Robust standard errors
+
+Two views of robust SE quality, mirroring the paper. **Relative SE bias** is
+`mean(SE) / sd(estimate) - 1` across replicates (negative = SEs too small);
+**coverage** is the empirical 95% confidence-interval coverage of the true value.
+Both are averaged over the loadings; computed per estimator on its own reporting
+scale (cat-LS in the polychoric metric, ML in the completely standardized
+metric).
+
+**Loading SE relative bias:**
+
+```{r}
+filt_load <- function(d) d[d$param_type == "loading", ]
+# average se_rel_bias across the loading rows within each cell x estimator
+agg_se <- aggregate(se_rel_bias ~ categories + N + estimator,
+                    data = filt_load(sum_param), FUN = mean, na.rm = TRUE)
+knitr::kable(wide_by_estimator(agg_se, "se_rel_bias", fmt_pct), row.names = FALSE)
+```
+
+**Loading 95% coverage:**
+
+```{r}
+agg_cov <- aggregate(coverage ~ categories + N + estimator,
+                     data = filt_load(sum_param), FUN = mean, na.rm = TRUE)
+knitr::kable(wide_by_estimator(agg_cov, "coverage", fmt_n), row.names = FALSE)
+```
+
+## χ² Type I error
+
+The fitted model is the correct two-factor model, so the rejection rate at the 5%
+level is the **Type I error** of the mean-and-variance-adjusted statistic
+(`T_cat-MV` for cat-LS, `T_ML-MV` for ML). Bradley's accuracy band is
+`[.025, .075]`.
+
+```{r}
+filt_mv <- function(d) d[d$stat_name == "MV", ]
+knitr::kable(wide_by_estimator(sum_chi2, "reject_05", fmt_p, filt_mv),
+             row.names = FALSE)
+```
+
+## Convergence and improper solutions
+
+Convergence rate and, among converged fits, the rate of improper (Heywood)
+solutions (a standardized loading `> 1` or `|factor correlation| > 1`). cat-LS
+fails to converge when a category is empty in a generated sample, which happens
+at small `N` with many categories.
+
+```{r}
+sum_conv$conv <- fmt_n(sum_conv$conv_rate)
+sum_conv$imp  <- fmt_n(sum_conv$improper_rate)
+w_conv <- stats::reshape(sum_conv[, c("categories", "N", "estimator",
+                                      "conv", "imp")],
+                         idvar = c("categories", "N"), timevar = "estimator",
+                         direction = "wide")
+w_conv <- w_conv[order(w_conv$categories, w_conv$N), ]
+names(w_conv) <- sub("conv\\.catLS", "cat-LS conv", names(w_conv))
+names(w_conv) <- sub("imp\\.catLS", "cat-LS improper", names(w_conv))
+names(w_conv) <- sub("conv\\.ML", "ML conv", names(w_conv))
+names(w_conv) <- sub("imp\\.ML", "ML improper", names(w_conv))
+knitr::kable(w_conv, row.names = FALSE)
+```
+
+## Lavaan parity
+
+Present only when the runner was invoked with `--lavaan-parity`. Compares magmaan
+to lavaan on rep 1 of each cell: cat-LS against `WLSMV`, continuous ML against
+`MLM`, on standardized loadings and the scaled-χ² p-value.
+
+```{r}
+if (!is.null(parity) && nrow(parity) > 0L) {
+  parity$magmaan <- fmt_n(parity$magmaan)
+  parity$lavaan  <- fmt_n(parity$lavaan)
+  parity$abs_diff <- fmt_n(parity$abs_diff)
+  knitr::kable(parity, row.names = FALSE)
+} else {
+  cat("(no lavaan parity table — run with `--lavaan-parity`)\n")
+}
+```
+
+## Caveats
+
+- **Symmetric thresholds only.** The paper's moderate/extreme asymmetry
+  conditions live in an unavailable supplement; we reproduce only the symmetric
+  case, which is analytic and matches the paper's Table 1 exactly.
+- **Normal underlying distribution only.** The paper's secondary aim is the
+  nonnormal `y*` condition (skew 2, kurtosis 7), which is where cat-LS's own
+  underlying-normality assumption breaks. That condition needs a Vale-Maurelli
+  generator and is deferred, so this run does *not* exercise cat-LS bias under
+  nonnormality — it shows cat-LS only in its favorable regime.
+- **Default `--reps 10` is noisy**, especially the χ² rejection rates and
+  coverage. The paper uses 1000 replications (`--reps 1000`). No Monte-Carlo
+  error bars are reported, per repo convention.
+- At small `N` with many categories, generated samples can have an empty
+  category; cat-LS errors there and the replicate counts as a non-convergence —
+  itself one of the paper's reported outcomes.
+
+## Reproduce
+
+```bash
+# fast iteration (small, noisy)
+Rscript experiments/15-rhemtulla-2012/run_experiment.R --smoke --reps 30
+
+# full grid at paper scale
+Rscript experiments/15-rhemtulla-2012/run_experiment.R --reps 1000
+
+# single slice, with lavaan cross-check
+Rscript experiments/15-rhemtulla-2012/run_experiment.R \
+  --cells categories=2,N=600 --reps 200 --lavaan-parity
+
+quarto render experiments/15-rhemtulla-2012/report.qmd
+```
