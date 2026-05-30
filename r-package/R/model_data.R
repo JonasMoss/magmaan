@@ -377,7 +377,8 @@ data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = N
                                              alpha = 0.3,
                                              clip = c("hard_huber", "pseudo_huber",
                                                       "tukey_biweight", "none"),
-                                             k = NULL) {
+                                             k = NULL,
+                                             full_wls_weight = TRUE) {
   missing <- match.arg(missing)
   polyserial <- match.arg(polyserial)
   clip <- match.arg(clip)
@@ -468,7 +469,8 @@ data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = N
     ordered_mask <- list(blk$ordered_mask)
   }
   out <- data_mixed_ordinal_stats_from_raw(
-    X, ordered_mask, polyserial = polyserial, alpha = alpha, clip = clip, k = k
+    X, ordered_mask, polyserial = polyserial, alpha = alpha, clip = clip, k = k,
+    full_wls_weight = full_wls_weight
   )
   out$X <- X
   out$ov_names <- ov_by_group

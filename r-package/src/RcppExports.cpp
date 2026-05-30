@@ -439,14 +439,15 @@ BEGIN_RCPP
 END_RCPP
 }
 // data_mixed_ordinal_stats_from_raw_impl
-Rcpp::List data_mixed_ordinal_stats_from_raw_impl(SEXP X, SEXP ordered_mask);
-RcppExport SEXP _magmaan_data_mixed_ordinal_stats_from_raw_impl(SEXP XSEXP, SEXP ordered_maskSEXP) {
+Rcpp::List data_mixed_ordinal_stats_from_raw_impl(SEXP X, SEXP ordered_mask, bool full_wls_weight);
+RcppExport SEXP _magmaan_data_mixed_ordinal_stats_from_raw_impl(SEXP XSEXP, SEXP ordered_maskSEXP, SEXP full_wls_weightSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
     Rcpp::traits::input_parameter< SEXP >::type ordered_mask(ordered_maskSEXP);
-    rcpp_result_gen = Rcpp::wrap(data_mixed_ordinal_stats_from_raw_impl(X, ordered_mask));
+    Rcpp::traits::input_parameter< bool >::type full_wls_weight(full_wls_weightSEXP);
+    rcpp_result_gen = Rcpp::wrap(data_mixed_ordinal_stats_from_raw_impl(X, ordered_mask, full_wls_weight));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1561,7 +1562,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_data_ordinal_stats_h_weighted_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_h_weighted_from_raw_impl, 6},
     {"_magmaan_data_ordinal_stats_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_dpd_from_raw_impl, 2},
     {"_magmaan_data_ordinal_stats_huber_residual_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_huber_residual_from_raw_impl, 3},
-    {"_magmaan_data_mixed_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_from_raw_impl, 2},
+    {"_magmaan_data_mixed_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_from_raw_impl, 3},
     {"_magmaan_data_shrink_mixed_ordinal_stats_impl", (DL_FUNC) &_magmaan_data_shrink_mixed_ordinal_stats_impl, 4},
     {"_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl, 3},
     {"_magmaan_data_mixed_ordinal_stats_huber_residual_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_huber_residual_from_raw_impl, 4},

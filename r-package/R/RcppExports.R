@@ -125,8 +125,8 @@ data_ordinal_stats_huber_residual_from_raw_impl <- function(X, clip = "hard_hube
     .Call(`_magmaan_data_ordinal_stats_huber_residual_from_raw_impl`, X, clip, k)
 }
 
-data_mixed_ordinal_stats_from_raw_impl <- function(X, ordered_mask) {
-    .Call(`_magmaan_data_mixed_ordinal_stats_from_raw_impl`, X, ordered_mask)
+data_mixed_ordinal_stats_from_raw_impl <- function(X, ordered_mask, full_wls_weight = TRUE) {
+    .Call(`_magmaan_data_mixed_ordinal_stats_from_raw_impl`, X, ordered_mask, full_wls_weight)
 }
 
 data_shrink_mixed_ordinal_stats_impl <- function(mixed_stats, kind = "diagonal", intensity = 0.0, estimate_intensity = FALSE) {
@@ -456,3 +456,4 @@ infer_robust_se_both_breads_raw <- function(fit, X, moments = "structured", cov 
 infer_robust_se_both_breads_zc <- function(fit, Zc, n_total, moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_both_breads_zc`, fit, Zc, n_total, moments, cov)
 }
+

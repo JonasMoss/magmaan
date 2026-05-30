@@ -36,7 +36,8 @@ data_mixed_ordinal_stats_from_raw <- function(X, ordered_mask,
                                               alpha = 0.3,
                                               clip = c("hard_huber", "pseudo_huber",
                                                        "tukey_biweight", "none"),
-                                              k = NULL) {
+                                              k = NULL,
+                                              full_wls_weight = TRUE) {
   polyserial <- match.arg(polyserial)
   clip <- match.arg(clip)
   if (is.null(k)) {
@@ -44,7 +45,7 @@ data_mixed_ordinal_stats_from_raw <- function(X, ordered_mask,
   }
   switch(
     polyserial,
-    ml = data_mixed_ordinal_stats_from_raw_impl(X, ordered_mask),
+    ml = data_mixed_ordinal_stats_from_raw_impl(X, ordered_mask, full_wls_weight),
     dpd = data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl(
       X, ordered_mask, alpha = alpha),
     huber_residual = data_mixed_ordinal_stats_huber_residual_from_raw_impl(

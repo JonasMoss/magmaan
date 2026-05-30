@@ -2061,7 +2061,8 @@ Rcpp::List data_ordinal_stats_huber_residual_from_raw_impl(
 }
 
 // [[Rcpp::export]]
-Rcpp::List data_mixed_ordinal_stats_from_raw_impl(SEXP X, SEXP ordered_mask) {
+Rcpp::List data_mixed_ordinal_stats_from_raw_impl(SEXP X, SEXP ordered_mask,
+                                                  bool full_wls_weight = true) {
   auto blocks = matrix_blocks_from_arg(X);
   std::vector<std::vector<std::int32_t>> ordered;
   ordered.reserve(blocks.size());
@@ -2086,7 +2087,8 @@ Rcpp::List data_mixed_ordinal_stats_from_raw_impl(SEXP X, SEXP ordered_mask) {
       Rcpp::stop("magmaan: ordered_mask must be a list for multi-group data");
     ordered.push_back(Rcpp::as<std::vector<std::int32_t>>(v));
   }
-  auto out_or = magmaan::data::mixed_ordinal_stats_from_data(blocks, ordered);
+  auto out_or = magmaan::data::mixed_ordinal_stats_from_data(blocks, ordered,
+                                                            full_wls_weight);
   if (!out_or.has_value()) stop_post(out_or.error());
   return mixed_ordinal_stats_to_r(*out_or);
 }
