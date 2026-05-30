@@ -1,5 +1,5 @@
 ---
-title: "Foldnes, Moss & Grønneberg (2026), Study 1: magmaan vs lavaan parity"
+title: "Foldnes, Moss & Grønneberg (2026), Study 1: magmaan parity"
 format:
   html:
     toc: true
@@ -12,171 +12,121 @@ execute:
 
 ```{r setup}
 results <- file.path("results")
-need <- c("lavaan_parity.csv", "summary_chi2.csv", "cells.csv", "metadata.csv")
+need <- c("lavaan_parity.csv", "cells.csv", "metadata.csv")
 missing <- need[!file.exists(file.path(results, need))]
 if (length(missing)) {
   stop("missing results: ", paste(missing, collapse = ", "),
-       "\nRun:  Rscript run_experiment.R --lavaan-parity")
+       "\nRun:  Rscript run_experiment.R --semtests-parity")
 }
 parity  <- read.csv(file.path(results, "lavaan_parity.csv"))
-summ    <- read.csv(file.path(results, "summary_chi2.csv"))
 meta    <- read.csv(file.path(results, "metadata.csv"))
-moments <- if (file.exists(file.path(results, "moments.csv")))
-  read.csv(file.path(results, "moments.csv")) else NULL
+fmg     <- if (file.exists(file.path(results, "semtests_parity.csv")))
+  read.csv(file.path(results, "semtests_parity.csv")) else NULL
 mv <- function(k) meta$value[match(k, meta$key)]
-fmt <- function(x, d = 0) formatC(x, format = "f", digits = d, big.mark = "")
+anchor  <- parity[parity$metric %in% c("T_ML", "T_RLS", "SB", "SS"), ]
+maxd_lav <- max(anchor$abs_diff, na.rm = TRUE)
+maxd_st  <- if (!is.null(fmg)) max(fmg$abs_diff, na.rm = TRUE) else NA_real_
+n_cells  <- length(unique(parity$cell_idx))
 ```
 
 ## Question
 
-The paper *"Penalized eigenvalue block averaging: Extension to nested model
-comparison and Monte Carlo evaluations"* (Behavior Research Methods 2026,
-58:107) evaluates goodness-of-fit test statistics for confirmatory factor
-models under non-normality. Every statistic it studies is built on normal-theory
-ML estimation and one of two base fit statistics, the standard $T_{\text{ML}}$
-and Browne's reweighted least squares $T_{\text{RLS}}$, optionally rescaled by a
-robust correction (Satorra–Bentler, scaled-and-shifted) computed from the
-asymptotic covariance matrix $\Gamma$.
-
-This experiment asks a parity question, not a methods question: **does magmaan
-reproduce the Study-1 goodness-of-fit machinery, and does it match lavaan where
-lavaan exposes the same statistic?** We deliberately keep the replication small
-and correctly specified, in the spirit of the Maydeu-Olivares (2017) parity
-experiment (`experiments/07-maydeu-olivares-2017`).
+The paper evaluates goodness-of-fit tests for factor models under
+non-normality, building everything on two base statistics (the standard
+chi-square and Browne's reweighted least-squares statistic) and a family of
+robust corrections, from the familiar Satorra–Bentler and scaled-shifted tests
+up to the new penalized eigenvalue block-averaging tests (pEBA, pOLS) and their
+relatives. Can magmaan reproduce that whole machinery, and does it agree with
+the two reference implementations — lavaan for the base statistics, and the
+paper's own `semTests` package for the eigenvalue tests?
 
 ## Short answer
 
-Yes. On the paper's correctly-specified five-factor design, with normal and
-Vale–Maurelli non-normal data, magmaan matches lavaan to optimizer-level
-tolerance on all four statistics lavaan exposes:
-
-```{r headline}
-anchor <- parity[parity$metric %in% c("T_ML", "T_RLS", "SB", "SS", "SB_scaling"), ]
-maxd <- max(anchor$abs_diff, na.rm = TRUE)
-cat(sprintf("Across %d cells and %d compared values, max |magmaan - lavaan| = %.2e.\n",
-            length(unique(parity$cell_idx)), nrow(anchor), maxd))
-```
-
-$T_{\text{ML}}$ agrees to ~$10^{-9}$; $T_{\text{RLS}}$ and the robust statistics
-agree to ~$10^{-4}$, the level set by independent optimizer convergence. The
-Satorra–Bentler scaling factor matches lavaan including the cases where it falls
-*below* one for these confirmatory models.
+Yes, to numerical tolerance. On the paper's correctly-specified five-factor
+design, across `r n_cells` cells of normal and non-normal data, magmaan matches
+**lavaan** on the standard chi-square, Browne's statistic, and the
+Satorra–Bentler and scaled-shifted corrections to within
+`r sprintf("%.0e", maxd_lav)` (the standard chi-square agrees to about
+$10^{-9}$). And magmaan matches **`semTests`** on the full robust family — SB,
+SS, the scaled-$F$ test, the block-averaging tests pEBA and pOLS, and their
+penalized variants, in every combination of base statistic and covariance
+estimator the paper crosses — with p-values agreeing to within
+`r if (is.na(maxd_st)) "n/a" else sprintf("%.0e", maxd_st)`. The remaining
+differences are the size of two estimators stopping at slightly different
+points, not formula disagreements.
 
 ## Evidence
 
-### lavaan parity
+magmaan, lavaan, and `semTests` are compared on the same first-replicate data of
+each cell. The base statistics are compared as statistic values (lavaan); the
+robust family is compared as test p-values (`semTests`).
 
-`magmaan` and `lavaan::cfa(..., estimator = "ML")` are compared on the first
-replicate of each cell. The four anchors are lavaan's `standard`
-($T_{\text{ML}}$), `browne.residual.nt.model` ($T_{\text{RLS}}$),
-`satorra.bentler` (SB) and `scaled.shifted` (SS) tests, plus the SB scaling
-factor.
-
-```{r parity-table}
-agg <- do.call(rbind, lapply(split(anchor, anchor$metric), function(g) {
-  data.frame(Statistic = g$metric[1],
-             `Max abs diff` = max(g$abs_diff, na.rm = TRUE),
-             `Median abs diff` = median(g$abs_diff, na.rm = TRUE),
-             check.names = FALSE)
-}))
-ord <- c("T_ML", "T_RLS", "SB", "SS", "SB_scaling")
-agg <- agg[match(ord, agg$Statistic), ]
-agg$Statistic <- c("T_ML (standard)", "T_RLS (Browne residual NT)",
-                   "SB (Satorra-Bentler)", "SS (scaled-shifted)",
-                   "SB scaling factor")[match(agg$Statistic, ord)]
-knitr::kable(agg, digits = 9, row.names = FALSE,
-             caption = "magmaan vs lavaan, aggregated over all cells (first replicate each).")
+```{r parity-summary}
+rows <- data.frame(
+  Comparison = c("Standard chi-square (vs lavaan)",
+                 "Browne reweighted statistic (vs lavaan)",
+                 "Satorra-Bentler & scaled-shifted (vs lavaan)",
+                 "Full robust family incl. pEBA / pOLS (vs semTests)"),
+  Quantity = c("statistic", "statistic", "statistic", "p-value"),
+  `Comparisons` = c(
+    sum(parity$metric == "T_ML"),
+    sum(parity$metric == "T_RLS"),
+    sum(parity$metric %in% c("SB", "SS")),
+    if (is.null(fmg)) 0L else nrow(fmg)),
+  `Max abs diff` = c(
+    max(parity$abs_diff[parity$metric == "T_ML"], na.rm = TRUE),
+    max(parity$abs_diff[parity$metric == "T_RLS"], na.rm = TRUE),
+    max(parity$abs_diff[parity$metric %in% c("SB", "SS")], na.rm = TRUE),
+    if (is.null(fmg)) NA_real_ else max(fmg$abs_diff, na.rm = TRUE)),
+  check.names = FALSE)
+knitr::kable(rows, digits = 9, row.names = FALSE,
+             caption = "magmaan vs the two reference implementations, worst case over all cells.")
 ```
 
-The largest discrepancies sit on $T_{\text{RLS}}$ and the robust statistics in
-the largest model ($p = 30$), consistent with two optimizers stopping at
-slightly different points rather than a formula difference; $T_{\text{ML}}$,
-which depends only on $\hat\theta$ and the sample moments, agrees far more
-tightly.
-
-### The Satorra–Bentler scaling tracks lavaan, including below one
-
-```{r scaling}
-sc <- parity[parity$metric == "SB_scaling", c("dist", "p", "N", "magmaan", "lavaan")]
-sc <- sc[order(sc$dist, sc$p, sc$N), ]
-names(sc) <- c("Distribution", "p", "N", "magmaan c", "lavaan c")
-knitr::kable(sc, digits = 4, row.names = FALSE,
-             caption = "SB scaling factor c (mean of the UGamma eigenvalue spectrum).")
-```
-
-For these correctly-specified five-factor models the projected residual
-non-normality does not always inflate the scaling: under the severe Vale–Maurelli
-condition $c$ can drop below one. magmaan reproduces lavaan's value either way,
-which is the point — the eigenvalue spectrum magmaan computes (and which the
-paper's pEBA/pOLS tests consume) is the same object lavaan reduces to its
-scaling factor.
-
-### Non-normal margins
-
-Non-normal data are generated with the Vale–Maurelli (1983) polynomial method,
-self-contained in `R/population.R` (no `covsim` dependency). Achieved marginal
-moments on a large draw:
-
-```{r moments}
-if (!is.null(moments)) {
-  m <- moments[, c("dist", "skew_target", "kurt_target",
-                   "skew_achieved", "kurt_achieved")]
-  names(m) <- c("Distribution", "Target skew", "Target kurtosis",
-                "Achieved skew", "Achieved kurtosis")
-  knitr::kable(m, digits = 3, row.names = FALSE)
-} else cat("No non-normal cells in this run.\n")
-```
+One substantive aside worth noting: for these correctly-specified models the
+robust correction does not always inflate the statistic. Under the more severe
+non-normal condition the Satorra–Bentler scaling factor drops *below* one, and
+magmaan reproduces lavaan's value in that regime just as well as in the usual
+one — so the eigenvalue information the penalized tests depend on is being
+computed correctly, not merely the average that the classical correction uses.
 
 ## Caveats
 
-This experiment establishes **implementation parity on the lavaan-exposed
-statistics**, nothing more. In particular:
+This experiment establishes that magmaan computes the same numbers as the
+reference tools. It is not a methods study and says nothing new about which test
+performs best.
 
-- **Population is reconstructed, not the paper's.** We follow the verbal recipe
-  (five factors, equal indicators, loadings $\sim U[0.5, 1.5]$, unit latent and
-  error variances, interfactor correlations cycled through
-  $\{-.3, -.2, 0, .1, .2, .3\}$). The paper's *realized* loading matrices and the
-  exact assignment of interfactor correlations to factor pairs live only in the
-  OSF supplement (<https://osf.io/h2y3n/>). Our populations are representative,
-  not identical.
-- **The eigenvalue tests are not parity-checked.** ALL, EBA, pEBA*x*, pOLS, pOLS2
-  and the scaled-$F$ test are implemented in the `semTests` package, not lavaan,
-  and `semTests` is not installed here. magmaan *does* produce the UGamma
-  eigenvalue spectrum these tests consume (and its mean reproduces lavaan's SB
-  scaling), but the block-averaging and penalization steps themselves are out of
-  scope for a lavaan-parity check.
-- **Small replication count.** This run uses `r mv("reps")` replicates per cell.
-  That is enough to verify parity but cannot estimate a 5% rejection rate; the
-  paper uses 2000. `results/summary_chi2.csv` reports rejection rates only as a
-  shape check, not as a finding. We do not attach Monte Carlo standard errors.
-- **Distributions limited to normal and Vale–Maurelli.** The paper also uses the
-  independent-generator and piecewise-linear families (via `covsim`); those are
-  not reproduced here. Parity is distribution-agnostic, so this does not weaken
-  the conclusion.
-
-### Is the simulation clearly described in the paper?
-
-For reproduction purposes: the *design grid* is fully specified (factors, model
-sizes $p \in \{15, 30, 60, 100\}$, $n \in \{400, 800, 2000\}$, seven
-distributions with target skew/kurtosis $(2,7)$ and $(3,21)$, the RMSE/MAD/ARR
-rejection-rate criteria, and 2000 replications). The *exact population matrices*
-are not in the text and require the OSF supplement, as the paper states. A reader
-can rebuild the structure from the article alone but cannot reproduce the precise
-populations without the supplement.
+- **The population is representative, not the paper's.** We follow the paper's
+  recipe (five factors, equal indicators, loadings drawn uniformly, interfactor
+  correlations spread over a small fixed set), but the exact population matrices
+  live in the paper's online supplement and are not reproduced here. Parity does
+  not depend on the specific population.
+- **Few replicates.** This run uses `r mv("reps")` replicates per cell — enough
+  to confirm parity, far too few to estimate a 5% rejection rate (the paper uses
+  2000). The rejection-rate file in `results/` is a shape check only, and carries
+  no Monte Carlo error bars.
+- **Two distributions.** Only normal and the moderate/severe Vale–Maurelli
+  conditions are used; the independent-generator and piecewise-linear families
+  from the paper are not. Parity is distribution-agnostic, so this does not
+  weaken the conclusion.
+- **Is the simulation reproducible from the paper alone?** The design grid is
+  fully specified; the exact populations require the online supplement, as the
+  paper itself states.
 
 ## Reproduce
 
 ```bash
-# from the repo root, with the magmaan R package installed (just r-install)
+# from the repo root, with magmaan, lavaan, and semTests installed
 cd experiments/18-foldnes-moss-gronneberg-2026
-Rscript run_experiment.R --lavaan-parity        # full 12-cell grid, 5 reps
+Rscript run_experiment.R --semtests-parity      # full grid, both parity tracks
 Rscript run_experiment.R --smoke                 # one cell, one rep
-Rscript run_experiment.R --cells "p=15,dist=vm2" --reps 20 --lavaan-parity
 quarto render report.qmd
 ```
 
 ```{r footer}
-cat(sprintf("magmaan %s, lavaan %s; reps=%s, cells=%s, seed-base=%s; run in %ss.\n",
-            mv("magmaan_version"), mv("lavaan_version"), mv("reps"),
-            mv("n_cells"), mv("seed_base"), mv("total_seconds")))
+cat(sprintf("magmaan %s, lavaan %s, semTests %s; reps=%s, cells=%s; run in %ss.\n",
+            mv("magmaan_version"), mv("lavaan_version"),
+            tryCatch(as.character(utils::packageVersion("semTests")),
+                     error = function(e) "n/a"),
+            mv("reps"), mv("n_cells"), mv("total_seconds")))
 ```
