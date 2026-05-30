@@ -86,18 +86,48 @@ experiment-specific statistical decisions in that package.
 
 ## Reports
 
-Reports should be professional, concise, and interesting. Prefer a short
-argument over a long lab notebook. The default shape is:
+A report is a short talk, not a lab notebook. Write it for a colleague who has
+sixty seconds with you on a Zoom call. They should leave knowing three things:
+the question, the answer, and how much to trust it. Everything else is optional
+reading.
 
-1. Question
-2. Short Answer
-3. Evidence
-4. Caveats
-5. Reproduce
+The four rules, not negotiable per experiment:
 
-Use that shape when it fits; adapt it when the experiment genuinely needs a
-different order. Lead with the point. Keep method details only when they are
-needed to trust the result.
+- **The first screen is the whole story.** The report opens with the question
+  and the answer, in prose, before any table or figure. A reader who stops after
+  the first screen still gets the finding. If the answer only emerges by reading
+  a table, the report has failed.
+- **Lead with the conclusion, never the setup.** No metadata dump, threshold
+  table, or design grid before the answer. Setup, if shown at all, comes after
+  the finding; most of it belongs in `results/`.
+- **One summary artifact per finding.** Each genuine outcome gets at most one
+  table or one plot, showing a summary slice, not the full design grid. A
+  replication may carry several outcomes; that is fine. A report's length should
+  track the number of real findings, never the size of the design grid. If a
+  table has a row per design cell, it belongs in `results/`, not the report.
+- **No implementation internals in a report, ever.** Caveats are for the reader:
+  "reps=10 is noisy", "only the symmetric regime", "asymmetric case deferred".
+  If you are naming a C++ primitive, a sandwich variant, or a df
+  parameterization, you are writing a code comment in the wrong file.
+
+Required shape, always, in this order:
+
+1. **Question** - one or two sentences. What did we want to know, and why does
+   it matter?
+2. **Short answer** - the finding in prose, naming the numbers that matter. The
+   sentence you would say out loud. For a multi-outcome replication, one sentence
+   per outcome.
+3. **Evidence** - one summary table or plot per finding, rounded for reading;
+   optionally a few sentences on the key slice.
+4. **Caveats** - what this run can and cannot establish. Reader-facing only.
+5. **Reproduce** - the commands.
+
+An experiment with unusual content may add sections after these, but it always
+opens with Question and Short answer.
+
+Self-check before committing a report: read only the Question and Short answer
+aloud. If that is not a complete, honest account of the result, fix those two
+sections before touching anything else.
 
 Recommended Quarto defaults:
 
