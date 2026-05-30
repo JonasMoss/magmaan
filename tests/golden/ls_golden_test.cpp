@@ -277,18 +277,24 @@ bool check_estimate(const std::string& id,
     chisq = *chisq_or;
   }
 
-  const double d_chisq = std::abs(chisq - fit["chisq"].get<double>());
-  double chisq_tol =
-      id == "0002_multigroup_3f_school" ? 2e-1 :
-      id == "0004_two_factor_meanstructure" ? 7e-2 :
-      5e-2;
-  if (estimator != "ULS") {
-    chisq_tol = std::max(chisq_tol, 2.0 * total_n(samp) * fmin_tol);
-  }
+  // magmaan keeps the N·F statistic multiplier; lavaan reports (N−G)·F
+  // (Wishart/unbiased). They relate by EXACTLY (N−G)/N — ULS already carries
+  // the (N−G) factor (browne_residual_nt's n_used) and matches lavaan directly,
+  // while GLS/WLS need the rescale. Pin the exact relation tightly rather than
+  // hiding the multiplier gap behind a slack tolerance; the residual is fixture
+  // storage precision, not estimator slack. (G = covariance-block count.)
+  const double n_total = total_n(samp);
+  const double n_groups = static_cast<double>(samp.S.size());
+  const double conv =
+      (estimator == "ULS") ? 1.0 : (n_total - n_groups) / n_total;
+  const double lavaan_pred = chisq * conv;
+  const double d_chisq = std::abs(lavaan_pred - fit["chisq"].get<double>());
+  const double chisq_tol = 5e-3;
   if (d_chisq > chisq_tol) {
     char buf[320];
     std::snprintf(buf, sizeof(buf),
-                  "%s/%s: |chisq-lavaan|=%.3e (ours %.9g, lavaan %.9g)",
+                  "%s/%s: |chisq·(N−G)/N − lavaan|=%.3e "
+                  "(magmaan N·F %.9g, lavaan %.9g)",
                   id.c_str(), estimator.c_str(), d_chisq, chisq,
                   fit["chisq"].get<double>());
     failures.push_back(buf);
