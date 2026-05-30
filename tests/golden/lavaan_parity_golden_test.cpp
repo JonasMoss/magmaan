@@ -719,10 +719,17 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
            std::to_string(fit["npar"].get<int>()));
 
     // ULS standard chi-square is lavaan's Browne residual NT statistic, which
-    // continuous_ls_chisq reproduces exactly. GLS/WLS reporting follows the
-    // 2·N·fmin convention, which diverges from lavaan's reported chi-square by
-    // an estimator-convention amount — gated loosely, mirroring ls_golden.
-    // The moment weight is the only estimator selector: empty ⇒ ULS.
+    // continuous_ls_chisq reproduces exactly. GLS/WLS use magmaan's N·F
+    // statistic-multiplier convention; lavaan reports the (N−G)·F
+    // Wishart/unbiased multiplier. The two relate by EXACTLY (N−G)/N: ULS
+    // already carries the (N−G) factor (browne_residual_nt's n_used), so it
+    // matches lavaan directly, while GLS/WLS need the (N−G)/N rescale. We pin
+    // that exact relation tightly instead of hiding the multiplier gap behind a
+    // slack tolerance; the residual below is fixture storage precision (~2e-3),
+    // not estimator slack. magmaan's N convention is intentional (sample cov is
+    // already rescaled to the N−1 unbiased divisor above; the statistic
+    // multiplier is a separate, documented choice). The moment weight is the
+    // only estimator selector: empty ⇒ ULS.
     magmaan::estimate::gmm::Weight weight;
     if (is_gls) {
       auto ev = magmaan::model::ModelEvaluator::build(*pt, *mr);
@@ -741,11 +748,14 @@ void run_ls_parity_case(const std::string& parity_dir, const std::string& id,
       chisq = *c;
       double n_total = 0.0;
       for (auto nb : samp.n_obs) n_total += static_cast<double>(nb);
-      const double chisq_tol =
-          is_uls ? 5e-2 : std::max(5e-2, 2.0 * n_total * 2e-3);
-      if (std::abs(chisq - fit["chisq"].get<double>()) > chisq_tol)
-        fail(e + ": chisq = " + std::to_string(chisq) + ", lavaan = " +
-             std::to_string(fit["chisq"].get<double>()));
+      const int n_groups = ref.value("n_groups", 1);
+      const double conv = is_uls ? 1.0 : (n_total - n_groups) / n_total;
+      const double lavaan_pred = chisq * conv;
+      const double chisq_tol = 5e-3;
+      if (std::abs(lavaan_pred - fit["chisq"].get<double>()) > chisq_tol)
+        fail(e + ": chisq·(N−G)/N = " + std::to_string(lavaan_pred) +
+             ", lavaan = " + std::to_string(fit["chisq"].get<double>()) +
+             " (magmaan N·F chisq = " + std::to_string(chisq) + ")");
     }
 
     if (is_uls) {
