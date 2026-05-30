@@ -19,17 +19,17 @@
 # three distribution shapes x four category counts x seven sample sizes (84
 # cells) following Li's Figure 2 response-probability profiles.
 #
-# Two estimators are fit on the SAME categorized matrix per replicate:
+# Li's three estimators are fit on the SAME categorized matrix per replicate:
 #
-#   DWLS — categoricals as categorical (polychoric correlations), robust
+#   DWLS — polychoric correlations, diagonal weight, robust
 #          mean-and-variance-adjusted chi-square (T_MV) and SEs. lavaan WLSMV.
+#   ULS  — polychoric correlations, identity weight, robust mean-and-variance
+#          adjusted chi-square and SEs. lavaan ULSMV. DWLS and ULS share one
+#          polychoric stats build per replicate (neither needs the full-WLS
+#          NACOV inverse).
 #   ML   — normal-theory ML treating the integer codes as continuous, with
 #          Satorra-Bentler / mean-variance-adjusted chi-square and robust
 #          (sandwich) SEs. lavaan MLM-family / Mplus MLR.
-#
-# Li's third arm, ULS on polychorics (ULSMV), is NOT yet exposed in the magmaan
-# R bindings (the bounded-fit weight kinds are DWLS/WLS only); it is a planned
-# follow-up. See the `# ── ULS arm (deferred) ──` hook below and the report.
 #
 # The fitted model is correctly specified, so chi-square rejection rates are
 # Type I error rates. Parameter estimates and SEs are reported in the
@@ -357,9 +357,31 @@ extract_params <- function(estimator, pt, th_std, se_std, mod) {
   do.call(rbind, rows)
 }
 
+# Categorical LS arm (DWLS or ULS): robust corrections + standardized solution
+# + parameter extraction from a converged ordinal fit on shared stats `d`.
+# Standardize_all puts categorical-indicator loadings on the unit-variance
+# latent-response scale and rescales structural paths / endogenous-factor
+# loadings by the model-implied latent SDs.
+cat_arm_result <- function(estimator, f, d, mod) {
+  rob <- tryCatch(core$robust_ordinal(f, d), error = function(e) e)
+  vcov <- if (inherits(rob, "error")) NULL else rob$vcov
+  sac <- if (is.null(vcov)) NULL else
+    tryCatch(core$measures_standardize_all(f, vcov), error = function(e) NULL)
+  th_std <- if (is.null(sac)) rep(NA_real_, length(f$theta)) else sac$theta
+  se_std <- if (is.null(sac)) rep(NA_real_, length(f$theta)) else sac$se
+  pr <- extract_params(estimator, f$partable, th_std, se_std, mod)
+  chi2 <- if (!inherits(rob, "error")) data.frame(
+    estimator = estimator, stat_name = c("SB", "MV"),
+    statistic = c(rob$satorra_bentler$chi2_scaled, rob$mean_var_adjusted$chi2_adj),
+    df = c(rob$satorra_bentler$df, rob$mean_var_adjusted$df_adj),
+    stringsAsFactors = FALSE) else NULL
+  list(params = pr, chi2 = chi2,
+       improper = any(abs(pr$est[pr$param_type == "loading"]) > 1, na.rm = TRUE))
+}
+
 # ── Per-replicate pipeline ───────────────────────────────────────────────────
-# Generate one categorized integer matrix and fit both estimators on it. Each
-# estimator contributes param rows, chi2 rows, and a convergence/improper
+# Generate one categorized integer matrix and fit all three estimators on it.
+# Each estimator contributes param rows, chi2 rows, and a convergence/improper
 # record; an estimator that errors or fails to converge contributes only the
 # conv record.
 fit_one_rep <- function(mod, taus, N, seed, keep_parity = FALSE) {
@@ -376,49 +398,34 @@ fit_one_rep <- function(mod, taus, N, seed, keep_parity = FALSE) {
   param_list <- list(); chi2_list <- list(); conv_list <- list()
   parity <- if (keep_parity) list(data = df_ord) else NULL
 
-  # ---- DWLS (polychoric, robust MV / SB) ----
-  dwls_ok <- FALSE; dwls_improper <- NA
-  fit <- tryCatch({
-    # DWLS only — skip the dense NACOV inverse (full-WLS weight); it is O(m^3)
-    # and often singular at small N with 20 indicators. DWLS uses the diagonal
-    # weight and the robust sandwich uses the NACOV itself.
-    d <- core$data_ordinal_stats_from_df(df_ord, mod$spec_ord,
-                                         full_wls_weight = FALSE)
-    f <- core$fit_dwls_ordinal(
-      mod$spec_ord, d, control = list(max_iter = 4000, ftol = 1e-13,
-                                      gtol = 1e-8))
-    list(d = d, f = f)
-  }, error = function(e) e)
-  if (!inherits(fit, "error") && isTRUE(fit$f$converged)) {
-    f <- fit$f
-    rob <- tryCatch(core$robust_ordinal(f, fit$d), error = function(e) e)
-    # Standardized solution (lavaan std.all). magmaan's ordinal-aware
-    # standardize_all puts categorical-indicator loadings on the unit-variance
-    # latent-response scale and rescales structural paths and endogenous-factor
-    # loadings by the model-implied latent SDs.
-    vcov <- if (inherits(rob, "error")) NULL else rob$vcov
-    sac <- if (is.null(vcov)) NULL else
-      tryCatch(core$measures_standardize_all(f, vcov), error = function(e) NULL)
-    th_std <- if (is.null(sac)) rep(NA_real_, length(f$theta)) else sac$theta
-    se_std <- if (is.null(sac)) rep(NA_real_, length(f$theta)) else sac$se
-    pr <- extract_params("DWLS", f$partable, th_std, se_std, mod)
-    dwls_improper <- any(abs(pr$est[pr$param_type == "loading"]) > 1,
-                         na.rm = TRUE)
-    dwls_ok <- TRUE
-    param_list[["DWLS"]] <- pr
-    if (!inherits(rob, "error")) {
-      chi2_list[["DWLS"]] <- data.frame(
-        estimator = "DWLS", stat_name = c("SB", "MV"),
-        statistic = c(rob$satorra_bentler$chi2_scaled,
-                      rob$mean_var_adjusted$chi2_adj),
-        df = c(rob$satorra_bentler$df, rob$mean_var_adjusted$df_adj),
-        stringsAsFactors = FALSE)
+  # ---- Categorical LS arms: DWLS (diagonal weight) and ULS (identity weight) ----
+  # Shared polychoric stats, computed once. full_wls_weight = FALSE skips the
+  # dense NACOV inverse (O(m^3), singular at small N with 20 indicators); neither
+  # DWLS nor ULS needs it — each uses NACOV + its own weight, and the robust
+  # sandwich uses NACOV directly.
+  cat_d <- tryCatch(core$data_ordinal_stats_from_df(df_ord, mod$spec_ord,
+                                                    full_wls_weight = FALSE),
+                    error = function(e) e)
+  cat_arms <- list(list(name = "DWLS", fit = core$fit_dwls_ordinal),
+                   list(name = "ULS",  fit = core$fit_uls_ordinal))
+  for (arm in cat_arms) {
+    ok <- FALSE; improper <- NA
+    f <- if (inherits(cat_d, "error")) cat_d else tryCatch(
+      arm$fit(mod$spec_ord, cat_d,
+              control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8)),
+      error = function(e) e)
+    if (!inherits(f, "error") && isTRUE(f$converged)) {
+      res <- cat_arm_result(arm$name, f, cat_d, mod)
+      ok <- TRUE; improper <- res$improper
+      param_list[[arm$name]] <- res$params
+      if (!is.null(res$chi2)) chi2_list[[arm$name]] <- res$chi2
+      if (keep_parity)
+        parity[[arm$name]] <- list(params = res$params, chi2 = res$chi2)
     }
-    if (keep_parity) parity$DWLS <- list(params = pr, chi2 = chi2_list[["DWLS"]])
+    conv_list[[arm$name]] <- data.frame(estimator = arm$name, converged = ok,
+                                        improper = isTRUE(improper),
+                                        stringsAsFactors = FALSE)
   }
-  conv_list[["DWLS"]] <- data.frame(estimator = "DWLS", converged = dwls_ok,
-                                    improper = isTRUE(dwls_improper),
-                                    stringsAsFactors = FALSE)
 
   # ---- ML (continuous robust ML on the same integer matrix) ----
   ml_ok <- FALSE; ml_improper <- NA
@@ -464,13 +471,6 @@ fit_one_rep <- function(mod, taus, N, seed, keep_parity = FALSE) {
   conv_list[["ML"]] <- data.frame(estimator = "ML", converged = ml_ok,
                                   improper = isTRUE(ml_improper),
                                   stringsAsFactors = FALSE)
-
-  # ── ULS arm (deferred) ───────────────────────────────────────────────────
-  # Li's third estimator is ULS on the polychoric correlations with robust
-  # corrections (ULSMV). It is not yet reachable from R: OrdinalWeightKind is
-  # {DWLS, WLS} only and ordinal_weight_from_string() rejects "ULS". Once a
-  # fit_uls_ordinal binding + robust ULSMV land, a third arm slots in here
-  # exactly like the DWLS block above (identity weight). Tracked in the report.
 
   list(
     params = if (length(param_list)) do.call(rbind, param_list) else NULL,
@@ -557,7 +557,7 @@ for (ci in seq_len(nrow(cell_grid))) {
   taus <- li_thresholds(cell$shape, cell$categories)
   cat(sprintf("  cell %3d/%3d: cat=%d shape=%-8s N=%4d ",
               ci, nrow(cell_grid), cell$categories, cell$shape, cell$N))
-  dwls_ok <- 0L; ml_ok <- 0L
+  dwls_ok <- 0L; uls_ok <- 0L; ml_ok <- 0L
   t_cell0 <- proc.time()[["elapsed"]]
   for (rep_idx in seq_len(args$reps)) {
     seed <- args$seed_base + ci * 10000L + rep_idx
@@ -575,12 +575,14 @@ for (ci in seq_len(nrow(cell_grid))) {
     vv <- vv + 1L; all_conv[[vv]] <- cbind(out$conv, meta_cols)
     dwls_ok <- dwls_ok +
       isTRUE(out$conv$converged[out$conv$estimator == "DWLS"])
+    uls_ok <- uls_ok +
+      isTRUE(out$conv$converged[out$conv$estimator == "ULS"])
     ml_ok <- ml_ok + isTRUE(out$conv$converged[out$conv$estimator == "ML"])
     if (keep_parity) all_parity[[ci]] <- out$parity
   }
   t_cell1 <- proc.time()[["elapsed"]]
-  cat(sprintf("DWLS_ok=%d ML_ok=%d  (%.1fs)\n", dwls_ok, ml_ok,
-              t_cell1 - t_cell0))
+  cat(sprintf("DWLS_ok=%d ULS_ok=%d ML_ok=%d  (%.1fs)\n", dwls_ok, uls_ok,
+              ml_ok, t_cell1 - t_cell0))
 }
 t_global1 <- proc.time()[["elapsed"]]
 
@@ -720,18 +722,22 @@ if (isTRUE(args$lavaan_parity)) {
       if (is.null(cached)) next
       df <- cached$data
       path_types <- c("gamma", "beta")
-      if (!is.null(cached$DWLS)) {
+      # DWLS vs lavaan WLSMV and ULS vs lavaan ULSMV (both polychoric LS).
+      for (cl in list(list(arm = "DWLS", est = "WLSMV"),
+                      list(arm = "ULS",  est = "ULSMV"))) {
+        ca <- cached[[cl$arm]]
+        if (is.null(ca)) next
         lv <- tryCatch(lavaan::sem(mod$syntax, data = df,
-                                   ordered = mod$varnames, estimator = "WLSMV",
+                                   ordered = mod$varnames, estimator = cl$est,
                                    std.lv = TRUE), error = function(e) e)
         if (!inherits(lv, "error")) {
           s <- lv_named(lv)
-          cmp_family(ci, cell, "DWLS", cached$DWLS$params, s, "loading")
-          cmp_family(ci, cell, "DWLS", cached$DWLS$params, s, path_types)
-          cmp_family(ci, cell, "DWLS", cached$DWLS$params, s, "factor_cor")
+          cmp_family(ci, cell, cl$arm, ca$params, s, "loading")
+          cmp_family(ci, cell, cl$arm, ca$params, s, path_types)
+          cmp_family(ci, cell, cl$arm, ca$params, s, "factor_cor")
           tst <- lavaan::lavInspect(lv, "test")
-          mv <- cached$DWLS$chi2[cached$DWLS$chi2$stat_name == "MV", ]
-          add(ci, cell, "DWLS", "chi2_MV_pvalue",
+          mv <- ca$chi2[ca$chi2$stat_name == "MV", ]
+          add(ci, cell, cl$arm, "chi2_MV_pvalue",
               stats::pchisq(mv$statistic, mv$df, lower.tail = FALSE),
               stats::pchisq(tst[[length(tst)]]$stat, tst[[length(tst)]]$df,
                             lower.tail = FALSE))
