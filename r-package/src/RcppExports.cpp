@@ -1287,6 +1287,22 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_fmg_test
+Rcpp::List infer_fmg_test(double chi2_source, int df, Rcpp::NumericVector eigvals, std::string method, double param, bool truncate_negative);
+RcppExport SEXP _magmaan_infer_fmg_test(SEXP chi2_sourceSEXP, SEXP dfSEXP, SEXP eigvalsSEXP, SEXP methodSEXP, SEXP paramSEXP, SEXP truncate_negativeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type chi2_source(chi2_sourceSEXP);
+    Rcpp::traits::input_parameter< int >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type eigvals(eigvalsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< double >::type param(paramSEXP);
+    Rcpp::traits::input_parameter< bool >::type truncate_negative(truncate_negativeSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_fmg_test(chi2_source, df, eigvals, method, param, truncate_negative));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_casewise_contributions
 Rcpp::NumericMatrix infer_casewise_contributions(SEXP partable, SEXP X);
 RcppExport SEXP _magmaan_infer_casewise_contributions(SEXP partableSEXP, SEXP XSEXP) {
@@ -1627,6 +1643,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_satorra_bentler", (DL_FUNC) &_magmaan_infer_satorra_bentler, 3},
     {"_magmaan_infer_mean_var_adjusted", (DL_FUNC) &_magmaan_infer_mean_var_adjusted, 3},
     {"_magmaan_infer_scaled_shifted", (DL_FUNC) &_magmaan_infer_scaled_shifted, 3},
+    {"_magmaan_infer_fmg_test", (DL_FUNC) &_magmaan_infer_fmg_test, 6},
     {"_magmaan_infer_casewise_contributions", (DL_FUNC) &_magmaan_infer_casewise_contributions, 2},
     {"_magmaan_data_sample_stats_from_raw", (DL_FUNC) &_magmaan_data_sample_stats_from_raw, 1},
     {"_magmaan_data_pairwise_sample_stats", (DL_FUNC) &_magmaan_data_pairwise_sample_stats, 2},
