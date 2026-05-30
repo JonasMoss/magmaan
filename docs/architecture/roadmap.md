@@ -578,6 +578,20 @@ stop rather than any usable non-error return.
   the threshold-plus-polychoric moment vector. The implementation now uses a
   shared weighted-moment sandwich/U-Gamma primitive that can be reused by other
   LS moment stacks with arbitrary block weights and NACOV matrices.
+- `measures::standardize::standardize_lv`/`standardize_all` accept
+  ordinal/mixed-ordinal fits (the `require_not_ordinal` guard was removed from
+  both the C++ api and the Rcpp bindings; `factor_scores`/`compute_defined`
+  stay guarded). `standardize_all` takes an `ordinal_delta_unit` flag: under the
+  delta parameterization a categorical indicator's latent response is
+  unit-variance, so its loading is standardized by the latent SD only (σ_rr = 1)
+  rather than the assembled `λ²ψ + 1`. This is applied in both the plain-CFA
+  `Lambda` slot and the all-y RAM `Beta` slot, so a mixed SEM's endogenous-factor
+  loadings and structural paths standardize to lavaan `std.all`. The bindings
+  read the parameterization from the partable attribute and the api from the
+  fit's `EstimatorSpec`. Mixed-ordinal stats construction also no longer aborts
+  DWLS when the full-WLS NACOV is singular (common at small N with many
+  indicators): the inverse is non-fatal, `W_wls` is left empty, and DWLS / the
+  robust sandwich proceed on the diagonal weight / NACOV.
 - All-ordinal DWLS/WLS fit measures are exposed through
   `estimate::fit_measures_ordinal()` and `api::fit_measures()`: CFI/TLI/RMSEA
   use the categorical independence baseline over the polychoric moment stack,

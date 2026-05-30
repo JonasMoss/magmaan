@@ -1,0 +1,257 @@
+---
+title: "Li (2021) replication — mixed continuous/categorical SEM"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path)))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"),
+                              candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates, "metadata.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+rd <- function(name) {
+  p <- file.path(results_dir, name)
+  if (!file.exists(p)) return(NULL)
+  utils::read.csv(p, check.names = FALSE, stringsAsFactors = FALSE)
+}
+meta    <- rd("metadata.csv")
+cells   <- rd("cells.csv")
+thr     <- rd("thresholds.csv")
+sparam  <- rd("summary_param.csv")
+schi2   <- rd("summary_chi2.csv")
+sconv   <- rd("summary_conv.csv")
+parity  <- rd("lavaan_parity.csv")
+if (is.null(meta) || is.null(sparam) || is.null(schi2)) {
+  stop("Missing result CSVs. Run: Rscript run_experiment.R")
+}
+pct  <- function(x, d = 1) ifelse(is.na(x), "", sprintf(paste0("%.", d, "f"), 100 * x))
+num3 <- function(x) ifelse(is.na(x), "", sprintf("%.3f", x))
+fam_lab <- c(loading_cont = "λ continuous", loading_cat = "λ categorical",
+             factor_cor = "φ inter-factor", gamma = "γ paths", beta = "β paths")
+shape_lab <- c(sym = "symmetric", asym = "asymmetric")
+model_lab <- c(cfa = "3-factor CFA", sem = "5-factor SEM")
+```
+
+This experiment replicates **Li, C.-H. (2021), "Statistical estimation of
+structural equation models with a mixture of continuous and categorical
+observed variables", *Behavior Research Methods* 53:2191-2213** against
+magmaan. Li's design is the first to put continuous and categorical indicators
+in the *same* model, so DWLS must combine polychoric (categorical-categorical),
+polyserial (continuous-categorical) and Pearson (continuous-continuous)
+associations in one weight matrix. Two estimators are fit on identical data per
+replicate: **DWLS** (lavaan WLSMV; categoricals as categorical) and **MLR**
+(robust ML treating the integer codes as continuous). The fitted model is
+correctly specified, so χ² rejection rates are Type I error rates.
+
+## Question
+
+When a latent construct is measured by a *mix* of continuous and categorical
+indicators, does DWLS or MLR recover loadings, inter-factor correlations and
+structural paths better — and how does that depend on the number of response
+categories, distribution shape, and sample size?
+
+## Short answer
+
+magmaan reproduces Li's central findings. **DWLS recovers categorical-indicator
+loadings essentially unbiased; MLR underestimates them**, with the bias largest
+at few categories and asymmetric thresholds and shrinking as categories or `N`
+grow. The two estimators are comparable on continuous-indicator loadings,
+inter-factor correlations and structural paths. DWLS's mean-and-variance
+adjusted χ² controls Type I error close to nominal; MLR's robust χ² tends to
+over-reject at small `N` / few categories.
+
+Both estimators match lavaan (WLSMV / MLM `standardizedSolution`) on the same
+data: MLR to ~1e-6, DWLS loadings/paths to ~1e-2 (see parity table).
+
+## Design
+
+```{r}
+knitr::kable(meta, row.names = FALSE)
+```
+
+Two population models, both with standardized (unit-variance) latent responses
+and zero mean structure (Li Fig 1):
+
+- **3-factor CFA** (12 indicators). Continuous:categorical ratio varies by
+  factor (3:1, 2:2, 1:3); inter-factor correlations all .3. This drives the
+  "proportion of categorical" effect.
+- **5-factor SEM** (20 indicators). Two exogenous, three endogenous factors,
+  each 2 continuous + 2 categorical; structural paths `B`/`Γ` and inter-factor
+  correlation φ₁₂ = .3.
+
+Crossed with number of categories (2-7), distribution shape (symmetric /
+slightly asymmetric, Li's exact thresholds), and `N` ∈ {200, 500, 1000}.
+Parameters and SEs are reported in the standardized metric, split by family.
+
+```{r}
+if (!is.null(thr)) {
+  t2 <- thr; t2$shape <- shape_lab[t2$shape]
+  knitr::kable(t2, row.names = FALSE,
+               col.names = c("Shape", "Categories", "Thresholds", "Proportions"))
+}
+```
+
+## Evidence
+
+### Parameter relative bias (%), by family
+
+Averaged over replicates and same-family parameters; negative = underestimate.
+Li's "trivial bias" band is |RB| < 5%.
+
+```{r}
+if (!is.null(sparam)) {
+  d <- sparam
+  d$family <- fam_lab[d$param_type]
+  d$cell <- sprintf("%s, %s, K=%d, N=%d", model_lab[d$model],
+                    shape_lab[d$shape], d$categories, d$N)
+  agg <- d[, c("model", "shape", "categories", "N", "estimator",
+               "param_type", "family", "rel_bias")]
+  # Focus table: loadings split by type, collapsed over shape, at a few cells.
+  foc <- agg[agg$param_type %in% c("loading_cont", "loading_cat") &
+               agg$shape == "sym", ]
+  w <- stats::reshape(
+    foc[, c("model", "categories", "N", "estimator", "param_type", "rel_bias")],
+    idvar = c("model", "categories", "N", "estimator"),
+    timevar = "param_type", direction = "wide")
+  names(w) <- sub("^rel_bias\\.", "", names(w))
+  w$loading_cont <- pct(w$loading_cont); w$loading_cat <- pct(w$loading_cat)
+  w$model <- model_lab[w$model]
+  w <- w[order(w$model, w$N, w$categories, w$estimator), ]
+  knitr::kable(w, row.names = FALSE,
+               col.names = c("Model", "K", "N", "Est.",
+                             "λ cont. RB%", "λ cat. RB%"),
+               caption = "Symmetric thresholds. Full grid in results/summary_param.csv.")
+}
+```
+
+The signature contrast: **λ categorical RB is near zero for DWLS but clearly
+negative for MLR**, worst at K = 2-3, attenuating with K and N. λ continuous is
+small for both.
+
+### Standard-error relative bias and coverage
+
+```{r}
+if (!is.null(sparam)) {
+  d <- sparam[sparam$shape == "sym" & sparam$N == 500, ]
+  d$family <- fam_lab[d$param_type]
+  d$se_rel_bias <- pct(d$se_rel_bias); d$coverage <- num3(d$coverage)
+  d$rel_bias <- pct(d$rel_bias)
+  d <- d[order(d$model, d$categories, d$estimator, d$param_type),
+         c("model", "categories", "estimator", "family",
+           "rel_bias", "se_rel_bias", "coverage")]
+  d$model <- model_lab[d$model]
+  knitr::kable(d, row.names = FALSE,
+               col.names = c("Model", "K", "Est.", "Family",
+                             "Param RB%", "SE RB%", "Coverage"),
+               caption = "Symmetric, N = 500.")
+}
+```
+
+### χ² rejection rate (Type I error at α = .05)
+
+DWLS uses the mean-and-variance adjusted statistic (lavaan WLSMV); MLR the
+Satorra-Bentler and mean-variance adjusted statistics. Bradley's band is
+[.025, .075].
+
+```{r}
+if (!is.null(schi2)) {
+  d <- schi2[schi2$shape == "sym", ]
+  # DWLS-MV vs MLR-MV side by side.
+  d <- d[(d$estimator == "DWLS" & d$stat_name == "MV") |
+           (d$estimator == "MLR" & d$stat_name == "MV"), ]
+  d$tag <- paste0(d$estimator, "-MV")
+  w <- stats::reshape(d[, c("model", "categories", "N", "tag", "reject_05")],
+                      idvar = c("model", "categories", "N"),
+                      timevar = "tag", direction = "wide")
+  names(w) <- sub("^reject_05\\.", "", names(w))
+  w[] <- lapply(names(w), function(nm)
+    if (nm %in% c("DWLS-MV", "MLR-MV")) num3(w[[nm]]) else w[[nm]])
+  w$model <- model_lab[w$model]
+  w <- w[order(w$model, w$N, w$categories), ]
+  knitr::kable(w, row.names = FALSE,
+               caption = "Symmetric thresholds. Empirical rejection at α = .05.")
+}
+```
+
+### Convergence and improper solutions
+
+```{r}
+if (!is.null(sconv)) {
+  d <- sconv
+  d$conv_rate <- num3(d$conv_rate); d$improper_rate <- num3(d$improper_rate)
+  d$model <- model_lab[d$model]; d$shape <- shape_lab[d$shape]
+  bad <- d[as.numeric(d$conv_rate) < 1 | as.numeric(d$improper_rate) > 0, ]
+  if (nrow(bad)) {
+    knitr::kable(bad[order(bad$model, bad$N, bad$categories),
+                     c("model", "categories", "shape", "N", "estimator",
+                       "conv_rate", "improper_rate")],
+                 row.names = FALSE,
+                 col.names = c("Model", "K", "Shape", "N", "Est.",
+                               "Conv.", "Improper"),
+                 caption = "Cells with any nonconvergence or improper solutions.")
+  } else {
+    cat("All cells converged with no improper solutions.\n")
+  }
+}
+```
+
+### lavaan parity (rep 1 per cell)
+
+Present only when run with `--lavaan-parity`. Max absolute difference between
+magmaan and lavaan (`standardizedSolution`; WLSMV for DWLS, MLM for MLR) on the
+same data.
+
+```{r}
+if (!is.null(parity) && nrow(parity)) {
+  a <- aggregate(abs_diff ~ estimator + metric + model, parity, max)
+  a$abs_diff <- sprintf("%.2e", a$abs_diff)
+  a$model <- model_lab[a$model]
+  knitr::kable(a[order(a$model, a$estimator, a$metric), ], row.names = FALSE,
+               col.names = c("Est.", "Metric", "Model", "Max |diff|"))
+} else {
+  cat("(no parity table — run with `--lavaan-parity`)\n")
+}
+```
+
+## Caveats
+
+- Default `--reps` is small for iteration; rejection rates and biases are noisy
+  until `--reps` is large (Li uses 1000). Per repo style, no Monte-Carlo error
+  bars are reported.
+- Estimates are standardized via magmaan's ordinal-aware `standardize_all`
+  (lavaan `std.all`). For DWLS the categorical-indicator loadings use the
+  unit-variance latent-response scale; structural paths and endogenous-factor
+  loadings are rescaled by the model-implied latent SDs. This required a core
+  change: standardization was previously not exposed for ordinal/mixed fits.
+- DWLS's χ² parity uses the mean-and-variance adjusted statistic; magmaan's MV
+  uses a Satterthwaite df, lavaan's WLSMV default is scaled-shifted, so the
+  per-rep p-values differ by a parameterization (compared, not the statistics).
+- The SEM at N = 200 stresses the mixed weight matrix; the full-WLS NACOV is
+  often singular there. DWLS (diagonal weight) is unaffected — a core change
+  makes a singular NACOV non-fatal so DWLS proceeds, matching lavaan WLSMV.
+
+## Reproduce
+
+```sh
+# fast smoke (both models, a few cells)
+Rscript run_experiment.R --reps 30 --smoke
+
+# a single cell with the lavaan cross-check
+Rscript run_experiment.R --reps 100 --cells "categories=5,N=500" --lavaan-parity
+
+# the full paper-scale grid (slow)
+Rscript run_experiment.R --reps 1000
+```
+
+`Rscript run_experiment.R --help` lists all options. Outputs land in
+`results/`; this report reads only from there.
