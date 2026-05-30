@@ -31,6 +31,7 @@ using robust::ScaledShiftedResult;
 enum class OrdinalWeightKind {
   DWLS,
   WLS,
+  ULS,  // identity weight (no NACOV needed for the fit); robust = ULSMV
 };
 
 enum class OrdinalParameterization {

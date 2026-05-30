@@ -145,6 +145,10 @@ fit_dwls_ordinal_impl <- function(partable, ordinal_stats, optimizer = NULL, con
     .Call(`_magmaan_fit_dwls_ordinal_impl`, partable, ordinal_stats, optimizer, control, bounds)
 }
 
+fit_uls_ordinal_impl <- function(partable, ordinal_stats, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_uls_ordinal_impl`, partable, ordinal_stats, optimizer, control, bounds)
+}
+
 fit_wls_ordinal_impl <- function(partable, ordinal_stats, optimizer = NULL, control = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_wls_ordinal_impl`, partable, ordinal_stats, optimizer, control, bounds)
 }

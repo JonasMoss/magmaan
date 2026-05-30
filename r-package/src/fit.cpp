@@ -2232,6 +2232,40 @@ Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
 }
 
 // [[Rcpp::export]]
+Rcpp::List fit_uls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
+                                Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+                                Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+                                Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue) {
+  const std::string parameterization_name = ordinal_parameterization_attr(partable);
+  const auto parameterization = ordinal_parameterization_from_string(parameterization_name);
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed = partable_from_arg(partable, "fit_uls_ordinal");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.names = std::move(parsed.names);
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(ctx.pt, stats, &starts);
+  if (!prep_or.has_value()) stop_fit(prep_or.error());
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  ctx.samp.S = stats.R;
+  ctx.samp.n_obs = stats.n_obs;
+  ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{} : ctx.rep.ov_names[0];
+  ctx.meanstructure = false;
+  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, stats, starts);
+  auto e_or = magmaan::estimate::fit_ordinal_bounded(
+      ctx.pt, ctx.rep, stats, bounds_from_nullable(bounds),
+      magmaan::estimate::OrdinalWeightKind::ULS, x0,
+      backend_from_optimizer_arg(optimizer), optim_opts_from(control),
+      parameterization);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+  return ordinal_fit_result(ctx, stats, est, &starts, "ULS",
+                            parameterization_name.c_str());
+}
+
+// [[Rcpp::export]]
 Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
                                 Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
                                 Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,

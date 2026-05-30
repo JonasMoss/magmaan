@@ -1229,6 +1229,14 @@ fit_wls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                        control = control, bounds = b)
 }
 
+fit_uls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
+                            control = NULL, bounds = NULL) {
+  pt <- augment_ordinal_partable(model, data)
+  b <- bounds_arg(bounds, pt, caller = "fit_uls_ordinal")
+  fit_uls_ordinal_impl(pt, data, optimizer = optimizer,
+                       control = control, bounds = b)
+}
+
 fit_dwls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                                    control = NULL, bounds = NULL) {
   pt <- augment_mixed_ordinal_partable(model, data)
@@ -1336,7 +1344,7 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
     return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
   }
 
-  if (ordinal_requested && estimator %in% c("DWLS", "WLS")) {
+  if (ordinal_requested && estimator %in% c("DWLS", "WLS", "ULS")) {
     if (is.data.frame(data)) {
       ov_by_group <- model_matrix_rep(spec$partable)$ov_names
       if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
@@ -1348,16 +1356,19 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
       }
     }
     if (inherits(data, "magmaan_ordinal_data")) {
-      fit <- if (identical(estimator, "DWLS")) {
-        fit_dwls_ordinal(spec, data, optimizer = optimizer,
-                         control = control, bounds = bounds)
-      } else {
-        fit_wls_ordinal(spec, data, optimizer = optimizer,
-                        control = control, bounds = bounds)
-      }
+      fit <- switch(estimator,
+                    DWLS = fit_dwls_ordinal(spec, data, optimizer = optimizer,
+                                            control = control, bounds = bounds),
+                    WLS  = fit_wls_ordinal(spec, data, optimizer = optimizer,
+                                           control = control, bounds = bounds),
+                    ULS  = fit_uls_ordinal(spec, data, optimizer = optimizer,
+                                           control = control, bounds = bounds))
       return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
     }
     if (inherits(data, "magmaan_mixed_ordinal_data")) {
+      if (identical(estimator, "ULS")) {
+        stop("magmaan(): ULS is not supported for mixed continuous/categorical data; use DWLS or WLS")
+      }
       fit <- if (identical(estimator, "DWLS")) {
         fit_dwls_mixed_ordinal(spec, data, optimizer = optimizer,
                                control = control, bounds = bounds)
