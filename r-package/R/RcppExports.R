@@ -385,6 +385,10 @@ infer_scaled_shifted <- function(t_ml, df, eigvals) {
     .Call(`_magmaan_infer_scaled_shifted`, t_ml, df, eigvals)
 }
 
+infer_fmg_test <- function(chi2_source, df, eigvals, method = "peba", param = 4.0, truncate_negative = TRUE) {
+    .Call(`_magmaan_infer_fmg_test`, chi2_source, df, eigvals, method, param, truncate_negative)
+}
+
 infer_casewise_contributions <- function(partable, X) {
     .Call(`_magmaan_infer_casewise_contributions`, partable, X)
 }

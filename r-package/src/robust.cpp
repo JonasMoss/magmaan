@@ -9,6 +9,7 @@
 #include "internal.hpp"
 
 #include "magmaan/robust/robust.hpp"
+#include "magmaan/robust/fmg.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/ordinal.hpp"
@@ -492,6 +493,79 @@ Rcpp::List infer_scaled_shifted(double t_ml, int df, Rcpp::NumericVector eigvals
   const magmaan::robust::ScaledShiftedResult r = magmaan::robust::scaled_shifted(t_ml, df, ev);
   return Rcpp::List::create(Rcpp::_["chi2_adj"] = r.chi2_adj, Rcpp::_["df"] = r.df,
                             Rcpp::_["scale_a"] = r.scale_a, Rcpp::_["shift_b"] = r.shift_b);
+}
+
+// =============================================================================
+// FMG eigenvalue tests (Foldnes-Moss-Gronneberg): SB / SS / scaled-F / EBAd /
+// penalized-all / pEBA / pOLS — the single-model goodness-of-fit p-values.
+// =============================================================================
+
+namespace {
+
+magmaan::robust::frontier::FmgMethod fmg_method_from_string(const std::string& s) {
+  using M = magmaan::robust::frontier::FmgMethod;
+  if (s == "standard" || s == "ml" || s == "chisq")  return M::StandardChiSquare;
+  if (s == "sb" || s == "satorra_bentler")           return M::SatorraBentler;
+  if (s == "ss" || s == "scaled_shifted")            return M::ScaledShifted;
+  if (s == "scaled_f" || s == "f")                   return M::ScaledF;
+  if (s == "all" || s == "ebad")                     return M::All;
+  if (s == "penalized_all" || s == "pall")           return M::PenalizedAll;
+  if (s == "peba")                                   return M::Peba;
+  if (s == "pols")                                   return M::Pols;
+  Rcpp::stop("magmaan: `method` must be one of 'standard','sb','ss','scaled_f',"
+             "'all','penalized_all','peba','pols' (got '%s')", s.c_str());
+}
+
+const char* fmg_method_to_string(magmaan::robust::frontier::FmgMethod m) {
+  using M = magmaan::robust::frontier::FmgMethod;
+  switch (m) {
+    case M::StandardChiSquare: return "standard";
+    case M::SatorraBentler:    return "sb";
+    case M::ScaledShifted:     return "ss";
+    case M::ScaledF:           return "scaled_f";
+    case M::All:               return "all";
+    case M::PenalizedAll:      return "penalized_all";
+    case M::Peba:              return "peba";
+    case M::Pols:              return "pols";
+  }
+  return "peba";
+}
+
+}  // namespace
+
+// infer_fmg_test() — mirrors robust::frontier::fmg_test(chi2_source, df,
+// ugamma_eigenvalues, {method, param, truncate_negative}). The single-model FMG
+// goodness-of-fit p-value: take the source χ² (`chi2_source` = T_ML from
+// infer_df_stat() or T_RLS from infer_browne_residual_nt()), its `df`, and the
+// UΓ eigenvalues `eigvals` (from infer_ugamma_eigenvalues()); apply the chosen
+// eigenvalue transform; return the Imhof tail p-value. `method` selects the
+// transform; `param` is the pEBA block count j (method="peba", ceil-rounded) or
+// the pOLS shrinkage γ (method="pols"), and is ignored by the others. The
+// p-value branches (all/penalized_all/peba/pols) call imhof_upper() — magmaan's
+// own CompQuadForm-equivalent — so nothing is recomputed in R.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_fmg_test(double chi2_source, int df, Rcpp::NumericVector eigvals,
+                          std::string method = "peba", double param = 4.0,
+                          bool truncate_negative = true) {
+  const Eigen::VectorXd ev = Rcpp::as<Eigen::VectorXd>(eigvals);
+  magmaan::robust::frontier::FmgOptions opt;
+  opt.method = fmg_method_from_string(method);
+  opt.param = param;
+  opt.truncate_negative = truncate_negative;
+  const magmaan::robust::frontier::FmgTestResult r =
+      magmaan::robust::frontier::fmg_test(chi2_source, df, ev, opt);
+  return Rcpp::List::create(
+      Rcpp::_["p_value"]           = r.p_value,
+      Rcpp::_["chi2_source"]       = r.chi2_source,
+      Rcpp::_["df"]                = r.df,
+      Rcpp::_["chi2_equiv"]        = r.chi2_equiv,
+      Rcpp::_["method"]            = std::string(fmg_method_to_string(r.method)),
+      Rcpp::_["param"]             = r.param,
+      Rcpp::_["lambdas_raw"]       = Rcpp::wrap(r.lambdas_raw),
+      Rcpp::_["lambdas"]           = Rcpp::wrap(r.lambdas),
+      Rcpp::_["lambdas_reference"] = Rcpp::wrap(r.lambdas_reference),
+      Rcpp::_["n_truncated"]       = r.n_truncated);
 }
 
 // =============================================================================
