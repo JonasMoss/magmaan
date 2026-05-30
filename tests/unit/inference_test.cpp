@@ -437,6 +437,189 @@ TEST_CASE("chi2_stat: chi2 = n · fmin") {
 }
 
 // ----------------------------------------------------------------------------
+// Error / failure paths — the branches golden tests never reach because they
+// only ever feed well-identified, well-shaped, PD inputs. Each drives one
+// `std::unexpected(...)` return so the error arms are exercised (and pinned).
+// ----------------------------------------------------------------------------
+
+TEST_CASE("information_expected: errors when θ̂ size ≠ evaluator n_free") {
+  auto h = must_model("f =~ x1 + x2 + x3");   // 6 free params
+  std::mt19937 rng(7);
+  SampleStats samp;
+  samp.S.push_back(random_pd(rng, 3));
+  samp.n_obs.push_back(200);
+
+  Estimates est;
+  est.theta = Eigen::VectorXd::Zero(2);   // deliberately wrong length
+  auto r = magmaan::inference::information_expected(*h.pt, *h.rep, samp, est);
+  REQUIRE_FALSE(r.has_value());
+  CHECK(r.error().detail.find("n_free") != std::string::npos);
+}
+
+TEST_CASE("information_expected: errors on SampleStats/evaluator block mismatch") {
+  auto h = must_model("f =~ x1 + x2 + x3");   // single block
+  std::mt19937 rng(8);
+  SampleStats samp;                            // two blocks — model has one
+  samp.S.push_back(random_pd(rng, 3));
+  samp.S.push_back(random_pd(rng, 3));
+  samp.n_obs = {200, 200};
+
+  Estimates est;
+  est.theta = Eigen::VectorXd::Zero(6);
+  auto r = magmaan::inference::information_expected(*h.pt, *h.rep, samp, est);
+  REQUIRE_FALSE(r.has_value());
+}
+
+TEST_CASE("vcov: singular information matrix errors (InfoMatrixSingular)") {
+  // No labels ⇒ no equality constraints ⇒ the plain `invert_spd(info)` arm,
+  // including its LLT→LDLT fallback when the matrix isn't PD.
+  auto h = must_model("f =~ x1 + x2 + x3");
+  // An indefinite info (one negative eigenvalue) is not SPD, so invert_spd's
+  // LLT→LDLT path returns InfoMatrixSingular. A rank-deficient *PSD* matrix can
+  // slip past LDLT::isPositive(), and an all-zero one trips an Eigen debug
+  // assert — an unambiguous negative eigenvalue avoids both pitfalls.
+  Eigen::MatrixXd info = Eigen::MatrixXd::Identity(6, 6);
+  info(0, 0) = -1.0;
+  auto r = magmaan::inference::vcov(info, *h.pt);
+  REQUIRE_FALSE(r.has_value());
+  CHECK(r.error().kind == magmaan::PostError::Kind::InfoMatrixSingular);
+  CHECK(r.error().detail.find("not invertible") != std::string::npos);
+}
+
+TEST_CASE("se: NaN on a negative diagonal, √ otherwise") {
+  Eigen::MatrixXd v = Eigen::MatrixXd::Zero(3, 3);
+  v(0, 0) = 4.0;
+  v(1, 1) = -1.0;   // negative variance ⇒ NaN, never throws
+  v(2, 2) = 9.0;
+  const Eigen::VectorXd s = magmaan::inference::se(v);
+  CHECK(s(0) == doctest::Approx(2.0));
+  CHECK(std::isnan(s(1)));
+  CHECK(s(2) == doctest::Approx(3.0));
+}
+
+TEST_CASE("wald_test: shape-mismatch inputs all error") {
+  Estimates est;
+  est.theta = Eigen::VectorXd::Zero(3);
+  const Eigen::MatrixXd vcov = Eigen::MatrixXd::Identity(3, 3);
+
+  // Empty restriction matrix.
+  {
+    const Eigen::MatrixXd R(0, 3);
+    const Eigen::VectorXd q(0);
+    CHECK_FALSE(magmaan::inference::wald_test(R, q, est, vcov).has_value());
+  }
+  // R.cols() ≠ θ̂.size().
+  {
+    Eigen::MatrixXd R = Eigen::MatrixXd::Zero(1, 2);
+    R(0, 0) = 1.0;
+    const Eigen::VectorXd q = Eigen::VectorXd::Zero(1);
+    CHECK_FALSE(magmaan::inference::wald_test(R, q, est, vcov).has_value());
+  }
+  // q.size() ≠ R.rows().
+  {
+    Eigen::MatrixXd R = Eigen::MatrixXd::Zero(1, 3);
+    R(0, 0) = 1.0;
+    const Eigen::VectorXd q = Eigen::VectorXd::Zero(2);
+    CHECK_FALSE(magmaan::inference::wald_test(R, q, est, vcov).has_value());
+  }
+  // vcov shape ≠ θ̂.size().
+  {
+    Eigen::MatrixXd R = Eigen::MatrixXd::Zero(1, 3);
+    R(0, 0) = 1.0;
+    const Eigen::VectorXd q = Eigen::VectorXd::Zero(1);
+    const Eigen::MatrixXd vbad = Eigen::MatrixXd::Identity(2, 2);
+    CHECK_FALSE(magmaan::inference::wald_test(R, q, est, vbad).has_value());
+  }
+}
+
+TEST_CASE("rls_chi2: SampleStats/ImpliedMoments block mismatch errors") {
+  std::mt19937 rng(3);
+  SampleStats samp;
+  samp.S.push_back(random_pd(rng, 3));
+  samp.n_obs.push_back(100);
+  magmaan::model::ImpliedMoments im;   // zero implied blocks
+  auto r = magmaan::inference::rls_chi2(samp, im);
+  REQUIRE_FALSE(r.has_value());
+}
+
+TEST_CASE("browne_residual_adf: rejects missing-data RawData") {
+  auto h = must_model("f =~ x1 + x2 + x3");
+
+  magmaan::data::RawData raw;
+  raw.X.emplace_back(200, 3);
+  std::mt19937 rng(11);
+  std::normal_distribution<double> nd(0.0, 1.0);
+  for (Eigen::Index i = 0; i < raw.X[0].rows(); ++i) {
+    raw.X[0](i, 0) = nd(rng);
+    raw.X[0](i, 1) = 0.7 * raw.X[0](i, 0) + nd(rng);
+    raw.X[0](i, 2) = 0.5 * raw.X[0](i, 0) + nd(rng);
+  }
+
+  // Derive sample stats + fit from the *complete* data first…
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp_or.has_value());
+  auto est = magmaan::test::fit(*h.pt, *h.rep, *samp_or).value();
+
+  // …then mark the data as having missingness and confirm ADF refuses it.
+  Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M(200, 3);
+  M.setOnes();
+  M(0, 0) = 0;   // one missing cell
+  raw.mask.push_back(M);
+
+  auto r = magmaan::inference::browne_residual_adf(*h.pt, *h.rep, *samp_or, raw, est);
+  REQUIRE_FALSE(r.has_value());
+  CHECK(r.error().detail.find("missing-data") != std::string::npos);
+}
+
+TEST_CASE("vcov / df_stat: nonlinear `==` constraint takes the null-space branch") {
+  // The linear (shared-label) constraint path is covered in constraints_test;
+  // the nonlinear `a == b*b` path projects onto the null space of the
+  // constraint Jacobian and needs θ̂. Fit the *unconstrained* model for a
+  // valid θ̂ + PD info (identical parameter layout), then drive vcov/df_stat
+  // with the constrained partable.
+  std::mt19937 rng(99);
+  SampleStats samp;
+  samp.S.push_back(random_pd(rng, 3));
+  samp.n_obs.push_back(250);
+
+  auto fp_u = magmaan::parse::Parser::parse("f =~ x1 + a*x2 + b*x3");
+  REQUIRE(fp_u.has_value());
+  auto pt_u  = magmaan::spec::build(*fp_u);            REQUIRE(pt_u.has_value());
+  auto rep_u = magmaan::model::build_matrix_rep(*pt_u); REQUIRE(rep_u.has_value());
+  auto est   = magmaan::test::fit(*pt_u, *rep_u, samp).value();
+  auto info_or = magmaan::inference::information_expected(*pt_u, *rep_u, samp, est);
+  REQUIRE(info_or.has_value());
+
+  // Same formula + labels ⇒ identical θ ordering; the extra row is the
+  // nonlinear constraint (no new free parameters).
+  auto fp_c = magmaan::parse::Parser::parse("f =~ x1 + a*x2 + b*x3\na == b*b");
+  REQUIRE(fp_c.has_value());
+  auto pt_c = magmaan::spec::build(*fp_c);  REQUIRE(pt_c.has_value());
+  REQUIRE(pt_c->nl_constraints.size() == 1);
+
+  // (a) Omitting θ̂ on a nonlinearly-constrained model errors.
+  auto miss = magmaan::inference::vcov(*info_or, *pt_c);
+  REQUIRE_FALSE(miss.has_value());
+  CHECK(miss.error().detail.find("third argument") != std::string::npos);
+
+  // (b) With θ̂ the Z-null-space projection succeeds and stays symmetric.
+  auto vc = magmaan::inference::vcov(*info_or, *pt_c, est.theta);
+  REQUIRE_MESSAGE(vc.has_value(),
+      "nonlinear vcov failed: " << (vc.has_value() ? "" : vc.error().detail));
+  CHECK(vc->rows() == est.theta.size());
+  CHECK(vc->cols() == est.theta.size());
+  CHECK((*vc - vc->transpose()).cwiseAbs().maxCoeff() < 1e-9);
+
+  // (c) df_stat: the nonlinear rank is added to the linear df, and θ̂ is
+  // likewise required. Saturated 3-var 1F CFA ⇒ 6 moments − 6 free + 1
+  // constraint rank = 1.
+  REQUIRE_FALSE(magmaan::inference::df_stat(*pt_c, samp).has_value());
+  auto df = magmaan::inference::df_stat(*pt_c, samp, est.theta);
+  REQUIRE(df.has_value());
+  CHECK(*df == 1);
+}
+
+// ----------------------------------------------------------------------------
 // Observed information — FD and analytic variants.
 // ----------------------------------------------------------------------------
 
