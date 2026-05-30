@@ -2575,6 +2575,23 @@ Rcpp::NumericVector infer_se(Rcpp::NumericMatrix vcov) {
   return Rcpp::wrap(magmaan::inference::se(vcov_m));
 }
 
+// The standardized-solution / factor-score / defined-parameter primitives are
+// not exposed for ordinal or mixed-ordinal fits: under delta parameterization
+// the loadings are already in the correlation metric, so dividing by the
+// model-implied indicator variance would silently rescale them. The high-level
+// Fit API enforces this via require_not_ordinal() (src/api/sem.cpp), but these
+// thin core bindings construct no Fit object and would otherwise bypass that
+// guard. Mirror it here.
+void stop_if_ordinal_fit(const Rcpp::List& fit, const char* call) {
+  const bool ord = fit.containsElementNamed("ordinal") &&
+                   Rcpp::as<bool>(fit["ordinal"]);
+  const bool mix = fit.containsElementNamed("mixed_ordinal") &&
+                   Rcpp::as<bool>(fit["mixed_ordinal"]);
+  if (ord || mix) {
+    Rcpp::stop("%s is not exposed for ordinal or mixed-ordinal fits", call);
+  }
+}
+
 // compute_defined_impl() — mirrors measures::effects::compute_defined(flat, pt,
 // names, est, vcov). `syntax` must be the original model syntax because the
 // lavaan-shaped partable only carries the projected `:=` rows, not their parsed
@@ -2584,6 +2601,7 @@ Rcpp::NumericVector infer_se(Rcpp::NumericMatrix vcov) {
 Rcpp::DataFrame compute_defined_impl(std::string syntax,
                                      Rcpp::List fit,
                                      Rcpp::NumericMatrix vcov) {
+  stop_if_ordinal_fit(fit, "compute_defined()");
   auto flat_or = magmaan::parse::Parser::parse(syntax);
   if (!flat_or.has_value()) {
     const auto& e = flat_or.error();
@@ -2742,6 +2760,7 @@ Rcpp::List estimate_fiml_robust_mlr(Rcpp::List fit, double h_step = 1e-4) {
 //
 // [[Rcpp::export]]
 Rcpp::List measures_standardize_lv(Rcpp::List fit, Rcpp::NumericMatrix vcov) {
+  stop_if_ordinal_fit(fit, "standardize_lv()");
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
@@ -2755,6 +2774,7 @@ Rcpp::List measures_standardize_lv(Rcpp::List fit, Rcpp::NumericMatrix vcov) {
 //
 // [[Rcpp::export]]
 Rcpp::List measures_standardize_all(Rcpp::List fit, Rcpp::NumericMatrix vcov) {
+  stop_if_ordinal_fit(fit, "standardize_all()");
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
@@ -2831,6 +2851,7 @@ Rcpp::List measures_standardized_residuals(Rcpp::List fit) {
 // [[Rcpp::export]]
 Rcpp::List measures_factor_scores(Rcpp::List fit, SEXP raw_data,
                                   std::string method = "regression") {
+  stop_if_ordinal_fit(fit, "factor_scores()");
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
