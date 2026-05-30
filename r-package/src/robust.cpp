@@ -81,7 +81,8 @@ Rcpp::List test_moments_pair_to_list(
 magmaan::estimate::OrdinalWeightKind ordinal_weight_from_string(const std::string& s) {
   if (s == "DWLS" || s == "dwls") return magmaan::estimate::OrdinalWeightKind::DWLS;
   if (s == "WLS" || s == "wls") return magmaan::estimate::OrdinalWeightKind::WLS;
-  Rcpp::stop("magmaan: `weight` must be 'DWLS' or 'WLS' (got '%s')", s);
+  if (s == "ULS" || s == "uls") return magmaan::estimate::OrdinalWeightKind::ULS;
+  Rcpp::stop("magmaan: `weight` must be 'DWLS', 'WLS' or 'ULS' (got '%s')", s);
 }
 
 magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {

@@ -508,6 +508,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fit_uls_ordinal_impl
+Rcpp::List fit_uls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_uls_ordinal_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_uls_ordinal_impl(partable, ordinal_stats, optimizer, control, bounds));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_wls_ordinal_impl
 Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
 RcppExport SEXP _magmaan_fit_wls_ordinal_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
@@ -1584,6 +1599,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_polyserial_dpd_from_raw_impl, 3},
     {"_magmaan_data_mixed_ordinal_stats_huber_residual_from_raw_impl", (DL_FUNC) &_magmaan_data_mixed_ordinal_stats_huber_residual_from_raw_impl, 4},
     {"_magmaan_fit_dwls_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_ordinal_impl, 5},
+    {"_magmaan_fit_uls_ordinal_impl", (DL_FUNC) &_magmaan_fit_uls_ordinal_impl, 5},
     {"_magmaan_fit_wls_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_ordinal_impl, 5},
     {"_magmaan_fit_dwls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_mixed_ordinal_impl, 5},
     {"_magmaan_fit_wls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_mixed_ordinal_impl, 5},

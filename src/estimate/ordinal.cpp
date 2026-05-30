@@ -162,8 +162,14 @@ fit_expected<void> validate_stats(const data::OrdinalStats& s,
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "OrdinalStats block counts do not match MatrixRep"));
   }
-  const auto& Ws = kind == OrdinalWeightKind::DWLS ? s.W_dwls : s.W_wls;
-  if (Ws.size() != nb || s.NACOV.size() != nb) {
+  // ULS uses the identity weight (materialized on demand in weight_factors /
+  // robust_ordinal), so only the NACOV / moment blocks are validated here; the
+  // weight is trivially positive definite and sized to NACOV.
+  const bool uls = kind == OrdinalWeightKind::ULS;
+  static const std::vector<Eigen::MatrixXd> kNoWeights;
+  const auto& Ws = uls ? kNoWeights
+                 : (kind == OrdinalWeightKind::DWLS ? s.W_dwls : s.W_wls);
+  if (s.NACOV.size() != nb || (!uls && Ws.size() != nb)) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "OrdinalStats weight/NACOV block count does not match MatrixRep"));
   }
@@ -179,8 +185,8 @@ fit_expected<void> validate_stats(const data::OrdinalStats& s,
           "OrdinalStats threshold metadata mismatch in block " + std::to_string(b)));
     }
     const Eigen::Index mdim = s.thresholds[b].size() + p * (p - 1) / 2;
-    if (Ws[b].rows() != mdim || Ws[b].cols() != mdim ||
-        s.NACOV[b].rows() != mdim || s.NACOV[b].cols() != mdim) {
+    if (s.NACOV[b].rows() != mdim || s.NACOV[b].cols() != mdim ||
+        (!uls && (Ws[b].rows() != mdim || Ws[b].cols() != mdim))) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "OrdinalStats moment/weight dimension mismatch in block " +
               std::to_string(b)));
@@ -190,7 +196,8 @@ fit_expected<void> validate_stats(const data::OrdinalStats& s,
           "OrdinalStats n_obs must be positive in block " + std::to_string(b)));
     }
     if (!matrix_all_finite(s.R[b]) || !vector_all_finite(s.thresholds[b]) ||
-        !matrix_all_finite(Ws[b]) || !matrix_all_finite(s.NACOV[b])) {
+        !matrix_all_finite(s.NACOV[b]) ||
+        (!uls && !matrix_all_finite(Ws[b]))) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "OrdinalStats contains non-finite values in block " +
               std::to_string(b)));
@@ -202,11 +209,13 @@ fit_expected<void> validate_stats(const data::OrdinalStats& s,
                 std::to_string(b)));
       }
     }
-    Eigen::LLT<Eigen::MatrixXd> llt(Ws[b]);
-    if (llt.info() != Eigen::Success) {
-      return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          "OrdinalStats weight matrix is not positive definite in block " +
-              std::to_string(b)));
+    if (!uls) {
+      Eigen::LLT<Eigen::MatrixXd> llt(Ws[b]);
+      if (llt.info() != Eigen::Success) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "OrdinalStats weight matrix is not positive definite in block " +
+                std::to_string(b)));
+      }
     }
   }
   return {};
@@ -1071,6 +1080,15 @@ make_threshold_layout(const spec::LatentStructure& pt,
 
 fit_expected<std::vector<Eigen::MatrixXd>>
 weight_factors(const data::OrdinalStats& stats, OrdinalWeightKind kind) {
+  // ULS uses the identity weight, so its Cholesky factor is the identity. No
+  // NACOV inverse is involved; the residual is the raw moment residual s − σ.
+  if (kind == OrdinalWeightKind::ULS) {
+    std::vector<Eigen::MatrixXd> out;
+    out.reserve(stats.NACOV.size());
+    for (const auto& G : stats.NACOV)
+      out.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+    return out;
+  }
   const auto& Ws = kind == OrdinalWeightKind::DWLS ? stats.W_dwls : stats.W_wls;
   std::vector<Eigen::MatrixXd> out;
   out.reserve(Ws.size());
@@ -2503,7 +2521,18 @@ robust_ordinal(spec::LatentStructure pt,
         "robust_ordinal: constraint reparameterization has incompatible shape"));
   }
 
-  const auto& Ws = weights == OrdinalWeightKind::DWLS ? stats.W_dwls : stats.W_wls;
+  // ULS: the model weight is the identity (the ULSMV sandwich uses NACOV
+  // directly). Build it once so `Ws[b]` references a live matrix through the
+  // robust_weighted_moments() call below.
+  std::vector<Eigen::MatrixXd> uls_identity;
+  if (weights == OrdinalWeightKind::ULS) {
+    uls_identity.reserve(stats.NACOV.size());
+    for (const auto& G : stats.NACOV)
+      uls_identity.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+  }
+  const auto& Ws = weights == OrdinalWeightKind::ULS ? uls_identity
+                 : (weights == OrdinalWeightKind::DWLS ? stats.W_dwls
+                                                       : stats.W_wls);
   std::vector<WeightedMomentBlock> blocks;
   blocks.reserve(stats.R.size());
   Eigen::Index off = 0;

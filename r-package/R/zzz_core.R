@@ -71,6 +71,7 @@ estimate_gls_pairwise <- fit_gls_pairwise_impl
 estimate_wls <- fit_wls_impl
 estimate_dwls_ordinal <- fit_dwls_ordinal_impl
 estimate_wls_ordinal <- fit_wls_ordinal_impl
+estimate_uls_ordinal <- fit_uls_ordinal_impl
 estimate_dwls_mixed_ordinal <- fit_dwls_mixed_ordinal_impl
 estimate_wls_mixed_ordinal <- fit_wls_mixed_ordinal_impl
 estimate_uls_snlls <- fit_uls_snlls_impl
@@ -206,6 +207,7 @@ magmaan_core <- local({
       "estimate_wls",
       "estimate_dwls_ordinal",
       "estimate_wls_ordinal",
+      "estimate_uls_ordinal",
       "estimate_dwls_mixed_ordinal",
       "estimate_wls_mixed_ordinal",
       "estimate_uls_snlls",
@@ -333,6 +335,7 @@ magmaan_core <- local({
       "bounds_loading",
       "fit_dwls_ordinal",
       "fit_wls_ordinal",
+      "fit_uls_ordinal",
       "fit_dwls_mixed_ordinal",
       "fit_wls_mixed_ordinal",
       "fit_uls_snlls",
@@ -377,6 +380,7 @@ magmaan_core <- local({
       "fit_wls_impl",
       "fit_dwls_ordinal_impl",
       "fit_wls_ordinal_impl",
+      "fit_uls_ordinal_impl",
       "fit_dwls_mixed_ordinal_impl",
       "fit_wls_mixed_ordinal_impl",
       "fit_uls_snlls_impl",
