@@ -1,0 +1,31 @@
+QUADPACK
+========
+
+The QUADPACK routines (dqagie, dqk15i, dqelg, dqpsrt and the verbatim Fortran
+sources under upstream/) are in the PUBLIC DOMAIN.
+
+QUADPACK was developed by Robert Piessens and Elise de Doncker-Kapenga
+(Katholieke Universiteit Leuven), Christoph W. Überhuber (Technische Universität
+Wien), and David K. Kahaner (National Bureau of Standards), and published in:
+
+    R. Piessens, E. de Doncker-Kapenga, C. W. Überhuber, D. K. Kahaner,
+    "QUADPACK: A Subroutine Package for Automatic Integration",
+    Springer-Verlag, 1983.
+
+It has been distributed without restriction via Netlib (https://www.netlib.org/
+quadpack/) and SLATEC for decades and carries no copyright or license
+conditions. No warranty is expressed or implied.
+
+f2c runtime header
+==================
+
+f2c.h is part of the f2c (Fortran-to-C) distribution by AT&T Bell Laboratories
+(S. I. Feldman et al.) and is freely redistributable. See
+https://www.netlib.org/f2c/ . It is included verbatim (copied from
+third_party/port/cport/f2c.h).
+
+Locally written files
+=====================
+
+d1mach.c and pow_dd.c were written for magmaan and are covered by the magmaan
+project license (MIT, see the repository root LICENSE).

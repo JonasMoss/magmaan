@@ -297,6 +297,19 @@ Local-first safety tooling for an AI-assisted repo. Design note:
 Advisory local tooling, not a substitute for parity fixtures. Full design:
 [docs/validation/benchmark_plan.md](../validation/benchmark_plan.md).
 
+- **DONE (perf, core).** `robust::weighted_chisq::imhof_upper` was ~43x slower
+  than `CompQuadForm::imhof` (fixed-grid composite Simpson over a guessed finite
+  `[0,U]`). Replaced the integrator with the vendored QUADPACK `qagi` cone
+  (`third_party/quadpack/`, f2c-translated `dqagie`/`dqk15i`/`dqpsrt`/`dqelg` +
+  hand `d1mach`/`pow_dd`, public domain): now ~0.2 ms vs CompQuadForm's ~0.6 ms
+  (3x faster, agreement to ~2e-16), with the dense-Simpson method retained as a
+  fallback for the weakly-damped small-df tail (df ~ 1-2, large x) where qagi's
+  epsilon extrapolation is unreliable. This was the dominant cost of every
+  FMG/pEBA/pOLS p-value and the robust nested tests; experiment 17 dropped from
+  11+ min to ~16 s.
+  - **Option 2 (follow-up, S/M).** Consider replacing the f2c'd C under
+    `third_party/quadpack/` with a clean C++23 hand-port of `dqagie`/`dqk15i`
+    for readability — QUADPACK is public domain, so we can mirror it exactly.
 - **S.** Keep the build-loop timings table in `docs/architecture/roadmap.md` current after
   major workflow changes.
 - **S/M.** Continue extending benchmark coverage beyond the current

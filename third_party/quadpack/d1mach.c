@@ -1,0 +1,28 @@
+#include "f2c.h"
+#include <float.h>
+
+/* d1mach -- IEEE double-precision machine constants queried by the QUADPACK
+   routines. A dependency-free replacement for netlib's bit-table `d1mach.f`
+   (which infers the constants from integer bit patterns and carries a COMMON
+   block); here we read them straight from <float.h>:
+
+     d1mach(1) = smallest positive magnitude            (underflow)
+     d1mach(2) = largest magnitude                       (overflow)
+     d1mach(3) = b^(-t)   = smallest relative spacing    (eps/2)
+     d1mach(4) = b^(1-t)  = largest relative spacing      (machine epsilon)
+     d1mach(5) = log10(2)
+
+   The symbol is renamed to a magmaan-private name at compile time (see
+   cmake/QuadpackVendor.cmake) so it never collides with the vendored PORT's
+   own d1mach. */
+doublereal d1mach_(integer *i)
+{
+    switch (*i) {
+        case 1: return DBL_MIN;
+        case 2: return DBL_MAX;
+        case 3: return 0.5 * DBL_EPSILON;
+        case 4: return DBL_EPSILON;
+        case 5: return 0.301029995663981195213738894724; /* log10(2) */
+    }
+    return 0.0;
+}

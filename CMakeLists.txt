@@ -69,6 +69,12 @@ if(MAGMAAN_WITH_PORT)
   include(PortVendor)
 endif()
 
+# QUADPACK — vendored `qagi` adaptive integrator (f2c-translated C, public
+# domain). Always built: `imhof_upper` (the weighted-chi-square tail behind every
+# SB/pEBA/pOLS p-value and the robust nested tests) depends on it. Knobs in
+# `cmake/QuadpackVendor.cmake`; vendor manifest in `third_party/quadpack/README.md`.
+include(QuadpackVendor)
+
 # ---------------------------------------------------------------------------
 # Core library
 # ---------------------------------------------------------------------------
@@ -152,7 +158,7 @@ target_include_directories(magmaan
 
 target_link_libraries(magmaan
   PUBLIC  magmaan::no_exc_no_rtti Eigen3::Eigen
-  PRIVATE magmaan::warnings magmaan::sanitizers NLopt::nlopt)
+  PRIVATE magmaan::warnings magmaan::sanitizers NLopt::nlopt quadpack)
 
 # Ceres optimizer adapter — only compiled when MAGMAAN_WITH_CERES=ON. Mirrors
 # the old exception-isolated optimizer pattern: TU is `-fexceptions` (Ceres
