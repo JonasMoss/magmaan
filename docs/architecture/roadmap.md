@@ -120,6 +120,12 @@ golden `parTable()` fixtures.
   and work on block-stacked multi-block covariance and mean-structure models.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand
   and a casewise multi-block primitive.
+- The weighted-sum-of-chi-squares tail behind the FMG/pEBA/pOLS p-values
+  (`robust::weighted_chisq::imhof_upper`, Imhof 1961) integrates with vendored
+  QUADPACK `qagi` (`third_party/quadpack/`, f2c-translated, public domain;
+  cmake/QuadpackVendor.cmake — the second vendored static library after PORT),
+  matching `CompQuadForm::imhof` to ~2e-16 at ~3x its speed, with a dense-Simpson
+  fallback for the weakly-damped small-df tail where qagi's extrapolation breaks.
 
 ### Continuous FIML
 
