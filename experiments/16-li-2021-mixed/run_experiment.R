@@ -418,7 +418,10 @@ fit_one_rep <- function(mod, taus, N, seed, keep_parity = FALSE) {
   # ---- DWLS (mixed polychoric/polyserial/Pearson) ----
   dwls_ok <- FALSE; dwls_improper <- NA
   fit <- tryCatch({
-    d <- core$data_mixed_ordinal_stats_from_df(df, mod$spec_ord)
+    # DWLS only — skip the dense NACOV inverse (full-WLS weight); it is
+    # O(m³) and often singular at small N with many indicators.
+    d <- core$data_mixed_ordinal_stats_from_df(df, mod$spec_ord,
+                                               full_wls_weight = FALSE)
     f <- core$fit_dwls_mixed_ordinal(
       mod$spec_ord, d, control = list(max_iter = 4000, ftol = 1e-13,
                                       gtol = 1e-8))

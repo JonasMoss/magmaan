@@ -265,6 +265,16 @@ fit_expected<void> validate_stats(const data::MixedOrdinalStats& s,
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "MixedOrdinalStats weight/NACOV block count does not match MatrixRep"));
   }
+  if (kind == OrdinalWeightKind::WLS) {
+    for (std::size_t b = 0; b < nb; ++b) {
+      if (Ws[b].size() == 0) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "MixedOrdinalStats full-WLS weight was not materialized (stats "
+            "built with full_wls_weight = false); rebuild with "
+            "full_wls_weight = true to fit WLS"));
+      }
+    }
+  }
   for (std::size_t b = 0; b < nb; ++b) {
     const Eigen::Index p = rep.dims[b].n_observed;
     if (s.R[b].rows() != p || s.R[b].cols() != p || s.mean[b].size() != p ||

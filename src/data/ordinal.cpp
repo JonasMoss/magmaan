@@ -2257,7 +2257,8 @@ mixed_ordinal_stats_from_data_impl(
     const std::vector<Eigen::MatrixXd>& Xs,
     const std::vector<std::vector<std::int32_t>>& ordered,
     bool use_polyserial_dpd,
-    PolyserialPairDpdOptions dpd_options) {
+    PolyserialPairDpdOptions dpd_options,
+    bool full_wls_weight = true) {
   if (Xs.empty()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "mixed_ordinal_stats_from_data: no data blocks"));
@@ -2619,15 +2620,19 @@ mixed_ordinal_stats_from_data_impl(
     }
     // The full-WLS weight is the NACOV inverse; it is needed only for full WLS
     // fitting, not for DWLS (which uses the diagonal W_dwls) or the robust
-    // sandwich (which uses NACOV itself). At small N with many indicators the
-    // mixed NACOV is often singular, so a failed inverse is not fatal here:
-    // leave W_wls empty and let an explicit WLS request report it. This matches
-    // lavaan WLSMV, which fits the diagonal weight regardless of NACOV rank.
+    // sandwich (which uses NACOV itself). DWLS-only callers pass
+    // `full_wls_weight = false` to skip the O(m³) inverse entirely. Even when
+    // requested, the inverse is non-fatal: at small N with many indicators the
+    // mixed NACOV is often singular, so a failed inverse leaves W_wls empty and
+    // an explicit WLS request reports it. This matches lavaan WLSMV, which fits
+    // the diagonal weight regardless of NACOV rank.
     Eigen::MatrixXd W_wls;
-    if (auto W_wls_or =
-            symmetric_inverse_pd(NACOV, "mixed ordinal NACOV matrix");
-        W_wls_or.has_value()) {
-      W_wls = std::move(*W_wls_or);
+    if (full_wls_weight) {
+      if (auto W_wls_or =
+              symmetric_inverse_pd(NACOV, "mixed ordinal NACOV matrix");
+          W_wls_or.has_value()) {
+        W_wls = std::move(*W_wls_or);
+      }
     }
 
     if (use_polyserial_dpd) {
@@ -2655,8 +2660,10 @@ mixed_ordinal_stats_from_data_impl(
 post_expected<MixedOrdinalStats>
 mixed_ordinal_stats_from_data(
     const std::vector<Eigen::MatrixXd>& Xs,
-    const std::vector<std::vector<std::int32_t>>& ordered) {
-  auto out = mixed_ordinal_stats_from_data_impl(Xs, ordered, false, {});
+    const std::vector<std::vector<std::int32_t>>& ordered,
+    bool full_wls_weight) {
+  auto out = mixed_ordinal_stats_from_data_impl(Xs, ordered, false, {},
+                                                full_wls_weight);
   if (!out.has_value()) return std::unexpected(out.error());
   return std::move(out->stats);
 }

@@ -236,9 +236,16 @@ struct MixedOrdinalHuberResidualStats {
 post_expected<OrdinalStats>
 ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& X);
 
+// `full_wls_weight` controls whether the full-WLS weight (the dense NACOV
+// inverse) is materialized. DWLS needs only the diagonal `W_dwls` (an
+// element-wise reciprocal of the NACOV diagonal) and the robust sandwich uses
+// NACOV directly, so a DWLS-only caller can pass `false` to skip the O(m³)
+// inverse — which is also often singular at small N with many indicators. When
+// `false`, `W_wls` is left empty and an explicit full-WLS fit will report it.
 post_expected<MixedOrdinalStats>
 mixed_ordinal_stats_from_data(const std::vector<Eigen::MatrixXd>& X,
-                              const std::vector<std::vector<std::int32_t>>& ordered);
+                              const std::vector<std::vector<std::int32_t>>& ordered,
+                              bool full_wls_weight = true);
 
 post_expected<MixedOrdinalPolyserialDpdStats>
 mixed_ordinal_stats_polyserial_dpd_from_data(

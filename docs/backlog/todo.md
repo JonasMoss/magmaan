@@ -32,16 +32,21 @@ semantics · **XL** statistical design/research track before implementation.
   remaining unguarded `require_not_ordinal` R path — decide whether delta-method
   defined parameters are valid for ordinal fits.
 
-- **Fixed.** **Mixed-ordinal stats aborted DWLS when the full NACOV was
-  singular.** `mixed_ordinal_stats_from_data` (`src/data/ordinal.cpp`) eagerly
-  inverted the full NACOV to build the WLS weight and returned an error if it was
-  not positive definite — which blocked DWLS too, even though DWLS only needs the
-  diagonal `W_dwls`. At small `N` with many indicators (e.g. the 20-variable
-  Li 2021 SEM at `N = 200`) this made every mixed DWLS fit fail, while lavaan
-  WLSMV (diagonal weight) converged. The inverse is now non-fatal: a singular
-  NACOV leaves `W_wls` empty, DWLS and the robust sandwich (which use `W_dwls` /
-  `NACOV`) proceed, and an explicit full-WLS request reports the singular NACOV
-  via `weight_factors` (`src/estimate/ordinal.cpp`).
+- **Fixed.** **Mixed-ordinal stats inverted the full NACOV even for DWLS.**
+  `mixed_ordinal_stats_from_data` (`src/data/ordinal.cpp`) eagerly inverted the
+  full NACOV to build the WLS weight and returned an error if it was not positive
+  definite — which both wasted an O(m³) factorization (DWLS needs only the
+  diagonal `W_dwls = 1/diag(Γ)`; the robust sandwich uses `NACOV` itself) and
+  blocked DWLS when the inverse failed. At small `N` with many indicators (the
+  20-variable Li 2021 SEM at `N = 200`) this made every mixed DWLS fit fail,
+  while lavaan WLSMV (diagonal weight) converged. Two changes: (1)
+  `mixed_ordinal_stats_from_data` / `data_mixed_ordinal_stats_from_{raw,df}` take
+  `full_wls_weight = true`; a DWLS-only caller passes `false` to skip the inverse
+  entirely (W_wls left empty). (2) Even with `full_wls_weight = true` the inverse
+  is non-fatal — a singular NACOV leaves W_wls empty and DWLS / robust proceed.
+  An explicit full-WLS fit on a skipped/empty weight reports it clearly
+  (`validate_stats` / `weight_factors`, `src/estimate/ordinal.cpp`). The eager
+  default preserves the existing W_wls-vs-lavaan golden/unit contracts.
 
 - **Investigated, NOT a bug (recorded so we don't re-chase it).** The continuous
   ULS test-statistic builders use *different* base statistics for the standard
