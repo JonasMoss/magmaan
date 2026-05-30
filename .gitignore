@@ -17,6 +17,7 @@ external/*
 papers/*
 !papers/AGENTS.md
 !papers/STYLE.md
+!papers/CLAUDE.md
 
 *.o
 *.obj
