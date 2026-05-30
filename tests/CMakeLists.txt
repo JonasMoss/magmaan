@@ -2,9 +2,13 @@
 # magmaan itself. doctest is built with DOCTEST_CONFIG_NO_EXCEPTIONS so its
 # CHECK_THROWS-style assertions vanish.
 
+# Pinned past v2.4.12 to an upstream master commit: releases up to 2.4.12 still
+# #include <ciso646> on clang, which libstdc++ >= 15 flags as a deprecated C++20
+# header and our -Werror wall turns fatal. This commit switches to <version> via
+# __has_include. Move to the next tagged release (>= v2.4.13) once it ships.
 magmaan_find_or_fetch(NAME doctest
   GIT_REPOSITORY https://github.com/doctest/doctest.git
-  GIT_TAG        v2.4.11
+  GIT_TAG        d44d4f6e66232d716af82f00a063759e9d0e50d6
   FIND_PACKAGE_ARGS CONFIG)
 
 # Test-only JSON dependency. Used by the fixture loader and the regen
