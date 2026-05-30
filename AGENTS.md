@@ -57,7 +57,9 @@ plan is historical archaeology, not current guidance.
 - `docs/grammar/` - `grammar.ebnf` (normative), `lexer.md`, `grammar.md`.
 - `docs/architecture/roadmap.md` - current implementation state and design contracts.
 - `docs/backlog/todo.md` - active human-readable backlog and remaining milestones.
-- `external/` - ignored optional source mirrors for reading upstream code, never built.
+- `external/` - ignored single "development help" folder: source mirrors for reading
+  upstream code plus `external/refs/` reference PDFs. Never built. (Replaces the former
+  separate `resources/` folder.)
 - `third_party/` - tracked vendored third-party sources that participate in the
   build. Each subdirectory holds the verbatim upstream sources plus the upstream
   LICENSE files and a vendor README.md documenting source URL, commit, license,

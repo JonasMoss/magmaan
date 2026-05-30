@@ -1,4 +1,4 @@
-source(file.path("resources", "sims", "r", "common.R"))
+source(file.path("docs", "research", "sims", "r", "common.R"))
 
 li2021_thresholds <- function() {
   list(
