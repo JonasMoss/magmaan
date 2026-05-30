@@ -2011,9 +2011,10 @@ Rcpp::List evaluate_at_impl(
 }
 
 // [[Rcpp::export]]
-Rcpp::List data_ordinal_stats_from_raw_impl(SEXP X) {
+Rcpp::List data_ordinal_stats_from_raw_impl(SEXP X, bool full_wls_weight = true) {
   auto blocks = matrix_blocks_from_arg(X);
-  auto out_or = magmaan::data::ordinal_stats_from_integer_data(blocks);
+  auto out_or = magmaan::data::ordinal_stats_from_integer_data(blocks,
+                                                               full_wls_weight);
   if (!out_or.has_value()) stop_post(out_or.error());
   return ordinal_stats_to_r(*out_or);
 }

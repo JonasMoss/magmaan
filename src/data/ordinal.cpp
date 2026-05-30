@@ -1616,7 +1616,8 @@ post_expected<MixedOrdinalWorkspace> mixed_ordinal_workspace_from_data(
 }
 
 post_expected<PairwiseOrdinalStats>
-pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs) {
+pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
+                                         bool full_wls_weight) {
   if (Xs.empty()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "ordinal_stats_from_integer_data: no data blocks"));
@@ -1863,9 +1864,21 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs)
       }
       W_dwls(k, k) = 1.0 / v;
     }
-    auto W_wls_or = symmetric_inverse_pd(
-        NACOV, "ordinal NACOV matrix");
-    if (!W_wls_or.has_value()) return std::unexpected(W_wls_or.error());
+    // The full-WLS weight is the NACOV inverse; it is needed only for full WLS
+    // fitting, not for DWLS (which uses the diagonal W_dwls) or the robust
+    // sandwich (which uses NACOV itself). DWLS-only callers pass
+    // `full_wls_weight = false` to skip the O(m³) inverse entirely. Even when
+    // requested, the inverse is non-fatal: at small N with many indicators the
+    // ordinal NACOV is often singular, so a failed inverse leaves W_wls empty
+    // and an explicit WLS request reports it. This matches lavaan WLSMV, which
+    // fits the diagonal weight regardless of NACOV rank.
+    Eigen::MatrixXd W_wls;
+    if (full_wls_weight) {
+      if (auto W_wls_or = symmetric_inverse_pd(NACOV, "ordinal NACOV matrix");
+          W_wls_or.has_value()) {
+        W_wls = std::move(*W_wls_or);
+      }
+    }
     block_diag.moment_influence = std::move(IF);
     block_diag.gamma = NACOV;
 
@@ -1875,7 +1888,7 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs)
     out.stats.threshold_level.push_back(std::move(th_level));
     out.stats.NACOV.push_back(std::move(NACOV));
     out.stats.W_dwls.push_back(std::move(W_dwls));
-    out.stats.W_wls.push_back(std::move(*W_wls_or));
+    out.stats.W_wls.push_back(std::move(W_wls));
     out.stats.n_obs.push_back(static_cast<std::int64_t>(n));
     out.stats.n_levels.push_back(std::move(levels));
     out.block_diagnostics.push_back(std::move(block_diag));
@@ -1884,8 +1897,9 @@ pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs)
 }
 
 post_expected<OrdinalStats>
-ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs) {
-  auto out = pairwise_ordinal_stats_from_integer_data(Xs);
+ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
+                                bool full_wls_weight) {
+  auto out = pairwise_ordinal_stats_from_integer_data(Xs, full_wls_weight);
   if (!out.has_value()) return std::unexpected(out.error());
   return std::move(out->stats);
 }

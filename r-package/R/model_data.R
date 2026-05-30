@@ -277,7 +277,7 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
                                        h_lambda = 0.2,
                                        clip = c("hard_huber", "pseudo_huber",
                                                 "tukey_biweight", "none"),
-                                       k = NULL) {
+                                       k = NULL, full_wls_weight = TRUE) {
   missing <- match.arg(missing)
   robust <- match.arg(robust)
   h_kind <- match.arg(h_kind)
@@ -356,7 +356,8 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
   }
   out <- data_ordinal_stats_from_raw(
     X, robust = robust, alpha = alpha, h_kind = h_kind, h_k = h_k,
-    h_a = h_a, h_b = h_b, h_lambda = h_lambda, clip = clip, k = k
+    h_a = h_a, h_b = h_b, h_lambda = h_lambda, clip = clip, k = k,
+    full_wls_weight = full_wls_weight
   )
   out$X <- X
   out$ov_names <- ov_by_group
