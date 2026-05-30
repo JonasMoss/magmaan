@@ -3,20 +3,23 @@
 The repository keeps the core source, tests, fixtures, benchmark manifests,
 and maintainer notes in Git. Local reference material stays outside history.
 
-## `resources/`
+## `external/` — the single "development help" folder
 
-`resources/` is ignored. Use it for local PDFs, package tarballs, downloaded
-datasets, and other reference artifacts whose redistribution terms are unclear
-or unnecessary for the build. Do not link tests or scripts to files that must
-exist under `resources/`.
+All outside material you read while developing lives under `external/`, which is
+ignored (except its `README.md` convention doc). It is not part of the build, not
+part of CI, and never a required test input. This replaces the former split
+between `external/` and a separate `resources/` folder — there is now one place.
+
+It holds:
+
+- **Source mirrors** — `lavaan`, `robcat`, `kreiberg`, and similar checkouts read
+  for implementation details.
+- **`external/refs/`** — local PDFs (papers, textbooks), textbook companion files,
+  and other reference artifacts whose redistribution terms are unclear or simply
+  unnecessary for the build. Do not link tests or scripts to files that must exist
+  under `external/refs/`.
 
 Tracked research notes and simulation scripts live under `docs/research/`.
-
-## `external/`
-
-`external/` is ignored. It is an optional convenience area for source mirrors
-such as lavaan, semTests, or robcat when reading implementation details. It is
-not part of the build, not part of CI, and not a required test input.
 
 Textbook-corpus material (raw Mplus, Brown, Geiser, Kline, Little, Newsom
 bundles) does **not** live here — it lives under the textbook-corpus submodule

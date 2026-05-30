@@ -5,10 +5,12 @@ CMakeFiles/
 compile_commands.json
 .claude/
 
-# Optional source mirrors and local resource caches; see docs/reference/external_resources.md.
-external/
-
-resources/
+# Development-help materials: source mirrors + reference PDFs you read while
+# developing. Ignored except the in-folder convention doc. See external/README.md.
+# Uses external/* (not external/) so the README exception can re-include — a
+# parent dir excluded by `external/` cannot have children re-included.
+external/*
+!external/README.md
 
 # Local paper projects live here as independent nested git repositories.
 # Shared convention and style docs are the exceptions that live in magmaan.
