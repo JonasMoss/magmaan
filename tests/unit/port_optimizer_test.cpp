@@ -178,6 +178,30 @@ TEST_CASE("PortOptimizer — budget exhaustion at non-stationary iterate "
   CHECK(out->fmin > 1e-3);   // still far from the optimum
 }
 
+TEST_CASE("PortOptimizer — ftol is forwarded (looser tolerance does no more work)") {
+  // opts.ftol (> 0) reaches PORT's relative-function-convergence tolerance
+  // v[kV_RfcTol]. A loose tolerance must stop earlier and at a less-optimal
+  // iterate than a tight one on the same problem — proving the option is wired
+  // through, not that PORT's trust region works. Exercises the ftol > 0
+  // forwarding branch the existing budget-exhaustion case (ftol == 0,
+  // uniform-stop) does not.
+  auto f = [](const Eigen::VectorXd& x, Eigen::VectorXd& g) {
+    const double a = 1.0 - x[0];
+    const double b = x[1] - x[0] * x[0];
+    g.resize(2);
+    g[0] = -2.0 * a - 400.0 * x[0] * b;
+    g[1] = 200.0 * b;
+    return a * a + 100.0 * b * b;
+  };
+  Eigen::VectorXd x0(2);  x0 << -1.2, 1.0;
+  auto loose = PortOptimizer({1000, /*ftol=*/1e-1,  1e-7, 10}).minimize(f, x0);
+  auto tight = PortOptimizer({1000, /*ftol=*/1e-12, 1e-7, 10}).minimize(f, x0);
+  REQUIRE(loose.has_value());
+  REQUIRE(tight.has_value());
+  CHECK(loose->iterations <= tight->iterations);
+  CHECK(loose->fmin >= tight->fmin);
+}
+
 TEST_CASE("PortOptimizer — empty parameter vector is an error value") {
   auto f = [](const Eigen::VectorXd&, Eigen::VectorXd&) { return 0.0; };
   PortOptimizer opt;
