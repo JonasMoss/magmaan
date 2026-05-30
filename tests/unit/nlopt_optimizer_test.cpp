@@ -307,3 +307,66 @@ TEST_CASE("NloptOptimizer/LBFGS — solves the Rosenbrock function") {
   CHECK(out->fmin < 1e-4);
   CHECK((out->theta_hat - Eigen::Vector2d(1.0, 1.0)).norm() < 5e-2);
 }
+
+// ============================================================================
+// Wiring tests: verify the adapter forwards/honors the caller's OptimOptions
+// and populates the OptimOutput it returns. These exercise OUR translation
+// layer (finish_nlopt_result), not NLopt's solver — the partner to the PORT
+// budget/forwarding cases in port_optimizer_test.cpp.
+// ============================================================================
+
+TEST_CASE("NloptOptimizer — evaluation budget exhaustion is an error value") {
+  // max_iter forwards to nlopt_set_maxeval (a function-eval budget). Five evals
+  // on Rosenbrock from the canonical far start cannot reach a stationary point,
+  // so the MAXEVAL_REACHED + non-stationary branch must surface a value-typed
+  // OptimizerNonConvergence rather than a salvaged result. Mirrors the PORT
+  // budget-exhaustion case.
+  NloptOptimizer opt({/*max_iter=*/5, 1e-12, 1e-8, 10}, NloptAlgorithm::Lbfgs);
+  Eigen::VectorXd x0(2);  x0 << -1.2, 1.0;
+  auto out = opt.minimize(rosenbrock_objective(), x0);
+  REQUIRE_FALSE(out.has_value());
+  CHECK(out.error().kind == FitError::Kind::OptimizerNonConvergence);
+}
+
+TEST_CASE("NloptOptimizer — ftol is forwarded (looser tolerance stops less optimally)") {
+  // opts.ftol reaches nlopt_set_ftol_rel, the relative function-value stopping
+  // rule (|Δf| < ftol·|f|). To make ftol the *binding* criterion we (a) give
+  // the objective a large constant offset so |f| — and thus the threshold —
+  // stays well away from zero, and (b) set gtol (→ nlopt_set_xtol_rel) tiny in
+  // both runs so the step-size rule never preempts ftol. A looser ftol must
+  // then stop at a less-optimal point: loose->fmin > tight->fmin proves the
+  // option changed the stop, i.e. our forwarding is live. (On a min-at-zero
+  // problem like Rosenbrock the threshold collapses with |f| and ftol_rel goes
+  // inert — hence the offset.)
+  constexpr double kOffset = 1.0e4;
+  Eigen::Vector3d  c(1.0, -2.0, 0.5);
+  Eigen::Vector3d  w(1.0, 10.0, 100.0);            // mild conditioning
+  auto f = [&](const Eigen::VectorXd& x, Eigen::VectorXd& g) {
+    g = 2.0 * (w.array() * (x - c).array()).matrix();
+    return kOffset + (w.array() * (x - c).array().square()).sum();
+  };
+  const Eigen::VectorXd x0 = Eigen::VectorXd::Zero(3);
+  auto loose = NloptOptimizer({1000, /*ftol=*/1e-2,  /*gtol=*/1e-15, 10},
+                              NloptAlgorithm::Lbfgs).minimize(f, x0);
+  auto tight = NloptOptimizer({1000, /*ftol=*/1e-12, /*gtol=*/1e-15, 10},
+                              NloptAlgorithm::Lbfgs).minimize(f, x0);
+  REQUIRE(loose.has_value());
+  REQUIRE(tight.has_value());
+  CHECK(loose->fmin > tight->fmin);               // loose stopped earlier
+  CHECK(loose->f_evals <= tight->f_evals);
+}
+
+TEST_CASE("NloptOptimizer — OptimOutput is populated on a clean solve") {
+  // A normal convergence must fill the result struct the adapter returns, not
+  // leave it default-constructed: eval counters move, the terminal audit runs
+  // (grad_inf_norm leaves its -1 sentinel) and reports a stationary iterate.
+  Eigen::Vector3d c(1.0, -2.0, 0.5);
+  NloptOptimizer opt({}, NloptAlgorithm::Lbfgs);
+  auto out = opt.minimize(quadratic_objective(c), Eigen::VectorXd::Zero(3));
+  REQUIRE(out.has_value());
+  CHECK(out->f_evals > 0);
+  CHECK(out->g_evals > 0);
+  CHECK(out->grad_inf_norm >= 0.0);
+  CHECK(out->audit.stationary);
+  CHECK(out->status == magmaan::optim::OptimStatus::Converged);
+}
