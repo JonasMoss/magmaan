@@ -40,16 +40,21 @@
 source(.support_helpers())
 rm(.support_helpers)
 source(experiment_path("R", "population.R"))
+source(experiment_path("R", "fmg_parity.R"))
 
 parse_args <- function(args) {
   out <- list(reps = 5L, cells_filter = NULL, seed_base = 20260530L,
-              lavaan_parity = FALSE, smoke = FALSE)
+              lavaan_parity = FALSE, semtests_parity = FALSE, smoke = FALSE)
   i <- 1L
   while (i <= length(args)) {
     a <- args[[i]]
     if (a %in% c("-h", "--help")) {
       cat("Usage: Rscript run_experiment.R [--reps N] [--cells FILTER] ",
-          "[--seed-base S] [--lavaan-parity] [--smoke]\n", sep = "")
+          "[--seed-base S] [--lavaan-parity] [--semtests-parity] [--smoke]\n",
+          sep = "")
+      cat("  --semtests-parity: compare magmaan's FMG family (SB/SS/SF/ALL/\n",
+          "                     pEBA/pOLS x ML/RLS x biased/unbiased) against\n",
+          "                     semTests p-values; implies --lavaan-parity\n", sep = "")
       cat("  --cells: comma-separated key=value over {p, N, dist}, e.g.\n",
           "           p=15,N=400,dist=vm1\n", sep = "")
       cat("  dist in {norm, vm1, vm2}; vm1=(skew 2,kurt 7), vm2=(skew 3,kurt 21)\n")
@@ -67,6 +72,9 @@ parse_args <- function(args) {
     } else if (startsWith(a, "--seed-base=")) {
       out$seed_base <- as.integer(sub("^--seed-base=", "", a))
     } else if (a == "--lavaan-parity") {
+      out$lavaan_parity <- TRUE
+    } else if (a == "--semtests-parity") {
+      out$semtests_parity <- TRUE
       out$lavaan_parity <- TRUE
     } else if (a == "--smoke") {
       out$smoke <- TRUE
@@ -185,7 +193,8 @@ fit_one_rep <- function(ctx, N, dist, seed, keep_parity = FALSE) {
 
   parity <- if (isTRUE(keep_parity)) {
     list(data = as.data.frame(X), chi2_rows = chi2_rows,
-         eig_mean_biased = mean(ev_b))
+         eig_mean_biased = mean(ev_b), df = df, T_ML = T_ML, T_RLS = T_RLS,
+         ev_biased = ev_b, ev_unbiased = ev_ub)
   } else NULL
 
   list(ok = TRUE, chi2_rows = chi2_rows, fmin = as.numeric(fit$fmin),
@@ -317,7 +326,7 @@ meta <- metadata_frame(
                 lavaan_parity = isTRUE(args$lavaan_parity),
                 n_cells = nrow(cell_grid),
                 total_seconds = sprintf("%.2f", t1 - t0)),
-  packages = c("magmaan", "lavaan"))
+  packages = c("magmaan", "lavaan", "semTests", "covsim"))
 write_csv(meta, file.path(results_dir, "metadata.csv"))
 cat(sprintf("\ndone in %.1fs — results in %s\n", t1 - t0, results_dir))
 
@@ -327,7 +336,13 @@ if (isTRUE(args$lavaan_parity)) {
     cat("--lavaan-parity requested but lavaan not installed; skipping.\n")
   } else {
     cat("running lavaan parity (one fit per cell)...\n")
+    do_semtests <- isTRUE(args$semtests_parity) &&
+      requireNamespace("semTests", quietly = TRUE)
+    if (isTRUE(args$semtests_parity) && !do_semtests) {
+      cat("--semtests-parity requested but semTests not installed; skipping it.\n")
+    }
     rows <- list()
+    fmg_rows <- list()
     add <- function(ci, cell, metric, mag, lav) {
       rows[[length(rows) + 1L]] <<- data.frame(
         cell_idx = ci, p = cell$p, N = cell$N, dist = cell$dist,
@@ -358,11 +373,29 @@ if (isTRUE(args$lavaan_parity)) {
       # SB scaling factor.
       add(ci, cell, "SB_scaling", cached$eig_mean_biased,
           ts[["satorra.bentler"]]$scaling.factor %||% NA_real_)
+
+      if (do_semtests) {
+        fr <- fmg_parity_rows(lv, cached)
+        fmg_rows[[length(fmg_rows) + 1L]] <- cbind(
+          data.frame(cell_idx = ci, p = cell$p, N = cell$N, dist = cell$dist,
+                     stringsAsFactors = FALSE),
+          fr)
+      }
     }
     parity_df <- do.call(rbind, rows)
     utils::write.csv(parity_df, file.path(results_dir, "lavaan_parity.csv"),
                      row.names = FALSE)
     cat(sprintf("lavaan parity: %d rows; max |Δ| = %.3g\n",
                 nrow(parity_df), max(parity_df$abs_diff, na.rm = TRUE)))
+
+    if (do_semtests && length(fmg_rows)) {
+      fmg_df <- do.call(rbind, fmg_rows)
+      utils::write.csv(fmg_df, file.path(results_dir, "semtests_parity.csv"),
+                       row.names = FALSE)
+      ok_rows <- fmg_df[is.finite(fmg_df$abs_diff), ]
+      cat(sprintf("semTests parity: %d rows (%d comparable); max |Δp| = %.3g\n",
+                  nrow(fmg_df), nrow(ok_rows),
+                  if (nrow(ok_rows)) max(ok_rows$abs_diff) else NA_real_))
+    }
   }
 }
