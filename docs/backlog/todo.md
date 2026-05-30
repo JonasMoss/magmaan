@@ -16,21 +16,26 @@ semantics · **XL** statistical design/research track before implementation.
   loading came back as ~`.52`; `standardize_all`/`standardize_lv` were therefore
   guarded to *refuse* ordinal fits (a stop-gap). `measures::standardize::standardize_all`
   now takes an `ordinal_delta_unit` flag: for ordinal indicators under the delta
-  parameterization it standardizes loadings by the latent SD only (σ_rr = 1),
-  matching lavaan `std.all`. This works in both the plain-CFA `Lambda` slot and
-  the all-y RAM `Beta` slot (where measurement loadings are `Beta[observed_node,
-  latent]`, offset after the latent nodes), so endogenous-factor loadings and
-  structural paths in a mixed SEM also standardize correctly. The
-  `require_not_ordinal` guard is removed from `standardize_lv`/`standardize_all`
+  parameterization it standardizes measurement loadings (the `Lambda` slot) by
+  the latent SD only (σ_rr = 1), matching lavaan `std.all`. `Beta` is the m × m
+  latent regression matrix and `Mid` the m × m latent covariance, so structural
+  paths (latent → latent) always standardize as `b·SD(pred)/SD(out)` regardless
+  of parameterization — there are no observed rows in `Beta` to special-case.
+  The `require_not_ordinal` guard is removed from `standardize_lv`/`standardize_all`
   (C++ api + Rcpp bindings); `factor_scores` and `compute_defined` stay guarded.
-  Validated against lavaan `standardizedSolution` for mixed CFA and SEM (≤ ~1e-2
-  on loadings/paths); regression assertion in
-  `r-package/examples/ordinal_dwls_wls.R`. Surfaced while building
-  `experiments/16-li-2021-mixed`. **Follow-ups:** (1) add a checked C++ golden
-  fixture for mixed-SEM standardized rows (currently only the R example + the
-  experiment's `--lavaan-parity` cover it); (2) `compute_defined` is the
-  remaining unguarded `require_not_ordinal` R path — decide whether delta-method
-  defined parameters are valid for ordinal fits.
+  Validated against lavaan `standardizedSolution` for mixed CFA/SEM and the
+  all-ordinal SEM (≤ ~1e-6 on loadings/paths); regression assertions in
+  `r-package/examples/ordinal_dwls_wls.R` and the `--lavaan-parity` checks of
+  `experiments/16-li-2021-mixed` / `experiments/19-li-2016-ordinal`. Surfaced
+  while building exp 16; a follow-up bug (the original entry assumed an all-y
+  RAM `Beta` with observed nodes offset after the latents and standardized
+  structural paths by the predictor SD only, which mis-fired for *all-ordinal*
+  SEMs and inflated structural paths past 1.0) was fixed while building exp 19.
+  **Follow-ups:** (1) add a checked C++ golden fixture for ordinal-SEM
+  standardized rows (currently only the R examples + the experiments'
+  `--lavaan-parity` cover it); (2) `compute_defined` is the remaining unguarded
+  `require_not_ordinal` R path — decide whether delta-method defined parameters
+  are valid for ordinal fits.
 
 - **Fixed.** **Mixed-ordinal stats inverted the full NACOV even for DWLS.**
   `mixed_ordinal_stats_from_data` (`src/data/ordinal.cpp`) eagerly inverted the
@@ -46,7 +51,11 @@ semantics · **XL** statistical design/research track before implementation.
   is non-fatal — a singular NACOV leaves W_wls empty and DWLS / robust proceed.
   An explicit full-WLS fit on a skipped/empty weight reports it clearly
   (`validate_stats` / `weight_factors`, `src/estimate/ordinal.cpp`). The eager
-  default preserves the existing W_wls-vs-lavaan golden/unit contracts.
+  default preserves the existing W_wls-vs-lavaan golden/unit contracts. The same
+  `full_wls_weight` flag and non-fatal inverse were ported to the **all-ordinal**
+  path (`ordinal_stats_from_integer_data` / `pairwise_ordinal_stats_from_integer_data`,
+  `data_ordinal_stats_from_{raw,df}`) while building `experiments/19-li-2016-ordinal`,
+  where the all-ordinal 20-indicator SEM at `N = 200` hit the same singular NACOV.
 
 - **Investigated, NOT a bug (recorded so we don't re-chase it).** The continuous
   ULS test-statistic builders use *different* base statistics for the standard

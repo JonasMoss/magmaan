@@ -309,23 +309,13 @@ standardize_all(const spec::LatentStructure& pt,
         auto vx_or = latent_var(L.col);
         if (!vy_or.has_value()) return std::unexpected(vy_or.error());
         if (!vx_or.has_value()) return std::unexpected(vx_or.error());
-        // In the all-y RAM representation a measurement loading is a Beta entry
-        // Beta[observed_node, latent], with observed nodes offset after the
-        // latent nodes (offset = dim(Mid) − #observed). For an ordinal observed
-        // node the latent response is unit-variance, so the loading is
-        // standardized by the predictor SD only (no √Mid(row) division).
-        // Structural paths (latent → latent) have L.row < offset, so they are
-        // never matched here.
-        if (ordinal_delta_unit) {
-          const auto& mask = ordinal_ov[static_cast<std::size_t>(L.block)];
-          const Eigen::Index off =
-              bmat.Mid.rows() - static_cast<Eigen::Index>(sigma.rows());
-          const Eigen::Index ov = L.row - off;
-          if (ov >= 0 && ov < static_cast<Eigen::Index>(mask.size()) &&
-              mask[static_cast<std::size_t>(ov)]) {
-            return bmat.Beta(L.row, L.col) * std::sqrt(*vx_or);
-          }
-        }
+        // Beta is m × m: regressions among latents (~ lv on lv). Both endpoints
+        // are latent, so a structural path standardizes by the predictor and
+        // outcome latent SDs alike, b·SD(pred)/SD(out) — including under the
+        // ordinal delta parameterization, where the unit-latent-response scaling
+        // applies to measurement loadings (handled in the Lambda case), not to
+        // latent→latent regressions. Mid is the m × m latent covariance, so
+        // there are no observed rows in Beta to special-case here.
         return bmat.Beta(L.row, L.col) * std::sqrt(*vx_or) / std::sqrt(*vy_or);
       }
       case model::MatId::Alpha: {
