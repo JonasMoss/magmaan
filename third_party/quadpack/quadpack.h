@@ -1,0 +1,35 @@
+#ifndef MAGMAAN_THIRD_PARTY_QUADPACK_H
+#define MAGMAAN_THIRD_PARTY_QUADPACK_H
+
+/* Minimal C interface to the vendored QUADPACK `qagi` adaptive integrator
+   (Piessens, de Doncker, Kahaner; public domain). Only `dqagie` is exposed —
+   the f2c'd `integer` is `int` and `doublereal` is `double` (see f2c.h), so the
+   prototype below is ABI-compatible with the translated definition while being
+   clean to include from C++ (the f2c headers' K&R `(...)` function-pointer
+   typedefs are avoided here). */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Integrand: f(&x) -> value. Matches QUADPACK's `external f` (a bare function,
+   no user-data pointer), so context is threaded by the caller via a
+   thread-local. */
+typedef double (*magmaan_quadpack_integrand)(double *x);
+
+/* Adaptive integration over an infinite interval (QUADPACK dqagie):
+     inf =  1 : (bound, +infinity)
+     inf = -1 : (-infinity, bound)
+     inf =  2 : (-infinity, +infinity)
+   alist/blist/rlist/elist and iord are caller-owned work arrays of length
+   `limit`. On return `ier == 0` means the requested accuracy was met. */
+int dqagie_(magmaan_quadpack_integrand f, double *bound, int *inf,
+            double *epsabs, double *epsrel, int *limit, double *result,
+            double *abserr, int *neval, int *ier, double *alist, double *blist,
+            double *rlist, double *elist, int *iord, int *last);
+
+#ifdef __cplusplus
+}  /* extern "C" */
+#endif
+
+#endif  /* MAGMAAN_THIRD_PARTY_QUADPACK_H */

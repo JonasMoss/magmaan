@@ -5,6 +5,7 @@ MAGMAAN_PRESET ?= opt
 MAGMAAN_BUILD ?= $(MAGMAAN_ROOT)/build/$(MAGMAAN_PRESET)
 MAGMAAN_LIB  := $(MAGMAAN_BUILD)/libmagmaan.a
 MAGMAAN_PORT_LIB := $(MAGMAAN_BUILD)/libport.a
+MAGMAAN_QUADPACK_LIB := $(MAGMAAN_BUILD)/libquadpack.a
 MAGMAAN_NLOPT_LIB := $(MAGMAAN_BUILD)/_deps/nlopt-build/libnlopt.a
 MAGMAAN_WITH_CERES_R ?= 0
 MAGMAAN_WITH_IPOPT_R ?= 0
@@ -20,7 +21,7 @@ override CXXFLAGS += -O3 -DNDEBUG -march=native
 # CMake build, so the static archive carries unresolved PORT/NLopt symbols.
 # The R shared object must pull them in explicitly or it fails to load with an
 # undefined symbol. Prefer the fetched NLopt archive and fall back to -lnlopt.
-PKG_LIBS      = $(MAGMAAN_LIB) $(MAGMAAN_PORT_LIB) $(if $(wildcard $(MAGMAAN_NLOPT_LIB)),$(MAGMAAN_NLOPT_LIB),-lnlopt)
+PKG_LIBS      = $(MAGMAAN_LIB) $(MAGMAAN_PORT_LIB) $(MAGMAAN_QUADPACK_LIB) $(if $(wildcard $(MAGMAAN_NLOPT_LIB)),$(MAGMAAN_NLOPT_LIB),-lnlopt)
 
 ifeq ($(MAGMAAN_WITH_CERES_R),1)
 PKG_CPPFLAGS += -DMAGMAAN_WITH_CERES
