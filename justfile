@@ -6,6 +6,19 @@ coverage_profdata := "build/coverage/coverage.profdata"
 coverage_html := "build/coverage/html"
 coverage_ignore := "(/_deps/|/third_party/|/tests/|/usr/)"
 
+# Locate the LLVM coverage tools. Debian/Ubuntu ship them versioned
+# (`llvm-cov-21`) under the compiler's own bin dir and do NOT put bare
+# `llvm-cov`/`llvm-profdata` on PATH, so derive the bin dir from the active
+# clang++ — this also guarantees the tool version matches the instrumentation.
+# Falls back to bare names on PATH (Homebrew, source builds, manual symlinks).
+llvm_bindir := ```
+    dir=$(clang++ -print-resource-dir 2>/dev/null)
+    dir=${dir%/lib/clang/*}/bin
+    if [ -x "$dir/llvm-cov" ] && [ -x "$dir/llvm-profdata" ]; then echo "$dir"; fi
+  ```
+llvm_cov := if llvm_bindir != "" { llvm_bindir / "llvm-cov" } else { "llvm-cov" }
+llvm_profdata := if llvm_bindir != "" { llvm_bindir / "llvm-profdata" } else { "llvm-profdata" }
+
 default:
     @just --list
 
@@ -49,7 +62,7 @@ coverage:
     rm -rf {{coverage_profiles}} {{coverage_profdata}}
     mkdir -p {{coverage_profiles}}
     LLVM_PROFILE_FILE="$PWD/{{coverage_profiles}}/%p-%m.profraw" ctest --preset coverage
-    llvm-profdata merge -sparse {{coverage_profiles}}/*.profraw -o {{coverage_profdata}}
+    {{llvm_profdata}} merge -sparse {{coverage_profiles}}/*.profraw -o {{coverage_profdata}}
     objects=(
         build/coverage/tests/magmaan_test_smoke
         build/coverage/tests/magmaan_test_spec
@@ -64,7 +77,7 @@ coverage:
     for obj in "${objects[@]:1}"; do
         object_args+=(--object "$obj")
     done
-    llvm-cov report "${objects[0]}" "${object_args[@]}" \
+    {{llvm_cov}} report "${objects[0]}" "${object_args[@]}" \
         --instr-profile={{coverage_profdata}} \
         --ignore-filename-regex='{{coverage_ignore}}'
 
@@ -87,7 +100,7 @@ coverage-html: coverage
     for obj in "${objects[@]:1}"; do
         object_args+=(--object "$obj")
     done
-    llvm-cov show "${objects[0]}" "${object_args[@]}" \
+    {{llvm_cov}} show "${objects[0]}" "${object_args[@]}" \
         --instr-profile={{coverage_profdata}} \
         --format=html \
         --output-dir={{coverage_html}} \
