@@ -187,6 +187,15 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   heavy parity/optional optimizer lanes less often, and coverage as an
   artifact before considering badges. Avoid coverage percentage gates until
   the report has been calibrated by real maintenance work.
+- **S/M.** Promote the FMG goodness-of-fit validation into the checked suite.
+  `experiments/18-foldnes-moss-gronneberg-2026 --semtests-parity` shows the
+  single-model FMG family (SB/SS/SF/ALL/pall/pEBA/pOLS x ML/RLS x biased/unbiased
+  Gamma) matches `semTests::pvalues` to ~1e-9 (Imhof) / machine precision
+  (closed-form), but that lives in an advisory experiment, not a gate. Add a
+  checked C++ golden for the FMG p-value transforms (fixed eigenvalues + chi-square
+  -> p-value per method) and note the semTests parity in
+  `docs/architecture/roadmap.md`. Coordinate with the exp-17 pEBA work, which
+  owns the nested/multi-group side of the same machinery.
 
 ## API and R boundary
 
@@ -276,6 +285,12 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   the mixed moment stack so `NACOV`/`W_dwls`/`W_wls` rebuild. The all-ordinal
   h-score variants already have the generic Gamma machinery; the missing piece
   is the mixed polyserial estimating-equation design.
+- **S.** Wire the single-model FMG goodness-of-fit test into `magmaan_core`.
+  `infer_fmg_test(chi2_source, df, eigvals, method, param)` is exported (commit
+  `bae097e`) but has no `robust_fmg_test` canonical alias in `zzz_core.R`, so
+  callers reach it via `magmaan:::infer_fmg_test`. `experiments/18-foldnes-moss-gronneberg-2026`
+  already prefers a `robust_fmg_test` core member if present and falls back to
+  the namespace symbol; adding the alias closes the gap.
 
 ## Benchmarks
 
