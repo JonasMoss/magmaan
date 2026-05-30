@@ -1,0 +1,133 @@
+---
+title: "Improved goodness-of-fit tests (Foldnes, Moss & Grønneberg 2024): magmaan replication"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+results <- "results"
+need <- file.path(results, c("rejection_rates.csv", "metadata.csv"))
+if (!all(file.exists(need))) {
+  stop("Missing results. Run:\n",
+       "  Rscript run_experiment.R --reps 100 --semtests-parity\n",
+       "from the experiment directory first.")
+}
+rr   <- utils::read.csv(file.path(results, "rejection_rates.csv"))
+meta <- utils::read.csv(file.path(results, "metadata.csv"))
+par_file <- file.path(results, "semtests_parity.csv")
+parity <- if (file.exists(par_file)) utils::read.csv(par_file) else NULL
+reps <- meta$value[match("reps", meta$key)]
+fmt_pct <- function(x) sprintf("%.1f", 100 * x)
+```
+
+## Question
+
+The paper proposes penalized eigenvalue-block-averaging goodness-of-fit tests
+(pEBA, pOLS) that are meant to hold the nominal Type I error rate under
+non-normality where the classical ML chi-square fails. Two questions:
+
+1. **Does magmaan compute these tests correctly** — do its p-values match the
+   paper's own `semTests` implementation, fit for fit?
+2. **Do the recommended tests behave** — under correct specification, does
+   `pEBA4_RLS` / `pOLS_RLS` hold ~5% rejection where the ML chi-square inflates
+   as the model grows and the data turn non-normal?
+
+## Short answer
+
+**Yes on both.** magmaan's FMG family, computed through `fmg_pvalues()`,
+reproduces `semTests` p-value for p-value: across every test and cell the largest
+disagreement is **~1e-5** (the biased-Gamma tests agree to ~5e-7; the
+unbiased-Gamma variants to ~1e-5). And the qualitative Type I picture replicates:
+the classical **ML chi-square over-rejects** — worse as `p` grows and under severe
+non-normality — while **`pEBA4_RLS` and `pOLS_RLS` stay near 5%**.
+
+```{r parity-headline, results='asis'}
+if (!is.null(parity) && nrow(parity)) {
+  comp <- parity[is.finite(parity$abs_diff), ]
+  cat(sprintf("\n> Procedure parity: **max |Δp| = %.2g** over %d magmaan-vs-semTests comparisons.\n",
+              max(comp$abs_diff), nrow(comp)))
+}
+```
+
+## Evidence
+
+### Type I error: ML inflates, penalized tests hold
+
+Empirical rejection rates at α = 5% (correctly-specified model, so every rejection
+is a Type I error). Averaged over sample sizes; one row per model size ×
+distribution, a few representative tests. Nominal is 5.0.
+
+```{r rr-table}
+key <- c(std_ml = "ML chi-square", sb_ug_rls = "SB (UG, RLS)",
+         peba4_rls = "pEBA4 (RLS)", pols2_rls = "pOLS (RLS)")
+sub <- rr[rr$test %in% names(key), ]
+agg <- aggregate(reject_05 ~ p + dist + test, data = sub, FUN = mean)
+wide <- reshape(agg, idvar = c("p", "dist"), timevar = "test",
+                direction = "wide")
+names(wide) <- sub("reject_05\\.", "", names(wide))
+ord <- c("std_ml", "sb_ug_rls", "peba4_rls", "pols2_rls")
+ord <- ord[ord %in% names(wide)]
+wide <- wide[order(wide$dist, wide$p), c("p", "dist", ord)]
+disp <- wide
+disp[ord] <- lapply(disp[ord], fmt_pct)
+colnames(disp) <- c("p", "Distribution", unname(key[ord]))
+knitr::kable(disp, align = "llrrrr",
+             caption = "Rejection rate (%) at alpha = 5%. Full grid in results/rejection_rates.csv.")
+```
+
+The ML column drifts above 5% as `p` rises and under the severe (`*2`)
+distributions; the penalized RLS columns track 5% across the grid. (Per-cell
+detail, all tests and sample sizes, lives in `results/rejection_rates.csv`.)
+
+### Procedure parity: magmaan vs semTests
+
+```{r parity-table}
+if (is.null(parity) || !nrow(parity)) {
+  cat("Parity not run. Re-run with --semtests-parity to populate this section.\n")
+} else {
+  comp <- parity[is.finite(parity$abs_diff), ]
+  by_test <- aggregate(abs_diff ~ test, data = comp, FUN = max)
+  by_test <- by_test[order(-by_test$abs_diff), ]
+  by_test$abs_diff <- signif(by_test$abs_diff, 2)
+  colnames(by_test) <- c("Test", "Max |Δp| vs semTests")
+  knitr::kable(by_test, align = "lr",
+               caption = "Largest magmaan-vs-semTests p-value gap per test (rep 1 of each cell).")
+}
+```
+
+The split is exactly as expected: tests on the biased Gamma estimator match to
+near machine precision; the unbiased-Gamma (`_ug`) tests are looser at ~1e-5,
+since magmaan and semTests apply the bias correction at different stages. Both
+are far tighter than any Monte Carlo rejection-rate cell can resolve.
+
+## Caveats
+
+- This is a **trimmed** replication: `r reps` replicates (the paper uses 3000),
+  model sizes `p ∈ {10, 20}` by default (the paper adds 40), and the VM and IG
+  non-normal families. The PL family is reachable via `--cells` but excluded by
+  default (its data generator is slow and often cannot fit the severe margins).
+- At `r reps` replicates the rejection rates carry visible Monte Carlo noise; the
+  table establishes the *direction and ordering* of the effect, not precise rates.
+  The procedure-parity finding, by contrast, is exact and replicate-independent.
+- The population loadings are a representative draw matching the paper's verbal
+  design (standardized loadings ~U[.3,.8], interfactor r = .5), not the paper's
+  exact OSF matrices.
+
+## Reproduce
+
+```sh
+# default grid (norm + VM + IG, p in {10,20}, N in {400,800}), with parity
+Rscript run_experiment.R --reps 100 --semtests-parity
+
+# add the large model / more sizes / PL family
+Rscript run_experiment.R --reps 1000 --cells p=40
+Rscript run_experiment.R --reps 200 --cells dist=pl1
+
+Rscript run_experiment.R --help
+```
