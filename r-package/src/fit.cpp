@@ -2760,7 +2760,9 @@ Rcpp::List estimate_fiml_robust_mlr(Rcpp::List fit, double h_step = 1e-4) {
 //
 // [[Rcpp::export]]
 Rcpp::List measures_standardize_lv(Rcpp::List fit, Rcpp::NumericMatrix vcov) {
-  stop_if_ordinal_fit(fit, "standardize_lv()");
+  // Standardization is parameterization-agnostic: it divides by the
+  // model-implied indicator variance and uses the assembled latent covariance,
+  // so it is well-defined for ordinal/mixed-ordinal (delta or theta) fits.
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
@@ -2774,12 +2776,24 @@ Rcpp::List measures_standardize_lv(Rcpp::List fit, Rcpp::NumericMatrix vcov) {
 //
 // [[Rcpp::export]]
 Rcpp::List measures_standardize_all(Rcpp::List fit, Rcpp::NumericMatrix vcov) {
-  stop_if_ordinal_fit(fit, "standardize_all()");
+  // See measures_standardize_lv(): standardization is well-defined for
+  // ordinal/mixed-ordinal fits, so no ordinal guard here. For ordinal/mixed
+  // fits under the delta parameterization, the categorical indicators' latent
+  // responses are unit-variance, so std.all standardizes their loadings by the
+  // latent SD only (no √σ_rr division) — pass that through to the core.
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   const Eigen::MatrixXd vcov_m = Rcpp::as<Eigen::MatrixXd>(vcov);
+  const bool is_ordinal =
+      (fit.containsElementNamed("ordinal") &&
+       Rcpp::as<bool>(fit["ordinal"])) ||
+      (fit.containsElementNamed("mixed_ordinal") &&
+       Rcpp::as<bool>(fit["mixed_ordinal"]));
+  const bool ordinal_delta_unit =
+      is_ordinal && fit.containsElementNamed("partable") &&
+      ordinal_parameterization_attr(fit["partable"]) == "delta";
   auto r_or = magmaan::measures::standardize::standardize_all(
-      ctx.pt, ctx.rep, est, vcov_m);
+      ctx.pt, ctx.rep, est, vcov_m, ordinal_delta_unit);
   if (!r_or.has_value()) stop_post(r_or.error());
   return standardized_to_list(*r_or);
 }

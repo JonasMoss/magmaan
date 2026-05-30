@@ -171,7 +171,8 @@ post_expected<StandardizedSolution>
 standardize_all(const spec::LatentStructure& pt,
                 const model::MatrixRep&   rep,
                 const Estimates&          est,
-                const Eigen::MatrixXd&    vcov) {
+                const Eigen::MatrixXd&    vcov,
+                bool ordinal_delta_unit) {
   const Eigen::Index n_free = est.theta.size();
   if (vcov.rows() != n_free || vcov.cols() != n_free) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -206,6 +207,31 @@ standardize_all(const spec::LatentStructure& pt,
   const auto& am = *am_or;
   const auto  locs = ev.param_locations();
   const std::size_t n_blocks = am.blocks.size();
+
+  // Ordinal (delta) indicators have unit-variance latent responses, so their
+  // standardized loadings must be divided by the latent SD only, not by the
+  // assembled σ_rr (which carries a fixed unit residual). Mark those indicator
+  // rows per block from the threshold rows of the partable.
+  std::vector<std::vector<char>> ordinal_ov(n_blocks);
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    ordinal_ov[b].assign(
+        static_cast<std::size_t>(am.blocks[b].Lambda.rows()), 0);
+  }
+  if (ordinal_delta_unit) {
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.op[i] != parse::Op::Threshold) continue;
+      const std::int32_t g = pt.group[i];
+      const std::int32_t vid = pt.lhs_var[i];
+      if (g <= 0 || vid < 0) continue;
+      const std::size_t b = static_cast<std::size_t>(g - 1);
+      if (b >= n_blocks) continue;
+      const std::int32_t ov = pt.ov_pos[static_cast<std::size_t>(vid)];
+      if (ov >= 0 &&
+          ov < static_cast<std::int32_t>(ordinal_ov[b].size())) {
+        ordinal_ov[b][static_cast<std::size_t>(ov)] = 1;
+      }
+    }
+  }
 
   // Per-block vech offset into the Jacobian Js (rows = sum_b vech_len(p_b)).
   std::vector<Eigen::Index> vech_off(n_blocks, 0);
@@ -257,6 +283,12 @@ standardize_all(const spec::LatentStructure& pt,
       case model::MatId::Lambda: {
         auto v_or = latent_var(L.col);
         if (!v_or.has_value()) return std::unexpected(v_or.error());
+        if (ordinal_delta_unit &&
+            ordinal_ov[static_cast<std::size_t>(L.block)]
+                      [static_cast<std::size_t>(L.row)]) {
+          // Unit latent-response variance: standardize by latent SD only.
+          return bmat.Lambda(L.row, L.col) * std::sqrt(*v_or);
+        }
         const double sigma_rr = sigma(L.row, L.row);
         if (sigma_rr <= 0.0) {
           return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -277,6 +309,23 @@ standardize_all(const spec::LatentStructure& pt,
         auto vx_or = latent_var(L.col);
         if (!vy_or.has_value()) return std::unexpected(vy_or.error());
         if (!vx_or.has_value()) return std::unexpected(vx_or.error());
+        // In the all-y RAM representation a measurement loading is a Beta entry
+        // Beta[observed_node, latent], with observed nodes offset after the
+        // latent nodes (offset = dim(Mid) − #observed). For an ordinal observed
+        // node the latent response is unit-variance, so the loading is
+        // standardized by the predictor SD only (no √Mid(row) division).
+        // Structural paths (latent → latent) have L.row < offset, so they are
+        // never matched here.
+        if (ordinal_delta_unit) {
+          const auto& mask = ordinal_ov[static_cast<std::size_t>(L.block)];
+          const Eigen::Index off =
+              bmat.Mid.rows() - static_cast<Eigen::Index>(sigma.rows());
+          const Eigen::Index ov = L.row - off;
+          if (ov >= 0 && ov < static_cast<Eigen::Index>(mask.size()) &&
+              mask[static_cast<std::size_t>(ov)]) {
+            return bmat.Beta(L.row, L.col) * std::sqrt(*vx_or);
+          }
+        }
         return bmat.Beta(L.row, L.col) * std::sqrt(*vx_or) / std::sqrt(*vy_or);
       }
       case model::MatId::Alpha: {

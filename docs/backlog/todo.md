@@ -9,6 +9,40 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Correctness bugs
 
+- **Fixed (properly, ordinal-aware).** **Standardized solution for
+  ordinal / mixed-ordinal fits.** Previously the generic standardize formula
+  `λ·√Var(η)/√σ_rr` (`src/measures/standardized.cpp`) divided by the assembled
+  `σ_rr ≈ λ²ψ + 1`, but a delta-ordinal `y*` is unit-variance, so a true `.6`
+  loading came back as ~`.52`; `standardize_all`/`standardize_lv` were therefore
+  guarded to *refuse* ordinal fits (a stop-gap). `measures::standardize::standardize_all`
+  now takes an `ordinal_delta_unit` flag: for ordinal indicators under the delta
+  parameterization it standardizes loadings by the latent SD only (σ_rr = 1),
+  matching lavaan `std.all`. This works in both the plain-CFA `Lambda` slot and
+  the all-y RAM `Beta` slot (where measurement loadings are `Beta[observed_node,
+  latent]`, offset after the latent nodes), so endogenous-factor loadings and
+  structural paths in a mixed SEM also standardize correctly. The
+  `require_not_ordinal` guard is removed from `standardize_lv`/`standardize_all`
+  (C++ api + Rcpp bindings); `factor_scores` and `compute_defined` stay guarded.
+  Validated against lavaan `standardizedSolution` for mixed CFA and SEM (≤ ~1e-2
+  on loadings/paths); regression assertion in
+  `r-package/examples/ordinal_dwls_wls.R`. Surfaced while building
+  `experiments/16-li-2021-mixed`. **Follow-ups:** (1) add a checked C++ golden
+  fixture for mixed-SEM standardized rows (currently only the R example + the
+  experiment's `--lavaan-parity` cover it); (2) `compute_defined` is the
+  remaining unguarded `require_not_ordinal` R path — decide whether delta-method
+  defined parameters are valid for ordinal fits.
+
+- **Fixed.** **Mixed-ordinal stats aborted DWLS when the full NACOV was
+  singular.** `mixed_ordinal_stats_from_data` (`src/data/ordinal.cpp`) eagerly
+  inverted the full NACOV to build the WLS weight and returned an error if it was
+  not positive definite — which blocked DWLS too, even though DWLS only needs the
+  diagonal `W_dwls`. At small `N` with many indicators (e.g. the 20-variable
+  Li 2021 SEM at `N = 200`) this made every mixed DWLS fit fail, while lavaan
+  WLSMV (diagonal weight) converged. The inverse is now non-fatal: a singular
+  NACOV leaves `W_wls` empty, DWLS and the robust sandwich (which use `W_dwls` /
+  `NACOV`) proceed, and an explicit full-WLS request reports the singular NACOV
+  via `weight_factors` (`src/estimate/ordinal.cpp`).
+
 - **Investigated, NOT a bug (recorded so we don't re-chase it).** The continuous
   ULS test-statistic builders use *different* base statistics for the standard
   vs robust paths: `continuous_ls_chisq` (`src/robust/weighted_inference.cpp`)

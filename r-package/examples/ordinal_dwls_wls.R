@@ -87,6 +87,30 @@ stopifnot(is.finite(rob_dwls$scaled_shifted$scale_a))
 stopifnot(all(is.finite(rob_wls$se)))
 stopifnot(identical(rob_wls$df, 2L))
 
+# Regression: standardized solutions are exposed for ordinal/mixed fits and
+# match lavaan std.all. Under the delta parameterization a categorical
+# indicator's latent response is unit-variance, so std.all standardizes its
+# loading by the latent SD only — recovering the true loading. The earlier
+# guard refused these calls because the generic path divided by the assembled
+# σ_rr (= λ²ψ + 1), shrinking a true .6 loading to ~.52; see
+# docs/backlog/todo.md.
+lv_std_dwls <- lavaan::standardizedSolution(lavaan_dwls)
+lv_load <- lv_std_dwls[lv_std_dwls$op == "=~", ]
+ld_rows <- which(fit_dwls$partable$op == "=~" & fit_dwls$partable$free > 0L)
+ld_names <- fit_dwls$partable$rhs[ld_rows]
+lv_match <- lv_load$est.std[match(ld_names, lv_load$rhs)]
+for (call in c("measures_standardize_all", "measures_standardize_lv")) {
+  sol <- core[[call]](fit_dwls, rob_dwls$vcov)
+  mg_load <- sol$theta[fit_dwls$partable$free[ld_rows]]
+  stopifnot(length(mg_load) == length(lv_match), all(is.finite(mg_load)),
+            max(abs(mg_load - lv_match)) < 5e-3)
+}
+# Factor scores remain unsupported for ordinal fits.
+fs_msg <- tryCatch(
+  core$measures_factor_scores(fit_dwls, as.matrix(df), method = "regression"),
+  error = function(e) conditionMessage(e))
+stopifnot(is.character(fs_msg), grepl("not exposed for ordinal", fs_msg))
+
 df_mixed <- df
 set.seed(22L)
 eta <- rnorm(nrow(df_mixed))

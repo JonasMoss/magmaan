@@ -2617,8 +2617,18 @@ mixed_ordinal_stats_from_data_impl(
       }
       W_dwls(k, k) = 1.0 / v;
     }
-    auto W_wls_or = symmetric_inverse_pd(NACOV, "mixed ordinal NACOV matrix");
-    if (!W_wls_or.has_value()) return std::unexpected(W_wls_or.error());
+    // The full-WLS weight is the NACOV inverse; it is needed only for full WLS
+    // fitting, not for DWLS (which uses the diagonal W_dwls) or the robust
+    // sandwich (which uses NACOV itself). At small N with many indicators the
+    // mixed NACOV is often singular, so a failed inverse is not fatal here:
+    // leave W_wls empty and let an explicit WLS request report it. This matches
+    // lavaan WLSMV, which fits the diagonal weight regardless of NACOV rank.
+    Eigen::MatrixXd W_wls;
+    if (auto W_wls_or =
+            symmetric_inverse_pd(NACOV, "mixed ordinal NACOV matrix");
+        W_wls_or.has_value()) {
+      W_wls = std::move(*W_wls_or);
+    }
 
     if (use_polyserial_dpd) {
       block_diag.moment_influence = IF;
@@ -2635,7 +2645,7 @@ mixed_ordinal_stats_from_data_impl(
     stats.moments.push_back(std::move(moment));
     stats.NACOV.push_back(std::move(NACOV));
     stats.W_dwls.push_back(std::move(W_dwls));
-    stats.W_wls.push_back(std::move(*W_wls_or));
+    stats.W_wls.push_back(std::move(W_wls));
     stats.n_obs.push_back(static_cast<std::int64_t>(n));
     stats.n_levels.push_back(std::move(levels));
   }

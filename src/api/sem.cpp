@@ -1351,10 +1351,9 @@ Result<inference::WaldTestResult> wald_test(const Fit &fit,
 
 Result<measures::standardize::StandardizedSolution>
 standardize_lv(const Fit &fit, const Eigen::MatrixXd &vcov) {
-  auto ok = require_not_ordinal(fit, "standardize_lv()");
-  if (!ok) {
-    return std::unexpected(ok.error());
-  }
+  // Standardization is parameterization-agnostic and well-defined for
+  // ordinal/mixed-ordinal fits (std.lv scales by latent SD only), so no
+  // ordinal guard here.
   auto out = measures::standardize::standardize_lv(
       fit.model().structure(), fit.model().matrix_rep(), fit.estimates(), vcov);
   return post_result(std::move(out));
@@ -1362,12 +1361,16 @@ standardize_lv(const Fit &fit, const Eigen::MatrixXd &vcov) {
 
 Result<measures::standardize::StandardizedSolution>
 standardize_all(const Fit &fit, const Eigen::MatrixXd &vcov) {
-  auto ok = require_not_ordinal(fit, "standardize_all()");
-  if (!ok) {
-    return std::unexpected(ok.error());
-  }
+  // Ordinal indicators under the delta parameterization have unit-variance
+  // latent responses; flag that so std.all does not divide their loadings by
+  // the assembled σ_rr (see measures::standardize::standardize_all).
+  const bool ordinal_delta_unit =
+      (fit.data().ordinal() || fit.data().mixed_ordinal()) &&
+      fit.estimator_spec().ordinal_parameterization ==
+          estimate::OrdinalParameterization::Delta;
   auto out = measures::standardize::standardize_all(
-      fit.model().structure(), fit.model().matrix_rep(), fit.estimates(), vcov);
+      fit.model().structure(), fit.model().matrix_rep(), fit.estimates(), vcov,
+      ordinal_delta_unit);
   return post_result(std::move(out));
 }
 

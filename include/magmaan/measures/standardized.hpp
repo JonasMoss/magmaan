@@ -77,11 +77,20 @@ standardize_lv(const spec::LatentStructure& pt,
 // SEs via delta method on the Jacobian of the transformation, which
 // includes terms from ∂σ_ii/∂θ (from `dsigma_dtheta`) for the indicator
 // scale, plus the latent-scale terms shared with `std.lv`.
+//
+// `ordinal_delta_unit` is set for ordinal/mixed-ordinal fits estimated under
+// the lavaan delta parameterization, where each categorical indicator's latent
+// response is standardized to unit variance. For those indicators the assembled
+// σ_rr carries a fixed unit residual (σ_rr = λ²ψ + 1) rather than the true
+// unit latent-response variance, so their Λ loadings are standardized by the
+// latent SD only (no √σ_rr division), matching lavaan `std.all`. Continuous
+// indicators and the theta parameterization keep the assembled σ_rr.
 post_expected<StandardizedSolution>
 standardize_all(const spec::LatentStructure& pt,
                 const model::MatrixRep&   rep,
                 const Estimates&          est,
-                const Eigen::MatrixXd&    vcov);
+                const Eigen::MatrixXd&    vcov,
+                bool ordinal_delta_unit = false);
 
 // Native FC-SEM counterparts. They use the FcSemEvaluator's sample-backed W/T
 // covariance semantics and return values/SEs for free rows in θ order, just as

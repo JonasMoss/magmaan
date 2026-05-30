@@ -1550,6 +1550,12 @@ weight_factors(const data::MixedOrdinalStats& stats, OrdinalWeightKind kind) {
   std::vector<Eigen::MatrixXd> out;
   out.reserve(Ws.size());
   for (std::size_t b = 0; b < Ws.size(); ++b) {
+    if (Ws[b].size() == 0) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "mixed ordinal full-WLS weight unavailable in block " +
+              std::to_string(b) +
+              " (NACOV not positive definite); use DWLS"));
+    }
     Eigen::LLT<Eigen::MatrixXd> llt(Ws[b]);
     if (llt.info() != Eigen::Success) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
