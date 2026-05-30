@@ -45,32 +45,34 @@ This experiment replicates **Cheng-Hsien Li (2016), "The Performance of ML,
 DWLS, and ULS Estimation With Robust Corrections in Structural Equation Models
 With Ordinal Variables", *Psychological Methods* 21(3):369-387** against
 magmaan. Li's population model is the same five-factor structural model used in
-Li (2021) (experiment 16), but here *all 20 indicators are ordinal*. Two
+Li (2021) (experiment 16), but here *all 20 indicators are ordinal*. Li's three
 estimators are fit on identical categorized data per replicate: **DWLS** (lavaan
-WLSMV; polychoric correlations) and **ML** (robust ML treating the integer codes
-as continuous). The fitted model is correctly specified, so χ² rejection rates
-are Type I error rates.
+WLSMV) and **ULS** (lavaan ULSMV), both on the polychoric correlations, and
+**ML** (robust ML treating the integer codes as continuous). The fitted model is
+correctly specified, so χ² rejection rates are Type I error rates.
 
 ## Question
 
 When a five-factor structural model is measured entirely by ordinal indicators,
-does treating them as categorical (DWLS on polychorics) or as continuous (robust
-ML) recover loadings and structural paths better, and which controls χ² Type I
+do the polychoric least-squares estimators (DWLS, ULS) or continuous robust ML
+recover loadings and structural paths better, and which controls χ² Type I
 error, as the number of categories, distribution asymmetry, and sample size
 vary?
 
 ## Short answer
 
-magmaan reproduces Li's central contrasts. **DWLS recovers loadings and
+magmaan reproduces Li's central contrasts. **DWLS and ULS recover loadings and
 structural paths with smaller bias than ML, and the gap widens with
-asymmetry**; ML's downward bias on loadings is its signature failure. ML's
-robust standard errors are at least as well calibrated as DWLS's. But on the
-fit statistic the order reverses: **DWLS's mean-and-variance adjusted χ²
-controls Type I error close to nominal, while robust ML over-rejects at small N
-and few categories**, only catching up by N ≈ 1000 — Li's headline finding.
+asymmetry**; ML's downward bias on loadings is its signature failure, while DWLS
+and ULS track each other closely. ML's robust standard errors are at least as
+well calibrated as the LS estimators'. But on the fit statistic the order
+reverses: **the DWLS and ULS mean-and-variance adjusted χ² control Type I error
+close to nominal, while robust ML over-rejects at small N and few categories**,
+only catching up by N ≈ 1000 — Li's headline finding.
 
-Both estimators match lavaan on the same data (`standardizedSolution`; WLSMV for
-DWLS, MLM for ML) to the tolerances in the parity table.
+All three estimators match lavaan on the same data (`standardizedSolution`;
+WLSMV for DWLS, ULSMV for ULS, MLM for ML) to the tolerances in the parity
+table (~1e-6 for the LS estimators' loadings/paths).
 
 ## Design
 
@@ -117,19 +119,20 @@ if (!is.null(sparam)) {
     idvar = c("shape", "categories", "param_type"),
     timevar = "estimator", direction = "wide")
   names(w) <- sub("^rel_bias\\.", "", names(w))
-  w$DWLS <- pct(w$DWLS); w$ML <- pct(w$ML)
+  for (e in c("DWLS", "ULS", "ML")) if (e %in% names(w)) w[[e]] <- pct(w[[e]])
   w$family <- fam_lab[w$param_type]; w$shape <- shape_lab[w$shape]
   w <- w[order(match(w$shape, shape_lab), w$param_type, w$categories),
-         c("shape", "family", "categories", "DWLS", "ML")]
+         c("shape", "family", "categories", "DWLS", "ULS", "ML")]
   knitr::kable(w, row.names = FALSE,
-               col.names = c("Shape", "Family", "K", "DWLS RB%", "ML RB%"),
+               col.names = c("Shape", "Family", "K", "DWLS RB%", "ULS RB%",
+                             "ML RB%"),
                caption = "N = 500. Full grid in results/summary_param.csv.")
 }
 ```
 
 The signature contrast: **ML's loading and path bias grows with asymmetry while
-DWLS stays near zero.** Bias attenuates with more categories and larger N for
-both.
+DWLS and ULS stay near zero and track each other.** Bias attenuates with more
+categories and larger N for all three.
 
 ### Standard-error relative bias and coverage
 
@@ -151,28 +154,29 @@ if (!is.null(sparam)) {
 
 ### χ² rejection rate (Type I error at α = .05)
 
-DWLS uses the mean-and-variance adjusted statistic (lavaan WLSMV); ML the
-Satorra-Bentler and mean-variance adjusted statistics. Bradley's band is
-[.025, .075].
+DWLS and ULS use the mean-and-variance adjusted statistic (lavaan WLSMV /
+ULSMV); ML the Satorra-Bentler and mean-variance adjusted statistics. Bradley's
+band is [.025, .075].
 
 ```{r}
 if (!is.null(schi2)) {
   d <- schi2[schi2$stat_name == "MV" & schi2$shape == "moderate" &
-               schi2$estimator %in% c("DWLS", "ML"), ]
+               schi2$estimator %in% c("DWLS", "ULS", "ML"), ]
   d$tag <- paste0(d$estimator, "-MV")
   w <- stats::reshape(d[, c("categories", "N", "tag", "reject_05")],
                       idvar = c("categories", "N"),
                       timevar = "tag", direction = "wide")
   names(w) <- sub("^reject_05\\.", "", names(w))
-  for (nm in c("DWLS-MV", "ML-MV")) if (nm %in% names(w)) w[[nm]] <- num3(w[[nm]])
+  for (nm in c("DWLS-MV", "ULS-MV", "ML-MV"))
+    if (nm %in% names(w)) w[[nm]] <- num3(w[[nm]])
   w <- w[order(w$N, w$categories), ]
   knitr::kable(w, row.names = FALSE,
                caption = "Moderately asymmetric. Empirical rejection at α = .05; nominal .05.")
 }
 ```
 
-DWLS-MV sits near .05 across the grid; ML-MV runs high at small N and pulls
-toward nominal as N grows.
+DWLS-MV and ULS-MV sit near .05 across the grid; ML-MV runs high at small N and
+pulls toward nominal as N grows.
 
 ### Convergence and improper solutions
 
@@ -198,8 +202,8 @@ if (!is.null(sconv)) {
 ### lavaan parity (rep 1 per cell)
 
 Present only when run with `--lavaan-parity`. Max absolute difference between
-magmaan and lavaan (`standardizedSolution`; WLSMV for DWLS, MLM for ML) on the
-same data.
+magmaan and lavaan (`standardizedSolution`; WLSMV for DWLS, ULSMV for ULS, MLM
+for ML) on the same data.
 
 ```{r}
 if (!is.null(parity) && nrow(parity)) {
@@ -214,21 +218,19 @@ if (!is.null(parity) && nrow(parity)) {
 
 ## Caveats
 
-- **Two of Li's three estimators.** Li compares robust ML, DWLS *and* ULS;
-  this run covers ML and DWLS. ULS (ULSMV) on polychorics is a planned
-  follow-up; it is central to Li's three-way comparison, so the ML-vs-DWLS
-  contrasts here are the replication's first half, not the whole story.
 - Default `--reps` is small for iteration; rejection rates and biases are noisy
   until `--reps` is large (Li uses 500). Per repo style, no Monte-Carlo error
   bars are reported.
-- Estimates are standardized to lavaan's `std.all` metric; for DWLS the
-  loadings use the unit-variance latent-response scale and structural paths are
-  rescaled by the model-implied latent SDs.
-- DWLS's χ² parity uses the mean-and-variance adjusted statistic; magmaan's MV
-  uses a Satterthwaite df, lavaan's WLSMV default is scaled-shifted, so the
-  per-rep p-values differ by a parameterization (compared, not the statistics).
+- Estimates are standardized to lavaan's `std.all` metric; for the polychoric
+  LS estimators the loadings use the unit-variance latent-response scale and
+  structural paths are rescaled by the model-implied latent SDs.
+- The DWLS/ULS χ² parity uses the mean-and-variance adjusted statistic;
+  magmaan's MV uses a Satterthwaite df, lavaan's WLSMV/ULSMV default is
+  scaled-shifted, so the per-rep p-values differ by a parameterization
+  (compared, not the statistics).
 - At small N the 20-indicator polychoric weight matrix is often singular; DWLS
-  (diagonal weight) is unaffected and matches lavaan WLSMV.
+  and ULS (diagonal / identity weight) are unaffected and match lavaan
+  WLSMV / ULSMV.
 
 ## Reproduce
 
