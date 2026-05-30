@@ -109,8 +109,8 @@ evaluate_at_impl <- function(partable, sample_stats, theta, estimator, W = NULL,
     .Call(`_magmaan_evaluate_at_impl`, partable, sample_stats, theta, estimator, W, bounds, audit_options)
 }
 
-data_ordinal_stats_from_raw_impl <- function(X) {
-    .Call(`_magmaan_data_ordinal_stats_from_raw_impl`, X)
+data_ordinal_stats_from_raw_impl <- function(X, full_wls_weight = TRUE) {
+    .Call(`_magmaan_data_ordinal_stats_from_raw_impl`, X, full_wls_weight)
 }
 
 data_ordinal_stats_h_weighted_from_raw_impl <- function(X, h_kind = "wma_hard_cap", k = 1.5, a = 1.6, b = 2.2, lambda = 0.2) {

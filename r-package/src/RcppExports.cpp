@@ -387,13 +387,14 @@ BEGIN_RCPP
 END_RCPP
 }
 // data_ordinal_stats_from_raw_impl
-Rcpp::List data_ordinal_stats_from_raw_impl(SEXP X);
-RcppExport SEXP _magmaan_data_ordinal_stats_from_raw_impl(SEXP XSEXP) {
+Rcpp::List data_ordinal_stats_from_raw_impl(SEXP X, bool full_wls_weight);
+RcppExport SEXP _magmaan_data_ordinal_stats_from_raw_impl(SEXP XSEXP, SEXP full_wls_weightSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
-    rcpp_result_gen = Rcpp::wrap(data_ordinal_stats_from_raw_impl(X));
+    Rcpp::traits::input_parameter< bool >::type full_wls_weight(full_wls_weightSEXP);
+    rcpp_result_gen = Rcpp::wrap(data_ordinal_stats_from_raw_impl(X, full_wls_weight));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1574,7 +1575,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_gls_impl", (DL_FUNC) &_magmaan_fit_gls_impl, 5},
     {"_magmaan_fit_wls_impl", (DL_FUNC) &_magmaan_fit_wls_impl, 6},
     {"_magmaan_evaluate_at_impl", (DL_FUNC) &_magmaan_evaluate_at_impl, 7},
-    {"_magmaan_data_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_from_raw_impl, 1},
+    {"_magmaan_data_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_from_raw_impl, 2},
     {"_magmaan_data_ordinal_stats_h_weighted_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_h_weighted_from_raw_impl, 6},
     {"_magmaan_data_ordinal_stats_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_dpd_from_raw_impl, 2},
     {"_magmaan_data_ordinal_stats_huber_residual_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_huber_residual_from_raw_impl, 3},

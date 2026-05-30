@@ -233,8 +233,13 @@ struct MixedOrdinalHuberResidualStats {
   std::vector<MixedOrdinalHuberResidualBlockDiagnostics> block_diagnostics;
 };
 
+// `full_wls_weight` controls whether the full-WLS weight (the dense NACOV
+// inverse) is materialized; see the mixed-ordinal overload below. DWLS-only
+// callers pass `false` to skip the O(m³) inverse, which is also often singular
+// at small N with many indicators. When `false`, `W_wls` is left empty.
 post_expected<OrdinalStats>
-ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& X);
+ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& X,
+                                bool full_wls_weight = true);
 
 // `full_wls_weight` controls whether the full-WLS weight (the dense NACOV
 // inverse) is materialized. DWLS needs only the diagonal `W_dwls` (an

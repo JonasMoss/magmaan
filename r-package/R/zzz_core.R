@@ -10,7 +10,7 @@ data_ordinal_stats_from_raw <- function(X, robust = c("ml", "none", "h_weighted"
                                         h_lambda = 0.2,
                                         clip = c("hard_huber", "pseudo_huber",
                                                  "tukey_biweight", "none"),
-                                        k = NULL) {
+                                        k = NULL, full_wls_weight = TRUE) {
   robust <- match.arg(robust)
   h_kind <- match.arg(h_kind)
   clip <- match.arg(clip)
@@ -19,8 +19,8 @@ data_ordinal_stats_from_raw <- function(X, robust = c("ml", "none", "h_weighted"
   }
   switch(
     robust,
-    ml = data_ordinal_stats_from_raw_impl(X),
-    none = data_ordinal_stats_from_raw_impl(X),
+    ml = data_ordinal_stats_from_raw_impl(X, full_wls_weight = full_wls_weight),
+    none = data_ordinal_stats_from_raw_impl(X, full_wls_weight = full_wls_weight),
     h_weighted = data_ordinal_stats_h_weighted_from_raw_impl(
       X, h_kind = h_kind, k = h_k, a = h_a, b = h_b, lambda = h_lambda),
     dpd = data_ordinal_stats_dpd_from_raw_impl(X, alpha = alpha),

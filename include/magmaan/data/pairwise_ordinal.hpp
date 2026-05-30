@@ -366,8 +366,12 @@ ordinal_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& x_i,
                     const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
                     const Eigen::Ref<const Eigen::VectorXd>& thresholds_j);
 
+// `full_wls_weight` controls whether the full-WLS weight (the dense NACOV
+// inverse) is materialized; DWLS-only callers pass `false` to skip the O(m³)
+// inverse, which is often singular at small N. When `false`, `W_wls` is empty.
 post_expected<PairwiseOrdinalStats>
-pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& X);
+pairwise_ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& X,
+                                         bool full_wls_weight = true);
 
 post_expected<PairwiseOrdinalStats>
 pairwise_ordinal_stats_h_weighted_from_integer_data(
