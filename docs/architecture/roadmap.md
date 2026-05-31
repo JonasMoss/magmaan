@@ -150,11 +150,11 @@ golden `parTable()` fixtures.
   than approximating lavaan's conditional likelihood behavior.
 - The R boundary exposes `df_to_fiml_data()` and estimate-only `fit_fiml()`.
 - The R FMG p-value helper computes biased and optional Browne-unbiased U-Gamma
-  spectra through a fused C++ spectra primitive, keeping the U-factor, casewise
-  contributions, reduced matrices, and eigensolves out of R list roundtrips. In
-  the expected-bread unbiased path it uses the reduced normal-theory identity
-  `B' Gamma_NT B = I`; for biased-only single-model spectra it can eigensolve in
-  row space when `N < df`.
+  spectra through a fused C++ spectra primitive, keeping the U-factor, tiled
+  casewise-contribution projection, reduced matrices, and eigensolves out of R
+  list roundtrips. In the expected-bread unbiased path it uses the reduced
+  normal-theory identity `B' Gamma_NT B = I`; for biased-only single-model
+  spectra it can eigensolve in row space when `N < df`.
 
 ### Staged C++ facade
 
