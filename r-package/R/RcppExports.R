@@ -393,6 +393,10 @@ infer_fmg_test <- function(chi2_source, df, eigvals, method = "peba", param = 4.
     .Call(`_magmaan_infer_fmg_test`, chi2_source, df, eigvals, method, param, truncate_negative)
 }
 
+infer_fmg_ugamma_spectra <- function(fit, X, need_unbiased = FALSE) {
+    .Call(`_magmaan_infer_fmg_ugamma_spectra`, fit, X, need_unbiased)
+}
+
 infer_casewise_contributions <- function(partable, X) {
     .Call(`_magmaan_infer_casewise_contributions`, partable, X)
 }
@@ -464,4 +468,3 @@ infer_robust_se_both_breads_raw <- function(fit, X, moments = "structured", cov 
 infer_robust_se_both_breads_zc <- function(fit, Zc, n_total, moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_both_breads_zc`, fit, Zc, n_total, moments, cov)
 }
-

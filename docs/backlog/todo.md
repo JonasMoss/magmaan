@@ -197,6 +197,34 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   `docs/architecture/roadmap.md`. Coordinate with the exp-17 pEBA work, which
   owns the nested/multi-group side of the same machinery.
 
+## FMG / U-Gamma Performance
+
+- **Landed.** Add a fused Rcpp spectra helper for `fmg_pvalues()` that keeps
+  `UFactor`, casewise contributions, reduced Gamma matrices, and eigensolves
+  inside one C++ call. The current R composition repeatedly crosses the Rcpp
+  boundary and reconstructs the transparent `UFactor` list, including
+  per-block Cholesky factors, for each reducer.
+- **Landed.** Special-case expected-bread `reduced_gamma_nt()` in the FMG unbiased
+  path as the identity in the reduced projector basis. For
+  `ProjectionExpected`, `B = L_Gamma^-T N`, so `B' Gamma_NT B = I`; Browne's
+  unbiased correction can use a diagonal shift instead of applying the NT
+  operator column-by-column.
+- **M/L.** Add a tiled raw-data-to-reduced-Gamma path that generates casewise
+  contributions in row blocks, multiplies each tile by `B`, and accumulates
+  `M += Y'Y`. This avoids materializing and copying the full `N x p*`
+  contribution matrix while preserving dense GEMM kernels.
+- **Partly landed.** For empirical spectra, eigensolve in row space when
+  `df > N_total` on the fused biased-only single-model FMG path.
+  Nonzero eigenvalues of `(ZcB)'(ZcB)` match those of `(ZcB)(ZcB)'`; large-p
+  FMG models can have `df` much larger than `N`, where this avoids a much
+  larger symmetric eigendecomposition. Generalize this beyond the fused R
+  helper if other callers need it.
+- **L.** Investigate a rank-one secular update for the unbiased spectrum:
+  with the expected-bread identity shortcut,
+  `M_unbiased = a M_sample - b I + d vv'`. This could avoid the second full
+  eigendecomposition, but should only land if the implementation is clearly
+  stable and faster than Eigen's dense symmetric eigensolver at target sizes.
+
 ## API and R boundary
 
 - **S/M.** Add or rename R wrappers only when the methods-developer workflow

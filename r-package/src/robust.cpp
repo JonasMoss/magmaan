@@ -464,6 +464,70 @@ Rcpp::NumericVector infer_ugamma_eigenvalues(Rcpp::NumericMatrix M) {
   return Rcpp::wrap(*ev_or);
 }
 
+// infer_fmg_ugamma_spectra() — fused single-model FMG spectra path. Mirrors the
+// R composition in fmg_pvalues(), but keeps UFactor construction, Zc reduction,
+// optional Browne-unbiased correction, and eigensolves inside C++ so the hot
+// path does not roundtrip the transparent UFactor list through R.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_fmg_ugamma_spectra(Rcpp::List fit, SEXP X,
+                                    bool need_unbiased = false) {
+  Ctx ctx = ctx_from_fit(fit);
+  if (ctx.rep.dims.size() != 1) {
+    Rcpp::stop("magmaan: infer_fmg_ugamma_spectra() currently supports single-group fits only");
+  }
+
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = raw_from_arg(ctx.rep, X);
+  auto ss_or = magmaan::data::sample_stats_from_raw(raw);
+  if (!ss_or.has_value()) stop_post(ss_or.error());
+
+  auto uf_or = magmaan::robust::build_u_factor(
+      ctx.pt, ctx.rep, ctx.samp, est,
+      magmaan::robust::InferenceSpec{
+          magmaan::robust::Information::Expected,
+          magmaan::robust::WeightMoments::Structured,
+          magmaan::robust::ScoreCovariance::ModelImplied});
+  if (!uf_or.has_value()) stop_post(uf_or.error());
+
+  auto zc_or = magmaan::robust::casewise_contributions(
+      raw, *ss_or, /*include_means=*/uf_or->has_means);
+  if (!zc_or.has_value()) stop_post(zc_or.error());
+
+  const double denom = static_cast<double>(ss_or->n_obs[0]);
+  Eigen::MatrixXd ZcB = (*zc_or) * uf_or->B;
+  Eigen::VectorXd ev_biased;
+  Eigen::MatrixXd M;
+  if (!need_unbiased && ZcB.rows() < uf_or->df) {
+    Eigen::MatrixXd row_M = (ZcB * ZcB.transpose()) / denom;
+    auto ev_row_or = magmaan::robust::ugamma_eigenvalues(row_M);
+    if (!ev_row_or.has_value()) stop_post(ev_row_or.error());
+    ev_biased = Eigen::VectorXd::Zero(uf_or->df);
+    ev_biased.tail(ev_row_or->size()) = *ev_row_or;
+  } else {
+    M = (ZcB.transpose() * ZcB) / denom;
+    M = 0.5 * (M + M.transpose()).eval();
+    auto ev_or = magmaan::robust::ugamma_eigenvalues(M);
+    if (!ev_or.has_value()) stop_post(ev_or.error());
+    ev_biased = std::move(*ev_or);
+  }
+
+  Rcpp::List out = Rcpp::List::create(Rcpp::_["biased"] = Rcpp::wrap(ev_biased));
+  if (need_unbiased) {
+    magmaan::data::SampleStats browne_samp = ctx.samp;
+    browne_samp.n_obs = ss_or->n_obs;
+    const Eigen::MatrixXd M_nt =
+        Eigen::MatrixXd::Identity(uf_or->df, uf_or->df);
+    auto Mu_or = magmaan::robust::reduced_gamma_unbiased(
+        *uf_or, browne_samp, M, M_nt);
+    if (!Mu_or.has_value()) stop_post(Mu_or.error());
+    auto evu_or = magmaan::robust::ugamma_eigenvalues(*Mu_or);
+    if (!evu_or.has_value()) stop_post(evu_or.error());
+    out["unbiased"] = Rcpp::wrap(*evu_or);
+  }
+  return out;
+}
+
 // infer_satorra_bentler() — mirrors satorra_bentler(t_ml, df, eigvals).
 // c = mean(eigvals); T_SB = t_ml / c.
 //
