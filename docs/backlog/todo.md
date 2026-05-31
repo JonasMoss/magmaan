@@ -197,6 +197,26 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   `docs/architecture/roadmap.md`. Coordinate with the exp-17 pEBA work, which
   owns the nested/multi-group side of the same machinery.
 
+## Simulation primitives
+
+- **Landed, first slice.** `magmaan::sim` now has a NORTA primitive with
+  explicit calibration (`calibrate_norta`) and sampling
+  (`simulate_norta_matrix`, `simulate_norta_raw`). The first marginal families
+  are standard normal, standardized lognormal, and Tukey g-and-h; unit tests
+  cover normal identity calibration, analytic lognormal calibration,
+  infeasible lognormal correlations, and a mixed-marginal stochastic smoke.
+- **M.** Add exact skew/kurtosis moment-matching marginals for NORTA. Preferred
+  order: prototype Pearson-system fitting against R `PearsonDS::pearsonFitM()`
+  / `qpearson()` fixtures, then decide whether to implement the Pearson
+  quantile formulas in C++; add Johnson-system fitting only after the Pearson
+  feasibility/quantile story is clear. Keep R/package dependencies out of the
+  C++ core.
+- **M.** Harden NORTA calibration for larger simulation grids: cache pairwise
+  correlation maps when marginal specs repeat, expose/interpolate the
+  `rho_Z -> Corr(X_i, X_j)` map for repeated target matrices, and add an
+  explicit policy for pairwise-calibrated latent matrices that are not positive
+  definite (error-only is the current behavior).
+
 ## FMG / U-Gamma Performance
 
 - **Landed.** Add a fused Rcpp spectra helper for `fmg_pvalues()` that keeps

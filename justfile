@@ -36,7 +36,7 @@ fast:
 test-fast: fast
     ctest --preset fast
 
-# Build + run one fast-suite area (smoke|spec|estimate|inference|ordinal|api|parity|robcat); optional 2nd arg filters test names by regex.
+# Build + run one fast-suite area (smoke|spec|estimate|inference|ordinal|api|sim|parity|robcat); optional 2nd arg filters test names by regex.
 test-area area regex="":
     cmake --build --preset fast --target magmaan_test_{{area}}
     ctest --preset fast -L {{area}} {{ if regex == "" { "" } else { "-R '" + regex + "'" } }}
@@ -70,6 +70,7 @@ coverage:
         build/coverage/tests/magmaan_test_inference
         build/coverage/tests/magmaan_test_ordinal
         build/coverage/tests/magmaan_test_api
+        build/coverage/tests/magmaan_test_sim
         build/coverage/tests/magmaan_test_parity
         build/coverage/tests/magmaan_test_robcat
     )
@@ -93,6 +94,7 @@ coverage-html: coverage
         build/coverage/tests/magmaan_test_inference
         build/coverage/tests/magmaan_test_ordinal
         build/coverage/tests/magmaan_test_api
+        build/coverage/tests/magmaan_test_sim
         build/coverage/tests/magmaan_test_parity
         build/coverage/tests/magmaan_test_robcat
     )

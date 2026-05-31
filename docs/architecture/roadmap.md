@@ -169,6 +169,21 @@ golden `parTable()` fixtures.
   underlying fit and post-fit primitives described above. Unsupported
   combinations fail with `api::ErrorStage::UnsupportedCombination`.
 
+### Simulation primitives
+
+- A first C++ simulation namespace, `magmaan::sim`, provides NORTA data
+  generation as an explicit primitive rather than a fitting shortcut.
+  `calibrate_norta()` maps a target observed correlation matrix to a Gaussian
+  copula correlation matrix by deterministic Gauss-Hermite quadrature and
+  pairwise bisection, then validates the calibrated latent correlation by
+  Cholesky factorization. `simulate_norta_matrix()` samples a complete
+  `Eigen::MatrixXd`; `simulate_norta_raw()` wraps the same matrix in
+  `data::RawData` for downstream sample-stat builders.
+- Initial NORTA marginals are standard normal, standardized lognormal, and
+  Tukey g-and-h. The Tukey path is a pragmatic skew/tail stress family with
+  numerically standardized moments and `0 <= h < 0.25` so fourth moments are
+  finite. Pearson/Johnson exact skew-kurtosis matching remains future work.
+
 ### Optimizer backends
 
 User-facing the optimizer is selected by a single kebab-case `optimizer = "..."`
@@ -820,7 +835,7 @@ stop rather than any usable non-error return.
   calls outside `magmaan()`.
 - Primary public declarations and internal implementation now live in the
   target namespaces: `parse`, `spec`, `model`, `data`, `estimate`,
-  `inference`, `robust`, `measures`, `optim`, and `compat::lavaan`. Repository
+  `inference`, `robust`, `measures`, `sim`, `optim`, and `compat::lavaan`. Repository
   code and R binding internals use those namespaces directly.
 - Old `fit/*` and `partable/*` compatibility headers have been removed; use the
   target namespace headers directly.

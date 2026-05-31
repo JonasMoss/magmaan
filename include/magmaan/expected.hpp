@@ -21,4 +21,7 @@ using fit_expected = std::expected<T, FitError>;
 template <class T>
 using post_expected = std::expected<T, PostError>;
 
+template <class T>
+using sim_expected = std::expected<T, SimError>;
+
 }
