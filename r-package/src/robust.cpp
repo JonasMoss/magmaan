@@ -14,6 +14,8 @@
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 
+#include <algorithm>
+
 // [[Rcpp::depends(RcppEigen)]]
 
 using namespace magmaanr;
@@ -259,6 +261,34 @@ magmaan::data::RawData raw_from_arg(const lvm::MatrixRep& rep, SEXP X) {
   return raw;
 }
 
+Eigen::Index vech_lower_index(Eigen::Index p, Eigen::Index row, Eigen::Index col) {
+  return col * p - (col * (col - 1)) / 2 + (row - col);
+}
+
+void fill_casewise_tile_single(const Eigen::MatrixXd& Xc,
+                               const Eigen::MatrixXd& S,
+                               const magmaan::robust::UFactor& uf,
+                               Eigen::Index row_start,
+                               Eigen::Index n_tile,
+                               Eigen::MatrixXd& Ztile) {
+  const auto& blk = uf.blocks.front();
+  const Eigen::Index p = blk.p;
+  Ztile.setZero(n_tile, uf.total_rows);
+  for (Eigen::Index i = 0; i < n_tile; ++i) {
+    const Eigen::Index r = row_start + i;
+    if (uf.has_means && blk.mu_off >= 0) {
+      Ztile.block(i, blk.mu_off, 1, p) = Xc.row(r);
+    }
+    for (Eigen::Index col = 0; col < p; ++col) {
+      const double xc_col = Xc(r, col);
+      for (Eigen::Index row = col; row < p; ++row) {
+        const Eigen::Index k = vech_lower_index(p, row, col);
+        Ztile(i, blk.row_offset + k) = Xc(r, row) * xc_col - S(row, col);
+      }
+    }
+  }
+}
+
 }  // namespace
 
 // =============================================================================
@@ -490,22 +520,48 @@ Rcpp::List infer_fmg_ugamma_spectra(Rcpp::List fit, SEXP X,
           magmaan::robust::ScoreCovariance::ModelImplied});
   if (!uf_or.has_value()) stop_post(uf_or.error());
 
-  auto zc_or = magmaan::robust::casewise_contributions(
-      raw, *ss_or, /*include_means=*/uf_or->has_means);
-  if (!zc_or.has_value()) stop_post(zc_or.error());
-
+  const Eigen::MatrixXd& Xb = raw.X[0];
+  const Eigen::MatrixXd& S = ss_or->S[0];
+  const Eigen::Index n = Xb.rows();
+  const Eigen::Index p = Xb.cols();
+  const Eigen::VectorXd mean_b =
+      (!ss_or->mean.empty() && ss_or->mean[0].size() == p)
+          ? ss_or->mean[0]
+          : Xb.colwise().mean().transpose().eval();
+  const Eigen::MatrixXd Xc = Xb.rowwise() - mean_b.transpose();
   const double denom = static_cast<double>(ss_or->n_obs[0]);
-  Eigen::MatrixXd ZcB = (*zc_or) * uf_or->B;
   Eigen::VectorXd ev_biased;
   Eigen::MatrixXd M;
-  if (!need_unbiased && ZcB.rows() < uf_or->df) {
-    Eigen::MatrixXd row_M = (ZcB * ZcB.transpose()) / denom;
+  const bool row_space = !need_unbiased && n < uf_or->df;
+  Eigen::MatrixXd Y_all;
+  if (row_space) {
+    Y_all.resize(n, uf_or->df);
+  } else {
+    M = Eigen::MatrixXd::Zero(uf_or->df, uf_or->df);
+  }
+
+  constexpr Eigen::Index tile_rows = 128;
+  Eigen::MatrixXd Ztile;
+  for (Eigen::Index row_start = 0; row_start < n; row_start += tile_rows) {
+    const Eigen::Index n_tile = std::min(tile_rows, n - row_start);
+    fill_casewise_tile_single(Xc, S, *uf_or, row_start, n_tile, Ztile);
+    const Eigen::MatrixXd Ytile = Ztile * uf_or->B;
+    if (row_space) {
+      Y_all.middleRows(row_start, n_tile) = Ytile;
+    } else {
+      M.noalias() += Ytile.transpose() * Ytile;
+    }
+  }
+
+  if (row_space) {
+    Eigen::MatrixXd row_M = (Y_all * Y_all.transpose()) / denom;
     auto ev_row_or = magmaan::robust::ugamma_eigenvalues(row_M);
     if (!ev_row_or.has_value()) stop_post(ev_row_or.error());
     ev_biased = Eigen::VectorXd::Zero(uf_or->df);
     ev_biased.tail(ev_row_or->size()) = *ev_row_or;
+    std::sort(ev_biased.data(), ev_biased.data() + ev_biased.size());
   } else {
-    M = (ZcB.transpose() * ZcB) / denom;
+    M /= denom;
     M = 0.5 * (M + M.transpose()).eval();
     auto ev_or = magmaan::robust::ugamma_eigenvalues(M);
     if (!ev_or.has_value()) stop_post(ev_or.error());
