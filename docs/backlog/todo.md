@@ -217,16 +217,22 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   FMG spectra path uses them to avoid materializing and copying the full
   `N x p*` contribution matrix.
 - **Partly landed.** For empirical spectra, eigensolve in row space when
-  `df > N_total` on the fused biased-only single-model FMG path.
-  Nonzero eigenvalues of `(ZcB)'(ZcB)` match those of `(ZcB)(ZcB)'`; large-p
-  FMG models can have `df` much larger than `N`, where this avoids a much
-  larger symmetric eigendecomposition. Generalize this beyond the fused R
-  helper if other callers need it.
-- **L.** Investigate a rank-one secular update for the unbiased spectrum:
+  `df > N_total` on the fused single-model FMG path. Nonzero eigenvalues of
+  `(ZcB)'(ZcB)` match those of `(ZcB)(ZcB)'`; large-p FMG models can have `df`
+  much larger than `N`, where this avoids a much larger symmetric
+  eigendecomposition. The same fused helper now handles the Browne-unbiased
+  low-rank form `M_u = -bI + (a/N)Y'Y + dww'` with an `(N+1) × (N+1)`
+  eigensolve when `df > N+1`. Generalize this beyond the fused R helper if
+  other callers need it.
+- **Investigated, defer.** Rank-one secular update for the unbiased spectrum:
   with the expected-bread identity shortcut,
   `M_unbiased = a M_sample - b I + d vv'`. This could avoid the second full
-  eigendecomposition, but should only land if the implementation is clearly
-  stable and faster than Eigen's dense symmetric eigensolver at target sizes.
+  eigendecomposition, but it requires eigenvectors of `M_sample` to rotate `v`
+  into the eigenspace. Eigen's `ComputeEigenvectors` path was ~4-6x slower
+  than `EigenvaluesOnly` in synthetic df=300/739/1500 checks, so a perfect
+  secular solve would still lose to two values-only solves at the p=40 target.
+  Revisit only if a tridiagonal-level update or a LAPACK-backed eigensolver
+  becomes available.
 
 ## API and R boundary
 

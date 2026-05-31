@@ -154,7 +154,8 @@ golden `parTable()` fixtures.
   casewise-contribution projection, reduced matrices, and eigensolves out of R
   list roundtrips. In the expected-bread unbiased path it uses the reduced
   normal-theory identity `B' Gamma_NT B = I`; for biased-only single-model
-  spectra it can eigensolve in row space when `N < df`.
+  spectra it can eigensolve in row space when `N < df`, and for Browne-unbiased
+  spectra it uses the low-rank shifted form when `N + 1 < df`.
 
 ### Staged C++ facade
 
