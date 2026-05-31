@@ -102,7 +102,7 @@ require_pkg("magmaan")
 # reachable via `--cells dist=pl1|pl2` but kept out of the default run: covsim's
 # rPLSIM is slow and often cannot fit the severe marginals.
 cell_grid <- expand.grid(
-  p    = c(10L, 20L),
+  p    = c(10L, 20L, 40L),
   N    = c(400L, 800L),
   dist = c("norm", "vm1", "vm2", "ig2"),
   stringsAsFactors = FALSE)
