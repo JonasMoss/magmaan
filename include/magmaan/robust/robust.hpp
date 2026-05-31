@@ -368,6 +368,28 @@ reduced_gamma_sample_streaming(const UFactor&                            uf,
                                const std::vector<Eigen::VectorXd>&       zc_rows,
                                double                                    denom);
 
+// Tiled complete-data projection helpers. These avoid materializing the full
+// N × p* (or N × total_rows with means) casewise contribution matrix. They are
+// currently defined for the expected-bread projection U-factor, where
+// Y = Zc·B and M = YᵀY / denom.
+post_expected<Eigen::MatrixXd>
+casewise_projected_rows_tiled(const UFactor&            uf,
+                              const RawData&            raw,
+                              const SampleStats&        samp,
+                              Eigen::Index              tile_rows = 128);
+post_expected<Eigen::MatrixXd>
+reduced_gamma_sample_tiled(const UFactor&                           uf,
+                           const RawData&                           raw,
+                           const SampleStats&                       samp,
+                           const Eigen::Ref<const Eigen::VectorXd>& denom,
+                           Eigen::Index                             tile_rows = 128);
+post_expected<Eigen::MatrixXd>
+reduced_gamma_sample_tiled(const UFactor&     uf,
+                           const RawData&     raw,
+                           const SampleStats& samp,
+                           double             denom,
+                           Eigen::Index       tile_rows = 128);
+
 // Helper: build the stacked Zc matrix from RawData + SampleStats. Each row
 // of Zc corresponds to one observation; the row carries that observation's
 // block contribution in the appropriate column slice (zeros elsewhere — so

@@ -209,11 +209,13 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   `ProjectionExpected`, `B = L_Gamma^-T N`, so `B' Gamma_NT B = I`; Browne's
   unbiased correction can use a diagonal shift instead of applying the NT
   operator column-by-column.
-- **Partly landed.** Add a tiled raw-data-to-reduced-Gamma path that generates
-  casewise contributions in row blocks, multiplies each tile by `B`, and
-  accumulates `M += Y'Y`. The fused single-model R FMG spectra path now avoids
-  materializing and copying the full `N x p*` contribution matrix; generalize
-  this into a reusable C++ reducer if other callers need the same memory profile.
+- **Landed.** Add a tiled raw-data-to-reduced-Gamma path that generates
+  complete-data casewise contributions in row blocks, multiplies each tile by
+  `B`, and accumulates `M += Y'Y`. The reusable robust-core helpers
+  `casewise_projected_rows_tiled()` and `reduced_gamma_sample_tiled()` cover
+  complete-data `ProjectionExpected` U-factors, and the fused single-model R
+  FMG spectra path uses them to avoid materializing and copying the full
+  `N x p*` contribution matrix.
 - **Partly landed.** For empirical spectra, eigensolve in row space when
   `df > N_total` on the fused biased-only single-model FMG path.
   Nonzero eigenvalues of `(ZcB)'(ZcB)` match those of `(ZcB)(ZcB)'`; large-p

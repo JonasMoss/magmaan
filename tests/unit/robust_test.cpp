@@ -1463,3 +1463,42 @@ TEST_CASE("reduced_gamma_sample_streaming matches reduced_gamma_sample") {
 
   CHECK((*M_batch_or - *M_stream_or).cwiseAbs().maxCoeff() < 1e-10);
 }
+
+TEST_CASE("tiled projected casewise path matches materialized Zc reduction") {
+  auto ctx = load_and_fit(
+      "visual =~ x1 + x2 + x3\n"
+      "textual =~ x4 + x5 + x6\n"
+      "speed =~ x7 + x8 + x9",
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
+  auto uf_or = magmaan::robust::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
+                                          ctx.samp, ctx.est);
+  REQUIRE(uf_or.has_value());
+
+  std::mt19937 rng(17);
+  const Eigen::Index n = 220;
+  auto ev = magmaan::model::ModelEvaluator::build(*ctx.handles.pt, *ctx.handles.rep);
+  REQUIRE(ev.has_value());
+  auto sigma_or = ev->sigma(ctx.est.theta);
+  REQUIRE(sigma_or.has_value());
+  magmaan::data::RawData raw;
+  raw.X.push_back(mvn_sample(rng, n, Eigen::VectorXd::Zero(9), sigma_or->sigma[0]));
+
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp_or.has_value());
+  auto Zc_or = magmaan::robust::casewise_contributions(raw, *samp_or);
+  REQUIRE(Zc_or.has_value());
+
+  const Eigen::MatrixXd Y_ref = (*Zc_or) * uf_or->B;
+  auto Y_tiled_or = magmaan::robust::casewise_projected_rows_tiled(
+      *uf_or, raw, *samp_or, /*tile_rows=*/37);
+  REQUIRE(Y_tiled_or.has_value());
+  CHECK((Y_ref - *Y_tiled_or).cwiseAbs().maxCoeff() < 1e-12);
+
+  auto M_ref_or = magmaan::robust::reduced_gamma_sample(
+      *uf_or, *Zc_or, static_cast<double>(n));
+  REQUIRE(M_ref_or.has_value());
+  auto M_tiled_or = magmaan::robust::reduced_gamma_sample_tiled(
+      *uf_or, raw, *samp_or, static_cast<double>(n), /*tile_rows=*/37);
+  REQUIRE(M_tiled_or.has_value());
+  CHECK((*M_ref_or - *M_tiled_or).cwiseAbs().maxCoeff() < 1e-10);
+}

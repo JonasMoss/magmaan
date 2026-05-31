@@ -1,5 +1,6 @@
 #include "magmaan/robust/robust.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <string>
@@ -41,6 +42,14 @@ PostError make_err(PostError::Kind k, std::string detail) {
 
 using detail::vech_lower;
 using detail::vech_unpack;
+
+std::pair<Eigen::Index, Eigen::Index>
+block_slice(const UFactor& uf, const UFactor::Block& blk) {
+  const Eigen::Index start = (uf.has_means && blk.mu_off >= 0)
+                                 ? blk.mu_off : blk.row_offset;
+  const Eigen::Index size = (uf.has_means ? blk.p : 0) + blk.pstar;
+  return {start, size};
+}
 
 // For an ObservedHessian UFactor: C = I − A·H_obs⁻¹·Aᵀ
 // (total_rows × total_rows, symmetric).
@@ -1038,6 +1047,169 @@ reduced_gamma_sample_streaming(const UFactor&                       uf,
   M /= denom;
   M = 0.5 * (M + M.transpose()).eval();
   return M;
+}
+
+namespace {
+
+post_expected<void>
+validate_tiled_projection_inputs(const UFactor&     uf,
+                                 const RawData&     raw,
+                                 const SampleStats& samp,
+                                 Eigen::Index       tile_rows,
+                                 const char*        fn) {
+  if (uf.kind != UFactor::Kind::ProjectionExpected) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(fn) + ": only the ProjectionExpected U-factor is supported"));
+  }
+  if (!raw.mask.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(fn) + ": complete-data RawData is required"));
+  }
+  if (raw.X.size() != samp.S.size() || raw.X.size() != uf.blocks.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(fn) + ": RawData, SampleStats, and UFactor block counts differ"));
+  }
+  if (tile_rows <= 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(fn) + ": tile_rows must be positive"));
+  }
+  return {};
+}
+
+void fill_casewise_projection_tile(const Eigen::MatrixXd&       Xc,
+                                   const Eigen::MatrixXd&       S,
+                                   const UFactor&               uf,
+                                   const UFactor::Block&        blk,
+                                   Eigen::Index                 row_start,
+                                   Eigen::Index                 n_tile,
+                                   Eigen::Ref<Eigen::MatrixXd>  Ztile) {
+  const Eigen::Index p = blk.p;
+  Ztile.setZero();
+  for (Eigen::Index i = 0; i < n_tile; ++i) {
+    const Eigen::Index r = row_start + i;
+    if (uf.has_means && blk.mu_off >= 0) {
+      Ztile.block(i, 0, 1, p) = Xc.row(r);
+    }
+    const Eigen::Index sigma_off = uf.has_means ? p : 0;
+    for (Eigen::Index col = 0; col < p; ++col) {
+      const double xc_col = Xc(r, col);
+      for (Eigen::Index row = col; row < p; ++row) {
+        const Eigen::Index k = detail::vech_index(p, row, col);
+        Ztile(i, sigma_off + k) = Xc(r, row) * xc_col - S(row, col);
+      }
+    }
+  }
+}
+
+}  // namespace
+
+post_expected<Eigen::MatrixXd>
+casewise_projected_rows_tiled(const UFactor&     uf,
+                              const RawData&     raw,
+                              const SampleStats& samp,
+                              Eigen::Index       tile_rows) {
+  auto ok = validate_tiled_projection_inputs(
+      uf, raw, samp, tile_rows, "casewise_projected_rows_tiled");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+
+  Eigen::Index n_total = 0;
+  for (const auto& X : raw.X) n_total += X.rows();
+  Eigen::MatrixXd Y(n_total, uf.df);
+  Eigen::MatrixXd Ztile;
+  Eigen::Index out_row = 0;
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    const auto& X = raw.X[b];
+    const auto& S = samp.S[b];
+    const auto& blk = uf.blocks[b];
+    const Eigen::Index p = X.cols();
+    if (p != S.rows() || p != blk.p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "casewise_projected_rows_tiled: block " + std::to_string(b) +
+              " dimension mismatch"));
+    }
+    const Eigen::VectorXd mean_b =
+        (b < samp.mean.size() && samp.mean[b].size() == p)
+            ? samp.mean[b]
+            : X.colwise().mean().transpose().eval();
+    const Eigen::MatrixXd Xc = X.rowwise() - mean_b.transpose();
+    const auto [bstart, bsize] = block_slice(uf, blk);
+    for (Eigen::Index row_start = 0; row_start < X.rows(); row_start += tile_rows) {
+      const Eigen::Index n_tile = std::min(tile_rows, X.rows() - row_start);
+      Ztile.resize(n_tile, bsize);
+      fill_casewise_projection_tile(
+          Xc, S, uf, blk, row_start, n_tile, Ztile);
+      Y.middleRows(out_row + row_start, n_tile).noalias() =
+          Ztile * uf.B.middleRows(bstart, bsize);
+    }
+    out_row += X.rows();
+  }
+  return Y;
+}
+
+post_expected<Eigen::MatrixXd>
+reduced_gamma_sample_tiled(const UFactor&                           uf,
+                           const RawData&                           raw,
+                           const SampleStats&                       samp,
+                           const Eigen::Ref<const Eigen::VectorXd>& denom,
+                           Eigen::Index                             tile_rows) {
+  auto ok = validate_tiled_projection_inputs(
+      uf, raw, samp, tile_rows, "reduced_gamma_sample_tiled");
+  if (!ok.has_value()) return std::unexpected(ok.error());
+  const Eigen::Index nb = static_cast<Eigen::Index>(uf.blocks.size());
+  if (denom.size() != 1 && denom.size() != nb) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_sample_tiled: denom has length " +
+            std::to_string(denom.size()) + "; expected 1 or " +
+            std::to_string(nb)));
+  }
+  if (!(denom.minCoeff() > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_sample_tiled: every denom entry must be > 0"));
+  }
+  const auto denom_b = [&](Eigen::Index b) -> double {
+    return denom.size() == 1 ? denom(0) : denom(b);
+  };
+
+  Eigen::MatrixXd M = Eigen::MatrixXd::Zero(uf.df, uf.df);
+  Eigen::MatrixXd Ztile;
+  for (Eigen::Index b = 0; b < nb; ++b) {
+    const auto& X = raw.X[static_cast<std::size_t>(b)];
+    const auto& S = samp.S[static_cast<std::size_t>(b)];
+    const auto& blk = uf.blocks[static_cast<std::size_t>(b)];
+    const Eigen::Index p = X.cols();
+    if (p != S.rows() || p != blk.p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "reduced_gamma_sample_tiled: block " + std::to_string(b) +
+              " dimension mismatch"));
+    }
+    const Eigen::VectorXd mean_b =
+        (static_cast<std::size_t>(b) < samp.mean.size() &&
+         samp.mean[static_cast<std::size_t>(b)].size() == p)
+            ? samp.mean[static_cast<std::size_t>(b)]
+            : X.colwise().mean().transpose().eval();
+    const Eigen::MatrixXd Xc = X.rowwise() - mean_b.transpose();
+    const auto [bstart, bsize] = block_slice(uf, blk);
+    for (Eigen::Index row_start = 0; row_start < X.rows(); row_start += tile_rows) {
+      const Eigen::Index n_tile = std::min(tile_rows, X.rows() - row_start);
+      Ztile.resize(n_tile, bsize);
+      fill_casewise_projection_tile(
+          Xc, S, uf, blk, row_start, n_tile, Ztile);
+      const Eigen::MatrixXd Ytile = Ztile * uf.B.middleRows(bstart, bsize);
+      M.noalias() += (Ytile.transpose() * Ytile) / denom_b(b);
+    }
+  }
+  M = 0.5 * (M + M.transpose()).eval();
+  return M;
+}
+
+post_expected<Eigen::MatrixXd>
+reduced_gamma_sample_tiled(const UFactor&     uf,
+                           const RawData&     raw,
+                           const SampleStats& samp,
+                           double             denom,
+                           Eigen::Index       tile_rows) {
+  const Eigen::VectorXd d = Eigen::VectorXd::Constant(1, denom);
+  return reduced_gamma_sample_tiled(uf, raw, samp, d, tile_rows);
 }
 
 post_expected<Eigen::MatrixXd>
