@@ -95,16 +95,11 @@ fmg_pvalues <- function(fit, data,
   base_stat <- c(ml  = infer_chi2_stat(ss, fit$fmin),
                  rls = infer_rls_chi2_fit(fit, model_implied(fit))$statistic)
 
-  # UGamma eigenvalues: biased (A) always; unbiased (U) only if requested
-  uf   <- infer_build_u_factor(fit)                 # expected bread, structured
-  Zc   <- infer_casewise_contributions(pt, X)
-  M    <- infer_reduced_gamma_sample(uf, Zc, ss$nobs)
-  ev   <- list(biased = infer_ugamma_eigenvalues(M))
-  if (any(vapply(specs, `[[`, logical(1), "ug"))) {
-    M_nt <- infer_reduced_gamma_nt(uf)
-    M_u  <- infer_reduced_gamma_unbiased(uf, ss$nobs, M, M_nt)
-    ev$unbiased <- infer_ugamma_eigenvalues(M_u)
-  }
+  # UGamma eigenvalues: biased (A) always; unbiased (U) only if requested.
+  # Keep the hot spectra path in C++ so UFactor and its block factorizations
+  # are not copied through R for every reducer.
+  need_ug <- any(vapply(specs, `[[`, logical(1), "ug"))
+  ev <- infer_fmg_ugamma_spectra(fit, X, need_ug)
 
   out <- vapply(specs, function(s) {
     eigvals <- if (s$ug) ev$unbiased else ev$biased
