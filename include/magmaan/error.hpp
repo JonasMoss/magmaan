@@ -101,4 +101,20 @@ struct PostError {
   friend bool operator==(const PostError&, const PostError&) = default;
 };
 
+// Errors raised by simulation helpers (copula calibration, marginal validation,
+// RNG-facing data generation).
+struct SimError {
+  enum class Kind : std::uint8_t {
+    InvalidInput,
+    InvalidMarginal,
+    CalibrationFailed,
+    NonPositiveDefinite,
+    NumericIssue,
+  };
+  Kind        kind   = Kind::InvalidInput;
+  std::string detail = {};
+
+  friend bool operator==(const SimError&, const SimError&) = default;
+};
+
 }
