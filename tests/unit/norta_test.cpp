@@ -108,6 +108,59 @@ TEST_CASE("independent raw generator wraps one complete data block") {
   CHECK(raw_or->X[0].cols() == 2);
 }
 
+TEST_CASE("Tukey g-and-h moment matcher recovers Kowalchuk-Headrick shape") {
+  magmaan::sim::MomentMatchSpec spec;
+  spec.family = magmaan::sim::MomentMatchFamily::TukeyGH;
+  spec.shape.skewness = 3.0;
+  spec.shape.excess_kurtosis = 20.0;
+
+  magmaan::sim::MomentMatchOptions options;
+  options.quadrature_points = 81;
+  auto fit_or = magmaan::sim::fit_marginal_to_moments(spec, options);
+  REQUIRE(fit_or.has_value());
+  if (!fit_or.has_value()) return;
+
+  CHECK(fit_or->marginal.kind == magmaan::sim::MarginalKind::TukeyGH);
+  CHECK(fit_or->marginal.g == doctest::Approx(0.690678).epsilon(2e-3));
+  CHECK(fit_or->marginal.h == doctest::Approx(0.009831).epsilon(3e-2));
+  CHECK(fit_or->moments.skewness == doctest::Approx(3.0).epsilon(2e-6));
+  CHECK(fit_or->moments.excess_kurtosis == doctest::Approx(20.0).epsilon(2e-6));
+}
+
+TEST_CASE("moment-matched Tukey marginals feed NORTA calibration") {
+  magmaan::sim::MomentMatchSpec left;
+  left.shape.skewness = 3.0;
+  left.shape.excess_kurtosis = 20.0;
+  magmaan::sim::MomentMatchSpec right;
+  right.shape.skewness = -3.0;
+  right.shape.excess_kurtosis = 20.0;
+
+  magmaan::sim::MomentMatchOptions options;
+  options.quadrature_points = 81;
+  auto left_or = magmaan::sim::fit_marginal_to_moments(left, options);
+  auto right_or = magmaan::sim::fit_marginal_to_moments(right, options);
+  REQUIRE(left_or.has_value());
+  REQUIRE(right_or.has_value());
+  if (!left_or.has_value() || !right_or.has_value()) return;
+  CHECK(left_or->marginal.g > 0.0);
+  CHECK(right_or->marginal.g < 0.0);
+
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      left_or->marginal, right_or->marginal};
+  auto cal_or = magmaan::sim::calibrate_norta(corr2(0.30), marginals);
+  REQUIRE(cal_or.has_value());
+  CHECK(cal_or->latent_corr(0, 1) > 0.30);
+}
+
+TEST_CASE("moment matcher reserves unsupported family slots") {
+  magmaan::sim::MomentMatchSpec spec;
+  spec.family = magmaan::sim::MomentMatchFamily::Pearson;
+  spec.shape.excess_kurtosis = 1.0;
+  auto fit_or = magmaan::sim::fit_marginal_to_moments(spec);
+  REQUIRE_FALSE(fit_or.has_value());
+  CHECK(fit_or.error().kind == magmaan::SimError::Kind::InvalidInput);
+}
+
 TEST_CASE("NORTA simulation respects target moments and correlations") {
   Eigen::MatrixXd target(3, 3);
   target << 1.0, 0.30, -0.20,

@@ -31,6 +31,13 @@ struct MarginalMoments {
   double sd = 1.0;
 };
 
+struct MomentFitEval {
+  MarginalSpec marginal;
+  MarginalMomentSummary moments;
+  Eigen::Vector2d residual = Eigen::Vector2d::Zero();
+  double norm = 0.0;
+};
+
 sim_expected<GaussHermite> gauss_hermite(int n) {
   if (n < 8) {
     return std::unexpected(make_err(
@@ -260,6 +267,54 @@ build_marginal_moments(const std::vector<MarginalSpec>& marginals,
   return moments;
 }
 
+sim_expected<MarginalMomentSummary>
+raw_moment_summary(const MarginalSpec& m, const GaussHermite& gh) {
+  if (auto ok = validate_marginal(m); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  double e1 = 0.0;
+  double e2 = 0.0;
+  double e3 = 0.0;
+  double e4 = 0.0;
+  for (Eigen::Index a = 0; a < gh.nodes.size(); ++a) {
+    const double z = kSqrt2 * gh.nodes(a);
+    const double w = gh.weights(a) / kSqrtPi;
+    const double y = raw_from_z(m, z);
+    if (!std::isfinite(y)) {
+      return std::unexpected(make_err(
+          SimError::Kind::NumericIssue,
+          "marginal moments: non-finite marginal transform"));
+    }
+    const double y2 = y * y;
+    e1 += w * y;
+    e2 += w * y2;
+    e3 += w * y2 * y;
+    e4 += w * y2 * y2;
+  }
+
+  const double var = e2 - e1 * e1;
+  if (!std::isfinite(var) || var <= 0.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "marginal moments: non-positive variance"));
+  }
+
+  const double sd = std::sqrt(var);
+  const double mu3 = e3 - 3.0 * e1 * e2 + 2.0 * e1 * e1 * e1;
+  const double mu4 = e4 - 4.0 * e1 * e3 + 6.0 * e1 * e1 * e2 -
+                     3.0 * e1 * e1 * e1 * e1;
+  const double skew = mu3 / (sd * sd * sd);
+  const double excess = mu4 / (var * var) - 3.0;
+  if (!std::isfinite(skew) || !std::isfinite(excess)) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "marginal moments: non-finite shape moments"));
+  }
+
+  return MarginalMomentSummary{m.mean, m.sd, skew, excess};
+}
+
 double pair_observed_corr(const MarginalSpec& mi,
                           const MarginalMoments& mom_i,
                           const MarginalSpec& mj,
@@ -330,6 +385,212 @@ calibrate_pair(double target,
     }
   }
   return mid;
+}
+
+sim_expected<void>
+validate_moment_match(const MomentMatchSpec& spec,
+                      const MomentMatchOptions& options) {
+  if (!std::isfinite(spec.mean) || !std::isfinite(spec.sd) || spec.sd <= 0.0 ||
+      !std::isfinite(spec.shape.skewness) ||
+      !std::isfinite(spec.shape.excess_kurtosis)) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "fit_marginal_to_moments: target moments must be finite and sd positive"));
+  }
+  if (options.quadrature_points < 8 || options.max_iter < 1 ||
+      options.grid_points_g < 3 || options.grid_points_h < 2 ||
+      options.objective_tol <= 0.0 || options.parameter_tol <= 0.0 ||
+      options.finite_diff_step <= 0.0 ||
+      !std::isfinite(options.objective_tol) ||
+      !std::isfinite(options.parameter_tol) ||
+      !std::isfinite(options.finite_diff_step) ||
+      !std::isfinite(options.tukey_g_bound) ||
+      !std::isfinite(options.tukey_h_upper) ||
+      options.tukey_g_bound <= 0.0 || options.tukey_h_upper <= 0.0 ||
+      options.tukey_h_upper >= 0.25) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "fit_marginal_to_moments: invalid moment-match options"));
+  }
+  switch (spec.family) {
+    case MomentMatchFamily::TukeyGH:
+      return {};
+    case MomentMatchFamily::Pearson:
+    case MomentMatchFamily::Johnson:
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "fit_marginal_to_moments: requested family is not implemented yet"));
+  }
+  return std::unexpected(make_err(
+      SimError::Kind::InvalidInput,
+      "fit_marginal_to_moments: unknown moment-match family"));
+}
+
+Eigen::Vector2d project_tukey_params(Eigen::Vector2d x,
+                                     const MomentMatchOptions& options) {
+  x(0) = std::clamp(x(0), -options.tukey_g_bound, options.tukey_g_bound);
+  x(1) = std::clamp(x(1), 0.0, options.tukey_h_upper);
+  return x;
+}
+
+sim_expected<MomentFitEval>
+eval_tukey_moment_fit(const Eigen::Vector2d& x,
+                      const MomentMatchSpec& spec,
+                      const GaussHermite& gh) {
+  MomentFitEval out;
+  out.marginal = MarginalSpec::tukey_g_h(x(0), x(1), spec.mean, spec.sd);
+  auto moments_or = raw_moment_summary(out.marginal, gh);
+  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+  out.moments = *moments_or;
+  out.residual(0) = out.moments.skewness - spec.shape.skewness;
+  out.residual(1) = out.moments.excess_kurtosis - spec.shape.excess_kurtosis;
+  out.norm = out.residual.norm();
+  return out;
+}
+
+sim_expected<MomentFitEval>
+initial_tukey_moment_fit(const MomentMatchSpec& spec,
+                         const MomentMatchOptions& options,
+                         const GaussHermite& gh) {
+  MomentFitEval best;
+  bool have_best = false;
+  for (int ig = 0; ig < options.grid_points_g; ++ig) {
+    const double wg = static_cast<double>(ig) /
+                      static_cast<double>(options.grid_points_g - 1);
+    const double g = -options.tukey_g_bound +
+                     2.0 * options.tukey_g_bound * wg;
+    for (int ih = 0; ih < options.grid_points_h; ++ih) {
+      const double wh = static_cast<double>(ih) /
+                        static_cast<double>(options.grid_points_h - 1);
+      const double h = options.tukey_h_upper * wh;
+      auto eval_or = eval_tukey_moment_fit(Eigen::Vector2d(g, h), spec, gh);
+      if (!eval_or.has_value()) continue;
+      if (!have_best || eval_or->norm < best.norm) {
+        best = *eval_or;
+        have_best = true;
+      }
+    }
+  }
+  if (!have_best) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        "fit_marginal_to_moments: no finite Tukey g-and-h starting point"));
+  }
+  return best;
+}
+
+sim_expected<MomentMatchResult>
+fit_tukey_moment_match(const MomentMatchSpec& spec,
+                       const MomentMatchOptions& options,
+                       const GaussHermite& gh) {
+  if (spec.shape.excess_kurtosis < -options.objective_tol) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        "fit_marginal_to_moments: Tukey g-and-h cannot match negative excess kurtosis"));
+  }
+
+  auto best_or = initial_tukey_moment_fit(spec, options, gh);
+  if (!best_or.has_value()) return std::unexpected(best_or.error());
+  MomentFitEval best = *best_or;
+  MomentFitEval current = best;
+  Eigen::Vector2d x(current.marginal.g, current.marginal.h);
+
+  int iter = 0;
+  for (; iter < options.max_iter; ++iter) {
+    if (current.norm <= options.objective_tol) break;
+
+    Eigen::Matrix2d J;
+    bool ok_jac = true;
+    for (int k = 0; k < 2; ++k) {
+      const double step = options.finite_diff_step *
+                          std::max(1.0, std::abs(x(k)));
+      Eigen::Vector2d xp = project_tukey_params(x, options);
+      Eigen::Vector2d xm = xp;
+      xp(k) = std::clamp(x(k) + step,
+                         k == 0 ? -options.tukey_g_bound : 0.0,
+                         k == 0 ? options.tukey_g_bound : options.tukey_h_upper);
+      xm(k) = std::clamp(x(k) - step,
+                         k == 0 ? -options.tukey_g_bound : 0.0,
+                         k == 0 ? options.tukey_g_bound : options.tukey_h_upper);
+      if (std::abs(xp(k) - xm(k)) <= options.parameter_tol) {
+        ok_jac = false;
+        break;
+      }
+      auto fp_or = eval_tukey_moment_fit(xp, spec, gh);
+      auto fm_or = eval_tukey_moment_fit(xm, spec, gh);
+      if (!fp_or.has_value() || !fm_or.has_value()) {
+        ok_jac = false;
+        break;
+      }
+      J.col(k) = (fp_or->residual - fm_or->residual) / (xp(k) - xm(k));
+    }
+    if (!ok_jac || !J.allFinite()) break;
+
+    Eigen::Matrix2d A = J.transpose() * J;
+    const double ridge = 1e-10 * std::max(1.0, A.diagonal().cwiseAbs().maxCoeff());
+    A.diagonal().array() += ridge;
+    const Eigen::Vector2d step = A.ldlt().solve(-J.transpose() * current.residual);
+    if (!step.allFinite()) break;
+    if (step.norm() <= options.parameter_tol) break;
+
+    bool accepted = false;
+    double alpha = 1.0;
+    for (int ls = 0; ls < 24; ++ls) {
+      const Eigen::Vector2d trial_x = project_tukey_params(x + alpha * step, options);
+      if ((trial_x - x).norm() <= options.parameter_tol) break;
+      auto trial_or = eval_tukey_moment_fit(trial_x, spec, gh);
+      if (trial_or.has_value() && trial_or->norm < current.norm) {
+        current = *trial_or;
+        x = trial_x;
+        accepted = true;
+        if (current.norm < best.norm) best = current;
+        break;
+      }
+      alpha *= 0.5;
+    }
+    if (!accepted) {
+      double radius_g = std::max(0.01, 0.25 * std::max(1.0, std::abs(x(0))));
+      double radius_h = 0.02;
+      for (int search = 0; search < 32 && !accepted; ++search) {
+        const Eigen::Vector2d trials[] = {
+            Eigen::Vector2d( radius_g,  0.0),
+            Eigen::Vector2d(-radius_g,  0.0),
+            Eigen::Vector2d( 0.0,       radius_h),
+            Eigen::Vector2d( 0.0,      -radius_h),
+            Eigen::Vector2d( radius_g,  radius_h),
+            Eigen::Vector2d( radius_g, -radius_h),
+            Eigen::Vector2d(-radius_g,  radius_h),
+            Eigen::Vector2d(-radius_g, -radius_h),
+        };
+        for (const auto& delta : trials) {
+          const Eigen::Vector2d trial_x = project_tukey_params(x + delta, options);
+          if ((trial_x - x).norm() <= options.parameter_tol) continue;
+          auto trial_or = eval_tukey_moment_fit(trial_x, spec, gh);
+          if (trial_or.has_value() && trial_or->norm < current.norm) {
+            current = *trial_or;
+            x = trial_x;
+            accepted = true;
+            if (current.norm < best.norm) best = current;
+            break;
+          }
+        }
+        if (!accepted) {
+          radius_g *= 0.5;
+          radius_h *= 0.5;
+          if (std::max(radius_g, radius_h) <= options.parameter_tol) break;
+        }
+      }
+    }
+    if (!accepted) break;
+  }
+
+  if (best.norm > options.objective_tol) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        "fit_marginal_to_moments: Tukey g-and-h moment solve did not converge"));
+  }
+
+  return MomentMatchResult{best.marginal, best.moments, best.norm, iter};
 }
 
 sim_expected<Eigen::MatrixXd>
@@ -455,6 +716,35 @@ marginal_quantile(const MarginalSpec& marginal, double u) {
   if (!mom_or.has_value()) return std::unexpected(mom_or.error());
   const double y = standardized_from_z(marginal, *mom_or, *z_or);
   return marginal.mean + marginal.sd * y;
+}
+
+sim_expected<MarginalMomentSummary>
+marginal_moment_summary(const MarginalSpec& marginal, int quadrature_points) {
+  auto gh_or = gauss_hermite(quadrature_points);
+  if (!gh_or.has_value()) return std::unexpected(gh_or.error());
+  return raw_moment_summary(marginal, *gh_or);
+}
+
+sim_expected<MomentMatchResult>
+fit_marginal_to_moments(const MomentMatchSpec& spec,
+                        const MomentMatchOptions& options) {
+  if (auto ok = validate_moment_match(spec, options); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  auto gh_or = gauss_hermite(options.quadrature_points);
+  if (!gh_or.has_value()) return std::unexpected(gh_or.error());
+  switch (spec.family) {
+    case MomentMatchFamily::TukeyGH:
+      return fit_tukey_moment_match(spec, options, *gh_or);
+    case MomentMatchFamily::Pearson:
+    case MomentMatchFamily::Johnson:
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "fit_marginal_to_moments: requested family is not implemented yet"));
+  }
+  return std::unexpected(make_err(
+      SimError::Kind::InvalidInput,
+      "fit_marginal_to_moments: unknown moment-match family"));
 }
 
 sim_expected<Eigen::MatrixXd>
