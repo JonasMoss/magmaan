@@ -1,0 +1,111 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "sim.pearson_moment_match",
+    "oracle": "PearsonDS 1.3.2 pearsonFitM/qpearson"
+  },
+  "cases": [
+    {
+      "id": "normal_type0",
+      "mean": 0,
+      "sd": 1,
+      "skewness": 0,
+      "excess_kurtosis": 0,
+      "supported": true,
+      "raw_kurtosis": 3,
+      "pearson_type": 0,
+      "pearson_params": [0, 1, 0, 0],
+      "probabilities": [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999],
+      "quantiles": [-3.09023230616781, -2.32634787404084, -1.2815515655446, 0, 1.2815515655446, 2.32634787404084, 3.09023230616781]
+    },
+    {
+      "id": "beta_type1",
+      "mean": 0,
+      "sd": 1,
+      "skewness": 1,
+      "excess_kurtosis": 1,
+      "supported": true,
+      "raw_kurtosis": 4,
+      "pearson_type": 1,
+      "pearson_params": [1.82084380111805, 10.179156198882, -1.52493781056044, 10.0498756211209],
+      "probabilities": [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999],
+      "quantiles": [-1.49599245558318, -1.41986983860691, -1.1142929566337, -0.195547590749658, 1.39032107456197, 2.99092533882672, 4.18051268159366]
+    },
+    {
+      "id": "symmetric_beta_type2",
+      "mean": 0,
+      "sd": 1,
+      "skewness": 0,
+      "excess_kurtosis": -1,
+      "supported": true,
+      "raw_kurtosis": 2,
+      "pearson_type": 2,
+      "pearson_params": [1.5, -2, 4, 0],
+      "probabilities": [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999],
+      "quantiles": [-1.97185248530527, -1.86866598679362, -1.37409765226508, -6.66133814775094e-16, 1.37409765226508, 1.86866598679362, 1.97185248530527]
+    },
+    {
+      "id": "gamma_type3",
+      "mean": 0,
+      "sd": 1,
+      "skewness": 2,
+      "excess_kurtosis": 6,
+      "supported": true,
+      "raw_kurtosis": 9,
+      "pearson_type": 3,
+      "pearson_params": [1, -1, 1, 0],
+      "probabilities": [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999],
+      "quantiles": [-0.998999499666416, -0.989949664146499, -0.894639484342174, -0.306852819440055, 1.30258509299405, 3.60517018598809, 5.90775527898214]
+    },
+    {
+      "id": "beta_prime_type6",
+      "mean": 0,
+      "sd": 1,
+      "skewness": 3,
+      "excess_kurtosis": 17,
+      "supported": true,
+      "raw_kurtosis": 20,
+      "pearson_type": 6,
+      "pearson_params": [0.880044045061902, 9.57142857142857, -0.839636633896654, 8.17786958934955],
+      "probabilities": [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999],
+      "quantiles": [-0.839318328648021, -0.835268002154543, -0.777472947909365, -0.327690336099237, 1.17055552866468, 3.86618055484846, 7.31764047950888]
+    },
+    {
+      "id": "student_type7",
+      "mean": 0,
+      "sd": 1,
+      "skewness": 0,
+      "excess_kurtosis": 1,
+      "supported": true,
+      "raw_kurtosis": 4,
+      "pearson_type": 7,
+      "pearson_params": [10, 0, 0.894427190999916, 0],
+      "probabilities": [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999],
+      "quantiles": [-3.70623839323505, -2.4719905529911, -1.22731835965435, 0, 1.22731835965435, 2.4719905529911, 3.70623839323505]
+    },
+    {
+      "id": "negative_skew_beta_type1",
+      "mean": 0,
+      "sd": 1,
+      "skewness": -1,
+      "excess_kurtosis": 1,
+      "supported": true,
+      "raw_kurtosis": 4,
+      "pearson_type": 1,
+      "pearson_params": [10.179156198882, 1.82084380111805, -8.52493781056045, 10.0498756211209],
+      "probabilities": [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999],
+      "quantiles": [-4.18051268159366, -2.99092533882672, -1.39032107456197, 0.195547590749657, 1.1142929566337, 1.41986983860691, 1.49599245558318]
+    },
+    {
+      "id": "type4_unsupported",
+      "mean": 0,
+      "sd": 1,
+      "skewness": 1,
+      "excess_kurtosis": 4,
+      "supported": false,
+      "raw_kurtosis": 7,
+      "pearson_type": 4,
+      "pearson_params": [4, -3, -1, 2]
+    }
+  ]
+}

@@ -211,16 +211,19 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   wrapping, and a mixed-marginal stochastic smoke.
 - **Partly landed.** Moment-matching now has a reusable C++ API:
   `MomentMatchSpec` / `MomentMatchOptions` / `MomentMatchResult` plus
-  `fit_marginal_to_moments()`. The first implemented family is Tukey g-and-h,
-  fitting `g,h` to target skewness and **excess** kurtosis, then returning a
-  regular `MarginalSpec` that plugs into the existing NORTA and independent
-  generators. Unit coverage pins the Kowalchuk-Headrick `(skew=3,
-  excess-kurtosis=20)` example and verifies the fitted marginal feeds NORTA
-  calibration. **Remaining:** implement `MomentMatchFamily::Pearson` by
-  prototyping against R `PearsonDS::pearsonFitM()` / `qpearson()` fixtures,
-  decide whether Pearson quantile formulas belong in C++, then add Johnson
-  fitting once that feasibility/quantile story is clear. Keep R/package
-  dependencies out of the C++ core.
+  `fit_marginal_to_moments()`. Tukey g-and-h fits `g,h` to target skewness and
+  **excess** kurtosis, then returns a regular `MarginalSpec` that plugs into
+  the existing NORTA and independent generators. Unit coverage pins the
+  Kowalchuk-Headrick `(skew=3, excess-kurtosis=20)` example and verifies the
+  fitted marginal feeds NORTA calibration. Pearson fitting is also landed for
+  PearsonDS Types 0/I/II/III/V/VI/VII: the C++ formulas mirror
+  `PearsonDS::pearsonFitM()`, the quantile path mirrors `qpearson()` through
+  regularized beta/gamma/F/t inversions, and
+  `tests/tools/regen_pearson_sim_fixtures.R` generates checked PearsonDS 1.3.2
+  goldens. **Remaining:** implement a principled Pearson Type IV
+  CDF/quantile policy (or keep rejecting it deliberately), then add Johnson
+  fitting once the Pearson Type IV story is clear. Keep R/package dependencies
+  out of the C++ core and fixtures only.
 - **M.** Harden NORTA calibration for larger simulation grids: cache pairwise
   correlation maps when marginal specs repeat, expose/interpolate the
   `rho_Z -> Corr(X_i, X_j)` map for repeated target matrices, and add an
