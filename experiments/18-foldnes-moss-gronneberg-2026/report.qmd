@@ -101,6 +101,9 @@ performs best.
   correlations spread over a small fixed set), but the exact population matrices
   live in the paper's online supplement and are not reproduced here. Parity does
   not depend on the specific population.
+- **The Study 1 grid is complete.** The script crosses the paper's Study 1
+  model sizes (`p = 15, 30, 60, 100`), sample sizes (`N = 400, 800, 2000`),
+  and seven distribution conditions, for 84 cells before filtering.
 - **Few replicates.** This run uses `r mv("reps")` replicates per cell — enough
   to confirm parity, far too few to estimate a 5% rejection rate (the paper uses
   2000). The rejection-rate file in `results/` is a shape check only, and carries
