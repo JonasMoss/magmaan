@@ -6,10 +6,10 @@
 # ~ U[0.5, 1.5], unit latent and error variances, interfactor correlations in
 # {-.3, -.2, 0, .1, .2, .3}). The paper's exact realized population matrices
 # live in the OSF supplement (https://osf.io/h2y3n/) and are NOT reproduced
-# here. Marginal non-normality is induced with the Vale-Maurelli (1983) third-
-# order polynomial method for VM cells and magmaan's piecewise-linear simulator
-# for PL cells, so the experiment needs no covsim dependency. The paper itself
-# generates VM/IG/PL data with lavaan/covsim.
+# here. Marginal non-normality is induced with experiment-local Vale-Maurelli
+# code for VM cells and magmaan's independent-generator and piecewise-linear
+# simulators for IG/PL cells, so the experiment needs no covsim dependency.
+# The paper itself generates VM/IG/PL data with lavaan/covsim.
 
 # ── Fleishman (1978) power-method coefficients ──────────────────────────────
 # Solve for (b, c, d) with a = -c so that Y = a + bZ + cZ^2 + dZ^3, Z ~ N(0,1),
@@ -131,10 +131,13 @@ dist_family <- function(dist) sub("[12]$", "", dist)
   sweep(Y, 2L, setup$sds, "*")
 }
 
-# Build a per-cell sampler. Cheap families draw fresh per replicate; PLSIM
-# calibrates once per cell and stores a short batch of generated matrices.
+# Build a per-cell sampler. Cheap families draw fresh per replicate; IG and
+# PLSIM calibrate once per cell and store a short batch of generated matrices.
 make_cell_sampler <- function(pop, N, dist, reps, seed_base, moments,
                               fl = NULL, core = NULL,
+                              ig_root = "symmetric",
+                              ig_generator_family = "pearson",
+                              ig_quadrature_points = 81L,
                               plsim_method = "hermite_then_rectangle",
                               plsim_num_segments = 12L,
                               plsim_quadrature_points = 31L,
@@ -158,6 +161,26 @@ make_cell_sampler <- function(pop, N, dist, reps, seed_base, moments,
                   set.seed(seed_base + i)
                   .vm_draw(N, p, setup, fl)
                 }))
+  }
+
+  if (fam == "ig") {
+    if (is.null(core)) stop("IG cells require magmaan_core", call. = FALSE)
+    mom <- moments[[dist]]
+    if (is.null(mom)) stop("unknown IG distribution: ", dist, call. = FALSE)
+    batch <- core$sim_ig_batch(
+      pop$Sigma,
+      rep(mom[[1L]], p),
+      rep(mom[[2L]], p),
+      n = N,
+      reps = reps,
+      seed_base = seed_base,
+      root = ig_root,
+      generator_family = ig_generator_family,
+      quadrature_points = ig_quadrature_points)
+    return(list(setup_seconds = proc.time()[["elapsed"]] - t0,
+                ig = batch[c("root", "generator_skewness",
+                             "generator_excess_kurtosis")],
+                draw = function(i) batch$draws[[i]]))
   }
 
   if (fam == "pl") {

@@ -23,8 +23,7 @@
 #                            [--lavaan-parity] [--smoke]
 #
 # `--cells FILTER` is a comma-separated list of key=value pairs restricting the
-# crossed grid, e.g. `p=15,N=400,dist=pl1`. `--smoke` runs one tiny PLSIM cell
-# once.
+# crossed grid, e.g. `p=15,N=400,dist=ig1`. `--smoke` runs one short IG cell.
 
 .support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
@@ -57,8 +56,9 @@ parse_args <- function(args) {
           "                     pEBA/pOLS x ML/RLS x biased/unbiased) against\n",
           "                     semTests p-values; implies --lavaan-parity\n", sep = "")
       cat("  --cells: comma-separated key=value over {p, N, dist}, e.g.\n",
-          "           p=15,N=400,dist=pl1\n", sep = "")
-      cat("  dist in {norm, vm1, vm2, pl1, pl2}; *1=(skew 2,kurt 7), *2=(skew 3,kurt 21)\n")
+          "           p=15,N=400,dist=ig1\n", sep = "")
+      cat("  dist in {norm, vm1, vm2, ig1, ig2, pl1, pl2}; ",
+          "*1=(skew 2,kurt 7), *2=(skew 3,kurt 21)\n", sep = "")
       quit(save = "no", status = 0L)
     } else if (a == "--reps") {
       i <- i + 1L; out$reps <- as.integer(args[[i]])
@@ -101,6 +101,7 @@ core <- magmaan::magmaan_core
 dist_moments <- list(
   norm = c(0, 0),
   vm1  = c(2, 7),  vm2 = c(3, 21),
+  ig1  = c(2, 7),  ig2 = c(3, 21),
   pl1  = c(2, 7),  pl2 = c(3, 21)
 )
 
@@ -217,13 +218,13 @@ parse_cells_filter <- function(s) {
 cell_grid <- expand.grid(
   p    = c(15L, 30L),
   N    = c(400L, 800L),
-  dist = c("norm", "vm1", "vm2", "pl1", "pl2"),
+  dist = c("norm", "vm1", "vm2", "ig1", "ig2", "pl1", "pl2"),
   stringsAsFactors = FALSE
 )
 if (isTRUE(args$smoke)) {
-  cell_grid <- data.frame(p = 15L, N = 400L, dist = "pl1",
+  cell_grid <- data.frame(p = 15L, N = 400L, dist = "ig1",
                           stringsAsFactors = FALSE)
-  args$reps <- 1L
+  args$reps <- 3L
 }
 
 filter <- parse_cells_filter(args$cells_filter)
