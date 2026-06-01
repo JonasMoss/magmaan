@@ -772,6 +772,70 @@ validate_bivariate_quantile_marginals(const std::vector<MarginalSpec>& marginals
   return {};
 }
 
+sim_expected<void>
+validate_bivariate_copula_matrix_target(
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options) {
+  if (target_corr.rows() != target_corr.cols()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_bivariate_copula_correlation_matrix: target_corr must be square"));
+  }
+  if (target_corr.rows() == 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_bivariate_copula_correlation_matrix: target_corr must not be empty"));
+  }
+  if (static_cast<Eigen::Index>(marginals.size()) != target_corr.rows()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_bivariate_copula_correlation_matrix: marginal count must match target_corr dimension"));
+  }
+  if (options.quadrature_points < 8 || options.max_bisection_iter < 16 ||
+      !std::isfinite(options.calibration_tol) || options.calibration_tol <= 0.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_bivariate_copula_correlation_matrix: invalid options"));
+  }
+
+  constexpr double sym_tol = 1e-12;
+  constexpr double diag_tol = 1e-12;
+  for (Eigen::Index i = 0; i < target_corr.rows(); ++i) {
+    if (!std::isfinite(target_corr(i, i)) ||
+        std::abs(target_corr(i, i) - 1.0) > diag_tol) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "calibrate_bivariate_copula_correlation_matrix: target_corr diagonal must equal 1"));
+    }
+    for (Eigen::Index j = 0; j < target_corr.cols(); ++j) {
+      if (!std::isfinite(target_corr(i, j)) ||
+          std::abs(target_corr(i, j) - target_corr(j, i)) > sym_tol) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "calibrate_bivariate_copula_correlation_matrix: target_corr must be finite and symmetric"));
+      }
+      if (i != j && std::abs(target_corr(i, j)) >= 1.0) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "calibrate_bivariate_copula_correlation_matrix: off-diagonal target correlations must satisfy |r| < 1"));
+      }
+    }
+  }
+
+  for (const auto& marginal : marginals) {
+    if (auto ok = validate_marginal(marginal); !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
+    if (marginal.kind == MarginalKind::Fleishman) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidMarginal,
+          "calibrate_bivariate_copula_correlation_matrix: Fleishman polynomial is not a copula quantile marginal"));
+    }
+  }
+  return {};
+}
+
 sim_expected<std::vector<MarginalMoments>>
 build_marginal_moments(const std::vector<MarginalSpec>& marginals,
                        const GaussHermite& gh) {
@@ -2715,6 +2779,52 @@ calibrate_bivariate_copula_correlation(
   if (!best_spec_or.has_value()) return std::unexpected(best_spec_or.error());
   out.copula = *best_spec_or;
   out.achieved_corr = best_corr;
+  return out;
+}
+
+sim_expected<BivariateCopulaMatrixCalibration>
+calibrate_bivariate_copula_correlation_matrix(
+    BivariateCopulaFamily family,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options) {
+  if (auto ok = validate_bivariate_copula_matrix_target(
+          target_corr, marginals, options);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  const Eigen::Index p = target_corr.rows();
+  BivariateCopulaMatrixCalibration out;
+  out.family = family;
+  out.theta = Eigen::MatrixXd::Zero(p, p);
+  out.achieved_corr = Eigen::MatrixXd::Identity(p, p);
+  out.lower_bound_corr = Eigen::MatrixXd::Identity(p, p);
+  out.upper_bound_corr = Eigen::MatrixXd::Identity(p, p);
+  out.iterations = Eigen::MatrixXi::Zero(p, p);
+
+  for (Eigen::Index i = 0; i < p; ++i) {
+    for (Eigen::Index j = i + 1; j < p; ++j) {
+      const std::vector<MarginalSpec> pair_marginals{
+          marginals[static_cast<std::size_t>(i)],
+          marginals[static_cast<std::size_t>(j)]};
+      auto pair_or = calibrate_bivariate_copula_correlation(
+          family, target_corr(i, j), pair_marginals, options);
+      if (!pair_or.has_value()) return std::unexpected(pair_or.error());
+      const auto& pair = *pair_or;
+      out.theta(i, j) = pair.copula.theta;
+      out.theta(j, i) = pair.copula.theta;
+      out.achieved_corr(i, j) = pair.achieved_corr;
+      out.achieved_corr(j, i) = pair.achieved_corr;
+      out.lower_bound_corr(i, j) = pair.lower_bound_corr;
+      out.lower_bound_corr(j, i) = pair.lower_bound_corr;
+      out.upper_bound_corr(i, j) = pair.upper_bound_corr;
+      out.upper_bound_corr(j, i) = pair.upper_bound_corr;
+      out.iterations(i, j) = pair.iterations;
+      out.iterations(j, i) = pair.iterations;
+    }
+  }
+
   return out;
 }
 

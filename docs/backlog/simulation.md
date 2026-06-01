@@ -20,7 +20,7 @@ simulation work queue and decision log.
   generators, Foldnes-Olsson independent-generator calibration,
   Vale-Maurelli/Fleishman calibration/sampling, fixed-parameter t-copula
   sampling, fixed-parameter bivariate Archimedean copula sampling, and a first
-  bivariate copula observed-Pearson calibration helper.
+  VITA/covsim-style bivariate copula observed-Pearson calibration layer.
 - Baseline multivariate-normal generation is available through
   `simulate_normal_matrix()` and `simulate_normal_raw()`, taking explicit
   population means and covariance matrices. This is the low-level normal
@@ -78,9 +78,12 @@ simulation work queue and decision log.
   deterministic quadrature-implied observed Pearson correlation after the
   marginal quantile transforms, and `calibrate_bivariate_copula_correlation()`
   bisects on Kendall tau to hit a target pairwise correlation for one family.
-  This is the first VITA/covsim-style pairwise calibration layer; full matrix
-  assembly, positive-definiteness repair, and ordinal/polyserial/polychoric
-  calibration remain separate work.
+  `calibrate_bivariate_copula_correlation_matrix()` applies that calibration to
+  every off-diagonal entry of a target correlation matrix and returns pairwise
+  copula parameters, achieved correlations, feasible bounds, and iteration
+  counts. This is a matrix diagnostic/calibration layer, not a multivariate
+  Archimedean/vine sampler; joint assembly, positive-definiteness repair, and
+  ordinal/polyserial/polychoric calibration remain separate work.
 
 ## Architecture Direction
 
@@ -245,16 +248,18 @@ Validation:
   parameter-convention fixtures against vinecopulib or its R interface unless a
   broader vine backend is explicitly chosen. `simulate_mixed_population_bivariate_copula()`
   composes the same generator with observed ordinal/mixed projection.
-- **Landed, first pairwise VITA/covsim slice.** Add deterministic bivariate
-  copula observed-correlation evaluation and Kendall-tau bisection calibration
-  through `bivariate_copula_observed_corr()` and
-  `calibrate_bivariate_copula_correlation()`. The current scope is one
-  bivariate family and two quantile marginals; full matrix assembly and
-  ordinal/polyserial/polychoric calibration remain.
+- **Landed, first VITA/covsim matrix slice.** Add deterministic bivariate copula
+  observed-correlation evaluation and Kendall-tau bisection calibration through
+  `bivariate_copula_observed_corr()`,
+  `calibrate_bivariate_copula_correlation()`, and
+  `calibrate_bivariate_copula_correlation_matrix()`. The current matrix scope
+  is pairwise calibration/diagnostics for one bivariate family across quantile
+  marginals; joint copula assembly and ordinal/polyserial/polychoric
+  calibration remain.
 - **S.** Add PLSIM/piecewise-linear simulation once the shared projection and
   diagnostics interfaces exist.
-- **S.** Extend VITA/covsim-style simulation from pairwise calibration to matrix
-  calibration, feasibility diagnostics, and positive-definiteness repair.
+- **S.** Extend VITA/covsim-style simulation from matrix diagnostics to joint
+  assembly, feasibility policy, and positive-definiteness repair.
 - **S.** Decide whether Johnson SL should be exposed beyond the direct
   `MarginalSpec::johnson()` constructor.
 - **S.** Decide the long-term special-functions policy before expanding the
