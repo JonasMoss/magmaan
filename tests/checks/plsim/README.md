@@ -8,12 +8,16 @@ The driver compares:
 
 - Hermite-series covariance calibration;
 - bivariate Gauss-Hermite quadrature calibration;
+- conditional-normal rectangle-moment calibration;
 - Hermite-initialized quadrature refinement.
+- Hermite-initialized rectangle refinement.
 
 For each condition it reports calibration time, strategy-implied target
 residual, and the same calibrated intermediate correlations re-evaluated by the
-quadrature reference. The quadrature path is the current deterministic local
-reference until a specialized Foldnes-Gronneberg rectangle-moment kernel lands.
+quadrature and rectangle evaluators. The rectangle path evaluates the
+Foldnes-Gronneberg segment-rectangle decomposition with conditional-normal
+one-dimensional adaptive integration, avoiding the kink-smoothing behavior of
+full-plane Gauss-Hermite quadrature.
 
 Run locally from this directory:
 
@@ -33,13 +37,16 @@ The columns are:
   evaluator;
 - `quad_err`: maximum absolute residual after re-evaluating the calibrated
   intermediate correlations with the quadrature reference;
+- `rect_err`: maximum absolute residual after re-evaluating the calibrated
+  intermediate correlations with the rectangle-moment evaluator;
 - `rho_delta`: maximum latent-correlation difference from pure quadrature;
 - `samp_corr` / `samp_shape`: stochastic sample diagnostics from one generated
   sample, useful only as a rough smoke check.
 
 On the initial quick smoke (`reps=3`, `sample_n=20000`), Hermite-only was much
-faster but had quadrature-reference residuals around `1e-3`; pure quadrature
-and Hermite-initialized quadrature agreed at the requested calibration tolerance.
+faster and agreed with the rectangle evaluator at the requested tolerance.
+Pure quadrature and Hermite-initialized quadrature agreed with each other, but
+were about `1e-3` away from the rectangle/Hermite paths in the smoke cases.
 
 Useful sweep knobs:
 
@@ -55,6 +62,5 @@ Initial sweeps showed that increasing Hermite order from 12 to 96 did not
 materially change the Hermite-only quadrature-reference residuals for the smoke
 cases. Increasing quadrature nodes did move those residuals, sometimes
 non-monotonically, which is consistent with Gauss-Hermite quadrature being a
-rough deterministic reference for kinked PL transforms. The next precision step
-is therefore the exact bivariate normal rectangle-moment evaluator, not simply
-more Hermite coefficients.
+rough deterministic reference for kinked PL transforms. Prefer the rectangle
+path when judging calibration accuracy.

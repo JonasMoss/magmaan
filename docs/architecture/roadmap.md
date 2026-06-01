@@ -207,10 +207,13 @@ golden `parTable()` fixtures.
   breakpoints, fits continuous PL slopes to target marginal skewness and excess
   kurtosis, exposes Hermite coefficients, and calibrates pairwise intermediate
   normal correlations with selectable covariance evaluators:
-  `PlsimCovarianceMethod::Hermite`, `Quadrature`, or
-  `HermiteThenQuadrature`. The quadrature path is a deterministic bivariate
-  Gauss-Hermite reference; a specialized Foldnes-Grønneberg rectangle-moment
-  kernel remains the next performance/accuracy refinement.
+  `PlsimCovarianceMethod::Hermite`, `Quadrature`, `Rectangle`,
+  `HermiteThenQuadrature`, or `HermiteThenRectangle`. The rectangle path
+  evaluates the Foldnes-Grønneberg segment decomposition by reducing bivariate
+  normal rectangle probability/first/cross moments to conditional-normal
+  one-dimensional adaptive integration. Gauss-Hermite quadrature remains useful
+  as a smooth deterministic comparison path, but the advisory PLSIM bench shows
+  it can differ from the rectangle/Hermite paths around kinked transforms.
 - Initial NORTA marginals are standard normal, standardized lognormal, Tukey
   g-and-h, Pearson-system distributions, and Johnson-system SU/SB
   distributions. Fleishman polynomial transforms can also be passed through the

@@ -74,6 +74,26 @@ TEST_CASE("PLSIM Hermite covariance agrees with quadrature for fitted marginals"
   CHECK(*h_or == doctest::Approx(*q_or).epsilon(4e-3));
 }
 
+TEST_CASE("PLSIM rectangle covariance agrees with quadrature reference") {
+  magmaan::sim::PlsimOptions options;
+  options.hermite_order = 36;
+  options.quadrature_points = 61;
+  auto left_or = magmaan::sim::fit_plsim_marginal(0.75, 1.25, options);
+  auto right_or = magmaan::sim::fit_plsim_marginal(-0.35, 0.80, options);
+  if (!left_or.has_value()) MESSAGE(left_or.error().detail);
+  if (!right_or.has_value()) MESSAGE(right_or.error().detail);
+  REQUIRE(left_or.has_value());
+  REQUIRE(right_or.has_value());
+
+  auto rect_or = magmaan::sim::plsim_covariance_rectangle(
+      *left_or, *right_or, 0.42, options);
+  auto quad_or = magmaan::sim::plsim_covariance_quadrature(
+      *left_or, *right_or, 0.42, options.quadrature_points);
+  REQUIRE(rect_or.has_value());
+  REQUIRE(quad_or.has_value());
+  CHECK(*rect_or == doctest::Approx(*quad_or).epsilon(2e-3));
+}
+
 TEST_CASE("PLSIM calibration solves pairwise covariance with alternative strategies") {
   Eigen::VectorXd skew(2);
   skew << 2.0, 0.75;
@@ -106,6 +126,12 @@ TEST_CASE("PLSIM calibration solves pairwise covariance with alternative strateg
         doctest::Approx(exact_or->achieved_corr(0, 1)).epsilon(5e-6));
   CHECK(std::abs(hermite_or->intermediate_corr(0, 1) -
                  exact_or->intermediate_corr(0, 1)) < 0.02);
+
+  auto rect_or = magmaan::sim::calibrate_plsim(
+      target, skew, kurt, magmaan::sim::PlsimCovarianceMethod::Rectangle, options);
+  if (!rect_or.has_value()) MESSAGE(rect_or.error().detail);
+  REQUIRE(rect_or.has_value());
+  CHECK(rect_or->achieved_corr(0, 1) == doctest::Approx(0.30).epsilon(5e-6));
 }
 
 TEST_CASE("PLSIM simulation respects calibrated population moments") {
@@ -151,4 +177,3 @@ TEST_CASE("PLSIM raw wrapper returns one complete data block") {
   CHECK(raw_or->X[0].rows() == 30);
   CHECK(raw_or->X[0].cols() == 2);
 }
-

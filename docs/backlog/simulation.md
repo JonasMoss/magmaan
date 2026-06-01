@@ -53,11 +53,12 @@ simulation work queue and decision log.
   regular normal-quantile breakpoints, solves slopes for target marginal
   skewness/excess kurtosis, exposes Hermite coefficients, and calibrates
   pairwise intermediate normal correlations with selectable covariance
-  evaluators: Hermite-series, bivariate Gauss-Hermite quadrature, or
-  Hermite-initialized quadrature. This is the comparison harness for the later
-  specialized bivariate rectangle-moment kernel; the current quadrature path is
-  the local deterministic reference, not yet the exact Foldnes-Grønneberg
-  rectangle formula.
+  evaluators: Hermite-series, bivariate Gauss-Hermite quadrature,
+  conditional-normal rectangle moments, and Hermite-initialized refinement for
+  either deterministic path. The rectangle evaluator follows the
+  Foldnes-Grønneberg segment decomposition directly, reducing each bivariate
+  rectangle probability/first/cross-moment calculation to one-dimensional
+  adaptive integration over the conditioning normal variable.
 - Pearson marginals follow PearsonDS conventions. Types 0/I/II/III/IV/V/VI/VII
   are supported and checked against PearsonDS 1.3.2 goldens. Type IV uses a
   dependency-free finite-integral CDF and bisection quantile path.
@@ -160,11 +161,10 @@ calibrates/diagnoses one of those steps.
   parameter conventions, simulation checks, and later vine work. Do not make it
   a core runtime dependency unless the exception/dependency boundary is
   deliberately revisited; the C++ core stays local and `std::expected` based.
-- Extend the first PLSIM slice with a specialized bivariate normal rectangle
-  probability/first/cross-moment kernel, pair-calibration caching, and explicit
-  performance diagnostics comparing Hermite-only, quadrature, and
-  Hermite-initialized refinement. Extend the first pairwise VITA/covsim copula
-  calibration into a full matrix-oriented workflow.
+- Extend the first PLSIM slice with pair-calibration caching, broader
+  simulation-grid diagnostics, and possible tuning/replacement of the current
+  adaptive rectangle integration kernel. Extend the first pairwise VITA/covsim
+  copula calibration into a full matrix-oriented workflow.
 
 ## Pearson Type IV
 
@@ -285,11 +285,12 @@ Validation:
   `fit_plsim_marginal()`, `calibrate_plsim()`, `simulate_plsim_matrix()`, and
   `simulate_plsim_raw()`. Unit coverage checks the skewness 2 / excess kurtosis
   5 condition where Fleishman fails, Hermite-vs-quadrature covariance
-  agreement, pairwise calibration under Hermite/quadrature/refined strategies,
-  stochastic moments, and raw-data wrapping. `tests/checks/plsim/` provides an
-  advisory calibration bench comparing speed and quadrature-reference
-  agreement across strategies. Remaining PLSIM work is a faster exact
-  rectangle-moment covariance evaluator and broader simulation-grid diagnostics.
+  agreement, rectangle covariance evaluation, pairwise calibration under
+  Hermite/quadrature/rectangle/refined strategies, stochastic moments, and
+  raw-data wrapping. `tests/checks/plsim/` provides an advisory calibration
+  bench comparing speed and quadrature/rectangle agreement across strategies.
+  Remaining PLSIM work is pair-cache/performance tuning and broader
+  simulation-grid diagnostics.
 - **S.** Extend VITA/covsim-style simulation from repaired matrix diagnostics
   plus explicit 3-variable C-vine sampling to automatic matrix-to-vine fitting
   and broader vine/multivariate-copula policies.

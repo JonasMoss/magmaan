@@ -42,6 +42,7 @@ struct MethodSummary {
   double mean_ms = 0.0;
   double max_strategy_resid = std::numeric_limits<double>::quiet_NaN();
   double max_quad_resid = std::numeric_limits<double>::quiet_NaN();
+  double max_rect_resid = std::numeric_limits<double>::quiet_NaN();
   double max_rho_delta = std::numeric_limits<double>::quiet_NaN();
   double sample_corr_err = std::numeric_limits<double>::quiet_NaN();
   double sample_shape_err = std::numeric_limits<double>::quiet_NaN();
@@ -170,6 +171,23 @@ double quadrature_residual(const magmaan::sim::PlsimCalibration& cal,
   return out;
 }
 
+double rectangle_residual(const magmaan::sim::PlsimCalibration& cal,
+                          const Eigen::MatrixXd& target,
+                          const magmaan::sim::PlsimOptions& options) {
+  double out = 0.0;
+  for (Eigen::Index i = 0; i < target.rows(); ++i) {
+    for (Eigen::Index j = i + 1; j < target.cols(); ++j) {
+      auto cov_or = magmaan::sim::plsim_covariance_rectangle(
+          cal.marginals[static_cast<std::size_t>(i)],
+          cal.marginals[static_cast<std::size_t>(j)],
+          cal.intermediate_corr(i, j), options);
+      if (!cov_or.has_value()) return std::numeric_limits<double>::quiet_NaN();
+      out = std::max(out, std::abs(*cov_or - target(i, j)));
+    }
+  }
+  return out;
+}
+
 double sample_corr_error(const Eigen::MatrixXd& X, const Eigen::MatrixXd& target) {
   double out = 0.0;
   for (Eigen::Index i = 0; i < target.rows(); ++i) {
@@ -219,6 +237,7 @@ MethodSummary run_method(const Case& c,
   out.mean_ms = total_ms / static_cast<double>(out.ok + out.failed);
   out.max_strategy_resid = max_abs_offdiag(last.achieved_corr, c.corr);
   out.max_quad_resid = quadrature_residual(last, c.corr, options);
+  out.max_rect_resid = rectangle_residual(last, c.corr, options);
   if (reference != nullptr) {
     out.max_rho_delta =
         max_abs_offdiag(last.intermediate_corr, reference->intermediate_corr);
@@ -241,6 +260,7 @@ void print_summary(const Case& c, const std::vector<MethodSummary>& rows) {
             << std::setw(12) << "ms"
             << std::setw(14) << "own_err"
             << std::setw(14) << "quad_err"
+            << std::setw(14) << "rect_err"
             << std::setw(14) << "rho_delta"
             << std::setw(14) << "samp_corr"
             << std::setw(14) << "samp_shape" << "\n";
@@ -252,6 +272,7 @@ void print_summary(const Case& c, const std::vector<MethodSummary>& rows) {
               << std::setw(14) << std::scientific << std::setprecision(3)
               << r.max_strategy_resid
               << std::setw(14) << r.max_quad_resid
+              << std::setw(14) << r.max_rect_resid
               << std::setw(14) << r.max_rho_delta
               << std::setw(14) << r.sample_corr_err
               << std::setw(14) << r.sample_shape_err
@@ -297,8 +318,15 @@ int main(int argc, char** argv) {
         c, "Quadrature", magmaan::sim::PlsimCovarianceMethod::Quadrature,
         options, ref, cfg));
     rows.push_back(run_method(
+        c, "Rectangle", magmaan::sim::PlsimCovarianceMethod::Rectangle,
+        options, ref, cfg));
+    rows.push_back(run_method(
         c, "Hermite+Quadrature",
         magmaan::sim::PlsimCovarianceMethod::HermiteThenQuadrature,
+        options, ref, cfg));
+    rows.push_back(run_method(
+        c, "Hermite+Rectangle",
+        magmaan::sim::PlsimCovarianceMethod::HermiteThenRectangle,
         options, ref, cfg));
     print_summary(c, rows);
   }
