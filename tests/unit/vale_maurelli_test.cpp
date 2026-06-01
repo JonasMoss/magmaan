@@ -96,6 +96,22 @@ TEST_CASE("Vale-Maurelli solves the pairwise polynomial covariance equation") {
   CHECK(*cov_or == doctest::Approx(0.30).epsilon(1e-10));
 }
 
+TEST_CASE("Fleishman coefficient solve covers Rhemtulla nonnormal target") {
+  auto coef_or = magmaan::sim::fit_fleishman_coefficients(2.0, 7.0);
+  if (!coef_or.has_value()) MESSAGE(coef_or.error().detail);
+  REQUIRE(coef_or.has_value());
+
+  std::mt19937_64 rng(20260603);
+  Eigen::MatrixXd X(160000, 1);
+  std::normal_distribution<double> normal(0.0, 1.0);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double z = normal(rng);
+    X(i, 0) = coef_or->a + z * (coef_or->b + z * (coef_or->c + z * coef_or->d));
+  }
+  CHECK(std::abs(sample_skewness(X, 0) - 2.0) < 0.14);
+  CHECK(std::abs(sample_excess_kurtosis(X, 0) - 7.0) < 0.55);
+}
+
 TEST_CASE("Vale-Maurelli simulation respects target moments and correlations") {
   Eigen::MatrixXd target(3, 3);
   target << 1.0, 0.30, -0.20,
