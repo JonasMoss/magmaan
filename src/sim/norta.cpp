@@ -31,6 +31,11 @@ struct GaussHermite {
   Eigen::VectorXd weights;
 };
 
+struct GaussLegendre {
+  Eigen::VectorXd nodes;
+  Eigen::VectorXd weights;
+};
+
 struct MarginalMoments {
   double mean = 0.0;
   double sd = 1.0;
@@ -186,6 +191,57 @@ sim_expected<GaussHermite> gauss_hermite(int n) {
     gh.weights(i) = kSqrtPi * V(0, i) * V(0, i);
   }
   return gh;
+}
+
+sim_expected<GaussLegendre> gauss_legendre_unit(int n) {
+  if (n < 8) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "gauss_legendre_unit: quadrature_points must be at least 8"));
+  }
+
+  GaussLegendre gl;
+  gl.nodes.resize(n);
+  gl.weights.resize(n);
+  const int m = (n + 1) / 2;
+  constexpr double eps = 1e-14;
+  for (int i = 0; i < m; ++i) {
+    double z = std::cos(std::numbers::pi *
+                        (static_cast<double>(i) + 0.75) /
+                        (static_cast<double>(n) + 0.5));
+    double pp = 0.0;
+    for (int iter = 0; iter < 80; ++iter) {
+      double p1 = 1.0;
+      double p2 = 0.0;
+      for (int j = 1; j <= n; ++j) {
+        const double p3 = p2;
+        p2 = p1;
+        p1 = ((2.0 * static_cast<double>(j) - 1.0) * z * p2 -
+              (static_cast<double>(j) - 1.0) * p3) /
+             static_cast<double>(j);
+      }
+      pp = static_cast<double>(n) * (z * p1 - p2) / (z * z - 1.0);
+      const double z_next = z - p1 / pp;
+      if (std::abs(z_next - z) <= eps) {
+        z = z_next;
+        break;
+      }
+      z = z_next;
+    }
+    if (!std::isfinite(z) || !std::isfinite(pp) || pp == 0.0) {
+      return std::unexpected(make_err(
+          SimError::Kind::NumericIssue,
+          "gauss_legendre_unit: root solve failed"));
+    }
+    const double w = 2.0 / ((1.0 - z * z) * pp * pp);
+    const int lo = i;
+    const int hi = n - 1 - i;
+    gl.nodes(lo) = 0.5 * (1.0 - z);
+    gl.nodes(hi) = 0.5 * (1.0 + z);
+    gl.weights(lo) = 0.5 * w;
+    gl.weights(hi) = 0.5 * w;
+  }
+  return gl;
 }
 
 sim_expected<void> validate_marginal(const MarginalSpec& m) {
@@ -628,6 +684,10 @@ sim_expected<void>
 validate_bivariate_copula_spec(const BivariateCopulaSpec& copula);
 
 sim_expected<void>
+validate_bivariate_quantile_marginals(const std::vector<MarginalSpec>& marginals,
+                                      const char* caller);
+
+sim_expected<void>
 validate_bivariate_copula_inputs(Eigen::Index n,
                                  const BivariateCopulaSpec& copula,
                                  const std::vector<MarginalSpec>& marginals,
@@ -642,7 +702,8 @@ validate_bivariate_copula_inputs(Eigen::Index n,
         SimError::Kind::InvalidInput,
         "simulate_bivariate_copula_matrix: exactly two marginals are required"));
   }
-  if (options.quadrature_points < 8 || options.max_bisection_iter < 16) {
+  if (options.quadrature_points < 8 || options.max_bisection_iter < 16 ||
+      !std::isfinite(options.calibration_tol) || options.calibration_tol <= 0.0) {
     return std::unexpected(make_err(
         SimError::Kind::InvalidInput,
         "simulate_bivariate_copula_matrix: invalid options"));
@@ -652,17 +713,8 @@ validate_bivariate_copula_inputs(Eigen::Index n,
     return std::unexpected(ok.error());
   }
 
-  for (const auto& marginal : marginals) {
-    if (auto ok = validate_marginal(marginal); !ok.has_value()) {
-      return std::unexpected(ok.error());
-    }
-    if (marginal.kind == MarginalKind::Fleishman) {
-      return std::unexpected(make_err(
-          SimError::Kind::InvalidMarginal,
-          "simulate_bivariate_copula_matrix: Fleishman polynomial is not a copula quantile marginal"));
-    }
-  }
-  return {};
+  return validate_bivariate_quantile_marginals(
+      marginals, "simulate_bivariate_copula_matrix");
 }
 
 sim_expected<void>
@@ -696,6 +748,28 @@ validate_bivariate_copula_spec(const BivariateCopulaSpec& copula) {
   return std::unexpected(make_err(
       SimError::Kind::InvalidInput,
       "bivariate copula: unknown family"));
+}
+
+sim_expected<void>
+validate_bivariate_quantile_marginals(const std::vector<MarginalSpec>& marginals,
+                                      const char* caller) {
+  if (marginals.size() != 2u) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        std::string(caller) + ": exactly two marginals are required"));
+  }
+  for (const auto& marginal : marginals) {
+    if (auto ok = validate_marginal(marginal); !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
+    if (marginal.kind == MarginalKind::Fleishman) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidMarginal,
+          std::string(caller) +
+              ": Fleishman polynomial is not a copula quantile marginal"));
+    }
+  }
+  return {};
 }
 
 sim_expected<std::vector<MarginalMoments>>
@@ -2456,6 +2530,192 @@ bivariate_copula_from_tau(BivariateCopulaFamily family,
   return std::unexpected(make_err(
       SimError::Kind::InvalidInput,
       "bivariate_copula_from_tau: unknown family"));
+}
+
+sim_expected<double>
+bivariate_copula_observed_corr(
+    const BivariateCopulaSpec& copula,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options) {
+  if (auto ok = validate_bivariate_copula_spec(copula); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (options.quadrature_points < 8 || options.max_bisection_iter < 16 ||
+      !std::isfinite(options.calibration_tol) || options.calibration_tol <= 0.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "bivariate_copula_observed_corr: invalid options"));
+  }
+  if (auto ok = validate_bivariate_quantile_marginals(
+          marginals, "bivariate_copula_observed_corr");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  auto gl_or = gauss_legendre_unit(options.quadrature_points);
+  if (!gl_or.has_value()) return std::unexpected(gl_or.error());
+  auto gh_or = gauss_hermite(options.quadrature_points);
+  if (!gh_or.has_value()) return std::unexpected(gh_or.error());
+  auto moments_or = build_marginal_moments(marginals, *gh_or);
+  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+  const auto& gl = *gl_or;
+  const auto& moments = *moments_or;
+
+  double corr = 0.0;
+  for (Eigen::Index a = 0; a < gl.nodes.size(); ++a) {
+    const double u = open_unit(gl.nodes(a));
+    auto x_or = marginal_from_unit(marginals[0], moments[0], u);
+    if (!x_or.has_value()) return std::unexpected(x_or.error());
+    const double x = (*x_or - marginals[0].mean) / marginals[0].sd;
+    for (Eigen::Index b = 0; b < gl.nodes.size(); ++b) {
+      const double w = open_unit(gl.nodes(b));
+      auto v_or = invert_bivariate_conditional(
+          copula, u, w, options.max_bisection_iter);
+      if (!v_or.has_value()) return std::unexpected(v_or.error());
+      auto y_or = marginal_from_unit(marginals[1], moments[1], *v_or);
+      if (!y_or.has_value()) return std::unexpected(y_or.error());
+      const double y = (*y_or - marginals[1].mean) / marginals[1].sd;
+      corr += gl.weights(a) * gl.weights(b) * x * y;
+    }
+  }
+  if (!std::isfinite(corr)) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "bivariate_copula_observed_corr: non-finite correlation"));
+  }
+  return std::clamp(corr, -1.0, 1.0);
+}
+
+sim_expected<BivariateCopulaCorrelationCalibration>
+calibrate_bivariate_copula_correlation(
+    BivariateCopulaFamily family,
+    double target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options) {
+  if (!std::isfinite(target_corr) || target_corr <= -1.0 ||
+      target_corr >= 1.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_bivariate_copula_correlation: target_corr must satisfy -1 < r < 1"));
+  }
+  if (options.quadrature_points < 8 || options.max_bisection_iter < 16 ||
+      !std::isfinite(options.calibration_tol) || options.calibration_tol <= 0.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_bivariate_copula_correlation: invalid options"));
+  }
+  if (auto ok = validate_bivariate_quantile_marginals(
+          marginals, "calibrate_bivariate_copula_correlation");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  if (family == BivariateCopulaFamily::Independence) {
+    if (std::abs(target_corr) > options.calibration_tol) {
+      return std::unexpected(make_err(
+          SimError::Kind::CalibrationFailed,
+          "calibrate_bivariate_copula_correlation: independence can only target zero correlation"));
+    }
+    BivariateCopulaCorrelationCalibration out;
+    out.copula = BivariateCopulaSpec{};
+    out.target_corr = target_corr;
+    out.achieved_corr = 0.0;
+    out.lower_bound_corr = 0.0;
+    out.upper_bound_corr = 0.0;
+    out.iterations = 0;
+    return out;
+  }
+
+  const auto eval_tau =
+      [&](double tau) -> sim_expected<std::pair<BivariateCopulaSpec, double>> {
+    auto spec_or = bivariate_copula_from_tau(family, tau, options);
+    if (!spec_or.has_value()) return std::unexpected(spec_or.error());
+    auto corr_or = bivariate_copula_observed_corr(*spec_or, marginals, options);
+    if (!corr_or.has_value()) return std::unexpected(corr_or.error());
+    return std::pair<BivariateCopulaSpec, double>{*spec_or, *corr_or};
+  };
+
+  const auto stable_endpoint =
+      [&](double sign) -> sim_expected<std::pair<double, double>> {
+    for (double tau_abs : {0.95, 0.90, 0.80, 0.70, 0.60, 0.50}) {
+      const double tau = sign * tau_abs;
+      auto eval_or = eval_tau(tau);
+      if (eval_or.has_value()) {
+        return std::pair<double, double>{tau, eval_or->second};
+      }
+      if (eval_or.error().kind != SimError::Kind::NumericIssue) {
+        return std::unexpected(eval_or.error());
+      }
+    }
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "calibrate_bivariate_copula_correlation: could not find stable endpoint"));
+  };
+
+  auto lo_endpoint_or = family == BivariateCopulaFamily::Frank
+      ? stable_endpoint(-1.0)
+      : sim_expected<std::pair<double, double>>{std::pair<double, double>{0.0, 0.0}};
+  auto hi_endpoint_or = stable_endpoint(1.0);
+  if (!lo_endpoint_or.has_value()) return std::unexpected(lo_endpoint_or.error());
+  if (!hi_endpoint_or.has_value()) return std::unexpected(hi_endpoint_or.error());
+  double lo_tau = lo_endpoint_or->first;
+  double hi_tau = hi_endpoint_or->first;
+  double lo_corr = lo_endpoint_or->second;
+  double hi_corr = hi_endpoint_or->second;
+  if (lo_corr > hi_corr) {
+    std::swap(lo_tau, hi_tau);
+    std::swap(lo_corr, hi_corr);
+  }
+
+  BivariateCopulaCorrelationCalibration out;
+  out.target_corr = target_corr;
+  out.lower_bound_corr = lo_corr;
+  out.upper_bound_corr = hi_corr;
+  if (target_corr < lo_corr - options.calibration_tol ||
+      target_corr > hi_corr + options.calibration_tol) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        "calibrate_bivariate_copula_correlation: target correlation outside feasible family range"));
+  }
+
+  double best_tau = lo_tau;
+  double best_corr = lo_corr;
+  if (std::abs(target_corr - hi_corr) < std::abs(target_corr - best_corr)) {
+    best_tau = hi_tau;
+    best_corr = hi_corr;
+  }
+
+  for (int iter = 0; iter < options.max_bisection_iter; ++iter) {
+    const double mid_tau = 0.5 * (lo_tau + hi_tau);
+    auto mid_spec_or = bivariate_copula_from_tau(family, mid_tau, options);
+    if (!mid_spec_or.has_value()) return std::unexpected(mid_spec_or.error());
+    auto mid_corr_or = bivariate_copula_observed_corr(
+        *mid_spec_or, marginals, options);
+    if (!mid_corr_or.has_value()) return std::unexpected(mid_corr_or.error());
+    const double mid_corr = *mid_corr_or;
+    if (std::abs(target_corr - mid_corr) < std::abs(target_corr - best_corr)) {
+      best_tau = mid_tau;
+      best_corr = mid_corr;
+    }
+    out.iterations = iter + 1;
+    if (std::abs(mid_corr - target_corr) <= options.calibration_tol ||
+        std::abs(hi_tau - lo_tau) <= options.calibration_tol) {
+      break;
+    }
+    if (mid_corr < target_corr) {
+      lo_tau = mid_tau;
+      lo_corr = mid_corr;
+    } else {
+      hi_tau = mid_tau;
+      hi_corr = mid_corr;
+    }
+  }
+
+  auto best_spec_or = bivariate_copula_from_tau(family, best_tau, options);
+  if (!best_spec_or.has_value()) return std::unexpected(best_spec_or.error());
+  out.copula = *best_spec_or;
+  out.achieved_corr = best_corr;
+  return out;
 }
 
 sim_expected<double>
