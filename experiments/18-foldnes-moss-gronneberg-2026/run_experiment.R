@@ -22,8 +22,11 @@
 #   Rscript run_experiment.R [--reps N] [--cells FILTER] [--seed-base S]
 #                            [--lavaan-parity] [--smoke]
 #
-# `--cells FILTER` is a comma-separated list of key=value pairs restricting the
-# crossed grid, e.g. `p=15,N=400,dist=ig1`. `--smoke` runs one short IG cell.
+# By default this runs the paper's full Study 1 grid:
+#   p in {15, 30, 60, 100}, N in {400, 800, 2000},
+#   dist in {norm, vm1, vm2, ig1, ig2, pl1, pl2}.
+# `--cells FILTER` restricts the crossed grid, e.g. `p=15,N=400,dist=ig1`.
+# `--smoke` runs one short IG cell.
 
 .support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
@@ -216,8 +219,8 @@ parse_cells_filter <- function(s) {
 }
 
 cell_grid <- expand.grid(
-  p    = c(15L, 30L),
-  N    = c(400L, 800L),
+  p    = c(15L, 30L, 60L, 100L),
+  N    = c(400L, 800L, 2000L),
   dist = c("norm", "vm1", "vm2", "ig1", "ig2", "pl1", "pl2"),
   stringsAsFactors = FALSE
 )
