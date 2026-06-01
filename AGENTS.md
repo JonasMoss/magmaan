@@ -8,8 +8,10 @@ A C++23 library that ports lavaan's behavior for **linear SEM under
 complete-data normal-theory estimators**. The audience is methods developers,
 not end users. [docs/architecture/roadmap.md](docs/architecture/roadmap.md) is the current state and
 architecture summary; [docs/backlog/todo.md](docs/backlog/todo.md) is the active backlog of
-remaining work. Read both before structural changes. The old external `latva`
-plan is historical archaeology, not current guidance.
+remaining SEM/parser/estimation work; [docs/backlog/simulation.md](docs/backlog/simulation.md)
+is the simulation-specific backlog and decision log. Read the roadmap and the
+relevant backlog before structural changes. The old external `latva` plan is
+historical archaeology, not current guidance.
 
 ## Non-negotiables
 
@@ -57,6 +59,8 @@ plan is historical archaeology, not current guidance.
 - `docs/grammar/` - `grammar.ebnf` (normative), `lexer.md`, `grammar.md`.
 - `docs/architecture/roadmap.md` - current implementation state and design contracts.
 - `docs/backlog/todo.md` - active human-readable backlog and remaining milestones.
+- `docs/backlog/simulation.md` - simulation-specific TODO and decision log for
+  `magmaan::sim`, marginal generators, and simulation fixture policy.
 - `external/` - ignored single "development help" folder: source mirrors for reading
   upstream code plus `external/refs/` reference PDFs. Never built. (Replaces the former
   separate `resources/` folder.)
@@ -179,13 +183,18 @@ retiered. See `docs/backlog/todo.md`.
 - Private headers under `src/.../detail_*.hpp` include with relative paths.
 - Comments only when the why is non-obvious. The roadmap and lavaan reference
   together cover the what.
-- Keep `docs/backlog/todo.md` as the single active backlog. Remove or fold stale
-  finished planning docs into `docs/architecture/roadmap.md` or `docs/backlog/todo.md` when a phase
+- Keep `docs/backlog/todo.md` as the main active backlog and
+  `docs/backlog/simulation.md` as the simulation-specific active backlog.
+  Remove or fold stale finished planning docs into `docs/architecture/roadmap.md`,
+  `docs/backlog/todo.md`, or `docs/backlog/simulation.md` when a phase
   completes; do not create parallel roadmaps.
 - Keep `docs/architecture/roadmap.md` current whenever a change alters implementation
   state, architecture, contracts, boundaries, or validation expectations.
 - Keep `docs/backlog/todo.md` current whenever a change completes a milestone,
   changes priorities, or reveals new remaining work.
+- Keep `docs/backlog/simulation.md` current whenever a change completes a
+  simulation milestone, changes generator priorities, or reveals new
+  simulation-specific work.
 - Commit every finished user request as a coherent completed change before
   handing back, unless the user explicitly asks not to commit. Keep work on the
   current branch unless explicitly asked to branch.

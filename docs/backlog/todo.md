@@ -199,6 +199,11 @@ Local-first safety tooling for an AI-assisted repo. Design note:
 
 ## Simulation primitives
 
+Simulation-specific state and remaining work now lives in
+[`simulation.md`](simulation.md). Keep this section as a high-level index for
+cross-domain planning; put detailed generator/marginal/fixture decisions in the
+simulation backlog.
+
 - **Landed, first slice.** `magmaan::sim` now has a NORTA primitive with
   explicit calibration (`calibrate_norta`) and sampling
   (`simulate_norta_matrix`, `simulate_norta_raw`). The first marginal families
@@ -240,22 +245,10 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   `tests/tools/regen_pearson_sim_fixtures.R` generates checked PearsonDS 1.3.2
   goldens. Johnson SU/SB fitting is now landed too: it fits gamma/delta by
   deterministic quadrature against skewness and excess kurtosis and returns the
-  same `MarginalSpec` used by NORTA and IG generator calibration. **Remaining:**
-  implement a principled Pearson Type IV CDF/quantile policy (or keep rejecting
-  it deliberately), decide whether Johnson SL should be exposed beyond the
-  direct `MarginalSpec::johnson()` constructor, and keep R/package dependencies
-  out of the C++ core and fixtures only.
-- **S.** Decide the long-term special-functions policy before expanding the
-  Pearson/Johnson surface. `src/detail_distribution_math.hpp` currently holds
-  hand-rolled regularized beta/gamma, inverse beta/gamma, Student-t, and F-tail
-  helpers shared by Pearson simulation and FMG p-values. Evaluate whether to
-  keep these with dedicated goldens, vendor/use Boost.Math, or choose another
-  vetted dependency.
-- **M.** Harden NORTA calibration for larger simulation grids: cache pairwise
-  correlation maps when marginal specs repeat, expose/interpolate the
-  `rho_Z -> Corr(X_i, X_j)` map for repeated target matrices, and add an
-  explicit policy for pairwise-calibrated latent matrices that are not positive
-  definite (error-only is the current behavior).
+  same `MarginalSpec` used by NORTA and IG generator calibration. **Remaining
+  simulation work is tracked in [`simulation.md`](simulation.md), including the
+  Pearson Type IV CDF/quantile policy, Johnson SL exposure decision, special
+  functions policy, and NORTA calibration hardening.**
 
 ## FMG / U-Gamma Performance
 
