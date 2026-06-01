@@ -71,6 +71,43 @@ TEST_CASE("NORTA reports infeasible lognormal target correlations") {
   CHECK(cal_or.error().kind == magmaan::SimError::Kind::CalibrationFailed);
 }
 
+TEST_CASE("independent generator supports Tukey g-and-h marginals") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::tukey_g_h(0.35, 0.05, 1.0, 2.0),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.4, -2.0, 1.5),
+      magmaan::sim::MarginalSpec::standard_normal()};
+
+  std::mt19937_64 rng(20260601);
+  magmaan::sim::IndependentOptions options;
+  options.quadrature_points = 35;
+  auto X_or = magmaan::sim::simulate_independent_matrix(30000, marginals, rng, options);
+  REQUIRE(X_or.has_value());
+  const auto& X = *X_or;
+  REQUIRE(X.rows() == 30000);
+  REQUIRE(X.cols() == 3);
+
+  CHECK(std::abs(X.col(0).mean() - 1.0) < 0.08);
+  CHECK(std::abs(X.col(1).mean() + 2.0) < 0.05);
+  CHECK(std::abs(X.col(2).mean()) < 0.03);
+  CHECK(std::abs(sample_corr(X, 0, 1)) < 0.03);
+  CHECK(std::abs(sample_corr(X, 0, 2)) < 0.03);
+  CHECK(std::abs(sample_corr(X, 1, 2)) < 0.03);
+}
+
+TEST_CASE("independent raw generator wraps one complete data block") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::tukey_g_h(0.0, 0.1)};
+
+  std::mt19937_64 rng(11);
+  auto raw_or = magmaan::sim::simulate_independent_raw(25, marginals, rng);
+  REQUIRE(raw_or.has_value());
+  CHECK(raw_or->X.size() == 1u);
+  CHECK(raw_or->mask.empty());
+  CHECK(raw_or->X[0].rows() == 25);
+  CHECK(raw_or->X[0].cols() == 2);
+}
+
 TEST_CASE("NORTA simulation respects target moments and correlations") {
   Eigen::MatrixXd target(3, 3);
   target << 1.0, 0.30, -0.20,
