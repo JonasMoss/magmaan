@@ -415,6 +415,13 @@ calibrate_cvine3_copula_correlation_select_families(
     const std::vector<MarginalSpec>& marginals,
     const BivariateCopulaOptions& options = {});
 
+sim_expected<CVine3CorrelationCalibration>
+calibrate_cvine3_copula_correlation_select_structure(
+    const std::vector<BivariateCopulaFamily>& family_set,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options = {});
+
 sim_expected<double>
 bivariate_copula_conditional_quantile(
     const BivariateCopulaSpec& copula,

@@ -3367,6 +3367,100 @@ calibrate_cvine3_copula_correlation_select_families(
   return best;
 }
 
+sim_expected<CVine3CorrelationCalibration>
+calibrate_cvine3_copula_correlation_select_structure(
+    const std::vector<BivariateCopulaFamily>& family_set,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options) {
+  if (family_set.empty()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_cvine3_copula_correlation_select_structure: family_set must not be empty"));
+  }
+  if (auto ok = validate_bivariate_copula_matrix_target(
+          target_corr, marginals, options);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (target_corr.rows() != 3) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_cvine3_copula_correlation_select_structure: target_corr must be 3x3"));
+  }
+
+  CVine3CorrelationCalibration best;
+  bool have_best = false;
+  SimError last_error = make_err(
+      SimError::Kind::CalibrationFailed,
+      "calibrate_cvine3_copula_correlation_select_structure: no feasible structure");
+
+  for (int root = 0; root < 3; ++root) {
+    Eigen::Vector3i order;
+    order(0) = root;
+    Eigen::Index pos = 1;
+    for (int j = 0; j < 3; ++j) {
+      if (j != root) {
+        order(pos) = j;
+        ++pos;
+      }
+    }
+
+    std::vector<MarginalSpec> ordered_marginals;
+    ordered_marginals.reserve(3);
+    for (Eigen::Index k = 0; k < 3; ++k) {
+      ordered_marginals.push_back(
+          marginals[static_cast<std::size_t>(order(k))]);
+    }
+
+    Eigen::MatrixXd ordered_target(3, 3);
+    for (Eigen::Index i = 0; i < 3; ++i) {
+      for (Eigen::Index j = 0; j < 3; ++j) {
+        ordered_target(i, j) = target_corr(order(i), order(j));
+      }
+    }
+
+    for (const auto family_01 : family_set) {
+      for (const auto family_02 : family_set) {
+        for (const auto family_12_given_0 : family_set) {
+          const CVine3FamilySpec families{
+              family_01, family_02, family_12_given_0};
+          auto cal_or = calibrate_cvine3_copula_correlation(
+              families, ordered_target, ordered_marginals, options);
+          if (!cal_or.has_value()) {
+            last_error = cal_or.error();
+            continue;
+          }
+
+          CVine3CorrelationCalibration candidate = *cal_or;
+          candidate.variable_order = order;
+          candidate.root_index = root;
+          candidate.target_corr = target_corr;
+          Eigen::MatrixXd achieved = Eigen::MatrixXd::Identity(3, 3);
+          for (Eigen::Index i = 0; i < 3; ++i) {
+            for (Eigen::Index j = 0; j < 3; ++j) {
+              achieved(order(i), order(j)) = cal_or->achieved_corr(i, j);
+            }
+          }
+          candidate.achieved_corr = std::move(achieved);
+          candidate.max_abs_error =
+              (candidate.achieved_corr - target_corr).cwiseAbs().maxCoeff();
+
+          if (!have_best || candidate.max_abs_error < best.max_abs_error) {
+            best = std::move(candidate);
+            have_best = true;
+          }
+        }
+      }
+    }
+  }
+
+  if (!have_best) {
+    return std::unexpected(last_error);
+  }
+  return best;
+}
+
 sim_expected<double>
 bivariate_copula_conditional_quantile(
     const BivariateCopulaSpec& copula,

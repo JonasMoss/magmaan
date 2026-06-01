@@ -1114,6 +1114,58 @@ TEST_CASE("C-vine 3 calibration can select edge families") {
   CHECK(impossible_or.error().kind == magmaan::SimError::Kind::CalibrationFailed);
 }
 
+TEST_CASE("C-vine 3 calibration can select root and edge families") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.25),
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.35)};
+  Eigen::MatrixXd target(3, 3);
+  target << 1.0, 0.19, -0.17,
+            0.19, 1.0, 0.15,
+           -0.17, 0.15, 1.0;
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 11;
+  options.max_bisection_iter = 40;
+  options.calibration_tol = 2e-3;
+
+  const std::vector<magmaan::sim::BivariateCopulaFamily> family_set{
+      magmaan::sim::BivariateCopulaFamily::Clayton,
+      magmaan::sim::BivariateCopulaFamily::Frank};
+  auto cal_or =
+      magmaan::sim::calibrate_cvine3_copula_correlation_select_structure(
+          family_set, target, marginals, options);
+  if (!cal_or.has_value()) MESSAGE(cal_or.error().detail);
+  REQUIRE(cal_or.has_value());
+  if (!cal_or.has_value()) return;
+
+  bool seen[3] = {false, false, false};
+  for (Eigen::Index i = 0; i < 3; ++i) {
+    const int idx = cal_or->variable_order(i);
+    REQUIRE(idx >= 0);
+    REQUIRE(idx < 3);
+    CHECK_FALSE(seen[idx]);
+    seen[idx] = true;
+  }
+  CHECK(cal_or->root_index == cal_or->variable_order(0));
+  CHECK(cal_or->target_corr.isApprox(target, 0.0));
+  CHECK(cal_or->max_abs_error < 1.2e-2);
+  CHECK(cal_or->achieved_corr(0, 1) ==
+        doctest::Approx(target(0, 1)).epsilon(1.2e-2));
+  CHECK(cal_or->achieved_corr(0, 2) ==
+        doctest::Approx(target(0, 2)).epsilon(1.2e-2));
+  CHECK(cal_or->achieved_corr(1, 2) ==
+        doctest::Approx(target(1, 2)).epsilon(1.2e-2));
+
+  const std::vector<magmaan::sim::BivariateCopulaFamily> one_sided{
+      magmaan::sim::BivariateCopulaFamily::Clayton};
+  auto impossible_or =
+      magmaan::sim::calibrate_cvine3_copula_correlation_select_structure(
+          one_sided, target, marginals, options);
+  REQUIRE_FALSE(impossible_or.has_value());
+  CHECK(impossible_or.error().kind == magmaan::SimError::Kind::CalibrationFailed);
+}
+
 TEST_CASE("bivariate copula raw generator validates parameters and marginals") {
   const std::vector<magmaan::sim::MarginalSpec> marginals{
       magmaan::sim::MarginalSpec::standard_normal(),
