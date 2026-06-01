@@ -1,6 +1,9 @@
 #include <RcppEigen.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <random>
 #include <string>
 
@@ -273,6 +276,81 @@ magmaan::sim::PlsimOptions plsim_options_from_list(Rcpp::List x) {
   return options;
 }
 
+bool approx_equal(double a, double b, double tol = 1e-10) {
+  return std::abs(a - b) <= tol * std::max({1.0, std::abs(a), std::abs(b)});
+}
+
+bool pearson_type6_moments(const magmaan::sim::MarginalSpec& m,
+                           double& mean,
+                           double& sd) {
+  if (m.kind != magmaan::sim::MarginalKind::Pearson ||
+      m.pearson_type != 6 || !(m.pearson_p2 > 2.0)) {
+    return false;
+  }
+  const double a = m.pearson_p1;
+  const double b = m.pearson_p2;
+  mean = m.pearson_p3 + m.pearson_p4 * a / (b - 1.0);
+  const double var = m.pearson_p4 * m.pearson_p4 * a * (a + b - 1.0) /
+      ((b - 2.0) * (b - 1.0) * (b - 1.0));
+  if (!std::isfinite(mean) || !std::isfinite(var) || !(var > 0.0)) {
+    return false;
+  }
+  sd = std::sqrt(var);
+  return true;
+}
+
+bool can_use_r_pearson_type6_path(
+    const std::vector<magmaan::sim::MarginalSpec>& marginals) {
+  for (const auto& marginal : marginals) {
+    double mean = 0.0;
+    double sd = 1.0;
+    if (!pearson_type6_moments(marginal, mean, sd)) return false;
+    if (!approx_equal(mean, marginal.mean) || !approx_equal(sd, marginal.sd)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+Eigen::MatrixXd simulate_ig_pearson_type6_r(
+    Eigen::Index total_n,
+    const Eigen::Ref<const Eigen::MatrixXd>& root,
+    const std::vector<magmaan::sim::MarginalSpec>& marginals) {
+  Rcpp::RNGScope scope;
+  const Eigen::Index p = static_cast<Eigen::Index>(marginals.size());
+  Eigen::MatrixXd G(total_n, p);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const auto& m = marginals[static_cast<std::size_t>(j)];
+    const double a = m.pearson_p1;
+    const double b = m.pearson_p2;
+    const double fallback_beta = a / (a + b);
+    const double location = m.pearson_p3;
+    const double scale = m.pearson_p4;
+    for (Eigen::Index row = 0; row < total_n; ++row) {
+      const double x = R::rgamma(a, 1.0);
+      const double y = R::rgamma(b, 1.0);
+      const double beta = (x + y > 0.0) ? x / (x + y) : fallback_beta;
+      const double one_minus_beta = std::max(
+          1.0 - beta, std::numeric_limits<double>::min());
+      G(row, j) = location + scale * beta / one_minus_beta;
+    }
+  }
+
+  Eigen::MatrixXd out(total_n, root.rows());
+  out.noalias() = G * root.transpose();
+  return out;
+}
+
+Rcpp::List split_draw_matrix(const Eigen::MatrixXd& X, int n, int reps) {
+  Rcpp::List draws(reps);
+  for (int i = 0; i < reps; ++i) {
+    draws[i] = Rcpp::wrap(X.middleRows(
+        static_cast<Eigen::Index>(i) * static_cast<Eigen::Index>(n),
+        static_cast<Eigen::Index>(n)).eval());
+  }
+  return draws;
+}
+
 }  // namespace
 
 // [[Rcpp::export]]
@@ -322,15 +400,26 @@ Rcpp::List sim_ig_batch_impl(
   magmaan::sim::IndependentOptions independent_options;
   independent_options.quadrature_points = quadrature_points;
 
-  Rcpp::List draws(reps);
-  for (int i = 0; i < reps; ++i) {
-    std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
-                        static_cast<std::uint64_t>(i + 1));
-    auto X_or = magmaan::sim::simulate_ig_matrix(
-        static_cast<Eigen::Index>(n), cal_or->root,
-        cal_or->generator_marginals, rng, independent_options);
-    if (!X_or.has_value()) stop_sim(X_or.error());
-    draws[i] = Rcpp::wrap(*X_or);
+  const Eigen::Index total_n =
+      static_cast<Eigen::Index>(n) * static_cast<Eigen::Index>(reps);
+  Rcpp::List draws;
+  if (can_use_r_pearson_type6_path(cal_or->generator_marginals)) {
+    Rcpp::Function set_seed("set.seed");
+    set_seed(static_cast<int>(seed_base) + 1);
+    const Eigen::MatrixXd X = simulate_ig_pearson_type6_r(
+        total_n, cal_or->root, cal_or->generator_marginals);
+    draws = split_draw_matrix(X, n, reps);
+  } else {
+    draws = Rcpp::List(reps);
+    for (int i = 0; i < reps; ++i) {
+      std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
+                          static_cast<std::uint64_t>(i + 1));
+      auto X_or = magmaan::sim::simulate_ig_matrix(
+          static_cast<Eigen::Index>(n), cal_or->root,
+          cal_or->generator_marginals, rng, independent_options);
+      if (!X_or.has_value()) stop_sim(X_or.error());
+      draws[i] = Rcpp::wrap(*X_or);
+    }
   }
 
   return Rcpp::List::create(
@@ -409,14 +498,25 @@ Rcpp::List sim_ig_draw_impl(Rcpp::List calibration,
     options.quadrature_points = Rcpp::as<int>(calibration["quadrature_points"]);
   }
 
-  Rcpp::List draws(reps);
-  for (int i = 0; i < reps; ++i) {
-    std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
-                        static_cast<std::uint64_t>(i + 1));
-    auto X_or = magmaan::sim::simulate_ig_matrix(
-        static_cast<Eigen::Index>(n), root, marginals, rng, options);
-    if (!X_or.has_value()) stop_sim(X_or.error());
-    draws[i] = Rcpp::wrap(*X_or);
+  const Eigen::Index total_n =
+      static_cast<Eigen::Index>(n) * static_cast<Eigen::Index>(reps);
+  Rcpp::List draws;
+  if (can_use_r_pearson_type6_path(marginals)) {
+    Rcpp::Function set_seed("set.seed");
+    set_seed(static_cast<int>(seed_base) + 1);
+    const Eigen::MatrixXd X = simulate_ig_pearson_type6_r(
+        total_n, root, marginals);
+    draws = split_draw_matrix(X, n, reps);
+  } else {
+    draws = Rcpp::List(reps);
+    for (int i = 0; i < reps; ++i) {
+      std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
+                          static_cast<std::uint64_t>(i + 1));
+      auto X_or = magmaan::sim::simulate_ig_matrix(
+          static_cast<Eigen::Index>(n), root, marginals, rng, options);
+      if (!X_or.has_value()) stop_sim(X_or.error());
+      draws[i] = Rcpp::wrap(*X_or);
+    }
   }
   return Rcpp::List::create(Rcpp::_["draws"] = draws);
 }

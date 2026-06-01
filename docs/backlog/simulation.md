@@ -28,7 +28,10 @@ simulation work queue and decision log.
   calibration handles: `sim_ig_calibrate()` / `sim_ig_draw()` and
   `sim_plsim_calibrate()` / `sim_plsim_draw()`. These return inspectable
   list/S3 calibration objects and let experiment grids reuse deterministic
-  calibration across sample-size cells.
+  calibration across sample-size cells. Pearson IG draw-time generation now
+  bypasses inverse-CDF transforms for closed-form Pearson types; all-Type-VI
+  Pearson IG draws from R use a stacked R-gamma fast path and split the returned
+  samples after the covariance mix.
 - Baseline multivariate-normal generation is available through
   `simulate_normal_matrix()` and `simulate_normal_raw()`, taking explicit
   population means and covariance matrices. This is the low-level normal
@@ -486,6 +489,14 @@ for skew/kurt (scale/location invariant) but is the same pattern.
   inspectable list/S3 calibration objects. The Foldnes-Moss-Grønneberg 2026
   Study 1 experiment now caches IG/PLSIM calibration per `(family, p, dist)` and
   reuses it across all `N` cells.
+- **Landed, Pearson IG draw fast path.** Pearson independent draws now use
+  direct RNGs for closed-form Pearson types and analytic raw mean/sd where
+  available, leaving Pearson Type IV on the existing quantile fallback. The R
+  IG wrappers batch reusable all-Type-VI Pearson draws through R's gamma RNG and
+  split the stacked result after the covariance mix. Advisory coverage lives in
+  `tests/checks/ig/pearson_draw_bench.R`; on the p=40 severe
+  `(skew=3, excess kurtosis=21)` FMG population it is faster than local covsim's
+  `rIG(..., typeA="symm")` after reusable calibration.
 - **Landed, NORTA draw-ready C++ calibration.** Add public
   `simulate_norta_matrix()` / `simulate_norta_raw()` overloads that accept
   `NortaCalibration`, aligning NORTA with the two-stage calibrated generator

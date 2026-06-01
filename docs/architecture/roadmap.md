@@ -195,7 +195,10 @@ golden `parTable()` fixtures.
   generator marginals for experiments that want to inspect or cache the
   calibration. The exploratory R package exposes the same mechanism through
   `magmaan_core$sim_ig_batch()` and the reusable
-  `sim_ig_calibrate()` / `sim_ig_draw()` split.
+  `sim_ig_calibrate()` / `sim_ig_draw()` split. Pearson IG draws use direct
+  Pearson random generators instead of inverse-CDF transforms where closed-form
+  RNGs are available; the R wrapper additionally batches reusable Type VI
+  Pearson IG draws through R's gamma RNG before splitting the returned samples.
 - Vale-Maurelli / Fleishman polynomial simulation is available through
   `fit_fleishman_coefficients()`, `calibrate_vale_maurelli()`,
   `simulate_vale_maurelli_matrix()`, and `simulate_vale_maurelli_raw()`.

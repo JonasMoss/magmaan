@@ -513,6 +513,296 @@ double standardized_from_z(const MarginalSpec& m,
   return (raw_from_z(m, z) - moments.mean) / moments.sd;
 }
 
+bool pearson_raw_moments(const MarginalSpec& m, MarginalMoments& moments) {
+  double mean = nan();
+  double var = nan();
+  switch (m.pearson_type) {
+    case 0:
+      mean = m.pearson_p1;
+      var = m.pearson_p2 * m.pearson_p2;
+      break;
+    case 1: {
+      const double a = m.pearson_p1;
+      const double b = m.pearson_p2;
+      const double s = a + b;
+      mean = m.pearson_p3 + m.pearson_p4 * a / s;
+      var = m.pearson_p4 * m.pearson_p4 * a * b / (s * s * (s + 1.0));
+      break;
+    }
+    case 2: {
+      const double a = m.pearson_p1;
+      mean = m.pearson_p2 + 0.5 * m.pearson_p3;
+      var = m.pearson_p3 * m.pearson_p3 / (4.0 * (2.0 * a + 1.0));
+      break;
+    }
+    case 3:
+      mean = m.pearson_p2 + m.pearson_p1 * m.pearson_p3;
+      var = m.pearson_p1 * m.pearson_p3 * m.pearson_p3;
+      break;
+    case 4:
+      return false;
+    case 5: {
+      const double a = m.pearson_p1;
+      if (!(a > 2.0)) return false;
+      mean = m.pearson_p2 + m.pearson_p3 / (a - 1.0);
+      var = m.pearson_p3 * m.pearson_p3 /
+            ((a - 1.0) * (a - 1.0) * (a - 2.0));
+      break;
+    }
+    case 6: {
+      const double a = m.pearson_p1;
+      const double b = m.pearson_p2;
+      if (!(b > 2.0)) return false;
+      mean = m.pearson_p3 + m.pearson_p4 * a / (b - 1.0);
+      var = m.pearson_p4 * m.pearson_p4 * a * (a + b - 1.0) /
+            ((b - 2.0) * (b - 1.0) * (b - 1.0));
+      break;
+    }
+    case 7: {
+      const double df = m.pearson_p1;
+      if (!(df > 2.0)) return false;
+      mean = m.pearson_p2;
+      var = m.pearson_p3 * m.pearson_p3 * df / (df - 2.0);
+      break;
+    }
+    default:
+      return false;
+  }
+  if (!std::isfinite(mean) || !std::isfinite(var) || !(var > 0.0)) {
+    return false;
+  }
+  moments = MarginalMoments{mean, std::sqrt(var)};
+  return true;
+}
+
+template <typename Rng>
+double beta_variate(double a, double b, Rng& rng) {
+  std::gamma_distribution<double> ga(a, 1.0);
+  std::gamma_distribution<double> gb(b, 1.0);
+  for (int attempt = 0; attempt < 8; ++attempt) {
+    const double x = ga(rng);
+    const double y = gb(rng);
+    const double total = x + y;
+    if (std::isfinite(total) && total > 0.0) return x / total;
+  }
+  return a / (a + b);
+}
+
+template <typename Rng>
+double pearson_raw_random(const MarginalSpec& m, Rng& rng) {
+  switch (m.pearson_type) {
+    case 0: {
+      std::normal_distribution<double> normal(0.0, 1.0);
+      return m.pearson_p1 + m.pearson_p2 * normal(rng);
+    }
+    case 1:
+      return m.pearson_p3 +
+             m.pearson_p4 * beta_variate(m.pearson_p1, m.pearson_p2, rng);
+    case 2:
+      return m.pearson_p2 +
+             m.pearson_p3 * beta_variate(m.pearson_p1, m.pearson_p1, rng);
+    case 3: {
+      const double scale = m.pearson_p3;
+      std::gamma_distribution<double> gamma(m.pearson_p1, std::abs(scale));
+      return m.pearson_p2 + std::copysign(gamma(rng), scale);
+    }
+    case 4: {
+      std::uniform_real_distribution<double> uniform(
+          std::numeric_limits<double>::min(),
+          1.0 - std::numeric_limits<double>::epsilon());
+      return pearson_type4_quantile(uniform(rng),
+                                    m.pearson_p1,
+                                    m.pearson_p2,
+                                    m.pearson_p3,
+                                    m.pearson_p4);
+    }
+    case 5: {
+      const double scale = m.pearson_p3;
+      std::gamma_distribution<double> gamma(m.pearson_p1,
+                                            1.0 / std::abs(scale));
+      return m.pearson_p2 + std::copysign(1.0 / gamma(rng), scale);
+    }
+    case 6: {
+      const double y = beta_variate(m.pearson_p1, m.pearson_p2, rng);
+      const double one_minus_y = std::max(
+          1.0 - y, std::numeric_limits<double>::min());
+      return m.pearson_p3 + m.pearson_p4 * y / one_minus_y;
+    }
+    case 7: {
+      std::student_t_distribution<double> student(m.pearson_p1);
+      return m.pearson_p2 + m.pearson_p3 * student(rng);
+    }
+    default:
+      return nan();
+  }
+}
+
+template <typename Rng>
+sim_expected<double>
+draw_standardized_marginal(const MarginalSpec& m,
+                           const MarginalMoments& moments,
+                           Rng& rng) {
+  if (m.kind == MarginalKind::Pearson) {
+    const double raw = pearson_raw_random(m, rng);
+    if (!std::isfinite(raw)) {
+      return std::unexpected(make_err(
+          SimError::Kind::NumericIssue,
+          "simulate_independent_matrix: non-finite Pearson draw"));
+    }
+    return (raw - moments.mean) / moments.sd;
+  }
+
+  std::normal_distribution<double> normal(0.0, 1.0);
+  const double z = normal(rng);
+  const double y = standardized_from_z(m, moments, z);
+  if (!std::isfinite(y)) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "simulate_independent_matrix: non-finite marginal draw"));
+  }
+  return y;
+}
+
+template <typename Rng>
+sim_expected<void>
+fill_pearson_column(Eigen::MatrixXd& X,
+                    Eigen::Index col,
+                    const MarginalSpec& m,
+                    const MarginalMoments& moments,
+                    Rng& rng) {
+  auto assign_raw = [&](Eigen::Index row, double raw) -> sim_expected<void> {
+    if (!std::isfinite(raw)) {
+      return std::unexpected(make_err(
+          SimError::Kind::NumericIssue,
+          "simulate_independent_matrix: non-finite Pearson draw"));
+    }
+    X(row, col) = m.mean + m.sd * ((raw - moments.mean) / moments.sd);
+    return {};
+  };
+
+  switch (m.pearson_type) {
+    case 0: {
+      std::normal_distribution<double> normal(0.0, 1.0);
+      for (Eigen::Index row = 0; row < X.rows(); ++row) {
+        if (auto ok = assign_raw(row, m.pearson_p1 + m.pearson_p2 * normal(rng));
+            !ok.has_value()) return ok;
+      }
+      return {};
+    }
+    case 1: {
+      std::gamma_distribution<double> ga(m.pearson_p1, 1.0);
+      std::gamma_distribution<double> gb(m.pearson_p2, 1.0);
+      for (Eigen::Index row = 0; row < X.rows(); ++row) {
+        const double x = ga(rng);
+        const double y = gb(rng);
+        const double beta = (x + y > 0.0) ? x / (x + y)
+                                          : m.pearson_p1 /
+                                            (m.pearson_p1 + m.pearson_p2);
+        if (auto ok = assign_raw(row, m.pearson_p3 + m.pearson_p4 * beta);
+            !ok.has_value()) return ok;
+      }
+      return {};
+    }
+    case 2: {
+      std::gamma_distribution<double> ga(m.pearson_p1, 1.0);
+      std::gamma_distribution<double> gb(m.pearson_p1, 1.0);
+      for (Eigen::Index row = 0; row < X.rows(); ++row) {
+        const double x = ga(rng);
+        const double y = gb(rng);
+        const double beta = (x + y > 0.0) ? x / (x + y) : 0.5;
+        if (auto ok = assign_raw(row, m.pearson_p2 + m.pearson_p3 * beta);
+            !ok.has_value()) return ok;
+      }
+      return {};
+    }
+    case 3: {
+      const double scale = m.pearson_p3;
+      std::gamma_distribution<double> gamma(m.pearson_p1, std::abs(scale));
+      for (Eigen::Index row = 0; row < X.rows(); ++row) {
+        if (auto ok = assign_raw(row,
+                                 m.pearson_p2 + std::copysign(gamma(rng), scale));
+            !ok.has_value()) return ok;
+      }
+      return {};
+    }
+    case 4: {
+      std::uniform_real_distribution<double> uniform(
+          std::numeric_limits<double>::min(),
+          1.0 - std::numeric_limits<double>::epsilon());
+      for (Eigen::Index row = 0; row < X.rows(); ++row) {
+        if (auto ok = assign_raw(row,
+                                 pearson_type4_quantile(uniform(rng),
+                                                        m.pearson_p1,
+                                                        m.pearson_p2,
+                                                        m.pearson_p3,
+                                                        m.pearson_p4));
+            !ok.has_value()) return ok;
+      }
+      return {};
+    }
+    case 5: {
+      const double scale = m.pearson_p3;
+      std::gamma_distribution<double> gamma(m.pearson_p1,
+                                            1.0 / std::abs(scale));
+      for (Eigen::Index row = 0; row < X.rows(); ++row) {
+        if (auto ok = assign_raw(row,
+                                 m.pearson_p2 +
+                                     std::copysign(1.0 / gamma(rng), scale));
+            !ok.has_value()) return ok;
+      }
+      return {};
+    }
+    case 6: {
+      std::gamma_distribution<double> ga(m.pearson_p1, 1.0);
+      std::gamma_distribution<double> gb(m.pearson_p2, 1.0);
+      const double fallback_beta =
+          m.pearson_p1 / (m.pearson_p1 + m.pearson_p2);
+      const double location = m.pearson_p3;
+      const double scale = m.pearson_p4;
+      const bool raw_is_scaled =
+          approx_equal(m.mean, moments.mean, 1e-10) &&
+          approx_equal(m.sd, moments.sd, 1e-10);
+      if (raw_is_scaled) {
+        for (Eigen::Index row = 0; row < X.rows(); ++row) {
+          const double x = ga(rng);
+          const double y = gb(rng);
+          const double beta = (x + y > 0.0) ? x / (x + y) : fallback_beta;
+          const double one_minus_beta = std::max(
+              1.0 - beta, std::numeric_limits<double>::min());
+          X(row, col) = location + scale * beta / one_minus_beta;
+        }
+        return {};
+      }
+      const double out_mean = m.mean;
+      const double out_sd = m.sd;
+      const double raw_mean = moments.mean;
+      const double inv_raw_sd = 1.0 / moments.sd;
+      for (Eigen::Index row = 0; row < X.rows(); ++row) {
+        const double x = ga(rng);
+        const double y = gb(rng);
+        const double beta = (x + y > 0.0) ? x / (x + y) : fallback_beta;
+        const double one_minus_beta = std::max(
+            1.0 - beta, std::numeric_limits<double>::min());
+        const double raw = location + scale * beta / one_minus_beta;
+        X(row, col) = out_mean + out_sd * ((raw - raw_mean) * inv_raw_sd);
+      }
+      return {};
+    }
+    case 7: {
+      std::student_t_distribution<double> student(m.pearson_p1);
+      for (Eigen::Index row = 0; row < X.rows(); ++row) {
+        if (auto ok = assign_raw(row, m.pearson_p2 + m.pearson_p3 * student(rng));
+            !ok.has_value()) return ok;
+      }
+      return {};
+    }
+    default:
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidMarginal,
+          "simulate_independent_matrix: unsupported Pearson type"));
+  }
+}
+
 double open_unit(double u) noexcept {
   constexpr double lo = std::numeric_limits<double>::min();
   constexpr double hi = 1.0 - std::numeric_limits<double>::epsilon();
@@ -2460,21 +2750,63 @@ simulate_independent_matrix(Eigen::Index n,
   if (auto ok = validate_independent_inputs(n, marginals, options); !ok.has_value()) {
     return std::unexpected(ok.error());
   }
+
+  const Eigen::Index p = static_cast<Eigen::Index>(marginals.size());
+  const bool all_pearson = std::all_of(
+      marginals.begin(), marginals.end(), [](const MarginalSpec& m) {
+        return m.kind == MarginalKind::Pearson;
+      });
+  if (all_pearson) {
+    std::vector<MarginalMoments> pearson_moments;
+    pearson_moments.reserve(marginals.size());
+    bool have_analytic_moments = true;
+    for (const auto& marginal : marginals) {
+      MarginalMoments moment;
+      if (!pearson_raw_moments(marginal, moment)) {
+        have_analytic_moments = false;
+        break;
+      }
+      pearson_moments.push_back(moment);
+    }
+    if (have_analytic_moments) {
+      Eigen::MatrixXd X(n, p);
+      for (Eigen::Index j = 0; j < p; ++j) {
+        const auto idx = static_cast<std::size_t>(j);
+        if (auto ok = fill_pearson_column(
+                X, j, marginals[idx], pearson_moments[idx], rng);
+            !ok.has_value()) {
+          return std::unexpected(ok.error());
+        }
+      }
+      return X;
+    }
+  }
+
   auto gh_or = gauss_hermite(options.quadrature_points);
   if (!gh_or.has_value()) return std::unexpected(gh_or.error());
   auto moments_or = build_marginal_moments(marginals, *gh_or);
   if (!moments_or.has_value()) return std::unexpected(moments_or.error());
   const auto& moments = *moments_or;
 
-  const Eigen::Index p = static_cast<Eigen::Index>(marginals.size());
-  std::normal_distribution<double> normal(0.0, 1.0);
   Eigen::MatrixXd X(n, p);
+  if (all_pearson) {
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const auto idx = static_cast<std::size_t>(j);
+      if (auto ok = fill_pearson_column(X, j, marginals[idx], moments[idx], rng);
+          !ok.has_value()) {
+        return std::unexpected(ok.error());
+      }
+    }
+    return X;
+  }
+
   for (Eigen::Index row = 0; row < n; ++row) {
     for (Eigen::Index j = 0; j < p; ++j) {
       const auto idx = static_cast<std::size_t>(j);
-      const double z = normal(rng);
-      const double y = standardized_from_z(marginals[idx], moments[idx], z);
-      X(row, j) = marginals[idx].mean + marginals[idx].sd * y;
+      auto y_or = draw_standardized_marginal(
+          marginals[idx], moments[idx], rng);
+      if (!y_or.has_value()) return std::unexpected(y_or.error());
+      X(row, j) = marginals[idx].mean + marginals[idx].sd * *y_or;
     }
   }
   return X;
