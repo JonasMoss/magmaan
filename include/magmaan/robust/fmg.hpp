@@ -20,6 +20,7 @@ enum class FmgMethod {
   ScaledF,
   All,
   PenalizedAll,
+  Eba,
   Peba,
   Pols
 };

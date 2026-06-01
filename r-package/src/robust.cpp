@@ -624,10 +624,11 @@ magmaan::robust::frontier::FmgMethod fmg_method_from_string(const std::string& s
   if (s == "scaled_f" || s == "f")                   return M::ScaledF;
   if (s == "all" || s == "ebad")                     return M::All;
   if (s == "penalized_all" || s == "pall")           return M::PenalizedAll;
+  if (s == "eba")                                    return M::Eba;
   if (s == "peba")                                   return M::Peba;
   if (s == "pols")                                   return M::Pols;
   Rcpp::stop("magmaan: `method` must be one of 'standard','sb','ss','scaled_f',"
-             "'all','penalized_all','peba','pols' (got '%s')", s.c_str());
+             "'all','penalized_all','eba','peba','pols' (got '%s')", s.c_str());
 }
 
 const char* fmg_method_to_string(magmaan::robust::frontier::FmgMethod m) {
@@ -639,6 +640,7 @@ const char* fmg_method_to_string(magmaan::robust::frontier::FmgMethod m) {
     case M::ScaledF:           return "scaled_f";
     case M::All:               return "all";
     case M::PenalizedAll:      return "penalized_all";
+    case M::Eba:               return "eba";
     case M::Peba:              return "peba";
     case M::Pols:              return "pols";
   }

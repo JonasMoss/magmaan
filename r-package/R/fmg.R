@@ -9,7 +9,7 @@
 
 # Parse one semTests-style test name into its components.
 #   grammar: <type>[_ug][_ml|_rls]   (case-insensitive)
-#     type : std | sb | ss | sf | all | pall | peba<j> | pols<gamma>
+#     type : std | sb | ss | sf | all | pall | eba<j> | peba<j> | pols<gamma>
 #     _ug  : unbiased Gamma-hat (Du-Bentler); absent => biased Gamma-hat
 #     _ml | _rls : base statistic (default rls, as in semTests::split_input)
 .fmg_parse_test <- function(name) {
@@ -28,8 +28,8 @@
     method <- "pols"; param <- num(substring(type, 5L), 2)
     label  <- paste0("pols", param)
   } else if (startsWith(type, "eba")) {
-    stop("fmg_pvalues(): magmaan implements penalized EBA ('peba<j>') and EBAd ",
-         "('all'), not plain non-penalized EBA-j; got '", name, "'.", call. = FALSE)
+    method <- "eba"; param <- num(substring(type, 4L), 2)
+    label  <- paste0("eba", param)
   } else if (type %in% c("std", "sb", "ss", "sf", "all", "pall")) {
     method <- c(std = "standard", sb = "sb", ss = "ss", sf = "scaled_f",
                 all = "all", pall = "penalized_all")[[type]]
@@ -54,7 +54,7 @@
 #' @param data The raw data: a data.frame or matrix whose columns include the
 #'   model's observed variables (reordered by name).
 #' @param tests Character vector of semTests-style test names. Recognised types:
-#'   `std`, `sb`, `ss`, `sf`, `all`, `pall`, `peba<j>`, `pols<gamma>`, each
+#'   `std`, `sb`, `ss`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, `pols<gamma>`, each
 #'   optionally suffixed `_ug` (unbiased Gamma-hat) and `_ml` / `_rls` (base
 #'   statistic; default `rls`).
 #'

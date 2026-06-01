@@ -88,6 +88,26 @@ TEST_CASE("FMG pEBA uses lavaan/semTests column-block averaging") {
   CHECK(r.lambdas_reference(4) == doctest::Approx(2.85));
 }
 
+TEST_CASE("FMG EBA averages eigenvalue blocks without penalization") {
+  Eigen::VectorXd eig(5);
+  eig << 8.0, 6.0, 4.0, 2.0, 1.0;
+
+  const auto r = magmaan::robust::frontier::fmg_test(
+      6.0, 5, eig,
+      magmaan::robust::frontier::FmgOptions{
+          .method = magmaan::robust::frontier::FmgMethod::Eba,
+          .param = 2.0});
+
+  // Same blocks as pEBA (means 6 and 1.5), but used directly -- no shrink to
+  // the global mean (4.2). Contrast with the pEBA case above (5.1 / 2.85).
+  REQUIRE(r.lambdas_reference.size() == 5);
+  CHECK(r.lambdas_reference(0) == doctest::Approx(6.0));
+  CHECK(r.lambdas_reference(1) == doctest::Approx(6.0));
+  CHECK(r.lambdas_reference(2) == doctest::Approx(6.0));
+  CHECK(r.lambdas_reference(3) == doctest::Approx(1.5));
+  CHECK(r.lambdas_reference(4) == doctest::Approx(1.5));
+}
+
 TEST_CASE("FMG pOLS shrinks the spectrum trend by gamma") {
   Eigen::VectorXd eig(4);
   eig << 8.0, 6.0, 4.0, 2.0;
