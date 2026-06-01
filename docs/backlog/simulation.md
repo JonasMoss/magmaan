@@ -30,6 +30,16 @@ simulation work queue and decision log.
   into one-based ordinal categories, preserves continuous columns in mixed data,
   and returns ordered masks, declared level counts, and category counts for
   downstream ordinal/mixed workspace builders.
+- Population composition structs are available through `ContinuousPopulation`,
+  `MixedPopulation`, and `MixedPopulationDraw`. They compose explicit
+  mean/covariance population moments with the continuous generators and the
+  observed projection layer; model-implied SEM simulation should lower into
+  this surface.
+- The first elliptical/scale-mixture generators are available:
+  `simulate_student_t_*`, `simulate_contaminated_normal_*`,
+  `simulate_slash_*`, and `simulate_scale_mixture_normal_*`. These APIs treat
+  the supplied covariance as the target population covariance when the variance
+  exists, rescaling the internal normal core as needed.
 - Marginal moment matching is available through `fit_marginal_to_moments()`.
   Tukey g-and-h, Pearson-system, Johnson SU/SB, and Fleishman polynomial
   families feed the same `MarginalSpec` transform path used by NORTA and
@@ -90,9 +100,6 @@ calibrates/diagnoses one of those steps.
 
 ## Planned Surface
 
-- Add explicit population structs for continuous and mixed data, including
-  means, covariance/correlation, group-specific variants, thresholds, ordered
-  columns, and optional variable names/levels when wrapping `data::RawData`.
 - Add model-implied simulation as a lowering step: convert `MatrixRep` /
   estimates / fitted objects into population moments and projection specs, then
   call the generic simulation stack. Mean structures, intercepts, latent means,
@@ -102,10 +109,10 @@ calibrates/diagnoses one of those steps.
   stable. The first version can generate from latent correlations and report
   achieved observed correlations; a later version should calibrate latent
   correlations to requested observed Pearson/polychoric/polyserial summaries.
-- Add an elliptical-generator family: multivariate Student-t, contaminated
-  normal, slash, and a generic scale-mixture-of-normals hook. Add power
-  exponential / generalized-normal variants if the literature use cases need
-  them.
+- Extend the elliptical-generator family beyond the first scale-mixture slice:
+  add power exponential / generalized-normal variants if the literature use
+  cases need them, and add diagnostics for theoretical vs achieved tail
+  behavior.
 - Add pseudo-elliptical / transformed-elliptical mechanisms where a radial or
   spherical/elliptical core is combined with marginal transformations. Keep the
   boundary clear with NORTA/copula methods: pseudo-elliptical methods are
@@ -194,13 +201,16 @@ Validation:
 - **M.** Extend the ordinal/mixed projection layer with group-specific
   thresholds, variable names/level labels for raw-data wrapping, and richer
   achieved-proportion diagnostics.
+- **M.** Extend population composition with group-specific population blocks
+  and raw-data naming/level metadata once the `RawData` carrier grows those
+  fields.
 - **L.** Add model-implied simulation that lowers lavaanified/model evaluator
   state to population moments and projection specs before invoking the generic
   simulation stack. Treat mean structure as population construction/projection,
   not as a generator-specific option.
-- **M.** Add first elliptical generators: Student-t, contaminated normal, slash,
-  and a generic scale-mixture-of-normals entry point. Validate moments and tail
-  behavior with deterministic formulas where available plus stochastic smokes.
+- **M.** Add elliptical diagnostics/goldens for Student-t, contaminated normal,
+  slash, and finite scale mixtures: deterministic moment formulas where
+  available plus stochastic smokes.
 - **Landed, first non-Gaussian copula slice.** Add fixed-parameter t-copula
   simulation through `TCopulaSpec`, `simulate_t_copula_matrix()`, and
   `simulate_t_copula_raw()`. It reuses the existing marginal quantile path and

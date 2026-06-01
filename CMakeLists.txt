@@ -133,8 +133,10 @@ add_library(magmaan STATIC
   src/robust/lr_test_satorra.cpp
   src/robust/weighted_chisq.cpp
   src/robust/weighted_inference.cpp
+  src/sim/elliptical.cpp
   src/sim/normal.cpp
   src/sim/norta.cpp
+  src/sim/population.cpp
   src/sim/projection.cpp
   src/sim/vale_maurelli.cpp
   src/measures/fit_measures.cpp
