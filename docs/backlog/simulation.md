@@ -98,10 +98,13 @@ simulation work queue and decision log.
   repair toward a requested minimum eigenvalue. This is a matrix
   diagnostic/calibration layer, not an automatic matrix-to-vine fitter.
   Explicit three-variable C-vine sampling is available through
-  `CVine3CopulaSpec`, `simulate_cvine3_copula_uniforms()`,
-  `simulate_cvine3_copula_matrix()`, and `simulate_cvine3_copula_raw()`.
-  The first structure uses variable 0 as the root, pair copulas for `0-1` and
-  `0-2`, and a conditional pair copula for `1-2|0`.
+  `CVine3CopulaSpec`, `cvine3_copula_inverse_rosenblatt()`,
+  `simulate_cvine3_copula_uniforms()`, `simulate_cvine3_copula_matrix()`, and
+  `simulate_cvine3_copula_raw()`. The first structure uses variable 0 as the
+  root, pair copulas for `0-1` and `0-2`, and a conditional pair copula for
+  `1-2|0`. `tests/fixtures/sim/cvine3_inverse_rosenblatt.json` checks the
+  deterministic inverse Rosenblatt transform against rvinecopulib
+  `inverse_rosenblatt()` for the equivalent `cvine_structure(c(3,2,1))`.
   `cvine3_copula_observed_corr()` deterministically evaluates the implied
   observed correlation matrix, and `calibrate_cvine3_copula_correlation()`
   calibrates the two root pair copulas plus the conditional pair copula to a

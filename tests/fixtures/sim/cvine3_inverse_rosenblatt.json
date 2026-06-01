@@ -1,0 +1,83 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "sim.cvine3_inverse_rosenblatt",
+    "oracle": "rvinecopulib 0.7.3.1.0 inverse_rosenblatt(vinecop_dist(..., cvine_structure(c(3,2,1))))"
+  },
+  "cases": [
+    {
+      "id": "frank_root0_mixed",
+      "structure": "cvine_root0_order_3_2_1",
+      "copula_01": {
+        "family": "frank",
+        "rotation": 0,
+        "parameters": 5
+      },
+      "copula_02": {
+        "family": "frank",
+        "rotation": 0,
+        "parameters": -5
+      },
+      "copula_12_given_0": {
+        "family": "frank",
+        "rotation": 0,
+        "parameters": 3
+      },
+      "points": [
+        {
+          "independent_u": [0.11, 0.22, 0.33],
+          "copula_u": [0.11, 0.0789452746103052, 0.602742566930829]
+        },
+        {
+          "independent_u": [0.41, 0.52, 0.63],
+          "copula_u": [0.41, 0.437435213389108, 0.658273394074058]
+        },
+        {
+          "independent_u": [0.73, 0.14, 0.86],
+          "copula_u": [0.73, 0.388300204504048, 0.411668391752755]
+        },
+        {
+          "independent_u": [0.91, 0.82, 0.17],
+          "copula_u": [0.91, 0.941294110525632, 0.129372678435175]
+        }
+      ]
+    },
+    {
+      "id": "clayton_gumbel_independent_conditional",
+      "structure": "cvine_root0_order_3_2_1",
+      "copula_01": {
+        "family": "clayton",
+        "rotation": 0,
+        "parameters": 2
+      },
+      "copula_02": {
+        "family": "gumbel",
+        "rotation": 0,
+        "parameters": 2
+      },
+      "copula_12_given_0": {
+        "family": "indep",
+        "rotation": 0,
+        "parameters": []
+      },
+      "points": [
+        {
+          "independent_u": [0.11, 0.22, 0.33],
+          "copula_u": [0.11, 0.0830075241127467, 0.12979722336386]
+        },
+        {
+          "independent_u": [0.41, 0.52, 0.63],
+          "copula_u": [0.41, 0.485034595397905, 0.505261347645243]
+        },
+        {
+          "independent_u": [0.73, 0.14, 0.86],
+          "copula_u": [0.73, 0.405441424937847, 0.853357141242373]
+        },
+        {
+          "independent_u": [0.91, 0.82, 0.17],
+          "copula_u": [0.91, 0.92417873108981, 0.673649485239869]
+        }
+      ]
+    }
+  ]
+}
