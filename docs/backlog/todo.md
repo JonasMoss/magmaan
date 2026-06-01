@@ -632,6 +632,24 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   "Tolerance calibration" for the experimental sketch and
   `papers/snlls-constrained/reports/convergence-audit-notes.md` for the
   conversation that motivated the v1 default.
+- **M/L.** Decouple terminal audits from optimizer coordinate systems so every
+  fit result can be re-audited uniformly after any method-specific massage.
+  The audit philosophy should be: produce a candidate result, expand/profile/
+  reconstruct it as needed, then audit the resulting point against an explicit
+  objective and coordinate contract. The first concrete gap is SNLLS: current
+  `fit_snlls` / `fit_snlls_gls` convergence is audited in the profiled outer
+  beta coordinates, relying on the inner alpha least-squares solve for the
+  eliminated block. Add a post-hoc full-theta audit path, probably by
+  generalizing `evaluate_at()`, so paper and benchmark harnesses can compare
+  Full and SNLLS under the same expanded-theta KKT projected-gradient check.
+  Record both verdicts where useful (`profiled_beta_stationary` and
+  `full_theta_stationary`) plus objective/gradient norms, inner-solve
+  rank/conditioning, active bounds, and any profile fallback diagnostics.
+  Treat disagreements as high-value diagnostics for variable-projection
+  conditioning, rank deficiency, or mismatch between the profiled and full
+  objective geometry; do not make the full-theta audit a default hard gate
+  until the SNLLS paper corpora and verifier track show how often it differs
+  from the mathematically expected profiled verdict.
 - **M.** Compare NLopt L-BFGS/SLSQP/VAR2/TNEWTON/BOBYQA, PORT/PORT-NLS,
   Ceres trust-region, Ceres dense BFGS, and SNLLS only on semantically
   appropriate cases; include shallow or Heywood-prone LS cases so bounds and
