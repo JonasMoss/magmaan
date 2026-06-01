@@ -133,4 +133,8 @@ Rscript run_experiment.R --reps 1000 --cells p=10,N=400
 Rscript run_experiment.R --reps 1000 --cells dist=pl2
 
 Rscript run_experiment.R --help
+
+# paper-scale rejection rates: parallel over cells (forks the 84 cells, chunked
+# so memory stays light). ~30-40 min on 10 cores; writes rejection_rates.csv.
+Rscript scripts/run_parallel.R --reps 3000 --cores 10
 ```
