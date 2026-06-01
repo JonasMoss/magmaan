@@ -108,8 +108,11 @@ simulation work queue and decision log.
   `cvine3_copula_observed_corr()` deterministically evaluates the implied
   observed correlation matrix, and `calibrate_cvine3_copula_correlation()`
   calibrates the two root pair copulas plus the conditional pair copula to a
-  3x3 target observed-correlation matrix. Broader structure selection,
-  higher-dimensional vines, and ordinal/polyserial/polychoric calibration
+  3x3 target observed-correlation matrix.
+  `calibrate_cvine3_copula_correlation_select_root()` tries all three possible
+  roots, restores achieved correlations to the caller's original variable
+  order, and reports the selected root/order. Higher-dimensional vines,
+  per-edge family selection, and ordinal/polyserial/polychoric calibration
   remain separate work.
 
 ## Architecture Direction
@@ -292,8 +295,12 @@ Validation:
   `cvine3_copula_observed_corr()` and
   `calibrate_cvine3_copula_correlation()` for the fixed root-0 C-vine. The fit
   calibrates root pairs against `r01`/`r02`, then bisects the conditional
-  copula against the full C-vine implied `r12`. Broader structure selection and
-  higher-dimensional vines remain future work.
+  copula against the full C-vine implied `r12`.
+- **Landed, root selection for 3-variable C-vines.** Add
+  `calibrate_cvine3_copula_correlation_select_root()` to try roots 0, 1, and 2
+  by permutation, skip infeasible fits, and return the best achieved matrix in
+  the original variable order. Higher-dimensional vines and per-edge family
+  selection remain future work.
 - **Landed, first PLSIM slice.** Add piecewise-linear simulation through
   `fit_plsim_marginal()`, `calibrate_plsim()`, `simulate_plsim_matrix()`, and
   `simulate_plsim_raw()`. Unit coverage checks the skewness 2 / excess kurtosis
@@ -305,8 +312,8 @@ Validation:
   Remaining PLSIM work is pair-cache/performance tuning and broader
   simulation-grid diagnostics.
 - **S.** Extend VITA/covsim-style simulation from repaired matrix diagnostics
-  plus fixed 3-variable C-vine fitting to structure selection, higher
-  dimensions, and broader vine/multivariate-copula policies.
+  plus 3-variable C-vine root selection to higher dimensions, per-edge family
+  selection, and broader vine/multivariate-copula policies.
 - **S.** Decide whether Johnson SL should be exposed beyond the direct
   `MarginalSpec::johnson()` constructor.
 - **S.** Decide the long-term special-functions policy before expanding the

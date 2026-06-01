@@ -232,6 +232,8 @@ struct CVine3CorrelationCalibration {
   CVine3CopulaSpec copula = {};
   Eigen::MatrixXd target_corr;
   Eigen::MatrixXd achieved_corr;
+  Eigen::Vector3i variable_order = Eigen::Vector3i(0, 1, 2);
+  int root_index = 0;
   BivariateCopulaCorrelationCalibration root_01 = {};
   BivariateCopulaCorrelationCalibration root_02 = {};
   double conditional_lower_bound_corr_12 = 0.0;
@@ -381,6 +383,13 @@ cvine3_copula_observed_corr(
 
 sim_expected<CVine3CorrelationCalibration>
 calibrate_cvine3_copula_correlation(
+    BivariateCopulaFamily family,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options = {});
+
+sim_expected<CVine3CorrelationCalibration>
+calibrate_cvine3_copula_correlation_select_root(
     BivariateCopulaFamily family,
     const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
     const std::vector<MarginalSpec>& marginals,

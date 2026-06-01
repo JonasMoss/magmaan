@@ -269,8 +269,10 @@ golden `parTable()` fixtures.
   `cvine3_copula_observed_corr()` evaluates its implied observed correlation
   matrix by deterministic quadrature, and
   `calibrate_cvine3_copula_correlation()` fits the two root pair copulas plus
-  the conditional copula to a 3x3 observed-correlation target. Broader
-  structure selection, higher-dimensional vines, and
+  the conditional copula to a 3x3 observed-correlation target.
+  `calibrate_cvine3_copula_correlation_select_root()` tries all three possible
+  roots by permutation and returns the best achieved matrix in the original
+  variable order. Higher-dimensional vines, per-edge family selection, and
   ordinal/polyserial/polychoric calibration are still future work.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for
