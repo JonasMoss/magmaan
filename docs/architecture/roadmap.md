@@ -230,7 +230,8 @@ golden `parTable()` fixtures.
   `simulate_bivariate_copula_raw()`. The first local families are independence,
   Clayton, Gumbel, Frank, and Joe. Sampling uses conditional inversion of
   `dC(u,v)/du`, then feeds the resulting uniforms through the same marginal
-  quantile machinery as the t-copula path.
+  quantile machinery as the t-copula path. The conditional CDF and inverse
+  conditional CDF helpers are fixture-checked against rvinecopulib `hbicop()`.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for
   now; the long-term dependency policy is still open.

@@ -66,7 +66,9 @@ simulation work queue and decision log.
   `simulate_bivariate_copula_raw()`. The first families are independence,
   Clayton, Gumbel, Frank, and Joe. Sampling uses conditional inversion of the
   bivariate copula and then the same marginal quantile path as t-copula
-  sampling.
+  sampling. `tests/tools/regen_copula_sim_fixtures.R` regenerates
+  `tests/fixtures/sim/bivariate_copula_hfunc.json`, which checks the
+  conditional CDF and inverse conditional CDF against rvinecopulib `hbicop()`.
 
 ## Architecture Direction
 

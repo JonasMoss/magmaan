@@ -68,6 +68,16 @@ void check_ig_moment_system(const Eigen::MatrixXd& root,
   CHECK((got_kurt - target_excess_kurtosis).norm() == doctest::Approx(0.0).epsilon(1e-10));
 }
 
+magmaan::sim::BivariateCopulaFamily copula_family_from_string(
+    const std::string& family) {
+  if (family == "indep") return magmaan::sim::BivariateCopulaFamily::Independence;
+  if (family == "clayton") return magmaan::sim::BivariateCopulaFamily::Clayton;
+  if (family == "gumbel") return magmaan::sim::BivariateCopulaFamily::Gumbel;
+  if (family == "frank") return magmaan::sim::BivariateCopulaFamily::Frank;
+  if (family == "joe") return magmaan::sim::BivariateCopulaFamily::Joe;
+  return magmaan::sim::BivariateCopulaFamily::Independence;
+}
+
 }  // namespace
 
 TEST_CASE("normal quantile round-trips through normal CDF") {
@@ -644,6 +654,44 @@ TEST_CASE("bivariate Archimedean copulas generate expected dependence direction"
     CHECK(r < c.upper);
     CHECK(std::abs(X_or->col(0).mean()) < 0.04);
     CHECK(std::abs(X_or->col(1).mean()) < 0.04);
+  }
+}
+
+TEST_CASE("bivariate copula conditional helpers match rvinecopulib goldens") {
+  const std::string path = magmaan::test::fixtures_dir() +
+                           "/sim/bivariate_copula_hfunc.json";
+  auto raw = magmaan::test::read_fixture(path);
+  REQUIRE(raw.has_value());
+  auto fixture = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(fixture.is_discarded());
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.max_bisection_iter = 90;
+  for (const auto& c : fixture["cases"]) {
+    const std::string id = c["id"].get<std::string>();
+    CAPTURE(id);
+    magmaan::sim::BivariateCopulaSpec copula;
+    copula.family = copula_family_from_string(c["family"].get<std::string>());
+    if (c["parameters"].is_number()) {
+      copula.theta = c["parameters"].get<double>();
+    }
+
+    for (const auto& point : c["points"]) {
+      const double u = point["u"].get<double>();
+      const double v = point["v"].get<double>();
+      const double p = point["p"].get<double>();
+      auto h_or = magmaan::sim::bivariate_copula_conditional_cdf(
+          copula, u, v);
+      REQUIRE(h_or.has_value());
+      CHECK(*h_or == doctest::Approx(
+          point["conditional_cdf"].get<double>()).epsilon(1e-10));
+
+      auto q_or = magmaan::sim::bivariate_copula_conditional_quantile(
+          copula, u, p, options);
+      REQUIRE(q_or.has_value());
+      CHECK(*q_or == doctest::Approx(
+          point["conditional_quantile"].get<double>()).epsilon(1e-10));
+    }
   }
 }
 
