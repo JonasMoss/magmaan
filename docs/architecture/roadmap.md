@@ -308,8 +308,9 @@ golden `parTable()` fixtures.
   through `CVineCopulaSpec`, `cvine_copula_inverse_rosenblatt()`, and
   `simulate_cvine_copula_*()` for arbitrary dimension, with inverse
   Rosenblatt validation against both the 3-variable specialization and a
-  four-variable rvinecopulib fixture. Higher-dimensional calibration, broader
-  structure/family policies, and
+  four-variable rvinecopulib fixture. `simulate_mixed_population_cvine_copula()`
+  composes generic fixed-order C-vine draws with the observed projection layer.
+  Higher-dimensional calibration, broader structure/family policies, and
   ordinal/polyserial/polychoric calibration are still future work.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for

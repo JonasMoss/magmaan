@@ -169,4 +169,20 @@ simulate_mixed_population_cvine3_copula(
     std::mt19937_64& rng,
     const BivariateCopulaOptions& options = {});
 
+sim_expected<Eigen::MatrixXd>
+simulate_continuous_population_cvine_copula(
+    Eigen::Index n,
+    const CVineCopulaSpec& copula,
+    const std::vector<MarginalSpec>& marginals,
+    std::mt19937_64& rng,
+    const BivariateCopulaOptions& options = {});
+
+sim_expected<MixedPopulationDraw>
+simulate_mixed_population_cvine_copula(
+    Eigen::Index n,
+    const CVineCopulaSpec& copula,
+    const CopulaPopulation& population,
+    std::mt19937_64& rng,
+    const BivariateCopulaOptions& options = {});
+
 }  // namespace magmaan::sim
