@@ -583,9 +583,12 @@ if (isTRUE(args$lavaan_parity)) {
                             tst[[length(tst)]]$df, lower.tail = FALSE))
         }
       }
-      # continuous ML vs lavaan MLM.
+      # continuous ML vs lavaan MLM. lavaan needs the integer codes as numeric
+      # columns here (the cat-LS fit above used the ordered-factor frame).
       if (!is.null(cached$ML)) {
-        lv <- tryCatch(lavaan::sem(SYNTAX, data = df, estimator = "MLM",
+        df_num <- as.data.frame(lapply(df, function(c)
+          as.numeric(as.character(c))))
+        lv <- tryCatch(lavaan::sem(SYNTAX, data = df_num, estimator = "MLM",
                                    std.lv = TRUE),
                        error = function(e) e)
         if (!inherits(lv, "error")) {
