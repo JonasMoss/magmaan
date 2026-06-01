@@ -185,6 +185,9 @@ retiered. See `docs/backlog/todo.md`.
   together cover the what.
 - Keep `docs/backlog/todo.md` as the main active backlog and
   `docs/backlog/simulation.md` as the simulation-specific active backlog.
+  Treat `docs/backlog/simulation.md` as the design roadmap for the simulation
+  sublibrary's generator/projection/calibration stack; keep only cross-domain
+  summaries in the main roadmap/TODO.
   Remove or fold stale finished planning docs into `docs/architecture/roadmap.md`,
   `docs/backlog/todo.md`, or `docs/backlog/simulation.md` when a phase
   completes; do not create parallel roadmaps.

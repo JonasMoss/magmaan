@@ -319,6 +319,26 @@ TEST_CASE("Pearson moment matcher matches PearsonDS goldens") {
   }
 }
 
+TEST_CASE("Pearson Type IV marginals feed independent generation") {
+  magmaan::sim::MomentMatchSpec spec;
+  spec.family = magmaan::sim::MomentMatchFamily::Pearson;
+  spec.shape.skewness = 1.0;
+  spec.shape.excess_kurtosis = 2.0;
+
+  auto fit_or = magmaan::sim::fit_marginal_to_moments(spec);
+  REQUIRE(fit_or.has_value());
+  REQUIRE(fit_or->marginal.kind == magmaan::sim::MarginalKind::Pearson);
+  REQUIRE(fit_or->marginal.pearson_type == 4);
+
+  std::mt19937_64 rng(20260602);
+  const std::vector<magmaan::sim::MarginalSpec> marginals{fit_or->marginal};
+  auto X_or = magmaan::sim::simulate_independent_matrix(16, marginals, rng);
+  REQUIRE(X_or.has_value());
+  REQUIRE(X_or->rows() == 16);
+  REQUIRE(X_or->cols() == 1);
+  CHECK(X_or->array().isFinite().all());
+}
+
 TEST_CASE("Johnson moment matcher matches SuppDists goldens") {
   const std::string path = magmaan::test::fixtures_dir() +
                            "/sim/johnson_moment_match.json";

@@ -43,6 +43,19 @@ struct MomentFitEval {
   double norm = 0.0;
 };
 
+struct PearsonIvKernel {
+  double m = 0.0;
+  double nu = 0.0;
+  double log_peak = 0.0;
+
+  double operator()(double theta) const noexcept {
+    const double c = std::cos(theta);
+    if (!(c > 0.0)) return 0.0;
+    const double alpha = 2.0 * m - 2.0;
+    return std::exp(-nu * theta + alpha * std::log(c) - log_peak);
+  }
+};
+
 using detail::inverse_gamma_p;
 using detail::inverse_regularized_beta;
 using detail::nan;
@@ -50,6 +63,97 @@ using detail::student_t_quantile;
 
 bool approx_equal(double a, double b, double tol = 1e-12) noexcept {
   return std::abs(a - b) <= tol * std::max({1.0, std::abs(a), std::abs(b)});
+}
+
+template <typename F>
+double simpson_panel(const F& f, double a, double b) {
+  const double m = 0.5 * (a + b);
+  return (b - a) / 6.0 * (f(a) + 4.0 * f(m) + f(b));
+}
+
+template <typename F>
+double adaptive_simpson_aux(const F& f,
+                            double a,
+                            double b,
+                            double whole,
+                            double abs_tol,
+                            int depth) {
+  const double m = 0.5 * (a + b);
+  const double left = simpson_panel(f, a, m);
+  const double right = simpson_panel(f, m, b);
+  const double refined = left + right;
+  const double delta = refined - whole;
+  if (depth <= 0 || std::abs(delta) <= 15.0 * abs_tol) {
+    return refined + delta / 15.0;
+  }
+  return adaptive_simpson_aux(f, a, m, left, 0.5 * abs_tol, depth - 1) +
+         adaptive_simpson_aux(f, m, b, right, 0.5 * abs_tol, depth - 1);
+}
+
+template <typename F>
+double adaptive_simpson(const F& f, double a, double b, double abs_tol) {
+  if (!(b > a)) return 0.0;
+  const double whole = simpson_panel(f, a, b);
+  return adaptive_simpson_aux(f, a, b, whole, abs_tol, 28);
+}
+
+double pearson_type4_log_peak(double m, double nu) noexcept {
+  const double alpha = 2.0 * m - 2.0;
+  const double theta = std::atan(-nu / alpha);
+  return -nu * theta + alpha * std::log(std::cos(theta));
+}
+
+double pearson_type4_integral(const PearsonIvKernel& kernel,
+                              double a,
+                              double b) {
+  constexpr double tol = 2e-12;
+  const double val = adaptive_simpson(kernel, a, b, tol);
+  return std::max(0.0, val);
+}
+
+double pearson_type4_cdf_theta(double theta,
+                               const PearsonIvKernel& kernel,
+                               double total,
+                               bool integrate_lower_tail) {
+  constexpr double lo = -0.5 * std::numbers::pi;
+  constexpr double hi = 0.5 * std::numbers::pi;
+  if (theta <= lo) return 0.0;
+  if (theta >= hi) return 1.0;
+  if (!(total > 0.0) || !std::isfinite(total)) return nan();
+  if (integrate_lower_tail) {
+    return pearson_type4_integral(kernel, lo, theta) / total;
+  }
+  return 1.0 - pearson_type4_integral(kernel, theta, hi) / total;
+}
+
+double pearson_type4_quantile(double p,
+                              double m,
+                              double nu,
+                              double location,
+                              double scale) {
+  if (!(p > 0.0) || !(p < 1.0) || !(m > 1.0) || !(scale > 0.0)) {
+    return nan();
+  }
+  constexpr double lo0 = -0.5 * std::numbers::pi;
+  constexpr double hi0 = 0.5 * std::numbers::pi;
+  const PearsonIvKernel kernel{m, nu, pearson_type4_log_peak(m, nu)};
+  const double total = pearson_type4_integral(kernel, lo0, hi0);
+  if (!(total > 0.0) || !std::isfinite(total)) return nan();
+
+  double lo = lo0;
+  double hi = hi0;
+  double mid = 0.0;
+  const bool integrate_lower_tail = p <= 0.5;
+  for (int iter = 0; iter < 90; ++iter) {
+    mid = 0.5 * (lo + hi);
+    const double cdf = pearson_type4_cdf_theta(
+        mid, kernel, total, integrate_lower_tail);
+    if (!std::isfinite(cdf)) return nan();
+    if (cdf < p) lo = mid;
+    else hi = mid;
+  }
+  const double theta = 0.5 * (lo + hi);
+  return location + scale * std::tan(theta);
 }
 
 sim_expected<GaussHermite> gauss_hermite(int n) {
@@ -133,6 +237,9 @@ sim_expected<void> validate_marginal(const MarginalSpec& m) {
         case 3:
         case 5:
           if (m.pearson_p1 > 0.0 && m.pearson_p3 != 0.0) return {};
+          break;
+        case 4:
+          if (m.pearson_p1 > 1.0 && m.pearson_p4 > 0.0) return {};
           break;
         case 6:
           if (m.pearson_p1 > 0.0 && m.pearson_p2 > 0.0 &&
@@ -223,6 +330,9 @@ double pearson_raw_from_z(const MarginalSpec& m, double z) {
       const double q = inverse_gamma_p(pp, m.pearson_p1, std::abs(scale));
       return m.pearson_p2 + std::copysign(q, scale);
     }
+    case 4:
+      return pearson_type4_quantile(
+          p, m.pearson_p1, m.pearson_p2, m.pearson_p3, m.pearson_p4);
     case 5: {
       const double scale = m.pearson_p3;
       const double pp = scale > 0.0 ? 1.0 - p : p;
@@ -1124,9 +1234,21 @@ fit_pearson_moment_match(const MomentMatchSpec& spec) {
       marginal = MarginalSpec::pearson(6, 1.0 + m2, -m2 - m1 - 1.0,
                                        location, scale, mean, spec.sd);
     } else if (kap > 0.0 && kap < 1.0) {
-      return std::unexpected(make_err(
-          SimError::Kind::CalibrationFailed,
-          "fit_marginal_to_moments: Pearson Type IV quantile is not implemented"));
+      const double r = 6.0 * (kurt - skew2 - 1.0) /
+                       (2.0 * kurt - 3.0 * skew2 - 6.0);
+      const double shape_term =
+          16.0 * (r - 1.0) - skew2 * (r - 2.0) * (r - 2.0);
+      if (!(shape_term > 0.0)) {
+        return std::unexpected(make_err(
+            SimError::Kind::CalibrationFailed,
+            "fit_marginal_to_moments: invalid Pearson Type IV shape"));
+      }
+      const double nu = -r * (r - 2.0) * skew / std::sqrt(shape_term);
+      const double scale = std::sqrt(variance * shape_term) / 4.0;
+      const double location = mean - ((r - 2.0) * skew * spec.sd) / 4.0;
+      const double m = 1.0 + 0.5 * r;
+      marginal = MarginalSpec::pearson(4, m, nu, location, scale,
+                                       mean, spec.sd);
     } else {
       return std::unexpected(make_err(
           SimError::Kind::CalibrationFailed,

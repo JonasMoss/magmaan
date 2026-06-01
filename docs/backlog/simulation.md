@@ -3,10 +3,11 @@
 Simulation-specific state and remaining work for `magmaan::sim`.
 
 This file exists to keep simulation-generator state separate from the main SEM
-estimation/inference backlog in [`todo.md`](todo.md). Use it for NORTA,
-independent generators, Vale-Maurelli/Fleishman, marginal moment matching,
-simulation fixture policy, and simulation-performance notes. Keep estimator,
-parser, matrix-representation, robust-test, and R-package work in
+estimation/inference backlog in [`todo.md`](todo.md). Use it for the simulation
+sublibrary roadmap, NORTA, independent generators, Vale-Maurelli/Fleishman,
+marginal moment matching, ordinal/mixed-data projection, model-implied data
+generation, simulation fixture policy, and simulation-performance notes. Keep
+estimator, parser, matrix-representation, robust-test, and R-package work in
 [`todo.md`](todo.md) unless the item is specifically about data generation.
 
 The implementation-state summary still belongs in
@@ -24,14 +25,81 @@ simulation work queue and decision log.
   independent generators. Fleishman uses the Vale-Maurelli coefficient solver
   and is deliberately treated as a normal generator transform; it is not exposed
   as a guaranteed quantile because the fitted cubic need not be monotone.
-- Pearson marginals follow PearsonDS conventions. Types 0/I/II/III/V/VI/VII
-  are supported and checked against PearsonDS 1.3.2 goldens. Type IV is
-  classified but still rejected pending a CDF/quantile policy.
+- Pearson marginals follow PearsonDS conventions. Types 0/I/II/III/IV/V/VI/VII
+  are supported and checked against PearsonDS 1.3.2 goldens. Type IV uses a
+  dependency-free finite-integral CDF and bisection quantile path.
 - Johnson SU/SB marginals are checked against SuppDists 1.1.9.9
   `JohnsonFit`/`qJohnson` goldens (shape pair, type, and quantiles to ~1e-7).
   The fixture targets the realized moments of SuppDists's returned shape so the
   comparison is exact rather than capped by SuppDists's loose moment solve;
   `tests/tools/regen_johnson_sim_fixtures.R` regenerates it.
+
+## Architecture Direction
+
+The simulation sublibrary is intentionally maximalist: if a data-generation
+mechanism is used in the SEM/simulation literature, or has an obvious extension
+needed to compare those mechanisms fairly, it belongs here eventually. Keep that
+coverage organized as a layered simulation stack rather than as unrelated
+top-level named generators.
+
+The preferred decomposition is:
+
+1. **Population construction.** Build explicit population means/covariances,
+   group-specific population moments, thresholds, and eventually model-implied
+   population moments from a lavaanified model or fitted estimates.
+2. **Continuous generator.** Draw a complete continuous response matrix from a
+   named mechanism: normal, elliptical, copula/NORTA, independent-generator,
+   Vale-Maurelli/Fleishman, PLSIM, VITA/covsim, or later mechanisms.
+3. **Observed-variable projection.** Apply mean/intercept structure,
+   threshold/discretization rules, group labels, missingness, contamination, and
+   other observed-data transformations. Ordinal and mixed simulation should be
+   projection layers shared by all continuous generators, not duplicated inside
+   each generator.
+4. **Diagnostics and calibration artifacts.** Return or expose achieved moments,
+   calibrated latent/intermediate correlations, fitted marginal parameters,
+   thresholds, infeasible pairwise maps, positive-definiteness failures, and
+   stochastic validation summaries.
+
+This shape keeps named literature methods narrow: each one either constructs a
+population, generates continuous responses, projects observed variables, or
+calibrates/diagnoses one of those steps.
+
+## Planned Surface
+
+- Add first-class normal population simulation:
+  `simulate_normal_matrix(n, mean, sigma, rng)` and raw-data wrapping. This is
+  the baseline all other mechanisms compare against and the low-level target for
+  model-implied SEM simulation.
+- Add explicit population structs for continuous and mixed data, including
+  means, covariance/correlation, group-specific variants, thresholds, ordered
+  columns, and optional variable names/levels when wrapping `data::RawData`.
+- Add reusable discretization/projection helpers:
+  threshold continuous latent responses into ordinal/binary columns, derive
+  thresholds from marginal probabilities, preserve continuous columns for mixed
+  data, and report empty-category or achieved-proportion diagnostics.
+- Add model-implied simulation as a lowering step: convert `MatrixRep` /
+  estimates / fitted objects into population moments and projection specs, then
+  call the generic simulation stack. Mean structures, intercepts, latent means,
+  group means, and thresholds should live here instead of being baked into each
+  generator.
+- Add ordinal/mixed correlation calibration after the direct projection path is
+  stable. The first version can generate from latent correlations and report
+  achieved observed correlations; a later version should calibrate latent
+  correlations to requested observed Pearson/polychoric/polyserial summaries.
+- Add an elliptical-generator family: multivariate Student-t, contaminated
+  normal, slash, and a generic scale-mixture-of-normals hook. Add power
+  exponential / generalized-normal variants if the literature use cases need
+  them.
+- Add pseudo-elliptical / transformed-elliptical mechanisms where a radial or
+  spherical/elliptical core is combined with marginal transformations. Keep the
+  boundary clear with NORTA/copula methods: pseudo-elliptical methods are
+  continuous-generator mechanisms, not observed-data projections.
+- Add copula families beyond Gaussian NORTA: t-copula first, then Archimedean
+  Clayton, Gumbel, Frank, and Joe if needed for robust/ordinal simulation
+  studies. Reuse the same marginal and projection layers.
+- Add PLSIM and VITA/covsim later. Both are literature-relevant, but they should
+  plug into the same continuous-generator interface after normal, mixed
+  projection, and elliptical/copula foundations are in place.
 
 ## Pearson Type IV
 
@@ -62,15 +130,15 @@ Observed examples from the current classifier:
 | 3 | 20 | VI |
 | 3 | 30 | IV |
 
-Implementation note:
+Implemented policy:
 
-- The Type IV moment-parameter formulas are straightforward and already present
-  in PearsonDS `pearsonFitM()`: `m`, `nu`, `location`, and `scale`.
+- The Type IV moment-parameter formulas mirror PearsonDS `pearsonFitM()`:
+  `m`, `nu`, `location`, and `scale`.
 - GSL is not the core blocker for magmaan. PearsonDS uses GSL only for the
   complex log-gamma normalization in the density, and also ships a no-GSL C
   fallback for that normalization.
-- The simulation path needs quantiles, not density evaluation. A dependency-free
-  CDF can be computed as a normalized finite integral after
+- The simulation path needs quantiles, not density evaluation. The implemented
+  CDF computes a normalized finite integral after
   `theta = atan((x - location) / scale)`:
 
 ```text
@@ -80,32 +148,57 @@ CDF(x) =
   integral[-pi/2,  pi/2] exp(-nu*t) * cos(t)^(2*m - 2) dt
 ```
 
-- Quantiles can then be computed by safeguarded bisection in `theta`, followed
-  by `x = location + scale * tan(theta)`. This avoids GSL, avoids porting GPL
+- Quantiles are computed by safeguarded bisection in `theta`, followed by
+  `x = location + scale * tan(theta)`. This avoids GSL, avoids porting GPL
   PearsonDS hypergeometric code, and matches the existing project preference
   for small, validated numerical kernels.
 - The existing vendored QUADPACK `qagi` is for semi-infinite intervals; Type IV
-  only needs finite-interval quadrature. Prefer a small private adaptive
-  Simpson or Gauss-Kronrod helper unless a broader finite-integral need emerges.
+  only needs finite-interval quadrature. Type IV currently uses a small private
+  adaptive Simpson helper in `src/sim/norta.cpp`; revisit only if a broader
+  finite-integral need emerges.
 
-Validation expected for Type IV support:
+Validation:
 
-- Extend `tests/tools/regen_pearson_sim_fixtures.R` so Type IV cases are
-  supported and checked against PearsonDS 1.3.2 quantiles.
-- Include multiple Type IV cases, at least `(skew=1, excess=2)`,
-  `(skew=1, excess=5)`, `(skew=2, excess=10)`, `(skew=3, excess=30)`, and a
-  negative-skew mirror.
-- Add a direct transform smoke through either `simulate_independent_matrix()` or
-  `calibrate_norta()` using a Type IV Pearson marginal, so the implemented
-  quantile path is exercised beyond parameter goldens.
+- `tests/tools/regen_pearson_sim_fixtures.R` includes Type IV cases for
+  `(skew=1, excess=2)`, `(skew=1, excess=5)`, `(skew=2, excess=10)`,
+  `(skew=3, excess=30)`, and a negative-skew mirror.
+- `tests/unit/norta_test.cpp` checks fitted Type IV parameters and quantiles
+  against PearsonDS 1.3.2 and includes a direct `simulate_independent_matrix()`
+  transform smoke.
 - Keep the fixture oracle in R/PearsonDS only. Do not add PearsonDS, gsl, or R
   package dependencies to the C++ core.
 
 ## Remaining Work
 
-- **M.** Implement Pearson Type IV support for `MomentMatchFamily::Pearson`:
-  parameter formulas, `validate_marginal()` acceptance, finite-integral CDF,
-  quantile bisection, PearsonDS goldens, and one transform-path smoke.
+- **M.** Add baseline multivariate-normal simulation with explicit mean and
+  covariance, plus `data::RawData` wrapping and validation for finite positive
+  definite covariance matrices.
+- **L.** Add the population/projection layer for ordinal and mixed simulation:
+  threshold specs, marginal-probability-to-threshold helpers, binary-as-ordinal,
+  mixed continuous/ordinal output, group-specific threshold support, and
+  diagnostics for achieved proportions and empty categories.
+- **L.** Add model-implied simulation that lowers lavaanified/model evaluator
+  state to population moments and projection specs before invoking the generic
+  simulation stack. Treat mean structure as population construction/projection,
+  not as a generator-specific option.
+- **M.** Add first elliptical generators: Student-t, contaminated normal, slash,
+  and a generic scale-mixture-of-normals entry point. Validate moments and tail
+  behavior with deterministic formulas where available plus stochastic smokes.
+- **M.** Add t-copula simulation as the first non-Gaussian copula extension.
+  Keep it on the existing marginal/projection path and expose calibration
+  artifacts analogously to NORTA.
+- **M.** Add ordinal/mixed observed-correlation calibration once direct
+  threshold projection is stable: pairwise thresholded correlation maps,
+  calibration to target observed Pearson/polychoric/polyserial summaries, and a
+  policy for non-positive-definite calibrated latent matrices.
+- **S.** Add pseudo-elliptical / transformed-elliptical mechanisms after the
+  first elliptical slice clarifies the shared radial/core interfaces.
+- **S.** Add Archimedean copulas as needed by simulation studies: Clayton,
+  Gumbel, Frank, and Joe.
+- **S.** Add PLSIM/piecewise-linear simulation once the shared projection and
+  diagnostics interfaces exist.
+- **S.** Add VITA/covsim-style simulation once copula and projection
+  foundations make the implementation local rather than architecture-driving.
 - **S.** Decide whether Johnson SL should be exposed beyond the direct
   `MarginalSpec::johnson()` constructor.
 - **S.** Decide the long-term special-functions policy before expanding the
