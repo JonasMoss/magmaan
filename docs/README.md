@@ -7,7 +7,8 @@ is stable enough to describe without rewriting the story every week.
 ## Layout
 
 - `architecture/` - current implementation state and design contracts.
-- `backlog/` - accepted remaining work and known failures.
+- `backlog/` - accepted remaining work and known failures, including the
+  simulation-specific work queue.
 - `grammar/` - normative parser grammar and lexer notes.
 - `validation/` - parity, benchmark, and diagnostic validation plans.
 - `design/` - proposals, audits, and non-binding sketches.
