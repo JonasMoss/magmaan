@@ -197,6 +197,12 @@ struct BivariateCopulaSpec {
   double theta = 0.0;
 };
 
+struct CVine3CopulaSpec {
+  BivariateCopulaSpec copula_01 = {};
+  BivariateCopulaSpec copula_02 = {};
+  BivariateCopulaSpec copula_12_given_0 = {};
+};
+
 struct BivariateCopulaCorrelationCalibration {
   BivariateCopulaSpec copula = {};
   double target_corr = 0.0;
@@ -375,5 +381,25 @@ simulate_bivariate_copula_raw(Eigen::Index n,
                               const std::vector<MarginalSpec>& marginals,
                               std::mt19937_64& rng,
                               const BivariateCopulaOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
+simulate_cvine3_copula_uniforms(Eigen::Index n,
+                                const CVine3CopulaSpec& copula,
+                                std::mt19937_64& rng,
+                                const BivariateCopulaOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
+simulate_cvine3_copula_matrix(Eigen::Index n,
+                              const CVine3CopulaSpec& copula,
+                              const std::vector<MarginalSpec>& marginals,
+                              std::mt19937_64& rng,
+                              const BivariateCopulaOptions& options = {});
+
+sim_expected<data::RawData>
+simulate_cvine3_copula_raw(Eigen::Index n,
+                           const CVine3CopulaSpec& copula,
+                           const std::vector<MarginalSpec>& marginals,
+                           std::mt19937_64& rng,
+                           const BivariateCopulaOptions& options = {});
 
 }  // namespace magmaan::sim

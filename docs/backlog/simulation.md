@@ -95,9 +95,13 @@ simulation work queue and decision log.
   counts. It also reports the maximum achieved-correlation error and the raw
   minimum eigenvalue of the achieved matrix, with opt-in error/ridge/shrinkage
   repair toward a requested minimum eigenvalue. This is a matrix
-  diagnostic/calibration layer, not a multivariate Archimedean/vine sampler;
-  joint assembly and ordinal/polyserial/polychoric calibration remain separate
-  work.
+  diagnostic/calibration layer, not an automatic matrix-to-vine fitter.
+  Explicit three-variable C-vine sampling is available through
+  `CVine3CopulaSpec`, `simulate_cvine3_copula_uniforms()`,
+  `simulate_cvine3_copula_matrix()`, and `simulate_cvine3_copula_raw()`.
+  The first structure uses variable 0 as the root, pair copulas for `0-1` and
+  `0-2`, and a conditional pair copula for `1-2|0`. Automatic matrix-to-vine
+  assembly and ordinal/polyserial/polychoric calibration remain separate work.
 
 ## Architecture Direction
 
@@ -272,6 +276,11 @@ Validation:
   marginals, including maximum-error/minimum-eigenvalue diagnostics and opt-in
   error/ridge/shrinkage repair for indefinite achieved matrices. Joint copula
   assembly and ordinal/polyserial/polychoric calibration remain.
+- **Landed, first explicit vine sampler.** Add `CVine3CopulaSpec` and
+  `simulate_cvine3_copula_*()` for a fixed three-variable C-vine with root 0.
+  It composes the local bivariate h-functions/inverses and supports explicit
+  `0-1`, `0-2`, and `1-2|0` copulas. Matrix-to-vine fitting remains future
+  work; this is the valid joint sampler that later VITA calibration can target.
 - **Landed, first PLSIM slice.** Add piecewise-linear simulation through
   `fit_plsim_marginal()`, `calibrate_plsim()`, `simulate_plsim_matrix()`, and
   `simulate_plsim_raw()`. Unit coverage checks the skewness 2 / excess kurtosis
@@ -282,7 +291,8 @@ Validation:
   agreement across strategies. Remaining PLSIM work is a faster exact
   rectangle-moment covariance evaluator and broader simulation-grid diagnostics.
 - **S.** Extend VITA/covsim-style simulation from repaired matrix diagnostics
-  to joint assembly and a clear vine/multivariate-copula policy.
+  plus explicit 3-variable C-vine sampling to automatic matrix-to-vine fitting
+  and broader vine/multivariate-copula policies.
 - **S.** Decide whether Johnson SL should be exposed beyond the direct
   `MarginalSpec::johnson()` constructor.
 - **S.** Decide the long-term special-functions policy before expanding the

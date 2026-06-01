@@ -256,7 +256,11 @@ golden `parTable()` fixtures.
   iteration counts. It also reports maximum absolute error and achieved-matrix
   eigenvalue diagnostics, with opt-in error/ridge/shrinkage repair toward a
   requested minimum eigenvalue. This is a matrix diagnostic/calibration layer
-  rather than a joint sampler; joint copula assembly and
+  rather than an automatic matrix-to-vine fitter. The first explicit joint vine
+  sampler is available through `CVine3CopulaSpec` and
+  `simulate_cvine3_copula_*()`: a fixed three-variable C-vine with variable 0
+  as root, bivariate pair copulas for `0-1` and `0-2`, and a conditional pair
+  copula for `1-2|0`. Automatic matrix-to-vine fitting and
   ordinal/polyserial/polychoric calibration are still future work.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for
