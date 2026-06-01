@@ -178,9 +178,9 @@ golden `parTable()` fixtures.
   pairwise bisection, then validates the calibrated latent correlation by
   Cholesky factorization. `simulate_norta_matrix()` samples a complete
   `Eigen::MatrixXd`; `simulate_norta_raw()` wraps the same matrix in
-  `data::RawData` for downstream sample-stat builders. NORTA currently exposes
-  `NortaCalibration` but still needs public calibration-aware draw overloads to
-  match the rest of the calibrated generator surface.
+  `data::RawData` for downstream sample-stat builders. Both draw functions also
+  accept `NortaCalibration` directly, so repeated draws can reuse the
+  deterministic latent-correlation calibration.
 - The same marginal-transform surface is reused by independent generators:
   `simulate_independent_matrix()` and `simulate_independent_raw()` draw
   independent latent standard normals, transform each column through its
@@ -193,10 +193,9 @@ golden `parTable()` fixtures.
   skewness and excess kurtosis, then moment-matches each independent generator
   marginal. The lower-level overload accepts an already chosen root and fitted
   generator marginals for experiments that want to inspect or cache the
-  calibration. The exploratory R package exposes the same mechanism for batch
-  simulation as `magmaan_core$sim_ig_batch()`, returning draws plus the fitted
-  root and generator skewness/kurtosis diagnostics. That R wrapper is still a
-  one-shot convenience; reusable R calibration handles remain to be added.
+  calibration. The exploratory R package exposes the same mechanism through
+  `magmaan_core$sim_ig_batch()` and the reusable
+  `sim_ig_calibrate()` / `sim_ig_draw()` split.
 - Vale-Maurelli / Fleishman polynomial simulation is available through
   `fit_fleishman_coefficients()`, `calibrate_vale_maurelli()`,
   `simulate_vale_maurelli_matrix()`, and `simulate_vale_maurelli_raw()`.
@@ -224,17 +223,17 @@ golden `parTable()` fixtures.
   marginals, feasible pairwise target ranges, per-pair calibration failures,
   achieved correlations, and the minimum intermediate-correlation eigenvalue
   before the stricter `calibrate_plsim()` wrapper returns a success value.
-  `PlsimCalibration` is draw-ready in C++, but the R package currently exposes
-  it only indirectly through `sim_plsim_batch()`, which recalibrates for each
-  batch call.
-- Calibrated simulation generators are being standardized around a two-stage
+  `PlsimCalibration` is draw-ready in C++, and the R package exposes both
+  `sim_plsim_batch()` and the reusable
+  `sim_plsim_calibrate()` / `sim_plsim_draw()` split.
+- Calibrated simulation generators are standardized around a two-stage
   contract: deterministic `calibrate_*()` calls return reusable state objects
   with fitted marginals, latent/intermediate matrices, achieved diagnostics, and
   iteration metadata; stochastic `simulate_*()`/draw calls accept that state
-  plus only `n`, RNG/seed, and draw-time options. One-shot batch helpers may
-  remain as convenience wrappers, but both C++ and R should expose the reusable
-  calibration object path so large simulation grids do not redo identical
-  calibration for every sample-size cell.
+  plus only `n`, RNG/seed, and draw-time options. One-shot batch helpers remain
+  as convenience wrappers. This path is now in place for IG and PLSIM at the R
+  boundary and for IG, PLSIM, and NORTA at the C++ boundary; remaining work is
+  to expose the same R split for NORTA and calibrated copula/vine paths.
 - Initial NORTA marginals are standard normal, standardized lognormal, Tukey
   g-and-h, Pearson-system distributions, and Johnson-system SU/SB
   distributions. Fleishman polynomial transforms can also be passed through the
@@ -307,8 +306,10 @@ golden `parTable()` fixtures.
   correlation through structure/family calibration to deterministic-seed
   simulated correlations. Generic fixed-order C-vine sampling is available
   through `CVineCopulaSpec`, `cvine_copula_inverse_rosenblatt()`, and
-  `simulate_cvine_copula_*()` for arbitrary dimension. Higher-dimensional
-  calibration, broader structure/family policies, and
+  `simulate_cvine_copula_*()` for arbitrary dimension, with inverse
+  Rosenblatt validation against both the 3-variable specialization and a
+  four-variable rvinecopulib fixture. Higher-dimensional calibration, broader
+  structure/family policies, and
   ordinal/polyserial/polychoric calibration are still future work.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for

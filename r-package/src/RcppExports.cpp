@@ -1606,6 +1606,50 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sim_ig_calibrate_impl
+Rcpp::List sim_ig_calibrate_impl(Rcpp::NumericMatrix sigma, Rcpp::NumericVector target_skewness, Rcpp::NumericVector target_excess_kurtosis, std::string root, std::string generator_family, int quadrature_points, int max_iter, int grid_points_g, int grid_points_h, double objective_tol, double parameter_tol, double finite_diff_step, double tukey_g_bound, double tukey_h_upper, double johnson_gamma_bound, double johnson_log_delta_lower, double johnson_log_delta_upper, double root_eigen_tol, double moment_solve_tol);
+RcppExport SEXP _magmaan_sim_ig_calibrate_impl(SEXP sigmaSEXP, SEXP target_skewnessSEXP, SEXP target_excess_kurtosisSEXP, SEXP rootSEXP, SEXP generator_familySEXP, SEXP quadrature_pointsSEXP, SEXP max_iterSEXP, SEXP grid_points_gSEXP, SEXP grid_points_hSEXP, SEXP objective_tolSEXP, SEXP parameter_tolSEXP, SEXP finite_diff_stepSEXP, SEXP tukey_g_boundSEXP, SEXP tukey_h_upperSEXP, SEXP johnson_gamma_boundSEXP, SEXP johnson_log_delta_lowerSEXP, SEXP johnson_log_delta_upperSEXP, SEXP root_eigen_tolSEXP, SEXP moment_solve_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type sigma(sigmaSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type target_skewness(target_skewnessSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type target_excess_kurtosis(target_excess_kurtosisSEXP);
+    Rcpp::traits::input_parameter< std::string >::type root(rootSEXP);
+    Rcpp::traits::input_parameter< std::string >::type generator_family(generator_familySEXP);
+    Rcpp::traits::input_parameter< int >::type quadrature_points(quadrature_pointsSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< int >::type grid_points_g(grid_points_gSEXP);
+    Rcpp::traits::input_parameter< int >::type grid_points_h(grid_points_hSEXP);
+    Rcpp::traits::input_parameter< double >::type objective_tol(objective_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type parameter_tol(parameter_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type finite_diff_step(finite_diff_stepSEXP);
+    Rcpp::traits::input_parameter< double >::type tukey_g_bound(tukey_g_boundSEXP);
+    Rcpp::traits::input_parameter< double >::type tukey_h_upper(tukey_h_upperSEXP);
+    Rcpp::traits::input_parameter< double >::type johnson_gamma_bound(johnson_gamma_boundSEXP);
+    Rcpp::traits::input_parameter< double >::type johnson_log_delta_lower(johnson_log_delta_lowerSEXP);
+    Rcpp::traits::input_parameter< double >::type johnson_log_delta_upper(johnson_log_delta_upperSEXP);
+    Rcpp::traits::input_parameter< double >::type root_eigen_tol(root_eigen_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type moment_solve_tol(moment_solve_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_ig_calibrate_impl(sigma, target_skewness, target_excess_kurtosis, root, generator_family, quadrature_points, max_iter, grid_points_g, grid_points_h, objective_tol, parameter_tol, finite_diff_step, tukey_g_bound, tukey_h_upper, johnson_gamma_bound, johnson_log_delta_lower, johnson_log_delta_upper, root_eigen_tol, moment_solve_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sim_ig_draw_impl
+Rcpp::List sim_ig_draw_impl(Rcpp::List calibration, int n, int reps, double seed_base, int quadrature_points);
+RcppExport SEXP _magmaan_sim_ig_draw_impl(SEXP calibrationSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP quadrature_pointsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type calibration(calibrationSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type reps(repsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed_base(seed_baseSEXP);
+    Rcpp::traits::input_parameter< int >::type quadrature_points(quadrature_pointsSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_ig_draw_impl(calibration, n, reps, seed_base, quadrature_points));
+    return rcpp_result_gen;
+END_RCPP
+}
 // sim_plsim_batch_impl
 Rcpp::List sim_plsim_batch_impl(Rcpp::NumericMatrix target_corr, Rcpp::NumericVector target_skewness, Rcpp::NumericVector target_excess_kurtosis, int n, int reps, double seed_base, std::string method, int num_segments, bool monotone, int max_iter, int quadrature_points, int hermite_order, double marginal_tol, double correlation_tol, double rho_bound);
 RcppExport SEXP _magmaan_sim_plsim_batch_impl(SEXP target_corrSEXP, SEXP target_skewnessSEXP, SEXP target_excess_kurtosisSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP methodSEXP, SEXP num_segmentsSEXP, SEXP monotoneSEXP, SEXP max_iterSEXP, SEXP quadrature_pointsSEXP, SEXP hermite_orderSEXP, SEXP marginal_tolSEXP, SEXP correlation_tolSEXP, SEXP rho_boundSEXP) {
@@ -1628,6 +1672,42 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type correlation_tol(correlation_tolSEXP);
     Rcpp::traits::input_parameter< double >::type rho_bound(rho_boundSEXP);
     rcpp_result_gen = Rcpp::wrap(sim_plsim_batch_impl(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, method, num_segments, monotone, max_iter, quadrature_points, hermite_order, marginal_tol, correlation_tol, rho_bound));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sim_plsim_calibrate_impl
+Rcpp::List sim_plsim_calibrate_impl(Rcpp::NumericMatrix target_corr, Rcpp::NumericVector target_skewness, Rcpp::NumericVector target_excess_kurtosis, std::string method, int num_segments, bool monotone, int max_iter, int quadrature_points, int hermite_order, double marginal_tol, double correlation_tol, double rho_bound);
+RcppExport SEXP _magmaan_sim_plsim_calibrate_impl(SEXP target_corrSEXP, SEXP target_skewnessSEXP, SEXP target_excess_kurtosisSEXP, SEXP methodSEXP, SEXP num_segmentsSEXP, SEXP monotoneSEXP, SEXP max_iterSEXP, SEXP quadrature_pointsSEXP, SEXP hermite_orderSEXP, SEXP marginal_tolSEXP, SEXP correlation_tolSEXP, SEXP rho_boundSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type target_corr(target_corrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type target_skewness(target_skewnessSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type target_excess_kurtosis(target_excess_kurtosisSEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< int >::type num_segments(num_segmentsSEXP);
+    Rcpp::traits::input_parameter< bool >::type monotone(monotoneSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< int >::type quadrature_points(quadrature_pointsSEXP);
+    Rcpp::traits::input_parameter< int >::type hermite_order(hermite_orderSEXP);
+    Rcpp::traits::input_parameter< double >::type marginal_tol(marginal_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type correlation_tol(correlation_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type rho_bound(rho_boundSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_plsim_calibrate_impl(target_corr, target_skewness, target_excess_kurtosis, method, num_segments, monotone, max_iter, quadrature_points, hermite_order, marginal_tol, correlation_tol, rho_bound));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sim_plsim_draw_impl
+Rcpp::List sim_plsim_draw_impl(Rcpp::List calibration, int n, int reps, double seed_base);
+RcppExport SEXP _magmaan_sim_plsim_draw_impl(SEXP calibrationSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type calibration(calibrationSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type reps(repsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed_base(seed_baseSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_plsim_draw_impl(calibration, n, reps, seed_base));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1751,7 +1831,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_robust_se_both_breads_raw", (DL_FUNC) &_magmaan_infer_robust_se_both_breads_raw, 4},
     {"_magmaan_infer_robust_se_both_breads_zc", (DL_FUNC) &_magmaan_infer_robust_se_both_breads_zc, 5},
     {"_magmaan_sim_ig_batch_impl", (DL_FUNC) &_magmaan_sim_ig_batch_impl, 22},
+    {"_magmaan_sim_ig_calibrate_impl", (DL_FUNC) &_magmaan_sim_ig_calibrate_impl, 19},
+    {"_magmaan_sim_ig_draw_impl", (DL_FUNC) &_magmaan_sim_ig_draw_impl, 5},
     {"_magmaan_sim_plsim_batch_impl", (DL_FUNC) &_magmaan_sim_plsim_batch_impl, 15},
+    {"_magmaan_sim_plsim_calibrate_impl", (DL_FUNC) &_magmaan_sim_plsim_calibrate_impl, 12},
+    {"_magmaan_sim_plsim_draw_impl", (DL_FUNC) &_magmaan_sim_plsim_draw_impl, 4},
     {NULL, NULL, 0}
 };
 

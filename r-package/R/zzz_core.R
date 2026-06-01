@@ -162,7 +162,11 @@ robust_se_both_breads_raw <- infer_robust_se_both_breads_raw
 robust_se_both_breads_zc <- infer_robust_se_both_breads_zc
 
 sim_ig_batch <- sim_ig_batch_impl
+sim_ig_calibrate <- sim_ig_calibrate_impl
+sim_ig_draw <- sim_ig_draw_impl
 sim_plsim_batch <- sim_plsim_batch_impl
+sim_plsim_calibrate <- sim_plsim_calibrate_impl
+sim_plsim_draw <- sim_plsim_draw_impl
 
 measures_baseline <- infer_baseline
 measures_compute_defined <- compute_defined_impl
@@ -295,7 +299,11 @@ magmaan_core <- local({
     ),
     sim = c(
       "sim_ig_batch",
-      "sim_plsim_batch"
+      "sim_ig_calibrate",
+      "sim_ig_draw",
+      "sim_plsim_batch",
+      "sim_plsim_calibrate",
+      "sim_plsim_draw"
     ),
     measures = c(
       "measures_baseline",

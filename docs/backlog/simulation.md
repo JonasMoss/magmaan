@@ -23,11 +23,12 @@ simulation work queue and decision log.
   bivariate Archimedean copula sampling, and a first VITA/covsim-style
   bivariate copula observed-Pearson calibration layer.
 - The exploratory R package exposes simulation batches through the flat
-  `magmaan_core` registry, currently including `sim_ig_batch()` for
-  independent-generator simulation and `sim_plsim_batch()` for PLSIM. This is
-  now recognized as an incomplete convenience layer: batch wrappers calibrate
-  once per call, but they do not expose reusable calibration objects across
-  sample-size cells or repeated experiment runs.
+  `magmaan_core` registry, including `sim_ig_batch()` and
+  `sim_plsim_batch()` convenience calls. It also exposes the first reusable
+  calibration handles: `sim_ig_calibrate()` / `sim_ig_draw()` and
+  `sim_plsim_calibrate()` / `sim_plsim_draw()`. These return inspectable
+  list/S3 calibration objects and let experiment grids reuse deterministic
+  calibration across sample-size cells.
 - Baseline multivariate-normal generation is available through
   `simulate_normal_matrix()` and `simulate_normal_raw()`, taking explicit
   population means and covariance matrices. This is the low-level normal
@@ -70,11 +71,10 @@ simulation work queue and decision log.
   minimum eigenvalue available when calibration fails.
 - Calibration/state objects already exist for most high-cost continuous
   generators (`PlsimCalibration`, `IgCalibration`, `NortaCalibration`,
-  `BivariateCopula*Calibration`, and `CVine3CorrelationCalibration`), but the
-  surface is not yet uniform. PLSIM and IG have low-level draw paths that accept
-  fitted calibration state; NORTA still lacks a public draw overload from
-  `NortaCalibration`; the R layer exposes only all-in-one batch calls for
-  IG/PLSIM and no reusable calibration handles.
+  `BivariateCopula*Calibration`, and `CVine3CorrelationCalibration`). PLSIM,
+  IG, and NORTA now have C++ draw paths that accept fitted calibration state;
+  the R layer has reusable calibration/draw wrappers for IG and PLSIM. R-level
+  NORTA/coplanar copula calibration handles remain to be normalized.
 - Pearson marginals follow PearsonDS conventions. Types 0/I/II/III/IV/V/VI/VII
   are supported and checked against PearsonDS 1.3.2 goldens. Type IV uses a
   dependency-free finite-integral CDF and bisection quantile path.
@@ -144,8 +144,10 @@ simulation work queue and decision log.
   Generic fixed-order C-vine simulation is available through `CVineCopulaSpec`,
   `cvine_copula_inverse_rosenblatt()`, and `simulate_cvine_copula_*()` for
   arbitrary dimension, with the 3-variable specialization used as a regression
-  oracle. Higher-dimensional calibration, broader structure/family policies,
-  and ordinal/polyserial/polychoric calibration remain separate work.
+  oracle and a four-variable rvinecopulib fixture validating the generic
+  inverse Rosenblatt recursion. Higher-dimensional calibration, broader
+  structure/family policies, and ordinal/polyserial/polychoric calibration
+  remain separate work.
 
 ## Architecture Direction
 
@@ -222,12 +224,11 @@ calibrates/diagnoses one of those steps.
   parameter conventions, simulation checks, and later vine work. Do not make it
   a core runtime dependency unless the exception/dependency boundary is
   deliberately revisited; the C++ core stays local and `std::expected` based.
-- Normalize the generator API around reusable calibration objects. Add missing
-  calibration-aware C++ draw overloads where needed (notably NORTA), expose
-  `sim_*_calibrate()` and `sim_*_draw()` R wrappers for PLSIM, IG, NORTA, and
+- Normalize the generator API around reusable calibration objects. Expose
+  remaining `sim_*_calibrate()` and `sim_*_draw()` R wrappers for NORTA and
   calibrated copula/vine paths, and keep existing `sim_*_batch()` functions as
-  thin convenience wrappers. Extend the first PLSIM slice with pair-calibration
-  caching, broader simulation-grid diagnostics, and possible
+  thin convenience wrappers. Extend the first PLSIM slice with broader
+  simulation-grid diagnostics and possible
   tuning/replacement of the current adaptive rectangle integration kernel.
   Extend the first pairwise VITA/covsim copula calibration into a full
   matrix-oriented workflow.
@@ -377,7 +378,8 @@ Validation:
 - **Landed, generic fixed-order C-vine sampler.** Add `CVineCopulaSpec`,
   `cvine_copula_inverse_rosenblatt()`, and `simulate_cvine_copula_*()` for
   arbitrary-dimensional fixed-order C-vines. Unit coverage checks equivalence
-  with the rvine-backed three-variable specialization and a four-variable smoke.
+  with the rvine-backed three-variable specialization and a four-variable
+  rvinecopulib oracle fixture.
 - **Landed, first PLSIM slice.** Add piecewise-linear simulation through
   `fit_plsim_marginal()`, `diagnose_plsim()`, `calibrate_plsim()`,
   `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. Unit coverage checks
@@ -387,10 +389,20 @@ Validation:
   pairwise infeasibility diagnostics, non-PD intermediate diagnostics,
   stochastic moments, and raw-data wrapping. `tests/checks/plsim/` provides an
   advisory calibration bench comparing speed and quadrature/rectangle agreement
-  across strategies. Remaining PLSIM work is pair-cache/performance tuning,
-  broader simulation-grid diagnostics, and R-level reusable calibration
+  across strategies. The R layer now exposes reusable PLSIM calibration/draw
   wrappers so large grids do not recalibrate identical `(corr, moments,
-  options)` cells for every sample size.
+  options)` cells for every sample size. Remaining PLSIM work is lower-level
+  pair-cache/performance tuning and broader simulation-grid diagnostics.
+- **Landed, first reusable R calibration handles.** Add
+  `sim_ig_calibrate()` / `sim_ig_draw()` and
+  `sim_plsim_calibrate()` / `sim_plsim_draw()` to the R core registry, backed by
+  inspectable list/S3 calibration objects. The Foldnes-Moss-Grønneberg 2026
+  Study 1 experiment now caches IG/PLSIM calibration per `(family, p, dist)` and
+  reuses it across all `N` cells.
+- **Landed, NORTA draw-ready C++ calibration.** Add public
+  `simulate_norta_matrix()` / `simulate_norta_raw()` overloads that accept
+  `NortaCalibration`, aligning NORTA with the two-stage calibrated generator
+  contract.
 - **S.** Extend VITA/covsim-style simulation from repaired matrix diagnostics
   plus 3-variable C-vine root/family selection and generic fixed-order C-vine
   sampling to higher-dimensional calibration, richer structure/family search
@@ -402,15 +414,12 @@ Validation:
   hand-rolled regularized beta/gamma, inverse beta/gamma, Student-t, and F-tail
   helpers shared by Pearson simulation and FMG p-values. Either keep these with
   dedicated goldens, vendor/use Boost.Math, or choose another vetted dependency.
-- **M.** Harden NORTA calibration for larger simulation grids: add a public
-  `simulate_norta_matrix()` / raw-data overload that accepts
-  `NortaCalibration`, cache pairwise correlation maps when marginal specs
-  repeat, expose/interpolate the `rho_Z -> Corr(X_i, X_j)` map for repeated
-  target matrices, and add an explicit policy for pairwise-calibrated latent
-  matrices that are not positive definite. Error-only is the current behavior.
-- **M.** Add R-level calibration objects for simulation generators. Minimum
-  first slice: `sim_plsim_calibrate()` returns a list/class carrying
-  `PlsimCalibration` diagnostics and draw-ready state;
-  `sim_plsim_draw(calibration, n, reps, seed_base, ...)` draws without
-  recalibrating; repeat for `sim_ig_*` and `sim_norta_*`. Batch wrappers should
-  delegate to these functions internally.
+- **M.** Harden NORTA calibration for larger simulation grids: cache pairwise
+  correlation maps when marginal specs repeat, expose/interpolate the
+  `rho_Z -> Corr(X_i, X_j)` map for repeated target matrices, and add an
+  explicit policy for pairwise-calibrated latent matrices that are not positive
+  definite. Error-only is the current behavior.
+- **M.** Add remaining R-level calibration objects for simulation generators:
+  `sim_norta_calibrate()` / `sim_norta_draw()` and analogous calibrated
+  copula/vine handles. Batch wrappers should delegate to two-stage functions
+  internally where practical.

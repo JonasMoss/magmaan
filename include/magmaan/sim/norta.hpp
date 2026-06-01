@@ -327,10 +327,24 @@ calibrate_norta(const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
 
 sim_expected<Eigen::MatrixXd>
 simulate_norta_matrix(Eigen::Index n,
+                      const NortaCalibration& calibration,
+                      const std::vector<MarginalSpec>& marginals,
+                      std::mt19937_64& rng,
+                      const NortaOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
+simulate_norta_matrix(Eigen::Index n,
                       const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
                       const std::vector<MarginalSpec>& marginals,
                       std::mt19937_64& rng,
                       const NortaOptions& options = {});
+
+sim_expected<data::RawData>
+simulate_norta_raw(Eigen::Index n,
+                   const NortaCalibration& calibration,
+                   const std::vector<MarginalSpec>& marginals,
+                   std::mt19937_64& rng,
+                   const NortaOptions& options = {});
 
 sim_expected<data::RawData>
 simulate_norta_raw(Eigen::Index n,

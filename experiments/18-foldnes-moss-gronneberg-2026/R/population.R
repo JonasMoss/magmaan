@@ -135,6 +135,7 @@ dist_family <- function(dist) sub("[12]$", "", dist)
 # PLSIM calibrate once per cell and store a short batch of generated matrices.
 make_cell_sampler <- function(pop, N, dist, reps, seed_base, moments,
                               fl = NULL, core = NULL,
+                              sim_calibration = NULL,
                               ig_root = "symmetric",
                               ig_generator_family = "pearson",
                               ig_quadrature_points = 81L,
@@ -167,19 +168,23 @@ make_cell_sampler <- function(pop, N, dist, reps, seed_base, moments,
     if (is.null(core)) stop("IG cells require magmaan_core", call. = FALSE)
     mom <- moments[[dist]]
     if (is.null(mom)) stop("unknown IG distribution: ", dist, call. = FALSE)
-    batch <- core$sim_ig_batch(
-      pop$Sigma,
-      rep(mom[[1L]], p),
-      rep(mom[[2L]], p),
-      n = N,
-      reps = reps,
-      seed_base = seed_base,
-      root = ig_root,
-      generator_family = ig_generator_family,
+    cal <- sim_calibration
+    if (is.null(cal)) {
+      cal <- core$sim_ig_calibrate(
+        pop$Sigma,
+        rep(mom[[1L]], p),
+        rep(mom[[2L]], p),
+        root = ig_root,
+        generator_family = ig_generator_family,
+        quadrature_points = ig_quadrature_points)
+    }
+    batch <- core$sim_ig_draw(
+      cal, n = N, reps = reps, seed_base = seed_base,
       quadrature_points = ig_quadrature_points)
     return(list(setup_seconds = proc.time()[["elapsed"]] - t0,
-                ig = batch[c("root", "generator_skewness",
-                             "generator_excess_kurtosis")],
+                calibration = cal,
+                ig = cal[c("root", "generator_skewness",
+                           "generator_excess_kurtosis")],
                 draw = function(i) batch$draws[[i]]))
   }
 
@@ -188,19 +193,22 @@ make_cell_sampler <- function(pop, N, dist, reps, seed_base, moments,
     mom <- moments[[dist]]
     if (is.null(mom)) stop("unknown PLSIM distribution: ", dist, call. = FALSE)
     sds <- sqrt(diag(pop$Sigma))
-    batch <- core$sim_plsim_batch(
-      stats::cov2cor(pop$Sigma),
-      rep(mom[[1L]], p),
-      rep(mom[[2L]], p),
-      n = N,
-      reps = reps,
-      seed_base = seed_base,
-      method = plsim_method,
-      num_segments = plsim_num_segments,
-      quadrature_points = plsim_quadrature_points,
-      hermite_order = plsim_hermite_order)
+    cal <- sim_calibration
+    if (is.null(cal)) {
+      cal <- core$sim_plsim_calibrate(
+        stats::cov2cor(pop$Sigma),
+        rep(mom[[1L]], p),
+        rep(mom[[2L]], p),
+        method = plsim_method,
+        num_segments = plsim_num_segments,
+        quadrature_points = plsim_quadrature_points,
+        hermite_order = plsim_hermite_order)
+    }
+    batch <- core$sim_plsim_draw(
+      cal, n = N, reps = reps, seed_base = seed_base)
     return(list(setup_seconds = proc.time()[["elapsed"]] - t0,
-                plsim = batch[c("intermediate_corr", "achieved_corr", "iterations")],
+                calibration = cal,
+                plsim = cal[c("intermediate_corr", "achieved_corr", "iterations")],
                 draw = function(i) sweep(batch$draws[[i]], 2L, sds, "*")))
   }
 
