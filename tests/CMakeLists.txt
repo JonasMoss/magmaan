@@ -153,6 +153,7 @@ magmaan_add_test_target(magmaan_test_api api
 magmaan_add_test_target(magmaan_test_sim sim
   unit/normal_test.cpp
   unit/norta_test.cpp
+  unit/population_test.cpp
   unit/projection_test.cpp
   unit/vale_maurelli_test.cpp)
 

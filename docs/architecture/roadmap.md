@@ -224,7 +224,8 @@ golden `parTable()` fixtures.
   later VITA/covsim work should own calibration from requested observed
   moments/correlations to generator parameters. `vinecopulib`/`rvinecopulib`
   are treated as oracle/reference implementations for copula conventions, not
-  as core runtime dependencies.
+  as core runtime dependencies. `simulate_mixed_population_t_copula()` composes
+  the same generator with the observed projection layer.
 - Fixed-parameter bivariate Archimedean copula simulation is available through
   `BivariateCopulaSpec`, `simulate_bivariate_copula_matrix()`, and
   `simulate_bivariate_copula_raw()`. The first local families are independence,
@@ -234,6 +235,8 @@ golden `parTable()` fixtures.
   conditional CDF helpers are fixture-checked against rvinecopulib `hbicop()`.
   `bivariate_copula_tau()` and `bivariate_copula_from_tau()` provide the
   Kendall-tau parameter scale used for rank-based copula setup.
+  `simulate_mixed_population_bivariate_copula()` composes the same generator
+  with the observed projection layer.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for
   now; the long-term dependency policy is still open.

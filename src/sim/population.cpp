@@ -197,4 +197,57 @@ simulate_mixed_population_slash(Eigen::Index n,
       .observed = std::move(*observed_or)};
 }
 
+sim_expected<Eigen::MatrixXd>
+simulate_continuous_population_t_copula(
+    Eigen::Index n,
+    const TCopulaSpec& copula,
+    const std::vector<MarginalSpec>& marginals,
+    std::mt19937_64& rng,
+    const TCopulaOptions& options) {
+  return simulate_t_copula_matrix(n, copula, marginals, rng, options);
+}
+
+sim_expected<MixedPopulationDraw>
+simulate_mixed_population_t_copula(Eigen::Index n,
+                                   const TCopulaSpec& copula,
+                                   const CopulaPopulation& population,
+                                   std::mt19937_64& rng,
+                                   const TCopulaOptions& options) {
+  auto latent_or = simulate_continuous_population_t_copula(
+      n, copula, population.marginals, rng, options);
+  if (!latent_or.has_value()) return std::unexpected(latent_or.error());
+  auto observed_or = project_mixed_matrix(*latent_or, population.observed);
+  if (!observed_or.has_value()) return std::unexpected(observed_or.error());
+  return MixedPopulationDraw{
+      .latent = std::move(*latent_or),
+      .observed = std::move(*observed_or)};
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_continuous_population_bivariate_copula(
+    Eigen::Index n,
+    const BivariateCopulaSpec& copula,
+    const std::vector<MarginalSpec>& marginals,
+    std::mt19937_64& rng,
+    const BivariateCopulaOptions& options) {
+  return simulate_bivariate_copula_matrix(n, copula, marginals, rng, options);
+}
+
+sim_expected<MixedPopulationDraw>
+simulate_mixed_population_bivariate_copula(
+    Eigen::Index n,
+    const BivariateCopulaSpec& copula,
+    const CopulaPopulation& population,
+    std::mt19937_64& rng,
+    const BivariateCopulaOptions& options) {
+  auto latent_or = simulate_continuous_population_bivariate_copula(
+      n, copula, population.marginals, rng, options);
+  if (!latent_or.has_value()) return std::unexpected(latent_or.error());
+  auto observed_or = project_mixed_matrix(*latent_or, population.observed);
+  if (!observed_or.has_value()) return std::unexpected(observed_or.error());
+  return MixedPopulationDraw{
+      .latent = std::move(*latent_or),
+      .observed = std::move(*observed_or)};
+}
+
 }  // namespace magmaan::sim
