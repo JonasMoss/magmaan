@@ -202,11 +202,12 @@ golden `parTable()` fixtures.
   assembled intermediate correlation matrix is Cholesky-validated before
   sampling.
 - PLSIM piecewise-linear simulation is available through
-  `fit_plsim_marginal()`, `calibrate_plsim()`, `simulate_plsim_matrix()`, and
-  `simulate_plsim_raw()`. The first slice uses regular normal-quantile
-  breakpoints, fits continuous PL slopes to target marginal skewness and excess
-  kurtosis, exposes Hermite coefficients, and calibrates pairwise intermediate
-  normal correlations with selectable covariance evaluators:
+  `fit_plsim_marginal()`, `diagnose_plsim()`, `calibrate_plsim()`,
+  `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. The first slice uses
+  regular normal-quantile breakpoints, fits continuous PL slopes to target
+  marginal skewness and excess kurtosis, exposes Hermite coefficients, and
+  calibrates pairwise intermediate normal correlations with selectable
+  covariance evaluators:
   `PlsimCovarianceMethod::Hermite`, `Quadrature`, `Rectangle`,
   `HermiteThenQuadrature`, or `HermiteThenRectangle`. The rectangle path
   evaluates the Foldnes-Grønneberg segment decomposition by reducing bivariate
@@ -214,6 +215,10 @@ golden `parTable()` fixtures.
   one-dimensional adaptive integration. Gauss-Hermite quadrature remains useful
   as a smooth deterministic comparison path, but the advisory PLSIM bench shows
   it can differ from the rectangle/Hermite paths around kinked transforms.
+  Hermite is the default calibration path; `diagnose_plsim()` reports fitted
+  marginals, feasible pairwise target ranges, per-pair calibration failures,
+  achieved correlations, and the minimum intermediate-correlation eigenvalue
+  before the stricter `calibrate_plsim()` wrapper returns a success value.
 - Initial NORTA marginals are standard normal, standardized lognormal, Tukey
   g-and-h, Pearson-system distributions, and Johnson-system SU/SB
   distributions. Fleishman polynomial transforms can also be passed through the

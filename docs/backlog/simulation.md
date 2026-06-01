@@ -48,17 +48,20 @@ simulation work queue and decision log.
   independent generators. Fleishman uses the Vale-Maurelli coefficient solver
   and is deliberately treated as a normal generator transform; it is not exposed
   as a guaranteed quantile because the fitted cubic need not be monotone.
-- PLSIM is available through `fit_plsim_marginal()`, `calibrate_plsim()`,
-  `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. The first slice uses
-  regular normal-quantile breakpoints, solves slopes for target marginal
-  skewness/excess kurtosis, exposes Hermite coefficients, and calibrates
-  pairwise intermediate normal correlations with selectable covariance
-  evaluators: Hermite-series, bivariate Gauss-Hermite quadrature,
+- PLSIM is available through `fit_plsim_marginal()`, `diagnose_plsim()`,
+  `calibrate_plsim()`, `simulate_plsim_matrix()`, and `simulate_plsim_raw()`.
+  The first slice uses regular normal-quantile breakpoints, solves slopes for
+  target marginal skewness/excess kurtosis, exposes Hermite coefficients, and
+  calibrates pairwise intermediate normal correlations with selectable
+  covariance evaluators: Hermite-series, bivariate Gauss-Hermite quadrature,
   conditional-normal rectangle moments, and Hermite-initialized refinement for
-  either deterministic path. The rectangle evaluator follows the
-  Foldnes-Grønneberg segment decomposition directly, reducing each bivariate
-  rectangle probability/first/cross-moment calculation to one-dimensional
-  adaptive integration over the conditioning normal variable.
+  either deterministic path. Hermite is the default fast path. The rectangle
+  evaluator follows the Foldnes-Grønneberg segment decomposition directly,
+  reducing each bivariate rectangle probability/first/cross-moment calculation
+  to one-dimensional adaptive integration over the conditioning normal variable.
+  `diagnose_plsim()` keeps pairwise feasibility bounds, per-pair errors, the
+  partial intermediate matrix, achieved correlations, and the intermediate
+  minimum eigenvalue available when calibration fails.
 - Pearson marginals follow PearsonDS conventions. Types 0/I/II/III/IV/V/VI/VII
   are supported and checked against PearsonDS 1.3.2 goldens. Type IV uses a
   dependency-free finite-integral CDF and bisection quantile path.
@@ -111,9 +114,12 @@ simulation work queue and decision log.
   3x3 target observed-correlation matrix.
   `calibrate_cvine3_copula_correlation_select_root()` tries all three possible
   roots, restores achieved correlations to the caller's original variable
-  order, and reports the selected root/order. Higher-dimensional vines,
-  per-edge family selection, and ordinal/polyserial/polychoric calibration
-  remain separate work.
+  order, and reports the selected root/order. `CVine3FamilySpec` and the
+  overloaded `calibrate_cvine3_copula_correlation()` support per-edge family
+  choices, while `calibrate_cvine3_copula_correlation_select_families()` tries
+  a caller-provided candidate set for the fixed root-0 C-vine. Higher-
+  dimensional vines, combined root/family selection, and
+  ordinal/polyserial/polychoric calibration remain separate work.
 
 ## Architecture Direction
 
@@ -299,21 +305,26 @@ Validation:
 - **Landed, root selection for 3-variable C-vines.** Add
   `calibrate_cvine3_copula_correlation_select_root()` to try roots 0, 1, and 2
   by permutation, skip infeasible fits, and return the best achieved matrix in
-  the original variable order. Higher-dimensional vines and per-edge family
-  selection remain future work.
+  the original variable order.
+- **Landed, per-edge family selection for fixed root-0 C-vines.** Add
+  `CVine3FamilySpec` plus `calibrate_cvine3_copula_correlation_select_families()`
+  to fit `0-1`, `0-2`, and `1-2|0` with different family choices from a
+  caller-provided candidate set. Higher-dimensional vines and combined
+  root/family selection remain future work.
 - **Landed, first PLSIM slice.** Add piecewise-linear simulation through
-  `fit_plsim_marginal()`, `calibrate_plsim()`, `simulate_plsim_matrix()`, and
-  `simulate_plsim_raw()`. Unit coverage checks the skewness 2 / excess kurtosis
-  5 condition where Fleishman fails, Hermite-vs-quadrature covariance
-  agreement, rectangle covariance evaluation, pairwise calibration under
-  Hermite/quadrature/rectangle/refined strategies, stochastic moments, and
-  raw-data wrapping. `tests/checks/plsim/` provides an advisory calibration
-  bench comparing speed and quadrature/rectangle agreement across strategies.
-  Remaining PLSIM work is pair-cache/performance tuning and broader
-  simulation-grid diagnostics.
+  `fit_plsim_marginal()`, `diagnose_plsim()`, `calibrate_plsim()`,
+  `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. Unit coverage checks
+  the skewness 2 / excess kurtosis 5 condition where Fleishman fails,
+  Hermite-vs-quadrature covariance agreement, rectangle covariance evaluation,
+  pairwise calibration under Hermite/quadrature/rectangle/refined strategies,
+  pairwise infeasibility diagnostics, non-PD intermediate diagnostics,
+  stochastic moments, and raw-data wrapping. `tests/checks/plsim/` provides an
+  advisory calibration bench comparing speed and quadrature/rectangle agreement
+  across strategies. Remaining PLSIM work is pair-cache/performance tuning and
+  broader simulation-grid diagnostics.
 - **S.** Extend VITA/covsim-style simulation from repaired matrix diagnostics
-  plus 3-variable C-vine root selection to higher dimensions, per-edge family
-  selection, and broader vine/multivariate-copula policies.
+  plus 3-variable C-vine root/family selection to higher dimensions, combined
+  structure/family search, and broader vine/multivariate-copula policies.
 - **S.** Decide whether Johnson SL should be exposed beyond the direct
   `MarginalSpec::johnson()` constructor.
 - **S.** Decide the long-term special-functions policy before expanding the

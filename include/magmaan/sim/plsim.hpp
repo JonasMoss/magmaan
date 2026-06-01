@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <random>
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
@@ -49,6 +50,18 @@ struct PlsimCalibration {
   Eigen::MatrixXi iterations;
 };
 
+struct PlsimDiagnostics {
+  PlsimCalibration calibration;
+  Eigen::MatrixXd lower_bound_corr;
+  Eigen::MatrixXd upper_bound_corr;
+  Eigen::MatrixXi pair_ok;
+  std::vector<std::string> pair_error;
+  bool pairwise_complete = false;
+  bool intermediate_positive_definite = false;
+  double min_intermediate_eigenvalue = 0.0;
+  std::string failure_detail;
+};
+
 sim_expected<PlsimMarginal>
 fit_plsim_marginal(double skewness,
                    double excess_kurtosis,
@@ -82,7 +95,15 @@ calibrate_plsim(
     const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
     const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
     const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
-    PlsimCovarianceMethod method = PlsimCovarianceMethod::HermiteThenQuadrature,
+    PlsimCovarianceMethod method = PlsimCovarianceMethod::Hermite,
+    const PlsimOptions& options = {});
+
+sim_expected<PlsimDiagnostics>
+diagnose_plsim(
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+    const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+    PlsimCovarianceMethod method = PlsimCovarianceMethod::Hermite,
     const PlsimOptions& options = {});
 
 sim_expected<Eigen::MatrixXd>
@@ -98,7 +119,7 @@ simulate_plsim_matrix(
     const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
     const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
     std::mt19937_64& rng,
-    PlsimCovarianceMethod method = PlsimCovarianceMethod::HermiteThenQuadrature,
+    PlsimCovarianceMethod method = PlsimCovarianceMethod::Hermite,
     const PlsimOptions& options = {});
 
 sim_expected<data::RawData>
@@ -108,7 +129,7 @@ simulate_plsim_raw(
     const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
     const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
     std::mt19937_64& rng,
-    PlsimCovarianceMethod method = PlsimCovarianceMethod::HermiteThenQuadrature,
+    PlsimCovarianceMethod method = PlsimCovarianceMethod::Hermite,
     const PlsimOptions& options = {});
 
 }  // namespace magmaan::sim

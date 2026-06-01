@@ -134,6 +134,59 @@ TEST_CASE("PLSIM calibration solves pairwise covariance with alternative strateg
   CHECK(rect_or->achieved_corr(0, 1) == doctest::Approx(0.30).epsilon(5e-6));
 }
 
+TEST_CASE("PLSIM diagnostics reports infeasible pair bounds") {
+  Eigen::VectorXd skew(2);
+  skew << 2.0, -1.5;
+  Eigen::VectorXd kurt(2);
+  kurt << 5.0, 4.0;
+  const Eigen::MatrixXd target = corr2(0.85);
+
+  magmaan::sim::PlsimOptions options;
+  options.hermite_order = 30;
+  auto diag_or = magmaan::sim::diagnose_plsim(
+      target, skew, kurt, magmaan::sim::PlsimCovarianceMethod::Hermite, options);
+  if (!diag_or.has_value()) MESSAGE(diag_or.error().detail);
+  REQUIRE(diag_or.has_value());
+  CHECK_FALSE(diag_or->pairwise_complete);
+  CHECK_FALSE(diag_or->intermediate_positive_definite);
+  CHECK(diag_or->pair_ok(0, 1) == 0);
+  CHECK(diag_or->upper_bound_corr(0, 1) < target(0, 1));
+  CHECK_FALSE(diag_or->failure_detail.empty());
+
+  auto cal_or = magmaan::sim::calibrate_plsim(
+      target, skew, kurt, magmaan::sim::PlsimCovarianceMethod::Hermite, options);
+  REQUIRE_FALSE(cal_or.has_value());
+  CHECK(cal_or.error().kind == magmaan::SimError::Kind::CalibrationFailed);
+}
+
+TEST_CASE("PLSIM diagnostics reports non-PD intermediate matrix") {
+  Eigen::MatrixXd target(4, 4);
+  target << 1.0, 0.70, 0.49, 0.343,
+            0.70, 1.0, 0.70, 0.49,
+            0.49, 0.70, 1.0, 0.70,
+            0.343, 0.49, 0.70, 1.0;
+  Eigen::VectorXd skew(4);
+  skew << 2.0, -1.5, 1.25, -0.75;
+  Eigen::VectorXd kurt(4);
+  kurt << 5.0, 4.0, 3.0, 1.5;
+
+  magmaan::sim::PlsimOptions options;
+  options.hermite_order = 30;
+  auto diag_or = magmaan::sim::diagnose_plsim(
+      target, skew, kurt, magmaan::sim::PlsimCovarianceMethod::Hermite, options);
+  if (!diag_or.has_value()) MESSAGE(diag_or.error().detail);
+  REQUIRE(diag_or.has_value());
+  CHECK(diag_or->pairwise_complete);
+  CHECK_FALSE(diag_or->intermediate_positive_definite);
+  CHECK(diag_or->min_intermediate_eigenvalue < 0.0);
+  CHECK_FALSE(diag_or->failure_detail.empty());
+
+  auto cal_or = magmaan::sim::calibrate_plsim(
+      target, skew, kurt, magmaan::sim::PlsimCovarianceMethod::Hermite, options);
+  REQUIRE_FALSE(cal_or.has_value());
+  CHECK(cal_or.error().kind == magmaan::SimError::Kind::NonPositiveDefinite);
+}
+
 TEST_CASE("PLSIM simulation respects calibrated population moments") {
   Eigen::VectorXd skew(2);
   skew << 2.0, 0.75;
