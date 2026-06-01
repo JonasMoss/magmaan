@@ -17,6 +17,24 @@ enum class MarginalKind : std::uint8_t {
   TukeyGH,
 };
 
+enum class MomentMatchFamily : std::uint8_t {
+  TukeyGH,
+  Pearson,
+  Johnson,
+};
+
+struct ShapeMoments {
+  double skewness = 0.0;
+  double excess_kurtosis = 0.0;
+};
+
+struct MarginalMomentSummary {
+  double mean = 0.0;
+  double sd = 1.0;
+  double skewness = 0.0;
+  double excess_kurtosis = 0.0;
+};
+
 struct MarginalSpec {
   MarginalKind kind = MarginalKind::StandardNormal;
   double mean = 0.0;
@@ -39,6 +57,32 @@ struct MarginalSpec {
                                 double h,
                                 double mean = 0.0,
                                 double sd = 1.0);
+};
+
+struct MomentMatchSpec {
+  MomentMatchFamily family = MomentMatchFamily::TukeyGH;
+  ShapeMoments shape = {};
+  double mean = 0.0;
+  double sd = 1.0;
+};
+
+struct MomentMatchOptions {
+  int quadrature_points = 81;
+  int max_iter = 80;
+  int grid_points_g = 29;
+  int grid_points_h = 25;
+  double objective_tol = 1e-8;
+  double parameter_tol = 1e-8;
+  double finite_diff_step = 1e-4;
+  double tukey_g_bound = 3.0;
+  double tukey_h_upper = 0.249;
+};
+
+struct MomentMatchResult {
+  MarginalSpec marginal = {};
+  MarginalMomentSummary moments = {};
+  double residual_norm = 0.0;
+  int iterations = 0;
 };
 
 struct NortaOptions {
@@ -66,6 +110,14 @@ double normal_cdf(double z) noexcept;
 
 sim_expected<double>
 marginal_quantile(const MarginalSpec& marginal, double u);
+
+sim_expected<MarginalMomentSummary>
+marginal_moment_summary(const MarginalSpec& marginal,
+                        int quadrature_points = 81);
+
+sim_expected<MomentMatchResult>
+fit_marginal_to_moments(const MomentMatchSpec& spec,
+                        const MomentMatchOptions& options = {});
 
 sim_expected<Eigen::MatrixXd>
 simulate_independent_matrix(Eigen::Index n,

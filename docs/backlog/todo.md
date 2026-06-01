@@ -209,12 +209,18 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   cover normal identity calibration, analytic lognormal calibration,
   infeasible lognormal correlations, independent Tukey generation, raw-data
   wrapping, and a mixed-marginal stochastic smoke.
-- **M.** Add exact skew/kurtosis moment-matching marginals for NORTA. Preferred
-  order: prototype Pearson-system fitting against R `PearsonDS::pearsonFitM()`
-  / `qpearson()` fixtures, then decide whether to implement the Pearson
-  quantile formulas in C++; add Johnson-system fitting only after the Pearson
-  feasibility/quantile story is clear. Keep R/package dependencies out of the
-  C++ core.
+- **Partly landed.** Moment-matching now has a reusable C++ API:
+  `MomentMatchSpec` / `MomentMatchOptions` / `MomentMatchResult` plus
+  `fit_marginal_to_moments()`. The first implemented family is Tukey g-and-h,
+  fitting `g,h` to target skewness and **excess** kurtosis, then returning a
+  regular `MarginalSpec` that plugs into the existing NORTA and independent
+  generators. Unit coverage pins the Kowalchuk-Headrick `(skew=3,
+  excess-kurtosis=20)` example and verifies the fitted marginal feeds NORTA
+  calibration. **Remaining:** implement `MomentMatchFamily::Pearson` by
+  prototyping against R `PearsonDS::pearsonFitM()` / `qpearson()` fixtures,
+  decide whether Pearson quantile formulas belong in C++, then add Johnson
+  fitting once that feasibility/quantile story is clear. Keep R/package
+  dependencies out of the C++ core.
 - **M.** Harden NORTA calibration for larger simulation grids: cache pairwise
   correlation maps when marginal specs repeat, expose/interpolate the
   `rho_Z -> Corr(X_i, X_j)` map for repeated target matrices, and add an

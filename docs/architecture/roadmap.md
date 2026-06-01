@@ -187,6 +187,13 @@ golden `parTable()` fixtures.
   Tukey g-and-h. The Tukey path is a pragmatic skew/tail stress family with
   numerically standardized moments and `0 <= h < 0.25` so fourth moments are
   finite. Pearson/Johnson exact skew-kurtosis matching remains future work.
+- Moment-matching now has an explicit simulation API:
+  `fit_marginal_to_moments()` takes a `MomentMatchSpec` with target skewness
+  and excess kurtosis, returning a fitted `MarginalSpec` plus achieved moment
+  diagnostics. `MomentMatchFamily::TukeyGH` is implemented with a reusable
+  two-moment finite-difference solve over Tukey `g,h`; `Pearson` and `Johnson`
+  are reserved family slots that currently fail explicitly until their
+  parameterization and quantile/evaluation policies are implemented.
 
 ### Optimizer backends
 
