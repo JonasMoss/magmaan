@@ -124,6 +124,9 @@ simulation work queue and decision log.
   `calibrate_cvine3_copula_correlation_select_structure()` tries all three
   roots and all candidate edge-family triples, skips infeasible fits, and
   returns achieved correlations in the caller's original variable order.
+  The `simulate_cvine3_copula_*()` overloads that take a
+  `CVine3CorrelationCalibration` apply the selected vine order internally and
+  restore output columns to the caller's original order.
   Higher-dimensional vines, broader structure/family policies, and
   ordinal/polyserial/polychoric calibration remain separate work.
 
@@ -320,6 +323,10 @@ Validation:
   `calibrate_cvine3_copula_correlation_select_structure()` to try all roots and
   candidate edge-family triples, skip infeasible fits, and return the best
   achieved matrix in the original variable order.
+- **Landed, calibration-aware 3-variable C-vine simulation.** Add
+  `simulate_cvine3_copula_matrix()` / `simulate_cvine3_copula_raw()` overloads
+  for `CVine3CorrelationCalibration`, preserving selected root/order internally
+  while returning draws in the original variable order.
 - **Landed, first PLSIM slice.** Add piecewise-linear simulation through
   `fit_plsim_marginal()`, `diagnose_plsim()`, `calibrate_plsim()`,
   `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. Unit coverage checks

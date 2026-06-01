@@ -824,6 +824,22 @@ validate_cvine3_quantile_marginals(const std::vector<MarginalSpec>& marginals,
 }
 
 sim_expected<void>
+validate_cvine3_variable_order(const Eigen::Vector3i& order,
+                               const char* caller) {
+  bool seen[3] = {false, false, false};
+  for (Eigen::Index i = 0; i < 3; ++i) {
+    const int idx = order(i);
+    if (idx < 0 || idx >= 3 || seen[idx]) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          std::string(caller) + ": variable_order must be a permutation of 0, 1, 2"));
+    }
+    seen[idx] = true;
+  }
+  return {};
+}
+
+sim_expected<void>
 validate_bivariate_copula_matrix_target(
     const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
     const std::vector<MarginalSpec>& marginals,
@@ -3657,6 +3673,42 @@ simulate_cvine3_copula_matrix(Eigen::Index n,
   return X;
 }
 
+sim_expected<Eigen::MatrixXd>
+simulate_cvine3_copula_matrix(Eigen::Index n,
+                              const CVine3CorrelationCalibration& calibration,
+                              const std::vector<MarginalSpec>& marginals,
+                              std::mt19937_64& rng,
+                              const BivariateCopulaOptions& options) {
+  constexpr const char* caller =
+      "simulate_cvine3_copula_matrix(calibration)";
+  if (auto ok = validate_cvine3_quantile_marginals(marginals, caller);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (auto ok = validate_cvine3_variable_order(
+          calibration.variable_order, caller);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  std::vector<MarginalSpec> ordered_marginals;
+  ordered_marginals.reserve(3);
+  for (Eigen::Index k = 0; k < 3; ++k) {
+    ordered_marginals.push_back(
+        marginals[static_cast<std::size_t>(calibration.variable_order(k))]);
+  }
+
+  auto ordered_or = simulate_cvine3_copula_matrix(
+      n, calibration.copula, ordered_marginals, rng, options);
+  if (!ordered_or.has_value()) return std::unexpected(ordered_or.error());
+
+  Eigen::MatrixXd X(n, 3);
+  for (Eigen::Index k = 0; k < 3; ++k) {
+    X.col(calibration.variable_order(k)) = ordered_or->col(k);
+  }
+  return X;
+}
+
 sim_expected<data::RawData>
 simulate_cvine3_copula_raw(Eigen::Index n,
                            const CVine3CopulaSpec& copula,
@@ -3664,6 +3716,20 @@ simulate_cvine3_copula_raw(Eigen::Index n,
                            std::mt19937_64& rng,
                            const BivariateCopulaOptions& options) {
   auto X_or = simulate_cvine3_copula_matrix(n, copula, marginals, rng, options);
+  if (!X_or.has_value()) return std::unexpected(X_or.error());
+  data::RawData raw;
+  raw.X.push_back(std::move(*X_or));
+  return raw;
+}
+
+sim_expected<data::RawData>
+simulate_cvine3_copula_raw(Eigen::Index n,
+                           const CVine3CorrelationCalibration& calibration,
+                           const std::vector<MarginalSpec>& marginals,
+                           std::mt19937_64& rng,
+                           const BivariateCopulaOptions& options) {
+  auto X_or = simulate_cvine3_copula_matrix(
+      n, calibration, marginals, rng, options);
   if (!X_or.has_value()) return std::unexpected(X_or.error());
   data::RawData raw;
   raw.X.push_back(std::move(*X_or));
