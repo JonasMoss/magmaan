@@ -189,7 +189,7 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   the report has been calibrated by real maintenance work.
 - **S/M.** Promote the FMG goodness-of-fit validation into the checked suite.
   `experiments/18-foldnes-moss-gronneberg-2026 --semtests-parity` shows the
-  single-model FMG family (SB/SS/SF/ALL/pall/pEBA/pOLS x ML/RLS x biased/unbiased
+  single-model FMG family (SB/SS/SF/ALL/pall/EBA/pEBA/pOLS x ML/RLS x biased/unbiased
   Gamma) matches `semTests::pvalues` to ~1e-9 (Imhof) / machine precision
   (closed-form), but that lives in an advisory experiment, not a gate. Add a
   checked C++ golden for the FMG p-value transforms (fixed eigenvalues + chi-square
