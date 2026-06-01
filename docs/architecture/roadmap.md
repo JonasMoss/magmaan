@@ -263,7 +263,11 @@ golden `parTable()` fixtures.
   sampler is available through `CVine3CopulaSpec` and
   `simulate_cvine3_copula_*()`: a fixed three-variable C-vine with variable 0
   as root, bivariate pair copulas for `0-1` and `0-2`, and a conditional pair
-  copula for `1-2|0`. Automatic matrix-to-vine fitting and
+  copula for `1-2|0`. `cvine3_copula_observed_corr()` evaluates its implied
+  observed correlation matrix by deterministic quadrature, and
+  `calibrate_cvine3_copula_correlation()` fits the two root pair copulas plus
+  the conditional copula to a 3x3 observed-correlation target. Broader
+  structure selection, higher-dimensional vines, and
   ordinal/polyserial/polychoric calibration are still future work.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for

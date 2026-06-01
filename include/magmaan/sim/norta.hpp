@@ -228,6 +228,18 @@ struct BivariateCopulaMatrixCalibration {
   bool repair_applied = false;
 };
 
+struct CVine3CorrelationCalibration {
+  CVine3CopulaSpec copula = {};
+  Eigen::MatrixXd target_corr;
+  Eigen::MatrixXd achieved_corr;
+  BivariateCopulaCorrelationCalibration root_01 = {};
+  BivariateCopulaCorrelationCalibration root_02 = {};
+  double conditional_lower_bound_corr_12 = 0.0;
+  double conditional_upper_bound_corr_12 = 0.0;
+  int conditional_iterations = 0;
+  double max_abs_error = 0.0;
+};
+
 struct IndependentOptions {
   int quadrature_points = 31;
 };
@@ -356,6 +368,19 @@ calibrate_bivariate_copula_correlation(
 
 sim_expected<BivariateCopulaMatrixCalibration>
 calibrate_bivariate_copula_correlation_matrix(
+    BivariateCopulaFamily family,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
+cvine3_copula_observed_corr(
+    const CVine3CopulaSpec& copula,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options = {});
+
+sim_expected<CVine3CorrelationCalibration>
+calibrate_cvine3_copula_correlation(
     BivariateCopulaFamily family,
     const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
     const std::vector<MarginalSpec>& marginals,

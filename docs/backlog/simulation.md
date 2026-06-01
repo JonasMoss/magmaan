@@ -101,8 +101,13 @@ simulation work queue and decision log.
   `CVine3CopulaSpec`, `simulate_cvine3_copula_uniforms()`,
   `simulate_cvine3_copula_matrix()`, and `simulate_cvine3_copula_raw()`.
   The first structure uses variable 0 as the root, pair copulas for `0-1` and
-  `0-2`, and a conditional pair copula for `1-2|0`. Automatic matrix-to-vine
-  assembly and ordinal/polyserial/polychoric calibration remain separate work.
+  `0-2`, and a conditional pair copula for `1-2|0`.
+  `cvine3_copula_observed_corr()` deterministically evaluates the implied
+  observed correlation matrix, and `calibrate_cvine3_copula_correlation()`
+  calibrates the two root pair copulas plus the conditional pair copula to a
+  3x3 target observed-correlation matrix. Broader structure selection,
+  higher-dimensional vines, and ordinal/polyserial/polychoric calibration
+  remain separate work.
 
 ## Architecture Direction
 
@@ -279,8 +284,13 @@ Validation:
 - **Landed, first explicit vine sampler.** Add `CVine3CopulaSpec` and
   `simulate_cvine3_copula_*()` for a fixed three-variable C-vine with root 0.
   It composes the local bivariate h-functions/inverses and supports explicit
-  `0-1`, `0-2`, and `1-2|0` copulas. Matrix-to-vine fitting remains future
-  work; this is the valid joint sampler that later VITA calibration can target.
+  `0-1`, `0-2`, and `1-2|0` copulas.
+- **Landed, first matrix-to-vine fit.** Add
+  `cvine3_copula_observed_corr()` and
+  `calibrate_cvine3_copula_correlation()` for the fixed root-0 C-vine. The fit
+  calibrates root pairs against `r01`/`r02`, then bisects the conditional
+  copula against the full C-vine implied `r12`. Broader structure selection and
+  higher-dimensional vines remain future work.
 - **Landed, first PLSIM slice.** Add piecewise-linear simulation through
   `fit_plsim_marginal()`, `calibrate_plsim()`, `simulate_plsim_matrix()`, and
   `simulate_plsim_raw()`. Unit coverage checks the skewness 2 / excess kurtosis
@@ -292,8 +302,8 @@ Validation:
   Remaining PLSIM work is pair-cache/performance tuning and broader
   simulation-grid diagnostics.
 - **S.** Extend VITA/covsim-style simulation from repaired matrix diagnostics
-  plus explicit 3-variable C-vine sampling to automatic matrix-to-vine fitting
-  and broader vine/multivariate-copula policies.
+  plus fixed 3-variable C-vine fitting to structure selection, higher
+  dimensions, and broader vine/multivariate-copula policies.
 - **S.** Decide whether Johnson SL should be exposed beyond the direct
   `MarginalSpec::johnson()` constructor.
 - **S.** Decide the long-term special-functions policy before expanding the
