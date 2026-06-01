@@ -1508,3 +1508,26 @@ TEST_CASE("bivariate copula raw generator validates parameters and marginals") {
   REQUIRE_FALSE(bad_marginal_or.has_value());
   CHECK(bad_marginal_or.error().kind == magmaan::SimError::Kind::InvalidMarginal);
 }
+
+
+
+TEST_CASE("Johnson SU moment match uses closed-form moments") {
+  using namespace magmaan::sim;
+  // SU-region targets (excess kurtosis above the lognormal line). The closed-form
+  // SU moments let the solve reach machine precision where Gauss-Hermite
+  // quadrature on the heavy-tailed z^4 sinh^4 integrand previously stalled.
+  const double skews[] = {3.0, 3.5, 3.2};
+  const double exks[] = {21.0, 30.0, 23.0};
+  for (int i = 0; i < 3; ++i) {
+    MomentMatchSpec spec;
+    spec.family = MomentMatchFamily::Johnson;
+    spec.shape.skewness = skews[i];
+    spec.shape.excess_kurtosis = exks[i];
+    auto r = fit_marginal_to_moments(spec, MomentMatchOptions{});
+    REQUIRE(r.has_value());
+    CHECK(r->marginal.johnson_type == 2);  // SU branch selected
+    CHECK(r->residual_norm < 1e-7);
+    CHECK(r->moments.skewness == doctest::Approx(skews[i]).epsilon(1e-5));
+    CHECK(r->moments.excess_kurtosis == doctest::Approx(exks[i]).epsilon(1e-5));
+  }
+}

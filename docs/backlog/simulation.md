@@ -304,6 +304,82 @@ Validation:
 - Keep the fixture oracle in R/PearsonDS only. Do not add PearsonDS, gsl, or R
   package dependencies to the C++ core.
 
+## IG Generator Family: Draw Cost and Moment-Matching (2026-06-01)
+
+Findings from profiling the independent-generator (`sim_ig_*`) path while
+scaling experiment 17 (Foldnes-Moss-Gronneberg 2024) to the full grid.
+
+**Cost shape.** The ML fit is trivial and N-independent (~2-9 ms at any p/N: the
+sample covariance is formed once, then optimization is on the p x p matrix). The
+expensive parts are (a) the FMG eigenvalue battery, which scales with p/df and,
+at p=40, with N; and (b) IG *data generation*. At p=40, N=3000 a single IG
+dataset draw costs ~2.0-2.2 s/rep, dwarfing everything else. So large-model runs
+are p-bound, and the IG generator is the single biggest line item at the corner.
+
+**Why IG draws are slow: generator family.** `make_cell_sampler` requests
+`generator_family = "pearson"` (chosen to mirror the lavaan/R IG reference). The
+Pearson draw applies a per-element inverse CDF (`normal_cdf` then an inverse
+beta/gamma/Student-t, or the iterative Type IV quantile) -- O(N*p) numeric
+inversions per dataset. The Tukey g-and-h and Johnson SU families instead have
+*closed-form* draw transforms (`((exp(gZ)-1)/g) exp(hZ^2/2)` and
+`sinh((Z-gamma)/delta)`), so their draws are ~100x cheaper. The right default for
+speed is a closed-form family.
+
+**Why we cannot just switch families (today):**
+- **Tukey g-and-h cannot represent the targets.** For skew 2-3 the `g` that sets
+  the skew already overshoots the kurtosis, and the finite-fourth-moment cap
+  `h < 1/4` leaves no room. Calibration fails even at a 10% moment tolerance.
+  This is a representability limit, not a solver bug.
+- **Johnson SU can represent them, but the moment-match solver is brittle.** It
+  fits both shape params by a finite-difference Gauss-Newton whose candidate
+  moments are computed by hand-rolled **Gauss-Hermite quadrature**
+  (`raw_moment_summary`). For severe kurtosis the `z^4 sinh^4` integrand has
+  heavy tails that 81-point GH integrates poorly, so the residual floors above
+  `objective_tol` and the solver *throws* on what is otherwise a fine fit (and on
+  non-convergence it throws rather than returning the best fit found). Symptoms:
+  fails at the trivial (skew 2, kurt 7) under the default `max_iter=80`;
+  convergence flips erratically with `max_iter`/`parameter_tol`; stalls ~10%
+  short at (skew 3, kurt 21).
+
+**Root cause and fix.** The fragility is the hand-rolled quadrature used to
+*evaluate* candidate moments, not the optimizer. For Johnson **SU** the
+standardized skewness and excess kurtosis are closed-form in `(gamma, delta)`
+(raw moments of `W = sinh((Z-gamma)/delta)`: with `w = exp(1/delta^2)`,
+`Om = gamma/delta`, `E[W]=-sqrt(w) sinh(Om)`, `E[W^2]=(w^2 cosh(2Om)-1)/2`,
+`E[W^3]=-sqrt(w)(w^4 sinh(3Om)-3 sinh(Om))/4`,
+`E[W^4]=(w^8 cosh(4Om)-4 w^2 cosh(2Om)+3)/8`, then central moments; verified
+against Monte Carlo). Computing those analytically removes the quadrature error,
+so the SU solve now converges to machine precision (resid ~1e-12 in ~10 iters)
+where it previously stalled. Implemented in the SU branch of
+`eval_johnson_moment_fit` with an SU regression test; SB (type 3) keeps the
+quadrature path.
+
+**This does NOT yet make Johnson a usable IG generator.** The IG construction
+does not fit the marginal to the *target* moments: `solve_ig_moment_system`
+solves a linear system for inflated *generator* moments (the linear mixing
+`X = root . Y` averages independent generators and so reduces kurtosis; the
+generators must overshoot to compensate, and the inflation grows with p). At
+p=40, target `(skew 3, exkurt 21)` requires generator marginals ranging up to
+`(skew 5.6, exkurt 53)`, and the generator-moment vector straddles the SU/SB
+boundary -- a mix of SU points (now fixed) and SB points. Several SB-region
+generator targets (e.g. `(3.5, 26)`, `(2.14, 7.7)`, `(3.72, 17.6)`) still fail
+the quadrature SB solve, and any single failed marginal aborts the whole IG
+calibrate. So **experiment 17 stays on Pearson** for now; Johnson IG needs a
+robust SB moment-fit too (no elementary closed form -- candidates: AS99
+Hill-Holder SB branch, or higher/adaptive quadrature that returns its best fit
+instead of throwing). The orthogonal lever for IG draw speed is to spline the
+Pearson inverse-CDF once per marginal at calibration (keeps lavaan-matching
+fidelity, family-agnostic) rather than inverting per element at draw time.
+
+**General lesson (carry forward).** Hand-rolled numerical integration in the sim
+calibration (`marginal_moments`, the bivariate-copula and PLSIM quadratures) is a
+recurring fragility source: it silently caps the achievable accuracy and turns
+representable targets into "did not converge". Prefer closed-form moments wherever
+the family admits them; where quadrature is unavoidable, the convergence test
+must respect the quadrature floor and the solver should return its best fit
+rather than throw. The draw-time standardization (`marginal_moments`) is benign
+for skew/kurt (scale/location invariant) but is the same pattern.
+
 ## Remaining Work
 
 - **M.** Extend the ordinal/mixed projection layer with group-specific
