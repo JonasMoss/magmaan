@@ -22,8 +22,16 @@ cases <- list(
        excess_kurtosis = 1, supported = TRUE),
   list(id = "negative_skew_beta_type1", mean = 0, sd = 1, skewness = -1,
        excess_kurtosis = 1, supported = TRUE),
-  list(id = "type4_unsupported", mean = 0, sd = 1, skewness = 1,
-       excess_kurtosis = 4, supported = FALSE)
+  list(id = "type4_mild_tail", mean = 0, sd = 1, skewness = 1,
+       excess_kurtosis = 2, supported = TRUE),
+  list(id = "type4_heavy_tail", mean = 0, sd = 1, skewness = 1,
+       excess_kurtosis = 5, supported = TRUE),
+  list(id = "type4_high_skew", mean = 0, sd = 1, skewness = 2,
+       excess_kurtosis = 10, supported = TRUE),
+  list(id = "type4_extreme_tail", mean = 0, sd = 1, skewness = 3,
+       excess_kurtosis = 30, supported = TRUE),
+  list(id = "type4_negative_skew", mean = 0, sd = 1, skewness = -1,
+       excess_kurtosis = 5, supported = TRUE)
 )
 
 param_vector <- function(params) {

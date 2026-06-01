@@ -239,9 +239,9 @@ simulation backlog.
   the existing NORTA and independent generators. Unit coverage pins the
   Kowalchuk-Headrick `(skew=3, excess-kurtosis=20)` example and verifies the
   fitted marginal feeds NORTA calibration. Pearson fitting is also landed for
-  PearsonDS Types 0/I/II/III/V/VI/VII: the C++ formulas mirror
-  `PearsonDS::pearsonFitM()`, the quantile path mirrors `qpearson()` through
-  regularized beta/gamma/F/t inversions, and
+  PearsonDS Types 0/I/II/III/IV/V/VI/VII: the C++ formulas mirror
+  `PearsonDS::pearsonFitM()`, and the quantile path mirrors `qpearson()` through
+  regularized beta/gamma/F/t inversions plus finite-integral Type IV bisection;
   `tests/tools/regen_pearson_sim_fixtures.R` generates checked PearsonDS 1.3.2
   goldens. Johnson SU/SB fitting is now landed too: it fits gamma/delta by
   deterministic quadrature against skewness and excess kurtosis and returns the
@@ -256,8 +256,8 @@ simulation backlog.
   resulting cubic is treated as a generator transform, not as a public
   quantile. **Remaining
   simulation work is tracked in [`simulation.md`](simulation.md), including the
-  Pearson Type IV CDF/quantile policy, Johnson SL exposure decision, special
-  functions policy, and NORTA calibration hardening.**
+  Johnson SL exposure decision, special-functions policy, and NORTA calibration
+  hardening.**
 
 ## FMG / U-Gamma Performance
 
