@@ -625,6 +625,9 @@ validate_t_copula_inputs(Eigen::Index n,
 }
 
 sim_expected<void>
+validate_bivariate_copula_spec(const BivariateCopulaSpec& copula);
+
+sim_expected<void>
 validate_bivariate_copula_inputs(Eigen::Index n,
                                  const BivariateCopulaSpec& copula,
                                  const std::vector<MarginalSpec>& marginals,
@@ -645,37 +648,8 @@ validate_bivariate_copula_inputs(Eigen::Index n,
         "simulate_bivariate_copula_matrix: invalid options"));
   }
 
-  switch (copula.family) {
-    case BivariateCopulaFamily::Independence:
-      break;
-    case BivariateCopulaFamily::Clayton:
-      if (!std::isfinite(copula.theta) || copula.theta <= 0.0) {
-        return std::unexpected(make_err(
-            SimError::Kind::InvalidInput,
-            "simulate_bivariate_copula_matrix: Clayton theta must be positive"));
-      }
-      break;
-    case BivariateCopulaFamily::Gumbel:
-      if (!std::isfinite(copula.theta) || copula.theta < 1.0) {
-        return std::unexpected(make_err(
-            SimError::Kind::InvalidInput,
-            "simulate_bivariate_copula_matrix: Gumbel theta must be at least 1"));
-      }
-      break;
-    case BivariateCopulaFamily::Frank:
-      if (!std::isfinite(copula.theta) || std::abs(copula.theta) < 1e-10) {
-        return std::unexpected(make_err(
-            SimError::Kind::InvalidInput,
-            "simulate_bivariate_copula_matrix: Frank theta must be finite and nonzero"));
-      }
-      break;
-    case BivariateCopulaFamily::Joe:
-      if (!std::isfinite(copula.theta) || copula.theta < 1.0) {
-        return std::unexpected(make_err(
-            SimError::Kind::InvalidInput,
-            "simulate_bivariate_copula_matrix: Joe theta must be at least 1"));
-      }
-      break;
+  if (auto ok = validate_bivariate_copula_spec(copula); !ok.has_value()) {
+    return std::unexpected(ok.error());
   }
 
   for (const auto& marginal : marginals) {
@@ -689,6 +663,39 @@ validate_bivariate_copula_inputs(Eigen::Index n,
     }
   }
   return {};
+}
+
+sim_expected<void>
+validate_bivariate_copula_spec(const BivariateCopulaSpec& copula) {
+  switch (copula.family) {
+    case BivariateCopulaFamily::Independence:
+      return {};
+    case BivariateCopulaFamily::Clayton:
+      if (std::isfinite(copula.theta) && copula.theta > 0.0) return {};
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "bivariate copula: Clayton theta must be positive"));
+    case BivariateCopulaFamily::Gumbel:
+      if (std::isfinite(copula.theta) && copula.theta >= 1.0) return {};
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "bivariate copula: Gumbel theta must be at least 1"));
+    case BivariateCopulaFamily::Frank:
+      if (std::isfinite(copula.theta) && std::abs(copula.theta) >= 1e-10) {
+        return {};
+      }
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "bivariate copula: Frank theta must be finite and nonzero"));
+    case BivariateCopulaFamily::Joe:
+      if (std::isfinite(copula.theta) && copula.theta >= 1.0) return {};
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "bivariate copula: Joe theta must be at least 1"));
+  }
+  return std::unexpected(make_err(
+      SimError::Kind::InvalidInput,
+      "bivariate copula: unknown family"));
 }
 
 sim_expected<std::vector<MarginalMoments>>
@@ -2217,6 +2224,52 @@ simulate_t_copula_raw(Eigen::Index n,
   data::RawData raw;
   raw.X.push_back(std::move(*X_or));
   return raw;
+}
+
+sim_expected<double>
+bivariate_copula_conditional_cdf(const BivariateCopulaSpec& copula,
+                                 double u,
+                                 double v) {
+  if (auto ok = validate_bivariate_copula_spec(copula); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (!std::isfinite(u) || !std::isfinite(v) ||
+      u <= 0.0 || u >= 1.0 || v <= 0.0 || v >= 1.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "bivariate_copula_conditional_cdf: u and v must satisfy 0 < value < 1"));
+  }
+  const double h = bivariate_conditional_u(copula, u, v);
+  if (!std::isfinite(h)) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "bivariate_copula_conditional_cdf: non-finite conditional CDF"));
+  }
+  return std::clamp(h, 0.0, 1.0);
+}
+
+sim_expected<double>
+bivariate_copula_conditional_quantile(
+    const BivariateCopulaSpec& copula,
+    double u,
+    double p,
+    const BivariateCopulaOptions& options) {
+  if (auto ok = validate_bivariate_copula_spec(copula); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (!std::isfinite(u) || !std::isfinite(p) ||
+      u <= 0.0 || u >= 1.0 || p <= 0.0 || p >= 1.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "bivariate_copula_conditional_quantile: u and p must satisfy 0 < value < 1"));
+  }
+  if (options.max_bisection_iter < 16) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "bivariate_copula_conditional_quantile: max_bisection_iter must be at least 16"));
+  }
+  return invert_bivariate_conditional(
+      copula, u, p, options.max_bisection_iter);
 }
 
 sim_expected<Eigen::MatrixXd>

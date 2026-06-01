@@ -286,6 +286,18 @@ simulate_t_copula_raw(Eigen::Index n,
                       std::mt19937_64& rng,
                       const TCopulaOptions& options = {});
 
+sim_expected<double>
+bivariate_copula_conditional_cdf(const BivariateCopulaSpec& copula,
+                                 double u,
+                                 double v);
+
+sim_expected<double>
+bivariate_copula_conditional_quantile(
+    const BivariateCopulaSpec& copula,
+    double u,
+    double p,
+    const BivariateCopulaOptions& options = {});
+
 sim_expected<Eigen::MatrixXd>
 simulate_bivariate_copula_matrix(Eigen::Index n,
                                  const BivariateCopulaSpec& copula,

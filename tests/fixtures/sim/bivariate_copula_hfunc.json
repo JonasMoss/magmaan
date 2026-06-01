@@ -1,0 +1,225 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "sim.bivariate_copula_hfunc",
+    "oracle": "rvinecopulib 0.7.3.1.0 hbicop(cond_var=1, rotation=0)"
+  },
+  "cases": [
+    {
+      "id": "independence",
+      "family": "indep",
+      "rotation": 0,
+      "parameters": [],
+      "points": [
+        {
+          "u": 0.1,
+          "v": 0.2,
+          "p": 0.3,
+          "conditional_cdf": 0.2,
+          "conditional_quantile": 0.3
+        },
+        {
+          "u": 0.2,
+          "v": 0.7,
+          "p": 0.6,
+          "conditional_cdf": 0.7,
+          "conditional_quantile": 0.6
+        },
+        {
+          "u": 0.75,
+          "v": 0.35,
+          "p": 0.8,
+          "conditional_cdf": 0.35,
+          "conditional_quantile": 0.8
+        },
+        {
+          "u": 0.92,
+          "v": 0.88,
+          "p": 0.15,
+          "conditional_cdf": 0.88,
+          "conditional_quantile": 0.15
+        }
+      ]
+    },
+    {
+      "id": "clayton_theta2",
+      "family": "clayton",
+      "rotation": 0,
+      "parameters": 2,
+      "points": [
+        {
+          "u": 0.1,
+          "v": 0.2,
+          "p": 0.3,
+          "conditional_cdf": 0.724214927527318,
+          "conditional_quantile": 0.0897504384323926
+        },
+        {
+          "u": 0.2,
+          "v": 0.7,
+          "p": 0.6,
+          "conditional_cdf": 0.940650133512236,
+          "conditional_quantile": 0.299570051814331
+        },
+        {
+          "u": 0.75,
+          "v": 0.35,
+          "p": 0.8,
+          "conditional_cdf": 0.0886612660183733,
+          "conditional_quantile": 0.882110495808008
+        },
+        {
+          "u": 0.92,
+          "v": 0.88,
+          "p": 0.15,
+          "conditional_cdf": 0.718492555576195,
+          "conditional_quantile": 0.499778972363183
+        }
+      ]
+    },
+    {
+      "id": "gumbel_theta2",
+      "family": "gumbel",
+      "rotation": 0,
+      "parameters": 2,
+      "points": [
+        {
+          "u": 0.1,
+          "v": 0.2,
+          "p": 0.3,
+          "conditional_cdf": 0.493800782912056,
+          "conditional_quantile": 0.11109436198963
+        },
+        {
+          "u": 0.2,
+          "v": 0.7,
+          "p": 0.6,
+          "conditional_cdf": 0.938923732476678,
+          "conditional_quantile": 0.341144348899357
+        },
+        {
+          "u": 0.75,
+          "v": 0.35,
+          "p": 0.8,
+          "conditional_cdf": 0.118651278791206,
+          "conditional_quantile": 0.832776827042362
+        },
+        {
+          "u": 0.92,
+          "v": 0.88,
+          "p": 0.15,
+          "conditional_cdf": 0.509774649141608,
+          "conditional_quantile": 0.673770934746596
+        }
+      ]
+    },
+    {
+      "id": "frank_theta5",
+      "family": "frank",
+      "rotation": 0,
+      "parameters": 5,
+      "points": [
+        {
+          "u": 0.1,
+          "v": 0.2,
+          "p": 0.3,
+          "conditional_cdf": 0.514948119501049,
+          "conditional_quantile": 0.105950071389088
+        },
+        {
+          "u": 0.2,
+          "v": 0.7,
+          "p": 0.6,
+          "conditional_cdf": 0.938301965226791,
+          "conditional_quantile": 0.319540192576824
+        },
+        {
+          "u": 0.75,
+          "v": 0.35,
+          "p": 0.8,
+          "conditional_cdf": 0.104205985258408,
+          "conditional_quantile": 0.875708399194991
+        },
+        {
+          "u": 0.92,
+          "v": 0.88,
+          "p": 0.15,
+          "conditional_cdf": 0.641876274886552,
+          "conditional_quantile": 0.561798774084309
+        }
+      ]
+    },
+    {
+      "id": "frank_theta_neg5",
+      "family": "frank",
+      "rotation": 0,
+      "parameters": -5,
+      "points": [
+        {
+          "u": 0.1,
+          "v": 0.2,
+          "p": 0.3,
+          "conditional_cdf": 0.019073647761005,
+          "conditional_quantile": 0.689445483702002
+        },
+        {
+          "u": 0.2,
+          "v": 0.7,
+          "p": 0.6,
+          "conditional_cdf": 0.430899966565331,
+          "conditional_quantile": 0.79563473854796
+        },
+        {
+          "u": 0.75,
+          "v": 0.35,
+          "p": 0.8,
+          "conditional_cdf": 0.586292370492291,
+          "conditional_quantile": 0.523113216419006
+        },
+        {
+          "u": 0.92,
+          "v": 0.88,
+          "p": 0.15,
+          "conditional_cdf": 0.991702896124502,
+          "conditional_quantile": 0.0463851836102549
+        }
+      ]
+    },
+    {
+      "id": "joe_theta2",
+      "family": "joe",
+      "rotation": 0,
+      "parameters": 2,
+      "points": [
+        {
+          "u": 0.1,
+          "v": 0.2,
+          "p": 0.3,
+          "conditional_cdf": 0.335683713000638,
+          "conditional_quantile": 0.177166399282174
+        },
+        {
+          "u": 0.2,
+          "v": 0.7,
+          "p": 0.6,
+          "conditional_cdf": 0.887804878048781,
+          "conditional_quantile": 0.4131043674065
+        },
+        {
+          "u": 0.75,
+          "v": 0.35,
+          "p": 0.8,
+          "conditional_cdf": 0.213195449833345,
+          "conditional_quantile": 0.823597167659878
+        },
+        {
+          "u": 0.92,
+          "v": 0.88,
+          "p": 0.15,
+          "conditional_cdf": 0.547927731648894,
+          "conditional_quantile": 0.570906571197869
+        }
+      ]
+    }
+  ]
+}
