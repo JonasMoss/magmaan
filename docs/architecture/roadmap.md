@@ -201,6 +201,16 @@ golden `parTable()` fixtures.
   correlations are solved from the Vale-Maurelli covariance cubic, and the
   assembled intermediate correlation matrix is Cholesky-validated before
   sampling.
+- PLSIM piecewise-linear simulation is available through
+  `fit_plsim_marginal()`, `calibrate_plsim()`, `simulate_plsim_matrix()`, and
+  `simulate_plsim_raw()`. The first slice uses regular normal-quantile
+  breakpoints, fits continuous PL slopes to target marginal skewness and excess
+  kurtosis, exposes Hermite coefficients, and calibrates pairwise intermediate
+  normal correlations with selectable covariance evaluators:
+  `PlsimCovarianceMethod::Hermite`, `Quadrature`, or
+  `HermiteThenQuadrature`. The quadrature path is a deterministic bivariate
+  Gauss-Hermite reference; a specialized Foldnes-Grønneberg rectangle-moment
+  kernel remains the next performance/accuracy refinement.
 - Initial NORTA marginals are standard normal, standardized lognormal, Tukey
   g-and-h, Pearson-system distributions, and Johnson-system SU/SB
   distributions. Fleishman polynomial transforms can also be passed through the
