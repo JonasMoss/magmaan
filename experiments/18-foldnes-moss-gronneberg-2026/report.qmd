@@ -105,10 +105,11 @@ performs best.
   to confirm parity, far too few to estimate a 5% rejection rate (the paper uses
   2000). The rejection-rate file in `results/` is a shape check only, and carries
   no Monte Carlo error bars.
-- **Two distributions.** Only normal and the moderate/severe Vale–Maurelli
-  conditions are used; the independent-generator and piecewise-linear families
-  from the paper are not. Parity is distribution-agnostic, so this does not
-  weaken the conclusion.
+- **Distribution families.** The run covers normal, the moderate/severe
+  Vale–Maurelli conditions, and the moderate/severe piecewise-linear
+  conditions through magmaan's PLSIM generator. The independent-generator
+  family from the paper is still not included. Parity is distribution-agnostic,
+  so this does not weaken the conclusion.
 - **Is the simulation reproducible from the paper alone?** The design grid is
   fully specified; the exact populations require the online supplement, as the
   paper itself states.

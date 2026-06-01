@@ -161,6 +161,8 @@ robust_se_both_breads <- infer_robust_se_both_breads
 robust_se_both_breads_raw <- infer_robust_se_both_breads_raw
 robust_se_both_breads_zc <- infer_robust_se_both_breads_zc
 
+sim_plsim_batch <- sim_plsim_batch_impl
+
 measures_baseline <- infer_baseline
 measures_compute_defined <- compute_defined_impl
 frontier_fcsem_standard_errors <- fcsem_standard_errors_impl
@@ -289,6 +291,9 @@ magmaan_core <- local({
       "robust_se_both_breads",
       "robust_se_both_breads_raw",
       "robust_se_both_breads_zc"
+    ),
+    sim = c(
+      "sim_plsim_batch"
     ),
     measures = c(
       "measures_baseline",

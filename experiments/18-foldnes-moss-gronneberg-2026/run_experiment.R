@@ -23,7 +23,8 @@
 #                            [--lavaan-parity] [--smoke]
 #
 # `--cells FILTER` is a comma-separated list of key=value pairs restricting the
-# crossed grid, e.g. `p=15,N=400,dist=vm1`. `--smoke` runs one tiny cell once.
+# crossed grid, e.g. `p=15,N=400,dist=pl1`. `--smoke` runs one tiny PLSIM cell
+# once.
 
 .support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
@@ -56,8 +57,8 @@ parse_args <- function(args) {
           "                     pEBA/pOLS x ML/RLS x biased/unbiased) against\n",
           "                     semTests p-values; implies --lavaan-parity\n", sep = "")
       cat("  --cells: comma-separated key=value over {p, N, dist}, e.g.\n",
-          "           p=15,N=400,dist=vm1\n", sep = "")
-      cat("  dist in {norm, vm1, vm2}; vm1=(skew 2,kurt 7), vm2=(skew 3,kurt 21)\n")
+          "           p=15,N=400,dist=pl1\n", sep = "")
+      cat("  dist in {norm, vm1, vm2, pl1, pl2}; *1=(skew 2,kurt 7), *2=(skew 3,kurt 21)\n")
       quit(save = "no", status = 0L)
     } else if (a == "--reps") {
       i <- i + 1L; out$reps <- as.integer(args[[i]])
@@ -99,8 +100,8 @@ core <- magmaan::magmaan_core
 # ── Distribution targets (paper: VM1 = moderate, VM2 = severe) ───────────────
 dist_moments <- list(
   norm = c(0, 0),
-  vm1  = c(2, 7),
-  vm2  = c(3, 21)
+  vm1  = c(2, 7),  vm2 = c(3, 21),
+  pl1  = c(2, 7),  pl2 = c(3, 21)
 )
 
 # ── Per-cell context (constant across reps) ─────────────────────────────────
@@ -129,10 +130,8 @@ sample_data_bundle <- function(X, varnames) {
 }
 
 # ── Per-replicate fit and statistics ────────────────────────────────────────
-fit_one_rep <- function(ctx, N, dist, seed, keep_parity = FALSE) {
-  pop <- ctx$pop
-  set.seed(seed)
-  X <- sample_population(pop, N, dist, fl = ctx$fl)
+fit_one_rep <- function(ctx, rep_idx, keep_parity = FALSE) {
+  X <- ctx$sampler$draw(rep_idx)
   colnames(X) <- ctx$varnames
   storage.mode(X) <- "double"
   dat <- sample_data_bundle(X, ctx$varnames)
@@ -218,11 +217,11 @@ parse_cells_filter <- function(s) {
 cell_grid <- expand.grid(
   p    = c(15L, 30L),
   N    = c(400L, 800L),
-  dist = c("norm", "vm1", "vm2"),
+  dist = c("norm", "vm1", "vm2", "pl1", "pl2"),
   stringsAsFactors = FALSE
 )
 if (isTRUE(args$smoke)) {
-  cell_grid <- data.frame(p = 15L, N = 400L, dist = "vm1",
+  cell_grid <- data.frame(p = 15L, N = 400L, dist = "pl1",
                           stringsAsFactors = FALSE)
   args$reps <- 1L
 }
@@ -236,11 +235,11 @@ for (key in names(filter)) {
 }
 if (!nrow(cell_grid)) stop("no cells selected", call. = FALSE)
 
-# Fleishman coefficients per non-normal distribution, and an achieved-moment
-# table for the report (verified on one large draw).
+# Fleishman coefficients per VM distribution, and an achieved-moment table for
+# the report (verified on one large draw).
 fl_cache <- list()
 moment_rows <- list()
-for (d in setdiff(unique(cell_grid$dist), "norm")) {
+for (d in unique(cell_grid$dist)[dist_family(unique(cell_grid$dist)) == "vm"]) {
   tgt <- dist_moments[[d]]
   fl <- fleishman_coef(tgt[[1L]], tgt[[2L]])
   fl_cache[[d]] <- fl
@@ -271,17 +270,25 @@ all_chi2 <- list(); all_meta <- list(); all_parity <- vector("list", nrow(cell_g
 t0 <- proc.time()[["elapsed"]]
 for (ci in seq_len(nrow(cell_grid))) {
   cell <- as.list(cell_grid[ci, , drop = FALSE])
+  tc0 <- proc.time()[["elapsed"]]
   pop <- build_population_5factor(cell$p)
+  cell_seed_base <- args$seed_base + ci * 10000L
+  sampler <- make_cell_sampler(
+    pop, cell$N, cell$dist, args$reps, cell_seed_base,
+    moments = dist_moments,
+    fl = if (cell$dist == "norm") NULL else fl_cache[[cell$dist]],
+    core = core)
   ctx <- list(pop = pop, spec = get_spec(cell$p, pop$per_factor),
               varnames = paste0("x", seq_len(cell$p)),
-              fl = if (cell$dist == "norm") NULL else fl_cache[[cell$dist]])
-  cat(sprintf("  cell %2d/%2d: p=%3d N=%4d dist=%-4s ", ci, nrow(cell_grid),
-              cell$p, cell$N, cell$dist))
-  ok <- 0L; fail <- 0L; tc0 <- proc.time()[["elapsed"]]
+              sampler = sampler)
+  cat(sprintf("  cell %2d/%2d: p=%3d N=%4d dist=%-4s setup=%.2fs ",
+              ci, nrow(cell_grid), cell$p, cell$N, cell$dist,
+              sampler$setup_seconds))
+  ok <- 0L; fail <- 0L
   for (rep_idx in seq_len(args$reps)) {
-    seed <- args$seed_base + ci * 10000L + rep_idx
+    seed <- cell_seed_base + rep_idx
     keep <- isTRUE(args$lavaan_parity) && rep_idx == 1L
-    out <- fit_one_rep(ctx, cell$N, cell$dist, seed, keep_parity = keep)
+    out <- fit_one_rep(ctx, rep_idx, keep_parity = keep)
     if (!isTRUE(out$ok)) { fail <- fail + 1L; next }
     ok <- ok + 1L
     all_chi2[[length(all_chi2) + 1L]] <- cbind(
@@ -295,6 +302,7 @@ for (ci in seq_len(nrow(cell_grid))) {
   cat(sprintf("ok=%d fail=%d (%.1fs)\n", ok, fail, tc1 - tc0))
   all_meta[[ci]] <- data.frame(cell_idx = ci, p = cell$p, N = cell$N,
                                dist = cell$dist, rep_ok = ok, rep_fail = fail,
+                               setup_seconds = sampler$setup_seconds,
                                seconds = tc1 - tc0, stringsAsFactors = FALSE)
 }
 t1 <- proc.time()[["elapsed"]]
@@ -326,7 +334,7 @@ meta <- metadata_frame(
                 lavaan_parity = isTRUE(args$lavaan_parity),
                 n_cells = nrow(cell_grid),
                 total_seconds = sprintf("%.2f", t1 - t0)),
-  packages = c("magmaan", "lavaan", "semTests", "covsim"))
+  packages = c("magmaan", "lavaan", "semTests"))
 write_csv(meta, file.path(results_dir, "metadata.csv"))
 cat(sprintf("\ndone in %.1fs — results in %s\n", t1 - t0, results_dir))
 
