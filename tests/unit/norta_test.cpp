@@ -945,6 +945,103 @@ TEST_CASE("C-vine 3 inverse Rosenblatt matches rvinecopulib goldens") {
   }
 }
 
+TEST_CASE("generic C-vine inverse Rosenblatt matches C-vine 3 specialization") {
+  const std::string path = magmaan::test::fixtures_dir() +
+                           "/sim/cvine3_inverse_rosenblatt.json";
+  auto raw = magmaan::test::read_fixture(path);
+  REQUIRE(raw.has_value());
+  auto fixture = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(fixture.is_discarded());
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.max_bisection_iter = 90;
+  for (const auto& c : fixture["cases"]) {
+    const std::string id = c["id"].get<std::string>();
+    CAPTURE(id);
+    magmaan::sim::CVine3CopulaSpec cvine3;
+    assign_copula_from_json(cvine3.copula_01, c["copula_01"]);
+    assign_copula_from_json(cvine3.copula_02, c["copula_02"]);
+    assign_copula_from_json(
+        cvine3.copula_12_given_0, c["copula_12_given_0"]);
+
+    magmaan::sim::CVineCopulaSpec generic;
+    generic.pair_copulas = {
+        {},
+        {cvine3.copula_01},
+        {cvine3.copula_02, cvine3.copula_12_given_0}};
+
+    Eigen::MatrixXd independent(c["points"].size(), 3);
+    for (Eigen::Index row = 0; row < independent.rows(); ++row) {
+      const auto& point = c["points"][static_cast<std::size_t>(row)];
+      for (Eigen::Index col = 0; col < 3; ++col) {
+        independent(row, col) =
+            point["independent_u"][static_cast<std::size_t>(col)].get<double>();
+      }
+    }
+
+    auto specialized_or = magmaan::sim::cvine3_copula_inverse_rosenblatt(
+        independent, cvine3, options);
+    auto generic_or = magmaan::sim::cvine_copula_inverse_rosenblatt(
+        independent, generic, options);
+    REQUIRE(specialized_or.has_value());
+    if (!generic_or.has_value()) MESSAGE(generic_or.error().detail);
+    REQUIRE(generic_or.has_value());
+    CHECK(generic_or->isApprox(*specialized_or, 2e-12));
+  }
+}
+
+TEST_CASE("generic C-vine sampler supports four variables") {
+  magmaan::sim::BivariateCopulaSpec frank_pos;
+  frank_pos.family = magmaan::sim::BivariateCopulaFamily::Frank;
+  frank_pos.theta = 3.0;
+  magmaan::sim::BivariateCopulaSpec frank_neg;
+  frank_neg.family = magmaan::sim::BivariateCopulaFamily::Frank;
+  frank_neg.theta = -2.0;
+  magmaan::sim::BivariateCopulaSpec clayton;
+  clayton.family = magmaan::sim::BivariateCopulaFamily::Clayton;
+  clayton.theta = 1.2;
+
+  magmaan::sim::CVineCopulaSpec copula;
+  copula.pair_copulas = {
+      {},
+      {frank_pos},
+      {frank_neg, frank_pos},
+      {clayton, magmaan::sim::BivariateCopulaSpec{}, frank_neg}};
+
+  Eigen::MatrixXd independent(2, 4);
+  independent << 0.11, 0.22, 0.33, 0.44,
+                 0.81, 0.72, 0.63, 0.54;
+  magmaan::sim::BivariateCopulaOptions options;
+  options.max_bisection_iter = 80;
+  auto U_or = magmaan::sim::cvine_copula_inverse_rosenblatt(
+      independent, copula, options);
+  if (!U_or.has_value()) MESSAGE(U_or.error().detail);
+  REQUIRE(U_or.has_value());
+  CHECK(U_or->rows() == 2);
+  CHECK(U_or->cols() == 4);
+  CHECK(U_or->col(0).isApprox(independent.col(0), 0.0));
+  CHECK(U_or->array().minCoeff() > 0.0);
+  CHECK(U_or->array().maxCoeff() < 1.0);
+
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.20),
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.30)};
+  std::mt19937_64 rng(20260613);
+  auto X_or = magmaan::sim::simulate_cvine_copula_matrix(
+      200, copula, marginals, rng, options);
+  REQUIRE(X_or.has_value());
+  CHECK(X_or->rows() == 200);
+  CHECK(X_or->cols() == 4);
+
+  copula.pair_copulas[3].pop_back();
+  auto bad_or = magmaan::sim::simulate_cvine_copula_matrix(
+      20, copula, marginals, rng, options);
+  REQUIRE_FALSE(bad_or.has_value());
+  CHECK(bad_or.error().kind == magmaan::SimError::Kind::InvalidInput);
+}
+
 TEST_CASE("C-vine 3 conditional pair copula can drive residual dependence") {
   const std::vector<magmaan::sim::MarginalSpec> marginals{
       magmaan::sim::MarginalSpec::standard_normal(),

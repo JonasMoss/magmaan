@@ -203,6 +203,11 @@ struct CVine3CopulaSpec {
   BivariateCopulaSpec copula_12_given_0 = {};
 };
 
+struct CVineCopulaSpec {
+  // Row j contains pair copulas (j, k | 0..k-1) for k = 0..j-1.
+  std::vector<std::vector<BivariateCopulaSpec>> pair_copulas;
+};
+
 struct CVine3FamilySpec {
   BivariateCopulaFamily family_01 = BivariateCopulaFamily::Independence;
   BivariateCopulaFamily family_02 = BivariateCopulaFamily::Independence;
@@ -482,5 +487,31 @@ simulate_cvine3_copula_raw(Eigen::Index n,
                            const std::vector<MarginalSpec>& marginals,
                            std::mt19937_64& rng,
                            const BivariateCopulaOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
+cvine_copula_inverse_rosenblatt(
+    const Eigen::Ref<const Eigen::MatrixXd>& independent_u,
+    const CVineCopulaSpec& copula,
+    const BivariateCopulaOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
+simulate_cvine_copula_uniforms(Eigen::Index n,
+                               const CVineCopulaSpec& copula,
+                               std::mt19937_64& rng,
+                               const BivariateCopulaOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
+simulate_cvine_copula_matrix(Eigen::Index n,
+                             const CVineCopulaSpec& copula,
+                             const std::vector<MarginalSpec>& marginals,
+                             std::mt19937_64& rng,
+                             const BivariateCopulaOptions& options = {});
+
+sim_expected<data::RawData>
+simulate_cvine_copula_raw(Eigen::Index n,
+                          const CVineCopulaSpec& copula,
+                          const std::vector<MarginalSpec>& marginals,
+                          std::mt19937_64& rng,
+                          const BivariateCopulaOptions& options = {});
 
 }  // namespace magmaan::sim

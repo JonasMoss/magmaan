@@ -141,8 +141,11 @@ simulation work queue and decision log.
   three-variable C-vine draws with the shared observed projection layer.
   Unit validation covers the full target-correlation -> selected calibrated
   C-vine -> deterministic-seed simulated correlations path.
-  Higher-dimensional vines, broader structure/family policies, and
-  ordinal/polyserial/polychoric calibration remain separate work.
+  Generic fixed-order C-vine simulation is available through `CVineCopulaSpec`,
+  `cvine_copula_inverse_rosenblatt()`, and `simulate_cvine_copula_*()` for
+  arbitrary dimension, with the 3-variable specialization used as a regression
+  oracle. Higher-dimensional calibration, broader structure/family policies,
+  and ordinal/polyserial/polychoric calibration remain separate work.
 
 ## Architecture Direction
 
@@ -371,6 +374,10 @@ Validation:
   simulation check that calibrates a target observed-correlation matrix, draws
   from the selected calibrated C-vine, and verifies empirical correlations
   against both the target and deterministic achieved-correlation diagnostics.
+- **Landed, generic fixed-order C-vine sampler.** Add `CVineCopulaSpec`,
+  `cvine_copula_inverse_rosenblatt()`, and `simulate_cvine_copula_*()` for
+  arbitrary-dimensional fixed-order C-vines. Unit coverage checks equivalence
+  with the rvine-backed three-variable specialization and a four-variable smoke.
 - **Landed, first PLSIM slice.** Add piecewise-linear simulation through
   `fit_plsim_marginal()`, `diagnose_plsim()`, `calibrate_plsim()`,
   `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. Unit coverage checks
@@ -385,9 +392,9 @@ Validation:
   wrappers so large grids do not recalibrate identical `(corr, moments,
   options)` cells for every sample size.
 - **S.** Extend VITA/covsim-style simulation from repaired matrix diagnostics
-  plus 3-variable C-vine root/family selection to higher dimensions, richer
-  structure/family search policies, and broader vine/multivariate-copula
-  policies.
+  plus 3-variable C-vine root/family selection and generic fixed-order C-vine
+  sampling to higher-dimensional calibration, richer structure/family search
+  policies, and broader vine/multivariate-copula policies.
 - **S.** Decide whether Johnson SL should be exposed beyond the direct
   `MarginalSpec::johnson()` constructor.
 - **S.** Decide the long-term special-functions policy before expanding the
