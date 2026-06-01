@@ -14,7 +14,9 @@ namespace magmaan::sim {
 enum class PlsimCovarianceMethod : std::uint8_t {
   Hermite,
   Quadrature,
+  Rectangle,
   HermiteThenQuadrature,
+  HermiteThenRectangle,
 };
 
 struct PlsimOptions {
@@ -68,6 +70,12 @@ plsim_covariance_quadrature(const PlsimMarginal& left,
                             const PlsimMarginal& right,
                             double rho,
                             int quadrature_points);
+
+sim_expected<double>
+plsim_covariance_rectangle(const PlsimMarginal& left,
+                           const PlsimMarginal& right,
+                           double rho,
+                           const PlsimOptions& options = {});
 
 sim_expected<PlsimCalibration>
 calibrate_plsim(

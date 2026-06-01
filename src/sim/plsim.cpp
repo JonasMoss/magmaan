@@ -27,6 +27,11 @@ double normal_pdf(double z) noexcept {
   return inv_sqrt_two_pi * std::exp(-0.5 * z * z);
 }
 
+double finite_bound(double x) noexcept {
+  if (std::isinf(x)) return x < 0.0 ? -10.0 : 10.0;
+  return std::clamp(x, -10.0, 10.0);
+}
+
 bool approx_equal(double a, double b, double tol = 1e-12) noexcept {
   return std::abs(a - b) <= tol * std::max({1.0, std::abs(a), std::abs(b)});
 }
@@ -328,6 +333,9 @@ plsim_covariance_by_method(const PlsimMarginal& left,
     case PlsimCovarianceMethod::HermiteThenQuadrature:
       return plsim_covariance_quadrature(
           left, right, rho, options.quadrature_points);
+    case PlsimCovarianceMethod::Rectangle:
+    case PlsimCovarianceMethod::HermiteThenRectangle:
+      return plsim_covariance_rectangle(left, right, rho, options);
   }
   return std::unexpected(make_err(
       SimError::Kind::InvalidInput,
@@ -354,7 +362,8 @@ solve_intermediate_corr(const PlsimMarginal& left,
   double fhi = 0.0;
   int iterations = 0;
 
-  if (method == PlsimCovarianceMethod::HermiteThenQuadrature) {
+  if (method == PlsimCovarianceMethod::HermiteThenQuadrature ||
+      method == PlsimCovarianceMethod::HermiteThenRectangle) {
     auto h_lo_or = eval(lo, PlsimCovarianceMethod::Hermite);
     auto h_hi_or = eval(hi, PlsimCovarianceMethod::Hermite);
     if (!h_lo_or.has_value()) return std::unexpected(h_lo_or.error());
@@ -385,7 +394,9 @@ solve_intermediate_corr(const PlsimMarginal& left,
         }
       }
     }
-    method = PlsimCovarianceMethod::Quadrature;
+    method = method == PlsimCovarianceMethod::HermiteThenRectangle
+                 ? PlsimCovarianceMethod::Rectangle
+                 : PlsimCovarianceMethod::Quadrature;
   }
 
   auto lo_or = eval(lo, method);
@@ -395,7 +406,8 @@ solve_intermediate_corr(const PlsimMarginal& left,
   flo = *lo_or;
   fhi = *hi_or;
   if (!std::isfinite(flo) || !std::isfinite(fhi) || flo * fhi > 0.0) {
-    if (method == PlsimCovarianceMethod::Quadrature &&
+    if ((method == PlsimCovarianceMethod::Quadrature ||
+         method == PlsimCovarianceMethod::Rectangle) &&
         (lo != full_lo || hi != full_hi)) {
       lo = full_lo;
       hi = full_hi;
@@ -676,6 +688,142 @@ plsim_covariance_quadrature(const PlsimMarginal& left,
     ey += wy * plsim_apply(right, y);
   }
   return exy - ex * ey;
+}
+
+namespace {
+
+template <class Fn>
+double simpson(const Fn& f, double a, double b) {
+  const double c = 0.5 * (a + b);
+  return (b - a) * (f(a) + 4.0 * f(c) + f(b)) / 6.0;
+}
+
+template <class Fn>
+double adaptive_simpson(const Fn& f,
+                        double a,
+                        double b,
+                        double eps,
+                        double whole,
+                        int depth) {
+  const double c = 0.5 * (a + b);
+  const double left = simpson(f, a, c);
+  const double right = simpson(f, c, b);
+  const double delta = left + right - whole;
+  if (depth <= 0 || std::abs(delta) <= 15.0 * eps) {
+    return left + right + delta / 15.0;
+  }
+  return adaptive_simpson(f, a, c, 0.5 * eps, left, depth - 1) +
+         adaptive_simpson(f, c, b, 0.5 * eps, right, depth - 1);
+}
+
+template <class Fn>
+double integrate_finite(const Fn& f, double lo, double hi, double eps) {
+  if (!(hi > lo)) return 0.0;
+  const double whole = simpson(f, lo, hi);
+  return adaptive_simpson(f, lo, hi, eps, whole, 18);
+}
+
+struct RectMoments {
+  double p = 0.0;
+  double mx = 0.0;
+  double my = 0.0;
+  double mxy = 0.0;
+};
+
+RectMoments bvn_rectangle_moments(double xlo,
+                                  double xhi,
+                                  double ylo,
+                                  double yhi,
+                                  double rho,
+                                  double eps) {
+  const double lo = finite_bound(xlo);
+  const double hi = finite_bound(xhi);
+  if (!(hi > lo)) return {};
+
+  const double s = std::sqrt(std::max(0.0, 1.0 - rho * rho));
+  auto parts = [&](double x) {
+    const double ax = std::isinf(ylo) && ylo < 0.0
+                          ? -std::numeric_limits<double>::infinity()
+                          : (ylo - rho * x) / s;
+    const double bx = std::isinf(yhi) && yhi > 0.0
+                          ? std::numeric_limits<double>::infinity()
+                          : (yhi - rho * x) / s;
+    const double q = normal_cdf(bx) - normal_cdf(ax);
+    const double tail = normal_pdf(ax) - normal_pdf(bx);
+    const double phi_x = normal_pdf(x);
+    const double y_cond = rho * x * q + s * tail;
+    Eigen::Vector4d out;
+    out << phi_x * q,
+           x * phi_x * q,
+           phi_x * y_cond,
+           x * phi_x * y_cond;
+    return out;
+  };
+
+  RectMoments out;
+  auto fp = [&](double x) { return parts(x)(0); };
+  auto fmx = [&](double x) { return parts(x)(1); };
+  auto fmy = [&](double x) { return parts(x)(2); };
+  auto fmxy = [&](double x) { return parts(x)(3); };
+  out.p = integrate_finite(fp, lo, hi, eps);
+  out.mx = integrate_finite(fmx, lo, hi, eps);
+  out.my = integrate_finite(fmy, lo, hi, eps);
+  out.mxy = integrate_finite(fmxy, lo, hi, eps);
+  return out;
+}
+
+}  // namespace
+
+sim_expected<double>
+plsim_covariance_rectangle(const PlsimMarginal& left,
+                           const PlsimMarginal& right,
+                           double rho,
+                           const PlsimOptions& options) {
+  if (auto ok = validate_options(options); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (!std::isfinite(rho) || std::abs(rho) >= 1.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "plsim_covariance_rectangle: rho must be finite with |rho| < 1"));
+  }
+  if (left.a.size() == 0 || right.a.size() == 0 ||
+      left.b.size() != left.a.size() || right.b.size() != right.a.size() ||
+      left.gamma.size() + 1 != left.a.size() ||
+      right.gamma.size() + 1 != right.a.size()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "plsim_covariance_rectangle: invalid marginal"));
+  }
+
+  const double eps = std::min(1e-9, options.correlation_tol * 0.1);
+  double cov = 0.0;
+  for (Eigen::Index i = 0; i < left.a.size(); ++i) {
+    const double xlo = (i == 0) ? -std::numeric_limits<double>::infinity()
+                                : left.gamma(i - 1);
+    const double xhi = (i + 1 == left.a.size())
+                           ? std::numeric_limits<double>::infinity()
+                           : left.gamma(i);
+    for (Eigen::Index j = 0; j < right.a.size(); ++j) {
+      const double ylo = (j == 0) ? -std::numeric_limits<double>::infinity()
+                                  : right.gamma(j - 1);
+      const double yhi = (j + 1 == right.a.size())
+                             ? std::numeric_limits<double>::infinity()
+                             : right.gamma(j);
+      const RectMoments m =
+          bvn_rectangle_moments(xlo, xhi, ylo, yhi, rho, eps);
+      cov += left.a(i) * right.a(j) * m.mxy +
+             left.a(i) * right.b(j) * m.mx +
+             left.b(i) * right.a(j) * m.my +
+             left.b(i) * right.b(j) * m.p;
+    }
+  }
+  if (!std::isfinite(cov)) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "plsim_covariance_rectangle: covariance became non-finite"));
+  }
+  return cov;
 }
 
 sim_expected<PlsimCalibration>
