@@ -46,13 +46,14 @@ source(experiment_path("R", "population.R"))
 source(experiment_path("R", "fmg_parity.R"))
 
 parse_args <- function(args) {
-  out <- list(reps = 5L, cells_filter = NULL, seed_base = 20260530L,
+  out <- list(reps = 5L, cells_filter = NULL, p_values = c(15L, 30L, 60L, 100L),
+              seed_base = 20260530L,
               lavaan_parity = FALSE, semtests_parity = FALSE, smoke = FALSE)
   i <- 1L
   while (i <= length(args)) {
     a <- args[[i]]
     if (a %in% c("-h", "--help")) {
-      cat("Usage: Rscript run_experiment.R [--reps N] [--cells FILTER] ",
+      cat("Usage: Rscript run_experiment.R [--reps N] [--p-values CSV] [--cells FILTER] ",
           "[--seed-base S] [--lavaan-parity] [--semtests-parity] [--smoke]\n",
           sep = "")
       cat("  --semtests-parity: compare magmaan's FMG family (SB/SS/SF/ALL/\n",
@@ -60,6 +61,8 @@ parse_args <- function(args) {
           "                     semTests p-values; implies --lavaan-parity\n", sep = "")
       cat("  --cells: comma-separated key=value over {p, N, dist}, e.g.\n",
           "           p=15,N=400,dist=ig1\n", sep = "")
+      cat("  --p-values: comma-separated model sizes, e.g. 15,30,60 to drop p=100\n",
+          sep = "")
       cat("  dist in {norm, vm1, vm2, ig1, ig2, pl1, pl2}; ",
           "*1=(skew 2,kurt 7), *2=(skew 3,kurt 21)\n", sep = "")
       quit(save = "no", status = 0L)
@@ -71,6 +74,10 @@ parse_args <- function(args) {
       i <- i + 1L; out$cells_filter <- args[[i]]
     } else if (startsWith(a, "--cells=")) {
       out$cells_filter <- sub("^--cells=", "", a)
+    } else if (a == "--p-values") {
+      i <- i + 1L; out$p_values <- as.integer(parse_csv_arg(args[[i]]))
+    } else if (startsWith(a, "--p-values=")) {
+      out$p_values <- as.integer(parse_csv_arg(sub("^--p-values=", "", a)))
     } else if (a == "--seed-base") {
       i <- i + 1L; out$seed_base <- as.integer(args[[i]])
     } else if (startsWith(a, "--seed-base=")) {
@@ -90,6 +97,16 @@ parse_args <- function(args) {
   if (!is.finite(out$reps) || out$reps < 1L) {
     stop("--reps must be a positive integer", call. = FALSE)
   }
+  if (!length(out$p_values) || any(!is.finite(out$p_values))) {
+    stop("--p-values must contain at least one integer", call. = FALSE)
+  }
+  allowed_p <- c(15L, 30L, 60L, 100L)
+  bad_p <- setdiff(out$p_values, allowed_p)
+  if (length(bad_p)) {
+    stop("--p-values contains unsupported p: ", paste(bad_p, collapse = ","),
+         call. = FALSE)
+  }
+  out$p_values <- sort(unique(out$p_values))
   out
 }
 
@@ -226,7 +243,7 @@ parse_cells_filter <- function(s) {
 }
 
 cell_grid <- expand.grid(
-  p    = c(15L, 30L, 60L, 100L),
+  p    = args$p_values,
   N    = c(400L, 800L, 2000L),
   dist = c("norm", "vm1", "vm2", "ig1", "ig2", "pl1", "pl2"),
   stringsAsFactors = FALSE
@@ -465,6 +482,7 @@ write_csv(runtime, file.path(results_dir, "runtime.csv"))
 meta <- metadata_frame(
   values = list(reps = args$reps, seed_base = args$seed_base,
                 cells_filter = args$cells_filter,
+                p_values = args$p_values,
                 lavaan_parity = isTRUE(args$lavaan_parity),
                 semtests_parity = isTRUE(args$semtests_parity),
                 n_cells = nrow(cell_grid),
