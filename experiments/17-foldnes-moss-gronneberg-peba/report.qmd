@@ -108,26 +108,29 @@ are far tighter than any Monte Carlo rejection-rate cell can resolve.
 
 ## Caveats
 
-- This is a **trimmed** replication: `r reps` replicates (the paper uses 3000),
-  model sizes `p ∈ {10, 20}` by default (the paper adds 40), and the VM and IG
-  non-normal families. The PL family is reachable via `--cells` but excluded by
-  default (its data generator is slow and often cannot fit the severe margins).
+- The populations are the paper's **exact** two-factor models, and the default
+  grid runs all three sizes (`p ∈ {10, 20, 40}`) and all seven distributions
+  (normal plus VM, IG, PL at both severities). What remains **trimmed** is the
+  evaluation scale, not the design: `r reps` replicates (the paper uses 3000),
+  two sample sizes (the paper adds 1500 and 3000), and a ten-test subset of the
+  paper's full battery (no Bollen-Stine bootstrap or EBAd).
 - At `r reps` replicates the rejection rates carry visible Monte Carlo noise; the
   table establishes the *direction and ordering* of the effect, not precise rates.
   The procedure-parity finding, by contrast, is exact and replicate-independent.
-- The population loadings are a representative draw matching the paper's verbal
-  design (standardized loadings ~U[.3,.8], interfactor r = .5), not the paper's
-  exact OSF matrices.
+- Non-normal data uses magmaan's own simulators for the IG and PL families and a
+  self-contained Fleishman power method for VM; the paper generates IG/PL with
+  covsim and VM with lavaan. The target distributions (covariance plus marginal
+  skewness and kurtosis) are identical, but individual datasets are not.
 
 ## Reproduce
 
 ```sh
-# default grid (norm + VM + IG, p in {10,20}, N in {400,800}), with parity
+# full default grid (p in {10,20,40}, N in {400,800}, all 7 distributions), parity
 Rscript run_experiment.R --reps 100 --semtests-parity
 
-# add the large model / more sizes / PL family
+# heavier run on a single slice, e.g. the large model or the severe PL cell
 Rscript run_experiment.R --reps 1000 --cells p=40
-Rscript run_experiment.R --reps 200 --cells dist=pl1
+Rscript run_experiment.R --reps 1000 --cells dist=pl2
 
 Rscript run_experiment.R --help
 ```
