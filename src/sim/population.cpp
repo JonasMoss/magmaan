@@ -1,0 +1,200 @@
+#include "magmaan/sim/population.hpp"
+
+#include <string>
+#include <utility>
+
+namespace magmaan::sim {
+
+namespace {
+
+SimError make_err(SimError::Kind k, std::string detail) {
+  return SimError{k, std::move(detail)};
+}
+
+sim_expected<void>
+validate_continuous_population(const ContinuousPopulation& population,
+                               const char* caller) {
+  if (population.mean.size() == 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        std::string(caller) + ": population mean must not be empty"));
+  }
+  if (population.covariance.rows() != population.covariance.cols() ||
+      population.covariance.rows() != population.mean.size()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        std::string(caller) +
+            ": covariance must be square and match mean length"));
+  }
+  return {};
+}
+
+}  // namespace
+
+sim_expected<Eigen::MatrixXd>
+simulate_continuous_population_normal(Eigen::Index n,
+                                      const ContinuousPopulation& population,
+                                      std::mt19937_64& rng,
+                                      const NormalOptions& options) {
+  if (auto ok = validate_continuous_population(
+          population, "simulate_continuous_population_normal");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  return simulate_normal_matrix(
+      n, population.mean, population.covariance, rng, options);
+}
+
+sim_expected<MixedPopulationDraw>
+simulate_mixed_population_normal(Eigen::Index n,
+                                 const MixedPopulation& population,
+                                 std::mt19937_64& rng,
+                                 const NormalOptions& options) {
+  if (auto ok = validate_continuous_population(
+          population.latent, "simulate_mixed_population_normal");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  auto latent_or = simulate_normal_matrix(
+      n, population.latent.mean, population.latent.covariance, rng, options);
+  if (!latent_or.has_value()) return std::unexpected(latent_or.error());
+
+  auto observed_or = project_mixed_matrix(*latent_or, population.observed);
+  if (!observed_or.has_value()) return std::unexpected(observed_or.error());
+
+  MixedPopulationDraw out;
+  out.latent = std::move(*latent_or);
+  out.observed = std::move(*observed_or);
+  return out;
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_continuous_population_student_t(
+    Eigen::Index n,
+    const ContinuousPopulation& population,
+    double df,
+    std::mt19937_64& rng,
+    const StudentTOptions& options) {
+  if (auto ok = validate_continuous_population(
+          population, "simulate_continuous_population_student_t");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  return simulate_student_t_matrix(
+      n, population.mean, population.covariance, df, rng, options);
+}
+
+sim_expected<MixedPopulationDraw>
+simulate_mixed_population_student_t(Eigen::Index n,
+                                    const MixedPopulation& population,
+                                    double df,
+                                    std::mt19937_64& rng,
+                                    const StudentTOptions& options) {
+  auto latent_or = simulate_continuous_population_student_t(
+      n, population.latent, df, rng, options);
+  if (!latent_or.has_value()) return std::unexpected(latent_or.error());
+  auto observed_or = project_mixed_matrix(*latent_or, population.observed);
+  if (!observed_or.has_value()) return std::unexpected(observed_or.error());
+  return MixedPopulationDraw{
+      .latent = std::move(*latent_or),
+      .observed = std::move(*observed_or)};
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_continuous_population_scale_mixture(
+    Eigen::Index n,
+    const ContinuousPopulation& population,
+    const NormalScaleMixtureSpec& mixture,
+    std::mt19937_64& rng,
+    const NormalOptions& options) {
+  if (auto ok = validate_continuous_population(
+          population, "simulate_continuous_population_scale_mixture");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  return simulate_scale_mixture_normal_matrix(
+      n, population.mean, population.covariance, mixture, rng, options);
+}
+
+sim_expected<MixedPopulationDraw>
+simulate_mixed_population_scale_mixture(
+    Eigen::Index n,
+    const MixedPopulation& population,
+    const NormalScaleMixtureSpec& mixture,
+    std::mt19937_64& rng,
+    const NormalOptions& options) {
+  auto latent_or = simulate_continuous_population_scale_mixture(
+      n, population.latent, mixture, rng, options);
+  if (!latent_or.has_value()) return std::unexpected(latent_or.error());
+  auto observed_or = project_mixed_matrix(*latent_or, population.observed);
+  if (!observed_or.has_value()) return std::unexpected(observed_or.error());
+  return MixedPopulationDraw{
+      .latent = std::move(*latent_or),
+      .observed = std::move(*observed_or)};
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_continuous_population_contaminated_normal(
+    Eigen::Index n,
+    const ContinuousPopulation& population,
+    const ContaminatedNormalSpec& contamination,
+    std::mt19937_64& rng,
+    const NormalOptions& options) {
+  if (auto ok = validate_continuous_population(
+          population, "simulate_continuous_population_contaminated_normal");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  return simulate_contaminated_normal_matrix(
+      n, population.mean, population.covariance, contamination, rng, options);
+}
+
+sim_expected<MixedPopulationDraw>
+simulate_mixed_population_contaminated_normal(
+    Eigen::Index n,
+    const MixedPopulation& population,
+    const ContaminatedNormalSpec& contamination,
+    std::mt19937_64& rng,
+    const NormalOptions& options) {
+  auto latent_or = simulate_continuous_population_contaminated_normal(
+      n, population.latent, contamination, rng, options);
+  if (!latent_or.has_value()) return std::unexpected(latent_or.error());
+  auto observed_or = project_mixed_matrix(*latent_or, population.observed);
+  if (!observed_or.has_value()) return std::unexpected(observed_or.error());
+  return MixedPopulationDraw{
+      .latent = std::move(*latent_or),
+      .observed = std::move(*observed_or)};
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_continuous_population_slash(Eigen::Index n,
+                                     const ContinuousPopulation& population,
+                                     const SlashSpec& slash,
+                                     std::mt19937_64& rng,
+                                     const NormalOptions& options) {
+  if (auto ok = validate_continuous_population(
+          population, "simulate_continuous_population_slash");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  return simulate_slash_matrix(
+      n, population.mean, population.covariance, slash, rng, options);
+}
+
+sim_expected<MixedPopulationDraw>
+simulate_mixed_population_slash(Eigen::Index n,
+                                const MixedPopulation& population,
+                                const SlashSpec& slash,
+                                std::mt19937_64& rng,
+                                const NormalOptions& options) {
+  auto latent_or = simulate_continuous_population_slash(
+      n, population.latent, slash, rng, options);
+  if (!latent_or.has_value()) return std::unexpected(latent_or.error());
+  auto observed_or = project_mixed_matrix(*latent_or, population.observed);
+  if (!observed_or.has_value()) return std::unexpected(observed_or.error());
+  return MixedPopulationDraw{
+      .latent = std::move(*latent_or),
+      .observed = std::move(*observed_or)};
+}
+
+}  // namespace magmaan::sim
