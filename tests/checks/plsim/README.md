@@ -40,3 +40,21 @@ The columns are:
 On the initial quick smoke (`reps=3`, `sample_n=20000`), Hermite-only was much
 faster but had quadrature-reference residuals around `1e-3`; pure quadrature
 and Hermite-initialized quadrature agreed at the requested calibration tolerance.
+
+Useful sweep knobs:
+
+```sh
+build/plsim_calibration_bench --reps=1 --sample-n=20000 --hermite-order=60
+build/plsim_calibration_bench --reps=1 --sample-n=20000 --hermite-order=120
+```
+
+Increase `--quadrature-points=` when checking whether the quadrature reference,
+rather than Hermite truncation, is the limiting term.
+
+Initial sweeps showed that increasing Hermite order from 12 to 96 did not
+materially change the Hermite-only quadrature-reference residuals for the smoke
+cases. Increasing quadrature nodes did move those residuals, sometimes
+non-monotonically, which is consistent with Gauss-Hermite quadrature being a
+rough deterministic reference for kinked PL transforms. The next precision step
+is therefore the exact bivariate normal rectangle-moment evaluator, not simply
+more Hermite coefficients.

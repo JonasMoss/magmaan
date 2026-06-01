@@ -23,6 +23,8 @@ using Clock = std::chrono::steady_clock;
 struct Config {
   int reps = 5;
   int sample_n = 30000;
+  int hermite_order = 30;
+  int quadrature_points = 31;
   std::uint64_t seed = 20260605;
 };
 
@@ -74,10 +76,18 @@ Config parse_args(int argc, char** argv) {
     if (const auto v = value("--sample-n="); !v.empty()) {
       cfg.sample_n = parse_int(v, cfg.sample_n);
     }
+    if (const auto v = value("--hermite-order="); !v.empty()) {
+      cfg.hermite_order = parse_int(v, cfg.hermite_order);
+    }
+    if (const auto v = value("--quadrature-points="); !v.empty()) {
+      cfg.quadrature_points = parse_int(v, cfg.quadrature_points);
+    }
     if (const auto v = value("--seed="); !v.empty()) cfg.seed = parse_seed(v, cfg.seed);
   }
   cfg.reps = std::max(1, cfg.reps);
   cfg.sample_n = std::max(1000, cfg.sample_n);
+  cfg.hermite_order = std::max(1, cfg.hermite_order);
+  cfg.quadrature_points = std::max(8, cfg.quadrature_points);
   return cfg;
 }
 
@@ -261,8 +271,8 @@ int main(int argc, char** argv) {
   const Config cfg = parse_args(argc, argv);
 
   magmaan::sim::PlsimOptions options;
-  options.hermite_order = 30;
-  options.quadrature_points = 31;
+  options.hermite_order = cfg.hermite_order;
+  options.quadrature_points = cfg.quadrature_points;
   options.correlation_tol = 1e-7;
 
   std::cout << "PLSIM calibration bench"
