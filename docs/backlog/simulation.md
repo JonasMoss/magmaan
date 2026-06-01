@@ -18,8 +18,8 @@ simulation work queue and decision log.
 
 - `magmaan::sim` exposes NORTA calibration/sampling, independent marginal
   generators, Foldnes-Olsson independent-generator calibration,
-  Vale-Maurelli/Fleishman calibration/sampling, and fixed-parameter t-copula
-  sampling.
+  Vale-Maurelli/Fleishman calibration/sampling, fixed-parameter t-copula
+  sampling, and fixed-parameter bivariate Archimedean copula sampling.
 - Baseline multivariate-normal generation is available through
   `simulate_normal_matrix()` and `simulate_normal_raw()`, taking explicit
   population means and covariance matrices. This is the low-level normal
@@ -31,10 +31,10 @@ simulation work queue and decision log.
   and returns ordered masks, declared level counts, and category counts for
   downstream ordinal/mixed workspace builders.
 - Population composition structs are available through `ContinuousPopulation`,
-  `MixedPopulation`, and `MixedPopulationDraw`. They compose explicit
-  mean/covariance population moments with the continuous generators and the
-  observed projection layer; model-implied SEM simulation should lower into
-  this surface.
+  `MixedPopulation`, `CopulaPopulation`, and `MixedPopulationDraw`. They
+  compose explicit mean/covariance population moments or copula marginals with
+  continuous generators and the observed projection layer; model-implied SEM
+  simulation should lower into this surface.
 - The first elliptical/scale-mixture generators are available:
   `simulate_student_t_*`, `simulate_contaminated_normal_*`,
   `simulate_slash_*`, and `simulate_scale_mixture_normal_*`. These APIs treat
@@ -220,8 +220,10 @@ Validation:
 - **Landed, first non-Gaussian copula slice.** Add fixed-parameter t-copula
   simulation through `TCopulaSpec`, `simulate_t_copula_matrix()`, and
   `simulate_t_copula_raw()`. It reuses the existing marginal quantile path and
-  validates that marginals are true quantile marginals, leaving observed
-  correlation calibration to later VITA/covsim-style work.
+  validates that marginals are true quantile marginals. The population
+  composition layer also exposes `simulate_mixed_population_t_copula()` to feed
+  generated continuous copula data through the shared observed projection path,
+  leaving observed-correlation calibration to later VITA/covsim-style work.
 - **M.** Add ordinal/mixed observed-correlation calibration once direct
   threshold projection is stable: pairwise thresholded correlation maps,
   calibration to target observed Pearson/polychoric/polyserial summaries, and a
@@ -232,7 +234,8 @@ Validation:
   independence, Clayton, Gumbel, Frank, and Joe copula simulation. The runtime
   implementation is local and uses conditional inversion; validate future
   parameter-convention fixtures against vinecopulib or its R interface unless a
-  broader vine backend is explicitly chosen.
+  broader vine backend is explicitly chosen. `simulate_mixed_population_bivariate_copula()`
+  composes the same generator with observed ordinal/mixed projection.
 - **S.** Add PLSIM/piecewise-linear simulation once the shared projection and
   diagnostics interfaces exist.
 - **S.** Add VITA/covsim-style simulation once copula and projection

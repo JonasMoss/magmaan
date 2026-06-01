@@ -1,11 +1,13 @@
 #pragma once
 
 #include <random>
+#include <vector>
 
 #include <Eigen/Core>
 
 #include "magmaan/expected.hpp"
 #include "magmaan/sim/elliptical.hpp"
+#include "magmaan/sim/norta.hpp"
 #include "magmaan/sim/normal.hpp"
 #include "magmaan/sim/projection.hpp"
 
@@ -18,6 +20,11 @@ struct ContinuousPopulation {
 
 struct MixedPopulation {
   ContinuousPopulation latent;
+  MixedProjectionSpec observed;
+};
+
+struct CopulaPopulation {
+  std::vector<MarginalSpec> marginals;
   MixedProjectionSpec observed;
 };
 
@@ -98,5 +105,36 @@ simulate_mixed_population_slash(Eigen::Index n,
                                 const SlashSpec& slash,
                                 std::mt19937_64& rng,
                                 const NormalOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
+simulate_continuous_population_t_copula(
+    Eigen::Index n,
+    const TCopulaSpec& copula,
+    const std::vector<MarginalSpec>& marginals,
+    std::mt19937_64& rng,
+    const TCopulaOptions& options = {});
+
+sim_expected<MixedPopulationDraw>
+simulate_mixed_population_t_copula(Eigen::Index n,
+                                   const TCopulaSpec& copula,
+                                   const CopulaPopulation& population,
+                                   std::mt19937_64& rng,
+                                   const TCopulaOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
+simulate_continuous_population_bivariate_copula(
+    Eigen::Index n,
+    const BivariateCopulaSpec& copula,
+    const std::vector<MarginalSpec>& marginals,
+    std::mt19937_64& rng,
+    const BivariateCopulaOptions& options = {});
+
+sim_expected<MixedPopulationDraw>
+simulate_mixed_population_bivariate_copula(
+    Eigen::Index n,
+    const BivariateCopulaSpec& copula,
+    const CopulaPopulation& population,
+    std::mt19937_64& rng,
+    const BivariateCopulaOptions& options = {});
 
 }  // namespace magmaan::sim
