@@ -24,7 +24,10 @@ simulation work queue and decision log.
   bivariate copula observed-Pearson calibration layer.
 - The exploratory R package exposes simulation batches through the flat
   `magmaan_core` registry, currently including `sim_ig_batch()` for
-  independent-generator simulation and `sim_plsim_batch()` for PLSIM.
+  independent-generator simulation and `sim_plsim_batch()` for PLSIM. This is
+  now recognized as an incomplete convenience layer: batch wrappers calibrate
+  once per call, but they do not expose reusable calibration objects across
+  sample-size cells or repeated experiment runs.
 - Baseline multivariate-normal generation is available through
   `simulate_normal_matrix()` and `simulate_normal_raw()`, taking explicit
   population means and covariance matrices. This is the low-level normal
@@ -65,6 +68,13 @@ simulation work queue and decision log.
   `diagnose_plsim()` keeps pairwise feasibility bounds, per-pair errors, the
   partial intermediate matrix, achieved correlations, and the intermediate
   minimum eigenvalue available when calibration fails.
+- Calibration/state objects already exist for most high-cost continuous
+  generators (`PlsimCalibration`, `IgCalibration`, `NortaCalibration`,
+  `BivariateCopula*Calibration`, and `CVine3CorrelationCalibration`), but the
+  surface is not yet uniform. PLSIM and IG have low-level draw paths that accept
+  fitted calibration state; NORTA still lacks a public draw overload from
+  `NortaCalibration`; the R layer exposes only all-in-one batch calls for
+  IG/PLSIM and no reusable calibration handles.
 - Pearson marginals follow PearsonDS conventions. Types 0/I/II/III/IV/V/VI/VII
   are supported and checked against PearsonDS 1.3.2 goldens. Type IV uses a
   dependency-free finite-integral CDF and bisection quantile path.
@@ -160,6 +170,24 @@ The preferred decomposition is:
    thresholds, infeasible pairwise maps, positive-definiteness failures, and
    stochastic validation summaries.
 
+Calibrated generators must follow a two-stage contract at both C++ and R
+boundaries:
+
+1. `calibrate_*()` returns a concrete calibration/state object containing every
+   deterministic object needed for future draws: fitted marginals, latent or
+   intermediate correlation/root matrices, chosen copula parameters, repair
+   diagnostics, achieved moments/correlations, and iteration counts.
+2. `simulate_*()` / `draw_*()` accepts that calibration object and only consumes
+   `n`, RNG/seed, and draw-time options. Repeated draws for different sample
+   sizes or replicate batches must not redo deterministic calibration.
+3. Convenience one-shot APIs may remain, but must be thin wrappers that call the
+   explicit two-stage path and should be named/documented as convenience, not as
+   the primary simulation design.
+4. R wrappers should mirror the C++ split with opaque-but-inspectable S3/list
+   calibration objects. For large simulation grids, users should be able to
+   calibrate once per `(population, generator, distribution target, options)`
+   cell and reuse that object for all `N` and replicate batches.
+
 This shape keeps named literature methods narrow: each one either constructs a
 population, generates continuous responses, projects observed variables, or
 calibrates/diagnoses one of those steps.
@@ -191,10 +219,15 @@ calibrates/diagnoses one of those steps.
   parameter conventions, simulation checks, and later vine work. Do not make it
   a core runtime dependency unless the exception/dependency boundary is
   deliberately revisited; the C++ core stays local and `std::expected` based.
-- Extend the first PLSIM slice with pair-calibration caching, broader
-  simulation-grid diagnostics, and possible tuning/replacement of the current
-  adaptive rectangle integration kernel. Extend the first pairwise VITA/covsim
-  copula calibration into a full matrix-oriented workflow.
+- Normalize the generator API around reusable calibration objects. Add missing
+  calibration-aware C++ draw overloads where needed (notably NORTA), expose
+  `sim_*_calibrate()` and `sim_*_draw()` R wrappers for PLSIM, IG, NORTA, and
+  calibrated copula/vine paths, and keep existing `sim_*_batch()` functions as
+  thin convenience wrappers. Extend the first PLSIM slice with pair-calibration
+  caching, broader simulation-grid diagnostics, and possible
+  tuning/replacement of the current adaptive rectangle integration kernel.
+  Extend the first pairwise VITA/covsim copula calibration into a full
+  matrix-oriented workflow.
 
 ## Pearson Type IV
 
@@ -347,8 +380,10 @@ Validation:
   pairwise infeasibility diagnostics, non-PD intermediate diagnostics,
   stochastic moments, and raw-data wrapping. `tests/checks/plsim/` provides an
   advisory calibration bench comparing speed and quadrature/rectangle agreement
-  across strategies. Remaining PLSIM work is pair-cache/performance tuning and
-  broader simulation-grid diagnostics.
+  across strategies. Remaining PLSIM work is pair-cache/performance tuning,
+  broader simulation-grid diagnostics, and R-level reusable calibration
+  wrappers so large grids do not recalibrate identical `(corr, moments,
+  options)` cells for every sample size.
 - **S.** Extend VITA/covsim-style simulation from repaired matrix diagnostics
   plus 3-variable C-vine root/family selection to higher dimensions, richer
   structure/family search policies, and broader vine/multivariate-copula
@@ -360,8 +395,15 @@ Validation:
   hand-rolled regularized beta/gamma, inverse beta/gamma, Student-t, and F-tail
   helpers shared by Pearson simulation and FMG p-values. Either keep these with
   dedicated goldens, vendor/use Boost.Math, or choose another vetted dependency.
-- **M.** Harden NORTA calibration for larger simulation grids: cache pairwise
-  correlation maps when marginal specs repeat, expose/interpolate the
-  `rho_Z -> Corr(X_i, X_j)` map for repeated target matrices, and add an
-  explicit policy for pairwise-calibrated latent matrices that are not positive
-  definite. Error-only is the current behavior.
+- **M.** Harden NORTA calibration for larger simulation grids: add a public
+  `simulate_norta_matrix()` / raw-data overload that accepts
+  `NortaCalibration`, cache pairwise correlation maps when marginal specs
+  repeat, expose/interpolate the `rho_Z -> Corr(X_i, X_j)` map for repeated
+  target matrices, and add an explicit policy for pairwise-calibrated latent
+  matrices that are not positive definite. Error-only is the current behavior.
+- **M.** Add R-level calibration objects for simulation generators. Minimum
+  first slice: `sim_plsim_calibrate()` returns a list/class carrying
+  `PlsimCalibration` diagnostics and draw-ready state;
+  `sim_plsim_draw(calibration, n, reps, seed_base, ...)` draws without
+  recalibrating; repeat for `sim_ig_*` and `sim_norta_*`. Batch wrappers should
+  delegate to these functions internally.

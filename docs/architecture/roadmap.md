@@ -178,7 +178,9 @@ golden `parTable()` fixtures.
   pairwise bisection, then validates the calibrated latent correlation by
   Cholesky factorization. `simulate_norta_matrix()` samples a complete
   `Eigen::MatrixXd`; `simulate_norta_raw()` wraps the same matrix in
-  `data::RawData` for downstream sample-stat builders.
+  `data::RawData` for downstream sample-stat builders. NORTA currently exposes
+  `NortaCalibration` but still needs public calibration-aware draw overloads to
+  match the rest of the calibrated generator surface.
 - The same marginal-transform surface is reused by independent generators:
   `simulate_independent_matrix()` and `simulate_independent_raw()` draw
   independent latent standard normals, transform each column through its
@@ -193,7 +195,8 @@ golden `parTable()` fixtures.
   generator marginals for experiments that want to inspect or cache the
   calibration. The exploratory R package exposes the same mechanism for batch
   simulation as `magmaan_core$sim_ig_batch()`, returning draws plus the fitted
-  root and generator skewness/kurtosis diagnostics.
+  root and generator skewness/kurtosis diagnostics. That R wrapper is still a
+  one-shot convenience; reusable R calibration handles remain to be added.
 - Vale-Maurelli / Fleishman polynomial simulation is available through
   `fit_fleishman_coefficients()`, `calibrate_vale_maurelli()`,
   `simulate_vale_maurelli_matrix()`, and `simulate_vale_maurelli_raw()`.
@@ -221,6 +224,17 @@ golden `parTable()` fixtures.
   marginals, feasible pairwise target ranges, per-pair calibration failures,
   achieved correlations, and the minimum intermediate-correlation eigenvalue
   before the stricter `calibrate_plsim()` wrapper returns a success value.
+  `PlsimCalibration` is draw-ready in C++, but the R package currently exposes
+  it only indirectly through `sim_plsim_batch()`, which recalibrates for each
+  batch call.
+- Calibrated simulation generators are being standardized around a two-stage
+  contract: deterministic `calibrate_*()` calls return reusable state objects
+  with fitted marginals, latent/intermediate matrices, achieved diagnostics, and
+  iteration metadata; stochastic `simulate_*()`/draw calls accept that state
+  plus only `n`, RNG/seed, and draw-time options. One-shot batch helpers may
+  remain as convenience wrappers, but both C++ and R should expose the reusable
+  calibration object path so large simulation grids do not redo identical
+  calibration for every sample-size cell.
 - Initial NORTA marginals are standard normal, standardized lognormal, Tukey
   g-and-h, Pearson-system distributions, and Johnson-system SU/SB
   distributions. Fleishman polynomial transforms can also be passed through the
