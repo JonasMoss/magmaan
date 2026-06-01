@@ -1,0 +1,66 @@
+#!/usr/bin/env Rscript
+
+suppressPackageStartupMessages(library(magmaan))
+
+args <- commandArgs(trailingOnly = TRUE)
+get_arg <- function(name, default) {
+  prefix <- paste0("--", name, "=")
+  hit <- grep(paste0("^", prefix), args, value = TRUE)
+  if (length(hit) == 0L) return(default)
+  sub(prefix, "", hit[[1L]], fixed = TRUE)
+}
+
+n <- as.integer(get_arg("n", "3000"))
+p <- as.integer(get_arg("p", "40"))
+reps <- as.integer(get_arg("reps", "10"))
+rounds <- as.integer(get_arg("rounds", "7"))
+seed_base <- as.integer(get_arg("seed-base", "20260601"))
+
+source("experiments/17-foldnes-moss-gronneberg-peba/R/population.R")
+pop <- build_population_2factor(p)
+core <- magmaan::magmaan_core
+
+cal <- core$sim_ig_calibrate(
+  pop$Sigma, rep(3, pop$p), rep(21, pop$p),
+  root = "symmetric", generator_family = "pearson",
+  quadrature_points = 81L
+)
+
+time_magmaan <- numeric(rounds)
+for (i in seq_len(rounds)) {
+  time_magmaan[[i]] <- system.time(core$sim_ig_draw(
+    cal, n = n, reps = reps, seed_base = seed_base + 1000L * i,
+    quadrature_points = 81L
+  ))[["elapsed"]]
+}
+
+cat(sprintf("case: p=%d n=%d reps=%d rounds=%d\n", p, n, reps, rounds))
+cat("magmaan pearson types:\n")
+print(table(vapply(cal$generator_marginals, `[[`, integer(1), "pearson_type")))
+cat(sprintf(
+  "magmaan median warm: %.4f s total, %.4f s/rep\n",
+  median(time_magmaan[-1L]), median(time_magmaan[-1L]) / reps
+))
+
+covsim_path <- "external/r_source/covsim/R/IG.R"
+if (file.exists(covsim_path)) {
+  source(covsim_path)
+  time_covsim <- numeric(rounds)
+  for (i in seq_len(rounds)) {
+    set.seed(seed_base + 2000L * i)
+    time_covsim[[i]] <- system.time(rIG(
+      N = n, sigma.target = pop$Sigma, skewness = rep(3, pop$p),
+      excesskurtosis = rep(21, pop$p), reps = reps, typeA = "symm"
+    ))[["elapsed"]]
+  }
+  cat(sprintf(
+    "covsim median warm:  %.4f s total, %.4f s/rep\n",
+    median(time_covsim[-1L]), median(time_covsim[-1L]) / reps
+  ))
+  cat(sprintf(
+    "speedup: %.2fx\n",
+    median(time_covsim[-1L]) / median(time_magmaan[-1L])
+  ))
+} else {
+  cat(sprintf("covsim source not found at %s; skipped comparison\n", covsim_path))
+}
