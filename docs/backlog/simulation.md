@@ -147,7 +147,10 @@ simulation work queue and decision log.
   oracle and a four-variable rvinecopulib fixture validating the generic
   inverse Rosenblatt recursion. `simulate_mixed_population_cvine_copula()`
   composes generic fixed-order C-vine draws with the shared observed projection
-  layer. Higher-dimensional calibration, broader structure/family policies, and
+  layer. `cvine_copula_observed_corr()` and
+  `calibrate_cvine_copula_correlation()` add deterministic fixed-order
+  observed-correlation evaluation and sequential calibration for one supplied
+  family/order in arbitrary dimension. Broader structure/family policies and
   ordinal/polyserial/polychoric calibration remain separate work.
 
 ## Architecture Direction
@@ -384,6 +387,10 @@ Validation:
 - **Landed, generic C-vine population composition.** Add continuous and mixed
   population helpers for `CVineCopulaSpec`, reusing the shared observed
   projection layer for arbitrary-dimensional fixed-order C-vine draws.
+- **Landed, first generic fixed-order C-vine calibration.** Add
+  `cvine_copula_observed_corr()` and `calibrate_cvine_copula_correlation()` for
+  deterministic observed-correlation evaluation plus sequential Kendall-tau
+  calibration in a caller-supplied C-vine order and single bivariate family.
 - **Landed, first PLSIM slice.** Add piecewise-linear simulation through
   `fit_plsim_marginal()`, `diagnose_plsim()`, `calibrate_plsim()`,
   `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. Unit coverage checks
@@ -408,9 +415,9 @@ Validation:
   `NortaCalibration`, aligning NORTA with the two-stage calibrated generator
   contract.
 - **S.** Extend VITA/covsim-style simulation from repaired matrix diagnostics
-  plus 3-variable C-vine root/family selection and generic fixed-order C-vine
-  sampling to higher-dimensional calibration, richer structure/family search
-  policies, and broader vine/multivariate-copula policies.
+  plus 3-variable C-vine root/family selection and generic fixed-order
+  calibration to richer higher-dimensional structure/family search policies and
+  broader vine/multivariate-copula policies.
 - **S.** Decide whether Johnson SL should be exposed beyond the direct
   `MarginalSpec::johnson()` constructor.
 - **S.** Decide the long-term special-functions policy before expanding the

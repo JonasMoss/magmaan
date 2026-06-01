@@ -3569,6 +3569,262 @@ calibrate_cvine3_copula_correlation_select_structure(
   return best;
 }
 
+sim_expected<Eigen::MatrixXd>
+cvine_copula_observed_corr(
+    const CVineCopulaSpec& copula,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options) {
+  if (auto ok = validate_cvine_copula_spec(copula); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  const Eigen::Index d =
+      static_cast<Eigen::Index>(copula.pair_copulas.size());
+  if (auto ok = validate_cvine_quantile_marginals(
+          marginals, d, "cvine_copula_observed_corr");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (options.quadrature_points < 8 || options.max_bisection_iter < 16 ||
+      !std::isfinite(options.calibration_tol) || options.calibration_tol <= 0.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "cvine_copula_observed_corr: invalid options"));
+  }
+
+  auto gl_or = gauss_legendre_unit(options.quadrature_points);
+  if (!gl_or.has_value()) return std::unexpected(gl_or.error());
+  auto gh_or = gauss_hermite(options.quadrature_points);
+  if (!gh_or.has_value()) return std::unexpected(gh_or.error());
+  auto moments_or = build_marginal_moments(marginals, *gh_or);
+  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+  const auto& gl = *gl_or;
+  const auto& moments = *moments_or;
+
+  Eigen::MatrixXd corr = Eigen::MatrixXd::Zero(d, d);
+  Eigen::MatrixXd W(1, d);
+  std::vector<Eigen::Index> index(static_cast<std::size_t>(d), 0);
+  bool done = false;
+  while (!done) {
+    double weight = 1.0;
+    for (Eigen::Index col = 0; col < d; ++col) {
+      const auto idx = index[static_cast<std::size_t>(col)];
+      W(0, col) = open_unit(gl.nodes(idx));
+      weight *= gl.weights(idx);
+    }
+
+    auto U_or = cvine_copula_inverse_rosenblatt(W, copula, options);
+    if (!U_or.has_value()) return std::unexpected(U_or.error());
+    Eigen::VectorXd x(d);
+    for (Eigen::Index col = 0; col < d; ++col) {
+      auto x_or = marginal_from_unit(
+          marginals[static_cast<std::size_t>(col)],
+          moments[static_cast<std::size_t>(col)],
+          (*U_or)(0, col));
+      if (!x_or.has_value()) return std::unexpected(x_or.error());
+      x(col) = (*x_or - marginals[static_cast<std::size_t>(col)].mean) /
+               marginals[static_cast<std::size_t>(col)].sd;
+    }
+    corr.noalias() += weight * (x * x.transpose());
+
+    for (Eigen::Index pos = d - 1; pos >= 0; --pos) {
+      auto& idx = index[static_cast<std::size_t>(pos)];
+      ++idx;
+      if (idx < gl.nodes.size()) break;
+      idx = 0;
+      if (pos == 0) {
+        done = true;
+        break;
+      }
+    }
+  }
+
+  if (!corr.allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "cvine_copula_observed_corr: non-finite correlation matrix"));
+  }
+  corr = 0.5 * (corr + corr.transpose());
+  corr.diagonal().setOnes();
+  for (Eigen::Index i = 0; i < d; ++i) {
+    for (Eigen::Index j = i + 1; j < d; ++j) {
+      const double r = std::clamp(corr(i, j), -1.0, 1.0);
+      corr(i, j) = r;
+      corr(j, i) = r;
+    }
+  }
+  return corr;
+}
+
+sim_expected<CVineCorrelationCalibration>
+calibrate_cvine_copula_correlation(
+    BivariateCopulaFamily family,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options) {
+  if (auto ok = validate_bivariate_copula_matrix_target(
+          target_corr, marginals, options);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (target_corr.rows() < 2) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_cvine_copula_correlation: target_corr must be at least 2x2"));
+  }
+
+  const Eigen::Index d = target_corr.rows();
+  CVineCorrelationCalibration out;
+  out.family = family;
+  out.target_corr = target_corr;
+  out.achieved_corr = Eigen::MatrixXd::Identity(d, d);
+  out.lower_bound_corr = Eigen::MatrixXd::Identity(d, d);
+  out.upper_bound_corr = Eigen::MatrixXd::Identity(d, d);
+  out.iterations = Eigen::MatrixXi::Zero(d, d);
+  out.copula.pair_copulas.resize(static_cast<std::size_t>(d));
+  for (Eigen::Index j = 1; j < d; ++j) {
+    out.copula.pair_copulas[static_cast<std::size_t>(j)].resize(
+        static_cast<std::size_t>(j));
+  }
+
+  for (Eigen::Index j = 1; j < d; ++j) {
+    for (Eigen::Index k = 0; k < j; ++k) {
+      const auto row = static_cast<std::size_t>(j);
+      const auto col = static_cast<std::size_t>(k);
+      const double target = target_corr(k, j);
+      const auto eval_tau =
+          [&](double tau) -> sim_expected<std::pair<BivariateCopulaSpec, double>> {
+        auto spec_or = bivariate_copula_from_tau(family, tau, options);
+        if (!spec_or.has_value()) return std::unexpected(spec_or.error());
+        CVineCopulaSpec probe = out.copula;
+        probe.pair_copulas[row][col] = *spec_or;
+        auto corr_or = cvine_copula_observed_corr(probe, marginals, options);
+        if (!corr_or.has_value()) return std::unexpected(corr_or.error());
+        return std::pair<BivariateCopulaSpec, double>{*spec_or, (*corr_or)(k, j)};
+      };
+
+      if (family == BivariateCopulaFamily::Independence) {
+        auto corr_or = cvine_copula_observed_corr(out.copula, marginals, options);
+        if (!corr_or.has_value()) return std::unexpected(corr_or.error());
+        const double achieved = (*corr_or)(k, j);
+        out.lower_bound_corr(k, j) = out.lower_bound_corr(j, k) = achieved;
+        out.upper_bound_corr(k, j) = out.upper_bound_corr(j, k) = achieved;
+        if (std::abs(achieved - target) > options.calibration_tol) {
+          return std::unexpected(make_err(
+              SimError::Kind::CalibrationFailed,
+              "calibrate_cvine_copula_correlation: independence cannot hit target correlation"));
+        }
+        out.achieved_corr = *corr_or;
+        continue;
+      }
+
+      const auto stable_endpoint =
+          [&](double sign) -> sim_expected<std::pair<double, double>> {
+        for (double tau_abs : {0.95, 0.90, 0.80, 0.70, 0.60, 0.50}) {
+          const double tau = sign * tau_abs;
+          auto eval_or = eval_tau(tau);
+          if (eval_or.has_value()) {
+            return std::pair<double, double>{tau, eval_or->second};
+          }
+          if (eval_or.error().kind != SimError::Kind::NumericIssue) {
+            return std::unexpected(eval_or.error());
+          }
+        }
+        return std::unexpected(make_err(
+            SimError::Kind::NumericIssue,
+            "calibrate_cvine_copula_correlation: could not find stable endpoint"));
+      };
+
+      sim_expected<std::pair<double, double>> lo_endpoint_or =
+          std::pair<double, double>{0.0, 0.0};
+      if (family == BivariateCopulaFamily::Frank) {
+        lo_endpoint_or = stable_endpoint(-1.0);
+      } else {
+        auto zero_or = eval_tau(0.0);
+        if (!zero_or.has_value()) return std::unexpected(zero_or.error());
+        lo_endpoint_or = std::pair<double, double>{0.0, zero_or->second};
+      }
+      auto hi_endpoint_or = stable_endpoint(1.0);
+      if (!lo_endpoint_or.has_value()) {
+        return std::unexpected(lo_endpoint_or.error());
+      }
+      if (!hi_endpoint_or.has_value()) {
+        return std::unexpected(hi_endpoint_or.error());
+      }
+
+      double lo_tau = lo_endpoint_or->first;
+      double hi_tau = hi_endpoint_or->first;
+      double lo_corr = lo_endpoint_or->second;
+      double hi_corr = hi_endpoint_or->second;
+      if (lo_corr > hi_corr) {
+        std::swap(lo_tau, hi_tau);
+        std::swap(lo_corr, hi_corr);
+      }
+      out.lower_bound_corr(k, j) = out.lower_bound_corr(j, k) = lo_corr;
+      out.upper_bound_corr(k, j) = out.upper_bound_corr(j, k) = hi_corr;
+      if (target < lo_corr - options.calibration_tol ||
+          target > hi_corr + options.calibration_tol) {
+        return std::unexpected(make_err(
+            SimError::Kind::CalibrationFailed,
+            "calibrate_cvine_copula_correlation: target correlation outside feasible edge range"));
+      }
+
+      double best_tau = lo_tau;
+      double best_corr = lo_corr;
+      if (std::abs(target - hi_corr) < std::abs(target - best_corr)) {
+        best_tau = hi_tau;
+        best_corr = hi_corr;
+      }
+      for (int iter = 0; iter < options.max_bisection_iter; ++iter) {
+        const double mid_tau = 0.5 * (lo_tau + hi_tau);
+        auto mid_or = eval_tau(mid_tau);
+        if (!mid_or.has_value()) return std::unexpected(mid_or.error());
+        const double mid_corr = mid_or->second;
+        if (std::abs(target - mid_corr) < std::abs(target - best_corr)) {
+          best_tau = mid_tau;
+          best_corr = mid_corr;
+        }
+        out.iterations(k, j) = out.iterations(j, k) = iter + 1;
+        if (std::abs(mid_corr - target) <= options.calibration_tol ||
+            std::abs(hi_tau - lo_tau) <= options.calibration_tol) {
+          break;
+        }
+        if (mid_corr < target) {
+          lo_tau = mid_tau;
+          lo_corr = mid_corr;
+        } else {
+          hi_tau = mid_tau;
+          hi_corr = mid_corr;
+        }
+      }
+
+      auto best_spec_or = bivariate_copula_from_tau(family, best_tau, options);
+      if (!best_spec_or.has_value()) {
+        return std::unexpected(best_spec_or.error());
+      }
+      out.copula.pair_copulas[row][col] = *best_spec_or;
+      auto achieved_or = cvine_copula_observed_corr(
+          out.copula, marginals, options);
+      if (!achieved_or.has_value()) return std::unexpected(achieved_or.error());
+      out.achieved_corr = *achieved_or;
+      out.max_abs_error =
+          std::max(out.max_abs_error, std::abs(best_corr - target));
+    }
+  }
+
+  auto achieved_or = cvine_copula_observed_corr(out.copula, marginals, options);
+  if (!achieved_or.has_value()) return std::unexpected(achieved_or.error());
+  out.achieved_corr = *achieved_or;
+  out.max_abs_error = 0.0;
+  for (Eigen::Index i = 0; i < d; ++i) {
+    for (Eigen::Index j = i + 1; j < d; ++j) {
+      out.max_abs_error = std::max(
+          out.max_abs_error,
+          std::abs(out.achieved_corr(i, j) - target_corr(i, j)));
+    }
+  }
+  return out;
+}
+
 sim_expected<double>
 bivariate_copula_conditional_quantile(
     const BivariateCopulaSpec& copula,
