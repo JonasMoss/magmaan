@@ -27,8 +27,9 @@
 #   semTests). `--smoke` runs one tiny cell once.
 #
 # dist in {norm, ig1, ig2, pl1, pl2, vm1, vm2}; the "1" suffix is moderate
-# non-normality (skew 2, kurt 7), "2" is severe (skew 3, kurt 21). IG and PL
-# require covsim; norm and VM are self-contained.
+# non-normality (skew 2, kurt 7), "2" is severe (skew 3, kurt 21). All families
+# are self-contained: VM via the Fleishman power method, IG/PL via magmaan's
+# native simulators (no covsim).
 
 .support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
@@ -96,18 +97,27 @@ args <- parse_args(commandArgs(trailingOnly = TRUE))
 results_dir <- ensure_results_dir()
 set_single_threaded_math()
 require_pkg("magmaan")
+core <- magmaan::magmaan_core
+
+# Marginal moments per distribution label (moderate = *1: skew 2, kurt 7;
+# severe = *2: skew 3, kurt 21). Passed to the sampler for the IG/PL families
+# and used to solve the Fleishman coefficients for VM.
+dist_moments <- list(
+  norm = c(0, 0),
+  vm1  = c(2, 7),  vm2 = c(3, 21),
+  ig1  = c(2, 7),  ig2 = c(3, 21),
+  pl1  = c(2, 7),  pl2 = c(3, 21))
 
 # ── Cell grid ───────────────────────────────────────────────────────────────
-# Default grid keeps norm + VM (self-contained) + IG (covsim, reliable). PL is
-# reachable via `--cells dist=pl1|pl2` but kept out of the default run: covsim's
-# rPLSIM is slow and often cannot fit the severe marginals.
+# Full paper grid: norm + all six non-normal cells (VM via the self-contained
+# Fleishman path, IG/PL via magmaan's native simulators -- no covsim).
 cell_grid <- expand.grid(
   p    = c(10L, 20L, 40L),
   N    = c(400L, 800L),
-  dist = c("norm", "vm1", "vm2", "ig2"),
+  dist = c("norm", "vm1", "vm2", "ig1", "ig2", "pl1", "pl2"),
   stringsAsFactors = FALSE)
 if (isTRUE(args$smoke)) {
-  cell_grid <- data.frame(p = 10L, N = 400L, dist = "vm2", stringsAsFactors = FALSE)
+  cell_grid <- data.frame(p = 10L, N = 400L, dist = "ig2", stringsAsFactors = FALSE)
   args$reps <- 1L
 }
 for (key in names(parse_cells_filter(args$cells_filter))) {
@@ -117,12 +127,6 @@ for (key in names(parse_cells_filter(args$cells_filter))) {
   cell_grid <- cell_grid[cell_grid[[key]] == target, , drop = FALSE]
 }
 if (!nrow(cell_grid)) stop("no cells selected", call. = FALSE)
-
-needs_covsim <- any(dist_family(cell_grid$dist) %in% c("ig", "pl"))
-if (needs_covsim && !requireNamespace("covsim", quietly = TRUE)) {
-  stop("IG/PL cells need covsim; install it or restrict --cells to norm/vm*",
-       call. = FALSE)
-}
 
 # ── Per-cell population + analysis spec (constant across reps) ───────────────
 .spec_cache <- new.env(parent = emptyenv())
@@ -166,18 +170,31 @@ cat(sprintf("  reps=%d, cells=%d%s\n", args$reps, nrow(cell_grid),
             if (isTRUE(args$semtests_parity)) ", semTests parity ON" else ""))
 
 pval_rows <- list(); meta_rows <- list(); parity_rows <- list()
+# IG/PL calibration is population-only (no N), so reuse it across sample sizes
+# sharing the same (family, p, dist).
+.sim_cal_cache <- new.env(parent = emptyenv())
 t0 <- proc.time()[["elapsed"]]
 for (ci in seq_len(nrow(cell_grid))) {
   cell <- as.list(cell_grid[ci, , drop = FALSE])
   ctx <- get_ctx(cell$p)
+  fam <- dist_family(cell$dist)
+  cal_key <- if (fam %in% c("ig", "pl")) paste(fam, cell$p, cell$dist, sep = ":") else NULL
+  cached_cal <- if (!is.null(cal_key) && exists(cal_key, envir = .sim_cal_cache,
+                                                inherits = FALSE)) {
+    get(cal_key, envir = .sim_cal_cache)
+  } else NULL
   sampler <- make_cell_sampler(ctx$pop, cell$N, cell$dist, args$reps,
                                seed_base = args$seed_base + ci * 100000L,
-                               fl = get_fl(cell$dist))
+                               moments = dist_moments, fl = get_fl(cell$dist),
+                               core = core, sim_calibration = cached_cal)
+  if (!is.null(cal_key) && is.null(cached_cal) && !is.null(sampler$calibration)) {
+    assign(cal_key, sampler$calibration, envir = .sim_cal_cache)
+  }
   cat(sprintf("  cell %2d/%2d: p=%3d N=%4d dist=%-4s ", ci, nrow(cell_grid),
               cell$p, cell$N, cell$dist))
   ok <- 0L; fail <- 0L; tc0 <- proc.time()[["elapsed"]]
   for (rep_idx in seq_len(args$reps)) {
-    X <- tryCatch(sampler(rep_idx), error = function(e) e)
+    X <- tryCatch(sampler$draw(rep_idx), error = function(e) e)
     if (inherits(X, "error")) { fail <- fail + 1L; next }
     colnames(X) <- ctx$varnames
     res <- fit_magmaan(ctx, X)
@@ -207,6 +224,7 @@ for (ci in seq_len(nrow(cell_grid))) {
   cat(sprintf("ok=%d fail=%d (%.1fs)\n", ok, fail, tc1 - tc0))
   meta_rows[[ci]] <- data.frame(cell_idx = ci, p = cell$p, N = cell$N,
                                 dist = cell$dist, rep_ok = ok, rep_fail = fail,
+                                setup_seconds = sampler$setup_seconds,
                                 seconds = tc1 - tc0, stringsAsFactors = FALSE)
 }
 t1 <- proc.time()[["elapsed"]]
@@ -236,12 +254,30 @@ if (length(parity_rows)) {
               nrow(parity_df), if (nrow(comp)) max(comp$abs_diff) else NA_real_))
 }
 
+# Achieved VM marginal moments on one large draw, for report-side verification
+# that the Fleishman path hits the (skew, kurt) targets.
+vm_dists <- unique(cell_grid$dist)[dist_family(unique(cell_grid$dist)) == "vm"]
+if (length(vm_dists)) {
+  moment_rows <- lapply(vm_dists, function(d) {
+    tgt <- dist_moments[[d]]; fl <- get_fl(d)
+    set.seed(0xF1E15)
+    Z <- stats::rnorm(2e5L)
+    Y <- fl$a + fl$b * Z + fl$c * Z^2 + fl$d * Z^3
+    data.frame(dist = d, skew_target = tgt[[1L]], kurt_target = tgt[[2L]],
+               skew_achieved = mean((Y - mean(Y))^3) / stats::sd(Y)^3,
+               kurt_achieved = mean((Y - mean(Y))^4) / stats::var(Y)^2 - 3,
+               fleishman_resid = fl$resid, stringsAsFactors = FALSE)
+  })
+  utils::write.csv(do.call(rbind, moment_rows),
+                   file.path(results_dir, "moments.csv"), row.names = FALSE)
+}
+
 write_csv(metadata_frame(
   values = list(reps = args$reps, seed_base = args$seed_base,
                 cells_filter = args$cells_filter,
                 semtests_parity = isTRUE(args$semtests_parity),
                 n_cells = nrow(cell_grid),
                 total_seconds = sprintf("%.2f", t1 - t0)),
-  packages = c("magmaan", "lavaan", "semTests", "covsim")),
+  packages = c("magmaan", "lavaan", "semTests")),
   file.path(results_dir, "metadata.csv"))
 cat(sprintf("\ndone in %.1fs — results in %s\n", t1 - t0, results_dir))

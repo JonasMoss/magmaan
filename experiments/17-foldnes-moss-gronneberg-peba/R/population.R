@@ -5,21 +5,26 @@
 # Structural Equation Modeling 32(1), 1-13.
 #
 # The design is a correctly-specified two-factor CFA at three sizes
-# (p = 10, 20, 40 observed variables; df = 34, 169, 739). Standardized loadings
-# are drawn ~ U[.3, .8] (Li 2016) and NESTED across sizes: the p=10 loadings are
-# the first five per factor of the p=20 loadings, which are the first ten of the
-# p=40 loadings. Residual variances give unit-variance indicators; the two
-# factors correlate .5. The paper's exact realized loadings live on OSF
-# (https://osf.io/6trwu/) and are NOT reproduced here; we reconstruct a
-# representative population matching the verbal description with a fixed seed.
+# (p = 10, 20, 40 observed variables; df = 34, 169, 739). The population
+# loading and residual matrices are the paper's *exact* values, transcribed
+# verbatim from the OSF supplement (models.R at https://osf.io/6trwu/): MODEL1,
+# MODEL2 and MODEL3 are the p = 10, 20 and 40 populations. Standardized loadings
+# give unit-variance indicators; the two factors have unit variance and
+# correlate .5. The models are nested: MODEL2's first five loadings per factor
+# equal MODEL1's, and MODEL3's first ten per factor equal MODEL2's.
 #
-# Marginal non-normality spans the paper's three families at two severities:
-#   moderate (skew 2, kurt 7) and severe (skew 3, kurt 21).
-#   - VM (Vale-Maurelli 1983): self-contained via Fleishman power method.
-#   - IG (independent generator) / PL (piecewise linear): via covsim, as the
-#     paper itself generates them.
+# Marginal non-normality spans the paper's three families at two severities,
+# moderate (skew 2, kurt 7) and severe (skew 3, kurt 21):
+#   - VM (Vale-Maurelli 1983): self-contained via the Fleishman power method.
+#   - IG (independent generator, Foldnes-Olsson 2016) and PL (piecewise linear,
+#     Foldnes-Gronneberg 2022): magmaan's own simulators (core$sim_ig_*,
+#     core$sim_plsim_*), so the experiment needs no covsim dependency. The paper
+#     itself generates IG/PL with covsim and VM with lavaan; magmaan reproduces
+#     the IG/PL families natively (see experiment 18).
 
 # ── Fleishman (1978) power-method coefficients (Vale-Maurelli) ──────────────
+# Solve for (b, c, d) with a = -c so that Y = a + bZ + cZ^2 + dZ^3, Z ~ N(0,1),
+# has unit variance and the target marginal skewness and excess kurtosis.
 fleishman_coef <- function(skew, kurt) {
   eqs <- function(p) {
     b <- p[[1L]]; c <- p[[2L]]; d <- p[[3L]]
@@ -52,34 +57,58 @@ intermediate_rho <- function(rho_y, fl) {
   real[which.min(abs(real - rho_y))]
 }
 
-# ── Two-factor nested population ────────────────────────────────────────────
-# A pool of `max_per_factor` standardized loadings per factor is drawn once with
-# a fixed seed; a size-p model uses the first p/2 of each factor's pool, so
-# smaller models are nested in larger ones (paper, Section 2.1).
-build_population_2factor <- function(p, seed = 20240701L, interfactor = 0.5,
-                                     max_per_factor = 20L,
-                                     loading_range = c(0.3, 0.8)) {
-  stopifnot(p %% 2L == 0L)
+# ── Exact two-factor populations (paper OSF supplement, models.R) ────────────
+# Per-factor standardized loadings and residual variances for MODEL1/2/3. Each
+# loading^2 + residual = 1 (unit-variance indicators); nesting is visible in the
+# leading entries (MODEL2 extends MODEL1, MODEL3 extends MODEL2).
+.osf_models <- list(
+  `10` = list(
+    f1_load  = c(0.4, 0.5, 0.6, 0.8, 0.4),
+    f1_resid = c(0.84, 0.75, 0.64, 0.36, 0.84),
+    f2_load  = c(0.4, 0.7, 0.6, 0.4, 0.8),
+    f2_resid = c(0.84, 0.51, 0.64, 0.84, 0.36)),
+  `20` = list(
+    f1_load  = c(0.4, 0.5, 0.6, 0.8, 0.4, 0.7, 0.8, 0.6, 0.6, 0.3),
+    f1_resid = c(0.84, 0.75, 0.64, 0.36, 0.84, 0.51, 0.36, 0.64, 0.64, 0.91),
+    f2_load  = c(0.4, 0.7, 0.6, 0.4, 0.8, 0.8, 0.4, 0.7, 0.5, 0.6),
+    f2_resid = c(0.84, 0.51, 0.64, 0.84, 0.36, 0.36, 0.84, 0.51, 0.75, 0.64)),
+  `40` = list(
+    f1_load  = c(0.4, 0.5, 0.6, 0.8, 0.4, 0.7, 0.8, 0.6, 0.6, 0.3,
+                 0.4, 0.4, 0.6, 0.5, 0.7, 0.5, 0.7, 0.8, 0.5, 0.7),
+    f1_resid = c(0.84, 0.75, 0.64, 0.36, 0.84, 0.51, 0.36, 0.64, 0.64, 0.91,
+                 0.84, 0.84, 0.64, 0.75, 0.51, 0.75, 0.51, 0.36, 0.75, 0.51),
+    f2_load  = c(0.4, 0.7, 0.6, 0.4, 0.8, 0.8, 0.4, 0.7, 0.5, 0.6,
+                 0.6, 0.4, 0.7, 0.4, 0.5, 0.7, 0.8, 0.4, 0.5, 0.3),
+    f2_resid = c(0.84, 0.51, 0.64, 0.84, 0.36, 0.36, 0.84, 0.51, 0.75, 0.64,
+                 0.64, 0.84, 0.51, 0.84, 0.75, 0.51, 0.36, 0.84, 0.75, 0.91))
+)
+
+build_population_2factor <- function(p, interfactor = 0.5) {
+  m <- .osf_models[[as.character(p)]]
+  if (is.null(m)) {
+    stop("no OSF population for p = ", p, " (have 10, 20, 40)", call. = FALSE)
+  }
   per_factor <- as.integer(p / 2L)
-  stopifnot(per_factor <= max_per_factor)
+  stopifnot(length(m$f1_load) == per_factor, length(m$f2_load) == per_factor)
 
-  restore <- .Random.seed_guard()
-  set.seed(seed)
-  pool1 <- stats::runif(max_per_factor, loading_range[[1L]], loading_range[[2L]])
-  pool2 <- stats::runif(max_per_factor, loading_range[[1L]], loading_range[[2L]])
-  restore()
-
-  std <- c(pool1[seq_len(per_factor)], pool2[seq_len(per_factor)])
+  std   <- c(m$f1_load, m$f2_load)
+  resid <- c(m$f1_resid, m$f2_resid)
   Lambda <- matrix(0.0, p, 2L)
-  Lambda[seq_len(per_factor), 1L]              <- std[seq_len(per_factor)]
-  Lambda[(per_factor + 1L):p, 2L]              <- std[(per_factor + 1L):p]
+  Lambda[seq_len(per_factor), 1L] <- m$f1_load
+  Lambda[(per_factor + 1L):p, 2L] <- m$f2_load
 
-  Phi <- matrix(c(1, interfactor, interfactor, 1), 2L, 2L)
-  Theta <- diag(1 - std^2)                       # unit-variance indicators
+  Phi   <- matrix(c(1, interfactor, interfactor, 1), 2L, 2L)
+  Theta <- diag(resid)
   Sigma <- Lambda %*% Phi %*% t(Lambda) + Theta  # a correlation matrix
 
+  # Indicators are unit-variance by construction; this doubles as a guard
+  # against any transcription slip in .osf_models above.
+  if (max(abs(diag(Sigma) - 1)) > 1e-8) {
+    stop("OSF population for p = ", p,
+         " is not unit-variance; check the transcription", call. = FALSE)
+  }
   list(Sigma = Sigma, L = chol(Sigma), Lambda = Lambda, Phi = Phi,
-       std_loadings = std, p = p, per_factor = per_factor)
+       std_loadings = std, residuals = resid, p = p, per_factor = per_factor)
 }
 
 # Correctly-specified two-factor analysis syntax (marker identification, free
@@ -93,22 +122,18 @@ build_2factor_syntax <- function(p) {
 }
 
 # ── Data sampling ───────────────────────────────────────────────────────────
-# Marginal moments per distribution label (moderate = *1, severe = *2).
-dist_moments <- list(
-  norm = c(0, 0),
-  ig1  = c(2, 7),  ig2 = c(3, 21),
-  pl1  = c(2, 7),  pl2 = c(3, 21),
-  vm1  = c(2, 7),  vm2 = c(3, 21))
-
 dist_family <- function(dist) sub("[12]$", "", dist)
 
 # Vale-Maurelli setup: solve the intermediate (Z-scale) correlation matrix that
 # maps to `pop$Sigma` under the Fleishman coefficients, and cache its Cholesky.
-# This depends only on the population and `fl`, NOT on the random draw, so it is
-# computed once per cell and reused across replicates (the per-pair polyroot +
-# the PD check are the expensive part, especially as p grows).
+# Depends only on the population and `fl`, NOT on the random draw, so it is
+# computed once per cell and reused across replicates.
 .vm_setup <- function(pop, fl) {
+  if (is.null(fl)) {
+    stop("Fleishman coefficients required for non-normal dist", call. = FALSE)
+  }
   R <- stats::cov2cor(pop$Sigma)
+  sds <- sqrt(diag(pop$Sigma))
   Rz <- R
   off <- which(upper.tri(R), arr.ind = TRUE)
   for (i in seq_len(nrow(off))) {
@@ -120,7 +145,7 @@ dist_family <- function(dist) sub("[12]$", "", dist)
   if (min(eigen(Rz, symmetric = TRUE, only.values = TRUE)$values) <= 0) {
     stop("VM: intermediate correlation matrix not PD for this cell", call. = FALSE)
   }
-  list(Lz = chol(Rz), sds = sqrt(diag(pop$Sigma)))
+  list(Lz = chol(Rz), sds = sds)
 }
 
 # One VM replicate from a cached setup: Fleishman polynomial on a correlated
@@ -131,48 +156,87 @@ dist_family <- function(dist) sub("[12]$", "", dist)
   sweep(Y, 2L, setup$sds, "*")
 }
 
-# Build a per-cell sampler: a closure draw(i) returning replicate i's N x p
-# matrix. Cheap families (norm, VM) draw fresh per replicate from a per-replicate
-# seed; covsim families (IG, PL) carry setup cost, so the whole batch of `reps`
-# datasets is generated once per cell (seeded) and indexed. If covsim cannot fit
-# the requested marginals (PL severe is the usual offender), draw(i) raises a
-# clear error so the runner counts the cell's replicates as failed and moves on,
-# rather than aborting the whole run.
-make_cell_sampler <- function(pop, N, dist, reps, seed_base, fl = NULL,
-                              pl_numsegments = 12L) {
+# Build a per-cell sampler returning a list(draw, setup_seconds, calibration).
+# Cheap families (norm, VM) draw fresh per replicate from a per-replicate seed.
+# IG and PL calibrate once per cell with magmaan's native simulators and store a
+# short batch of generated matrices; the calibration is population-only (no N),
+# so the caller can reuse it across sample sizes.
+make_cell_sampler <- function(pop, N, dist, reps, seed_base, moments,
+                              fl = NULL, core = NULL,
+                              sim_calibration = NULL,
+                              ig_root = "symmetric",
+                              ig_generator_family = "pearson",
+                              ig_quadrature_points = 81L,
+                              plsim_method = "hermite_then_rectangle",
+                              plsim_num_segments = 12L,
+                              plsim_quadrature_points = 31L,
+                              plsim_hermite_order = 24L) {
+  p <- pop$p
   fam <- dist_family(dist)
+  t0 <- proc.time()[["elapsed"]]
+
   if (fam == "norm") {
-    return(function(i) {
-      set.seed(seed_base + i)
-      matrix(stats::rnorm(N * pop$p), N, pop$p) %*% pop$L
-    })
+    return(list(setup_seconds = proc.time()[["elapsed"]] - t0,
+                draw = function(i) {
+                  set.seed(seed_base + i)
+                  matrix(stats::rnorm(N * p), N, p) %*% pop$L
+                }))
   }
+
   if (fam == "vm") {
-    setup <- .vm_setup(pop, fl)                 # once per cell, not per replicate
-    return(function(i) {
-      set.seed(seed_base + i)
-      .vm_draw(N, pop$p, setup, fl)
-    })
+    setup <- .vm_setup(pop, fl)               # once per cell, not per replicate
+    return(list(setup_seconds = proc.time()[["elapsed"]] - t0,
+                draw = function(i) {
+                  set.seed(seed_base + i)
+                  .vm_draw(N, p, setup, fl)
+                }))
   }
-  mom <- dist_moments[[dist]]
-  skew <- rep(mom[[1L]], pop$p); kurt <- rep(mom[[2L]], pop$p)
-  set.seed(seed_base)
-  batch <- tryCatch(
-    if (fam == "ig") {
-      covsim::rIG(N, pop$Sigma, skewness = skew, excesskurtosis = kurt, reps = reps)
-    } else {
-      covsim::rPLSIM(N, pop$Sigma, skewness = skew, excesskurtosis = kurt,
-                     reps = reps, numsegments = pl_numsegments, verbose = FALSE)
-    },
-    error = function(e) e)
-  if (inherits(batch, "error")) {
-    msg <- conditionMessage(batch)
-    return(function(i) stop("covsim ", toupper(fam), " generation failed: ", msg,
-                            call. = FALSE))
+
+  if (fam == "ig") {
+    if (is.null(core)) stop("IG cells require magmaan_core", call. = FALSE)
+    mom <- moments[[dist]]
+    if (is.null(mom)) stop("unknown IG distribution: ", dist, call. = FALSE)
+    cal <- sim_calibration
+    if (is.null(cal)) {
+      cal <- core$sim_ig_calibrate(
+        pop$Sigma,
+        rep(mom[[1L]], p),
+        rep(mom[[2L]], p),
+        root = ig_root,
+        generator_family = ig_generator_family,
+        quadrature_points = ig_quadrature_points)
+    }
+    batch <- core$sim_ig_draw(
+      cal, n = N, reps = reps, seed_base = seed_base,
+      quadrature_points = ig_quadrature_points)
+    return(list(setup_seconds = proc.time()[["elapsed"]] - t0,
+                calibration = cal,
+                draw = function(i) batch$draws[[i]]))
   }
-  # covsim returns a list of `reps` matrices (rPLSIM nests them one level).
-  flat <- if (fam == "pl" && is.list(batch) && is.list(batch[[1L]])) batch[[1L]] else batch
-  function(i) as.matrix(flat[[i]])
+
+  if (fam == "pl") {
+    if (is.null(core)) stop("PLSIM cells require magmaan_core", call. = FALSE)
+    mom <- moments[[dist]]
+    if (is.null(mom)) stop("unknown PLSIM distribution: ", dist, call. = FALSE)
+    sds <- sqrt(diag(pop$Sigma))
+    cal <- sim_calibration
+    if (is.null(cal)) {
+      cal <- core$sim_plsim_calibrate(
+        stats::cov2cor(pop$Sigma),
+        rep(mom[[1L]], p),
+        rep(mom[[2L]], p),
+        method = plsim_method,
+        num_segments = plsim_num_segments,
+        quadrature_points = plsim_quadrature_points,
+        hermite_order = plsim_hermite_order)
+    }
+    batch <- core$sim_plsim_draw(cal, n = N, reps = reps, seed_base = seed_base)
+    return(list(setup_seconds = proc.time()[["elapsed"]] - t0,
+                calibration = cal,
+                draw = function(i) sweep(batch$draws[[i]], 2L, sds, "*")))
+  }
+
+  stop("unknown distribution family: ", dist, call. = FALSE)
 }
 
 # Save/restore RNG state so a fixed population seed does not perturb the
