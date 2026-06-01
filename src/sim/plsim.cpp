@@ -453,6 +453,17 @@ solve_intermediate_corr(const PlsimMarginal& left,
   return std::pair{0.5 * (lo + hi), iterations};
 }
 
+double min_eigenvalue_symmetric(const Eigen::Ref<const Eigen::MatrixXd>& x) {
+  if (x.rows() == 0 || x.rows() != x.cols() || !x.allFinite()) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(x);
+  if (es.info() != Eigen::Success) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return es.eigenvalues().minCoeff();
+}
+
 sim_expected<Eigen::MatrixXd>
 cholesky_factor_with_jitter(const Eigen::Ref<const Eigen::MatrixXd>& corr,
                             double jitter) {
@@ -520,6 +531,20 @@ validate_plsim_inputs(const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
     }
   }
   return {};
+}
+
+std::size_t pair_error_index(Eigen::Index p, Eigen::Index i, Eigen::Index j) {
+  return static_cast<std::size_t>(i * p + j);
+}
+
+PlsimCovarianceMethod terminal_covariance_method(PlsimCovarianceMethod method) {
+  if (method == PlsimCovarianceMethod::HermiteThenQuadrature) {
+    return PlsimCovarianceMethod::Quadrature;
+  }
+  if (method == PlsimCovarianceMethod::HermiteThenRectangle) {
+    return PlsimCovarianceMethod::Rectangle;
+  }
+  return method;
 }
 
 }  // namespace
@@ -833,6 +858,33 @@ calibrate_plsim(
     const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
     PlsimCovarianceMethod method,
     const PlsimOptions& options) {
+  auto diag_or = diagnose_plsim(
+      target_corr, target_skewness, target_excess_kurtosis, method, options);
+  if (!diag_or.has_value()) return std::unexpected(diag_or.error());
+  if (!diag_or->pairwise_complete) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        diag_or->failure_detail.empty()
+            ? "calibrate_plsim: pairwise calibration failed"
+            : diag_or->failure_detail));
+  }
+  if (!diag_or->intermediate_positive_definite) {
+    return std::unexpected(make_err(
+        SimError::Kind::NonPositiveDefinite,
+        diag_or->failure_detail.empty()
+            ? "calibrate_plsim: intermediate correlation is not positive definite"
+            : diag_or->failure_detail));
+  }
+  return std::move(diag_or->calibration);
+}
+
+sim_expected<PlsimDiagnostics>
+diagnose_plsim(
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+    const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+    PlsimCovarianceMethod method,
+    const PlsimOptions& options) {
   if (auto ok = validate_plsim_inputs(
           target_corr, target_skewness, target_excess_kurtosis, options);
       !ok.has_value()) {
@@ -840,42 +892,87 @@ calibrate_plsim(
   }
 
   const Eigen::Index p = target_corr.rows();
-  PlsimCalibration out;
-  out.marginals.reserve(static_cast<std::size_t>(p));
+  PlsimDiagnostics out;
+  out.calibration.marginals.reserve(static_cast<std::size_t>(p));
   for (Eigen::Index j = 0; j < p; ++j) {
     auto marginal_or = fit_plsim_marginal(
         target_skewness(j), target_excess_kurtosis(j), options);
     if (!marginal_or.has_value()) return std::unexpected(marginal_or.error());
-    out.marginals.push_back(std::move(*marginal_or));
+    out.calibration.marginals.push_back(std::move(*marginal_or));
   }
 
-  out.intermediate_corr = Eigen::MatrixXd::Identity(p, p);
-  out.achieved_corr = Eigen::MatrixXd::Identity(p, p);
-  out.iterations = Eigen::MatrixXi::Zero(p, p);
+  out.calibration.intermediate_corr = Eigen::MatrixXd::Identity(p, p);
+  out.calibration.achieved_corr = Eigen::MatrixXd::Identity(p, p);
+  out.calibration.iterations = Eigen::MatrixXi::Zero(p, p);
+  out.lower_bound_corr = Eigen::MatrixXd::Identity(p, p);
+  out.upper_bound_corr = Eigen::MatrixXd::Identity(p, p);
+  out.pair_ok = Eigen::MatrixXi::Zero(p, p);
+  out.pair_ok.diagonal().array() = 1;
+  out.pair_error.assign(static_cast<std::size_t>(p * p), {});
+  out.pairwise_complete = true;
+
+  const PlsimCovarianceMethod bound_method = terminal_covariance_method(method);
   for (Eigen::Index i = 0; i < p; ++i) {
     for (Eigen::Index j = i + 1; j < p; ++j) {
+      auto lo_or = plsim_covariance_by_method(
+          out.calibration.marginals[static_cast<std::size_t>(i)],
+          out.calibration.marginals[static_cast<std::size_t>(j)],
+          -options.rho_bound, bound_method, options);
+      auto hi_or = plsim_covariance_by_method(
+          out.calibration.marginals[static_cast<std::size_t>(i)],
+          out.calibration.marginals[static_cast<std::size_t>(j)],
+          options.rho_bound, bound_method, options);
+      if (lo_or.has_value() && hi_or.has_value()) {
+        out.lower_bound_corr(i, j) = out.lower_bound_corr(j, i) =
+            std::min(*lo_or, *hi_or);
+        out.upper_bound_corr(i, j) = out.upper_bound_corr(j, i) =
+            std::max(*lo_or, *hi_or);
+      }
+
       auto rho_or = solve_intermediate_corr(
-          out.marginals[static_cast<std::size_t>(i)],
-          out.marginals[static_cast<std::size_t>(j)],
+          out.calibration.marginals[static_cast<std::size_t>(i)],
+          out.calibration.marginals[static_cast<std::size_t>(j)],
           target_corr(i, j), method, options);
-      if (!rho_or.has_value()) return std::unexpected(rho_or.error());
+      if (!rho_or.has_value()) {
+        out.pairwise_complete = false;
+        out.pair_ok(i, j) = out.pair_ok(j, i) = 0;
+        const std::string detail = rho_or.error().detail;
+        out.pair_error[pair_error_index(p, i, j)] = detail;
+        out.pair_error[pair_error_index(p, j, i)] = detail;
+        if (out.failure_detail.empty()) out.failure_detail = detail;
+        continue;
+      }
       const double rho = rho_or->first;
-      out.intermediate_corr(i, j) = rho;
-      out.intermediate_corr(j, i) = rho;
-      out.iterations(i, j) = rho_or->second;
-      out.iterations(j, i) = rho_or->second;
+      out.calibration.intermediate_corr(i, j) = rho;
+      out.calibration.intermediate_corr(j, i) = rho;
+      out.calibration.iterations(i, j) = rho_or->second;
+      out.calibration.iterations(j, i) = rho_or->second;
       auto achieved_or = plsim_covariance_by_method(
-          out.marginals[static_cast<std::size_t>(i)],
-          out.marginals[static_cast<std::size_t>(j)], rho, method, options);
-      if (!achieved_or.has_value()) return std::unexpected(achieved_or.error());
-      out.achieved_corr(i, j) = *achieved_or;
-      out.achieved_corr(j, i) = *achieved_or;
+          out.calibration.marginals[static_cast<std::size_t>(i)],
+          out.calibration.marginals[static_cast<std::size_t>(j)], rho, method,
+          options);
+      if (!achieved_or.has_value()) {
+        out.pairwise_complete = false;
+        const std::string detail = achieved_or.error().detail;
+        out.pair_error[pair_error_index(p, i, j)] = detail;
+        out.pair_error[pair_error_index(p, j, i)] = detail;
+        if (out.failure_detail.empty()) out.failure_detail = detail;
+        continue;
+      }
+      out.pair_ok(i, j) = out.pair_ok(j, i) = 1;
+      out.calibration.achieved_corr(i, j) = *achieved_or;
+      out.calibration.achieved_corr(j, i) = *achieved_or;
     }
   }
 
+  out.min_intermediate_eigenvalue =
+      min_eigenvalue_symmetric(out.calibration.intermediate_corr);
   auto root_or = cholesky_factor_with_jitter(
-      out.intermediate_corr, options.cholesky_jitter);
-  if (!root_or.has_value()) return std::unexpected(root_or.error());
+      out.calibration.intermediate_corr, options.cholesky_jitter);
+  out.intermediate_positive_definite = out.pairwise_complete && root_or.has_value();
+  if (!out.intermediate_positive_definite && out.failure_detail.empty()) {
+    out.failure_detail = root_or.error().detail;
+  }
   return out;
 }
 
