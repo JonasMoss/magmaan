@@ -215,6 +215,16 @@ golden `parTable()` fixtures.
   standard normal variate, fit SU/SB shape parameters to target skewness and
   excess kurtosis by deterministic quadrature, and plug into the same
   NORTA/independent-generator transform surface.
+- Fixed-parameter t-copula simulation is available through `TCopulaSpec`,
+  `simulate_t_copula_matrix()`, and `simulate_t_copula_raw()`. It draws a
+  multivariate Student-t copula from a supplied correlation matrix and degrees
+  of freedom, maps the resulting uniforms through the existing marginal
+  quantile machinery, and rejects non-quantile generator transforms such as
+  Fleishman. This is deliberately not an observed-correlation calibration path;
+  later VITA/covsim work should own calibration from requested observed
+  moments/correlations to generator parameters. `vinecopulib`/`rvinecopulib`
+  are treated as oracle/reference implementations for copula conventions, not
+  as core runtime dependencies.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for
   now; the long-term dependency policy is still open.

@@ -158,6 +158,16 @@ struct NortaOptions {
   double cholesky_jitter = 1e-10;
 };
 
+struct TCopulaOptions {
+  int quadrature_points = 31;
+  double cholesky_jitter = 1e-10;
+};
+
+struct TCopulaSpec {
+  double df = 5.0;
+  Eigen::MatrixXd corr;
+};
+
 struct IndependentOptions {
   int quadrature_points = 31;
 };
@@ -243,5 +253,19 @@ simulate_norta_raw(Eigen::Index n,
                    const std::vector<MarginalSpec>& marginals,
                    std::mt19937_64& rng,
                    const NortaOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
+simulate_t_copula_matrix(Eigen::Index n,
+                         const TCopulaSpec& copula,
+                         const std::vector<MarginalSpec>& marginals,
+                         std::mt19937_64& rng,
+                         const TCopulaOptions& options = {});
+
+sim_expected<data::RawData>
+simulate_t_copula_raw(Eigen::Index n,
+                      const TCopulaSpec& copula,
+                      const std::vector<MarginalSpec>& marginals,
+                      std::mt19937_64& rng,
+                      const TCopulaOptions& options = {});
 
 }  // namespace magmaan::sim

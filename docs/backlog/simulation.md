@@ -17,8 +17,9 @@ simulation work queue and decision log.
 ## Current Simulation Surface
 
 - `magmaan::sim` exposes NORTA calibration/sampling, independent marginal
-  generators, Foldnes-Olsson independent-generator calibration, and
-  Vale-Maurelli/Fleishman calibration/sampling.
+  generators, Foldnes-Olsson independent-generator calibration,
+  Vale-Maurelli/Fleishman calibration/sampling, and fixed-parameter t-copula
+  sampling.
 - Baseline multivariate-normal generation is available through
   `simulate_normal_matrix()` and `simulate_normal_raw()`, taking explicit
   population means and covariance matrices. This is the low-level normal
@@ -43,6 +44,13 @@ simulation work queue and decision log.
   The fixture targets the realized moments of SuppDists's returned shape so the
   comparison is exact rather than capped by SuppDists's loose moment solve;
   `tests/tools/regen_johnson_sim_fixtures.R` regenerates it.
+- t-copula sampling is intentionally a copula-parameter generator, not an
+  observed-Pearson-correlation calibrator. `simulate_t_copula_matrix()` draws a
+  multivariate Student-t copula with supplied correlation matrix and degrees of
+  freedom, then feeds uniforms through the existing marginal quantile path.
+  Fleishman generator transforms are rejected because they are not guaranteed
+  quantiles. Future VITA/covsim work should sit above this layer as calibration
+  from requested observed moments/correlations to generator parameters.
 
 ## Architecture Direction
 
@@ -96,9 +104,14 @@ calibrates/diagnoses one of those steps.
   spherical/elliptical core is combined with marginal transformations. Keep the
   boundary clear with NORTA/copula methods: pseudo-elliptical methods are
   continuous-generator mechanisms, not observed-data projections.
-- Add copula families beyond Gaussian NORTA: t-copula first, then Archimedean
-  Clayton, Gumbel, Frank, and Joe if needed for robust/ordinal simulation
-  studies. Reuse the same marginal and projection layers.
+- Add copula families beyond Gaussian NORTA: fixed-parameter t-copula is
+  landed; add Archimedean Clayton, Gumbel, Frank, and Joe if needed for
+  robust/ordinal simulation studies. Reuse the same marginal and projection
+  layers.
+- Use `vinecopulib` / `rvinecopulib` as an oracle/reference for copula-family
+  parameter conventions, simulation checks, and later vine work. Do not make it
+  a core runtime dependency unless the exception/dependency boundary is
+  deliberately revisited; the C++ core stays local and `std::expected` based.
 - Add PLSIM and VITA/covsim later. Both are literature-relevant, but they should
   plug into the same continuous-generator interface after normal, mixed
   projection, and elliptical/copula foundations are in place.
@@ -182,17 +195,21 @@ Validation:
 - **M.** Add first elliptical generators: Student-t, contaminated normal, slash,
   and a generic scale-mixture-of-normals entry point. Validate moments and tail
   behavior with deterministic formulas where available plus stochastic smokes.
-- **M.** Add t-copula simulation as the first non-Gaussian copula extension.
-  Keep it on the existing marginal/projection path and expose calibration
-  artifacts analogously to NORTA.
+- **Landed, first non-Gaussian copula slice.** Add fixed-parameter t-copula
+  simulation through `TCopulaSpec`, `simulate_t_copula_matrix()`, and
+  `simulate_t_copula_raw()`. It reuses the existing marginal quantile path and
+  validates that marginals are true quantile marginals, leaving observed
+  correlation calibration to later VITA/covsim-style work.
 - **M.** Add ordinal/mixed observed-correlation calibration once direct
   threshold projection is stable: pairwise thresholded correlation maps,
   calibration to target observed Pearson/polychoric/polyserial summaries, and a
   policy for non-positive-definite calibrated latent matrices.
 - **S.** Add pseudo-elliptical / transformed-elliptical mechanisms after the
   first elliptical slice clarifies the shared radial/core interfaces.
-- **S.** Add Archimedean copulas as needed by simulation studies: Clayton,
-  Gumbel, Frank, and Joe.
+- **S.** Add fixed-parameter Archimedean copulas as needed by simulation
+  studies: Clayton, Gumbel, Frank, and Joe. Validate against vinecopulib or its
+  R interface, but keep the runtime implementation local unless a broader vine
+  backend is explicitly chosen.
 - **S.** Add PLSIM/piecewise-linear simulation once the shared projection and
   diagnostics interfaces exist.
 - **S.** Add VITA/covsim-style simulation once copula and projection

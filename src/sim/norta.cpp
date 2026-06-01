@@ -59,6 +59,7 @@ struct PearsonIvKernel {
 using detail::inverse_gamma_p;
 using detail::inverse_regularized_beta;
 using detail::nan;
+using detail::student_t_cdf;
 using detail::student_t_quantile;
 
 bool approx_equal(double a, double b, double tol = 1e-12) noexcept {
@@ -447,6 +448,29 @@ double standardized_from_z(const MarginalSpec& m,
   return (raw_from_z(m, z) - moments.mean) / moments.sd;
 }
 
+double open_unit(double u) noexcept {
+  constexpr double lo = std::numeric_limits<double>::min();
+  constexpr double hi = 1.0 - std::numeric_limits<double>::epsilon();
+  if (u <= 0.0) return lo;
+  if (u >= 1.0) return hi;
+  return u;
+}
+
+sim_expected<double>
+marginal_from_unit(const MarginalSpec& marginal,
+                   const MarginalMoments& moments,
+                   double u) {
+  auto z_or = normal_quantile(open_unit(u));
+  if (!z_or.has_value()) return std::unexpected(z_or.error());
+  const double y = standardized_from_z(marginal, moments, *z_or);
+  if (!std::isfinite(y)) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "copula simulation: non-finite marginal transform"));
+  }
+  return marginal.mean + marginal.sd * y;
+}
+
 sim_expected<void>
 validate_target(const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
                 const std::vector<MarginalSpec>& marginals,
@@ -522,6 +546,79 @@ validate_independent_inputs(Eigen::Index n,
   for (const auto& marginal : marginals) {
     if (auto ok = validate_marginal(marginal); !ok.has_value()) {
       return std::unexpected(ok.error());
+    }
+  }
+  return {};
+}
+
+sim_expected<void>
+validate_t_copula_inputs(Eigen::Index n,
+                         const TCopulaSpec& copula,
+                         const std::vector<MarginalSpec>& marginals,
+                         const TCopulaOptions& options) {
+  if (n <= 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_t_copula_matrix: n must be positive"));
+  }
+  if (!std::isfinite(copula.df) || copula.df <= 0.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_t_copula_matrix: df must be positive and finite"));
+  }
+  if (copula.corr.rows() != copula.corr.cols()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_t_copula_matrix: copula correlation must be square"));
+  }
+  if (copula.corr.rows() == 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_t_copula_matrix: copula correlation must not be empty"));
+  }
+  if (static_cast<Eigen::Index>(marginals.size()) != copula.corr.rows()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_t_copula_matrix: marginal count must match copula dimension"));
+  }
+  if (options.quadrature_points < 8 || options.cholesky_jitter < 0.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_t_copula_matrix: invalid options"));
+  }
+
+  constexpr double sym_tol = 1e-12;
+  constexpr double diag_tol = 1e-12;
+  for (Eigen::Index i = 0; i < copula.corr.rows(); ++i) {
+    if (!std::isfinite(copula.corr(i, i)) ||
+        std::abs(copula.corr(i, i) - 1.0) > diag_tol) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "simulate_t_copula_matrix: copula correlation diagonal must equal 1"));
+    }
+    for (Eigen::Index j = 0; j < copula.corr.cols(); ++j) {
+      if (!std::isfinite(copula.corr(i, j)) ||
+          std::abs(copula.corr(i, j) - copula.corr(j, i)) > sym_tol) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "simulate_t_copula_matrix: copula correlation must be finite and symmetric"));
+      }
+      if (i != j && std::abs(copula.corr(i, j)) >= 1.0) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "simulate_t_copula_matrix: off-diagonal correlations must satisfy |r| < 1"));
+      }
+    }
+  }
+
+  for (const auto& marginal : marginals) {
+    if (auto ok = validate_marginal(marginal); !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
+    if (marginal.kind == MarginalKind::Fleishman) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidMarginal,
+          "simulate_t_copula_matrix: Fleishman polynomial is not a copula quantile marginal"));
     }
   }
   return {};
@@ -1902,6 +1999,70 @@ simulate_norta_raw(Eigen::Index n,
                    std::mt19937_64& rng,
                    const NortaOptions& options) {
   auto X_or = simulate_norta_matrix(n, target_corr, marginals, rng, options);
+  if (!X_or.has_value()) return std::unexpected(X_or.error());
+  data::RawData raw;
+  raw.X.push_back(std::move(*X_or));
+  return raw;
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_t_copula_matrix(Eigen::Index n,
+                         const TCopulaSpec& copula,
+                         const std::vector<MarginalSpec>& marginals,
+                         std::mt19937_64& rng,
+                         const TCopulaOptions& options) {
+  if (auto ok = validate_t_copula_inputs(n, copula, marginals, options);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  auto L_or = cholesky_factor_with_jitter(copula.corr, options.cholesky_jitter);
+  if (!L_or.has_value()) return std::unexpected(L_or.error());
+
+  auto gh_or = gauss_hermite(options.quadrature_points);
+  if (!gh_or.has_value()) return std::unexpected(gh_or.error());
+  auto moments_or = build_marginal_moments(marginals, *gh_or);
+  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+  const auto& moments = *moments_or;
+
+  const Eigen::Index p = copula.corr.rows();
+  std::normal_distribution<double> normal(0.0, 1.0);
+  std::chi_squared_distribution<double> chi_square(copula.df);
+  Eigen::MatrixXd X(n, p);
+  for (Eigen::Index row = 0; row < n; ++row) {
+    Eigen::VectorXd eps(p);
+    for (Eigen::Index j = 0; j < p; ++j) eps(j) = normal(rng);
+    const Eigen::VectorXd z = (*L_or) * eps;
+    const double w = chi_square(rng);
+    if (!(w > 0.0) || !std::isfinite(w)) {
+      return std::unexpected(make_err(
+          SimError::Kind::NumericIssue,
+          "simulate_t_copula_matrix: non-positive chi-square draw"));
+    }
+    const double scale = std::sqrt(copula.df / w);
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const auto idx = static_cast<std::size_t>(j);
+      const double u = student_t_cdf(z(j) * scale, copula.df);
+      if (!std::isfinite(u)) {
+        return std::unexpected(make_err(
+            SimError::Kind::NumericIssue,
+            "simulate_t_copula_matrix: non-finite t copula probability"));
+      }
+      auto x_or = marginal_from_unit(marginals[idx], moments[idx], u);
+      if (!x_or.has_value()) return std::unexpected(x_or.error());
+      X(row, j) = *x_or;
+    }
+  }
+  return X;
+}
+
+sim_expected<data::RawData>
+simulate_t_copula_raw(Eigen::Index n,
+                      const TCopulaSpec& copula,
+                      const std::vector<MarginalSpec>& marginals,
+                      std::mt19937_64& rng,
+                      const TCopulaOptions& options) {
+  auto X_or = simulate_t_copula_matrix(n, copula, marginals, rng, options);
   if (!X_or.has_value()) return std::unexpected(X_or.error());
   data::RawData raw;
   raw.X.push_back(std::move(*X_or));
