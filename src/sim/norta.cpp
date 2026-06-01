@@ -48,6 +48,15 @@ struct MomentFitEval {
   double norm = 0.0;
 };
 
+struct MatrixRepairResult {
+  Eigen::MatrixXd corr;
+  double raw_min_eigenvalue = 0.0;
+  double repaired_min_eigenvalue = 0.0;
+  double ridge = 0.0;
+  double shrinkage = 0.0;
+  bool repaired = false;
+};
+
 struct PearsonIvKernel {
   double m = 0.0;
   double nu = 0.0;
@@ -793,7 +802,10 @@ validate_bivariate_copula_matrix_target(
         "calibrate_bivariate_copula_correlation_matrix: marginal count must match target_corr dimension"));
   }
   if (options.quadrature_points < 8 || options.max_bisection_iter < 16 ||
-      !std::isfinite(options.calibration_tol) || options.calibration_tol <= 0.0) {
+      !std::isfinite(options.calibration_tol) || options.calibration_tol <= 0.0 ||
+      !std::isfinite(options.matrix_repair_min_eigenvalue) ||
+      options.matrix_repair_min_eigenvalue < 0.0 ||
+      options.matrix_repair_min_eigenvalue >= 1.0) {
     return std::unexpected(make_err(
         SimError::Kind::InvalidInput,
         "calibrate_bivariate_copula_correlation_matrix: invalid options"));
@@ -834,6 +846,94 @@ validate_bivariate_copula_matrix_target(
     }
   }
   return {};
+}
+
+sim_expected<MatrixRepairResult>
+repair_correlation_matrix_if_requested(
+    const Eigen::Ref<const Eigen::MatrixXd>& corr,
+    BivariateCopulaCorrelationRepairKind kind,
+    double min_eigenvalue,
+    const char* caller) {
+  if (corr.rows() != corr.cols() || !corr.allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        std::string(caller) + ": correlation matrix must be finite and square"));
+  }
+  if (!std::isfinite(min_eigenvalue) ||
+      min_eigenvalue < 0.0 || min_eigenvalue >= 1.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        std::string(caller) + ": repair minimum eigenvalue must be in [0, 1)"));
+  }
+
+  MatrixRepairResult out;
+  out.corr = 0.5 * (corr + corr.transpose());
+  out.corr.diagonal().setOnes();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(out.corr);
+  if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        std::string(caller) + ": correlation eigendecomposition failed"));
+  }
+  out.raw_min_eigenvalue = es.eigenvalues().minCoeff();
+  out.repaired_min_eigenvalue = out.raw_min_eigenvalue;
+  if (out.raw_min_eigenvalue >= min_eigenvalue ||
+      kind == BivariateCopulaCorrelationRepairKind::None) {
+    return out;
+  }
+
+  if (kind == BivariateCopulaCorrelationRepairKind::Error) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        std::string(caller) + ": calibrated matrix is below the requested minimum eigenvalue"));
+  }
+
+  const double denom = 1.0 - out.raw_min_eigenvalue;
+  if (!(denom > 0.0) || !std::isfinite(denom)) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        std::string(caller) + ": matrix cannot be repaired toward identity"));
+  }
+  const double shrinkage = (min_eigenvalue - out.raw_min_eigenvalue) / denom;
+  if (!(shrinkage > 0.0) || !(shrinkage < 1.0) || !std::isfinite(shrinkage)) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        std::string(caller) + ": invalid repair intensity"));
+  }
+
+  const Eigen::MatrixXd identity =
+      Eigen::MatrixXd::Identity(corr.rows(), corr.cols());
+  if (kind == BivariateCopulaCorrelationRepairKind::Ridge) {
+    const double ridge = shrinkage / (1.0 - shrinkage);
+    if (!(ridge > 0.0) || !std::isfinite(ridge)) {
+      return std::unexpected(make_err(
+          SimError::Kind::NumericIssue,
+          std::string(caller) + ": invalid repair ridge"));
+    }
+    out.corr = (out.corr + ridge * identity) / (1.0 + ridge);
+    out.ridge = ridge;
+    out.repaired = true;
+  } else if (kind == BivariateCopulaCorrelationRepairKind::Shrinkage) {
+    out.corr = (1.0 - shrinkage) * out.corr + shrinkage * identity;
+    out.shrinkage = shrinkage;
+    out.repaired = true;
+  } else {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        std::string(caller) + ": unknown repair kind"));
+  }
+
+  out.corr.diagonal().setOnes();
+  out.corr = 0.5 * (out.corr + out.corr.transpose());
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> repaired_es(out.corr);
+  if (repaired_es.info() != Eigen::Success ||
+      !repaired_es.eigenvalues().allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        std::string(caller) + ": repaired eigendecomposition failed"));
+  }
+  out.repaired_min_eigenvalue = repaired_es.eigenvalues().minCoeff();
+  return out;
 }
 
 sim_expected<std::vector<MarginalMoments>>
@@ -2799,6 +2899,7 @@ calibrate_bivariate_copula_correlation_matrix(
   out.family = family;
   out.theta = Eigen::MatrixXd::Zero(p, p);
   out.achieved_corr = Eigen::MatrixXd::Identity(p, p);
+  out.repaired_corr = Eigen::MatrixXd::Identity(p, p);
   out.lower_bound_corr = Eigen::MatrixXd::Identity(p, p);
   out.upper_bound_corr = Eigen::MatrixXd::Identity(p, p);
   out.iterations = Eigen::MatrixXi::Zero(p, p);
@@ -2822,9 +2923,23 @@ calibrate_bivariate_copula_correlation_matrix(
       out.upper_bound_corr(j, i) = pair.upper_bound_corr;
       out.iterations(i, j) = pair.iterations;
       out.iterations(j, i) = pair.iterations;
+      out.max_abs_error = std::max(
+          out.max_abs_error,
+          std::abs(pair.achieved_corr - target_corr(i, j)));
     }
   }
 
+  auto repair_or = repair_correlation_matrix_if_requested(
+      out.achieved_corr, options.matrix_repair,
+      options.matrix_repair_min_eigenvalue,
+      "calibrate_bivariate_copula_correlation_matrix");
+  if (!repair_or.has_value()) return std::unexpected(repair_or.error());
+  out.repaired_corr = std::move(repair_or->corr);
+  out.raw_min_eigenvalue = repair_or->raw_min_eigenvalue;
+  out.repaired_min_eigenvalue = repair_or->repaired_min_eigenvalue;
+  out.repair_ridge = repair_or->ridge;
+  out.repair_shrinkage = repair_or->shrinkage;
+  out.repair_applied = repair_or->repaired;
   return out;
 }
 

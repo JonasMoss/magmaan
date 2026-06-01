@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 #include <nlohmann/json.hpp>
 
 #include "../oracle.hpp"
@@ -812,6 +813,59 @@ TEST_CASE("bivariate copula matrix calibration works pairwise") {
       magmaan::sim::BivariateCopulaFamily::Clayton, target, marginals, options);
   REQUIRE_FALSE(impossible_or.has_value());
   CHECK(impossible_or.error().kind == magmaan::SimError::Kind::CalibrationFailed);
+}
+
+TEST_CASE("bivariate copula matrix calibration reports and repairs indefiniteness") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standard_normal()};
+  Eigen::MatrixXd target(3, 3);
+  target << 1.0, 0.75, 0.75,
+            0.75, 1.0, -0.75,
+            0.75, -0.75, 1.0;
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 17;
+  options.max_bisection_iter = 45;
+  options.calibration_tol = 1e-3;
+
+  auto raw_or = magmaan::sim::calibrate_bivariate_copula_correlation_matrix(
+      magmaan::sim::BivariateCopulaFamily::Frank, target, marginals, options);
+  if (!raw_or.has_value()) MESSAGE(raw_or.error().detail);
+  REQUIRE(raw_or.has_value());
+  if (!raw_or.has_value()) return;
+  CHECK(raw_or->max_abs_error < 5e-3);
+  CHECK(raw_or->raw_min_eigenvalue < 0.0);
+  CHECK(raw_or->repaired_min_eigenvalue == doctest::Approx(raw_or->raw_min_eigenvalue));
+  CHECK_FALSE(raw_or->repair_applied);
+  CHECK(raw_or->repaired_corr.isApprox(raw_or->achieved_corr, 0.0));
+
+  auto error_options = options;
+  error_options.matrix_repair =
+      magmaan::sim::BivariateCopulaCorrelationRepairKind::Error;
+  error_options.matrix_repair_min_eigenvalue = 1e-4;
+  auto error_or = magmaan::sim::calibrate_bivariate_copula_correlation_matrix(
+      magmaan::sim::BivariateCopulaFamily::Frank, target, marginals, error_options);
+  REQUIRE_FALSE(error_or.has_value());
+  CHECK(error_or.error().kind == magmaan::SimError::Kind::CalibrationFailed);
+
+  auto repair_options = error_options;
+  repair_options.matrix_repair =
+      magmaan::sim::BivariateCopulaCorrelationRepairKind::Shrinkage;
+  auto repaired_or = magmaan::sim::calibrate_bivariate_copula_correlation_matrix(
+      magmaan::sim::BivariateCopulaFamily::Frank, target, marginals, repair_options);
+  if (!repaired_or.has_value()) MESSAGE(repaired_or.error().detail);
+  REQUIRE(repaired_or.has_value());
+  if (!repaired_or.has_value()) return;
+  CHECK(repaired_or->repair_applied);
+  CHECK(repaired_or->repair_shrinkage > 0.0);
+  CHECK(repaired_or->repaired_min_eigenvalue >=
+        repair_options.matrix_repair_min_eigenvalue * 0.999);
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(repaired_or->repaired_corr);
+  REQUIRE(es.info() == Eigen::Success);
+  CHECK(es.eigenvalues().minCoeff() ==
+        doctest::Approx(repaired_or->repaired_min_eigenvalue).epsilon(1e-10));
 }
 
 TEST_CASE("bivariate copula raw generator validates parameters and marginals") {
