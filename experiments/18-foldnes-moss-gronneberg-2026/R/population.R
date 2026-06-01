@@ -7,8 +7,9 @@
 # {-.3, -.2, 0, .1, .2, .3}). The paper's exact realized population matrices
 # live in the OSF supplement (https://osf.io/h2y3n/) and are NOT reproduced
 # here. Marginal non-normality is induced with the Vale-Maurelli (1983) third-
-# order polynomial method so the experiment needs no covsim dependency; the
-# paper itself generates VM/IG/PL data with covsim.
+# order polynomial method for VM cells and magmaan's piecewise-linear simulator
+# for PL cells, so the experiment needs no covsim dependency. The paper itself
+# generates VM/IG/PL data with lavaan/covsim.
 
 # ── Fleishman (1978) power-method coefficients ──────────────────────────────
 # Solve for (b, c, d) with a = -c so that Y = a + bZ + cZ^2 + dZ^3, Z ~ N(0,1),
@@ -100,14 +101,11 @@ build_5factor_syntax <- function(p, per_factor = NULL) {
 }
 
 # ── Data sampling ───────────────────────────────────────────────────────────
-# dist == "norm": multivariate normal with covariance Sigma.
-# dist == "vm1"/"vm2": Vale-Maurelli with marginal (skew, kurt) = (2, 7)/(3, 21).
-sample_population <- function(pop, N, dist, fl = NULL) {
-  p <- pop$p
-  if (identical(dist, "norm")) {
-    z <- matrix(stats::rnorm(N * p), N, p)
-    return(z %*% pop$L)
-  }
+dist_family <- function(dist) sub("[12]$", "", dist)
+
+# Vale-Maurelli setup: solve the intermediate normal correlation matrix once per
+# cell, then reuse it across replicates.
+.vm_setup <- function(pop, fl) {
   if (is.null(fl)) stop("Fleishman coefficients required for non-normal dist",
                         call. = FALSE)
   R <- stats::cov2cor(pop$Sigma)
@@ -124,10 +122,66 @@ sample_population <- function(pop, N, dist, fl = NULL) {
     stop("intermediate correlation matrix not PD; VM infeasible for this cell",
          call. = FALSE)
   }
-  Lz <- chol(Rz)
-  Z <- matrix(stats::rnorm(N * p), N, p) %*% Lz
+  list(Lz = chol(Rz), sds = sds)
+}
+
+.vm_draw <- function(N, p, setup, fl) {
+  Z <- matrix(stats::rnorm(N * p), N, p) %*% setup$Lz
   Y <- fl$a + fl$b * Z + fl$c * Z^2 + fl$d * Z^3   # unit-variance, target moments
-  sweep(Y, 2L, sds, "*")
+  sweep(Y, 2L, setup$sds, "*")
+}
+
+# Build a per-cell sampler. Cheap families draw fresh per replicate; PLSIM
+# calibrates once per cell and stores a short batch of generated matrices.
+make_cell_sampler <- function(pop, N, dist, reps, seed_base, moments,
+                              fl = NULL, core = NULL,
+                              plsim_method = "hermite_then_rectangle",
+                              plsim_num_segments = 12L,
+                              plsim_quadrature_points = 31L,
+                              plsim_hermite_order = 24L) {
+  p <- pop$p
+  fam <- dist_family(dist)
+  t0 <- proc.time()[["elapsed"]]
+
+  if (fam == "norm") {
+    return(list(setup_seconds = proc.time()[["elapsed"]] - t0,
+                draw = function(i) {
+                  set.seed(seed_base + i)
+                  matrix(stats::rnorm(N * p), N, p) %*% pop$L
+                }))
+  }
+
+  if (fam == "vm") {
+    setup <- .vm_setup(pop, fl)
+    return(list(setup_seconds = proc.time()[["elapsed"]] - t0,
+                draw = function(i) {
+                  set.seed(seed_base + i)
+                  .vm_draw(N, p, setup, fl)
+                }))
+  }
+
+  if (fam == "pl") {
+    if (is.null(core)) stop("PLSIM cells require magmaan_core", call. = FALSE)
+    mom <- moments[[dist]]
+    if (is.null(mom)) stop("unknown PLSIM distribution: ", dist, call. = FALSE)
+    sds <- sqrt(diag(pop$Sigma))
+    batch <- core$sim_plsim_batch(
+      stats::cov2cor(pop$Sigma),
+      rep(mom[[1L]], p),
+      rep(mom[[2L]], p),
+      n = N,
+      reps = reps,
+      seed_base = seed_base,
+      method = plsim_method,
+      num_segments = plsim_num_segments,
+      quadrature_points = plsim_quadrature_points,
+      hermite_order = plsim_hermite_order)
+    return(list(setup_seconds = proc.time()[["elapsed"]] - t0,
+                plsim = batch[c("intermediate_corr", "achieved_corr", "iterations")],
+                draw = function(i) sweep(batch$draws[[i]], 2L, sds, "*")))
+  }
+
+  stop("unknown distribution family: ", dist, call. = FALSE)
 }
 
 # Save and restore the RNG state so a fixed population seed does not perturb the

@@ -1264,6 +1264,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_fmg_ugamma_spectra
+Rcpp::List infer_fmg_ugamma_spectra(Rcpp::List fit, SEXP X, bool need_unbiased);
+RcppExport SEXP _magmaan_infer_fmg_ugamma_spectra(SEXP fitSEXP, SEXP XSEXP, SEXP need_unbiasedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< bool >::type need_unbiased(need_unbiasedSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_fmg_ugamma_spectra(fit, X, need_unbiased));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_satorra_bentler
 Rcpp::List infer_satorra_bentler(double t_ml, int df, Rcpp::NumericVector eigvals);
 RcppExport SEXP _magmaan_infer_satorra_bentler(SEXP t_mlSEXP, SEXP dfSEXP, SEXP eigvalsSEXP) {
@@ -1316,19 +1329,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type param(paramSEXP);
     Rcpp::traits::input_parameter< bool >::type truncate_negative(truncate_negativeSEXP);
     rcpp_result_gen = Rcpp::wrap(infer_fmg_test(chi2_source, df, eigvals, method, param, truncate_negative));
-    return rcpp_result_gen;
-END_RCPP
-}
-// infer_fmg_ugamma_spectra
-Rcpp::List infer_fmg_ugamma_spectra(Rcpp::List fit, SEXP X, bool need_unbiased);
-RcppExport SEXP _magmaan_infer_fmg_ugamma_spectra(SEXP fitSEXP, SEXP XSEXP, SEXP need_unbiasedSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
-    Rcpp::traits::input_parameter< bool >::type need_unbiased(need_unbiasedSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_fmg_ugamma_spectra(fit, X, need_unbiased));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1574,6 +1574,31 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sim_plsim_batch_impl
+Rcpp::List sim_plsim_batch_impl(Rcpp::NumericMatrix target_corr, Rcpp::NumericVector target_skewness, Rcpp::NumericVector target_excess_kurtosis, int n, int reps, double seed_base, std::string method, int num_segments, bool monotone, int max_iter, int quadrature_points, int hermite_order, double marginal_tol, double correlation_tol, double rho_bound);
+RcppExport SEXP _magmaan_sim_plsim_batch_impl(SEXP target_corrSEXP, SEXP target_skewnessSEXP, SEXP target_excess_kurtosisSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP methodSEXP, SEXP num_segmentsSEXP, SEXP monotoneSEXP, SEXP max_iterSEXP, SEXP quadrature_pointsSEXP, SEXP hermite_orderSEXP, SEXP marginal_tolSEXP, SEXP correlation_tolSEXP, SEXP rho_boundSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type target_corr(target_corrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type target_skewness(target_skewnessSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type target_excess_kurtosis(target_excess_kurtosisSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type reps(repsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed_base(seed_baseSEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    Rcpp::traits::input_parameter< int >::type num_segments(num_segmentsSEXP);
+    Rcpp::traits::input_parameter< bool >::type monotone(monotoneSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< int >::type quadrature_points(quadrature_pointsSEXP);
+    Rcpp::traits::input_parameter< int >::type hermite_order(hermite_orderSEXP);
+    Rcpp::traits::input_parameter< double >::type marginal_tol(marginal_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type correlation_tol(correlation_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type rho_bound(rho_boundSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_plsim_batch_impl(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, method, num_segments, monotone, max_iter, quadrature_points, hermite_order, marginal_tol, correlation_tol, rho_bound));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_version", (DL_FUNC) &_magmaan_version, 0},
@@ -1670,11 +1695,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_reduced_gamma_sample_materialized", (DL_FUNC) &_magmaan_infer_reduced_gamma_sample_materialized, 3},
     {"_magmaan_infer_reduced_gamma_unbiased", (DL_FUNC) &_magmaan_infer_reduced_gamma_unbiased, 4},
     {"_magmaan_infer_ugamma_eigenvalues", (DL_FUNC) &_magmaan_infer_ugamma_eigenvalues, 1},
+    {"_magmaan_infer_fmg_ugamma_spectra", (DL_FUNC) &_magmaan_infer_fmg_ugamma_spectra, 3},
     {"_magmaan_infer_satorra_bentler", (DL_FUNC) &_magmaan_infer_satorra_bentler, 3},
     {"_magmaan_infer_mean_var_adjusted", (DL_FUNC) &_magmaan_infer_mean_var_adjusted, 3},
     {"_magmaan_infer_scaled_shifted", (DL_FUNC) &_magmaan_infer_scaled_shifted, 3},
     {"_magmaan_infer_fmg_test", (DL_FUNC) &_magmaan_infer_fmg_test, 6},
-    {"_magmaan_infer_fmg_ugamma_spectra", (DL_FUNC) &_magmaan_infer_fmg_ugamma_spectra, 3},
     {"_magmaan_infer_casewise_contributions", (DL_FUNC) &_magmaan_infer_casewise_contributions, 2},
     {"_magmaan_data_sample_stats_from_raw", (DL_FUNC) &_magmaan_data_sample_stats_from_raw, 1},
     {"_magmaan_data_pairwise_sample_stats", (DL_FUNC) &_magmaan_data_pairwise_sample_stats, 2},
@@ -1693,6 +1718,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_robust_se_both_breads", (DL_FUNC) &_magmaan_infer_robust_se_both_breads, 4},
     {"_magmaan_infer_robust_se_both_breads_raw", (DL_FUNC) &_magmaan_infer_robust_se_both_breads_raw, 4},
     {"_magmaan_infer_robust_se_both_breads_zc", (DL_FUNC) &_magmaan_infer_robust_se_both_breads_zc, 5},
+    {"_magmaan_sim_plsim_batch_impl", (DL_FUNC) &_magmaan_sim_plsim_batch_impl, 15},
     {NULL, NULL, 0}
 };
 

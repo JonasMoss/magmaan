@@ -377,6 +377,10 @@ infer_ugamma_eigenvalues <- function(M) {
     .Call(`_magmaan_infer_ugamma_eigenvalues`, M)
 }
 
+infer_fmg_ugamma_spectra <- function(fit, X, need_unbiased = FALSE) {
+    .Call(`_magmaan_infer_fmg_ugamma_spectra`, fit, X, need_unbiased)
+}
+
 infer_satorra_bentler <- function(t_ml, df, eigvals) {
     .Call(`_magmaan_infer_satorra_bentler`, t_ml, df, eigvals)
 }
@@ -391,10 +395,6 @@ infer_scaled_shifted <- function(t_ml, df, eigvals) {
 
 infer_fmg_test <- function(chi2_source, df, eigvals, method = "peba", param = 4.0, truncate_negative = TRUE) {
     .Call(`_magmaan_infer_fmg_test`, chi2_source, df, eigvals, method, param, truncate_negative)
-}
-
-infer_fmg_ugamma_spectra <- function(fit, X, need_unbiased = FALSE) {
-    .Call(`_magmaan_infer_fmg_ugamma_spectra`, fit, X, need_unbiased)
 }
 
 infer_casewise_contributions <- function(partable, X) {
@@ -468,3 +468,8 @@ infer_robust_se_both_breads_raw <- function(fit, X, moments = "structured", cov 
 infer_robust_se_both_breads_zc <- function(fit, Zc, n_total, moments = "structured", cov = "empirical") {
     .Call(`_magmaan_infer_robust_se_both_breads_zc`, fit, Zc, n_total, moments, cov)
 }
+
+sim_plsim_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, method = "hermite", num_segments = 12L, monotone = FALSE, max_iter = 80L, quadrature_points = 31L, hermite_order = 24L, marginal_tol = 1e-8, correlation_tol = 1e-8, rho_bound = 0.999) {
+    .Call(`_magmaan_sim_plsim_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, method, num_segments, monotone, max_iter, quadrature_points, hermite_order, marginal_tol, correlation_tol, rho_bound)
+}
+
