@@ -434,3 +434,9 @@ Validation:
   `sim_norta_calibrate()` / `sim_norta_draw()` and analogous calibrated
   copula/vine handles. Batch wrappers should delegate to two-stage functions
   internally where practical.
+- **M.** Add an explicit persistent calibration-cache policy for long
+  simulation experiments. In-memory calibration reuse now prevents repeated
+  PLSIM/IG calibration across `N` within one R process, but separate timing or
+  production runs still recompute high-`p` PLSIM calibrations. Experiment-level
+  disk caches should be ignored by default, keyed by population/generator/options
+  with an explicit deletion or invalidation command rather than silent reuse.

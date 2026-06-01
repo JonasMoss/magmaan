@@ -96,6 +96,11 @@ parse_args <- function(args) {
 args <- parse_args(commandArgs(trailingOnly = TRUE))
 
 results_dir <- ensure_results_dir()
+if (!isTRUE(args$lavaan_parity)) {
+  unlink(file.path(results_dir, c("lavaan_parity.csv", "semtests_parity.csv")))
+} else if (!isTRUE(args$semtests_parity)) {
+  unlink(file.path(results_dir, "semtests_parity.csv"))
+}
 set_single_threaded_math()
 require_pkg("magmaan")
 core <- magmaan::magmaan_core
@@ -274,7 +279,9 @@ cat(sprintf("  reps=%d, cells=%d%s\n", args$reps, nrow(cell_grid),
 # ── Run ─────────────────────────────────────────────────────────────────────
 all_chi2 <- list(); all_meta <- list(); all_parity <- vector("list", nrow(cell_grid))
 .sim_cal_cache <- new.env(parent = emptyenv())
+run_started_at <- Sys.time()
 t0 <- proc.time()[["elapsed"]]
+sim_t0 <- t0
 for (ci in seq_len(nrow(cell_grid))) {
   cell <- as.list(cell_grid[ci, , drop = FALSE])
   tc0 <- proc.time()[["elapsed"]]
@@ -324,7 +331,7 @@ for (ci in seq_len(nrow(cell_grid))) {
                                setup_seconds = sampler$setup_seconds,
                                seconds = tc1 - tc0, stringsAsFactors = FALSE)
 }
-t1 <- proc.time()[["elapsed"]]
+sim_t1 <- proc.time()[["elapsed"]]
 
 write_rows(all_chi2, file.path(results_dir, "fits_chi2.csv"))
 write_rows(all_meta, file.path(results_dir, "cell_meta.csv"))
@@ -347,21 +354,15 @@ if (!is.null(chi2_long) && nrow(chi2_long)) {
                    row.names = FALSE)
 }
 
-meta <- metadata_frame(
-  values = list(reps = args$reps, seed_base = args$seed_base,
-                cells_filter = args$cells_filter,
-                lavaan_parity = isTRUE(args$lavaan_parity),
-                n_cells = nrow(cell_grid),
-                total_seconds = sprintf("%.2f", t1 - t0)),
-  packages = c("magmaan", "lavaan", "semTests"))
-write_csv(meta, file.path(results_dir, "metadata.csv"))
-cat(sprintf("\ndone in %.1fs — results in %s\n", t1 - t0, results_dir))
+parity_t0 <- NA_real_
+parity_t1 <- NA_real_
 
 # ── lavaan parity (rep 1 per cell) ──────────────────────────────────────────
 if (isTRUE(args$lavaan_parity)) {
   if (!requireNamespace("lavaan", quietly = TRUE)) {
     cat("--lavaan-parity requested but lavaan not installed; skipping.\n")
   } else {
+    parity_t0 <- proc.time()[["elapsed"]]
     cat("running lavaan parity (one fit per cell)...\n")
     do_semtests <- isTRUE(args$semtests_parity) &&
       requireNamespace("semTests", quietly = TRUE)
@@ -424,5 +425,55 @@ if (isTRUE(args$lavaan_parity)) {
                   nrow(fmg_df), nrow(ok_rows),
                   if (nrow(ok_rows)) max(ok_rows$abs_diff) else NA_real_))
     }
+    parity_t1 <- proc.time()[["elapsed"]]
   }
 }
+
+total_t1 <- proc.time()[["elapsed"]]
+run_finished_at <- Sys.time()
+cell_meta <- if (length(all_meta)) do.call(rbind, all_meta) else data.frame()
+runtime <- data.frame(
+  phase = c("simulation", "parity", "total"),
+  seconds = c(
+    sim_t1 - sim_t0,
+    if (is.finite(parity_t0) && is.finite(parity_t1)) parity_t1 - parity_t0 else NA_real_,
+    total_t1 - t0),
+  stringsAsFactors = FALSE
+)
+runtime$minutes <- runtime$seconds / 60
+runtime$notes <- c(
+  "data generation, magmaan ML fits, and FMG spectra",
+  if (isTRUE(args$lavaan_parity)) "lavaan and optional semTests first-replicate parity" else "",
+  "complete command wall-clock elapsed time")
+if (nrow(cell_meta)) {
+  runtime <- rbind(
+    runtime,
+    data.frame(
+      phase = c("cell_setup_sum", "cell_fit_sum"),
+      seconds = c(
+        sum(cell_meta$setup_seconds, na.rm = TRUE),
+        sum(pmax(0, cell_meta$seconds - cell_meta$setup_seconds), na.rm = TRUE)),
+      minutes = c(
+        sum(cell_meta$setup_seconds, na.rm = TRUE) / 60,
+        sum(pmax(0, cell_meta$seconds - cell_meta$setup_seconds), na.rm = TRUE) / 60),
+      notes = c("sum of per-cell sampler setup/generation time",
+                "sum of per-cell fitting/statistic time after setup"),
+      stringsAsFactors = FALSE))
+}
+write_csv(runtime, file.path(results_dir, "runtime.csv"))
+
+meta <- metadata_frame(
+  values = list(reps = args$reps, seed_base = args$seed_base,
+                cells_filter = args$cells_filter,
+                lavaan_parity = isTRUE(args$lavaan_parity),
+                semtests_parity = isTRUE(args$semtests_parity),
+                n_cells = nrow(cell_grid),
+                run_started_at = format(run_started_at, usetz = TRUE),
+                run_finished_at = format(run_finished_at, usetz = TRUE),
+                simulation_seconds = sprintf("%.2f", sim_t1 - sim_t0),
+                parity_seconds = if (is.finite(parity_t0) && is.finite(parity_t1))
+                  sprintf("%.2f", parity_t1 - parity_t0) else "",
+                total_seconds = sprintf("%.2f", total_t1 - t0)),
+  packages = c("magmaan", "lavaan", "semTests"))
+write_csv(meta, file.path(results_dir, "metadata.csv"))
+cat(sprintf("\ndone in %.1fs — results in %s\n", total_t1 - t0, results_dir))
