@@ -23,6 +23,12 @@ simulation work queue and decision log.
   `simulate_normal_matrix()` and `simulate_normal_raw()`, taking explicit
   population means and covariance matrices. This is the low-level normal
   generator target for future model-implied SEM simulation.
+- Reusable observed-variable projection is available through
+  `thresholds_from_probabilities()`, `project_ordinal_matrix()`, and
+  `project_mixed_matrix()`. Projection thresholds continuous latent responses
+  into one-based ordinal categories, preserves continuous columns in mixed data,
+  and returns ordered masks, declared level counts, and category counts for
+  downstream ordinal/mixed workspace builders.
 - Marginal moment matching is available through `fit_marginal_to_moments()`.
   Tukey g-and-h, Pearson-system, Johnson SU/SB, and Fleishman polynomial
   families feed the same `MarginalSpec` transform path used by NORTA and
@@ -73,10 +79,6 @@ calibrates/diagnoses one of those steps.
 - Add explicit population structs for continuous and mixed data, including
   means, covariance/correlation, group-specific variants, thresholds, ordered
   columns, and optional variable names/levels when wrapping `data::RawData`.
-- Add reusable discretization/projection helpers:
-  threshold continuous latent responses into ordinal/binary columns, derive
-  thresholds from marginal probabilities, preserve continuous columns for mixed
-  data, and report empty-category or achieved-proportion diagnostics.
 - Add model-implied simulation as a lowering step: convert `MatrixRep` /
   estimates / fitted objects into population moments and projection specs, then
   call the generic simulation stack. Mean structures, intercepts, latent means,
@@ -170,10 +172,9 @@ Validation:
 
 ## Remaining Work
 
-- **L.** Add the population/projection layer for ordinal and mixed simulation:
-  threshold specs, marginal-probability-to-threshold helpers, binary-as-ordinal,
-  mixed continuous/ordinal output, group-specific threshold support, and
-  diagnostics for achieved proportions and empty categories.
+- **M.** Extend the ordinal/mixed projection layer with group-specific
+  thresholds, variable names/level labels for raw-data wrapping, and richer
+  achieved-proportion diagnostics.
 - **L.** Add model-implied simulation that lowers lavaanified/model evaluator
   state to population moments and projection specs before invoking the generic
   simulation stack. Treat mean structure as population construction/projection,
