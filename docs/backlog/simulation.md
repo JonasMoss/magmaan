@@ -145,9 +145,10 @@ simulation work queue and decision log.
   `cvine_copula_inverse_rosenblatt()`, and `simulate_cvine_copula_*()` for
   arbitrary dimension, with the 3-variable specialization used as a regression
   oracle and a four-variable rvinecopulib fixture validating the generic
-  inverse Rosenblatt recursion. Higher-dimensional calibration, broader
-  structure/family policies, and ordinal/polyserial/polychoric calibration
-  remain separate work.
+  inverse Rosenblatt recursion. `simulate_mixed_population_cvine_copula()`
+  composes generic fixed-order C-vine draws with the shared observed projection
+  layer. Higher-dimensional calibration, broader structure/family policies, and
+  ordinal/polyserial/polychoric calibration remain separate work.
 
 ## Architecture Direction
 
@@ -380,6 +381,9 @@ Validation:
   arbitrary-dimensional fixed-order C-vines. Unit coverage checks equivalence
   with the rvine-backed three-variable specialization and a four-variable
   rvinecopulib oracle fixture.
+- **Landed, generic C-vine population composition.** Add continuous and mixed
+  population helpers for `CVineCopulaSpec`, reusing the shared observed
+  projection layer for arbitrary-dimensional fixed-order C-vine draws.
 - **Landed, first PLSIM slice.** Add piecewise-linear simulation through
   `fit_plsim_marginal()`, `diagnose_plsim()`, `calibrate_plsim()`,
   `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. Unit coverage checks

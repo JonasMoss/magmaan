@@ -163,3 +163,71 @@ TEST_CASE("copula population C-vine path projects mixed observed columns") {
   expected.col(1) = latent_direct_or->col(2);
   CHECK(latent_cal_or->isApprox(expected, 0.0));
 }
+
+TEST_CASE("copula population generic C-vine path projects mixed observed columns") {
+  Eigen::VectorXd probs(3);
+  probs << 0.25, 0.50, 0.25;
+  auto thresholds_or = magmaan::sim::thresholds_from_probabilities(probs);
+  REQUIRE(thresholds_or.has_value());
+
+  magmaan::sim::BivariateCopulaSpec frank_pos;
+  frank_pos.family = magmaan::sim::BivariateCopulaFamily::Frank;
+  frank_pos.theta = 3.0;
+  magmaan::sim::BivariateCopulaSpec frank_neg;
+  frank_neg.family = magmaan::sim::BivariateCopulaFamily::Frank;
+  frank_neg.theta = -2.0;
+  magmaan::sim::BivariateCopulaSpec clayton;
+  clayton.family = magmaan::sim::BivariateCopulaFamily::Clayton;
+  clayton.theta = 1.2;
+
+  magmaan::sim::CVineCopulaSpec copula;
+  copula.pair_copulas = {
+      {},
+      {frank_pos},
+      {frank_neg, frank_pos},
+      {clayton, magmaan::sim::BivariateCopulaSpec{}, frank_neg}};
+
+  magmaan::sim::CopulaPopulation population;
+  population.marginals = {
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.20),
+      magmaan::sim::MarginalSpec::standard_normal(1.0, 1.25),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.30)};
+  population.observed.kinds = {
+      magmaan::sim::ObservedKind::Continuous,
+      magmaan::sim::ObservedKind::Ordinal,
+      magmaan::sim::ObservedKind::Continuous,
+      magmaan::sim::ObservedKind::Ordinal};
+  population.observed.thresholds = {
+      Eigen::VectorXd{}, *thresholds_or, Eigen::VectorXd{}, *thresholds_or};
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.max_bisection_iter = 70;
+  std::mt19937_64 rng(20260614);
+  auto draw_or = magmaan::sim::simulate_mixed_population_cvine_copula(
+      360, copula, population, rng, options);
+  if (!draw_or.has_value()) MESSAGE(draw_or.error().detail);
+  REQUIRE(draw_or.has_value());
+  const auto& draw = *draw_or;
+  CHECK(draw.latent.rows() == 360);
+  CHECK(draw.latent.cols() == 4);
+  CHECK(draw.observed.X.rows() == 360);
+  CHECK(draw.observed.X.cols() == 4);
+  CHECK(draw.observed.ordered == std::vector<std::int32_t>{0, 1, 0, 1});
+  CHECK(draw.observed.n_levels == std::vector<std::int32_t>{0, 3, 0, 3});
+  CHECK(draw.observed.X.col(0).isApprox(draw.latent.col(0), 0.0));
+  CHECK(draw.observed.X.col(2).isApprox(draw.latent.col(2), 0.0));
+  CHECK(draw.observed.category_counts[1].sum() == 360);
+  CHECK(draw.observed.category_counts[3].sum() == 360);
+  CHECK(draw.observed.X.col(1).minCoeff() >= 1.0);
+  CHECK(draw.observed.X.col(1).maxCoeff() <= 3.0);
+  CHECK(draw.observed.X.col(3).minCoeff() >= 1.0);
+  CHECK(draw.observed.X.col(3).maxCoeff() <= 3.0);
+
+  std::mt19937_64 rng_continuous(20260615);
+  auto latent_or = magmaan::sim::simulate_continuous_population_cvine_copula(
+      20, copula, population.marginals, rng_continuous, options);
+  REQUIRE(latent_or.has_value());
+  CHECK(latent_or->rows() == 20);
+  CHECK(latent_or->cols() == 4);
+}
