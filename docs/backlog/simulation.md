@@ -117,8 +117,11 @@ simulation work queue and decision log.
   order, and reports the selected root/order. `CVine3FamilySpec` and the
   overloaded `calibrate_cvine3_copula_correlation()` support per-edge family
   choices, while `calibrate_cvine3_copula_correlation_select_families()` tries
-  a caller-provided candidate set for the fixed root-0 C-vine. Higher-
-  dimensional vines, combined root/family selection, and
+  a caller-provided candidate set for the fixed root-0 C-vine.
+  `calibrate_cvine3_copula_correlation_select_structure()` tries all three
+  roots and all candidate edge-family triples, skips infeasible fits, and
+  returns achieved correlations in the caller's original variable order.
+  Higher-dimensional vines, broader structure/family policies, and
   ordinal/polyserial/polychoric calibration remain separate work.
 
 ## Architecture Direction
@@ -309,8 +312,11 @@ Validation:
 - **Landed, per-edge family selection for fixed root-0 C-vines.** Add
   `CVine3FamilySpec` plus `calibrate_cvine3_copula_correlation_select_families()`
   to fit `0-1`, `0-2`, and `1-2|0` with different family choices from a
-  caller-provided candidate set. Higher-dimensional vines and combined
-  root/family selection remain future work.
+  caller-provided candidate set.
+- **Landed, combined root/family selection for 3-variable C-vines.** Add
+  `calibrate_cvine3_copula_correlation_select_structure()` to try all roots and
+  candidate edge-family triples, skip infeasible fits, and return the best
+  achieved matrix in the original variable order.
 - **Landed, first PLSIM slice.** Add piecewise-linear simulation through
   `fit_plsim_marginal()`, `diagnose_plsim()`, `calibrate_plsim()`,
   `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. Unit coverage checks
@@ -323,8 +329,9 @@ Validation:
   across strategies. Remaining PLSIM work is pair-cache/performance tuning and
   broader simulation-grid diagnostics.
 - **S.** Extend VITA/covsim-style simulation from repaired matrix diagnostics
-  plus 3-variable C-vine root/family selection to higher dimensions, combined
-  structure/family search, and broader vine/multivariate-copula policies.
+  plus 3-variable C-vine root/family selection to higher dimensions, richer
+  structure/family search policies, and broader vine/multivariate-copula
+  policies.
 - **S.** Decide whether Johnson SL should be exposed beyond the direct
   `MarginalSpec::johnson()` constructor.
 - **S.** Decide the long-term special-functions policy before expanding the

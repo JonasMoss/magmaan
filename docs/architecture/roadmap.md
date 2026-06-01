@@ -280,7 +280,9 @@ golden `parTable()` fixtures.
   variable order. `CVine3FamilySpec` allows different families on `0-1`, `0-2`,
   and `1-2|0`, and `calibrate_cvine3_copula_correlation_select_families()`
   searches a caller-provided family set for the fixed root-0 C-vine.
-  Higher-dimensional vines, combined structure/family search, and
+  `calibrate_cvine3_copula_correlation_select_structure()` combines the
+  three-root search with per-edge family search for the three-variable case.
+  Higher-dimensional vines, broader structure/family policies, and
   ordinal/polyserial/polychoric calibration are still future work.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for
