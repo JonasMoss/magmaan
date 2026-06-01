@@ -693,6 +693,9 @@ sim_expected<void>
 validate_bivariate_copula_spec(const BivariateCopulaSpec& copula);
 
 sim_expected<void>
+validate_cvine3_copula_spec(const CVine3CopulaSpec& copula);
+
+sim_expected<void>
 validate_bivariate_quantile_marginals(const std::vector<MarginalSpec>& marginals,
                                       const char* caller);
 
@@ -760,12 +763,51 @@ validate_bivariate_copula_spec(const BivariateCopulaSpec& copula) {
 }
 
 sim_expected<void>
+validate_cvine3_copula_spec(const CVine3CopulaSpec& copula) {
+  if (auto ok = validate_bivariate_copula_spec(copula.copula_01);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (auto ok = validate_bivariate_copula_spec(copula.copula_02);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (auto ok = validate_bivariate_copula_spec(copula.copula_12_given_0);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  return {};
+}
+
+sim_expected<void>
 validate_bivariate_quantile_marginals(const std::vector<MarginalSpec>& marginals,
                                       const char* caller) {
   if (marginals.size() != 2u) {
     return std::unexpected(make_err(
         SimError::Kind::InvalidInput,
         std::string(caller) + ": exactly two marginals are required"));
+  }
+  for (const auto& marginal : marginals) {
+    if (auto ok = validate_marginal(marginal); !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
+    if (marginal.kind == MarginalKind::Fleishman) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidMarginal,
+          std::string(caller) +
+              ": Fleishman polynomial is not a copula quantile marginal"));
+    }
+  }
+  return {};
+}
+
+sim_expected<void>
+validate_cvine3_quantile_marginals(const std::vector<MarginalSpec>& marginals,
+                                   const char* caller) {
+  if (marginals.size() != 3u) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        std::string(caller) + ": exactly three marginals are required"));
   }
   for (const auto& marginal : marginals) {
     if (auto ok = validate_marginal(marginal); !ok.has_value()) {
@@ -3011,6 +3053,114 @@ simulate_bivariate_copula_raw(Eigen::Index n,
                               const BivariateCopulaOptions& options) {
   auto X_or = simulate_bivariate_copula_matrix(
       n, copula, marginals, rng, options);
+  if (!X_or.has_value()) return std::unexpected(X_or.error());
+  data::RawData raw;
+  raw.X.push_back(std::move(*X_or));
+  return raw;
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_cvine3_copula_uniforms(Eigen::Index n,
+                                const CVine3CopulaSpec& copula,
+                                std::mt19937_64& rng,
+                                const BivariateCopulaOptions& options) {
+  if (n <= 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_cvine3_copula_uniforms: n must be positive"));
+  }
+  if (options.max_bisection_iter < 16) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_cvine3_copula_uniforms: max_bisection_iter must be at least 16"));
+  }
+  if (auto ok = validate_cvine3_copula_spec(copula); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  std::uniform_real_distribution<double> uniform(0.0, 1.0);
+  Eigen::MatrixXd U(n, 3);
+  for (Eigen::Index row = 0; row < n; ++row) {
+    const double u0 = open_unit(uniform(rng));
+    const double w1 = open_unit(uniform(rng));
+    const double w2 = open_unit(uniform(rng));
+
+    auto u1_or = invert_bivariate_conditional(
+        copula.copula_01, u0, w1, options.max_bisection_iter);
+    if (!u1_or.has_value()) return std::unexpected(u1_or.error());
+
+    const double h1_given_0 = open_unit(
+        bivariate_conditional_u(copula.copula_01, u0, *u1_or));
+    if (!std::isfinite(h1_given_0)) {
+      return std::unexpected(make_err(
+          SimError::Kind::NumericIssue,
+          "simulate_cvine3_copula_uniforms: non-finite root h-function"));
+    }
+
+    auto h2_given_0_or = invert_bivariate_conditional(
+        copula.copula_12_given_0, h1_given_0, w2,
+        options.max_bisection_iter);
+    if (!h2_given_0_or.has_value()) {
+      return std::unexpected(h2_given_0_or.error());
+    }
+
+    auto u2_or = invert_bivariate_conditional(
+        copula.copula_02, u0, *h2_given_0_or,
+        options.max_bisection_iter);
+    if (!u2_or.has_value()) return std::unexpected(u2_or.error());
+
+    U(row, 0) = u0;
+    U(row, 1) = *u1_or;
+    U(row, 2) = *u2_or;
+  }
+  return U;
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_cvine3_copula_matrix(Eigen::Index n,
+                              const CVine3CopulaSpec& copula,
+                              const std::vector<MarginalSpec>& marginals,
+                              std::mt19937_64& rng,
+                              const BivariateCopulaOptions& options) {
+  if (auto ok = validate_cvine3_quantile_marginals(
+          marginals, "simulate_cvine3_copula_matrix");
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (options.quadrature_points < 8) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_cvine3_copula_matrix: quadrature_points must be at least 8"));
+  }
+
+  auto U_or = simulate_cvine3_copula_uniforms(n, copula, rng, options);
+  if (!U_or.has_value()) return std::unexpected(U_or.error());
+  auto gh_or = gauss_hermite(options.quadrature_points);
+  if (!gh_or.has_value()) return std::unexpected(gh_or.error());
+  auto moments_or = build_marginal_moments(marginals, *gh_or);
+  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+
+  Eigen::MatrixXd X(n, 3);
+  for (Eigen::Index row = 0; row < n; ++row) {
+    for (Eigen::Index col = 0; col < 3; ++col) {
+      auto x_or = marginal_from_unit(
+          marginals[static_cast<std::size_t>(col)],
+          (*moments_or)[static_cast<std::size_t>(col)],
+          (*U_or)(row, col));
+      if (!x_or.has_value()) return std::unexpected(x_or.error());
+      X(row, col) = *x_or;
+    }
+  }
+  return X;
+}
+
+sim_expected<data::RawData>
+simulate_cvine3_copula_raw(Eigen::Index n,
+                           const CVine3CopulaSpec& copula,
+                           const std::vector<MarginalSpec>& marginals,
+                           std::mt19937_64& rng,
+                           const BivariateCopulaOptions& options) {
+  auto X_or = simulate_cvine3_copula_matrix(n, copula, marginals, rng, options);
   if (!X_or.has_value()) return std::unexpected(X_or.error());
   data::RawData raw;
   raw.X.push_back(std::move(*X_or));

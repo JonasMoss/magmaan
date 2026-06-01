@@ -868,6 +868,64 @@ TEST_CASE("bivariate copula matrix calibration reports and repairs indefinitenes
         doctest::Approx(repaired_or->repaired_min_eigenvalue).epsilon(1e-10));
 }
 
+TEST_CASE("C-vine 3 copula simulation composes root and conditional pairs") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.35)};
+
+  magmaan::sim::CVine3CopulaSpec copula;
+  copula.copula_01.family = magmaan::sim::BivariateCopulaFamily::Frank;
+  copula.copula_01.theta = 5.0;
+  copula.copula_02.family = magmaan::sim::BivariateCopulaFamily::Frank;
+  copula.copula_02.theta = -5.0;
+  copula.copula_12_given_0.family =
+      magmaan::sim::BivariateCopulaFamily::Independence;
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 31;
+  options.max_bisection_iter = 80;
+  std::mt19937_64 rng(20260607);
+  auto X_or = magmaan::sim::simulate_cvine3_copula_matrix(
+      18000, copula, marginals, rng, options);
+  if (!X_or.has_value()) MESSAGE(X_or.error().detail);
+  REQUIRE(X_or.has_value());
+  CHECK(sample_corr(*X_or, 0, 1) > 0.35);
+  CHECK(sample_corr(*X_or, 0, 2) < -0.30);
+  CHECK(std::abs(X_or->col(0).mean()) < 0.04);
+  CHECK(std::abs(X_or->col(1).mean()) < 0.04);
+  CHECK(std::abs(X_or->col(2).mean()) < 0.06);
+}
+
+TEST_CASE("C-vine 3 conditional pair copula can drive residual dependence") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standard_normal()};
+
+  magmaan::sim::CVine3CopulaSpec copula;
+  copula.copula_12_given_0.family = magmaan::sim::BivariateCopulaFamily::Frank;
+  copula.copula_12_given_0.theta = 5.0;
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.max_bisection_iter = 80;
+  std::mt19937_64 rng(20260608);
+  auto X_or = magmaan::sim::simulate_cvine3_copula_matrix(
+      18000, copula, marginals, rng, options);
+  if (!X_or.has_value()) MESSAGE(X_or.error().detail);
+  REQUIRE(X_or.has_value());
+  CHECK(std::abs(sample_corr(*X_or, 0, 1)) < 0.04);
+  CHECK(std::abs(sample_corr(*X_or, 0, 2)) < 0.04);
+  CHECK(sample_corr(*X_or, 1, 2) > 0.35);
+
+  auto raw_or = magmaan::sim::simulate_cvine3_copula_raw(
+      20, copula, marginals, rng, options);
+  REQUIRE(raw_or.has_value());
+  REQUIRE(raw_or->X.size() == 1u);
+  CHECK(raw_or->X[0].rows() == 20);
+  CHECK(raw_or->X[0].cols() == 3);
+}
+
 TEST_CASE("bivariate copula raw generator validates parameters and marginals") {
   const std::vector<magmaan::sim::MarginalSpec> marginals{
       magmaan::sim::MarginalSpec::standard_normal(),
