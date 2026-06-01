@@ -734,6 +734,40 @@ TEST_CASE("bivariate copula Kendall tau helpers use standard parameterization") 
   CHECK(bad_or.error().kind == magmaan::SimError::Kind::InvalidInput);
 }
 
+TEST_CASE("bivariate copula calibration targets observed Pearson correlation") {
+  const std::vector<magmaan::sim::MarginalSpec> normal_marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standard_normal()};
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 17;
+  options.max_bisection_iter = 45;
+  options.calibration_tol = 8e-4;
+
+  auto cal_or = magmaan::sim::calibrate_bivariate_copula_correlation(
+      magmaan::sim::BivariateCopulaFamily::Frank, 0.35,
+      normal_marginals, options);
+  if (!cal_or.has_value()) MESSAGE(cal_or.error().detail);
+  REQUIRE(cal_or.has_value());
+  if (!cal_or.has_value()) return;
+  CHECK(cal_or->target_corr == doctest::Approx(0.35));
+  CHECK(cal_or->achieved_corr == doctest::Approx(0.35).epsilon(3e-3));
+  CHECK(cal_or->iterations > 0);
+  CHECK(cal_or->lower_bound_corr < 0.0);
+  CHECK(cal_or->upper_bound_corr > 0.0);
+
+  auto achieved_or = magmaan::sim::bivariate_copula_observed_corr(
+      cal_or->copula, normal_marginals, options);
+  REQUIRE(achieved_or.has_value());
+  CHECK(*achieved_or == doctest::Approx(cal_or->achieved_corr).epsilon(1e-12));
+
+  auto impossible_or = magmaan::sim::calibrate_bivariate_copula_correlation(
+      magmaan::sim::BivariateCopulaFamily::Clayton, -0.25,
+      normal_marginals, options);
+  REQUIRE_FALSE(impossible_or.has_value());
+  CHECK(impossible_or.error().kind == magmaan::SimError::Kind::CalibrationFailed);
+}
+
 TEST_CASE("bivariate copula raw generator validates parameters and marginals") {
   const std::vector<magmaan::sim::MarginalSpec> marginals{
       magmaan::sim::MarginalSpec::standard_normal(),

@@ -19,7 +19,8 @@ simulation work queue and decision log.
 - `magmaan::sim` exposes NORTA calibration/sampling, independent marginal
   generators, Foldnes-Olsson independent-generator calibration,
   Vale-Maurelli/Fleishman calibration/sampling, fixed-parameter t-copula
-  sampling, and fixed-parameter bivariate Archimedean copula sampling.
+  sampling, fixed-parameter bivariate Archimedean copula sampling, and a first
+  bivariate copula observed-Pearson calibration helper.
 - Baseline multivariate-normal generation is available through
   `simulate_normal_matrix()` and `simulate_normal_raw()`, taking explicit
   population means and covariance matrices. This is the low-level normal
@@ -59,8 +60,9 @@ simulation work queue and decision log.
   multivariate Student-t copula with supplied correlation matrix and degrees of
   freedom, then feeds uniforms through the existing marginal quantile path.
   Fleishman generator transforms are rejected because they are not guaranteed
-  quantiles. Future VITA/covsim work should sit above this layer as calibration
-  from requested observed moments/correlations to generator parameters.
+  quantiles. VITA/covsim work sits above the fixed-parameter generator layer as
+  calibration from requested observed moments/correlations to generator
+  parameters.
 - Fixed-parameter bivariate Archimedean copula sampling is available through
   `BivariateCopulaSpec`, `simulate_bivariate_copula_matrix()`, and
   `simulate_bivariate_copula_raw()`. The first families are independence,
@@ -72,7 +74,13 @@ simulation work queue and decision log.
   `bivariate_copula_tau()` and `bivariate_copula_from_tau()` expose the
   Kendall-tau parameterization used by vine/copula workflows; Clayton, Gumbel,
   and Frank use closed-form or Debye-function formulas, while Joe uses the
-  standard convergent series.
+  standard convergent series. `bivariate_copula_observed_corr()` evaluates the
+  deterministic quadrature-implied observed Pearson correlation after the
+  marginal quantile transforms, and `calibrate_bivariate_copula_correlation()`
+  bisects on Kendall tau to hit a target pairwise correlation for one family.
+  This is the first VITA/covsim-style pairwise calibration layer; full matrix
+  assembly, positive-definiteness repair, and ordinal/polyserial/polychoric
+  calibration remain separate work.
 
 ## Architecture Direction
 
@@ -131,9 +139,10 @@ calibrates/diagnoses one of those steps.
   parameter conventions, simulation checks, and later vine work. Do not make it
   a core runtime dependency unless the exception/dependency boundary is
   deliberately revisited; the C++ core stays local and `std::expected` based.
-- Add PLSIM and VITA/covsim later. Both are literature-relevant, but they should
-  plug into the same continuous-generator interface after normal, mixed
-  projection, and elliptical/copula foundations are in place.
+- Add PLSIM later, and extend the first pairwise VITA/covsim copula calibration
+  into a full matrix-oriented workflow. Both should plug into the same
+  continuous-generator interface after normal, mixed projection, and
+  elliptical/copula foundations are in place.
 
 ## Pearson Type IV
 
@@ -236,10 +245,16 @@ Validation:
   parameter-convention fixtures against vinecopulib or its R interface unless a
   broader vine backend is explicitly chosen. `simulate_mixed_population_bivariate_copula()`
   composes the same generator with observed ordinal/mixed projection.
+- **Landed, first pairwise VITA/covsim slice.** Add deterministic bivariate
+  copula observed-correlation evaluation and Kendall-tau bisection calibration
+  through `bivariate_copula_observed_corr()` and
+  `calibrate_bivariate_copula_correlation()`. The current scope is one
+  bivariate family and two quantile marginals; full matrix assembly and
+  ordinal/polyserial/polychoric calibration remain.
 - **S.** Add PLSIM/piecewise-linear simulation once the shared projection and
   diagnostics interfaces exist.
-- **S.** Add VITA/covsim-style simulation once copula and projection
-  foundations make the implementation local rather than architecture-driving.
+- **S.** Extend VITA/covsim-style simulation from pairwise calibration to matrix
+  calibration, feasibility diagnostics, and positive-definiteness repair.
 - **S.** Decide whether Johnson SL should be exposed beyond the direct
   `MarginalSpec::johnson()` constructor.
 - **S.** Decide the long-term special-functions policy before expanding the

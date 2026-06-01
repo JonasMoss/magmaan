@@ -179,11 +179,21 @@ struct TCopulaSpec {
 struct BivariateCopulaOptions {
   int quadrature_points = 31;
   int max_bisection_iter = 80;
+  double calibration_tol = 1e-6;
 };
 
 struct BivariateCopulaSpec {
   BivariateCopulaFamily family = BivariateCopulaFamily::Independence;
   double theta = 0.0;
+};
+
+struct BivariateCopulaCorrelationCalibration {
+  BivariateCopulaSpec copula = {};
+  double target_corr = 0.0;
+  double achieved_corr = 0.0;
+  double lower_bound_corr = 0.0;
+  double upper_bound_corr = 0.0;
+  int iterations = 0;
 };
 
 struct IndependentOptions {
@@ -298,6 +308,19 @@ sim_expected<BivariateCopulaSpec>
 bivariate_copula_from_tau(BivariateCopulaFamily family,
                           double tau,
                           const BivariateCopulaOptions& options = {});
+
+sim_expected<double>
+bivariate_copula_observed_corr(
+    const BivariateCopulaSpec& copula,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options = {});
+
+sim_expected<BivariateCopulaCorrelationCalibration>
+calibrate_bivariate_copula_correlation(
+    BivariateCopulaFamily family,
+    double target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options = {});
 
 sim_expected<double>
 bivariate_copula_conditional_quantile(
