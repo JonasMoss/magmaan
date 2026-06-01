@@ -253,8 +253,10 @@ golden `parTable()` fixtures.
   tau for one bivariate family. `calibrate_bivariate_copula_correlation_matrix()`
   extends this to every off-diagonal entry of a target correlation matrix and
   returns pairwise parameters, achieved correlations, feasible bounds, and
-  iteration counts. This is a matrix diagnostic/calibration layer rather than a
-  joint sampler; joint copula assembly, positive-definiteness repair, and
+  iteration counts. It also reports maximum absolute error and achieved-matrix
+  eigenvalue diagnostics, with opt-in error/ridge/shrinkage repair toward a
+  requested minimum eigenvalue. This is a matrix diagnostic/calibration layer
+  rather than a joint sampler; joint copula assembly and
   ordinal/polyserial/polychoric calibration are still future work.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for

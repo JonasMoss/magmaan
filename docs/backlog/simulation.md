@@ -92,9 +92,12 @@ simulation work queue and decision log.
   `calibrate_bivariate_copula_correlation_matrix()` applies that calibration to
   every off-diagonal entry of a target correlation matrix and returns pairwise
   copula parameters, achieved correlations, feasible bounds, and iteration
-  counts. This is a matrix diagnostic/calibration layer, not a multivariate
-  Archimedean/vine sampler; joint assembly, positive-definiteness repair, and
-  ordinal/polyserial/polychoric calibration remain separate work.
+  counts. It also reports the maximum achieved-correlation error and the raw
+  minimum eigenvalue of the achieved matrix, with opt-in error/ridge/shrinkage
+  repair toward a requested minimum eigenvalue. This is a matrix
+  diagnostic/calibration layer, not a multivariate Archimedean/vine sampler;
+  joint assembly and ordinal/polyserial/polychoric calibration remain separate
+  work.
 
 ## Architecture Direction
 
@@ -266,8 +269,9 @@ Validation:
   `calibrate_bivariate_copula_correlation()`, and
   `calibrate_bivariate_copula_correlation_matrix()`. The current matrix scope
   is pairwise calibration/diagnostics for one bivariate family across quantile
-  marginals; joint copula assembly and ordinal/polyserial/polychoric
-  calibration remain.
+  marginals, including maximum-error/minimum-eigenvalue diagnostics and opt-in
+  error/ridge/shrinkage repair for indefinite achieved matrices. Joint copula
+  assembly and ordinal/polyserial/polychoric calibration remain.
 - **Landed, first PLSIM slice.** Add piecewise-linear simulation through
   `fit_plsim_marginal()`, `calibrate_plsim()`, `simulate_plsim_matrix()`, and
   `simulate_plsim_raw()`. Unit coverage checks the skewness 2 / excess kurtosis
@@ -276,8 +280,8 @@ Validation:
   stochastic moments, and raw-data wrapping. Remaining PLSIM work is a faster
   exact rectangle-moment covariance evaluator plus benchmark/check tooling for
   calibration speed and accuracy.
-- **S.** Extend VITA/covsim-style simulation from matrix diagnostics to joint
-  assembly, feasibility policy, and positive-definiteness repair.
+- **S.** Extend VITA/covsim-style simulation from repaired matrix diagnostics
+  to joint assembly and a clear vine/multivariate-copula policy.
 - **S.** Decide whether Johnson SL should be exposed beyond the direct
   `MarginalSpec::johnson()` constructor.
 - **S.** Decide the long-term special-functions policy before expanding the

@@ -35,6 +35,13 @@ enum class BivariateCopulaFamily : std::uint8_t {
   Joe,
 };
 
+enum class BivariateCopulaCorrelationRepairKind : std::uint8_t {
+  None,
+  Error,
+  Ridge,
+  Shrinkage,
+};
+
 struct ShapeMoments {
   double skewness = 0.0;
   double excess_kurtosis = 0.0;
@@ -180,6 +187,9 @@ struct BivariateCopulaOptions {
   int quadrature_points = 31;
   int max_bisection_iter = 80;
   double calibration_tol = 1e-6;
+  BivariateCopulaCorrelationRepairKind matrix_repair =
+      BivariateCopulaCorrelationRepairKind::None;
+  double matrix_repair_min_eigenvalue = 1e-8;
 };
 
 struct BivariateCopulaSpec {
@@ -200,9 +210,16 @@ struct BivariateCopulaMatrixCalibration {
   BivariateCopulaFamily family = BivariateCopulaFamily::Independence;
   Eigen::MatrixXd theta;
   Eigen::MatrixXd achieved_corr;
+  Eigen::MatrixXd repaired_corr;
   Eigen::MatrixXd lower_bound_corr;
   Eigen::MatrixXd upper_bound_corr;
   Eigen::MatrixXi iterations;
+  double max_abs_error = 0.0;
+  double raw_min_eigenvalue = 0.0;
+  double repaired_min_eigenvalue = 0.0;
+  double repair_ridge = 0.0;
+  double repair_shrinkage = 0.0;
+  bool repair_applied = false;
 };
 
 struct IndependentOptions {
