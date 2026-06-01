@@ -127,6 +127,8 @@ simulation work queue and decision log.
   The `simulate_cvine3_copula_*()` overloads that take a
   `CVine3CorrelationCalibration` apply the selected vine order internally and
   restore output columns to the caller's original order.
+  `simulate_mixed_population_cvine3_copula()` composes explicit or calibrated
+  three-variable C-vine draws with the shared observed projection layer.
   Higher-dimensional vines, broader structure/family policies, and
   ordinal/polyserial/polychoric calibration remain separate work.
 
@@ -327,6 +329,9 @@ Validation:
   `simulate_cvine3_copula_matrix()` / `simulate_cvine3_copula_raw()` overloads
   for `CVine3CorrelationCalibration`, preserving selected root/order internally
   while returning draws in the original variable order.
+- **Landed, C-vine population composition.** Add continuous and mixed
+  population helpers for explicit `CVine3CopulaSpec` and calibrated
+  `CVine3CorrelationCalibration`, reusing the shared observed projection layer.
 - **Landed, first PLSIM slice.** Add piecewise-linear simulation through
   `fit_plsim_marginal()`, `diagnose_plsim()`, `calibrate_plsim()`,
   `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. Unit coverage checks
