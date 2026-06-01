@@ -179,6 +179,10 @@ golden `parTable()` fixtures.
   Cholesky factorization. `simulate_norta_matrix()` samples a complete
   `Eigen::MatrixXd`; `simulate_norta_raw()` wraps the same matrix in
   `data::RawData` for downstream sample-stat builders.
+- The same marginal-transform surface is reused by independent generators:
+  `simulate_independent_matrix()` and `simulate_independent_raw()` draw
+  independent latent standard normals, transform each column through its
+  marginal, and skip NORTA correlation calibration entirely.
 - Initial NORTA marginals are standard normal, standardized lognormal, and
   Tukey g-and-h. The Tukey path is a pragmatic skew/tail stress family with
   numerically standardized moments and `0 <= h < 0.25` so fourth moments are

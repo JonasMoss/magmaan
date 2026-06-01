@@ -202,9 +202,13 @@ Local-first safety tooling for an AI-assisted repo. Design note:
 - **Landed, first slice.** `magmaan::sim` now has a NORTA primitive with
   explicit calibration (`calibrate_norta`) and sampling
   (`simulate_norta_matrix`, `simulate_norta_raw`). The first marginal families
-  are standard normal, standardized lognormal, and Tukey g-and-h; unit tests
+  are standard normal, standardized lognormal, and Tukey g-and-h. The same
+  marginal-transform machinery also powers independent generators
+  (`simulate_independent_matrix`, `simulate_independent_raw`) for simulation
+  conditions where covariance is irrelevant or supplied downstream. Unit tests
   cover normal identity calibration, analytic lognormal calibration,
-  infeasible lognormal correlations, and a mixed-marginal stochastic smoke.
+  infeasible lognormal correlations, independent Tukey generation, raw-data
+  wrapping, and a mixed-marginal stochastic smoke.
 - **M.** Add exact skew/kurtosis moment-matching marginals for NORTA. Preferred
   order: prototype Pearson-system fitting against R `PearsonDS::pearsonFitM()`
   / `qpearson()` fixtures, then decide whether to implement the Pearson

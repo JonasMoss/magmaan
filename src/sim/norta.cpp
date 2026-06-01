@@ -220,6 +220,46 @@ validate_target(const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
   return {};
 }
 
+sim_expected<void>
+validate_independent_inputs(Eigen::Index n,
+                            const std::vector<MarginalSpec>& marginals,
+                            const IndependentOptions& options) {
+  if (n <= 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_independent_matrix: n must be positive"));
+  }
+  if (marginals.empty()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_independent_matrix: marginals must not be empty"));
+  }
+  if (options.quadrature_points < 8) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_independent_matrix: quadrature_points must be at least 8"));
+  }
+  for (const auto& marginal : marginals) {
+    if (auto ok = validate_marginal(marginal); !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
+  }
+  return {};
+}
+
+sim_expected<std::vector<MarginalMoments>>
+build_marginal_moments(const std::vector<MarginalSpec>& marginals,
+                       const GaussHermite& gh) {
+  std::vector<MarginalMoments> moments;
+  moments.reserve(marginals.size());
+  for (const auto& marginal : marginals) {
+    auto mom_or = marginal_moments(marginal, gh);
+    if (!mom_or.has_value()) return std::unexpected(mom_or.error());
+    moments.push_back(*mom_or);
+  }
+  return moments;
+}
+
 double pair_observed_corr(const MarginalSpec& mi,
                           const MarginalMoments& mom_i,
                           const MarginalSpec& mj,
@@ -417,6 +457,46 @@ marginal_quantile(const MarginalSpec& marginal, double u) {
   return marginal.mean + marginal.sd * y;
 }
 
+sim_expected<Eigen::MatrixXd>
+simulate_independent_matrix(Eigen::Index n,
+                            const std::vector<MarginalSpec>& marginals,
+                            std::mt19937_64& rng,
+                            const IndependentOptions& options) {
+  if (auto ok = validate_independent_inputs(n, marginals, options); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  auto gh_or = gauss_hermite(options.quadrature_points);
+  if (!gh_or.has_value()) return std::unexpected(gh_or.error());
+  auto moments_or = build_marginal_moments(marginals, *gh_or);
+  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+  const auto& moments = *moments_or;
+
+  const Eigen::Index p = static_cast<Eigen::Index>(marginals.size());
+  std::normal_distribution<double> normal(0.0, 1.0);
+  Eigen::MatrixXd X(n, p);
+  for (Eigen::Index row = 0; row < n; ++row) {
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const auto idx = static_cast<std::size_t>(j);
+      const double z = normal(rng);
+      const double y = standardized_from_z(marginals[idx], moments[idx], z);
+      X(row, j) = marginals[idx].mean + marginals[idx].sd * y;
+    }
+  }
+  return X;
+}
+
+sim_expected<data::RawData>
+simulate_independent_raw(Eigen::Index n,
+                         const std::vector<MarginalSpec>& marginals,
+                         std::mt19937_64& rng,
+                         const IndependentOptions& options) {
+  auto X_or = simulate_independent_matrix(n, marginals, rng, options);
+  if (!X_or.has_value()) return std::unexpected(X_or.error());
+  data::RawData raw;
+  raw.X.push_back(std::move(*X_or));
+  return raw;
+}
+
 sim_expected<NortaCalibration>
 calibrate_norta(const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
                 const std::vector<MarginalSpec>& marginals,
@@ -429,13 +509,9 @@ calibrate_norta(const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
   if (!gh_or.has_value()) return std::unexpected(gh_or.error());
   const auto& gh = *gh_or;
 
-  std::vector<MarginalMoments> moments;
-  moments.reserve(marginals.size());
-  for (const auto& marginal : marginals) {
-    auto mom_or = marginal_moments(marginal, gh);
-    if (!mom_or.has_value()) return std::unexpected(mom_or.error());
-    moments.push_back(*mom_or);
-  }
+  auto moments_or = build_marginal_moments(marginals, gh);
+  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+  const auto& moments = *moments_or;
 
   const Eigen::Index p = target_corr.rows();
   NortaCalibration out;
@@ -484,13 +560,9 @@ simulate_norta_matrix(Eigen::Index n,
 
   auto gh_or = gauss_hermite(options.quadrature_points);
   if (!gh_or.has_value()) return std::unexpected(gh_or.error());
-  std::vector<MarginalMoments> moments;
-  moments.reserve(marginals.size());
-  for (const auto& marginal : marginals) {
-    auto mom_or = marginal_moments(marginal, *gh_or);
-    if (!mom_or.has_value()) return std::unexpected(mom_or.error());
-    moments.push_back(*mom_or);
-  }
+  auto moments_or = build_marginal_moments(marginals, *gh_or);
+  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+  const auto& moments = *moments_or;
 
   const Eigen::Index p = target_corr.rows();
   std::normal_distribution<double> normal(0.0, 1.0);

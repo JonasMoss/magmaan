@@ -49,6 +49,10 @@ struct NortaOptions {
   double cholesky_jitter = 1e-10;
 };
 
+struct IndependentOptions {
+  int quadrature_points = 31;
+};
+
 struct NortaCalibration {
   Eigen::MatrixXd latent_corr;
   Eigen::VectorXd marginal_mean;
@@ -62,6 +66,18 @@ double normal_cdf(double z) noexcept;
 
 sim_expected<double>
 marginal_quantile(const MarginalSpec& marginal, double u);
+
+sim_expected<Eigen::MatrixXd>
+simulate_independent_matrix(Eigen::Index n,
+                            const std::vector<MarginalSpec>& marginals,
+                            std::mt19937_64& rng,
+                            const IndependentOptions& options = {});
+
+sim_expected<data::RawData>
+simulate_independent_raw(Eigen::Index n,
+                         const std::vector<MarginalSpec>& marginals,
+                         std::mt19937_64& rng,
+                         const IndependentOptions& options = {});
 
 sim_expected<NortaCalibration>
 calibrate_norta(const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
