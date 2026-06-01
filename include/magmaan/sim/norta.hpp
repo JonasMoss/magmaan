@@ -203,6 +203,12 @@ struct CVine3CopulaSpec {
   BivariateCopulaSpec copula_12_given_0 = {};
 };
 
+struct CVine3FamilySpec {
+  BivariateCopulaFamily family_01 = BivariateCopulaFamily::Independence;
+  BivariateCopulaFamily family_02 = BivariateCopulaFamily::Independence;
+  BivariateCopulaFamily family_12_given_0 = BivariateCopulaFamily::Independence;
+};
+
 struct BivariateCopulaCorrelationCalibration {
   BivariateCopulaSpec copula = {};
   double target_corr = 0.0;
@@ -389,8 +395,22 @@ calibrate_cvine3_copula_correlation(
     const BivariateCopulaOptions& options = {});
 
 sim_expected<CVine3CorrelationCalibration>
+calibrate_cvine3_copula_correlation(
+    const CVine3FamilySpec& families,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options = {});
+
+sim_expected<CVine3CorrelationCalibration>
 calibrate_cvine3_copula_correlation_select_root(
     BivariateCopulaFamily family,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options = {});
+
+sim_expected<CVine3CorrelationCalibration>
+calibrate_cvine3_copula_correlation_select_families(
+    const std::vector<BivariateCopulaFamily>& family_set,
     const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
     const std::vector<MarginalSpec>& marginals,
     const BivariateCopulaOptions& options = {});
