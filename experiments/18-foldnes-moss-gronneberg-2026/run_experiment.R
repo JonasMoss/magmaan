@@ -273,17 +273,30 @@ cat(sprintf("  reps=%d, cells=%d%s\n", args$reps, nrow(cell_grid),
 
 # ── Run ─────────────────────────────────────────────────────────────────────
 all_chi2 <- list(); all_meta <- list(); all_parity <- vector("list", nrow(cell_grid))
+.sim_cal_cache <- new.env(parent = emptyenv())
 t0 <- proc.time()[["elapsed"]]
 for (ci in seq_len(nrow(cell_grid))) {
   cell <- as.list(cell_grid[ci, , drop = FALSE])
   tc0 <- proc.time()[["elapsed"]]
   pop <- build_population_5factor(cell$p)
   cell_seed_base <- args$seed_base + ci * 10000L
+  fam <- dist_family(cell$dist)
+  cal_key <- if (fam %in% c("ig", "pl")) {
+    paste(fam, cell$p, cell$dist, sep = ":")
+  } else NULL
+  cached_cal <- if (!is.null(cal_key) && exists(cal_key, envir = .sim_cal_cache,
+                                               inherits = FALSE)) {
+    get(cal_key, envir = .sim_cal_cache)
+  } else NULL
   sampler <- make_cell_sampler(
     pop, cell$N, cell$dist, args$reps, cell_seed_base,
     moments = dist_moments,
     fl = if (cell$dist == "norm") NULL else fl_cache[[cell$dist]],
-    core = core)
+    core = core,
+    sim_calibration = cached_cal)
+  if (!is.null(cal_key) && is.null(cached_cal) && !is.null(sampler$calibration)) {
+    assign(cal_key, sampler$calibration, envir = .sim_cal_cache)
+  }
   ctx <- list(pop = pop, spec = get_spec(cell$p, pop$per_factor),
               varnames = paste0("x", seq_len(cell$p)),
               sampler = sampler)

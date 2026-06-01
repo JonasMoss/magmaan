@@ -2579,7 +2579,7 @@ calibrate_norta(const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
 
 sim_expected<Eigen::MatrixXd>
 simulate_norta_matrix(Eigen::Index n,
-                      const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+                      const NortaCalibration& calibration,
                       const std::vector<MarginalSpec>& marginals,
                       std::mt19937_64& rng,
                       const NortaOptions& options) {
@@ -2588,10 +2588,25 @@ simulate_norta_matrix(Eigen::Index n,
         SimError::Kind::InvalidInput,
         "simulate_norta_matrix: n must be positive"));
   }
-
-  auto cal_or = calibrate_norta(target_corr, marginals, options);
-  if (!cal_or.has_value()) return std::unexpected(cal_or.error());
-  auto L_or = cholesky_factor_with_jitter(cal_or->latent_corr, options.cholesky_jitter);
+  if (calibration.latent_corr.rows() == 0 ||
+      calibration.latent_corr.rows() != calibration.latent_corr.cols()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_norta_matrix: calibration latent correlation must be square and non-empty"));
+  }
+  const Eigen::Index p = calibration.latent_corr.rows();
+  if (static_cast<Eigen::Index>(marginals.size()) != p) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_norta_matrix: marginal count must match calibration dimension"));
+  }
+  if (!calibration.latent_corr.allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_norta_matrix: calibration latent correlation must be finite"));
+  }
+  auto L_or = cholesky_factor_with_jitter(
+      calibration.latent_corr, options.cholesky_jitter);
   if (!L_or.has_value()) return std::unexpected(L_or.error());
 
   auto gh_or = gauss_hermite(options.quadrature_points);
@@ -2600,7 +2615,6 @@ simulate_norta_matrix(Eigen::Index n,
   if (!moments_or.has_value()) return std::unexpected(moments_or.error());
   const auto& moments = *moments_or;
 
-  const Eigen::Index p = target_corr.rows();
   std::normal_distribution<double> normal(0.0, 1.0);
   Eigen::MatrixXd X(n, p);
   for (Eigen::Index row = 0; row < n; ++row) {
@@ -2614,6 +2628,30 @@ simulate_norta_matrix(Eigen::Index n,
     }
   }
   return X;
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_norta_matrix(Eigen::Index n,
+                      const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+                      const std::vector<MarginalSpec>& marginals,
+                      std::mt19937_64& rng,
+                      const NortaOptions& options) {
+  auto cal_or = calibrate_norta(target_corr, marginals, options);
+  if (!cal_or.has_value()) return std::unexpected(cal_or.error());
+  return simulate_norta_matrix(n, *cal_or, marginals, rng, options);
+}
+
+sim_expected<data::RawData>
+simulate_norta_raw(Eigen::Index n,
+                   const NortaCalibration& calibration,
+                   const std::vector<MarginalSpec>& marginals,
+                   std::mt19937_64& rng,
+                   const NortaOptions& options) {
+  auto X_or = simulate_norta_matrix(n, calibration, marginals, rng, options);
+  if (!X_or.has_value()) return std::unexpected(X_or.error());
+  data::RawData raw;
+  raw.X.push_back(std::move(*X_or));
+  return raw;
 }
 
 sim_expected<data::RawData>
