@@ -135,6 +135,7 @@ add_library(magmaan STATIC
   src/robust/weighted_inference.cpp
   src/sim/normal.cpp
   src/sim/norta.cpp
+  src/sim/projection.cpp
   src/sim/vale_maurelli.cpp
   src/measures/fit_measures.cpp
   src/measures/standardized.cpp
