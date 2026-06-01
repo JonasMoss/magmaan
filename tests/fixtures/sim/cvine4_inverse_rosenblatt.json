@@ -1,0 +1,53 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "sim.cvine4_inverse_rosenblatt",
+    "oracle": "rvinecopulib 0.7.3.1.0 inverse_rosenblatt(vinecop_dist(..., cvine_structure(c(4,3,2,1))))"
+  },
+  "cases": [
+    {
+      "id": "four_variable_mixed",
+      "structure": "cvine_root0_order_4_3_2_1",
+      "copula_10": {
+        "family": "frank",
+        "rotation": 0,
+        "parameters": 3
+      },
+      "copula_20": {
+        "family": "frank",
+        "rotation": 0,
+        "parameters": -2
+      },
+      "copula_21_given_0": {
+        "family": "frank",
+        "rotation": 0,
+        "parameters": 3
+      },
+      "copula_30": {
+        "family": "clayton",
+        "rotation": 0,
+        "parameters": 1.2
+      },
+      "copula_31_given_0": {
+        "family": "indep",
+        "rotation": 0,
+        "parameters": []
+      },
+      "copula_32_given_01": {
+        "family": "frank",
+        "rotation": 0,
+        "parameters": -2
+      },
+      "points": [
+        {
+          "independent_u": [0.11, 0.22, 0.33, 0.44],
+          "copula_u": [0.11, 0.103876725333976, 0.373413777007954, 0.197607020529059]
+        },
+        {
+          "independent_u": [0.81, 0.72, 0.63, 0.54],
+          "copula_u": [0.81, 0.836773638002342, 0.592148680036189, 0.66195806735483]
+        }
+      ]
+    }
+  ]
+}

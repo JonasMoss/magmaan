@@ -3851,6 +3851,7 @@ cvine_copula_inverse_rosenblatt(
   }
 
   Eigen::MatrixXd U(independent_u.rows(), d);
+  Eigen::MatrixXd h_forward(d, d);
   for (Eigen::Index row = 0; row < independent_u.rows(); ++row) {
     for (Eigen::Index col = 0; col < d; ++col) {
       if (independent_u(row, col) <= 0.0 ||
@@ -3860,19 +3861,34 @@ cvine_copula_inverse_rosenblatt(
             "cvine_copula_inverse_rosenblatt: independent_u entries must satisfy 0 < u < 1"));
       }
     }
+    h_forward.setZero();
     U(row, 0) = independent_u(row, 0);
+    h_forward(0, 0) = U(row, 0);
     for (Eigen::Index j = 1; j < d; ++j) {
       double x = independent_u(row, j);
       for (Eigen::Index k = j - 1; k >= 0; --k) {
         auto next_or = invert_bivariate_conditional(
             copula.pair_copulas[static_cast<std::size_t>(j)]
                                [static_cast<std::size_t>(k)],
-            independent_u(row, k), x, options.max_bisection_iter);
+            h_forward(k, k), x, options.max_bisection_iter);
         if (!next_or.has_value()) return std::unexpected(next_or.error());
         x = *next_or;
         if (k == 0) break;
       }
       U(row, j) = x;
+      h_forward(j, 0) = x;
+      for (Eigen::Index k = 0; k < j; ++k) {
+        const double h = bivariate_conditional_u(
+            copula.pair_copulas[static_cast<std::size_t>(j)]
+                               [static_cast<std::size_t>(k)],
+            h_forward(k, k), h_forward(j, k));
+        if (!std::isfinite(h)) {
+          return std::unexpected(make_err(
+              SimError::Kind::NumericIssue,
+              "cvine_copula_inverse_rosenblatt: non-finite h-function"));
+        }
+        h_forward(j, k + 1) = open_unit(h);
+      }
     }
   }
   return U;
