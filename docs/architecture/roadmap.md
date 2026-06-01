@@ -305,8 +305,10 @@ golden `parTable()` fixtures.
   three-variable C-vine draws with the observed projection layer.
   Unit validation now covers the full 3-variable path from target observed
   correlation through structure/family calibration to deterministic-seed
-  simulated correlations.
-  Higher-dimensional vines, broader structure/family policies, and
+  simulated correlations. Generic fixed-order C-vine sampling is available
+  through `CVineCopulaSpec`, `cvine_copula_inverse_rosenblatt()`, and
+  `simulate_cvine_copula_*()` for arbitrary dimension. Higher-dimensional
+  calibration, broader structure/family policies, and
   ordinal/polyserial/polychoric calibration are still future work.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for
