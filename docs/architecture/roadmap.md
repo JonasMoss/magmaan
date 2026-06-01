@@ -289,6 +289,9 @@ golden `parTable()` fixtures.
   columns in the caller's original variable order.
   `simulate_mixed_population_cvine3_copula()` composes explicit or calibrated
   three-variable C-vine draws with the observed projection layer.
+  Unit validation now covers the full 3-variable path from target observed
+  correlation through structure/family calibration to deterministic-seed
+  simulated correlations.
   Higher-dimensional vines, broader structure/family policies, and
   ordinal/polyserial/polychoric calibration are still future work.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails

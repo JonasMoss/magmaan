@@ -129,6 +129,8 @@ simulation work queue and decision log.
   restore output columns to the caller's original order.
   `simulate_mixed_population_cvine3_copula()` composes explicit or calibrated
   three-variable C-vine draws with the shared observed projection layer.
+  Unit validation covers the full target-correlation -> selected calibrated
+  C-vine -> deterministic-seed simulated correlations path.
   Higher-dimensional vines, broader structure/family policies, and
   ordinal/polyserial/polychoric calibration remain separate work.
 
@@ -332,6 +334,10 @@ Validation:
 - **Landed, C-vine population composition.** Add continuous and mixed
   population helpers for explicit `CVine3CopulaSpec` and calibrated
   `CVine3CorrelationCalibration`, reusing the shared observed projection layer.
+- **Landed, full 3-variable VITA smoke validation.** Add a deterministic-seed
+  simulation check that calibrates a target observed-correlation matrix, draws
+  from the selected calibrated C-vine, and verifies empirical correlations
+  against both the target and deterministic achieved-correlation diagnostics.
 - **Landed, first PLSIM slice.** Add piecewise-linear simulation through
   `fit_plsim_marginal()`, `diagnose_plsim()`, `calibrate_plsim()`,
   `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. Unit coverage checks

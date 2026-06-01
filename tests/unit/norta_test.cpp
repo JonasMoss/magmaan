@@ -1221,6 +1221,48 @@ TEST_CASE("C-vine 3 calibration simulation restores original variable order") {
   CHECK(bad_or.error().kind == magmaan::SimError::Kind::InvalidInput);
 }
 
+TEST_CASE("C-vine 3 calibrated simulation tracks target correlations") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.20),
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.35)};
+  Eigen::MatrixXd target(3, 3);
+  target << 1.0, 0.18, -0.16,
+            0.18, 1.0, 0.14,
+           -0.16, 0.14, 1.0;
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 13;
+  options.max_bisection_iter = 45;
+  options.calibration_tol = 1.5e-3;
+
+  const std::vector<magmaan::sim::BivariateCopulaFamily> family_set{
+      magmaan::sim::BivariateCopulaFamily::Clayton,
+      magmaan::sim::BivariateCopulaFamily::Frank};
+  auto cal_or =
+      magmaan::sim::calibrate_cvine3_copula_correlation_select_structure(
+          family_set, target, marginals, options);
+  if (!cal_or.has_value()) MESSAGE(cal_or.error().detail);
+  REQUIRE(cal_or.has_value());
+  if (!cal_or.has_value()) return;
+  REQUIRE(cal_or->max_abs_error < 1.0e-2);
+
+  std::mt19937_64 rng(20260612);
+  auto X_or = magmaan::sim::simulate_cvine3_copula_matrix(
+      30000, *cal_or, marginals, rng, options);
+  if (!X_or.has_value()) MESSAGE(X_or.error().detail);
+  REQUIRE(X_or.has_value());
+
+  Eigen::MatrixXd empirical = Eigen::MatrixXd::Identity(3, 3);
+  empirical(0, 1) = empirical(1, 0) = sample_corr(*X_or, 0, 1);
+  empirical(0, 2) = empirical(2, 0) = sample_corr(*X_or, 0, 2);
+  empirical(1, 2) = empirical(2, 1) = sample_corr(*X_or, 1, 2);
+  CHECK(empirical(0, 1) == doctest::Approx(target(0, 1)).epsilon(2.5e-2));
+  CHECK(empirical(0, 2) == doctest::Approx(target(0, 2)).epsilon(2.5e-2));
+  CHECK(empirical(1, 2) == doctest::Approx(target(1, 2)).epsilon(2.5e-2));
+  CHECK((empirical - cal_or->achieved_corr).cwiseAbs().maxCoeff() < 3.0e-2);
+}
+
 TEST_CASE("bivariate copula raw generator validates parameters and marginals") {
   const std::vector<magmaan::sim::MarginalSpec> marginals{
       magmaan::sim::MarginalSpec::standard_normal(),
