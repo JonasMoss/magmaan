@@ -319,6 +319,46 @@ TEST_CASE("Pearson moment matcher matches PearsonDS goldens") {
   }
 }
 
+TEST_CASE("Johnson moment matcher matches SuppDists goldens") {
+  const std::string path = magmaan::test::fixtures_dir() +
+                           "/sim/johnson_moment_match.json";
+  auto raw = magmaan::test::read_fixture(path);
+  REQUIRE(raw.has_value());
+  auto fixture = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(fixture.is_discarded());
+
+  for (const auto& c : fixture["cases"]) {
+    const std::string id = c["id"].get<std::string>();
+    CAPTURE(id);
+    magmaan::sim::MomentMatchSpec spec;
+    spec.family = magmaan::sim::MomentMatchFamily::Johnson;
+    spec.mean = c["mean"].get<double>();
+    spec.sd = c["sd"].get<double>();
+    spec.shape.skewness = c["skewness"].get<double>();
+    spec.shape.excess_kurtosis = c["excess_kurtosis"].get<double>();
+
+    auto fit_or = magmaan::sim::fit_marginal_to_moments(spec);
+    REQUIRE(fit_or.has_value());
+    if (!fit_or.has_value()) continue;
+    const auto& got = fit_or->marginal;
+    CHECK(got.kind == magmaan::sim::MarginalKind::Johnson);
+    CHECK(got.johnson_type == c["johnson_type"].get<int>());
+    CHECK(got.johnson_gamma == doctest::Approx(
+        c["johnson_gamma"].get<double>()).epsilon(1e-7).scale(1.0));
+    CHECK(got.johnson_delta == doctest::Approx(
+        c["johnson_delta"].get<double>()).epsilon(1e-7).scale(1.0));
+
+    const auto& probs = c["probabilities"];
+    const auto& quantiles = c["quantiles"];
+    for (std::size_t i = 0; i < probs.size(); ++i) {
+      auto q_or = magmaan::sim::marginal_quantile(got, probs[i].get<double>());
+      REQUIRE(q_or.has_value());
+      CHECK(*q_or == doctest::Approx(
+          quantiles[i].get<double>()).epsilon(1e-7).scale(1.0));
+    }
+  }
+}
+
 TEST_CASE("Johnson moment matcher fits SU and SB shape moments") {
   magmaan::sim::MomentMatchSpec spec;
   spec.family = magmaan::sim::MomentMatchFamily::Johnson;
@@ -371,6 +411,64 @@ TEST_CASE("moment-matched Johnson marginals feed NORTA calibration") {
   auto cal_or = magmaan::sim::calibrate_norta(corr2(0.30), marginals);
   REQUIRE(cal_or.has_value());
   CHECK(cal_or->latent_corr(0, 1) > 0.0);
+}
+
+TEST_CASE("Fleishman moment matcher fits polynomial shape moments") {
+  const double c = 0.12;
+  const double d = 0.08;
+  const double b = -3.0 * d + std::sqrt(1.0 - 2.0 * c * c - 6.0 * d * d);
+  auto source_summary_or = magmaan::sim::marginal_moment_summary(
+      magmaan::sim::MarginalSpec::fleishman(b, c, d), 81);
+  REQUIRE(source_summary_or.has_value());
+
+  magmaan::sim::MomentMatchSpec spec;
+  spec.family = magmaan::sim::MomentMatchFamily::Fleishman;
+  spec.shape.skewness = source_summary_or->skewness;
+  spec.shape.excess_kurtosis = source_summary_or->excess_kurtosis;
+
+  magmaan::sim::MomentMatchOptions options;
+  options.quadrature_points = 81;
+  auto fit_or = magmaan::sim::fit_marginal_to_moments(spec, options);
+  if (!fit_or.has_value()) MESSAGE(fit_or.error().detail);
+  REQUIRE(fit_or.has_value());
+  if (!fit_or.has_value()) return;
+  CHECK(fit_or->marginal.kind == magmaan::sim::MarginalKind::Fleishman);
+  CHECK(fit_or->moments.skewness ==
+        doctest::Approx(spec.shape.skewness).epsilon(2e-6));
+  CHECK(fit_or->moments.excess_kurtosis ==
+        doctest::Approx(spec.shape.excess_kurtosis).epsilon(2e-6));
+
+  auto q_or = magmaan::sim::marginal_quantile(fit_or->marginal, 0.5);
+  REQUIRE_FALSE(q_or.has_value());
+  CHECK(q_or.error().kind == magmaan::SimError::Kind::InvalidMarginal);
+}
+
+TEST_CASE("IG calibration can use Fleishman generator marginals") {
+  const Eigen::MatrixXd sigma = Eigen::MatrixXd::Identity(2, 2);
+  Eigen::VectorXd target_skewness(2);
+  target_skewness << 0.45, -0.30;
+  Eigen::VectorXd target_excess_kurtosis(2);
+  target_excess_kurtosis << 0.80, 0.55;
+
+  magmaan::sim::IgOptions options;
+  options.generator_family = magmaan::sim::MomentMatchFamily::Fleishman;
+  options.moment_match.quadrature_points = 81;
+
+  auto cal_or = magmaan::sim::calibrate_ig(
+      sigma, target_skewness, target_excess_kurtosis, options);
+  if (!cal_or.has_value()) MESSAGE(cal_or.error().detail);
+  REQUIRE(cal_or.has_value());
+  if (!cal_or.has_value()) return;
+  REQUIRE(cal_or->generator_marginals.size() == 2);
+  CHECK(cal_or->generator_marginals[0].kind ==
+        magmaan::sim::MarginalKind::Fleishman);
+  CHECK(cal_or->generator_marginals[1].kind ==
+        magmaan::sim::MarginalKind::Fleishman);
+  check_ig_moment_system(cal_or->root,
+                         cal_or->generator_skewness,
+                         cal_or->generator_excess_kurtosis,
+                         target_skewness,
+                         target_excess_kurtosis);
 }
 
 TEST_CASE("IG simulation respects covariance and target marginal shapes") {

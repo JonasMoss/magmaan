@@ -1,0 +1,93 @@
+{
+  "_meta": {
+    "format_version": 1,
+    "fixture_kind": "sim.johnson_moment_match",
+    "oracle": "SuppDists 1.1.9.9 JohnsonFit/qJohnson (shape + quantiles); realized moments via R integrate"
+  },
+  "cases": [
+    {
+      "id": "su_positive_skew",
+      "requested_skewness": 0.8,
+      "requested_excess_kurtosis": 1.5,
+      "mean": 0,
+      "sd": 1,
+      "skewness": 0.799524031817795,
+      "excess_kurtosis": 1.49893904875003,
+      "johnson_type": 2,
+      "johnson_gamma": -2.28743366573992,
+      "johnson_delta": 2.80301697697775,
+      "probabilities": [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999],
+      "quantiles": [-2.4133015887373, -1.88372656341846, -1.15485436918137, -0.11450266430528, 1.29651074661123, 2.92555857808457, 4.52575502932906]
+    },
+    {
+      "id": "su_negative_skew",
+      "requested_skewness": -0.8,
+      "requested_excess_kurtosis": 1.5,
+      "mean": 2,
+      "sd": 3,
+      "skewness": -0.799524031817795,
+      "excess_kurtosis": 1.49893904875003,
+      "johnson_type": 2,
+      "johnson_gamma": 2.28743366573992,
+      "johnson_delta": 2.80301697697775,
+      "probabilities": [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999],
+      "quantiles": [-11.5772650879872, -6.7766757342537, -1.88953223983369, 2.34350799291584, 5.4645631075441, 7.65117969025537, 9.23990476621189]
+    },
+    {
+      "id": "su_high_kurtosis",
+      "requested_skewness": 0.5,
+      "requested_excess_kurtosis": 3,
+      "mean": -1,
+      "sd": 0.5,
+      "skewness": 0.490699559995493,
+      "excess_kurtosis": 2.98655876618596,
+      "johnson_type": 2,
+      "johnson_gamma": -0.321922079483366,
+      "johnson_delta": 1.6716504165725,
+      "probabilities": [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999],
+      "quantiles": [-2.86469718956457, -2.17714556924376, -1.56698154390611, -1.0256921592754, -0.403486215946945, 0.423434752650435, 1.40448767595239]
+    },
+    {
+      "id": "su_symmetric_heavy_tail",
+      "requested_skewness": 0,
+      "requested_excess_kurtosis": 2,
+      "mean": 0,
+      "sd": 1,
+      "skewness": 0,
+      "excess_kurtosis": 2,
+      "johnson_type": 2,
+      "johnson_gamma": 0,
+      "johnson_delta": 1.82050617369784,
+      "probabilities": [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999],
+      "quantiles": [-4.09955522024379, -2.5717362980754, -1.18638701708904, 0, 1.18638701708904, 2.5717362980754, 4.09955522024379]
+    },
+    {
+      "id": "sb_symmetric_platykurtic",
+      "requested_skewness": 0,
+      "requested_excess_kurtosis": -0.8,
+      "mean": 0,
+      "sd": 1,
+      "skewness": 0,
+      "excess_kurtosis": -0.800038735806257,
+      "johnson_type": 3,
+      "johnson_gamma": 0,
+      "johnson_delta": 1.07851916852227,
+      "probabilities": [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999],
+      "quantiles": [-2.26369202232169, -2.01107730037402, -1.3519584509244, 0, 1.35195845092439, 2.01107730037402, 2.26369202232169]
+    },
+    {
+      "id": "sb_skewed",
+      "requested_skewness": 0.3,
+      "requested_excess_kurtosis": -0.6,
+      "mean": 1,
+      "sd": 2,
+      "skewness": 0.29835371115602,
+      "excess_kurtosis": -0.604357626670442,
+      "johnson_type": 3,
+      "johnson_gamma": 0.493315993170118,
+      "johnson_delta": 1.16593125195558,
+      "probabilities": [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999],
+      "quantiles": [-3.04182973327423, -2.62638239692972, -1.54995594740204, 0.845687362141216, 3.79907529909462, 5.62620368348281, 6.45096249616162]
+    }
+  ]
+}

@@ -17,12 +17,14 @@ enum class MarginalKind : std::uint8_t {
   TukeyGH,
   Pearson,
   Johnson,
+  Fleishman,
 };
 
 enum class MomentMatchFamily : std::uint8_t {
   TukeyGH,
   Pearson,
   Johnson,
+  Fleishman,
 };
 
 struct ShapeMoments {
@@ -66,6 +68,12 @@ struct MarginalSpec {
   double johnson_gamma = 0.0;
   double johnson_delta = 1.0;
 
+  // Fleishman cubic polynomial: a + bZ + cZ^2 + dZ^3, with a = -c for
+  // zero raw mean. Moment fitting chooses b from the unit-variance equation.
+  double fleishman_b = 1.0;
+  double fleishman_c = 0.0;
+  double fleishman_d = 0.0;
+
   static MarginalSpec standard_normal(double mean = 0.0, double sd = 1.0);
   static MarginalSpec standardized_lognormal(double sigma_log,
                                              double mean = 0.0,
@@ -86,6 +94,11 @@ struct MarginalSpec {
                               double delta,
                               double mean = 0.0,
                               double sd = 1.0);
+  static MarginalSpec fleishman(double b,
+                                double c,
+                                double d,
+                                double mean = 0.0,
+                                double sd = 1.0);
 };
 
 struct MomentMatchSpec {
