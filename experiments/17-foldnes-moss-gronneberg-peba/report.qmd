@@ -108,12 +108,12 @@ are far tighter than any Monte Carlo rejection-rate cell can resolve.
 
 ## Caveats
 
-- The populations are the paper's **exact** two-factor models, and the default
-  grid runs all three sizes (`p ∈ {10, 20, 40}`) and all seven distributions
-  (normal plus VM, IG, PL at both severities). What remains **trimmed** is the
-  evaluation scale, not the design: `r reps` replicates (the paper uses 3000),
-  two sample sizes (the paper adds 1500 and 3000), and a ten-test subset of the
-  paper's full battery (no Bollen-Stine bootstrap or EBAd).
+- The design now matches the paper: its **exact** two-factor populations, the
+  full 84-condition grid (`p ∈ {10, 20, 40}` × `N ∈ {400, 800, 1500, 3000}` ×
+  seven distributions), and its full battery of 42 test statistics. The one
+  omission is the **Bollen-Stine bootstrap** (the paper's 43rd test), which
+  magmaan does not implement. The only remaining knob is replicate count:
+  `r reps` here versus the paper's 3000.
 - At `r reps` replicates the rejection rates carry visible Monte Carlo noise; the
   table establishes the *direction and ordering* of the effect, not precise rates.
   The procedure-parity finding, by contrast, is exact and replicate-independent.
@@ -125,11 +125,11 @@ are far tighter than any Monte Carlo rejection-rate cell can resolve.
 ## Reproduce
 
 ```sh
-# full default grid (p in {10,20,40}, N in {400,800}, all 7 distributions), parity
+# full 84-condition grid (p {10,20,40} x N {400,800,1500,3000} x 7 dists), parity
 Rscript run_experiment.R --reps 100 --semtests-parity
 
-# heavier run on a single slice, e.g. the large model or the severe PL cell
-Rscript run_experiment.R --reps 1000 --cells p=40
+# the large/heavy cells are p=40 at N=3000; scope with --cells when iterating
+Rscript run_experiment.R --reps 1000 --cells p=10,N=400
 Rscript run_experiment.R --reps 1000 --cells dist=pl2
 
 Rscript run_experiment.R --help

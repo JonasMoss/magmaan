@@ -7,15 +7,17 @@
 # Two questions, one design (correctly-specified two-factor CFA, p in {10,20,40},
 # data normal or non-normal):
 #
-#  (1) PROCEDURE PARITY. Does magmaan's penalized eigenvalue-block-averaging
-#      family (pEBA / pOLS / SB / SS, x T_ML/T_RLS x biased/unbiased Gamma),
+#  (1) PROCEDURE PARITY. Does magmaan's eigenvalue-block-averaging family
+#      (SB / SS / EBA / pEBA / pOLS / EBAd, x T_ML/T_RLS x biased/unbiased Gamma),
 #      computed through fmg_pvalues(), reproduce the paper's own semTests
 #      p-values fit-for-fit? This is the decisive correctness check.
 #
-#  (2) TYPE I ERROR. Under correct specification, do the recommended tests
-#      (pEBA4_RLS, pOLS_RLS) hold the nominal 5% rejection rate where the
-#      classical ML chi-square does not, as the model grows and the data turn
-#      non-normal? A trimmed replication of the paper's rejection-rate tables.
+#  (2) TYPE I ERROR. Under correct specification, do the robustified tests hold
+#      the nominal 5% rejection rate where the classical ML chi-square does not,
+#      as the model grows and the data turn non-normal? The full 84-condition
+#      grid and the paper's 42-statistic battery; only the replicate count is
+#      scaled down (--reps) from the paper's 3000. The Bollen-Stine bootstrap,
+#      the paper's 43rd statistic, is the one test magmaan does not implement.
 #
 # Usage:
 #   Rscript run_experiment.R [--reps N] [--cells FILTER] [--seed-base S]
@@ -47,11 +49,22 @@ source(.support_helpers())
 rm(.support_helpers)
 source(experiment_path("R", "population.R"))
 
-# The test family scored for rejection rates: classical baselines, the best
-# traditional robust test (SB_UG_RLS), and the penalized recommendations.
-TESTS <- c("std_ml", "std_rls", "sb_ug_rls", "ss_ug_rls",
-           "peba2_rls", "peba4_rls", "peba6_rls", "pols2_rls",
-           "peba4_ug_rls", "pols2_ug_rls")
+# The paper's full test battery: 42 statistics = its 43 minus the Bollen-Stine
+# bootstrap (the one family magmaan does not implement). Two normal-theory base
+# tests (std) plus ten Gamma-dependent families, each crossed over base statistic
+# (ML/RLS) x Gamma estimator (biased / unbiased "ug"): SB, SS, EBA2/4/6,
+# pEBA2/4/6, pOLS (gamma=2), and ALL (= EBAd, singleton blocks).
+.fmg_full_battery <- function() {
+  fams <- c("sb", "ss", "eba2", "eba4", "eba6",
+            "peba2", "peba4", "peba6", "pols2", "all")
+  g <- expand.grid(fam = fams, ug = c("", "ug"), base = c("ml", "rls"),
+                   stringsAsFactors = FALSE)
+  gtests <- vapply(seq_len(nrow(g)), function(i)
+    paste(c(g$fam[[i]], if (nzchar(g$ug[[i]])) g$ug[[i]], g$base[[i]]),
+          collapse = "_"), character(1))
+  c("std_ml", "std_rls", sort(gtests))
+}
+TESTS <- .fmg_full_battery()
 
 parse_args <- function(args) {
   out <- list(reps = 5L, cells_filter = NULL, seed_base = 20240701L,
@@ -109,11 +122,13 @@ dist_moments <- list(
   pl1  = c(2, 7),  pl2 = c(3, 21))
 
 # ── Cell grid ───────────────────────────────────────────────────────────────
-# Full paper grid: norm + all six non-normal cells (VM via the self-contained
-# Fleishman path, IG/PL via magmaan's native simulators -- no covsim).
+# Full paper grid (3 x 4 x 7 = 84 conditions): p in {10,20,40}, the four sample
+# sizes N in {400,800,1500,3000}, and norm + all six non-normal cells (VM via the
+# self-contained Fleishman path, IG/PL via magmaan's native simulators, no
+# covsim). The p=40 / N=3000 cells are heavy; scale with --reps and --cells.
 cell_grid <- expand.grid(
   p    = c(10L, 20L, 40L),
-  N    = c(400L, 800L),
+  N    = c(400L, 800L, 1500L, 3000L),
   dist = c("norm", "vm1", "vm2", "ig1", "ig2", "pl1", "pl2"),
   stringsAsFactors = FALSE)
 if (isTRUE(args$smoke)) {
