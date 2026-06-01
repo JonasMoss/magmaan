@@ -768,6 +768,52 @@ TEST_CASE("bivariate copula calibration targets observed Pearson correlation") {
   CHECK(impossible_or.error().kind == magmaan::SimError::Kind::CalibrationFailed);
 }
 
+TEST_CASE("bivariate copula matrix calibration works pairwise") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.35),
+      magmaan::sim::MarginalSpec::standard_normal()};
+  Eigen::MatrixXd target(3, 3);
+  target << 1.0, 0.30, -0.20,
+            0.30, 1.0, 0.25,
+           -0.20, 0.25, 1.0;
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 17;
+  options.max_bisection_iter = 45;
+  options.calibration_tol = 1e-3;
+
+  auto cal_or = magmaan::sim::calibrate_bivariate_copula_correlation_matrix(
+      magmaan::sim::BivariateCopulaFamily::Frank, target, marginals, options);
+  if (!cal_or.has_value()) MESSAGE(cal_or.error().detail);
+  REQUIRE(cal_or.has_value());
+  if (!cal_or.has_value()) return;
+
+  CHECK(cal_or->theta.rows() == 3);
+  CHECK(cal_or->theta.cols() == 3);
+  CHECK(cal_or->achieved_corr.rows() == 3);
+  CHECK(cal_or->achieved_corr.cols() == 3);
+  for (Eigen::Index i = 0; i < 3; ++i) {
+    CHECK(cal_or->theta(i, i) == doctest::Approx(0.0));
+    CHECK(cal_or->achieved_corr(i, i) == doctest::Approx(1.0));
+    for (Eigen::Index j = i + 1; j < 3; ++j) {
+      CHECK(cal_or->theta(i, j) == doctest::Approx(cal_or->theta(j, i)));
+      CHECK(cal_or->achieved_corr(i, j) ==
+            doctest::Approx(target(i, j)).epsilon(5e-3));
+      CHECK(cal_or->achieved_corr(i, j) ==
+            doctest::Approx(cal_or->achieved_corr(j, i)));
+      CHECK(cal_or->lower_bound_corr(i, j) <= target(i, j));
+      CHECK(cal_or->upper_bound_corr(i, j) >= target(i, j));
+      CHECK(cal_or->iterations(i, j) > 0);
+    }
+  }
+
+  auto impossible_or = magmaan::sim::calibrate_bivariate_copula_correlation_matrix(
+      magmaan::sim::BivariateCopulaFamily::Clayton, target, marginals, options);
+  REQUIRE_FALSE(impossible_or.has_value());
+  CHECK(impossible_or.error().kind == magmaan::SimError::Kind::CalibrationFailed);
+}
+
 TEST_CASE("bivariate copula raw generator validates parameters and marginals") {
   const std::vector<magmaan::sim::MarginalSpec> marginals{
       magmaan::sim::MarginalSpec::standard_normal(),

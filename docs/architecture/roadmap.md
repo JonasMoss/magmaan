@@ -240,8 +240,12 @@ golden `parTable()` fixtures.
   calibration helper is also present: `bivariate_copula_observed_corr()`
   evaluates the quadrature-implied observed Pearson correlation after marginal
   transforms, and `calibrate_bivariate_copula_correlation()` bisects on Kendall
-  tau for one bivariate family. Full matrix assembly, positive-definiteness
-  repair, and ordinal/polyserial/polychoric calibration are still future work.
+  tau for one bivariate family. `calibrate_bivariate_copula_correlation_matrix()`
+  extends this to every off-diagonal entry of a target correlation matrix and
+  returns pairwise parameters, achieved correlations, feasible bounds, and
+  iteration counts. This is a matrix diagnostic/calibration layer rather than a
+  joint sampler; joint copula assembly, positive-definiteness repair, and
+  ordinal/polyserial/polychoric calibration are still future work.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for
   now; the long-term dependency policy is still open.

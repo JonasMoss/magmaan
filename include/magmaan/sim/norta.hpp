@@ -196,6 +196,15 @@ struct BivariateCopulaCorrelationCalibration {
   int iterations = 0;
 };
 
+struct BivariateCopulaMatrixCalibration {
+  BivariateCopulaFamily family = BivariateCopulaFamily::Independence;
+  Eigen::MatrixXd theta;
+  Eigen::MatrixXd achieved_corr;
+  Eigen::MatrixXd lower_bound_corr;
+  Eigen::MatrixXd upper_bound_corr;
+  Eigen::MatrixXi iterations;
+};
+
 struct IndependentOptions {
   int quadrature_points = 31;
 };
@@ -319,6 +328,13 @@ sim_expected<BivariateCopulaCorrelationCalibration>
 calibrate_bivariate_copula_correlation(
     BivariateCopulaFamily family,
     double target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options = {});
+
+sim_expected<BivariateCopulaMatrixCalibration>
+calibrate_bivariate_copula_correlation_matrix(
+    BivariateCopulaFamily family,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
     const std::vector<MarginalSpec>& marginals,
     const BivariateCopulaOptions& options = {});
 
