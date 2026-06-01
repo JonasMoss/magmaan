@@ -287,6 +287,8 @@ golden `parTable()` fixtures.
   The `simulate_cvine3_copula_*()` overloads that take a
   `CVine3CorrelationCalibration` simulate in the selected vine order and return
   columns in the caller's original variable order.
+  `simulate_mixed_population_cvine3_copula()` composes explicit or calibrated
+  three-variable C-vine draws with the observed projection layer.
   Higher-dimensional vines, broader structure/family policies, and
   ordinal/polyserial/polychoric calibration are still future work.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
