@@ -11,6 +11,8 @@
 #include <Eigen/Eigenvalues>
 #include <Eigen/QR>
 
+#include "magmaan/sim/vale_maurelli.hpp"
+
 #include "../detail_distribution_math.hpp"
 
 namespace magmaan::sim {
@@ -160,6 +162,15 @@ sim_expected<void> validate_marginal(const MarginalSpec& m) {
       return std::unexpected(make_err(
           SimError::Kind::InvalidMarginal,
           "Johnson: type must be 1 (SL), 2 (SU), or 3 (SB)"));
+    case MarginalKind::Fleishman:
+      if (!std::isfinite(m.fleishman_b) ||
+          !std::isfinite(m.fleishman_c) ||
+          !std::isfinite(m.fleishman_d)) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidMarginal,
+            "Fleishman: polynomial coefficients must be finite"));
+      }
+      return {};
   }
   return std::unexpected(make_err(
       SimError::Kind::InvalidMarginal,
@@ -260,6 +271,12 @@ double johnson_raw_from_z(const MarginalSpec& m, double z) {
   }
 }
 
+double fleishman_raw_from_z(const MarginalSpec& m, double z) {
+  const double z2 = z * z;
+  return -m.fleishman_c + m.fleishman_b * z + m.fleishman_c * z2 +
+         m.fleishman_d * z2 * z;
+}
+
 double raw_from_z(const MarginalSpec& m, double z) {
   switch (m.kind) {
     case MarginalKind::StandardNormal:
@@ -272,6 +289,8 @@ double raw_from_z(const MarginalSpec& m, double z) {
       return pearson_raw_from_z(m, z);
     case MarginalKind::Johnson:
       return johnson_raw_from_z(m, z);
+    case MarginalKind::Fleishman:
+      return fleishman_raw_from_z(m, z);
   }
   return std::numeric_limits<double>::quiet_NaN();
 }
@@ -569,6 +588,8 @@ validate_moment_match(const MomentMatchSpec& spec,
     case MomentMatchFamily::Pearson:
       return {};
     case MomentMatchFamily::Johnson:
+      return {};
+    case MomentMatchFamily::Fleishman:
       return {};
   }
   return std::unexpected(make_err(
@@ -956,6 +977,36 @@ fit_johnson_moment_match(const MomentMatchSpec& spec,
   }
   return MomentMatchResult{
       best.marginal, best.moments, best.norm, best_iterations};
+}
+
+sim_expected<MomentMatchResult>
+fit_fleishman_moment_match(const MomentMatchSpec& spec,
+                           const MomentMatchOptions& options,
+                           const GaussHermite& gh) {
+  ValeMaurelliOptions vm_options;
+  vm_options.max_iter = options.max_iter;
+  vm_options.coefficient_tol = std::min(options.objective_tol, 1e-8);
+  auto coef_or = fit_fleishman_coefficients(
+      spec.shape.skewness, spec.shape.excess_kurtosis, vm_options);
+  if (!coef_or.has_value()) return std::unexpected(coef_or.error());
+
+  MomentMatchResult out;
+  out.marginal = MarginalSpec::fleishman(
+      coef_or->b, coef_or->c, coef_or->d, spec.mean, spec.sd);
+  auto moments_or = raw_moment_summary(out.marginal, gh);
+  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+  out.moments = *moments_or;
+  const Eigen::Vector2d residual(
+      out.moments.skewness - spec.shape.skewness,
+      out.moments.excess_kurtosis - spec.shape.excess_kurtosis);
+  out.residual_norm = residual.norm();
+  out.iterations = 0;
+  if (out.residual_norm > options.objective_tol) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        "fit_marginal_to_moments: Fleishman moment solve did not converge"));
+  }
+  return out;
 }
 
 sim_expected<MomentMatchResult>
@@ -1390,6 +1441,21 @@ MarginalSpec MarginalSpec::johnson(int type,
   return m;
 }
 
+MarginalSpec MarginalSpec::fleishman(double b,
+                                     double c,
+                                     double d,
+                                     double mean,
+                                     double sd) {
+  MarginalSpec m;
+  m.kind = MarginalKind::Fleishman;
+  m.mean = mean;
+  m.sd = sd;
+  m.fleishman_b = b;
+  m.fleishman_c = c;
+  m.fleishman_d = d;
+  return m;
+}
+
 double normal_cdf(double z) noexcept {
   return 0.5 * std::erfc(-z / kSqrt2);
 }
@@ -1451,6 +1517,11 @@ sim_expected<double> normal_quantile(double u) {
 
 sim_expected<double>
 marginal_quantile(const MarginalSpec& marginal, double u) {
+  if (marginal.kind == MarginalKind::Fleishman) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidMarginal,
+        "marginal_quantile: Fleishman polynomial is a generator transform, not a guaranteed quantile"));
+  }
   auto z_or = normal_quantile(u);
   if (!z_or.has_value()) return std::unexpected(z_or.error());
   auto gh_or = gauss_hermite(61);
@@ -1486,6 +1557,11 @@ fit_marginal_to_moments(const MomentMatchSpec& spec,
       auto gh_or = gauss_hermite(options.quadrature_points);
       if (!gh_or.has_value()) return std::unexpected(gh_or.error());
       return fit_johnson_moment_match(spec, options, *gh_or);
+    }
+    case MomentMatchFamily::Fleishman: {
+      auto gh_or = gauss_hermite(options.quadrature_points);
+      if (!gh_or.has_value()) return std::unexpected(gh_or.error());
+      return fit_fleishman_moment_match(spec, options, *gh_or);
     }
   }
   return std::unexpected(make_err(

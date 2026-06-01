@@ -245,7 +245,16 @@ simulation backlog.
   `tests/tools/regen_pearson_sim_fixtures.R` generates checked PearsonDS 1.3.2
   goldens. Johnson SU/SB fitting is now landed too: it fits gamma/delta by
   deterministic quadrature against skewness and excess kurtosis and returns the
-  same `MarginalSpec` used by NORTA and IG generator calibration. **Remaining
+  same `MarginalSpec` used by NORTA and IG generator calibration;
+  `tests/tools/regen_johnson_sim_fixtures.R` now generates checked SuppDists
+  1.1.9.9 `JohnsonFit`/`qJohnson` goldens (shape pair, SU/SB type, and
+  quantiles to ~1e-7), targeting the realized moments of the SuppDists fit so
+  the comparison is exact rather than limited by SuppDists's loose moment
+  solve. Fleishman
+  fitting now routes the same moment-match API through the Vale-Maurelli
+  coefficient solver, so IG can select `MomentMatchFamily::Fleishman`; the
+  resulting cubic is treated as a generator transform, not as a public
+  quantile. **Remaining
   simulation work is tracked in [`simulation.md`](simulation.md), including the
   Pearson Type IV CDF/quantile policy, Johnson SL exposure decision, special
   functions policy, and NORTA calibration hardening.**

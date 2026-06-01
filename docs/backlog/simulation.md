@@ -19,11 +19,19 @@ simulation work queue and decision log.
   generators, Foldnes-Olsson independent-generator calibration, and
   Vale-Maurelli/Fleishman calibration/sampling.
 - Marginal moment matching is available through `fit_marginal_to_moments()`.
-  Tukey g-and-h, Pearson-system, and Johnson SU/SB families feed the same
-  `MarginalSpec` transform path used by NORTA and independent generators.
+  Tukey g-and-h, Pearson-system, Johnson SU/SB, and Fleishman polynomial
+  families feed the same `MarginalSpec` transform path used by NORTA and
+  independent generators. Fleishman uses the Vale-Maurelli coefficient solver
+  and is deliberately treated as a normal generator transform; it is not exposed
+  as a guaranteed quantile because the fitted cubic need not be monotone.
 - Pearson marginals follow PearsonDS conventions. Types 0/I/II/III/V/VI/VII
   are supported and checked against PearsonDS 1.3.2 goldens. Type IV is
   classified but still rejected pending a CDF/quantile policy.
+- Johnson SU/SB marginals are checked against SuppDists 1.1.9.9
+  `JohnsonFit`/`qJohnson` goldens (shape pair, type, and quantiles to ~1e-7).
+  The fixture targets the realized moments of SuppDists's returned shape so the
+  comparison is exact rather than capped by SuppDists's loose moment solve;
+  `tests/tools/regen_johnson_sim_fixtures.R` regenerates it.
 
 ## Pearson Type IV
 
