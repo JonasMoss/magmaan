@@ -64,3 +64,12 @@ cases. Increasing quadrature nodes did move those residuals, sometimes
 non-monotonically, which is consistent with Gauss-Hermite quadrature being a
 rough deterministic reference for kinked PL transforms. Prefer the rectangle
 path when judging calibration accuracy.
+
+The stress cases include high positive correlation, negative correlation with
+heavy skewed tails, AR(1)-style high shape, and mixed-sign correlation patterns.
+The high-positive and AR high-shape cases are useful feasibility checks: they
+currently fail because either no pairwise intermediate root exists or the
+assembled intermediate matrix is not positive definite. The negative-correlation
+tail case is the clearest Hermite-order stress: with order 6, Hermite can be
+several `1e-3` away from Rectangle; by order 12 this dropped below `5e-4`, and
+by the default order 30 it was around `5e-5` in the local quick run.

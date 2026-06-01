@@ -37,6 +37,7 @@ struct Case {
 
 struct MethodSummary {
   std::string name;
+  std::string last_error;
   int ok = 0;
   int failed = 0;
   double mean_ms = 0.0;
@@ -98,6 +99,16 @@ Eigen::MatrixXd exchangeable_corr(int p, double r) {
   return out;
 }
 
+Eigen::MatrixXd ar1_corr(int p, double r) {
+  Eigen::MatrixXd out(p, p);
+  for (int i = 0; i < p; ++i) {
+    for (int j = 0; j < p; ++j) {
+      out(i, j) = std::pow(r, std::abs(i - j));
+    }
+  }
+  return out;
+}
+
 std::vector<Case> make_cases() {
   std::vector<Case> cases;
 
@@ -122,6 +133,50 @@ std::vector<Case> make_cases() {
   mixed.kurt.resize(5);
   mixed.kurt << 0.0, 1.0, 0.80, 2.50, 5.0;
   cases.push_back(mixed);
+
+  Case high_corr;
+  high_corr.name = "p2 high corr tails";
+  high_corr.corr.resize(2, 2);
+  high_corr.corr << 1.0, 0.85,
+                    0.85, 1.0;
+  high_corr.skew.resize(2);
+  high_corr.skew << 2.0, -1.5;
+  high_corr.kurt.resize(2);
+  high_corr.kurt << 5.0, 4.0;
+  cases.push_back(high_corr);
+
+  Case neg_corr;
+  neg_corr.name = "p2 negative corr tails";
+  neg_corr.corr.resize(2, 2);
+  neg_corr.corr << 1.0, -0.65,
+                  -0.65, 1.0;
+  neg_corr.skew.resize(2);
+  neg_corr.skew << 2.0, 2.0;
+  neg_corr.kurt.resize(2);
+  neg_corr.kurt << 5.0, 5.0;
+  cases.push_back(neg_corr);
+
+  Case ar;
+  ar.name = "p4 ar high shape";
+  ar.corr = ar1_corr(4, 0.70);
+  ar.skew.resize(4);
+  ar.skew << 2.0, -1.5, 1.25, -0.75;
+  ar.kurt.resize(4);
+  ar.kurt << 5.0, 4.0, 3.0, 1.5;
+  cases.push_back(ar);
+
+  Case mixed_sign;
+  mixed_sign.name = "p4 mixed sign";
+  mixed_sign.corr.resize(4, 4);
+  mixed_sign.corr << 1.0, 0.55, -0.30, 0.20,
+                     0.55, 1.0, -0.25, 0.45,
+                    -0.30, -0.25, 1.0, -0.50,
+                     0.20, 0.45, -0.50, 1.0;
+  mixed_sign.skew.resize(4);
+  mixed_sign.skew << 2.0, 0.75, -1.5, 1.25;
+  mixed_sign.kurt.resize(4);
+  mixed_sign.kurt << 5.0, 1.25, 4.0, 3.0;
+  cases.push_back(mixed_sign);
 
   return cases;
 }
@@ -227,6 +282,7 @@ MethodSummary run_method(const Case& c,
     total_ms += std::chrono::duration<double, std::milli>(stop - start).count();
     if (!cal_or.has_value()) {
       ++out.failed;
+      out.last_error = cal_or.error().detail;
       continue;
     }
     ++out.ok;
@@ -277,6 +333,9 @@ void print_summary(const Case& c, const std::vector<MethodSummary>& rows) {
               << std::setw(14) << r.sample_corr_err
               << std::setw(14) << r.sample_shape_err
               << std::defaultfloat << "\n";
+    if (r.ok == 0 && !r.last_error.empty()) {
+      std::cout << "  " << r.name << " failure: " << r.last_error << "\n";
+    }
   }
 }
 
