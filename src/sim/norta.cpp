@@ -624,6 +624,73 @@ validate_t_copula_inputs(Eigen::Index n,
   return {};
 }
 
+sim_expected<void>
+validate_bivariate_copula_inputs(Eigen::Index n,
+                                 const BivariateCopulaSpec& copula,
+                                 const std::vector<MarginalSpec>& marginals,
+                                 const BivariateCopulaOptions& options) {
+  if (n <= 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_bivariate_copula_matrix: n must be positive"));
+  }
+  if (marginals.size() != 2u) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_bivariate_copula_matrix: exactly two marginals are required"));
+  }
+  if (options.quadrature_points < 8 || options.max_bisection_iter < 16) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_bivariate_copula_matrix: invalid options"));
+  }
+
+  switch (copula.family) {
+    case BivariateCopulaFamily::Independence:
+      break;
+    case BivariateCopulaFamily::Clayton:
+      if (!std::isfinite(copula.theta) || copula.theta <= 0.0) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "simulate_bivariate_copula_matrix: Clayton theta must be positive"));
+      }
+      break;
+    case BivariateCopulaFamily::Gumbel:
+      if (!std::isfinite(copula.theta) || copula.theta < 1.0) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "simulate_bivariate_copula_matrix: Gumbel theta must be at least 1"));
+      }
+      break;
+    case BivariateCopulaFamily::Frank:
+      if (!std::isfinite(copula.theta) || std::abs(copula.theta) < 1e-10) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "simulate_bivariate_copula_matrix: Frank theta must be finite and nonzero"));
+      }
+      break;
+    case BivariateCopulaFamily::Joe:
+      if (!std::isfinite(copula.theta) || copula.theta < 1.0) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "simulate_bivariate_copula_matrix: Joe theta must be at least 1"));
+      }
+      break;
+  }
+
+  for (const auto& marginal : marginals) {
+    if (auto ok = validate_marginal(marginal); !ok.has_value()) {
+      return std::unexpected(ok.error());
+    }
+    if (marginal.kind == MarginalKind::Fleishman) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidMarginal,
+          "simulate_bivariate_copula_matrix: Fleishman polynomial is not a copula quantile marginal"));
+    }
+  }
+  return {};
+}
+
 sim_expected<std::vector<MarginalMoments>>
 build_marginal_moments(const std::vector<MarginalSpec>& marginals,
                        const GaussHermite& gh) {
@@ -706,6 +773,89 @@ double pair_observed_corr(const MarginalSpec& mi,
     }
   }
   return exy / std::numbers::pi;
+}
+
+double clayton_conditional_u(double u, double v, double theta) {
+  const double log_u = std::log(u);
+  const double a = std::exp(-theta * log_u) +
+                   std::exp(-theta * std::log(v)) - 1.0;
+  if (!(a > 0.0)) return nan();
+  return std::exp((-theta - 1.0) * log_u +
+                  (-1.0 / theta - 1.0) * std::log(a));
+}
+
+double gumbel_conditional_u(double u, double v, double theta) {
+  const double lu = -std::log(u);
+  const double lv = -std::log(v);
+  const double a = std::pow(lu, theta);
+  const double b = std::pow(lv, theta);
+  const double s = a + b;
+  if (!(s > 0.0)) return nan();
+  const double c = std::exp(-std::pow(s, 1.0 / theta));
+  if (lu == 0.0) return 1.0;
+  return c * std::pow(s, 1.0 / theta - 1.0) *
+         std::pow(lu, theta - 1.0) / u;
+}
+
+double frank_conditional_u(double u, double v, double theta) {
+  const double eu = std::exp(-theta * u);
+  const double ev = std::exp(-theta * v);
+  const double d = std::expm1(-theta);
+  const double denom = d + (eu - 1.0) * (ev - 1.0);
+  if (denom == 0.0) return nan();
+  return eu * (ev - 1.0) / denom;
+}
+
+double joe_conditional_u(double u, double v, double theta) {
+  const double a = std::pow(1.0 - u, theta);
+  const double b = std::pow(1.0 - v, theta);
+  const double s = a + b - a * b;
+  if (!(s > 0.0)) return nan();
+  return (1.0 - b) * std::pow(s, 1.0 / theta - 1.0) *
+         std::pow(1.0 - u, theta - 1.0);
+}
+
+double bivariate_conditional_u(const BivariateCopulaSpec& copula,
+                               double u,
+                               double v) {
+  switch (copula.family) {
+    case BivariateCopulaFamily::Independence:
+      return v;
+    case BivariateCopulaFamily::Clayton:
+      return clayton_conditional_u(u, v, copula.theta);
+    case BivariateCopulaFamily::Gumbel:
+      return gumbel_conditional_u(u, v, copula.theta);
+    case BivariateCopulaFamily::Frank:
+      return frank_conditional_u(u, v, copula.theta);
+    case BivariateCopulaFamily::Joe:
+      return joe_conditional_u(u, v, copula.theta);
+  }
+  return nan();
+}
+
+sim_expected<double>
+invert_bivariate_conditional(const BivariateCopulaSpec& copula,
+                             double u,
+                             double w,
+                             int max_iter) {
+  if (copula.family == BivariateCopulaFamily::Independence) return w;
+  u = open_unit(u);
+  w = open_unit(w);
+  double lo = std::numeric_limits<double>::min();
+  double hi = 1.0 - std::numeric_limits<double>::epsilon();
+  double mid = 0.5;
+  for (int iter = 0; iter < max_iter; ++iter) {
+    mid = 0.5 * (lo + hi);
+    const double cdf = bivariate_conditional_u(copula, u, mid);
+    if (!std::isfinite(cdf)) {
+      return std::unexpected(make_err(
+          SimError::Kind::NumericIssue,
+          "simulate_bivariate_copula_matrix: non-finite conditional copula CDF"));
+    }
+    if (cdf < w) lo = mid;
+    else hi = mid;
+  }
+  return open_unit(0.5 * (lo + hi));
 }
 
 sim_expected<double>
@@ -2063,6 +2213,56 @@ simulate_t_copula_raw(Eigen::Index n,
                       std::mt19937_64& rng,
                       const TCopulaOptions& options) {
   auto X_or = simulate_t_copula_matrix(n, copula, marginals, rng, options);
+  if (!X_or.has_value()) return std::unexpected(X_or.error());
+  data::RawData raw;
+  raw.X.push_back(std::move(*X_or));
+  return raw;
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_bivariate_copula_matrix(Eigen::Index n,
+                                 const BivariateCopulaSpec& copula,
+                                 const std::vector<MarginalSpec>& marginals,
+                                 std::mt19937_64& rng,
+                                 const BivariateCopulaOptions& options) {
+  if (auto ok = validate_bivariate_copula_inputs(n, copula, marginals, options);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  auto gh_or = gauss_hermite(options.quadrature_points);
+  if (!gh_or.has_value()) return std::unexpected(gh_or.error());
+  auto moments_or = build_marginal_moments(marginals, *gh_or);
+  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+  const auto& moments = *moments_or;
+
+  std::uniform_real_distribution<double> uniform(0.0, 1.0);
+  Eigen::MatrixXd X(n, 2);
+  for (Eigen::Index row = 0; row < n; ++row) {
+    const double u = open_unit(uniform(rng));
+    const double w = open_unit(uniform(rng));
+    auto v_or = invert_bivariate_conditional(
+        copula, u, w, options.max_bisection_iter);
+    if (!v_or.has_value()) return std::unexpected(v_or.error());
+
+    auto x0_or = marginal_from_unit(marginals[0], moments[0], u);
+    if (!x0_or.has_value()) return std::unexpected(x0_or.error());
+    auto x1_or = marginal_from_unit(marginals[1], moments[1], *v_or);
+    if (!x1_or.has_value()) return std::unexpected(x1_or.error());
+    X(row, 0) = *x0_or;
+    X(row, 1) = *x1_or;
+  }
+  return X;
+}
+
+sim_expected<data::RawData>
+simulate_bivariate_copula_raw(Eigen::Index n,
+                              const BivariateCopulaSpec& copula,
+                              const std::vector<MarginalSpec>& marginals,
+                              std::mt19937_64& rng,
+                              const BivariateCopulaOptions& options) {
+  auto X_or = simulate_bivariate_copula_matrix(
+      n, copula, marginals, rng, options);
   if (!X_or.has_value()) return std::unexpected(X_or.error());
   data::RawData raw;
   raw.X.push_back(std::move(*X_or));

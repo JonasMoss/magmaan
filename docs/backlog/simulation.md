@@ -51,6 +51,12 @@ simulation work queue and decision log.
   Fleishman generator transforms are rejected because they are not guaranteed
   quantiles. Future VITA/covsim work should sit above this layer as calibration
   from requested observed moments/correlations to generator parameters.
+- Fixed-parameter bivariate Archimedean copula sampling is available through
+  `BivariateCopulaSpec`, `simulate_bivariate_copula_matrix()`, and
+  `simulate_bivariate_copula_raw()`. The first families are independence,
+  Clayton, Gumbel, Frank, and Joe. Sampling uses conditional inversion of the
+  bivariate copula and then the same marginal quantile path as t-copula
+  sampling.
 
 ## Architecture Direction
 
@@ -104,10 +110,10 @@ calibrates/diagnoses one of those steps.
   spherical/elliptical core is combined with marginal transformations. Keep the
   boundary clear with NORTA/copula methods: pseudo-elliptical methods are
   continuous-generator mechanisms, not observed-data projections.
-- Add copula families beyond Gaussian NORTA: fixed-parameter t-copula is
-  landed; add Archimedean Clayton, Gumbel, Frank, and Joe if needed for
-  robust/ordinal simulation studies. Reuse the same marginal and projection
-  layers.
+- Add copula families beyond Gaussian NORTA: fixed-parameter t-copula and
+  bivariate Archimedean independence/Clayton/Gumbel/Frank/Joe are landed.
+  Reuse the same marginal and projection layers for later calibration and
+  broader copula surfaces.
 - Use `vinecopulib` / `rvinecopulib` as an oracle/reference for copula-family
   parameter conventions, simulation checks, and later vine work. Do not make it
   a core runtime dependency unless the exception/dependency boundary is
@@ -206,10 +212,11 @@ Validation:
   policy for non-positive-definite calibrated latent matrices.
 - **S.** Add pseudo-elliptical / transformed-elliptical mechanisms after the
   first elliptical slice clarifies the shared radial/core interfaces.
-- **S.** Add fixed-parameter Archimedean copulas as needed by simulation
-  studies: Clayton, Gumbel, Frank, and Joe. Validate against vinecopulib or its
-  R interface, but keep the runtime implementation local unless a broader vine
-  backend is explicitly chosen.
+- **Landed, first bivariate Archimedean slice.** Add fixed-parameter bivariate
+  independence, Clayton, Gumbel, Frank, and Joe copula simulation. The runtime
+  implementation is local and uses conditional inversion; validate future
+  parameter-convention fixtures against vinecopulib or its R interface unless a
+  broader vine backend is explicitly chosen.
 - **S.** Add PLSIM/piecewise-linear simulation once the shared projection and
   diagnostics interfaces exist.
 - **S.** Add VITA/covsim-style simulation once copula and projection
