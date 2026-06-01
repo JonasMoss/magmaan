@@ -990,6 +990,51 @@ TEST_CASE("generic C-vine inverse Rosenblatt matches C-vine 3 specialization") {
   }
 }
 
+TEST_CASE("generic C-vine inverse Rosenblatt matches rvinecopulib 4D golden") {
+  const std::string path = magmaan::test::fixtures_dir() +
+                           "/sim/cvine4_inverse_rosenblatt.json";
+  auto raw = magmaan::test::read_fixture(path);
+  REQUIRE(raw.has_value());
+  auto fixture = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(fixture.is_discarded());
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.max_bisection_iter = 90;
+  for (const auto& c : fixture["cases"]) {
+    const std::string id = c["id"].get<std::string>();
+    CAPTURE(id);
+    magmaan::sim::CVineCopulaSpec copula;
+    copula.pair_copulas = {{}, {{}}, {{}, {}}, {{}, {}, {}}};
+    assign_copula_from_json(copula.pair_copulas[1][0], c["copula_10"]);
+    assign_copula_from_json(copula.pair_copulas[2][0], c["copula_20"]);
+    assign_copula_from_json(
+        copula.pair_copulas[2][1], c["copula_21_given_0"]);
+    assign_copula_from_json(copula.pair_copulas[3][0], c["copula_30"]);
+    assign_copula_from_json(
+        copula.pair_copulas[3][1], c["copula_31_given_0"]);
+    assign_copula_from_json(
+        copula.pair_copulas[3][2], c["copula_32_given_01"]);
+
+    Eigen::MatrixXd independent(c["points"].size(), 4);
+    Eigen::MatrixXd expected(c["points"].size(), 4);
+    for (Eigen::Index row = 0; row < independent.rows(); ++row) {
+      const auto& point = c["points"][static_cast<std::size_t>(row)];
+      for (Eigen::Index col = 0; col < 4; ++col) {
+        independent(row, col) =
+            point["independent_u"][static_cast<std::size_t>(col)].get<double>();
+        expected(row, col) =
+            point["copula_u"][static_cast<std::size_t>(col)].get<double>();
+      }
+    }
+
+    auto got_or = magmaan::sim::cvine_copula_inverse_rosenblatt(
+        independent, copula, options);
+    if (!got_or.has_value()) MESSAGE(got_or.error().detail);
+    REQUIRE(got_or.has_value());
+    CHECK(got_or->isApprox(expected, 2e-10));
+  }
+}
+
 TEST_CASE("generic C-vine sampler supports four variables") {
   magmaan::sim::BivariateCopulaSpec frank_pos;
   frank_pos.family = magmaan::sim::BivariateCopulaFamily::Frank;

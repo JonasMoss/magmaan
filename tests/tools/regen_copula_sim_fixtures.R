@@ -142,6 +142,79 @@ cvine3_fixture <- list(
   cases = lapply(cvine3_cases, cvine3_oracle_case)
 )
 
+cvine4_points <- matrix(
+  c(
+    0.11, 0.22, 0.33, 0.44,
+    0.81, 0.72, 0.63, 0.54
+  ),
+  ncol = 4,
+  byrow = TRUE
+)
+
+cvine4_cases <- list(
+  list(
+    id = "four_variable_mixed",
+    copula_10 = list(family = "frank", rotation = 0L, parameters = 3.0),
+    copula_20 = list(family = "frank", rotation = 0L, parameters = -2.0),
+    copula_21_given_0 = list(family = "frank", rotation = 0L, parameters = 3.0),
+    copula_30 = list(family = "clayton", rotation = 0L, parameters = 1.2),
+    copula_31_given_0 = list(family = "indep", rotation = 0L, parameters = numeric()),
+    copula_32_given_01 = list(family = "frank", rotation = 0L, parameters = -2.0)
+  )
+)
+
+cvine4_oracle_case <- function(case) {
+  # rvinecopulib's root-0 C-vine uses order c(4, 3, 2, 1). Pair-copula
+  # order is reversed within each tree relative to natural variable order:
+  # tree 1 is (0,3), (0,2), (0,1); tree 2 is (1,3|0), (1,2|0);
+  # tree 3 is (2,3|0,1).
+  model <- vinecop_dist(
+    pair_copulas = list(
+      list(
+        bicop_from_spec(case$copula_30),
+        bicop_from_spec(case$copula_20),
+        bicop_from_spec(case$copula_10)
+      ),
+      list(
+        bicop_from_spec(case$copula_31_given_0),
+        bicop_from_spec(case$copula_21_given_0)
+      ),
+      list(bicop_from_spec(case$copula_32_given_01))
+    ),
+    structure = cvine_structure(c(4, 3, 2, 1))
+  )
+  out <- inverse_rosenblatt(cvine4_points, model)
+  rows <- lapply(seq_len(nrow(cvine4_points)), function(i) {
+    list(
+      independent_u = unname(cvine4_points[i, ]),
+      copula_u = unname(out[i, ])
+    )
+  })
+  list(
+    id = case$id,
+    structure = "cvine_root0_order_4_3_2_1",
+    copula_10 = case$copula_10,
+    copula_20 = case$copula_20,
+    copula_21_given_0 = case$copula_21_given_0,
+    copula_30 = case$copula_30,
+    copula_31_given_0 = case$copula_31_given_0,
+    copula_32_given_01 = case$copula_32_given_01,
+    points = rows
+  )
+}
+
+cvine4_fixture <- list(
+  `_meta` = list(
+    format_version = 1,
+    fixture_kind = "sim.cvine4_inverse_rosenblatt",
+    oracle = paste0(
+      "rvinecopulib ", rvinecopulib_version,
+      " inverse_rosenblatt(vinecop_dist(..., cvine_structure(c(4,3,2,1))))"
+    )
+  ),
+  cases = lapply(cvine4_cases, cvine4_oracle_case)
+)
+
 args_file <- sub("^--file=", "", commandArgs(FALSE)[grep("^--file=", commandArgs(FALSE))][1])
 script_dir <- dirname(normalizePath(args_file, mustWork = TRUE))
 root <- normalizePath(file.path(script_dir, "..", "fixtures"), mustWork = TRUE)
@@ -156,6 +229,13 @@ write_json(
 write_json(
   cvine3_fixture,
   file.path(root, "sim", "cvine3_inverse_rosenblatt.json"),
+  auto_unbox = TRUE,
+  digits = NA,
+  pretty = TRUE
+)
+write_json(
+  cvine4_fixture,
+  file.path(root, "sim", "cvine4_inverse_rosenblatt.json"),
   auto_unbox = TRUE,
   digits = NA,
   pretty = TRUE
