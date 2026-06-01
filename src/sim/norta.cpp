@@ -1604,17 +1604,57 @@ Eigen::Vector2d project_johnson_params(Eigen::Vector2d x,
   return x;
 }
 
+// Closed-form standardized moments of the Johnson SU shape
+// W = sinh((Z - gamma)/delta), Z ~ N(0,1). With w = exp(1/delta^2) and
+// Om = gamma/delta the raw moments are elementary; the central moments give the
+// scale/location-free skewness and excess kurtosis. This replaces Gauss-Hermite
+// quadrature for SU: the quadrature error on the heavy-tailed z^4 sinh^4
+// integrand was what stalled the moment solve at high kurtosis. Verified against
+// Monte Carlo. (SU only; SB has no elementary closed form.)
+MarginalMomentSummary johnson_su_moment_summary(double gamma, double delta) {
+  const double w = std::exp(1.0 / (delta * delta));
+  const double om = gamma / delta;
+  const double sw = std::sqrt(w);
+  const double m1 = -sw * std::sinh(om);
+  const double m2 = 0.5 * (w * w * std::cosh(2.0 * om) - 1.0);
+  const double m3 = -0.25 * sw *
+                    (w * w * w * w * std::sinh(3.0 * om) - 3.0 * std::sinh(om));
+  const double m4 = 0.125 * (std::pow(w, 8.0) * std::cosh(4.0 * om) -
+                             4.0 * w * w * std::cosh(2.0 * om) + 3.0);
+  const double mu2 = m2 - m1 * m1;
+  const double mu3 = m3 - 3.0 * m1 * m2 + 2.0 * m1 * m1 * m1;
+  const double mu4 =
+      m4 - 4.0 * m1 * m3 + 6.0 * m1 * m1 * m2 - 3.0 * m1 * m1 * m1 * m1;
+  MarginalMomentSummary s;
+  s.mean = m1;
+  s.sd = std::sqrt(mu2);
+  s.skewness = mu3 / (mu2 * s.sd);
+  s.excess_kurtosis = mu4 / (mu2 * mu2) - 3.0;
+  return s;
+}
+
 sim_expected<MomentFitEval>
 eval_johnson_moment_fit(int type,
                         const Eigen::Vector2d& x,
                         const MomentMatchSpec& spec,
                         const GaussHermite& gh) {
   MomentFitEval out;
-  out.marginal = MarginalSpec::johnson(
-      type, x(0), std::exp(x(1)), spec.mean, spec.sd);
-  auto moments_or = raw_moment_summary(out.marginal, gh);
-  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
-  out.moments = *moments_or;
+  const double delta = std::exp(x(1));
+  out.marginal = MarginalSpec::johnson(type, x(0), delta, spec.mean, spec.sd);
+  if (type == 2) {  // SU: closed-form moments, no quadrature
+    out.moments = johnson_su_moment_summary(x(0), delta);
+    if (!std::isfinite(out.moments.skewness) ||
+        !std::isfinite(out.moments.excess_kurtosis) ||
+        !(out.moments.sd > 0.0)) {
+      return std::unexpected(make_err(
+          SimError::Kind::NumericIssue,
+          "johnson SU closed-form moments non-finite"));
+    }
+  } else {
+    auto moments_or = raw_moment_summary(out.marginal, gh);
+    if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+    out.moments = *moments_or;
+  }
   out.residual(0) = out.moments.skewness - spec.shape.skewness;
   out.residual(1) = out.moments.excess_kurtosis - spec.shape.excess_kurtosis;
   out.norm = out.residual.norm();
