@@ -730,10 +730,10 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   Rhemtulla, Brosseau-Liard & Savalei (2012) cat-LS-vs-continuous-ML horse race,
   but v1 covers only the symmetric-threshold, underlying-normal conditions
   (number of categories 2--7 × N). Two paper conditions are deferred: (1) the
-  nonnormal underlying `y*` (skew 2, kurtosis 7), which is beyond the first
-  cubic Fleishman / Vale-Maurelli slice and likely needs a higher-order
-  polynomial or a documented alternative generator; this is the condition where
-  cat-LS's own underlying-normality assumption breaks; (2) the moderate/extreme
+  nonnormal underlying `y*` (skew 2, kurtosis 7 in the paper's convention),
+  which is covered by the C++ cubic Fleishman / Vale-Maurelli primitive but
+  still needs wiring into the experiment; this is the condition where cat-LS's
+  own underlying-normality assumption breaks; (2) the moderate/extreme
   asymmetric-threshold conditions,
   whose exact threshold tables are in the paper's unavailable supplement (would
   need a documented rule validated against their Table 1 skew/kurtosis). Add
