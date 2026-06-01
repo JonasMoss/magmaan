@@ -27,6 +27,14 @@ enum class MomentMatchFamily : std::uint8_t {
   Fleishman,
 };
 
+enum class BivariateCopulaFamily : std::uint8_t {
+  Independence,
+  Clayton,
+  Gumbel,
+  Frank,
+  Joe,
+};
+
 struct ShapeMoments {
   double skewness = 0.0;
   double excess_kurtosis = 0.0;
@@ -168,6 +176,16 @@ struct TCopulaSpec {
   Eigen::MatrixXd corr;
 };
 
+struct BivariateCopulaOptions {
+  int quadrature_points = 31;
+  int max_bisection_iter = 80;
+};
+
+struct BivariateCopulaSpec {
+  BivariateCopulaFamily family = BivariateCopulaFamily::Independence;
+  double theta = 0.0;
+};
+
 struct IndependentOptions {
   int quadrature_points = 31;
 };
@@ -267,5 +285,19 @@ simulate_t_copula_raw(Eigen::Index n,
                       const std::vector<MarginalSpec>& marginals,
                       std::mt19937_64& rng,
                       const TCopulaOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
+simulate_bivariate_copula_matrix(Eigen::Index n,
+                                 const BivariateCopulaSpec& copula,
+                                 const std::vector<MarginalSpec>& marginals,
+                                 std::mt19937_64& rng,
+                                 const BivariateCopulaOptions& options = {});
+
+sim_expected<data::RawData>
+simulate_bivariate_copula_raw(Eigen::Index n,
+                              const BivariateCopulaSpec& copula,
+                              const std::vector<MarginalSpec>& marginals,
+                              std::mt19937_64& rng,
+                              const BivariateCopulaOptions& options = {});
 
 }  // namespace magmaan::sim

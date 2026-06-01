@@ -606,3 +606,76 @@ TEST_CASE("t-copula raw generator validates quantile marginals") {
   REQUIRE_FALSE(bad_or.has_value());
   CHECK(bad_or.error().kind == magmaan::SimError::Kind::InvalidMarginal);
 }
+
+TEST_CASE("bivariate Archimedean copulas generate expected dependence direction") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standard_normal()};
+
+  struct Case {
+    magmaan::sim::BivariateCopulaFamily family;
+    double theta;
+    double lower;
+    double upper;
+  };
+  const Case cases[] = {
+      {magmaan::sim::BivariateCopulaFamily::Independence, 0.0, -0.04, 0.04},
+      {magmaan::sim::BivariateCopulaFamily::Clayton, 2.0, 0.55, 1.0},
+      {magmaan::sim::BivariateCopulaFamily::Gumbel, 2.0, 0.55, 1.0},
+      {magmaan::sim::BivariateCopulaFamily::Frank, 5.0, 0.40, 1.0},
+      {magmaan::sim::BivariateCopulaFamily::Frank, -5.0, -1.0, -0.40},
+      {magmaan::sim::BivariateCopulaFamily::Joe, 2.0, 0.45, 1.0},
+  };
+
+  std::mt19937_64 rng(20260605);
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 31;
+  options.max_bisection_iter = 80;
+  for (const auto& c : cases) {
+    magmaan::sim::BivariateCopulaSpec copula;
+    copula.family = c.family;
+    copula.theta = c.theta;
+    auto X_or = magmaan::sim::simulate_bivariate_copula_matrix(
+        12000, copula, marginals, rng, options);
+    if (!X_or.has_value()) MESSAGE(X_or.error().detail);
+    REQUIRE(X_or.has_value());
+    const double r = sample_corr(*X_or, 0, 1);
+    CHECK(r > c.lower);
+    CHECK(r < c.upper);
+    CHECK(std::abs(X_or->col(0).mean()) < 0.04);
+    CHECK(std::abs(X_or->col(1).mean()) < 0.04);
+  }
+}
+
+TEST_CASE("bivariate copula raw generator validates parameters and marginals") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.5)};
+
+  magmaan::sim::BivariateCopulaSpec copula;
+  copula.family = magmaan::sim::BivariateCopulaFamily::Clayton;
+  copula.theta = 1.5;
+  std::mt19937_64 rng(20260606);
+  auto raw_or = magmaan::sim::simulate_bivariate_copula_raw(
+      20, copula, marginals, rng);
+  REQUIRE(raw_or.has_value());
+  CHECK(raw_or->X.size() == 1u);
+  CHECK(raw_or->mask.empty());
+  CHECK(raw_or->X[0].rows() == 20);
+  CHECK(raw_or->X[0].cols() == 2);
+
+  copula.theta = -1.0;
+  auto bad_theta_or = magmaan::sim::simulate_bivariate_copula_matrix(
+      20, copula, marginals, rng);
+  REQUIRE_FALSE(bad_theta_or.has_value());
+  CHECK(bad_theta_or.error().kind == magmaan::SimError::Kind::InvalidInput);
+
+  copula.theta = 1.5;
+  const std::vector<magmaan::sim::MarginalSpec> bad_marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::fleishman(1.0, 0.0, 0.0)};
+  auto bad_marginal_or = magmaan::sim::simulate_bivariate_copula_matrix(
+      20, copula, bad_marginals, rng);
+  REQUIRE_FALSE(bad_marginal_or.has_value());
+  CHECK(bad_marginal_or.error().kind == magmaan::SimError::Kind::InvalidMarginal);
+}
