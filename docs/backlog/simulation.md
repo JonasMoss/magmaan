@@ -277,9 +277,10 @@ Validation:
   `simulate_plsim_raw()`. Unit coverage checks the skewness 2 / excess kurtosis
   5 condition where Fleishman fails, Hermite-vs-quadrature covariance
   agreement, pairwise calibration under Hermite/quadrature/refined strategies,
-  stochastic moments, and raw-data wrapping. Remaining PLSIM work is a faster
-  exact rectangle-moment covariance evaluator plus benchmark/check tooling for
-  calibration speed and accuracy.
+  stochastic moments, and raw-data wrapping. `tests/checks/plsim/` provides an
+  advisory calibration bench comparing speed and quadrature-reference
+  agreement across strategies. Remaining PLSIM work is a faster exact
+  rectangle-moment covariance evaluator and broader simulation-grid diagnostics.
 - **S.** Extend VITA/covsim-style simulation from repaired matrix diagnostics
   to joint assembly and a clear vine/multivariate-copula policy.
 - **S.** Decide whether Johnson SL should be exposed beyond the direct

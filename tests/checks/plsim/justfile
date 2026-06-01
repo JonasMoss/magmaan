@@ -1,0 +1,32 @@
+set shell := ["bash", "-uc"]
+
+root := "../../.."
+build_dir := "build"
+bin := build_dir / "plsim_calibration_bench"
+cxx := env_var_or_default("CXX", "clang++")
+lib := env_var_or_default("MAGMAAN_LIB", root / "build/fast/libmagmaan.a")
+eigen := env_var_or_default("EIGEN_INCLUDE_DIR", root / "build/fast/_deps/eigen3-src")
+
+default:
+    @just --list
+
+build:
+    mkdir -p {{build_dir}}
+    {{cxx}} -std=gnu++23 -O2 -g -fPIC -fno-exceptions -fno-rtti \
+      -fvisibility=hidden -fvisibility-inlines-hidden \
+      -DEIGEN_DONT_PARALLELIZE=1 -DEIGEN_INITIALIZE_MATRICES_BY_NAN=1 \
+      -DEIGEN_MAX_ALIGN_BYTES=64 -DEIGEN_NO_AUTOMATIC_RESIZING=1 \
+      -DEIGEN_NO_EXCEPTIONS=1 \
+      -I{{root}}/include -I{{root}}/src -isystem {{eigen}} \
+      plsim_calibration_bench.cpp {{lib}} -o {{bin}}
+
+quick: build
+    mkdir -p results
+    {{bin}} --reps=3 --sample-n=20000 | tee results/quick.txt
+
+all: build
+    mkdir -p results
+    {{bin}} --reps=20 --sample-n=80000 | tee results/latest.txt
+
+clean:
+    rm -rf {{build_dir}} results
