@@ -22,6 +22,9 @@ simulation work queue and decision log.
   calibration/sampling, fixed-parameter t-copula sampling, fixed-parameter
   bivariate Archimedean copula sampling, and a first VITA/covsim-style
   bivariate copula observed-Pearson calibration layer.
+- The exploratory R package exposes simulation batches through the flat
+  `magmaan_core` registry, currently including `sim_ig_batch()` for
+  independent-generator simulation and `sim_plsim_batch()` for PLSIM.
 - Baseline multivariate-normal generation is available through
   `simulate_normal_matrix()` and `simulate_normal_raw()`, taking explicit
   population means and covariance matrices. This is the low-level normal

@@ -191,7 +191,9 @@ golden `parTable()` fixtures.
   skewness and excess kurtosis, then moment-matches each independent generator
   marginal. The lower-level overload accepts an already chosen root and fitted
   generator marginals for experiments that want to inspect or cache the
-  calibration.
+  calibration. The exploratory R package exposes the same mechanism for batch
+  simulation as `magmaan_core$sim_ig_batch()`, returning draws plus the fitted
+  root and generator skewness/kurtosis diagnostics.
 - Vale-Maurelli / Fleishman polynomial simulation is available through
   `fit_fleishman_coefficients()`, `calibrate_vale_maurelli()`,
   `simulate_vale_maurelli_matrix()`, and `simulate_vale_maurelli_raw()`.

@@ -161,6 +161,7 @@ robust_se_both_breads <- infer_robust_se_both_breads
 robust_se_both_breads_raw <- infer_robust_se_both_breads_raw
 robust_se_both_breads_zc <- infer_robust_se_both_breads_zc
 
+sim_ig_batch <- sim_ig_batch_impl
 sim_plsim_batch <- sim_plsim_batch_impl
 
 measures_baseline <- infer_baseline
@@ -293,6 +294,7 @@ magmaan_core <- local({
       "robust_se_both_breads_zc"
     ),
     sim = c(
+      "sim_ig_batch",
       "sim_plsim_batch"
     ),
     measures = c(
