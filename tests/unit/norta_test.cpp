@@ -1008,6 +1008,43 @@ TEST_CASE("C-vine 3 calibration fits an observed correlation matrix") {
   CHECK(achieved_or->isApprox(cal_or->achieved_corr, 1e-12));
 }
 
+TEST_CASE("C-vine 3 calibration can select the root variable") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.25),
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.40)};
+  Eigen::MatrixXd target(3, 3);
+  target << 1.0, 0.18, -0.16,
+            0.18, 1.0, 0.22,
+           -0.16, 0.22, 1.0;
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 13;
+  options.max_bisection_iter = 45;
+  options.calibration_tol = 1.5e-3;
+
+  auto cal_or = magmaan::sim::calibrate_cvine3_copula_correlation_select_root(
+      magmaan::sim::BivariateCopulaFamily::Frank, target, marginals, options);
+  if (!cal_or.has_value()) MESSAGE(cal_or.error().detail);
+  REQUIRE(cal_or.has_value());
+  if (!cal_or.has_value()) return;
+
+  bool seen[3] = {false, false, false};
+  for (Eigen::Index i = 0; i < 3; ++i) {
+    const int idx = cal_or->variable_order(i);
+    REQUIRE(idx >= 0);
+    REQUIRE(idx < 3);
+    CHECK_FALSE(seen[idx]);
+    seen[idx] = true;
+  }
+  CHECK(cal_or->root_index == cal_or->variable_order(0));
+  CHECK(cal_or->target_corr.isApprox(target, 0.0));
+  CHECK(cal_or->max_abs_error < 8e-3);
+  CHECK(cal_or->achieved_corr(0, 1) == doctest::Approx(target(0, 1)).epsilon(8e-3));
+  CHECK(cal_or->achieved_corr(0, 2) == doctest::Approx(target(0, 2)).epsilon(8e-3));
+  CHECK(cal_or->achieved_corr(1, 2) == doctest::Approx(target(1, 2)).epsilon(8e-3));
+}
+
 TEST_CASE("bivariate copula raw generator validates parameters and marginals") {
   const std::vector<magmaan::sim::MarginalSpec> marginals{
       magmaan::sim::MarginalSpec::standard_normal(),
