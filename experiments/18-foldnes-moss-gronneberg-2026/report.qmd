@@ -149,6 +149,7 @@ knitr::kable(rt_out, row.names = FALSE,
 # from the repo root, with magmaan, lavaan, and semTests installed
 cd experiments/18-foldnes-moss-gronneberg-2026
 Rscript run_experiment.R --semtests-parity      # full grid, both parity tracks
+Rscript run_experiment.R --p-values 15,30,60    # reduced grid without p=100
 Rscript run_experiment.R --smoke                 # one IG cell, three reps
 quarto render report.qmd
 ```
