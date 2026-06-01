@@ -19,6 +19,10 @@ simulation work queue and decision log.
 - `magmaan::sim` exposes NORTA calibration/sampling, independent marginal
   generators, Foldnes-Olsson independent-generator calibration, and
   Vale-Maurelli/Fleishman calibration/sampling.
+- Baseline multivariate-normal generation is available through
+  `simulate_normal_matrix()` and `simulate_normal_raw()`, taking explicit
+  population means and covariance matrices. This is the low-level normal
+  generator target for future model-implied SEM simulation.
 - Marginal moment matching is available through `fit_marginal_to_moments()`.
   Tukey g-and-h, Pearson-system, Johnson SU/SB, and Fleishman polynomial
   families feed the same `MarginalSpec` transform path used by NORTA and
@@ -66,10 +70,6 @@ calibrates/diagnoses one of those steps.
 
 ## Planned Surface
 
-- Add first-class normal population simulation:
-  `simulate_normal_matrix(n, mean, sigma, rng)` and raw-data wrapping. This is
-  the baseline all other mechanisms compare against and the low-level target for
-  model-implied SEM simulation.
 - Add explicit population structs for continuous and mixed data, including
   means, covariance/correlation, group-specific variants, thresholds, ordered
   columns, and optional variable names/levels when wrapping `data::RawData`.
@@ -170,9 +170,6 @@ Validation:
 
 ## Remaining Work
 
-- **M.** Add baseline multivariate-normal simulation with explicit mean and
-  covariance, plus `data::RawData` wrapping and validation for finite positive
-  definite covariance matrices.
 - **L.** Add the population/projection layer for ordinal and mixed simulation:
   threshold specs, marginal-probability-to-threshold helpers, binary-as-ordinal,
   mixed continuous/ordinal output, group-specific threshold support, and

@@ -151,6 +151,7 @@ magmaan_add_test_target(magmaan_test_api api
   unit/api_sem_test.cpp)
 
 magmaan_add_test_target(magmaan_test_sim sim
+  unit/normal_test.cpp
   unit/norta_test.cpp
   unit/vale_maurelli_test.cpp)
 
