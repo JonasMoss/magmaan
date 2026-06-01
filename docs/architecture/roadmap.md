@@ -192,6 +192,15 @@ golden `parTable()` fixtures.
   marginal. The lower-level overload accepts an already chosen root and fitted
   generator marginals for experiments that want to inspect or cache the
   calibration.
+- Vale-Maurelli / Fleishman polynomial simulation is available through
+  `fit_fleishman_coefficients()`, `calibrate_vale_maurelli()`,
+  `simulate_vale_maurelli_matrix()`, and `simulate_vale_maurelli_raw()`.
+  The first slice implements the classic third-order Fleishman transform
+  `a + bZ + cZ^2 + dZ^3`: coefficients are solved from target skewness and
+  excess kurtosis by exact polynomial moments, pairwise intermediate normal
+  correlations are solved from the Vale-Maurelli covariance cubic, and the
+  assembled intermediate correlation matrix is Cholesky-validated before
+  sampling.
 - Initial NORTA marginals are standard normal, standardized lognormal, Tukey
   g-and-h, Pearson-system distributions, and Johnson-system SU/SB
   distributions. The Tukey path is a pragmatic

@@ -218,6 +218,15 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   `simulate_ig_matrix()` / `simulate_ig_raw()` or through a lower-level
   root-plus-generator overload for cached calibrations. Unit coverage checks
   both root conventions and a Tukey g-and-h stochastic covariance/moment smoke.
+- **Landed, Vale-Maurelli / Fleishman slice.** `fit_fleishman_coefficients()`
+  solves the classic third-order Fleishman polynomial coefficients from target
+  skewness and excess kurtosis using exact normal polynomial moments.
+  `calibrate_vale_maurelli()` then solves the pairwise Vale-Maurelli cubic for
+  the intermediate normal correlation matrix, validates it by Cholesky, and
+  feeds `simulate_vale_maurelli_matrix()` / `simulate_vale_maurelli_raw()`.
+  Unit coverage checks the normal identity case, coefficient moment matching,
+  the pairwise covariance equation, raw-data wrapping, infeasible moments, and
+  a stochastic covariance/moment smoke.
 - **Partly landed.** Moment-matching now has a reusable C++ API:
   `MomentMatchSpec` / `MomentMatchOptions` / `MomentMatchResult` plus
   `fit_marginal_to_moments()`. Tukey g-and-h fits `g,h` to target skewness and
@@ -728,9 +737,11 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   Rhemtulla, Brosseau-Liard & Savalei (2012) cat-LS-vs-continuous-ML horse race,
   but v1 covers only the symmetric-threshold, underlying-normal conditions
   (number of categories 2--7 × N). Two paper conditions are deferred: (1) the
-  nonnormal underlying `y*` (skew 2, kurtosis 7), which needs a Vale-Maurelli /
-  Fleishman generator and is the condition where cat-LS's own underlying-normality
-  assumption breaks; (2) the moderate/extreme asymmetric-threshold conditions,
+  nonnormal underlying `y*` (skew 2, kurtosis 7), which is beyond the first
+  cubic Fleishman / Vale-Maurelli slice and likely needs a higher-order
+  polynomial or a documented alternative generator; this is the condition where
+  cat-LS's own underlying-normality assumption breaks; (2) the moderate/extreme
+  asymmetric-threshold conditions,
   whose exact threshold tables are in the paper's unavailable supplement (would
   need a documented rule validated against their Table 1 skew/kurtosis). Add
   these only if the replication needs to exercise cat-LS bias under nonnormality.
