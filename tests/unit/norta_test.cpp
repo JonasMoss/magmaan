@@ -695,6 +695,45 @@ TEST_CASE("bivariate copula conditional helpers match rvinecopulib goldens") {
   }
 }
 
+TEST_CASE("bivariate copula Kendall tau helpers use standard parameterization") {
+  struct TauCase {
+    magmaan::sim::BivariateCopulaFamily family;
+    double theta;
+    double tau;
+  };
+  const TauCase cases[] = {
+      {magmaan::sim::BivariateCopulaFamily::Independence, 0.0, 0.0},
+      {magmaan::sim::BivariateCopulaFamily::Clayton, 2.0, 0.5},
+      {magmaan::sim::BivariateCopulaFamily::Gumbel, 2.0, 0.5},
+      {magmaan::sim::BivariateCopulaFamily::Frank, 5.0, 0.4567009581601169},
+      {magmaan::sim::BivariateCopulaFamily::Frank, -5.0, -0.4567009581601169},
+      {magmaan::sim::BivariateCopulaFamily::Joe, 2.0, 0.3550659331517736},
+  };
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.max_bisection_iter = 90;
+  for (const auto& c : cases) {
+    magmaan::sim::BivariateCopulaSpec copula;
+    copula.family = c.family;
+    copula.theta = c.theta;
+    auto tau_or = magmaan::sim::bivariate_copula_tau(copula);
+    REQUIRE(tau_or.has_value());
+    CHECK(*tau_or == doctest::Approx(c.tau).epsilon(2e-10));
+
+    auto back_or = magmaan::sim::bivariate_copula_from_tau(
+        c.family, c.tau, options);
+    REQUIRE(back_or.has_value());
+    auto tau_back_or = magmaan::sim::bivariate_copula_tau(*back_or);
+    REQUIRE(tau_back_or.has_value());
+    CHECK(*tau_back_or == doctest::Approx(c.tau).epsilon(2e-10));
+  }
+
+  auto bad_or = magmaan::sim::bivariate_copula_from_tau(
+      magmaan::sim::BivariateCopulaFamily::Clayton, -0.25, options);
+  REQUIRE_FALSE(bad_or.has_value());
+  CHECK(bad_or.error().kind == magmaan::SimError::Kind::InvalidInput);
+}
+
 TEST_CASE("bivariate copula raw generator validates parameters and marginals") {
   const std::vector<magmaan::sim::MarginalSpec> marginals{
       magmaan::sim::MarginalSpec::standard_normal(),

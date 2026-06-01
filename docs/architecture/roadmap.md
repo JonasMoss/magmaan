@@ -232,6 +232,8 @@ golden `parTable()` fixtures.
   `dC(u,v)/du`, then feeds the resulting uniforms through the same marginal
   quantile machinery as the t-copula path. The conditional CDF and inverse
   conditional CDF helpers are fixture-checked against rvinecopulib `hbicop()`.
+  `bivariate_copula_tau()` and `bivariate_copula_from_tau()` provide the
+  Kendall-tau parameter scale used for rank-based copula setup.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for
   now; the long-term dependency policy is still open.

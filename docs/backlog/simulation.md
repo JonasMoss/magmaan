@@ -69,6 +69,10 @@ simulation work queue and decision log.
   sampling. `tests/tools/regen_copula_sim_fixtures.R` regenerates
   `tests/fixtures/sim/bivariate_copula_hfunc.json`, which checks the
   conditional CDF and inverse conditional CDF against rvinecopulib `hbicop()`.
+  `bivariate_copula_tau()` and `bivariate_copula_from_tau()` expose the
+  Kendall-tau parameterization used by vine/copula workflows; Clayton, Gumbel,
+  and Frank use closed-form or Debye-function formulas, while Joe uses the
+  standard convergent series.
 
 ## Architecture Direction
 
