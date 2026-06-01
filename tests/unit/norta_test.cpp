@@ -1166,6 +1166,61 @@ TEST_CASE("C-vine 3 calibration can select root and edge families") {
   CHECK(impossible_or.error().kind == magmaan::SimError::Kind::CalibrationFailed);
 }
 
+TEST_CASE("C-vine 3 calibration simulation restores original variable order") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.25),
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.35)};
+
+  magmaan::sim::CVine3CorrelationCalibration calibration;
+  calibration.variable_order = Eigen::Vector3i(2, 0, 1);
+  calibration.root_index = 2;
+  calibration.copula.copula_01.family =
+      magmaan::sim::BivariateCopulaFamily::Frank;
+  calibration.copula.copula_01.theta = 2.0;
+  calibration.copula.copula_02.family =
+      magmaan::sim::BivariateCopulaFamily::Clayton;
+  calibration.copula.copula_02.theta = 1.2;
+  calibration.copula.copula_12_given_0.family =
+      magmaan::sim::BivariateCopulaFamily::Frank;
+  calibration.copula.copula_12_given_0.theta = -1.5;
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 11;
+  options.max_bisection_iter = 45;
+
+  std::mt19937_64 rng_cal(20260610);
+  auto got_or = magmaan::sim::simulate_cvine3_copula_matrix(
+      64, calibration, marginals, rng_cal, options);
+  if (!got_or.has_value()) MESSAGE(got_or.error().detail);
+  REQUIRE(got_or.has_value());
+
+  const std::vector<magmaan::sim::MarginalSpec> ordered_marginals{
+      marginals[2], marginals[0], marginals[1]};
+  std::mt19937_64 rng_direct(20260610);
+  auto ordered_or = magmaan::sim::simulate_cvine3_copula_matrix(
+      64, calibration.copula, ordered_marginals, rng_direct, options);
+  REQUIRE(ordered_or.has_value());
+  Eigen::MatrixXd expected(64, 3);
+  expected.col(2) = ordered_or->col(0);
+  expected.col(0) = ordered_or->col(1);
+  expected.col(1) = ordered_or->col(2);
+  CHECK(got_or->isApprox(expected, 0.0));
+
+  auto raw_or = magmaan::sim::simulate_cvine3_copula_raw(
+      8, calibration, marginals, rng_cal, options);
+  REQUIRE(raw_or.has_value());
+  REQUIRE(raw_or->X.size() == 1u);
+  CHECK(raw_or->X[0].rows() == 8);
+  CHECK(raw_or->X[0].cols() == 3);
+
+  calibration.variable_order = Eigen::Vector3i(0, 0, 2);
+  auto bad_or = magmaan::sim::simulate_cvine3_copula_matrix(
+      8, calibration, marginals, rng_cal, options);
+  REQUIRE_FALSE(bad_or.has_value());
+  CHECK(bad_or.error().kind == magmaan::SimError::Kind::InvalidInput);
+}
+
 TEST_CASE("bivariate copula raw generator validates parameters and marginals") {
   const std::vector<magmaan::sim::MarginalSpec> marginals{
       magmaan::sim::MarginalSpec::standard_normal(),

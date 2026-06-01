@@ -284,6 +284,9 @@ golden `parTable()` fixtures.
   searches a caller-provided family set for the fixed root-0 C-vine.
   `calibrate_cvine3_copula_correlation_select_structure()` combines the
   three-root search with per-edge family search for the three-variable case.
+  The `simulate_cvine3_copula_*()` overloads that take a
+  `CVine3CorrelationCalibration` simulate in the selected vine order and return
+  columns in the caller's original variable order.
   Higher-dimensional vines, broader structure/family policies, and
   ordinal/polyserial/polychoric calibration are still future work.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails

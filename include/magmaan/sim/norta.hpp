@@ -462,9 +462,23 @@ simulate_cvine3_copula_matrix(Eigen::Index n,
                               std::mt19937_64& rng,
                               const BivariateCopulaOptions& options = {});
 
+sim_expected<Eigen::MatrixXd>
+simulate_cvine3_copula_matrix(Eigen::Index n,
+                              const CVine3CorrelationCalibration& calibration,
+                              const std::vector<MarginalSpec>& marginals,
+                              std::mt19937_64& rng,
+                              const BivariateCopulaOptions& options = {});
+
 sim_expected<data::RawData>
 simulate_cvine3_copula_raw(Eigen::Index n,
                            const CVine3CopulaSpec& copula,
+                           const std::vector<MarginalSpec>& marginals,
+                           std::mt19937_64& rng,
+                           const BivariateCopulaOptions& options = {});
+
+sim_expected<data::RawData>
+simulate_cvine3_copula_raw(Eigen::Index n,
+                           const CVine3CorrelationCalibration& calibration,
                            const std::vector<MarginalSpec>& marginals,
                            std::mt19937_64& rng,
                            const BivariateCopulaOptions& options = {});
