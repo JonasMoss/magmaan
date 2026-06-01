@@ -183,6 +183,15 @@ golden `parTable()` fixtures.
   `simulate_independent_matrix()` and `simulate_independent_raw()` draw
   independent latent standard normals, transform each column through its
   marginal, and skip NORTA correlation calibration entirely.
+- Foldnes-Olsson style independent-generator simulation is available through
+  `calibrate_ig()`, `simulate_ig_matrix()`, and `simulate_ig_raw()`.
+  `calibrate_ig()` chooses a square root `A` of the target covariance
+  (`IgRootKind::Cholesky` by default, or `IgRootKind::Symmetric` via
+  eigendecomposition), solves the linear `A^3` and `A^4` systems for generator
+  skewness and excess kurtosis, then moment-matches each independent generator
+  marginal. The lower-level overload accepts an already chosen root and fitted
+  generator marginals for experiments that want to inspect or cache the
+  calibration.
 - Initial NORTA marginals are standard normal, standardized lognormal, Tukey
   g-and-h, and Pearson-system distributions. The Tukey path is a pragmatic
   skew/tail stress family with numerically standardized moments and
@@ -190,6 +199,9 @@ golden `parTable()` fixtures.
   PearsonDS parameter convention for Types 0, I, II, III, V, VI, and VII;
   Type IV is detected but currently rejected because its CDF/quantile requires
   a separate numerical integration policy.
+- Scalar special-function helpers needed by Pearson quantiles and FMG F tails
+  are centralized in the private `src/detail_distribution_math.hpp` header for
+  now; the long-term dependency policy is still open.
 - Moment-matching now has an explicit simulation API:
   `fit_marginal_to_moments()` takes a `MomentMatchSpec` with target skewness
   and excess kurtosis, returning a fitted `MarginalSpec` plus achieved moment

@@ -27,6 +27,47 @@ double sample_corr(const Eigen::MatrixXd& X, Eigen::Index a, Eigen::Index b) {
   return xa.dot(xb) / std::sqrt(xa.squaredNorm() * xb.squaredNorm());
 }
 
+Eigen::MatrixXd sample_cov(const Eigen::MatrixXd& X) {
+  const Eigen::MatrixXd centered = X.rowwise() - X.colwise().mean();
+  return centered.transpose() * centered / static_cast<double>(X.rows());
+}
+
+double sample_skewness(const Eigen::MatrixXd& X, Eigen::Index j) {
+  const Eigen::ArrayXd centered = X.col(j).array() - X.col(j).mean();
+  const double var = centered.square().mean();
+  return centered.pow(3).mean() / std::pow(var, 1.5);
+}
+
+double sample_excess_kurtosis(const Eigen::MatrixXd& X, Eigen::Index j) {
+  const Eigen::ArrayXd centered = X.col(j).array() - X.col(j).mean();
+  const double var = centered.square().mean();
+  return centered.pow(4).mean() / (var * var) - 3.0;
+}
+
+void check_ig_moment_system(const Eigen::MatrixXd& root,
+                            const Eigen::VectorXd& generator_skewness,
+                            const Eigen::VectorXd& generator_excess_kurtosis,
+                            const Eigen::VectorXd& target_skewness,
+                            const Eigen::VectorXd& target_excess_kurtosis) {
+  Eigen::VectorXd got_skew(root.rows());
+  Eigen::VectorXd got_kurt(root.rows());
+  for (Eigen::Index i = 0; i < root.rows(); ++i) {
+    const double variance = root.row(i).squaredNorm();
+    const double sd = std::sqrt(variance);
+    got_skew(i) = 0.0;
+    got_kurt(i) = 0.0;
+    for (Eigen::Index j = 0; j < root.cols(); ++j) {
+      const double a = root(i, j);
+      const double a2 = a * a;
+      got_skew(i) += a2 * a / (sd * sd * sd) * generator_skewness(j);
+      got_kurt(i) += a2 * a2 / (variance * variance) *
+                     generator_excess_kurtosis(j);
+    }
+  }
+  CHECK((got_skew - target_skewness).norm() == doctest::Approx(0.0).epsilon(1e-10));
+  CHECK((got_kurt - target_excess_kurtosis).norm() == doctest::Approx(0.0).epsilon(1e-10));
+}
+
 }  // namespace
 
 TEST_CASE("normal quantile round-trips through normal CDF") {
@@ -109,6 +150,83 @@ TEST_CASE("independent raw generator wraps one complete data block") {
   CHECK(raw_or->mask.empty());
   CHECK(raw_or->X[0].rows() == 25);
   CHECK(raw_or->X[0].cols() == 2);
+}
+
+TEST_CASE("IG calibration solves generator moments with Cholesky root") {
+  const Eigen::MatrixXd sigma = corr2(0.30);
+  Eigen::VectorXd target_skewness(2);
+  target_skewness << 0.20, 0.45;
+  Eigen::VectorXd target_excess_kurtosis(2);
+  target_excess_kurtosis << 0.50, 0.90;
+
+  magmaan::sim::IgOptions options;
+  options.root = magmaan::sim::IgRootKind::Cholesky;
+  options.generator_family = magmaan::sim::MomentMatchFamily::TukeyGH;
+  options.moment_match.quadrature_points = 81;
+
+  auto cal_or = magmaan::sim::calibrate_ig(
+      sigma, target_skewness, target_excess_kurtosis, options);
+  if (!cal_or.has_value()) MESSAGE(cal_or.error().detail);
+  REQUIRE(cal_or.has_value());
+  if (!cal_or.has_value()) return;
+  const auto& cal = *cal_or;
+  CHECK((cal.root * cal.root.transpose() - sigma).norm() ==
+        doctest::Approx(0.0).epsilon(1e-12));
+  CHECK(cal.generator_marginals.size() == 2u);
+  CHECK(cal.generator_marginals[0].kind == magmaan::sim::MarginalKind::TukeyGH);
+  CHECK(cal.generator_marginals[1].kind == magmaan::sim::MarginalKind::TukeyGH);
+  check_ig_moment_system(cal.root,
+                         cal.generator_skewness,
+                         cal.generator_excess_kurtosis,
+                         target_skewness,
+                         target_excess_kurtosis);
+
+  for (Eigen::Index j = 0; j < cal.generator_skewness.size(); ++j) {
+    auto summary_or = magmaan::sim::marginal_moment_summary(
+        cal.generator_marginals[static_cast<std::size_t>(j)], 81);
+    REQUIRE(summary_or.has_value());
+    CHECK(summary_or->skewness ==
+          doctest::Approx(cal.generator_skewness(j)).epsilon(1e-6));
+    CHECK(summary_or->excess_kurtosis ==
+          doctest::Approx(cal.generator_excess_kurtosis(j)).epsilon(1e-6));
+  }
+}
+
+TEST_CASE("IG calibration exposes symmetric square-root option") {
+  const Eigen::MatrixXd sigma = corr2(0.30);
+  Eigen::VectorXd target_skewness(2);
+  target_skewness << 0.20, 0.45;
+  Eigen::VectorXd target_excess_kurtosis(2);
+  target_excess_kurtosis << 0.50, 0.90;
+
+  magmaan::sim::IgOptions cholesky_options;
+  cholesky_options.root = magmaan::sim::IgRootKind::Cholesky;
+  cholesky_options.moment_match.quadrature_points = 81;
+  auto chol_or = magmaan::sim::calibrate_ig(
+      sigma, target_skewness, target_excess_kurtosis, cholesky_options);
+  if (!chol_or.has_value()) MESSAGE(chol_or.error().detail);
+  REQUIRE(chol_or.has_value());
+  if (!chol_or.has_value()) return;
+
+  magmaan::sim::IgOptions symmetric_options;
+  symmetric_options.root = magmaan::sim::IgRootKind::Symmetric;
+  symmetric_options.moment_match.quadrature_points = 81;
+  auto sym_or = magmaan::sim::calibrate_ig(
+      sigma, target_skewness, target_excess_kurtosis, symmetric_options);
+  if (!sym_or.has_value()) MESSAGE(sym_or.error().detail);
+  REQUIRE(sym_or.has_value());
+  if (!sym_or.has_value()) return;
+
+  CHECK((sym_or->root - sym_or->root.transpose()).norm() ==
+        doctest::Approx(0.0).epsilon(1e-12));
+  CHECK((sym_or->root * sym_or->root.transpose() - sigma).norm() ==
+        doctest::Approx(0.0).epsilon(1e-12));
+  CHECK((chol_or->root - sym_or->root).norm() > 1e-3);
+  check_ig_moment_system(sym_or->root,
+                         sym_or->generator_skewness,
+                         sym_or->generator_excess_kurtosis,
+                         target_skewness,
+                         target_excess_kurtosis);
 }
 
 TEST_CASE("Tukey g-and-h moment matcher recovers Kowalchuk-Headrick shape") {
@@ -208,6 +326,38 @@ TEST_CASE("moment matcher reserves unsupported family slots") {
   auto fit_or = magmaan::sim::fit_marginal_to_moments(spec);
   REQUIRE_FALSE(fit_or.has_value());
   CHECK(fit_or.error().kind == magmaan::SimError::Kind::InvalidInput);
+}
+
+TEST_CASE("IG simulation respects covariance and target marginal shapes") {
+  const Eigen::MatrixXd sigma = corr2(0.25);
+  Eigen::VectorXd target_skewness(2);
+  target_skewness << 0.20, 0.45;
+  Eigen::VectorXd target_excess_kurtosis(2);
+  target_excess_kurtosis << 0.50, 0.90;
+
+  magmaan::sim::IgOptions options;
+  options.root = magmaan::sim::IgRootKind::Cholesky;
+  options.generator_family = magmaan::sim::MomentMatchFamily::TukeyGH;
+  options.moment_match.quadrature_points = 81;
+
+  std::mt19937_64 rng(20260602);
+  auto X_or = magmaan::sim::simulate_ig_matrix(
+      60000, sigma, target_skewness, target_excess_kurtosis, rng, options);
+  if (!X_or.has_value()) MESSAGE(X_or.error().detail);
+  REQUIRE(X_or.has_value());
+  if (!X_or.has_value()) return;
+  const auto& X = *X_or;
+  REQUIRE(X.rows() == 60000);
+  REQUIRE(X.cols() == 2);
+
+  const Eigen::MatrixXd cov = sample_cov(X);
+  CHECK(std::abs(cov(0, 0) - sigma(0, 0)) < 0.04);
+  CHECK(std::abs(cov(1, 1) - sigma(1, 1)) < 0.04);
+  CHECK(std::abs(cov(0, 1) - sigma(0, 1)) < 0.04);
+  CHECK(std::abs(sample_skewness(X, 0) - target_skewness(0)) < 0.08);
+  CHECK(std::abs(sample_skewness(X, 1) - target_skewness(1)) < 0.08);
+  CHECK(std::abs(sample_excess_kurtosis(X, 0) - target_excess_kurtosis(0)) < 0.20);
+  CHECK(std::abs(sample_excess_kurtosis(X, 1) - target_excess_kurtosis(1)) < 0.20);
 }
 
 TEST_CASE("NORTA simulation respects target moments and correlations") {

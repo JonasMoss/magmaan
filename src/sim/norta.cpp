@@ -9,6 +9,9 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Eigenvalues>
+#include <Eigen/QR>
+
+#include "../detail_distribution_math.hpp"
 
 namespace magmaan::sim {
 
@@ -38,176 +41,13 @@ struct MomentFitEval {
   double norm = 0.0;
 };
 
-double nan() noexcept {
-  return std::numeric_limits<double>::quiet_NaN();
-}
+using detail::inverse_gamma_p;
+using detail::inverse_regularized_beta;
+using detail::nan;
+using detail::student_t_quantile;
 
 bool approx_equal(double a, double b, double tol = 1e-12) noexcept {
   return std::abs(a - b) <= tol * std::max({1.0, std::abs(a), std::abs(b)});
-}
-
-double gamma_p_series(double a, double x) noexcept {
-  if (!(a > 0.0) || x < 0.0) return nan();
-  if (x == 0.0) return 0.0;
-  double sum = 1.0 / a;
-  double term = sum;
-  constexpr int max_iter = 200;
-  for (int n = 1; n < max_iter; ++n) {
-    term *= x / (a + static_cast<double>(n));
-    sum += term;
-    if (std::abs(term) < std::abs(sum) * 1e-15) break;
-  }
-  return sum * std::exp(-x + a * std::log(x) - std::lgamma(a));
-}
-
-double gamma_q_cfrac(double a, double x) noexcept {
-  if (!(a > 0.0) || x < 0.0) return nan();
-  if (x == 0.0) return 1.0;
-  constexpr double fpmin = 1e-300;
-  double b = x + 1.0 - a;
-  double c = 1.0 / fpmin;
-  double d = 1.0 / b;
-  double h = d;
-  constexpr int max_iter = 200;
-  for (int n = 1; n < max_iter; ++n) {
-    const double an = -static_cast<double>(n) * (static_cast<double>(n) - a);
-    b += 2.0;
-    d = an * d + b;
-    if (std::abs(d) < fpmin) d = fpmin;
-    c = b + an / c;
-    if (std::abs(c) < fpmin) c = fpmin;
-    d = 1.0 / d;
-    const double del = d * c;
-    h *= del;
-    if (std::abs(del - 1.0) < 1e-15) break;
-  }
-  return h * std::exp(-x + a * std::log(x) - std::lgamma(a));
-}
-
-double gamma_p(double a, double x) noexcept {
-  if (x < a + 1.0) return gamma_p_series(a, x);
-  return 1.0 - gamma_q_cfrac(a, x);
-}
-
-double beta_cont_frac(double a, double b, double x) noexcept {
-  constexpr int max_iter = 200;
-  constexpr double eps = 3e-14;
-  constexpr double fpmin = 1e-300;
-
-  const double qab = a + b;
-  const double qap = a + 1.0;
-  const double qam = a - 1.0;
-  double c = 1.0;
-  double d = 1.0 - qab * x / qap;
-  if (std::abs(d) < fpmin) d = fpmin;
-  d = 1.0 / d;
-  double h = d;
-
-  for (int m = 1; m <= max_iter; ++m) {
-    const double m2 = 2.0 * static_cast<double>(m);
-    double aa = static_cast<double>(m) * (b - static_cast<double>(m)) * x /
-                ((qam + m2) * (a + m2));
-    d = 1.0 + aa * d;
-    if (std::abs(d) < fpmin) d = fpmin;
-    c = 1.0 + aa / c;
-    if (std::abs(c) < fpmin) c = fpmin;
-    d = 1.0 / d;
-    h *= d * c;
-
-    aa = -(a + static_cast<double>(m)) * (qab + static_cast<double>(m)) * x /
-         ((a + m2) * (qap + m2));
-    d = 1.0 + aa * d;
-    if (std::abs(d) < fpmin) d = fpmin;
-    c = 1.0 + aa / c;
-    if (std::abs(c) < fpmin) c = fpmin;
-    d = 1.0 / d;
-    const double del = d * c;
-    h *= del;
-    if (std::abs(del - 1.0) < eps) break;
-  }
-  return h;
-}
-
-double regularized_beta(double a, double b, double x) noexcept {
-  if (!(a > 0.0) || !(b > 0.0) || x < 0.0 || x > 1.0) return nan();
-  if (x == 0.0) return 0.0;
-  if (x == 1.0) return 1.0;
-  const double bt = std::exp(std::lgamma(a + b) - std::lgamma(a) -
-                             std::lgamma(b) + a * std::log(x) +
-                             b * std::log1p(-x));
-  if (x < (a + 1.0) / (a + b + 2.0)) {
-    return bt * beta_cont_frac(a, b, x) / a;
-  }
-  return 1.0 - bt * beta_cont_frac(b, a, 1.0 - x) / b;
-}
-
-double inverse_regularized_beta(double p, double a, double b) noexcept {
-  if (!(a > 0.0) || !(b > 0.0) || p < 0.0 || p > 1.0) return nan();
-  if (p == 0.0) return 0.0;
-  if (p == 1.0) return 1.0;
-  double lo = 0.0;
-  double hi = 1.0;
-  double mid = 0.5;
-  for (int iter = 0; iter < 120; ++iter) {
-    mid = 0.5 * (lo + hi);
-    const double cdf = regularized_beta(a, b, mid);
-    if (!std::isfinite(cdf)) return nan();
-    if (cdf < p) lo = mid;
-    else hi = mid;
-  }
-  return mid;
-}
-
-double inverse_gamma_p(double p, double shape, double scale) noexcept {
-  if (!(shape > 0.0) || !(scale > 0.0) || p < 0.0 || p > 1.0) return nan();
-  if (p == 0.0) return 0.0;
-  if (p == 1.0) return std::numeric_limits<double>::infinity();
-  double lo = 0.0;
-  double hi = std::max(1.0, shape * scale);
-  while (gamma_p(shape, hi / scale) < p) {
-    hi *= 2.0;
-    if (!std::isfinite(hi)) return hi;
-  }
-  double mid = hi;
-  for (int iter = 0; iter < 140; ++iter) {
-    mid = 0.5 * (lo + hi);
-    const double cdf = gamma_p(shape, mid / scale);
-    if (!std::isfinite(cdf)) return nan();
-    if (cdf < p) lo = mid;
-    else hi = mid;
-  }
-  return mid;
-}
-
-double student_t_cdf(double x, double df) noexcept {
-  if (!(df > 0.0)) return nan();
-  if (x == 0.0) return 0.5;
-  const double z = df / (df + x * x);
-  const double ib = regularized_beta(0.5 * df, 0.5, z);
-  if (!std::isfinite(ib)) return nan();
-  return x > 0.0 ? 1.0 - 0.5 * ib : 0.5 * ib;
-}
-
-double student_t_quantile(double p, double df) noexcept {
-  if (!(df > 0.0) || p < 0.0 || p > 1.0) return nan();
-  if (p == 0.0) return -std::numeric_limits<double>::infinity();
-  if (p == 1.0) return std::numeric_limits<double>::infinity();
-  if (p == 0.5) return 0.0;
-  const bool neg = p < 0.5;
-  const double target = neg ? 1.0 - p : p;
-  double lo = 0.0;
-  double hi = 1.0;
-  while (student_t_cdf(hi, df) < target) {
-    hi *= 2.0;
-    if (!std::isfinite(hi)) return neg ? -hi : hi;
-  }
-  double mid = hi;
-  for (int iter = 0; iter < 140; ++iter) {
-    mid = 0.5 * (lo + hi);
-    if (student_t_cdf(mid, df) < target) lo = mid;
-    else hi = mid;
-  }
-  return neg ? -mid : mid;
 }
 
 sim_expected<GaussHermite> gauss_hermite(int n) {
@@ -1019,6 +859,209 @@ cholesky_factor_with_jitter(const Eigen::Ref<const Eigen::MatrixXd>& corr,
       "simulate_norta: calibrated latent correlation is not positive definite"));
 }
 
+sim_expected<void>
+validate_ig_inputs(const Eigen::Ref<const Eigen::MatrixXd>& sigma,
+                   const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+                   const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+                   const IgOptions& options) {
+  if (sigma.rows() != sigma.cols()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_ig: sigma must be square"));
+  }
+  if (sigma.rows() == 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_ig: sigma must not be empty"));
+  }
+  if (target_skewness.size() != sigma.rows() ||
+      target_excess_kurtosis.size() != sigma.rows()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_ig: target moment vector sizes must match sigma dimension"));
+  }
+  if (!std::isfinite(options.root_eigen_tol) || options.root_eigen_tol <= 0.0 ||
+      !std::isfinite(options.moment_solve_tol) || options.moment_solve_tol <= 0.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_ig: invalid root or moment-solve tolerances"));
+  }
+
+  constexpr double sym_tol = 1e-12;
+  for (Eigen::Index i = 0; i < sigma.rows(); ++i) {
+    if (!std::isfinite(target_skewness(i)) ||
+        !std::isfinite(target_excess_kurtosis(i))) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "calibrate_ig: target skewness and kurtosis must be finite"));
+    }
+    if (!std::isfinite(sigma(i, i)) || sigma(i, i) <= 0.0) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "calibrate_ig: sigma diagonal must be finite and positive"));
+    }
+    for (Eigen::Index j = 0; j < sigma.cols(); ++j) {
+      if (!std::isfinite(sigma(i, j)) ||
+          std::abs(sigma(i, j) - sigma(j, i)) > sym_tol) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "calibrate_ig: sigma must be finite and symmetric"));
+      }
+    }
+  }
+  return {};
+}
+
+sim_expected<Eigen::MatrixXd>
+ig_root_matrix(const Eigen::Ref<const Eigen::MatrixXd>& sigma,
+               const IgOptions& options) {
+  switch (options.root) {
+    case IgRootKind::Cholesky: {
+      Eigen::LLT<Eigen::MatrixXd> llt(sigma);
+      if (llt.info() != Eigen::Success) {
+        return std::unexpected(make_err(
+            SimError::Kind::NonPositiveDefinite,
+            "calibrate_ig: sigma is not positive definite"));
+      }
+      return llt.matrixL();
+    }
+    case IgRootKind::Symmetric: {
+      Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(sigma);
+      if (es.info() != Eigen::Success) {
+        return std::unexpected(make_err(
+            SimError::Kind::NumericIssue,
+            "calibrate_ig: symmetric-root eigensolve failed"));
+      }
+      const Eigen::VectorXd evals = es.eigenvalues();
+      if (evals.minCoeff() <= options.root_eigen_tol) {
+        return std::unexpected(make_err(
+            SimError::Kind::NonPositiveDefinite,
+            "calibrate_ig: sigma has non-positive eigenvalues"));
+      }
+      return es.eigenvectors() * evals.cwiseSqrt().asDiagonal() *
+             es.eigenvectors().transpose();
+    }
+  }
+  return std::unexpected(make_err(
+      SimError::Kind::InvalidInput,
+      "calibrate_ig: unknown root kind"));
+}
+
+sim_expected<Eigen::VectorXd>
+solve_ig_moment_system(const Eigen::MatrixXd& B,
+                       const Eigen::VectorXd& target,
+                       const char* label,
+                       double tol) {
+  Eigen::ColPivHouseholderQR<Eigen::MatrixXd> qr(B);
+  const Eigen::VectorXd x = qr.solve(target);
+  if (!x.allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        std::string("calibrate_ig: non-finite ") + label + " generator moments"));
+  }
+  const Eigen::VectorXd residual = B * x - target;
+  const double scale = std::max(1.0, target.norm());
+  if (!std::isfinite(residual.norm()) || residual.norm() > tol * scale) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        std::string("calibrate_ig: ") + label + " moment system is singular"));
+  }
+  return x;
+}
+
+sim_expected<void>
+ig_generator_moments(const Eigen::MatrixXd& root,
+                     const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+                     const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+                     double tol,
+                     Eigen::VectorXd& generator_skewness,
+                     Eigen::VectorXd& generator_excess_kurtosis) {
+  const Eigen::Index p = root.rows();
+  const Eigen::Index q = root.cols();
+  Eigen::MatrixXd B3(p, q);
+  Eigen::MatrixXd B4(p, q);
+  for (Eigen::Index i = 0; i < p; ++i) {
+    const double variance = root.row(i).squaredNorm();
+    if (!std::isfinite(variance) || variance <= 0.0) {
+      return std::unexpected(make_err(
+          SimError::Kind::NumericIssue,
+          "calibrate_ig: root has a row with non-positive variance"));
+    }
+    const double sd = std::sqrt(variance);
+    for (Eigen::Index j = 0; j < q; ++j) {
+      const double a = root(i, j);
+      const double a2 = a * a;
+      B3(i, j) = a2 * a / (sd * sd * sd);
+      B4(i, j) = a2 * a2 / (variance * variance);
+    }
+  }
+
+  auto skew_or = solve_ig_moment_system(B3, target_skewness, "skewness", tol);
+  if (!skew_or.has_value()) return std::unexpected(skew_or.error());
+  auto kurt_or = solve_ig_moment_system(
+      B4, target_excess_kurtosis, "kurtosis", tol);
+  if (!kurt_or.has_value()) return std::unexpected(kurt_or.error());
+  generator_skewness = std::move(*skew_or);
+  generator_excess_kurtosis = std::move(*kurt_or);
+  return {};
+}
+
+sim_expected<std::vector<MarginalSpec>>
+fit_ig_generator_marginals(const Eigen::VectorXd& generator_skewness,
+                           const Eigen::VectorXd& generator_excess_kurtosis,
+                           const IgOptions& options) {
+  std::vector<MarginalSpec> marginals;
+  marginals.reserve(static_cast<std::size_t>(generator_skewness.size()));
+  for (Eigen::Index j = 0; j < generator_skewness.size(); ++j) {
+    MomentMatchSpec spec;
+    spec.family = options.generator_family;
+    spec.mean = 0.0;
+    spec.sd = 1.0;
+    spec.shape.skewness = generator_skewness(j);
+    spec.shape.excess_kurtosis = generator_excess_kurtosis(j);
+    auto fit_or = fit_marginal_to_moments(spec, options.moment_match);
+    if (!fit_or.has_value()) return std::unexpected(fit_or.error());
+    marginals.push_back(fit_or->marginal);
+  }
+  return marginals;
+}
+
+sim_expected<void>
+validate_ig_root_sim_inputs(Eigen::Index n,
+                            const Eigen::Ref<const Eigen::MatrixXd>& root,
+                            const std::vector<MarginalSpec>& generator_marginals,
+                            const IndependentOptions& options) {
+  if (n <= 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_ig_matrix: n must be positive"));
+  }
+  if (root.rows() == 0 || root.cols() == 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_ig_matrix: root must not be empty"));
+  }
+  if (static_cast<Eigen::Index>(generator_marginals.size()) != root.cols()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_ig_matrix: generator marginal count must match root columns"));
+  }
+  if (!root.allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_ig_matrix: root must be finite"));
+  }
+  for (const auto& marginal : generator_marginals) {
+    if (std::abs(marginal.mean) > 1e-12 ||
+        std::abs(marginal.sd - 1.0) > 1e-12) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidMarginal,
+          "simulate_ig_matrix: generator marginals must have mean 0 and sd 1"));
+    }
+  }
+  return validate_independent_inputs(n, generator_marginals, options);
+}
+
 }  // namespace
 
 MarginalSpec MarginalSpec::standard_normal(double mean, double sd) {
@@ -1208,6 +1251,87 @@ simulate_independent_raw(Eigen::Index n,
                          std::mt19937_64& rng,
                          const IndependentOptions& options) {
   auto X_or = simulate_independent_matrix(n, marginals, rng, options);
+  if (!X_or.has_value()) return std::unexpected(X_or.error());
+  data::RawData raw;
+  raw.X.push_back(std::move(*X_or));
+  return raw;
+}
+
+sim_expected<IgCalibration>
+calibrate_ig(const Eigen::Ref<const Eigen::MatrixXd>& sigma,
+             const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+             const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+             const IgOptions& options) {
+  if (auto ok = validate_ig_inputs(
+          sigma, target_skewness, target_excess_kurtosis, options);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  auto root_or = ig_root_matrix(sigma, options);
+  if (!root_or.has_value()) return std::unexpected(root_or.error());
+
+  IgCalibration out;
+  out.root = std::move(*root_or);
+  if (auto ok = ig_generator_moments(out.root,
+                                     target_skewness,
+                                     target_excess_kurtosis,
+                                     options.moment_solve_tol,
+                                     out.generator_skewness,
+                                     out.generator_excess_kurtosis);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  auto marginals_or = fit_ig_generator_marginals(
+      out.generator_skewness, out.generator_excess_kurtosis, options);
+  if (!marginals_or.has_value()) return std::unexpected(marginals_or.error());
+  out.generator_marginals = std::move(*marginals_or);
+  return out;
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_ig_matrix(Eigen::Index n,
+                   const Eigen::Ref<const Eigen::MatrixXd>& root,
+                   const std::vector<MarginalSpec>& generator_marginals,
+                   std::mt19937_64& rng,
+                   const IndependentOptions& options) {
+  if (auto ok = validate_ig_root_sim_inputs(
+          n, root, generator_marginals, options);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  auto X_or = simulate_independent_matrix(n, generator_marginals, rng, options);
+  if (!X_or.has_value()) return std::unexpected(X_or.error());
+  return (*X_or) * root.transpose();
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_ig_matrix(Eigen::Index n,
+                   const Eigen::Ref<const Eigen::MatrixXd>& sigma,
+                   const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+                   const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+                   std::mt19937_64& rng,
+                   const IgOptions& options) {
+  auto cal_or = calibrate_ig(
+      sigma, target_skewness, target_excess_kurtosis, options);
+  if (!cal_or.has_value()) return std::unexpected(cal_or.error());
+
+  IndependentOptions independent_options;
+  independent_options.quadrature_points = options.moment_match.quadrature_points;
+  return simulate_ig_matrix(
+      n, cal_or->root, cal_or->generator_marginals, rng, independent_options);
+}
+
+sim_expected<data::RawData>
+simulate_ig_raw(Eigen::Index n,
+                const Eigen::Ref<const Eigen::MatrixXd>& sigma,
+                const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+                const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+                std::mt19937_64& rng,
+                const IgOptions& options) {
+  auto X_or = simulate_ig_matrix(
+      n, sigma, target_skewness, target_excess_kurtosis, rng, options);
   if (!X_or.has_value()) return std::unexpected(X_or.error());
   data::RawData raw;
   raw.X.push_back(std::move(*X_or));

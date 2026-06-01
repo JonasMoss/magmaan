@@ -209,6 +209,15 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   cover normal identity calibration, analytic lognormal calibration,
   infeasible lognormal correlations, independent Tukey generation, raw-data
   wrapping, and a mixed-marginal stochastic smoke.
+- **Landed, IG slice.** `calibrate_ig()` implements the Foldnes-Olsson
+  independent-generator moment equations for a chosen square root of `Sigma`.
+  Cholesky is the default root; a symmetric square root is available for
+  experiments that want the eigendecomposition convention. The calibration
+  solves generator skewness and excess-kurtosis systems, fits generator
+  marginals through `fit_marginal_to_moments()`, and can be sampled through
+  `simulate_ig_matrix()` / `simulate_ig_raw()` or through a lower-level
+  root-plus-generator overload for cached calibrations. Unit coverage checks
+  both root conventions and a Tukey g-and-h stochastic covariance/moment smoke.
 - **Partly landed.** Moment-matching now has a reusable C++ API:
   `MomentMatchSpec` / `MomentMatchOptions` / `MomentMatchResult` plus
   `fit_marginal_to_moments()`. Tukey g-and-h fits `g,h` to target skewness and
@@ -224,6 +233,12 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   CDF/quantile policy (or keep rejecting it deliberately), then add Johnson
   fitting once the Pearson Type IV story is clear. Keep R/package dependencies
   out of the C++ core and fixtures only.
+- **S.** Decide the long-term special-functions policy before expanding the
+  Pearson/Johnson surface. `src/detail_distribution_math.hpp` currently holds
+  hand-rolled regularized beta/gamma, inverse beta/gamma, Student-t, and F-tail
+  helpers shared by Pearson simulation and FMG p-values. Evaluate whether to
+  keep these with dedicated goldens, vendor/use Boost.Math, or choose another
+  vetted dependency.
 - **M.** Harden NORTA calibration for larger simulation grids: cache pairwise
   correlation maps when marginal specs repeat, expose/interpolate the
   `rho_Z -> Corr(X_i, X_j)` map for repeated target matrices, and add an
