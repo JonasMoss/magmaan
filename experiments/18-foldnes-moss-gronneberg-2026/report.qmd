@@ -12,7 +12,7 @@ execute:
 
 ```{r setup}
 results <- file.path("results")
-need <- c("lavaan_parity.csv", "cells.csv", "metadata.csv")
+need <- c("lavaan_parity.csv", "cells.csv", "metadata.csv", "runtime.csv")
 missing <- need[!file.exists(file.path(results, need))]
 if (length(missing)) {
   stop("missing results: ", paste(missing, collapse = ", "),
@@ -20,6 +20,7 @@ if (length(missing)) {
 }
 parity  <- read.csv(file.path(results, "lavaan_parity.csv"))
 meta    <- read.csv(file.path(results, "metadata.csv"))
+runtime <- read.csv(file.path(results, "runtime.csv"))
 fmg     <- if (file.exists(file.path(results, "semtests_parity.csv")))
   read.csv(file.path(results, "semtests_parity.csv")) else NULL
 mv <- function(k) meta$value[match(k, meta$key)]
@@ -27,6 +28,12 @@ anchor  <- parity[parity$metric %in% c("T_ML", "T_RLS", "SB", "SS"), ]
 maxd_lav <- max(anchor$abs_diff, na.rm = TRUE)
 maxd_st  <- if (!is.null(fmg)) max(fmg$abs_diff, na.rm = TRUE) else NA_real_
 n_cells  <- length(unique(parity$cell_idx))
+fmt_time <- function(seconds) {
+  if (!is.finite(seconds)) return("")
+  if (seconds < 60) return(sprintf("%.1fs", seconds))
+  if (seconds < 3600) return(sprintf("%.1f min", seconds / 60))
+  sprintf("%.2f h", seconds / 3600)
+}
 ```
 
 ## Question
@@ -117,6 +124,24 @@ performs best.
 - **Is the simulation reproducible from the paper alone?** The design grid is
   fully specified; the exact populations require the online supplement, as the
   paper itself states.
+
+## Runtime
+
+The runner records wall-clock timing in `results/runtime.csv` and mirrors the
+main totals in `results/metadata.csv`. The total includes any requested parity
+work, so this table describes the exact command that produced the report.
+
+```{r runtime}
+rt <- runtime
+rt$Time <- vapply(rt$seconds, fmt_time, character(1))
+rt_out <- data.frame(
+  Phase = rt$phase,
+  Time = rt$Time,
+  Notes = rt$notes,
+  check.names = FALSE)
+knitr::kable(rt_out, row.names = FALSE,
+             caption = "Measured wall-clock timing for this run.")
+```
 
 ## Reproduce
 
