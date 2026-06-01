@@ -18,9 +18,10 @@ simulation work queue and decision log.
 
 - `magmaan::sim` exposes NORTA calibration/sampling, independent marginal
   generators, Foldnes-Olsson independent-generator calibration,
-  Vale-Maurelli/Fleishman calibration/sampling, fixed-parameter t-copula
-  sampling, fixed-parameter bivariate Archimedean copula sampling, and a first
-  VITA/covsim-style bivariate copula observed-Pearson calibration layer.
+  Vale-Maurelli/Fleishman calibration/sampling, PLSIM piecewise-linear
+  calibration/sampling, fixed-parameter t-copula sampling, fixed-parameter
+  bivariate Archimedean copula sampling, and a first VITA/covsim-style
+  bivariate copula observed-Pearson calibration layer.
 - Baseline multivariate-normal generation is available through
   `simulate_normal_matrix()` and `simulate_normal_raw()`, taking explicit
   population means and covariance matrices. This is the low-level normal
@@ -47,6 +48,16 @@ simulation work queue and decision log.
   independent generators. Fleishman uses the Vale-Maurelli coefficient solver
   and is deliberately treated as a normal generator transform; it is not exposed
   as a guaranteed quantile because the fitted cubic need not be monotone.
+- PLSIM is available through `fit_plsim_marginal()`, `calibrate_plsim()`,
+  `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. The first slice uses
+  regular normal-quantile breakpoints, solves slopes for target marginal
+  skewness/excess kurtosis, exposes Hermite coefficients, and calibrates
+  pairwise intermediate normal correlations with selectable covariance
+  evaluators: Hermite-series, bivariate Gauss-Hermite quadrature, or
+  Hermite-initialized quadrature. This is the comparison harness for the later
+  specialized bivariate rectangle-moment kernel; the current quadrature path is
+  the local deterministic reference, not yet the exact Foldnes-Grønneberg
+  rectangle formula.
 - Pearson marginals follow PearsonDS conventions. Types 0/I/II/III/IV/V/VI/VII
   are supported and checked against PearsonDS 1.3.2 goldens. Type IV uses a
   dependency-free finite-integral CDF and bisection quantile path.
@@ -142,10 +153,11 @@ calibrates/diagnoses one of those steps.
   parameter conventions, simulation checks, and later vine work. Do not make it
   a core runtime dependency unless the exception/dependency boundary is
   deliberately revisited; the C++ core stays local and `std::expected` based.
-- Add PLSIM later, and extend the first pairwise VITA/covsim copula calibration
-  into a full matrix-oriented workflow. Both should plug into the same
-  continuous-generator interface after normal, mixed projection, and
-  elliptical/copula foundations are in place.
+- Extend the first PLSIM slice with a specialized bivariate normal rectangle
+  probability/first/cross-moment kernel, pair-calibration caching, and explicit
+  performance diagnostics comparing Hermite-only, quadrature, and
+  Hermite-initialized refinement. Extend the first pairwise VITA/covsim copula
+  calibration into a full matrix-oriented workflow.
 
 ## Pearson Type IV
 
@@ -256,8 +268,14 @@ Validation:
   is pairwise calibration/diagnostics for one bivariate family across quantile
   marginals; joint copula assembly and ordinal/polyserial/polychoric
   calibration remain.
-- **S.** Add PLSIM/piecewise-linear simulation once the shared projection and
-  diagnostics interfaces exist.
+- **Landed, first PLSIM slice.** Add piecewise-linear simulation through
+  `fit_plsim_marginal()`, `calibrate_plsim()`, `simulate_plsim_matrix()`, and
+  `simulate_plsim_raw()`. Unit coverage checks the skewness 2 / excess kurtosis
+  5 condition where Fleishman fails, Hermite-vs-quadrature covariance
+  agreement, pairwise calibration under Hermite/quadrature/refined strategies,
+  stochastic moments, and raw-data wrapping. Remaining PLSIM work is a faster
+  exact rectangle-moment covariance evaluator plus benchmark/check tooling for
+  calibration speed and accuracy.
 - **S.** Extend VITA/covsim-style simulation from matrix diagnostics to joint
   assembly, feasibility policy, and positive-definiteness repair.
 - **S.** Decide whether Johnson SL should be exposed beyond the direct

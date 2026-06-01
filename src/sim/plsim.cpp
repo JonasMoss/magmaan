@@ -1,0 +1,809 @@
+#include "magmaan/sim/plsim.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <numbers>
+#include <string>
+#include <utility>
+
+#include <Eigen/Cholesky>
+#include <Eigen/Eigenvalues>
+#include <Eigen/QR>
+
+#include "magmaan/sim/norta.hpp"
+
+namespace magmaan::sim {
+
+namespace {
+
+constexpr double inv_sqrt_two_pi = 0.39894228040143267794;
+
+SimError make_err(SimError::Kind k, std::string detail) {
+  return SimError{k, std::move(detail)};
+}
+
+double normal_pdf(double z) noexcept {
+  return inv_sqrt_two_pi * std::exp(-0.5 * z * z);
+}
+
+bool approx_equal(double a, double b, double tol = 1e-12) noexcept {
+  return std::abs(a - b) <= tol * std::max({1.0, std::abs(a), std::abs(b)});
+}
+
+sim_expected<void> validate_options(const PlsimOptions& options) {
+  if (options.num_segments < 2 || options.max_iter <= 0 ||
+      options.quadrature_points < 8 || options.hermite_order < 1 ||
+      !std::isfinite(options.marginal_tol) || options.marginal_tol <= 0.0 ||
+      !std::isfinite(options.correlation_tol) || options.correlation_tol <= 0.0 ||
+      !std::isfinite(options.rho_bound) || options.rho_bound <= 0.0 ||
+      options.rho_bound >= 1.0 ||
+      !std::isfinite(options.cholesky_jitter) || options.cholesky_jitter < 0.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "PLSIM options are outside their valid ranges"));
+  }
+  return {};
+}
+
+Eigen::VectorXd regular_gamma(int num_segments) {
+  Eigen::VectorXd gamma(num_segments - 1);
+  for (int i = 1; i < num_segments; ++i) {
+    auto q_or = normal_quantile(static_cast<double>(i) /
+                                static_cast<double>(num_segments));
+    gamma(i - 1) = q_or.value_or(0.0);
+  }
+  return gamma;
+}
+
+double normal_raw_interval_moment(int k, double lo, double hi) {
+  if (k == 0) return normal_cdf(hi) - normal_cdf(lo);
+
+  std::vector<double> m(static_cast<std::size_t>(std::max(k + 1, 2)), 0.0);
+  m[0] = normal_cdf(hi) - normal_cdf(lo);
+  m[1] = normal_pdf(lo) - normal_pdf(hi);
+  for (int n = 2; n <= k; ++n) {
+    const double lo_term = std::isinf(lo) ? 0.0 : std::pow(lo, n - 1) * normal_pdf(lo);
+    const double hi_term = std::isinf(hi) ? 0.0 : std::pow(hi, n - 1) * normal_pdf(hi);
+    m[static_cast<std::size_t>(n)] =
+        static_cast<double>(n - 1) * m[static_cast<std::size_t>(n - 2)] +
+        lo_term - hi_term;
+  }
+  return m[static_cast<std::size_t>(k)];
+}
+
+double binom(int n, int k) noexcept {
+  if (k < 0 || k > n) return 0.0;
+  k = std::min(k, n - k);
+  double out = 1.0;
+  for (int i = 1; i <= k; ++i) {
+    out *= static_cast<double>(n - k + i);
+    out /= static_cast<double>(i);
+  }
+  return out;
+}
+
+Eigen::VectorXd continuity_intercepts(const Eigen::VectorXd& a,
+                                      const Eigen::VectorXd& gamma) {
+  Eigen::VectorXd b = Eigen::VectorXd::Zero(a.size());
+  for (Eigen::Index i = 1; i < b.size(); ++i) {
+    b(i) = b(i - 1) + (a(i - 1) - a(i)) * gamma(i - 1);
+  }
+
+  double mean = 0.0;
+  for (Eigen::Index i = 0; i < a.size(); ++i) {
+    const double lo = (i == 0) ? -std::numeric_limits<double>::infinity()
+                              : gamma(i - 1);
+    const double hi = (i + 1 == a.size())
+                          ? std::numeric_limits<double>::infinity()
+                          : gamma(i);
+    mean += a(i) * normal_raw_interval_moment(1, lo, hi) +
+            b(i) * normal_raw_interval_moment(0, lo, hi);
+  }
+  b.array() -= mean;
+  return b;
+}
+
+Eigen::Vector4d raw_moments(const Eigen::VectorXd& a,
+                            const Eigen::VectorXd& b,
+                            const Eigen::VectorXd& gamma) {
+  Eigen::Vector4d out = Eigen::Vector4d::Zero();
+  for (Eigen::Index i = 0; i < a.size(); ++i) {
+    const double lo = (i == 0) ? -std::numeric_limits<double>::infinity()
+                              : gamma(i - 1);
+    const double hi = (i + 1 == a.size())
+                          ? std::numeric_limits<double>::infinity()
+                          : gamma(i);
+    for (int power = 1; power <= 4; ++power) {
+      double seg = 0.0;
+      for (int zpow = 0; zpow <= power; ++zpow) {
+        seg += binom(power, zpow) * std::pow(a(i), zpow) *
+               std::pow(b(i), power - zpow) *
+               normal_raw_interval_moment(zpow, lo, hi);
+      }
+      out(power - 1) += seg;
+    }
+  }
+  return out;
+}
+
+sim_expected<Eigen::Vector2d> shape_residual(const Eigen::VectorXd& a,
+                                             const Eigen::VectorXd& gamma,
+                                             double target_skewness,
+                                             double target_excess_kurtosis) {
+  if (!a.allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "fit_plsim_marginal: non-finite slope iterate"));
+  }
+  const Eigen::VectorXd b = continuity_intercepts(a, gamma);
+  const Eigen::Vector4d m = raw_moments(a, b, gamma);
+  const double mean = m(0);
+  const double var = m(1) - mean * mean;
+  if (!(var > 0.0) || !std::isfinite(var)) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "fit_plsim_marginal: variance became non-positive"));
+  }
+  const double mu3 = m(2) - 3.0 * mean * m(1) + 2.0 * mean * mean * mean;
+  const double mu4 = m(3) - 4.0 * mean * m(2) + 6.0 * mean * mean * m(1) -
+                     3.0 * mean * mean * mean * mean;
+  Eigen::Vector2d out;
+  out(0) = mu3 / std::pow(var, 1.5) - target_skewness;
+  out(1) = mu4 / (var * var) - 3.0 - target_excess_kurtosis;
+  if (!out.allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "fit_plsim_marginal: residual became non-finite"));
+  }
+  return out;
+}
+
+double residual_norm(const Eigen::Vector2d& r) noexcept {
+  return std::max(std::abs(r(0)), std::abs(r(1)));
+}
+
+std::vector<Eigen::VectorXd> plsim_starts(int d, bool monotone) {
+  std::vector<Eigen::VectorXd> starts;
+  starts.push_back(Eigen::VectorXd::Ones(d));
+
+  Eigen::VectorXd increasing(d);
+  Eigen::VectorXd decreasing(d);
+  Eigen::VectorXd right_tail(d);
+  Eigen::VectorXd left_tail(d);
+  for (int i = 0; i < d; ++i) {
+    const double t = static_cast<double>(i) / static_cast<double>(std::max(1, d - 1));
+    increasing(i) = 0.45 + 1.7 * t;
+    decreasing(i) = 2.15 - 1.7 * t;
+    right_tail(i) = (i + 1 == d) ? 2.2 : 0.45 + 0.15 * static_cast<double>(i);
+    left_tail(i) = (i == 0) ? 2.2 : 0.75 - 0.12 * static_cast<double>(i);
+  }
+  starts.push_back(increasing);
+  starts.push_back(decreasing);
+  starts.push_back(right_tail);
+  starts.push_back(left_tail);
+
+  if (!monotone && d == 4) {
+    Eigen::VectorXd paper_like(4);
+    paper_like << 0.55, 0.26, 0.58, 2.18;
+    starts.push_back(paper_like);
+    Eigen::VectorXd nonmonotone(4);
+    nonmonotone << 0.85, -0.90, 1.20, 2.15;
+    starts.push_back(nonmonotone);
+  }
+  return starts;
+}
+
+sim_expected<Eigen::VectorXd>
+solve_slopes_from_start(const Eigen::VectorXd& start,
+                        const Eigen::VectorXd& gamma,
+                        double skewness,
+                        double excess_kurtosis,
+                        const PlsimOptions& options) {
+  Eigen::VectorXd x = start;
+  if (options.monotone) x = x.cwiseMax(0.05);
+
+  double best_norm = std::numeric_limits<double>::infinity();
+  Eigen::VectorXd best_x = x;
+
+  for (int iter = 0; iter < options.max_iter; ++iter) {
+    auto r_or = shape_residual(x, gamma, skewness, excess_kurtosis);
+    if (!r_or.has_value()) return std::unexpected(r_or.error());
+    const Eigen::Vector2d r = *r_or;
+    const double norm = residual_norm(r);
+    if (norm < best_norm) {
+      best_norm = norm;
+      best_x = x;
+    }
+    if (norm <= options.marginal_tol) return x;
+
+    Eigen::MatrixXd J(2, x.size());
+    for (Eigen::Index j = 0; j < x.size(); ++j) {
+      Eigen::VectorXd xp = x;
+      const double h = 1e-5 * std::max(1.0, std::abs(x(j)));
+      xp(j) += h;
+      if (options.monotone) xp(j) = std::max(0.05, xp(j));
+      auto rp_or = shape_residual(xp, gamma, skewness, excess_kurtosis);
+      if (!rp_or.has_value()) return std::unexpected(rp_or.error());
+      J.col(j) = (*rp_or - r) / h;
+    }
+
+    const Eigen::VectorXd step = J.colPivHouseholderQr().solve(r);
+    if (!step.allFinite()) break;
+
+    bool accepted = false;
+    double scale = 1.0;
+    for (int ls = 0; ls < 28; ++ls) {
+      Eigen::VectorXd candidate = x - scale * step;
+      if (options.monotone) candidate = candidate.cwiseMax(0.05);
+      auto rc_or = shape_residual(candidate, gamma, skewness, excess_kurtosis);
+      if (rc_or.has_value() && residual_norm(*rc_or) < norm) {
+        x = candidate;
+        accepted = true;
+        break;
+      }
+      scale *= 0.5;
+    }
+    if (!accepted) break;
+  }
+
+  if (best_norm <= std::max(options.marginal_tol, 1e-6)) return best_x;
+  return std::unexpected(make_err(
+      SimError::Kind::CalibrationFailed,
+      "fit_plsim_marginal: piecewise-linear moment solve did not converge"));
+}
+
+double probabilists_hermite(int n, double x) noexcept {
+  if (n == 0) return 1.0;
+  if (n == 1) return x;
+  double hm2 = 1.0;
+  double hm1 = x;
+  for (int k = 2; k <= n; ++k) {
+    const double h = x * hm1 - static_cast<double>(k - 1) * hm2;
+    hm2 = hm1;
+    hm1 = h;
+  }
+  return hm1;
+}
+
+double hermite_interval_integral(int n, double lo, double hi) {
+  if (n == 0) return normal_cdf(hi) - normal_cdf(lo);
+  const double lo_term =
+      std::isinf(lo) ? 0.0 : probabilists_hermite(n - 1, lo) * normal_pdf(lo);
+  const double hi_term =
+      std::isinf(hi) ? 0.0 : probabilists_hermite(n - 1, hi) * normal_pdf(hi);
+  return lo_term - hi_term;
+}
+
+double factorial(int n) noexcept {
+  double out = 1.0;
+  for (int i = 2; i <= n; ++i) out *= static_cast<double>(i);
+  return out;
+}
+
+struct GaussHermite {
+  Eigen::VectorXd nodes;
+  Eigen::VectorXd weights;
+};
+
+sim_expected<GaussHermite> gauss_hermite(int n) {
+  if (n < 8) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "PLSIM quadrature requires at least 8 nodes"));
+  }
+  Eigen::VectorXd beta(n - 1);
+  for (int i = 1; i < n; ++i) beta(i - 1) = std::sqrt(static_cast<double>(i) / 2.0);
+  Eigen::MatrixXd J = Eigen::MatrixXd::Zero(n, n);
+  for (int i = 0; i < n - 1; ++i) {
+    J(i, i + 1) = beta(i);
+    J(i + 1, i) = beta(i);
+  }
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(J);
+  if (es.info() != Eigen::Success) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "PLSIM quadrature eigensolve failed"));
+  }
+  GaussHermite gh;
+  gh.nodes = es.eigenvalues();
+  gh.weights.resize(n);
+  const double sqrt_pi = std::sqrt(std::numbers::pi);
+  for (int i = 0; i < n; ++i) {
+    gh.weights(i) = sqrt_pi * es.eigenvectors()(0, i) * es.eigenvectors()(0, i);
+  }
+  return gh;
+}
+
+sim_expected<double>
+plsim_covariance_by_method(const PlsimMarginal& left,
+                           const PlsimMarginal& right,
+                           double rho,
+                           PlsimCovarianceMethod method,
+                           const PlsimOptions& options) {
+  switch (method) {
+    case PlsimCovarianceMethod::Hermite:
+      return plsim_covariance_hermite(left, right, rho, options.hermite_order);
+    case PlsimCovarianceMethod::Quadrature:
+    case PlsimCovarianceMethod::HermiteThenQuadrature:
+      return plsim_covariance_quadrature(
+          left, right, rho, options.quadrature_points);
+  }
+  return std::unexpected(make_err(
+      SimError::Kind::InvalidInput,
+      "PLSIM covariance method is unknown"));
+}
+
+sim_expected<std::pair<double, int>>
+solve_intermediate_corr(const PlsimMarginal& left,
+                        const PlsimMarginal& right,
+                        double target,
+                        PlsimCovarianceMethod method,
+                        const PlsimOptions& options) {
+  auto eval = [&](double rho, PlsimCovarianceMethod m) -> sim_expected<double> {
+    auto cov_or = plsim_covariance_by_method(left, right, rho, m, options);
+    if (!cov_or.has_value()) return std::unexpected(cov_or.error());
+    return *cov_or - target;
+  };
+
+  double lo = -options.rho_bound;
+  double hi = options.rho_bound;
+  const double full_lo = lo;
+  const double full_hi = hi;
+  double flo = 0.0;
+  double fhi = 0.0;
+  int iterations = 0;
+
+  if (method == PlsimCovarianceMethod::HermiteThenQuadrature) {
+    auto h_lo_or = eval(lo, PlsimCovarianceMethod::Hermite);
+    auto h_hi_or = eval(hi, PlsimCovarianceMethod::Hermite);
+    if (!h_lo_or.has_value()) return std::unexpected(h_lo_or.error());
+    if (!h_hi_or.has_value()) return std::unexpected(h_hi_or.error());
+    double h_lo = *h_lo_or;
+    double h_hi = *h_hi_or;
+    if (std::isfinite(h_lo) && std::isfinite(h_hi) && h_lo * h_hi <= 0.0) {
+      double a = lo;
+      double b = hi;
+      for (int iter = 0; iter < options.max_iter; ++iter) {
+        const double mid = 0.5 * (a + b);
+        auto h_mid_or = eval(mid, PlsimCovarianceMethod::Hermite);
+        if (!h_mid_or.has_value()) return std::unexpected(h_mid_or.error());
+        const double h_mid = *h_mid_or;
+        if (std::abs(h_mid) <= options.correlation_tol ||
+            std::abs(b - a) <= 1e-3) {
+          lo = std::max(-options.rho_bound, mid - 0.08);
+          hi = std::min(options.rho_bound, mid + 0.08);
+          break;
+        }
+        if (h_lo * h_mid <= 0.0) {
+          b = mid;
+          h_hi = h_mid;
+          (void)h_hi;
+        } else {
+          a = mid;
+          h_lo = h_mid;
+        }
+      }
+    }
+    method = PlsimCovarianceMethod::Quadrature;
+  }
+
+  auto lo_or = eval(lo, method);
+  auto hi_or = eval(hi, method);
+  if (!lo_or.has_value()) return std::unexpected(lo_or.error());
+  if (!hi_or.has_value()) return std::unexpected(hi_or.error());
+  flo = *lo_or;
+  fhi = *hi_or;
+  if (!std::isfinite(flo) || !std::isfinite(fhi) || flo * fhi > 0.0) {
+    if (method == PlsimCovarianceMethod::Quadrature &&
+        (lo != full_lo || hi != full_hi)) {
+      lo = full_lo;
+      hi = full_hi;
+      lo_or = eval(lo, method);
+      hi_or = eval(hi, method);
+      if (!lo_or.has_value()) return std::unexpected(lo_or.error());
+      if (!hi_or.has_value()) return std::unexpected(hi_or.error());
+      flo = *lo_or;
+      fhi = *hi_or;
+    }
+    if (!std::isfinite(flo) || !std::isfinite(fhi) || flo * fhi > 0.0) {
+      return std::unexpected(make_err(
+          SimError::Kind::CalibrationFailed,
+          "calibrate_plsim: no intermediate correlation root in bounds"));
+    }
+  }
+  if (std::abs(flo) <= options.correlation_tol) return std::pair{lo, iterations};
+  if (std::abs(fhi) <= options.correlation_tol) return std::pair{hi, iterations};
+
+  for (; iterations < options.max_iter; ++iterations) {
+    const double mid = 0.5 * (lo + hi);
+    auto fmid_or = eval(mid, method);
+    if (!fmid_or.has_value()) return std::unexpected(fmid_or.error());
+    const double fmid = *fmid_or;
+    if (!std::isfinite(fmid)) {
+      return std::unexpected(make_err(
+          SimError::Kind::NumericIssue,
+          "calibrate_plsim: non-finite correlation calibration residual"));
+    }
+    if (std::abs(fmid) <= options.correlation_tol ||
+        std::abs(hi - lo) <= options.correlation_tol) {
+      return std::pair{mid, iterations + 1};
+    }
+    if (flo * fmid <= 0.0) {
+      hi = mid;
+      fhi = fmid;
+      (void)fhi;
+    } else {
+      lo = mid;
+      flo = fmid;
+    }
+  }
+  return std::pair{0.5 * (lo + hi), iterations};
+}
+
+sim_expected<Eigen::MatrixXd>
+cholesky_factor_with_jitter(const Eigen::Ref<const Eigen::MatrixXd>& corr,
+                            double jitter) {
+  Eigen::LLT<Eigen::MatrixXd> llt(corr);
+  if (llt.info() == Eigen::Success) return llt.matrixL();
+  if (jitter > 0.0) {
+    Eigen::MatrixXd adjusted = corr;
+    adjusted.diagonal().array() += jitter;
+    Eigen::LLT<Eigen::MatrixXd> llt_j(adjusted);
+    if (llt_j.info() == Eigen::Success) return llt_j.matrixL();
+  }
+  return std::unexpected(make_err(
+      SimError::Kind::NonPositiveDefinite,
+      "simulate_plsim_matrix: intermediate correlation is not positive definite"));
+}
+
+sim_expected<void>
+validate_plsim_inputs(const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+                      const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+                      const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+                      const PlsimOptions& options) {
+  if (auto ok = validate_options(options); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (target_corr.rows() != target_corr.cols() || target_corr.rows() == 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_plsim: target_corr must be a non-empty square matrix"));
+  }
+  if (target_skewness.size() != target_corr.rows() ||
+      target_excess_kurtosis.size() != target_corr.rows()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_plsim: moment vectors must match target_corr size"));
+  }
+  if (!target_corr.allFinite() || !target_skewness.allFinite() ||
+      !target_excess_kurtosis.allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_plsim: inputs must be finite"));
+  }
+  for (Eigen::Index i = 0; i < target_corr.rows(); ++i) {
+    if (!approx_equal(target_corr(i, i), 1.0, 1e-10)) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "calibrate_plsim: target_corr diagonal must equal one"));
+    }
+    if (target_excess_kurtosis(i) <
+        target_skewness(i) * target_skewness(i) - 2.0) {
+      return std::unexpected(make_err(
+          SimError::Kind::CalibrationFailed,
+          "calibrate_plsim: requested marginal moments are infeasible"));
+    }
+    for (Eigen::Index j = i + 1; j < target_corr.cols(); ++j) {
+      if (!approx_equal(target_corr(i, j), target_corr(j, i), 1e-10)) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "calibrate_plsim: target_corr must be symmetric"));
+      }
+      if (std::abs(target_corr(i, j)) >= 1.0) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "calibrate_plsim: correlations must be strictly inside (-1, 1)"));
+      }
+    }
+  }
+  return {};
+}
+
+}  // namespace
+
+sim_expected<PlsimMarginal>
+fit_plsim_marginal(double skewness,
+                   double excess_kurtosis,
+                   const PlsimOptions& options) {
+  if (auto ok = validate_options(options); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (!std::isfinite(skewness) || !std::isfinite(excess_kurtosis)) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "fit_plsim_marginal: target moments must be finite"));
+  }
+  if (excess_kurtosis < skewness * skewness - 2.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        "fit_plsim_marginal: requested moments are infeasible"));
+  }
+
+  const Eigen::VectorXd gamma = regular_gamma(options.num_segments);
+  SimError last_error{SimError::Kind::CalibrationFailed,
+                      "fit_plsim_marginal: piecewise-linear moment solve did not converge"};
+  for (const auto& start : plsim_starts(options.num_segments, options.monotone)) {
+    auto slopes_or = solve_slopes_from_start(
+        start, gamma, skewness, excess_kurtosis, options);
+    if (!slopes_or.has_value()) {
+      last_error = slopes_or.error();
+      continue;
+    }
+
+    Eigen::VectorXd a = *slopes_or;
+    Eigen::VectorXd b = continuity_intercepts(a, gamma);
+    Eigen::Vector4d m = raw_moments(a, b, gamma);
+    const double var = m(1) - m(0) * m(0);
+    if (!(var > 0.0) || !std::isfinite(var)) continue;
+    a.array() /= std::sqrt(var);
+    b = continuity_intercepts(a, gamma);
+    m = raw_moments(a, b, gamma);
+
+    PlsimMarginal out;
+    out.gamma = gamma;
+    out.a = a;
+    out.b = b;
+    out.mean = m(0);
+    out.variance = m(1) - m(0) * m(0);
+    const double mu3 = m(2) - 3.0 * m(0) * m(1) + 2.0 * m(0) * m(0) * m(0);
+    const double mu4 = m(3) - 4.0 * m(0) * m(2) +
+                       6.0 * m(0) * m(0) * m(1) -
+                       3.0 * m(0) * m(0) * m(0) * m(0);
+    out.skewness = mu3 / std::pow(out.variance, 1.5);
+    out.excess_kurtosis = mu4 / (out.variance * out.variance) - 3.0;
+    auto h_or = plsim_hermite_coefficients(out, options.hermite_order);
+    if (!h_or.has_value()) return std::unexpected(h_or.error());
+    out.hermite_coefficients = *h_or;
+    return out;
+  }
+  return std::unexpected(last_error);
+}
+
+sim_expected<Eigen::VectorXd>
+plsim_hermite_coefficients(const PlsimMarginal& marginal, int order) {
+  if (order < 0 || marginal.a.size() == 0 ||
+      marginal.b.size() != marginal.a.size() ||
+      marginal.gamma.size() + 1 != marginal.a.size() ||
+      !marginal.a.allFinite() || !marginal.b.allFinite() ||
+      !marginal.gamma.allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "plsim_hermite_coefficients: invalid marginal or order"));
+  }
+
+  Eigen::VectorXd c(order + 1);
+  for (int n = 0; n <= order; ++n) {
+    double numerator = 0.0;
+    for (Eigen::Index i = 0; i < marginal.a.size(); ++i) {
+      const double lo = (i == 0) ? -std::numeric_limits<double>::infinity()
+                                : marginal.gamma(i - 1);
+      const double hi = (i + 1 == marginal.a.size())
+                            ? std::numeric_limits<double>::infinity()
+                            : marginal.gamma(i);
+      const double iz = hermite_interval_integral(n + 1, lo, hi) +
+                        static_cast<double>(n) *
+                            (n == 0 ? 0.0 : hermite_interval_integral(n - 1, lo, hi));
+      numerator += marginal.a(i) * iz +
+                   marginal.b(i) * hermite_interval_integral(n, lo, hi);
+    }
+    c(n) = numerator / factorial(n);
+  }
+  return c;
+}
+
+double plsim_apply(const PlsimMarginal& marginal, double z) noexcept {
+  Eigen::Index k = 0;
+  while (k < marginal.gamma.size() && z > marginal.gamma(k)) ++k;
+  return marginal.a(k) * z + marginal.b(k);
+}
+
+sim_expected<double>
+plsim_covariance_hermite(const PlsimMarginal& left,
+                         const PlsimMarginal& right,
+                         double rho,
+                         int order) {
+  if (!std::isfinite(rho) || std::abs(rho) >= 1.0 || order < 1) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "plsim_covariance_hermite: invalid rho or order"));
+  }
+  Eigen::VectorXd lc = left.hermite_coefficients;
+  Eigen::VectorXd rc = right.hermite_coefficients;
+  if (lc.size() <= order) {
+    auto lc_or = plsim_hermite_coefficients(left, order);
+    if (!lc_or.has_value()) return std::unexpected(lc_or.error());
+    lc = *lc_or;
+  }
+  if (rc.size() <= order) {
+    auto rc_or = plsim_hermite_coefficients(right, order);
+    if (!rc_or.has_value()) return std::unexpected(rc_or.error());
+    rc = *rc_or;
+  }
+  double out = 0.0;
+  double rho_power = 1.0;
+  for (int n = 1; n <= order; ++n) {
+    rho_power *= rho;
+    out += factorial(n) * lc(n) * rc(n) * rho_power;
+  }
+  return out;
+}
+
+sim_expected<double>
+plsim_covariance_quadrature(const PlsimMarginal& left,
+                            const PlsimMarginal& right,
+                            double rho,
+                            int quadrature_points) {
+  if (!std::isfinite(rho) || std::abs(rho) >= 1.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "plsim_covariance_quadrature: rho must be finite with |rho| < 1"));
+  }
+  auto gh_or = gauss_hermite(quadrature_points);
+  if (!gh_or.has_value()) return std::unexpected(gh_or.error());
+  const auto& gh = *gh_or;
+
+  const double scale = std::sqrt(std::max(0.0, 1.0 - rho * rho));
+  double exy = 0.0;
+  double ex = 0.0;
+  double ey = 0.0;
+  for (Eigen::Index i = 0; i < gh.nodes.size(); ++i) {
+    const double x = std::sqrt(2.0) * gh.nodes(i);
+    const double wx = gh.weights(i) / std::sqrt(std::numbers::pi);
+    const double hx = plsim_apply(left, x);
+    ex += wx * hx;
+    for (Eigen::Index j = 0; j < gh.nodes.size(); ++j) {
+      const double e = std::sqrt(2.0) * gh.nodes(j);
+      const double y = rho * x + scale * e;
+      const double w = wx * gh.weights(j) / std::sqrt(std::numbers::pi);
+      const double hy = plsim_apply(right, y);
+      exy += w * hx * hy;
+    }
+  }
+  for (Eigen::Index j = 0; j < gh.nodes.size(); ++j) {
+    const double y = std::sqrt(2.0) * gh.nodes(j);
+    const double wy = gh.weights(j) / std::sqrt(std::numbers::pi);
+    ey += wy * plsim_apply(right, y);
+  }
+  return exy - ex * ey;
+}
+
+sim_expected<PlsimCalibration>
+calibrate_plsim(
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+    const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+    PlsimCovarianceMethod method,
+    const PlsimOptions& options) {
+  if (auto ok = validate_plsim_inputs(
+          target_corr, target_skewness, target_excess_kurtosis, options);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  const Eigen::Index p = target_corr.rows();
+  PlsimCalibration out;
+  out.marginals.reserve(static_cast<std::size_t>(p));
+  for (Eigen::Index j = 0; j < p; ++j) {
+    auto marginal_or = fit_plsim_marginal(
+        target_skewness(j), target_excess_kurtosis(j), options);
+    if (!marginal_or.has_value()) return std::unexpected(marginal_or.error());
+    out.marginals.push_back(std::move(*marginal_or));
+  }
+
+  out.intermediate_corr = Eigen::MatrixXd::Identity(p, p);
+  out.achieved_corr = Eigen::MatrixXd::Identity(p, p);
+  out.iterations = Eigen::MatrixXi::Zero(p, p);
+  for (Eigen::Index i = 0; i < p; ++i) {
+    for (Eigen::Index j = i + 1; j < p; ++j) {
+      auto rho_or = solve_intermediate_corr(
+          out.marginals[static_cast<std::size_t>(i)],
+          out.marginals[static_cast<std::size_t>(j)],
+          target_corr(i, j), method, options);
+      if (!rho_or.has_value()) return std::unexpected(rho_or.error());
+      const double rho = rho_or->first;
+      out.intermediate_corr(i, j) = rho;
+      out.intermediate_corr(j, i) = rho;
+      out.iterations(i, j) = rho_or->second;
+      out.iterations(j, i) = rho_or->second;
+      auto achieved_or = plsim_covariance_by_method(
+          out.marginals[static_cast<std::size_t>(i)],
+          out.marginals[static_cast<std::size_t>(j)], rho, method, options);
+      if (!achieved_or.has_value()) return std::unexpected(achieved_or.error());
+      out.achieved_corr(i, j) = *achieved_or;
+      out.achieved_corr(j, i) = *achieved_or;
+    }
+  }
+
+  auto root_or = cholesky_factor_with_jitter(
+      out.intermediate_corr, options.cholesky_jitter);
+  if (!root_or.has_value()) return std::unexpected(root_or.error());
+  return out;
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_plsim_matrix(Eigen::Index n,
+                      const PlsimCalibration& calibration,
+                      std::mt19937_64& rng,
+                      const PlsimOptions& options) {
+  if (auto ok = validate_options(options); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (n <= 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_plsim_matrix: n must be positive"));
+  }
+  const Eigen::Index p = static_cast<Eigen::Index>(calibration.marginals.size());
+  if (p == 0 || calibration.intermediate_corr.rows() != p ||
+      calibration.intermediate_corr.cols() != p ||
+      !calibration.intermediate_corr.allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_plsim_matrix: invalid calibration"));
+  }
+  auto root_or = cholesky_factor_with_jitter(
+      calibration.intermediate_corr, options.cholesky_jitter);
+  if (!root_or.has_value()) return std::unexpected(root_or.error());
+  const Eigen::MatrixXd& root = *root_or;
+
+  std::normal_distribution<double> normal(0.0, 1.0);
+  Eigen::MatrixXd Z(n, p);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    for (Eigen::Index j = 0; j < p; ++j) Z(i, j) = normal(rng);
+  }
+  Z = Z * root.transpose();
+
+  Eigen::MatrixXd X(n, p);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    for (Eigen::Index j = 0; j < p; ++j) {
+      X(i, j) = plsim_apply(
+          calibration.marginals[static_cast<std::size_t>(j)], Z(i, j));
+    }
+  }
+  return X;
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_plsim_matrix(
+    Eigen::Index n,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+    const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+    std::mt19937_64& rng,
+    PlsimCovarianceMethod method,
+    const PlsimOptions& options) {
+  auto cal_or = calibrate_plsim(
+      target_corr, target_skewness, target_excess_kurtosis, method, options);
+  if (!cal_or.has_value()) return std::unexpected(cal_or.error());
+  return simulate_plsim_matrix(n, *cal_or, rng, options);
+}
+
+sim_expected<data::RawData>
+simulate_plsim_raw(
+    Eigen::Index n,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+    const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+    std::mt19937_64& rng,
+    PlsimCovarianceMethod method,
+    const PlsimOptions& options) {
+  auto X_or = simulate_plsim_matrix(
+      n, target_corr, target_skewness, target_excess_kurtosis, rng, method, options);
+  if (!X_or.has_value()) return std::unexpected(X_or.error());
+  data::RawData raw;
+  raw.X.push_back(std::move(*X_or));
+  return raw;
+}
+
+}  // namespace magmaan::sim
