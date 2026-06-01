@@ -549,3 +549,60 @@ TEST_CASE("NORTA simulation respects target moments and correlations") {
   CHECK(std::abs(sample_corr(X, 0, 2) - target(0, 2)) < 0.04);
   CHECK(std::abs(sample_corr(X, 1, 2) - target(1, 2)) < 0.04);
 }
+
+TEST_CASE("t-copula simulation preserves t marginals and copula correlation") {
+  Eigen::MatrixXd corr(3, 3);
+  corr << 1.0, 0.45, -0.25,
+          0.45, 1.0, 0.20,
+         -0.25, 0.20, 1.0;
+  constexpr double df = 7.0;
+  const double t_scale = std::sqrt((df - 2.0) / df);
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::pearson(7, df, 0.0, t_scale, 0.0),
+      magmaan::sim::MarginalSpec::pearson(7, df, 0.0, t_scale, 0.0),
+      magmaan::sim::MarginalSpec::pearson(7, df, 0.0, t_scale, 0.0)};
+
+  magmaan::sim::TCopulaSpec copula;
+  copula.df = df;
+  copula.corr = corr;
+  std::mt19937_64 rng(20260603);
+  auto X_or = magmaan::sim::simulate_t_copula_matrix(
+      30000, copula, marginals, rng);
+  if (!X_or.has_value()) MESSAGE(X_or.error().detail);
+  REQUIRE(X_or.has_value());
+  if (!X_or.has_value()) return;
+  const auto& X = *X_or;
+  REQUIRE(X.rows() == 30000);
+  REQUIRE(X.cols() == 3);
+
+  CHECK(std::abs(X.col(0).mean()) < 0.04);
+  CHECK(std::abs(sample_corr(X, 0, 1) - corr(0, 1)) < 0.04);
+  CHECK(std::abs(sample_corr(X, 0, 2) - corr(0, 2)) < 0.04);
+  CHECK(std::abs(sample_corr(X, 1, 2) - corr(1, 2)) < 0.04);
+  CHECK(std::abs(sample_excess_kurtosis(X, 0) - 2.0) < 0.65);
+}
+
+TEST_CASE("t-copula raw generator validates quantile marginals") {
+  magmaan::sim::TCopulaSpec copula;
+  copula.df = 5.0;
+  copula.corr = corr2(0.30);
+  std::mt19937_64 rng(20260604);
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.5)};
+
+  auto raw_or = magmaan::sim::simulate_t_copula_raw(20, copula, marginals, rng);
+  REQUIRE(raw_or.has_value());
+  CHECK(raw_or->X.size() == 1u);
+  CHECK(raw_or->mask.empty());
+  CHECK(raw_or->X[0].rows() == 20);
+  CHECK(raw_or->X[0].cols() == 2);
+
+  const std::vector<magmaan::sim::MarginalSpec> bad_marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::fleishman(1.0, 0.0, 0.0)};
+  auto bad_or = magmaan::sim::simulate_t_copula_matrix(
+      20, copula, bad_marginals, rng);
+  REQUIRE_FALSE(bad_or.has_value());
+  CHECK(bad_or.error().kind == magmaan::SimError::Kind::InvalidMarginal);
+}
