@@ -926,6 +926,40 @@ TEST_CASE("C-vine 3 conditional pair copula can drive residual dependence") {
   CHECK(raw_or->X[0].cols() == 3);
 }
 
+TEST_CASE("C-vine 3 calibration fits an observed correlation matrix") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.30),
+      magmaan::sim::MarginalSpec::standard_normal()};
+  Eigen::MatrixXd target(3, 3);
+  target << 1.0, 0.25, -0.20,
+            0.25, 1.0, 0.10,
+           -0.20, 0.10, 1.0;
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 13;
+  options.max_bisection_iter = 45;
+  options.calibration_tol = 1.5e-3;
+
+  auto cal_or = magmaan::sim::calibrate_cvine3_copula_correlation(
+      magmaan::sim::BivariateCopulaFamily::Frank, target, marginals, options);
+  if (!cal_or.has_value()) MESSAGE(cal_or.error().detail);
+  REQUIRE(cal_or.has_value());
+  if (!cal_or.has_value()) return;
+  CHECK(cal_or->root_01.achieved_corr == doctest::Approx(target(0, 1)).epsilon(5e-3));
+  CHECK(cal_or->root_02.achieved_corr == doctest::Approx(target(0, 2)).epsilon(5e-3));
+  CHECK(cal_or->conditional_iterations > 0);
+  CHECK(cal_or->max_abs_error < 7e-3);
+  CHECK(cal_or->achieved_corr(0, 1) == doctest::Approx(target(0, 1)).epsilon(7e-3));
+  CHECK(cal_or->achieved_corr(0, 2) == doctest::Approx(target(0, 2)).epsilon(7e-3));
+  CHECK(cal_or->achieved_corr(1, 2) == doctest::Approx(target(1, 2)).epsilon(7e-3));
+
+  auto achieved_or = magmaan::sim::cvine3_copula_observed_corr(
+      cal_or->copula, marginals, options);
+  REQUIRE(achieved_or.has_value());
+  CHECK(achieved_or->isApprox(cal_or->achieved_corr, 1e-12));
+}
+
 TEST_CASE("bivariate copula raw generator validates parameters and marginals") {
   const std::vector<magmaan::sim::MarginalSpec> marginals{
       magmaan::sim::MarginalSpec::standard_normal(),
