@@ -102,6 +102,26 @@ struct MomentMatchResult {
   int iterations = 0;
 };
 
+enum class IgRootKind : std::uint8_t {
+  Cholesky,
+  Symmetric,
+};
+
+struct IgOptions {
+  IgRootKind root = IgRootKind::Cholesky;
+  MomentMatchFamily generator_family = MomentMatchFamily::TukeyGH;
+  MomentMatchOptions moment_match = {};
+  double root_eigen_tol = 1e-12;
+  double moment_solve_tol = 1e-8;
+};
+
+struct IgCalibration {
+  Eigen::MatrixXd root;
+  Eigen::VectorXd generator_skewness;
+  Eigen::VectorXd generator_excess_kurtosis;
+  std::vector<MarginalSpec> generator_marginals;
+};
+
 struct NortaOptions {
   int quadrature_points = 31;
   int max_bisection_iter = 80;
@@ -147,6 +167,35 @@ simulate_independent_raw(Eigen::Index n,
                          const std::vector<MarginalSpec>& marginals,
                          std::mt19937_64& rng,
                          const IndependentOptions& options = {});
+
+sim_expected<IgCalibration>
+calibrate_ig(const Eigen::Ref<const Eigen::MatrixXd>& sigma,
+             const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+             const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+             const IgOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
+simulate_ig_matrix(Eigen::Index n,
+                   const Eigen::Ref<const Eigen::MatrixXd>& root,
+                   const std::vector<MarginalSpec>& generator_marginals,
+                   std::mt19937_64& rng,
+                   const IndependentOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
+simulate_ig_matrix(Eigen::Index n,
+                   const Eigen::Ref<const Eigen::MatrixXd>& sigma,
+                   const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+                   const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+                   std::mt19937_64& rng,
+                   const IgOptions& options = {});
+
+sim_expected<data::RawData>
+simulate_ig_raw(Eigen::Index n,
+                const Eigen::Ref<const Eigen::MatrixXd>& sigma,
+                const Eigen::Ref<const Eigen::VectorXd>& target_skewness,
+                const Eigen::Ref<const Eigen::VectorXd>& target_excess_kurtosis,
+                std::mt19937_64& rng,
+                const IgOptions& options = {});
 
 sim_expected<NortaCalibration>
 calibrate_norta(const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
