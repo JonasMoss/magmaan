@@ -3074,7 +3074,7 @@ cvine3_copula_observed_corr(
 
 sim_expected<CVine3CorrelationCalibration>
 calibrate_cvine3_copula_correlation(
-    BivariateCopulaFamily family,
+    const CVine3FamilySpec& families,
     const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
     const std::vector<MarginalSpec>& marginals,
     const BivariateCopulaOptions& options) {
@@ -3096,10 +3096,10 @@ calibrate_cvine3_copula_correlation(
   const std::vector<MarginalSpec> marginals_01{marginals[0], marginals[1]};
   const std::vector<MarginalSpec> marginals_02{marginals[0], marginals[2]};
   auto root_01_or = calibrate_bivariate_copula_correlation(
-      family, target_corr(0, 1), marginals_01, options);
+      families.family_01, target_corr(0, 1), marginals_01, options);
   if (!root_01_or.has_value()) return std::unexpected(root_01_or.error());
   auto root_02_or = calibrate_bivariate_copula_correlation(
-      family, target_corr(0, 2), marginals_02, options);
+      families.family_02, target_corr(0, 2), marginals_02, options);
   if (!root_02_or.has_value()) return std::unexpected(root_02_or.error());
   out.root_01 = *root_01_or;
   out.root_02 = *root_02_or;
@@ -3109,7 +3109,8 @@ calibrate_cvine3_copula_correlation(
 
   const auto eval_tau =
       [&](double tau) -> sim_expected<std::pair<BivariateCopulaSpec, double>> {
-    auto spec_or = bivariate_copula_from_tau(family, tau, options);
+    auto spec_or = bivariate_copula_from_tau(
+        families.family_12_given_0, tau, options);
     if (!spec_or.has_value()) return std::unexpected(spec_or.error());
     CVine3CopulaSpec probe = out.copula;
     probe.copula_12_given_0 = *spec_or;
@@ -3118,7 +3119,7 @@ calibrate_cvine3_copula_correlation(
     return std::pair<BivariateCopulaSpec, double>{*spec_or, (*corr_or)(1, 2)};
   };
 
-  if (family == BivariateCopulaFamily::Independence) {
+  if (families.family_12_given_0 == BivariateCopulaFamily::Independence) {
     auto corr_or = cvine3_copula_observed_corr(out.copula, marginals, options);
     if (!corr_or.has_value()) return std::unexpected(corr_or.error());
     out.achieved_corr = *corr_or;
@@ -3153,7 +3154,7 @@ calibrate_cvine3_copula_correlation(
 
   sim_expected<std::pair<double, double>> lo_endpoint_or =
       std::pair<double, double>{0.0, 0.0};
-  if (family == BivariateCopulaFamily::Frank) {
+  if (families.family_12_given_0 == BivariateCopulaFamily::Frank) {
     lo_endpoint_or = stable_endpoint(-1.0);
   } else {
     auto zero_or = eval_tau(0.0);
@@ -3211,7 +3212,8 @@ calibrate_cvine3_copula_correlation(
     }
   }
 
-  auto best_spec_or = bivariate_copula_from_tau(family, best_tau, options);
+  auto best_spec_or = bivariate_copula_from_tau(
+      families.family_12_given_0, best_tau, options);
   if (!best_spec_or.has_value()) return std::unexpected(best_spec_or.error());
   out.copula.copula_12_given_0 = *best_spec_or;
   auto achieved_or = cvine3_copula_observed_corr(out.copula, marginals, options);
@@ -3219,6 +3221,17 @@ calibrate_cvine3_copula_correlation(
   out.achieved_corr = *achieved_or;
   out.max_abs_error = (out.achieved_corr - target_corr).cwiseAbs().maxCoeff();
   return out;
+}
+
+sim_expected<CVine3CorrelationCalibration>
+calibrate_cvine3_copula_correlation(
+    BivariateCopulaFamily family,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options) {
+  const CVine3FamilySpec families{family, family, family};
+  return calibrate_cvine3_copula_correlation(
+      families, target_corr, marginals, options);
 }
 
 sim_expected<CVine3CorrelationCalibration>
@@ -3293,6 +3306,58 @@ calibrate_cvine3_copula_correlation_select_root(
     if (!have_best || candidate.max_abs_error < best.max_abs_error) {
       best = std::move(candidate);
       have_best = true;
+    }
+  }
+
+  if (!have_best) {
+    return std::unexpected(last_error);
+  }
+  return best;
+}
+
+sim_expected<CVine3CorrelationCalibration>
+calibrate_cvine3_copula_correlation_select_families(
+    const std::vector<BivariateCopulaFamily>& family_set,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<MarginalSpec>& marginals,
+    const BivariateCopulaOptions& options) {
+  if (family_set.empty()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_cvine3_copula_correlation_select_families: family_set must not be empty"));
+  }
+  if (auto ok = validate_bivariate_copula_matrix_target(
+          target_corr, marginals, options);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (target_corr.rows() != 3) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_cvine3_copula_correlation_select_families: target_corr must be 3x3"));
+  }
+
+  CVine3CorrelationCalibration best;
+  bool have_best = false;
+  SimError last_error = make_err(
+      SimError::Kind::CalibrationFailed,
+      "calibrate_cvine3_copula_correlation_select_families: no feasible family combination");
+  for (const auto family_01 : family_set) {
+    for (const auto family_02 : family_set) {
+      for (const auto family_12_given_0 : family_set) {
+        const CVine3FamilySpec families{
+            family_01, family_02, family_12_given_0};
+        auto cal_or = calibrate_cvine3_copula_correlation(
+            families, target_corr, marginals, options);
+        if (!cal_or.has_value()) {
+          last_error = cal_or.error();
+          continue;
+        }
+        if (!have_best || cal_or->max_abs_error < best.max_abs_error) {
+          best = *cal_or;
+          have_best = true;
+        }
+      }
     }
   }
 

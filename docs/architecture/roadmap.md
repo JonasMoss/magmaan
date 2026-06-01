@@ -277,7 +277,10 @@ golden `parTable()` fixtures.
   the conditional copula to a 3x3 observed-correlation target.
   `calibrate_cvine3_copula_correlation_select_root()` tries all three possible
   roots by permutation and returns the best achieved matrix in the original
-  variable order. Higher-dimensional vines, per-edge family selection, and
+  variable order. `CVine3FamilySpec` allows different families on `0-1`, `0-2`,
+  and `1-2|0`, and `calibrate_cvine3_copula_correlation_select_families()`
+  searches a caller-provided family set for the fixed root-0 C-vine.
+  Higher-dimensional vines, combined structure/family search, and
   ordinal/polyserial/polychoric calibration are still future work.
 - Scalar special-function helpers needed by Pearson quantiles and FMG F tails
   are centralized in the private `src/detail_distribution_math.hpp` header for

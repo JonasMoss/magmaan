@@ -1045,6 +1045,75 @@ TEST_CASE("C-vine 3 calibration can select the root variable") {
   CHECK(cal_or->achieved_corr(1, 2) == doctest::Approx(target(1, 2)).epsilon(8e-3));
 }
 
+TEST_CASE("C-vine 3 calibration supports per-edge family choices") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.25),
+      magmaan::sim::MarginalSpec::standard_normal()};
+  Eigen::MatrixXd target(3, 3);
+  target << 1.0, 0.22, 0.18,
+            0.22, 1.0, 0.14,
+            0.18, 0.14, 1.0;
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 13;
+  options.max_bisection_iter = 45;
+  options.calibration_tol = 1.5e-3;
+
+  const magmaan::sim::CVine3FamilySpec families{
+      magmaan::sim::BivariateCopulaFamily::Clayton,
+      magmaan::sim::BivariateCopulaFamily::Gumbel,
+      magmaan::sim::BivariateCopulaFamily::Frank};
+  auto cal_or = magmaan::sim::calibrate_cvine3_copula_correlation(
+      families, target, marginals, options);
+  if (!cal_or.has_value()) MESSAGE(cal_or.error().detail);
+  REQUIRE(cal_or.has_value());
+  if (!cal_or.has_value()) return;
+  CHECK(cal_or->copula.copula_01.family ==
+        magmaan::sim::BivariateCopulaFamily::Clayton);
+  CHECK(cal_or->copula.copula_02.family ==
+        magmaan::sim::BivariateCopulaFamily::Gumbel);
+  CHECK(cal_or->copula.copula_12_given_0.family ==
+        magmaan::sim::BivariateCopulaFamily::Frank);
+  CHECK(cal_or->max_abs_error < 8e-3);
+}
+
+TEST_CASE("C-vine 3 calibration can select edge families") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standard_normal()};
+  Eigen::MatrixXd target(3, 3);
+  target << 1.0, 0.20, -0.18,
+            0.20, 1.0, 0.12,
+           -0.18, 0.12, 1.0;
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 11;
+  options.max_bisection_iter = 40;
+  options.calibration_tol = 2e-3;
+
+  const std::vector<magmaan::sim::BivariateCopulaFamily> family_set{
+      magmaan::sim::BivariateCopulaFamily::Clayton,
+      magmaan::sim::BivariateCopulaFamily::Frank};
+  auto cal_or = magmaan::sim::calibrate_cvine3_copula_correlation_select_families(
+      family_set, target, marginals, options);
+  if (!cal_or.has_value()) MESSAGE(cal_or.error().detail);
+  REQUIRE(cal_or.has_value());
+  if (!cal_or.has_value()) return;
+  CHECK(cal_or->max_abs_error < 1.2e-2);
+  CHECK(cal_or->copula.copula_02.family ==
+        magmaan::sim::BivariateCopulaFamily::Frank);
+
+  const std::vector<magmaan::sim::BivariateCopulaFamily> one_sided{
+      magmaan::sim::BivariateCopulaFamily::Clayton};
+  auto impossible_or =
+      magmaan::sim::calibrate_cvine3_copula_correlation_select_families(
+          one_sided, target, marginals, options);
+  REQUIRE_FALSE(impossible_or.has_value());
+  CHECK(impossible_or.error().kind == magmaan::SimError::Kind::CalibrationFailed);
+}
+
 TEST_CASE("bivariate copula raw generator validates parameters and marginals") {
   const std::vector<magmaan::sim::MarginalSpec> marginals{
       magmaan::sim::MarginalSpec::standard_normal(),
