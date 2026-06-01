@@ -292,6 +292,14 @@ bivariate_copula_conditional_cdf(const BivariateCopulaSpec& copula,
                                  double v);
 
 sim_expected<double>
+bivariate_copula_tau(const BivariateCopulaSpec& copula);
+
+sim_expected<BivariateCopulaSpec>
+bivariate_copula_from_tau(BivariateCopulaFamily family,
+                          double tau,
+                          const BivariateCopulaOptions& options = {});
+
+sim_expected<double>
 bivariate_copula_conditional_quantile(
     const BivariateCopulaSpec& copula,
     double u,

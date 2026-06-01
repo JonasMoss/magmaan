@@ -840,6 +840,123 @@ double bivariate_conditional_u(const BivariateCopulaSpec& copula,
   return nan();
 }
 
+double frank_debye1_integrand(double t) noexcept {
+  if (std::abs(t) < 1e-6) {
+    const double t2 = t * t;
+    return 1.0 - 0.5 * t + t2 / 12.0 - t2 * t2 / 720.0;
+  }
+  return t / std::expm1(t);
+}
+
+double frank_debye1(double theta) {
+  if (std::abs(theta) < 1e-5) {
+    const double t2 = theta * theta;
+    return 1.0 - 0.25 * theta + t2 / 36.0 - t2 * t2 / 3600.0;
+  }
+  const auto f = [](double t) { return frank_debye1_integrand(t); };
+  const double integral = theta > 0.0
+      ? adaptive_simpson(f, 0.0, theta, 1e-12)
+      : -adaptive_simpson(f, theta, 0.0, 1e-12);
+  return integral / theta;
+}
+
+double joe_tau_series(double theta) {
+  double sum = 0.0;
+  for (int k = 1; k < 200000; ++k) {
+    const double dk = static_cast<double>(k);
+    const double term = 1.0 /
+        (dk * (theta * dk + 2.0) * (theta * (dk - 1.0) + 2.0));
+    sum += term;
+    if (term < 1e-15 * std::max(1.0, std::abs(sum))) break;
+  }
+  return 1.0 - 4.0 * sum;
+}
+
+double bivariate_tau_unchecked(const BivariateCopulaSpec& copula) {
+  switch (copula.family) {
+    case BivariateCopulaFamily::Independence:
+      return 0.0;
+    case BivariateCopulaFamily::Clayton:
+      return copula.theta / (copula.theta + 2.0);
+    case BivariateCopulaFamily::Gumbel:
+      return 1.0 - 1.0 / copula.theta;
+    case BivariateCopulaFamily::Frank: {
+      const double a = std::abs(copula.theta);
+      if (a > 50.0) {
+        const double tau_abs = 1.0 - 4.0 / a +
+            2.0 * std::numbers::pi * std::numbers::pi / (3.0 * a * a);
+        return std::copysign(tau_abs, copula.theta);
+      }
+      return 1.0 + 4.0 * (frank_debye1(copula.theta) - 1.0) /
+                       copula.theta;
+    }
+    case BivariateCopulaFamily::Joe:
+      if (copula.theta == 1.0) return 0.0;
+      return joe_tau_series(copula.theta);
+  }
+  return nan();
+}
+
+sim_expected<double>
+invert_tau_bisection(BivariateCopulaFamily family,
+                     double tau,
+                     double lo,
+                     double hi,
+                     int max_iter) {
+  BivariateCopulaSpec probe;
+  probe.family = family;
+
+  probe.theta = hi;
+  double hi_tau = bivariate_tau_unchecked(probe);
+  while (std::isfinite(hi_tau) && hi_tau < tau) {
+    lo = hi;
+    hi *= 2.0;
+    if (!std::isfinite(hi) || hi > 1e8) {
+      return std::unexpected(make_err(
+          SimError::Kind::CalibrationFailed,
+          "bivariate_copula_from_tau: could not bracket tau"));
+    }
+    probe.theta = hi;
+    hi_tau = bivariate_tau_unchecked(probe);
+  }
+  if (!std::isfinite(hi_tau)) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "bivariate_copula_from_tau: non-finite tau during bracketing"));
+  }
+
+  double mid = hi;
+  for (int iter = 0; iter < max_iter; ++iter) {
+    mid = 0.5 * (lo + hi);
+    probe.theta = mid;
+    const double mid_tau = bivariate_tau_unchecked(probe);
+    if (!std::isfinite(mid_tau)) {
+      return std::unexpected(make_err(
+          SimError::Kind::NumericIssue,
+          "bivariate_copula_from_tau: non-finite tau during inversion"));
+    }
+    if (mid_tau < tau) lo = mid;
+    else hi = mid;
+  }
+  return 0.5 * (lo + hi);
+}
+
+sim_expected<double>
+invert_frank_tau(double tau, int max_iter) {
+  if (tau > 0.0) {
+    auto theta_or = invert_tau_bisection(
+        BivariateCopulaFamily::Frank, tau, 1e-8, 1.0, max_iter);
+    if (!theta_or.has_value()) return theta_or;
+    return *theta_or;
+  }
+
+  const double target = -tau;
+  auto theta_or = invert_tau_bisection(
+      BivariateCopulaFamily::Frank, target, 1e-8, 1.0, max_iter);
+  if (!theta_or.has_value()) return theta_or;
+  return -*theta_or;
+}
+
 sim_expected<double>
 invert_bivariate_conditional(const BivariateCopulaSpec& copula,
                              double u,
@@ -2246,6 +2363,99 @@ bivariate_copula_conditional_cdf(const BivariateCopulaSpec& copula,
         "bivariate_copula_conditional_cdf: non-finite conditional CDF"));
   }
   return std::clamp(h, 0.0, 1.0);
+}
+
+sim_expected<double>
+bivariate_copula_tau(const BivariateCopulaSpec& copula) {
+  if (auto ok = validate_bivariate_copula_spec(copula); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  const double tau = bivariate_tau_unchecked(copula);
+  if (!std::isfinite(tau)) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        "bivariate_copula_tau: non-finite tau"));
+  }
+  return std::clamp(tau, -1.0, 1.0);
+}
+
+sim_expected<BivariateCopulaSpec>
+bivariate_copula_from_tau(BivariateCopulaFamily family,
+                          double tau,
+                          const BivariateCopulaOptions& options) {
+  if (!std::isfinite(tau) || tau <= -1.0 || tau >= 1.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "bivariate_copula_from_tau: tau must satisfy -1 < tau < 1"));
+  }
+  if (options.max_bisection_iter < 16) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "bivariate_copula_from_tau: max_bisection_iter must be at least 16"));
+  }
+
+  BivariateCopulaSpec out;
+  out.family = family;
+  switch (family) {
+    case BivariateCopulaFamily::Independence:
+      if (std::abs(tau) > 1e-14) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "bivariate_copula_from_tau: independence requires tau = 0"));
+      }
+      out.theta = 0.0;
+      return out;
+    case BivariateCopulaFamily::Clayton:
+      if (tau < 0.0) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "bivariate_copula_from_tau: Clayton requires nonnegative tau"));
+      }
+      out.theta = tau == 0.0 ? 0.0 : 2.0 * tau / (1.0 - tau);
+      if (out.theta == 0.0) {
+        out.family = BivariateCopulaFamily::Independence;
+      }
+      return out;
+    case BivariateCopulaFamily::Gumbel:
+      if (tau < 0.0) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "bivariate_copula_from_tau: Gumbel requires nonnegative tau"));
+      }
+      out.theta = 1.0 / (1.0 - tau);
+      return out;
+    case BivariateCopulaFamily::Frank: {
+      if (std::abs(tau) < 1e-14) {
+        out.family = BivariateCopulaFamily::Independence;
+        out.theta = 0.0;
+        return out;
+      }
+      auto theta_or = invert_frank_tau(tau, options.max_bisection_iter);
+      if (!theta_or.has_value()) return std::unexpected(theta_or.error());
+      out.theta = *theta_or;
+      return out;
+    }
+    case BivariateCopulaFamily::Joe: {
+      if (tau < 0.0) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "bivariate_copula_from_tau: Joe requires nonnegative tau"));
+      }
+      if (tau == 0.0) {
+        out.theta = 1.0;
+        return out;
+      }
+      auto theta_or = invert_tau_bisection(
+          BivariateCopulaFamily::Joe, tau, 1.0, 2.0,
+          options.max_bisection_iter);
+      if (!theta_or.has_value()) return std::unexpected(theta_or.error());
+      out.theta = *theta_or;
+      return out;
+    }
+  }
+  return std::unexpected(make_err(
+      SimError::Kind::InvalidInput,
+      "bivariate_copula_from_tau: unknown family"));
 }
 
 sim_expected<double>
