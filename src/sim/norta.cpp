@@ -145,6 +145,21 @@ sim_expected<void> validate_marginal(const MarginalSpec& m) {
       return std::unexpected(make_err(
           SimError::Kind::InvalidMarginal,
           "Pearson: unsupported or invalid PearsonDS parameterization"));
+    case MarginalKind::Johnson:
+      if (!std::isfinite(m.johnson_gamma) ||
+          !std::isfinite(m.johnson_delta) ||
+          m.johnson_delta <= 0.0) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidMarginal,
+            "Johnson: gamma must be finite and delta must be positive and finite"));
+      }
+      if (m.johnson_type == 1 || m.johnson_type == 2 ||
+          m.johnson_type == 3) {
+        return {};
+      }
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidMarginal,
+          "Johnson: type must be 1 (SL), 2 (SU), or 3 (SB)"));
   }
   return std::unexpected(make_err(
       SimError::Kind::InvalidMarginal,
@@ -222,6 +237,29 @@ double pearson_raw_from_z(const MarginalSpec& m, double z) {
   }
 }
 
+double logistic_stable(double x) {
+  if (x >= 0.0) {
+    const double e = std::exp(-x);
+    return 1.0 / (1.0 + e);
+  }
+  const double e = std::exp(x);
+  return e / (1.0 + e);
+}
+
+double johnson_raw_from_z(const MarginalSpec& m, double z) {
+  const double y = (z - m.johnson_gamma) / m.johnson_delta;
+  switch (m.johnson_type) {
+    case 1:
+      return std::exp(y);
+    case 2:
+      return std::sinh(y);
+    case 3:
+      return logistic_stable(y);
+    default:
+      return nan();
+  }
+}
+
 double raw_from_z(const MarginalSpec& m, double z) {
   switch (m.kind) {
     case MarginalKind::StandardNormal:
@@ -232,6 +270,8 @@ double raw_from_z(const MarginalSpec& m, double z) {
       return tukey_g_h_raw_from_z(m, z);
     case MarginalKind::Pearson:
       return pearson_raw_from_z(m, z);
+    case MarginalKind::Johnson:
+      return johnson_raw_from_z(m, z);
   }
   return std::numeric_limits<double>::quiet_NaN();
 }
@@ -258,7 +298,7 @@ marginal_moments(const MarginalSpec& m, const GaussHermite& gh) {
     if (!std::isfinite(y)) {
       return std::unexpected(make_err(
           SimError::Kind::NumericIssue,
-          "marginal moments: non-finite Tukey g-and-h transform"));
+          "marginal moments: non-finite marginal transform"));
     }
     e1 += w * y;
     e2 += w * y * y;
@@ -510,8 +550,15 @@ validate_moment_match(const MomentMatchSpec& spec,
       !std::isfinite(options.finite_diff_step) ||
       !std::isfinite(options.tukey_g_bound) ||
       !std::isfinite(options.tukey_h_upper) ||
+      !std::isfinite(options.johnson_gamma_bound) ||
+      !std::isfinite(options.johnson_log_delta_lower) ||
+      !std::isfinite(options.johnson_log_delta_upper) ||
       options.tukey_g_bound <= 0.0 || options.tukey_h_upper <= 0.0 ||
-      options.tukey_h_upper >= 0.25) {
+      options.tukey_h_upper >= 0.25 ||
+      options.johnson_gamma_bound <= 0.0 ||
+      options.johnson_log_delta_lower >= options.johnson_log_delta_upper ||
+      options.johnson_log_delta_lower < -2.0 ||
+      options.johnson_log_delta_upper > 3.0) {
     return std::unexpected(make_err(
         SimError::Kind::InvalidInput,
         "fit_marginal_to_moments: invalid moment-match options"));
@@ -522,9 +569,7 @@ validate_moment_match(const MomentMatchSpec& spec,
     case MomentMatchFamily::Pearson:
       return {};
     case MomentMatchFamily::Johnson:
-      return std::unexpected(make_err(
-          SimError::Kind::InvalidInput,
-          "fit_marginal_to_moments: requested family is not implemented yet"));
+      return {};
   }
   return std::unexpected(make_err(
       SimError::Kind::InvalidInput,
@@ -696,6 +741,221 @@ fit_tukey_moment_match(const MomentMatchSpec& spec,
   }
 
   return MomentMatchResult{best.marginal, best.moments, best.norm, iter};
+}
+
+Eigen::Vector2d project_johnson_params(Eigen::Vector2d x,
+                                       const MomentMatchOptions& options) {
+  x(0) = std::clamp(x(0), -options.johnson_gamma_bound,
+                    options.johnson_gamma_bound);
+  x(1) = std::clamp(x(1), options.johnson_log_delta_lower,
+                    options.johnson_log_delta_upper);
+  return x;
+}
+
+sim_expected<MomentFitEval>
+eval_johnson_moment_fit(int type,
+                        const Eigen::Vector2d& x,
+                        const MomentMatchSpec& spec,
+                        const GaussHermite& gh) {
+  MomentFitEval out;
+  out.marginal = MarginalSpec::johnson(
+      type, x(0), std::exp(x(1)), spec.mean, spec.sd);
+  auto moments_or = raw_moment_summary(out.marginal, gh);
+  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+  out.moments = *moments_or;
+  out.residual(0) = out.moments.skewness - spec.shape.skewness;
+  out.residual(1) = out.moments.excess_kurtosis - spec.shape.excess_kurtosis;
+  out.norm = out.residual.norm();
+  return out;
+}
+
+sim_expected<MomentFitEval>
+initial_johnson_moment_fit(int type,
+                           const MomentMatchSpec& spec,
+                           const MomentMatchOptions& options,
+                           const GaussHermite& gh) {
+  MomentFitEval best;
+  bool have_best = false;
+  for (int ig = 0; ig < options.grid_points_g; ++ig) {
+    const double wg = static_cast<double>(ig) /
+                      static_cast<double>(options.grid_points_g - 1);
+    const double gamma = -options.johnson_gamma_bound +
+                         2.0 * options.johnson_gamma_bound * wg;
+    for (int id = 0; id < options.grid_points_h; ++id) {
+      const double wd = static_cast<double>(id) /
+                        static_cast<double>(options.grid_points_h - 1);
+      const double log_delta = options.johnson_log_delta_lower +
+          (options.johnson_log_delta_upper -
+           options.johnson_log_delta_lower) * wd;
+      auto eval_or = eval_johnson_moment_fit(
+          type, Eigen::Vector2d(gamma, log_delta), spec, gh);
+      if (!eval_or.has_value()) continue;
+      if (!have_best || eval_or->norm < best.norm) {
+        best = *eval_or;
+        have_best = true;
+      }
+    }
+  }
+  if (!have_best) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        "fit_marginal_to_moments: no finite Johnson starting point"));
+  }
+  return best;
+}
+
+sim_expected<MomentFitEval>
+fit_one_johnson_moment_match(int type,
+                             const MomentMatchSpec& spec,
+                             const MomentMatchOptions& options,
+                             const GaussHermite& gh,
+                             int& iterations) {
+  auto best_or = initial_johnson_moment_fit(type, spec, options, gh);
+  if (!best_or.has_value()) return std::unexpected(best_or.error());
+  MomentFitEval best = *best_or;
+  MomentFitEval current = best;
+  Eigen::Vector2d x(current.marginal.johnson_gamma,
+                   std::log(current.marginal.johnson_delta));
+
+  iterations = 0;
+  for (; iterations < options.max_iter; ++iterations) {
+    if (current.norm <= options.objective_tol) break;
+
+    Eigen::Matrix2d J;
+    bool ok_jac = true;
+    for (int k = 0; k < 2; ++k) {
+      const double step = options.finite_diff_step *
+                          std::max(1.0, std::abs(x(k)));
+      Eigen::Vector2d xp = project_johnson_params(x, options);
+      Eigen::Vector2d xm = xp;
+      xp(k) = std::clamp(x(k) + step,
+                         k == 0 ? -options.johnson_gamma_bound
+                                : options.johnson_log_delta_lower,
+                         k == 0 ? options.johnson_gamma_bound
+                                : options.johnson_log_delta_upper);
+      xm(k) = std::clamp(x(k) - step,
+                         k == 0 ? -options.johnson_gamma_bound
+                                : options.johnson_log_delta_lower,
+                         k == 0 ? options.johnson_gamma_bound
+                                : options.johnson_log_delta_upper);
+      if (std::abs(xp(k) - xm(k)) <= options.parameter_tol) {
+        ok_jac = false;
+        break;
+      }
+      auto fp_or = eval_johnson_moment_fit(type, xp, spec, gh);
+      auto fm_or = eval_johnson_moment_fit(type, xm, spec, gh);
+      if (!fp_or.has_value() || !fm_or.has_value()) {
+        ok_jac = false;
+        break;
+      }
+      J.col(k) = (fp_or->residual - fm_or->residual) / (xp(k) - xm(k));
+    }
+    if (!ok_jac || !J.allFinite()) break;
+
+    Eigen::Matrix2d A = J.transpose() * J;
+    const double ridge =
+        1e-10 * std::max(1.0, A.diagonal().cwiseAbs().maxCoeff());
+    A.diagonal().array() += ridge;
+    const Eigen::Vector2d step =
+        A.ldlt().solve(-J.transpose() * current.residual);
+    if (!step.allFinite()) break;
+    if (step.norm() <= options.parameter_tol) break;
+
+    bool accepted = false;
+    double alpha = 1.0;
+    for (int ls = 0; ls < 24; ++ls) {
+      const Eigen::Vector2d trial_x =
+          project_johnson_params(x + alpha * step, options);
+      if ((trial_x - x).norm() <= options.parameter_tol) break;
+      auto trial_or = eval_johnson_moment_fit(type, trial_x, spec, gh);
+      if (trial_or.has_value() && trial_or->norm < current.norm) {
+        current = *trial_or;
+        x = trial_x;
+        accepted = true;
+        if (current.norm < best.norm) best = current;
+        break;
+      }
+      alpha *= 0.5;
+    }
+    if (!accepted) {
+      double radius_gamma = 0.25 * std::max(1.0, std::abs(x(0)));
+      double radius_delta = 0.15;
+      for (int search = 0; search < 32 && !accepted; ++search) {
+        const Eigen::Vector2d trials[] = {
+            Eigen::Vector2d( radius_gamma,  0.0),
+            Eigen::Vector2d(-radius_gamma,  0.0),
+            Eigen::Vector2d( 0.0,           radius_delta),
+            Eigen::Vector2d( 0.0,          -radius_delta),
+            Eigen::Vector2d( radius_gamma,  radius_delta),
+            Eigen::Vector2d( radius_gamma, -radius_delta),
+            Eigen::Vector2d(-radius_gamma,  radius_delta),
+            Eigen::Vector2d(-radius_gamma, -radius_delta),
+        };
+        for (const auto& delta : trials) {
+          const Eigen::Vector2d trial_x =
+              project_johnson_params(x + delta, options);
+          if ((trial_x - x).norm() <= options.parameter_tol) continue;
+          auto trial_or = eval_johnson_moment_fit(type, trial_x, spec, gh);
+          if (trial_or.has_value() && trial_or->norm < current.norm) {
+            current = *trial_or;
+            x = trial_x;
+            accepted = true;
+            if (current.norm < best.norm) best = current;
+            break;
+          }
+        }
+        if (!accepted) {
+          radius_gamma *= 0.5;
+          radius_delta *= 0.5;
+          if (std::max(radius_gamma, radius_delta) <= options.parameter_tol) {
+            break;
+          }
+        }
+      }
+    }
+    if (!accepted) break;
+  }
+  return best;
+}
+
+sim_expected<MomentMatchResult>
+fit_johnson_moment_match(const MomentMatchSpec& spec,
+                         const MomentMatchOptions& options,
+                         const GaussHermite& gh) {
+  const double beta1 = spec.shape.skewness * spec.shape.skewness;
+  const double beta2 = spec.shape.excess_kurtosis + 3.0;
+  if (beta2 < beta1 + 1.0 - options.objective_tol) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        "fit_marginal_to_moments: no distribution has the requested Johnson moments"));
+  }
+
+  MomentFitEval best;
+  bool have_best = false;
+  int best_iterations = 0;
+  for (int type : {2, 3}) {
+    int iterations = 0;
+    auto fit_or = fit_one_johnson_moment_match(
+        type, spec, options, gh, iterations);
+    if (!fit_or.has_value()) continue;
+    if (!have_best || fit_or->norm < best.norm) {
+      best = *fit_or;
+      best_iterations = iterations;
+      have_best = true;
+    }
+  }
+  if (!have_best) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        "fit_marginal_to_moments: Johnson moment solve found no finite fit"));
+  }
+  if (best.norm > options.objective_tol) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        "fit_marginal_to_moments: Johnson moment solve did not converge"));
+  }
+  return MomentMatchResult{
+      best.marginal, best.moments, best.norm, best_iterations};
 }
 
 sim_expected<MomentMatchResult>
@@ -1115,6 +1375,21 @@ MarginalSpec MarginalSpec::pearson(int type,
   return m;
 }
 
+MarginalSpec MarginalSpec::johnson(int type,
+                                   double gamma,
+                                   double delta,
+                                   double mean,
+                                   double sd) {
+  MarginalSpec m;
+  m.kind = MarginalKind::Johnson;
+  m.mean = mean;
+  m.sd = sd;
+  m.johnson_type = type;
+  m.johnson_gamma = gamma;
+  m.johnson_delta = delta;
+  return m;
+}
+
 double normal_cdf(double z) noexcept {
   return 0.5 * std::erfc(-z / kSqrt2);
 }
@@ -1207,10 +1482,11 @@ fit_marginal_to_moments(const MomentMatchSpec& spec,
     }
     case MomentMatchFamily::Pearson:
       return fit_pearson_moment_match(spec);
-    case MomentMatchFamily::Johnson:
-      return std::unexpected(make_err(
-          SimError::Kind::InvalidInput,
-          "fit_marginal_to_moments: requested family is not implemented yet"));
+    case MomentMatchFamily::Johnson: {
+      auto gh_or = gauss_hermite(options.quadrature_points);
+      if (!gh_or.has_value()) return std::unexpected(gh_or.error());
+      return fit_johnson_moment_match(spec, options, *gh_or);
+    }
   }
   return std::unexpected(make_err(
       SimError::Kind::InvalidInput,

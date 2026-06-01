@@ -319,13 +319,58 @@ TEST_CASE("Pearson moment matcher matches PearsonDS goldens") {
   }
 }
 
-TEST_CASE("moment matcher reserves unsupported family slots") {
+TEST_CASE("Johnson moment matcher fits SU and SB shape moments") {
   magmaan::sim::MomentMatchSpec spec;
   spec.family = magmaan::sim::MomentMatchFamily::Johnson;
-  spec.shape.excess_kurtosis = 1.0;
-  auto fit_or = magmaan::sim::fit_marginal_to_moments(spec);
-  REQUIRE_FALSE(fit_or.has_value());
-  CHECK(fit_or.error().kind == magmaan::SimError::Kind::InvalidInput);
+  spec.shape.skewness = 0.8;
+  spec.shape.excess_kurtosis = 1.5;
+
+  magmaan::sim::MomentMatchOptions options;
+  options.quadrature_points = 81;
+  auto fit_or = magmaan::sim::fit_marginal_to_moments(spec, options);
+  if (!fit_or.has_value()) MESSAGE(fit_or.error().detail);
+  REQUIRE(fit_or.has_value());
+  if (!fit_or.has_value()) return;
+  CHECK(fit_or->marginal.kind == magmaan::sim::MarginalKind::Johnson);
+  CHECK((fit_or->marginal.johnson_type == 2 ||
+         fit_or->marginal.johnson_type == 3));
+  CHECK(fit_or->moments.skewness == doctest::Approx(0.8).epsilon(2e-6));
+  CHECK(fit_or->moments.excess_kurtosis == doctest::Approx(1.5).epsilon(2e-6));
+
+  spec.shape.skewness = 0.0;
+  spec.shape.excess_kurtosis = -0.8;
+  auto bounded_or = magmaan::sim::fit_marginal_to_moments(spec, options);
+  if (!bounded_or.has_value()) MESSAGE(bounded_or.error().detail);
+  REQUIRE(bounded_or.has_value());
+  if (!bounded_or.has_value()) return;
+  CHECK(bounded_or->marginal.kind == magmaan::sim::MarginalKind::Johnson);
+  CHECK(bounded_or->marginal.johnson_type == 3);
+  CHECK(bounded_or->moments.skewness == doctest::Approx(0.0).epsilon(2e-6));
+  CHECK(bounded_or->moments.excess_kurtosis ==
+        doctest::Approx(-0.8).epsilon(2e-6));
+}
+
+TEST_CASE("moment-matched Johnson marginals feed NORTA calibration") {
+  magmaan::sim::MomentMatchSpec left;
+  left.family = magmaan::sim::MomentMatchFamily::Johnson;
+  left.shape.skewness = 0.8;
+  left.shape.excess_kurtosis = 1.5;
+  magmaan::sim::MomentMatchSpec right = left;
+  right.shape.skewness = -0.8;
+
+  magmaan::sim::MomentMatchOptions options;
+  options.quadrature_points = 81;
+  auto left_or = magmaan::sim::fit_marginal_to_moments(left, options);
+  auto right_or = magmaan::sim::fit_marginal_to_moments(right, options);
+  REQUIRE(left_or.has_value());
+  REQUIRE(right_or.has_value());
+  if (!left_or.has_value() || !right_or.has_value()) return;
+
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      left_or->marginal, right_or->marginal};
+  auto cal_or = magmaan::sim::calibrate_norta(corr2(0.30), marginals);
+  REQUIRE(cal_or.has_value());
+  CHECK(cal_or->latent_corr(0, 1) > 0.0);
 }
 
 TEST_CASE("IG simulation respects covariance and target marginal shapes") {

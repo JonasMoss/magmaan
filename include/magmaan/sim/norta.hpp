@@ -16,6 +16,7 @@ enum class MarginalKind : std::uint8_t {
   StandardizedLognormal,
   TukeyGH,
   Pearson,
+  Johnson,
 };
 
 enum class MomentMatchFamily : std::uint8_t {
@@ -59,6 +60,12 @@ struct MarginalSpec {
   double pearson_p3 = 0.0;
   double pearson_p4 = 0.0;
 
+  // Johnson system parameters. `type` uses 1 = SL, 2 = SU, 3 = SB; gamma and
+  // delta parameterize T(Z) with Z ~ N(0,1), before numeric standardization.
+  int johnson_type = 2;
+  double johnson_gamma = 0.0;
+  double johnson_delta = 1.0;
+
   static MarginalSpec standard_normal(double mean = 0.0, double sd = 1.0);
   static MarginalSpec standardized_lognormal(double sigma_log,
                                              double mean = 0.0,
@@ -72,6 +79,11 @@ struct MarginalSpec {
                               double p2 = 0.0,
                               double p3 = 0.0,
                               double p4 = 0.0,
+                              double mean = 0.0,
+                              double sd = 1.0);
+  static MarginalSpec johnson(int type,
+                              double gamma,
+                              double delta,
                               double mean = 0.0,
                               double sd = 1.0);
 };
@@ -93,6 +105,9 @@ struct MomentMatchOptions {
   double finite_diff_step = 1e-4;
   double tukey_g_bound = 3.0;
   double tukey_h_upper = 0.249;
+  double johnson_gamma_bound = 6.0;
+  double johnson_log_delta_lower = -1.3862943611198906;
+  double johnson_log_delta_upper = 2.0794415416798357;
 };
 
 struct MomentMatchResult {

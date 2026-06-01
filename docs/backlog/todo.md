@@ -229,9 +229,12 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   `PearsonDS::pearsonFitM()`, the quantile path mirrors `qpearson()` through
   regularized beta/gamma/F/t inversions, and
   `tests/tools/regen_pearson_sim_fixtures.R` generates checked PearsonDS 1.3.2
-  goldens. **Remaining:** implement a principled Pearson Type IV
-  CDF/quantile policy (or keep rejecting it deliberately), then add Johnson
-  fitting once the Pearson Type IV story is clear. Keep R/package dependencies
+  goldens. Johnson SU/SB fitting is now landed too: it fits gamma/delta by
+  deterministic quadrature against skewness and excess kurtosis and returns the
+  same `MarginalSpec` used by NORTA and IG generator calibration. **Remaining:**
+  implement a principled Pearson Type IV CDF/quantile policy (or keep rejecting
+  it deliberately), decide whether Johnson SL should be exposed beyond the
+  direct `MarginalSpec::johnson()` constructor, and keep R/package dependencies
   out of the C++ core and fixtures only.
 - **S.** Decide the long-term special-functions policy before expanding the
   Pearson/Johnson surface. `src/detail_distribution_math.hpp` currently holds
