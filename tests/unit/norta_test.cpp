@@ -79,6 +79,16 @@ magmaan::sim::BivariateCopulaFamily copula_family_from_string(
   return magmaan::sim::BivariateCopulaFamily::Independence;
 }
 
+void assign_copula_from_json(magmaan::sim::BivariateCopulaSpec& copula,
+                             const nlohmann::json& spec) {
+  copula.family = copula_family_from_string(spec["family"].get<std::string>());
+  if (spec["parameters"].is_number()) {
+    copula.theta = spec["parameters"].get<double>();
+  } else {
+    copula.theta = 0.0;
+  }
+}
+
 }  // namespace
 
 TEST_CASE("normal quantile round-trips through normal CDF") {
@@ -895,6 +905,44 @@ TEST_CASE("C-vine 3 copula simulation composes root and conditional pairs") {
   CHECK(std::abs(X_or->col(0).mean()) < 0.04);
   CHECK(std::abs(X_or->col(1).mean()) < 0.04);
   CHECK(std::abs(X_or->col(2).mean()) < 0.06);
+}
+
+TEST_CASE("C-vine 3 inverse Rosenblatt matches rvinecopulib goldens") {
+  const std::string path = magmaan::test::fixtures_dir() +
+                           "/sim/cvine3_inverse_rosenblatt.json";
+  auto raw = magmaan::test::read_fixture(path);
+  REQUIRE(raw.has_value());
+  auto fixture = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(fixture.is_discarded());
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.max_bisection_iter = 90;
+  for (const auto& c : fixture["cases"]) {
+    const std::string id = c["id"].get<std::string>();
+    CAPTURE(id);
+    magmaan::sim::CVine3CopulaSpec copula;
+    assign_copula_from_json(copula.copula_01, c["copula_01"]);
+    assign_copula_from_json(copula.copula_02, c["copula_02"]);
+    assign_copula_from_json(copula.copula_12_given_0, c["copula_12_given_0"]);
+
+    Eigen::MatrixXd independent(c["points"].size(), 3);
+    Eigen::MatrixXd expected(c["points"].size(), 3);
+    for (Eigen::Index row = 0; row < independent.rows(); ++row) {
+      const auto& point = c["points"][static_cast<std::size_t>(row)];
+      for (Eigen::Index col = 0; col < 3; ++col) {
+        independent(row, col) =
+            point["independent_u"][static_cast<std::size_t>(col)].get<double>();
+        expected(row, col) =
+            point["copula_u"][static_cast<std::size_t>(col)].get<double>();
+      }
+    }
+
+    auto got_or = magmaan::sim::cvine3_copula_inverse_rosenblatt(
+        independent, copula, options);
+    if (!got_or.has_value()) MESSAGE(got_or.error().detail);
+    REQUIRE(got_or.has_value());
+    CHECK(got_or->isApprox(expected, 2e-10));
+  }
 }
 
 TEST_CASE("C-vine 3 conditional pair copula can drive residual dependence") {

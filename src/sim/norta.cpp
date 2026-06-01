@@ -3294,30 +3294,37 @@ simulate_bivariate_copula_raw(Eigen::Index n,
 }
 
 sim_expected<Eigen::MatrixXd>
-simulate_cvine3_copula_uniforms(Eigen::Index n,
-                                const CVine3CopulaSpec& copula,
-                                std::mt19937_64& rng,
-                                const BivariateCopulaOptions& options) {
-  if (n <= 0) {
+cvine3_copula_inverse_rosenblatt(
+    const Eigen::Ref<const Eigen::MatrixXd>& independent_u,
+    const CVine3CopulaSpec& copula,
+    const BivariateCopulaOptions& options) {
+  if (independent_u.rows() == 0 || independent_u.cols() != 3 ||
+      !independent_u.allFinite()) {
     return std::unexpected(make_err(
         SimError::Kind::InvalidInput,
-        "simulate_cvine3_copula_uniforms: n must be positive"));
+        "cvine3_copula_inverse_rosenblatt: independent_u must be a non-empty finite n x 3 matrix"));
   }
   if (options.max_bisection_iter < 16) {
     return std::unexpected(make_err(
         SimError::Kind::InvalidInput,
-        "simulate_cvine3_copula_uniforms: max_bisection_iter must be at least 16"));
+        "cvine3_copula_inverse_rosenblatt: max_bisection_iter must be at least 16"));
   }
   if (auto ok = validate_cvine3_copula_spec(copula); !ok.has_value()) {
     return std::unexpected(ok.error());
   }
 
-  std::uniform_real_distribution<double> uniform(0.0, 1.0);
-  Eigen::MatrixXd U(n, 3);
-  for (Eigen::Index row = 0; row < n; ++row) {
-    const double u0 = open_unit(uniform(rng));
-    const double w1 = open_unit(uniform(rng));
-    const double w2 = open_unit(uniform(rng));
+  Eigen::MatrixXd U(independent_u.rows(), 3);
+  for (Eigen::Index row = 0; row < independent_u.rows(); ++row) {
+    for (Eigen::Index col = 0; col < 3; ++col) {
+      if (independent_u(row, col) <= 0.0 || independent_u(row, col) >= 1.0) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "cvine3_copula_inverse_rosenblatt: independent_u entries must satisfy 0 < u < 1"));
+      }
+    }
+    const double u0 = independent_u(row, 0);
+    const double w1 = independent_u(row, 1);
+    const double w2 = independent_u(row, 2);
 
     auto u1_or = invert_bivariate_conditional(
         copula.copula_01, u0, w1, options.max_bisection_iter);
@@ -3328,7 +3335,7 @@ simulate_cvine3_copula_uniforms(Eigen::Index n,
     if (!std::isfinite(h1_given_0)) {
       return std::unexpected(make_err(
           SimError::Kind::NumericIssue,
-          "simulate_cvine3_copula_uniforms: non-finite root h-function"));
+          "cvine3_copula_inverse_rosenblatt: non-finite root h-function"));
     }
 
     auto h2_given_0_or = invert_bivariate_conditional(
@@ -3348,6 +3355,26 @@ simulate_cvine3_copula_uniforms(Eigen::Index n,
     U(row, 2) = *u2_or;
   }
   return U;
+}
+
+sim_expected<Eigen::MatrixXd>
+simulate_cvine3_copula_uniforms(Eigen::Index n,
+                                const CVine3CopulaSpec& copula,
+                                std::mt19937_64& rng,
+                                const BivariateCopulaOptions& options) {
+  if (n <= 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_cvine3_copula_uniforms: n must be positive"));
+  }
+  std::uniform_real_distribution<double> uniform(0.0, 1.0);
+  Eigen::MatrixXd W(n, 3);
+  for (Eigen::Index row = 0; row < n; ++row) {
+    W(row, 0) = open_unit(uniform(rng));
+    W(row, 1) = open_unit(uniform(rng));
+    W(row, 2) = open_unit(uniform(rng));
+  }
+  return cvine3_copula_inverse_rosenblatt(W, copula, options);
 }
 
 sim_expected<Eigen::MatrixXd>

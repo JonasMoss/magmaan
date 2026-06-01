@@ -414,6 +414,12 @@ simulate_cvine3_copula_uniforms(Eigen::Index n,
                                 const BivariateCopulaOptions& options = {});
 
 sim_expected<Eigen::MatrixXd>
+cvine3_copula_inverse_rosenblatt(
+    const Eigen::Ref<const Eigen::MatrixXd>& independent_u,
+    const CVine3CopulaSpec& copula,
+    const BivariateCopulaOptions& options = {});
+
+sim_expected<Eigen::MatrixXd>
 simulate_cvine3_copula_matrix(Eigen::Index n,
                               const CVine3CopulaSpec& copula,
                               const std::vector<MarginalSpec>& marginals,
