@@ -15,6 +15,7 @@ enum class MarginalKind : std::uint8_t {
   StandardNormal,
   StandardizedLognormal,
   TukeyGH,
+  Pearson,
 };
 
 enum class MomentMatchFamily : std::uint8_t {
@@ -49,6 +50,15 @@ struct MarginalSpec {
   double g = 0.0;
   double h = 0.0;
 
+  // Pearson distribution-system parameters in PearsonDS convention. `type`
+  // matches PearsonDS: 0 normal, 1 beta, 2 symmetric beta, 3 gamma, 4 Type IV,
+  // 5 inverse gamma, 6 beta prime, 7 Student t.
+  int pearson_type = 0;
+  double pearson_p1 = 0.0;
+  double pearson_p2 = 0.0;
+  double pearson_p3 = 0.0;
+  double pearson_p4 = 0.0;
+
   static MarginalSpec standard_normal(double mean = 0.0, double sd = 1.0);
   static MarginalSpec standardized_lognormal(double sigma_log,
                                              double mean = 0.0,
@@ -57,6 +67,13 @@ struct MarginalSpec {
                                 double h,
                                 double mean = 0.0,
                                 double sd = 1.0);
+  static MarginalSpec pearson(int type,
+                              double p1,
+                              double p2 = 0.0,
+                              double p3 = 0.0,
+                              double p4 = 0.0,
+                              double mean = 0.0,
+                              double sd = 1.0);
 };
 
 struct MomentMatchSpec {

@@ -2,10 +2,13 @@
 
 #include <cmath>
 #include <random>
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
+#include <nlohmann/json.hpp>
 
+#include "../oracle.hpp"
 #include "magmaan/error.hpp"
 #include "magmaan/sim/norta.hpp"
 
@@ -152,9 +155,55 @@ TEST_CASE("moment-matched Tukey marginals feed NORTA calibration") {
   CHECK(cal_or->latent_corr(0, 1) > 0.30);
 }
 
+TEST_CASE("Pearson moment matcher matches PearsonDS goldens") {
+  const std::string path = magmaan::test::fixtures_dir() +
+                           "/sim/pearson_moment_match.json";
+  auto raw = magmaan::test::read_fixture(path);
+  REQUIRE(raw.has_value());
+  auto fixture = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(fixture.is_discarded());
+
+  for (const auto& c : fixture["cases"]) {
+    magmaan::sim::MomentMatchSpec spec;
+    spec.family = magmaan::sim::MomentMatchFamily::Pearson;
+    spec.mean = c["mean"].get<double>();
+    spec.sd = c["sd"].get<double>();
+    spec.shape.skewness = c["skewness"].get<double>();
+    spec.shape.excess_kurtosis = c["excess_kurtosis"].get<double>();
+
+    auto fit_or = magmaan::sim::fit_marginal_to_moments(spec);
+    const bool supported = c["supported"].get<bool>();
+    if (!supported) {
+      REQUIRE_FALSE(fit_or.has_value());
+      CHECK(fit_or.error().kind == magmaan::SimError::Kind::CalibrationFailed);
+      continue;
+    }
+    REQUIRE(fit_or.has_value());
+    if (!fit_or.has_value()) continue;
+    const auto& got = fit_or->marginal;
+    CHECK(got.kind == magmaan::sim::MarginalKind::Pearson);
+    CHECK(got.pearson_type == c["pearson_type"].get<int>());
+    const double got_params[] = {
+        got.pearson_p1, got.pearson_p2, got.pearson_p3, got.pearson_p4};
+    for (std::size_t i = 0; i < 4; ++i) {
+      CHECK(got_params[i] == doctest::Approx(
+          c["pearson_params"][i].get<double>()).epsilon(2e-11));
+    }
+    const auto& probs = c["probabilities"];
+    const auto& quantiles = c["quantiles"];
+    for (std::size_t i = 0; i < probs.size(); ++i) {
+      auto q_or = magmaan::sim::marginal_quantile(
+          got, probs[i].get<double>());
+      REQUIRE(q_or.has_value());
+      CHECK(*q_or == doctest::Approx(
+          quantiles[i].get<double>()).epsilon(5e-7).scale(1.0));
+    }
+  }
+}
+
 TEST_CASE("moment matcher reserves unsupported family slots") {
   magmaan::sim::MomentMatchSpec spec;
-  spec.family = magmaan::sim::MomentMatchFamily::Pearson;
+  spec.family = magmaan::sim::MomentMatchFamily::Johnson;
   spec.shape.excess_kurtosis = 1.0;
   auto fit_or = magmaan::sim::fit_marginal_to_moments(spec);
   REQUIRE_FALSE(fit_or.has_value());

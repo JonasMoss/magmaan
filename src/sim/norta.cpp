@@ -38,6 +38,178 @@ struct MomentFitEval {
   double norm = 0.0;
 };
 
+double nan() noexcept {
+  return std::numeric_limits<double>::quiet_NaN();
+}
+
+bool approx_equal(double a, double b, double tol = 1e-12) noexcept {
+  return std::abs(a - b) <= tol * std::max({1.0, std::abs(a), std::abs(b)});
+}
+
+double gamma_p_series(double a, double x) noexcept {
+  if (!(a > 0.0) || x < 0.0) return nan();
+  if (x == 0.0) return 0.0;
+  double sum = 1.0 / a;
+  double term = sum;
+  constexpr int max_iter = 200;
+  for (int n = 1; n < max_iter; ++n) {
+    term *= x / (a + static_cast<double>(n));
+    sum += term;
+    if (std::abs(term) < std::abs(sum) * 1e-15) break;
+  }
+  return sum * std::exp(-x + a * std::log(x) - std::lgamma(a));
+}
+
+double gamma_q_cfrac(double a, double x) noexcept {
+  if (!(a > 0.0) || x < 0.0) return nan();
+  if (x == 0.0) return 1.0;
+  constexpr double fpmin = 1e-300;
+  double b = x + 1.0 - a;
+  double c = 1.0 / fpmin;
+  double d = 1.0 / b;
+  double h = d;
+  constexpr int max_iter = 200;
+  for (int n = 1; n < max_iter; ++n) {
+    const double an = -static_cast<double>(n) * (static_cast<double>(n) - a);
+    b += 2.0;
+    d = an * d + b;
+    if (std::abs(d) < fpmin) d = fpmin;
+    c = b + an / c;
+    if (std::abs(c) < fpmin) c = fpmin;
+    d = 1.0 / d;
+    const double del = d * c;
+    h *= del;
+    if (std::abs(del - 1.0) < 1e-15) break;
+  }
+  return h * std::exp(-x + a * std::log(x) - std::lgamma(a));
+}
+
+double gamma_p(double a, double x) noexcept {
+  if (x < a + 1.0) return gamma_p_series(a, x);
+  return 1.0 - gamma_q_cfrac(a, x);
+}
+
+double beta_cont_frac(double a, double b, double x) noexcept {
+  constexpr int max_iter = 200;
+  constexpr double eps = 3e-14;
+  constexpr double fpmin = 1e-300;
+
+  const double qab = a + b;
+  const double qap = a + 1.0;
+  const double qam = a - 1.0;
+  double c = 1.0;
+  double d = 1.0 - qab * x / qap;
+  if (std::abs(d) < fpmin) d = fpmin;
+  d = 1.0 / d;
+  double h = d;
+
+  for (int m = 1; m <= max_iter; ++m) {
+    const double m2 = 2.0 * static_cast<double>(m);
+    double aa = static_cast<double>(m) * (b - static_cast<double>(m)) * x /
+                ((qam + m2) * (a + m2));
+    d = 1.0 + aa * d;
+    if (std::abs(d) < fpmin) d = fpmin;
+    c = 1.0 + aa / c;
+    if (std::abs(c) < fpmin) c = fpmin;
+    d = 1.0 / d;
+    h *= d * c;
+
+    aa = -(a + static_cast<double>(m)) * (qab + static_cast<double>(m)) * x /
+         ((a + m2) * (qap + m2));
+    d = 1.0 + aa * d;
+    if (std::abs(d) < fpmin) d = fpmin;
+    c = 1.0 + aa / c;
+    if (std::abs(c) < fpmin) c = fpmin;
+    d = 1.0 / d;
+    const double del = d * c;
+    h *= del;
+    if (std::abs(del - 1.0) < eps) break;
+  }
+  return h;
+}
+
+double regularized_beta(double a, double b, double x) noexcept {
+  if (!(a > 0.0) || !(b > 0.0) || x < 0.0 || x > 1.0) return nan();
+  if (x == 0.0) return 0.0;
+  if (x == 1.0) return 1.0;
+  const double bt = std::exp(std::lgamma(a + b) - std::lgamma(a) -
+                             std::lgamma(b) + a * std::log(x) +
+                             b * std::log1p(-x));
+  if (x < (a + 1.0) / (a + b + 2.0)) {
+    return bt * beta_cont_frac(a, b, x) / a;
+  }
+  return 1.0 - bt * beta_cont_frac(b, a, 1.0 - x) / b;
+}
+
+double inverse_regularized_beta(double p, double a, double b) noexcept {
+  if (!(a > 0.0) || !(b > 0.0) || p < 0.0 || p > 1.0) return nan();
+  if (p == 0.0) return 0.0;
+  if (p == 1.0) return 1.0;
+  double lo = 0.0;
+  double hi = 1.0;
+  double mid = 0.5;
+  for (int iter = 0; iter < 120; ++iter) {
+    mid = 0.5 * (lo + hi);
+    const double cdf = regularized_beta(a, b, mid);
+    if (!std::isfinite(cdf)) return nan();
+    if (cdf < p) lo = mid;
+    else hi = mid;
+  }
+  return mid;
+}
+
+double inverse_gamma_p(double p, double shape, double scale) noexcept {
+  if (!(shape > 0.0) || !(scale > 0.0) || p < 0.0 || p > 1.0) return nan();
+  if (p == 0.0) return 0.0;
+  if (p == 1.0) return std::numeric_limits<double>::infinity();
+  double lo = 0.0;
+  double hi = std::max(1.0, shape * scale);
+  while (gamma_p(shape, hi / scale) < p) {
+    hi *= 2.0;
+    if (!std::isfinite(hi)) return hi;
+  }
+  double mid = hi;
+  for (int iter = 0; iter < 140; ++iter) {
+    mid = 0.5 * (lo + hi);
+    const double cdf = gamma_p(shape, mid / scale);
+    if (!std::isfinite(cdf)) return nan();
+    if (cdf < p) lo = mid;
+    else hi = mid;
+  }
+  return mid;
+}
+
+double student_t_cdf(double x, double df) noexcept {
+  if (!(df > 0.0)) return nan();
+  if (x == 0.0) return 0.5;
+  const double z = df / (df + x * x);
+  const double ib = regularized_beta(0.5 * df, 0.5, z);
+  if (!std::isfinite(ib)) return nan();
+  return x > 0.0 ? 1.0 - 0.5 * ib : 0.5 * ib;
+}
+
+double student_t_quantile(double p, double df) noexcept {
+  if (!(df > 0.0) || p < 0.0 || p > 1.0) return nan();
+  if (p == 0.0) return -std::numeric_limits<double>::infinity();
+  if (p == 1.0) return std::numeric_limits<double>::infinity();
+  if (p == 0.5) return 0.0;
+  const bool neg = p < 0.5;
+  const double target = neg ? 1.0 - p : p;
+  double lo = 0.0;
+  double hi = 1.0;
+  while (student_t_cdf(hi, df) < target) {
+    hi *= 2.0;
+    if (!std::isfinite(hi)) return neg ? -hi : hi;
+  }
+  double mid = hi;
+  for (int iter = 0; iter < 140; ++iter) {
+    mid = 0.5 * (lo + hi);
+    if (student_t_cdf(mid, df) < target) lo = mid;
+    else hi = mid;
+  }
+  return neg ? -mid : mid;
+}
+
 sim_expected<GaussHermite> gauss_hermite(int n) {
   if (n < 8) {
     return std::unexpected(make_err(
@@ -98,6 +270,41 @@ sim_expected<void> validate_marginal(const MarginalSpec& m) {
             "Tukey g-and-h: g must be finite and h must satisfy 0 <= h < 0.25"));
       }
       return {};
+    case MarginalKind::Pearson:
+      if (!std::isfinite(m.pearson_p1) || !std::isfinite(m.pearson_p2) ||
+          !std::isfinite(m.pearson_p3) || !std::isfinite(m.pearson_p4)) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidMarginal,
+            "Pearson: parameters must be finite"));
+      }
+      switch (m.pearson_type) {
+        case 0:
+          if (m.pearson_p2 > 0.0) return {};
+          break;
+        case 1:
+          if (m.pearson_p1 > 0.0 && m.pearson_p2 > 0.0 &&
+              m.pearson_p4 != 0.0) return {};
+          break;
+        case 2:
+          if (m.pearson_p1 > 0.0 && m.pearson_p3 != 0.0) return {};
+          break;
+        case 3:
+        case 5:
+          if (m.pearson_p1 > 0.0 && m.pearson_p3 != 0.0) return {};
+          break;
+        case 6:
+          if (m.pearson_p1 > 0.0 && m.pearson_p2 > 0.0 &&
+              m.pearson_p4 != 0.0) return {};
+          break;
+        case 7:
+          if (m.pearson_p1 > 0.0 && m.pearson_p3 != 0.0) return {};
+          break;
+        default:
+          break;
+      }
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidMarginal,
+          "Pearson: unsupported or invalid PearsonDS parameterization"));
   }
   return std::unexpected(make_err(
       SimError::Kind::InvalidMarginal,
@@ -123,6 +330,58 @@ double tukey_g_h_raw_from_z(const MarginalSpec& m, double z) {
   return tg * std::exp(0.5 * m.h * z * z);
 }
 
+double qbeta_with_scale(double p,
+                        double a,
+                        double b,
+                        double location,
+                        double scale) {
+  const double pp = scale < 0.0 ? 1.0 - p : p;
+  const double q = inverse_regularized_beta(pp, a, b);
+  return location + scale * q;
+}
+
+double pearson_raw_from_z(const MarginalSpec& m, double z) {
+  const double p = normal_cdf(z);
+  switch (m.pearson_type) {
+    case 0:
+      return m.pearson_p1 + m.pearson_p2 * z;
+    case 1:
+      return qbeta_with_scale(
+          p, m.pearson_p1, m.pearson_p2, m.pearson_p3, m.pearson_p4);
+    case 2:
+      return qbeta_with_scale(
+          p, m.pearson_p1, m.pearson_p1, m.pearson_p2, m.pearson_p3);
+    case 3: {
+      const double scale = m.pearson_p3;
+      const double pp = scale < 0.0 ? 1.0 - p : p;
+      const double q = inverse_gamma_p(pp, m.pearson_p1, std::abs(scale));
+      return m.pearson_p2 + std::copysign(q, scale);
+    }
+    case 5: {
+      const double scale = m.pearson_p3;
+      const double pp = scale > 0.0 ? 1.0 - p : p;
+      const double q = inverse_gamma_p(pp, m.pearson_p1, 1.0 / std::abs(scale));
+      return m.pearson_p2 + std::copysign(1.0 / q, scale);
+    }
+    case 6: {
+      const double scale = m.pearson_p4 * m.pearson_p1 / m.pearson_p2;
+      const double pp = scale < 0.0 ? 1.0 - p : p;
+      const double y = inverse_regularized_beta(
+          pp, m.pearson_p1, m.pearson_p2);
+      const double f = (2.0 * m.pearson_p2 * y) /
+                       (2.0 * m.pearson_p1 * (1.0 - y));
+      return m.pearson_p3 + scale * f;
+    }
+    case 7: {
+      const double scale = m.pearson_p3;
+      const double pp = scale < 0.0 ? 1.0 - p : p;
+      return m.pearson_p2 + scale * student_t_quantile(pp, m.pearson_p1);
+    }
+    default:
+      return nan();
+  }
+}
+
 double raw_from_z(const MarginalSpec& m, double z) {
   switch (m.kind) {
     case MarginalKind::StandardNormal:
@@ -131,6 +390,8 @@ double raw_from_z(const MarginalSpec& m, double z) {
       return standardized_lognormal_from_z(m, z);
     case MarginalKind::TukeyGH:
       return tukey_g_h_raw_from_z(m, z);
+    case MarginalKind::Pearson:
+      return pearson_raw_from_z(m, z);
   }
   return std::numeric_limits<double>::quiet_NaN();
 }
@@ -143,6 +404,9 @@ marginal_moments(const MarginalSpec& m, const GaussHermite& gh) {
   if (m.kind == MarginalKind::StandardNormal ||
       m.kind == MarginalKind::StandardizedLognormal) {
     return MarginalMoments{0.0, 1.0};
+  }
+  if (m.kind == MarginalKind::Pearson) {
+    return MarginalMoments{m.mean, m.sd};
   }
 
   double e1 = 0.0;
@@ -416,6 +680,7 @@ validate_moment_match(const MomentMatchSpec& spec,
     case MomentMatchFamily::TukeyGH:
       return {};
     case MomentMatchFamily::Pearson:
+      return {};
     case MomentMatchFamily::Johnson:
       return std::unexpected(make_err(
           SimError::Kind::InvalidInput,
@@ -593,6 +858,147 @@ fit_tukey_moment_match(const MomentMatchSpec& spec,
   return MomentMatchResult{best.marginal, best.moments, best.norm, iter};
 }
 
+sim_expected<MomentMatchResult>
+fit_pearson_moment_match(const MomentMatchSpec& spec) {
+  const double mean = spec.mean;
+  const double variance = spec.sd * spec.sd;
+  const double skew = spec.shape.skewness;
+  const double kurt = spec.shape.excess_kurtosis + 3.0;
+  const double skew2 = skew * skew;
+  if (approx_equal(skew2, kurt - 1.0)) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        "fit_marginal_to_moments: Pearson boundary is a two-point discrete distribution"));
+  }
+  if (skew2 > kurt - 1.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        "fit_marginal_to_moments: no distribution has the requested Pearson moments"));
+  }
+
+  const double denom = 10.0 * kurt - 12.0 * skew2 - 18.0;
+  if (approx_equal(denom, 0.0)) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        "fit_marginal_to_moments: Pearson moment equations are singular"));
+  }
+  const double c0 = (4.0 * kurt - 3.0 * skew2) / denom * variance;
+  const double c1 = skew * (kurt + 3.0) / denom * spec.sd;
+  const double c2 = (2.0 * kurt - 3.0 * skew2 - 6.0) / denom;
+
+  MarginalSpec marginal;
+  if (approx_equal(skew, 0.0)) {
+    if (approx_equal(kurt, 3.0)) {
+      marginal = MarginalSpec::pearson(0, mean, spec.sd, 0.0, 0.0,
+                                       mean, spec.sd);
+    } else if (kurt < 3.0) {
+      const double a1 = spec.sd / 2.0 *
+          (-std::sqrt(-16.0 * kurt * (2.0 * kurt - 6.0)) /
+           (2.0 * kurt - 6.0));
+      const double m1 = -1.0 / (2.0 * c2);
+      if (!(m1 > -1.0)) {
+        return std::unexpected(make_err(
+            SimError::Kind::CalibrationFailed,
+            "fit_marginal_to_moments: invalid Pearson Type II shape"));
+      }
+      const double scale = 2.0 * a1;
+      const double location = mean - scale / 2.0;
+      marginal = MarginalSpec::pearson(2, 1.0 + m1, location, scale, 0.0,
+                                       mean, spec.sd);
+    } else {
+      const double r = 6.0 * (kurt - 1.0) / (2.0 * kurt - 6.0);
+      const double a = std::sqrt(variance * (r - 1.0));
+      const double df = 1.0 + r;
+      marginal = MarginalSpec::pearson(7, df, mean, a / std::sqrt(df), 0.0,
+                                       mean, spec.sd);
+    }
+  } else if (!approx_equal(2.0 * kurt - 3.0 * skew2 - 6.0, 0.0)) {
+    const double kap = 0.25 * skew2 * (kurt + 3.0) * (kurt + 3.0) /
+        ((4.0 * kurt - 3.0 * skew2) *
+         (2.0 * kurt - 3.0 * skew2 - 6.0));
+    if (kap < 0.0) {
+      double a1 = spec.sd / 2.0 *
+          ((-skew * (kurt + 3.0) -
+            std::sqrt(skew2 * (kurt + 3.0) * (kurt + 3.0) -
+                      4.0 * (4.0 * kurt - 3.0 * skew2) *
+                      (2.0 * kurt - 3.0 * skew2 - 6.0))) /
+           (2.0 * kurt - 3.0 * skew2 - 6.0));
+      double a2 = spec.sd / 2.0 *
+          ((-skew * (kurt + 3.0) +
+            std::sqrt(skew2 * (kurt + 3.0) * (kurt + 3.0) -
+                      4.0 * (4.0 * kurt - 3.0 * skew2) *
+                      (2.0 * kurt - 3.0 * skew2 - 6.0))) /
+           (2.0 * kurt - 3.0 * skew2 - 6.0));
+      if (a1 > 0.0) std::swap(a1, a2);
+      const double disc = std::sqrt(
+          skew2 * (kurt + 3.0) * (kurt + 3.0) -
+          4.0 * (4.0 * kurt - 3.0 * skew2) *
+          (2.0 * kurt - 3.0 * skew2 - 6.0));
+      const double m1 = -(skew * (kurt + 3.0) +
+          a1 * denom / spec.sd) / disc;
+      const double m2 = -(-skew * (kurt + 3.0) -
+          a2 * denom / spec.sd) / disc;
+      if (!(m1 > -1.0) || !(m2 > -1.0)) {
+        return std::unexpected(make_err(
+            SimError::Kind::CalibrationFailed,
+            "fit_marginal_to_moments: invalid Pearson Type I shape"));
+      }
+      const double scale = a2 - a1;
+      const double location = mean - scale * (m1 + 1.0) / (m1 + m2 + 2.0);
+      marginal = MarginalSpec::pearson(1, 1.0 + m1, 1.0 + m2,
+                                       location, scale, mean, spec.sd);
+    } else if (approx_equal(kap, 1.0)) {
+      const double C1 = c1 / (2.0 * c2);
+      const double scale = -(c1 - C1) / c2;
+      marginal = MarginalSpec::pearson(5, 1.0 / c2 - 1.0, mean - C1,
+                                       scale, 0.0, mean, spec.sd);
+    } else if (kap > 1.0) {
+      double a1 = spec.sd / 2.0 *
+          ((-skew * (kurt + 3.0) -
+            std::sqrt(skew2 * (kurt + 3.0) * (kurt + 3.0) -
+                      4.0 * (4.0 * kurt - 3.0 * skew2) *
+                      (2.0 * kurt - 3.0 * skew2 - 6.0))) /
+           (2.0 * kurt - 3.0 * skew2 - 6.0));
+      double a2 = spec.sd / 2.0 *
+          ((-skew * (kurt + 3.0) +
+            std::sqrt(skew2 * (kurt + 3.0) * (kurt + 3.0) -
+                      4.0 * (4.0 * kurt - 3.0 * skew2) *
+                      (2.0 * kurt - 3.0 * skew2 - 6.0))) /
+           (2.0 * kurt - 3.0 * skew2 - 6.0));
+      if (a1 > 0.0) std::swap(a1, a2);
+      const double m1 = (c1 + a1) / (c2 * (a2 - a1));
+      const double m2 = -(c1 + a2) / (c2 * (a2 - a1));
+      const double scale = a2 - a1;
+      const double location = mean + scale * (m2 + 1.0) / (m2 + m1 + 2.0);
+      marginal = MarginalSpec::pearson(6, 1.0 + m2, -m2 - m1 - 1.0,
+                                       location, scale, mean, spec.sd);
+    } else if (kap > 0.0 && kap < 1.0) {
+      return std::unexpected(make_err(
+          SimError::Kind::CalibrationFailed,
+          "fit_marginal_to_moments: Pearson Type IV quantile is not implemented"));
+    } else {
+      return std::unexpected(make_err(
+          SimError::Kind::CalibrationFailed,
+          "fit_marginal_to_moments: invalid Pearson kappa"));
+    }
+  } else {
+    const double m = c0 / (c1 * c1) - 1.0;
+    marginal = MarginalSpec::pearson(3, m + 1.0, mean - c0 / c1, c1, 0.0,
+                                     mean, spec.sd);
+  }
+
+  if (auto ok = validate_marginal(marginal); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  MomentMatchResult out;
+  out.marginal = marginal;
+  out.moments = MarginalMomentSummary{
+      mean, spec.sd, spec.shape.skewness, spec.shape.excess_kurtosis};
+  out.residual_norm = 0.0;
+  out.iterations = 0;
+  return out;
+}
+
 sim_expected<Eigen::MatrixXd>
 cholesky_factor_with_jitter(const Eigen::Ref<const Eigen::MatrixXd>& corr,
                             double jitter) {
@@ -644,6 +1050,25 @@ MarginalSpec MarginalSpec::tukey_g_h(double g,
   m.sd = sd;
   m.g = g;
   m.h = h;
+  return m;
+}
+
+MarginalSpec MarginalSpec::pearson(int type,
+                                   double p1,
+                                   double p2,
+                                   double p3,
+                                   double p4,
+                                   double mean,
+                                   double sd) {
+  MarginalSpec m;
+  m.kind = MarginalKind::Pearson;
+  m.mean = mean;
+  m.sd = sd;
+  m.pearson_type = type;
+  m.pearson_p1 = p1;
+  m.pearson_p2 = p2;
+  m.pearson_p3 = p3;
+  m.pearson_p4 = p4;
   return m;
 }
 
@@ -731,12 +1156,14 @@ fit_marginal_to_moments(const MomentMatchSpec& spec,
   if (auto ok = validate_moment_match(spec, options); !ok.has_value()) {
     return std::unexpected(ok.error());
   }
-  auto gh_or = gauss_hermite(options.quadrature_points);
-  if (!gh_or.has_value()) return std::unexpected(gh_or.error());
   switch (spec.family) {
-    case MomentMatchFamily::TukeyGH:
+    case MomentMatchFamily::TukeyGH: {
+      auto gh_or = gauss_hermite(options.quadrature_points);
+      if (!gh_or.has_value()) return std::unexpected(gh_or.error());
       return fit_tukey_moment_match(spec, options, *gh_or);
+    }
     case MomentMatchFamily::Pearson:
+      return fit_pearson_moment_match(spec);
     case MomentMatchFamily::Johnson:
       return std::unexpected(make_err(
           SimError::Kind::InvalidInput,
