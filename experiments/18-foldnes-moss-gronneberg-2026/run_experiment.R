@@ -99,6 +99,7 @@ results_dir <- ensure_results_dir()
 set_single_threaded_math()
 require_pkg("magmaan")
 core <- magmaan::magmaan_core
+fmg_spectra <- get("infer_fmg_ugamma_spectra", envir = asNamespace("magmaan"))
 
 # ── Distribution targets (paper: VM1 = moderate, VM2 = severe) ───────────────
 dist_moments <- list(
@@ -155,15 +156,16 @@ fit_one_rep <- function(ctx, rep_idx, keep_parity = FALSE) {
                     error = function(e) NA_real_)
 
   # UGamma eigenvalue spectrum: biased (sample) and unbiased (Browne) Gamma.
-  uf <- core$robust_build_u_factor_parts(fit$partable, samp, fit$theta)
-  Zc <- core$robust_casewise_contributions(fit$partable, list(X))
-  M_s  <- core$robust_reduced_gamma_sample(uf, Zc, fit$nobs)
-  M_nt <- core$robust_reduced_gamma_nt(uf)
-  n_scalar <- as.numeric(unlist(fit$nobs, use.names = FALSE))[[1L]]
-  M_ub <- tryCatch(core$robust_reduced_gamma_unbiased(uf, n_scalar, M_s, M_nt),
-                   error = function(e) e)
-  ev_b  <- core$robust_ugamma_eigenvalues(M_s)
-  ev_ub <- if (inherits(M_ub, "error")) NULL else core$robust_ugamma_eigenvalues(M_ub)
+  # Keep this on the fused FMG path: for high-p cells it uses the row-space
+  # spectrum, including the low-rank Browne-unbiased update, instead of two
+  # dense df x df eigensolves.
+  spectra <- tryCatch(fmg_spectra(fit, X, need_unbiased = TRUE),
+                      error = function(e) e)
+  if (inherits(spectra, "error")) {
+    return(list(ok = FALSE, error = conditionMessage(spectra)))
+  }
+  ev_b <- spectra$biased
+  ev_ub <- spectra$unbiased
 
   # SB / SS on each base statistic and each Gamma version.
   robust_row <- function(name, base_T, ev) {
