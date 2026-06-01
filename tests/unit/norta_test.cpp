@@ -1087,6 +1087,77 @@ TEST_CASE("generic C-vine sampler supports four variables") {
   CHECK(bad_or.error().kind == magmaan::SimError::Kind::InvalidInput);
 }
 
+TEST_CASE("generic C-vine observed correlation matches C-vine 3 specialization") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standardized_lognormal(0.25),
+      magmaan::sim::MarginalSpec::standard_normal()};
+
+  magmaan::sim::CVine3CopulaSpec cvine3;
+  cvine3.copula_01.family = magmaan::sim::BivariateCopulaFamily::Frank;
+  cvine3.copula_01.theta = 2.5;
+  cvine3.copula_02.family = magmaan::sim::BivariateCopulaFamily::Frank;
+  cvine3.copula_02.theta = -2.0;
+  cvine3.copula_12_given_0.family =
+      magmaan::sim::BivariateCopulaFamily::Clayton;
+  cvine3.copula_12_given_0.theta = 0.8;
+
+  magmaan::sim::CVineCopulaSpec generic;
+  generic.pair_copulas = {
+      {},
+      {cvine3.copula_01},
+      {cvine3.copula_02, cvine3.copula_12_given_0}};
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 9;
+  options.max_bisection_iter = 60;
+
+  auto specialized_or = magmaan::sim::cvine3_copula_observed_corr(
+      cvine3, marginals, options);
+  auto generic_or = magmaan::sim::cvine_copula_observed_corr(
+      generic, marginals, options);
+  if (!specialized_or.has_value()) MESSAGE(specialized_or.error().detail);
+  if (!generic_or.has_value()) MESSAGE(generic_or.error().detail);
+  REQUIRE(specialized_or.has_value());
+  REQUIRE(generic_or.has_value());
+  CHECK(generic_or->isApprox(*specialized_or, 2e-12));
+}
+
+TEST_CASE("generic C-vine fixed-order calibration fits four-variable target") {
+  const std::vector<magmaan::sim::MarginalSpec> marginals{
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standard_normal(),
+      magmaan::sim::MarginalSpec::standard_normal()};
+  Eigen::MatrixXd target(4, 4);
+  target << 1.0, 0.16, -0.12, 0.10,
+            0.16, 1.0, 0.11, -0.08,
+           -0.12, 0.11, 1.0, 0.09,
+            0.10, -0.08, 0.09, 1.0;
+
+  magmaan::sim::BivariateCopulaOptions options;
+  options.quadrature_points = 8;
+  options.max_bisection_iter = 32;
+  options.calibration_tol = 2.5e-3;
+
+  auto cal_or = magmaan::sim::calibrate_cvine_copula_correlation(
+      magmaan::sim::BivariateCopulaFamily::Frank, target, marginals, options);
+  if (!cal_or.has_value()) MESSAGE(cal_or.error().detail);
+  REQUIRE(cal_or.has_value());
+  if (!cal_or.has_value()) return;
+  CHECK(cal_or->family == magmaan::sim::BivariateCopulaFamily::Frank);
+  CHECK(cal_or->copula.pair_copulas.size() == 4u);
+  CHECK(cal_or->iterations(3, 2) > 0);
+  CHECK(cal_or->max_abs_error < 1.0e-2);
+
+  auto achieved_or = magmaan::sim::cvine_copula_observed_corr(
+      cal_or->copula, marginals, options);
+  if (!achieved_or.has_value()) MESSAGE(achieved_or.error().detail);
+  REQUIRE(achieved_or.has_value());
+  CHECK(achieved_or->isApprox(cal_or->achieved_corr, 1e-12));
+  CHECK((*achieved_or - target).cwiseAbs().maxCoeff() < 1.0e-2);
+}
+
 TEST_CASE("C-vine 3 conditional pair copula can drive residual dependence") {
   const std::vector<magmaan::sim::MarginalSpec> marginals{
       magmaan::sim::MarginalSpec::standard_normal(),
