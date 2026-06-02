@@ -4,6 +4,7 @@ format:
   html:
     toc: true
     number-sections: false
+  gfm: default
 execute:
   echo: false
   warning: false
@@ -96,6 +97,21 @@ html_table <- function(x, status_col = NULL, limit = 30L) {
 meta_value <- function(key) {
   hit <- metadata$value[metadata$key == key]
   if (length(hit)) hit[[1L]] else ""
+}
+public_meta_value <- function(key) {
+  value <- meta_value(key)
+  if (!nzchar(value)) return(value)
+  if (key %in% c("audit_source", "oracle_path", "lcs_source",
+                 "refit_source")) {
+    return(basename(value))
+  }
+  value
+}
+public_path <- function(x) {
+  x <- as.character(x)
+  x <- sub("^.*/magmaan/", "", x)
+  x <- ifelse(grepl("^/", x), basename(x), x)
+  x
 }
 ```
 
@@ -193,9 +209,9 @@ was changed and the mismatch disappeared."
 cache_tbl <- data.frame(
   Field = c("Audit Mode", "Audit Source", "Oracle Run", "lavaan Version",
             "Refit Source"),
-  Value = c(meta_value("audit_mode"), meta_value("audit_source"),
-            meta_value("oracle_run"), meta_value("lavaan_version"),
-            meta_value("refit_source")),
+  Value = c(public_meta_value("audit_mode"), public_meta_value("audit_source"),
+            public_meta_value("oracle_run"), public_meta_value("lavaan_version"),
+            public_meta_value("refit_source")),
   stringsAsFactors = FALSE
 )
 cache_tbl <- cache_tbl[!is.na(cache_tbl$Value) & nzchar(cache_tbl$Value),
@@ -352,6 +368,9 @@ html_table(lcs_tbl, limit = NULL)
 
 ```{r}
 #| results: asis
+if ("path" %in% names(drivers)) {
+  drivers$path <- public_path(drivers$path)
+}
 html_table(drivers, limit = NULL)
 ```
 
