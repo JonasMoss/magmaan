@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # Deng & Chan (2017) alpha vs omega: a non-regular Wald contrast, an Imhof fix,
-# and the regular trinity (LR, score).
+# and the regular trinity (Wald, LR, score).
 #
 # Testing H0: alpha = omega is, within a one-factor model, testing
 # tau-equivalence (equal loadings). Because omega >= alpha always, the contrast
@@ -9,8 +9,8 @@
 # a quadratic form, not a normal, and the z-test is mis-calibrated. The fix
 # keeps the interpretable reliability gap as the statistic but references it
 # against its true weighted-chi-square law via Imhof. We compare it to the
-# regular (p-1)-df tests of the same null: the Satorra-2000 scaled LR and a
-# standard score test.
+# regular (p-1)-df tests of the same null: Wald, the Satorra-2000 scaled LR,
+# and a standard score test.
 #
 # Estimation is traditional normal-theory ML throughout. magmaan supplies the
 # fits and the Gamma helpers; the Imhof tail comes from CompQuadForm. No magmaan
@@ -153,9 +153,11 @@ demo_scales <- list(
 demo_rows <- lapply(names(demo_scales), function(nm) {
   d <- lavaan::HolzingerSwineford1939[, demo_scales[[nm]]]
   rt <- reliability_tests(d); st <- satorra_tau_test(d); sc <- score_tau_test(d)
+  wt <- wald_tau_test(d)
   data.frame(scale = nm, p = ncol(d),
              omega = rt$omega, alpha = rt$alpha, diff = rt$diff,
              p_wald_sw = rt$p_wald_sw, p_imhof_sw = rt$p_imhof_sw,
+             p_wald_equal = wt$p_wald_equal,
              p_satorra_scaled = st$p_scaled, p_score = sc$p_score)
 })
 demo_rows <- do.call(rbind, demo_rows)
@@ -194,16 +196,21 @@ if (cfg$do_sim) {
       reject_wald_sw = rejection_rate(reps$p_wald_sw),
       reject_imhof_nm = rejection_rate(reps$p_imhof_nm),
       reject_imhof_sw = rejection_rate(reps$p_imhof_sw),
+      reject_wald_equal = rejection_rate(reps$p_wald_equal),
       reject_satorra_scaled = rejection_rate(reps$p_satorra_scaled),
       reject_satorra_mixture = rejection_rate(reps$p_satorra_mixture),
       reject_score = rejection_rate(reps$p_score),
-      n_rel_ok = sum(reps$rel_converged), n_st_ok = sum(reps$st_converged),
+      n_rel_ok = sum(reps$rel_converged),
+      n_wald_ok = sum(reps$wald_converged),
+      n_st_ok = sum(reps$st_converged),
       row.names = NULL
     )
-    cat(sprintf("  %-12s %-9s N=%-4d  wald.sw=%.3f  imhof.sw=%.3f  satorra=%.3f  score=%.3f\n",
+    cat(sprintf("  %-12s %-9s N=%-4d  deng=%.3f  imhof=%.3f  wald=%.3f  lr=%.3f  score=%.3f\n",
                 cell$population, cell$dist, cell$N,
                 summ_list[[gi]]$reject_wald_sw, summ_list[[gi]]$reject_imhof_sw,
-                summ_list[[gi]]$reject_satorra_scaled, summ_list[[gi]]$reject_score))
+                summ_list[[gi]]$reject_wald_equal,
+                summ_list[[gi]]$reject_satorra_scaled,
+                summ_list[[gi]]$reject_score))
   }
   sim_summary <- do.call(rbind, summ_list)
   write_csv(do.call(rbind, raw_list), file.path(res_dir, "simulation_raw.csv"))
