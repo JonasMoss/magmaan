@@ -223,6 +223,51 @@ TEST_CASE("frontier robust score test: equality release reduces to NT") {
   CHECK(std::abs(r.mi_scaled - n.mi) < 1e-7 * (1.0 + std::abs(n.mi)));
 }
 
+TEST_CASE("param_space_sandwich: whitened-solve A1/B1 match explicit Δ'WΔ / Δ'WΓ̂WΔ") {
+  // Independent re-derivation of the bread/meat from primitives (Δ via the
+  // evaluator, W = Γ_NT(Σ̂)⁻¹ by explicit inverse, Γ̂ empirical) vs the library's
+  // triangular-solve path. A numeric cross-check of the novel meat machinery.
+  auto h = build("f =~ x1 + x2 + x3 + x4\nx1 ~~ 0*x2");
+  std::mt19937 rng(424242u);
+  const Eigen::Matrix4d Sigma = four_indicator_sample_cov();
+  magmaan::data::RawData raw;
+  raw.X.push_back(multivariate_t_sample(rng, 2500, Sigma, 7.0));
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto est = magmaan::test::fit(h.pt, h.rep, *samp);
+  REQUIRE(est.has_value());
+
+  // Primitives: Δ = ∂σ/∂θ at θ̂, Σ̂ model-implied, W = Γ_NT(Σ̂)⁻¹, Γ̂ empirical.
+  auto ev = magmaan::model::ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  auto Delta = ev->dsigma_dtheta(est->theta);
+  REQUIRE(Delta.has_value());
+  auto im = ev->sigma(est->theta);
+  REQUIRE(im.has_value());
+  auto Gnt = magmaan::data::gamma_nt(im->sigma[0]);
+  REQUIRE(Gnt.has_value());
+  Eigen::LLT<Eigen::MatrixXd> llt_gnt(*Gnt);
+  REQUIRE(llt_gnt.info() == Eigen::Success);
+  const Eigen::MatrixXd W =
+      llt_gnt.solve(Eigen::MatrixXd::Identity(Gnt->rows(), Gnt->cols()));
+  auto Ghat = magmaan::data::empirical_gamma(raw.X[0]);
+  REQUIRE(Ghat.has_value());
+
+  const Eigen::MatrixXd A1_ref = Delta->transpose() * W * (*Delta);
+  const Eigen::MatrixXd B1_ref =
+      Delta->transpose() * W * (*Ghat) * W * (*Delta);
+
+  const rob::InferenceSpec spec{rob::Information::Expected,
+                                rob::WeightMoments::Structured,
+                                rob::ScoreCovariance::Empirical};
+  auto sw = rob::param_space_sandwich(h.pt, h.rep, *samp, *est, *Ghat, spec,
+                                      /*reparam_constraints=*/false);
+  REQUIRE(sw.has_value());
+
+  CHECK((sw->A1 - A1_ref).norm() < 1e-8 * (1.0 + A1_ref.norm()));
+  CHECK((sw->B1 - B1_ref).norm() < 1e-8 * (1.0 + B1_ref.norm()));
+}
+
 TEST_CASE("frontier robust MI: empirical raw-data path scales on non-normal data") {
   auto h = build("f =~ x1 + x2 + x3 + x4\nx1 ~~ 0*x2");
   std::mt19937 rng(20260602u);
