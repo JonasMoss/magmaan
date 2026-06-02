@@ -41,17 +41,23 @@ non-normality where the classical ML chi-square fails. Two questions:
 ## Short answer
 
 **Yes on both.** magmaan's FMG family, computed through `fmg_pvalues()`,
-reproduces `semTests` p-value for p-value: across every test and cell the largest
-disagreement is **~1e-5** (the biased-Gamma tests agree to ~5e-7; the
-unbiased-Gamma variants to ~1e-5). And the qualitative Type I picture replicates:
-the classical **ML chi-square over-rejects** — worse as `p` grows and under severe
+reproduces `semTests` p-value for p-value: the biased-Gamma tests — including the
+recommended `pEBA4_RLS` and `pOLS_RLS` — agree to **~3e-6** across the whole grid.
+The unbiased-Gamma (`_ug`) variants agree to ~1e-5 in small models and widen to
+**~9e-3** only at `p = 40, N = 400`, where the two packages stage the bias
+correction differently and Γ is near-singular — still far below what 3000
+replicates resolve. And the qualitative Type I picture replicates: the classical
+**ML chi-square over-rejects** — worse as `p` grows and under severe
 non-normality — while **`pEBA4_RLS` and `pOLS_RLS` stay near 5%**.
 
 ```{r parity-headline, results='asis'}
 if (!is.null(parity) && nrow(parity)) {
   comp <- parity[is.finite(parity$abs_diff), ]
-  cat(sprintf("\n> Procedure parity: **max |Δp| = %.2g** over %d magmaan-vs-semTests comparisons.\n",
-              max(comp$abs_diff), nrow(comp)))
+  biased <- comp[!grepl("_ug_", comp$test), ]
+  cat(sprintf(paste0("\n> Procedure parity: biased-Γ tests match `semTests` to ",
+              "**max |Δp| = %.1g**; the unbiased-Γ (`_ug`) variants to **%.1g** ",
+              "(worst at p=40/N=400). %d comparisons total.\n"),
+              max(biased$abs_diff), max(comp$abs_diff), nrow(comp)))
 }
 ```
 
@@ -59,9 +65,9 @@ if (!is.null(parity) && nrow(parity)) {
 
 ### Type I error: ML inflates, penalized tests hold
 
-Empirical rejection rates at α = 5% (correctly-specified model, so every rejection
-is a Type I error). Averaged over sample sizes; one row per model size ×
-distribution, a few representative tests. Nominal is 5.0.
+Empirical rejection rates at α = 5% from `r reps` replicates (correctly-specified
+model, so every rejection is a Type I error). Averaged over sample sizes; one row
+per model size × distribution, a few representative tests. Nominal is 5.0.
 
 ```{r rr-table}
 key <- c(std_ml = "ML chi-square", sb_ug_rls = "SB (UG, RLS)",
@@ -102,25 +108,33 @@ if (is.null(parity) || !nrow(parity)) {
 ```
 
 The split is exactly as expected: tests on the biased Gamma estimator match to
-near machine precision; the unbiased-Gamma (`_ug`) tests are looser at ~1e-5,
-since magmaan and semTests apply the bias correction at different stages. Both
-are far tighter than any Monte Carlo rejection-rate cell can resolve.
+near machine precision (~3e-6) across all model sizes. The unbiased-Gamma (`_ug`)
+tests are looser — ~1e-5 at p=10/20, widening to ~9e-3 at p=40/N=400 — because
+the two packages stage the bias correction differently and that gap amplifies
+where N is small relative to the number of covariances and Γ is near-singular.
+Even the widest gap is far tighter than any Monte Carlo rejection-rate cell can
+resolve at 3000 replicates.
 
 ## Caveats
 
-- The design now matches the paper: its **exact** two-factor populations, the
-  full 84-condition grid (`p ∈ {10, 20, 40}` × `N ∈ {400, 800, 1500, 3000}` ×
-  seven distributions), and its full battery of 42 test statistics. The one
-  omission is the **Bollen-Stine bootstrap** (the paper's 43rd test), which
-  magmaan does not implement. The only remaining knob is replicate count:
-  `r reps` here versus the paper's 3000.
-- At `r reps` replicates the rejection rates carry visible Monte Carlo noise; the
-  table establishes the *direction and ordering* of the effect, not precise rates.
-  The procedure-parity finding, by contrast, is exact and replicate-independent.
+- This is the paper's full design at full scale: its **exact** two-factor
+  populations, the complete 84-condition grid (`p ∈ {10, 20, 40}` ×
+  `N ∈ {400, 800, 1500, 3000}` × seven distributions), the full battery of
+  42 test statistics, and `r reps` replicates per cell. The sole omission is the
+  **Bollen-Stine bootstrap** (the paper's 43rd test), which magmaan does not
+  implement.
 - Non-normal data uses magmaan's own simulators for the IG and PL families and a
   self-contained Fleishman power method for VM; the paper generates IG/PL with
   covsim and VM with lavaan. The target distributions (covariance plus marginal
   skewness and kurtosis) are identical, but individual datasets are not.
+
+## Cost
+
+The full `r reps`-replicate grid (84 cells × 42 tests) ran in **2 h 17 m** on a
+13th-gen Intel Core i7-1355U (10 cores / 12 threads; 2 performance + 8
+efficiency) with 10 parallel workers. Throughput at `p = 40` is
+memory-bandwidth-bound and the sustained all-core load thermally throttles, so
+wall time scales sublinearly with cores.
 
 ## Reproduce
 
@@ -134,7 +148,8 @@ Rscript run_experiment.R --reps 1000 --cells dist=pl2
 
 Rscript run_experiment.R --help
 
-# paper-scale rejection rates: parallel over cells (forks the 84 cells, chunked
-# so memory stays light). ~30-40 min on 10 cores; writes rejection_rates.csv.
+# paper-scale rejection rates (these results): parallel over cells, forks the 84
+# cells and chunks the replicate loop so memory stays light. Writes
+# rejection_rates.csv. Pair with the parity command above for the parity table.
 Rscript scripts/run_parallel.R --reps 3000 --cores 10
 ```
