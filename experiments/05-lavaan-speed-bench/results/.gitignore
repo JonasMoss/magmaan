@@ -1,2 +1,5 @@
 *
 !.gitignore
+!geiser.csv
+!pipeline.csv
+!zoo.csv
