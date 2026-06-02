@@ -1,4 +1,4 @@
-# magmaan <img src="docs/assets/logo/logo_compact.png" align="right" height="170" />
+# magmaan <img src="docs/assets/logo/logo_compact.png" align="right" height="85" />
 
 `magmaan` is the subterranean cousin of `lavaan`. It's C++23 toolkit for methods developers and simulation ethusiasts working on linear SEM, with a focus on modularity, extensibility, and full control over moving parts.
 
@@ -47,4 +47,3 @@ ctest --preset opt
 `fast` is the everyday Debug loop; `opt` is the optimized build; `dev` adds
 AddressSanitizer + UBSan. `just` wraps the usual loops: `just build`,
 `just test`, `just opt`, `just test-opt`, `just r-check`, and `just check`.
-
