@@ -409,25 +409,22 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   - **Option 2 (follow-up, S/M).** Consider replacing the f2c'd C under
     `third_party/quadpack/` with a clean C++23 hand-port of `dqagie`/`dqk15i`
     for readability — QUADPACK is public domain, so we can mirror it exactly.
-- **M/L (perf, core).** With imhof fixed (above), the UΓ eigenvalue machinery is
-  now the dominant cost of the FMG/robust p-values at large p. At p=40 (df=739,
-  p\*=820) `fmg_pvalues` is ~109 ms/rep biased-only and **~292 ms with any `_ug`
-  test** — the breakdown is U-factor 26 ms, reduced Γ 41 ms, eigen(739²) 34 ms,
-  imhof ~6 ms. The 3x jump is the **unbiased-Γ path**: requesting any `_ug`
-  (Du-Bentler / Browne unbiased Gamma) test makes the helper build a *second*
-  full reduced Γ (`robust::reduced_gamma_unbiased`) and eigendecompose it from
-  scratch, even though the biased and unbiased Γ share the casewise contributions
-  and the NT Γ — the unbiased one is a rank-corrected combination of objects the
-  biased path already formed. Goal: compute the biased and unbiased UΓ spectra in
-  one shared pass (avoid the second casewise/Γ build and ideally reuse structure
-  across the two eigendecompositions); only build unbiased when a `_ug` test is
-  requested (the recommended pEBA4_RLS/pOLS_RLS use biased Γ, so it is optional
-  for the headline). Entry points: `src/robust/` (`reduced_gamma_sample`,
-  `reduced_gamma_unbiased`, `reduced_gamma_nt`, `ugamma_eigenvalues`,
-  `build_u_factor`) and the R `fmg_pvalues()` composition. Validation bar: the
-  ~2e-16 CompQuadForm imhof parity and the semTests pEBA/pOLS parity must hold.
-  Surfaced by experiment 17 (`experiments/17-foldnes-moss-gronneberg-peba`); see
-  commits 2524cf1 (QUADPACK/imhof) and e7cdb8c (experiment 17).
+- **Current perf note (core).** With imhof fixed and the fused spectra helper
+  landed, the UΓ eigenvalue machinery remains the dominant cost of FMG/robust
+  p-values at large p, but biased and `_ug` tests now share the expensive setup:
+  one `UFactor`, one tiled casewise projection/reduced-Gamma accumulation, and
+  the expected-bread NT identity `B'Γ_NT B = I`. Requesting any `_ug`
+  (Du-Bentler / Browne unbiased Gamma) test still adds a second df×df matrix
+  formation and values-only eigensolve for
+  `M_unbiased = a M_sample - b I + d vv'`; the rank-one secular-update route
+  was investigated above and deferred. Only compute the unbiased spectrum when a
+  `_ug` test is requested (the recommended pEBA4_RLS/pOLS_RLS use biased Γ).
+  Entry points: `r-package/src/robust.cpp::infer_fmg_ugamma_spectra`,
+  `src/robust/robust.cpp::reduced_gamma_sample_tiled`,
+  `reduced_gamma_unbiased`, and `ugamma_eigenvalues`. Validation bar remains the
+  ~2e-16 CompQuadForm imhof parity and semTests pEBA/pOLS parity. Surfaced by
+  experiment 17 (`experiments/17-foldnes-moss-gronneberg-peba`); see commits
+  2524cf1 (QUADPACK/imhof) and e7cdb8c (experiment 17).
 - **S.** Keep the build-loop timings table in `docs/architecture/roadmap.md` current after
   major workflow changes.
 - **S/M.** Continue extending benchmark coverage beyond the current
