@@ -162,3 +162,117 @@ bootstrap_diff_se <- function(d, B = 1000L, seed = 1L) {
   }
   stats::sd(diffs, na.rm = TRUE)
 }
+
+# =============================================================================
+# Imhof-corrected reliability test.
+#
+# Under tau-equivalence (omega = alpha) the contrast omega - alpha sits at the
+# bottom of its range (omega >= alpha always), so its s-space gradient vanishes
+# and the first-order delta method degenerates. The leading term is then
+# second-order:
+#
+#   2n (omega_hat - alpha_hat)  ~  z' H z,   z ~ N(0, Gamma),
+#
+# a quadratic form in normals = a weighted sum of chi-square_1 with weights
+# lambda_i = eig(H Gamma), where H = d^2(omega - alpha)/ds^2 at the null. The
+# correct p-value is the upper tail of that distribution (Imhof 1961), which the
+# CompQuadForm package evaluates exactly. This keeps Deng & Chan's interpretable
+# reliability gap as the statistic but references it against the right law
+# instead of N(0, 1). See notes/alpha_omega_second_order.qmd.
+# =============================================================================
+
+# Refit the congeneric ML model at an arbitrary covariance S (mutating a base
+# magmaan_data object so we never touch raw data). Returns NULL if the fit fails
+# or is non-converged.
+make_congeneric_fitter <- function(d) {
+  d <- as.data.frame(d); ov <- colnames(d)
+  m <- paste0("f =~ NA*", ov[1L], " + ", paste(ov[-1L], collapse = " + "),
+              "\n f ~~ 1*f")
+  base <- magmaan::df_to_data(d, magmaan::model_spec(m))
+  function(S) {
+    dat <- base; dat$S <- list(S)
+    fit <- tryCatch(magmaan::magmaan(m, dat, estimator = "ML"),
+                    error = function(e) NULL)
+    if (is.null(fit) || !isTRUE(fit$converged)) return(NULL)
+    pt <- fit$partable
+    is_err <- pt$op == "~~" & pt$lhs == pt$rhs & pt$lhs != "f"
+    list(lam = pt$est[pt$op == "=~"], psi = pt$est[is_err])
+  }
+}
+
+# s-space gradient of (omega - alpha) at S, refitting the congeneric model there.
+grad_contrast_s <- function(S, fitter) {
+  lp <- fitter(S); if (is.null(lp)) return(NULL)
+  lam <- lp$lam; psi <- lp$psi
+  Sig <- tcrossprod(lam) + diag(psi)
+  W <- solve(.gamma_nt(Sig)); sd <- sigma_dot(lam, psi)
+  go <- W %*% sd %*% solve(t(sd) %*% W %*% sd, omega_grad_theta(lam, psi))
+  as.numeric(go) - alpha_grad_s(S)
+}
+
+# Perturb S along vech coordinate k (column-major lower-tri). An off-diagonal
+# coordinate is a single value shared by (i,j) and (j,i), so both move by delta.
+.pert_S <- function(S, k, delta) {
+  idx <- which(lower.tri(S, diag = TRUE), arr.ind = TRUE)
+  i <- idx[k, 1L]; j <- idx[k, 2L]
+  S[i, j] <- S[i, j] + delta
+  if (i != j) S[j, i] <- S[j, i] + delta
+  S
+}
+
+# Hessian of (omega - alpha) wrt vech(S), by central differences of the
+# gradient (2 p* congeneric refits). Returns NULL if any refit fails.
+contrast_hessian_s <- function(S, fitter, delta = 1e-3) {
+  pstar <- ncol(S) * (ncol(S) + 1) / 2
+  H <- matrix(NA_real_, pstar, pstar)
+  for (k in seq_len(pstar)) {
+    gp <- grad_contrast_s(.pert_S(S, k,  delta), fitter)
+    gm <- grad_contrast_s(.pert_S(S, k, -delta), fitter)
+    if (is.null(gp) || is.null(gm)) return(NULL)
+    H[, k] <- (gp - gm) / (2 * delta)
+  }
+  (H + t(H)) / 2
+}
+
+# Imhof tail of the quadratic-form null law given the contrast Hessian and a
+# Gamma. Returns NA when the Hessian is unavailable.
+.imhof_pvalue <- function(Tstat, H, Gamma) {
+  if (is.null(H)) return(NA_real_)
+  lam <- Re(eigen(H %*% Gamma, only.values = TRUE)$values)
+  lam <- lam[abs(lam) > 1e-8 * max(abs(lam))]
+  if (!length(lam)) return(NA_real_)
+  pv <- tryCatch(suppressWarnings(CompQuadForm::imhof(Tstat, lam)$Qq),
+                 error = function(e) NA_real_)
+  min(max(pv, 0), 1)
+}
+
+# All reliability-based tests of omega = alpha in one pass (one base congeneric
+# fit reused throughout): the first-order Wald z (nm + sw) and the second-order
+# Imhof test (nm + sw). nm uses normal-theory Gamma_NT(S); sw uses the empirical
+# (ADF) Gamma. Returns NULL if the base fit does not converge.
+reliability_tests <- function(d, delta = 1e-3) {
+  d <- as.matrix(d); n <- nrow(d); S <- mle_cov(d)
+  fitter <- make_congeneric_fitter(d)
+  lp <- fitter(S); if (is.null(lp)) return(NULL)
+  lam <- lp$lam; psi <- lp$psi
+  omega <- omega_from_lp(lam, psi); alpha <- alpha_from_S(S)
+  diff <- omega - alpha
+  Sig <- tcrossprod(lam) + diag(psi)
+  W <- solve(.gamma_nt(Sig)); sd <- sigma_dot(lam, psi)
+  g <- as.numeric(W %*% sd %*% solve(t(sd) %*% W %*% sd,
+                                     omega_grad_theta(lam, psi))) - alpha_grad_s(S)
+  Gnt <- .gamma_nt(S); Gadf <- .gamma_adf(d)
+
+  se_nm <- sqrt(as.numeric(t(g) %*% Gnt  %*% g) / n)
+  se_sw <- sqrt(as.numeric(t(g) %*% Gadf %*% g) / n)
+
+  H <- contrast_hessian_s(S, fitter, delta)
+  Tstat <- 2 * n * diff
+  list(omega = omega, alpha = alpha, diff = diff,
+       se_nm = se_nm, se_sw = se_sw,
+       p_wald_nm = 2 * stats::pnorm(-abs(diff / se_nm)),
+       p_wald_sw = 2 * stats::pnorm(-abs(diff / se_sw)),
+       p_imhof_nm = .imhof_pvalue(Tstat, H, Gnt),
+       p_imhof_sw = .imhof_pvalue(Tstat, H, Gadf),
+       converged = TRUE)
+}

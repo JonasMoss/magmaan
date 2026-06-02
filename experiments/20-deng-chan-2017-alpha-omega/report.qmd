@@ -1,5 +1,5 @@
 ---
-title: "Deng & Chan (2017): a reliability-difference Wald test vs a Satorra-2000 LRT"
+title: "Deng & Chan (2017) alpha vs omega: a non-regular Wald test, fixed with Imhof"
 format:
   html:
     toc: true
@@ -12,20 +12,20 @@ execute:
 
 ```{r setup}
 results <- "results"
-need <- c("validation_identity.csv", "validation_se.csv", "demo.csv",
-          "simulation_summary.csv", "metadata.csv")
+need <- c("nonregularity.csv", "validation_identity.csv", "validation_se.csv",
+          "demo.csv", "simulation_summary.csv", "metadata.csv")
 missing <- need[!file.exists(file.path(results, need))]
 if (length(missing)) {
   stop("missing results: ", paste(missing, collapse = ", "),
        "\nRun:  Rscript run_experiment.R")
 }
-ident <- read.csv(file.path(results, "validation_identity.csv"))
-seval <- read.csv(file.path(results, "validation_se.csv"))
-demo  <- read.csv(file.path(results, "demo.csv"))
-sim   <- read.csv(file.path(results, "simulation_summary.csv"))
-meta  <- read.csv(file.path(results, "metadata.csv"))
+nonreg <- read.csv(file.path(results, "nonregularity.csv"))
+ident  <- read.csv(file.path(results, "validation_identity.csv"))
+seval  <- read.csv(file.path(results, "validation_se.csv"))
+demo   <- read.csv(file.path(results, "demo.csv"))
+sim    <- read.csv(file.path(results, "simulation_summary.csv"))
+meta   <- read.csv(file.path(results, "metadata.csv"))
 mv <- function(k) meta$value[match(k, meta$key)]
-
 cellr <- function(pop, dist, N, col) {
   r <- sim[sim$population == pop & sim$dist == dist & sim$N == N, ]
   r[[col]][1]
@@ -35,138 +35,138 @@ pct <- function(x) sprintf("%.1f%%", 100 * x)
 
 ## Question
 
-Coefficient alpha equals coefficient omega exactly when a scale's items are
-tau-equivalent (equal loadings); otherwise alpha understates reliability. So
-"is alpha different from omega?" and "are the loadings equal?" are the same null
-hypothesis whenever a one-factor model holds. Deng & Chan (2017) test it one
-way — a Wald z-test on the reliability difference $\hat\omega-\hat\alpha$ with a
-delta-method standard error. magmaan already ships the other way — a
-Satorra-2000 scaled likelihood-ratio test of the equal-loading restriction. Is
-the Deng & Chan procedure reachable with today's magmaan, and how do the two
-tests compare on calibration, power, and behaviour when the one-factor model is
-wrong?
+Coefficient alpha equals coefficient omega exactly when a scale is
+tau-equivalent (equal loadings), so testing $\alpha=\omega$ is testing
+tau-equivalence within a one-factor model. Deng & Chan (2017) test it with a
+Wald z on the reliability gap $\hat\omega-\hat\alpha$. Is that test valid; if
+not, what is the right way to test the gap; and how do the regular tests of the
+same null compare?
 
 ## Short answer
 
-Reachable with no new magmaan core. The Satorra-2000 side is a single
-`nestedTest()` call; the Deng & Chan side is a ~30-line delta method over
-magmaan's one-factor fit and its $\Gamma$ helpers. Two checks say the
-implementation is right: magmaan recovers Cronbach's alpha **exactly** as the
-omega of a ULS-fitted tau-equivalent model (agreement
-`r sprintf("%.0e", ident$abs_diff[1])`), and the analytic sandwich SE of
-$\hat\omega-\hat\alpha$ matches a nonparametric bootstrap to within ~6%.
+**The Wald z is not valid at the null it targets.** Because $\omega\ge\alpha$
+with equality only at equal loadings, the contrast $\omega-\alpha$ sits at an
+*interior minimum* under tau-equivalence — not a parameter boundary, but a point
+where its gradient vanishes. The first-order delta method then collapses and
+$\hat\omega-\hat\alpha$ becomes a **second-order** statistic: when $N$
+quadruples its SD quarters (1/N), whereas each coefficient's SD halves
+(1/$\sqrt N$); the two estimates become perfectly correlated
+(`r sprintf("%.4f", nonreg$corr_omega_alpha[nrow(nonreg)])`) and the difference
+stays right-skewed. So the z-test under-rejects badly — Type I error
+`r pct(cellr("tau","normal",250,"reject_wald_sw"))` at $N=250$,
+`r pct(cellr("tau","normal",500,"reject_wald_sw"))` at $N=500$, against a
+nominal 5%. (Derivation: `notes/alpha_omega_second_order.qmd`.)
 
-On the substance, the two tests agree only when a one-factor model holds, and
-even then they are not interchangeable:
+**An Imhof reference fixes it.** Keep Deng & Chan's interpretable statistic
+$2n(\hat\omega-\hat\alpha)$, but reference it against its true law — a weighted
+sum of $\chi^2_1$ — via Imhof instead of $N(0,1)$. Type I error returns toward
+nominal (`r pct(cellr("tau","normal",250,"reject_imhof_sw"))` →
+`r pct(cellr("tau","normal",500,"reject_imhof_sw"))` across $N$) and power rises
+above the Wald test's.
 
-- **Tau-equivalent population (Type I error).** The Satorra scaled LRT sits near
-  the nominal 5% (`r pct(cellr("tau","normal",500,"reject_satorra_scaled"))` at
-  $N=500$); the Deng & Chan Wald is markedly **conservative**
-  (`r pct(cellr("tau","normal",500,"reject_wald_sw"))`). Testing a difference
-  that cannot be negative in the population pushes the two-sided z-test below
-  nominal.
-- **Congeneric population (power).** Both reject unequal loadings with high
-  power even though the reliability gap is tiny ($\omega-\alpha\approx0.007$):
-  Wald `r pct(cellr("congeneric","normal",250,"reject_wald_sw"))` and Satorra
-  `r pct(cellr("congeneric","normal",250,"reject_satorra_scaled"))` at $N=250$.
-  Deng & Chan's "the difference is minor in applications" is about its *size*,
-  not its detectability.
-- **Misspecified population (divergence).** With a minor second factor breaking
-  unidimensionality the tests come apart: the Satorra LRT increasingly rejects
-  (`r pct(cellr("misspecified","normal",250,"reject_satorra_scaled"))` at
-  $N=250$ rising to
-  `r pct(cellr("misspecified","normal",500,"reject_satorra_scaled"))` at
-  $N=500$), while the reliability-difference Wald stays near nominal
-  (`r pct(cellr("misspecified","normal",500,"reject_wald_sw"))`). They answer
-  different questions: Satorra asks whether the loadings are equal *within* a
-  one-factor model; Deng & Chan compare a model-based omega against a model-free
-  alpha, two numbers that can track each other even when the model is wrong.
+**The regular trinity behaves.** The structural tests of the same null — the
+Satorra-2000 scaled LR and a standard score test, both proper $(p-1)$-df tests —
+are near nominal under tau-equivalence
+(`r pct(cellr("tau","normal",500,"reject_satorra_scaled"))` and
+`r pct(cellr("tau","normal",500,"reject_score"))` at $N=500$) and fully powered.
+Under one-factor *misspecification* the reliability-gap tests and the structural
+tests diverge: the structural tests increasingly reject (Satorra
+`r pct(cellr("misspecified","normal",500,"reject_satorra_scaled"))` at $N=500$)
+while the gap tests stay low — they answer different questions.
 
-The same split appears on real Holzinger-Swineford subscales below.
+Everything is reachable with no new magmaan core: magmaan supplies the ML fits
+and the moment-covariance matrices, the Imhof tail is a standard quadratic-form
+computation, and Cronbach's alpha falls out exactly as the omega of a ULS
+tau-fit (agreement `r sprintf("%.0e", ident$abs_diff[1])`).
 
 ## Evidence
 
-### The implementation is correct
+### The contrast is second-order at the null
 
-```{r validation}
-v <- data.frame(
-  Check = c("alpha(S) == omega of ULS tau-fit",
-            paste0("sandwich SE vs bootstrap (", seval$dataset, ")")),
-  Value = c(sprintf("|diff| = %.1e", ident$abs_diff[1]),
-            sprintf("ratio = %.3f", seval$ratio_sw_boot)),
-  stringsAsFactors = FALSE
-)
-knitr::kable(v, caption = "Validation: the model-free alpha is exactly the ULS tau-equivalent omega, and the Deng-Chan sandwich SE of the difference matches a nonparametric bootstrap.")
+```{r diagnostic}
+d <- nonreg[, c("N", "sd_diff", "sd_omega", "sd_diff_ratio", "sd_omega_ratio",
+                "corr_omega_alpha")]
+names(d) <- c("N", "SD(w-a)", "SD(w)", "SD(w-a) ratio", "SD(w) ratio",
+              "corr(w,a)")
+knitr::kable(d, digits = c(0, 5, 4, 2, 2, 4), row.names = FALSE,
+  caption = "Tau-equivalent population. SD(omega-alpha) quarters when N quadruples (1/N, second-order) while SD(omega) halves (1/sqrt(N), regular). corr(omega,alpha) -> 1: the two estimates share one influence function at the null.")
 ```
 
-The first row is the reason alpha is not a magmaan primitive: it is the omega of
-a *least-squares*-fitted tau model, not the ML one, and otherwise just a closed
-form on the sample covariance.
+The `SD(w-a) ratio` near 0.25 versus 0.50 for `SD(w)` is the fingerprint of a
+second-order statistic — the reason a standard-normal Wald reference cannot be
+right here.
 
-### Calibration, power, and divergence
+### An Imhof reference restores calibration; the trinity behaves
 
 ```{r simulation}
 tab <- sim[sim$dist == "normal",
-           c("population", "N", "gap", "reject_wald_sw", "reject_satorra_scaled")]
+           c("population", "N", "reject_wald_sw", "reject_imhof_sw",
+             "reject_satorra_scaled", "reject_score")]
 tab <- tab[order(match(tab$population, c("tau","congeneric","misspecified")), tab$N), ]
-names(tab) <- c("Population", "N", "Pop. gap (w-a)",
-                "Wald (sandwich)", "Satorra (scaled)")
-rownames(tab) <- NULL
+names(tab) <- c("Population", "N", "Wald z", "Imhof", "Satorra LR", "Score")
 knitr::kable(tab, digits = 3, row.names = FALSE,
-  caption = "Rejection rate at the 5% level, normal data. Tau row = Type I error; congeneric = power; misspecified = divergence. Non-normal data (in results/) is comparable, with the Satorra test slightly liberal under tau.")
+  caption = "Rejection rate at 5%, normal data. Tau = Type I error (Wald conservative; Imhof restored; LR/score nominal); congeneric = power; misspecified = divergence. Non-normal rates are in results/simulation_summary.csv.")
 ```
 
-The tau rows show the calibration split; the congeneric rows show both tests are
-powerful against genuine inequality; the misspecified rows show the divergence
-growing with $N$ — the structural LRT chases the model error while the
-reliability contrast does not. Note the misspecified population gap is
-*negative*: the minor factor inflates the model-free alpha above the one-factor
-omega, so $\hat\omega-\hat\alpha$ has little to detect.
+Reading the tau rows: the Wald z is stuck well below 5% and barely improves with
+$N$ (it is converging to the wrong law), while the Imhof test climbs toward
+nominal and the Satorra LR and score test are already there. The congeneric rows
+show all four are powerful against genuinely unequal loadings, Imhof more so than
+the Wald z. The misspecified rows show the split: with a minor second factor the
+structural tests chase the model error while the reliability-gap tests do not
+(the population gap is even *negative* there — the extra factor lifts the
+model-free alpha above the one-factor omega).
 
-### The same pattern on real scales
+### Implementation checks and real scales
+
+```{r checks}
+v <- data.frame(
+  Check = c("alpha(S) == omega of ULS tau-fit",
+            paste0("Deng-Chan sandwich SE vs bootstrap (", seval$dataset, ")")),
+  Value = c(sprintf("|diff| = %.1e", ident$abs_diff[1]),
+            sprintf("ratio = %.3f", seval$ratio_sw_boot)))
+knitr::kable(v, caption = "Cronbach's alpha is exactly the ULS tau-equivalent omega, and the first-order sandwich SE matches a nonparametric bootstrap away from the null.")
+```
 
 ```{r demo}
-d <- demo
-names(d) <- c("Scale", "p", "Omega", "Alpha", "w - a", "SE (sw)",
-              "Wald p (sw)", "Satorra p")
-knitr::kable(d, digits = c(0,0,3,3,4,4,3,4), row.names = FALSE,
-  caption = "Holzinger-Swineford subscales. On textual and speed the Satorra LRT flags non-tau-equivalence while the Wald test does not; on the deliberately two-dimensional visual+textual block the split is extreme.")
+dd <- demo[, c("scale", "p", "omega", "alpha", "diff", "p_imhof_sw",
+               "p_satorra_scaled", "p_score")]
+names(dd) <- c("Scale", "p", "Omega", "Alpha", "w - a", "Imhof p",
+               "Satorra p", "Score p")
+knitr::kable(dd, digits = c(0,0,3,3,4,3,4,3), row.names = FALSE,
+  caption = "Holzinger-Swineford subscales. On textual and speed the structural tests flag non-tau-equivalence while the reliability gap is a few thousandths; visual+textual is deliberately two-dimensional.")
 ```
-
-For *textual* and *speed* the reliability gap is a few thousandths and the Wald
-test is silent ($p>0.15$), yet the Satorra LRT rejects equal loadings
-($p<0.03$). The `visual+textual` block is genuinely two factors: the Satorra LRT
-rejects overwhelmingly while the Wald test sees a trivial reliability gap and
-shrugs.
 
 ## Caveats
 
-- **What this establishes.** A correctness check on the Deng & Chan SE (identity
-  + bootstrap) and a finite-sample comparison of the two tests at $p=6$,
-  $N\in\{250,500\}$, `r mv("reps")` replications per cell. It does not reproduce
-  Deng & Chan's published tables: their data sets (a 26-item Holzinger-Swineford
-  battery, FACES II, etc.) are not redistributable, so the real-data section
-  uses lavaan's nine-item Holzinger-Swineford, whose subscales are only
-  three indicators each (a just-identified one-factor fit).
-- **Why the Wald test is conservative.** Under tau-equivalence the first-order
-  influence functions of $\hat\omega$ and $\hat\alpha$ coincide, so
-  $\hat\omega-\hat\alpha$ is a second-order statistic with a quadratic-form
-  null law rather than a normal law. A standard two-sided z reference therefore
-  under-rejects; see `notes/alpha_omega_second_order.qmd`.
-- **Non-normality** here is centred-scaled chi-square(5) components (closed-form
-  covariance, no moment-matching). The sandwich Wald and the empirical-$\Gamma$
-  Satorra test both stay usable; rates are in `results/simulation_summary.csv`.
+- **What this establishes.** The non-regularity (diagnostic + derivation), an
+  Imhof calibration of the reliability gap, and a finite-sample comparison of
+  the gap tests against the regular trinity at $p=6$, $N\in\{250,500\}$,
+  `r mv("reps")` replications per cell. It does not reproduce Deng & Chan's
+  published tables: their data sets (a 26-item Holzinger-Swineford battery,
+  FACES II, etc.) are not redistributable, so the real-data section uses
+  lavaan's nine-item Holzinger-Swineford, whose subscales are three indicators
+  each (a just-identified one-factor fit).
+- **Not a boundary problem.** The tau-equivalent point is interior in the SEM
+  parameterization; the singularity is in the *derived scalar contrast*, whose
+  first derivative vanishes there. See `notes/alpha_omega_second_order.qmd`.
+- **The score test is normal-theory only.** lavaan has no robust release-score
+  test (it falls back to the ordinary one), so under non-normality only the
+  sandwich Imhof and the empirical-$\Gamma$ Satorra LR are formally justified;
+  the score column is a normal-theory reference.
+- **Estimation is traditional ML** throughout; non-normality is centred-scaled
+  chi-square(5) components (closed-form covariance, no moment-matching).
 - Rejection rates are point estimates; replicate counts are in the metadata.
 
 ## Reproduce
 
 ```sh
-# full run (validation + real-data demo + simulation)
+# full run (diagnostic + validation + real-data demo + simulation)
 Rscript run_experiment.R
 
 # fast smoke path
 Rscript run_experiment.R --smoke
 
 # a single slice
-Rscript run_experiment.R --cells pop=misspecified,dist=normal --reps 2000
+Rscript run_experiment.R --cells pop=tau,dist=normal --reps 2000
 ```
