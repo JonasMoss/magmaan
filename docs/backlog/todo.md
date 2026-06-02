@@ -303,16 +303,23 @@ simulation backlog.
   `magmaan_fit`, and post-fit wrapper surface is otherwise sufficient for the
   next R exploration pass.
 - **S/M, experiment-motivated.** `experiments/20-deng-chan-2017-alpha-omega`
-  replicates Deng & Chan's (2017) reliability-difference test and compares it to
-  the existing Satorra-2000 nested LRT of tau-equivalence. It found everything
-  reachable with no new core: the Deng-Chan sandwich SE of `omega - alpha` is a
-  ~30-line delta method over the one-factor ML fit and the exposed Gamma
-  builders (`infer_gamma_nt`, `infer_empirical_gamma`), validated against a
-  bootstrap, and Cronbach's alpha falls out exactly as the omega of a ULS
-  tau-equivalent fit. If this earns a home in core, the natural shape is a
-  `measures::frontier` reliability module (alpha, omega, and the joint
-  `omega - alpha` sandwich SE in one place) plus a thin R wrapper. Not required;
-  the experiment runs today against the current surface.
+  replicates Deng & Chan's (2017) reliability-difference test, compares it to the
+  existing Satorra-2000 nested LRT and a score test of tau-equivalence, and
+  diagnoses a genuine non-regularity: because `omega >= alpha` with equality only
+  at equal loadings, the contrast sits at an interior minimum under
+  tau-equivalence, its gradient vanishes, and `omega - alpha` becomes a
+  second-order (1/N) statistic with a quadratic-form null law — so the Deng-Chan
+  Wald z under-rejects (Type I ~0.3-2%). The fix keeps the interpretable gap as
+  the statistic but references `2n(omega - alpha)` against its weighted-chi-square
+  law via Imhof (eigenvalues of the contrast Hessian times Gamma; tail from
+  `CompQuadForm`), restoring calibration. Everything reachable with no new core:
+  magmaan supplies the ML fits and `infer_gamma_nt`/`infer_empirical_gamma`, and
+  Cronbach's alpha falls out exactly as the omega of a ULS tau-equivalent fit.
+  Derivation in the experiment's `notes/alpha_omega_second_order.qmd`. If this
+  earns a home in core, the natural shape is a `measures::frontier` reliability
+  module (alpha, omega, the joint `omega - alpha` SE, and its second-order
+  Imhof calibration) plus a thin R wrapper. Not required; the experiment runs
+  today against the current surface.
 - **L/XL.** Implement the ordinal SNLLS / Gamma workspace split sketched in
   [docs/design/ordinal-snlls-gamma-architecture.md](../design/ordinal-snlls-gamma-architecture.md):
   separate ordinal moments from lazy Gamma/weight construction, support
