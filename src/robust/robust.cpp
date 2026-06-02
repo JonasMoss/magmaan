@@ -1875,7 +1875,8 @@ compute_bread_observed(const spec::LatentStructure& pt,
 post_expected<RobustSetup>
 robust_setup(spec::LatentStructure pt, const model::MatrixRep& rep,
              const SampleStats& samp, const Estimates& est,
-             InferenceSpec spec, bool /*gamma_hat_overload*/) {
+             InferenceSpec spec, bool /*gamma_hat_overload*/,
+             bool reparam_constraints = true) {
   if (spec.cov == ScoreCovariance::BrowneUnbiased) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "robust_se: ScoreCovariance::BrowneUnbiased not yet implemented"));
@@ -1987,7 +1988,7 @@ robust_setup(spec::LatentStructure pt, const model::MatrixRep& rep,
         "robust_se: " + con_or.error().detail));
   }
   Eigen::MatrixXd Delta = std::move(Delta_full);
-  if (con_or->active()) {
+  if (con_or->active() && reparam_constraints) {
     s.K_con = con_or->K();
     Delta = (Delta * s.K_con).eval();
   }
@@ -2185,6 +2186,69 @@ robust_se(spec::LatentStructure                     pt,
   const Eigen::MatrixXd ZcWDelta = Zc * s.WDelta;
   const Eigen::MatrixXd meat = (ZcWDelta.transpose() * ZcWDelta) / n_total;
   return sandwich_finish(s, meat);
+}
+
+// ── param_space_sandwich — bread/meat for the robust score-test path ────────
+// Reuse `robust_setup` (the same Δ-stacking / Γ_NT Cholesky / WΔ build that
+// `robust_se` uses) and surface {A1 = bread, B1 = meat, K_con, q}. No inversion
+// is done here: the score-test caller only contracts quadratic forms gᵀA1g /
+// gᵀB1g, so a singular A1 (e.g. the unconstrained bread of a model identified
+// only via its equality constraints) is fine.
+
+post_expected<ParamSpaceSandwich>
+param_space_sandwich(spec::LatentStructure pt, const model::MatrixRep& rep,
+                     const SampleStats& samp, const Estimates& est,
+                     InferenceSpec spec, bool reparam_constraints) {
+  auto setup_or = robust_setup(std::move(pt), rep, samp, est, spec,
+                               /*gamma_hat=*/false, reparam_constraints);
+  if (!setup_or.has_value()) return std::unexpected(setup_or.error());
+  const auto& s = *setup_or;
+  // Model-implied (Γ_NT) meat: Δ'WΓ_NTWΔ = Δ'WΔ = bread_expected exactly.
+  return ParamSpaceSandwich{s.bread, s.bread_expected, s.K_con, s.q};
+}
+
+post_expected<ParamSpaceSandwich>
+param_space_sandwich(spec::LatentStructure pt, const model::MatrixRep& rep,
+                     const SampleStats& samp, const Estimates& est,
+                     const RawData& raw, InferenceSpec spec,
+                     bool reparam_constraints) {
+  auto setup_or = robust_setup(std::move(pt), rep, samp, est, spec,
+                               /*gamma_hat=*/false, reparam_constraints);
+  if (!setup_or.has_value()) return std::unexpected(setup_or.error());
+  const auto& s = *setup_or;
+  auto Zc_or = casewise_contributions(raw, samp, /*include_means=*/s.has_means);
+  if (!Zc_or.has_value()) return std::unexpected(Zc_or.error());
+  const Eigen::Index expected_cols = s.has_means ? s.total_rows : s.pstar;
+  if (Zc_or->cols() != expected_cols) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "param_space_sandwich: Z_c has " + std::to_string(Zc_or->cols()) +
+            " columns, expected " + std::to_string(expected_cols)));
+  }
+  const Eigen::MatrixXd ZcWDelta = (*Zc_or) * s.WDelta;
+  Eigen::MatrixXd B1 = (ZcWDelta.transpose() * ZcWDelta) / s.N_total;
+  B1 = 0.5 * (B1 + B1.transpose()).eval();
+  return ParamSpaceSandwich{s.bread, std::move(B1), s.K_con, s.q};
+}
+
+post_expected<ParamSpaceSandwich>
+param_space_sandwich(spec::LatentStructure pt, const model::MatrixRep& rep,
+                     const SampleStats& samp, const Estimates& est,
+                     const Eigen::MatrixXd& gamma_hat, InferenceSpec spec,
+                     bool reparam_constraints) {
+  auto setup_or = robust_setup(std::move(pt), rep, samp, est, spec,
+                               /*gamma_hat=*/true, reparam_constraints);
+  if (!setup_or.has_value()) return std::unexpected(setup_or.error());
+  const auto& s = *setup_or;
+  const Eigen::Index expected_dim = s.has_means ? s.total_rows : s.pstar;
+  if (gamma_hat.rows() != expected_dim || gamma_hat.cols() != expected_dim) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "param_space_sandwich: Γ̂ is " + std::to_string(gamma_hat.rows()) + "×" +
+            std::to_string(gamma_hat.cols()) + ", expected " +
+            std::to_string(expected_dim) + "×" + std::to_string(expected_dim)));
+  }
+  Eigen::MatrixXd B1 = s.WDelta.transpose() * gamma_hat * s.WDelta;
+  B1 = 0.5 * (B1 + B1.transpose()).eval();
+  return ParamSpaceSandwich{s.bread, std::move(B1), s.K_con, s.q};
 }
 
 // ── robust_se_both_breads — three overloads ────────────────────────────────

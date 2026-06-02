@@ -359,6 +359,24 @@ TEST_CASE("score/modification-index goldens match lavaan fixed-row and equality-
                               5e-3, failures) && ok;
       ok = compare_score_tests(id, st, fit["score_tests"], 2e-2, 5e-3,
                                failures) && ok;
+
+      // Robust reduction-to-NT: the model-implied (Γ_NT) Expected-bread robust
+      // statistic equals the ordinary one exactly (WΓ_NTW = W), so `mi_scaled`
+      // must still match lavaan's NT modindices targets. Anchors the whole
+      // inference::frontier pipeline to the same fixtures.
+      magmaan::inference::frontier::RobustScoreOptions ropts;
+      ropts.base = mi_opts;  // WithAbsentRows, Expected information
+      auto rmi_or = magmaan::inference::frontier::modification_indices_robust(
+          h->pt, h->rep, samp, est, ropts);
+      if (rmi_or.has_value()) {
+        auto rmi = std::move(*rmi_or);
+        for (auto& row : rmi.rows) row.mi = row.mi_scaled;  // compare scaled
+        ok = compare_modindices(id + " [robust]", rmi, h->names,
+                                fit["modindices"], 2e-2, 5e-3, failures) && ok;
+      } else {
+        failures.push_back(id + ": robust modification_indices failed");
+        ok = false;
+      }
     } else if (kind == "fiml") {
       const auto raw = raw_from_fixture(exp);
       const auto est = estimates_from_fixture(fit);

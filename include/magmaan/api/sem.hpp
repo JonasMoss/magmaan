@@ -385,6 +385,22 @@ Result<FitMeasuresResult> fit_measures_fcsem(const Fit &fit);
 Result<std::vector<measures::standardize::FcSemStandardizedRow>>
 standardized_rows_fcsem(const Fit &fit, const Eigen::MatrixXd &vcov);
 
+// Robust (generalized / SB-scaled) modification indices and equality-release
+// score tests for a complete-data ML fit. Goes beyond lavaan (which falls back
+// to the ordinary statistic). Γ̂ from raw data, or a caller-supplied NACOV.
+Result<inference::ScoreTestTable>
+modification_indices_robust(const Fit &fit, const data::RawData &raw,
+                            inference::frontier::RobustScoreOptions options = {});
+Result<inference::ScoreTestTable>
+modification_indices_robust(const Fit &fit, const Eigen::MatrixXd &gamma,
+                            inference::frontier::RobustScoreOptions options = {});
+Result<inference::ScoreTestTable>
+score_tests_robust(const Fit &fit, const data::RawData &raw,
+                   inference::frontier::RobustScoreOptions options = {});
+Result<inference::ScoreTestTable>
+score_tests_robust(const Fit &fit, const Eigen::MatrixXd &gamma,
+                   inference::frontier::RobustScoreOptions options = {});
+
 } // namespace frontier
 
 Result<measures::ResidualMoments> residuals(const Fit &fit);

@@ -133,6 +133,41 @@ semantics · **XL** statistical design/research track before implementation.
   as diagnostic telemetry only; core fitting/inference should stay strict until
   a downstream need justifies an explicit API.
 
+## Robust score / modification-index tests (frontier)
+
+`inference::frontier::{modification_indices,score_tests}_robust` landed for
+complete-data ML, both breads, single group (see roadmap). It reuses
+`robust::param_space_sandwich` (extracted from `robust_se`'s setup) for the
+bread/meat and rescales each candidate by `c = gᵀB1g / gᵀA1g`. Validated by
+`tests/unit/score_robust_test.cpp` (exact reduction-to-NT under Γ_NT; the
+empirical raw-data path scales `c ≠ 1` on heavy-tailed data and agrees with the
+explicit `empirical_gamma` route) and the robust reduction anchor in
+`tests/golden/score_golden_test.cpp`. Remaining work:
+
+- **M, external oracle (blocked on pinned lavaan).** Add the R-assembled numeric
+  oracle: lavaan has no robust `lavTestScore`/`modindices` (it falls back to NT),
+  but exposes `lavInspect(fit, "gamma"/"delta"/"information"/"gradient.logl")`.
+  Generate `*_robust.score.json` fixtures in `tests/tools/regen_oracle.R` for an
+  MLM/MLR fit on a non-normal corpus, assembling `mi_scaled` in R from those
+  matrices, plus a `score_robust_golden_test.cpp` consumer (gamma_hat overload).
+  Must be regenerated at the pinned lavaan version (CI/dev box currently has
+  0.6.21 vs pinned 0.6-22.2560), so deferred to a maintainer regen pass.
+- **S/M, advisory simulation.** `tests/checks/robust_score/`: robust MI of
+  freeing a fixed param ≈ robust Wald `z²` (via `robust::robust_se`) after refit,
+  and robust equality-release ≈ Satorra-2000 scaled LRT diff
+  (`robust::lr_test_satorra_bentler2001_from_data`), averaged over reps at large
+  N. Independent statistical confirmation the scaling is the right one.
+- **Deferred estimator tiers.** FIML robust MI (needs casewise score
+  contributions per missingness pattern; `FimlEvaluator` builds info by finite
+  difference, no Γ̂ analogue), continuous-LS (GLS/WLS) robust MI (`J'WΓ̂WJ` in the
+  moment metric), and ordinal-DWLS robust MI (polychoric NACOV meat). Multi-group
+  (per-block `n_b/N` denom weighting; currently single-group guarded).
+- **df>1 total release.** Mean-scaled `T_total/c_total` plus an optional Imhof
+  eigenvalue-mixture p-value for joint releases.
+- **Perf.** v1 rebuilds the sandwich per augmented MI candidate; `Zc` and the
+  per-block `L_Γ` are candidate-invariant, so cache them and rank-1-update the
+  extra Δ-column (`// TODO(perf)` site in the robust evaluator).
+
 ## Local hardening and validation tooling
 
 Local-first safety tooling for an AI-assisted repo. Design note:
