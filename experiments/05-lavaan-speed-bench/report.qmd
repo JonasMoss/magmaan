@@ -5,6 +5,7 @@ format:
     toc: true
     number-sections: false
     embed-resources: true
+  gfm: default
 execute:
   echo: false
   warning: false
@@ -25,10 +26,11 @@ if (!file.exists(zoo_path)) {
   stop("Missing zoo.csv. Run: Rscript run_experiment.R")
 }
 
-if (!requireNamespace("ggplot2", quietly = TRUE)) {
-  stop("This report requires ggplot2.")
+has_ggplot2 <- requireNamespace("ggplot2", quietly = TRUE) &&
+  knitr::is_html_output()
+if (has_ggplot2) {
+  library(ggplot2)
 }
-library(ggplot2)
 
 zoo <- utils::read.csv(zoo_path, check.names = FALSE, stringsAsFactors = FALSE)
 geiser <- if (file.exists(geiser_path)) {
@@ -37,7 +39,9 @@ geiser <- if (file.exists(geiser_path)) {
 
 fmt_ms <- function(x) ifelse(is.na(x), "", sprintf("%.3f", x))
 fmt_speedup <- function(x) ifelse(is.na(x), "", sprintf("%.1f×", x))
-theme_set(theme_minimal(base_size = 12))
+if (has_ggplot2) {
+  theme_set(theme_minimal(base_size = 12))
+}
 ```
 
 How fast is magmaan compared to lavaan on the same models? Two complementary
@@ -81,17 +85,19 @@ if (!is.null(geiser)) {
 #| fig-width: 7
 #| fig-height: 3.6
 if (!is.null(geiser)) {
-  g <- geiser
-  g$model <- factor(g$model, levels = g$model[order(g$speedup)])
-  ggplot(g, aes(speedup, model)) +
-    geom_col(fill = "#7a3b2c", width = 0.55) +
-    geom_text(aes(label = sprintf("%.1f×", speedup)),
-              hjust = -0.1, size = 3.6, color = "gray25") +
-    scale_x_continuous(expand = expansion(mult = c(0, 0.18))) +
-    labs(x = "lavaan / magmaan median wall time",
-         y = NULL,
-         title = "Geiser 2013 corpus: lavaan-to-magmaan speedup",
-         subtitle = "estimate-only workload, single thread")
+  if (has_ggplot2) {
+    g <- geiser
+    g$model <- factor(g$model, levels = g$model[order(g$speedup)])
+    ggplot(g, aes(speedup, model)) +
+      geom_col(fill = "#7a3b2c", width = 0.55) +
+      geom_text(aes(label = sprintf("%.1f×", speedup)),
+                hjust = -0.1, size = 3.6, color = "gray25") +
+      scale_x_continuous(expand = expansion(mult = c(0, 0.18))) +
+      labs(x = "lavaan / magmaan median wall time",
+           y = NULL,
+           title = "Geiser 2013 corpus: lavaan-to-magmaan speedup",
+           subtitle = "estimate-only workload, single thread")
+  }
 }
 ```
 
@@ -131,15 +137,17 @@ knitr::kable(zoo_out, row.names = FALSE,
 #| fig-height: 3.8
 zoo$display <- paste0(zoo$label, " (", zoo$estimator, ")")
 zoo$display <- factor(zoo$display, levels = zoo$display[order(zoo$speedup)])
-ggplot(zoo, aes(speedup, display)) +
-  geom_col(fill = "#2c4e7a", width = 0.55) +
-  geom_text(aes(label = sprintf("%.1f×", speedup)),
-            hjust = -0.1, size = 3.6, color = "gray25") +
-  scale_x_continuous(expand = expansion(mult = c(0, 0.18))) +
-  labs(x = "lavaan / magmaan median wall time",
-       y = NULL,
-       title = "Tutorial-model zoo: lavaan-to-magmaan speedup",
-       subtitle = "estimate-only workload, single thread, parity-validated to 1e-3")
+if (has_ggplot2) {
+  ggplot(zoo, aes(speedup, display)) +
+    geom_col(fill = "#2c4e7a", width = 0.55) +
+    geom_text(aes(label = sprintf("%.1f×", speedup)),
+              hjust = -0.1, size = 3.6, color = "gray25") +
+    scale_x_continuous(expand = expansion(mult = c(0, 0.18))) +
+    labs(x = "lavaan / magmaan median wall time",
+         y = NULL,
+         title = "Tutorial-model zoo: lavaan-to-magmaan speedup",
+         subtitle = "estimate-only workload, single thread, parity-validated to 1e-3")
+}
 ```
 
 ## Methodology

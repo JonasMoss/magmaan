@@ -54,7 +54,10 @@ needed, the runner should give a clear error or document the acquisition step
 in `--help`.
 
 Quarto outputs (`.quarto/`, `report.html`, `report_files/`) are generated and
-ignored by default.
+ignored by default. A tracked `report.md` is allowed when an experiment is
+linked from the repository README or another GitHub-facing index; render it
+from `report.qmd` with Quarto's GFM format so it is readable in GitHub's normal
+Markdown viewer.
 
 ## Runners
 

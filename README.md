@@ -10,7 +10,10 @@
 
 * **Philosophy:** `lavaan` is the oracle, failures are values, APIs stay explicit and composable.
 
-`magmaan` is heavily tasted against `lavaan`, and the two libraries agree n nb    on a massive corpus of models. See ((todo: add lavan parity document in experiments)) for details. 
+`magmaan` is heavily tested against `lavaan`, and the two libraries agree on a
+large corpus of models. See the
+[lavaan audit parity report](experiments/00-lavaan-parity/report.md) for the
+current experiment summary.
 
 
 ## Speed
@@ -26,7 +29,9 @@
 | HS 3-factor CFA (masked)                     | FIML      |      59.4 |       1.53 |     39× |
 | Bollen democracy SEM                         | ML        |      33.8 |       1.49 |     23× |
 
-(TODO: Link to more detail benchmark.)
+See the
+[magmaan vs lavaan speed benchmark report](experiments/05-lavaan-speed-bench/report.md)
+for methodology, caveats, and the full benchmark slices.
 
 
 ## Build
