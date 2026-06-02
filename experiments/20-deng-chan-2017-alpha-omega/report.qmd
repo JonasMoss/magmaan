@@ -1,0 +1,171 @@
+---
+title: "Deng & Chan (2017): a reliability-difference Wald test vs a Satorra-2000 LRT"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+results <- "results"
+need <- c("validation_identity.csv", "validation_se.csv", "demo.csv",
+          "simulation_summary.csv", "metadata.csv")
+missing <- need[!file.exists(file.path(results, need))]
+if (length(missing)) {
+  stop("missing results: ", paste(missing, collapse = ", "),
+       "\nRun:  Rscript run_experiment.R")
+}
+ident <- read.csv(file.path(results, "validation_identity.csv"))
+seval <- read.csv(file.path(results, "validation_se.csv"))
+demo  <- read.csv(file.path(results, "demo.csv"))
+sim   <- read.csv(file.path(results, "simulation_summary.csv"))
+meta  <- read.csv(file.path(results, "metadata.csv"))
+mv <- function(k) meta$value[match(k, meta$key)]
+
+cellr <- function(pop, dist, N, col) {
+  r <- sim[sim$population == pop & sim$dist == dist & sim$N == N, ]
+  r[[col]][1]
+}
+pct <- function(x) sprintf("%.1f%%", 100 * x)
+```
+
+## Question
+
+Coefficient alpha equals coefficient omega exactly when a scale's items are
+tau-equivalent (equal loadings); otherwise alpha understates reliability. So
+"is alpha different from omega?" and "are the loadings equal?" are the same null
+hypothesis whenever a one-factor model holds. Deng & Chan (2017) test it one
+way — a Wald z-test on the reliability difference $\hat\omega-\hat\alpha$ with a
+delta-method standard error. magmaan already ships the other way — a
+Satorra-2000 scaled likelihood-ratio test of the equal-loading restriction. Is
+the Deng & Chan procedure reachable with today's magmaan, and how do the two
+tests compare on calibration, power, and behaviour when the one-factor model is
+wrong?
+
+## Short answer
+
+Reachable with no new magmaan core. The Satorra-2000 side is a single
+`nestedTest()` call; the Deng & Chan side is a ~30-line delta method over
+magmaan's one-factor fit and its $\Gamma$ helpers. Two checks say the
+implementation is right: magmaan recovers Cronbach's alpha **exactly** as the
+omega of a ULS-fitted tau-equivalent model (agreement
+`r sprintf("%.0e", ident$abs_diff[1])`), and the analytic sandwich SE of
+$\hat\omega-\hat\alpha$ matches a nonparametric bootstrap to within ~6%.
+
+On the substance, the two tests agree only when a one-factor model holds, and
+even then they are not interchangeable:
+
+- **Tau-equivalent population (Type I error).** The Satorra scaled LRT sits near
+  the nominal 5% (`r pct(cellr("tau","normal",500,"reject_satorra_scaled"))` at
+  $N=500$); the Deng & Chan Wald is markedly **conservative**
+  (`r pct(cellr("tau","normal",500,"reject_wald_sw"))`). Testing a difference
+  that cannot be negative in the population pushes the two-sided z-test below
+  nominal.
+- **Congeneric population (power).** Both reject unequal loadings with high
+  power even though the reliability gap is tiny ($\omega-\alpha\approx0.007$):
+  Wald `r pct(cellr("congeneric","normal",250,"reject_wald_sw"))` and Satorra
+  `r pct(cellr("congeneric","normal",250,"reject_satorra_scaled"))` at $N=250$.
+  Deng & Chan's "the difference is minor in applications" is about its *size*,
+  not its detectability.
+- **Misspecified population (divergence).** With a minor second factor breaking
+  unidimensionality the tests come apart: the Satorra LRT increasingly rejects
+  (`r pct(cellr("misspecified","normal",250,"reject_satorra_scaled"))` at
+  $N=250$ rising to
+  `r pct(cellr("misspecified","normal",500,"reject_satorra_scaled"))` at
+  $N=500$), while the reliability-difference Wald stays near nominal
+  (`r pct(cellr("misspecified","normal",500,"reject_wald_sw"))`). They answer
+  different questions: Satorra asks whether the loadings are equal *within* a
+  one-factor model; Deng & Chan compare a model-based omega against a model-free
+  alpha, two numbers that can track each other even when the model is wrong.
+
+The same split appears on real Holzinger-Swineford subscales below.
+
+## Evidence
+
+### The implementation is correct
+
+```{r validation}
+v <- data.frame(
+  Check = c("alpha(S) == omega of ULS tau-fit",
+            paste0("sandwich SE vs bootstrap (", seval$dataset, ")")),
+  Value = c(sprintf("|diff| = %.1e", ident$abs_diff[1]),
+            sprintf("ratio = %.3f", seval$ratio_sw_boot)),
+  stringsAsFactors = FALSE
+)
+knitr::kable(v, caption = "Validation: the model-free alpha is exactly the ULS tau-equivalent omega, and the Deng-Chan sandwich SE of the difference matches a nonparametric bootstrap.")
+```
+
+The first row is the reason alpha is not a magmaan primitive: it is the omega of
+a *least-squares*-fitted tau model, not the ML one, and otherwise just a closed
+form on the sample covariance.
+
+### Calibration, power, and divergence
+
+```{r simulation}
+tab <- sim[sim$dist == "normal",
+           c("population", "N", "gap", "reject_wald_sw", "reject_satorra_scaled")]
+tab <- tab[order(match(tab$population, c("tau","congeneric","misspecified")), tab$N), ]
+names(tab) <- c("Population", "N", "Pop. gap (w-a)",
+                "Wald (sandwich)", "Satorra (scaled)")
+rownames(tab) <- NULL
+knitr::kable(tab, digits = 3, row.names = FALSE,
+  caption = "Rejection rate at the 5% level, normal data. Tau row = Type I error; congeneric = power; misspecified = divergence. Non-normal data (in results/) is comparable, with the Satorra test slightly liberal under tau.")
+```
+
+The tau rows show the calibration split; the congeneric rows show both tests are
+powerful against genuine inequality; the misspecified rows show the divergence
+growing with $N$ — the structural LRT chases the model error while the
+reliability contrast does not. Note the misspecified population gap is
+*negative*: the minor factor inflates the model-free alpha above the one-factor
+omega, so $\hat\omega-\hat\alpha$ has little to detect.
+
+### The same pattern on real scales
+
+```{r demo}
+d <- demo
+names(d) <- c("Scale", "p", "Omega", "Alpha", "w - a", "SE (sw)",
+              "Wald p (sw)", "Satorra p")
+knitr::kable(d, digits = c(0,0,3,3,4,4,3,4), row.names = FALSE,
+  caption = "Holzinger-Swineford subscales. On textual and speed the Satorra LRT flags non-tau-equivalence while the Wald test does not; on the deliberately two-dimensional visual+textual block the split is extreme.")
+```
+
+For *textual* and *speed* the reliability gap is a few thousandths and the Wald
+test is silent ($p>0.15$), yet the Satorra LRT rejects equal loadings
+($p<0.03$). The `visual+textual` block is genuinely two factors: the Satorra LRT
+rejects overwhelmingly while the Wald test sees a trivial reliability gap and
+shrugs.
+
+## Caveats
+
+- **What this establishes.** A correctness check on the Deng & Chan SE (identity
+  + bootstrap) and a finite-sample comparison of the two tests at $p=6$,
+  $N\in\{250,500\}$, `r mv("reps")` replications per cell. It does not reproduce
+  Deng & Chan's published tables: their data sets (a 26-item Holzinger-Swineford
+  battery, FACES II, etc.) are not redistributable, so the real-data section
+  uses lavaan's nine-item Holzinger-Swineford, whose subscales are only
+  three indicators each (a just-identified one-factor fit).
+- **Why the Wald test is conservative.** Under tau-equivalence $\omega-\alpha=0$
+  sits at the edge of the feasible region ($\omega\ge\alpha$ in the one-factor
+  population), so a two-sided z-test under-rejects. A one-sided test would be
+  better calibrated but is not how Deng & Chan frame their confidence interval.
+- **Non-normality** here is centred-scaled chi-square(5) components (closed-form
+  covariance, no moment-matching). The sandwich Wald and the empirical-$\Gamma$
+  Satorra test both stay usable; rates are in `results/simulation_summary.csv`.
+- Rejection rates are point estimates; replicate counts are in the metadata.
+
+## Reproduce
+
+```sh
+# full run (validation + real-data demo + simulation)
+Rscript run_experiment.R
+
+# fast smoke path
+Rscript run_experiment.R --smoke
+
+# a single slice
+Rscript run_experiment.R --cells pop=misspecified,dist=normal --reps 2000
+```
