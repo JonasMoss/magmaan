@@ -148,10 +148,11 @@ shrugs.
   battery, FACES II, etc.) are not redistributable, so the real-data section
   uses lavaan's nine-item Holzinger-Swineford, whose subscales are only
   three indicators each (a just-identified one-factor fit).
-- **Why the Wald test is conservative.** Under tau-equivalence $\omega-\alpha=0$
-  sits at the edge of the feasible region ($\omega\ge\alpha$ in the one-factor
-  population), so a two-sided z-test under-rejects. A one-sided test would be
-  better calibrated but is not how Deng & Chan frame their confidence interval.
+- **Why the Wald test is conservative.** Under tau-equivalence the first-order
+  influence functions of $\hat\omega$ and $\hat\alpha$ coincide, so
+  $\hat\omega-\hat\alpha$ is a second-order statistic with a quadratic-form
+  null law rather than a normal law. A standard two-sided z reference therefore
+  under-rejects; see `notes/alpha_omega_second_order.qmd`.
 - **Non-normality** here is centred-scaled chi-square(5) components (closed-form
   covariance, no moment-matching). The sandwich Wald and the empirical-$\Gamma$
   Satorra test both stay usable; rates are in `results/simulation_summary.csv`.
