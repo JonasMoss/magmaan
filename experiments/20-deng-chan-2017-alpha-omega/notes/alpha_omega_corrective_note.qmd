@@ -1,0 +1,172 @@
+---
+title: "Testing Alpha-Omega Equality Is a Non-Regular Reliability-Gap Problem"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+results <- "../results"
+need <- c("nonregularity.csv", "simulation_summary.csv", "demo.csv",
+          "validation_identity.csv", "validation_se.csv", "metadata.csv")
+missing <- need[!file.exists(file.path(results, need))]
+if (length(missing)) {
+  stop("missing results: ", paste(missing, collapse = ", "),
+       "\nRun from the experiment root: Rscript run_experiment.R")
+}
+nonreg <- read.csv(file.path(results, "nonregularity.csv"))
+sim <- read.csv(file.path(results, "simulation_summary.csv"))
+demo <- read.csv(file.path(results, "demo.csv"))
+ident <- read.csv(file.path(results, "validation_identity.csv"))
+seval <- read.csv(file.path(results, "validation_se.csv"))
+meta <- read.csv(file.path(results, "metadata.csv"))
+has_equal_wald <- "reject_wald_equal" %in% names(sim)
+has_demo_equal_wald <- "p_wald_equal" %in% names(demo)
+pct <- function(x) sprintf("%.1f%%", 100 * x)
+mv <- function(k) meta$value[match(k, meta$key)]
+```
+
+## Abstract
+
+Deng and Chan (2017) proposed a Wald test for the difference between
+coefficient omega and coefficient alpha. We show that this test is non-regular
+at the null hypothesis it is meant to test. In a one-factor model,
+$\omega \ge \alpha$, with equality exactly at tau-equivalence, so the scalar
+gap $\omega-\alpha$ has an interior minimum at the null and its first derivative
+vanishes. The resulting statistic has a second-order quadratic-form limit, not a
+normal limit. A short simulation shows the Deng-Chan Wald test is conservative
+under tau-equivalence, while an Imhof calibration of the reliability gap and the
+regular equal-loading Wald, likelihood-ratio, and score tests behave as expected.
+
+## Problem
+
+Coefficient alpha is the covariance-based reliability coefficient that is exact
+for a tau-equivalent item sum. Coefficient omega is the one-factor/congeneric
+reliability coefficient for the same total score.
+
+For a unidimensional congeneric model, alpha equals omega only when the item
+loadings are equal. Thus the hypothesis $\alpha=\omega$ is not merely a
+numerical comparison between two reliability summaries; it is the
+tau-equivalence restriction in disguise.
+
+Deng and Chan's statistic tests the derived scalar gap
+$\hat\omega-\hat\alpha$ with a first-order Wald reference. The regular
+structural tests instead test the equal-loading restriction directly, with
+$p-1$ degrees of freedom. These are different Wald problems: the scalar
+reliability-gap Wald is singular at the null, while the equal-loading Wald test
+is regular under the usual SEM conditions.
+
+## Why the Scalar Wald Test Fails
+
+On the correctly specified one-factor model,
+
+$$
+\omega-\alpha =
+\frac{p\sum_{j=1}^p(\lambda_j-\bar\lambda)^2}
+{(p-1)\{(\mathbf 1^\top\lambda)^2+\mathbf 1^\top\psi\}} .
+$$
+
+The numerator is loading dispersion. It is zero at tau-equivalence and
+nonnegative nearby, so the null is an interior minimum of the derived
+reliability gap. Consequently the first-order derivative of
+$d(s)=\omega(s)-\alpha(s)$ is zero at the null.
+
+The usual first-order delta method is therefore the wrong approximation. If
+$\sqrt n(\hat s-s_0)\Rightarrow Z$ and $Z\sim N(0,\Gamma)$, then
+
+$$
+n\{\hat\omega-\hat\alpha\}\Rightarrow \frac{1}{2}Z^\top HZ,
+$$
+
+where $H$ is the Hessian of the fitted reliability gap with respect to the
+sample covariance vector. This is a quadratic form in normals, usually written
+as a weighted sum of independent $\chi^2_1$ variables.
+
+## Numerical Check
+
+```{r scaling-table}
+sc <- nonreg[, c("N", "sd_diff", "sd_omega", "sd_diff_ratio",
+                 "sd_omega_ratio", "corr_omega_alpha")]
+names(sc) <- c("N", "SD(omega-alpha)", "SD(omega)",
+               "SD gap ratio", "SD omega ratio", "corr(omega, alpha)")
+knitr::kable(sc, digits = c(0, 5, 4, 2, 2, 4), row.names = FALSE,
+             caption = "Tau-equivalent population. The reliability gap scales at the second-order 1/N rate, while omega itself scales at the ordinary 1/sqrt(N) rate.")
+```
+
+The diagnostic is the non-regularity in one table: when $N$ quadruples, the
+standard deviation of the gap quarters, while the standard deviation of omega
+roughly halves.
+
+```{r test-table}
+sim_cols <- c("population", "N", "reject_wald_sw", "reject_imhof_sw")
+if (has_equal_wald) sim_cols <- c(sim_cols, "reject_wald_equal")
+sim_cols <- c(sim_cols, "reject_satorra_scaled", "reject_score")
+tab <- sim[sim$dist == "normal", sim_cols]
+tab <- tab[order(match(tab$population, c("tau", "congeneric", "misspecified")),
+                 tab$N), ]
+names(tab) <- c("Population", "N", "Deng Wald", "Imhof gap",
+                if (has_equal_wald) "Equal-loading Wald",
+                "Satorra LR", "Score")
+knitr::kable(tab, digits = 3, row.names = FALSE,
+             caption = "Rejection rate at 5%, normal data. The tau rows are Type I error; the congeneric rows are power; the misspecified rows show that reliability-gap tests and structural tau-equivalence tests answer different questions.")
+```
+
+The Deng-Chan Wald test is conservative at the tau-equivalent null. The Imhof
+test keeps the scalar reliability gap but uses the correct second-order
+reference law. The regular Wald/LR/score tests target the structural
+equal-loading restriction directly.
+
+## Real-Data Illustration
+
+```{r demo-table}
+demo_cols <- c("scale", "p", "omega", "alpha", "diff", "p_imhof_sw")
+if (has_demo_equal_wald) demo_cols <- c(demo_cols, "p_wald_equal")
+demo_cols <- c(demo_cols, "p_satorra_scaled", "p_score")
+dd <- demo[, demo_cols]
+names(dd) <- c("Scale", "p", "Omega", "Alpha", "Omega - alpha", "Imhof p",
+               if (has_demo_equal_wald) "Equal-loading Wald p",
+               "Satorra p", "Score p")
+knitr::kable(dd, digits = c(0, 0, 3, 3, 4, 3,
+                            if (has_demo_equal_wald) 4, 4, 3),
+             row.names = FALSE,
+             caption = "Holzinger-Swineford subscales. Structural tests can reject tau-equivalence even when the reliability gap is only a few thousandths.")
+```
+
+## Recommendation
+
+For a test of tau-equivalence, use the regular equal-loading Wald, LR, or score
+test. These are the tests of the model restriction that makes alpha and omega
+equal.
+
+If the estimand of interest is specifically the scalar reliability gap, do not
+use a normal Wald reference at the null. Calibrate the gap by its second-order
+quadratic-form law, as in the Imhof test here, or by a null bootstrap.
+
+## Appendix Sketch
+
+The full appendix should contain four pieces.
+
+1. Algebra showing that $\omega-\alpha$ is proportional to loading dispersion
+   on the one-factor model.
+2. A second-order delta-method derivation of the quadratic-form limit.
+3. A derivation showing that Deng and Chan's estimated first-order SE is also
+   second-order at the null, producing a non-pivotal Wald ratio.
+4. Implementation checks: alpha equals the omega from a ULS tau-equivalent fit
+   (`r sprintf("%.1e", ident$abs_diff[1])` absolute difference), and the
+   sandwich SE agrees with a nonparametric bootstrap away from the null
+   (`r sprintf("%.3f", seval$ratio_sw_boot[1])` ratio for
+   `r seval$dataset[1]`).
+
+## Citation Audit Before Submission
+
+The first web pass did not find an obvious published correction using searches
+for Deng-Chan plus non-regularity, Imhof, singularity, and second-order delta
+method. This is not enough for a novelty claim. Before submission, screen the
+citing-paper set from Google Scholar and one reproducible source such as
+OpenAlex, Semantic Scholar, or Scopus for prior corrections or bootstrap-based
+workarounds.

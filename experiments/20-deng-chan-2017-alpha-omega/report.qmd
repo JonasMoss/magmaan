@@ -25,12 +25,23 @@ seval  <- read.csv(file.path(results, "validation_se.csv"))
 demo   <- read.csv(file.path(results, "demo.csv"))
 sim    <- read.csv(file.path(results, "simulation_summary.csv"))
 meta   <- read.csv(file.path(results, "metadata.csv"))
+has_equal_wald <- "reject_wald_equal" %in% names(sim)
+has_demo_equal_wald <- "p_wald_equal" %in% names(demo)
 mv <- function(k) meta$value[match(k, meta$key)]
 cellr <- function(pop, dist, N, col) {
   r <- sim[sim$population == pop & sim$dist == dist & sim$N == N, ]
   r[[col]][1]
 }
 pct <- function(x) sprintf("%.1f%%", 100 * x)
+trinity_tau500 <- if (has_equal_wald) {
+  paste0(pct(cellr("tau","normal",500,"reject_wald_equal")), ", ",
+         pct(cellr("tau","normal",500,"reject_satorra_scaled")), ", and ",
+         pct(cellr("tau","normal",500,"reject_score")))
+} else {
+  paste0(pct(cellr("tau","normal",500,"reject_satorra_scaled")), " and ",
+         pct(cellr("tau","normal",500,"reject_score")),
+         " for LR and score; rerun the experiment to populate the new regular Wald column")
+}
 ```
 
 ## Question
@@ -65,10 +76,9 @@ nominal (`r pct(cellr("tau","normal",250,"reject_imhof_sw"))` →
 above the Wald test's.
 
 **The regular trinity behaves.** The structural tests of the same null — the
-Satorra-2000 scaled LR and a standard score test, both proper $(p-1)$-df tests —
-are near nominal under tau-equivalence
-(`r pct(cellr("tau","normal",500,"reject_satorra_scaled"))` and
-`r pct(cellr("tau","normal",500,"reject_score"))` at $N=500$) and fully powered.
+normal-theory equal-loading Wald, Satorra-2000 scaled LR, and standard score
+test, all proper $(p-1)$-df tests — are near nominal under tau-equivalence
+(`r trinity_tau500` at $N=500$) and fully powered.
 Under one-factor *misspecification* the reliability-gap tests and the structural
 tests diverge: the structural tests increasingly reject (Satorra
 `r pct(cellr("misspecified","normal",500,"reject_satorra_scaled"))` at $N=500$)
@@ -99,23 +109,26 @@ right here.
 ### An Imhof reference restores calibration; the trinity behaves
 
 ```{r simulation}
-tab <- sim[sim$dist == "normal",
-           c("population", "N", "reject_wald_sw", "reject_imhof_sw",
-             "reject_satorra_scaled", "reject_score")]
+sim_cols <- c("population", "N", "reject_wald_sw", "reject_imhof_sw")
+if (has_equal_wald) sim_cols <- c(sim_cols, "reject_wald_equal")
+sim_cols <- c(sim_cols, "reject_satorra_scaled", "reject_score")
+tab <- sim[sim$dist == "normal", sim_cols]
 tab <- tab[order(match(tab$population, c("tau","congeneric","misspecified")), tab$N), ]
-names(tab) <- c("Population", "N", "Wald z", "Imhof", "Satorra LR", "Score")
+names(tab) <- c("Population", "N", "Deng Wald z", "Imhof gap",
+                if (has_equal_wald) "Equal-loading Wald",
+                "Satorra LR", "Score")
 knitr::kable(tab, digits = 3, row.names = FALSE,
-  caption = "Rejection rate at 5%, normal data. Tau = Type I error (Wald conservative; Imhof restored; LR/score nominal); congeneric = power; misspecified = divergence. Non-normal rates are in results/simulation_summary.csv.")
+  caption = "Rejection rate at 5%, normal data. Tau = Type I error (Deng Wald conservative; Imhof restored; structural tests nominal); congeneric = power; misspecified = divergence. Non-normal rates are in results/simulation_summary.csv.")
 ```
 
 Reading the tau rows: the Wald z is stuck well below 5% and barely improves with
 $N$ (it is converging to the wrong law), while the Imhof test climbs toward
-nominal and the Satorra LR and score test are already there. The congeneric rows
-show all four are powerful against genuinely unequal loadings, Imhof more so than
-the Wald z. The misspecified rows show the split: with a minor second factor the
-structural tests chase the model error while the reliability-gap tests do not
-(the population gap is even *negative* there — the extra factor lifts the
-model-free alpha above the one-factor omega).
+nominal and the regular equal-loading Wald, Satorra LR, and score tests are
+already there. The congeneric rows show all five are powerful against genuinely
+unequal loadings, Imhof more so than the Deng Wald z. The misspecified rows show
+the split: with a minor second factor the structural tests chase the model error
+while the reliability-gap tests do not (the population gap is even *negative*
+there — the extra factor lifts the model-free alpha above the one-factor omega).
 
 ### Implementation checks and real scales
 
@@ -129,11 +142,15 @@ knitr::kable(v, caption = "Cronbach's alpha is exactly the ULS tau-equivalent om
 ```
 
 ```{r demo}
-dd <- demo[, c("scale", "p", "omega", "alpha", "diff", "p_imhof_sw",
-               "p_satorra_scaled", "p_score")]
+demo_cols <- c("scale", "p", "omega", "alpha", "diff", "p_imhof_sw")
+if (has_demo_equal_wald) demo_cols <- c(demo_cols, "p_wald_equal")
+demo_cols <- c(demo_cols, "p_satorra_scaled", "p_score")
+dd <- demo[, demo_cols]
 names(dd) <- c("Scale", "p", "Omega", "Alpha", "w - a", "Imhof p",
+               if (has_demo_equal_wald) "Equal-loading Wald p",
                "Satorra p", "Score p")
-knitr::kable(dd, digits = c(0,0,3,3,4,3,4,3), row.names = FALSE,
+demo_digits <- c(0,0,3,3,4,3, if (has_demo_equal_wald) 4, 4, 3)
+knitr::kable(dd, digits = demo_digits, row.names = FALSE,
   caption = "Holzinger-Swineford subscales. On textual and speed the structural tests flag non-tau-equivalence while the reliability gap is a few thousandths; visual+textual is deliberately two-dimensional.")
 ```
 
@@ -151,9 +168,10 @@ knitr::kable(dd, digits = c(0,0,3,3,4,3,4,3), row.names = FALSE,
   parameterization; the singularity is in the *derived scalar contrast*, whose
   first derivative vanishes there. See `notes/alpha_omega_second_order.qmd`.
 - **The score test is normal-theory only.** lavaan has no robust release-score
-  test (it falls back to the ordinary one), so under non-normality only the
-  sandwich Imhof and the empirical-$\Gamma$ Satorra LR are formally justified;
-  the score column is a normal-theory reference.
+  test (it falls back to the ordinary one), and the equal-loading Wald column is
+  the ordinary Wald test. Under non-normality only the sandwich Imhof and the
+  empirical-$\Gamma$ Satorra LR are formally justified; the regular Wald and
+  score columns are normal-theory references.
 - **Estimation is traditional ML** throughout; non-normality is centred-scaled
   chi-square(5) components (closed-form covariance, no moment-matching).
 - Rejection rates are point estimates; replicate counts are in the metadata.
