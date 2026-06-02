@@ -654,4 +654,49 @@ robust_se_both_breads(spec::LatentStructure                     pt,
                       WeightMoments                             moments = WeightMoments::Structured,
                       ScoreCovariance                           cov     = ScoreCovariance::Empirical);
 
+// ── Parameter-space sandwich terms (for robust score / modification-index tests)
+//
+// Surfaces the same {bread, meat} that `robust_se` assembles, but as raw q×q
+// matrices in θ-space, so a caller can contract a custom efficient-score
+// direction g against them: the robust generalized/SB-scaled score statistic is
+//   mi_robust = mi_NT · (gᵀA1 g)/(gᵀB1 g)   (== mi_NT / c, c = gᵀB1g / gᵀA1g).
+// Both A1 and B1 are PER-UNIT (averaged over N), so c is dimensionless and → 1
+// under normality. The meat equals the bread EXACTLY when Γ̂ = Γ_NT (since
+// `WΓ_NTW = W`), which is what the `InferenceSpec`-only overload returns.
+//
+//   A1 = bread (Expected: Δ'WΔ; Observed: H_obs/N), per `spec.bread`.
+//   B1 = meat  (Δ'WΓ̂WΔ; model-implied Γ_NT for the no-Γ̂ overload).
+//   K_con = npar × q reparameterization (empty ⇒ identity / θ-space).
+//
+// `reparam_constraints = false` keeps A1/B1 in full npar θ-space even when the
+// model has active equality constraints — required by the score-test path,
+// where the nuisance projection lives in θ-space (the released constraint's K).
+struct ParamSpaceSandwich {
+  Eigen::MatrixXd A1;     // q × q  bread
+  Eigen::MatrixXd B1;     // q × q  meat
+  Eigen::MatrixXd K_con;  // npar × q (empty ⇒ identity)
+  Eigen::Index    q = 0;
+};
+
+// Model-implied (Γ_NT) meat: B1 = Δ'WΔ. For the Expected bread A1 == B1 (c ≡ 1),
+// the exact reduction-to-NT baseline; for the Observed bread B1 = Δ'WΔ ≠ H_obs.
+post_expected<ParamSpaceSandwich>
+param_space_sandwich(spec::LatentStructure pt, const model::MatrixRep& rep,
+                     const SampleStats& samp, const Estimates& est,
+                     InferenceSpec spec = {}, bool reparam_constraints = true);
+
+// Empirical meat from raw data (via `casewise_contributions`).
+post_expected<ParamSpaceSandwich>
+param_space_sandwich(spec::LatentStructure pt, const model::MatrixRep& rep,
+                     const SampleStats& samp, const Estimates& est,
+                     const RawData& raw, InferenceSpec spec = {},
+                     bool reparam_constraints = true);
+
+// Empirical meat from a caller-supplied Γ̂ (σ-only ⇒ pstar; means ⇒ total_rows).
+post_expected<ParamSpaceSandwich>
+param_space_sandwich(spec::LatentStructure pt, const model::MatrixRep& rep,
+                     const SampleStats& samp, const Estimates& est,
+                     const Eigen::MatrixXd& gamma_hat, InferenceSpec spec = {},
+                     bool reparam_constraints = true);
+
 }  // namespace magmaan::robust

@@ -13,6 +13,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/op.hpp"
+#include "magmaan/robust/robust.hpp"
 #include "magmaan/spec/partable.hpp"
 
 namespace magmaan::inference {
@@ -53,6 +54,15 @@ struct ScoreTestResult {
   double epc = 0.0;        // raw expected parameter change
   double epc_lv = 0.0;     // std.lv-standardized EPC (latent SDs)
   double epc_all = 0.0;    // std.all-standardized EPC (latent + indicator SDs)
+
+  // Robust extension (filled only by `inference::frontier`; the normal-theory
+  // path leaves them at these defaults, so `mi_scaled == mi` and
+  // `scaling_factor == 1` there). `mi` stays the ordinary statistic; `mi_scaled`
+  // is the generalized / SB-scaled robust statistic `mi / scaling_factor`, with
+  // `p_value` referenced to `mi_scaled` on the robust path.
+  double v_eff = 0.0;          // robust efficient-score variance (NT info units)
+  double mi_scaled = 0.0;      // mi / scaling_factor
+  double scaling_factor = 1.0; // c = gᵀB1g / gᵀA1g (→ 1 under normality)
 };
 
 struct ScoreTestTable {
@@ -153,5 +163,74 @@ score_tests_fiml(spec::LatentStructure pt,
                  const Estimates& est,
                  FIML discrepancy = {},
                  double h_step = 1e-4);
+
+// ── Robust (generalized / Satorra-Bentler-scaled) score tests ───────────────
+//
+// Frontier surface: goes beyond lavaan, which falls back to the ordinary
+// statistic when `se != "standard"` (see lav_test_score.R). For every fixed-row
+// / equality-release candidate these report `mi` (the ordinary NT statistic) and
+// `mi_scaled = mi / c` with the per-direction scaling `c = gᵀB1g / gᵀA1g`, where
+// A1/B1 are the parameter-space sandwich bread/meat (`robust::param_space_sandwich`)
+// and g is the efficient-score direction. v1 covers continuous ML, both breads
+// (`Information::Expected` ≈ robust.sem/MLM; `Information::Observed` ≈
+// robust.huber.white/MLR). Single-group only.
+namespace frontier {
+
+struct RobustScoreOptions {
+  // bread (Expected/Observed) + meat moments + Γ̂ source, shared with `robust_se`.
+  robust::InferenceSpec spec{robust::Information::Expected,
+                             robust::WeightMoments::Structured,
+                             robust::ScoreCovariance::Empirical};
+  ModificationIndexOptions base{};  // candidate set, loadings/covariances, info
+};
+
+// Robust ML modification indices. Γ̂ from raw data; or model-implied Γ_NT when
+// `options.spec.cov == ScoreCovariance::ModelImplied` (raw is then ignored and
+// may be omitted via the sample-stats overload).
+post_expected<ScoreTestTable>
+modification_indices_robust(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const SampleStats& samp,
+                            const RawData& raw,
+                            const Estimates& est,
+                            const RobustScoreOptions& options = {});
+
+// Model-implied (Γ_NT) meat only — `options.spec.cov` is treated as ModelImplied.
+// For the Expected bread this reproduces the ordinary MI exactly (reduction-to-NT
+// baseline); requires only sample statistics.
+post_expected<ScoreTestTable>
+modification_indices_robust(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const SampleStats& samp,
+                            const Estimates& est,
+                            const RobustScoreOptions& options = {});
+
+// Caller-supplied Γ̂ (e.g. lavaan's NACOV); the R-assembled oracle path.
+post_expected<ScoreTestTable>
+modification_indices_robust(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const SampleStats& samp,
+                            const Eigen::MatrixXd& gamma_hat,
+                            const Estimates& est,
+                            const RobustScoreOptions& options = {});
+
+// Robust equality-release score tests (B1 built once in θ-space, df=1 per row).
+post_expected<ScoreTestTable>
+score_tests_robust(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const SampleStats& samp,
+                   const RawData& raw,
+                   const Estimates& est,
+                   const RobustScoreOptions& options = {});
+
+post_expected<ScoreTestTable>
+score_tests_robust(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const SampleStats& samp,
+                   const Eigen::MatrixXd& gamma_hat,
+                   const Estimates& est,
+                   const RobustScoreOptions& options = {});
+
+}  // namespace frontier
 
 }  // namespace magmaan::inference

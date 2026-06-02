@@ -116,6 +116,17 @@ golden `parTable()` fixtures.
   equality-release score tests, fit measures including RMSEA close-fit
   p-values, structural-aware standardization, and C++ defined-parameter
   evaluation.
+- `inference::frontier` robust (generalized / Satorra-Bentler-scaled)
+  modification indices and equality-release score tests: each candidate carries
+  the ordinary `mi` and a `mi_scaled = mi / c` with the per-direction scaling
+  `c = gᵀB1g / gᵀA1g`, where A1/B1 are the parameter-space sandwich bread/meat
+  surfaced by `robust::param_space_sandwich` (the same Δ'WΔ / Δ'WΓ̂WΔ that
+  `robust_se` uses) and g is the efficient-score direction. Goes beyond lavaan,
+  which falls back to the ordinary statistic when `se != "standard"`. v1 covers
+  complete-data ML, both breads (`Information::Expected` ≈ robust.sem/MLM;
+  `Information::Observed` ≈ robust.huber.white/MLR), single group; reduces to the
+  ordinary statistic exactly under the model-implied Γ_NT meat (Expected bread).
+  Friendly entries under `api::frontier::{modification_indices,score_tests}_robust`.
 - Observed-bread robust SEs and observed-Hessian U-factors use total-N scaling
   and work on block-stacked multi-block covariance and mean-structure models.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand

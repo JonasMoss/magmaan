@@ -1196,6 +1196,58 @@ standardized_rows_fcsem(const Fit &fit, const Eigen::MatrixXd &vcov) {
   return post_result(std::move(rows));
 }
 
+Result<inference::ScoreTestTable>
+modification_indices_robust(const Fit &fit, const data::RawData &raw,
+                            inference::frontier::RobustScoreOptions options) {
+  auto ok = require_complete_ml(fit, "modification_indices_robust()");
+  if (!ok) {
+    return std::unexpected(ok.error());
+  }
+  auto out = inference::frontier::modification_indices_robust(
+      fit.model().structure(), fit.model().matrix_rep(),
+      *fit.data().sample_stats(), raw, fit.estimates(), options);
+  return post_result(std::move(out));
+}
+
+Result<inference::ScoreTestTable>
+modification_indices_robust(const Fit &fit, const Eigen::MatrixXd &gamma,
+                            inference::frontier::RobustScoreOptions options) {
+  auto ok = require_complete_ml(fit, "modification_indices_robust()");
+  if (!ok) {
+    return std::unexpected(ok.error());
+  }
+  auto out = inference::frontier::modification_indices_robust(
+      fit.model().structure(), fit.model().matrix_rep(),
+      *fit.data().sample_stats(), gamma, fit.estimates(), options);
+  return post_result(std::move(out));
+}
+
+Result<inference::ScoreTestTable>
+score_tests_robust(const Fit &fit, const data::RawData &raw,
+                   inference::frontier::RobustScoreOptions options) {
+  auto ok = require_complete_ml(fit, "score_tests_robust()");
+  if (!ok) {
+    return std::unexpected(ok.error());
+  }
+  auto out = inference::frontier::score_tests_robust(
+      fit.model().structure(), fit.model().matrix_rep(),
+      *fit.data().sample_stats(), raw, fit.estimates(), options);
+  return post_result(std::move(out));
+}
+
+Result<inference::ScoreTestTable>
+score_tests_robust(const Fit &fit, const Eigen::MatrixXd &gamma,
+                   inference::frontier::RobustScoreOptions options) {
+  auto ok = require_complete_ml(fit, "score_tests_robust()");
+  if (!ok) {
+    return std::unexpected(ok.error());
+  }
+  auto out = inference::frontier::score_tests_robust(
+      fit.model().structure(), fit.model().matrix_rep(),
+      *fit.data().sample_stats(), gamma, fit.estimates(), options);
+  return post_result(std::move(out));
+}
+
 } // namespace frontier
 
 Result<measures::ResidualMoments> residuals(const Fit &fit) {
