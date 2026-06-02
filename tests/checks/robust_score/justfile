@@ -1,0 +1,42 @@
+set shell := ["bash", "-uc"]
+
+root := "../.."
+build_dir := "build"
+bin := build_dir / "robust_score_sanity"
+cxx := env_var_or_default("CXX", "clang++")
+lib := root / "build/opt/libmagmaan.a"
+
+default:
+    @just --list
+
+# Build the optimized (non-sanitized) library the harness links against.
+lib:
+    cmake --build --preset opt --target magmaan
+
+eigen := env_var_or_default("EIGEN_INCLUDE", root / "build/fast/_deps/eigen3-src")
+opt := root / "build/opt"
+libs := opt / "libmagmaan.a " + opt / "libport.a " + opt / "libquadpack.a " + opt / "_deps/nlopt-build/libnlopt.a"
+
+# Eigen ABI defines MUST match cmake/MagmaanNoExceptNoRtti.cmake (Release set,
+# so no EIGEN_INITIALIZE_MATRICES_BY_NAN); EIGEN_MAX_ALIGN_BYTES is ABI-critical.
+eigen_defs := "-DNDEBUG -DEIGEN_NO_EXCEPTIONS=1 -DEIGEN_NO_AUTOMATIC_RESIZING=1 -DEIGEN_RUNTIME_NO_MALLOC=1 -DEIGEN_DONT_PARALLELIZE=1 -DEIGEN_MAX_ALIGN_BYTES=64"
+
+build: lib
+    mkdir -p {{build_dir}}
+    {{cxx}} -std=gnu++23 -O3 -march=native -g -fPIC -fno-exceptions -fno-rtti \
+      -fvisibility=hidden -fvisibility-inlines-hidden {{eigen_defs}} \
+      -I{{root}}/include -I{{root}}/src -isystem {{eigen}} \
+      robust_score_sanity.cpp -Wl,--start-group {{libs}} -Wl,--end-group -o {{bin}}
+
+# Fast smoke run.
+quick: build
+    mkdir -p results
+    {{bin}} --n=1500 --reps=120 --df=5 | tee results/quick.txt
+
+# Full run: heavy tails, many reps.
+all: build
+    mkdir -p results
+    {{bin}} --n=4000 --reps=800 --df=5 | tee results/latest.txt
+
+clean:
+    rm -rf {{build_dir}} results
