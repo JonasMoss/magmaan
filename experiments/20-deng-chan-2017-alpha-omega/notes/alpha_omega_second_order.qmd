@@ -1,0 +1,283 @@
+---
+title: "Second-order asymptotics for the alpha-omega contrast"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Short version
+
+At a tau-equivalent one-factor population, the Deng--Chan contrast
+$\hat\omega-\hat\alpha$ is not a regular first-order statistic. The ordinary
+delta-method gradient vanishes at the null, so
+
+$$
+\sqrt{n}(\hat\omega-\hat\alpha) \overset{p}{\longrightarrow} 0,
+\qquad
+n(\hat\omega-\hat\alpha) \Rightarrow
+\frac{1}{2} Z^\top H Z ,
+$$
+
+where $Z$ is the limiting normal vector for the sample covariance and $H$ is the
+Hessian of the fitted reliability contrast as a function of that covariance.
+Thus the null law is a quadratic form in normals, usually a weighted sum of
+$\chi^2_1$ variables, not a normal law.
+
+This is enough to explain the diagnostic run: the coefficients themselves have
+$1/\sqrt{n}$ standard errors, but their difference has $1/n$ standard deviation
+at the null, positive $1/n$ bias, and persistent right skew. The first-order
+Wald $z$ statistic divides one second-order random quantity by another and has a
+non-pivotal, non-normal limit.
+
+The practical conclusion is also simple: the regular test of tau-equivalence is
+the equal-loading restriction test (Wald/LR/score, $p-1$ df). If the
+alpha--omega contrast is tested directly, it needs a second-order calibration,
+not a standard-normal reference.
+
+## Setup
+
+Let $s=\operatorname{vech}(S)$ be the lower-triangular vector of a covariance
+matrix. Under standard moment assumptions,
+
+$$
+\sqrt{n}(\hat s-s_0)\Rightarrow Z,\qquad Z\sim N(0,\Gamma).
+$$
+
+For a one-factor covariance
+
+$$
+\Sigma(\theta)=\lambda\lambda^\top+\operatorname{diag}(\psi),
+\qquad
+\theta=(\lambda_1,\ldots,\lambda_p,\psi_1,\ldots,\psi_p),
+$$
+
+coefficient alpha and coefficient omega are
+
+$$
+\alpha(\Sigma)=
+\frac{p}{p-1}\left(1-\frac{\operatorname{tr}(\Sigma)}
+{\mathbf 1^\top\Sigma\mathbf 1}\right),
+\qquad
+\omega(\theta)=
+\frac{(\mathbf 1^\top\lambda)^2}
+{(\mathbf 1^\top\lambda)^2+\mathbf 1^\top\psi}.
+$$
+
+Let $\theta_e(s)$ denote the population fitting map for the estimator used to
+obtain the one-factor omega. For example, for a regular minimum-distance fit,
+$\theta_e(s)$ is the local solution of the population normal equations. The
+published statistic is the plug-in contrast
+
+$$
+d(s)=\omega\{\theta_e(s)\}-\alpha(s).
+$$
+
+A first-order delta-method test requires $\nabla d(s_0)\neq 0$. The issue is
+that tau-equivalence makes this derivative zero for the standard
+covariance-fitting maps used in this experiment.
+
+## Why the derivative vanishes
+
+First consider the contrast on the correctly specified one-factor model, where
+alpha and omega are evaluated on the same covariance. Direct algebra gives
+
+$$
+\omega(\theta)-\alpha\{\Sigma(\theta)\}
+=
+\frac{p\sum_{j=1}^p \lambda_j^2-\left(\sum_{j=1}^p\lambda_j\right)^2}
+{(p-1)\left[\left(\sum_{j=1}^p\lambda_j\right)^2+
+\sum_{j=1}^p\psi_j\right]}
+=
+\frac{p\sum_{j=1}^p(\lambda_j-\bar\lambda)^2}
+{(p-1)\left[\left(\sum_{j=1}^p\lambda_j\right)^2+
+\sum_{j=1}^p\psi_j\right]} .
+$$
+
+The numerator is the loading dispersion. It is nonnegative and is zero exactly
+when $\lambda_1=\cdots=\lambda_p$. Therefore a tau-equivalent population is an
+interior minimum of the derived contrast on the one-factor model. It is not a
+boundary of the SEM parameter space.
+
+For the fitted statistic $d(s)$, the corresponding derivative is
+
+$$
+\nabla_s d(s_0)
+=
+\dot\theta_e(s_0)^\top \nabla_\theta\omega(\theta_0)
+-\nabla_s\alpha(s_0).
+$$
+
+In Deng--Chan notation this is
+
+$$
+g_0=P_0^\top\dot\omega_0-\dot\alpha_0,
+$$
+
+with $P_0$ the derivative of the fitted model parameters with respect to the
+sample covariance. At a tau-equivalent population, $g_0=0$ for the standard
+ML/GLS/ULS covariance-fitting maps used here. For the symmetric tau populations
+in the experiment it also holds for the ADF/sandwich map, so the planned
+ML/GLS/ULS/ADF grid is in the same second-order case at the null. Numerically,
+the experiment's R implementation gives $\lVert g_0\rVert$ at roundoff when
+evaluated at the tau population.
+
+This equality is the influence-function statement: at the null, $\hat\omega$
+and $\hat\alpha$ have the same first-order influence function. Their leading
+normal terms cancel in the difference. That is why the empirical correlation
+between the two coefficient estimates tends to one.
+
+The condition worth stating in a paper is not that every conceivable estimator
+must behave this way. The condition is $g_0=0$. If an exotic fitting map or
+weight matrix made $g_0\neq 0$, the contrast would be first-order regular for
+that estimator. The Deng--Chan statistic and the standard covariance-fitting
+estimators in this experiment are in the singular case.
+
+## Second-order delta method
+
+Since $d(s_0)=0$ and $\nabla d(s_0)=0$, Taylor expansion gives
+
+$$
+d(\hat s)
+=
+\frac{1}{2}(\hat s-s_0)^\top H(\hat s-s_0)
++o_p(n^{-1}),
+$$
+
+where $H=\nabla_s^2 d(s_0)$. Multiplying by $n$ and using
+$\sqrt{n}(\hat s-s_0)\Rightarrow Z$,
+
+$$
+n\,d(\hat s)\Rightarrow Q
+=
+\frac{1}{2}Z^\top HZ .
+$$
+
+If $H$ is positive semidefinite on the relevant covariance directions, then
+$Q$ is a nonnegative weighted sum of independent $\chi^2_1$ variables. More
+generally it is still a quadratic form in normals. Either way, it is not a
+centered normal variate.
+
+The leading moments follow immediately:
+
+$$
+E\{d(\hat s)\}
+=
+\frac{1}{2n}\operatorname{tr}(H\Gamma)+o(n^{-1}),
+$$
+
+and, in the Gaussian quadratic-form approximation,
+
+$$
+\operatorname{Var}\{d(\hat s)\}
+=
+\frac{1}{2n^2}\operatorname{tr}\{(H\Gamma)^2\}+o(n^{-2}).
+$$
+
+So the standard deviation is proportional to $1/n$, not $1/\sqrt n$, and the
+positive mean under the tau null is the usual second-order bias term. This is
+the mechanism behind the observed "omega tends to exceed alpha" effect under
+tau-equivalence.
+
+## What happens to the published Wald statistic
+
+The Deng--Chan standard error estimates the first-order delta variance,
+
+$$
+\widehat{\operatorname{se}}\{d(\hat s)\}
+=
+\left[
+\frac{1}{n}\nabla d(\hat s)^\top\hat\Gamma\nabla d(\hat s)
+\right]^{1/2}.
+$$
+
+But $\nabla d(s_0)=0$, so another Taylor expansion gives
+
+$$
+\nabla d(\hat s)=H(\hat s-s_0)+o_p(n^{-1/2}).
+$$
+
+Therefore
+
+$$
+\widehat{\operatorname{se}}\{d(\hat s)\}
+=
+\frac{1}{n}
+\left[(HZ)^\top\Gamma(HZ)\right]^{1/2}
++o_p(n^{-1}).
+$$
+
+The reported Wald ratio has the nonstandard limit
+
+$$
+\frac{d(\hat s)}
+{\widehat{\operatorname{se}}\{d(\hat s)\}}
+\Rightarrow
+\frac{\frac{1}{2}Z^\top HZ}
+{\left[(HZ)^\top\Gamma(HZ)\right]^{1/2}} .
+$$
+
+This is $O_p(1)$, but it is not $N(0,1)$ and it depends on the unknown
+population through $H$ and $\Gamma$. A normal critical value is therefore not
+asymptotically justified at the tau-equivalent null. The conservative rejection
+rates in the experiment are not a small-sample accident; they are the finite
+sample expression of the wrong reference law.
+
+Away from tau-equivalence, $\nabla d(s_0)\neq 0$. Then the ordinary first-order
+delta method applies and the Deng--Chan Wald statistic is regular. The
+degeneracy is local to the null the procedure is meant to test.
+
+## Correct calibration options
+
+There are two defensible routes.
+
+1. Test tau-equivalence directly with the regular loading-equality restriction.
+   The null is $L\lambda=0$ with rank $p-1$, so the usual Wald, LR, and score/LM
+   tests have standard $\chi^2_{p-1}$ limits under the usual SEM regularity
+   conditions. This is the clean comparison for ML/GLS/ULS/ADF and
+   normal-theory versus robust covariance choices.
+
+2. If the target is specifically the scalar reliability gap, use the
+   second-order limit of $n(\hat\omega-\hat\alpha)$. Estimate $H$ and $\Gamma$
+   under the tau null, compute the eigenvalues of
+   $\frac{1}{2}\Gamma^{1/2}H\Gamma^{1/2}$, and evaluate the resulting
+   weighted-$\chi^2$ tail probability, or use a null parametric/bootstrap
+   calibration. This tests the same derived contrast but does not pretend the
+   first-order gradient is nonzero.
+
+The first route is simpler and more interpretable: it tests the regular
+equal-loading restriction that makes alpha and omega equal in a one-factor
+model. The second route is useful if a corrective note wants to stay as close
+as possible to the Deng--Chan scalar statistic.
+
+## Is van der Vaart enough?
+
+For the central mathematical claim, yes. The needed result is just the
+second-order delta method: if $\sqrt n(\hat s-s_0)$ is asymptotically normal and
+the first derivative of a twice differentiable map is zero, then the statistic
+has an $n$-rate quadratic-form limit. van der Vaart's *Asymptotic Statistics*
+contains the delta-method machinery; the second-order version follows by the
+same Taylor expansion plus the continuous mapping theorem.
+
+For a publishable corrective note, I would cite van der Vaart for the
+asymptotic machinery and add one source that explicitly discusses quadratic-form
+or singular-hypothesis limits. The point to avoid is calling this a boundary
+test. The tau-equivalent point is interior in the SEM parameterization; the
+singularity is in the derived scalar contrast because its first derivative
+vanishes.
+
+## References
+
+- Deng, L., & Chan, W. (2017). Testing the difference between reliability
+  coefficients alpha and omega. *Educational and Psychological Measurement*,
+  77(2), 185--203.
+- Drton, M. (2009). Likelihood ratio tests and singularities. *The Annals of
+  Statistics*, 37(2), 979--1012.
+- Serfling, R. J. (1980). *Approximation Theorems of Mathematical Statistics*.
+  Wiley.
+- van der Vaart, A. W. (1998). *Asymptotic Statistics*. Cambridge University
+  Press.
