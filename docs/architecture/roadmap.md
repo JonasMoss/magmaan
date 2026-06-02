@@ -127,6 +127,11 @@ golden `parTable()` fixtures.
   `Information::Observed` ≈ robust.huber.white/MLR), single group; reduces to the
   ordinary statistic exactly under the model-implied Γ_NT meat (Expected bread).
   Friendly entries under `api::frontier::{modification_indices,score_tests}_robust`.
+  Validated four ways (lavaan implements no robust score test to diff against):
+  exact reduction-to-NT, independent A1/B1 re-assembly, an R-internals oracle
+  built from lavaan's delta/wls.v/gamma/ceq.JAC (`regen_robust_score.R`,
+  convention-free θ-space scaling), and an advisory calibration + Wald/LRT-trinity
+  simulation (`tests/checks/robust_score/`).
 - Observed-bread robust SEs and observed-Hessian U-factors use total-N scaling
   and work on block-stacked multi-block covariance and mean-structure models.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand

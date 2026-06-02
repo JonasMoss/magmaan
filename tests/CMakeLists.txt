@@ -135,6 +135,7 @@ magmaan_add_test_target(magmaan_test_inference inference
   unit/weighted_chisq_test.cpp
   golden/inference_golden_test.cpp
   golden/score_golden_test.cpp
+  golden/score_robust_golden_test.cpp
   golden/observed_inference_golden_test.cpp
   golden/multigroup_inference_golden_test.cpp
   golden/fit_measures_golden_test.cpp
