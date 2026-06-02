@@ -18,16 +18,26 @@ current experiment summary.
 
 ## Speed
 
-`magmaan` fits SEM models orders of magnitue faster than `lavaan`.
+`magmaan` fits SEM models orders of magnitude faster than `lavaan` on many
+fit-heavy workloads.
 
 | Model                                        | Estimator | lavaan ms | magmaan ms | Speedup |
 | -------------------------------------------- | --------- | --------: | ---------: | ------: |
 | Latent state-trait (Geiser 2013)             | ML        |     103.7 |       1.28 |    103× |
 | Latent state strict invariance (Geiser 2013) | ML        |      34.6 |       0.63 |     80× |
 | Three-factor CFA (Geiser 2013)               | ML        |      32.6 |       0.73 |     73× |
-| HS 3-factor CFA                              | ULS       |      31.2 |       0.78 |     40× |
-| HS 3-factor CFA (masked)                     | FIML      |      59.4 |       1.53 |     39× |
-| Bollen democracy SEM                         | ML        |      33.8 |       1.49 |     23× |
+| HS 3-factor CFA                              | ULS       |      23.9 |       0.70 |     34× |
+| HS 3-factor CFA (masked)                     | FIML      |      40.7 |       1.70 |     24× |
+| Bollen democracy SEM                         | ML        |      26.7 |       1.90 |     14× |
+
+Small whole-pipeline smoke rows, including raw-data statistic construction and
+selected post-fit reporting:
+
+| Workflow                         | Estimator   | Data path                | lavaan ms | magmaan ms | Speedup |
+| -------------------------------- | ----------- | ------------------------ | --------: | ---------: | ------: |
+| HS 3-factor CFA robust report    | ML + UGamma | raw continuous           |      32.0 |        2.0 |     16× |
+| Ordinal CFA robust report        | DWLS        | all ordinal              |      46.0 |       18.0 |    2.6× |
+| Mixed ordinal/continuous CFA fit | DWLS        | 2 ordinal + 2 continuous |      48.5 |       12.5 |    3.9× |
 
 See the
 [magmaan vs lavaan speed benchmark report](experiments/05-lavaan-speed-bench/report.md)

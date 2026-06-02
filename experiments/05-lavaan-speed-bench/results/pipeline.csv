@@ -1,0 +1,4 @@
+"pipeline_id","label","estimator","data_path","n_obs","n_vars","includes","lavaan_ms_median","magmaan_ms_median","speedup","check_value","iterations"
+"hs_ml_ugamma_robust","HS 3-factor CFA robust report","ML + UGamma","raw continuous",301,9,"sample stats, ML fit, UGamma spectra, SB test, robust SE",31.9999999999965,2.00000000000244,15.9999999999787,1.83491457192986e-05,30
+"ordinal_dwls_polychoric_robust","Ordinal CFA robust report","DWLS","all ordinal",360,4,"polychorics, NACOV/weights, DWLS fit, robust ordinal SE/test",46.0000000000065,18.0000000000007,2.55555555555582,0.00872626024678169,30
+"mixed_dwls_polyserial","Mixed ordinal/continuous CFA","DWLS","2 ordinal + 2 continuous",360,4,"thresholds, polyserial/polychoric moments, DWLS fit",48.4999999999971,12.4999999999957,3.88000000000109,0,30

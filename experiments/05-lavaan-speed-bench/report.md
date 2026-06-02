@@ -1,16 +1,19 @@
 # magmaan vs lavaan: speed bench
 
 
-How fast is magmaan compared to lavaan on the same models? Two
+How fast is magmaan compared to lavaan on the same models? Three
 complementary slices below: a *headline* slice on five real published
-latent-variable models from Geiser (2013), and a small *zoo* slice on
+latent-variable models from Geiser (2013), a small *zoo* slice on
 classic lavaan tutorial models that the benchmark harness already
-validates against the lavaan oracle.
+validates against the lavaan oracle, and a whole-pipeline slice that
+includes raw-data statistic construction and selected post-fit
+reporting.
 
-Both slices time **estimate-only** workloads (`se = "none"`,
-`test = "none"` in lavaan) at **single-threaded** BLAS / OpenMP.
-Magmaan’s free-parameter estimates agree with the lavaan oracle to
-better than `1e-3` (max absolute) on every case shown.
+The headline and zoo slices time **estimate-only** workloads
+(`se = "none"`, `test = "none"` in lavaan) at **single-threaded** BLAS /
+OpenMP. The pipeline slice times broader calls: UGamma robust reporting,
+all-ordinal DWLS with polychorics, and mixed ordinal/continuous DWLS
+with polyserial moments.
 
 ## Headline: Geiser (2013) corpus
 
@@ -45,28 +48,54 @@ Speedup = `lavaan_ms_median / magmaan_ms_median`.
 
 | Model | Estimator | n | Obs vars | Params | Lavaan ms | magmaan ms | Speedup | Max \|Δθ\| |
 |:---|:---|---:|---:|---:|---:|---:|---:|---:|
-| Holzinger-Swineford 3-factor CFA | ML | 301 | 9 | 21 | 20.780 | 0.782 | 26.6× | 9.5e-07 |
-| Holzinger-Swineford 3-factor CFA (masked) | FIML | 301 | 9 | 30 | 59.401 | 1.528 | 38.9× | 1.8e-06 |
-| Holzinger-Swineford 3-factor CFA | ULS | 301 | 9 | 21 | 31.248 | 0.778 | 40.2× | 3.8e-03 |
-| Holzinger-Swineford 3-factor CFA | GLS | 301 | 9 | 21 | 34.688 | 0.892 | 38.9× | 3.5e-03 |
-| Bollen democracy SEM | ML | 75 | 11 | 31 | 33.778 | 1.493 | 22.6× | 2.0e-05 |
-| Demo.growth linear LGC | ML | 400 | 10 | 17 | 38.564 | 3.432 | 11.2× | 6.7e-07 |
+| Holzinger-Swineford 3-factor CFA | ML | 301 | 9 | 21 | 16.900 | 0.700 | 24.1× | 9.5e-07 |
+| Holzinger-Swineford 3-factor CFA (masked) | FIML | 301 | 9 | 30 | 40.700 | 1.700 | 23.9× | 1.8e-06 |
+| Holzinger-Swineford 3-factor CFA | ULS | 301 | 9 | 21 | 23.850 | 0.700 | 34.1× | 3.8e-03 |
+| Holzinger-Swineford 3-factor CFA | GLS | 301 | 9 | 21 | 22.400 | 0.900 | 24.9× | 3.5e-03 |
+| Bollen democracy SEM | ML | 75 | 11 | 31 | 26.650 | 1.900 | 14.0× | 2.0e-05 |
+| Demo.growth linear LGC | ML | 400 | 10 | 17 | 26.550 | 1.400 | 19.0× | 6.7e-07 |
+
+## Whole-pipeline smoke
+
+These rows are deliberately small. They ask whether the README headline
+still has a representative path beyond continuous estimate-only fitting:
+raw data are converted to the required sample statistics, the model is
+fit, and the named post-fit report is materialized where magmaan exposes
+one.
+
+| Workflow | Estimator | Data Path | n | Obs vars | Lavaan ms | magmaan ms | Speedup | Check |
+|:---|:---|:---|---:|---:|---:|---:|---:|---:|
+| HS 3-factor CFA robust report | ML + UGamma | raw continuous | 301 | 9 | 32.000 | 2.000 | 16.0× | 1.8e-05 |
+| Ordinal CFA robust report | DWLS | all ordinal | 360 | 4 | 46.000 | 18.000 | 2.6× | 0.0087 |
+| Mixed ordinal/continuous CFA | DWLS | 2 ordinal + 2 continuous | 360 | 4 | 48.500 | 12.500 | 3.9× | 0 |
+
+The `Check` column is the row-specific parity smoke: scaled
+chi-square/scale factor drift for the ML UGamma row, unscaled chi-square
+drift for the ordinal DWLS row, and free-parameter-count drift for the
+mixed row.
 
 ## Methodology
 
 - **Estimate-only**: magmaan via `magmaan::magmaan()`; lavaan with
   `se = "none"`, `test = "none"`. The post-fit machinery (standard
   errors, test statistics, fit indices) is excluded — both libraries are
-  timed on the *core fit loop*.
+  timed on the *core fit loop* in the headline and zoo slices only.
+- **Whole-pipeline**: the smoke rows include raw-data statistic
+  construction and the named reporting path. The ML row includes UGamma
+  spectra, Satorra-Bentler scaling, and robust SEs; the ordinal row
+  includes polychorics, NACOV/weights, DWLS, and robust ordinal
+  reporting; the mixed row includes threshold/polyserial/polychoric
+  moment construction and DWLS fit.
 - **Single-threaded**: `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, and
   `MKL_NUM_THREADS` are set to `1` before R loads BLAS. The
   Geiser-corpus numbers were produced with the same protocol; see
   `papers/snlls-constrained`.
-- **Iterations**: 30 per case via `bench::mark`. Times are medians.
+- **Iterations**: 30 per case. Times are medians of repeated
+  elapsed-time measurements.
 - **Correctness gate**: each zoo case’s magmaan estimates must agree
   with the lavaan oracle to `1e-3` (max absolute over free parameters)
-  before timing is reported. The harness that enforces this is
-  `benchmarks/r/run_benchmark.R`.
+  before timing is reported. The pipeline rows use the row-specific
+  smoke check shown in the table.
 
 ## Reproduce
 
