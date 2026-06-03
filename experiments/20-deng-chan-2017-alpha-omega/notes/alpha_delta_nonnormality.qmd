@@ -1,0 +1,231 @@
+---
+title: "Delta-method nonnormality diagnostics for coefficient alpha"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Purpose
+
+This note records a cheap asymptotic diagnostic for the simulation design. The
+main alpha-omega note needs nonnormal cells, but verbal claims such as
+"residual kurtosis matters more than latent kurtosis" are too vague to use as a
+design principle. For coefficient alpha, the first-order delta method gives a
+direct population-level decomposition of where nonnormality enters.
+
+The useful object is the asymptotic covariance matrix
+
+$$
+\Gamma = \operatorname{Var}\{\sqrt n\,\operatorname{vech}(S-\Sigma)\}.
+$$
+
+For alpha, every normality or nonnormality effect is a projection of this
+matrix onto one influence direction. This makes it possible to inspect a
+population before simulating it.
+
+## Alpha as a covariance functional
+
+Let
+
+$$
+\alpha(\Sigma)
+= c\left(1-\frac{\operatorname{tr}(\Sigma)}
+{\mathbf 1^\top \Sigma \mathbf 1}\right),
+\qquad
+c=\frac{p}{p-1}.
+$$
+
+Write
+
+$$
+T=\operatorname{tr}(\Sigma),
+\qquad
+V=\mathbf 1^\top\Sigma\mathbf 1,
+\qquad
+r=T/V.
+$$
+
+For a small symmetric perturbation \(d\Sigma\),
+
+$$
+d\alpha = \operatorname{tr}(B\,d\Sigma),
+\qquad
+B=\frac{c}{V}\{r\,\mathbf 1\mathbf 1^\top-I\}.
+$$
+
+Thus the influence function of sample alpha is
+
+$$
+\operatorname{IF}_\alpha(x)
+= \operatorname{tr}\{B(xx^\top-\Sigma)\},
+$$
+
+and
+
+$$
+\sqrt n\{\hat\alpha-\alpha(\Sigma)\}
+\Rightarrow
+N\{0,\operatorname{Var}[\operatorname{IF}_\alpha(X)]\}.
+$$
+
+Equivalently, if \(b=\operatorname{vech}(B)\) is represented in the same
+lower-triangular convention as \(\Gamma\), with off-diagonal weights handled
+consistently, then
+
+$$
+\operatorname{avar}(\hat\alpha) = b^\top\Gamma b.
+$$
+
+This is the first diagnostic to compute for each simulation population.
+
+## Independent-source factor model
+
+For the ordinary one-factor congeneric model,
+
+$$
+X=\lambda\eta+\epsilon,
+\qquad
+\Sigma=\lambda\lambda^\top+\operatorname{diag}(\psi),
+$$
+
+assume \(\eta\) and the residual components
+\(\epsilon_1,\ldots,\epsilon_p\) are mutually independent, have mean zero, and
+have variances \(1,\psi_1,\ldots,\psi_p\). Let \(\kappa_\eta\) be the excess
+kurtosis of the standardized latent factor, and let \(\kappa_{\epsilon j}\) be
+the excess kurtosis of standardized residual \(j\).
+
+Then the fourth-moment covariance of \(S\) decomposes as
+
+$$
+\Gamma
+= \Gamma_{\mathrm{NT}}(\Sigma)
++ \kappa_\eta\,
+  \operatorname{vech}(\lambda\lambda^\top)
+  \operatorname{vech}(\lambda\lambda^\top)^\top
++ \sum_{j=1}^p \kappa_{\epsilon j}\,
+  \psi_j^2
+  \operatorname{vech}(E_{jj})
+  \operatorname{vech}(E_{jj})^\top ,
+$$
+
+with the same vech weighting convention used by the implementation. Projecting
+onto alpha gives
+
+$$
+\operatorname{avar}(\hat\alpha)
+= 2\operatorname{tr}(B\Sigma B\Sigma)
++ \kappa_\eta(\lambda^\top B\lambda)^2
++ \sum_{j=1}^p \kappa_{\epsilon j}(\psi_j B_{jj})^2.
+$$
+
+The three terms have a simple interpretation:
+
+- \(2\operatorname{tr}(B\Sigma B\Sigma)\): normal-theory contribution.
+- \(\kappa_\eta(\lambda^\top B\lambda)^2\): latent-kurtosis increment.
+- \(\sum_j \kappa_{\epsilon j}(\psi_j B_{jj})^2\): residual-kurtosis increment.
+
+So the latent-versus-error question is not a general verbal rule. It is a
+projection question: which fourth-moment directions line up more strongly with
+the alpha influence direction \(B\)?
+
+## Tau-equivalent simplification
+
+The tau-equivalent unit-variance case gives a useful check on intuition. Let
+
+$$
+\lambda_j^2=q,\qquad
+\psi_j=1-q,\qquad
+D=1+(p-1)q.
+$$
+
+Then
+
+$$
+\lambda^\top B\lambda
+= \frac{p q(1-q)}{D^2},
+\qquad
+\psi_j B_{jj}
+= -\frac{q(1-q)}{D^2}.
+$$
+
+If the latent factor and all residuals have the same excess kurtosis
+\(\kappa\), then
+
+$$
+\text{latent increment}
+= \kappa\,p^2 A,
+\qquad
+\text{aggregate residual increment}
+= \kappa\,p A,
+$$
+
+where
+
+$$
+A=\frac{q^2(1-q)^2}{D^4}.
+$$
+
+In this clean tau-equivalent model, latent kurtosis contributes \(p\) times as
+much as the aggregate residual-kurtosis term when excess kurtoses are equal.
+This cuts against a blanket claim that residual kurtosis is generally more
+important for alpha. Residual kurtosis can dominate only if its excess kurtosis
+or its projection terms are sufficiently larger.
+
+## Dependent but uncorrelated sources
+
+The decomposition above uses mutual independence. That assumption is doing real
+work. If the latent factor and residuals, or different residuals, are dependent
+but uncorrelated, the covariance model
+
+$$
+\Sigma=\lambda\lambda^\top+\operatorname{diag}(\psi)
+$$
+
+can still hold, but \(\Gamma\) gains mixed fourth-cumulant terms. The alpha
+variance remains
+
+$$
+\operatorname{avar}(\hat\alpha)
+= \operatorname{Var}\{\operatorname{tr}[B(XX^\top-\Sigma)]\},
+$$
+
+but it no longer separates cleanly into one latent-kurtosis term plus \(p\)
+residual-kurtosis terms. Cross terms such as
+\(\operatorname{cum}(\eta,\eta,\epsilon_j,\epsilon_k)\) and
+\(\operatorname{cum}(\epsilon_i,\epsilon_j,\epsilon_k,\epsilon_l)\) may enter.
+
+This is a possible robustness stress design, but it is not the clean default
+for the alpha-omega paper. Most reliability simulations that discuss "latent"
+or "error" nonnormality are easier to interpret as independent-source designs:
+make the common factor nonnormal, make residuals nonnormal, or make both
+nonnormal while preserving the same covariance model.
+
+Correlated residuals are a different and more standard SEM misspecification:
+they change \(\Sigma\) itself by adding off-diagonal residual covariance. Those
+belong in the non-congeneric/misspecified-model simulation block, not in the
+independent-source kurtosis decomposition.
+
+## Simulation-design implication
+
+For the main paper, the recommended split is:
+
+1. Keep the main congeneric cells as independent-source factor models. They are
+   mathematically transparent, and the normal versus nonnormal contrast is
+   explainable through \(\Gamma\).
+2. Add a small asymptotic diagnostic table for selected populations:
+   normal-theory alpha variance, latent-kurtosis increment, residual-kurtosis
+   increment, and their proportions.
+3. Treat correlated residuals, minor factors, and two-factor populations as
+   model-misspecification cells. They answer a different question: whether
+   reliability-gap tests and structural tau-equivalence tests diverge when the
+   fitted one-factor model is false.
+4. Leave dependent-but-uncorrelated sources out of the first paper unless a
+   specific literature design requires them. They are mathematically possible,
+   but they obscure the main point and require mixed fourth-cumulant
+   bookkeeping rather than the simple low-rank \(\Gamma\) decomposition above.
+
