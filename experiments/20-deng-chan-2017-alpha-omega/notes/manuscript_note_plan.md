@@ -52,6 +52,10 @@ an appendix for the Taylor expansion and Imhof construction.
 - Asymptotics: if sqrt(n)(s_hat - s0) converges to N(0, Gamma) and the gradient
   of d(s) = omega(s) - alpha(s) is zero, then
   n d(s_hat) converges to 0.5 Z' H Z.
+- Nonnormality diagnostics: `alpha_delta_nonnormality.qmd` records the
+  first-order delta-method decomposition for coefficient alpha, separating the
+  normal-theory, latent-kurtosis, and residual-kurtosis contributions under an
+  independent-source congeneric model.
 - Deng statistic: the estimated first-order SE is also O(1 / n), producing a
   non-pivotal ratio rather than N(0, 1).
 - Computation: estimate H and Gamma under the null, eigendecompose the
