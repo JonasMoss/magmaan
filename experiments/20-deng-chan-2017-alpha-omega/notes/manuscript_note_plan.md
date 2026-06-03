@@ -63,6 +63,9 @@ an appendix for the Taylor expansion and Imhof construction.
 - Validation: alpha equals the omega from a ULS tau-equivalent fit; the
   first-order sandwich SE agrees with a nonparametric bootstrap away from the
   null; the null diagnostic shows SD(omega - alpha) scales as 1 / N.
+  `alpha_uls_identity.md` records the exact statement, the two-line proof
+  (tau-equivalent and parallel), why it is ULS and not ML, and the citation
+  provenance for the identity.
 
 ## Citation audit status
 
