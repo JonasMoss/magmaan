@@ -154,6 +154,34 @@ knitr::kable(dd, digits = demo_digits, row.names = FALSE,
   caption = "Holzinger-Swineford subscales. On textual and speed the structural tests flag non-tau-equivalence while the reliability gap is a few thousandths; visual+textual is deliberately two-dimensional.")
 ```
 
+## Proposed Expanded Study
+
+The next simulation pass should separate three questions that are easy to
+confound. First, exact tau-equivalent populations test calibration at the null,
+crossing item count, sample size, and reliability level. Second, congeneric
+one-factor populations test power against unequal loadings while the covariance
+model remains correct. Third, minor-factor and correlated-residual populations
+ask what happens when the fitted one-factor model is false; these cells are not
+just stronger congeneric alternatives, because the structural tests and the
+scalar reliability-gap tests answer different questions under misspecification.
+
+The R support code now sketches this design in
+`R/populations.R`. `proposed_study_grid()` returns a candidate grid over
+$p\in\{4,6,12\}$, $N\in\{100,250,500,1000\}$, tau reliabilities
+$.55/.70/.85$, several congeneric loading patterns, and distribution regimes
+`normal`, `latent_chisq`, `error_chisq`, `all_chisq`, and
+`paired_quadratic_residuals`. The paired-quadratic residual condition keeps the
+SEM covariance model tau-equivalent or congeneric, but makes residuals
+nonlinearly dependent within pairs while preserving zero residual covariance;
+it is a fourth-moment stress test, not a correlated-residual misspecification.
+
+For motivation, `alpha_avar_components()` computes the first-order
+delta-method variance decomposition for coefficient alpha: normal-theory,
+latent-kurtosis, residual-kurtosis, and paired-dependence increments. This lets
+the paper report whether nonnormality matters through the common factor, the
+residuals, or nonlinear residual dependence before relying on Monte Carlo
+rejection rates.
+
 ## Caveats
 
 - **What this establishes.** The non-regularity (diagnostic + derivation), an
