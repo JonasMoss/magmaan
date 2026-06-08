@@ -16,6 +16,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/estimate/fiml.hpp"
+#include "magmaan/robust/robust.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/optim/problem.hpp"
@@ -437,6 +438,89 @@ TEST_CASE("fiml_robust_mlr: multi-block H1 trace handles unequal row counts") {
   CHECK(std::isfinite(rob->trace_ugamma));
   CHECK(std::isfinite(rob->scaling_factor));
   CHECK(std::isfinite(rob->chisq_scaled));
+}
+
+TEST_CASE("fiml_ugamma_spectrum: complete data matches the unstructured robust spectrum") {
+  // The first-principles FIML UΓ spectrum (V = saturated info, Γ = H⁻¹JH⁻¹) must,
+  // on complete data, reproduce the complete-data UNSTRUCTURED robust spectrum
+  // eig(U·Γ̂) with U built from the sample-moment (unstructured) weight — the
+  // h1.information = "unstructured" convention that is natural for FIML's EM
+  // saturated model. (Validated against lavaan's unstructured UGamma in the R
+  // example; this is the lavaan-free C++ guard.)
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4 + x5");
+  const Eigen::Index nfree = static_cast<Eigen::Index>(built.ev.n_free());
+  Eigen::VectorXd theta0(nfree);
+  theta0.setConstant(0.6);
+  auto truth = built.ev.sigma(theta0);
+  REQUIRE(truth.has_value());
+  Eigen::LLT<Eigen::MatrixXd> llt(truth->sigma[0]);
+  REQUIRE(llt.info() == Eigen::Success);
+  const Eigen::MatrixXd L = llt.matrixL();
+  const Eigen::Index p = truth->sigma[0].rows();
+  Eigen::MatrixXd Z = deterministic_z(220, p);
+  magmaan::data::RawData raw;
+  raw.X.push_back((Z * L.transpose()).rowwise() + truth->mu[0].transpose());
+
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 500;
+  auto est = magmaan::estimate::fit_fiml(*built.pt, *built.rep, raw, theta0,
+                                         magmaan::estimate::fiml::FIML{},
+                                         magmaan::estimate::Backend::NloptLbfgs,
+                                         opts);
+  REQUIRE(est.has_value());
+  auto fx = magmaan::estimate::fiml::fiml_extras(*built.pt, *built.rep, raw, *est);
+  REQUIRE(fx.has_value());
+
+  // df = saturated moments (means + vech) − free params, single group.
+  const int df = static_cast<int>(p + p * (p + 1) / 2 - nfree);
+  auto sp = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      *built.pt, *built.rep, raw, *est, df, fx->chi2);
+  REQUIRE_MESSAGE(sp.has_value(),
+      "fiml_ugamma_spectrum failed: " << (sp.has_value() ? "" : sp.error().detail));
+
+  // Contract.
+  CHECK(sp->df == df);
+  CHECK(sp->eigvals.size() == df);
+  CHECK(sp->eigvals.allFinite());
+  CHECK(sp->eigvals.minCoeff() > 0.0);
+  CHECK(sp->chi2_lrt == doctest::Approx(fx->chi2));
+  CHECK(sp->trace_xcheck == doctest::Approx(sp->eigvals.sum()));
+
+  // Reference: complete-data unstructured robust spectrum eig(U·Γ̂).
+  auto uf = magmaan::robust::build_u_factor(
+      *built.pt, *built.rep, *samp, *est,
+      magmaan::robust::InferenceSpec{
+          magmaan::robust::Information::Expected,
+          magmaan::robust::WeightMoments::Unstructured,
+          magmaan::robust::ScoreCovariance::Empirical});
+  REQUIRE(uf.has_value());
+  auto Zc = magmaan::robust::casewise_contributions(raw, *samp, /*include_means=*/true);
+  REQUIRE(Zc.has_value());
+  auto M = magmaan::robust::reduced_gamma_sample(
+      *uf, *Zc, static_cast<double>(raw.X[0].rows()));
+  REQUIRE(M.has_value());
+  auto ev_ref = magmaan::robust::ugamma_eigenvalues(*M);
+  REQUIRE(ev_ref.has_value());
+  REQUIRE(static_cast<int>(uf->df) == df);
+
+  Eigen::VectorXd a = sp->eigvals;          // ascending
+  Eigen::VectorXd b = ev_ref->tail(df);     // top-df, ascending
+  CHECK((a - b).cwiseAbs().maxCoeff() < 1e-6);
+}
+
+TEST_CASE("fiml_ugamma_spectrum: rejects bad arguments") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3");
+  magmaan::data::RawData raw;
+  raw.X.push_back(deterministic_z(40, 3));
+  magmaan::estimate::Estimates est;
+  est.theta = Eigen::VectorXd::Constant(
+      static_cast<Eigen::Index>(built.ev.n_free()), 0.5);
+  auto bad_df = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      *built.pt, *built.rep, raw, est, /*df=*/0, /*chi2_lrt=*/1.0);
+  CHECK_FALSE(bad_df.has_value());
 }
 
 TEST_CASE("fiml_baseline_chi2: missing data produces finite baseline") {

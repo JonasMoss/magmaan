@@ -175,8 +175,20 @@ golden `parTable()` fixtures.
   `fit_ml(model, df_to_data(...))` retain listwise-complete raw blocks in
   `fit$raw_data`, so FMG no longer requires a separate raw-data argument in the
   normal fit workflow. The fused C++ spectra primitive supports complete-data
-  single- and multi-group ML, including mean structures; FIML/missing-data FMG
-  is still rejected until an observed-pattern spectra/sandwich route is defined.
+  single- and multi-group ML, including mean structures. FIML/missing-data fits
+  are also supported (`fmg_tests()` accepts a `fit_fiml()` /
+  `magmaan(..., estimator = "FIML")` fit, single- or multi-group): the
+  missing-data UGamma spectrum is built first-principles by
+  `estimate::fiml::fiml_ugamma_spectrum` from the saturated-model EM information
+  `V = H` and the saturated-moment ACOV `Gamma_mis = H^-1 J H^-1`
+  (`saturated_em_moments`), via `U = V - V Delta (Delta' V Delta)^-1 Delta' V` and
+  the df eigenvalues of `U Gamma_mis`, with the FIML LRT as the base statistic.
+  This is the `h1.information = "unstructured"` convention natural to FIML's EM
+  saturated model: on complete data it reproduces lavaan's unstructured UGamma
+  spectrum element-for-element (~1e-7), validated in `examples/fmg.R`. semTests'
+  rescale-the-mis-normalized-lavInspect-UGamma FIML hack is unsound and is
+  deliberately NOT matched. Under FIML only the biased Gamma-hat and the ML base
+  are defined; `_ug` and `_rls` are rejected.
   The helper computes biased and optional Browne/Du-Bentler unbiased U-Gamma
   spectra through C++, keeping the U-factor, tiled casewise-contribution
   projection, grouped reduced matrices, and eigensolves out of R list

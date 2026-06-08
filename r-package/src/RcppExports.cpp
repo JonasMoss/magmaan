@@ -817,6 +817,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_fiml_fmg_spectrum
+Rcpp::List infer_fiml_fmg_spectrum(Rcpp::List fit, double h_step);
+RcppExport SEXP _magmaan_infer_fiml_fmg_spectrum(SEXP fitSEXP, SEXP h_stepSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< double >::type h_step(h_stepSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_fiml_fmg_spectrum(fit, h_step));
+    return rcpp_result_gen;
+END_RCPP
+}
 // measures_standardize_lv
 Rcpp::List measures_standardize_lv(Rcpp::List fit, Rcpp::NumericMatrix vcov);
 RcppExport SEXP _magmaan_measures_standardize_lv(SEXP fitSEXP, SEXP vcovSEXP) {
@@ -1773,6 +1785,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_baseline", (DL_FUNC) &_magmaan_infer_baseline, 1},
     {"_magmaan_measures_fit", (DL_FUNC) &_magmaan_measures_fit, 4},
     {"_magmaan_estimate_fiml_robust_mlr", (DL_FUNC) &_magmaan_estimate_fiml_robust_mlr, 2},
+    {"_magmaan_infer_fiml_fmg_spectrum", (DL_FUNC) &_magmaan_infer_fiml_fmg_spectrum, 2},
     {"_magmaan_measures_standardize_lv", (DL_FUNC) &_magmaan_measures_standardize_lv, 2},
     {"_magmaan_measures_standardize_all", (DL_FUNC) &_magmaan_measures_standardize_all, 2},
     {"_magmaan_measures_composite_weights", (DL_FUNC) &_magmaan_measures_composite_weights, 2},

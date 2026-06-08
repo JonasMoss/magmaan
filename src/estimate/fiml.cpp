@@ -1604,6 +1604,157 @@ fiml_robust_mlr(spec::LatentStructure pt,
   return out;
 }
 
+post_expected<FIMLUGammaSpectrum>
+fiml_ugamma_spectrum(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const RawData& raw,
+                     const Estimates& est,
+                     int df,
+                     double chi2_lrt,
+                     FIML discrepancy,
+                     double h_step) {
+  if (df <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_ugamma_spectrum: requires df > 0"));
+  }
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_ugamma_spectrum: h_step must be > 0"));
+  }
+  (void)discrepancy;  // saturated_em_moments builds its own FIML{}; kept for API symmetry
+
+  // (1) Saturated-moment ingredients (block-diagonal η-space, multi-group safe):
+  //     V = H (saturated observed information), Γ_mis = acov = H⁻¹ J H⁻¹.
+  auto sm_or = saturated_em_moments(raw, h_step);
+  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+  const SaturatedMoments& sm = *sm_or;
+  const Eigen::MatrixXd& V = sm.H;
+  const Eigen::MatrixXd& G = sm.acov;
+  const Eigen::Index Q = V.rows();
+
+  // (2) Model Jacobian Δ = ∂[μ(θ); vech Σ(θ)]/∂θ at θ̂ (mirror the
+  //     fiml_robust_mlr evaluator/fixed.x preamble).
+  auto start_samp_or = fiml_start_sample_stats(raw);
+  if (!start_samp_or.has_value()) {
+    return std::unexpected(fit_to_post(start_samp_or.error(),
+        "fiml_start_sample_stats"));
+  }
+  SampleStats start_samp = std::move(*start_samp_or);
+  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(),
+        "validate_fiml_fixed_x_missing_policy"));
+  }
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, start_samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(), "resolve_fixed_x_from_sample"));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_ugamma_spectrum: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  const auto& ev = *ev_or;
+  if (static_cast<std::size_t>(est.theta.size()) != ev.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_ugamma_spectrum: theta size mismatch"));
+  }
+  auto eval_or = ev.evaluate(est.theta, /*with_sigma_jacobian=*/true,
+                             /*with_mu_jacobian=*/true);
+  if (!eval_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_ugamma_spectrum: ModelEvaluator::evaluate failed: " +
+            eval_or.error().detail));
+  }
+  const Eigen::MatrixXd& Js = eval_or->J_sigma;  // (Σ p*_b) × q, σ-blocks stacked
+  const Eigen::MatrixXd& Jm = eval_or->J_mu;     // (Σ p_b)  × q, or 0×0
+  const Eigen::Index qpar = static_cast<Eigen::Index>(ev.n_free());
+  const bool has_mu = Jm.rows() > 0;
+
+  // (3) Interleave J_mu / J_sigma into the saturated η-layout
+  //     [μ_1; vech Σ_1; μ_2; vech Σ_2; …] to match V / Γ_mis.
+  Eigen::MatrixXd Delta = Eigen::MatrixXd::Zero(Q, qpar);
+  const std::size_t B = raw.X.size();
+  Eigen::Index eta_off = 0, mu_off = 0, sig_off = 0;
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index p = raw.X[b].cols();
+    const Eigen::Index ps = p * (p + 1) / 2;
+    if (has_mu) Delta.block(eta_off, 0, p, qpar) = Jm.block(mu_off, 0, p, qpar);
+    Delta.block(eta_off + p, 0, ps, qpar) = Js.block(sig_off, 0, ps, qpar);
+    eta_off += p + ps;
+    mu_off += p;
+    sig_off += ps;
+  }
+  if (eta_off != Q) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_ugamma_spectrum: assembled Δ rows (" + std::to_string(eta_off) +
+            ") != saturated dim (" + std::to_string(Q) + ")"));
+  }
+
+  // Equality constraints: Δ ← Δ·K (collapse to the α-reparameterization).
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  if (con_or->active()) Delta = (Delta * con_or->K()).eval();
+
+  // (4) Residual projector in the V-metric: U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV (rank df).
+  const Eigen::MatrixXd VD = V * Delta;
+  Eigen::MatrixXd DtVD = Delta.transpose() * VD;
+  DtVD = (0.5 * (DtVD + DtVD.transpose())).eval();
+  auto DtVDinv_or = invert_symmetric(DtVD, "fiml_ugamma_spectrum: ΔᵀVΔ");
+  if (!DtVDinv_or.has_value()) return std::unexpected(DtVDinv_or.error());
+  Eigen::MatrixXd U = V - VD * (*DtVDinv_or) * VD.transpose();
+  U = (0.5 * (U + U.transpose())).eval();
+
+  // (5) Eigenvalues of the non-symmetric U·Γ_mis via the symmetric reduction
+  //     RᵀUR with Γ_mis = R Rᵀ (Γ_mis is symmetric PSD); eig(RᵀUR) = eig(U·Γ).
+  Eigen::MatrixXd reduced;
+  {
+    const Eigen::MatrixXd Gs = 0.5 * (G + G.transpose());
+    Eigen::LLT<Eigen::MatrixXd> llt(Gs);
+    if (llt.info() == Eigen::Success) {
+      const Eigen::MatrixXd R = llt.matrixL();
+      reduced = R.transpose() * U * R;
+    } else {
+      Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es_g(Gs);
+      const Eigen::VectorXd d = es_g.eigenvalues().cwiseMax(0.0).cwiseSqrt();
+      const Eigen::MatrixXd sq =
+          es_g.eigenvectors() * d.asDiagonal() * es_g.eigenvectors().transpose();
+      reduced = sq * U * sq;
+    }
+    reduced = (0.5 * (reduced + reduced.transpose())).eval();
+  }
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(reduced,
+                                                    Eigen::EigenvaluesOnly);
+  if (es.info() != Eigen::Success) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_ugamma_spectrum: eigen-solve failed"));
+  }
+  const Eigen::VectorXd all = es.eigenvalues();  // Q ascending
+  if (static_cast<Eigen::Index>(df) > all.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_ugamma_spectrum: df exceeds spectrum size"));
+  }
+
+  FIMLUGammaSpectrum out;
+  out.df = df;
+  out.chi2_lrt = chi2_lrt;
+  out.eigvals = all.tail(df);  // top-df nonzero eigenvalues, ascending
+  out.trace_xcheck = out.eigvals.sum();
+
+  // Sanity: the largest projected-out eigenvalue must be ~0 — a non-trivial
+  // value means `df` is inconsistent with the U-rank (layout / df bug).
+  if (Q > static_cast<Eigen::Index>(df)) {
+    const double zero_top = std::abs(all(Q - df - 1));
+    const double scale = std::max(1.0, out.eigvals.cwiseAbs().maxCoeff());
+    if (zero_top > 1e-6 * scale) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fiml_ugamma_spectrum: df=" + std::to_string(df) +
+              " inconsistent with the U·Γ rank (projected-out eigenvalue " +
+              std::to_string(zero_top) + " not ~0)"));
+    }
+  }
+  return out;
+}
+
 namespace {
 
 post_expected<BaselineFit>

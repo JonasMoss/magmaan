@@ -67,6 +67,7 @@
 
   canonical <- paste0(c(label, if (ug) "ug", base), collapse = "_")
   list(input = name, method = method, param = param, ug = ug, base = base,
+       label = label, base_explicit = ("ml" %in% rest) || ("rls" %in% rest),
        canonical = canonical)
 }
 
@@ -229,6 +230,13 @@
          lambdas_reference = res$lambdas_reference)
   })
 
+  .fmg_rows_to_df(rows)
+}
+
+# Assemble the per-test row list into the `magmaan_fmg_tests` data.frame. Shared
+# by the complete-data (`.fmg_result_rows`) and FIML (`.fmg_result_rows_fiml`)
+# paths so the column layout stays identical.
+.fmg_rows_to_df <- function(rows) {
   scalar <- data.frame(
     input = vapply(rows, `[[`, character(1), "input"),
     label = vapply(rows, `[[`, character(1), "label"),
@@ -251,36 +259,120 @@
   scalar
 }
 
+# Is this a FIML / missing-data fit? FIML fits carry $fiml = TRUE, estimator
+# "FIML", and a `magmaan_fiml_data` raw object.
+.fmg_is_fiml <- function(fit) {
+  isTRUE(fit$fiml) || identical(.fmg_fit_estimator(fit), "FIML") ||
+    inherits(fit$raw_data, "magmaan_fiml_data")
+}
+
+.fmg_default_tests_fiml <- function() {
+  c("pEBA4", "pEBA2", "pEBA6", "SB", "SS")
+}
+
+.fmg_resolve_default_tests <- function(fit, tests) {
+  if (!is.null(tests)) return(tests)
+  if (.fmg_is_fiml(fit)) .fmg_default_tests_fiml() else .fmg_default_tests()
+}
+
+# Under FIML only the biased Gamma-hat and the ML (LRT) base statistic are
+# defined; the Du-Bentler unbiased gamma and Browne's RLS statistic require the
+# classical complete-data normal-theory ML case. An *explicit* `_rls`/`_ug` is an
+# error; an unsuffixed (default) base resolves to ML, mirroring semTests' "auto".
+.fmg_adjust_specs_fiml <- function(specs) {
+  lapply(specs, function(s) {
+    if (isTRUE(s$ug)) {
+      stop("fmg_tests(): under FIML only the biased Gamma-hat is supported; the ",
+           "unbiased Du-Bentler Gamma is undefined for missing data (test '",
+           s$input, "').", call. = FALSE)
+    }
+    if (identical(s$base, "rls")) {
+      if (isTRUE(s$base_explicit)) {
+        stop("fmg_tests(): under FIML only the ML (LRT) base statistic is ",
+             "supported; the RLS (browne.residual.nt.model) base requires the ",
+             "classical complete-data normal-theory ML case (test '", s$input,
+             "').", call. = FALSE)
+      }
+      s$base <- "ml"
+      s$canonical <- sub("_rls$", "_ml", s$canonical)
+    }
+    s
+  })
+}
+
+# FIML result rows: the spectrum comes from the first-principles missing-data
+# UGamma path (`infer_fiml_fmg_spectrum`); the base statistic is the FIML LRT.
+.fmg_result_rows_fiml <- function(fit, specs, h_step = 1e-4) {
+  sp <- infer_fiml_fmg_spectrum(fit, h_step)
+  df <- sp$df
+  eigvals <- sp$biased
+  rows <- lapply(specs, function(s) {
+    res <- infer_fmg_test(sp$chi2_lrt, df, eigvals,
+                          method = s$method,
+                          param = .fmg_param_for_cpp(s$param))
+    list(input = s$input,
+         label = s$canonical,
+         p_value = res$p_value,
+         df = res$df,
+         base = "ml",
+         base_statistic = res$chi2_source,
+         method = res$method,
+         param = if (is.na(s$param)) NA_real_ else res$param,
+         ug = FALSE,
+         chi2_equiv = res$chi2_equiv,
+         n_truncated = res$n_truncated,
+         eigenvalues = eigvals,
+         lambdas_raw = res$lambdas_raw,
+         lambdas = res$lambdas,
+         lambdas_reference = res$lambdas_reference)
+  })
+  out <- .fmg_rows_to_df(rows)
+  attr(out, "trace_xcheck") <- sp$trace_xcheck
+  out
+}
+
 #' Foldnes-Moss-Gronneberg goodness-of-fit diagnostics.
 #'
-#' Computes FMG p-values and diagnostics for a complete-data ML
-#' fit. The fit must carry complete raw data, as fits produced from
-#' `magmaan(..., data.frame, estimator = "ML")` or `fit_ml(model,
+#' Computes FMG p-values and diagnostics for a complete-data ML fit or a FIML
+#' (missing-data) fit. Complete-data fits must carry complete raw data, as fits
+#' from `magmaan(..., data.frame, estimator = "ML")` or `fit_ml(model,
 #' df_to_data(...))` do, or callers can pass complete raw `data` explicitly.
-#' FIML/missing-data fits are currently rejected because the fused FMG UGamma
-#' spectra path is complete-data only.
 #'
-#' @param fit A fitted magmaan complete-data ML model.
-#' @param tests Character vector of semTests-style test names. Recognised types:
+#' FIML fits (`fit_fiml()` / `magmaan(..., estimator = "FIML")`, single- or
+#' multi-group) are supported: the missing-data UGamma spectrum is computed
+#' first-principles from the saturated-model EM information and ACOV, with the
+#' FIML LRT as the base statistic. Under FIML only the biased Gamma-hat and the
+#' ML base are defined, so `_ug` and `_rls` are rejected (an unsuffixed base
+#' resolves to ML). This is a principled construction, not a port of semTests'
+#' (unsound) FIML handling.
+#'
+#' @param fit A fitted magmaan ML (complete-data) or FIML model.
+#' @param tests Character vector of semTests-style test names, or `NULL` for the
+#'   recommended defaults (complete-data or FIML-appropriate). Recognised types:
 #'   `std`, `sb`, `ss`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, `pols<gamma>`, each
-#'   optionally suffixed `_ug` and `_ml` / `_rls`.
-#' @param data Optional complete raw data. Usually unnecessary for new fits that
-#'   retain `$raw_data`; kept for sample-stat-only and compatibility workflows.
+#'   optionally suffixed `_ug` and `_ml` / `_rls` (complete-data only).
+#' @param data Optional complete raw data (complete-data fits only). Usually
+#'   unnecessary for new fits that retain `$raw_data`.
 #'
 #' @return A data frame with scalar diagnostics plus list-columns for the raw
 #'   UGamma spectrum and the method-specific lambda vectors.
 #' @export
-fmg_tests <- function(fit, tests = .fmg_default_tests(), data = NULL) {
+fmg_tests <- function(fit, tests = NULL, data = NULL) {
+  tests <- .fmg_resolve_default_tests(fit, tests)
+  specs <- lapply(tests, .fmg_parse_test)
+  if (.fmg_is_fiml(fit)) {
+    if (!is.null(data)) {
+      stop("fmg_tests(): FIML FMG uses the fit's own missing-data raw blocks; ",
+           "the `data` argument is not supported for FIML fits.", call. = FALSE)
+    }
+    specs <- .fmg_adjust_specs_fiml(specs)
+    return(.fmg_result_rows_fiml(fit, specs))
+  }
   estimator <- .fmg_fit_estimator(fit)
   if (!identical(estimator, "ML")) {
     stop("fmg_tests(): FMG currently requires a complete-data ML fit ",
          "(got estimator = '", estimator, "').", call. = FALSE)
   }
-  if (isTRUE(fit$fiml) || inherits(fit$raw_data, "magmaan_fiml_data")) {
-    stop("fmg_tests(): FMG is not available for FIML/missing-data fits; ",
-         "complete-data UGamma spectra are required.", call. = FALSE)
-  }
-  specs <- lapply(tests, .fmg_parse_test)
   X <- .fmg_raw_from_fit_or_data(fit, data, caller = "fmg_tests")
   .fmg_validate_complete_raw(fit, X, caller = "fmg_tests")
   .fmg_result_rows(fit, X, specs)
@@ -301,7 +393,7 @@ fmg_tests <- function(fit, tests = .fmg_default_tests(), data = NULL) {
 #' @return A named numeric vector of p-values; names are the canonical test
 #'   labels (e.g. `peba4_rls`, `sb_ug_rls`), matching `semTests::pvalues()`.
 #' @export
-fmg_pvalues <- function(fit, data = NULL, tests = .fmg_default_tests()) {
+fmg_pvalues <- function(fit, data = NULL, tests = NULL) {
   tab <- fmg_tests(fit, tests = tests, data = data)
   out <- tab$p_value
   names(out) <- tab$label
@@ -336,7 +428,7 @@ fit_measures <- function(fit, baseline = NULL, fmg = NULL, data = NULL) {
     baseline.df = baseline$df
   ), fm)
   if (!is.null(fmg) && !identical(fmg, FALSE)) {
-    tests <- if (isTRUE(fmg)) .fmg_default_tests() else fmg
+    tests <- if (isTRUE(fmg)) NULL else fmg
     out$fmg <- fmg_tests(fit, tests = tests, data = data)
   }
   out
