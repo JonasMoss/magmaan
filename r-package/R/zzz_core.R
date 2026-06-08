@@ -134,6 +134,8 @@ robust_test_moments_both_breads_gamma <- infer_robust_test_moments_both_breads_g
 robust_reduced_gamma_sample_materialized <- infer_reduced_gamma_sample_materialized
 robust_reduced_gamma_unbiased <- infer_reduced_gamma_unbiased
 robust_ugamma_eigenvalues <- infer_ugamma_eigenvalues
+robust_fmg_ugamma_spectra <- infer_fmg_ugamma_spectra
+robust_fmg_test <- infer_fmg_test
 robust_satorra_bentler <- infer_satorra_bentler
 robust_mean_var_adjusted <- infer_mean_var_adjusted
 robust_scaled_shifted <- infer_scaled_shifted
@@ -276,6 +278,8 @@ magmaan_core <- local({
       "robust_reduced_gamma_sample_materialized",
       "robust_reduced_gamma_unbiased",
       "robust_ugamma_eigenvalues",
+      "robust_fmg_ugamma_spectra",
+      "robust_fmg_test",
       "robust_satorra_bentler",
       "robust_mean_var_adjusted",
       "robust_scaled_shifted",

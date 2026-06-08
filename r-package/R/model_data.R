@@ -1060,16 +1060,18 @@ bounds_arg <- function(bounds, model, data = NULL, caller = "fit") {
 fit_ml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                    bounds = NULL) {
   b <- bounds_arg(bounds, model, data, "fit_ml")
-  fit_ml_impl(partable_arg(model), sample_stats_arg(data),
-              optimizer = optimizer, control = control, bounds = b)
+  fit <- fit_ml_impl(partable_arg(model), sample_stats_arg(data),
+                     optimizer = optimizer, control = control, bounds = b)
+  attach_complete_raw_data(fit, data)
 }
 
 # Normal-theory ML via local Fisher scoring. This is a damped expected-
 # information step on the true ML objective, not a frozen GLS inner solve.
 fit_ml_fisher <- function(model, data, control = NULL, bounds = NULL) {
   b <- bounds_arg(bounds, model, data, "fit_ml_fisher")
-  fit_ml_fisher_impl(partable_arg(model), sample_stats_arg(data),
-                     control = control, bounds = b)
+  fit <- fit_ml_fisher_impl(partable_arg(model), sample_stats_arg(data),
+                            control = control, bounds = b)
+  attach_complete_raw_data(fit, data)
 }
 
 # Fisher scoring with local SNLLS-style block elimination: same ML objective
@@ -1077,8 +1079,9 @@ fit_ml_fisher <- function(model, data, control = NULL, bounds = NULL) {
 # the beta/alpha Schur complement.
 fit_ml_fisher_snlls <- function(model, data, control = NULL, bounds = NULL) {
   b <- bounds_arg(bounds, model, data, "fit_ml_fisher_snlls")
-  fit_ml_fisher_snlls_impl(partable_arg(model), sample_stats_arg(data),
-                           control = control, bounds = b)
+  fit <- fit_ml_fisher_snlls_impl(partable_arg(model), sample_stats_arg(data),
+                                  control = control, bounds = b)
+  attach_complete_raw_data(fit, data)
 }
 
 # Normal-theory ML via iteratively reweighted GLS (Fisher scoring). Same
@@ -1094,8 +1097,9 @@ fit_ml_fisher_snlls <- function(model, data, control = NULL, bounds = NULL) {
 fit_ml_irls <- function(model, data, optimizer = "port-nls", control = NULL,
                         bounds = NULL) {
   b <- bounds_arg(bounds, model, data, "fit_ml_irls")
-  fit_ml_irls_impl(partable_arg(model), sample_stats_arg(data),
-                   optimizer = optimizer, control = control, bounds = b)
+  fit <- fit_ml_irls_impl(partable_arg(model), sample_stats_arg(data),
+                          optimizer = optimizer, control = control, bounds = b)
+  attach_complete_raw_data(fit, data)
 }
 
 # SNLLS-flavoured IRLS-ML: outer Fisher reweight on Sigma(theta), inner step
@@ -1105,8 +1109,9 @@ fit_ml_irls <- function(model, data, optimizer = "port-nls", control = NULL,
 fit_ml_irls_snlls <- function(model, data, optimizer = "port-nls",
                               control = NULL, bounds = NULL) {
   b <- bounds_arg(bounds, model, data, "fit_ml_irls_snlls")
-  fit_ml_irls_snlls_impl(partable_arg(model), sample_stats_arg(data),
-                         optimizer = optimizer, control = control, bounds = b)
+  fit <- fit_ml_irls_snlls_impl(partable_arg(model), sample_stats_arg(data),
+                                optimizer = optimizer, control = control, bounds = b)
+  attach_complete_raw_data(fit, data)
 }
 
 frontier_fit_ml_ridge_continuation <- function(
@@ -1136,22 +1141,25 @@ fit_fiml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL) {
 fit_uls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                     bounds = NULL) {
   b <- bounds_arg(bounds, model, data, "fit_uls")
-  fit_uls_impl(partable_arg(model), sample_stats_arg(data),
-               optimizer = optimizer, control = control, bounds = b)
+  fit <- fit_uls_impl(partable_arg(model), sample_stats_arg(data),
+                      optimizer = optimizer, control = control, bounds = b)
+  attach_complete_raw_data(fit, data)
 }
 
 fit_gls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                     bounds = NULL) {
   b <- bounds_arg(bounds, model, data, "fit_gls")
-  fit_gls_impl(partable_arg(model), sample_stats_arg(data),
-               optimizer = optimizer, control = control, bounds = b)
+  fit <- fit_gls_impl(partable_arg(model), sample_stats_arg(data),
+                      optimizer = optimizer, control = control, bounds = b)
+  attach_complete_raw_data(fit, data)
 }
 
 fit_wls <- function(model, data, W, optimizer = "nlopt-lbfgs", control = NULL,
                     bounds = NULL) {
   b <- bounds_arg(bounds, model, data, "fit_wls")
-  fit_wls_impl(partable_arg(model), sample_stats_arg(data), W = W,
-               optimizer = optimizer, control = control, bounds = b)
+  fit <- fit_wls_impl(partable_arg(model), sample_stats_arg(data), W = W,
+                      optimizer = optimizer, control = control, bounds = b)
+  attach_complete_raw_data(fit, data)
 }
 
 # evaluate_at() — no-optimizer companion. Runs the same terminal audit /
@@ -1549,6 +1557,26 @@ sample_stats_arg <- function(data, allow_fcsem = FALSE) {
     return(list(S = data$S, mean = data$mean, nobs = data$nobs))
   }
   data
+}
+
+complete_raw_data <- function(data) {
+  if (!inherits(data, "magmaan_data") || is.null(data$X)) return(NULL)
+  nobs <- vapply(data$X, nrow, integer(1))
+  out <- list(
+    X = data$X,
+    ov_names = data$ov_names,
+    group_var = data$group_var %||% "",
+    group_labels = data$group_labels %||% character(),
+    nobs = nobs
+  )
+  class(out) <- c("magmaan_complete_data", "list")
+  out
+}
+
+attach_complete_raw_data <- function(fit, data) {
+  raw <- complete_raw_data(data)
+  if (!is.null(raw)) fit$raw_data <- raw
+  fit
 }
 
 fiml_data_arg <- function(data) {
