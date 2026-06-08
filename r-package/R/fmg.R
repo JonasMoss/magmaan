@@ -84,26 +84,66 @@
       return(data$X)
     }
     if (is.data.frame(data) || is.matrix(data)) {
-      ov <- if (is.list(fit$ov_names)) fit$ov_names[[1L]] else fit$ov_names
-      if (is.null(ov)) {
-        stop(caller, "(): fit is missing $ov_names.", call. = FALSE)
+      ngroups <- fit$ngroups %||% length(fit$nobs) %||% 1L
+      ov_list <- if (is.list(fit$ov_names)) fit$ov_names else list(fit$ov_names)
+      if (ngroups > 1L) {
+        if (!is.data.frame(data)) {
+          stop(caller, "(): multi-group raw data must be a list of per-group ",
+               "matrices, a magmaan_data object, or a data.frame carrying the ",
+               "fit's grouping column.", call. = FALSE)
+        }
+        group_var <- fit$group_var %||% ""
+        group_labels <- fit$group_labels %||% character()
+        if (!nzchar(group_var) || !group_var %in% names(data) ||
+            length(group_labels) != ngroups) {
+          stop(caller, "(): explicit multi-group data.frame input requires ",
+               "`fit$group_var` and `fit$group_labels`; pass a list of ",
+               "per-group matrices instead.", call. = FALSE)
+        }
+        return(lapply(seq_len(ngroups), function(g) {
+          ov <- ov_list[[min(g, length(ov_list))]]
+          if (is.null(ov)) stop(caller, "(): fit is missing $ov_names.",
+                                call. = FALSE)
+          rows <- as.character(data[[group_var]]) == group_labels[[g]]
+          miss <- setdiff(ov, colnames(data))
+          if (length(miss)) {
+            stop(caller, "(): data is missing observed variables: ",
+                 paste(miss, collapse = ", "), call. = FALSE)
+          }
+          X <- as.matrix(data[rows, ov, drop = FALSE])
+          if (anyNA(X)) {
+            stop(caller, "(): missing observed values are not supported by FMG; ",
+                 "use complete data or listwise-complete df_to_data() input.",
+                 call. = FALSE)
+          }
+          if (any(!is.finite(X))) {
+            stop(caller, "(): non-finite observed values are not supported by FMG.",
+                 call. = FALSE)
+          }
+          X
+        }))
+      } else {
+        ov <- ov_list[[1L]]
+        if (is.null(ov)) {
+          stop(caller, "(): fit is missing $ov_names.", call. = FALSE)
+        }
+        miss <- setdiff(ov, colnames(data))
+        if (length(miss)) {
+          stop(caller, "(): data is missing observed variables: ",
+               paste(miss, collapse = ", "), call. = FALSE)
+        }
+        X <- as.matrix(data[, ov, drop = FALSE])
+        if (anyNA(X)) {
+          stop(caller, "(): missing observed values are not supported by FMG; ",
+               "use complete data or listwise-complete df_to_data() input.",
+               call. = FALSE)
+        }
+        if (any(!is.finite(X))) {
+          stop(caller, "(): non-finite observed values are not supported by FMG.",
+               call. = FALSE)
+        }
+        return(X)
       }
-      miss <- setdiff(ov, colnames(data))
-      if (length(miss)) {
-        stop(caller, "(): data is missing observed variables: ",
-             paste(miss, collapse = ", "), call. = FALSE)
-      }
-      X <- as.matrix(data[, ov, drop = FALSE])
-      if (anyNA(X)) {
-        stop(caller, "(): missing observed values are not supported by FMG; ",
-             "use complete data or listwise-complete df_to_data() input.",
-             call. = FALSE)
-      }
-      if (any(!is.finite(X))) {
-        stop(caller, "(): non-finite observed values are not supported by FMG.",
-             call. = FALSE)
-      }
-      return(X)
     }
     if (is.list(data) && !is.null(data$X)) return(data$X)
     return(data)
@@ -213,12 +253,12 @@
 
 #' Foldnes-Moss-Gronneberg goodness-of-fit diagnostics.
 #'
-#' Computes FMG p-values and diagnostics for a complete-data single-group ML
+#' Computes FMG p-values and diagnostics for a complete-data ML
 #' fit. The fit must carry complete raw data, as fits produced from
 #' `magmaan(..., data.frame, estimator = "ML")` or `fit_ml(model,
 #' df_to_data(...))` do, or callers can pass complete raw `data` explicitly.
-#' FIML/missing-data fits and multi-group fits are currently rejected because
-#' the fused FMG UGamma spectra path is single-group complete-data only.
+#' FIML/missing-data fits are currently rejected because the fused FMG UGamma
+#' spectra path is complete-data only.
 #'
 #' @param fit A fitted magmaan complete-data ML model.
 #' @param tests Character vector of semTests-style test names. Recognised types:
@@ -231,11 +271,6 @@
 #'   UGamma spectrum and the method-specific lambda vectors.
 #' @export
 fmg_tests <- function(fit, tests = .fmg_default_tests(), data = NULL) {
-  ngroups <- fit$ngroups %||% 1L
-  if (ngroups > 1L) {
-    stop("fmg_tests(): only complete-data single-group fits are supported ",
-         "(got ngroups = ", ngroups, ").", call. = FALSE)
-  }
   estimator <- .fmg_fit_estimator(fit)
   if (!identical(estimator, "ML")) {
     stop("fmg_tests(): FMG currently requires a complete-data ML fit ",

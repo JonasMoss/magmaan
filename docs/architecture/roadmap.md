@@ -174,21 +174,19 @@ golden `parTable()` fixtures.
   built from `magmaan(..., data.frame, estimator = "ML")` or
   `fit_ml(model, df_to_data(...))` retain listwise-complete raw blocks in
   `fit$raw_data`, so FMG no longer requires a separate raw-data argument in the
-  normal fit workflow. The fused C++ spectra primitive remains
-  complete-data/single-group; multi-group and FIML/missing-data FMG are rejected
-  explicitly until the required spectra/sandwich route is defined for those
-  cases. The helper computes biased and optional Browne-unbiased U-Gamma spectra
-  through C++, keeping the U-factor, tiled casewise-contribution projection,
-  reduced matrices, and eigensolves out of R list roundtrips. The Du-Bentler
-  unbiased correction's normal-theory term is `B' Gamma_NT(S) B` evaluated at the
-  *sample* covariance `S` (`reduced_gamma_nt_sample`), not the structured
-  `B' Gamma_NT(Sigma_hat) B = I` the expected bread reduces to: using the
-  identity silently makes the correction model-dependent and breaks the
-  `semTests::pvalues()` parity off the `S = Sigma_hat` point (validated
-  value-for-value to ~1e-8 across the full test x gamma x base grid, guarded by
-  `examples/fmg.R`). Biased-only single-model spectra can still eigensolve in
-  row space when `N < df`; the unbiased path takes the full reduced route so the
-  non-identity sample NT term is honored.
+  normal fit workflow. The fused C++ spectra primitive supports complete-data
+  single- and multi-group ML, including mean structures; FIML/missing-data FMG
+  is still rejected until an observed-pattern spectra/sandwich route is defined.
+  The helper computes biased and optional Browne/Du-Bentler unbiased U-Gamma
+  spectra through C++, keeping the U-factor, tiled casewise-contribution
+  projection, grouped reduced matrices, and eigensolves out of R list
+  roundtrips. The unbiased correction mirrors lavaan's complete-data rule: the
+  covariance block uses `Gamma_NT(S)` at the *sample* covariance plus Browne's
+  finite-sample coefficients, and mean-structure blocks keep `S` for means with
+  the mean-covariance third-order block scaled by `n/(n-2)`. Biased-only
+  single-block spectra can still eigensolve in row space when `N < df`; grouped
+  and unbiased paths take the full reduced route so per-block denominators and
+  the non-identity sample NT term are honored.
 
 ### Staged C++ facade
 

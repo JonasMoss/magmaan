@@ -475,14 +475,18 @@ Rcpp::NumericVector infer_ugamma_eigenvalues(Rcpp::NumericMatrix M) {
 Rcpp::List infer_fmg_ugamma_spectra(Rcpp::List fit, SEXP X,
                                     bool need_unbiased = false) {
   Ctx ctx = ctx_from_fit(fit);
-  if (ctx.rep.dims.size() != 1) {
-    Rcpp::stop("magmaan: infer_fmg_ugamma_spectra() currently supports single-group fits only");
-  }
 
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = raw_from_arg(ctx.rep, X);
   auto ss_or = magmaan::data::sample_stats_from_raw(raw);
   if (!ss_or.has_value()) stop_post(ss_or.error());
+  if (ss_or->n_obs.size() != ctx.rep.dims.size()) {
+    Rcpp::stop("magmaan: infer_fmg_ugamma_spectra() raw-data block count does not match fit");
+  }
+  Eigen::VectorXd denom(static_cast<Eigen::Index>(ss_or->n_obs.size()));
+  for (std::size_t b = 0; b < ss_or->n_obs.size(); ++b) {
+    denom(static_cast<Eigen::Index>(b)) = static_cast<double>(ss_or->n_obs[b]);
+  }
 
   auto uf_or = magmaan::robust::build_u_factor(
       ctx.pt, ctx.rep, ctx.samp, est,
@@ -493,20 +497,22 @@ Rcpp::List infer_fmg_ugamma_spectra(Rcpp::List fit, SEXP X,
   if (!uf_or.has_value()) stop_post(uf_or.error());
 
   const Eigen::Index n = raw.X[0].rows();
-  const double denom = static_cast<double>(ss_or->n_obs[0]);
   Eigen::VectorXd ev_biased;
   Eigen::VectorXd ev_unbiased;
   Eigen::MatrixXd M;
   // The row-space shortcut (n×n Gram instead of the df×df reduced Γ̂) is only a
   // win for the biased spectrum. The unbiased correction needs the full df×df
   // M and a non-identity Bᵀ·Γ_NT(S)·B, so fall back to the full path whenever
-  // the unbiased spectrum is requested.
-  const bool row_space = (n < uf_or->df) && !need_unbiased;
+  // the unbiased spectrum is requested. For multi-group data the empirical
+  // meat uses per-block denominators n_g, so the unscaled row-space Gram is not
+  // equivalent unless rows are block-scaled; keep that optimization single-block.
+  const bool row_space =
+      (ctx.rep.dims.size() == 1) && (n < uf_or->df) && !need_unbiased;
   if (row_space) {
     auto Y_or = magmaan::robust::casewise_projected_rows_tiled(
         *uf_or, raw, *ss_or);
     if (!Y_or.has_value()) stop_post(Y_or.error());
-    Eigen::MatrixXd row_M = (*Y_or * Y_or->transpose()) / denom;
+    Eigen::MatrixXd row_M = (*Y_or * Y_or->transpose()) / denom(0);
     auto ev_row_or = magmaan::robust::ugamma_eigenvalues(row_M);
     if (!ev_row_or.has_value()) stop_post(ev_row_or.error());
     ev_biased = Eigen::VectorXd::Zero(uf_or->df);
@@ -524,16 +530,11 @@ Rcpp::List infer_fmg_ugamma_spectra(Rcpp::List fit, SEXP X,
 
   Rcpp::List out = Rcpp::List::create(Rcpp::_["biased"] = Rcpp::wrap(ev_biased));
   if (need_unbiased) {
-    magmaan::data::SampleStats browne_samp = ctx.samp;
-    browne_samp.n_obs = ss_or->n_obs;
-    // Du-Bentler unbiased Γ: the normal-theory term uses the SAMPLE covariance
-    // S (Bᵀ·Γ_NT(S)·B), NOT the bread's structured Σ̂ — the latter reduces to
-    // the identity and silently makes the correction model-dependent, breaking
-    // parity with lavaan/semTests off the S = Σ̂ point.
-    auto Mnt_or = magmaan::robust::reduced_gamma_nt_sample(*uf_or);
-    if (!Mnt_or.has_value()) stop_post(Mnt_or.error());
-    auto Mu_or = magmaan::robust::reduced_gamma_unbiased(
-        *uf_or, browne_samp, M, *Mnt_or);
+    auto Zc_or = magmaan::robust::casewise_contributions(
+        raw, *ss_or, uf_or->has_means);
+    if (!Zc_or.has_value()) stop_post(Zc_or.error());
+    auto Mu_or = magmaan::robust::reduced_gamma_unbiased_casewise(
+        *uf_or, *ss_or, *Zc_or, denom);
     if (!Mu_or.has_value()) stop_post(Mu_or.error());
     auto evu_or = magmaan::robust::ugamma_eigenvalues(*Mu_or);
     if (!evu_or.has_value()) stop_post(evu_or.error());

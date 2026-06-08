@@ -914,11 +914,13 @@ TEST_CASE("reduced_gamma_unbiased matches the Browne closed-form") {
   auto M_sample_or = magmaan::robust::reduced_gamma_sample(*uf_or, *Zc_or,
                                                      static_cast<double>(n));
   REQUIRE(M_sample_or.has_value());
-  auto M_nt_or     = magmaan::robust::reduced_gamma_nt(*uf_or);
-  REQUIRE(M_nt_or.has_value());
+  auto Gnt_S_or = magmaan::data::gamma_nt(samp_or->S[0]);
+  REQUIRE(Gnt_S_or.has_value());
+  Eigen::MatrixXd M_nt = uf_or->B.transpose() * (*Gnt_S_or) * uf_or->B;
+  M_nt = 0.5 * (M_nt + M_nt.transpose()).eval();
 
   auto M_u_or = magmaan::robust::reduced_gamma_unbiased(
-      *uf_or, *samp_or, *M_sample_or, *M_nt_or);
+      *uf_or, *samp_or, *M_sample_or, M_nt);
   REQUIRE(M_u_or.has_value());
   auto M_u_zc_or = magmaan::robust::reduced_gamma_unbiased_casewise(
       *uf_or, *samp_or, *Zc_or, static_cast<double>(n));
@@ -938,7 +940,7 @@ TEST_CASE("reduced_gamma_unbiased matches the Browne closed-form") {
   }
   const Eigen::VectorXd Bs = uf_or->B.transpose() * s_vech;
   const Eigen::MatrixXd M_ref =
-      a * (*M_sample_or) - b * (*M_nt_or) + b * c * (Bs * Bs.transpose());
+      a * (*M_sample_or) - b * M_nt + b * c * (Bs * Bs.transpose());
   CHECK((*M_u_or - M_ref).cwiseAbs().maxCoeff() < 1e-10);
   CHECK((*M_u_zc_or - M_ref).cwiseAbs().maxCoeff() < 1e-10);
 }
@@ -975,6 +977,119 @@ TEST_CASE("reduced_gamma_unbiased stitches per-block Browne corrections") {
           (M_u_or.has_value() ? "" : M_u_or.error().detail));
   CHECK(M_u_or->rows() == uf_or->df);
   CHECK(M_u_or->cols() == uf_or->df);
+}
+
+TEST_CASE("reduced_gamma_unbiased stitches mean-structure blocks") {
+  auto seed = must_model(
+      "visual =~ x1 + x2 + x3\n"
+      "textual =~ x4 + x5 + x6\n"
+      "x1 ~ 1\nx2 ~ 1\nx3 ~ 1\nx4 ~ 1\nx5 ~ 1\nx6 ~ 1");
+
+  std::mt19937 rng(177);
+  auto random_pd = [&](Eigen::Index p) {
+    std::uniform_real_distribution<double> d(-0.45, 0.45);
+    Eigen::MatrixXd A(p, p);
+    for (Eigen::Index i = 0; i < p; ++i)
+      for (Eigen::Index j = 0; j < p; ++j) A(i, j) = d(rng);
+    return Eigen::MatrixXd(A * A.transpose() +
+                           Eigen::MatrixXd::Identity(p, p) *
+                               static_cast<double>(p));
+  };
+
+  magmaan::data::SampleStats samp_seed;
+  samp_seed.S = {random_pd(6)};
+  Eigen::VectorXd mu_seed(6);
+  mu_seed << 1.0, -0.5, 2.3, 0.8, -1.2, 0.4;
+  samp_seed.mean = {mu_seed};
+  samp_seed.n_obs = {600};
+
+  auto est_seed_or = magmaan::test::fit(*seed.pt, *seed.rep, samp_seed);
+  REQUIRE(est_seed_or.has_value());
+  auto ev_seed_or = magmaan::model::ModelEvaluator::build(*seed.pt, *seed.rep);
+  REQUIRE(ev_seed_or.has_value());
+  auto im_seed_or = ev_seed_or->sigma(est_seed_or->theta);
+  REQUIRE(im_seed_or.has_value());
+  REQUIRE(im_seed_or->mu.size() == 1);
+  REQUIRE(im_seed_or->sigma.size() == 1);
+
+  auto two = duplicate_two_blocks(seed);
+  magmaan::data::RawData raw;
+  raw.X.push_back(mvn_sample(rng, 320, im_seed_or->mu[0],
+                             im_seed_or->sigma[0]));
+  Eigen::VectorXd mu_shifted = im_seed_or->mu[0];
+  mu_shifted(0) += 0.25;
+  mu_shifted(4) -= 0.15;
+  raw.X.push_back(mvn_sample(rng, 410, mu_shifted, im_seed_or->sigma[0]));
+
+  auto samp_or = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp_or.has_value());
+  REQUIRE(samp_or->S.size() == 2);
+  REQUIRE(samp_or->mean.size() == 2);
+  auto est_or = magmaan::test::fit(*two.pt, *two.rep, *samp_or);
+  REQUIRE(est_or.has_value());
+  auto uf_or = magmaan::robust::build_u_factor(
+      *two.pt, *two.rep, *samp_or, *est_or);
+  REQUIRE(uf_or.has_value());
+  REQUIRE(uf_or->has_means);
+  REQUIRE(uf_or->blocks.size() == 2);
+
+  auto Zc_or = magmaan::robust::casewise_contributions(
+      raw, *samp_or, /*include_means=*/true);
+  REQUIRE(Zc_or.has_value());
+  REQUIRE(Zc_or->cols() == uf_or->total_rows);
+  Eigen::VectorXd denom(2);
+  denom << static_cast<double>(samp_or->n_obs[0]),
+           static_cast<double>(samp_or->n_obs[1]);
+
+  auto M_u_or = magmaan::robust::reduced_gamma_unbiased_casewise(
+      *uf_or, *samp_or, *Zc_or, denom);
+  REQUIRE_MESSAGE(M_u_or.has_value(),
+      "reduced_gamma_unbiased mean blocks failed: " <<
+          (M_u_or.has_value() ? "" : M_u_or.error().detail));
+
+  Eigen::MatrixXd M_ref = Eigen::MatrixXd::Zero(uf_or->df, uf_or->df);
+  for (std::size_t b = 0; b < uf_or->blocks.size(); ++b) {
+    const auto& blk = uf_or->blocks[b];
+    const double N = static_cast<double>(samp_or->n_obs[b]);
+    const double a = N * (N - 1.0) / ((N - 2.0) * (N - 3.0));
+    const double bb = N / ((N - 2.0) * (N - 3.0));
+    const double c = 2.0 / (N - 1.0);
+
+    auto Gnt_or = magmaan::data::gamma_nt(samp_or->S[b]);
+    REQUIRE(Gnt_or.has_value());
+    const Eigen::MatrixXd Zc_mu = Zc_or->middleCols(blk.mu_off, blk.p);
+    const Eigen::MatrixXd Zc_cov = Zc_or->middleCols(blk.row_offset, blk.pstar);
+    const Eigen::MatrixXd gamma_cov =
+        (Zc_cov.transpose() * Zc_cov) / N;
+    Eigen::VectorXd s_vech(blk.pstar);
+    Eigen::Index k = 0;
+    for (Eigen::Index col = 0; col < blk.p; ++col)
+      for (Eigen::Index row = col; row < blk.p; ++row)
+        s_vech(k++) = samp_or->S[b](row, col);
+    const Eigen::MatrixXd gamma_u_cov =
+        a * gamma_cov -
+        bb * ((*Gnt_or) - c * (s_vech * s_vech.transpose()));
+    const Eigen::MatrixXd gamma_mu_cov =
+        ((Zc_mu.transpose() * Zc_cov) / N) * (N / (N - 2.0));
+
+    Eigen::MatrixXd gamma_b =
+        Eigen::MatrixXd::Zero(blk.p + blk.pstar, blk.p + blk.pstar);
+    gamma_b.topLeftCorner(blk.p, blk.p) = samp_or->S[b];
+    gamma_b.topRightCorner(blk.p, blk.pstar) = gamma_mu_cov;
+    gamma_b.bottomLeftCorner(blk.pstar, blk.p) = gamma_mu_cov.transpose();
+    gamma_b.bottomRightCorner(blk.pstar, blk.pstar) = gamma_u_cov;
+
+    const Eigen::MatrixXd B_b =
+        uf_or->B.middleRows(blk.mu_off, blk.p + blk.pstar);
+    M_ref.noalias() += B_b.transpose() * gamma_b * B_b;
+  }
+  M_ref = 0.5 * (M_ref + M_ref.transpose()).eval();
+  CHECK((*M_u_or - M_ref).cwiseAbs().maxCoeff() < 1e-10);
+
+  auto ev_or = magmaan::robust::ugamma_eigenvalues(*M_u_or);
+  REQUIRE(ev_or.has_value());
+  CHECK(ev_or->size() == uf_or->df);
+  CHECK(ev_or->allFinite());
 }
 
 // ----------------------------------------------------------------------------

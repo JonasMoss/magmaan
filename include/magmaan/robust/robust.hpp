@@ -499,7 +499,7 @@ reduced_gamma_nt_pairwise(const UFactor&                       uf,
                           const data::PairwiseSampleStats&     pw);
 
 // (c) Browne's unbiased Γ_u (distribution-free, complete-data, simple
-// setting only). Closed form:
+// setting only). Covariance-only shorthand:
 //
 //   Bᵀ·Γ_u·B = a · M_sample  −  b · M_nt  +  b · 2/(N−1) · (Bᵀs)(Bᵀs)ᵀ
 //   a = N·(N−1) / ((N−2)·(N−3))
@@ -516,10 +516,14 @@ reduced_gamma_unbiased(const UFactor&            uf,
                        const Eigen::MatrixXd&    M_sample,
                        const Eigen::MatrixXd&    M_nt);
 
-// Multi-block Browne-unbiased correction. This overload consumes the raw
-// stacked casewise contributions so it can apply Browne's finite-sample
-// coefficients per block before summing into the common reduced basis. The
-// reduced-matrix overload above remains the single-block shorthand.
+// Multi-block Browne-unbiased correction. This overload consumes the stacked
+// casewise contributions so it can apply Browne/Du-Bentler finite-sample
+// coefficients per block before summing into the common reduced basis. When
+// `uf.has_means` is true, each block is corrected in lavaan's `[mu; sigma]`
+// layout: the mean block is S_b, the sigma block uses Browne's covariance
+// correction, and the mean-sigma third-order block is scaled by n_b/(n_b-2).
+// The reduced-matrix overload above remains the covariance-only single-block
+// shorthand.
 post_expected<Eigen::MatrixXd>
 reduced_gamma_unbiased_casewise(
     const UFactor&                            uf,
