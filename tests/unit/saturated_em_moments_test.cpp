@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -86,6 +87,115 @@ magmaan::data::RawData two_complete_blocks() {
   raw.X.push_back(X1);
   raw.X.push_back(X2);
   return raw;
+}
+
+magmaan::data::RawData two_missing_blocks() {
+  const double na = std::numeric_limits<double>::quiet_NaN();
+
+  Eigen::MatrixXd X1(12, 3);
+  X1 << 1.0, 2.0, 3.0,
+        2.0, 1.0, 4.0,
+        3.0, 4.0, 2.0,
+        4.0, 3.0, 5.0,
+        5.0, 5.0, 1.0,
+        6.0, 4.0, 6.0,
+        7.0, 7.0, 4.0,
+        8.0, 6.0, 7.0,
+        2.5, 3.5, 2.5,
+        3.5, 2.5, 3.5,
+        6.5, 5.5, 5.5,
+        4.5, 4.0, 4.0;
+  Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M1(12, 3);
+  M1 << 1, 1, 1,
+        1, 1, 1,
+        1, 0, 1,
+        1, 1, 1,
+        1, 1, 1,
+        1, 1, 0,
+        1, 1, 1,
+        1, 1, 1,
+        1, 1, 1,
+        1, 1, 1,
+        0, 1, 1,
+        1, 1, 1;
+  for (Eigen::Index r = 0; r < X1.rows(); ++r)
+    for (Eigen::Index c = 0; c < X1.cols(); ++c)
+      if (M1(r, c) == 0) X1(r, c) = na;
+
+  Eigen::MatrixXd X2(12, 2);
+  X2 << 0.5, 1.5,
+        1.5, 0.5,
+        2.5, 2.5,
+        1.0, 3.0,
+        3.0, 1.0,
+        2.0, 2.0,
+        1.5, 1.5,
+        2.2, 3.2,
+        3.3, 2.1,
+        2.7, 1.9,
+        3.6, 3.0,
+        0.8, 2.4;
+  Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M2(12, 2);
+  M2 << 1, 1,
+        1, 1,
+        1, 1,
+        1, 0,
+        1, 1,
+        1, 1,
+        0, 1,
+        1, 1,
+        1, 1,
+        1, 1,
+        1, 1,
+        1, 1;
+  for (Eigen::Index r = 0; r < X2.rows(); ++r)
+    for (Eigen::Index c = 0; c < X2.cols(); ++c)
+      if (M2(r, c) == 0) X2(r, c) = na;
+
+  magmaan::data::RawData raw;
+  raw.X.push_back(X1);
+  raw.X.push_back(X2);
+  raw.mask.push_back(M1);
+  raw.mask.push_back(M2);
+  return raw;
+}
+
+double relative_max_abs(const Eigen::MatrixXd& A, const Eigen::MatrixXd& B) {
+  const double num = (A - B).cwiseAbs().maxCoeff();
+  const double den = std::max(1.0, B.cwiseAbs().maxCoeff());
+  return num / den;
+}
+
+void check_analytic_matches_fd(const magmaan::data::RawData& raw,
+                               double h_tol,
+                               double acov_tol) {
+  auto analytic_or = magmaan::estimate::fiml::saturated_em_moments(raw);
+  auto fd_or =
+      magmaan::estimate::fiml::diagnostic::saturated_em_moments_fd(raw, 1e-5);
+  REQUIRE_MESSAGE(analytic_or.has_value(),
+      "analytic saturated_em_moments failed: " <<
+      (analytic_or.has_value() ? "" : analytic_or.error().detail));
+  REQUIRE_MESSAGE(fd_or.has_value(),
+      "finite-difference saturated_em_moments failed: " <<
+      (fd_or.has_value() ? "" : fd_or.error().detail));
+  if (!analytic_or.has_value() || !fd_or.has_value()) return;
+
+  const auto& analytic = *analytic_or;
+  const auto& fd = *fd_or;
+  REQUIRE(analytic.mean.size() == fd.mean.size());
+  REQUIRE(analytic.cov.size() == fd.cov.size());
+  REQUIRE(analytic.n_obs.size() == fd.n_obs.size());
+  for (std::size_t b = 0; b < analytic.mean.size(); ++b) {
+    CHECK((analytic.mean[b] - fd.mean[b]).cwiseAbs().maxCoeff() < 1e-12);
+    CHECK((analytic.cov[b] - fd.cov[b]).cwiseAbs().maxCoeff() < 1e-12);
+    CHECK(analytic.n_obs[b] == fd.n_obs[b]);
+  }
+  CHECK((analytic.J - fd.J).cwiseAbs().maxCoeff() < 1e-12);
+
+  INFO("relative H error = ", relative_max_abs(analytic.H, fd.H));
+  INFO("relative acov error = ", relative_max_abs(analytic.acov, fd.acov));
+  CHECK(relative_max_abs(analytic.H, fd.H) < h_tol);
+  CHECK(relative_max_abs(analytic.acov, fd.acov) < acov_tol);
 }
 
 }  // namespace
@@ -212,4 +322,22 @@ TEST_CASE("saturated_em_moments: multi-block H and J are block-diagonal") {
     CHECK((out.mean[b] - ref_mu).cwiseAbs().maxCoeff() < 1e-10);
     CHECK((out.cov[b] - ref_cov).cwiseAbs().maxCoeff() < 1e-10);
   }
+}
+
+TEST_CASE("saturated_em_moments: analytic H matches finite-difference diagnostic") {
+  check_analytic_matches_fd(complete_single_block(), 1e-7, 1e-7);
+  check_analytic_matches_fd(missing_single_block(), 2e-5, 2e-5);
+  check_analytic_matches_fd(two_missing_blocks(), 2e-5, 3e-5);
+}
+
+TEST_CASE("saturated_em_moments: public analytic path is h_step invariant") {
+  const auto raw = missing_single_block();
+  auto loose = magmaan::estimate::fiml::saturated_em_moments(raw, 1e-2);
+  auto tight = magmaan::estimate::fiml::saturated_em_moments(raw, 1e-6);
+  REQUIRE(loose.has_value());
+  REQUIRE(tight.has_value());
+
+  CHECK((loose->H - tight->H).cwiseAbs().maxCoeff() == 0.0);
+  CHECK((loose->J - tight->J).cwiseAbs().maxCoeff() == 0.0);
+  CHECK((loose->acov - tight->acov).cwiseAbs().maxCoeff() == 0.0);
 }

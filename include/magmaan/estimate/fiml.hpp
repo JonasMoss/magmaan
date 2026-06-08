@@ -212,12 +212,24 @@ fiml_robust_mlr(spec::LatentStructure pt,
 
 // Saturated (H1) ML/EM moments — runs the EM iteration that already drives
 // FIML's H1 likelihood accounting, then aggregates per-block scores and
-// finite-difference Hessians into a block-diagonal `(H, J, H⁻¹JH⁻¹)`.
+// analytic observed-row Hessians into a block-diagonal `(H, J, H⁻¹JH⁻¹)`.
 // Multi-group safe; takes raw data only (no `LatentStructure` is needed because
 // the saturated model has no structural restrictions). See `SaturatedMoments`
-// for the η layout and scaling conventions.
+// for the η layout and scaling conventions. `h_step` is retained for source
+// compatibility and validated when supplied, but no longer tunes the saturated
+// H1 information.
 post_expected<SaturatedMoments>
 saturated_em_moments(const RawData& raw, double h_step = 1e-4);
+
+namespace diagnostic {
+
+// Regression-only comparator for the old finite-difference saturated H1
+// information path. Do not expose this on the R surface; use it only to check
+// the analytic saturated information against the previous numeric route.
+post_expected<SaturatedMoments>
+saturated_em_moments_fd(const RawData& raw, double h_step = 1e-4);
+
+}  // namespace diagnostic
 
 post_expected<FIMLEtaJacobian>
 fiml_eta_jacobian(spec::LatentStructure pt,

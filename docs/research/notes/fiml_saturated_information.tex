@@ -1,0 +1,142 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+
+\title{Analytic Saturated Information for FIML FMG}
+\author{}
+\date{\today}
+
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\tr}{\operatorname{tr}}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+These notes derive the analytic observed-data saturated information used by
+the FIML FMG machinery. The target is only the H1/saturated eta-space
+information. The H0 model-parameter observed information can remain on its
+existing finite-difference path.
+
+For one independent block, the saturated parameter is
+\[
+  \eta = \begin{bmatrix}\mu \\ \vech(\Sigma)\end{bmatrix},
+\]
+where \(\vech\) stores the lower triangle once, in column-major order. A row
+with observed index set \(o\) contributes the observed-subvector normal
+deviance
+\[
+  f_o(\mu,\Sigma)
+    = \log |\Sigma_{oo}|
+      + (x_o-\mu_o)' \Sigma_{oo}^{-1} (x_o-\mu_o),
+\]
+up to constants independent of \(\eta\). Let
+\[
+  A = \Sigma_{oo}^{-1}, \qquad
+  u = x_o-\mu_o, \qquad
+  z = A u.
+\]
+
+\section*{Scores in the implementation convention}
+
+The code stores row scores as gradients of the deviance \(f_o=-2\ell_o+c\).
+The log-likelihood score is therefore \(-\frac12\) times this vector.
+
+For the observed mean coordinates,
+\[
+  g_\mu = \frac{\partial f_o}{\partial \mu_o} = -2z.
+\]
+
+For a full covariance vech coordinate \(k\), let \(D_k\) denote the symmetric
+matrix in observed-subvector coordinates induced by increasing that full
+\(\vech(\Sigma)\) entry by one. Diagonal coordinates have one nonzero entry;
+off-diagonal coordinates have the two mirrored nonzero entries. The deviance
+score is
+\[
+  g_k
+    = \frac{\partial f_o}{\partial \sigma_k}
+    = \tr(A D_k) - z'D_kz.
+\]
+This is exactly the existing saturated-score code: off-diagonal covariance
+scores receive the duplication factor because \(D_k\) contains both mirrored
+entries.
+
+\section*{Analytic row Hessian}
+
+The row Hessian of the deviance score has three blocks.
+
+Mean--mean:
+\[
+  H_{\mu\mu} = 2A.
+\]
+
+Mean--covariance:
+\[
+  H_{\mu k}
+    = \frac{\partial g_\mu}{\partial \sigma_k}
+    = 2 A D_k z.
+\]
+By symmetry, \(H_{k\mu}=H_{\mu k}'\).
+
+Covariance--covariance:
+\[
+  H_{kl}
+    = \frac{\partial g_k}{\partial \sigma_l}
+    = -\tr(A D_l A D_k)
+      + z'D_l A D_k z
+      + z'D_k A D_l z.
+\]
+Equivalently, using \(D_k z\),
+\[
+  H_{kl}
+    = -\tr(A D_l A D_k)
+      + (D_lz)' A D_k z
+      + (D_kz)' A D_l z.
+\]
+This form is convenient because \(D_k\) is sparse and \(A D_k z\) can be built
+from one or two columns of \(A\).
+
+\section*{Block aggregation and scaling}
+
+For block \(b\) with \(n_b\) rows, the implementation averages the row
+deviance Hessians first:
+\[
+  \bar H_{\mathrm{dev},b}
+    = \frac{1}{n_b}\sum_{i=1}^{n_b}
+      \frac{\partial^2 f_i}{\partial \eta_b\partial\eta_b'}.
+\]
+The saturated information reported by \texttt{saturated\_em\_moments()} is in
+log-likelihood units, summed over rows:
+\[
+  H_b = -\frac{\partial^2 \ell_b}{\partial\eta_b\partial\eta_b'}
+      = \frac{n_b}{2}\,\bar H_{\mathrm{dev},b}.
+\]
+
+The existing \(J\) construction remains unchanged. If \(G_{\mathrm{dev}}\) is
+the matrix whose rows are deviance scores, then
+\[
+  J_b
+    = \sum_i
+      \frac{\partial\ell_i}{\partial\eta_b}
+      \frac{\partial\ell_i}{\partial\eta_b'}
+    = \frac14 G_{\mathrm{dev}}'G_{\mathrm{dev}}.
+\]
+
+The missing-data saturated moment covariance used by FIML FMG is then
+\[
+  \Gamma_{\mathrm{mis}} = H^{-1} J H^{-1},
+\]
+with \(H\) and \(J\) block-diagonal across independent groups/blocks.
+
+\section*{Implementation implication}
+
+The finite-difference step \(h\) is not part of the saturated H1 FMG
+definition. It was only a numerical route to the same row Hessian. After this
+analytic replacement, \texttt{h\_step} can remain on public calls for source
+compatibility and for the still-numeric H0 parameter-information path, but it
+does not tune saturated H1 information.
+
+\end{document}

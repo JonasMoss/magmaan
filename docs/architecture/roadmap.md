@@ -181,8 +181,10 @@ golden `parTable()` fixtures.
   missing-data UGamma spectrum is built first-principles by
   `estimate::fiml::fiml_ugamma_spectrum` from the saturated-model EM information
   `V = H` and the saturated-moment ACOV `Gamma_mis = H^-1 J H^-1`
-  (`saturated_em_moments`), via `U = V - V Delta (Delta' V Delta)^-1 Delta' V` and
-  the df eigenvalues of `U Gamma_mis`, with the FIML LRT as the base statistic.
+  (`saturated_em_moments`, with analytic observed-row Hessians for saturated
+  H1 information and a C++-only finite-difference diagnostic comparator), via
+  `U = V - V Delta (Delta' V Delta)^-1 Delta' V` and the df eigenvalues of
+  `U Gamma_mis`, with the FIML LRT as the base statistic.
   This is the `h1.information = "unstructured"` convention natural to FIML's EM
   saturated model: on complete data it reproduces lavaan's unstructured UGamma
   spectrum element-for-element (~1e-7), validated in `examples/fmg.R`. semTests'

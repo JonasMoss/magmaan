@@ -65,12 +65,17 @@ V = H
 `H`, `J`, and `Gamma_mis` are block-diagonal across independent groups, but not
 across missingness patterns inside a group. Scaling must be consistent:
 `H` and `J` are summed log-likelihood quantities, so `V Gamma_mis` is
-dimensionless and has the same role as `V Gamma` in complete-data FMG.
+dimensionless and has the same role as `V Gamma` in complete-data FMG. The
+saturated `H` is computed from analytic observed-row Hessians; see
+`docs/research/notes/fiml_saturated_information.tex` for the derivation.
 
 The current core ingredients are:
 
 - `estimate::fiml::saturated_em_moments(raw, h_step)` for saturated
-  `mean`, `cov`, `H`, `J`, and `acov`.
+  `mean`, `cov`, analytic `H`, `J`, and `acov`; `h_step` is retained for source
+  compatibility but no longer tunes saturated H1 information.
+- `estimate::fiml::diagnostic::saturated_em_moments_fd(raw, h_step)` for the
+  C++-only finite-difference comparator used by regression tests.
 - `estimate::fiml::fiml_ugamma_spectrum(...)` for the current single-model
   spectrum construction.
 - `estimate::fiml::fiml_robust_mlr(...)` for the MLR trace/scaling route. This
@@ -240,6 +245,8 @@ The FIML FMG implementation follows this construction:
 - actual missing-data trace checks compare the spectrum sum to
   `fiml_robust_mlr`'s `trace_ugamma`;
 - multi-group missing-data spectra have C++ coverage;
+- saturated H1 information is analytic and checked against the old
+  finite-difference route on complete, missing, and multi-block raw data;
 - nonlinear equality constraints are rejected explicitly;
 - nested FIML `restriction_map` tests use the model-pair `A/C/S` route in
   saturated eta-space, with exact and delta restriction-map variants.
