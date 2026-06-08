@@ -457,8 +457,9 @@ simulation backlog.
   method/parameter, UG flag, spectra/lambda list-columns), `fit_measures(...,
   fmg = ...)` attaches those diagnostics to ordinary fit measures, and
   `fmg_pvalues()` remains a named-vector compatibility view. Supported boundary
-  is complete-data single-group ML with retained or explicitly supplied raw
-  data; multi-group and FIML/missing-data FMG now fail explicitly.
+  is complete-data single- and multi-group ML, including mean structures, with
+  retained or explicitly supplied raw data; FIML/missing-data FMG still fails
+  explicitly.
 
 ## Benchmarks
 

@@ -1642,11 +1642,6 @@ reduced_gamma_unbiased_casewise(
         "reduced_gamma_unbiased: only the ProjectionExpected U-factor is "
         "supported"));
   }
-  if (uf.has_means) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "reduced_gamma_unbiased: Browne's covariance correction currently "
-        "expects a covariance-only UFactor"));
-  }
   const Eigen::Index nb = static_cast<Eigen::Index>(uf.blocks.size());
   if (samp.S.size() != uf.blocks.size()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -1662,17 +1657,19 @@ reduced_gamma_unbiased_casewise(
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "reduced_gamma_unbiased: every denom entry must be > 0"));
   }
-  if (Zc.cols() != uf.pstar) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "reduced_gamma_unbiased: Zc has " + std::to_string(Zc.cols()) +
-            " columns, expected " + std::to_string(uf.pstar)));
-  }
   const auto denom_b = [&](Eigen::Index b) -> double {
     return denom.size() == 1 ? denom(0) : denom(b);
   };
+  const Eigen::Index expected_cols = uf.has_means ? uf.total_rows : uf.pstar;
+  if (Zc.cols() != expected_cols) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_unbiased: Zc has " + std::to_string(Zc.cols()) +
+            " columns, expected " + std::to_string(expected_cols) +
+            (uf.has_means ? " (mu-rows + sigma-rows per block)"
+                          : " (sigma-only)")));
+  }
 
   Eigen::MatrixXd M = Eigen::MatrixXd::Zero(uf.df, uf.df);
-  Eigen::MatrixXd H_buf;
   for (Eigen::Index b = 0; b < nb; ++b) {
     const auto& blk = uf.blocks[static_cast<std::size_t>(b)];
     const double N = static_cast<double>(samp.n_obs[static_cast<std::size_t>(b)]);
@@ -1685,27 +1682,40 @@ reduced_gamma_unbiased_casewise(
     const double bb = N / ((N - 2.0) * (N - 3.0));
     const double c = 2.0 / (N - 1.0);
 
-    const Eigen::Index bstart = blk.row_offset;
-    const Eigen::Index bsize = blk.pstar;
-    const Eigen::MatrixXd B_b = uf.B.middleRows(bstart, bsize);
-    const Eigen::MatrixXd ZcB_b = Zc.middleCols(bstart, bsize) * B_b;
-    const Eigen::MatrixXd M_sample_b =
-        (ZcB_b.transpose() * ZcB_b) / denom_b(b);
-
-    Eigen::MatrixXd GB_b = Eigen::MatrixXd::Zero(bsize, uf.df);
-    Eigen::VectorXd dst = Eigen::VectorXd::Zero(uf.total_rows);
-    for (Eigen::Index col = 0; col < uf.df; ++col) {
-      dst.setZero();
-      apply_gamma_nt_block(blk, /*has_means=*/false, uf.moments,
-                           uf.B.col(col), dst, H_buf);
-      GB_b.col(col) = dst.segment(bstart, bsize);
+    auto gnt_or = gamma_nt(samp.S[static_cast<std::size_t>(b)]);
+    if (!gnt_or.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "reduced_gamma_unbiased: gamma_nt(S) failed in block " +
+              std::to_string(b) + ": " + gnt_or.error().detail));
     }
-    const Eigen::MatrixXd M_nt_b = B_b.transpose() * GB_b;
-
+    const Eigen::MatrixXd Zc_cov = Zc.middleCols(blk.row_offset, blk.pstar);
+    const Eigen::MatrixXd gamma_cov =
+        (Zc_cov.transpose() * Zc_cov) / denom_b(b);
     const Eigen::VectorXd s_vech = vech_lower(samp.S[static_cast<std::size_t>(b)]);
-    const Eigen::VectorXd Bs = B_b.transpose() * s_vech;
-    M.noalias() += a * M_sample_b - bb * M_nt_b +
-                   bb * c * (Bs * Bs.transpose());
+    const Eigen::MatrixXd gamma_u_cov =
+        a * gamma_cov -
+        bb * ((*gnt_or) - c * (s_vech * s_vech.transpose()));
+
+    if (uf.has_means && blk.mu_off >= 0) {
+      const Eigen::Index bstart = blk.mu_off;
+      const Eigen::Index bsize = blk.p + blk.pstar;
+      const Eigen::MatrixXd Zc_mu = Zc.middleCols(blk.mu_off, blk.p);
+      const Eigen::MatrixXd gamma_mu_cov =
+          ((Zc_mu.transpose() * Zc_cov) / denom_b(b)) * (N / (N - 2.0));
+
+      Eigen::MatrixXd gamma_b = Eigen::MatrixXd::Zero(bsize, bsize);
+      gamma_b.topLeftCorner(blk.p, blk.p) =
+          samp.S[static_cast<std::size_t>(b)];
+      gamma_b.topRightCorner(blk.p, blk.pstar) = gamma_mu_cov;
+      gamma_b.bottomLeftCorner(blk.pstar, blk.p) = gamma_mu_cov.transpose();
+      gamma_b.bottomRightCorner(blk.pstar, blk.pstar) = gamma_u_cov;
+
+      const Eigen::MatrixXd B_b = uf.B.middleRows(bstart, bsize);
+      M.noalias() += B_b.transpose() * gamma_b * B_b;
+    } else {
+      const Eigen::MatrixXd B_b = uf.B.middleRows(blk.row_offset, blk.pstar);
+      M.noalias() += B_b.transpose() * gamma_u_cov * B_b;
+    }
   }
   M = 0.5 * (M + M.transpose()).eval();
   return M;

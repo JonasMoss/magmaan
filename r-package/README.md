@@ -102,10 +102,10 @@ family:
   `fit_ml(model, df_to_data(...))` retain the listwise-complete raw blocks in
   `fit$raw_data`, so FMG calls normally do not need a separate `data` argument.
   Sample-stat-only fits can still pass complete raw `data =` explicitly.
-- Current support is complete-data, single-group ML. Multi-group FMG and
-  FIML/missing-data FMG are rejected explicitly. Listwise-deleted input is
-  supported only after it has become complete-data sample moments through
-  `df_to_data(..., missing = "listwise")`.
+- Current support is complete-data ML for single- and multi-group fits,
+  including mean structures. FIML/missing-data FMG is rejected explicitly.
+  Listwise-deleted input is supported only after it has become complete-data
+  sample moments through `df_to_data(..., missing = "listwise")`.
 - The test-name grammar mirrors semTests-style labels:
   `std`, `sb`, `ss`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, and
   `pols<gamma>`, with optional `_ug` and `_ml` / `_rls` suffixes. The default

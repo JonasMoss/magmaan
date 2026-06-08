@@ -52,9 +52,23 @@ stopifnot(inherits(fm$fmg, "magmaan_fmg_tests"))
 stopifnot(identical(fm$fmg$label, c("sb_rls", "peba4_rls")))
 
 fit_group <- magmaan(model, df, estimator = "ML", groups = "school",
-                     se = "none", test = "none")
-err_group <- tryCatch(fmg_tests(fit_group), error = conditionMessage)
-stopifnot(grepl("single-group", err_group, fixed = TRUE))
+                     meanstructure = TRUE, se = "none", test = "none")
+group_tests <- c("sb_ug_rls", "peba2_ug_rls", "peba4_rls", "pols2_rls")
+tab_group <- fmg_tests(fit_group, tests = group_tests)
+stopifnot(inherits(tab_group, "magmaan_fmg_tests"))
+stopifnot(identical(tab_group$label, group_tests))
+stopifnot(all(is.finite(tab_group$p_value)),
+          all(tab_group$p_value >= 0), all(tab_group$p_value <= 1))
+stopifnot(all(lengths(tab_group$eigenvalues) >= tab_group$df))
+stopifnot(all(lengths(tab_group$lambdas) == tab_group$df))
+
+pv_group_df <- fmg_pvalues(fit_group, data = df, tests = group_tests)
+pv_group_list <- fmg_pvalues(fit_group, data = fit_group$raw_data$X,
+                             tests = group_tests)
+stopifnot(isTRUE(all.equal(unname(pv_group_df), tab_group$p_value,
+                           tolerance = 1e-12)))
+stopifnot(isTRUE(all.equal(unname(pv_group_list), tab_group$p_value,
+                           tolerance = 1e-12)))
 
 df_missing <- df
 df_missing$x1[1L] <- NA_real_
