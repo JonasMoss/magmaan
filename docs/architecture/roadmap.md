@@ -179,11 +179,16 @@ golden `parTable()` fixtures.
   explicitly until the required spectra/sandwich route is defined for those
   cases. The helper computes biased and optional Browne-unbiased U-Gamma spectra
   through C++, keeping the U-factor, tiled casewise-contribution projection,
-  reduced matrices, and eigensolves out of R list roundtrips. In the
-  expected-bread unbiased path it uses the reduced normal-theory identity
-  `B' Gamma_NT B = I`; for biased-only single-model spectra it can eigensolve
-  in row space when `N < df`, and for Browne-unbiased spectra it uses the
-  low-rank shifted form when `N + 1 < df`.
+  reduced matrices, and eigensolves out of R list roundtrips. The Du-Bentler
+  unbiased correction's normal-theory term is `B' Gamma_NT(S) B` evaluated at the
+  *sample* covariance `S` (`reduced_gamma_nt_sample`), not the structured
+  `B' Gamma_NT(Sigma_hat) B = I` the expected bread reduces to: using the
+  identity silently makes the correction model-dependent and breaks the
+  `semTests::pvalues()` parity off the `S = Sigma_hat` point (validated
+  value-for-value to ~1e-8 across the full test x gamma x base grid, guarded by
+  `examples/fmg.R`). Biased-only single-model spectra can still eigensolve in
+  row space when `N < df`; the unbiased path takes the full reduced route so the
+  non-identity sample NT term is honored.
 
 ### Staged C++ facade
 

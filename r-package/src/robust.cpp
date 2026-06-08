@@ -261,18 +261,6 @@ magmaan::data::RawData raw_from_arg(const lvm::MatrixRep& rep, SEXP X) {
   return raw;
 }
 
-Eigen::VectorXd vech_lower_matrix(const Eigen::MatrixXd& S) {
-  const Eigen::Index p = S.rows();
-  Eigen::VectorXd out(p * (p + 1) / 2);
-  Eigen::Index k = 0;
-  for (Eigen::Index col = 0; col < p; ++col) {
-    for (Eigen::Index row = col; row < p; ++row) {
-      out(k++) = S(row, col);
-    }
-  }
-  return out;
-}
-
 }  // namespace
 
 // =============================================================================
@@ -509,9 +497,11 @@ Rcpp::List infer_fmg_ugamma_spectra(Rcpp::List fit, SEXP X,
   Eigen::VectorXd ev_biased;
   Eigen::VectorXd ev_unbiased;
   Eigen::MatrixXd M;
-  const bool row_space_biased = n < uf_or->df;
-  const bool row_space_unbiased = need_unbiased && (n + 1) < uf_or->df;
-  const bool row_space = row_space_biased && (!need_unbiased || row_space_unbiased);
+  // The row-space shortcut (n×n Gram instead of the df×df reduced Γ̂) is only a
+  // win for the biased spectrum. The unbiased correction needs the full df×df
+  // M and a non-identity Bᵀ·Γ_NT(S)·B, so fall back to the full path whenever
+  // the unbiased spectrum is requested.
+  const bool row_space = (n < uf_or->df) && !need_unbiased;
   if (row_space) {
     auto Y_or = magmaan::robust::casewise_projected_rows_tiled(
         *uf_or, raw, *ss_or);
@@ -522,32 +512,6 @@ Rcpp::List infer_fmg_ugamma_spectra(Rcpp::List fit, SEXP X,
     ev_biased = Eigen::VectorXd::Zero(uf_or->df);
     ev_biased.tail(ev_row_or->size()) = *ev_row_or;
     std::sort(ev_biased.data(), ev_biased.data() + ev_biased.size());
-    if (need_unbiased) {
-      magmaan::data::SampleStats browne_samp = ctx.samp;
-      browne_samp.n_obs = ss_or->n_obs;
-      const double N = static_cast<double>(browne_samp.n_obs[0]);
-      if (!(N > 3.0)) {
-        Rcpp::stop("magmaan: reduced_gamma_unbiased requires N > 3");
-      }
-      const double a = N * (N - 1.0) / ((N - 2.0) * (N - 3.0));
-      const double b = N / ((N - 2.0) * (N - 3.0));
-      const double c = 2.0 / (N - 1.0);
-      const double d = b * c;
-
-      const Eigen::VectorXd s_vech = vech_lower_matrix(browne_samp.S[0]);
-      const Eigen::VectorXd Bs = uf_or->B.transpose() * s_vech;
-      Eigen::MatrixXd small = Eigen::MatrixXd::Zero(n + 1, n + 1);
-      small.topLeftCorner(n, n).noalias() = a * row_M;
-      const double cross_scale = std::sqrt((a / denom) * d);
-      small.topRightCorner(n, 1).noalias() = cross_scale * ((*Y_or) * Bs);
-      small.bottomLeftCorner(1, n) = small.topRightCorner(n, 1).transpose();
-      small(n, n) = d * Bs.squaredNorm();
-      auto ev_small_or = magmaan::robust::ugamma_eigenvalues(small);
-      if (!ev_small_or.has_value()) stop_post(ev_small_or.error());
-      ev_unbiased = Eigen::VectorXd::Constant(uf_or->df, -b);
-      ev_unbiased.tail(ev_small_or->size()) = ev_small_or->array() - b;
-      std::sort(ev_unbiased.data(), ev_unbiased.data() + ev_unbiased.size());
-    }
   } else {
     auto M_or = magmaan::robust::reduced_gamma_sample_tiled(
         *uf_or, raw, *ss_or, denom);
@@ -562,16 +526,18 @@ Rcpp::List infer_fmg_ugamma_spectra(Rcpp::List fit, SEXP X,
   if (need_unbiased) {
     magmaan::data::SampleStats browne_samp = ctx.samp;
     browne_samp.n_obs = ss_or->n_obs;
-    if (ev_unbiased.size() == 0) {
-      const Eigen::MatrixXd M_nt =
-          Eigen::MatrixXd::Identity(uf_or->df, uf_or->df);
-      auto Mu_or = magmaan::robust::reduced_gamma_unbiased(
-          *uf_or, browne_samp, M, M_nt);
-      if (!Mu_or.has_value()) stop_post(Mu_or.error());
-      auto evu_or = magmaan::robust::ugamma_eigenvalues(*Mu_or);
-      if (!evu_or.has_value()) stop_post(evu_or.error());
-      ev_unbiased = std::move(*evu_or);
-    }
+    // Du-Bentler unbiased Γ: the normal-theory term uses the SAMPLE covariance
+    // S (Bᵀ·Γ_NT(S)·B), NOT the bread's structured Σ̂ — the latter reduces to
+    // the identity and silently makes the correction model-dependent, breaking
+    // parity with lavaan/semTests off the S = Σ̂ point.
+    auto Mnt_or = magmaan::robust::reduced_gamma_nt_sample(*uf_or);
+    if (!Mnt_or.has_value()) stop_post(Mnt_or.error());
+    auto Mu_or = magmaan::robust::reduced_gamma_unbiased(
+        *uf_or, browne_samp, M, *Mnt_or);
+    if (!Mu_or.has_value()) stop_post(Mu_or.error());
+    auto evu_or = magmaan::robust::ugamma_eigenvalues(*Mu_or);
+    if (!evu_or.has_value()) stop_post(evu_or.error());
+    ev_unbiased = std::move(*evu_or);
     out["unbiased"] = Rcpp::wrap(ev_unbiased);
   }
   return out;

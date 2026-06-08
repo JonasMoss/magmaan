@@ -65,4 +65,33 @@ fiml_data <- df_to_fiml_data(df_missing, model_spec(model))
 err_fiml <- tryCatch(fmg_tests(fit, data = fiml_data), error = conditionMessage)
 stopifnot(grepl("FIML/missing-data", err_fiml, fixed = TRUE))
 
+# Oracle parity: magmaan's FMG p-values must match semTests::pvalues() value-for-
+# value over the full test x gamma x base grid. semTests reads the UGamma spectra
+# and base statistics off a lavaan robust fit; magmaan computes them itself, so an
+# agreement to ~1e-8 exercises the entire chain (base stats, biased AND unbiased
+# Du-Bentler gamma, every eigenvalue-tail transform). Guarded so the example still
+# runs where semTests is absent.
+if (requireNamespace("semTests", quietly = TRUE) &&
+    requireNamespace("lavaan", quietly = TRUE)) {
+  fit_l <- lavaan::sem(model, df, estimator = "ML", test = "satorra.bentler",
+                       meanstructure = FALSE)
+  # std ignores the gamma flavour and semTests names it std_<base> only, so omit
+  # std_ug; every other method depends on the spectrum and is tested both ways.
+  ug_types <- c("sb", "ss", "sf", "all", "pall", "eba2", "eba3", "eba4",
+                "peba2", "peba4", "peba6", "pols2")
+  g <- expand.grid(type = ug_types, ug = c(FALSE, TRUE), base = c("ml", "rls"),
+                   stringsAsFactors = FALSE)
+  parity_tests <- c("std_ml", "std_rls",
+                    apply(g, 1L, function(r)
+                      paste(c(r[["type"]], if (identical(r[["ug"]], "TRUE")) "ug",
+                              r[["base"]]), collapse = "_")))
+  pv_m <- fmg_pvalues(fit, tests = parity_tests)
+  pv_s <- semTests::pvalues(fit_l, tests = as.list(parity_tests))
+  common <- intersect(names(pv_m), names(pv_s))
+  stopifnot(setequal(names(pv_m), names(pv_s)))
+  stopifnot(max(abs(pv_m[common] - pv_s[common])) < 1e-6)
+  cat(sprintf("FMG vs semTests parity: ok (%d cells, max|d| = %.1e)\n",
+              length(common), max(abs(pv_m[common] - pv_s[common]))))
+}
+
 cat("FMG fit-measure/inference workflow: ok\n")

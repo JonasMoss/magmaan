@@ -460,6 +460,19 @@ pairwise_casewise_contributions(const RawData& raw,
 post_expected<Eigen::MatrixXd>
 reduced_gamma_nt(const UFactor& uf);
 
+// (b'') Sample-moment normal-theory Bᵀ·Γ_NT(S)·B — same projection as
+// `reduced_gamma_nt(uf)` but with the *sample* covariance S in the Γ_NT
+// operator instead of the bread's structured moments Σ̂. This is the NT term
+// the Du-Bentler unbiased Γ requires: Γ_u is a distribution-free estimator of
+// the population fourth-moment ACOV, so its normal-theory piece is Γ_NT(S),
+// not Γ_NT(Σ̂). When the U-factor is built `Structured`, `reduced_gamma_nt(uf)`
+// returns ≈ I (the bread orthonormalises against Γ_NT(Σ̂)); feeding that as the
+// unbiasing `M_nt` silently makes the correction model-dependent and breaks
+// parity with lavaan/semTests off the (rare) S = Σ̂ point. Only the
+// `ProjectionExpected` U-factor is supported.
+post_expected<Eigen::MatrixXd>
+reduced_gamma_nt_sample(const UFactor& uf);
+
 // (b') Pairwise normal-theory Γ_NT^pw — the missing-data analogue of
 // `reduced_gamma_nt(uf)`, computed via the pattern-grouped expectation
 // identity without materialising the p* × p* `Γ_NT^pw` matrix. For each
