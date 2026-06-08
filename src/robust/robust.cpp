@@ -1432,6 +1432,33 @@ reduced_gamma_nt(const UFactor& uf) {
 }
 
 // ============================================================================
+// reduced_gamma_nt_sample — Bᵀ·Γ_NT(S)·B (sample-moment NT meat).
+// ============================================================================
+// Identical to `reduced_gamma_nt` except the Γ_NT operator is evaluated at the
+// per-block *sample* covariance S (WeightMoments::Unstructured → blk.S) rather
+// than the bread's structured Σ̂. This is the normal-theory term required by the
+// Du-Bentler unbiased Γ; see the header note. Only ProjectionExpected.
+post_expected<Eigen::MatrixXd>
+reduced_gamma_nt_sample(const UFactor& uf) {
+  if (uf.kind != UFactor::Kind::ProjectionExpected) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "reduced_gamma_nt_sample: only the ProjectionExpected U-factor is "
+        "supported"));
+  }
+  Eigen::MatrixXd GB = Eigen::MatrixXd::Zero(uf.total_rows, uf.df);
+  Eigen::MatrixXd H_buf;
+  for (Eigen::Index c = 0; c < uf.df; ++c) {
+    for (const auto& blk : uf.blocks) {
+      apply_gamma_nt_block(blk, uf.has_means, WeightMoments::Unstructured,
+                           uf.B.col(c), GB.col(c), H_buf);
+    }
+  }
+  Eigen::MatrixXd M = uf.B.transpose() * GB;
+  M = 0.5 * (M + M.transpose()).eval();
+  return M;
+}
+
+// ============================================================================
 // reduced_gamma_nt_pairwise — operator-only, never forms Γ_NT^pw.
 // ============================================================================
 

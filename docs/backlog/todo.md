@@ -223,15 +223,17 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   heavy parity/optional optimizer lanes less often, and coverage as an
   artifact before considering badges. Avoid coverage percentage gates until
   the report has been calibrated by real maintenance work.
-- **S/M.** Promote the FMG goodness-of-fit validation into the checked suite.
-  `experiments/18-foldnes-moss-gronneberg-2026 --semtests-parity` shows the
-  single-model FMG family (SB/SS/SF/ALL/pall/EBA/pEBA/pOLS x ML/RLS x biased/unbiased
-  Gamma) matches `semTests::pvalues` to ~1e-9 (Imhof) / machine precision
-  (closed-form), but that lives in an advisory experiment, not a gate. Add a
-  checked C++ golden for the FMG p-value transforms (fixed eigenvalues + chi-square
-  -> p-value per method) and note the semTests parity in
-  `docs/architecture/roadmap.md`. Coordinate with the exp-17 pEBA work, which
-  owns the nested/multi-group side of the same machinery.
+- **Partly landed.** Promote the FMG goodness-of-fit validation into the checked
+  suite. `examples/fmg.R` (run by `just r-check`) now asserts value-for-value
+  parity of the single-model FMG family (SB/SS/SF/ALL/pall/EBA/pEBA/pOLS x ML/RLS
+  x biased/unbiased Gamma) against `semTests::pvalues` to <1e-6 (observed ~1e-8)
+  on HS1939, gated on `semTests` being installed; this caught and now guards the
+  unbiased-Gamma NT-term regression (see FMG / U-Gamma Performance). The fused
+  unbiased path is unit-pinned by `reduced_gamma_nt_sample` in `robust_test.cpp`.
+  Still wanted: a self-contained C++ golden for the FMG p-value transforms (fixed
+  eigenvalues + chi-square -> p-value per method) so the eigenvalue-tail maths is
+  gated without R. Coordinate with the exp-17 pEBA work, which owns the
+  nested/multi-group side of the same machinery.
 
 ## Simulation primitives
 
@@ -302,11 +304,17 @@ simulation backlog.
   inside one C++ call. The current R composition repeatedly crosses the Rcpp
   boundary and reconstructs the transparent `UFactor` list, including
   per-block Cholesky factors, for each reducer.
-- **Landed.** Special-case expected-bread `reduced_gamma_nt()` in the FMG unbiased
-  path as the identity in the reduced projector basis. For
-  `ProjectionExpected`, `B = L_Gamma^-T N`, so `B' Gamma_NT B = I`; Browne's
-  unbiased correction can use a diagonal shift instead of applying the NT
-  operator column-by-column.
+- **Reverted (was a correctness bug).** The fused FMG unbiased path special-cased
+  the NT term as the identity (`B' Gamma_NT(Sigma_hat) B = I` for the expected
+  bread) and applied Browne's correction as a `-bI` diagonal shift. That is wrong:
+  the Du-Bentler unbiased Gamma is a distribution-free estimator whose NT term is
+  `Gamma_NT(S)` at the *sample* covariance, not the model-implied `Sigma_hat`.
+  Using the identity made every `_ug` test (incl. the defaults `SB_UG_RLS`,
+  `pEBA2_UG_RLS`) silently model-dependent and broke `semTests` parity by up to
+  ~4e-4 in p-values (worse at small N). Fixed by `reduced_gamma_nt_sample()`
+  (`B' Gamma_NT(S) B`, the Unstructured-moment reduction) fed as `M_nt`; parity
+  back to ~1e-8 across the full grid, regression-guarded in `examples/fmg.R` and
+  unit-pinned in `robust_test.cpp`.
 - **Landed.** Add a tiled raw-data-to-reduced-Gamma path that generates
   complete-data casewise contributions in row blocks, multiplies each tile by
   `B`, and accumulates `M += Y'Y`. The reusable robust-core helpers
@@ -318,13 +326,17 @@ simulation backlog.
   `df > N_total` on the fused single-model FMG path. Nonzero eigenvalues of
   `(ZcB)'(ZcB)` match those of `(ZcB)(ZcB)'`; large-p FMG models can have `df`
   much larger than `N`, where this avoids a much larger symmetric
-  eigendecomposition. The same fused helper now handles the Browne-unbiased
-  low-rank form `M_u = -bI + (a/N)Y'Y + dww'` with an `(N+1) × (N+1)`
-  eigensolve when `df > N+1`. Generalize this beyond the fused R helper if
-  other callers need it.
-- **Investigated, defer.** Rank-one secular update for the unbiased spectrum:
-  with the expected-bread identity shortcut,
-  `M_unbiased = a M_sample - b I + d vv'`. This could avoid the second full
+  eigendecomposition. The row-space shortcut is biased-spectrum only: the
+  Browne-unbiased low-rank form `M_u = -bI + (a/N)Y'Y + dww'` baked in the same
+  wrong `Gamma_NT(Sigma_hat) = I` identity, so the unbiased path now always takes
+  the full reduced route (`M`, `reduced_gamma_nt_sample`, `reduced_gamma_unbiased`).
+  A correct row-space unbiased optimization would need the sample NT term folded
+  in, not a scalar `-b` shift; defer until a tiny-N/high-df FMG case demands it.
+- **Investigated, defer (and the shortcut was wrong).** Rank-one secular update
+  for the unbiased spectrum once used the expected-bread identity,
+  `M_unbiased = a M_sample - b I + d vv'`; with the correct sample NT term the
+  `-bI` becomes `-b * B'Gamma_NT(S)B`, no longer diagonal, so the secular form
+  does not apply. This could avoid the second full
   eigendecomposition, but it requires eigenvectors of `M_sample` to rotate `v`
   into the eigenspace. Eigen's `ComputeEigenvectors` path was ~4-6x slower
   than `EigenvaluesOnly` in synthetic df=300/739/1500 checks, so a perfect

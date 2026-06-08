@@ -480,6 +480,44 @@ TEST_CASE("U·Γ_NT eigenvalues all 1 on path model (Reduced LISREL)") {
   CHECK(max_deviation < 1e-10);
 }
 
+TEST_CASE("reduced_gamma_nt_sample uses the sample S, not the structured Σ̂") {
+  // The Du-Bentler unbiased Γ needs the normal-theory term at the SAMPLE
+  // covariance, Bᵀ·Γ_NT(S)·B — not Bᵀ·Γ_NT(Σ̂)·B, which a Structured bread
+  // reduces to the identity. Pin the sample primitive against a direct
+  // gamma_nt(S) construction and confirm it really differs from the structured
+  // reduction whenever S ≠ Σ̂ (here, the fixture's model misfit guarantees it).
+  auto ctx = load_and_fit(
+      "visual =~ x1 + x2 + x3\n"
+      "textual =~ x4 + x5 + x6\n"
+      "speed =~ x7 + x8 + x9",
+      std::string(MAGMAAN_FIXTURES_DIR) + "/fit/0002_three_factor_hs.fit.json");
+
+  auto uf_or = magmaan::robust::build_u_factor(*ctx.handles.pt, *ctx.handles.rep,
+                                          ctx.samp, ctx.est);
+  REQUIRE(uf_or.has_value());
+
+  // Direct reference: Bᵀ·Γ_NT(S)·B with S the sample covariance (cov-only fit,
+  // so total_rows == p* and B reduces Γ_NT(S) wholesale).
+  auto Gnt_S_or = magmaan::data::gamma_nt(ctx.samp.S[0]);
+  REQUIRE(Gnt_S_or.has_value());
+  const Eigen::MatrixXd M_ref = uf_or->B.transpose() * (*Gnt_S_or) * uf_or->B;
+
+  auto M_s_or = magmaan::robust::reduced_gamma_nt_sample(*uf_or);
+  REQUIRE(M_s_or.has_value());
+  CHECK(M_s_or->rows() == uf_or->df);
+  CHECK(M_s_or->cols() == uf_or->df);
+  CHECK((*M_s_or - M_ref).cwiseAbs().maxCoeff() < 1e-9);
+
+  // The structured reduction is ≈ I; the sample reduction is genuinely
+  // different. A regression that fed Γ_NT(Σ̂) into the unbiasing would collapse
+  // this gap and trip the final check.
+  auto M_struct_or = magmaan::robust::reduced_gamma_nt(*uf_or);
+  REQUIRE(M_struct_or.has_value());
+  const Eigen::MatrixXd Id = Eigen::MatrixXd::Identity(uf_or->df, uf_or->df);
+  CHECK((*M_struct_or - Id).cwiseAbs().maxCoeff() < 1e-9);
+  CHECK((*M_s_or - Id).cwiseAbs().maxCoeff() > 1e-3);
+}
+
 // ----------------------------------------------------------------------------
 // Cross-flavor consistency on MVN data: as n → ∞, M_sample → M_nt and the
 // eigenvalues of UΓ̂ converge to 1.
