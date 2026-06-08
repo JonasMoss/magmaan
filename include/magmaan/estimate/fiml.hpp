@@ -119,6 +119,12 @@ struct FIMLUGammaSpectrum {
   double          trace_xcheck = 0.0;  // Σ eigvals; == fiml_robust_mlr().trace_ugamma
 };
 
+struct FIMLEtaJacobian {
+  // Δ = ∂[μ_1; vech(Σ_1); μ_2; vech(Σ_2); ...] / ∂θ in the same saturated
+  // eta layout used by `saturated_em_moments`.
+  Eigen::MatrixXd Delta_theta;
+};
+
 // Full-information ML over raw continuous data with arbitrary observed-value
 // patterns. The optimized scalar is the per-observation observed-pattern
 // normal-theory deviance without saturated/H1 constants:
@@ -212,6 +218,13 @@ fiml_robust_mlr(spec::LatentStructure pt,
 // for the η layout and scaling conventions.
 post_expected<SaturatedMoments>
 saturated_em_moments(const RawData& raw, double h_step = 1e-4);
+
+post_expected<FIMLEtaJacobian>
+fiml_eta_jacobian(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const RawData& raw,
+                  const Estimates& est,
+                  FIML discrepancy = {});
 
 // First-principles FIML UΓ spectrum for FMG goodness-of-fit tests. Multi-group
 // safe (H/J/acov are block-diagonal across groups; Δ stacks per group). `df` and

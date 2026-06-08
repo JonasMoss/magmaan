@@ -467,10 +467,16 @@ simulation backlog.
   refused). It is the `h1.information="unstructured"` convention and reproduces
   lavaan's unstructured UGamma element-for-element on complete data (~1e-7,
   guarded in `examples/fmg.R`); semTests' unsound FIML rescale hack is not
-  matched. Remaining FIML follow-ups: the `magmaan(estimator="FIML")` high-level
-  path does not auto-enable mean structure (use `model_spec(..., meanstructure =
-  TRUE)` + `fit_fiml`); multi-group FIML fits need explicit start/convergence
-  care; nested/two-model FIML FMG and pairwise-data FMG remain deferred.
+  matched. Nested/two-model FIML FMG is also wired through
+  `robust_nested_lrt()` / `nestedTest(method = "restriction_map")` when both
+  fits are FIML and carry compatible `raw_data`; the C++ core uses the H1
+  saturated eta-space `A/C/S` reduction with exact and delta restriction maps,
+  and the R surface rejects complete-data-only nested methods and mixed
+  FIML/complete pairs. Remaining FIML follow-ups: the
+  `magmaan(estimator="FIML")` high-level path does not auto-enable mean
+  structure (use `model_spec(..., meanstructure = TRUE)` + `fit_fiml`);
+  multi-group FIML fits need explicit start/convergence care; nonlinear
+  equality tangent-space support and pairwise-data FMG remain deferred.
 
 ## Benchmarks
 

@@ -103,9 +103,16 @@ family:
   `fit$raw_data`, so FMG calls normally do not need a separate `data` argument.
   Sample-stat-only fits can still pass complete raw `data =` explicitly.
 - Current support is complete-data ML for single- and multi-group fits,
-  including mean structures. FIML/missing-data FMG is rejected explicitly.
-  Listwise-deleted input is supported only after it has become complete-data
-  sample moments through `df_to_data(..., missing = "listwise")`.
+  including mean structures, plus FIML/missing-data fits with retained
+  `fit$raw_data`. Under FIML only the ML/LRT base and biased Gamma are defined;
+  explicit `_rls` and `_ug` labels are rejected. Listwise-deleted input is
+  supported only after it has become complete-data sample moments through
+  `df_to_data(..., missing = "listwise")`.
+- Nested FIML model-pair tests are available through
+  `nestedTest(..., method = "restriction_map")` / `robust_nested_lrt()` when
+  both fits are FIML fits from the same raw-data shape and mask. Complete-data
+  SB2001/SB2010 compatibility methods, caller-supplied `data =`, and mixed
+  FIML/complete-data pairs are rejected for this path.
 - The test-name grammar mirrors semTests-style labels:
   `std`, `sb`, `ss`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, and
   `pols<gamma>`, with optional `_ug` and `_ml` / `_rls` suffixes. The default

@@ -34,6 +34,40 @@ stopifnot(isTRUE(fit$fiml))
 stopifnot(inherits(fit$raw_data, "magmaan_fiml_data"))
 stopifnot(identical(fit$raw_data$nobs[[1L]], nrow(df)))
 
+model_eq <- "visual =~ x1 + a*x2 + a*x3"
+m_eq <- model_spec(model_eq, meanstructure = TRUE)
+fit_eq <- magmaan_core$fit_fiml(
+  m_eq, df_to_fiml_data(df, m_eq),
+  control = list(max_iter = 4000, ftol = 1e-12, gtol = 1e-8)
+)
+nested_emp <- nestedTest(fit, fit_eq, method = "restriction_map")
+stopifnot(inherits(nested_emp, "magmaan_nested_test"))
+stopifnot(nested_emp$df_diff == 1L)
+stopifnot(length(nested_emp$eigenvalues) == nested_emp$df_diff)
+stopifnot(all(is.finite(nested_emp$eigenvalues)))
+nested_nt <- nestedTest(fit, fit_eq, method = "restriction_map", gamma = "NT")
+stopifnot(max(abs(nested_nt$eigenvalues - 1)) < 1e-6)
+
+err_complete_method <- tryCatch(
+  nestedTest(fit, fit_eq, method = "satorra.bentler.2001"),
+  error = function(e) conditionMessage(e)
+)
+stopifnot(grepl("restriction_map", err_complete_method, fixed = TRUE))
+err_data_arg <- tryCatch(
+  nestedTest(fit, fit_eq, data = df, method = "restriction_map"),
+  error = function(e) conditionMessage(e)
+)
+stopifnot(grepl("fit_H1$raw_data", err_data_arg, fixed = TRUE))
+fit_ml_complete <- magmaan_core$fit_ml(
+  m, df_to_data(lavaan::HolzingerSwineford1939, m),
+  control = list(max_iter = 1000)
+)
+err_mixed <- tryCatch(
+  nestedTest(fit, fit_ml_complete, method = "restriction_map"),
+  error = function(e) conditionMessage(e)
+)
+stopifnot(grepl("mixed FIML/complete-data", err_mixed, fixed = TRUE))
+
 mg <- df_to_fiml_data(df, model_spec(model, meanstructure = TRUE), group = "school")
 stopifnot(length(mg$X) == 2L)
 stopifnot(identical(mg$group_labels, levels(df$school)))

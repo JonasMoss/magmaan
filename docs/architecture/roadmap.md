@@ -188,7 +188,15 @@ golden `parTable()` fixtures.
   spectrum element-for-element (~1e-7), validated in `examples/fmg.R`. semTests'
   rescale-the-mis-normalized-lavInspect-UGamma FIML hack is unsound and is
   deliberately NOT matched. Under FIML only the biased Gamma-hat and the ML base
-  are defined; `_ug` and `_rls` are rejected.
+  are defined; `_ug` and `_rls` are rejected. Nested/model-pair FIML FMG is
+  available through the existing `robust_nested_lrt()` / `nestedTest()`
+  `method = "restriction_map"` route when both fits are FIML and carry
+  compatible `raw_data`: it builds the H1-anchored saturated eta-space
+  `Delta1/P/A/C/S` reduction from `V = H` and `Gamma_mis`, supports exact
+  equality-constraint maps and delta tangent maps, reports the existing
+  unscaled/scaled/mean-variance/scaled-shifted/exact-mixture nested result
+  shape, and rejects nonlinear equality constraints and complete-data-only
+  nested compatibility methods for FIML pairs.
   The helper computes biased and optional Browne/Du-Bentler unbiased U-Gamma
   spectra through C++, keeping the U-factor, tiled casewise-contribution
   projection, grouped reduced matrices, and eigensolves out of R list
@@ -1154,7 +1162,11 @@ friendly statistical name for nested robust likelihood-ratio work. Its default
 `"lavaan_sb2001"` and `"lavaan_sb2010"` are explicit compatibility methods.
 The restriction-map route also exposes `computation = "streaming"` versus
 `"materialized"` so paper-local benchmarks can compare the algebra without
-using lavaan as the timing denominator.
+using lavaan as the timing denominator. When both fits are FIML,
+`robust_nested_lrt()` dispatches only to `method = "restriction_map"` and uses
+the retained FIML `raw_data` rather than a caller-supplied complete-data
+argument; mixed FIML/complete-data pairs and the lavaan SB2001/SB2010
+compatibility methods are rejected for this boundary.
 The older `nestedTest()` spelling and lavaan labels (`"satorra.2000"`,
 `"satorra.bentler.2001"`, `"satorra.bentler.2010"`) remain as compatibility
 aliases during exploration. Low-level `magmaan_core` exposes both

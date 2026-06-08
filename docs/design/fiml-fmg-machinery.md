@@ -121,7 +121,7 @@ complete-data "structured" FMG default. It should reproduce the complete-data
 unstructured H1-information spectrum, because FIML's saturated EM model uses
 the unstructured saturated moment information as `V = H`.
 
-Under FIML, the first supported boundary should be:
+Under FIML, the implemented single-model boundary is:
 
 - biased Gamma only: `Gamma_mis = H^-1 J H^-1`;
 - ML/LRT base only;
@@ -195,13 +195,13 @@ For FIML nested tests, both need eta-space versions:
   `[mu; vech(Sigma)]`, then find the M0 column-space restriction inside M1's
   column space.
 
-Nonlinear equality constraints require a tangent-space implementation before
-claiming support. The tangent is local to the fitted point, so a pure
+Nonlinear equality constraints are rejected until there is a tangent-space
+implementation. The tangent is local to the fitted point, so a pure
 shared-label `K` is not enough.
 
-## Validation Bar
+## Validation Coverage
 
-Before treating FIML FMG as landed, tests should cover:
+The checked validation now covers:
 
 - complete-data degeneracy against the unstructured complete-data UGamma
   spectrum;
@@ -221,27 +221,25 @@ Before treating FIML FMG as landed, tests should cover:
 - equality-constraint df/tangent behavior;
 - a nested FIML synthetic case where the nested eigenvalues collapse to ones
   under `Gamma = V^-1`;
-- a nested FIML case comparing dense and reduced generalized-eigenvalue paths.
+- a nested FIML case comparing dense and reduced generalized-eigenvalue paths;
+- explicit rejection of nonlinear equality constraints for FIML GOF and nested
+  tests.
 
 The trace check is a diagnostic, not the definition of the spectrum. The
 definition is the eta-space projector `U Gamma_mis`.
 
-## Review Implications For `beb45a3`
+## Implementation Status
 
-The recent `Support FIML (missing-data) FMG goodness-of-fit tests` commit is
-aligned with the single-model GOF construction if:
+The FIML FMG implementation follows this construction:
 
 - `fiml_ugamma_spectrum()` uses only saturated `H/J/acov`, the H0 model tangent,
   and the FIML LRT base;
 - `_ug` and explicit `_rls` are rejected under FIML;
 - complete-data validation is against the unstructured H1-information spectrum,
-  not the structured complete-data default.
-
-Remaining review concerns before relying on it as fully landed:
-
-- add an actual missing-data trace check against `fiml_robust_mlr`'s
-  `trace_ugamma`;
-- add multi-group C++ coverage, not only an R example smoke test;
-- state or reject nonlinear equality constraints explicitly;
-- do not describe nested FIML FMG as implemented until the model-pair
-  `A/C/S` route above exists.
+  not the structured complete-data default;
+- actual missing-data trace checks compare the spectrum sum to
+  `fiml_robust_mlr`'s `trace_ugamma`;
+- multi-group missing-data spectra have C++ coverage;
+- nonlinear equality constraints are rejected explicitly;
+- nested FIML `restriction_map` tests use the model-pair `A/C/S` route in
+  saturated eta-space, with exact and delta restriction-map variants.

@@ -1604,6 +1604,78 @@ fiml_robust_mlr(spec::LatentStructure pt,
   return out;
 }
 
+post_expected<FIMLEtaJacobian>
+fiml_eta_jacobian(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const RawData& raw,
+                  const Estimates& est,
+                  FIML discrepancy) {
+  auto cache_or = discrepancy.prepare(raw);
+  if (!cache_or.has_value()) {
+    return std::unexpected(fit_to_post(cache_or.error(), "FIML::prepare"));
+  }
+  const FIMLCache& cache = *cache_or;
+
+  auto start_samp_or = fiml_start_sample_stats(raw);
+  if (!start_samp_or.has_value()) {
+    return std::unexpected(fit_to_post(start_samp_or.error(),
+        "fiml_start_sample_stats"));
+  }
+  SampleStats start_samp = std::move(*start_samp_or);
+  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(),
+        "validate_fiml_fixed_x_missing_policy"));
+  }
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, start_samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(), "resolve_fixed_x_from_sample"));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_eta_jacobian: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  const auto& ev = *ev_or;
+  if (static_cast<std::size_t>(est.theta.size()) != ev.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_eta_jacobian: theta size mismatch"));
+  }
+  auto eval_or = ev.evaluate(est.theta, /*with_sigma_jacobian=*/true,
+                             /*with_mu_jacobian=*/true);
+  if (!eval_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_eta_jacobian: ModelEvaluator::evaluate failed: " +
+            eval_or.error().detail));
+  }
+  const Eigen::MatrixXd& Js = eval_or->J_sigma;
+  const Eigen::MatrixXd& Jm = eval_or->J_mu;
+  const Eigen::Index qpar = static_cast<Eigen::Index>(ev.n_free());
+  const bool has_mu = Jm.rows() > 0;
+
+  Eigen::Index Q = 0;
+  for (Eigen::Index p : cache.block_p) Q += p + p * (p + 1) / 2;
+
+  Eigen::MatrixXd Delta = Eigen::MatrixXd::Zero(Q, qpar);
+  const std::size_t B = raw.X.size();
+  Eigen::Index eta_off = 0, mu_off = 0, sig_off = 0;
+  for (std::size_t b = 0; b < B; ++b) {
+    const Eigen::Index p = raw.X[b].cols();
+    const Eigen::Index ps = p * (p + 1) / 2;
+    if (has_mu) Delta.block(eta_off, 0, p, qpar) = Jm.block(mu_off, 0, p, qpar);
+    Delta.block(eta_off + p, 0, ps, qpar) = Js.block(sig_off, 0, ps, qpar);
+    eta_off += p + ps;
+    mu_off += p;
+    sig_off += ps;
+  }
+  if (eta_off != Q) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_eta_jacobian: assembled Δ rows (" + std::to_string(eta_off) +
+            ") != saturated dim (" + std::to_string(Q) + ")"));
+  }
+
+  return FIMLEtaJacobian{std::move(Delta)};
+}
+
 post_expected<FIMLUGammaSpectrum>
 fiml_ugamma_spectrum(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
@@ -1621,7 +1693,11 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "fiml_ugamma_spectrum: h_step must be > 0"));
   }
-  (void)discrepancy;  // saturated_em_moments builds its own FIML{}; kept for API symmetry
+  if (!pt.nl_constraints.empty()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_ugamma_spectrum: nonlinear equality constraints need "
+        "tangent-space support, which is not implemented for FIML FMG"));
+  }
 
   // (1) Saturated-moment ingredients (block-diagonal η-space, multi-group safe):
   //     V = H (saturated observed information), Γ_mis = acov = H⁻¹ J H⁻¹.
@@ -1632,65 +1708,17 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
   const Eigen::MatrixXd& G = sm.acov;
   const Eigen::Index Q = V.rows();
 
-  // (2) Model Jacobian Δ = ∂[μ(θ); vech Σ(θ)]/∂θ at θ̂ (mirror the
-  //     fiml_robust_mlr evaluator/fixed.x preamble).
-  auto start_samp_or = fiml_start_sample_stats(raw);
-  if (!start_samp_or.has_value()) {
-    return std::unexpected(fit_to_post(start_samp_or.error(),
-        "fiml_start_sample_stats"));
-  }
-  SampleStats start_samp = std::move(*start_samp_or);
-  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
-    return std::unexpected(fit_to_post(e.error(),
-        "validate_fiml_fixed_x_missing_policy"));
-  }
-  if (auto e = resolve_fixed_x_from_sample(pt, rep, start_samp); !e.has_value()) {
-    return std::unexpected(fit_to_post(e.error(), "resolve_fixed_x_from_sample"));
-  }
-  auto ev_or = model::ModelEvaluator::build(pt, rep);
-  if (!ev_or.has_value()) {
+  // (2) Model Jacobian Δ = ∂[μ(θ); vech Σ(θ)]/∂θ at θ̂.
+  auto jac_or = fiml_eta_jacobian(pt, rep, raw, est, discrepancy);
+  if (!jac_or.has_value()) return std::unexpected(jac_or.error());
+  Eigen::MatrixXd Delta = std::move(jac_or->Delta_theta);
+  if (Delta.rows() != Q) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "fiml_ugamma_spectrum: ModelEvaluator::build failed: " +
-            ev_or.error().detail));
-  }
-  const auto& ev = *ev_or;
-  if (static_cast<std::size_t>(est.theta.size()) != ev.n_free()) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "fiml_ugamma_spectrum: theta size mismatch"));
-  }
-  auto eval_or = ev.evaluate(est.theta, /*with_sigma_jacobian=*/true,
-                             /*with_mu_jacobian=*/true);
-  if (!eval_or.has_value()) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "fiml_ugamma_spectrum: ModelEvaluator::evaluate failed: " +
-            eval_or.error().detail));
-  }
-  const Eigen::MatrixXd& Js = eval_or->J_sigma;  // (Σ p*_b) × q, σ-blocks stacked
-  const Eigen::MatrixXd& Jm = eval_or->J_mu;     // (Σ p_b)  × q, or 0×0
-  const Eigen::Index qpar = static_cast<Eigen::Index>(ev.n_free());
-  const bool has_mu = Jm.rows() > 0;
-
-  // (3) Interleave J_mu / J_sigma into the saturated η-layout
-  //     [μ_1; vech Σ_1; μ_2; vech Σ_2; …] to match V / Γ_mis.
-  Eigen::MatrixXd Delta = Eigen::MatrixXd::Zero(Q, qpar);
-  const std::size_t B = raw.X.size();
-  Eigen::Index eta_off = 0, mu_off = 0, sig_off = 0;
-  for (std::size_t b = 0; b < B; ++b) {
-    const Eigen::Index p = raw.X[b].cols();
-    const Eigen::Index ps = p * (p + 1) / 2;
-    if (has_mu) Delta.block(eta_off, 0, p, qpar) = Jm.block(mu_off, 0, p, qpar);
-    Delta.block(eta_off + p, 0, ps, qpar) = Js.block(sig_off, 0, ps, qpar);
-    eta_off += p + ps;
-    mu_off += p;
-    sig_off += ps;
-  }
-  if (eta_off != Q) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "fiml_ugamma_spectrum: assembled Δ rows (" + std::to_string(eta_off) +
+        "fiml_ugamma_spectrum: Δ rows (" + std::to_string(Delta.rows()) +
             ") != saturated dim (" + std::to_string(Q) + ")"));
   }
 
-  // Equality constraints: Δ ← Δ·K (collapse to the α-reparameterization).
+  // (3) Equality constraints: Δ ← Δ·K (collapse to the α-reparameterization).
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
   if (con_or->active()) Delta = (Delta * con_or->K()).eval();
