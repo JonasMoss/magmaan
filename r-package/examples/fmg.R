@@ -79,6 +79,63 @@ fiml_data <- df_to_fiml_data(df_missing, model_spec(model))
 err_fiml <- tryCatch(fmg_tests(fit, data = fiml_data), error = conditionMessage)
 stopifnot(grepl("FIML/missing-data", err_fiml, fixed = TRUE))
 
+# ---- FIML (missing-data) FMG: first-principles UGamma spectrum --------------
+# magmaan computes the missing-data UGamma spectrum from its own saturated-model
+# EM information and ACOV (no semTests-style rescale hack; semTests' FIML support
+# is unsound and is intentionally NOT matched). Under FIML only the biased
+# Gamma-hat and the ML/LRT base are defined.
+spec_f <- model_spec(model, meanstructure = TRUE)
+df_na <- df
+set.seed(11)
+for (j in paste0("x", 1:9)) df_na[sample(nrow(df_na), 28L), j] <- NA_real_
+fit_fiml <- magmaan_core$fit_fiml(spec_f, df_to_fiml_data(df_na, spec_f),
+              control = list(max_iter = 8000, ftol = 1e-12, gtol = 1e-8))
+stopifnot(identical(fit_fiml$estimator, "FIML"), isTRUE(fit_fiml$fiml))
+
+tab_f <- fmg_tests(fit_fiml)
+stopifnot(inherits(tab_f, "magmaan_fmg_tests"))
+stopifnot(all(tab_f$base == "ml"), all(!tab_f$ug))
+stopifnot(all(is.finite(tab_f$p_value)), all(tab_f$p_value >= 0), all(tab_f$p_value <= 1))
+# RLS and unbiased gamma are refused under FIML.
+stopifnot(grepl("RLS",
+  tryCatch(fmg_tests(fit_fiml, tests = "peba4_rls"), error = conditionMessage)))
+stopifnot(grepl("unbiased",
+  tryCatch(fmg_tests(fit_fiml, tests = "sb_ug"), error = conditionMessage)))
+
+if (requireNamespace("lavaan", quietly = TRUE)) {
+  # Validation oracle (NOT semTests): on COMPLETE data the FIML spectrum must
+  # reproduce lavaan's unstructured UGamma element-for-element (the
+  # h1.information = "unstructured" convention natural to FIML's EM h1 model),
+  # and the FIML LRT base must match lavaan's chisq.
+  fit_fc <- magmaan_core$fit_fiml(spec_f, df_to_fiml_data(df, spec_f),
+              control = list(max_iter = 10000, ftol = 1e-13, gtol = 1e-9))
+  sp_c <- magmaan:::infer_fiml_fmg_spectrum(fit_fc)
+  lav_u <- lavaan::cfa(model, df, estimator = "ML", test = "satorra.bentler",
+                       meanstructure = TRUE, h1.information = "unstructured")
+  ev_l <- sort(Re(eigen(lavaan::lavInspect(lav_u, "UGamma"),
+                        only.values = TRUE)$values),
+               decreasing = TRUE)[seq_len(sp_c$df)]
+  ev_m <- sort(sp_c$biased, decreasing = TRUE)
+  stopifnot(max(abs(ev_m - ev_l)) < 1e-5)
+  stopifnot(abs(sp_c$chi2_lrt - unname(lavaan::fitMeasures(lav_u, "chisq"))) < 1e-5)
+  cat(sprintf("FIML FMG vs lavaan unstructured UGamma: ok (%d cells, max|d| = %.1e)\n",
+              sp_c$df, max(abs(ev_m - ev_l))))
+}
+
+# Multi-group FIML (the spectra are block-diagonal across groups).
+spec_mg <- model_spec(model, group = "school",
+                      group_labels = levels(HolzingerSwineford1939$school),
+                      meanstructure = TRUE)
+dfg <- df[, c(paste0("x", 1:9), "school")]
+fit_mg <- magmaan_core$fit_fiml(spec_mg,
+            df_to_fiml_data(dfg, spec_mg, group = "school"),
+            control = list(max_iter = 12000, ftol = 1e-13, gtol = 1e-9))
+stopifnot(fit_mg$ngroups == 2L)
+tab_mg <- fmg_tests(fit_mg)
+stopifnot(inherits(tab_mg, "magmaan_fmg_tests"))
+stopifnot(all(tab_mg$base == "ml"), all(is.finite(tab_mg$p_value)))
+cat("FIML FMG (single + multi-group) workflow: ok\n")
+
 # Oracle parity: magmaan's FMG p-values must match semTests::pvalues() value-for-
 # value over the full test x gamma x base grid. semTests reads the UGamma spectra
 # and base statistics off a lavaan robust fit; magmaan computes them itself, so an

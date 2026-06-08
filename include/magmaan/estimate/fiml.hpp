@@ -104,6 +104,21 @@ struct FIMLRobustMLR {
   std::int64_t ntotal            = 0;
 };
 
+// The full missing-data UΓ spectrum for FMG goodness-of-fit tests under FIML.
+// Unlike `FIMLRobustMLR` (which carries only the first cumulant via a trace
+// difference and the q parameter-space eigenvalues of H⁻¹·meat), this returns
+// the df nonzero eigenvalues of U·Γ_mis in the *saturated-moment* space — the
+// reference law T → Σ λ_j χ²_1 that every FMG eigenvalue-tail transform consumes.
+// Built first-principles from the saturated information (V = H), the
+// saturated-moment ACOV (Γ_mis = H⁻¹JH⁻¹), and the model Jacobian
+// Δ = ∂η_model/∂θ: U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV. No lavaan-UGamma-rescaling hack.
+struct FIMLUGammaSpectrum {
+  Eigen::VectorXd eigvals;          // df nonzero eigenvalues of U·Γ_mis, ascending
+  double          chi2_lrt = 0.0;   // FIML LRT (the FMG base statistic under FIML)
+  int             df       = 0;
+  double          trace_xcheck = 0.0;  // Σ eigvals; == fiml_robust_mlr().trace_ugamma
+};
+
 // Full-information ML over raw continuous data with arbitrary observed-value
 // patterns. The optimized scalar is the per-observation observed-pattern
 // normal-theory deviance without saturated/H1 constants:
@@ -197,6 +212,22 @@ fiml_robust_mlr(spec::LatentStructure pt,
 // for the η layout and scaling conventions.
 post_expected<SaturatedMoments>
 saturated_em_moments(const RawData& raw, double h_step = 1e-4);
+
+// First-principles FIML UΓ spectrum for FMG goodness-of-fit tests. Multi-group
+// safe (H/J/acov are block-diagonal across groups; Δ stacks per group). `df` and
+// `chi2_lrt` are passed in (the caller already has them from `infer_df_stat` /
+// `fiml_extras`) to avoid recomputation, mirroring `fiml_robust_mlr`. Returns the
+// df nonzero eigenvalues of U·Γ_mis; `trace_xcheck = Σ eigvals` must equal
+// `fiml_robust_mlr(...).trace_ugamma` (validated in tests).
+post_expected<FIMLUGammaSpectrum>
+fiml_ugamma_spectrum(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const RawData& raw,
+                     const Estimates& est,
+                     int df,
+                     double chi2_lrt,
+                     FIML discrepancy = {},
+                     double h_step = 1e-4);
 
 // FIML independence/baseline chi-square for raw continuous data with missing
 // values. Unlike complete-data `baseline_chi2(SampleStats)`, this evaluates the

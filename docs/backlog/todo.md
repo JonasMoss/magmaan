@@ -457,9 +457,20 @@ simulation backlog.
   method/parameter, UG flag, spectra/lambda list-columns), `fit_measures(...,
   fmg = ...)` attaches those diagnostics to ordinary fit measures, and
   `fmg_pvalues()` remains a named-vector compatibility view. Supported boundary
-  is complete-data single- and multi-group ML, including mean structures, with
-  retained or explicitly supplied raw data; FIML/missing-data FMG still fails
-  explicitly.
+  is complete-data single- and multi-group ML (including mean structures) with
+  retained or explicitly supplied raw data, plus **FIML/missing-data fits**
+  (single- and multi-group): `fmg_tests()` accepts a `fit_fiml()` /
+  `magmaan(..., estimator = "FIML")` fit and routes to
+  `estimate::fiml::fiml_ugamma_spectrum` (Rcpp `infer_fiml_fmg_spectrum`), which
+  builds the missing-data UΓ spectrum first-principles from the saturated EM
+  information and ACOV (`U·Γ_mis`, biased gamma + FIML-LRT base only; `_ug`/`_rls`
+  refused). It is the `h1.information="unstructured"` convention and reproduces
+  lavaan's unstructured UGamma element-for-element on complete data (~1e-7,
+  guarded in `examples/fmg.R`); semTests' unsound FIML rescale hack is not
+  matched. Remaining FIML follow-ups: the `magmaan(estimator="FIML")` high-level
+  path does not auto-enable mean structure (use `model_spec(..., meanstructure =
+  TRUE)` + `fit_fiml`); multi-group FIML fits need explicit start/convergence
+  care; nested/two-model FIML FMG and pairwise-data FMG remain deferred.
 
 ## Benchmarks
 

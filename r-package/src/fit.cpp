@@ -2793,6 +2793,35 @@ Rcpp::List estimate_fiml_robust_mlr(Rcpp::List fit, double h_step = 1e-4) {
       Rcpp::_["chisq"] = extras_or->chi2);
 }
 
+// infer_fiml_fmg_spectrum() — mirrors estimate::fiml::fiml_ugamma_spectrum().
+// First-principles missing-data UΓ spectrum for FMG goodness-of-fit tests: the
+// df nonzero eigenvalues of U·Γ_mis built from the saturated information and the
+// saturated-moment ACOV. Biased gamma only (the Du-Bentler unbiased gamma is
+// undefined under FIML — no $unbiased key), ML/LRT base statistic.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_fiml_fmg_spectrum(Rcpp::List fit, double h_step = 1e-4) {
+  if (!fit.containsElementNamed("raw_data")) {
+    Rcpp::stop("magmaan: infer_fiml_fmg_spectrum() requires a FIML fit with $raw_data");
+  }
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
+  auto df_or = magmaan::inference::df_stat(ctx.pt, ctx.samp, est.theta);
+  if (!df_or.has_value()) stop_post(df_or.error());
+  auto extras_or = magmaan::estimate::fiml::fiml_extras(ctx.pt, ctx.rep, raw, est);
+  if (!extras_or.has_value()) stop_post(extras_or.error());
+  auto sp_or = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      ctx.pt, ctx.rep, raw, est, *df_or, extras_or->chi2,
+      magmaan::estimate::fiml::FIML{}, h_step);
+  if (!sp_or.has_value()) stop_post(sp_or.error());
+  return Rcpp::List::create(
+      Rcpp::_["biased"] = Rcpp::wrap(sp_or->eigvals),
+      Rcpp::_["chi2_lrt"] = sp_or->chi2_lrt,
+      Rcpp::_["df"] = sp_or->df,
+      Rcpp::_["trace_xcheck"] = sp_or->trace_xcheck);
+}
+
 // measures_standardize_lv() — mirrors measures::standardize::standardize_lv().
 //
 // [[Rcpp::export]]

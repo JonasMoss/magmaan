@@ -241,6 +241,10 @@ estimate_fiml_robust_mlr <- function(fit, h_step = 1e-4) {
     .Call(`_magmaan_estimate_fiml_robust_mlr`, fit, h_step)
 }
 
+infer_fiml_fmg_spectrum <- function(fit, h_step = 1e-4) {
+    .Call(`_magmaan_infer_fiml_fmg_spectrum`, fit, h_step)
+}
+
 measures_standardize_lv <- function(fit, vcov) {
     .Call(`_magmaan_measures_standardize_lv`, fit, vcov)
 }
@@ -492,3 +496,4 @@ sim_plsim_calibrate_impl <- function(target_corr, target_skewness, target_excess
 sim_plsim_draw_impl <- function(calibration, n, reps, seed_base) {
     .Call(`_magmaan_sim_plsim_draw_impl`, calibration, n, reps, seed_base)
 }
+
