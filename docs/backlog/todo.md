@@ -438,12 +438,15 @@ simulation backlog.
   the mixed moment stack so `NACOV`/`W_dwls`/`W_wls` rebuild. The all-ordinal
   h-score variants already have the generic Gamma machinery; the missing piece
   is the mixed polyserial estimating-equation design.
-- **S.** Wire the single-model FMG goodness-of-fit test into `magmaan_core`.
-  `infer_fmg_test(chi2_source, df, eigvals, method, param)` is exported (commit
-  `bae097e`) but has no `robust_fmg_test` canonical alias in `zzz_core.R`, so
-  callers reach it via `magmaan:::infer_fmg_test`. `experiments/18-foldnes-moss-gronneberg-2026`
-  already prefers a `robust_fmg_test` core member if present and falls back to
-  the namespace symbol; adding the alias closes the gap.
+- **Landed.** FMG single-model goodness-of-fit tests are wired into the R
+  inference/fit-measure surface. `magmaan_core$robust_fmg_test` and
+  `magmaan_core$robust_fmg_ugamma_spectra` are canonical aliases for the C++
+  primitives, `fmg_tests()` returns diagnostics (df, ML/RLS base statistic,
+  method/parameter, UG flag, spectra/lambda list-columns), `fit_measures(...,
+  fmg = ...)` attaches those diagnostics to ordinary fit measures, and
+  `fmg_pvalues()` remains a named-vector compatibility view. Supported boundary
+  is complete-data single-group ML with retained or explicitly supplied raw
+  data; multi-group and FIML/missing-data FMG now fail explicitly.
 
 ## Benchmarks
 

@@ -165,13 +165,25 @@ golden `parTable()` fixtures.
 - The public fixed.x policy rejects missing observed exogenous variables rather
   than approximating lavaan's conditional likelihood behavior.
 - The R boundary exposes `df_to_fiml_data()` and estimate-only `fit_fiml()`.
-- The R FMG p-value helper computes biased and optional Browne-unbiased U-Gamma
-  spectra through a fused C++ spectra primitive, keeping the U-factor, tiled
-  casewise-contribution projection, reduced matrices, and eigensolves out of R
-  list roundtrips. In the expected-bread unbiased path it uses the reduced
-  normal-theory identity `B' Gamma_NT B = I`; for biased-only single-model
-  spectra it can eigensolve in row space when `N < df`, and for Browne-unbiased
-  spectra it uses the low-rank shifted form when `N + 1 < df`.
+- FMG single-model goodness-of-fit p-values are first-class complete-data ML
+  post-fit diagnostics on the R surface. `fmg_tests()` returns the p-value,
+  df, ML/RLS source statistic, method/parameter, UG flag, chi-square-equivalent
+  diagnostic, truncation count, and UGamma/lambda spectra; `fit_measures(...,
+  fmg = ...)` attaches the same table to the ordinary fit-measure path, while
+  the legacy `fmg_pvalues()` remains a named-vector compatibility view. Fits
+  built from `magmaan(..., data.frame, estimator = "ML")` or
+  `fit_ml(model, df_to_data(...))` retain listwise-complete raw blocks in
+  `fit$raw_data`, so FMG no longer requires a separate raw-data argument in the
+  normal fit workflow. The fused C++ spectra primitive remains
+  complete-data/single-group; multi-group and FIML/missing-data FMG are rejected
+  explicitly until the required spectra/sandwich route is defined for those
+  cases. The helper computes biased and optional Browne-unbiased U-Gamma spectra
+  through C++, keeping the U-factor, tiled casewise-contribution projection,
+  reduced matrices, and eigensolves out of R list roundtrips. In the
+  expected-bread unbiased path it uses the reduced normal-theory identity
+  `B' Gamma_NT B = I`; for biased-only single-model spectra it can eigensolve
+  in row space when `N < df`, and for Browne-unbiased spectra it uses the
+  low-rank shifted form when `N + 1 < df`.
 
 ### Staged C++ facade
 

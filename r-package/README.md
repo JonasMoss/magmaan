@@ -32,6 +32,8 @@ Convenience helpers are limited to R-side composition:
   caller-supplied covariance matrix, `stats::residuals(fit, standardized)`,
   `factor_scores(fit, data, method)` requires complete raw data, and
   `modification_indices(fit, candidates)` forwards to the scaffold primitive.
+  `fit_measures(fit, fmg = ...)` reports the ordinary fit-measure set and can
+  attach Foldnes-Moss-Gronneberg (FMG) robust p-value diagnostics.
 
 Low-level functions such as `compat_lavaan_lavaanify()`,
 `model_matrix_rep()`, `estimate_fit()`, `estimate_*()`,
@@ -81,6 +83,33 @@ Complete-data ML/ULS/GLS/WLS fit wrappers accept sample moments as
   covariance convention expected by the C++ discrepancies. `df_to_data()` can
   rescale to `n-1` for inspection, but lavaan parity fixtures use N-divisor
   moments.
+
+## FMG robust p-values
+
+FMG single-model goodness-of-fit tests are exposed as a post-fit inference
+family:
+
+- `fmg_tests(fit, tests = ...)` returns one row per requested test with the
+  p-value, df, source statistic (`base = "ml"` or `"rls"`), method, parameter,
+  UG flag, chi-square-equivalent diagnostic, truncation count, and list-columns
+  for the UGamma spectrum and method-specific lambda vectors.
+- `fit_measures(fit, fmg = TRUE)` attaches the default FMG table to the
+  ordinary fit-measure list. Passing a character vector to `fmg` chooses the
+  exact FMG tests.
+- `fmg_pvalues(fit, data = NULL, tests = ...)` remains as the compatibility
+  named-vector view over `fmg_tests()`.
+- Fits built from `magmaan(..., data.frame, estimator = "ML")` or
+  `fit_ml(model, df_to_data(...))` retain the listwise-complete raw blocks in
+  `fit$raw_data`, so FMG calls normally do not need a separate `data` argument.
+  Sample-stat-only fits can still pass complete raw `data =` explicitly.
+- Current support is complete-data, single-group ML. Multi-group FMG and
+  FIML/missing-data FMG are rejected explicitly. Listwise-deleted input is
+  supported only after it has become complete-data sample moments through
+  `df_to_data(..., missing = "listwise")`.
+- The test-name grammar mirrors semTests-style labels:
+  `std`, `sb`, `ss`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, and
+  `pols<gamma>`, with optional `_ug` and `_ml` / `_rls` suffixes. The default
+  source statistic is RLS; bare `peba` and `pols` use parameter 2.
 
 ## Ordinal LS boundary
 
