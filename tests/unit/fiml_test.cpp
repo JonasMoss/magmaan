@@ -9,13 +9,17 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/inference/inference.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/estimate/fiml.hpp"
+#include "magmaan/robust/lr_test_satorra.hpp"
+#include "magmaan/robust/restriction.hpp"
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/estimate/nt.hpp"
@@ -113,6 +117,43 @@ Eigen::MatrixXd deterministic_z(Eigen::Index n, Eigen::Index p) {
     Z.col(c).array() -= Z.col(c).mean();
   }
   return Z;
+}
+
+magmaan::data::RawData
+model_missing_raw(const BuiltModel& built,
+                  const Eigen::Ref<const Eigen::VectorXd>& theta,
+                  const std::vector<Eigen::Index>& n_per_group) {
+  auto truth = built.ev.sigma(theta);
+  REQUIRE(truth.has_value());
+  REQUIRE(truth->sigma.size() == n_per_group.size());
+
+  magmaan::data::RawData raw;
+  for (std::size_t b = 0; b < truth->sigma.size(); ++b) {
+    const Eigen::Index p = truth->sigma[b].rows();
+    Eigen::LLT<Eigen::MatrixXd> llt(truth->sigma[b]);
+    REQUIRE(llt.info() == Eigen::Success);
+    Eigen::MatrixXd Z = deterministic_z(n_per_group[b], p);
+    if (b > 0) Z.array() *= 1.0 + 0.07 * static_cast<double>(b);
+    Eigen::MatrixXd X =
+        (Z * llt.matrixL().transpose()).rowwise() + truth->mu[b].transpose();
+    Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M =
+        Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>::Ones(
+            X.rows(), X.cols());
+    for (Eigen::Index r = 0; r < X.rows(); ++r) {
+      if (r % 5 == 0) {
+        const Eigen::Index c = (r + static_cast<Eigen::Index>(b)) % p;
+        M(r, c) = 0;
+        X(r, c) = std::numeric_limits<double>::quiet_NaN();
+      } else if (r % 11 == 0 && p > 2) {
+        const Eigen::Index c = (r + 2 + static_cast<Eigen::Index>(b)) % p;
+        M(r, c) = 0;
+        X(r, c) = std::numeric_limits<double>::quiet_NaN();
+      }
+    }
+    raw.X.push_back(std::move(X));
+    raw.mask.push_back(std::move(M));
+  }
+  return raw;
 }
 
 double log_det_pd(const Eigen::MatrixXd& A) {
@@ -511,6 +552,94 @@ TEST_CASE("fiml_ugamma_spectrum: complete data matches the unstructured robust s
   CHECK((a - b).cwiseAbs().maxCoeff() < 1e-6);
 }
 
+TEST_CASE("fiml_ugamma_spectrum: missing-data trace matches fiml_robust_mlr") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.55);
+  auto raw = model_missing_raw(built, theta0, {160});
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 600;
+  auto est = magmaan::estimate::fit_fiml(
+      *built.pt, *built.rep, raw, theta0, magmaan::estimate::fiml::FIML{},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(est.has_value(),
+      "fit_fiml failed: " << (est.has_value() ? "" : est.error().detail));
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df_or = magmaan::inference::df_stat(*built.pt, *samp, est->theta);
+  REQUIRE(df_or.has_value());
+  auto fx = magmaan::estimate::fiml::fiml_extras(
+      *built.pt, *built.rep, raw, *est);
+  REQUIRE(fx.has_value());
+
+  constexpr double h_step = 1e-4;
+  auto sp = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      *built.pt, *built.rep, raw, *est, *df_or, fx->chi2,
+      magmaan::estimate::fiml::FIML{}, h_step);
+  REQUIRE_MESSAGE(sp.has_value(),
+      "fiml_ugamma_spectrum failed: " <<
+      (sp.has_value() ? "" : sp.error().detail));
+  auto rob = magmaan::estimate::fiml::fiml_robust_mlr(
+      *built.pt, *built.rep, raw, *est, *df_or, fx->chi2,
+      magmaan::estimate::fiml::FIML{}, h_step);
+  REQUIRE_MESSAGE(rob.has_value(),
+      "fiml_robust_mlr failed: " <<
+      (rob.has_value() ? "" : rob.error().detail));
+
+  CHECK(sp->df == *df_or);
+  CHECK(sp->eigvals.size() == *df_or);
+  CHECK(sp->eigvals.allFinite());
+  CHECK(sp->eigvals.minCoeff() > 0.0);
+  INFO("trace_xcheck = ", sp->trace_xcheck,
+       " robust trace = ", rob->trace_ugamma);
+  const double trace_scale =
+      std::max(1.0, std::abs(rob->trace_ugamma));
+  CHECK(std::abs(sp->trace_xcheck - rob->trace_ugamma) / trace_scale < 1e-2);
+}
+
+TEST_CASE("fiml_ugamma_spectrum: multi-group missing-data spectrum is finite") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4", /*n_groups=*/2);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.58);
+  auto raw = model_missing_raw(built, theta0, {90, 84});
+
+  magmaan::estimate::Estimates est;
+  est.theta = theta0;
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df_or = magmaan::inference::df_stat(*built.pt, *samp, est.theta);
+  REQUIRE(df_or.has_value());
+  auto sp = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      *built.pt, *built.rep, raw, est, *df_or, /*chi2_lrt=*/7.0);
+  REQUIRE_MESSAGE(sp.has_value(),
+      "fiml_ugamma_spectrum failed: " <<
+      (sp.has_value() ? "" : sp.error().detail));
+
+  CHECK(sp->df == *df_or);
+  CHECK(sp->eigvals.size() == *df_or);
+  CHECK(sp->eigvals.allFinite());
+  CHECK(sp->trace_xcheck == doctest::Approx(sp->eigvals.sum()));
+  CHECK(sp->eigvals.minCoeff() > 0.0);
+}
+
+TEST_CASE("fiml_ugamma_spectrum: rejects nonlinear equality constraints explicitly") {
+  auto built = build_mean_model("f =~ x1 + a*x2 + b*x3\na == b^2");
+  magmaan::data::RawData raw;
+  raw.X.push_back(deterministic_z(40, 3));
+  magmaan::estimate::Estimates est;
+  est.theta = Eigen::VectorXd::Constant(
+      static_cast<Eigen::Index>(built.ev.n_free()), 0.6);
+
+  auto sp = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      *built.pt, *built.rep, raw, est, /*df=*/1, /*chi2_lrt=*/1.0);
+  REQUIRE_FALSE(sp.has_value());
+  CHECK(sp.error().detail.find("nonlinear equality constraints") !=
+        std::string::npos);
+  CHECK(sp.error().detail.find("tangent-space") != std::string::npos);
+}
+
 TEST_CASE("fiml_ugamma_spectrum: rejects bad arguments") {
   auto built = build_mean_model("f =~ x1 + x2 + x3");
   magmaan::data::RawData raw;
@@ -521,6 +650,168 @@ TEST_CASE("fiml_ugamma_spectrum: rejects bad arguments") {
   auto bad_df = magmaan::estimate::fiml::fiml_ugamma_spectrum(
       *built.pt, *built.rep, raw, est, /*df=*/0, /*chi2_lrt=*/1.0);
   CHECK_FALSE(bad_df.has_value());
+}
+
+TEST_CASE("nested FIML restriction map: NT gamma gives all-one eigenvalues") {
+  auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");
+  Eigen::VectorXd theta1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta1.setConstant(0.6);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(h0.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto raw = model_missing_raw(h1, theta1, {140});
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df1 = magmaan::inference::df_stat(*h1.pt, *samp, theta1);
+  auto df0 = magmaan::inference::df_stat(*h0.pt, *samp, theta0);
+  REQUIRE(df1.has_value());
+  REQUIRE(df0.has_value());
+  REQUIRE(*df0 - *df1 == 1);
+  auto K1 = magmaan::estimate::build_eq_constraints(*h1.pt);
+  auto K0 = magmaan::estimate::build_eq_constraints(*h0.pt);
+  REQUIRE(K1.has_value());
+  REQUIRE(K0.has_value());
+
+  auto r = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1,
+      *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/5.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::NT,
+      magmaan::robust::SatorraAMethod::Exact);
+  REQUIRE_MESSAGE(r.has_value(),
+      "nested FIML NT failed: " << (r.has_value() ? "" : r.error().detail));
+  REQUIRE(r->eigenvalues.size() == 1);
+  CHECK(r->eigenvalues(0) == doctest::Approx(1.0).epsilon(1e-10));
+  CHECK(r->scale_c == doctest::Approx(1.0).epsilon(1e-10));
+  CHECK(r->T_scaled == doctest::Approx(3.0).epsilon(1e-10));
+}
+
+TEST_CASE("nested FIML restriction map: reduced and dense eta-space eigensolves agree") {
+  auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");
+  Eigen::VectorXd theta1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta1.setConstant(0.6);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(h0.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto raw = model_missing_raw(h1, theta1, {150});
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df1 = magmaan::inference::df_stat(*h1.pt, *samp, theta1);
+  auto df0 = magmaan::inference::df_stat(*h0.pt, *samp, theta0);
+  REQUIRE(df1.has_value());
+  REQUIRE(df0.has_value());
+  auto K1 = magmaan::estimate::build_eq_constraints(*h1.pt);
+  auto K0 = magmaan::estimate::build_eq_constraints(*h0.pt);
+  REQUIRE(K1.has_value());
+  REQUIRE(K0.has_value());
+
+  auto exact = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1,
+      *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/5.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Exact);
+  auto delta = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1,
+      *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/5.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Delta);
+  REQUIRE_MESSAGE(exact.has_value(),
+      "nested FIML exact failed: " << (exact.has_value() ? "" : exact.error().detail));
+  REQUIRE_MESSAGE(delta.has_value(),
+      "nested FIML delta failed: " << (delta.has_value() ? "" : delta.error().detail));
+  REQUIRE(exact->eigenvalues.size() == 1);
+  REQUIRE(delta->eigenvalues.size() == 1);
+  CHECK(exact->eigenvalues(0) == doctest::Approx(delta->eigenvalues(0)).epsilon(1e-7));
+
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
+  REQUIRE(sm.has_value());
+  magmaan::estimate::Estimates est1;
+  est1.theta = theta1;
+  auto D1 = magmaan::estimate::fiml::fiml_eta_jacobian(
+      *h1.pt, *h1.rep, raw, est1);
+  REQUIRE(D1.has_value());
+  const Eigen::MatrixXd Delta1 = D1->Delta_theta * K1->Kmat;
+  auto restr = magmaan::robust::restriction_alpha_from_K(*K1, *K0);
+  REQUIRE(restr.has_value());
+  auto reduced = magmaan::robust::compute_fiml_satorra2000(
+      Delta1, sm->H, sm->acov, restr->A);
+  REQUIRE(reduced.has_value());
+
+  const Eigen::MatrixXd V = 0.5 * (sm->H + sm->H.transpose());
+  const Eigen::MatrixXd G = 0.5 * (sm->acov + sm->acov.transpose());
+  const Eigen::MatrixXd VD = V * Delta1;
+  Eigen::MatrixXd P = Delta1.transpose() * VD;
+  P = 0.5 * (P + P.transpose()).eval();
+  Eigen::LDLT<Eigen::MatrixXd> ldlt_P(P);
+  REQUIRE(ldlt_P.info() == Eigen::Success);
+  const Eigen::MatrixXd Pinv =
+      ldlt_P.solve(Eigen::MatrixXd::Identity(P.rows(), P.cols()));
+  Eigen::MatrixXd C = restr->A * Pinv * restr->A.transpose();
+  C = 0.5 * (C + C.transpose()).eval();
+  Eigen::LDLT<Eigen::MatrixXd> ldlt_C(C);
+  REQUIRE(ldlt_C.info() == Eigen::Success);
+  const Eigen::MatrixXd Cinv =
+      ldlt_C.solve(Eigen::MatrixXd::Identity(C.rows(), C.cols()));
+  Eigen::MatrixXd U = VD * Pinv * restr->A.transpose() * Cinv *
+                      restr->A * Pinv * VD.transpose();
+  U = 0.5 * (U + U.transpose()).eval();
+
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es_g(G);
+  REQUIRE(es_g.info() == Eigen::Success);
+  const Eigen::VectorXd d =
+      es_g.eigenvalues().cwiseMax(0.0).cwiseSqrt();
+  const Eigen::MatrixXd Gsqrt =
+      es_g.eigenvectors() * d.asDiagonal() * es_g.eigenvectors().transpose();
+  Eigen::MatrixXd dense_op = Gsqrt * U * Gsqrt;
+  dense_op = 0.5 * (dense_op + dense_op.transpose()).eval();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es_dense(dense_op);
+  REQUIRE(es_dense.info() == Eigen::Success);
+  const Eigen::VectorXd ev_dense =
+      es_dense.eigenvalues().tail(reduced->eigenvalues.size());
+  CHECK(ev_dense(0) == doctest::Approx(reduced->eigenvalues(0)).epsilon(1e-7));
+}
+
+TEST_CASE("nested FIML restriction map: rejects df mismatch and reversed nesting") {
+  auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");
+  Eigen::VectorXd theta1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta1.setConstant(0.6);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(h0.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto raw = model_missing_raw(h1, theta1, {120});
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df1 = magmaan::inference::df_stat(*h1.pt, *samp, theta1);
+  auto df0 = magmaan::inference::df_stat(*h0.pt, *samp, theta0);
+  REQUIRE(df1.has_value());
+  REQUIRE(df0.has_value());
+  auto K1 = magmaan::estimate::build_eq_constraints(*h1.pt);
+  auto K0 = magmaan::estimate::build_eq_constraints(*h0.pt);
+  REQUIRE(K1.has_value());
+  REQUIRE(K0.has_value());
+
+  auto mismatch = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1,
+      *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/5.0, /*T_H1=*/2.0, *df0 + 1, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Exact);
+  REQUIRE_FALSE(mismatch.has_value());
+  CHECK(mismatch.error().detail.find("df_diff mismatch") != std::string::npos);
+
+  auto reversed = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h0.pt, *h0.rep, theta0, *K0,
+      *h1.pt, *h1.rep, theta1, *K1,
+      raw, /*T_H0=*/2.0, /*T_H1=*/5.0, *df1, *df0,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Exact);
+  REQUIRE_FALSE(reversed.has_value());
+  CHECK(reversed.error().detail.find("df_H0 - df_H1 is negative") !=
+        std::string::npos);
 }
 
 TEST_CASE("fiml_baseline_chi2: missing data produces finite baseline") {

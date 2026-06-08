@@ -8,6 +8,8 @@
 
 // [[Rcpp::depends(RcppEigen)]]
 
+#include <cmath>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -19,7 +21,6 @@
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/robust/lr_test_satorra.hpp"
 #include "magmaan/robust/robust.hpp"
-
 
 namespace {
 
@@ -60,6 +61,68 @@ magmaan::data::RawData raw_from_group_list(Rcpp::List X_per_group,
   return raw;
 }
 
+magmaan::data::RawData fiml_raw_from_fit_arg(const lvm::MatrixRep& rep,
+                                             SEXP raw_data) {
+  SEXP X_arg = raw_data;
+  SEXP mask_arg = R_NilValue;
+  if (TYPEOF(raw_data) == VECSXP) {
+    Rcpp::List rd(raw_data);
+    if (rd.containsElementNamed("X")) {
+      X_arg = rd["X"];
+      if (rd.containsElementNamed("mask")) mask_arg = rd["mask"];
+    }
+  }
+
+  const std::size_t n_blocks = rep.dims.size();
+  magmaan::data::RawData raw;
+  raw.X.reserve(n_blocks);
+  raw.mask.reserve(n_blocks);
+
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    Rcpp::NumericMatrix Xb =
+        magmaanr::block_matrix(X_arg, b, n_blocks, "raw_data$X");
+    const std::vector<int> perm =
+        magmaanr::perm_for_cols(Xb, rep.ov_names[b], "raw_data$X");
+    const int n = Xb.nrow();
+    const int p = static_cast<int>(perm.size());
+
+    Rcpp::LogicalMatrix Mb;
+    const bool has_mask = !Rf_isNull(mask_arg);
+    if (has_mask) {
+      Mb = magmaanr::block_mask_matrix(mask_arg, b, n_blocks, "raw_data$mask");
+      if (Mb.nrow() != n || Mb.ncol() != Xb.ncol()) {
+        Rcpp::stop("magmaan: raw_data$mask block %d has shape %dx%d but "
+                   "raw_data$X has %dx%d",
+                   static_cast<int>(b + 1), Mb.nrow(), Mb.ncol(),
+                   Xb.nrow(), Xb.ncol());
+      }
+    }
+
+    Eigen::MatrixXd X(n, p);
+    Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M(n, p);
+    for (int r = 0; r < n; ++r) {
+      for (int k = 0; k < p; ++k) {
+        const int src = perm[static_cast<std::size_t>(k)];
+        const double x = Xb(r, src);
+        const bool observed = has_mask
+            ? (Mb(r, src) != NA_LOGICAL && Mb(r, src) != 0)
+            : std::isfinite(x);
+        if (observed && !std::isfinite(x)) {
+          Rcpp::stop("magmaan: raw_data$mask marks a non-finite value as "
+                     "observed in block %d, row %d",
+                     static_cast<int>(b + 1), r + 1);
+        }
+        M(r, k) = static_cast<std::uint8_t>(observed ? 1 : 0);
+        X(r, k) = observed ? x : std::numeric_limits<double>::quiet_NaN();
+      }
+    }
+
+    raw.X.push_back(std::move(X));
+    raw.mask.push_back(std::move(M));
+  }
+  return raw;
+}
+
 Rcpp::List sb_diff_to_list(const magmaan::robust::LRSatorraBentlerDiffResult& r) {
   Rcpp::CharacterVector warns(static_cast<R_xlen_t>(r.warnings.size()));
   for (std::size_t k = 0; k < r.warnings.size(); ++k) {
@@ -75,6 +138,77 @@ Rcpp::List sb_diff_to_list(const magmaan::robust::LRSatorraBentlerDiffResult& r)
       Rcpp::_["c_H1"]     = r.c_H1,
       Rcpp::_["c_hybrid"] = r.c_hybrid,
       Rcpp::_["warnings"] = warns);
+}
+
+Rcpp::List satorra2000_to_list(const magmaan::robust::LRSatorra2000Result& r) {
+  Rcpp::CharacterVector warns(static_cast<R_xlen_t>(r.warnings.size()));
+  for (std::size_t k = 0; k < r.warnings.size(); ++k) {
+    warns[static_cast<R_xlen_t>(k)] = r.warnings[k];
+  }
+  return Rcpp::List::create(
+      Rcpp::_["T_diff"]      = r.T_diff,
+      Rcpp::_["df_diff"]     = r.df_diff,
+      Rcpp::_["p_unscaled"]  = r.p_unscaled,
+      Rcpp::_["eigenvalues"] = Rcpp::wrap(r.eigenvalues),
+      Rcpp::_["scale_c"]     = r.scale_c,
+      Rcpp::_["T_scaled"]    = r.T_scaled,
+      Rcpp::_["p_scaled"]    = r.p_scaled,
+      Rcpp::_["adjust_d0"]   = r.adjust_d0,
+      Rcpp::_["T_adjusted"]  = r.T_adjusted,
+      Rcpp::_["p_adjusted"]  = r.p_adjusted,
+      Rcpp::_["scaled_shifted"] = Rcpp::List::create(
+          Rcpp::_["chi2_adj"] = r.scaled_shifted.chi2_adj,
+          Rcpp::_["df"]       = r.scaled_shifted.df,
+          Rcpp::_["scale_a"]  = r.scaled_shifted.scale_a,
+          Rcpp::_["shift_b"]  = r.scaled_shifted.shift_b,
+          Rcpp::_["pvalue"]   = r.p_scaled_shifted),
+      Rcpp::_["p_scaled_shifted"] = r.p_scaled_shifted,
+      Rcpp::_["p_mixture"]   = r.p_mixture,
+      Rcpp::_["warnings"]    = warns);
+}
+
+void validate_same_fiml_raw(const magmaan::data::RawData& h1,
+                            const magmaan::data::RawData& h0,
+                            const char* caller) {
+  if (h1.X.size() != h0.X.size()) {
+    Rcpp::stop("%s: H0/H1 raw_data have different block counts", caller);
+  }
+  const bool h1_mask = !h1.mask.empty();
+  const bool h0_mask = !h0.mask.empty();
+  if (h1_mask != h0_mask) {
+    Rcpp::stop("%s: H0/H1 raw_data mask presence differs", caller);
+  }
+  for (std::size_t b = 0; b < h1.X.size(); ++b) {
+    if (h1.X[b].rows() != h0.X[b].rows() || h1.X[b].cols() != h0.X[b].cols()) {
+      Rcpp::stop("%s: H0/H1 raw_data block %d shapes differ",
+                 caller, static_cast<int>(b + 1));
+    }
+    if (h1_mask) {
+      if (h1.mask[b].rows() != h0.mask[b].rows() ||
+          h1.mask[b].cols() != h0.mask[b].cols()) {
+        Rcpp::stop("%s: H0/H1 raw_data mask block %d shapes differ",
+                   caller, static_cast<int>(b + 1));
+      }
+      for (Eigen::Index r = 0; r < h1.mask[b].rows(); ++r) {
+        for (Eigen::Index c = 0; c < h1.mask[b].cols(); ++c) {
+          if (h1.mask[b](r, c) != h0.mask[b](r, c)) {
+            Rcpp::stop("%s: H0/H1 raw_data masks differ at block %d, row %d, column %d",
+                       caller, static_cast<int>(b + 1),
+                       static_cast<int>(r + 1), static_cast<int>(c + 1));
+          }
+          if (h1.mask[b](r, c) != 0 &&
+              h1.X[b](r, c) != h0.X[b](r, c)) {
+            Rcpp::stop("%s: H0/H1 raw_data observed values differ at block %d, row %d, column %d",
+                       caller, static_cast<int>(b + 1),
+                       static_cast<int>(r + 1), static_cast<int>(c + 1));
+          }
+        }
+      }
+    } else if (!h1.X[b].isApprox(h0.X[b], 0.0)) {
+      Rcpp::stop("%s: H0/H1 raw_data values differ in block %d",
+                 caller, static_cast<int>(b + 1));
+    }
+  }
 }
 
 }  // namespace
@@ -161,30 +295,59 @@ Rcpp::List infer_lr_test_satorra2000(Rcpp::List           fit_H1,
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   const magmaan::robust::LRSatorra2000Result& r = *r_or;
 
-  Rcpp::CharacterVector warns(static_cast<R_xlen_t>(r.warnings.size()));
-  for (std::size_t k = 0; k < r.warnings.size(); ++k) {
-    warns[static_cast<R_xlen_t>(k)] = r.warnings[k];
+  return satorra2000_to_list(r);
+}
+
+// infer_fiml_lr_test_satorra2000() — FIML/missing-data restriction-map nested
+// LR test. Uses fit_H1$raw_data as the saturated observed-pattern H1 source and
+// validates fit_H0$raw_data shape/mask/value compatibility.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
+                                          Rcpp::List  fit_H0,
+                                          std::string gamma = "empirical",
+                                          std::string a_method = "exact",
+                                          double      h_step = 1e-4) {
+  if (!fit_H1.containsElementNamed("raw_data") ||
+      !fit_H0.containsElementNamed("raw_data")) {
+    Rcpp::stop("infer_fiml_lr_test_satorra2000: both FIML fits must carry $raw_data");
   }
-  return Rcpp::List::create(
-      Rcpp::_["T_diff"]      = r.T_diff,
-      Rcpp::_["df_diff"]     = r.df_diff,
-      Rcpp::_["p_unscaled"]  = r.p_unscaled,
-      Rcpp::_["eigenvalues"] = Rcpp::wrap(r.eigenvalues),
-      Rcpp::_["scale_c"]     = r.scale_c,
-      Rcpp::_["T_scaled"]    = r.T_scaled,
-      Rcpp::_["p_scaled"]    = r.p_scaled,
-      Rcpp::_["adjust_d0"]   = r.adjust_d0,
-      Rcpp::_["T_adjusted"]  = r.T_adjusted,
-      Rcpp::_["p_adjusted"]  = r.p_adjusted,
-      Rcpp::_["scaled_shifted"] = Rcpp::List::create(
-          Rcpp::_["chi2_adj"] = r.scaled_shifted.chi2_adj,
-          Rcpp::_["df"]       = r.scaled_shifted.df,
-          Rcpp::_["scale_a"]  = r.scaled_shifted.scale_a,
-          Rcpp::_["shift_b"]  = r.scaled_shifted.shift_b,
-          Rcpp::_["pvalue"]   = r.p_scaled_shifted),
-      Rcpp::_["p_scaled_shifted"] = r.p_scaled_shifted,
-      Rcpp::_["p_mixture"]   = r.p_mixture,
-      Rcpp::_["warnings"]    = warns);
+  magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
+  magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est_H0 = magmaanr::est_from_fit(fit_H0);
+
+  magmaan::data::RawData raw_H1 =
+      fiml_raw_from_fit_arg(ctx_H1.rep, fit_H1["raw_data"]);
+  magmaan::data::RawData raw_H0 =
+      fiml_raw_from_fit_arg(ctx_H0.rep, fit_H0["raw_data"]);
+  validate_same_fiml_raw(raw_H1, raw_H0, "infer_fiml_lr_test_satorra2000");
+
+  auto df_H1_or = magmaan::inference::df_stat(ctx_H1.pt, ctx_H1.samp, est_H1.theta);
+  if (!df_H1_or.has_value()) magmaanr::stop_post(df_H1_or.error());
+  auto df_H0_or = magmaan::inference::df_stat(ctx_H0.pt, ctx_H0.samp, est_H0.theta);
+  if (!df_H0_or.has_value()) magmaanr::stop_post(df_H0_or.error());
+  auto fx_H1_or = magmaan::estimate::fiml::fiml_extras(
+      ctx_H1.pt, ctx_H1.rep, raw_H1, est_H1);
+  if (!fx_H1_or.has_value()) magmaanr::stop_post(fx_H1_or.error());
+  auto fx_H0_or = magmaan::estimate::fiml::fiml_extras(
+      ctx_H0.pt, ctx_H0.rep, raw_H0, est_H0);
+  if (!fx_H0_or.has_value()) magmaanr::stop_post(fx_H0_or.error());
+
+  auto K_H1_or = magmaan::estimate::build_eq_constraints(
+      ctx_H1.pt, /*allow_nonlinear=*/true);
+  if (!K_H1_or.has_value()) magmaanr::stop_post(K_H1_or.error());
+  auto K_H0_or = magmaan::estimate::build_eq_constraints(
+      ctx_H0.pt, /*allow_nonlinear=*/true);
+  if (!K_H0_or.has_value()) magmaanr::stop_post(K_H0_or.error());
+
+  auto r_or = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      ctx_H1.pt, ctx_H1.rep, est_H1.theta, *K_H1_or,
+      ctx_H0.pt, ctx_H0.rep, est_H0.theta, *K_H0_or,
+      raw_H1, fx_H0_or->chi2, fx_H1_or->chi2, *df_H0_or, *df_H1_or,
+      parse_gamma(gamma), parse_a_method(a_method), h_step);
+  if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
+  return satorra2000_to_list(*r_or);
 }
 
 // infer_lr_test_satorra_bentler2001() — lavaan-compatible SB2001 scaled

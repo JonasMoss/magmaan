@@ -6,7 +6,9 @@
 #include <string>
 #include <utility>
 
+#include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/error.hpp"
@@ -559,6 +561,212 @@ lr_test_satorra2000_from_data(
       X_per_group, mean_per_group, n_per_group, weight_per_group,
       T_H0, T_H1, df_H0, df_H1,
       Satorra2000Options{.a_method = SatorraAMethod::Exact, .gamma = gamma});
+}
+
+post_expected<SatorraDiffResult>
+compute_fiml_satorra2000(
+    const Eigen::Ref<const Eigen::MatrixXd>& Delta1_alpha,
+    const Eigen::Ref<const Eigen::MatrixXd>& V,
+    const Eigen::Ref<const Eigen::MatrixXd>& Gamma,
+    const Eigen::Ref<const Eigen::MatrixXd>& A_alpha) {
+  const Eigen::Index Q = Delta1_alpha.rows();
+  const Eigen::Index r1 = Delta1_alpha.cols();
+  const Eigen::Index m = A_alpha.rows();
+
+  if (V.rows() != Q || V.cols() != Q || Gamma.rows() != Q ||
+      Gamma.cols() != Q) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000: V/Gamma dimensions must match Delta rows"));
+  }
+  if (A_alpha.cols() != r1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000: A_alpha column count " +
+        std::to_string(A_alpha.cols()) + " does not match r1 = " +
+        std::to_string(r1)));
+  }
+  if (m == 0) {
+    SatorraDiffResult deg;
+    deg.C = Eigen::MatrixXd::Zero(0, 0);
+    deg.S = Eigen::MatrixXd::Zero(0, 0);
+    deg.eigenvalues = Eigen::VectorXd::Zero(0);
+    deg.trace_CinvS = 0.0;
+    deg.trace_CinvS_sq = 0.0;
+    return deg;
+  }
+  if (m > r1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000: A_alpha has more rows than H1 alpha "
+        "directions"));
+  }
+
+  const Eigen::MatrixXd Vsym = 0.5 * (V + V.transpose());
+  const Eigen::MatrixXd Gsym = 0.5 * (Gamma + Gamma.transpose());
+  const Eigen::MatrixXd VD = Vsym * Delta1_alpha;
+  Eigen::MatrixXd P = Delta1_alpha.transpose() * VD;
+  P = 0.5 * (P + P.transpose()).eval();
+  Eigen::LDLT<Eigen::MatrixXd> ldlt_P(P);
+  if (ldlt_P.info() != Eigen::Success) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000: H1 eta-space information P is not "
+        "invertible"));
+  }
+  {
+    const Eigen::VectorXd d_abs = ldlt_P.vectorD().cwiseAbs();
+    const double tol_pivot = 1e-10 * d_abs.maxCoeff();
+    if (d_abs.minCoeff() <= tol_pivot) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "compute_fiml_satorra2000: H1 eta-space information P is "
+          "rank-deficient (smallest |D| pivot " +
+          std::to_string(d_abs.minCoeff()) + " <= tol " +
+          std::to_string(tol_pivot) + ")"));
+    }
+  }
+
+  const Eigen::MatrixXd Y = ldlt_P.solve(A_alpha.transpose());
+  Eigen::MatrixXd C = A_alpha * Y;
+  C = 0.5 * (C + C.transpose()).eval();
+
+  const Eigen::MatrixXd mid = VD.transpose() * Gsym * VD;
+  Eigen::MatrixXd S = Y.transpose() * mid * Y;
+  S = 0.5 * (S + S.transpose()).eval();
+
+  Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(
+      S, C, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
+  if (ges.info() != Eigen::Success) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000: generalized eigensolver failed "
+        "(restriction C may be singular against H1 eta-space curvature)"));
+  }
+  Eigen::VectorXd eig = ges.eigenvalues();
+
+  std::vector<std::string> warnings;
+  const double clip_thresh = 1e-12 * std::max(1.0, eig.cwiseAbs().maxCoeff());
+  for (Eigen::Index k = 0; k < eig.size(); ++k) {
+    if (eig(k) < 0.0) {
+      if (eig(k) >= -clip_thresh) {
+        eig(k) = 0.0;
+      } else {
+        warnings.emplace_back(
+            "compute_fiml_satorra2000: detected eigenvalue " +
+            std::to_string(eig(k)) + " below clip threshold " +
+            std::to_string(-clip_thresh) + " -- clipped to 0");
+        eig(k) = 0.0;
+      }
+    }
+  }
+
+  SatorraDiffResult out;
+  out.C = std::move(C);
+  out.S = std::move(S);
+  out.eigenvalues = eig;
+  out.trace_CinvS = eig.sum();
+  out.trace_CinvS_sq = eig.squaredNorm();
+  out.warnings = std::move(warnings);
+  return out;
+}
+
+post_expected<LRSatorra2000Result>
+lr_test_satorra2000_fiml_from_data(
+    const spec::LatentStructure&     pt_H1,
+    const model::MatrixRep&          rep_H1,
+    const Eigen::VectorXd&           theta_H1_full,
+    const EqConstraints&             K_H1,
+    const spec::LatentStructure&     pt_H0,
+    const model::MatrixRep&          rep_H0,
+    const Eigen::VectorXd&           theta_H0_full,
+    const EqConstraints&             K_H0,
+    const data::RawData&             raw,
+    double                           T_H0,
+    double                           T_H1,
+    int                              df_H0,
+    int                              df_H1,
+    GammaSource                      gamma,
+    SatorraAMethod                   a_method,
+    double                           h_step) {
+  const int df_diff_from_T = df_H0 - df_H1;
+  if (df_diff_from_T < 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_fiml_from_data: df_H0 - df_H1 is negative; "
+        "H1 must be the less-restricted model"));
+  }
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_fiml_from_data: h_step must be > 0"));
+  }
+  if (!pt_H1.nl_constraints.empty() || !pt_H0.nl_constraints.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_fiml_from_data: nonlinear equality constraints "
+        "need tangent-space support, which is not implemented for nested "
+        "FIML FMG"));
+  }
+
+  auto sm_or = estimate::fiml::saturated_em_moments(raw, h_step);
+  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+  const estimate::fiml::SaturatedMoments& sm = *sm_or;
+  const Eigen::MatrixXd& V = sm.H;
+
+  Eigen::MatrixXd Gamma;
+  if (gamma == GammaSource::NT) {
+    Eigen::LDLT<Eigen::MatrixXd> ldlt_V(0.5 * (V + V.transpose()));
+    if (ldlt_V.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "lr_test_satorra2000_fiml_from_data: saturated information V is "
+          "not invertible"));
+    }
+    Gamma = ldlt_V.solve(Eigen::MatrixXd::Identity(V.rows(), V.cols()));
+    Gamma = 0.5 * (Gamma + Gamma.transpose()).eval();
+  } else {
+    Gamma = sm.acov;
+  }
+
+  estimate::Estimates est_H1;
+  est_H1.theta = theta_H1_full;
+  auto D1_or = estimate::fiml::fiml_eta_jacobian(
+      pt_H1, rep_H1, raw, est_H1, estimate::fiml::FIML{});
+  if (!D1_or.has_value()) return std::unexpected(D1_or.error());
+  if (D1_or->Delta_theta.rows() != V.rows() ||
+      D1_or->Delta_theta.cols() != K_H1.Kmat.rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_fiml_from_data: H1 eta Jacobian shape "
+        "disagrees with saturated information or K_H1"));
+  }
+  const Eigen::MatrixXd Delta1_alpha = D1_or->Delta_theta * K_H1.Kmat;
+
+  Eigen::MatrixXd A_alpha;
+  if (a_method == SatorraAMethod::Exact) {
+    auto restr_or = restriction_alpha_from_K(K_H1, K_H0);
+    if (!restr_or.has_value()) return std::unexpected(restr_or.error());
+    A_alpha = std::move(restr_or->A);
+  } else {
+    estimate::Estimates est_H0;
+    est_H0.theta = theta_H0_full;
+    auto D0_or = estimate::fiml::fiml_eta_jacobian(
+        pt_H0, rep_H0, raw, est_H0, estimate::fiml::FIML{});
+    if (!D0_or.has_value()) return std::unexpected(D0_or.error());
+    if (D0_or->Delta_theta.rows() != V.rows() ||
+        D0_or->Delta_theta.cols() != K_H0.Kmat.rows()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "lr_test_satorra2000_fiml_from_data: H0 eta Jacobian shape "
+          "disagrees with saturated information or K_H0"));
+    }
+    const Eigen::MatrixXd Delta0_alpha = D0_or->Delta_theta * K_H0.Kmat;
+    auto A_or = restriction_alpha_delta_from_jacobians(
+        Delta1_alpha, Delta0_alpha, df_diff_from_T);
+    if (!A_or.has_value()) return std::unexpected(A_or.error());
+    A_alpha = std::move(*A_or);
+  }
+
+  const int df_diff_from_A = static_cast<int>(A_alpha.rows());
+  if (df_diff_from_A != df_diff_from_T) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_fiml_from_data: df_diff mismatch -- derived A "
+        "has m = " + std::to_string(df_diff_from_A) +
+        " but df_H0 - df_H1 = " + std::to_string(df_diff_from_T)));
+  }
+
+  auto sd_or = compute_fiml_satorra2000(Delta1_alpha, V, Gamma, A_alpha);
+  if (!sd_or.has_value()) return std::unexpected(sd_or.error());
+  return lr_test_satorra2000(T_H0 - T_H1, *sd_or);
 }
 
 }  // namespace magmaan::robust

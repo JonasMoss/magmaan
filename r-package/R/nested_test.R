@@ -9,9 +9,10 @@
 #' @param fit_H1 Less-restricted fit from `magmaan::fit_fit()`.
 #' @param fit_H0 More-restricted fit (same lavaanified partable shape,
 #'   differing only in constraint rows / shared labels).
-#' @param data Raw data: either a data.frame whose columns include the observed
-#'   variables of `fit_H1` (single-group case), or a list of per-group matrices
-#'   in the same block order the fit was built with.
+#' @param data Raw complete data for complete-data fits: either a data.frame
+#'   whose columns include the observed variables of `fit_H1` (single-group
+#'   case), or a list of per-group matrices in the same block order the fit was
+#'   built with. FIML pairs use `fit_H1$raw_data` and do not accept `data`.
 #' @param gamma `"empirical"` (default, empirical Gamma-hat) or `"NT"`
 #'   (normal-theory sanity-check path where all eigenvalues collapse to 1).
 #' @param method `"restriction_map"` (default), `"lavaan_sb2001"`, or
@@ -28,7 +29,7 @@
 #'
 #' @return A list of class `magmaan_nested_test`.
 #' @export
-robust_nested_lrt <- function(fit_H1, fit_H0, data,
+robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
                               gamma = c("empirical", "NT"),
                               method = c("restriction_map",
                                          "lavaan_sb2001",
@@ -40,6 +41,45 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data,
   method <- match.arg(method)
   A.method <- match.arg(A.method)
   computation <- match.arg(computation)
+
+  fit_estimator <- function(fit) {
+    toupper(as.character(fit$estimator %||% fit$options$estimator %||% ""))
+  }
+  is_fiml <- function(fit) {
+    isTRUE(fit$fiml) || identical(fit_estimator(fit), "FIML") ||
+      inherits(fit$raw_data, "magmaan_fiml_data")
+  }
+  fiml_H1 <- is_fiml(fit_H1)
+  fiml_H0 <- is_fiml(fit_H0)
+  if (xor(fiml_H1, fiml_H0)) {
+    stop("robust_nested_lrt(): mixed FIML/complete-data model pairs are not ",
+         "supported; fit both models with the same estimator.", call. = FALSE)
+  }
+  if (fiml_H1) {
+    if (!identical(method, "restriction_map")) {
+      stop("robust_nested_lrt(): FIML nested tests support ",
+           "method = 'restriction_map' only; complete-data compatibility ",
+           "methods are not defined for FIML.", call. = FALSE)
+    }
+    if (!is.null(data)) {
+      stop("robust_nested_lrt(): FIML nested tests use fit_H1$raw_data; ",
+           "the `data` argument is not supported for FIML fits.",
+           call. = FALSE)
+    }
+    res <- infer_fiml_lr_test_satorra2000(
+      fit_H1, fit_H0, gamma = gamma, a_method = A.method)
+    res$gamma <- gamma
+    res$method <- method
+    res$A.method <- A.method
+    res$computation <- "fiml_eta"
+    class(res) <- c("magmaan_nested_test", "list")
+    return(res)
+  }
+
+  if (is.null(data)) {
+    stop("robust_nested_lrt(): complete-data nested tests require `data`.",
+         call. = FALSE)
+  }
 
   ngroups <- fit_H1$ngroups
   if (is.null(ngroups) || ngroups < 1) ngroups <- 1L
@@ -106,7 +146,7 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data,
 #'   `"satorra.bentler.2001"`, `"satorra.bentler.2010"`) or the canonical
 #'   robust nested-LRT method names.
 #' @export
-nestedTest <- function(fit_H1, fit_H0, data, gamma = c("empirical", "NT"),
+nestedTest <- function(fit_H1, fit_H0, data = NULL, gamma = c("empirical", "NT"),
                        method = c("satorra.2000",
                                   "satorra.bentler.2001",
                                   "satorra.bentler.2010",
