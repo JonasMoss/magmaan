@@ -464,10 +464,13 @@ simulation backlog.
   `estimate::fiml::fiml_ugamma_spectrum` (Rcpp `infer_fiml_fmg_spectrum`), which
   builds the missing-data UΓ spectrum first-principles from the saturated EM
   information and ACOV (`U·Γ_mis`, biased gamma + FIML-LRT base only; `_ug`/`_rls`
-  refused). It is the `h1.information="unstructured"` convention and reproduces
-  lavaan's unstructured UGamma element-for-element on complete data (~1e-7,
-  guarded in `examples/fmg.R`); semTests' unsound FIML rescale hack is not
-  matched. Nested/two-model FIML FMG is also wired through
+  refused). Saturated H1 information now uses an analytic observed-row Hessian
+  derived in `docs/research/notes/fiml_saturated_information.tex`, with the old
+  finite-difference route kept as a C++ diagnostic comparator. It is the
+  `h1.information="unstructured"` convention and reproduces lavaan's
+  unstructured UGamma element-for-element on complete data (~1e-7, guarded in
+  `examples/fmg.R`); semTests' unsound FIML rescale hack is not matched.
+  Nested/two-model FIML FMG is also wired through
   `robust_nested_lrt()` / `nestedTest(method = "restriction_map")` when both
   fits are FIML and carry compatible `raw_data`; the C++ core uses the H1
   saturated eta-space `A/C/S` reduction with exact and delta restriction maps,
