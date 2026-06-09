@@ -1,0 +1,10 @@
+set shell := ["bash", "-uc"]
+
+default:
+    @just --list
+
+quick:
+    Rscript fiml_fmg_trace_convergence.R --n=250,1000 --reps=3 --missing=0.15
+
+all:
+    Rscript fiml_fmg_trace_convergence.R --n=250,1000,4000 --reps=20 --missing=0.15
