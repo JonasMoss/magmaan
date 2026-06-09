@@ -1,11 +1,13 @@
 #include <doctest/doctest.h>
 #include "../test_fit.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
@@ -1136,6 +1138,297 @@ TEST_CASE("nested FIML restriction map: rejects df mismatch and reversed nesting
   REQUIRE_FALSE(reversed.has_value());
   CHECK(reversed.error().detail.find("df_H0 - df_H1 is negative") !=
         std::string::npos);
+}
+
+// ===========================================================================
+// Multi-group + cross-group equality (measurement-invariance) coverage.
+//
+// The nested-FIML cases above are all single-group. lr_test_satorra2000_fiml_
+// from_data and fiml_ugamma_spectrum claim multi-group, cross-group-equality
+// (metric/scalar), and mean-structure support, but nothing exercises that
+// seam. These cases drive it: H1 = configural (loadings free per group),
+// H0 = metric (a single bare label per non-marker loading, which the build
+// step replicates across groups => equal-across-groups). A scalar variant
+// ties the intercepts too, exercising the (μ_b, vech(Σ_b)) η layout under a
+// mean-block constraint.
+// ===========================================================================
+
+TEST_CASE("nested FIML restriction map: multi-group metric NT gamma gives all-one eigenvalues") {
+  auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4", /*n_groups=*/2);
+  auto h0 = build_mean_model("f =~ x1 + a2*x2 + a3*x3 + a4*x4", /*n_groups=*/2);
+  Eigen::VectorXd theta1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta1.setConstant(0.6);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(h0.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto raw = model_missing_raw(h1, theta1, {120, 100});
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df1 = magmaan::inference::df_stat(*h1.pt, *samp, theta1);
+  auto df0 = magmaan::inference::df_stat(*h0.pt, *samp, theta0);
+  REQUIRE(df1.has_value());
+  REQUIRE(df0.has_value());
+  // 3 non-marker loadings, each tied across 2 groups => 3 restrictions.
+  REQUIRE(*df0 - *df1 == 3);
+  auto K1 = magmaan::estimate::build_eq_constraints(*h1.pt);
+  auto K0 = magmaan::estimate::build_eq_constraints(*h0.pt);
+  REQUIRE(K1.has_value());
+  REQUIRE(K0.has_value());
+
+  auto r = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1,
+      *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/9.0, /*T_H1=*/3.0, *df0, *df1,
+      magmaan::robust::GammaSource::NT,
+      magmaan::robust::SatorraAMethod::Exact);
+  REQUIRE_MESSAGE(r.has_value(),
+      "multi-group nested FIML NT failed: " <<
+      (r.has_value() ? "" : r.error().detail));
+  REQUIRE(r->eigenvalues.size() == 3);
+  INFO("NT eigenvalues = ", r->eigenvalues.transpose());
+  CHECK((r->eigenvalues.array() - 1.0).abs().maxCoeff() < 1e-8);
+  CHECK(r->scale_c == doctest::Approx(1.0).epsilon(1e-9));
+  CHECK(r->T_scaled == doctest::Approx(6.0).epsilon(1e-9));  // T_diff = 6, c = 1
+}
+
+TEST_CASE("nested FIML restriction map: multi-group metric trace_CinvS algebra and row-dup invariance") {
+  auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4", /*n_groups=*/2);
+  auto h0 = build_mean_model("f =~ x1 + a2*x2 + a3*x3 + a4*x4", /*n_groups=*/2);
+  Eigen::VectorXd theta1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta1.setConstant(0.6);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(h0.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto raw = model_missing_raw(h1, theta1, {160, 130});
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df1 = magmaan::inference::df_stat(*h1.pt, *samp, theta1);
+  auto df0 = magmaan::inference::df_stat(*h0.pt, *samp, theta0);
+  REQUIRE(df1.has_value());
+  REQUIRE(df0.has_value());
+  REQUIRE(*df0 - *df1 == 3);
+  auto K1 = magmaan::estimate::build_eq_constraints(*h1.pt);
+  auto K0 = magmaan::estimate::build_eq_constraints(*h0.pt);
+  REQUIRE(K1.has_value());
+  REQUIRE(K0.has_value());
+
+  auto exact = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1,
+      *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/9.0, /*T_H1=*/3.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Exact);
+  REQUIRE_MESSAGE(exact.has_value(),
+      "multi-group nested FIML exact failed: " <<
+      (exact.has_value() ? "" : exact.error().detail));
+  REQUIRE(exact->eigenvalues.size() == 3);
+
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
+  REQUIRE(sm.has_value());
+  magmaan::estimate::Estimates est1;
+  est1.theta = theta1;
+  auto D1 = magmaan::estimate::fiml::fiml_eta_jacobian(
+      *h1.pt, *h1.rep, raw, est1);
+  REQUIRE(D1.has_value());
+  const Eigen::MatrixXd Delta1 = D1->Delta_theta * K1->Kmat;
+  auto restr = magmaan::robust::restriction_alpha_from_K(*K1, *K0);
+  REQUIRE(restr.has_value());
+  auto reduced = magmaan::robust::compute_fiml_satorra2000(
+      Delta1, sm->H, sm->acov, restr->A);
+  REQUIRE_MESSAGE(reduced.has_value(),
+      "compute_fiml_satorra2000 failed: " <<
+      (reduced.has_value() ? "" : reduced.error().detail));
+  REQUIRE(reduced->eigenvalues.size() == 3);
+
+  const Eigen::MatrixXd Cinv = inverse_ldlt(reduced->C);
+  const double trace_direct = (Cinv * reduced->S).trace();
+  INFO("trace_direct = ", trace_direct,
+       " trace_CinvS = ", reduced->trace_CinvS,
+       " eigenvalues = ", reduced->eigenvalues.transpose());
+  CHECK(trace_direct == doctest::Approx(reduced->trace_CinvS).epsilon(1e-9));
+  CHECK(reduced->trace_CinvS ==
+        doctest::Approx(reduced->eigenvalues.sum()).epsilon(1e-12));
+  CHECK(reduced->trace_CinvS_sq ==
+        doctest::Approx(reduced->eigenvalues.squaredNorm()).epsilon(1e-12));
+  CHECK((exact->eigenvalues - reduced->eigenvalues).cwiseAbs().maxCoeff() < 1e-9);
+
+  const auto raw_dup = duplicate_raw_rows(raw, 3);
+  auto exact_dup = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1,
+      *h0.pt, *h0.rep, theta0, *K0,
+      raw_dup, /*T_H0=*/9.0, /*T_H1=*/3.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Exact);
+  REQUIRE_MESSAGE(exact_dup.has_value(),
+      "duplicated multi-group nested FIML exact failed: " <<
+      (exact_dup.has_value() ? "" : exact_dup.error().detail));
+  REQUIRE(exact->eigenvalues.size() == exact_dup->eigenvalues.size());
+  INFO("original eigenvalues = ", exact->eigenvalues.transpose(),
+       " duplicated eigenvalues = ", exact_dup->eigenvalues.transpose());
+  CHECK((exact->eigenvalues - exact_dup->eigenvalues).cwiseAbs().maxCoeff() < 1e-9);
+  CHECK(exact_dup->scale_c == doctest::Approx(exact->scale_c).epsilon(1e-9));
+  CHECK(exact_dup->adjust_d0 == doctest::Approx(exact->adjust_d0).epsilon(1e-9));
+}
+
+TEST_CASE("fiml_ugamma_spectrum: cross-group metric equality spectrum is finite with trace identity") {
+  auto built = build_mean_model("f =~ x1 + a2*x2 + a3*x3 + a4*x4", /*n_groups=*/2);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.58);
+  auto raw = model_missing_raw(built, theta0, {130, 110});
+
+  magmaan::estimate::Estimates est;
+  est.theta = theta0;
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df_or = magmaan::inference::df_stat(*built.pt, *samp, est.theta);
+  REQUIRE(df_or.has_value());
+  auto sp = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      *built.pt, *built.rep, raw, est, *df_or, /*chi2_lrt=*/6.0);
+  REQUIRE_MESSAGE(sp.has_value(),
+      "cross-group metric fiml_ugamma_spectrum failed: " <<
+      (sp.has_value() ? "" : sp.error().detail));
+
+  CHECK(sp->df == *df_or);
+  CHECK(sp->eigvals.size() == *df_or);
+  CHECK(sp->eigvals.allFinite());
+  CHECK(sp->eigvals.minCoeff() > 0.0);
+  CHECK(sp->trace_xcheck == doctest::Approx(sp->eigvals.sum()));
+
+  // The split trace identity routes Δ through K (cross-group equality ties
+  // parameters between the two stacked group blocks); a block-ordering bug in
+  // the Δ←Δ·K projection breaks it.
+  const auto pieces = fiml_projection_pieces(built, raw, est);
+  const double trace_h1 = (pieces.H * pieces.Gamma).trace();
+  const double trace_h0 =
+      (pieces.P_inv *
+       pieces.Delta.transpose() * pieces.J * pieces.Delta).trace();
+  const double trace_from_split = trace_h1 - trace_h0;
+  const double trace_direct = (pieces.U * pieces.Gamma).trace();
+  INFO("trace_from_split = ", trace_from_split,
+       " trace_direct = ", trace_direct,
+       " spectrum trace = ", sp->trace_xcheck);
+  CHECK(trace_direct == doctest::Approx(trace_from_split).epsilon(1e-9));
+  CHECK(sp->trace_xcheck == doctest::Approx(trace_from_split).epsilon(1e-9));
+}
+
+TEST_CASE("fiml_ugamma_spectrum: cross-group scalar (equal intercepts) spectrum exercises mean-block layout") {
+  auto built = build_mean_model(
+      "f =~ x1 + a2*x2 + a3*x3 + a4*x4\n"
+      "x1 ~ i1*1\nx2 ~ i2*1\nx3 ~ i3*1\nx4 ~ i4*1",
+      /*n_groups=*/2);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.5);
+  auto raw = model_missing_raw(built, theta0, {140, 120});
+
+  magmaan::estimate::Estimates est;
+  est.theta = theta0;
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df_or = magmaan::inference::df_stat(*built.pt, *samp, est.theta);
+  REQUIRE(df_or.has_value());
+  auto sp = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      *built.pt, *built.rep, raw, est, *df_or, /*chi2_lrt=*/6.0);
+  REQUIRE_MESSAGE(sp.has_value(),
+      "cross-group scalar fiml_ugamma_spectrum failed: " <<
+      (sp.has_value() ? "" : sp.error().detail));
+
+  CHECK(sp->df == *df_or);
+  CHECK(sp->eigvals.size() == *df_or);
+  CHECK(sp->eigvals.allFinite());
+  CHECK(sp->eigvals.minCoeff() > 0.0);
+  CHECK(sp->trace_xcheck == doctest::Approx(sp->eigvals.sum()));
+
+  const auto pieces = fiml_projection_pieces(built, raw, est);
+  const double trace_from_split =
+      (pieces.H * pieces.Gamma).trace() -
+      (pieces.P_inv * pieces.Delta.transpose() * pieces.J * pieces.Delta).trace();
+  const double trace_direct = (pieces.U * pieces.Gamma).trace();
+  INFO("trace_from_split = ", trace_from_split,
+       " trace_direct = ", trace_direct,
+       " spectrum trace = ", sp->trace_xcheck);
+  CHECK(trace_direct == doctest::Approx(trace_from_split).epsilon(1e-9));
+  CHECK(sp->trace_xcheck == doctest::Approx(trace_from_split).epsilon(1e-9));
+}
+
+TEST_CASE("fiml_ugamma_spectrum: complete-data multi-group configural matches the unstructured robust spectrum") {
+  // Degeneracy guard, multi-group generalization of the single-group case
+  // above: on COMPLETE data the first-principles FIML UΓ spectrum must
+  // reproduce the complete-data UNSTRUCTURED robust spectrum eig(U·Γ̂) across
+  // two groups. This pins the FIML multi-group block-stacking to the
+  // complete-data robust path without an external oracle.
+  //
+  // NOTE: the *cross-group-equality* (metric/scalar invariance) version of this
+  // degeneracy is intentionally NOT asserted here. build_u_factor's complete-
+  // data reduced spectrum deviates ~0.5% from lavaan (and from the FIML path,
+  // which matches lavaan to 1e-9) specifically for multi-group + cross-group
+  // equality constraints — a separate complete-data bug (docs/backlog/todo.md).
+  // The FIML cross-group spectrum's correctness is validated against lavaan in
+  // experiments/21-fiml-measurement-invariance-fmg; its internal consistency is
+  // covered by the cross-group metric/scalar cases above.
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4", /*n_groups=*/2);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto truth = built.ev.sigma(theta0);
+  REQUIRE(truth.has_value());
+  REQUIRE(truth->sigma.size() == 2);
+
+  magmaan::data::RawData raw;
+  const std::array<Eigen::Index, 2> ns = {200, 170};
+  for (std::size_t b = 0; b < 2; ++b) {
+    Eigen::LLT<Eigen::MatrixXd> llt(truth->sigma[b]);
+    REQUIRE(llt.info() == Eigen::Success);
+    const Eigen::MatrixXd L = llt.matrixL();
+    Eigen::MatrixXd Z = deterministic_z(ns[b], truth->sigma[b].rows());
+    if (b == 1) Z.array() *= 1.08;
+    raw.X.push_back((Z * L.transpose()).rowwise() + truth->mu[b].transpose());
+  }
+
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 800;
+  auto est = magmaan::estimate::fit_fiml(*built.pt, *built.rep, raw, theta0,
+                                         magmaan::estimate::fiml::FIML{},
+                                         magmaan::estimate::Backend::NloptLbfgs,
+                                         opts);
+  REQUIRE_MESSAGE(est.has_value(),
+      "multi-group metric fit_fiml failed: " <<
+      (est.has_value() ? "" : est.error().detail));
+  auto fx = magmaan::estimate::fiml::fiml_extras(*built.pt, *built.rep, raw, *est);
+  REQUIRE(fx.has_value());
+
+  auto df_or = magmaan::inference::df_stat(*built.pt, *samp, est->theta);
+  REQUIRE(df_or.has_value());
+  auto sp = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      *built.pt, *built.rep, raw, *est, *df_or, fx->chi2);
+  REQUIRE_MESSAGE(sp.has_value(),
+      "multi-group metric fiml_ugamma_spectrum failed: " <<
+      (sp.has_value() ? "" : sp.error().detail));
+
+  // Reference: complete-data unstructured robust spectrum eig(U·Γ̂), multi-block.
+  auto uf = magmaan::robust::build_u_factor(
+      *built.pt, *built.rep, *samp, *est,
+      magmaan::robust::InferenceSpec{
+          magmaan::robust::Information::Expected,
+          magmaan::robust::WeightMoments::Unstructured,
+          magmaan::robust::ScoreCovariance::Empirical});
+  REQUIRE(uf.has_value());
+  auto Zc = magmaan::robust::casewise_contributions(raw, *samp, /*include_means=*/true);
+  REQUIRE(Zc.has_value());
+  Eigen::VectorXd denom(2);
+  denom << static_cast<double>(raw.X[0].rows()),
+           static_cast<double>(raw.X[1].rows());
+  auto M = magmaan::robust::reduced_gamma_sample(*uf, *Zc, denom);
+  REQUIRE(M.has_value());
+  auto ev_ref = magmaan::robust::ugamma_eigenvalues(*M);
+  REQUIRE(ev_ref.has_value());
+  REQUIRE(static_cast<int>(uf->df) == *df_or);
+
+  Eigen::VectorXd a = sp->eigvals;             // ascending, length df
+  Eigen::VectorXd b = ev_ref->tail(*df_or);    // top-df, ascending
+  INFO("fiml eig = ", a.transpose(), " unstructured eig = ", b.transpose());
+  CHECK((a - b).cwiseAbs().maxCoeff() < 1e-6);
 }
 
 TEST_CASE("fiml_baseline_chi2: missing data produces finite baseline") {

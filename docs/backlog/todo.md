@@ -9,6 +9,32 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Correctness bugs
 
+- **Open.** **Complete-data robust UΓ spectrum is wrong for multi-group +
+  cross-group equality constraints (measurement invariance).**
+  `build_u_factor` (`src/robust/robust.cpp`) produces a reduced UΓ spectrum that
+  deviates ~0.5% from lavaan's `lavInspect(fit, "UGamma")` eigenvalues whenever a
+  model has **both** multiple groups **and** an equality constraint tying
+  parameters *across* groups (metric: equal loadings; scalar: equal intercepts).
+  Single-group fits (with or without within-group equality) and multi-group
+  *configural* fits (no cross-group ties) match lavaan to ~1e-7, so the defect is
+  specific to the cross-group-K × multi-block interaction; it affects both the
+  Structured (production FMG) and Unstructured weights. This corrupts the SB
+  scaling factor, the FMG GOF p-values, and robust SEs for complete-data
+  measurement-invariance models. The **FIML** saturated-EM path
+  (`fiml_ugamma_spectrum`) handles the identical case correctly (matches lavaan
+  to ~1e-9), so this is isolated to the complete-data reduced path, not the
+  constraint machinery or the Jacobian. Surfaced while auditing FIML FMG
+  feature-completeness (the FIML↔complete-data degeneracy guard in
+  `tests/unit/fiml_test.cpp` is therefore asserted only for the *configural*
+  multi-group case). Repro: lavaan `cfa(..., group=, group.equal="loadings",
+  estimator="ML", test="satorra.bentler", h1.information="structured")` vs
+  `fmg_tests()` on the same magmaan ML fit; eigenvalues of `lavInspect("UGamma")`
+  diverge by ~5e-3 at two groups. Likely site: the reduced meat
+  (`reduced_gamma_sample*`) or the per-block weighting when the global kernel
+  basis `N` couples blocks; the bread/`A` and global QR of `A` appear correct.
+  The lavaan-parity demonstration of this lives in
+  `experiments/21-fiml-measurement-invariance-fmg`.
+
 - **Fixed (properly, ordinal-aware).** **Standardized solution for
   ordinal / mixed-ordinal fits.** Previously the generic standardize formula
   `λ·√Var(η)/√σ_rr` (`src/measures/standardized.cpp`) divided by the assembled
