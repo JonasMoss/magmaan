@@ -68,7 +68,7 @@ struct Fixture {
   Eigen::MatrixXd S;            // sample covariance
   Eigen::VectorXd theta_hat;    // lavaan optimum, magmaan free order
   Eigen::VectorXd theta_start;  // lavaan start values, magmaan free order
-  double lavaan_fmin = 0.0;     // lavaan reports F/2; magmaan F == 2 * this
+  double lavaan_fmin = 0.0;     // ½F: magmaan est.fmin == this; full F == 2*this
 };
 
 Fixture load_fixture(const std::string& name) {
@@ -336,7 +336,7 @@ void run_diagnostics(const std::string& name) {
     CHECK_MESSAGE(est.has_value(),
                   "ML must converge from the default heuristic start");
     if (est.has_value()) {
-      CHECK(std::abs(est->fmin - 2.0 * f.lavaan_fmin) < 1e-3);
+      CHECK(std::abs(est->fmin - f.lavaan_fmin) < 1e-3);
       CHECK((est->theta - f.theta_hat).cwiseAbs().maxCoeff() < 1e-3);
     }
   }

@@ -410,8 +410,10 @@ TEST_CASE("FC-SEM ML: objective matches lavaan chi-square at native estimates") 
       REQUIRE(grad.size() == theta.size());
       CHECK(grad.array().isFinite().all());
 
+      // obj->f is the optimiser objective ½F; chi2 = N·F ⇒ ½F = chi2/(2N).
       const double expected_f =
-          j["chi2"].get<double>() / static_cast<double>(j["n_obs"].get<int>());
+          j["chi2"].get<double>() /
+          (2.0 * static_cast<double>(j["n_obs"].get<int>()));
       CHECK(std::abs(f - expected_f) < 1e-8);
 
       auto got = ev->sigma(samp, theta);
@@ -481,8 +483,10 @@ TEST_CASE("FC-SEM ML: fit from native simple starts matches lavaan objective") {
           built.pt, samp, *x0, {}, magmaan::estimate::Backend::NloptLbfgs, opts);
       REQUIRE_MESSAGE(est.has_value(), "fit failed: " << est.error().detail);
 
+      // est.fmin = ½F = chi2 / (2N), since chi2 = N·F.
       const double expected_f =
-          j["chi2"].get<double>() / static_cast<double>(j["n_obs"].get<int>());
+          j["chi2"].get<double>() /
+          (2.0 * static_cast<double>(j["n_obs"].get<int>()));
       CHECK(std::abs(est->fmin - expected_f) < 1e-6);
 
       auto ev = FcSemEvaluator::build(built.pt);

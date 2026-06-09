@@ -420,10 +420,11 @@ TEST_CASE("browne_residual_adf: zero on saturated model") {
   CHECK(std::abs(*adf_or) < 1e-6);
 }
 
-TEST_CASE("chi2_stat: chi2 = n · fmin") {
-  // Pure arithmetic on the fmin → chi2 plumbing. N (not N−1) matches
-  // lavaan's `likelihood = "normal"` default. Doesn't depend on any
-  // information matrix — `chi2_stat` reads samp.n_obs and est.fmin only.
+TEST_CASE("chi2_stat: chi2 = 2n · fmin") {
+  // Pure arithmetic on the fmin → chi2 plumbing. est.fmin = ½F, so the
+  // statistic is T = 2N·fmin = N·F. N (not N−1) matches lavaan's
+  // `likelihood = "normal"` default. Doesn't depend on any information
+  // matrix — `chi2_stat` reads samp.n_obs and est.fmin only.
   SampleStats samp;
   samp.S.push_back(Eigen::MatrixXd::Identity(3, 3));   // not used by chi2_stat
   samp.n_obs.push_back(301);
@@ -433,7 +434,7 @@ TEST_CASE("chi2_stat: chi2 = n · fmin") {
   est.fmin  = 0.04321;
 
   CHECK(magmaan::inference::chi2_stat(samp, est) ==
-        doctest::Approx(301.0 * 0.04321).epsilon(1e-12));
+        doctest::Approx(2.0 * 301.0 * 0.04321).epsilon(1e-12));
 }
 
 // ----------------------------------------------------------------------------

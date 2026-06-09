@@ -69,8 +69,9 @@ stopifnot(length(fit_dwls$theta) == sum(lavaan::parTable(lavaan_wls)$free > 0L))
 
 lavaan_dwls <- lavaan::cfa(model, data = df, ordered = ordered,
                            estimator = "DWLS", parameterization = "delta")
-chisq_dwls <- fit_dwls$ntotal * fit_dwls$fmin
-chisq_wls <- fit_wls$ntotal * fit_wls$fmin
+# fit$fmin = ½F (uniform objective scale); χ² = 2·N·fmin = N·F.
+chisq_dwls <- 2 * fit_dwls$ntotal * fit_dwls$fmin
+chisq_wls <- 2 * fit_wls$ntotal * fit_wls$fmin
 stopifnot(abs(chisq_dwls - lavaan::fitMeasures(lavaan_dwls, "chisq")) < 0.08)
 stopifnot(abs(chisq_wls - lavaan::fitMeasures(lavaan_wls, "chisq")) < 0.08)
 

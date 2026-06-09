@@ -237,14 +237,14 @@ TEST_CASE("Mplus SEM continuous goldens match lavaan") {
         }
         check_common_fit(label, handles->pt, handles->rep, *est_or, samp, fit,
                          1e-3, failures);
-        const double lavaan_f = 2.0 * fit["fmin"].get<double>();
+        const double lavaan_f = fit["fmin"].get<double>();
         if (!close(est_or->fmin, lavaan_f, 2e-4)) {
           failures.push_back(label + ": fmin = " + std::to_string(est_or->fmin) +
-                             ", lavaan 2*fmin = " + std::to_string(lavaan_f));
+                             ", lavaan fmin = " + std::to_string(lavaan_f));
           continue;
         }
         const double chisq =
-            static_cast<double>(samp.n_obs[0]) * est_or->fmin;
+            2.0 * static_cast<double>(samp.n_obs[0]) * est_or->fmin;
         if (!close(chisq, fit["chisq"].get<double>(), 5e-3)) {
           failures.push_back(label + ": chisq = " + std::to_string(chisq) +
                              ", lavaan = " +

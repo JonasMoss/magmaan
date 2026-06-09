@@ -2672,10 +2672,10 @@ Rcpp::DataFrame compute_defined_impl(std::string syntax,
       Rcpp::_["stringsAsFactors"] = false);
 }
 
-// infer_chi2_stat() — mirrors chi2_stat(samp, est). Returns N_total · F_ML(θ̂).
-// This primitive does not need a fit object: sample_stats supplies nobs and
-// fmin is the optimizer's final discrepancy value (fit$fmin when called after
-// fit_fit()).
+// infer_chi2_stat() — mirrors chi2_stat(samp, est). Returns 2·N_total·fmin =
+// N·F (the GOF χ²). This primitive does not need a fit object: sample_stats
+// supplies nobs and fmin is the optimizer's minimised objective ½·F (fit$fmin
+// when called after fit_fit()); see docs/design/numerical-conventions.md.
 //
 // [[Rcpp::export]]
 double infer_chi2_stat(Rcpp::List sample_stats, double fmin) {

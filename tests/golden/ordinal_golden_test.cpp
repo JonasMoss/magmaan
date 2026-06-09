@@ -479,7 +479,7 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
         continue;
       }
       const int df = static_cast<int>(n_moments - con_or->n_alpha);
-      const double chisq = static_cast<double>(n_total) * est_or->fmin;
+      const double chisq = 2.0 * static_cast<double>(n_total) * est_or->fmin;
       const double d_chisq = std::abs(chisq - lavaan_chisq);
       const double d_theta = max_abs_diff(est_or->theta, lavaan_theta);
       const double theta_tol = 1e-5;
@@ -709,7 +709,7 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
         continue;
       }
       const int df = static_cast<int>(n_moments - con_or->n_alpha);
-      const double chisq = static_cast<double>(n_total) * est_or->fmin;
+      const double chisq = 2.0 * static_cast<double>(n_total) * est_or->fmin;
       const double d_chisq = std::abs(chisq - lavaan_chisq);
       const double d_theta = max_abs_diff(est_or->theta, lavaan_theta);
       if (df != lavaan_df || d_theta > 2e-2 || d_chisq > 3e-1) {
@@ -724,7 +724,7 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
           !fit_item.value()["robust"].is_null()) {
         magmaan::estimate::Estimates lavaan_est = *est_or;
         lavaan_est.theta = lavaan_theta;
-        lavaan_est.fmin = lavaan_chisq / static_cast<double>(n_total);
+        lavaan_est.fmin = lavaan_chisq / (2.0 * static_cast<double>(n_total));
         auto rob_or = magmaan::estimate::robust_mixed_ordinal(
             h->pt, h->rep, h->stats, lavaan_est, kind);
         if (!rob_or.has_value()) {

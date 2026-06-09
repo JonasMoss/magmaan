@@ -1616,7 +1616,10 @@ fiml_observed_information(spec::LatentStructure pt,
   }
   // H = ∂²F/∂θ² of the per-observation-averaged deviance F. The FIML
   // log-likelihood is logl = −½(N·F + c), so the observed information is
-  // −∂²logl/∂θ² = ½·N·H.
+  // −∂²logl/∂θ² = ½·N·H. F here is the FULL-scale kernel deviance
+  // (fiml_observed_hessian_fd differentiates discrepancy.gradient), NOT the
+  // ½F optimiser objective — est.fmin is halved only in the fit adapter, so
+  // this ½·N·H stays correct unchanged.
   auto H_or = fiml_observed_hessian_fd(pt, rep, raw, *cache_or, *start_or, est,
                                        discrepancy, h_step);
   if (!H_or.has_value()) return std::unexpected(H_or.error());
@@ -2172,8 +2175,13 @@ fit_fiml(spec::LatentStructure pt,
       grad.setZero();
       return std::numeric_limits<double>::infinity();
     }
-    grad = std::move(vg->gradient);
-    return vg->value;
+    // ½·F scale: est.fmin = ½F, uniform with ML/LS. The FIML χ² stays the LRT
+    // in fiml_extras, which recomputes the full-F deviance from est.theta and
+    // is unaffected. INVARIANT: halve ONLY here in the optimiser adapter —
+    // FIML::value / value_gradient must stay full-F because fiml_extras and
+    // fiml_observed_hessian_fd (the observed information) differentiate them.
+    grad = 0.5 * vg->gradient;
+    return 0.5 * vg->value;
   };
 
   auto run_fiml_scalar = [&](const optim::ScalarProblem& prob,

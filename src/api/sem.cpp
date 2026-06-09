@@ -986,6 +986,16 @@ Result<estimate::OrdinalRobustResult> robust_ordinal(const Fit &fit) {
       "robust_ordinal() requires ordinal or mixed ordinal data"));
 }
 
+// Standard goodness-of-fit χ² dispatch — the single site that maps each
+// estimator to its base statistic. The uniform contract is T = 2N·fmin = N·F
+// (fmin = ½F for every estimator); see inference::chi2_stat and
+// docs/design/numerical-conventions.md for the rule and its deliberate
+// exceptions. Here:
+//   - ML (sample stats)        → chi2_stat        (2N·fmin)
+//   - continuous ULS/GLS/WLS   → continuous_ls_chisq (ULS: Browne residual;
+//                                 GLS/WLS: 2N·fmin)
+//   - FIML (raw data)          → fiml_extras.chi2 (the LRT −2(logl−logl_sat))
+//   - ordinal / mixed          → robust_ordinal.chisq_standard (2N·fmin)
 Result<TestResult> test(const Fit &fit, TestSpec spec) {
   if (spec.kind != TestKind::StandardChiSquare) {
     return std::unexpected(make_error(ErrorStage::UnsupportedCombination,
