@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -102,6 +103,22 @@ magmaan::data::SampleStats sample_stats_from_case(const nlohmann::json &c) {
   return samp;
 }
 
+magmaan::data::SampleStats sample_stats_from_export(const nlohmann::json &c) {
+  magmaan::data::SampleStats samp;
+  for (const auto &block : c["data"]["sample_cov"]) {
+    samp.S.push_back(matrix_from_json(block));
+  }
+  if (c["data"].contains("sample_mean") && !c["data"]["sample_mean"].empty()) {
+    for (const auto &block : c["data"]["sample_mean"]) {
+      samp.mean.push_back(vector_from_json(block));
+    }
+  }
+  for (const auto &n : c["data"]["n_obs"]) {
+    samp.n_obs.push_back(n.get<std::int64_t>());
+  }
+  return samp;
+}
+
 struct Handles {
   magmaan::spec::LatentStructure pt;
   magmaan::model::MatrixRep rep;
@@ -118,6 +135,39 @@ std::optional<Handles> handles_from_case(const nlohmann::json &c,
   magmaan::spec::BuildOptions opts;
   opts.meanstructure = c.value("meanstructure", false);
   opts.fixed_x = c.value("fixed_x", true);
+  if (c.value("lavaan_function", std::string{}) == "growth") {
+    opts.meanstructure = true;
+    opts.int_ov_free = false;
+    opts.int_lv_free = true;
+    opts.fixed_x = false;
+  }
+  auto pt = magmaan::spec::build(*flat, opts);
+  if (!pt.has_value()) {
+    failures.push_back(id + ": lavaanify - " + pt.error().detail);
+    return std::nullopt;
+  }
+  auto rep = magmaan::model::build_matrix_rep(*pt);
+  if (!rep.has_value()) {
+    failures.push_back(id + ": matrix_rep - " + rep.error().detail);
+    return std::nullopt;
+  }
+  return Handles{std::move(*pt), std::move(*rep)};
+}
+
+std::optional<Handles>
+handles_from_export_case(const nlohmann::json &c,
+                         std::vector<std::string> &failures) {
+  const std::string id = c["case_id"].get<std::string>();
+  auto flat = magmaan::parse::Parser::parse(c["model"].get<std::string>());
+  if (!flat.has_value()) {
+    failures.push_back(id + ": parse - " + flat.error().detail);
+    return std::nullopt;
+  }
+  magmaan::spec::BuildOptions opts;
+  opts.n_groups = c["data"].value("n_groups", 1);
+  opts.meanstructure = c["model_options"].value("meanstructure", false);
+  opts.fixed_x = c["model_options"].value("fixed_x", true);
+  opts.auto_cov_y = c.value("lavaan_function", std::string{}) == "sem";
   if (c.value("lavaan_function", std::string{}) == "growth") {
     opts.meanstructure = true;
     opts.int_ov_free = false;
@@ -197,6 +247,56 @@ void check_case(const std::string &corpus, const nlohmann::json &c,
     failures.push_back(label + ": fmin = " + std::to_string(est->fmin) +
                        ", lavaan fmin = " + std::to_string(lavaan_f));
   }
+}
+
+struct ExportFitResult {
+  std::string id;
+  int df = 0;
+  double chisq = 0.0;
+};
+
+std::optional<ExportFitResult>
+check_export_case(const nlohmann::json &c, std::vector<std::string> &failures) {
+  const std::string id = c["case_id"].get<std::string>();
+  auto handles = handles_from_export_case(c, failures);
+  if (!handles.has_value()) {
+    return std::nullopt;
+  }
+  auto samp = sample_stats_from_export(c);
+  auto est =
+      magmaan::test::fit(handles->pt, handles->rep, samp, {},
+                         magmaan::estimate::Backend::NloptLbfgs, textbook_opts());
+  if (!est.has_value()) {
+    failures.push_back(id + ": fit - " + est.error().detail);
+    return std::nullopt;
+  }
+
+  const double lavaan_f = c["lavaan"]["fit"]["fmin"].get<double>();
+  if (est->fmin > lavaan_f + 1e-6) {
+    failures.push_back(id + ": fmin = " + std::to_string(est->fmin) +
+                       " worse than lavaan " + std::to_string(lavaan_f));
+  }
+
+  auto df = magmaan::inference::df_stat(handles->pt, samp);
+  if (!df.has_value()) {
+    failures.push_back(id + ": df - " + df.error().detail);
+  } else if (*df != c["lavaan"]["fit"]["df"].get<int>()) {
+    failures.push_back(id + ": df = " + std::to_string(*df) +
+                       ", lavaan = " +
+                       std::to_string(c["lavaan"]["fit"]["df"].get<int>()));
+  }
+
+  const std::int64_t n_total = std::accumulate(
+      samp.n_obs.begin(), samp.n_obs.end(), std::int64_t{0});
+  const double chisq = 2.0 * static_cast<double>(n_total) * est->fmin;
+  const double lavaan_chisq = c["lavaan"]["fit"]["chisq"].get<double>();
+  const bool lavaan_well_converged =
+      id != "kline_2023_ch22_guo_mi_strong";
+  if (lavaan_well_converged && std::abs(chisq - lavaan_chisq) > 1e-3) {
+    failures.push_back(id + ": chisq = " + std::to_string(chisq) +
+                       ", lavaan = " + std::to_string(lavaan_chisq));
+  }
+  return ExportFitResult{id, df.value_or(0), chisq};
 }
 
 void check_json_file_exists(const std::string &corpus,
@@ -624,6 +724,59 @@ TEST_CASE("Textbook corpus v1 overlap graph is well formed") {
   CHECK(has_exact);
   CHECK(has_canonical);
   CHECK(has_shape);
+}
+
+TEST_CASE("Textbook corpus Kline Guo invariance ML cases match lavaan") {
+  const std::string root = magmaan::test::fixtures_dir();
+  auto raw =
+      magmaan::test::read_fixture(root + "/textbook_corpus/case_exports.json");
+  REQUIRE(raw.has_value());
+  auto j = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(j.is_discarded());
+  REQUIRE(j.contains("_meta"));
+  CHECK(j["_meta"]["fixture_kind"].get<std::string>() ==
+        "textbook_corpus.case_export");
+  REQUIRE(j.contains("cases"));
+  REQUIRE(j["cases"].size() == 4);
+
+  std::vector<std::string> failures;
+  std::vector<ExportFitResult> results;
+  for (const auto &c : j["cases"]) {
+    auto r = check_export_case(c, failures);
+    if (r.has_value()) {
+      results.push_back(*r);
+    }
+  }
+
+  if (results.size() == 4) {
+    const std::array<std::pair<std::size_t, std::size_t>, 2> nested_pairs = {{
+        {1, 0}, // weak vs configural
+        {3, 1}, // partial-strong vs weak
+    }};
+    for (const auto &[more_restricted, less_restricted] : nested_pairs) {
+      const auto &h0 = results[more_restricted];
+      const auto &h1 = results[less_restricted];
+      const double diff = h0.chisq - h1.chisq;
+      const int ddf = h0.df - h1.df;
+      const double lavaan_diff =
+          j["cases"][more_restricted]["lavaan"]["fit"]["chisq"].get<double>() -
+          j["cases"][less_restricted]["lavaan"]["fit"]["chisq"].get<double>();
+      const int lavaan_ddf =
+          j["cases"][more_restricted]["lavaan"]["fit"]["df"].get<int>() -
+          j["cases"][less_restricted]["lavaan"]["fit"]["df"].get<int>();
+      if (ddf != lavaan_ddf || std::abs(diff - lavaan_diff) > 1e-3) {
+        failures.push_back(h0.id + " vs " + h1.id +
+                           ": nested delta chisq=" + std::to_string(diff) +
+                           " lavaan=" + std::to_string(lavaan_diff) +
+                           " ddf=" + std::to_string(ddf) +
+                           " lavaan_ddf=" + std::to_string(lavaan_ddf));
+      }
+    }
+  }
+
+  for (const auto &f : failures)
+    MESSAGE("  FAIL " << f);
+  CHECK(failures.empty());
 }
 
 TEST_CASE("Newsom LCS promoted-observed implied moments match lavaan at theta") {

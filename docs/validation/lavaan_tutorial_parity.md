@@ -129,7 +129,8 @@ measurement invariance, χ²-difference tests.
   equality via shared labels (configural / metric / scalar / partial
   invariance), the `c(...)` per-group modifier, LR / Satorra nested tests.
 - **Test:** corpus `0016`, `0021`–`0025`, parity `hs_3factor_ls_mg_configural`
-  / `hs_3factor_ls_mg_metric`, `multigroup_inference_golden_test`; examples
+  / `hs_3factor_ls_mg_metric`, Kline Guo configural/weak/strong/partial-strong
+  checked-in textbook export, `multigroup_inference_golden_test`; examples
   `holzinger_invariance.R`, `holzinger_2group_satorra_bentler.R`,
   `c_modifier_per_group.R`.
 - **Gap:** no `group.equal=` / `group.partial=` convenience arguments —
@@ -184,7 +185,9 @@ robust DWLS/ULS (WLSMV, ULSMV, …); `se=`/`test=` robust and bootstrap;
 
 - **core ◐ / api ◐ / R ◐.**
   - ML, GLS, WLS, DWLS, ULS: **✓** (`fit/`, `ls/`, `ordinal/` fixtures).
-  - FIML (`missing="ML"`): **✓** (parity `bfi_fiml`, `bfi_fiml_5factor`).
+  - FIML (`missing="ML"`): **✓** (parity `bfi_fiml`, `bfi_fiml_5factor`;
+    no textbook-corpus FIML lane yet because the canonical corpus currently
+    exports no `expected/lavaan_fiml.json` snapshots).
   - Robust MLM/MLR/WLSMV: **✓ as post-fit choices** — magmaan estimates, then
     Satorra-Bentler / Yuan-Bentler scaling and sandwich SEs are explicit
     post-fit calls. This is an architecture difference from lavaan's fit-time
