@@ -90,7 +90,7 @@ pairs_all  <- nested_pairs()
 have_lav   <- args$lavaan_parity && requireNamespace("lavaan", quietly = TRUE)
 
 CTRL_FIML <- list(max_iter = 16000L, ftol = 1e-13, gtol = 1e-9)
-CTRL_ML   <- list(max_iter = 10000L)
+CTRL_ML   <- list(max_iter = 10000L, ftol = 1e-13, gtol = 1e-9)
 
 # Fit one invariance level under FIML; returns NULL on failure.
 fit_fiml_level <- function(level, df) {
@@ -134,7 +134,10 @@ for (ci in seq_len(nrow(cells))) {
 
   for (rep in seq_len(args$reps)) {
     set.seed(args$seed_base + 1000L * ci + rep)
-    df_complete <- draw_complete(pop, args$n, dist = cell$dist, violate = violate)
+    # Deliberately UNEQUAL group sizes: the pooled-weight projector only matters
+    # when w_b = n_b/N differs across the groups an equality constraint couples.
+    n_groups_vec <- c(args$n, round(0.7 * args$n))
+    df_complete <- draw_complete(pop, n_groups_vec, dist = cell$dist, violate = violate)
     df <- inject_mcar(df_complete, pop$ov, cell$miss)
 
     fits <- lapply(levels_all, fit_fiml_level, df = df)
@@ -323,7 +326,8 @@ write_rows(invariant_rows, file.path(out_dir, "invariants.csv"))
 write_csv(summary_df, file.path(out_dir, "summary_rejection.csv"))
 write_metadata(
   file.path(out_dir, "metadata.csv"),
-  values = list(reps = args$reps, n_per_group = args$n, seed_base = args$seed_base,
+  values = list(reps = args$reps, n_group_a = args$n, n_group_b = round(0.7 * args$n),
+                seed_base = args$seed_base,
                 conditions = args$conditions, dists = args$dists, miss = args$miss,
                 lavaan_parity = have_lav, elapsed_sec = round(elapsed, 1)),
   packages = c("magmaan", "lavaan"))

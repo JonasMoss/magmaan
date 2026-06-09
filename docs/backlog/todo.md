@@ -9,29 +9,32 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Correctness bugs
 
-- **Open (minor, non-production).** **build_u_factor's Unstructured-weight
-  reduced UΓ spectrum disagrees with the saturated/FIML spectrum for multi-group
-  + cross-group equality.** With `InferenceSpec{moments = Unstructured}`,
-  `build_u_factor` (`src/robust/robust.cpp`) produces a reduced spectrum that
-  differs ~0.6% from the first-principles FIML saturated spectrum
-  (`fiml_ugamma_spectrum`) for a model with **both** multiple groups **and** an
-  across-group equality constraint (metric/scalar invariance), at the same θ̂
-  (`tests/unit/fiml_test.cpp`, the metric/scalar cases). Single-group (±within-
-  group equality) and multi-group *configural* agree to ~1e-6. The FIML spectrum
-  is the correct one — it matches lavaan's unstructured `lavInspect("UGamma")`
-  to ~1e-9 across configural/metric/scalar
-  (`experiments/21-fiml-measurement-invariance-fmg`, `--lavaan-parity`). **This
-  does not affect production FMG:** `infer_fmg_ugamma_spectra` /
-  `fmg_tests()` use the **Structured** weight, and that path matches lavaan's
-  structured UGamma to ~3e-7 for the identical metric/scalar models (exp 21).
-  So the defect is confined to the non-default Unstructured weight + cross-group-K
-  combination. Likely site: the reduced meat (`reduced_gamma_sample*`) or the
-  per-block weighting when the global kernel basis `N` couples blocks under the
-  S-based (vs Σ̂-based) weight; the bread/`A` and global QR of `A` appear correct.
-  (Earlier triage mis-scoped this to the Structured/production path; that was a
-  model-spec mismatch in the ad-hoc check — magmaan labels vs lavaan
-  `group.equal` produced different χ² — not a build_u_factor defect. With
-  identical specs the structured spectra match.)
+- **Fixed.** **Complete-data robust UΓ projector dropped the per-group weight
+  for unequal groups + cross-group equality.** `build_u_factor`'s
+  ProjectionExpected path (`finish_u_factor_expected`, `src/robust/robust.cpp`)
+  built the kernel basis `N = ker(Aᵀ)` from `A_b = L_Γ,b⁻¹·Δ_b` with **no**
+  per-group weight `w_b = n_b/N` — `w_b` entered only the (separate) SE bread,
+  never the test projector. The FIML saturated path bakes `n_b` into its
+  information `H = blockdiag(n_b·V_b)`, so its projector is correctly weighted;
+  that mismatch made the reduced UΓ spectrum (hence the SB scaling factor, the
+  FMG GOF p-values, and the robust difference test) wrong by up to ~1% whenever a
+  model had **both** unequal group sizes **and** an equality constraint coupling
+  the groups (metric/scalar invariance). It was invisible for single-group,
+  equal-group (where `w_b` is a global scalar), and configural / within-group
+  cases — block-local columns are unaffected because the weight is then a pure
+  per-column rescaling of `A` that leaves `ker(Aᵀ)` fixed. It bites only
+  cross-block columns of unequal-size blocks, where the omitted weight tilts the
+  projected subspace. Affects both the Structured (production FMG) and
+  Unstructured weights. **Fix:** scale each block's rows of `A` by `√w_b` before
+  the QR (a no-op on the projected subspace for the unaffected cases). Validated
+  against lavaan: the complete-data structured spectrum for unequal-group metric
+  invariance went from ~5e-3 off to ~1e-7, and the FIML/Unstructured degeneracy
+  in `tests/unit/fiml_test.cpp` (now the metric case) holds to ~1e-6;
+  `experiments/21-fiml-measurement-invariance-fmg` (unequal groups,
+  `--lavaan-parity`) reproduces the parity. Surfaced while auditing FIML FMG
+  feature-completeness. (The SE sandwich path `robust_se` uses its own w_b-
+  weighted bread and was not affected; the Observed-bread spectrum tail was left
+  as-is — FMG uses the Expected bread.)
 
 - **Fixed (properly, ordinal-aware).** **Standardized solution for
   ordinal / mixed-ordinal fits.** Previously the generic standardize formula
