@@ -100,7 +100,7 @@ semantics · **XL** statistical design/research track before implementation.
   lavaan values; they pass on the current code and a "uniform Browne base"
   rewrite breaks them. Leave the split as is.
 
-- **Resolved (convention chosen + tests made honest); doc still owed.**
+- **Resolved (convention + tests + doc).**
   Continuous GLS/WLS standard χ² uses multiplier `N` (`2N·fmin = N·F`), whereas
   lavaan reports `(N−G)·F` (Wishart/unbiased). Characterized exactly against the
   lavaan-generated fixtures: on `hs_3factor_ls` (N=301) magmaan/lavaan =
@@ -113,23 +113,29 @@ semantics · **XL** statistical design/research track before implementation.
   made the golden tests honest: `lavaan_parity_golden_test.cpp` and
   `ls_golden_test.cpp` now pin `magmaan_chisq·(N−G)/N == lavaan` to 5e-3 (was a
   loose `max(5e-2, 2·N·fmin·2e-3)` ≈ 1.2 gate that silently absorbed the gap).
-  **Still owed:** the user-facing documentation of this convention (see the docs
-  item below) and the `magmaan-gls-chi-convention` note updated to say `(N−G)/N`,
-  not just "half".
+  **Done:** [docs/design/numerical-conventions.md](../design/numerical-conventions.md)
+  is the user-facing convention doc; the `magmaan-gls-chi-convention` memory note
+  now reads `(N−G)/N`, not just "half".
 
-- **M, organization.** Revisit how the continuous/ordinal test-statistic and
-  robust-inference builders are organized. Today the standard `test()` path uses
-  `continuous_ls_chisq` (Browne residual for ULS, `2N·fmin` for GLS/WLS) while
-  the robust path uses `robust_ls_standard_chisq` (`2N·fmin` uniformly), and the
-  continuous vs ordinal robust paths reach `robust_weighted_moments` with
-  different `fmin` scaling conventions (`src/estimate/ordinal.cpp:2509,2652`
-  passes `est.fmin`, the continuous path passes `2·fmin`). The per-estimator base
-  statistic is correct (it matches lavaan; see the two entries above), but the
-  rules are spread across several call sites. Audit for a single, documented
-  contract on what each path's base χ² means per estimator (continuous
-  ULS/GLS/WLS standard vs robust, ordinal DWLS/WLS, mixed) and where the
-  estimator-kind dispatch lives, so the deliberate ULS standard-vs-robust split
-  is obvious by construction rather than implicit.
+- **Resolved (½-everywhere unification + single documented contract).** The
+  per-estimator objective/test-statistic scaling was unified so EVERY estimator
+  (ML/FIML, ULS/GLS/WLS, ordinal DWLS/WLS/ULS, mixed) stores `est.fmin = ½·F`
+  and the GOF χ² is `T = 2N·fmin = N·F`. Previously `est.fmin` was overloaded:
+  continuous LS stored `½F`, but ML/FIML/ordinal stored the full `F` (ordinal
+  via an explicit `2.0 * out->fmin` doubling), with the multiplier flipping
+  between `N` and `2N` per path to compensate. Now the `½` lives ONLY in the
+  optimiser adapters (`ml_objective`, FIML `eval_at`, LS `scalarize`); the math
+  kernels stay full-F so the information/SE and score-test paths are untouched
+  (verified: ML info uses `n_b/2·ΔᵀWΔ`, FIML info uses `½N·H[F]`, neither reads
+  `est.fmin`). `fit_ml_fisher`'s `expected_ml_hessian_f` carries the matching
+  `½` so the Newton step is unchanged. The single documented contract lives at
+  `inference::chi2_stat` (+ a dispatch note in `api::test()`); the deliberate
+  exceptions (ULS-standard Browne, FIML-standard LRT, the test-side `(N−G)/N`
+  lavaan offset) are documented there and in
+  [docs/design/numerical-conventions.md](../design/numerical-conventions.md).
+  χ² VALUES are unchanged, so lavaan parity is preserved; only the internal
+  split became uniform. (NOTE: the `ordinal.cpp:2509,2652` line refs in the old
+  entry have shifted; the robust calls are now `2554`/`2697`.)
 
 - **S/M.** Add Kline-corpus parity coverage for the Guo measurement-invariance
   models (`guo_mi_weak`, `guo_mi_strong`, `guo_mi_partial_strong`). The

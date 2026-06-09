@@ -92,7 +92,14 @@ struct TerminalAuditOptions {
     gradient check at that tolerance). v1 ships Absolute so that magmaan's
     convergence verdict is on the same yardstick as lavaan's, which makes
     cross-package comparisons honest without an internal calibration study
-    we don't yet have.
+    we don't yet have. NOTE: since the `fmin = ½·F` unification (see
+    [numerical-conventions.md](numerical-conventions.md)) the audit sees a
+    gradient on the `½F` (discrepancy-half) scale for EVERY estimator,
+    matching lavaan (which minimises `½F` for ML too). Before that change ML/NT
+    presented the audit a full-`F` gradient — 2× lavaan's — so `1e-3` was
+    effectively 2× too tight for ML; it is now genuinely apples-to-apples. The
+    `absolute_tol` value itself is unchanged and still a defensive cross-package
+    match, not a calibrated choice.
   - **Relative**: `‖Pg‖_∞ ≤ stationarity_tol · (1 + |f|)`. The shape an
     earlier revision shipped as the default. The argument for Relative is
     that `|f|` spans many orders of magnitude across the SEM corpus, so an

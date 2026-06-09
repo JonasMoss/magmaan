@@ -103,9 +103,16 @@ golden `parTable()` fixtures.
   `magmaan_core$fit_ml_fisher_snlls()` path solves the same local Fisher
   equation through a Schur complement over the SNLLS β/α split; this is local
   block elimination, not Golub-Pereyra objective profiling.
-- Discrepancy-scale convention: magmaan's `fmin` is the full ML discrepancy
-  `F`, whereas lavaan reports `F/2` — magmaan's `fmin` at the optimum equals
-  twice lavaan's.
+- Objective-scale convention (unified 2026-06-09): `est.fmin = ½·F` for EVERY
+  estimator (ML/FIML, ULS/GLS/WLS, ordinal, mixed) — the optimiser's minimum,
+  half the discrepancy, and the quantity whose Hessian is the Fisher
+  information. The goodness-of-fit statistic is `T = 2N·fmin = N·F` uniformly
+  (`inference::chi2_stat`), matching lavaan's stored `fmin` element-for-element.
+  The `½` lives only in the optimiser adapters; the math kernels stay full-`F`
+  so the information/SE and score paths are untouched. Deliberate exceptions
+  (ULS-standard Browne, FIML-standard LRT, the test-side `(N−G)/N` lavaan
+  offset) are documented at `chi2_stat` and in
+  [docs/design/numerical-conventions.md](../design/numerical-conventions.md).
 - Expected information, finite-difference observed information, and analytic
   observed information for covariance and mean-structure models.
 - Vcov/SE, Wald/z tests, chi-square/df helpers, LR/Satorra-2000 and

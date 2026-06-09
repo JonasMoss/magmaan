@@ -189,10 +189,10 @@ void check_case(const std::string &corpus, const nlohmann::json &c,
     failures.push_back(label + ": df = " + std::to_string(*df) +
                        ", lavaan = " + std::to_string(oracle["df"].get<int>()));
   }
-  const double lavaan_f = 2.0 * oracle["fmin"].get<double>();
+  const double lavaan_f = oracle["fmin"].get<double>();
   if (!close(est->fmin, lavaan_f, 1e-3)) {
     failures.push_back(label + ": fmin = " + std::to_string(est->fmin) +
-                       ", lavaan 2*fmin = " + std::to_string(lavaan_f));
+                       ", lavaan fmin = " + std::to_string(lavaan_f));
   }
 }
 

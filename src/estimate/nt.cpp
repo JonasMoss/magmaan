@@ -482,8 +482,14 @@ ml_objective(const model::ModelEvaluator& ev, const SampleStats& s) {
       grad.setZero();
       return kInf;
     }
-    grad = std::move(vg->gradient);
-    return vg->value;
+    // Objective scale: the optimiser minimises ½·F_ML so that est.fmin = ½F,
+    // uniform with the LS family, and ∇²(½F) equals the Fisher information.
+    // The χ² statistic is recovered as 2N·fmin = N·F (see chi2_stat). The ½
+    // lives ONLY here in the optimiser adapter: ml_value_gradient stays at
+    // full-F scale because the information builders (information_*) and the
+    // score/MI tests differentiate it directly and expect the F-scale gradient.
+    grad = 0.5 * vg->gradient;
+    return 0.5 * vg->value;
   };
   return prob;
 }
@@ -508,8 +514,9 @@ ml_objective(const model::FcSemEvaluator& ev, const SampleStats& s) {
       grad.setZero();
       return kInf;
     }
-    grad = std::move(*g);
-    return *f;
+    // ½·F_ML scale — see the ModelEvaluator overload above.
+    grad = 0.5 * (*g);
+    return 0.5 * (*f);
   };
   return prob;
 }

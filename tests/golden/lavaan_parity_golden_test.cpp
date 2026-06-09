@@ -287,9 +287,9 @@ TEST_CASE("lavaan-parity ML — magmaan reproduces lavaan on real data") {
         char buf[200];
         std::snprintf(buf, sizeof(buf),
                       "%s: KNOWN GAP (magmaan_aligned=false) — fit fmin=%.6f "
-                      "vs lavaan 2·fmin=%.6f; not parity-gated",
+                      "vs lavaan fmin=%.6f; not parity-gated",
                       id.c_str(), est_or->fmin,
-                      2.0 * ref["lavaan_fmin"].get<double>());
+                      ref["lavaan_fmin"].get<double>());
         notes.push_back(buf);
       } else {
         notes.push_back(id + ": KNOWN GAP — fit failed: " +
@@ -324,10 +324,11 @@ TEST_CASE("lavaan-parity ML — magmaan reproduces lavaan on real data") {
       }
     }
 
-    // objective — magmaan F == 2 · lavaan fmin.
-    const double f_lavaan = 2.0 * ref["lavaan_fmin"].get<double>();
+    // objective — magmaan and lavaan now share the ½F scale, so
+    // est.fmin == lavaan's stored fmin directly (both are ½F).
+    const double f_lavaan = ref["lavaan_fmin"].get<double>();
     if (!close(est.fmin, f_lavaan, 1e-4)) {
-      std::snprintf(buf, sizeof(buf), "fmin = %.8f, expected 2·fmin = %.8f",
+      std::snprintf(buf, sizeof(buf), "fmin = %.8f, expected fmin = %.8f",
                     est.fmin, f_lavaan);
       fail(buf);
     }
@@ -896,7 +897,7 @@ TEST_CASE("lavaan-parity ordinal — bfi DWLS/WLS") {
       continue;
     }
     const int df = static_cast<int>(n_moments - con_or->n_alpha);
-    const double chisq = static_cast<double>(n_total) * est.fmin;
+    const double chisq = 2.0 * static_cast<double>(n_total) * est.fmin;
 
     const Eigen::VectorXd theta_l = vector_from_json(fit["theta_hat"]);
     if (est.theta.size() != theta_l.size()) {

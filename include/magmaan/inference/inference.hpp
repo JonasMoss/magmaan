@@ -132,14 +132,32 @@ Eigen::VectorXd se(const Eigen::MatrixXd& vcov) noexcept;
 // Test-statistic / model-dimension primitives — independent of any Hessian.
 // =============================================================================
 
-// Model fit test statistic: chi² = N_total · F_ML(θ̂). Trivial closed form;
-// inlined so callers don't pay for an out-of-line call. `est.fmin` is the
-// final discrepancy value; `samp.n_obs` gives the per-block sample sizes.
+// Model fit test statistic: chi² = 2·N_total·fmin = N_total·F(θ̂).
+//
+// THE OBJECTIVE-SCALE CONTRACT (uniform across every estimator):
+//   est.fmin = ½·F, where F is the statistical discrepancy. The optimiser
+//   minimises ½·F for ALL estimators — ML/FIML, ULS/GLS/WLS, ordinal
+//   DWLS/WLS/ULS, mixed — so est.fmin is simultaneously (i) the optimiser's
+//   minimum, (ii) half the discrepancy, and (iii) the quantity whose Hessian
+//   is the Fisher information (∇²(½F) = I). The goodness-of-fit statistic is
+//   therefore T = 2N·fmin = N·F everywhere. N (not N−1) matches lavaan's
+//   `likelihood = "normal"` default.
+//
+// Two deliberate exceptions, documented at their own sites, NOT here:
+//   - Continuous ULS *standard* GOF uses Browne's residual NT statistic, not
+//     2N·fmin (N·F_ULS is not asymptotically χ²): see continuous_ls_chisq.
+//   - FIML *standard* GOF is the LRT −2(logl − logl_sat); the 2N·fmin identity
+//     holds but the LRT is the reported quantity: see fiml::fiml_extras.
+//   - magmaan reports T against N; lavaan's GLS/WLS (N−G)·F differs by exactly
+//     (N−G)/N. That offset is applied test-side in the parity goldens, not in
+//     the statistic itself. See docs/design/numerical-conventions.md.
+//
+// Trivial closed form; inlined so callers don't pay for an out-of-line call.
 inline double chi2_stat(const SampleStats& samp,
                         const Estimates&   est) noexcept {
   double n_total = 0.0;
   for (auto n : samp.n_obs) n_total += static_cast<double>(n);
-  return n_total * est.fmin;
+  return 2.0 * n_total * est.fmin;
 }
 
 // Degrees of freedom: Σ_b p_b(p_b+1)/2 (+ Σ_b p_b if the model has mean

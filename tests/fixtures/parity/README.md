@@ -65,7 +65,7 @@ fixtures are aligned unless a case explicitly carries `magmaan_aligned = false`.
 | `lavaan_function`, `estimator`, `meanstructure`, `auto_cov_y`, `n_obs`, `ov_names`, `n_free` | oracle provenance and lavaanify options |
 | `sample_cov` | `{names, values}` — N-divisor sample covariance |
 | `sample_mean` | `{names, values}` for meanstructure cases, else `null` |
-| `lavaan_fmin`, `chisq`, `df`, `pvalue` | lavaan fit statistics (magmaan `F == 2 · lavaan_fmin`) |
+| `lavaan_fmin`, `chisq`, `df`, `pvalue` | lavaan fit statistics. magmaan `est.fmin == lavaan_fmin` directly (both store `½F`); χ² `= 2·N·fmin = N·F`. See [docs/design/numerical-conventions.md](../../../docs/design/numerical-conventions.md) |
 | `fit_measures` | `{npar, logl, unrestricted_logl, aic, bic, bic2, cfi, tli, rmsea, rmsea_ci_*, rmsea_pvalue, srmr}` |
 | `param_lhs/op/rhs`, `theta_hat`, `se`, `theta_start_lavaan` | per-free-parameter labels / estimates / SEs / starts, in **magmaan free order** (aligned cases only) |
 

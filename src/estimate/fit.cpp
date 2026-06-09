@@ -710,9 +710,11 @@ total_n_obs_double(const SampleStats& samp, const char* who) {
   return total;
 }
 
-// Expected Hessian of F_ML itself, not the N/2-scaled post-fit information
-// matrix. This keeps the Fisher equation local and literal:
-// H_E(θ) d = -∇F_ML(θ).
+// Expected Hessian of ½·F_ML (the optimiser's objective scale; see
+// estimate::ml_objective), not the N/2-scaled post-fit information matrix.
+// The ½ matches the halved adapter gradient so the Fisher step is unchanged:
+//   (½H_E)⁻¹ (½∇F_ML) = H_E⁻¹ ∇F_ML.
+// This keeps the Fisher equation local and literal: (½H_E) d = -½∇F_ML.
 fit_expected<Eigen::MatrixXd>
 expected_ml_hessian_f(const model::ModelEvaluator& ev,
                       const SampleStats& samp,
@@ -766,7 +768,7 @@ expected_ml_hessian_f(const model::ModelEvaluator& ev,
               std::to_string(b)));
     }
     SigmaInv[b] = llt.solve(Eigen::MatrixXd::Identity(p, p));
-    weight[b]   = static_cast<double>(samp.n_obs[b]) / n_total;
+    weight[b]   = 0.5 * static_cast<double>(samp.n_obs[b]) / n_total;
     p_dim[b]    = p;
     vech_off[b] = running;
     running += vech_len(p);

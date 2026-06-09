@@ -3396,7 +3396,7 @@ TEST_CASE("Ordinal robust reporting returns sandwich SEs and scaled-test eigenva
   CHECK(rob->df == 2);
   CHECK(rob->eigvals.size() == rob->df);
   CHECK(rob->eigvals.minCoeff() > 0.0);
-  CHECK(rob->chisq_standard == doctest::Approx(800.0 * fit->fmin));
+  CHECK(rob->chisq_standard == doctest::Approx(2.0 * 800.0 * fit->fmin));
   CHECK(rob->satorra_bentler.df == rob->df);
   CHECK(std::isfinite(rob->satorra_bentler.scale_c));
   CHECK(std::isfinite(rob->mean_var_adjusted.df_adj));

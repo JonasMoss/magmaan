@@ -2551,7 +2551,8 @@ robust_ordinal(spec::LatentStructure pt,
     off += mb;
   }
 
-  auto out = robust_weighted_moments(blocks, K, est.fmin);
+  // 2·est.fmin = F (est.fmin = ½F): robust_weighted_moments forms N·F.
+  auto out = robust_weighted_moments(blocks, K, 2.0 * est.fmin);
   if (!out.has_value()) return std::unexpected(out.error());
   return ordinal_result_from_weighted(*out);
 }
@@ -2694,7 +2695,8 @@ robust_mixed_ordinal(spec::LatentStructure pt,
     off += mb;
   }
 
-  auto out = robust_weighted_moments(blocks, K, est.fmin);
+  // 2·est.fmin = F (est.fmin = ½F): robust_weighted_moments forms N·F.
+  auto out = robust_weighted_moments(blocks, K, 2.0 * est.fmin);
   if (!out.has_value()) return std::unexpected(out.error());
   return ordinal_result_from_weighted(*out);
 }
@@ -3256,7 +3258,7 @@ fit_measures_ordinal(spec::LatentStructure pt,
   auto N_or = total_n_obs(stats);
   if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
   const int df = static_cast<int>(ordinal_moment_rows(stats) - con_or->n_alpha);
-  const double chi2 = static_cast<double>(*N_or) * est.fmin;
+  const double chi2 = 2.0 * static_cast<double>(*N_or) * est.fmin;
   const measures::FitMeasures indices =
       measures::fit_measures(chi2, df, *baseline, *N_or, stats.R.size());
 
@@ -3481,14 +3483,14 @@ solve_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
   if (!con.active()) {
     auto out = run_ordinal_ls(prob, x0, bounds, backend, opts);
     if (!out.has_value()) return std::unexpected(out.error());
-    return Estimates{prob.expand(out->x), 2.0 * out->fmin, out->iterations};
+    return Estimates{prob.expand(out->x), out->fmin, out->iterations};
   }
 
   const optim::GmmProblem prob_a = reparameterize(prob, con);
   if (con.n_alpha == 0) {  // every parameter pinned by the linear system
     auto r = prob_a.r(Eigen::VectorXd(0));
     if (!r.has_value()) return std::unexpected(r.error());
-    return Estimates{prob_a.expand(Eigen::VectorXd(0)), r->squaredNorm(), 0};
+    return Estimates{prob_a.expand(Eigen::VectorXd(0)), 0.5 * r->squaredNorm(), 0};
   }
 
   Eigen::VectorXd alpha0 = con.contract(x0);
@@ -3514,7 +3516,7 @@ solve_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
       }
     }
   }
-  return Estimates{std::move(theta_hat), 2.0 * out->fmin, out->iterations};
+  return Estimates{std::move(theta_hat), out->fmin, out->iterations};
 }
 
 }  // namespace
@@ -3934,12 +3936,12 @@ fit_ordinal_snlls(spec::LatentStructure pt,
     auto r = prob.r(Eigen::VectorXd(0));
     if (!r.has_value()) return std::unexpected(r.error());
     theta_reduced = prob.expand(Eigen::VectorXd(0));
-    fmin = r->squaredNorm();
+    fmin = 0.5 * r->squaredNorm();
   } else {
     auto out = run_ordinal_ls(prob, gp_or->beta0, Bounds{}, backend, opts);
     if (!out.has_value()) return std::unexpected(out.error());
     theta_reduced = prob.expand(out->x);
-    fmin = 2.0 * out->fmin;
+    fmin = out->fmin;
     iterations = out->iterations;
     f_evals = out->f_evals;
     g_evals = out->g_evals;
@@ -4083,12 +4085,12 @@ fit_ordinal_snlls_full_thresholds(spec::LatentStructure pt,
     auto r = prob.r(Eigen::VectorXd(0));
     if (!r.has_value()) return std::unexpected(r.error());
     theta_hat = prob.expand(Eigen::VectorXd(0));
-    fmin = r->squaredNorm();
+    fmin = 0.5 * r->squaredNorm();
   } else {
     auto out = run_ordinal_ls(prob, gp_or->beta0, Bounds{}, backend, opts);
     if (!out.has_value()) return std::unexpected(out.error());
     theta_hat = prob.expand(out->x);
-    fmin = 2.0 * out->fmin;
+    fmin = out->fmin;
     iterations = out->iterations;
     f_evals = out->f_evals;
     g_evals = out->g_evals;
@@ -4348,12 +4350,12 @@ fit_mixed_ordinal_snlls_full_thresholds(
     auto r = prob.r(Eigen::VectorXd(0));
     if (!r.has_value()) return std::unexpected(r.error());
     theta_hat = prob.expand(Eigen::VectorXd(0));
-    fmin = r->squaredNorm();
+    fmin = 0.5 * r->squaredNorm();
   } else {
     auto out = run_ordinal_ls(prob, gp_or->beta0, Bounds{}, backend, opts);
     if (!out.has_value()) return std::unexpected(out.error());
     theta_hat = prob.expand(out->x);
-    fmin = 2.0 * out->fmin;
+    fmin = out->fmin;
     iterations = out->iterations;
     f_evals = out->f_evals;
     g_evals = out->g_evals;
