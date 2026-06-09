@@ -209,6 +209,17 @@ golden `parTable()` fixtures.
   single-block spectra can still eigensolve in row space when `N < df`; grouped
   and unbiased paths take the full reduced route so per-block denominators and
   the non-identity sample NT term are honored.
+  FIML FMG is validated for the full multi-group measurement-invariance workflow
+  (configural -> metric -> scalar: cross-group loading/intercept equality plus
+  mean structure), for both the GOF spectrum and the nested restriction map, by
+  C++ algebra cases in `tests/unit/fiml_test.cpp` and by
+  `experiments/21-fiml-measurement-invariance-fmg`, whose `--lavaan-parity` run
+  reproduces lavaan's FIML LRT chi-square (~1e-7) and, on complete data, the full
+  unstructured UGamma eigenvalue spectrum (~1e-5) across all three invariance
+  levels and normal / heavy-tailed / MCAR cells. Known caveat: the complete-data
+  robust path's non-default *Unstructured* weight disagrees ~0.6% with the
+  FIML/lavaan spectrum for cross-group-equality models; FMG uses the Structured
+  weight and is unaffected (`docs/backlog/todo.md`).
 
 ### Staged C++ facade
 
