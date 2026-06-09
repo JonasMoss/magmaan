@@ -9,6 +9,9 @@ quick:
 heavy:
     Rscript fiml_fmg_trace_convergence.R --dist=t --t-df=5 --n=500,2000 --reps=3 --missing=0.15
 
+nominal:
+    Rscript fiml_fmg_trace_convergence.R --dist=t --t-df=5 --n=2000 --reps=80 --missing=0.15 --alpha=0.05
+
 all:
     Rscript fiml_fmg_trace_convergence.R --n=250,1000,4000 --reps=20 --missing=0.15
 
