@@ -247,6 +247,9 @@ The FIML FMG implementation follows this construction:
 - multi-group missing-data spectra have C++ coverage;
 - saturated H1 information is analytic and checked against the old
   finite-difference route on complete, missing, and multi-block raw data;
+- `tests/checks/fiml_fmg_trace/` provides an advisory null simulation showing
+  the FMG eigenvalue trace and the MLR trace difference converge under matched
+  FIML conventions;
 - nonlinear equality constraints are rejected explicitly;
 - nested FIML `restriction_map` tests use the model-pair `A/C/S` route in
   saturated eta-space, with exact and delta restriction-map variants.
