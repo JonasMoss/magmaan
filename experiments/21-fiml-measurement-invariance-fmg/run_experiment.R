@@ -145,8 +145,10 @@ for (ci in seq_len(nrow(cells))) {
     if (any(vapply(fits, is.null, logical(1)))) next   # skip rep on any failure
 
     # ---- GOF FMG at each level -------------------------------------------
+    gof_tests <- c("pEBA4", "pEBA2", "pEBA6", "SB", "SS", "pall", "all")
     for (lev in levels_all) {
-      tab <- tryCatch(magmaan::fmg_tests(fits[[lev]]), error = function(e) NULL)
+      tab <- tryCatch(magmaan::fmg_tests(fits[[lev]], tests = gof_tests),
+                      error = function(e) NULL)
       sp  <- tryCatch(magmaan:::infer_fiml_fmg_spectrum(fits[[lev]]),
                       error = function(e) NULL)
       if (is.null(tab) || is.null(sp)) next
@@ -301,7 +303,8 @@ if (nrow(nested_df)) {
   }
 }
 if (nrow(gof_df)) {
-  gof_sb <- gof_df[gof_df$test %in% c("sb_ml", "pall_ml", "peba4_ml"), , drop = FALSE]
+  gof_sb <- gof_df[gof_df$test %in% c("sb_ml", "ss_ml", "peba4_ml", "pall_ml",
+                                      "all_ml"), , drop = FALSE]
   grp <- split(gof_sb, list(gof_sb$condition, gof_sb$dist, gof_sb$miss,
                             gof_sb$level, gof_sb$test), drop = TRUE)
   for (g in grp) {
