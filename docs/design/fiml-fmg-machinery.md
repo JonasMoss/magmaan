@@ -222,6 +222,13 @@ The checked validation now covers:
 
   modulo the documented scaling convention;
 
+- deterministic saturated-space algebra checks verify
+  `sum(eig(U Gamma_mis)) == trace(H Gamma_mis) -
+  trace((Delta' H Delta)^-1 Delta' J Delta)`;
+- single-model normal-theory sanity checks verify `Gamma = H^-1` yields `df`
+  eigenvalues equal to one;
+- row-duplication invariance checks verify saturated `H/J/acov` scaling leaves
+  the FMG eigenvalues unchanged;
 - explicit rejection of `_ug` and `_rls` under FIML;
 - equality-constraint df/tangent behavior;
 - a nested FIML synthetic case where the nested eigenvalues collapse to ones
