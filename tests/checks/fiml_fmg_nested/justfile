@@ -1,0 +1,13 @@
+set shell := ["bash", "-uc"]
+
+default:
+    @just --list
+
+quick:
+    Rscript fiml_nested_nominal.R --n=500,2000 --reps=3 --missing=0.15
+
+heavy:
+    Rscript fiml_nested_nominal.R --dist=t --t-df=5 --n=500,2000 --reps=3 --missing=0.15
+
+nominal:
+    Rscript fiml_nested_nominal.R --dist=t --t-df=5 --n=2000 --reps=80 --missing=0.15 --alpha=0.05

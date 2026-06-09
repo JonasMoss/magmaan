@@ -987,6 +987,118 @@ TEST_CASE("nested FIML restriction map: reduced and dense eta-space eigensolves 
   CHECK(ev_dense(0) == doctest::Approx(reduced->eigenvalues(0)).epsilon(1e-7));
 }
 
+TEST_CASE("nested FIML restriction map: trace_CinvS matches C/S algebra") {
+  auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + a*x4");
+  Eigen::VectorXd theta1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta1.setConstant(0.6);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(h0.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto raw = model_missing_raw(h1, theta1, {160});
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df1 = magmaan::inference::df_stat(*h1.pt, *samp, theta1);
+  auto df0 = magmaan::inference::df_stat(*h0.pt, *samp, theta0);
+  REQUIRE(df1.has_value());
+  REQUIRE(df0.has_value());
+  REQUIRE(*df0 - *df1 == 2);
+  auto K1 = magmaan::estimate::build_eq_constraints(*h1.pt);
+  auto K0 = magmaan::estimate::build_eq_constraints(*h0.pt);
+  REQUIRE(K1.has_value());
+  REQUIRE(K0.has_value());
+
+  auto exact = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1,
+      *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/7.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Exact);
+  REQUIRE_MESSAGE(exact.has_value(),
+      "nested FIML exact failed: " << (exact.has_value() ? "" : exact.error().detail));
+  REQUIRE(exact->eigenvalues.size() == 2);
+
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
+  REQUIRE(sm.has_value());
+  magmaan::estimate::Estimates est1;
+  est1.theta = theta1;
+  auto D1 = magmaan::estimate::fiml::fiml_eta_jacobian(
+      *h1.pt, *h1.rep, raw, est1);
+  REQUIRE(D1.has_value());
+  const Eigen::MatrixXd Delta1 = D1->Delta_theta * K1->Kmat;
+  auto restr = magmaan::robust::restriction_alpha_from_K(*K1, *K0);
+  REQUIRE(restr.has_value());
+  auto reduced = magmaan::robust::compute_fiml_satorra2000(
+      Delta1, sm->H, sm->acov, restr->A);
+  REQUIRE_MESSAGE(reduced.has_value(),
+      "compute_fiml_satorra2000 failed: " <<
+      (reduced.has_value() ? "" : reduced.error().detail));
+  REQUIRE(reduced->eigenvalues.size() == 2);
+
+  const Eigen::MatrixXd Cinv = inverse_ldlt(reduced->C);
+  const double trace_direct = (Cinv * reduced->S).trace();
+  INFO("trace_direct = ", trace_direct,
+       " trace_CinvS = ", reduced->trace_CinvS,
+       " eigenvalues = ", reduced->eigenvalues.transpose());
+  CHECK(trace_direct == doctest::Approx(reduced->trace_CinvS).epsilon(1e-9));
+  CHECK(reduced->trace_CinvS ==
+        doctest::Approx(reduced->eigenvalues.sum()).epsilon(1e-12));
+  CHECK(reduced->trace_CinvS_sq ==
+        doctest::Approx(reduced->eigenvalues.squaredNorm()).epsilon(1e-12));
+  CHECK((exact->eigenvalues - reduced->eigenvalues).cwiseAbs().maxCoeff() < 1e-9);
+  CHECK(exact->scale_c ==
+        doctest::Approx(reduced->trace_CinvS / 2.0).epsilon(1e-12));
+}
+
+TEST_CASE("nested FIML restriction map: row duplication leaves eigenvalues invariant") {
+  auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + a*x4");
+  Eigen::VectorXd theta1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta1.setConstant(0.6);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(h0.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto raw = model_missing_raw(h1, theta1, {150});
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df1 = magmaan::inference::df_stat(*h1.pt, *samp, theta1);
+  auto df0 = magmaan::inference::df_stat(*h0.pt, *samp, theta0);
+  REQUIRE(df1.has_value());
+  REQUIRE(df0.has_value());
+  REQUIRE(*df0 - *df1 == 2);
+  auto K1 = magmaan::estimate::build_eq_constraints(*h1.pt);
+  auto K0 = magmaan::estimate::build_eq_constraints(*h0.pt);
+  REQUIRE(K1.has_value());
+  REQUIRE(K0.has_value());
+
+  auto exact = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1,
+      *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/7.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Exact);
+  REQUIRE_MESSAGE(exact.has_value(),
+      "nested FIML exact failed: " << (exact.has_value() ? "" : exact.error().detail));
+
+  const auto raw_dup = duplicate_raw_rows(raw, 3);
+  auto exact_dup = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1,
+      *h0.pt, *h0.rep, theta0, *K0,
+      raw_dup, /*T_H0=*/7.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Exact);
+  REQUIRE_MESSAGE(exact_dup.has_value(),
+      "duplicated nested FIML exact failed: " <<
+      (exact_dup.has_value() ? "" : exact_dup.error().detail));
+
+  REQUIRE(exact->eigenvalues.size() == exact_dup->eigenvalues.size());
+  INFO("original eigenvalues = ", exact->eigenvalues.transpose(),
+       " duplicated eigenvalues = ", exact_dup->eigenvalues.transpose());
+  CHECK((exact->eigenvalues - exact_dup->eigenvalues).cwiseAbs().maxCoeff() < 1e-9);
+  CHECK(exact_dup->scale_c == doctest::Approx(exact->scale_c).epsilon(1e-9));
+  CHECK(exact_dup->adjust_d0 == doctest::Approx(exact->adjust_d0).epsilon(1e-9));
+}
+
 TEST_CASE("nested FIML restriction map: rejects df mismatch and reversed nesting") {
   auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
   auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");
