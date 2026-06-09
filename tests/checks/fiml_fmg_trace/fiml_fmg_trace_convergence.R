@@ -7,6 +7,8 @@ parse_args <- function(args) {
     n = c(250L, 1000L, 4000L),
     reps = 6L,
     missing = 0.15,
+    dist = "normal",
+    t_df = 5.0,
     seed = 20260609L,
     max_iter = 8000L
   )
@@ -21,6 +23,10 @@ parse_args <- function(args) {
       out$reps <- as.integer(val)
     } else if (identical(key, "missing")) {
       out$missing <- as.numeric(val)
+    } else if (identical(key, "dist")) {
+      out$dist <- val
+    } else if (identical(key, "t-df")) {
+      out$t_df <- as.numeric(val)
     } else if (identical(key, "seed")) {
       out$seed <- as.integer(val)
     } else if (identical(key, "max-iter")) {
@@ -38,10 +44,16 @@ population <- function() {
   list(mu = mu, Sigma = Sigma)
 }
 
-draw_null_data <- function(n, pop, missing_prob) {
+draw_null_data <- function(n, pop, missing_prob, dist, t_df) {
   p <- length(pop$mu)
   Z <- matrix(rnorm(n * p), nrow = n, ncol = p)
-  X <- sweep(Z %*% chol(pop$Sigma), 2L, pop$mu, "+")
+  X0 <- Z %*% chol(pop$Sigma)
+  if (identical(dist, "t")) {
+    w <- stats::rchisq(n, df = t_df) / t_df
+    row_scale <- sqrt((t_df - 2.0) / t_df) / sqrt(w)
+    X0 <- X0 * matrix(row_scale, nrow = n, ncol = p)
+  }
+  X <- sweep(X0, 2L, pop$mu, "+")
   colnames(X) <- paste0("x", seq_len(p))
 
   M <- matrix(runif(n * p) >= missing_prob, nrow = n, ncol = p)
@@ -71,7 +83,8 @@ fit_one <- function(df, spec, max_iter) {
     gap = gap,
     rel_gap = abs(gap) / max(1.0, abs(mlr$trace_ugamma)),
     min_lambda = min(sp$biased),
-    max_lambda = max(sp$biased)
+    max_lambda = max(sp$biased),
+    mean_abs_lambda_minus_one = mean(abs(sp$biased - 1.0))
   )
 }
 
@@ -87,7 +100,8 @@ summarise_n <- function(rows) {
     mean_rel_gap = mean(rows$rel_gap),
     p90_rel_gap = unname(stats::quantile(rows$rel_gap, 0.90, names = FALSE)),
     min_lambda = min(rows$min_lambda),
-    max_lambda = max(rows$max_lambda)
+    max_lambda = max(rows$max_lambda),
+    mean_abs_lambda_minus_one = mean(rows$mean_abs_lambda_minus_one)
   )
 }
 
@@ -96,6 +110,10 @@ if (any(!is.finite(cfg$n)) || any(cfg$n <= 0L)) stop("--n must be positive")
 if (!is.finite(cfg$reps) || cfg$reps <= 0L) stop("--reps must be positive")
 if (!is.finite(cfg$missing) || cfg$missing < 0 || cfg$missing >= 1) {
   stop("--missing must be in [0, 1)")
+}
+if (!cfg$dist %in% c("normal", "t")) stop("--dist must be 'normal' or 't'")
+if (identical(cfg$dist, "t") && (!is.finite(cfg$t_df) || cfg$t_df <= 2.0)) {
+  stop("--t-df must be finite and > 2")
 }
 
 set.seed(cfg$seed)
@@ -107,7 +125,8 @@ spec <- model_spec(model, meanstructure = TRUE)
 pop <- population()
 
 cat("FIML FMG trace convergence under the null\n")
-cat("model: one-factor CFA, normal data, MCAR missingness\n")
+cat("model: one-factor CFA, ", cfg$dist, " data, MCAR missingness\n", sep = "")
+if (identical(cfg$dist, "t")) cat("t_df=", cfg$t_df, "\n", sep = "")
 cat("missing=", cfg$missing, " reps=", cfg$reps,
     " seed=", cfg$seed, "\n\n", sep = "")
 
@@ -115,7 +134,7 @@ all_rows <- list()
 idx <- 1L
 for (n in cfg$n) {
   for (rep in seq_len(cfg$reps)) {
-    df <- draw_null_data(n, pop, cfg$missing)
+    df <- draw_null_data(n, pop, cfg$missing, cfg$dist, cfg$t_df)
     row <- tryCatch(
       fit_one(df, spec, cfg$max_iter),
       error = function(e) {
