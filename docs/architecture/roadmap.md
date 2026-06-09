@@ -559,7 +559,14 @@ stop rather than any usable non-error return.
   same-syntax, same-shape, and same-oracle-structure examples while preserving
   every source case as its own fixture record. The local raw-corpus
   parser/lavaanify smoke sweep currently accepts all 38 Little catalogue
-  models and all 142 Newsom lavaan models.
+  models and all 142 Newsom lavaan models. A dedicated golden ("Kline Guo
+  multi-group measurement-invariance fits match lavaan",
+  `tests/golden/textbook_corpus_golden_test.cpp`) re-fits the four Guo invariance
+  rungs from the submodule's per-group summary statistics under
+  `corpus/textbook-corpus/cases/kline_2023/` and asserts df-exact + chisq parity;
+  it documents that lavaan's `guo_mi_strong` reference is under-converged (magmaan
+  reaches a strictly lower chisq at identical df, confirmed by three independent
+  optimizers), so that rung is gated by df-exact + no-worse-than-oracle.
 - Paper-corpus curation now lives in the ignored nested Git repository
   `external/paper_corpus`. That repository owns raw downloads, minimal derived
   lavaan-ready data/models, raw-to-derived validation, and magmaan-facing JSON

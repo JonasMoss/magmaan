@@ -1,9 +1,12 @@
 #include "../test_fit.hpp"
 #include <doctest/doctest.h>
 
+#include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -293,6 +296,203 @@ void check_little_single_indicator_case_at_lavaan_theta() {
   CHECK_MESSAGE(d_mu < 1e-8, case_id << ": max|mu - lavaan| = " << d_mu);
 }
 
+// --- Kline Guo multi-group measurement invariance (textbook-corpus submodule) ---
+//
+// The four Guo invariance rungs (configural/weak/strong/partial_strong) live in
+// the textbook-corpus submodule as per-group summary statistics with a
+// checked-in lavaan ML oracle. We re-fit each from those summary stats and
+// assert order-free parity (df exact, chisq + fmin within 1e-3) against the
+// oracle. This guards the fixed duplicated-formula-term bug: a phantom
+// invariance parameter that moved the analytic gradient but not the model
+// moments — caught by the converged fit, not by implied moments. Per-parameter
+// theta/SE comparison is deferred (the oracle stores them in lavaan's free-
+// parameter order, which needs a lavaan->magmaan map the chisq/df check avoids).
+
+std::vector<std::string> split_csv_line(const std::string &line) {
+  std::vector<std::string> cells;
+  std::string cur;
+  for (const char ch : line) {
+    if (ch == ',') {
+      cells.push_back(cur);
+      cur.clear();
+    } else if (ch != '"' && ch != '\r') {
+      cur.push_back(ch);
+    }
+  }
+  cells.push_back(cur);
+  return cells;
+}
+
+std::vector<std::vector<std::string>> read_csv_rows(const std::string &path) {
+  std::vector<std::vector<std::string>> rows;
+  auto raw = magmaan::test::read_fixture(path);
+  if (!raw.has_value())
+    return rows;
+  std::string line;
+  for (const char ch : *raw) {
+    if (ch == '\n') {
+      if (!line.empty())
+        rows.push_back(split_csv_line(line));
+      line.clear();
+    } else {
+      line.push_back(ch);
+    }
+  }
+  if (!line.empty())
+    rows.push_back(split_csv_line(line));
+  return rows;
+}
+
+// Named covariance CSV: header `"","V1","V2",...`, then one `"Vi",x,x,...` row
+// per variable. strtod (not stod) keeps the -fno-exceptions build honest.
+std::optional<Eigen::MatrixXd> read_named_cov_csv(const std::string &path) {
+  const auto rows = read_csv_rows(path);
+  if (rows.size() < 2)
+    return std::nullopt;
+  const Eigen::Index p = static_cast<Eigen::Index>(rows[0].size()) - 1;
+  if (p <= 0 || rows.size() < static_cast<std::size_t>(p) + 1)
+    return std::nullopt;
+  Eigen::MatrixXd S(p, p);
+  for (Eigen::Index r = 0; r < p; ++r) {
+    const auto &row = rows[static_cast<std::size_t>(r) + 1];
+    if (static_cast<Eigen::Index>(row.size()) < p + 1)
+      return std::nullopt;
+    for (Eigen::Index c = 0; c < p; ++c) {
+      S(r, c) = std::strtod(row[static_cast<std::size_t>(c) + 1].c_str(),
+                            nullptr);
+    }
+  }
+  return S;
+}
+
+// Named mean CSV: header `"name","mean"`, then one `"Vi",x` row per variable.
+std::optional<Eigen::VectorXd> read_named_mean_csv(const std::string &path) {
+  const auto rows = read_csv_rows(path);
+  if (rows.size() < 2)
+    return std::nullopt;
+  const Eigen::Index p = static_cast<Eigen::Index>(rows.size()) - 1;
+  Eigen::VectorXd mean(p);
+  for (Eigen::Index r = 0; r < p; ++r) {
+    const auto &row = rows[static_cast<std::size_t>(r) + 1];
+    if (row.size() < 2)
+      return std::nullopt;
+    mean(r) = std::strtod(row[1].c_str(), nullptr);
+  }
+  return mean;
+}
+
+void check_kline_guo_mi_case(std::string_view case_id,
+                             bool lavaan_well_converged,
+                             std::vector<std::string> &failures) {
+  const std::string id(case_id);
+  const std::string case_dir = repo_root_from_fixtures() +
+      "/corpus/textbook-corpus/cases/kline_2023/" + id;
+
+  auto model_raw = magmaan::test::read_fixture(case_dir + "/model.lav");
+  auto meta_raw = magmaan::test::read_fixture(case_dir + "/meta.json");
+  auto ref_raw =
+      magmaan::test::read_fixture(case_dir + "/expected/lavaan_ml.json");
+  if (!model_raw.has_value() || !meta_raw.has_value() || !ref_raw.has_value()) {
+    failures.push_back(id + ": missing model/meta/expected");
+    return;
+  }
+  const auto meta = nlohmann::json::parse(*meta_raw, nullptr, false);
+  const auto ref = nlohmann::json::parse(*ref_raw, nullptr, false);
+  if (meta.is_discarded() || ref.is_discarded()) {
+    failures.push_back(id + ": invalid meta/expected JSON");
+    return;
+  }
+
+  auto flat = magmaan::parse::Parser::parse(*model_raw);
+  if (!flat.has_value()) {
+    failures.push_back(id + ": parse - " + flat.error().detail);
+    return;
+  }
+  magmaan::spec::BuildOptions opts;
+  opts.n_groups = meta["data"].value("n_groups", 1);
+  opts.meanstructure = meta["model_options"].value("meanstructure", false);
+  opts.fixed_x = meta["model_options"].value("fixed_x", true);
+  opts.auto_cov_y = meta.value("lavaan_function", std::string{}) == "sem";
+  auto pt = magmaan::spec::build(*flat, opts);
+  if (!pt.has_value()) {
+    failures.push_back(id + ": lavaanify - " + pt.error().detail);
+    return;
+  }
+  auto rep = magmaan::model::build_matrix_rep(*pt);
+  if (!rep.has_value()) {
+    failures.push_back(id + ": matrix_rep - " + rep.error().detail);
+    return;
+  }
+
+  // Per-group summary statistics from the submodule CSVs. The CSV variable
+  // order is the model's declaration order (= magmaan's observed order); a
+  // misordering would surface as a chisq mismatch, not a silent pass.
+  const auto &data = meta["data"];
+  const auto &cov_files = data["files"]["sample_cov"];
+  const auto &mean_files = data["files"]["sample_mean"];
+  const auto &n_obs = data["n_obs"];
+  magmaan::data::SampleStats samp;
+  for (std::size_t g = 0; g < cov_files.size(); ++g) {
+    auto S =
+        read_named_cov_csv(case_dir + "/" + cov_files[g].get<std::string>());
+    auto mean =
+        read_named_mean_csv(case_dir + "/" + mean_files[g].get<std::string>());
+    if (!S.has_value() || !mean.has_value()) {
+      failures.push_back(id + ": unreadable summary-stat CSV for group " +
+                         std::to_string(g + 1));
+      return;
+    }
+    samp.S.push_back(std::move(*S));
+    samp.mean.push_back(std::move(*mean));
+    samp.n_obs.push_back(n_obs[g].get<std::int64_t>());
+  }
+
+  auto est = magmaan::test::fit(*pt, *rep, samp, {},
+                                magmaan::estimate::Backend::NloptLbfgs,
+                                textbook_opts());
+  if (!est.has_value()) {
+    failures.push_back(id + ": fit - " + est.error().detail);
+    return;
+  }
+
+  const auto &fit = ref["fit"];
+  // df is exact for every rung: it pins the constraint structure (a dropped or
+  // mis-counted invariance constraint moves df), independent of the optimum.
+  auto df = magmaan::inference::df_stat(*pt, samp);
+  if (!df.has_value()) {
+    failures.push_back(id + ": df - " + df.error().detail);
+  } else if (*df != fit["df"].get<int>()) {
+    failures.push_back(id + ": df = " + std::to_string(*df) +
+                       ", lavaan = " + std::to_string(fit["df"].get<int>()));
+  }
+  const double chi2 = magmaan::inference::chi2_stat(samp, *est);
+  const double chi2_lavaan = fit["chisq"].get<double>();
+  const double fmin_lavaan = fit["fmin"].get<double>();
+  // magmaan must reach a minimum no worse than the lavaan oracle (+ float
+  // slack). True for every rung.
+  if (est->fmin > fmin_lavaan + 1e-6) {
+    failures.push_back(id + ": fmin = " + std::to_string(est->fmin) +
+                       " worse than lavaan " + std::to_string(fmin_lavaan));
+  }
+  if (lavaan_well_converged) {
+    // Tight two-sided parity where lavaan is well-converged.
+    if (std::abs(chi2 - chi2_lavaan) > 1e-3) {
+      failures.push_back(id + ": chisq = " + std::to_string(chi2) +
+                         ", lavaan = " + std::to_string(chi2_lavaan));
+    }
+  } else if (chi2 > chi2_lavaan + 1e-3) {
+    // `guo_mi_strong`: lavaan's reference is under-converged. magmaan reaches a
+    // strictly lower chisq (here ~60.451 vs lavaan's ~60.549) at identical df,
+    // and three independent optimizers (NLopt L-BFGS, NLopt SLSQP, PORT) agree
+    // on that lower optimum to 6 digits — so this is lavaan stopping early, not
+    // a magmaan error. We assert df-exact + no-worse-than-oracle and skip the
+    // two-sided chisq parity; a higher (worse) chisq would still fail here.
+    failures.push_back(id + ": chisq = " + std::to_string(chi2) +
+                       " worse than (under-converged) lavaan " +
+                       std::to_string(chi2_lavaan));
+  }
+}
+
 } // namespace
 
 TEST_CASE("Little and Newsom corpus fixtures are well formed") {
@@ -456,6 +656,40 @@ TEST_CASE("Little and Newsom continuous goldens match lavaan" *
   }
 
   MESSAGE("Little/Newsom continuous cases checked: " << total);
+  for (const auto &f : failures)
+    MESSAGE("  FAIL " << f);
+  CHECK(failures.empty());
+}
+
+// Re-fit the four Kline (2023, ch22) Guo divergent-thinking measurement-
+// invariance models from the textbook-corpus submodule's per-group summary
+// statistics and check df/chisq/fmin parity against the checked-in lavaan
+// oracle. Guards the merge of duplicated `lhs op rhs` formula terms in
+// lavaanify (`build_group_template`); see docs/backlog/todo.md.
+TEST_CASE("Kline Guo multi-group measurement-invariance fits match lavaan") {
+  struct Rung {
+    std::string_view id;
+    bool lavaan_well_converged;
+  };
+  // `strong` is the lone under-converged lavaan reference (see
+  // check_kline_guo_mi_case); the other three match lavaan to <1e-3.
+  const std::array<Rung, 4> cases = {{
+      {"kline_2023_ch22_guo_mi_configural", true},
+      {"kline_2023_ch22_guo_mi_weak", true},
+      {"kline_2023_ch22_guo_mi_strong", false},
+      {"kline_2023_ch22_guo_mi_partial_strong", true},
+  }};
+  // Graceful skip when the textbook-corpus submodule isn't checked out.
+  const std::string probe = repo_root_from_fixtures() +
+      "/corpus/textbook-corpus/cases/kline_2023/" + std::string(cases[0].id) +
+      "/model.lav";
+  if (!magmaan::test::read_fixture(probe).has_value()) {
+    MESSAGE("textbook-corpus submodule absent; skipping Kline Guo MI parity");
+    return;
+  }
+  std::vector<std::string> failures;
+  for (const auto &c : cases)
+    check_kline_guo_mi_case(c.id, c.lavaan_well_converged, failures);
   for (const auto &f : failures)
     MESSAGE("  FAIL " << f);
   CHECK(failures.empty());

@@ -137,17 +137,34 @@ semantics · **XL** statistical design/research track before implementation.
   split became uniform. (NOTE: the `ordinal.cpp:2509,2652` line refs in the old
   entry have shifted; the robust calls are now `2554`/`2697`.)
 
-- **S/M.** Add Kline-corpus parity coverage for the Guo measurement-invariance
-  models (`guo_mi_weak`, `guo_mi_strong`, `guo_mi_partial_strong`). The
-  underlying bug — duplicated formula terms (`NA*LM1 + c(a1,a2)*LM1`) becoming
-  two partable rows for one matrix cell, leaving a phantom parameter that moved
-  the analytic gradient but not the model moments — is fixed: `lavaanify` now
-  merges repeated `lhs op rhs` terms within a block (`src/spec/build.cpp`,
-  `build_group_template`), and `guo_mi_weak` fits to the lavaan reference
-  (`chisq = 25.5159`, `df = 11`) under both L-BFGS and PORT. Root-cause
-  regression tests live in `lavaanify_test.cpp`; what remains is wiring the
-  finalized `corpus/textbook-corpus/raw/kline` corpus into an end-to-end
-  parity test.
+- **Done.** **Kline-corpus parity coverage for the Guo measurement-invariance
+  models** (`guo_mi_configural/weak/strong/partial_strong`). The underlying bug
+  — duplicated formula terms (`NA*LM1 + c(a1,a2)*LM1`) becoming two partable rows
+  for one matrix cell, leaving a phantom parameter that moved the analytic
+  gradient but not the model moments — was fixed earlier: `lavaanify` merges
+  repeated `lhs op rhs` terms within a block (`src/spec/build.cpp`,
+  `build_group_template`), with root-cause regression tests in
+  `lavaanify_test.cpp`. End-to-end parity now lands as a dedicated golden in
+  `tests/golden/textbook_corpus_golden_test.cpp` ("Kline Guo multi-group
+  measurement-invariance fits match lavaan"): it reads the four Guo invariance
+  rungs from the **textbook-corpus submodule** at
+  `corpus/textbook-corpus/cases/kline_2023/` (per-group summary-stat CSVs +
+  checked-in `expected/lavaan_ml.json` ML oracle; the old `raw/kline` path is
+  superseded by the finalized per-case `cases/kline_2023/` format), re-fits each
+  from its per-group summary statistics, and asserts order-free parity: df exact,
+  magmaan's fmin no worse than lavaan, and tight two-sided chisq (<1e-3) for the
+  three well-converged rungs (configural df=8, weak df=11 / chisq 25.5159,
+  partial_strong df=12). **Finding: lavaan's `guo_mi_strong` reference is
+  under-converged** — magmaan reaches a strictly lower chisq (60.451 vs lavaan's
+  60.549) at identical df=14, and three independent optimizers (NLopt L-BFGS,
+  NLopt SLSQP, PORT) agree on that lower optimum to six digits, so it is lavaan
+  stopping early on a poorly-fitting (RMSEA 0.104) effect-coding +
+  full-scalar-invariance surface, not a magmaan error. That rung is guarded by
+  df-exact + no-worse-than-oracle, with two-sided chisq parity skipped and the
+  reason documented in the test. The golden graceful-skips when the submodule is
+  absent. **Follow-up (deferred):** per-parameter θ̂/SE parity — the submodule
+  oracle stores `theta`/`se` in lavaan's free-parameter order, which needs a
+  lavaan→magmaan parameter map the order-free chisq/df check does not require.
 
 - **Low priority, S/M.** **ADF/WLS Γ̂ inversion policy and conditioned KKT
   diagnostics** — At small N with a binary covariate, the empirical Browne
