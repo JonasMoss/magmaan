@@ -1,0 +1,130 @@
+---
+title: "FIML measurement-invariance FMG: is it feature-complete?"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+res <- "results"
+need <- file.path(res, c("lavaan_parity.csv", "summary_rejection.csv",
+                         "invariants.csv", "metadata.csv"))
+if (!all(file.exists(need))) {
+  stop("Missing results. Run:\n  Rscript run_experiment.R --reps 40 --lavaan-parity")
+}
+parity   <- read.csv(file.path(res, "lavaan_parity.csv"))
+summ     <- read.csv(file.path(res, "summary_rejection.csv"))
+invar    <- read.csv(file.path(res, "invariants.csv"))
+meta     <- read.csv(file.path(res, "metadata.csv"))
+mv <- function(k) meta$value[meta$key == k]
+fmt <- function(x) formatC(x, format = "e", digits = 1)
+```
+
+## Question
+
+magmaan computes the Foldnes-Moss-Grønneberg (FMG) robust test family under FIML
+(missing data). Is that path actually feature-complete and correct across the
+cases that matter for applied measurement invariance — multiple groups,
+cross-group loading/intercept equality, and mean structure — for both the
+goodness-of-fit test and the nested difference test? We built the grid to
+surface a gap if any of those combinations were half-implemented.
+
+## Short answer
+
+**Yes.** Across a configural → metric → scalar invariance ladder, crossed with
+normal / heavy-tailed (t₅) data and complete / 15%-MCAR-missing data, magmaan's
+FIML statistics reproduce lavaan to numerical precision: the FIML LRT
+chi-square matches `lavaan` (FIML) to `r fmt(max(parity$abs_diff[parity$metric=="fiml_chisq"], na.rm=TRUE))`,
+and on complete data the full FIML UGamma **spectrum** matches lavaan's
+unstructured `lavInspect("UGamma")` eigenvalues to
+`r fmt(max(parity$abs_diff[parity$metric=="fiml_ugamma_spectrum_maxabs"], na.rm=TRUE))`
+— element for element, including the cross-group-equality cells. The robust FMG
+difference test is well-calibrated where the naive test is not: under heavy
+tails the unscaled configural-vs-metric test rejects a true null ~45% of the
+time, while the FMG-scaled and exact-mixture versions hold ≈ 5%, and all three
+have ~100% power against a real loading non-invariance. Internal algebraic
+invariants (saturated-space trace identity, group-permutation invariance) hold
+to `r fmt(max(invar$value, na.rm=TRUE))`.
+
+One non-blocking caveat surfaced (below): the *complete-data* robust path's
+**Unstructured** weight — which FMG does not use — disagrees ~0.6% with the
+FIML/lavaan spectrum for cross-group-equality models; the production Structured
+path is correct.
+
+## Evidence 1 — magmaan reproduces lavaan across the grid
+
+Largest absolute magmaan−lavaan discrepancy over every cell and invariance
+level, by quantity. FIML quantities span all cells (complete + missing); the
+spectrum checks are complete-data only (lavaan exposes the full UGamma there).
+
+```{r parity}
+agg <- aggregate(abs_diff ~ metric, parity, function(x) max(x, na.rm = TRUE))
+lab <- c(fiml_chisq = "FIML LRT chi-square vs lavaan",
+         fiml_ugamma_trace = "FIML UGamma trace vs lavaan",
+         fiml_ugamma_spectrum_maxabs = "FIML UGamma spectrum vs lavaan (unstructured)",
+         ml_ugamma_spectrum_maxabs = "Complete-data ML spectrum vs lavaan (structured)")
+agg$Quantity <- lab[agg$metric]
+agg <- agg[match(names(lab), agg$metric), ]
+knitr::kable(data.frame(Quantity = agg$Quantity,
+                        `Max abs. difference` = fmt(agg$abs_diff),
+                        check.names = FALSE),
+             align = "lr")
+```
+
+The FIML path is exact across configural, metric, and scalar — the cross-group
+loading/intercept equalities and the mean-structure block are all handled
+correctly. The complete-data ML row uses the **Structured** (production) weight
+and also matches lavaan.
+
+## Evidence 2 — the robust difference test is calibrated; the naive one is not
+
+Rejection rate at α = 0.05 of the configural-vs-metric nested test
+(`r mv("reps")` replicates/cell, two groups of `r mv("n_per_group")`). H0 = the
+loading restriction is true; H1\_metric = group-2 loading non-invariance.
+
+```{r calib}
+n <- summ[summ$kind == "nested" & summ$key == "configural_vs_metric", ]
+n$cond <- ifelse(n$condition == "H1_metric", "H1: loadings differ", "H0: invariant")
+n$data <- sprintf("%s, %s", n$dist, ifelse(n$miss > 0, "MCAR 15%", "complete"))
+keep <- n$condition %in% c("H0", "H1_metric")
+tab <- n[keep, c("cond", "data", "reject_unscaled", "reject_scaled", "reject_mixture")]
+tab <- tab[order(tab$cond, tab$data), ]
+names(tab) <- c("Condition", "Data", "Unscaled", "FMG-scaled", "Exact mixture")
+knitr::kable(tab, row.names = FALSE, digits = 2, align = "llrrr")
+```
+
+Read the heavy-tailed (t5) H0 rows: the unscaled χ² difference test rejects far
+above 5%, while the FMG-scaled and mixture corrections pull it back to nominal.
+Under H1 all three detect the real non-invariance. (The GOF FMG p-values and the
+metric↔scalar pair are in `results/`.)
+
+## Caveats
+
+- `r mv("reps")` replicates per cell make the rejection rates directional, not
+  precise; the parity numbers (Evidence 1) are exact per replicate and carry the
+  correctness claim.
+- The nested difference test is checked for *internal* calibration and against
+  lavaan's chi-square; magmaan uses the Satorra-2000 restriction map and lavaan
+  the 2001 approximation, so their scaled difference statistics differ slightly
+  by construction (reported in `results/lavaan_parity.csv`, not asserted equal).
+- The FMG-specific methods (pEBA / pall / pOLS) have no external oracle; they
+  rest on the same UGamma spectrum that is pinned to lavaan here, plus the
+  algebraic invariants.
+- A non-production inconsistency remains: `build_u_factor`'s **Unstructured**
+  weight disagrees ~0.6% with the FIML/lavaan spectrum for multi-group
+  cross-group-equality models. FMG uses the Structured weight (Evidence 1, last
+  row), so FMG output is unaffected; tracked in `docs/backlog/todo.md`.
+
+## Reproduce
+
+```sh
+# from this directory (needs the installed magmaan + lavaan):
+Rscript run_experiment.R --smoke                     # one tiny cell
+Rscript run_experiment.R --reps 40 --lavaan-parity   # full grid (this report)
+quarto render report.qmd
+```

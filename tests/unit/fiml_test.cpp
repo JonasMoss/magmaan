@@ -1358,13 +1358,15 @@ TEST_CASE("fiml_ugamma_spectrum: complete-data multi-group configural matches th
   // complete-data robust path without an external oracle.
   //
   // NOTE: the *cross-group-equality* (metric/scalar invariance) version of this
-  // degeneracy is intentionally NOT asserted here. build_u_factor's complete-
-  // data reduced spectrum deviates ~0.5% from lavaan (and from the FIML path,
-  // which matches lavaan to 1e-9) specifically for multi-group + cross-group
-  // equality constraints — a separate complete-data bug (docs/backlog/todo.md).
-  // The FIML cross-group spectrum's correctness is validated against lavaan in
-  // experiments/21-fiml-measurement-invariance-fmg; its internal consistency is
-  // covered by the cross-group metric/scalar cases above.
+  // degeneracy is intentionally NOT asserted here. build_u_factor's
+  // Unstructured-weight reduced spectrum deviates ~0.6% from the FIML saturated
+  // spectrum for multi-group + cross-group equality (a narrow, non-production
+  // inconsistency in the Unstructured path; docs/backlog/todo.md). The FIML
+  // spectrum is the correct one: it matches lavaan's unstructured UGamma to
+  // ~1e-9, and the production Structured FMG path matches lavaan's structured
+  // UGamma to ~3e-7 — both validated across configural/metric/scalar in
+  // experiments/21-fiml-measurement-invariance-fmg. The FIML cross-group
+  // spectrum's internal consistency is covered by the metric/scalar cases above.
   auto built = build_mean_model("f =~ x1 + x2 + x3 + x4", /*n_groups=*/2);
   Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
   theta0.setConstant(0.6);
