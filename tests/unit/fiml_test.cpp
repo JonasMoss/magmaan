@@ -156,6 +156,108 @@ model_missing_raw(const BuiltModel& built,
   return raw;
 }
 
+magmaan::data::RawData duplicate_raw_rows(const magmaan::data::RawData& raw,
+                                          int times) {
+  REQUIRE(times > 0);
+  magmaan::data::RawData out;
+  out.X.reserve(raw.X.size());
+  out.mask.reserve(raw.mask.size());
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    const Eigen::MatrixXd& X = raw.X[b];
+    Eigen::MatrixXd Xdup(X.rows() * times, X.cols());
+    for (int t = 0; t < times; ++t) {
+      Xdup.block(t * X.rows(), 0, X.rows(), X.cols()) = X;
+    }
+    out.X.push_back(std::move(Xdup));
+
+    if (!raw.mask.empty()) {
+      const auto& M = raw.mask[b];
+      Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> Mdup(
+          M.rows() * times, M.cols());
+      for (int t = 0; t < times; ++t) {
+        Mdup.block(t * M.rows(), 0, M.rows(), M.cols()) = M;
+      }
+      out.mask.push_back(std::move(Mdup));
+    }
+  }
+  return out;
+}
+
+Eigen::MatrixXd symmetrized(const Eigen::MatrixXd& A) {
+  return 0.5 * (A + A.transpose());
+}
+
+Eigen::MatrixXd inverse_ldlt(const Eigen::MatrixXd& A) {
+  Eigen::LDLT<Eigen::MatrixXd> ldlt(symmetrized(A));
+  REQUIRE(ldlt.info() == Eigen::Success);
+  return ldlt.solve(Eigen::MatrixXd::Identity(A.rows(), A.cols()));
+}
+
+struct FimlProjectionPieces {
+  Eigen::MatrixXd H;
+  Eigen::MatrixXd J;
+  Eigen::MatrixXd Gamma;
+  Eigen::MatrixXd Delta;
+  Eigen::MatrixXd P_inv;
+  Eigen::MatrixXd U;
+};
+
+FimlProjectionPieces fiml_projection_pieces(
+    const BuiltModel& built,
+    const magmaan::data::RawData& raw,
+    const magmaan::estimate::Estimates& est) {
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
+  REQUIRE_MESSAGE(sm.has_value(),
+      "saturated_em_moments failed: " << (sm.has_value() ? "" : sm.error().detail));
+  auto D = magmaan::estimate::fiml::fiml_eta_jacobian(
+      *built.pt, *built.rep, raw, est);
+  REQUIRE_MESSAGE(D.has_value(),
+      "fiml_eta_jacobian failed: " << (D.has_value() ? "" : D.error().detail));
+  auto con = magmaan::estimate::build_eq_constraints(*built.pt);
+  REQUIRE_MESSAGE(con.has_value(),
+      "build_eq_constraints failed: " << (con.has_value() ? "" : con.error().detail));
+
+  Eigen::MatrixXd Delta = D->Delta_theta;
+  if (con->active()) Delta = (Delta * con->K()).eval();
+
+  FimlProjectionPieces out;
+  out.H = symmetrized(sm->H);
+  out.J = symmetrized(sm->J);
+  out.Gamma = symmetrized(sm->acov);
+  out.Delta = std::move(Delta);
+
+  const Eigen::MatrixXd HD = out.H * out.Delta;
+  const Eigen::MatrixXd P = symmetrized(out.Delta.transpose() * HD);
+  out.P_inv = inverse_ldlt(P);
+  out.U = symmetrized(out.H - HD * out.P_inv * HD.transpose());
+  return out;
+}
+
+Eigen::VectorXd projected_ugamma_eigenvalues(const Eigen::MatrixXd& U,
+                                             const Eigen::MatrixXd& Gamma,
+                                             int df) {
+  const Eigen::MatrixXd Gs = symmetrized(Gamma);
+  Eigen::MatrixXd reduced;
+  Eigen::LLT<Eigen::MatrixXd> llt(Gs);
+  if (llt.info() == Eigen::Success) {
+    const Eigen::MatrixXd R = llt.matrixL();
+    reduced = R.transpose() * U * R;
+  } else {
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es_g(Gs);
+    REQUIRE(es_g.info() == Eigen::Success);
+    const Eigen::VectorXd d =
+        es_g.eigenvalues().cwiseMax(0.0).cwiseSqrt();
+    const Eigen::MatrixXd sq =
+        es_g.eigenvectors() * d.asDiagonal() * es_g.eigenvectors().transpose();
+    reduced = sq * U * sq;
+  }
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(symmetrized(reduced),
+                                                    Eigen::EigenvaluesOnly);
+  REQUIRE(es.info() == Eigen::Success);
+  REQUIRE(static_cast<Eigen::Index>(df) <= es.eigenvalues().size());
+  return es.eigenvalues().tail(df);
+}
+
 double log_det_pd(const Eigen::MatrixXd& A) {
   Eigen::LLT<Eigen::MatrixXd> llt(A);
   REQUIRE(llt.info() == Eigen::Success);
@@ -597,6 +699,116 @@ TEST_CASE("fiml_ugamma_spectrum: missing-data trace matches fiml_robust_mlr") {
   const double trace_scale =
       std::max(1.0, std::abs(rob->trace_ugamma));
   CHECK(std::abs(sp->trace_xcheck - rob->trace_ugamma) / trace_scale < 1e-2);
+}
+
+TEST_CASE("fiml_ugamma_spectrum: saturated-space trace identity is algebraic") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.55);
+  auto raw = model_missing_raw(built, theta0, {180});
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 700;
+  auto est = magmaan::estimate::fit_fiml(
+      *built.pt, *built.rep, raw, theta0, magmaan::estimate::fiml::FIML{},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(est.has_value(),
+      "fit_fiml failed: " << (est.has_value() ? "" : est.error().detail));
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df_or = magmaan::inference::df_stat(*built.pt, *samp, est->theta);
+  REQUIRE(df_or.has_value());
+  auto fx = magmaan::estimate::fiml::fiml_extras(
+      *built.pt, *built.rep, raw, *est);
+  REQUIRE(fx.has_value());
+  auto sp = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      *built.pt, *built.rep, raw, *est, *df_or, fx->chi2);
+  REQUIRE_MESSAGE(sp.has_value(),
+      "fiml_ugamma_spectrum failed: " <<
+      (sp.has_value() ? "" : sp.error().detail));
+
+  const auto pieces = fiml_projection_pieces(built, raw, *est);
+  const double trace_h1 = (pieces.H * pieces.Gamma).trace();
+  const double trace_h0 =
+      (pieces.P_inv *
+       pieces.Delta.transpose() * pieces.J * pieces.Delta).trace();
+  const double trace_from_split = trace_h1 - trace_h0;
+  const double trace_direct = (pieces.U * pieces.Gamma).trace();
+
+  INFO("trace_h1 = ", trace_h1,
+       " trace_h0 = ", trace_h0,
+       " trace_from_split = ", trace_from_split,
+       " trace_direct = ", trace_direct,
+       " spectrum trace = ", sp->trace_xcheck);
+  CHECK(trace_direct == doctest::Approx(trace_from_split).epsilon(1e-9));
+  CHECK(sp->trace_xcheck == doctest::Approx(trace_from_split).epsilon(1e-9));
+}
+
+TEST_CASE("fiml_ugamma_spectrum: NT saturated gamma gives all-one eigenvalues") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.55);
+  auto raw = model_missing_raw(built, theta0, {170});
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 700;
+  auto est = magmaan::estimate::fit_fiml(
+      *built.pt, *built.rep, raw, theta0, magmaan::estimate::fiml::FIML{},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(est.has_value(),
+      "fit_fiml failed: " << (est.has_value() ? "" : est.error().detail));
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df_or = magmaan::inference::df_stat(*built.pt, *samp, est->theta);
+  REQUIRE(df_or.has_value());
+
+  const auto pieces = fiml_projection_pieces(built, raw, *est);
+  const Eigen::MatrixXd gamma_nt = inverse_ldlt(pieces.H);
+  const Eigen::VectorXd eig =
+      projected_ugamma_eigenvalues(pieces.U, gamma_nt, *df_or);
+  REQUIRE(eig.size() == *df_or);
+  INFO("NT eigenvalues = ", eig.transpose());
+  CHECK((eig.array() - 1.0).abs().maxCoeff() < 1e-8);
+}
+
+TEST_CASE("fiml_ugamma_spectrum: row duplication leaves eigenvalues invariant") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.55);
+  auto raw = model_missing_raw(built, theta0, {150});
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 700;
+  auto est = magmaan::estimate::fit_fiml(
+      *built.pt, *built.rep, raw, theta0, magmaan::estimate::fiml::FIML{},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(est.has_value(),
+      "fit_fiml failed: " << (est.has_value() ? "" : est.error().detail));
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df_or = magmaan::inference::df_stat(*built.pt, *samp, est->theta);
+  REQUIRE(df_or.has_value());
+
+  auto sp = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      *built.pt, *built.rep, raw, *est, *df_or, /*chi2_lrt=*/3.0);
+  REQUIRE_MESSAGE(sp.has_value(),
+      "fiml_ugamma_spectrum failed: " <<
+      (sp.has_value() ? "" : sp.error().detail));
+
+  const auto raw_dup = duplicate_raw_rows(raw, 3);
+  auto sp_dup = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      *built.pt, *built.rep, raw_dup, *est, *df_or, /*chi2_lrt=*/3.0);
+  REQUIRE_MESSAGE(sp_dup.has_value(),
+      "duplicated fiml_ugamma_spectrum failed: " <<
+      (sp_dup.has_value() ? "" : sp_dup.error().detail));
+
+  REQUIRE(sp->eigvals.size() == sp_dup->eigvals.size());
+  INFO("original eigenvalues = ", sp->eigvals.transpose(),
+       " duplicated eigenvalues = ", sp_dup->eigvals.transpose());
+  CHECK((sp->eigvals - sp_dup->eigvals).cwiseAbs().maxCoeff() < 1e-9);
+  CHECK(sp_dup->trace_xcheck == doctest::Approx(sp->trace_xcheck).epsilon(1e-9));
 }
 
 TEST_CASE("fiml_ugamma_spectrum: multi-group missing-data spectrum is finite") {
