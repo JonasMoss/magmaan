@@ -103,6 +103,21 @@ stopifnot(grepl("unbiased",
   tryCatch(fmg_tests(fit_fiml, tests = "sb_ug"), error = conditionMessage)))
 
 if (requireNamespace("lavaan", quietly = TRUE)) {
+  # Missing-data scalar oracle: lavaan's plain Yuan-Bentler test with
+  # unstructured H1 information exposes the same saturated-space first moment
+  # that magmaan computes as sum(FIML FMG eigenvalues). This is distinct from
+  # lavaan's default MLR/Mplus trace and from lavInspect("UGamma"), which follows
+  # the older SB accessor path.
+  sp_f <- magmaan:::infer_fiml_fmg_spectrum(fit_fiml)
+  lav_yb <- lavaan::cfa(model, df_na, missing = "fiml", estimator = "MLR",
+                        test = "yuan.bentler",
+                        h1.information = "unstructured",
+                        meanstructure = TRUE)
+  lav_tests <- lavaan::lavInspect(lav_yb, "test")
+  lav_trace <- lav_tests$yuan.bentler$trace.UGamma
+  stopifnot(is.finite(lav_trace))
+  stopifnot(abs(sp_f$trace_xcheck - lav_trace) < 5e-5)
+
   # Validation oracle (NOT semTests): on COMPLETE data the FIML spectrum must
   # reproduce lavaan's unstructured UGamma element-for-element (the
   # h1.information = "unstructured" convention natural to FIML's EM h1 model),
@@ -118,6 +133,8 @@ if (requireNamespace("lavaan", quietly = TRUE)) {
   ev_m <- sort(sp_c$biased, decreasing = TRUE)
   stopifnot(max(abs(ev_m - ev_l)) < 1e-5)
   stopifnot(abs(sp_c$chi2_lrt - unname(lavaan::fitMeasures(lav_u, "chisq"))) < 1e-5)
+  cat(sprintf("FIML FMG trace vs lavaan Yuan-Bentler H1 trace: ok (|d| = %.1e)\n",
+              abs(sp_f$trace_xcheck - lav_trace)))
   cat(sprintf("FIML FMG vs lavaan unstructured UGamma: ok (%d cells, max|d| = %.1e)\n",
               sp_c$df, max(abs(ev_m - ev_l))))
 }
