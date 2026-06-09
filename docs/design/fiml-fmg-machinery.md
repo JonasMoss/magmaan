@@ -234,6 +234,8 @@ The checked validation now covers:
 - a nested FIML synthetic case where the nested eigenvalues collapse to ones
   under `Gamma = V^-1`;
 - a nested FIML case comparing dense and reduced generalized-eigenvalue paths;
+- nested FIML checks verifying `trace(C^-1 S)` equals the nested eigenvalue sum
+  and that row duplication leaves nested eigenvalues unchanged;
 - explicit rejection of nonlinear equality constraints for FIML GOF and nested
   tests.
 
@@ -257,6 +259,8 @@ The FIML FMG implementation follows this construction:
 - `tests/checks/fiml_fmg_trace/` provides an advisory null simulation showing
   the FMG eigenvalue trace and the MLR trace difference converge under matched
   FIML conventions for both normal and heavy-tailed H0-true data;
+- `tests/checks/fiml_fmg_nested/` provides an advisory H0-true nested
+  simulation for the FIML `restriction_map` route, including heavy-tailed data;
 - nonlinear equality constraints are rejected explicitly;
 - nested FIML `restriction_map` tests use the model-pair `A/C/S` route in
   saturated eta-space, with exact and delta restriction-map variants.
