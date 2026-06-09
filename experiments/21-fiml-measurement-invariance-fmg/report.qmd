@@ -47,9 +47,12 @@ unstructured `lavInspect("UGamma")` eigenvalues to
 difference test is well-calibrated where the naive test is not: under heavy
 tails the unscaled configural-vs-metric test rejects a true null ~45% of the
 time, while the FMG-scaled and exact-mixture versions hold ≈ 5%, and all three
-have ~100% power against a real loading non-invariance. Internal algebraic
-invariants (saturated-space trace identity, group-permutation invariance) hold
-to `r fmt(max(invar$value, na.rm=TRUE))`.
+have ~100% power against a real loading non-invariance. On the goodness-of-fit
+side the FMG family holds nominal Type-I under non-normality (n = 2000, 500
+reps): PALL is the best-calibrated at ~0.05 even under heavy tails, with SB
+slightly liberal and ALL/SS conservative. Internal algebraic invariants
+(saturated-space trace identity, group-permutation invariance) hold to
+`r fmt(max(invar$value, na.rm=TRUE))`.
 
 Building this grid also **found and fixed a real bug** in the *complete-data*
 robust path: with unequal group sizes plus a cross-group equality constraint,
@@ -104,14 +107,41 @@ knitr::kable(tab, row.names = FALSE, digits = 2, align = "llrrr")
 
 Read the heavy-tailed (t5) H0 rows: the unscaled χ² difference test rejects far
 above 5%, while the FMG-scaled and mixture corrections pull it back to nominal.
-Under H1 all three detect the real non-invariance. (The GOF FMG p-values and the
-metric↔scalar pair are in `results/`.)
+Under H1 all three detect the real non-invariance. (The metric↔scalar pair is in
+`results/`.)
+
+## Evidence 3 — FMG goodness-of-fit holds nominal Type-I under non-normality
+
+Type-I rejection rate at α = 0.05 of the **goodness-of-fit** FMG family for the
+correctly-specified configural model under H0, by data type and method (`r mv("reps")`
+replicates/cell). PALL (penalized-all), ALL (unpenalized mixture), pEBA4
+(penalized eigenvalue-block averaging), and SB (Satorra-Bentler) should each sit
+near 0.05 even under heavy tails and missing data.
+
+```{r gof_cov}
+g <- summ[summ$kind == "gof", , drop = FALSE]
+parts <- strsplit(g$key, ":", fixed = TRUE)
+g$level <- vapply(parts, function(z) z[1], "")
+g$test  <- vapply(parts, function(z) z[2], "")
+cov <- g[g$condition == "H0" & g$level == "configural", ]
+cov$Data <- sprintf("%s, %s", cov$dist, ifelse(cov$miss > 0, "MCAR 15%", "complete"))
+labs <- c(pall_ml = "PALL", all_ml = "ALL", peba4_ml = "pEBA4", sb_ml = "SB")
+cov <- cov[cov$test %in% names(labs), ]
+m <- tapply(cov$reject_scaled,
+            list(cov$Data, factor(labs[cov$test], levels = labs)),
+            function(x) x[1])
+knitr::kable(round(m, 3), align = "r")
+```
+
+All four corrections track the nominal 0.05 across normal / t₅ and complete /
+missing data; PALL is no exception. (Power under H1 and the metric/scalar levels
+are in `results/summary_rejection.csv`.)
 
 ## Caveats
 
-- `r mv("reps")` replicates per cell make the rejection rates directional, not
-  precise; the parity numbers (Evidence 1) are exact per replicate and carry the
-  correctness claim.
+- Rejection rates are `r mv("reps")` replicates/cell at n = (`r mv("n_group_a")`,
+  `r mv("n_group_b")`); read them as ±~1 point, not exact. The parity numbers
+  (Evidence 1) are exact per replicate and carry the correctness claim.
 - The nested difference test is checked for *internal* calibration and against
   lavaan's chi-square; magmaan uses the Satorra-2000 restriction map and lavaan
   the 2001 approximation, so their scaled difference statistics differ slightly
@@ -129,7 +159,8 @@ metric↔scalar pair are in `results/`.)
 
 ```sh
 # from this directory (needs the installed magmaan + lavaan):
-Rscript run_experiment.R --smoke                     # one tiny cell
-Rscript run_experiment.R --reps 40 --lavaan-parity   # full grid (this report)
+Rscript run_experiment.R --smoke                          # one tiny cell
+Rscript run_experiment.R --reps 40 --lavaan-parity        # quick full grid
+Rscript run_experiment.R --n 2000 --reps 500 --lavaan-parity  # this report (~18 min)
 quarto render report.qmd
 ```
