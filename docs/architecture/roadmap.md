@@ -216,10 +216,12 @@ golden `parTable()` fixtures.
   `experiments/21-fiml-measurement-invariance-fmg`, whose `--lavaan-parity` run
   reproduces lavaan's FIML LRT chi-square (~1e-7) and, on complete data, the full
   unstructured UGamma eigenvalue spectrum (~1e-5) across all three invariance
-  levels and normal / heavy-tailed / MCAR cells. Known caveat: the complete-data
-  robust path's non-default *Unstructured* weight disagrees ~0.6% with the
-  FIML/lavaan spectrum for cross-group-equality models; FMG uses the Structured
-  weight and is unaffected (`docs/backlog/todo.md`).
+  levels and normal / heavy-tailed / MCAR cells. That audit also found and fixed
+  a complete-data robust bug: the `build_u_factor` Expected-info projector had
+  dropped the per-group weight `n_b/N`, biasing the UΓ spectrum (SB scaling, FMG
+  p-values, robust difference test) for models with unequal group sizes plus a
+  cross-group equality constraint; it was masked by equal-group designs where the
+  weight is a global scalar (`docs/backlog/todo.md`).
 
 ### Staged C++ facade
 

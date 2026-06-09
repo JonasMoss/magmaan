@@ -617,11 +617,30 @@ finish_u_factor_expected(const UFactorShared& sh) {
   UFactor uf = sh.base;
 
   // ── Expected-info projection bread (`U = B·Bᵀ`) ─────────────────────────
+  // Pooled multigroup metric: weight each block's rows of A by √w_b
+  // (w_b = n_b / N_total) before the kernel QR. This makes the residual
+  // projector `U = B·Bᵀ` use the pooled weight `blockdiag(w_b·V_b)` rather than
+  // the per-unit `blockdiag(V_b)`. For a single group, equal group sizes, or
+  // block-local columns (configural / within-group equality) it is a no-op on
+  // `ker(Aᵀ)` — a pure per-column rescaling that leaves the projected subspace
+  // fixed. It changes the projection only when an equality constraint couples
+  // blocks of UNEQUAL size (cross-group metric / scalar invariance), where the
+  // omitted weight otherwise tilts `ker(Aᵀ)` and biases the UΓ spectrum.
+  Eigen::MatrixXd Aw = sh.A;
+  if (uf.blocks.size() > 1) {
+    for (const auto& blk : uf.blocks) {
+      const double w_b = static_cast<double>(blk.n_obs) / sh.N_total;
+      const double s = std::sqrt(w_b);
+      if (uf.has_means && blk.mu_off >= 0)
+        Aw.middleRows(blk.mu_off, blk.p) *= s;
+      Aw.middleRows(blk.row_offset, blk.pstar) *= s;
+    }
+  }
   // QR of A → orthonormal basis N of ker(Aᵀ). Trailing (total_rows − rank(A))
   // columns of Q form the basis. We assume full column rank of A (=
   // full column rank of Δ in the Γ_NT-metric); if not, the trailing
   // columns still span ker(Aᵀ) but `df` is larger than `total_rows − q`.
-  Eigen::HouseholderQR<Eigen::MatrixXd> qr(sh.A);
+  Eigen::HouseholderQR<Eigen::MatrixXd> qr(Aw);
   // Estimate rank via the absolute diagonal of R. Cheap and adequate for
   // SEM sizes — rank-deficient Δ is a "your model is broken" condition
   // and the SE methods would already complain.

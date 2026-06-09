@@ -1350,24 +1350,19 @@ TEST_CASE("fiml_ugamma_spectrum: cross-group scalar (equal intercepts) spectrum 
   CHECK(sp->trace_xcheck == doctest::Approx(trace_from_split).epsilon(1e-9));
 }
 
-TEST_CASE("fiml_ugamma_spectrum: complete-data multi-group configural matches the unstructured robust spectrum") {
-  // Degeneracy guard, multi-group generalization of the single-group case
-  // above: on COMPLETE data the first-principles FIML UΓ spectrum must
-  // reproduce the complete-data UNSTRUCTURED robust spectrum eig(U·Γ̂) across
-  // two groups. This pins the FIML multi-group block-stacking to the
-  // complete-data robust path without an external oracle.
-  //
-  // NOTE: the *cross-group-equality* (metric/scalar invariance) version of this
-  // degeneracy is intentionally NOT asserted here. build_u_factor's
-  // Unstructured-weight reduced spectrum deviates ~0.6% from the FIML saturated
-  // spectrum for multi-group + cross-group equality (a narrow, non-production
-  // inconsistency in the Unstructured path; docs/backlog/todo.md). The FIML
-  // spectrum is the correct one: it matches lavaan's unstructured UGamma to
-  // ~1e-9, and the production Structured FMG path matches lavaan's structured
-  // UGamma to ~3e-7 — both validated across configural/metric/scalar in
-  // experiments/21-fiml-measurement-invariance-fmg. The FIML cross-group
-  // spectrum's internal consistency is covered by the metric/scalar cases above.
-  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4", /*n_groups=*/2);
+TEST_CASE("fiml_ugamma_spectrum: complete-data multi-group metric matches the unstructured robust spectrum") {
+  // Degeneracy guard, multi-group + cross-group-equality (metric invariance)
+  // generalization of the single-group case above: on COMPLETE data the
+  // first-principles FIML UΓ spectrum must reproduce the complete-data
+  // UNSTRUCTURED robust spectrum eig(U·Γ̂) with the loadings tied across two
+  // groups of UNEQUAL size (200 vs 170). This is the case that regressed when
+  // build_u_factor's kernel projector omitted the per-group weight √(n_b/N):
+  // the omission tilts ker(Aᵀ) for cross-group-coupled columns of unequal-size
+  // blocks. With the weight restored, the FIML saturated spectrum and the
+  // complete-data unstructured spectrum agree to ~1e-6 here, and the production
+  // Structured FMG path matches lavaan across configural/metric/scalar in
+  // experiments/21-fiml-measurement-invariance-fmg.
+  auto built = build_mean_model("f =~ x1 + a2*x2 + a3*x3 + a4*x4", /*n_groups=*/2);
   Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
   theta0.setConstant(0.6);
   auto truth = built.ev.sigma(theta0);

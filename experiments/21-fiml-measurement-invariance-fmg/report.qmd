@@ -51,10 +51,13 @@ have ~100% power against a real loading non-invariance. Internal algebraic
 invariants (saturated-space trace identity, group-permutation invariance) hold
 to `r fmt(max(invar$value, na.rm=TRUE))`.
 
-One non-blocking caveat surfaced (below): the *complete-data* robust path's
-**Unstructured** weight — which FMG does not use — disagrees ~0.6% with the
-FIML/lavaan spectrum for cross-group-equality models; the production Structured
-path is correct.
+Building this grid also **found and fixed a real bug** in the *complete-data*
+robust path: with unequal group sizes plus a cross-group equality constraint,
+the UGamma projector had dropped the per-group weight `n_b/N`, biasing the
+spectrum (and so the SB scaling and FMG p-values) by up to ~1%. It was invisible
+with equal groups — the weight is then a global scalar — which is why it had
+escaped notice. With the fix the complete-data spectrum matches lavaan to the
+same precision as everything else (last row above).
 
 ## Evidence 1 — magmaan reproduces lavaan across the grid
 
@@ -84,8 +87,9 @@ and also matches lavaan.
 ## Evidence 2 — the robust difference test is calibrated; the naive one is not
 
 Rejection rate at α = 0.05 of the configural-vs-metric nested test
-(`r mv("reps")` replicates/cell, two groups of `r mv("n_per_group")`). H0 = the
-loading restriction is true; H1\_metric = group-2 loading non-invariance.
+(`r mv("reps")` replicates/cell, unequal groups of `r mv("n_group_a")` and
+`r mv("n_group_b")`). H0 = the loading restriction is true; H1\_metric =
+group-2 loading non-invariance.
 
 ```{r calib}
 n <- summ[summ$kind == "nested" & summ$key == "configural_vs_metric", ]
@@ -115,10 +119,11 @@ metric↔scalar pair are in `results/`.)
 - The FMG-specific methods (pEBA / pall / pOLS) have no external oracle; they
   rest on the same UGamma spectrum that is pinned to lavaan here, plus the
   algebraic invariants.
-- A non-production inconsistency remains: `build_u_factor`'s **Unstructured**
-  weight disagrees ~0.6% with the FIML/lavaan spectrum for multi-group
-  cross-group-equality models. FMG uses the Structured weight (Evidence 1, last
-  row), so FMG output is unaffected; tracked in `docs/backlog/todo.md`.
+- The complete-data unequal-group projector bug this run surfaced is now fixed
+  (`docs/backlog/todo.md`); the last row of Evidence 1 is the post-fix check. The
+  ML-vs-lavaan spectrum row carries a little extra noise (~3e-4) in the
+  heavy-tailed misspecified cells, where the empirical Γ̂ is harder to pin down;
+  the correctly-specified cells agree to ~1e-7.
 
 ## Reproduce
 

@@ -31,16 +31,22 @@ group_moments <- function(pop, g, violate = NULL) {
 # Draw one replicate's complete two-group data frame. dist in {"norm","t5"};
 # the heavy-tailed arm scales standard-normal rows by a chi/df factor so the
 # marginals are multivariate-t(df) with the same covariance.
+# `n_per_group` is length 1 (equal groups) or length 2 (per-group sizes). Unequal
+# group sizes are the case that exercises the pooled-weight projector — with
+# equal groups the per-group weight w_b = n_b/N is a global scalar and the
+# UGamma spectrum is insensitive to it.
 draw_complete <- function(pop, n_per_group, dist = "norm", violate = NULL,
                           t_df = 5) {
+  n_g <- if (length(n_per_group) == 1L) rep(n_per_group, 2L) else n_per_group
   blocks <- lapply(seq_len(2L), function(g) {
+    n <- n_g[g]
     mom <- group_moments(pop, g, violate)
     L <- chol(mom$Sigma)               # upper; rows %*% L give the cov
-    Z <- matrix(rnorm(n_per_group * length(pop$ov)), n_per_group)
+    Z <- matrix(rnorm(n * length(pop$ov)), n)
     if (identical(dist, "t5")) {
-      s <- sqrt(t_df / rchisq(n_per_group, t_df))   # per-row scale
+      s <- sqrt(t_df / rchisq(n, t_df))   # per-row scale
       Z <- Z * s
-      Z <- Z / sqrt(t_df / (t_df - 2))              # rescale to unit variance
+      Z <- Z / sqrt(t_df / (t_df - 2))    # rescale to unit variance
     }
     X <- Z %*% L
     X <- sweep(X, 2L, mom$mu, `+`)
