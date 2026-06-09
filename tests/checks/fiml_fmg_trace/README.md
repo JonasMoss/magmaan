@@ -23,6 +23,11 @@ as `n` grows. Finite samples will not be monotone replicate-by-replicate,
 because the H0 MLR trace still uses the fitted restricted-model observed
 Hessian while FMG uses the saturated eta-space tangent projection.
 
+The script also reports rejection rates for FIML FMG `std`, `sb`, `all`, and
+`pall` p-values at `--alpha` (default 0.05). These are stochastic smoke checks:
+the small recipes should be read directionally, while `just nominal` gives a
+somewhat more useful PALL calibration run.
+
 Two null distributions are supported:
 
 - `--dist=normal`: ordinary normal-theory H0 data.
@@ -35,6 +40,7 @@ Two null distributions are supported:
 ```sh
 just quick
 just heavy
+just nominal
 just all
 just all-heavy
 ```

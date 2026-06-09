@@ -9,6 +9,7 @@ parse_args <- function(args) {
     missing = 0.15,
     dist = "normal",
     t_df = 5.0,
+    alpha = 0.05,
     seed = 20260609L,
     max_iter = 8000L
   )
@@ -27,6 +28,8 @@ parse_args <- function(args) {
       out$dist <- val
     } else if (identical(key, "t-df")) {
       out$t_df <- as.numeric(val)
+    } else if (identical(key, "alpha")) {
+      out$alpha <- as.numeric(val)
     } else if (identical(key, "seed")) {
       out$seed <- as.integer(val)
     } else if (identical(key, "max-iter")) {
@@ -66,7 +69,7 @@ draw_null_data <- function(n, pop, missing_prob, dist, t_df) {
   as.data.frame(X)
 }
 
-fit_one <- function(df, spec, max_iter) {
+fit_one <- function(df, spec, max_iter, alpha) {
   fit <- magmaan_core$fit_fiml(
     spec,
     df_to_fiml_data(df, spec),
@@ -74,6 +77,8 @@ fit_one <- function(df, spec, max_iter) {
   )
   sp <- magmaan:::infer_fiml_fmg_spectrum(fit)
   mlr <- magmaan:::estimate_fiml_robust_mlr(fit)
+  tab <- fmg_tests(fit, tests = c("std", "sb", "all", "pall"))
+  pval <- stats::setNames(tab$p_value, sub("_ml$", "", tab$label))
   gap <- sp$trace_xcheck - mlr$trace_ugamma
   data.frame(
     df = sp$df,
@@ -84,7 +89,15 @@ fit_one <- function(df, spec, max_iter) {
     rel_gap = abs(gap) / max(1.0, abs(mlr$trace_ugamma)),
     min_lambda = min(sp$biased),
     max_lambda = max(sp$biased),
-    mean_abs_lambda_minus_one = mean(abs(sp$biased - 1.0))
+    mean_abs_lambda_minus_one = mean(abs(sp$biased - 1.0)),
+    p_std = unname(pval[["std"]]),
+    p_sb = unname(pval[["sb"]]),
+    p_all = unname(pval[["all"]]),
+    p_pall = unname(pval[["pall"]]),
+    reject_std = unname(pval[["std"]]) < alpha,
+    reject_sb = unname(pval[["sb"]]) < alpha,
+    reject_all = unname(pval[["all"]]) < alpha,
+    reject_pall = unname(pval[["pall"]]) < alpha
   )
 }
 
@@ -101,7 +114,12 @@ summarise_n <- function(rows) {
     p90_rel_gap = unname(stats::quantile(rows$rel_gap, 0.90, names = FALSE)),
     min_lambda = min(rows$min_lambda),
     max_lambda = max(rows$max_lambda),
-    mean_abs_lambda_minus_one = mean(rows$mean_abs_lambda_minus_one)
+    mean_abs_lambda_minus_one = mean(rows$mean_abs_lambda_minus_one),
+    reject_std = mean(rows$reject_std),
+    reject_sb = mean(rows$reject_sb),
+    reject_all = mean(rows$reject_all),
+    reject_pall = mean(rows$reject_pall),
+    mean_p_pall = mean(rows$p_pall)
   )
 }
 
@@ -114,6 +132,9 @@ if (!is.finite(cfg$missing) || cfg$missing < 0 || cfg$missing >= 1) {
 if (!cfg$dist %in% c("normal", "t")) stop("--dist must be 'normal' or 't'")
 if (identical(cfg$dist, "t") && (!is.finite(cfg$t_df) || cfg$t_df <= 2.0)) {
   stop("--t-df must be finite and > 2")
+}
+if (!is.finite(cfg$alpha) || cfg$alpha <= 0 || cfg$alpha >= 1) {
+  stop("--alpha must be in (0, 1)")
 }
 
 set.seed(cfg$seed)
@@ -128,7 +149,7 @@ cat("FIML FMG trace convergence under the null\n")
 cat("model: one-factor CFA, ", cfg$dist, " data, MCAR missingness\n", sep = "")
 if (identical(cfg$dist, "t")) cat("t_df=", cfg$t_df, "\n", sep = "")
 cat("missing=", cfg$missing, " reps=", cfg$reps,
-    " seed=", cfg$seed, "\n\n", sep = "")
+    " alpha=", cfg$alpha, " seed=", cfg$seed, "\n\n", sep = "")
 
 all_rows <- list()
 idx <- 1L
@@ -136,7 +157,7 @@ for (n in cfg$n) {
   for (rep in seq_len(cfg$reps)) {
     df <- draw_null_data(n, pop, cfg$missing, cfg$dist, cfg$t_df)
     row <- tryCatch(
-      fit_one(df, spec, cfg$max_iter),
+      fit_one(df, spec, cfg$max_iter, cfg$alpha),
       error = function(e) {
         warning("n=", n, " rep=", rep, " failed: ", conditionMessage(e),
                 call. = FALSE)
@@ -161,4 +182,5 @@ print(summary, digits = 4, row.names = FALSE)
 
 cat("\nInterpretation: the null/local theory predicts the relative trace gap ",
     "should shrink with n on average, not necessarily monotonically in every ",
-    "finite-sample replicate.\n", sep = "")
+    "finite-sample replicate. Rejection-rate columns are stochastic smoke ",
+    "checks against the nominal alpha, not pass/fail assertions.\n", sep = "")
