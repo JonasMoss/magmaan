@@ -116,6 +116,21 @@ magmaan::sim::PlsimOptions make_plsim_options(
   return options;
 }
 
+magmaan::sim::NortaOptions make_norta_options(
+    int quadrature_points,
+    int max_bisection_iter,
+    double rho_bound,
+    double calibration_tol,
+    double cholesky_jitter) {
+  magmaan::sim::NortaOptions options;
+  options.quadrature_points = quadrature_points;
+  options.max_bisection_iter = max_bisection_iter;
+  options.rho_bound = rho_bound;
+  options.calibration_tol = calibration_tol;
+  options.cholesky_jitter = cholesky_jitter;
+  return options;
+}
+
 const char* marginal_kind_to_string(magmaan::sim::MarginalKind kind) {
   using K = magmaan::sim::MarginalKind;
   switch (kind) {
@@ -138,6 +153,18 @@ magmaan::sim::MarginalKind marginal_kind_from_string(const std::string& kind) {
   if (kind == "johnson") return K::Johnson;
   if (kind == "fleishman") return K::Fleishman;
   Rcpp::stop("unknown marginal kind: %s", kind);
+}
+
+bool has_named(Rcpp::List x, const char* name) {
+  return x.containsElementNamed(name) && !Rcpp::RObject(x[name]).isNULL();
+}
+
+int list_int_or(Rcpp::List x, const char* name, int fallback) {
+  return has_named(x, name) ? Rcpp::as<int>(x[name]) : fallback;
+}
+
+double list_double_or(Rcpp::List x, const char* name, double fallback) {
+  return has_named(x, name) ? Rcpp::as<double>(x[name]) : fallback;
 }
 
 Rcpp::List marginal_spec_to_list(const magmaan::sim::MarginalSpec& m) {
@@ -163,23 +190,25 @@ Rcpp::List marginal_spec_to_list(const magmaan::sim::MarginalSpec& m) {
 
 magmaan::sim::MarginalSpec marginal_spec_from_list(Rcpp::List x) {
   magmaan::sim::MarginalSpec m;
-  m.kind = marginal_kind_from_string(Rcpp::as<std::string>(x["kind"]));
-  m.mean = Rcpp::as<double>(x["mean"]);
-  m.sd = Rcpp::as<double>(x["sd"]);
-  m.sigma_log = Rcpp::as<double>(x["sigma_log"]);
-  m.g = Rcpp::as<double>(x["g"]);
-  m.h = Rcpp::as<double>(x["h"]);
-  m.pearson_type = Rcpp::as<int>(x["pearson_type"]);
-  m.pearson_p1 = Rcpp::as<double>(x["pearson_p1"]);
-  m.pearson_p2 = Rcpp::as<double>(x["pearson_p2"]);
-  m.pearson_p3 = Rcpp::as<double>(x["pearson_p3"]);
-  m.pearson_p4 = Rcpp::as<double>(x["pearson_p4"]);
-  m.johnson_type = Rcpp::as<int>(x["johnson_type"]);
-  m.johnson_gamma = Rcpp::as<double>(x["johnson_gamma"]);
-  m.johnson_delta = Rcpp::as<double>(x["johnson_delta"]);
-  m.fleishman_b = Rcpp::as<double>(x["fleishman_b"]);
-  m.fleishman_c = Rcpp::as<double>(x["fleishman_c"]);
-  m.fleishman_d = Rcpp::as<double>(x["fleishman_d"]);
+  if (has_named(x, "kind")) {
+    m.kind = marginal_kind_from_string(Rcpp::as<std::string>(x["kind"]));
+  }
+  m.mean = list_double_or(x, "mean", m.mean);
+  m.sd = list_double_or(x, "sd", m.sd);
+  m.sigma_log = list_double_or(x, "sigma_log", m.sigma_log);
+  m.g = list_double_or(x, "g", m.g);
+  m.h = list_double_or(x, "h", m.h);
+  m.pearson_type = list_int_or(x, "pearson_type", m.pearson_type);
+  m.pearson_p1 = list_double_or(x, "pearson_p1", m.pearson_p1);
+  m.pearson_p2 = list_double_or(x, "pearson_p2", m.pearson_p2);
+  m.pearson_p3 = list_double_or(x, "pearson_p3", m.pearson_p3);
+  m.pearson_p4 = list_double_or(x, "pearson_p4", m.pearson_p4);
+  m.johnson_type = list_int_or(x, "johnson_type", m.johnson_type);
+  m.johnson_gamma = list_double_or(x, "johnson_gamma", m.johnson_gamma);
+  m.johnson_delta = list_double_or(x, "johnson_delta", m.johnson_delta);
+  m.fleishman_b = list_double_or(x, "fleishman_b", m.fleishman_b);
+  m.fleishman_c = list_double_or(x, "fleishman_c", m.fleishman_c);
+  m.fleishman_d = list_double_or(x, "fleishman_d", m.fleishman_d);
   return m;
 }
 
@@ -274,6 +303,24 @@ magmaan::sim::PlsimOptions plsim_options_from_list(Rcpp::List x) {
       Rcpp::as<double>(x["rho_bound"]));
   options.cholesky_jitter = Rcpp::as<double>(x["cholesky_jitter"]);
   return options;
+}
+
+Rcpp::List norta_options_to_list(const magmaan::sim::NortaOptions& options) {
+  return Rcpp::List::create(
+      Rcpp::_["quadrature_points"] = options.quadrature_points,
+      Rcpp::_["max_bisection_iter"] = options.max_bisection_iter,
+      Rcpp::_["rho_bound"] = options.rho_bound,
+      Rcpp::_["calibration_tol"] = options.calibration_tol,
+      Rcpp::_["cholesky_jitter"] = options.cholesky_jitter);
+}
+
+magmaan::sim::NortaOptions norta_options_from_list(Rcpp::List x) {
+  return make_norta_options(
+      list_int_or(x, "quadrature_points", 31),
+      list_int_or(x, "max_bisection_iter", 80),
+      list_double_or(x, "rho_bound", 0.999),
+      list_double_or(x, "calibration_tol", 1e-8),
+      list_double_or(x, "cholesky_jitter", 1e-10));
 }
 
 bool approx_equal(double a, double b, double tol = 1e-10) {
@@ -517,6 +564,115 @@ Rcpp::List sim_ig_draw_impl(Rcpp::List calibration,
       if (!X_or.has_value()) stop_sim(X_or.error());
       draws[i] = Rcpp::wrap(*X_or);
     }
+  }
+  return Rcpp::List::create(Rcpp::_["draws"] = draws);
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_norta_batch_impl(
+    Rcpp::NumericMatrix target_corr,
+    Rcpp::List marginals,
+    int n,
+    int reps,
+    double seed_base,
+    int quadrature_points = 31,
+    int max_bisection_iter = 80,
+    double rho_bound = 0.999,
+    double calibration_tol = 1e-8,
+    double cholesky_jitter = 1e-10) {
+  if (n <= 0) Rcpp::stop("n must be positive");
+  if (reps <= 0) Rcpp::stop("reps must be positive");
+
+  const Eigen::Map<Eigen::MatrixXd> corr(
+      REAL(target_corr), target_corr.nrow(), target_corr.ncol());
+  const auto marginal_specs = marginal_specs_from_list(marginals);
+  const magmaan::sim::NortaOptions options = make_norta_options(
+      quadrature_points, max_bisection_iter, rho_bound, calibration_tol,
+      cholesky_jitter);
+
+  auto cal_or = magmaan::sim::calibrate_norta(corr, marginal_specs, options);
+  if (!cal_or.has_value()) stop_sim(cal_or.error());
+
+  Rcpp::List draws(reps);
+  for (int i = 0; i < reps; ++i) {
+    std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
+                        static_cast<std::uint64_t>(i + 1));
+    auto X_or = magmaan::sim::simulate_norta_matrix(
+        static_cast<Eigen::Index>(n), *cal_or, marginal_specs, rng, options);
+    if (!X_or.has_value()) stop_sim(X_or.error());
+    draws[i] = Rcpp::wrap(*X_or);
+  }
+
+  return Rcpp::List::create(
+      Rcpp::_["draws"] = draws,
+      Rcpp::_["latent_corr"] = Rcpp::wrap(cal_or->latent_corr),
+      Rcpp::_["marginal_mean"] = Rcpp::wrap(cal_or->marginal_mean),
+      Rcpp::_["marginal_sd"] = Rcpp::wrap(cal_or->marginal_sd));
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_norta_calibrate_impl(
+    Rcpp::NumericMatrix target_corr,
+    Rcpp::List marginals,
+    int quadrature_points = 31,
+    int max_bisection_iter = 80,
+    double rho_bound = 0.999,
+    double calibration_tol = 1e-8,
+    double cholesky_jitter = 1e-10) {
+  const Eigen::Map<Eigen::MatrixXd> corr(
+      REAL(target_corr), target_corr.nrow(), target_corr.ncol());
+  const auto marginal_specs = marginal_specs_from_list(marginals);
+  const magmaan::sim::NortaOptions options = make_norta_options(
+      quadrature_points, max_bisection_iter, rho_bound, calibration_tol,
+      cholesky_jitter);
+
+  auto cal_or = magmaan::sim::calibrate_norta(corr, marginal_specs, options);
+  if (!cal_or.has_value()) stop_sim(cal_or.error());
+
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["latent_corr"] = Rcpp::wrap(cal_or->latent_corr),
+      Rcpp::_["marginal_mean"] = Rcpp::wrap(cal_or->marginal_mean),
+      Rcpp::_["marginal_sd"] = Rcpp::wrap(cal_or->marginal_sd),
+      Rcpp::_["marginals"] = marginal_specs_to_list(marginal_specs),
+      Rcpp::_["options"] = norta_options_to_list(options));
+  out.attr("class") = Rcpp::CharacterVector::create(
+      "magmaan_norta_calibration", "list");
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_norta_draw_impl(Rcpp::List calibration,
+                               int n,
+                               int reps,
+                               double seed_base,
+                               int quadrature_points = -1,
+                               double cholesky_jitter = -1.0) {
+  if (n <= 0) Rcpp::stop("n must be positive");
+  if (reps <= 0) Rcpp::stop("reps must be positive");
+
+  magmaan::sim::NortaCalibration cal;
+  cal.latent_corr = Rcpp::as<Eigen::MatrixXd>(calibration["latent_corr"]);
+  cal.marginal_mean = Rcpp::as<Eigen::VectorXd>(calibration["marginal_mean"]);
+  cal.marginal_sd = Rcpp::as<Eigen::VectorXd>(calibration["marginal_sd"]);
+  const auto marginal_specs = marginal_specs_from_list(
+      Rcpp::as<Rcpp::List>(calibration["marginals"]));
+
+  magmaan::sim::NortaOptions options;
+  if (calibration.containsElementNamed("options")) {
+    options = norta_options_from_list(Rcpp::as<Rcpp::List>(
+        calibration["options"]));
+  }
+  if (quadrature_points > 0) options.quadrature_points = quadrature_points;
+  if (cholesky_jitter >= 0.0) options.cholesky_jitter = cholesky_jitter;
+
+  Rcpp::List draws(reps);
+  for (int i = 0; i < reps; ++i) {
+    std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
+                        static_cast<std::uint64_t>(i + 1));
+    auto X_or = magmaan::sim::simulate_norta_matrix(
+        static_cast<Eigen::Index>(n), cal, marginal_specs, rng, options);
+    if (!X_or.has_value()) stop_sim(X_or.error());
+    draws[i] = Rcpp::wrap(*X_or);
   }
   return Rcpp::List::create(Rcpp::_["draws"] = draws);
 }

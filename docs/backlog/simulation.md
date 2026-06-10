@@ -23,9 +23,11 @@ generators, the Tukey / Pearson / Johnson / Fleishman marginal families,
 population composition, and the shared observed-variable projection layer) is
 inventoried in the roadmap's "Simulation primitives" section. The R surface
 exposes `sim_*_batch()` convenience calls plus the reusable
-`sim_ig_calibrate()` / `sim_ig_draw()` and `sim_plsim_calibrate()` /
-`sim_plsim_draw()` two-stage handles. Keep API-level inventory in the roadmap;
-this file carries the work queue and decision log below.
+`sim_ig_calibrate()` / `sim_ig_draw()`,
+`sim_norta_calibrate()` / `sim_norta_draw()`, and
+`sim_plsim_calibrate()` / `sim_plsim_draw()` two-stage handles. Keep API-level
+inventory in the roadmap; this file carries the work queue and decision log
+below.
 
 ## Architecture Direction
 
@@ -103,9 +105,9 @@ calibrates/diagnoses one of those steps.
   a core runtime dependency unless the exception/dependency boundary is
   deliberately revisited; the C++ core stays local and `std::expected` based.
 - Normalize the generator API around reusable calibration objects. Expose
-  remaining `sim_*_calibrate()` and `sim_*_draw()` R wrappers for NORTA and
-  calibrated copula/vine paths, and keep existing `sim_*_batch()` functions as
-  thin convenience wrappers. Extend the first PLSIM slice with broader
+  remaining `sim_*_calibrate()` and `sim_*_draw()` R wrappers for calibrated
+  copula/vine paths, and keep existing `sim_*_batch()` functions as thin
+  convenience wrappers. Extend the first PLSIM slice with broader
   simulation-grid diagnostics and possible
   tuning/replacement of the current adaptive rectangle integration kernel.
   Extend the first pairwise VITA/covsim copula calibration into a full
@@ -301,10 +303,14 @@ Open work only; landed generator slices are inventoried in the roadmap.
   `rho_Z -> Corr(X_i, X_j)` map for repeated target matrices, and add an
   explicit policy for pairwise-calibrated latent matrices that are not positive
   definite. Error-only is the current behavior.
-- **M.** Add remaining R-level calibration objects for simulation generators:
-  `sim_norta_calibrate()` / `sim_norta_draw()` and analogous calibrated
-  copula/vine handles. Batch wrappers should delegate to two-stage functions
-  internally where practical.
+- **Landed, NORTA R calibration handles.** Add
+  `sim_norta_calibrate()` / `sim_norta_draw()` plus `sim_norta_batch()` to the
+  R core registry, backed by inspectable list/S3 calibration objects that retain
+  the fitted latent correlation, marginal specs, marginal moments, and NORTA
+  options for reusable draws.
+- **M.** Add remaining R-level calibration objects for calibrated copula/vine
+  generators. Batch wrappers should delegate to two-stage functions internally
+  where practical.
 - **M.** Add an explicit persistent calibration-cache policy for long
   simulation experiments. In-memory calibration reuse now prevents repeated
   PLSIM/IG calibration across `N` within one R process, but separate timing or

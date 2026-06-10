@@ -308,9 +308,9 @@ golden `parTable()` fixtures.
   with fitted marginals, latent/intermediate matrices, achieved diagnostics, and
   iteration metadata; stochastic `simulate_*()`/draw calls accept that state
   plus only `n`, RNG/seed, and draw-time options. One-shot batch helpers remain
-  as convenience wrappers. This path is now in place for IG and PLSIM at the R
-  boundary and for IG, PLSIM, and NORTA at the C++ boundary; remaining work is
-  to expose the same R split for NORTA and calibrated copula/vine paths.
+  as convenience wrappers. This path is now in place for IG, NORTA, and PLSIM
+  at the R boundary and for IG, PLSIM, and NORTA at the C++ boundary; remaining
+  work is to expose the same R split for calibrated copula/vine paths.
 - Initial NORTA marginals are standard normal, standardized lognormal, Tukey
   g-and-h, Pearson-system distributions, and Johnson-system SU/SB
   distributions. Fleishman polynomial transforms can also be passed through the
