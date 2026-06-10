@@ -13,9 +13,9 @@ semantics · **XL** statistical design/research track before implementation.
 
 ## Estimation and inference follow-ups
 
-Small open items surfaced while fixing the standardized-solution, Kline/Guo
-parity, and ADF inversion bugs (the fixes themselves are recorded in the test
-ledger).
+Small open items surfaced while fixing the standardized-solution and Kline/Guo
+parity bugs (the fixes themselves are recorded in the test ledger; the ADF
+`spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
 
 - **S.** Ordinal-SEM standardized solution: add a checked C++ golden fixture for
   ordinal / mixed-ordinal standardized rows (currently only `r-package/examples/
@@ -23,12 +23,6 @@ ledger).
   decide whether delta-method defined parameters (`compute_defined`) and
   `factor_scores` are valid for ordinal fits — both still carry the
   `require_not_ordinal` guard that was removed from `standardize_lv`/`_all`.
-- **M, research-tier.** Optional non-default `spectral_truncate` weight policy
-  for degenerate saturated continuous ADF/WLS Γ̂: a pseudo-inverse returning
-  dropped rank / retained weighted residual / conditioned projected-gradient
-  norm, as a parity-restoring alternative to the current rank-deficiency refusal
-  (`detail::symmetric_inverse_pd_gated`). `experiments/00-lavaan-parity`'s
-  `conditioned_adf_weight()` is the advisory telemetry for it.
 
 ## Robust score / modification-index tests (frontier)
 
@@ -70,10 +64,6 @@ landed; remaining open items:
   `MESSAGE`-only soft checks, and fixtures regenerated from magmaan's own output
   rather than an external oracle; for each, either tighten to the oracle or write
   down explicitly why the looseness is principled.
-- **S, deferred.** A `statistic = "N" | "N-1"` (or report-both) selector for the
-  GLS/WLS test multiplier, deferred until a concrete methods workflow needs it.
-  The convention itself is fixed and documented in
-  [docs/design/numerical-conventions.md](../design/numerical-conventions.md).
 - **M, later.** Layer CI on top only after the local commands are useful:
   `test-quick` on PRs/pushes, sanitizer validation on main or a schedule, heavy
   parity/optional optimizer lanes less often, and coverage as an artifact before
@@ -136,14 +126,6 @@ decisions in the simulation backlog.
   multi-group FIML fits need explicit start/convergence care; and nonlinear
   equality tangent-space support plus pairwise-data FMG remain deferred.
 
-## Documentation
-
-- **Documentation system (gated).** The design lives in
-  [docs/design/documentation_proposal.md](../design/documentation_proposal.md):
-  two surfaces, a C++ compositional methods manual and a staged API manual.
-  Build when we commit to public docs; the first concrete step per the proposal
-  is settling audience, vocabulary, and the API-status/evidence catalog.
-
 ## Benchmarks
 
 Advisory local tooling, not a substitute for parity fixtures. Full design:
@@ -185,29 +167,6 @@ work lives in [`speculative.md`](speculative.md). Open work:
   landed for `papers/pairwise-robust-sem/` and `experiments/08`/`09`. The
   remaining pairwise μ ACOV and pairwise Browne-unbiased items live in
   [`speculative.md`](speculative.md).
-- **S/M.** Extend the ordinal SNLLS speed pilot
-  (`experiments/_archive/11-ordinal-snlls-speed`) when the paper needs stronger
-  timing evidence. The native C++ benchmark now compares full bounded DWLS/WLS,
-  threshold-profiled bounded, full-threshold SNLLS, and threshold-profiled SNLLS
-  across a Kreiberg-style family, splits rows by delta/theta parameterization,
-  and includes mixed continuous/ordinal rows plus the lazy `MixedOrdinalWorkspace`
-  boundary. The latest opt smoke pilot covers the compact `--smoke` grid with
-  `q ≤ 4`; open follow-up is the fuller `q ≤ 12` literature-like sweep and
-  optional lavaan context rows if the paper needs them.
-- **S.** Extend the ordinal threshold-constraint support experiment
-  (`experiments/_archive/12-ordinal-threshold-constraints`) only if the paper
-  needs broader constraint evidence. Single-group ordinal CFA is covered (free /
-  shared-label thresholds agree across profiled/full paths; true linear threshold
-  constraints are rejected by threshold-profiled fitting and accepted by full
-  bounded plus full-threshold SNLLS). Open follow-up: multi-group
-  threshold-invariance/equality examples once the harness can express groups
-  without pulling in fixture generation.
-- **S/M.** Extend the ordinal construction-boundary experiment
-  (`experiments/_archive/13-ordinal-construction-boundary`) if the paper needs
-  broader construction evidence. The lazy opt pilot times fit-only ULS/DWLS raw
-  workspace construction against eager legacy stats construction, projection to
-  `OrdinalMoments`, diagonal/full Gamma cache copies, DWLS weight construction,
-  and WLS reinversion across all-ordinal synthetic blocks up to `p = 16`, `c = 5`.
 - **M/L.** Convergence-note / start-value portfolio paper track
   (`papers/convergence-note/`). The skeleton, local resources, and first R
   simulation factories exist for the De Jonckere-Rosseel small-sample SEM designs
@@ -345,11 +304,6 @@ work lives in [`speculative.md`](speculative.md). Open work:
   and IPOPT). Document tolerance semantics (`gtol` vs NLopt `xtol_rel`),
   iteration/evaluation reporting, and bounded behavior before changing the default
   again.
-- **M.** Maybe add exact Hessians for IPOPT. The first IPOPT adapter uses
-  limited-memory Hessian approximation and supplies objective gradients plus
-  nonlinear-constraint Jacobians only. Revisit after the optimizer comparison work
-  clarifies whether exact objective / Lagrangian Hessians materially help ML,
-  GLS/WLS/ULS, or nonlinear-constraint fits.
 - **S/M, newsom corpus.** The Little/Newsom continuous golden
   (`tests/golden/textbook_corpus_golden_test.cpp`) is currently skipped because
   NLopt L-BFGS does not converge `newsom/ex5_5b` from `simple_start_values`. Same
@@ -357,28 +311,9 @@ work lives in [`speculative.md`](speculative.md). Open work:
   [newsom-corpus-failures.md](newsom-corpus-failures.md): NLopt stalling early on
   a structurally awkward ML objective. Unskip once the starting-value path or a
   harness-level cross-backend fallback handles it.
-- **S, before shipping binary artifacts.** The repo carries an MIT `LICENSE` that
-  also notes the vendored BSD-3 PORT routines, sufficient for a source release —
-  Eigen, Ceres, NLopt, and nlohmann_json are fetched at build time, not
-  redistributed. Before shipping a binary or packaged artifact, extend this to a
-  full dependency-license manifest (Eigen, optional Ceres, required NLopt,
-  optional IPOPT, vendored PORT and QUADPACK, and test-only nlohmann_json) with
-  versions and redistribution obligations.
-- **M/L, after coverage exists.** Promote the Ceres preset into regular validation
-  where relevant without making the default build pay the Ceres dependency cost.
-- **S, only if timings justify it.** Experiment with opt-in precompiled headers
-  for Eigen-heavy local builds; keep them disabled unless they improve changed-TU
-  rebuilds without worsening no-op or full rebuild ergonomics.
 
 ## Ordinal/SNLLS research
 
-- **S, revisit only if the paper track needs it.** The h-score / WMA robust
-  polychoric path has landed (all-ordinal h-weighted moments; see roadmap), so its
-  phased plan note has been retired. Design rationale lives in
-  `docs/research/notes/h-polychorics.tex` and `robust_ordinal_gamma.tex`; the
-  remaining concrete work is the h-weighted polyserial item under "API and R
-  boundary". Revisit the threshold parameterization and positive-definiteness
-  repair policy only if the robust-ordinal paper track demands it.
 - **M/L.** Structured Gamma / model-implied fourth-order paper track
   (`papers/structured-gamma/`). A minimal `estimate::frontier` weight-matrix
   builder exists for complete-data covariance-only pure CFA and is exposed to R as
@@ -409,18 +344,6 @@ work lives in [`speculative.md`](speculative.md). Open work:
   next paper-facing C++ work should be tighter mixed robust inference, lazy mixed
   WLS construction, mixed theta SNLLS, threshold-profiled general linear maps, or
   reduced-Gamma inference plumbing.
-- **S/M, experiment extension.** `experiments/15-rhemtulla-2012` replicates the
-  Rhemtulla, Brosseau-Liard & Savalei (2012) cat-LS-vs-continuous-ML horse race,
-  but v1 covers only the symmetric-threshold, underlying-normal conditions
-  (number of categories 2-7 × N). Two paper conditions are deferred: (1) the
-  nonnormal underlying `y*` (skew 2, kurtosis 7 in the paper's convention),
-  covered by the C++ cubic Fleishman / Vale-Maurelli primitive but still needing
-  wiring into the experiment — the condition where cat-LS's own
-  underlying-normality assumption breaks; (2) the moderate/extreme
-  asymmetric-threshold conditions, whose exact threshold tables are in the paper's
-  unavailable supplement (would need a documented rule validated against their
-  Table 1 skew/kurtosis). Add these only if the replication needs to exercise
-  cat-LS bias under nonnormality.
 
 ## Composite models
 

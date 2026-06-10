@@ -7,6 +7,176 @@ specific condition under which we'd actually build the item. Unlike
 only when a concrete downstream consumer (paper row, user request, parity
 failure) appears.
 
+## Estimation / inference
+
+### `spectral_truncate` weight policy for degenerate ADF/WLS Γ̂
+
+An optional non-default pseudo-inverse weight policy for degenerate saturated
+continuous ADF/WLS Γ̂: spectral truncation on the retained subspace, returning
+dropped rank, retained weighted residual, and conditioned projected-gradient
+norm, as a parity-restoring alternative to the current rank-deficiency
+refusal.
+
+**Alternative already available.** The explicit refusal
+(`detail::symmetric_inverse_pd_gated`, returning dim/rank/rcond/λmin) plus the
+advisory `conditioned_adf_weight()` telemetry in `experiments/00-lavaan-parity`.
+Convention documented in
+[docs/design/numerical-conventions.md](../design/numerical-conventions.md).
+
+**Build if.** A real parity or methods case needs lavaan-matching estimates on
+a degenerate Γ̂ instead of an explicit refusal. Research-tier: a pseudo-inverse
+estimator's sampling behavior is its own validation problem, not a free
+parity patch.
+
+### `statistic = "N" | "N-1"` selector for the GLS/WLS test multiplier
+
+A user-facing selector (or report-both mode) for the GLS/WLS chi-square
+multiplier convention.
+
+**Alternative already available.** The convention is fixed and documented in
+[docs/design/numerical-conventions.md](../design/numerical-conventions.md);
+parity tests pin `magmaan·(N−G)/N == lavaan` at 5e-3.
+
+**Build if.** A concrete methods workflow needs the other convention or a
+side-by-side report.
+
+## Optimizers
+
+### Exact Hessians for IPOPT
+
+The IPOPT adapter uses limited-memory Hessian approximation and supplies
+objective gradients plus nonlinear-constraint Jacobians only; exact objective /
+Lagrangian Hessians are unimplemented.
+
+**Alternative already available.** IPOPT's internal L-BFGS approximation, and
+the other nine backends for unconstrained/bounded problems.
+
+**Build if.** The optimizer comparison studies show exact objective /
+Lagrangian Hessians materially help ML, GLS/WLS/ULS, or nonlinear-constraint
+fits.
+
+## Build, packaging, and docs
+
+### Documentation system (two-surface manual)
+
+The design lives in
+[docs/design/documentation_proposal.md](../design/documentation_proposal.md):
+two surfaces, a C++ compositional methods manual and a staged API manual. The
+first concrete step per the proposal is settling audience, vocabulary, and the
+API-status/evidence catalog.
+
+**Alternative already available.** The roadmap, design notes, and AGENTS.md
+serve the current methods-developer audience.
+
+**Build if.** We commit to public docs.
+
+### Dependency-license manifest for binary artifacts
+
+A full dependency-license manifest (Eigen, optional Ceres, required NLopt,
+optional IPOPT, vendored PORT and QUADPACK, test-only nlohmann_json) with
+versions and redistribution obligations.
+
+**Alternative already available.** The repo's MIT `LICENSE` also notes the
+vendored BSD-3 PORT routines, sufficient for a source release — Eigen, Ceres,
+NLopt, and nlohmann_json are fetched at build time, not redistributed.
+
+**Build if.** We ship a binary or packaged artifact.
+
+### Ceres preset in regular validation
+
+Promote the `ceres` preset into regular validation where relevant, without
+making the default build pay the Ceres dependency cost.
+
+**Alternative already available.** The `ceres` preset builds and tests on
+demand; PORT and NLopt backends are exercised by the default presets.
+
+**Build if.** Calibrated coverage shows Ceres-specific paths are the
+undervalidated gap, or a Ceres-backend regression slips through local testing.
+
+### Opt-in precompiled headers for Eigen-heavy builds
+
+**Alternative already available.** Current build-loop timings (tracked in the
+roadmap's timings table) are acceptable.
+
+**Build if.** PCH measurably improves changed-TU rebuilds without worsening
+no-op or full rebuild ergonomics.
+
+## Experiment extensions (paper-gated)
+
+Completed or archived experiments whose extensions are needed only if a paper's
+evidence base demands them. Each experiment's landed coverage is recorded in
+the experiment folder and the roadmap.
+
+### Ordinal SNLLS speed pilot: literature-grade grid
+
+Extend `experiments/_archive/11-ordinal-snlls-speed` beyond the compact
+`--smoke` grid (`q ≤ 4`) to the fuller `q ≤ 12` literature-like sweep, with
+optional lavaan context rows.
+
+**Alternative already available.** The native C++ benchmark already compares
+full bounded DWLS/WLS, threshold-profiled bounded, full-threshold SNLLS, and
+threshold-profiled SNLLS across a Kreiberg-style family, splits delta/theta
+rows, and includes mixed rows plus the lazy `MixedOrdinalWorkspace` boundary.
+
+**Build if.** The SNLLS paper needs stronger timing evidence than the smoke
+grid provides.
+
+### Ordinal threshold-constraint experiment: multi-group examples
+
+Extend `experiments/_archive/12-ordinal-threshold-constraints` with multi-group
+threshold-invariance/equality examples.
+
+**Alternative already available.** Single-group ordinal CFA is covered: free /
+shared-label thresholds agree across profiled/full paths; true linear threshold
+constraints are rejected by threshold-profiled fitting and accepted by full
+bounded plus full-threshold SNLLS.
+
+**Build if.** A paper needs broader constraint evidence AND the harness can
+express groups without pulling in fixture generation.
+
+### Ordinal construction-boundary experiment: broader blocks
+
+Extend `experiments/_archive/13-ordinal-construction-boundary` beyond
+all-ordinal synthetic blocks up to `p = 16`, `c = 5`.
+
+**Alternative already available.** The lazy opt pilot times fit-only ULS/DWLS
+raw workspace construction against eager legacy stats construction, projection
+to `OrdinalMoments`, diagonal/full Gamma cache copies, DWLS weight
+construction, and WLS reinversion.
+
+**Build if.** A paper needs broader construction evidence.
+
+### Robust polychoric threshold parameterization / PD-repair revisit
+
+Revisit the threshold parameterization and positive-definiteness repair policy
+of the landed h-score / WMA robust polychoric path.
+
+**Alternative already available.** The all-ordinal h-weighted moment path is
+landed (see roadmap); design rationale lives in
+`docs/research/notes/h-polychorics.tex` and `robust_ordinal_gamma.tex`. The
+remaining committed work is the h-weighted polyserial item in
+[todo.md](todo.md).
+
+**Build if.** The robust-ordinal paper track demands it.
+
+### Rhemtulla 2012 replication: nonnormal y* and asymmetric thresholds
+
+`experiments/15-rhemtulla-2012` v1 covers only the symmetric-threshold,
+underlying-normal conditions (categories 2–7 × N). Deferred paper conditions:
+(1) nonnormal underlying `y*` (skew 2, kurtosis 7 in the paper's convention) —
+the C++ cubic Fleishman / Vale-Maurelli primitive covers it but the wiring
+into the experiment is missing; this is the condition where cat-LS's own
+underlying-normality assumption breaks; (2) the moderate/extreme
+asymmetric-threshold conditions, whose exact threshold tables are in the
+paper's unavailable supplement (would need a documented rule validated against
+their Table 1 skew/kurtosis).
+
+**Alternative already available.** The v1 symmetric/normal replication of the
+cat-LS-vs-continuous-ML horse race.
+
+**Build if.** The replication needs to exercise cat-LS bias under
+nonnormality.
+
 ## Pairwise covariance / missing-data side
 
 ### Pairwise μ ACOV for `fit_gls_pairwise` mean-structure models

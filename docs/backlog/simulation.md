@@ -107,13 +107,12 @@ calibrates/diagnoses one of those steps.
   parameter conventions, simulation checks, and later vine work. Do not make it
   a core runtime dependency unless the exception/dependency boundary is
   deliberately revisited; the C++ core stays local and `std::expected` based.
-- Normalize the generator API around reusable calibration objects. Expose
-  remaining `sim_*_calibrate()` and `sim_*_draw()` R wrappers for calibrated
-  copula/vine paths, and keep existing `sim_*_batch()` functions as thin
-  convenience wrappers. Extend the first PLSIM slice with broader
-  simulation-grid diagnostics and possible
-  tuning/replacement of the current adaptive rectangle integration kernel.
-  Extend the first pairwise VITA/covsim copula calibration into a full
+- The generator API is normalized around reusable calibration objects: every
+  calibrated path now exposes `sim_*_calibrate()` / `sim_*_draw()` R wrappers,
+  with `sim_*_batch()` kept as thin convenience wrappers. Remaining: extend the
+  first PLSIM slice with broader simulation-grid diagnostics and possible
+  tuning/replacement of the current adaptive rectangle integration kernel, and
+  extend the first pairwise VITA/covsim copula calibration into a full
   matrix-oriented workflow.
 
 ## Pearson Type IV
@@ -306,32 +305,3 @@ Open work only; landed generator slices are inventoried in the roadmap.
   `rho_Z -> Corr(X_i, X_j)` map for repeated target matrices, and add an
   explicit policy for pairwise-calibrated latent matrices that are not positive
   definite. Error-only is the current behavior.
-- **Landed, NORTA R calibration handles.** Add
-  `sim_norta_calibrate()` / `sim_norta_draw()` plus `sim_norta_batch()` to the
-  R core registry, backed by inspectable list/S3 calibration objects that retain
-  the fitted latent correlation, marginal specs, marginal moments, and NORTA
-  options for reusable draws.
-- **Landed, pairwise copula R calibration handles.** Add
-  `sim_bicop_calibrate()` / `sim_bicop_draw()` plus `sim_bicop_batch()` to the
-  R core registry for calibrated two-variable Archimedean copula draws. The
-  handle retains the fitted family/theta pair, target/achieved correlation
-  diagnostics, marginal specs, and copula options.
-- **Landed, generic C-vine R calibration handles.** Add
-  `sim_cvine_calibrate()` / `sim_cvine_draw()` plus `sim_cvine_batch()` to the
-  R core registry for fixed-order C-vine Archimedean copula draws of arbitrary
-  dimension. The handle retains the triangular pair-copula spec,
-  target/achieved/bounds/iteration diagnostics, marginal specs, and copula
-  options.
-- **Landed, specialized C-vine3 R selection handles.** Add
-  `sim_cvine3_calibrate()` / `sim_cvine3_draw()` plus `sim_cvine3_batch()` to
-  the R core registry for fixed three-variable C-vines, per-edge family choices,
-  root selection, edge-family selection, and combined root/family structure
-  selection. Handles retain the selected root/order, selected pair-copula spec,
-  root and conditional diagnostics, marginal specs, and copula options.
-- **Landed, experiment-local persistent calibration-cache policy.** The shared
-  `experiments/_support` harness exposes explicit
-  `calibration_cache_key()` / `write()` / `read()` / `list()` / `clear()`
-  helpers. Entries live under ignored `results/cache/` directories, are keyed by
-  population target, generator name, generator options, and magmaan package/git
-  reference, and require runner opt-in. Core and the R package still avoid
-  hidden global disk caches.
