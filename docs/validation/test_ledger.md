@@ -37,6 +37,23 @@ reason the test exists; unresolved work still belongs in the backlog.
 The notes below are cross-subsystem, oracle-dependent fixes. Full root-cause
 write-ups live in the commits that introduced each guard.
 
+**Ordinal golden chisq gate absorbed the lavaan `(N−G)` convention.**
+Regression: the ordinal goldens compared `2N·fmin` directly against lavaan's
+categorical-LS statistic `Σ_g (n_g−1)·F̂_g` with an 8e-2 absolute gate, which
+silently absorbed the entire convention gap for fixtures 0001–0012 (e.g. 0001:
+diff 8.7e-3, 0004 WLS: 5.6e-2); the larger-χ² threshold-invariance fixture 0013
+finally exceeded the slack and exposed it. Same shape as the continuous GLS/WLS
+audit-item template. The lavaan source factor is per-group
+(`lav_model_objective.R`: `group.fx = 0.5·(nobs−1)/nobs·group.fx`), which also
+makes the *estimator* differ once equality constraints couple groups (θ̂ shift
+`O(1/n_g)`; see `docs/design/numerical-conventions.md` exception 4).
+Guard: `tests/golden/ordinal_golden_test.cpp` (`to_lavaan_ls_chisq` rescale,
+χ² gates 8e-2 → 5e-3, robust χ²-scale gates 8e-2 → 5e-3; documented 1.5e-4 θ /
+1.5e-2 scaled-shifted exceptions for fixture 0013 only).
+Scope: mixed bounded θ/χ² gates remain loose (2e-2/3e-1) pending the mixed
+robust-parity root-cause in the backlog; the SS shift is N-free and compared
+unrescaled.
+
 **Robust UΓ projector per-group weight.**
 Regression: the complete-data `build_u_factor` ProjectionExpected path built the
 kernel basis from `A_b = L_Γ,b⁻¹·Δ_b` without the per-group weight `w_b = n_b/N`,

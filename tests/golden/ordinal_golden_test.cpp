@@ -38,6 +38,8 @@ const std::vector<std::string> kOrdinalFixtures = {
     "0010_near_perfect_pair",
     "0011_sixcat_threshold_heavy_cfa",
     "0012_2group_equal_loading_3cat_cfa",
+    "0013_2group_threshold_invariance_3cat_cfa",
+    "0014_threshold_linear_constraint_3cat_cfa",
 };
 
 const std::vector<std::string> kMixedOrdinalFixtures = {
@@ -55,31 +57,65 @@ std::string ordinal_syntax(const nlohmann::json& exp) {
 
   const auto& first_block = exp["blocks"][0]["matrix"];
   const Eigen::Index p = static_cast<Eigen::Index>(first_block[0].size());
-  std::vector<int> max_level(static_cast<std::size_t>(p), 0);
-  for (const auto& block : exp["blocks"]) {
-    const auto& X = block["matrix"];
-    for (const auto& row : X) {
-      for (Eigen::Index j = 0; j < p; ++j) {
-        max_level[static_cast<std::size_t>(j)] =
-            std::max(max_level[static_cast<std::size_t>(j)],
-                     row[static_cast<std::size_t>(j)].get<int>());
+
+  // Fixtures with labeled or constrained thresholds carry the threshold rows
+  // in the model string itself; only append auto-generated plain rows when
+  // the input has none.
+  const bool input_has_thresholds =
+      exp.contains("input_has_thresholds") &&
+      exp["input_has_thresholds"].get<bool>();
+  if (!input_has_thresholds) {
+    std::vector<int> max_level(static_cast<std::size_t>(p), 0);
+    for (const auto& block : exp["blocks"]) {
+      const auto& X = block["matrix"];
+      for (const auto& row : X) {
+        for (Eigen::Index j = 0; j < p; ++j) {
+          max_level[static_cast<std::size_t>(j)] =
+              std::max(max_level[static_cast<std::size_t>(j)],
+                       row[static_cast<std::size_t>(j)].get<int>());
+        }
       }
     }
-  }
-
-  for (Eigen::Index j = 0; j < p; ++j) {
-    src += "x" + std::to_string(j + 1) + " | ";
-    for (int lev = 1; lev < max_level[static_cast<std::size_t>(j)]; ++lev) {
-      if (lev > 1) src += " + ";
-      src += "t" + std::to_string(lev);
+    for (Eigen::Index j = 0; j < p; ++j) {
+      src += "x" + std::to_string(j + 1) + " | ";
+      for (int lev = 1; lev < max_level[static_cast<std::size_t>(j)]; ++lev) {
+        if (lev > 1) src += " + ";
+        src += "t" + std::to_string(lev);
+      }
+      src += "\n";
     }
-    src += "\n";
   }
   for (Eigen::Index j = 0; j < p; ++j) {
     src += "x" + std::to_string(j + 1) + " ~*~ 1*x" +
            std::to_string(j + 1) + "\n";
   }
   return src;
+}
+
+// lavaan's categorical LS test statistic is sum_g (n_g - 1) * F_g
+// (lav_model_objective.R: `group.fx = 0.5 * (nobs - 1)/nobs * group.fx` for
+// ULS/DWLS/WLS, combined by weighted.mean with weights n_g), while magmaan's
+// documented convention (docs/design/numerical-conventions.md) is
+// chisq = 2 * N * fmin = sum_g n_g * F_g. Rescale magmaan's statistic by the
+// global (N - G)/N before comparing; the per-group-vs-global residual is
+// O(G/N * spread of F_g) and is covered by the 5e-3 gates below. This mirrors
+// the continuous GLS/WLS golden convention.
+double to_lavaan_ls_chisq(double magmaan_chisq,
+                          std::int64_t n_total,
+                          std::size_t n_groups) {
+  return magmaan_chisq *
+         static_cast<double>(n_total - static_cast<std::int64_t>(n_groups)) /
+         static_cast<double>(n_total);
+}
+
+// lavaan's (n_g - 1)/N estimation weights differ from magmaan's n_g/N. With
+// cross-group equality constraints the two weightings produce genuinely
+// (slightly) different estimators, shifting theta_hat by O(1/n_g); without
+// cross-group coupling the minimizers coincide. Fixtures whose models couple
+// groups through constraints get the looser documented bound.
+double ordinal_theta_tol(const std::string& id) {
+  if (id == "0013_2group_threshold_invariance_3cat_cfa") return 1.5e-4;
+  return 1e-5;
 }
 
 double max_abs_diff(const Eigen::MatrixXd& a, const Eigen::MatrixXd& b) {
@@ -462,11 +498,13 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
         continue;
       }
       const int df = static_cast<int>(n_moments - con_or->n_alpha);
-      const double chisq = 2.0 * static_cast<double>(n_total) * est_or->fmin;
+      const double chisq = to_lavaan_ls_chisq(
+          2.0 * static_cast<double>(n_total) * est_or->fmin, n_total,
+          h->stats.R.size());
       const double d_chisq = std::abs(chisq - lavaan_chisq);
       const double d_theta = max_abs_diff(est_or->theta, lavaan_theta);
-      const double theta_tol = 1e-5;
-      const double chisq_tol = 8e-2;
+      const double theta_tol = ordinal_theta_tol(id);
+      const double chisq_tol = 5e-3;
 
       if (!est_or->theta.allFinite() || !std::isfinite(est_or->fmin) ||
           est_or->fmin < 0.0) {
@@ -503,33 +541,53 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
         const Eigen::VectorXd lavaan_ev = vector_from_json(robust["eigvals"]);
         const double d_se = max_abs_diff(rob_or->se, lavaan_se);
         const double d_ev = max_abs_diff(rob_or->eigvals, lavaan_ev);
+        // chisq-scale robust quantities (standard, SB, mean-var, scaled-
+        // shifted statistics and the additive shift) carry the same
+        // N-vs-(N-G) convention gap as the plain statistic; scale factors,
+        // adjusted df, and eigenvalues are ratio-scale and unaffected.
+        const auto ls = [&](double v) {
+          return to_lavaan_ls_chisq(v, n_total, h->stats.R.size());
+        };
         const double d_standard =
-            std::abs(rob_or->chisq_standard -
+            std::abs(ls(rob_or->chisq_standard) -
                      robust["chisq_standard"].get<double>());
         const double d_sb =
-            std::abs(rob_or->satorra_bentler.chi2_scaled -
+            std::abs(ls(rob_or->satorra_bentler.chi2_scaled) -
                      robust["satorra_bentler"]["chisq"].get<double>());
         const double d_sb_scale =
             std::abs(rob_or->satorra_bentler.scale_c -
                      robust["satorra_bentler"]["scale"].get<double>());
         const double d_mv =
-            std::abs(rob_or->mean_var_adjusted.chi2_adj -
+            std::abs(ls(rob_or->mean_var_adjusted.chi2_adj) -
                      robust["mean_var_adjusted"]["chisq"].get<double>());
         const double d_mv_df =
             std::abs(rob_or->mean_var_adjusted.df_adj -
                      robust["mean_var_adjusted"]["df_adj"].get<double>());
         const double d_ss =
-            std::abs(rob_or->scaled_shifted.chi2_adj -
+            std::abs(ls(rob_or->scaled_shifted.chi2_adj) -
                      robust["scaled_shifted"]["chisq"].get<double>());
         const double d_ss_scale =
             std::abs((1.0 / rob_or->scaled_shifted.scale_a) -
                      robust["scaled_shifted"]["scale"].get<double>());
+        // The shift solves a trace system in df and UGamma eigenvalue
+        // products, all N-free, so it carries no chisq-convention factor.
         const double d_ss_shift =
             std::abs(rob_or->scaled_shifted.shift_b -
                      robust["scaled_shifted"]["shift"].get<double>());
         const double robust_se_tol = 3e-4;
         const double robust_ev_tol = 2e-4;
         const double robust_scale_tol = 2e-4;
+        const double robust_chisq_tol = 5e-3;
+        // 0013's estimator itself differs from lavaan's by the (n_g - 1)/n_g
+        // group-weighting convention (see ordinal_theta_tol); the scaled-
+        // shifted solve amplifies that O(1/n) theta difference through its
+        // trace products. Measured 8.5e-3 on the fixture data.
+        const bool weighting_convention_fixture =
+            id == "0013_2group_threshold_invariance_3cat_cfa";
+        const double robust_ss_tol =
+            weighting_convention_fixture ? 1.5e-2 : robust_chisq_tol;
+        const double robust_ss_shift_tol =
+            weighting_convention_fixture ? 1.5e-2 : 2e-4;
 
         if (rob_or->df != robust["df"].get<int>() ||
             rob_or->satorra_bentler.df !=
@@ -537,11 +595,11 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
             rob_or->scaled_shifted.df !=
                 robust["scaled_shifted"]["df"].get<int>() ||
             d_se > robust_se_tol || d_ev > robust_ev_tol ||
-            d_standard > 8e-2 ||
-            d_sb > 8e-2 || d_sb_scale > robust_scale_tol ||
-            d_mv > 8e-2 || d_mv_df > 2e-4 ||
-            d_ss > 8e-2 || d_ss_scale > robust_scale_tol ||
-            d_ss_shift > 2e-4) {
+            d_standard > robust_chisq_tol ||
+            d_sb > robust_chisq_tol || d_sb_scale > robust_scale_tol ||
+            d_mv > robust_chisq_tol || d_mv_df > 2e-4 ||
+            d_ss > robust_ss_tol || d_ss_scale > robust_scale_tol ||
+            d_ss_shift > robust_ss_shift_tol) {
           failures.push_back(
               id + " " + name +
               ": robust diffs se=" + std::to_string(d_se) +
@@ -569,6 +627,112 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
   }
 
   MESSAGE("ordinal fixture fits: " << passed << " / " << total << " pass");
+  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+  CHECK(passed == total);
+}
+
+// The threshold-profiled SNLLS path against the same lavaan contract as the
+// bounded golden above. This is the lavaan anchor for the joint threshold
+// design: free thresholds, cross-group threshold invariance (0013), and
+// threshold-only linear equality constraints (0014) all flow through
+// fit_ordinal_snlls.
+TEST_CASE("ordinal fixtures: profiled SNLLS fits match lavaan delta contract") {
+  const std::string dir = magmaan::test::fixtures_dir() + "/ordinal";
+
+  int total = 0;
+  int passed = 0;
+  std::vector<std::string> failures;
+
+  for (const auto& id : kOrdinalFixtures) {
+    const std::string path = dir + "/" + id + ".ordinal.json";
+    auto raw = magmaan::test::read_fixture(path);
+    REQUIRE(raw.has_value());
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(exp.is_discarded());
+    if (!has_fit(exp)) continue;
+
+    auto h = handles_from_fixture(id, exp, failures);
+    if (!h.has_value()) continue;
+
+    std::vector<Eigen::MatrixXd> blocks;
+    for (const auto& b : exp["blocks"]) {
+      blocks.push_back(matrix_from_json(b["matrix"]));
+    }
+
+    const magmaan::optim::OptimOptions opt{
+        .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+
+    for (const auto& fit_item : exp["fits"].items()) {
+      const std::string name = fit_item.key();
+      if (name != "DWLS" && name != "WLS") continue;
+      const auto estimator = name == "DWLS"
+          ? magmaan::data::OrdinalEstimatorKind::DWLS
+          : magmaan::data::OrdinalEstimatorKind::WLS;
+      ++total;
+
+      auto plan = magmaan::data::ordinal_weight_plan(
+          magmaan::data::OrdinalWorkspacePurpose::FitOnly, estimator);
+      auto workspace =
+          magmaan::data::ordinal_workspace_from_integer_data(blocks, plan);
+      if (!workspace.has_value()) {
+        failures.push_back(id + " " + name + ": workspace — " +
+                           workspace.error().detail);
+        continue;
+      }
+      auto x0 = magmaan::estimate::ordinal_start_values(
+          h->pt, h->rep, workspace->moments, {});
+      if (!x0.has_value()) {
+        failures.push_back(id + " " + name + ": starts — " +
+                           x0.error().detail);
+        continue;
+      }
+      auto est_or = magmaan::estimate::fit_ordinal_snlls(
+          h->pt, h->rep, workspace->moments, &workspace->gamma_cache, plan,
+          *x0, magmaan::estimate::Backend::NloptLbfgs, opt);
+      if (!est_or.has_value()) {
+        failures.push_back(id + " " + name + ": snlls — " +
+                           est_or.error().detail);
+        continue;
+      }
+
+      const double lavaan_chisq = exp["fits"][name]["chisq"].get<double>();
+      const Eigen::VectorXd lavaan_theta =
+          vector_from_json(exp["fits"][name]["theta_hat"]);
+      const std::int64_t n_total =
+          std::accumulate(h->stats.n_obs.begin(), h->stats.n_obs.end(),
+                          std::int64_t{0});
+      const double chisq = to_lavaan_ls_chisq(
+          2.0 * static_cast<double>(n_total) * est_or->fmin, n_total,
+          h->stats.R.size());
+      const double d_chisq = std::abs(chisq - lavaan_chisq);
+      const double d_theta = max_abs_diff(est_or->theta, lavaan_theta);
+
+      if (!est_or->theta.allFinite() || !std::isfinite(est_or->fmin) ||
+          est_or->fmin < 0.0) {
+        failures.push_back(id + " " + name + ": non-finite SNLLS result");
+        continue;
+      }
+      if (est_or->theta.size() != lavaan_theta.size()) {
+        failures.push_back(id + " " + name + ": npar mismatch magmaan=" +
+                           std::to_string(est_or->theta.size()) + " lavaan=" +
+                           std::to_string(lavaan_theta.size()));
+        continue;
+      }
+      if (d_theta > ordinal_theta_tol(id) || d_chisq > 5e-3) {
+        failures.push_back(id + " " + name +
+                           ": theta diff=" + std::to_string(d_theta) +
+                           " chisq=" + std::to_string(chisq) +
+                           " lavaan chisq=" + std::to_string(lavaan_chisq));
+        continue;
+      }
+      MESSAGE(id << " " << name << " SNLLS: chisq=" << chisq
+                 << " lavaan=" << lavaan_chisq << " theta diff=" << d_theta);
+      ++passed;
+    }
+  }
+
+  MESSAGE("ordinal SNLLS fixture fits: " << passed << " / " << total
+                                         << " pass");
   for (const auto& f : failures) MESSAGE("  FAIL " << f);
   CHECK(passed == total);
 }
@@ -692,7 +856,9 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
         continue;
       }
       const int df = static_cast<int>(n_moments - con_or->n_alpha);
-      const double chisq = 2.0 * static_cast<double>(n_total) * est_or->fmin;
+      const double chisq = to_lavaan_ls_chisq(
+          2.0 * static_cast<double>(n_total) * est_or->fmin, n_total,
+          h->stats.R.size());
       const double d_chisq = std::abs(chisq - lavaan_chisq);
       const double d_theta = max_abs_diff(est_or->theta, lavaan_theta);
       if (df != lavaan_df || d_theta > 2e-2 || d_chisq > 3e-1) {
@@ -707,6 +873,10 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
           !fit_item.value()["robust"].is_null()) {
         magmaan::estimate::Estimates lavaan_est = *est_or;
         lavaan_est.theta = lavaan_theta;
+        // Deliberately maps lavaan's chisq onto magmaan's 2N-convention fmin
+        // so the robust standard statistic reproduces lavaan's stored value
+        // exactly (gated at 1e-8 below); the scaled tests are then compared
+        // free of the sum_g (n_g - 1) F_g vs sum_g n_g F_g convention gap.
         lavaan_est.fmin = lavaan_chisq / (2.0 * static_cast<double>(n_total));
         auto rob_or = magmaan::estimate::robust_mixed_ordinal(
             h->pt, h->rep, h->stats, lavaan_est, kind);
