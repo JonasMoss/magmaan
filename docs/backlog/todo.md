@@ -242,15 +242,19 @@ Remaining work:
 Local-first safety tooling for an AI-assisted repo. Design note:
 [docs/validation/local_hardening.md](../validation/local_hardening.md).
 
-- **S.** Calibrate the landed local LLVM coverage lane after its first real
-  run. Initial tooling now exists as a `coverage` CMake preset plus
-  `just coverage` and `just coverage-html`, all writing under ignored
-  `build/coverage/`. Once exercised, adjust the ignore regex, object list, and
-  domain-level interpretation notes as needed.
-- **S.** Calibrate the landed local report/health recipes after first use.
-  Initial tooling now exists as `just test-report`, `just test-quick-report`,
-  and `just health`. Keep the command boring and local; sanitizer,
-  parity-heavy, and optional optimizer lanes can be opt-in or later extensions.
+- **Partly calibrated.** Calibrate the landed local LLVM coverage lane after
+  its first real run. Initial tooling now exists as a `coverage` CMake preset
+  plus `just coverage` and `just coverage-html`, all writing under ignored
+  `build/coverage/`. First `just health` run completed and printed a usable
+  source report over all checked targets, including parity and robcat. Still
+  open: interpret the `llvm-cov` "mismatched data" warning, decide whether
+  any ignore/object-list adjustments are needed, and add domain-level
+  interpretation notes.
+- **Done.** Calibrate the landed local report/health recipes after first use.
+  `just health` now runs as a useful local maintenance check: quick JUnit
+  report first, then full coverage. The JUnit recipes were fixed to pass
+  absolute `--output-junit` paths because CTest resolves relative paths from
+  the build tree; artifacts now land under `build/fast/` as documented.
 - **Done.** Add `docs/validation/test_ledger.md`: one table per validation area
   mapping subsystem, oracle, test kind, important files/tests, and known gaps.
   This now orients maintainers and agents without becoming a second backlog.

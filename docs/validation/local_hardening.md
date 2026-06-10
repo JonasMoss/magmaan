@@ -61,6 +61,15 @@ just test-quick-report
 This is useful for local dashboards, editor integrations, and eventual CI
 without changing the test suite.
 
+First calibration run: CTest resolves relative `--output-junit` paths from the
+build tree, not the repository root. The report recipes therefore pass absolute
+paths so the artifacts land at:
+
+```text
+build/fast/test-results.xml
+build/fast/test-quick-results.xml
+```
+
 ### One-command health check
 
 A `just health` command is the maintainer cockpit. The first version stays
@@ -73,6 +82,11 @@ just coverage
 
 Later versions can add sanitizer or parity lanes deliberately, but the command
 should stay understandable and locally runnable.
+
+First calibration run: `just health` successfully runs `test-quick-report`
+first and then the full LLVM coverage lane. That means it is a real local
+maintenance check, not a smoke test; coverage includes the parity and robcat
+targets because the coverage report is meant to map the whole checked surface.
 
 ### Test ledger
 
