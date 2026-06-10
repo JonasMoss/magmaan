@@ -278,19 +278,12 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   principled. Goal: a tolerance should encode a real numerical bound, never paper
   over an unexplained discrepancy.
 
-- **M, docs.** Write the first numerical-conventions doc (we have none yet) and
-  decide how the API should surface these choices. Must cover: the optimizer's
-  `½·rᵀWr` objective scale (so `fmin = ½F`); the test-statistic multiplier policy
-  — magmaan uses `N` always, reserving `N−1` only where it is genuinely the
-  unbiased quantity (the sample covariance divisor is `N−1`; the χ² multiplier is
-  `N`), which is why magmaan χ² relates to lavaan's `(N−G)·F` by exactly
-  `(N−G)/N` for GLS/WLS while ULS already carries `N−G`; and the lavaan-parity
-  implication so users are not surprised by the offset. Then consider whether the
-  API should make the convention explicit/selectable (e.g. a documented
-  `statistic = "N" | "N-1"` or report-both option) or stay fixed-and-documented.
-  lavaan's own `N` vs `N−1` choices are partly literature-convention and not
-  always principled; our value is a single stated rule. Pairs with the
-  test-statistic-builder organization item under Correctness bugs.
+- **Done (docs; API selector deferred).** The numerical-conventions doc now
+  lives at [docs/design/numerical-conventions.md](../design/numerical-conventions.md).
+  It records the unified `fmin = ½F` objective scale, the `T = 2N·fmin = N·F`
+  test-statistic rule, and the deliberate GLS/WLS `(N−G)/N` lavaan offset. The
+  current API stays fixed-and-documented; a future `statistic = "N" | "N-1"` or
+  report-both option is deferred until a concrete methods workflow needs it.
 - **M, later.** Layer CI on top only after the local commands are useful:
   `test-quick` on PRs/pushes, sanitizer validation on main or a schedule,
   heavy parity/optional optimizer lanes less often, and coverage as an
@@ -473,10 +466,6 @@ simulation backlog.
   Fit-only mixed DWLS can now build `MixedOrdinalMoments` plus the exact Gamma
   diagonal through `mixed_ordinal_workspace_from_data()` and feed both bounded
   and full-threshold mixed SNLLS fits without full Gamma/WLS materialization.
-  Remaining C++ estimator work on this track: lazy mixed WLS construction,
-  mixed theta SNLLS, threshold-profiled general linear maps such as
-  effect-coding-style constraints, reduced-Gamma robust-inference products that
-  avoid full materialization where possible, and only-when-needed R/API polish.
   First benchmark slice landed as `magmaan_ordinal_workspace_bench` plus
   `experiments/_archive/06-ordinal-snlls-probe`: it covers all-ordinal delta fit-only
   ULS/DWLS/WLS across free, fixed, and shared threshold models and checks
@@ -593,17 +582,14 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 - **S/M.** Continue extending benchmark coverage beyond the current
   lavaan-backed complete-data ML, controlled-missingness FIML, and continuous
   ULS/GLS smoke cases to WLS, ordinal DWLS/WLS, and mixed categorical models.
-- **M.** Extend ordinal SNLLS/Gamma workspace experiment instrumentation for the
-  new all-ordinal delta path: report moment construction, diagonal Gamma, full
-  Gamma, weight materialization, optimizer time, post-fit inference time when
-  requested, objective/gradient diagnostics, iteration counts, cache
-  materialization flags, and agreement with the legacy materialized ordinal
-  path. Landed first: a C++ advisory benchmark target and experiment runner
-  for ULS/DWLS/WLS fit-only cells across free, fixed, and shared thresholds.
-  Landed next: a separate fit-plus-inference robust-reporting experiment for
-  DWLS/WLS cache reuse against the legacy materialized robust path. Remaining:
-  raw-data lazy construction boundaries, larger/literature-grade speed grids
-  when needed, and any R/API wrapper polish justified by those results.
+- **Mostly landed.** Ordinal SNLLS/Gamma workspace instrumentation now covers
+  all-ordinal delta fit-only construction, fit-plus-inference cache reuse,
+  threshold-constraint support, construction-boundary timing, raw-to-SNLLS
+  legacy/lazy rows, delta/theta stratification, and mixed continuous/ordinal
+  delta rows through lazy mixed-DWLS construction plus robust-reporting cache
+  reuse. Remaining: larger/literature-grade speed grids, tighter mixed robust
+  scaled-test diagnostics, lazy mixed WLS and mixed theta rows once the
+  estimators exist, and any R/API wrapper polish justified by those results.
 - **M/L.** Add a two-stage EM/saturated-covariance missing-data research path
   for comparison with direct FIML and pairwise covariance methods. Stage 1
   (saturated EM moments + sandwich ACOV ingredients) is exposed as
@@ -638,16 +624,14 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   Σ-only-weight variant remains accessible by handing
   `samp.S = pw.S` to the existing `fit_gls`; both reduce to the same fit on
   complete data (C++ unit test in tests/unit/pairwise_gls_test.cpp).
-  Open: **`experiments/NN-pairwise-gls-efficiency/`** — the live research
-  question on whether the asymptotically-efficient Γ_NT^pw weight pays off
-  in finite samples. Scope: one-factor CFA at p ∈ {5, 10, 20} (overidentified
-  df > 0 so the weight bites), n ∈ {200, 500, 1000, 2000}, MCAR rates
-  {10%, 25%, 40%} plus one MAR design. Comparators: Σ-only-weight GLS,
-  Γ_NT^pw GLS, complete-data ML oracle, FIML. Outcomes: per-parameter MSE,
-  wall time, divergence-from-truth ratio. Now landed at
-  `experiments/08-pairwise-gls-efficiency/` (with MAR, FIML oracle) and
-  `experiments/09-pairwise-fit-speed/`. Inference-side Γ_NT^pw plumbing
-  has also landed: `WeightMoments::Pairwise` bread in `build_u_factor`,
+  The finite-sample efficiency experiments are now landed at
+  `experiments/08-pairwise-gls-efficiency/` (with MAR and FIML oracle) and
+  `experiments/09-pairwise-fit-speed/`. They cover the one-factor CFA grid
+  where the weight can bite (`p ∈ {5, 10, 20}`, `n ∈ {200, 500, 1000, 2000}`,
+  MCAR plus MAR), comparing Σ-only GLS, Γ_NT^pw GLS, complete-data ML, and
+  FIML by per-parameter MSE, wall time, and divergence-from-truth ratio.
+  Inference-side Γ_NT^pw plumbing has also landed:
+  `WeightMoments::Pairwise` bread in `build_u_factor`,
   `robust::reduced_gamma_nt_pairwise` meat reducer, and the matching R
   surface — see `tests/unit/pairwise_inference_test.cpp` and
   `r-package/examples/pairwise_robust_se.R` for the {bread × meat} 2×2

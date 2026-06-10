@@ -657,7 +657,7 @@ TEST_CASE("lavaanify: repeated `lhs op rhs` term merges modifiers into one row")
   // `a*` labels it. lavaan merges the two terms into a single parameter; so
   // must we. Emitting two rows would put two free parameters on one matrix
   // cell — the assemble step overwrites one, leaving a phantom parameter that
-  // moves nothing yet carries a nonzero analytic gradient (TODO.md item #1).
+  // moves nothing yet carries a nonzero analytic gradient.
   auto pt = must_lavaanify("f =~ NA*x1 + a*x1 + x2 + x3");
   int loading_x1_rows = 0;
   for (std::size_t i = 0; i < pt.size(); ++i) {
