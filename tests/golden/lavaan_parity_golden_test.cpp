@@ -88,24 +88,9 @@ bool close(double a, double b, double tol) {
   return std::abs(a - b) <= tol * std::max(1.0, std::abs(b));
 }
 
-Eigen::MatrixXd matrix_from_json(const nlohmann::json& values) {
-  const auto p = static_cast<Eigen::Index>(values.size());
-  const auto c0 =
-      p > 0 ? static_cast<Eigen::Index>(values[0].size()) : Eigen::Index{0};
-  Eigen::MatrixXd M(p, c0);
-  for (Eigen::Index r = 0; r < p; ++r)
-    for (Eigen::Index c = 0; c < c0; ++c)
-      M(r, c) = values[static_cast<std::size_t>(r)]
-                       [static_cast<std::size_t>(c)].get<double>();
-  return M;
-}
+using magmaan::test::matrix_from_json;
 
-Eigen::VectorXd vector_from_json(const nlohmann::json& arr) {
-  Eigen::VectorXd v(static_cast<Eigen::Index>(arr.size()));
-  for (Eigen::Index k = 0; k < v.size(); ++k)
-    v(k) = arr[static_cast<std::size_t>(k)].get<double>();
-  return v;
-}
+using magmaan::test::vector_from_json;
 
 // [{block, matrix}, ...] → vector of dense matrices (lavaan WLS.V / gamma).
 std::vector<Eigen::MatrixXd> matrices_from_blocks(const nlohmann::json& blocks) {

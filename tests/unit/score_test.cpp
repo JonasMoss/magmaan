@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "../oracle.hpp"
 #include "../test_fit.hpp"
 
 #include <fstream>
@@ -51,18 +52,7 @@ nlohmann::json fixture_json(const std::string& rel) {
   return j;
 }
 
-Eigen::MatrixXd matrix_from_json(const nlohmann::json& arr) {
-  const Eigen::Index nr = static_cast<Eigen::Index>(arr.size());
-  const Eigen::Index nc = static_cast<Eigen::Index>(arr[0].size());
-  Eigen::MatrixXd out(nr, nc);
-  for (Eigen::Index i = 0; i < nr; ++i) {
-    for (Eigen::Index j = 0; j < nc; ++j) {
-      out(i, j) = arr[static_cast<std::size_t>(i)]
-                     [static_cast<std::size_t>(j)].get<double>();
-    }
-  }
-  return out;
-}
+using magmaan::test::matrix_from_json;
 
 SampleStats sample_from_fixture(const nlohmann::json& j) {
   SampleStats samp;

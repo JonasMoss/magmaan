@@ -27,31 +27,9 @@
 
 namespace {
 
-Eigen::MatrixXd matrix_from_json(const nlohmann::json &j) {
-  const Eigen::Index nr = static_cast<Eigen::Index>(j.size());
-  const Eigen::Index nc = nr > 0 ? static_cast<Eigen::Index>(j[0].size()) : 0;
-  Eigen::MatrixXd out(nr, nc);
-  for (Eigen::Index r = 0; r < nr; ++r) {
-    for (Eigen::Index c = 0; c < nc; ++c) {
-      out(r, c) = j[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)]
-                      .get<double>();
-    }
-  }
-  return out;
-}
+using magmaan::test::matrix_from_json;
 
-Eigen::VectorXd vector_from_json(const nlohmann::json &j) {
-  if (j.is_number()) {
-    Eigen::VectorXd out(1);
-    out(0) = j.get<double>();
-    return out;
-  }
-  Eigen::VectorXd out(static_cast<Eigen::Index>(j.size()));
-  for (Eigen::Index i = 0; i < out.size(); ++i) {
-    out(i) = j[static_cast<std::size_t>(i)].get<double>();
-  }
-  return out;
-}
+using magmaan::test::vector_from_json;
 
 double max_abs_diff(const Eigen::MatrixXd &a, const Eigen::MatrixXd &b) {
   if (a.rows() != b.rows() || a.cols() != b.cols()) {

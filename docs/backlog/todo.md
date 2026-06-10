@@ -136,6 +136,14 @@ decisions in the simulation backlog.
   multi-group FIML fits need explicit start/convergence care; and nonlinear
   equality tangent-space support plus pairwise-data FMG remain deferred.
 
+## Documentation
+
+- **Documentation system (gated).** The design lives in
+  [docs/design/documentation_proposal.md](../design/documentation_proposal.md):
+  two surfaces, a C++ compositional methods manual and a staged API manual.
+  Build when we commit to public docs; the first concrete step per the proposal
+  is settling audience, vocabulary, and the API-status/evidence catalog.
+
 ## Benchmarks
 
 Advisory local tooling, not a substitute for parity fixtures. Full design:

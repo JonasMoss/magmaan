@@ -36,16 +36,7 @@ const std::vector<std::string> kCompositeFixtures = {
     "0003_composite_structural_hs",
 };
 
-Eigen::MatrixXd matrix_from_json(const nlohmann::json &j) {
-  const Eigen::Index nr = static_cast<Eigen::Index>(j.size());
-  const Eigen::Index nc = nr > 0 ? static_cast<Eigen::Index>(j[0].size()) : 0;
-  Eigen::MatrixXd out(nr, nc);
-  for (Eigen::Index r = 0; r < nr; ++r)
-    for (Eigen::Index c = 0; c < nc; ++c)
-      out(r, c) = j[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)]
-                      .get<double>();
-  return out;
-}
+using magmaan::test::matrix_from_json;
 
 magmaan::data::SampleStats sample_stats_from_fixture(const nlohmann::json &fx) {
   magmaan::data::SampleStats samp;

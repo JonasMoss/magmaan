@@ -42,13 +42,7 @@ Eigen::MatrixXd matrix_from_json(const nlohmann::json& j, bool null_as_nan) {
   return out;
 }
 
-Eigen::VectorXd vector_from_json(const nlohmann::json& j) {
-  Eigen::VectorXd out(static_cast<Eigen::Index>(j.size()));
-  for (Eigen::Index i = 0; i < out.size(); ++i) {
-    out(i) = j[static_cast<std::size_t>(i)].get<double>();
-  }
-  return out;
-}
+using magmaan::test::vector_from_json;
 
 Eigen::VectorXi int_vector_from_json(const nlohmann::json& j) {
   Eigen::VectorXi out(static_cast<Eigen::Index>(j.size()));
