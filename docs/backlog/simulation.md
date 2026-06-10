@@ -25,7 +25,8 @@ inventoried in the roadmap's "Simulation primitives" section. The R surface
 exposes `sim_*_batch()` convenience calls plus the reusable
 `sim_ig_calibrate()` / `sim_ig_draw()`,
 `sim_norta_calibrate()` / `sim_norta_draw()`, and
-`sim_plsim_calibrate()` / `sim_plsim_draw()` two-stage handles. Keep API-level
+`sim_plsim_calibrate()` / `sim_plsim_draw()`, and
+`sim_bicop_calibrate()` / `sim_bicop_draw()` two-stage handles. Keep API-level
 inventory in the roadmap; this file carries the work queue and decision log
 below.
 
@@ -308,9 +309,14 @@ Open work only; landed generator slices are inventoried in the roadmap.
   R core registry, backed by inspectable list/S3 calibration objects that retain
   the fitted latent correlation, marginal specs, marginal moments, and NORTA
   options for reusable draws.
-- **M.** Add remaining R-level calibration objects for calibrated copula/vine
-  generators. Batch wrappers should delegate to two-stage functions internally
-  where practical.
+- **Landed, pairwise copula R calibration handles.** Add
+  `sim_bicop_calibrate()` / `sim_bicop_draw()` plus `sim_bicop_batch()` to the
+  R core registry for calibrated two-variable Archimedean copula draws. The
+  handle retains the fitted family/theta pair, target/achieved correlation
+  diagnostics, marginal specs, and copula options.
+- **M.** Add remaining R-level calibration objects for calibrated C-vine and
+  higher-dimensional copula generators. Batch wrappers should delegate to
+  two-stage functions internally where practical.
 - **M.** Add an explicit persistent calibration-cache policy for long
   simulation experiments. In-memory calibration reuse now prevents repeated
   PLSIM/IG calibration across `N` within one R process, but separate timing or

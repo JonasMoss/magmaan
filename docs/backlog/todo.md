@@ -95,8 +95,8 @@ work queue and decision log live in [`simulation.md`](simulation.md). Keep this
 section as a high-level index for cross-domain planning — including the Johnson
 SL exposure decision, the special-functions dependency policy, NORTA calibration
 hardening, and the remaining R `calibrate_*`/`draw_*` split for calibrated
-copula/vine paths — and put detailed generator/marginal/fixture decisions in the
-simulation backlog.
+C-vine and higher-dimensional copula paths — and put detailed
+generator/marginal/fixture decisions in the simulation backlog.
 
 ## API and R boundary
 
