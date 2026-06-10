@@ -328,9 +328,10 @@ Open work only; landed generator slices are inventoried in the roadmap.
   root selection, edge-family selection, and combined root/family structure
   selection. Handles retain the selected root/order, selected pair-copula spec,
   root and conditional diagnostics, marginal specs, and copula options.
-- **M.** Add an explicit persistent calibration-cache policy for long
-  simulation experiments. In-memory calibration reuse now prevents repeated
-  PLSIM/IG calibration across `N` within one R process, but separate timing or
-  production runs still recompute high-`p` PLSIM calibrations. Experiment-level
-  disk caches should be ignored by default, keyed by population/generator/options
-  with an explicit deletion or invalidation command rather than silent reuse.
+- **Landed, experiment-local persistent calibration-cache policy.** The shared
+  `experiments/_support` harness exposes explicit
+  `calibration_cache_key()` / `write()` / `read()` / `list()` / `clear()`
+  helpers. Entries live under ignored `results/cache/` directories, are keyed by
+  population target, generator name, generator options, and magmaan package/git
+  reference, and require runner opt-in. Core and the R package still avoid
+  hidden global disk caches.

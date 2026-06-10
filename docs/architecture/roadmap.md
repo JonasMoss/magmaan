@@ -312,6 +312,10 @@ golden `parTable()` fixtures.
   pairwise Archimedean copulas, generic fixed-order C-vines, and specialized
   three-variable C-vine root/family-selection policies at the R boundary and
   for IG, PLSIM, NORTA, and copula/vine generators at the C++ boundary.
+  Long-running experiments persist those calibration objects explicitly through
+  the `experiments/_support` cache helpers, which key ignored `results/cache/`
+  entries by population, generator/options, magmaan package version, and git
+  reference. Core and the R package do not perform hidden global disk caching.
 - Initial NORTA marginals are standard normal, standardized lognormal, Tukey
   g-and-h, Pearson-system distributions, and Johnson-system SU/SB
   distributions. Fleishman polynomial transforms can also be passed through the

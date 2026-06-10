@@ -84,6 +84,18 @@ the collection-level `experiments/README.md` index; see "Index And Lifecycle".)
 Generated outputs live under `results/` and are ignored by git unless there is
 a deliberate, documented reason to commit a tiny frozen artifact.
 
+Persistent simulation calibration caches also live under `results/cache/` by
+default and are ignored by git. Use the `_support` helpers
+`calibration_cache_key()`, `calibration_cache_write()`,
+`calibration_cache_read()`, `calibration_cache_list()`, and
+`calibration_cache_clear()` for expensive two-stage simulation calibration
+objects that should be reused across separate runs. Keys must include the
+population target, generator name, generator options, and the magmaan package /
+git reference captured by `magmaan_cache_ref()`. Runners must opt in
+explicitly; the core library and R package do not own a global on-disk cache,
+and invalidation is an explicit delete via `calibration_cache_clear()` or
+removing `results/cache/`.
+
 External papers, downloaded files, local notes, cached datasets, and bulky
 scratch inputs live under `resources/`. `resources/` is always ignored by git.
 Do not make a report silently depend on a local-only resource. If a resource is
