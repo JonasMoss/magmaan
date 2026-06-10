@@ -513,6 +513,18 @@ sim_bicop_draw_impl <- function(calibration, n, reps, seed_base, quadrature_poin
     .Call(`_magmaan_sim_bicop_draw_impl`, calibration, n, reps, seed_base, quadrature_points, max_bisection_iter)
 }
 
+sim_cvine_batch_impl <- function(target_corr, marginals, n, reps, seed_base, family = "frank", quadrature_points = 31L, max_bisection_iter = 80L, calibration_tol = 1e-6) {
+    .Call(`_magmaan_sim_cvine_batch_impl`, target_corr, marginals, n, reps, seed_base, family, quadrature_points, max_bisection_iter, calibration_tol)
+}
+
+sim_cvine_calibrate_impl <- function(target_corr, marginals, family = "frank", quadrature_points = 31L, max_bisection_iter = 80L, calibration_tol = 1e-6) {
+    .Call(`_magmaan_sim_cvine_calibrate_impl`, target_corr, marginals, family, quadrature_points, max_bisection_iter, calibration_tol)
+}
+
+sim_cvine_draw_impl <- function(calibration, n, reps, seed_base, quadrature_points = -1L, max_bisection_iter = -1L) {
+    .Call(`_magmaan_sim_cvine_draw_impl`, calibration, n, reps, seed_base, quadrature_points, max_bisection_iter)
+}
+
 sim_plsim_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, method = "hermite", num_segments = 12L, monotone = FALSE, max_iter = 80L, quadrature_points = 31L, hermite_order = 24L, marginal_tol = 1e-8, correlation_tol = 1e-8, rho_bound = 0.999) {
     .Call(`_magmaan_sim_plsim_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, method, num_segments, monotone, max_iter, quadrature_points, hermite_order, marginal_tol, correlation_tol, rho_bound)
 }

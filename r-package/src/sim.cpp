@@ -437,6 +437,56 @@ Rcpp::List bivariate_copula_calibration_to_list(
       Rcpp::_["iterations"] = cal.iterations);
 }
 
+Rcpp::List cvine_copula_spec_to_list(
+    const magmaan::sim::CVineCopulaSpec& copula) {
+  Rcpp::List pair_copulas(
+      static_cast<R_xlen_t>(copula.pair_copulas.size()));
+  for (std::size_t j = 0; j < copula.pair_copulas.size(); ++j) {
+    Rcpp::List row(static_cast<R_xlen_t>(copula.pair_copulas[j].size()));
+    for (std::size_t k = 0; k < copula.pair_copulas[j].size(); ++k) {
+      row[static_cast<R_xlen_t>(k)] =
+          bivariate_copula_spec_to_list(copula.pair_copulas[j][k]);
+    }
+    pair_copulas[static_cast<R_xlen_t>(j)] = row;
+  }
+  return Rcpp::List::create(Rcpp::_["pair_copulas"] = pair_copulas);
+}
+
+magmaan::sim::CVineCopulaSpec cvine_copula_spec_from_list(Rcpp::List x) {
+  Rcpp::List pair_copulas = has_named(x, "pair_copulas")
+      ? Rcpp::as<Rcpp::List>(x["pair_copulas"])
+      : x;
+  magmaan::sim::CVineCopulaSpec copula;
+  copula.pair_copulas.resize(static_cast<std::size_t>(pair_copulas.size()));
+  for (R_xlen_t j = 0; j < pair_copulas.size(); ++j) {
+    Rcpp::List row = Rcpp::as<Rcpp::List>(pair_copulas[j]);
+    if (row.size() != j) {
+      Rcpp::stop(
+          "copula$pair_copulas must be triangular with row j containing j entries");
+    }
+    auto& out_row = copula.pair_copulas[static_cast<std::size_t>(j)];
+    out_row.reserve(static_cast<std::size_t>(row.size()));
+    for (R_xlen_t k = 0; k < row.size(); ++k) {
+      out_row.push_back(
+          bivariate_copula_spec_from_list(Rcpp::as<Rcpp::List>(row[k])));
+    }
+  }
+  return copula;
+}
+
+Rcpp::List cvine_calibration_to_list(
+    const magmaan::sim::CVineCorrelationCalibration& cal) {
+  return Rcpp::List::create(
+      Rcpp::_["copula"] = cvine_copula_spec_to_list(cal.copula),
+      Rcpp::_["family"] = bivariate_copula_family_to_string(cal.family),
+      Rcpp::_["target_corr"] = Rcpp::wrap(cal.target_corr),
+      Rcpp::_["achieved_corr"] = Rcpp::wrap(cal.achieved_corr),
+      Rcpp::_["lower_bound_corr"] = Rcpp::wrap(cal.lower_bound_corr),
+      Rcpp::_["upper_bound_corr"] = Rcpp::wrap(cal.upper_bound_corr),
+      Rcpp::_["iterations"] = Rcpp::wrap(cal.iterations),
+      Rcpp::_["max_abs_error"] = cal.max_abs_error);
+}
+
 bool approx_equal(double a, double b, double tol = 1e-10) {
   return std::abs(a - b) <= tol * std::max({1.0, std::abs(a), std::abs(b)});
 }
@@ -894,6 +944,111 @@ Rcpp::List sim_bicop_draw_impl(Rcpp::List calibration,
     std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
                         static_cast<std::uint64_t>(i + 1));
     auto X_or = magmaan::sim::simulate_bivariate_copula_matrix(
+        static_cast<Eigen::Index>(n), copula, marginal_specs, rng, options);
+    if (!X_or.has_value()) stop_sim(X_or.error());
+    draws[i] = Rcpp::wrap(*X_or);
+  }
+  return Rcpp::List::create(Rcpp::_["draws"] = draws);
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_cvine_batch_impl(Rcpp::NumericMatrix target_corr,
+                                Rcpp::List marginals,
+                                int n,
+                                int reps,
+                                double seed_base,
+                                std::string family = "frank",
+                                int quadrature_points = 31,
+                                int max_bisection_iter = 80,
+                                double calibration_tol = 1e-6) {
+  if (n <= 0) Rcpp::stop("n must be positive");
+  if (reps <= 0) Rcpp::stop("reps must be positive");
+
+  const Eigen::Map<Eigen::MatrixXd> corr(
+      REAL(target_corr), target_corr.nrow(), target_corr.ncol());
+  const auto marginal_specs = marginal_specs_from_list(marginals);
+  const auto copula_family = bivariate_copula_family_from_string(family);
+  const magmaan::sim::BivariateCopulaOptions options =
+      make_bivariate_copula_options(
+          quadrature_points, max_bisection_iter, calibration_tol);
+
+  auto cal_or = magmaan::sim::calibrate_cvine_copula_correlation(
+      copula_family, corr, marginal_specs, options);
+  if (!cal_or.has_value()) stop_sim(cal_or.error());
+
+  Rcpp::List draws(reps);
+  for (int i = 0; i < reps; ++i) {
+    std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
+                        static_cast<std::uint64_t>(i + 1));
+    auto X_or = magmaan::sim::simulate_cvine_copula_matrix(
+        static_cast<Eigen::Index>(n), cal_or->copula, marginal_specs, rng,
+        options);
+    if (!X_or.has_value()) stop_sim(X_or.error());
+    draws[i] = Rcpp::wrap(*X_or);
+  }
+
+  Rcpp::List out = cvine_calibration_to_list(*cal_or);
+  out["draws"] = draws;
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_cvine_calibrate_impl(Rcpp::NumericMatrix target_corr,
+                                    Rcpp::List marginals,
+                                    std::string family = "frank",
+                                    int quadrature_points = 31,
+                                    int max_bisection_iter = 80,
+                                    double calibration_tol = 1e-6) {
+  const Eigen::Map<Eigen::MatrixXd> corr(
+      REAL(target_corr), target_corr.nrow(), target_corr.ncol());
+  const auto marginal_specs = marginal_specs_from_list(marginals);
+  const auto copula_family = bivariate_copula_family_from_string(family);
+  const magmaan::sim::BivariateCopulaOptions options =
+      make_bivariate_copula_options(
+          quadrature_points, max_bisection_iter, calibration_tol);
+
+  auto cal_or = magmaan::sim::calibrate_cvine_copula_correlation(
+      copula_family, corr, marginal_specs, options);
+  if (!cal_or.has_value()) stop_sim(cal_or.error());
+
+  Rcpp::List out = cvine_calibration_to_list(*cal_or);
+  out["marginals"] = marginal_specs_to_list(marginal_specs);
+  out["options"] = bivariate_copula_options_to_list(options);
+  out.attr("class") = Rcpp::CharacterVector::create(
+      "magmaan_cvine_calibration", "list");
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_cvine_draw_impl(Rcpp::List calibration,
+                               int n,
+                               int reps,
+                               double seed_base,
+                               int quadrature_points = -1,
+                               int max_bisection_iter = -1) {
+  if (n <= 0) Rcpp::stop("n must be positive");
+  if (reps <= 0) Rcpp::stop("reps must be positive");
+
+  const auto copula = cvine_copula_spec_from_list(
+      Rcpp::as<Rcpp::List>(calibration["copula"]));
+  const auto marginal_specs = marginal_specs_from_list(
+      Rcpp::as<Rcpp::List>(calibration["marginals"]));
+
+  magmaan::sim::BivariateCopulaOptions options;
+  if (calibration.containsElementNamed("options")) {
+    options = bivariate_copula_options_from_list(
+        Rcpp::as<Rcpp::List>(calibration["options"]));
+  }
+  if (quadrature_points > 0) options.quadrature_points = quadrature_points;
+  if (max_bisection_iter > 0) {
+    options.max_bisection_iter = max_bisection_iter;
+  }
+
+  Rcpp::List draws(reps);
+  for (int i = 0; i < reps; ++i) {
+    std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
+                        static_cast<std::uint64_t>(i + 1));
+    auto X_or = magmaan::sim::simulate_cvine_copula_matrix(
         static_cast<Eigen::Index>(n), copula, marginal_specs, rng, options);
     if (!X_or.has_value()) stop_sim(X_or.error());
     draws[i] = Rcpp::wrap(*X_or);
