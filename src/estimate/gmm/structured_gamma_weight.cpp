@@ -5,12 +5,12 @@
 #include <utility>
 #include <vector>
 
-#include <Eigen/Cholesky>
 #include <Eigen/Core>
 #include <Eigen/QR>
 
 #include "magmaan/error.hpp"
 
+#include "detail_linalg.hpp"
 #include "detail_vech.hpp"
 
 namespace magmaan::estimate::frontier {
@@ -220,15 +220,16 @@ structured_gamma_weight(const model::ModelEvaluator& ev,
   W.reserve(G_or->size());
   for (std::size_t b = 0; b < G_or->size(); ++b) {
     const Eigen::MatrixXd& Gamma = (*G_or)[b];
-    Eigen::LLT<Eigen::MatrixXd> g_llt(Gamma);
-    if (g_llt.info() != Eigen::Success) {
+    auto inv = detail::symmetric_inverse_pd_gated(Gamma);
+    if (!inv.ok) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "structured_gamma_weight: block " + std::to_string(b) +
-          " structured Gamma is not positive definite"));
+          " structured Gamma is rank deficient (dim=" + std::to_string(inv.dim) +
+          ", numerical rank=" + std::to_string(inv.rank) +
+          ", rcond=" + std::to_string(inv.rcond) +
+          ", lambda_min=" + std::to_string(inv.min_eval) + ")."));
     }
-    const Eigen::MatrixXd Wb =
-        g_llt.solve(Eigen::MatrixXd::Identity(Gamma.rows(), Gamma.cols()));
-    Eigen::MatrixXd Wsym = 0.5 * (Wb + Wb.transpose());
+    Eigen::MatrixXd Wsym = 0.5 * (inv.inverse + inv.inverse.transpose());
     W.push_back(std::move(Wsym));
   }
   return W;

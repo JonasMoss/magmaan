@@ -209,6 +209,42 @@ TEST_CASE("dls_weight: a=1 covariance block is the ADF (empirical) weight") {
 }
 
 // ============================================================================
+// Strict gate: a rank-deficient empirical Γ̂ is refused (not silently inverted
+// into a ~1e16 eigendirection that later trips the terminal stationarity audit
+// — the muthen_2017_ch2_ex2_1__adf pathology). Small N makes the fourth-moment
+// Γ̂ (p*=6 vech-only, p+p*=9 with means) rank-deficient while the 3×3 sample
+// covariance stays PD, so the model/start machinery is still happy.
+// ============================================================================
+
+TEST_CASE("dls_weight: rejects a rank-deficient ADF Gamma with diagnostics") {
+  auto raw = make_raw(5);  // n-1 = 4 < p* ⇒ empirical Γ̂ is rank deficient
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+
+  for (bool means : {false, true}) {
+    auto m = build_model("f =~ x1 + x2 + x3\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1", means);
+    auto ev = ModelEvaluator::build(m.pt, m.rep);
+    REQUIRE(ev.has_value());
+    auto x0 = est::simple_start_values(m.pt, m.rep, *samp, {});
+    REQUIRE(x0.has_value());
+
+    auto dls = dls_weight(*ev, *samp, raw, *x0, {1.0});  // a = 1 ⇒ pure ADF
+    REQUIRE_FALSE(dls.has_value());
+    CHECK(dls.error().kind == magmaan::FitError::Kind::NumericIssue);
+
+    const std::string& d = dls.error().detail;
+    CHECK(d.find("rank deficient") != std::string::npos);
+    CHECK(d.find("numerical rank=") != std::string::npos);
+    CHECK(d.find("rcond=") != std::string::npos);
+    CHECK(d.find("lambda_min=") != std::string::npos);
+    CHECK(d.find("ADF/WLS requires an invertible fourth-moment") !=
+          std::string::npos);
+    // The old, wrong "too few rows" wording must be gone.
+    CHECK(d.find("too few rows") == std::string::npos);
+  }
+}
+
+// ============================================================================
 // Intermediate a: the covariance block inverts to the convex blend of Γ.
 // ============================================================================
 

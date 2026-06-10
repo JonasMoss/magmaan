@@ -90,7 +90,12 @@ primary full-weight ADF objective, do not change magmaan’s optimizer
 behavior, and should not be read as a silent fallback estimator. A
 conditioned pass with a strict-audit failure means “the full inverse is
 numerically unstable here,” not “the ADF objective was changed and the
-mismatch disappeared.”
+mismatch disappeared.” Note that this harness inverts the empirical NACOV
+in R (`chol2inv(chol(.))`) to study the raw pathology; magmaan’s own
+ADF/WLS weight builders now reject a rank-deficient NACOV up front with an
+explicit numerical error (rank / rcond / smallest eigenvalue), so a user
+fitting through the core library never reaches this unstable-inverse
+regime.
 
 </div>
 

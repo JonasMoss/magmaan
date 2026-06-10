@@ -11,6 +11,8 @@
 
 #include "magmaan/error.hpp"
 
+#include "detail_linalg.hpp"
+
 namespace magmaan::data {
 
 namespace {
@@ -133,24 +135,17 @@ shrink_covariance_matrix(const Eigen::MatrixXd& S0,
 
 post_expected<Eigen::MatrixXd> symmetric_inverse_pd(const Eigen::MatrixXd& A,
                                                     std::string what) {
-  if (A.rows() != A.cols() || !A.allFinite()) {
+  detail::SymInverseResult r = detail::symmetric_inverse_pd_gated(A);
+  if (r.ok) return std::move(r.inverse);
+  if (!r.finite) {
     return std::unexpected(make_err(std::move(what) +
                                     " is not a finite square matrix"));
   }
-  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(
-      0.5 * (A + A.transpose()));
-  if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
+  if (!r.decomposed) {
     return std::unexpected(make_err(std::move(what) +
                                     " eigendecomposition failed"));
   }
-  const double max_eval = es.eigenvalues().maxCoeff();
-  const double tol = 1e-10 * std::max(1.0, max_eval);
-  if (es.eigenvalues().minCoeff() <= tol) {
-    return std::unexpected(make_err(std::move(what) +
-                                    " is not positive definite"));
-  }
-  const Eigen::VectorXd inv = es.eigenvalues().cwiseInverse();
-  return es.eigenvectors() * inv.asDiagonal() * es.eigenvectors().transpose();
+  return std::unexpected(make_err(std::move(what) + " is not positive definite"));
 }
 
 Eigen::VectorXd mixed_moment_vector(const Eigen::MatrixXd& R,
