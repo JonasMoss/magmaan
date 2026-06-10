@@ -16,145 +16,16 @@ simulation work queue and decision log.
 
 ## Current Simulation Surface
 
-- `magmaan::sim` exposes NORTA calibration/sampling, independent marginal
-  generators, Foldnes-Olsson independent-generator calibration,
-  Vale-Maurelli/Fleishman calibration/sampling, PLSIM piecewise-linear
-  calibration/sampling, fixed-parameter t-copula sampling, fixed-parameter
-  bivariate Archimedean copula sampling, and a first VITA/covsim-style
-  bivariate copula observed-Pearson calibration layer.
-- The exploratory R package exposes simulation batches through the flat
-  `magmaan_core` registry, including `sim_ig_batch()` and
-  `sim_plsim_batch()` convenience calls. It also exposes the first reusable
-  calibration handles: `sim_ig_calibrate()` / `sim_ig_draw()` and
-  `sim_plsim_calibrate()` / `sim_plsim_draw()`. These return inspectable
-  list/S3 calibration objects and let experiment grids reuse deterministic
-  calibration across sample-size cells. Pearson IG draw-time generation now
-  bypasses inverse-CDF transforms for closed-form Pearson types; all-Type-VI
-  Pearson IG draws from R use a stacked R-gamma fast path and split the returned
-  samples after the covariance mix.
-- Baseline multivariate-normal generation is available through
-  `simulate_normal_matrix()` and `simulate_normal_raw()`, taking explicit
-  population means and covariance matrices. This is the low-level normal
-  generator target for future model-implied SEM simulation.
-- Reusable observed-variable projection is available through
-  `thresholds_from_probabilities()`, `project_ordinal_matrix()`, and
-  `project_mixed_matrix()`. Projection thresholds continuous latent responses
-  into one-based ordinal categories, preserves continuous columns in mixed data,
-  and returns ordered masks, declared level counts, and category counts for
-  downstream ordinal/mixed workspace builders.
-- Population composition structs are available through `ContinuousPopulation`,
-  `MixedPopulation`, `CopulaPopulation`, and `MixedPopulationDraw`. They
-  compose explicit mean/covariance population moments or copula marginals with
-  continuous generators and the observed projection layer; model-implied SEM
-  simulation should lower into this surface.
-- The first elliptical/scale-mixture generators are available:
-  `simulate_student_t_*`, `simulate_contaminated_normal_*`,
-  `simulate_slash_*`, and `simulate_scale_mixture_normal_*`. These APIs treat
-  the supplied covariance as the target population covariance when the variance
-  exists, rescaling the internal normal core as needed.
-- Marginal moment matching is available through `fit_marginal_to_moments()`.
-  Tukey g-and-h, Pearson-system, Johnson SU/SB, and Fleishman polynomial
-  families feed the same `MarginalSpec` transform path used by NORTA and
-  independent generators. Fleishman uses the Vale-Maurelli coefficient solver
-  and is deliberately treated as a normal generator transform; it is not exposed
-  as a guaranteed quantile because the fitted cubic need not be monotone.
-- PLSIM is available through `fit_plsim_marginal()`, `diagnose_plsim()`,
-  `calibrate_plsim()`, `simulate_plsim_matrix()`, and `simulate_plsim_raw()`.
-  The first slice uses regular normal-quantile breakpoints, solves slopes for
-  target marginal skewness/excess kurtosis, exposes Hermite coefficients, and
-  calibrates pairwise intermediate normal correlations with selectable
-  covariance evaluators: Hermite-series, bivariate Gauss-Hermite quadrature,
-  conditional-normal rectangle moments, and Hermite-initialized refinement for
-  either deterministic path. Hermite is the default fast path. The rectangle
-  evaluator follows the Foldnes-Grønneberg segment decomposition directly,
-  reducing each bivariate rectangle probability/first/cross-moment calculation
-  to one-dimensional adaptive integration over the conditioning normal variable.
-  `diagnose_plsim()` keeps pairwise feasibility bounds, per-pair errors, the
-  partial intermediate matrix, achieved correlations, and the intermediate
-  minimum eigenvalue available when calibration fails.
-- Calibration/state objects already exist for most high-cost continuous
-  generators (`PlsimCalibration`, `IgCalibration`, `NortaCalibration`,
-  `BivariateCopula*Calibration`, and `CVine3CorrelationCalibration`). PLSIM,
-  IG, and NORTA now have C++ draw paths that accept fitted calibration state;
-  the R layer has reusable calibration/draw wrappers for IG and PLSIM. R-level
-  NORTA/coplanar copula calibration handles remain to be normalized.
-- Pearson marginals follow PearsonDS conventions. Types 0/I/II/III/IV/V/VI/VII
-  are supported and checked against PearsonDS 1.3.2 goldens. Type IV uses a
-  dependency-free finite-integral CDF and bisection quantile path.
-- Johnson SU/SB marginals are checked against SuppDists 1.1.9.9
-  `JohnsonFit`/`qJohnson` goldens (shape pair, type, and quantiles to ~1e-7).
-  The fixture targets the realized moments of SuppDists's returned shape so the
-  comparison is exact rather than capped by SuppDists's loose moment solve;
-  `tests/tools/regen_johnson_sim_fixtures.R` regenerates it.
-- t-copula sampling is intentionally a copula-parameter generator, not an
-  observed-Pearson-correlation calibrator. `simulate_t_copula_matrix()` draws a
-  multivariate Student-t copula with supplied correlation matrix and degrees of
-  freedom, then feeds uniforms through the existing marginal quantile path.
-  Fleishman generator transforms are rejected because they are not guaranteed
-  quantiles. VITA/covsim work sits above the fixed-parameter generator layer as
-  calibration from requested observed moments/correlations to generator
-  parameters.
-- Fixed-parameter bivariate Archimedean copula sampling is available through
-  `BivariateCopulaSpec`, `simulate_bivariate_copula_matrix()`, and
-  `simulate_bivariate_copula_raw()`. The first families are independence,
-  Clayton, Gumbel, Frank, and Joe. Sampling uses conditional inversion of the
-  bivariate copula and then the same marginal quantile path as t-copula
-  sampling. `tests/tools/regen_copula_sim_fixtures.R` regenerates
-  `tests/fixtures/sim/bivariate_copula_hfunc.json`, which checks the
-  conditional CDF and inverse conditional CDF against rvinecopulib `hbicop()`.
-  `bivariate_copula_tau()` and `bivariate_copula_from_tau()` expose the
-  Kendall-tau parameterization used by vine/copula workflows; Clayton, Gumbel,
-  and Frank use closed-form or Debye-function formulas, while Joe uses the
-  standard convergent series. `bivariate_copula_observed_corr()` evaluates the
-  deterministic quadrature-implied observed Pearson correlation after the
-  marginal quantile transforms, and `calibrate_bivariate_copula_correlation()`
-  bisects on Kendall tau to hit a target pairwise correlation for one family.
-  `calibrate_bivariate_copula_correlation_matrix()` applies that calibration to
-  every off-diagonal entry of a target correlation matrix and returns pairwise
-  copula parameters, achieved correlations, feasible bounds, and iteration
-  counts. It also reports the maximum achieved-correlation error and the raw
-  minimum eigenvalue of the achieved matrix, with opt-in error/ridge/shrinkage
-  repair toward a requested minimum eigenvalue. This is a matrix
-  diagnostic/calibration layer, not an automatic matrix-to-vine fitter.
-  Explicit three-variable C-vine sampling is available through
-  `CVine3CopulaSpec`, `cvine3_copula_inverse_rosenblatt()`,
-  `simulate_cvine3_copula_uniforms()`, `simulate_cvine3_copula_matrix()`, and
-  `simulate_cvine3_copula_raw()`. The first structure uses variable 0 as the
-  root, pair copulas for `0-1` and `0-2`, and a conditional pair copula for
-  `1-2|0`. `tests/fixtures/sim/cvine3_inverse_rosenblatt.json` checks the
-  deterministic inverse Rosenblatt transform against rvinecopulib
-  `inverse_rosenblatt()` for the equivalent `cvine_structure(c(3,2,1))`.
-  `cvine3_copula_observed_corr()` deterministically evaluates the implied
-  observed correlation matrix, and `calibrate_cvine3_copula_correlation()`
-  calibrates the two root pair copulas plus the conditional pair copula to a
-  3x3 target observed-correlation matrix.
-  `calibrate_cvine3_copula_correlation_select_root()` tries all three possible
-  roots, restores achieved correlations to the caller's original variable
-  order, and reports the selected root/order. `CVine3FamilySpec` and the
-  overloaded `calibrate_cvine3_copula_correlation()` support per-edge family
-  choices, while `calibrate_cvine3_copula_correlation_select_families()` tries
-  a caller-provided candidate set for the fixed root-0 C-vine.
-  `calibrate_cvine3_copula_correlation_select_structure()` tries all three
-  roots and all candidate edge-family triples, skips infeasible fits, and
-  returns achieved correlations in the caller's original variable order.
-  The `simulate_cvine3_copula_*()` overloads that take a
-  `CVine3CorrelationCalibration` apply the selected vine order internally and
-  restore output columns to the caller's original order.
-  `simulate_mixed_population_cvine3_copula()` composes explicit or calibrated
-  three-variable C-vine draws with the shared observed projection layer.
-  Unit validation covers the full target-correlation -> selected calibrated
-  C-vine -> deterministic-seed simulated correlations path.
-  Generic fixed-order C-vine simulation is available through `CVineCopulaSpec`,
-  `cvine_copula_inverse_rosenblatt()`, and `simulate_cvine_copula_*()` for
-  arbitrary dimension, with the 3-variable specialization used as a regression
-  oracle and a four-variable rvinecopulib fixture validating the generic
-  inverse Rosenblatt recursion. `simulate_mixed_population_cvine_copula()`
-  composes generic fixed-order C-vine draws with the shared observed projection
-  layer. `cvine_copula_observed_corr()` and
-  `calibrate_cvine_copula_correlation()` add deterministic fixed-order
-  observed-correlation evaluation and sequential calibration for one supplied
-  family/order in arbitrary dimension. Broader structure/family policies and
-  ordinal/polyserial/polychoric calibration remain separate work.
+The implemented `magmaan::sim` surface (NORTA, independent / Foldnes-Olsson IG,
+Vale-Maurelli/Fleishman, PLSIM, fixed-parameter t-copula, bivariate Archimedean
+copulas, 3-variable and generic fixed-order C-vines, elliptical / scale-mixture
+generators, the Tukey / Pearson / Johnson / Fleishman marginal families,
+population composition, and the shared observed-variable projection layer) is
+inventoried in the roadmap's "Simulation primitives" section. The R surface
+exposes `sim_*_batch()` convenience calls plus the reusable
+`sim_ig_calibrate()` / `sim_ig_draw()` and `sim_plsim_calibrate()` /
+`sim_plsim_draw()` two-stage handles. Keep API-level inventory in the roadmap;
+this file carries the work queue and decision log below.
 
 ## Architecture Direction
 
@@ -385,6 +256,8 @@ for skew/kurt (scale/location invariant) but is the same pattern.
 
 ## Remaining Work
 
+Open work only; landed generator slices are inventoried in the roadmap.
+
 - **M.** Extend the ordinal/mixed projection layer with group-specific
   thresholds, variable names/level labels for raw-data wrapping, and richer
   achieved-proportion diagnostics.
@@ -398,109 +271,15 @@ for skew/kurt (scale/location invariant) but is the same pattern.
 - **M.** Add elliptical diagnostics/goldens for Student-t, contaminated normal,
   slash, and finite scale mixtures: deterministic moment formulas where
   available plus stochastic smokes.
-- **Landed, first non-Gaussian copula slice.** Add fixed-parameter t-copula
-  simulation through `TCopulaSpec`, `simulate_t_copula_matrix()`, and
-  `simulate_t_copula_raw()`. It reuses the existing marginal quantile path and
-  validates that marginals are true quantile marginals. The population
-  composition layer also exposes `simulate_mixed_population_t_copula()` to feed
-  generated continuous copula data through the shared observed projection path,
-  leaving observed-correlation calibration to later VITA/covsim-style work.
 - **M.** Add ordinal/mixed observed-correlation calibration once direct
   threshold projection is stable: pairwise thresholded correlation maps,
   calibration to target observed Pearson/polychoric/polyserial summaries, and a
   policy for non-positive-definite calibrated latent matrices.
 - **S.** Add pseudo-elliptical / transformed-elliptical mechanisms after the
   first elliptical slice clarifies the shared radial/core interfaces.
-- **Landed, first bivariate Archimedean slice.** Add fixed-parameter bivariate
-  independence, Clayton, Gumbel, Frank, and Joe copula simulation. The runtime
-  implementation is local and uses conditional inversion; validate future
-  parameter-convention fixtures against vinecopulib or its R interface unless a
-  broader vine backend is explicitly chosen. `simulate_mixed_population_bivariate_copula()`
-  composes the same generator with observed ordinal/mixed projection.
-- **Landed, first VITA/covsim matrix slice.** Add deterministic bivariate copula
-  observed-correlation evaluation and Kendall-tau bisection calibration through
-  `bivariate_copula_observed_corr()`,
-  `calibrate_bivariate_copula_correlation()`, and
-  `calibrate_bivariate_copula_correlation_matrix()`. The current matrix scope
-  is pairwise calibration/diagnostics for one bivariate family across quantile
-  marginals, including maximum-error/minimum-eigenvalue diagnostics and opt-in
-  error/ridge/shrinkage repair for indefinite achieved matrices. Joint copula
-  assembly and ordinal/polyserial/polychoric calibration remain.
-- **Landed, first explicit vine sampler.** Add `CVine3CopulaSpec` and
-  `simulate_cvine3_copula_*()` for a fixed three-variable C-vine with root 0.
-  It composes the local bivariate h-functions/inverses and supports explicit
-  `0-1`, `0-2`, and `1-2|0` copulas.
-- **Landed, first matrix-to-vine fit.** Add
-  `cvine3_copula_observed_corr()` and
-  `calibrate_cvine3_copula_correlation()` for the fixed root-0 C-vine. The fit
-  calibrates root pairs against `r01`/`r02`, then bisects the conditional
-  copula against the full C-vine implied `r12`.
-- **Landed, root selection for 3-variable C-vines.** Add
-  `calibrate_cvine3_copula_correlation_select_root()` to try roots 0, 1, and 2
-  by permutation, skip infeasible fits, and return the best achieved matrix in
-  the original variable order.
-- **Landed, per-edge family selection for fixed root-0 C-vines.** Add
-  `CVine3FamilySpec` plus `calibrate_cvine3_copula_correlation_select_families()`
-  to fit `0-1`, `0-2`, and `1-2|0` with different family choices from a
-  caller-provided candidate set.
-- **Landed, combined root/family selection for 3-variable C-vines.** Add
-  `calibrate_cvine3_copula_correlation_select_structure()` to try all roots and
-  candidate edge-family triples, skip infeasible fits, and return the best
-  achieved matrix in the original variable order.
-- **Landed, calibration-aware 3-variable C-vine simulation.** Add
-  `simulate_cvine3_copula_matrix()` / `simulate_cvine3_copula_raw()` overloads
-  for `CVine3CorrelationCalibration`, preserving selected root/order internally
-  while returning draws in the original variable order.
-- **Landed, C-vine population composition.** Add continuous and mixed
-  population helpers for explicit `CVine3CopulaSpec` and calibrated
-  `CVine3CorrelationCalibration`, reusing the shared observed projection layer.
-- **Landed, full 3-variable VITA smoke validation.** Add a deterministic-seed
-  simulation check that calibrates a target observed-correlation matrix, draws
-  from the selected calibrated C-vine, and verifies empirical correlations
-  against both the target and deterministic achieved-correlation diagnostics.
-- **Landed, generic fixed-order C-vine sampler.** Add `CVineCopulaSpec`,
-  `cvine_copula_inverse_rosenblatt()`, and `simulate_cvine_copula_*()` for
-  arbitrary-dimensional fixed-order C-vines. Unit coverage checks equivalence
-  with the rvine-backed three-variable specialization and a four-variable
-  rvinecopulib oracle fixture.
-- **Landed, generic C-vine population composition.** Add continuous and mixed
-  population helpers for `CVineCopulaSpec`, reusing the shared observed
-  projection layer for arbitrary-dimensional fixed-order C-vine draws.
-- **Landed, first generic fixed-order C-vine calibration.** Add
-  `cvine_copula_observed_corr()` and `calibrate_cvine_copula_correlation()` for
-  deterministic observed-correlation evaluation plus sequential Kendall-tau
-  calibration in a caller-supplied C-vine order and single bivariate family.
-- **Landed, first PLSIM slice.** Add piecewise-linear simulation through
-  `fit_plsim_marginal()`, `diagnose_plsim()`, `calibrate_plsim()`,
-  `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. Unit coverage checks
-  the skewness 2 / excess kurtosis 5 condition where Fleishman fails,
-  Hermite-vs-quadrature covariance agreement, rectangle covariance evaluation,
-  pairwise calibration under Hermite/quadrature/rectangle/refined strategies,
-  pairwise infeasibility diagnostics, non-PD intermediate diagnostics,
-  stochastic moments, and raw-data wrapping. `tests/checks/plsim/` provides an
-  advisory calibration bench comparing speed and quadrature/rectangle agreement
-  across strategies. The R layer now exposes reusable PLSIM calibration/draw
-  wrappers so large grids do not recalibrate identical `(corr, moments,
-  options)` cells for every sample size. Remaining PLSIM work is lower-level
-  pair-cache/performance tuning and broader simulation-grid diagnostics.
-- **Landed, first reusable R calibration handles.** Add
-  `sim_ig_calibrate()` / `sim_ig_draw()` and
-  `sim_plsim_calibrate()` / `sim_plsim_draw()` to the R core registry, backed by
-  inspectable list/S3 calibration objects. The Foldnes-Moss-Grønneberg 2026
-  Study 1 experiment now caches IG/PLSIM calibration per `(family, p, dist)` and
-  reuses it across all `N` cells.
-- **Landed, Pearson IG draw fast path.** Pearson independent draws now use
-  direct RNGs for closed-form Pearson types and analytic raw mean/sd where
-  available, leaving Pearson Type IV on the existing quantile fallback. The R
-  IG wrappers batch reusable all-Type-VI Pearson draws through R's gamma RNG and
-  split the stacked result after the covariance mix. Advisory coverage lives in
-  `tests/checks/ig/pearson_draw_bench.R`; on the p=40 severe
-  `(skew=3, excess kurtosis=21)` FMG population it is faster than local covsim's
-  `rIG(..., typeA="symm")` after reusable calibration.
-- **Landed, NORTA draw-ready C++ calibration.** Add public
-  `simulate_norta_matrix()` / `simulate_norta_raw()` overloads that accept
-  `NortaCalibration`, aligning NORTA with the two-stage calibrated generator
-  contract.
+- **S/M.** Remaining PLSIM work: lower-level pair-cache / performance tuning and
+  broader simulation-grid diagnostics (the first PLSIM slice plus its R
+  calibrate/draw wrappers have landed; see roadmap).
 - **S.** Extend VITA/covsim-style simulation from repaired matrix diagnostics
   plus 3-variable C-vine root/family selection and generic fixed-order
   calibration to richer higher-dimensional structure/family search policies and
@@ -512,6 +291,11 @@ for skew/kurt (scale/location invariant) but is the same pattern.
   hand-rolled regularized beta/gamma, inverse beta/gamma, Student-t, and F-tail
   helpers shared by Pearson simulation and FMG p-values. Either keep these with
   dedicated goldens, vendor/use Boost.Math, or choose another vetted dependency.
+- **S/M.** A robust Johnson SB moment-fit (no elementary closed form) so the
+  Johnson family becomes a usable closed-form IG generator: candidates are the
+  AS99 Hill-Holder SB branch or higher/adaptive quadrature that returns its best
+  fit instead of throwing. Orthogonal IG draw-speed lever: spline the Pearson
+  inverse-CDF once per marginal at calibration. (See the 2026-06-01 IG note.)
 - **M.** Harden NORTA calibration for larger simulation grids: cache pairwise
   correlation maps when marginal specs repeat, expose/interpolate the
   `rho_Z -> Corr(X_i, X_j)` map for repeated target matrices, and add an
