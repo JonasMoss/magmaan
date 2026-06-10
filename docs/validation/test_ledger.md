@@ -144,6 +144,21 @@ Guard: `examples/fmg.R` value-for-value vs `semTests::pvalues` (<1e-6); unit pin
 Scope: the row-space unbiased optimization and rank-one secular update that
 relied on the same wrong identity are deferred (see `docs/backlog/speculative.md`).
 
+**Satorra-2000 nested-test parity oracle (not a bug).**
+Regression: an apparent ~13% scale gap vs lavaan's
+`lavTestLRT(method = "satorra.2000")` came from lavaan's `A.method` *default*
+(`"delta"`, a moment-Jacobian column-space construction for covariance-nested
+models), not from the Satorra-2000 scaling formula. magmaan's
+`robust_nested_lrt(method = "restriction_map")` uses the exact
+parameter-restriction matrix and reports the mean-scaled `T/c`.
+Guard / oracle: regenerate fixtures and diff against
+`lavTestLRT(fit_h1, fit_h0, method = "satorra.2000", A.method = "exact",
+scaled.shifted = FALSE)` — NOT the bare default; `tests/unit/satorra2000_test.cpp`,
+`r-package/examples/nested_test_satorra2000.R`.
+Scope: lavaan's bare default (`A.method = "delta"`, `scaled.shifted = TRUE`) is a
+documented compatibility alternative for covariance-nested checks, not the
+magmaan oracle. Full investigation: `docs/validation/satorra2000_parity.md`.
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |

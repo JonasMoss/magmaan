@@ -1,5 +1,10 @@
 # SNLLS fast α-solve: Cholesky-on-normal-equations with rcond fallback
 
+**Status:** implemented. This is the rationale for shipped behavior, not a
+proposal; the gate lives at `src/estimate/gmm/gp.cpp` and is guarded by
+`tests/unit/snlls_test.cpp`. Kept because the threshold derivation below is the
+"why this constant" that the code comments defer to.
+
 ## Motivation
 
 Profiling a 280-model SEM corpus
