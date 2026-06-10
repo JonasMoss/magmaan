@@ -33,6 +33,19 @@ experiment_dir <- function(script = script_path()) {
   dirname(script)
 }
 
+# Path into the shared experiment harness (experiments/_support). The one
+# sanctioned cross-experiment dependency; carries no SEM logic.
+support_path <- function(...) {
+  file.path(repo_root(), "experiments", "_support", ...)
+}
+
+# Path to the textbook-corpus submodule. Pure path helper so experiments read
+# the corpus directly instead of borrowing another leaf's data (tests/fixtures
+# or a paper's bundle).
+corpus_root <- function() {
+  file.path(repo_root(), "corpus", "textbook-corpus")
+}
+
 experiment_path <- function(..., script = script_path()) {
   file.path(experiment_dir(script), ...)
 }

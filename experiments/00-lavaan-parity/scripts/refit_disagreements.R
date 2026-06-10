@@ -25,19 +25,13 @@ experiment_results_dir <- function(create = FALSE) {
   out
 }
 
-paper_dir <- function() {
-  candidates <- file.path(repo_root(), "papers",
-                          c("snlls-continuous", "snlls-constrained"))
-  hits <- candidates[dir.exists(candidates)]
-  if (length(hits)) hits[[1L]] else candidates[[1L]]
-}
-
-paper_root <- paper_dir()
-pkg_dir <- file.path(paper_root, "r-package")
-require_pkg("pkgload")
-pkgload::load_all(pkg_dir, quiet = TRUE)
-
-`%||%` <- function(a, b) if (is.null(a)) b else a
+# Experiment-local harness (sibling R/ dir, one level up from scripts/).
+local({
+  exp_root <- dirname(dirname(script_path()))
+  source(file.path(exp_root, "R", "corpus.R"))
+  source(file.path(exp_root, "R", "problem.R"))
+  source(file.path(exp_root, "R", "lavaan_oracle.R"))
+})
 
 canon_keys <- function(df) {
   swap <- df$op == "~~" & df$lhs > df$rhs
@@ -74,7 +68,7 @@ audit_bessel <- function(case, n_total) {
 }
 
 audit_one <- function(case) {
-  lav <- tryCatch(snlls_lavaan_estimates(case, check_gradient = TRUE),
+  lav <- tryCatch(lavaan_estimates(case, check_gradient = TRUE),
                   error = function(e) structure(
                     list(error = conditionMessage(e)),
                     class = "audit_parity_lavaan_error"))
@@ -82,7 +76,7 @@ audit_one <- function(case) {
     return(empty_row(case, error = paste0("lavaan: ", lav$error)))
   }
 
-  prob <- tryCatch(snlls_make_problem(case),
+  prob <- tryCatch(make_problem(case),
                    error = function(e) structure(
                      list(error = conditionMessage(e)),
                      class = "audit_parity_magmaan_error"))
@@ -158,24 +152,23 @@ audit_one <- function(case) {
   )
 }
 
-v7_candidates <- file.path(
-  paper_root,
-  c(file.path("reports", "pilot-data", "audit-parity-v7"),
-    file.path("results", "raw", "pilot-data", "audit-parity-v7")),
-  "lavaan_audit_parity_disagree.csv")
-v7_hits <- v7_candidates[file.exists(v7_candidates)]
-if (!length(v7_hits)) {
-  stop("missing audit-parity-v7 disagreement CSV in: ",
-       paste(v7_candidates, collapse = ", "), call. = FALSE)
+# Refit the experiment's own most-recent disagreement set (produced by the
+# audit). Run the audit first: `Rscript run_experiment.R --from-oracle`.
+disagree_path <- file.path(experiment_results_dir(), "audit-parity",
+                           "lavaan_audit_parity_disagree.csv")
+if (!file.exists(disagree_path)) {
+  stop("missing ", disagree_path,
+       "\n(Run the audit first: Rscript run_experiment.R --from-oracle.)",
+       call. = FALSE)
 }
-v7_path <- v7_hits[[1L]]
-v7_disagree <- utils::read.csv(v7_path, stringsAsFactors = FALSE)
-corpus_root <- snlls_corpus_root(paper_root)
+v7_disagree <- utils::read.csv(disagree_path, stringsAsFactors = FALSE)
+corpus_root_dir <- corpus_root()
 
 need <- unique(v7_disagree[, c("book", "weight")])
 all_cases <- list()
 for (i in seq_len(nrow(need))) {
-  all_cases <- c(all_cases, corpus_cases(corpus_root, weights = need$weight[[i]],
+  all_cases <- c(all_cases, corpus_cases(corpus_root_dir,
+                                         weights = need$weight[[i]],
                                          books = need$book[[i]]))
 }
 

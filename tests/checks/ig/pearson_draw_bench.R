@@ -16,7 +16,41 @@ reps <- as.integer(get_arg("reps", "10"))
 rounds <- as.integer(get_arg("rounds", "7"))
 seed_base <- as.integer(get_arg("seed-base", "20260601"))
 
-source("experiments/17-foldnes-moss-gronneberg-peba/R/population.R")
+# Self-contained 2-factor OSF populations (p in {10, 20, 40}). Inlined so this
+# advisory check does not source another leaf (an experiment); the same numbers
+# live in experiments/17's population.R, but tests/ must stay a sink.
+.osf_models <- list(
+  `10` = list(
+    f1_load  = c(0.4, 0.5, 0.6, 0.8, 0.4),
+    f1_resid = c(0.84, 0.75, 0.64, 0.36, 0.84),
+    f2_load  = c(0.4, 0.7, 0.6, 0.4, 0.8),
+    f2_resid = c(0.84, 0.51, 0.64, 0.84, 0.36)),
+  `20` = list(
+    f1_load  = c(0.4, 0.5, 0.6, 0.8, 0.4, 0.7, 0.8, 0.6, 0.6, 0.3),
+    f1_resid = c(0.84, 0.75, 0.64, 0.36, 0.84, 0.51, 0.36, 0.64, 0.64, 0.91),
+    f2_load  = c(0.4, 0.7, 0.6, 0.4, 0.8, 0.8, 0.4, 0.7, 0.5, 0.6),
+    f2_resid = c(0.84, 0.51, 0.64, 0.84, 0.36, 0.36, 0.84, 0.51, 0.75, 0.64)),
+  `40` = list(
+    f1_load  = c(0.4, 0.5, 0.6, 0.8, 0.4, 0.7, 0.8, 0.6, 0.6, 0.3,
+                 0.4, 0.4, 0.6, 0.5, 0.7, 0.5, 0.7, 0.8, 0.5, 0.7),
+    f1_resid = c(0.84, 0.75, 0.64, 0.36, 0.84, 0.51, 0.36, 0.64, 0.64, 0.91,
+                 0.84, 0.84, 0.64, 0.75, 0.51, 0.75, 0.51, 0.36, 0.75, 0.51),
+    f2_load  = c(0.4, 0.7, 0.6, 0.4, 0.8, 0.8, 0.4, 0.7, 0.5, 0.6,
+                 0.6, 0.4, 0.7, 0.4, 0.5, 0.7, 0.8, 0.4, 0.5, 0.3),
+    f2_resid = c(0.84, 0.51, 0.64, 0.84, 0.36, 0.36, 0.84, 0.51, 0.75, 0.64,
+                 0.64, 0.84, 0.51, 0.84, 0.75, 0.51, 0.36, 0.84, 0.75, 0.91))
+)
+build_population_2factor <- function(p, interfactor = 0.5) {
+  m <- .osf_models[[as.character(p)]]
+  if (is.null(m)) stop("no OSF population for p = ", p, call. = FALSE)
+  per_factor <- as.integer(p / 2L)
+  Lambda <- matrix(0.0, p, 2L)
+  Lambda[seq_len(per_factor), 1L] <- m$f1_load
+  Lambda[(per_factor + 1L):p, 2L] <- m$f2_load
+  Phi <- matrix(c(1, interfactor, interfactor, 1), 2L, 2L)
+  Sigma <- Lambda %*% Phi %*% t(Lambda) + diag(c(m$f1_resid, m$f2_resid))
+  list(Sigma = Sigma, p = p)
+}
 pop <- build_population_2factor(p)
 core <- magmaan::magmaan_core
 

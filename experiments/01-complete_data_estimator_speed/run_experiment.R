@@ -213,55 +213,9 @@ coverage_row <- function(case_id, label, source, primary_tag, tags, data_kind,
   )
 }
 
-load_fixture_experiment_cases <- function(fixtures_dir, case_regex = NULL,
-                                          include_observed = FALSE) {
-  manifest_path <- file.path(fixtures_dir, "textbook_corpus", "manifest.json")
-  manifest <- jsonlite::read_json(manifest_path, simplifyVector = FALSE)
-  candidates <- Filter(function(x) {
-    identical(x$measurement_kind %||% "", "continuous")
-  }, manifest$cases)
-  if (!is.null(case_regex)) {
-    candidates <- Filter(function(x) grepl(case_regex, x$id), candidates)
-  }
-
-  out <- list()
-  coverage <- list()
-  for (mc in candidates) {
-    loaded <- NULL
-    for (rel in mc$oracle_files %||% character()) {
-      path <- file.path(fixtures_dir, rel)
-      if (!file.exists(path)) next
-      fc <- fixture_find_case(path, mc$source_case_id)
-      if (!is.null(fc)) {
-        candidate <- normalize_fixture_case(mc, fc)
-        if (usable_case(candidate, include_observed)) {
-          loaded <- candidate
-          break
-        }
-        loaded <- loaded %||% candidate
-      }
-    }
-    if (usable_case(loaded, include_observed)) {
-      out[[loaded$id]] <- loaded
-      coverage[[length(coverage) + 1L]] <- coverage_row(
-        loaded$id, loaded$label, loaded$source, loaded$primary_tag, loaded$tags,
-        loaded$data_kind, loaded$n_groups, sum(loaded$n_obs),
-        loaded$model_type, loaded$fidelity_tier, "timed_candidate"
-      )
-    } else {
-      coverage[[length(coverage) + 1L]] <- coverage_row(
-        mc$id, mc$label %||% mc$id, mc$source, mc$family %||% "",
-        mc$family %||% "", "summary", 1L, NA_integer_,
-        "", "", "skipped_preload", "no fixture sample statistics"
-      )
-    }
-  }
-  list(
-    cases = out,
-    coverage = if (length(coverage)) do.call(rbind, coverage) else data.frame(),
-    source = "tests/fixtures/textbook_corpus"
-  )
-}
+# (The former test-fixture loader was removed: experiments are sinks and must
+# not read tests/. exp01 now sources the textbook-corpus submodule directly via
+# load_corpus_experiment_cases below.)
 
 load_corpus_case <- function(corpus_dir, row, include_observed = TRUE) {
   case_dir <- file.path(corpus_dir, row$case_dir)
@@ -416,15 +370,14 @@ load_experiment_cases <- function(repo_dir, corpus_dir = NULL, case_regex = NULL
     corpus_dir <- file.path(repo_dir, "corpus", "textbook-corpus")
   }
   corpus_manifest <- file.path(corpus_dir, "manifest.csv")
-  if (file.exists(corpus_manifest)) {
-    return(load_corpus_experiment_cases(
-      normalizePath(corpus_dir, mustWork = TRUE),
-      case_regex = case_regex,
-      include_observed = include_observed
-    ))
+  if (!file.exists(corpus_manifest)) {
+    stop("textbook-corpus submodule not found at ", corpus_dir,
+         " (expected manifest.csv). Initialise it with ",
+         "`git submodule update --init corpus/textbook-corpus`, ",
+         "or pass --corpus <path>.", call. = FALSE)
   }
-  load_fixture_experiment_cases(
-    file.path(repo_dir, "tests", "fixtures"),
+  load_corpus_experiment_cases(
+    normalizePath(corpus_dir, mustWork = TRUE),
     case_regex = case_regex,
     include_observed = include_observed
   )

@@ -10,6 +10,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  layering:
+    name: dependency layering (fast)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check layering
+        run: bash tests/tools/check_layering.sh
+
   build-test:
     name: build + ctest (Linux, clang)
     runs-on: ubuntu-latest

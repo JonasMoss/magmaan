@@ -14,6 +14,16 @@ numbered folder.
 Experiments are advisory research tooling. They can motivate core work, docs,
 or fixtures, but they are not themselves parity gates.
 
+**Experiments are endpoints** (see "Dependency layering" in the root
+`AGENTS.md`). Nothing outside an experiment references it, and an experiment
+references no paper and no other experiment. The only shared experiment sibling
+is `experiments/_support` (path / metadata / IO helpers, no SEM logic); an
+experiment may also consume the core library, `r-package`, `benchmarks`, and the
+`corpus/` submodule. To share statistical code, lift it into core, the
+`r-package`, or `experiments/_support` - never `source()`/`sys.source()` another
+experiment or a paper. Enforced by `tests/tools/check_layering.sh`
+(`just check-layering`).
+
 ## Directory Shape
 
 Use the next numeric prefix and a short kebab-case slug:

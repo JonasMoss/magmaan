@@ -11,6 +11,14 @@ this convention doc. Submodules are not used; a paper that is ready to
 archive can be pushed to its own remote (Zenodo, OSF mirror, GitHub) without
 touching magmaan.
 
+**Papers are private** (see "Dependency layering" in the root `AGENTS.md`).
+Nothing outside a paper references it: no experiment, test, benchmark, core
+file, or other paper may `source`, `load`, `include`, or read
+`papers/<this>/**`. A paper depends only on the core library and `r-package`;
+shared infrastructure lives there or in `experiments/_support`, never across a
+paper boundary. Enforced (best-effort, since `papers/*` is gitignored) by
+`tests/tools/check_layering.sh`.
+
 ## Purpose
 
 One paper folder holds one manuscript-in-progress aimed at a specific

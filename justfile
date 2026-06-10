@@ -187,5 +187,10 @@ regen-oracle:
 regen-robcat:
     Rscript tests/tools/regen_robcat_fixtures.R
 
-# C++ tests + R smoke — everything.
-check: test r-check
+# Enforce the dependency-layering rule (leaves are sinks). Fast: no build, no R.
+check-layering:
+    bash tests/tools/check_layering.sh
+
+# Dependency layering + C++ tests + R smoke — everything. Layering runs first so
+# a cheap structural lint fails fast before the slow build.
+check: check-layering test r-check

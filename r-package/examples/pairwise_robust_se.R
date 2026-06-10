@@ -25,19 +25,29 @@ Sigma <- psi * tcrossprod(lam); diag(Sigma) <- diag(Sigma) + theta_res
 X <- matrix(rnorm(n * p), n, p) %*% chol(Sigma)
 colnames(X) <- paste0("x", seq_len(p))
 
-# SB-2005 MAR via the paper's r-package — keeps x1, x2 intact and ties
-# missingness in x3..x5 to those predictors.
-missingness <- new.env()
-source(file.path("..", "..", "papers", "pairwise-robust-sem",
-                 "r-package", "R", "missingness.R"), local = missingness)
-mar <- missingness$sb2005_mar(as.data.frame(X), rate = 0.25,
-                              predictors = 1:2, seed = 42,
-                              calibrate = TRUE)
-Xm <- as.matrix(mar$data)
-mask <- !mar$mask
-storage.mode(mask) <- "logical"
-keep <- rowSums(mask) > 0
-Xm <- Xm[keep, , drop = FALSE]; mask <- mask[keep, , drop = FALSE]
+# Self-contained MAR: keep x1, x2 intact and make x3..x5 missing with a
+# probability that rises with the intact predictors (logistic in standardized
+# x1 + x2), the intercept calibrated by bisection to ~25% per target column.
+# (The pairwise-robust-sem paper uses a richer SB-2005 rule design; this demo
+# only needs an MAR mechanism, so it stays self-contained.)
+local({
+  set.seed(42)
+  z <- as.numeric(scale(X[, 1] + X[, 2]))
+  beta <- 1.2; rate <- 0.25
+  m <- matrix(TRUE, n, p)                       # TRUE = observed
+  for (k in 3:5) {
+    lo <- -12; hi <- 12
+    for (.i in 1:40) {
+      a <- (lo + hi) / 2
+      if (mean(plogis(a + beta * z)) > rate) hi <- a else lo <- a
+    }
+    m[runif(n) < plogis((lo + hi) / 2 + beta * z), k] <- FALSE
+  }
+  Xna <- X; Xna[!m] <- NA
+  keep <- rowSums(m) > 0
+  Xm <<- Xna[keep, , drop = FALSE]
+  mask <<- m[keep, , drop = FALSE]
+})
 n_eff <- nrow(Xm)
 cat(sprintf("n_eff = %d (after dropping fully-missing rows)\n", n_eff))
 

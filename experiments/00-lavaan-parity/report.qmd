@@ -47,7 +47,6 @@ v7_disagree <- read_result("audit_disagreements_enriched.csv")
 by_book <- read_result("audit_by_book.csv")
 by_weight <- read_result("audit_by_weight.csv")
 refit_summary <- read_result("refit_summary.csv")
-lcs_summary <- read_result(file.path("lcs-objective-gap", "summary.csv"))
 drivers <- read_result("driver_inventory.csv")
 metadata <- read_result("metadata.csv")
 v7_agreement_cells <- as.integer(audit_summary$n_with_both_fits[[1L]] -
@@ -173,23 +172,23 @@ public_path <- function(x) {
 ## Scope
 
 <div class="scope-box">
-This experiment presents the paper-side lavaan audit-parity validation in a
-single inspectable place. The full sweep fits each SNLLS textbook-corpus
-<code>(case, weight)</code> cell in <code>lavaan</code>, aligns lavaan's
-returned free-parameter vector to magmaan's model, evaluates the same point
-with <code>magmaan_core$evaluate_at()</code>, and compares lavaan's
+This experiment validates lavaan-vs-magmaan convergence verdicts in a single
+inspectable place. It fits each textbook-corpus <code>(case, weight)</code> cell
+in <code>lavaan</code>, aligns lavaan's returned free-parameter vector to
+magmaan's model, evaluates the same point with
+<code>magmaan_core$evaluate_at()</code>, and compares lavaan's
 <code>lavInspect(fit, "converged")</code> self-report with magmaan's terminal
 audit stationarity verdict. This is a convergence-verdict validation, not a
 new estimator, not a fixture generator, and not the benchmark speed surface.
 </div>
 
 The tables below read the latest normalized outputs written by
-`run_experiment.R`. Plain `run_experiment.R` copies the legacy paper-side
-combined sweep, `r meta_value("audit_run")`; `--from-oracle` instead reuses a
-lavaan-only cache and reruns just magmaan's audit. The targeted refit is not a
-full sweep: it reruns only the 24 v7 disagreement cells and projects the
-current failure surface under the assumption that the `r v7_agreement_cells`
-v7 agreement cells did not regress.
+`run_experiment.R`. The audit is self-contained: `--collect-lavaan` caches a
+lavaan-only oracle (`theta_hat` / objective / convergence) once, and the default
+run replays it through magmaan's terminal audit. The targeted refit is not a
+full sweep: it reruns only the disagreement cells and projects the current
+failure surface under the assumption that the `r v7_agreement_cells` agreement
+cells did not regress.
 
 <div class="caveat-box">
 <strong>ADF conditioning caveat.</strong> The conditioned ADF columns are
@@ -350,25 +349,7 @@ names(weight_tbl) <- c("Block", "Weight", "Cells", "Agree",
 html_table(weight_tbl, limit = NULL)
 ```
 
-## Block D: LCS Objective-Gap Probe
-
-The LCS probe compares `Σhat(theta_hat)`, `muhat(theta_hat)`, sample
-covariances, and sample means element by element on three target cells. It
-diagnoses the old large fmin-ratio outliers as an implied-moment assembly
-problem in LCS / phantom-latent patterns.
-
-```{r}
-#| results: asis
-lcs_tbl <- lcs_summary
-for (nm in c("magmaan_fmin", "lavaan_fx", "ratio", "audit_grad_inf",
-             "worst_magmaan", "worst_lavaan", "worst_diff",
-             "worst_rel_diff")) {
-  if (nm %in% names(lcs_tbl)) lcs_tbl[[nm]] <- fmt_num(lcs_tbl[[nm]])
-}
-html_table(lcs_tbl, limit = NULL)
-```
-
-## Block E: Driver Inventory
+## Block D: Driver Inventory
 
 ```{r}
 #| results: asis
@@ -380,31 +361,20 @@ html_table(drivers, limit = NULL)
 
 ## Reproduce
 
-Normalize existing outputs and render this report:
+Collect a lavaan-only oracle cache once (needs the lavaan package and the
+textbook-corpus submodule), then audit current magmaan against that cache and
+render this report:
 
 ```sh
-Rscript experiments/00-lavaan-parity/run_experiment.R
+Rscript experiments/00-lavaan-parity/run_experiment.R --collect-lavaan
+Rscript experiments/00-lavaan-parity/run_experiment.R --from-oracle
 (cd experiments/00-lavaan-parity && quarto render report.qmd)
 ```
 
-Collect a new lavaan-only oracle cache using the newest CRAN lavaan, then audit
-current magmaan against that cached oracle:
-
-```sh
-Rscript experiments/00-lavaan-parity/run_experiment.R --collect-lavaan --install-latest-lavaan
-Rscript experiments/00-lavaan-parity/run_experiment.R --from-oracle
-```
-
-Run the legacy combined paper sweep only when needed:
-
-```sh
-Rscript experiments/00-lavaan-parity/run_experiment.R --run-full
-```
-
-Run the cheap targeted probes:
+Run the cheap targeted probes (after an audit has produced its disagreement
+set):
 
 ```sh
 Rscript experiments/00-lavaan-parity/scripts/refit_disagreements.R
 Rscript experiments/00-lavaan-parity/scripts/diagnose_adf_conditioning.R
-Rscript experiments/00-lavaan-parity/run_experiment.R --run-lcs
 ```

@@ -25,12 +25,13 @@ experiment_results_dir <- function(create = FALSE) {
   out
 }
 
-paper_dir <- function() {
-  candidates <- file.path(repo_root(), "papers",
-                          c("snlls-continuous", "snlls-constrained"))
-  hits <- candidates[dir.exists(candidates)]
-  if (length(hits)) hits[[1L]] else candidates[[1L]]
-}
+# Experiment-local harness (sibling R/ dir, one level up from scripts/).
+local({
+  exp_root <- dirname(dirname(script_path()))
+  source(file.path(exp_root, "R", "corpus.R"))
+  source(file.path(exp_root, "R", "problem.R"))
+  source(file.path(exp_root, "R", "lavaan_oracle.R"))
+})
 
 parse_args <- function(args) {
   out <- list(
@@ -134,7 +135,7 @@ collect_one <- function(case) {
   started <- proc.time()[["elapsed"]]
   lav <- tryCatch(
     withCallingHandlers(
-      snlls_lavaan_estimates(case, check_gradient = TRUE),
+      lavaan_estimates(case, check_gradient = TRUE),
       warning = function(w) {
         warnings <<- c(warnings, conditionMessage(w))
         invokeRestart("muffleWarning")
@@ -177,18 +178,12 @@ args <- parse_args(commandArgs(trailingOnly = TRUE))
 if (isTRUE(args$install_latest_lavaan)) {
   install_latest_lavaan(args$repos, args$lib)
 }
-require_pkg("pkgload")
 require_pkg("lavaan")
-
-paper_root <- paper_dir()
-pkg_dir <- file.path(paper_root, "r-package")
-pkgload::load_all(pkg_dir, quiet = TRUE)
 
 run_id <- args$run_id
 if (!nzchar(run_id)) run_id <- default_run_id()
 
-corpus_root <- snlls_corpus_root(paper_root)
-cases <- corpus_cases(corpus_root, weights = args$weights, books = args$books)
+cases <- corpus_cases(corpus_root(), weights = args$weights, books = args$books)
 if (is.finite(args$limit) && args$limit > 0L) {
   cases <- cases[seq_len(min(length(cases), args$limit))]
 }
@@ -233,8 +228,7 @@ write_metadata(
   values = list(
     oracle_run = run_id,
     generated = format(Sys.time(), "%Y-%m-%d %H:%M:%S %z"),
-    paper_dir = paper_root,
-    corpus_root = corpus_root,
+    corpus_root = corpus_root(),
     books = if (is.null(args$books)) "all" else paste(args$books, collapse = ","),
     weights = paste(args$weights, collapse = ","),
     limit = if (is.finite(args$limit)) args$limit else "",

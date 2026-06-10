@@ -428,15 +428,9 @@ pipeline <- if (length(pipeline_rows)) {
 pipeline_path <- file.path(experiment_results_dir, "pipeline.csv")
 utils::write.csv(pipeline, pipeline_path, row.names = FALSE)
 
-geiser_src <- file.path(project_root, "papers", "snlls-constrained",
-                        "tables", "snlls_geiser_corpus_lavaan.csv")
-geiser_path <- file.path(experiment_results_dir, "geiser.csv")
-if (file.exists(geiser_src)) {
-  file.copy(geiser_src, geiser_path, overwrite = TRUE)
-  cat(sprintf("\ncopied %s\n", geiser_path))
-} else {
-  cat(sprintf("\nwarn: %s not present; geiser headline numbers omitted\n", geiser_src))
-}
+# (Removed a copy of a headline-numbers CSV from the snlls-constrained paper:
+# experiments are sinks and must not read a paper's content. The paper is not
+# present in this tree anyway; exp05 stands on its own benchmark pipeline.)
 
 cat(sprintf("wrote %s\n", zoo_path))
 cat(sprintf("wrote %s\n", pipeline_path))
