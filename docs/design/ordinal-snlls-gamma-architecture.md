@@ -223,11 +223,19 @@ For equality-constrained or otherwise linearly mapped thresholds:
 alpha_tau = (H' W_tt H)^-1 H' (W_tt (tau_hat - c) + W_tr e_r)
 ```
 
-The implementation now covers the identity/free-threshold case and the
-selector-map case where some threshold rows are fixed constants and the
-remaining free thresholds are unique or merged by a pure threshold-local
-equality group. General linear threshold maps remain a later slice and should
-still fail clearly.
+The implementation now covers the full affine threshold design
+`tau_b = c_b + H_b gamma`: free thresholds, fixed rows, equality-label merges
+(including cross-group threshold invariance), and threshold-only linear
+equality constraints folded through a null-space basis. The threshold normal
+equations are joint across blocks with `n_b/N` sample weights — required as
+soon as one `gamma` coordinate spans groups, where the per-block solve is
+singular and the block weights no longer cancel. Block `b`'s profiled
+thresholds then depend on every block's correlation residual through the
+shared normal-matrix inverse, so the workspace threshold map consumes the
+stacked correlation residual. Constraints that mix threshold and
+non-threshold columns, equality groups linking thresholds to non-threshold
+parameters, and infeasible/contradictory threshold constraint systems fail
+clearly.
 
 ## Fit-Only Cost Rules
 
@@ -241,8 +249,8 @@ These are the rules the implementation and experiments should enforce.
 
 For fixed threshold rows, ULS/DWLS keep the threshold residuals in the profiled
 full moment vector and DWLS consumes the corresponding diagonal Gamma entries.
-Threshold-local shared-label or bare-merge equalities use the same map; general
-linear threshold constraints still require the broader map above.
+Shared-label merges (within or across groups) and threshold-only linear
+constraints use the same joint design map above.
 
 ## Inference Rules
 
@@ -263,15 +271,14 @@ intentionally.
 
 ## SNLLS Integration
 
-The first ordinal SNLLS target is:
+The threshold-profiled ordinal SNLLS path covers:
 
-- all-ordinal, delta parameterization
-- free thresholds (`H = I`), fixed threshold rows, and threshold-local pure
-  merge equalities
-- ULS and DWLS first
-- WLS second, using the profiled Schur-complement weight
-- no general linear threshold constraints
-- no mixed continuous/ordinal path until the all-ordinal path is stable
+- all-ordinal, delta parameterization (theta delegates to the full-threshold
+  path)
+- the full affine threshold design: free thresholds, fixed rows, equality
+  merges within and across groups, and threshold-only linear constraints
+- ULS, DWLS, and WLS (profiled Schur-complement weight)
+- multi-group fits with joint `n_b/N`-weighted threshold normal equations
 
 The nonlinear SNLLS block should operate on the profiled ordinal correlation
 objective after thresholds have been eliminated. Threshold estimates are then

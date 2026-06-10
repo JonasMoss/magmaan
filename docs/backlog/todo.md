@@ -107,11 +107,13 @@ decisions in the simulation backlog.
   second-order Imhof calibration) plus a thin R wrapper. Not required.
 - **L/XL.** Remaining C++ estimator work on the ordinal SNLLS / Gamma workspace
   track (the landed split is in the roadmap and
-  [docs/design/ordinal-snlls-gamma-architecture.md](../design/ordinal-snlls-gamma-architecture.md)):
-  tighten mixed robust scaled-test parity beyond the current loose guard, lazy
-  mixed WLS construction, mixed theta SNLLS, threshold-profiled general linear
-  maps (e.g. effect-coding-style constraints), reduced-Gamma robust-inference
-  products that avoid full materialization where possible, and only-when-needed
+  [docs/design/ordinal-snlls-gamma-architecture.md](../design/ordinal-snlls-gamma-architecture.md);
+  threshold-profiled general linear maps and joint multi-group threshold
+  profiling/invariance landed 2026-06): tighten mixed robust scaled-test parity
+  beyond the current loose guard, lazy mixed WLS construction, mixed theta
+  SNLLS, reduced-Gamma robust-inference products that avoid full
+  materialization where possible, lavaan oracle fixtures for multi-group
+  threshold invariance and linear threshold constraints, and only-when-needed
   R/API polish.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
