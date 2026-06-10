@@ -228,7 +228,8 @@ golden `parTable()` fixtures.
   dropped the per-group weight `n_b/N`, biasing the UΓ spectrum (SB scaling, FMG
   p-values, robust difference test) for models with unequal group sizes plus a
   cross-group equality constraint; it was masked by equal-group designs where the
-  weight is a global scalar (`docs/backlog/todo.md`).
+  weight is a global scalar (regression note in
+  [docs/validation/test_ledger.md](../validation/test_ledger.md)).
 
 ### Staged C++ facade
 
@@ -1324,9 +1325,25 @@ failures.
 ## Planning Documents
 
 Use this file to understand the current state and contracts before structural
-changes. Use [docs/backlog/todo.md](../backlog/todo.md) to choose or update remaining work. See
-[docs/validation/lavaan_tutorial_parity.md](../validation/lavaan_tutorial_parity.md) for the
-section-by-section audit of magmaan against the lavaan tutorial. See
-[docs/design/documentation_proposal.md](../design/documentation_proposal.md) for the proposed
-Quarto manual split, documentation vocabulary, and first documentation
-milestones.
+changes. Remaining work lives in the backlog:
+
+- [docs/backlog/todo.md](../backlog/todo.md) — the active SEM/parser/estimation
+  backlog (open work only; completed items are folded into this roadmap and the
+  test ledger).
+- [docs/backlog/simulation.md](../backlog/simulation.md) — the `magmaan::sim`
+  work queue and decision log.
+- [docs/backlog/speculative.md](../backlog/speculative.md) — may-never-build
+  ideas kept findable, with the cheaper alternative and the build-if trigger.
+- [docs/backlog/newsom-corpus-failures.md](../backlog/newsom-corpus-failures.md)
+  — open optimizer/evaluator-accuracy cases surfaced by the Newsom corpus.
+
+Validation and design context:
+
+- [docs/validation/test_ledger.md](../validation/test_ledger.md) — the
+  test-protection map by subsystem plus the regression notes for fixed
+  cross-subsystem bugs.
+- [docs/validation/lavaan_tutorial_parity.md](../validation/lavaan_tutorial_parity.md)
+  — section-by-section audit of magmaan against the lavaan tutorial.
+- [docs/design/documentation_proposal.md](../design/documentation_proposal.md)
+  — the proposed Quarto manual split, documentation vocabulary, and first
+  documentation milestones.

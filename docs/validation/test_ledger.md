@@ -34,6 +34,116 @@ Put it in this ledger when the bug crosses subsystems, depends on an external
 oracle, or needs a maintainer to run a non-obvious report. Keep notes to the
 reason the test exists; unresolved work still belongs in the backlog.
 
+The notes below are cross-subsystem, oracle-dependent fixes. Full root-cause
+write-ups live in the commits that introduced each guard.
+
+**Robust UΓ projector per-group weight.**
+Regression: the complete-data `build_u_factor` ProjectionExpected path built the
+kernel basis from `A_b = L_Γ,b⁻¹·Δ_b` without the per-group weight `w_b = n_b/N`,
+so the reduced UΓ spectrum (SB scaling, FMG p-values, robust difference test) was
+off by up to ~1% for models with both unequal group sizes and a cross-group
+equality constraint. Masked for single-group, equal-group, and configural cases.
+Guard: `tests/unit/fiml_test.cpp` (metric-invariance Unstructured degeneracy
+~1e-6); `experiments/21-fiml-measurement-invariance-fmg --lavaan-parity`.
+Scope: Expected bread only (the FMG path); the Observed-bread spectrum tail is
+left as-is. `robust_se` uses its own w_b-weighted bread and was unaffected.
+
+**Ordinal/mixed standardized delta-unit.**
+Regression: the generic `λ·√Var(η)/√σ_rr` formula divided by `σ_rr ≈ λ²ψ+1`, but
+a delta-ordinal `y*` is unit-variance, so a true .6 loading came back ~.52; the
+path had been guarded to refuse ordinal fits. `standardize_all` now takes
+`ordinal_delta_unit` and standardizes ordinal-indicator loadings (the `Lambda`
+and all-y `Beta` slots) by the latent SD only (σ_rr = 1).
+Guard: `r-package/examples/ordinal_dwls_wls.R`; `experiments/16-li-2021-mixed`
+and `19-li-2016-ordinal` `--lavaan-parity` (≤~1e-6 vs `standardizedSolution`).
+Scope: no checked C++ golden for ordinal-SEM standardized rows yet;
+`compute_defined`/`factor_scores` stay `require_not_ordinal`-guarded (in backlog).
+
+**Mixed-ordinal NACOV eager inversion for DWLS.**
+Regression: `mixed_ordinal_stats_from_data` eagerly inverted the full NACOV to
+build the WLS weight and errored if it was not PD — wasting an O(m³)
+factorization for DWLS (which needs only diag Γ) and failing every mixed DWLS fit
+at small N with many indicators (Li-2021 20-var SEM, N=200). `full_wls_weight`
+now skips the inverse for DWLS-only callers, and even when requested the inverse
+is non-fatal (a singular NACOV leaves `W_wls` empty; DWLS/robust proceed). Ported
+to the all-ordinal path too.
+Guard: `tests/golden/ordinal_golden_test.cpp` keeps the eager W_wls-vs-lavaan
+contract; `experiments/19-li-2016-ordinal`.
+Scope: an explicit full-WLS fit on an empty weight reports it via
+`validate_stats` / `weight_factors`.
+
+**Continuous ULS standard-vs-robust base — not a bug (do not re-chase).**
+Recorded so it is not re-investigated: ULS uses different base statistics for the
+standard (`continuous_ls_chisq` Browne residual NT) vs robust
+(`robust_continuous_ls`, scaling off `2N·fmin`) paths. This looks inconsistent
+but faithfully mirrors lavaan's default-ULS Browne test vs its `se="robust.sem"`
+unscaled base.
+Guard: `tests/golden/lavaan_parity_golden_test.cpp` ULS
+`chisq_standard`/`satorra_bentler`/`scaled_shifted` against the lavaan
+`hs_3factor_ls*` fixtures; a "uniform Browne base" rewrite breaks them.
+Scope: see memory `uls-robust-test-base-bug`.
+
+**GLS/WLS standard χ² multiplier (N vs N−G) — convention, not a bug.**
+Continuous GLS/WLS standard χ² uses `2N·fmin = N·F`, whereas lavaan reports
+`(N−G)·F`; the ratio is exactly `(N−G)/N`. Decision: keep magmaan's `N`
+multiplier. ULS already carries `N−G` via `browne_residual_nt`, so it matches
+lavaan directly.
+Guard: `lavaan_parity_golden_test.cpp` and `ls_golden_test.cpp` pin
+`magmaan·(N−G)/N == lavaan` to 5e-3 (previously a loose gate absorbed the gap).
+Scope: documented in `docs/design/numerical-conventions.md`; memory
+`magmaan-gls-chi-convention`.
+
+**½-everywhere objective unification (2026-06-09) — convention.**
+`est.fmin` was overloaded (continuous LS stored ½F; ML/FIML/ordinal stored full
+F, ordinal via an explicit `2·fmin` doubling), with the χ² multiplier flipping
+between N and 2N to compensate. Unified so every estimator stores `fmin = ½F` and
+`T = 2N·fmin = N·F`; the ½ lives only in the optimiser adapters, the math kernels
+stay full-F, so information/SE/score paths are untouched and χ² values are
+unchanged.
+Guard: the single contract is documented at `inference::chi2_stat`; deliberate
+exceptions (ULS Browne, FIML LRT, test-side `(N−G)/N`) recorded there and in
+`docs/design/numerical-conventions.md`.
+
+**Kline/Guo duplicated lavaanify term.**
+Regression: duplicated formula terms (`NA*LM1 + c(a1,a2)*LM1`) produced two
+partable rows for one matrix cell, leaving a phantom free parameter that moved
+the analytic gradient but not the model moments. `lavaanify` now merges repeated
+`lhs op rhs` within a block (`build_group_template`, `src/spec/build.cpp`).
+Guard: root-cause cases in `tests/unit/lavaanify_test.cpp`; end-to-end Guo
+invariance rungs in `tests/golden/textbook_corpus_golden_test.cpp`
+(`case_exports.json`).
+Scope: lavaan's `guo_mi_strong` reference is under-converged (magmaan reaches a
+strictly lower chisq at equal df, confirmed by three optimizers), so that rung is
+gated df-exact + no-worse-than-oracle with two-sided chisq parity skipped.
+Per-parameter θ̂/SE parity deferred (needs a lavaan→magmaan param map — backlog).
+
+**ADF/WLS Γ̂ eigen-gated inverse.**
+Regression: a barely-PD but numerically rank-deficient empirical Browne NACOV
+(reproducer `muthen_2017_ch2_ex2_1__adf`, rcond≈5e-18) passed a bare
+`Eigen::LLT`; the fit reached the correct saturated θ̂ but a ~1e16 weight
+eigendirection amplified residuals into `grad_inf≈3.86`, tripping the terminal
+audit. The continuous ADF/WLS builders (`dls_weight`, `structured_gamma_weight`)
+now invert through `detail::symmetric_inverse_pd_gated` (`tol=1e-10·max(1,λmax)`);
+a rank-deficient Γ̂ returns `FitError::NumericIssue` with dim/rank/rcond/λmin.
+Guard: `tests/unit/detail_linalg_test.cpp` (RNG-free muthen-spectrum pin);
+rank-deficient rejection in `dls_weight_test.cpp`.
+Scope: an optional `spectral_truncate` parity-restore policy is not built
+(backlog); `experiments/00-lavaan-parity` inverts the raw NACOV in R and is not
+routed through the gate.
+
+**FMG unbiased-Gamma NT-term.**
+Regression: the fused FMG unbiased path special-cased the NT term as the identity
+(`B'Γ_NT(Σ̂)B = I`) and applied Browne's correction as a `-bI` shift. Wrong: the
+Du-Bentler unbiased Gamma is distribution-free with NT term `Γ_NT(S)` at the
+*sample* covariance, not the model-implied Σ̂. This made every `_ug` test (incl.
+the defaults `SB_UG_RLS`, `pEBA2_UG_RLS`) silently model-dependent and broke
+semTests parity by up to ~4e-4. Fixed by `reduced_gamma_nt_sample()`
+(`B'Γ_NT(S)B`); parity back to ~1e-8.
+Guard: `examples/fmg.R` value-for-value vs `semTests::pvalues` (<1e-6); unit pin
+`reduced_gamma_nt_sample` in `tests/unit/robust_test.cpp`.
+Scope: the row-space unbiased optimization and rank-one secular update that
+relied on the same wrong identity are deferred (see `docs/backlog/speculative.md`).
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |

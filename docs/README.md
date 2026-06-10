@@ -7,8 +7,13 @@ is stable enough to describe without rewriting the story every week.
 ## Layout
 
 - `architecture/` - current implementation state and design contracts.
-- `backlog/` - accepted remaining work and known failures, including the
-  simulation-specific work queue.
+- `backlog/` - accepted remaining work and known failures:
+  - `todo.md` - the active SEM/parser/estimation backlog (open work only).
+  - `simulation.md` - the `magmaan::sim` work queue and decision log.
+  - `speculative.md` - may-never-build ideas, each with the cheaper alternative
+    and the build-if trigger.
+  - `newsom-corpus-failures.md` - open optimizer / evaluator-accuracy cases
+    surfaced by the Newsom corpus.
 - `grammar/` - normative parser grammar and lexer notes.
 - `validation/` - parity, benchmark, and diagnostic validation plans.
 - `design/` - proposals, audits, and non-binding sketches.
