@@ -177,6 +177,9 @@ sim_bicop_draw <- sim_bicop_draw_impl
 sim_cvine_batch <- sim_cvine_batch_impl
 sim_cvine_calibrate <- sim_cvine_calibrate_impl
 sim_cvine_draw <- sim_cvine_draw_impl
+sim_cvine3_batch <- sim_cvine3_batch_impl
+sim_cvine3_calibrate <- sim_cvine3_calibrate_impl
+sim_cvine3_draw <- sim_cvine3_draw_impl
 sim_plsim_batch <- sim_plsim_batch_impl
 sim_plsim_calibrate <- sim_plsim_calibrate_impl
 sim_plsim_draw <- sim_plsim_draw_impl
@@ -327,6 +330,9 @@ magmaan_core <- local({
       "sim_cvine_batch",
       "sim_cvine_calibrate",
       "sim_cvine_draw",
+      "sim_cvine3_batch",
+      "sim_cvine3_calibrate",
+      "sim_cvine3_draw",
       "sim_plsim_batch",
       "sim_plsim_calibrate",
       "sim_plsim_draw"

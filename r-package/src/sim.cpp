@@ -487,6 +487,193 @@ Rcpp::List cvine_calibration_to_list(
       Rcpp::_["max_abs_error"] = cal.max_abs_error);
 }
 
+Rcpp::List cvine3_copula_spec_to_list(
+    const magmaan::sim::CVine3CopulaSpec& copula) {
+  return Rcpp::List::create(
+      Rcpp::_["copula_01"] =
+          bivariate_copula_spec_to_list(copula.copula_01),
+      Rcpp::_["copula_02"] =
+          bivariate_copula_spec_to_list(copula.copula_02),
+      Rcpp::_["copula_12_given_0"] =
+          bivariate_copula_spec_to_list(copula.copula_12_given_0));
+}
+
+magmaan::sim::CVine3CopulaSpec cvine3_copula_spec_from_list(Rcpp::List x) {
+  magmaan::sim::CVine3CopulaSpec copula;
+  copula.copula_01 = bivariate_copula_spec_from_list(
+      Rcpp::as<Rcpp::List>(x["copula_01"]));
+  copula.copula_02 = bivariate_copula_spec_from_list(
+      Rcpp::as<Rcpp::List>(x["copula_02"]));
+  copula.copula_12_given_0 = bivariate_copula_spec_from_list(
+      Rcpp::as<Rcpp::List>(x["copula_12_given_0"]));
+  return copula;
+}
+
+magmaan::sim::CVine3FamilySpec cvine3_family_spec_from_nullable(
+    Rcpp::Nullable<Rcpp::CharacterVector> families,
+    magmaan::sim::BivariateCopulaFamily fallback) {
+  magmaan::sim::CVine3FamilySpec out{fallback, fallback, fallback};
+  if (families.isNull()) return out;
+
+  Rcpp::CharacterVector values(families);
+  if (values.size() == 1) {
+    const auto family =
+        bivariate_copula_family_from_string(Rcpp::as<std::string>(values[0]));
+    return magmaan::sim::CVine3FamilySpec{family, family, family};
+  }
+  if (values.size() != 3) {
+    Rcpp::stop("families must be NULL, length 1, or length 3");
+  }
+  out.family_01 =
+      bivariate_copula_family_from_string(Rcpp::as<std::string>(values[0]));
+  out.family_02 =
+      bivariate_copula_family_from_string(Rcpp::as<std::string>(values[1]));
+  out.family_12_given_0 =
+      bivariate_copula_family_from_string(Rcpp::as<std::string>(values[2]));
+  return out;
+}
+
+std::vector<magmaan::sim::BivariateCopulaFamily>
+family_set_from_nullable(Rcpp::Nullable<Rcpp::CharacterVector> family_set,
+                         magmaan::sim::BivariateCopulaFamily fallback) {
+  std::vector<magmaan::sim::BivariateCopulaFamily> out;
+  if (family_set.isNull()) {
+    out.push_back(fallback);
+    return out;
+  }
+  Rcpp::CharacterVector values(family_set);
+  if (values.size() == 0) {
+    Rcpp::stop("family_set must not be empty");
+  }
+  out.reserve(static_cast<std::size_t>(values.size()));
+  for (R_xlen_t i = 0; i < values.size(); ++i) {
+    out.push_back(
+        bivariate_copula_family_from_string(Rcpp::as<std::string>(values[i])));
+  }
+  return out;
+}
+
+Eigen::Vector3i vector3i_from_list_field(Rcpp::List x, const char* name) {
+  Rcpp::IntegerVector values = Rcpp::as<Rcpp::IntegerVector>(x[name]);
+  if (values.size() != 3) {
+    Rcpp::stop("%s must be an integer vector of length 3", name);
+  }
+  Eigen::Vector3i out;
+  for (R_xlen_t i = 0; i < 3; ++i) out(i) = values[i];
+  return out;
+}
+
+Rcpp::IntegerVector vector3i_to_integer_vector(const Eigen::Vector3i& x) {
+  return Rcpp::IntegerVector::create(x(0), x(1), x(2));
+}
+
+Rcpp::List cvine3_calibration_to_list(
+    const magmaan::sim::CVine3CorrelationCalibration& cal) {
+  return Rcpp::List::create(
+      Rcpp::_["copula"] = cvine3_copula_spec_to_list(cal.copula),
+      Rcpp::_["target_corr"] = Rcpp::wrap(cal.target_corr),
+      Rcpp::_["achieved_corr"] = Rcpp::wrap(cal.achieved_corr),
+      Rcpp::_["variable_order"] = vector3i_to_integer_vector(cal.variable_order),
+      Rcpp::_["root_index"] = cal.root_index,
+      Rcpp::_["root_01"] = bivariate_copula_calibration_to_list(cal.root_01),
+      Rcpp::_["root_02"] = bivariate_copula_calibration_to_list(cal.root_02),
+      Rcpp::_["conditional_lower_bound_corr_12"] =
+          cal.conditional_lower_bound_corr_12,
+      Rcpp::_["conditional_upper_bound_corr_12"] =
+          cal.conditional_upper_bound_corr_12,
+      Rcpp::_["conditional_iterations"] = cal.conditional_iterations,
+      Rcpp::_["max_abs_error"] = cal.max_abs_error);
+}
+
+magmaan::sim::CVine3CorrelationCalibration cvine3_calibration_from_list(
+    Rcpp::List x) {
+  magmaan::sim::CVine3CorrelationCalibration cal;
+  cal.copula = cvine3_copula_spec_from_list(Rcpp::as<Rcpp::List>(x["copula"]));
+  if (has_named(x, "target_corr")) {
+    cal.target_corr = Rcpp::as<Eigen::MatrixXd>(x["target_corr"]);
+  }
+  if (has_named(x, "achieved_corr")) {
+    cal.achieved_corr = Rcpp::as<Eigen::MatrixXd>(x["achieved_corr"]);
+  }
+  if (has_named(x, "variable_order")) {
+    cal.variable_order = vector3i_from_list_field(x, "variable_order");
+  }
+  if (has_named(x, "root_index")) {
+    cal.root_index = Rcpp::as<int>(x["root_index"]);
+  }
+  if (has_named(x, "root_01")) {
+    Rcpp::List root = Rcpp::as<Rcpp::List>(x["root_01"]);
+    cal.root_01.copula = bivariate_copula_spec_from_list(
+        Rcpp::as<Rcpp::List>(root["copula"]));
+    cal.root_01.target_corr = list_double_or(root, "target_corr", 0.0);
+    cal.root_01.achieved_corr = list_double_or(root, "achieved_corr", 0.0);
+    cal.root_01.lower_bound_corr =
+        list_double_or(root, "lower_bound_corr", 0.0);
+    cal.root_01.upper_bound_corr =
+        list_double_or(root, "upper_bound_corr", 0.0);
+    cal.root_01.iterations = list_int_or(root, "iterations", 0);
+  }
+  if (has_named(x, "root_02")) {
+    Rcpp::List root = Rcpp::as<Rcpp::List>(x["root_02"]);
+    cal.root_02.copula = bivariate_copula_spec_from_list(
+        Rcpp::as<Rcpp::List>(root["copula"]));
+    cal.root_02.target_corr = list_double_or(root, "target_corr", 0.0);
+    cal.root_02.achieved_corr = list_double_or(root, "achieved_corr", 0.0);
+    cal.root_02.lower_bound_corr =
+        list_double_or(root, "lower_bound_corr", 0.0);
+    cal.root_02.upper_bound_corr =
+        list_double_or(root, "upper_bound_corr", 0.0);
+    cal.root_02.iterations = list_int_or(root, "iterations", 0);
+  }
+  cal.conditional_lower_bound_corr_12 =
+      list_double_or(x, "conditional_lower_bound_corr_12", 0.0);
+  cal.conditional_upper_bound_corr_12 =
+      list_double_or(x, "conditional_upper_bound_corr_12", 0.0);
+  cal.conditional_iterations = list_int_or(x, "conditional_iterations", 0);
+  cal.max_abs_error = list_double_or(x, "max_abs_error", 0.0);
+  return cal;
+}
+
+magmaan::sim_expected<magmaan::sim::CVine3CorrelationCalibration>
+calibrate_cvine3_from_args(
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<magmaan::sim::MarginalSpec>& marginal_specs,
+    const std::string& family,
+    const std::string& selection,
+    Rcpp::Nullable<Rcpp::CharacterVector> families,
+    Rcpp::Nullable<Rcpp::CharacterVector> family_set,
+    const magmaan::sim::BivariateCopulaOptions& options) {
+  const auto fallback_family = bivariate_copula_family_from_string(family);
+  if (selection == "fixed") {
+    if (families.isNull()) {
+      return magmaan::sim::calibrate_cvine3_copula_correlation(
+          fallback_family, target_corr, marginal_specs, options);
+    }
+    const auto family_spec =
+        cvine3_family_spec_from_nullable(families, fallback_family);
+    return magmaan::sim::calibrate_cvine3_copula_correlation(
+        family_spec, target_corr, marginal_specs, options);
+  }
+  if (selection == "select_root" || selection == "root") {
+    return magmaan::sim::calibrate_cvine3_copula_correlation_select_root(
+        fallback_family, target_corr, marginal_specs, options);
+  }
+  if (selection == "select_families" || selection == "families") {
+    const auto families_to_try =
+        family_set_from_nullable(family_set, fallback_family);
+    return magmaan::sim::calibrate_cvine3_copula_correlation_select_families(
+        families_to_try, target_corr, marginal_specs, options);
+  }
+  if (selection == "select_structure" || selection == "structure") {
+    const auto families_to_try =
+        family_set_from_nullable(family_set, fallback_family);
+    return magmaan::sim::calibrate_cvine3_copula_correlation_select_structure(
+        families_to_try, target_corr, marginal_specs, options);
+  }
+  Rcpp::stop(
+      "selection must be 'fixed', 'select_root', 'select_families', or 'select_structure'");
+}
+
 bool approx_equal(double a, double b, double tol = 1e-10) {
   return std::abs(a - b) <= tol * std::max({1.0, std::abs(a), std::abs(b)});
 }
@@ -1050,6 +1237,119 @@ Rcpp::List sim_cvine_draw_impl(Rcpp::List calibration,
                         static_cast<std::uint64_t>(i + 1));
     auto X_or = magmaan::sim::simulate_cvine_copula_matrix(
         static_cast<Eigen::Index>(n), copula, marginal_specs, rng, options);
+    if (!X_or.has_value()) stop_sim(X_or.error());
+    draws[i] = Rcpp::wrap(*X_or);
+  }
+  return Rcpp::List::create(Rcpp::_["draws"] = draws);
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_cvine3_batch_impl(
+    Rcpp::NumericMatrix target_corr,
+    Rcpp::List marginals,
+    int n,
+    int reps,
+    double seed_base,
+    std::string family = "frank",
+    std::string selection = "fixed",
+    Rcpp::Nullable<Rcpp::CharacterVector> families = R_NilValue,
+    Rcpp::Nullable<Rcpp::CharacterVector> family_set = R_NilValue,
+    int quadrature_points = 31,
+    int max_bisection_iter = 80,
+    double calibration_tol = 1e-6) {
+  if (n <= 0) Rcpp::stop("n must be positive");
+  if (reps <= 0) Rcpp::stop("reps must be positive");
+
+  const Eigen::Map<Eigen::MatrixXd> corr(
+      REAL(target_corr), target_corr.nrow(), target_corr.ncol());
+  const auto marginal_specs = marginal_specs_from_list(marginals);
+  const magmaan::sim::BivariateCopulaOptions options =
+      make_bivariate_copula_options(
+          quadrature_points, max_bisection_iter, calibration_tol);
+
+  auto cal_or = calibrate_cvine3_from_args(
+      corr, marginal_specs, family, selection, families, family_set, options);
+  if (!cal_or.has_value()) stop_sim(cal_or.error());
+
+  Rcpp::List draws(reps);
+  for (int i = 0; i < reps; ++i) {
+    std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
+                        static_cast<std::uint64_t>(i + 1));
+    auto X_or = magmaan::sim::simulate_cvine3_copula_matrix(
+        static_cast<Eigen::Index>(n), *cal_or, marginal_specs, rng, options);
+    if (!X_or.has_value()) stop_sim(X_or.error());
+    draws[i] = Rcpp::wrap(*X_or);
+  }
+
+  Rcpp::List out = cvine3_calibration_to_list(*cal_or);
+  out["selection"] = selection;
+  out["marginals"] = marginal_specs_to_list(marginal_specs);
+  out["options"] = bivariate_copula_options_to_list(options);
+  out["draws"] = draws;
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_cvine3_calibrate_impl(
+    Rcpp::NumericMatrix target_corr,
+    Rcpp::List marginals,
+    std::string family = "frank",
+    std::string selection = "fixed",
+    Rcpp::Nullable<Rcpp::CharacterVector> families = R_NilValue,
+    Rcpp::Nullable<Rcpp::CharacterVector> family_set = R_NilValue,
+    int quadrature_points = 31,
+    int max_bisection_iter = 80,
+    double calibration_tol = 1e-6) {
+  const Eigen::Map<Eigen::MatrixXd> corr(
+      REAL(target_corr), target_corr.nrow(), target_corr.ncol());
+  const auto marginal_specs = marginal_specs_from_list(marginals);
+  const magmaan::sim::BivariateCopulaOptions options =
+      make_bivariate_copula_options(
+          quadrature_points, max_bisection_iter, calibration_tol);
+
+  auto cal_or = calibrate_cvine3_from_args(
+      corr, marginal_specs, family, selection, families, family_set, options);
+  if (!cal_or.has_value()) stop_sim(cal_or.error());
+
+  Rcpp::List out = cvine3_calibration_to_list(*cal_or);
+  out["selection"] = selection;
+  out["marginals"] = marginal_specs_to_list(marginal_specs);
+  out["options"] = bivariate_copula_options_to_list(options);
+  out.attr("class") = Rcpp::CharacterVector::create(
+      "magmaan_cvine3_calibration", "list");
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_cvine3_draw_impl(Rcpp::List calibration,
+                                int n,
+                                int reps,
+                                double seed_base,
+                                int quadrature_points = -1,
+                                int max_bisection_iter = -1) {
+  if (n <= 0) Rcpp::stop("n must be positive");
+  if (reps <= 0) Rcpp::stop("reps must be positive");
+
+  auto cal = cvine3_calibration_from_list(calibration);
+  const auto marginal_specs = marginal_specs_from_list(
+      Rcpp::as<Rcpp::List>(calibration["marginals"]));
+
+  magmaan::sim::BivariateCopulaOptions options;
+  if (calibration.containsElementNamed("options")) {
+    options = bivariate_copula_options_from_list(
+        Rcpp::as<Rcpp::List>(calibration["options"]));
+  }
+  if (quadrature_points > 0) options.quadrature_points = quadrature_points;
+  if (max_bisection_iter > 0) {
+    options.max_bisection_iter = max_bisection_iter;
+  }
+
+  Rcpp::List draws(reps);
+  for (int i = 0; i < reps; ++i) {
+    std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
+                        static_cast<std::uint64_t>(i + 1));
+    auto X_or = magmaan::sim::simulate_cvine3_copula_matrix(
+        static_cast<Eigen::Index>(n), cal, marginal_specs, rng, options);
     if (!X_or.has_value()) stop_sim(X_or.error());
     draws[i] = Rcpp::wrap(*X_or);
   }

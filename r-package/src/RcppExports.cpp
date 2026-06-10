@@ -1832,6 +1832,63 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sim_cvine3_batch_impl
+Rcpp::List sim_cvine3_batch_impl(Rcpp::NumericMatrix target_corr, Rcpp::List marginals, int n, int reps, double seed_base, std::string family, std::string selection, Rcpp::Nullable<Rcpp::CharacterVector> families, Rcpp::Nullable<Rcpp::CharacterVector> family_set, int quadrature_points, int max_bisection_iter, double calibration_tol);
+RcppExport SEXP _magmaan_sim_cvine3_batch_impl(SEXP target_corrSEXP, SEXP marginalsSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP familySEXP, SEXP selectionSEXP, SEXP familiesSEXP, SEXP family_setSEXP, SEXP quadrature_pointsSEXP, SEXP max_bisection_iterSEXP, SEXP calibration_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type target_corr(target_corrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type marginals(marginalsSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type reps(repsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed_base(seed_baseSEXP);
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< std::string >::type selection(selectionSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type families(familiesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type family_set(family_setSEXP);
+    Rcpp::traits::input_parameter< int >::type quadrature_points(quadrature_pointsSEXP);
+    Rcpp::traits::input_parameter< int >::type max_bisection_iter(max_bisection_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type calibration_tol(calibration_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_cvine3_batch_impl(target_corr, marginals, n, reps, seed_base, family, selection, families, family_set, quadrature_points, max_bisection_iter, calibration_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sim_cvine3_calibrate_impl
+Rcpp::List sim_cvine3_calibrate_impl(Rcpp::NumericMatrix target_corr, Rcpp::List marginals, std::string family, std::string selection, Rcpp::Nullable<Rcpp::CharacterVector> families, Rcpp::Nullable<Rcpp::CharacterVector> family_set, int quadrature_points, int max_bisection_iter, double calibration_tol);
+RcppExport SEXP _magmaan_sim_cvine3_calibrate_impl(SEXP target_corrSEXP, SEXP marginalsSEXP, SEXP familySEXP, SEXP selectionSEXP, SEXP familiesSEXP, SEXP family_setSEXP, SEXP quadrature_pointsSEXP, SEXP max_bisection_iterSEXP, SEXP calibration_tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type target_corr(target_corrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type marginals(marginalsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type family(familySEXP);
+    Rcpp::traits::input_parameter< std::string >::type selection(selectionSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type families(familiesSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type family_set(family_setSEXP);
+    Rcpp::traits::input_parameter< int >::type quadrature_points(quadrature_pointsSEXP);
+    Rcpp::traits::input_parameter< int >::type max_bisection_iter(max_bisection_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type calibration_tol(calibration_tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_cvine3_calibrate_impl(target_corr, marginals, family, selection, families, family_set, quadrature_points, max_bisection_iter, calibration_tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sim_cvine3_draw_impl
+Rcpp::List sim_cvine3_draw_impl(Rcpp::List calibration, int n, int reps, double seed_base, int quadrature_points, int max_bisection_iter);
+RcppExport SEXP _magmaan_sim_cvine3_draw_impl(SEXP calibrationSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP quadrature_pointsSEXP, SEXP max_bisection_iterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type calibration(calibrationSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type reps(repsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed_base(seed_baseSEXP);
+    Rcpp::traits::input_parameter< int >::type quadrature_points(quadrature_pointsSEXP);
+    Rcpp::traits::input_parameter< int >::type max_bisection_iter(max_bisection_iterSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_cvine3_draw_impl(calibration, n, reps, seed_base, quadrature_points, max_bisection_iter));
+    return rcpp_result_gen;
+END_RCPP
+}
 // sim_plsim_batch_impl
 Rcpp::List sim_plsim_batch_impl(Rcpp::NumericMatrix target_corr, Rcpp::NumericVector target_skewness, Rcpp::NumericVector target_excess_kurtosis, int n, int reps, double seed_base, std::string method, int num_segments, bool monotone, int max_iter, int quadrature_points, int hermite_order, double marginal_tol, double correlation_tol, double rho_bound);
 RcppExport SEXP _magmaan_sim_plsim_batch_impl(SEXP target_corrSEXP, SEXP target_skewnessSEXP, SEXP target_excess_kurtosisSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP methodSEXP, SEXP num_segmentsSEXP, SEXP monotoneSEXP, SEXP max_iterSEXP, SEXP quadrature_pointsSEXP, SEXP hermite_orderSEXP, SEXP marginal_tolSEXP, SEXP correlation_tolSEXP, SEXP rho_boundSEXP) {
@@ -2026,6 +2083,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_sim_cvine_batch_impl", (DL_FUNC) &_magmaan_sim_cvine_batch_impl, 9},
     {"_magmaan_sim_cvine_calibrate_impl", (DL_FUNC) &_magmaan_sim_cvine_calibrate_impl, 6},
     {"_magmaan_sim_cvine_draw_impl", (DL_FUNC) &_magmaan_sim_cvine_draw_impl, 6},
+    {"_magmaan_sim_cvine3_batch_impl", (DL_FUNC) &_magmaan_sim_cvine3_batch_impl, 12},
+    {"_magmaan_sim_cvine3_calibrate_impl", (DL_FUNC) &_magmaan_sim_cvine3_calibrate_impl, 9},
+    {"_magmaan_sim_cvine3_draw_impl", (DL_FUNC) &_magmaan_sim_cvine3_draw_impl, 6},
     {"_magmaan_sim_plsim_batch_impl", (DL_FUNC) &_magmaan_sim_plsim_batch_impl, 15},
     {"_magmaan_sim_plsim_calibrate_impl", (DL_FUNC) &_magmaan_sim_plsim_calibrate_impl, 12},
     {"_magmaan_sim_plsim_draw_impl", (DL_FUNC) &_magmaan_sim_plsim_draw_impl, 4},

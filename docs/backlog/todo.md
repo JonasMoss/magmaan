@@ -94,9 +94,9 @@ families, and observed-variable projection) is summarized in the roadmap; its
 work queue and decision log live in [`simulation.md`](simulation.md). Keep this
 section as a high-level index for cross-domain planning — including the Johnson
 SL exposure decision, the special-functions dependency policy, NORTA calibration
-hardening, and the remaining R `calibrate_*`/`draw_*` split for calibrated
-C-vine root/family-selection policies — and put detailed generator, marginal,
-and fixture decisions in the simulation backlog.
+hardening, and the persistent calibration-cache policy for long simulation
+experiments — and put detailed generator, marginal, and fixture decisions in the
+simulation backlog.
 
 ## API and R boundary
 

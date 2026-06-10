@@ -309,10 +309,9 @@ golden `parTable()` fixtures.
   iteration metadata; stochastic `simulate_*()`/draw calls accept that state
   plus only `n`, RNG/seed, and draw-time options. One-shot batch helpers remain
   as convenience wrappers. This path is now in place for IG, NORTA, PLSIM,
-  pairwise Archimedean copulas, and generic fixed-order C-vines at the R
-  boundary and for IG, PLSIM, NORTA, and copula/vine generators at the C++
-  boundary; remaining work is to expose specialized C-vine root/family
-  selection policies at the R boundary.
+  pairwise Archimedean copulas, generic fixed-order C-vines, and specialized
+  three-variable C-vine root/family-selection policies at the R boundary and
+  for IG, PLSIM, NORTA, and copula/vine generators at the C++ boundary.
 - Initial NORTA marginals are standard normal, standardized lognormal, Tukey
   g-and-h, Pearson-system distributions, and Johnson-system SU/SB
   distributions. Fleishman polynomial transforms can also be passed through the
