@@ -15,6 +15,7 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/LU>
 #include <Eigen/SVD>
 
 #include "magmaan/error.hpp"
@@ -609,32 +610,49 @@ struct ThresholdLayout {
   std::vector<std::vector<char>> present;
 };
 
-struct ThresholdProfile {
+// Affine threshold model tau_b = c[b] + H[b] * gamma over all blocks, plus
+// free-set bookkeeping for the profiled paths. H carries free thresholds as
+// unit columns, equality-label merges (including cross-group invariance) as
+// shared columns, and threshold-only linear equality constraints folded
+// through a null-space basis. gamma is the joint reduced threshold
+// coordinate; one gamma column may span several blocks.
+struct ThresholdDesign {
   std::vector<std::int32_t> active_full;
   std::vector<char> is_threshold;
-  std::vector<std::int32_t> threshold_coord;
   Eigen::VectorXd full_template;
-  std::int32_t n_threshold_coord = 0;
+  std::vector<Eigen::MatrixXd> H;  // per block: nth_b x n_gamma
+  std::vector<Eigen::VectorXd> c;  // per block: nth_b
+  Eigen::Index n_gamma = 0;
+  // Linear-constraint rows absorbed into H/c (threshold-only rows). They are
+  // satisfied identically by the profiled thresholds and must be dropped from
+  // any reduced partable handed to downstream constraint machinery.
+  std::vector<char> absorbed_lin_row;
 };
 
 struct ThresholdFixedProfile {
   spec::LatentStructure pt;
   Eigen::VectorXd x0;
   std::vector<std::int32_t> reduced_to_full;
-  ThresholdProfile profile;
+  ThresholdDesign design;
   Eigen::VectorXd full_template;
 };
 
+// Profiled-threshold weight workspace. The threshold map is joint across
+// blocks: with shared gamma coordinates the profiled thresholds of block b
+// depend on every block's correlation residual, so threshold_from_corr maps
+// the stacked correlation residual (length ncorr_total) into block b's
+// threshold rows.
 struct ProfiledWeightBlock {
-  Eigen::MatrixXd factor;
-  Eigen::MatrixXd profiled_moment_from_corr;
-  Eigen::VectorXd profiled_offset;
-  Eigen::VectorXd threshold_intercept;
-  Eigen::MatrixXd threshold_from_corr;
+  Eigen::MatrixXd factor;               // mdim x mdim weight factor
+  Eigen::VectorXd threshold_offset;     // nth: intercept - sample thresholds
+  Eigen::MatrixXd threshold_from_corr;  // nth x ncorr_total
+  Eigen::VectorXd threshold_intercept;  // nth
 };
 
 struct ProfiledWeightWorkspace {
   std::vector<ProfiledWeightBlock> blocks;
+  std::vector<Eigen::Index> corr_offset;  // per-block start in stacked d_corr
+  Eigen::Index ncorr_total = 0;
 };
 
 fit_expected<ThresholdLayout>
@@ -700,45 +718,49 @@ make_threshold_layout(const spec::LatentStructure& pt,
   return out;
 }
 
-fit_expected<ThresholdProfile>
-make_threshold_profile(const spec::LatentStructure& pt,
-                       const ThresholdLayout& layout,
-                       const data::OrdinalStats& stats,
-                       const Eigen::VectorXd& x0) {
+fit_expected<ThresholdDesign>
+make_threshold_design(const spec::LatentStructure& pt,
+                      const ThresholdLayout& layout,
+                      const data::OrdinalStats& stats,
+                      const Eigen::VectorXd& x0) {
   const std::int32_t n_free = pt.n_free();
   if (x0.size() != n_free) {
     return std::unexpected(make_err(FitError::Kind::InvalidStartValues,
         "ordinal threshold profiling received a start vector with the wrong size"));
   }
-  ThresholdProfile profile;
-  profile.is_threshold.assign(static_cast<std::size_t>(n_free), 0);
-  profile.threshold_coord.assign(static_cast<std::size_t>(n_free), -1);
-  profile.full_template = x0;
+  ThresholdDesign design;
+  design.is_threshold.assign(static_cast<std::size_t>(n_free), 0);
+  design.full_template = x0;
 
-  std::vector<std::int32_t> threshold_free;
-  for (std::size_t b = 0; b < stats.thresholds.size(); ++b) {
+  const std::size_t nb = stats.thresholds.size();
+  for (std::size_t b = 0; b < nb; ++b) {
     for (Eigen::Index k = 0; k < stats.thresholds[b].size(); ++k) {
       const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
       if (fr < 0 || fr > n_free) {
         return std::unexpected(make_err(FitError::Kind::NumericIssue,
             "ordinal threshold profiling found an invalid threshold free index"));
       }
-      if (fr == 0) {
-        continue;
-      }
-      const std::size_t idx = static_cast<std::size_t>(fr - 1);
-      if (profile.is_threshold[idx] != 0) {
-        return std::unexpected(make_err(FitError::Kind::NumericIssue,
-            "ordinal threshold profiling does not support shared thresholds"));
-      }
-      profile.is_threshold[idx] = 1;
-      threshold_free.push_back(fr);
-      profile.full_template(fr - 1) = stats.thresholds[b](k);
+      if (fr == 0) continue;
+      design.is_threshold[static_cast<std::size_t>(fr - 1)] = 1;
+      design.full_template(fr - 1) = stats.thresholds[b](k);
+    }
+  }
+  // A free index driving both a threshold row and a non-threshold row cannot
+  // be profiled out.
+  for (std::size_t row = 0; row < pt.size(); ++row) {
+    const std::int32_t fr = pt.free[row];
+    if (fr <= 0 || fr > n_free) continue;
+    if (design.is_threshold[static_cast<std::size_t>(fr - 1)] != 0 &&
+        pt.op[row] != parse::Op::Threshold) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal threshold profiling does not support a free parameter shared between threshold and non-threshold rows"));
     }
   }
 
-  if (static_cast<std::int32_t>(pt.eq_groups.size()) == n_free) {
-    std::int32_t max_group = -1;
+  const bool have_eq =
+      static_cast<std::int32_t>(pt.eq_groups.size()) == n_free;
+  std::int32_t max_group = -1;
+  if (have_eq) {
     for (std::int32_t k = 0; k < n_free; ++k) {
       const std::int32_t group = pt.eq_groups[static_cast<std::size_t>(k)];
       if (group < 0) {
@@ -750,36 +772,71 @@ make_threshold_profile(const spec::LatentStructure& pt,
     std::vector<char> group_has_other(static_cast<std::size_t>(max_group + 1), 0);
     for (std::int32_t k = 0; k < n_free; ++k) {
       const std::int32_t group = pt.eq_groups[static_cast<std::size_t>(k)];
-      if (profile.is_threshold[static_cast<std::size_t>(k)] == 0) {
+      if (design.is_threshold[static_cast<std::size_t>(k)] == 0) {
         group_has_other[static_cast<std::size_t>(group)] = 1;
       }
     }
     for (std::int32_t t = 0; t < n_free; ++t) {
-      if (profile.is_threshold[static_cast<std::size_t>(t)] == 0) continue;
+      if (design.is_threshold[static_cast<std::size_t>(t)] == 0) continue;
       const std::int32_t group = pt.eq_groups[static_cast<std::size_t>(t)];
       if (group_has_other[static_cast<std::size_t>(group)] != 0) {
         return std::unexpected(make_err(FitError::Kind::NumericIssue,
             "ordinal threshold profiling does not support equality constraints between thresholds and non-threshold parameters"));
       }
     }
-    std::vector<std::int32_t> group_to_coord(static_cast<std::size_t>(max_group + 1), -1);
-    for (std::int32_t fr : threshold_free) {
-      const std::int32_t group = pt.eq_groups[static_cast<std::size_t>(fr - 1)];
-      if (group_to_coord[static_cast<std::size_t>(group)] < 0) {
-        group_to_coord[static_cast<std::size_t>(group)] =
-            profile.n_threshold_coord++;
+  }
+
+  // Preliminary coordinate per threshold merge class (equality-label group,
+  // possibly spanning blocks), in deterministic (block, row) first-appearance
+  // order. Without equality groups every distinct free index is its own
+  // class.
+  std::vector<std::int32_t> coord_of_free(static_cast<std::size_t>(n_free), -1);
+  std::vector<std::int32_t> group_to_coord(
+      have_eq ? static_cast<std::size_t>(max_group + 1) : 0, -1);
+  Eigen::Index m = 0;
+  for (std::size_t b = 0; b < nb; ++b) {
+    for (Eigen::Index k = 0; k < stats.thresholds[b].size(); ++k) {
+      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+      if (fr <= 0) continue;
+      std::int32_t& coord = coord_of_free[static_cast<std::size_t>(fr - 1)];
+      if (coord >= 0) continue;
+      if (have_eq) {
+        const std::int32_t group = pt.eq_groups[static_cast<std::size_t>(fr - 1)];
+        std::int32_t& gc = group_to_coord[static_cast<std::size_t>(group)];
+        if (gc < 0) gc = static_cast<std::int32_t>(m++);
+        coord = gc;
+      } else {
+        coord = static_cast<std::int32_t>(m++);
       }
-      profile.threshold_coord[static_cast<std::size_t>(fr - 1)] =
-          group_to_coord[static_cast<std::size_t>(group)];
-    }
-  } else {
-    for (std::int32_t fr : threshold_free) {
-      profile.threshold_coord[static_cast<std::size_t>(fr - 1)] =
-          profile.n_threshold_coord++;
     }
   }
 
+  // Preliminary affine model tau_b = c0_b + H0_b * gamma0 over the merge
+  // coordinates.
+  std::vector<Eigen::MatrixXd> H0(nb);
+  std::vector<Eigen::VectorXd> c0(nb);
+  for (std::size_t b = 0; b < nb; ++b) {
+    const Eigen::Index nth = stats.thresholds[b].size();
+    H0[b] = Eigen::MatrixXd::Zero(nth, m);
+    c0[b] = Eigen::VectorXd::Zero(nth);
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+      if (fr > 0) {
+        H0[b](k, coord_of_free[static_cast<std::size_t>(fr - 1)]) = 1.0;
+      } else {
+        c0[b](k) = layout.fixed[b][static_cast<std::size_t>(k)];
+      }
+    }
+  }
+
+  // Threshold-only linear equality rows fold into the design through a
+  // null-space basis; rows mixing threshold and non-threshold columns are
+  // rejected.
   const std::size_t n_lin = pt.lin_constraint_d.size();
+  design.absorbed_lin_row.assign(n_lin, 0);
+  Eigen::MatrixXd Rc;
+  Eigen::VectorXd dc;
+  Eigen::Index n_abs = 0;
   if (n_lin > 0) {
     const std::size_t n_cols = static_cast<std::size_t>(n_free);
     if (pt.lin_constraint_R.size() != n_lin * n_cols) {
@@ -787,28 +844,81 @@ make_threshold_profile(const spec::LatentStructure& pt,
           "ordinal threshold profiling found malformed linear constraints"));
     }
     for (std::size_t r = 0; r < n_lin; ++r) {
+      bool has_threshold = false;
+      bool has_other = false;
       for (std::int32_t k = 0; k < n_free; ++k) {
-        if (profile.is_threshold[static_cast<std::size_t>(k)] == 0) continue;
         const double v =
             pt.lin_constraint_R[r * n_cols + static_cast<std::size_t>(k)];
-        if (std::abs(v) > 1e-12) {
-          return std::unexpected(make_err(FitError::Kind::NumericIssue,
-              "ordinal threshold profiling does not support linear constraints on thresholds"));
+        if (std::abs(v) <= 1e-12) continue;
+        if (design.is_threshold[static_cast<std::size_t>(k)] != 0) {
+          has_threshold = true;
+        } else {
+          has_other = true;
         }
+      }
+      if (has_threshold && has_other) {
+        return std::unexpected(make_err(FitError::Kind::NumericIssue,
+            "ordinal threshold profiling does not support linear constraints mixing thresholds and non-threshold parameters"));
+      }
+      if (has_threshold) {
+        design.absorbed_lin_row[r] = 1;
+        ++n_abs;
+      }
+    }
+    if (n_abs > 0) {
+      Rc = Eigen::MatrixXd::Zero(n_abs, m);
+      dc = Eigen::VectorXd::Zero(n_abs);
+      Eigen::Index rr = 0;
+      for (std::size_t r = 0; r < n_lin; ++r) {
+        if (design.absorbed_lin_row[r] == 0) continue;
+        for (std::int32_t k = 0; k < n_free; ++k) {
+          const double v =
+              pt.lin_constraint_R[r * n_cols + static_cast<std::size_t>(k)];
+          if (std::abs(v) <= 1e-12) continue;
+          Rc(rr, coord_of_free[static_cast<std::size_t>(k)]) += v;
+        }
+        dc(rr) = pt.lin_constraint_d[r];
+        ++rr;
       }
     }
   }
 
-  profile.active_full.reserve(static_cast<std::size_t>(n_free));
-  for (std::int32_t k = 0; k < n_free; ++k) {
-    if (profile.is_threshold[static_cast<std::size_t>(k)] == 0) {
-      profile.active_full.push_back(k);
+  if (n_abs == 0) {
+    design.H = std::move(H0);
+    design.c = std::move(c0);
+    design.n_gamma = m;
+  } else {
+    Eigen::FullPivLU<Eigen::MatrixXd> lu(Rc);
+    const Eigen::VectorXd gamma_p = lu.solve(dc);
+    const double feas_tol = 1e-8 * (1.0 + dc.cwiseAbs().maxCoeff());
+    if (!gamma_p.allFinite() ||
+        (Rc * gamma_p - dc).cwiseAbs().maxCoeff() > feas_tol) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "ordinal threshold linear equality constraints are infeasible"));
+    }
+    const Eigen::Index ng = lu.dimensionOfKernel();
+    const Eigen::MatrixXd kernel = lu.kernel();
+    design.n_gamma = ng;
+    design.H.resize(nb);
+    design.c.resize(nb);
+    for (std::size_t b = 0; b < nb; ++b) {
+      design.c[b] = c0[b] + H0[b] * gamma_p;
+      design.H[b] = ng > 0
+          ? Eigen::MatrixXd(H0[b] * kernel.leftCols(ng))
+          : Eigen::MatrixXd::Zero(stats.thresholds[b].size(), 0);
     }
   }
-  return profile;
+
+  design.active_full.reserve(static_cast<std::size_t>(n_free));
+  for (std::int32_t k = 0; k < n_free; ++k) {
+    if (design.is_threshold[static_cast<std::size_t>(k)] == 0) {
+      design.active_full.push_back(k);
+    }
+  }
+  return design;
 }
 
-Eigen::VectorXd profile_contract(const ThresholdProfile& profile,
+Eigen::VectorXd profile_contract(const ThresholdDesign& profile,
                                  const Eigen::VectorXd& theta) {
   Eigen::VectorXd out(static_cast<Eigen::Index>(profile.active_full.size()));
   for (Eigen::Index k = 0; k < out.size(); ++k) {
@@ -817,7 +927,7 @@ Eigen::VectorXd profile_contract(const ThresholdProfile& profile,
   return out;
 }
 
-Eigen::VectorXd profile_expand(const ThresholdProfile& profile,
+Eigen::VectorXd profile_expand(const ThresholdDesign& profile,
                                const Eigen::VectorXd& active) {
   Eigen::VectorXd out = profile.full_template;
   for (Eigen::Index k = 0; k < active.size(); ++k) {
@@ -826,7 +936,7 @@ Eigen::VectorXd profile_expand(const ThresholdProfile& profile,
   return out;
 }
 
-Eigen::MatrixXd profile_jacobian(const ThresholdProfile& profile,
+Eigen::MatrixXd profile_jacobian(const ThresholdDesign& profile,
                                  const Eigen::MatrixXd& J_full) {
   Eigen::MatrixXd out(J_full.rows(),
                       static_cast<Eigen::Index>(profile.active_full.size()));
@@ -836,7 +946,7 @@ Eigen::MatrixXd profile_jacobian(const ThresholdProfile& profile,
   return out;
 }
 
-Bounds profile_bounds(const ThresholdProfile& profile, const Bounds& bounds) {
+Bounds profile_bounds(const ThresholdDesign& profile, const Bounds& bounds) {
   if (bounds.empty()) return {};
   Bounds out;
   const Eigen::Index n = static_cast<Eigen::Index>(profile.active_full.size());
@@ -896,11 +1006,30 @@ ordinal_gp_block_kinds(const spec::LatentStructure& pt,
 
 fit_expected<void>
 ensure_no_unprofiled_equality_constraints(const spec::LatentStructure& pt,
-                                          const ThresholdProfile& profile) {
+                                          const ThresholdDesign& profile) {
   const std::int32_t n_free = pt.n_free();
   if (!pt.lin_constraint_d.empty()) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "fit_ordinal_bounded: profiled ordinal fit-only path does not yet support general linear equality constraints"));
+    // Threshold-only linear rows are absorbed into the threshold design and
+    // satisfied identically by the profiled thresholds; rows touching
+    // non-threshold parameters would be silently dropped by the profiled
+    // solver and must be rejected.
+    const std::size_t n_lin = pt.lin_constraint_d.size();
+    const std::size_t n_cols = static_cast<std::size_t>(n_free);
+    if (pt.lin_constraint_R.size() != n_lin * n_cols) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          "fit_ordinal_bounded: malformed linear constraints"));
+    }
+    for (std::size_t r = 0; r < n_lin; ++r) {
+      for (std::int32_t k = 0; k < n_free; ++k) {
+        const double v =
+            pt.lin_constraint_R[r * n_cols + static_cast<std::size_t>(k)];
+        if (std::abs(v) > 1e-12 &&
+            profile.is_threshold[static_cast<std::size_t>(k)] == 0) {
+          return std::unexpected(make_err(FitError::Kind::NumericIssue,
+              "fit_ordinal_bounded: profiled ordinal fit-only path does not yet support linear equality constraints on non-threshold parameters"));
+        }
+      }
+    }
   }
   if (static_cast<std::int32_t>(pt.eq_groups.size()) != n_free) return {};
 
@@ -936,9 +1065,31 @@ fix_thresholds_for_snlls(spec::LatentStructure pt,
                          const ThresholdLayout& layout,
                          const data::OrdinalStats& stats,
                          const Eigen::VectorXd& x0) {
-  auto profile_or = make_threshold_profile(pt, layout, stats, x0);
-  if (!profile_or.has_value()) return std::unexpected(profile_or.error());
-  ThresholdProfile profile = std::move(*profile_or);
+  auto design_or = make_threshold_design(pt, layout, stats, x0);
+  if (!design_or.has_value()) return std::unexpected(design_or.error());
+  ThresholdDesign design = std::move(*design_or);
+
+  // Threshold-only linear rows are absorbed by the threshold design; drop
+  // them before free-set compaction so the remaining constraint machinery
+  // only sees non-threshold rows.
+  if (!pt.lin_constraint_d.empty()) {
+    const std::size_t n_lin = pt.lin_constraint_d.size();
+    const std::size_t n_cols = static_cast<std::size_t>(pt.n_free());
+    std::vector<double> R_keep;
+    std::vector<double> d_keep;
+    for (std::size_t r = 0; r < n_lin; ++r) {
+      if (r < design.absorbed_lin_row.size() &&
+          design.absorbed_lin_row[r] != 0) {
+        continue;
+      }
+      for (std::size_t k = 0; k < n_cols; ++k) {
+        R_keep.push_back(pt.lin_constraint_R[r * n_cols + k]);
+      }
+      d_keep.push_back(pt.lin_constraint_d[r]);
+    }
+    pt.lin_constraint_R = std::move(R_keep);
+    pt.lin_constraint_d = std::move(d_keep);
+  }
 
   const std::int32_t old_n = pt.n_free();
   const std::vector<std::int32_t> old_free = pt.free;
@@ -973,8 +1124,8 @@ fix_thresholds_for_snlls(spec::LatentStructure pt,
   out.pt = std::move(pt);
   out.x0 = Eigen::VectorXd::Zero(out.pt.n_free());
   out.reduced_to_full.assign(static_cast<std::size_t>(out.pt.n_free()), 0);
-  out.full_template = profile.full_template;
-  out.profile = std::move(profile);
+  out.full_template = design.full_template;
+  out.design = std::move(design);
   std::vector<char> seen(static_cast<std::size_t>(out.pt.n_free()), 0);
   for (std::size_t row = 0; row < out.pt.size(); ++row) {
     const std::int32_t old = old_free[row];
@@ -1309,124 +1460,133 @@ mixed_stats_from_moments_cache(const data::MixedOrdinalMoments& moments,
   return std::pair{std::move(stats), OrdinalWeightKind::DWLS};
 }
 
-fit_expected<ProfiledWeightBlock>
-make_profiled_weight_block(const Eigen::VectorXd& thresholds,
-                           const std::vector<std::int32_t>& free,
-                           const std::vector<double>& fixed,
-                           const ThresholdProfile& profile,
-                           const Eigen::MatrixXd& W,
-                           const Eigen::MatrixXd& factor,
-                           std::string_view context,
-                           std::size_t block_index) {
-  const Eigen::Index nth = thresholds.size();
-  if (static_cast<Eigen::Index>(free.size()) != nth ||
-      static_cast<Eigen::Index>(fixed.size()) != nth) {
+// Joint cross-block threshold profiling. Minimizing the threshold block of
+// the weighted objective sum_b w_b * r_b' W_b r_b over the shared gamma
+// coordinate gives the normal equations
+//   A gamma = sum_b w_b H_b' ( W_tt,b (tau_hat_b - c_b) - W_tr,b d_rho,b ),
+//   A       = sum_b w_b H_b' W_tt,b H_b,
+// with w_b = n_b / N. The block sample weights do not cancel once a gamma
+// coordinate spans blocks, and block b's profiled thresholds depend on every
+// block's correlation residual through A^{-1}.
+fit_expected<ProfiledWeightWorkspace>
+build_joint_profiled_workspace(const data::OrdinalMoments& moments,
+                               const ThresholdDesign& design,
+                               std::vector<Eigen::MatrixXd> Ws,
+                               std::vector<Eigen::MatrixXd> factors,
+                               std::string_view context) {
+  const std::size_t nb = moments.R.size();
+  if (design.H.size() != nb || design.c.size() != nb || Ws.size() != nb ||
+      factors.size() != nb) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        std::string(context) + ": threshold layout dimension mismatch in block " +
-            std::to_string(block_index)));
+        std::string(context) + ": threshold design block count mismatch"));
   }
-  if (W.rows() != W.cols() || W.rows() < nth || !matrix_all_finite(W)) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        std::string(context) + ": weight dimension mismatch in block " +
-            std::to_string(block_index)));
-  }
-  if (factor.rows() != W.rows() || factor.cols() != W.cols() ||
-      !matrix_all_finite(factor)) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        std::string(context) + ": weight factor dimension mismatch in block " +
-            std::to_string(block_index)));
-  }
-  const Eigen::Index mdim = W.rows();
-  const Eigen::Index ncorr = mdim - nth;
-  Eigen::VectorXd fixed_contrib = Eigen::VectorXd::Zero(nth);
-  for (Eigen::Index k = 0; k < nth; ++k) {
-    const std::int32_t fr = free[static_cast<std::size_t>(k)];
-    if (fr < 0) {
+  auto N = total_n_obs(moments);
+  if (!N.has_value()) return std::unexpected(N.error());
+
+  ProfiledWeightWorkspace out;
+  out.blocks.reserve(nb);
+  out.corr_offset.resize(nb);
+  for (std::size_t b = 0; b < nb; ++b) {
+    const Eigen::Index p = moments.R[b].rows();
+    const Eigen::Index nth = moments.thresholds[b].size();
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    const Eigen::Index mdim = nth + ncorr;
+    out.corr_offset[b] = out.ncorr_total;
+    out.ncorr_total += ncorr;
+    if (Ws[b].rows() != mdim || Ws[b].cols() != mdim ||
+        !matrix_all_finite(Ws[b])) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          std::string(context) + ": invalid threshold free index in block " +
-              std::to_string(block_index)));
+          std::string(context) + ": weight dimension mismatch in block " +
+              std::to_string(b)));
     }
-    if (fr == 0) {
-      fixed_contrib(k) = fixed[static_cast<std::size_t>(k)];
-      continue;
-    }
-    if (fr > static_cast<std::int32_t>(profile.threshold_coord.size()) ||
-        profile.threshold_coord[static_cast<std::size_t>(fr - 1)] < 0 ||
-        profile.threshold_coord[static_cast<std::size_t>(fr - 1)] >=
-            profile.n_threshold_coord) {
+    if (factors[b].rows() != mdim || factors[b].cols() != mdim ||
+        !matrix_all_finite(factors[b])) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          std::string(context) + ": threshold profiling metadata mismatch"));
+          std::string(context) + ": weight factor dimension mismatch in block " +
+              std::to_string(b)));
+    }
+    if (design.H[b].rows() != nth || design.H[b].cols() != design.n_gamma ||
+        design.c[b].size() != nth) {
+      return std::unexpected(make_err(FitError::Kind::NumericIssue,
+          std::string(context) + ": threshold design dimension mismatch in block " +
+              std::to_string(b)));
     }
   }
 
-  Eigen::MatrixXd H =
-      Eigen::MatrixXd::Zero(nth, profile.n_threshold_coord);
-  for (Eigen::Index k = 0; k < nth; ++k) {
-    const std::int32_t fr = free[static_cast<std::size_t>(k)];
-    if (fr > 0) {
-      H(k, profile.threshold_coord[static_cast<std::size_t>(fr - 1)]) = 1.0;
+  const Eigen::Index ng = design.n_gamma;
+  Eigen::VectorXd G_const;
+  Eigen::MatrixXd G_corr;
+  if (ng > 0) {
+    Eigen::MatrixXd A = Eigen::MatrixXd::Zero(ng, ng);
+    Eigen::VectorXd r_const = Eigen::VectorXd::Zero(ng);
+    Eigen::MatrixXd R_corr = Eigen::MatrixXd::Zero(ng, out.ncorr_total);
+    for (std::size_t b = 0; b < nb; ++b) {
+      const Eigen::Index nth = moments.thresholds[b].size();
+      const Eigen::Index ncorr = Ws[b].rows() - nth;
+      const double w = static_cast<double>(moments.n_obs[b]) /
+                       static_cast<double>(*N);
+      const Eigen::MatrixXd HtW =
+          design.H[b].transpose() * Ws[b].block(0, 0, nth, nth);
+      A.noalias() += w * (HtW * design.H[b]);
+      r_const.noalias() +=
+          w * (HtW * (moments.thresholds[b] - design.c[b]));
+      if (ncorr > 0) {
+        R_corr.middleCols(out.corr_offset[b], ncorr).noalias() =
+            w * (design.H[b].transpose() * Ws[b].block(0, nth, nth, ncorr));
+      }
     }
-  }
-
-  Eigen::VectorXd threshold_intercept = fixed_contrib;
-  Eigen::MatrixXd threshold_from_corr = Eigen::MatrixXd::Zero(nth, ncorr);
-  if (H.cols() > 0) {
-    const Eigen::MatrixXd Wtt = W.block(0, 0, nth, nth);
-    const Eigen::MatrixXd Wtr = W.block(0, nth, nth, ncorr);
-    Eigen::MatrixXd A = H.transpose() * Wtt * H;
     A = 0.5 * (A + A.transpose());
     Eigen::LLT<Eigen::MatrixXd> llt_A(A);
     if (llt_A.info() != Eigen::Success) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           std::string(context) +
-              ": threshold profiling normal matrix is not positive definite in block " +
-              std::to_string(block_index)));
+              ": threshold profiling normal matrix is not positive definite "
+              "(rank-deficient or contradictory threshold design)"));
     }
-    const Eigen::VectorXd rhs_intercept =
-        H.transpose() * Wtt * (thresholds - fixed_contrib);
-    threshold_intercept = H * llt_A.solve(rhs_intercept) + fixed_contrib;
-    if (ncorr > 0) {
-      threshold_from_corr = H * llt_A.solve(H.transpose() * Wtr);
-    }
-    if (!threshold_intercept.allFinite() || !threshold_from_corr.allFinite()) {
+    G_const = llt_A.solve(r_const);
+    G_corr = llt_A.solve(R_corr);
+    if (!G_const.allFinite() || !G_corr.allFinite()) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          std::string(context) +
-              ": threshold profiling solve failed in block " +
-              std::to_string(block_index)));
+          std::string(context) + ": threshold profiling solve failed"));
     }
   }
 
-  Eigen::MatrixXd profiled_moment_from_corr =
-      Eigen::MatrixXd::Zero(mdim, ncorr);
-  if (ncorr > 0) {
-    profiled_moment_from_corr.topRows(nth) = -threshold_from_corr;
-    profiled_moment_from_corr.bottomRows(ncorr).setIdentity();
+  for (std::size_t b = 0; b < nb; ++b) {
+    const Eigen::Index nth = moments.thresholds[b].size();
+    Eigen::VectorXd intercept = design.c[b];
+    Eigen::MatrixXd from_corr = Eigen::MatrixXd::Zero(nth, out.ncorr_total);
+    if (ng > 0) {
+      intercept.noalias() += design.H[b] * G_const;
+      from_corr.noalias() = design.H[b] * G_corr;
+    }
+    Eigen::VectorXd offset = intercept - moments.thresholds[b];
+    out.blocks.push_back(ProfiledWeightBlock{
+        .factor = std::move(factors[b]),
+        .threshold_offset = std::move(offset),
+        .threshold_from_corr = std::move(from_corr),
+        .threshold_intercept = std::move(intercept)});
   }
-  Eigen::VectorXd profiled_offset = Eigen::VectorXd::Zero(mdim);
-  profiled_offset.head(nth) = threshold_intercept - thresholds;
-
-  return ProfiledWeightBlock{
-      .factor = factor,
-      .profiled_moment_from_corr = std::move(profiled_moment_from_corr),
-      .profiled_offset = std::move(profiled_offset),
-      .threshold_intercept = std::move(threshold_intercept),
-      .threshold_from_corr = std::move(threshold_from_corr)};
+  return out;
 }
 
 fit_expected<ProfiledWeightWorkspace>
 profiled_weight_workspace(const data::OrdinalMoments& moments,
                           const ThresholdLayout& layout,
-                          const ThresholdProfile& profile,
+                          const ThresholdDesign& design,
                           data::OrdinalGammaCache* cache,
                           const data::OrdinalWeightPlan& plan) {
-  ProfiledWeightWorkspace out;
-  out.blocks.reserve(moments.R.size());
+  (void)layout;
   if (plan.purpose == data::OrdinalWorkspacePurpose::InferenceOnly) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "fit_ordinal_bounded: OrdinalWeightPlan purpose cannot be inference-only"));
   }
   const bool fit_plus_inference =
       plan.purpose == data::OrdinalWorkspacePurpose::FitPlusInference;
+
+  std::vector<Eigen::MatrixXd> Ws;
+  std::vector<Eigen::MatrixXd> factors;
+  Ws.reserve(moments.R.size());
+  factors.reserve(moments.R.size());
 
   if (plan.estimator == data::OrdinalEstimatorKind::ULS) {
     const data::OrdinalGammaMaterialization expected =
@@ -1462,17 +1622,14 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
     }
     for (std::size_t b = 0; b < moments.R.size(); ++b) {
       const Eigen::Index p = moments.R[b].rows();
-      const Eigen::Index nth = moments.thresholds[b].size();
-      const Eigen::Index ncorr = p * (p - 1) / 2;
-      const Eigen::Index mdim = nth + ncorr;
-      const Eigen::MatrixXd I = Eigen::MatrixXd::Identity(mdim, mdim);
-      auto block = make_profiled_weight_block(
-          moments.thresholds[b], layout.free[b], layout.fixed[b], profile, I, I,
-          "fit_ordinal_bounded", b);
-      if (!block.has_value()) return std::unexpected(block.error());
-      out.blocks.push_back(std::move(*block));
+      const Eigen::Index mdim =
+          moments.thresholds[b].size() + p * (p - 1) / 2;
+      Ws.push_back(Eigen::MatrixXd::Identity(mdim, mdim));
+      factors.push_back(Eigen::MatrixXd::Identity(mdim, mdim));
     }
-    return out;
+    return build_joint_profiled_workspace(moments, design, std::move(Ws),
+                                          std::move(factors),
+                                          "fit_ordinal_bounded");
   }
 
   if (plan.estimator == data::OrdinalEstimatorKind::WLS) {
@@ -1494,8 +1651,7 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
     for (std::size_t b = 0; b < moments.R.size(); ++b) {
       const Eigen::Index p = moments.R[b].rows();
       const Eigen::Index nth = moments.thresholds[b].size();
-      const Eigen::Index ncorr = p * (p - 1) / 2;
-      const Eigen::Index mdim = nth + ncorr;
+      const Eigen::Index mdim = nth + p * (p - 1) / 2;
       const Eigen::MatrixXd& W = cache->blocks[b].w_wls;
       if (W.rows() != mdim || W.cols() != mdim || !matrix_all_finite(W)) {
         return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -1508,13 +1664,12 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
             "fit_ordinal_bounded: cached WLS weight is not positive definite in block " +
                 std::to_string(b)));
       }
-      auto block = make_profiled_weight_block(
-          moments.thresholds[b], layout.free[b], layout.fixed[b], profile, W,
-          llt.matrixL(), "fit_ordinal_bounded", b);
-      if (!block.has_value()) return std::unexpected(block.error());
-      out.blocks.push_back(std::move(*block));
+      Ws.push_back(W);
+      factors.push_back(llt.matrixL());
     }
-    return out;
+    return build_joint_profiled_workspace(moments, design, std::move(Ws),
+                                          std::move(factors),
+                                          "fit_ordinal_bounded");
   }
 
   const data::OrdinalGammaMaterialization expected =
@@ -1542,8 +1697,7 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
   for (std::size_t b = 0; b < moments.R.size(); ++b) {
     const Eigen::Index p = moments.R[b].rows();
     const Eigen::Index nth = moments.thresholds[b].size();
-    const Eigen::Index ncorr = p * (p - 1) / 2;
-    const Eigen::Index mdim = nth + ncorr;
+    const Eigen::Index mdim = nth + p * (p - 1) / 2;
     const Eigen::VectorXd& diagonal = cache->blocks[b].diagonal;
     if (diagonal.size() != mdim || !vector_all_finite(diagonal)) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
@@ -1563,13 +1717,12 @@ profiled_weight_workspace(const data::OrdinalMoments& moments,
       W(k, k) = w;
       factor(k, k) = std::sqrt(w);
     }
-    auto block = make_profiled_weight_block(
-        moments.thresholds[b], layout.free[b], layout.fixed[b], profile, W, factor,
-        "fit_ordinal_bounded", b);
-    if (!block.has_value()) return std::unexpected(block.error());
-    out.blocks.push_back(std::move(*block));
+    Ws.push_back(std::move(W));
+    factors.push_back(std::move(factor));
   }
-  return out;
+  return build_joint_profiled_workspace(moments, design, std::move(Ws),
+                                        std::move(factors),
+                                        "fit_ordinal_bounded");
 }
 
 fit_expected<std::vector<Eigen::MatrixXd>>
@@ -1841,41 +1994,63 @@ ordinal_jacobian(const data::OrdinalStats& stats,
   return out;
 }
 
+// Stacked correlation residual d_corr over all blocks, in workspace order.
+// The joint threshold map consumes the full stacked vector: with shared gamma
+// coordinates block b's profiled thresholds depend on every block's
+// correlation residual.
+template <typename Stats>
+fit_expected<Eigen::VectorXd>
+stacked_corr_residual(const Stats& stats,
+                      const model::ImpliedMoments& moments,
+                      const ProfiledWeightWorkspace& weights) {
+  if (weights.blocks.size() != stats.R.size() ||
+      weights.corr_offset.size() != stats.R.size()) {
+    return std::unexpected(make_err(FitError::Kind::NumericIssue,
+        "profiled ordinal residuals received mismatched weight blocks"));
+  }
+  Eigen::VectorXd d(weights.ncorr_total);
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    d.segment(weights.corr_offset[b], ncorr) =
+        corr_lower(moments.sigma[b]) - corr_lower(stats.R[b]);
+  }
+  return d;
+}
+
 fit_expected<Eigen::VectorXd>
 profiled_ordinal_residuals(const data::OrdinalMoments& stats,
                            const model::ImpliedMoments& moments,
                            const ProfiledWeightWorkspace& weights) {
   auto N = total_n_obs(stats);
   if (!N.has_value()) return std::unexpected(N.error());
-  if (weights.blocks.size() != stats.R.size()) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "profiled ordinal residuals received mismatched weight blocks"));
-  }
+  auto d_corr_or = stacked_corr_residual(stats, moments, weights);
+  if (!d_corr_or.has_value()) return std::unexpected(d_corr_or.error());
+  const Eigen::VectorXd& d_corr = *d_corr_or;
+
   Eigen::Index n_total = 0;
-  for (std::size_t b = 0; b < stats.R.size(); ++b) {
-    n_total += weights.blocks[b].profiled_offset.size();
-  }
+  for (const auto& block : weights.blocks) n_total += block.factor.rows();
   Eigen::VectorXd out(n_total);
   Eigen::Index off = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
     const Eigen::Index ncorr = p * (p - 1) / 2;
     const auto& block = weights.blocks[b];
-    if (block.profiled_moment_from_corr.cols() != ncorr ||
-        block.profiled_moment_from_corr.rows() != block.profiled_offset.size() ||
-        block.factor.rows() != block.profiled_offset.size() ||
-        block.factor.cols() != block.profiled_offset.size()) {
+    const Eigen::Index nth = block.threshold_offset.size();
+    const Eigen::Index mdim = nth + ncorr;
+    if (block.factor.rows() != mdim || block.factor.cols() != mdim ||
+        block.threshold_from_corr.rows() != nth ||
+        block.threshold_from_corr.cols() != weights.ncorr_total) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "profiled ordinal residuals found a weight dimension mismatch"));
     }
-    const Eigen::VectorXd d_corr =
-        corr_lower(moments.sigma[b]) - corr_lower(stats.R[b]);
-    const Eigen::VectorXd d =
-        block.profiled_offset + block.profiled_moment_from_corr * d_corr;
+    Eigen::VectorXd d(mdim);
+    d.head(nth) = block.threshold_offset - block.threshold_from_corr * d_corr;
+    d.tail(ncorr) = d_corr.segment(weights.corr_offset[b], ncorr);
     const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) /
                                 static_cast<double>(*N));
-    out.segment(off, d.size()) = sw * (block.factor.transpose() * d);
-    off += d.size();
+    out.segment(off, mdim) = sw * (block.factor.transpose() * d);
+    off += mdim;
   }
   if (!out.allFinite()) {
     return std::unexpected(make_err(FitError::Kind::NonFiniteObjective,
@@ -1891,37 +2066,49 @@ profiled_ordinal_jacobian(const data::OrdinalMoments& stats,
                           const ProfiledWeightWorkspace& weights) {
   auto N = total_n_obs(stats);
   if (!N.has_value()) return std::unexpected(N.error());
-  if (weights.blocks.size() != stats.R.size()) {
+  if (weights.blocks.size() != stats.R.size() ||
+      weights.corr_offset.size() != stats.R.size()) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "profiled ordinal Jacobian received mismatched weight blocks"));
   }
-  Eigen::Index n_total = 0;
-  for (std::size_t b = 0; b < stats.R.size(); ++b) {
-    n_total += weights.blocks[b].profiled_offset.size();
+  // Stacked correlation Jacobian over all blocks, matching the stacked d_corr
+  // layout.
+  Eigen::MatrixXd J_corr(weights.ncorr_total, J_sigma.cols());
+  {
+    Eigen::Index sigma_off = 0;
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      const Eigen::Index p = stats.R[b].rows();
+      const Eigen::Index ncorr = p * (p - 1) / 2;
+      J_corr.middleRows(weights.corr_offset[b], ncorr) =
+          corr_jacobian(moments.sigma[b], J_sigma, sigma_off);
+      sigma_off += vech_len(p);
+    }
   }
+
+  Eigen::Index n_total = 0;
+  for (const auto& block : weights.blocks) n_total += block.factor.rows();
   Eigen::MatrixXd out(n_total, J_sigma.cols());
   Eigen::Index out_off = 0;
-  Eigen::Index sigma_off = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
     const Eigen::Index ncorr = p * (p - 1) / 2;
     const auto& block = weights.blocks[b];
-    if (block.profiled_moment_from_corr.cols() != ncorr ||
-        block.profiled_moment_from_corr.rows() != block.profiled_offset.size() ||
-        block.factor.rows() != block.profiled_offset.size() ||
-        block.factor.cols() != block.profiled_offset.size()) {
+    const Eigen::Index nth = block.threshold_offset.size();
+    const Eigen::Index mdim = nth + ncorr;
+    if (block.factor.rows() != mdim || block.factor.cols() != mdim ||
+        block.threshold_from_corr.rows() != nth ||
+        block.threshold_from_corr.cols() != weights.ncorr_total) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "profiled ordinal Jacobian found a weight dimension mismatch"));
     }
-    Eigen::MatrixXd Jb =
-        corr_jacobian(moments.sigma[b], J_sigma, sigma_off);
+    Eigen::MatrixXd Jp(mdim, J_sigma.cols());
+    Jp.topRows(nth).noalias() = -block.threshold_from_corr * J_corr;
+    Jp.bottomRows(ncorr) = J_corr.middleRows(weights.corr_offset[b], ncorr);
     const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) /
                                 static_cast<double>(*N));
-    const Eigen::MatrixXd Jp = block.profiled_moment_from_corr * Jb;
-    out.block(out_off, 0, block.profiled_offset.size(), J_sigma.cols()) =
+    out.block(out_off, 0, mdim, J_sigma.cols()) =
         sw * (block.factor.transpose() * Jp);
-    out_off += block.profiled_offset.size();
-    sigma_off += vech_len(p);
+    out_off += mdim;
   }
   return out;
 }
@@ -1932,23 +2119,18 @@ reconstruct_profiled_thresholds(const data::OrdinalStats& stats,
                                 const model::ImpliedMoments& moments,
                                 const ProfiledWeightWorkspace& weights,
                                 const Eigen::VectorXd& theta) {
-  if (weights.blocks.size() != stats.R.size()) {
-    return std::unexpected(make_err(FitError::Kind::NumericIssue,
-        "profiled ordinal reconstruction received mismatched weight blocks"));
-  }
+  auto d_corr_or = stacked_corr_residual(stats, moments, weights);
+  if (!d_corr_or.has_value()) return std::unexpected(d_corr_or.error());
+  const Eigen::VectorXd& d_corr = *d_corr_or;
   Eigen::VectorXd out = theta;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
-    const Eigen::Index p = stats.R[b].rows();
     const Eigen::Index nth = stats.thresholds[b].size();
-    const Eigen::Index ncorr = p * (p - 1) / 2;
     if (weights.blocks[b].threshold_intercept.size() != nth ||
         weights.blocks[b].threshold_from_corr.rows() != nth ||
-        weights.blocks[b].threshold_from_corr.cols() != ncorr) {
+        weights.blocks[b].threshold_from_corr.cols() != weights.ncorr_total) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
           "profiled ordinal reconstruction found a threshold map dimension mismatch"));
     }
-    const Eigen::VectorXd d_corr =
-        corr_lower(moments.sigma[b]) - corr_lower(stats.R[b]);
     const Eigen::VectorXd tau =
         weights.blocks[b].threshold_intercept -
         weights.blocks[b].threshold_from_corr * d_corr;
@@ -3714,9 +3896,9 @@ fit_ordinal_bounded(spec::LatentStructure pt,
     return solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
                             "fit_ordinal_bounded");
   }
-  auto profile_or = make_threshold_profile(pt, layout, stats, x0);
+  auto profile_or = make_threshold_design(pt, layout, stats, x0);
   if (!profile_or.has_value()) return std::unexpected(profile_or.error());
-  ThresholdProfile profile = std::move(*profile_or);
+  ThresholdDesign profile = std::move(*profile_or);
 
   if (bounds.empty()) {
     auto b_or = bounds_from_partable(pt);
@@ -3848,7 +4030,7 @@ fit_ordinal_snlls(spec::LatentStructure pt,
   ThresholdFixedProfile threshold_fixed = std::move(*threshold_fixed_or);
 
   auto profiled_weights_or = profiled_weight_workspace(
-      moments, layout, threshold_fixed.profile, gamma_cache, plan);
+      moments, layout, threshold_fixed.design, gamma_cache, plan);
   if (!profiled_weights_or.has_value()) {
     return std::unexpected(profiled_weights_or.error());
   }

@@ -782,28 +782,32 @@ stop rather than any usable non-error return.
 - The all-ordinal fit-only path can now consume `OrdinalMoments` plus an
   `OrdinalWeightPlan`: ULS builds identity weights and does not touch Gamma,
   while DWLS consumes only diagonal Gamma entries from `OrdinalGammaCache`.
-  For free-threshold delta models (`H = I`), the cache-aware ULS/DWLS path
-  profiles thresholds out of the optimizer, drives only the active correlation
-  block, and reconstructs returned threshold estimates from the observed sample
-  thresholds. Fixed threshold rows are kept as threshold residuals in the
-  profiled full-moment objective, so ULS/DWLS/WLS can compare against the
-  ordinary unprofiled ordinal objective without promoting fixed thresholds back
-  into optimizer coordinates. Threshold-local shared-label / bare-merge
-  equality groups share threshold-map columns while non-threshold equalities
-  remain outside this cache-aware fit-only path. The cache-aware WLS path uses
-  the full inverse-weight threshold/correlation blocks, applies the equivalent
-  profiled affine threshold/correlation residual transform, and reconstructs
-  thresholds with the profiled cross-block formula.
+  The cache-aware ULS/DWLS/WLS paths profile thresholds out of the optimizer
+  through a joint affine threshold design `tau_b = c_b + H_b gamma` built from
+  the prepared partable: free thresholds, fixed rows (kept as threshold
+  residuals in the profiled full-moment objective), equality-label merges
+  within and across groups (cross-group threshold invariance), and
+  threshold-only linear equality constraints folded through a null-space
+  basis. The threshold normal equations are joint across blocks with `n_b/N`
+  sample weights, so multi-group profiled fitting is supported and one gamma
+  coordinate may span groups; block `b`'s profiled thresholds then consume the
+  stacked correlation residual over all blocks. Non-threshold equalities and
+  constraints mixing threshold with non-threshold columns remain outside this
+  cache-aware fit-only path. The cache-aware WLS path uses the full
+  inverse-weight threshold/correlation blocks, applies the equivalent profiled
+  affine threshold/correlation residual transform, and reconstructs thresholds
+  with the profiled cross-block formula.
   Fit-plus-inference and inference-only all-ordinal plans can also reuse a
   full `OrdinalGammaCache` for robust DWLS/WLS reporting: DWLS materializes
   diagonal weights from the full Gamma when needed, WLS materializes the full
   inverse weight, and the robust result matches the legacy materialized
   `OrdinalStats` path. The default all-ordinal SNLLS entry point reuses the
-  same free/fixed/pure-merge-threshold profiled objective for delta ULS/DWLS/WLS:
+  same joint threshold-design profiled objective for delta ULS/DWLS/WLS:
   thresholds are fixed out before the generic Golub-Pereyra classifier sees the
-  problem, conditionally linear covariance parameters are profiled, WLS uses the
-  same affine full-weight transform, and the returned vector is reconstructed in
-  the ordinary prepared ordinal partable coordinate. For theta, cache-aware
+  problem (absorbed threshold-only linear rows are stripped from the reduced
+  partable), conditionally linear covariance parameters are profiled, WLS uses
+  the same affine full-weight transform, and the returned vector is
+  reconstructed in the ordinary prepared ordinal partable coordinate. For theta, cache-aware
   bounded fitting uses the full standardized threshold/correlation moment
   objective with the requested ULS/DWLS/WLS cache materialization, and SNLLS
   profiles only threshold free parameters because the standardized covariance
@@ -812,10 +816,11 @@ stop rather than any usable non-error return.
   and marks threshold free parameters as Golub-Pereyra linear coordinates, so
   linear threshold constraints remain compatible without using the ordinal
   threshold-profiling map. `experiments/_archive/12-ordinal-threshold-constraints`
-  validates the split: free/shared-label threshold cases fit through both
-  profiled and full-threshold paths, while general linear threshold constraints
-  are rejected by threshold-profiled fitting and accepted by the full bounded
-  and full-threshold SNLLS paths. `experiments/_archive/13-ordinal-construction-boundary`
+  validated the original split (free/shared-label cases through both paths,
+  general linear threshold constraints only through the full bounded and
+  full-threshold SNLLS paths); the threshold-profiled paths have since gained
+  general threshold-only linear constraints and multi-group invariance, gated
+  by unit parity tests against the full-threshold and legacy bounded fits. `experiments/_archive/13-ordinal-construction-boundary`
   now compares the legacy eager constructor with
   `ordinal_workspace_from_integer_data()`: fit-only ULS returns
   `OrdinalMoments` without Gamma, fit-only DWLS returns `OrdinalMoments` plus

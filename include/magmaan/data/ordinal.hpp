@@ -94,6 +94,10 @@ enum class OrdinalMomentParameterization {
   Theta,
 };
 
+// Advisory threshold-structure label for benchmark/plan bookkeeping; the fit
+// paths derive the actual threshold design (free / merged / fixed /
+// linear-map, including cross-group invariance) from the partable. All three
+// modes are supported by the threshold-profiled paths.
 enum class OrdinalThresholdMode {
   FreeIdentity,
   LinearMap,
