@@ -171,6 +171,9 @@ sim_ig_draw <- sim_ig_draw_impl
 sim_norta_batch <- sim_norta_batch_impl
 sim_norta_calibrate <- sim_norta_calibrate_impl
 sim_norta_draw <- sim_norta_draw_impl
+sim_bicop_batch <- sim_bicop_batch_impl
+sim_bicop_calibrate <- sim_bicop_calibrate_impl
+sim_bicop_draw <- sim_bicop_draw_impl
 sim_plsim_batch <- sim_plsim_batch_impl
 sim_plsim_calibrate <- sim_plsim_calibrate_impl
 sim_plsim_draw <- sim_plsim_draw_impl
@@ -315,6 +318,9 @@ magmaan_core <- local({
       "sim_norta_batch",
       "sim_norta_calibrate",
       "sim_norta_draw",
+      "sim_bicop_batch",
+      "sim_bicop_calibrate",
+      "sim_bicop_draw",
       "sim_plsim_batch",
       "sim_plsim_calibrate",
       "sim_plsim_draw"
