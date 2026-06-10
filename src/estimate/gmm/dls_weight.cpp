@@ -7,11 +7,11 @@
 #include <utility>
 #include <vector>
 
-#include <Eigen/Cholesky>
 #include <Eigen/Core>
 
 #include "magmaan/error.hpp"
 
+#include "detail_linalg.hpp"
 #include "detail_vech.hpp"
 
 namespace magmaan::estimate::frontier {
@@ -22,6 +22,21 @@ using detail::vech_lower;
 
 FitError make_err(FitError::Kind k, std::string detail) {
   return FitError{k, std::move(detail), 0, 0.0};
+}
+
+// Shared diagnostic for a rank-deficient mixed/stacked Γ̂. ADF/WLS needs an
+// invertible fourth-moment matrix; we refuse rather than invert a barely-PD Γ̂
+// into a ~1e16 eigendirection that later trips the terminal stationarity audit.
+std::string gamma_singular_detail(std::size_t b, const char* which,
+                                  const detail::SymInverseResult& r) {
+  return "dls_weight: block " + std::to_string(b) + ": " + which +
+         " is rank deficient (dim=" + std::to_string(r.dim) +
+         ", numerical rank=" + std::to_string(r.rank) +
+         ", rcond=" + std::to_string(r.rcond) +
+         ", lambda_min=" + std::to_string(r.min_eval) +
+         ", tol=" + std::to_string(r.tol) +
+         "). ADF/WLS requires an invertible fourth-moment Gamma-hat; consider "
+         "more data, a GLS/normal-theory weight, or DLS mixing a<1.";
 }
 
 fit_expected<void>
@@ -193,15 +208,12 @@ dls_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
       const Eigen::MatrixXd gamma_dls_full =
           (1.0 - opts.a) * gamma_nt_full + opts.a * (*g_adf_full);
 
-      Eigen::LLT<Eigen::MatrixXd> gf_llt(gamma_dls_full);
-      if (gf_llt.info() != Eigen::Success) {
+      auto inv_full = detail::symmetric_inverse_pd_gated(gamma_dls_full);
+      if (!inv_full.ok) {
         return std::unexpected(make_err(FitError::Kind::NumericIssue,
-            "dls_weight: block " + std::to_string(b) +
-            " stacked Γ is not positive definite (the raw data may have too "
-            "few rows for the ADF weight with meanstructure)"));
+            gamma_singular_detail(b, "stacked Gamma", inv_full)));
       }
-      W.push_back(gf_llt.solve(
-          Eigen::MatrixXd::Identity(p + pstar, p + pstar)));
+      W.push_back(std::move(inv_full.inverse));
       continue;
     }
 
@@ -218,14 +230,12 @@ dls_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
 
     // W_DLS = Γ_DLS⁻¹. At a = 0 this equals gmm::normal_theory_weight's
     // covariance block (its 0.5 scaling cancels the symmetric-basis factor 2).
-    Eigen::LLT<Eigen::MatrixXd> g_llt(gamma_dls);
-    if (g_llt.info() != Eigen::Success) {
+    auto inv_mix = detail::symmetric_inverse_pd_gated(gamma_dls);
+    if (!inv_mix.ok) {
       return std::unexpected(make_err(FitError::Kind::NumericIssue,
-          "dls_weight: block " + std::to_string(b) +
-          " mixed Γ is not positive definite (the raw data may have too few "
-          "rows for the ADF weight)"));
+          gamma_singular_detail(b, "mixed Gamma", inv_mix)));
     }
-    W.push_back(g_llt.solve(Eigen::MatrixXd::Identity(pstar, pstar)));
+    W.push_back(std::move(inv_mix.inverse));
   }
   return W;
 }

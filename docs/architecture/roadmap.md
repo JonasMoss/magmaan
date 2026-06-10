@@ -606,7 +606,13 @@ stop rather than any usable non-error return.
   direction of Du and Wu (2024). `empirical_bayes_dls_weight()` then delegates
   to the same DLS builder, so modification-index and weighted-moment sandwich
   paths consume the result exactly like any supplied WLS weight. Local
-  simulation checks live under `tests/checks/dls/`.
+  simulation checks live under `tests/checks/dls/`. The mixed/structured Gamma
+  is inverted through a strict eigen-gated SPD inverse
+  (`detail::symmetric_inverse_pd_gated`, `tol = 1e-10·max(1,λmax)`): a
+  numerically rank-deficient fourth-moment Gamma returns an explicit
+  `FitError::NumericIssue` with dim / numerical rank / rcond / smallest
+  eigenvalue rather than a barely-PD inverse that would later trip the terminal
+  stationarity audit.
 - Model-implied fourth-order / structured-ADF weights are available as an
   explicit `estimate::frontier::structured_gamma_weight()` builder for
   complete-data, covariance-only pure CFA. The builder estimates independent

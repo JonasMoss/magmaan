@@ -101,3 +101,29 @@ genuinely the unbiased quantity (the sample-covariance divisor is `N−1`).
   baseline χ² is computed from `S` directly, not from `fmin`.
 - Anything reporting `est.fmin` as a number now reports `½F` for ML/FIML/ordinal
   too (previously those stored full `F`); the GOF statistic is unchanged.
+
+## Weight-matrix inversion policy
+
+Fourth-moment weight matrices are inverted through one shared, strict gate:
+`detail::symmetric_inverse_pd_gated` (`src/detail_linalg.{hpp,cpp}`). It takes a
+symmetric matrix, eigendecomposes `½(A + Aᵀ)`, and **refuses** to invert when the
+smallest eigenvalue falls at or below `tol = 1e-10·max(1, λmax)` (equivalently
+rcond ≲ 1e-10 once `λmax ≥ 1`); otherwise it returns `V·Λ⁻¹·Vᵀ` plus diagnostics
+(numerical rank, rcond, λmin, λmax).
+
+This is the single policy reference for:
+
+- continuous ADF/WLS and DLS weights — `estimate::frontier::dls_weight`,
+  `structured_gamma_weight` (the mixed/structured Γ̂), and
+- the ordinal NACOV / A11 inverses — `data/ordinal.cpp`, `data/shrinkage.cpp`,
+  which wrap the same core helper and map a non-`ok` result onto `PostError`.
+
+The rationale is that a Browne/empirical Γ̂ can be positive-definite only to
+working precision (e.g. a structurally degenerate fourth-moment direction at
+~1e-17). A bare Cholesky accepts such a matrix and produces a ~1e16 weight
+eigendirection, which is numerically useless and later trips the terminal
+stationarity audit (`src/optim/terminal_audit.cpp`) with amplified machine
+residuals. Failing explicitly — with rank / rcond / λmin in the error — is the
+stated convention; magmaan does not silently regularize a rank-deficient weight.
+A non-default `spectral_truncate` policy (pseudo-inverse on the retained
+subspace) is a possible future opt-in, not current behavior.

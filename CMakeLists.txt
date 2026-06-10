@@ -87,6 +87,7 @@ add_library(magmaan STATIC
   src/spec/lin_constraints.cpp
   src/compat/lavaan/partable_view.cpp
   src/compat/lavaan/composite_fold.cpp
+  src/detail_linalg.cpp
   src/model/matrix_rep.cpp
   src/model/model_evaluator.cpp
   src/model/fcsem_evaluator.cpp

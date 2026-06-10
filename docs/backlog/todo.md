@@ -165,22 +165,41 @@ semantics · **XL** statistical design/research track before implementation.
   oracle stores `theta`/`se` in lavaan's free-parameter order, which needs a
   lavaan→magmaan parameter map the order-free chisq/df check does not require.
 
-- **Low priority, S/M.** **ADF/WLS Γ̂ inversion policy and conditioned KKT
-  diagnostics** — At small N with a binary covariate, the empirical Browne
-  NACOV can be positive-definite to working precision but numerically rank
-  deficient. Reproducer: `muthen_2017_ch2_ex2_1__adf` (Hayes PROTEST
-  mediation; N=129; binary treatment 41/88 split; saturated path model; Γ̂ has
-  8 well-conditioned eigenvalues 10.4 → 0.09 plus one at 7.5×10⁻¹⁷). The
-  strict `chol2inv(chol(Γ̂))` audit amplifies machine residuals at a saturated
-  fit and reports a non-stationary projected gradient, while the
-  `experiments/00-lavaan-parity` conditioned diagnostic trims Γ̂ to rank 8/9
-  and gives `conditioned_grad_inf ≈ 9e-15`. Do not silently replace the ADF/WLS
-  objective. If this moves into C++, make it an explicit rank-revealing helper
-  or policy (`strict` vs `spectral_truncate`) that returns diagnostics such as
-  rank, tolerance, `rcond`, dropped rank, retained weighted residual, and
-  conditioned projected-gradient norm. The experiment report now treats this
-  as diagnostic telemetry only; core fitting/inference should stay strict until
-  a downstream need justifies an explicit API.
+- **Done (strict gate; `spectral_truncate` left as optional follow-up).**
+  **ADF/WLS Γ̂ inversion policy.** At small N with a binary covariate the
+  empirical Browne NACOV can be positive-definite to working precision but
+  numerically rank deficient. Reproducer: `muthen_2017_ch2_ex2_1__adf` (Hayes
+  PROTEST mediation; N=129; binary treatment 41/88 split; saturated df=0 path
+  model; Γ̂ has 8 well-conditioned eigenvalues 10.4 → 0.09 plus one at
+  7.5×10⁻¹⁷, rcond ≈ 5e-18). The diagnosis turned out to be a terminal-audit
+  false-negative, not a wrong estimate: the barely-PD Γ̂ passed the bare
+  `Eigen::LLT` in `dls_weight.cpp`, the fit landed at the correct saturated θ̂,
+  but the resulting ~1e16 weight eigendirection amplified machine residuals into
+  a `grad_inf ≈ 3.86` so the KKT audit reported non-stationary — neither a clean
+  failure nor a clean success. **Fix:** the continuous ADF/WLS weight builders
+  (`estimate::frontier::dls_weight`, `structured_gamma_weight`) now invert the
+  mixed/structured Γ through a shared eigen-gated SPD inverse,
+  `detail::symmetric_inverse_pd_gated` (`src/detail_linalg.{hpp,cpp}`), with the
+  same floor the ordinal path already used (`tol = 1e-10·max(1,λmax)`, i.e.
+  rcond ≳ 1e-10). A rank-deficient Γ̂ now returns an explicit
+  `FitError::NumericIssue` carrying dim / numerical rank / rcond / λmin and a
+  remedy pointer ("more data, a GLS/normal-theory weight, or DLS mixing a<1")
+  instead of an unstable inverse; the misleading "too few rows" message is gone.
+  The same helper de-duplicates the byte-identical `symmetric_inverse_pd` copies
+  in `data/ordinal.cpp` and `data/shrinkage.cpp`. Guarded by
+  `tests/unit/detail_linalg_test.cpp` (RNG-free gate pin reproducing the muthen
+  spectrum) and a rank-deficient rejection case in `dls_weight_test.cpp`; the
+  well-conditioned a=0/a=1/meanstructure exactness anchors stay green after the
+  LLT→eigensolver swap. Note `experiments/00-lavaan-parity` is unaffected: its
+  audit harness deliberately inverts the empirical NACOV in R
+  (`chol2inv(chol(.))`, papers/snlls-continuous core-cases), so it still
+  exercises the raw pathology + conditioned-trim telemetry and is not routed
+  through the core gate. **Follow-up (optional, deferred):** a non-default
+  `spectral_truncate` policy (the experiment's pseudo-inverse, returning dropped
+  rank / retained weighted residual / conditioned projected-gradient norm) for
+  callers who want a parity-restoring fit on degenerate saturated cases rather
+  than a refusal. Not built; the experiment's `conditioned_adf_weight()` remains
+  the advisory telemetry for it.
 
 ## Robust score / modification-index tests (frontier)
 
