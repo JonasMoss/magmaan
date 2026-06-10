@@ -133,11 +133,11 @@ test: test-fast
 
 # Build + run the fast C++ test suite and write JUnit XML.
 test-report: fast
-    ctest --preset fast --output-junit build/fast/test-results.xml
+    ctest --preset fast --output-junit "$PWD/build/fast/test-results.xml"
 
 # Build + run the quick fast-suite and write JUnit XML.
 test-quick-report: fast
-    ctest --preset fast -LE parity --output-junit build/fast/test-quick-results.xml
+    ctest --preset fast -LE parity --output-junit "$PWD/build/fast/test-quick-results.xml"
 
 # Local maintainer health check: quick report plus source-coverage summary.
 health: test-quick-report coverage
