@@ -90,6 +90,21 @@ genuinely the unbiased quantity (the sample-covariance divisor is `N−1`).
    goldens (`lavaan_parity_golden_test.cpp`, `ls_golden_test.cpp`), never inside
    the statistic. It is an honesty correction in the comparison, not an
    estimator choice.
+4. **Ordinal/categorical LS carries the same offset — per group.** lavaan's
+   categorical ULS/DWLS/WLS objective applies `(n_g−1)/n_g` *inside each
+   group's term* (`lav_model_objective.R`:
+   `group.fx = 0.5·(nobs−1)/nobs·group.fx`, combined by `weighted.mean` with
+   weights `n_g`), so its statistic is `Σ_g (n_g−1)·F̂_g` against magmaan's
+   `Σ_g n_g·F̂_g`. The ordinal goldens (`ordinal_golden_test.cpp`,
+   `to_lavaan_ls_chisq`) rescale test-side by the global `(N−G)/N` at a 5e-3
+   gate; the per-group-vs-global residual is `O(G/N·spread of F̂_g)` (measured
+   ≤ 2.1e-3 on the 2-group fixtures). Because the `(n_g−1)/N` group weights
+   also reweight lavaan's *objective*, the estimator itself differs from
+   magmaan's `n_g/N` convention once equality constraints couple groups:
+   `θ̂` shifts by `O(1/n_g)` (measured 4e-5 on the threshold-invariance
+   fixture 0013, where the goldens carry a documented 1.5e-4 θ /
+   1.5e-2 scaled-shifted exception). Single-group and cross-group-uncoupled
+   fits have identical minimizers.
 
 ## Implications for callers
 

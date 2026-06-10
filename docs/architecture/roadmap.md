@@ -820,7 +820,12 @@ stop rather than any usable non-error return.
   general linear threshold constraints only through the full bounded and
   full-threshold SNLLS paths); the threshold-profiled paths have since gained
   general threshold-only linear constraints and multi-group invariance, gated
-  by unit parity tests against the full-threshold and legacy bounded fits. `experiments/_archive/13-ordinal-construction-boundary`
+  by unit parity tests against the full-threshold and legacy bounded fits and
+  by lavaan oracle fixtures (0013 cross-group threshold invariance via explicit
+  shared labels, 0014 threshold-only linear constraint) driven through both the
+  legacy bounded and profiled SNLLS golden paths. The ordinal golden chisq
+  gates now apply the lavaan `Σ(n_g−1)F̂_g` convention rescale at 5e-3 (see
+  numerical-conventions exception 4 and the test ledger). `experiments/_archive/13-ordinal-construction-boundary`
   now compares the legacy eager constructor with
   `ordinal_workspace_from_integer_data()`: fit-only ULS returns
   `OrdinalMoments` without Gamma, fit-only DWLS returns `OrdinalMoments` plus

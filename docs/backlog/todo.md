@@ -60,10 +60,14 @@ landed; remaining open items:
   already fixed: continuous GLS/WLS chisq was gated at `max(5e-2, 2·N·fmin·2e-3)`
   (≈1.2) in `lavaan_parity_golden_test` and `ls_golden_test`, absorbing the whole
   `(N−G)/N` multiplier gap; both now pin `magmaan·(N−G)/N == lavaan` to 5e-3.
-  Sweep the remaining golden/parity tests for similar slack tolerances,
-  `MESSAGE`-only soft checks, and fixtures regenerated from magmaan's own output
-  rather than an external oracle; for each, either tighten to the oracle or write
-  down explicitly why the looseness is principled.
+  The ordinal goldens are now swept too (2026-06: same multiplier found under
+  the 8e-2 ordinal chisq gates; rescaled and tightened to 5e-3, with the
+  per-group `(n_g−1)/n_g` estimator-weighting consequence documented in
+  numerical-conventions exception 4 and the test ledger). Sweep the remaining
+  golden/parity tests for similar slack tolerances, `MESSAGE`-only soft checks,
+  and fixtures regenerated from magmaan's own output rather than an external
+  oracle; for each, either tighten to the oracle or write down explicitly why
+  the looseness is principled.
 - **M, later.** Layer CI on top only after the local commands are useful:
   `test-quick` on PRs/pushes, sanitizer validation on main or a schedule, heavy
   parity/optional optimizer lanes less often, and coverage as an artifact before
@@ -108,13 +112,16 @@ decisions in the simulation backlog.
 - **L/XL.** Remaining C++ estimator work on the ordinal SNLLS / Gamma workspace
   track (the landed split is in the roadmap and
   [docs/design/ordinal-snlls-gamma-architecture.md](../design/ordinal-snlls-gamma-architecture.md);
-  threshold-profiled general linear maps and joint multi-group threshold
-  profiling/invariance landed 2026-06): tighten mixed robust scaled-test parity
-  beyond the current loose guard, lazy mixed WLS construction, mixed theta
-  SNLLS, reduced-Gamma robust-inference products that avoid full
-  materialization where possible, lavaan oracle fixtures for multi-group
-  threshold invariance and linear threshold constraints, and only-when-needed
-  R/API polish.
+  threshold-profiled general linear maps, joint multi-group threshold
+  profiling/invariance, and their lavaan oracle fixtures 0013/0014 landed
+  2026-06): tighten mixed robust scaled-test parity beyond the current loose
+  guard, lazy mixed WLS construction, mixed theta SNLLS, reduced-Gamma
+  robust-inference products that avoid full materialization where possible,
+  and only-when-needed R/API polish. `group.equal = "thresholds"` parity is
+  documented out of scope: lavaan's Wu-Estabrook identification frees group-2+
+  delta scales and intercepts, which the magmaan ordinal delta path does not
+  model (explicit shared threshold labels are the supported contract,
+  fixture 0013).
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into the

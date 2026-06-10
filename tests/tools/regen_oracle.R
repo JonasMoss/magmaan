@@ -1014,6 +1014,50 @@ ordinal_cases <- list(
        },
        ordered = paste0("x", 1:4),
        group = "school",
+       fit = TRUE),
+  # Cross-group threshold invariance via explicit shared labels (lavaan single
+  # labels in a multi-group model impose cross-group equality; the warning is
+  # the intent). Scales stay fixed at 1 in all groups, so this is the
+  # explicit-syntax contract rather than `group.equal = "thresholds"`, whose
+  # Wu-Estabrook identification frees group-2+ scales and intercepts -- not
+  # expressible in the magmaan ordinal delta path.
+  list(id = "0013_2group_threshold_invariance_3cat_cfa",
+       model = paste("f =~ x1 + x2 + x3 + x4",
+                     "x1 | t11*t1 + t12*t2",
+                     "x2 | t21*t1 + t22*t2",
+                     "x3 | t31*t1 + t32*t2",
+                     "x4 | t41*t1 + t42*t2",
+                     sep = "\n"),
+       model_has_thresholds = TRUE,
+       data = {
+         d1 <- make_ord_df(310, list(c(-0.70, 0.35), c(-0.55, 0.60),
+                                     c(-0.85, 0.20), c(-0.45, 0.75)),
+                           seed = 211L)
+         d2 <- make_ord_df(270, list(c(-0.55, 0.50), c(-0.70, 0.40),
+                                     c(-0.65, 0.35), c(-0.80, 0.55)),
+                           seed = 223L)
+         d1$school <- "Pasteur"; d2$school <- "Grant-White"
+         rbind(d1, d2)
+       },
+       ordered = paste0("x", 1:4),
+       group = "school",
+       fit = TRUE),
+  # Threshold-only linear equality constraint (a + b == 0): the direct lavaan
+  # anchor for the general-H threshold design in the profiled paths.
+  list(id = "0014_threshold_linear_constraint_3cat_cfa",
+       model = paste("f =~ x1 + x2 + x3 + x4",
+                     "x1 | a*t1 + b*t2",
+                     "x2 | t1 + t2",
+                     "x3 | t1 + t2",
+                     "x4 | t1 + t2",
+                     "a + b == 0",
+                     sep = "\n"),
+       model_has_thresholds = TRUE,
+       data = make_ord_df(560, list(c(-0.50, 0.45), c(-0.55, 0.60),
+                                    c(-0.85, 0.20), c(-0.45, 0.75)),
+                          seed = 227L),
+       ordered = paste0("x", 1:4),
+       group = NULL,
        fit = TRUE)
 )
 
@@ -1083,6 +1127,10 @@ for (oc in ordinal_cases) {
                    tool = "lavaan::cfa(ordered=..., estimator=WLS/DWLS)",
                    lavaan_version = installed),
     input = oc$model,
+    # When TRUE the model string already carries explicit (labeled or
+    # constrained) threshold rows, so the C++ golden must not auto-append
+    # plain `x | t1 + ...` rows.
+    input_has_thresholds = isTRUE(oc$model_has_thresholds),
     ordered = ov,
     group_var = if (nzchar(group_var)) group_var else NULL,
     blocks = blocks,
