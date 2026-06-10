@@ -101,23 +101,9 @@ model_hs_3f9i <- function() {
 
 models <- list(model_brown_1f5i(), model_hs_3f9i())
 
-# -- Missingness (sb2005_mcar + mar from the paper's r-package) ------------
+# -- Missingness (sb2005_mcar + mar) from the shared experiment harness -----
 
-.sb2005_path <- function() {
-  candidates <- c(
-    file.path("..", "..", "papers", "pairwise-robust-sem", "r-package",
-              "R", "missingness.R"),
-    file.path("..", "..", "..", "papers", "pairwise-robust-sem", "r-package",
-              "R", "missingness.R")
-  )
-  hits <- candidates[file.exists(candidates)]
-  if (!length(hits)) {
-    stop("Cannot locate papers/pairwise-robust-sem/r-package/R/missingness.R",
-         call. = FALSE)
-  }
-  hits[[1L]]
-}
-sys.source(.sb2005_path(), envir = environment())
+source(support_path("R", "missingness.R"))
 
 simulate_data <- function(n, Sigma, seed) {
   set.seed(seed)

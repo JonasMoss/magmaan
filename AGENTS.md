@@ -73,6 +73,47 @@ historical archaeology, not current guidance.
 - `r-package/` - exploratory R bindings (Rcpp); consumes the prebuilt
   `libmagmaan.a`, separate from and not part of the C++ build.
 
+## Dependency layering
+
+Dependencies flow strictly downward; **leaves are sinks**. Each item depends
+only on strictly-lower tiers plus the one sanctioned shared sibling at its tier.
+
+- **T0 inputs**: `third_party/` (built), `external/` (ignored), `corpus/`
+  (submodule data).
+- **T1 core**: `include/`, `src/` - depend on T0 only.
+- **T2**: `r-package/` (depends on core only); `experiments/_support/` (the
+  `magmaan.experiments` harness package: depends on core/r-package only, carries
+  **no SEM logic** and **no paper/experiment-specific references**); `benchmarks/`
+  (shared benchmark harness that experiments may consume).
+- **T3 leaves / sinks**: each `papers/<name>/`, each `experiments/<NN>-*/`, and
+  `tests/`. A leaf consumes only lower tiers, is referenced by nothing, and never
+  references a sibling leaf.
+
+Invariants (enforced by `tests/tools/check_layering.sh`, run via
+`just check-layering`, folded into `just check`, and a hard-failing CI job):
+
+1. **Core never reaches up**: nothing in `include/`, `src/`, or `r-package/`
+   references `papers/`, `experiments/`, `benchmarks/`, or `tests/`.
+2. **Papers are private**: `papers/A/**` is referenced only from within
+   `papers/A/` (each paper is its own nested git repo, gitignored by the outer
+   repo).
+3. **Experiments are endpoints**: an `experiments/<NN>/` references no paper and
+   no other experiment; the only shared experiment sibling is
+   `experiments/_support`. Experiments may consume `benchmarks/` and the corpus
+   submodule.
+4. **No sibling-leaf edges**: paper-to-paper, experiment-to-experiment (except
+   `_support`), paper-to-experiment, and tests-to-(papers/experiments) are all
+   forbidden.
+5. **Shared code flows down, never sideways**: code two leaves both need goes
+   into core, `r-package`, `experiments/_support`, or `benchmarks` - never
+   sourced/loaded/included across a sibling boundary. (Running a built artifact,
+   e.g. `build/<preset>/benchmarks/<bin>`, is allowed; it is execution, not a
+   source dependency.)
+6. **Reports read only from their own `results/`**.
+
+The checker scans code files only (`*.R/*.cpp/*.hpp/*.h/CMakeLists.txt/*.cmake/
+*.sh/justfile`), with comments stripped, so prose and comments never trip it.
+
 ## Build
 
 ```sh

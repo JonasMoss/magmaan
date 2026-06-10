@@ -264,24 +264,10 @@ apply_mcar_strat <- function(X, rate, seed = NULL) {
   list(X = Xm, mask = !drop)
 }
 
-# SB-2005 MAR: sourced from the paper's r-package. The 3-rule design
-# (calibrated to hit `rate` on average) ties missingness in target columns
-# to two intact predictor columns.
-.sb2005_mar_path <- function() {
-  candidates <- c(
-    file.path("..", "..", "papers", "pairwise-robust-sem", "r-package",
-              "R", "missingness.R"),
-    file.path("..", "..", "..", "papers", "pairwise-robust-sem", "r-package",
-              "R", "missingness.R")
-  )
-  hits <- candidates[file.exists(candidates)]
-  if (!length(hits)) {
-    stop("Cannot locate papers/pairwise-robust-sem/r-package/R/missingness.R; ",
-         "checked: ", paste(candidates, collapse = "; "), call. = FALSE)
-  }
-  hits[[1L]]
-}
-sys.source(.sb2005_mar_path(), envir = environment())
+# SB-2005 MAR mechanism from the shared experiment harness. The 3-rule design
+# (calibrated to hit `rate` on average) ties missingness in target columns to
+# two intact predictor columns.
+source(support_path("R", "missingness.R"))
 
 apply_mar_sb2005 <- function(X, rate, predictors = 1:2, seed = NULL) {
   if (rate <= 0) return(list(X = X, mask = matrix(TRUE, nrow(X), ncol(X))))
