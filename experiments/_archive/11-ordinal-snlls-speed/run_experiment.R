@@ -2,7 +2,7 @@
 # Ordinal SNLLS speed experiment.
 #
 # Usage:
-#   Rscript experiments/11-ordinal-snlls-speed/run_experiment.R [options]
+#   Rscript experiments/_archive/11-ordinal-snlls-speed/run_experiment.R [options]
 
 .support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)

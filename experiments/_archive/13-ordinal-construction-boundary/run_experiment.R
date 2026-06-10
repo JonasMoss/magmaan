@@ -2,7 +2,7 @@
 # Ordinal construction-boundary experiment.
 #
 # Usage:
-#   Rscript experiments/13-ordinal-construction-boundary/run_experiment.R [options]
+#   Rscript experiments/_archive/13-ordinal-construction-boundary/run_experiment.R [options]
 
 .support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)

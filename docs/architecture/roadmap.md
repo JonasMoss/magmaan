@@ -805,16 +805,16 @@ stop rather than any usable non-error return.
   ordinal SNLLS entry point keeps the full threshold+correlation moment stack
   and marks threshold free parameters as Golub-Pereyra linear coordinates, so
   linear threshold constraints remain compatible without using the ordinal
-  threshold-profiling map. `experiments/12-ordinal-threshold-constraints`
+  threshold-profiling map. `experiments/_archive/12-ordinal-threshold-constraints`
   validates the split: free/shared-label threshold cases fit through both
   profiled and full-threshold paths, while general linear threshold constraints
   are rejected by threshold-profiled fitting and accepted by the full bounded
-  and full-threshold SNLLS paths. `experiments/13-ordinal-construction-boundary`
+  and full-threshold SNLLS paths. `experiments/_archive/13-ordinal-construction-boundary`
   now compares the legacy eager constructor with
   `ordinal_workspace_from_integer_data()`: fit-only ULS returns
   `OrdinalMoments` without Gamma, fit-only DWLS returns `OrdinalMoments` plus
   the Gamma diagonal, and WLS/fit-plus-inference still fall back to full
-  `OrdinalStats`/Gamma materialization. `experiments/11-ordinal-snlls-speed`
+  `OrdinalStats`/Gamma materialization. `experiments/_archive/11-ordinal-snlls-speed`
   now includes delta/theta timing rows plus construction-aware raw-to-SNLLS
   rows: the legacy row rebuilds `OrdinalStats`/moments/starts/cache inside the
   timed operation, while the lazy ULS/DWLS row rebuilds `OrdinalWorkspace`,

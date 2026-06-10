@@ -2,7 +2,7 @@
 # Native ordinal workspace / SNLLS benchmark.
 #
 # Usage:
-#   Rscript experiments/06-ordinal-snlls-probe/run_experiment.R [options]
+#   Rscript experiments/_archive/06-ordinal-snlls-probe/run_experiment.R [options]
 
 .support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)

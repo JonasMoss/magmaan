@@ -1,8 +1,8 @@
 #!/usr/bin/env Rscript
-# Native ordinal fit-plus-inference cache benchmark.
+# Ordinal threshold-constraint experiment.
 #
 # Usage:
-#   Rscript experiments/10-ordinal-inference-cache-probe/run_experiment.R [options]
+#   Rscript experiments/_archive/12-ordinal-threshold-constraints/run_experiment.R [options]
 
 .support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
@@ -25,10 +25,10 @@ usage <- function() {
     "Usage: Rscript run_experiment.R [options]\n\n",
     "Options:\n",
     "  --preset NAME     CMake preset to use (default: opt)\n",
-    "  --reps N          repeated timings per fit/robust row (default: 3)\n",
+    "  --reps N          repeated timings per fit row (default: 3)\n",
     "  --max-iter N      optimizer max_iter (default: 300)\n",
-    "  --seed-base N     deterministic seed base (default: 20260525)\n",
-    "  --smoke           run the small three-cell design\n",
+    "  --seed-base N     deterministic seed base (default: 20260601)\n",
+    "  --smoke           run the small validation design\n",
     "  --skip-build      use an already-built benchmark executable\n",
     "  --help            print this help\n",
     sep = ""
@@ -40,7 +40,7 @@ parse_args <- function(args) {
     preset = "opt",
     reps = 3L,
     max_iter = 300L,
-    seed_base = 20260525L,
+    seed_base = 20260601L,
     smoke = FALSE,
     skip_build = FALSE
   )
@@ -118,15 +118,15 @@ results <- ensure_results_dir()
 set_single_threaded_math()
 
 binary <- file.path(project_root, "build", args$preset, "benchmarks",
-                    "magmaan_ordinal_inference_workspace_bench")
-workspace_csv <- file.path(results, "inference_workspace.csv")
+                    "magmaan_ordinal_threshold_constraint_bench")
+constraints_csv <- file.path(results, "threshold_constraints.csv")
 metadata_csv <- file.path(results, "metadata.csv")
 
 if (!isTRUE(args$skip_build)) {
   run_cmd("cmake", c("--preset", args$preset, "-DMAGMAAN_BUILD_BENCH=ON"),
           project_root)
   run_cmd("cmake", c("--build", "--preset", args$preset,
-                     "--target", "magmaan_ordinal_inference_workspace_bench"),
+                     "--target", "magmaan_ordinal_threshold_constraint_bench"),
           project_root)
 }
 
@@ -137,7 +137,7 @@ if (!file.exists(binary)) {
 }
 
 bench_args <- c(
-  "--out", workspace_csv,
+  "--out", constraints_csv,
   "--reps", as.character(args$reps),
   "--max-iter", as.character(args$max_iter),
   "--seed-base", as.character(args$seed_base)
@@ -149,10 +149,11 @@ run_cmd(binary, bench_args, project_root)
 write_metadata(
   metadata_csv,
   values = list(
-    experiment = "10-ordinal-inference-cache-probe",
+    experiment = "12-ordinal-threshold-constraints",
     question = paste(
-      "Compare materialized robust ordinal reporting with cache-aware",
-      "fit-only plus separate inference cache and fit-plus-inference reuse."
+      "Probe ordinal threshold equality constraints under full bounded,",
+      "threshold-profiled bounded, full-threshold SNLLS, and",
+      "threshold-profiled SNLLS fits in a single-group ordinal CFA."
     ),
     preset = args$preset,
     smoke = args$smoke,
@@ -161,10 +162,10 @@ write_metadata(
     seed_base = args$seed_base,
     git_head = git_head(project_root),
     benchmark_binary = binary,
-    inference_workspace_csv = workspace_csv
+    threshold_constraints_csv = constraints_csv
   )
 )
 
 cat("Wrote:\n")
-cat("  ", workspace_csv, "\n", sep = "")
+cat("  ", constraints_csv, "\n", sep = "")
 cat("  ", metadata_csv, "\n", sep = "")

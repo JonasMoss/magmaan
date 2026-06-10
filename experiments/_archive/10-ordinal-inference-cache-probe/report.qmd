@@ -197,8 +197,8 @@ up front.
 ## Reproduce
 
 ```sh
-Rscript experiments/10-ordinal-inference-cache-probe/run_experiment.R --smoke --preset fast
-(cd experiments/10-ordinal-inference-cache-probe && quarto render report.qmd)
+Rscript experiments/_archive/10-ordinal-inference-cache-probe/run_experiment.R --smoke --preset fast
+(cd experiments/_archive/10-ordinal-inference-cache-probe && quarto render report.qmd)
 ```
 
 For less noisy timings, use `--preset opt` and increase `--reps`.

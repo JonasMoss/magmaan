@@ -1,0 +1,60 @@
+# Experiments
+
+Each folder answers **one** research or engineering question and is a standalone,
+reproducible endpoint. This file is the map; open an experiment's `report.qmd` (or
+`report.md`) for the full story. Conventions, the canonical folder shape, and the
+shared `_support` harness live in [AGENTS.md](AGENTS.md).
+
+**Kind**
+- `parity` — audits magmaan output against lavaan.
+- `replication` — reproduces a published simulation study (named author-year).
+- `paper-sim` — a simulation pipeline a paper's results depend on; do not delete.
+- `benchmark` — speed or statistical-efficiency comparison.
+- `probe` — a one-off engineering diagnostic.
+
+**Lifecycle**
+- `active` — still rerun, extended, or load-bearing.
+- `complete` — finished, kept flat for reference value.
+- `archived` — inert; answer baked into the core library; moved to
+  [`_archive/`](_archive/).
+
+## Active
+
+| # | Experiment | Kind | Lifecycle | Question |
+|--:|------------|------|-----------|----------|
+| 00 | [lavaan-parity](00-lavaan-parity/report.md) | parity | active | Does magmaan's ML inference match lavaan across the textbook corpus? |
+| 01 | [complete-data-estimator-speed](01-complete-data-estimator-speed/report.qmd) | benchmark | active | How do the NT/ULS/GLS estimators compare on wall-time across the corpus? |
+| 04 | [near-singular-ml-continuation](04-near-singular-ml-continuation/report.qmd) | benchmark | active | Does shrinkage-blended covariance continuation help ML converge on near-singular problems? |
+| 05 | [lavaan-speed-bench](05-lavaan-speed-bench/report.md) | benchmark | active | How fast is magmaan versus lavaan on the Geiser textbook corpus? |
+| 07 | [maydeu-olivares-2017](07-maydeu-olivares-2017/report.qmd) | replication | complete | Do the SE methods and χ² adjustments hold under nonnormality (two-factor CFA)? |
+| 08 | [pairwise-gls-efficiency](08-pairwise-gls-efficiency/report.qmd) | paper-sim | active | Which of five missing-data estimators is most efficient? |
+| 09 | [pairwise-fit-speed](09-pairwise-fit-speed/report.qmd) | paper-sim | active | Which pairwise missing-data estimator is fastest? |
+| 14 | [irls-ernst-convergence](14-irls-ernst-convergence/report.qmd) | benchmark | complete | Does Fisher-scoring IRLS improve ML convergence on the Ernst small-sample design? |
+| 15 | [rhemtulla-2012](15-rhemtulla-2012/report.qmd) | replication | complete | When can ordinal variables be treated as continuous (cat-LS vs continuous ML)? |
+| 16 | [li-2021-mixed](16-li-2021-mixed/report.qmd) | replication | complete | DWLS or MLR for a mix of continuous and categorical indicators? |
+| 17 | [foldnes-moss-gronneberg-peba](17-foldnes-moss-gronneberg-peba/report.qmd) | replication | complete | Do the penalized EBA goodness-of-fit tests hold nominal Type I under nonnormality? |
+| 18 | [foldnes-moss-gronneberg-2026](18-foldnes-moss-gronneberg-2026/report.qmd) | replication | active | Can magmaan reproduce the full FMG goodness-of-fit machinery versus lavaan and semTests? |
+| 19 | [li-2016-ordinal](19-li-2016-ordinal/report.qmd) | replication | complete | DWLS/ULS or continuous ML for an all-ordinal five-factor SEM? |
+| 20 | [deng-chan-2017-alpha-omega](20-deng-chan-2017-alpha-omega/report.qmd) | paper-sim | active | Is the Deng-Chan Wald test of coefficient α = ω valid? |
+| 21 | [fiml-measurement-invariance-fmg](21-fiml-measurement-invariance-fmg/report.qmd) | paper-sim | active | Is the FIML FMG robust-test family feature-complete for measurement invariance? |
+
+## Archived
+
+Frozen engineering probes whose question is answered and whose result is now baked
+into the core library. Kept for provenance; not rerun. See [`_archive/`](_archive/).
+
+| # | Experiment | Question |
+|--:|------------|----------|
+| 02 | [latent-metric-identification](_archive/02-latent-metric-identification/report.qmd) | Does `std.lv` beat marker-variable parameterization once spec-rebuild and back-conversion costs are counted? |
+| 03 | [heywood-box-constraints](_archive/03-heywood-box-constraints/report.qmd) | Do variance box constraints turn inadmissible Heywood ML solutions into admissible boundary optima? |
+| 06 | [ordinal-snlls-probe](_archive/06-ordinal-snlls-probe/report.qmd) | Do the cache-aware and SNLLS ordinal paths reproduce the materialized DWLS/WLS fits? |
+| 10 | [ordinal-inference-cache-probe](_archive/10-ordinal-inference-cache-probe/report.qmd) | Does carrying a full cache through fitting help robust ordinal reporting requested right after a bounded fit? |
+| 11 | [ordinal-snlls-speed](_archive/11-ordinal-snlls-speed/report.qmd) | Does ordinal SNLLS show the same speed pattern as continuous SNLLS once thresholds and ordinal weights are in the objective? |
+| 12 | [ordinal-threshold-constraints](_archive/12-ordinal-threshold-constraints/report.qmd) | Which ordinal fitting paths can handle equality constraints on thresholds? |
+| 13 | [ordinal-construction-boundary](_archive/13-ordinal-construction-boundary/report.qmd) | What does ordinal statistic construction (lazy vs eager) cost before fitting begins? |
+
+---
+
+`_support/` (path / metadata / IO helpers, no SEM logic) is the only shared sibling
+an experiment may consume. Numbers are permanent IDs: an archived experiment keeps
+its number, and new experiments take the next free one regardless of gaps.

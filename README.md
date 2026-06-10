@@ -13,7 +13,9 @@
 `magmaan` is heavily tested against `lavaan`, and the two libraries agree on a
 large corpus of models. See the
 [lavaan audit parity report](experiments/00-lavaan-parity/report.md) for the
-current experiment summary.
+current experiment summary. The
+[experiments index](experiments/README.md) maps every parity audit, literature
+replication, and benchmark.
 
 
 ## Speed

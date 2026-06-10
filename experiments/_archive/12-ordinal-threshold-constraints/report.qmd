@@ -227,8 +227,8 @@ knitr::kable(cost[order(cost$Case, cost$Estimator, cost$Method), ],
 ## Reproduce
 
 ```sh
-Rscript experiments/12-ordinal-threshold-constraints/run_experiment.R --smoke --preset fast
-(cd experiments/12-ordinal-threshold-constraints && quarto render report.qmd)
+Rscript experiments/_archive/12-ordinal-threshold-constraints/run_experiment.R --smoke --preset fast
+(cd experiments/_archive/12-ordinal-threshold-constraints && quarto render report.qmd)
 ```
 
 For less noisy timings, use `--preset opt` and increase `--reps`. This remains

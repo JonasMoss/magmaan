@@ -24,9 +24,35 @@ experiment may also consume the core library, `r-package`, `benchmarks`, and the
 experiment or a paper. Enforced by `tests/tools/check_layering.sh`
 (`just check-layering`).
 
+## Index And Lifecycle
+
+`experiments/README.md` is the tracked index of every experiment: number, slug,
+kind, lifecycle, and the one-line question. Adding an experiment means adding a
+row. This collection-level index is the one allowed exception to the "no README"
+rule below, which still holds for individual `NN-` folders.
+
+Classify each experiment on two axes, recorded in the index:
+
+- **Kind** - `parity` (audits magmaan against lavaan), `replication` (reproduces a
+  published author-year simulation), `paper-sim` (a pipeline a paper's results
+  depend on; never delete), `benchmark` (speed or statistical efficiency), `probe`
+  (a one-off engineering diagnostic).
+- **Lifecycle** - `active` (still rerun, extended, or load-bearing), `complete`
+  (finished, kept flat for reference value), `archived` (inert).
+
+Archive an experiment only when it is an engineering `probe` whose answer is now
+baked into the core library and that nobody will rerun. Durable replications and
+reusable benchmarks stay flat (tagged `complete`) even when finished, and anything
+the active backlog still points at as pending evidence stays flat. Archived
+experiments move to `experiments/_archive/NN-slug/` and keep their number; numbers
+are permanent IDs, so never renumber and always take the next free number even when
+earlier ones are archived. When archiving, repoint the report's Reproduce commands
+and any doc cross-references to the `_archive/` path.
+
 ## Directory Shape
 
-Use the next numeric prefix and a short kebab-case slug:
+Use the next numeric prefix and a short kebab-case slug (literature replications use
+`author-year[-topic]`, e.g. `15-rhemtulla-2012`, `20-deng-chan-2017-alpha-omega`):
 
 ```text
 experiments/
@@ -50,7 +76,8 @@ Required files:
 
 Do not add a per-experiment `README.md`. The report is the readable document,
 and `Rscript run_experiment.R --help` is the command reference. If a report is
-not self-contained enough to replace a README, fix the report.
+not self-contained enough to replace a README, fix the report. (The exception is
+the collection-level `experiments/README.md` index; see "Index And Lifecycle".)
 
 ## Generated And Local Files
 

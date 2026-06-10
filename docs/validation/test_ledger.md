@@ -75,8 +75,8 @@ Protected by:
 - `tests/golden/pairwise_golden_test.cpp`
 - `tests/golden/robcat_parity_golden_test.cpp`
 - `r-package/examples/ordinal_dwls_wls.R`
-- `experiments/10-ordinal-inference-cache-probe` and
-  `experiments/11-ordinal-snlls-speed`
+- `experiments/_archive/10-ordinal-inference-cache-probe` and
+  `experiments/_archive/11-ordinal-snlls-speed`
 
 Known weak spots: mixed robust scaled-test parity has loose guards, and lazy
 mixed WLS construction plus mixed theta SNLLS are still open.

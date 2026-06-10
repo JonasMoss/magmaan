@@ -632,8 +632,8 @@ range.
 ## Reproduce
 
 ```sh
-Rscript experiments/11-ordinal-snlls-speed/run_experiment.R --smoke --preset fast
-(cd experiments/11-ordinal-snlls-speed && quarto render report.qmd)
+Rscript experiments/_archive/11-ordinal-snlls-speed/run_experiment.R --smoke --preset fast
+(cd experiments/_archive/11-ordinal-snlls-speed && quarto render report.qmd)
 ```
 
 For less noisy timings, use `--preset opt`, increase `--reps`, and optionally

@@ -225,8 +225,8 @@ always creates the full square matrix and its WLS inverse.
 ## Reproduce
 
 ```sh
-Rscript experiments/13-ordinal-construction-boundary/run_experiment.R --smoke --preset fast
-(cd experiments/13-ordinal-construction-boundary && quarto render report.qmd)
+Rscript experiments/_archive/13-ordinal-construction-boundary/run_experiment.R --smoke --preset fast
+(cd experiments/_archive/13-ordinal-construction-boundary && quarto render report.qmd)
 ```
 
 For the preliminary sweep used here, run with `--preset opt --reps 3 --max-p 16`.
