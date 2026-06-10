@@ -18,6 +18,22 @@ backlog.
 - Treat advisory checks under `tests/checks/` and experiments as evidence for
   research claims, not as default CI gates.
 
+## Regression Notes
+
+When a fixed bug gets a guard test, preserve the bug shape and the protecting
+test so future edits know why the assertion exists. Use this compact format:
+
+```text
+Regression: <short symptom and root cause>.
+Guard: <test, fixture, example, or report that fails if it comes back>.
+Scope: <optional remaining gap or intentionally uncovered cases>.
+```
+
+Put the note near the focused test when the guard is local and easy to find.
+Put it in this ledger when the bug crosses subsystems, depends on an external
+oracle, or needs a maintainer to run a non-obvious report. Keep notes to the
+reason the test exists; unresolved work still belongs in the backlog.
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |

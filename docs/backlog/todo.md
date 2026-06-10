@@ -258,9 +258,10 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   FIML, ordinal/mixed moments, robust test reductions, optimizer terminal
   audit, parser/lavaanify, and R boundary reconstruction. Each entry says
   "Protected by:" and names concrete test files or reports to run.
-- **S.** Adopt a lightweight regression-note convention: when a fixed bug gets
-  a guard test, record the bug shape and the protecting test either near the
-  test or in the test ledger.
+- **Done.** Adopt a lightweight regression-note convention: when a fixed bug
+  gets a guard test, record the bug shape and the protecting test either near
+  the test or in the test ledger. The ledger now gives the compact
+  Regression/Guard/Scope format and placement rule.
 - **M, audit.** Audit test tolerances so the suite is not "faked" by loose
   gates that pass a known divergence instead of pinning the right answer.
   First offender already fixed as the template: continuous GLS/WLS chisq was
