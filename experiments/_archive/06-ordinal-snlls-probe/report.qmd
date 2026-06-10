@@ -193,8 +193,8 @@ Gamma, and weight inversion at their true construction boundaries.
 ## Reproduce
 
 ```sh
-Rscript experiments/06-ordinal-snlls-probe/run_experiment.R --smoke --preset fast
-(cd experiments/06-ordinal-snlls-probe && quarto render report.qmd)
+Rscript experiments/_archive/06-ordinal-snlls-probe/run_experiment.R --smoke --preset fast
+(cd experiments/_archive/06-ordinal-snlls-probe && quarto render report.qmd)
 ```
 
 For less noisy timings, use `--preset opt` and increase `--reps`.

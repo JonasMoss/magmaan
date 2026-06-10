@@ -4,7 +4,7 @@
 //
 // Exposed to R only via the `frontier_*` aliases in r-package/R/zzz_core.R.
 // Not part of the core stable API. See
-// experiments/02-latent_metric_identification/ for the validation that
+// experiments/_archive/02-latent-metric-identification/ for the validation that
 // established the predicate set (0 false positives on the textbook corpus).
 //
 // Three free functions, all operating on the SoA `LavaanParTable` view:

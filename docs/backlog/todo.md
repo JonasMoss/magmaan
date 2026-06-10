@@ -478,22 +478,22 @@ simulation backlog.
   effect-coding-style constraints, reduced-Gamma robust-inference products that
   avoid full materialization where possible, and only-when-needed R/API polish.
   First benchmark slice landed as `magmaan_ordinal_workspace_bench` plus
-  `experiments/06-ordinal-snlls-probe`: it covers all-ordinal delta fit-only
+  `experiments/_archive/06-ordinal-snlls-probe`: it covers all-ordinal delta fit-only
   ULS/DWLS/WLS across free, fixed, and shared threshold models and checks
   cache/materialization flags plus agreement with bounded/materialized paths.
   The fit-plus-inference companion also landed as
   `magmaan_ordinal_inference_workspace_bench` plus
-  `experiments/10-ordinal-inference-cache-probe`, comparing legacy
+  `experiments/_archive/10-ordinal-inference-cache-probe`, comparing legacy
   materialized robust reporting, minimal fit-only plus separate inference
   caches, and shared fit-plus-inference cache reuse for all-ordinal delta
   DWLS/WLS. A threshold-constraint support slice also landed as
   `magmaan_ordinal_threshold_constraint_bench` plus
-  `experiments/12-ordinal-threshold-constraints`: shared-label thresholds fit
+  `experiments/_archive/12-ordinal-threshold-constraints`: shared-label thresholds fit
   through both profiled and full-threshold paths, while general linear
   threshold constraints intentionally reject in threshold-profiled fitting and
   fit through full bounded / full-threshold SNLLS. The construction-boundary
   benchmark also landed as `magmaan_ordinal_construction_bench` plus
-  `experiments/13-ordinal-construction-boundary`; it now includes
+  `experiments/_archive/13-ordinal-construction-boundary`; it now includes
   `ordinal_workspace_from_integer_data()`, where fit-only ULS returns
   `OrdinalMoments` without Gamma and fit-only DWLS returns `OrdinalMoments`
   plus the exact Gamma diagonal without full Gamma/WLS inverse materialization.
@@ -656,7 +656,7 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
 - **M.** Track objective value, gradient norm, iteration count, wall time, and
   agreement with lavaan-backed estimates where applicable.
 - **S/M.** Extend the ordinal SNLLS speed pilot
-  (`experiments/11-ordinal-snlls-speed`) when the paper needs stronger timing
+  (`experiments/_archive/11-ordinal-snlls-speed`) when the paper needs stronger timing
   evidence. Landed: a native C++ benchmark target comparing full bounded
   DWLS/WLS, threshold-profiled bounded, full-threshold SNLLS, and
   threshold-profiled SNLLS all-ordinal delta fits across a Kreiberg-style
@@ -681,7 +681,7 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   `q <= 12` literature-like sweep and optional lavaan context rows if the paper
   needs them.
 - **S.** Extend the ordinal threshold-constraint support experiment
-  (`experiments/12-ordinal-threshold-constraints`) only if the paper needs
+  (`experiments/_archive/12-ordinal-threshold-constraints`) only if the paper needs
   broader constraint evidence. The first opt pilot is single-group ordinal CFA:
   free and shared-label thresholds agree across profiled/full paths; true
   linear threshold constraints are rejected by threshold-profiled bounded/SNLLS
@@ -689,7 +689,7 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   multi-group threshold-invariance/equality examples once the C++ or R-facing
   experiment harness can express groups without pulling in fixture generation.
 - **S/M.** Extend the ordinal construction-boundary experiment
-  (`experiments/13-ordinal-construction-boundary`) if the paper needs broader
+  (`experiments/_archive/13-ordinal-construction-boundary`) if the paper needs broader
   construction evidence. The first lazy opt pilot times fit-only ULS/DWLS raw
   workspace construction against eager legacy stats construction, projection
   to `OrdinalMoments`, diagonal/full Gamma cache copies, DWLS weight
@@ -706,7 +706,7 @@ Advisory local tooling, not a substitute for parity fixtures. Full design:
   admissibility, PD margin, and multistart basin disagreement rather than
   optimizer failure alone.
 - **M.** Extend the new near-singular ML continuation experiment
-  (`experiments/04-near_singular_ml_continuation`) beyond the first
+  (`experiments/04-near-singular-ml-continuation`) beyond the first
   diagonal-ridge path: the first target/profile grid now compares diagonal,
   scaled-identity, and raw-identity targets over several fixed lambda
   sequences; remaining work is direct ML vs ULS/GLS-start ladders and explicit

@@ -4,8 +4,11 @@
 # Leaves: each papers/<name>/, each experiments/<NN>-*/, benchmarks/, tests/.
 # A leaf consumes only lower tiers (core = include/ src/ r-package/, plus the
 # shared experiments/_support and build artifacts) and never references a
-# sibling leaf. Core never references any leaf. See AGENTS.md 'Dependency
-# layering' and experiments/AGENTS.md / papers/AGENTS.md.
+# sibling leaf. Core never references any leaf. Retired experiments live frozen
+# under experiments/_archive/<NN>-*/ and are treated as one archive zone (a path
+# token there truncates to experiments/_archive): an archived file may reference
+# within the archive but still not a paper, a live experiment, or tests. See
+# AGENTS.md 'Dependency layering' and experiments/AGENTS.md / papers/AGENTS.md.
 #
 # Static, dependency-free (POSIX-ish bash + awk/grep/find). No R, no build.
 # Scans code files only (comments stripped), so prose/comments never trip it.
@@ -48,6 +51,7 @@ classify_zone() {
     include/*|src/*|r-package/*)         Z=CORE ;;
     justfile|CMakeLists.txt|cmake/*)     Z=ORCH ;;
     experiments/_support/*)              Z=SUPPORT ;;
+    experiments/_archive/*)              Z=EXP; SELF="experiments/_archive" ;;
     experiments/*) Z=EXP;   SELF="experiments/$(printf '%s' "$1" | cut -d/ -f2)" ;;
     papers/*)      Z=PAPER; SELF="papers/$(printf '%s' "$1" | cut -d/ -f2)" ;;
     benchmarks/*)                        Z=BENCH ;;
