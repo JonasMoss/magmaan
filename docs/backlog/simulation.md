@@ -27,7 +27,8 @@ exposes `sim_*_batch()` convenience calls plus the reusable
 `sim_norta_calibrate()` / `sim_norta_draw()`,
 `sim_plsim_calibrate()` / `sim_plsim_draw()`,
 `sim_bicop_calibrate()` / `sim_bicop_draw()`, and
-`sim_cvine_calibrate()` / `sim_cvine_draw()` two-stage handles. Keep API-level
+`sim_cvine_calibrate()` / `sim_cvine_draw()` and
+`sim_cvine3_calibrate()` / `sim_cvine3_draw()` two-stage handles. Keep API-level
 inventory in the roadmap; this file carries the work queue and decision log
 below.
 
@@ -321,9 +322,12 @@ Open work only; landed generator slices are inventoried in the roadmap.
   dimension. The handle retains the triangular pair-copula spec,
   target/achieved/bounds/iteration diagnostics, marginal specs, and copula
   options.
-- **M.** Add remaining R-level handles for specialized calibrated C-vine root
-  and family-selection policies. Batch wrappers should delegate to two-stage
-  functions internally where practical.
+- **Landed, specialized C-vine3 R selection handles.** Add
+  `sim_cvine3_calibrate()` / `sim_cvine3_draw()` plus `sim_cvine3_batch()` to
+  the R core registry for fixed three-variable C-vines, per-edge family choices,
+  root selection, edge-family selection, and combined root/family structure
+  selection. Handles retain the selected root/order, selected pair-copula spec,
+  root and conditional diagnostics, marginal specs, and copula options.
 - **M.** Add an explicit persistent calibration-cache policy for long
   simulation experiments. In-memory calibration reuse now prevents repeated
   PLSIM/IG calibration across `N` within one R process, but separate timing or
