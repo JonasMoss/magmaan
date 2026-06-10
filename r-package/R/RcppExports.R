@@ -489,6 +489,18 @@ sim_ig_draw_impl <- function(calibration, n, reps, seed_base, quadrature_points 
     .Call(`_magmaan_sim_ig_draw_impl`, calibration, n, reps, seed_base, quadrature_points)
 }
 
+sim_norta_batch_impl <- function(target_corr, marginals, n, reps, seed_base, quadrature_points = 31L, max_bisection_iter = 80L, rho_bound = 0.999, calibration_tol = 1e-8, cholesky_jitter = 1e-10) {
+    .Call(`_magmaan_sim_norta_batch_impl`, target_corr, marginals, n, reps, seed_base, quadrature_points, max_bisection_iter, rho_bound, calibration_tol, cholesky_jitter)
+}
+
+sim_norta_calibrate_impl <- function(target_corr, marginals, quadrature_points = 31L, max_bisection_iter = 80L, rho_bound = 0.999, calibration_tol = 1e-8, cholesky_jitter = 1e-10) {
+    .Call(`_magmaan_sim_norta_calibrate_impl`, target_corr, marginals, quadrature_points, max_bisection_iter, rho_bound, calibration_tol, cholesky_jitter)
+}
+
+sim_norta_draw_impl <- function(calibration, n, reps, seed_base, quadrature_points = -1L, cholesky_jitter = -1.0) {
+    .Call(`_magmaan_sim_norta_draw_impl`, calibration, n, reps, seed_base, quadrature_points, cholesky_jitter)
+}
+
 sim_plsim_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, method = "hermite", num_segments = 12L, monotone = FALSE, max_iter = 80L, quadrature_points = 31L, hermite_order = 24L, marginal_tol = 1e-8, correlation_tol = 1e-8, rho_bound = 0.999) {
     .Call(`_magmaan_sim_plsim_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, method, num_segments, monotone, max_iter, quadrature_points, hermite_order, marginal_tol, correlation_tol, rho_bound)
 }
