@@ -76,29 +76,9 @@ std::string ordinal_syntax() {
          "x4 ~*~ 1*x4\n";
 }
 
-nlohmann::json load_fixture_json(const std::string& rel) {
-  const std::string path = magmaan::test::fixtures_dir() + "/" + rel;
-  std::ifstream in(path);
-  REQUIRE_MESSAGE(in.good(), "could not open fixture: " << path);
-  std::stringstream ss;
-  ss << in.rdbuf();
-  auto j = nlohmann::json::parse(ss.str(), nullptr, false);
-  REQUIRE_FALSE(j.is_discarded());
-  return j;
-}
+using magmaan::test::load_json_fixture;
 
-Eigen::MatrixXd matrix_from_json(const nlohmann::json& j) {
-  const Eigen::Index nr = static_cast<Eigen::Index>(j.size());
-  const Eigen::Index nc = nr == 0 ? 0 : static_cast<Eigen::Index>(j[0].size());
-  Eigen::MatrixXd out(nr, nc);
-  for (Eigen::Index r = 0; r < nr; ++r) {
-    for (Eigen::Index c = 0; c < nc; ++c) {
-      out(r, c) = j[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)]
-                      .get<double>();
-    }
-  }
-  return out;
-}
+using magmaan::test::matrix_from_json;
 
 std::vector<std::string> fixture_observed_order(const nlohmann::json& j) {
   if (j["sample_cov"][0].contains("names")) {
@@ -432,7 +412,8 @@ TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {
 
 TEST_CASE("api frontier exposes native FC-SEM fit and post-fit calls") {
   const auto j =
-      load_fixture_json("composite/0002_composite_factor_hs.fit.json");
+      load_json_fixture("composite/0002_composite_factor_hs.fit.json");
+  REQUIRE_FALSE(j.is_discarded());
   auto model = magmaan::api::frontier::model_from_lavaan_fcsem(
       j["input"].get<std::string>());
   REQUIRE_OK(model);

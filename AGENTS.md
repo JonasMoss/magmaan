@@ -61,6 +61,10 @@ historical archaeology, not current guidance.
 - `docs/backlog/todo.md` - active human-readable backlog and remaining milestones.
 - `docs/backlog/simulation.md` - simulation-specific TODO and decision log for
   `magmaan::sim`, marginal generators, and simulation fixture policy.
+- `docs/backlog/speculative.md` - deferred may-never-build items; each entry
+  names the gap, the cheaper alternative that already covers it, and the
+  explicit build-if trigger. Promote to `todo.md` only when a concrete
+  downstream consumer appears.
 - `external/` - ignored single "development help" folder: source mirrors for reading
   upstream code plus `external/refs/` reference PDFs. Never built. (Replaces the former
   separate `resources/` folder.)
@@ -134,8 +138,7 @@ ctest --preset ceres
 the local performance-comparison build (Release, no sanitizers,
 `-O3 -DNDEBUG -march=native`). `ceres` is the optional optimized build with the
 Ceres and NLopt backends enabled; PORT remains enabled by default. Existing
-presets such as `asan`, `release`, and `ubsan` remain available for
-compatibility.
+presets such as `release` and `ubsan` remain available for compatibility.
 
 There's a `justfile` at the repo root wrapping the common loops: `just build`,
 `just test` (aliases for the `dev` build plus ctest), `just opt`,
@@ -229,6 +232,8 @@ retiered. See `docs/backlog/todo.md`.
   Treat `docs/backlog/simulation.md` as the design roadmap for the simulation
   sublibrary's generator/projection/calibration stack; keep only cross-domain
   summaries in the main roadmap/TODO.
+  Non-committed may-never-build ideas live in `docs/backlog/speculative.md`,
+  not in `todo.md`; it is a trigger list, not a parallel roadmap.
   Remove or fold stale finished planning docs into `docs/architecture/roadmap.md`,
   `docs/backlog/todo.md`, or `docs/backlog/simulation.md` when a phase
   completes; do not create parallel roadmaps.

@@ -53,27 +53,9 @@ FcSemEvaluator must_eval(const LatentStructure& pt) {
   return std::move(*ev);
 }
 
-Eigen::MatrixXd matrix_from_json(const nlohmann::json& j) {
-  const Eigen::Index nr = static_cast<Eigen::Index>(j.size());
-  const Eigen::Index nc = nr == 0 ? 0 : static_cast<Eigen::Index>(j[0].size());
-  Eigen::MatrixXd out(nr, nc);
-  for (Eigen::Index r = 0; r < nr; ++r)
-    for (Eigen::Index c = 0; c < nc; ++c)
-      out(r, c) = j[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)]
-                      .get<double>();
-  return out;
-}
+using magmaan::test::matrix_from_json;
 
-nlohmann::json load_json_fixture(const std::string& rel) {
-  const std::string path = magmaan::test::fixtures_dir() + "/" + rel;
-  std::ifstream in(path);
-  REQUIRE_MESSAGE(in.good(), "could not open fixture: " << path);
-  std::stringstream ss;
-  ss << in.rdbuf();
-  auto j = nlohmann::json::parse(ss.str(), nullptr, false);
-  REQUIRE_FALSE(j.is_discarded());
-  return j;
-}
+using magmaan::test::load_json_fixture;
 
 void set_theta(const LatentStructure& pt, const LatentNames& names,
                Eigen::VectorXd& theta, std::string_view lhs, Op op,
@@ -141,6 +123,7 @@ TEST_CASE("FcSemEvaluator: one composite regression matches hand algebra") {
 
 TEST_CASE("FcSemEvaluator: HS pure composite implied covariance matches lavaan fixture") {
   const auto j = load_json_fixture("composite/0001_pure_composite_hs.fit.json");
+  REQUIRE_FALSE(j.is_discarded());
   const Built b = must_build(j["input"].get<std::string>());
   auto ev = must_eval(b.pt);
 

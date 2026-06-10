@@ -55,29 +55,9 @@ Built must_build(std::string_view src) {
   return Built{std::move(*pt), std::move(names), std::move(starts)};
 }
 
-Eigen::MatrixXd matrix_from_json(const nlohmann::json& j) {
-  const Eigen::Index nr = static_cast<Eigen::Index>(j.size());
-  const Eigen::Index nc = nr == 0 ? 0 : static_cast<Eigen::Index>(j[0].size());
-  Eigen::MatrixXd out(nr, nc);
-  for (Eigen::Index r = 0; r < nr; ++r) {
-    for (Eigen::Index c = 0; c < nc; ++c) {
-      out(r, c) = j[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)]
-                      .get<double>();
-    }
-  }
-  return out;
-}
+using magmaan::test::matrix_from_json;
 
-nlohmann::json load_json_fixture(const std::string& rel) {
-  const std::string path = magmaan::test::fixtures_dir() + "/" + rel;
-  std::ifstream in(path);
-  REQUIRE_MESSAGE(in.good(), "could not open fixture: " << path);
-  std::stringstream ss;
-  ss << in.rdbuf();
-  auto j = nlohmann::json::parse(ss.str(), nullptr, false);
-  REQUIRE_FALSE(j.is_discarded());
-  return j;
-}
+using magmaan::test::load_json_fixture;
 
 void set_theta(const LatentStructure& pt, const LatentNames& names,
                Eigen::VectorXd& theta, std::string_view lhs, Op op,
@@ -375,6 +355,7 @@ struct PureHsFixture {
 
 PureHsFixture pure_hs_fixture() {
   auto j = load_json_fixture("composite/0001_pure_composite_hs.fit.json");
+  REQUIRE_FALSE(j.is_discarded());
   Built built = must_build(j["input"].get<std::string>());
   SampleStats samp = sample_stats_from_composite_fixture(j, built);
   Eigen::VectorXd theta = pure_hs_theta_from_fixture(built, j, samp);
@@ -394,6 +375,7 @@ TEST_CASE("FC-SEM ML: objective matches lavaan chi-square at native estimates") 
   for (const char* path : fixtures) {
     SUBCASE(path) {
       auto j = load_json_fixture(path);
+      REQUIRE_FALSE(j.is_discarded());
       Built built = must_build(j["input"].get<std::string>());
       SampleStats samp = sample_stats_from_composite_fixture(j, built);
       Eigen::VectorXd theta = hs_theta_from_fixture(built, j, samp);
@@ -471,6 +453,7 @@ TEST_CASE("FC-SEM ML: fit from native simple starts matches lavaan objective") {
   for (const char* path : fixtures) {
     SUBCASE(path) {
       auto j = load_json_fixture(path);
+      REQUIRE_FALSE(j.is_discarded());
       Built built = must_build(j["input"].get<std::string>());
       SampleStats samp = sample_stats_from_composite_fixture(j, built);
       auto x0 = magmaan::estimate::simple_fcsem_start_values(built.pt, samp);
@@ -534,6 +517,7 @@ TEST_CASE("FC-SEM expected information: SEs match lavaan native fixtures") {
   for (const char* path : fixtures) {
     SUBCASE(path) {
       auto j = load_json_fixture(path);
+      REQUIRE_FALSE(j.is_discarded());
       Built built = must_build(j["input"].get<std::string>());
       SampleStats samp = sample_stats_from_composite_fixture(j, built);
       auto x0 = magmaan::estimate::simple_fcsem_start_values(built.pt, samp);
@@ -583,6 +567,7 @@ TEST_CASE("FC-SEM fit measures: match lavaan native fixtures") {
   for (const char* path : fixtures) {
     SUBCASE(path) {
       auto j = load_json_fixture(path);
+      REQUIRE_FALSE(j.is_discarded());
       Built built = must_build(j["input"].get<std::string>());
       SampleStats samp = sample_stats_from_composite_fixture(j, built);
       auto x0 = magmaan::estimate::simple_fcsem_start_values(built.pt, samp);
@@ -639,6 +624,7 @@ TEST_CASE("FC-SEM standardization: std.lv/std.all match lavaan native fixtures")
   for (const char* path : fixtures) {
     SUBCASE(path) {
       auto j = load_json_fixture(path);
+      REQUIRE_FALSE(j.is_discarded());
       Built built = must_build(j["input"].get<std::string>());
       SampleStats samp = sample_stats_from_composite_fixture(j, built);
       auto x0 = magmaan::estimate::simple_fcsem_start_values(built.pt, samp);

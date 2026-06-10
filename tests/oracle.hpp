@@ -221,6 +221,44 @@ inline std::optional<std::string> read_fixture(const std::string& path) {
   return ss.str();
 }
 
+// Loads a fixture JSON by path relative to fixtures_dir(). Returns a
+// discarded value when the file is missing or unparsable; callers assert
+// with REQUIRE_FALSE(j.is_discarded()).
+inline nlohmann::json load_json_fixture(const std::string& rel) {
+  const std::string path = fixtures_dir() + "/" + rel;
+  std::ifstream in(path);
+  if (!in) return nlohmann::json(nlohmann::json::value_t::discarded);
+  std::stringstream ss;
+  ss << in.rdbuf();
+  return nlohmann::json::parse(ss.str(), nullptr, /*allow_exceptions=*/false);
+}
+
+// Dense row-major `[[...], ...]` JSON array-of-arrays to MatrixXd.
+inline Eigen::MatrixXd matrix_from_json(const nlohmann::json& j) {
+  const auto nr = static_cast<Eigen::Index>(j.size());
+  const auto nc =
+      nr > 0 ? static_cast<Eigen::Index>(j[0].size()) : Eigen::Index{0};
+  Eigen::MatrixXd out(nr, nc);
+  for (Eigen::Index r = 0; r < nr; ++r)
+    for (Eigen::Index c = 0; c < nc; ++c)
+      out(r, c) = j[static_cast<std::size_t>(r)][static_cast<std::size_t>(c)]
+                      .get<double>();
+  return out;
+}
+
+// `[...]` JSON array to VectorXd; a bare number becomes a length-1 vector.
+inline Eigen::VectorXd vector_from_json(const nlohmann::json& j) {
+  if (j.is_number()) {
+    Eigen::VectorXd out(1);
+    out(0) = j.get<double>();
+    return out;
+  }
+  Eigen::VectorXd out(static_cast<Eigen::Index>(j.size()));
+  for (Eigen::Index i = 0; i < out.size(); ++i)
+    out(i) = j[static_cast<std::size_t>(i)].get<double>();
+  return out;
+}
+
 // Load a `raw: [{X:[[...]], mask?:[[...]]}]` JSON grid into data::RawData.
 // One object per block; `X` is row-major (n_b × p_b). `mask` is optional:
 // when every block omits it, RawData::mask is left empty, which is what

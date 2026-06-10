@@ -81,16 +81,6 @@
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
     },
     {
-      "name": "asan",
-      "inherits": "_local",
-      "binaryDir": "${sourceDir}/build/asan",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "MAGMAAN_SANITIZER": "asan+ubsan",
-        "CMAKE_CXX_COMPILER": "clang++"
-      }
-    },
-    {
       "name": "ubsan",
       "inherits": "_local",
       "binaryDir": "${sourceDir}/build/ubsan",
@@ -132,7 +122,6 @@
     { "name": "coverage", "configurePreset": "coverage" },
     { "name": "opt",     "configurePreset": "opt" },
     { "name": "release", "configurePreset": "release" },
-    { "name": "asan",    "configurePreset": "asan" },
     { "name": "ubsan",   "configurePreset": "ubsan" },
     { "name": "ceres",   "configurePreset": "ceres" },
     { "name": "ipopt",   "configurePreset": "ipopt" }
@@ -149,7 +138,6 @@
     { "name": "coverage", "inherits": "default", "configurePreset": "coverage" },
     { "name": "opt",     "inherits": "default", "configurePreset": "opt" },
     { "name": "release", "inherits": "default", "configurePreset": "release" },
-    { "name": "asan",    "inherits": "default", "configurePreset": "asan" },
     { "name": "ubsan",   "inherits": "default", "configurePreset": "ubsan" },
     { "name": "ceres",   "inherits": "default", "configurePreset": "ceres" },
     { "name": "ipopt",   "inherits": "default", "configurePreset": "ipopt" }

@@ -108,6 +108,10 @@ while IFS= read -r f; do
     check_token "$f" "${hit%%:*}" "${hit#*:}"
   done < <(strip_comments "$iscpp" <"$f" | grep -noE "$TOKEN_RE")
 done < <(
+  # Invariant 6 ("reports read only from their own results/") is intentionally
+  # NOT mechanically enforced: */results/* is excluded and .qmd files are never
+  # scanned, because the checker's design rule is code-files-only so prose can
+  # never false-positive. Report inputs are reviewed manually.
   find . -type f \( -name '*.R' -o -name '*.r' -o -name '*.cpp' -o -name '*.hpp' \
       -o -name '*.h' -o -name 'CMakeLists.txt' -o -name '*.cmake' -o -name '*.sh' \
       -o -name 'justfile' \) \
