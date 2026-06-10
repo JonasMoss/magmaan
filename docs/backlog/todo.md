@@ -251,13 +251,13 @@ Local-first safety tooling for an AI-assisted repo. Design note:
   Initial tooling now exists as `just test-report`, `just test-quick-report`,
   and `just health`. Keep the command boring and local; sanitizer,
   parity-heavy, and optional optimizer lanes can be opt-in or later extensions.
-- **S.** Add `docs/validation/test_ledger.md`: one table per validation area
+- **Done.** Add `docs/validation/test_ledger.md`: one table per validation area
   mapping subsystem, oracle, test kind, important files/tests, and known gaps.
-  This should orient maintainers and agents; it is not a second backlog.
-- **S/M.** Add a risk-map section to the test ledger for scary areas such as
+  This now orients maintainers and agents without becoming a second backlog.
+- **Done.** Add a risk-map section to the test ledger for scary areas such as
   FIML, ordinal/mixed moments, robust test reductions, optimizer terminal
-  audit, parser/lavaanify, and R boundary reconstruction. Each entry should
-  say "protected by" and name the concrete test files or reports to run.
+  audit, parser/lavaanify, and R boundary reconstruction. Each entry says
+  "Protected by:" and names concrete test files or reports to run.
 - **S.** Adopt a lightweight regression-note convention: when a fixed bug gets
   a guard test, record the bug shape and the protecting test either near the
   test or in the test ledger.
