@@ -106,6 +106,11 @@ struct PolyserialPairScores {
   // Columns: thresholds, rho.
   Eigen::MatrixXd score_contributions;
   Eigen::MatrixXd score_gamma;
+  // Raw-metric pair-likelihood scores for the continuous margin's mean and
+  // variance, at unit sigma: sigma * dl/dmu and sigma^2 * dl/dsigma^2. The
+  // caller divides by sigma / sigma^2 to land in the raw parameter metric.
+  Eigen::VectorXd mu_unit;
+  Eigen::VectorXd var_unit;
 };
 
 struct PolyserialPairDpdScores {

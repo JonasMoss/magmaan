@@ -904,15 +904,21 @@ stop rather than any usable non-error return.
   a focused unit test. The fit-only mixed DWLS workspace path now avoids full
   Gamma/WLS materialization by carrying `MixedOrdinalMoments` plus the Gamma
   diagonal into bounded and full-threshold SNLLS fits. Mixed full-Gamma cache
-  reuse also covers robust DWLS/WLS reporting through a mixed-moments overload;
-  the mixed ordinal golden test now checks the lavaan robust scaled-test fields
-  with looser tolerances than the all-ordinal path because current mixed
-  scale/eigen parity is approximate. Mixed theta SNLLS, lazy mixed WLS
-  construction, tighter mixed robust scaled-test parity, and
+  reuse also covers robust DWLS/WLS reporting through a mixed-moments
+  overload. The mixed Gamma construction mirrors lavaan's muthen1984
+  estimating-equation sandwich exactly (stage-1 mu/var ML scores with
+  per-variable bread blocks, pair-ML scores including mu/var coupling channels
+  for polyserial and continuous-continuous pairs, and the delta-rule
+  correlation-to-covariance transform applied to post-sandwich variance
+  influence; see the design doc's "Mixed Gamma Construction"), so the mixed
+  goldens gate NACOV/weights at 1e-6, point estimates at the all-ordinal
+  theta 1e-5 / chisq 5e-3 contract, and the robust scaled-test fields at
+  all-ordinal tightness — at lavaan's theta-hat and at magmaan's own. The
+  same construction backs the lazy fit-only DWLS diagonal and the
+  Huber-residual single-ordinal rebuild (no-clip reproduces the ML Gamma
+  exactly). Mixed theta SNLLS, lazy mixed WLS construction, and
   threshold-profiled mixed objectives remain later slices. The lavaan-backed
-  fixtures include a complete/listwise sparse 4-category boundary case; the
-  continuous-ordinal covariance influence rows include the variance
-  delta-method term needed for stable mixed WLS weighting.
+  fixtures include a complete/listwise sparse 4-category boundary case.
 - Covariance shrinkage is available for both continuous `SampleStats` and
   mixed continuous/ordinal `MixedOrdinalStats`. Mixed shrinkage leaves
   thresholds and continuous means in place, transforms the lower-triangle

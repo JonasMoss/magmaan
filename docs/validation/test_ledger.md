@@ -37,6 +37,27 @@ reason the test exists; unresolved work still belongs in the backlog.
 The notes below are cross-subsystem, oracle-dependent fixes. Full root-cause
 write-ups live in the commits that introduced each guard.
 
+**Mixed Γ ignored the continuous stage-1 estimating equations.**
+Regression: the mixed continuous/ordinal NACOV put continuous means/variances
+and continuous-continuous covariances into Γ̂ as raw moment residuals and
+patched the polyserial variance channel additively, instead of routing them
+through the muthen1984 stage-1/stage-2 sandwich. Block-partition diffs vs
+lavaan reached 0.65 (variance rows) while pure-ordinal blocks matched at 1e-7;
+the mixed goldens hid it behind NACOV ≤ 1.2 / robust ≤ 4.5e-1 gates. Root
+cause: missing mu/var stage-1 scores in `A11`, missing pair-score mu/var
+coupling channels in `A21`, zero scores for continuous-continuous pairs, and
+the delta-rule `H` applied to raw residuals instead of post-sandwich variance
+influence.
+Guard: `tests/golden/ordinal_golden_test.cpp` mixed stats gates (NACOV/W
+1.2 → 1e-6), mixed fit gates (θ 2e-2 → 1e-5, χ² 3e-1 → 5e-3 with the
+convention rescale), mixed robust gates at all-ordinal tightness (SE 3e-4,
+eig 2e-4, scales 2e-4, χ²-scale 5e-3), plus an own-θ̂ robust check;
+`tests/unit/ordinal_test.cpp` lazy-workspace diagonal parity (1e-8) and the
+Huber no-clip ≡ ML Γ identity.
+Scope: polyserial-DPD Γ stays a research surface (ML-identity mu/var
+channels); the ≥2-ordinal Huber branch keeps its per-pair scalar-bread
+polyserial influence.
+
 **Ordinal golden chisq gate absorbed the lavaan `(N−G)` convention.**
 Regression: the ordinal goldens compared `2N·fmin` directly against lavaan's
 categorical-LS statistic `Σ_g (n_g−1)·F̂_g` with an 8e-2 absolute gate, which

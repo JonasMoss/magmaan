@@ -113,11 +113,11 @@ decisions in the simulation backlog.
   track (the landed split is in the roadmap and
   [docs/design/ordinal-snlls-gamma-architecture.md](../design/ordinal-snlls-gamma-architecture.md);
   threshold-profiled general linear maps, joint multi-group threshold
-  profiling/invariance, and their lavaan oracle fixtures 0013/0014 landed
-  2026-06): tighten mixed robust scaled-test parity beyond the current loose
-  guard, lazy mixed WLS construction, mixed theta SNLLS, reduced-Gamma
-  robust-inference products that avoid full materialization where possible,
-  and only-when-needed R/API polish. `group.equal = "thresholds"` parity is
+  profiling/invariance, their lavaan oracle fixtures 0013/0014, and exact
+  mixed robust parity — the muthen1984-faithful mixed Gamma sandwich, gated at
+  all-ordinal tightness — landed 2026-06): lazy mixed WLS construction, mixed
+  theta SNLLS, reduced-Gamma robust-inference products that avoid full
+  materialization where possible, and only-when-needed R/API polish. `group.equal = "thresholds"` parity is
   documented out of scope: lavaan's Wu-Estabrook identification frees group-2+
   delta scales and intercepts, which the magmaan ordinal delta path does not
   model (explicit shared threshold labels are the supported contract,
@@ -343,16 +343,15 @@ work lives in [`speculative.md`](speculative.md). Open work:
   known Welz qualitative pattern for Designs 1-2 before adding SEM fits or broad
   copula grids.
 - **M/L.** Ordinal SNLLS follow-up research. The all-ordinal delta ULS/DWLS/WLS
-  prototype exists for free, fixed, and pure-merge threshold models, the
-  all-ordinal theta path covers cache-aware bounded/SNLLS point estimation, and
-  the full-threshold SNLLS path supports general linear threshold constraints.
-  Mixed continuous/ordinal delta SNLLS exists for the materialized full-threshold
-  DWLS/WLS path, and mixed fit-only DWLS has a lazy workspace path. Mixed robust
-  scaled-test fields are checked against lavaan only with loose tolerances; exact
-  mixed scale/eigen parity remains open. Use experiments to decide whether the
-  next paper-facing C++ work should be tighter mixed robust inference, lazy mixed
-  WLS construction, mixed theta SNLLS, threshold-profiled general linear maps, or
-  reduced-Gamma inference plumbing.
+  path covers free, fixed, merged (including cross-group invariant), and
+  general linearly constrained thresholds through both the threshold-profiled
+  and full-threshold SNLLS routes; the all-ordinal theta path covers
+  cache-aware bounded/SNLLS point estimation. Mixed continuous/ordinal delta
+  SNLLS exists for the materialized full-threshold DWLS/WLS path, mixed
+  fit-only DWLS has a lazy workspace path, and mixed robust scaled tests now
+  match lavaan at all-ordinal tightness. Use experiments to decide whether the
+  next paper-facing C++ work should be lazy mixed WLS construction, mixed
+  theta SNLLS, or reduced-Gamma inference plumbing.
 
 ## Composite models
 
