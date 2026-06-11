@@ -40,6 +40,28 @@ parity tests pin `magmaan·(N−G)/N == lavaan` at 5e-3.
 **Build if.** A concrete methods workflow needs the other convention or a
 side-by-side report.
 
+### Reduced-Gamma ordinal robust-inference products
+
+Robust ordinal/mixed reporting that consumes reduced Gamma products
+(`OrdinalGammaCacheBlock` influence factor with Γ = IF'IF/n,
+`OrdinalGammaMaterialization::Reduced` plan rules, and a
+`robust_ordinal`/`robust_mixed_ordinal` path through `robust::build_u_factor`
+plus `reduced_gamma_sample_from_gamma`) instead of materializing the dense
+m×m Gamma per block for ULSMV/DWLS scaled tests.
+
+**Alternative already available.** The cache-aware robust paths reuse an
+attached full Gamma (fit-plus-inference plans materialize it once), the lazy
+workspaces defer the WLS inverse, and the influence factor is already
+computed inside the stats builders — only the cache plumbing and the reduced
+sandwich route are missing. `Materialization::Reduced` exists in the enum,
+unconsumed.
+
+**Build if.** An ordinal/mixed model is large enough that the m×m Gamma
+materialization dominates robust reporting in a benchmark or paper grid
+(moment_dim ≳ 1000; experiment 13 measured full Gamma at ~100-200× the
+diagonal's memory), or the ordinal-snlls paper's fit-plus-inference rows
+need the reduced route to make their cost story complete.
+
 ## Optimizers
 
 ### Exact Hessians for IPOPT
