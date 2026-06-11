@@ -156,13 +156,14 @@ work lives in [`speculative.md`](speculative.md). Open work:
 - **S/M.** Continue extending benchmark coverage beyond the current
   lavaan-backed complete-data ML, controlled-missingness FIML, and continuous
   ULS/GLS smoke cases to WLS, ordinal DWLS/WLS, and mixed categorical models.
-- **S/M.** Extend ordinal SNLLS / Gamma workspace benchmark coverage: larger /
-  literature-grade speed grids, tighter mixed robust scaled-test diagnostics,
-  lazy mixed WLS and mixed theta rows once those estimators exist, and any R/API
-  wrapper polish justified by the results. (All-ordinal delta fit-only,
-  fit-plus-inference cache reuse, threshold-constraint, construction-boundary,
-  raw-to-SNLLS legacy/lazy, delta/theta, and mixed-DWLS lazy rows have landed
-  across `experiments/_archive/06/10/11/12/13`.)
+- **S/M.** Remaining ordinal SNLLS / Gamma workspace benchmark polish: lazy
+  mixed WLS and mixed theta rows for the estimators landed 2026-06, and any
+  R/API wrapper polish justified by the paper results. (All-ordinal delta
+  fit-only, fit-plus-inference cache reuse, threshold-constraint,
+  construction-boundary, raw-to-SNLLS legacy/lazy, delta/theta, mixed-DWLS
+  lazy, two-group invariance, and naive corr-block-WLS rows have landed
+  across `experiments/_archive/06/10/11/12/13` and the benchmark itself; the
+  literature-grade `q ≤ 12` grid now runs from `papers/ordinal-snlls/`.)
 - **M/L.** Two-stage EM / saturated-covariance missing-data path. Stage 1
   (`estimate::fiml::saturated_em_moments` / `estimate_saturated_em_moments`) and
   Stage 2 (`estimate_two_stage_em(partable, raw_data, kind = c("ml","gls"))`)

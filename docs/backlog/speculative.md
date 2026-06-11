@@ -131,30 +131,17 @@ the experiment folder and the roadmap.
 
 ### Ordinal SNLLS speed pilot: literature-grade grid
 
-Extend `experiments/_archive/11-ordinal-snlls-speed` beyond the compact
-`--smoke` grid (`q ≤ 4`) to the fuller `q ≤ 12` literature-like sweep, with
-optional lavaan context rows.
-
-**Alternative already available.** The native C++ benchmark already compares
-full bounded DWLS/WLS, threshold-profiled bounded, full-threshold SNLLS, and
-threshold-profiled SNLLS across a Kreiberg-style family, splits delta/theta
-rows, and includes mixed rows plus the lazy `MixedOrdinalWorkspace` boundary.
-
-**Build if.** The SNLLS paper needs stronger timing evidence than the smoke
-grid provides.
+**Fired 2026-06 and absorbed into `papers/ordinal-snlls/`.** The native
+benchmark gained two-group invariance cells and the naive corr-block-WLS
+comparison row, and the paper's `run_speed_grid.R` drives the full `q ≤ 12`
+sweep; results land under the paper's `results/`. No remaining trigger.
 
 ### Ordinal threshold-constraint experiment: multi-group examples
 
-Extend `experiments/_archive/12-ordinal-threshold-constraints` with multi-group
-threshold-invariance/equality examples.
-
-**Alternative already available.** Single-group ordinal CFA is covered: free /
-shared-label thresholds agree across profiled/full paths; true linear threshold
-constraints are rejected by threshold-profiled fitting and accepted by full
-bounded plus full-threshold SNLLS.
-
-**Build if.** A paper needs broader constraint evidence AND the harness can
-express groups without pulling in fixture generation.
+**Fired 2026-06 and absorbed.** Multi-group threshold invariance is now a
+core capability (joint cross-block profiling), gated by unit parity tests,
+the lavaan oracle fixture 0013, and the benchmark's `invariance_2group`
+cells consumed by `papers/ordinal-snlls/`. No remaining trigger.
 
 ### Ordinal construction-boundary experiment: broader blocks
 
