@@ -3881,12 +3881,63 @@ TEST_CASE("Mixed ordinal full-threshold SNLLS matches bounded DWLS/WLS") {
   check_weight(magmaan::estimate::OrdinalWeightKind::DWLS);
   check_weight(magmaan::estimate::OrdinalWeightKind::WLS);
 
-  auto theta = magmaan::estimate::fit_mixed_ordinal_snlls_full_thresholds(
-      *pt, *mr, *stats, magmaan::estimate::OrdinalWeightKind::DWLS, *x0,
-      magmaan::estimate::Backend::NloptLbfgs, opts,
-      magmaan::estimate::OrdinalParameterization::Theta);
-  REQUIRE_FALSE(theta.has_value());
-  CHECK(theta.error().detail.find("only delta") != std::string::npos);
+  // Theta flows through the same full-threshold stack: the standardized
+  // covariance moments make the non-threshold block nonlinear, so only the
+  // thresholds stay Golub-Pereyra linear, and the fit must agree with the
+  // bounded theta fit. The delta model above keeps a binary indicator, but
+  // under theta that model has a near-flat lambda/psi ridge (both optimizers
+  // stall at arbitrary ridge points), so the theta parity check uses a
+  // well-identified design with three-category ordinal indicators.
+  std::mt19937 rng_theta(20260614);
+  Eigen::MatrixXd Xt(560, 4);
+  for (Eigen::Index i = 0; i < Xt.rows(); ++i) {
+    const double eta = norm(rng_theta);
+    const double y1 = 0.85 * eta + 0.53 * norm(rng_theta);
+    const double y2 = 0.78 * eta + 0.63 * norm(rng_theta);
+    Xt(i, 0) = 1.0 + (y1 > -0.7) + (y1 > 0.35);
+    Xt(i, 1) = 1.0 + (y2 > -0.5) + (y2 > 0.55);
+    Xt(i, 2) = 0.82 * eta + 0.57 * norm(rng_theta) + 0.15;
+    Xt(i, 3) = 0.63 * eta + 0.78 * norm(rng_theta) - 0.12;
+  }
+  auto stats_theta =
+      magmaan::data::mixed_ordinal_stats_from_data({Xt}, ordered);
+  REQUIRE(stats_theta.has_value());
+  auto fp_theta = magmaan::parse::Parser::parse("f =~ x1 + x2 + x3 + x4\n"
+                                                "x1 | t1 + t2\n"
+                                                "x2 | t1 + t2\n"
+                                                "x1 ~*~ 1*x1\n"
+                                                "x2 ~*~ 1*x2\n");
+  REQUIRE(fp_theta.has_value());
+  auto pt_theta = magmaan::spec::build(*fp_theta, build_opts);
+  REQUIRE(pt_theta.has_value());
+  auto mr_theta = magmaan::model::build_matrix_rep(*pt_theta);
+  REQUIRE(mr_theta.has_value());
+  auto x0_theta = magmaan::estimate::mixed_ordinal_start_values(
+      *pt_theta, *mr_theta, *stats_theta, {});
+  REQUIRE(x0_theta.has_value());
+
+  auto check_theta = [&](magmaan::estimate::OrdinalWeightKind weight) {
+    auto bounded = magmaan::estimate::fit_mixed_ordinal_bounded(
+        *pt_theta, *mr_theta, *stats_theta, {}, weight, *x0_theta,
+        magmaan::estimate::Backend::NloptLbfgs, opts,
+        magmaan::estimate::OrdinalParameterization::Theta);
+    auto snlls = magmaan::estimate::fit_mixed_ordinal_snlls_full_thresholds(
+        *pt_theta, *mr_theta, *stats_theta, weight, *x0_theta,
+        magmaan::estimate::Backend::NloptLbfgs, opts,
+        magmaan::estimate::OrdinalParameterization::Theta);
+    REQUIRE_MESSAGE(bounded.has_value(),
+                    "mixed bounded theta failed: "
+                        << (bounded.has_value() ? "" : bounded.error().detail));
+    REQUIRE_MESSAGE(snlls.has_value(),
+                    "mixed SNLLS theta failed: "
+                        << (snlls.has_value() ? "" : snlls.error().detail));
+    CHECK(snlls->fmin == doctest::Approx(bounded->fmin).epsilon(2e-6));
+    CHECK((snlls->theta - bounded->theta).cwiseAbs().maxCoeff() < 8e-4);
+    CHECK(snlls->n_nonlinear > 0);
+    CHECK(snlls->n_linear > 0);
+  };
+  check_theta(magmaan::estimate::OrdinalWeightKind::DWLS);
+  check_theta(magmaan::estimate::OrdinalWeightKind::WLS);
 }
 
 TEST_CASE("Mixed ordinal fit-only workspace supplies DWLS diagonal fits") {

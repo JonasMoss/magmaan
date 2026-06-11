@@ -916,9 +916,15 @@ stop rather than any usable non-error return.
   all-ordinal tightness — at lavaan's theta-hat and at magmaan's own. The
   same construction backs the lazy fit-only DWLS diagonal and the
   Huber-residual single-ordinal rebuild (no-clip reproduces the ML Gamma
-  exactly). Mixed theta SNLLS, lazy mixed WLS construction, and
-  threshold-profiled mixed objectives remain later slices. The lavaan-backed
-  fixtures include a complete/listwise sparse 4-category boundary case.
+  exactly). Mixed theta SNLLS runs through the same full-threshold stack:
+  under theta only thresholds stay Golub-Pereyra linear (the standardized
+  covariance moments make the rest nonlinear), gated against the bounded
+  theta fit on a well-identified three-category design — binary-indicator
+  theta models carry a near-flat lambda/psi ridge where optimizer endpoints
+  are arbitrary, so theta parity is only meaningful on identified designs.
+  Lazy mixed WLS construction and threshold-profiled mixed objectives remain
+  later slices. The lavaan-backed fixtures include a complete/listwise
+  sparse 4-category boundary case.
 - Covariance shrinkage is available for both continuous `SampleStats` and
   mixed continuous/ordinal `MixedOrdinalStats`. Mixed shrinkage leaves
   thresholds and continuous means in place, transforms the lower-triangle
