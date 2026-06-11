@@ -302,10 +302,13 @@ fit_mixed_ordinal_bounded(spec::LatentStructure pt,
                           Backend backend = Backend::NloptLbfgs,
                           optim::OptimOptions opts = {});
 
-// Golub-Pereyra profiled mixed continuous/ordinal delta LS over the full mixed
-// threshold + continuous mean/variance + association moment objective.
-// This first mixed SNLLS entry point intentionally consumes the materialized
-// mixed stats/weights; lazy mixed Gamma construction remains a later slice.
+// Golub-Pereyra profiled mixed continuous/ordinal LS over the full mixed
+// threshold + continuous mean/variance + association moment objective. Under
+// delta the thresholds, means, variances, and covariances are conditionally
+// linear; under theta the standardized covariance moments leave only the
+// thresholds in the Golub-Pereyra linear block. This entry point consumes the
+// materialized mixed stats/weights; lazy mixed full-Gamma construction
+// remains a later slice.
 fit_expected<Estimates>
 fit_mixed_ordinal_snlls_full_thresholds(
     spec::LatentStructure pt,

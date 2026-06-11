@@ -4413,12 +4413,11 @@ fit_mixed_ordinal_snlls_full_thresholds(
     Backend backend,
     OptimOptions opts,
     OrdinalParameterization parameterization) {
-  if (parameterization != OrdinalParameterization::Delta) {
-    return std::unexpected(
-        make_err(FitError::Kind::NumericIssue,
-                 "fit_mixed_ordinal_snlls_full_thresholds: only delta "
-                 "parameterization is currently supported"));
-  }
+  // Theta is supported through the same full-threshold moment stack: the
+  // standardized covariance moments make the non-threshold covariance block
+  // nonlinear, so ordinal_gp_block_kinds marks only thresholds as
+  // Golub-Pereyra linear coordinates under theta (the implementation answer
+  // to the response-scale separability boundary).
   if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
     return std::unexpected(v.error());
   }
