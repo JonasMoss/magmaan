@@ -269,6 +269,46 @@ The magmaan rule still applies: never compute more than necessary for the
 requested product, but make it possible to request a larger product bundle
 intentionally.
 
+## Mixed Gamma Construction
+
+The mixed continuous/ordinal `NACOV` mirrors lavaan's muthen1984
+estimating-equation sandwich exactly (validated to ~1e-8 per moment block on
+the mixed fixtures):
+
+- **Stage-1 stack** `[th | mu | var]`: threshold scores for ordinal variables;
+  univariate normal ML scores `(y - mu)/sigma^2` and
+  `((y - mu)^2 - sigma^2)/(2 sigma^4)` for continuous ones. The bread `A11` is
+  block-diagonal per variable (threshold block, or the 2x2 `(mu, var)` OPG
+  block for a continuous variable); the meat is the full score OPG.
+- **Stage-2 pair scores** for every association type: polychoric rho scores,
+  polyserial rho scores with mu/var coupling channels (the raw-metric pair
+  scores `sigma dl/dmu = u - dlogP/du` and
+  `sigma^2 dl/dsigma^2 = ((u^2 - 1) - u dlogP/du)/2`, exposed as
+  `PolyserialPairScores::{mu_unit, var_unit}`), and bivariate-normal
+  correlation ML scores for continuous-continuous pairs (chain-ruled from the
+  covariance-metric `continuous_pair_normal_scores` into the
+  `(mu, sigma^2, rho)` parameterization).
+- **`A21`** holds the score-cross coupling of each pair's rho score with its
+  margins' stage-1 scores (th/mu/var channels); **`A22`** is the diagonal rho
+  score OPG. The sandwich inverts block-triangularly as before.
+- **Delta rule** (lavaan's `H`): association influence rows transform from the
+  correlation metric to the covariance metric using the *post-sandwich*
+  variance influence columns — `cov_ij` rows are
+  `sd_i sd_j IF_rho + (rho sd_j / 2 sd_i) IF_var_i + (rho sd_i / 2 sd_j)
+  IF_var_j` (one variance term for polyserial rows) — replacing the former
+  ad-hoc raw-residual variance patch. Mean rows are `-IF_mu` (the `-mu`
+  moment sign), variance rows are `IF_var`.
+
+The same construction backs the eager `mixed_ordinal_stats_from_data_impl`,
+the lazy fit-only DWLS diagonal in `mixed_ordinal_workspace_from_data` (column
+norms only), and the Huber-residual single-ordinal rebuild (whose no-clip
+variant reproduces the ML Gamma exactly; its mu/var coupling channels use the
+ML score units at the Huber rho, an estimating-equation approximation under
+clipping). The polyserial-DPD pair bread continues to override the
+`(thresholds, rho)` block; its mu/var channels use the ML-identity
+approximation and its Gamma is a research surface allowed to differ from
+lavaan.
+
 ## SNLLS Integration
 
 The threshold-profiled ordinal SNLLS path covers:

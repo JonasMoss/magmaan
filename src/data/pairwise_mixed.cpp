@@ -1070,7 +1070,9 @@ polyserial_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& categories,
       .rho = Eigen::VectorXd::Zero(n),
       .thresholds = Eigen::MatrixXd::Zero(n, nth),
       .score_contributions = Eigen::MatrixXd::Zero(n, nth + 1),
-      .score_gamma = Eigen::MatrixXd::Zero(nth + 1, nth + 1)};
+      .score_gamma = Eigen::MatrixXd::Zero(nth + 1, nth + 1),
+      .mu_unit = Eigen::VectorXd::Zero(n),
+      .var_unit = Eigen::VectorXd::Zero(n)};
   const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
   const double h = 1e-5;
   const double rp = std::min(0.999, rho + h);
@@ -1081,11 +1083,26 @@ polyserial_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& categories,
     const double pp = polyserial_prob_unchecked(c, u(r), rp, thresholds);
     const double pm = polyserial_prob_unchecked(c, u(r), rm, thresholds);
     out.rho(r) = (std::log(pp) - std::log(pm)) / (rp - rm);
+    // d log P(c | u) / du = -rho * (z_hi - z_lo) / lik, which is -rho times
+    // the row sum of the threshold score columns below.
+    double dlogp_du = 0.0;
     for (Eigen::Index a = 0; a < nth; ++a) {
       const double z = normal_pdf((thresholds(a) - rho * u(r)) / sd) / sd;
-      if (c == a) out.thresholds(r, a) += z / lik;
-      if (c == a + 1) out.thresholds(r, a) -= z / lik;
+      if (c == a) {
+        out.thresholds(r, a) += z / lik;
+        dlogp_du -= rho * z / lik;
+      }
+      if (c == a + 1) {
+        out.thresholds(r, a) -= z / lik;
+        dlogp_du += rho * z / lik;
+      }
     }
+    // Raw-metric pair-likelihood scores at unit sigma. With
+    // l = log phi(u) + log P(c | u), u = (y - mu)/sigma:
+    //   sigma   * dl/dmu      = u - d log P/du
+    //   sigma^2 * dl/dsigma^2 = ((u^2 - 1) - u * d log P/du) / 2
+    out.mu_unit(r) = u(r) - dlogp_du;
+    out.var_unit(r) = 0.5 * ((u(r) * u(r) - 1.0) - u(r) * dlogp_du);
   }
   out.score_contributions.leftCols(nth) = out.thresholds;
   out.score_contributions.col(nth) = out.rho;

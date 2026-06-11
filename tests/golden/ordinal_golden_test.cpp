@@ -411,8 +411,8 @@ TEST_CASE("mixed ordinal goldens: thresholds, polyserials, NACOV, and WLS weight
       const double d_N = max_abs_diff(stats.NACOV[b], NACOV);
       const double d_WD = max_abs_diff(stats.W_dwls[b], WD);
       const double d_W = max_abs_diff(stats.W_wls[b], W);
-      if (d_th > 5e-8 || d_mean > 5e-8 || d_R > 2e-3 || d_mom > 2e-3 ||
-          d_N > 1.2 || d_WD > 1.2 || d_W > 1.2) {
+      if (d_th > 5e-8 || d_mean > 5e-8 || d_R > 1e-6 || d_mom > 1e-6 ||
+          d_N > 1e-6 || d_WD > 1e-6 || d_W > 1e-5) {
         failures.push_back(id + " block " + std::to_string(b) +
                            ": max diffs thresholds=" + std::to_string(d_th) +
                            " mean=" + std::to_string(d_mean) +
@@ -861,7 +861,7 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
           h->stats.R.size());
       const double d_chisq = std::abs(chisq - lavaan_chisq);
       const double d_theta = max_abs_diff(est_or->theta, lavaan_theta);
-      if (df != lavaan_df || d_theta > 2e-2 || d_chisq > 3e-1) {
+      if (df != lavaan_df || d_theta > 1e-5 || d_chisq > 5e-3) {
         failures.push_back(id + " " + name +
                            ": df=" + std::to_string(df) +
                            " lavaan_df=" + std::to_string(lavaan_df) +
@@ -914,20 +914,20 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
         const double d_ss_shift =
             std::abs(rob_or->scaled_shifted.shift_b -
                      robust["scaled_shifted"]["shift"].get<double>());
-        // Mixed continuous/ordinal robust scaled tests are currently a looser
-        // lavaan guard than the all-ordinal path; the small/sparse mixed
-        // fixtures expose existing scale/eigen drift that is tracked in the
-        // backlog rather than hidden by omitting the assertions.
+        // The mixed Gamma construction mirrors lavaan's muthen1984
+        // estimating-equation sandwich (stage-1 mu/var ML scores, pair-ML
+        // association scores, delta-rule covariance transform), so the mixed
+        // robust gates sit at the all-ordinal tightness.
         if (rob_or->df != robust["df"].get<int>() ||
             rob_or->satorra_bentler.df !=
                 robust["satorra_bentler"]["df"].get<int>() ||
             rob_or->scaled_shifted.df !=
                 robust["scaled_shifted"]["df"].get<int>() ||
-            d_se > 3e-2 || d_ev > 1e-1 || d_standard > 1e-8 ||
-            d_sb > 4.5e-1 || d_sb_scale > 9e-2 ||
-            d_mv > 4.5e-1 || d_mv_df > 1e-2 ||
-            d_ss > 4.5e-1 || d_ss_scale > 9e-2 ||
-            d_ss_shift > 5e-3) {
+            d_se > 3e-4 || d_ev > 2e-4 || d_standard > 1e-8 ||
+            d_sb > 5e-3 || d_sb_scale > 2e-4 ||
+            d_mv > 5e-3 || d_mv_df > 2e-4 ||
+            d_ss > 5e-3 || d_ss_scale > 2e-4 ||
+            d_ss_shift > 2e-4) {
           failures.push_back(id + " " + name +
                              ": robust diffs se=" + std::to_string(d_se) +
                              " eig=" + std::to_string(d_ev) +
@@ -941,6 +941,42 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
                              std::to_string(d_ss_scale) +
                              " scaled.shifted shift=" +
                              std::to_string(d_ss_shift));
+          continue;
+        }
+
+        // End-to-end check at magmaan's own theta-hat: the chisq-scale
+        // statistics convert through the (N - G)/N convention rescale, the
+        // ratio/df/SE quantities compare directly.
+        auto rob_own_or = magmaan::estimate::robust_mixed_ordinal(
+            h->pt, h->rep, h->stats, *est_or, kind);
+        if (!rob_own_or.has_value()) {
+          failures.push_back(id + " " + name + ": robust (own theta) — " +
+                             rob_own_or.error().detail);
+          continue;
+        }
+        const auto ls = [&](double v) {
+          return to_lavaan_ls_chisq(v, n_total, h->stats.R.size());
+        };
+        const double o_se = max_abs_diff(rob_own_or->se, lavaan_se);
+        const double o_ev = max_abs_diff(rob_own_or->eigvals, lavaan_ev);
+        const double o_standard =
+            std::abs(ls(rob_own_or->chisq_standard) -
+                     robust["chisq_standard"].get<double>());
+        const double o_sb =
+            std::abs(ls(rob_own_or->satorra_bentler.chi2_scaled) -
+                     robust["satorra_bentler"]["chisq"].get<double>());
+        const double o_ss =
+            std::abs(ls(rob_own_or->scaled_shifted.chi2_adj) -
+                     robust["scaled_shifted"]["chisq"].get<double>());
+        if (o_se > 3e-4 || o_ev > 2e-4 || o_standard > 5e-3 ||
+            o_sb > 5e-3 || o_ss > 5e-3) {
+          failures.push_back(id + " " + name +
+                             ": robust (own theta) diffs se=" +
+                             std::to_string(o_se) +
+                             " eig=" + std::to_string(o_ev) +
+                             " standard=" + std::to_string(o_standard) +
+                             " SB=" + std::to_string(o_sb) +
+                             " scaled.shifted=" + std::to_string(o_ss));
           continue;
         }
       }
