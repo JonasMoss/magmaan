@@ -922,9 +922,13 @@ stop rather than any usable non-error return.
   theta fit on a well-identified three-category design — binary-indicator
   theta models carry a near-flat lambda/psi ridge where optimizer endpoints
   are arbitrary, so theta parity is only meaningful on identified designs.
-  Lazy mixed WLS construction and threshold-profiled mixed objectives remain
-  later slices. The lavaan-backed fixtures include a complete/listwise
-  sparse 4-category boundary case.
+  Mixed WLS and fit-plus-inference workspaces are lazy about weights: the
+  builder carries moments plus full Gamma into the cache and defers the
+  O(m³) WLS inverse (and DWLS weight extraction) to the
+  `ordinal_gamma_cache_ensure_*` helpers at first use. Threshold-profiled
+  mixed objectives remain a later slice; reduced-Gamma robust products sit in
+  the speculative backlog. The lavaan-backed fixtures include a
+  complete/listwise sparse 4-category boundary case.
 - Covariance shrinkage is available for both continuous `SampleStats` and
   mixed continuous/ordinal `MixedOrdinalStats`. Mixed shrinkage leaves
   thresholds and continuous means in place, transforms the lower-triangle

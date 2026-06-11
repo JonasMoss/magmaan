@@ -115,9 +115,11 @@ decisions in the simulation backlog.
   threshold-profiled general linear maps, joint multi-group threshold
   profiling/invariance, their lavaan oracle fixtures 0013/0014, exact mixed
   robust parity — the muthen1984-faithful mixed Gamma sandwich, gated at
-  all-ordinal tightness — and mixed theta SNLLS landed 2026-06): lazy mixed
-  WLS construction, reduced-Gamma robust-inference products that avoid full
-  materialization where possible, and only-when-needed R/API polish. `group.equal = "thresholds"` parity is
+  all-ordinal tightness — mixed theta SNLLS, and lazy mixed WLS (the
+  workspace defers the O(m³) inverse to the cache ensure helpers) landed
+  2026-06): only-when-needed R/API polish remains; reduced-Gamma
+  robust-inference products moved to [speculative.md](speculative.md) with a
+  size-triggered build-if. `group.equal = "thresholds"` parity is
   documented out of scope: lavaan's Wu-Estabrook identification frees group-2+
   delta scales and intercepts, which the magmaan ordinal delta path does not
   model (explicit shared threshold labels are the supported contract,

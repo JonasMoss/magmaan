@@ -845,11 +845,14 @@ ordinal_gamma_cache_from_stats(const MixedOrdinalStats& stats) {
     block.has_full = true;
     block.diagonal = stats.NACOV[b].diagonal();
     block.has_diagonal = true;
-    if (b < stats.W_dwls.size()) {
+    // Stats built without the eager WLS inverse (full_wls_weight = false)
+    // carry empty W_wls placeholders; leave the provenance flag unset so the
+    // cache ensure helpers build the weight on demand.
+    if (b < stats.W_dwls.size() && stats.W_dwls[b].size() > 0) {
       block.w_dwls = stats.W_dwls[b];
       block.has_dwls_weight = true;
     }
-    if (b < stats.W_wls.size()) {
+    if (b < stats.W_wls.size() && stats.W_wls[b].size() > 0) {
       block.w_wls = stats.W_wls[b];
       block.has_wls_weight = true;
     }
@@ -1219,7 +1222,12 @@ post_expected<MixedOrdinalWorkspace> mixed_ordinal_workspace_from_data(
       plan.estimator == OrdinalEstimatorKind::DWLS &&
       plan.materialization == OrdinalGammaMaterialization::Diagonal;
   if (!lazy_fit_only_uls && !lazy_fit_only_dwls) {
-    auto stats_or = mixed_ordinal_stats_from_data(Xs, ordered);
+    // WLS and fit-plus-inference plans carry the full Gamma in the cache but
+    // defer every weight: the O(m^3) WLS inverse and the DWLS diagonal weight
+    // are built on demand by the ordinal_gamma_cache_ensure_* helpers when a
+    // fit or robust call actually needs them.
+    auto stats_or = mixed_ordinal_stats_from_data(Xs, ordered,
+                                                  /*full_wls_weight=*/false);
     if (!stats_or.has_value()) return std::unexpected(stats_or.error());
     return MixedOrdinalWorkspace{
         .moments = mixed_ordinal_moments_from_stats(*stats_or),

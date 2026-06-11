@@ -4034,6 +4034,36 @@ TEST_CASE("Mixed ordinal fit-only workspace supplies DWLS diagonal fits") {
         8e-4);
   CHECK((lazy_snlls->theta - full_bounded->theta).cwiseAbs().maxCoeff() <
         8e-4);
+
+  // A WLS plan carries the full Gamma but defers the O(m^3) inverse: the
+  // workspace must hand back has_full without has_wls_weight, the cache-aware
+  // fit builds the weight on demand and matches the eagerly materialized fit,
+  // and the cache retains the weight afterwards.
+  auto wls_plan = magmaan::data::ordinal_weight_plan(
+      magmaan::data::OrdinalWorkspacePurpose::FitOnly,
+      magmaan::data::OrdinalEstimatorKind::WLS,
+      magmaan::data::OrdinalMomentParameterization::Delta);
+  auto wls_workspace =
+      magmaan::data::mixed_ordinal_workspace_from_data({X}, ordered, wls_plan);
+  REQUIRE(wls_workspace.has_value());
+  REQUIRE(wls_workspace->gamma_cache.blocks.size() == 1);
+  CHECK(wls_workspace->gamma_cache.blocks[0].has_full);
+  CHECK_FALSE(wls_workspace->gamma_cache.blocks[0].has_wls_weight);
+  auto full_wls = magmaan::estimate::fit_mixed_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::WLS,
+      *x0_full, magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto lazy_wls = magmaan::estimate::fit_mixed_ordinal_bounded(
+      *pt, *mr, wls_workspace->moments, &wls_workspace->gamma_cache, {},
+      wls_plan, *x0_lazy, magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(full_wls.has_value(),
+                  "full mixed WLS failed: "
+                      << (full_wls.has_value() ? "" : full_wls.error().detail));
+  REQUIRE_MESSAGE(lazy_wls.has_value(),
+                  "lazy mixed WLS failed: "
+                      << (lazy_wls.has_value() ? "" : lazy_wls.error().detail));
+  CHECK(lazy_wls->fmin == doctest::Approx(full_wls->fmin).epsilon(1e-10));
+  CHECK((lazy_wls->theta - full_wls->theta).cwiseAbs().maxCoeff() < 1e-8);
+  CHECK(wls_workspace->gamma_cache.blocks[0].has_wls_weight);
 }
 
 TEST_CASE("Mixed ordinal full-Gamma cache supplies robust reporting") {
