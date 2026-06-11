@@ -230,6 +230,36 @@ std::string make_repeated_model_syntax(int q, int categories,
   return syntax.str();
 }
 
+// Two-group threshold-invariance variant: every threshold row carries a
+// per-(variable, level) label, and single labels in a multi-group build
+// impose cross-group equality — the structured-H case the joint profiled
+// paths now support.
+std::string make_invariance_model_syntax(int q, int categories) {
+  const int p = 4 * q;
+  std::ostringstream syntax;
+  for (int f = 0; f < 4; ++f) {
+    syntax << "f" << (f + 1) << " =~ ";
+    for (int j = 1; j <= q; ++j) {
+      if (j > 1) syntax << " + ";
+      syntax << "x" << (f * q + j);
+    }
+    syntax << "\n";
+  }
+  const int n_threshold = categories - 1;
+  for (int j = 1; j <= p; ++j) {
+    syntax << "x" << j << " | ";
+    for (int k = 1; k <= n_threshold; ++k) {
+      if (k > 1) syntax << " + ";
+      syntax << "v" << j << "k" << k << "*t" << k;
+    }
+    syntax << "\n";
+  }
+  for (int j = 1; j <= p; ++j) {
+    syntax << "x" << j << " ~*~ 1*x" << j << "\n";
+  }
+  return syntax.str();
+}
+
 int mixed_ordinal_index(int factor, int j, int q) {
   return factor * (2 * q) + j + 1;
 }
@@ -457,6 +487,13 @@ struct CacheBundle {
   OrdinalGammaCache* ptr() noexcept { return use_cache ? &cache : nullptr; }
 };
 
+std::vector<Eigen::VectorXd> nacov_diagonals(const OrdinalStats& stats) {
+  std::vector<Eigen::VectorXd> out;
+  out.reserve(stats.NACOV.size());
+  for (const auto& G : stats.NACOV) out.push_back(G.diagonal());
+  return out;
+}
+
 CacheBundle make_fit_cache_unmeasured(const OrdinalStats& stats,
                                       OrdinalEstimatorKind estimator) {
   CacheBundle bundle;
@@ -464,14 +501,16 @@ CacheBundle make_fit_cache_unmeasured(const OrdinalStats& stats,
   if (estimator == OrdinalEstimatorKind::DWLS) {
     bundle.cache =
         magmaan::data::ordinal_gamma_cache_from_diagonal(
-            {stats.NACOV[0].diagonal()});
+            nacov_diagonals(stats));
     bundle.use_cache = true;
     return bundle;
   }
 
-  bundle.cache.blocks.resize(1);
-  bundle.cache.blocks[0].gamma = stats.NACOV[0];
-  bundle.cache.blocks[0].has_full = true;
+  bundle.cache.blocks.resize(stats.NACOV.size());
+  for (std::size_t b = 0; b < stats.NACOV.size(); ++b) {
+    bundle.cache.blocks[b].gamma = stats.NACOV[b];
+    bundle.cache.blocks[b].has_full = true;
+  }
   bundle.use_cache = true;
   auto ok = magmaan::data::ordinal_gamma_cache_ensure_wls_weights(
       bundle.cache);
@@ -486,7 +525,7 @@ CacheBundle make_fit_cache(const OrdinalStats& stats,
   if (estimator == OrdinalEstimatorKind::DWLS) {
     const auto timed = measure_reps(1, [&]() {
       bundle.cache = magmaan::data::ordinal_gamma_cache_from_diagonal(
-          {stats.NACOV[0].diagonal()});
+          nacov_diagonals(stats));
       return true;
     });
     bundle.cache_setup = timed.timing;
@@ -495,9 +534,11 @@ CacheBundle make_fit_cache(const OrdinalStats& stats,
   }
 
   const auto cache_timed = measure_reps(1, [&]() {
-    bundle.cache.blocks.resize(1);
-    bundle.cache.blocks[0].gamma = stats.NACOV[0];
-    bundle.cache.blocks[0].has_full = true;
+    bundle.cache.blocks.resize(stats.NACOV.size());
+    for (std::size_t b = 0; b < stats.NACOV.size(); ++b) {
+      bundle.cache.blocks[b].gamma = stats.NACOV[b];
+      bundle.cache.blocks[b].has_full = true;
+    }
     bundle.use_cache = true;
     return true;
   });
@@ -716,6 +757,7 @@ TimedFitResult run_timed_estimate(Row base, int reps, Fn&& fn,
 
 struct DesignCell {
   bool mixed = false;
+  bool invariance = false;
   std::string design;
   std::string case_id;
   int n = 0;
@@ -783,6 +825,23 @@ std::vector<DesignCell> make_design(bool smoke, int seed_base, int max_q) {
                  .threshold_mode = OrdinalThresholdMode::FreeIdentity,
                  .seed = seed_base + offset});
   ++offset;
+
+  // Two-group threshold-invariance cells: cross-group equality labels on
+  // every threshold drive the joint profiled normal equations.
+  const std::vector<int> invariance_qs =
+      smoke ? std::vector<int>{2} : std::vector<int>{2, 4};
+  for (const int q : invariance_qs) {
+    out.push_back({.invariance = true,
+                   .design = "invariance_2group",
+                   .case_id = "invariance_q" + std::to_string(q),
+                   .n = smoke ? 500 : 2000,
+                   .q = q,
+                   .categories = smoke ? 3 : 5,
+                   .threshold_balance = "symmetric",
+                   .threshold_mode = OrdinalThresholdMode::LinearMap,
+                   .seed = seed_base + offset});
+    ++offset;
+  }
 
   const std::vector<int> categories =
       smoke ? std::vector<int>{3, 5} : std::vector<int>{2, 3, 5, 7};
@@ -1116,6 +1175,255 @@ bool run_mixed_cell(std::ostream& out,
   return true;
 }
 
+// Two-group cross-group threshold-invariance cells: every threshold carries a
+// shared label across groups, so the profiled paths exercise the joint
+// (n_b/N-weighted) threshold normal equations while the legacy bounded path
+// enforces the same equalities through the constrained solver.
+bool run_invariance_cell(std::ostream& out,
+                         const DesignCell& cell,
+                         int reps,
+                         int max_iter,
+                         const magmaan::optim::OptimOptions& opts) {
+  const int p = 4 * cell.q;
+  const int n2 = (cell.n * 17) / 20;
+  const Eigen::MatrixXd data1 = simulate_repeated_ordinal(
+      cell.n, cell.q, cell.categories, cell.threshold_balance, cell.seed);
+  const Eigen::MatrixXd data2 = simulate_repeated_ordinal(
+      n2, cell.q, cell.categories, cell.threshold_balance, cell.seed + 7919,
+      /*loading=*/0.62, /*factor_cor=*/0.35);
+  const std::string syntax =
+      make_invariance_model_syntax(cell.q, cell.categories);
+
+  magmaan::spec::LatentStructure pt;
+  magmaan::model::MatrixRep rep;
+  const auto model_timed = measure_reps(1, [&]() {
+    auto flat = magmaan::parse::Parser::parse(syntax);
+    if (!flat.has_value()) {
+      std::cerr << "invariance parse failed: " << flat.error().detail << "\n";
+      return false;
+    }
+    magmaan::spec::BuildOptions build_opts;
+    build_opts.n_groups = 2;
+    auto built = magmaan::spec::build(*flat, build_opts);
+    if (!built.has_value()) {
+      std::cerr << "invariance lavaanify failed: " << built.error().detail
+                << "\n";
+      return false;
+    }
+    auto matrix_rep = magmaan::model::build_matrix_rep(*built);
+    if (!matrix_rep.has_value()) {
+      std::cerr << "invariance matrix rep failed: "
+                << matrix_rep.error().detail << "\n";
+      return false;
+    }
+    pt = *built;
+    rep = *matrix_rep;
+    return true;
+  });
+  if (!model_timed.ok) return false;
+
+  OrdinalStats stats;
+  std::string stats_error;
+  const auto stats_timed = measure_reps(1, [&]() {
+    auto computed =
+        magmaan::data::ordinal_stats_from_integer_data({data1, data2});
+    if (!computed.has_value()) {
+      stats_error = computed.error().detail;
+      return false;
+    }
+    stats = *computed;
+    return true;
+  });
+  if (!stats_timed.ok) {
+    std::cerr << "invariance stats failed: " << stats_error << "\n";
+    return false;
+  }
+
+  magmaan::data::OrdinalMoments moments;
+  const auto moments_timed = measure_reps(1, [&]() {
+    moments = magmaan::data::ordinal_moments_from_stats(stats);
+    return true;
+  });
+
+  Eigen::VectorXd x0;
+  std::string starts_error;
+  const auto starts_timed = measure_reps(1, [&]() {
+    auto starts = magmaan::estimate::ordinal_start_values(pt, rep, moments, {});
+    if (!starts.has_value()) {
+      starts_error = starts.error().detail;
+      return false;
+    }
+    x0 = *starts;
+    return true;
+  });
+  if (!starts_timed.ok) {
+    std::cerr << "invariance starts failed: " << starts_error << "\n";
+    return false;
+  }
+
+  Row base;
+  base.design = cell.design;
+  base.case_id = cell.case_id;
+  base.seed = cell.seed;
+  base.n = cell.n + n2;
+  base.q = cell.q;
+  base.p = p;
+  base.n_ordered = p;
+  base.n_continuous = 0;
+  base.categories = cell.categories;
+  base.threshold_balance = cell.threshold_balance;
+  base.threshold_mode = "invariant";
+  base.reps = reps;
+  base.max_iter = max_iter;
+  base.n_free = static_cast<int>(x0.size());
+  base.n_thresholds =
+      stats.thresholds.empty() ? 0
+                               : static_cast<int>(stats.thresholds[0].size());
+  base.moment_dim = 2 * moment_dimension(p, cell.categories);
+  base.model_setup_ms = model_timed.timing.median_ms;
+  base.stats_ms = stats_timed.timing.median_ms;
+  base.moments_ms = moments_timed.timing.median_ms;
+  base.starts_ms = starts_timed.timing.median_ms;
+
+  const std::vector<OrdinalEstimatorKind> estimators = {
+      OrdinalEstimatorKind::ULS, OrdinalEstimatorKind::DWLS,
+      OrdinalEstimatorKind::WLS};
+  for (const auto estimator : estimators) {
+    const auto plan = magmaan::data::ordinal_weight_plan(
+        OrdinalWorkspacePurpose::FitOnly, estimator,
+        OrdinalMomentParameterization::Delta,
+        OrdinalThresholdMode::LinearMap);
+
+    Estimates full_bounded_ref;
+    bool have_full_bounded = false;
+    if (estimator != OrdinalEstimatorKind::ULS) {
+      const auto weight_kind = estimator == OrdinalEstimatorKind::DWLS
+                                   ? magmaan::estimate::OrdinalWeightKind::DWLS
+                                   : magmaan::estimate::OrdinalWeightKind::WLS;
+      Row row = base;
+      row.estimator = estimator_name(estimator);
+      row.path = "full_bounded";
+      auto result = run_timed_fit(
+          row, reps,
+          [&]() {
+            return magmaan::estimate::fit_ordinal_bounded(
+                pt, rep, stats, {}, weight_kind, x0, Backend::NloptLbfgs,
+                opts);
+          },
+          nullptr, nullptr);
+      row = result.row;
+      if (result.have_estimate) {
+        have_full_bounded = true;
+        full_bounded_ref = std::move(result.estimate);
+        row.theta_diff_full_bounded = 0.0;
+        row.fmin_diff_full_bounded = 0.0;
+      }
+      write_row(out, row);
+    }
+
+    Estimates profiled_bounded_ref;
+    bool have_profiled_bounded = false;
+    {
+      auto cache = make_fit_cache(stats, estimator);
+      Row row = base;
+      row.estimator = estimator_name(estimator);
+      row.path = "threshold_profiled_bounded";
+      row.cache_setup_ms = cache.cache_setup.median_ms;
+      row.weight_setup_ms = cache.weight_setup.median_ms;
+      if (!cache.error.empty()) {
+        row.status = "error";
+        row.error = cache.error;
+      } else {
+        auto result = run_timed_fit(
+            row, reps,
+            [&]() {
+              return magmaan::estimate::fit_ordinal_bounded(
+                  pt, rep, moments, cache.ptr(), {}, plan, x0,
+                  Backend::NloptLbfgs, opts);
+            },
+            nullptr, have_full_bounded ? &full_bounded_ref : nullptr);
+        row = result.row;
+        const auto flags = cache_flags(cache.ptr());
+        row.cache_blocks = flags.block_count;
+        row.cache_has_diagonal = flags.has_diagonal;
+        row.cache_has_full = flags.has_full;
+        row.cache_has_dwls_weight = flags.has_dwls_weight;
+        row.cache_has_wls_weight = flags.has_wls_weight;
+        if (result.have_estimate) {
+          have_profiled_bounded = true;
+          profiled_bounded_ref = std::move(result.estimate);
+          row.theta_diff_profiled_bounded = 0.0;
+          row.fmin_diff_profiled_bounded = 0.0;
+        }
+      }
+      write_row(out, row);
+    }
+
+    {
+      auto cache = make_fit_cache(stats, estimator);
+      Row row = base;
+      row.estimator = estimator_name(estimator);
+      row.path = "snlls";
+      row.cache_setup_ms = cache.cache_setup.median_ms;
+      row.weight_setup_ms = cache.weight_setup.median_ms;
+      if (!cache.error.empty()) {
+        row.status = "error";
+        row.error = cache.error;
+      } else {
+        auto result = run_timed_fit(
+            row, reps,
+            [&]() {
+              return magmaan::estimate::fit_ordinal_snlls(
+                  pt, rep, moments, cache.ptr(), plan, x0, Backend::NloptLbfgs,
+                  opts);
+            },
+            have_profiled_bounded ? &profiled_bounded_ref : nullptr,
+            have_full_bounded ? &full_bounded_ref : nullptr);
+        row = result.row;
+        const auto flags = cache_flags(cache.ptr());
+        row.cache_blocks = flags.block_count;
+        row.cache_has_diagonal = flags.has_diagonal;
+        row.cache_has_full = flags.has_full;
+        row.cache_has_dwls_weight = flags.has_dwls_weight;
+        row.cache_has_wls_weight = flags.has_wls_weight;
+      }
+      write_row(out, row);
+    }
+
+    {
+      auto cache = make_fit_cache(stats, estimator);
+      Row row = base;
+      row.estimator = estimator_name(estimator);
+      row.path = "snlls_full_thresholds";
+      row.cache_setup_ms = cache.cache_setup.median_ms;
+      row.weight_setup_ms = cache.weight_setup.median_ms;
+      if (!cache.error.empty()) {
+        row.status = "error";
+        row.error = cache.error;
+      } else {
+        auto result = run_timed_fit(
+            row, reps,
+            [&]() {
+              return magmaan::estimate::fit_ordinal_snlls_full_thresholds(
+                  pt, rep, moments, cache.ptr(), plan, x0, Backend::NloptLbfgs,
+                  opts);
+            },
+            have_profiled_bounded ? &profiled_bounded_ref : nullptr,
+            have_full_bounded ? &full_bounded_ref : nullptr);
+        row = result.row;
+        const auto flags = cache_flags(cache.ptr());
+        row.cache_blocks = flags.block_count;
+        row.cache_has_diagonal = flags.has_diagonal;
+        row.cache_has_full = flags.has_full;
+        row.cache_has_dwls_weight = flags.has_dwls_weight;
+        row.cache_has_wls_weight = flags.has_wls_weight;
+      }
+      write_row(out, row);
+    }
+  }
+  return true;
+}
+
 void print_help(const char* argv0) {
   std::cout
       << "Usage: " << argv0 << " [options]\n\n"
@@ -1202,6 +1510,10 @@ int main(int argc, char** argv) {
   for (const auto& cell : design) {
     if (cell.mixed) {
       if (!run_mixed_cell(out, cell, reps, max_iter, opts)) return 1;
+      continue;
+    }
+    if (cell.invariance) {
+      if (!run_invariance_cell(out, cell, reps, max_iter, opts)) return 1;
       continue;
     }
 
@@ -1337,6 +1649,42 @@ int main(int argc, char** argv) {
             row.fmin_diff_full_bounded = 0.0;
           }
           write_row(out, row);
+        }
+
+        // The naive "polychoric matrix plus the lower-right block of the
+        // inverse weight" estimator: zero the threshold/correlation
+        // cross-blocks of W_wls and identity the threshold block. With free
+        // thresholds that profiles to tau = tau_hat exactly and fits the
+        // correlations with W_rho_rho alone — the estimator the ordinal
+        // SNLLS paper's Remark distinguishes from profiled WLS. The theta
+        // and fmin diffs against the full bounded WLS reference quantify the
+        // distinction.
+        if (estimator == OrdinalEstimatorKind::WLS &&
+            parameterization == OrdinalMomentParameterization::Delta &&
+            cell.threshold_mode == OrdinalThresholdMode::FreeIdentity) {
+          OrdinalStats naive_stats = stats;
+          for (std::size_t b = 0; b < naive_stats.W_wls.size(); ++b) {
+            Eigen::MatrixXd& W = naive_stats.W_wls[b];
+            const Eigen::Index nth = naive_stats.thresholds[b].size();
+            const Eigen::Index ncorr = W.rows() - nth;
+            W.topLeftCorner(nth, nth) =
+                Eigen::MatrixXd::Identity(nth, nth);
+            W.topRightCorner(nth, ncorr).setZero();
+            W.bottomLeftCorner(ncorr, nth).setZero();
+          }
+          Row row = parameterized_base;
+          row.estimator = estimator_name(estimator);
+          row.path = "corr_block_wls";
+          auto result = run_timed_fit(
+              row, reps,
+              [&]() {
+                return magmaan::estimate::fit_ordinal_bounded(
+                    pt, rep, naive_stats, {},
+                    magmaan::estimate::OrdinalWeightKind::WLS, x0,
+                    Backend::NloptLbfgs, opts, bounded_parameterization);
+              },
+              nullptr, have_full_bounded ? &full_bounded_ref : nullptr);
+          write_row(out, result.row);
         }
 
         Estimates profiled_bounded_ref;
