@@ -4,7 +4,7 @@
     "fixture_kind": "ordinal",
     "corpus_id": "0014_threshold_linear_constraint_3cat_cfa",
     "tool": "lavaan::cfa(ordered=..., estimator=WLS/DWLS)",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "f =~ x1 + x2 + x3 + x4\nx1 | a*t1 + b*t2\nx2 | t1 + t2\nx3 | t1 + t2\nx4 | t1 + t2\na + b == 0",
   "input_has_thresholds": true,

@@ -4,7 +4,7 @@
     "fixture_kind": "ptable",
     "corpus_id": "0003_multi_line_continuation",
     "tool": "lavaan::lavaanify",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "f =~ x1 + x2 +\n     x3 + x4",
   "rows": [

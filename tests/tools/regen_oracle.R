@@ -564,12 +564,12 @@ for (m in models) {
   if (!is.null(fit_tests) && !inherits(fit_tests, "error") &&
       lavInspect(fit_tests, "converged")) {
     browne_nt_chi2 <- as.numeric(
-        lavTest(fit_tests, "browne.residual.nt")$stat)
+        lav_test1(fit_tests, "browne.residual.nt")$stat)
     rls_chi2_value <- as.numeric(
-        lavTest(fit_tests, "browne.residual.nt.model")$stat)
-    sb  <- lavTest(fit_tests, "satorra.bentler")
-    mv  <- lavTest(fit_tests, "mean.var.adjusted")
-    ss  <- lavTest(fit_tests, "scaled.shifted")
+        lav_test1(fit_tests, "browne.residual.nt.model")$stat)
+    sb  <- lav_test1(fit_tests, "satorra.bentler")
+    mv  <- lav_test1(fit_tests, "mean.var.adjusted")
+    ss  <- lav_test1(fit_tests, "scaled.shifted")
     sb_chi2   <- as.numeric(sb$stat)
     sb_scale  <- as.numeric(sb$scaling.factor)
     mv_chi2   <- as.numeric(mv$stat)

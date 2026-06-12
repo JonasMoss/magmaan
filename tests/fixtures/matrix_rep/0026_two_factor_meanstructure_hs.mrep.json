@@ -4,7 +4,7 @@
     "fixture_kind": "matrix_rep",
     "corpus_id": "0026_two_factor_meanstructure_hs",
     "tool": "lavaan::lavMatrixRepresentation",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "visual =~ x1 + x2 + x3\ntextual =~ x4 + x5 + x6\nx1 ~ 1\nx2 ~ 1\nx3 ~ 1\nx4 ~ 1\nx5 ~ 1\nx6 ~ 1",
   "blocks": [

@@ -4,7 +4,7 @@
     "fixture_kind": "flat.partable",
     "corpus_id": "0025_partial_invariance_3f_hs",
     "tool": "lavaan::lavParseModelString",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "visual =~ x1 + c(l2, l2)*x2 + c(l3a, l3b)*x3\ntextual =~ x4 + c(l5, l5)*x5 + c(l6, l6)*x6\nspeed =~ x7 + c(l8, l8)*x8 + c(l9, l9)*x9",
   "rows": [

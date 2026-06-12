@@ -9,6 +9,18 @@
 # and returns a list ready for jsonlite::write_json(). None reads script
 # globals. Sourcing this file defines functions only -- it runs nothing.
 
+# --- lavTest shape shim ----------------------------------------------------
+
+# lavaan >= 0.7 returns lavTest(fit, "X") as a named list list(standard = ...,
+# X = ...) rather than the single test's flat list. Extract the inner test list
+# so field access ($stat, $scaling.factor, $shift.parameter, $scaled.test.stat,
+# $df, ...) keeps working; falls back to the result itself on the older flat
+# shape (where res[[what]] is NULL).
+lav_test1 <- function(fit, what) {
+  res <- lavTest(fit, what)
+  if (!is.null(res[[what]])) res[[what]] else res
+}
+
 # --- continuous LS helpers -------------------------------------------------
 
 # A matrix or per-block list of matrices -> [{block, matrix}, ...].
@@ -82,9 +94,9 @@ ls_robust_json <- function(fit) {
   pt_fitted <- parTable(fit)
   free_rows <- pt_fitted[pt_fitted$free > 0, ]
   free_rows <- free_rows[order(free_rows$free), ]
-  sb <- lavTest(fit, "satorra.bentler")
-  mv <- lavTest(fit, "mean.var.adjusted")
-  ss <- lavTest(fit, "scaled.shifted")
+  sb <- lav_test1(fit, "satorra.bentler")
+  mv <- lav_test1(fit, "mean.var.adjusted")
+  ss <- lav_test1(fit, "scaled.shifted")
   G <- lavInspect(fit, "gamma")
   UG <- lavInspect(fit, "UGamma")
   ev <- Re(eigen(UG, only.values = TRUE)$values)
@@ -192,9 +204,9 @@ ordinal_robust_json <- function(fit) {
   pt <- parTable(fit)
   free <- pt[pt$free > 0, ]
   free <- free[order(free$free), ]
-  sb <- lavTest(fit, "satorra.bentler")
-  mv <- lavTest(fit, "mean.var.adjusted")
-  ss <- lavTest(fit, "scaled.shifted")
+  sb <- lav_test1(fit, "satorra.bentler")
+  mv <- lav_test1(fit, "mean.var.adjusted")
+  ss <- lav_test1(fit, "scaled.shifted")
   UG <- lavInspect(fit, "UGamma")
   ev <- Re(eigen(UG, only.values = TRUE)$values)
   ev <- sort(ev[is.finite(ev) & ev > 1e-8])

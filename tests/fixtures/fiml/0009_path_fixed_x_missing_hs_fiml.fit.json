@@ -4,7 +4,7 @@
     "fixture_kind": "fit.fiml.unsupported",
     "corpus_id": "0009_path_fixed_x_missing_hs_fiml",
     "tool": "magmaan-policy",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "x9 ~ x1",
   "entry": "sem",

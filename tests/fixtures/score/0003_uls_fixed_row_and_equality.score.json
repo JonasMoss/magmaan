@@ -4,7 +4,7 @@
     "fixture_kind": "score",
     "corpus_id": "0003_uls_fixed_row_and_equality",
     "tool": "lavaan::modindices/lavTestScore",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "kind": "ls",
   "estimator": "ULS",
@@ -39,7 +39,7 @@
         "op": "~~",
         "rhs": "x2",
         "group": 1,
-        "mi": 8.10432802198964,
+        "mi": 8.10432802198967,
         "epc": -0.223312769056153
       },
       {
@@ -47,15 +47,15 @@
         "op": "~~",
         "rhs": "x3",
         "group": 1,
-        "mi": 8.87527457983357,
-        "epc": 0.282090026615073
+        "mi": 8.87527457983353,
+        "epc": 0.282090026615072
       }
     ],
     "score_tests": {
       "total": {
         "mi": 3.51031044063283,
         "df": 1,
-        "pvalue": 0.0609880266735879
+        "pvalue": 0.0609880266735877
       },
       "rows": [
         {
@@ -64,7 +64,7 @@
           "rhs": "b",
           "mi": 3.51031044063283,
           "df": 1,
-          "pvalue": 0.0609880266735879
+          "pvalue": 0.0609880266735877
         }
       ]
     }

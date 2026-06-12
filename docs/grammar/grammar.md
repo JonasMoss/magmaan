@@ -7,7 +7,7 @@ Source of truth for the parser. Read this in conjunction with
 ## Status
 
 Version: **v0** (parser-first phases P1–P4 of the project plan).
-Compatible with lavaan **0.6-22.2560** semantics for the supported
+Compatible with lavaan **0.7-1.2691** semantics for the supported
 subset of operators.
 
 ## Source-of-truth contract

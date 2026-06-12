@@ -4,7 +4,7 @@
     "fixture_kind": "ptable",
     "corpus_id": "0023_scalar_invariance_3f_hs",
     "tool": "lavaan::lavaanify",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "visual =~ l1*x1 + l2*x2 + l3*x3\ntextual =~ l4*x4 + l5*x5 + l6*x6\nspeed =~ l7*x7 + l8*x8 + l9*x9\nx1 ~ n1*1\nx2 ~ n2*1\nx3 ~ n3*1\nx4 ~ n4*1\nx5 ~ n5*1\nx6 ~ n6*1\nx7 ~ n7*1\nx8 ~ n8*1\nx9 ~ n9*1",
   "rows": [
