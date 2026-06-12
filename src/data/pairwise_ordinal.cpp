@@ -80,48 +80,120 @@ double normal_quantile(double p) noexcept {
          (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1.0);
 }
 
+// Upper-orthant probability P(X > h, Y > k) for a standard bivariate normal
+// with correlation r, after Drezner & Wesolowsky (1990) as refined by Genz
+// (2004, "Numerical computation of rectangular bivariate and trivariate
+// normal and t probabilities", Statistics and Computing 14). Gauss-Legendre
+// on the tetrachoric integral (6/12/20 nodes by |r|) below |r| = 0.925, and
+// the complementary expansion in sqrt(1 - r^2) above it. Absolute accuracy is
+// ~5e-16; both h and k must be finite.
+double bvn_upper(double h, double k, double r) noexcept {
+  static constexpr double x6[3] = {
+      -0.9324695142031521, -0.6612093864662645, -0.2386191860831969};
+  static constexpr double w6[3] = {
+      0.1713244923791704, 0.3607615730481386, 0.4679139345726910};
+  static constexpr double x12[6] = {
+      -0.9815606342467192, -0.9041172563704749, -0.7699026741943047,
+      -0.5873179542866175, -0.3678314989981802, -0.1252334085114689};
+  static constexpr double w12[6] = {
+      0.0471753363865118, 0.1069393259953184, 0.1600783285433462,
+      0.2031674267230659, 0.2334925365383548, 0.2491470458134028};
+  static constexpr double x20[10] = {
+      -0.9931285991850949, -0.9639719272779138, -0.9122344282513259,
+      -0.8391169718222188, -0.7463319064601508, -0.6360536807265150,
+      -0.5108670019508271, -0.3737060887154195, -0.2277858511416451,
+      -0.0765265211334973};
+  static constexpr double w20[10] = {
+      0.0176140071391521, 0.0406014298003869, 0.0626720483341091,
+      0.0832767415767048, 0.1019301198172404, 0.1181945319615184,
+      0.1316886384491766, 0.1420961093183820, 0.1491729864726037,
+      0.1527533871307258};
+  constexpr double two_pi = 6.283185307179586;
+  constexpr double sqrt_two_pi = 2.5066282746310002;
+
+  const double abs_r = std::abs(r);
+  const double* xs = x20;
+  const double* ws = w20;
+  int lg = 10;
+  if (abs_r < 0.3) {
+    xs = x6;
+    ws = w6;
+    lg = 3;
+  } else if (abs_r < 0.75) {
+    xs = x12;
+    ws = w12;
+    lg = 6;
+  }
+
+  double hk = h * k;
+  double bvn = 0.0;
+  if (abs_r < 0.925) {
+    if (abs_r > 0.0) {
+      const double hs = 0.5 * (h * h + k * k);
+      const double asr = std::asin(r);
+      for (int i = 0; i < lg; ++i) {
+        for (int is = -1; is <= 1; is += 2) {
+          const double sn = std::sin(0.5 * asr * (is * xs[i] + 1.0));
+          bvn += ws[i] * std::exp((sn * hk - hs) / (1.0 - sn * sn));
+        }
+      }
+      bvn *= asr / (2.0 * two_pi);
+    }
+    bvn += normal_cdf(-h) * normal_cdf(-k);
+    return std::clamp(bvn, 0.0, 1.0);
+  }
+
+  if (r < 0.0) {
+    k = -k;
+    hk = -hk;
+  }
+  if (abs_r < 1.0) {
+    const double as = (1.0 - r) * (1.0 + r);
+    double a = std::sqrt(as);
+    const double bs = (h - k) * (h - k);
+    const double c = (4.0 - hk) / 8.0;
+    const double d = (12.0 - hk) / 16.0;
+    double asr = -0.5 * (bs / as + hk);
+    if (asr > -100.0) {
+      bvn = a * std::exp(asr) *
+            (1.0 - c * (bs - as) * (1.0 - d * bs / 5.0) / 3.0 +
+             c * d * as * as / 5.0);
+    }
+    if (-hk < 100.0) {
+      const double b = std::sqrt(bs);
+      bvn -= std::exp(-0.5 * hk) * sqrt_two_pi * normal_cdf(-b / a) * b *
+             (1.0 - c * bs * (1.0 - d * bs / 5.0) / 3.0);
+    }
+    a *= 0.5;
+    for (int i = 0; i < lg; ++i) {
+      for (int is = -1; is <= 1; is += 2) {
+        const double t = a * (is * xs[i] + 1.0);
+        const double xsq = t * t;
+        const double rs = std::sqrt(1.0 - xsq);
+        asr = -0.5 * (bs / xsq + hk);
+        if (asr > -100.0) {
+          bvn += a * ws[i] * std::exp(asr) *
+                 (std::exp(-hk * (1.0 - rs) / (2.0 * (1.0 + rs))) / rs -
+                  (1.0 + c * xsq * (1.0 + d * xsq)));
+        }
+      }
+    }
+    bvn = -bvn / two_pi;
+  }
+  if (r > 0.0) {
+    bvn += normal_cdf(-std::max(h, k));
+  } else {
+    bvn = -bvn;
+    if (k > h) bvn += normal_cdf(k) - normal_cdf(h);
+  }
+  return std::clamp(bvn, 0.0, 1.0);
+}
+
 double bvn_cdf(double h, double k, double rho) noexcept {
   if (h == -kInf || k == -kInf) return 0.0;
   if (h == kInf) return normal_cdf(k);
   if (k == kInf) return normal_cdf(h);
-  const double upper = std::min(8.0, h);
-  const double lower = -8.0;
-  if (upper <= lower) return 0.0;
-
-  static constexpr double x[32] = {
-      -0.9972638618494816, -0.9856115115452684, -0.9647622555875064,
-      -0.9349060759377397, -0.8963211557660521, -0.8493676137325700,
-      -0.7944837959679424, -0.7321821187402897, -0.6630442669302152,
-      -0.5877157572407623, -0.5068999089322294, -0.4213512761306353,
-      -0.3318686022821277, -0.2392873622521371, -0.1444719615827965,
-      -0.0483076656877383,  0.0483076656877383,  0.1444719615827965,
-       0.2392873622521371,  0.3318686022821277,  0.4213512761306353,
-       0.5068999089322294,  0.5877157572407623,  0.6630442669302152,
-       0.7321821187402897,  0.7944837959679424,  0.8493676137325700,
-       0.8963211557660521,  0.9349060759377397,  0.9647622555875064,
-       0.9856115115452684,  0.9972638618494816};
-  static constexpr double w[32] = {
-      0.0070186100094701, 0.0162743947309057, 0.0253920653092621,
-      0.0342738629130214, 0.0428358980222267, 0.0509980592623762,
-      0.0586840934785355, 0.0658222227763618, 0.0723457941088485,
-      0.0781938957870703, 0.0833119242269467, 0.0876520930044038,
-      0.0911738786957639, 0.0938443990808046, 0.0956387200792749,
-      0.0965400885147278, 0.0965400885147278, 0.0956387200792749,
-      0.0938443990808046, 0.0911738786957639, 0.0876520930044038,
-      0.0833119242269467, 0.0781938957870703, 0.0723457941088485,
-      0.0658222227763618, 0.0586840934785355, 0.0509980592623762,
-      0.0428358980222267, 0.0342738629130214, 0.0253920653092621,
-      0.0162743947309057, 0.0070186100094701};
-
-  const double mid = 0.5 * (upper + lower);
-  const double half = 0.5 * (upper - lower);
-  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
-  double sum = 0.0;
-  for (int i = 0; i < 32; ++i) {
-    const double z = mid + half * x[i];
-    sum += w[i] * normal_pdf(z) * normal_cdf((k - rho * z) / sd);
-  }
-  return std::clamp(half * sum, 0.0, 1.0);
+  return bvn_upper(-h, -k, rho);
 }
 
 double bvn_pdf(double x, double y, double rho) noexcept {

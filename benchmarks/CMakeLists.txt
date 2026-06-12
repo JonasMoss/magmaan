@@ -42,6 +42,13 @@ target_link_libraries(magmaan_ordinal_construction_bench PRIVATE magmaan::magmaa
 
 target_compile_features(magmaan_ordinal_construction_bench PRIVATE cxx_std_23)
 
+add_executable(magmaan_mixed_ordinal_construction_bench
+  mixed_ordinal_construction_bench.cpp)
+
+target_link_libraries(magmaan_mixed_ordinal_construction_bench PRIVATE magmaan::magmaan)
+
+target_compile_features(magmaan_mixed_ordinal_construction_bench PRIVATE cxx_std_23)
+
 # ---------------------------------------------------------------------------
 # magmaan_mem_profile — peak-heap profiler for the reduced-Gamma computations.
 #

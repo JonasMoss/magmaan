@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "magmaan/error.hpp"
+#include "magmaan/optim/nlopt_optimizer.hpp"
 
 #include "detail_rho_search.hpp"
 
@@ -1023,41 +1024,41 @@ fit_polyserial_pair_joint_dpd(
         "fit_polyserial_pair_joint_dpd: non-finite starting objective"));
   }
 
+  // Unconstrained in the encoded coordinates (cumulative-gap thresholds,
+  // log sd, squashed rho): delegate to the vendored NLopt L-BFGS with the
+  // central-difference gradient instead of hand-rolled steepest descent.
+  // +inf at a probe point acts as the barrier the old step-halving used; a
+  // hard optimizer failure keeps the moment/ML starting values.
   int iterations = 0;
   bool converged = false;
-  for (; iterations < options.max_iter; ++iterations) {
-    const Eigen::VectorXd grad = numeric_gradient(
-        x, options.fd_step, objective);
-    if (!grad.allFinite()) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "fit_polyserial_pair_joint_dpd: non-finite gradient"));
-    }
-    if (grad.lpNorm<Eigen::Infinity>() <= options.gtol) {
-      converged = true;
-      break;
-    }
-    const double grad_sq = grad.squaredNorm();
-    bool accepted = false;
-    bool ftol_stop = false;
-    double step = 0.4;
-    for (int ls = 0; ls < 36; ++ls) {
-      const Eigen::VectorXd candidate = x - step * grad;
-      const double fc = objective(candidate);
-      if (std::isfinite(fc) && fc < f - 1e-4 * step * grad_sq) {
-        ftol_stop = std::abs(f - fc) <=
-            options.ftol * std::max(1.0, std::abs(f));
-        x = candidate;
-        f = fc;
-        accepted = true;
-        break;
-      }
-      step *= 0.5;
-    }
-    if (!accepted) break;
-    if (ftol_stop) {
-      ++iterations;
-      converged = true;
-      break;
+  {
+    const optim::NloptOptimizer lbfgs(
+        optim::OptimOptions{.max_iter = options.max_iter,
+                            .ftol = options.ftol,
+                            .gtol = options.gtol},
+        optim::NloptAlgorithm::Lbfgs);
+    auto sol = lbfgs.minimize(
+        [&](const Eigen::VectorXd& xc, Eigen::VectorXd& grad_out) {
+          const double fx = objective(xc);
+          if (!std::isfinite(fx)) {
+            grad_out.setZero();
+            return std::numeric_limits<double>::infinity();
+          }
+          grad_out = numeric_gradient(xc, options.fd_step, objective);
+          if (!grad_out.allFinite()) {
+            grad_out.setZero();
+            return std::numeric_limits<double>::infinity();
+          }
+          return fx;
+        },
+        x);
+    if (sol.has_value() && sol->theta_hat.allFinite() &&
+        std::isfinite(sol->fmin) && sol->fmin <= f) {
+      x = sol->theta_hat;
+      f = sol->fmin;
+      iterations = sol->iterations;
+      converged = sol->status == optim::OptimStatus::Converged ||
+                  sol->status == optim::OptimStatus::LineSearchSalvaged;
     }
   }
 

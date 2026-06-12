@@ -50,15 +50,37 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   bvn evaluation shares the `(K_i+1)(K_j+1)` corner grid
   (`ordinal_bvn_corner_{cdf,pdf,pdf_drho}`) instead of 4 `bvn_cdf` per cell.
   Construction-bench medians (n=900, reps=5): lazy ULS p16/c5 423→14 ms,
-  lazy DWLS p16/c5 298→26 ms, legacy full stats p16/c5 376→68 ms. Remaining
-  headroom, in impact order:
-  - **S.** A Drezner–Wesolowsky-style `bvn_cdf` (6–20 nodes vs the fixed
-    32-node Gauss–Legendre) would cut the remaining corner-grid cost ~2–4×;
-    verify lavaan polychoric parity tolerances first.
-  - **S.** Cell-cache `shared_ordinal_casewise_psi` and restrict the
-    shared-robust FD gradient/bread to pairs touching the perturbed coordinate.
-  - **S.** The mixed workspace (`mixed_ordinal_stats_from_data`) has no
-    benchmark; the all-ordinal benches cover the shared primitives only.
+  lazy DWLS p16/c5 298→26 ms, legacy full stats p16/c5 376→68 ms.
+  Third pass (2026-06-12, same day) closed the listed S items:
+  - `bvn_cdf` is now the Genz (2004) refinement of Drezner–Wesolowsky (6/12/20
+    Gauss–Legendre nodes by |rho| plus the complementary high-|rho| expansion,
+    ~5e-16 absolute accuracy, unit-pinned against the asin closed form and a
+    Simpson reference in `ordinal_test.cpp`); all-ordinal construction mins
+    moved p16/c5 lazy ULS 11.4→4.1 ms, lazy DWLS 19.2→13.2 ms, p4/c3 lazy ULS
+    1.0→0.24 ms. Lavaan parity suite unchanged.
+  - `shared_ordinal_casewise_psi` is cell-cached (scaled per-cell scores
+    scattered to rows via a transposed accumulator), and the shared-robust FD
+    gradient and bread FD columns are restricted to the pairs touching the
+    perturbed coordinate (`shared_ordinal_touched_pairs`) — exact, since
+    untouched pairs difference to zero.
+  - The shared-robust threshold+rho refinement and the joint polyserial DPD
+    fit now delegate to the vendored NLopt L-BFGS (encoded coordinates are
+    unconstrained) instead of hand-rolled steepest descent + Armijo; +inf is
+    the barrier for invalid probes, and a hard optimizer failure keeps the ML
+    starting values like the old bail-out. The remaining hand-rolled searches
+    (1-D golden-section/bisection/Newton, Fisher scoring, EM) were audited
+    2026-06-12 and are appropriate as-is.
+  - `benchmarks/mixed_ordinal_construction_bench.cpp` covers the mixed
+    workspace/stats paths (half-ordinal half-continuous designs). It shows
+    mixed construction is dominated by the polyserial/Pearson branches:
+    p16/c5 lazy ULS is ~21 ms vs ~4 ms all-ordinal at the same design.
+  Remaining headroom:
+  - **S.** The mixed polyserial pair fits recompute per-case quantities the
+    way the all-ordinal path did before cell caching; profile
+    `pairwise_mixed.cpp` (ML polyserial scores, casewise influence) for the
+    analogous case→cell collapse where the per-case loop is over a smooth
+    continuous coordinate (no exact cell structure; needs binning or a
+    different factorization, so verify accuracy first).
 
 ## Robust score / modification-index tests (frontier)
 
@@ -107,7 +129,16 @@ landed; remaining open items:
   and fixtures regenerated from magmaan's own output rather than an external
   oracle; for each, either tighten to the oracle or write down explicitly why
   the looseness is principled.
-- **M, later.** Layer CI on top only after the local commands are useful:
+- **M, pre-existing opt-preset failure (found 2026-06-12).** The `api` test
+  "api FIML exposes likelihood test, fit measures, and MLR reporting" fails
+  deterministically on the `opt` preset (Release, `-O3 -march=native`) at the
+  pre-pass HEAD as well: the FIML fit's NLopt L-BFGS returns "generic solver
+  failure", and the doctest failure path then segfaults. Passes on `dev`
+  (ASan, `-O0`). Reproduce with the comma-escaped doctest filter
+  (`--test-case=...\,...`); an unescaped comma splits the filter and runs zero
+  cases, reporting a hollow pass. Likely FP-sensitivity in the FIML
+  objective/gradient under fast math-adjacent codegen; diagnose the solver
+  failure first, then the crash-on-failure teardown.
   `test-quick` on PRs/pushes, sanitizer validation on main or a schedule, heavy
   parity/optional optimizer lanes less often, and coverage as an artifact before
   considering badges. Avoid coverage-percentage gates until the report has been
