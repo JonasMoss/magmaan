@@ -62,6 +62,27 @@ materialization dominates robust reporting in a benchmark or paper grid
 diagonal's memory), or the ordinal-snlls paper's fit-plus-inference rows
 need the reduced route to make their cost story complete.
 
+### Ordinal EBM factor scores
+
+A factor-score path for ordinal / mixed-ordinal fits that matches lavaan's
+`lavPredict()`: empirical-Bayes-modal (and ML) scoring by numerical integration
+over the latent-response distribution implied by the thresholds and the fitted
+Λ/Θ/Ψ, rather than the continuous regression/Bartlett predictor.
+
+**Alternative already available.** `api::factor_scores` is exposed for
+continuous fits; ordinal fits are explicitly guarded (`require_not_ordinal`,
+asserted in `r-package/examples/ordinal_dwls_wls.R`). The neighbouring
+parameterization-agnostic transforms — `standardize_lv`/`standardize_all` and
+`compute_defined` — are exposed for ordinal fits because they are exact
+functions of the fitted parameters and the caller vcov; factor scores are not,
+they are a distinct estimator.
+
+**Build if.** A paper row or methods workflow needs per-observation ordinal
+factor scores and wants lavaan-`lavPredict()` parity. This is a real estimator
+(quadrature over y\* per missingness/response pattern), not a guard flip —
+treat as research-tier, separate from the standardization/defined-parameter
+exposure that motivated removing their guards.
+
 ## Optimizers
 
 ### Exact Hessians for IPOPT

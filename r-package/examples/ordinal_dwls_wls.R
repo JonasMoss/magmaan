@@ -112,6 +112,59 @@ fs_msg <- tryCatch(
   error = function(e) conditionMessage(e))
 stopifnot(is.character(fs_msg), grepl("not exposed for ordinal", fs_msg))
 
+# Defined (`:=`) parameters are exposed for ordinal fits and match lavaan: value
+# and delta-method SE are a parameterization-agnostic transform of the fit (no
+# ordinal guard), evaluated over the prepared partable.
+model_def <- "f =~ x1 + L2*x2 + L3*x3 + x4\nlprod := L2*L3"
+m_def <- magmaan::model_spec(model_def, ordered = ordered,
+                             parameterization = "delta")
+d_def <- core$data_ordinal_stats_from_df(df, m_def)
+fit_def <- core$fit_dwls_ordinal(
+  m_def, d_def, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+rob_def <- core$robust_ordinal(fit_def, d_def)
+mg_def <- magmaan::compute_defined(model_def, fit_def, rob_def$vcov)
+lav_def <- lavaan::cfa(model_def, data = df, ordered = ordered,
+                       estimator = "DWLS", parameterization = "delta")
+lav_lp <- lavaan::parameterEstimates(lav_def)
+lav_lp <- lav_lp[lav_lp$op == ":=" & lav_lp$lhs == "lprod", ]
+mg_lp <- mg_def[mg_def$lhs == "lprod", ]
+stopifnot(nrow(lav_lp) == 1L, nrow(mg_lp) == 1L)
+stopifnot(abs(mg_lp$est - lav_lp$est) < 5e-3)
+stopifnot(abs(mg_lp$se - lav_lp$se) < 5e-3)
+
+# Standardized solutions are exposed for *mixed* continuous/ordinal fits too and
+# match lavaan std.all (continuous indicators carry the σ_rr division, ordinal
+# ones do not). Use data where the continuous indicators load on the shared
+# latent so the single-factor model is proper.
+make_mixed_df <- function(n, cuts, seed = 11L) {
+  set.seed(seed)
+  z <- matrix(rnorm(n * 4), n, 4)
+  for (j in 2:4) z[, j] <- 0.6 * z[, 1] + sqrt(1 - 0.36) * z[, j]
+  data.frame(
+    x1 = ordered(cut(z[, 1], c(-Inf, cuts[[1]], Inf), labels = FALSE)),
+    x2 = ordered(cut(z[, 2], c(-Inf, cuts[[2]], Inf), labels = FALSE)),
+    x3 = z[, 3], x4 = z[, 4])
+}
+df_mx <- make_mixed_df(500, list(c(-0.7, 0.4), c(-0.5, 0.6)))
+m_mx <- magmaan::model_spec(model, ordered = c("x1", "x2"),
+                            parameterization = "delta", meanstructure = TRUE)
+d_mx <- core$data_mixed_ordinal_stats_from_df(df_mx, m_mx)
+fit_mx <- core$fit_dwls_mixed_ordinal(
+  m_mx, d_mx, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+rob_mx <- core$robust_mixed_ordinal(fit_mx, d_mx)
+sol_mx <- core$measures_standardize_all(fit_mx, rob_mx$vcov)
+ld_mx <- which(fit_mx$partable$op == "=~" & fit_mx$partable$free > 0L)
+ld_mx_names <- fit_mx$partable$rhs[ld_mx]
+mg_mx <- sol_mx$theta[fit_mx$partable$free[ld_mx]]
+lav_mx <- lavaan::cfa(model, data = df_mx, ordered = c("x1", "x2"),
+                      estimator = "DWLS", parameterization = "delta",
+                      meanstructure = TRUE)
+lav_mx_s <- lavaan::standardizedSolution(lav_mx)
+lav_mx_s <- lav_mx_s[lav_mx_s$op == "=~", ]
+lav_mx_match <- lav_mx_s$est.std[match(ld_mx_names, lav_mx_s$rhs)]
+stopifnot(length(mg_mx) == length(lav_mx_match), all(is.finite(mg_mx)),
+          max(abs(mg_mx - lav_mx_match)) < 1e-3)
+
 df_mixed <- df
 set.seed(22L)
 eta <- rnorm(nrow(df_mixed))

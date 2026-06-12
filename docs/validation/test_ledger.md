@@ -197,6 +197,25 @@ Scope: lavaan's bare default (`A.method = "delta"`, `scaled.shifted = TRUE`) is 
 documented compatibility alternative for covariance-nested checks, not the
 magmaan oracle. Full investigation: `docs/validation/satorra2000_parity.md`.
 
+**Ordinal api standardize/compute_defined fed the un-prepared structure.**
+Regression: `api::standardize_lv`/`standardize_all`/`compute_defined` dropped
+their `require_not_ordinal` guard but never worked for ordinal/mixed fits — the
+api `Fit` stores the un-prepared `LatentStructure` (latent-response residual
+variances still free) while `fit_ordinal_bounded` fits over the *prepared*
+partable (those fixed, free set compacted), so `estimates().theta` and the
+robust vcov are reduced. Standardize fed the reduced theta into the un-prepared
+evaluator and aborted (`theta has size N; ModelEvaluator expects N+p_ord`);
+`compute_defined` would have indexed the wrong free slots. Only the Rcpp path
+worked, because `ctx_from_fit` parses the prepared partable. Fix: the api
+reconstructs the prepared structure on demand (`prepared_structure` in
+`src/api/sem.cpp`, replaying `prepare_ordinal_partable`).
+Guard: `tests/unit/api_sem_test.cpp` ordinal case (standardize_lv/all +
+compute_defined succeed, factor_scores stays guarded); live lavaan value-parity
+in `r-package/examples/ordinal_dwls_wls.R` (ordinal `:=` to 5e-3, mixed std.all
+to 1e-3).
+Scope: the C++ *golden* (stored lavaan oracle) for ordinal standardized rows is
+still pending a lavaan-pin realignment — see `docs/backlog/todo.md`.
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |

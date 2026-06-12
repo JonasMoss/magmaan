@@ -2612,13 +2612,14 @@ Rcpp::NumericVector infer_se(Rcpp::NumericMatrix vcov) {
   return Rcpp::wrap(magmaan::inference::se(vcov_m));
 }
 
-// The standardized-solution / factor-score / defined-parameter primitives are
-// not exposed for ordinal or mixed-ordinal fits: under delta parameterization
-// the loadings are already in the correlation metric, so dividing by the
-// model-implied indicator variance would silently rescale them. The high-level
-// Fit API enforces this via require_not_ordinal() (src/api/sem.cpp), but these
-// thin core bindings construct no Fit object and would otherwise bypass that
-// guard. Mirror it here.
+// Factor scores are not exposed for ordinal or mixed-ordinal fits: lavaan
+// scores ordinal indicators by latent-response integration (EBM), a distinct
+// estimator the continuous predictor does not implement. The high-level Fit API
+// enforces this via require_not_ordinal() (src/api/sem.cpp); this thin core
+// binding constructs no Fit object and would otherwise bypass that guard, so
+// mirror it here. (Standardization and `:=` defined parameters are exposed for
+// ordinal fits — both are parameterization-agnostic transforms over the
+// prepared partable; see measures_standardize_all and compute_defined_impl.)
 void stop_if_ordinal_fit(const Rcpp::List& fit, const char* call) {
   const bool ord = fit.containsElementNamed("ordinal") &&
                    Rcpp::as<bool>(fit["ordinal"]);
@@ -2638,7 +2639,9 @@ void stop_if_ordinal_fit(const Rcpp::List& fit, const char* call) {
 Rcpp::DataFrame compute_defined_impl(std::string syntax,
                                      Rcpp::List fit,
                                      Rcpp::NumericMatrix vcov) {
-  stop_if_ordinal_fit(fit, "compute_defined()");
+  // Exposed for ordinal/mixed fits too: ctx_from_fit() rebuilds the prepared
+  // partable, which lines up with the reduced est/vcov, and the delta-method
+  // value/SE are parameterization-agnostic (mirrors api::compute_defined).
   auto flat_or = magmaan::parse::Parser::parse(syntax);
   if (!flat_or.has_value()) {
     const auto& e = flat_or.error();

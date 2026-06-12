@@ -226,6 +226,30 @@ Result<void> require_not_ordinal(const Fit &fit, std::string_view call) {
   return {};
 }
 
+// Ordinal / mixed-ordinal delta fits are fitted over a *prepared* partable:
+// fit_ordinal_bounded fixes the latent-response residual variances the delta
+// constraint determines and compacts the free set, so the stored Estimates and
+// vcov live in that reduced space while Model still carries the un-prepared
+// structure. Post-fit transforms that re-evaluate the model (standardize) or
+// index the free set (compute_defined) must use the same prepared structure, so
+// replay the identical prepare step here. Non-ordinal fits pass through
+// unchanged, so the continuous path is unaffected.
+Result<spec::LatentStructure> prepared_structure(const Fit &fit) {
+  spec::LatentStructure pt = fit.model().structure();
+  const auto param = fit.estimator_spec().ordinal_parameterization;
+  if (const auto *stats = fit.data().ordinal()) {
+    if (auto p = estimate::prepare_ordinal_partable(pt, *stats, param); !p) {
+      return std::unexpected(make_error(ErrorStage::Fit, p.error()));
+    }
+  } else if (const auto *mstats = fit.data().mixed_ordinal()) {
+    if (auto p = estimate::prepare_mixed_ordinal_partable(pt, *mstats, param);
+        !p) {
+      return std::unexpected(make_error(ErrorStage::Fit, p.error()));
+    }
+  }
+  return pt;
+}
+
 template <class T>
 Result<T> post_result(post_expected<T> result) {
   if (!result) {
@@ -1297,9 +1321,16 @@ factor_scores(const Fit &fit, const data::RawData &raw,
               measures::FactorScoreMethod method) {
   // Factor scores are per-observation, so the caller supplies the raw data
   // explicitly (mirroring robust_se(fit, raw, ...)) — a fit carried over
-  // sample statistics can still score separately-held observations. Ordinal
-  // fits parameterize thresholds rather than a continuous Λ/Θ split and are
-  // not covered.
+  // sample statistics can still score separately-held observations.
+  //
+  // Unlike standardization and `:=` defined parameters (both removed their
+  // ordinal guard, being parameterization-agnostic transforms of the fit),
+  // ordinal factor scores are a genuinely different estimator: lavaan's
+  // lavPredict() scores ordinal indicators by empirical-Bayes-modal
+  // integration over the latent-response distribution, not the continuous
+  // regression/Bartlett predictor measures::factor_scores implements. Flipping
+  // the guard would silently emit non-lavaan numbers, so the guard stays until
+  // the EBM path is built (see docs/backlog/speculative.md).
   auto ok = require_not_ordinal(fit, "factor_scores()");
   if (!ok) {
     return std::unexpected(ok.error());
@@ -1415,9 +1446,13 @@ Result<measures::standardize::StandardizedSolution>
 standardize_lv(const Fit &fit, const Eigen::MatrixXd &vcov) {
   // Standardization is parameterization-agnostic and well-defined for
   // ordinal/mixed-ordinal fits (std.lv scales by latent SD only), so no
-  // ordinal guard here.
+  // ordinal guard here. Ordinal estimates live over the prepared structure.
+  auto pt = prepared_structure(fit);
+  if (!pt) {
+    return std::unexpected(pt.error());
+  }
   auto out = measures::standardize::standardize_lv(
-      fit.model().structure(), fit.model().matrix_rep(), fit.estimates(), vcov);
+      *pt, fit.model().matrix_rep(), fit.estimates(), vcov);
   return post_result(std::move(out));
 }
 
@@ -1430,20 +1465,31 @@ standardize_all(const Fit &fit, const Eigen::MatrixXd &vcov) {
       (fit.data().ordinal() || fit.data().mixed_ordinal()) &&
       fit.estimator_spec().ordinal_parameterization ==
           estimate::OrdinalParameterization::Delta;
+  auto pt = prepared_structure(fit);
+  if (!pt) {
+    return std::unexpected(pt.error());
+  }
   auto out = measures::standardize::standardize_all(
-      fit.model().structure(), fit.model().matrix_rep(), fit.estimates(), vcov,
+      *pt, fit.model().matrix_rep(), fit.estimates(), vcov,
       ordinal_delta_unit);
   return post_result(std::move(out));
 }
 
 Result<measures::effects::DefinedParams>
 compute_defined(const Fit &fit, const Eigen::MatrixXd &vcov) {
-  auto ok = require_not_ordinal(fit, "compute_defined()");
-  if (!ok) {
-    return std::unexpected(ok.error());
+  // Defined (`:=`) parameters are a delta-method transform: value and SE come
+  // from the expression's AD gradient against the caller-supplied vcov, with no
+  // dependence on the continuous/ordinal split (see measures::effects::
+  // compute_defined). Parameterization-agnostic like standardize_lv/_all, so no
+  // ordinal guard — lavaan likewise exposes `:=` rows for ordinal fits. The
+  // label→free-index map must come from the prepared structure so it lines up
+  // with the reduced estimates/vcov.
+  auto pt = prepared_structure(fit);
+  if (!pt) {
+    return std::unexpected(pt.error());
   }
   auto out = measures::effects::compute_defined(
-      fit.model().flat_partable(), fit.model().structure(), fit.model().names(),
+      fit.model().flat_partable(), *pt, fit.model().names(),
       fit.estimates(), vcov);
   return post_result(std::move(out));
 }
