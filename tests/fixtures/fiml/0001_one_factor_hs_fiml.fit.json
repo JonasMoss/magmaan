@@ -4,7 +4,7 @@
     "fixture_kind": "fit.fiml",
     "corpus_id": "0001_one_factor_hs_fiml",
     "tool": "lavaan::cfa(missing = \"fiml\")",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "visual =~ x1 + x2 + x3",
   "entry": "cfa",
@@ -634,9 +634,9 @@
   "logl": -1251.48564707646,
   "unrestricted_logl": -1251.48564707656,
   "chisq": 0,
-  "baseline_chisq": 85.2739999004476,
+  "baseline_chisq": 85.2739999004479,
   "baseline_df": 3,
-  "se_robust_huberwhite": [0.176229103243921, 0.249452607635563, 0.141494098713208, 0.121734533678146, 0.135527624827079, 0.158558822481099, 0.0683127791378502, 0.0705494385453622, 0.0659942178497485],
+  "se_robust_huberwhite": [0.176229103244155, 0.249452607637601, 0.141494098720125, 0.121734533687061, 0.135527624828101, 0.158558822482469, 0.0683127791374523, 0.0705494385453497, 0.0659942178496987],
   "mlr_chisq_scaled": 0,
   "mlr_scaling_factor": null,
   "mlr_scaling_factor_h1": null,

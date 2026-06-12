@@ -4,7 +4,7 @@
     "fixture_kind": "ptable",
     "corpus_id": "0020_cfa_plus_structural_hs",
     "tool": "lavaan::lavaanify",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "visual =~ x1 + x2 + x3\nx9 ~ visual",
   "rows": [

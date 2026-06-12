@@ -4,7 +4,7 @@
     "fixture_kind": "flat.partable",
     "corpus_id": "0021_multigroup_1f_hs",
     "tool": "lavaan::lavParseModelString",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "f =~ x1 + x2 + x3",
   "rows": [

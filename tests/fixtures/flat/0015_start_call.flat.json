@@ -4,7 +4,7 @@
     "fixture_kind": "flat.partable",
     "corpus_id": "0015_start_call",
     "tool": "lavaan::lavParseModelString",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "f =~ start(0.5) * x1 + start(0.7) * x2",
   "rows": [

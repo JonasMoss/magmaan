@@ -4,7 +4,7 @@
     "fixture_kind": "fit.fiml",
     "corpus_id": "0011_path_fixedx_false_missing_x_y_fiml",
     "tool": "lavaan::sem(missing = \"fiml\")",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "x9 ~ x1",
   "entry": "sem",
@@ -628,15 +628,15 @@
       ]
     }
   ],
-  "theta_hat": [0.351290729125084, 0.825080324678092, 1.37207389427586, 3.6351315213592, 4.92987793795827],
+  "theta_hat": [0.351290729125085, 0.825080324678088, 1.37207389427586, 3.6351315213592, 4.92987793795826],
   "converged": true,
   "df": 0,
   "logl": -810.160060466484,
   "unrestricted_logl": -810.160060466643,
   "chisq": 0,
-  "baseline_chisq": 50.5365940442808,
+  "baseline_chisq": 50.5365940442807,
   "baseline_df": 1,
-  "se_robust_huberwhite": [0.0474918311761997, 0.0753536822037042, 0.127621679787497, 0.250403368968454, 0.0703390933638397],
+  "se_robust_huberwhite": [0.047491831177089, 0.0753536822034312, 0.127621679784444, 0.250403368990374, 0.0703390933638839],
   "mlr_chisq_scaled": 0,
   "mlr_scaling_factor": null,
   "mlr_scaling_factor_h1": null,

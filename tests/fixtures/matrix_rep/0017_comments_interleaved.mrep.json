@@ -4,7 +4,7 @@
     "fixture_kind": "matrix_rep",
     "corpus_id": "0017_comments_interleaved",
     "tool": "lavaan::lavMatrixRepresentation",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "f =~ x1 # marker indicator\n     + x2 ! second loading\n     + x3",
   "blocks": [

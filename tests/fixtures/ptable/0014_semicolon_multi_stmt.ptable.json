@@ -4,7 +4,7 @@
     "fixture_kind": "ptable",
     "corpus_id": "0014_semicolon_multi_stmt",
     "tool": "lavaan::lavaanify",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "f =~ x1 + x2 + x3; y ~ f",
   "rows": [

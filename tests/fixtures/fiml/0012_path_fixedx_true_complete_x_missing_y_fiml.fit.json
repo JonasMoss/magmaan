@@ -4,7 +4,7 @@
     "fixture_kind": "fit.fiml",
     "corpus_id": "0012_path_fixedx_true_complete_x_missing_y_fiml",
     "tool": "lavaan::sem(missing = \"fiml\")",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "x9 ~ x1 + x2",
   "entry": "sem",
@@ -631,12 +631,12 @@
   "theta_hat": [0.299761559848384, 0.0740746878547229, 0.844799364972272, 3.47415222468422],
   "converged": true,
   "df": 0,
-  "logl": -357.67561075211,
+  "logl": -357.6756107521,
   "unrestricted_logl": -357.67561075213,
   "chisq": 0,
-  "baseline_chisq": 45.2925328874105,
+  "baseline_chisq": 45.2925328874107,
   "baseline_df": 2,
-  "se_robust_huberwhite": [0.0482090285907731, 0.0473059202688275, 0.0827780392827815, 0.331175375037193],
+  "se_robust_huberwhite": [0.0482090285892992, 0.0473059202688017, 0.0827780392829724, 0.331175375010583],
   "mlr_chisq_scaled": 0,
   "mlr_scaling_factor": null,
   "mlr_scaling_factor_h1": null,
@@ -653,8 +653,8 @@
   "rmsea_close_h0": 0.05,
   "rmsea_notclose_pvalue": null,
   "rmsea_notclose_h0": 0.08,
-  "aic": 723.35122150422,
-  "bic": 738.179662563216,
-  "bic2": 725.493937404866,
+  "aic": 723.3512215042,
+  "bic": 738.179662563195,
+  "bic2": 725.493937404846,
   "npar": 4
 }

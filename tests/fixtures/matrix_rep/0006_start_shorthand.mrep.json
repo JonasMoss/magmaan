@@ -4,7 +4,7 @@
     "fixture_kind": "matrix_rep",
     "corpus_id": "0006_start_shorthand",
     "tool": "lavaan::lavMatrixRepresentation",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "f =~ 1*x1 + 0.7?x2 + x3",
   "blocks": [

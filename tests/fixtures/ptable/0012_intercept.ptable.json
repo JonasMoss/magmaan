@@ -4,7 +4,7 @@
     "fixture_kind": "ptable",
     "corpus_id": "0012_intercept",
     "tool": "lavaan::lavaanify",
-    "lavaan_version": "0.6.22.2560"
+    "lavaan_version": "0.7.1.2691"
   },
   "input": "y ~ 1",
   "rows": [
