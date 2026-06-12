@@ -84,6 +84,17 @@ void add_new_free_group(spec::LatentStructure& pt, std::int32_t old_n) {
   }
 }
 
+void add_new_free_groups(spec::LatentStructure& pt, std::int32_t old_n,
+                         std::size_t n_new) {
+  if (static_cast<std::int32_t>(pt.eq_groups.size()) == old_n) {
+    for (std::size_t i = 0; i < n_new; ++i) {
+      pt.eq_groups.push_back(old_n + static_cast<std::int32_t>(i));
+    }
+  } else if (!pt.eq_groups.empty()) {
+    pt.eq_groups.clear();
+  }
+}
+
 post_expected<spec::LatentStructure>
 with_fixed_row_freed(spec::LatentStructure pt, std::size_t row,
                      const SampleStats& samp, const model::MatrixRep& rep) {
@@ -101,10 +112,89 @@ with_fixed_row_freed(spec::LatentStructure pt, std::size_t row,
   return pt;
 }
 
+struct FixedCandidateRow {
+  std::size_t row = 0;
+  double fixed_value = 0.0;
+  ScoreCandidate candidate;
+};
+
+ScoreCandidate make_fixed_candidate(const spec::LatentStructure& pt,
+                                    std::size_t row) {
+  ScoreCandidate cand;
+  cand.kind = ScoreCandidateKind::FixedParam;
+  cand.row = row;
+  cand.op = pt.op[row];
+  cand.lhs_var = pt.lhs_var[row];
+  cand.rhs_var = pt.rhs_var[row];
+  cand.group = pt.group[row];
+  return cand;
+}
+
+std::vector<FixedCandidateRow>
+collect_fixed_candidates(const spec::LatentStructure& pt,
+                         const model::MatrixRep& rep) {
+  std::vector<FixedCandidateRow> out;
+  for (std::size_t row = 0; row < pt.size(); ++row) {
+    if (!fixed_candidate_row(pt, rep, row)) continue;
+    out.push_back(FixedCandidateRow{
+        row, pt.fixed_value[row], make_fixed_candidate(pt, row)});
+  }
+  return out;
+}
+
+bool candidate_cells_are_unique(const model::MatrixRep& rep,
+                                const std::vector<FixedCandidateRow>& rows) {
+  std::set<std::array<std::int32_t, 4>> seen;
+  for (const auto& r : rows) {
+    if (r.row >= rep.cell_for_row.size()) return false;
+    const auto& c = rep.cell_for_row[r.row];
+    if (!c.used) return false;
+    const std::array<std::int32_t, 4> key{
+        static_cast<std::int32_t>(c.block),
+        static_cast<std::int32_t>(c.mat),
+        static_cast<std::int32_t>(c.row),
+        static_cast<std::int32_t>(c.col)};
+    if (!seen.insert(key).second) return false;
+  }
+  return true;
+}
+
+post_expected<spec::LatentStructure>
+with_fixed_rows_freed(spec::LatentStructure pt,
+                      const std::vector<FixedCandidateRow>& rows,
+                      const SampleStats& samp,
+                      const model::MatrixRep& rep) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  const std::int32_t old_n = pt.n_free();
+  for (std::size_t i = 0; i < rows.size(); ++i) {
+    const std::size_t row = rows[i].row;
+    if (!fixed_candidate_row(pt, rep, row)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "score tests: requested row is not an eligible fixed parameter"));
+    }
+    pt.free[row] = old_n + static_cast<std::int32_t>(i) + 1;
+    pt.fixed_value[row] = std::numeric_limits<double>::quiet_NaN();
+  }
+  add_new_free_groups(pt, old_n, rows.size());
+  return pt;
+}
+
 Eigen::VectorXd append_theta(const Eigen::VectorXd& theta, double value) {
   Eigen::VectorXd out(theta.size() + 1);
   if (theta.size() > 0) out.head(theta.size()) = theta;
   out(theta.size()) = value;
+  return out;
+}
+
+Eigen::VectorXd append_thetas(const Eigen::VectorXd& theta,
+                              const std::vector<FixedCandidateRow>& rows) {
+  Eigen::VectorXd out(theta.size() + static_cast<Eigen::Index>(rows.size()));
+  if (theta.size() > 0) out.head(theta.size()) = theta;
+  for (std::size_t i = 0; i < rows.size(); ++i) {
+    out(theta.size() + static_cast<Eigen::Index>(i)) = rows[i].fixed_value;
+  }
   return out;
 }
 
@@ -214,6 +304,96 @@ score_for_direction_robust(const ScoreCandidate& candidate,
   ScoreTestResult out = *nt;
   out.scaling_factor = c;
   out.v_eff = out.information * c;   // robust efficient-score variance (NT units)
+  out.mi_scaled = out.mi / c;
+  out.p_value = chi2_pvalue(out.mi_scaled, out.df);
+  return out;
+}
+
+struct NuisanceProjection {
+  Eigen::MatrixXd K;
+  Eigen::MatrixXd Iaa_inv;
+  Eigen::VectorXd score_a;
+  Eigen::VectorXd Iaa_score_a;
+};
+
+post_expected<NuisanceProjection>
+prepare_nuisance_projection(const Eigen::VectorXd& score_full,
+                            const Eigen::MatrixXd& info_full,
+                            const Eigen::MatrixXd& K_nuisance,
+                            const char* what) {
+  if (score_full.size() != info_full.rows() ||
+      info_full.rows() != info_full.cols() ||
+      K_nuisance.rows() != score_full.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust score tests: incompatible score/information/nuisance shapes"));
+  }
+  NuisanceProjection out;
+  out.K = K_nuisance;
+  if (K_nuisance.cols() == 0) return out;
+  const Eigen::MatrixXd I_aa =
+      K_nuisance.transpose() * info_full * K_nuisance;
+  auto Iaa_inv = invert_symmetric(I_aa, what);
+  if (!Iaa_inv.has_value()) return std::unexpected(Iaa_inv.error());
+  out.Iaa_inv = std::move(*Iaa_inv);
+  out.score_a = K_nuisance.transpose() * score_full;
+  out.Iaa_score_a = out.Iaa_inv * out.score_a;
+  return out;
+}
+
+post_expected<ScoreTestResult>
+score_for_coordinate_robust(const ScoreCandidate& candidate,
+                            const Eigen::VectorXd& score_full,
+                            const Eigen::MatrixXd& info_full,
+                            const Eigen::MatrixXd& A1,
+                            const Eigen::MatrixXd& B1,
+                            const NuisanceProjection& nuisance,
+                            Eigen::Index coord) {
+  const Eigen::Index q = score_full.size();
+  if (coord < 0 || coord >= q || info_full.rows() != q ||
+      info_full.cols() != q || A1.rows() != q || A1.cols() != q ||
+      B1.rows() != q || B1.cols() != q || nuisance.K.rows() != q) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust score tests: incompatible coordinate score shapes"));
+  }
+
+  const Eigen::VectorXd I_d = info_full.col(coord);
+  double score_eff = score_full(coord);
+  double info_eff = info_full(coord, coord);
+  Eigen::VectorXd g = Eigen::VectorXd::Zero(q);
+  g(coord) = 1.0;
+
+  if (nuisance.K.cols() > 0) {
+    const Eigen::VectorXd I_ab = nuisance.K.transpose() * I_d;
+    const Eigen::VectorXd Iaa_Iab = nuisance.Iaa_inv * I_ab;
+    score_eff -= I_ab.dot(nuisance.Iaa_score_a);
+    info_eff -= I_ab.dot(Iaa_Iab);
+    g.noalias() -= nuisance.K * Iaa_Iab;
+  }
+
+  const double tol_info = 1e-10 * std::max<double>(1.0, std::abs(info_eff));
+  if (!(info_eff > tol_info) || !std::isfinite(score_eff)) {
+    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+        "score tests: efficient information is not positive"));
+  }
+
+  const double bread_q = g.dot(A1 * g);
+  const double meat_q = g.dot(B1 * g);
+  const double tol_bread = 1e-12 * std::max<double>(1.0, std::abs(bread_q));
+  if (!(bread_q > tol_bread) || !std::isfinite(meat_q) || !(meat_q > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+        "robust score tests: sandwich quadratic form is not positive"));
+  }
+
+  const double c = meat_q / bread_q;
+  ScoreTestResult out;
+  out.candidate = candidate;
+  out.score = score_eff;
+  out.information = info_eff;
+  out.mi = (score_eff * score_eff) / info_eff;
+  out.df = 1;
+  out.epc = score_eff / info_eff;
+  out.scaling_factor = c;
+  out.v_eff = out.information * c;
   out.mi_scaled = out.mi / c;
   out.p_value = chi2_pvalue(out.mi_scaled, out.df);
   return out;
@@ -484,10 +664,10 @@ equality_release_tests(spec::LatentStructure pt,
 // `mi` and the scaled `mi_scaled`.
 template <class Evaluator>
 post_expected<ScoreTestTable>
-fixed_parameter_tests_robust(spec::LatentStructure pt,
-                             const model::MatrixRep& rep,
-                             const Estimates& est,
-                             Evaluator eval_robust) {
+fixed_parameter_tests_robust_one_by_one(spec::LatentStructure pt,
+                                        const model::MatrixRep& rep,
+                                        const Estimates& est,
+                                        Evaluator eval_robust) {
   ScoreTestTable out;
   auto con0 = build_eq_constraints(pt);
   if (!con0.has_value()) return std::unexpected(con0.error());
@@ -514,13 +694,7 @@ fixed_parameter_tests_robust(spec::LatentStructure pt,
 
     Eigen::VectorXd direction = Eigen::VectorXd::Zero(score_full.size());
     direction(score_full.size() - 1) = 1.0;
-    ScoreCandidate cand;
-    cand.kind = ScoreCandidateKind::FixedParam;
-    cand.row = row;
-    cand.op = pt.op[row];
-    cand.lhs_var = pt.lhs_var[row];
-    cand.rhs_var = pt.rhs_var[row];
-    cand.group = pt.group[row];
+    ScoreCandidate cand = make_fixed_candidate(pt, row);
     Eigen::MatrixXd K_aug = Eigen::MatrixXd::Zero(score_full.size(),
                                                   con0->K().cols());
     if (con0->K().rows() > 0) {
@@ -528,6 +702,70 @@ fixed_parameter_tests_robust(spec::LatentStructure pt,
     }
     auto r = score_for_direction_robust(cand, score_full, info_full, A1, B1,
                                         K_aug, direction);
+    if (r.has_value()) out.rows.push_back(*r);
+  }
+  return out;
+}
+
+template <class Evaluator>
+post_expected<ScoreTestTable>
+fixed_parameter_tests_robust(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const Estimates& est,
+                             Evaluator eval_robust) {
+  auto con0 = build_eq_constraints(pt);
+  if (!con0.has_value()) return std::unexpected(con0.error());
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust score tests: fitted theta length does not match partable"));
+  }
+
+  const std::vector<FixedCandidateRow> candidates =
+      collect_fixed_candidates(pt, rep);
+  if (candidates.empty()) return ScoreTestTable{};
+  if (!candidate_cells_are_unique(rep, candidates)) {
+    return fixed_parameter_tests_robust_one_by_one(
+        std::move(pt), rep, est, eval_robust);
+  }
+
+  auto aug_or = eval_robust.make_augmented(pt, candidates);
+  if (!aug_or.has_value()) {
+    return fixed_parameter_tests_robust_one_by_one(
+        std::move(pt), rep, est, eval_robust);
+  }
+  spec::LatentStructure aug_pt = std::move(*aug_or);
+  Estimates aug_est{append_thetas(est.theta, candidates), est.fmin,
+                    est.iterations};
+
+  Eigen::VectorXd score_full;
+  Eigen::MatrixXd info_full, A1, B1;
+  if (auto e = eval_robust.evaluate(aug_pt, aug_est, score_full, info_full,
+                                    A1, B1);
+      !e.has_value()) {
+    return fixed_parameter_tests_robust_one_by_one(
+        std::move(pt), rep, est, eval_robust);
+  }
+  const Eigen::Index base_q = est.theta.size();
+  const Eigen::Index q = score_full.size();
+  if (q != base_q + static_cast<Eigen::Index>(candidates.size())) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust score tests: batched augmented score has unexpected length"));
+  }
+
+  Eigen::MatrixXd K_aug = Eigen::MatrixXd::Zero(q, con0->K().cols());
+  if (con0->K().rows() > 0) {
+    K_aug.topRows(con0->K().rows()) = con0->K();
+  }
+  auto nuisance = prepare_nuisance_projection(
+      score_full, info_full, K_aug, "robust score tests nuisance information");
+  if (!nuisance.has_value()) return std::unexpected(nuisance.error());
+
+  ScoreTestTable out;
+  out.rows.reserve(candidates.size());
+  for (std::size_t i = 0; i < candidates.size(); ++i) {
+    const Eigen::Index coord = base_q + static_cast<Eigen::Index>(i);
+    auto r = score_for_coordinate_robust(candidates[i].candidate, score_full,
+                                         info_full, A1, B1, *nuisance, coord);
     if (r.has_value()) out.rows.push_back(*r);
   }
   return out;
@@ -607,6 +845,12 @@ struct RobustMlEvaluator {
   post_expected<spec::LatentStructure>
   make_augmented(spec::LatentStructure pt, std::size_t row) const {
     return with_fixed_row_freed(std::move(pt), row, samp, rep);
+  }
+
+  post_expected<spec::LatentStructure>
+  make_augmented(spec::LatentStructure pt,
+                 const std::vector<FixedCandidateRow>& rows) const {
+    return with_fixed_rows_freed(std::move(pt), rows, samp, rep);
   }
 
   post_expected<robust::ParamSpaceSandwich>

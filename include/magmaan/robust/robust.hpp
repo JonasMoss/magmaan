@@ -709,6 +709,15 @@ param_space_sandwich(spec::LatentStructure pt, const model::MatrixRep& rep,
                      const RawData& raw, InferenceSpec spec = {},
                      bool reparam_constraints = true);
 
+// Empirical meat from caller-supplied casewise contributions. Same layout
+// contract as `robust_se(..., Zc, n_total, ...)`.
+post_expected<ParamSpaceSandwich>
+param_space_sandwich(spec::LatentStructure pt, const model::MatrixRep& rep,
+                     const SampleStats& samp, const Estimates& est,
+                     const Eigen::Ref<const Eigen::MatrixXd>& Zc,
+                     double n_total, InferenceSpec spec = {},
+                     bool reparam_constraints = true);
+
 // Empirical meat from a caller-supplied Γ̂ (σ-only ⇒ pstar; means ⇒ total_rows).
 post_expected<ParamSpaceSandwich>
 param_space_sandwich(spec::LatentStructure pt, const model::MatrixRep& rep,

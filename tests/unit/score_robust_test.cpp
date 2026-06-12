@@ -268,6 +268,34 @@ TEST_CASE("param_space_sandwich: whitened-solve A1/B1 match explicit Δ'WΔ / Δ
   CHECK((sw->B1 - B1_ref).norm() < 1e-8 * (1.0 + B1_ref.norm()));
 }
 
+TEST_CASE("param_space_sandwich: caller-supplied Zc matches raw-data overload") {
+  auto h = build("f =~ x1 + x2 + x3 + x4\nx1 ~~ 0*x2");
+  std::mt19937 rng(20260612u);
+  const Eigen::Matrix4d Sigma = four_indicator_sample_cov();
+  magmaan::data::RawData raw;
+  raw.X.push_back(multivariate_t_sample(rng, 900, Sigma, 6.0));
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto est = magmaan::test::fit(h.pt, h.rep, *samp);
+  REQUIRE(est.has_value());
+
+  const rob::InferenceSpec spec{rob::Information::Expected,
+                                rob::WeightMoments::Structured,
+                                rob::ScoreCovariance::Empirical};
+  auto sw_raw = rob::param_space_sandwich(h.pt, h.rep, *samp, *est, raw, spec,
+                                          /*reparam_constraints=*/false);
+  REQUIRE(sw_raw.has_value());
+  auto Zc = rob::casewise_contributions(raw, *samp);
+  REQUIRE(Zc.has_value());
+  auto sw_zc = rob::param_space_sandwich(
+      h.pt, h.rep, *samp, *est, *Zc, static_cast<double>(raw.X[0].rows()),
+      spec, /*reparam_constraints=*/false);
+  REQUIRE(sw_zc.has_value());
+
+  CHECK((sw_zc->A1 - sw_raw->A1).norm() < 1e-12 * (1.0 + sw_raw->A1.norm()));
+  CHECK((sw_zc->B1 - sw_raw->B1).norm() < 1e-12 * (1.0 + sw_raw->B1.norm()));
+}
+
 TEST_CASE("frontier robust MI: empirical raw-data path scales on non-normal data") {
   auto h = build("f =~ x1 + x2 + x3 + x4\nx1 ~~ 0*x2");
   std::mt19937 rng(20260602u);

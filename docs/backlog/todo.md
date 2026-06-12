@@ -56,9 +56,6 @@ the R-internals oracle from `tests/tools/regen_robust_score.R`, and the advisory
   (per-block `n_b/N` denom weighting; currently single-group guarded).
 - **df>1 total release.** Mean-scaled `T_total/c_total` plus an optional Imhof
   eigenvalue-mixture p-value for joint releases.
-- **Perf.** v1 rebuilds the sandwich per augmented MI candidate; `Zc` and the
-  per-block `L_Γ` are candidate-invariant, so cache them and rank-1-update the
-  extra Δ-column (`// TODO(perf)` site in the robust evaluator).
 
 ## Local hardening and validation tooling
 

@@ -134,6 +134,12 @@ golden `parTable()` fixtures.
   `Information::Observed` ≈ robust.huber.white/MLR), single group; reduces to the
   ordinary statistic exactly under the model-implied Γ_NT meat (Expected bread).
   Friendly entries under `api::frontier::{modification_indices,score_tests}_robust`.
+  The fixed-parameter robust MI sweep batches eligible candidate rows into one
+  augmented null-point evaluation, so score/info and the parameter-space sandwich
+  are built once per sweep rather than once per candidate; duplicate matrix-cell
+  edge cases fall back to the conservative one-candidate path. The sandwich
+  helper also accepts precomputed casewise contributions (`Zc`) for callers that
+  reuse the same raw-data meat.
   Validated four ways (lavaan implements no robust score test to diff against):
   exact reduction-to-NT, independent A1/B1 re-assembly, an R-internals oracle
   built from lavaan's delta/wls.v/gamma/ceq.JAC (`regen_robust_score.R`,
