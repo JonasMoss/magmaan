@@ -45,6 +45,49 @@ robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
                         const Eigen::MatrixXd& K,
                         double fmin);
 
+// Parameter-space sandwich {A1, B1} in the moment metric, the LS counterpart
+// of `robust::param_space_sandwich`: per-unit bread A1 = Σ_b (n_b/N)·Δ_bᵀW_bΔ_b
+// and meat B1 = Σ_b (n_b/N)·Δ_bᵀW_bΓ̂_bW_bΔ_b, with W the ESTIMATION weight
+// (not Γ_NT⁻¹). Always full θ-space (K_con empty): the robust score-test caller
+// projects equality constraints itself. No inversion is performed, so a
+// singular A1 is fine. The per-direction robust scaling c = gᵀB1g / gᵀA1g is
+// NOT invariant to the scale of W (B1 carries W twice); callers must pass the
+// same W the score/information evaluation used.
+post_expected<robust::ParamSpaceSandwich>
+weighted_param_space_sandwich(const std::vector<WeightedMomentBlock>& blocks);
+
+// Moment-metric sandwich for a continuous moment-quadratic (ULS/GLS/WLS/DWLS)
+// fit, evaluated at `est.theta` (which may belong to an augmented partable —
+// the robust modification-index path calls this at the freed-candidate null
+// point). `weight` follows the `robust_continuous_ls` convention (empty ⇒ ULS
+// identity). The three overloads differ in the Γ̂ source: per-block supplied,
+// empirical from complete-data raw, or model-implied Γ_NT — blockdiag(M_b,
+// gamma_nt(M_b)) with M_b = Σ̂_b(θ) (Structured) or S_b (Unstructured). The
+// Γ_NT meat with the GLS weight reproduces B1 = A1 (c ≡ 1) exactly.
+post_expected<robust::ParamSpaceSandwich>
+continuous_ls_param_space_sandwich(spec::LatentStructure pt,
+                                   const model::MatrixRep& rep,
+                                   const data::SampleStats& samp,
+                                   const Estimates& est,
+                                   const gmm::Weight& weight,
+                                   const std::vector<Eigen::MatrixXd>& gamma);
+
+post_expected<robust::ParamSpaceSandwich>
+continuous_ls_param_space_sandwich(spec::LatentStructure pt,
+                                   const model::MatrixRep& rep,
+                                   const data::SampleStats& samp,
+                                   const Estimates& est,
+                                   const gmm::Weight& weight,
+                                   const data::RawData& raw);
+
+post_expected<robust::ParamSpaceSandwich>
+continuous_ls_param_space_sandwich(spec::LatentStructure pt,
+                                   const model::MatrixRep& rep,
+                                   const data::SampleStats& samp,
+                                   const Estimates& est,
+                                   const gmm::Weight& weight,
+                                   robust::WeightMoments nt_moments);
+
 // Moment-quadratic least-squares objective F(θ) = ½·r̃(θ)ᵀr̃(θ). The `weight`
 // is the only thing that distinguishes the estimators: empty ⇒ ULS; a
 // normal-theory weight (`gmm::normal_theory_weight`) ⇒ GLS; a caller-supplied

@@ -85,18 +85,33 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 ## Robust score / modification-index tests (frontier)
 
 `inference::frontier::{modification_indices,score_tests}_robust` has landed for
-complete-data ML, both breads, single group (see roadmap; validated by
-`tests/unit/score_robust_test.cpp`, `tests/golden/score_robust_golden_test.cpp`,
-the R-internals oracle from `tests/tools/regen_robust_score.R`, and the advisory
+complete-data ML (both breads), continuous ULS/GLS/WLS/DWLS (the
+`gmm::Weight` overloads, expected bread, moment-metric sandwich), and —
+as `estimate::frontier::{modification_indices,score_tests}_{ordinal,mixed_ordinal}_robust`
+— all-ordinal ULS/DWLS/WLS and mixed DWLS/WLS over the polychoric NACOV meat;
+all single group (see roadmap; validated by
+`tests/unit/score_robust_test.cpp`, `tests/golden/score_robust_golden_test.cpp`
+fixtures 0006-0008, the R-internals oracle from
+`tests/tools/regen_robust_score.R`, and the advisory
 `tests/checks/robust_score/`). Remaining work:
 
-- **Deferred estimator tiers.** FIML robust MI (needs casewise score
-  contributions per missingness pattern; `FimlEvaluator` builds info by finite
-  difference, no Γ̂ analogue), continuous-LS (GLS/WLS) robust MI (`J'WΓ̂WJ` in the
-  moment metric), and ordinal-DWLS robust MI (polychoric NACOV meat). Multi-group
-  (per-block `n_b/N` denom weighting; currently single-group guarded).
+- **Deferred estimator tier: FIML robust MI.** Needs casewise score
+  contributions per missingness pattern (`FimlEvaluator` builds info by finite
+  difference, no Γ̂ analogue) — re-check against the exp-21 FIML FMG UGamma
+  machinery before sizing, which post-dates this note.
+- **Multi-group.** The sandwich blocks are already per-block `n_b/N`-weighted
+  (ML via `robust_setup`, LS/ordinal via `WeightedMomentBlock`); the remaining
+  work is removing the v1 single-group guards, verifying per-group candidate
+  enumeration and the shared-information nuisance projection, and adding a
+  two-group R-internals oracle fixture.
 - **df>1 total release.** Mean-scaled `T_total/c_total` plus an optional Imhof
-  eigenvalue-mixture p-value for joint releases.
+  eigenvalue-mixture p-value for joint releases (the per-release machinery is
+  in place; the joint version needs `c̄ = tr((GᵀA1G)⁻¹(GᵀB1G))/df` and the
+  existing QUADPACK-backed imhof tail).
+- **S, only-when-needed.** `api::frontier` / R wrappers for the LS and ordinal
+  robust tiers (the api `Fit` does not currently carry the LS estimation
+  weight; the `estimate::frontier` / `inference::frontier` functions are the
+  methods-developer surface). Add when a concrete consumer appears.
 
 ## Local hardening and validation tooling
 

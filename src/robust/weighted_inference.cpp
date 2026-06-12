@@ -288,16 +288,17 @@ gamma_blocks_from_raw(const data::RawData& raw,
   return out;
 }
 
-post_expected<WeightedRobustResult>
-robust_continuous_ls_impl(spec::LatentStructure pt,
-                          const model::MatrixRep& rep,
-                          const data::SampleStats& samp,
-                          const Estimates& est,
-                          const gmm::Weight& weight,
-                          const std::vector<Eigen::MatrixXd>& gamma) {
-  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
-    return std::unexpected(fit_to_post(e.error()));
-  }
+// Shared block assembly for `robust_continuous_ls` and the moment-metric
+// parameter-space sandwich: Δ_b / W_b / Γ̂_b / n_b at `est.theta`, which may
+// belong to an augmented (freed-candidate) partable. `pt` must already be
+// fixed-x-resolved.
+post_expected<std::vector<WeightedMomentBlock>>
+build_continuous_ls_blocks(const spec::LatentStructure& pt,
+                           const model::MatrixRep& rep,
+                           const data::SampleStats& samp,
+                           const Estimates& est,
+                           const gmm::Weight& weight,
+                           const std::vector<Eigen::MatrixXd>& gamma) {
   if (est.theta.size() != pt.n_free()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "robust_continuous_ls: fitted theta length does not match partable"));
@@ -317,13 +318,6 @@ robust_continuous_ls_impl(spec::LatentStructure pt,
   if (gamma.size() != samp.S.size()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "robust_continuous_ls: gamma block count does not match sample blocks"));
-  }
-
-  auto con_or = build_eq_constraints(pt);
-  if (!con_or.has_value()) return std::unexpected(con_or.error());
-  if (con_or->K().rows() != pt.n_free()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "robust_continuous_ls: constraint reparameterization has incompatible shape"));
   }
 
   std::vector<WeightedMomentBlock> blocks;
@@ -346,12 +340,34 @@ robust_continuous_ls_impl(spec::LatentStructure pt,
         .gamma = gamma[b],
         .n_obs = samp.n_obs[b]});
   }
+  return blocks;
+}
+
+post_expected<WeightedRobustResult>
+robust_continuous_ls_impl(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const data::SampleStats& samp,
+                          const Estimates& est,
+                          const gmm::Weight& weight,
+                          const std::vector<Eigen::MatrixXd>& gamma) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  if (con_or->K().rows() != pt.n_free()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_continuous_ls: constraint reparameterization has incompatible shape"));
+  }
+
+  auto blocks = build_continuous_ls_blocks(pt, rep, samp, est, weight, gamma);
+  if (!blocks.has_value()) return std::unexpected(blocks.error());
 
   auto chisq = robust_ls_standard_chisq(samp, est);
   if (!chisq.has_value()) return std::unexpected(chisq.error());
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
-  return robust_weighted_moments(blocks, con_or->K(), *chisq / *n);
+  return robust_weighted_moments(*blocks, con_or->K(), *chisq / *n);
 }
 
 post_expected<WeightedRobustResult>
@@ -601,6 +617,137 @@ robust_continuous_ls(spec::LatentStructure pt,
                      const data::RawData& raw) {
   return robust_continuous_ls_raw_impl(std::move(pt), rep, samp, est,
                                        weight, raw);
+}
+
+post_expected<robust::ParamSpaceSandwich>
+weighted_param_space_sandwich(const std::vector<WeightedMomentBlock>& blocks) {
+  if (blocks.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "weighted_param_space_sandwich: no moment blocks supplied"));
+  }
+  const Eigen::Index q = blocks[0].jacobian.cols();
+  double N_total = 0.0;
+  for (std::size_t b = 0; b < blocks.size(); ++b) {
+    const auto& blk = blocks[b];
+    if (blk.n_obs <= 0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "weighted_param_space_sandwich: non-positive n_obs in block " +
+              std::to_string(b)));
+    }
+    if (blk.jacobian.cols() != q ||
+        blk.weight.rows() != blk.jacobian.rows() ||
+        blk.weight.cols() != blk.jacobian.rows() ||
+        blk.gamma.rows() != blk.jacobian.rows() ||
+        blk.gamma.cols() != blk.jacobian.rows()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "weighted_param_space_sandwich: moment matrix shape mismatch in block " +
+              std::to_string(b)));
+    }
+    N_total += static_cast<double>(blk.n_obs);
+  }
+
+  Eigen::MatrixXd A1 = Eigen::MatrixXd::Zero(q, q);
+  Eigen::MatrixXd B1 = Eigen::MatrixXd::Zero(q, q);
+  for (const auto& blk : blocks) {
+    const double w_b = static_cast<double>(blk.n_obs) / N_total;
+    const Eigen::MatrixXd WD = blk.weight * blk.jacobian;
+    A1.noalias() += w_b * (blk.jacobian.transpose() * WD);
+    B1.noalias() += w_b * (WD.transpose() * blk.gamma * WD);
+  }
+  A1 = 0.5 * (A1 + A1.transpose()).eval();
+  B1 = 0.5 * (B1 + B1.transpose()).eval();
+  return robust::ParamSpaceSandwich{std::move(A1), std::move(B1),
+                                    Eigen::MatrixXd(), q};
+}
+
+post_expected<robust::ParamSpaceSandwich>
+continuous_ls_param_space_sandwich(spec::LatentStructure pt,
+                                   const model::MatrixRep& rep,
+                                   const data::SampleStats& samp,
+                                   const Estimates& est,
+                                   const gmm::Weight& weight,
+                                   const std::vector<Eigen::MatrixXd>& gamma) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto blocks = build_continuous_ls_blocks(pt, rep, samp, est, weight, gamma);
+  if (!blocks.has_value()) return std::unexpected(blocks.error());
+  return weighted_param_space_sandwich(*blocks);
+}
+
+post_expected<robust::ParamSpaceSandwich>
+continuous_ls_param_space_sandwich(spec::LatentStructure pt,
+                                   const model::MatrixRep& rep,
+                                   const data::SampleStats& samp,
+                                   const Estimates& est,
+                                   const gmm::Weight& weight,
+                                   const data::RawData& raw) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  if (auto v = validate_moment_shapes(samp, eval->moments); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  const auto layout = make_layout(samp, eval->moments);
+  auto gamma = gamma_blocks_from_raw(raw, samp, layout);
+  if (!gamma.has_value()) return std::unexpected(gamma.error());
+  auto blocks = build_continuous_ls_blocks(pt, rep, samp, est, weight, *gamma);
+  if (!blocks.has_value()) return std::unexpected(blocks.error());
+  return weighted_param_space_sandwich(*blocks);
+}
+
+post_expected<robust::ParamSpaceSandwich>
+continuous_ls_param_space_sandwich(spec::LatentStructure pt,
+                                   const model::MatrixRep& rep,
+                                   const data::SampleStats& samp,
+                                   const Estimates& est,
+                                   const gmm::Weight& weight,
+                                   robust::WeightMoments nt_moments) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  if (auto v = validate_moment_shapes(samp, eval->moments); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  if (nt_moments == robust::WeightMoments::Pairwise) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "continuous_ls_param_space_sandwich: Pairwise Γ_NT moments are not "
+        "supported"));
+  }
+  const auto layout = make_layout(samp, eval->moments);
+  // Γ_NT in the [μ ; vech σ] moment layout: under normality the mean and
+  // covariance blocks are asymptotically independent, with Var(√n·x̄) = M and
+  // Var(√n·vech S) = gamma_nt(M).
+  std::vector<Eigen::MatrixXd> gamma;
+  gamma.reserve(samp.S.size());
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    const Eigen::MatrixXd& M =
+        nt_moments == robust::WeightMoments::Structured ? eval->moments.sigma[b]
+                                                        : samp.S[b];
+    auto G_cov = data::gamma_nt(M);
+    if (!G_cov.has_value()) return std::unexpected(G_cov.error());
+    if (!layout.has_means) {
+      gamma.push_back(std::move(*G_cov));
+      continue;
+    }
+    const Eigen::Index p = M.rows();
+    Eigen::MatrixXd G = Eigen::MatrixXd::Zero(layout.block_rows[b],
+                                              layout.block_rows[b]);
+    G.topLeftCorner(p, p) = M;
+    G.bottomRightCorner(G_cov->rows(), G_cov->cols()) = *G_cov;
+    gamma.push_back(std::move(G));
+  }
+  auto blocks = build_continuous_ls_blocks(pt, rep, samp, est, weight, gamma);
+  if (!blocks.has_value()) return std::unexpected(blocks.error());
+  return weighted_param_space_sandwich(*blocks);
 }
 
 }  // namespace magmaan::estimate

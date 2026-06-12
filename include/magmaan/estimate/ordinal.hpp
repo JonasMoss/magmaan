@@ -179,6 +179,62 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
                           OrdinalParameterization parameterization =
                               OrdinalParameterization::Delta);
 
+// ── Robust (generalized / SB-scaled) ordinal score tests ────────────────────
+// Frontier surface (lavaan implements no robust score test): every candidate
+// row carries the ordinary `mi` plus `mi_scaled = mi / c` with the
+// per-direction scaling `c = gᵀB1g / gᵀA1g`, where A1 = Σ_b (n_b/N)·Δ_bᵀW_bΔ_b
+// and B1 = Σ_b (n_b/N)·Δ_bᵀW_bΓ̂_bW_bΔ_b in the [thresholds ; associations]
+// moment metric — W the estimation weight (ULS identity / DWLS diagonal /
+// full WLS, the same blocks `robust_ordinal` uses) and Γ̂ = `stats.NACOV` (the
+// polychoric/polyserial moment ACOV, which must be populated). Under WLS the
+// meat collapses onto the bread (W = Γ̂⁻¹ ⇒ B1 = A1, c ≡ 1), the exact
+// reduction-to-ordinary baseline. `mi` keeps the lavaan-matched row-type scale
+// convention of the non-robust sweep (`mi_scaled` inherits it: c carries no
+// moment-scale factor). Mixed stats support DWLS/WLS only, like the
+// non-robust mixed sweep. Single group only (v1).
+namespace frontier {
+
+post_expected<inference::ScoreTestTable>
+modification_indices_ordinal_robust(spec::LatentStructure pt,
+                                    const model::MatrixRep& rep,
+                                    const data::OrdinalStats& stats,
+                                    const Estimates& est,
+                                    OrdinalWeightKind weights,
+                                    const inference::ModificationIndexOptions&
+                                        options = {},
+                                    OrdinalParameterization parameterization =
+                                        OrdinalParameterization::Delta);
+
+post_expected<inference::ScoreTestTable>
+score_tests_ordinal_robust(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::OrdinalStats& stats,
+                           const Estimates& est,
+                           OrdinalWeightKind weights,
+                           OrdinalParameterization parameterization =
+                               OrdinalParameterization::Delta);
+
+post_expected<inference::ScoreTestTable>
+modification_indices_mixed_ordinal_robust(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& est,
+    OrdinalWeightKind weights,
+    const inference::ModificationIndexOptions& options = {},
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta);
+
+post_expected<inference::ScoreTestTable>
+score_tests_mixed_ordinal_robust(spec::LatentStructure pt,
+                                 const model::MatrixRep& rep,
+                                 const data::MixedOrdinalStats& stats,
+                                 const Estimates& est,
+                                 OrdinalWeightKind weights,
+                                 OrdinalParameterization parameterization =
+                                     OrdinalParameterization::Delta);
+
+}  // namespace frontier
+
 // Start-value producers for ordinal LS. They run the partable preparation step
 // internally, so the returned vector is sized for the *prepared* partable —
 // exactly what the matching `fit_*_ordinal_bounded` rebuilds. Pass the result

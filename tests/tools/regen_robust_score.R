@@ -98,3 +98,111 @@ write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
            null = "null", na = "null", digits = NA)
 cat(sprintf("wrote %s\n  X2_nt=%.6f  c=%.6f  mi_scaled=%.6f  (lavaan %s)\n",
             out_path, rs$X2_nt, rs$scaling, rs$mi_scaled, installed))
+
+# ── 0007: continuous DWLS (diagonal-ADF weight, moment-metric sandwich) ───────
+# Same assembly, but wls.v is now the DIAGONAL ADF weight and gamma the full
+# ADF NACOV, so c ≠ 1 already measures the diagonal-vs-full weight gap (the
+# data is the same heavy-tailed t). Exercises magmaan's continuous-LS robust
+# tier: A1 = Δ'WΔ, B1 = Δ'WΓ̂WΔ with W the estimation weight.
+set.seed(20260612L)
+Z2 <- matrix(rnorm(n * 4L), n, 4L)
+w2 <- rchisq(n, df_t) / df_t
+X2 <- sqrt((df_t - 2) / df_t) * (Z2 %*% t(L)) / sqrt(w2)
+colnames(X2) <- paste0("x", 1:4)
+dat2 <- as.data.frame(X2)
+
+# `se = "robust.sem"` makes lavaan compute the ADF NACOV, so both the DWLS
+# estimation weight (wls.v = 1/diag(Γ̂)) and the assembled meat use the
+# empirical Γ̂ — the same convention magmaan's diag(empirical_gamma)⁻¹ weight
+# and raw-data meat reproduce. The default (NT-gamma) DWLS would weight by
+# 1/diag(Γ_NT(S)) instead.
+fit_dwls <- sem(model, data = dat2, estimator = "DWLS", ordered = FALSE,
+                se = "robust.sem")
+if (!lavInspect(fit_dwls, "converged")) stop("DWLS robust score oracle fit did not converge")
+rs_dwls <- robust_score_assemble(fit_dwls)
+
+payload_dwls <- list(
+  `_meta` = list(
+    format_version = 1L,
+    fixture_kind = "score_robust",
+    corpus_id = "0007_robust_release_dwls_continuous",
+    tool = "lavaan internals (R-assembled): delta/wls.v/gamma/ceq.JAC",
+    lavaan_version = installed,
+    note = paste("continuous DWLS (diagonal-ADF weight); c measures the",
+                 "diagonal-vs-full weight gap in the moment metric")),
+  input = model,
+  estimator = "DWLS",
+  bread = "expected",
+  n_obs = n,
+  raw = unname(X2),
+  score_tests_robust = list(rows = list(list(
+    lhs = "a", op = "==", rhs = "b", df = 1L,
+    mi = rs_dwls$X2_nt, scaling_factor = rs_dwls$scaling,
+    mi_scaled = rs_dwls$mi_scaled))))
+
+out_dwls <- file.path(fixtures,
+                      "0007_robust_release_dwls_continuous.score_robust.json")
+write_json(payload_dwls, out_dwls, pretty = TRUE, auto_unbox = TRUE,
+           null = "null", na = "null", digits = NA)
+cat(sprintf("wrote %s\n  X2_nt=%.6f  c=%.6f  mi_scaled=%.6f  (lavaan %s)\n",
+            out_dwls, rs_dwls$X2_nt, rs_dwls$scaling, rs_dwls$mi_scaled,
+            installed))
+
+# ── 0008: ordinal DWLS / WLSMV (polychoric NACOV meat) ────────────────────────
+# All-ordinal 3-category CFA fit by WLSMV (DWLS weight); delta now carries the
+# threshold rows and gamma is the polychoric NACOV. Exercises magmaan's
+# ordinal robust tier over the [thresholds ; correlations] moment metric.
+set.seed(20260613L)
+n_ord  <- 800L
+lam_o  <- c(0.88, 0.80, 0.80, 0.64)
+eta_o  <- rnorm(n_ord)
+Y      <- sapply(seq_along(lam_o), function(j)
+  lam_o[j] * eta_o + sqrt(1 - lam_o[j]^2) * rnorm(n_ord))
+Xo     <- 1L + (Y > -0.5) + (Y > 0.45)
+colnames(Xo) <- paste0("x", 1:4)
+dato   <- as.data.frame(lapply(as.data.frame(Xo), ordered))
+
+model_ord <- paste(
+  "f =~ x1 + a*x2 + b*x3 + x4",
+  "x1 | t1 + t2",
+  "x2 | t1 + t2",
+  "x3 | t1 + t2",
+  "x4 | t1 + t2",
+  "x1 ~*~ 1*x1",
+  "x2 ~*~ 1*x2",
+  "x3 ~*~ 1*x3",
+  "x4 ~*~ 1*x4",
+  "a == b",
+  sep = "\n")
+
+fit_ord <- sem(model_ord, data = dato, estimator = "WLSMV",
+               ordered = colnames(Xo))
+if (!lavInspect(fit_ord, "converged")) stop("WLSMV robust score oracle fit did not converge")
+rs_ord <- robust_score_assemble(fit_ord)
+
+payload_ord <- list(
+  `_meta` = list(
+    format_version = 1L,
+    fixture_kind = "score_robust",
+    corpus_id = "0008_robust_release_wlsmv_ordinal",
+    tool = "lavaan internals (R-assembled): delta/wls.v/gamma/ceq.JAC",
+    lavaan_version = installed,
+    note = paste("all-ordinal WLSMV (DWLS weight, polychoric NACOV meat);",
+                 "delta carries threshold rows")),
+  input = model_ord,
+  estimator = "WLSMV",
+  bread = "expected",
+  n_obs = n_ord,
+  raw = unname(Xo),
+  score_tests_robust = list(rows = list(list(
+    lhs = "a", op = "==", rhs = "b", df = 1L,
+    mi = rs_ord$X2_nt, scaling_factor = rs_ord$scaling,
+    mi_scaled = rs_ord$mi_scaled))))
+
+out_ord <- file.path(fixtures,
+                     "0008_robust_release_wlsmv_ordinal.score_robust.json")
+write_json(payload_ord, out_ord, pretty = TRUE, auto_unbox = TRUE,
+           null = "null", na = "null", digits = NA)
+cat(sprintf("wrote %s\n  X2_nt=%.6f  c=%.6f  mi_scaled=%.6f  (lavaan %s)\n",
+            out_ord, rs_ord$X2_nt, rs_ord$scaling, rs_ord$mi_scaled,
+            installed))

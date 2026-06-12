@@ -3341,6 +3341,320 @@ ordinal_score_tests_impl(spec::LatentStructure pt,
   return table;
 }
 
+// ── Robust (generalized / SB-scaled) ordinal score-test machinery ────────────
+// The robust twins of the two sweeps above additionally build the moment-metric
+// parameter-space sandwich {A1, B1} at each (augmented) null point — the same
+// {Δ_b, W_b, Γ̂_b = NACOV_b, n_b} blocks `robust_ordinal` assembles — and hand
+// the per-direction scaling to `inference::frontier::score_for_direction_robust`.
+// The sandwich uses the unwhitened estimation weight; c carries no
+// `moment_scale` factor, so `mi_scaled` inherits the row-type scale convention
+// of the ordinary `mi` and reduces to it exactly under WLS (W = Γ̂⁻¹).
+
+Eigen::Index ordinal_sandwich_block_rows(const data::OrdinalStats& stats,
+                                         std::size_t b) {
+  const Eigen::Index p = stats.R[b].rows();
+  return static_cast<Eigen::Index>(stats.thresholds[b].size()) +
+         p * (p - 1) / 2;
+}
+
+Eigen::Index ordinal_sandwich_block_rows(const data::MixedOrdinalStats& stats,
+                                         std::size_t b) {
+  return stats.moments[b].size();
+}
+
+template <class Stats>
+post_expected<void> validate_ordinal_nacov(const Stats& stats) {
+  if (stats.NACOV.size() != stats.R.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal robust score tests: stats.NACOV is not populated"));
+  }
+  for (std::size_t b = 0; b < stats.NACOV.size(); ++b) {
+    const Eigen::Index mb = ordinal_sandwich_block_rows(stats, b);
+    if (stats.NACOV[b].rows() != mb || stats.NACOV[b].cols() != mb) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ordinal robust score tests: NACOV dimension mismatch in block " +
+              std::to_string(b)));
+    }
+  }
+  return {};
+}
+
+post_expected<std::vector<Eigen::MatrixXd>>
+ordinal_sandwich_weights(const data::OrdinalStats& stats,
+                         OrdinalWeightKind kind) {
+  std::vector<Eigen::MatrixXd> out;
+  out.reserve(stats.NACOV.size());
+  if (kind == OrdinalWeightKind::ULS) {
+    for (const auto& G : stats.NACOV) {
+      out.push_back(Eigen::MatrixXd::Identity(G.rows(), G.cols()));
+    }
+    return out;
+  }
+  const auto& Ws = kind == OrdinalWeightKind::DWLS ? stats.W_dwls : stats.W_wls;
+  for (std::size_t b = 0; b < Ws.size(); ++b) {
+    if (Ws[b].size() == 0) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ordinal robust score tests: weight matrix unavailable in block " +
+              std::to_string(b)));
+    }
+    out.push_back(Ws[b]);
+  }
+  return out;
+}
+
+post_expected<std::vector<Eigen::MatrixXd>>
+ordinal_sandwich_weights(const data::MixedOrdinalStats& stats,
+                         OrdinalWeightKind kind) {
+  if (kind == OrdinalWeightKind::ULS) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed ordinal robust score tests support DWLS/WLS weights only"));
+  }
+  const auto& Ws = kind == OrdinalWeightKind::DWLS ? stats.W_dwls : stats.W_wls;
+  std::vector<Eigen::MatrixXd> out;
+  out.reserve(Ws.size());
+  for (std::size_t b = 0; b < Ws.size(); ++b) {
+    if (Ws[b].size() == 0) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "mixed ordinal robust score tests: weight matrix unavailable in "
+          "block " + std::to_string(b)));
+    }
+    out.push_back(Ws[b]);
+  }
+  return out;
+}
+
+template <class Stats>
+post_expected<robust::ParamSpaceSandwich>
+ordinal_param_space_sandwich(const Stats& stats,
+                             const std::vector<Eigen::MatrixXd>& Ws,
+                             const Eigen::MatrixXd& Delta_full) {
+  std::vector<WeightedMomentBlock> blocks;
+  blocks.reserve(stats.R.size());
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index mb = ordinal_sandwich_block_rows(stats, b);
+    blocks.push_back(WeightedMomentBlock{
+        .jacobian = Delta_full.block(off, 0, mb, Delta_full.cols()),
+        .weight = Ws[b],
+        .gamma = stats.NACOV[b],
+        .n_obs = stats.n_obs[b]});
+    off += mb;
+  }
+  if (off != Delta_full.rows()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal robust score tests: moment Jacobian row count does not match "
+        "the block layout"));
+  }
+  return weighted_param_space_sandwich(blocks);
+}
+
+template <class Stats>
+post_expected<void> require_single_group_ordinal(const Stats& stats) {
+  if (stats.R.size() != 1) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal robust score tests: only single-group models are supported "
+        "(v1)"));
+  }
+  return {};
+}
+
+template <class Stats, class ResidualFn, class JacobianFn,
+          class MomentJacobianFn, class PrepareFn>
+post_expected<inference::ScoreTestTable>
+ordinal_modification_indices_robust_impl(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const Stats& stats,
+    const Estimates& est,
+    OrdinalWeightKind weights,
+    const inference::ModificationIndexOptions& options,
+    ResidualFn residual_fn,
+    JacobianFn jacobian_fn,
+    MomentJacobianFn moment_jacobian_fn,
+    PrepareFn prepare_fn) {
+  if (auto g = require_single_group_ordinal(stats); !g.has_value()) {
+    return std::unexpected(g.error());
+  }
+  if (auto v = validate_ordinal_nacov(stats); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  auto work = prepare_ordinal_modification_index_model(std::move(pt), rep,
+                                                       options);
+  if (!work.has_value()) return std::unexpected(work.error());
+
+  if (auto v = validate_stats(stats, work->rep, weights); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (auto p = prepare_fn(work->pt, stats); !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != work->pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal robust modification indices: fitted theta length does not "
+        "match delta partable"));
+  }
+  auto con0 = build_eq_constraints(work->pt);
+  if (!con0.has_value()) return std::unexpected(con0.error());
+  auto N_or = total_n_obs(stats);
+  if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
+  const double n_total = static_cast<double>(*N_or);
+  auto Ws = ordinal_sandwich_weights(stats, weights);
+  if (!Ws.has_value()) return std::unexpected(Ws.error());
+
+  inference::ScoreTestTable table;
+  for (std::size_t row = 0; row < work->pt.size(); ++row) {
+    if (!ordinal_fixed_candidate(work->pt, work->rep, row)) continue;
+    spec::LatentStructure aug = work->pt;
+    const double fixed_value = aug.fixed_value[row];
+    const std::int32_t old_n = aug.n_free();
+    aug.free[row] = old_n + 1;
+    aug.fixed_value[row] = std::numeric_limits<double>::quiet_NaN();
+    ordinal_add_free_group(aug, old_n);
+
+    Eigen::VectorXd theta(est.theta.size() + 1);
+    if (est.theta.size() > 0) theta.head(est.theta.size()) = est.theta;
+    theta(est.theta.size()) = fixed_value;
+
+    auto layout = make_threshold_layout(aug, work->rep, stats);
+    if (!layout.has_value()) return std::unexpected(fit_to_post(layout.error()));
+    auto factors = weight_factors(stats, weights);
+    if (!factors.has_value()) return std::unexpected(fit_to_post(factors.error()));
+    auto ev = model::ModelEvaluator::build(aug, work->rep);
+    if (!ev.has_value()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ordinal robust modification indices: ModelEvaluator::build failed: " +
+              ev.error().detail));
+    }
+    auto eval = ev->evaluate(theta, true, true);
+    if (!eval.has_value()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ordinal robust modification indices: fitted evaluation failed: " +
+              eval.error().detail));
+    }
+    auto r = residual_fn(stats, *layout, eval->moments, *factors, theta);
+    if (!r.has_value()) return std::unexpected(fit_to_post(r.error()));
+    auto J = jacobian_fn(stats, *layout, eval->moments, eval->J_sigma,
+                         eval->J_mu, *factors, theta);
+    if (!J.has_value()) return std::unexpected(fit_to_post(J.error()));
+
+    const Eigen::MatrixXd Delta_full = moment_jacobian_fn(
+        stats, *layout, eval->moments, eval->J_sigma, eval->J_mu, theta);
+    auto sw = ordinal_param_space_sandwich(stats, *Ws, Delta_full);
+    if (!sw.has_value()) return std::unexpected(sw.error());
+
+    const bool generated_absent = row >= work->original_rows;
+    // lavaan scores generated all-ordinal absent rows on the single-counted
+    // moment scale; explicit fixed partable rows retain the fixed-row scale.
+    const double moment_scale =
+        (generated_absent && std::is_same_v<Stats, data::OrdinalStats>)
+            ? 1.0
+            : 2.0;
+    const Eigen::VectorXd score =
+        -moment_scale * n_total * (J->transpose() * *r);
+    Eigen::MatrixXd info = moment_scale * n_total * (J->transpose() * *J);
+    info = 0.5 * (info + info.transpose());
+
+    Eigen::VectorXd direction = Eigen::VectorXd::Zero(score.size());
+    direction(score.size() - 1) = 1.0;
+    inference::ScoreCandidate cand;
+    cand.kind = inference::ScoreCandidateKind::FixedParam;
+    cand.row = row;
+    cand.op = work->pt.op[row];
+    cand.lhs_var = work->pt.lhs_var[row];
+    cand.rhs_var = work->pt.rhs_var[row];
+    cand.group = work->pt.group[row];
+    Eigen::MatrixXd K_aug = Eigen::MatrixXd::Zero(score.size(), con0->K().cols());
+    if (con0->K().rows() > 0) K_aug.topRows(con0->K().rows()) = con0->K();
+    auto res = inference::frontier::score_for_direction_robust(
+        cand, score, info, sw->A1, sw->B1, K_aug, direction);
+    if (res.has_value()) table.rows.push_back(*res);
+  }
+  return table;
+}
+
+template <class Stats, class ResidualFn, class JacobianFn,
+          class MomentJacobianFn, class PrepareFn>
+post_expected<inference::ScoreTestTable>
+ordinal_score_tests_robust_impl(spec::LatentStructure pt,
+                                const model::MatrixRep& rep,
+                                const Stats& stats,
+                                const Estimates& est,
+                                OrdinalWeightKind weights,
+                                ResidualFn residual_fn,
+                                JacobianFn jacobian_fn,
+                                MomentJacobianFn moment_jacobian_fn,
+                                PrepareFn prepare_fn) {
+  if (auto g = require_single_group_ordinal(stats); !g.has_value()) {
+    return std::unexpected(g.error());
+  }
+  if (auto v = validate_ordinal_nacov(stats); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (auto p = prepare_fn(pt, stats); !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal robust score tests: fitted theta length does not match delta "
+        "partable"));
+  }
+  auto con = build_eq_constraints(pt);
+  if (!con.has_value()) return std::unexpected(con.error());
+  inference::ScoreTestTable table;
+  if (!con->active()) return table;
+  auto N_or = total_n_obs(stats);
+  if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
+  const double n_total = static_cast<double>(*N_or);
+  auto Ws = ordinal_sandwich_weights(stats, weights);
+  if (!Ws.has_value()) return std::unexpected(Ws.error());
+
+  auto layout = make_threshold_layout(pt, rep, stats);
+  if (!layout.has_value()) return std::unexpected(fit_to_post(layout.error()));
+  auto factors = weight_factors(stats, weights);
+  if (!factors.has_value()) return std::unexpected(fit_to_post(factors.error()));
+  auto ev = model::ModelEvaluator::build(pt, rep);
+  if (!ev.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal robust score tests: ModelEvaluator::build failed: " +
+            ev.error().detail));
+  }
+  auto eval = ev->evaluate(est.theta, true, true);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal robust score tests: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+  auto r = residual_fn(stats, *layout, eval->moments, *factors, est.theta);
+  if (!r.has_value()) return std::unexpected(fit_to_post(r.error()));
+  auto J = jacobian_fn(stats, *layout, eval->moments, eval->J_sigma,
+                       eval->J_mu, *factors, est.theta);
+  if (!J.has_value()) return std::unexpected(fit_to_post(J.error()));
+  const Eigen::VectorXd score = -n_total * (J->transpose() * *r);
+  Eigen::MatrixXd info = n_total * (J->transpose() * *J);
+  info = 0.5 * (info + info.transpose());
+
+  const Eigen::MatrixXd Delta_full = moment_jacobian_fn(
+      stats, *layout, eval->moments, eval->J_sigma, eval->J_mu, est.theta);
+  auto sw = ordinal_param_space_sandwich(stats, *Ws, Delta_full);
+  if (!sw.has_value()) return std::unexpected(sw.error());
+
+  for (Eigen::Index row = 0; row < con->A_eq.rows(); ++row) {
+    auto d = ordinal_release_direction(*con, row);
+    if (!d.has_value()) return std::unexpected(d.error());
+    inference::ScoreCandidate cand;
+    cand.kind = inference::ScoreCandidateKind::EqualityRelease;
+    cand.row = static_cast<std::size_t>(row);
+    cand.op = parse::Op::EqConstraint;
+    auto res = inference::frontier::score_for_direction_robust(
+        cand, score, info, sw->A1, sw->B1, con->K(), *d);
+    if (res.has_value()) table.rows.push_back(*res);
+  }
+  return table;
+}
+
 post_expected<measures::BaselineFit>
 ordinal_baseline_chi2(const data::OrdinalStats& stats,
                       OrdinalWeightKind weights) {
@@ -3603,6 +3917,157 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
   return ordinal_score_tests_impl(std::move(pt), rep, stats, est, weights,
                                   residual_fn, jacobian_fn, prepare_fn);
 }
+
+namespace frontier {
+
+namespace {
+
+// The (residual, jacobian, moment-jacobian, prepare) lambdas for the robust
+// sweeps, binding the parameterization exactly like the non-robust wrappers
+// above. The moment-jacobian lambda produces the UNWHITENED Δ the sandwich
+// blocks contract against. Returned as a struct of lambdas so the MI and
+// score-test wrappers share one definition per stats type.
+auto ordinal_robust_handles(OrdinalParameterization parameterization) {
+  auto residual = [parameterization](const data::OrdinalStats& s,
+                                     const ThresholdLayout& layout,
+                                     const model::ImpliedMoments& moments,
+                                     const std::vector<Eigen::MatrixXd>& factors,
+                                     const Eigen::VectorXd& theta) {
+    return ordinal_residuals(s, layout, moments, factors, theta,
+                             parameterization);
+  };
+  auto jacobian = [parameterization](const data::OrdinalStats& s,
+                                     const ThresholdLayout& layout,
+                                     const model::ImpliedMoments& moments,
+                                     const Eigen::MatrixXd& J_sigma,
+                                     const Eigen::MatrixXd&,
+                                     const std::vector<Eigen::MatrixXd>& factors,
+                                     const Eigen::VectorXd& theta) {
+    return ordinal_jacobian(s, layout, moments, J_sigma, factors, theta,
+                            parameterization);
+  };
+  auto moment_jacobian = [parameterization](const data::OrdinalStats& s,
+                                            const ThresholdLayout& layout,
+                                            const model::ImpliedMoments& moments,
+                                            const Eigen::MatrixXd& J_sigma,
+                                            const Eigen::MatrixXd&,
+                                            const Eigen::VectorXd& theta) {
+    return ordinal_moment_jacobian(s, layout, moments, J_sigma, theta,
+                                   parameterization);
+  };
+  auto prepare = [](spec::LatentStructure& p, const data::OrdinalStats& s) {
+    return prepare_ordinal_delta_partable(p, s, nullptr);
+  };
+  struct Handles {
+    decltype(residual) residual;
+    decltype(jacobian) jacobian;
+    decltype(moment_jacobian) moment_jacobian;
+    decltype(prepare) prepare;
+  };
+  return Handles{std::move(residual), std::move(jacobian),
+                 std::move(moment_jacobian), std::move(prepare)};
+}
+
+auto mixed_ordinal_robust_handles(OrdinalParameterization parameterization) {
+  auto residual = [parameterization](const data::MixedOrdinalStats& s,
+                                     const ThresholdLayout& layout,
+                                     const model::ImpliedMoments& moments,
+                                     const std::vector<Eigen::MatrixXd>& factors,
+                                     const Eigen::VectorXd& theta) {
+    return mixed_ordinal_residuals(s, layout, moments, factors, theta,
+                                   parameterization);
+  };
+  auto jacobian = [parameterization](const data::MixedOrdinalStats& s,
+                                     const ThresholdLayout& layout,
+                                     const model::ImpliedMoments& moments,
+                                     const Eigen::MatrixXd& J_sigma,
+                                     const Eigen::MatrixXd& J_mu,
+                                     const std::vector<Eigen::MatrixXd>& factors,
+                                     const Eigen::VectorXd& theta) {
+    return mixed_ordinal_jacobian(s, layout, moments, J_sigma, J_mu, factors,
+                                  theta, parameterization);
+  };
+  auto moment_jacobian = [parameterization](const data::MixedOrdinalStats& s,
+                                            const ThresholdLayout& layout,
+                                            const model::ImpliedMoments& moments,
+                                            const Eigen::MatrixXd& J_sigma,
+                                            const Eigen::MatrixXd& J_mu,
+                                            const Eigen::VectorXd& theta) {
+    return mixed_moment_jacobian(s, layout, moments, J_sigma, J_mu, theta,
+                                 parameterization);
+  };
+  auto prepare = [](spec::LatentStructure& p, const data::MixedOrdinalStats& s) {
+    return prepare_mixed_ordinal_delta_partable(p, s, nullptr);
+  };
+  struct Handles {
+    decltype(residual) residual;
+    decltype(jacobian) jacobian;
+    decltype(moment_jacobian) moment_jacobian;
+    decltype(prepare) prepare;
+  };
+  return Handles{std::move(residual), std::move(jacobian),
+                 std::move(moment_jacobian), std::move(prepare)};
+}
+
+}  // namespace
+
+post_expected<inference::ScoreTestTable>
+modification_indices_ordinal_robust(spec::LatentStructure pt,
+                                    const model::MatrixRep& rep,
+                                    const data::OrdinalStats& stats,
+                                    const Estimates& est,
+                                    OrdinalWeightKind weights,
+                                    const inference::ModificationIndexOptions&
+                                        options,
+                                    OrdinalParameterization parameterization) {
+  auto h = ordinal_robust_handles(parameterization);
+  return ordinal_modification_indices_robust_impl(
+      std::move(pt), rep, stats, est, weights, options, h.residual, h.jacobian,
+      h.moment_jacobian, h.prepare);
+}
+
+post_expected<inference::ScoreTestTable>
+score_tests_ordinal_robust(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::OrdinalStats& stats,
+                           const Estimates& est,
+                           OrdinalWeightKind weights,
+                           OrdinalParameterization parameterization) {
+  auto h = ordinal_robust_handles(parameterization);
+  return ordinal_score_tests_robust_impl(std::move(pt), rep, stats, est,
+                                         weights, h.residual, h.jacobian,
+                                         h.moment_jacobian, h.prepare);
+}
+
+post_expected<inference::ScoreTestTable>
+modification_indices_mixed_ordinal_robust(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& est,
+    OrdinalWeightKind weights,
+    const inference::ModificationIndexOptions& options,
+    OrdinalParameterization parameterization) {
+  auto h = mixed_ordinal_robust_handles(parameterization);
+  return ordinal_modification_indices_robust_impl(
+      std::move(pt), rep, stats, est, weights, options, h.residual, h.jacobian,
+      h.moment_jacobian, h.prepare);
+}
+
+post_expected<inference::ScoreTestTable>
+score_tests_mixed_ordinal_robust(spec::LatentStructure pt,
+                                 const model::MatrixRep& rep,
+                                 const data::MixedOrdinalStats& stats,
+                                 const Estimates& est,
+                                 OrdinalWeightKind weights,
+                                 OrdinalParameterization parameterization) {
+  auto h = mixed_ordinal_robust_handles(parameterization);
+  return ordinal_score_tests_robust_impl(std::move(pt), rep, stats, est,
+                                         weights, h.residual, h.jacobian,
+                                         h.moment_jacobian, h.prepare);
+}
+
+}  // namespace frontier
 
 namespace {
 

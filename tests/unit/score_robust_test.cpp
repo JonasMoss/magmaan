@@ -8,13 +8,17 @@
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
 
+#include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
+#include "magmaan/estimate/gmm/moment_quadratic.hpp"
+#include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/inference/score.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/robust/robust.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/spec/build.hpp"
 
 // Unit tests for the robust (generalized / SB-scaled) score & modification-index
@@ -340,4 +344,379 @@ TEST_CASE("frontier robust MI: empirical raw-data path scales on non-normal data
     CHECK(std::abs(rob_raw->rows[i].scaling_factor -
                    rob_gh->rows[i].scaling_factor) < 1e-8);
   }
+}
+
+// ── Continuous-LS tier ────────────────────────────────────────────────────────
+// The exact-reduction anchor for the LS sandwich: the GLS weight is Γ_NT(S)⁻¹
+// (the ½ lives inside `normal_theory_weight`), so the model-implied meat under
+// WeightMoments::Unstructured gives B1 = Δ'WΓ_NT(S)WΔ = Δ'WΔ = A1 and c ≡ 1.
+
+TEST_CASE("frontier robust LS MI: GLS weight + Gamma_NT(S) meat reduces to NT") {
+  auto h = build("f =~ x1 + x2 + x3 + x4\nx1 ~~ 0*x2");
+  SampleStats samp;
+  samp.S = {four_indicator_sample_cov()};
+  samp.n_obs = {400};
+  auto est = magmaan::test::fit_gls(h.pt, h.rep, samp);
+  REQUIRE(est.has_value());
+
+  auto ev = magmaan::model::ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  auto weight = magmaan::estimate::gmm::normal_theory_weight(*ev, samp,
+                                                             est->theta);
+  REQUIRE(weight.has_value());
+
+  inf::ModificationIndexOptions nt_opts;
+  nt_opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto nt = inf::modification_indices(h.pt, h.rep, samp, *est, *weight,
+                                      nt_opts);
+  REQUIRE(nt.has_value());
+
+  inf::frontier::RobustScoreOptions opts;
+  opts.spec.moments = rob::WeightMoments::Unstructured;  // Γ_NT(S) = W⁻¹
+  opts.base.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto rob_mi = inf::frontier::modification_indices_robust(h.pt, h.rep, samp,
+                                                           *est, *weight, opts);
+  REQUIRE(rob_mi.has_value());
+
+  REQUIRE(rob_mi->rows.size() == nt->rows.size());
+  REQUIRE(rob_mi->rows.size() > 1);
+  for (std::size_t i = 0; i < rob_mi->rows.size(); ++i) {
+    const auto& r = rob_mi->rows[i];
+    const auto& n = nt->rows[i];
+    CHECK(std::abs(r.mi - n.mi) < 1e-9 * (1.0 + std::abs(n.mi)));
+    CHECK(std::abs(r.scaling_factor - 1.0) < 1e-7);
+    CHECK(std::abs(r.mi_scaled - r.mi) < 1e-7 * (1.0 + std::abs(r.mi)));
+  }
+}
+
+TEST_CASE("frontier robust LS score test: GLS equality release reduces to NT") {
+  auto h = build("f =~ x1 + a*x2 + b*x3 + x4\na == b");
+  SampleStats samp;
+  samp.S = {four_indicator_sample_cov()};
+  samp.n_obs = {400};
+  auto est = magmaan::test::fit_gls(h.pt, h.rep, samp);
+  REQUIRE(est.has_value());
+
+  auto ev = magmaan::model::ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  auto weight = magmaan::estimate::gmm::normal_theory_weight(*ev, samp,
+                                                             est->theta);
+  REQUIRE(weight.has_value());
+
+  auto nt = inf::score_tests(h.pt, h.rep, samp, *est, *weight);
+  REQUIRE(nt.has_value());
+  REQUIRE(nt->rows.size() == 1);
+
+  inf::frontier::RobustScoreOptions opts;
+  opts.spec.moments = rob::WeightMoments::Unstructured;
+  auto rob_st = inf::frontier::score_tests_robust(h.pt, h.rep, samp, *est,
+                                                  *weight, opts);
+  REQUIRE(rob_st.has_value());
+  REQUIRE(rob_st->rows.size() == 1);
+
+  const auto& r = rob_st->rows[0];
+  const auto& n = nt->rows[0];
+  CHECK(std::abs(r.mi - n.mi) < 1e-9 * (1.0 + std::abs(n.mi)));
+  CHECK(std::abs(r.scaling_factor - 1.0) < 1e-7);
+  CHECK(std::abs(r.mi_scaled - n.mi) < 1e-7 * (1.0 + std::abs(n.mi)));
+}
+
+TEST_CASE("frontier robust LS MI: DWLS raw path scales; sandwich matches primitives") {
+  auto h = build("f =~ x1 + x2 + x3 + x4\nx1 ~~ 0*x2");
+  std::mt19937 rng(20260612u);
+  const Eigen::Matrix4d Sigma = four_indicator_sample_cov();
+  magmaan::data::RawData raw;
+  raw.X.push_back(multivariate_t_sample(rng, 2500, Sigma, 7.0));
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+
+  // Diagonal-ADF (continuous DWLS) weight: W = diag(Γ̂)⁻¹, so W ≠ Γ̂⁻¹ and the
+  // robust scaling is genuinely ≠ 1.
+  auto G = magmaan::data::empirical_gamma(raw.X[0]);
+  REQUIRE(G.has_value());
+  Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(G->rows(), G->cols());
+  for (Eigen::Index k = 0; k < G->rows(); ++k) W_dwls(k, k) = 1.0 / (*G)(k, k);
+  magmaan::estimate::gmm::Weight weight{W_dwls};
+
+  auto est = magmaan::test::fit_gmm(h.pt, h.rep, *samp, weight);
+  REQUIRE(est.has_value());
+
+  inf::frontier::RobustScoreOptions opts;
+  opts.base.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto rob_raw = inf::frontier::modification_indices_robust(
+      h.pt, h.rep, *samp, raw, *est, weight, opts);
+  REQUIRE(rob_raw.has_value());
+  REQUIRE(rob_raw->rows.size() > 1);
+  bool any_scaled = false;
+  for (const auto& r : rob_raw->rows) {
+    CHECK(std::isfinite(r.scaling_factor));
+    CHECK(r.scaling_factor > 0.0);
+    CHECK(std::isfinite(r.mi_scaled));
+    CHECK(r.mi_scaled >= 0.0);
+    if (std::abs(r.scaling_factor - 1.0) > 0.03) any_scaled = true;
+  }
+  CHECK(any_scaled);
+
+  // Raw casewise Γ̂ equals feeding the same empirical Γ̂ block explicitly.
+  std::vector<Eigen::MatrixXd> gamma_blocks{*G};
+  auto rob_gh = inf::frontier::modification_indices_robust(
+      h.pt, h.rep, *samp, gamma_blocks, *est, weight, opts);
+  REQUIRE(rob_gh.has_value());
+  REQUIRE(rob_gh->rows.size() == rob_raw->rows.size());
+  for (std::size_t i = 0; i < rob_raw->rows.size(); ++i) {
+    CHECK(std::abs(rob_raw->rows[i].scaling_factor -
+                   rob_gh->rows[i].scaling_factor) < 1e-8);
+  }
+
+  // Independent re-derivation of the moment-metric sandwich from primitives.
+  auto sw = magmaan::estimate::continuous_ls_param_space_sandwich(
+      h.pt, h.rep, *samp, *est, weight, gamma_blocks);
+  REQUIRE(sw.has_value());
+  auto ev = magmaan::model::ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  auto Delta = ev->dsigma_dtheta(est->theta);
+  REQUIRE(Delta.has_value());
+  const Eigen::MatrixXd A1_ref = Delta->transpose() * W_dwls * (*Delta);
+  const Eigen::MatrixXd B1_ref =
+      Delta->transpose() * W_dwls * (*G) * W_dwls * (*Delta);
+  CHECK((sw->A1 - A1_ref).norm() < 1e-8 * (1.0 + A1_ref.norm()));
+  CHECK((sw->B1 - B1_ref).norm() < 1e-8 * (1.0 + B1_ref.norm()));
+}
+
+// ── Ordinal tier ─────────────────────────────────────────────────────────────
+// The exact-reduction anchor: the full-WLS weight is the NACOV inverse, so the
+// NACOV meat collapses onto the bread (c ≡ 1) and the robust statistic equals
+// the ordinary one.
+
+namespace {
+
+Eigen::MatrixXd ordinal_three_cat_sample(std::mt19937& rng, Eigen::Index n) {
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(n, 4);
+  const double loading[4] = {0.88, 0.80, 0.72, 0.64};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.50) + (y > 0.45);
+    }
+  }
+  return X;
+}
+
+constexpr const char* ordinal_cfa_syntax =
+    "f =~ x1 + x2 + x3 + x4\n"
+    "x1 | t1 + t2\n"
+    "x2 | t1 + t2\n"
+    "x3 | t1 + t2\n"
+    "x4 | t1 + t2\n"
+    "x1 ~*~ 1*x1\n"
+    "x2 ~*~ 1*x2\n"
+    "x3 ~*~ 1*x3\n"
+    "x4 ~*~ 1*x4\n";
+
+constexpr const char* ordinal_cfa_eq_syntax =
+    "f =~ x1 + a*x2 + b*x3 + x4\n"
+    "x1 | t1 + t2\n"
+    "x2 | t1 + t2\n"
+    "x3 | t1 + t2\n"
+    "x4 | t1 + t2\n"
+    "x1 ~*~ 1*x1\n"
+    "x2 ~*~ 1*x2\n"
+    "x3 ~*~ 1*x3\n"
+    "x4 ~*~ 1*x4\n"
+    "a == b\n";
+
+}  // namespace
+
+TEST_CASE("frontier robust ordinal MI: WLS + NACOV meat reduces to ordinary") {
+  std::mt19937 rng(20260612u);
+  auto stats =
+      magmaan::data::ordinal_stats_from_integer_data({ordinal_three_cat_sample(rng, 700)});
+  REQUIRE(stats.has_value());
+  auto h = build(ordinal_cfa_syntax);
+  auto est = magmaan::test::fit_ordinal_bounded(
+      h.pt, h.rep, *stats, {}, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE(est.has_value());
+
+  inf::ModificationIndexOptions mi_opts;
+  mi_opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto nt = magmaan::estimate::modification_indices_ordinal(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS,
+      mi_opts);
+  REQUIRE(nt.has_value());
+  auto rob = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS,
+      mi_opts);
+  REQUIRE(rob.has_value());
+
+  REQUIRE(rob->rows.size() == nt->rows.size());
+  REQUIRE(rob->rows.size() > 1);
+  for (std::size_t i = 0; i < rob->rows.size(); ++i) {
+    const auto& r = rob->rows[i];
+    const auto& n = nt->rows[i];
+    CHECK(std::abs(r.mi - n.mi) < 1e-9 * (1.0 + std::abs(n.mi)));
+    CHECK(std::abs(r.scaling_factor - 1.0) < 1e-6);
+    CHECK(std::abs(r.mi_scaled - r.mi) < 1e-6 * (1.0 + std::abs(r.mi)));
+  }
+}
+
+TEST_CASE("frontier robust ordinal score test: WLS equality release reduces") {
+  std::mt19937 rng(20260613u);
+  auto stats =
+      magmaan::data::ordinal_stats_from_integer_data({ordinal_three_cat_sample(rng, 700)});
+  REQUIRE(stats.has_value());
+  auto h = build(ordinal_cfa_eq_syntax);
+  auto est = magmaan::test::fit_ordinal_bounded(
+      h.pt, h.rep, *stats, {}, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE(est.has_value());
+
+  auto nt = magmaan::estimate::score_tests_ordinal(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE(nt.has_value());
+  REQUIRE(nt->rows.size() == 1);
+  auto rob = magmaan::estimate::frontier::score_tests_ordinal_robust(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE(rob.has_value());
+  REQUIRE(rob->rows.size() == 1);
+
+  const auto& r = rob->rows[0];
+  const auto& n = nt->rows[0];
+  CHECK(std::abs(r.mi - n.mi) < 1e-9 * (1.0 + std::abs(n.mi)));
+  CHECK(std::abs(r.scaling_factor - 1.0) < 1e-6);
+  CHECK(std::abs(r.mi_scaled - n.mi) < 1e-6 * (1.0 + std::abs(n.mi)));
+}
+
+TEST_CASE("frontier robust ordinal MI: DWLS scales against the NACOV meat") {
+  std::mt19937 rng(20260614u);
+  auto stats =
+      magmaan::data::ordinal_stats_from_integer_data({ordinal_three_cat_sample(rng, 700)});
+  REQUIRE(stats.has_value());
+  auto h = build(ordinal_cfa_syntax);
+  auto est = magmaan::test::fit_ordinal_bounded(
+      h.pt, h.rep, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(est.has_value());
+
+  inf::ModificationIndexOptions mi_opts;
+  mi_opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto nt = magmaan::estimate::modification_indices_ordinal(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::DWLS,
+      mi_opts);
+  REQUIRE(nt.has_value());
+  auto rob = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::DWLS,
+      mi_opts);
+  REQUIRE(rob.has_value());
+  REQUIRE(rob->rows.size() == nt->rows.size());
+  REQUIRE(rob->rows.size() > 1);
+
+  bool any_scaled = false;
+  for (std::size_t i = 0; i < rob->rows.size(); ++i) {
+    const auto& r = rob->rows[i];
+    // NT component identical to the non-robust ordinal sweep.
+    CHECK(std::abs(r.mi - nt->rows[i].mi) <
+          1e-9 * (1.0 + std::abs(nt->rows[i].mi)));
+    CHECK(std::isfinite(r.scaling_factor));
+    CHECK(r.scaling_factor > 0.0);
+    CHECK(std::isfinite(r.mi_scaled));
+    if (std::abs(r.scaling_factor - 1.0) > 0.01) any_scaled = true;
+  }
+  CHECK(any_scaled);
+
+  // ULS rides the identity weight against the same NACOV meat (ULSMV-style).
+  auto est_uls = magmaan::test::fit_ordinal_bounded(
+      h.pt, h.rep, *stats, {}, magmaan::estimate::OrdinalWeightKind::ULS);
+  REQUIRE(est_uls.has_value());
+  auto rob_uls = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+      h.pt, h.rep, *stats, *est_uls, magmaan::estimate::OrdinalWeightKind::ULS,
+      mi_opts);
+  REQUIRE(rob_uls.has_value());
+  for (const auto& r : rob_uls->rows) {
+    CHECK(std::isfinite(r.scaling_factor));
+    CHECK(r.scaling_factor > 0.0);
+  }
+
+  // Missing NACOV is a hard error, not a silent NT fallback.
+  auto stats_no_nacov = *stats;
+  stats_no_nacov.NACOV.clear();
+  auto rob_missing =
+      magmaan::estimate::frontier::modification_indices_ordinal_robust(
+          h.pt, h.rep, stats_no_nacov, *est,
+          magmaan::estimate::OrdinalWeightKind::DWLS, mi_opts);
+  CHECK_FALSE(rob_missing.has_value());
+}
+
+TEST_CASE("frontier robust mixed ordinal: WLS reduces, DWLS finite, ULS rejected") {
+  std::mt19937 rng(20260615u);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(800, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    // x1 ordinal (3 categories), x2 binary, x3/x4 continuous.
+    X(i, 0) = 1.0 + (eta > -0.6) + (eta > 0.4);
+    X(i, 1) = 1.0 + (0.65 * eta + 0.76 * norm(rng) > 0.1);
+    X(i, 2) = 0.80 * eta + 0.60 * norm(rng) + 0.2;
+    X(i, 3) = 0.70 * eta + 0.71 * norm(rng) - 0.1;
+  }
+  const std::vector<std::vector<std::int32_t>> ordered = {{1, 1, 0, 0}};
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data({X}, ordered);
+  REQUIRE(stats.has_value());
+
+  auto fp = Parser::parse(
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n");
+  REQUIRE(fp.has_value());
+  magmaan::spec::BuildOptions build_opts;
+  build_opts.meanstructure = true;
+  auto pt = magmaan::spec::build(*fp, build_opts);
+  REQUIRE(pt.has_value());
+  auto rep = build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+  Handles h{std::move(*pt), std::move(*rep)};
+
+  auto est = magmaan::test::fit_mixed_ordinal_bounded(
+      h.pt, h.rep, *stats, {}, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE(est.has_value());
+
+  inf::ModificationIndexOptions mi_opts;
+  mi_opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto nt = magmaan::estimate::modification_indices_mixed_ordinal(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS,
+      mi_opts);
+  REQUIRE(nt.has_value());
+  auto rob =
+      magmaan::estimate::frontier::modification_indices_mixed_ordinal_robust(
+          h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS,
+          mi_opts);
+  REQUIRE(rob.has_value());
+  REQUIRE(rob->rows.size() == nt->rows.size());
+  REQUIRE(rob->rows.size() > 0);
+  for (std::size_t i = 0; i < rob->rows.size(); ++i) {
+    CHECK(std::abs(rob->rows[i].mi - nt->rows[i].mi) <
+          1e-9 * (1.0 + std::abs(nt->rows[i].mi)));
+    CHECK(std::abs(rob->rows[i].scaling_factor - 1.0) < 1e-6);
+  }
+
+  auto est_dwls = magmaan::test::fit_mixed_ordinal_bounded(
+      h.pt, h.rep, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(est_dwls.has_value());
+  auto rob_dwls =
+      magmaan::estimate::frontier::modification_indices_mixed_ordinal_robust(
+          h.pt, h.rep, *stats, *est_dwls,
+          magmaan::estimate::OrdinalWeightKind::DWLS, mi_opts);
+  REQUIRE(rob_dwls.has_value());
+  for (const auto& r : rob_dwls->rows) {
+    CHECK(std::isfinite(r.scaling_factor));
+    CHECK(r.scaling_factor > 0.0);
+  }
+
+  auto rob_uls =
+      magmaan::estimate::frontier::modification_indices_mixed_ordinal_robust(
+          h.pt, h.rep, *stats, *est_dwls,
+          magmaan::estimate::OrdinalWeightKind::ULS, mi_opts);
+  CHECK_FALSE(rob_uls.has_value());
 }
