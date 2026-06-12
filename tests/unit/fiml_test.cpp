@@ -333,6 +333,76 @@ TEST_CASE("FIML: analytic gradient matches finite differences") {
   CHECK(diff < 1e-5);
 }
 
+namespace {
+
+// Analytic-vs-FD comparator for the observed FIML information. Evaluating at
+// an arbitrary (non-optimal) θ exercises the second-order chain-rule term
+// hardest: away from the optimum the pattern-aggregated moment gradient that
+// contracts with ∂²Σ/∂θ_a∂θ_b and ∂²μ/∂θ_a∂θ_b is far from zero.
+void check_fiml_observed_information_analytic_vs_fd(
+    const BuiltModel& built,
+    const magmaan::data::RawData& raw,
+    const Eigen::VectorXd& theta) {
+  magmaan::estimate::Estimates est;
+  est.theta = theta;
+
+  auto an = magmaan::estimate::fiml::fiml_observed_information(
+      *built.pt, *built.rep, raw, est);
+  REQUIRE_MESSAGE(an.has_value(),
+      "analytic observed information failed: "
+          << (an.has_value() ? "" : an.error().detail));
+  auto fd = magmaan::estimate::fiml::diagnostic::fiml_observed_information_fd(
+      *built.pt, *built.rep, raw, est);
+  REQUIRE_MESSAGE(fd.has_value(),
+      "FD observed information failed: "
+          << (fd.has_value() ? "" : fd.error().detail));
+
+  CHECK((*an - an->transpose()).cwiseAbs().maxCoeff() < 1e-9);
+  const double scale = std::max(1.0, fd->cwiseAbs().maxCoeff());
+  INFO("max rel diff = ", (*an - *fd).cwiseAbs().maxCoeff() / scale);
+  CHECK((*an - *fd).cwiseAbs().maxCoeff() / scale < 1e-6);
+}
+
+Eigen::VectorXd perturbed_theta(const Eigen::VectorXd& theta0) {
+  Eigen::VectorXd theta = theta0;
+  for (Eigen::Index k = 0; k < theta.size(); ++k) {
+    theta(k) += 0.04 * std::sin(1.0 + static_cast<double>(k));
+  }
+  return theta;
+}
+
+}  // namespace
+
+TEST_CASE("fiml_observed_information: analytic matches FD for a mean CFA") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.55);
+  const auto raw = model_missing_raw(built, theta0, {120});
+  check_fiml_observed_information_analytic_vs_fd(built, raw,
+                                                 perturbed_theta(theta0));
+}
+
+TEST_CASE("fiml_observed_information: analytic matches FD with structural "
+          "latent means") {
+  // y ~ f exercises the Β second-derivative paths (Λ-Β, Ψ-Β, Β-Β), and the
+  // free latent mean f ~ 1 turns on the mean-map curvature (Λ-α, α-Β, Β-Β).
+  auto built = build_mean_model("f =~ x1 + x2 + x3\ny ~ f\nf ~ 1");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.55);
+  const auto raw = model_missing_raw(built, theta0, {130});
+  check_fiml_observed_information_analytic_vs_fd(built, raw,
+                                                 perturbed_theta(theta0));
+}
+
+TEST_CASE("fiml_observed_information: analytic matches FD multi-group") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4", 2);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.55);
+  const auto raw = model_missing_raw(built, theta0, {70, 90});
+  check_fiml_observed_information_analytic_vs_fd(built, raw,
+                                                 perturbed_theta(theta0));
+}
+
 TEST_CASE("fit_fiml: complete-data path fits a saturated mean CFA near zero gradient") {
   auto built = build_mean_model("f =~ x1 + x2 + x3");
 

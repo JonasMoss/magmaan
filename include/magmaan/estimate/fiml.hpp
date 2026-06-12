@@ -190,10 +190,14 @@ fiml_extras(spec::LatentStructure pt,
 
 // Observed FIML information matrix — the npar × npar `−∂²logl/∂θ²` for a
 // continuous raw-data FIML fit, computed as `(N/2)·H` where `H` is the
-// finite-difference Hessian of the per-observation-averaged deviance. Its
-// inverse (via `inference::vcov`, which folds in any equality constraints) is
-// the *non-robust* missing-data standard error — the `se = "standard"`
-// counterpart to `fiml_robust_mlr`'s sandwich SEs.
+// analytic Hessian of the per-observation-averaged deviance: the per-pattern
+// moment-space Hessian chained through the model Jacobian, plus the
+// pattern-aggregated moment gradient contracted with the closed-form LISREL
+// second derivatives. Its inverse (via `inference::vcov`, which folds in any
+// equality constraints) is the *non-robust* missing-data standard error — the
+// `se = "standard"` counterpart to `fiml_robust_mlr`'s sandwich SEs. `h_step`
+// is retained for source compatibility and validated when supplied, but no
+// longer tunes the Hessian.
 post_expected<Eigen::MatrixXd>
 fiml_observed_information(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
@@ -204,8 +208,8 @@ fiml_observed_information(spec::LatentStructure pt,
 
 // Robust missing-data reporting for lavaan's continuous FIML MLR corner
 // (`missing = "fiml", estimator = "MLR"`). The sandwich meat is built from
-// observed-pattern casewise deviance gradients, and the bread is a
-// finite-difference observed FIML Hessian.
+// observed-pattern casewise deviance gradients, and the bread is the analytic
+// observed FIML Hessian (`h_step` retained for source compatibility only).
 post_expected<FIMLRobustMLR>
 fiml_robust_mlr(spec::LatentStructure pt,
                 const model::MatrixRep& rep,
@@ -234,6 +238,18 @@ namespace diagnostic {
 // the analytic saturated information against the previous numeric route.
 post_expected<SaturatedMoments>
 saturated_em_moments_fd(const RawData& raw, double h_step = 1e-4);
+
+// Regression-only comparator for the old central-difference observed FIML
+// information path. Same contract as `fiml_observed_information`, but `H` is
+// the finite-difference Hessian of the analytic FIML gradient with step
+// `h_step`. Do not expose this on the R surface.
+post_expected<Eigen::MatrixXd>
+fiml_observed_information_fd(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const RawData& raw,
+                             const Estimates& est,
+                             FIML discrepancy = {},
+                             double h_step = 1e-4);
 
 }  // namespace diagnostic
 
