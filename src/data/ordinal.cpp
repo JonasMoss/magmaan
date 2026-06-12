@@ -393,18 +393,22 @@ repair_correlation_if_requested(
   return out;
 }
 
+double corner_rect_value(const Eigen::MatrixXd& grid,
+                         Eigen::Index a,
+                         Eigen::Index b) noexcept {
+  return grid(a + 1, b + 1) - grid(a, b + 1) - grid(a + 1, b) + grid(a, b);
+}
+
 Eigen::MatrixXd expected_pair_counts(double total,
                                      const Eigen::VectorXd& th_i,
                                      const Eigen::VectorXd& th_j,
                                      double rho) {
+  Eigen::MatrixXd cdf;
+  ordinal_bvn_corner_cdf(th_i, th_j, rho, cdf);
   Eigen::MatrixXd out(th_i.size() + 1, th_j.size() + 1);
   for (Eigen::Index a = 0; a < out.rows(); ++a) {
-    const double lo_i = (a == 0) ? -kInf : th_i(a - 1);
-    const double hi_i = (a + 1 == out.rows()) ? kInf : th_i(a);
     for (Eigen::Index c = 0; c < out.cols(); ++c) {
-      const double lo_j = (c == 0) ? -kInf : th_j(c - 1);
-      const double hi_j = (c + 1 == out.cols()) ? kInf : th_j(c);
-      out(a, c) = ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho);
+      out(a, c) = std::clamp(corner_rect_value(cdf, a, c), 0.0, 1.0);
     }
   }
   const double prob_sum = out.sum();
@@ -483,15 +487,13 @@ double shared_pair_objective(
     double rho,
     const SharedRobustOrdinalOptions& options) {
   const double total = counts.sum();
+  Eigen::MatrixXd cdf;
+  ordinal_bvn_corner_cdf(th_i, th_j, rho, cdf);
   double out = 0.0;
   for (Eigen::Index a = 0; a < counts.rows(); ++a) {
-    const double lo_i = (a == 0) ? -kInf : th_i(a - 1);
-    const double hi_i = (a + 1 == counts.rows()) ? kInf : th_i(a);
     for (Eigen::Index b = 0; b < counts.cols(); ++b) {
-      const double lo_j = (b == 0) ? -kInf : th_j(b - 1);
-      const double hi_j = (b + 1 == counts.cols()) ? kInf : th_j(b);
       const double p = std::max(
-          kProbFloor, ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho));
+          kProbFloor, std::clamp(corner_rect_value(cdf, a, b), 0.0, 1.0));
       const double f = counts(a, b) / total;
       if (options.kind == SharedRobustOrdinalKind::HWeighted) {
         auto h = eval_polychoric_h_score(f / p, options.h_score);

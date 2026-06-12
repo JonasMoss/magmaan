@@ -10,6 +10,8 @@
 
 #include "magmaan/error.hpp"
 
+#include "detail_rho_search.hpp"
+
 namespace magmaan::data {
 
 namespace {
@@ -133,6 +135,53 @@ double neglog_polyserial_unchecked(const Eigen::Ref<const Eigen::VectorXi>& cat,
   double out = 0.0;
   for (Eigen::Index i = 0; i < cat.size(); ++i) {
     out -= std::log(polyserial_prob_unchecked(cat(i), u(i), rho, th));
+  }
+  return out;
+}
+
+// First and second derivatives in rho of one conditional cell probability
+// boundary term phi(z_t) * dz_t/drho, with z_t = (t - rho*u)/s, s^2 = 1-rho^2.
+struct PolyserialBoundaryDerivs {
+  double d1 = 0.0;
+  double d2 = 0.0;
+};
+
+PolyserialBoundaryDerivs polyserial_boundary_derivs(
+    double t, double u, double rho, double sd, double s2) noexcept {
+  if (!std::isfinite(t)) return {};
+  const double z = (t - rho * u) / sd;
+  const double pz = normal_pdf(z);
+  const double s3 = sd * s2;
+  const double s5 = s3 * s2;
+  const double w = (rho * t - u) / s3;
+  const double wp = t / s3 + 3.0 * rho * (rho * t - u) / s5;
+  return {.d1 = pz * w, .d2 = pz * (wp - z * w * w)};
+}
+
+// First and second derivatives of the polyserial conditional negative
+// log-likelihood in rho. Floored rows contribute nothing, matching the flat
+// floored objective they would differentiate.
+detail::RhoScore polyserial_rho_score_unchecked(
+    const Eigen::Ref<const Eigen::VectorXi>& cat,
+    const Eigen::Ref<const Eigen::VectorXd>& u,
+    const Eigen::Ref<const Eigen::VectorXd>& th,
+    double rho) noexcept {
+  const double s2 = std::max(1e-12, 1.0 - rho * rho);
+  const double sd = std::sqrt(s2);
+  detail::RhoScore out;
+  for (Eigen::Index i = 0; i < cat.size(); ++i) {
+    const double lo = (cat(i) == 0) ? -kInf : th(cat(i) - 1);
+    const double hi = (cat(i) == th.size()) ? kInf : th(cat(i));
+    const double p = normal_cdf((hi - rho * u(i)) / sd) -
+                     normal_cdf((lo - rho * u(i)) / sd);
+    if (p <= kProbFloor) continue;
+    const auto top = polyserial_boundary_derivs(hi, u(i), rho, sd, s2);
+    const auto bot = polyserial_boundary_derivs(lo, u(i), rho, sd, s2);
+    const double dp = top.d1 - bot.d1;
+    const double d2p = top.d2 - bot.d2;
+    const double ratio = dp / p;
+    out.g -= ratio;
+    out.h -= d2p / p - ratio * ratio;
   }
   return out;
 }
@@ -796,31 +845,13 @@ fit_polyserial_pair_rho_ml(
   }
 
   PolyserialPairMlResult out;
-  double lo = options.rho_lower;
-  double hi = options.rho_upper;
-  constexpr double gr = 0.6180339887498948482;
-  double c = hi - gr * (hi - lo);
-  double d = lo + gr * (hi - lo);
-  double fc = neglog_polyserial_unchecked(categories, u, thresholds, c);
-  double fd = neglog_polyserial_unchecked(categories, u, thresholds, d);
-  const double tol = options.x_tol * std::max(1.0, hi - lo);
-  for (int iter = 0; iter < options.max_iter && (hi - lo) > tol; ++iter) {
-    if (fc < fd) {
-      hi = d;
-      d = c;
-      fd = fc;
-      c = hi - gr * (hi - lo);
-      fc = neglog_polyserial_unchecked(categories, u, thresholds, c);
-    } else {
-      lo = c;
-      c = d;
-      fc = fd;
-      d = lo + gr * (hi - lo);
-      fd = neglog_polyserial_unchecked(categories, u, thresholds, d);
-    }
-    out.iterations = iter + 1;
-  }
-  out.rho = 0.5 * (lo + hi);
+  const auto search = detail::newton_rho_search(
+      options.rho_lower, options.rho_upper, options.x_tol, options.max_iter,
+      [&](double r) {
+        return polyserial_rho_score_unchecked(categories, u, thresholds, r);
+      });
+  out.rho = search.rho;
+  out.iterations = search.iterations;
   out.negloglik = neglog_polyserial_unchecked(categories, u, thresholds, out.rho);
   const double width = options.rho_upper - options.rho_lower;
   out.hit_lower = std::abs(out.rho - options.rho_lower) <= 1e-8 * width;

@@ -13,6 +13,8 @@
 
 #include "magmaan/error.hpp"
 
+#include "detail_rho_search.hpp"
+
 namespace magmaan::data {
 
 namespace {
@@ -239,20 +241,56 @@ Eigen::MatrixXd adjusted_polychoric_table(const Eigen::MatrixXd& counts) {
   return out.cwiseMax(0.0);
 }
 
+double corner_rect_value(const Eigen::MatrixXd& grid,
+                         Eigen::Index a,
+                         Eigen::Index b) noexcept {
+  return grid(a + 1, b + 1) - grid(a, b + 1) - grid(a + 1, b) + grid(a, b);
+}
+
 double neglog_pair_unchecked(const Eigen::Ref<const Eigen::MatrixXd>& counts,
                              const Eigen::Ref<const Eigen::VectorXd>& th_i,
                              const Eigen::Ref<const Eigen::VectorXd>& th_j,
                              double rho) noexcept {
+  Eigen::MatrixXd cdf;
+  ordinal_bvn_corner_cdf(th_i, th_j, rho, cdf);
   double out = 0.0;
   for (Eigen::Index a = 0; a < counts.rows(); ++a) {
-    const double lo_i = (a == 0) ? -kInf : th_i(a - 1);
-    const double hi_i = (a + 1 == counts.rows()) ? kInf : th_i(a);
     for (Eigen::Index b = 0; b < counts.cols(); ++b) {
       const double n = counts(a, b);
       if (n <= 0.0) continue;
-      const double lo_j = (b == 0) ? -kInf : th_j(b - 1);
-      const double hi_j = (b + 1 == counts.cols()) ? kInf : th_j(b);
-      out -= n * std::log(floored_rect_prob(lo_i, hi_i, lo_j, hi_j, rho));
+      const double p = std::clamp(corner_rect_value(cdf, a, b), 0.0, 1.0);
+      out -= n * std::log(std::max(kProbFloor, p));
+    }
+  }
+  return out;
+}
+
+// First and second derivatives of the pair negative log-likelihood in rho,
+// from one shared corner-grid evaluation. Floored cells contribute nothing,
+// matching the flat floored objective they would differentiate.
+detail::RhoScore polychoric_rho_score_unchecked(
+    const Eigen::Ref<const Eigen::MatrixXd>& counts,
+    const Eigen::Ref<const Eigen::VectorXd>& th_i,
+    const Eigen::Ref<const Eigen::VectorXd>& th_j,
+    double rho) {
+  Eigen::MatrixXd cdf;
+  Eigen::MatrixXd pdf;
+  Eigen::MatrixXd pdf_drho;
+  ordinal_bvn_corner_cdf(th_i, th_j, rho, cdf);
+  ordinal_bvn_corner_pdf(th_i, th_j, rho, pdf);
+  ordinal_bvn_corner_pdf_drho(th_i, th_j, rho, pdf_drho);
+  detail::RhoScore out;
+  for (Eigen::Index a = 0; a < counts.rows(); ++a) {
+    for (Eigen::Index b = 0; b < counts.cols(); ++b) {
+      const double n = counts(a, b);
+      if (n <= 0.0) continue;
+      const double p = std::clamp(corner_rect_value(cdf, a, b), 0.0, 1.0);
+      if (p <= kProbFloor) continue;
+      const double dp = corner_rect_value(pdf, a, b);
+      const double d2p = corner_rect_value(pdf_drho, a, b);
+      const double ratio = dp / p;
+      out.g -= n * ratio;
+      out.h -= n * (d2p / p - ratio * ratio);
     }
   }
   return out;
@@ -302,15 +340,29 @@ h_weighted_result(const Eigen::Ref<const Eigen::MatrixXd>& counts,
   return out;
 }
 
-double h_weighted_objective_unchecked(
+// Same objective as h_weighted_result, without materializing the diagnostic
+// matrices; `cdf` is a reusable corner-grid workspace for the search loop.
+double h_weighted_objective_grid_unchecked(
     const Eigen::Ref<const Eigen::MatrixXd>& counts,
     const Eigen::Ref<const Eigen::VectorXd>& th_i,
     const Eigen::Ref<const Eigen::VectorXd>& th_j,
     double rho,
-    const PolychoricHScoreOptions& h_options) {
-  auto result = h_weighted_result(counts, th_i, th_j, rho, h_options);
-  if (!result.has_value()) return std::numeric_limits<double>::infinity();
-  return result->objective;
+    const PolychoricHScoreOptions& h_options,
+    Eigen::MatrixXd& cdf) {
+  ordinal_bvn_corner_cdf(th_i, th_j, rho, cdf);
+  const double total = counts.sum();
+  double out = 0.0;
+  for (Eigen::Index a = 0; a < counts.rows(); ++a) {
+    for (Eigen::Index b = 0; b < counts.cols(); ++b) {
+      const double p = std::max(
+          kProbFloor, std::clamp(corner_rect_value(cdf, a, b), 0.0, 1.0));
+      const double t = counts(a, b) / (total * p);
+      auto h = eval_polychoric_h_score(t, h_options);
+      if (!h.has_value()) return std::numeric_limits<double>::infinity();
+      out += p * h->phi;
+    }
+  }
+  return out;
 }
 
 bool h_score_is_ml_like(const PolychoricHScoreOptions& h_options) noexcept {
@@ -639,13 +691,15 @@ double joint_h_weighted_gradient_inf_unchecked(
   encode_thresholds(thresholds_j, min_threshold_spacing, x, n_th_i);
   x(npar - 1) = encode_rho(rho, rho_lower, rho_upper);
 
+  Eigen::MatrixXd cdf_ws;
   auto objective_value = [&](const Eigen::VectorXd& z) {
     const Eigen::VectorXd th_i = decode_thresholds(
         z, 0, n_th_i, min_threshold_spacing);
     const Eigen::VectorXd th_j = decode_thresholds(
         z, n_th_i, n_th_j, min_threshold_spacing);
     const double r = decode_rho(z(npar - 1), rho_lower, rho_upper);
-    return h_weighted_objective_unchecked(counts, th_i, th_j, r, h_options);
+    return h_weighted_objective_grid_unchecked(counts, th_i, th_j, r,
+                                               h_options, cdf_ws);
   };
 
   Eigen::VectorXd grad(npar);
@@ -749,6 +803,54 @@ double ordinal_bvn_rect_drho(double lo_i, double hi_i,
          bvn_pdf(hi_i, lo_j, rho) + bvn_pdf(lo_i, lo_j, rho);
 }
 
+namespace {
+
+template <class Fn>
+void fill_corner_grid(const Eigen::Ref<const Eigen::VectorXd>& th_i,
+                      const Eigen::Ref<const Eigen::VectorXd>& th_j,
+                      Eigen::MatrixXd& out,
+                      Fn&& corner_value) {
+  const Eigen::Index ni = th_i.size() + 2;
+  const Eigen::Index nj = th_j.size() + 2;
+  out.resize(ni, nj);
+  for (Eigen::Index a = 0; a < ni; ++a) {
+    const double x = (a == 0) ? -kInf : (a + 1 == ni) ? kInf : th_i(a - 1);
+    for (Eigen::Index b = 0; b < nj; ++b) {
+      const double y = (b == 0) ? -kInf : (b + 1 == nj) ? kInf : th_j(b - 1);
+      out(a, b) = corner_value(x, y);
+    }
+  }
+}
+
+}  // namespace
+
+void ordinal_bvn_corner_cdf(const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+                            const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+                            double rho,
+                            Eigen::MatrixXd& out) {
+  fill_corner_grid(thresholds_i, thresholds_j, out,
+                   [rho](double x, double y) { return bvn_cdf(x, y, rho); });
+}
+
+void ordinal_bvn_corner_pdf(const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+                            const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+                            double rho,
+                            Eigen::MatrixXd& out) {
+  fill_corner_grid(thresholds_i, thresholds_j, out,
+                   [rho](double x, double y) { return bvn_pdf(x, y, rho); });
+}
+
+void ordinal_bvn_corner_pdf_drho(
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+    double rho,
+    Eigen::MatrixXd& out) {
+  fill_corner_grid(thresholds_i, thresholds_j, out,
+                   [rho](double x, double y) {
+                     return bvn_pdf_drho(x, y, rho);
+                   });
+}
+
 post_expected<double>
 ordinal_pair_negloglik(const Eigen::Ref<const Eigen::MatrixXd>& counts,
                        const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
@@ -810,31 +912,14 @@ fit_ordinal_pair_rho_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
     }
   }
 
-  double lo = options.rho_lower;
-  double hi = options.rho_upper;
-  constexpr double gr = 0.6180339887498948482;
-  double c = hi - gr * (hi - lo);
-  double d = lo + gr * (hi - lo);
-  double fc = neglog_pair_unchecked(adjusted, thresholds_i, thresholds_j, c);
-  double fd = neglog_pair_unchecked(adjusted, thresholds_i, thresholds_j, d);
-  const double tol = options.x_tol * std::max(1.0, hi - lo);
-  for (int iter = 0; iter < options.max_iter && (hi - lo) > tol; ++iter) {
-    if (fc < fd) {
-      hi = d;
-      d = c;
-      fd = fc;
-      c = hi - gr * (hi - lo);
-      fc = neglog_pair_unchecked(adjusted, thresholds_i, thresholds_j, c);
-    } else {
-      lo = c;
-      c = d;
-      fc = fd;
-      d = lo + gr * (hi - lo);
-      fd = neglog_pair_unchecked(adjusted, thresholds_i, thresholds_j, d);
-    }
-    out.iterations = iter + 1;
-  }
-  out.rho = 0.5 * (lo + hi);
+  const auto search = detail::newton_rho_search(
+      options.rho_lower, options.rho_upper, options.x_tol, options.max_iter,
+      [&](double r) {
+        return polychoric_rho_score_unchecked(adjusted, thresholds_i,
+                                              thresholds_j, r);
+      });
+  out.rho = search.rho;
+  out.iterations = search.iterations;
   out.negloglik = neglog_pair_unchecked(adjusted, thresholds_i, thresholds_j,
                                         out.rho);
   const double width = options.rho_upper - options.rho_lower;
@@ -889,10 +974,11 @@ fit_ordinal_pair_rho_h_weighted(
   constexpr double gr = 0.6180339887498948482;
   double c = hi - gr * (hi - lo);
   double d = lo + gr * (hi - lo);
-  double fc = h_weighted_objective_unchecked(
-      adjusted, thresholds_i, thresholds_j, c, options.h_score);
-  double fd = h_weighted_objective_unchecked(
-      adjusted, thresholds_i, thresholds_j, d, options.h_score);
+  Eigen::MatrixXd cdf_ws;
+  double fc = h_weighted_objective_grid_unchecked(
+      adjusted, thresholds_i, thresholds_j, c, options.h_score, cdf_ws);
+  double fd = h_weighted_objective_grid_unchecked(
+      adjusted, thresholds_i, thresholds_j, d, options.h_score, cdf_ws);
   const double width0 = hi - lo;
   const double tol = options.x_tol * std::max(1.0, width0);
   int iterations = 0;
@@ -902,15 +988,15 @@ fit_ordinal_pair_rho_h_weighted(
       d = c;
       fd = fc;
       c = hi - gr * (hi - lo);
-      fc = h_weighted_objective_unchecked(
-          adjusted, thresholds_i, thresholds_j, c, options.h_score);
+      fc = h_weighted_objective_grid_unchecked(
+          adjusted, thresholds_i, thresholds_j, c, options.h_score, cdf_ws);
     } else {
       lo = c;
       c = d;
       fc = fd;
       d = lo + gr * (hi - lo);
-      fd = h_weighted_objective_unchecked(
-          adjusted, thresholds_i, thresholds_j, d, options.h_score);
+      fd = h_weighted_objective_grid_unchecked(
+          adjusted, thresholds_i, thresholds_j, d, options.h_score, cdf_ws);
     }
   }
   auto out = h_weighted_result(adjusted, thresholds_i, thresholds_j,
@@ -1153,6 +1239,7 @@ fit_ordinal_pair_joint_h_weighted(
                             options.rho_lower,
                             options.rho_upper);
 
+  Eigen::MatrixXd cdf_ws;
   auto objective_value = [&](const Eigen::VectorXd& x) {
     const Eigen::VectorXd th_i = decode_thresholds(
         x, 0, n_th_i, options.min_threshold_spacing);
@@ -1161,8 +1248,8 @@ fit_ordinal_pair_joint_h_weighted(
     const double rho = decode_rho(x(npar - 1),
                                   options.rho_lower,
                                   options.rho_upper);
-    return h_weighted_objective_unchecked(adjusted, th_i, th_j, rho,
-                                          options.h_score);
+    return h_weighted_objective_grid_unchecked(adjusted, th_i, th_j, rho,
+                                               options.h_score, cdf_ws);
   };
 
   auto gradient = [&](const Eigen::VectorXd& x) {

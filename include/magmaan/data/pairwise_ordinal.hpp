@@ -304,6 +304,30 @@ double ordinal_bvn_rect_drho(double lo_i, double hi_i,
                              double lo_j, double hi_j,
                              double rho) noexcept;
 
+// Corner grids over an ordinal pair's rectangle partition: entry (a, b) holds
+// the bvn cdf / pdf / d(pdf)/d(rho) at corner (t_i(a), t_j(b)), where t
+// extends the thresholds with -inf below and +inf above, so `out` is
+// (thresholds_i.size() + 2) x (thresholds_j.size() + 2). Cell (a, b) of the
+// pair table then recovers its rectangle quantity from the four corners
+//   out(a+1, b+1) - out(a, b+1) - out(a+1, b) + out(a, b),
+// sharing each interior corner across the four adjacent cells instead of
+// recomputing it per cell.
+void ordinal_bvn_corner_cdf(const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+                            const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+                            double rho,
+                            Eigen::MatrixXd& out);
+
+void ordinal_bvn_corner_pdf(const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+                            const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+                            double rho,
+                            Eigen::MatrixXd& out);
+
+void ordinal_bvn_corner_pdf_drho(
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
+    const Eigen::Ref<const Eigen::VectorXd>& thresholds_j,
+    double rho,
+    Eigen::MatrixXd& out);
+
 post_expected<double>
 ordinal_pair_negloglik(const Eigen::Ref<const Eigen::MatrixXd>& counts,
                        const Eigen::Ref<const Eigen::VectorXd>& thresholds_i,
