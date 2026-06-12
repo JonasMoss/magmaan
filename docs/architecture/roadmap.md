@@ -168,6 +168,19 @@ golden `parTable()` fixtures.
 - Rows are compressed into observed-value patterns; the observed-pattern
   objective and analytic gradient reuse `ModelEvaluator` Jacobians.
 - `fit_fiml()` currently optimizes directly with NLopt L-BFGS.
+- Cross-call precomputation is value-based, with no mutable cache state:
+  `FIMLPack` (immutable pattern cache + pairwise-complete start statistics,
+  built by `fiml_pack`) and `FIMLH1` (per-block saturated EM moments plus the
+  converged H1 objective value, built by one EM run in `fiml_h1_moments`).
+  Every post-fit helper (`fiml_extras`, `fiml_observed_information`,
+  `fiml_robust_mlr`, `saturated_em_moments`, `fiml_eta_jacobian`,
+  `fiml_ugamma_spectrum`, `fiml_baseline_chi2`) and `fit_fiml` carries a pack
+  overload next to the raw-only signature, which now just builds the pack/H1
+  and delegates. `api::sem` FIML fits build both eagerly at `fit()` time and
+  expose them via `Fit::fiml_pack()` / `Fit::fiml_h1()`, so a
+  fit → test → fit_measures → SE/MLR session runs the saturated EM exactly
+  once (the H1 value and H1 moments also share that single EM run, where the
+  raw-only `fiml_extras` previously ran two).
 - Current checked-in fixtures cover single- and multi-group CFA, three-factor
   CFA, labeled equality CFA, latent structural models, observed-variable path
   models under random-x and complete fixed.x policies, equality-constrained

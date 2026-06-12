@@ -109,7 +109,8 @@ fit_fiml(const Pt& pt, const Rep& rep, const Raw& raw,
   if (!samp.has_value()) return std::unexpected(samp.error());
   auto x0 = estimate::simple_start_values(pt, rep, *samp, {});
   if (!x0.has_value()) return std::unexpected(x0.error());
-  return estimate::fit_fiml(pt, rep, raw, *x0, {}, backend, opts);
+  return estimate::fit_fiml(pt, rep, raw, *x0, estimate::fiml::FIML{},
+                            backend, opts);
 }
 
 // Ordinal DWLS / WLS. `parameterization` selects Delta (default) or Theta.

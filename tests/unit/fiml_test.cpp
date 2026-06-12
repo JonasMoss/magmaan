@@ -1522,3 +1522,91 @@ TEST_CASE("fiml_baseline_chi2: rejects a column with no observed values") {
   CHECK(bl.error().detail.find("column 1 has no observed values") !=
         std::string::npos);
 }
+
+TEST_CASE("FIML pack overloads reproduce the raw-data paths exactly") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.55);
+  const auto raw = model_missing_raw(built, theta0, {160});
+
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto h1 = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack);
+  REQUIRE(h1.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 600;
+  auto est_raw = magmaan::estimate::fit_fiml(
+      *built.pt, *built.rep, raw, theta0, magmaan::estimate::fiml::FIML{},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE(est_raw.has_value());
+  auto est_pack = magmaan::estimate::fit_fiml(
+      *built.pt, *built.rep, raw, theta0, *pack,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE(est_pack.has_value());
+  CHECK(est_raw->theta == est_pack->theta);
+  const auto& est = *est_raw;
+
+  auto fx_raw = magmaan::estimate::fiml::fiml_extras(
+      *built.pt, *built.rep, raw, est);
+  REQUIRE(fx_raw.has_value());
+  auto fx_pack = magmaan::estimate::fiml::fiml_extras(
+      *built.pt, *built.rep, raw, est, *pack, *h1);
+  REQUIRE(fx_pack.has_value());
+  CHECK(fx_raw->logl == fx_pack->logl);
+  CHECK(fx_raw->unrestricted_logl == fx_pack->unrestricted_logl);
+  CHECK(fx_raw->chi2 == fx_pack->chi2);
+  CHECK(fx_raw->srmr == fx_pack->srmr);
+
+  auto info_raw = magmaan::estimate::fiml::fiml_observed_information(
+      *built.pt, *built.rep, raw, est);
+  REQUIRE(info_raw.has_value());
+  auto info_pack = magmaan::estimate::fiml::fiml_observed_information(
+      *built.pt, *built.rep, raw, est, *pack);
+  REQUIRE(info_pack.has_value());
+  CHECK(*info_raw == *info_pack);
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df_or = magmaan::inference::df_stat(*built.pt, *samp, est.theta);
+  REQUIRE(df_or.has_value());
+
+  auto rob_raw = magmaan::estimate::fiml::fiml_robust_mlr(
+      *built.pt, *built.rep, raw, est, *df_or, fx_raw->chi2);
+  REQUIRE(rob_raw.has_value());
+  auto rob_pack = magmaan::estimate::fiml::fiml_robust_mlr(
+      *built.pt, *built.rep, raw, est, *df_or, fx_raw->chi2, *pack, *h1);
+  REQUIRE(rob_pack.has_value());
+  CHECK(rob_raw->chisq_scaled == rob_pack->chisq_scaled);
+  CHECK(rob_raw->trace_ugamma == rob_pack->trace_ugamma);
+  CHECK(rob_raw->se == rob_pack->se);
+
+  auto sm_raw = magmaan::estimate::fiml::saturated_em_moments(raw);
+  REQUIRE(sm_raw.has_value());
+  auto sm_pack = magmaan::estimate::fiml::saturated_em_moments(raw, *pack, *h1);
+  REQUIRE(sm_pack.has_value());
+  CHECK(sm_raw->H == sm_pack->H);
+  CHECK(sm_raw->J == sm_pack->J);
+  CHECK(sm_raw->acov == sm_pack->acov);
+  REQUIRE(sm_raw->mean.size() == sm_pack->mean.size());
+  for (std::size_t b = 0; b < sm_raw->mean.size(); ++b) {
+    CHECK(sm_raw->mean[b] == sm_pack->mean[b]);
+    CHECK(sm_raw->cov[b] == sm_pack->cov[b]);
+  }
+
+  auto bl_raw = magmaan::estimate::fiml::fiml_baseline_chi2(*built.pt, raw);
+  REQUIRE(bl_raw.has_value());
+  auto bl_pack = magmaan::estimate::fiml::fiml_baseline_chi2(
+      *built.pt, raw, *pack, *h1);
+  REQUIRE(bl_pack.has_value());
+  CHECK(bl_raw->chi2 == bl_pack->chi2);
+  CHECK(bl_raw->df == bl_pack->df);
+
+  auto sp_raw = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      *built.pt, *built.rep, raw, est, *df_or, fx_raw->chi2);
+  REQUIRE(sp_raw.has_value());
+  auto sp_pack = magmaan::estimate::fiml::fiml_ugamma_spectrum(
+      *built.pt, *built.rep, raw, est, *df_or, fx_raw->chi2, *pack, *h1);
+  REQUIRE(sp_pack.has_value());
+  CHECK(sp_raw->eigvals == sp_pack->eigvals);
+}
