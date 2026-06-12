@@ -774,7 +774,8 @@ fit_ordinal_pair_rho_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
   if (!ok.has_value()) return std::unexpected(ok.error());
   if (!std::isfinite(options.rho_lower) || !std::isfinite(options.rho_upper) ||
       !(options.rho_lower > -1.0) || !(options.rho_upper < 1.0) ||
-      !(options.rho_lower < options.rho_upper) || options.max_iter < 1) {
+      !(options.rho_lower < options.rho_upper) || options.max_iter < 1 ||
+      !(std::isfinite(options.x_tol) && options.x_tol > 0.0)) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "fit_ordinal_pair_rho_ml: invalid options"));
   }
@@ -816,7 +817,8 @@ fit_ordinal_pair_rho_ml(const Eigen::Ref<const Eigen::MatrixXd>& counts,
   double d = lo + gr * (hi - lo);
   double fc = neglog_pair_unchecked(adjusted, thresholds_i, thresholds_j, c);
   double fd = neglog_pair_unchecked(adjusted, thresholds_i, thresholds_j, d);
-  for (int iter = 0; iter < options.max_iter; ++iter) {
+  const double tol = options.x_tol * std::max(1.0, hi - lo);
+  for (int iter = 0; iter < options.max_iter && (hi - lo) > tol; ++iter) {
     if (fc < fd) {
       hi = d;
       d = c;
@@ -1587,12 +1589,6 @@ ordinal_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& x_i,
   }
   const int n_levels_i = static_cast<int>(thresholds_i.size() + 1);
   const int n_levels_j = static_cast<int>(thresholds_j.size() + 1);
-  OrdinalPairScores out{
-      Eigen::VectorXd::Zero(x_i.size()),
-      Eigen::MatrixXd::Zero(x_i.size(), thresholds_i.size()),
-      Eigen::MatrixXd::Zero(x_i.size(), thresholds_j.size())};
-  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
-
   for (Eigen::Index r = 0; r < x_i.size(); ++r) {
     const int ci = x_i(r);
     const int cj = x_j(r);
@@ -1600,29 +1596,59 @@ ordinal_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& x_i,
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "ordinal_pair_scores: category outside threshold range"));
     }
+  }
+
+  // A row's score depends on the row only through its cell (ci, cj), so
+  // evaluate the n_levels_i * n_levels_j cells once and scatter to rows
+  // instead of redoing the rectangle quadratures per observation.
+  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
+  const Eigen::Index n_cells =
+      static_cast<Eigen::Index>(n_levels_i) * n_levels_j;
+  Eigen::VectorXd cell_rho(n_cells);
+  Eigen::MatrixXd cell_th_i =
+      Eigen::MatrixXd::Zero(n_cells, thresholds_i.size());
+  Eigen::MatrixXd cell_th_j =
+      Eigen::MatrixXd::Zero(n_cells, thresholds_j.size());
+  for (int ci = 0; ci < n_levels_i; ++ci) {
     const double lo_i = (ci == 0) ? -kInf : thresholds_i(ci - 1);
     const double hi_i = (ci + 1 == n_levels_i) ? kInf : thresholds_i(ci);
-    const double lo_j = (cj == 0) ? -kInf : thresholds_j(cj - 1);
-    const double hi_j = (cj + 1 == n_levels_j) ? kInf : thresholds_j(cj);
-    const double lik = floored_rect_prob(lo_i, hi_i, lo_j, hi_j, rho);
-    out.rho(r) = ordinal_bvn_rect_drho(lo_i, hi_i, lo_j, hi_j, rho) / lik;
+    for (int cj = 0; cj < n_levels_j; ++cj) {
+      const double lo_j = (cj == 0) ? -kInf : thresholds_j(cj - 1);
+      const double hi_j = (cj + 1 == n_levels_j) ? kInf : thresholds_j(cj);
+      const Eigen::Index cell =
+          static_cast<Eigen::Index>(ci) * n_levels_j + cj;
+      const double lik = floored_rect_prob(lo_i, hi_i, lo_j, hi_j, rho);
+      cell_rho(cell) = ordinal_bvn_rect_drho(lo_i, hi_i, lo_j, hi_j, rho) / lik;
 
-    for (Eigen::Index a = 0; a < thresholds_i.size(); ++a) {
-      const double t = thresholds_i(a);
-      const double z = normal_pdf(t) *
-          (normal_cdf((hi_j - rho * t) / sd) -
-           normal_cdf((lo_j - rho * t) / sd));
-      if (ci == a) out.threshold_i(r, a) += z / lik;
-      if (ci == a + 1) out.threshold_i(r, a) -= z / lik;
+      for (Eigen::Index a = 0; a < thresholds_i.size(); ++a) {
+        const double t = thresholds_i(a);
+        const double z = normal_pdf(t) *
+            (normal_cdf((hi_j - rho * t) / sd) -
+             normal_cdf((lo_j - rho * t) / sd));
+        if (ci == a) cell_th_i(cell, a) += z / lik;
+        if (ci == a + 1) cell_th_i(cell, a) -= z / lik;
+      }
+      for (Eigen::Index a = 0; a < thresholds_j.size(); ++a) {
+        const double t = thresholds_j(a);
+        const double z = normal_pdf(t) *
+            (normal_cdf((hi_i - rho * t) / sd) -
+             normal_cdf((lo_i - rho * t) / sd));
+        if (cj == a) cell_th_j(cell, a) += z / lik;
+        if (cj == a + 1) cell_th_j(cell, a) -= z / lik;
+      }
     }
-    for (Eigen::Index a = 0; a < thresholds_j.size(); ++a) {
-      const double t = thresholds_j(a);
-      const double z = normal_pdf(t) *
-          (normal_cdf((hi_i - rho * t) / sd) -
-           normal_cdf((lo_i - rho * t) / sd));
-      if (cj == a) out.threshold_j(r, a) += z / lik;
-      if (cj == a + 1) out.threshold_j(r, a) -= z / lik;
-    }
+  }
+
+  OrdinalPairScores out{
+      Eigen::VectorXd::Zero(x_i.size()),
+      Eigen::MatrixXd::Zero(x_i.size(), thresholds_i.size()),
+      Eigen::MatrixXd::Zero(x_i.size(), thresholds_j.size())};
+  for (Eigen::Index r = 0; r < x_i.size(); ++r) {
+    const Eigen::Index cell =
+        static_cast<Eigen::Index>(x_i(r)) * n_levels_j + x_j(r);
+    out.rho(r) = cell_rho(cell);
+    out.threshold_i.row(r) = cell_th_i.row(cell);
+    out.threshold_j.row(r) = cell_th_j.row(cell);
   }
   return out;
 }

@@ -789,7 +789,8 @@ fit_polyserial_pair_rho_ml(
   if (!ok.has_value()) return std::unexpected(ok.error());
   if (!std::isfinite(options.rho_lower) || !std::isfinite(options.rho_upper) ||
       !(options.rho_lower > -1.0) || !(options.rho_upper < 1.0) ||
-      !(options.rho_lower < options.rho_upper) || options.max_iter < 1) {
+      !(options.rho_lower < options.rho_upper) || options.max_iter < 1 ||
+      !(std::isfinite(options.x_tol) && options.x_tol > 0.0)) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "fit_polyserial_pair_rho_ml: invalid options"));
   }
@@ -802,7 +803,8 @@ fit_polyserial_pair_rho_ml(
   double d = lo + gr * (hi - lo);
   double fc = neglog_polyserial_unchecked(categories, u, thresholds, c);
   double fd = neglog_polyserial_unchecked(categories, u, thresholds, d);
-  for (int iter = 0; iter < options.max_iter; ++iter) {
+  const double tol = options.x_tol * std::max(1.0, hi - lo);
+  for (int iter = 0; iter < options.max_iter && (hi - lo) > tol; ++iter) {
     if (fc < fd) {
       hi = d;
       d = c;
