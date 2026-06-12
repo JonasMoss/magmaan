@@ -866,8 +866,9 @@ Result<StandardErrors> standard_errors(const Fit &fit, InformationSpec spec) {
       break;
     }
   } else if (fit.estimator() == EstimatorKind::FIML && fit.data().raw()) {
-    // FIML exposes a single information notion — the observed −∂²logl/∂θ².
-    // `spec.kind` does not apply; `spec.h_step` tunes the FD Hessian.
+    // FIML exposes a single information notion — the observed −∂²logl/∂θ²,
+    // computed analytically. `spec.kind` does not apply; `spec.h_step` is
+    // retained for source compatibility only.
     info = estimate::fiml::fiml_observed_information(
         fit.model().structure(), fit.model().matrix_rep(), *fit.data().raw(),
         fit.estimates(), {}, spec.h_step);

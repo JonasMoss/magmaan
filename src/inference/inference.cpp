@@ -23,6 +23,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/robust/robust.hpp"   // robust::casewise_contributions
 
+#include "detail_second_order.hpp"
 #include "detail_vech.hpp"
 
 namespace magmaan::inference {
@@ -590,123 +591,6 @@ inline double trace_product(const Eigen::MatrixXd& A,
   return (A.array() * B.transpose().array()).sum();
 }
 
-inline double h2_lambda_lambda(const model::ParamLocation& la,
-                               const model::ParamLocation& lb,
-                               const Eigen::MatrixXd& Mid,
-                               const Eigen::MatrixXd& G) noexcept {
-  return 2.0 * Mid(la.col, lb.col) * G(la.row, lb.row);
-}
-
-inline double h2_lambda_psi(const model::ParamLocation& lam,
-                            const model::ParamLocation& psi,
-                            const Eigen::MatrixXd& GLamA,
-                            const Eigen::MatrixXd& A) noexcept {
-  if (psi.row == psi.col) {
-    return 2.0 * GLamA(lam.row, psi.row) * A(lam.col, psi.row);
-  }
-  return 2.0 * (GLamA(lam.row, psi.row) * A(lam.col, psi.col) +
-                GLamA(lam.row, psi.col) * A(lam.col, psi.row));
-}
-
-inline double h2_lambda_beta(const model::ParamLocation& lam,
-                             const model::ParamLocation& beta,
-                             const Eigen::MatrixXd& GLamA,
-                             const Eigen::MatrixXd& GLamMid,
-                             const Eigen::MatrixXd& Mid,
-                             const Eigen::MatrixXd& A) noexcept {
-  return 2.0 * (GLamA(lam.row, beta.row)    * Mid(beta.col, lam.col) +
-                GLamMid(lam.row, beta.col)  * A(lam.col, beta.row));
-}
-
-inline double h2_psi_beta(const model::ParamLocation& psi,
-                          const model::ParamLocation& beta,
-                          const Eigen::MatrixXd& P,
-                          const Eigen::MatrixXd& A) noexcept {
-  if (psi.row == psi.col) {
-    return 2.0 * P(psi.row, beta.row) * A(beta.col, psi.row);
-  }
-  return 2.0 * (P(psi.col, beta.row) * A(beta.col, psi.row) +
-                P(psi.row, beta.row) * A(beta.col, psi.col));
-}
-
-inline double h2_beta_beta(const model::ParamLocation& ba,
-                           const model::ParamLocation& bb,
-                           const Eigen::MatrixXd& A,
-                           const Eigen::MatrixXd& MKA,
-                           const Eigen::MatrixXd& P,
-                           const Eigen::MatrixXd& Mid) noexcept {
-  return 2.0 * (A(bb.col, ba.row) * MKA(ba.col, bb.row) +
-                A(ba.col, bb.row) * MKA(bb.col, ba.row) +
-                Mid(ba.col, bb.col) * P(ba.row, bb.row));
-}
-
-Eigen::VectorXd second_mu(const model::ParamLocation& a,
-                          const model::ParamLocation& b,
-                          const model::BlockMatrices& bm,
-                          const Eigen::VectorXd& A_alpha) {
-  const Eigen::Index p = bm.Lambda.rows();
-  Eigen::VectorXd out = Eigen::VectorXd::Zero(p);
-  using model::MatId;
-
-  auto lambda_alpha = [&](const model::ParamLocation& lam,
-                          const model::ParamLocation& alpha) {
-    if (bm.A.rows() == 0) return;
-    out(static_cast<Eigen::Index>(lam.row)) =
-        bm.A(static_cast<Eigen::Index>(lam.col),
-             static_cast<Eigen::Index>(alpha.row));
-  };
-  auto lambda_beta = [&](const model::ParamLocation& lam,
-                         const model::ParamLocation& beta) {
-    if (A_alpha.size() == 0) return;
-    out(static_cast<Eigen::Index>(lam.row)) =
-        bm.A(static_cast<Eigen::Index>(lam.col),
-             static_cast<Eigen::Index>(beta.row)) *
-        A_alpha(static_cast<Eigen::Index>(beta.col));
-  };
-  auto alpha_beta = [&](const model::ParamLocation& alpha,
-                        const model::ParamLocation& beta) {
-    out.noalias() =
-        bm.LamA.col(static_cast<Eigen::Index>(beta.row)) *
-        bm.A(static_cast<Eigen::Index>(beta.col),
-             static_cast<Eigen::Index>(alpha.row));
-  };
-  auto beta_beta = [&](const model::ParamLocation& ba,
-                       const model::ParamLocation& bb) {
-    if (A_alpha.size() == 0) return;
-    out.noalias() =
-        bm.LamA.col(static_cast<Eigen::Index>(bb.row)) *
-        bm.A(static_cast<Eigen::Index>(bb.col),
-             static_cast<Eigen::Index>(ba.row)) *
-        A_alpha(static_cast<Eigen::Index>(ba.col));
-    out.noalias() +=
-        bm.LamA.col(static_cast<Eigen::Index>(ba.row)) *
-        bm.A(static_cast<Eigen::Index>(ba.col),
-             static_cast<Eigen::Index>(bb.row)) *
-        A_alpha(static_cast<Eigen::Index>(bb.col));
-  };
-
-  switch (a.mat) {
-    case MatId::Lambda:
-      if (b.mat == MatId::Alpha) lambda_alpha(a, b);
-      else if (b.mat == MatId::Beta) lambda_beta(a, b);
-      break;
-    case MatId::Alpha:
-      if (b.mat == MatId::Lambda) lambda_alpha(b, a);
-      else if (b.mat == MatId::Beta) alpha_beta(a, b);
-      break;
-    case MatId::Beta:
-      if (b.mat == MatId::Lambda) lambda_beta(b, a);
-      else if (b.mat == MatId::Alpha) alpha_beta(b, a);
-      else if (b.mat == MatId::Beta) beta_beta(a, b);
-      break;
-    case MatId::Theta:
-    case MatId::Psi:
-    case MatId::Nu:
-      break;
-  }
-  return out;
-}
-
 }  // namespace
 
 post_expected<Eigen::MatrixXd>
@@ -806,16 +690,7 @@ information_observed_analytic(spec::LatentStructure       pt,
     }
 
     // Per-block H2 precomputes.
-    const Eigen::MatrixXd GLam    = G * bm.Lambda;
-    const Eigen::MatrixXd GLamA   = G * bm.LamA;
-    const Eigen::MatrixXd GLamMid = GLam * bm.Mid;
-    const Eigen::MatrixXd K       = bm.Lambda.transpose() * G * bm.Lambda;
-    const Eigen::MatrixXd P       = bm.LamA.transpose()   * G * bm.LamA;
-    const Eigen::MatrixXd MKA     = bm.Mid * K * bm.A;
-    const Eigen::VectorXd A_alpha =
-        (has_means && bm.Alpha.size() > 0 && bm.A.rows() > 0)
-            ? Eigen::VectorXd(bm.A * bm.Alpha)
-            : Eigen::VectorXd();
+    const auto sow = detail::SecondOrderWeights::build(G, bm, has_means);
 
     const double weight = static_cast<double>(samp.n_obs[blk]) / 2.0;
     const auto blk_i    = static_cast<std::int8_t>(blk);
@@ -829,45 +704,7 @@ information_observed_analytic(spec::LatentStructure       pt,
         const auto& la = locs[a];
         const auto& lb = locs[b];
         if (la.block == blk_i && lb.block == blk_i) {
-          using model::MatId;
-          const auto pair = std::pair{la.mat, lb.mat};
-          switch (pair.first) {
-            case MatId::Lambda:
-              switch (pair.second) {
-                case MatId::Lambda: h2 = h2_lambda_lambda(la, lb, bm.Mid, G); break;
-                case MatId::Psi:    h2 = h2_lambda_psi(la, lb, GLamA, bm.A); break;
-                case MatId::Beta:   h2 = h2_lambda_beta(la, lb, GLamA, GLamMid, bm.Mid, bm.A); break;
-                case MatId::Theta:  break;
-                case MatId::Nu:     break;
-                case MatId::Alpha:  break;
-              }
-              break;
-            case MatId::Psi:
-              switch (pair.second) {
-                case MatId::Lambda: h2 = h2_lambda_psi(lb, la, GLamA, bm.A); break;
-                case MatId::Beta:   h2 = h2_psi_beta(la, lb, P, bm.A); break;
-                case MatId::Psi:    break;
-                case MatId::Theta:  break;
-                case MatId::Nu:     break;
-                case MatId::Alpha:  break;
-              }
-              break;
-            case MatId::Beta:
-              switch (pair.second) {
-                case MatId::Lambda: h2 = h2_lambda_beta(lb, la, GLamA, GLamMid, bm.Mid, bm.A); break;
-                case MatId::Psi:    h2 = h2_psi_beta(lb, la, P, bm.A); break;
-                case MatId::Beta:   h2 = h2_beta_beta(la, lb, bm.A, MKA, P, bm.Mid); break;
-                case MatId::Theta:  break;
-                case MatId::Nu:     break;
-                case MatId::Alpha:  break;
-              }
-              break;
-            case MatId::Theta:
-              break;
-            case MatId::Nu:
-            case MatId::Alpha:
-              break;
-          }
+          h2 = detail::second_sigma_trace(la, lb, sow, bm);
         }
 
         if (has_means && la.block == blk_i && lb.block == blk_i) {
@@ -877,7 +714,8 @@ information_observed_analytic(spec::LatentStructure       pt,
               Jmu.col(static_cast<Eigen::Index>(b)).segment(mu_off, p);
           const Eigen::VectorXd W_mu_b = W * mu_b;
           const Eigen::VectorXd W_Mb_z = W * (M[b] * z);
-          const Eigen::VectorXd mu_ab = second_mu(la, lb, bm, A_alpha);
+          const Eigen::VectorXd mu_ab = detail::second_mu(la, lb, bm,
+                                                          sow.A_alpha);
           h2 += 2.0 * mu_a.dot(W_mu_b)
               + 2.0 * mu_b.dot(W * (M[a] * z))
               + 2.0 * mu_a.dot(W_Mb_z)

@@ -180,7 +180,14 @@ golden `parTable()` fixtures.
   information criteria, and fit-index inputs for the current fixture tranche.
 - Robust FIML MLR post-fit reporting computes observed-pattern casewise
   sandwich SEs and Yuan-Bentler Mplus scaled-test traces for fixture-backed
-  non-saturated single- and multi-group cases.
+  non-saturated single- and multi-group cases. The observed FIML information
+  (`fiml_observed_information`, the MLR sandwich bread, and the `api` FIML
+  information path) is analytic: the per-pattern moment-space Hessian chained
+  through the model Jacobian plus the pattern-aggregated moment gradient
+  contracted with the closed-form LISREL second derivatives (shared with the
+  complete-data analytic observed information via `detail_second_order.hpp`);
+  `diagnostic::fiml_observed_information_fd` retains the central-difference
+  route as a regression comparator.
 - The public fixed.x policy rejects missing observed exogenous variables rather
   than approximating lavaan's conditional likelihood behavior.
 - The R boundary exposes `df_to_fiml_data()` and estimate-only `fit_fiml()`.

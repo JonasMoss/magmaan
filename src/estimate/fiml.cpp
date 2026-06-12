@@ -23,6 +23,7 @@
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/optim/problem.hpp"
 
+#include "detail_second_order.hpp"
 #include "detail_vech.hpp"
 
 namespace magmaan::estimate::fiml {
@@ -1020,6 +1021,176 @@ fiml_saturated_hessian_fd_block(const RawData& raw,
   return Eigen::MatrixXd(0.5 * (H + H.transpose()));
 }
 
+// Gradient of the FIML deviance F with respect to the FULL per-block moments,
+// aggregated over observed-value patterns: ∂F/∂Σ_b = G_b in the symmetric
+// matrix-derivative sense (dF = tr(G_b · dΣ_b) + u_bᵀ dμ_b), with the
+// per-pattern weight Σ_oo⁻¹ − Σ_oo⁻¹(S_r + ddᵀ)Σ_oo⁻¹ scattered into the full
+// p×p index space. These are the weights the second-order chain-rule term of
+// the observed Hessian contracts against ∂²Σ/∂θ_a∂θ_b and ∂²μ/∂θ_a∂θ_b.
+struct FIMLMomentGradient {
+  std::vector<Eigen::MatrixXd> G;  // per block, p×p symmetric
+  std::vector<Eigen::VectorXd> u;  // per block, p
+};
+
+post_expected<FIMLMomentGradient>
+fiml_moment_gradient(const FIMLCache& cache,
+                     const model::ImpliedMoments& moments) {
+  FIMLMomentGradient out;
+  const std::size_t n_blocks = cache.block_p.size();
+  out.G.resize(n_blocks);
+  out.u.resize(n_blocks);
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const Eigen::Index p = cache.block_p[b];
+    out.G[b] = Eigen::MatrixXd::Zero(p, p);
+    out.u[b] = Eigen::VectorXd::Zero(p);
+  }
+
+  for (const FIMLPattern& pat : cache.patterns) {
+    const auto& obs = pat.observed;
+    const Eigen::Index q = static_cast<Eigen::Index>(obs.size());
+    const Eigen::MatrixXd Sigma_o = select_square(moments.sigma[pat.block], obs);
+    const Eigen::VectorXd Mu_o = select_vector(moments.mu[pat.block], obs);
+    const Eigen::VectorXd d = pat.mean - Mu_o;
+    const Eigen::MatrixXd A = pat.cov + d * d.transpose();
+
+    Eigen::LLT<Eigen::MatrixXd> llt(Sigma_o);
+    if (llt.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "FIML observed Hessian: implied observed-pattern Σ is not "
+          "positive definite"));
+    }
+    const Eigen::MatrixXd SigmaInv =
+        llt.solve(Eigen::MatrixXd::Identity(q, q));
+    Eigen::MatrixXd Gp = SigmaInv - SigmaInv * A * SigmaInv;
+    Gp = 0.5 * (Gp + Gp.transpose()).eval();
+    const Eigen::VectorXd z = SigmaInv * d;
+
+    const double scale = static_cast<double>(pat.n_obs) /
+                         static_cast<double>(cache.n_total);
+    auto& Gb = out.G[pat.block];
+    auto& ub = out.u[pat.block];
+    for (Eigen::Index cj = 0; cj < q; ++cj) {
+      const Eigen::Index c = obs[static_cast<std::size_t>(cj)];
+      for (Eigen::Index ri = 0; ri < q; ++ri) {
+        const Eigen::Index r = obs[static_cast<std::size_t>(ri)];
+        Gb(r, c) += scale * Gp(ri, cj);
+      }
+      ub(c) += -2.0 * scale * z(cj);
+    }
+  }
+  return out;
+}
+
+// Analytic observed Hessian of the per-observation-averaged FIML deviance F
+// with respect to θ — same object as `fiml_observed_hessian_fd`, exact instead
+// of central-difference. Chain rule through the moment map (μ(θ), Σ(θ)):
+//
+//   H = Σ_b (n_b/N) · Δ_bᵀ · W_b · Δ_b                       (first order)
+//     + Σ_b [ tr(G_b · ∂²Σ_b/∂θ_a∂θ_b) + u_bᵀ ∂²μ_b/∂θ_a∂θ_b ]  (second order)
+//
+// where W_b is the per-block moment-space Hessian of the mean deviance
+// (`fiml_saturated_hessian_analytic_block` evaluated at the model-implied
+// moments), Δ_b stacks [∂μ_b/∂θ ; ∂vech(Σ_b)/∂θ], and (G_b, u_b) is the
+// pattern-aggregated moment gradient above contracted with the closed-form
+// LISREL second derivatives (`detail::second_sigma_trace` / `detail::second_mu`).
+post_expected<Eigen::MatrixXd>
+fiml_observed_hessian_analytic(spec::LatentStructure pt,
+                               const model::MatrixRep& rep,
+                               const FIMLCache& cache,
+                               const SampleStats& start_samp,
+                               const Estimates& est) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, start_samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(), "resolve_fixed_x_from_sample"));
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::build failed: " + ev_or.error().detail));
+  }
+  const auto& ev = *ev_or;
+  const Eigen::Index q = static_cast<Eigen::Index>(ev.n_free());
+  if (est.theta.size() != q) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "FIML observed Hessian: theta size mismatch"));
+  }
+
+  auto am_or = ev.assembled(est.theta);
+  if (!am_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::assembled failed: " + am_or.error().detail));
+  }
+  auto eval_or = ev.evaluate(est.theta, true, true);
+  if (!eval_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::evaluate failed: " + eval_or.error().detail));
+  }
+  const auto& eval = *eval_or;
+  const auto locs = ev.param_locations();
+
+  const std::size_t n_blocks = cache.block_p.size();
+  Eigen::Index total_p = 0;
+  for (std::size_t b = 0; b < n_blocks; ++b) total_p += cache.block_p[b];
+  if (eval.J_mu.rows() != total_p || eval.J_mu.cols() != q) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "FIML observed Hessian: mean structure is required"));
+  }
+
+  std::vector<std::int64_t> n_block(n_blocks, 0);
+  for (const FIMLPattern& pat : cache.patterns) n_block[pat.block] += pat.n_obs;
+
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
+
+  // First-order term: per-block moment-space Hessian at the implied moments,
+  // contracted with the stacked [μ; vech Σ] Jacobian.
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    const Eigen::Index p = cache.block_p[b];
+    const Eigen::Index pstar = vech_len(p);
+    auto W_or = fiml_saturated_hessian_analytic_block(cache, b,
+                                                      eval.moments.mu[b],
+                                                      eval.moments.sigma[b]);
+    if (!W_or.has_value()) return std::unexpected(W_or.error());
+
+    Eigen::MatrixXd Delta(p + pstar, q);
+    Delta.topRows(p) = eval.J_mu.middleRows(cache.mu_offsets[b], p);
+    Delta.bottomRows(pstar) =
+        eval.J_sigma.middleRows(cache.sigma_offsets[b], pstar);
+
+    const double weight = static_cast<double>(n_block[b]) /
+                          static_cast<double>(cache.n_total);
+    H.noalias() += weight * (Delta.transpose() * ((*W_or) * Delta));
+  }
+
+  // Second-order term: pattern-aggregated moment gradient contracted with the
+  // closed-form LISREL second derivatives.
+  auto mg_or = fiml_moment_gradient(cache, eval.moments);
+  if (!mg_or.has_value()) return std::unexpected(mg_or.error());
+  const FIMLMomentGradient& mg = *mg_or;
+
+  std::vector<detail::SecondOrderWeights> sow;
+  sow.reserve(n_blocks);
+  for (std::size_t b = 0; b < n_blocks; ++b) {
+    sow.push_back(detail::SecondOrderWeights::build(mg.G[b],
+                                                    am_or->blocks[b],
+                                                    /*has_means=*/true));
+  }
+
+  for (Eigen::Index a = 0; a < q; ++a) {
+    for (Eigen::Index b = a; b < q; ++b) {
+      const auto& la = locs[static_cast<std::size_t>(a)];
+      const auto& lb = locs[static_cast<std::size_t>(b)];
+      if (la.block != lb.block) continue;
+      const auto blk = static_cast<std::size_t>(la.block);
+      const auto& bm = am_or->blocks[blk];
+      double h2 = detail::second_sigma_trace(la, lb, sow[blk], bm);
+      h2 += detail::second_mu(la, lb, bm, sow[blk].A_alpha).dot(mg.u[blk]);
+      H(a, b) += h2;
+      if (a != b) H(b, a) += h2;
+    }
+  }
+
+  return Eigen::MatrixXd(0.5 * (H + H.transpose()));
+}
+
 post_expected<double>
 fiml_saturated_trace_h1(const RawData& raw,
                         const FIMLCache& cache,
@@ -1685,16 +1856,50 @@ fiml_observed_information(spec::LatentStructure pt,
   }
   // H = ∂²F/∂θ² of the per-observation-averaged deviance F. The FIML
   // log-likelihood is logl = −½(N·F + c), so the observed information is
-  // −∂²logl/∂θ² = ½·N·H. F here is the FULL-scale kernel deviance
-  // (fiml_observed_hessian_fd differentiates discrepancy.gradient), NOT the
+  // −∂²logl/∂θ² = ½·N·H. F here is the FULL-scale kernel deviance, NOT the
   // ½F optimiser objective — est.fmin is halved only in the fit adapter, so
   // this ½·N·H stays correct unchanged.
+  auto H_or = fiml_observed_hessian_analytic(std::move(pt), rep, *cache_or,
+                                             *start_or, est);
+  if (!H_or.has_value()) return std::unexpected(H_or.error());
+  const double N = static_cast<double>(cache_or->n_total);
+  return Eigen::MatrixXd(0.5 * N * (*H_or));
+}
+
+namespace diagnostic {
+
+post_expected<Eigen::MatrixXd>
+fiml_observed_information_fd(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const RawData& raw,
+                             const Estimates& est,
+                             FIML discrepancy,
+                             double h_step) {
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_observed_information_fd: h_step must be positive"));
+  }
+  auto cache_or = discrepancy.prepare(raw);
+  if (!cache_or.has_value()) {
+    return std::unexpected(fit_to_post(cache_or.error(), "FIML::prepare"));
+  }
+  auto start_or = fiml_start_sample_stats(raw);
+  if (!start_or.has_value()) {
+    return std::unexpected(fit_to_post(start_or.error(),
+        "fiml_start_sample_stats"));
+  }
+  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(),
+        "validate_fiml_fixed_x_missing_policy"));
+  }
   auto H_or = fiml_observed_hessian_fd(pt, rep, raw, *cache_or, *start_or, est,
                                        discrepancy, h_step);
   if (!H_or.has_value()) return std::unexpected(H_or.error());
   const double N = static_cast<double>(cache_or->n_total);
   return Eigen::MatrixXd(0.5 * N * (*H_or));
 }
+
+}  // namespace diagnostic
 
 post_expected<FIMLRobustMLR>
 fiml_robust_mlr(spec::LatentStructure pt,
@@ -1759,8 +1964,7 @@ fiml_robust_mlr(spec::LatentStructure pt,
   if (!scores_or.has_value()) return std::unexpected(scores_or.error());
   Eigen::MatrixXd scores = std::move(*scores_or);
 
-  auto H_or = fiml_observed_hessian_fd(pt, rep, raw, cache, start_samp,
-                                       est, discrepancy, h_step);
+  auto H_or = fiml_observed_hessian_analytic(pt, rep, cache, start_samp, est);
   if (!H_or.has_value()) return std::unexpected(H_or.error());
   Eigen::MatrixXd H = std::move(*H_or);
 
@@ -2248,7 +2452,7 @@ fit_fiml(spec::LatentStructure pt,
     // in fiml_extras, which recomputes the full-F deviance from est.theta and
     // is unaffected. INVARIANT: halve ONLY here in the optimiser adapter —
     // FIML::value / value_gradient must stay full-F because fiml_extras and
-    // fiml_observed_hessian_fd (the observed information) differentiate them.
+    // the observed-Hessian paths (analytic and FD) differentiate them.
     grad = 0.5 * vg->gradient;
     return 0.5 * vg->value;
   };
