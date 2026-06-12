@@ -375,20 +375,19 @@ native expected SEs, standardization, fit measures, df, the `api::frontier`
 surface, and the R frontier mirror (`fcsem_model_spec()`,
 `fit_ml_fcsem()`/`magmaan_fcsem()`, `fcsem_standard_errors()`,
 `fcsem_fit_measures()`, `fcsem_standardized_rows()`). Details are in the roadmap.
+Single-group native ML lavaan parity for the pure-composite,
+composite-plus-factor, and composite-structural HS fixture trio is now gated by
+`tests/golden/composite_golden_test.cpp`.
 Remaining:
 
-- **L.** Post-fit lavaan parity validation: minimal oracle fixtures exist under
-  `tests/fixtures/composite/` for pure composite, composite plus common factor,
-  and structural regression involving a composite. The diagnostic golden is wired
-  but skipped while we decide whether native W-matrix parity belongs in low-level
-  C++ fixture tests, an R frontier diagnostic, or both.
 - **M/L.** Multi-group composites are in scope only after the single-group ML and
   R frontier slices stay green and only if lavaan handles them cleanly, including
   `group.equal = "composite.weights"`.
 - **S, after parity fixtures are green.** Add composite benchmark cases.
 
-Deferred until the ML slice is lavaan-validated: ordinal composites, FIML/LS
-composites, robust corrections for composites, and composite mean-structure rows.
+Deferred beyond the lavaan-validated single-group ML slice: ordinal composites,
+FIML/LS composites, robust corrections for composites, and composite
+mean-structure rows.
 
 ## Core/frontier layout follow-ups
 

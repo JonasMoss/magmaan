@@ -1051,14 +1051,16 @@ stop rather than any usable non-error return.
   `fcsem_standard_errors()`, `fcsem_fit_measures()`, and
   `fcsem_standardized_rows()`, plus `magmaan_core$frontier_*` aliases for
   method-development workflows.
-- Full composite lavaan parity is not yet claimed. Native lavaan
-  `<~` oracle fixtures for pure-composite, composite-plus-factor, and
-  composite-structural HS cases live under `tests/fixtures/composite/` and
-  now record lavaan's observed-variable order for the stored sample/implied
-  covariance matrices. The corresponding diagnostic golden remains
-  intentionally skipped until we decide how much native W-matrix fixture
-  parity belongs in the low-level C++ tests versus the R frontier examples;
-  the new R bridge is not a lavaan replacement interface.
+- Single-group native ML FC-SEM lavaan parity is fixture-gated for the
+  pure-composite, composite-plus-factor, and composite-structural HS cases under
+  `tests/fixtures/composite/`. The public-surface golden
+  (`tests/golden/composite_golden_test.cpp`) fits through `fit_ml_fcsem()` and
+  checks objective/chi-square, implied covariance in lavaan observed-variable
+  order, df/npar, fit measures, reported raw rows, SEs, and `std.lv`/`std.all`
+  rows against lavaan's native `<~` output. Native W/T matrix construction
+  remains covered as evaluator/unit-test machinery rather than as a public
+  fixture contract; the R bridge is still a methods-developer frontier surface,
+  not a lavaan replacement interface.
 - `magmaan(model, data, estimator, groups)` is the high-level estimate-only
   R convenience. It composes `model_spec()`, data-frame sample-stat/raw-data
   construction, and the matching point-estimation wrapper for complete-data
