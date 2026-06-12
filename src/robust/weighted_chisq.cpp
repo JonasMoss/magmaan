@@ -3,8 +3,12 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
+#include <vector>
 
 #include <Eigen/Core>
+
+#include "magmaan/inference/inference.hpp"
 
 namespace magmaan::robust {
 
@@ -12,6 +16,11 @@ namespace magmaan::robust {
 namespace {
 
 constexpr double pi = 3.14159265358979323846;
+
+struct TailResult {
+  double prob = 0.0;
+  bool   ok   = false;
+};
 
 // QUADPACK's dqagie takes a bare `double f(double*)` integrand (no user-data
 // pointer), so the Imhof parameters are threaded through thread-local state:
@@ -102,6 +111,78 @@ double imhof_simpson(const Eigen::VectorXd& lam, double x,
   return 0.5 + I_prev / pi;
 }
 
+// Ruben's positive-weight expansion writes the weighted χ²₁ sum as a mixture
+// of central χ²(m + 2k) tails with non-negative coefficients. Unlike the Imhof
+// integral, it avoids oscillatory cancellation, so it remains stable in the
+// deep upper tail where FMG/nested tests can land on badly fitting models.
+TailResult ruben_upper(const Eigen::VectorXd& lam, double x,
+                       double rel_tol, int max_terms = 5000) noexcept {
+  TailResult out;
+  if (lam.size() == 0) {
+    out.prob = (x < 0.0) ? 1.0 : 0.0;
+    out.ok = true;
+    return out;
+  }
+  if (x <= 0.0) {
+    out.prob = 1.0;
+    out.ok = true;
+    return out;
+  }
+
+  const double beta = lam.minCoeff();
+  if (!(beta > 0.0)) return out;
+
+  const int m = static_cast<int>(lam.size());
+  Eigen::VectorXd gamma(m);
+  double log_a0 = 0.0;
+  for (Eigen::Index j = 0; j < lam.size(); ++j) {
+    gamma(j) = 1.0 - beta / lam(j);
+    log_a0 += 0.5 * std::log(beta / lam(j));
+  }
+
+  std::vector<double> a;
+  std::vector<double> g;
+  a.reserve(static_cast<std::size_t>(max_terms) + 1);
+  g.reserve(static_cast<std::size_t>(max_terms) + 1);
+  a.push_back(std::exp(log_a0));
+  g.push_back(0.5 * gamma.sum());
+
+  double surv = a[0] * inference::chi2_pvalue(x / beta, m);
+  double asum = a[0];
+  const double eps = std::max(rel_tol, 1e-12);
+  for (int k = 1; k <= max_terms; ++k) {
+    double ak_num = 0.0;
+    for (int i = 0; i < k; ++i) {
+      ak_num += g[static_cast<std::size_t>(i)] *
+                a[static_cast<std::size_t>(k - 1 - i)];
+    }
+    const double ak = ak_num / static_cast<double>(k);
+    if (!std::isfinite(ak) || ak < 0.0) return out;
+
+    a.push_back(ak);
+    double gamma_power_sum = 0.0;
+    for (Eigen::Index j = 0; j < gamma.size(); ++j) {
+      gamma_power_sum += std::pow(gamma(j), static_cast<double>(k + 1));
+    }
+    g.push_back(0.5 * gamma_power_sum);
+
+    surv += ak * inference::chi2_pvalue(x / beta, m + 2 * k);
+    asum += ak;
+    if (!std::isfinite(surv) || !std::isfinite(asum)) return out;
+
+    const double remainder = std::max(0.0, 1.0 - asum);
+    if (remainder < eps * std::max(surv, std::numeric_limits<double>::min())) {
+      out.prob = std::clamp(surv, 0.0, 1.0);
+      out.ok = true;
+      return out;
+    }
+  }
+
+  out.prob = std::clamp(surv, 0.0, 1.0);
+  out.ok = false;
+  return out;
+}
+
 }  // namespace
 
 // QUADPACK qagi adaptive Gauss-Kronrod integrator over a (semi-)infinite
@@ -123,15 +204,21 @@ double imhof_upper(const Eigen::Ref<const Eigen::VectorXd>& lambda,
   if (!std::isfinite(x)) return (x > 0.0) ? 0.0 : 1.0;
   if (x <= 0.0)          return 1.0;
 
-  // Snapshot λ as an owning vector so the Integrand can hold a const& without
-  // worrying about expression-template lifetimes; also lets us replace tiny
-  // negatives (numerical noise from a generalised eig) with 0.
-  Eigen::VectorXd lam = lambda;
-  for (Eigen::Index j = 0; j < lam.size(); ++j) {
-    if (!(lam(j) > 0.0)) lam(j) = 0.0;
+  // Snapshot λ as an owning positive vector. Tiny negative eigenvalue noise from
+  // a generalized eigensolve is clipped to zero; exact mixture callers in
+  // magmaan use a non-negative weighted χ² law.
+  Eigen::Index n_pos = 0;
+  for (Eigen::Index j = 0; j < lambda.size(); ++j) {
+    if (lambda(j) > 0.0) ++n_pos;
   }
-  const double lmax = lam.maxCoeff();
-  if (lmax <= 0.0) return 0.0;
+  Eigen::VectorXd lam(n_pos);
+  for (Eigen::Index j = 0, out = 0; j < lambda.size(); ++j) {
+    if (lambda(j) > 0.0) lam(out++) = lambda(j);
+  }
+  if (lam.size() == 0) return 0.0;
+
+  const TailResult ruben = ruben_upper(lam, x, rel_tol);
+  if (ruben.ok) return ruben.prob;
 
   // ∫₀^∞ f(u) du via QUADPACK qagi (bound = 0, inf = 1). dqk15i performs the
   // [0,∞) transform; the adaptive driver bisects the worst panel and
