@@ -149,6 +149,8 @@ golden `parTable()` fixtures.
   cmake/QuadpackVendor.cmake — the second vendored static library after PORT),
   matching `CompQuadForm::imhof` to ~2e-16 at ~3x its speed, with a dense-Simpson
   fallback for the weakly-damped small-df tail where qagi's extrapolation breaks.
+  A self-contained C++ golden pins fixed-spectrum FMG p-values for each method
+  against constants generated from R `stats` and `CompQuadForm::imhof`.
 
 ### Continuous FIML
 
