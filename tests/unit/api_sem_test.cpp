@@ -343,6 +343,11 @@ TEST_CASE("api FIML exposes likelihood test, fit measures, and MLR reporting") {
   const auto fit = magmaan::api::fit(*model, *data, magmaan::api::fiml());
   REQUIRE_OK(fit);
 
+  // FIML fits carry the cross-call pack and the saturated H1 EM moments,
+  // built once at fit() time and shared by the post-fit helpers below.
+  CHECK(fit->fiml_pack() != nullptr);
+  CHECK(fit->fiml_h1() != nullptr);
+
   const auto tst = magmaan::api::test(*fit, magmaan::api::standard_chi_square());
   REQUIRE(tst.has_value());
   CHECK(tst->df > 0);

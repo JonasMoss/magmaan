@@ -324,6 +324,19 @@ public:
   EstimatorKind estimator() const noexcept { return estimator_.kind; }
   const EstimatorSpec &estimator_spec() const noexcept { return estimator_; }
 
+  // FIML cross-call state, built once at fit() time for FIML fits and shared
+  // by every post-fit helper (test, fit_measures, standard errors, robust
+  // MLR): the pattern/start-stats pack and the saturated H1 EM moments.
+  // Null for non-FIML fits; fiml_h1() is additionally null if the H1 EM
+  // failed at fit time, in which case post-fit helpers fall back to the
+  // raw-data paths (and surface that error where it was previously raised).
+  const estimate::fiml::FIMLPack *fiml_pack() const noexcept {
+    return fiml_pack_.get();
+  }
+  const estimate::fiml::FIMLH1 *fiml_h1() const noexcept {
+    return fiml_h1_.get();
+  }
+
 private:
   friend Result<Fit> fit(std::shared_ptr<const Model>,
                          std::shared_ptr<const Data>, EstimatorSpec);
@@ -338,6 +351,8 @@ private:
   std::shared_ptr<const Data> data_;
   estimate::Estimates estimates_;
   EstimatorSpec estimator_;
+  std::shared_ptr<const estimate::fiml::FIMLPack> fiml_pack_;
+  std::shared_ptr<const estimate::fiml::FIMLH1> fiml_h1_;
 };
 
 Result<Fit> fit(std::shared_ptr<const Model> model,

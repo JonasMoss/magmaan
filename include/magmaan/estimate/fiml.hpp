@@ -46,12 +46,27 @@ struct FIMLCache {
   std::vector<Eigen::Index> mu_offsets;
   std::vector<Eigen::Index> block_p;
   std::int64_t n_total = 0;
-  // Cached H1 (saturated) moments to avoid redundant EM runs in post-fit.
-  // Lazily populated on first h1_moments_block call, then reused for subsequent
-  // calls (fiml_extras, fiml_robust_mlr, saturated_em_moments). Mutable because
-  // caching is a performance detail, not a semantic change.
-  mutable std::vector<Eigen::VectorXd> cached_h1_mu;
-  mutable std::vector<Eigen::MatrixXd> cached_h1_sigma;
+};
+
+// The cross-call FIML pack: the immutable pattern cache plus the
+// pairwise-complete start statistics that every post-fit helper needs. Build
+// once per dataset via `fiml_pack` and thread through the pack overloads
+// below; the raw-only signatures rebuild it internally on every call.
+struct FIMLPack {
+  FIMLCache cache;
+  SampleStats start_stats;
+};
+
+// Saturated (H1) EM moments plus the converged H1 objective value, computed
+// by one EM run per block via `fiml_h1_moments` and shared by every post-fit
+// consumer (likelihood accounting, SRMR, robust traces, saturated
+// information). `value` is the per-observation-averaged observed-pattern H1
+// deviance kernel; `mu`/`sigma` are the per-block EM moments (complete-data
+// blocks carry the sample moments).
+struct FIMLH1 {
+  std::vector<Eigen::VectorXd> mu;
+  std::vector<Eigen::MatrixXd> sigma;
+  double value = 0.0;
 };
 
 struct FIMLValueGradient {
@@ -163,6 +178,18 @@ struct FIML {
                  const Eigen::MatrixXd& J_mu) const;
 };
 
+// Build the cross-call pack: pattern grouping (FIML::prepare) plus the
+// pairwise-complete start statistics, in one pass each over the raw data.
+fit_expected<FIMLPack>
+fiml_pack(const RawData& raw);
+
+// Run the saturated (H1) EM once per block and return moments + objective
+// value together. This is the single expensive missing-data precomputation;
+// everything downstream (extras, robust MLR, UGamma spectrum, baseline,
+// saturated information) consumes the result.
+fit_expected<FIMLH1>
+fiml_h1_moments(const RawData& raw, const FIMLPack& pack);
+
 // Start-value and fixed.x helper for FIML. Means use all observed values in
 // each column; covariances use pairwise observed rows with an N divisor.
 fit_expected<SampleStats>
@@ -188,6 +215,14 @@ fiml_extras(spec::LatentStructure pt,
             const Estimates& est,
             FIML discrepancy = {});
 
+post_expected<FIMLExtras>
+fiml_extras(spec::LatentStructure pt,
+            const model::MatrixRep& rep,
+            const RawData& raw,
+            const Estimates& est,
+            const FIMLPack& pack,
+            const FIMLH1& h1);
+
 // Observed FIML information matrix — the npar × npar `−∂²logl/∂θ²` for a
 // continuous raw-data FIML fit, computed as `(N/2)·H` where `H` is the
 // analytic Hessian of the per-observation-averaged deviance: the per-pattern
@@ -206,6 +241,13 @@ fiml_observed_information(spec::LatentStructure pt,
                           FIML discrepancy = {},
                           double h_step = 1e-4);
 
+post_expected<Eigen::MatrixXd>
+fiml_observed_information(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          const FIMLPack& pack);
+
 // Robust missing-data reporting for lavaan's continuous FIML MLR corner
 // (`missing = "fiml", estimator = "MLR"`). The sandwich meat is built from
 // observed-pattern casewise deviance gradients, and the bread is the analytic
@@ -220,6 +262,16 @@ fiml_robust_mlr(spec::LatentStructure pt,
                 FIML discrepancy = {},
                 double h_step = 1e-4);
 
+post_expected<FIMLRobustMLR>
+fiml_robust_mlr(spec::LatentStructure pt,
+                const model::MatrixRep& rep,
+                const RawData& raw,
+                const Estimates& est,
+                int df,
+                double chisq,
+                const FIMLPack& pack,
+                const FIMLH1& h1);
+
 // Saturated (H1) ML/EM moments — runs the EM iteration that already drives
 // FIML's H1 likelihood accounting, then aggregates per-block scores and
 // analytic observed-row Hessians into a block-diagonal `(H, J, H⁻¹JH⁻¹)`.
@@ -230,6 +282,11 @@ fiml_robust_mlr(spec::LatentStructure pt,
 // H1 information.
 post_expected<SaturatedMoments>
 saturated_em_moments(const RawData& raw, double h_step = 1e-4);
+
+post_expected<SaturatedMoments>
+saturated_em_moments(const RawData& raw,
+                     const FIMLPack& pack,
+                     const FIMLH1& h1);
 
 namespace diagnostic {
 
@@ -260,6 +317,13 @@ fiml_eta_jacobian(spec::LatentStructure pt,
                   const Estimates& est,
                   FIML discrepancy = {});
 
+post_expected<FIMLEtaJacobian>
+fiml_eta_jacobian(spec::LatentStructure pt,
+                  const model::MatrixRep& rep,
+                  const RawData& raw,
+                  const Estimates& est,
+                  const FIMLPack& pack);
+
 // First-principles FIML UΓ spectrum for FMG goodness-of-fit tests. Multi-group
 // safe (H/J/acov are block-diagonal across groups; Δ stacks per group). `df` and
 // `chi2_lrt` are passed in (the caller already has them from `infer_df_stat` /
@@ -276,6 +340,16 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
                      FIML discrepancy = {},
                      double h_step = 1e-4);
 
+post_expected<FIMLUGammaSpectrum>
+fiml_ugamma_spectrum(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const RawData& raw,
+                     const Estimates& est,
+                     int df,
+                     double chi2_lrt,
+                     const FIMLPack& pack,
+                     const FIMLH1& h1);
+
 // FIML independence/baseline chi-square for raw continuous data with missing
 // values. Unlike complete-data `baseline_chi2(SampleStats)`, this evaluates the
 // diagonal normal model directly over observed-value patterns and compares it
@@ -289,6 +363,12 @@ fiml_baseline_chi2(const spec::LatentStructure& pt,
                    const RawData& raw,
                    FIML discrepancy = {});
 
+post_expected<BaselineFit>
+fiml_baseline_chi2(const spec::LatentStructure& pt,
+                   const RawData& raw,
+                   const FIMLPack& pack,
+                   const FIMLH1& h1);
+
 // Full-information ML fit over raw continuous data. `backend` selects the
 // scalar optimizer (NLopt L-BFGS by default, optional IPOPT when enabled);
 // equality constraints are folded in via the θ = θ₀ + K·α reparameterization.
@@ -298,6 +378,15 @@ fit_fiml(spec::LatentStructure pt,
          const RawData& raw,
          const Eigen::VectorXd& x0,      // start values, size pt.n_free()
          FIML discrepancy = {},
+         Backend backend = Backend::NloptLbfgs,
+         optim::OptimOptions opts = {});
+
+fit_expected<Estimates>
+fit_fiml(spec::LatentStructure pt,
+         const model::MatrixRep& rep,
+         const RawData& raw,
+         const Eigen::VectorXd& x0,      // start values, size pt.n_free()
+         const FIMLPack& pack,
          Backend backend = Backend::NloptLbfgs,
          optim::OptimOptions opts = {});
 

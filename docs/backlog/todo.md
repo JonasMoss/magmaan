@@ -149,6 +149,14 @@ decisions in the simulation backlog.
   structure (use `model_spec(..., meanstructure = TRUE)` + `fit_fiml`);
   multi-group FIML fits need explicit start/convergence care; and nonlinear
   equality tangent-space support plus pairwise-data FMG remain deferred.
+- **FIML cross-call pack: remaining consumers.** The `FIMLPack`/`FIMLH1`
+  value-based precomputation (roadmap, Continuous FIML) is threaded through
+  the post-fit helpers and `api::sem`. Not yet pack-aware: the R bindings
+  (stateless per call — each `estimate_fiml_*()` round-trip rebuilds the pack
+  and re-runs the H1 EM; threading it needs the R fit object to carry an XPtr
+  to fit-time C++ state), `inference::{modification_indices,score_tests}_fiml`
+  and `robust::lr_test_satorra2000_fiml_from_data` (rebuild pattern grouping
+  and start stats per call; no H1 EM, so the win is one data pass, not an EM).
 
 ## Benchmarks
 

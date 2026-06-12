@@ -38,9 +38,11 @@ stopifnot(length(mag$mean) == 1L,
           mag$n_obs == n_eff)
 
 # Run lavaan's saturated EM at a tight tolerance for parity comparison.
-mp <- lavaan:::lav_data_missing_patterns(X)
-lav <- lavaan:::lav_mvnorm_missing_h1_estimate_moments(
-  Y = X, Mp = mp, tol = 1e-12, max.iter = 10000L)
+# (lavaan 0.7 renamed the 0.6-era lav_data_missing_patterns /
+# lav_mvnorm_missing_h1_estimate_moments internals.)
+mp <- lavaan:::lav_data_mi_patterns(X)
+lav <- lavaan:::lav_mvn_mi_h1_est_moments(
+  y = X, mp = mp, tol = 1e-12, max_iter = 10000L)
 
 mean_diff <- max(abs(mag$mean[[1L]] - lav$Mu))
 cov_diff  <- max(abs(mag$cov[[1L]] - lav$Sigma))

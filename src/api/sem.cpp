@@ -168,16 +168,35 @@ Result<estimate::gmm::Weight> ls_weight_for_fit(const Fit &fit) {
 }
 
 Result<int> fiml_df(const Fit &fit, const data::RawData &raw) {
-  auto stats = estimate::fiml::fiml_start_sample_stats(raw);
-  if (!stats) {
-    return std::unexpected(make_error(ErrorStage::Data, stats.error()));
+  const estimate::fiml::FIMLPack *pack = fit.fiml_pack();
+  std::optional<data::SampleStats> local_stats;
+  if (!pack) {
+    auto stats = estimate::fiml::fiml_start_sample_stats(raw);
+    if (!stats) {
+      return std::unexpected(make_error(ErrorStage::Data, stats.error()));
+    }
+    local_stats = std::move(*stats);
   }
-  auto df = inference::df_stat(fit.model().structure(), *stats,
+  auto df = inference::df_stat(fit.model().structure(),
+                               pack ? pack->start_stats : *local_stats,
                                fit.estimates().theta);
   if (!df) {
     return std::unexpected(make_error(ErrorStage::PostFit, df.error()));
   }
   return *df;
+}
+
+// Use the Fit's cross-call FIML pack when present; fall back to the raw-data
+// overload (which rebuilds the pack and re-runs the H1 EM) otherwise.
+auto fiml_extras_for(const Fit &fit, const data::RawData &raw) {
+  if (fit.fiml_pack() && fit.fiml_h1()) {
+    return estimate::fiml::fiml_extras(
+        fit.model().structure(), fit.model().matrix_rep(), raw,
+        fit.estimates(), *fit.fiml_pack(), *fit.fiml_h1());
+  }
+  return estimate::fiml::fiml_extras(fit.model().structure(),
+                                     fit.model().matrix_rep(), raw,
+                                     fit.estimates());
 }
 
 double total_n(const std::vector<std::int64_t> &n_obs) noexcept {
@@ -613,24 +632,43 @@ Result<Fit> fit(std::shared_ptr<const Model> model,
                      "FIML currently supports only the NLopt L-BFGS, NLopt SLSQP, or IPOPT optimizer"));
     }
 
-    auto start_stats = estimate::fiml::fiml_start_sample_stats(*raw);
-    if (!start_stats) {
-      return std::unexpected(make_error(ErrorStage::Data, start_stats.error()));
+    // Same precedence as the raw-only fit_fiml: report the fixed.x-missing
+    // policy error before any pattern/start-stats error from pack building.
+    if (auto e = estimate::fiml::validate_fiml_fixed_x_missing_policy(pt, *raw);
+        !e) {
+      return std::unexpected(make_error(ErrorStage::Fit, e.error()));
     }
-    auto x0 = start_values(pt, rep, *start_stats, model->starts(),
+    auto pack = estimate::fiml::fiml_pack(*raw);
+    if (!pack) {
+      return std::unexpected(make_error(ErrorStage::Data, pack.error()));
+    }
+    auto x0 = start_values(pt, rep, pack->start_stats, model->starts(),
                            estimator.start_spec);
     if (!x0) {
       return std::unexpected(x0.error());
     }
 
     auto est = estimate::fiml::fit_fiml(
-        pt, rep, *raw, *x0, {}, backend_from(estimator.optimizer_spec),
+        pt, rep, *raw, *x0, *pack, backend_from(estimator.optimizer_spec),
         estimator.optimizer_spec.options);
     if (!est) {
       return std::unexpected(make_error(ErrorStage::Fit, est.error()));
     }
-    return Fit(std::move(model), std::move(data), std::move(*est),
-               std::move(estimator));
+
+    // Saturated H1 EM, run once here and shared by every post-fit helper.
+    // On failure leave the H1 slot null: the helpers fall back to their
+    // raw-data paths and surface the error where it used to be raised.
+    auto pack_ptr = std::make_shared<const estimate::fiml::FIMLPack>(
+        std::move(*pack));
+    std::shared_ptr<const estimate::fiml::FIMLH1> h1_ptr;
+    if (auto h1 = estimate::fiml::fiml_h1_moments(*raw, *pack_ptr); h1) {
+      h1_ptr = std::make_shared<const estimate::fiml::FIMLH1>(std::move(*h1));
+    }
+    Fit out(std::move(model), std::move(data), std::move(*est),
+            std::move(estimator));
+    out.fiml_pack_ = std::move(pack_ptr);
+    out.fiml_h1_ = std::move(h1_ptr);
+    return out;
   }
 
   if (const auto *stats = data->ordinal()) {
@@ -869,9 +907,15 @@ Result<StandardErrors> standard_errors(const Fit &fit, InformationSpec spec) {
     // FIML exposes a single information notion — the observed −∂²logl/∂θ²,
     // computed analytically. `spec.kind` does not apply; `spec.h_step` is
     // retained for source compatibility only.
-    info = estimate::fiml::fiml_observed_information(
-        fit.model().structure(), fit.model().matrix_rep(), *fit.data().raw(),
-        fit.estimates(), {}, spec.h_step);
+    if (const auto *pack = fit.fiml_pack()) {
+      info = estimate::fiml::fiml_observed_information(
+          fit.model().structure(), fit.model().matrix_rep(), *fit.data().raw(),
+          fit.estimates(), *pack);
+    } else {
+      info = estimate::fiml::fiml_observed_information(
+          fit.model().structure(), fit.model().matrix_rep(), *fit.data().raw(),
+          fit.estimates(), {}, spec.h_step);
+    }
   } else if (is_continuous_ls(fit.estimator()) && fit.data().sample_stats()) {
     auto weight = ls_weight_for_fit(fit);
     if (!weight) {
@@ -911,6 +955,13 @@ Result<estimate::fiml::FIMLRobustMLR> fiml_robust_mlr(const Fit &fit,
   auto t = test(fit, standard_chi_square());
   if (!t) {
     return std::unexpected(t.error());
+  }
+  if (fit.fiml_pack() && fit.fiml_h1()) {
+    auto robust = estimate::fiml::fiml_robust_mlr(
+        fit.model().structure(), fit.model().matrix_rep(), *raw,
+        fit.estimates(), t->df, t->statistic, *fit.fiml_pack(),
+        *fit.fiml_h1());
+    return post_result(std::move(robust));
   }
   auto robust = estimate::fiml::fiml_robust_mlr(
       fit.model().structure(), fit.model().matrix_rep(), *raw, fit.estimates(),
@@ -1064,9 +1115,7 @@ Result<TestResult> test(const Fit &fit, TestSpec spec) {
     if (!df) {
       return std::unexpected(df.error());
     }
-    auto extras = estimate::fiml::fiml_extras(
-        fit.model().structure(), fit.model().matrix_rep(), *raw,
-        fit.estimates());
+    auto extras = fiml_extras_for(fit, *raw);
     if (!extras) {
       return std::unexpected(make_error(ErrorStage::PostFit, extras.error()));
     }
@@ -1120,24 +1169,30 @@ Result<FitMeasuresResult> fit_measures(const Fit &fit) {
   }
 
   if (const auto *raw = fit.data().raw()) {
-    auto stats = estimate::fiml::fiml_start_sample_stats(*raw);
-    if (!stats) {
-      return std::unexpected(make_error(ErrorStage::Data, stats.error()));
+    const estimate::fiml::FIMLPack *pack = fit.fiml_pack();
+    std::optional<data::SampleStats> local_stats;
+    if (!pack) {
+      auto stats = estimate::fiml::fiml_start_sample_stats(*raw);
+      if (!stats) {
+        return std::unexpected(make_error(ErrorStage::Data, stats.error()));
+      }
+      local_stats = std::move(*stats);
     }
     auto t = test(fit, standard_chi_square());
     if (!t) {
       return std::unexpected(t.error());
     }
-    auto baseline =
-        estimate::fiml::fiml_baseline_chi2(fit.model().structure(), *raw);
+    auto baseline = (pack && fit.fiml_h1())
+        ? estimate::fiml::fiml_baseline_chi2(fit.model().structure(), *raw,
+                                             *pack, *fit.fiml_h1())
+        : estimate::fiml::fiml_baseline_chi2(fit.model().structure(), *raw);
     if (!baseline) {
       return std::unexpected(make_error(ErrorStage::PostFit, baseline.error()));
     }
-    auto indices =
-        measures::fit_measures(t->statistic, t->df, *baseline, *stats);
-    auto extras = estimate::fiml::fiml_extras(
-        fit.model().structure(), fit.model().matrix_rep(), *raw,
-        fit.estimates());
+    auto indices = measures::fit_measures(
+        t->statistic, t->df, *baseline,
+        pack ? pack->start_stats : *local_stats);
+    auto extras = fiml_extras_for(fit, *raw);
     if (!extras) {
       return std::unexpected(make_error(ErrorStage::PostFit, extras.error()));
     }
