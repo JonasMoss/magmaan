@@ -1801,6 +1801,63 @@ TEST_CASE("Ordinal bvn corner grids reproduce per-cell rectangle values") {
   }
 }
 
+TEST_CASE("Ordinal bvn cdf matches closed forms and a brute-force reference") {
+  const double inf = std::numeric_limits<double>::infinity();
+  const auto cdf = [&](double h, double k, double rho) {
+    return magmaan::data::ordinal_bvn_rect_prob(-inf, h, -inf, k, rho);
+  };
+  const auto phi = [](double x) {
+    return 0.5 * std::erfc(-x / std::sqrt(2.0));
+  };
+
+  // P(X<0, Y<0) = 1/4 + asin(rho) / (2 pi), exact for all rho.
+  constexpr double pi = 3.14159265358979323846;
+  for (double rho : {-0.999, -0.95, -0.926, -0.9, -0.5, -0.2, 0.0,
+                     0.3, 0.75, 0.924, 0.99, 0.9999}) {
+    CHECK(cdf(0.0, 0.0, rho) ==
+          doctest::Approx(0.25 + std::asin(rho) / (2.0 * pi)).epsilon(1e-13));
+  }
+
+  // Independence factorizes; the degenerate corners are exact.
+  CHECK(cdf(0.7, -1.3, 0.0) == doctest::Approx(phi(0.7) * phi(-1.3)).epsilon(1e-14));
+  CHECK(cdf(0.7, -1.3, 1.0) == doctest::Approx(phi(-1.3)).epsilon(1e-14));
+  CHECK(cdf(0.7, -0.3, -1.0) ==
+        doctest::Approx(std::max(0.0, phi(0.7) + phi(-0.3) - 1.0)).epsilon(1e-14));
+
+  // Brute-force Simpson reference on Phi((k - rho z)/sd) phi(z) dz over
+  // [-9, h]; the integrand truncation error is below Phi(-9) ~ 1.1e-19.
+  const auto reference = [&](double h, double k, double rho) {
+    const double lo = -9.0;
+    const double hi = std::min(9.0, h);
+    if (hi <= lo) return 0.0;
+    // Simpson panels; the reference error is dominated by the steep Phi
+    // transition at |rho| ~ 1 (~3e-9 at rho = 0.999), hence the 1e-8 gate
+    // below rather than the implementation's own ~5e-16 accuracy.
+    const int n = 4000;
+    const double step = (hi - lo) / (2.0 * n);
+    const double sd = std::sqrt(1.0 - rho * rho);
+    const auto f = [&](double z) {
+      constexpr double inv_sqrt_2pi = 0.39894228040143267794;
+      return inv_sqrt_2pi * std::exp(-0.5 * z * z) *
+             phi((k - rho * z) / sd);
+    };
+    double sum = f(lo) + f(hi);
+    for (int i = 1; i < 2 * n; ++i) {
+      sum += f(lo + i * step) * ((i % 2 == 1) ? 4.0 : 2.0);
+    }
+    return sum * step / 3.0;
+  };
+  for (double rho : {-0.999, -0.93, -0.6, -0.1, 0.0, 0.4, 0.85, 0.924,
+                     0.926, 0.999}) {
+    for (double h : {-2.5, -0.8, 0.0, 1.2, 3.0}) {
+      for (double k : {-3.0, -1.1, 0.3, 2.2}) {
+        CHECK(cdf(h, k, rho) ==
+              doctest::Approx(reference(h, k, rho)).epsilon(1e-8));
+      }
+    }
+  }
+}
+
 TEST_CASE("Ordinal pair ML rho search lands on a stationary minimum") {
   Eigen::VectorXd thi(3);
   thi << -1.0, -0.1, 0.8;

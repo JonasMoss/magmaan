@@ -17,6 +17,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/data/pairwise_mixed.hpp"
 #include "magmaan/data/pairwise_ordinal.hpp"
+#include "magmaan/optim/nlopt_optimizer.hpp"
 
 #include "detail_linalg.hpp"
 
@@ -536,11 +537,63 @@ double shared_ordinal_objective(
   return out;
 }
 
+double shared_ordinal_objective_subset(
+    const Eigen::VectorXd& z,
+    const std::vector<std::int32_t>& levels,
+    const std::vector<Eigen::Index>& th_start,
+    const std::vector<SharedOrdinalPairTable>& pairs,
+    const std::vector<std::size_t>& subset,
+    const SharedRobustOrdinalOptions& options) {
+  Eigen::VectorXd thresholds;
+  std::vector<Eigen::VectorXd> th_by_var;
+  Eigen::MatrixXd R;
+  decode_shared_ordinal_params(
+      z, levels, th_start, options.rho_lower, options.rho_upper,
+      options.min_threshold_spacing, thresholds, th_by_var, R);
+  double out = 0.0;
+  for (const std::size_t idx : subset) {
+    const auto& pair = pairs[idx];
+    out += shared_pair_objective(
+        pair.adjusted_counts, th_by_var[static_cast<std::size_t>(pair.i)],
+        th_by_var[static_cast<std::size_t>(pair.j)], R(pair.i, pair.j),
+        options);
+  }
+  return out;
+}
+
+// Coordinate k moves either one variable's thresholds (the encoding is a
+// per-variable cumulative gap chain) or one correlation, so finite
+// differences only need the pairs whose contribution actually changes:
+// touched[k] lists those pair indices. Valid for both the z encoding and
+// the raw (thresholds, rho) layout, which share the coordinate map.
+std::vector<std::vector<std::size_t>> shared_ordinal_touched_pairs(
+    Eigen::Index nth,
+    Eigen::Index mdim,
+    const std::vector<std::int32_t>& levels,
+    const std::vector<Eigen::Index>& th_start,
+    const std::vector<SharedOrdinalPairTable>& pairs) {
+  std::vector<std::vector<std::size_t>> out(static_cast<std::size_t>(mdim));
+  for (std::size_t idx = 0; idx < pairs.size(); ++idx) {
+    const auto& pair = pairs[idx];
+    for (const Eigen::Index v : {pair.i, pair.j}) {
+      const Eigen::Index start = th_start[static_cast<std::size_t>(v)];
+      const Eigen::Index len =
+          static_cast<Eigen::Index>(levels[static_cast<std::size_t>(v)] - 1);
+      for (Eigen::Index k = 0; k < len; ++k) {
+        out[static_cast<std::size_t>(start + k)].push_back(idx);
+      }
+    }
+    out[static_cast<std::size_t>(nth + pair.corr_index)].push_back(idx);
+  }
+  return out;
+}
+
 Eigen::VectorXd shared_ordinal_gradient(
     const Eigen::VectorXd& z,
     const std::vector<std::int32_t>& levels,
     const std::vector<Eigen::Index>& th_start,
     const std::vector<SharedOrdinalPairTable>& pairs,
+    const std::vector<std::vector<std::size_t>>& touched,
     const SharedRobustOrdinalOptions& options) {
   Eigen::VectorXd grad(z.size());
   for (Eigen::Index k = 0; k < z.size(); ++k) {
@@ -549,8 +602,11 @@ Eigen::VectorXd shared_ordinal_gradient(
     Eigen::VectorXd zm = z;
     zp(k) += h;
     zm(k) -= h;
-    grad(k) = (shared_ordinal_objective(zp, levels, th_start, pairs, options) -
-               shared_ordinal_objective(zm, levels, th_start, pairs, options)) /
+    const auto& subset = touched[static_cast<std::size_t>(k)];
+    grad(k) = (shared_ordinal_objective_subset(
+                   zp, levels, th_start, pairs, subset, options) -
+               shared_ordinal_objective_subset(
+                   zm, levels, th_start, pairs, subset, options)) /
               (2.0 * h);
   }
   return grad;
@@ -617,12 +673,14 @@ Eigen::VectorXd shared_ordinal_estimating_equation(
     const std::vector<std::int32_t>& levels,
     const std::vector<Eigen::Index>& th_start,
     const std::vector<SharedOrdinalPairTable>& pairs,
+    const std::vector<std::size_t>& subset,
     const SharedRobustOrdinalOptions& options) {
   const Eigen::Index nth = thresholds.size();
   const Eigen::Index p = R.rows();
   const Eigen::Index mdim = nth + p * (p - 1) / 2;
   Eigen::VectorXd out = Eigen::VectorXd::Zero(mdim);
-  for (const auto& pair : pairs) {
+  for (const std::size_t pair_idx : subset) {
+    const auto& pair = pairs[pair_idx];
     const auto& th_i = th_by_var[static_cast<std::size_t>(pair.i)];
     const auto& th_j = th_by_var[static_cast<std::size_t>(pair.j)];
     const Eigen::Index nth_i = th_i.size();
@@ -675,7 +733,10 @@ Eigen::MatrixXd shared_ordinal_casewise_psi(
   const Eigen::Index nth = thresholds.size();
   const Eigen::Index p = R.rows();
   const Eigen::Index mdim = nth + p * (p - 1) / 2;
-  Eigen::MatrixXd psi = Eigen::MatrixXd::Zero(n, mdim);
+  // Accumulate transposed (cases as contiguous columns) so the per-row
+  // scatter binds segments directly instead of copying whole rows.
+  Eigen::MatrixXd psi_t = Eigen::MatrixXd::Zero(mdim, n);
+  std::vector<Eigen::VectorXd> cell_score;
   for (const auto& pair : pairs) {
     const auto& th_i = th_by_var[static_cast<std::size_t>(pair.i)];
     const auto& th_j = th_by_var[static_cast<std::size_t>(pair.j)];
@@ -685,34 +746,45 @@ Eigen::MatrixXd shared_ordinal_casewise_psi(
     const Eigen::Index sj = th_start[static_cast<std::size_t>(pair.j)];
     const double rho = R(pair.i, pair.j);
     const double total = pair.adjusted_counts.sum();
-    for (Eigen::Index row = 0; row < n; ++row) {
-      const Eigen::Index ci = Xcat(row, pair.i);
-      const Eigen::Index cj = Xcat(row, pair.j);
+    const Eigen::Index n_levels_i = nth_i + 1;
+    const Eigen::Index n_levels_j = nth_j + 1;
+    // A row's contribution depends on the row only through its cell, so
+    // evaluate the scaled score once per cell and scatter to rows.
+    cell_score.assign(
+        static_cast<std::size_t>(n_levels_i * n_levels_j), Eigen::VectorXd{});
+    for (Eigen::Index ci = 0; ci < n_levels_i; ++ci) {
       const double lo_i = (ci == 0) ? -kInf : th_i(ci - 1);
-      const double hi_i = (ci + 1 == th_i.size() + 1) ? kInf : th_i(ci);
-      const double lo_j = (cj == 0) ? -kInf : th_j(cj - 1);
-      const double hi_j = (cj + 1 == th_j.size() + 1) ? kInf : th_j(cj);
-      const double pcell = std::max(
-          kProbFloor, ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho));
-      const Eigen::VectorXd score =
-          ordinal_pair_cell_log_score_local(ci, cj, th_i, th_j, rho);
-      double scale = 1.0;
-      if (options.kind == SharedRobustOrdinalKind::HWeighted) {
-        const double t = pair.adjusted_counts(ci, cj) / (total * pcell);
-        auto h = eval_polychoric_h_score(t, options.h_score);
-        scale = h.has_value() ? h->dh : std::numeric_limits<double>::quiet_NaN();
-      } else if (options.kind == SharedRobustOrdinalKind::Dpd) {
-        scale = std::pow(pcell, options.alpha);
-      } else {
-        const double f = pair.adjusted_counts(ci, cj) / total;
-        scale = clipped_cell_derivative(f, pcell, total, options.clip);
+      const double hi_i = (ci + 1 == n_levels_i) ? kInf : th_i(ci);
+      for (Eigen::Index cj = 0; cj < n_levels_j; ++cj) {
+        const double lo_j = (cj == 0) ? -kInf : th_j(cj - 1);
+        const double hi_j = (cj + 1 == n_levels_j) ? kInf : th_j(cj);
+        const double pcell = std::max(
+            kProbFloor, ordinal_bvn_rect_prob(lo_i, hi_i, lo_j, hi_j, rho));
+        double scale = 1.0;
+        if (options.kind == SharedRobustOrdinalKind::HWeighted) {
+          const double t = pair.adjusted_counts(ci, cj) / (total * pcell);
+          auto h = eval_polychoric_h_score(t, options.h_score);
+          scale = h.has_value() ? h->dh
+                                : std::numeric_limits<double>::quiet_NaN();
+        } else if (options.kind == SharedRobustOrdinalKind::Dpd) {
+          scale = std::pow(pcell, options.alpha);
+        } else {
+          const double f = pair.adjusted_counts(ci, cj) / total;
+          scale = clipped_cell_derivative(f, pcell, total, options.clip);
+        }
+        cell_score[static_cast<std::size_t>(ci * n_levels_j + cj)] =
+            scale * ordinal_pair_cell_log_score_local(ci, cj, th_i, th_j, rho);
       }
-      Eigen::VectorXd row_psi = psi.row(row).transpose();
-      add_pair_score_to_global(row_psi, score, nth, si, sj, nth_i, nth_j,
-                               pair.corr_index, scale);
-      psi.row(row) = row_psi.transpose();
+    }
+    for (Eigen::Index row = 0; row < n; ++row) {
+      const Eigen::Index cell =
+          Xcat(row, pair.i) * n_levels_j + Xcat(row, pair.j);
+      add_pair_score_to_global(
+          psi_t.col(row), cell_score[static_cast<std::size_t>(cell)], nth, si,
+          sj, nth_i, nth_j, pair.corr_index, 1.0);
     }
   }
+  Eigen::MatrixXd psi = psi_t.transpose();
   psi.rowwise() -= psi.colwise().mean();
   return psi;
 }
@@ -736,7 +808,8 @@ Eigen::MatrixXd shared_ordinal_bread_numeric(
     }
   }
 
-  auto unpack_g = [&](const Eigen::VectorXd& x) {
+  auto unpack_g = [&](const Eigen::VectorXd& x,
+                      const std::vector<std::size_t>& subset) {
     Eigen::VectorXd th = x.head(nth);
     std::vector<Eigen::VectorXd> by_var(static_cast<std::size_t>(p));
     for (Eigen::Index j = 0; j < p; ++j) {
@@ -754,9 +827,13 @@ Eigen::MatrixXd shared_ordinal_bread_numeric(
       }
     }
     return shared_ordinal_estimating_equation(
-        th, by_var, r, levels, th_start, pairs, options);
+        th, by_var, r, levels, th_start, pairs, subset, options);
   };
 
+  // Pairs not touching coordinate k contribute identically at x+h and x-h,
+  // so their finite difference is exactly zero; skip them.
+  const auto touched =
+      shared_ordinal_touched_pairs(nth, mdim, levels, th_start, pairs);
   Eigen::MatrixXd bread(mdim, mdim);
   for (Eigen::Index k = 0; k < mdim; ++k) {
     double h = options.fd_step * std::max(1.0, std::abs(theta(k)));
@@ -783,7 +860,9 @@ Eigen::MatrixXd shared_ordinal_bread_numeric(
       xp(k) = std::min(options.rho_upper, xp(k));
       xm(k) = std::max(options.rho_lower, xm(k));
     }
-    bread.col(k) = (unpack_g(xp) - unpack_g(xm)) / (xp(k) - xm(k));
+    const auto& subset = touched[static_cast<std::size_t>(k)];
+    bread.col(k) = (unpack_g(xp, subset) - unpack_g(xm, subset)) /
+                   (xp(k) - xm(k));
   }
   return 0.5 * (bread + bread.transpose());
 }
@@ -2062,42 +2141,47 @@ pairwise_ordinal_stats_shared_robust_from_integer_data(
           "pairwise_ordinal_stats_shared_robust_from_integer_data: non-finite starting objective"));
     }
 
+    const auto touched =
+        shared_ordinal_touched_pairs(nth, mdim, levels, th_start, pairs);
+    // The encoding already removes the bounds (cumulative-gap thresholds,
+    // squashed rho), so this is an unconstrained smooth problem: delegate to
+    // the vendored NLopt L-BFGS instead of hand-rolled steepest descent.
+    // Non-finite objective or gradient at a probe point returns +inf, which
+    // the line search treats as a barrier — matching the old step-halving
+    // rejection. A hard optimizer failure keeps the ML starting values, like
+    // the old loop's bail-out on an exhausted line search.
     int iterations = 0;
     bool converged = false;
-    for (; iterations < options.max_iter; ++iterations) {
-      Eigen::VectorXd grad = shared_ordinal_gradient(
-          z, levels, th_start, pairs, options);
-      if (!grad.allFinite()) {
-        return std::unexpected(make_err(PostError::Kind::NumericIssue,
-            "pairwise_ordinal_stats_shared_robust_from_integer_data: non-finite gradient"));
-      }
-      if (grad.lpNorm<Eigen::Infinity>() <= options.gtol) {
-        converged = true;
-        break;
-      }
-      const double grad_sq = grad.squaredNorm();
-      double step = 0.6;
-      bool accepted = false;
-      bool ftol_stop = false;
-      for (int ls = 0; ls < 36; ++ls) {
-        const Eigen::VectorXd candidate = z - step * grad;
-        const double fc = shared_ordinal_objective(
-            candidate, levels, th_start, pairs, options);
-        if (std::isfinite(fc) && fc < f - 1e-4 * step * grad_sq) {
-          ftol_stop = std::abs(f - fc) <=
-              options.ftol * std::max(1.0, std::abs(f));
-          z = candidate;
-          f = fc;
-          accepted = true;
-          break;
-        }
-        step *= 0.5;
-      }
-      if (!accepted) break;
-      if (ftol_stop) {
-        ++iterations;
-        converged = true;
-        break;
+    {
+      const optim::NloptOptimizer lbfgs(
+          optim::OptimOptions{.max_iter = options.max_iter,
+                              .ftol = options.ftol,
+                              .gtol = options.gtol},
+          optim::NloptAlgorithm::Lbfgs);
+      auto sol = lbfgs.minimize(
+          [&](const Eigen::VectorXd& x, Eigen::VectorXd& grad_out) {
+            const double fx = shared_ordinal_objective(
+                x, levels, th_start, pairs, options);
+            if (!std::isfinite(fx)) {
+              grad_out.setZero();
+              return std::numeric_limits<double>::infinity();
+            }
+            grad_out = shared_ordinal_gradient(
+                x, levels, th_start, pairs, touched, options);
+            if (!grad_out.allFinite()) {
+              grad_out.setZero();
+              return std::numeric_limits<double>::infinity();
+            }
+            return fx;
+          },
+          z);
+      if (sol.has_value() && sol->theta_hat.allFinite() &&
+          std::isfinite(sol->fmin) && sol->fmin <= f) {
+        z = sol->theta_hat;
+        f = sol->fmin;
+        iterations = sol->iterations;
+        converged = sol->status == optim::OptimStatus::Converged ||
+                    sol->status == optim::OptimStatus::LineSearchSalvaged;
       }
     }
 
