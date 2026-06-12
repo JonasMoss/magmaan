@@ -1,4 +1,4 @@
-#include "magmaan/data/shrinkage.hpp"
+#include "magmaan/data/frontier/shrinkage.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -13,7 +13,7 @@
 
 #include "detail_linalg.hpp"
 
-namespace magmaan::data {
+namespace magmaan::data::frontier {
 
 namespace {
 
@@ -333,4 +333,4 @@ shrink_mixed_ordinal_stats(const MixedOrdinalStats& stats,
   return out;
 }
 
-}  // namespace magmaan::data
+}  // namespace magmaan::data::frontier

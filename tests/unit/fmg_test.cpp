@@ -5,7 +5,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/inference/inference.hpp"
-#include "magmaan/robust/fmg.hpp"
+#include "magmaan/robust/frontier/fmg.hpp"
 
 TEST_CASE("FMG standard chi-square ignores the UGamma spectrum") {
   Eigen::VectorXd eig(3);

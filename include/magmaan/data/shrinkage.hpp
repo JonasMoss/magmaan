@@ -1,80 +1,15 @@
 #pragma once
 
-#include <cstdint>
-#include <vector>
-
-#include "magmaan/data/ordinal.hpp"
-#include "magmaan/data/sample_stats.hpp"
-#include "magmaan/expected.hpp"
+#include "magmaan/data/frontier/shrinkage.hpp"
 
 namespace magmaan::data {
 
-// Covariance shrinkage as an explicit sample-moment transformation.
-//
-// `shrink_sample_stats` takes a `SampleStats` and returns a shrunk copy plus
-// per-block repair diagnostics. It is an opt-in transformation: a fit that
-// wants shrinkage calls this first and passes the result to `fit_*`. Nothing
-// here changes a default — passing the raw `SampleStats` straight to a fitter
-// is unaffected.
-//
-// Shrinkage replaces the sample covariance `S` with a convex combination
-// `S' = (1 - s)·S + s·T` of `S` and a structured, well-conditioned target
-// `T`. It trades a little bias for a large variance reduction and lifts the
-// smallest eigenvalue away from zero — useful for small-N / near-singular `S`.
-
-enum class CovarianceShrinkageKind : std::uint8_t {
-  None,                 // S' = S (diagnostics only)
-  Ridge,                // T = I            (best on correlation-scale input)
-  IdentityTarget,       // T = (tr S / p)·I (Ledoit-Wolf scaled identity)
-  DiagonalTarget,       // T = diag(S)      (shrinks covariances toward 0)
-  ConstantCorrelation,  // T has the average sample correlation off-diagonal
-};
-
-struct CovarianceShrinkageOptions {
-  CovarianceShrinkageKind kind = CovarianceShrinkageKind::None;
-
-  // Shrinkage intensity `s ∈ [0, 1]` (clamped). Used unless
-  // `estimate_intensity` is set. `s = 0` ⇒ no change, `s = 1` ⇒ the target.
-  double intensity = 0.0;
-
-  // Estimate the intensity from the data instead of using `intensity`: the
-  // normal-theory Ledoit-Wolf / Schäfer-Strimmer optimal value. Supported for
-  // `DiagonalTarget` only; any other kind returns an explicit error.
-  bool estimate_intensity = false;
-};
-
-// Per-block repair diagnostics — what the shrinkage did to the conditioning.
-struct CovarianceRepairResult {
-  double raw_min_eigen = 0.0;   // smallest eigenvalue of the original S
-  double min_eigen     = 0.0;   // smallest eigenvalue of the shrunk S'
-  double intensity     = 0.0;   // shrinkage intensity actually applied
-  bool   shrunk        = false; // true when a non-zero intensity was applied
-};
-
-struct ShrunkSampleStats {
-  SampleStats stats;                                  // shrunk sample moments
-  std::vector<CovarianceRepairResult> block_diagnostics;
-};
-
-struct ShrunkMixedOrdinalStats {
-  MixedOrdinalStats stats;                            // shrunk mixed moments
-  std::vector<CovarianceRepairResult> block_diagnostics;
-};
-
-// Apply covariance shrinkage to every block of `samp`. Means and `n_obs` pass
-// through unchanged. Returns `NumericIssue` on a malformed input or an
-// unsupported `estimate_intensity` combination.
-post_expected<ShrunkSampleStats>
-shrink_sample_stats(const SampleStats& samp, CovarianceShrinkageOptions opts);
-
-// Apply the same covariance shrinkage transformation to the covariance-like
-// portion of `MixedOrdinalStats`: ordinal thresholds and continuous means pass
-// through, while continuous variances and all lower-triangle association rows
-// are transformed with the block covariance/correlation matrix. NACOV and
-// DWLS/WLS weights are rebuilt by delta-method propagation through that same
-// transformation, so C++ and R callers can consume one consistent stats object.
-post_expected<ShrunkMixedOrdinalStats>
-shrink_mixed_ordinal_stats(const MixedOrdinalStats& stats,
-                           CovarianceShrinkageOptions opts);
+using frontier::CovarianceRepairResult;
+using frontier::CovarianceShrinkageKind;
+using frontier::CovarianceShrinkageOptions;
+using frontier::ShrunkMixedOrdinalStats;
+using frontier::ShrunkSampleStats;
+using frontier::shrink_mixed_ordinal_stats;
+using frontier::shrink_sample_stats;
 
 }  // namespace magmaan::data

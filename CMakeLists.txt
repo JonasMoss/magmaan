@@ -94,7 +94,7 @@ add_library(magmaan STATIC
   src/model/auto_identification.cpp
   src/data/raw_data.cpp
   src/data/pairwise_cov.cpp
-  src/data/shrinkage.cpp
+  src/data/frontier/shrinkage.cpp
   src/data/h_score.cpp
   src/data/pairwise_mixed.cpp
   src/data/pairwise_ordinal.cpp

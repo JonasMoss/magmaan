@@ -9,7 +9,7 @@
 #include "internal.hpp"
 
 #include "magmaan/robust/robust.hpp"
-#include "magmaan/robust/fmg.hpp"
+#include "magmaan/robust/frontier/fmg.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/ordinal.hpp"

@@ -1,4 +1,4 @@
-#include "magmaan/robust/fmg.hpp"
+#include "magmaan/robust/frontier/fmg.hpp"
 
 #include <algorithm>
 #include <cmath>

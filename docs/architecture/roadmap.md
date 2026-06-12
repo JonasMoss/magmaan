@@ -952,12 +952,13 @@ stop rather than any usable non-error return.
   mixed objectives remain a later slice; reduced-Gamma robust products sit in
   the speculative backlog. The lavaan-backed fixtures include a
   complete/listwise sparse 4-category boundary case.
-- Covariance shrinkage is available for both continuous `SampleStats` and
-  mixed continuous/ordinal `MixedOrdinalStats`. Mixed shrinkage leaves
-  thresholds and continuous means in place, transforms the lower-triangle
-  association/covariance block, propagates the moment transformation through
-  `NACOV`, and rebuilds DWLS/WLS weights so C++ and R consume the same shrunk
-  moment stack.
+- Covariance shrinkage is available under `data::frontier` for both continuous
+  `SampleStats` and mixed continuous/ordinal `MixedOrdinalStats`. Mixed
+  shrinkage leaves thresholds and continuous means in place, transforms the
+  lower-triangle association/covariance block, propagates the moment
+  transformation through `NACOV`, and rebuilds DWLS/WLS weights so C++ and R
+  consume the same shrunk moment stack. The old `magmaan/data/shrinkage.hpp`
+  include path remains a forwarding shim.
 - Public complete-data polyserial pair kernel for mixed continuous/ordinal
   work, exposing fixed-threshold rho ML, likelihood, casewise threshold/rho
   scores, and pairwise score Gamma. The mixed sample-stat builder now reuses
@@ -1129,9 +1130,9 @@ stop rather than any usable non-error return.
   exposes all-ordinal Huberized residual stats. Default ordinal and mixed data
   builders remain lavaan-compatible ML paths.
 - The R `magmaan_core` surface also exposes mixed continuous/ordinal covariance
-  shrinkage as an explicit data transformation, rebuilding mixed moments,
-  `NACOV`, and DWLS/WLS weights before fitting rather than hiding shrinkage
-  inside estimator strings.
+  shrinkage as an explicit `data::frontier` transformation, rebuilding mixed
+  moments, `NACOV`, and DWLS/WLS weights before fitting rather than hiding
+  shrinkage inside estimator strings.
 - The R package is intended as a methods-developer interface over the C++
   library, not a second SEM implementation.
 - Standard errors, information matrices, Wald/z tests, robust corrections,

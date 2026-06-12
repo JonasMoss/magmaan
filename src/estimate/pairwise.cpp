@@ -1,4 +1,4 @@
-#include "magmaan/estimate/pairwise.hpp"
+#include "magmaan/estimate/frontier/pairwise.hpp"
 
 #include <algorithm>
 #include <cmath>

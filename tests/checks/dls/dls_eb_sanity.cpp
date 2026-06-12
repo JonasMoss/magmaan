@@ -14,7 +14,7 @@
 #include <Eigen/Core>
 
 #include "magmaan/data/raw_data.hpp"
-#include "magmaan/estimate/gmm/dls_weight.hpp"
+#include "magmaan/estimate/frontier/dls_weight.hpp"
 
 namespace {
 

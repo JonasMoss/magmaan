@@ -20,7 +20,7 @@
 #include "magmaan/data/pairwise_mixed.hpp"
 #include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/estimate/ordinal.hpp"
-#include "magmaan/estimate/pairwise.hpp"
+#include "magmaan/estimate/frontier/pairwise.hpp"
 #include "magmaan/measures/standardized.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"

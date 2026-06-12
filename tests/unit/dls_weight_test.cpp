@@ -12,7 +12,7 @@
 #include "../test_fit.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/data/sample_stats.hpp"
-#include "magmaan/estimate/gmm/dls_weight.hpp"
+#include "magmaan/estimate/frontier/dls_weight.hpp"
 #include "magmaan/estimate/start_values.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/model/matrix_rep.hpp"

@@ -13,7 +13,7 @@
 #include "../oracle.hpp"
 #include "magmaan/data/pairwise_mixed.hpp"
 #include "magmaan/data/pairwise_ordinal.hpp"
-#include "magmaan/estimate/pairwise.hpp"
+#include "magmaan/estimate/frontier/pairwise.hpp"
 
 namespace {
 

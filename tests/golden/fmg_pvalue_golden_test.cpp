@@ -6,7 +6,7 @@
 
 #include <Eigen/Core>
 
-#include "magmaan/robust/fmg.hpp"
+#include "magmaan/robust/frontier/fmg.hpp"
 
 namespace {
 
