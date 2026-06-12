@@ -1,0 +1,62 @@
+#pragma once
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
+namespace magmaan::data::detail {
+
+struct RhoScore {
+  double g = 0.0;  // first derivative of the objective in rho
+  double h = 0.0;  // second derivative of the objective in rho
+};
+
+struct RhoSearchResult {
+  double rho = 0.0;
+  int iterations = 0;
+};
+
+// Safeguarded Newton on the closed-form rho score over [lo, hi]. Carries the
+// same unimodality assumption as the golden-section search it replaces: the
+// sign of the score brackets the minimizer, and bisection takes over whenever
+// the Newton step is non-finite, non-descent, or leaves the bracket. x_tol is
+// relative to the initial width, matching the golden-section stop semantics.
+template <class ScoreFn>
+RhoSearchResult newton_rho_search(double lo, double hi, double x_tol,
+                                  int max_iter, ScoreFn&& score) {
+  double a = lo;
+  double b = hi;
+  const double tol = x_tol * std::max(1.0, b - a);
+  double x = std::clamp(0.0, a, b);
+  RhoSearchResult out;
+  for (; out.iterations < max_iter; ++out.iterations) {
+    const RhoScore s = score(x);
+    if (!std::isfinite(s.g)) {
+      const double xn = 0.5 * (a + b);
+      if (std::abs(xn - x) <= tol) {
+        x = xn;
+        break;
+      }
+      x = xn;
+      continue;
+    }
+    if (s.g > 0.0) {
+      b = x;
+    } else {
+      a = x;
+    }
+    if (s.g == 0.0 || b - a <= tol) break;
+    double xn = std::numeric_limits<double>::quiet_NaN();
+    if (std::isfinite(s.h) && s.h > 0.0) xn = x - s.g / s.h;
+    if (!(xn > a && xn < b)) xn = 0.5 * (a + b);
+    if (std::abs(xn - x) <= tol) {
+      x = xn;
+      break;
+    }
+    x = xn;
+  }
+  out.rho = std::clamp(x, lo, hi);
+  return out;
+}
+
+}  // namespace magmaan::data::detail

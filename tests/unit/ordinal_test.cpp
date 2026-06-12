@@ -1768,6 +1768,112 @@ TEST_CASE("Ordinal pair ML kernel: probabilities, rho fit, and scores") {
   CHECK(scores->threshold_j.allFinite());
 }
 
+TEST_CASE("Ordinal bvn corner grids reproduce per-cell rectangle values") {
+  Eigen::VectorXd thi(3);
+  thi << -1.1, -0.2, 0.9;
+  Eigen::VectorXd thj(2);
+  thj << -0.5, 0.6;
+  const double rho = 0.37;
+  const double inf = std::numeric_limits<double>::infinity();
+
+  Eigen::MatrixXd cdf;
+  Eigen::MatrixXd pdf;
+  magmaan::data::ordinal_bvn_corner_cdf(thi, thj, rho, cdf);
+  magmaan::data::ordinal_bvn_corner_pdf(thi, thj, rho, pdf);
+  REQUIRE(cdf.rows() == thi.size() + 2);
+  REQUIRE(cdf.cols() == thj.size() + 2);
+
+  for (Eigen::Index a = 0; a < thi.size() + 1; ++a) {
+    const double lo_i = (a == 0) ? -inf : thi(a - 1);
+    const double hi_i = (a == thi.size()) ? inf : thi(a);
+    for (Eigen::Index b = 0; b < thj.size() + 1; ++b) {
+      const double lo_j = (b == 0) ? -inf : thj(b - 1);
+      const double hi_j = (b == thj.size()) ? inf : thj(b);
+      const double p_cell = cdf(a + 1, b + 1) - cdf(a, b + 1) -
+                            cdf(a + 1, b) + cdf(a, b);
+      const double d_cell = pdf(a + 1, b + 1) - pdf(a, b + 1) -
+                            pdf(a + 1, b) + pdf(a, b);
+      CHECK(p_cell == doctest::Approx(magmaan::data::ordinal_bvn_rect_prob(
+          lo_i, hi_i, lo_j, hi_j, rho)).epsilon(1e-14));
+      CHECK(d_cell == doctest::Approx(magmaan::data::ordinal_bvn_rect_drho(
+          lo_i, hi_i, lo_j, hi_j, rho)).epsilon(1e-14));
+    }
+  }
+}
+
+TEST_CASE("Ordinal pair ML rho search lands on a stationary minimum") {
+  Eigen::VectorXd thi(3);
+  thi << -1.0, -0.1, 0.8;
+  Eigen::VectorXd thj(2);
+  thj << -0.4, 0.5;
+  Eigen::MatrixXd counts(4, 3);
+  counts << 24.0,  9.0,  2.0,
+            14.0, 21.0,  6.0,
+             5.0, 17.0, 12.0,
+             1.0,  8.0, 19.0;
+
+  auto fit = magmaan::data::fit_ordinal_pair_rho_ml(counts, thi, thj);
+  REQUIRE(fit.has_value());
+  CHECK(!fit->hit_lower);
+  CHECK(!fit->hit_upper);
+
+  const double h = 1e-5;
+  auto nll = [&](double r) {
+    auto v = magmaan::data::ordinal_pair_negloglik(counts, thi, thj, r);
+    REQUIRE(v.has_value());
+    return *v;
+  };
+  const double f0 = nll(fit->rho);
+  const double fp = nll(fit->rho + h);
+  const double fm = nll(fit->rho - h);
+  // Interior minimum: neighbors are no lower and the FD slope vanishes at
+  // the curvature scale.
+  CHECK(fp >= f0 - 1e-10);
+  CHECK(fm >= f0 - 1e-10);
+  const double slope = (fp - fm) / (2.0 * h);
+  const double curvature = (fp - 2.0 * f0 + fm) / (h * h);
+  CHECK(std::abs(slope) <= 1e-4 * std::max(1.0, std::abs(curvature)));
+}
+
+TEST_CASE("Polyserial ML rho search lands on a stationary minimum") {
+  Eigen::VectorXd th(2);
+  th << -0.6, 0.7;
+  const Eigen::Index n = 160;
+  Eigen::VectorXd u(n);
+  Eigen::VectorXi cat(n);
+  // Deterministic latent draws with a positive association.
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const double z = std::cos(0.7 * static_cast<double>(i) + 0.3) +
+                     0.4 * std::sin(1.9 * static_cast<double>(i));
+    u(i) = z;
+    const double y = 0.6 * z + 0.5 * std::sin(3.7 * static_cast<double>(i));
+    cat(i) = (y < th(0)) ? 0 : (y < th(1)) ? 1 : 2;
+  }
+  u.array() -= u.mean();
+  u /= std::sqrt(u.squaredNorm() / static_cast<double>(n));
+
+  auto fit = magmaan::data::fit_polyserial_pair_rho_ml(cat, u, th);
+  REQUIRE(fit.has_value());
+  CHECK(!fit->hit_lower);
+  CHECK(!fit->hit_upper);
+  CHECK(fit->rho > 0.0);
+
+  const double h = 1e-5;
+  auto nll = [&](double r) {
+    auto v = magmaan::data::polyserial_pair_negloglik(cat, u, th, r);
+    REQUIRE(v.has_value());
+    return *v;
+  };
+  const double f0 = nll(fit->rho);
+  const double fp = nll(fit->rho + h);
+  const double fm = nll(fit->rho - h);
+  CHECK(fp >= f0 - 1e-10);
+  CHECK(fm >= f0 - 1e-10);
+  const double slope = (fp - fm) / (2.0 * h);
+  const double curvature = (fp - 2.0 * f0 + fm) / (h * h);
+  CHECK(std::abs(slope) <= 1e-4 * std::max(1.0, std::abs(curvature)));
+}
+
 TEST_CASE("Ordinal pair ML kernel: independence and lavaan 2x2 adjustment") {
   Eigen::VectorXd th(1);
   th << 0.0;

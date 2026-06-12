@@ -43,14 +43,18 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 
 - **Ordinal stats-construction perf headroom (2026-06-12 audit).** Workspace
   construction dominates ordinal/mixed wall time (fits are sub-3ms). Landed:
-  cell-cached `ordinal_pair_scores` and an `x_tol` stop for the polychoric and
-  polyserial golden-section searches (p=12/cat=5/n=1200: 475→172 ms). Remaining
-  headroom, in impact order, now all inside the per-pair rho search:
-  - **M.** Replace golden section with a derivative-based search
-    (`ordinal_bvn_rect_drho` is closed form, ~6–10 evals vs ~44).
-  - **M.** Evaluate the `(K_i+1)(K_j+1)` bvn corner grid once per rho instead
-    of 4 `bvn_cdf` per cell (interior corners shared by 4 cells, ~4×); consider
-    a Drezner–Wesolowsky-style `bvn_cdf` (6–20 nodes vs fixed 32).
+  cell-cached `ordinal_pair_scores`, an `x_tol` stop for the rho searches, and
+  (second pass, same day) the two M items: the polychoric/polyserial ML rho
+  searches are now safeguarded Newton on the closed-form score
+  (`detail_rho_search.hpp`, ~6 grid evals vs ~44 golden-section), and per-rho
+  bvn evaluation shares the `(K_i+1)(K_j+1)` corner grid
+  (`ordinal_bvn_corner_{cdf,pdf,pdf_drho}`) instead of 4 `bvn_cdf` per cell.
+  Construction-bench medians (n=900, reps=5): lazy ULS p16/c5 423→14 ms,
+  lazy DWLS p16/c5 298→26 ms, legacy full stats p16/c5 376→68 ms. Remaining
+  headroom, in impact order:
+  - **S.** A Drezner–Wesolowsky-style `bvn_cdf` (6–20 nodes vs the fixed
+    32-node Gauss–Legendre) would cut the remaining corner-grid cost ~2–4×;
+    verify lavaan polychoric parity tolerances first.
   - **S.** Cell-cache `shared_ordinal_casewise_psi` and restrict the
     shared-robust FD gradient/bread to pairs touching the perturbed coordinate.
   - **S.** The mixed workspace (`mixed_ordinal_stats_from_data`) has no
