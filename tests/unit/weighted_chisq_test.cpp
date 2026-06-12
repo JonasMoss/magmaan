@@ -70,6 +70,36 @@ TEST_CASE("imhof_upper: k equal-weight λ=1 collapses to χ²(k)") {
   }
 }
 
+TEST_CASE("imhof_upper: equal-weight deep tails stay on the χ² reference") {
+  struct Case {
+    int k;
+    double x;
+  };
+  const std::vector<Case> cases = {
+      {3, 60.0}, {3, 100.0}, {3, 160.0}, {5, 80.0}, {5, 140.0}};
+
+  for (const auto& c : cases) {
+    const Eigen::VectorXd lam = Eigen::VectorXd::Ones(c.k);
+    const double got = magmaan::robust::imhof_upper(lam, c.x);
+    const double exact = magmaan::inference::chi2_pvalue(c.x, c.k);
+    INFO("k=", c.k, "  x=", c.x, "  got=", got, "  exact=", exact);
+    CHECK(got > 0.0);
+    CHECK(got == doctest::Approx(exact).epsilon(1e-8));
+  }
+}
+
+TEST_CASE("imhof_upper: distinct positive deep tail matches Davies oracle") {
+  const Eigen::VectorXd lam = vec({2.0, 1.5, 1.0, 0.7, 0.3});
+  const double x = 66.0;
+  // Independent oracle: CompQuadForm::davies(q, lambda, acc=1e-10, lim=1e6),
+  // ifault=0. This exercises Ruben's recurrence, not the equal-weight shortcut.
+  const double expected = 3.8227433551973888e-08;
+
+  const double got = magmaan::robust::imhof_upper(lam, x);
+  CHECK(got > 0.0);
+  CHECK(got == doctest::Approx(expected).epsilon(1e-6));
+}
+
 TEST_CASE("imhof_upper: k equal-weight λ=c collapses to a scaled χ²(k)") {
   // Σⱼ c·χ²₁ⱼ = c·χ²(k), so Pr(Q > x) = Pr(χ²(k) > x/c).
   const int k = 4;
@@ -93,6 +123,11 @@ TEST_CASE("imhof_upper: degenerate inputs") {
 
   // All λ = 0  ⇒  Q ≡ 0; upper tail above any x > 0 is exactly 0.
   CHECK(magmaan::robust::imhof_upper(vec({0.0, 0.0, 0.0}), 1.0) == doctest::Approx(0.0));
+
+  // Zero weights and clipped negative eigensolve noise contribute no mass.
+  CHECK(magmaan::robust::imhof_upper(vec({3.0, 2.0, 1.0, 0.0, -1e-12}), 5.0) ==
+        doctest::Approx(magmaan::robust::imhof_upper(vec({3.0, 2.0, 1.0}), 5.0))
+            .epsilon(1e-12));
 }
 
 // ── Monte-Carlo cross-check on unequal-λ mixtures ───────────────────────────

@@ -69,16 +69,18 @@ scaled_shifted(double                                    t_ml,
 //     Q = Σⱼ λⱼ · Xⱼ ,    Xⱼ  ~ᵢᵢᵈ  χ²₁ ,
 //     imhof_upper(λ, x) = Pr(Q > x).
 //
-// Imhof (Biometrika 48, 1961): single 1-D quadrature
+// Positive spectra are evaluated first by Ruben's non-negative central-χ²
+// series, which avoids oscillatory cancellation in the deep tail. If that
+// series does not converge, the implementation falls back to Imhof
+// (Biometrika 48, 1961): single 1-D quadrature
 //
 //     Pr(Q > x) = ½ − (1/π) ∫₀^∞ sin θ(u) / (u · ρ(u))  du
 //     θ(u)      = ½ Σⱼ arctan(λⱼ u) − ½ x u
 //     ρ(u)      = Πⱼ (1 + λⱼ² u²)^{1/4}
 //
 // The integrand has a removable 0/0 at u = 0 (lim = (Σλⱼ − x)/2); it then
-// oscillates while damping as u → ∞.  We integrate via adaptive Simpson on
-// dyadic intervals [0, 2^n] until the next interval's contribution falls
-// below `rel_tol`, hard-capped at 2^30 to keep pathological inputs bounded.
+// oscillates while damping as u → ∞.  We integrate via QUADPACK qagi, with a
+// dense Simpson fallback for weakly damped small-df tails.
 //
 // Preconditions:
 //   • `lambda` non-empty, all entries non-negative (caller clips tiny
