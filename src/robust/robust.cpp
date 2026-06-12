@@ -2289,6 +2289,32 @@ param_space_sandwich(spec::LatentStructure pt, const model::MatrixRep& rep,
 post_expected<ParamSpaceSandwich>
 param_space_sandwich(spec::LatentStructure pt, const model::MatrixRep& rep,
                      const SampleStats& samp, const Estimates& est,
+                     const Eigen::Ref<const Eigen::MatrixXd>& Zc,
+                     double n_total, InferenceSpec spec,
+                     bool reparam_constraints) {
+  auto setup_or = robust_setup(std::move(pt), rep, samp, est, spec,
+                               /*gamma_hat=*/false, reparam_constraints);
+  if (!setup_or.has_value()) return std::unexpected(setup_or.error());
+  const auto& s = *setup_or;
+  const Eigen::Index expected_cols = s.has_means ? s.total_rows : s.pstar;
+  if (Zc.cols() != expected_cols) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "param_space_sandwich: Z_c has " + std::to_string(Zc.cols()) +
+            " columns, expected " + std::to_string(expected_cols)));
+  }
+  if (!(n_total > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "param_space_sandwich: n_total must be positive"));
+  }
+  const Eigen::MatrixXd ZcWDelta = Zc * s.WDelta;
+  Eigen::MatrixXd B1 = (ZcWDelta.transpose() * ZcWDelta) / n_total;
+  B1 = 0.5 * (B1 + B1.transpose()).eval();
+  return ParamSpaceSandwich{s.bread, std::move(B1), s.K_con, s.q};
+}
+
+post_expected<ParamSpaceSandwich>
+param_space_sandwich(spec::LatentStructure pt, const model::MatrixRep& rep,
+                     const SampleStats& samp, const Estimates& est,
                      const Eigen::MatrixXd& gamma_hat, InferenceSpec spec,
                      bool reparam_constraints) {
   auto setup_or = robust_setup(std::move(pt), rep, samp, est, spec,
