@@ -129,7 +129,7 @@ golden `parTable()` fixtures.
   `c = gᵀB1g / gᵀA1g`, where A1/B1 are the parameter-space sandwich bread/meat
   surfaced by `robust::param_space_sandwich` (the same Δ'WΔ / Δ'WΓ̂WΔ that
   `robust_se` uses) and g is the efficient-score direction. Goes beyond lavaan,
-  which falls back to the ordinary statistic when `se != "standard"`. v1 covers
+  which falls back to the ordinary statistic when `se != "standard"`. Covers
   complete-data ML, both breads (`Information::Expected` ≈ robust.sem/MLM;
   `Information::Observed` ≈ robust.huber.white/MLR), single group; reduces to the
   ordinary statistic exactly under the model-implied Γ_NT meat (Expected bread).
@@ -145,6 +145,31 @@ golden `parTable()` fixtures.
   built from lavaan's delta/wls.v/gamma/ceq.JAC (`regen_robust_score.R`,
   convention-free θ-space scaling), and an advisory calibration + Wald/LRT-trinity
   simulation (`tests/checks/robust_score/`).
+- The same scaling in the moment metric for the LS estimator tiers (2026-06).
+  Continuous ULS/GLS/WLS/DWLS: `inference::frontier`
+  `{modification_indices,score_tests}_robust` overloads taking the
+  `estimate::gmm::Weight`, with A1 = Σ_b (n_b/N)·Δ'WΔ and
+  B1 = Σ_b (n_b/N)·Δ'WΓ̂WΔ built by
+  `estimate::continuous_ls_param_space_sandwich` (expected bread only; Γ̂
+  empirical from raw, caller-supplied per-block, or model-implied Γ_NT per
+  `WeightMoments` — the GLS weight with the Γ_NT(S) meat collapses to c ≡ 1
+  exactly). All-ordinal and mixed DWLS/WLS (plus all-ordinal ULS):
+  `estimate::frontier`
+  `{modification_indices,score_tests}_{ordinal,mixed_ordinal}_robust` over the
+  [thresholds ; associations] moment metric, reusing the `robust_ordinal`
+  block assembly (W = estimation weight, Γ̂ = `stats.NACOV`) through the shared
+  `estimate::weighted_param_space_sandwich`; full WLS (W = NACOV⁻¹) reduces to
+  the ordinary statistic exactly, and `mi`/`mi_scaled` keep the lavaan-matched
+  row-type moment-scale convention (c carries no moment-scale factor). The
+  per-direction worker is shared as
+  `inference::frontier::score_for_direction_robust` (c is not W-scale
+  invariant: A1/B1 must be on the same weight scale as score/info). Single
+  group; api/R wrappers deferred until a concrete consumer appears. Oracles:
+  continuous DWLS (`se = "robust.sem"`, so lavaan's wls.v/gamma are the
+  ADF NACOV — gaps ~1e-9) and all-ordinal WLSMV (polychoric NACOV — c gap
+  ~6e-10) release-score fixtures 0007/0008 in `regen_robust_score.R`, plus the
+  exact WLS/GLS reductions and a primitives re-assembly in
+  `tests/unit/score_robust_test.cpp`.
 - Observed-bread robust SEs and observed-Hessian U-factors use total-N scaling
   and work on block-stacked multi-block covariance and mean-structure models.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand

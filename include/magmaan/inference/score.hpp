@@ -231,6 +231,86 @@ score_tests_robust(spec::LatentStructure pt,
                    const Estimates& est,
                    const RobustScoreOptions& options = {});
 
+// ── Continuous-LS (moment-quadratic) robust score tests ─────────────────────
+// The same per-direction scaling in the moment metric: A1 = Σ_b (n_b/N)·Δ'WΔ,
+// B1 = Σ_b (n_b/N)·Δ'WΓ̂WΔ with W the ESTIMATION weight, following the
+// non-robust `modification_indices(.., weight)` convention (empty ⇒ ULS
+// identity; `gmm::normal_theory_weight` ⇒ GLS; caller-supplied ⇒ WLS/DWLS).
+// The bread is always the expected (Δ'WΔ) one — `options.spec.bread` must be
+// Expected. Γ̂ sources mirror the ML overloads: empirical from complete-data
+// raw, model-implied Γ_NT (per `options.spec.moments`: Structured ⇒ Γ_NT(Σ̂),
+// Unstructured ⇒ Γ_NT(S)), or caller-supplied per-block Γ̂. With the GLS
+// weight and the Γ_NT(S) meat the sandwich collapses (B1 = A1, c ≡ 1) — the
+// exact reduction-to-NT baseline. Single-group only (v1).
+
+post_expected<ScoreTestTable>
+modification_indices_robust(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const SampleStats& samp,
+                            const RawData& raw,
+                            const Estimates& est,
+                            const estimate::gmm::Weight& weight,
+                            const RobustScoreOptions& options = {});
+
+// Model-implied (Γ_NT) meat only — `options.spec.cov` is treated as ModelImplied.
+post_expected<ScoreTestTable>
+modification_indices_robust(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const SampleStats& samp,
+                            const Estimates& est,
+                            const estimate::gmm::Weight& weight,
+                            const RobustScoreOptions& options = {});
+
+// Caller-supplied per-block Γ̂ in the [μ ; vech σ] moment layout.
+post_expected<ScoreTestTable>
+modification_indices_robust(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const SampleStats& samp,
+                            const std::vector<Eigen::MatrixXd>& gamma_blocks,
+                            const Estimates& est,
+                            const estimate::gmm::Weight& weight,
+                            const RobustScoreOptions& options = {});
+
+post_expected<ScoreTestTable>
+score_tests_robust(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const SampleStats& samp,
+                   const RawData& raw,
+                   const Estimates& est,
+                   const estimate::gmm::Weight& weight,
+                   const RobustScoreOptions& options = {});
+
+post_expected<ScoreTestTable>
+score_tests_robust(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const SampleStats& samp,
+                   const Estimates& est,
+                   const estimate::gmm::Weight& weight,
+                   const RobustScoreOptions& options = {});
+
+post_expected<ScoreTestTable>
+score_tests_robust(spec::LatentStructure pt,
+                   const model::MatrixRep& rep,
+                   const SampleStats& samp,
+                   const std::vector<Eigen::MatrixXd>& gamma_blocks,
+                   const Estimates& est,
+                   const estimate::gmm::Weight& weight,
+                   const RobustScoreOptions& options = {});
+
+// Per-direction robust statistic worker, shared with the ordinal robust score
+// path (`estimate::frontier`): computes the NT statistic for `direction` and
+// rescales by c = gᵀB1g / gᵀA1g, with g the efficient-score direction implied
+// by the info-metric nuisance projection. A1/B1 must be on the same weight
+// scale as the score/information evaluation (c is not W-scale-invariant).
+post_expected<ScoreTestResult>
+score_for_direction_robust(const ScoreCandidate& candidate,
+                           const Eigen::VectorXd& score_full,
+                           const Eigen::MatrixXd& info_full,
+                           const Eigen::MatrixXd& A1,
+                           const Eigen::MatrixXd& B1,
+                           const Eigen::MatrixXd& K_nuisance,
+                           const Eigen::VectorXd& direction);
+
 }  // namespace frontier
 
 }  // namespace magmaan::inference

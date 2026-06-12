@@ -4,7 +4,7 @@
     "fixture_kind": "score_robust",
     "corpus_id": "0006_robust_release_mlm",
     "tool": "lavaan internals (R-assembled): delta/wls.v/gamma/ceq.JAC",
-    "lavaan_version": "0.6.21",
+    "lavaan_version": "0.7.1.2691",
     "note": "lavaan has no robust lavTestScore (it falls back to NT); mi_scaled assembled from internals, version-stable"
   },
   "input": "f =~ x1 + a*x2 + b*x3 + x4\na == b",
