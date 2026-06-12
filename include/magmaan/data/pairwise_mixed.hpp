@@ -36,6 +36,9 @@ struct PolyserialPairMlOptions {
   double rho_lower = -0.999;
   double rho_upper = 0.999;
   int    max_iter = 72;
+  // Bracket-width stop relative to the initial (rho_lower, rho_upper) width;
+  // mirrors OrdinalPairMlOptions::x_tol.
+  double x_tol = 1e-9;
 };
 
 struct PolyserialPairMlResult {

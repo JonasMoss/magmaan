@@ -15,6 +15,10 @@ struct OrdinalPairMlOptions {
   double rho_lower = -0.999;
   double rho_upper = 0.999;
   int    max_iter = 72;
+  // Bracket-width stop relative to the initial (rho_lower, rho_upper) width;
+  // bounds the rho error by ~width * x_tol / 2, three orders below the 1e-6
+  // lavaan polychoric parity tolerance.
+  double x_tol = 1e-9;
   bool   lavaan_adjust_2x2 = true;
 };
 
