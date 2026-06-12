@@ -41,6 +41,21 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   - **S.** Decide whether delta-method defined parameters and `factor_scores`
     need any further ordinal-specific handling once a downstream consumer asks.
 
+- **Ordinal stats-construction perf headroom (2026-06-12 audit).** Workspace
+  construction dominates ordinal/mixed wall time (fits are sub-3ms). Landed:
+  cell-cached `ordinal_pair_scores` and an `x_tol` stop for the polychoric and
+  polyserial golden-section searches (p=12/cat=5/n=1200: 475→172 ms). Remaining
+  headroom, in impact order, now all inside the per-pair rho search:
+  - **M.** Replace golden section with a derivative-based search
+    (`ordinal_bvn_rect_drho` is closed form, ~6–10 evals vs ~44).
+  - **M.** Evaluate the `(K_i+1)(K_j+1)` bvn corner grid once per rho instead
+    of 4 `bvn_cdf` per cell (interior corners shared by 4 cells, ~4×); consider
+    a Drezner–Wesolowsky-style `bvn_cdf` (6–20 nodes vs fixed 32).
+  - **S.** Cell-cache `shared_ordinal_casewise_psi` and restrict the
+    shared-robust FD gradient/bread to pairs touching the perturbed coordinate.
+  - **S.** The mixed workspace (`mixed_ordinal_stats_from_data`) has no
+    benchmark; the all-ordinal benches cover the shared primitives only.
+
 ## Robust score / modification-index tests (frontier)
 
 `inference::frontier::{modification_indices,score_tests}_robust` has landed for
