@@ -6,13 +6,13 @@
 
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/sample_stats.hpp"
-#include "magmaan/data/shrinkage.hpp"
+#include "magmaan/data/frontier/shrinkage.hpp"
 
-using magmaan::data::CovarianceShrinkageKind;
-using magmaan::data::CovarianceShrinkageOptions;
 using magmaan::data::SampleStats;
-using magmaan::data::shrink_mixed_ordinal_stats;
-using magmaan::data::shrink_sample_stats;
+using magmaan::data::frontier::CovarianceShrinkageKind;
+using magmaan::data::frontier::CovarianceShrinkageOptions;
+using magmaan::data::frontier::shrink_mixed_ordinal_stats;
+using magmaan::data::frontier::shrink_sample_stats;
 
 namespace {
 

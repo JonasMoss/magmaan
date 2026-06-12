@@ -19,7 +19,7 @@
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/data/raw_data.hpp"
-#include "magmaan/data/shrinkage.hpp"
+#include "magmaan/data/frontier/shrinkage.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -1289,8 +1289,9 @@ Rcpp::List ordinal_fit_result(Ctx& ctx,
   return out;
 }
 
-magmaan::data::CovarianceShrinkageKind shrinkage_kind_from_string(const std::string& kind) {
-  using K = magmaan::data::CovarianceShrinkageKind;
+magmaan::data::frontier::CovarianceShrinkageKind
+shrinkage_kind_from_string(const std::string& kind) {
+  using K = magmaan::data::frontier::CovarianceShrinkageKind;
   if (kind == "none") return K::None;
   if (kind == "ridge") return K::Ridge;
   if (kind == "identity") return K::IdentityTarget;
@@ -2099,11 +2100,11 @@ Rcpp::List data_shrink_mixed_ordinal_stats_impl(
     Rcpp::List mixed_stats, std::string kind = "diagonal",
     double intensity = 0.0, bool estimate_intensity = false) {
   magmaan::data::MixedOrdinalStats stats = mixed_ordinal_stats_from_arg(mixed_stats);
-  magmaan::data::CovarianceShrinkageOptions opts;
+  magmaan::data::frontier::CovarianceShrinkageOptions opts;
   opts.kind = shrinkage_kind_from_string(kind);
   opts.intensity = intensity;
   opts.estimate_intensity = estimate_intensity;
-  auto out_or = magmaan::data::shrink_mixed_ordinal_stats(stats, opts);
+  auto out_or = magmaan::data::frontier::shrink_mixed_ordinal_stats(stats, opts);
   if (!out_or.has_value()) stop_post(out_or.error());
   Rcpp::List out = mixed_ordinal_stats_to_r(out_or->stats);
   Rcpp::List diag(static_cast<R_xlen_t>(out_or->block_diagnostics.size()));
