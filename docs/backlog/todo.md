@@ -90,13 +90,6 @@ landed; remaining open items:
   parity/optional optimizer lanes less often, and coverage as an artifact before
   considering badges. Avoid coverage-percentage gates until the report has been
   calibrated by real maintenance work.
-- **S/M.** Add a self-contained C++ golden for the FMG p-value transforms (fixed
-  eigenvalues + chi-square → p-value per method) so the eigenvalue-tail maths is
-  gated without R. The single-model FMG family is already value-for-value
-  parity-checked against `semTests::pvalues` in `examples/fmg.R` (run by
-  `just r-check`); coordinate with the exp-17 pEBA work, which owns the
-  nested/multi-group side of the same machinery.
-
 ## Simulation primitives
 
 The `magmaan::sim` surface (NORTA / IG / Vale-Maurelli-Fleishman / PLSIM /

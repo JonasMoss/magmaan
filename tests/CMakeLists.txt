@@ -134,6 +134,7 @@ magmaan_add_test_target(magmaan_test_inference inference
   unit/restriction_test.cpp
   unit/satorra2000_test.cpp
   unit/weighted_chisq_test.cpp
+  golden/fmg_pvalue_golden_test.cpp
   golden/inference_golden_test.cpp
   golden/score_golden_test.cpp
   golden/score_robust_golden_test.cpp
