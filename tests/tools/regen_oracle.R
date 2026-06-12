@@ -1058,7 +1058,21 @@ ordinal_cases <- list(
                           seed = 227L),
        ordered = paste0("x", 1:4),
        group = NULL,
-       fit = TRUE)
+       fit = TRUE),
+  # Defined-parameter (`:=`) case: a product of two labeled loadings -- the
+  # direct lavaan anchor for measures::compute_defined on an ordinal delta fit.
+  # Same data/structure as 0001 (labels alone do not constrain), so the fit
+  # parity and the standardized-loading gate ride along unchanged.
+  list(id = "0015_defined_param_3cat_cfa",
+       model = paste("f =~ x1 + L2*x2 + L3*x3 + x4",
+                     "lprod := L2*L3", sep = "\n"),
+       data = make_ord_df(360, list(c(-0.70, 0.35), c(-0.55, 0.60),
+                                    c(-0.85, 0.20), c(-0.45, 0.75)),
+                          seed = 11L),
+       ordered = paste0("x", 1:4),
+       group = NULL,
+       fit = TRUE,
+       fit_estimators = c("DWLS"))
 )
 
 regenerated_ord <- character(0)
@@ -1104,6 +1118,11 @@ for (oc in ordinal_cases) {
                                       parameterization = "delta"),
                                  if (nzchar(group_var)) list(group = group_var) else list()))
       fits$DWLS <- ordinal_fit_json(fit_dwls)
+      # Post-hoc standardized rows + any `:=` defined params (value-parity gate
+      # for measures::standardize_all / compute_defined on ordinal delta fits).
+      fits$DWLS$standardized <- ordinal_std_json(fit_dwls)
+      def <- defined_json(fit_dwls)
+      if (length(def) > 0) fits$DWLS$defined <- def
       fit_dwls_robust <- do.call(cfa, c(list(model = oc$model, data = df,
                                              ordered = ov, estimator = "DWLS",
                                              parameterization = "delta",
@@ -1259,6 +1278,7 @@ for (mc in mixed_cases) {
   fits <- list(DWLS = ordinal_fit_json(fit_dwls),
                WLS = ordinal_fit_json(fit_wls))
   fits$DWLS$robust <- ordinal_robust_json(fit_dwls_robust)
+  fits$DWLS$standardized <- ordinal_std_json(fit_dwls)
 
   data_for_cpp <- if (isTRUE(mc$listwise)) listwise_mixed_data(mc$data, mc$ov)
                   else mc$data

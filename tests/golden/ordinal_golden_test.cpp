@@ -17,6 +17,8 @@
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/measures/effects.hpp"
+#include "magmaan/measures/standardized.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/optim/problem.hpp"
@@ -40,6 +42,7 @@ const std::vector<std::string> kOrdinalFixtures = {
     "0012_2group_equal_loading_3cat_cfa",
     "0013_2group_threshold_invariance_3cat_cfa",
     "0014_threshold_linear_constraint_3cat_cfa",
+    "0015_defined_param_3cat_cfa",
 };
 
 const std::vector<std::string> kMixedOrdinalFixtures = {
@@ -1052,3 +1055,246 @@ TEST_CASE("ordinal fixtures: Ceres and NLopt L-BFGS bounded fits agree") {
   CHECK(passed == total);
 }
 #endif
+
+// Post-hoc standardized-solution (std.lv / std.all loadings) and defined-
+// parameter (`:=`) parity for ordinal and mixed-ordinal DWLS delta fits.
+// These gate measures::standardize_{all,lv} and measures::compute_defined
+// against lavaan, which previously lived only in the live R example
+// (examples/ordinal_dwls_wls.R). Mirrors the api path used by the Rcpp
+// binding: estimates/vcov live over the *prepared* (reduced) structure, the
+// matrix_rep stays the original, and std.all carries ordinal_delta_unit so a
+// categorical indicator's loading is standardized by the latent SD only.
+//
+// Oracle (per DWLS fit, in free-index order matching theta_hat):
+//   fits.DWLS.standardized = {par_op, par_rhs, std_lv_est, std_all_est}
+//   fits.DWLS.defined      = [{lhs, est, se}, ...]   (only the `:=` case)
+// Only the `=~` loading rows are gated — the proven parity surface; thresholds
+// and (co)variances are stored but not asserted.
+namespace {
+
+// Gate the `=~` loading rows of standardize_all / standardize_lv against the
+// stored lavaan est.std. Returns true on full agreement.
+bool check_ordinal_std(const std::string& id,
+                       const magmaan::spec::LatentStructure& pt_prep,
+                       const magmaan::model::MatrixRep& rep,
+                       const magmaan::estimate::Estimates& est,
+                       const Eigen::MatrixXd& vcov,
+                       const nlohmann::json& std_oracle,
+                       double tol,
+                       std::vector<std::string>& failures) {
+  auto sall = magmaan::measures::standardize::standardize_all(
+      pt_prep, rep, est, vcov, /*ordinal_delta_unit=*/true);
+  auto slv = magmaan::measures::standardize::standardize_lv(
+      pt_prep, rep, est, vcov);
+  if (!sall.has_value()) {
+    failures.push_back(id + ": standardize_all — " + sall.error().detail);
+    return false;
+  }
+  if (!slv.has_value()) {
+    failures.push_back(id + ": standardize_lv — " + slv.error().detail);
+    return false;
+  }
+  const auto& op = std_oracle["par_op"];
+  const auto& all_e = std_oracle["std_all_est"];
+  const auto& lv_e = std_oracle["std_lv_est"];
+  const std::size_t n = op.size();
+  if (static_cast<std::size_t>(sall->theta.size()) != n ||
+      static_cast<std::size_t>(slv->theta.size()) != n) {
+    failures.push_back(id + ": std n_free mismatch (magmaan=" +
+                       std::to_string(sall->theta.size()) +
+                       " lavaan=" + std::to_string(n) + ")");
+    return false;
+  }
+  bool ok = true;
+  char buf[256];
+  for (std::size_t k = 0; k < n; ++k) {
+    if (op[k].get<std::string>() != "=~") continue;  // gate loadings only
+    const auto kk = static_cast<Eigen::Index>(k);
+    const double d_all = std::abs(sall->theta(kk) - all_e[k].get<double>());
+    const double d_lv = std::abs(slv->theta(kk) - lv_e[k].get<double>());
+    if (d_all > tol || d_lv > tol) {
+      std::snprintf(buf, sizeof(buf),
+                    "%s std loading[%zu] std.all diff=%.2e std.lv diff=%.2e",
+                    id.c_str(), k, d_all, d_lv);
+      failures.push_back(buf);
+      ok = false;
+    }
+  }
+  return ok;
+}
+
+}  // namespace
+
+TEST_CASE("ordinal/mixed standardized + := rows match lavaan") {
+  const std::string odir = magmaan::test::fixtures_dir() + "/ordinal";
+  const std::string mdir = magmaan::test::fixtures_dir() + "/mixed_ordinal";
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+  // Loading std.all / std.lv parity tolerance matches the live R parity:
+  // all-ordinal 5e-3, mixed (continuous indicators carry the σ_rr division)
+  // 1e-3. The := value/SE is a delta-method transform of a vcov matched to
+  // ~1e-3, gated at 5e-3.
+  const double std_tol_ordinal = 5e-3;
+  const double std_tol_mixed = 1e-3;
+  const double defined_tol = 5e-3;
+
+  int total = 0, passed = 0;
+  std::vector<std::string> failures;
+
+  // --- ordinal fixtures (std.all/std.lv loadings + the := case) -----------
+  for (const auto& id : kOrdinalFixtures) {
+    const std::string path = odir + "/" + id + ".ordinal.json";
+    auto raw = magmaan::test::read_fixture(path);
+    REQUIRE(raw.has_value());
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(exp.is_discarded());
+    if (!has_fit(exp) || !exp["fits"].contains("DWLS")) continue;
+    const auto& dwls = exp["fits"]["DWLS"];
+    const bool has_std = dwls.contains("standardized");
+    const bool has_def = dwls.contains("defined");
+    if (!has_std && !has_def) continue;
+
+    auto h = handles_from_fixture(id, exp, failures);
+    if (!h.has_value()) continue;
+
+    auto est_or = magmaan::test::fit_ordinal_bounded(
+        h->pt, h->rep, h->stats, magmaan::estimate::Bounds{},
+        magmaan::estimate::OrdinalWeightKind::DWLS,
+        magmaan::estimate::Backend::NloptLbfgs, opt);
+    if (!est_or.has_value()) {
+      failures.push_back(id + ": fit — " + est_or.error().detail);
+      continue;
+    }
+    auto rob_or = magmaan::estimate::robust_ordinal(
+        h->pt, h->rep, h->stats, *est_or,
+        magmaan::estimate::OrdinalWeightKind::DWLS);
+    if (!rob_or.has_value()) {
+      failures.push_back(id + ": robust — " + rob_or.error().detail);
+      continue;
+    }
+
+    // Prepared structure: the estimates / vcov index the reduced free set.
+    auto pt_prep = h->pt;
+    auto prep =
+        magmaan::estimate::prepare_ordinal_delta_partable(pt_prep, h->stats);
+    if (!prep.has_value()) {
+      failures.push_back(id + ": prepare — " + prep.error().detail);
+      continue;
+    }
+
+    if (has_std) {
+      ++total;
+      if (check_ordinal_std(id, pt_prep, h->rep, *est_or, rob_or->vcov,
+                            dwls["standardized"], std_tol_ordinal, failures))
+        ++passed;
+    }
+
+    if (has_def) {
+      ++total;
+      // compute_defined wants the original flat partable (`:=` row), the
+      // prepared structure (free-index map), and the verbal LatentNames.
+      auto fp = magmaan::parse::Parser::parse(ordinal_syntax(exp));
+      if (!fp.has_value()) {
+        failures.push_back(id + ": defined parse");
+        continue;
+      }
+      magmaan::spec::BuildOptions bopts;
+      bopts.n_groups = static_cast<std::int32_t>(exp["blocks"].size());
+      magmaan::spec::LatentNames names;
+      auto pt_named = magmaan::spec::build(*fp, bopts, nullptr, &names);
+      if (!pt_named.has_value()) {
+        failures.push_back(id + ": defined build — " + pt_named.error().detail);
+        continue;
+      }
+      auto pt_def = *pt_named;
+      auto prep_def =
+          magmaan::estimate::prepare_ordinal_delta_partable(pt_def, h->stats);
+      if (!prep_def.has_value()) {
+        failures.push_back(id + ": defined prepare — " +
+                           prep_def.error().detail);
+        continue;
+      }
+      auto def_or = magmaan::measures::effects::compute_defined(
+          *fp, pt_def, names, *est_or, rob_or->vcov);
+      if (!def_or.has_value()) {
+        failures.push_back(id + ": compute_defined — " + def_or.error().detail);
+        continue;
+      }
+      bool ok = true;
+      char buf[256];
+      for (const auto& row : dwls["defined"]) {
+        const std::string lhs = row["lhs"].get<std::string>();
+        const double lav_est = row["est"].get<double>();
+        const double lav_se = row["se"].get<double>();
+        const auto it = std::find_if(
+            def_or->entries.begin(), def_or->entries.end(),
+            [&](const auto& e) { return e.name == lhs; });
+        if (it == def_or->entries.end()) {
+          failures.push_back(id + ": defined '" + lhs + "' missing");
+          ok = false;
+          continue;
+        }
+        const double d_est = std::abs(it->value - lav_est);
+        const double d_se = std::abs(it->se - lav_se);
+        if (d_est > defined_tol || d_se > defined_tol) {
+          std::snprintf(buf, sizeof(buf),
+                        "%s := %s est diff=%.2e se diff=%.2e", id.c_str(),
+                        lhs.c_str(), d_est, d_se);
+          failures.push_back(buf);
+          ok = false;
+        }
+      }
+      if (ok) ++passed;
+    }
+  }
+
+  // --- mixed-ordinal fixtures (std.all/std.lv loadings) -------------------
+  for (const auto& id : kMixedOrdinalFixtures) {
+    const std::string path = mdir + "/" + id + ".ordinal.json";
+    auto raw = magmaan::test::read_fixture(path);
+    REQUIRE(raw.has_value());
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(exp.is_discarded());
+    if (!exp.contains("fits") || !exp["fits"].contains("DWLS") ||
+        !exp["fits"]["DWLS"].contains("standardized"))
+      continue;
+
+    auto h = mixed_handles_from_fixture(id, exp, failures);
+    if (!h.has_value()) continue;
+
+    const magmaan::optim::OptimOptions mopt{
+        .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8};
+    auto est_or = magmaan::test::fit_mixed_ordinal_bounded(
+        h->pt, h->rep, h->stats, magmaan::estimate::Bounds{},
+        magmaan::estimate::OrdinalWeightKind::DWLS,
+        magmaan::estimate::Backend::NloptLbfgs, mopt);
+    if (!est_or.has_value()) {
+      failures.push_back(id + ": fit — " + est_or.error().detail);
+      continue;
+    }
+    auto rob_or = magmaan::estimate::robust_mixed_ordinal(
+        h->pt, h->rep, h->stats, *est_or,
+        magmaan::estimate::OrdinalWeightKind::DWLS);
+    if (!rob_or.has_value()) {
+      failures.push_back(id + ": robust — " + rob_or.error().detail);
+      continue;
+    }
+    auto pt_prep = h->pt;
+    auto prep = magmaan::estimate::prepare_mixed_ordinal_delta_partable(
+        pt_prep, h->stats);
+    if (!prep.has_value()) {
+      failures.push_back(id + ": prepare — " + prep.error().detail);
+      continue;
+    }
+    ++total;
+    if (check_ordinal_std(id, pt_prep, h->rep, *est_or, rob_or->vcov,
+                          exp["fits"]["DWLS"]["standardized"], std_tol_mixed,
+                          failures))
+      ++passed;
+  }
+
+  MESSAGE("ordinal/mixed standardized + := : " << passed << " / " << total
+          << " pass");
+  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+  CHECK(passed == total);
+}

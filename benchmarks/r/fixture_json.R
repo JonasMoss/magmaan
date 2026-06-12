@@ -226,6 +226,51 @@ ordinal_robust_json <- function(fit) {
                              df = as.integer(ss$df)))
 }
 
+# Post-hoc std.lv / std.all standardized values per free θ index (free-index
+# order, matching theta_hat / Estimates::theta). Mirrors the continuous fit_std
+# block: the C++ golden gates the `=~` loading rows (par_op == "=~") against
+# these, where ordinal/mixed delta fits standardize a categorical indicator's
+# loading by the latent SD only. Rows absent from standardizedSolution (e.g.
+# thresholds, depending on lavaan) get NA and are simply not gated.
+ordinal_std_json <- function(fit) {
+  pt <- parTable(fit)
+  free <- pt[pt$free > 0, ]
+  free <- free[order(free$free), ]
+  slv <- standardizedSolution(fit, type = "std.lv")
+  sall <- standardizedSolution(fit, type = "std.all")
+  fr_grp   <- if (!is.null(free$group)) free$group else rep(1L, nrow(free))
+  slv_grp  <- if (!is.null(slv$group))  slv$group  else rep(1L, nrow(slv))
+  sall_grp <- if (!is.null(sall$group)) sall$group else rep(1L, nrow(sall))
+  n <- nrow(free)
+  op_v <- character(n); rhs_v <- character(n)
+  slv_e <- rep(NA_real_, n); sall_e <- rep(NA_real_, n)
+  for (i in seq_len(n)) {
+    op_v[i]  <- as.character(free$op[i])
+    rhs_v[i] <- as.character(free$rhs[i])
+    h1 <- which(slv$lhs == free$lhs[i] & slv$op == free$op[i] &
+                slv$rhs == free$rhs[i] & slv_grp == fr_grp[i])
+    h2 <- which(sall$lhs == free$lhs[i] & sall$op == free$op[i] &
+                sall$rhs == free$rhs[i] & sall_grp == fr_grp[i])
+    if (length(h1) == 1L) slv_e[i]  <- slv$est.std[h1]
+    if (length(h2) == 1L) sall_e[i] <- sall$est.std[h2]
+  }
+  list(par_op = I(op_v), par_rhs = I(rhs_v),
+       std_lv_est = I(slv_e), std_all_est = I(sall_e))
+}
+
+# User-defined (`:=`) rows from a fitted object: value + delta-method SE, keyed
+# by the defined-parameter label. The C++ golden gates compute_defined() against
+# these for ordinal fits (a parameterization-agnostic delta-method transform).
+defined_json <- function(fit) {
+  pe <- parameterEstimates(fit)
+  dr <- pe[pe$op == ":=", , drop = FALSE]
+  lapply(seq_len(nrow(dr)), function(i) {
+    list(lhs = as.character(dr$lhs[i]),
+         est = as.numeric(dr$est[i]),
+         se  = as.numeric(dr$se[i]))
+  })
+}
+
 # --- raw-data helper -------------------------------------------------------
 
 # A data frame -> {X, mask}: X is the raw matrix (NA preserved), mask is
