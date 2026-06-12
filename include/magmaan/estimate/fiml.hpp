@@ -46,6 +46,12 @@ struct FIMLCache {
   std::vector<Eigen::Index> mu_offsets;
   std::vector<Eigen::Index> block_p;
   std::int64_t n_total = 0;
+  // Cached H1 (saturated) moments to avoid redundant EM runs in post-fit.
+  // Lazily populated on first h1_moments_block call, then reused for subsequent
+  // calls (fiml_extras, fiml_robust_mlr, saturated_em_moments). Mutable because
+  // caching is a performance detail, not a semantic change.
+  mutable std::vector<Eigen::VectorXd> cached_h1_mu;
+  mutable std::vector<Eigen::MatrixXd> cached_h1_sigma;
 };
 
 struct FIMLValueGradient {

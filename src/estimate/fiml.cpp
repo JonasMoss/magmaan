@@ -4,9 +4,11 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -35,6 +37,16 @@ using estimate::simple_start_values;
 using measures::BaselineFit;
 
 namespace {
+
+struct IndexVectorHash {
+  std::size_t operator()(const std::vector<Eigen::Index>& v) const noexcept {
+    std::size_t seed = 0;
+    for (Eigen::Index idx : v) {
+      seed ^= std::hash<Eigen::Index>{}(idx) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    }
+    return seed;
+  }
+};
 
 FitError make_fit_err(FitError::Kind k, std::string detail) {
   return FitError{k, std::move(detail), 0, 0.0};
@@ -474,6 +486,15 @@ h1_moments_block(const RawData& raw,
     return std::unexpected(make_fit_err(FitError::Kind::NumericIssue,
         "FIML H1: block index out of range"));
   }
+
+  // Check cache first (mutable because cache is logical const).
+  if (!cache.cached_h1_mu.empty() && static_cast<std::size_t>(block) < cache.cached_h1_mu.size() &&
+      cache.cached_h1_mu[block].size() > 0) {
+    mu = cache.cached_h1_mu[block];
+    Sigma = cache.cached_h1_sigma[block];
+    return {};
+  }
+
   if (raw.mask.empty()) {
     mu = starts.mean[block];
     Sigma = 0.5 * (starts.S[block] + starts.S[block].transpose());
@@ -499,6 +520,17 @@ h1_moments_block(const RawData& raw,
     auto upd = h1_em_update_block(cache, block, mu, Sigma);
     if (!upd.has_value()) return std::unexpected(upd.error());
   }
+
+  // Lazily populate cache on first compute of each block.
+  if (cache.cached_h1_mu.empty()) {
+    cache.cached_h1_mu.resize(cache.block_p.size());
+    cache.cached_h1_sigma.resize(cache.block_p.size());
+  }
+  if (block < cache.cached_h1_mu.size()) {
+    cache.cached_h1_mu[block] = mu;
+    cache.cached_h1_sigma[block] = Sigma;
+  }
+
   return {};
 }
 
@@ -1163,7 +1195,8 @@ FIML::prepare(const RawData& raw) const {
     sigma_off += vech_len(p);
     mu_off += p;
 
-    std::map<std::vector<Eigen::Index>, std::vector<Eigen::Index>> rows_by_obs;
+    std::unordered_map<std::vector<Eigen::Index>, std::vector<Eigen::Index>,
+                       IndexVectorHash> rows_by_obs;
     for (Eigen::Index r = 0; r < n; ++r) {
       std::vector<Eigen::Index> obs;
       obs.reserve(static_cast<std::size_t>(p));
