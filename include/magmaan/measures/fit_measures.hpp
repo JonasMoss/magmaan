@@ -35,6 +35,7 @@ BaselineFit baseline_chi2(const spec::LatentStructure& pt,
 //
 //   CFI   = 1 − max(0, T_u − df_u) / max(0, T_b − df_b)
 //   TLI   = (T_b/df_b − T_u/df_u) / (T_b/df_b − 1)
+//           with lavaan's saturated-user-model convention TLI = 1 when df_u = 0
 //   RMSEA = √(max(0, (T_u − df_u) / (df_u · N))) · √G
 //   rmsea_ci_{lower,upper} — the 90% CI for RMSEA (lavaan's
 //     `rmsea.ci.lower` / `rmsea.ci.upper`): invert the noncentral-χ²(df_u, λ)

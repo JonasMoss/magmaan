@@ -88,6 +88,14 @@ bool close(double a, double b, double tol) {
   return std::abs(a - b) <= tol * std::max(1.0, std::abs(b));
 }
 
+double to_lavaan_ls_chisq(double magmaan_chisq,
+                          std::int64_t n_total,
+                          std::size_t n_groups) {
+  return magmaan_chisq *
+         static_cast<double>(n_total - static_cast<std::int64_t>(n_groups)) /
+         static_cast<double>(n_total);
+}
+
 using magmaan::test::matrix_from_json;
 
 using magmaan::test::vector_from_json;
@@ -366,7 +374,14 @@ TEST_CASE("lavaan-parity ML — magmaan reproduces lavaan on real data") {
                      double tol) {
         if (!mref.contains(key) || mref[key].is_null()) return;
         const double l = mref[key].get<double>();
-        if (!std::isfinite(ours) || !std::isfinite(l)) return;
+        if (!std::isfinite(l)) return;
+        if (!std::isfinite(ours)) {
+          char m[200];
+          std::snprintf(m, sizeof(m), "%s is non-finite, lavaan = %.10g", name,
+                        l);
+          fail(m);
+          return;
+        }
         if (!close(ours, l, tol)) {
           char m[200];
           std::snprintf(m, sizeof(m), "%s = %.10g, lavaan = %.10g", name, ours,
@@ -882,7 +897,9 @@ TEST_CASE("lavaan-parity ordinal — bfi DWLS/WLS") {
       continue;
     }
     const int df = static_cast<int>(n_moments - con_or->n_alpha);
-    const double chisq = 2.0 * static_cast<double>(n_total) * est.fmin;
+    const double chisq_magmaan = 2.0 * static_cast<double>(n_total) * est.fmin;
+    const double chisq =
+        to_lavaan_ls_chisq(chisq_magmaan, n_total, stats.R.size());
 
     const Eigen::VectorXd theta_l = vector_from_json(fit["theta_hat"]);
     if (est.theta.size() != theta_l.size()) {
@@ -895,9 +912,12 @@ TEST_CASE("lavaan-parity ordinal — bfi DWLS/WLS") {
     if (df != fit["df"].get<int>())
       fail(name + ": df = " + std::to_string(df) + ", lavaan = " +
            std::to_string(fit["df"].get<int>()));
-    if (!close(chisq, fit["chisq"].get<double>(), 5e-1))
-      fail(name + ": chisq = " + std::to_string(chisq) + ", lavaan = " +
-           std::to_string(fit["chisq"].get<double>()));
+    if (const double d_chisq = std::abs(chisq - fit["chisq"].get<double>());
+        d_chisq > 5e-3)
+      fail(name + ": chisq·(N−G)/N = " + std::to_string(chisq) +
+           ", lavaan = " + std::to_string(fit["chisq"].get<double>()) +
+           " (magmaan N·F chisq = " + std::to_string(chisq_magmaan) +
+           ", |Δ| = " + std::to_string(d_chisq) + ")");
 
     auto fm_or = magmaan::estimate::fit_measures_ordinal(*pt, *mr, stats, est,
                                                          kind);
@@ -934,21 +954,25 @@ TEST_CASE("lavaan-parity ordinal — bfi DWLS/WLS") {
           fail(name + ": robust eigvals max diff > 2e-4");
         if (rob.df != rref["df"].get<int>())
           fail(name + ": robust df mismatch");
-        if (!close(rob.chisq_standard, rref["chisq_standard"].get<double>(),
-                   8e-2))
+        const auto ls = [&](double value) {
+          return to_lavaan_ls_chisq(value, n_total, stats.R.size());
+        };
+        if (std::abs(ls(rob.chisq_standard) -
+                     rref["chisq_standard"].get<double>()) > 5e-3)
           fail(name + ": robust chisq_standard mismatch");
-        if (!close(rob.satorra_bentler.chi2_scaled,
-                   rref["satorra_bentler"]["chisq"].get<double>(), 8e-2))
+        if (std::abs(ls(rob.satorra_bentler.chi2_scaled) -
+                     rref["satorra_bentler"]["chisq"].get<double>()) > 5e-3)
           fail(name + ": Satorra-Bentler chisq mismatch");
-        if (!close(rob.scaled_shifted.chi2_adj,
-                   rref["scaled_shifted"]["chisq"].get<double>(), 8e-2))
+        if (std::abs(ls(rob.scaled_shifted.chi2_adj) -
+                     rref["scaled_shifted"]["chisq"].get<double>()) > 5e-3)
           fail(name + ": scaled-shifted chisq mismatch");
       }
     }
 
     char buf[200];
-    std::snprintf(buf, sizeof(buf), "%s/%s: chisq=%.4f (lavaan %.4f) df=%d",
-                  id.c_str(), name.c_str(), chisq,
+    std::snprintf(buf, sizeof(buf),
+                  "%s/%s: chisq=%.4f, lavaan-scale=%.4f (lavaan %.4f) df=%d",
+                  id.c_str(), name.c_str(), chisq_magmaan, chisq,
                   fit["chisq"].get<double>(), df);
     notes.push_back(buf);
   }

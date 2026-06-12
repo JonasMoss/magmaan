@@ -80,8 +80,14 @@ landed; remaining open items:
   The ordinal goldens are now swept too (2026-06: same multiplier found under
   the 8e-2 ordinal chisq gates; rescaled and tightened to 5e-3, with the
   per-group `(n_g−1)/n_g` estimator-weighting consequence documented in
-  numerical-conventions exception 4 and the test ledger). Sweep the remaining
-  golden/parity tests for similar slack tolerances, `MESSAGE`-only soft checks,
+  numerical-conventions exception 4 and the test ledger). Follow-up audit:
+  the real-data bfi ordinal block in `lavaan_parity_golden_test` had the same
+  stale multiplier gate (and used relative tolerances); it now rescales to
+  lavaan's statistic and pins χ²-family quantities to 5e-3, and finite lavaan
+  fit-measure fields now fail if magmaan returns non-finite values, which
+  surfaced and fixed the saturated-model TLI convention (`df_user = 0` → TLI =
+  1). Continue sweeping the remaining golden/parity tests for `MESSAGE`-only
+  soft checks
   and fixtures regenerated from magmaan's own output rather than an external
   oracle; for each, either tighten to the oracle or write down explicitly why
   the looseness is principled.

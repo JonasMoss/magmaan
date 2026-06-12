@@ -70,10 +70,23 @@ makes the *estimator* differ once equality constraints couple groups (θ̂ shift
 `O(1/n_g)`; see `docs/design/numerical-conventions.md` exception 4).
 Guard: `tests/golden/ordinal_golden_test.cpp` (`to_lavaan_ls_chisq` rescale,
 χ² gates 8e-2 → 5e-3, robust χ²-scale gates 8e-2 → 5e-3; documented 1.5e-4 θ /
-1.5e-2 scaled-shifted exceptions for fixture 0013 only).
-Scope: mixed bounded θ/χ² gates remain loose (2e-2/3e-1) pending the mixed
-robust-parity root-cause in the backlog; the SS shift is N-free and compared
-unrescaled.
+1.5e-2 scaled-shifted exceptions for fixture 0013 only) and the real-data bfi
+ordinal block in `tests/golden/lavaan_parity_golden_test.cpp` (stale relative
+χ² gates replaced by the same lavaan-scale 5e-3 checks).
+Scope: the scaled-shifted shift is N-free and compared unrescaled; fixture 0013
+keeps its documented cross-group weighting exception only.
+
+**Saturated-model TLI was hidden by a finite-oracle soft skip.**
+Regression: fit-measure goldens skipped comparisons when magmaan returned a
+non-finite value even if the lavaan fixture was finite. Tightening that audit
+check exposed saturated user models (`df_user = 0`) where lavaan reports
+`tli = 1` but magmaan returned `NaN`.
+Guard: `measures::fit_measures()` now follows lavaan's saturated-model
+convention; `tests/unit/fit_measures_test.cpp` pins the edge case and
+`tests/golden/fit_measures_golden_test.cpp` fails finite lavaan oracle fields
+when magmaan is non-finite.
+Scope: non-finite lavaan fixture fields remain skipped because there is no
+numeric oracle to compare.
 
 **Robust UΓ projector per-group weight.**
 Regression: the complete-data `build_u_factor` ProjectionExpected path built the
@@ -244,9 +257,9 @@ corpora stay at `0.6-22.2560` (their regen needs data packages, e.g.
 | Parser and lexer | `docs/grammar/grammar.ebnf`, checked parser fixtures | Unit plus golden tests under `spec` | `tests/unit/lexer_test.cpp`, `tests/unit/parser_test.cpp`, `tests/golden/lexer_golden_test.cpp`, `tests/golden/parser_golden_test.cpp` | Grammar-coverage walk remains manual; grammar changes must edit EBNF first. |
 | Lavaanify, spec, and partable projection | lavaan `parTable()` fixtures and corpus exports | Unit, golden, and corpus parity under `spec` and `parity` | `tests/unit/lavaanify_test.cpp`, `tests/golden/lavaanify_golden_test.cpp`, `tests/golden/textbook_corpus_golden_test.cpp` | Little/Newsom and Mplus corpus promotion remains ongoing. |
 | Matrix representation and model evaluation | lavaan implied moments plus algebraic invariants | Unit plus golden tests under `spec` | `tests/unit/matrix_rep_test.cpp`, `tests/unit/model_evaluator_test.cpp`, `tests/golden/matrix_rep_golden_test.cpp`, `tests/golden/fit_implied_golden_test.cpp` | Some observed fixed.x path-model implied-moment comparisons remain documented parity exceptions. |
-| Complete-data ML and LS estimation | lavaan JSON fixtures and real-data parity fixtures | Unit, golden, and parity tests under `estimate` and `parity` | `tests/unit/ml_test.cpp`, `tests/unit/ls_path_test.cpp`, `tests/golden/ls_golden_test.cpp`, `tests/golden/lavaan_parity_golden_test.cpp` | Tolerance audit is still open; Geiser GLS exceptions need tighter documentation or fixes. |
+| Complete-data ML and LS estimation | lavaan JSON fixtures and real-data parity fixtures | Unit, golden, and parity tests under `estimate` and `parity` | `tests/unit/ml_test.cpp`, `tests/unit/ls_path_test.cpp`, `tests/golden/ls_golden_test.cpp`, `tests/golden/lavaan_parity_golden_test.cpp` | Multiplier-tolerance audit covered continuous and ordinal LS; remaining soft gates are corpus/documented-nonparity cases. |
 | FIML and missing data | lavaan FIML fixtures, saturated EM invariants, FIML FMG diagnostics | Unit, golden, R examples, and advisory checks | `tests/unit/fiml_test.cpp`, `tests/golden/fiml_golden_test.cpp`, `r-package/examples/fiml.R`, `tests/checks/fiml_fmg_trace/` | High-level `magmaan(estimator = "FIML")` mean-structure defaults and multi-group starts need care. |
-| Ordinal and mixed moments | lavaan ordinal fixtures, robcat fixtures, internal moment invariants | Unit, golden, robcat, R examples, and experiments | `tests/unit/ordinal_test.cpp`, `tests/golden/ordinal_golden_test.cpp`, `tests/golden/robcat_parity_golden_test.cpp`, `r-package/examples/ordinal_dwls_wls.R` | Mixed robust scaled-test parity is still loose; lazy mixed WLS and mixed theta SNLLS remain open. |
+| Ordinal and mixed moments | lavaan ordinal fixtures, robcat fixtures, internal moment invariants | Unit, golden, robcat, R examples, and experiments | `tests/unit/ordinal_test.cpp`, `tests/golden/ordinal_golden_test.cpp`, `tests/golden/robcat_parity_golden_test.cpp`, `r-package/examples/ordinal_dwls_wls.R` | Lazy mixed WLS construction, mixed theta SNLLS, and research robust-association paths remain open. |
 | Inference, standardization, and fit measures | lavaan SE, score, standardized, and fit-measure fixtures | Unit plus golden tests under `inference` | `tests/unit/inference_test.cpp`, `tests/unit/score_test.cpp`, `tests/unit/standardized_test.cpp`, `tests/golden/inference_golden_test.cpp`, `tests/golden/standardized_golden_test.cpp` | Ordinal defined-parameter validity and additional ordinal-SEM standardized goldens remain follow-ups. |
 | Robust tests, FMG, and nested restrictions | lavaan/semTests parity, R-internals fixtures, weighted-chi-square oracles | Unit, golden, R examples, and advisory checks | `tests/unit/robust_test.cpp`, `tests/unit/fmg_test.cpp`, `tests/unit/weighted_chisq_test.cpp`, `tests/golden/fmg_pvalue_golden_test.cpp`, `tests/golden/score_robust_golden_test.cpp`, `r-package/examples/fmg.R` | Robust MI is still complete-data ML single-group only; mixed-sign weighted-χ² tails remain outside magmaan's non-negative spectrum contract. |
 | Optimizers and terminal audits | Recomputed objectives, projected gradients, cross-backend agreement | Unit tests and benchmark/report tracks under `estimate` | `tests/unit/terminal_audit_test.cpp`, `tests/unit/optimizer_crosscheck_test.cpp`, `tests/unit/fit_diagnostics_test.cpp`, `docs/design/terminal-audit.md` | Ultimate verifier and stationarity tolerance calibration remain research work. |
