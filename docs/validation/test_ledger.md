@@ -212,9 +212,30 @@ reconstructs the prepared structure on demand (`prepared_structure` in
 Guard: `tests/unit/api_sem_test.cpp` ordinal case (standardize_lv/all +
 compute_defined succeed, factor_scores stays guarded); live lavaan value-parity
 in `r-package/examples/ordinal_dwls_wls.R` (ordinal `:=` to 5e-3, mixed std.all
-to 1e-3).
-Scope: the C++ *golden* (stored lavaan oracle) for ordinal standardized rows is
-still pending a lavaan-pin realignment — see `docs/backlog/todo.md`.
+to 1e-3); the C++ golden `tests/golden/ordinal_golden_test.cpp`
+"ordinal/mixed standardized + := rows match lavaan" now gates the `=~` loading
+std.lv/std.all rows and the `lprod := L2*L3` value+SE against the stored lavaan
+oracle (fixtures `ordinal/0015_defined_param_3cat_cfa` plus the per-fit
+`fits.DWLS.standardized` block).
+
+**lavaan 0.7 `lavTest()` returns a nested per-test list.**
+Regression: under the oracle pin `0.7-1.2691`, `lavTest(fit, "satorra.bentler")`
+(and the mean.var/scaled.shifted/browne variants) returns
+`list(standard = ..., satorra.bentler = ...)` rather than the flat single-test
+list 0.6-22 returned, so `$stat`/`$scaling.factor`/`$shift.parameter`/
+`$scaled.test.stat`/`$df` read `NULL`. The fixture-gen helpers serialized those
+as empty arrays and the consuming goldens crashed (`nlohmann::json get<double>`
+abort on `null`) — robust ULS, inference, multi-group, and ordinal/mixed.
+Fix: `lav_test1()` shim in `benchmarks/r/fixture_json.R` extracts `res[[what]]`
+(falling back to the flat shape), routed through all six call sites
+(`fixture_json.R` ls/ordinal robust helpers + `regen_oracle.R` fit layer).
+Guard: regenerating under `0.7-1.2691` and the robust goldens (`ls`,
+`inference`, multi-group, `ordinal`/`mixed` robust blocks); the empty-array
+shape reappears if the shim is dropped.
+Scope: only the lavaan-version-dependent `regen_oracle.R` streams were
+realigned; the real-data `parity` stream and the little/newsom/mplus/paper
+corpora stay at `0.6-22.2560` (their regen needs data packages, e.g.
+`psychTools`, absent in this environment) and pass within tolerance.
 
 ## Validation Areas
 

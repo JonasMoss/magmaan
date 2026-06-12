@@ -31,13 +31,13 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   (`api_sem_test` ordinal case) and live lavaan value-parity in
   `r-package/examples/ordinal_dwls_wls.R` (ordinal `:=` value+SE to 5e-3; mixed
   std.all to 1e-3; all-ordinal std.all already covered). Remaining:
-  - **S, blocked on lavaan-pin realignment.** A checked C++ *golden* (stored
-    lavaan oracle) for ordinal/mixed standardized rows and the ordinal `:=`
-    row, to gate value-parity in the C++ suite rather than only via R. Blocked
-    because `tests/tools/regen_oracle.R` hard-aborts on the lavaan version
-    mismatch (pinned `0.6-22.2560`, environment has `0.7.1.2691`); add the
-    `standardizedSolution`/`:=` oracle to the ordinal-parity regen block and the
-    consuming golden once the pin is realigned.
+  - **Done 2026-06.** The oracle pin was realigned to `0.7-1.2691` and the
+    checked C++ golden landed: `tests/golden/ordinal_golden_test.cpp`
+    "ordinal/mixed standardized + := rows match lavaan" gates the `=~` loading
+    std.lv/std.all rows (all-ordinal 5e-3, mixed 1e-3) and the
+    `lprod := L2*L3` value+SE (5e-3) against the stored lavaan oracle
+    (`ordinal/0015_defined_param_3cat_cfa` plus the per-fit
+    `fits.DWLS.standardized` blocks emitted by `regen_oracle.R`).
   - **S.** Decide whether delta-method defined parameters and `factor_scores`
     need any further ordinal-specific handling once a downstream consumer asks.
 
