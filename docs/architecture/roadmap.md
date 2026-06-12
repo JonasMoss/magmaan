@@ -869,10 +869,21 @@ stop rather than any usable non-error return.
   the threshold-plus-polychoric moment vector. The implementation now uses a
   shared weighted-moment sandwich/U-Gamma primitive that can be reused by other
   LS moment stacks with arbitrary block weights and NACOV matrices.
-- `measures::standardize::standardize_lv`/`standardize_all` accept
-  ordinal/mixed-ordinal fits (the `require_not_ordinal` guard was removed from
-  both the C++ api and the Rcpp bindings; `factor_scores`/`compute_defined`
-  stay guarded). `standardize_all` takes an `ordinal_delta_unit` flag: under the
+- `standardize_lv`/`standardize_all` and `compute_defined` accept
+  ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings;
+  `factor_scores` stays guarded (lavaan scores ordinal indicators by
+  latent-response EBM integration, a distinct estimator — deferred in
+  `speculative.md`). All three are parameterization-agnostic transforms over the
+  *prepared* ordinal partable: `fit_ordinal_bounded` fixes the latent-response
+  residual variances the delta constraint determines and compacts the free set,
+  so the stored estimates/vcov live in that reduced space while `Model` carries
+  the un-prepared structure. The api functions reconstruct the prepared
+  structure on demand (an internal `prepared_structure` helper replaying
+  `prepare_ordinal_partable`); the Rcpp bindings get it for free because
+  `ctx_from_fit` parses the prepared partable. (Before this bridge the api-level
+  guard-removal was dead: it fed the reduced theta into the un-prepared
+  evaluator and aborted on the dimension mismatch.) `standardize_all` takes an
+  `ordinal_delta_unit` flag: under the
   delta parameterization a categorical indicator's latent response is
   unit-variance, so its loading is standardized by the latent SD only (σ_rr = 1)
   rather than the assembled `λ²ψ + 1`. This is applied in both the plain-CFA

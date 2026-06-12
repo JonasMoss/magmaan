@@ -65,7 +65,7 @@ Eigen::MatrixXd ordinal_block(Eigen::Index n = 140) {
 }
 
 std::string ordinal_syntax() {
-  return "f =~ x1 + x2 + x3 + x4\n"
+  return "f =~ x1 + l2*x2 + l3*x3 + x4\n"
          "x1 | t1 + t2 + t3 + t4\n"
          "x2 | t1 + t2 + t3 + t4\n"
          "x3 | t1 + t2 + t3 + t4\n"
@@ -73,7 +73,8 @@ std::string ordinal_syntax() {
          "x1 ~*~ 1*x1\n"
          "x2 ~*~ 1*x2\n"
          "x3 ~*~ 1*x3\n"
-         "x4 ~*~ 1*x4\n";
+         "x4 ~*~ 1*x4\n"
+         "lprod := l2*l3\n";
 }
 
 using magmaan::test::load_json_fixture;
@@ -408,6 +409,35 @@ TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {
   REQUIRE(ord_fm->ordinal_srmr.has_value());
   CHECK(std::isfinite(*ord_fm->ordinal_srmr));
   CHECK(*ord_fm->ordinal_srmr >= 0.0);
+
+  // Standardization and `:=` defined parameters are parameterization-agnostic
+  // transforms of the fit, so they are exposed for ordinal fits (no guard).
+  // The robust ordinal result carries the full free-parameter vcov.
+  const Eigen::MatrixXd &vcov = dwls_rob->vcov;
+
+  const auto std_all = magmaan::api::standardize_all(*dwls_fit, vcov);
+  REQUIRE_OK(std_all);
+  CHECK(std_all->theta.size() == dwls_fit->estimates().theta.size());
+
+  const auto std_lv = magmaan::api::standardize_lv(*dwls_fit, vcov);
+  REQUIRE_OK(std_lv);
+  CHECK(std_lv->theta.size() == dwls_fit->estimates().theta.size());
+
+  const auto defs = magmaan::api::compute_defined(*dwls_fit, vcov);
+  REQUIRE_OK(defs);
+  REQUIRE(defs->entries.size() == 1);
+  CHECK(defs->entries[0].name == "lprod");
+  CHECK(std::isfinite(defs->entries[0].value));
+  CHECK(defs->entries[0].se > 0.0);
+
+  // Factor scores stay guarded for ordinal fits: lavaan scores ordinal
+  // indicators by latent-response integration, a distinct estimator the
+  // continuous predictor here does not implement (see speculative.md).
+  magmaan::data::RawData ordinal_raw;
+  ordinal_raw.X.push_back(ordinal_block());
+  const auto fs = magmaan::api::factor_scores(
+      *dwls_fit, ordinal_raw, magmaan::measures::FactorScoreMethod::Regression);
+  REQUIRE_FALSE(fs.has_value());
 }
 
 TEST_CASE("api frontier exposes native FC-SEM fit and post-fit calls") {

@@ -17,12 +17,29 @@ Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 `spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
 
-- **S.** Ordinal-SEM standardized solution: add a checked C++ golden fixture for
-  ordinal / mixed-ordinal standardized rows (currently only `r-package/examples/
-  ordinal_dwls_wls.R` plus the experiment `--lavaan-parity` runs cover it), and
-  decide whether delta-method defined parameters (`compute_defined`) and
-  `factor_scores` are valid for ordinal fits — both still carry the
-  `require_not_ordinal` guard that was removed from `standardize_lv`/`_all`.
+- **Ordinal-SEM standardized solution / defined params — mostly landed
+  2026-06.** Decided: `compute_defined` is valid for ordinal/mixed fits (a
+  parameterization-agnostic delta-method transform) and its guard was removed at
+  both the C++ api and the Rcpp binding; `factor_scores` stays guarded (lavaan
+  uses latent-response EBM integration, a distinct estimator deferred in
+  `speculative.md`). Fixing the api flip surfaced a real bug: the ordinal api
+  `Fit` carries the un-prepared structure while estimates live over the prepared
+  (reduced) partable, so `standardize_lv`/`standardize_all`/`compute_defined`
+  aborted on a theta-dimension mismatch — only the Rcpp path (which stores the
+  prepared partable) worked. The api now reconstructs the prepared structure on
+  demand (`prepared_structure` helper in `src/api/sem.cpp`). Coverage: C++ unit
+  (`api_sem_test` ordinal case) and live lavaan value-parity in
+  `r-package/examples/ordinal_dwls_wls.R` (ordinal `:=` value+SE to 5e-3; mixed
+  std.all to 1e-3; all-ordinal std.all already covered). Remaining:
+  - **S, blocked on lavaan-pin realignment.** A checked C++ *golden* (stored
+    lavaan oracle) for ordinal/mixed standardized rows and the ordinal `:=`
+    row, to gate value-parity in the C++ suite rather than only via R. Blocked
+    because `tests/tools/regen_oracle.R` hard-aborts on the lavaan version
+    mismatch (pinned `0.6-22.2560`, environment has `0.7.1.2691`); add the
+    `standardizedSolution`/`:=` oracle to the ordinal-parity regen block and the
+    consuming golden once the pin is realigned.
+  - **S.** Decide whether delta-method defined parameters and `factor_scores`
+    need any further ordinal-specific handling once a downstream consumer asks.
 
 ## Robust score / modification-index tests (frontier)
 
