@@ -317,10 +317,12 @@ FitMeasures fit_measures(double             chi2_user,
   const double num_b = std::max(0.0, T_b - df_b);
   out.cfi = (num_b > 0.0) ? std::max(0.0, 1.0 - num_u / num_b) : 1.0;
 
-  // TLI: (T_b/df_b − T_u/df_u) / (T_b/df_b − 1). Undefined when df_b = 0
-  // or df_u = 0; conventional return value is NaN (or 1 for a perfect
-  // fit at the saturated case). We return NaN to flag the singular case.
-  if (df_b > 0 && df_u > 0) {
+  // TLI: (T_b/df_b − T_u/df_u) / (T_b/df_b − 1). lavaan reports 1 for
+  // saturated user models (df_u = 0); otherwise the ratio needs positive
+  // baseline and user degrees of freedom.
+  if (df_u == 0.0) {
+    out.tli = 1.0;
+  } else if (df_b > 0 && df_u > 0) {
     const double ratio_b = T_b / df_b;
     const double ratio_u = T_u / df_u;
     const double denom   = ratio_b - 1.0;

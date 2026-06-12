@@ -121,8 +121,8 @@ golden `parTable()` fixtures.
   FMG eigenvalue p-value tests (explicit method/options API, no parser),
   Browne residual NT/ADF, fixed-parameter modification indices,
   equality-release score tests, fit measures including RMSEA close-fit
-  p-values, structural-aware standardization, and C++ defined-parameter
-  evaluation.
+  p-values and lavaan's saturated-user-model `TLI = 1` convention,
+  structural-aware standardization, and C++ defined-parameter evaluation.
 - `inference::frontier` robust (generalized / Satorra-Bentler-scaled)
   modification indices and equality-release score tests: each candidate carries
   the ordinary `mi` and a `mi_scaled = mi / c` with the per-direction scaling

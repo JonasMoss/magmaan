@@ -159,17 +159,21 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
         fail(buf);
       }
     }
-    // Practical fit indices — only when the fixture value is finite (lavaan
-    // emits NaN for tli/cfi on saturated/under-identified fits; our
-    // fit_measures returns NaN for tli when df_u == 0). Compare what's
-    // comparable; non-finite-on-either-side is skipped, not a failure.
+    // Practical fit indices — only when the fixture value is finite. A finite
+    // lavaan oracle makes a non-finite magmaan value a failure, not a soft skip.
     auto cmp_field = [&](const char* name, double ours,
                          const char* key, double tol) {
       if (!exp.contains(key)) return;
       const auto& jv = exp[key];
       if (!finite_json(jv)) return;
       const double l = jv.get<double>();
-      if (!std::isfinite(ours)) return;  // e.g. tli=NaN on saturated models
+      if (!std::isfinite(ours)) {
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), "%s is non-finite, lavaan = %.10g",
+                      name, l);
+        fail(buf);
+        return;
+      }
       if (!close(ours, l, tol)) {
         char buf[200];
         std::snprintf(buf, sizeof(buf),

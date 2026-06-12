@@ -154,6 +154,7 @@ TEST_CASE("fit_measures: RMSEA CI edge cases (df<1, small χ², G>1 scaling)") {
   // df_u < 1 (saturated): both bounds 0.
   {
     auto fm = fit_measures(0.0, 0, bl, mk_samp({300}));
+    CHECK(fm.tli == doctest::Approx(1.0));
     CHECK(fm.rmsea_ci_lower == 0.0);
     CHECK(fm.rmsea_ci_upper == 0.0);
   }
