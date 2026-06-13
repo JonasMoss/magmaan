@@ -117,6 +117,7 @@ project_mixed_matrix(const Eigen::Ref<const Eigen::MatrixXd>& latent,
   out.ordered.assign(p_size, 0);
   out.n_levels.assign(p_size, 0);
   out.category_counts.resize(p_size);
+  out.category_proportions.resize(p_size);
 
   for (Eigen::Index j = 0; j < latent.cols(); ++j) {
     const auto idx = static_cast<std::size_t>(j);
@@ -147,6 +148,9 @@ project_mixed_matrix(const Eigen::Ref<const Eigen::MatrixXd>& latent,
       out.X(i, j) = static_cast<double>(category);
       out.category_counts[idx](category - 1) += 1;
     }
+    out.category_proportions[idx] =
+        out.category_counts[idx].cast<double>() /
+        static_cast<double>(latent.rows());
   }
 
   return out;
@@ -161,6 +165,42 @@ project_ordinal_matrix(
                     ObservedKind::Ordinal);
   spec.thresholds = thresholds;
   return project_mixed_matrix(latent, spec);
+}
+
+sim_expected<data::RawData>
+raw_data_from_mixed_projection(
+    const MixedProjectionResult& result,
+    const std::vector<std::string>& variable_names,
+    const std::vector<std::vector<std::string>>& ordinal_level_labels) {
+  const auto p = static_cast<std::size_t>(result.X.cols());
+  if (!variable_names.empty() && variable_names.size() != p) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "raw_data_from_mixed_projection: variable_names size must match column count"));
+  }
+  if (!ordinal_level_labels.empty() && ordinal_level_labels.size() != p) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "raw_data_from_mixed_projection: ordinal_level_labels size must match column count"));
+  }
+
+  data::RawData raw;
+  raw.X = {result.X};
+  raw.variable_names = variable_names;
+  if (!ordinal_level_labels.empty()) {
+    raw.ordinal_level_labels = ordinal_level_labels;
+  } else {
+    raw.ordinal_level_labels.resize(p);
+    for (std::size_t v = 0; v < p; ++v) {
+      const bool ordered = v < result.ordered.size() && result.ordered[v] == 1;
+      if (!ordered) continue;
+      const int k = (v < result.n_levels.size()) ? result.n_levels[v] : 0;
+      std::vector<std::string> labels;
+      for (int c = 1; c <= k; ++c) labels.push_back(std::to_string(c));
+      raw.ordinal_level_labels[v] = std::move(labels);
+    }
+  }
+  return raw;
 }
 
 }  // namespace magmaan::sim

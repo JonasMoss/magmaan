@@ -13,7 +13,9 @@
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/sim/model_implied.hpp"
 #include "magmaan/sim/norta.hpp"
+#include "magmaan/sim/ordinal_correlation.hpp"
 #include "magmaan/sim/plsim.hpp"
+#include "magmaan/sim/population.hpp"
 
 namespace {
 
@@ -387,6 +389,76 @@ std::vector<Eigen::VectorXd> thresholds_from_list(Rcpp::List thresholds,
     }
   }
   return out;
+}
+
+magmaan::sim::ObservedCorrelationMetric observed_correlation_metric_from_string(
+    const std::string& metric) {
+  using M = magmaan::sim::ObservedCorrelationMetric;
+  if (metric == "polychoric") return M::Polychoric;
+  if (metric == "pearson_codes" || metric == "pearson") return M::PearsonCodes;
+  if (metric == "polyserial") return M::Polyserial;
+  Rcpp::stop("metric must be one of \"polychoric\", \"pearson_codes\", \"polyserial\"");
+}
+
+const char* observed_correlation_metric_to_string(
+    magmaan::sim::ObservedCorrelationMetric metric) {
+  using M = magmaan::sim::ObservedCorrelationMetric;
+  switch (metric) {
+    case M::Polychoric: return "polychoric";
+    case M::PearsonCodes: return "pearson_codes";
+    case M::Polyserial: return "polyserial";
+  }
+  return "polychoric";
+}
+
+// Per-variable marginals: an ordinal variable is a numeric vector of category
+// proportions; a continuous variable is NULL.
+std::vector<magmaan::sim::OrdinalMarginalSpec> ordinal_marginal_specs_from_list(
+    Rcpp::List marginals) {
+  std::vector<magmaan::sim::OrdinalMarginalSpec> out;
+  out.reserve(static_cast<std::size_t>(marginals.size()));
+  for (R_xlen_t i = 0; i < marginals.size(); ++i) {
+    magmaan::sim::OrdinalMarginalSpec spec;
+    Rcpp::RObject value(marginals[i]);
+    if (value.isNULL()) {
+      spec.kind = magmaan::sim::ObservedKind::Continuous;
+    } else {
+      spec.kind = magmaan::sim::ObservedKind::Ordinal;
+      spec.proportions = Rcpp::as<Eigen::VectorXd>(value);
+    }
+    out.push_back(std::move(spec));
+  }
+  return out;
+}
+
+Rcpp::DataFrame ordinal_pairs_to_df(
+    const std::vector<magmaan::sim::OrdinalPairCalibration>& pairs) {
+  const R_xlen_t m = static_cast<R_xlen_t>(pairs.size());
+  Rcpp::IntegerVector i_idx(m);
+  Rcpp::IntegerVector j_idx(m);
+  Rcpp::IntegerVector iters(m);
+  Rcpp::NumericVector target(m);
+  Rcpp::NumericVector latent(m);
+  Rcpp::NumericVector achieved(m);
+  Rcpp::LogicalVector converged(m);
+  Rcpp::LogicalVector infeasible(m);
+  for (R_xlen_t k = 0; k < m; ++k) {
+    const auto& p = pairs[static_cast<std::size_t>(k)];
+    i_idx[k] = p.i + 1;  // 1-based for R
+    j_idx[k] = p.j + 1;
+    iters[k] = p.iterations;
+    target[k] = p.target_corr;
+    latent[k] = p.latent_rho;
+    achieved[k] = p.achieved_corr;
+    converged[k] = p.converged;
+    infeasible[k] = p.infeasible;
+  }
+  return Rcpp::DataFrame::create(
+      Rcpp::_["i"] = i_idx, Rcpp::_["j"] = j_idx,
+      Rcpp::_["target"] = target, Rcpp::_["latent_rho"] = latent,
+      Rcpp::_["achieved"] = achieved, Rcpp::_["iterations"] = iters,
+      Rcpp::_["converged"] = converged, Rcpp::_["infeasible"] = infeasible,
+      Rcpp::_["stringsAsFactors"] = false);
 }
 
 Rcpp::List model_implied_population_to_list(
@@ -1233,6 +1305,113 @@ Rcpp::List sim_norta_draw_impl(Rcpp::List calibration,
     draws[i] = Rcpp::wrap(*X_or);
   }
   return Rcpp::List::create(Rcpp::_["draws"] = draws);
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_ordcorr_calibrate_impl(
+    Rcpp::NumericMatrix target_corr,
+    Rcpp::List marginals,
+    std::string metric = "polychoric",
+    int max_bisection_iter = 80,
+    double calibration_tol = 1e-8,
+    double rho_bound = 0.999,
+    std::string matrix_repair = "none",
+    double matrix_repair_min_eigenvalue = 1e-8) {
+  const Eigen::Map<Eigen::MatrixXd> corr(
+      REAL(target_corr), target_corr.nrow(), target_corr.ncol());
+  const auto marginal_specs = ordinal_marginal_specs_from_list(marginals);
+
+  magmaan::sim::OrdinalCorrelationOptions options;
+  options.metric = observed_correlation_metric_from_string(metric);
+  options.max_bisection_iter = max_bisection_iter;
+  options.calibration_tol = calibration_tol;
+  options.rho_bound = rho_bound;
+  options.matrix_repair = bivariate_copula_repair_from_string(matrix_repair);
+  options.matrix_repair_min_eigenvalue = matrix_repair_min_eigenvalue;
+
+  auto cal_or = magmaan::sim::calibrate_ordinal_correlation(
+      corr, marginal_specs, options);
+  if (!cal_or.has_value()) stop_sim(cal_or.error());
+  const auto& cal = *cal_or;
+
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["latent_corr"] = Rcpp::wrap(cal.latent_corr),
+      Rcpp::_["target_corr"] = Rcpp::wrap(cal.target_corr),
+      Rcpp::_["achieved_corr"] = Rcpp::wrap(cal.achieved_corr),
+      Rcpp::_["kinds"] = observed_kinds_to_int(cal.kinds),
+      Rcpp::_["thresholds"] = thresholds_to_list(cal.thresholds),
+      Rcpp::_["pairs"] = ordinal_pairs_to_df(cal.pairs),
+      Rcpp::_["metric"] =
+          std::string(observed_correlation_metric_to_string(cal.metric)),
+      Rcpp::_["max_abs_error"] = cal.max_abs_error,
+      Rcpp::_["repair"] = Rcpp::List::create(
+          Rcpp::_["applied"] = cal.repair_applied,
+          Rcpp::_["raw_min_eigenvalue"] = cal.raw_min_eigenvalue,
+          Rcpp::_["repaired_min_eigenvalue"] = cal.repaired_min_eigenvalue,
+          Rcpp::_["ridge"] = cal.repair_ridge,
+          Rcpp::_["shrinkage"] = cal.repair_shrinkage));
+  out.attr("class") = Rcpp::CharacterVector::create(
+      "magmaan_ordcorr_calibration", "list");
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_ordcorr_draw_impl(Rcpp::List calibration,
+                                 int n,
+                                 int reps,
+                                 double seed_base,
+                                 double cholesky_jitter = 0.0) {
+  if (n <= 0) Rcpp::stop("n must be positive");
+  if (reps <= 0) Rcpp::stop("reps must be positive");
+
+  magmaan::sim::OrdinalCorrelationCalibration cal;
+  cal.latent_corr = Rcpp::as<Eigen::MatrixXd>(calibration["latent_corr"]);
+  cal.kinds = observed_kinds_from_int(
+      Rcpp::as<Rcpp::IntegerVector>(calibration["kinds"]));
+  cal.thresholds = thresholds_from_list(
+      Rcpp::as<Rcpp::List>(calibration["thresholds"]), cal.kinds.size());
+
+  auto pop_or = magmaan::sim::ordinal_correlation_population(cal);
+  if (!pop_or.has_value()) stop_sim(pop_or.error());
+
+  magmaan::sim::NormalOptions normal_options;
+  if (cholesky_jitter > 0.0) normal_options.cholesky_jitter = cholesky_jitter;
+
+  Rcpp::List draws(reps);
+  for (int i = 0; i < reps; ++i) {
+    std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
+                        static_cast<std::uint64_t>(i + 1));
+    auto draw_or = magmaan::sim::simulate_mixed_population_normal(
+        static_cast<Eigen::Index>(n), *pop_or, rng, normal_options);
+    if (!draw_or.has_value()) stop_sim(draw_or.error());
+    draws[i] = Rcpp::List::create(
+        Rcpp::_["X"] = Rcpp::wrap(draw_or->observed.X),
+        Rcpp::_["ordered"] = int32_vector_to_r(draw_or->observed.ordered),
+        Rcpp::_["n_levels"] = int32_vector_to_r(draw_or->observed.n_levels),
+        Rcpp::_["category_proportions"] =
+            thresholds_to_list(draw_or->observed.category_proportions));
+  }
+  return Rcpp::List::create(Rcpp::_["draws"] = draws);
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_ordcorr_batch_impl(
+    Rcpp::NumericMatrix target_corr,
+    Rcpp::List marginals,
+    int n,
+    int reps,
+    double seed_base,
+    std::string metric = "polychoric",
+    int max_bisection_iter = 80,
+    double calibration_tol = 1e-8,
+    double rho_bound = 0.999,
+    std::string matrix_repair = "none",
+    double matrix_repair_min_eigenvalue = 1e-8,
+    double cholesky_jitter = 0.0) {
+  Rcpp::List calibration = sim_ordcorr_calibrate_impl(
+      target_corr, marginals, metric, max_bisection_iter, calibration_tol,
+      rho_bound, matrix_repair, matrix_repair_min_eigenvalue);
+  return sim_ordcorr_draw_impl(calibration, n, reps, seed_base, cholesky_jitter);
 }
 
 // [[Rcpp::export]]

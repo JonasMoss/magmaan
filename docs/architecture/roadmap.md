@@ -450,15 +450,37 @@ golden `parTable()` fixtures.
   partable with an explicit `theta` vector. Copula/NORTA/vine/IG/VM/PLSIM
   bridges remain separate because the SEM supplies moments and thresholds, not
   marginal distribution specifications.
+- Ordinal/mixed observed-correlation calibration inverts a target observed
+  correlation matrix plus per-variable marginals (ordinal category proportions
+  or continuous) into a latent Gaussian correlation matrix + thresholds.
+  `sim::calibrate_ordinal_correlation()` solves each off-diagonal independently
+  (NORTA-style) under one of three `ObservedCorrelationMetric` options:
+  `Polychoric` (ordinal x ordinal latent rho == target, closed form),
+  `PearsonCodes` (monotone bisection so the integer-code Pearson r matches the
+  target, using `data::ordinal_bvn_rect_prob` as the forward map), and
+  `Polyserial` (ordinal x continuous closed form `rho*sum phi(tau)/sd`;
+  continuous x continuous is identity). The assembled latent matrix is repaired
+  through the shared `repair_correlation_matrix_if_requested`
+  (None/Error/Ridge/Shrinkage), and the calibration object records per-pair
+  diagnostics plus the achieved-correlation matrix at the shipped latent.
+  `sim::ordinal_correlation_population()` lowers it to a `MixedPopulation` that
+  feeds the existing `simulate_mixed_population_*` generators;
+  `simulate_ordinal_correlation_normal()` is the one-shot convenience. The R
+  package exposes the two-stage split as `sim_ordcorr_calibrate()` /
+  `sim_ordcorr_draw()` plus `sim_ordcorr_batch()`. `MixedProjectionResult` now
+  also carries achieved `category_proportions`, and
+  `sim::raw_data_from_mixed_projection()` wraps a projected block as a
+  `data::RawData` with optional variable names and ordinal level labels.
 - Calibrated simulation generators are standardized around a two-stage
   contract: deterministic `calibrate_*()` calls return reusable state objects
   with fitted marginals, latent/intermediate matrices, achieved diagnostics, and
   iteration metadata; stochastic `simulate_*()`/draw calls accept that state
   plus only `n`, RNG/seed, and draw-time options. One-shot batch helpers remain
   as convenience wrappers. This path is now in place for IG, NORTA, PLSIM,
-  pairwise Archimedean copulas, generic fixed-order C-vines, and specialized
-  three-variable C-vine root/family-selection policies at the R boundary and
-  for IG, PLSIM, NORTA, and copula/vine generators at the C++ boundary.
+  pairwise Archimedean copulas, generic fixed-order C-vines, specialized
+  three-variable C-vine root/family-selection policies, and ordinal/mixed
+  observed-correlation calibration at the R boundary and for IG, PLSIM, NORTA,
+  copula/vine, and ordinal-correlation generators at the C++ boundary.
   Long-running experiments persist those calibration objects explicitly through
   the `experiments/_support` cache helpers, which key ignored `results/cache/`
   entries by population, generator/options, magmaan package version, and git

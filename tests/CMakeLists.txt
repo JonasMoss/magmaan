@@ -159,6 +159,7 @@ magmaan_add_test_target(magmaan_test_sim sim
   unit/norta_test.cpp
   unit/plsim_test.cpp
   unit/model_implied_test.cpp
+  unit/ordinal_correlation_test.cpp
   unit/population_test.cpp
   unit/projection_test.cpp
   unit/vale_maurelli_test.cpp)

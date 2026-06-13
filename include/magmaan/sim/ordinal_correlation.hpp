@@ -1,0 +1,125 @@
+#pragma once
+
+#include <cstdint>
+#include <random>
+#include <vector>
+
+#include <Eigen/Core>
+
+#include "magmaan/expected.hpp"
+#include "magmaan/sim/norta.hpp"        // BivariateCopulaCorrelationRepairKind, normal_cdf/quantile
+#include "magmaan/sim/normal.hpp"       // NormalOptions
+#include "magmaan/sim/population.hpp"   // MixedPopulation, MixedPopulationDraw
+#include "magmaan/sim/projection.hpp"   // ObservedKind, MixedProjectionSpec
+
+namespace magmaan::sim {
+
+// Inverse of the polychoric/polyserial estimation problem: given a target
+// observed correlation matrix plus per-variable marginals, find the latent
+// Gaussian correlation matrix + thresholds whose thresholded normal draws
+// reproduce the target. Calibration is pairwise (each off-diagonal independent,
+// like NORTA); the assembled latent matrix is then PD-repaired.
+//
+// The forward map dispatches on the pair's variable kinds, and `metric` governs
+// only ordinal x ordinal pairs:
+//   - ordinal x ordinal:  Polychoric/Polyserial => latent rho == target (the
+//     polychoric correlation of a thresholded Gaussian is its latent rho);
+//     PearsonCodes => root-find rho so the Pearson r of the integer codes
+//     1..k matches the target.
+//   - ordinal x continuous: always the polyserial closed form
+//     rho * sum_c phi(tau_c) / sd(codes) (this equals Pearson(code, continuous)).
+//   - continuous x continuous: always identity (latent rho == target).
+enum class ObservedCorrelationMetric : std::uint8_t {
+  Polychoric,    // ordinal x ordinal target is the polychoric correlation
+  PearsonCodes,  // ordinal x ordinal target is the Pearson r of integer codes
+  Polyserial,    // mixed/continuous target; ordinal x ordinal falls back to Polychoric
+};
+
+// Per-variable marginal. Ordinal: `proportions` has k category probabilities
+// (positive, summing to 1) -> k-1 thresholds. Continuous: `proportions` empty;
+// the latent column is standard normal and passes through unthresholded.
+struct OrdinalMarginalSpec {
+  ObservedKind kind = ObservedKind::Ordinal;
+  Eigen::VectorXd proportions;
+};
+
+struct OrdinalCorrelationOptions {
+  ObservedCorrelationMetric metric = ObservedCorrelationMetric::Polychoric;
+  int    max_bisection_iter = 80;     // PearsonCodes ordinal x ordinal solve
+  double calibration_tol    = 1e-8;
+  double rho_bound          = 0.999;
+  BivariateCopulaCorrelationRepairKind matrix_repair =
+      BivariateCopulaCorrelationRepairKind::None;
+  double matrix_repair_min_eigenvalue = 1e-8;
+};
+
+// One off-diagonal entry's calibration record.
+struct OrdinalPairCalibration {
+  std::int32_t i = 0;
+  std::int32_t j = 0;
+  double target_corr   = 0.0;
+  double latent_rho    = 0.0;  // solved latent Gaussian correlation (pre-repair)
+  double achieved_corr = 0.0;  // forward map at the POST-repair latent rho
+  int    iterations    = 0;
+  bool   converged     = true;
+  bool   hit_lower     = false;
+  bool   hit_upper     = false;
+  bool   infeasible    = false;  // target unattainable at this metric -> clamped
+};
+
+// Two-stage calibration state: every deterministic artifact needed to draw.
+struct OrdinalCorrelationCalibration {
+  ObservedCorrelationMetric metric = ObservedCorrelationMetric::Polychoric;
+  std::vector<ObservedKind> kinds;          // per variable
+  std::vector<Eigen::VectorXd> thresholds;  // per variable (empty for continuous)
+  Eigen::MatrixXd latent_corr;              // POST-repair latent Gaussian corr
+  Eigen::MatrixXd target_corr;              // echo of the request
+  Eigen::MatrixXd achieved_corr;            // forward map at latent_corr (diagnostic)
+  std::vector<OrdinalPairCalibration> pairs;
+  // PD-repair diagnostics (mirror MatrixRepairResult):
+  double raw_min_eigenvalue = 0.0;
+  double repaired_min_eigenvalue = 0.0;
+  double repair_ridge = 0.0;
+  double repair_shrinkage = 0.0;
+  bool   repair_applied = false;
+  double max_abs_error = 0.0;               // max |achieved - target| off-diagonal
+};
+
+// Forward map: observed correlation of a pair under a given latent rho, by the
+// chosen metric and the pair's variable kinds. Deterministic; reused by the
+// calibration solve and the achieved-correlation diagnostic.
+sim_expected<double>
+ordinal_pair_observed_corr(ObservedCorrelationMetric metric,
+                           ObservedKind kind_i,
+                           const Eigen::VectorXd& thresholds_i,
+                           ObservedKind kind_j,
+                           const Eigen::VectorXd& thresholds_j,
+                           double latent_rho);
+
+// Stage 1: calibrate. Validates the target, derives thresholds, solves each
+// off-diagonal pair, PD-repairs, then records the achieved correlation at the
+// shipped (post-repair) latent matrix.
+sim_expected<OrdinalCorrelationCalibration>
+calibrate_ordinal_correlation(
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<OrdinalMarginalSpec>& marginals,
+    const OrdinalCorrelationOptions& options = {});
+
+// Lower a finished calibration to a draw-ready MixedPopulation (latent mean 0,
+// covariance = latent_corr; observed = kinds + thresholds). Does NOT redraw; the
+// existing simulate_mixed_population_* generators consume this.
+sim_expected<MixedPopulation>
+ordinal_correlation_population(const OrdinalCorrelationCalibration& calibration);
+
+// Thin one-shot convenience: calibrate, lower, then draw with the normal
+// generator. Repeated draws should call the two-stage path instead.
+sim_expected<MixedPopulationDraw>
+simulate_ordinal_correlation_normal(
+    Eigen::Index n,
+    const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
+    const std::vector<OrdinalMarginalSpec>& marginals,
+    std::mt19937_64& rng,
+    const OrdinalCorrelationOptions& options = {},
+    const NormalOptions& normal_options = {});
+
+}  // namespace magmaan::sim

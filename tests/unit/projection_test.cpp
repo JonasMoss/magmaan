@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
@@ -46,6 +47,9 @@ TEST_CASE("ordinal projection codes thresholded columns as one-based categories"
   CHECK(projected.category_counts[0](2) == 2);
   CHECK(projected.category_counts[1](0) == 4);
   CHECK(projected.category_counts[1](1) == 2);
+  CHECK(projected.category_proportions[0](0) == doctest::Approx(1.0 / 3.0));
+  CHECK(projected.category_proportions[1](0) == doctest::Approx(2.0 / 3.0));
+  CHECK(projected.category_proportions[1](1) == doctest::Approx(1.0 / 3.0));
   CHECK(projected.X(0, 0) == 1.0);
   CHECK(projected.X(3, 0) == 2.0);
   CHECK(projected.X(5, 0) == 3.0);
@@ -98,6 +102,41 @@ TEST_CASE("mixed projection preserves continuous columns and marks ordinal colum
   REQUIRE(workspace_or.has_value());
   CHECK(workspace_or->moments.ordered[0] ==
         std::vector<std::int32_t>{1, 0, 1});
+}
+
+TEST_CASE("raw-data wrapping carries names and derives ordinal level labels") {
+  Eigen::MatrixXd latent(4, 2);
+  latent << -1.0, 5.0,
+            -0.2, 6.0,
+             0.3, 7.0,
+             1.1, 8.0;
+  magmaan::sim::MixedProjectionSpec spec;
+  spec.kinds = {magmaan::sim::ObservedKind::Ordinal,
+                magmaan::sim::ObservedKind::Continuous};
+  Eigen::VectorXd th(2);
+  th << -0.5, 0.5;
+  spec.thresholds = {th, Eigen::VectorXd{}};
+
+  auto projected_or = magmaan::sim::project_mixed_matrix(latent, spec);
+  REQUIRE(projected_or.has_value());
+
+  auto raw_or = magmaan::sim::raw_data_from_mixed_projection(
+      *projected_or, {"item", "score"});
+  REQUIRE(raw_or.has_value());
+  const auto& raw = *raw_or;
+  REQUIRE(raw.X.size() == 1);
+  CHECK(raw.X[0].cols() == 2);
+  CHECK(raw.variable_names == std::vector<std::string>{"item", "score"});
+  REQUIRE(raw.ordinal_level_labels.size() == 2);
+  CHECK(raw.ordinal_level_labels[0] ==
+        std::vector<std::string>{"1", "2", "3"});  // 3-level ordinal
+  CHECK(raw.ordinal_level_labels[1].empty());      // continuous
+
+  // Size mismatch is rejected.
+  auto bad = magmaan::sim::raw_data_from_mixed_projection(*projected_or,
+                                                          {"only-one"});
+  REQUIRE_FALSE(bad.has_value());
+  CHECK(bad.error().kind == magmaan::SimError::Kind::InvalidInput);
 }
 
 TEST_CASE("projection validates probabilities and thresholds") {
