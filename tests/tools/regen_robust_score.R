@@ -206,3 +206,78 @@ write_json(payload_ord, out_ord, pretty = TRUE, auto_unbox = TRUE,
 cat(sprintf("wrote %s\n  X2_nt=%.6f  c=%.6f  mi_scaled=%.6f  (lavaan %s)\n",
             out_ord, rs_ord$X2_nt, rs_ord$scaling, rs_ord$mi_scaled,
             installed))
+
+# ── 0009: FIML / MLR (missing-data observed-info bread, casewise-score meat) ───
+# Missing-data full-information ML with the MLR (robust.huber.white) sandwich:
+# the bread is the analytic OBSERVED information and the meat the covariance of
+# the casewise observed-pattern scores. Unlike 0006-0008 the assembly is already
+# in θ-space (no moment-space Δ'VΔ): A1 = N · information.observed (lavaan's
+# information is per-unit), B1 = Σ_i s_i s_iᵀ from lavScores. magmaan's FIML
+# robust path builds A1 = (N/2)·H = N·I_unit and B1 = ¼·scoresᵀscores =
+# crossprod(lavScores) (its casewise scores are deviance, = −2× loglik), so the
+# convention-free θ-space ratio c must match. Heavy-tailed t data + MCAR
+# missingness ⇒ Γ̂ ≠ Γ_NT (c ≠ 1).
+robust_score_assemble_fiml <- function(fit) {
+  X2_nt <- suppressWarnings(lavTestScore(fit)$uni$X2[1])
+  N  <- lavInspect(fit, "ntotal")
+  A1 <- N * lavInspect(fit, "information.observed")  # total observed info
+  # Unprojected full-θ casewise scores: the K-projection is applied below, so
+  # lavScores must NOT apply its own equality-constraint Lagrange correction.
+  S  <- lavScores(fit, ignore.constraints = TRUE, remove.duplicated = FALSE)
+  stopifnot(ncol(S) == nrow(A1))
+  B1 <- crossprod(S)                                 # Σ_i s_i s_iᵀ
+  R  <- fit@Model@ceq.JAC
+  d  <- as.numeric(R[1, ]); d <- d / sqrt(sum(d * d))
+  K  <- MASS::Null(t(R))
+  g  <- d - K %*% solve(t(K) %*% A1 %*% K, t(K) %*% (A1 %*% d))
+  c_fac <- as.numeric((t(g) %*% B1 %*% g) / (t(g) %*% A1 %*% g))
+  if (!is.finite(c_fac) || c_fac < 0.3 || c_fac > 3.5)
+    stop(sprintf("FIML robust score c out of sane range (scaling bug?): %g",
+                 c_fac))
+  list(X2_nt = X2_nt, scaling = c_fac, mi_scaled = X2_nt / c_fac)
+}
+
+set.seed(20260613L)
+n_f <- 600L
+Zf  <- matrix(rnorm(n_f * 4L), n_f, 4L)
+wf  <- rchisq(n_f, df_t) / df_t
+Xf  <- sqrt((df_t - 2) / df_t) * (Zf %*% t(L)) / sqrt(wf)
+colnames(Xf) <- paste0("x", 1:4)
+miss <- matrix(runif(n_f * 4L) < 0.08, n_f, 4L)
+for (i in seq_len(n_f)) if (sum(!miss[i, ]) < 2L) miss[i, ] <- FALSE
+Xf[miss] <- NA
+datf <- as.data.frame(Xf)
+
+fit_fiml <- sem(model, data = datf, estimator = "MLR", missing = "ml",
+                meanstructure = TRUE)
+if (!lavInspect(fit_fiml, "converged")) stop("FIML robust score oracle fit did not converge")
+rs_fiml <- robust_score_assemble_fiml(fit_fiml)
+
+payload_fiml <- list(
+  `_meta` = list(
+    format_version = 1L,
+    fixture_kind = "score_robust",
+    corpus_id = "0009_robust_release_fiml_mlr",
+    tool = "lavaan internals (R-assembled): information.observed/lavScores/ceq.JAC",
+    lavaan_version = installed,
+    note = paste("missing-data FIML / MLR (observed-info bread, casewise-score",
+                 "meat); A1/B1 already in theta-space; heavy-tailed + MCAR")),
+  input = model,
+  estimator = "MLR",
+  missing = "ml",
+  meanstructure = TRUE,
+  bread = "observed",
+  n_obs = n_f,
+  raw = unname(Xf),
+  score_tests_robust = list(rows = list(list(
+    lhs = "a", op = "==", rhs = "b", df = 1L,
+    mi = rs_fiml$X2_nt, scaling_factor = rs_fiml$scaling,
+    mi_scaled = rs_fiml$mi_scaled))))
+
+out_fiml <- file.path(fixtures,
+                      "0009_robust_release_fiml_mlr.score_robust.json")
+write_json(payload_fiml, out_fiml, pretty = TRUE, auto_unbox = TRUE,
+           null = "null", na = "null", digits = NA)
+cat(sprintf("wrote %s\n  X2_nt=%.6f  c=%.6f  mi_scaled=%.6f  (lavaan %s)\n",
+            out_fiml, rs_fiml$X2_nt, rs_fiml$scaling, rs_fiml$mi_scaled,
+            installed))

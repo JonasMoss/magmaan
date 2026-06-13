@@ -1308,6 +1308,42 @@ independence_value_from_patterns(const FIMLCache& cache,
 
 }  // namespace
 
+post_expected<FIMLScoreMeatBread>
+fiml_score_meat_bread(const spec::LatentStructure& pt,
+                      const model::MatrixRep& rep,
+                      const RawData& raw,
+                      const FIMLPack& pack,
+                      const Estimates& est) {
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::build failed: " + ev_or.error().detail));
+  }
+  const auto& ev = *ev_or;
+  if (static_cast<std::size_t>(est.theta.size()) != ev.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "Estimates.theta size " + std::to_string(est.theta.size()) +
+            " != evaluator n_free " + std::to_string(ev.n_free())));
+  }
+  auto eval_or = ev.evaluate(est.theta, true, true);
+  if (!eval_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::evaluate failed: " + eval_or.error().detail));
+  }
+  const auto& eval = *eval_or;
+  auto scores_or = fiml_casewise_scores(raw, pack.cache, eval.moments,
+                                        eval.J_sigma, eval.J_mu);
+  if (!scores_or.has_value()) return std::unexpected(scores_or.error());
+  auto H_or =
+      fiml_observed_hessian_analytic(pt, rep, pack.cache, pack.start_stats, est);
+  if (!H_or.has_value()) return std::unexpected(H_or.error());
+
+  FIMLScoreMeatBread out;
+  out.scores = std::move(*scores_or);
+  out.hessian = std::move(*H_or);
+  return out;
+}
+
 fit_expected<FIMLCache>
 FIML::prepare(const RawData& raw) const {
   if (auto ok = validate_raw_shape(raw); !ok.has_value()) {
@@ -1950,32 +1986,10 @@ fiml_robust_mlr_impl(spec::LatentStructure pt,
         "resolve_fixed_x_from_sample"));
   }
 
-  auto ev_or = model::ModelEvaluator::build(pt, rep);
-  if (!ev_or.has_value()) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "ModelEvaluator::build failed: " + ev_or.error().detail));
-  }
-  const auto& ev = *ev_or;
-  if (static_cast<std::size_t>(est.theta.size()) != ev.n_free()) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "Estimates.theta size " + std::to_string(est.theta.size()) +
-            " != evaluator n_free " + std::to_string(ev.n_free())));
-  }
-
-  auto eval_or = ev.evaluate(est.theta, true, true);
-  if (!eval_or.has_value()) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "ModelEvaluator::evaluate failed: " + eval_or.error().detail));
-  }
-  const auto& eval = *eval_or;
-  auto scores_or = fiml_casewise_scores(raw, cache, eval.moments,
-                                        eval.J_sigma, eval.J_mu);
-  if (!scores_or.has_value()) return std::unexpected(scores_or.error());
-  Eigen::MatrixXd scores = std::move(*scores_or);
-
-  auto H_or = fiml_observed_hessian_analytic(pt, rep, cache, start_samp, est);
-  if (!H_or.has_value()) return std::unexpected(H_or.error());
-  Eigen::MatrixXd H = std::move(*H_or);
+  auto parts_or = fiml_score_meat_bread(pt, rep, raw, pack, est);
+  if (!parts_or.has_value()) return std::unexpected(parts_or.error());
+  Eigen::MatrixXd scores = std::move(parts_or->scores);
+  Eigen::MatrixXd H = std::move(parts_or->hessian);
 
   auto con_or = build_eq_constraints(pt);
   if (!con_or.has_value()) return std::unexpected(con_or.error());

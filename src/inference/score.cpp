@@ -939,6 +939,44 @@ struct FimlEvaluator {
   }
 };
 
+// FIML robust evaluator (MLR corner). Bread A1 = info_full = (N/2)·H (the
+// observed information), meat B1 = ¼·scoresᵀscores. The casewise scores are the
+// per-observation deviance gradients ∂(deviance_i)/∂θ, so colSums(scores) = N·g
+// and the FIML score is score_full = -½·colSums(scores) — exactly the
+// non-robust `evaluate_augmented_fiml` score, so the unscaled `mi` matches.
+// Both A1/B1 stay in full θ-space; the K_nuisance projection is the score-test
+// worker's job. The H1 EM is not needed (only H and the casewise scores), so
+// the per-candidate cost is two data passes, no EM. FIML has no batch
+// augmentation, so this only ever feeds the one-by-one robust sweep.
+struct RobustFimlEvaluator {
+  const model::MatrixRep& rep;
+  const RawData& raw;
+  const estimate::fiml::FIMLPack& pack;
+
+  post_expected<spec::LatentStructure>
+  make_augmented(spec::LatentStructure pt, std::size_t row) const {
+    return with_fixed_row_freed(std::move(pt), row, pack.start_stats, rep);
+  }
+
+  post_expected<void>
+  evaluate(const spec::LatentStructure& pt, const Estimates& est,
+           Eigen::VectorXd& score, Eigen::MatrixXd& info,
+           Eigen::MatrixXd& A1, Eigen::MatrixXd& B1) const {
+    auto parts = estimate::fiml::fiml_score_meat_bread(pt, rep, raw, pack, est);
+    if (!parts.has_value()) return std::unexpected(parts.error());
+    const Eigen::MatrixXd& scores = parts->scores;  // n × q, ∂(deviance_i)/∂θ
+    const double n_total = static_cast<double>(pack.cache.n_total);
+
+    score = -0.5 * scores.colwise().sum().transpose();
+    info = 0.5 * n_total * parts->hessian;
+    info = 0.5 * (info + info.transpose());
+    A1 = info;
+    B1 = 0.25 * (scores.transpose() * scores);
+    B1 = 0.5 * (B1 + B1.transpose());
+    return {};
+  }
+};
+
 // === Absent-row generation ==================================================
 
 bool var_is_latent(const spec::LatentStructure& pt, std::int32_t v) {
@@ -1641,6 +1679,89 @@ score_tests_robust(spec::LatentStructure pt,
                    const RobustScoreOptions& options) {
   return score_tests_robust_ls_impl(std::move(pt), rep, samp, est, weight,
                                     options, nullptr, &gamma_blocks);
+}
+
+// ── FIML robust tier ─────────────────────────────────────────────────────────
+
+namespace {
+
+post_expected<void> require_single_group_raw(const RawData& raw) {
+  if (raw.X.size() != 1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "FIML robust score tests: only single-group models are supported (v1)"));
+  }
+  return {};
+}
+
+post_expected<ScoreTestTable>
+modification_indices_fiml_robust_impl(spec::LatentStructure pt,
+                                      const model::MatrixRep& rep,
+                                      const RawData& raw,
+                                      const Estimates& est,
+                                      const ModificationIndexOptions& options) {
+  if (auto e = require_single_group_raw(raw); !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+  auto work = prepare_modification_index_model(std::move(pt), rep, options);
+  if (!work.has_value()) return std::unexpected(work.error());
+  if (auto e = validate_fiml_fixed_x_missing_policy(work->pt, raw);
+      !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto pack_or = estimate::fiml::fiml_pack(raw);
+  if (!pack_or.has_value()) return std::unexpected(fit_to_post(pack_or.error()));
+  estimate::fiml::FIMLPack pack = std::move(*pack_or);
+  if (auto e = resolve_fixed_x_from_sample(work->pt, work->rep, pack.start_stats);
+      !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  RobustFimlEvaluator ev{work->rep, raw, pack};
+  auto table =
+      fixed_parameter_tests_robust_one_by_one(work->pt, work->rep, est, ev);
+  if (!table.has_value()) return std::unexpected(table.error());
+  if (auto e = fill_standardized_epc(*table, work->pt, work->rep, est);
+      !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+  return table;
+}
+
+}  // namespace
+
+post_expected<ScoreTestTable>
+modification_indices_fiml_robust(spec::LatentStructure pt,
+                                 const model::MatrixRep& rep,
+                                 const RawData& raw,
+                                 const Estimates& est,
+                                 const ModificationIndexOptions& options,
+                                 FIML discrepancy) {
+  (void)discrepancy;
+  return modification_indices_fiml_robust_impl(std::move(pt), rep, raw, est,
+                                               options);
+}
+
+post_expected<ScoreTestTable>
+score_tests_fiml_robust(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const RawData& raw,
+                        const Estimates& est,
+                        FIML discrepancy) {
+  (void)discrepancy;
+  if (auto e = require_single_group_raw(raw); !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto pack_or = estimate::fiml::fiml_pack(raw);
+  if (!pack_or.has_value()) return std::unexpected(fit_to_post(pack_or.error()));
+  estimate::fiml::FIMLPack pack = std::move(*pack_or);
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, pack.start_stats);
+      !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  RobustFimlEvaluator ev{rep, raw, pack};
+  return equality_release_tests_robust(std::move(pt), rep, est, ev);
 }
 
 }  // namespace frontier

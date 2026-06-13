@@ -95,10 +95,6 @@ fixtures 0006-0008, the R-internals oracle from
 `tests/tools/regen_robust_score.R`, and the advisory
 `tests/checks/robust_score/`). Remaining work:
 
-- **Deferred estimator tier: FIML robust MI.** Needs casewise score
-  contributions per missingness pattern (`FimlEvaluator` builds info by finite
-  difference, no Γ̂ analogue) — re-check against the exp-21 FIML FMG UGamma
-  machinery before sizing, which post-dates this note.
 - **Multi-group.** The sandwich blocks are already per-block `n_b/N`-weighted
   (ML via `robust_setup`, LS/ordinal via `WeightedMomentBlock`); the remaining
   work is removing the v1 single-group guards, verifying per-group candidate
