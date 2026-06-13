@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <random>
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
@@ -85,6 +86,19 @@ struct OrdinalCorrelationCalibration {
   double max_abs_error = 0.0;               // max |achieved - target| off-diagonal
 };
 
+struct MultiGroupOrdinalCorrelationCalibration {
+  std::vector<OrdinalCorrelationCalibration> groups;
+  std::vector<std::string> group_labels;  // defaults to "1".."G"
+  std::vector<std::string> variable_names;
+  std::vector<std::vector<std::string>> ordinal_level_labels;
+};
+
+struct GroupOrdinalProportions {
+  std::string group_label;
+  // Per variable; empty vector for continuous columns.
+  std::vector<Eigen::VectorXd> category_proportions;
+};
+
 // Forward map: observed correlation of a pair under a given latent rho, by the
 // chosen metric and the pair's variable kinds. Deterministic; reused by the
 // calibration solve and the achieved-correlation diagnostic.
@@ -105,11 +119,22 @@ calibrate_ordinal_correlation(
     const std::vector<OrdinalMarginalSpec>& marginals,
     const OrdinalCorrelationOptions& options = {});
 
+sim_expected<MultiGroupOrdinalCorrelationCalibration>
+calibrate_ordinal_correlation_multigroup(
+    const std::vector<Eigen::MatrixXd>& target_corrs,
+    const std::vector<std::vector<OrdinalMarginalSpec>>& marginals,
+    const std::vector<std::string>& group_labels = {},
+    const OrdinalCorrelationOptions& options = {});
+
 // Lower a finished calibration to a draw-ready MixedPopulation (latent mean 0,
 // covariance = latent_corr; observed = kinds + thresholds). Does NOT redraw; the
 // existing simulate_mixed_population_* generators consume this.
 sim_expected<MixedPopulation>
 ordinal_correlation_population(const OrdinalCorrelationCalibration& calibration);
+
+sim_expected<std::vector<MixedPopulation>>
+ordinal_correlation_populations(
+    const MultiGroupOrdinalCorrelationCalibration& calibration);
 
 // Thin one-shot convenience: calibrate, lower, then draw with the normal
 // generator. Repeated draws should call the two-stage path instead.
@@ -121,5 +146,17 @@ simulate_ordinal_correlation_normal(
     std::mt19937_64& rng,
     const OrdinalCorrelationOptions& options = {},
     const NormalOptions& normal_options = {});
+
+sim_expected<std::vector<MixedPopulationDraw>>
+simulate_ordinal_correlation_multigroup_normal(
+    const std::vector<Eigen::Index>& n,
+    const MultiGroupOrdinalCorrelationCalibration& calibration,
+    std::mt19937_64& rng,
+    const NormalOptions& normal_options = {});
+
+sim_expected<std::vector<GroupOrdinalProportions>>
+multigroup_category_proportions(
+    const std::vector<std::string>& group_labels,
+    const std::vector<MixedPopulationDraw>& draws);
 
 }  // namespace magmaan::sim

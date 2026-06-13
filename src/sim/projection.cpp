@@ -50,6 +50,28 @@ int ordinal_category(double x, const Eigen::VectorXd& thresholds) noexcept {
   return category;
 }
 
+std::vector<std::string> default_group_labels(std::size_t n_groups) {
+  std::vector<std::string> labels;
+  labels.reserve(n_groups);
+  for (std::size_t g = 0; g < n_groups; ++g) {
+    labels.push_back(std::to_string(g + 1));
+  }
+  return labels;
+}
+
+std::vector<std::vector<std::string>>
+default_ordinal_level_labels(const MixedProjectionResult& result) {
+  const auto p = static_cast<std::size_t>(result.X.cols());
+  std::vector<std::vector<std::string>> labels(p);
+  for (std::size_t v = 0; v < p; ++v) {
+    const bool ordered = v < result.ordered.size() && result.ordered[v] == 1;
+    if (!ordered) continue;
+    const int k = (v < result.n_levels.size()) ? result.n_levels[v] : 0;
+    for (int c = 1; c <= k; ++c) labels[v].push_back(std::to_string(c));
+  }
+  return labels;
+}
+
 }  // namespace
 
 sim_expected<Eigen::VectorXd>
@@ -190,16 +212,79 @@ raw_data_from_mixed_projection(
   if (!ordinal_level_labels.empty()) {
     raw.ordinal_level_labels = ordinal_level_labels;
   } else {
-    raw.ordinal_level_labels.resize(p);
-    for (std::size_t v = 0; v < p; ++v) {
-      const bool ordered = v < result.ordered.size() && result.ordered[v] == 1;
-      if (!ordered) continue;
-      const int k = (v < result.n_levels.size()) ? result.n_levels[v] : 0;
-      std::vector<std::string> labels;
-      for (int c = 1; c <= k; ++c) labels.push_back(std::to_string(c));
-      raw.ordinal_level_labels[v] = std::move(labels);
+    raw.ordinal_level_labels = default_ordinal_level_labels(result);
+  }
+  return raw;
+}
+
+sim_expected<data::RawData>
+raw_data_from_mixed_projections(
+    const std::vector<MixedProjectionResult>& per_group,
+    const std::vector<std::string>& group_labels,
+    const std::vector<std::string>& variable_names,
+    const std::vector<std::vector<std::string>>& ordinal_level_labels) {
+  if (per_group.empty()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "raw_data_from_mixed_projections: need at least one group"));
+  }
+  const auto p = static_cast<std::size_t>(per_group.front().X.cols());
+  if (p == 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "raw_data_from_mixed_projections: projected blocks must have columns"));
+  }
+  if (!group_labels.empty() && group_labels.size() != per_group.size()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "raw_data_from_mixed_projections: group_labels size must match group count"));
+  }
+  if (!variable_names.empty() && variable_names.size() != p) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "raw_data_from_mixed_projections: variable_names size must match column count"));
+  }
+  if (!ordinal_level_labels.empty() && ordinal_level_labels.size() != p) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "raw_data_from_mixed_projections: ordinal_level_labels size must match column count"));
+  }
+
+  const auto& ref = per_group.front();
+  if (ref.ordered.size() != p || ref.n_levels.size() != p) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "raw_data_from_mixed_projections: projection metadata size must match column count"));
+  }
+  for (std::size_t g = 0; g < per_group.size(); ++g) {
+    const auto& block = per_group[g];
+    if (block.X.cols() != static_cast<Eigen::Index>(p)) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "raw_data_from_mixed_projections: all groups must have the same column count"));
+    }
+    if (block.ordered.size() != p || block.n_levels.size() != p) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "raw_data_from_mixed_projections: projection metadata size must match column count"));
+    }
+    if (block.ordered != ref.ordered || block.n_levels != ref.n_levels) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "raw_data_from_mixed_projections: ordered flags and level counts must match across groups"));
     }
   }
+
+  data::RawData raw;
+  raw.X.reserve(per_group.size());
+  for (const auto& block : per_group) raw.X.push_back(block.X);
+  raw.group_labels =
+      group_labels.empty() ? default_group_labels(per_group.size()) : group_labels;
+  raw.variable_names = variable_names;
+  raw.ordinal_level_labels =
+      ordinal_level_labels.empty()
+          ? default_ordinal_level_labels(per_group.front())
+          : ordinal_level_labels;
   return raw;
 }
 

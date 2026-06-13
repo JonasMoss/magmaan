@@ -14,14 +14,18 @@
 #include "magmaan/sim/projection.hpp"
 
 using magmaan::sim::calibrate_ordinal_correlation;
+using magmaan::sim::calibrate_ordinal_correlation_multigroup;
+using magmaan::sim::multigroup_category_proportions;
 using magmaan::sim::ObservedCorrelationMetric;
 using magmaan::sim::ObservedKind;
 using magmaan::sim::OrdinalCorrelationOptions;
 using magmaan::sim::OrdinalMarginalSpec;
 using magmaan::sim::ordinal_correlation_population;
 using magmaan::sim::ordinal_pair_observed_corr;
+using magmaan::sim::raw_data_from_mixed_projections;
 using magmaan::sim::simulate_mixed_population_normal;
 using magmaan::sim::simulate_ordinal_correlation_normal;
+using magmaan::sim::simulate_ordinal_correlation_multigroup_normal;
 using BivariateRepair = magmaan::sim::BivariateCopulaCorrelationRepairKind;
 
 namespace {
@@ -245,4 +249,182 @@ TEST_CASE("polychoric round-trip recovers the target in large samples") {
       x.col(0), x.col(1), 3, 3);
   REQUIRE(fit_or.has_value());
   CHECK(std::abs(fit_or->fit.rho - 0.5) < 0.02);
+}
+
+TEST_CASE("multi-group ordinal correlation calibration decomposes by group") {
+  Eigen::MatrixXd target1(3, 3);
+  target1 << 1.0, 0.25, 0.30,
+             0.25, 1.0, 0.20,
+             0.30, 0.20, 1.0;
+  Eigen::MatrixXd target2(3, 3);
+  target2 << 1.0, -0.15, 0.45,
+            -0.15, 1.0, 0.10,
+             0.45, 0.10, 1.0;
+  std::vector<std::vector<OrdinalMarginalSpec>> marginals = {
+      {ordinal_marginal({0.20, 0.50, 0.30}), continuous_marginal(),
+       ordinal_marginal({0.40, 0.60})},
+      {ordinal_marginal({0.30, 0.40, 0.30}), continuous_marginal(),
+       ordinal_marginal({0.55, 0.45})}};
+  OrdinalCorrelationOptions options;
+  options.metric = ObservedCorrelationMetric::PearsonCodes;
+
+  auto mg_or = calibrate_ordinal_correlation_multigroup(
+      {target1, target2}, marginals, {}, options);
+  REQUIRE(mg_or.has_value());
+  REQUIRE(mg_or->groups.size() == 2);
+  CHECK(mg_or->group_labels == std::vector<std::string>{"1", "2"});
+
+  auto g1_or = calibrate_ordinal_correlation(target1, marginals[0], options);
+  auto g2_or = calibrate_ordinal_correlation(target2, marginals[1], options);
+  REQUIRE(g1_or.has_value());
+  REQUIRE(g2_or.has_value());
+  CHECK(mg_or->groups[0].latent_corr.isApprox(g1_or->latent_corr, 0.0));
+  CHECK(mg_or->groups[0].achieved_corr.isApprox(g1_or->achieved_corr, 0.0));
+  CHECK(mg_or->groups[1].latent_corr.isApprox(g2_or->latent_corr, 0.0));
+  CHECK(mg_or->groups[1].achieved_corr.isApprox(g2_or->achieved_corr, 0.0));
+
+  auto labeled_or = calibrate_ordinal_correlation_multigroup(
+      {target1, target2}, marginals, {"school_a", "school_b"}, options);
+  REQUIRE(labeled_or.has_value());
+  CHECK(labeled_or->group_labels ==
+        std::vector<std::string>{"school_a", "school_b"});
+}
+
+TEST_CASE("multi-group ordinal correlation calibration validates shared shape") {
+  Eigen::MatrixXd target(2, 2);
+  target << 1.0, 0.2,
+            0.2, 1.0;
+  std::vector<std::vector<OrdinalMarginalSpec>> ok = {
+      {ordinal_marginal({0.50, 0.50}), continuous_marginal()},
+      {ordinal_marginal({0.40, 0.60}), continuous_marginal()}};
+  auto size_bad = calibrate_ordinal_correlation_multigroup({target}, ok);
+  REQUIRE_FALSE(size_bad.has_value());
+  CHECK(size_bad.error().kind == magmaan::SimError::Kind::InvalidInput);
+
+  std::vector<std::vector<OrdinalMarginalSpec>> kind_bad = {
+      {ordinal_marginal({0.50, 0.50}), continuous_marginal()},
+      {continuous_marginal(), continuous_marginal()}};
+  auto kind_or = calibrate_ordinal_correlation_multigroup(
+      {target, target}, kind_bad);
+  REQUIRE_FALSE(kind_or.has_value());
+  CHECK(kind_or.error().kind == magmaan::SimError::Kind::InvalidInput);
+
+  std::vector<std::vector<OrdinalMarginalSpec>> level_bad = {
+      {ordinal_marginal({0.50, 0.50}), continuous_marginal()},
+      {ordinal_marginal({0.20, 0.30, 0.50}), continuous_marginal()}};
+  auto level_or = calibrate_ordinal_correlation_multigroup(
+      {target, target}, level_bad);
+  REQUIRE_FALSE(level_or.has_value());
+  CHECK(level_or.error().kind == magmaan::SimError::Kind::InvalidInput);
+}
+
+TEST_CASE("multi-group ordinal correlation draw honors unequal n and proportions") {
+  Eigen::MatrixXd target1(3, 3);
+  target1 << 1.0, 0.20, 0.25,
+             0.20, 1.0, 0.15,
+             0.25, 0.15, 1.0;
+  Eigen::MatrixXd target2(3, 3);
+  target2 << 1.0, 0.35, -0.10,
+             0.35, 1.0, 0.25,
+            -0.10, 0.25, 1.0;
+  std::vector<std::vector<OrdinalMarginalSpec>> marginals = {
+      {ordinal_marginal({0.25, 0.50, 0.25}), continuous_marginal(),
+       ordinal_marginal({0.30, 0.70})},
+      {ordinal_marginal({0.35, 0.35, 0.30}), continuous_marginal(),
+       ordinal_marginal({0.60, 0.40})}};
+  auto cal_or = calibrate_ordinal_correlation_multigroup(
+      {target1, target2}, marginals, {"g1", "g2"});
+  REQUIRE(cal_or.has_value());
+
+  std::mt19937_64 rng1(12345ULL);
+  auto draw1_or = simulate_ordinal_correlation_multigroup_normal(
+      {40, 55}, *cal_or, rng1);
+  REQUIRE(draw1_or.has_value());
+  std::mt19937_64 rng2(12345ULL);
+  auto draw2_or = simulate_ordinal_correlation_multigroup_normal(
+      {40, 55}, *cal_or, rng2);
+  REQUIRE(draw2_or.has_value());
+  REQUIRE(draw1_or->size() == 2);
+  CHECK((*draw1_or)[0].observed.X.rows() == 40);
+  CHECK((*draw1_or)[1].observed.X.rows() == 55);
+  CHECK((*draw1_or)[0].observed.X.isApprox((*draw2_or)[0].observed.X, 0.0));
+  CHECK((*draw1_or)[1].observed.X.isApprox((*draw2_or)[1].observed.X, 0.0));
+
+  for (const auto& group : *draw1_or) {
+    REQUIRE(group.observed.category_proportions.size() == 3);
+    CHECK(group.observed.category_proportions[0].size() == 3);
+    CHECK(group.observed.category_proportions[1].size() == 0);
+    CHECK(group.observed.category_proportions[2].size() == 2);
+    CHECK(group.observed.category_proportions[0].sum() ==
+          doctest::Approx(1.0));
+    CHECK(group.observed.category_proportions[2].sum() ==
+          doctest::Approx(1.0));
+  }
+
+  auto props_or = multigroup_category_proportions(
+      cal_or->group_labels, *draw1_or);
+  REQUIRE(props_or.has_value());
+  REQUIRE(props_or->size() == 2);
+  CHECK((*props_or)[0].group_label == "g1");
+  CHECK((*props_or)[1].group_label == "g2");
+  CHECK((*props_or)[0].category_proportions[0].size() == 3);
+
+  auto bad_n = simulate_ordinal_correlation_multigroup_normal(
+      {40}, *cal_or, rng1);
+  REQUIRE_FALSE(bad_n.has_value());
+  CHECK(bad_n.error().kind == magmaan::SimError::Kind::InvalidInput);
+}
+
+TEST_CASE("raw_data_from_mixed_projections composes multi-block metadata") {
+  Eigen::MatrixXd latent1(4, 2);
+  latent1 << -1.0, 10.0,
+             -0.2, 11.0,
+              0.3, 12.0,
+              1.1, 13.0;
+  Eigen::MatrixXd latent2(3, 2);
+  latent2 << -1.2, 20.0,
+              0.1, 21.0,
+              1.4, 22.0;
+  magmaan::sim::MixedProjectionSpec spec;
+  spec.kinds = {ObservedKind::Ordinal, ObservedKind::Continuous};
+  Eigen::VectorXd th(2);
+  th << -0.5, 0.5;
+  spec.thresholds = {th, Eigen::VectorXd{}};
+  auto p1_or = magmaan::sim::project_mixed_matrix(latent1, spec);
+  auto p2_or = magmaan::sim::project_mixed_matrix(latent2, spec);
+  REQUIRE(p1_or.has_value());
+  REQUIRE(p2_or.has_value());
+
+  auto raw_or = raw_data_from_mixed_projections(
+      {*p1_or, *p2_or}, {"a", "b"}, {"y_ord", "x_cont"},
+      {{"low", "mid", "high"}, {}});
+  REQUIRE(raw_or.has_value());
+  CHECK(raw_or->X.size() == 2);
+  CHECK(raw_or->X[0].rows() == 4);
+  CHECK(raw_or->X[1].rows() == 3);
+  CHECK(raw_or->group_labels == std::vector<std::string>{"a", "b"});
+  CHECK(raw_or->variable_names ==
+        std::vector<std::string>{"y_ord", "x_cont"});
+  REQUIRE(raw_or->ordinal_level_labels.size() == 2);
+  CHECK(raw_or->ordinal_level_labels[0] ==
+        std::vector<std::string>{"low", "mid", "high"});
+  CHECK(raw_or->ordinal_level_labels[1].empty());
+
+  auto default_labels_or = raw_data_from_mixed_projections({*p1_or, *p2_or});
+  REQUIRE(default_labels_or.has_value());
+  CHECK(default_labels_or->group_labels ==
+        std::vector<std::string>{"1", "2"});
+  CHECK(default_labels_or->ordinal_level_labels[0] ==
+        std::vector<std::string>{"1", "2", "3"});
+
+  auto bad_labels = raw_data_from_mixed_projections(
+      {*p1_or, *p2_or}, {"only_one"});
+  REQUIRE_FALSE(bad_labels.has_value());
+  CHECK(bad_labels.error().kind == magmaan::SimError::Kind::InvalidInput);
+
+  auto p_bad = *p2_or;
+  p_bad.X.conservativeResize(Eigen::NoChange, 1);
+  auto bad_cols = raw_data_from_mixed_projections({*p1_or, p_bad});
+  REQUIRE_FALSE(bad_cols.has_value());
+  CHECK(bad_cols.error().kind == magmaan::SimError::Kind::InvalidInput);
 }

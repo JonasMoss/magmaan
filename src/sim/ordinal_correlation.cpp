@@ -30,6 +30,15 @@ bool is_ordinal(ObservedKind k) noexcept { return k == ObservedKind::Ordinal; }
 
 std::size_t ix(Eigen::Index i) noexcept { return static_cast<std::size_t>(i); }
 
+std::vector<std::string> default_group_labels(std::size_t n_groups) {
+  std::vector<std::string> labels;
+  labels.reserve(n_groups);
+  for (std::size_t g = 0; g < n_groups; ++g) {
+    labels.push_back(std::to_string(g + 1));
+  }
+  return labels;
+}
+
 // Category probabilities p_1..p_k from k-1 thresholds.
 Eigen::VectorXd category_probs_from_thresholds(const Eigen::VectorXd& th) {
   const Eigen::Index k = th.size() + 1;
@@ -311,6 +320,63 @@ calibrate_ordinal_correlation(
   return cal;
 }
 
+sim_expected<MultiGroupOrdinalCorrelationCalibration>
+calibrate_ordinal_correlation_multigroup(
+    const std::vector<Eigen::MatrixXd>& target_corrs,
+    const std::vector<std::vector<OrdinalMarginalSpec>>& marginals,
+    const std::vector<std::string>& group_labels,
+    const OrdinalCorrelationOptions& options) {
+  const std::size_t n_groups = target_corrs.size();
+  if (n_groups == 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_ordinal_correlation_multigroup: need at least one group"));
+  }
+  if (marginals.size() != n_groups) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_ordinal_correlation_multigroup: target/marginal group counts must match"));
+  }
+  if (!group_labels.empty() && group_labels.size() != n_groups) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_ordinal_correlation_multigroup: group_labels size must match group count"));
+  }
+
+  MultiGroupOrdinalCorrelationCalibration out;
+  out.group_labels =
+      group_labels.empty() ? default_group_labels(n_groups) : group_labels;
+  out.groups.reserve(n_groups);
+  for (std::size_t g = 0; g < n_groups; ++g) {
+    auto cal_or = calibrate_ordinal_correlation(
+        target_corrs[g], marginals[g], options);
+    if (!cal_or.has_value()) return std::unexpected(cal_or.error());
+    if (g > 0) {
+      const auto& ref = out.groups.front();
+      const auto& cur = *cal_or;
+      if (cur.kinds.size() != ref.kinds.size()) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "calibrate_ordinal_correlation_multigroup: variable count must match across groups"));
+      }
+      for (std::size_t v = 0; v < ref.kinds.size(); ++v) {
+        if (cur.kinds[v] != ref.kinds[v]) {
+          return std::unexpected(make_err(
+              SimError::Kind::InvalidInput,
+              "calibrate_ordinal_correlation_multigroup: variable kinds must match across groups"));
+        }
+        if (cur.thresholds[v].size() != ref.thresholds[v].size()) {
+          return std::unexpected(make_err(
+              SimError::Kind::InvalidInput,
+              "calibrate_ordinal_correlation_multigroup: ordinal category counts must match across groups"));
+        }
+      }
+    }
+    out.groups.push_back(std::move(*cal_or));
+  }
+  return out;
+}
+
 sim_expected<MixedPopulation>
 ordinal_correlation_population(const OrdinalCorrelationCalibration& calibration) {
   const Eigen::Index p = calibration.latent_corr.rows();
@@ -333,6 +399,30 @@ ordinal_correlation_population(const OrdinalCorrelationCalibration& calibration)
   return pop;
 }
 
+sim_expected<std::vector<MixedPopulation>>
+ordinal_correlation_populations(
+    const MultiGroupOrdinalCorrelationCalibration& calibration) {
+  if (calibration.groups.empty()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "ordinal_correlation_populations: calibration has no groups"));
+  }
+  if (!calibration.group_labels.empty() &&
+      calibration.group_labels.size() != calibration.groups.size()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "ordinal_correlation_populations: group_labels size must match group count"));
+  }
+  std::vector<MixedPopulation> out;
+  out.reserve(calibration.groups.size());
+  for (const auto& group : calibration.groups) {
+    auto pop_or = ordinal_correlation_population(group);
+    if (!pop_or.has_value()) return std::unexpected(pop_or.error());
+    out.push_back(std::move(*pop_or));
+  }
+  return out;
+}
+
 sim_expected<MixedPopulationDraw>
 simulate_ordinal_correlation_normal(
     Eigen::Index n,
@@ -346,6 +436,60 @@ simulate_ordinal_correlation_normal(
   auto pop_or = ordinal_correlation_population(*cal_or);
   if (!pop_or.has_value()) return std::unexpected(pop_or.error());
   return simulate_mixed_population_normal(n, *pop_or, rng, normal_options);
+}
+
+sim_expected<std::vector<MixedPopulationDraw>>
+simulate_ordinal_correlation_multigroup_normal(
+    const std::vector<Eigen::Index>& n,
+    const MultiGroupOrdinalCorrelationCalibration& calibration,
+    std::mt19937_64& rng,
+    const NormalOptions& normal_options) {
+  if (n.size() != calibration.groups.size()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "simulate_ordinal_correlation_multigroup_normal: n size must match group count"));
+  }
+  auto pops_or = ordinal_correlation_populations(calibration);
+  if (!pops_or.has_value()) return std::unexpected(pops_or.error());
+  std::vector<MixedPopulationDraw> out;
+  out.reserve(pops_or->size());
+  for (std::size_t g = 0; g < pops_or->size(); ++g) {
+    if (n[g] <= 0) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          "simulate_ordinal_correlation_multigroup_normal: group sample sizes must be positive"));
+    }
+    auto draw_or = simulate_mixed_population_normal(
+        n[g], (*pops_or)[g], rng, normal_options);
+    if (!draw_or.has_value()) return std::unexpected(draw_or.error());
+    out.push_back(std::move(*draw_or));
+  }
+  return out;
+}
+
+sim_expected<std::vector<GroupOrdinalProportions>>
+multigroup_category_proportions(
+    const std::vector<std::string>& group_labels,
+    const std::vector<MixedPopulationDraw>& draws) {
+  if (draws.empty()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "multigroup_category_proportions: need at least one draw"));
+  }
+  if (!group_labels.empty() && group_labels.size() != draws.size()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "multigroup_category_proportions: group_labels size must match draw count"));
+  }
+  const std::vector<std::string> labels =
+      group_labels.empty() ? default_group_labels(draws.size()) : group_labels;
+  std::vector<GroupOrdinalProportions> out;
+  out.reserve(draws.size());
+  for (std::size_t g = 0; g < draws.size(); ++g) {
+    out.push_back(GroupOrdinalProportions{
+        labels[g], draws[g].observed.category_proportions});
+  }
+  return out;
 }
 
 }  // namespace magmaan::sim

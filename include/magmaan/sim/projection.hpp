@@ -55,4 +55,15 @@ raw_data_from_mixed_projection(
     const std::vector<std::string>& variable_names = {},
     const std::vector<std::vector<std::string>>& ordinal_level_labels = {});
 
+// Wrap per-group projected blocks as a multi-block `data::RawData` carrier.
+// Group labels default to "1".."G"; variable names and ordinal level labels
+// are shared across blocks. Column counts and projection metadata must agree
+// across groups.
+sim_expected<data::RawData>
+raw_data_from_mixed_projections(
+    const std::vector<MixedProjectionResult>& per_group,
+    const std::vector<std::string>& group_labels = {},
+    const std::vector<std::string>& variable_names = {},
+    const std::vector<std::vector<std::string>>& ordinal_level_labels = {});
+
 }  // namespace magmaan::sim

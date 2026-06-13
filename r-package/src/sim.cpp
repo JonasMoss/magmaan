@@ -411,6 +411,23 @@ const char* observed_correlation_metric_to_string(
   return "polychoric";
 }
 
+magmaan::sim::OrdinalCorrelationOptions make_ordcorr_options(
+    const std::string& metric,
+    int max_bisection_iter,
+    double calibration_tol,
+    double rho_bound,
+    const std::string& matrix_repair,
+    double matrix_repair_min_eigenvalue) {
+  magmaan::sim::OrdinalCorrelationOptions options;
+  options.metric = observed_correlation_metric_from_string(metric);
+  options.max_bisection_iter = max_bisection_iter;
+  options.calibration_tol = calibration_tol;
+  options.rho_bound = rho_bound;
+  options.matrix_repair = bivariate_copula_repair_from_string(matrix_repair);
+  options.matrix_repair_min_eigenvalue = matrix_repair_min_eigenvalue;
+  return options;
+}
+
 // Per-variable marginals: an ordinal variable is a numeric vector of category
 // proportions; a continuous variable is NULL.
 std::vector<magmaan::sim::OrdinalMarginalSpec> ordinal_marginal_specs_from_list(
@@ -427,6 +444,30 @@ std::vector<magmaan::sim::OrdinalMarginalSpec> ordinal_marginal_specs_from_list(
       spec.proportions = Rcpp::as<Eigen::VectorXd>(value);
     }
     out.push_back(std::move(spec));
+  }
+  return out;
+}
+
+std::vector<Eigen::MatrixXd> ordinal_corr_matrices_from_list(
+    Rcpp::List target_corrs) {
+  std::vector<Eigen::MatrixXd> out;
+  out.reserve(static_cast<std::size_t>(target_corrs.size()));
+  for (R_xlen_t g = 0; g < target_corrs.size(); ++g) {
+    Rcpp::NumericMatrix src = Rcpp::as<Rcpp::NumericMatrix>(target_corrs[g]);
+    const Eigen::Map<Eigen::MatrixXd> corr(
+        REAL(src), src.nrow(), src.ncol());
+    out.emplace_back(corr);
+  }
+  return out;
+}
+
+std::vector<std::vector<magmaan::sim::OrdinalMarginalSpec>>
+ordinal_marginal_groups_from_list(Rcpp::List marginals) {
+  std::vector<std::vector<magmaan::sim::OrdinalMarginalSpec>> out;
+  out.reserve(static_cast<std::size_t>(marginals.size()));
+  for (R_xlen_t g = 0; g < marginals.size(); ++g) {
+    out.push_back(ordinal_marginal_specs_from_list(
+        Rcpp::as<Rcpp::List>(marginals[g])));
   }
   return out;
 }
@@ -459,6 +500,75 @@ Rcpp::DataFrame ordinal_pairs_to_df(
       Rcpp::_["achieved"] = achieved, Rcpp::_["iterations"] = iters,
       Rcpp::_["converged"] = converged, Rcpp::_["infeasible"] = infeasible,
       Rcpp::_["stringsAsFactors"] = false);
+}
+
+Rcpp::List ordcorr_calibration_to_list(
+    const magmaan::sim::OrdinalCorrelationCalibration& cal) {
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["latent_corr"] = Rcpp::wrap(cal.latent_corr),
+      Rcpp::_["target_corr"] = Rcpp::wrap(cal.target_corr),
+      Rcpp::_["achieved_corr"] = Rcpp::wrap(cal.achieved_corr),
+      Rcpp::_["kinds"] = observed_kinds_to_int(cal.kinds),
+      Rcpp::_["thresholds"] = thresholds_to_list(cal.thresholds),
+      Rcpp::_["pairs"] = ordinal_pairs_to_df(cal.pairs),
+      Rcpp::_["metric"] =
+          std::string(observed_correlation_metric_to_string(cal.metric)),
+      Rcpp::_["max_abs_error"] = cal.max_abs_error,
+      Rcpp::_["repair"] = Rcpp::List::create(
+          Rcpp::_["applied"] = cal.repair_applied,
+          Rcpp::_["raw_min_eigenvalue"] = cal.raw_min_eigenvalue,
+          Rcpp::_["repaired_min_eigenvalue"] = cal.repaired_min_eigenvalue,
+          Rcpp::_["ridge"] = cal.repair_ridge,
+          Rcpp::_["shrinkage"] = cal.repair_shrinkage));
+  out.attr("class") = Rcpp::CharacterVector::create(
+      "magmaan_ordcorr_calibration", "list");
+  return out;
+}
+
+magmaan::sim::OrdinalCorrelationCalibration ordcorr_calibration_from_list(
+    Rcpp::List calibration) {
+  magmaan::sim::OrdinalCorrelationCalibration cal;
+  cal.latent_corr = Rcpp::as<Eigen::MatrixXd>(calibration["latent_corr"]);
+  cal.kinds = observed_kinds_from_int(
+      Rcpp::as<Rcpp::IntegerVector>(calibration["kinds"]));
+  cal.thresholds = thresholds_from_list(
+      Rcpp::as<Rcpp::List>(calibration["thresholds"]), cal.kinds.size());
+  if (calibration.containsElementNamed("metric")) {
+    cal.metric = observed_correlation_metric_from_string(
+        Rcpp::as<std::string>(calibration["metric"]));
+  }
+  return cal;
+}
+
+Rcpp::List ordcorr_draw_to_list(
+    const magmaan::sim::MixedPopulationDraw& draw) {
+  return Rcpp::List::create(
+      Rcpp::_["X"] = Rcpp::wrap(draw.observed.X),
+      Rcpp::_["ordered"] = int32_vector_to_r(draw.observed.ordered),
+      Rcpp::_["n_levels"] = int32_vector_to_r(draw.observed.n_levels),
+      Rcpp::_["category_proportions"] =
+          thresholds_to_list(draw.observed.category_proportions));
+}
+
+std::vector<std::string> group_labels_from_nullable(
+    Rcpp::Nullable<Rcpp::CharacterVector> group_labels) {
+  if (group_labels.isNull()) return {};
+  return Rcpp::as<std::vector<std::string>>(
+      Rcpp::CharacterVector(group_labels.get()));
+}
+
+std::vector<std::string> variable_names_from_marginals(Rcpp::List marginals) {
+  Rcpp::CharacterVector names = marginals.names();
+  if (names.size() != marginals.size()) return {};
+  std::vector<std::string> out;
+  out.reserve(static_cast<std::size_t>(names.size()));
+  for (R_xlen_t i = 0; i < names.size(); ++i) {
+    if (Rcpp::CharacterVector::is_na(names[i])) return {};
+    const std::string name = Rcpp::as<std::string>(names[i]);
+    if (name.empty()) return {};
+    out.push_back(name);
+  }
+  return out;
 }
 
 Rcpp::List model_implied_population_to_list(
@@ -1321,38 +1431,14 @@ Rcpp::List sim_ordcorr_calibrate_impl(
       REAL(target_corr), target_corr.nrow(), target_corr.ncol());
   const auto marginal_specs = ordinal_marginal_specs_from_list(marginals);
 
-  magmaan::sim::OrdinalCorrelationOptions options;
-  options.metric = observed_correlation_metric_from_string(metric);
-  options.max_bisection_iter = max_bisection_iter;
-  options.calibration_tol = calibration_tol;
-  options.rho_bound = rho_bound;
-  options.matrix_repair = bivariate_copula_repair_from_string(matrix_repair);
-  options.matrix_repair_min_eigenvalue = matrix_repair_min_eigenvalue;
+  magmaan::sim::OrdinalCorrelationOptions options = make_ordcorr_options(
+      metric, max_bisection_iter, calibration_tol, rho_bound, matrix_repair,
+      matrix_repair_min_eigenvalue);
 
   auto cal_or = magmaan::sim::calibrate_ordinal_correlation(
       corr, marginal_specs, options);
   if (!cal_or.has_value()) stop_sim(cal_or.error());
-  const auto& cal = *cal_or;
-
-  Rcpp::List out = Rcpp::List::create(
-      Rcpp::_["latent_corr"] = Rcpp::wrap(cal.latent_corr),
-      Rcpp::_["target_corr"] = Rcpp::wrap(cal.target_corr),
-      Rcpp::_["achieved_corr"] = Rcpp::wrap(cal.achieved_corr),
-      Rcpp::_["kinds"] = observed_kinds_to_int(cal.kinds),
-      Rcpp::_["thresholds"] = thresholds_to_list(cal.thresholds),
-      Rcpp::_["pairs"] = ordinal_pairs_to_df(cal.pairs),
-      Rcpp::_["metric"] =
-          std::string(observed_correlation_metric_to_string(cal.metric)),
-      Rcpp::_["max_abs_error"] = cal.max_abs_error,
-      Rcpp::_["repair"] = Rcpp::List::create(
-          Rcpp::_["applied"] = cal.repair_applied,
-          Rcpp::_["raw_min_eigenvalue"] = cal.raw_min_eigenvalue,
-          Rcpp::_["repaired_min_eigenvalue"] = cal.repaired_min_eigenvalue,
-          Rcpp::_["ridge"] = cal.repair_ridge,
-          Rcpp::_["shrinkage"] = cal.repair_shrinkage));
-  out.attr("class") = Rcpp::CharacterVector::create(
-      "magmaan_ordcorr_calibration", "list");
-  return out;
+  return ordcorr_calibration_to_list(*cal_or);
 }
 
 // [[Rcpp::export]]
@@ -1364,12 +1450,8 @@ Rcpp::List sim_ordcorr_draw_impl(Rcpp::List calibration,
   if (n <= 0) Rcpp::stop("n must be positive");
   if (reps <= 0) Rcpp::stop("reps must be positive");
 
-  magmaan::sim::OrdinalCorrelationCalibration cal;
-  cal.latent_corr = Rcpp::as<Eigen::MatrixXd>(calibration["latent_corr"]);
-  cal.kinds = observed_kinds_from_int(
-      Rcpp::as<Rcpp::IntegerVector>(calibration["kinds"]));
-  cal.thresholds = thresholds_from_list(
-      Rcpp::as<Rcpp::List>(calibration["thresholds"]), cal.kinds.size());
+  magmaan::sim::OrdinalCorrelationCalibration cal =
+      ordcorr_calibration_from_list(calibration);
 
   auto pop_or = magmaan::sim::ordinal_correlation_population(cal);
   if (!pop_or.has_value()) stop_sim(pop_or.error());
@@ -1384,12 +1466,7 @@ Rcpp::List sim_ordcorr_draw_impl(Rcpp::List calibration,
     auto draw_or = magmaan::sim::simulate_mixed_population_normal(
         static_cast<Eigen::Index>(n), *pop_or, rng, normal_options);
     if (!draw_or.has_value()) stop_sim(draw_or.error());
-    draws[i] = Rcpp::List::create(
-        Rcpp::_["X"] = Rcpp::wrap(draw_or->observed.X),
-        Rcpp::_["ordered"] = int32_vector_to_r(draw_or->observed.ordered),
-        Rcpp::_["n_levels"] = int32_vector_to_r(draw_or->observed.n_levels),
-        Rcpp::_["category_proportions"] =
-            thresholds_to_list(draw_or->observed.category_proportions));
+    draws[i] = ordcorr_draw_to_list(*draw_or);
   }
   return Rcpp::List::create(Rcpp::_["draws"] = draws);
 }
@@ -1412,6 +1489,130 @@ Rcpp::List sim_ordcorr_batch_impl(
       target_corr, marginals, metric, max_bisection_iter, calibration_tol,
       rho_bound, matrix_repair, matrix_repair_min_eigenvalue);
   return sim_ordcorr_draw_impl(calibration, n, reps, seed_base, cholesky_jitter);
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_ordcorr_mg_calibrate_impl(
+    Rcpp::List target_corrs,
+    Rcpp::List marginals,
+    Rcpp::Nullable<Rcpp::CharacterVector> group_labels = R_NilValue,
+    std::string metric = "polychoric",
+    int max_bisection_iter = 80,
+    double calibration_tol = 1e-8,
+    double rho_bound = 0.999,
+    std::string matrix_repair = "none",
+    double matrix_repair_min_eigenvalue = 1e-8) {
+  const auto corr_groups = ordinal_corr_matrices_from_list(target_corrs);
+  const auto marginal_groups = ordinal_marginal_groups_from_list(marginals);
+  const auto labels = group_labels_from_nullable(group_labels);
+  magmaan::sim::OrdinalCorrelationOptions options = make_ordcorr_options(
+      metric, max_bisection_iter, calibration_tol, rho_bound, matrix_repair,
+      matrix_repair_min_eigenvalue);
+
+  auto cal_or = magmaan::sim::calibrate_ordinal_correlation_multigroup(
+      corr_groups, marginal_groups, labels, options);
+  if (!cal_or.has_value()) stop_sim(cal_or.error());
+  auto cal = std::move(*cal_or);
+  if (marginals.size() > 0) {
+    cal.variable_names =
+        variable_names_from_marginals(Rcpp::as<Rcpp::List>(marginals[0]));
+  }
+
+  Rcpp::List groups(static_cast<R_xlen_t>(cal.groups.size()));
+  for (std::size_t g = 0; g < cal.groups.size(); ++g) {
+    groups[static_cast<R_xlen_t>(g)] =
+        ordcorr_calibration_to_list(cal.groups[g]);
+  }
+
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["groups"] = groups,
+      Rcpp::_["group_labels"] = Rcpp::wrap(cal.group_labels),
+      Rcpp::_["n_groups"] = static_cast<int>(cal.groups.size()),
+      Rcpp::_["variable_names"] = Rcpp::wrap(cal.variable_names));
+  out.attr("class") = Rcpp::CharacterVector::create(
+      "magmaan_ordcorr_mg_calibration", "list");
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_ordcorr_mg_draw_impl(
+    Rcpp::List calibration,
+    Rcpp::IntegerVector n,
+    int reps,
+    double seed_base,
+    double cholesky_jitter = 0.0) {
+  if (reps <= 0) Rcpp::stop("reps must be positive");
+
+  Rcpp::List group_list = Rcpp::as<Rcpp::List>(calibration["groups"]);
+  magmaan::sim::MultiGroupOrdinalCorrelationCalibration cal;
+  cal.group_labels =
+      Rcpp::as<std::vector<std::string>>(calibration["group_labels"]);
+  if (calibration.containsElementNamed("variable_names")) {
+    cal.variable_names =
+        Rcpp::as<std::vector<std::string>>(calibration["variable_names"]);
+  }
+  cal.groups.reserve(static_cast<std::size_t>(group_list.size()));
+  for (R_xlen_t g = 0; g < group_list.size(); ++g) {
+    cal.groups.push_back(ordcorr_calibration_from_list(
+        Rcpp::as<Rcpp::List>(group_list[g])));
+  }
+
+  std::vector<Eigen::Index> n_by_group(cal.groups.size());
+  if (n.size() == 1) {
+    std::fill(n_by_group.begin(), n_by_group.end(),
+              static_cast<Eigen::Index>(n[0]));
+  } else if (static_cast<std::size_t>(n.size()) == cal.groups.size()) {
+    for (R_xlen_t g = 0; g < n.size(); ++g) {
+      n_by_group[static_cast<std::size_t>(g)] =
+          static_cast<Eigen::Index>(n[g]);
+    }
+  } else {
+    Rcpp::stop("n must be a scalar or one value per group");
+  }
+
+  magmaan::sim::NormalOptions normal_options;
+  if (cholesky_jitter > 0.0) normal_options.cholesky_jitter = cholesky_jitter;
+
+  Rcpp::List draws(reps);
+  for (int i = 0; i < reps; ++i) {
+    std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
+                        static_cast<std::uint64_t>(i + 1));
+    auto draw_or = magmaan::sim::simulate_ordinal_correlation_multigroup_normal(
+        n_by_group, cal, rng, normal_options);
+    if (!draw_or.has_value()) stop_sim(draw_or.error());
+    Rcpp::List groups(static_cast<R_xlen_t>(draw_or->size()));
+    for (std::size_t g = 0; g < draw_or->size(); ++g) {
+      groups[static_cast<R_xlen_t>(g)] = ordcorr_draw_to_list((*draw_or)[g]);
+    }
+    draws[i] = Rcpp::List::create(Rcpp::_["groups"] = groups);
+  }
+
+  return Rcpp::List::create(
+      Rcpp::_["draws"] = draws,
+      Rcpp::_["group_labels"] = Rcpp::wrap(cal.group_labels),
+      Rcpp::_["variable_names"] = Rcpp::wrap(cal.variable_names));
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_ordcorr_mg_batch_impl(
+    Rcpp::List target_corrs,
+    Rcpp::List marginals,
+    Rcpp::IntegerVector n,
+    int reps,
+    double seed_base,
+    Rcpp::Nullable<Rcpp::CharacterVector> group_labels = R_NilValue,
+    std::string metric = "polychoric",
+    int max_bisection_iter = 80,
+    double calibration_tol = 1e-8,
+    double rho_bound = 0.999,
+    std::string matrix_repair = "none",
+    double matrix_repair_min_eigenvalue = 1e-8,
+    double cholesky_jitter = 0.0) {
+  Rcpp::List calibration = sim_ordcorr_mg_calibrate_impl(
+      target_corrs, marginals, group_labels, metric, max_bisection_iter,
+      calibration_tol, rho_bound, matrix_repair, matrix_repair_min_eigenvalue);
+  return sim_ordcorr_mg_draw_impl(
+      calibration, n, reps, seed_base, cholesky_jitter);
 }
 
 // [[Rcpp::export]]
