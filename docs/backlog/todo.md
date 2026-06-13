@@ -213,6 +213,16 @@ decisions in the simulation backlog.
   structure (use `model_spec(..., meanstructure = TRUE)` + `fit_fiml`);
   multi-group FIML fits need explicit start/convergence care; and nonlinear
   equality tangent-space support plus pairwise-data FMG remain deferred.
+- **Ordinal/polychoric FMG — gate landed; paper next.** `fmg_tests_ordinal()` /
+  `fmg_tests_mixed_ordinal()` apply the FMG eigenvalue-tail transforms to the
+  `robust_ordinal()` / `robust_mixed_ordinal()` polychoric UGamma spectrum
+  (single-group v1; `_ml`/`_ug` rejected; anchored by the ordinal C++ FMG test
+  and `r-package/examples/fmg_ordinal.R`; see roadmap). This unblocks the
+  polychoric-FMG paper (`papers/fiml-fmg/` Paper 2). Remaining: the Paper 2
+  simulation harness (ordinal-invariance population, GOF + nested grid, tables),
+  and — only-when-needed — multi-group ordinal FMG and a C++ methods-developer
+  convenience entry point (the spectrum-once-then-loop R orchestration avoids a
+  per-method `robust_ordinal` recompute, so no C++ entry is needed for the paper).
 - **FIML cross-call pack: remaining consumers.** The `FIMLPack`/`FIMLH1`
   value-based precomputation (roadmap, Continuous FIML) is threaded through
   the post-fit helpers and `api::sem`. Not yet pack-aware: the R bindings

@@ -21,9 +21,11 @@
 #include "magmaan/data/pairwise_ordinal.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/frontier/pairwise.hpp"
+#include "magmaan/inference/inference.hpp"
 #include "magmaan/measures/standardized.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/parse/parser.hpp"
+#include "magmaan/robust/frontier/fmg.hpp"
 #include "magmaan/spec/build.hpp"
 
 namespace {
@@ -560,6 +562,87 @@ TEST_CASE("Cached ordinal DWLS fit-plus-inference reuses Gamma for robust report
   CHECK((cached_wls_rob->eigvals - materialized_wls_rob->eigvals)
             .cwiseAbs()
             .maxCoeff() < 1e-10);
+}
+
+// Anchors the ordinal FMG path (Paper 2 gate): the estimator-agnostic FMG
+// eigenvalue-tail transform fed the `robust_ordinal` (chisq_standard, df,
+// eigvals) triple reproduces the same Satorra-Bentler scaling `robust_ordinal`
+// already reports, and the tail transforms (pEBA/pOLS) yield proper p-values on
+// the polychoric UGamma spectrum. This is exactly the composition the R
+// `fmg_tests_ordinal()` wrapper performs (infer_ordinal_robust -> infer_fmg_test).
+TEST_CASE("Ordinal FMG transforms consume the robust_ordinal UGamma spectrum") {
+  std::mt19937 rng(20260613);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(600, 4);
+  const double loading[4] = {0.86, 0.78, 0.70, 0.62};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.55) + (y > 0.50);
+    }
+  }
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, *stats, {});
+  REQUIRE(x0.has_value());
+
+  auto fit = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS, *x0);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "DWLS fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+
+  auto rob = magmaan::estimate::robust_ordinal(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE_MESSAGE(rob.has_value(),
+      "robust_ordinal failed: " << (rob.has_value() ? "" : rob.error().detail));
+  REQUIRE(rob->df > 0);
+  REQUIRE(rob->eigvals.size() == rob->df);
+  // The projected UGamma spectrum is positive-definite, so FMG's default
+  // negative-eigenvalue truncation is a no-op here (keeps the SB comparison exact).
+  CHECK(rob->eigvals.minCoeff() > 0.0);
+
+  // FMG SatorraBentler must reproduce robust_ordinal's stored SB scaling, since
+  // both apply the same robust::satorra_bentler() to the same (T, df, eigvals).
+  const auto fmg_sb = magmaan::robust::frontier::fmg_test(
+      rob->chisq_standard, rob->df, rob->eigvals,
+      magmaan::robust::frontier::FmgOptions{
+          .method = magmaan::robust::frontier::FmgMethod::SatorraBentler,
+          .truncate_negative = false});
+  const double sb_p_direct = magmaan::inference::chi2_pvalue(
+      rob->satorra_bentler.chi2_scaled, rob->satorra_bentler.df);
+  CHECK(fmg_sb.p_value == doctest::Approx(sb_p_direct).epsilon(1e-12));
+
+  // The eigenvalue-tail transforms (the actual FMG winners) yield proper
+  // p-values on the ordinal spectrum.
+  for (const auto method : {magmaan::robust::frontier::FmgMethod::Peba,
+                            magmaan::robust::frontier::FmgMethod::Pols,
+                            magmaan::robust::frontier::FmgMethod::PenalizedAll}) {
+    const auto r = magmaan::robust::frontier::fmg_test(
+        rob->chisq_standard, rob->df, rob->eigvals,
+        magmaan::robust::frontier::FmgOptions{.method = method, .param = 4.0});
+    CHECK(std::isfinite(r.p_value));
+    CHECK(r.p_value >= 0.0);
+    CHECK(r.p_value <= 1.0);
+  }
 }
 
 TEST_CASE("Cached ordinal WLS fit uses Schur threshold profiling") {
