@@ -95,11 +95,16 @@ fixtures 0006-0008, the R-internals oracle from
 `tests/tools/regen_robust_score.R`, and the advisory
 `tests/checks/robust_score/`). Remaining work:
 
-- **Multi-group.** The sandwich blocks are already per-block `n_b/N`-weighted
-  (ML via `robust_setup`, LS/ordinal via `WeightedMomentBlock`); the remaining
-  work is removing the v1 single-group guards, verifying per-group candidate
-  enumeration and the shared-information nuisance projection, and adding a
-  two-group R-internals oracle fixture.
+- **Multi-group — continuous done 2026-06-13; ordinal remaining.** The
+  continuous ML and LS tiers (`inference::frontier`) now support multi-group: the
+  single-group guards in `score.cpp` are removed and the per-block `n_b/N`-weighted
+  sandwich, per-group candidate enumeration, and full-θ nuisance projection carry
+  over unchanged (validated by the cross-group loading-invariance golden 0010,
+  which pins the `n_b/N` weighting, plus Γ_NT/GLS reductions and an empirical
+  case). Remaining: the ordinal/mixed-ordinal robust tier (`estimate::frontier`,
+  `require_single_group_ordinal` in `ordinal.cpp`) still guards single-group —
+  needs a multi-group polychoric-NACOV oracle and per-group threshold/association
+  enumeration before its guards come off.
 - **df>1 total release.** Mean-scaled `T_total/c_total` plus an optional Imhof
   eigenvalue-mixture p-value for joint releases (the per-release machinery is
   in place; the joint version needs `c̄ = tr((GᵀA1G)⁻¹(GᵀB1G))/df` and the

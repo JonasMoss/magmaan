@@ -131,7 +131,8 @@ golden `parTable()` fixtures.
   `robust_se` uses) and g is the efficient-score direction. Goes beyond lavaan,
   which falls back to the ordinary statistic when `se != "standard"`. Covers
   complete-data ML, both breads (`Information::Expected` ≈ robust.sem/MLM;
-  `Information::Observed` ≈ robust.huber.white/MLR), single group; reduces to the
+  `Information::Observed` ≈ robust.huber.white/MLR), single or multi-group (the
+  per-block `n_b/N`-weighted sandwich pools across groups); reduces to the
   ordinary statistic exactly under the model-implied Γ_NT meat (Expected bread).
   Friendly entries under `api::frontier::{modification_indices,score_tests}_robust`.
   The fixed-parameter robust MI sweep batches eligible candidate rows into one
@@ -163,8 +164,11 @@ golden `parTable()` fixtures.
   row-type moment-scale convention (c carries no moment-scale factor). The
   per-direction worker is shared as
   `inference::frontier::score_for_direction_robust` (c is not W-scale
-  invariant: A1/B1 must be on the same weight scale as score/info). Single
-  group; api/R wrappers deferred until a concrete consumer appears. Oracles:
+  invariant: A1/B1 must be on the same weight scale as score/info). The
+  continuous ML/LS tiers are single- or multi-group (see the multi-group bullet);
+  the ordinal/mixed-ordinal tier stays single-group pending a multi-group
+  polychoric oracle. api/R wrappers deferred until a concrete consumer appears.
+  Oracles:
   continuous DWLS (`se = "robust.sem"`, so lavaan's wls.v/gamma are the
   ADF NACOV — gaps ~1e-9) and all-ordinal WLSMV (polychoric NACOV — c gap
   ~6e-10) release-score fixtures 0007/0008 in `regen_robust_score.R`, plus the
@@ -185,6 +189,18 @@ golden `parTable()` fixtures.
   `lavScores`, θ-space assembly, c ≈ 2.16 on heavy-tailed + MCAR data) plus a
   non-robust-`mi` match and a c → 1 normal-data anchor in
   `tests/unit/score_robust_test.cpp`.
+- Multi-group robust MI / score tests for the continuous ML and LS tiers
+  (2026-06-13): the single-group guards in `inference::frontier` are removed; the
+  per-block `n_b/N`-weighted sandwich (`robust::param_space_sandwich` /
+  `estimate::weighted_param_space_sandwich`), per-group candidate enumeration
+  (each absent statement is one candidate per group), and the full-θ-space
+  nuisance projection all carry over unchanged, so no new statistics were needed.
+  Validated by a two-group Γ_NT reduction (c = 1 exactly across unequal groups),
+  a heavy-tailed empirical case, a GLS multi-group reduction, and the cross-group
+  loading-invariance golden 0010 — the latter pins the `n_b/N` weighting that
+  within-group reductions cannot (`A1 = lavInspect(fit,"information")` equals
+  `Σ_b (n_b/N)·Δ_b'V_bΔ_b` exactly, c ≈ 1.24). FIML robust and the
+  ordinal/mixed-ordinal robust tier remain single-group.
 - Observed-bread robust SEs and observed-Hessian U-factors use total-N scaling
   and work on block-stacked multi-block covariance and mean-structure models.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand

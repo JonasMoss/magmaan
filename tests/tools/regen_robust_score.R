@@ -281,3 +281,79 @@ write_json(payload_fiml, out_fiml, pretty = TRUE, auto_unbox = TRUE,
 cat(sprintf("wrote %s\n  X2_nt=%.6f  c=%.6f  mi_scaled=%.6f  (lavaan %s)\n",
             out_fiml, rs_fiml$X2_nt, rs_fiml$scaling, rs_fiml$mi_scaled,
             installed))
+
+# ── 0010: two-group MLM, cross-group loading-invariance release ───────────────
+# Multi-group sandwich pooling: lavaan's pooled information is exactly
+# Σ_b (n_b/N)·Δ_b'V_bΔ_b (verified: lavInspect(fit,"information") == that sum), so
+# A1 = lavInspect(.,"information") and the meat is the matching n_b/N pool
+# B1 = Σ_b (n_b/N)·Δ_b'V_bΓ̂_bV_bΔ_b. Unequal group sizes + heavy-tailed t make
+# the n_b/N weighting load-bearing for the released cross-group equality (a
+# within-group release would let the weight cancel). The model uses explicit
+# per-group loading labels + `==` rows (the score-test form of
+# group.equal = "loadings"), so both lavaan and magmaan carry releasable
+# constraints; magmaan builds the same model from the stored syntax with
+# n_groups = 2.
+robust_score_assemble_mg <- function(fit) {
+  X2_nt <- suppressWarnings(lavTestScore(fit)$uni$X2[1])
+  A1 <- lavInspect(fit, "information")  # pooled, n_b/N-weighted, full θ-space
+  D  <- lavInspect(fit, "delta")
+  V  <- lavInspect(fit, "wls.v")
+  Gm <- lavInspect(fit, "gamma")
+  N  <- nobs(fit)
+  nb <- lavInspect(fit, "nobs")
+  B1 <- matrix(0, nrow(A1), ncol(A1))
+  for (b in seq_along(D))
+    B1 <- B1 + (nb[b] / N) * (t(D[[b]]) %*% V[[b]] %*% Gm[[b]] %*% V[[b]] %*% D[[b]])
+  R <- fit@Model@ceq.JAC
+  d <- as.numeric(R[1, ]); d <- d / sqrt(sum(d * d))
+  K <- MASS::Null(t(R))
+  g <- d - K %*% solve(t(K) %*% A1 %*% K, t(K) %*% (A1 %*% d))
+  c_fac <- as.numeric((t(g) %*% B1 %*% g) / (t(g) %*% A1 %*% g))
+  list(X2_nt = X2_nt, scaling = c_fac, mi_scaled = X2_nt / c_fac)
+}
+
+set.seed(20260613L)
+n_g1 <- 300L
+n_g2 <- 500L
+Zg1 <- matrix(rnorm(n_g1 * 4L), n_g1, 4L)
+wg1 <- rchisq(n_g1, df_t) / df_t
+Xg1 <- sqrt((df_t - 2) / df_t) * (Zg1 %*% t(L)) / sqrt(wg1)
+Zg2 <- matrix(rnorm(n_g2 * 4L), n_g2, 4L)
+wg2 <- rchisq(n_g2, 8) / 8
+Xg2 <- sqrt((8 - 2) / 8) * (Zg2 %*% t(L)) / sqrt(wg2)
+colnames(Xg1) <- paste0("x", 1:4)
+colnames(Xg2) <- paste0("x", 1:4)
+dat_mg <- rbind(data.frame(Xg1, g = 1L), data.frame(Xg2, g = 2L))
+
+model_mg <- paste(
+  "f =~ x1 + c(a2,b2)*x2 + c(a3,b3)*x3 + c(a4,b4)*x4",
+  "a2 == b2", "a3 == b3", "a4 == b4", sep = "\n")
+fit_mg <- sem(model_mg, data = dat_mg, group = "g", estimator = "MLM")
+if (!lavInspect(fit_mg, "converged")) stop("multi-group robust score oracle fit did not converge")
+rs_mg <- robust_score_assemble_mg(fit_mg)
+
+payload_mg <- list(
+  `_meta` = list(
+    format_version = 1L,
+    fixture_kind = "score_robust",
+    corpus_id = "0010_robust_release_multigroup_mlm",
+    tool = "lavaan internals (R-assembled): information/delta/wls.v/gamma/ceq.JAC",
+    lavaan_version = installed,
+    note = paste("two-group MLM, cross-group loading-invariance release;",
+                 "A1 = pooled information, B1 = Σ_b (n_b/N) Δ'VΓ̂VΔ")),
+  input = model_mg,
+  estimator = "MLM",
+  bread = "expected",
+  n_obs = c(n_g1, n_g2),
+  raw = list(unname(Xg1), unname(Xg2)),
+  score_tests_robust = list(rows = list(list(
+    lhs = "a2", op = "==", rhs = "b2", df = 1L,
+    mi = rs_mg$X2_nt, scaling_factor = rs_mg$scaling,
+    mi_scaled = rs_mg$mi_scaled))))
+
+out_mg <- file.path(fixtures,
+                    "0010_robust_release_multigroup_mlm.score_robust.json")
+write_json(payload_mg, out_mg, pretty = TRUE, auto_unbox = TRUE,
+           null = "null", na = "null", digits = NA)
+cat(sprintf("wrote %s\n  X2_nt=%.6f  c=%.6f  mi_scaled=%.6f  (lavaan %s)\n",
+            out_mg, rs_mg$X2_nt, rs_mg$scaling, rs_mg$mi_scaled, installed))

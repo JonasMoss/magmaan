@@ -103,6 +103,19 @@ inf::frontier::RobustScoreOptions robust_opts(rob::Information bread,
   return o;
 }
 
+// Multi-group build (configural unless `src` carries cross-group labels).
+Handles build_groups(std::string_view src, int n_groups) {
+  auto fp = Parser::parse(src);
+  REQUIRE(fp.has_value());
+  magmaan::spec::BuildOptions opts;
+  opts.n_groups = n_groups;
+  auto pt = magmaan::spec::build(*fp, opts);
+  REQUIRE(pt.has_value());
+  auto rep = build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+  return Handles{std::move(*pt), std::move(*rep)};
+}
+
 // Meanstructure CFA build for the FIML robust tier (FIML estimates means).
 Handles build_mean(std::string_view src) {
   auto fp = Parser::parse(src);
@@ -862,4 +875,107 @@ TEST_CASE("frontier FIML robust score test: equality release runs and is finite"
   auto rob_mg = inf::frontier::score_tests_fiml_robust(h.pt, h.rep, two_block,
                                                        *est);
   CHECK_FALSE(rob_mg.has_value());
+}
+
+// ── Multi-group (PR2) ────────────────────────────────────────────────────────
+// The sandwich is assembled per block with the n_b/N weighting, so the
+// reduction-to-NT anchor must still hold across groups: Expected bread +
+// model-implied Γ_NT meat gives B1_b = A1_b in every block ⇒ c = 1 exactly.
+
+TEST_CASE("frontier robust MI multi-group: model-implied Γ_NT meat reduces to NT") {
+  auto h = build_groups("f =~ x1 + x2 + x3 + x4", 2);
+  SampleStats samp;
+  Eigen::Matrix4d S1 = four_indicator_sample_cov();
+  Eigen::Matrix4d S2 = four_indicator_sample_cov();
+  S2(2, 3) += 0.12;
+  S2(3, 2) = S2(2, 3);  // perturb group 2 so the two fits differ
+  samp.S = {S1, S2};
+  samp.n_obs = {350, 450};
+  auto est = magmaan::test::fit(h.pt, h.rep, samp);
+  REQUIRE(est.has_value());
+
+  inf::ModificationIndexOptions nt_opts;
+  nt_opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  nt_opts.information = inf::ScoreInformation::Expected;
+  auto nt = inf::modification_indices(h.pt, h.rep, samp, *est, nt_opts);
+  REQUIRE(nt.has_value());
+
+  auto rob = inf::frontier::modification_indices_robust(
+      h.pt, h.rep, samp, *est,
+      robust_opts(rob::Information::Expected,
+                  inf::ScoreCandidateSet::WithAbsentRows));
+  REQUIRE(rob.has_value());
+  REQUIRE(rob->rows.size() == nt->rows.size());
+  REQUIRE(rob->rows.size() > 0);
+  for (std::size_t i = 0; i < rob->rows.size(); ++i) {
+    CHECK(std::abs(rob->rows[i].mi - nt->rows[i].mi) <
+          1e-9 * (1.0 + std::abs(nt->rows[i].mi)));
+    CHECK(std::abs(rob->rows[i].scaling_factor - 1.0) < 1e-6);
+  }
+}
+
+TEST_CASE("frontier robust MI multi-group: empirical raw-data path scales, finite") {
+  auto h = build_groups("f =~ x1 + x2 + x3 + x4", 2);
+  std::mt19937 rng(7u);
+  const Eigen::Matrix4d Sigma = four_indicator_sample_cov();
+  magmaan::data::RawData raw;
+  raw.X = {multivariate_t_sample(rng, 500, Sigma, 6.0),
+           multivariate_t_sample(rng, 600, Sigma, 8.0)};
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  REQUIRE(samp->S.size() == 2);
+  auto est = magmaan::test::fit(h.pt, h.rep, *samp);
+  REQUIRE(est.has_value());
+
+  auto rob = inf::frontier::modification_indices_robust(
+      h.pt, h.rep, *samp, raw, *est,
+      robust_opts(rob::Information::Expected,
+                  inf::ScoreCandidateSet::WithAbsentRows));
+  REQUIRE(rob.has_value());
+  REQUIRE(rob->rows.size() > 0);
+  bool any_nontrivial = false;
+  for (const auto& r : rob->rows) {
+    CHECK(std::isfinite(r.scaling_factor));
+    CHECK(r.scaling_factor > 0.0);
+    if (std::abs(r.scaling_factor - 1.0) > 0.05) any_nontrivial = true;
+  }
+  CHECK(any_nontrivial);  // heavy-tailed data ⇒ at least one genuine correction
+}
+
+TEST_CASE("frontier robust LS MI multi-group: GLS + Γ_NT(S) meat reduces to NT") {
+  auto h = build_groups("f =~ x1 + x2 + x3 + x4", 2);
+  SampleStats samp;
+  Eigen::Matrix4d S1 = four_indicator_sample_cov();
+  Eigen::Matrix4d S2 = four_indicator_sample_cov();
+  S2(2, 3) += 0.12;
+  S2(3, 2) = S2(2, 3);
+  samp.S = {S1, S2};
+  samp.n_obs = {350, 450};
+  auto est = magmaan::test::fit_gls(h.pt, h.rep, samp);
+  REQUIRE(est.has_value());
+
+  auto ev = magmaan::model::ModelEvaluator::build(h.pt, h.rep);
+  REQUIRE(ev.has_value());
+  auto weight =
+      magmaan::estimate::gmm::normal_theory_weight(*ev, samp, est->theta);
+  REQUIRE(weight.has_value());
+
+  inf::ModificationIndexOptions nt_opts;
+  nt_opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto nt = inf::modification_indices(h.pt, h.rep, samp, *est, *weight, nt_opts);
+  REQUIRE(nt.has_value());
+
+  inf::frontier::RobustScoreOptions opts;
+  opts.spec.moments = rob::WeightMoments::Unstructured;  // Γ_NT(S) = W⁻¹ per block
+  opts.base.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto rob_mi = inf::frontier::modification_indices_robust(h.pt, h.rep, samp,
+                                                           *est, *weight, opts);
+  REQUIRE(rob_mi.has_value());
+  REQUIRE(rob_mi->rows.size() == nt->rows.size());
+  REQUIRE(rob_mi->rows.size() > 1);
+  for (std::size_t i = 0; i < rob_mi->rows.size(); ++i) {
+    CHECK(std::abs(rob_mi->rows[i].scaling_factor - 1.0) < 1e-6);
+    CHECK(std::abs(rob_mi->rows[i].mi - nt->rows[i].mi) <
+          1e-8 * (1.0 + std::abs(nt->rows[i].mi)));
+  }
 }
