@@ -227,24 +227,27 @@ decisions in the simulation backlog.
   configural-vs-metric invariance, with lavaan WLSMV parity in
   `r-package/examples/nested_test_ordinal.R`. What Paper 2 still lacks, to
   write the paper:
-  - **Scaffold + plumbing landed 2026-06-13.** The paper-local harness exists at
-    `papers/ordinal-fmg/` (its own nested git repo, gitignored by the outer
-    repo), mirroring the `papers/fiml-fmg/` scaffold. It carries the single-group
-    GOF arm (one-factor ordinal CFA; truth = correct vs omitted residual
-    covariance) and the two-group nested arm (configural-vs-metric via
-    `nestedTest(method = "satorra.2000")`; truth = invariant vs group-2 loading
-    non-invariance) over a {normal, vm_mod, vm_sev} × cats {2,3,5} × N grid.
-    Non-normality enters the underlying continuous variates via the new
-    `sim_vm_*` (Vale-Maurelli/Fleishman) R surface, then thresholding; the
-    enabling core addition was wiring `calibrate_vale_maurelli` /
-    `simulate_vale_maurelli_matrix` into R (`sim_vm_calibrate/draw/batch`, with
-    `r-package/examples/sim_vm.R`). Smoke-verified: full pipeline runs, lavaan
-    WLSMV parity holds (UGamma spectrum ~3.8e-9, DWLS chi-square ~1e-6 after the
-    documented `(N-G)/N` ordinal-chi-square rescale). Remaining (author, in the
-    paper repo's `dev/todo.md`): the full `just parity` run, tuning the power
-    levers off saturation, and the directional calibration write-up. NB the smoke
-    shows ordinal DWLS can *under*-reject (scale c < 1), unlike Paper 1's FIML
-    over-rejection.
+  - **Scaffold + reframed design landed 2026-06-13.** The paper-local harness
+    exists at `papers/ordinal-fmg/` (its own nested git repo, gitignored by the
+    outer repo), mirroring the `papers/fiml-fmg/` scaffold. **Thesis correction:**
+    the paper is NOT about robustness to non-normality. For ordinal DWLS/ULS the
+    fit statistic is weighted-chi-square (`T → Σ λ_j χ²₁`, `λ_j ≠ 1`) *even at the
+    correct normal model*, because the diagonal weight is not `Γ⁻¹` — so the
+    correction is on-model, and a Gaussian-copula non-normal generator
+    (Vale-Maurelli, NORTA) is invisible after thresholding (collapses to normal
+    theory). The harness therefore generates **normal** underlying data and varies
+    the spectrum-shaping axes: categories {2,3,5} × model size p {6,12} × N. It
+    carries the single-group GOF arm (omitted residual covariance) and the
+    two-group nested arm (configural-vs-metric via `nestedTest(satorra.2000)`),
+    comparing naive / SB / WLSMV mean-variance / WLSMV scaled-shifted / FMG
+    (pEBA, pOLS). Smoke-verified: pipeline runs, lavaan WLSMV parity holds (UGamma
+    spectrum ~3.8e-9, DWLS chi-square ~1e-6 after the documented `(N-G)/N`
+    rescale). The `sim_vm_*` core exposure stays (useful for the continuous
+    papers) but is unused here. Remaining (author, in the paper repo's
+    `dev/todo.md`): the full `just parity` run, and the live empirical question —
+    do the FMG transforms beat the WLSMV mean-variance adjustment anywhere (only
+    possible where the spectrum spreads: binary items, larger models), or is
+    WLSMV hard to beat for ordinal?
   - **Done 2026-06-13.** Direct ordinal UGamma-spectrum oracle: the paper
     parity pipeline now emits an explicit `ordinal_wlsmv_ugamma_spectrum_maxabs`
     row comparing magmaan's public DWLS + `robust_ordinal()` eigenvalues against
