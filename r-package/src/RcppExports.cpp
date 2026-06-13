@@ -1950,6 +1950,63 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sim_model_calibrate_impl
+Rcpp::List sim_model_calibrate_impl(SEXP fit_or_partable, Rcpp::Nullable<Rcpp::NumericVector> theta);
+RcppExport SEXP _magmaan_sim_model_calibrate_impl(SEXP fit_or_partableSEXP, SEXP thetaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type fit_or_partable(fit_or_partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type theta(thetaSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_model_calibrate_impl(fit_or_partable, theta));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sim_model_draw_impl
+Rcpp::List sim_model_draw_impl(Rcpp::List calibration, int n, int reps, double seed_base, std::string generator, double df, Rcpp::Nullable<Rcpp::NumericVector> mixture_weights, Rcpp::Nullable<Rcpp::NumericVector> mixture_scale_multipliers, double contamination_probability, double contamination_scale_multiplier, double slash_q, double cholesky_jitter);
+RcppExport SEXP _magmaan_sim_model_draw_impl(SEXP calibrationSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP generatorSEXP, SEXP dfSEXP, SEXP mixture_weightsSEXP, SEXP mixture_scale_multipliersSEXP, SEXP contamination_probabilitySEXP, SEXP contamination_scale_multiplierSEXP, SEXP slash_qSEXP, SEXP cholesky_jitterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type calibration(calibrationSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type reps(repsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed_base(seed_baseSEXP);
+    Rcpp::traits::input_parameter< std::string >::type generator(generatorSEXP);
+    Rcpp::traits::input_parameter< double >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type mixture_weights(mixture_weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type mixture_scale_multipliers(mixture_scale_multipliersSEXP);
+    Rcpp::traits::input_parameter< double >::type contamination_probability(contamination_probabilitySEXP);
+    Rcpp::traits::input_parameter< double >::type contamination_scale_multiplier(contamination_scale_multiplierSEXP);
+    Rcpp::traits::input_parameter< double >::type slash_q(slash_qSEXP);
+    Rcpp::traits::input_parameter< double >::type cholesky_jitter(cholesky_jitterSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_model_draw_impl(calibration, n, reps, seed_base, generator, df, mixture_weights, mixture_scale_multipliers, contamination_probability, contamination_scale_multiplier, slash_q, cholesky_jitter));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sim_model_batch_impl
+Rcpp::List sim_model_batch_impl(SEXP fit_or_partable, int n, int reps, double seed_base, Rcpp::Nullable<Rcpp::NumericVector> theta, std::string generator, double df, Rcpp::Nullable<Rcpp::NumericVector> mixture_weights, Rcpp::Nullable<Rcpp::NumericVector> mixture_scale_multipliers, double contamination_probability, double contamination_scale_multiplier, double slash_q, double cholesky_jitter);
+RcppExport SEXP _magmaan_sim_model_batch_impl(SEXP fit_or_partableSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP thetaSEXP, SEXP generatorSEXP, SEXP dfSEXP, SEXP mixture_weightsSEXP, SEXP mixture_scale_multipliersSEXP, SEXP contamination_probabilitySEXP, SEXP contamination_scale_multiplierSEXP, SEXP slash_qSEXP, SEXP cholesky_jitterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type fit_or_partable(fit_or_partableSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type reps(repsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed_base(seed_baseSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< std::string >::type generator(generatorSEXP);
+    Rcpp::traits::input_parameter< double >::type df(dfSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type mixture_weights(mixture_weightsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type mixture_scale_multipliers(mixture_scale_multipliersSEXP);
+    Rcpp::traits::input_parameter< double >::type contamination_probability(contamination_probabilitySEXP);
+    Rcpp::traits::input_parameter< double >::type contamination_scale_multiplier(contamination_scale_multiplierSEXP);
+    Rcpp::traits::input_parameter< double >::type slash_q(slash_qSEXP);
+    Rcpp::traits::input_parameter< double >::type cholesky_jitter(cholesky_jitterSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_model_batch_impl(fit_or_partable, n, reps, seed_base, theta, generator, df, mixture_weights, mixture_scale_multipliers, contamination_probability, contamination_scale_multiplier, slash_q, cholesky_jitter));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_version", (DL_FUNC) &_magmaan_version, 0},
@@ -2089,6 +2146,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_sim_plsim_batch_impl", (DL_FUNC) &_magmaan_sim_plsim_batch_impl, 15},
     {"_magmaan_sim_plsim_calibrate_impl", (DL_FUNC) &_magmaan_sim_plsim_calibrate_impl, 12},
     {"_magmaan_sim_plsim_draw_impl", (DL_FUNC) &_magmaan_sim_plsim_draw_impl, 4},
+    {"_magmaan_sim_model_calibrate_impl", (DL_FUNC) &_magmaan_sim_model_calibrate_impl, 2},
+    {"_magmaan_sim_model_draw_impl", (DL_FUNC) &_magmaan_sim_model_draw_impl, 12},
+    {"_magmaan_sim_model_batch_impl", (DL_FUNC) &_magmaan_sim_model_batch_impl, 13},
     {NULL, NULL, 0}
 };
 

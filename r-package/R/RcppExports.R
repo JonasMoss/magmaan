@@ -549,3 +549,15 @@ sim_plsim_draw_impl <- function(calibration, n, reps, seed_base) {
     .Call(`_magmaan_sim_plsim_draw_impl`, calibration, n, reps, seed_base)
 }
 
+sim_model_calibrate_impl <- function(fit_or_partable, theta = NULL) {
+    .Call(`_magmaan_sim_model_calibrate_impl`, fit_or_partable, theta)
+}
+
+sim_model_draw_impl <- function(calibration, n, reps, seed_base, generator = "normal", df = 5.0, mixture_weights = NULL, mixture_scale_multipliers = NULL, contamination_probability = 0.05, contamination_scale_multiplier = 3.0, slash_q = 5.0, cholesky_jitter = 0.0) {
+    .Call(`_magmaan_sim_model_draw_impl`, calibration, n, reps, seed_base, generator, df, mixture_weights, mixture_scale_multipliers, contamination_probability, contamination_scale_multiplier, slash_q, cholesky_jitter)
+}
+
+sim_model_batch_impl <- function(fit_or_partable, n, reps, seed_base, theta = NULL, generator = "normal", df = 5.0, mixture_weights = NULL, mixture_scale_multipliers = NULL, contamination_probability = 0.05, contamination_scale_multiplier = 3.0, slash_q = 5.0, cholesky_jitter = 0.0) {
+    .Call(`_magmaan_sim_model_batch_impl`, fit_or_partable, n, reps, seed_base, theta, generator, df, mixture_weights, mixture_scale_multipliers, contamination_probability, contamination_scale_multiplier, slash_q, cholesky_jitter)
+}
+

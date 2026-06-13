@@ -183,6 +183,9 @@ sim_cvine3_draw <- sim_cvine3_draw_impl
 sim_plsim_batch <- sim_plsim_batch_impl
 sim_plsim_calibrate <- sim_plsim_calibrate_impl
 sim_plsim_draw <- sim_plsim_draw_impl
+sim_model_batch <- sim_model_batch_impl
+sim_model_calibrate <- sim_model_calibrate_impl
+sim_model_draw <- sim_model_draw_impl
 
 measures_baseline <- infer_baseline
 measures_compute_defined <- compute_defined_impl
@@ -335,7 +338,10 @@ magmaan_core <- local({
       "sim_cvine3_draw",
       "sim_plsim_batch",
       "sim_plsim_calibrate",
-      "sim_plsim_draw"
+      "sim_plsim_draw",
+      "sim_model_batch",
+      "sim_model_calibrate",
+      "sim_model_draw"
     ),
     measures = c(
       "measures_baseline",

@@ -19,16 +19,18 @@ simulation work queue and decision log.
 The implemented `magmaan::sim` surface (NORTA, independent / Foldnes-Olsson IG,
 Vale-Maurelli/Fleishman, PLSIM, fixed-parameter t-copula, bivariate Archimedean
 copulas, 3-variable and generic fixed-order C-vines, elliptical / scale-mixture
-generators, the Tukey / Pearson / Johnson / Fleishman marginal families,
-population composition, and the shared observed-variable projection layer) is
-inventoried in the roadmap's "Simulation primitives" section. The R surface
+generators, model-implied population lowering, the Tukey / Pearson / Johnson /
+Fleishman marginal families, population composition, and the shared
+observed-variable projection layer) is inventoried in the roadmap's "Simulation
+primitives" section. The R surface
 exposes `sim_*_batch()` convenience calls plus the reusable
 `sim_ig_calibrate()` / `sim_ig_draw()`,
 `sim_norta_calibrate()` / `sim_norta_draw()`,
 `sim_plsim_calibrate()` / `sim_plsim_draw()`,
 `sim_bicop_calibrate()` / `sim_bicop_draw()`, and
 `sim_cvine_calibrate()` / `sim_cvine_draw()` and
-`sim_cvine3_calibrate()` / `sim_cvine3_draw()` two-stage handles. Keep API-level
+`sim_cvine3_calibrate()` / `sim_cvine3_draw()`, and
+`sim_model_calibrate()` / `sim_model_draw()` two-stage handles. Keep API-level
 inventory in the roadmap; this file carries the work queue and decision log
 below.
 
@@ -43,8 +45,8 @@ top-level named generators.
 The preferred decomposition is:
 
 1. **Population construction.** Build explicit population means/covariances,
-   group-specific population moments, thresholds, and eventually model-implied
-   population moments from a lavaanified model or fitted estimates.
+   group-specific population moments, thresholds, and model-implied population
+   moments from a lavaanified model or fitted estimates.
 2. **Continuous generator.** Draw a complete continuous response matrix from a
    named mechanism: normal, elliptical, copula/NORTA, independent-generator,
    Vale-Maurelli/Fleishman, PLSIM, VITA/covsim, or later mechanisms.
@@ -82,11 +84,12 @@ calibrates/diagnoses one of those steps.
 
 ## Planned Surface
 
-- Add model-implied simulation as a lowering step: convert `MatrixRep` /
-  estimates / fitted objects into population moments and projection specs, then
-  call the generic simulation stack. Mean structures, intercepts, latent means,
-  group means, and thresholds should live here instead of being baked into each
-  generator.
+- Keep the landed model-implied simulation bridge moment-based: it lowers
+  fitted or hand-authored SEM state to population moments and projection specs,
+  then calls the normal/elliptical mixed-population stack. Do not route it into
+  copula/NORTA/vine/IG/VM/PLSIM generators until a separate marginal
+  calibration layer can supply distribution targets; the model gives moments
+  and thresholds, not marginal families.
 - Add ordinal/mixed correlation calibration after the direct projection path is
   stable. The first version can generate from latent correlations and report
   achieved observed correlations; a later version should calibrate latent
@@ -268,10 +271,6 @@ Open work only; landed generator slices are inventoried in the roadmap.
 - **M.** Extend population composition with group-specific population blocks
   and raw-data naming/level metadata once the `RawData` carrier grows those
   fields.
-- **L.** Add model-implied simulation that lowers lavaanified/model evaluator
-  state to population moments and projection specs before invoking the generic
-  simulation stack. Treat mean structure as population construction/projection,
-  not as a generator-specific option.
 - **M.** Add elliptical diagnostics/goldens for Student-t, contaminated normal,
   slash, and finite scale mixtures: deterministic moment formulas where
   available plus stochastic smokes.
