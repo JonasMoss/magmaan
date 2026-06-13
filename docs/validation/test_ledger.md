@@ -88,6 +88,19 @@ when magmaan is non-finite.
 Scope: non-finite lavaan fixture fields remain skipped because there is no
 numeric oracle to compare.
 
+**Golden soft skip sets are count-pinned.**
+Regression: `MESSAGE`-only tolerated/skipped/deferred/no-oracle buckets could
+absorb new fixture drift without failing the suite.
+Guard: `lavaanify_golden_test.cpp`, `matrix_rep_golden_test.cpp`,
+`fit_implied_golden_test.cpp`, `fit_measures_golden_test.cpp`,
+`fit_theta_golden_test.cpp`, `inference_golden_test.cpp`,
+`test_stats_golden_test.cpp`, and `observed_inference_golden_test.cpp` assert
+their soft-bucket counts; the old `test_stats` `pe_z` pre-regen path is now
+recorded as `NO-Z` and pinned empty.
+Scope: observed-inference no-oracle fixtures are currently pinned at zero under
+the regenerated lavaan-backed corpus; future structural no-oracle cases need an
+explicit count and rationale.
+
 **Robust UΓ projector per-group weight.**
 Regression: the complete-data `build_u_factor` ProjectionExpected path built the
 kernel basis from `A_b = L_Γ,b⁻¹·Δ_b` without the per-group weight `w_b = n_b/N`,

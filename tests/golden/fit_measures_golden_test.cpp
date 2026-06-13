@@ -232,6 +232,8 @@ TEST_CASE("fit-measure goldens — CFI/TLI/RMSEA/SRMR/logl/AIC/BIC match lavaan"
     for (const auto& id : processed) m += id + " ";
     MESSAGE(m);
   }
+  CHECK(skipped.size() == kSkipForFitMeasureGoldens.size());
+  CHECK(needs_regen.empty());
   if (!failures.empty()) {
     std::string m = "fit-measure golden failures:\n";
     for (const auto& f : failures) m += "  - " + f + "\n";

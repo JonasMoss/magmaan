@@ -164,5 +164,7 @@ TEST_CASE("model evaluator: implied Σ matches lavaan at θ̂") {
   for (const auto& s : evaluator_skips) MESSAGE("  SKIP " << s);
   for (const auto& f : failures)        MESSAGE("  FAIL " << f);
 
+  CHECK(deferred_count == static_cast<int>(kDeferred.size()));
+  CHECK(evaluator_skips.empty());
   CHECK(passed == total);
 }
