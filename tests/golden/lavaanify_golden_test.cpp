@@ -317,4 +317,5 @@ TEST_CASE("ptable goldens — every corpus entry that lavaanify can handle") {
   for (const auto& f : failures) MESSAGE("  FAIL " << f);
 
   CHECK(passed == total);
+  CHECK(tolerated.size() == tolerated_divergences.size());
 }

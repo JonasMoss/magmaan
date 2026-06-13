@@ -136,11 +136,15 @@ landed; remaining open items:
   lavaan's statistic and pins χ²-family quantities to 5e-3, and finite lavaan
   fit-measure fields now fail if magmaan returns non-finite values, which
   surfaced and fixed the saturated-model TLI convention (`df_user = 0` → TLI =
-  1). Continue sweeping the remaining golden/parity tests for `MESSAGE`-only
-  soft checks
-  and fixtures regenerated from magmaan's own output rather than an external
-  oracle; for each, either tighten to the oracle or write down explicitly why
-  the looseness is principled.
+  1). Soft-gap hygiene pass (2026-06): ptable tolerated divergences and the
+  matrix-rep deferred set now have exact count checks, and the skipped
+  Little/Newsom broad corpus check no longer aborts on Little's null mean
+  placeholders; forcing it with `--no-skip` reaches the single documented
+  `newsom/ex5_5b` backend failure. Continue sweeping the remaining
+  golden/parity tests for `MESSAGE`-only soft checks and fixtures regenerated
+  from magmaan's own output rather than an external oracle; for each, either
+  tighten to the oracle or write down explicitly why the looseness is
+  principled.
 - **M, pre-existing opt-preset failure (found 2026-06-12).** The `api` test
   "api FIML exposes likelihood test, fit measures, and MLR reporting" fails
   deterministically on the `opt` preset (Release, `-O3 -march=native`) at the
