@@ -225,11 +225,13 @@ decisions in the simulation backlog.
     ordinal data generator (categories × underlying skew × N), DWLS/WLS GOF +
     nested fits, and the naive-WLS vs SB vs FMG-winner (pEBA/pOLS/PALL) rejection
     grid. Mirror `papers/fiml-fmg/` Paper-1 scaffold.
-  - **M, direct UGamma-spectrum oracle.** A paper parity check of the ordinal
-    UGamma spectrum vs lavaan WLSMV (`lavInspect(., "UGamma")` or the internal
-    scaling), analogous to Paper 1's FIML parity table. The spectrum is already
-    gated indirectly via the ordinal robust SB/scaled-shifted goldens, but the
-    paper wants the explicit spectrum-vs-lavaan row.
+  - **Done 2026-06-13.** Direct ordinal UGamma-spectrum oracle: the paper
+    parity pipeline now emits an explicit `ordinal_wlsmv_ugamma_spectrum_maxabs`
+    row comparing magmaan's public DWLS + `robust_ordinal()` eigenvalues against
+    lavaan WLSMV `lavInspect(., "UGamma")`. The core C++ fixture gate already
+    compares `robust_ordinal().eigvals` to lavaan's stored UGamma eigenvalues in
+    `tests/golden/ordinal_golden_test.cpp`; the paper row makes that provenance
+    visible alongside the FIML parity table.
   - **S, author decision.** Single paper with a FIML + polychoric pair of parts,
     or a separate `papers/<slug>/` folder.
   - **Only-when-needed.** Multi-group ordinal FMG (lift the single-group v1 cap
