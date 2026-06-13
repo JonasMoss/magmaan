@@ -404,7 +404,7 @@
 #' polyserial moments). The UGamma spectrum, base chi-square, and df come from
 #' the same polychoric-NACOV sandwich as `robust_ordinal()` /
 #' `robust_mixed_ordinal()`, so the categorical stats are supplied explicitly the
-#' same way. Single group (v1).
+#' same way. Single- and multi-group fits are supported.
 #'
 #' An ordinal LS fit has one base statistic, the LS chi-square
 #' \eqn{N\,F_\mathrm{min}}; there is no ML/RLS split and no Du-Bentler unbiased
