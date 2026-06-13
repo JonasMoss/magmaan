@@ -464,13 +464,22 @@ golden `parTable()` fixtures.
   (None/Error/Ridge/Shrinkage), and the calibration object records per-pair
   diagnostics plus the achieved-correlation matrix at the shipped latent.
   `sim::ordinal_correlation_population()` lowers it to a `MixedPopulation` that
-  feeds the existing `simulate_mixed_population_*` generators;
-  `simulate_ordinal_correlation_normal()` is the one-shot convenience. The R
+  feeds the existing `simulate_mixed_population_*` generators, while
+  `sim::calibrate_ordinal_correlation_multigroup()` composes one such
+  calibration per group with shared variable shape, group labels, and
+  group-keyed achieved category proportions; its draw path threads one RNG
+  sequentially across per-group `MixedPopulation` blocks just like
+  model-implied simulation. `simulate_ordinal_correlation_normal()` is the
+  single-group one-shot convenience. The R
   package exposes the two-stage split as `sim_ordcorr_calibrate()` /
-  `sim_ordcorr_draw()` plus `sim_ordcorr_batch()`. `MixedProjectionResult` now
-  also carries achieved `category_proportions`, and
-  `sim::raw_data_from_mixed_projection()` wraps a projected block as a
-  `data::RawData` with optional variable names and ordinal level labels.
+  `sim_ordcorr_draw()` plus `sim_ordcorr_batch()`, and the multi-group split as
+  `sim_ordcorr_mg_calibrate()` / `sim_ordcorr_mg_draw()` plus
+  `sim_ordcorr_mg_batch()`. `MixedProjectionResult` now also carries achieved
+  `category_proportions`; `sim::raw_data_from_mixed_projection()` wraps a
+  projected block as a `data::RawData` with optional variable names and ordinal
+  level labels, and `sim::raw_data_from_mixed_projections()` composes
+  per-group projected blocks into multi-block `RawData` with populated
+  `group_labels`.
 - Calibrated simulation generators are standardized around a two-stage
   contract: deterministic `calibrate_*()` calls return reusable state objects
   with fitted marginals, latent/intermediate matrices, achieved diagnostics, and
@@ -478,9 +487,10 @@ golden `parTable()` fixtures.
   plus only `n`, RNG/seed, and draw-time options. One-shot batch helpers remain
   as convenience wrappers. This path is now in place for IG, NORTA, PLSIM,
   pairwise Archimedean copulas, generic fixed-order C-vines, specialized
-  three-variable C-vine root/family-selection policies, and ordinal/mixed
-  observed-correlation calibration at the R boundary and for IG, PLSIM, NORTA,
-  copula/vine, and ordinal-correlation generators at the C++ boundary.
+  three-variable C-vine root/family-selection policies, and single-/multi-group
+  ordinal/mixed observed-correlation calibration at the R boundary and for IG,
+  PLSIM, NORTA, copula/vine, and ordinal-correlation generators at the C++
+  boundary.
   Long-running experiments persist those calibration objects explicitly through
   the `experiments/_support` cache helpers, which key ignored `results/cache/`
   entries by population, generator/options, magmaan package version, and git

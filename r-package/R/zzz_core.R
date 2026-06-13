@@ -189,6 +189,9 @@ sim_model_draw <- sim_model_draw_impl
 sim_ordcorr_batch <- sim_ordcorr_batch_impl
 sim_ordcorr_calibrate <- sim_ordcorr_calibrate_impl
 sim_ordcorr_draw <- sim_ordcorr_draw_impl
+sim_ordcorr_mg_batch <- sim_ordcorr_mg_batch_impl
+sim_ordcorr_mg_calibrate <- sim_ordcorr_mg_calibrate_impl
+sim_ordcorr_mg_draw <- sim_ordcorr_mg_draw_impl
 
 measures_baseline <- infer_baseline
 measures_compute_defined <- compute_defined_impl
@@ -347,7 +350,10 @@ magmaan_core <- local({
       "sim_model_draw",
       "sim_ordcorr_batch",
       "sim_ordcorr_calibrate",
-      "sim_ordcorr_draw"
+      "sim_ordcorr_draw",
+      "sim_ordcorr_mg_batch",
+      "sim_ordcorr_mg_calibrate",
+      "sim_ordcorr_mg_draw"
     ),
     measures = c(
       "measures_baseline",
