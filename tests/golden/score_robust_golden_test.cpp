@@ -2,6 +2,8 @@
 #include "../oracle.hpp"
 #include "../test_fit.hpp"
 
+#include <cstdint>
+#include <limits>
 #include <string>
 
 #include <Eigen/Core>
@@ -194,4 +196,70 @@ TEST_CASE("robust ordinal release-score matches the lavaan-internals oracle (WLS
   CHECK(std::abs(got.mi_scaled - f.mis_want) <
         5e-3 * (1.0 + std::abs(f.mis_want)));
   CHECK(got.scaling_factor < 0.95);  // genuinely non-trivial (c ≈ 0.86)
+}
+
+TEST_CASE("robust FIML release-score matches the lavaan-internals oracle (MLR)") {
+  const std::string path =
+      magmaan::test::fixtures_dir() +
+      "/score/0009_robust_release_fiml_mlr.score_robust.json";
+  auto raw_json = magmaan::test::read_fixture(path);
+  REQUIRE(raw_json.has_value());
+  auto exp = nlohmann::json::parse(*raw_json, nullptr, false);
+  REQUIRE_FALSE(exp.is_discarded());
+
+  // FIML estimates means, so build with the mean structure on.
+  const std::string src = exp["input"].get<std::string>();
+  auto fp = magmaan::parse::Parser::parse(src);
+  REQUIRE(fp.has_value());
+  magmaan::spec::BuildOptions bo;
+  bo.meanstructure = true;
+  auto pt = magmaan::spec::build(*fp, bo);
+  REQUIRE(pt.has_value());
+  auto rep = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+
+  // Raw data with JSON-null missing cells → NaN + observed mask.
+  const auto& jraw = exp["raw"];
+  const Eigen::Index n = static_cast<Eigen::Index>(jraw.size());
+  const Eigen::Index p = static_cast<Eigen::Index>(jraw[0].size());
+  Eigen::MatrixXd X(n, p);
+  Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M(n, p);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const auto& row = jraw[static_cast<std::size_t>(i)];
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const auto& cell = row[static_cast<std::size_t>(j)];
+      if (cell.is_null()) {
+        X(i, j) = std::numeric_limits<double>::quiet_NaN();
+        M(i, j) = 0;
+      } else {
+        X(i, j) = cell.get<double>();
+        M(i, j) = 1;
+      }
+    }
+  }
+  magmaan::data::RawData raw;
+  raw.X.push_back(std::move(X));
+  raw.mask.push_back(std::move(M));
+
+  auto est = magmaan::test::fit_fiml(*pt, *rep, raw);
+  REQUIRE(est.has_value());
+  auto st = inf::frontier::score_tests_fiml_robust(*pt, *rep, raw, *est);
+  REQUIRE(st.has_value());
+  REQUIRE(st->rows.size() == 1);
+  const auto& got = st->rows[0];
+
+  const auto& want = exp["score_tests_robust"]["rows"][0];
+  const double mi_want = want["mi"].get<double>();
+  const double c_want = want["scaling_factor"].get<double>();
+  const double mis_want = want["mi_scaled"].get<double>();
+
+  // c is the convention-free θ-space ratio; magmaan's analytic observed
+  // information and casewise-deviance meat reproduce lavaan's
+  // information.observed / crossprod(lavScores) at the same FIML θ̂.
+  CHECK(std::abs(got.mi - mi_want) < 5e-3 * (1.0 + std::abs(mi_want)));
+  CHECK(std::abs(got.scaling_factor - c_want) <
+        5e-3 * (1.0 + std::abs(c_want)));
+  CHECK(std::abs(got.mi_scaled - mis_want) <
+        5e-3 * (1.0 + std::abs(mis_want)));
+  CHECK(got.scaling_factor > 1.5);  // genuinely non-trivial (c ≈ 2.16)
 }

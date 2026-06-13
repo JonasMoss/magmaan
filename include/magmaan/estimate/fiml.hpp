@@ -272,6 +272,27 @@ fiml_robust_mlr(spec::LatentStructure pt,
                 const FIMLPack& pack,
                 const FIMLH1& h1);
 
+// Shared sandwich ingredients for the FIML MLR corner: the analytic
+// per-observation-averaged deviance Hessian `H` (the bare averaged Hessian, so
+// the observed information is `(N/2)·H`) and the casewise observed-pattern
+// deviance gradients `∂(deviance_i)/∂θ` (`n_total × q`). Both are returned in
+// full θ-space with NO equality-constraint projection — callers that
+// reparameterize apply `K` themselves. `colSums(scores) = N·∂F̄/∂θ` and
+// `scoresᵀscores` is the MLR meat (`/N`). `pt` must already be
+// fixed.x-resolved (call `resolve_fixed_x_from_sample` with `pack.start_stats`).
+// Consumed by `fiml_robust_mlr` and the FIML robust score tests.
+struct FIMLScoreMeatBread {
+  Eigen::MatrixXd hessian;  // H = ∂²F̄/∂θ² (averaged deviance), q × q
+  Eigen::MatrixXd scores;   // casewise ∂(deviance_i)/∂θ, n_total × q
+};
+
+post_expected<FIMLScoreMeatBread>
+fiml_score_meat_bread(const spec::LatentStructure& pt,
+                      const model::MatrixRep& rep,
+                      const RawData& raw,
+                      const FIMLPack& pack,
+                      const Estimates& est);
+
 // Saturated (H1) ML/EM moments — runs the EM iteration that already drives
 // FIML's H1 likelihood accounting, then aggregates per-block scores and
 // analytic observed-row Hessians into a block-diagonal `(H, J, H⁻¹JH⁻¹)`.

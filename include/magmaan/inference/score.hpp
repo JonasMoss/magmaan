@@ -297,6 +297,34 @@ score_tests_robust(spec::LatentStructure pt,
                    const estimate::gmm::Weight& weight,
                    const RobustScoreOptions& options = {});
 
+// ── FIML (missing-data) robust score tests ───────────────────────────────────
+// The MLR corner (`missing = "fiml"`, observed bread + casewise-deviation meat):
+// the bread A1 is the analytic observed information `(N/2)·H`, the meat B1 the
+// covariance of the casewise contributions to the FIML score
+// (`B1 = ¼·scoresᵀscores`, since `score_full = -½·Σ_i scores_i`). The
+// per-direction scaling `c = gᵀB1g/gᵀA1g` is the Huber-White / MLR correction,
+// → 1 under a correctly specified normal model. Always observed-bread MLR (there
+// is no cheap expected-info FIML analogue), so a plain `ModificationIndexOptions`
+// (candidate set + standardized EPC) suffices — there is no `spec` knob. The H1
+// EM is not needed (the sandwich uses only `H` and the casewise scores), so the
+// per-candidate cost is two data passes, no EM. Single-group only (v1). The
+// `discrepancy` argument is accepted for signature symmetry with the non-robust
+// FIML entry points; FIML is the only kernel.
+post_expected<ScoreTestTable>
+modification_indices_fiml_robust(spec::LatentStructure pt,
+                                 const model::MatrixRep& rep,
+                                 const RawData& raw,
+                                 const Estimates& est,
+                                 const ModificationIndexOptions& options = {},
+                                 FIML discrepancy = {});
+
+post_expected<ScoreTestTable>
+score_tests_fiml_robust(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const RawData& raw,
+                        const Estimates& est,
+                        FIML discrepancy = {});
+
 // Per-direction robust statistic worker, shared with the ordinal robust score
 // path (`estimate::frontier`): computes the NT statistic for `direction` and
 // rescales by c = gᵀB1g / gᵀA1g, with g the efficient-score direction implied

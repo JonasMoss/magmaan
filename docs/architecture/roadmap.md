@@ -170,6 +170,21 @@ golden `parTable()` fixtures.
   ~6e-10) release-score fixtures 0007/0008 in `regen_robust_score.R`, plus the
   exact WLS/GLS reductions and a primitives re-assembly in
   `tests/unit/score_robust_test.cpp`.
+- FIML (missing-data) robust MI and equality-release score tests, the MLR corner
+  (2026-06): `inference::frontier::{modification_indices,score_tests}_fiml_robust`
+  build the bread A1 = (N/2)·H (the analytic observed FIML information) and the
+  meat B1 = ¼·scoresᵀscores from the casewise observed-pattern deviance
+  gradients, reusing the FIML-FMG machinery via the shared
+  `estimate::fiml::fiml_score_meat_bread` (also feeds `fiml_robust_mlr`). Because
+  the FIML score is `-½·Σ_i scores_i`, the unscaled `mi` equals the non-robust
+  FIML MI and the per-direction `c = gᵀB1g/gᵀA1g` is the Huber-White correction,
+  → 1 under a correct normal model. Observed bread only (no expected-info FIML
+  analogue), no H1 EM needed (two data passes per candidate, no EM), single group
+  (v1). FIML has no batch augmentation, so this uses the one-by-one robust sweep.
+  Oracle: FIML/MLR release-score fixture 0009 (`information.observed` /
+  `lavScores`, θ-space assembly, c ≈ 2.16 on heavy-tailed + MCAR data) plus a
+  non-robust-`mi` match and a c → 1 normal-data anchor in
+  `tests/unit/score_robust_test.cpp`.
 - Observed-bread robust SEs and observed-Hessian U-factors use total-N scaling
   and work on block-stacked multi-block covariance and mean-structure models.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand

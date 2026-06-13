@@ -2,6 +2,8 @@
 #include "../test_fit.hpp"
 
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <random>
 #include <string_view>
 
@@ -99,6 +101,49 @@ inf::frontier::RobustScoreOptions robust_opts(rob::Information bread,
                            ? inf::ScoreInformation::Observed
                            : inf::ScoreInformation::Expected;
   return o;
+}
+
+// Meanstructure CFA build for the FIML robust tier (FIML estimates means).
+Handles build_mean(std::string_view src) {
+  auto fp = Parser::parse(src);
+  REQUIRE(fp.has_value());
+  magmaan::spec::BuildOptions opts;
+  opts.meanstructure = true;
+  auto pt = magmaan::spec::build(*fp, opts);
+  REQUIRE(pt.has_value());
+  auto rep = build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+  return Handles{std::move(*pt), std::move(*rep)};
+}
+
+// n Gaussian rows from the 4-indicator true covariance (mean 0), with MCAR
+// missingness (every `period`-th row drops one rotating cell). Deterministic
+// given the RNG; the correct normal model drives the robust scaling toward 1.
+magmaan::data::RawData gaussian_cfa_raw(std::mt19937& rng, Eigen::Index n,
+                                        Eigen::Index period) {
+  const Eigen::Matrix4d Sigma = four_indicator_sample_cov();
+  Eigen::LLT<Eigen::Matrix4d> llt(Sigma);
+  const Eigen::Matrix4d L = llt.matrixL();
+  std::normal_distribution<double> z(0.0, 1.0);
+  Eigen::MatrixXd X(n, 4);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    Eigen::Vector4d zi;
+    for (Eigen::Index j = 0; j < 4; ++j) zi(j) = z(rng);
+    X.row(i) = (L * zi).transpose();
+  }
+  Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic> M =
+      Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>::Ones(n, 4);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    if (period > 0 && i % period == 0) {
+      const Eigen::Index c = i % 4;
+      M(i, c) = 0;
+      X(i, c) = std::numeric_limits<double>::quiet_NaN();
+    }
+  }
+  magmaan::data::RawData raw;
+  raw.X.push_back(std::move(X));
+  raw.mask.push_back(std::move(M));
+  return raw;
 }
 
 }  // namespace
@@ -719,4 +764,102 @@ TEST_CASE("frontier robust mixed ordinal: WLS reduces, DWLS finite, ULS rejected
           h.pt, h.rep, *stats, *est_dwls,
           magmaan::estimate::OrdinalWeightKind::ULS, mi_opts);
   CHECK_FALSE(rob_uls.has_value());
+}
+
+// ── FIML robust tier ─────────────────────────────────────────────────────────
+// The robust path shares the candidate enumeration and the NT score/information
+// with the non-robust FIML MI, so the unscaled `mi` must match (the only
+// difference is analytic vs central-difference info, so to the FD floor). The
+// scale of the sandwich meat (B1 = ¼·scoresᵀscores against A1 = (N/2)·H) is
+// pinned by c → 1 on a correctly specified large-n normal model — a wrong
+// constant (2× or ½×) would push c far from 1 — and exactly by golden 0009.
+
+TEST_CASE("frontier FIML robust MI: unscaled mi matches the non-robust FIML MI") {
+  auto h = build_mean("f =~ x1 + x2 + x3 + x4");
+  std::mt19937 rng(20260613u);
+  const auto raw = gaussian_cfa_raw(rng, 600, 9);
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 800;
+  auto est = magmaan::test::fit_fiml(h.pt, h.rep, raw, opts);
+  REQUIRE(est.has_value());
+
+  inf::ModificationIndexOptions mi_opts;
+  mi_opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto nt = inf::modification_indices_fiml(h.pt, h.rep, raw, *est, mi_opts);
+  REQUIRE(nt.has_value());
+  auto rob = inf::frontier::modification_indices_fiml_robust(h.pt, h.rep, raw,
+                                                             *est, mi_opts);
+  REQUIRE(rob.has_value());
+  REQUIRE(rob->rows.size() == nt->rows.size());
+  REQUIRE(rob->rows.size() > 0);
+  for (std::size_t i = 0; i < rob->rows.size(); ++i) {
+    CHECK(std::abs(rob->rows[i].mi - nt->rows[i].mi) <
+          1e-4 * (1.0 + std::abs(nt->rows[i].mi)));
+    CHECK(rob->rows[i].df == 1);
+    CHECK(std::isfinite(rob->rows[i].scaling_factor));
+    CHECK(rob->rows[i].scaling_factor > 0.0);
+    CHECK(std::abs(rob->rows[i].mi_scaled -
+                   rob->rows[i].mi / rob->rows[i].scaling_factor) <
+          1e-9 * (1.0 + std::abs(rob->rows[i].mi)));
+  }
+}
+
+TEST_CASE("frontier FIML robust MI: scaling approaches 1 on large-n normal data") {
+  auto h = build_mean("f =~ x1 + x2 + x3 + x4");
+  std::mt19937 rng(424242u);
+  const auto raw = gaussian_cfa_raw(rng, 4000, 11);
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1000;
+  auto est = magmaan::test::fit_fiml(h.pt, h.rep, raw, opts);
+  REQUIRE(est.has_value());
+
+  inf::ModificationIndexOptions mi_opts;
+  mi_opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto rob = inf::frontier::modification_indices_fiml_robust(h.pt, h.rep, raw,
+                                                             *est, mi_opts);
+  REQUIRE(rob.has_value());
+  REQUIRE(rob->rows.size() > 0);
+  // Per-candidate c is a noisy 4th-moment-driven ratio, so anchor the *mean*
+  // (variance ~1/rows lower) at 1; a wrong B1/A1 scale constant (2× or ½×)
+  // would instead push every row to |c−1| ≈ 1 or ½, which max_dev catches.
+  double sum_c = 0.0;
+  double max_dev = 0.0;
+  for (const auto& r : rob->rows) {
+    sum_c += r.scaling_factor;
+    max_dev = std::max(max_dev, std::abs(r.scaling_factor - 1.0));
+  }
+  const double mean_c = sum_c / static_cast<double>(rob->rows.size());
+  CHECK(std::abs(mean_c - 1.0) < 0.12);
+  CHECK(max_dev < 0.5);
+}
+
+TEST_CASE("frontier FIML robust score test: equality release runs and is finite") {
+  auto h = build_mean("f =~ x1 + c*x2 + c*x3 + x4");
+  std::mt19937 rng(99u);
+  const auto raw = gaussian_cfa_raw(rng, 800, 9);
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1000;
+  auto est = magmaan::test::fit_fiml(h.pt, h.rep, raw, opts);
+  REQUIRE(est.has_value());
+
+  auto rob = inf::frontier::score_tests_fiml_robust(h.pt, h.rep, raw, *est);
+  REQUIRE(rob.has_value());
+  REQUIRE(rob->rows.size() > 0);
+  for (const auto& r : rob->rows) {
+    CHECK(r.df == 1);
+    CHECK(std::isfinite(r.scaling_factor));
+    CHECK(r.scaling_factor > 0.0);
+    CHECK(std::isfinite(r.mi_scaled));
+  }
+
+  // Single-group guard (v1): the FIML robust tier rejects multi-block raw.
+  magmaan::data::RawData two_block = raw;
+  two_block.X.push_back(raw.X[0]);
+  two_block.mask.push_back(raw.mask[0]);
+  auto rob_mg = inf::frontier::score_tests_fiml_robust(h.pt, h.rep, two_block,
+                                                       *est);
+  CHECK_FALSE(rob_mg.has_value());
 }
