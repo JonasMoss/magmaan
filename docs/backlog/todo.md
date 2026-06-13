@@ -91,20 +91,22 @@ complete-data ML (both breads), continuous ULS/GLS/WLS/DWLS (the
 meat), and — as
 `estimate::frontier::{modification_indices,score_tests}_{ordinal,mixed_ordinal}_robust`
 — all-ordinal ULS/DWLS/WLS and mixed DWLS/WLS over the polychoric NACOV meat.
-The continuous ML/LS and ordinal/mixed-ordinal tiers are single- or multi-group;
-FIML/MLR remains single-group; a df>1 total-release (`score_tests_robust_joint`,
-mean-scaled + imhof mixture) covers joint releases.
+The continuous ML/LS, ordinal/mixed-ordinal, and FIML/MLR tiers are single- or
+multi-group; a df>1 total-release (`score_tests_robust_joint`, mean-scaled +
+imhof mixture) covers joint releases.
 Validated by `tests/unit/score_robust_test.cpp`,
 `tests/golden/score_robust_golden_test.cpp` fixtures 0006-0012, the R-internals
 oracle from `tests/tools/regen_robust_score.R`, and the advisory
 `tests/checks/robust_score/`. Remaining work:
 
 - **Done 2026-06-13.** Multi-group robust MI/score tests now cover the
-  continuous ML/LS tiers and the ordinal/mixed-ordinal tiers. The ordinal guard
-  in `estimate::frontier` is removed after validating the same per-block `n_b/N`
-  sandwich over polychoric NACOV with the two-group WLSMV golden 0012, plus
-  exact WLS reductions for all-ordinal MI/score and mixed-ordinal MI/score.
-  FIML/MLR robust score tests intentionally remain single-group v1.
+  continuous ML/LS tiers, the ordinal/mixed-ordinal tiers, and the FIML/MLR tier.
+  The ordinal guard in `estimate::frontier` and the FIML guard in
+  `inference::frontier` are removed after validating the same block-stacked
+  nuisance projection: per-block `n_b/N` sandwich over polychoric NACOV with the
+  two-group WLSMV golden 0012, exact WLS reductions for all-ordinal MI/score and
+  mixed-ordinal MI/score, and a two-group FIML raw/pack parity regression over
+  unequal raw block sizes and MCAR patterns.
 - **S, only-when-needed.** `api::frontier` / R wrappers for the LS and ordinal
   robust tiers (the api `Fit` does not currently carry the LS estimation
   weight; the `estimate::frontier` / `inference::frontier` functions are the

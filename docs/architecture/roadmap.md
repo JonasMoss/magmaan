@@ -184,8 +184,10 @@ golden `parTable()` fixtures.
   the FIML score is `-½·Σ_i scores_i`, the unscaled `mi` equals the non-robust
   FIML MI and the per-direction `c = gᵀB1g/gᵀA1g` is the Huber-White correction,
   → 1 under a correct normal model. Observed bread only (no expected-info FIML
-  analogue), no H1 EM needed (two data passes per candidate, no EM), single group
-  (v1). FIML has no batch augmentation, so this uses the one-by-one robust sweep.
+  analogue), no H1 EM needed (two data passes per candidate, no EM), single- or
+  multi-group via the same block-stacked Hessian / casewise-score layout used by
+  `fiml_robust_mlr`. FIML has no batch augmentation, so this uses the one-by-one
+  robust sweep.
   Oracle: FIML/MLR release-score fixture 0009 (`information.observed` /
   `lavScores`, θ-space assembly, c ≈ 2.16 on heavy-tailed + MCAR data) plus a
   non-robust-`mi` match and a c → 1 normal-data anchor in
@@ -200,8 +202,7 @@ golden `parTable()` fixtures.
   a heavy-tailed empirical case, a GLS multi-group reduction, and the cross-group
   loading-invariance golden 0010 — the latter pins the `n_b/N` weighting that
   within-group reductions cannot (`A1 = lavInspect(fit,"information")` equals
-  `Σ_b (n_b/N)·Δ_b'V_bΔ_b` exactly, c ≈ 1.24). FIML robust remains
-  single-group.
+  `Σ_b (n_b/N)·Δ_b'V_bΔ_b` exactly, c ≈ 1.24).
 - Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
   (2026-06-13): the `require_single_group_ordinal` guard in
   `estimate::frontier` is removed; the ordinal sandwich already loops over

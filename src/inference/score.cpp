@@ -1882,14 +1882,6 @@ score_tests_robust(spec::LatentStructure pt,
 
 namespace {
 
-post_expected<void> require_single_group_raw(const RawData& raw) {
-  if (raw.X.size() != 1) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "FIML robust score tests: only single-group models are supported (v1)"));
-  }
-  return {};
-}
-
 post_expected<ScoreTestTable>
 modification_indices_fiml_robust_impl(spec::LatentStructure pt,
                                       const model::MatrixRep& rep,
@@ -1897,9 +1889,6 @@ modification_indices_fiml_robust_impl(spec::LatentStructure pt,
                                       const Estimates& est,
                                       const ModificationIndexOptions& options,
                                       const estimate::fiml::FIMLPack& pack) {
-  if (auto e = require_single_group_raw(raw); !e.has_value()) {
-    return std::unexpected(e.error());
-  }
   auto work = prepare_modification_index_model(std::move(pt), rep, options);
   if (!work.has_value()) return std::unexpected(work.error());
   if (auto e = validate_fiml_fixed_x_missing_policy(work->pt, raw);
@@ -1957,9 +1946,6 @@ score_tests_fiml_robust(spec::LatentStructure pt,
                         const Estimates& est,
                         FIML discrepancy) {
   (void)discrepancy;
-  if (auto e = require_single_group_raw(raw); !e.has_value()) {
-    return std::unexpected(e.error());
-  }
   if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
@@ -1978,9 +1964,6 @@ score_tests_fiml_robust(spec::LatentStructure pt,
                         const estimate::fiml::FIMLPack& pack,
                         FIML discrepancy) {
   (void)discrepancy;
-  if (auto e = require_single_group_raw(raw); !e.has_value()) {
-    return std::unexpected(e.error());
-  }
   if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
