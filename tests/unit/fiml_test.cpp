@@ -16,6 +16,7 @@
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/fit.hpp"
 #include "magmaan/inference/inference.hpp"
+#include "magmaan/inference/score.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/measures/fit_measures.hpp"
@@ -36,6 +37,36 @@ struct BuiltModel {
   std::unique_ptr<magmaan::model::MatrixRep> rep;
   magmaan::model::ModelEvaluator ev;
 };
+
+bool same_or_both_nan(double a, double b) {
+  return (std::isnan(a) && std::isnan(b)) || a == b;
+}
+
+void check_same_score_table(const magmaan::inference::ScoreTestTable& a,
+                            const magmaan::inference::ScoreTestTable& b) {
+  REQUIRE(a.rows.size() == b.rows.size());
+  for (std::size_t i = 0; i < a.rows.size(); ++i) {
+    const auto& x = a.rows[i];
+    const auto& y = b.rows[i];
+    CHECK(x.candidate.kind == y.candidate.kind);
+    CHECK(x.candidate.row == y.candidate.row);
+    CHECK(x.candidate.op == y.candidate.op);
+    CHECK(x.candidate.lhs_var == y.candidate.lhs_var);
+    CHECK(x.candidate.rhs_var == y.candidate.rhs_var);
+    CHECK(x.candidate.group == y.candidate.group);
+    CHECK(same_or_both_nan(x.score, y.score));
+    CHECK(same_or_both_nan(x.information, y.information));
+    CHECK(same_or_both_nan(x.mi, y.mi));
+    CHECK(x.df == y.df);
+    CHECK(same_or_both_nan(x.p_value, y.p_value));
+    CHECK(same_or_both_nan(x.epc, y.epc));
+    CHECK(same_or_both_nan(x.epc_lv, y.epc_lv));
+    CHECK(same_or_both_nan(x.epc_all, y.epc_all));
+    CHECK(same_or_both_nan(x.v_eff, y.v_eff));
+    CHECK(same_or_both_nan(x.mi_scaled, y.mi_scaled));
+    CHECK(same_or_both_nan(x.scaling_factor, y.scaling_factor));
+  }
+}
 
 BuiltModel build_mean_model(std::string_view src, int n_groups = 1) {
   auto fp = magmaan::parse::Parser::parse(src);
@@ -965,6 +996,23 @@ TEST_CASE("nested FIML restriction map: NT gamma gives all-one eigenvalues") {
       magmaan::robust::SatorraAMethod::Exact);
   REQUIRE_MESSAGE(r.has_value(),
       "nested FIML NT failed: " << (r.has_value() ? "" : r.error().detail));
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+  auto sat_h1 = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack);
+  REQUIRE(sat_h1.has_value());
+  auto r_pack = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1,
+      *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/5.0, /*T_H1=*/2.0, *df0, *df1,
+      *pack, *sat_h1,
+      magmaan::robust::GammaSource::NT,
+      magmaan::robust::SatorraAMethod::Exact);
+  REQUIRE_MESSAGE(r_pack.has_value(),
+      "nested FIML NT pack failed: " <<
+          (r_pack.has_value() ? "" : r_pack.error().detail));
+  CHECK(r->T_scaled == r_pack->T_scaled);
+  CHECK(r->scale_c == r_pack->scale_c);
+  CHECK(r->eigenvalues == r_pack->eigenvalues);
   REQUIRE(r->eigenvalues.size() == 1);
   CHECK(r->eigenvalues(0) == doctest::Approx(1.0).epsilon(1e-10));
   CHECK(r->scale_c == doctest::Approx(1.0).epsilon(1e-10));
@@ -1609,4 +1657,51 @@ TEST_CASE("FIML pack overloads reproduce the raw-data paths exactly") {
       *built.pt, *built.rep, raw, est, *df_or, fx_raw->chi2, *pack, *h1);
   REQUIRE(sp_pack.has_value());
   CHECK(sp_raw->eigvals == sp_pack->eigvals);
+
+  auto mi_raw = magmaan::inference::modification_indices_fiml(
+      *built.pt, *built.rep, raw, est);
+  REQUIRE(mi_raw.has_value());
+  auto mi_pack = magmaan::inference::modification_indices_fiml(
+      *built.pt, *built.rep, raw, est, *pack);
+  REQUIRE(mi_pack.has_value());
+  check_same_score_table(*mi_raw, *mi_pack);
+
+  magmaan::inference::ModificationIndexOptions mi_opts;
+  mi_opts.candidates =
+      magmaan::inference::ScoreCandidateSet::WithAbsentRows;
+  auto rmi_raw = magmaan::inference::frontier::modification_indices_fiml_robust(
+      *built.pt, *built.rep, raw, est, mi_opts);
+  REQUIRE(rmi_raw.has_value());
+  auto rmi_pack = magmaan::inference::frontier::modification_indices_fiml_robust(
+      *built.pt, *built.rep, raw, est, *pack, mi_opts);
+  REQUIRE(rmi_pack.has_value());
+  check_same_score_table(*rmi_raw, *rmi_pack);
+
+  auto eq_built = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");
+  Eigen::VectorXd eq_theta0(static_cast<Eigen::Index>(eq_built.ev.n_free()));
+  eq_theta0.setConstant(0.55);
+  const auto eq_raw = model_missing_raw(eq_built, eq_theta0, {160});
+  auto eq_pack = magmaan::estimate::fiml::fiml_pack(eq_raw);
+  REQUIRE(eq_pack.has_value());
+  auto eq_est = magmaan::estimate::fit_fiml(
+      *eq_built.pt, *eq_built.rep, eq_raw, eq_theta0,
+      magmaan::estimate::fiml::FIML{},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE(eq_est.has_value());
+
+  auto st_raw = magmaan::inference::score_tests_fiml(
+      *eq_built.pt, *eq_built.rep, eq_raw, *eq_est);
+  REQUIRE(st_raw.has_value());
+  auto st_pack = magmaan::inference::score_tests_fiml(
+      *eq_built.pt, *eq_built.rep, eq_raw, *eq_est, *eq_pack);
+  REQUIRE(st_pack.has_value());
+  check_same_score_table(*st_raw, *st_pack);
+
+  auto rst_raw = magmaan::inference::frontier::score_tests_fiml_robust(
+      *eq_built.pt, *eq_built.rep, eq_raw, *eq_est);
+  REQUIRE(rst_raw.has_value());
+  auto rst_pack = magmaan::inference::frontier::score_tests_fiml_robust(
+      *eq_built.pt, *eq_built.rep, eq_raw, *eq_est, *eq_pack);
+  REQUIRE(rst_pack.has_value());
+  check_same_score_table(*rst_raw, *rst_pack);
 }

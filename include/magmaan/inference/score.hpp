@@ -22,6 +22,7 @@ using estimate::build_eq_constraints;
 using estimate::EqConstraints;
 using estimate::resolve_fixed_x_from_sample;
 using estimate::fiml::FIML;
+using estimate::fiml::FIMLPack;
 using estimate::fiml::fiml_start_sample_stats;
 using estimate::fiml::validate_fiml_fixed_x_missing_policy;
 
@@ -138,7 +139,26 @@ modification_indices_fiml(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const RawData& raw,
                           const Estimates& est,
+                          const FIMLPack& pack,
+                          FIML discrepancy = {},
+                          double h_step = 1e-4);
+
+post_expected<ScoreTestTable>
+modification_indices_fiml(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
                           const ModificationIndexOptions& options,
+                          FIML discrepancy = {},
+                          double h_step = 1e-4);
+
+post_expected<ScoreTestTable>
+modification_indices_fiml(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          const ModificationIndexOptions& options,
+                          const FIMLPack& pack,
                           FIML discrepancy = {},
                           double h_step = 1e-4);
 
@@ -161,6 +181,15 @@ score_tests_fiml(spec::LatentStructure pt,
                  const model::MatrixRep& rep,
                  const RawData& raw,
                  const Estimates& est,
+                 FIML discrepancy = {},
+                 double h_step = 1e-4);
+
+post_expected<ScoreTestTable>
+score_tests_fiml(spec::LatentStructure pt,
+                 const model::MatrixRep& rep,
+                 const RawData& raw,
+                 const Estimates& est,
+                 const FIMLPack& pack,
                  FIML discrepancy = {},
                  double h_step = 1e-4);
 
@@ -319,10 +348,27 @@ modification_indices_fiml_robust(spec::LatentStructure pt,
                                  FIML discrepancy = {});
 
 post_expected<ScoreTestTable>
+modification_indices_fiml_robust(spec::LatentStructure pt,
+                                 const model::MatrixRep& rep,
+                                 const RawData& raw,
+                                 const Estimates& est,
+                                 const FIMLPack& pack,
+                                 const ModificationIndexOptions& options = {},
+                                 FIML discrepancy = {});
+
+post_expected<ScoreTestTable>
 score_tests_fiml_robust(spec::LatentStructure pt,
                         const model::MatrixRep& rep,
                         const RawData& raw,
                         const Estimates& est,
+                        FIML discrepancy = {});
+
+post_expected<ScoreTestTable>
+score_tests_fiml_robust(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const RawData& raw,
+                        const Estimates& est,
+                        const FIMLPack& pack,
                         FIML discrepancy = {});
 
 // Per-direction robust statistic worker, shared with the ordinal robust score

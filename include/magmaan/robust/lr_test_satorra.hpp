@@ -212,4 +212,25 @@ lr_test_satorra2000_fiml_from_data(
     SatorraAMethod                   a_method = SatorraAMethod::Exact,
     double                           h_step = 1e-4);
 
+post_expected<LRSatorra2000Result>
+lr_test_satorra2000_fiml_from_data(
+    const spec::LatentStructure&     pt_H1,
+    const model::MatrixRep&          rep_H1,
+    const Eigen::VectorXd&           theta_H1_full,
+    const EqConstraints&             K_H1,
+    const spec::LatentStructure&     pt_H0,
+    const model::MatrixRep&          rep_H0,
+    const Eigen::VectorXd&           theta_H0_full,
+    const EqConstraints&             K_H0,
+    const data::RawData&             raw,
+    double                           T_H0,
+    double                           T_H1,
+    int                              df_H0,
+    int                              df_H1,
+    const estimate::fiml::FIMLPack&  pack,
+    const estimate::fiml::FIMLH1&    h1,
+    GammaSource                      gamma = GammaSource::Empirical,
+    SatorraAMethod                   a_method = SatorraAMethod::Exact,
+    double                           h_step = 1e-4);
+
 }  // namespace magmaan::robust

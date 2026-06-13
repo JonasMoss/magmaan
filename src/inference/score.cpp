@@ -476,6 +476,7 @@ evaluate_augmented_fiml(const spec::LatentStructure& pt,
                         const model::MatrixRep& rep,
                         const RawData& raw,
                         const Estimates& est,
+                        const estimate::fiml::FIMLPack& pack,
                         FIML discrepancy,
                         double h_step,
                         Eigen::VectorXd& score_full,
@@ -484,9 +485,7 @@ evaluate_augmented_fiml(const spec::LatentStructure& pt,
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "score tests FIML: h_step must be > 0"));
   }
-  auto cache = discrepancy.prepare(raw);
-  if (!cache.has_value()) return std::unexpected(fit_to_post(cache.error()));
-  const double n_total = static_cast<double>(cache->n_total);
+  const double n_total = static_cast<double>(pack.cache.n_total);
   if (!(n_total > 0.0)) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "score tests FIML: non-positive total n"));
@@ -498,7 +497,7 @@ evaluate_augmented_fiml(const spec::LatentStructure& pt,
       -> post_expected<Eigen::VectorXd> {
     auto eval = ev->evaluate(theta, true, true);
     if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
-    auto vg = discrepancy.value_gradient(raw, *cache, eval->moments,
+    auto vg = discrepancy.value_gradient(raw, pack.cache, eval->moments,
                                          eval->J_sigma, eval->J_mu);
     if (!vg.has_value()) return std::unexpected(fit_to_post(vg.error()));
     return vg->gradient;
@@ -523,6 +522,21 @@ evaluate_augmented_fiml(const spec::LatentStructure& pt,
   }
   info_full = 0.5 * (info_full + info_full.transpose());
   return {};
+}
+
+post_expected<void>
+evaluate_augmented_fiml(const spec::LatentStructure& pt,
+                        const model::MatrixRep& rep,
+                        const RawData& raw,
+                        const Estimates& est,
+                        FIML discrepancy,
+                        double h_step,
+                        Eigen::VectorXd& score_full,
+                        Eigen::MatrixXd& info_full) {
+  auto pack = estimate::fiml::fiml_pack(raw);
+  if (!pack.has_value()) return std::unexpected(fit_to_post(pack.error()));
+  return evaluate_augmented_fiml(pt, rep, raw, est, *pack, discrepancy, h_step,
+                                 score_full, info_full);
 }
 
 template <class Evaluator>
@@ -925,9 +939,13 @@ struct FimlEvaluator {
   const RawData& raw;
   FIML discrepancy;
   double h_step;
+  const estimate::fiml::FIMLPack* pack = nullptr;
 
   post_expected<spec::LatentStructure>
   make_augmented(spec::LatentStructure pt, std::size_t row) const {
+    if (pack != nullptr) {
+      return with_fixed_row_freed(std::move(pt), row, pack->start_stats, rep);
+    }
     auto start_samp = fiml_start_sample_stats(raw);
     if (!start_samp.has_value()) return std::unexpected(fit_to_post(start_samp.error()));
     return with_fixed_row_freed(std::move(pt), row, *start_samp, rep);
@@ -936,6 +954,10 @@ struct FimlEvaluator {
   post_expected<void>
   evaluate(const spec::LatentStructure& pt, const Estimates& est,
            Eigen::VectorXd& score, Eigen::MatrixXd& info) const {
+    if (pack != nullptr) {
+      return evaluate_augmented_fiml(pt, rep, raw, est, *pack, discrepancy,
+                                     h_step, score, info);
+    }
     return evaluate_augmented_fiml(pt, rep, raw, est, discrepancy, h_step,
                                    score, info);
   }
@@ -1307,7 +1329,35 @@ modification_indices_fiml(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const RawData& raw,
                           const Estimates& est,
+                          const estimate::fiml::FIMLPack& pack,
+                          FIML discrepancy,
+                          double h_step) {
+  ModificationIndexOptions options;
+  return modification_indices_fiml(std::move(pt), rep, raw, est, options, pack,
+                                   discrepancy, h_step);
+}
+
+post_expected<ScoreTestTable>
+modification_indices_fiml(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
                           const ModificationIndexOptions& options,
+                          FIML discrepancy,
+                          double h_step) {
+  auto pack = estimate::fiml::fiml_pack(raw);
+  if (!pack.has_value()) return std::unexpected(fit_to_post(pack.error()));
+  return modification_indices_fiml(std::move(pt), rep, raw, est, options, *pack,
+                                   discrepancy, h_step);
+}
+
+post_expected<ScoreTestTable>
+modification_indices_fiml(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          const ModificationIndexOptions& options,
+                          const estimate::fiml::FIMLPack& pack,
                           FIML discrepancy,
                           double h_step) {
   auto work = prepare_modification_index_model(std::move(pt), rep, options);
@@ -1317,13 +1367,11 @@ modification_indices_fiml(spec::LatentStructure pt,
       !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  auto start_samp = fiml_start_sample_stats(raw);
-  if (!start_samp.has_value()) return std::unexpected(fit_to_post(start_samp.error()));
-  if (auto e = resolve_fixed_x_from_sample(work->pt, work->rep, *start_samp);
+  if (auto e = resolve_fixed_x_from_sample(work->pt, work->rep, pack.start_stats);
       !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  FimlEvaluator ev{work->rep, raw, discrepancy, h_step};
+  FimlEvaluator ev{work->rep, raw, discrepancy, h_step, &pack};
   auto table = fixed_parameter_tests(work->pt, work->rep, est, ev);
   if (!table.has_value()) return std::unexpected(table.error());
   if (auto e = fill_standardized_epc(*table, work->pt, work->rep, est);
@@ -1340,15 +1388,28 @@ score_tests_fiml(spec::LatentStructure pt,
                  const Estimates& est,
                  FIML discrepancy,
                  double h_step) {
+  auto pack = estimate::fiml::fiml_pack(raw);
+  if (!pack.has_value()) return std::unexpected(fit_to_post(pack.error()));
+  return score_tests_fiml(std::move(pt), rep, raw, est, *pack, discrepancy,
+                          h_step);
+}
+
+post_expected<ScoreTestTable>
+score_tests_fiml(spec::LatentStructure pt,
+                 const model::MatrixRep& rep,
+                 const RawData& raw,
+                 const Estimates& est,
+                 const estimate::fiml::FIMLPack& pack,
+                 FIML discrepancy,
+                 double h_step) {
   if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  auto start_samp = fiml_start_sample_stats(raw);
-  if (!start_samp.has_value()) return std::unexpected(fit_to_post(start_samp.error()));
-  if (auto e = resolve_fixed_x_from_sample(pt, rep, *start_samp); !e.has_value()) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, pack.start_stats);
+      !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  FimlEvaluator ev{rep, raw, discrepancy, h_step};
+  FimlEvaluator ev{rep, raw, discrepancy, h_step, &pack};
   return equality_release_tests(std::move(pt), rep, est, ev);
 }
 
@@ -1834,7 +1895,8 @@ modification_indices_fiml_robust_impl(spec::LatentStructure pt,
                                       const model::MatrixRep& rep,
                                       const RawData& raw,
                                       const Estimates& est,
-                                      const ModificationIndexOptions& options) {
+                                      const ModificationIndexOptions& options,
+                                      const estimate::fiml::FIMLPack& pack) {
   if (auto e = require_single_group_raw(raw); !e.has_value()) {
     return std::unexpected(e.error());
   }
@@ -1844,9 +1906,6 @@ modification_indices_fiml_robust_impl(spec::LatentStructure pt,
       !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
-  auto pack_or = estimate::fiml::fiml_pack(raw);
-  if (!pack_or.has_value()) return std::unexpected(fit_to_post(pack_or.error()));
-  estimate::fiml::FIMLPack pack = std::move(*pack_or);
   if (auto e = resolve_fixed_x_from_sample(work->pt, work->rep, pack.start_stats);
       !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
@@ -1872,8 +1931,23 @@ modification_indices_fiml_robust(spec::LatentStructure pt,
                                  const ModificationIndexOptions& options,
                                  FIML discrepancy) {
   (void)discrepancy;
+  auto pack = estimate::fiml::fiml_pack(raw);
+  if (!pack.has_value()) return std::unexpected(fit_to_post(pack.error()));
   return modification_indices_fiml_robust_impl(std::move(pt), rep, raw, est,
-                                               options);
+                                               options, *pack);
+}
+
+post_expected<ScoreTestTable>
+modification_indices_fiml_robust(spec::LatentStructure pt,
+                                 const model::MatrixRep& rep,
+                                 const RawData& raw,
+                                 const Estimates& est,
+                                 const estimate::fiml::FIMLPack& pack,
+                                 const ModificationIndexOptions& options,
+                                 FIML discrepancy) {
+  (void)discrepancy;
+  return modification_indices_fiml_robust_impl(std::move(pt), rep, raw, est,
+                                               options, pack);
 }
 
 post_expected<ScoreTestTable>
@@ -1892,6 +1966,24 @@ score_tests_fiml_robust(spec::LatentStructure pt,
   auto pack_or = estimate::fiml::fiml_pack(raw);
   if (!pack_or.has_value()) return std::unexpected(fit_to_post(pack_or.error()));
   estimate::fiml::FIMLPack pack = std::move(*pack_or);
+  return score_tests_fiml_robust(std::move(pt), rep, raw, est, pack,
+                                 discrepancy);
+}
+
+post_expected<ScoreTestTable>
+score_tests_fiml_robust(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const RawData& raw,
+                        const Estimates& est,
+                        const estimate::fiml::FIMLPack& pack,
+                        FIML discrepancy) {
+  (void)discrepancy;
+  if (auto e = require_single_group_raw(raw); !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
   if (auto e = resolve_fixed_x_from_sample(pt, rep, pack.start_stats);
       !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
