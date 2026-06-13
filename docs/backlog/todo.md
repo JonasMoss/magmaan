@@ -213,7 +213,7 @@ decisions in the simulation backlog.
   structure (use `model_spec(..., meanstructure = TRUE)` + `fit_fiml`);
   multi-group FIML fits need explicit start/convergence care; and nonlinear
   equality tangent-space support plus pairwise-data FMG remain deferred.
-- **Ordinal/polychoric FMG (`papers/fiml-fmg/` Paper 2).** Core gate **landed
+- **Ordinal/polychoric FMG (`papers/ordinal-fmg/` Paper 2).** Core gate **landed
   2026-06-13** (commit b8c6dcb): `fmg_tests_ordinal()` / `fmg_tests_mixed_ordinal()`
   apply the FMG eigenvalue-tail transforms to the `robust_ordinal()` /
   `robust_mixed_ordinal()` polychoric UGamma spectrum (`eigvals` + `chisq_standard`
@@ -226,11 +226,24 @@ decisions in the simulation backlog.
   configural-vs-metric invariance, with lavaan WLSMV parity in
   `r-package/examples/nested_test_ordinal.R`. What Paper 2 still lacks, to
   write the paper:
-  - **L, paper sim harness.** A paper-local runner: an ordinal measurement-
-    invariance population (threshold + loading invariance across groups), an
-    ordinal data generator (categories × underlying skew × N), DWLS/WLS GOF +
-    nested fits, and the naive-WLS vs SB vs FMG-winner (pEBA/pOLS/PALL) rejection
-    grid. Mirror `papers/fiml-fmg/` Paper-1 scaffold.
+  - **Scaffold + plumbing landed 2026-06-13.** The paper-local harness exists at
+    `papers/ordinal-fmg/` (its own nested git repo, gitignored by the outer
+    repo), mirroring the `papers/fiml-fmg/` scaffold. It carries the single-group
+    GOF arm (one-factor ordinal CFA; truth = correct vs omitted residual
+    covariance) and the two-group nested arm (configural-vs-metric via
+    `nestedTest(method = "satorra.2000")`; truth = invariant vs group-2 loading
+    non-invariance) over a {normal, vm_mod, vm_sev} × cats {2,3,5} × N grid.
+    Non-normality enters the underlying continuous variates via the new
+    `sim_vm_*` (Vale-Maurelli/Fleishman) R surface, then thresholding; the
+    enabling core addition was wiring `calibrate_vale_maurelli` /
+    `simulate_vale_maurelli_matrix` into R (`sim_vm_calibrate/draw/batch`, with
+    `r-package/examples/sim_vm.R`). Smoke-verified: full pipeline runs, lavaan
+    WLSMV parity holds (UGamma spectrum ~3.8e-9, DWLS chi-square ~1e-6 after the
+    documented `(N-G)/N` ordinal-chi-square rescale). Remaining (author, in the
+    paper repo's `dev/todo.md`): the full `just parity` run, tuning the power
+    levers off saturation, and the directional calibration write-up. NB the smoke
+    shows ordinal DWLS can *under*-reject (scale c < 1), unlike Paper 1's FIML
+    over-rejection.
   - **Done 2026-06-13.** Direct ordinal UGamma-spectrum oracle: the paper
     parity pipeline now emits an explicit `ordinal_wlsmv_ugamma_spectrum_maxabs`
     row comparing magmaan's public DWLS + `robust_ordinal()` eigenvalues against
@@ -238,8 +251,8 @@ decisions in the simulation backlog.
     compares `robust_ordinal().eigvals` to lavaan's stored UGamma eigenvalues in
     `tests/golden/ordinal_golden_test.cpp`; the paper row makes that provenance
     visible alongside the FIML parity table.
-  - **S, author decision.** Single paper with a FIML + polychoric pair of parts,
-    or a separate `papers/<slug>/` folder.
+  - **Decided 2026-06-13.** Separate `papers/ordinal-fmg/` folder (not a second
+    part of `papers/fiml-fmg/`).
   - **Only-when-needed.** Multi-group ordinal GOF FMG (lift the single-group v1
     cap in the `fmg_tests_ordinal()` R wrapper), and a C++ methods-developer
     convenience entry point — not needed for the paper, since the
