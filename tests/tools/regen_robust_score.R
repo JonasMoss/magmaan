@@ -294,14 +294,22 @@ cat(sprintf("wrote %s\n  X2_nt=%.6f  c=%.6f  mi_scaled=%.6f  (lavaan %s)\n",
 # group.equal = "loadings"), so both lavaan and magmaan carry releasable
 # constraints; magmaan builds the same model from the stored syntax with
 # n_groups = 2.
+as_group_list <- function(x) {
+  if (is.list(x) && is.null(dim(x))) x else list(x)
+}
+
 robust_score_assemble_mg <- function(fit) {
   X2_nt <- suppressWarnings(lavTestScore(fit)$uni$X2[1])
   A1 <- lavInspect(fit, "information")  # pooled, n_b/N-weighted, full θ-space
-  D  <- lavInspect(fit, "delta")
-  V  <- lavInspect(fit, "wls.v")
-  Gm <- lavInspect(fit, "gamma")
+  D  <- as_group_list(lavInspect(fit, "delta"))
+  V  <- as_group_list(lavInspect(fit, "wls.v"))
+  Gm <- as_group_list(lavInspect(fit, "gamma"))
   N  <- nobs(fit)
   nb <- lavInspect(fit, "nobs")
+  if (length(D) != length(V) || length(D) != length(Gm) ||
+      length(D) != length(nb)) {
+    stop("multi-group robust score oracle: delta/wls.v/gamma/nobs block mismatch")
+  }
   B1 <- matrix(0, nrow(A1), ncol(A1))
   for (b in seq_along(D))
     B1 <- B1 + (nb[b] / N) * (t(D[[b]]) %*% V[[b]] %*% Gm[[b]] %*% V[[b]] %*% D[[b]])
@@ -430,3 +438,94 @@ write_json(payload_j, out_j, pretty = TRUE, auto_unbox = TRUE,
 cat(sprintf("wrote %s\n  T=%.6f  df=%d  c=%.6f  mi_scaled=%.6f  p_mix=%.6f  (lavaan %s)\n",
             out_j, rs_j$T_nt, rs_j$df, rs_j$scaling, rs_j$mi_scaled,
             rs_j$p_mixture, installed))
+
+# ── 0012: two-group WLSMV ordinal, cross-group loading release ────────────────
+# Same n_b/N sandwich-pooling shape as 0010, but over lavaan's categorical
+# [thresholds ; polychorics] moment metric. Free per-group thresholds are kept
+# by using plain threshold rows in the model string; only the loading labels are
+# tied across groups by explicit `==` rows.
+set.seed(20260613L)
+n_og1 <- 600L
+n_og2 <- 700L
+lam_og1 <- c(0.92, 0.82, 0.74, 0.70)
+lam_og2 <- c(0.88, 0.70, 0.84, 0.62)
+eta_og1 <- rnorm(n_og1)
+eta_og2 <- rnorm(n_og2)
+Yog1 <- sapply(seq_along(lam_og1), function(j)
+  lam_og1[j] * eta_og1 + sqrt(1 - lam_og1[j]^2) * rnorm(n_og1))
+Yog2 <- sapply(seq_along(lam_og2), function(j)
+  lam_og2[j] * eta_og2 + sqrt(1 - lam_og2[j]^2) * rnorm(n_og2))
+th_og1 <- list(c(-0.75, 0.25), c(-0.55, 0.60),
+               c(-0.90, 0.10), c(-0.50, 0.70))
+th_og2 <- list(c(-0.55, 0.50), c(-0.80, 0.30),
+               c(-0.65, 0.40), c(-0.95, 0.20))
+Xog1 <- matrix(NA_integer_, n_og1, 4L)
+Xog2 <- matrix(NA_integer_, n_og2, 4L)
+for (j in seq_len(4L)) {
+  Xog1[, j] <- 1L + (Yog1[, j] > th_og1[[j]][1]) +
+    (Yog1[, j] > th_og1[[j]][2])
+  Xog2[, j] <- 1L + (Yog2[, j] > th_og2[[j]][1]) +
+    (Yog2[, j] > th_og2[[j]][2])
+}
+colnames(Xog1) <- paste0("x", 1:4)
+colnames(Xog2) <- paste0("x", 1:4)
+dat_og1 <- as.data.frame(lapply(as.data.frame(Xog1), ordered))
+dat_og2 <- as.data.frame(lapply(as.data.frame(Xog2), ordered))
+dat_og1$g <- "g1"
+dat_og2$g <- "g2"
+dat_og <- rbind(dat_og1, dat_og2)
+
+model_ord_mg <- paste(
+  "f =~ x1 + c(a2,b2)*x2 + c(a3,b3)*x3 + c(a4,b4)*x4",
+  "x1 | t1 + t2",
+  "x2 | t1 + t2",
+  "x3 | t1 + t2",
+  "x4 | t1 + t2",
+  "x1 ~*~ 1*x1",
+  "x2 ~*~ 1*x2",
+  "x3 ~*~ 1*x3",
+  "x4 ~*~ 1*x4",
+  "a2 == b2", "a3 == b3", "a4 == b4",
+  sep = "\n")
+
+fit_ord_mg <- sem(model_ord_mg, data = dat_og, group = "g",
+                  estimator = "WLSMV", ordered = colnames(Xog1))
+if (!lavInspect(fit_ord_mg, "converged"))
+  stop("multi-group ordinal robust score oracle fit did not converge")
+rs_ord_mg <- robust_score_assemble_mg(fit_ord_mg)
+if (!is.finite(rs_ord_mg$scaling) ||
+    abs(rs_ord_mg$scaling - 1.0) <= 0.02) {
+  stop(sprintf("multi-group ordinal robust score c is not load-bearing: %g",
+               rs_ord_mg$scaling))
+}
+
+payload_ord_mg <- list(
+  `_meta` = list(
+    format_version = 1L,
+    fixture_kind = "score_robust",
+    corpus_id = "0012_robust_release_mg_ordinal",
+    tool = "lavaan internals (R-assembled): information/delta/wls.v/gamma/ceq.JAC",
+    lavaan_version = installed,
+    note = paste("two-group WLSMV ordinal, cross-group loading-invariance",
+                 "release; A1 = pooled information,",
+                 "B1 = Σ_b (n_b/N) Δ'VΓ̂VΔ over categorical moments")),
+  input = model_ord_mg,
+  estimator = "WLSMV",
+  bread = "expected",
+  ordered = colnames(Xog1),
+  group_var = "g",
+  group_labels = c("g1", "g2"),
+  n_obs = c(n_og1, n_og2),
+  raw = list(unname(Xog1), unname(Xog2)),
+  score_tests_robust = list(rows = list(list(
+    lhs = "a2", op = "==", rhs = "b2", df = 1L,
+    mi = rs_ord_mg$X2_nt, scaling_factor = rs_ord_mg$scaling,
+    mi_scaled = rs_ord_mg$mi_scaled))))
+
+out_ord_mg <- file.path(
+  fixtures, "0012_robust_release_mg_ordinal.score_robust.json")
+write_json(payload_ord_mg, out_ord_mg, pretty = TRUE, auto_unbox = TRUE,
+           null = "null", na = "null", digits = NA)
+cat(sprintf("wrote %s\n  X2_nt=%.6f  c=%.6f  mi_scaled=%.6f  (lavaan %s)\n",
+            out_ord_mg, rs_ord_mg$X2_nt, rs_ord_mg$scaling,
+            rs_ord_mg$mi_scaled, installed))

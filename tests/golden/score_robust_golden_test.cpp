@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <vector>
 
 #include <Eigen/Core>
 #include <nlohmann/json.hpp>
@@ -320,6 +321,60 @@ TEST_CASE("robust multi-group release-score matches the lavaan-internals oracle 
   CHECK(std::abs(got.mi_scaled - mis_want) <
         5e-3 * (1.0 + std::abs(mis_want)));
   CHECK(got.scaling_factor > 1.1);  // genuinely non-trivial (c ≈ 1.24)
+}
+
+TEST_CASE("robust multi-group ordinal release-score matches the lavaan-internals oracle (WLSMV)") {
+  const std::string path =
+      magmaan::test::fixtures_dir() +
+      "/score/0012_robust_release_mg_ordinal.score_robust.json";
+  auto raw_json = magmaan::test::read_fixture(path);
+  REQUIRE(raw_json.has_value());
+  auto exp = nlohmann::json::parse(*raw_json, nullptr, false);
+  REQUIRE_FALSE(exp.is_discarded());
+
+  const std::string src = exp["input"].get<std::string>();
+  auto fp = magmaan::parse::Parser::parse(src);
+  REQUIRE(fp.has_value());
+  magmaan::spec::BuildOptions bo;
+  bo.n_groups = static_cast<std::int32_t>(exp["raw"].size());
+  bo.group_var = exp["group_var"].get<std::string>();
+  for (const auto& label : exp["group_labels"]) {
+    bo.group_labels.push_back(label.get<std::string>());
+  }
+  auto pt = magmaan::spec::build(*fp, bo);
+  REQUIRE(pt.has_value());
+  auto rep = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+
+  const auto& jraw = exp["raw"];
+  REQUIRE(jraw.size() == 2);
+  std::vector<Eigen::MatrixXd> blocks;
+  blocks.push_back(raw_matrix(jraw[0]));
+  blocks.push_back(raw_matrix(jraw[1]));
+  auto stats = magmaan::data::ordinal_stats_from_integer_data(blocks);
+  REQUIRE(stats.has_value());
+  REQUIRE(stats->R.size() == 2);
+
+  auto est = magmaan::test::fit_ordinal_bounded(
+      *pt, *rep, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(est.has_value());
+  auto st = magmaan::estimate::frontier::score_tests_ordinal_robust(
+      *pt, *rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(st.has_value());
+  REQUIRE(st->rows.size() == 3);  // a2==b2, a3==b3, a4==b4
+
+  const auto& want = exp["score_tests_robust"]["rows"][0];
+  const double mi_want = want["mi"].get<double>();
+  const double c_want = want["scaling_factor"].get<double>();
+  const double mis_want = want["mi_scaled"].get<double>();
+  const auto& got = st->rows[0];
+
+  CHECK(std::abs(got.mi - mi_want) < 5e-3 * (1.0 + std::abs(mi_want)));
+  CHECK(std::abs(got.scaling_factor - c_want) <
+        1e-6 * (1.0 + std::abs(c_want)));
+  CHECK(std::abs(got.mi_scaled - mis_want) <
+        5e-3 * (1.0 + std::abs(mis_want)));
+  CHECK(std::abs(got.scaling_factor - 1.0) > 0.02);
 }
 
 TEST_CASE("robust joint df>1 release-score matches the lavaan-internals oracle") {

@@ -165,14 +165,15 @@ golden `parTable()` fixtures.
   per-direction worker is shared as
   `inference::frontier::score_for_direction_robust` (c is not W-scale
   invariant: A1/B1 must be on the same weight scale as score/info). The
-  continuous ML/LS tiers are single- or multi-group (see the multi-group bullet);
-  the ordinal/mixed-ordinal tier stays single-group pending a multi-group
-  polychoric oracle. api/R wrappers deferred until a concrete consumer appears.
+  continuous ML/LS and ordinal/mixed-ordinal tiers are single- or multi-group
+  (see the multi-group bullets). api/R wrappers deferred until a concrete
+  consumer appears.
   Oracles:
   continuous DWLS (`se = "robust.sem"`, so lavaan's wls.v/gamma are the
   ADF NACOV — gaps ~1e-9) and all-ordinal WLSMV (polychoric NACOV — c gap
-  ~6e-10) release-score fixtures 0007/0008 in `regen_robust_score.R`, plus the
-  exact WLS/GLS reductions and a primitives re-assembly in
+  ~6e-10) release-score fixtures 0007/0008, plus the two-group ordinal WLSMV
+  release-score fixture 0012, in `regen_robust_score.R`; exact WLS/GLS
+  reductions and a primitives re-assembly live in
   `tests/unit/score_robust_test.cpp`.
 - FIML (missing-data) robust MI and equality-release score tests, the MLR corner
   (2026-06): `inference::frontier::{modification_indices,score_tests}_fiml_robust`
@@ -199,8 +200,19 @@ golden `parTable()` fixtures.
   a heavy-tailed empirical case, a GLS multi-group reduction, and the cross-group
   loading-invariance golden 0010 — the latter pins the `n_b/N` weighting that
   within-group reductions cannot (`A1 = lavInspect(fit,"information")` equals
-  `Σ_b (n_b/N)·Δ_b'V_bΔ_b` exactly, c ≈ 1.24). FIML robust and the
-  ordinal/mixed-ordinal robust tier remain single-group.
+  `Σ_b (n_b/N)·Δ_b'V_bΔ_b` exactly, c ≈ 1.24). FIML robust remains
+  single-group.
+- Multi-group robust MI / score tests for the ordinal and mixed-ordinal tiers
+  (2026-06-13): the `require_single_group_ordinal` guard in
+  `estimate::frontier` is removed; the ordinal sandwich already loops over
+  `stats.R.size()` and pools `A1/B1` through the shared `n_b/N`-weighted
+  `estimate::weighted_param_space_sandwich`. The per-block threshold and
+  association moment Jacobians write into the correct full-θ columns, so the
+  continuous-tier nuisance projection carries over. Validated by exact
+  two-group full-WLS reductions for all-ordinal MI/score and mixed-ordinal
+  MI/score, a finite non-trivial two-group DWLS ordinal scaling case, and the
+  two-group WLSMV golden 0012 (`c ≈ 0.856`) assembled from lavaan's
+  per-group `delta` / `wls.v` / `gamma` lists.
 - df>1 total release (2026-06-13): `inference::frontier::score_tests_robust_joint`
   releases all active equality constraints at once. The NT joint statistic is the
   multivariate score (Lagrange-multiplier) form `T = uᵀV⁻¹u` over the
