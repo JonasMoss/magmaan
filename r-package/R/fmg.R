@@ -331,6 +331,117 @@
   out
 }
 
+# ── Ordinal / mixed-ordinal (polychoric least-squares) FMG ──────────────────
+# Ordinal DWLS/WLS/ULS fits are least-squares fits over polychoric/polyserial
+# moments. They carry a single base statistic, the LS chi-square
+# `chisq_standard = N * F_min`, and the UGamma eigenvalues come from the same
+# polychoric-NACOV sandwich `robust_ordinal()`/`robust_mixed_ordinal()` already
+# build and validate against lavaan. So an ordinal FMG test is just the
+# estimator-agnostic eigenvalue-tail transform applied to that
+# (chi-square, df, eigvals) triple — no new spectrum machinery.
+#
+# Unlike the complete-data ML path there is no ML/RLS base split (an LS fit has
+# no likelihood) and no Du-Bentler unbiased Gamma (the polychoric NACOV is
+# already the asymptotic Gamma), so `_ml` and `_ug` are rejected. The ordinal
+# stats are passed explicitly, exactly like `robust_ordinal(fit, stats, weight)`.
+
+.fmg_default_tests_ordinal <- function() {
+  c("SB", "pEBA2", "pEBA4", "pEBA6", "pOLS")
+}
+
+.fmg_adjust_specs_ordinal <- function(specs, caller = "fmg_tests_ordinal") {
+  lapply(specs, function(s) {
+    if (isTRUE(s$ug)) {
+      stop(caller, "(): the unbiased Du-Bentler Gamma is undefined for ",
+           "polychoric least-squares fits; the ordinal NACOV is already the ",
+           "asymptotic Gamma (test '", s$input, "').", call. = FALSE)
+    }
+    if (identical(s$base, "ml") && isTRUE(s$base_explicit)) {
+      stop(caller, "(): an ordinal least-squares fit has no ML (LRT) base ",
+           "statistic; drop the `_ml` suffix to use the LS base (test '",
+           s$input, "').", call. = FALSE)
+    }
+    s$base <- "ls"
+    s$canonical <- sub("_(rls|ml)$", "_ls", s$canonical)
+    if (!grepl("_ls$", s$canonical)) s$canonical <- paste0(s$canonical, "_ls")
+    s
+  })
+}
+
+# Apply the eigenvalue-tail transforms to an ordinal robust spectrum (the list
+# returned by `infer_ordinal_robust` / `infer_mixed_ordinal_robust`, carrying
+# `eigvals`, `chisq_standard`, `df`). The source statistic is the LS chi-square.
+.fmg_result_rows_ordinal <- function(spectrum, specs) {
+  df <- spectrum$df
+  eigvals <- spectrum$eigvals
+  rows <- lapply(specs, function(s) {
+    res <- infer_fmg_test(spectrum$chisq_standard, df, eigvals,
+                          method = s$method,
+                          param = .fmg_param_for_cpp(s$param))
+    list(input = s$input,
+         label = s$canonical,
+         p_value = res$p_value,
+         df = res$df,
+         base = "ls",
+         base_statistic = res$chi2_source,
+         method = res$method,
+         param = if (is.na(s$param)) NA_real_ else res$param,
+         ug = FALSE,
+         chi2_equiv = res$chi2_equiv,
+         n_truncated = res$n_truncated,
+         eigenvalues = eigvals,
+         lambdas_raw = res$lambdas_raw,
+         lambdas = res$lambdas,
+         lambdas_reference = res$lambdas_reference)
+  })
+  .fmg_rows_to_df(rows)
+}
+
+#' Foldnes-Moss-Gronneberg goodness-of-fit diagnostics for an ordinal fit.
+#'
+#' Applies the FMG eigenvalue-tail transforms to an ordinal (all-categorical) or
+#' mixed continuous/ordinal least-squares fit (DWLS/WLS/ULS over polychoric and
+#' polyserial moments). The UGamma spectrum, base chi-square, and df come from
+#' the same polychoric-NACOV sandwich as `robust_ordinal()` /
+#' `robust_mixed_ordinal()`, so the categorical stats are supplied explicitly the
+#' same way. Single group (v1).
+#'
+#' An ordinal LS fit has one base statistic, the LS chi-square
+#' \eqn{N\,F_\mathrm{min}}; there is no ML/RLS split and no Du-Bentler unbiased
+#' Gamma, so test names suffixed `_ml` or `_ug` are rejected. As on the
+#' complete-data and FIML paths, the pEBA/pOLS/PALL transforms are magmaan
+#' constructions with no external oracle.
+#'
+#' @param fit A fitted magmaan ordinal (or mixed-ordinal) least-squares model.
+#' @param ordinal_stats,mixed_stats The categorical sample statistics built by
+#'   `magmaan_core$data_ordinal_stats_from_df()` /
+#'   `data_mixed_ordinal_stats_from_df()` (the same object passed to
+#'   `robust_ordinal()`).
+#' @param tests Character vector of semTests-style test names, or `NULL` for the
+#'   ordinal defaults (`SB`, `pEBA2`, `pEBA4`, `pEBA6`, `pOLS`).
+#' @param weight Estimation weight (`"DWLS"`, `"WLS"`, `"ULS"`); empty resolves
+#'   from `fit$estimator`, matching `robust_ordinal()`.
+#'
+#' @return A `magmaan_fmg_tests` data frame, identical in shape to `fmg_tests()`.
+#' @export
+fmg_tests_ordinal <- function(fit, ordinal_stats, tests = NULL, weight = "") {
+  tests <- tests %||% .fmg_default_tests_ordinal()
+  specs <- .fmg_adjust_specs_ordinal(lapply(tests, .fmg_parse_test),
+                                     caller = "fmg_tests_ordinal")
+  spectrum <- infer_ordinal_robust(fit, ordinal_stats, weight)
+  .fmg_result_rows_ordinal(spectrum, specs)
+}
+
+#' @rdname fmg_tests_ordinal
+#' @export
+fmg_tests_mixed_ordinal <- function(fit, mixed_stats, tests = NULL, weight = "") {
+  tests <- tests %||% .fmg_default_tests_ordinal()
+  specs <- .fmg_adjust_specs_ordinal(lapply(tests, .fmg_parse_test),
+                                     caller = "fmg_tests_mixed_ordinal")
+  spectrum <- infer_mixed_ordinal_robust(fit, mixed_stats, weight)
+  .fmg_result_rows_ordinal(spectrum, specs)
+}
+
 #' Foldnes-Moss-Gronneberg goodness-of-fit diagnostics.
 #'
 #' Computes FMG p-values and diagnostics for a complete-data ML fit or a FIML
@@ -370,8 +481,10 @@ fmg_tests <- function(fit, tests = NULL, data = NULL) {
   }
   estimator <- .fmg_fit_estimator(fit)
   if (!identical(estimator, "ML")) {
-    stop("fmg_tests(): FMG currently requires a complete-data ML fit ",
-         "(got estimator = '", estimator, "').", call. = FALSE)
+    stop("fmg_tests(): FMG via this entry point requires a complete-data ML or ",
+         "FIML fit (got estimator = '", estimator, "'). For ordinal/polychoric ",
+         "least-squares fits use fmg_tests_ordinal(fit, ordinal_stats) or ",
+         "fmg_tests_mixed_ordinal(fit, mixed_stats).", call. = FALSE)
   }
   X <- .fmg_raw_from_fit_or_data(fit, data, caller = "fmg_tests")
   .fmg_validate_complete_raw(fit, X, caller = "fmg_tests")

@@ -343,6 +343,22 @@ golden `parTable()` fixtures.
   cross-group equality constraint; it was masked by equal-group designs where the
   weight is a global scalar (regression note in
   [docs/validation/test_ledger.md](../validation/test_ledger.md)).
+- Ordinal and mixed-ordinal (polychoric/polyserial least-squares) fits are FMG
+  supported via `fmg_tests_ordinal()` / `fmg_tests_mixed_ordinal()`. These reuse
+  the UGamma spectrum, base LS chi-square `N*F_min`, and df that
+  `robust_ordinal()` / `robust_mixed_ordinal()` already build from the polychoric
+  NACOV sandwich (validated against lavaan ordinal robust internals in the
+  ordinal goldens), then apply the estimator-agnostic `robust::frontier::fmg_test`
+  eigenvalue-tail transforms - no new spectrum machinery. An ordinal LS fit has a
+  single base statistic (no ML/RLS split) and the polychoric NACOV is already the
+  asymptotic Gamma, so `_ml` and `_ug` test suffixes are rejected. The categorical
+  sample statistics are passed explicitly, mirroring `robust_ordinal(fit, stats,
+  weight)`; single group (v1). Anchored by `tests/unit/ordinal_test.cpp` ("Ordinal
+  FMG transforms consume the robust_ordinal UGamma spectrum"; the FMG SB
+  reproduces the stored Satorra-Bentler scaling to 1e-12) and
+  `r-package/examples/fmg_ordinal.R`. This is the gate for the polychoric-FMG
+  paper track; the pEBA/pOLS/PALL transforms remain magmaan-original with no
+  external oracle, as on the complete-data and FIML paths.
 
 ### Staged C++ facade
 
