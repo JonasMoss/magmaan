@@ -404,6 +404,24 @@ golden `parTable()` fixtures.
   `PlsimCalibration` is draw-ready in C++, and the R package exposes both
   `sim_plsim_batch()` and the reusable
   `sim_plsim_calibrate()` / `sim_plsim_draw()` split.
+- Model-implied simulation is available as a population-construction bridge:
+  `sim::lower_model_implied()` lowers a lavaanified `LatentStructure` plus
+  `MatrixRep` and `theta` through `ModelEvaluator::sigma()` into per-group
+  `MixedPopulation` blocks, shared observed-variable names/kinds, and
+  projection thresholds. Empty implied means become zero population means;
+  explicit mean structures become the continuous population mean. Threshold
+  rows are read from the partable, sorted per group/observed variable, and
+  projected on the raw latent-response scale, so Delta/Theta ordinal
+  parameterizations require no simulation-side standardization option.
+  `sim::simulate_model_implied_group()` and `sim::simulate_model_implied()`
+  dispatch that lowered population through the existing normal, Student-t,
+  finite scale-mixture, contaminated-normal, and slash generators. The R
+  package exposes the same split as
+  `sim_model_calibrate()` / `sim_model_draw()` plus `sim_model_batch()`,
+  accepting either a fitted magmaan object or a lavaan-shaped population
+  partable with an explicit `theta` vector. Copula/NORTA/vine/IG/VM/PLSIM
+  bridges remain separate because the SEM supplies moments and thresholds, not
+  marginal distribution specifications.
 - Calibrated simulation generators are standardized around a two-stage
   contract: deterministic `calibrate_*()` calls return reusable state objects
   with fitted marginals, latent/intermediate matrices, achieved diagnostics, and

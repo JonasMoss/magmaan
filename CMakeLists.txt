@@ -138,6 +138,7 @@ add_library(magmaan STATIC
   src/sim/normal.cpp
   src/sim/norta.cpp
   src/sim/plsim.cpp
+  src/sim/model_implied.cpp
   src/sim/population.cpp
   src/sim/projection.cpp
   src/sim/vale_maurelli.cpp

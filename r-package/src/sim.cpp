@@ -8,7 +8,10 @@
 #include <string>
 #include <vector>
 
+#include "internal.hpp"
 #include "magmaan/error.hpp"
+#include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/sim/model_implied.hpp"
 #include "magmaan/sim/norta.hpp"
 #include "magmaan/sim/plsim.hpp"
 
@@ -40,6 +43,19 @@ magmaan::sim::PlsimCovarianceMethod plsim_method_from_string(
   if (method == "hermite_then_quadrature") return M::HermiteThenQuadrature;
   if (method == "hermite_then_rectangle") return M::HermiteThenRectangle;
   Rcpp::stop("unknown PLSIM covariance method: %s", method);
+}
+
+magmaan::sim::GeneratorKind generator_kind_from_string(
+    const std::string& generator) {
+  using G = magmaan::sim::GeneratorKind;
+  if (generator == "normal") return G::Normal;
+  if (generator == "student_t" || generator == "t") return G::StudentT;
+  if (generator == "scale_mixture") return G::ScaleMixture;
+  if (generator == "contaminated_normal" || generator == "contaminated") {
+    return G::ContaminatedNormal;
+  }
+  if (generator == "slash") return G::Slash;
+  Rcpp::stop("unknown model-implied generator: %s", generator);
 }
 
 magmaan::sim::IgRootKind ig_root_from_string(const std::string& root) {
@@ -291,6 +307,197 @@ marginal_specs_from_list(Rcpp::List xs) {
     out.push_back(marginal_spec_from_list(Rcpp::as<Rcpp::List>(xs[i])));
   }
   return out;
+}
+
+std::vector<double> nullable_numeric_to_vector(
+    Rcpp::Nullable<Rcpp::NumericVector> x,
+    const char* name) {
+  if (x.isNull()) return {};
+  Rcpp::NumericVector values(x);
+  std::vector<double> out;
+  out.reserve(static_cast<std::size_t>(values.size()));
+  for (R_xlen_t i = 0; i < values.size(); ++i) {
+    const double value = values[i];
+    if (!std::isfinite(value)) {
+      Rcpp::stop("%s must contain finite values", name);
+    }
+    out.push_back(value);
+  }
+  return out;
+}
+
+Rcpp::IntegerVector observed_kinds_to_int(
+    const std::vector<magmaan::sim::ObservedKind>& kinds) {
+  Rcpp::IntegerVector out(static_cast<R_xlen_t>(kinds.size()));
+  for (std::size_t i = 0; i < kinds.size(); ++i) {
+    out[static_cast<R_xlen_t>(i)] =
+        kinds[i] == magmaan::sim::ObservedKind::Ordinal ? 1 : 0;
+  }
+  return out;
+}
+
+std::vector<magmaan::sim::ObservedKind> observed_kinds_from_int(
+    Rcpp::IntegerVector kinds) {
+  std::vector<magmaan::sim::ObservedKind> out;
+  out.reserve(static_cast<std::size_t>(kinds.size()));
+  for (R_xlen_t i = 0; i < kinds.size(); ++i) {
+    if (kinds[i] == 0) {
+      out.push_back(magmaan::sim::ObservedKind::Continuous);
+    } else if (kinds[i] == 1) {
+      out.push_back(magmaan::sim::ObservedKind::Ordinal);
+    } else {
+      Rcpp::stop("model calibration kinds must be coded 0=continuous or 1=ordinal");
+    }
+  }
+  return out;
+}
+
+Rcpp::IntegerVector int32_vector_to_r(const std::vector<std::int32_t>& x) {
+  Rcpp::IntegerVector out(static_cast<R_xlen_t>(x.size()));
+  for (std::size_t i = 0; i < x.size(); ++i) {
+    out[static_cast<R_xlen_t>(i)] = x[i];
+  }
+  return out;
+}
+
+Rcpp::List thresholds_to_list(
+    const std::vector<Eigen::VectorXd>& thresholds) {
+  Rcpp::List out(static_cast<R_xlen_t>(thresholds.size()));
+  for (std::size_t j = 0; j < thresholds.size(); ++j) {
+    out[static_cast<R_xlen_t>(j)] =
+        thresholds[j].size() == 0
+            ? R_NilValue
+            : static_cast<SEXP>(Rcpp::wrap(thresholds[j]));
+  }
+  return out;
+}
+
+std::vector<Eigen::VectorXd> thresholds_from_list(Rcpp::List thresholds,
+                                                  std::size_t p) {
+  if (static_cast<std::size_t>(thresholds.size()) != p) {
+    Rcpp::stop("model calibration threshold list length must match ov_names");
+  }
+  std::vector<Eigen::VectorXd> out(p);
+  for (std::size_t j = 0; j < p; ++j) {
+    Rcpp::RObject value(thresholds[static_cast<R_xlen_t>(j)]);
+    if (value.isNULL()) {
+      out[j] = Eigen::VectorXd{};
+    } else {
+      out[j] = Rcpp::as<Eigen::VectorXd>(value);
+    }
+  }
+  return out;
+}
+
+Rcpp::List model_implied_population_to_list(
+    const magmaan::sim::ModelImpliedPopulation& population) {
+  Rcpp::List groups(static_cast<R_xlen_t>(population.groups.size()));
+  for (std::size_t b = 0; b < population.groups.size(); ++b) {
+    const auto& group = population.groups[b];
+    groups[static_cast<R_xlen_t>(b)] = Rcpp::List::create(
+        Rcpp::_["mean"] = Rcpp::wrap(group.latent.mean),
+        Rcpp::_["cov"] = Rcpp::wrap(group.latent.covariance),
+        Rcpp::_["thresholds"] = thresholds_to_list(group.observed.thresholds));
+  }
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["n_groups"] =
+          static_cast<int>(population.groups.size()),
+      Rcpp::_["ov_names"] = Rcpp::wrap(population.ov_names),
+      Rcpp::_["kinds"] = observed_kinds_to_int(population.kinds),
+      Rcpp::_["n_levels"] = int32_vector_to_r(population.n_levels),
+      Rcpp::_["groups"] = groups);
+  out.attr("class") = Rcpp::CharacterVector::create(
+      "magmaan_model_calibration", "list");
+  return out;
+}
+
+magmaan::sim::ModelImpliedPopulation model_implied_population_from_list(
+    Rcpp::List calibration) {
+  magmaan::sim::ModelImpliedPopulation population;
+  population.ov_names =
+      Rcpp::as<std::vector<std::string>>(calibration["ov_names"]);
+  const std::size_t p = population.ov_names.size();
+  population.kinds = observed_kinds_from_int(
+      Rcpp::as<Rcpp::IntegerVector>(calibration["kinds"]));
+  population.n_levels =
+      Rcpp::as<std::vector<std::int32_t>>(calibration["n_levels"]);
+  if (population.kinds.size() != p || population.n_levels.size() != p) {
+    Rcpp::stop("model calibration kind/n_levels lengths must match ov_names");
+  }
+
+  Rcpp::List groups = Rcpp::as<Rcpp::List>(calibration["groups"]);
+  population.groups.reserve(static_cast<std::size_t>(groups.size()));
+  for (R_xlen_t b = 0; b < groups.size(); ++b) {
+    Rcpp::List src = Rcpp::as<Rcpp::List>(groups[b]);
+    magmaan::sim::MixedPopulation group;
+    group.latent.mean = Rcpp::as<Eigen::VectorXd>(src["mean"]);
+    group.latent.covariance = Rcpp::as<Eigen::MatrixXd>(src["cov"]);
+    group.observed.kinds = population.kinds;
+    group.observed.thresholds = thresholds_from_list(
+        Rcpp::as<Rcpp::List>(src["thresholds"]), p);
+    population.groups.push_back(std::move(group));
+  }
+  return population;
+}
+
+magmaan::sim::GeneratorSpec make_model_generator_spec(
+    const std::string& generator,
+    double df,
+    Rcpp::Nullable<Rcpp::NumericVector> mixture_weights,
+    Rcpp::Nullable<Rcpp::NumericVector> mixture_scale_multipliers,
+    double contamination_probability,
+    double contamination_scale_multiplier,
+    double slash_q,
+    double cholesky_jitter) {
+  magmaan::sim::GeneratorSpec spec;
+  spec.kind = generator_kind_from_string(generator);
+  spec.df = df;
+  spec.scale_mixture.weights =
+      nullable_numeric_to_vector(mixture_weights, "mixture_weights");
+  spec.scale_mixture.scale_multipliers =
+      nullable_numeric_to_vector(mixture_scale_multipliers,
+                                 "mixture_scale_multipliers");
+  spec.contamination.contamination_probability =
+      contamination_probability;
+  spec.contamination.scale_multiplier = contamination_scale_multiplier;
+  spec.slash.q = slash_q;
+  spec.normal_options.cholesky_jitter = cholesky_jitter;
+  spec.student_t_options.cholesky_jitter = cholesky_jitter;
+  return spec;
+}
+
+magmaan::sim::ModelImpliedPopulation calibrate_model_from_arg(
+    SEXP fit_or_partable,
+    Rcpp::Nullable<Rcpp::NumericVector> theta) {
+  const bool is_data_frame = Rf_inherits(fit_or_partable, "data.frame");
+  if (!is_data_frame) {
+    Rcpp::List fit(fit_or_partable);
+    if (fit.containsElementNamed("partable") &&
+        fit.containsElementNamed("theta")) {
+      magmaanr::Ctx ctx = magmaanr::ctx_from_fit(fit);
+      const magmaan::estimate::Estimates est = magmaanr::est_from_fit(fit);
+      auto pop_or = magmaan::sim::lower_model_implied(
+          ctx.pt, ctx.rep, est.theta);
+      if (!pop_or.has_value()) stop_sim(pop_or.error());
+      return std::move(*pop_or);
+    }
+  }
+
+  auto parsed =
+      magmaanr::parse_partable_df(Rcpp::DataFrame(fit_or_partable));
+  auto rep_or = magmaan::model::build_matrix_rep(
+      parsed.structure, &parsed.names);
+  if (!rep_or.has_value()) magmaanr::stop_model(rep_or.error());
+  Eigen::VectorXd theta_vec;
+  if (theta.isNull()) {
+    theta_vec = Eigen::VectorXd{};
+  } else {
+    theta_vec = Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(theta));
+  }
+  auto pop_or = magmaan::sim::lower_model_implied(
+      parsed.structure, *rep_or, theta_vec);
+  if (!pop_or.has_value()) stop_sim(pop_or.error());
+  return std::move(*pop_or);
 }
 
 Rcpp::List plsim_marginal_to_list(const magmaan::sim::PlsimMarginal& m) {
@@ -1476,4 +1683,82 @@ Rcpp::List sim_plsim_draw_impl(Rcpp::List calibration,
     draws[i] = Rcpp::wrap(*X_or);
   }
   return Rcpp::List::create(Rcpp::_["draws"] = draws);
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_model_calibrate_impl(
+    SEXP fit_or_partable,
+    Rcpp::Nullable<Rcpp::NumericVector> theta = R_NilValue) {
+  auto population = calibrate_model_from_arg(fit_or_partable, theta);
+  return model_implied_population_to_list(population);
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_model_draw_impl(
+    Rcpp::List calibration,
+    int n,
+    int reps,
+    double seed_base,
+    std::string generator = "normal",
+    double df = 5.0,
+    Rcpp::Nullable<Rcpp::NumericVector> mixture_weights = R_NilValue,
+    Rcpp::Nullable<Rcpp::NumericVector> mixture_scale_multipliers = R_NilValue,
+    double contamination_probability = 0.05,
+    double contamination_scale_multiplier = 3.0,
+    double slash_q = 5.0,
+    double cholesky_jitter = 0.0) {
+  if (n <= 0) Rcpp::stop("n must be positive");
+  if (reps <= 0) Rcpp::stop("reps must be positive");
+
+  const auto population = model_implied_population_from_list(calibration);
+  const auto generator_spec = make_model_generator_spec(
+      generator, df, mixture_weights, mixture_scale_multipliers,
+      contamination_probability, contamination_scale_multiplier, slash_q,
+      cholesky_jitter);
+
+  Rcpp::List draws(reps);
+  for (int i = 0; i < reps; ++i) {
+    std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
+                        static_cast<std::uint64_t>(i + 1));
+    auto draw_or = magmaan::sim::simulate_model_implied(
+        static_cast<Eigen::Index>(n), population, generator_spec, rng);
+    if (!draw_or.has_value()) stop_sim(draw_or.error());
+
+    Rcpp::List groups(static_cast<R_xlen_t>(draw_or->size()));
+    for (std::size_t b = 0; b < draw_or->size(); ++b) {
+      const auto& group = (*draw_or)[b];
+      groups[static_cast<R_xlen_t>(b)] = Rcpp::List::create(
+          Rcpp::_["X"] = Rcpp::wrap(group.observed.X),
+          Rcpp::_["ordered"] = int32_vector_to_r(group.observed.ordered),
+          Rcpp::_["n_levels"] = int32_vector_to_r(group.observed.n_levels));
+    }
+    draws[i] = Rcpp::List::create(Rcpp::_["groups"] = groups);
+  }
+
+  return Rcpp::List::create(
+      Rcpp::_["draws"] = draws,
+      Rcpp::_["ov_names"] = calibration["ov_names"]);
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_model_batch_impl(
+    SEXP fit_or_partable,
+    int n,
+    int reps,
+    double seed_base,
+    Rcpp::Nullable<Rcpp::NumericVector> theta = R_NilValue,
+    std::string generator = "normal",
+    double df = 5.0,
+    Rcpp::Nullable<Rcpp::NumericVector> mixture_weights = R_NilValue,
+    Rcpp::Nullable<Rcpp::NumericVector> mixture_scale_multipliers = R_NilValue,
+    double contamination_probability = 0.05,
+    double contamination_scale_multiplier = 3.0,
+    double slash_q = 5.0,
+    double cholesky_jitter = 0.0) {
+  auto population = calibrate_model_from_arg(fit_or_partable, theta);
+  Rcpp::List calibration = model_implied_population_to_list(population);
+  return sim_model_draw_impl(
+      calibration, n, reps, seed_base, generator, df, mixture_weights,
+      mixture_scale_multipliers, contamination_probability,
+      contamination_scale_multiplier, slash_q, cholesky_jitter);
 }
