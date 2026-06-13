@@ -33,6 +33,27 @@ magmaan::data::RawData continuous_raw() {
   return raw;
 }
 
+// A 1-factor dataset with substantial, mutually distinct idiosyncratic parts so
+// the FIML optimum keeps every residual variance comfortably interior. The
+// near-perfect 1-factor `continuous_raw()` drives residuals toward a near-Heywood
+// wall, where L-BFGS is sensitive to FMA-level rounding — a -march=native stall
+// on some CPUs (see docs/validation/test_ledger.md). This data exercises the
+// same FIML reporting surface without that degenerate optimization geometry.
+magmaan::data::RawData fiml_interior_raw() {
+  Eigen::MatrixXd X(80, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double t = static_cast<double>(i);
+    const double z = std::sin(0.19 * t) + 0.4 * std::cos(0.07 * t);
+    X(i, 0) = 0.90 * z + 0.70 * std::sin(0.31 * t);
+    X(i, 1) = 0.80 * z + 0.65 * std::cos(0.23 * t);
+    X(i, 2) = 0.70 * z + 0.75 * std::sin(0.41 * t + 0.5);
+    X(i, 3) = 0.85 * z + 0.60 * std::cos(0.37 * t + 0.2);
+  }
+  magmaan::data::RawData raw;
+  raw.X.push_back(std::move(X));
+  return raw;
+}
+
 Eigen::MatrixXd ordinal_block(Eigen::Index n = 140) {
   Eigen::MatrixXd X(n, 4);
   for (Eigen::Index i = 0; i < n; ++i) {
@@ -131,10 +152,27 @@ magmaan::data::SampleStats fcsem_fixture_stats(
 
 } // namespace
 
+// doctest is built with DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS, so a
+// failed REQUIRE logs the failure but cannot throw to abort the test case —
+// execution otherwise continues. These macros register the failure (with the
+// error detail via INFO) and then bail out of the enclosing scope, so the next
+// statement's operator* / operator-> on an error-state std::expected can't run
+// into UB. REQUIRE_OK returns from a void test body; REQUIRE_OK_OR returns the
+// supplied value from a value-returning helper lambda.
+#define MAGMAAN_REQUIRE_OK_IMPL(value)                                         \
+  INFO("api error: " << ((value).has_value() ? "" : (value).error().detail)); \
+  REQUIRE((value).has_value())
+
 #define REQUIRE_OK(value)                                                     \
   do {                                                                        \
-    INFO("api error: " << ((value).has_value() ? "" : (value).error().detail)); \
-    REQUIRE((value).has_value());                                             \
+    MAGMAAN_REQUIRE_OK_IMPL(value);                                          \
+    if (!(value).has_value()) return;                                        \
+  } while (false)
+
+#define REQUIRE_OK_OR(value, ret)                                            \
+  do {                                                                        \
+    MAGMAAN_REQUIRE_OK_IMPL(value);                                          \
+    if (!(value).has_value()) return ret;                                    \
   } while (false)
 
 TEST_CASE("api sem header compiles standalone and parse errors keep stage") {
@@ -337,7 +375,7 @@ TEST_CASE("api FIML exposes likelihood test, fit measures, and MLR reporting") {
   const auto model =
       magmaan::api::model_from_lavaan("f =~ x1 + x2 + x3 + x4", options);
   REQUIRE(model.has_value());
-  const auto data = magmaan::api::data_from_raw(*model, continuous_raw());
+  const auto data = magmaan::api::data_from_raw(*model, fiml_interior_raw());
   REQUIRE(data.has_value());
 
   const auto fit = magmaan::api::fit(*model, *data, magmaan::api::fiml());
@@ -572,14 +610,14 @@ TEST_CASE("api second-order CFA fits ordinal data and matches the correlated mod
   struct Outcome { double chisq; int df; };
   auto fit_ord = [&](const std::string& syntax) -> Outcome {
     const auto model = magmaan::api::model_from_lavaan(syntax);
-    REQUIRE_OK(model);
+    REQUIRE_OK_OR(model, {});
     const auto data = magmaan::api::data_from_ordinal(*model, *stats);
-    REQUIRE_OK(data);
+    REQUIRE_OK_OR(data, {});
     const auto fit =
         magmaan::api::fit(*model, *data, magmaan::api::ordinal_dwls());
-    REQUIRE_OK(fit);
+    REQUIRE_OK_OR(fit, {});
     const auto rob = magmaan::api::robust_ordinal(*fit);
-    REQUIRE_OK(rob);
+    REQUIRE_OK_OR(rob, {});
     return {rob->chisq_standard, rob->df};
   };
 
@@ -660,16 +698,16 @@ TEST_CASE("api second-order CFA fits and equals the correlated first-order model
   struct Outcome { magmaan::api::TestResult test; std::ptrdiff_t npar = 0; };
   auto fit_chi = [&](const std::string& syntax) -> Outcome {
     const auto model = magmaan::api::model_from_lavaan(syntax);
-    REQUIRE_OK(model);
+    REQUIRE_OK_OR(model, {});
     // 9-column data resolves only if the first-order factors are kept latent;
     // a misclassification as observed would demand 12 data columns here.
     const auto data = magmaan::api::data_from_sample_stats(*model, *stats);
-    REQUIRE_OK(data);
+    REQUIRE_OK_OR(data, {});
     const auto fit = magmaan::api::fit(*model, *data, magmaan::api::ml());
-    REQUIRE_OK(fit);
+    REQUIRE_OK_OR(fit, {});
     const auto tst =
         magmaan::api::test(*fit, magmaan::api::standard_chi_square());
-    REQUIRE_OK(tst);
+    REQUIRE_OK_OR(tst, {});
     return {*tst, fit->estimates().theta.size()};
   };
 
@@ -691,3 +729,5 @@ TEST_CASE("api second-order CFA fits and equals the correlated first-order model
 }
 
 #undef REQUIRE_OK
+#undef REQUIRE_OK_OR
+#undef MAGMAAN_REQUIRE_OK_IMPL

@@ -145,16 +145,6 @@ landed; remaining open items:
   from magmaan's own output rather than an external oracle; for each, either
   tighten to the oracle or write down explicitly why the looseness is
   principled.
-- **M, pre-existing opt-preset failure (found 2026-06-12).** The `api` test
-  "api FIML exposes likelihood test, fit measures, and MLR reporting" fails
-  deterministically on the `opt` preset (Release, `-O3 -march=native`) at the
-  pre-pass HEAD as well: the FIML fit's NLopt L-BFGS returns "generic solver
-  failure", and the doctest failure path then segfaults. Passes on `dev`
-  (ASan, `-O0`). Reproduce with the comma-escaped doctest filter
-  (`--test-case=...\,...`); an unescaped comma splits the filter and runs zero
-  cases, reporting a hollow pass. Likely FP-sensitivity in the FIML
-  objective/gradient under fast math-adjacent codegen; diagnose the solver
-  failure first, then the crash-on-failure teardown.
 - **M, later.** Layer CI on top only after the local commands are useful: run
   `test-quick` on PRs/pushes, sanitizer validation on main or a schedule, heavy
   parity/optional optimizer lanes less often, and coverage as an artifact before

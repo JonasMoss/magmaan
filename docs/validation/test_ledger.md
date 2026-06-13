@@ -263,6 +263,32 @@ cross-loading release against lavaan-internals `delta`/`wls.v`/`gamma` assembly;
 all-ordinal MI/score and mixed-ordinal MI/score, plus a non-trivial DWLS
 finite-scaling case.
 
+**FIML reporting test crashed on a failed precondition; opt L-BFGS stall — two
+findings.**
+Regression (real bug): tests build with
+`DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS`, under which a failed
+`REQUIRE` cannot throw to abort the case (`throwException()` is a no-op), so
+`REQUIRE_OK(fit)` logged the failure and execution continued into
+`fit->fiml_pack()` — `operator->` on an error-state `std::expected`, i.e. UB /
+segfault. It only fired when the FIML fit actually failed (opt preset), masking
+the real failure behind a crash; `dev`, where the fit succeeds, never tripped it.
+Convention (not a bug): that fit failed only under `-O3 -march=native` (AVX2/FMA
+on this CPU), and only because the test's near-perfect 1-factor data drove
+residual variances to a near-Heywood wall (θ≈0.003) where L-BFGS finds no Wolfe
+step (‖∇f‖≈59), while the SSE / `-O0` paths thread to the interior optimum
+(f=−4.2424). The gradient is correct there (finite-difference-verified); magmaan
+reports a clean `LineSearchFailed` error. No solver "rescue" was added — an
+SLSQP fallback would prejudge the optimizer-comparison tracks, and the
+sensitivity is `-march=native`/ISA-specific, not a magmaan correctness bug.
+Guard: `REQUIRE_OK` / `REQUIRE_OK_OR` (`tests/unit/api_sem_test.cpp`) now
+`return` on failure, so a failed precondition reports cleanly instead of
+dereferencing a valueless expected. The FIML reporting test uses
+`fiml_interior_raw()` (substantial idiosyncratic variance → interior optimum),
+so it converges with pure L-BFGS on every ISA and exercises the reporting
+surface rather than a degenerate optimization geometry.
+Scope: the near-Heywood + `-march=native` L-BFGS sensitivity is an accepted
+optimizer-path limitation, documented here, not guarded by a test.
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |
