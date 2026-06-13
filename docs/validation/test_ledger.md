@@ -250,6 +250,19 @@ realigned; the real-data `parity` stream and the little/newsom/mplus/paper
 corpora stay at `0.6-22.2560` (their regen needs data packages, e.g.
 `psychTools`, absent in this environment) and pass within tolerance.
 
+**Multi-group ordinal robust score tests used to be blocked by a stale guard.**
+Regression: the ordinal/mixed-ordinal robust MI and score-test implementations
+already assembled the per-block `n_b/N` sandwich over categorical moments, but
+`estimate::frontier` rejected `stats.R.size() != 1` before that code could run.
+This left the continuous ML/LS robust tiers multi-group while the ordinal tier
+was artificially single-group. Fix: remove `require_single_group_ordinal` in
+`src/estimate/ordinal.cpp`. Guard: `tests/golden/score_robust_golden_test.cpp`
+fixture `0012_robust_release_mg_ordinal` checks a two-group WLSMV
+cross-loading release against lavaan-internals `delta`/`wls.v`/`gamma` assembly;
+`tests/unit/score_robust_test.cpp` adds exact two-group WLS reductions for
+all-ordinal MI/score and mixed-ordinal MI/score, plus a non-trivial DWLS
+finite-scaling case.
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |
@@ -261,7 +274,7 @@ corpora stay at `0.6-22.2560` (their regen needs data packages, e.g.
 | FIML and missing data | lavaan FIML fixtures, saturated EM invariants, FIML FMG diagnostics | Unit, golden, R examples, and advisory checks | `tests/unit/fiml_test.cpp`, `tests/golden/fiml_golden_test.cpp`, `r-package/examples/fiml.R`, `tests/checks/fiml_fmg_trace/` | High-level `magmaan(estimator = "FIML")` mean-structure defaults and multi-group starts need care. |
 | Ordinal and mixed moments | lavaan ordinal fixtures, robcat fixtures, internal moment invariants | Unit, golden, robcat, R examples, and experiments | `tests/unit/ordinal_test.cpp`, `tests/golden/ordinal_golden_test.cpp`, `tests/golden/robcat_parity_golden_test.cpp`, `r-package/examples/ordinal_dwls_wls.R` | Lazy mixed WLS construction, mixed theta SNLLS, and research robust-association paths remain open. |
 | Inference, standardization, and fit measures | lavaan SE, score, standardized, and fit-measure fixtures | Unit plus golden tests under `inference` | `tests/unit/inference_test.cpp`, `tests/unit/score_test.cpp`, `tests/unit/standardized_test.cpp`, `tests/golden/inference_golden_test.cpp`, `tests/golden/standardized_golden_test.cpp` | Ordinal defined-parameter validity and additional ordinal-SEM standardized goldens remain follow-ups. |
-| Robust tests, FMG, and nested restrictions | lavaan/semTests parity, R-internals fixtures, weighted-chi-square oracles | Unit, golden, R examples, and advisory checks | `tests/unit/robust_test.cpp`, `tests/unit/fmg_test.cpp`, `tests/unit/weighted_chisq_test.cpp`, `tests/golden/fmg_pvalue_golden_test.cpp`, `tests/golden/score_robust_golden_test.cpp`, `r-package/examples/fmg.R` | Robust MI is still complete-data ML single-group only; mixed-sign weighted-χ² tails remain outside magmaan's non-negative spectrum contract. |
+| Robust tests, FMG, and nested restrictions | lavaan/semTests parity, R-internals fixtures, weighted-chi-square oracles | Unit, golden, R examples, and advisory checks | `tests/unit/robust_test.cpp`, `tests/unit/fmg_test.cpp`, `tests/unit/weighted_chisq_test.cpp`, `tests/golden/fmg_pvalue_golden_test.cpp`, `tests/golden/score_robust_golden_test.cpp`, `r-package/examples/fmg.R` | FIML robust score tests remain single-group v1; mixed-sign weighted-χ² tails remain outside magmaan's non-negative spectrum contract. |
 | Optimizers and terminal audits | Recomputed objectives, projected gradients, cross-backend agreement | Unit tests and benchmark/report tracks under `estimate` | `tests/unit/terminal_audit_test.cpp`, `tests/unit/optimizer_crosscheck_test.cpp`, `tests/unit/fit_diagnostics_test.cpp`, `docs/design/terminal-audit.md` | Ultimate verifier and stationarity tolerance calibration remain research work. |
 | Simulation | Distribution goldens, deterministic calibration fixtures, stochastic smokes | Unit tests under `sim` plus advisory checks | `tests/unit/norta_test.cpp`, `tests/unit/plsim_test.cpp`, `tests/unit/vale_maurelli_test.cpp`, `tests/checks/plsim/` | Model-implied simulation, ordinal/mixed observed-correlation calibration, and persistent caches remain open. |
 | R boundary and examples | lavaan parity through examples and R-shaped wrapper checks | `just r-check` examples plus C++ API tests | `tests/unit/api_sem_test.cpp`, `r-package/examples/*.R`, `r-package/examples/tutorial/run_all.R` | Examples are smoke tests, not exhaustive wrapper coverage; R reconstruction is sensitive around means and groups. |

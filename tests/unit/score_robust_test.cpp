@@ -1,11 +1,13 @@
 #include <doctest/doctest.h>
 #include "../test_fit.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
 #include <random>
 #include <string_view>
+#include <vector>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
@@ -108,6 +110,19 @@ Handles build_groups(std::string_view src, int n_groups) {
   auto fp = Parser::parse(src);
   REQUIRE(fp.has_value());
   magmaan::spec::BuildOptions opts;
+  opts.n_groups = n_groups;
+  auto pt = magmaan::spec::build(*fp, opts);
+  REQUIRE(pt.has_value());
+  auto rep = build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+  return Handles{std::move(*pt), std::move(*rep)};
+}
+
+Handles build_groups_mean(std::string_view src, int n_groups) {
+  auto fp = Parser::parse(src);
+  REQUIRE(fp.has_value());
+  magmaan::spec::BuildOptions opts;
+  opts.meanstructure = true;
   opts.n_groups = n_groups;
   auto pt = magmaan::spec::build(*fp, opts);
   REQUIRE(pt.has_value());
@@ -548,17 +563,45 @@ TEST_CASE("frontier robust LS MI: DWLS raw path scales; sandwich matches primiti
 
 namespace {
 
-Eigen::MatrixXd ordinal_three_cat_sample(std::mt19937& rng, Eigen::Index n) {
+Eigen::MatrixXd ordinal_three_cat_sample(
+    std::mt19937& rng,
+    Eigen::Index n,
+    const std::array<double, 4>& loading,
+    double lo = -0.50,
+    double hi = 0.45) {
   std::normal_distribution<double> norm(0.0, 1.0);
   Eigen::MatrixXd X(n, 4);
-  const double loading[4] = {0.88, 0.80, 0.72, 0.64};
   for (Eigen::Index i = 0; i < X.rows(); ++i) {
     const double eta = norm(rng);
     for (Eigen::Index j = 0; j < X.cols(); ++j) {
-      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
-      const double y = loading[j] * eta + eps;
-      X(i, j) = 1.0 + (y > -0.50) + (y > 0.45);
+      const auto idx = static_cast<std::size_t>(j);
+      const double eps =
+          std::sqrt(1.0 - loading[idx] * loading[idx]) * norm(rng);
+      const double y = loading[idx] * eta + eps;
+      X(i, j) = 1.0 + (y > lo) + (y > hi);
     }
+  }
+  return X;
+}
+
+Eigen::MatrixXd ordinal_three_cat_sample(std::mt19937& rng, Eigen::Index n) {
+  return ordinal_three_cat_sample(rng, n, {0.88, 0.80, 0.72, 0.64});
+}
+
+Eigen::MatrixXd mixed_ordinal_sample(std::mt19937& rng,
+                                     Eigen::Index n,
+                                     const std::array<double, 4>& loading,
+                                     double shift) {
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(n, 4);
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    const double y0 = loading[0] * eta + 0.45 * norm(rng) + shift;
+    const double y1 = loading[1] * eta + 0.55 * norm(rng) - shift;
+    X(i, 0) = 1.0 + (y0 > -0.60) + (y0 > 0.40);
+    X(i, 1) = 1.0 + (y1 > 0.10);
+    X(i, 2) = loading[2] * eta + 0.65 * norm(rng) + 0.20 + shift;
+    X(i, 3) = loading[3] * eta + 0.70 * norm(rng) - 0.10 - shift;
   }
   return X;
 }
@@ -585,6 +628,29 @@ constexpr const char* ordinal_cfa_eq_syntax =
     "x3 ~*~ 1*x3\n"
     "x4 ~*~ 1*x4\n"
     "a == b\n";
+
+constexpr const char* ordinal_cfa_mg_eq_syntax =
+    "f =~ x1 + c(a2,b2)*x2 + c(a3,b3)*x3 + c(a4,b4)*x4\n"
+    "x1 | t1 + t2\n"
+    "x2 | t1 + t2\n"
+    "x3 | t1 + t2\n"
+    "x4 | t1 + t2\n"
+    "x1 ~*~ 1*x1\n"
+    "x2 ~*~ 1*x2\n"
+    "x3 ~*~ 1*x3\n"
+    "x4 ~*~ 1*x4\n"
+    "a2 == b2\n"
+    "a3 == b3\n"
+    "a4 == b4\n";
+
+constexpr const char* mixed_ordinal_mg_eq_syntax =
+    "f =~ x1 + c(a2,b2)*x2 + c(a3,b3)*x3 + x4\n"
+    "x1 | t1 + t2\n"
+    "x2 | t1\n"
+    "x1 ~*~ 1*x1\n"
+    "x2 ~*~ 1*x2\n"
+    "a2 == b2\n"
+    "a3 == b3\n";
 
 }  // namespace
 
@@ -777,6 +843,162 @@ TEST_CASE("frontier robust mixed ordinal: WLS reduces, DWLS finite, ULS rejected
           h.pt, h.rep, *stats, *est_dwls,
           magmaan::estimate::OrdinalWeightKind::ULS, mi_opts);
   CHECK_FALSE(rob_uls.has_value());
+}
+
+TEST_CASE("frontier robust ordinal MI multi-group: WLS reduces to ordinary") {
+  std::mt19937 rng(20260616u);
+  std::vector<Eigen::MatrixXd> blocks;
+  blocks.push_back(ordinal_three_cat_sample(
+      rng, 720, {0.88, 0.80, 0.72, 0.64}));
+  blocks.push_back(ordinal_three_cat_sample(
+      rng, 760, {0.84, 0.76, 0.68, 0.70}, -0.45, 0.55));
+  auto stats = magmaan::data::ordinal_stats_from_integer_data(blocks);
+  REQUIRE(stats.has_value());
+
+  auto h = build_groups(ordinal_cfa_syntax, 2);
+  auto est = magmaan::test::fit_ordinal_bounded(
+      h.pt, h.rep, *stats, {}, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE(est.has_value());
+
+  inf::ModificationIndexOptions mi_opts;
+  mi_opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto nt = magmaan::estimate::modification_indices_ordinal(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS,
+      mi_opts);
+  REQUIRE(nt.has_value());
+  auto rob = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS,
+      mi_opts);
+  REQUIRE(rob.has_value());
+  REQUIRE(rob->rows.size() == nt->rows.size());
+  REQUIRE(rob->rows.size() > 1);
+
+  for (std::size_t i = 0; i < rob->rows.size(); ++i) {
+    CHECK(std::abs(rob->rows[i].mi - nt->rows[i].mi) <
+          1e-9 * (1.0 + std::abs(nt->rows[i].mi)));
+    CHECK(std::abs(rob->rows[i].scaling_factor - 1.0) < 1e-6);
+    CHECK(std::abs(rob->rows[i].mi_scaled - nt->rows[i].mi) <
+          1e-6 * (1.0 + std::abs(nt->rows[i].mi)));
+  }
+}
+
+TEST_CASE("frontier robust ordinal score test multi-group: WLS equality release reduces") {
+  std::mt19937 rng(20260617u);
+  std::vector<Eigen::MatrixXd> blocks;
+  blocks.push_back(ordinal_three_cat_sample(
+      rng, 720, {0.88, 0.80, 0.72, 0.64}));
+  blocks.push_back(ordinal_three_cat_sample(
+      rng, 760, {0.84, 0.76, 0.68, 0.70}, -0.45, 0.55));
+  auto stats = magmaan::data::ordinal_stats_from_integer_data(blocks);
+  REQUIRE(stats.has_value());
+
+  auto h = build_groups(ordinal_cfa_mg_eq_syntax, 2);
+  auto est = magmaan::test::fit_ordinal_bounded(
+      h.pt, h.rep, *stats, {}, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE(est.has_value());
+
+  auto nt = magmaan::estimate::score_tests_ordinal(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE(nt.has_value());
+  REQUIRE(nt->rows.size() == 3);
+  auto rob = magmaan::estimate::frontier::score_tests_ordinal_robust(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE(rob.has_value());
+  REQUIRE(rob->rows.size() == nt->rows.size());
+
+  for (std::size_t i = 0; i < rob->rows.size(); ++i) {
+    CHECK(std::abs(rob->rows[i].mi - nt->rows[i].mi) <
+          1e-9 * (1.0 + std::abs(nt->rows[i].mi)));
+    CHECK(std::abs(rob->rows[i].scaling_factor - 1.0) < 1e-6);
+    CHECK(std::abs(rob->rows[i].mi_scaled - nt->rows[i].mi) <
+          1e-6 * (1.0 + std::abs(nt->rows[i].mi)));
+  }
+}
+
+TEST_CASE("frontier robust mixed ordinal multi-group: WLS reductions cover MI and score") {
+  std::mt19937 rng(20260618u);
+  std::vector<Eigen::MatrixXd> blocks;
+  blocks.push_back(mixed_ordinal_sample(
+      rng, 900, {0.84, 0.74, 0.78, 0.70}, 0.00));
+  blocks.push_back(mixed_ordinal_sample(
+      rng, 940, {0.78, 0.68, 0.72, 0.76}, 0.12));
+  const std::vector<std::vector<std::int32_t>> ordered = {
+      {1, 1, 0, 0}, {1, 1, 0, 0}};
+  auto stats = magmaan::data::mixed_ordinal_stats_from_data(blocks, ordered);
+  REQUIRE(stats.has_value());
+
+  auto h = build_groups_mean(mixed_ordinal_mg_eq_syntax, 2);
+  auto est = magmaan::test::fit_mixed_ordinal_bounded(
+      h.pt, h.rep, *stats, {}, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE(est.has_value());
+
+  inf::ModificationIndexOptions mi_opts;
+  mi_opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto nt_mi = magmaan::estimate::modification_indices_mixed_ordinal(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS,
+      mi_opts);
+  REQUIRE(nt_mi.has_value());
+  auto rob_mi =
+      magmaan::estimate::frontier::modification_indices_mixed_ordinal_robust(
+          h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS,
+          mi_opts);
+  REQUIRE(rob_mi.has_value());
+  REQUIRE(rob_mi->rows.size() == nt_mi->rows.size());
+
+  for (std::size_t i = 0; i < rob_mi->rows.size(); ++i) {
+    CHECK(std::abs(rob_mi->rows[i].mi - nt_mi->rows[i].mi) <
+          1e-9 * (1.0 + std::abs(nt_mi->rows[i].mi)));
+    CHECK(std::abs(rob_mi->rows[i].scaling_factor - 1.0) < 1e-6);
+    CHECK(std::abs(rob_mi->rows[i].mi_scaled - nt_mi->rows[i].mi) <
+          1e-6 * (1.0 + std::abs(nt_mi->rows[i].mi)));
+  }
+
+  auto nt_st = magmaan::estimate::score_tests_mixed_ordinal(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE(nt_st.has_value());
+  REQUIRE(nt_st->rows.size() == 2);
+  auto rob_st = magmaan::estimate::frontier::score_tests_mixed_ordinal_robust(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE(rob_st.has_value());
+  REQUIRE(rob_st->rows.size() == nt_st->rows.size());
+
+  for (std::size_t i = 0; i < rob_st->rows.size(); ++i) {
+    CHECK(std::abs(rob_st->rows[i].mi - nt_st->rows[i].mi) <
+          1e-9 * (1.0 + std::abs(nt_st->rows[i].mi)));
+    CHECK(std::abs(rob_st->rows[i].scaling_factor - 1.0) < 1e-6);
+    CHECK(std::abs(rob_st->rows[i].mi_scaled - nt_st->rows[i].mi) <
+          1e-6 * (1.0 + std::abs(nt_st->rows[i].mi)));
+  }
+}
+
+TEST_CASE("frontier robust ordinal score test multi-group: DWLS scales finite") {
+  std::mt19937 rng(20260619u);
+  std::vector<Eigen::MatrixXd> blocks;
+  blocks.push_back(ordinal_three_cat_sample(
+      rng, 620, {0.92, 0.82, 0.74, 0.70}));
+  blocks.push_back(ordinal_three_cat_sample(
+      rng, 710, {0.88, 0.70, 0.84, 0.62}, -0.55, 0.50));
+  auto stats = magmaan::data::ordinal_stats_from_integer_data(blocks);
+  REQUIRE(stats.has_value());
+
+  auto h = build_groups(ordinal_cfa_mg_eq_syntax, 2);
+  auto est = magmaan::test::fit_ordinal_bounded(
+      h.pt, h.rep, *stats, {}, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(est.has_value());
+  auto rob = magmaan::estimate::frontier::score_tests_ordinal_robust(
+      h.pt, h.rep, *stats, *est, magmaan::estimate::OrdinalWeightKind::DWLS);
+  REQUIRE(rob.has_value());
+  REQUIRE(rob->rows.size() == 3);
+
+  bool any_scaled = false;
+  for (const auto& r : rob->rows) {
+    CHECK(std::isfinite(r.scaling_factor));
+    CHECK(r.scaling_factor > 0.0);
+    CHECK(std::isfinite(r.mi_scaled));
+    CHECK(r.mi_scaled >= 0.0);
+    if (std::abs(r.scaling_factor - 1.0) > 0.05) any_scaled = true;
+  }
+  CHECK(any_scaled);
 }
 
 // ── FIML robust tier ─────────────────────────────────────────────────────────

@@ -3448,16 +3448,6 @@ ordinal_param_space_sandwich(const Stats& stats,
   return weighted_param_space_sandwich(blocks);
 }
 
-template <class Stats>
-post_expected<void> require_single_group_ordinal(const Stats& stats) {
-  if (stats.R.size() != 1) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "ordinal robust score tests: only single-group models are supported "
-        "(v1)"));
-  }
-  return {};
-}
-
 template <class Stats, class ResidualFn, class JacobianFn,
           class MomentJacobianFn, class PrepareFn>
 post_expected<inference::ScoreTestTable>
@@ -3472,9 +3462,6 @@ ordinal_modification_indices_robust_impl(
     JacobianFn jacobian_fn,
     MomentJacobianFn moment_jacobian_fn,
     PrepareFn prepare_fn) {
-  if (auto g = require_single_group_ordinal(stats); !g.has_value()) {
-    return std::unexpected(g.error());
-  }
   if (auto v = validate_ordinal_nacov(stats); !v.has_value()) {
     return std::unexpected(v.error());
   }
@@ -3584,9 +3571,6 @@ ordinal_score_tests_robust_impl(spec::LatentStructure pt,
                                 JacobianFn jacobian_fn,
                                 MomentJacobianFn moment_jacobian_fn,
                                 PrepareFn prepare_fn) {
-  if (auto g = require_single_group_ordinal(stats); !g.has_value()) {
-    return std::unexpected(g.error());
-  }
   if (auto v = validate_ordinal_nacov(stats); !v.has_value()) {
     return std::unexpected(v.error());
   }
