@@ -147,5 +147,6 @@ TEST_CASE("fit goldens — θ̂ matches lavaan on real data (≤1e-6)") {
   for (const auto& s : skipped)  MESSAGE("  SKIP " << s);
   for (const auto& f : failures) MESSAGE("  FAIL " << f);
 
+  CHECK(skipped.size() == kSkipForFitGoldens.size());
   CHECK(passed == total);
 }

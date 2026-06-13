@@ -426,5 +426,7 @@ TEST_CASE("inference goldens — SE/χ²/df match lavaan") {
   for (const auto& s : needs_regen) MESSAGE("  NO-SE   " << s);
   for (const auto& f : failures)    MESSAGE("  FAIL    " << f);
 
+  CHECK(skipped.size() == kSkipForInferenceGoldens.size());
+  CHECK(needs_regen.empty());
   CHECK(passed == total);
 }

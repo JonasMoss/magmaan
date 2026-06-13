@@ -140,11 +140,17 @@ landed; remaining open items:
   matrix-rep deferred set now have exact count checks, and the skipped
   Little/Newsom broad corpus check no longer aborts on Little's null mean
   placeholders; forcing it with `--no-skip` reaches the single documented
-  `newsom/ex5_5b` backend failure. Continue sweeping the remaining
-  golden/parity tests for `MESSAGE`-only soft checks and fixtures regenerated
-  from magmaan's own output rather than an external oracle; for each, either
-  tighten to the oracle or write down explicitly why the looseness is
-  principled.
+  `newsom/ex5_5b` backend failure. The remaining golden soft sets are now
+  swept too: `fit_implied`, `fit_measures`, `fit_theta`, `inference`,
+  `test_stats`, and `observed_inference` count-pin their skip/defer/
+  needs-regen/no-oracle buckets, and the old silent `test_stats` `pe_z`
+  pre-regen path is now recorded and pinned empty. The self-referential-fixture
+  audit came back clean: all fixture families are anchored to lavaan,
+  lavaan-internals, PearsonDS, SuppDists, rvinecopulib, robcat, or analytic
+  references; `paper_corpus`'s misleading `export_magmaan.R` name still runs
+  `lavaan::sem()`. Observed-inference currently has no no-oracle fixtures
+  under the regenerated lavaan-backed corpus; that bucket is literal-count
+  pinned at zero so future structural missing-oracle cases must be explicit.
 - **M, later.** Layer CI on top only after the local commands are useful: run
   `test-quick` on PRs/pushes, sanitizer validation on main or a schedule, heavy
   parity/optional optimizer lanes less often, and coverage as an artifact before

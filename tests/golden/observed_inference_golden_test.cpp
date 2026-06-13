@@ -31,6 +31,10 @@ const std::set<std::string> kSkipForObservedGoldens = {
     "0018_na_modifier",
 };
 
+// Current lavaan-backed fit fixtures all carry observed-SE oracles; keep the
+// old no-oracle path count-pinned so stale or structurally missing oracles fail.
+constexpr std::size_t kNoObservedInfoOracleFixtures = 0;
+
 // Run a single information_* function on one fixture, comparing the derived
 // SEs to `se_observed` in the fixture. Appends a `<id>: <message>` entry to
 // `failures` on disagreement and increments `passed` on success.
@@ -171,6 +175,8 @@ TEST_CASE("observed inference goldens — FD + analytic vs lavaan") {
   for (const auto& s : no_oracle) MESSAGE("  NO-OBS  " << s);
   for (const auto& f : failures)  MESSAGE("  FAIL    " << f);
 
+  CHECK(skipped.size() == kSkipForObservedGoldens.size());
+  CHECK(no_oracle.size() == kNoObservedInfoOracleFixtures);
   CHECK(passed_fd == total_fd);
   CHECK(passed_an == total_an);
 }

@@ -46,7 +46,7 @@ TEST_CASE("test-stat goldens — z / p-value / Wald vs lavaan") {
   const std::string fit_dir = magmaan::test::fixtures_dir() + "/fit";
 
   int total = 0, passed = 0;
-  std::vector<std::string> failures, skipped;
+  std::vector<std::string> failures, skipped, needs_regen;
 
   for (const auto& e : corpus) {
     if (e.n_groups > 1) continue;          // single-group only
@@ -56,7 +56,10 @@ TEST_CASE("test-stat goldens — z / p-value / Wald vs lavaan") {
     if (!raw.has_value()) continue;
     auto exp = nlohmann::json::parse(*raw, nullptr, /*allow_exceptions=*/false);
     if (exp.is_discarded()) { failures.push_back(e.id + ": invalid JSON"); continue; }
-    if (!exp.contains("pe_z") || exp["pe_z"].is_null()) continue;  // pre-regen fixture
+    if (!exp.contains("pe_z") || exp["pe_z"].is_null()) {
+      needs_regen.push_back(e.id);
+      continue;
+    }
     ++total;
 
     auto fp = magmaan::parse::Parser::parse(e.model);
@@ -163,8 +166,12 @@ TEST_CASE("test-stat goldens — z / p-value / Wald vs lavaan") {
   }
 
   MESSAGE("test-stat goldens: " << passed << " / " << total << " pass (+ "
-          << skipped.size() << " skipped under-identified)");
-  for (const auto& s : skipped)  MESSAGE("  SKIP " << s);
-  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+          << skipped.size() << " skipped under-identified, "
+          << needs_regen.size() << " awaiting fixture regen)");
+  for (const auto& s : skipped)     MESSAGE("  SKIP    " << s);
+  for (const auto& s : needs_regen) MESSAGE("  NO-Z    " << s);
+  for (const auto& f : failures)    MESSAGE("  FAIL    " << f);
+  CHECK(skipped.size() == kSkipForTestStats.size());
+  CHECK(needs_regen.empty());
   CHECK(passed == total);
 }
