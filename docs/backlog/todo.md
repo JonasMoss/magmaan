@@ -319,14 +319,6 @@ work lives in [`speculative.md`](speculative.md). Open work:
   landed for `papers/pairwise-robust-sem/` and `experiments/08`/`09`. The
   remaining pairwise μ ACOV and pairwise Browne-unbiased items live in
   [`speculative.md`](speculative.md).
-- **M/L.** Convergence-note / start-value portfolio paper track
-  (`papers/convergence-note/`). The skeleton, local resources, and first R
-  simulation factories exist for the De Jonckere-Rosseel small-sample SEM designs
-  and the Ludtke-Ulitzsch-Robitzsch weak-loading CFA design. Next: add runners
-  that compare simple/FABIN/Guttman/Bentler/James-Stein starts, bounded random
-  starts, and screened portfolios under equal budgets; filter genuinely hard
-  cases by final gradient norm, objective gap, admissibility, PD margin, and
-  multistart basin disagreement rather than optimizer failure alone.
 - **M.** Extend the near-singular ML continuation experiment
   (`experiments/04-near-singular-ml-continuation`) beyond the first
   diagonal-ridge path: the first target/profile grid compares diagonal,
@@ -466,16 +458,6 @@ work lives in [`speculative.md`](speculative.md). Open work:
 
 ## Ordinal/SNLLS research
 
-- **M/L.** Structured Gamma / model-implied fourth-order paper track
-  (`papers/structured-gamma/`). A minimal `estimate::frontier` weight-matrix
-  builder exists for complete-data covariance-only pure CFA and is exposed to R as
-  both a raw Gamma matrix and a WLS-compatible weight; the paper-local R
-  simulation helper generates one- and five-factor CFA scenarios, runs
-  NT/ADF/fixed-mix DLS/MI4 working-weight fits, records MI4 positive-definiteness
-  failures as data, optionally applies eigen-floor or minimal NT-target shrinkage
-  repair, and writes pilot CSV/R data from `scripts/sim_structured_gamma.R`.
-  Remaining paper work: run and summarize a defensible grid, calibrate/report the
-  MI4 repair policy, and decide later whether broader model classes are needed.
 - **M/L.** Robust ordinal SEM paper track. Follow
   [docs/research/notes/robust_ordinal_sem_paper_plan.md](../research/notes/robust_ordinal_sem_paper_plan.md):
   build a paper-local simulation runner that emits tidy CSV for the Welz bivariate
