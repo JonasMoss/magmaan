@@ -118,6 +118,7 @@ magmaan_add_test_target(magmaan_test_estimate estimate
 
 magmaan_add_test_target(magmaan_test_inference inference
   unit/inference_test.cpp
+  unit/distribution_math_test.cpp
   unit/score_test.cpp
   unit/score_robust_test.cpp
   unit/effects_test.cpp
