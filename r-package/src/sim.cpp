@@ -16,6 +16,7 @@
 #include "magmaan/sim/ordinal_correlation.hpp"
 #include "magmaan/sim/plsim.hpp"
 #include "magmaan/sim/population.hpp"
+#include "magmaan/sim/vale_maurelli.hpp"
 
 namespace {
 
@@ -2141,4 +2142,167 @@ Rcpp::List sim_model_batch_impl(
       calibration, n, reps, seed_base, generator, df, mixture_weights,
       mixture_scale_multipliers, contamination_probability,
       contamination_scale_multiplier, slash_q, cholesky_jitter);
+}
+
+namespace {
+
+magmaan::sim::ValeMaurelliOptions make_vm_options(
+    int max_iter, double coefficient_tol, double correlation_tol,
+    double rho_bound, double cholesky_jitter) {
+  magmaan::sim::ValeMaurelliOptions options;
+  options.max_iter = max_iter;
+  options.coefficient_tol = coefficient_tol;
+  options.correlation_tol = correlation_tol;
+  options.rho_bound = rho_bound;
+  options.cholesky_jitter = cholesky_jitter;
+  return options;
+}
+
+Rcpp::NumericMatrix vm_coefficients_to_matrix(
+    const std::vector<magmaan::sim::FleishmanCoefficients>& coeffs) {
+  Rcpp::NumericMatrix m(static_cast<int>(coeffs.size()), 4);
+  for (std::size_t i = 0; i < coeffs.size(); ++i) {
+    const int row = static_cast<int>(i);
+    m(row, 0) = coeffs[i].a;
+    m(row, 1) = coeffs[i].b;
+    m(row, 2) = coeffs[i].c;
+    m(row, 3) = coeffs[i].d;
+  }
+  Rcpp::colnames(m) = Rcpp::CharacterVector::create("a", "b", "c", "d");
+  return m;
+}
+
+std::vector<magmaan::sim::FleishmanCoefficients> vm_coefficients_from_matrix(
+    Rcpp::NumericMatrix m) {
+  std::vector<magmaan::sim::FleishmanCoefficients> coeffs(
+      static_cast<std::size_t>(m.nrow()));
+  for (int i = 0; i < m.nrow(); ++i) {
+    coeffs[static_cast<std::size_t>(i)].a = m(i, 0);
+    coeffs[static_cast<std::size_t>(i)].b = m(i, 1);
+    coeffs[static_cast<std::size_t>(i)].c = m(i, 2);
+    coeffs[static_cast<std::size_t>(i)].d = m(i, 3);
+  }
+  return coeffs;
+}
+
+Rcpp::List vm_calibration_to_list(
+    const magmaan::sim::ValeMaurelliCalibration& cal,
+    const Eigen::MatrixXd& target_corr,
+    const Eigen::VectorXd& skewness,
+    const Eigen::VectorXd& excess_kurtosis) {
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["coefficients"] = vm_coefficients_to_matrix(cal.coefficients),
+      Rcpp::_["intermediate_corr"] = Rcpp::wrap(cal.intermediate_corr),
+      Rcpp::_["target_corr"] = Rcpp::wrap(target_corr),
+      Rcpp::_["skewness"] = Rcpp::wrap(skewness),
+      Rcpp::_["excess_kurtosis"] = Rcpp::wrap(excess_kurtosis));
+  out.attr("class") = Rcpp::CharacterVector::create(
+      "magmaan_vm_calibration", "list");
+  return out;
+}
+
+magmaan::sim::ValeMaurelliCalibration vm_calibration_from_list(
+    Rcpp::List calibration) {
+  magmaan::sim::ValeMaurelliCalibration cal;
+  cal.coefficients = vm_coefficients_from_matrix(
+      Rcpp::as<Rcpp::NumericMatrix>(calibration["coefficients"]));
+  cal.intermediate_corr =
+      Rcpp::as<Eigen::MatrixXd>(calibration["intermediate_corr"]);
+  return cal;
+}
+
+}  // namespace
+
+// [[Rcpp::export]]
+Rcpp::List sim_vm_calibrate_impl(
+    Rcpp::NumericMatrix target_corr,
+    Rcpp::NumericVector target_skewness,
+    Rcpp::NumericVector target_excess_kurtosis,
+    int max_iter = 80,
+    double coefficient_tol = 1e-10,
+    double correlation_tol = 1e-10,
+    double rho_bound = 0.999,
+    double cholesky_jitter = 1e-10) {
+  const Eigen::Map<Eigen::MatrixXd> corr(
+      REAL(target_corr), target_corr.nrow(), target_corr.ncol());
+  const Eigen::Map<Eigen::VectorXd> skew(
+      REAL(target_skewness), target_skewness.size());
+  const Eigen::Map<Eigen::VectorXd> kurt(
+      REAL(target_excess_kurtosis), target_excess_kurtosis.size());
+  const magmaan::sim::ValeMaurelliOptions options = make_vm_options(
+      max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter);
+
+  auto cal_or = magmaan::sim::calibrate_vale_maurelli(corr, skew, kurt, options);
+  if (!cal_or.has_value()) stop_sim(cal_or.error());
+  return vm_calibration_to_list(*cal_or, corr, skew, kurt);
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_vm_draw_impl(Rcpp::List calibration,
+                            int n,
+                            int reps,
+                            double seed_base,
+                            double cholesky_jitter = 1e-10) {
+  if (n <= 0) Rcpp::stop("n must be positive");
+  if (reps <= 0) Rcpp::stop("reps must be positive");
+
+  const magmaan::sim::ValeMaurelliCalibration cal =
+      vm_calibration_from_list(calibration);
+  magmaan::sim::ValeMaurelliOptions options;
+  options.cholesky_jitter = cholesky_jitter;
+
+  Rcpp::List draws(reps);
+  for (int i = 0; i < reps; ++i) {
+    std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
+                        static_cast<std::uint64_t>(i + 1));
+    auto X_or = magmaan::sim::simulate_vale_maurelli_matrix(
+        static_cast<Eigen::Index>(n), cal, rng, options);
+    if (!X_or.has_value()) stop_sim(X_or.error());
+    draws[i] = Rcpp::wrap(*X_or);
+  }
+  return Rcpp::List::create(Rcpp::_["draws"] = draws);
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_vm_batch_impl(
+    Rcpp::NumericMatrix target_corr,
+    Rcpp::NumericVector target_skewness,
+    Rcpp::NumericVector target_excess_kurtosis,
+    int n,
+    int reps,
+    double seed_base,
+    int max_iter = 80,
+    double coefficient_tol = 1e-10,
+    double correlation_tol = 1e-10,
+    double rho_bound = 0.999,
+    double cholesky_jitter = 1e-10) {
+  if (n <= 0) Rcpp::stop("n must be positive");
+  if (reps <= 0) Rcpp::stop("reps must be positive");
+
+  const Eigen::Map<Eigen::MatrixXd> corr(
+      REAL(target_corr), target_corr.nrow(), target_corr.ncol());
+  const Eigen::Map<Eigen::VectorXd> skew(
+      REAL(target_skewness), target_skewness.size());
+  const Eigen::Map<Eigen::VectorXd> kurt(
+      REAL(target_excess_kurtosis), target_excess_kurtosis.size());
+  const magmaan::sim::ValeMaurelliOptions options = make_vm_options(
+      max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter);
+
+  auto cal_or = magmaan::sim::calibrate_vale_maurelli(corr, skew, kurt, options);
+  if (!cal_or.has_value()) stop_sim(cal_or.error());
+
+  Rcpp::List draws(reps);
+  for (int i = 0; i < reps; ++i) {
+    std::mt19937_64 rng(static_cast<std::uint64_t>(seed_base) +
+                        static_cast<std::uint64_t>(i + 1));
+    auto X_or = magmaan::sim::simulate_vale_maurelli_matrix(
+        static_cast<Eigen::Index>(n), *cal_or, rng, options);
+    if (!X_or.has_value()) stop_sim(X_or.error());
+    draws[i] = Rcpp::wrap(*X_or);
+  }
+
+  return Rcpp::List::create(
+      Rcpp::_["draws"] = draws,
+      Rcpp::_["coefficients"] = vm_coefficients_to_matrix(cal_or->coefficients),
+      Rcpp::_["intermediate_corr"] = Rcpp::wrap(cal_or->intermediate_corr));
 }

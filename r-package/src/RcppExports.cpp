@@ -2138,6 +2138,60 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sim_vm_calibrate_impl
+Rcpp::List sim_vm_calibrate_impl(Rcpp::NumericMatrix target_corr, Rcpp::NumericVector target_skewness, Rcpp::NumericVector target_excess_kurtosis, int max_iter, double coefficient_tol, double correlation_tol, double rho_bound, double cholesky_jitter);
+RcppExport SEXP _magmaan_sim_vm_calibrate_impl(SEXP target_corrSEXP, SEXP target_skewnessSEXP, SEXP target_excess_kurtosisSEXP, SEXP max_iterSEXP, SEXP coefficient_tolSEXP, SEXP correlation_tolSEXP, SEXP rho_boundSEXP, SEXP cholesky_jitterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type target_corr(target_corrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type target_skewness(target_skewnessSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type target_excess_kurtosis(target_excess_kurtosisSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type coefficient_tol(coefficient_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type correlation_tol(correlation_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type rho_bound(rho_boundSEXP);
+    Rcpp::traits::input_parameter< double >::type cholesky_jitter(cholesky_jitterSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_vm_calibrate_impl(target_corr, target_skewness, target_excess_kurtosis, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sim_vm_draw_impl
+Rcpp::List sim_vm_draw_impl(Rcpp::List calibration, int n, int reps, double seed_base, double cholesky_jitter);
+RcppExport SEXP _magmaan_sim_vm_draw_impl(SEXP calibrationSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP cholesky_jitterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type calibration(calibrationSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type reps(repsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed_base(seed_baseSEXP);
+    Rcpp::traits::input_parameter< double >::type cholesky_jitter(cholesky_jitterSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_vm_draw_impl(calibration, n, reps, seed_base, cholesky_jitter));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sim_vm_batch_impl
+Rcpp::List sim_vm_batch_impl(Rcpp::NumericMatrix target_corr, Rcpp::NumericVector target_skewness, Rcpp::NumericVector target_excess_kurtosis, int n, int reps, double seed_base, int max_iter, double coefficient_tol, double correlation_tol, double rho_bound, double cholesky_jitter);
+RcppExport SEXP _magmaan_sim_vm_batch_impl(SEXP target_corrSEXP, SEXP target_skewnessSEXP, SEXP target_excess_kurtosisSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP max_iterSEXP, SEXP coefficient_tolSEXP, SEXP correlation_tolSEXP, SEXP rho_boundSEXP, SEXP cholesky_jitterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type target_corr(target_corrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type target_skewness(target_skewnessSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type target_excess_kurtosis(target_excess_kurtosisSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type reps(repsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed_base(seed_baseSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type coefficient_tol(coefficient_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type correlation_tol(correlation_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type rho_bound(rho_boundSEXP);
+    Rcpp::traits::input_parameter< double >::type cholesky_jitter(cholesky_jitterSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_vm_batch_impl(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_version", (DL_FUNC) &_magmaan_version, 0},
@@ -2287,6 +2341,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_sim_model_calibrate_impl", (DL_FUNC) &_magmaan_sim_model_calibrate_impl, 2},
     {"_magmaan_sim_model_draw_impl", (DL_FUNC) &_magmaan_sim_model_draw_impl, 12},
     {"_magmaan_sim_model_batch_impl", (DL_FUNC) &_magmaan_sim_model_batch_impl, 13},
+    {"_magmaan_sim_vm_calibrate_impl", (DL_FUNC) &_magmaan_sim_vm_calibrate_impl, 8},
+    {"_magmaan_sim_vm_draw_impl", (DL_FUNC) &_magmaan_sim_vm_draw_impl, 5},
+    {"_magmaan_sim_vm_batch_impl", (DL_FUNC) &_magmaan_sim_vm_batch_impl, 11},
     {NULL, NULL, 0}
 };
 

@@ -424,7 +424,11 @@ golden `parTable()` fixtures.
   excess kurtosis by exact polynomial moments, pairwise intermediate normal
   correlations are solved from the Vale-Maurelli covariance cubic, and the
   assembled intermediate correlation matrix is Cholesky-validated before
-  sampling.
+  sampling. The R package exposes the two-stage split as
+  `sim_vm_calibrate()` / `sim_vm_draw()` plus `sim_vm_batch()` (calibrate from a
+  target correlation + per-margin skewness/excess kurtosis; draw consumes the
+  calibration's Fleishman coefficients + intermediate correlation), validated by
+  `r-package/examples/sim_vm.R`.
 - PLSIM piecewise-linear simulation is available through
   `fit_plsim_marginal()`, `diagnose_plsim()`, `calibrate_plsim()`,
   `simulate_plsim_matrix()`, and `simulate_plsim_raw()`. The first slice uses
