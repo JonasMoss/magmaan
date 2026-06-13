@@ -223,6 +223,20 @@ Scope: lavaan's bare default (`A.method = "delta"`, `scaled.shifted = TRUE`) is 
 documented compatibility alternative for covariance-nested checks, not the
 magmaan oracle. Full investigation: `docs/validation/satorra2000_parity.md`.
 
+**Ordinal WLSMV nested Satorra-2000 row convention.**
+Finding: lavaan's ordinal WLSMV `lavTestLRT(..., method = "satorra.2000",
+A.method = "exact", scaled.shifted = FALSE)` table reports the
+mean/variance-adjusted Satorra-2000 difference statistic for `m > 1`: the
+displayed `Df diff` is the spectrum-derived `d0 = (sum lambda)^2 / sum
+lambda^2`, and the table scale is `sum(lambda) / d0`, not the integer-rank
+mean scale `sum(lambda) / m`. magmaan exposes both rows; the ordinal nested
+oracle compares lavaan's row to `T_adjusted`, `adjust_d0`, and the
+`trace/d0` scale while keeping the integer restriction rank in `df_diff`.
+Guard: `r-package/examples/nested_test_ordinal.R` covers a single-group ordinal
+loading equality and a two-group configural-vs-metric WLSMV comparison; the
+C++ helper `compute_satorra2000_from_sandwich` is pinned against the
+moment-space wrapper in `tests/unit/satorra2000_test.cpp`.
+
 **Ordinal api standardize/compute_defined fed the un-prepared structure.**
 Regression: `api::standardize_lv`/`standardize_all`/`compute_defined` dropped
 their `require_not_ordinal` guard but never worked for ordinal/mixed fits — the
@@ -313,7 +327,7 @@ optimizer-path limitation, documented here, not guarded by a test.
 | FIML and missing data | lavaan FIML fixtures, saturated EM invariants, FIML FMG diagnostics | Unit, golden, R examples, and advisory checks | `tests/unit/fiml_test.cpp`, `tests/golden/fiml_golden_test.cpp`, `r-package/examples/fiml.R`, `tests/checks/fiml_fmg_trace/` | High-level `magmaan(estimator = "FIML")` mean-structure defaults and multi-group starts need care. |
 | Ordinal and mixed moments | lavaan ordinal fixtures, robcat fixtures, internal moment invariants | Unit, golden, robcat, R examples, and experiments | `tests/unit/ordinal_test.cpp`, `tests/golden/ordinal_golden_test.cpp`, `tests/golden/robcat_parity_golden_test.cpp`, `r-package/examples/ordinal_dwls_wls.R` | Lazy mixed WLS construction, mixed theta SNLLS, and research robust-association paths remain open. |
 | Inference, standardization, and fit measures | lavaan SE, score, standardized, and fit-measure fixtures | Unit plus golden tests under `inference` | `tests/unit/inference_test.cpp`, `tests/unit/score_test.cpp`, `tests/unit/standardized_test.cpp`, `tests/golden/inference_golden_test.cpp`, `tests/golden/standardized_golden_test.cpp` | Ordinal defined-parameter validity and additional ordinal-SEM standardized goldens remain follow-ups. |
-| Robust tests, FMG, and nested restrictions | lavaan/semTests parity, R-internals fixtures, weighted-chi-square oracles | Unit, golden, R examples, and advisory checks | `tests/unit/robust_test.cpp`, `tests/unit/fmg_test.cpp`, `tests/unit/weighted_chisq_test.cpp`, `tests/golden/fmg_pvalue_golden_test.cpp`, `tests/golden/score_robust_golden_test.cpp`, `r-package/examples/fmg.R` | FIML robust score tests remain single-group v1; mixed-sign weighted-χ² tails remain outside magmaan's non-negative spectrum contract. |
+| Robust tests, FMG, and nested restrictions | lavaan/semTests parity, R-internals fixtures, weighted-chi-square oracles | Unit, golden, R examples, and advisory checks | `tests/unit/robust_test.cpp`, `tests/unit/fmg_test.cpp`, `tests/unit/weighted_chisq_test.cpp`, `tests/golden/fmg_pvalue_golden_test.cpp`, `tests/golden/score_robust_golden_test.cpp`, `r-package/examples/fmg.R`, `r-package/examples/nested_test_ordinal.R` | FIML robust score tests remain single-group v1; mixed-sign weighted-χ² tails remain outside magmaan's non-negative spectrum contract. |
 | Optimizers and terminal audits | Recomputed objectives, projected gradients, cross-backend agreement | Unit tests and benchmark/report tracks under `estimate` | `tests/unit/terminal_audit_test.cpp`, `tests/unit/optimizer_crosscheck_test.cpp`, `tests/unit/fit_diagnostics_test.cpp`, `docs/design/terminal-audit.md` | Ultimate verifier and stationarity tolerance calibration remain research work. |
 | Simulation | Distribution goldens, deterministic calibration fixtures, stochastic smokes | Unit tests under `sim` plus advisory checks | `tests/unit/norta_test.cpp`, `tests/unit/plsim_test.cpp`, `tests/unit/vale_maurelli_test.cpp`, `tests/checks/plsim/` | Model-implied simulation, ordinal/mixed observed-correlation calibration, and persistent caches remain open. |
 | R boundary and examples | lavaan parity through examples and R-shaped wrapper checks | `just r-check` examples plus C++ API tests | `tests/unit/api_sem_test.cpp`, `r-package/examples/*.R`, `r-package/examples/tutorial/run_all.R` | Examples are smoke tests, not exhaustive wrapper coverage; R reconstruction is sensitive around means and groups. |
@@ -358,6 +372,7 @@ Protected by:
 - `tests/unit/weighted_chisq_test.cpp`
 - `tests/golden/score_robust_golden_test.cpp`
 - `r-package/examples/fmg.R`
+- `r-package/examples/nested_test_ordinal.R`
 - `tests/checks/robust_score/`
 
 Known weak spots: robust MI has deferred estimator tiers and no df-greater-than

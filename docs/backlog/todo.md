@@ -219,7 +219,13 @@ decisions in the simulation backlog.
   `robust_mixed_ordinal()` polychoric UGamma spectrum (`eigvals` + `chisq_standard`
   + `df`), single-group v1, `_ml`/`_ug` rejected, anchored by the ordinal C++ FMG
   test and `r-package/examples/fmg_ordinal.R`; no new C++ production code (see
-  roadmap). What Paper 2 still lacks, to write the paper:
+  roadmap). The nested-test gate **also landed 2026-06-13**:
+  all-ordinal DWLS/WLS `nestedTest(..., data = ordinal_stats,
+  method = "satorra.2000")` now builds the direct ordinal Satorra-2000 reduced
+  spectrum for exact or delta restrictions, including two-group
+  configural-vs-metric invariance, with lavaan WLSMV parity in
+  `r-package/examples/nested_test_ordinal.R`. What Paper 2 still lacks, to
+  write the paper:
   - **L, paper sim harness.** A paper-local runner: an ordinal measurement-
     invariance population (threshold + loading invariance across groups), an
     ordinal data generator (categories × underlying skew × N), DWLS/WLS GOF +
@@ -234,11 +240,12 @@ decisions in the simulation backlog.
     visible alongside the FIML parity table.
   - **S, author decision.** Single paper with a FIML + polychoric pair of parts,
     or a separate `papers/<slug>/` folder.
-  - **Only-when-needed.** Multi-group ordinal FMG (lift the single-group v1 cap
-    in `robust_ordinal`), and a C++ methods-developer convenience entry point —
-    not needed for the paper, since the spectrum-once-then-loop R orchestration
-    avoids a per-method `robust_ordinal` recompute. (`_ug`/unbiased-Gamma is N/A
-    for polychoric: the NACOV is already the asymptotic Gamma.)
+  - **Only-when-needed.** Multi-group ordinal GOF FMG (lift the single-group v1
+    cap in the `fmg_tests_ordinal()` R wrapper), and a C++ methods-developer
+    convenience entry point — not needed for the paper, since the
+    spectrum-once-then-loop R orchestration avoids a per-method
+    `robust_ordinal` recompute. (`_ug`/unbiased-Gamma is N/A for polychoric: the
+    NACOV is already the asymptotic Gamma.)
 - **FIML cross-call pack: remaining consumers.** The `FIMLPack`/`FIMLH1`
   value-based precomputation (roadmap, Continuous FIML) is threaded through
   the post-fit helpers and `api::sem`. Not yet pack-aware: the R bindings

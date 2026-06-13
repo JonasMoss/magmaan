@@ -12,7 +12,8 @@
 #' @param data Raw complete data for complete-data fits: either a data.frame
 #'   whose columns include the observed variables of `fit_H1` (single-group
 #'   case), or a list of per-group matrices in the same block order the fit was
-#'   built with. FIML pairs use `fit_H1$raw_data` and do not accept `data`.
+#'   built with. Ordinal DWLS/WLS pairs take the `magmaan_ordinal_data` object
+#'   used for fitting. FIML pairs use `fit_H1$raw_data` and do not accept `data`.
 #' @param gamma `"empirical"` (default, empirical Gamma-hat) or `"NT"`
 #'   (normal-theory sanity-check path where all eigenvalues collapse to 1).
 #' @param method `"restriction_map"` (default), `"lavaan_sb2001"`, or
@@ -26,6 +27,8 @@
 #'   q-by-q Gamma and U matrices and eigendecomposes the q-by-q product, as
 #'   standard SEM software does). The latter two are diagnostic/reference paths
 #'   for timing the algebraic reduction.
+#' @param weight Ordinal nested tests only: `"DWLS"`, `"WLS"`, or `"ULS"`.
+#'   Defaults to `fit_H1$estimator`.
 #'
 #' @return A list of class `magmaan_nested_test`.
 #' @export
@@ -36,7 +39,8 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
                                          "lavaan_sb2010"),
                               A.method = c("exact", "delta"),
                               computation = c("streaming", "materialized",
-                                              "dense")) {
+                                              "dense"),
+                              weight = NULL) {
   gamma <- match.arg(gamma)
   method <- match.arg(method)
   A.method <- match.arg(A.method)
@@ -53,6 +57,14 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
   fiml_H0 <- is_fiml(fit_H0)
   if (xor(fiml_H1, fiml_H0)) {
     stop("robust_nested_lrt(): mixed FIML/complete-data model pairs are not ",
+         "supported; fit both models with the same estimator.", call. = FALSE)
+  }
+  ordinal_H1 <- isTRUE(fit_H1$ordinal)
+  ordinal_H0 <- isTRUE(fit_H0$ordinal)
+  mixed_ordinal_H1 <- isTRUE(fit_H1$mixed_ordinal)
+  mixed_ordinal_H0 <- isTRUE(fit_H0$mixed_ordinal)
+  if (xor(ordinal_H1, ordinal_H0) || xor(mixed_ordinal_H1, mixed_ordinal_H0)) {
+    stop("robust_nested_lrt(): mixed ordinal/non-ordinal model pairs are not ",
          "supported; fit both models with the same estimator.", call. = FALSE)
   }
   if (fiml_H1) {
@@ -72,6 +84,41 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
     res$method <- method
     res$A.method <- A.method
     res$computation <- "fiml_eta"
+    class(res) <- c("magmaan_nested_test", "list")
+    return(res)
+  }
+  if (mixed_ordinal_H1) {
+    stop("robust_nested_lrt(): mixed-ordinal nested tests are not implemented; ",
+         "use all-ordinal DWLS/WLS fits or complete-data/FIML fits.",
+         call. = FALSE)
+  }
+  if (ordinal_H1) {
+    if (!identical(method, "restriction_map")) {
+      stop("robust_nested_lrt(): ordinal nested tests support ",
+           "method = 'restriction_map' only.", call. = FALSE)
+    }
+    if (!identical(gamma, "empirical")) {
+      stop("robust_nested_lrt(): ordinal nested tests use the polychoric NACOV ",
+           "Gamma from `data`; gamma = 'NT' is not defined.", call. = FALSE)
+    }
+    if (is.null(data)) {
+      stop("robust_nested_lrt(): ordinal nested tests require `data` to be the ",
+           "magmaan_ordinal_data object used for fitting.", call. = FALSE)
+    }
+    T_H1 <- infer_chi2_stat(fit_sample_stats(fit_H1), fit_H1$fmin)
+    T_H0 <- infer_chi2_stat(fit_sample_stats(fit_H0), fit_H0$fmin)
+    resolved_weight <- weight %||% fit_H1$estimator %||% ""
+    res <- infer_ordinal_lr_test_satorra2000(
+      fit_H1, fit_H0, data,
+      T_H1 = T_H1, df_H1 = 0L,
+      T_H0 = T_H0, df_H0 = 0L,
+      weight = resolved_weight,
+      a_method = A.method)
+    res$gamma <- gamma
+    res$method <- method
+    res$A.method <- A.method
+    res$computation <- "ordinal_moment"
+    res$weight <- resolved_weight
     class(res) <- c("magmaan_nested_test", "list")
     return(res)
   }
@@ -155,7 +202,8 @@ nestedTest <- function(fit_H1, fit_H0, data = NULL, gamma = c("empirical", "NT")
                                   "lavaan_sb2010"),
                        A.method = c("exact", "delta"),
                        computation = c("streaming", "materialized",
-                                       "dense")) {
+                                       "dense"),
+                       weight = NULL) {
   method <- match.arg(method)
   computation <- match.arg(computation)
   canonical <- switch(method,
@@ -165,7 +213,7 @@ nestedTest <- function(fit_H1, fit_H0, data = NULL, gamma = c("empirical", "NT")
     method)
   out <- robust_nested_lrt(fit_H1, fit_H0, data, gamma = gamma,
                            method = canonical, A.method = A.method,
-                           computation = computation)
+                           computation = computation, weight = weight)
   out$compat_method <- method
   out
 }

@@ -117,10 +117,12 @@ inference_rls_chi2_fit <- infer_rls_chi2_fit
 
 robust_lr_test_satorra2000 <- infer_lr_test_satorra2000
 robust_lr_test_satorra2000_fiml <- infer_fiml_lr_test_satorra2000
+robust_lr_test_satorra2000_ordinal <- infer_ordinal_lr_test_satorra2000
 robust_lr_test_satorra_bentler2001 <- infer_lr_test_satorra_bentler2001
 robust_lr_test_satorra_bentler2010 <- infer_lr_test_satorra_bentler2010
 robust_nested_lrt_restriction_map <- infer_lr_test_satorra2000
 robust_nested_lrt_fiml_restriction_map <- infer_fiml_lr_test_satorra2000
+robust_nested_lrt_ordinal_restriction_map <- infer_ordinal_lr_test_satorra2000
 robust_build_u_factor <- infer_build_u_factor
 robust_build_u_factor_parts <- infer_build_u_factor_parts
 robust_build_u_factor_fit <- infer_build_u_factor_fit
@@ -284,10 +286,12 @@ magmaan_core <- local({
     robust = c(
       "robust_lr_test_satorra2000",
       "robust_lr_test_satorra2000_fiml",
+      "robust_lr_test_satorra2000_ordinal",
       "robust_lr_test_satorra_bentler2001",
       "robust_lr_test_satorra_bentler2010",
       "robust_nested_lrt_restriction_map",
       "robust_nested_lrt_fiml_restriction_map",
+      "robust_nested_lrt_ordinal_restriction_map",
       "robust_build_u_factor",
       "robust_build_u_factor_parts",
       "robust_build_u_factor_fit",
@@ -481,6 +485,7 @@ magmaan_core <- local({
       "infer_rls_chi2",
       "infer_rls_chi2_sample",
       "infer_lr_test_satorra2000",
+      "infer_ordinal_lr_test_satorra2000",
       "infer_lr_test_satorra_bentler2001",
       "infer_lr_test_satorra_bentler2010",
       "infer_build_u_factor",

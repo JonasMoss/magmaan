@@ -564,23 +564,20 @@ lr_test_satorra2000_from_data(
 }
 
 post_expected<SatorraDiffResult>
-compute_fiml_satorra2000(
-    const Eigen::Ref<const Eigen::MatrixXd>& Delta1_alpha,
-    const Eigen::Ref<const Eigen::MatrixXd>& V,
-    const Eigen::Ref<const Eigen::MatrixXd>& Gamma,
+compute_satorra2000_from_sandwich(
+    const Eigen::Ref<const Eigen::MatrixXd>& A1,
+    const Eigen::Ref<const Eigen::MatrixXd>& B1,
     const Eigen::Ref<const Eigen::MatrixXd>& A_alpha) {
-  const Eigen::Index Q = Delta1_alpha.rows();
-  const Eigen::Index r1 = Delta1_alpha.cols();
+  const Eigen::Index r1 = A1.rows();
   const Eigen::Index m = A_alpha.rows();
 
-  if (V.rows() != Q || V.cols() != Q || Gamma.rows() != Q ||
-      Gamma.cols() != Q) {
+  if (A1.cols() != r1 || B1.rows() != r1 || B1.cols() != r1) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "compute_fiml_satorra2000: V/Gamma dimensions must match Delta rows"));
+        "compute_satorra2000_from_sandwich: A1/B1 dimensions must match"));
   }
   if (A_alpha.cols() != r1) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "compute_fiml_satorra2000: A_alpha column count " +
+        "compute_satorra2000_from_sandwich: A_alpha column count " +
         std::to_string(A_alpha.cols()) + " does not match r1 = " +
         std::to_string(r1)));
   }
@@ -595,19 +592,15 @@ compute_fiml_satorra2000(
   }
   if (m > r1) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "compute_fiml_satorra2000: A_alpha has more rows than H1 alpha "
-        "directions"));
+        "compute_satorra2000_from_sandwich: A_alpha has more rows than H1 "
+        "alpha directions"));
   }
 
-  const Eigen::MatrixXd Vsym = 0.5 * (V + V.transpose());
-  const Eigen::MatrixXd Gsym = 0.5 * (Gamma + Gamma.transpose());
-  const Eigen::MatrixXd VD = Vsym * Delta1_alpha;
-  Eigen::MatrixXd P = Delta1_alpha.transpose() * VD;
-  P = 0.5 * (P + P.transpose()).eval();
+  Eigen::MatrixXd P = 0.5 * (A1 + A1.transpose());
   Eigen::LDLT<Eigen::MatrixXd> ldlt_P(P);
   if (ldlt_P.info() != Eigen::Success) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "compute_fiml_satorra2000: H1 eta-space information P is not "
+        "compute_satorra2000_from_sandwich: H1 alpha-space bread A1 is not "
         "invertible"));
   }
   {
@@ -615,7 +608,7 @@ compute_fiml_satorra2000(
     const double tol_pivot = 1e-10 * d_abs.maxCoeff();
     if (d_abs.minCoeff() <= tol_pivot) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "compute_fiml_satorra2000: H1 eta-space information P is "
+          "compute_satorra2000_from_sandwich: H1 alpha-space bread A1 is "
           "rank-deficient (smallest |D| pivot " +
           std::to_string(d_abs.minCoeff()) + " <= tol " +
           std::to_string(tol_pivot) + ")"));
@@ -626,15 +619,15 @@ compute_fiml_satorra2000(
   Eigen::MatrixXd C = A_alpha * Y;
   C = 0.5 * (C + C.transpose()).eval();
 
-  const Eigen::MatrixXd mid = VD.transpose() * Gsym * VD;
-  Eigen::MatrixXd S = Y.transpose() * mid * Y;
+  const Eigen::MatrixXd Bsym = 0.5 * (B1 + B1.transpose());
+  Eigen::MatrixXd S = Y.transpose() * Bsym * Y;
   S = 0.5 * (S + S.transpose()).eval();
 
   Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(
       S, C, Eigen::EigenvaluesOnly | Eigen::Ax_lBx);
   if (ges.info() != Eigen::Success) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "compute_fiml_satorra2000: generalized eigensolver failed "
+        "compute_satorra2000_from_sandwich: generalized eigensolver failed "
         "(restriction C may be singular against H1 eta-space curvature)"));
   }
   Eigen::VectorXd eig = ges.eigenvalues();
@@ -647,7 +640,7 @@ compute_fiml_satorra2000(
         eig(k) = 0.0;
       } else {
         warnings.emplace_back(
-            "compute_fiml_satorra2000: detected eigenvalue " +
+            "compute_satorra2000_from_sandwich: detected eigenvalue " +
             std::to_string(eig(k)) + " below clip threshold " +
             std::to_string(-clip_thresh) + " -- clipped to 0");
         eig(k) = 0.0;
@@ -663,6 +656,28 @@ compute_fiml_satorra2000(
   out.trace_CinvS_sq = eig.squaredNorm();
   out.warnings = std::move(warnings);
   return out;
+}
+
+post_expected<SatorraDiffResult>
+compute_fiml_satorra2000(
+    const Eigen::Ref<const Eigen::MatrixXd>& Delta1_alpha,
+    const Eigen::Ref<const Eigen::MatrixXd>& V,
+    const Eigen::Ref<const Eigen::MatrixXd>& Gamma,
+    const Eigen::Ref<const Eigen::MatrixXd>& A_alpha) {
+  const Eigen::Index Q = Delta1_alpha.rows();
+  if (V.rows() != Q || V.cols() != Q || Gamma.rows() != Q ||
+      Gamma.cols() != Q) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_fiml_satorra2000: V/Gamma dimensions must match Delta rows"));
+  }
+  const Eigen::MatrixXd Vsym = 0.5 * (V + V.transpose());
+  const Eigen::MatrixXd Gsym = 0.5 * (Gamma + Gamma.transpose());
+  const Eigen::MatrixXd VD = Vsym * Delta1_alpha;
+  Eigen::MatrixXd A1 = Delta1_alpha.transpose() * VD;
+  A1 = 0.5 * (A1 + A1.transpose()).eval();
+  Eigen::MatrixXd B1 = VD.transpose() * Gsym * VD;
+  B1 = 0.5 * (B1 + B1.transpose()).eval();
+  return compute_satorra2000_from_sandwich(A1, B1, A_alpha);
 }
 
 post_expected<LRSatorra2000Result>

@@ -308,6 +308,51 @@ TEST_CASE("restriction_alpha_delta_from_jacobians finds moment-column restrictio
   CHECK((A * A.transpose())(0, 0) == doctest::Approx(1.0).epsilon(1e-12));
 }
 
+TEST_CASE("compute_satorra2000_from_sandwich matches moment-space wrapper") {
+  Eigen::MatrixXd Delta(4, 3);
+  Delta << 1.0, 0.2, 0.0,
+           0.1, 1.0, 0.3,
+           0.0, 0.4, 1.0,
+           0.5, 0.1, 0.2;
+  Eigen::MatrixXd Lw(4, 4);
+  Lw << 1.4, 0.0, 0.0, 0.0,
+        0.2, 1.2, 0.0, 0.0,
+        0.1, 0.3, 1.1, 0.0,
+        0.2, 0.1, 0.4, 1.3;
+  Eigen::MatrixXd Lg(4, 4);
+  Lg << 1.1, 0.0, 0.0, 0.0,
+        0.3, 1.4, 0.0, 0.0,
+        0.1, 0.2, 1.2, 0.0,
+        0.2, 0.1, 0.3, 1.5;
+  const Eigen::MatrixXd V = Lw * Lw.transpose();
+  const Eigen::MatrixXd Gamma = Lg * Lg.transpose();
+  Eigen::MatrixXd A_alpha(2, 3);
+  A_alpha << 1.0, 0.0, 0.0,
+             0.0, 0.5, 1.0;
+
+  const Eigen::MatrixXd VD = V * Delta;
+  const Eigen::MatrixXd A1 = Delta.transpose() * VD;
+  const Eigen::MatrixXd B1 = VD.transpose() * Gamma * VD;
+
+  auto moment_or = magmaan::robust::compute_fiml_satorra2000(
+      Delta, V, Gamma, A_alpha);
+  auto sandwich_or = magmaan::robust::compute_satorra2000_from_sandwich(
+      A1, B1, A_alpha);
+  REQUIRE(moment_or.has_value());
+  REQUIRE(sandwich_or.has_value());
+  CHECK(moment_or->C.isApprox(sandwich_or->C, 1e-12));
+  CHECK(moment_or->S.isApprox(sandwich_or->S, 1e-12));
+  REQUIRE(moment_or->eigenvalues.size() == sandwich_or->eigenvalues.size());
+  for (Eigen::Index k = 0; k < moment_or->eigenvalues.size(); ++k) {
+    CHECK(moment_or->eigenvalues(k) ==
+          doctest::Approx(sandwich_or->eigenvalues(k)).epsilon(1e-12));
+  }
+  CHECK(moment_or->trace_CinvS ==
+        doctest::Approx(sandwich_or->trace_CinvS).epsilon(1e-12));
+  CHECK(moment_or->trace_CinvS_sq ==
+        doctest::Approx(sandwich_or->trace_CinvS_sq).epsilon(1e-12));
+}
+
 // ── m = 0 degenerate ───────────────────────────────────────────────────────
 
 TEST_CASE("compute_satorra2000: degenerate m=0 (H0 ≡ H1)") {

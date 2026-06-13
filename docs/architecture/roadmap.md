@@ -359,6 +359,20 @@ golden `parTable()` fixtures.
   `r-package/examples/fmg_ordinal.R`. This is the gate for the polychoric-FMG
   paper track; the pEBA/pOLS/PALL transforms remain magmaan-original with no
   external oracle, as on the complete-data and FIML paths.
+- Ordinal nested Satorra-2000 tests are wired for all-ordinal DWLS/WLS fits via
+  `nestedTest()` / `robust_nested_lrt()` when the caller supplies the same
+  `magmaan_ordinal_data` statistics object used for fitting. The C++ worker
+  builds the H1 ordinal moment Jacobian, projects through the equality
+  reparameterization, pools the `n_b/N` weighted `{A1, B1}` sandwich over
+  polychoric NACOV blocks, derives either exact parameter restrictions or the
+  lavaan-style delta tangent map, and reuses the generic Satorra-2000 reduced
+  eigenproblem. Mixed continuous/ordinal nested tests remain explicitly
+  unsupported. Validation lives in `r-package/examples/nested_test_ordinal.R`:
+  a single-group loading equality and a two-group configural-vs-metric ordinal
+  WLSMV comparison match lavaan's `lavTestLRT(..., method = "satorra.2000",
+  A.method = "exact", scaled.shifted = FALSE)` row under lavaan's ordinal WLSMV
+  convention, where the displayed difference statistic/`Df diff` are the
+  spectrum-derived mean/variance-adjusted `T_adjusted`/`d0` for `m > 1`.
 
 ### Staged C++ facade
 
