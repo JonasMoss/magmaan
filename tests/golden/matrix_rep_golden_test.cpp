@@ -125,4 +125,5 @@ TEST_CASE("matrix_rep goldens — pure-CFA scope (P5.1)") {
   for (const auto& f : failures) MESSAGE("  FAIL " << f);
 
   CHECK(passed == total);
+  CHECK(deferred_count == static_cast<int>(kDeferred.size()));
 }

@@ -52,6 +52,16 @@ bool close(double a, double b, double tol) {
   return std::abs(a - b) <= tol * std::max(1.0, std::abs(b));
 }
 
+bool is_numeric_vector_json(const nlohmann::json &j) {
+  if (!j.is_array())
+    return false;
+  for (const auto &x : j) {
+    if (!x.is_number())
+      return false;
+  }
+  return true;
+}
+
 std::string repo_root_from_fixtures() {
   const std::string fixtures = magmaan::test::fixtures_dir();
   const std::string suffix = "/tests/fixtures";
@@ -74,7 +84,7 @@ nlohmann::json read_json_or_fail(const std::string &path) {
 magmaan::data::SampleStats sample_stats_from_case(const nlohmann::json &c) {
   magmaan::data::SampleStats samp;
   samp.S = {matrix_from_json(c["sample_cov"])};
-  if (c.contains("sample_mean") && !c["sample_mean"].is_null()) {
+  if (c.contains("sample_mean") && is_numeric_vector_json(c["sample_mean"])) {
     samp.mean = {vector_from_json(c["sample_mean"])};
   }
   samp.n_obs = {c["n_obs"].get<std::int64_t>()};
@@ -206,7 +216,8 @@ void check_case(const std::string &corpus, const nlohmann::json &c,
     failures.push_back(label +
                        ": max|Sigma - lavaan| = " + std::to_string(d_sigma));
   }
-  if (!im->mu.empty() && oracle.contains("mu") && !oracle["mu"].is_null()) {
+  if (!im->mu.empty() && oracle.contains("mu") &&
+      is_numeric_vector_json(oracle["mu"])) {
     const double d_mu = max_abs_diff(im->mu[0], vector_from_json(oracle["mu"]));
     if (d_mu > 1e-3) {
       failures.push_back(label +
