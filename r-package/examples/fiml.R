@@ -34,6 +34,28 @@ stopifnot(isTRUE(fit$fiml))
 stopifnot(inherits(fit$raw_data, "magmaan_fiml_data"))
 stopifnot(identical(fit$raw_data$nobs[[1L]], nrow(df)))
 
+model_ml2s <- "
+visual =~ x1 + x2 + x3
+textual =~ x4 + x5 + x6
+"
+fit_ml2s <- magmaan(
+  model_ml2s, data = df, estimator = "ML2S",
+  control = list(max_iter = 4000, ftol = 1e-12, gtol = 1e-8)
+)
+stopifnot(identical(fit_ml2s$estimator, "ML2S"))
+stopifnot(inherits(fit_ml2s, "magmaan_fit"))
+stopifnot(inherits(fit_ml2s$raw_data, "magmaan_fiml_data"))
+stopifnot(is.list(fit_ml2s$stage1), is.list(fit_ml2s$ml2s))
+stopifnot(length(fit_ml2s$se) == fit_ml2s$npar)
+stopifnot(all(is.finite(fit_ml2s$se)))
+stopifnot(is.matrix(fit_ml2s$vcov))
+stopifnot(nrow(fit_ml2s$vcov) == fit_ml2s$npar)
+stopifnot(ncol(fit_ml2s$vcov) == fit_ml2s$npar)
+stopifnot(is.finite(fit_ml2s$chisq))
+stopifnot(is.finite(fit_ml2s$chisq_scaled))
+stopifnot(is.finite(fit_ml2s$scaling_factor), fit_ml2s$scaling_factor > 0)
+stopifnot(identical(fit_ml2s$df, fit_ml2s$ml2s$df))
+
 model_eq <- "visual =~ x1 + a*x2 + a*x3"
 m_eq <- model_spec(model_eq, meanstructure = TRUE)
 fit_eq <- magmaan_core$fit_fiml(

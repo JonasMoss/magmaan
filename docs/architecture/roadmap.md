@@ -274,6 +274,16 @@ golden `parTable()` fixtures.
 - Post-fit FIML extras include observed-data normal constants, saturated/H1
   likelihood, baseline/independence likelihood accounting, chi-square,
   information criteria, and fit-index inputs for the current fixture tranche.
+- Two-stage EM ML (`ML2S`) is a packaged missing-data estimator path alongside
+  direct FIML. Stage 1 fits the saturated EM mean/covariance model and exposes
+  `(H, J, ACOV)`; Stage 2 runs complete-data ML on those saturated moments.
+  `estimate::fiml::two_stage_em_ml_inference` converts the Stage-1 ACOV to the
+  moment Gamma scales expected by the shared robust SE and U-Gamma reducers,
+  returning Savalei-Bentler-style sandwich SEs, ML chi-square, df, the corrected
+  U-Gamma spectrum, scaling factor, and scaled chi-square. Complete-data
+  multi-group tests anchor the corrected SE/spectrum path against the ordinary
+  complete-data robust.sem machinery; missing-data tests check finite corrected
+  output under MAR patterns.
 - Robust FIML MLR post-fit reporting computes observed-pattern casewise
   sandwich SEs and Yuan-Bentler Mplus scaled-test traces for fixture-backed
   non-saturated single- and multi-group cases. The observed FIML information
@@ -286,7 +296,11 @@ golden `parTable()` fixtures.
   route as a regression comparator.
 - The public fixed.x policy rejects missing observed exogenous variables rather
   than approximating lavaan's conditional likelihood behavior.
-- The R boundary exposes `df_to_fiml_data()` and estimate-only `fit_fiml()`.
+- The R boundary exposes `df_to_fiml_data()`, estimate-only `fit_fiml()`, and
+  packaged `fit_ml2s()` / `estimate_two_stage_em(..., kind = "ml")`. ML2S
+  attaches its corrected `vcov`, `se`, `chisq`, `df`, `chisq_scaled`, and
+  `scaling_factor` fields directly because those corrections are part of the
+  named two-stage estimator rather than optional post-fit reporting.
 - FMG single-model goodness-of-fit p-values are first-class complete-data ML
   post-fit diagnostics on the R surface. `fmg_tests()` returns the p-value,
   df, ML/RLS source statistic, method/parameter, UG flag, chi-square-equivalent
@@ -1275,11 +1289,11 @@ stop rather than any usable non-error return.
 - `magmaan(model, data, estimator, groups)` is the high-level estimate-only
   R convenience. It composes `model_spec()`, data-frame sample-stat/raw-data
   construction, and the matching point-estimation wrapper for complete-data
-  ML/ULS/GLS/WLS, FIML, and ordinal/mixed DWLS/WLS where the lower-level
-  inputs are available. For FIML syntax calls it auto-enables a mean structure
-  (and rebuilds syntax-backed no-mean specs) because the raw-data likelihood is
-  mean-based; explicit `meanstructure = FALSE` errors early. Lavaan-style
-  `se = "none"` and `test = "none"` are accepted as explicit
+  ML/ULS/GLS/WLS, FIML, ML2S, and ordinal/mixed DWLS/WLS where the lower-level
+  inputs are available. For FIML and ML2S syntax calls it auto-enables a mean
+  structure (and rebuilds syntax-backed no-mean specs) because the raw-data
+  missing-data paths are mean-based; explicit `meanstructure = FALSE` errors
+  early. Lavaan-style `se = "none"` and `test = "none"` are accepted as explicit
   point-estimate-only shortcuts; other values error and point users to explicit
   post-fit inference calls. It returns a `magmaan_fit` list: the raw primitive
   fit fields plus the source `model_spec`, syntax, estimator options,

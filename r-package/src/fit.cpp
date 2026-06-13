@@ -2797,6 +2797,31 @@ Rcpp::List estimate_fiml_robust_mlr(Rcpp::List fit, double h_step = 1e-4) {
       Rcpp::_["chisq"] = extras_or->chi2);
 }
 
+// estimate_two_stage_em_ml_inference() — mirrors
+// estimate::fiml::two_stage_em_ml_inference(). Takes the Stage-2 ML fit on EM
+// moments plus the original raw data used for Stage 1.
+//
+// [[Rcpp::export]]
+Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data,
+                                              double h_step = 1e-4) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, raw_data);
+  auto r_or = magmaan::estimate::fiml::two_stage_em_ml_inference(
+      ctx.pt, ctx.rep, raw, est, h_step);
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return Rcpp::List::create(
+      Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
+      Rcpp::_["se"] = Rcpp::wrap(r_or->se),
+      Rcpp::_["eigvals"] = Rcpp::wrap(r_or->eigvals),
+      Rcpp::_["chisq"] = r_or->chisq,
+      Rcpp::_["chisq_scaled"] = r_or->chisq_scaled,
+      Rcpp::_["scaling_factor"] = r_or->scaling_factor,
+      Rcpp::_["trace_ugamma"] = r_or->trace_ugamma,
+      Rcpp::_["df"] = r_or->df,
+      Rcpp::_["ntotal"] = static_cast<double>(r_or->ntotal));
+}
+
 // infer_fiml_fmg_spectrum() — mirrors estimate::fiml::fiml_ugamma_spectrum().
 // First-principles missing-data UΓ spectrum for FMG goodness-of-fit tests: the
 // df nonzero eigenvalues of U·Γ_mis built from the saturated information and the

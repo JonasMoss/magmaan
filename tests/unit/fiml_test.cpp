@@ -1546,6 +1546,126 @@ TEST_CASE("fiml_ugamma_spectrum: complete-data multi-group metric matches the un
   CHECK((a - b).cwiseAbs().maxCoeff() < 1e-6);
 }
 
+TEST_CASE("two_stage_em_ml_inference: complete-data multi-group matches complete-data robust path") {
+  auto built = build_mean_model("f =~ x1 + a2*x2 + a3*x3 + a4*x4", /*n_groups=*/2);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto truth = built.ev.sigma(theta0);
+  REQUIRE(truth.has_value());
+  REQUIRE(truth->sigma.size() == 2);
+
+  magmaan::data::RawData raw;
+  const std::array<Eigen::Index, 2> ns = {180, 145};
+  for (std::size_t b = 0; b < 2; ++b) {
+    Eigen::LLT<Eigen::MatrixXd> llt(truth->sigma[b]);
+    REQUIRE(llt.info() == Eigen::Success);
+    Eigen::MatrixXd Z = deterministic_z(ns[b], truth->sigma[b].rows());
+    if (b == 1) Z.array() *= 1.05;
+    raw.X.push_back((Z * llt.matrixL().transpose()).rowwise() +
+                    truth->mu[b].transpose());
+  }
+
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
+  REQUIRE_MESSAGE(sm.has_value(),
+      "saturated_em_moments failed: " << (sm.has_value() ? "" : sm.error().detail));
+  magmaan::data::SampleStats samp;
+  samp.S = sm->cov;
+  samp.mean = sm->mean;
+  samp.n_obs = sm->n_obs;
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 800;
+  auto est = magmaan::estimate::fit_ml(
+      *built.pt, *built.rep, samp, theta0, {}, magmaan::estimate::Backend::NloptLbfgs,
+      opts);
+  REQUIRE_MESSAGE(est.has_value(),
+      "two-stage ML fit failed: " << (est.has_value() ? "" : est.error().detail));
+
+  auto ml2s = magmaan::estimate::fiml::two_stage_em_ml_inference(
+      *built.pt, *built.rep, raw, *est);
+  REQUIRE_MESSAGE(ml2s.has_value(),
+      "two_stage_em_ml_inference failed: " <<
+      (ml2s.has_value() ? "" : ml2s.error().detail));
+
+  auto rob = magmaan::robust::robust_se(
+      *built.pt, *built.rep, samp, *est, raw,
+      magmaan::robust::InferenceSpec{
+          magmaan::robust::Information::Expected,
+          magmaan::robust::WeightMoments::Structured,
+          magmaan::robust::ScoreCovariance::Empirical});
+  REQUIRE(rob.has_value());
+  CHECK((ml2s->vcov - rob->vcov).cwiseAbs().maxCoeff() < 1e-7);
+  CHECK((ml2s->se - rob->se).cwiseAbs().maxCoeff() < 1e-7);
+
+  auto uf = magmaan::robust::build_u_factor(
+      *built.pt, *built.rep, samp, *est,
+      magmaan::robust::InferenceSpec{
+          magmaan::robust::Information::Expected,
+          magmaan::robust::WeightMoments::Structured,
+          magmaan::robust::ScoreCovariance::Empirical});
+  REQUIRE(uf.has_value());
+  auto Zc = magmaan::robust::casewise_contributions(raw, samp, /*include_means=*/true);
+  REQUIRE(Zc.has_value());
+  Eigen::VectorXd denom(2);
+  denom << static_cast<double>(raw.X[0].rows()),
+           static_cast<double>(raw.X[1].rows());
+  auto M = magmaan::robust::reduced_gamma_sample(*uf, *Zc, denom);
+  REQUIRE(M.has_value());
+  auto ev_ref = magmaan::robust::ugamma_eigenvalues(*M);
+  REQUIRE(ev_ref.has_value());
+
+  REQUIRE(ml2s->df == static_cast<int>(uf->df));
+  CHECK(ml2s->eigvals.size() == ev_ref->size());
+  CHECK((ml2s->eigvals - *ev_ref).cwiseAbs().maxCoeff() < 1e-7);
+  CHECK(ml2s->trace_ugamma == doctest::Approx(ml2s->eigvals.sum()));
+  CHECK(ml2s->scaling_factor ==
+        doctest::Approx(ml2s->trace_ugamma / static_cast<double>(ml2s->df)));
+  CHECK(ml2s->chisq == doctest::Approx(magmaan::inference::chi2_stat(samp, *est)));
+}
+
+TEST_CASE("two_stage_em_ml_inference: missing data returns finite corrected output") {
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.55);
+  auto raw = model_missing_raw(built, theta0, {170});
+
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
+  REQUIRE_MESSAGE(sm.has_value(),
+      "saturated_em_moments failed: " << (sm.has_value() ? "" : sm.error().detail));
+  magmaan::data::SampleStats samp;
+  samp.S = sm->cov;
+  samp.mean = sm->mean;
+  samp.n_obs = sm->n_obs;
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 700;
+  auto est = magmaan::estimate::fit_ml(
+      *built.pt, *built.rep, samp, theta0, {}, magmaan::estimate::Backend::NloptLbfgs,
+      opts);
+  REQUIRE_MESSAGE(est.has_value(),
+      "two-stage ML fit failed: " << (est.has_value() ? "" : est.error().detail));
+
+  auto ml2s = magmaan::estimate::fiml::two_stage_em_ml_inference(
+      *built.pt, *built.rep, raw, *est);
+  REQUIRE_MESSAGE(ml2s.has_value(),
+      "two_stage_em_ml_inference failed: " <<
+      (ml2s.has_value() ? "" : ml2s.error().detail));
+
+  CHECK(ml2s->df > 0);
+  CHECK(ml2s->ntotal == 170);
+  CHECK(ml2s->vcov.rows() == est->theta.size());
+  CHECK(ml2s->vcov.cols() == est->theta.size());
+  CHECK(ml2s->se.size() == est->theta.size());
+  CHECK(ml2s->vcov.allFinite());
+  CHECK(ml2s->se.allFinite());
+  CHECK(ml2s->eigvals.size() == ml2s->df);
+  CHECK(ml2s->eigvals.allFinite());
+  CHECK(ml2s->trace_ugamma > 0.0);
+  CHECK(ml2s->scaling_factor > 0.0);
+  CHECK(std::isfinite(ml2s->chisq));
+  CHECK(std::isfinite(ml2s->chisq_scaled));
+}
+
 TEST_CASE("fiml_baseline_chi2: missing data produces finite baseline") {
   const auto raw = well_conditioned_missing_raw();
   auto bl = magmaan::estimate::fiml::fiml_baseline_chi2(raw);

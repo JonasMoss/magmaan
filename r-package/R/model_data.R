@@ -1160,6 +1160,17 @@ fit_fiml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL) {
                 optimizer = optimizer, control = control)
 }
 
+fit_ml2s <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
+                     bounds = NULL, h_step = 1e-4) {
+  if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
+  fit <- estimate_two_stage_em_impl(partable_arg(model), fiml_data_arg(data),
+                                    kind = "ml", h_step = h_step,
+                                    optimizer = optimizer, control = control,
+                                    bounds = bounds)
+  if (inherits(data, "magmaan_fiml_data")) fit$raw_data <- data
+  fit
+}
+
 fit_uls <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
                     bounds = NULL) {
   b <- bounds_arg(bounds, model, data, "fit_uls")
@@ -1299,7 +1310,7 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
   if (estimator %in% c("MLM", "MLR")) {
     stop("magmaan(): `estimator` is estimate-only; robust corrections remain explicit post-fit calls")
   }
-  allowed <- c("ML", "FIML", "ULS", "GLS", "WLS", "DWLS")
+  allowed <- c("ML", "FIML", "ML2S", "ULS", "GLS", "WLS", "DWLS")
   if (!estimator %in% allowed) {
     stop("magmaan(): unsupported estimator '", estimator, "'")
   }
@@ -1321,10 +1332,10 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
   }
 
   dots <- list(...)
-  fiml_auto_meanstructure <- identical(estimator, "FIML")
-  if (identical(estimator, "FIML")) {
+  fiml_auto_meanstructure <- estimator %in% c("FIML", "ML2S")
+  if (estimator %in% c("FIML", "ML2S")) {
     if ("meanstructure" %in% names(dots) && !isTRUE(dots$meanstructure)) {
-      stop("magmaan(): estimator = 'FIML' requires a mean structure; omit ",
+      stop("magmaan(): estimator = '", estimator, "' requires a mean structure; omit ",
            "`meanstructure` or set it to TRUE.", call. = FALSE)
     }
   }
@@ -1369,7 +1380,7 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
       caller = "magmaan")
   }
 
-  if (identical(estimator, "FIML") && !.model_spec_has_meanstructure(spec)) {
+  if (estimator %in% c("FIML", "ML2S") && !.model_spec_has_meanstructure(spec)) {
     spec <- .rebuild_model_spec(
       spec,
       group = group_var,
@@ -1387,6 +1398,16 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
     }
     if (is.data.frame(data)) data <- df_to_fiml_data(data, spec, group = group_var)
     fit <- fit_fiml(spec, data, optimizer = optimizer, control = control)
+    return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
+  }
+
+  if (identical(estimator, "ML2S")) {
+    if (ordinal_requested) {
+      stop("magmaan(): estimator = 'ML2S' currently supports continuous raw data only")
+    }
+    if (is.data.frame(data)) data <- df_to_fiml_data(data, spec, group = group_var)
+    fit <- fit_ml2s(spec, data, optimizer = optimizer, control = control,
+                    bounds = bounds)
     return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
   }
 
