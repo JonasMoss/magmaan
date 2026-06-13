@@ -208,11 +208,11 @@ decisions in the simulation backlog.
   variants already have the generic Gamma machinery; the missing piece is the
   mixed polyserial estimating-equation design.
 - **FIML FMG follow-ups.** The landed FMG R wiring (single-model, FIML/missing,
-  and the nested restriction-map route; see roadmap) leaves: the
-  `magmaan(estimator = "FIML")` high-level path does not auto-enable mean
-  structure (use `model_spec(..., meanstructure = TRUE)` + `fit_fiml`);
-  multi-group FIML fits need explicit start/convergence care; and nonlinear
-  equality tangent-space support plus pairwise-data FMG remain deferred.
+  and the nested restriction-map route; see roadmap) leaves: multi-group FIML
+  fits need explicit start/convergence care; and nonlinear equality tangent-space
+  support plus pairwise-data FMG remain deferred. The high-level
+  `magmaan(estimator = "FIML")` path now auto-enables mean structure for
+  syntax-backed models and rejects explicit `meanstructure = FALSE`.
 - **Ordinal/polychoric FMG (`papers/ordinal-fmg/` Paper 2).** Core gate **landed
   2026-06-13** (commit b8c6dcb): `fmg_tests_ordinal()` / `fmg_tests_mixed_ordinal()`
   apply the FMG eigenvalue-tail transforms to the `robust_ordinal()` /

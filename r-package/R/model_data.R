@@ -116,6 +116,28 @@ as_magmaan_model_spec <- function(model) {
   stop("expected a magmaan model spec, model syntax string, or partable data.frame")
 }
 
+.model_spec_has_meanstructure <- function(spec) {
+  if (isTRUE(spec$options$meanstructure)) return(TRUE)
+  pt <- spec$partable
+  is.data.frame(pt) && "op" %in% names(pt) && any(as.character(pt$op) == "~1")
+}
+
+.rebuild_model_spec <- function(spec, group = NULL, group_labels = NULL,
+                                overrides = list(), caller = "magmaan") {
+  if (is.null(spec$syntax)) {
+    stop(caller, "(): cannot rebuild a lavaan partable without source syntax.",
+         call. = FALSE)
+  }
+  group <- group %||% spec$group_var %||% ""
+  if (!nzchar(group)) group <- NULL
+  group_labels <- group_labels %||% spec$group_labels
+  do.call(
+    model_spec,
+    c(list(syntax = spec$syntax, group = group, group_labels = group_labels),
+      modifyList(spec$options %||% list(), overrides))
+  )
+}
+
 lavaan_compare_partable <- function(x, reference, est_tolerance = NULL,
                                     ustart_tolerance = 1e-12) {
   as_pt <- function(z, arg) {
@@ -1299,6 +1321,13 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
   }
 
   dots <- list(...)
+  fiml_auto_meanstructure <- identical(estimator, "FIML")
+  if (identical(estimator, "FIML")) {
+    if ("meanstructure" %in% names(dots) && !isTRUE(dots$meanstructure)) {
+      stop("magmaan(): estimator = 'FIML' requires a mean structure; omit ",
+           "`meanstructure` or set it to TRUE.", call. = FALSE)
+    }
+  }
   if (inherits(model, "magmaan_model_spec")) {
     if (length(dots)) {
       stop("magmaan(): model option arguments are only accepted when `model` is a syntax string")
@@ -1309,6 +1338,8 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
       attr(spec$partable, "magmaan.ordered") <- spec$ordered
     }
   } else if (is.character(model) && length(model) == 1L) {
+    model_dots <- dots
+    if (fiml_auto_meanstructure) model_dots$meanstructure <- TRUE
     spec <- do.call(
       model_spec,
       c(list(syntax = model,
@@ -1316,7 +1347,7 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
              group_labels = group_labels,
              ordered = ordered,
              parameterization = parameterization),
-        dots)
+        model_dots)
     )
   } else {
     if (length(dots) || !is.null(ordered) || !is.null(groups)) {
@@ -1331,13 +1362,20 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
     (!identical(spec$group_var, group_var) ||
        (!is.null(group_labels) && !identical(as.character(spec_group_labels), group_labels)))
   if (needs_group_rebuild) {
-    spec <- do.call(
-      model_spec,
-      c(list(syntax = spec$syntax,
-             group = group_var,
-             group_labels = group_labels %||% spec$group_labels),
-        spec$options)
-    )
+    spec <- .rebuild_model_spec(
+      spec,
+      group = group_var,
+      group_labels = group_labels %||% spec$group_labels,
+      caller = "magmaan")
+  }
+
+  if (identical(estimator, "FIML") && !.model_spec_has_meanstructure(spec)) {
+    spec <- .rebuild_model_spec(
+      spec,
+      group = group_var,
+      group_labels = group_labels %||% spec$group_labels,
+      overrides = list(meanstructure = TRUE),
+      caller = "magmaan")
   }
 
   ordinal_requested <- length(spec$ordered) > 0L || inherits(data, "magmaan_ordinal_data") ||

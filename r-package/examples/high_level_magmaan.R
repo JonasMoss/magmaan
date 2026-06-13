@@ -22,8 +22,9 @@ fit_group_spec_high <- magmaan::magmaan(magmaan::model_spec(model, group = "scho
 
 df_missing <- df
 df_missing$x2[seq(1L, nrow(df_missing), by = 17L)] <- NA_real_
-fit_fiml_high <- magmaan::magmaan(model, df_missing, estimator = "FIML",
-                                  meanstructure = TRUE)
+fit_fiml_high <- magmaan::magmaan(model, df_missing, estimator = "FIML")
+fit_fiml_spec_high <- magmaan::magmaan(magmaan::model_spec(model), df_missing,
+                                       estimator = "FIML")
 
 stopifnot(inherits(fit_ml_high, "magmaan_fit"))
 stopifnot(inherits(fit_ml_high$model, "magmaan_model_spec"))
@@ -34,6 +35,9 @@ stopifnot(identical(fit_group_high$group_labels, c("Pasteur", "Grant-White")))
 stopifnot(identical(fit_group_spec_high$ngroups, 2L))
 stopifnot(identical(fit_fiml_high$estimator, "FIML"))
 stopifnot(isTRUE(fit_fiml_high$fiml))
+stopifnot(isTRUE(fit_fiml_high$options$model_options$meanstructure))
+stopifnot(isTRUE(fit_fiml_spec_high$options$model_options$meanstructure))
+stopifnot(any(as.character(fit_fiml_high$partable$op) == "~1"))
 stopifnot(identical(fit_ml_high$syntax, model))
 stopifnot(identical(fit_ml_high$options$se, "none"))
 stopifnot(identical(fit_ml_high$options$test, "none"))
@@ -69,5 +73,9 @@ stopifnot(grepl("explicit post-fit", err, fixed = TRUE))
 err <- tryCatch(magmaan::magmaan(model, df, estimator = "ML", test = "standard"),
                 error = function(e) conditionMessage(e))
 stopifnot(grepl("explicit post-fit", err, fixed = TRUE))
+err <- tryCatch(magmaan::magmaan(model, df_missing, estimator = "FIML",
+                                 meanstructure = FALSE),
+                error = function(e) conditionMessage(e))
+stopifnot(grepl("requires a mean structure", err, fixed = TRUE))
 
 cat("magmaan() high-level estimate-only workflow: ok\n")
