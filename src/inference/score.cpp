@@ -14,6 +14,7 @@
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
+#include <Eigen/Eigenvalues>
 #include <Eigen/SVD>
 
 #include "magmaan/error.hpp"
@@ -24,6 +25,7 @@
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/robust/weighted_chisq.hpp"
 #include "magmaan/robust/weighted_inference.hpp"
 
 namespace magmaan::inference {
@@ -1403,6 +1405,82 @@ score_for_direction_robust(const ScoreCandidate& candidate,
   return out;
 }
 
+post_expected<JointScoreTestResult>
+score_for_subspace_robust(std::vector<ScoreCandidate> candidates,
+                          const Eigen::VectorXd& score_full,
+                          const Eigen::MatrixXd& info_full,
+                          const Eigen::MatrixXd& A1,
+                          const Eigen::MatrixXd& B1,
+                          const Eigen::MatrixXd& K_nuisance,
+                          const Eigen::MatrixXd& directions) {
+  const Eigen::Index q = score_full.size();
+  const Eigen::Index df = directions.cols();
+  if (info_full.rows() != q || info_full.cols() != q || directions.rows() != q ||
+      A1.rows() != q || A1.cols() != q || B1.rows() != q || B1.cols() != q ||
+      K_nuisance.rows() != q || df < 1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust joint score test: incompatible subspace shapes"));
+  }
+
+  // Efficient-score subspace: each release direction made info-orthogonal to the
+  // nuisance subspace. G = D − K (KᵀIK)⁻¹ Kᵀ I D (the matrix form of the
+  // per-direction g, so u = Gᵀs and V = GᵀIG are the Schur-reduced score/info).
+  Eigen::MatrixXd G = directions;
+  if (K_nuisance.cols() > 0) {
+    const Eigen::MatrixXd I_d = info_full * directions;  // q × df
+    const Eigen::MatrixXd I_aa =
+        K_nuisance.transpose() * info_full * K_nuisance;
+    auto Iaa_inv =
+        invert_symmetric(I_aa, "robust joint score test nuisance information");
+    if (!Iaa_inv.has_value()) return std::unexpected(Iaa_inv.error());
+    G.noalias() -= K_nuisance * ((*Iaa_inv) * (K_nuisance.transpose() * I_d));
+  }
+
+  // NT joint (multivariate score) statistic T = uᵀ V⁻¹ u.
+  const Eigen::VectorXd u = G.transpose() * score_full;  // df
+  Eigen::MatrixXd V = G.transpose() * (info_full * G);   // df × df
+  V = 0.5 * (V + V.transpose());
+  auto V_inv =
+      invert_symmetric(V, "robust joint score test efficient information");
+  if (!V_inv.has_value()) return std::unexpected(V_inv.error());
+  const double T = u.dot((*V_inv) * u);
+  if (!std::isfinite(T) || T < 0.0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust joint score test: NT statistic is not finite/nonnegative"));
+  }
+
+  // Generalized spectrum λ of (GᵀA1G)⁻¹(GᵀB1G): the χ²₁ mixture weights.
+  Eigen::MatrixXd GtA = G.transpose() * (A1 * G);
+  Eigen::MatrixXd GtB = G.transpose() * (B1 * G);
+  GtA = 0.5 * (GtA + GtA.transpose());
+  GtB = 0.5 * (GtB + GtB.transpose());
+  Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> ges(GtB, GtA);
+  if (ges.info() != Eigen::Success) {
+    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+        "robust joint score test: generalized eigensolver failed (GtA not PD?)"));
+  }
+  const Eigen::VectorXd lambda = ges.eigenvalues();  // ascending
+  const double trace = lambda.sum();
+
+  JointScoreTestResult out;
+  out.candidates = std::move(candidates);
+  out.df = static_cast<int>(df);
+  out.mi = T;
+  out.eigvals = lambda;
+  if (std::isfinite(trace) && trace > 0.0) {
+    out.scaling_factor = trace / static_cast<double>(df);  // c̄ = Σλ / df
+    out.mi_scaled = T / out.scaling_factor;
+    out.p_value = chi2_pvalue(out.mi_scaled, out.df);
+    out.p_mixture = robust::imhof_upper(lambda, T);
+  } else {
+    out.scaling_factor = 1.0;
+    out.mi_scaled = T;
+    out.p_value = chi2_pvalue(T, out.df);
+    out.p_mixture = out.p_value;
+  }
+  return out;
+}
+
 namespace {
 
 ScoreInformation info_for_bread(robust::Information bread) {
@@ -1517,6 +1595,84 @@ score_tests_robust(spec::LatentStructure pt,
                    const RobustScoreOptions& options) {
   return score_tests_robust_impl(std::move(pt), rep, samp, est, options,
                                  nullptr, &gamma_hat);
+}
+
+namespace {
+
+post_expected<JointScoreTestResult>
+score_tests_robust_joint_impl(spec::LatentStructure pt,
+                              const model::MatrixRep& rep,
+                              const SampleStats& samp,
+                              const Estimates& est,
+                              const RobustScoreOptions& options,
+                              const RawData* raw,
+                              const Eigen::MatrixXd* gamma_hat) {
+  auto n = total_n(samp);
+  if (!n.has_value()) return std::unexpected(n.error());
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto con = build_eq_constraints(pt);
+  if (!con.has_value()) return std::unexpected(con.error());
+  if (!con->active() || con->A_eq.rows() == 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust joint score test: model has no active equality constraints"));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust joint score test: fitted theta length does not match partable"));
+  }
+
+  RobustMlEvaluator ev{rep, samp, options.spec,
+                       info_for_bread(options.spec.bread), 0.5 * *n,
+                       raw, gamma_hat};
+  Eigen::VectorXd score_full;
+  Eigen::MatrixXd info_full, A1, B1;
+  if (auto e = ev.evaluate(pt, est, score_full, info_full, A1, B1);
+      !e.has_value()) {
+    return std::unexpected(e.error());
+  }
+
+  const Eigen::Index df = con->A_eq.rows();
+  Eigen::MatrixXd D(score_full.size(), df);
+  std::vector<ScoreCandidate> candidates;
+  candidates.reserve(static_cast<std::size_t>(df));
+  for (Eigen::Index r = 0; r < df; ++r) {
+    auto d = release_direction(*con, r);
+    if (!d.has_value()) return std::unexpected(d.error());
+    D.col(r) = *d;
+    ScoreCandidate cand;
+    cand.kind = ScoreCandidateKind::EqualityRelease;
+    cand.row = static_cast<std::size_t>(r);
+    cand.op = parse::Op::EqConstraint;
+    candidates.push_back(cand);
+  }
+  return score_for_subspace_robust(std::move(candidates), score_full, info_full,
+                                   A1, B1, con->K(), D);
+}
+
+}  // namespace
+
+post_expected<JointScoreTestResult>
+score_tests_robust_joint(spec::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const SampleStats& samp,
+                         const RawData& raw,
+                         const Estimates& est,
+                         const RobustScoreOptions& options) {
+  return score_tests_robust_joint_impl(std::move(pt), rep, samp, est, options,
+                                       &raw, nullptr);
+}
+
+post_expected<JointScoreTestResult>
+score_tests_robust_joint(spec::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const SampleStats& samp,
+                         const Eigen::MatrixXd& gamma_hat,
+                         const Estimates& est,
+                         const RobustScoreOptions& options) {
+  return score_tests_robust_joint_impl(std::move(pt), rep, samp, est, options,
+                                       nullptr, &gamma_hat);
 }
 
 // ── Continuous-LS tier ───────────────────────────────────────────────────────

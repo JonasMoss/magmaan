@@ -339,6 +339,57 @@ score_for_direction_robust(const ScoreCandidate& candidate,
                            const Eigen::MatrixXd& K_nuisance,
                            const Eigen::VectorXd& direction);
 
+// ── df>1 total release ───────────────────────────────────────────────────────
+// Joint release of several equality constraints at once. The NT joint statistic
+// is the multivariate score (Lagrange-multiplier) statistic `T = uᵀV⁻¹u` over
+// the df-dimensional efficient-score subspace G (each release direction made
+// info-orthogonal to the nuisance subspace), with u = Gᵀs and V = GᵀIG. The
+// robust version mean-scales by `c̄ = tr((GᵀA1G)⁻¹(GᵀB1G)) / df` (the
+// Satorra-Bentler scaling at df>1) and also reports the exact eigenvalue-mixture
+// p-value `Pr(Σλⱼχ²₁ > T)` via the QUADPACK-backed `imhof_upper`, where λ are
+// the generalized eigenvalues of (GᵀB1G, GᵀA1G). At df=1 this reduces exactly to
+// the per-row `c`.
+struct JointScoreTestResult {
+  std::vector<ScoreCandidate> candidates;  // the jointly released constraints
+  int    df = 0;
+  double mi = 0.0;             // joint NT statistic T
+  double scaling_factor = 1.0; // c̄ = Σλ / df
+  double mi_scaled = 0.0;      // T / c̄ (mean-scaled)
+  double p_value = 1.0;        // χ²_df tail of mi_scaled (mean-scaled)
+  double p_mixture = 1.0;      // exact Pr(Σλⱼ χ²₁ > T) via imhof_upper
+  Eigen::VectorXd eigvals;     // λ of (GᵀA1G)⁻¹(GᵀB1G), ascending
+};
+
+// Joint-release worker. `directions` is the q × df matrix whose columns are the
+// released constraint directions; everything else matches
+// `score_for_direction_robust`.
+post_expected<JointScoreTestResult>
+score_for_subspace_robust(std::vector<ScoreCandidate> candidates,
+                          const Eigen::VectorXd& score_full,
+                          const Eigen::MatrixXd& info_full,
+                          const Eigen::MatrixXd& A1,
+                          const Eigen::MatrixXd& B1,
+                          const Eigen::MatrixXd& K_nuisance,
+                          const Eigen::MatrixXd& directions);
+
+// Robust joint (total) release of ALL active equality constraints, complete-data
+// ML. Γ̂ from raw data, or caller-supplied. Single- or multi-group.
+post_expected<JointScoreTestResult>
+score_tests_robust_joint(spec::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const SampleStats& samp,
+                         const RawData& raw,
+                         const Estimates& est,
+                         const RobustScoreOptions& options = {});
+
+post_expected<JointScoreTestResult>
+score_tests_robust_joint(spec::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const SampleStats& samp,
+                         const Eigen::MatrixXd& gamma_hat,
+                         const Estimates& est,
+                         const RobustScoreOptions& options = {});
+
 }  // namespace frontier
 
 }  // namespace magmaan::inference

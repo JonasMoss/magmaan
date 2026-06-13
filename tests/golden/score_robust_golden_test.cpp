@@ -321,3 +321,58 @@ TEST_CASE("robust multi-group release-score matches the lavaan-internals oracle 
         5e-3 * (1.0 + std::abs(mis_want)));
   CHECK(got.scaling_factor > 1.1);  // genuinely non-trivial (c ≈ 1.24)
 }
+
+TEST_CASE("robust joint df>1 release-score matches the lavaan-internals oracle") {
+  const std::string path =
+      magmaan::test::fixtures_dir() +
+      "/score/0011_robust_release_joint_df2.score_robust.json";
+  auto raw_json = magmaan::test::read_fixture(path);
+  REQUIRE(raw_json.has_value());
+  auto exp = nlohmann::json::parse(*raw_json, nullptr, false);
+  REQUIRE_FALSE(exp.is_discarded());
+
+  const std::string src = exp["input"].get<std::string>();
+  auto fp = magmaan::parse::Parser::parse(src);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto rep = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+
+  magmaan::data::RawData raw;
+  raw.X.push_back(raw_matrix(exp["raw"]));
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+
+  auto est = magmaan::test::fit(*pt, *rep, *samp);  // ML = MLM point estimates
+  REQUIRE(est.has_value());
+  inf::frontier::RobustScoreOptions opts;
+  opts.spec = {rob::Information::Expected, rob::WeightMoments::Structured,
+               rob::ScoreCovariance::Empirical};
+  auto jt = inf::frontier::score_tests_robust_joint(*pt, *rep, *samp, raw, *est,
+                                                    opts);
+  REQUIRE(jt.has_value());
+
+  const auto& want = exp["score_tests_robust_joint"];
+  CHECK(jt->df == want["df"].get<int>());
+  const double mi_want = want["mi"].get<double>();
+  const double c_want = want["scaling_factor"].get<double>();
+  const double mis_want = want["mi_scaled"].get<double>();
+  const double pmix_want = want["p_mixture"].get<double>();
+
+  CHECK(std::abs(jt->mi - mi_want) < 5e-3 * (1.0 + std::abs(mi_want)));
+  CHECK(std::abs(jt->scaling_factor - c_want) <
+        5e-3 * (1.0 + std::abs(c_want)));
+  CHECK(std::abs(jt->mi_scaled - mis_want) <
+        5e-3 * (1.0 + std::abs(mis_want)));
+  CHECK(std::abs(jt->p_mixture - pmix_want) < 5e-3);
+
+  // Generalized spectrum (both ascending), feeding the imhof mixture tail.
+  const auto& jev = want["eigvals"];
+  REQUIRE(jt->eigvals.size() == static_cast<Eigen::Index>(jev.size()));
+  for (Eigen::Index i = 0; i < jt->eigvals.size(); ++i) {
+    const double w = jev[static_cast<std::size_t>(i)].get<double>();
+    CHECK(std::abs(jt->eigvals(i) - w) < 5e-3 * (1.0 + std::abs(w)));
+  }
+  CHECK(jt->scaling_factor > 1.5);  // genuinely non-trivial (c̄ ≈ 2.03)
+}
