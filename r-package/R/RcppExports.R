@@ -588,3 +588,16 @@ sim_model_draw_impl <- function(calibration, n, reps, seed_base, generator = "no
 sim_model_batch_impl <- function(fit_or_partable, n, reps, seed_base, theta = NULL, generator = "normal", df = 5.0, mixture_weights = NULL, mixture_scale_multipliers = NULL, contamination_probability = 0.05, contamination_scale_multiplier = 3.0, slash_q = 5.0, cholesky_jitter = 0.0) {
     .Call(`_magmaan_sim_model_batch_impl`, fit_or_partable, n, reps, seed_base, theta, generator, df, mixture_weights, mixture_scale_multipliers, contamination_probability, contamination_scale_multiplier, slash_q, cholesky_jitter)
 }
+
+sim_vm_calibrate_impl <- function(target_corr, target_skewness, target_excess_kurtosis, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
+    .Call(`_magmaan_sim_vm_calibrate_impl`, target_corr, target_skewness, target_excess_kurtosis, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
+}
+
+sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 1e-10) {
+    .Call(`_magmaan_sim_vm_draw_impl`, calibration, n, reps, seed_base, cholesky_jitter)
+}
+
+sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
+    .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
+}
+
