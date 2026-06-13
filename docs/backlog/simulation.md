@@ -90,10 +90,15 @@ calibrates/diagnoses one of those steps.
   copula/NORTA/vine/IG/VM/PLSIM generators until a separate marginal
   calibration layer can supply distribution targets; the model gives moments
   and thresholds, not marginal families.
-- Add ordinal/mixed correlation calibration after the direct projection path is
-  stable. The first version can generate from latent correlations and report
-  achieved observed correlations; a later version should calibrate latent
-  correlations to requested observed Pearson/polychoric/polyserial summaries.
+- Ordinal/mixed correlation calibration is landed for the single-group pairwise
+  path: `sim::calibrate_ordinal_correlation()` inverts a target observed
+  correlation matrix + per-variable marginals to a latent Gaussian correlation
+  matrix + thresholds, across three metrics (`Polychoric`, `PearsonCodes`,
+  `Polyserial`), with eigenvalue-floor PD-repair and achieved-correlation
+  diagnostics. Remaining: a multi-group wrapper (currently a per-group
+  `std::vector<OrdinalCorrelationCalibration>` lowered to per-group
+  `MixedPopulation`; no struct change needed) and richer feasibility reporting
+  for `PearsonCodes` targets near +-1.
 - Extend the elliptical-generator family beyond the first scale-mixture slice:
   add power exponential / generalized-normal variants if the literature use
   cases need them, and add diagnostics for theoretical vs achieved tail
@@ -265,19 +270,31 @@ for skew/kurt (scale/location invariant) but is the same pattern.
 
 Open work only; landed generator slices are inventoried in the roadmap.
 
-- **M.** Extend the ordinal/mixed projection layer with group-specific
-  thresholds, variable names/level labels for raw-data wrapping, and richer
-  achieved-proportion diagnostics.
+- **M (partly landed).** Ordinal/mixed projection layer: achieved category
+  proportions are now on `MixedProjectionResult` (`category_proportions`), and
+  `RawData` carries optional `variable_names` / `ordinal_level_labels` /
+  `group_labels` populated by `sim::raw_data_from_mixed_projection()`.
+  Group-specific thresholds need no new struct: a multi-group draw is a
+  per-group `MixedPopulation`, each with its own `MixedProjectionSpec`
+  thresholds (as `ModelImpliedPopulation` already composes). Remaining: a thin
+  multi-group ordinal calibration/composition wrapper and group-keyed
+  achieved-proportion summaries.
 - **M.** Extend population composition with group-specific population blocks
-  and raw-data naming/level metadata once the `RawData` carrier grows those
-  fields.
+  using the `RawData` naming/level metadata now available (the carrier fields
+  landed; the composition wrapper is the open piece).
 - **M.** Add elliptical diagnostics/goldens for Student-t, contaminated normal,
   slash, and finite scale mixtures: deterministic moment formulas where
   available plus stochastic smokes.
-- **M.** Add ordinal/mixed observed-correlation calibration once direct
-  threshold projection is stable: pairwise thresholded correlation maps,
-  calibration to target observed Pearson/polychoric/polyserial summaries, and a
-  policy for non-positive-definite calibrated latent matrices.
+- **DONE (single-group).** Ordinal/mixed observed-correlation calibration:
+  `sim::calibrate_ordinal_correlation()` inverts a target observed correlation
+  matrix to a latent Gaussian correlation + thresholds across `Polychoric`
+  (closed-form identity), `PearsonCodes` (monotone bisection on the
+  `ordinal_bvn_rect_prob` code-Pearson forward map), and `Polyserial`
+  (closed-form `rho*sum phi(tau)/sd`) metrics; non-PD latent matrices honor the
+  `BivariateCopulaCorrelationRepairKind` (None/Error/Ridge/Shrinkage) policy.
+  Exposed in R as `sim_ordcorr_calibrate()` / `sim_ordcorr_draw()` /
+  `sim_ordcorr_batch()`. Remaining: multi-group + calibration to externally
+  pre-estimated polyserial/polychoric *summaries* (vs. proportions+target).
 - **S.** Add pseudo-elliptical / transformed-elliptical mechanisms after the
   first elliptical slice clarifies the shared radial/core interfaces.
 - **S/M.** Remaining PLSIM work: lower-level pair-cache / performance tuning and

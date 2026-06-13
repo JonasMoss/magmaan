@@ -11,6 +11,7 @@
 #include <Eigen/Eigenvalues>
 #include <Eigen/QR>
 
+#include "magmaan/sim/detail_matrix_repair.hpp"
 #include "magmaan/sim/vale_maurelli.hpp"
 
 #include "../detail_distribution_math.hpp"
@@ -46,15 +47,6 @@ struct MomentFitEval {
   MarginalMomentSummary moments;
   Eigen::Vector2d residual = Eigen::Vector2d::Zero();
   double norm = 0.0;
-};
-
-struct MatrixRepairResult {
-  Eigen::MatrixXd corr;
-  double raw_min_eigenvalue = 0.0;
-  double repaired_min_eigenvalue = 0.0;
-  double ridge = 0.0;
-  double shrinkage = 0.0;
-  bool repaired = false;
 };
 
 struct PearsonIvKernel {
@@ -1248,94 +1240,6 @@ validate_bivariate_copula_matrix_target(
     }
   }
   return {};
-}
-
-sim_expected<MatrixRepairResult>
-repair_correlation_matrix_if_requested(
-    const Eigen::Ref<const Eigen::MatrixXd>& corr,
-    BivariateCopulaCorrelationRepairKind kind,
-    double min_eigenvalue,
-    const char* caller) {
-  if (corr.rows() != corr.cols() || !corr.allFinite()) {
-    return std::unexpected(make_err(
-        SimError::Kind::NumericIssue,
-        std::string(caller) + ": correlation matrix must be finite and square"));
-  }
-  if (!std::isfinite(min_eigenvalue) ||
-      min_eigenvalue < 0.0 || min_eigenvalue >= 1.0) {
-    return std::unexpected(make_err(
-        SimError::Kind::InvalidInput,
-        std::string(caller) + ": repair minimum eigenvalue must be in [0, 1)"));
-  }
-
-  MatrixRepairResult out;
-  out.corr = 0.5 * (corr + corr.transpose());
-  out.corr.diagonal().setOnes();
-  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(out.corr);
-  if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
-    return std::unexpected(make_err(
-        SimError::Kind::NumericIssue,
-        std::string(caller) + ": correlation eigendecomposition failed"));
-  }
-  out.raw_min_eigenvalue = es.eigenvalues().minCoeff();
-  out.repaired_min_eigenvalue = out.raw_min_eigenvalue;
-  if (out.raw_min_eigenvalue >= min_eigenvalue ||
-      kind == BivariateCopulaCorrelationRepairKind::None) {
-    return out;
-  }
-
-  if (kind == BivariateCopulaCorrelationRepairKind::Error) {
-    return std::unexpected(make_err(
-        SimError::Kind::CalibrationFailed,
-        std::string(caller) + ": calibrated matrix is below the requested minimum eigenvalue"));
-  }
-
-  const double denom = 1.0 - out.raw_min_eigenvalue;
-  if (!(denom > 0.0) || !std::isfinite(denom)) {
-    return std::unexpected(make_err(
-        SimError::Kind::NumericIssue,
-        std::string(caller) + ": matrix cannot be repaired toward identity"));
-  }
-  const double shrinkage = (min_eigenvalue - out.raw_min_eigenvalue) / denom;
-  if (!(shrinkage > 0.0) || !(shrinkage < 1.0) || !std::isfinite(shrinkage)) {
-    return std::unexpected(make_err(
-        SimError::Kind::NumericIssue,
-        std::string(caller) + ": invalid repair intensity"));
-  }
-
-  const Eigen::MatrixXd identity =
-      Eigen::MatrixXd::Identity(corr.rows(), corr.cols());
-  if (kind == BivariateCopulaCorrelationRepairKind::Ridge) {
-    const double ridge = shrinkage / (1.0 - shrinkage);
-    if (!(ridge > 0.0) || !std::isfinite(ridge)) {
-      return std::unexpected(make_err(
-          SimError::Kind::NumericIssue,
-          std::string(caller) + ": invalid repair ridge"));
-    }
-    out.corr = (out.corr + ridge * identity) / (1.0 + ridge);
-    out.ridge = ridge;
-    out.repaired = true;
-  } else if (kind == BivariateCopulaCorrelationRepairKind::Shrinkage) {
-    out.corr = (1.0 - shrinkage) * out.corr + shrinkage * identity;
-    out.shrinkage = shrinkage;
-    out.repaired = true;
-  } else {
-    return std::unexpected(make_err(
-        SimError::Kind::InvalidInput,
-        std::string(caller) + ": unknown repair kind"));
-  }
-
-  out.corr.diagonal().setOnes();
-  out.corr = 0.5 * (out.corr + out.corr.transpose());
-  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> repaired_es(out.corr);
-  if (repaired_es.info() != Eigen::Success ||
-      !repaired_es.eigenvalues().allFinite()) {
-    return std::unexpected(make_err(
-        SimError::Kind::NumericIssue,
-        std::string(caller) + ": repaired eigendecomposition failed"));
-  }
-  out.repaired_min_eigenvalue = repaired_es.eigenvalues().minCoeff();
-  return out;
 }
 
 sim_expected<std::vector<MarginalMoments>>
@@ -2547,6 +2451,94 @@ validate_ig_root_sim_inputs(Eigen::Index n,
 }
 
 }  // namespace
+
+sim_expected<MatrixRepairResult>
+repair_correlation_matrix_if_requested(
+    const Eigen::Ref<const Eigen::MatrixXd>& corr,
+    BivariateCopulaCorrelationRepairKind kind,
+    double min_eigenvalue,
+    const char* caller) {
+  if (corr.rows() != corr.cols() || !corr.allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        std::string(caller) + ": correlation matrix must be finite and square"));
+  }
+  if (!std::isfinite(min_eigenvalue) ||
+      min_eigenvalue < 0.0 || min_eigenvalue >= 1.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        std::string(caller) + ": repair minimum eigenvalue must be in [0, 1)"));
+  }
+
+  MatrixRepairResult out;
+  out.corr = 0.5 * (corr + corr.transpose());
+  out.corr.diagonal().setOnes();
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(out.corr);
+  if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        std::string(caller) + ": correlation eigendecomposition failed"));
+  }
+  out.raw_min_eigenvalue = es.eigenvalues().minCoeff();
+  out.repaired_min_eigenvalue = out.raw_min_eigenvalue;
+  if (out.raw_min_eigenvalue >= min_eigenvalue ||
+      kind == BivariateCopulaCorrelationRepairKind::None) {
+    return out;
+  }
+
+  if (kind == BivariateCopulaCorrelationRepairKind::Error) {
+    return std::unexpected(make_err(
+        SimError::Kind::CalibrationFailed,
+        std::string(caller) + ": calibrated matrix is below the requested minimum eigenvalue"));
+  }
+
+  const double denom = 1.0 - out.raw_min_eigenvalue;
+  if (!(denom > 0.0) || !std::isfinite(denom)) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        std::string(caller) + ": matrix cannot be repaired toward identity"));
+  }
+  const double shrinkage = (min_eigenvalue - out.raw_min_eigenvalue) / denom;
+  if (!(shrinkage > 0.0) || !(shrinkage < 1.0) || !std::isfinite(shrinkage)) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        std::string(caller) + ": invalid repair intensity"));
+  }
+
+  const Eigen::MatrixXd identity =
+      Eigen::MatrixXd::Identity(corr.rows(), corr.cols());
+  if (kind == BivariateCopulaCorrelationRepairKind::Ridge) {
+    const double ridge = shrinkage / (1.0 - shrinkage);
+    if (!(ridge > 0.0) || !std::isfinite(ridge)) {
+      return std::unexpected(make_err(
+          SimError::Kind::NumericIssue,
+          std::string(caller) + ": invalid repair ridge"));
+    }
+    out.corr = (out.corr + ridge * identity) / (1.0 + ridge);
+    out.ridge = ridge;
+    out.repaired = true;
+  } else if (kind == BivariateCopulaCorrelationRepairKind::Shrinkage) {
+    out.corr = (1.0 - shrinkage) * out.corr + shrinkage * identity;
+    out.shrinkage = shrinkage;
+    out.repaired = true;
+  } else {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        std::string(caller) + ": unknown repair kind"));
+  }
+
+  out.corr.diagonal().setOnes();
+  out.corr = 0.5 * (out.corr + out.corr.transpose());
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> repaired_es(out.corr);
+  if (repaired_es.info() != Eigen::Success ||
+      !repaired_es.eigenvalues().allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::NumericIssue,
+        std::string(caller) + ": repaired eigendecomposition failed"));
+  }
+  out.repaired_min_eigenvalue = repaired_es.eigenvalues().minCoeff();
+  return out;
+}
 
 MarginalSpec MarginalSpec::standard_normal(double mean, double sd) {
   MarginalSpec m;

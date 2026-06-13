@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include <Eigen/Core>
@@ -34,6 +35,18 @@ struct RawData {
   // Optional per-block missingness mask (1 = observed, 0 = missing).
   // Same shape as X[b] when present.
   std::vector<Eigen::Matrix<std::uint8_t, Eigen::Dynamic, Eigen::Dynamic>> mask;
+
+  // Optional descriptive metadata, all empty by default and ignored by the
+  // numeric core. Populated by simulation raw-data wrapping (e.g.
+  // `sim::raw_data_from_mixed_projection`) so callers can carry variable names,
+  // ordinal factor levels, and group labels for inspection/export.
+  //   variable_names       : length p (same column order as X), or empty.
+  //   ordinal_level_labels : per-variable factor levels; entry empty for a
+  //                          continuous variable, or the whole vector empty.
+  //   group_labels         : length X.size() (one per block), or empty.
+  std::vector<std::string> variable_names;
+  std::vector<std::vector<std::string>> ordinal_level_labels;
+  std::vector<std::string> group_labels;
 };
 
 // Derive `SampleStats` from raw data with the lavaan `likelihood = "normal"`

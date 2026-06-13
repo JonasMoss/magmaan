@@ -501,6 +501,18 @@ sim_norta_draw_impl <- function(calibration, n, reps, seed_base, quadrature_poin
     .Call(`_magmaan_sim_norta_draw_impl`, calibration, n, reps, seed_base, quadrature_points, cholesky_jitter)
 }
 
+sim_ordcorr_calibrate_impl <- function(target_corr, marginals, metric = "polychoric", max_bisection_iter = 80L, calibration_tol = 1e-8, rho_bound = 0.999, matrix_repair = "none", matrix_repair_min_eigenvalue = 1e-8) {
+    .Call(`_magmaan_sim_ordcorr_calibrate_impl`, target_corr, marginals, metric, max_bisection_iter, calibration_tol, rho_bound, matrix_repair, matrix_repair_min_eigenvalue)
+}
+
+sim_ordcorr_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 0.0) {
+    .Call(`_magmaan_sim_ordcorr_draw_impl`, calibration, n, reps, seed_base, cholesky_jitter)
+}
+
+sim_ordcorr_batch_impl <- function(target_corr, marginals, n, reps, seed_base, metric = "polychoric", max_bisection_iter = 80L, calibration_tol = 1e-8, rho_bound = 0.999, matrix_repair = "none", matrix_repair_min_eigenvalue = 1e-8, cholesky_jitter = 0.0) {
+    .Call(`_magmaan_sim_ordcorr_batch_impl`, target_corr, marginals, n, reps, seed_base, metric, max_bisection_iter, calibration_tol, rho_bound, matrix_repair, matrix_repair_min_eigenvalue, cholesky_jitter)
+}
+
 sim_bicop_batch_impl <- function(target_corr, marginals, n, reps, seed_base, family = "frank", quadrature_points = 31L, max_bisection_iter = 80L, calibration_tol = 1e-6) {
     .Call(`_magmaan_sim_bicop_batch_impl`, target_corr, marginals, n, reps, seed_base, family, quadrature_points, max_bisection_iter, calibration_tol)
 }

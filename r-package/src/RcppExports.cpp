@@ -1730,6 +1730,61 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sim_ordcorr_calibrate_impl
+Rcpp::List sim_ordcorr_calibrate_impl(Rcpp::NumericMatrix target_corr, Rcpp::List marginals, std::string metric, int max_bisection_iter, double calibration_tol, double rho_bound, std::string matrix_repair, double matrix_repair_min_eigenvalue);
+RcppExport SEXP _magmaan_sim_ordcorr_calibrate_impl(SEXP target_corrSEXP, SEXP marginalsSEXP, SEXP metricSEXP, SEXP max_bisection_iterSEXP, SEXP calibration_tolSEXP, SEXP rho_boundSEXP, SEXP matrix_repairSEXP, SEXP matrix_repair_min_eigenvalueSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type target_corr(target_corrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type marginals(marginalsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type metric(metricSEXP);
+    Rcpp::traits::input_parameter< int >::type max_bisection_iter(max_bisection_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type calibration_tol(calibration_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type rho_bound(rho_boundSEXP);
+    Rcpp::traits::input_parameter< std::string >::type matrix_repair(matrix_repairSEXP);
+    Rcpp::traits::input_parameter< double >::type matrix_repair_min_eigenvalue(matrix_repair_min_eigenvalueSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_ordcorr_calibrate_impl(target_corr, marginals, metric, max_bisection_iter, calibration_tol, rho_bound, matrix_repair, matrix_repair_min_eigenvalue));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sim_ordcorr_draw_impl
+Rcpp::List sim_ordcorr_draw_impl(Rcpp::List calibration, int n, int reps, double seed_base, double cholesky_jitter);
+RcppExport SEXP _magmaan_sim_ordcorr_draw_impl(SEXP calibrationSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP cholesky_jitterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type calibration(calibrationSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type reps(repsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed_base(seed_baseSEXP);
+    Rcpp::traits::input_parameter< double >::type cholesky_jitter(cholesky_jitterSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_ordcorr_draw_impl(calibration, n, reps, seed_base, cholesky_jitter));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sim_ordcorr_batch_impl
+Rcpp::List sim_ordcorr_batch_impl(Rcpp::NumericMatrix target_corr, Rcpp::List marginals, int n, int reps, double seed_base, std::string metric, int max_bisection_iter, double calibration_tol, double rho_bound, std::string matrix_repair, double matrix_repair_min_eigenvalue, double cholesky_jitter);
+RcppExport SEXP _magmaan_sim_ordcorr_batch_impl(SEXP target_corrSEXP, SEXP marginalsSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP metricSEXP, SEXP max_bisection_iterSEXP, SEXP calibration_tolSEXP, SEXP rho_boundSEXP, SEXP matrix_repairSEXP, SEXP matrix_repair_min_eigenvalueSEXP, SEXP cholesky_jitterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type target_corr(target_corrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type marginals(marginalsSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type reps(repsSEXP);
+    Rcpp::traits::input_parameter< double >::type seed_base(seed_baseSEXP);
+    Rcpp::traits::input_parameter< std::string >::type metric(metricSEXP);
+    Rcpp::traits::input_parameter< int >::type max_bisection_iter(max_bisection_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type calibration_tol(calibration_tolSEXP);
+    Rcpp::traits::input_parameter< double >::type rho_bound(rho_boundSEXP);
+    Rcpp::traits::input_parameter< std::string >::type matrix_repair(matrix_repairSEXP);
+    Rcpp::traits::input_parameter< double >::type matrix_repair_min_eigenvalue(matrix_repair_min_eigenvalueSEXP);
+    Rcpp::traits::input_parameter< double >::type cholesky_jitter(cholesky_jitterSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_ordcorr_batch_impl(target_corr, marginals, n, reps, seed_base, metric, max_bisection_iter, calibration_tol, rho_bound, matrix_repair, matrix_repair_min_eigenvalue, cholesky_jitter));
+    return rcpp_result_gen;
+END_RCPP
+}
 // sim_bicop_batch_impl
 Rcpp::List sim_bicop_batch_impl(double target_corr, Rcpp::List marginals, int n, int reps, double seed_base, std::string family, int quadrature_points, int max_bisection_iter, double calibration_tol);
 RcppExport SEXP _magmaan_sim_bicop_batch_impl(SEXP target_corrSEXP, SEXP marginalsSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP familySEXP, SEXP quadrature_pointsSEXP, SEXP max_bisection_iterSEXP, SEXP calibration_tolSEXP) {
@@ -2134,6 +2189,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_sim_norta_batch_impl", (DL_FUNC) &_magmaan_sim_norta_batch_impl, 10},
     {"_magmaan_sim_norta_calibrate_impl", (DL_FUNC) &_magmaan_sim_norta_calibrate_impl, 7},
     {"_magmaan_sim_norta_draw_impl", (DL_FUNC) &_magmaan_sim_norta_draw_impl, 6},
+    {"_magmaan_sim_ordcorr_calibrate_impl", (DL_FUNC) &_magmaan_sim_ordcorr_calibrate_impl, 8},
+    {"_magmaan_sim_ordcorr_draw_impl", (DL_FUNC) &_magmaan_sim_ordcorr_draw_impl, 5},
+    {"_magmaan_sim_ordcorr_batch_impl", (DL_FUNC) &_magmaan_sim_ordcorr_batch_impl, 12},
     {"_magmaan_sim_bicop_batch_impl", (DL_FUNC) &_magmaan_sim_bicop_batch_impl, 9},
     {"_magmaan_sim_bicop_calibrate_impl", (DL_FUNC) &_magmaan_sim_bicop_calibrate_impl, 6},
     {"_magmaan_sim_bicop_draw_impl", (DL_FUNC) &_magmaan_sim_bicop_draw_impl, 6},

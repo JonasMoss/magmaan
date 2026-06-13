@@ -137,6 +137,7 @@ add_library(magmaan STATIC
   src/sim/elliptical.cpp
   src/sim/normal.cpp
   src/sim/norta.cpp
+  src/sim/ordinal_correlation.cpp
   src/sim/plsim.cpp
   src/sim/model_implied.cpp
   src/sim/population.cpp
