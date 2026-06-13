@@ -187,6 +187,12 @@ compute_fiml_satorra2000(
     const Eigen::Ref<const Eigen::MatrixXd>& Gamma,
     const Eigen::Ref<const Eigen::MatrixXd>& A_alpha);
 
+post_expected<SatorraDiffResult>
+compute_satorra2000_from_sandwich(
+    const Eigen::Ref<const Eigen::MatrixXd>& A1,
+    const Eigen::Ref<const Eigen::MatrixXd>& B1,
+    const Eigen::Ref<const Eigen::MatrixXd>& A_alpha);
+
 post_expected<LRSatorra2000Result>
 lr_test_satorra2000_fiml_from_data(
     const spec::LatentStructure&     pt_H1,

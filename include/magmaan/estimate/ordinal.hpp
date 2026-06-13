@@ -8,6 +8,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/robust/lr_test_satorra.hpp"
 #include "magmaan/robust/robust.hpp"
 #include "magmaan/inference/score.hpp"
 #include "magmaan/measures/fit_measures.hpp"
@@ -122,6 +123,23 @@ robust_mixed_ordinal(spec::LatentStructure pt,
                      data::OrdinalGammaCache& gamma_cache,
                      const Estimates& est,
                      data::OrdinalWeightPlan plan);
+
+post_expected<robust::LRSatorra2000Result>
+lr_test_satorra2000_ordinal(
+    spec::LatentStructure pt_H1,
+    const model::MatrixRep& rep_H1,
+    const data::OrdinalStats& stats,
+    const Estimates& est_H1,
+    spec::LatentStructure pt_H0,
+    const model::MatrixRep& rep_H0,
+    const Estimates& est_H0,
+    OrdinalWeightKind weights,
+    double T_H0,
+    double T_H1,
+    int df_H0,
+    int df_H1,
+    robust::SatorraAMethod a_method = robust::SatorraAMethod::Exact,
+    OrdinalParameterization parameterization = OrdinalParameterization::Delta);
 
 post_expected<inference::ScoreTestTable>
 modification_indices_ordinal(spec::LatentStructure pt,

@@ -11,6 +11,7 @@
 #include <cmath>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Rcpp.h>
@@ -19,6 +20,7 @@
 #include "internal.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/constraints.hpp"
+#include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/robust/lr_test_satorra.hpp"
 #include "magmaan/robust/robust.hpp"
 
@@ -42,6 +44,55 @@ magmaan::robust::GammaComputation parse_gamma_computation(const std::string& s) 
     return magmaan::robust::GammaComputation::Dense;
   }
   return magmaan::robust::GammaComputation::Streaming;
+}
+
+magmaan::estimate::OrdinalWeightKind parse_ordinal_weight(const std::string& s) {
+  if (s == "DWLS" || s == "dwls") return magmaan::estimate::OrdinalWeightKind::DWLS;
+  if (s == "WLS" || s == "wls") return magmaan::estimate::OrdinalWeightKind::WLS;
+  if (s == "ULS" || s == "uls") return magmaan::estimate::OrdinalWeightKind::ULS;
+  Rcpp::stop("magmaan: ordinal nested test `weight` must be 'DWLS', 'WLS', or 'ULS' (got '%s')", s);
+}
+
+magmaan::data::OrdinalStats ordinal_stats_from_arg(Rcpp::List x) {
+  const char* what = "ordinal_stats";
+  for (const char* nm : {"R", "thresholds", "threshold_ov", "threshold_level",
+                         "NACOV", "W_dwls", "W_wls", "nobs", "n_levels"}) {
+    if (!x.containsElementNamed(nm)) Rcpp::stop("magmaan: %s is missing $%s", what, nm);
+  }
+  Rcpp::List Rl(x["R"]), thl(x["thresholds"]), ovl(x["threshold_ov"]),
+      levl(x["threshold_level"]), NAl(x["NACOV"]),
+      Wdl(x["W_dwls"]), Wfl(x["W_wls"]), nlevl(x["n_levels"]);
+  Rcpp::IntegerVector nobs(x["nobs"]);
+  const R_xlen_t nb = Rl.size();
+  magmaan::data::OrdinalStats out;
+  out.R.reserve(static_cast<std::size_t>(nb));
+  out.thresholds.reserve(static_cast<std::size_t>(nb));
+  out.threshold_ov.reserve(static_cast<std::size_t>(nb));
+  out.threshold_level.reserve(static_cast<std::size_t>(nb));
+  out.NACOV.reserve(static_cast<std::size_t>(nb));
+  out.W_dwls.reserve(static_cast<std::size_t>(nb));
+  out.W_wls.reserve(static_cast<std::size_t>(nb));
+  out.n_obs.reserve(static_cast<std::size_t>(nb));
+  out.n_levels.reserve(static_cast<std::size_t>(nb));
+  for (R_xlen_t b = 0; b < nb; ++b) {
+    out.R.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Rl[b])));
+    out.thresholds.push_back(Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(thl[b])));
+    Rcpp::IntegerVector ov(ovl[b]), lev(levl[b]);
+    std::vector<std::int32_t> ov0(static_cast<std::size_t>(ov.size()));
+    std::vector<std::int32_t> lev0(static_cast<std::size_t>(lev.size()));
+    for (R_xlen_t k = 0; k < ov.size(); ++k) {
+      ov0[static_cast<std::size_t>(k)] = ov[k] - 1;
+      lev0[static_cast<std::size_t>(k)] = lev[k];
+    }
+    out.threshold_ov.push_back(std::move(ov0));
+    out.threshold_level.push_back(std::move(lev0));
+    out.NACOV.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(NAl[b])));
+    out.W_dwls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wdl[b])));
+    out.W_wls.push_back(Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(Wfl[b])));
+    out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
+    out.n_levels.push_back(Rcpp::as<std::vector<std::int32_t>>(Rcpp::IntegerVector(nlevl[b])));
+  }
+  return out;
 }
 
 magmaan::data::RawData raw_from_group_list(Rcpp::List X_per_group,
@@ -346,6 +397,53 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
       ctx_H0.pt, ctx_H0.rep, est_H0.theta, *K_H0_or,
       raw_H1, fx_H0_or->chi2, fx_H1_or->chi2, *df_H0_or, *df_H1_or,
       parse_gamma(gamma), parse_a_method(a_method), h_step);
+  if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
+  return satorra2000_to_list(*r_or);
+}
+
+// infer_ordinal_lr_test_satorra2000() — polychoric ordinal LS restriction-map
+// nested test. The caller supplies the same OrdinalStats object used for the
+// two fits, matching robust_ordinal()/fmg_tests_ordinal().
+//
+// [[Rcpp::export]]
+Rcpp::List infer_ordinal_lr_test_satorra2000(Rcpp::List  fit_H1,
+                                             Rcpp::List  fit_H0,
+                                             Rcpp::List  ordinal_stats,
+                                             double      T_H1,
+                                             int         df_H1,
+                                             double      T_H0,
+                                             int         df_H0,
+                                             std::string weight = "",
+                                             std::string a_method = "exact") {
+  magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
+  magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est_H0 = magmaanr::est_from_fit(fit_H0);
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+
+  if (weight.empty()) {
+    if (!fit_H1.containsElementNamed("estimator")) {
+      Rcpp::stop("infer_ordinal_lr_test_satorra2000: `weight` is required when fit_H1$estimator is absent");
+    }
+    weight = Rcpp::as<std::string>(fit_H1["estimator"]);
+  }
+  const std::string p1 = fit_H1.containsElementNamed("parameterization")
+      ? Rcpp::as<std::string>(fit_H1["parameterization"])
+      : "delta";
+  const std::string p0 = fit_H0.containsElementNamed("parameterization")
+      ? Rcpp::as<std::string>(fit_H0["parameterization"])
+      : "delta";
+  if (p1 != p0) {
+    Rcpp::stop("infer_ordinal_lr_test_satorra2000: H1/H0 parameterizations differ");
+  }
+
+  auto r_or = magmaan::estimate::lr_test_satorra2000_ordinal(
+      ctx_H1.pt, ctx_H1.rep, stats, est_H1,
+      ctx_H0.pt, ctx_H0.rep, est_H0,
+      parse_ordinal_weight(weight),
+      T_H0, T_H1, df_H0, df_H1,
+      parse_a_method(a_method),
+      magmaanr::ordinal_parameterization_from_string(p1));
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   return satorra2000_to_list(*r_or);
 }

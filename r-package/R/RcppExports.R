@@ -329,6 +329,10 @@ infer_fiml_lr_test_satorra2000 <- function(fit_H1, fit_H0, gamma = "empirical", 
     .Call(`_magmaan_infer_fiml_lr_test_satorra2000`, fit_H1, fit_H0, gamma, a_method, h_step)
 }
 
+infer_ordinal_lr_test_satorra2000 <- function(fit_H1, fit_H0, ordinal_stats, T_H1, df_H1, T_H0, df_H0, weight = "", a_method = "exact") {
+    .Call(`_magmaan_infer_ordinal_lr_test_satorra2000`, fit_H1, fit_H0, ordinal_stats, T_H1, df_H1, T_H0, df_H0, weight, a_method)
+}
+
 infer_lr_test_satorra_bentler2001 <- function(fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma = "empirical") {
     .Call(`_magmaan_infer_lr_test_satorra_bentler2001`, fit_H1, fit_H0, X_per_group, T_H1, df_H1, T_H0, df_H0, gamma)
 }
@@ -584,4 +588,3 @@ sim_model_draw_impl <- function(calibration, n, reps, seed_base, generator = "no
 sim_model_batch_impl <- function(fit_or_partable, n, reps, seed_base, theta = NULL, generator = "normal", df = 5.0, mixture_weights = NULL, mixture_scale_multipliers = NULL, contamination_probability = 0.05, contamination_scale_multiplier = 3.0, slash_q = 5.0, cholesky_jitter = 0.0) {
     .Call(`_magmaan_sim_model_batch_impl`, fit_or_partable, n, reps, seed_base, theta, generator, df, mixture_weights, mixture_scale_multipliers, contamination_probability, contamination_scale_multiplier, slash_q, cholesky_jitter)
 }
-
