@@ -217,8 +217,9 @@ decisions in the simulation backlog.
   2026-06-13** (commit b8c6dcb): `fmg_tests_ordinal()` / `fmg_tests_mixed_ordinal()`
   apply the FMG eigenvalue-tail transforms to the `robust_ordinal()` /
   `robust_mixed_ordinal()` polychoric UGamma spectrum (`eigvals` + `chisq_standard`
-  + `df`), single-group v1, `_ml`/`_ug` rejected, anchored by the ordinal C++ FMG
-  test and `r-package/examples/fmg_ordinal.R`; no new C++ production code (see
+  + `df`), single- and multi-group, `_ml`/`_ug` rejected, anchored by the ordinal
+  C++ FMG test and `r-package/examples/fmg_ordinal.R` (single-group plus
+  two-group all-ordinal/mixed SB parity); no new C++ production code (see
   roadmap). The nested-test gate **also landed 2026-06-13**:
   all-ordinal DWLS/WLS `nestedTest(..., data = ordinal_stats,
   method = "satorra.2000")` now builds the direct ordinal Satorra-2000 reduced
@@ -253,12 +254,14 @@ decisions in the simulation backlog.
     visible alongside the FIML parity table.
   - **Decided 2026-06-13.** Separate `papers/ordinal-fmg/` folder (not a second
     part of `papers/fiml-fmg/`).
-  - **Only-when-needed.** Multi-group ordinal GOF FMG (lift the single-group v1
-    cap in the `fmg_tests_ordinal()` R wrapper), and a C++ methods-developer
-    convenience entry point — not needed for the paper, since the
-    spectrum-once-then-loop R orchestration avoids a per-method
-    `robust_ordinal` recompute. (`_ug`/unbiased-Gamma is N/A for polychoric: the
-    NACOV is already the asymptotic Gamma.)
+  - **Done 2026-06-13.** Multi-group ordinal/mixed GOF FMG is first-class at the
+    R boundary: the wrappers reuse the multi-block robust ordinal sandwich and
+    `r-package/examples/fmg_ordinal.R` checks two-group all-ordinal and mixed
+    SB parity against `robust_ordinal()` / `robust_mixed_ordinal()`.
+  - **Only-when-needed.** A C++ methods-developer convenience entry point is not
+    needed for the paper, since the spectrum-once-then-loop R orchestration
+    avoids a per-method `robust_ordinal` recompute. (`_ug`/unbiased-Gamma is N/A
+    for polychoric: the NACOV is already the asymptotic Gamma.)
 - **FIML cross-call pack: remaining consumers.** The `FIMLPack`/`FIMLH1`
   value-based precomputation (roadmap, Continuous FIML) is threaded through
   the post-fit helpers and `api::sem`. Not yet pack-aware: the R bindings

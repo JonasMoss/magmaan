@@ -353,12 +353,15 @@ golden `parTable()` fixtures.
   single base statistic (no ML/RLS split) and the polychoric NACOV is already the
   asymptotic Gamma, so `_ml` and `_ug` test suffixes are rejected. The categorical
   sample statistics are passed explicitly, mirroring `robust_ordinal(fit, stats,
-  weight)`; single group (v1). Anchored by `tests/unit/ordinal_test.cpp` ("Ordinal
-  FMG transforms consume the robust_ordinal UGamma spectrum"; the FMG SB
-  reproduces the stored Satorra-Bentler scaling to 1e-12) and
-  `r-package/examples/fmg_ordinal.R`. This is the gate for the polychoric-FMG
-  paper track; the pEBA/pOLS/PALL transforms remain magmaan-original with no
-  external oracle, as on the complete-data and FIML paths.
+  weight)`; single- and multi-group fits are supported through the same
+  per-block `n_b/N` robust ordinal sandwich. Anchored by
+  `tests/unit/ordinal_test.cpp` ("Ordinal FMG transforms consume the
+  robust_ordinal UGamma spectrum"; the FMG SB reproduces the stored
+  Satorra-Bentler scaling to 1e-12) and `r-package/examples/fmg_ordinal.R`,
+  which checks single-group and two-group all-ordinal/mixed SB parity. This is
+  the gate for the polychoric-FMG paper track; the pEBA/pOLS/PALL transforms
+  remain magmaan-original with no external oracle, as on the complete-data and
+  FIML paths.
 - Ordinal nested Satorra-2000 tests are wired for all-ordinal DWLS/WLS fits via
   `nestedTest()` / `robust_nested_lrt()` when the caller supplies the same
   `magmaan_ordinal_data` statistics object used for fitting. The C++ worker

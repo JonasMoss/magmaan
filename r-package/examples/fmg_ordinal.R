@@ -4,8 +4,9 @@
 #
 # fmg_tests_ordinal() / fmg_tests_mixed_ordinal() apply the estimator-agnostic
 # FMG eigenvalue-tail transforms to the same polychoric-NACOV UGamma spectrum
-# that robust_ordinal() / robust_mixed_ordinal() report. The categorical sample
-# statistics are supplied explicitly, exactly like robust_ordinal(fit, stats).
+# that robust_ordinal() / robust_mixed_ordinal() report for single- and
+# multi-group fits. The categorical sample statistics are supplied explicitly,
+# exactly like robust_ordinal(fit, stats).
 #
 # Validation here pins the wiring: the SB row reproduces robust_ordinal()'s
 # Satorra-Bentler scaling to numerical tolerance. The pEBA/pOLS/PALL transforms
@@ -72,6 +73,31 @@ err_ml <- tryCatch(magmaan::fmg_tests_ordinal(fit_dwls, d, tests = "pEBA4_ML"),
                    error = function(e) conditionMessage(e))
 stopifnot(grepl("no ML", err_ml))
 
+## --- two-group ordinal GOF reuses the pooled robust_ordinal spectrum --------
+g1 <- make_ord_df(220, list(c(-0.70, 0.40), c(-0.50, 0.60),
+                            c(-0.85, 0.20), c(-0.45, 0.75)),
+                  seed = 31L)
+g2 <- make_ord_df(260, list(c(-0.60, 0.55), c(-0.40, 0.70),
+                            c(-0.75, 0.30), c(-0.35, 0.85)),
+                  seed = 32L)
+g1$grp <- "g1"
+g2$grp <- "g2"
+df_group <- rbind(g1, g2)
+m_group <- magmaan::model_spec(model, ordered = ordered, group = "grp",
+                               group_labels = c("g1", "g2"),
+                               parameterization = "delta")
+d_group <- core$data_ordinal_stats_from_df(df_group, m_group)
+fit_group <- core$fit_dwls_ordinal(
+  m_group, d_group, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+stopifnot(isTRUE(fit_group$ordinal), fit_group$ngroups == 2L)
+tab_group <- magmaan::fmg_tests_ordinal(fit_group, d_group)
+rob_group <- core$robust_ordinal(fit_group, d_group)
+sb_group_direct <- pchisq(rob_group$satorra_bentler$chi2_scaled,
+                          rob_group$satorra_bentler$df, lower.tail = FALSE)
+sb_group_row <- tab_group[tab_group$input == "SB", , drop = FALSE]
+stopifnot(nrow(sb_group_row) == 1L)
+stopifnot(abs(sb_group_row$p_value - sb_group_direct) < 1e-10)
+
 ## --- mixed continuous/ordinal smoke -----------------------------------------
 df_mixed <- df
 set.seed(24L)
@@ -91,5 +117,33 @@ sb_mixed_direct <- pchisq(rob_mixed$satorra_bentler$chi2_scaled,
                           rob_mixed$satorra_bentler$df, lower.tail = FALSE)
 sb_mixed_row <- tab_mixed[tab_mixed$input == "SB", , drop = FALSE]
 stopifnot(abs(sb_mixed_row$p_value - sb_mixed_direct) < 1e-10)
+
+## --- two-group mixed continuous/ordinal smoke -------------------------------
+df_mixed_group <- df_group
+set.seed(43L)
+eta_group <- rnorm(nrow(df_mixed_group))
+df_mixed_group$x3 <- 0.8 * eta_group + 0.6 * rnorm(nrow(df_mixed_group))
+df_mixed_group$x4 <- 0.7 * eta_group + 0.7 * rnorm(nrow(df_mixed_group))
+m_mixed_group <- magmaan::model_spec(
+  model, ordered = c("x1", "x2"), group = "grp",
+  group_labels = c("g1", "g2"), parameterization = "delta",
+  meanstructure = TRUE)
+d_mixed_group <- core$data_mixed_ordinal_stats_from_df(df_mixed_group,
+                                                       m_mixed_group)
+fit_mixed_group <- core$fit_dwls_mixed_ordinal(
+  m_mixed_group, d_mixed_group,
+  control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+stopifnot(isTRUE(fit_mixed_group$mixed_ordinal),
+          fit_mixed_group$ngroups == 2L)
+tab_mixed_group <- magmaan::fmg_tests_mixed_ordinal(fit_mixed_group,
+                                                    d_mixed_group)
+rob_mixed_group <- core$robust_mixed_ordinal(fit_mixed_group, d_mixed_group)
+sb_mixed_group_direct <- pchisq(
+  rob_mixed_group$satorra_bentler$chi2_scaled,
+  rob_mixed_group$satorra_bentler$df, lower.tail = FALSE)
+sb_mixed_group_row <- tab_mixed_group[tab_mixed_group$input == "SB", ,
+                                      drop = FALSE]
+stopifnot(nrow(sb_mixed_group_row) == 1L)
+stopifnot(abs(sb_mixed_group_row$p_value - sb_mixed_group_direct) < 1e-10)
 
 cat("ordinal/mixed fmg_tests_ordinal() workflow: ok\n")
