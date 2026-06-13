@@ -979,3 +979,58 @@ TEST_CASE("frontier robust LS MI multi-group: GLS + Γ_NT(S) meat reduces to NT"
           1e-8 * (1.0 + std::abs(nt->rows[i].mi)));
   }
 }
+
+// ── df>1 total release (PR3) ─────────────────────────────────────────────────
+// The joint worker generalizes the scalar c to a df-dim subspace; at df=1 it
+// must reproduce the per-row release bit-for-bit (G is a single column g, so
+// c̄ = λ = gᵀB1g/gᵀA1g and T = (gᵀs)²/(gᵀIg)).
+
+TEST_CASE("frontier robust joint: df=1 reduces to the per-row release") {
+  auto h = build("f =~ x1 + a*x2 + b*x3 + x4\na == b");
+  std::mt19937 rng(13u);
+  const Eigen::Matrix4d Sigma = four_indicator_sample_cov();
+  magmaan::data::RawData raw;
+  raw.X = {multivariate_t_sample(rng, 600, Sigma, 6.0)};
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto est = magmaan::test::fit(h.pt, h.rep, *samp);
+  REQUIRE(est.has_value());
+
+  inf::frontier::RobustScoreOptions opts;
+  opts.spec = {rob::Information::Expected, rob::WeightMoments::Structured,
+               rob::ScoreCovariance::Empirical};
+  auto per_row =
+      inf::frontier::score_tests_robust(h.pt, h.rep, *samp, raw, *est, opts);
+  REQUIRE(per_row.has_value());
+  REQUIRE(per_row->rows.size() == 1);
+  auto joint = inf::frontier::score_tests_robust_joint(h.pt, h.rep, *samp, raw,
+                                                       *est, opts);
+  REQUIRE(joint.has_value());
+
+  const auto& row = per_row->rows[0];
+  CHECK(joint->df == 1);
+  CHECK(joint->eigvals.size() == 1);
+  CHECK(std::abs(joint->mi - row.mi) < 1e-9 * (1.0 + std::abs(row.mi)));
+  CHECK(std::abs(joint->scaling_factor - row.scaling_factor) <
+        1e-9 * (1.0 + std::abs(row.scaling_factor)));
+  CHECK(std::abs(joint->mi_scaled - row.mi_scaled) <
+        1e-9 * (1.0 + std::abs(row.mi_scaled)));
+  CHECK(std::abs(joint->eigvals(0) - joint->scaling_factor) < 1e-9);
+  CHECK(joint->p_mixture > 0.0);
+  CHECK(joint->p_mixture <= 1.0);
+}
+
+TEST_CASE("frontier robust joint: errors cleanly with no equality constraint") {
+  auto h = build("f =~ x1 + x2 + x3 + x4");
+  std::mt19937 rng(21u);
+  const Eigen::Matrix4d Sigma = four_indicator_sample_cov();
+  magmaan::data::RawData raw;
+  raw.X = {multivariate_t_sample(rng, 400, Sigma, 7.0)};
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  auto est = magmaan::test::fit(h.pt, h.rep, *samp);
+  REQUIRE(est.has_value());
+  auto joint =
+      inf::frontier::score_tests_robust_joint(h.pt, h.rep, *samp, raw, *est);
+  CHECK_FALSE(joint.has_value());  // no active equality constraints to release
+}

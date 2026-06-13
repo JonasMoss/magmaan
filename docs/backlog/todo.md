@@ -86,14 +86,17 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 
 `inference::frontier::{modification_indices,score_tests}_robust` has landed for
 complete-data ML (both breads), continuous ULS/GLS/WLS/DWLS (the
-`gmm::Weight` overloads, expected bread, moment-metric sandwich), and —
-as `estimate::frontier::{modification_indices,score_tests}_{ordinal,mixed_ordinal}_robust`
-— all-ordinal ULS/DWLS/WLS and mixed DWLS/WLS over the polychoric NACOV meat;
-all single group (see roadmap; validated by
-`tests/unit/score_robust_test.cpp`, `tests/golden/score_robust_golden_test.cpp`
-fixtures 0006-0008, the R-internals oracle from
-`tests/tools/regen_robust_score.R`, and the advisory
-`tests/checks/robust_score/`). Remaining work:
+`gmm::Weight` overloads, expected bread, moment-metric sandwich), FIML/MLR
+(`{modification_indices,score_tests}_fiml_robust`, observed bread + casewise
+meat), and — as
+`estimate::frontier::{modification_indices,score_tests}_{ordinal,mixed_ordinal}_robust`
+— all-ordinal ULS/DWLS/WLS and mixed DWLS/WLS over the polychoric NACOV meat.
+The continuous ML/LS tiers are single- or multi-group; a df>1 total-release
+(`score_tests_robust_joint`, mean-scaled + imhof mixture) covers joint releases.
+Validated by `tests/unit/score_robust_test.cpp`,
+`tests/golden/score_robust_golden_test.cpp` fixtures 0006-0011, the R-internals
+oracle from `tests/tools/regen_robust_score.R`, and the advisory
+`tests/checks/robust_score/`. Remaining work:
 
 - **Multi-group — continuous done 2026-06-13; ordinal remaining.** The
   continuous ML and LS tiers (`inference::frontier`) now support multi-group: the
@@ -105,10 +108,6 @@ fixtures 0006-0008, the R-internals oracle from
   `require_single_group_ordinal` in `ordinal.cpp`) still guards single-group —
   needs a multi-group polychoric-NACOV oracle and per-group threshold/association
   enumeration before its guards come off.
-- **df>1 total release.** Mean-scaled `T_total/c_total` plus an optional Imhof
-  eigenvalue-mixture p-value for joint releases (the per-release machinery is
-  in place; the joint version needs `c̄ = tr((GᵀA1G)⁻¹(GᵀB1G))/df` and the
-  existing QUADPACK-backed imhof tail).
 - **S, only-when-needed.** `api::frontier` / R wrappers for the LS and ordinal
   robust tiers (the api `Fit` does not currently carry the LS estimation
   weight; the `estimate::frontier` / `inference::frontier` functions are the

@@ -33,6 +33,7 @@ suppressMessages({
   library(lavaan)
   library(jsonlite)
   library(MASS)
+  library(CompQuadForm)  # imhof tail for the df>1 joint-release mixture p-value
 })
 
 fixtures <- file.path("tests", "fixtures", "score")
@@ -357,3 +358,75 @@ write_json(payload_mg, out_mg, pretty = TRUE, auto_unbox = TRUE,
            null = "null", na = "null", digits = NA)
 cat(sprintf("wrote %s\n  X2_nt=%.6f  c=%.6f  mi_scaled=%.6f  (lavaan %s)\n",
             out_mg, rs_mg$X2_nt, rs_mg$scaling, rs_mg$mi_scaled, installed))
+
+# ── 0011: df>1 total release (two equality constraints, joint MLM) ────────────
+# Joint release of both `==` constraints (df = 2). The NT joint statistic is
+# lavaan's multivariate score total `lavTestScore(fit)$test$X2` (lavaan falls
+# back to the ordinary statistic for MLM, so this is the NT number magmaan's
+# uᵀV⁻¹u reproduces). The mean scaling is c̄ = tr((GᵀA1G)⁻¹(GᵀB1G))/df = Σλ/df,
+# and the exact mixture p-value is Pr(Σλⱼχ²₁ > T) via CompQuadForm::imhof — the
+# independent oracle for magmaan's QUADPACK-backed `imhof_upper`. G is the
+# df-dimensional efficient-score subspace (release normals made A1-orthogonal to
+# the nuisance subspace; A1 = info under the MLM Expected bread).
+robust_score_assemble_joint <- function(fit) {
+  ts <- suppressWarnings(lavTestScore(fit))
+  T_nt <- ts$test$X2
+  df   <- ts$test$df
+  Delta <- lavInspect(fit, "delta")
+  V     <- lavInspect(fit, "wls.v")
+  Gm    <- lavInspect(fit, "gamma")
+  A1 <- t(Delta) %*% V %*% Delta
+  B1 <- t(Delta) %*% V %*% Gm %*% V %*% Delta
+  R  <- fit@Model@ceq.JAC
+  K  <- MASS::Null(t(R))
+  D  <- t(R)  # q × df, constraint normals as columns
+  Geff <- D - K %*% solve(t(K) %*% A1 %*% K, t(K) %*% (A1 %*% D))
+  GtA <- t(Geff) %*% A1 %*% Geff
+  GtB <- t(Geff) %*% B1 %*% Geff
+  lam <- sort(Re(eigen(solve(GtA) %*% GtB, only.values = TRUE)$values))
+  cbar <- sum(lam) / df
+  list(T_nt = T_nt, df = df, scaling = cbar, mi_scaled = T_nt / cbar,
+       eigvals = lam, p_mixture = CompQuadForm::imhof(T_nt, lam)$Qq)
+}
+
+set.seed(20260613L)
+n_j <- 700L
+lam_j <- c(1, 0.85, 0.85, 0.85)
+Sig_j <- lam_j %*% t(lam_j) + diag(c(0.6, 0.6, 0.6, 0.6))
+Lj <- t(chol(Sig_j))
+Zj <- matrix(rnorm(n_j * 4L), n_j, 4L)
+wj <- rchisq(n_j, df_t) / df_t
+Xj <- sqrt((df_t - 2) / df_t) * (Zj %*% t(Lj)) / sqrt(wj)
+colnames(Xj) <- paste0("x", 1:4)
+dat_j <- as.data.frame(Xj)
+
+model_j <- "f =~ x1 + a*x2 + b*x3 + c*x4\na == b\na == c"
+fit_j <- sem(model_j, data = dat_j, estimator = "MLM")
+if (!lavInspect(fit_j, "converged")) stop("joint robust score oracle fit did not converge")
+rs_j <- robust_score_assemble_joint(fit_j)
+
+payload_j <- list(
+  `_meta` = list(
+    format_version = 1L,
+    fixture_kind = "score_robust",
+    corpus_id = "0011_robust_release_joint_df2",
+    tool = "lavaan internals (R-assembled): delta/wls.v/gamma/ceq.JAC + CompQuadForm::imhof",
+    lavaan_version = installed,
+    note = paste("df=2 joint release; mi = lavTestScore total, c̄ = Σλ/df,",
+                 "p_mixture = imhof(T, λ)")),
+  input = model_j,
+  estimator = "MLM",
+  bread = "expected",
+  n_obs = n_j,
+  raw = unname(Xj),
+  score_tests_robust_joint = list(
+    df = rs_j$df, mi = rs_j$T_nt, scaling_factor = rs_j$scaling,
+    mi_scaled = rs_j$mi_scaled, p_mixture = rs_j$p_mixture,
+    eigvals = rs_j$eigvals))
+
+out_j <- file.path(fixtures, "0011_robust_release_joint_df2.score_robust.json")
+write_json(payload_j, out_j, pretty = TRUE, auto_unbox = TRUE,
+           null = "null", na = "null", digits = NA)
+cat(sprintf("wrote %s\n  T=%.6f  df=%d  c=%.6f  mi_scaled=%.6f  p_mix=%.6f  (lavaan %s)\n",
+            out_j, rs_j$T_nt, rs_j$df, rs_j$scaling, rs_j$mi_scaled,
+            rs_j$p_mixture, installed))

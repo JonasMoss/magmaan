@@ -201,6 +201,19 @@ golden `parTable()` fixtures.
   within-group reductions cannot (`A1 = lavInspect(fit,"information")` equals
   `Σ_b (n_b/N)·Δ_b'V_bΔ_b` exactly, c ≈ 1.24). FIML robust and the
   ordinal/mixed-ordinal robust tier remain single-group.
+- df>1 total release (2026-06-13): `inference::frontier::score_tests_robust_joint`
+  releases all active equality constraints at once. The NT joint statistic is the
+  multivariate score (Lagrange-multiplier) form `T = uᵀV⁻¹u` over the
+  df-dimensional efficient-score subspace `G` (release normals made
+  info-orthogonal to the nuisance subspace; u = Gᵀs, V = GᵀIG), which reproduces
+  lavaan's `lavTestScore(fit)$test$X2`. The robust report mean-scales by
+  `c̄ = tr((GᵀA1G)⁻¹(GᵀB1G))/df = Σλ/df` and also gives the exact eigenvalue-mixture
+  p-value `Pr(Σλⱼχ²₁ > T)` via the QUADPACK `imhof_upper`, with λ the generalized
+  eigenvalues of (GᵀB1G, GᵀA1G) (`JointScoreTestResult`; the shared worker
+  `score_for_subspace_robust`). At df=1 it reduces to the per-row `c` bit-for-bit.
+  Complete-data ML (raw or caller Γ̂); single- or multi-group. Oracle: df=2 joint
+  fixture 0011 (mi = lavaan total, c̄ ≈ 2.03, p_mixture vs `CompQuadForm::imhof`)
+  plus a df=1-reduces-to-per-row unit check.
 - Observed-bread robust SEs and observed-Hessian U-factors use total-N scaling
   and work on block-stacked multi-block covariance and mean-structure models.
 - Browne's unbiased reduced gamma has a single-block reduced-matrix shorthand
