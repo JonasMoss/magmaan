@@ -262,14 +262,15 @@ decisions in the simulation backlog.
     needed for the paper, since the spectrum-once-then-loop R orchestration
     avoids a per-method `robust_ordinal` recompute. (`_ug`/unbiased-Gamma is N/A
     for polychoric: the NACOV is already the asymptotic Gamma.)
-- **FIML cross-call pack: remaining consumers.** The `FIMLPack`/`FIMLH1`
-  value-based precomputation (roadmap, Continuous FIML) is threaded through
-  the post-fit helpers and `api::sem`. Not yet pack-aware: the R bindings
-  (stateless per call — each `estimate_fiml_*()` round-trip rebuilds the pack
-  and re-runs the H1 EM; threading it needs the R fit object to carry an XPtr
-  to fit-time C++ state), `inference::{modification_indices,score_tests}_fiml`
-  and `robust::lr_test_satorra2000_fiml_from_data` (rebuild pattern grouping
-  and start stats per call; no H1 EM, so the win is one data pass, not an EM).
+- **C++/API done 2026-06-13; R only-when-needed.** The `FIMLPack`/`FIMLH1`
+  value-based precomputation (roadmap, Continuous FIML) is threaded through the
+  C++ post-fit helpers, `api::sem`, ordinary and MLR-robust FIML
+  modification-index / score-test helpers, and the FIML Satorra-2000 nested
+  restriction-map helper. The remaining pack boundary is the R bindings, which
+  are intentionally stateless per call today: each `estimate_fiml_*()` round-trip
+  rebuilds the pack and may re-run H1 EM. Threading it needs the R fit object to
+  carry an XPtr to fit-time C++ state; add only when a concrete R workflow shows
+  the round-trip rebuild is material.
 
 ## Benchmarks
 

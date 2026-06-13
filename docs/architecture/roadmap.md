@@ -255,10 +255,11 @@ golden `parTable()` fixtures.
   converged H1 objective value, built by one EM run in `fiml_h1_moments`).
   Every post-fit helper (`fiml_extras`, `fiml_observed_information`,
   `fiml_robust_mlr`, `saturated_em_moments`, `fiml_eta_jacobian`,
-  `fiml_ugamma_spectrum`, `fiml_baseline_chi2`) and `fit_fiml` carries a pack
-  overload next to the raw-only signature, which now just builds the pack/H1
-  and delegates. `api::sem` FIML fits build both eagerly at `fit()` time and
-  expose them via `Fit::fiml_pack()` / `Fit::fiml_h1()`, so a
+  `fiml_ugamma_spectrum`, `fiml_baseline_chi2`), the FIML score/MI helpers
+  (ordinary plus MLR robust), the FIML Satorra-2000 nested-test helper, and
+  `fit_fiml` carry pack overloads next to the raw-only signatures, which now
+  build the pack/H1 once and delegate. `api::sem` FIML fits build both eagerly
+  at `fit()` time and expose them via `Fit::fiml_pack()` / `Fit::fiml_h1()`, so a
   fit → test → fit_measures → SE/MLR session runs the saturated EM exactly
   once (the H1 value and H1 moments also share that single EM run, where the
   raw-only `fiml_extras` previously ran two).

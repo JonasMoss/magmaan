@@ -1419,9 +1419,13 @@ modification_indices(const Fit &fit,
     }
   }
   if (const auto *raw = fit.data().raw()) {
-    auto out = inference::modification_indices_fiml(
-        fit.model().structure(), fit.model().matrix_rep(), *raw,
-        fit.estimates(), options);
+    auto out = fit.fiml_pack()
+        ? inference::modification_indices_fiml(
+              fit.model().structure(), fit.model().matrix_rep(), *raw,
+              fit.estimates(), options, *fit.fiml_pack())
+        : inference::modification_indices_fiml(
+              fit.model().structure(), fit.model().matrix_rep(), *raw,
+              fit.estimates(), options);
     return post_result(std::move(out));
   }
   if (const auto *stats = fit.data().ordinal()) {
@@ -1463,9 +1467,13 @@ Result<inference::ScoreTestTable> score_tests(const Fit &fit) {
     }
   }
   if (const auto *raw = fit.data().raw()) {
-    auto out = inference::score_tests_fiml(
-        fit.model().structure(), fit.model().matrix_rep(), *raw,
-        fit.estimates());
+    auto out = fit.fiml_pack()
+        ? inference::score_tests_fiml(
+              fit.model().structure(), fit.model().matrix_rep(), *raw,
+              fit.estimates(), *fit.fiml_pack())
+        : inference::score_tests_fiml(
+              fit.model().structure(), fit.model().matrix_rep(), *raw,
+              fit.estimates());
     return post_result(std::move(out));
   }
   if (const auto *stats = fit.data().ordinal()) {

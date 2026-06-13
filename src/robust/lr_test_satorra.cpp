@@ -681,7 +681,7 @@ compute_fiml_satorra2000(
 }
 
 post_expected<LRSatorra2000Result>
-lr_test_satorra2000_fiml_from_data(
+lr_test_satorra2000_fiml_from_data_impl(
     const spec::LatentStructure&     pt_H1,
     const model::MatrixRep&          rep_H1,
     const Eigen::VectorXd&           theta_H1_full,
@@ -695,6 +695,8 @@ lr_test_satorra2000_fiml_from_data(
     double                           T_H1,
     int                              df_H0,
     int                              df_H1,
+    const estimate::fiml::FIMLPack*  pack,
+    const estimate::fiml::FIMLH1*    h1,
     GammaSource                      gamma,
     SatorraAMethod                   a_method,
     double                           h_step) {
@@ -715,7 +717,10 @@ lr_test_satorra2000_fiml_from_data(
         "FIML FMG"));
   }
 
-  auto sm_or = estimate::fiml::saturated_em_moments(raw, h_step);
+  const bool use_pack = pack != nullptr && h1 != nullptr;
+  auto sm_or = use_pack
+      ? estimate::fiml::saturated_em_moments(raw, *pack, *h1)
+      : estimate::fiml::saturated_em_moments(raw, h_step);
   if (!sm_or.has_value()) return std::unexpected(sm_or.error());
   const estimate::fiml::SaturatedMoments& sm = *sm_or;
   const Eigen::MatrixXd& V = sm.H;
@@ -736,8 +741,11 @@ lr_test_satorra2000_fiml_from_data(
 
   estimate::Estimates est_H1;
   est_H1.theta = theta_H1_full;
-  auto D1_or = estimate::fiml::fiml_eta_jacobian(
-      pt_H1, rep_H1, raw, est_H1, estimate::fiml::FIML{});
+  auto D1_or = use_pack
+      ? estimate::fiml::fiml_eta_jacobian(
+            pt_H1, rep_H1, raw, est_H1, *pack)
+      : estimate::fiml::fiml_eta_jacobian(
+            pt_H1, rep_H1, raw, est_H1, estimate::fiml::FIML{});
   if (!D1_or.has_value()) return std::unexpected(D1_or.error());
   if (D1_or->Delta_theta.rows() != V.rows() ||
       D1_or->Delta_theta.cols() != K_H1.Kmat.rows()) {
@@ -755,8 +763,11 @@ lr_test_satorra2000_fiml_from_data(
   } else {
     estimate::Estimates est_H0;
     est_H0.theta = theta_H0_full;
-    auto D0_or = estimate::fiml::fiml_eta_jacobian(
-        pt_H0, rep_H0, raw, est_H0, estimate::fiml::FIML{});
+    auto D0_or = use_pack
+        ? estimate::fiml::fiml_eta_jacobian(
+              pt_H0, rep_H0, raw, est_H0, *pack)
+        : estimate::fiml::fiml_eta_jacobian(
+              pt_H0, rep_H0, raw, est_H0, estimate::fiml::FIML{});
     if (!D0_or.has_value()) return std::unexpected(D0_or.error());
     if (D0_or->Delta_theta.rows() != V.rows() ||
         D0_or->Delta_theta.cols() != K_H0.Kmat.rows()) {
@@ -782,6 +793,58 @@ lr_test_satorra2000_fiml_from_data(
   auto sd_or = compute_fiml_satorra2000(Delta1_alpha, V, Gamma, A_alpha);
   if (!sd_or.has_value()) return std::unexpected(sd_or.error());
   return lr_test_satorra2000(T_H0 - T_H1, *sd_or);
+}
+
+post_expected<LRSatorra2000Result>
+lr_test_satorra2000_fiml_from_data(
+    const spec::LatentStructure&     pt_H1,
+    const model::MatrixRep&          rep_H1,
+    const Eigen::VectorXd&           theta_H1_full,
+    const EqConstraints&             K_H1,
+    const spec::LatentStructure&     pt_H0,
+    const model::MatrixRep&          rep_H0,
+    const Eigen::VectorXd&           theta_H0_full,
+    const EqConstraints&             K_H0,
+    const data::RawData&             raw,
+    double                           T_H0,
+    double                           T_H1,
+    int                              df_H0,
+    int                              df_H1,
+    GammaSource                      gamma,
+    SatorraAMethod                   a_method,
+    double                           h_step) {
+  return lr_test_satorra2000_fiml_from_data_impl(
+      pt_H1, rep_H1, theta_H1_full, K_H1,
+      pt_H0, rep_H0, theta_H0_full, K_H0,
+      raw, T_H0, T_H1, df_H0, df_H1,
+      nullptr, nullptr, gamma, a_method, h_step);
+}
+
+post_expected<LRSatorra2000Result>
+lr_test_satorra2000_fiml_from_data(
+    const spec::LatentStructure&     pt_H1,
+    const model::MatrixRep&          rep_H1,
+    const Eigen::VectorXd&           theta_H1_full,
+    const EqConstraints&             K_H1,
+    const spec::LatentStructure&     pt_H0,
+    const model::MatrixRep&          rep_H0,
+    const Eigen::VectorXd&           theta_H0_full,
+    const EqConstraints&             K_H0,
+    const data::RawData&             raw,
+    double                           T_H0,
+    double                           T_H1,
+    int                              df_H0,
+    int                              df_H1,
+    const estimate::fiml::FIMLPack&  pack,
+    const estimate::fiml::FIMLH1&    h1,
+    GammaSource                      gamma,
+    SatorraAMethod                   a_method,
+    double                           h_step) {
+  return lr_test_satorra2000_fiml_from_data_impl(
+      pt_H1, rep_H1, theta_H1_full, K_H1,
+      pt_H0, rep_H0, theta_H0_full, K_H0,
+      raw, T_H0, T_H1, df_H0, df_H1,
+      &pack, &h1, gamma, a_method, h_step);
 }
 
 }  // namespace magmaan::robust
