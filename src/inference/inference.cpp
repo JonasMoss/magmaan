@@ -23,6 +23,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/robust/robust.hpp"   // robust::casewise_contributions
 
+#include "detail_distribution_math.hpp"
 #include "detail_second_order.hpp"
 #include "detail_vech.hpp"
 
@@ -954,45 +955,13 @@ wald_test(const Eigen::MatrixXd& R, const Eigen::VectorXd& q,
 
 // ============================================================================
 // Upper-tail χ²(df) p-value via regularized upper incomplete gamma.
+// The incomplete-gamma kernels live in detail_distribution_math.hpp (shared with
+// the simulation Pearson path and the FMG p-values); callers below guard inputs
+// before dispatching, so the kernels' nan-on-bad-input guards are never reached.
 // ============================================================================
 
-namespace {
-
-double gamma_p_series(double a, double x) noexcept {
-  double sum = 1.0 / a;
-  double term = sum;
-  constexpr int max_iter = 200;
-  for (int n = 1; n < max_iter; ++n) {
-    term *= x / (a + static_cast<double>(n));
-    sum  += term;
-    if (std::abs(term) < std::abs(sum) * 1e-15) break;
-  }
-  return sum * std::exp(-x + a * std::log(x) - std::lgamma(a));
-}
-
-double gamma_q_cfrac(double a, double x) noexcept {
-  constexpr double FPMIN = 1e-300;
-  double b = x + 1.0 - a;
-  double c = 1.0 / FPMIN;
-  double d = 1.0 / b;
-  double h = d;
-  constexpr int max_iter = 200;
-  for (int n = 1; n < max_iter; ++n) {
-    const double an = -static_cast<double>(n) * (static_cast<double>(n) - a);
-    b += 2.0;
-    d = an * d + b;
-    if (std::abs(d) < FPMIN) d = FPMIN;
-    c = b + an / c;
-    if (std::abs(c) < FPMIN) c = FPMIN;
-    d = 1.0 / d;
-    const double del = d * c;
-    h *= del;
-    if (std::abs(del - 1.0) < 1e-15) break;
-  }
-  return h * std::exp(-x + a * std::log(x) - std::lgamma(a));
-}
-
-}  // namespace
+using detail::gamma_p_series;
+using detail::gamma_q_cfrac;
 
 post_expected<double>
 rls_chi2(const SampleStats&            samp,

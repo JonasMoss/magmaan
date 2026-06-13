@@ -301,13 +301,28 @@ Open work only; landed generator slices are inventoried in the roadmap.
   plus 3-variable C-vine root/family selection and generic fixed-order
   calibration to richer higher-dimensional structure/family search policies and
   broader vine/multivariate-copula policies.
-- **S.** Decide whether Johnson SL should be exposed beyond the direct
-  `MarginalSpec::johnson()` constructor.
-- **S.** Decide the long-term special-functions policy before expanding the
-  Pearson/Johnson surface. `src/detail_distribution_math.hpp` currently holds
-  hand-rolled regularized beta/gamma, inverse beta/gamma, Student-t, and F-tail
-  helpers shared by Pearson simulation and FMG p-values. Either keep these with
-  dedicated goldens, vendor/use Boost.Math, or choose another vetted dependency.
+- **DONE (decided).** Johnson SL stays **direct-construct-only**. SL is the
+  log-normal family: its standardized skewness and excess kurtosis are both
+  functions of the single shape parameter, so its moments lie on a 1-parameter
+  curve and cannot independently match an arbitrary (skew, kurtosis) target. The
+  moment-match surface therefore stays `{SU, SB}` (the `{2, 3}` loop in
+  `fit_johnson_moment_match`, commented in `src/sim/norta.cpp`); callers who
+  specifically want a log-normal marginal use `MarginalSpec::johnson(1, gamma,
+  delta, ...)`, which is fully implemented in the draw path and round-trips
+  through the R list serialization.
+- **DONE (decided).** Special-functions policy: **keep the hand-rolled kernels**
+  local in `src/detail_distribution_math.hpp` (regularized beta/gamma, inverse
+  beta/gamma, Student-t, F-tail), validated by **dedicated goldens vs base R**
+  (`tests/tools/regen_distribution_math_fixtures.R` ->
+  `tests/fixtures/distribution_math.json`,
+  `tests/unit/distribution_math_test.cpp`). No Boost.Math / third-party
+  special-functions dependency: Boost.Math throws (clashes with `-fno-exceptions`)
+  and is a heavy header surface, while the kernels are exact enough for their
+  callers (Pearson quantiles, FMG/chi-square/F p-values) at known tolerances. The
+  duplicated `gamma_p_series`/`gamma_q_cfrac` that lived in
+  `src/inference/inference.cpp` now reuse the shared header (single source of
+  truth). **Rule going forward: every new special-function kernel ships a direct
+  golden in that fixture.**
 - **S/M.** A robust Johnson SB moment-fit (no elementary closed form) so the
   Johnson family becomes a usable closed-form IG generator: candidates are the
   AS99 Hill-Holder SB branch or higher/adaptive quadrature that returns its best

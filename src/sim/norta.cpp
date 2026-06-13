@@ -2019,6 +2019,12 @@ fit_johnson_moment_match(const MomentMatchSpec& spec,
   MomentFitEval best;
   bool have_best = false;
   int best_iterations = 0;
+  // Only SU (2) and SB (3) are moment-matched. SL (1) is the log-normal family:
+  // its standardized skewness and excess kurtosis are both functions of the
+  // single shape parameter, so its moments lie on a 1-parameter curve and cannot
+  // independently match an arbitrary (skew, kurtosis) target. SL stays reachable
+  // by direct construction, MarginalSpec::johnson(1, gamma, delta, ...), for
+  // callers who specifically want a log-normal marginal.
   for (int type : {2, 3}) {
     int iterations = 0;
     auto fit_or = fit_one_johnson_moment_match(
