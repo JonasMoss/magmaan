@@ -154,10 +154,12 @@ landed; remaining open items:
   cases, reporting a hollow pass. Likely FP-sensitivity in the FIML
   objective/gradient under fast math-adjacent codegen; diagnose the solver
   failure first, then the crash-on-failure teardown.
+- **M, later.** Layer CI on top only after the local commands are useful: run
   `test-quick` on PRs/pushes, sanitizer validation on main or a schedule, heavy
   parity/optional optimizer lanes less often, and coverage as an artifact before
   considering badges. Avoid coverage-percentage gates until the report has been
   calibrated by real maintenance work.
+
 ## Simulation primitives
 
 The `magmaan::sim` surface (NORTA / IG / Vale-Maurelli-Fleishman / PLSIM /
