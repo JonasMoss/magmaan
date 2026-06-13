@@ -6,11 +6,9 @@
 #          `estimate_gls` with `sample_stats = list(S = cov, mean = mean,
 #          nobs = n_obs)`.
 #
-# This is the point-estimate version of the Savalei-Bentler (2009)
-# two-stage approach. The Stage-1 ACOV ingredients (H, J, ACOV) are
-# returned alongside the fit so a future second-stage SE correction
-# can consume them; this wrapper itself does not yet build corrected
-# standard errors.
+# For `kind = "ml"` this is the packaged ML2S surface: Stage-1 ACOV
+# ingredients feed the Savalei-Bentler corrected SEs and scaled chi-square.
+# `kind = "gls"` remains a point-estimate research comparator.
 #
 # Exposed via `magmaan_core$estimate_two_stage_em` in `zzz_core.R`.
 # Not a stable default estimator — currently used as a research
@@ -36,17 +34,30 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
   nobs <- as.integer(em$n_obs)
 
   sample_stats <- list(S = cov_list, mean = mean_list, nobs = nobs)
+  b <- bounds_arg(bounds, partable, sample_stats, "estimate_two_stage_em")
 
   fit <- switch(kind,
     ml  = fit_ml_impl(partable,  sample_stats, optimizer = optimizer,
-                      control = control, bounds = bounds),
+                      control = control, bounds = b),
     gls = fit_gls_impl(partable, sample_stats, optimizer = optimizer,
-                       control = control, bounds = bounds)
+                       control = control, bounds = b)
   )
 
-  fit$estimator <- paste0("two_stage_", kind)
+  fit$estimator <- if (identical(kind, "ml")) "ML2S" else paste0("two_stage_", kind)
   fit$stage1 <- list(
     mean = em$mean, cov = em$cov, n_obs = em$n_obs,
     H = em$H, J = em$J, acov = em$acov)
+  fit$raw_data <- raw_data
+  if (identical(kind, "ml")) {
+    correction <- estimate_two_stage_em_ml_inference(
+      fit, raw_data, h_step = h_step)
+    fit$ml2s <- correction
+    fit$vcov <- correction$vcov
+    fit$se <- correction$se
+    fit$chisq <- correction$chisq
+    fit$df <- correction$df
+    fit$chisq_scaled <- correction$chisq_scaled
+    fit$scaling_factor <- correction$scaling_factor
+  }
   fit
 }

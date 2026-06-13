@@ -241,6 +241,10 @@ estimate_fiml_robust_mlr <- function(fit, h_step = 1e-4) {
     .Call(`_magmaan_estimate_fiml_robust_mlr`, fit, h_step)
 }
 
+estimate_two_stage_em_ml_inference <- function(fit, raw_data, h_step = 1e-4) {
+    .Call(`_magmaan_estimate_two_stage_em_ml_inference`, fit, raw_data, h_step)
+}
+
 infer_fiml_fmg_spectrum <- function(fit, h_step = 1e-4) {
     .Call(`_magmaan_infer_fiml_fmg_spectrum`, fit, h_step)
 }

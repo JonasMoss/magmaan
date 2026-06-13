@@ -259,7 +259,8 @@ magmaan_core <- local({
       "estimate_start_values",
       "estimate_structured_gamma",
       "estimate_structured_gamma_weight",
-      "estimate_fiml_robust_mlr"
+      "estimate_fiml_robust_mlr",
+      "estimate_two_stage_em_ml_inference"
     ),
     inference = c(
       "inference_information_expected",
@@ -400,6 +401,7 @@ magmaan_core <- local({
       "fit_ml_irls",
       "fit_ml_irls_snlls",
       "fit_fiml",
+      "fit_ml2s",
       "fit_uls",
       "fit_gls",
       "fit_wls",

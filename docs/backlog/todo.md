@@ -304,13 +304,15 @@ work lives in [`speculative.md`](speculative.md). Open work:
   lazy, two-group invariance, and naive corr-block-WLS rows have landed
   across `experiments/_archive/06/10/11/12/13` and the benchmark itself; the
   literature-grade `q ≤ 12` grid now runs from `papers/ordinal-snlls/`.)
-- **M/L.** Two-stage EM / saturated-covariance missing-data path. Stage 1
+- **Landed.** Two-stage EM / saturated-covariance missing-data path. Stage 1
   (`estimate::fiml::saturated_em_moments` / `estimate_saturated_em_moments`) and
   Stage 2 (`estimate_two_stage_em(partable, raw_data, kind = c("ml","gls"))`)
   have landed and feed the MSE comparator in
-  `experiments/08-pairwise-gls-efficiency/`. Still open: a packaged
-  `estimator = "ML2S"` surface with the Savalei-Bentler (2009) corrected
-  chi-square and SEs, consuming the Stage 1 `(H, J, ACOV)` ingredients.
+  `experiments/08-pairwise-gls-efficiency/`. The packaged ML2S path has also
+  landed: `fit_ml2s()` / `magmaan(..., estimator = "ML2S")` run Stage-2 ML on
+  the saturated EM moments and attach Savalei-Bentler-style corrected SEs plus
+  scaled chi-square from the Stage-1 `(H, J, ACOV)` ingredients. The GLS branch
+  remains an explicit research comparator, not a named high-level estimator.
 - **Landed; remainder in speculative.** The Van-Praag pairwise covariance
   machinery (`data::pairwise_sample_stats`,
   `robust::pairwise_casewise_contributions`, `data::gamma_nt_pairwise`,

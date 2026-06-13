@@ -125,6 +125,18 @@ struct FIMLRobustMLR {
   std::int64_t ntotal            = 0;
 };
 
+struct TwoStageEMMLInference {
+  Eigen::MatrixXd vcov;
+  Eigen::VectorXd se;
+  Eigen::VectorXd eigvals;
+  double       chisq             = std::numeric_limits<double>::quiet_NaN();
+  double       chisq_scaled      = std::numeric_limits<double>::quiet_NaN();
+  double       scaling_factor    = std::numeric_limits<double>::quiet_NaN();
+  double       trace_ugamma      = std::numeric_limits<double>::quiet_NaN();
+  int          df                = 0;
+  std::int64_t ntotal            = 0;
+};
+
 // The full missing-data UΓ spectrum for FMG goodness-of-fit tests under FIML.
 // Unlike `FIMLRobustMLR` (which carries only the first cumulant via a trace
 // difference and the q parameter-space eigenvalues of H⁻¹·meat), this returns
@@ -309,6 +321,25 @@ saturated_em_moments(const RawData& raw,
                      const FIMLPack& pack,
                      const FIMLH1& h1);
 
+// Savalei-Bentler two-stage ML inference for a Stage-2 ML fit to the saturated
+// EM moments. The point estimate is supplied by the caller (`fit_ml` on
+// `SaturatedMoments::{cov, mean, n_obs}`); this helper consumes Stage-1
+// `(H, J, ACOV)` to build corrected sandwich SEs and the scaled chi-square.
+post_expected<TwoStageEMMLInference>
+two_stage_em_ml_inference(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          double h_step = 1e-4);
+
+post_expected<TwoStageEMMLInference>
+two_stage_em_ml_inference(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          const FIMLPack& pack,
+                          const FIMLH1& h1);
+
 namespace diagnostic {
 
 // Regression-only comparator for the old finite-difference saturated H1
@@ -417,8 +448,10 @@ namespace magmaan::estimate {
 
 using estimate::fiml::FIMLExtras;
 using estimate::fiml::SaturatedMoments;
+using estimate::fiml::TwoStageEMMLInference;
 using estimate::fiml::fit_fiml;
 using estimate::fiml::fiml_extras;
 using estimate::fiml::saturated_em_moments;
+using estimate::fiml::two_stage_em_ml_inference;
 
 }  // namespace magmaan::estimate

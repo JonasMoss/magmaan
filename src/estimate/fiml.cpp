@@ -20,8 +20,10 @@
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
+#include "magmaan/inference/inference.hpp"
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/optim/problem.hpp"
+#include "magmaan/robust/robust.hpp"
 
 #include "detail_second_order.hpp"
 #include "detail_vech.hpp"
@@ -2520,6 +2522,158 @@ saturated_em_moments(const RawData& raw,
   return saturated_em_moments_impl(raw, pack, h1, /*h_step=*/1e-4,
                                    SaturatedHessianKind::Analytic,
                                    "saturated_em_moments");
+}
+
+namespace {
+
+SampleStats
+sample_stats_from_saturated(const SaturatedMoments& sm) {
+  SampleStats samp;
+  samp.S     = sm.cov;
+  samp.mean  = sm.mean;
+  samp.n_obs = sm.n_obs;
+  return samp;
+}
+
+post_expected<Eigen::MatrixXd>
+two_stage_gamma_from_acov(const SaturatedMoments& sm, bool se_weighted) {
+  double N = 0.0;
+  Eigen::Index Q = 0;
+  for (std::size_t b = 0; b < sm.cov.size(); ++b) {
+    if (b >= sm.n_obs.size()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "two_stage_em_ml_inference: saturated moment block count mismatch"));
+    }
+    const Eigen::Index p = sm.cov[b].rows();
+    if (sm.cov[b].cols() != p || sm.mean[b].size() != p) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "two_stage_em_ml_inference: malformed saturated moments in block " +
+              std::to_string(b)));
+    }
+    if (sm.n_obs[b] <= 0) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "two_stage_em_ml_inference: non-positive block sample size"));
+    }
+    Q += p + detail::vech_len(p);
+    N += static_cast<double>(sm.n_obs[b]);
+  }
+  if (sm.acov.rows() != Q || sm.acov.cols() != Q) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_em_ml_inference: saturated ACOV shape mismatch"));
+  }
+  if (!(N > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_em_ml_inference: total sample size must be positive"));
+  }
+
+  Eigen::MatrixXd gamma = Eigen::MatrixXd::Zero(Q, Q);
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < sm.cov.size(); ++b) {
+    const Eigen::Index p = sm.cov[b].rows();
+    const Eigen::Index q = p + detail::vech_len(p);
+    const double n = static_cast<double>(sm.n_obs[b]);
+    const double scale = se_weighted ? (n * n / N) : n;
+    gamma.block(off, off, q, q) = scale * sm.acov.block(off, off, q, q);
+    off += q;
+  }
+  return Eigen::MatrixXd(0.5 * (gamma + gamma.transpose()).eval());
+}
+
+post_expected<TwoStageEMMLInference>
+two_stage_em_ml_inference_impl(spec::LatentStructure pt,
+                               const model::MatrixRep& rep,
+                               const RawData& raw,
+                               const Estimates& est,
+                               const FIMLPack& pack,
+                               const FIMLH1& h1) {
+  auto sm_or = saturated_em_moments(raw, pack, h1);
+  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+  const SaturatedMoments& sm = *sm_or;
+  SampleStats samp = sample_stats_from_saturated(sm);
+
+  auto df_or = inference::df_stat(pt, samp, est.theta);
+  if (!df_or.has_value()) return std::unexpected(df_or.error());
+
+  auto gamma_se_or = two_stage_gamma_from_acov(sm, /*se_weighted=*/true);
+  if (!gamma_se_or.has_value()) return std::unexpected(gamma_se_or.error());
+  auto se_or = robust::robust_se(
+      pt, rep, samp, est, *gamma_se_or,
+      robust::InferenceSpec{robust::Information::Expected,
+                            robust::WeightMoments::Structured,
+                            robust::ScoreCovariance::Empirical});
+  if (!se_or.has_value()) return std::unexpected(se_or.error());
+
+  TwoStageEMMLInference out;
+  out.vcov = std::move(se_or->vcov);
+  out.se = std::move(se_or->se);
+  out.df = *df_or;
+  out.chisq = inference::chi2_stat(samp, est);
+  out.ntotal = 0;
+  for (auto n : samp.n_obs) out.ntotal += n;
+
+  if (out.df <= 0) return out;
+
+  auto gamma_test_or = two_stage_gamma_from_acov(sm, /*se_weighted=*/false);
+  if (!gamma_test_or.has_value()) return std::unexpected(gamma_test_or.error());
+  auto uf_or = robust::build_u_factor(
+      std::move(pt), rep, samp, est,
+      robust::InferenceSpec{robust::Information::Expected,
+                            robust::WeightMoments::Structured,
+                            robust::ScoreCovariance::Empirical});
+  if (!uf_or.has_value()) return std::unexpected(uf_or.error());
+  if (static_cast<int>(uf_or->df) != out.df) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_em_ml_inference: U-factor df (" +
+            std::to_string(uf_or->df) + ") != df_stat (" +
+            std::to_string(out.df) + ")"));
+  }
+  auto M_or = robust::reduced_gamma_sample_from_gamma(*uf_or, *gamma_test_or);
+  if (!M_or.has_value()) return std::unexpected(M_or.error());
+  auto ev_or = robust::ugamma_eigenvalues(*M_or);
+  if (!ev_or.has_value()) return std::unexpected(ev_or.error());
+
+  out.eigvals = std::move(*ev_or);
+  out.trace_ugamma = out.eigvals.sum();
+  out.scaling_factor = out.trace_ugamma / static_cast<double>(out.df);
+  out.chisq_scaled = (out.scaling_factor > 0.0)
+      ? out.chisq / out.scaling_factor
+      : std::numeric_limits<double>::quiet_NaN();
+  return out;
+}
+
+}  // namespace
+
+post_expected<TwoStageEMMLInference>
+two_stage_em_ml_inference(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          double h_step) {
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_em_ml_inference: h_step must be > 0"));
+  }
+  auto pack_or = fiml_pack(raw);
+  if (!pack_or.has_value()) {
+    return std::unexpected(fit_to_post(pack_or.error(), "fiml_pack"));
+  }
+  auto h1_or = fiml_h1_moments(raw, *pack_or);
+  if (!h1_or.has_value()) {
+    return std::unexpected(fit_to_post(h1_or.error(), "FIML H1 moments"));
+  }
+  return two_stage_em_ml_inference_impl(std::move(pt), rep, raw, est,
+                                        *pack_or, *h1_or);
+}
+
+post_expected<TwoStageEMMLInference>
+two_stage_em_ml_inference(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const RawData& raw,
+                          const Estimates& est,
+                          const FIMLPack& pack,
+                          const FIMLH1& h1) {
+  return two_stage_em_ml_inference_impl(std::move(pt), rep, raw, est,
+                                        pack, h1);
 }
 
 namespace diagnostic {
