@@ -1410,14 +1410,6 @@ ScoreInformation info_for_bread(robust::Information bread) {
                                                 : ScoreInformation::Expected;
 }
 
-post_expected<void> require_single_group(const SampleStats& samp) {
-  if (samp.S.size() != 1) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
-        "robust score tests: only single-group models are supported (v1)"));
-  }
-  return {};
-}
-
 post_expected<ScoreTestTable>
 modification_indices_robust_impl(spec::LatentStructure pt,
                                  const model::MatrixRep& rep,
@@ -1426,9 +1418,6 @@ modification_indices_robust_impl(spec::LatentStructure pt,
                                  const RobustScoreOptions& options,
                                  const RawData* raw,
                                  const Eigen::MatrixXd* gamma_hat) {
-  if (auto e = require_single_group(samp); !e.has_value()) {
-    return std::unexpected(e.error());
-  }
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
   auto work = prepare_modification_index_model(std::move(pt), rep, options.base);
@@ -1495,9 +1484,6 @@ score_tests_robust_impl(spec::LatentStructure pt,
                         const RobustScoreOptions& options,
                         const RawData* raw,
                         const Eigen::MatrixXd* gamma_hat) {
-  if (auto e = require_single_group(samp); !e.has_value()) {
-    return std::unexpected(e.error());
-  }
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
@@ -1555,9 +1541,6 @@ modification_indices_robust_ls_impl(spec::LatentStructure pt,
                                     const RobustScoreOptions& options,
                                     const RawData* raw,
                                     const std::vector<Eigen::MatrixXd>* gamma_blocks) {
-  if (auto e = require_single_group(samp); !e.has_value()) {
-    return std::unexpected(e.error());
-  }
   if (auto e = require_expected_bread_ls(options); !e.has_value()) {
     return std::unexpected(e.error());
   }
@@ -1589,9 +1572,6 @@ score_tests_robust_ls_impl(spec::LatentStructure pt,
                            const RobustScoreOptions& options,
                            const RawData* raw,
                            const std::vector<Eigen::MatrixXd>* gamma_blocks) {
-  if (auto e = require_single_group(samp); !e.has_value()) {
-    return std::unexpected(e.error());
-  }
   if (auto e = require_expected_bread_ls(options); !e.has_value()) {
     return std::unexpected(e.error());
   }

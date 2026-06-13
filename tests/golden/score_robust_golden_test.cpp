@@ -263,3 +263,61 @@ TEST_CASE("robust FIML release-score matches the lavaan-internals oracle (MLR)")
         5e-3 * (1.0 + std::abs(mis_want)));
   CHECK(got.scaling_factor > 1.5);  // genuinely non-trivial (c ≈ 2.16)
 }
+
+TEST_CASE("robust multi-group release-score matches the lavaan-internals oracle (MLM)") {
+  const std::string path =
+      magmaan::test::fixtures_dir() +
+      "/score/0010_robust_release_multigroup_mlm.score_robust.json";
+  auto raw_json = magmaan::test::read_fixture(path);
+  REQUIRE(raw_json.has_value());
+  auto exp = nlohmann::json::parse(*raw_json, nullptr, false);
+  REQUIRE_FALSE(exp.is_discarded());
+
+  // Two-group model with explicit per-group loading labels + `==` rows.
+  const std::string src = exp["input"].get<std::string>();
+  auto fp = magmaan::parse::Parser::parse(src);
+  REQUIRE(fp.has_value());
+  magmaan::spec::BuildOptions bo;
+  bo.n_groups = 2;
+  auto pt = magmaan::spec::build(*fp, bo);
+  REQUIRE(pt.has_value());
+  auto rep = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(rep.has_value());
+
+  // Raw data is a list of two complete blocks.
+  const auto& jraw = exp["raw"];
+  REQUIRE(jraw.size() == 2);
+  magmaan::data::RawData raw;
+  raw.X.push_back(raw_matrix(jraw[0]));
+  raw.X.push_back(raw_matrix(jraw[1]));
+  auto samp = magmaan::data::sample_stats_from_raw(raw);
+  REQUIRE(samp.has_value());
+  REQUIRE(samp->S.size() == 2);
+
+  auto est = magmaan::test::fit(*pt, *rep, *samp);  // ML = MLM point estimates
+  REQUIRE(est.has_value());
+  inf::frontier::RobustScoreOptions opts;
+  opts.spec = {rob::Information::Expected, rob::WeightMoments::Structured,
+               rob::ScoreCovariance::Empirical};
+  auto st = inf::frontier::score_tests_robust(*pt, *rep, *samp, raw, *est, opts);
+  REQUIRE(st.has_value());
+  REQUIRE(st->rows.size() == 3);  // a2==b2, a3==b3, a4==b4
+
+  // The oracle releases the first equality (a2==b2); magmaan emits releases in
+  // partable constraint order, so row 0 is the same release.
+  const auto& want = exp["score_tests_robust"]["rows"][0];
+  const double mi_want = want["mi"].get<double>();
+  const double c_want = want["scaling_factor"].get<double>();
+  const double mis_want = want["mi_scaled"].get<double>();
+  const auto& got = st->rows[0];
+
+  // The pooled-information bread and the n_b/N-weighted meat are convention-free
+  // in θ-space; the gate is the multiplier-sensitive 5e-3 used by the other
+  // multi-group goldens (refit θ̂ difference only).
+  CHECK(std::abs(got.mi - mi_want) < 5e-3 * (1.0 + std::abs(mi_want)));
+  CHECK(std::abs(got.scaling_factor - c_want) <
+        5e-3 * (1.0 + std::abs(c_want)));
+  CHECK(std::abs(got.mi_scaled - mis_want) <
+        5e-3 * (1.0 + std::abs(mis_want)));
+  CHECK(got.scaling_factor > 1.1);  // genuinely non-trivial (c ≈ 1.24)
+}
