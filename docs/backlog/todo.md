@@ -213,16 +213,30 @@ decisions in the simulation backlog.
   structure (use `model_spec(..., meanstructure = TRUE)` + `fit_fiml`);
   multi-group FIML fits need explicit start/convergence care; and nonlinear
   equality tangent-space support plus pairwise-data FMG remain deferred.
-- **Ordinal/polychoric FMG — gate landed; paper next.** `fmg_tests_ordinal()` /
-  `fmg_tests_mixed_ordinal()` apply the FMG eigenvalue-tail transforms to the
-  `robust_ordinal()` / `robust_mixed_ordinal()` polychoric UGamma spectrum
-  (single-group v1; `_ml`/`_ug` rejected; anchored by the ordinal C++ FMG test
-  and `r-package/examples/fmg_ordinal.R`; see roadmap). This unblocks the
-  polychoric-FMG paper (`papers/fiml-fmg/` Paper 2). Remaining: the Paper 2
-  simulation harness (ordinal-invariance population, GOF + nested grid, tables),
-  and — only-when-needed — multi-group ordinal FMG and a C++ methods-developer
-  convenience entry point (the spectrum-once-then-loop R orchestration avoids a
-  per-method `robust_ordinal` recompute, so no C++ entry is needed for the paper).
+- **Ordinal/polychoric FMG (`papers/fiml-fmg/` Paper 2).** Core gate **landed
+  2026-06-13** (commit b8c6dcb): `fmg_tests_ordinal()` / `fmg_tests_mixed_ordinal()`
+  apply the FMG eigenvalue-tail transforms to the `robust_ordinal()` /
+  `robust_mixed_ordinal()` polychoric UGamma spectrum (`eigvals` + `chisq_standard`
+  + `df`), single-group v1, `_ml`/`_ug` rejected, anchored by the ordinal C++ FMG
+  test and `r-package/examples/fmg_ordinal.R`; no new C++ production code (see
+  roadmap). What Paper 2 still lacks, to write the paper:
+  - **L, paper sim harness.** A paper-local runner: an ordinal measurement-
+    invariance population (threshold + loading invariance across groups), an
+    ordinal data generator (categories × underlying skew × N), DWLS/WLS GOF +
+    nested fits, and the naive-WLS vs SB vs FMG-winner (pEBA/pOLS/PALL) rejection
+    grid. Mirror `papers/fiml-fmg/` Paper-1 scaffold.
+  - **M, direct UGamma-spectrum oracle.** A paper parity check of the ordinal
+    UGamma spectrum vs lavaan WLSMV (`lavInspect(., "UGamma")` or the internal
+    scaling), analogous to Paper 1's FIML parity table. The spectrum is already
+    gated indirectly via the ordinal robust SB/scaled-shifted goldens, but the
+    paper wants the explicit spectrum-vs-lavaan row.
+  - **S, author decision.** Single paper with a FIML + polychoric pair of parts,
+    or a separate `papers/<slug>/` folder.
+  - **Only-when-needed.** Multi-group ordinal FMG (lift the single-group v1 cap
+    in `robust_ordinal`), and a C++ methods-developer convenience entry point —
+    not needed for the paper, since the spectrum-once-then-loop R orchestration
+    avoids a per-method `robust_ordinal` recompute. (`_ug`/unbiased-Gamma is N/A
+    for polychoric: the NACOV is already the asymptotic Gamma.)
 - **FIML cross-call pack: remaining consumers.** The `FIMLPack`/`FIMLH1`
   value-based precomputation (roadmap, Continuous FIML) is threaded through
   the post-fit helpers and `api::sem`. Not yet pack-aware: the R bindings
