@@ -174,6 +174,19 @@ magmaan::data::RawData gaussian_cfa_raw(std::mt19937& rng, Eigen::Index n,
   return raw;
 }
 
+magmaan::data::RawData gaussian_cfa_raw_groups(
+    std::mt19937& rng, const std::vector<Eigen::Index>& ns,
+    Eigen::Index period) {
+  magmaan::data::RawData out;
+  for (std::size_t b = 0; b < ns.size(); ++b) {
+    auto block =
+        gaussian_cfa_raw(rng, ns[b], period + static_cast<Eigen::Index>(b));
+    out.X.push_back(std::move(block.X[0]));
+    out.mask.push_back(std::move(block.mask[0]));
+  }
+  return out;
+}
+
 }  // namespace
 
 TEST_CASE("frontier robust MI: model-implied Expected bread reduces to NT") {
@@ -1089,14 +1102,68 @@ TEST_CASE("frontier FIML robust score test: equality release runs and is finite"
     CHECK(r.scaling_factor > 0.0);
     CHECK(std::isfinite(r.mi_scaled));
   }
+}
 
-  // Single-group guard (v1): the FIML robust tier rejects multi-block raw.
-  magmaan::data::RawData two_block = raw;
-  two_block.X.push_back(raw.X[0]);
-  two_block.mask.push_back(raw.mask[0]);
-  auto rob_mg = inf::frontier::score_tests_fiml_robust(h.pt, h.rep, two_block,
-                                                       *est);
-  CHECK_FALSE(rob_mg.has_value());
+TEST_CASE("frontier FIML robust MI and score tests support multi-group raw blocks") {
+  auto h = build_groups_mean("f =~ x1 + c*x2 + c*x3 + x4", 2);
+  std::mt19937 rng(20260613u);
+  const auto raw = gaussian_cfa_raw_groups(rng, {520, 430}, 9);
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1400;
+  auto est = magmaan::test::fit_fiml(h.pt, h.rep, raw, opts);
+  REQUIRE_MESSAGE(est.has_value(),
+      "multi-group FIML fit failed: " <<
+      (est.has_value() ? "" : est.error().detail));
+
+  auto pack = magmaan::estimate::fiml::fiml_pack(raw);
+  REQUIRE(pack.has_value());
+
+  inf::ModificationIndexOptions mi_opts;
+  mi_opts.candidates = inf::ScoreCandidateSet::WithAbsentRows;
+  auto mi_raw = inf::frontier::modification_indices_fiml_robust(
+      h.pt, h.rep, raw, *est, mi_opts);
+  auto mi_pack = inf::frontier::modification_indices_fiml_robust(
+      h.pt, h.rep, raw, *est, *pack, mi_opts);
+  REQUIRE_MESSAGE(mi_raw.has_value(),
+      "multi-group FIML robust MI failed: " <<
+      (mi_raw.has_value() ? "" : mi_raw.error().detail));
+  REQUIRE(mi_pack.has_value());
+  REQUIRE(mi_raw->rows.size() == mi_pack->rows.size());
+  REQUIRE(mi_raw->rows.size() > 1);
+
+  for (std::size_t i = 0; i < mi_raw->rows.size(); ++i) {
+    const auto& a = mi_raw->rows[i];
+    const auto& b = mi_pack->rows[i];
+    CHECK(a.candidate.group == b.candidate.group);
+    CHECK(std::isfinite(a.scaling_factor));
+    CHECK(a.scaling_factor > 0.0);
+    CHECK(std::isfinite(a.mi_scaled));
+    CHECK(std::abs(a.scaling_factor - b.scaling_factor) < 1e-10);
+    CHECK(std::abs(a.mi_scaled - b.mi_scaled) <
+          1e-10 * (1.0 + std::abs(b.mi_scaled)));
+  }
+
+  auto st_raw = inf::frontier::score_tests_fiml_robust(h.pt, h.rep, raw, *est);
+  auto st_pack =
+      inf::frontier::score_tests_fiml_robust(h.pt, h.rep, raw, *est, *pack);
+  REQUIRE_MESSAGE(st_raw.has_value(),
+      "multi-group FIML robust score test failed: " <<
+      (st_raw.has_value() ? "" : st_raw.error().detail));
+  REQUIRE(st_pack.has_value());
+  REQUIRE(st_raw->rows.size() == st_pack->rows.size());
+  REQUIRE(st_raw->rows.size() > 0);
+  for (std::size_t i = 0; i < st_raw->rows.size(); ++i) {
+    const auto& a = st_raw->rows[i];
+    const auto& b = st_pack->rows[i];
+    CHECK(a.df == 1);
+    CHECK(std::isfinite(a.scaling_factor));
+    CHECK(a.scaling_factor > 0.0);
+    CHECK(std::isfinite(a.mi_scaled));
+    CHECK(std::abs(a.scaling_factor - b.scaling_factor) < 1e-10);
+    CHECK(std::abs(a.mi_scaled - b.mi_scaled) <
+          1e-10 * (1.0 + std::abs(b.mi_scaled)));
+  }
 }
 
 // ── Multi-group (PR2) ────────────────────────────────────────────────────────

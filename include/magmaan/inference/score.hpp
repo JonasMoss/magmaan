@@ -336,9 +336,11 @@ score_tests_robust(spec::LatentStructure pt,
 // is no cheap expected-info FIML analogue), so a plain `ModificationIndexOptions`
 // (candidate set + standardized EPC) suffices — there is no `spec` knob. The H1
 // EM is not needed (the sandwich uses only `H` and the casewise scores), so the
-// per-candidate cost is two data passes, no EM. Single-group only (v1). The
-// `discrepancy` argument is accepted for signature symmetry with the non-robust
-// FIML entry points; FIML is the only kernel.
+// per-candidate cost is two data passes, no EM. Single- and multi-group raw-data
+// blocks are supported with the same block-stacked FIML Hessian / casewise-score
+// layout used by `fiml_robust_mlr`. The `discrepancy` argument is accepted for
+// signature symmetry with the non-robust FIML entry points; FIML is the only
+// kernel.
 post_expected<ScoreTestTable>
 modification_indices_fiml_robust(spec::LatentStructure pt,
                                  const model::MatrixRep& rep,
