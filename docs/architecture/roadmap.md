@@ -1165,7 +1165,14 @@ stop rather than any usable non-error return.
   match lavaan", 5e-4) over the `fits.DWLS.fscores` oracle: single-group EBM
   (all-ordinal and mixed) and mixed ML. All-ordinal ML (unbounded mode on
   extreme patterns) and EAP (no categorical `lavPredict()` oracle) are not
-  lavaan-gated (EAP stays self-checked). Multi-group categorical EBM is correct
+  lavaan-gated (EAP stays self-checked). The EAP precision surface additionally
+  carries a Monte-Carlo ground-truth gate (`tests/unit/api_sem_test.cpp`,
+  "ordinal EAP factor-score precision tracks Monte-Carlo PRMSE"): on a
+  five-indicator three-category one-factor model simulated with retained latent
+  `Z` and fit under `std.lv`, the reported `pooled_prmse` matches the realized
+  `corr(Z, E[Z|Y])²`, the mean posterior variance matches the realized EAP MSE,
+  and the concrete reliability reduces exactly to `1 - mean Var(Z|Y)` under unit
+  latent variance (gaps ~1e-3 at n=8000). Multi-group categorical EBM is correct
   and is validated transitively: lavaan's own multi-group categorical
   `lavPredict()` returns a non-stationary point for non-reference groups (it is
   not a usable oracle there), so the same golden instead checks that each

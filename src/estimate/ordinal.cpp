@@ -515,8 +515,20 @@ fit_expected<void>
 compact_free_set(spec::LatentStructure& pt,
                  const std::vector<char>& remove_free,
                  spec::Starts* starts) {
-  const std::int32_t old_n = pt.n_free();
-  if (static_cast<std::int32_t>(remove_free.size()) != old_n + 1) {
+  // remove_free is indexed by the ORIGINAL free index (1..old_n); the caller
+  // sizes it from pt.n_free() *before* zeroing the removed rows. Recomputing
+  // old_n from pt.n_free() here undercounts whenever a removed parameter held
+  // the top free index — e.g. std.lv ordinal CFA, where the eliminated
+  // response-scale variances are numbered above the (now all-free) loadings —
+  // so take old_n from the metadata and only sanity-check the surviving range.
+  //
+  // Regression: std.lv ordinal delta fits aborted with "received inconsistent
+  // metadata" because n_free() (the max free index) dropped after the top
+  // response-scale variance was zeroed for elimination.
+  // Guard: tests/unit/api_sem_test.cpp "ordinal EAP factor-score precision
+  // tracks Monte-Carlo PRMSE" (fits a std.lv one-factor ordinal CFA).
+  const std::int32_t old_n = static_cast<std::int32_t>(remove_free.size()) - 1;
+  if (old_n < 0 || pt.n_free() > old_n) {
     return std::unexpected(make_err(FitError::Kind::NumericIssue,
         "ordinal delta free-set compaction received inconsistent metadata"));
   }

@@ -306,11 +306,15 @@ Do not implement this first. It is useful to document because it explains why
    only, complete data only, sample-moment plug-ins only.
 3. Done: add the R wrapper `factor_score_precision(fit, data)`, returning
    scores, posterior variances, sample PRMSE, and concrete ordinal reliability.
-4. Validate further against a small GRM/ordinal one-factor fixture:
-   - compare `m_i` to current EAP scores;
-   - compare `prmse_hat` to an R/mirt empirical-reliability calculation when
-     the model class is close enough;
-   - simulation check: generated `corr(Z, E[Z|Y])^2` matches PRMSE.
+4. Done (simulation check): `tests/unit/api_sem_test.cpp` "ordinal EAP
+   factor-score precision tracks Monte-Carlo PRMSE" simulates a five-indicator
+   three-category one-factor model with retained latent `Z`, fits ordinal DWLS
+   under `std.lv`, and pins `pooled_prmse ≈ corr(Z, E[Z|Y])^2`,
+   `mean Var(Z|Y) ≈` the realized EAP MSE, and `concrete == 1 - mean Var(Z|Y)`
+   exactly under unit latent variance (gaps ~1e-3 at n=8000). `m_i` vs current
+   EAP scores is already pinned in the same file's self-consistency test.
+   Still open: a direct `prmse_hat` vs R/mirt empirical-reliability cross-check
+   when the model class lines up.
 5. Add bootstrap CIs as the first inference surface for both sample PRMSE and
    concrete ordinal reliability.
 6. Add analytic delta SEs only after we expose a stable casewise ordinal moment

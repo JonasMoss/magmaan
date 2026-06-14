@@ -1,10 +1,12 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
 #include <iterator>
+#include <random>
 #include <sstream>
 #include <string>
 #include <variant>
@@ -127,6 +129,47 @@ std::string ordinal_score_syntax() {
          "x2 | t1 + t2\n"
          "x3 | t1 + t2\n"
          "x4 | t1 + t2\n";
+}
+
+// A one-factor ordinal model with retained true latent scores, for validating
+// EAP factor-score precision against simulated ground truth. Z ~ N(0,1); each
+// underlying response y*_j = lambda_j Z + sqrt(1 - lambda_j^2) eps_j has unit
+// variance (the Delta-parameterization scale), so under `std.lv` the fitted
+// latent metric and the simulated Z share the N(0,1) prior, and the recovered
+// loadings/thresholds match the population values.
+struct OrdinalSim {
+  Eigen::MatrixXd X;  // n × 5, integer category codes 1..3
+  Eigen::VectorXd Z;  // n × 1, the latent that produced X
+};
+
+OrdinalSim simulate_one_factor_ordinal(std::mt19937_64& rng, Eigen::Index n) {
+  std::normal_distribution<double> norm(0.0, 1.0);
+  const std::array<double, 5> lambda = {0.80, 0.75, 0.85, 0.70, 0.80};
+  const std::array<double, 2> tau = {-0.7, 0.7};  // 3 ordered categories
+  OrdinalSim s;
+  s.X.resize(n, 5);
+  s.Z.resize(n);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const double zi = norm(rng);
+    s.Z(i) = zi;
+    for (Eigen::Index j = 0; j < 5; ++j) {
+      const double lj = lambda[static_cast<std::size_t>(j)];
+      const double ystar = lj * zi + std::sqrt(1.0 - lj * lj) * norm(rng);
+      int level = 1;
+      for (const double t : tau) {
+        if (ystar > t) ++level;
+      }
+      s.X(i, j) = static_cast<double>(level);
+    }
+  }
+  return s;
+}
+
+// Pearson correlation of two equal-length column vectors.
+double corr_columns(const Eigen::VectorXd& a, const Eigen::VectorXd& b) {
+  const Eigen::VectorXd ca = a.array() - a.mean();
+  const Eigen::VectorXd cb = b.array() - b.mean();
+  return ca.dot(cb) / std::sqrt(ca.squaredNorm() * cb.squaredNorm());
 }
 
 std::string mixed_ordinal_syntax_from_fixture(const nlohmann::json& j) {
@@ -625,6 +668,73 @@ TEST_CASE("api ordinal factor scores expose EBM and one-factor EAP") {
   CHECK(fs_ml->scores[0].rows() == interior_raw.X[0].rows());
   CHECK(fs_ml->scores[0].cols() == 1);
   CHECK(fs_ml->scores[0].array().isFinite().all());
+}
+
+// The plug-in checks above are self-consistency (PRMSE recomputed from the same
+// posterior moments the function returns). This one validates the *meaning*: on
+// data simulated from a known one-factor ordinal model with retained latent Z,
+// the reported sample PRMSE must track the realized squared correlation between
+// Z and its EAP score (population identity corr(Z, E[Z|Y])^2 = PRMSE), and the
+// concrete reliability must reduce to 1 - mean Var(Z|Y) under unit latent
+// variance — i.e. 1 - the realized EAP mean squared error.
+TEST_CASE("ordinal EAP factor-score precision tracks Monte-Carlo PRMSE") {
+  std::mt19937_64 rng(0xF00DCAFEULL);
+  const Eigen::Index n = 8000;
+  const auto sim = simulate_one_factor_ordinal(rng, n);
+
+  magmaan::api::ModelOptions opts;
+  opts.build.std_lv = true;  // fit Var(f) = 1 so the metric matches Z ~ N(0,1)
+  const auto model = magmaan::api::model_from_lavaan(
+      "f =~ x1 + x2 + x3 + x4 + x5\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x5 | t1 + t2\n",
+      opts);
+  REQUIRE_OK(model);
+
+  const auto stats = magmaan::data::ordinal_stats_from_integer_data({sim.X});
+  REQUIRE_OK(stats);
+  const auto data = magmaan::api::data_from_ordinal(*model, *stats);
+  REQUIRE_OK(data);
+  const auto fit = magmaan::api::fit(*model, *data, magmaan::api::ordinal_dwls());
+  REQUIRE_OK(fit);
+
+  magmaan::data::RawData raw;
+  raw.X.push_back(sim.X);
+  const auto precision = magmaan::api::factor_score_precision(*fit, raw);
+  REQUIRE_OK(precision);
+  REQUIRE(precision->scores.scores.size() == 1);
+  REQUIRE(precision->posterior_variance.size() == 1);
+
+  const Eigen::VectorXd m = precision->scores.scores[0].col(0);
+  const Eigen::VectorXd v = precision->posterior_variance[0].col(0);
+  REQUIRE(m.rows() == n);
+  REQUIRE(v.rows() == n);
+
+  // Non-degenerate reliability so the agreement below is a real test.
+  CHECK(precision->pooled_prmse > 0.5);
+  CHECK(precision->pooled_prmse < 0.95);
+
+  // (1) Reported sample PRMSE tracks the realized squared correlation between
+  //     the true latent and its EAP score.
+  const double r = corr_columns(sim.Z, m);
+  CHECK(r > 0.0);  // positive loadings ⇒ EAP score tracks Z in the same metric
+  CHECK(std::abs(precision->pooled_prmse - r * r) < 0.02);
+
+  // (2) Mean posterior variance equals the realized EAP mean squared error:
+  //     E[Var(Z|Y)] = E[(Z - E[Z|Y])^2].
+  const double mse = (m - sim.Z).array().square().mean();
+  const double mean_v = v.mean();
+  CHECK(std::abs(mean_v - mse) < 0.02);
+
+  // (3) Under std.lv (Var_theta(Z) = 1) concrete reliability reduces exactly to
+  //     1 - mean Var(Z|Y), and tracks 1 - the realized EAP MSE.
+  CHECK(precision->pooled_concrete_ordinal_reliability ==
+        doctest::Approx(1.0 - mean_v).epsilon(1e-6));
+  CHECK(std::abs(precision->pooled_concrete_ordinal_reliability -
+                 (1.0 - mse)) < 0.02);
 }
 
 TEST_CASE("api mixed ordinal fit measures are exposed") {
