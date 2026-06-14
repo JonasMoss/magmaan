@@ -33,6 +33,16 @@ cal_g1 <- core$sim_ordcorr_calibrate(
   target_g1, marginals_g1, metric = "pearson_codes")
 cal_g2 <- core$sim_ordcorr_calibrate(
   target_g2, marginals_g2, metric = "pearson_codes")
+summary_g1 <- core$sim_ordcorr_summary_calibrate(
+  cal_g1$latent_corr, cal_g1$kinds, cal_g1$thresholds,
+  metric = "pearson_codes")
+summary_mg <- core$sim_ordcorr_mg_summary_calibrate(
+  list(cal_g1$latent_corr, cal_g2$latent_corr),
+  cal_g1$kinds,
+  list(cal_g1$thresholds, cal_g2$thresholds),
+  group_labels = labels,
+  metric = "pearson_codes"
+)
 
 close_matrix <- function(x, y, tol = 1e-12) {
   max(abs(x - y)) <= tol
@@ -45,7 +55,14 @@ stopifnot(
   close_matrix(cal_mg$groups[[1]]$latent_corr, cal_g1$latent_corr),
   close_matrix(cal_mg$groups[[2]]$latent_corr, cal_g2$latent_corr),
   close_matrix(cal_mg$groups[[1]]$achieved_corr, cal_g1$achieved_corr),
-  close_matrix(cal_mg$groups[[2]]$achieved_corr, cal_g2$achieved_corr)
+  close_matrix(cal_mg$groups[[2]]$achieved_corr, cal_g2$achieved_corr),
+  close_matrix(summary_g1$latent_corr, cal_g1$latent_corr),
+  close_matrix(summary_g1$target_corr, cal_g1$latent_corr),
+  summary_g1$max_abs_error == 0,
+  inherits(summary_mg, "magmaan_ordcorr_mg_calibration"),
+  identical(summary_mg$group_labels, labels),
+  close_matrix(summary_mg$groups[[1]]$latent_corr, cal_g1$latent_corr),
+  close_matrix(summary_mg$groups[[2]]$latent_corr, cal_g2$latent_corr)
 )
 
 draw_mg <- core$sim_ordcorr_mg_draw(

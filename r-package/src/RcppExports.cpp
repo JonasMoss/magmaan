@@ -1780,6 +1780,22 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sim_ordcorr_summary_calibrate_impl
+Rcpp::List sim_ordcorr_summary_calibrate_impl(Rcpp::NumericMatrix latent_corr, Rcpp::IntegerVector kinds, Rcpp::List thresholds, std::string metric, std::string matrix_repair, double matrix_repair_min_eigenvalue);
+RcppExport SEXP _magmaan_sim_ordcorr_summary_calibrate_impl(SEXP latent_corrSEXP, SEXP kindsSEXP, SEXP thresholdsSEXP, SEXP metricSEXP, SEXP matrix_repairSEXP, SEXP matrix_repair_min_eigenvalueSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type latent_corr(latent_corrSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type kinds(kindsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type thresholds(thresholdsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type metric(metricSEXP);
+    Rcpp::traits::input_parameter< std::string >::type matrix_repair(matrix_repairSEXP);
+    Rcpp::traits::input_parameter< double >::type matrix_repair_min_eigenvalue(matrix_repair_min_eigenvalueSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_ordcorr_summary_calibrate_impl(latent_corr, kinds, thresholds, metric, matrix_repair, matrix_repair_min_eigenvalue));
+    return rcpp_result_gen;
+END_RCPP
+}
 // sim_ordcorr_draw_impl
 Rcpp::List sim_ordcorr_draw_impl(Rcpp::List calibration, int n, int reps, double seed_base, double cholesky_jitter);
 RcppExport SEXP _magmaan_sim_ordcorr_draw_impl(SEXP calibrationSEXP, SEXP nSEXP, SEXP repsSEXP, SEXP seed_baseSEXP, SEXP cholesky_jitterSEXP) {
@@ -1833,6 +1849,23 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type matrix_repair(matrix_repairSEXP);
     Rcpp::traits::input_parameter< double >::type matrix_repair_min_eigenvalue(matrix_repair_min_eigenvalueSEXP);
     rcpp_result_gen = Rcpp::wrap(sim_ordcorr_mg_calibrate_impl(target_corrs, marginals, group_labels, metric, max_bisection_iter, calibration_tol, rho_bound, matrix_repair, matrix_repair_min_eigenvalue));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sim_ordcorr_mg_summary_calibrate_impl
+Rcpp::List sim_ordcorr_mg_summary_calibrate_impl(Rcpp::List latent_corrs, Rcpp::IntegerVector kinds, Rcpp::List thresholds, Rcpp::Nullable<Rcpp::CharacterVector> group_labels, std::string metric, std::string matrix_repair, double matrix_repair_min_eigenvalue);
+RcppExport SEXP _magmaan_sim_ordcorr_mg_summary_calibrate_impl(SEXP latent_corrsSEXP, SEXP kindsSEXP, SEXP thresholdsSEXP, SEXP group_labelsSEXP, SEXP metricSEXP, SEXP matrix_repairSEXP, SEXP matrix_repair_min_eigenvalueSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type latent_corrs(latent_corrsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::IntegerVector >::type kinds(kindsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type thresholds(thresholdsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::CharacterVector> >::type group_labels(group_labelsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type metric(metricSEXP);
+    Rcpp::traits::input_parameter< std::string >::type matrix_repair(matrix_repairSEXP);
+    Rcpp::traits::input_parameter< double >::type matrix_repair_min_eigenvalue(matrix_repair_min_eigenvalueSEXP);
+    rcpp_result_gen = Rcpp::wrap(sim_ordcorr_mg_summary_calibrate_impl(latent_corrs, kinds, thresholds, group_labels, metric, matrix_repair, matrix_repair_min_eigenvalue));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2335,9 +2368,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_sim_norta_calibrate_impl", (DL_FUNC) &_magmaan_sim_norta_calibrate_impl, 7},
     {"_magmaan_sim_norta_draw_impl", (DL_FUNC) &_magmaan_sim_norta_draw_impl, 6},
     {"_magmaan_sim_ordcorr_calibrate_impl", (DL_FUNC) &_magmaan_sim_ordcorr_calibrate_impl, 8},
+    {"_magmaan_sim_ordcorr_summary_calibrate_impl", (DL_FUNC) &_magmaan_sim_ordcorr_summary_calibrate_impl, 6},
     {"_magmaan_sim_ordcorr_draw_impl", (DL_FUNC) &_magmaan_sim_ordcorr_draw_impl, 5},
     {"_magmaan_sim_ordcorr_batch_impl", (DL_FUNC) &_magmaan_sim_ordcorr_batch_impl, 12},
     {"_magmaan_sim_ordcorr_mg_calibrate_impl", (DL_FUNC) &_magmaan_sim_ordcorr_mg_calibrate_impl, 9},
+    {"_magmaan_sim_ordcorr_mg_summary_calibrate_impl", (DL_FUNC) &_magmaan_sim_ordcorr_mg_summary_calibrate_impl, 7},
     {"_magmaan_sim_ordcorr_mg_draw_impl", (DL_FUNC) &_magmaan_sim_ordcorr_mg_draw_impl, 5},
     {"_magmaan_sim_ordcorr_mg_batch_impl", (DL_FUNC) &_magmaan_sim_ordcorr_mg_batch_impl, 13},
     {"_magmaan_sim_bicop_batch_impl", (DL_FUNC) &_magmaan_sim_bicop_batch_impl, 9},

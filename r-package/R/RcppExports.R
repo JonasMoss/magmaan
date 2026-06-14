@@ -513,6 +513,10 @@ sim_ordcorr_calibrate_impl <- function(target_corr, marginals, metric = "polycho
     .Call(`_magmaan_sim_ordcorr_calibrate_impl`, target_corr, marginals, metric, max_bisection_iter, calibration_tol, rho_bound, matrix_repair, matrix_repair_min_eigenvalue)
 }
 
+sim_ordcorr_summary_calibrate_impl <- function(latent_corr, kinds, thresholds, metric = "polychoric", matrix_repair = "none", matrix_repair_min_eigenvalue = 1e-8) {
+    .Call(`_magmaan_sim_ordcorr_summary_calibrate_impl`, latent_corr, kinds, thresholds, metric, matrix_repair, matrix_repair_min_eigenvalue)
+}
+
 sim_ordcorr_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 0.0) {
     .Call(`_magmaan_sim_ordcorr_draw_impl`, calibration, n, reps, seed_base, cholesky_jitter)
 }
@@ -523,6 +527,10 @@ sim_ordcorr_batch_impl <- function(target_corr, marginals, n, reps, seed_base, m
 
 sim_ordcorr_mg_calibrate_impl <- function(target_corrs, marginals, group_labels = NULL, metric = "polychoric", max_bisection_iter = 80L, calibration_tol = 1e-8, rho_bound = 0.999, matrix_repair = "none", matrix_repair_min_eigenvalue = 1e-8) {
     .Call(`_magmaan_sim_ordcorr_mg_calibrate_impl`, target_corrs, marginals, group_labels, metric, max_bisection_iter, calibration_tol, rho_bound, matrix_repair, matrix_repair_min_eigenvalue)
+}
+
+sim_ordcorr_mg_summary_calibrate_impl <- function(latent_corrs, kinds, thresholds, group_labels = NULL, metric = "polychoric", matrix_repair = "none", matrix_repair_min_eigenvalue = 1e-8) {
+    .Call(`_magmaan_sim_ordcorr_mg_summary_calibrate_impl`, latent_corrs, kinds, thresholds, group_labels, metric, matrix_repair, matrix_repair_min_eigenvalue)
 }
 
 sim_ordcorr_mg_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 0.0) {

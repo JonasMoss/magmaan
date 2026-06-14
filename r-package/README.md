@@ -151,6 +151,12 @@ Ordinal support is intentionally narrow and mirrors the C++ ordinal LS path:
 - Returned mixed data follows lavaan's categorical WLS moment order and
   includes `ordered_mask`, `thresholds`, `R`, continuous means, `moments`,
   `NACOV`, `W_dwls`, and `W_wls`.
+- Simulation from pre-estimated categorical summaries uses
+  `magmaan_core$sim_ordcorr_summary_calibrate(R, kinds, thresholds)` or the
+  multi-group `sim_ordcorr_mg_summary_calibrate()`, then the existing
+  `sim_ordcorr_draw()` / `sim_ordcorr_mg_draw()` calls. This path treats `R` as
+  the latent polychoric/polyserial summary matrix and skips the
+  proportions-plus-target inversion step.
 - Mixed continuous/ordinal covariance shrinkage is explicit:
   `magmaan_core$shrink_mixed_ordinal_stats(x, kind = "diagonal",
   intensity = ...)` transforms the association/covariance block and rebuilds

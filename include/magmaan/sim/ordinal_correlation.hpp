@@ -119,10 +119,30 @@ calibrate_ordinal_correlation(
     const std::vector<OrdinalMarginalSpec>& marginals,
     const OrdinalCorrelationOptions& options = {});
 
+// Stage 1 variant for already-estimated ordinal/mixed summaries: callers supply
+// observed variable kinds, thresholds on the latent-response scale, and the
+// latent Gaussian correlation matrix directly (e.g. a polychoric/polyserial
+// summary R). No pairwise inversion is run; `matrix_repair` is still applied and
+// `max_abs_error` records the largest off-diagonal repair delta.
+sim_expected<OrdinalCorrelationCalibration>
+calibrate_ordinal_correlation_summary(
+    const Eigen::Ref<const Eigen::MatrixXd>& latent_corr,
+    const std::vector<ObservedKind>& kinds,
+    const std::vector<Eigen::VectorXd>& thresholds,
+    const OrdinalCorrelationOptions& options = {});
+
 sim_expected<MultiGroupOrdinalCorrelationCalibration>
 calibrate_ordinal_correlation_multigroup(
     const std::vector<Eigen::MatrixXd>& target_corrs,
     const std::vector<std::vector<OrdinalMarginalSpec>>& marginals,
+    const std::vector<std::string>& group_labels = {},
+    const OrdinalCorrelationOptions& options = {});
+
+sim_expected<MultiGroupOrdinalCorrelationCalibration>
+calibrate_ordinal_correlation_summary_multigroup(
+    const std::vector<Eigen::MatrixXd>& latent_corrs,
+    const std::vector<std::vector<ObservedKind>>& kinds,
+    const std::vector<std::vector<Eigen::VectorXd>>& thresholds,
     const std::vector<std::string>& group_labels = {},
     const OrdinalCorrelationOptions& options = {});
 
