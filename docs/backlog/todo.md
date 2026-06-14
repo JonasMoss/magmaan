@@ -87,10 +87,24 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   the derivation note lives in
   [docs/research/notes/ordinal_factor_score_reliability.md](../research/notes/ordinal_factor_score_reliability.md).
   Remaining:
-  - **S/M.** Add a small generated one-factor ordinal validation fixture:
-    EAP scores match the scorer, `corr(Z, E[Z | Y])^2` tracks PRMSE, and
-    concrete reliability reduces to `1 - mean Var(Z | Y)` under unit latent
-    variance.
+  - **Done 2026-06-14.** One-factor ordinal EAP precision is now validated
+    against simulated ground truth (not just plug-in self-consistency):
+    `tests/unit/api_sem_test.cpp` "ordinal EAP factor-score precision tracks
+    Monte-Carlo PRMSE" generates a five-indicator three-category one-factor
+    model with retained latent `Z`, fits ordinal DWLS under `std.lv`, and pins
+    (1) `pooled_prmse ≈ corr(Z, E[Z|Y])²`, (2) `mean Var(Z|Y) ≈` the realized
+    EAP MSE, and (3) `concrete == 1 - mean Var(Z|Y)` exactly under unit latent
+    variance (≈ `1 - MSE`). Gaps are ~1e-3 at n=8000 against 2e-2 gates. This
+    surfaced and fixed a real bug: `std.lv` ordinal delta fits aborted in
+    `compact_free_set` because `n_free()` (the max free index) dropped after the
+    top response-scale variance was zeroed for elimination; the compaction now
+    takes the original free count from the caller's `remove_free` metadata
+    (`src/estimate/ordinal.cpp`, regression note at the fix site). Follow-up:
+    - **S/M.** Add a checked-in lavaan oracle for `std.lv` ordinal CFA. The fix
+      makes the fit run and the Monte-Carlo check confirms the recovered metric
+      is correct (unit-variance EAP scores track `Z` to ~1e-3), but there is no
+      stored lavaan parity fixture for `std.lv` ordinal point estimates yet;
+      regenerate one via `regen_oracle.R` to gate θ̂/thresholds directly.
   - **M.** Add bootstrap CIs as the first inference surface, probably frontier
     or R-only first: parametric bootstrap from the fitted ordinal/mixed model,
     rebuild stats, refit, recompute both coefficients; optionally add
