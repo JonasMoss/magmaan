@@ -85,6 +85,27 @@ Eigen::MatrixXd ordinal_block(Eigen::Index n = 140) {
   return X;
 }
 
+Eigen::MatrixXd ordinal_score_block(Eigen::Index n = 180) {
+  Eigen::MatrixXd X(n, 4);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const double t = static_cast<double>(i);
+    const double z = std::sin(0.13 * t) + 0.35 * std::cos(0.07 * t);
+    const double vals[4] = {
+        0.55 * z + 0.70 * std::sin(0.31 * t),
+        0.45 * z + 0.75 * std::cos(0.29 * t),
+        0.50 * z + 0.70 * std::sin(0.43 * t + 0.6),
+        0.40 * z + 0.80 * std::cos(0.37 * t + 0.3),
+    };
+    for (Eigen::Index j = 0; j < 4; ++j) {
+      int level = 1;
+      if (vals[j] > -0.55) level = 2;
+      if (vals[j] > 0.55) level = 3;
+      X(i, j) = static_cast<double>(level);
+    }
+  }
+  return X;
+}
+
 std::string ordinal_syntax() {
   return "f =~ x1 + l2*x2 + l3*x3 + x4\n"
          "x1 | t1 + t2 + t3 + t4\n"
@@ -96,6 +117,14 @@ std::string ordinal_syntax() {
          "x3 ~*~ 1*x3\n"
          "x4 ~*~ 1*x4\n"
          "lprod := l2*l3\n";
+}
+
+std::string ordinal_score_syntax() {
+  return "f =~ x1 + x2 + x3 + x4\n"
+         "x1 | t1 + t2\n"
+         "x2 | t1 + t2\n"
+         "x3 | t1 + t2\n"
+         "x4 | t1 + t2\n";
 }
 
 std::string mixed_ordinal_syntax_from_fixture(const nlohmann::json& j) {
@@ -506,14 +535,55 @@ TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {
   CHECK(std::isfinite(defs->entries[0].value));
   CHECK(defs->entries[0].se > 0.0);
 
-  // Factor scores stay guarded for ordinal fits: lavaan scores ordinal
-  // indicators by latent-response integration, a distinct estimator the
-  // continuous predictor here does not implement (see speculative.md).
+  // Ordinal factor scores use the categorical latent-response scorer, while
+  // the continuous regression/Bartlett predictors remain invalid here.
   magmaan::data::RawData ordinal_raw;
   ordinal_raw.X.push_back(ordinal_block());
-  const auto fs = magmaan::api::factor_scores(
+  const auto bad_fs = magmaan::api::factor_scores(
       *dwls_fit, ordinal_raw, magmaan::measures::FactorScoreMethod::Regression);
-  REQUIRE_FALSE(fs.has_value());
+  REQUIRE_FALSE(bad_fs.has_value());
+}
+
+TEST_CASE("api ordinal factor scores expose EBM and one-factor EAP") {
+  const auto model = magmaan::api::model_from_lavaan(ordinal_score_syntax());
+  REQUIRE_OK(model);
+  const Eigen::MatrixXd X = ordinal_score_block();
+  const auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE_OK(stats);
+  const auto data = magmaan::api::data_from_ordinal(*model, *stats);
+  REQUIRE_OK(data);
+
+  const auto fit = magmaan::api::fit(*model, *data, magmaan::api::ordinal_dwls());
+  REQUIRE_OK(fit);
+
+  magmaan::data::RawData raw;
+  raw.X.push_back(X);
+
+  const auto fs_ebm = magmaan::api::factor_scores(
+      *fit, raw, magmaan::measures::FactorScoreMethod::Ebm);
+  REQUIRE_OK(fs_ebm);
+  REQUIRE(fs_ebm->scores.size() == 1);
+  CHECK(fs_ebm->scores[0].rows() == raw.X[0].rows());
+  CHECK(fs_ebm->scores[0].cols() == 1);
+  CHECK(fs_ebm->scores[0].array().isFinite().all());
+
+  const auto fs_eap = magmaan::api::factor_scores(
+      *fit, raw, magmaan::measures::FactorScoreMethod::Eap);
+  REQUIRE_OK(fs_eap);
+  REQUIRE(fs_eap->scores.size() == 1);
+  CHECK(fs_eap->scores[0].rows() == raw.X[0].rows());
+  CHECK(fs_eap->scores[0].cols() == 1);
+  CHECK(fs_eap->scores[0].array().isFinite().all());
+
+  magmaan::data::RawData interior_raw;
+  interior_raw.X.push_back(Eigen::MatrixXd::Constant(3, 4, 2.0));
+  const auto fs_ml = magmaan::api::factor_scores(
+      *fit, interior_raw, magmaan::measures::FactorScoreMethod::Ml);
+  REQUIRE_OK(fs_ml);
+  REQUIRE(fs_ml->scores.size() == 1);
+  CHECK(fs_ml->scores[0].rows() == interior_raw.X[0].rows());
+  CHECK(fs_ml->scores[0].cols() == 1);
+  CHECK(fs_ml->scores[0].array().isFinite().all());
 }
 
 TEST_CASE("api mixed ordinal fit measures are exposed") {
@@ -559,6 +629,28 @@ TEST_CASE("api mixed ordinal fit measures are exposed") {
   REQUIRE(fm->ordinal_srmr.has_value());
   CHECK(std::isfinite(*fm->ordinal_srmr));
   CHECK(*fm->ordinal_srmr >= 0.0);
+
+  magmaan::data::RawData raw;
+  raw.X = blocks;
+  const auto bad_fs = magmaan::api::factor_scores(
+      *fit, raw, magmaan::measures::FactorScoreMethod::Regression);
+  REQUIRE_FALSE(bad_fs.has_value());
+
+  const auto fs_ebm = magmaan::api::factor_scores(
+      *fit, raw, magmaan::measures::FactorScoreMethod::Ebm);
+  REQUIRE_OK(fs_ebm);
+  REQUIRE(fs_ebm->scores.size() == 1);
+  CHECK(fs_ebm->scores[0].rows() == raw.X[0].rows());
+  CHECK(fs_ebm->scores[0].cols() == 1);
+  CHECK(fs_ebm->scores[0].array().isFinite().all());
+
+  const auto fs_eap = magmaan::api::factor_scores(
+      *fit, raw, magmaan::measures::FactorScoreMethod::Eap);
+  REQUIRE_OK(fs_eap);
+  REQUIRE(fs_eap->scores.size() == 1);
+  CHECK(fs_eap->scores[0].rows() == raw.X[0].rows());
+  CHECK(fs_eap->scores[0].cols() == 1);
+  CHECK(fs_eap->scores[0].array().isFinite().all());
 }
 
 TEST_CASE("api frontier exposes native FC-SEM fit and post-fit calls") {

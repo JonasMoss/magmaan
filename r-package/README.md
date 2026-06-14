@@ -34,7 +34,9 @@ Convenience helpers are limited to R-side composition:
   `modification_indices(fit, data, candidates)` / `score_tests(fit, data)`
   forward to the scaffold primitives. Categorical fit objects retain the
   ordinal/mixed-ordinal stats object used for fitting, so `data` is optional for
-  the ordinary categorical MI/score path.
+  the ordinary categorical MI/score path. Factor scores use
+  regression/Bartlett for continuous fits and EBM/ML/EAP for ordinal or
+  mixed-ordinal fits; EBM is the categorical default.
   `fit_measures(fit, fmg = ...)` reports the ordinary fit-measure set and can
   attach Foldnes-Moss-Gronneberg (FMG) robust p-value diagnostics.
 

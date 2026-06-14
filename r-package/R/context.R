@@ -30,8 +30,17 @@ residuals.magmaan_fit <- function(object, standardized = FALSE, ...) {
   magmaan_core$measures_residuals(object)
 }
 
-factor_scores <- function(fit, data, method = c("regression", "bartlett")) {
-  method <- match.arg(method)
+factor_scores <- function(fit, data, method = NULL) {
+  if (is.null(method)) {
+    method <- if (isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) {
+      "EBM"
+    } else {
+      "regression"
+    }
+  } else {
+    method <- match.arg(method, c("regression", "bartlett", "EBM", "ML", "EAP",
+                                  "ebm", "ml", "eap"))
+  }
   if (missing(data)) {
     stop("factor_scores(): `data` is required; pass complete observed raw data")
   }
@@ -76,7 +85,16 @@ raw_data_arg <- function(fit, data) {
       stop("factor_scores(): `data` is missing observed variables: ",
            paste(missing, collapse = ", "))
     }
-    as.matrix(data[rows, ov, drop = FALSE])
+    block <- data[rows, ov, drop = FALSE]
+    if (isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)) {
+      for (nm in ov) {
+        if (is.factor(block[[nm]])) {
+          block[[nm]] <- as.integer(block[[nm]])
+        }
+      }
+      return(data.matrix(block))
+    }
+    as.matrix(block)
   }
 
   if (length(ov_by_group) == 1L && !nzchar(group_var)) {

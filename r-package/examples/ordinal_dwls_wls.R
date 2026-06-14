@@ -125,11 +125,23 @@ for (call in c("measures_standardize_all", "measures_standardize_lv")) {
   stopifnot(length(mg_load) == length(lv_match), all(is.finite(mg_load)),
             max(abs(mg_load - lv_match)) < 5e-3)
 }
-# Factor scores remain unsupported for ordinal fits.
+# Ordinal factor scores dispatch to the categorical latent-response scorer.
+# EBM matches lavaan's categorical default; regression/Bartlett stay
+# continuous-only. EAP is available for this one-factor fit, but the installed
+# lavaan oracle exposes only EBM/ML for categorical lavPredict().
 fs_msg <- tryCatch(
-  core$measures_factor_scores(fit_dwls, as.matrix(df), method = "regression"),
+  magmaan::factor_scores(fit_dwls, df, method = "regression"),
   error = function(e) conditionMessage(e))
-stopifnot(is.character(fs_msg), grepl("not exposed for ordinal", fs_msg))
+stopifnot(is.character(fs_msg), grepl("continuous-only", fs_msg))
+fs_ebm <- magmaan::factor_scores(fit_dwls, df, method = "EBM")$scores[[1]][, 1]
+fs_default <- magmaan::factor_scores(fit_dwls, df)$scores[[1]][, 1]
+lv_ebm <- as.numeric(lavaan::lavPredict(lavaan_dwls, type = "lv",
+                                        method = "EBM"))
+stopifnot(max(abs(fs_ebm - lv_ebm)) < 5e-4,
+          max(abs(fs_default - fs_ebm)) < 1e-12)
+fs_eap <- magmaan::factor_scores(fit_dwls, df, method = "EAP")$scores[[1]]
+stopifnot(nrow(fs_eap) == nrow(df), ncol(fs_eap) == 1L,
+          all(is.finite(fs_eap)))
 
 # Defined (`:=`) parameters are exposed for ordinal fits and match lavaan: value
 # and delta-method SE are a parameterization-agnostic transform of the fit (no
