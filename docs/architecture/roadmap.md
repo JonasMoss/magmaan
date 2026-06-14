@@ -260,10 +260,14 @@ golden `parTable()` fixtures.
   (ordinary plus MLR robust), the FIML Satorra-2000 nested-test helper, and
   `fit_fiml` carry pack overloads next to the raw-only signatures, which now
   build the pack/H1 once and delegate. `api::sem` FIML fits build both eagerly
-  at `fit()` time and expose them via `Fit::fiml_pack()` / `Fit::fiml_h1()`, so a
-  fit → test → fit_measures → SE/MLR session runs the saturated EM exactly
-  once (the H1 value and H1 moments also share that single EM run, where the
-  raw-only `fiml_extras` previously ran two).
+  at `fit()` time and expose them via `Fit::fiml_pack()` / `Fit::fiml_h1()`.
+  The R FIML fit list mirrors this with opaque `fiml_pack` / `fiml_h1` external
+  pointers: `fit_fiml_impl()` uses the retained pack for optimization, and the
+  Rcpp MLR, FMG, and score/MI wrappers consume the retained pack/H1 when
+  present, falling back to raw-data rebuilding only for old/minimal fit lists.
+  A fit → test → fit_measures → SE/MLR session therefore runs the saturated EM
+  exactly once (the H1 value and H1 moments also share that single EM run, where
+  the raw-only `fiml_extras` previously ran two).
 - Current checked-in fixtures cover single- and multi-group CFA, three-factor
   CFA, labeled equality CFA, latent structural models, observed-variable path
   models under random-x and complete fixed.x policies, equality-constrained
@@ -296,11 +300,12 @@ golden `parTable()` fixtures.
   route as a regression comparator.
 - The public fixed.x policy rejects missing observed exogenous variables rather
   than approximating lavaan's conditional likelihood behavior.
-- The R boundary exposes `df_to_fiml_data()`, estimate-only `fit_fiml()`, and
-  packaged `fit_ml2s()` / `estimate_two_stage_em(..., kind = "ml")`. ML2S
-  attaches its corrected `vcov`, `se`, `chisq`, `df`, `chisq_scaled`, and
-  `scaling_factor` fields directly because those corrections are part of the
-  named two-stage estimator rather than optional post-fit reporting.
+- The R boundary exposes `df_to_fiml_data()`, estimate-only `fit_fiml()` with
+  retained FIML pack/H1 state, and packaged `fit_ml2s()` /
+  `estimate_two_stage_em(..., kind = "ml")`. ML2S attaches its corrected
+  `vcov`, `se`, `chisq`, `df`, `chisq_scaled`, and `scaling_factor` fields
+  directly because those corrections are part of the named two-stage estimator
+  rather than optional post-fit reporting.
 - FMG single-model goodness-of-fit p-values are first-class complete-data ML
   post-fit diagnostics on the R surface. `fmg_tests()` returns the p-value,
   df, ML/RLS source statistic, method/parameter, UG flag, chi-square-equivalent
