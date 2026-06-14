@@ -1123,6 +1123,12 @@ for (oc in ordinal_cases) {
       fits$DWLS$standardized <- ordinal_std_json(fit_dwls)
       def <- defined_json(fit_dwls)
       if (length(def) > 0) fits$DWLS$defined <- def
+      # Categorical EBM factor scores (single-group only; the multi-group
+      # scorer is not yet a gated surface). ML is omitted for all-ordinal:
+      # its mode is unbounded on extreme response patterns.
+      if (!nzchar(group_var)) {
+        fits$DWLS$fscores <- ordinal_fscores_json(fit_dwls, methods = "EBM")
+      }
       fit_dwls_robust <- do.call(cfa, c(list(model = oc$model, data = df,
                                              ordered = ov, estimator = "DWLS",
                                              parameterization = "delta",
@@ -1279,6 +1285,9 @@ for (mc in mixed_cases) {
                WLS = ordinal_fit_json(fit_wls))
   fits$DWLS$robust <- ordinal_robust_json(fit_dwls_robust)
   fits$DWLS$standardized <- ordinal_std_json(fit_dwls)
+  # Mixed fits are single-group; continuous indicators bound the ML mode, so
+  # both EBM and ML are oracle surfaces.
+  fits$DWLS$fscores <- ordinal_fscores_json(fit_dwls, methods = c("EBM", "ML"))
 
   data_for_cpp <- if (isTRUE(mc$listwise)) listwise_mixed_data(mc$data, mc$ov)
                   else mc$data

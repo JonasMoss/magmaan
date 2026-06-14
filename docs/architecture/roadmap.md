@@ -1160,7 +1160,13 @@ stop rather than any usable non-error return.
   `api::factor_score_precision()` and the R `factor_score_precision()` helper.
   The current categorical scope is diagonal residual `Theta`; multi-factor EAP
   and correlated-residual orthant
-  probabilities remain deferred.
+  probabilities remain deferred. Checked-in lavaan parity is gated by
+  `tests/golden/ordinal_golden_test.cpp` ("ordinal/mixed factor scores (EBM/ML)
+  match lavaan", 5e-4) over the `fits.DWLS.fscores` oracle: single-group EBM
+  (all-ordinal and mixed) and mixed ML. All-ordinal ML (unbounded mode on
+  extreme patterns), EAP (no categorical `lavPredict()` oracle; self-checked),
+  and multi-group categorical scores (a non-reference-group scorer divergence,
+  tracked in the backlog) are not part of the gated surface.
 - All-ordinal DWLS/WLS fit measures are exposed through
   `estimate::fit_measures_ordinal()` and `api::fit_measures()`: CFI/TLI/RMSEA
   use the categorical independence baseline over the polychoric moment stack,

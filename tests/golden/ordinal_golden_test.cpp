@@ -15,9 +15,11 @@
 
 #include "../oracle.hpp"
 #include "magmaan/data/ordinal.hpp"
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/measures/effects.hpp"
+#include "magmaan/measures/factor_scores.hpp"
 #include "magmaan/measures/standardized.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
@@ -1320,6 +1322,168 @@ TEST_CASE("ordinal/mixed standardized + := rows match lavaan") {
   }
 
   MESSAGE("ordinal/mixed standardized + := : " << passed << " / " << total
+          << " pass");
+  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+  CHECK(passed == total);
+}
+
+// Categorical factor-score (EBM / ML) parity against lavaan's lavPredict().
+// This locks the previously live-only EBM parity (examples/ordinal_dwls_wls.R)
+// into a checked-in golden, mirroring the prepared-structure path the Rcpp
+// binding and api use: the estimates index the *prepared* (reduced) structure,
+// the matrix_rep stays the original, and the raw integer category codes feed
+// the categorical scorer directly.
+//
+// Oracle (per DWLS fit): fits.DWLS.fscores = {EBM:[...], (ML:[...])}, one value
+// per observation in serialized block order. Scope is the proven surface:
+//   - EBM, single-group, all-ordinal and mixed (the posterior mode is prior-
+//     regularized and matches lavaan to ~1e-5).
+//   - ML, mixed only — the continuous indicators bound the likelihood mode.
+// Deliberately NOT gated (no oracle emitted):
+//   - all-ordinal ML: the likelihood mode is unbounded on extreme response
+//     patterns, where lavaan and magmaan legitimately diverge.
+//   - multi-group: magmaan's per-group scorer diverges from lavaan for
+//     non-reference groups (theta matches to 1e-5, but a non-reference group's
+//     EBM drifts; tracked in docs/backlog/todo.md).
+//   - EAP / posterior precision: lavaan's categorical lavPredict() rejects EAP,
+//     so there is no oracle; it stays self-checked (tests/unit/api_sem_test.cpp).
+TEST_CASE("ordinal/mixed factor scores (EBM/ML) match lavaan") {
+  const std::string odir = magmaan::test::fixtures_dir() + "/ordinal";
+  const std::string mdir = magmaan::test::fixtures_dir() + "/mixed_ordinal";
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+  // Matches the live R parity gate (examples/ordinal_dwls_wls.R, 5e-4); the
+  // measured spread at magmaan's own theta-hat is ~1e-5.
+  const double fs_tol = 5e-4;
+
+  int total = 0, passed = 0;
+  std::vector<std::string> failures;
+
+  const auto gate_method =
+      [&](const std::string& id, const std::string& method,
+          const magmaan::measures::FactorScores& fs,
+          const nlohmann::json& fscores) {
+        ++total;
+        const Eigen::VectorXd lav = vector_from_json(fscores[method]);
+        if (fs.scores.size() != 1 || fs.scores[0].cols() != 1) {
+          failures.push_back(id + " " + method + ": expected one block / one "
+                             "factor column");
+          return;
+        }
+        const Eigen::VectorXd got = fs.scores[0].col(0);
+        const double d = max_abs_diff(got, lav);
+        if (d > fs_tol) {
+          char buf[160];
+          std::snprintf(buf, sizeof(buf), "%s %s: max|diff|=%.3e (n=%lld)",
+                        id.c_str(), method.c_str(), d,
+                        static_cast<long long>(lav.size()));
+          failures.push_back(buf);
+          return;
+        }
+        ++passed;
+      };
+
+  // --- all-ordinal single-group fixtures (EBM) ----------------------------
+  for (const auto& id : kOrdinalFixtures) {
+    auto raw = magmaan::test::read_fixture(odir + "/" + id + ".ordinal.json");
+    REQUIRE(raw.has_value());
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(exp.is_discarded());
+    if (!has_fit(exp) || !exp["fits"].contains("DWLS") ||
+        !exp["fits"]["DWLS"].contains("fscores"))
+      continue;
+    const auto& fscores = exp["fits"]["DWLS"]["fscores"];
+
+    auto h = handles_from_fixture(id, exp, failures);
+    if (!h.has_value()) continue;
+
+    auto est_or = magmaan::test::fit_ordinal_bounded(
+        h->pt, h->rep, h->stats, magmaan::estimate::Bounds{},
+        magmaan::estimate::OrdinalWeightKind::DWLS,
+        magmaan::estimate::Backend::NloptLbfgs, opt);
+    if (!est_or.has_value()) {
+      failures.push_back(id + ": fit — " + est_or.error().detail);
+      continue;
+    }
+    auto pt_prep = h->pt;
+    auto prep =
+        magmaan::estimate::prepare_ordinal_delta_partable(pt_prep, h->stats);
+    if (!prep.has_value()) {
+      failures.push_back(id + ": prepare — " + prep.error().detail);
+      continue;
+    }
+
+    magmaan::data::RawData rd;
+    for (const auto& b : exp["blocks"]) rd.X.push_back(matrix_from_json(b["matrix"]));
+
+    auto fs = magmaan::measures::factor_scores_ordinal(
+        pt_prep, h->rep, rd, h->stats, *est_or,
+        magmaan::measures::FactorScoreMethod::Ebm,
+        magmaan::estimate::OrdinalParameterization::Delta);
+    if (!fs.has_value()) {
+      ++total;
+      failures.push_back(id + " EBM: factor_scores_ordinal — " +
+                         fs.error().detail);
+      continue;
+    }
+    gate_method(id, "EBM", *fs, fscores);
+  }
+
+  // --- mixed single-group fixtures (EBM + ML) -----------------------------
+  for (const auto& id : kMixedOrdinalFixtures) {
+    auto raw = magmaan::test::read_fixture(mdir + "/" + id + ".ordinal.json");
+    REQUIRE(raw.has_value());
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(exp.is_discarded());
+    if (!exp.contains("fits") || !exp["fits"].contains("DWLS") ||
+        !exp["fits"]["DWLS"].contains("fscores"))
+      continue;
+    const auto& fscores = exp["fits"]["DWLS"]["fscores"];
+
+    auto h = mixed_handles_from_fixture(id, exp, failures);
+    if (!h.has_value()) continue;
+
+    const magmaan::optim::OptimOptions mopt{
+        .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8};
+    auto est_or = magmaan::test::fit_mixed_ordinal_bounded(
+        h->pt, h->rep, h->stats, magmaan::estimate::Bounds{},
+        magmaan::estimate::OrdinalWeightKind::DWLS,
+        magmaan::estimate::Backend::NloptLbfgs, mopt);
+    if (!est_or.has_value()) {
+      failures.push_back(id + ": fit — " + est_or.error().detail);
+      continue;
+    }
+    auto pt_prep = h->pt;
+    auto prep = magmaan::estimate::prepare_mixed_ordinal_delta_partable(
+        pt_prep, h->stats);
+    if (!prep.has_value()) {
+      failures.push_back(id + ": prepare — " + prep.error().detail);
+      continue;
+    }
+
+    magmaan::data::RawData rd;
+    for (const auto& b : exp["blocks"]) rd.X.push_back(matrix_from_json(b["matrix"]));
+
+    for (const auto& method : {std::string("EBM"), std::string("ML")}) {
+      if (!fscores.contains(method)) continue;
+      const auto fsm = method == "EBM"
+          ? magmaan::measures::FactorScoreMethod::Ebm
+          : magmaan::measures::FactorScoreMethod::Ml;
+      auto fs = magmaan::measures::factor_scores_mixed_ordinal(
+          pt_prep, h->rep, rd, h->stats, *est_or, fsm,
+          magmaan::estimate::OrdinalParameterization::Delta);
+      if (!fs.has_value()) {
+        ++total;
+        failures.push_back(id + " " + method +
+                           ": factor_scores_mixed_ordinal — " +
+                           fs.error().detail);
+        continue;
+      }
+      gate_method(id, method, *fs, fscores);
+    }
+  }
+
+  MESSAGE("ordinal/mixed factor scores: " << passed << " / " << total
           << " pass");
   for (const auto& f : failures) MESSAGE("  FAIL " << f);
   CHECK(passed == total);
