@@ -62,26 +62,25 @@ materialization dominates robust reporting in a benchmark or paper grid
 diagonal's memory), or the ordinal-snlls paper's fit-plus-inference rows
 need the reduced route to make their cost story complete.
 
-### Ordinal EBM factor scores
+### Multi-factor EAP and non-diagonal residual ordinal factor scores
 
-A factor-score path for ordinal / mixed-ordinal fits that matches lavaan's
-`lavPredict()`: empirical-Bayes-modal (and ML) scoring by numerical integration
-over the latent-response distribution implied by the thresholds and the fitted
-Λ/Θ/Ψ, rather than the continuous regression/Bartlett predictor.
+The landed ordinal/mixed factor-score path covers diagonal residual `Theta`:
+EBM and ML by per-pattern Newton over the latent-response likelihood/posterior,
+and one-factor EAP by QUADPACK integration. Two heavier extensions remain
+separate: multi-factor EAP (adaptive/product Gauss-Hermite centered at the EBM
+mode) and models with correlated ordinal residuals, where a response pattern's
+probability is a multivariate orthant integral rather than a product of
+univariate interval probabilities.
 
-**Alternative already available.** `api::factor_scores` is exposed for
-continuous fits; ordinal fits are explicitly guarded (`require_not_ordinal`,
-asserted in `r-package/examples/ordinal_dwls_wls.R`). The neighbouring
-parameterization-agnostic transforms — `standardize_lv`/`standardize_all` and
-`compute_defined` — are exposed for ordinal fits because they are exact
-functions of the fitted parameters and the caller vcov; factor scores are not,
-they are a distinct estimator.
+**Alternative already available.** Use the diagonal-Theta categorical scorer:
+`api::factor_scores` / R `factor_scores()` expose EBM, ML, and one-factor EAP for
+all-ordinal and mixed complete data, while continuous fits keep the
+regression/Bartlett path.
 
-**Build if.** A paper row or methods workflow needs per-observation ordinal
-factor scores and wants lavaan-`lavPredict()` parity. This is a real estimator
-(quadrature over y\* per missingness/response pattern), not a guard flip —
-treat as research-tier, separate from the standardization/defined-parameter
-exposure that motivated removing their guards.
+**Build if.** A methods workflow needs posterior means for two-or-more-factor
+categorical models, or a paper/model requires residual covariance among ordinal
+indicators and wants lavaan-`lavPredict()` parity instead of an explicit
+unsupported-shape error.
 
 ## Optimizers
 

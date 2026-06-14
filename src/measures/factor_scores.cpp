@@ -1,8 +1,16 @@
 #include "magmaan/measures/factor_scores.hpp"
 
+#include <algorithm>
+#include <array>
+#include <bit>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <string>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
@@ -10,13 +18,665 @@
 #include "magmaan/error.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/model/model_evaluator.hpp"
+#include "magmaan/parse/op.hpp"
 
 namespace magmaan::measures {
 
 namespace {
 
+extern "C" {
+int dqagie_(double (*f)(double*), double* bound, int* inf, double* epsabs,
+            double* epsrel, int* limit, double* result, double* abserr,
+            int* neval, int* ier, double* alist, double* blist, double* rlist,
+            double* elist, int* iord, int* last);
+}
+
 PostError make_err(PostError::Kind k, std::string detail) {
   return PostError{k, std::move(detail)};
+}
+
+bool is_continuous_score_method(FactorScoreMethod method) noexcept {
+  return method == FactorScoreMethod::Regression ||
+         method == FactorScoreMethod::Bartlett;
+}
+
+bool is_ordinal_score_method(FactorScoreMethod method) noexcept {
+  return method == FactorScoreMethod::Ebm ||
+         method == FactorScoreMethod::Ml ||
+         method == FactorScoreMethod::Eap;
+}
+
+post_expected<void> require_complete_raw(const data::RawData& raw,
+                                         std::string_view call) {
+  for (const auto& m : raw.mask) {
+    if (m.size() != 0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(call) + " does not support missing data"));
+    }
+  }
+  return {};
+}
+
+double normal_pdf(double x) noexcept {
+  if (!std::isfinite(x)) return 0.0;
+  constexpr double inv_sqrt_2pi = 0.39894228040143267794;
+  return inv_sqrt_2pi * std::exp(-0.5 * x * x);
+}
+
+double normal_cdf(double x) noexcept {
+  if (x == std::numeric_limits<double>::infinity()) return 1.0;
+  if (x == -std::numeric_limits<double>::infinity()) return 0.0;
+  constexpr double inv_sqrt2 = 0.70710678118654752440;
+  return 0.5 * std::erfc(-x * inv_sqrt2);
+}
+
+double normal_interval_prob(double a, double b) noexcept {
+  constexpr double inv_sqrt2 = 0.70710678118654752440;
+  if (a == -std::numeric_limits<double>::infinity()) return normal_cdf(b);
+  if (b == std::numeric_limits<double>::infinity()) {
+    return 0.5 * std::erfc(a * inv_sqrt2);
+  }
+  if (a > 0.0) {
+    return 0.5 * (std::erfc(a * inv_sqrt2) -
+                  std::erfc(b * inv_sqrt2));
+  }
+  return normal_cdf(b) - normal_cdf(a);
+}
+
+double x_pdf(double x) noexcept {
+  return std::isfinite(x) ? x * normal_pdf(x) : 0.0;
+}
+
+bool finite_vector(const Eigen::VectorXd& x) {
+  return x.array().isFinite().all();
+}
+
+bool finite_matrix(const Eigen::MatrixXd& x) {
+  return x.array().isFinite().all();
+}
+
+struct PatternKey {
+  std::vector<std::uint64_t> bits;
+
+  bool operator==(const PatternKey& other) const noexcept {
+    return bits == other.bits;
+  }
+};
+
+struct PatternKeyHash {
+  std::size_t operator()(const PatternKey& key) const noexcept {
+    std::size_t h = 1469598103934665603ull;
+    for (const std::uint64_t b : key.bits) {
+      h ^= static_cast<std::size_t>(b);
+      h *= 1099511628211ull;
+    }
+    return h;
+  }
+};
+
+PatternKey pattern_key(const Eigen::Ref<const Eigen::RowVectorXd>& row) {
+  PatternKey key;
+  key.bits.reserve(static_cast<std::size_t>(row.size()));
+  for (Eigen::Index j = 0; j < row.size(); ++j) {
+    key.bits.push_back(std::bit_cast<std::uint64_t>(row(j)));
+  }
+  return key;
+}
+
+struct ThresholdBlock {
+  std::vector<char> ordinal;
+  std::vector<std::vector<double>> tau;
+  std::vector<std::int32_t> n_levels;
+};
+
+std::vector<std::int32_t>
+derive_n_levels(Eigen::Index p,
+                const std::vector<std::int32_t>& threshold_ov,
+                const std::vector<std::int32_t>& threshold_level,
+                const std::vector<std::int32_t>* supplied) {
+  std::vector<std::int32_t> out(static_cast<std::size_t>(p), 0);
+  if (supplied && supplied->size() == static_cast<std::size_t>(p)) {
+    out = *supplied;
+  }
+  for (std::size_t k = 0; k < threshold_ov.size() &&
+                          k < threshold_level.size(); ++k) {
+    const std::int32_t ov = threshold_ov[k];
+    if (ov >= 0 && ov < p) {
+      out[static_cast<std::size_t>(ov)] =
+          std::max(out[static_cast<std::size_t>(ov)], threshold_level[k] + 1);
+    }
+  }
+  return out;
+}
+
+post_expected<std::vector<ThresholdBlock>>
+make_threshold_blocks(const spec::LatentStructure& pt,
+                      const model::MatrixRep& rep,
+                      const std::vector<Eigen::VectorXd>& thresholds,
+                      const std::vector<std::vector<std::int32_t>>& threshold_ov,
+                      const std::vector<std::vector<std::int32_t>>& threshold_level,
+                      const std::vector<std::vector<std::int32_t>>& n_levels,
+                      const std::vector<std::vector<std::int32_t>>* ordered,
+                      const Eigen::VectorXd& theta,
+                      std::string_view call) {
+  const std::size_t nb = rep.dims.size();
+  if (thresholds.size() != nb || threshold_ov.size() != nb ||
+      threshold_level.size() != nb) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": ordinal stats block count does not match model"));
+  }
+  std::vector<ThresholdBlock> out(nb);
+  for (std::size_t b = 0; b < nb; ++b) {
+    const Eigen::Index p = rep.dims[b].n_observed;
+    if (threshold_ov[b].size() !=
+        static_cast<std::size_t>(thresholds[b].size()) ||
+        threshold_level[b].size() !=
+        static_cast<std::size_t>(thresholds[b].size())) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(call) + ": malformed threshold metadata in block " +
+              std::to_string(b)));
+    }
+    ThresholdBlock block;
+    block.ordinal.assign(static_cast<std::size_t>(p), 1);
+    if (ordered) {
+      if (b >= ordered->size() ||
+          (*ordered)[b].size() != static_cast<std::size_t>(p)) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            std::string(call) + ": ordered mask does not match model block " +
+                std::to_string(b)));
+      }
+      for (Eigen::Index j = 0; j < p; ++j) {
+        block.ordinal[static_cast<std::size_t>(j)] =
+            (*ordered)[b][static_cast<std::size_t>(j)] != 0 ? 1 : 0;
+      }
+    }
+    const std::vector<std::int32_t>* supplied =
+        b < n_levels.size() ? &n_levels[b] : nullptr;
+    block.n_levels = derive_n_levels(p, threshold_ov[b], threshold_level[b],
+                                     supplied);
+    block.tau.resize(static_cast<std::size_t>(p));
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (block.ordinal[static_cast<std::size_t>(j)] == 0) continue;
+      const auto lev = block.n_levels[static_cast<std::size_t>(j)];
+      if (lev < 2) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            std::string(call) + ": ordinal item has fewer than two levels"));
+      }
+      block.tau[static_cast<std::size_t>(j)].assign(
+          static_cast<std::size_t>(lev - 1),
+          std::numeric_limits<double>::quiet_NaN());
+    }
+    out[b] = std::move(block);
+  }
+
+  std::vector<std::vector<std::int32_t>> seen(nb);
+  for (std::size_t b = 0; b < nb; ++b) {
+    seen[b].assign(static_cast<std::size_t>(rep.dims[b].n_observed), 0);
+  }
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != parse::Op::Threshold || pt.group[i] <= 0) continue;
+    const std::size_t b = static_cast<std::size_t>(pt.group[i] - 1);
+    if (b >= nb) continue;
+    const std::int32_t ov = pt.lhs_var[i] >= 0
+        ? pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])]
+        : -1;
+    if (ov < 0 ||
+        ov >= static_cast<std::int32_t>(seen[b].size())) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(call) + ": threshold row references a non-observed variable"));
+    }
+    const std::int32_t lev = ++seen[b][static_cast<std::size_t>(ov)];
+    if (out[b].ordinal[static_cast<std::size_t>(ov)] == 0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(call) + ": threshold row references a continuous item"));
+    }
+    auto& tau_j = out[b].tau[static_cast<std::size_t>(ov)];
+    if (lev < 1 || lev > static_cast<std::int32_t>(tau_j.size())) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(call) + ": threshold row level is out of range"));
+    }
+    const std::int32_t fr = pt.free[i];
+    if (fr < 0 || fr > theta.size()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(call) + ": threshold free index is out of range"));
+    }
+    tau_j[static_cast<std::size_t>(lev - 1)] =
+        fr > 0 ? theta(fr - 1)
+               : (std::isfinite(pt.fixed_value[i]) ? pt.fixed_value[i] : 0.0);
+  }
+  for (std::size_t b = 0; b < nb; ++b) {
+    for (std::size_t j = 0; j < out[b].tau.size(); ++j) {
+      if (out[b].ordinal[j] == 0) continue;
+      for (const double t : out[b].tau[j]) {
+        if (!std::isfinite(t)) {
+          return std::unexpected(make_err(PostError::Kind::NumericIssue,
+              std::string(call) + ": missing fitted threshold for block " +
+                  std::to_string(b)));
+        }
+      }
+    }
+  }
+  return out;
+}
+
+struct OrdinalScoreBlock {
+  const Eigen::MatrixXd* X = nullptr;
+  model::BlockMatrices B;
+  ThresholdBlock thresholds;
+  Eigen::VectorXd nu;
+  Eigen::VectorXd prior_mean;
+  Eigen::MatrixXd prior_precision;
+  std::vector<double> resid_var;
+};
+
+struct ObjectiveEval {
+  double logp = 0.0;
+  Eigen::VectorXd grad;
+  Eigen::MatrixXd hess;
+};
+
+post_expected<OrdinalScoreBlock>
+make_score_block(const Eigen::MatrixXd& X,
+                 const model::BlockMatrices& B,
+                 ThresholdBlock thresholds,
+                 estimate::OrdinalParameterization parameterization,
+                 std::size_t b,
+                 std::string_view call) {
+  const Eigen::Index p = B.Lambda.rows();
+  const Eigen::Index m = B.Lambda.cols();
+  if (X.cols() != p) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": raw block " + std::to_string(b) +
+            " column count does not match the model"));
+  }
+  if (B.Theta.rows() != p || B.Theta.cols() != p ||
+      B.Mid.rows() != m || B.Mid.cols() != m) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": assembled matrix dimensions are inconsistent"));
+  }
+  constexpr double offdiag_tol = 1e-10;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      if (std::abs(B.Theta(i, j)) > offdiag_tol) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            std::string(call) +
+                ": ordinal factor scores currently require diagonal residual "
+                "Theta; residual covariance found in block " +
+                std::to_string(b)));
+      }
+    }
+  }
+
+  OrdinalScoreBlock out;
+  out.X = &X;
+  out.B = B;
+  out.thresholds = std::move(thresholds);
+  out.nu = Eigen::VectorXd::Zero(p);
+  if (B.Nu.size() == p) {
+    out.nu = B.Nu;
+  } else {
+    const Eigen::RowVectorXd means = X.colwise().mean();
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if (out.thresholds.ordinal[static_cast<std::size_t>(j)] == 0) {
+        out.nu(j) = means(j);
+      }
+    }
+  }
+
+  out.prior_mean = Eigen::VectorXd::Zero(m);
+  if (B.Alpha.size() == m) out.prior_mean.noalias() = B.A * B.Alpha;
+
+  Eigen::LLT<Eigen::MatrixXd> mid_llt(0.5 * (B.Mid + B.Mid.transpose()));
+  if (mid_llt.info() != Eigen::Success) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": latent prior covariance is not positive definite"));
+  }
+  out.prior_precision = mid_llt.solve(Eigen::MatrixXd::Identity(m, m));
+  if (!finite_matrix(out.prior_precision)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": latent prior precision is not finite"));
+  }
+
+  out.resid_var.assign(static_cast<std::size_t>(p), 0.0);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    double rv = B.Theta(j, j);
+    if (out.thresholds.ordinal[static_cast<std::size_t>(j)] != 0 &&
+        parameterization == estimate::OrdinalParameterization::Delta) {
+      const Eigen::RowVectorXd lambda = B.Lambda.row(j);
+      const double latent_var = (lambda * B.Mid * lambda.transpose())(0, 0);
+      rv = 1.0 - latent_var;
+    }
+    if (!(rv > 0.0) || !std::isfinite(rv)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(call) + ": non-positive conditional residual variance "
+              "in block " + std::to_string(b)));
+    }
+    out.resid_var[static_cast<std::size_t>(j)] = rv;
+  }
+  return out;
+}
+
+post_expected<ObjectiveEval>
+evaluate_pattern(const OrdinalScoreBlock& block,
+                 Eigen::Index row,
+                 const Eigen::VectorXd& eta,
+                 bool include_prior) {
+  const Eigen::Index p = block.B.Lambda.rows();
+  const Eigen::Index m = block.B.Lambda.cols();
+  ObjectiveEval out;
+  out.grad = Eigen::VectorXd::Zero(m);
+  out.hess = Eigen::MatrixXd::Zero(m, m);
+  const Eigen::MatrixXd& X = *block.X;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    const Eigen::RowVectorXd lambda = block.B.Lambda.row(j);
+    const double mu = block.nu(j) + lambda.dot(eta);
+    const double var = block.resid_var[static_cast<std::size_t>(j)];
+    const double sd = std::sqrt(var);
+    if (block.thresholds.ordinal[static_cast<std::size_t>(j)] != 0) {
+      const double y = X(row, j);
+      const double level_real = std::round(y);
+      if (!std::isfinite(y) || std::abs(y - level_real) > 1e-8) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "factor_scores_ordinal(): ordinal raw data must use integer category codes"));
+      }
+      const auto level = static_cast<std::int32_t>(level_real);
+      const std::int32_t nlev =
+          block.thresholds.n_levels[static_cast<std::size_t>(j)];
+      if (level < 1 || level > nlev) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "factor_scores_ordinal(): ordinal category code is out of range"));
+      }
+      const auto& tau = block.thresholds.tau[static_cast<std::size_t>(j)];
+      const double lower =
+          level <= 1 ? -std::numeric_limits<double>::infinity()
+                     : tau[static_cast<std::size_t>(level - 2)];
+      const double upper =
+          level >= nlev ? std::numeric_limits<double>::infinity()
+                        : tau[static_cast<std::size_t>(level - 1)];
+      const double a = (lower - mu) / sd;
+      const double b = (upper - mu) / sd;
+      const double prob = normal_interval_prob(a, b);
+      if (!(prob > 0.0) || !std::isfinite(prob)) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "factor_scores_ordinal(): ordinal category probability underflow"));
+      }
+      const double pa = normal_pdf(a);
+      const double pb = normal_pdf(b);
+      const double q1 = (pa - pb) / sd;
+      const double q2 = (x_pdf(a) - x_pdf(b)) / var;
+      const double d1 = q1 / prob;
+      const double d2 = q2 / prob - d1 * d1;
+      out.logp += std::log(prob);
+      out.grad.noalias() += d1 * lambda.transpose();
+      out.hess.noalias() += d2 * (lambda.transpose() * lambda);
+    } else {
+      const double resid = X(row, j) - mu;
+      if (!std::isfinite(resid)) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "factor_scores_ordinal(): continuous raw data must be finite"));
+      }
+      out.logp += -0.5 * resid * resid / var;
+      out.grad.noalias() += (resid / var) * lambda.transpose();
+      out.hess.noalias() += (-1.0 / var) * (lambda.transpose() * lambda);
+    }
+  }
+  if (include_prior) {
+    const Eigen::VectorXd d = eta - block.prior_mean;
+    out.logp += -0.5 * d.dot(block.prior_precision * d);
+    out.grad.noalias() -= block.prior_precision * d;
+    out.hess.noalias() -= block.prior_precision;
+  }
+  if (!std::isfinite(out.logp) || !finite_vector(out.grad) ||
+      !finite_matrix(out.hess)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "factor_scores_ordinal(): non-finite objective evaluation"));
+  }
+  return out;
+}
+
+post_expected<Eigen::VectorXd>
+mode_score(const OrdinalScoreBlock& block,
+           Eigen::Index row,
+           bool include_prior) {
+  Eigen::VectorXd eta = block.prior_mean;
+  constexpr int max_iter = 80;
+  constexpr double grad_tol = 1e-8;
+  constexpr double step_tol = 1e-10;
+  for (int iter = 0; iter < max_iter; ++iter) {
+    auto ev_or = evaluate_pattern(block, row, eta, include_prior);
+    if (!ev_or.has_value()) return std::unexpected(ev_or.error());
+    const ObjectiveEval& ev = *ev_or;
+    if (ev.grad.lpNorm<Eigen::Infinity>() < grad_tol) return eta;
+
+    Eigen::MatrixXd K = -0.5 * (ev.hess + ev.hess.transpose());
+    Eigen::LLT<Eigen::MatrixXd> llt(K);
+    if (llt.info() != Eigen::Success) {
+      if (!include_prior) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "factor_scores_ordinal(): ML factor-score likelihood has no "
+            "finite locally identified mode for this response pattern"));
+      }
+      double ridge = 1e-10;
+      bool ok = false;
+      for (int r = 0; r < 8; ++r) {
+        Eigen::MatrixXd Kr = K;
+        Kr.diagonal().array() += ridge;
+        llt.compute(Kr);
+        if (llt.info() == Eigen::Success) {
+          ok = true;
+          break;
+        }
+        ridge *= 10.0;
+      }
+      if (!ok) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "factor_scores_ordinal(): posterior Hessian is not negative definite"));
+      }
+    }
+    const Eigen::VectorXd step = llt.solve(ev.grad);
+    if (!finite_vector(step)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "factor_scores_ordinal(): Newton step is not finite"));
+    }
+    const double directional = ev.grad.dot(step);
+    double alpha = 1.0;
+    bool accepted = false;
+    Eigen::VectorXd candidate = eta;
+    for (int ls = 0; ls < 32; ++ls) {
+      candidate = eta + alpha * step;
+      auto cand_or = evaluate_pattern(block, row, candidate, include_prior);
+      if (cand_or.has_value() &&
+          cand_or->logp >= ev.logp + 1e-4 * alpha * directional) {
+        accepted = true;
+        break;
+      }
+      alpha *= 0.5;
+    }
+    if (!accepted) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "factor_scores_ordinal(): Newton line search failed"));
+    }
+    eta = candidate;
+    if ((alpha * step).norm() <= step_tol * (1.0 + eta.norm())) return eta;
+  }
+  return std::unexpected(make_err(PostError::Kind::NumericIssue,
+      "factor_scores_ordinal(): Newton solver did not converge"));
+}
+
+struct EapContext {
+  const OrdinalScoreBlock* block = nullptr;
+  Eigen::Index row = 0;
+  double log_center = 0.0;
+  int moment = 0;
+  bool bad = false;
+};
+
+thread_local EapContext* tls_eap_context = nullptr;
+
+double eap_integrand(double* x) {
+  EapContext* ctx = tls_eap_context;
+  if (!ctx || !ctx->block) return 0.0;
+  Eigen::VectorXd eta(1);
+  eta(0) = *x;
+  auto ev_or = evaluate_pattern(*ctx->block, ctx->row, eta,
+                                /*include_prior=*/true);
+  if (!ev_or.has_value()) {
+    return 0.0;
+  }
+  const double z = ev_or->logp - ctx->log_center;
+  if (z < -745.0) return 0.0;
+  const double w = std::exp(std::min(z, 40.0));
+  return ctx->moment == 0 ? w : (*x) * w;
+}
+
+post_expected<double>
+integrate_eap_moment(const OrdinalScoreBlock& block,
+                     Eigen::Index row,
+                     double log_center,
+                     int moment) {
+  constexpr int limit = 256;
+  EapContext ctx;
+  ctx.block = &block;
+  ctx.row = row;
+  ctx.log_center = log_center;
+  ctx.moment = moment;
+  tls_eap_context = &ctx;
+
+  double bound = 0.0;
+  int inf = 2;
+  double epsabs = 1e-8;
+  double epsrel = 1e-8;
+  int lim = limit;
+  double result = 0.0;
+  double abserr = 0.0;
+  int neval = 0;
+  int ier = 0;
+  int last = 0;
+  std::array<double, limit * 4> work{};
+  std::array<int, limit> iord{};
+  dqagie_(&eap_integrand, &bound, &inf, &epsabs, &epsrel, &lim, &result,
+          &abserr, &neval, &ier, work.data(), work.data() + limit,
+          work.data() + 2 * limit, work.data() + 3 * limit, iord.data(),
+          &last);
+  tls_eap_context = nullptr;
+
+  if (ctx.bad || ier != 0 || !std::isfinite(result)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "factor_scores_ordinal(): QUADPACK EAP integration failed"));
+  }
+  return result;
+}
+
+post_expected<Eigen::VectorXd>
+eap_score(const OrdinalScoreBlock& block, Eigen::Index row) {
+  if (block.B.Lambda.cols() != 1) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "factor_scores_ordinal(): EAP currently supports one latent dimension; "
+        "multi-factor EAP is deferred"));
+  }
+  auto mode_or = mode_score(block, row, /*include_prior=*/true);
+  if (!mode_or.has_value()) return std::unexpected(mode_or.error());
+  auto ev_or = evaluate_pattern(block, row, *mode_or, /*include_prior=*/true);
+  if (!ev_or.has_value()) return std::unexpected(ev_or.error());
+  auto den_or = integrate_eap_moment(block, row, ev_or->logp, 0);
+  if (!den_or.has_value()) return std::unexpected(den_or.error());
+  auto num_or = integrate_eap_moment(block, row, ev_or->logp, 1);
+  if (!num_or.has_value()) return std::unexpected(num_or.error());
+  if (!(*den_or > 0.0) || !std::isfinite(*den_or) ||
+      !std::isfinite(*num_or)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "factor_scores_ordinal(): invalid EAP integral ratio"));
+  }
+  Eigen::VectorXd out(1);
+  out(0) = *num_or / *den_or;
+  return out;
+}
+
+post_expected<FactorScores>
+factor_scores_ordinal_impl(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::RawData& raw,
+                           const std::vector<Eigen::VectorXd>& thresholds,
+                           const std::vector<std::vector<std::int32_t>>& threshold_ov,
+                           const std::vector<std::vector<std::int32_t>>& threshold_level,
+                           const std::vector<std::vector<std::int32_t>>& n_levels,
+                           const std::vector<std::vector<std::int32_t>>* ordered,
+                           const Estimates& est,
+                           FactorScoreMethod method,
+                           estimate::OrdinalParameterization parameterization,
+                           std::string_view call) {
+  if (!is_ordinal_score_method(method)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) +
+            " supports EBM, ML, or EAP; regression/Bartlett are continuous-only"));
+  }
+  if (auto ok = require_complete_raw(raw, call); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (raw.X.size() != rep.dims.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": raw block count does not match model"));
+  }
+  if (static_cast<std::size_t>(est.theta.size()) !=
+      static_cast<std::size_t>(pt.n_free())) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": fitted theta length does not match partable"));
+  }
+
+  auto th_or = make_threshold_blocks(pt, rep, thresholds, threshold_ov,
+                                     threshold_level, n_levels, ordered,
+                                     est.theta, call);
+  if (!th_or.has_value()) return std::unexpected(th_or.error());
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto asm_or = ev_or->assembled(est.theta);
+  if (!asm_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": ev.assembled(theta) failed: " +
+            asm_or.error().detail));
+  }
+  if (asm_or->blocks.size() != raw.X.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": assembled block count does not match raw data"));
+  }
+
+  FactorScores out;
+  out.scores.reserve(raw.X.size());
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    auto block_or = make_score_block(raw.X[b], asm_or->blocks[b],
+                                     std::move((*th_or)[b]),
+                                     parameterization, b, call);
+    if (!block_or.has_value()) return std::unexpected(block_or.error());
+    OrdinalScoreBlock& block = *block_or;
+    const Eigen::Index n = raw.X[b].rows();
+    const Eigen::Index m = block.B.Lambda.cols();
+    Eigen::MatrixXd scores(n, m);
+    std::unordered_map<PatternKey, Eigen::VectorXd, PatternKeyHash> cache;
+    cache.reserve(static_cast<std::size_t>(std::min<Eigen::Index>(n, 4096)));
+    for (Eigen::Index i = 0; i < n; ++i) {
+      PatternKey key = pattern_key(raw.X[b].row(i));
+      auto it = cache.find(key);
+      if (it == cache.end()) {
+        post_expected<Eigen::VectorXd> score_or;
+        if (method == FactorScoreMethod::Eap) {
+          score_or = eap_score(block, i);
+        } else {
+          score_or = mode_score(block, i,
+                                method == FactorScoreMethod::Ebm);
+        }
+        if (!score_or.has_value()) return std::unexpected(score_or.error());
+        it = cache.emplace(std::move(key), std::move(*score_or)).first;
+      }
+      scores.row(i) = it->second.transpose();
+    }
+    out.scores.push_back(std::move(scores));
+  }
+  return out;
 }
 
 }  // namespace
@@ -25,12 +685,14 @@ post_expected<FactorScores>
 factor_scores(spec::LatentStructure pt, const model::MatrixRep& rep,
               const data::RawData& raw, const Estimates& est,
               FactorScoreMethod method) {
+  if (!is_continuous_score_method(method)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "factor_scores() supports regression or Bartlett for continuous fits; "
+        "EBM/ML/EAP require factor_scores_ordinal()"));
+  }
   // Factor scores are per-observation — complete data only.
-  for (const auto& m : raw.mask) {
-    if (m.size() != 0) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "factor_scores() does not support missing data"));
-    }
+  if (auto ok = require_complete_raw(raw, "factor_scores()"); !ok.has_value()) {
+    return std::unexpected(ok.error());
   }
 
   // Resolve fixed.x against the moment summary, then build the evaluator —
@@ -143,6 +805,33 @@ factor_scores(spec::LatentStructure pt, const model::MatrixRep& rep,
     out.scores.push_back(std::move(s));
   }
   return out;
+}
+
+post_expected<FactorScores>
+factor_scores_ordinal(spec::LatentStructure pt, const model::MatrixRep& rep,
+                      const data::RawData& raw,
+                      const data::OrdinalStats& stats,
+                      const Estimates& est,
+                      FactorScoreMethod method,
+                      estimate::OrdinalParameterization parameterization) {
+  return factor_scores_ordinal_impl(
+      std::move(pt), rep, raw, stats.thresholds, stats.threshold_ov,
+      stats.threshold_level, stats.n_levels, nullptr, est, method,
+      parameterization, "factor_scores_ordinal()");
+}
+
+post_expected<FactorScores>
+factor_scores_mixed_ordinal(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const data::RawData& raw,
+                            const data::MixedOrdinalStats& stats,
+                            const Estimates& est,
+                            FactorScoreMethod method,
+                            estimate::OrdinalParameterization parameterization) {
+  return factor_scores_ordinal_impl(
+      std::move(pt), rep, raw, stats.thresholds, stats.threshold_ov,
+      stats.threshold_level, stats.n_levels, &stats.ordered, est, method,
+      parameterization, "factor_scores_mixed_ordinal()");
 }
 
 }  // namespace magmaan::measures

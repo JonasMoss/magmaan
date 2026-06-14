@@ -120,8 +120,9 @@ path had been guarded to refuse ordinal fits. `standardize_all` now takes
 and all-y `Beta` slots) by the latent SD only (σ_rr = 1).
 Guard: `r-package/examples/ordinal_dwls_wls.R`; `experiments/16-li-2021-mixed`
 and `19-li-2016-ordinal` `--lavaan-parity` (≤~1e-6 vs `standardizedSolution`).
-Scope: no checked C++ golden for ordinal-SEM standardized rows yet;
-`compute_defined`/`factor_scores` stay `require_not_ordinal`-guarded (in backlog).
+Scope: checked standardized/defined-parameter goldens and a diagonal-Theta
+ordinal/mixed factor-score scorer have since landed; multi-factor categorical
+EAP and correlated residual-Theta scoring remain backlog/speculative work.
 
 **Mixed-ordinal NACOV eager inversion for DWLS.**
 Regression: `mixed_ordinal_stats_from_data` eagerly inverted the full NACOV to
@@ -250,9 +251,11 @@ worked, because `ctx_from_fit` parses the prepared partable. Fix: the api
 reconstructs the prepared structure on demand (`prepared_structure` in
 `src/api/sem.cpp`, replaying `prepare_ordinal_partable`).
 Guard: `tests/unit/api_sem_test.cpp` ordinal case (standardize_lv/all +
-compute_defined succeed, factor_scores stays guarded); live lavaan value-parity
-in `r-package/examples/ordinal_dwls_wls.R` (ordinal `:=` to 5e-3, mixed std.all
-to 1e-3); the C++ golden `tests/golden/ordinal_golden_test.cpp`
+compute_defined succeed, categorical factor scores reject continuous methods
+and expose EBM/EAP); live lavaan value-parity in
+`r-package/examples/ordinal_dwls_wls.R` (ordinal `:=` to 5e-3, mixed std.all to
+1e-3, categorical EBM factor scores to 5e-4); the C++ golden
+`tests/golden/ordinal_golden_test.cpp`
 "ordinal/mixed standardized + := rows match lavaan" now gates the `=~` loading
 std.lv/std.all rows and the `lprod := L2*L3` value+SE against the stored lavaan
 oracle (fixtures `ordinal/0015_defined_param_3cat_cfa` plus the per-fit

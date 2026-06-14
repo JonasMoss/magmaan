@@ -8,6 +8,7 @@
 #include "magmaan/expected.hpp"
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/fit.hpp"
+#include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/model/matrix_rep.hpp"
 #include "magmaan/spec/partable.hpp"
 
@@ -23,7 +24,18 @@ using estimate::Estimates;
 //   Bartlett   — the GLS / maximum-likelihood scores, conditionally
 //                unbiased (E[f̂ | η] = η):
 //                  f̂ = (Λᵀ Θ⁻¹ Λ)⁻¹ Λᵀ Θ⁻¹ (y − ν)
-enum class FactorScoreMethod : std::uint8_t { Regression, Bartlett };
+//
+//   Ebm / Ml / Eap — categorical latent-response scores for ordinal and
+//                mixed-ordinal fits. EBM is the posterior mode, ML is the
+//                likelihood mode without the latent prior, and EAP is the
+//                posterior mean (currently one latent dimension).
+enum class FactorScoreMethod : std::uint8_t {
+  Regression,
+  Bartlett,
+  Ebm,
+  Ml,
+  Eap,
+};
 
 // Per-observation latent scores. `scores[b]` is (n_b × m): one row per
 // observation, one column per *extended* latent (in the reduced-LISREL
@@ -47,5 +59,22 @@ post_expected<FactorScores>
 factor_scores(spec::LatentStructure pt, const model::MatrixRep& rep,
               const data::RawData& raw, const Estimates& est,
               FactorScoreMethod method);
+
+post_expected<FactorScores>
+factor_scores_ordinal(spec::LatentStructure pt, const model::MatrixRep& rep,
+                      const data::RawData& raw,
+                      const data::OrdinalStats& stats,
+                      const Estimates& est,
+                      FactorScoreMethod method,
+                      estimate::OrdinalParameterization parameterization);
+
+post_expected<FactorScores>
+factor_scores_mixed_ordinal(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const data::RawData& raw,
+                            const data::MixedOrdinalStats& stats,
+                            const Estimates& est,
+                            FactorScoreMethod method,
+                            estimate::OrdinalParameterization parameterization);
 
 }  // namespace magmaan::measures

@@ -511,8 +511,17 @@ magmaan::measures::FactorScoreMethod factor_score_method_from(
   if (method == "bartlett" || method == "Bartlett") {
     return magmaan::measures::FactorScoreMethod::Bartlett;
   }
-  Rcpp::stop("magmaan: factor score method must be 'regression' or 'bartlett' "
-             "(got '%s')", method);
+  if (method == "ebm" || method == "EBM" || method == "Ebm") {
+    return magmaan::measures::FactorScoreMethod::Ebm;
+  }
+  if (method == "ml" || method == "ML" || method == "Ml") {
+    return magmaan::measures::FactorScoreMethod::Ml;
+  }
+  if (method == "eap" || method == "EAP" || method == "Eap") {
+    return magmaan::measures::FactorScoreMethod::Eap;
+  }
+  Rcpp::stop("magmaan: factor score method must be 'regression', 'bartlett', "
+             "'EBM', 'ML', or 'EAP' (got '%s')", method);
 }
 
 const char* score_candidate_kind_str(
@@ -2720,24 +2729,6 @@ Rcpp::NumericVector infer_se(Rcpp::NumericMatrix vcov) {
   return Rcpp::wrap(magmaan::inference::se(vcov_m));
 }
 
-// Factor scores are not exposed for ordinal or mixed-ordinal fits: lavaan
-// scores ordinal indicators by latent-response integration (EBM), a distinct
-// estimator the continuous predictor does not implement. The high-level Fit API
-// enforces this via require_not_ordinal() (src/api/sem.cpp); this thin core
-// binding constructs no Fit object and would otherwise bypass that guard, so
-// mirror it here. (Standardization and `:=` defined parameters are exposed for
-// ordinal fits — both are parameterization-agnostic transforms over the
-// prepared partable; see measures_standardize_all and compute_defined_impl.)
-void stop_if_ordinal_fit(const Rcpp::List& fit, const char* call) {
-  const bool ord = fit.containsElementNamed("ordinal") &&
-                   Rcpp::as<bool>(fit["ordinal"]);
-  const bool mix = fit.containsElementNamed("mixed_ordinal") &&
-                   Rcpp::as<bool>(fit["mixed_ordinal"]);
-  if (ord || mix) {
-    Rcpp::stop("%s is not exposed for ordinal or mixed-ordinal fits", call);
-  }
-}
-
 // compute_defined_impl() — mirrors measures::effects::compute_defined(flat, pt,
 // names, est, vcov). `syntax` must be the original model syntax because the
 // lavaan-shaped partable only carries the projected `:=` rows, not their parsed
@@ -3081,12 +3072,43 @@ Rcpp::List measures_standardized_residuals(Rcpp::List fit) {
 // [[Rcpp::export]]
 Rcpp::List measures_factor_scores(Rcpp::List fit, SEXP raw_data,
                                   std::string method = "regression") {
-  stop_if_ordinal_fit(fit, "factor_scores()");
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
-  auto r_or = magmaan::measures::factor_scores(
-      ctx.pt, ctx.rep, raw, est, factor_score_method_from(method));
+  const auto score_method = factor_score_method_from(method);
+  const bool is_ordinal_fit = fit.containsElementNamed("ordinal") &&
+                              Rcpp::as<bool>(fit["ordinal"]);
+  const bool is_mixed_ordinal_fit =
+      fit.containsElementNamed("mixed_ordinal") &&
+      Rcpp::as<bool>(fit["mixed_ordinal"]);
+  magmaan::post_expected<magmaan::measures::FactorScores> r_or;
+  if (is_ordinal_fit) {
+    if (!fit.containsElementNamed("ordinal_stats")) {
+      Rcpp::stop("magmaan: ordinal factor scores require fit$ordinal_stats");
+    }
+    auto stats = ordinal_stats_from_arg(Rcpp::List(fit["ordinal_stats"]));
+    r_or = magmaan::measures::factor_scores_ordinal(
+        ctx.pt, ctx.rep, raw, stats, est, score_method,
+        ordinal_parameterization_from_string(
+            fit.containsElementNamed("parameterization")
+                ? Rcpp::as<std::string>(fit["parameterization"])
+                : ordinal_parameterization_attr(fit["partable"])));
+  } else if (is_mixed_ordinal_fit) {
+    if (!fit.containsElementNamed("mixed_ordinal_stats")) {
+      Rcpp::stop("magmaan: mixed ordinal factor scores require fit$mixed_ordinal_stats");
+    }
+    auto stats =
+        mixed_ordinal_stats_from_arg(Rcpp::List(fit["mixed_ordinal_stats"]));
+    r_or = magmaan::measures::factor_scores_mixed_ordinal(
+        ctx.pt, ctx.rep, raw, stats, est, score_method,
+        ordinal_parameterization_from_string(
+            fit.containsElementNamed("parameterization")
+                ? Rcpp::as<std::string>(fit["parameterization"])
+                : ordinal_parameterization_attr(fit["partable"])));
+  } else {
+    r_or = magmaan::measures::factor_scores(
+        ctx.pt, ctx.rep, raw, est, score_method);
+  }
   if (!r_or.has_value()) stop_post(r_or.error());
   return Rcpp::List::create(
       Rcpp::_["scores"] = matrix_blocks_to_r(r_or->scores, ctx.rep.lv_names,

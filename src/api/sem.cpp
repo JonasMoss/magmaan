@@ -235,16 +235,6 @@ Result<void> require_complete_ml(const Fit &fit, std::string_view call) {
   return {};
 }
 
-Result<void> require_not_ordinal(const Fit &fit, std::string_view call) {
-  if (fit.data().ordinal() || fit.data().mixed_ordinal()) {
-    return std::unexpected(make_error(
-        ErrorStage::UnsupportedCombination,
-        std::string(call) +
-            " is not exposed for ordinal or mixed-ordinal fits"));
-  }
-  return {};
-}
-
 // Ordinal / mixed-ordinal delta fits are fitted over a *prepared* partable:
 // fit_ordinal_bounded fixes the latent-response residual variances the delta
 // constraint determines and compacts the free set, so the stored Estimates and
@@ -1381,18 +1371,47 @@ factor_scores(const Fit &fit, const data::RawData &raw,
   // Factor scores are per-observation, so the caller supplies the raw data
   // explicitly (mirroring robust_se(fit, raw, ...)) — a fit carried over
   // sample statistics can still score separately-held observations.
-  //
-  // Unlike standardization and `:=` defined parameters (both removed their
-  // ordinal guard, being parameterization-agnostic transforms of the fit),
-  // ordinal factor scores are a genuinely different estimator: lavaan's
-  // lavPredict() scores ordinal indicators by empirical-Bayes-modal
-  // integration over the latent-response distribution, not the continuous
-  // regression/Bartlett predictor measures::factor_scores implements. Flipping
-  // the guard would silently emit non-lavaan numbers, so the guard stays until
-  // the EBM path is built (see docs/backlog/speculative.md).
-  auto ok = require_not_ordinal(fit, "factor_scores()");
-  if (!ok) {
-    return std::unexpected(ok.error());
+  if (const auto *stats = fit.data().ordinal()) {
+    if (method == measures::FactorScoreMethod::Regression ||
+        method == measures::FactorScoreMethod::Bartlett) {
+      return std::unexpected(make_error(
+          ErrorStage::UnsupportedCombination,
+          "ordinal factor_scores() supports EBM, ML, or EAP; "
+          "regression/Bartlett are continuous-only"));
+    }
+    auto pt = prepared_structure(fit);
+    if (!pt) {
+      return std::unexpected(pt.error());
+    }
+    auto out = measures::factor_scores_ordinal(
+        std::move(*pt), fit.model().matrix_rep(), raw, *stats, fit.estimates(),
+        method, fit.estimator_spec().ordinal_parameterization);
+    return post_result(std::move(out));
+  }
+  if (const auto *stats = fit.data().mixed_ordinal()) {
+    if (method == measures::FactorScoreMethod::Regression ||
+        method == measures::FactorScoreMethod::Bartlett) {
+      return std::unexpected(make_error(
+          ErrorStage::UnsupportedCombination,
+          "mixed ordinal factor_scores() supports EBM, ML, or EAP; "
+          "regression/Bartlett are continuous-only"));
+    }
+    auto pt = prepared_structure(fit);
+    if (!pt) {
+      return std::unexpected(pt.error());
+    }
+    auto out = measures::factor_scores_mixed_ordinal(
+        std::move(*pt), fit.model().matrix_rep(), raw, *stats, fit.estimates(),
+        method, fit.estimator_spec().ordinal_parameterization);
+    return post_result(std::move(out));
+  }
+  if (method == measures::FactorScoreMethod::Ebm ||
+      method == measures::FactorScoreMethod::Ml ||
+      method == measures::FactorScoreMethod::Eap) {
+    return std::unexpected(make_error(
+        ErrorStage::UnsupportedCombination,
+        "continuous factor_scores() supports regression or Bartlett; "
+        "EBM/ML/EAP require an ordinal or mixed-ordinal fit"));
   }
   auto out = measures::factor_scores(fit.model().structure(),
                                      fit.model().matrix_rep(), raw,

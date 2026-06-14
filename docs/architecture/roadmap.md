@@ -1124,10 +1124,8 @@ stop rather than any usable non-error return.
   shared weighted-moment sandwich/U-Gamma primitive that can be reused by other
   LS moment stacks with arbitrary block weights and NACOV matrices.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
-  ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings;
-  `factor_scores` stays guarded (lavaan scores ordinal indicators by
-  latent-response EBM integration, a distinct estimator — deferred in
-  `speculative.md`). All three are parameterization-agnostic transforms over the
+  ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
+  parameterization-agnostic transforms operate over the
   *prepared* ordinal partable: `fit_ordinal_bounded` fixes the latent-response
   residual variances the delta constraint determines and compacts the free set,
   so the stored estimates/vcov live in that reduced space while `Model` carries
@@ -1148,6 +1146,17 @@ stop rather than any usable non-error return.
   DWLS when the full-WLS NACOV is singular (common at small N with many
   indicators): the inverse is non-fatal, `W_wls` is left empty, and DWLS / the
   robust sandwich proceed on the diagonal weight / NACOV.
+- Ordinal/mixed-ordinal factor scores are a separate categorical estimator, not
+  a guard flip over the continuous regression/Bartlett predictor. The measures
+  layer exposes `factor_scores_ordinal()` and `factor_scores_mixed_ordinal()`;
+  `api::factor_scores()` dispatches ordinal and mixed fits there; and the R
+  `factor_scores()` wrapper defaults categorical fits to EBM while accepting
+  `method = "EBM"`, `"ML"`, or `"EAP"`. EBM/ML score each unique complete
+  response pattern by damped Newton with analytic ordinal interval-probability
+  gradient/Hessian terms; EAP is supported for one-factor models through the
+  vendored QUADPACK infinite-interval integrator. The current categorical scope
+  is diagonal residual `Theta`; multi-factor EAP and correlated-residual orthant
+  probabilities remain deferred.
 - All-ordinal DWLS/WLS fit measures are exposed through
   `estimate::fit_measures_ordinal()` and `api::fit_measures()`: CFI/TLI/RMSEA
   use the categorical independence baseline over the polychoric moment stack,
@@ -1342,8 +1351,10 @@ stop rather than any usable non-error return.
   statistical choices: `standardized(fit, vcov, type)` requires an explicit
   covariance matrix, `stats::residuals(fit, standardized)` wraps raw or
   standardized residuals including the lavaan-style continuous residual
-  z-statistics, `factor_scores(fit, data, method)` requires complete raw data,
-  and `modification_indices(fit, data, candidates)` / `score_tests(fit, data)`
+  z-statistics, `factor_scores(fit, data, method)` requires complete raw data
+  and dispatches continuous regression/Bartlett vs ordinal/mixed EBM/ML/EAP
+  according to the fitted data type, and `modification_indices(fit, data,
+  candidates)` / `score_tests(fit, data)`
   forward to the explicit scaffold primitives. Ordinal and mixed-ordinal fit
   objects retain the categorical stats object used for fitting, so ordinary
   categorical MI/score calls work directly; callers may still pass the stats

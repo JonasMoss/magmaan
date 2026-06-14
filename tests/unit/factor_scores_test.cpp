@@ -88,8 +88,11 @@ TEST_CASE("factor_scores: regression and Bartlett scores on a 2-factor CFA") {
                                               FactorScoreMethod::Regression);
   auto bar = magmaan::measures::factor_scores(*pt, *mr, raw, est,
                                               FactorScoreMethod::Bartlett);
+  auto bad = magmaan::measures::factor_scores(*pt, *mr, raw, est,
+                                              FactorScoreMethod::Ebm);
   REQUIRE(reg.has_value());
   REQUIRE(bar.has_value());
+  CHECK_FALSE(bad.has_value());
   REQUIRE(reg->scores.size() == 1);
   REQUIRE(bar->scores.size() == 1);
   REQUIRE(reg->scores[0].rows() == n);

@@ -17,12 +17,15 @@ Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 `spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
 
-- **Ordinal-SEM standardized solution / defined params — mostly landed
-  2026-06.** Decided: `compute_defined` is valid for ordinal/mixed fits (a
-  parameterization-agnostic delta-method transform) and its guard was removed at
-  both the C++ api and the Rcpp binding; `factor_scores` stays guarded (lavaan
-  uses latent-response EBM integration, a distinct estimator deferred in
-  `speculative.md`). Fixing the api flip surfaced a real bug: the ordinal api
+- **Ordinal-SEM standardized solution / defined params / factor scores —
+  mostly landed 2026-06.** Decided: `compute_defined` is valid for ordinal/mixed
+  fits (a parameterization-agnostic delta-method transform) and its guard was
+  removed at both the C++ api and the Rcpp binding. Ordinal/mixed factor scores
+  now have their own categorical scorer instead of reusing the continuous
+  regression/Bartlett path: EBM and ML are per-pattern Newton solves over the
+  latent-response likelihood/posterior, and one-factor EAP uses the vendored
+  QUADPACK infinite-interval integrator. Fixing the api flip surfaced a real bug:
+  the ordinal api
   `Fit` carries the un-prepared structure while estimates live over the prepared
   (reduced) partable, so `standardize_lv`/`standardize_all`/`compute_defined`
   aborted on a theta-dimension mismatch — only the Rcpp path (which stores the
@@ -38,8 +41,14 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     `lprod := L2*L3` value+SE (5e-3) against the stored lavaan oracle
     (`ordinal/0015_defined_param_3cat_cfa` plus the per-fit
     `fits.DWLS.standardized` blocks emitted by `regen_oracle.R`).
-  - **S.** Decide whether delta-method defined parameters and `factor_scores`
-    need any further ordinal-specific handling once a downstream consumer asks.
+  - **S/M.** Expand checked-in lavaan oracle coverage for categorical factor
+    scores once the fixture generator can pin the installed-lavaan method set
+    cleanly. Current protection is focused C++ API/unit coverage plus live
+    EBM parity in `r-package/examples/ordinal_dwls_wls.R`.
+  - **M/L, only-when-needed.** Multi-factor EAP via adaptive Gauss-Hermite and
+    non-diagonal residual-Theta orthant probabilities remain deferred in
+    `speculative.md`; the landed scope is diagonal-Theta EBM/ML plus one-factor
+    EAP for all-ordinal and mixed complete data.
 
 - **Ordinal stats-construction perf headroom (2026-06-12 audit).** Workspace
   construction dominates ordinal/mixed wall time (fits are sub-3ms). Landed:
