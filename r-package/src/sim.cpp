@@ -473,6 +473,17 @@ ordinal_marginal_groups_from_list(Rcpp::List marginals) {
   return out;
 }
 
+std::vector<std::vector<Eigen::VectorXd>>
+ordinal_threshold_groups_from_list(Rcpp::List thresholds, std::size_t p) {
+  std::vector<std::vector<Eigen::VectorXd>> out;
+  out.reserve(static_cast<std::size_t>(thresholds.size()));
+  for (R_xlen_t g = 0; g < thresholds.size(); ++g) {
+    out.push_back(thresholds_from_list(
+        Rcpp::as<Rcpp::List>(thresholds[g]), p));
+  }
+  return out;
+}
+
 Rcpp::DataFrame ordinal_pairs_to_df(
     const std::vector<magmaan::sim::OrdinalPairCalibration>& pairs) {
   const R_xlen_t m = static_cast<R_xlen_t>(pairs.size());
@@ -1443,6 +1454,30 @@ Rcpp::List sim_ordcorr_calibrate_impl(
 }
 
 // [[Rcpp::export]]
+Rcpp::List sim_ordcorr_summary_calibrate_impl(
+    Rcpp::NumericMatrix latent_corr,
+    Rcpp::IntegerVector kinds,
+    Rcpp::List thresholds,
+    std::string metric = "polychoric",
+    std::string matrix_repair = "none",
+    double matrix_repair_min_eigenvalue = 1e-8) {
+  const Eigen::Map<Eigen::MatrixXd> corr(
+      REAL(latent_corr), latent_corr.nrow(), latent_corr.ncol());
+  const auto kind_vec = observed_kinds_from_int(kinds);
+  const auto threshold_vec = thresholds_from_list(thresholds, kind_vec.size());
+
+  magmaan::sim::OrdinalCorrelationOptions options;
+  options.metric = observed_correlation_metric_from_string(metric);
+  options.matrix_repair = bivariate_copula_repair_from_string(matrix_repair);
+  options.matrix_repair_min_eigenvalue = matrix_repair_min_eigenvalue;
+
+  auto cal_or = magmaan::sim::calibrate_ordinal_correlation_summary(
+      corr, kind_vec, threshold_vec, options);
+  if (!cal_or.has_value()) stop_sim(cal_or.error());
+  return ordcorr_calibration_to_list(*cal_or);
+}
+
+// [[Rcpp::export]]
 Rcpp::List sim_ordcorr_draw_impl(Rcpp::List calibration,
                                  int n,
                                  int reps,
@@ -1530,6 +1565,49 @@ Rcpp::List sim_ordcorr_mg_calibrate_impl(
       Rcpp::_["group_labels"] = Rcpp::wrap(cal.group_labels),
       Rcpp::_["n_groups"] = static_cast<int>(cal.groups.size()),
       Rcpp::_["variable_names"] = Rcpp::wrap(cal.variable_names));
+  out.attr("class") = Rcpp::CharacterVector::create(
+      "magmaan_ordcorr_mg_calibration", "list");
+  return out;
+}
+
+// [[Rcpp::export]]
+Rcpp::List sim_ordcorr_mg_summary_calibrate_impl(
+    Rcpp::List latent_corrs,
+    Rcpp::IntegerVector kinds,
+    Rcpp::List thresholds,
+    Rcpp::Nullable<Rcpp::CharacterVector> group_labels = R_NilValue,
+    std::string metric = "polychoric",
+    std::string matrix_repair = "none",
+    double matrix_repair_min_eigenvalue = 1e-8) {
+  const auto corr_groups = ordinal_corr_matrices_from_list(latent_corrs);
+  const auto kind_vec = observed_kinds_from_int(kinds);
+  std::vector<std::vector<magmaan::sim::ObservedKind>> kind_groups(
+      corr_groups.size(), kind_vec);
+  const auto threshold_groups =
+      ordinal_threshold_groups_from_list(thresholds, kind_vec.size());
+  const auto labels = group_labels_from_nullable(group_labels);
+
+  magmaan::sim::OrdinalCorrelationOptions options;
+  options.metric = observed_correlation_metric_from_string(metric);
+  options.matrix_repair = bivariate_copula_repair_from_string(matrix_repair);
+  options.matrix_repair_min_eigenvalue = matrix_repair_min_eigenvalue;
+
+  auto cal_or = magmaan::sim::calibrate_ordinal_correlation_summary_multigroup(
+      corr_groups, kind_groups, threshold_groups, labels, options);
+  if (!cal_or.has_value()) stop_sim(cal_or.error());
+  auto cal = std::move(*cal_or);
+
+  Rcpp::List groups(static_cast<R_xlen_t>(cal.groups.size()));
+  for (std::size_t g = 0; g < cal.groups.size(); ++g) {
+    groups[static_cast<R_xlen_t>(g)] =
+        ordcorr_calibration_to_list(cal.groups[g]);
+  }
+
+  Rcpp::List out = Rcpp::List::create(
+      Rcpp::_["groups"] = groups,
+      Rcpp::_["group_labels"] = Rcpp::wrap(cal.group_labels),
+      Rcpp::_["n_groups"] = static_cast<int>(cal.groups.size()),
+      Rcpp::_["variable_names"] = Rcpp::CharacterVector());
   out.attr("class") = Rcpp::CharacterVector::create(
       "magmaan_ordcorr_mg_calibration", "list");
   return out;

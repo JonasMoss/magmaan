@@ -15,6 +15,8 @@
 
 using magmaan::sim::calibrate_ordinal_correlation;
 using magmaan::sim::calibrate_ordinal_correlation_multigroup;
+using magmaan::sim::calibrate_ordinal_correlation_summary;
+using magmaan::sim::calibrate_ordinal_correlation_summary_multigroup;
 using magmaan::sim::multigroup_category_proportions;
 using magmaan::sim::ObservedCorrelationMetric;
 using magmaan::sim::ObservedKind;
@@ -42,6 +44,13 @@ OrdinalMarginalSpec continuous_marginal() {
   OrdinalMarginalSpec spec;
   spec.kind = ObservedKind::Continuous;
   return spec;
+}
+
+Eigen::VectorXd vec(std::initializer_list<double> values) {
+  Eigen::VectorXd out(static_cast<Eigen::Index>(values.size()));
+  Eigen::Index i = 0;
+  for (double value : values) out(i++) = value;
+  return out;
 }
 
 double sample_pearson(const Eigen::MatrixXd& x, Eigen::Index a, Eigen::Index b) {
@@ -82,6 +91,100 @@ TEST_CASE("polychoric calibration sets latent equal to target") {
   REQUIRE(cal.thresholds[2].size() == 1);
   CHECK(magmaan::sim::normal_cdf(cal.thresholds[2](0)) ==
         doctest::Approx(0.50).epsilon(1e-12));
+}
+
+TEST_CASE("summary calibration consumes pre-estimated latent correlations") {
+  Eigen::MatrixXd latent(3, 3);
+  latent << 1.0, 0.45, -0.20,
+            0.45, 1.0, 0.30,
+           -0.20, 0.30, 1.0;
+  const std::vector<ObservedKind> kinds = {
+      ObservedKind::Ordinal, ObservedKind::Continuous, ObservedKind::Ordinal};
+  const std::vector<Eigen::VectorXd> thresholds = {
+      vec({-0.6744897501960817, 0.6744897501960817}),
+      Eigen::VectorXd(),
+      vec({0.2533471031357997})};
+
+  OrdinalCorrelationOptions options;
+  options.metric = ObservedCorrelationMetric::Polyserial;
+  auto cal_or = calibrate_ordinal_correlation_summary(
+      latent, kinds, thresholds, options);
+  REQUIRE(cal_or.has_value());
+  const auto& cal = *cal_or;
+  CHECK(cal.target_corr.isApprox(latent, 0.0));
+  CHECK(cal.latent_corr.isApprox(latent, 0.0));
+  CHECK(cal.achieved_corr.isApprox(latent, 0.0));
+  CHECK(cal.max_abs_error == doctest::Approx(0.0));
+  REQUIRE(cal.pairs.size() == 3);
+  CHECK(cal.pairs[0].target_corr == doctest::Approx(0.45));
+  CHECK(cal.pairs[0].latent_rho == doctest::Approx(0.45));
+  CHECK(cal.pairs[0].achieved_corr == doctest::Approx(0.45));
+  CHECK(cal.pairs[0].iterations == 0);
+
+  auto pop_or = ordinal_correlation_population(cal);
+  REQUIRE(pop_or.has_value());
+  std::mt19937_64 rng(2026061405ULL);
+  auto draw_or = simulate_mixed_population_normal(120000, *pop_or, rng);
+  REQUIRE(draw_or.has_value());
+  CHECK(std::abs(sample_pearson(draw_or->latent, 0, 1) - latent(0, 1)) < 0.01);
+  CHECK(std::abs(sample_pearson(draw_or->latent, 0, 2) - latent(0, 2)) < 0.01);
+  CHECK(std::abs(sample_pearson(draw_or->latent, 1, 2) - latent(1, 2)) < 0.01);
+  REQUIRE(draw_or->observed.category_proportions.size() == 3);
+  CHECK(draw_or->observed.category_proportions[0].size() == 3);
+  CHECK(draw_or->observed.category_proportions[1].size() == 0);
+  CHECK(draw_or->observed.category_proportions[2].size() == 2);
+}
+
+TEST_CASE("summary calibration validates thresholds and repairs latent R") {
+  Eigen::MatrixXd target(3, 3);
+  target << 1.0, 0.9, 0.9,
+            0.9, 1.0, -0.9,
+            0.9, -0.9, 1.0;
+  const std::vector<ObservedKind> kinds = {
+      ObservedKind::Ordinal, ObservedKind::Ordinal, ObservedKind::Ordinal};
+  const std::vector<Eigen::VectorXd> thresholds = {
+      vec({0.0}), vec({-0.2, 0.4}), vec({0.1})};
+
+  OrdinalCorrelationOptions none;
+  auto none_or = calibrate_ordinal_correlation_summary(
+      target, kinds, thresholds, none);
+  REQUIRE(none_or.has_value());
+  CHECK(none_or->raw_min_eigenvalue < 0.0);
+  CHECK_FALSE(none_or->repair_applied);
+  CHECK(none_or->max_abs_error == doctest::Approx(0.0));
+
+  OrdinalCorrelationOptions ridge = none;
+  ridge.matrix_repair = BivariateRepair::Ridge;
+  ridge.matrix_repair_min_eigenvalue = 1e-3;
+  auto ridge_or = calibrate_ordinal_correlation_summary(
+      target, kinds, thresholds, ridge);
+  REQUIRE(ridge_or.has_value());
+  CHECK(ridge_or->repair_applied);
+  CHECK(ridge_or->max_abs_error > 0.0);
+  CHECK(ridge_or->repaired_min_eigenvalue >= 1e-3 - 1e-9);
+
+  OrdinalCorrelationOptions err = none;
+  err.matrix_repair = BivariateRepair::Error;
+  err.matrix_repair_min_eigenvalue = 1e-3;
+  auto err_or = calibrate_ordinal_correlation_summary(
+      target, kinds, thresholds, err);
+  REQUIRE_FALSE(err_or.has_value());
+  CHECK(err_or.error().kind == magmaan::SimError::Kind::CalibrationFailed);
+
+  auto bad_thresholds = thresholds;
+  bad_thresholds[1] = vec({0.4, -0.2});
+  auto bad_or = calibrate_ordinal_correlation_summary(
+      target, kinds, bad_thresholds, none);
+  REQUIRE_FALSE(bad_or.has_value());
+  CHECK(bad_or.error().kind == magmaan::SimError::Kind::InvalidInput);
+
+  auto bad_kinds = kinds;
+  bad_kinds[0] = ObservedKind::Continuous;
+  auto nonempty_continuous_or = calibrate_ordinal_correlation_summary(
+      target, bad_kinds, thresholds, none);
+  REQUIRE_FALSE(nonempty_continuous_or.has_value());
+  CHECK(nonempty_continuous_or.error().kind ==
+        magmaan::SimError::Kind::InvalidInput);
 }
 
 TEST_CASE("polyserial forward map is linear in rho and invertible") {
@@ -290,6 +393,36 @@ TEST_CASE("multi-group ordinal correlation calibration decomposes by group") {
         std::vector<std::string>{"school_a", "school_b"});
 }
 
+TEST_CASE("summary multi-group calibration decomposes by group") {
+  Eigen::MatrixXd latent1(2, 2);
+  latent1 << 1.0, 0.25,
+             0.25, 1.0;
+  Eigen::MatrixXd latent2(2, 2);
+  latent2 << 1.0, -0.35,
+            -0.35, 1.0;
+  const std::vector<std::vector<ObservedKind>> kinds = {
+      {ObservedKind::Ordinal, ObservedKind::Continuous},
+      {ObservedKind::Ordinal, ObservedKind::Continuous}};
+  const std::vector<std::vector<Eigen::VectorXd>> thresholds = {
+      {vec({0.0}), Eigen::VectorXd()},
+      {vec({-0.1}), Eigen::VectorXd()}};
+
+  auto mg_or = calibrate_ordinal_correlation_summary_multigroup(
+      {latent1, latent2}, kinds, thresholds, {"a", "b"});
+  REQUIRE(mg_or.has_value());
+  REQUIRE(mg_or->groups.size() == 2);
+  CHECK(mg_or->group_labels == std::vector<std::string>{"a", "b"});
+  CHECK(mg_or->groups[0].latent_corr.isApprox(latent1, 0.0));
+  CHECK(mg_or->groups[1].latent_corr.isApprox(latent2, 0.0));
+
+  auto bad_kinds = kinds;
+  bad_kinds[1][0] = ObservedKind::Continuous;
+  auto bad_or = calibrate_ordinal_correlation_summary_multigroup(
+      {latent1, latent2}, bad_kinds, thresholds);
+  REQUIRE_FALSE(bad_or.has_value());
+  CHECK(bad_or.error().kind == magmaan::SimError::Kind::InvalidInput);
+}
+
 TEST_CASE("multi-group ordinal correlation calibration validates shared shape") {
   Eigen::MatrixXd target(2, 2);
   target << 1.0, 0.2,
@@ -389,7 +522,7 @@ TEST_CASE("raw_data_from_mixed_projections composes multi-block metadata") {
   spec.kinds = {ObservedKind::Ordinal, ObservedKind::Continuous};
   Eigen::VectorXd th(2);
   th << -0.5, 0.5;
-  spec.thresholds = {th, Eigen::VectorXd{}};
+  spec.thresholds = {th, Eigen::VectorXd()};
   auto p1_or = magmaan::sim::project_mixed_matrix(latent1, spec);
   auto p2_or = magmaan::sim::project_mixed_matrix(latent2, spec);
   REQUIRE(p1_or.has_value());

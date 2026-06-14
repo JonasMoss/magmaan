@@ -535,7 +535,16 @@ golden `parTable()` fixtures.
   projected block as a `data::RawData` with optional variable names and ordinal
   level labels, and `sim::raw_data_from_mixed_projections()` composes
   per-group projected blocks into multi-block `RawData` with populated
-  `group_labels`.
+  `group_labels`. For workflows that already have estimated categorical
+  summaries, `sim::calibrate_ordinal_correlation_summary()` and
+  `sim::calibrate_ordinal_correlation_summary_multigroup()` accept observed
+  kinds, latent-response thresholds, and a pre-estimated latent Gaussian
+  correlation matrix directly (polychoric/polyserial summary `R`); they skip
+  pairwise inversion, apply the same matrix-repair policies, and record
+  `max_abs_error` as the largest off-diagonal repair delta. The R mirror is
+  `sim_ordcorr_summary_calibrate()` and
+  `sim_ordcorr_mg_summary_calibrate()`, whose outputs feed the existing
+  `sim_ordcorr*_draw()` functions.
 - Calibrated simulation generators are standardized around a two-stage
   contract: deterministic `calibrate_*()` calls return reusable state objects
   with fitted marginals, latent/intermediate matrices, achieved diagnostics, and

@@ -39,6 +39,86 @@ std::vector<std::string> default_group_labels(std::size_t n_groups) {
   return labels;
 }
 
+sim_expected<void>
+validate_correlation_matrix(const Eigen::Ref<const Eigen::MatrixXd>& corr,
+                            const char* caller) {
+  const Eigen::Index p = corr.rows();
+  if (p <= 0 || corr.cols() != p) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        std::string(caller) + ": correlation matrix must be non-empty and square"));
+  }
+  if (!corr.allFinite()) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        std::string(caller) + ": correlation matrix must be finite"));
+  }
+  for (Eigen::Index i = 0; i < p; ++i) {
+    if (std::abs(corr(i, i) - 1.0) > 1e-8) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          std::string(caller) + ": correlation diagonal must be one"));
+    }
+    for (Eigen::Index j = i + 1; j < p; ++j) {
+      if (std::abs(corr(i, j) - corr(j, i)) > 1e-8) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            std::string(caller) + ": correlation matrix must be symmetric"));
+      }
+      if (std::abs(corr(i, j)) > 1.0 + 1e-8) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            std::string(caller) + ": off-diagonal correlations must be in [-1, 1]"));
+      }
+    }
+  }
+  return {};
+}
+
+sim_expected<void>
+validate_summary_shape(const Eigen::Ref<const Eigen::MatrixXd>& corr,
+                       const std::vector<ObservedKind>& kinds,
+                       const std::vector<Eigen::VectorXd>& thresholds,
+                       const char* caller) {
+  if (auto ok = validate_correlation_matrix(corr, caller); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  const std::size_t p = ix(corr.rows());
+  if (kinds.size() != p || thresholds.size() != p) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        std::string(caller) + ": kinds and thresholds must match matrix dimension"));
+  }
+  for (std::size_t v = 0; v < p; ++v) {
+    if (kinds[v] == ObservedKind::Continuous) {
+      if (thresholds[v].size() != 0) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            std::string(caller) + ": continuous variables must have empty thresholds"));
+      }
+      continue;
+    }
+    if (thresholds[v].size() == 0) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          std::string(caller) + ": ordinal variables must have thresholds"));
+    }
+    if (!thresholds[v].allFinite()) {
+      return std::unexpected(make_err(
+          SimError::Kind::InvalidInput,
+          std::string(caller) + ": thresholds must be finite"));
+    }
+    for (Eigen::Index k = 1; k < thresholds[v].size(); ++k) {
+      if (!(thresholds[v](k - 1) < thresholds[v](k))) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            std::string(caller) + ": thresholds must be strictly increasing"));
+      }
+    }
+  }
+  return {};
+}
+
 // Category probabilities p_1..p_k from k-1 thresholds.
 Eigen::VectorXd category_probs_from_thresholds(const Eigen::VectorXd& th) {
   const Eigen::Index k = th.size() + 1;
@@ -225,35 +305,16 @@ calibrate_ordinal_correlation(
     const Eigen::Ref<const Eigen::MatrixXd>& target_corr,
     const std::vector<OrdinalMarginalSpec>& marginals,
     const OrdinalCorrelationOptions& options) {
+  constexpr const char* caller = "calibrate_ordinal_correlation";
   const Eigen::Index p = target_corr.rows();
-  if (p <= 0 || target_corr.cols() != p) {
-    return std::unexpected(make_err(
-        SimError::Kind::InvalidInput,
-        "calibrate_ordinal_correlation: target must be a non-empty square matrix"));
+  if (auto ok = validate_correlation_matrix(target_corr, caller);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
   }
   if (marginals.size() != ix(p)) {
     return std::unexpected(make_err(
         SimError::Kind::InvalidInput,
         "calibrate_ordinal_correlation: marginal count must match matrix dimension"));
-  }
-  if (!target_corr.allFinite()) {
-    return std::unexpected(make_err(
-        SimError::Kind::InvalidInput,
-        "calibrate_ordinal_correlation: target correlation must be finite"));
-  }
-  for (Eigen::Index i = 0; i < p; ++i) {
-    if (std::abs(target_corr(i, i) - 1.0) > 1e-8) {
-      return std::unexpected(make_err(
-          SimError::Kind::InvalidInput,
-          "calibrate_ordinal_correlation: target correlation diagonal must be one"));
-    }
-    for (Eigen::Index j = i + 1; j < p; ++j) {
-      if (std::abs(target_corr(i, j) - target_corr(j, i)) > 1e-8) {
-        return std::unexpected(make_err(
-            SimError::Kind::InvalidInput,
-            "calibrate_ordinal_correlation: target correlation must be symmetric"));
-      }
-    }
   }
 
   OrdinalCorrelationCalibration cal;
@@ -320,6 +381,57 @@ calibrate_ordinal_correlation(
   return cal;
 }
 
+sim_expected<OrdinalCorrelationCalibration>
+calibrate_ordinal_correlation_summary(
+    const Eigen::Ref<const Eigen::MatrixXd>& latent_corr,
+    const std::vector<ObservedKind>& kinds,
+    const std::vector<Eigen::VectorXd>& thresholds,
+    const OrdinalCorrelationOptions& options) {
+  constexpr const char* caller = "calibrate_ordinal_correlation_summary";
+  if (auto ok = validate_summary_shape(latent_corr, kinds, thresholds, caller);
+      !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+
+  auto repair_or = repair_correlation_matrix_if_requested(
+      latent_corr, options.matrix_repair,
+      options.matrix_repair_min_eigenvalue, caller);
+  if (!repair_or.has_value()) return std::unexpected(repair_or.error());
+  const MatrixRepairResult& rep = *repair_or;
+
+  const Eigen::Index p = latent_corr.rows();
+  OrdinalCorrelationCalibration cal;
+  cal.metric = options.metric;
+  cal.kinds = kinds;
+  cal.thresholds = thresholds;
+  cal.target_corr = latent_corr;
+  cal.latent_corr = rep.corr;
+  cal.achieved_corr = rep.corr;
+  cal.raw_min_eigenvalue = rep.raw_min_eigenvalue;
+  cal.repaired_min_eigenvalue = rep.repaired_min_eigenvalue;
+  cal.repair_ridge = rep.ridge;
+  cal.repair_shrinkage = rep.shrinkage;
+  cal.repair_applied = rep.repaired;
+
+  double max_err = 0.0;
+  for (Eigen::Index i = 0; i < p; ++i) {
+    for (Eigen::Index j = i + 1; j < p; ++j) {
+      OrdinalPairCalibration rec;
+      rec.i = static_cast<std::int32_t>(i);
+      rec.j = static_cast<std::int32_t>(j);
+      rec.target_corr = latent_corr(i, j);
+      rec.latent_rho = latent_corr(i, j);
+      rec.achieved_corr = rep.corr(i, j);
+      rec.iterations = 0;
+      rec.converged = true;
+      cal.pairs.push_back(rec);
+      max_err = std::max(max_err, std::abs(rep.corr(i, j) - latent_corr(i, j)));
+    }
+  }
+  cal.max_abs_error = max_err;
+  return cal;
+}
+
 sim_expected<MultiGroupOrdinalCorrelationCalibration>
 calibrate_ordinal_correlation_multigroup(
     const std::vector<Eigen::MatrixXd>& target_corrs,
@@ -369,6 +481,64 @@ calibrate_ordinal_correlation_multigroup(
           return std::unexpected(make_err(
               SimError::Kind::InvalidInput,
               "calibrate_ordinal_correlation_multigroup: ordinal category counts must match across groups"));
+        }
+      }
+    }
+    out.groups.push_back(std::move(*cal_or));
+  }
+  return out;
+}
+
+sim_expected<MultiGroupOrdinalCorrelationCalibration>
+calibrate_ordinal_correlation_summary_multigroup(
+    const std::vector<Eigen::MatrixXd>& latent_corrs,
+    const std::vector<std::vector<ObservedKind>>& kinds,
+    const std::vector<std::vector<Eigen::VectorXd>>& thresholds,
+    const std::vector<std::string>& group_labels,
+    const OrdinalCorrelationOptions& options) {
+  const std::size_t n_groups = latent_corrs.size();
+  if (n_groups == 0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_ordinal_correlation_summary_multigroup: need at least one group"));
+  }
+  if (kinds.size() != n_groups || thresholds.size() != n_groups) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_ordinal_correlation_summary_multigroup: group counts must match"));
+  }
+  if (!group_labels.empty() && group_labels.size() != n_groups) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "calibrate_ordinal_correlation_summary_multigroup: group_labels size must match group count"));
+  }
+
+  MultiGroupOrdinalCorrelationCalibration out;
+  out.group_labels =
+      group_labels.empty() ? default_group_labels(n_groups) : group_labels;
+  out.groups.reserve(n_groups);
+  for (std::size_t g = 0; g < n_groups; ++g) {
+    auto cal_or = calibrate_ordinal_correlation_summary(
+        latent_corrs[g], kinds[g], thresholds[g], options);
+    if (!cal_or.has_value()) return std::unexpected(cal_or.error());
+    if (g > 0) {
+      const auto& ref = out.groups.front();
+      const auto& cur = *cal_or;
+      if (cur.kinds.size() != ref.kinds.size()) {
+        return std::unexpected(make_err(
+            SimError::Kind::InvalidInput,
+            "calibrate_ordinal_correlation_summary_multigroup: variable count must match across groups"));
+      }
+      for (std::size_t v = 0; v < ref.kinds.size(); ++v) {
+        if (cur.kinds[v] != ref.kinds[v]) {
+          return std::unexpected(make_err(
+              SimError::Kind::InvalidInput,
+              "calibrate_ordinal_correlation_summary_multigroup: variable kinds must match across groups"));
+        }
+        if (cur.thresholds[v].size() != ref.thresholds[v].size()) {
+          return std::unexpected(make_err(
+              SimError::Kind::InvalidInput,
+              "calibrate_ordinal_correlation_summary_multigroup: ordinal category counts must match across groups"));
         }
       }
     }

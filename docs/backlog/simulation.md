@@ -293,9 +293,15 @@ Open work only; landed generator slices are inventoried in the roadmap.
   `RawData` with shared names/ordinal labels and populated group labels.
   Exposed in R as `sim_ordcorr_calibrate()` / `sim_ordcorr_draw()` /
   `sim_ordcorr_batch()` plus `sim_ordcorr_mg_calibrate()` /
-  `sim_ordcorr_mg_draw()` / `sim_ordcorr_mg_batch()`. Remaining:
-  calibration to externally pre-estimated polyserial/polychoric *summaries*
-  (vs. proportions+target) as a separate input contract.
+  `sim_ordcorr_mg_draw()` / `sim_ordcorr_mg_batch()`.
+  **Done 2026-06-14:** calibration to externally pre-estimated
+  polyserial/polychoric *summaries* is a separate input contract:
+  `sim::calibrate_ordinal_correlation_summary()` /
+  `sim::calibrate_ordinal_correlation_summary_multigroup()` and the R wrappers
+  `sim_ordcorr_summary_calibrate()` /
+  `sim_ordcorr_mg_summary_calibrate()` accept observed kinds, thresholds, and a
+  latent summary `R` directly; repair diagnostics report latent-matrix repair
+  deltas instead of pairwise-inversion residuals.
 - **S.** Add pseudo-elliptical / transformed-elliptical mechanisms after the
   first elliptical slice clarifies the shared radial/core interfaces.
 - **S/M.** Remaining PLSIM work: lower-level pair-cache / performance tuning and
