@@ -66,3 +66,54 @@ posterior moments, sample-normalized PRMSE, and concrete ordinal reliability.
 Inference with theta-hat uncertainty is documented as future work; the Sung and
 Liu arXiv paper is the closest derivation template, with the IRT item-parameter
 influence function replaced by magmaan's ordinal SEM moment influence path.
+
+## Working Notes
+
+Terminology:
+
+- Keep "factor-score reliability" out of public names unless a specific
+  coefficient is named. It is overloaded across squared determinacy, CTT
+  reliability of an observed score, PRMSE for a latent score, and posterior-MSE
+  coefficients.
+- The EAP/posterior mean is the only ordinal score currently implemented in
+  magmaan that has the exact posterior-MSE identity. EBM and ML are modes, so
+  they can have useful determinacy-like summaries but should not be called
+  PRMSE without defining a different target.
+- Current result fields deliberately separate:
+  - sample-normalized PRMSE:
+    `Var_n(E[Z | y]) / {Var_n(E[Z | y]) + mean_n Var(Z | y)}`;
+  - concrete ordinal reliability:
+    `1 - mean_n Var(Z | y) / Var_theta(Z)`, reducing to
+    `1 - mean_n Var(Z | y)` when `Var_theta(Z) = 1`.
+
+Inference plan:
+
+- Bootstrap first. Parametric bootstrap is closest to model reliability:
+  simulate ordinal/mixed data at `theta_hat`, rebuild stats, refit, recompute
+  both coefficients. Nonparametric bootstrap is also useful for robustness but
+  answers a slightly different question.
+- Analytic SEs need the same shape as Sung and Liu but with magmaan's ordinal
+  SEM estimator influence function: casewise threshold/correlation moments,
+  NACOV/Gamma, the LS/GMM bread, and the derivative of posterior moments wrt
+  free SEM parameters.
+- For sample PRMSE, differentiate the three sample moments
+  `[m_i, m_i^2, v_i]`. For concrete reliability, differentiate only `v_i` plus
+  the fitted latent variance. If the latent variance is fixed to one, the
+  concrete coefficient is the simpler first analytic target.
+- Finite-difference derivatives of the posterior moments are acceptable for a
+  research surface. Analytic/AD derivatives can wait until there is evidence
+  this becomes core.
+
+Likely next slices:
+
+1. Add a small simulation/fixture check for a one-factor ordinal GRM-like CFA:
+   EAP scores match current scorer, `corr(Z, E[Z | Y])^2` tracks PRMSE, and
+   concrete reliability tracks `1 - mean Var(Z | Y)` under `std.lv`.
+2. Add a `measures::frontier` or R-only bootstrap helper for
+   `factor_score_precision`, returning percentile/basic intervals for both
+   coefficients.
+3. Expose or factor stable casewise ordinal moment influence plumbing before
+   attempting analytic SEs.
+4. Leave CTT reliability of the EAP score, multi-factor EAP reliability, and
+   EBM/ML determinacy summaries explicit and separate until there is a concrete
+   consumer.
