@@ -50,6 +50,34 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     `speculative.md`; the landed scope is diagonal-Theta EBM/ML plus one-factor
     EAP for all-ordinal and mixed complete data.
 
+- **Ordinal EAP reliability / posterior precision follow-up (2026-06).**
+  Current state: `factor_score_precision()` reports one-factor ordinal/mixed
+  EAP posterior variance/SE, sample-normalized PRMSE, and concrete ordinal
+  reliability. Reference manifest and working notes live in
+  [docs/reference/ordinal_reliability.md](../reference/ordinal_reliability.md);
+  the derivation note lives in
+  [docs/research/notes/ordinal_factor_score_reliability.md](../research/notes/ordinal_factor_score_reliability.md).
+  Remaining:
+  - **S/M.** Add a small generated one-factor ordinal validation fixture:
+    EAP scores match the scorer, `corr(Z, E[Z | Y])^2` tracks PRMSE, and
+    concrete reliability reduces to `1 - mean Var(Z | Y)` under unit latent
+    variance.
+  - **M.** Add bootstrap CIs as the first inference surface, probably frontier
+    or R-only first: parametric bootstrap from the fitted ordinal/mixed model,
+    rebuild stats, refit, recompute both coefficients; optionally add
+    nonparametric row bootstrap for robustness checks.
+  - **L.** Analytic SEs require stable casewise ordinal moment influence
+    plumbing for `theta_hat` plus finite-difference derivatives of posterior
+    moments wrt free SEM parameters. Concrete reliability with fixed unit
+    latent variance is the simplest analytic target; sample PRMSE needs the
+    three-moment delta method. Follow Sung and Liu's IRT SE paper, replacing
+    their item-parameter influence function with magmaan's ordinal SEM
+    LS/GMM influence path.
+  - **S/M, keep separate.** Do not collapse CTT reliability of the EAP score,
+    EBM/ML determinacy summaries, and multi-factor EAP PRMSE into the same
+    public coefficient; add them only with explicit names and a concrete
+    downstream consumer.
+
 - **Ordinal stats-construction perf headroom (2026-06-12 audit).** Workspace
   construction dominates ordinal/mixed wall time (fits are sub-3ms). Landed:
   cell-cached `ordinal_pair_scores`, an `x_tol` stop for the rho searches, and
