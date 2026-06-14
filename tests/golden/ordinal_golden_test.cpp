@@ -289,6 +289,46 @@ std::optional<OrdinalHandles> handles_from_fixture(
   return OrdinalHandles{std::move(*pt), std::move(*mr), std::move(*stats_or)};
 }
 
+// Build single-group handles from one data block of a multi-group ordinal
+// fixture, reusing the fixture's model syntax. Used by the multi-group
+// factor-score self-consistency check: for a fixture with no cross-group
+// coupling, the per-group multi-group fit equals the independent single-group
+// fit, so the multi-group EBM scores for block b must match scoring that block
+// as a stand-alone single-group fit (which the lavaan EBM oracle gates).
+std::optional<OrdinalHandles> single_group_handles_from_block(
+    const std::string& id,
+    const nlohmann::json& exp,
+    const Eigen::MatrixXd& block,
+    std::vector<std::string>& failures) {
+  std::vector<Eigen::MatrixXd> blocks{block};
+  auto stats_or = magmaan::data::ordinal_stats_from_integer_data(blocks);
+  if (!stats_or.has_value()) {
+    failures.push_back(id + " (single-group sub-fit): stats — " +
+                       stats_or.error().detail);
+    return std::nullopt;
+  }
+  auto fp = magmaan::parse::Parser::parse(ordinal_syntax(exp));
+  if (!fp.has_value()) {
+    failures.push_back(id + " (single-group sub-fit): parse");
+    return std::nullopt;
+  }
+  magmaan::spec::BuildOptions opts;
+  opts.n_groups = 1;
+  auto pt = magmaan::spec::build(*fp, opts);
+  if (!pt.has_value()) {
+    failures.push_back(id + " (single-group sub-fit): lavaanify — " +
+                       pt.error().detail);
+    return std::nullopt;
+  }
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  if (!mr.has_value()) {
+    failures.push_back(id + " (single-group sub-fit): matrix_rep — " +
+                       mr.error().detail);
+    return std::nullopt;
+  }
+  return OrdinalHandles{std::move(*pt), std::move(*mr), std::move(*stats_or)};
+}
+
 }  // namespace
 
 TEST_CASE("ordinal goldens: thresholds, polychorics, NACOV, and WLS weights vs lavaan") {
@@ -1480,6 +1520,90 @@ TEST_CASE("ordinal/mixed factor scores (EBM/ML) match lavaan") {
         continue;
       }
       gate_method(id, method, *fs, fscores);
+    }
+  }
+
+  // --- multi-group self-consistency (transitive lavaan validation) --------
+  // lavaan's multi-group categorical lavPredict() returns a non-stationary
+  // point for non-reference groups (verified: at lavaan's group-2 score the
+  // posterior gradient is O(1) and the posterior density is lower than at
+  // magmaan's score, whose gradient is ~1e-7), so it is not a valid oracle.
+  // Instead, for a fixture with no cross-group coupling the per-group fit
+  // equals the independent single-group fit, so each group's multi-group EBM
+  // must match scoring that group as a stand-alone single-group fit — which
+  // the single-group lavaan EBM oracle above already gates. This validates the
+  // multi-group scorer path against lavaan transitively, machine-precision
+  // tight (measured ~3e-8).
+  const std::string mg_id = "0004_2group_3cat_cfa";
+  {
+    auto raw = magmaan::test::read_fixture(odir + "/" + mg_id + ".ordinal.json");
+    REQUIRE(raw.has_value());
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(exp.is_discarded());
+    auto h = handles_from_fixture(mg_id, exp, failures);
+    if (h.has_value() && exp["blocks"].size() > 1) {
+      auto est_or = magmaan::test::fit_ordinal_bounded(
+          h->pt, h->rep, h->stats, magmaan::estimate::Bounds{},
+          magmaan::estimate::OrdinalWeightKind::DWLS,
+          magmaan::estimate::Backend::NloptLbfgs, opt);
+      auto pt_prep = h->pt;
+      auto prep =
+          magmaan::estimate::prepare_ordinal_delta_partable(pt_prep, h->stats);
+      if (est_or.has_value() && prep.has_value()) {
+        magmaan::data::RawData rd;
+        for (const auto& b : exp["blocks"])
+          rd.X.push_back(matrix_from_json(b["matrix"]));
+        auto mg = magmaan::measures::factor_scores_ordinal(
+            pt_prep, h->rep, rd, h->stats, *est_or,
+            magmaan::measures::FactorScoreMethod::Ebm,
+            magmaan::estimate::OrdinalParameterization::Delta);
+        if (!mg.has_value()) {
+          ++total;
+          failures.push_back(mg_id + " multigroup EBM: " + mg.error().detail);
+        } else {
+          for (std::size_t b = 0; b < rd.X.size(); ++b) {
+            ++total;
+            auto sh = single_group_handles_from_block(mg_id, exp, rd.X[b],
+                                                      failures);
+            if (!sh.has_value()) continue;
+            auto sest = magmaan::test::fit_ordinal_bounded(
+                sh->pt, sh->rep, sh->stats, magmaan::estimate::Bounds{},
+                magmaan::estimate::OrdinalWeightKind::DWLS,
+                magmaan::estimate::Backend::NloptLbfgs, opt);
+            auto spt = sh->pt;
+            auto sprep =
+                magmaan::estimate::prepare_ordinal_delta_partable(spt, sh->stats);
+            if (!sest.has_value() || !sprep.has_value()) {
+              failures.push_back(mg_id + " block " + std::to_string(b) +
+                                 ": single-group sub-fit failed");
+              continue;
+            }
+            magmaan::data::RawData srd;
+            srd.X.push_back(rd.X[b]);
+            auto sg = magmaan::measures::factor_scores_ordinal(
+                spt, sh->rep, srd, sh->stats, *sest,
+                magmaan::measures::FactorScoreMethod::Ebm,
+                magmaan::estimate::OrdinalParameterization::Delta);
+            if (!sg.has_value()) {
+              failures.push_back(mg_id + " block " + std::to_string(b) +
+                                 " single EBM: " + sg.error().detail);
+              continue;
+            }
+            const Eigen::VectorXd mg_b = mg->scores[b].col(0);
+            const Eigen::VectorXd sg_b = sg->scores[0].col(0);
+            const double d = max_abs_diff(mg_b, sg_b);
+            if (d > 1e-6) {
+              char buf[160];
+              std::snprintf(buf, sizeof(buf),
+                            "%s block %zu: multigroup-vs-single EBM diff=%.3e",
+                            mg_id.c_str(), b, d);
+              failures.push_back(buf);
+            } else {
+              ++passed;
+            }
+          }
+        }
+      }
     }
   }
 
