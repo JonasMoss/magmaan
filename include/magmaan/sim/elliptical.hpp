@@ -29,6 +29,29 @@ struct NormalScaleMixtureSpec {
   std::vector<double> scale_multipliers;
 };
 
+struct EllipticalMomentDiagnostics {
+  double scale_second_moment = 1.0;
+  double scale_fourth_moment = 1.0;
+  double normal_covariance_multiplier = 1.0;
+  double radial_kurtosis_factor = 1.0;
+  double marginal_excess_kurtosis = 0.0;
+  bool finite_fourth_moment = true;
+};
+
+sim_expected<EllipticalMomentDiagnostics>
+student_t_moment_diagnostics(double df);
+
+sim_expected<EllipticalMomentDiagnostics>
+scale_mixture_normal_moment_diagnostics(
+    const NormalScaleMixtureSpec& mixture);
+
+sim_expected<EllipticalMomentDiagnostics>
+contaminated_normal_moment_diagnostics(
+    const ContaminatedNormalSpec& contamination);
+
+sim_expected<EllipticalMomentDiagnostics>
+slash_moment_diagnostics(const SlashSpec& slash);
+
 sim_expected<Eigen::MatrixXd>
 simulate_student_t_matrix(Eigen::Index n,
                           const Eigen::Ref<const Eigen::VectorXd>& mean,

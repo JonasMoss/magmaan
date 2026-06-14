@@ -498,6 +498,14 @@ golden `parTable()` fixtures.
   partable with an explicit `theta` vector. Copula/NORTA/vine/IG/VM/PLSIM
   bridges remain separate because the SEM supplies moments and thresholds, not
   marginal distribution specifications.
+- Elliptical generator diagnostics report the radial scale second/fourth
+  moments, the covariance-normalization multiplier used by the draw path, the
+  kurtosis inflation factor, and implied marginal excess kurtosis for
+  Student-t, finite scale mixtures, contaminated normal, and slash generators.
+  Infinite fourth moments are explicit for the covariance-finite but
+  fourth-moment-infinite Student-t/slash cases (`df`/`q` in `(2, 4]`).
+  `tests/unit/elliptical_test.cpp` pins the deterministic formulas and fixed-seed
+  covariance smokes.
 - Ordinal/mixed observed-correlation calibration inverts a target observed
   correlation matrix plus per-variable marginals (ordinal category proportions
   or continuous) into a latent Gaussian correlation matrix + thresholds.
