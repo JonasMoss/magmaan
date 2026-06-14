@@ -620,21 +620,26 @@ eap_score(const OrdinalScoreBlock& block, Eigen::Index row) {
   return out;
 }
 
-struct PrmseAccumulator {
+struct ReliabilityAccumulator {
   double n = 0.0;
   double sum_mean = 0.0;
   double sum_mean_sq = 0.0;
   double sum_var = 0.0;
+  double sum_latent_mean = 0.0;
+  double sum_latent_second = 0.0;
 
-  void add(double mean, double variance) noexcept {
+  void add(double mean, double variance,
+           double latent_mean, double latent_variance) noexcept {
     n += 1.0;
     sum_mean += mean;
     sum_mean_sq += mean * mean;
     sum_var += variance;
+    sum_latent_mean += latent_mean;
+    sum_latent_second += latent_variance + latent_mean * latent_mean;
   }
 };
 
-post_expected<double> prmse_from_accumulator(const PrmseAccumulator& acc,
+post_expected<double> prmse_from_accumulator(const ReliabilityAccumulator& acc,
                                              std::string_view call) {
   if (!(acc.n > 0.0) || !std::isfinite(acc.n) ||
       !std::isfinite(acc.sum_mean) || !std::isfinite(acc.sum_mean_sq) ||
@@ -660,6 +665,39 @@ post_expected<double> prmse_from_accumulator(const PrmseAccumulator& acc,
   if (!(out >= 0.0 && out <= 1.0) || !std::isfinite(out)) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         std::string(call) + ": PRMSE is outside [0, 1]"));
+  }
+  return out;
+}
+
+post_expected<double> concrete_reliability_from_accumulator(
+    const ReliabilityAccumulator& acc,
+    std::string_view call) {
+  if (!(acc.n > 0.0) || !std::isfinite(acc.n) ||
+      !std::isfinite(acc.sum_var) ||
+      !std::isfinite(acc.sum_latent_mean) ||
+      !std::isfinite(acc.sum_latent_second)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": invalid concrete reliability sample moments"));
+  }
+  const double mse = acc.sum_var / acc.n;
+  const double latent_mean = acc.sum_latent_mean / acc.n;
+  const double latent_second = acc.sum_latent_second / acc.n;
+  double latent_variance = latent_second - latent_mean * latent_mean;
+  const double tol = 1e-10 * (1.0 + std::abs(latent_second));
+  if (latent_variance < 0.0 && latent_variance >= -tol) {
+    latent_variance = 0.0;
+  }
+  if (!(latent_variance > 0.0) || !std::isfinite(latent_variance) ||
+      !(mse >= 0.0) || !std::isfinite(mse)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": invalid concrete reliability denominator"));
+  }
+  double out = 1.0 - mse / latent_variance;
+  if (out < 0.0 && out >= -1e-12) out = 0.0;
+  if (out > 1.0 && out <= 1.0 + 1e-12) out = 1.0;
+  if (!std::isfinite(out)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": concrete reliability is not finite"));
   }
   return out;
 }
@@ -804,7 +842,8 @@ factor_score_precision_ordinal_impl(
   out.posterior_variance.reserve(raw.X.size());
   out.posterior_se.reserve(raw.X.size());
   out.prmse_by_group.reserve(raw.X.size());
-  PrmseAccumulator pooled;
+  out.concrete_ordinal_reliability_by_group.reserve(raw.X.size());
+  ReliabilityAccumulator pooled;
   for (std::size_t b = 0; b < raw.X.size(); ++b) {
     auto block_or = make_score_block(raw.X[b], asm_or->blocks[b],
                                      std::move((*th_or)[b]),
@@ -816,12 +855,20 @@ factor_score_precision_ordinal_impl(
           std::string(call) +
               ": posterior precision currently supports one latent dimension"));
     }
+    const double latent_mean = block.prior_mean(0);
+    const double latent_variance = block.B.Mid(0, 0);
+    if (!std::isfinite(latent_mean) || !(latent_variance > 0.0) ||
+        !std::isfinite(latent_variance)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(call) +
+              ": fitted latent prior moments are invalid for reliability"));
+    }
     const Eigen::Index n = raw.X[b].rows();
     Eigen::MatrixXd scores(n, 1);
     Eigen::MatrixXd variances(n, 1);
     std::unordered_map<PatternKey, EapMomentStats, PatternKeyHash> cache;
     cache.reserve(static_cast<std::size_t>(std::min<Eigen::Index>(n, 4096)));
-    PrmseAccumulator group_acc;
+    ReliabilityAccumulator group_acc;
     for (Eigen::Index i = 0; i < n; ++i) {
       PatternKey key = pattern_key(raw.X[b].row(i));
       auto it = cache.find(key);
@@ -832,19 +879,30 @@ factor_score_precision_ordinal_impl(
       }
       scores(i, 0) = it->second.mean;
       variances(i, 0) = it->second.variance;
-      group_acc.add(it->second.mean, it->second.variance);
-      pooled.add(it->second.mean, it->second.variance);
+      group_acc.add(it->second.mean, it->second.variance,
+                    latent_mean, latent_variance);
+      pooled.add(it->second.mean, it->second.variance,
+                 latent_mean, latent_variance);
     }
     auto prmse_or = prmse_from_accumulator(group_acc, call);
     if (!prmse_or.has_value()) return std::unexpected(prmse_or.error());
+    auto concrete_or = concrete_reliability_from_accumulator(group_acc, call);
+    if (!concrete_or.has_value()) return std::unexpected(concrete_or.error());
     out.prmse_by_group.push_back(*prmse_or);
+    out.concrete_ordinal_reliability_by_group.push_back(*concrete_or);
     out.posterior_se.push_back(variances.array().sqrt().matrix());
     out.posterior_variance.push_back(std::move(variances));
     out.scores.scores.push_back(std::move(scores));
   }
   auto pooled_or = prmse_from_accumulator(pooled, call);
   if (!pooled_or.has_value()) return std::unexpected(pooled_or.error());
+  auto pooled_concrete_or =
+      concrete_reliability_from_accumulator(pooled, call);
+  if (!pooled_concrete_or.has_value()) {
+    return std::unexpected(pooled_concrete_or.error());
+  }
   out.pooled_prmse = *pooled_or;
+  out.pooled_concrete_ordinal_reliability = *pooled_concrete_or;
   return out;
 }
 

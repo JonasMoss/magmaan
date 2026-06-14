@@ -3169,8 +3169,13 @@ Rcpp::List measures_factor_score_precision(Rcpp::List fit, SEXP raw_data) {
                              /*square_names=*/false),
       Rcpp::_["prmse_by_group"] = Rcpp::wrap(r_or->prmse_by_group),
       Rcpp::_["pooled_prmse"] = r_or->pooled_prmse,
+      Rcpp::_["concrete_ordinal_reliability_by_group"] =
+          Rcpp::wrap(r_or->concrete_ordinal_reliability_by_group),
+      Rcpp::_["pooled_concrete_ordinal_reliability"] =
+          r_or->pooled_concrete_ordinal_reliability,
       Rcpp::_["method"] = "EAP",
-      Rcpp::_["target"] = "PRMSE",
+      Rcpp::_["targets"] = Rcpp::CharacterVector::create(
+          "sample_prmse", "concrete_ordinal_reliability"),
       Rcpp::_["population"] = "sample");
 }
 

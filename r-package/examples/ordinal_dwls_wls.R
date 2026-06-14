@@ -151,7 +151,10 @@ stopifnot(max(abs(fs_prec$scores[[1]] - fs_eap)) < 1e-10,
           all(is.finite(fs_var)), all(fs_var >= 0),
           max(abs(fs_se^2 - fs_var)) < 1e-10,
           abs(fs_prec$pooled_prmse - prmse) < 1e-10,
-          fs_prec$pooled_prmse >= 0, fs_prec$pooled_prmse <= 1)
+          fs_prec$pooled_prmse >= 0, fs_prec$pooled_prmse <= 1,
+          length(fs_prec$concrete_ordinal_reliability_by_group) == 1L,
+          is.finite(fs_prec$pooled_concrete_ordinal_reliability),
+          fs_prec$pooled_concrete_ordinal_reliability <= 1)
 
 # Defined (`:=`) parameters are exposed for ordinal fits and match lavaan: value
 # and delta-method SE are a parameterization-agnostic transform of the fit (no

@@ -1155,10 +1155,11 @@ stop rather than any usable non-error return.
   response pattern by damped Newton with analytic ordinal interval-probability
   gradient/Hessian terms; EAP is supported for one-factor models through the
   vendored QUADPACK infinite-interval integrator. The same EAP quadrature also
-  exposes one-factor posterior variance/SE and sample-moment PRMSE through
-  `factor_score_precision_*` / `api::factor_score_precision()` and the R
-  `factor_score_precision()` helper. The current categorical scope is diagonal
-  residual `Theta`; multi-factor EAP and correlated-residual orthant
+  exposes one-factor posterior variance/SE, sample-moment PRMSE, and the
+  direct concrete ordinal reliability through `factor_score_precision_*` /
+  `api::factor_score_precision()` and the R `factor_score_precision()` helper.
+  The current categorical scope is diagonal residual `Theta`; multi-factor EAP
+  and correlated-residual orthant
   probabilities remain deferred.
 - All-ordinal DWLS/WLS fit measures are exposed through
   `estimate::fit_measures_ordinal()` and `api::fit_measures()`: CFI/TLI/RMSEA

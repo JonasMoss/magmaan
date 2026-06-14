@@ -14,6 +14,8 @@
 #include <nlohmann/json.hpp>
 
 #include "magmaan/api/sem.hpp"
+#include "magmaan/estimate/ordinal.hpp"
+#include "magmaan/model/model_evaluator.hpp"
 #include "../oracle.hpp"
 
 namespace {
@@ -581,6 +583,7 @@ TEST_CASE("api ordinal factor scores expose EBM and one-factor EAP") {
   REQUIRE(precision->posterior_variance.size() == 1);
   REQUIRE(precision->posterior_se.size() == 1);
   REQUIRE(precision->prmse_by_group.size() == 1);
+  REQUIRE(precision->concrete_ordinal_reliability_by_group.size() == 1);
   CHECK(precision->scores.scores[0].isApprox(fs_eap->scores[0], 1e-10));
   CHECK(precision->posterior_variance[0].rows() == raw.X[0].rows());
   CHECK(precision->posterior_variance[0].cols() == 1);
@@ -594,8 +597,24 @@ TEST_CASE("api ordinal factor scores expose EBM and one-factor EAP") {
   const double prmse = (h2 - h1 * h1) / (h2 - h1 * h1 + h3);
   CHECK(precision->prmse_by_group[0] == doctest::Approx(prmse).epsilon(1e-10));
   CHECK(precision->pooled_prmse == doctest::Approx(prmse).epsilon(1e-10));
+  auto pt = fit->model().structure();
+  auto prep = magmaan::estimate::prepare_ordinal_partable(
+      pt, *stats, fit->estimator_spec().ordinal_parameterization);
+  REQUIRE(prep.has_value());
+  auto ev = magmaan::model::ModelEvaluator::build(pt, fit->model().matrix_rep());
+  REQUIRE(ev.has_value());
+  auto assembled = ev->assembled(fit->estimates().theta);
+  REQUIRE(assembled.has_value());
+  const double latent_var = assembled->blocks[0].Mid(0, 0);
+  const double concrete = 1.0 - h3 / latent_var;
+  CHECK(precision->concrete_ordinal_reliability_by_group[0] ==
+        doctest::Approx(concrete).epsilon(1e-10));
+  CHECK(precision->pooled_concrete_ordinal_reliability ==
+        doctest::Approx(concrete).epsilon(1e-10));
   CHECK(precision->pooled_prmse >= 0.0);
   CHECK(precision->pooled_prmse <= 1.0);
+  CHECK(std::isfinite(precision->pooled_concrete_ordinal_reliability));
+  CHECK(precision->pooled_concrete_ordinal_reliability <= 1.0);
 
   magmaan::data::RawData interior_raw;
   interior_raw.X.push_back(Eigen::MatrixXd::Constant(3, 4, 2.0));
@@ -680,6 +699,7 @@ TEST_CASE("api mixed ordinal fit measures are exposed") {
   REQUIRE(precision->posterior_variance.size() == 1);
   REQUIRE(precision->posterior_se.size() == 1);
   REQUIRE(precision->prmse_by_group.size() == 1);
+  REQUIRE(precision->concrete_ordinal_reliability_by_group.size() == 1);
   CHECK(precision->scores.scores[0].isApprox(fs_eap->scores[0], 1e-10));
   CHECK(precision->posterior_variance[0].rows() == raw.X[0].rows());
   CHECK(precision->posterior_variance[0].cols() == 1);
@@ -690,6 +710,8 @@ TEST_CASE("api mixed ordinal fit measures are exposed") {
   CHECK(std::isfinite(precision->pooled_prmse));
   CHECK(precision->pooled_prmse >= 0.0);
   CHECK(precision->pooled_prmse <= 1.0);
+  CHECK(std::isfinite(precision->pooled_concrete_ordinal_reliability));
+  CHECK(precision->pooled_concrete_ordinal_reliability <= 1.0);
 }
 
 TEST_CASE("api frontier exposes native FC-SEM fit and post-fit calls") {

@@ -38,7 +38,8 @@ Convenience helpers are limited to R-side composition:
   regression/Bartlett for continuous fits and EBM/ML/EAP for ordinal or
   mixed-ordinal fits; EBM is the categorical default. For one-factor
   ordinal/mixed EAP scores, `factor_score_precision(fit, data)` reports
-  posterior variance/SE and sample-moment PRMSE.
+  posterior variance/SE, sample-moment PRMSE, and the direct concrete ordinal
+  reliability `1 - mean(Var(Z | y)) / Var(Z)`.
   `fit_measures(fit, fmg = ...)` reports the ordinary fit-measure set and can
   attach Foldnes-Moss-Gronneberg (FMG) robust p-value diagnostics.
 
