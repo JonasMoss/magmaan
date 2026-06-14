@@ -48,14 +48,18 @@ struct FactorScores {
 
 // EAP posterior precision for ordinal/mixed-ordinal factor scores. V1 is
 // intentionally scalar: `scores`, `posterior_variance`, and `posterior_se`
-// blocks are n_b x 1, and PRMSE is the sample-moment plug-in
-// Var(E[Z|y]) / (Var(E[Z|y]) + E[Var(Z|y)]).
+// blocks are n_b x 1. `prmse` is the sample-moment plug-in
+// Var(E[Z|y]) / (Var(E[Z|y]) + E[Var(Z|y)]). The concrete ordinal reliability
+// is the direct posterior-MSE coefficient 1 - E[Var(Z|y)] / Var(Z), using the
+// fitted latent prior variance; when Var(Z) = 1 this is 1 - E[(Zhat - Z)^2].
 struct FactorScorePrecision {
   FactorScores scores;
   std::vector<Eigen::MatrixXd> posterior_variance;
   std::vector<Eigen::MatrixXd> posterior_se;
   std::vector<double> prmse_by_group;
   double pooled_prmse = 0.0;
+  std::vector<double> concrete_ordinal_reliability_by_group;
+  double pooled_concrete_ordinal_reliability = 0.0;
 };
 
 // Computes per-observation factor scores for `raw` at θ̂. The model is

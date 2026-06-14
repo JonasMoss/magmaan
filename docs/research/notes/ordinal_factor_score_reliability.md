@@ -22,12 +22,20 @@ modes, not the MSE-minimizing posterior mean. For EBM/ML we can report a
 squared-correlation or determinacy-like score, but calling it exact PRMSE
 would be wrong unless we deliberately define a different coefficient.
 
-So the first magmaan target should be:
+There are two sample plug-ins worth keeping distinct:
 
 ```text
-ordinal EAP PRMSE, scalar latent, complete all-ordinal/mixed data,
-estimated by plug-in sample moments from the fitted ordinal model.
+sample-normalized PRMSE =
+  Var_n(m_i) / {Var_n(m_i) + mean_n(v_i)}
+
+concrete ordinal reliability =
+  1 - mean_n(v_i) / Var_theta_hat(Z)
 ```
+
+where `m_i = E[Z | y_i; theta_hat]` and
+`v_i = Var(Z | y_i; theta_hat)`. The second coefficient is the direct
+`1 - E[(Zhat - Z)^2]` idea. When the model fixes `Var(Z) = 1`, it reduces to
+`1 - mean_n(v_i)`.
 
 ## Literature Map
 
@@ -100,15 +108,26 @@ h3 = mean(v_i)
 prmse_hat = (h2 - h1^2) / (h2 - h1^2 + h3)
 ```
 
-If the latent variance is fixed to one and the fitted posterior moments are
-coherent, this is also approximately:
+This is a self-normalizing empirical total-variance version of PRMSE. It uses
+`h2 - h1^2 + h3` as the empirical analogue of `Var(Z)`, so it does not force
+the denominator to be the fitted model's latent variance.
+
+The direct concrete ordinal reliability instead uses the fitted latent prior
+variance:
 
 ```text
-prmse_hat = 1 - mean(v_i)
+concrete_hat = 1 - h3 / Var_theta_hat(Z).
 ```
 
-but the three-moment formula is safer because it survives nonzero latent means,
-group-specific latent variances, transformed scores, and numerical drift.
+For a single group with `Var_theta_hat(Z) = 1`, this is exactly the concrete
+`1 - mean(v_i)` estimator. For multiple groups, the pooled denominator should
+be the sample-weighted fitted latent variance, including between-group latent
+mean differences:
+
+```text
+Var_pooled(Z) = mean_g[w_g {Var_g(Z) + E_g(Z)^2}]
+                - {mean_g[w_g E_g(Z)]}^2.
+```
 
 ### What We Already Have
 
@@ -133,11 +152,13 @@ new `FactorScorePrecision` or `FactorScoreReliability` result containing:
 
 ```text
 method = EAP
-target = PRMSE
+targets = sample_prmse, concrete_ordinal_reliability
 scores_by_group
 posterior_var_by_group
 prmse_by_group
 pooled_prmse
+concrete_ordinal_reliability_by_group
+pooled_concrete_ordinal_reliability
 ```
 
 Start scalar/componentwise. For multi-factor EAP the project already defers
@@ -156,9 +177,10 @@ There are two possible estimands:
    Sung/Liu SE paper targets for long IRT tests, and it is the right first
    implementation for magmaan.
 
-Use sample-moment PRMSE first. If a paper needs population PRMSE later, add it
-as an explicit `population = "model"` option backed by response-pattern
-enumeration for small all-ordinal models and model-based Monte Carlo otherwise.
+Use sample-moment PRMSE and concrete ordinal reliability first. If a paper
+needs population PRMSE later, add it as an explicit `population = "model"`
+option backed by response-pattern enumeration for small all-ordinal models and
+model-based Monte Carlo otherwise.
 
 ## Inference
 
@@ -183,7 +205,7 @@ estimator is IRT ML under a unidimensional GRM. For magmaan ordinal DWLS/WLS,
 replace their item-parameter influence function with the ordinal SEM
 GMM/polychoric influence function.
 
-For PRMSE define:
+For sample-normalized PRMSE define:
 
 ```text
 H_i(theta) = [m_i(theta), m_i(theta)^2, v_i(theta)]'
@@ -199,6 +221,35 @@ IF_eta,i = H_i(theta_0) - E[H(theta_0)]
 
 IF_prmse,i = grad_phi' IF_eta,i
 Var(prmse_hat) = Var(IF_prmse,i) / n
+```
+
+For concrete ordinal reliability define:
+
+```text
+K_i(theta) = v_i(theta)
+tau(theta) = Var_theta(Z)
+psi(k, tau) = 1 - k / tau
+```
+
+The linearization is:
+
+```text
+IF_k,i = K_i(theta_0) - E[K(theta_0)]
+         + E[dK(theta_0) / dtheta] IF_theta,i
+
+IF_tau,i = grad_tau(theta_0)' IF_theta,i
+
+IF_concrete,i = -(1 / tau) IF_k,i
+                + (E[K] / tau^2) IF_tau,i
+```
+
+If `Var(Z)` is fixed by identification, `IF_tau,i = 0`. If it is fixed to one,
+the coefficient and its linearization collapse to:
+
+```text
+concrete_hat = 1 - mean_i v_i(theta_hat)
+IF_concrete,i = -{v_i(theta_0) - E[v(theta_0)]}
+                - E[dv(theta_0) / dtheta] IF_theta,i
 ```
 
 In magmaan terms, `IF_theta,i` should come from the same ordinal moment stack
@@ -223,7 +274,9 @@ small casewise-influence plumbing project. The tricky pieces are:
   `n_g / N` convention as the robust ordinal sandwich, then report group and
   pooled PRMSE explicitly;
 - boundary behavior: PRMSE is in `[0, 1]`, so Wald intervals can misbehave near
-  the boundary. Fisher/logit transforms or bootstrap percentile intervals are
+  the boundary. The concrete sample plug-in can also drift slightly outside
+  `[0, 1]` when the observed response distribution is far from the fitted model
+  distribution. Fisher/logit transforms or bootstrap percentile intervals are
   worth exposing.
 
 ### 3. CTT Reliability of the EAP Score
@@ -245,28 +298,30 @@ Do not implement this first. It is useful to document because it explains why
 
 ## Proposed magmaan Milestones
 
-1. Add a private one-factor posterior-moment helper returning
+1. Done: add a private one-factor posterior-moment helper returning
    `(mean, second_moment, variance)` per response pattern. Reuse the current EAP
    cache.
-2. Add `measures::factor_score_prmse_ordinal(...)` and
-   `factor_score_prmse_mixed_ordinal(...)` for one latent dimension, EAP only,
-   complete data only, sample-moment plug-in only.
-3. Add an R wrapper, probably `factor_score_precision(fit, data, method = "EAP",
-   target = "PRMSE")`, returning scores, posterior variances, and PRMSE.
-4. Validate against a small GRM/ordinal one-factor fixture:
+2. Done: add `measures::factor_score_precision_ordinal(...)` and
+   `factor_score_precision_mixed_ordinal(...)` for one latent dimension, EAP
+   only, complete data only, sample-moment plug-ins only.
+3. Done: add the R wrapper `factor_score_precision(fit, data)`, returning
+   scores, posterior variances, sample PRMSE, and concrete ordinal reliability.
+4. Validate further against a small GRM/ordinal one-factor fixture:
    - compare `m_i` to current EAP scores;
    - compare `prmse_hat` to an R/mirt empirical-reliability calculation when
      the model class is close enough;
    - simulation check: generated `corr(Z, E[Z|Y])^2` matches PRMSE.
-5. Add bootstrap CI as the first inference surface.
-6. Add analytic delta SE only after we expose a stable casewise ordinal moment
+5. Add bootstrap CIs as the first inference surface for both sample PRMSE and
+   concrete ordinal reliability.
+6. Add analytic delta SEs only after we expose a stable casewise ordinal moment
    influence path for downstream statistics.
 
 ## Decision
 
 This is worth doing, but it should land under `measures` / maybe
 `measures::frontier` first, not as a generic reliability module. The reliable
-core target is scalar ordinal EAP PRMSE. Everything else -- EBM/ML
-determinacy, CTT reliability of the EAP score, multi-factor EAP, and analytic
-SEs -- should stay explicit so we do not collapse different coefficients under
-one overloaded "factor-score reliability" label.
+core target is scalar ordinal EAP posterior precision, sample PRMSE, and
+concrete ordinal reliability. Everything else -- EBM/ML determinacy, CTT
+reliability of the EAP score, multi-factor EAP, and analytic SEs -- should stay
+explicit so we do not collapse different coefficients under one overloaded
+"factor-score reliability" label.
