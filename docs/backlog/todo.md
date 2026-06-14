@@ -211,8 +211,9 @@ decisions in the simulation backlog.
   mixed polyserial estimating-equation design.
 - **FIML FMG follow-ups.** The landed FMG R wiring (single-model, FIML/missing,
   and the nested restriction-map route; see roadmap) leaves: multi-group FIML
-  fits need explicit start/convergence care; and nonlinear equality tangent-space
-  support plus pairwise-data FMG remain deferred. The high-level
+  fits need explicit start/convergence care, and pairwise-data FMG remains
+  deferred. Nonlinear equality tangent-space support for the single-model FIML
+  UGamma spectrum landed 2026-06. The high-level
   `magmaan(estimator = "FIML")` path now auto-enables mean structure for
   syntax-backed models and rejects explicit `meanstructure = FALSE`.
 - **Ordinal/polychoric FMG (`papers/ordinal-fmg/` Paper 2).** Core gate **landed

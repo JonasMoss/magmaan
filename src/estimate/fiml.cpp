@@ -16,6 +16,7 @@
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
+#include <Eigen/SVD>
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
@@ -2190,11 +2191,6 @@ fiml_ugamma_spectrum_impl(spec::LatentStructure pt,
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "fiml_ugamma_spectrum: requires df > 0"));
   }
-  if (!pt.nl_constraints.empty()) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "fiml_ugamma_spectrum: nonlinear equality constraints need "
-        "tangent-space support, which is not implemented for FIML FMG"));
-  }
 
   // (1) Saturated-moment ingredients (block-diagonal η-space, multi-group safe):
   //     V = H (saturated observed information), Γ_mis = acov = H⁻¹ J H⁻¹.
@@ -2215,10 +2211,43 @@ fiml_ugamma_spectrum_impl(spec::LatentStructure pt,
             ") != saturated dim (" + std::to_string(Q) + ")"));
   }
 
-  // (3) Equality constraints: Δ ← Δ·K (collapse to the α-reparameterization).
-  auto con_or = build_eq_constraints(pt);
+  // (3) Equality constraints: collapse Δ to local free coordinates. Linear
+  // constraints use their affine K; nonlinear constraints use the tangent space
+  // null([A_eq ; ∂h/∂θ]) at θ̂.
+  auto con_or = build_eq_constraints(pt, /*allow_nonlinear=*/true);
   if (!con_or.has_value()) return std::unexpected(con_or.error());
-  if (con_or->active()) Delta = (Delta * con_or->K()).eval();
+  if (pt.nl_constraints.empty()) {
+    if (con_or->active()) Delta = (Delta * con_or->K()).eval();
+  } else {
+    if (est.theta.size() != Delta.cols()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fiml_ugamma_spectrum: theta size mismatch for nonlinear equality "
+          "constraint tangent"));
+    }
+    const NonlinearEqConstraints nl = build_nl_constraints(pt);
+    const Eigen::MatrixXd H = nl.jacobian(est.theta);
+    if (!H.allFinite()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fiml_ugamma_spectrum: nonlinear equality constraint Jacobian is "
+          "not finite at theta"));
+    }
+
+    const Eigen::Index npar = Delta.cols();
+    Eigen::MatrixXd C(con_or->A_eq.rows() + H.rows(), npar);
+    if (con_or->A_eq.rows() > 0) {
+      C.topRows(con_or->A_eq.rows()) = con_or->A_eq;
+    }
+    C.bottomRows(H.rows()) = H;
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(C, Eigen::ComputeFullV);
+    svd.setThreshold(1e-9);
+    const Eigen::Index nz = npar - svd.rank();
+    if (nz <= 0) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fiml_ugamma_spectrum: equality constraints leave no tangent "
+          "directions"));
+    }
+    Delta = (Delta * svd.matrixV().rightCols(nz)).eval();
+  }
 
   // (4) Residual projector in the V-metric: U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV (rank df).
   const Eigen::MatrixXd VD = V * Delta;

@@ -325,7 +325,11 @@ golden `parTable()` fixtures.
   (`saturated_em_moments`, with analytic observed-row Hessians for saturated
   H1 information and a C++-only finite-difference diagnostic comparator), via
   `U = V - V Delta (Delta' V Delta)^-1 Delta' V` and the df eigenvalues of
-  `U Gamma_mis`, with the FIML LRT as the base statistic.
+  `U Gamma_mis`, with the FIML LRT as the base statistic. Equality constraints
+  are honored by projecting `Delta` into the local free-coordinate space:
+  affine linear constraints use their `K` reparameterization, while nonlinear
+  equality constraints use the tangent-space null basis of `[A_eq ; dh/dtheta]`
+  at `theta_hat`.
   This is the `h1.information = "unstructured"` convention natural to FIML's EM
   saturated model: on complete data it reproduces lavaan's unstructured UGamma
   spectrum element-for-element (~1e-7), validated in `examples/fmg.R`. semTests'
@@ -338,8 +342,9 @@ golden `parTable()` fixtures.
   `Delta1/P/A/C/S` reduction from `V = H` and `Gamma_mis`, supports exact
   equality-constraint maps and delta tangent maps, reports the existing
   unscaled/scaled/mean-variance/scaled-shifted/exact-mixture nested result
-  shape, and rejects nonlinear equality constraints and complete-data-only
-  nested compatibility methods for FIML pairs.
+  shape, and rejects complete-data-only nested compatibility methods for FIML
+  pairs. Nonlinear equality constraints remain outside the FIML nested-pair
+  route.
   The helper computes biased and optional Browne/Du-Bentler unbiased U-Gamma
   spectra through C++, keeping the U-factor, tiled casewise-contribution
   projection, grouped reduced matrices, and eigensolves out of R list
