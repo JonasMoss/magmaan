@@ -27,7 +27,15 @@ historical archaeology, not current guidance.
 - **Lavaan is the oracle.** Parser, partable, point estimates, SEs, and
   chi-square statistics match installed lavaan output to documented
   tolerances. New fixtures are regenerated via `tests/tools/regen_oracle.R`; CI
-  itself never invokes R.
+  itself never invokes R. The rare exception: when lavaan (or another oracle) is
+  *provably* wrong, do not gate against its output — gate transitively or by an
+  independent reference, and record the case in
+  [docs/validation/oracle-defects.md](docs/validation/oracle-defects.md) with
+  the required standard of proof. A bare "magmaan differs" is almost always a
+  magmaan bug, not an oracle defect; clear the high bar in that file before
+  claiming otherwise. This is mostly relevant for less-popular features
+  (multi-group categorical scores, exotic test/SE combinations) where the oracle
+  is least exercised.
 - **The lavaanified model is the contract.** Held in memory as a triple:
   `LatentStructure` (what to estimate, name-free, modulo estimator and
   identification convention), `LatentNames` (the verbal model: variable names,
@@ -257,3 +265,12 @@ versions and writes checked-in JSON; C++ tests consume those fixtures only.
 When implementing a step, read the formulas (Bollen 1989, Mulaik 2009,
 Yuan-Bentler), not the R source. Use package output, not vendored code, as the
 oracle. See `docs/reference/external_resources.md`.
+
+When a parity check fails, assume a magmaan bug first. If — and only if — you can
+clear the standard of proof in
+[`docs/validation/oracle-defects.md`](docs/validation/oracle-defects.md) (an
+independent reference magmaan matches plus a first-principles property the oracle
+violates), record the case there and gate the affected test transitively or
+self-consistently rather than against the bad output. That ledger is also where
+to look before re-investigating a suspicious divergence, and the place to grow a
+list we can later turn into upstream PRs / bug reports.

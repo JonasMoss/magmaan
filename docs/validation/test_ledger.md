@@ -17,6 +17,9 @@ backlog.
   real-data parity or R boundary code.
 - Treat advisory checks under `tests/checks/` and experiments as evidence for
   research claims, not as default CI gates.
+- This ledger records magmaan bugs we fixed. For the opposite — the rare cases
+  where the *oracle* (lavaan, etc.) is provably wrong and magmaan is right — see
+  [`oracle-defects.md`](oracle-defects.md).
 
 ## Regression Notes
 
