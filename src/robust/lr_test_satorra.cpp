@@ -9,9 +9,11 @@
 #include <Eigen/Cholesky>
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
+#include <Eigen/SVD>
 
 #include "magmaan/data/raw_data.hpp"
 #include "magmaan/error.hpp"
+#include "magmaan/estimate/nl_constraints.hpp"
 #include "magmaan/expected.hpp"
 #include "magmaan/inference/inference.hpp"        // chi2_pvalue, noncentral_chisq_cdf
 #include "magmaan/robust/robust.hpp"
@@ -37,6 +39,48 @@ PostError make_err(PostError::Kind k, std::string detail) {
 
 double quiet_nan() {
   return std::numeric_limits<double>::quiet_NaN();
+}
+
+post_expected<Eigen::MatrixXd>
+local_constraint_basis(const spec::LatentStructure& pt,
+                       const EqConstraints&         con,
+                       const Eigen::VectorXd&       theta,
+                       std::string                  label) {
+  const Eigen::Index npar = con.Kmat.rows();
+  if (theta.size() != npar || con.npar != npar) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        label + ": theta/K dimension mismatch for local constraint basis"));
+  }
+  if (pt.nl_constraints.empty()) {
+    return con.Kmat;
+  }
+
+  const estimate::NonlinearEqConstraints nl =
+      estimate::build_nl_constraints(pt);
+  const Eigen::MatrixXd H = nl.jacobian(theta);
+  if (H.cols() != npar || !H.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        label + ": nonlinear equality constraint Jacobian is malformed or "
+        "not finite at theta"));
+  }
+  if (con.A_eq.cols() != npar) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        label + ": linear equality constraint matrix has wrong column count"));
+  }
+
+  Eigen::MatrixXd C(con.A_eq.rows() + H.rows(), npar);
+  if (con.A_eq.rows() > 0) {
+    C.topRows(con.A_eq.rows()) = con.A_eq;
+  }
+  C.bottomRows(H.rows()) = H;
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(C, Eigen::ComputeFullV);
+  svd.setThreshold(1e-9);
+  const Eigen::Index nz = npar - svd.rank();
+  if (nz < 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        label + ": constraint Jacobian rank exceeds parameter dimension"));
+  }
+  return Eigen::MatrixXd(svd.matrixV().rightCols(nz));
 }
 
 Eigen::VectorXd denom_from_sample(const data::SampleStats& samp) {
@@ -710,11 +754,14 @@ lr_test_satorra2000_fiml_from_data_impl(
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "lr_test_satorra2000_fiml_from_data: h_step must be > 0"));
   }
-  if (!pt_H1.nl_constraints.empty() || !pt_H0.nl_constraints.empty()) {
-    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+  const bool has_nonlinear =
+      !pt_H1.nl_constraints.empty() || !pt_H0.nl_constraints.empty();
+  std::vector<std::string> warnings;
+  if (has_nonlinear && a_method == SatorraAMethod::Exact) {
+    warnings.emplace_back(
         "lr_test_satorra2000_fiml_from_data: nonlinear equality constraints "
-        "need tangent-space support, which is not implemented for nested "
-        "FIML FMG"));
+        "have no global affine exact restriction map; using the local tangent "
+        "restriction map at the fitted points");
   }
 
   const bool use_pack = pack != nullptr && h1 != nullptr;
@@ -753,10 +800,14 @@ lr_test_satorra2000_fiml_from_data_impl(
         "lr_test_satorra2000_fiml_from_data: H1 eta Jacobian shape "
         "disagrees with saturated information or K_H1"));
   }
-  const Eigen::MatrixXd Delta1_alpha = D1_or->Delta_theta * K_H1.Kmat;
+  auto B1_or = local_constraint_basis(
+      pt_H1, K_H1, theta_H1_full,
+      "lr_test_satorra2000_fiml_from_data: H1");
+  if (!B1_or.has_value()) return std::unexpected(B1_or.error());
+  const Eigen::MatrixXd Delta1_alpha = D1_or->Delta_theta * (*B1_or);
 
   Eigen::MatrixXd A_alpha;
-  if (a_method == SatorraAMethod::Exact) {
+  if (a_method == SatorraAMethod::Exact && !has_nonlinear) {
     auto restr_or = restriction_alpha_from_K(K_H1, K_H0);
     if (!restr_or.has_value()) return std::unexpected(restr_or.error());
     A_alpha = std::move(restr_or->A);
@@ -775,7 +826,11 @@ lr_test_satorra2000_fiml_from_data_impl(
           "lr_test_satorra2000_fiml_from_data: H0 eta Jacobian shape "
           "disagrees with saturated information or K_H0"));
     }
-    const Eigen::MatrixXd Delta0_alpha = D0_or->Delta_theta * K_H0.Kmat;
+    auto B0_or = local_constraint_basis(
+        pt_H0, K_H0, theta_H0_full,
+        "lr_test_satorra2000_fiml_from_data: H0");
+    if (!B0_or.has_value()) return std::unexpected(B0_or.error());
+    const Eigen::MatrixXd Delta0_alpha = D0_or->Delta_theta * (*B0_or);
     auto A_or = restriction_alpha_delta_from_jacobians(
         Delta1_alpha, Delta0_alpha, df_diff_from_T);
     if (!A_or.has_value()) return std::unexpected(A_or.error());
@@ -792,7 +847,11 @@ lr_test_satorra2000_fiml_from_data_impl(
 
   auto sd_or = compute_fiml_satorra2000(Delta1_alpha, V, Gamma, A_alpha);
   if (!sd_or.has_value()) return std::unexpected(sd_or.error());
-  return lr_test_satorra2000(T_H0 - T_H1, *sd_or);
+  auto out_or = lr_test_satorra2000(T_H0 - T_H1, *sd_or);
+  if (!out_or.has_value()) return std::unexpected(out_or.error());
+  out_or->warnings.insert(out_or->warnings.end(),
+                          warnings.begin(), warnings.end());
+  return out_or;
 }
 
 post_expected<LRSatorra2000Result>

@@ -213,9 +213,9 @@ decisions in the simulation backlog.
   and the nested restriction-map route; see roadmap) leaves: multi-group FIML
   fits need explicit start/convergence care, and pairwise-data FMG remains
   deferred. Nonlinear equality tangent-space support for the single-model FIML
-  UGamma spectrum landed 2026-06. The high-level
-  `magmaan(estimator = "FIML")` path now auto-enables mean structure for
-  syntax-backed models and rejects explicit `meanstructure = FALSE`.
+  UGamma spectrum and nested FIML restriction-map route landed 2026-06. The
+  high-level `magmaan(estimator = "FIML")` path now auto-enables mean structure
+  for syntax-backed models and rejects explicit `meanstructure = FALSE`.
 - **Ordinal/polychoric FMG (`papers/ordinal-fmg/` Paper 2).** Core gate **landed
   2026-06-13** (commit b8c6dcb): `fmg_tests_ordinal()` / `fmg_tests_mixed_ordinal()`
   apply the FMG eigenvalue-tail transforms to the `robust_ordinal()` /
