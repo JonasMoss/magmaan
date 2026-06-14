@@ -939,20 +939,48 @@ TEST_CASE("fiml_ugamma_spectrum: multi-group missing-data spectrum is finite") {
   CHECK(sp->eigvals.minCoeff() > 0.0);
 }
 
-TEST_CASE("fiml_ugamma_spectrum: rejects nonlinear equality constraints explicitly") {
+TEST_CASE("fiml_ugamma_spectrum: nonlinear equality constraints use tangent space") {
   auto built = build_mean_model("f =~ x1 + a*x2 + b*x3\na == b^2");
+
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.7);
+  theta0(0) = 0.49;
+  theta0(1) = 0.7;
+  theta0.tail(3) << 1.0, 2.0, 3.0;
+  auto truth = built.ev.sigma(theta0);
+  REQUIRE(truth.has_value());
+  Eigen::LLT<Eigen::MatrixXd> llt(truth->sigma[0]);
+  REQUIRE(llt.info() == Eigen::Success);
+  const Eigen::MatrixXd L = llt.matrixL();
+
   magmaan::data::RawData raw;
-  raw.X.push_back(deterministic_z(40, 3));
-  magmaan::estimate::Estimates est;
-  est.theta = Eigen::VectorXd::Constant(
-      static_cast<Eigen::Index>(built.ev.n_free()), 0.6);
+  raw.X.push_back((deterministic_z(34, 3) * L.transpose()).rowwise() +
+                  truth->mu[0].transpose());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 350;
+  auto est = magmaan::estimate::fit_fiml(
+      *built.pt, *built.rep, raw, theta0, magmaan::estimate::fiml::FIML{},
+      magmaan::estimate::Backend::NloptSlsqp, opts);
+  REQUIRE_MESSAGE(est.has_value(), "SLSQP constrained FIML failed: "
+      << (est.has_value() ? std::string{} : est.error().detail));
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df_or = magmaan::inference::df_stat(*built.pt, *samp, est->theta);
+  REQUIRE(df_or.has_value());
+  REQUIRE(*df_or == 1);
 
   auto sp = magmaan::estimate::fiml::fiml_ugamma_spectrum(
-      *built.pt, *built.rep, raw, est, /*df=*/1, /*chi2_lrt=*/1.0);
-  REQUIRE_FALSE(sp.has_value());
-  CHECK(sp.error().detail.find("nonlinear equality constraints") !=
-        std::string::npos);
-  CHECK(sp.error().detail.find("tangent-space") != std::string::npos);
+      *built.pt, *built.rep, raw, *est, *df_or, /*chi2_lrt=*/1.0);
+  REQUIRE_MESSAGE(sp.has_value(),
+      "fiml_ugamma_spectrum failed: " <<
+      (sp.has_value() ? "" : sp.error().detail));
+  CHECK(sp->df == *df_or);
+  CHECK(sp->eigvals.size() == *df_or);
+  CHECK(sp->eigvals.allFinite());
+  CHECK(sp->eigvals.minCoeff() > 0.0);
+  CHECK(sp->trace_xcheck == doctest::Approx(sp->eigvals.sum()));
 }
 
 TEST_CASE("fiml_ugamma_spectrum: rejects bad arguments") {

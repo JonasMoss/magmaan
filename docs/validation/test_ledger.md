@@ -345,8 +345,9 @@ Protected by:
 - `r-package/examples/fiml.R`
 - `tests/checks/fiml_fmg_trace/` and `tests/checks/fiml_fmg_nested/`
 
-Known weak spots: high-level mean-structure defaults, multi-group starts, and
-nonlinear equality tangent-space support remain backlog items.
+Known weak spots: high-level mean-structure defaults and multi-group starts need
+care; pairwise-data FMG and nonlinear-constrained nested FIML pairs remain
+deferred.
 
 ### Ordinal and Mixed Moments
 
