@@ -275,9 +275,11 @@ for skew/kurt (scale/location invariant) but is the same pattern.
 
 Open work only; landed generator slices are inventoried in the roadmap.
 
-- **M.** Add elliptical diagnostics/goldens for Student-t, contaminated normal,
-  slash, and finite scale mixtures: deterministic moment formulas where
-  available plus stochastic smokes.
+- **DONE 2026-06-14.** Elliptical diagnostics/goldens for Student-t,
+  contaminated normal, slash, and finite scale mixtures: public C++ diagnostics
+  report radial scale moments, covariance normalization, kurtosis inflation, and
+  implied marginal excess kurtosis; deterministic formula pins and fixed-seed
+  covariance smokes live in `tests/unit/elliptical_test.cpp`.
 - **DONE.** Ordinal/mixed observed-correlation calibration:
   `sim::calibrate_ordinal_correlation()` inverts a target observed correlation
   matrix to a latent Gaussian correlation + thresholds across `Polychoric`

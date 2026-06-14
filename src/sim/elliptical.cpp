@@ -95,7 +95,29 @@ data::RawData raw_from_matrix(Eigen::MatrixXd X) {
   return raw;
 }
 
-sim_expected<double>
+struct ScaleMixtureMoments {
+  double second = 1.0;
+  double fourth = 1.0;
+};
+
+EllipticalMomentDiagnostics diagnostics_from_scale_moments(double second,
+                                                           double fourth) {
+  EllipticalMomentDiagnostics out;
+  out.scale_second_moment = second;
+  out.scale_fourth_moment = fourth;
+  out.normal_covariance_multiplier = 1.0 / second;
+  out.finite_fourth_moment = std::isfinite(fourth);
+  if (out.finite_fourth_moment) {
+    out.radial_kurtosis_factor = fourth / (second * second);
+    out.marginal_excess_kurtosis = 3.0 * (out.radial_kurtosis_factor - 1.0);
+  } else {
+    out.radial_kurtosis_factor = std::numeric_limits<double>::infinity();
+    out.marginal_excess_kurtosis = std::numeric_limits<double>::infinity();
+  }
+  return out;
+}
+
+sim_expected<ScaleMixtureMoments>
 validate_scale_mixture(const NormalScaleMixtureSpec& mixture,
                        const char* caller) {
   if (mixture.weights.empty() ||
@@ -107,6 +129,7 @@ validate_scale_mixture(const NormalScaleMixtureSpec& mixture,
   }
   double weight_total = 0.0;
   double second_scale_moment = 0.0;
+  double fourth_scale_moment = 0.0;
   for (std::size_t k = 0; k < mixture.weights.size(); ++k) {
     const double weight = mixture.weights[k];
     const double scale = mixture.scale_multipliers[k];
@@ -119,17 +142,79 @@ validate_scale_mixture(const NormalScaleMixtureSpec& mixture,
     }
     weight_total += weight;
     second_scale_moment += weight * scale * scale;
+    const double scale2 = scale * scale;
+    fourth_scale_moment += weight * scale2 * scale2;
   }
   if (!std::isfinite(weight_total) || weight_total <= 0.0 ||
-      !std::isfinite(second_scale_moment) || second_scale_moment <= 0.0) {
+      !std::isfinite(second_scale_moment) || second_scale_moment <= 0.0 ||
+      !std::isfinite(fourth_scale_moment) || fourth_scale_moment <= 0.0) {
     return std::unexpected(make_err(
         SimError::Kind::InvalidInput,
         std::string(caller) + ": invalid mixture moments"));
   }
-  return second_scale_moment / weight_total;
+  return ScaleMixtureMoments{second_scale_moment / weight_total,
+                             fourth_scale_moment / weight_total};
 }
 
 }  // namespace
+
+sim_expected<EllipticalMomentDiagnostics>
+student_t_moment_diagnostics(double df) {
+  if (!std::isfinite(df) || df <= 2.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "student_t_moment_diagnostics: df must be finite and greater than 2"));
+  }
+  const double second = df / (df - 2.0);
+  double fourth = std::numeric_limits<double>::infinity();
+  if (df > 4.0) {
+    fourth = (df * df) / ((df - 2.0) * (df - 4.0));
+  }
+  return diagnostics_from_scale_moments(second, fourth);
+}
+
+sim_expected<EllipticalMomentDiagnostics>
+scale_mixture_normal_moment_diagnostics(
+    const NormalScaleMixtureSpec& mixture) {
+  constexpr const char* caller = "scale_mixture_normal_moment_diagnostics";
+  auto moments_or = validate_scale_mixture(mixture, caller);
+  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+  return diagnostics_from_scale_moments(moments_or->second, moments_or->fourth);
+}
+
+sim_expected<EllipticalMomentDiagnostics>
+contaminated_normal_moment_diagnostics(
+    const ContaminatedNormalSpec& contamination) {
+  if (!std::isfinite(contamination.contamination_probability) ||
+      contamination.contamination_probability <= 0.0 ||
+      contamination.contamination_probability >= 1.0 ||
+      !std::isfinite(contamination.scale_multiplier) ||
+      contamination.scale_multiplier <= 1.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "contaminated_normal_moment_diagnostics: invalid contamination spec"));
+  }
+  NormalScaleMixtureSpec mixture;
+  mixture.weights = {1.0 - contamination.contamination_probability,
+                     contamination.contamination_probability};
+  mixture.scale_multipliers = {1.0, contamination.scale_multiplier};
+  return scale_mixture_normal_moment_diagnostics(mixture);
+}
+
+sim_expected<EllipticalMomentDiagnostics>
+slash_moment_diagnostics(const SlashSpec& slash) {
+  if (!std::isfinite(slash.q) || slash.q <= 2.0) {
+    return std::unexpected(make_err(
+        SimError::Kind::InvalidInput,
+        "slash_moment_diagnostics: q must be finite and greater than 2"));
+  }
+  const double second = slash.q / (slash.q - 2.0);
+  double fourth = std::numeric_limits<double>::infinity();
+  if (slash.q > 4.0) {
+    fourth = slash.q / (slash.q - 4.0);
+  }
+  return diagnostics_from_scale_moments(second, fourth);
+}
 
 sim_expected<Eigen::MatrixXd>
 simulate_student_t_matrix(Eigen::Index n,
@@ -198,7 +283,8 @@ simulate_scale_mixture_normal_matrix(
     return std::unexpected(second_scale_or.error());
   }
   auto L_or = cholesky_for_covariance(
-      covariance, 1.0 / *second_scale_or, options.cholesky_jitter, caller);
+      covariance, 1.0 / second_scale_or->second, options.cholesky_jitter,
+      caller);
   if (!L_or.has_value()) return std::unexpected(L_or.error());
 
   Eigen::MatrixXd X = draw_standard_normals(n, mean.size(), rng);
