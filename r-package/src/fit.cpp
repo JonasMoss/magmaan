@@ -564,6 +564,30 @@ magmaan::inference::ModificationIndexOptions modification_options_from(
   return opts;
 }
 
+magmaan::estimate::OrdinalWeightKind ordinal_weight_from_estimator(
+    const std::string& estimator, const char* call) {
+  if (estimator == "ULS") return magmaan::estimate::OrdinalWeightKind::ULS;
+  if (estimator == "DWLS") return magmaan::estimate::OrdinalWeightKind::DWLS;
+  if (estimator == "WLS") return magmaan::estimate::OrdinalWeightKind::WLS;
+  Rcpp::stop("magmaan: %s requires an ordinal ULS/DWLS/WLS fit", call);
+}
+
+Rcpp::List stats_from_fit_or_arg(Rcpp::List fit, SEXP arg,
+                                 const char* field, const char* call) {
+  if (!Rf_isNull(arg)) {
+    if (TYPEOF(arg) != VECSXP) {
+      Rcpp::stop("magmaan: %s requires `%s` as a categorical stats list",
+                 call, field);
+    }
+    return Rcpp::List(arg);
+  }
+  if (!fit.containsElementNamed(field)) {
+    Rcpp::stop("magmaan: %s requires `%s` (pass the data object used for fitting)",
+               call, field);
+  }
+  return Rcpp::List(SEXP(fit[field]));
+}
+
 Rcpp::DataFrame score_table_df(
     const magmaan::inference::ScoreTestTable& tab,
     const magmaan::spec::LatentNames& names) {
@@ -571,7 +595,7 @@ Rcpp::DataFrame score_table_df(
   Rcpp::CharacterVector kind(n), op(n), lhs(n), rhs(n);
   Rcpp::IntegerVector row(n), group(n), df(n);
   Rcpp::NumericVector score(n), information(n), mi(n), pvalue(n), epc(n),
-      epc_lv(n), epc_all(n);
+      epc_lv(n), epc_all(n), v_eff(n), mi_scaled(n), scaling_factor(n);
   for (R_xlen_t i = 0; i < n; ++i) {
     const auto& r = tab.rows[static_cast<std::size_t>(i)];
     const auto& c = r.candidate;
@@ -603,6 +627,12 @@ Rcpp::DataFrame score_table_df(
     epc[i] = r.epc;
     epc_lv[i] = r.epc_lv;
     epc_all[i] = r.epc_all;
+    v_eff[i] = r.v_eff;
+    mi_scaled[i] = (r.mi_scaled == 0.0 && r.scaling_factor == 1.0 &&
+                    r.v_eff == 0.0)
+        ? r.mi
+        : r.mi_scaled;
+    scaling_factor[i] = r.scaling_factor;
   }
   return Rcpp::DataFrame::create(
       Rcpp::_["kind"] = kind,
@@ -619,6 +649,9 @@ Rcpp::DataFrame score_table_df(
       Rcpp::_["epc"] = epc,
       Rcpp::_["epc.lv"] = epc_lv,
       Rcpp::_["epc.all"] = epc_all,
+      Rcpp::_["v.eff"] = v_eff,
+      Rcpp::_["mi.scaled"] = mi_scaled,
+      Rcpp::_["scaling.factor"] = scaling_factor,
       Rcpp::_["stringsAsFactors"] = false);
 }
 Rcpp::DataFrame cells_df(const std::vector<lvm::Cell>& cells) {
@@ -1347,8 +1380,10 @@ Rcpp::List ordinal_fit_result(Ctx& ctx,
   Rcpp::List out = fit_result(ctx, est, starts, estimator);
   out["ordinal"] = true;
   out["parameterization"] = parameterization;
-  out["thresholds"] = ordinal_stats_to_r(stats)["thresholds"];
-  out["polychoric"] = ordinal_stats_to_r(stats)["R"];
+  Rcpp::List stats_r = ordinal_stats_to_r(stats);
+  out["ordinal_stats"] = stats_r;
+  out["thresholds"] = stats_r["thresholds"];
+  out["polychoric"] = stats_r["R"];
   return out;
 }
 
@@ -2404,6 +2439,7 @@ Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
   Rcpp::List out = fit_result(ctx, est, &starts, "DWLS");
   out["mixed_ordinal"] = true;
   out["parameterization"] = parameterization_name;
+  out["mixed_ordinal_stats"] = mixed_ordinal_stats_to_r(stats);
   return out;
 }
 
@@ -2441,6 +2477,7 @@ Rcpp::List fit_wls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats,
   Rcpp::List out = fit_result(ctx, est, &starts, "WLS");
   out["mixed_ordinal"] = true;
   out["parameterization"] = parameterization_name;
+  out["mixed_ordinal_stats"] = mixed_ordinal_stats_to_r(stats);
   return out;
 }
 
@@ -3072,10 +3109,37 @@ Rcpp::DataFrame inference_modification_indices(
   const std::string estimator = fit.containsElementNamed("estimator")
       ? Rcpp::as<std::string>(fit["estimator"])
       : "";
+  const bool is_ordinal_fit = fit.containsElementNamed("ordinal") &&
+                              Rcpp::as<bool>(fit["ordinal"]);
+  const bool is_mixed_ordinal_fit =
+      fit.containsElementNamed("mixed_ordinal") &&
+      Rcpp::as<bool>(fit["mixed_ordinal"]);
   const auto opts = modification_options_from(
       information, candidates, include_loadings, include_covariances);
   magmaan::post_expected<magmaan::inference::ScoreTestTable> out;
-  if (estimator == "FIML") {
+  if (is_ordinal_fit) {
+    auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit, weight, "ordinal_stats", "ordinal modification indices"));
+    out = magmaan::estimate::modification_indices_ordinal(
+        ctx.pt, ctx.rep, stats, est,
+        ordinal_weight_from_estimator(estimator, "ordinal modification indices"),
+        opts, ordinal_parameterization_from_string(
+                  fit.containsElementNamed("parameterization")
+                      ? Rcpp::as<std::string>(fit["parameterization"])
+                      : ordinal_parameterization_attr(fit["partable"])));
+  } else if (is_mixed_ordinal_fit) {
+    auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit, weight, "mixed_ordinal_stats",
+        "mixed ordinal modification indices"));
+    out = magmaan::estimate::modification_indices_mixed_ordinal(
+        ctx.pt, ctx.rep, stats, est,
+        ordinal_weight_from_estimator(estimator,
+                                      "mixed ordinal modification indices"),
+        opts, ordinal_parameterization_from_string(
+                  fit.containsElementNamed("parameterization")
+                      ? Rcpp::as<std::string>(fit["parameterization"])
+                      : ordinal_parameterization_attr(fit["partable"])));
+  } else if (estimator == "FIML") {
     if (!fit.containsElementNamed("raw_data")) {
       Rcpp::stop("magmaan: FIML modification indices require fit$raw_data");
     }
@@ -3125,8 +3189,33 @@ Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
   const std::string estimator = fit.containsElementNamed("estimator")
       ? Rcpp::as<std::string>(fit["estimator"])
       : "";
+  const bool is_ordinal_fit = fit.containsElementNamed("ordinal") &&
+                              Rcpp::as<bool>(fit["ordinal"]);
+  const bool is_mixed_ordinal_fit =
+      fit.containsElementNamed("mixed_ordinal") &&
+      Rcpp::as<bool>(fit["mixed_ordinal"]);
   magmaan::post_expected<magmaan::inference::ScoreTestTable> out;
-  if (estimator == "FIML") {
+  if (is_ordinal_fit) {
+    auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit, weight, "ordinal_stats", "ordinal score tests"));
+    out = magmaan::estimate::score_tests_ordinal(
+        ctx.pt, ctx.rep, stats, est,
+        ordinal_weight_from_estimator(estimator, "ordinal score tests"),
+        ordinal_parameterization_from_string(
+            fit.containsElementNamed("parameterization")
+                ? Rcpp::as<std::string>(fit["parameterization"])
+                : ordinal_parameterization_attr(fit["partable"])));
+  } else if (is_mixed_ordinal_fit) {
+    auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit, weight, "mixed_ordinal_stats", "mixed ordinal score tests"));
+    out = magmaan::estimate::score_tests_mixed_ordinal(
+        ctx.pt, ctx.rep, stats, est,
+        ordinal_weight_from_estimator(estimator, "mixed ordinal score tests"),
+        ordinal_parameterization_from_string(
+            fit.containsElementNamed("parameterization")
+                ? Rcpp::as<std::string>(fit["parameterization"])
+                : ordinal_parameterization_attr(fit["partable"])));
+  } else if (estimator == "FIML") {
     if (!fit.containsElementNamed("raw_data")) {
       Rcpp::stop("magmaan: FIML score tests require fit$raw_data");
     }

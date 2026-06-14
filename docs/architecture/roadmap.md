@@ -1326,8 +1326,11 @@ stop rather than any usable non-error return.
   covariance matrix, `stats::residuals(fit, standardized)` wraps raw or
   standardized residuals including the lavaan-style continuous residual
   z-statistics, `factor_scores(fit, data, method)` requires complete raw data,
-  and `modification_indices(fit, candidates)` forwards to the explicit
-  scaffold primitive.
+  and `modification_indices(fit, data, candidates)` / `score_tests(fit, data)`
+  forward to the explicit scaffold primitives. Ordinal and mixed-ordinal fit
+  objects retain the categorical stats object used for fitting, so ordinary
+  categorical MI/score calls work directly; callers may still pass the stats
+  object explicitly.
 - R post-fit inference helpers now separate primitive-shaped entry points from
   fit-list adapters for the first audited slice: vcov, z tests, Wald tests,
   RLS chi-square, U-factor construction, and robust SE helpers can be called

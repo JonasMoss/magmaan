@@ -65,6 +65,7 @@ fit_dwls_dpd <- core$fit_dwls_ordinal(
 stopifnot(isTRUE(fit_dwls$ordinal), identical(fit_dwls$estimator, "DWLS"))
 stopifnot(isTRUE(fit_wls$ordinal), identical(fit_wls$estimator, "WLS"))
 stopifnot(isTRUE(fit_dwls_h$ordinal), isTRUE(fit_dwls_dpd$ordinal))
+stopifnot(inherits(fit_dwls$ordinal_stats, "magmaan_ordinal_data"))
 stopifnot(length(fit_dwls$theta) == sum(lavaan::parTable(lavaan_wls)$free > 0L))
 
 lavaan_dwls <- lavaan::cfa(model, data = df, ordered = ordered,
@@ -87,6 +88,24 @@ stopifnot(is.finite(rob_dwls$mean_var_adjusted$df_adj))
 stopifnot(is.finite(rob_dwls$scaled_shifted$scale_a))
 stopifnot(all(is.finite(rob_wls$se)))
 stopifnot(identical(rob_wls$df, 2L))
+
+mi_dwls <- magmaan::modification_indices(fit_dwls)
+mi_dwls_explicit <- magmaan::modification_indices(fit_dwls, d)
+model_score <- "f =~ x1 + L*x2 + L*x3 + x4"
+m_score <- magmaan::model_spec(model_score, ordered = ordered,
+                               parameterization = "delta")
+fit_score <- core$fit_dwls_ordinal(
+  m_score, d, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+st_dwls <- magmaan::score_tests(fit_score)
+st_dwls_explicit <- magmaan::score_tests(fit_score, d)
+stopifnot(nrow(mi_dwls) > 0L, nrow(st_dwls) > 0L)
+stopifnot(identical(mi_dwls$lhs, mi_dwls_explicit$lhs),
+          identical(mi_dwls$rhs, mi_dwls_explicit$rhs),
+          identical(st_dwls$lhs, st_dwls_explicit$lhs),
+          identical(st_dwls$rhs, st_dwls_explicit$rhs))
+stopifnot(all(is.finite(mi_dwls$mi)), all(is.finite(st_dwls$mi)))
+stopifnot(max(abs(mi_dwls$mi.scaled - mi_dwls$mi)) < 1e-12)
+stopifnot(max(abs(st_dwls$mi.scaled - st_dwls$mi)) < 1e-12)
 
 # Regression: standardized solutions are exposed for ordinal/mixed fits and
 # match lavaan std.all. Under the delta parameterization a categorical
@@ -152,6 +171,19 @@ d_mx <- core$data_mixed_ordinal_stats_from_df(df_mx, m_mx)
 fit_mx <- core$fit_dwls_mixed_ordinal(
   m_mx, d_mx, control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
 rob_mx <- core$robust_mixed_ordinal(fit_mx, d_mx)
+mi_mx <- magmaan::modification_indices(fit_mx)
+model_mx_score <- "f =~ x1 + L*x2 + L*x3 + x4"
+m_mx_score <- magmaan::model_spec(model_mx_score, ordered = c("x1", "x2"),
+                                  parameterization = "delta",
+                                  meanstructure = TRUE)
+fit_mx_score <- core$fit_dwls_mixed_ordinal(
+  m_mx_score, d_mx,
+  control = list(max_iter = 4000, ftol = 1e-13, gtol = 1e-8))
+st_mx <- magmaan::score_tests(fit_mx_score, d_mx)
+stopifnot(isTRUE(fit_mx$mixed_ordinal))
+stopifnot(inherits(fit_mx$mixed_ordinal_stats, "magmaan_mixed_ordinal_data"))
+stopifnot(nrow(mi_mx) > 0L, nrow(st_mx) > 0L)
+stopifnot(all(is.finite(mi_mx$mi)), all(is.finite(st_mx$mi)))
 sol_mx <- core$measures_standardize_all(fit_mx, rob_mx$vcov)
 ld_mx <- which(fit_mx$partable$op == "=~" & fit_mx$partable$free > 0L)
 ld_mx_names <- fit_mx$partable$rhs[ld_mx]
