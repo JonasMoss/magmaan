@@ -1247,6 +1247,60 @@ TEST_CASE("nested FIML restriction map: row duplication leaves eigenvalues invar
   CHECK(exact_dup->adjust_d0 == doctest::Approx(exact->adjust_d0).epsilon(1e-9));
 }
 
+TEST_CASE("nested FIML restriction map: nonlinear equality uses local tangent") {
+  auto h1 = build_mean_model("f =~ x1 + a*x2 + b*x3");
+  auto h0 = build_mean_model("f =~ x1 + a*x2 + b*x3\na == b^2");
+  Eigen::VectorXd theta(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta.setConstant(0.7);
+  theta(0) = 0.49;
+  theta(1) = 0.7;
+  theta.tail(3) << 1.0, 2.0, 3.0;
+  auto raw = model_missing_raw(h0, theta, {150});
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df1 = magmaan::inference::df_stat(*h1.pt, *samp, theta);
+  auto df0 = magmaan::inference::df_stat(*h0.pt, *samp, theta);
+  REQUIRE(df1.has_value());
+  REQUIRE(df0.has_value());
+  REQUIRE(*df0 - *df1 == 1);
+  auto K1 = magmaan::estimate::build_eq_constraints(
+      *h1.pt, /*allow_nonlinear=*/true);
+  auto K0 = magmaan::estimate::build_eq_constraints(
+      *h0.pt, /*allow_nonlinear=*/true);
+  REQUIRE(K1.has_value());
+  REQUIRE(K0.has_value());
+
+  auto exact = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta, *K1,
+      *h0.pt, *h0.rep, theta, *K0,
+      raw, /*T_H0=*/6.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Exact);
+  REQUIRE_MESSAGE(exact.has_value(),
+      "nested FIML nonlinear exact failed: " <<
+      (exact.has_value() ? "" : exact.error().detail));
+  auto delta = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta, *K1,
+      *h0.pt, *h0.rep, theta, *K0,
+      raw, /*T_H0=*/6.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Delta);
+  REQUIRE_MESSAGE(delta.has_value(),
+      "nested FIML nonlinear delta failed: " <<
+      (delta.has_value() ? "" : delta.error().detail));
+
+  REQUIRE(exact->eigenvalues.size() == 1);
+  CHECK(exact->eigenvalues.allFinite());
+  CHECK(exact->eigenvalues.minCoeff() >= 0.0);
+  CHECK((exact->eigenvalues - delta->eigenvalues).cwiseAbs().maxCoeff() < 1e-12);
+  bool warned = false;
+  for (const auto& w : exact->warnings) {
+    warned = warned || w.find("local tangent") != std::string::npos;
+  }
+  CHECK(warned);
+}
+
 TEST_CASE("nested FIML restriction map: rejects df mismatch and reversed nesting") {
   auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
   auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");

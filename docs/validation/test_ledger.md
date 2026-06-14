@@ -346,8 +346,7 @@ Protected by:
 - `tests/checks/fiml_fmg_trace/` and `tests/checks/fiml_fmg_nested/`
 
 Known weak spots: high-level mean-structure defaults and multi-group starts need
-care; pairwise-data FMG and nonlinear-constrained nested FIML pairs remain
-deferred.
+care; pairwise-data FMG remains deferred.
 
 ### Ordinal and Mixed Moments
 

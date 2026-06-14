@@ -343,8 +343,9 @@ golden `parTable()` fixtures.
   equality-constraint maps and delta tangent maps, reports the existing
   unscaled/scaled/mean-variance/scaled-shifted/exact-mixture nested result
   shape, and rejects complete-data-only nested compatibility methods for FIML
-  pairs. Nonlinear equality constraints remain outside the FIML nested-pair
-  route.
+  pairs. Nonlinear equality constraints are supported by local tangent bases for
+  both models; when `"exact"` is requested for such a pair, the route warns and
+  uses the local tangent restriction because no global affine exact map exists.
   The helper computes biased and optional Browne/Du-Bentler unbiased U-Gamma
   spectra through C++, keeping the U-factor, tiled casewise-contribution
   projection, grouped reduced matrices, and eigensolves out of R list
