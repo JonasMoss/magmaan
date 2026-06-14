@@ -271,6 +271,30 @@ defined_json <- function(fit) {
   })
 }
 
+# Categorical one-factor EBM/ML factor scores from lavPredict(), single-group
+# only. lavaan's categorical lavPredict() exposes only EBM and ML (regression /
+# Bartlett are aliased onto these, and EAP is rejected for categorical data, so
+# magmaan's EAP / posterior-precision path has no lavaan oracle and stays
+# self-checked in C++). `methods` selects which to emit:
+#   all-ordinal -> "EBM" only. The ML *mode* is unbounded on extreme all-ordinal
+#     response patterns (a perfect / near-perfect row drives the likelihood mode
+#     to the boundary), where lavaan and magmaan legitimately diverge, so ML is
+#     not an oracle surface for pure-ordinal fits.
+#   mixed       -> c("EBM", "ML"). The continuous indicators bound the ML
+#     likelihood, so the ML mode is well-defined and matches lavaan.
+# Each entry is the n x 1 score column flattened to a numeric vector, in data
+# row order (the same order as the serialized `blocks[[1]]$matrix`). The C++
+# golden refits and gates magmaan's factor_scores_{ordinal,mixed_ordinal}
+# against these. Multi-group categorical scores are intentionally not emitted:
+# magmaan's per-group scorer currently diverges from lavaan for non-reference
+# groups (see docs/backlog/todo.md), so there is no gated surface to anchor.
+ordinal_fscores_json <- function(fit, methods = "EBM") {
+  out <- list()
+  for (m in methods) out[[m]] <- as.numeric(lavPredict(fit, type = "lv",
+                                                        method = m))
+  out
+}
+
 # --- raw-data helper -------------------------------------------------------
 
 # A data frame -> {X, mask}: X is the raw matrix (NA preserved), mask is

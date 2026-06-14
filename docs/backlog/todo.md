@@ -41,10 +41,28 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     `lprod := L2*L3` value+SE (5e-3) against the stored lavaan oracle
     (`ordinal/0015_defined_param_3cat_cfa` plus the per-fit
     `fits.DWLS.standardized` blocks emitted by `regen_oracle.R`).
-  - **S/M.** Expand checked-in lavaan oracle coverage for categorical factor
-    scores once the fixture generator can pin the installed-lavaan method set
-    cleanly. Current protection is focused C++ API/unit coverage plus live
-    EBM parity in `r-package/examples/ordinal_dwls_wls.R`.
+  - **Done 2026-06-14.** Checked-in lavaan oracle for categorical factor scores
+    landed. `regen_oracle.R` now emits `fits.DWLS.fscores` (via
+    `ordinal_fscores_json` in `benchmarks/r/fixture_json.R`) for the single-group
+    ordinal and mixed fixtures, and the golden
+    `tests/golden/ordinal_golden_test.cpp` "ordinal/mixed factor scores (EBM/ML)
+    match lavaan" gates `factor_scores_{ordinal,mixed_ordinal}` against
+    `lavPredict()` at 5e-4 (the previously live-only parity from
+    `r-package/examples/ordinal_dwls_wls.R`). The installed-lavaan method set is
+    pinned by emitting only what lavaan's categorical `lavPredict()` supports:
+    **EBM** single-group (all-ordinal and mixed; posterior mode, ~1e-5) and
+    **ML mixed-only** (continuous indicators bound the mode). Deliberately not
+    gated: all-ordinal ML (unbounded mode on extreme patterns) and EAP/precision
+    (categorical `lavPredict()` rejects EAP, so no oracle; stays self-checked in
+    `tests/unit/api_sem_test.cpp`).
+  - **M, bug surfaced 2026-06-14.** Multi-group categorical factor scores
+    diverge from lavaan for non-reference groups. With `theta` matched to 1e-5,
+    the reference group's EBM matches (~2e-5) but a non-reference group's EBM
+    drifts (measured max|diff| ~0.2, corr 0.996 on the `0004` two-group design),
+    so multi-group `fscores` are intentionally not emitted as an oracle surface.
+    Likely a per-group latent-distribution/centering mismatch in the categorical
+    scorer; needs a fix plus its own multi-group golden before the oracle can be
+    extended to `0004`/`0012`/`0013`.
   - **M/L, only-when-needed.** Multi-factor EAP via adaptive Gauss-Hermite and
     non-diagonal residual-Theta orthant probabilities remain deferred in
     `speculative.md`; the landed scope is diagonal-Theta EBM/ML plus one-factor
