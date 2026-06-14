@@ -3670,6 +3670,45 @@ ordinal_baseline_chi2(const data::OrdinalStats& stats,
   return out;
 }
 
+post_expected<measures::BaselineFit>
+mixed_ordinal_baseline_chi2(const data::MixedOrdinalStats& stats,
+                            OrdinalWeightKind weights) {
+  if (weights == OrdinalWeightKind::ULS) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "mixed ordinal baseline supports DWLS/WLS weights only"));
+  }
+  const auto& Ws = weights == OrdinalWeightKind::DWLS ? stats.W_dwls
+                                                       : stats.W_wls;
+
+  measures::BaselineFit out;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    Eigen::Index n_cont = 0;
+    for (const std::int32_t flag : stats.ordered[b]) {
+      if (flag == 0) ++n_cont;
+    }
+    const Eigen::Index nmarg = stats.thresholds[b].size() + 2 * n_cont;
+    const Eigen::Index nassoc = p * (p - 1) / 2;
+    Eigen::VectorXd d = Eigen::VectorXd::Zero(nmarg + nassoc);
+    if (nassoc > 0) {
+      d.tail(nassoc) = -stats.moments[b].tail(nassoc);
+    }
+    if (nmarg > 0 && nassoc > 0) {
+      const Eigen::MatrixXd Wmm = Ws[b].topLeftCorner(nmarg, nmarg);
+      const Eigen::MatrixXd Wma = Ws[b].topRightCorner(nmarg, nassoc);
+      Eigen::LDLT<Eigen::MatrixXd> ldlt(Wmm);
+      if (ldlt.info() != Eigen::Success) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "mixed ordinal baseline marginal block is not positive definite"));
+      }
+      d.head(nmarg) = -ldlt.solve(Wma * d.tail(nassoc));
+    }
+    out.chi2 += static_cast<double>(stats.n_obs[b]) * d.dot(Ws[b] * d);
+    out.df += static_cast<int>(nassoc);
+  }
+  return out;
+}
+
 post_expected<double>
 ordinal_srmr(const data::OrdinalStats& stats,
              const model::ImpliedMoments& moments,
@@ -3689,6 +3728,51 @@ ordinal_srmr(const data::OrdinalStats& stats,
     const Eigen::VectorXd residual = implied - corr_lower(stats.R[b]);
     const double block =
         std::sqrt(residual.squaredNorm() / static_cast<double>(vech_len(p)));
+    out += (static_cast<double>(stats.n_obs[b]) /
+            static_cast<double>(*N)) *
+           block;
+  }
+  return out;
+}
+
+post_expected<double>
+mixed_ordinal_srmr(const data::MixedOrdinalStats& stats,
+                   const ThresholdLayout& layout,
+                   const model::ImpliedMoments& moments,
+                   const Eigen::VectorXd& theta,
+                   OrdinalParameterization parameterization) {
+  auto N = total_n_obs(stats);
+  if (!N.has_value()) return std::unexpected(fit_to_post(N.error()));
+
+  double out = 0.0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index nassoc = p * (p - 1) / 2;
+    if (nassoc <= 0) continue;
+    const Eigen::VectorXd implied =
+        mixed_model_moments(stats, layout, moments, theta, b, parameterization)
+            .tail(nassoc);
+    const Eigen::VectorXd observed = stats.moments[b].tail(nassoc);
+    double sum_sq = 0.0;
+    Eigen::Index k = 0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j + 1; i < p; ++i) {
+        const bool oi = stats.ordered[b][static_cast<std::size_t>(i)] != 0;
+        const bool oj = stats.ordered[b][static_cast<std::size_t>(j)] != 0;
+        double scale = 1.0;
+        if (!oi && !oj) {
+          scale = std::sqrt(stats.R[b](i, i) * stats.R[b](j, j));
+        } else if (oi != oj) {
+          const Eigen::Index c = oi ? j : i;
+          scale = std::sqrt(stats.R[b](c, c));
+        }
+        const double r = (implied(k) - observed(k)) / scale;
+        sum_sq += r * r;
+        ++k;
+      }
+    }
+    const double block =
+        std::sqrt(sum_sq / static_cast<double>(vech_len(p)));
     out += (static_cast<double>(stats.n_obs[b]) /
             static_cast<double>(*N)) *
            block;
@@ -3862,6 +3946,59 @@ fit_measures_ordinal(spec::LatentStructure pt,
   auto N_or = total_n_obs(stats);
   if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
   const int df = static_cast<int>(ordinal_moment_rows(stats) - con_or->n_alpha);
+  const double chi2 = 2.0 * static_cast<double>(*N_or) * est.fmin;
+  const measures::FitMeasures indices =
+      measures::fit_measures(chi2, df, *baseline, *N_or, stats.R.size());
+
+  return OrdinalFitMeasures{*baseline, indices, *sr};
+}
+
+post_expected<OrdinalFitMeasures>
+fit_measures_mixed_ordinal(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::MixedOrdinalStats& stats,
+                           const Estimates& est,
+                           OrdinalWeightKind weights,
+                           OrdinalParameterization parameterization) {
+  if (auto v = validate_stats(stats, rep, weights); !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (auto p = prepare_mixed_ordinal_delta_partable(pt, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fit_measures_mixed_ordinal: fitted theta length does not match "
+        "mixed ordinal delta partable"));
+  }
+
+  auto layout = make_threshold_layout(pt, rep, stats);
+  if (!layout.has_value()) return std::unexpected(fit_to_post(layout.error()));
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fit_measures_mixed_ordinal: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, false, false);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fit_measures_mixed_ordinal: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+
+  auto baseline = mixed_ordinal_baseline_chi2(stats, weights);
+  if (!baseline.has_value()) return std::unexpected(baseline.error());
+  auto sr = mixed_ordinal_srmr(stats, *layout, eval->moments, est.theta,
+                               parameterization);
+  if (!sr.has_value()) return std::unexpected(sr.error());
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  auto N_or = total_n_obs(stats);
+  if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
+  const int df = static_cast<int>(mixed_moment_rows(stats) - con_or->n_alpha);
   const double chi2 = 2.0 * static_cast<double>(*N_or) * est.fmin;
   const measures::FitMeasures indices =
       measures::fit_measures(chi2, df, *baseline, *N_or, stats.R.size());

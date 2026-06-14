@@ -983,6 +983,32 @@ TEST_CASE("mixed ordinal fixtures: DWLS/WLS bounded fits match lavaan delta cont
           continue;
         }
       }
+
+      auto fm_or = magmaan::estimate::fit_measures_mixed_ordinal(
+          h->pt, h->rep, h->stats, *est_or, kind);
+      if (!fm_or.has_value()) {
+        failures.push_back(id + " " + name + ": fit measures — " +
+                           fm_or.error().detail);
+        continue;
+      }
+      const double d_cfi =
+          std::abs(fm_or->indices.cfi - fit_item.value()["cfi"].get<double>());
+      const double d_tli =
+          std::abs(fm_or->indices.tli - fit_item.value()["tli"].get<double>());
+      const double d_rmsea = std::abs(fm_or->indices.rmsea -
+                                      fit_item.value()["rmsea"].get<double>());
+      const double d_srmr =
+          std::abs(fm_or->srmr - fit_item.value()["srmr"].get<double>());
+      if (d_cfi > 5e-3 || d_tli > 5e-3 || d_rmsea > 5e-3 ||
+          d_srmr > 5e-4) {
+        failures.push_back(id + " " + name +
+                           ": fit-measure diffs cfi=" +
+                           std::to_string(d_cfi) +
+                           " tli=" + std::to_string(d_tli) +
+                           " rmsea=" + std::to_string(d_rmsea) +
+                           " srmr=" + std::to_string(d_srmr));
+        continue;
+      }
       ++passed;
     }
   }

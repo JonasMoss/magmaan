@@ -414,4 +414,13 @@ fit_measures_ordinal(spec::LatentStructure pt,
                      OrdinalParameterization parameterization =
                          OrdinalParameterization::Delta);
 
+post_expected<OrdinalFitMeasures>
+fit_measures_mixed_ordinal(spec::LatentStructure pt,
+                           const model::MatrixRep& rep,
+                           const data::MixedOrdinalStats& stats,
+                           const Estimates& est,
+                           OrdinalWeightKind weights,
+                           OrdinalParameterization parameterization =
+                               OrdinalParameterization::Delta);
+
 }  // namespace magmaan::estimate

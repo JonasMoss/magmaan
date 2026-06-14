@@ -1219,6 +1219,12 @@ stop rather than any usable non-error return.
 - Ordinal and mixed delta DWLS/WLS expose fixed-parameter modification indices
   and equality-release score tests over the same threshold/correlation moment
   vectors and weights used by fitting.
+- Mixed continuous/ordinal DWLS/WLS fit-measures are exposed through the same
+  `api::fit_measures()` surface as all-ordinal fits. The mixed independence
+  baseline profiles the marginal threshold/mean/variance block under the fitted
+  DWLS/WLS weight before testing the zero-association model, and SRMR is
+  computed from standardized mixed association residuals; both are fixture-gated
+  against lavaan's mixed ordinal CFI/TLI/RMSEA/SRMR fields.
 - Ordinal and mixed categorical entry points validate block counts, threshold
   metadata, ordered masks, moment/weight/NACOV dimensions, finite values,
   positive `n_obs`, and positive NACOV diagonals before fitting or robust
@@ -1564,8 +1570,8 @@ failures.
 - Continuous LS robust ULS reporting is lavaan-backed for non-fixed.x cases;
   fixed.x robust LS still follows lavaan's conditional exogenous bookkeeping
   and is not part of the generic continuous adapter coverage.
-- Mixed categorical NACOV/weight, fit, and robust-reporting parity remains
-  looser than the all-ordinal path, but now includes a sparse listwise
+- Mixed categorical NACOV/weight, fit, fit-measure, and robust-reporting parity
+  remains looser than the all-ordinal path, but now includes a sparse listwise
   4-category boundary fixture. Pairwise polyserial ML, fixed-marginal
   polyserial DPD, pair-local full DPD polyserial diagnostics, and
   continuous-normal score/Gamma primitives are exposed for follow-on inference

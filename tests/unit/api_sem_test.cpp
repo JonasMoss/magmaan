@@ -98,6 +98,39 @@ std::string ordinal_syntax() {
          "lprod := l2*l3\n";
 }
 
+std::string mixed_ordinal_syntax_from_fixture(const nlohmann::json& j) {
+  std::string src = j["input"].get<std::string>();
+  if (!src.empty() && src.back() != '\n') src.push_back('\n');
+  const auto ordered = j["ordered"].get<std::vector<std::string>>();
+  std::vector<Eigen::Index> ordered_cols;
+  const auto& mask = j["ordered_mask"][0]["mask"];
+  for (Eigen::Index k = 0; k < static_cast<Eigen::Index>(mask.size()); ++k) {
+    if (mask[static_cast<std::size_t>(k)].get<int>() != 0) {
+      ordered_cols.push_back(k);
+    }
+  }
+  REQUIRE(ordered_cols.size() == ordered.size());
+  for (std::size_t idx = 0; idx < ordered.size(); ++idx) {
+    const std::string& name = ordered[idx];
+    const Eigen::Index col = ordered_cols[idx];
+    int max_level = 0;
+    for (const auto& row : j["blocks"][0]["matrix"]) {
+      max_level = std::max(max_level,
+                           row[static_cast<std::size_t>(col)].get<int>());
+    }
+    src += name + " | ";
+    for (int lev = 1; lev < max_level; ++lev) {
+      if (lev > 1) src += " + ";
+      src += "t" + std::to_string(lev);
+    }
+    src += "\n";
+  }
+  for (const std::string& name : ordered) {
+    src += name + " ~*~ 1*" + name + "\n";
+  }
+  return src;
+}
+
 using magmaan::test::load_json_fixture;
 
 using magmaan::test::matrix_from_json;
@@ -481,6 +514,51 @@ TEST_CASE("api ordinal DWLS/WLS fits and robust ordinal reporting") {
   const auto fs = magmaan::api::factor_scores(
       *dwls_fit, ordinal_raw, magmaan::measures::FactorScoreMethod::Regression);
   REQUIRE_FALSE(fs.has_value());
+}
+
+TEST_CASE("api mixed ordinal fit measures are exposed") {
+  const auto j = load_json_fixture("mixed_ordinal/0001_mixed_cfa.ordinal.json");
+  REQUIRE_FALSE(j.is_discarded());
+
+  magmaan::api::ModelOptions opts;
+  opts.build.meanstructure = true;
+  const auto model = magmaan::api::model_from_lavaan(
+      mixed_ordinal_syntax_from_fixture(j), opts);
+  REQUIRE_OK(model);
+
+  std::vector<Eigen::MatrixXd> blocks;
+  for (const auto& b : j["blocks"]) {
+    blocks.push_back(matrix_from_json(b["matrix"]));
+  }
+  std::vector<std::vector<std::int32_t>> ordered;
+  for (const auto& b : j["ordered_mask"]) {
+    std::vector<std::int32_t> mask;
+    for (const auto& z : b["mask"]) mask.push_back(z.get<std::int32_t>());
+    ordered.push_back(std::move(mask));
+  }
+  const auto stats = magmaan::data::mixed_ordinal_stats_from_data(blocks, ordered);
+  REQUIRE_OK(stats);
+  const auto data = magmaan::api::data_from_mixed_ordinal(*model, *stats);
+  REQUIRE_OK(data);
+
+  magmaan::optim::OptimOptions opt;
+  opt.max_iter = 5000;
+  opt.ftol = 1e-13;
+  opt.gtol = 1e-8;
+  const auto fit =
+      magmaan::api::fit(*model, *data,
+                        magmaan::api::ordinal_dwls().optimizer(
+                            magmaan::api::OptimizerSpec{
+                                magmaan::api::OptimizerKind::NloptLbfgs, opt}));
+  REQUIRE_OK(fit);
+
+  const auto fm = magmaan::api::fit_measures(*fit);
+  REQUIRE_OK(fm);
+  CHECK(std::isfinite(fm->indices.cfi));
+  CHECK(std::isfinite(fm->indices.rmsea));
+  REQUIRE(fm->ordinal_srmr.has_value());
+  CHECK(std::isfinite(*fm->ordinal_srmr));
+  CHECK(*fm->ordinal_srmr >= 0.0);
 }
 
 TEST_CASE("api frontier exposes native FC-SEM fit and post-fit calls") {

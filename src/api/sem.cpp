@@ -1212,13 +1212,16 @@ Result<FitMeasuresResult> fit_measures(const Fit &fit) {
                              std::nullopt, fm->srmr};
   }
 
-  if (fit.data().mixed_ordinal()) {
-    // Mixed ordinal fit measures need the mixed polychoric/polyserial
-    // independence baseline; keep that unsupported until the mixed surface has
-    // its own parity gate.
-    return std::unexpected(make_error(
-        ErrorStage::UnsupportedCombination,
-        "fit_measures() does not yet cover mixed ordinal DWLS/WLS fits"));
+  if (const auto *stats = fit.data().mixed_ordinal()) {
+    auto fm = estimate::fit_measures_mixed_ordinal(
+        fit.model().structure(), fit.model().matrix_rep(), *stats,
+        fit.estimates(), fit.estimator_spec().ordinal_weight,
+        fit.estimator_spec().ordinal_parameterization);
+    if (!fm) {
+      return std::unexpected(make_error(ErrorStage::PostFit, fm.error()));
+    }
+    return FitMeasuresResult{fm->baseline, fm->indices, std::nullopt,
+                             std::nullopt, fm->srmr};
   }
   return std::unexpected(
       make_error(ErrorStage::UnsupportedCombination,
