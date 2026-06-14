@@ -1419,6 +1419,33 @@ factor_scores(const Fit &fit, const data::RawData &raw,
   return post_result(std::move(out));
 }
 
+Result<measures::FactorScorePrecision>
+factor_score_precision(const Fit &fit, const data::RawData &raw) {
+  if (const auto *stats = fit.data().ordinal()) {
+    auto pt = prepared_structure(fit);
+    if (!pt) {
+      return std::unexpected(pt.error());
+    }
+    auto out = measures::factor_score_precision_ordinal(
+        std::move(*pt), fit.model().matrix_rep(), raw, *stats, fit.estimates(),
+        fit.estimator_spec().ordinal_parameterization);
+    return post_result(std::move(out));
+  }
+  if (const auto *stats = fit.data().mixed_ordinal()) {
+    auto pt = prepared_structure(fit);
+    if (!pt) {
+      return std::unexpected(pt.error());
+    }
+    auto out = measures::factor_score_precision_mixed_ordinal(
+        std::move(*pt), fit.model().matrix_rep(), raw, *stats, fit.estimates(),
+        fit.estimator_spec().ordinal_parameterization);
+    return post_result(std::move(out));
+  }
+  return std::unexpected(make_error(
+      ErrorStage::UnsupportedCombination,
+      "factor_score_precision() requires an ordinal or mixed-ordinal fit"));
+}
+
 Result<inference::ScoreTestTable>
 modification_indices(const Fit &fit,
                      inference::ModificationIndexOptions options) {

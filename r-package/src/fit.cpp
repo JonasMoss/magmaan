@@ -3116,6 +3116,64 @@ Rcpp::List measures_factor_scores(Rcpp::List fit, SEXP raw_data,
       Rcpp::_["method"] = method);
 }
 
+// measures_factor_score_precision() — EAP posterior variance and sample PRMSE
+// for ordinal/mixed-ordinal one-factor scores.
+//
+// [[Rcpp::export]]
+Rcpp::List measures_factor_score_precision(Rcpp::List fit, SEXP raw_data) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  magmaan::data::RawData raw = complete_raw_from_arg(ctx.rep, raw_data);
+  const bool is_ordinal_fit = fit.containsElementNamed("ordinal") &&
+                              Rcpp::as<bool>(fit["ordinal"]);
+  const bool is_mixed_ordinal_fit =
+      fit.containsElementNamed("mixed_ordinal") &&
+      Rcpp::as<bool>(fit["mixed_ordinal"]);
+  magmaan::post_expected<magmaan::measures::FactorScorePrecision> r_or;
+  if (is_ordinal_fit) {
+    if (!fit.containsElementNamed("ordinal_stats")) {
+      Rcpp::stop("magmaan: ordinal factor score precision requires fit$ordinal_stats");
+    }
+    auto stats = ordinal_stats_from_arg(Rcpp::List(fit["ordinal_stats"]));
+    r_or = magmaan::measures::factor_score_precision_ordinal(
+        ctx.pt, ctx.rep, raw, stats, est,
+        ordinal_parameterization_from_string(
+            fit.containsElementNamed("parameterization")
+                ? Rcpp::as<std::string>(fit["parameterization"])
+                : ordinal_parameterization_attr(fit["partable"])));
+  } else if (is_mixed_ordinal_fit) {
+    if (!fit.containsElementNamed("mixed_ordinal_stats")) {
+      Rcpp::stop("magmaan: mixed ordinal factor score precision requires fit$mixed_ordinal_stats");
+    }
+    auto stats =
+        mixed_ordinal_stats_from_arg(Rcpp::List(fit["mixed_ordinal_stats"]));
+    r_or = magmaan::measures::factor_score_precision_mixed_ordinal(
+        ctx.pt, ctx.rep, raw, stats, est,
+        ordinal_parameterization_from_string(
+            fit.containsElementNamed("parameterization")
+                ? Rcpp::as<std::string>(fit["parameterization"])
+                : ordinal_parameterization_attr(fit["partable"])));
+  } else {
+    Rcpp::stop("magmaan: factor score precision requires an ordinal or mixed-ordinal fit");
+  }
+  if (!r_or.has_value()) stop_post(r_or.error());
+  return Rcpp::List::create(
+      Rcpp::_["scores"] = matrix_blocks_to_r(r_or->scores.scores,
+                                             ctx.rep.lv_names,
+                                             /*square_names=*/false),
+      Rcpp::_["posterior_variance"] =
+          matrix_blocks_to_r(r_or->posterior_variance, ctx.rep.lv_names,
+                             /*square_names=*/false),
+      Rcpp::_["posterior_se"] =
+          matrix_blocks_to_r(r_or->posterior_se, ctx.rep.lv_names,
+                             /*square_names=*/false),
+      Rcpp::_["prmse_by_group"] = Rcpp::wrap(r_or->prmse_by_group),
+      Rcpp::_["pooled_prmse"] = r_or->pooled_prmse,
+      Rcpp::_["method"] = "EAP",
+      Rcpp::_["target"] = "PRMSE",
+      Rcpp::_["population"] = "sample");
+}
+
 // inference_modification_indices() — mirrors inference::modification_indices()
 // for ML/FIML/continuous LS fit objects. WLS requires an explicit weight matrix
 // because current R fit lists do not retain W.

@@ -913,6 +913,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// measures_factor_score_precision
+Rcpp::List measures_factor_score_precision(Rcpp::List fit, SEXP raw_data);
+RcppExport SEXP _magmaan_measures_factor_score_precision(SEXP fitSEXP, SEXP raw_dataSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
+    rcpp_result_gen = Rcpp::wrap(measures_factor_score_precision(fit, raw_data));
+    return rcpp_result_gen;
+END_RCPP
+}
 // inference_modification_indices
 Rcpp::DataFrame inference_modification_indices(Rcpp::List fit, SEXP weight, std::string information, std::string candidates, bool include_loadings, bool include_covariances, double h_step);
 RcppExport SEXP _magmaan_inference_modification_indices(SEXP fitSEXP, SEXP weightSEXP, SEXP informationSEXP, SEXP candidatesSEXP, SEXP include_loadingsSEXP, SEXP include_covariancesSEXP, SEXP h_stepSEXP) {
@@ -2344,6 +2356,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_measures_residuals", (DL_FUNC) &_magmaan_measures_residuals, 1},
     {"_magmaan_measures_standardized_residuals", (DL_FUNC) &_magmaan_measures_standardized_residuals, 1},
     {"_magmaan_measures_factor_scores", (DL_FUNC) &_magmaan_measures_factor_scores, 3},
+    {"_magmaan_measures_factor_score_precision", (DL_FUNC) &_magmaan_measures_factor_score_precision, 2},
     {"_magmaan_inference_modification_indices", (DL_FUNC) &_magmaan_inference_modification_indices, 7},
     {"_magmaan_inference_score_tests", (DL_FUNC) &_magmaan_inference_score_tests, 3},
     {"_magmaan_inference_modification_indices_robust", (DL_FUNC) &_magmaan_inference_modification_indices_robust, 10},

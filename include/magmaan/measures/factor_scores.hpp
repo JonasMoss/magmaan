@@ -46,6 +46,18 @@ struct FactorScores {
   std::vector<Eigen::MatrixXd> scores;
 };
 
+// EAP posterior precision for ordinal/mixed-ordinal factor scores. V1 is
+// intentionally scalar: `scores`, `posterior_variance`, and `posterior_se`
+// blocks are n_b x 1, and PRMSE is the sample-moment plug-in
+// Var(E[Z|y]) / (Var(E[Z|y]) + E[Var(Z|y)]).
+struct FactorScorePrecision {
+  FactorScores scores;
+  std::vector<Eigen::MatrixXd> posterior_variance;
+  std::vector<Eigen::MatrixXd> posterior_se;
+  std::vector<double> prmse_by_group;
+  double pooled_prmse = 0.0;
+};
+
 // Computes per-observation factor scores for `raw` at θ̂. The model is
 // centered on the model-implied mean (mean-structure models) or the sample
 // column means (covariance-only models). Complete data only — a non-empty
@@ -76,5 +88,23 @@ factor_scores_mixed_ordinal(spec::LatentStructure pt,
                             const Estimates& est,
                             FactorScoreMethod method,
                             estimate::OrdinalParameterization parameterization);
+
+post_expected<FactorScorePrecision>
+factor_score_precision_ordinal(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::RawData& raw,
+    const data::OrdinalStats& stats,
+    const Estimates& est,
+    estimate::OrdinalParameterization parameterization);
+
+post_expected<FactorScorePrecision>
+factor_score_precision_mixed_ordinal(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::RawData& raw,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& est,
+    estimate::OrdinalParameterization parameterization);
 
 }  // namespace magmaan::measures

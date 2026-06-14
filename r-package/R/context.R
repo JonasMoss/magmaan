@@ -47,6 +47,13 @@ factor_scores <- function(fit, data, method = NULL) {
   magmaan_core$measures_factor_scores(fit, raw_data_arg(fit, data), method = method)
 }
 
+factor_score_precision <- function(fit, data) {
+  if (missing(data)) {
+    stop("factor_score_precision(): `data` is required; pass complete observed raw data")
+  }
+  magmaan_core$measures_factor_score_precision(fit, raw_data_arg(fit, data))
+}
+
 modification_indices <- function(fit, data = NULL, ..., candidates = "all") {
   dots <- list(...)
   if (!is.null(data)) {

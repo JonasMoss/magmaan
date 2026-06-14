@@ -142,6 +142,16 @@ stopifnot(max(abs(fs_ebm - lv_ebm)) < 5e-4,
 fs_eap <- magmaan::factor_scores(fit_dwls, df, method = "EAP")$scores[[1]]
 stopifnot(nrow(fs_eap) == nrow(df), ncol(fs_eap) == 1L,
           all(is.finite(fs_eap)))
+fs_prec <- magmaan::factor_score_precision(fit_dwls, df)
+fs_var <- fs_prec$posterior_variance[[1]][, 1]
+fs_se <- fs_prec$posterior_se[[1]][, 1]
+prmse <- (mean(fs_eap[, 1]^2) - mean(fs_eap[, 1])^2) /
+  (mean(fs_eap[, 1]^2) - mean(fs_eap[, 1])^2 + mean(fs_var))
+stopifnot(max(abs(fs_prec$scores[[1]] - fs_eap)) < 1e-10,
+          all(is.finite(fs_var)), all(fs_var >= 0),
+          max(abs(fs_se^2 - fs_var)) < 1e-10,
+          abs(fs_prec$pooled_prmse - prmse) < 1e-10,
+          fs_prec$pooled_prmse >= 0, fs_prec$pooled_prmse <= 1)
 
 # Defined (`:=`) parameters are exposed for ordinal fits and match lavaan: value
 # and delta-method SE are a parameterization-agnostic transform of the fit (no
