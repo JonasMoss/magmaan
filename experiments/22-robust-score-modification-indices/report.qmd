@@ -1,0 +1,128 @@
+---
+title: "Robust modification indices and score tests: do they change the call?"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+results <- "results"
+need <- c("demo.csv", "reductions.csv", "metadata.csv")
+missing <- need[!file.exists(file.path(results, need))]
+if (length(missing)) {
+  stop("missing results: ", paste(missing, collapse = ", "),
+       "\nRun:  Rscript run_experiment.R")
+}
+demo <- read.csv(file.path(results, "demo.csv"))
+red  <- read.csv(file.path(results, "reductions.csv"))
+meta <- read.csv(file.path(results, "metadata.csv"))
+score_file <- file.path(results, "score_demo.csv")
+score_demo <- if (file.exists(score_file)) read.csv(score_file) else NULL
+sim_file <- file.path(results, "simulation_summary.csv")
+sim <- if (file.exists(sim_file)) read.csv(sim_file) else NULL
+mv <- function(k) meta$value[match(k, meta$key)]
+```
+
+## Question
+
+magmaan exposes robust (generalized / Satorra-Bentler-scaled) modification
+indices and score tests at the R boundary through `modification_indices_robust()`
+and `score_tests_robust()`. Each candidate keeps the ordinary `mi` and adds
+`mi_scaled = mi / c` with the per-direction scaling `c = g'B1g / g'A1g`. Two
+things should be true if the wiring is right: the scaling must **bite** where the
+estimation weight is not the meat inverse, and it must **collapse to 1** where it
+is. This experiment is the first consumer of that surface; lavaan has no robust
+score test, so there is no oracle, only behaviour.
+
+## Short answer
+
+The robust correction changes the omitted-path statistic exactly where theory
+predicts: under **ordinal DWLS** (diagonal weight `!=` polychoric NACOV inverse)
+the scaling departs from 1 even on normal latent data, and under **continuous
+GLS with heavy tails** the empirical (ADF) meat pulls the statistic away from the
+normal-theory value. Where the weight *is* the meat inverse (ordinal full WLS),
+where the meat is model-implied, and where the data are normal, the scaling
+returns to 1 to numerical precision / sampling noise. The surface behaves.
+
+## Evidence
+
+**Demo: naive vs robust for the omitted `x1 ~~ x2` covariance.** One misspecified
+dataset per regime (the true model carries a residual covariance the fitted
+one-factor model omits).
+
+```{r demo}
+d <- demo
+d$mi <- round(d$mi, 2); d$mi_scaled <- round(d$mi_scaled, 2)
+d$scaling_factor <- round(d$scaling_factor, 3)
+d$p_naive <- signif(d$p_naive, 3); d$p_robust <- signif(d$p_robust, 3)
+knitr::kable(d, col.names = c("regime", "meat", "mi", "mi_scaled", "c",
+                              "p (naive)", "p (robust)"))
+```
+
+**Score test (`score_tests_robust`): release a true loading-equality constraint
+on an ordinal fit.** Full WLS reduces (`c = 1`); DWLS scales against the NACOV
+meat.
+
+```{r score, eval = !is.null(score_demo)}
+sd <- score_demo
+sd$mi <- round(sd$mi, 3); sd$mi_scaled <- round(sd$mi_scaled, 3)
+sd$scaling_factor <- round(sd$scaling_factor, 3)
+knitr::kable(sd, col.names = c("ordinal estimator", "mi", "mi_scaled", "c"))
+```
+
+**Reductions: the `c -> 1` identities the surface must honour.** These double as
+correctness gates. The continuous gate uses unstructured moments, whose meat is
+`Gamma_NT(S) = W^-1` (structured moments instead compare against the
+model-implied `Gamma_NT(Sigma_hat)`, which differs from `S` under
+misspecification by design).
+
+```{r reductions}
+r <- red
+r$scaling_factor <- round(r$scaling_factor, 4)
+r$abs_c_minus_1 <- signif(r$abs_c_minus_1, 2)
+knitr::kable(r[, c("case", "scaling_factor", "abs_c_minus_1")],
+             col.names = c("case", "c", "|c - 1|"))
+```
+
+```{r sim, eval = !is.null(sim)}
+#| output: asis
+cat("**Detection of the omitted path** (rejection rate of the `x1 ~~ x2`",
+    "score test at the 0.05 level), naive vs robust:\n\n")
+s <- sim
+s$detect_naive <- round(s$detect_naive, 2)
+s$detect_robust <- round(s$detect_robust, 2)
+print(knitr::kable(s[, c("regime", "n", "reps_ok", "detect_naive",
+                         "detect_robust")],
+                   col.names = c("regime", "n", "reps ok", "detect (naive)",
+                                 "detect (robust)")))
+```
+
+## Caveats
+
+- No oracle: lavaan falls back to the ordinary statistic when `se != "standard"`,
+  so the robust score test is a magmaan frontier feature with no external check.
+  Correctness rests on the `c -> 1` reductions above plus the C++ unit/golden
+  coverage (`tests/unit/score_robust_test.cpp`,
+  `tests/golden/score_robust_golden_test.cpp`).
+- The continuous-GLS robust statistic needs the raw fitting data for the
+  empirical meat (`data=`). The exact `c = 1` reduction uses unstructured
+  moments (meat `= Gamma_NT(S) = W^-1`); with the default structured moments the
+  meat is the model-implied `Gamma_NT(Sigma_hat)`, so `c != 1` under a
+  misspecified model -- expected, not a defect. Full WLS reduces regardless
+  (`W = Gamma^-1`), which is the ordinal-WLS gate above.
+- Simulation rates are point estimates over `r mv("reps")` replications; read
+  them qualitatively.
+
+## Reproduce
+
+```sh
+Rscript experiments/22-robust-score-modification-indices/run_experiment.R --smoke
+# full run:
+Rscript experiments/22-robust-score-modification-indices/run_experiment.R
+quarto render experiments/22-robust-score-modification-indices/report.qmd
+```
