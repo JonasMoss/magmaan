@@ -55,14 +55,25 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     gated: all-ordinal ML (unbounded mode on extreme patterns) and EAP/precision
     (categorical `lavPredict()` rejects EAP, so no oracle; stays self-checked in
     `tests/unit/api_sem_test.cpp`).
-  - **M, bug surfaced 2026-06-14.** Multi-group categorical factor scores
-    diverge from lavaan for non-reference groups. With `theta` matched to 1e-5,
-    the reference group's EBM matches (~2e-5) but a non-reference group's EBM
-    drifts (measured max|diff| ~0.2, corr 0.996 on the `0004` two-group design),
-    so multi-group `fscores` are intentionally not emitted as an oracle surface.
-    Likely a per-group latent-distribution/centering mismatch in the categorical
-    scorer; needs a fix plus its own multi-group golden before the oracle can be
-    extended to `0004`/`0012`/`0013`.
+  - **Resolved 2026-06-14 — not a magmaan bug; lavaan is the outlier.** The
+    multi-group categorical EBM divergence (reference group matches lavaan ~2e-5,
+    non-reference group drifts ~0.2 with `theta` matched to 1e-7) was root-caused
+    to a **lavaan** defect: lavaan's multi-group categorical `lavPredict()`
+    returns a *non-stationary* point for non-reference groups. Verified three
+    ways: (1) magmaan's non-reference-group EBM matches an independent
+    `optimize()`-based posterior-mode scorer built from lavaan's *own* extracted
+    group-2 parameters to 1.9e-5; (2) at lavaan's group-2 score the posterior
+    gradient is O(1) and the posterior density is *lower* than at magmaan's score
+    (whose gradient is ~1e-7) — i.e. lavaan does not sit at the mode; (3) every
+    ingredient lavaan feeds its scorer (prior `VETAx`, `THETA`, `TH(delta=FALSE)`,
+    loadings, data, `th.idx`) is identical to magmaan's, consistent with lavaan's
+    own `lav_predict.R` FIXME about categorical scores being "not identical (but
+    close) to Mplus". So multi-group `fscores` are not emitted as a lavaan oracle.
+    Instead the multi-group scorer is validated **transitively** against lavaan in
+    `tests/golden/ordinal_golden_test.cpp`: for the unconstrained two-group
+    fixture `0004` the per-group multi-group EBM equals an independent
+    single-group fit on that group's data (machine-tight, ~3e-8), and the
+    single-group EBM is lavaan-gated. No remaining work.
   - **M/L, only-when-needed.** Multi-factor EAP via adaptive Gauss-Hermite and
     non-diagonal residual-Theta orthant probabilities remain deferred in
     `speculative.md`; the landed scope is diagonal-Theta EBM/ML plus one-factor

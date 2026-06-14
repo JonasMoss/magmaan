@@ -1164,9 +1164,14 @@ stop rather than any usable non-error return.
   `tests/golden/ordinal_golden_test.cpp` ("ordinal/mixed factor scores (EBM/ML)
   match lavaan", 5e-4) over the `fits.DWLS.fscores` oracle: single-group EBM
   (all-ordinal and mixed) and mixed ML. All-ordinal ML (unbounded mode on
-  extreme patterns), EAP (no categorical `lavPredict()` oracle; self-checked),
-  and multi-group categorical scores (a non-reference-group scorer divergence,
-  tracked in the backlog) are not part of the gated surface.
+  extreme patterns) and EAP (no categorical `lavPredict()` oracle) are not
+  lavaan-gated (EAP stays self-checked). Multi-group categorical EBM is correct
+  and is validated transitively: lavaan's own multi-group categorical
+  `lavPredict()` returns a non-stationary point for non-reference groups (it is
+  not a usable oracle there), so the same golden instead checks that each
+  group's multi-group EBM equals an independent single-group fit on that group's
+  data (~3e-8) for the unconstrained two-group fixture, and single-group EBM is
+  lavaan-gated.
 - All-ordinal DWLS/WLS fit measures are exposed through
   `estimate::fit_measures_ordinal()` and `api::fit_measures()`: CFI/TLI/RMSEA
   use the categorical independence baseline over the polychoric moment stack,
