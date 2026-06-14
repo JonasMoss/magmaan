@@ -29,6 +29,7 @@
 #include "magmaan/estimate/backend_strings.hpp"  // backend_from_string
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/inference/inference.hpp"        // information_*, vcov, se, chi2_stat, df_stat
+#include "magmaan/robust/robust.hpp"              // InferenceSpec (bread/moments/cov)
 #include "magmaan/optim/problem.hpp"  // OptimOptions
 
 namespace lv  = magmaan;
@@ -51,6 +52,40 @@ inline std::string ordinal_parameterization_attr(SEXP x) {
   SEXP attr = Rf_getAttrib(x, Rf_install("magmaan.parameterization"));
   if (attr == R_NilValue || Rf_length(attr) < 1) return "delta";
   return Rcpp::as<std::string>(Rcpp::CharacterVector(attr)[0]);
+}
+
+// ---- robust InferenceSpec enums <-> strings (shared by fit.cpp / robust.cpp) -
+
+inline magmaan::robust::Information info_from_string(const std::string& s) {
+  if (s == "expected") return magmaan::robust::Information::Expected;
+  if (s == "observed") return magmaan::robust::Information::Observed;
+  Rcpp::stop("magmaan: `bread` must be 'expected' or 'observed' (got '%s')", s);
+}
+inline magmaan::robust::WeightMoments moments_from_string(const std::string& s) {
+  if (s == "structured")   return magmaan::robust::WeightMoments::Structured;
+  if (s == "unstructured") return magmaan::robust::WeightMoments::Unstructured;
+  if (s == "pairwise")     return magmaan::robust::WeightMoments::Pairwise;
+  Rcpp::stop("magmaan: `moments` must be 'structured', 'unstructured', or 'pairwise' (got '%s')", s);
+}
+inline magmaan::robust::ScoreCovariance cov_from_string(const std::string& s) {
+  if (s == "model_implied")   return magmaan::robust::ScoreCovariance::ModelImplied;
+  if (s == "empirical")       return magmaan::robust::ScoreCovariance::Empirical;
+  if (s == "browne_unbiased") return magmaan::robust::ScoreCovariance::BrowneUnbiased;
+  Rcpp::stop("magmaan: `cov` must be 'model_implied', 'empirical', or 'browne_unbiased' (got '%s')", s);
+}
+inline magmaan::robust::InferenceSpec spec_from(const std::string& bread,
+                                                const std::string& moments) {
+  magmaan::robust::InferenceSpec s;
+  s.bread = info_from_string(bread);
+  s.moments = moments_from_string(moments);
+  return s;
+}
+inline magmaan::robust::InferenceSpec spec_from(const std::string& bread,
+                                                const std::string& moments,
+                                                const std::string& cov) {
+  magmaan::robust::InferenceSpec s = spec_from(bread, moments);
+  s.cov = cov_from_string(cov);
+  return s;
 }
 
 // ---- error -> R error -------------------------------------------------------

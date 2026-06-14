@@ -70,6 +70,41 @@ score_tests <- function(fit, data = NULL, ...) {
   do.call(magmaan_core$inference_score_tests, c(list(fit = fit), dots))
 }
 
+# Robust (generalized / Satorra-Bentler-scaled) modification indices and score
+# tests: the `*_robust` frontier mirror of the two functions above. Each row
+# keeps the ordinary `mi` and adds `mi_scaled = mi / scaling_factor`.
+#
+# Ordinal/mixed fits use the polychoric NACOV the fit already carries, so the
+# scaling is intrinsic to the diagonal/identity weight (DWLS/ULS scale even on
+# normal data) and `bread`/`moments`/`cov` are ignored. Continuous ML/ULS/GLS
+# build the meat from `cov`: 'empirical'/'browne_unbiased' need the fitting
+# `data` (raw observations); 'model_implied' uses Gamma_NT(S) and reduces to the
+# ordinary statistic. WLS supplies its weight via `weight=` and always reduces.
+modification_indices_robust <- function(fit, data = NULL, weight = NULL,
+                                        bread = "expected",
+                                        moments = "structured",
+                                        cov = "empirical",
+                                        candidates = "all",
+                                        include_loadings = TRUE,
+                                        include_covariances = TRUE,
+                                        information = "expected") {
+  is_ord <- isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)
+  raw <- if (!is_ord && !is.null(data)) raw_data_arg(fit, data) else NULL
+  magmaan_core$inference_modification_indices_robust(
+    fit, raw = raw, weight = weight, bread = bread, moments = moments,
+    cov = cov, information = information, candidates = candidates,
+    include_loadings = include_loadings, include_covariances = include_covariances)
+}
+
+score_tests_robust <- function(fit, data = NULL, weight = NULL,
+                               bread = "expected", moments = "structured",
+                               cov = "empirical") {
+  is_ord <- isTRUE(fit$ordinal) || isTRUE(fit$mixed_ordinal)
+  raw <- if (!is_ord && !is.null(data)) raw_data_arg(fit, data) else NULL
+  magmaan_core$inference_score_tests_robust(
+    fit, raw = raw, weight = weight, bread = bread, moments = moments, cov = cov)
+}
+
 raw_data_arg <- function(fit, data) {
   if (!is.data.frame(data)) return(data)
 

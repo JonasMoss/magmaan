@@ -943,6 +943,42 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// inference_modification_indices_robust
+Rcpp::DataFrame inference_modification_indices_robust(Rcpp::List fit, SEXP raw, SEXP weight, std::string bread, std::string moments, std::string cov, std::string information, std::string candidates, bool include_loadings, bool include_covariances);
+RcppExport SEXP _magmaan_inference_modification_indices_robust(SEXP fitSEXP, SEXP rawSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP, SEXP informationSEXP, SEXP candidatesSEXP, SEXP include_loadingsSEXP, SEXP include_covariancesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw(rawSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
+    Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
+    Rcpp::traits::input_parameter< std::string >::type information(informationSEXP);
+    Rcpp::traits::input_parameter< std::string >::type candidates(candidatesSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_loadings(include_loadingsSEXP);
+    Rcpp::traits::input_parameter< bool >::type include_covariances(include_covariancesSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_modification_indices_robust(fit, raw, weight, bread, moments, cov, information, candidates, include_loadings, include_covariances));
+    return rcpp_result_gen;
+END_RCPP
+}
+// inference_score_tests_robust
+Rcpp::DataFrame inference_score_tests_robust(Rcpp::List fit, SEXP raw, SEXP weight, std::string bread, std::string moments, std::string cov);
+RcppExport SEXP _magmaan_inference_score_tests_robust(SEXP fitSEXP, SEXP rawSEXP, SEXP weightSEXP, SEXP breadSEXP, SEXP momentsSEXP, SEXP covSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type raw(rawSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type weight(weightSEXP);
+    Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
+    Rcpp::traits::input_parameter< std::string >::type moments(momentsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type cov(covSEXP);
+    rcpp_result_gen = Rcpp::wrap(inference_score_tests_robust(fit, raw, weight, bread, moments, cov));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_z_test
 Rcpp::List infer_z_test(Rcpp::List fit, Rcpp::NumericVector se);
 RcppExport SEXP _magmaan_infer_z_test(SEXP fitSEXP, SEXP seSEXP) {
@@ -2310,6 +2346,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_measures_factor_scores", (DL_FUNC) &_magmaan_measures_factor_scores, 3},
     {"_magmaan_inference_modification_indices", (DL_FUNC) &_magmaan_inference_modification_indices, 7},
     {"_magmaan_inference_score_tests", (DL_FUNC) &_magmaan_inference_score_tests, 3},
+    {"_magmaan_inference_modification_indices_robust", (DL_FUNC) &_magmaan_inference_modification_indices_robust, 10},
+    {"_magmaan_inference_score_tests_robust", (DL_FUNC) &_magmaan_inference_score_tests_robust, 6},
     {"_magmaan_infer_z_test", (DL_FUNC) &_magmaan_infer_z_test, 2},
     {"_magmaan_infer_z_test_theta", (DL_FUNC) &_magmaan_infer_z_test_theta, 2},
     {"_magmaan_infer_chi2_pvalue", (DL_FUNC) &_magmaan_infer_chi2_pvalue, 2},

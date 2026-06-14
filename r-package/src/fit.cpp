@@ -3274,6 +3274,207 @@ Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
   return score_table_df(*out, ctx.names);
 }
 
+// ── Robust (generalized / Satorra-Bentler-scaled) MI & score tests ──────────
+// Frontier mirror of inference_modification_indices/_score_tests, routed to the
+// *_robust entry points: inference::frontier for continuous ML/ULS/GLS/WLS,
+// estimate::frontier for ordinal/mixed. Each row keeps the ordinary `mi` and
+// adds `mi_scaled = mi / scaling_factor` (the same DataFrame columns the
+// non-robust sweep already emits).
+//
+// Meat: ordinal/mixed use the polychoric NACOV carried by the fit, so the
+// scaling is intrinsic to W != NACOV^-1 (DWLS/ULS scale even on normal data)
+// and `bread`/`moments`/`cov` do not apply. Continuous fits build the bread from
+// the estimation weight (ULS identity / GLS normal-theory / WLS the supplied
+// `weight`) and the meat from `cov`: 'empirical'/'browne_unbiased' need the raw
+// fitting data (`raw`); 'model_implied' uses Gamma_NT(S) and collapses to the
+// ordinary statistic. Full-WLS collapses regardless (W = Gamma^-1).
+
+namespace {
+
+// Estimation weight for a continuous LS fit (empty for ULS; ML carries none and
+// is handled by the caller via the weight-free overloads).
+magmaan::estimate::gmm::Weight continuous_ls_weight(
+    const Ctx& ctx, const magmaan::estimate::Estimates& est,
+    const std::string& estimator, SEXP weight, const char* call) {
+  if (estimator == "ULS") return magmaan::estimate::gmm::Weight{};
+  if (estimator == "GLS") {
+    auto ev_or = magmaan::model::ModelEvaluator::build(ctx.pt, ctx.rep);
+    if (!ev_or.has_value()) stop_model(ev_or.error());
+    auto w_or =
+        magmaan::estimate::gmm::normal_theory_weight(*ev_or, ctx.samp, est.theta);
+    if (!w_or.has_value()) stop_fit(w_or.error());
+    return *w_or;
+  }
+  if (estimator == "WLS") {
+    if (Rf_isNull(weight))
+      Rcpp::stop("magmaan: WLS robust %s require an explicit `weight`", call);
+    return wls_from_arg(weight, ctx.samp.S.size());
+  }
+  Rcpp::stop("magmaan: robust %s are not exposed for estimator '%s'", call,
+             estimator.c_str());
+}
+
+}  // namespace
+
+// [[Rcpp::export]]
+Rcpp::DataFrame inference_modification_indices_robust(
+    Rcpp::List fit, SEXP raw = R_NilValue, SEXP weight = R_NilValue,
+    std::string bread = "expected", std::string moments = "structured",
+    std::string cov = "empirical", std::string information = "expected",
+    std::string candidates = "fixed", bool include_loadings = true,
+    bool include_covariances = true) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"])
+      : "";
+  const bool is_ordinal_fit = fit.containsElementNamed("ordinal") &&
+                              Rcpp::as<bool>(fit["ordinal"]);
+  const bool is_mixed_ordinal_fit =
+      fit.containsElementNamed("mixed_ordinal") &&
+      Rcpp::as<bool>(fit["mixed_ordinal"]);
+  const auto base = modification_options_from(
+      information, candidates, include_loadings, include_covariances);
+  magmaan::post_expected<magmaan::inference::ScoreTestTable> out;
+
+  if (is_ordinal_fit) {
+    auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit, R_NilValue, "ordinal_stats",
+        "ordinal robust modification indices"));
+    out = magmaan::estimate::frontier::modification_indices_ordinal_robust(
+        ctx.pt, ctx.rep, stats, est,
+        ordinal_weight_from_estimator(estimator,
+                                      "ordinal robust modification indices"),
+        base,
+        ordinal_parameterization_from_string(
+            fit.containsElementNamed("parameterization")
+                ? Rcpp::as<std::string>(fit["parameterization"])
+                : ordinal_parameterization_attr(fit["partable"])));
+  } else if (is_mixed_ordinal_fit) {
+    auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit, R_NilValue, "mixed_ordinal_stats",
+        "mixed ordinal robust modification indices"));
+    out = magmaan::estimate::frontier::modification_indices_mixed_ordinal_robust(
+        ctx.pt, ctx.rep, stats, est,
+        ordinal_weight_from_estimator(
+            estimator, "mixed ordinal robust modification indices"),
+        base,
+        ordinal_parameterization_from_string(
+            fit.containsElementNamed("parameterization")
+                ? Rcpp::as<std::string>(fit["parameterization"])
+                : ordinal_parameterization_attr(fit["partable"])));
+  } else {
+    const bool is_ml = (estimator == "ML" || estimator.empty());
+    const bool model_implied = (cov == "model_implied") || (estimator == "WLS");
+    magmaan::inference::frontier::RobustScoreOptions opts;
+    opts.base = base;
+    opts.spec = spec_from(bread, moments, model_implied ? "model_implied" : cov);
+    if (model_implied) {
+      if (is_ml) {
+        out = magmaan::inference::frontier::modification_indices_robust(
+            ctx.pt, ctx.rep, ctx.samp, est, opts);
+      } else {
+        auto w = continuous_ls_weight(ctx, est, estimator, weight,
+                                      "modification indices");
+        out = magmaan::inference::frontier::modification_indices_robust(
+            ctx.pt, ctx.rep, ctx.samp, est, w, opts);
+      }
+    } else {
+      if (Rf_isNull(raw)) {
+        Rcpp::stop("magmaan: robust modification indices with cov='%s' require "
+                   "the fitting data; pass data= (or use cov='model_implied')",
+                   cov.c_str());
+      }
+      magmaan::data::RawData rd = complete_raw_from_arg(ctx.rep, raw);
+      if (is_ml) {
+        out = magmaan::inference::frontier::modification_indices_robust(
+            ctx.pt, ctx.rep, ctx.samp, rd, est, opts);
+      } else {
+        auto w = continuous_ls_weight(ctx, est, estimator, weight,
+                                      "modification indices");
+        out = magmaan::inference::frontier::modification_indices_robust(
+            ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
+      }
+    }
+  }
+  if (!out.has_value()) stop_post(out.error());
+  return score_table_df(*out, ctx.names);
+}
+
+// [[Rcpp::export]]
+Rcpp::DataFrame inference_score_tests_robust(
+    Rcpp::List fit, SEXP raw = R_NilValue, SEXP weight = R_NilValue,
+    std::string bread = "expected", std::string moments = "structured",
+    std::string cov = "empirical") {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  const std::string estimator = fit.containsElementNamed("estimator")
+      ? Rcpp::as<std::string>(fit["estimator"])
+      : "";
+  const bool is_ordinal_fit = fit.containsElementNamed("ordinal") &&
+                              Rcpp::as<bool>(fit["ordinal"]);
+  const bool is_mixed_ordinal_fit =
+      fit.containsElementNamed("mixed_ordinal") &&
+      Rcpp::as<bool>(fit["mixed_ordinal"]);
+  magmaan::post_expected<magmaan::inference::ScoreTestTable> out;
+
+  if (is_ordinal_fit) {
+    auto stats = ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit, R_NilValue, "ordinal_stats", "ordinal robust score tests"));
+    out = magmaan::estimate::frontier::score_tests_ordinal_robust(
+        ctx.pt, ctx.rep, stats, est,
+        ordinal_weight_from_estimator(estimator, "ordinal robust score tests"),
+        ordinal_parameterization_from_string(
+            fit.containsElementNamed("parameterization")
+                ? Rcpp::as<std::string>(fit["parameterization"])
+                : ordinal_parameterization_attr(fit["partable"])));
+  } else if (is_mixed_ordinal_fit) {
+    auto stats = mixed_ordinal_stats_from_arg(stats_from_fit_or_arg(
+        fit, R_NilValue, "mixed_ordinal_stats",
+        "mixed ordinal robust score tests"));
+    out = magmaan::estimate::frontier::score_tests_mixed_ordinal_robust(
+        ctx.pt, ctx.rep, stats, est,
+        ordinal_weight_from_estimator(estimator,
+                                      "mixed ordinal robust score tests"),
+        ordinal_parameterization_from_string(
+            fit.containsElementNamed("parameterization")
+                ? Rcpp::as<std::string>(fit["parameterization"])
+                : ordinal_parameterization_attr(fit["partable"])));
+  } else {
+    const bool is_ml = (estimator == "ML" || estimator.empty());
+    const bool model_implied = (cov == "model_implied") || (estimator == "WLS");
+    magmaan::inference::frontier::RobustScoreOptions opts;
+    opts.spec = spec_from(bread, moments, model_implied ? "model_implied" : cov);
+    if (model_implied) {
+      if (is_ml) {
+        Rcpp::stop("magmaan: ML robust score tests require the fitting data "
+                   "(cov='empirical'); pass data=");
+      }
+      auto w = continuous_ls_weight(ctx, est, estimator, weight, "score tests");
+      out = magmaan::inference::frontier::score_tests_robust(
+          ctx.pt, ctx.rep, ctx.samp, est, w, opts);
+    } else {
+      if (Rf_isNull(raw)) {
+        Rcpp::stop("magmaan: robust score tests with cov='%s' require the "
+                   "fitting data; pass data= (or use cov='model_implied')",
+                   cov.c_str());
+      }
+      magmaan::data::RawData rd = complete_raw_from_arg(ctx.rep, raw);
+      if (is_ml) {
+        out = magmaan::inference::frontier::score_tests_robust(
+            ctx.pt, ctx.rep, ctx.samp, rd, est, opts);
+      } else {
+        auto w =
+            continuous_ls_weight(ctx, est, estimator, weight, "score tests");
+        out = magmaan::inference::frontier::score_tests_robust(
+            ctx.pt, ctx.rep, ctx.samp, rd, est, w, opts);
+      }
+    }
+  }
+  if (!out.has_value()) stop_post(out.error());
+  return score_table_df(*out, ctx.names);
+}
+
 // infer_z_test() — mirrors z_test(est, se). `se` is the SE vector from
 // infer_se(infer_vcov(info, fit)).
 //

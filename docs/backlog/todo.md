@@ -116,10 +116,22 @@ oracle from `tests/tools/regen_robust_score.R`, and the advisory
   two-group WLSMV golden 0012, exact WLS reductions for all-ordinal MI/score and
   mixed-ordinal MI/score, and a two-group FIML raw/pack parity regression over
   unequal raw block sizes and MCAR patterns.
-- **S, only-when-needed.** `api::frontier` / R wrappers for the LS and ordinal
-  robust tiers (the api `Fit` does not currently carry the LS estimation
-  weight; the `estimate::frontier` / `inference::frontier` functions are the
-  methods-developer surface). Add when a concrete consumer appears.
+- **R wrappers done 2026-06-14.** `modification_indices_robust()` /
+  `score_tests_robust()` (R/`context.R`, exported) now wrap the LS and ordinal
+  robust tiers: new Rcpp glue `inference_{modification_indices,score_tests}_robust`
+  (`r-package/src/fit.cpp`) dispatches ordinal/mixed -> `estimate::frontier`
+  (intrinsic NACOV-meat scaling) and continuous ML/ULS/GLS/WLS ->
+  `inference::frontier`, reconstructing the LS weight in glue (ULS identity / GLS
+  normal-theory / WLS explicit) and taking `bread`/`moments`/`cov` plus the raw
+  fitting data for the empirical meat. The `bread/moments/cov` -> `InferenceSpec`
+  parsers moved to the shared `r-package/src/internal.hpp`. Concrete consumer:
+  `experiments/22-robust-score-modification-indices` (ordinal DWLS + continuous
+  GLS misspecification demo, with the exact `c -> 1` reductions as correctness
+  gates). Still open / only-when-needed: a C++ `api::frontier` entry point taking
+  `api::Fit` for the LS tiers (the api `Fit`'s `EstimatorSpec.weight` is empty for
+  GLS/DWLS, so it would have to recompute the weight; the ML `api::frontier`
+  robust overloads already exist). The R path sidesteps this by reconstructing the
+  weight in glue, so no consumer needs the C++ api entry point yet.
 
 ## Local hardening and validation tooling
 

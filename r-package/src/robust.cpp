@@ -23,24 +23,9 @@ using namespace magmaanr;
 namespace {
 
 // ---- InferenceSpec enums <-> strings ---------------------------------------
+// info_from_string / moments_from_string / cov_from_string / spec_from now live
+// in internal.hpp (namespace magmaanr), shared with fit.cpp's robust score glue.
 
-magmaan::robust::Information info_from_string(const std::string& s) {
-  if (s == "expected") return magmaan::robust::Information::Expected;
-  if (s == "observed") return magmaan::robust::Information::Observed;
-  Rcpp::stop("magmaan: `bread` must be 'expected' or 'observed' (got '%s')", s);
-}
-magmaan::robust::WeightMoments moments_from_string(const std::string& s) {
-  if (s == "structured")   return magmaan::robust::WeightMoments::Structured;
-  if (s == "unstructured") return magmaan::robust::WeightMoments::Unstructured;
-  if (s == "pairwise")     return magmaan::robust::WeightMoments::Pairwise;
-  Rcpp::stop("magmaan: `moments` must be 'structured', 'unstructured', or 'pairwise' (got '%s')", s);
-}
-magmaan::robust::ScoreCovariance cov_from_string(const std::string& s) {
-  if (s == "model_implied")   return magmaan::robust::ScoreCovariance::ModelImplied;
-  if (s == "empirical")       return magmaan::robust::ScoreCovariance::Empirical;
-  if (s == "browne_unbiased") return magmaan::robust::ScoreCovariance::BrowneUnbiased;
-  Rcpp::stop("magmaan: `cov` must be 'model_implied', 'empirical', or 'browne_unbiased' (got '%s')", s);
-}
 const char* moments_to_string(magmaan::robust::WeightMoments m) {
   switch (m) {
     case magmaan::robust::WeightMoments::Structured:   return "structured";
@@ -51,19 +36,6 @@ const char* moments_to_string(magmaan::robust::WeightMoments m) {
 }
 const char* ufactor_kind_to_string(magmaan::robust::UFactor::Kind k) {
   return k == magmaan::robust::UFactor::Kind::ProjectionExpected ? "ProjectionExpected" : "ObservedHessian";
-}
-
-magmaan::robust::InferenceSpec spec_from(const std::string& bread, const std::string& moments) {
-  magmaan::robust::InferenceSpec s;
-  s.bread = info_from_string(bread);
-  s.moments = moments_from_string(moments);
-  return s;
-}
-magmaan::robust::InferenceSpec spec_from(const std::string& bread, const std::string& moments,
-                             const std::string& cov) {
-  magmaan::robust::InferenceSpec s = spec_from(bread, moments);
-  s.cov = cov_from_string(cov);
-  return s;
 }
 
 Rcpp::List chisq_moments_to_list(
