@@ -10,6 +10,7 @@
 #include "internal.hpp"
 
 #include <cctype>
+#include <memory>
 
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/diagnostics.hpp"
@@ -1205,6 +1206,68 @@ Rcpp::List fiml_raw_to_r(const magmaan::data::RawData& raw,
   return out;
 }
 
+using FimlPack = magmaan::estimate::fiml::FIMLPack;
+using FimlH1 = magmaan::estimate::fiml::FIMLH1;
+
+Rcpp::XPtr<FimlPack> fiml_pack_xptr(FimlPack pack) {
+  Rcpp::XPtr<FimlPack> xp(new FimlPack(std::move(pack)), true);
+  xp.attr("class") =
+      Rcpp::CharacterVector::create("magmaan_fiml_pack", "externalptr");
+  return xp;
+}
+
+Rcpp::XPtr<FimlH1> fiml_h1_xptr(FimlH1 h1) {
+  Rcpp::XPtr<FimlH1> xp(new FimlH1(std::move(h1)), true);
+  xp.attr("class") =
+      Rcpp::CharacterVector::create("magmaan_fiml_h1", "externalptr");
+  return xp;
+}
+
+const FimlPack* fiml_pack_ptr_from_fit(Rcpp::List fit) {
+  if (!fit.containsElementNamed("fiml_pack")) return nullptr;
+  SEXP xp = fit["fiml_pack"];
+  if (Rf_isNull(xp)) return nullptr;
+  if (TYPEOF(xp) != EXTPTRSXP) {
+    Rcpp::stop("magmaan: fit$fiml_pack is not an external pointer");
+  }
+  void* addr = R_ExternalPtrAddr(xp);
+  if (addr == nullptr) Rcpp::stop("magmaan: fit$fiml_pack is null");
+  return static_cast<const FimlPack*>(addr);
+}
+
+const FimlH1* fiml_h1_ptr_from_fit(Rcpp::List fit) {
+  if (!fit.containsElementNamed("fiml_h1")) return nullptr;
+  SEXP xp = fit["fiml_h1"];
+  if (Rf_isNull(xp)) return nullptr;
+  if (TYPEOF(xp) != EXTPTRSXP) {
+    Rcpp::stop("magmaan: fit$fiml_h1 is not an external pointer");
+  }
+  void* addr = R_ExternalPtrAddr(xp);
+  if (addr == nullptr) Rcpp::stop("magmaan: fit$fiml_h1 is null");
+  return static_cast<const FimlH1*>(addr);
+}
+
+const FimlPack& fiml_pack_for_fit(Rcpp::List fit,
+                                  const magmaan::data::RawData& raw,
+                                  std::unique_ptr<FimlPack>& owned) {
+  if (const FimlPack* pack = fiml_pack_ptr_from_fit(fit)) return *pack;
+  auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
+  if (!pack_or.has_value()) stop_fit(pack_or.error());
+  owned = std::make_unique<FimlPack>(std::move(*pack_or));
+  return *owned;
+}
+
+const FimlH1& fiml_h1_for_fit(Rcpp::List fit,
+                              const magmaan::data::RawData& raw,
+                              const FimlPack& pack,
+                              std::unique_ptr<FimlH1>& owned) {
+  if (const FimlH1* h1 = fiml_h1_ptr_from_fit(fit)) return *h1;
+  auto h1_or = magmaan::estimate::fiml::fiml_h1_moments(raw, pack);
+  if (!h1_or.has_value()) stop_fit(h1_or.error());
+  owned = std::make_unique<FimlH1>(std::move(*h1_or));
+  return *owned;
+}
+
 Rcpp::List fiml_fit_result(Ctx& ctx,
                            const magmaan::data::RawData& raw,
                            const magmaan::estimate::Estimates& est,
@@ -1695,9 +1758,13 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
     Rcpp::stop("magmaan: model has no observed variables");
 
   magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, raw_data);
-  auto start_samp_or = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
-  if (!start_samp_or.has_value()) stop_fit(start_samp_or.error());
-  ctx.samp = std::move(*start_samp_or);
+  if (auto e = magmaan::estimate::fiml::validate_fiml_fixed_x_missing_policy(
+          ctx.pt, raw); !e.has_value()) {
+    stop_fit(e.error());
+  }
+  auto pack_or = magmaan::estimate::fiml::fiml_pack(raw);
+  if (!pack_or.has_value()) stop_fit(pack_or.error());
+  ctx.samp = pack_or->start_stats;
   ctx.ov_names = ctx.rep.ov_names[0];
   ctx.meanstructure = has_meanstructure(ctx.pt);
   if (!ctx.meanstructure) ctx.samp.mean.clear();
@@ -1705,11 +1772,14 @@ Rcpp::List fit_fiml_impl(SEXP partable, SEXP raw_data,
   const Eigen::VectorXd x0 = start_values_or_stop(ctx, starts);
   const magmaan::estimate::Backend backend = backend_from_optimizer_arg(optimizer);
   auto e_or = magmaan::estimate::fit_fiml(
-      ctx.pt, ctx.rep, raw, x0, magmaan::estimate::fiml::FIML{},
-      backend, optim_opts_from(control));
+      ctx.pt, ctx.rep, raw, x0, *pack_or, backend, optim_opts_from(control));
   if (!e_or.has_value()) stop_fit(e_or.error());
   const magmaan::estimate::Estimates est = std::move(*e_or);
-  return fiml_fit_result(ctx, raw, est, &starts);
+  Rcpp::List out = fiml_fit_result(ctx, raw, est, &starts);
+  auto h1_or = magmaan::estimate::fiml::fiml_h1_moments(raw, *pack_or);
+  if (h1_or.has_value()) out["fiml_h1"] = fiml_h1_xptr(std::move(*h1_or));
+  out["fiml_pack"] = fiml_pack_xptr(std::move(*pack_or));
+  return out;
 }
 
 // saturated_em_moments_impl() — Stage-1 of the Savalei-Bentler (2009) two-stage
@@ -2772,16 +2842,23 @@ Rcpp::List estimate_fiml_robust_mlr(Rcpp::List fit, double h_step = 1e-4) {
   if (!fit.containsElementNamed("raw_data")) {
     Rcpp::stop("magmaan: estimate_fiml_robust_mlr() requires a FIML fit with $raw_data");
   }
+  if (!(h_step > 0.0)) {
+    Rcpp::stop("magmaan: estimate_fiml_robust_mlr() requires h_step > 0");
+  }
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
+  std::unique_ptr<FimlPack> owned_pack;
+  const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
+  std::unique_ptr<FimlH1> owned_h1;
+  const FimlH1& h1 = fiml_h1_for_fit(fit, raw, pack, owned_h1);
   auto df_or = magmaan::inference::df_stat(ctx.pt, ctx.samp, est.theta);
   if (!df_or.has_value()) stop_post(df_or.error());
-  auto extras_or = magmaan::estimate::fiml::fiml_extras(ctx.pt, ctx.rep, raw, est);
+  auto extras_or = magmaan::estimate::fiml::fiml_extras(
+      ctx.pt, ctx.rep, raw, est, pack, h1);
   if (!extras_or.has_value()) stop_post(extras_or.error());
   auto r_or = magmaan::estimate::fiml::fiml_robust_mlr(
-      ctx.pt, ctx.rep, raw, est, *df_or, extras_or->chi2,
-      magmaan::estimate::fiml::FIML{}, h_step);
+      ctx.pt, ctx.rep, raw, est, *df_or, extras_or->chi2, pack, h1);
   if (!r_or.has_value()) stop_post(r_or.error());
   return Rcpp::List::create(
       Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
@@ -2833,16 +2910,23 @@ Rcpp::List infer_fiml_fmg_spectrum(Rcpp::List fit, double h_step = 1e-4) {
   if (!fit.containsElementNamed("raw_data")) {
     Rcpp::stop("magmaan: infer_fiml_fmg_spectrum() requires a FIML fit with $raw_data");
   }
+  if (!(h_step > 0.0)) {
+    Rcpp::stop("magmaan: infer_fiml_fmg_spectrum() requires h_step > 0");
+  }
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
+  std::unique_ptr<FimlPack> owned_pack;
+  const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
+  std::unique_ptr<FimlH1> owned_h1;
+  const FimlH1& h1 = fiml_h1_for_fit(fit, raw, pack, owned_h1);
   auto df_or = magmaan::inference::df_stat(ctx.pt, ctx.samp, est.theta);
   if (!df_or.has_value()) stop_post(df_or.error());
-  auto extras_or = magmaan::estimate::fiml::fiml_extras(ctx.pt, ctx.rep, raw, est);
+  auto extras_or = magmaan::estimate::fiml::fiml_extras(
+      ctx.pt, ctx.rep, raw, est, pack, h1);
   if (!extras_or.has_value()) stop_post(extras_or.error());
   auto sp_or = magmaan::estimate::fiml::fiml_ugamma_spectrum(
-      ctx.pt, ctx.rep, raw, est, *df_or, extras_or->chi2,
-      magmaan::estimate::fiml::FIML{}, h_step);
+      ctx.pt, ctx.rep, raw, est, *df_or, extras_or->chi2, pack, h1);
   if (!sp_or.has_value()) stop_post(sp_or.error());
   return Rcpp::List::create(
       Rcpp::_["biased"] = Rcpp::wrap(sp_or->eigvals),
@@ -2996,8 +3080,10 @@ Rcpp::DataFrame inference_modification_indices(
       Rcpp::stop("magmaan: FIML modification indices require fit$raw_data");
     }
     magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
+    std::unique_ptr<FimlPack> owned_pack;
+    const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
     out = magmaan::inference::modification_indices_fiml(
-        ctx.pt, ctx.rep, raw, est, opts, magmaan::estimate::fiml::FIML{},
+        ctx.pt, ctx.rep, raw, est, opts, pack, magmaan::estimate::fiml::FIML{},
         h_step);
   } else if (estimator == "ULS") {
     out = magmaan::inference::modification_indices(
@@ -3045,8 +3131,11 @@ Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
       Rcpp::stop("magmaan: FIML score tests require fit$raw_data");
     }
     magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, fit["raw_data"]);
+    std::unique_ptr<FimlPack> owned_pack;
+    const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
     out = magmaan::inference::score_tests_fiml(
-        ctx.pt, ctx.rep, raw, est, magmaan::estimate::fiml::FIML{}, h_step);
+        ctx.pt, ctx.rep, raw, est, pack, magmaan::estimate::fiml::FIML{},
+        h_step);
   } else if (estimator == "ULS") {
     out = magmaan::inference::score_tests(
         ctx.pt, ctx.rep, ctx.samp, est, magmaan::estimate::gmm::Weight{});

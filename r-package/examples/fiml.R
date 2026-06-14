@@ -33,6 +33,10 @@ stopifnot(identical(fit$estimator, "FIML"))
 stopifnot(isTRUE(fit$fiml))
 stopifnot(inherits(fit$raw_data, "magmaan_fiml_data"))
 stopifnot(identical(fit$raw_data$nobs[[1L]], nrow(df)))
+stopifnot(typeof(fit$fiml_pack) == "externalptr")
+stopifnot(typeof(fit$fiml_h1) == "externalptr")
+stopifnot(inherits(fit$fiml_pack, "magmaan_fiml_pack"))
+stopifnot(inherits(fit$fiml_h1, "magmaan_fiml_h1"))
 
 model_ml2s <- "
 visual =~ x1 + x2 + x3
