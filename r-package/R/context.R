@@ -38,8 +38,27 @@ factor_scores <- function(fit, data, method = c("regression", "bartlett")) {
   magmaan_core$measures_factor_scores(fit, raw_data_arg(fit, data), method = method)
 }
 
-modification_indices <- function(fit, ..., candidates = "all") {
-  magmaan_core$inference_modification_indices(fit, ..., candidates = candidates)
+modification_indices <- function(fit, data = NULL, ..., candidates = "all") {
+  dots <- list(...)
+  if (!is.null(data)) {
+    if ("weight" %in% names(dots)) {
+      stop("modification_indices(): pass only one of `data` or `weight`")
+    }
+    dots$weight <- data
+  }
+  dots$candidates <- candidates
+  do.call(magmaan_core$inference_modification_indices, c(list(fit = fit), dots))
+}
+
+score_tests <- function(fit, data = NULL, ...) {
+  dots <- list(...)
+  if (!is.null(data)) {
+    if ("weight" %in% names(dots)) {
+      stop("score_tests(): pass only one of `data` or `weight`")
+    }
+    dots$weight <- data
+  }
+  do.call(magmaan_core$inference_score_tests, c(list(fit = fit), dots))
 }
 
 raw_data_arg <- function(fit, data) {

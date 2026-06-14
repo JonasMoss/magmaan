@@ -31,7 +31,10 @@ Convenience helpers are limited to R-side composition:
   callers through `magmaan_core`: `standardized(fit, vcov, type)` requires the
   caller-supplied covariance matrix, `stats::residuals(fit, standardized)`,
   `factor_scores(fit, data, method)` requires complete raw data, and
-  `modification_indices(fit, candidates)` forwards to the scaffold primitive.
+  `modification_indices(fit, data, candidates)` / `score_tests(fit, data)`
+  forward to the scaffold primitives. Categorical fit objects retain the
+  ordinal/mixed-ordinal stats object used for fitting, so `data` is optional for
+  the ordinary categorical MI/score path.
   `fit_measures(fit, fmg = ...)` reports the ordinary fit-measure set and can
   attach Foldnes-Moss-Gronneberg (FMG) robust p-value diagnostics.
 
