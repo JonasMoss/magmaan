@@ -105,7 +105,6 @@ add_library(magmaan STATIC
   src/estimate/nt.cpp
   src/estimate/ml_continuation.cpp
   src/estimate/fiml.cpp
-  src/estimate/reparameterize.cpp
   src/estimate/bounds.cpp
   src/estimate/ordinal.cpp
   src/estimate/pairwise.cpp
@@ -151,6 +150,7 @@ add_library(magmaan STATIC
   src/measures/factor_scores.cpp
   src/optim/nlopt_optimizer.cpp
   src/optim/optimizers.cpp
+  src/optim/reparameterize.cpp
   src/optim/terminal_audit.cpp)
 add_library(magmaan::magmaan ALIAS magmaan)
 
