@@ -15,7 +15,6 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/nl_constraints.hpp"
-#include "magmaan/estimate/reparameterize.hpp"
 #include "magmaan/estimate/resolve_fixed_x.hpp"
 #include "magmaan/estimate/gmm/gp.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
@@ -24,6 +23,7 @@
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/optim/problem.hpp"
+#include "magmaan/optim/reparameterize.hpp"
 #include "magmaan/optim/terminal_audit.hpp"
 #include "magmaan/spec/partable.hpp"
 
@@ -260,7 +260,7 @@ compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
                        std::move(r->audit)};
     }
 
-    const optim::ScalarProblem prob_a = reparameterize(prob, con);
+    const optim::ScalarProblem prob_a = optim::reparameterize(prob, con);
     if (con.n_alpha == 0) {
       Eigen::VectorXd theta = con.expand(Eigen::VectorXd(0));
       Eigen::VectorXd scratch(theta.size());
@@ -277,7 +277,7 @@ compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
     Bounds abounds;
     const bool pure_merge = !con.group.empty();
     if (!bounds.empty() && pure_merge) {
-      abounds = fold_alpha_bounds(con, bounds);
+      abounds = optim::fold_alpha_bounds(con, bounds);
       alpha0  = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
     }
     auto r = run_scalar_constrained(prob_a, h_a, jac_a, nl.m(), alpha0,
@@ -310,7 +310,7 @@ compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
                      std::move(out->audit)};
   }
 
-  const optim::ScalarProblem prob_a = reparameterize(prob, con);
+  const optim::ScalarProblem prob_a = optim::reparameterize(prob, con);
   if (con.n_alpha == 0) {
     Eigen::VectorXd theta = con.expand(Eigen::VectorXd(0));
     Eigen::VectorXd scratch(theta.size());
@@ -322,7 +322,7 @@ compose_scalar_ml(const optim::ScalarProblem& prob, const EqConstraints& con,
   Bounds abounds;
   const bool pure_merge = !con.group.empty();
   if (!bounds.empty() && pure_merge) {
-    abounds = fold_alpha_bounds(con, bounds);
+    abounds = optim::fold_alpha_bounds(con, bounds);
     alpha0 = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
   }
   auto out = run_scalar(prob_a, alpha0, abounds, backend, opts);
@@ -367,7 +367,7 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
     // run the constrained scalar optimizer on the nonlinear constraints
     // re-expressed in α:
     // h_α(α) = h(θ₀+Kα), ∂h_α/∂α = (∂h/∂θ)·K.
-    const optim::GmmProblem prob_a = reparameterize(prob, con);
+    const optim::GmmProblem prob_a = optim::reparameterize(prob, con);
     if (con.n_alpha == 0) {  // every parameter pinned by the linear system
       auto rr = prob_a.r(Eigen::VectorXd(0));
       if (!rr.has_value()) return std::unexpected(rr.error());
@@ -385,7 +385,7 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
     Bounds abounds;
     const bool pure_merge = !con.group.empty();
     if (!bounds.empty() && pure_merge) {
-      abounds = fold_alpha_bounds(con, bounds);
+      abounds = optim::fold_alpha_bounds(con, bounds);
       alpha0  = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
     }
     auto r = run_scalar_constrained(sprob_a, h_a, jac_a, nl.m(), alpha0,
@@ -419,7 +419,7 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
   }
 
   // Constrained: optimize over the reduced α (θ = θ₀ + K·α).
-  const optim::GmmProblem prob_a = reparameterize(prob, con);
+  const optim::GmmProblem prob_a = optim::reparameterize(prob, con);
   if (con.n_alpha == 0) {  // every parameter pinned by constraints
     auto r = prob_a.r(Eigen::VectorXd(0));
     if (!r.has_value()) return std::unexpected(r.error());
@@ -431,7 +431,7 @@ compose_gmm(const model::ModelEvaluator& ev, const EqConstraints& con,
   Bounds abounds;
   const bool pure_merge = !con.group.empty();
   if (!bounds.empty() && pure_merge) {
-    abounds = fold_alpha_bounds(con, bounds);
+    abounds = optim::fold_alpha_bounds(con, bounds);
     alpha0 = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
   }
   auto out = run_gmm(prob_a, alpha0, abounds, backend, opts);
@@ -1114,7 +1114,7 @@ compose_fisher_ml(const Prelude& pre, const SampleStats& samp,
   Eigen::VectorXd driven = driven_reduced ? con.contract(x0) : x0;
   Bounds driven_bounds;
   if (!bounds.empty()) {
-    driven_bounds = driven_reduced ? fold_alpha_bounds(con, bounds) : bounds;
+    driven_bounds = driven_reduced ? optim::fold_alpha_bounds(con, bounds) : bounds;
     driven = driven.cwiseMax(driven_bounds.lower).cwiseMin(driven_bounds.upper);
   }
 
@@ -1361,7 +1361,7 @@ compose_irls_outer(const spec::LatentStructure& pt, const Prelude& pre,
   Eigen::VectorXd driven = driven_reduced ? con.contract(x0) : x0;
   Bounds driven_bounds;
   if (!bounds.empty()) {
-    driven_bounds = driven_reduced ? fold_alpha_bounds(con, bounds) : bounds;
+    driven_bounds = driven_reduced ? optim::fold_alpha_bounds(con, bounds) : bounds;
     driven = driven.cwiseMax(driven_bounds.lower).cwiseMin(driven_bounds.upper);
   }
 

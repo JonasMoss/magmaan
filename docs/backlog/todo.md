@@ -267,16 +267,6 @@ decisions in the simulation backlog.
     needed for the paper, since the spectrum-once-then-loop R orchestration
     avoids a per-method `robust_ordinal` recompute. (`_ug`/unbiased-Gamma is N/A
     for polychoric: the NACOV is already the asymptotic Gamma.)
-- **C++/API done 2026-06-13; R only-when-needed.** The `FIMLPack`/`FIMLH1`
-  value-based precomputation (roadmap, Continuous FIML) is threaded through the
-  C++ post-fit helpers, `api::sem`, ordinary and MLR-robust FIML
-  modification-index / score-test helpers, and the FIML Satorra-2000 nested
-  restriction-map helper. The remaining pack boundary is the R bindings, which
-  are intentionally stateless per call today: each `estimate_fiml_*()` round-trip
-  rebuilds the pack and may re-run H1 EM. Threading it needs the R fit object to
-  carry an XPtr to fit-time C++ state; add only when a concrete R workflow shows
-  the round-trip rebuild is material.
-
 ## Benchmarks
 
 Advisory local tooling, not a substitute for parity fixtures. Full design:
@@ -525,8 +515,6 @@ into `<domain>::frontier`. Canonical public headers now live under
   (24 includers), `nl_constraints.hpp`, `expr_eval.hpp`, `resolve_fixed_x.hpp`
   (13). A structural relayering — its own pass, with a design note settling
   whether constraint *evaluation* is `spec` or `estimate`.
-- **M.** Move `reparameterize.hpp` to `optim/` (optimizer machinery, not an
-  estimator); it is coupled to the `estimate/constraints.hpp` move above.
 - **S/M.** Settle whether `cfa_utils.hpp` belongs in `spec` or `model`; depends on
   the start-values decision below.
 - **M.** Gather the five start-value producers (`start_values.hpp`) into an

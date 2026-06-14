@@ -23,7 +23,6 @@
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/gmm/gp.hpp"
-#include "magmaan/estimate/reparameterize.hpp"
 #include "magmaan/inference/inference.hpp"
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/estimate/start_values.hpp"
@@ -32,6 +31,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/optim/problem.hpp"
+#include "magmaan/optim/reparameterize.hpp"
 #include "magmaan/parse/op.hpp"
 
 namespace magmaan::estimate {
@@ -4241,7 +4241,7 @@ solve_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
     return Estimates{prob.expand(out->x), out->fmin, out->iterations};
   }
 
-  const optim::GmmProblem prob_a = reparameterize(prob, con);
+  const optim::GmmProblem prob_a = optim::reparameterize(prob, con);
   if (con.n_alpha == 0) {  // every parameter pinned by the linear system
     auto r = prob_a.r(Eigen::VectorXd(0));
     if (!r.has_value()) return std::unexpected(r.error());
@@ -4252,7 +4252,7 @@ solve_ordinal_ls(const optim::GmmProblem& prob, const Eigen::VectorXd& x0,
   Bounds abounds;
   const bool pure_merge = !con.group.empty();
   if (!bounds.empty() && pure_merge) {
-    abounds = fold_alpha_bounds(con, bounds);
+    abounds = optim::fold_alpha_bounds(con, bounds);
     alpha0  = alpha0.cwiseMax(abounds.lower).cwiseMin(abounds.upper);
   }
   auto out = run_ordinal_ls(prob_a, alpha0, abounds, backend, opts);

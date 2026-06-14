@@ -1,0 +1,37 @@
+#pragma once
+
+#include "magmaan/estimate/bounds.hpp"
+#include "magmaan/estimate/constraints.hpp"
+#include "magmaan/optim/problem.hpp"
+
+// Equality constraints as a closure transformer. A theta-space problem becomes
+// a problem over the constraint-reduced alpha (theta = theta0 + K * alpha); the
+// optimizer then sees a plain unconstrained problem in alpha, and the result's
+// `expand` recovers full theta. Constraint construction remains in `estimate`
+// until the broader constraint-header retiering lands.
+
+namespace magmaan::optim {
+
+// Reduce a least-squares problem to the alpha parameterization.
+//   r_alpha(alpha) = r_theta(theta0 + K * alpha)
+//   J_alpha(alpha) = J_theta(theta0 + K * alpha) * K
+GmmProblem
+reparameterize(const GmmProblem& prob,
+               const estimate::EqConstraints& con);
+
+// Reduce a scalar problem to the alpha parameterization.
+//   F_alpha(alpha) = F_theta(theta0 + K * alpha)
+//   grad_alpha F = K' * grad_theta F
+ScalarProblem
+reparameterize(const ScalarProblem& prob,
+               const estimate::EqConstraints& con);
+
+// Fold per-theta box bounds onto the constraint-reduced alpha for a pure-merge
+// reparameterization. A merged alpha gets the intersection of the boxes of
+// every theta it stands in for. General-linear equality constraints have no
+// box-preserving alpha and are optimized unbounded with a post-hoc bound check.
+estimate::Bounds
+fold_alpha_bounds(const estimate::EqConstraints& con,
+                  const estimate::Bounds& b);
+
+}  // namespace magmaan::optim

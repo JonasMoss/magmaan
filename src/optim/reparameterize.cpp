@@ -1,6 +1,7 @@
-#include "magmaan/estimate/reparameterize.hpp"
+#include "magmaan/optim/reparameterize.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <limits>
 #include <utility>
 
@@ -11,11 +12,12 @@
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/optim/problem.hpp"
 
-namespace magmaan::estimate {
+namespace magmaan::optim {
 
-optim::GmmProblem
-reparameterize(const optim::GmmProblem& prob, const EqConstraints& con) {
-  optim::GmmProblem out;
+GmmProblem
+reparameterize(const GmmProblem& prob,
+               const estimate::EqConstraints& con) {
+  GmmProblem out;
   out.n_resid = prob.n_resid;
   out.n_param = static_cast<Eigen::Index>(con.n_alpha);
 
@@ -31,11 +33,11 @@ reparameterize(const optim::GmmProblem& prob, const EqConstraints& con) {
   };
   if (prob.eval) {
     out.eval = [eval = prob.eval, con](
-                   const Eigen::VectorXd& a) -> fit_expected<optim::LsEvaluation> {
+                   const Eigen::VectorXd& a) -> fit_expected<LsEvaluation> {
       auto e = eval(con.expand(a));
       if (!e.has_value()) return std::unexpected(e.error());
-      return optim::LsEvaluation{std::move(e->residual),
-                                 Eigen::MatrixXd(e->jacobian * con.Kmat)};
+      return LsEvaluation{std::move(e->residual),
+                          Eigen::MatrixXd(e->jacobian * con.Kmat)};
     };
   }
   out.expand = [e = prob.expand, con](const Eigen::VectorXd& a) {
@@ -44,9 +46,10 @@ reparameterize(const optim::GmmProblem& prob, const EqConstraints& con) {
   return out;
 }
 
-optim::ScalarProblem
-reparameterize(const optim::ScalarProblem& prob, const EqConstraints& con) {
-  optim::ScalarProblem out;
+ScalarProblem
+reparameterize(const ScalarProblem& prob,
+               const estimate::EqConstraints& con) {
+  ScalarProblem out;
   out.n_param = static_cast<Eigen::Index>(con.n_alpha);
 
   out.f = [f = prob.f, con](const Eigen::VectorXd& a,
@@ -63,10 +66,12 @@ reparameterize(const optim::ScalarProblem& prob, const EqConstraints& con) {
   return out;
 }
 
-Bounds fold_alpha_bounds(const EqConstraints& con, const Bounds& b) {
+estimate::Bounds
+fold_alpha_bounds(const estimate::EqConstraints& con,
+                  const estimate::Bounds& b) {
   constexpr double kInf = std::numeric_limits<double>::infinity();
   const Eigen::Index na = con.Kmat.cols();
-  Bounds out;
+  estimate::Bounds out;
   out.lower = Eigen::VectorXd::Constant(na, -kInf);
   out.upper = Eigen::VectorXd::Constant(na, kInf);
   for (Eigen::Index k = 0; k < b.lower.size(); ++k) {
@@ -78,4 +83,4 @@ Bounds fold_alpha_bounds(const EqConstraints& con, const Bounds& b) {
   return out;
 }
 
-}  // namespace magmaan::estimate
+}  // namespace magmaan::optim

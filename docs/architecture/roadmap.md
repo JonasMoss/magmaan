@@ -1364,6 +1364,12 @@ stop rather than any usable non-error return.
   target namespaces: `parse`, `spec`, `model`, `data`, `estimate`,
   `inference`, `robust`, `measures`, `sim`, `optim`, and `compat::lavaan`. Repository
   code and R binding internals use those namespaces directly.
+- The `optim` namespace owns optimizer interfaces/backends, terminal audit
+  helpers, and the equality-constraint reparameterization transforms that map
+  theta-space scalar/GMM problems into constraint-reduced alpha coordinates.
+  Constraint construction still lives in `estimate` until the broader
+  constraint-header retiering lands; the old `estimate/reparameterize.hpp` path
+  is a forwarding shim.
 - Old `fit/*` and `partable/*` compatibility headers have been removed; use the
   target namespace headers directly.
 
