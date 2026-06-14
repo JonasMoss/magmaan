@@ -36,7 +36,9 @@ Convenience helpers are limited to R-side composition:
   ordinal/mixed-ordinal stats object used for fitting, so `data` is optional for
   the ordinary categorical MI/score path. Factor scores use
   regression/Bartlett for continuous fits and EBM/ML/EAP for ordinal or
-  mixed-ordinal fits; EBM is the categorical default.
+  mixed-ordinal fits; EBM is the categorical default. For one-factor
+  ordinal/mixed EAP scores, `factor_score_precision(fit, data)` reports
+  posterior variance/SE and sample-moment PRMSE.
   `fit_measures(fit, fmg = ...)` reports the ordinary fit-measure set and can
   attach Foldnes-Moss-Gronneberg (FMG) robust p-value diagnostics.
 

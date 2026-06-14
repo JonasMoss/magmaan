@@ -381,6 +381,7 @@ magmaan_core <- local({
       "measures_residuals",
       "measures_standardized_residuals",
       "measures_factor_scores",
+      "measures_factor_score_precision",
       "measures_compute_defined"
     ),
     frontier = c(

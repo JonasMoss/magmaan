@@ -273,6 +273,10 @@ measures_factor_scores <- function(fit, raw_data, method = "regression") {
     .Call(`_magmaan_measures_factor_scores`, fit, raw_data, method)
 }
 
+measures_factor_score_precision <- function(fit, raw_data) {
+    .Call(`_magmaan_measures_factor_score_precision`, fit, raw_data)
+}
+
 inference_modification_indices <- function(fit, weight = NULL, information = "expected", candidates = "fixed", include_loadings = TRUE, include_covariances = TRUE, h_step = 1e-4) {
     .Call(`_magmaan_inference_modification_indices`, fit, weight, information, candidates, include_loadings, include_covariances, h_step)
 }
@@ -620,4 +624,3 @@ sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 
 sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
     .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
 }
-

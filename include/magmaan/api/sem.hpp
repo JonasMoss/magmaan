@@ -423,6 +423,8 @@ Result<measures::StandardizedResiduals> standardized_residuals(const Fit &fit);
 Result<measures::FactorScores>
 factor_scores(const Fit &fit, const data::RawData &raw,
               measures::FactorScoreMethod method);
+Result<measures::FactorScorePrecision>
+factor_score_precision(const Fit &fit, const data::RawData &raw);
 Result<inference::ScoreTestTable>
 modification_indices(const Fit &fit,
                      inference::ModificationIndexOptions options = {});

@@ -526,7 +526,9 @@ double eap_integrand(double* x) {
   const double z = ev_or->logp - ctx->log_center;
   if (z < -745.0) return 0.0;
   const double w = std::exp(std::min(z, 40.0));
-  return ctx->moment == 0 ? w : (*x) * w;
+  if (ctx->moment == 0) return w;
+  if (ctx->moment == 1) return (*x) * w;
+  return (*x) * (*x) * w;
 }
 
 post_expected<double>
@@ -567,8 +569,14 @@ integrate_eap_moment(const OrdinalScoreBlock& block,
   return result;
 }
 
-post_expected<Eigen::VectorXd>
-eap_score(const OrdinalScoreBlock& block, Eigen::Index row) {
+struct EapMomentStats {
+  double mean = 0.0;
+  double second = 0.0;
+  double variance = 0.0;
+};
+
+post_expected<EapMomentStats>
+eap_moments(const OrdinalScoreBlock& block, Eigen::Index row) {
   if (block.B.Lambda.cols() != 1) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "factor_scores_ordinal(): EAP currently supports one latent dimension; "
@@ -582,13 +590,77 @@ eap_score(const OrdinalScoreBlock& block, Eigen::Index row) {
   if (!den_or.has_value()) return std::unexpected(den_or.error());
   auto num_or = integrate_eap_moment(block, row, ev_or->logp, 1);
   if (!num_or.has_value()) return std::unexpected(num_or.error());
+  auto second_or = integrate_eap_moment(block, row, ev_or->logp, 2);
+  if (!second_or.has_value()) return std::unexpected(second_or.error());
   if (!(*den_or > 0.0) || !std::isfinite(*den_or) ||
-      !std::isfinite(*num_or)) {
+      !std::isfinite(*num_or) || !std::isfinite(*second_or)) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "factor_scores_ordinal(): invalid EAP integral ratio"));
   }
+  EapMomentStats out;
+  out.mean = *num_or / *den_or;
+  out.second = *second_or / *den_or;
+  out.variance = out.second - out.mean * out.mean;
+  const double tol = 1e-10 * (1.0 + std::abs(out.second));
+  if (out.variance < 0.0 && out.variance >= -tol) out.variance = 0.0;
+  if (!std::isfinite(out.mean) || !std::isfinite(out.second) ||
+      !(out.variance >= 0.0) || !std::isfinite(out.variance)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "factor_scores_ordinal(): invalid EAP posterior variance"));
+  }
+  return out;
+}
+
+post_expected<Eigen::VectorXd>
+eap_score(const OrdinalScoreBlock& block, Eigen::Index row) {
+  auto moments_or = eap_moments(block, row);
+  if (!moments_or.has_value()) return std::unexpected(moments_or.error());
   Eigen::VectorXd out(1);
-  out(0) = *num_or / *den_or;
+  out(0) = moments_or->mean;
+  return out;
+}
+
+struct PrmseAccumulator {
+  double n = 0.0;
+  double sum_mean = 0.0;
+  double sum_mean_sq = 0.0;
+  double sum_var = 0.0;
+
+  void add(double mean, double variance) noexcept {
+    n += 1.0;
+    sum_mean += mean;
+    sum_mean_sq += mean * mean;
+    sum_var += variance;
+  }
+};
+
+post_expected<double> prmse_from_accumulator(const PrmseAccumulator& acc,
+                                             std::string_view call) {
+  if (!(acc.n > 0.0) || !std::isfinite(acc.n) ||
+      !std::isfinite(acc.sum_mean) || !std::isfinite(acc.sum_mean_sq) ||
+      !std::isfinite(acc.sum_var)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": invalid PRMSE sample moments"));
+  }
+  const double h1 = acc.sum_mean / acc.n;
+  const double h2 = acc.sum_mean_sq / acc.n;
+  const double h3 = acc.sum_var / acc.n;
+  double num = h2 - h1 * h1;
+  const double tol = 1e-10 * (1.0 + std::abs(h2));
+  if (num < 0.0 && num >= -tol) num = 0.0;
+  const double den = num + h3;
+  if (!(num >= 0.0) || !(den > 0.0) || !std::isfinite(num) ||
+      !std::isfinite(den)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": invalid PRMSE denominator"));
+  }
+  double out = num / den;
+  if (out < 0.0 && out >= -1e-12) out = 0.0;
+  if (out > 1.0 && out <= 1.0 + 1e-12) out = 1.0;
+  if (!(out >= 0.0 && out <= 1.0) || !std::isfinite(out)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": PRMSE is outside [0, 1]"));
+  }
   return out;
 }
 
@@ -676,6 +748,103 @@ factor_scores_ordinal_impl(spec::LatentStructure pt,
     }
     out.scores.push_back(std::move(scores));
   }
+  return out;
+}
+
+post_expected<FactorScorePrecision>
+factor_score_precision_ordinal_impl(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::RawData& raw,
+    const std::vector<Eigen::VectorXd>& thresholds,
+    const std::vector<std::vector<std::int32_t>>& threshold_ov,
+    const std::vector<std::vector<std::int32_t>>& threshold_level,
+    const std::vector<std::vector<std::int32_t>>& n_levels,
+    const std::vector<std::vector<std::int32_t>>* ordered,
+    const Estimates& est,
+    estimate::OrdinalParameterization parameterization,
+    std::string_view call) {
+  if (auto ok = require_complete_raw(raw, call); !ok.has_value()) {
+    return std::unexpected(ok.error());
+  }
+  if (raw.X.size() != rep.dims.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": raw block count does not match model"));
+  }
+  if (static_cast<std::size_t>(est.theta.size()) !=
+      static_cast<std::size_t>(pt.n_free())) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": fitted theta length does not match partable"));
+  }
+
+  auto th_or = make_threshold_blocks(pt, rep, thresholds, threshold_ov,
+                                     threshold_level, n_levels, ordered,
+                                     est.theta, call);
+  if (!th_or.has_value()) return std::unexpected(th_or.error());
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto asm_or = ev_or->assembled(est.theta);
+  if (!asm_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": ev.assembled(theta) failed: " +
+            asm_or.error().detail));
+  }
+  if (asm_or->blocks.size() != raw.X.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(call) + ": assembled block count does not match raw data"));
+  }
+
+  FactorScorePrecision out;
+  out.scores.scores.reserve(raw.X.size());
+  out.posterior_variance.reserve(raw.X.size());
+  out.posterior_se.reserve(raw.X.size());
+  out.prmse_by_group.reserve(raw.X.size());
+  PrmseAccumulator pooled;
+  for (std::size_t b = 0; b < raw.X.size(); ++b) {
+    auto block_or = make_score_block(raw.X[b], asm_or->blocks[b],
+                                     std::move((*th_or)[b]),
+                                     parameterization, b, call);
+    if (!block_or.has_value()) return std::unexpected(block_or.error());
+    OrdinalScoreBlock& block = *block_or;
+    if (block.B.Lambda.cols() != 1) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(call) +
+              ": posterior precision currently supports one latent dimension"));
+    }
+    const Eigen::Index n = raw.X[b].rows();
+    Eigen::MatrixXd scores(n, 1);
+    Eigen::MatrixXd variances(n, 1);
+    std::unordered_map<PatternKey, EapMomentStats, PatternKeyHash> cache;
+    cache.reserve(static_cast<std::size_t>(std::min<Eigen::Index>(n, 4096)));
+    PrmseAccumulator group_acc;
+    for (Eigen::Index i = 0; i < n; ++i) {
+      PatternKey key = pattern_key(raw.X[b].row(i));
+      auto it = cache.find(key);
+      if (it == cache.end()) {
+        auto moments_or = eap_moments(block, i);
+        if (!moments_or.has_value()) return std::unexpected(moments_or.error());
+        it = cache.emplace(std::move(key), *moments_or).first;
+      }
+      scores(i, 0) = it->second.mean;
+      variances(i, 0) = it->second.variance;
+      group_acc.add(it->second.mean, it->second.variance);
+      pooled.add(it->second.mean, it->second.variance);
+    }
+    auto prmse_or = prmse_from_accumulator(group_acc, call);
+    if (!prmse_or.has_value()) return std::unexpected(prmse_or.error());
+    out.prmse_by_group.push_back(*prmse_or);
+    out.posterior_se.push_back(variances.array().sqrt().matrix());
+    out.posterior_variance.push_back(std::move(variances));
+    out.scores.scores.push_back(std::move(scores));
+  }
+  auto pooled_or = prmse_from_accumulator(pooled, call);
+  if (!pooled_or.has_value()) return std::unexpected(pooled_or.error());
+  out.pooled_prmse = *pooled_or;
   return out;
 }
 
@@ -832,6 +1001,34 @@ factor_scores_mixed_ordinal(spec::LatentStructure pt,
       std::move(pt), rep, raw, stats.thresholds, stats.threshold_ov,
       stats.threshold_level, stats.n_levels, &stats.ordered, est, method,
       parameterization, "factor_scores_mixed_ordinal()");
+}
+
+post_expected<FactorScorePrecision>
+factor_score_precision_ordinal(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::RawData& raw,
+    const data::OrdinalStats& stats,
+    const Estimates& est,
+    estimate::OrdinalParameterization parameterization) {
+  return factor_score_precision_ordinal_impl(
+      std::move(pt), rep, raw, stats.thresholds, stats.threshold_ov,
+      stats.threshold_level, stats.n_levels, nullptr, est, parameterization,
+      "factor_score_precision_ordinal()");
+}
+
+post_expected<FactorScorePrecision>
+factor_score_precision_mixed_ordinal(
+    spec::LatentStructure pt,
+    const model::MatrixRep& rep,
+    const data::RawData& raw,
+    const data::MixedOrdinalStats& stats,
+    const Estimates& est,
+    estimate::OrdinalParameterization parameterization) {
+  return factor_score_precision_ordinal_impl(
+      std::move(pt), rep, raw, stats.thresholds, stats.threshold_ov,
+      stats.threshold_level, stats.n_levels, &stats.ordered, est,
+      parameterization, "factor_score_precision_mixed_ordinal()");
 }
 
 }  // namespace magmaan::measures
