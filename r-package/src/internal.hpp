@@ -69,6 +69,18 @@ inline std::vector<magmaan::spec::GroupEqual> group_equal_attr(SEXP x) {
   return out;
 }
 
+// Stamp the `group.equal` families as enum indices on a partable df, matching
+// what lavaan_lavaanify writes, so a fit result carries them forward to the
+// nested ordinal LR test (which rebuilds each structure from its partable).
+inline void stamp_group_equal_attr(
+    SEXP target, const std::vector<magmaan::spec::GroupEqual>& ge) {
+  if (ge.empty()) return;
+  Rcpp::IntegerVector v(static_cast<R_xlen_t>(ge.size()));
+  for (std::size_t i = 0; i < ge.size(); ++i)
+    v[static_cast<R_xlen_t>(i)] = static_cast<int>(ge[i]);
+  Rf_setAttrib(target, Rf_install("magmaan.group_equal"), v);
+}
+
 // ---- robust InferenceSpec enums <-> strings (shared by fit.cpp / robust.cpp) -
 
 inline magmaan::robust::Information info_from_string(const std::string& s) {
@@ -783,8 +795,13 @@ inline Ctx ctx_from_fit(Rcpp::List fit) {
                "or fcsem_standardized_rows()");
   }
   auto parsed = parse_partable_df(Rcpp::DataFrame(partable));
-  return ctx_from_parts(std::move(parsed.structure), std::move(parsed.names),
-                        fit["S"], fit["nobs"], sm, /*reorder=*/false);
+  Ctx ctx = ctx_from_parts(std::move(parsed.structure), std::move(parsed.names),
+                           fit["S"], fit["nobs"], sm, /*reorder=*/false);
+  // `from_lavaan_partable` cannot recover group.equal; re-attach it so the
+  // nested ordinal LR test's prepare_ordinal re-prep applies the same release
+  // the fit did (otherwise a released H0 collapses back to the pinned scale).
+  ctx.pt.group_equal = group_equal_attr(partable);
+  return ctx;
 }
 
 inline magmaan::estimate::Estimates est_from_fit(Rcpp::List fit) {

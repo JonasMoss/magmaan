@@ -1389,6 +1389,14 @@ Rcpp::List ordinal_fit_result(Ctx& ctx,
   Rcpp::List out = fit_result(ctx, est, starts, estimator);
   out["ordinal"] = true;
   out["parameterization"] = parameterization;
+  // Carry the group.equal families on the partable so the nested ordinal LR
+  // test (which rebuilds each structure via ctx_from_fit) re-applies the
+  // Wu-Estabrook release; from_lavaan_partable would otherwise drop them.
+  if (!ctx.pt.group_equal.empty()) {
+    Rcpp::DataFrame pt_out = out["partable"];
+    stamp_group_equal_attr(pt_out, ctx.pt.group_equal);
+    out["partable"] = pt_out;
+  }
   Rcpp::List stats_r = ordinal_stats_to_r(stats);
   out["ordinal_stats"] = stats_r;
   out["thresholds"] = stats_r["thresholds"];

@@ -442,6 +442,48 @@ fmg_tests_mixed_ordinal <- function(fit, mixed_stats, tests = NULL, weight = "")
   .fmg_result_rows_ordinal(spectrum, specs)
 }
 
+#' Foldnes-Moss-Gronneberg eigenvalue-tail diagnostics for a nested ordinal pair.
+#'
+#' The nested-model analogue of [fmg_tests_ordinal()]. The Satorra-2000 reduction
+#' of the two polychoric least-squares fits yields a difference triple --- the
+#' unscaled LS difference statistic \eqn{T_{H0} - T_{H1}}, the restriction rank
+#' (`df_diff`), and the difference spectrum (the nested UGamma eigenvalues) ---
+#' and the same FMG eigenvalue-tail transforms are applied to it, exactly as
+#' [fmg_tests_ordinal()] applies them to a single-model UGamma spectrum.
+#'
+#' `A.method` defaults to `"delta"`: the configural-to-metric ordinal invariance
+#' step is non-nested (Wu-Estabrook metric frees the group-2+ scale/intercepts
+#' that configural fixes), so the exact parameter-nesting restriction does not
+#' apply --- the moment-Jacobian column-space (`delta`) restriction is what
+#' lavaan's `lavTestLRT(method = "satorra.2000")` uses there. (`robust_nested_lrt()`
+#' keeps the `"exact"` default for nested complete-data/FIML pairs.)
+#'
+#' @param fit_H1 Less-restricted (e.g. configural) ordinal least-squares fit.
+#' @param fit_H0 More-restricted (e.g. metric / `group.equal`) ordinal fit.
+#' @param ordinal_stats The categorical sample statistics used for both fits
+#'   (the object from `data_ordinal_stats_from_df()`), as in `fmg_tests_ordinal()`.
+#' @param tests,weight As in [fmg_tests_ordinal()].
+#' @param A.method `"delta"` (default) or `"exact"`.
+#'
+#' @return A `magmaan_fmg_tests` data frame, identical in shape to
+#'   [fmg_tests_ordinal()].
+#' @export
+fmg_nested_ordinal <- function(fit_H1, fit_H0, ordinal_stats, tests = NULL,
+                               weight = "", A.method = c("delta", "exact")) {
+  A.method <- match.arg(A.method)
+  tests <- tests %||% .fmg_default_tests_ordinal()
+  specs <- .fmg_adjust_specs_ordinal(lapply(tests, .fmg_parse_test),
+                                     caller = "fmg_nested_ordinal")
+  nested <- robust_nested_lrt(
+    fit_H1, fit_H0, data = ordinal_stats, gamma = "empirical",
+    method = "restriction_map", A.method = A.method,
+    weight = if (nzchar(weight)) weight else NULL)
+  spectrum <- list(chisq_standard = nested$T_diff,
+                   df = nested$df_diff,
+                   eigvals = nested$eigenvalues)
+  .fmg_result_rows_ordinal(spectrum, specs)
+}
+
 #' Foldnes-Moss-Gronneberg goodness-of-fit diagnostics.
 #'
 #' Computes FMG p-values and diagnostics for a complete-data ML fit or a FIML

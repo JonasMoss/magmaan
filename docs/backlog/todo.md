@@ -361,7 +361,8 @@ decisions in the simulation backlog.
 - **M. Ordinal `group.equal` R surface + paper (the C++ core is done, gated).**
   The keyword + Wu-Estabrook theta release + nested satorra.2000 LRT all landed
   and match lavaan in C++ (commits 2aae694 / be27d01 / 00f2373; see the ordinal
-  SNLLS bullet above). What's left is the nested-ordinal R wrapper and the paper:
+  SNLLS bullet above). The R surface (single-fit + nested) is now done and
+  lavaan-gated; only the paper remains.
   - **R surface — LANDED 2026-06-15, lavaan-gated.** `model_spec()` /
     `magmaan(...)` take `group_equal` / `group_partial` (snake_case, lavaan
     family strings); Rcpp `lavaan_lavaanify` maps strings → `GroupEqual` and ties
@@ -381,17 +382,25 @@ decisions in the simulation backlog.
     estimate match `lavaan::cfa(group.equal=, parameterization="theta")` (est
     diff ≤ 2e-4; `~*~` excluded — a fixed theta row lavaan reports as a derived
     implied scale, magmaan keeps the nominal 1.0 and carries the scale on `~~`).
-  - **Nested-ordinal FMG wrapper (remaining).** Add an Rcpp export beside
-    `infer_ordinal_lr_test_satorra2000` returning the diff spectrum, and a thin R
-    `fmg_nested_ordinal(...)` paralleling `fmg_tests_ordinal`. Default
-    `A.method = "delta"` for ordinal configural→metric pairs in
-    `r-package/R/nested_test.R` (it already exposes `c("exact","delta")`, default
-    `"exact"`). **Note:** the nested R path rebuilds each fit's structure via
-    `ctx_from_fit` → `from_lavaan_partable`, which also drops `group_equal`; the
-    H0 (metric) fit needs the same `group_equal_attr` re-attach the single-fit
-    impls now do (stamp it on `fit$partable` in `ordinal_fit_result` and read it
-    in `ctx_from_fit`) before its moment Jacobian re-prep, or the released
-    H0 structure won't reproduce.
+  - **Nested-ordinal FMG wrapper — LANDED 2026-06-15, lavaan-gated.** No new
+    Rcpp export was needed: `infer_ordinal_lr_test_satorra2000` already returns
+    the difference triple (`T_diff`, `df_diff`, `eigenvalues`), so
+    `fmg_nested_ordinal(fit_H1, fit_H0, ordinal_stats, ...)` (`r-package/R/fmg.R`)
+    is a thin R wrapper that runs `robust_nested_lrt(method="restriction_map")`
+    and feeds that triple through the same `.fmg_result_rows_ordinal` /
+    `infer_fmg_test` path as `fmg_tests_ordinal`. Its `A.method` defaults to
+    `"delta"` (the configural→metric Wu-Estabrook pair is non-nested);
+    `robust_nested_lrt()` keeps its `"exact"` default so nested complete-data /
+    FIML pairs are unaffected. The threading gotcha was real and is fixed:
+    `ctx_from_fit` → `from_lavaan_partable` drops `group_equal`, which the H0
+    re-prep inside `lr_test_satorra2000_ordinal` needs (it re-preps both
+    structures), so `ordinal_fit_result` now stamps `magmaan.group_equal` on
+    `fit$partable` (`stamp_group_equal_attr`) and `ctx_from_fit` re-attaches it.
+    Gated by `r-package/examples/group_equal_nested_ordinal.R`: the rescaled
+    satorra.2000 scaled Δχ² (3.0255), Δdf (3), and p (0.387) match
+    `lavTestLRT(method="satorra.2000")` on `se="robust.sem"` fits (≤ 5e-3,
+    reproducing the C++ nested golden), and the FMG `sb_ls` row reproduces
+    `nestedTest()`'s `T_scaled`.
   - **Paper** (`papers/ordinal-fmg/`, private leaf): switch
     `harness-population.R::invariance_syntax` from loadings-only to
     `group.equal = c("thresholds","loadings")` under theta; add a
