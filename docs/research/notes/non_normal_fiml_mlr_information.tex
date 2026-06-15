@@ -290,6 +290,125 @@ need to show the stronger projected equality
 or an equivalent equality for the full weighted-mixture spectrum. There is no
 general theorem giving this under non-normal FIML.
 
+\section*{A two-variable witness}
+
+A maximally small complete-data example already shows the issue. Let the
+saturated covariance of two observed variables be
+\[
+  \Sigma_Y =
+  \begin{bmatrix}
+    1 & \rho \\
+    \rho & 1
+  \end{bmatrix},
+  \qquad \rho \ne 0,
+\]
+but fit the restricted independence model
+\[
+  \Sigma(\theta) =
+  \begin{bmatrix}
+    \theta_1 & 0 \\
+    0 & \theta_2
+  \end{bmatrix}.
+\]
+The pseudo-true restricted covariance is
+\[
+  \Sigma(\theta^\star) = I_2,
+\]
+whereas the saturated covariance is \(\Sigma_Y\). Hence the structured and
+unstructured H1 weights evaluate the normal-theory covariance-moment weight at
+different places.
+
+Use covariance moments ordered as
+\[
+  \eta = (\sigma_{11},\sigma_{21},\sigma_{22})'.
+\]
+The restricted derivative is
+\[
+  \Delta =
+  \begin{bmatrix}
+    1 & 0 \\
+    0 & 0 \\
+    0 & 1
+  \end{bmatrix},
+\]
+so the single degree of freedom is the covariance coordinate. At the structured
+point \(I_2\),
+\[
+  \Gamma_{\mathrm{NT}}(I_2)
+    =
+  \begin{bmatrix}
+    2 & 0 & 0 \\
+    0 & 1 & 0 \\
+    0 & 0 & 2
+  \end{bmatrix},
+  \qquad
+  V_{\mathrm{struct}} = \Gamma_{\mathrm{NT}}(I_2)^{-1}.
+\]
+The corresponding residual-space matrix is simply
+\[
+  U_{\mathrm{struct}}
+    =
+  \begin{bmatrix}
+    0 & 0 & 0 \\
+    0 & 1 & 0 \\
+    0 & 0 & 0
+  \end{bmatrix}.
+\]
+
+If the trace meat is the normal covariance-moment matrix at the saturated
+covariance,
+\[
+  \Gamma_{\mathrm{NT}}(\Sigma_Y)
+    =
+  \begin{bmatrix}
+    2 & 2\rho & 2\rho^2 \\
+    2\rho & 1+\rho^2 & 2\rho \\
+    2\rho^2 & 2\rho & 2
+  \end{bmatrix},
+\]
+then the structured one-df scale is
+\[
+  c_{\mathrm{struct}}
+    =
+  \tr\{U_{\mathrm{struct}}\Gamma_{\mathrm{NT}}(\Sigma_Y)\}
+    =
+  1+\rho^2.
+\]
+
+By contrast, the unstructured choice uses
+\[
+  V_{\mathrm{unstruct}}
+    = \Gamma_{\mathrm{NT}}(\Sigma_Y)^{-1}.
+\]
+For any positive definite \(\Gamma\), the matrix
+\[
+  U(V=\Gamma^{-1})\Gamma
+\]
+is the \(\Gamma^{-1}\)-orthogonal residual projector and has trace equal to its
+rank. Here the rank is the model df, one. Hence
+\[
+  c_{\mathrm{unstruct}} = 1.
+\]
+
+Therefore, for every \(\rho\ne 0\),
+\[
+  c_{\mathrm{struct}} = 1+\rho^2
+  \qquad \text{but} \qquad
+  c_{\mathrm{unstruct}} = 1.
+\]
+The disagreement is not numerical and not a trace shortcut artifact. It is
+caused entirely by evaluating \(V\) at the restricted structured covariance
+\(I_2\) instead of at the saturated covariance \(\Sigma_Y\).
+
+This witness uses complete data only to keep the algebra visible. Missing data
+replaces \(\Gamma_{\mathrm{NT}}(\Sigma_Y)\) by the saturated observed-pattern
+sandwich
+\[
+  H_\eta^{-1}J_\eta H_\eta^{-1},
+\]
+but the same logical burden remains: structured correctness requires the
+restricted and saturated H1 curvatures to agree after projection.
+
 \section*{Practical diagnostic}
 
 The clean diagnostic is therefore not a new trace formula. It is a controlled
