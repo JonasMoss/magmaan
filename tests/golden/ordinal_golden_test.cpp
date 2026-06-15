@@ -53,6 +53,18 @@ const std::vector<std::string> kMixedOrdinalFixtures = {
     "0002_sparse_4cat_listwise_mixed_cfa",
 };
 
+// Wu-Estabrook (2016) two-group ordinal measurement-invariance fixtures fit
+// under the THETA parameterization with the lavaan `group.equal` keyword. Held
+// in their own list + test case (not folded into kOrdinalFixtures) because the
+// released-scale theta model is gated only on the bounded full-Newton fit
+// (df / chisq / theta_hat); the standardized, factor-score, and profiled-SNLLS
+// arms are not part of this contract.
+const std::vector<std::string> kOrdinalInvarianceFixtures = {
+    "0017_2group_thresh_load_invariance_3cat_cfa",
+    "0018_2group_thresh_load_invariance_binary_cfa",
+    "0019_2group_thresh_invariance_3cat_cfa",
+};
+
 using magmaan::test::matrix_from_json;
 
 using magmaan::test::vector_from_json;
@@ -121,7 +133,51 @@ double to_lavaan_ls_chisq(double magmaan_chisq,
 // groups through constraints get the looser documented bound.
 double ordinal_theta_tol(const std::string& id) {
   if (id == "0013_2group_threshold_invariance_3cat_cfa") return 1.5e-4;
+  // Wu-Estabrook threshold+loading invariance fixtures couple groups through
+  // tied loadings/thresholds (the same (n_g - 1)/n_g estimation-weight gap as
+  // 0013) and free the group-2 latent-response scale + intercepts, so theta
+  // shifts by O(1/n_g). 0017 ties BOTH families and its released latent/residual
+  // variances reach O(5), so the absolute shift on those is ~2e-4 (relative
+  // ~4e-5, chisq matched to 5e-4); 0019 ties thresholds only (loadings free →
+  // less coupling) and 0018 is binary. The bound is the magnitude-scaled
+  // analogue of 0013's 1.5e-4 on O(1) parameters.
+  if (id.rfind("0017_", 0) == 0) return 3e-4;
+  if (id.rfind("0018_", 0) == 0 || id.rfind("0019_", 0) == 0) return 1.5e-4;
   return 1e-5;
+}
+
+// Ordinal estimation parameterization recorded in the fixture (delta default;
+// theta for the Wu-Estabrook invariance fixtures).
+magmaan::estimate::OrdinalParameterization fixture_param(
+    const nlohmann::json& exp) {
+  if (exp.contains("parameterization") && exp["parameterization"].is_string() &&
+      exp["parameterization"].get<std::string>() == "theta")
+    return magmaan::estimate::OrdinalParameterization::Theta;
+  return magmaan::estimate::OrdinalParameterization::Delta;
+}
+
+// Map the fixture's `group_equal` field (a lavaan family string or array of
+// strings; absent/null for non-invariance fixtures) onto BuildOptions.
+void apply_group_equal(const nlohmann::json& exp,
+                       magmaan::spec::BuildOptions& opts) {
+  if (!exp.contains("group_equal") || exp["group_equal"].is_null()) return;
+  using GE = magmaan::spec::GroupEqual;
+  auto add = [&](const std::string& s) {
+    if (s == "loadings") opts.group_equal.push_back(GE::Loadings);
+    else if (s == "thresholds") opts.group_equal.push_back(GE::Thresholds);
+    else if (s == "intercepts") opts.group_equal.push_back(GE::Intercepts);
+    else if (s == "means") opts.group_equal.push_back(GE::Means);
+    else if (s == "residuals") opts.group_equal.push_back(GE::Residuals);
+    else if (s == "residual.covariances")
+      opts.group_equal.push_back(GE::ResidualCovariances);
+    else if (s == "lv.variances") opts.group_equal.push_back(GE::LvVariances);
+    else if (s == "lv.covariances") opts.group_equal.push_back(GE::LvCovariances);
+    else if (s == "regressions") opts.group_equal.push_back(GE::Regressions);
+  };
+  const auto& ge = exp["group_equal"];
+  if (ge.is_string()) add(ge.get<std::string>());
+  else if (ge.is_array())
+    for (const auto& s : ge) add(s.get<std::string>());
 }
 
 double max_abs_diff(const Eigen::MatrixXd& a, const Eigen::MatrixXd& b) {
@@ -277,6 +333,7 @@ std::optional<OrdinalHandles> handles_from_fixture(
       opts.group_labels.push_back(b["label"].get<std::string>());
     }
   }
+  apply_group_equal(exp, opts);
   auto pt = magmaan::spec::build(*fp, opts);
   if (!pt.has_value()) {
     failures.push_back(id + ": lavaanify — " + pt.error().detail);
@@ -673,6 +730,116 @@ TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract")
   }
 
   MESSAGE("ordinal fixture fits: " << passed << " / " << total << " pass");
+  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+  CHECK(passed == total);
+}
+
+// Wu-Estabrook two-group ordinal measurement invariance via the `group.equal`
+// keyword (theta parameterization). magmaan must (a) tie the free loadings +
+// thresholds across groups, (b) release the group-2 latent-response scale
+// (free residual variance `~~`, binary-vetoed) and indicator intercepts `~1`,
+// and (c) reproduce lavaan's df / chisq / theta_hat. The released scale lives
+// on the free `~~` row in both magmaan and lavaan theta, so theta_hat compares
+// positionally with no projection.
+TEST_CASE("ordinal invariance (group.equal) theta fits match lavaan") {
+  const std::string dir = magmaan::test::fixtures_dir() + "/ordinal";
+
+  int total = 0;
+  int passed = 0;
+  std::vector<std::string> failures;
+
+  for (const auto& id : kOrdinalInvarianceFixtures) {
+    const std::string path = dir + "/" + id + ".ordinal.json";
+    auto raw = magmaan::test::read_fixture(path);
+    REQUIRE(raw.has_value());
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(exp.is_discarded());
+    if (!has_fit(exp)) continue;
+
+    auto h = handles_from_fixture(id, exp, failures);
+    if (!h.has_value()) continue;
+
+    const auto param = fixture_param(exp);
+    const magmaan::optim::OptimOptions opt{
+        .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+
+    for (const auto& fit_item : exp["fits"].items()) {
+      const std::string name = fit_item.key();
+      if (name != "DWLS" && name != "WLS") continue;
+      const auto kind = name == "DWLS"
+          ? magmaan::estimate::OrdinalWeightKind::DWLS
+          : magmaan::estimate::OrdinalWeightKind::WLS;
+      ++total;
+
+      auto est_or = magmaan::test::fit_ordinal_bounded(
+          h->pt, h->rep, h->stats, magmaan::estimate::Bounds{}, kind,
+          magmaan::estimate::Backend::NloptLbfgs, opt, param);
+      if (!est_or.has_value()) {
+        failures.push_back(id + " " + name + ": fit — " + est_or.error().detail);
+        continue;
+      }
+
+      const double lavaan_chisq = exp["fits"][name]["chisq"].get<double>();
+      const int lavaan_df = exp["fits"][name]["df"].get<int>();
+      const Eigen::VectorXd lavaan_theta =
+          vector_from_json(exp["fits"][name]["theta_hat"]);
+      const std::int64_t n_total =
+          std::accumulate(h->stats.n_obs.begin(), h->stats.n_obs.end(),
+                          std::int64_t{0});
+      Eigen::Index n_moments = 0;
+      for (std::size_t b = 0; b < h->stats.R.size(); ++b) {
+        const Eigen::Index p = h->stats.R[b].rows();
+        n_moments += h->stats.thresholds[b].size() + p * (p - 1) / 2;
+      }
+      auto pt_for_df = h->pt;
+      auto prep_for_df =
+          magmaan::estimate::prepare_ordinal_delta_partable(pt_for_df, h->stats);
+      if (!prep_for_df.has_value()) {
+        failures.push_back(id + " " + name + ": df prep — " +
+                           prep_for_df.error().detail);
+        continue;
+      }
+      auto con_or = magmaan::estimate::build_eq_constraints(pt_for_df);
+      if (!con_or.has_value()) {
+        failures.push_back(id + " " + name + ": df constraints — " +
+                           con_or.error().detail);
+        continue;
+      }
+      const int df = static_cast<int>(n_moments - con_or->n_alpha);
+      const double chisq = to_lavaan_ls_chisq(
+          2.0 * static_cast<double>(n_total) * est_or->fmin, n_total,
+          h->stats.R.size());
+      const double d_chisq = std::abs(chisq - lavaan_chisq);
+      const double d_theta = max_abs_diff(est_or->theta, lavaan_theta);
+      const double theta_tol = ordinal_theta_tol(id);
+      const double chisq_tol = 5e-3;
+
+      if (!est_or->theta.allFinite() || !std::isfinite(est_or->fmin) ||
+          est_or->fmin < 0.0) {
+        failures.push_back(id + " " + name + ": non-finite fit result");
+        continue;
+      }
+      if (est_or->theta.size() != lavaan_theta.size()) {
+        failures.push_back(id + " " + name + ": npar mismatch magmaan=" +
+                           std::to_string(est_or->theta.size()) + " lavaan=" +
+                           std::to_string(lavaan_theta.size()));
+        continue;
+      }
+      if (df != lavaan_df || d_theta > theta_tol || d_chisq > chisq_tol) {
+        failures.push_back(id + " " + name + ": df=" + std::to_string(df) +
+                           " lavaan_df=" + std::to_string(lavaan_df) +
+                           " theta diff=" + std::to_string(d_theta) +
+                           " chisq diff=" + std::to_string(d_chisq));
+        continue;
+      }
+      MESSAGE(id << " " << name << ": chisq=" << chisq << " (lavaan "
+                 << lavaan_chisq << ") df=" << df << " theta diff=" << d_theta
+                 << " npar=" << est_or->theta.size());
+      ++passed;
+    }
+  }
+
+  MESSAGE("ordinal invariance fits: " << passed << " / " << total << " pass");
   for (const auto& f : failures) MESSAGE("  FAIL " << f);
   CHECK(passed == total);
 }

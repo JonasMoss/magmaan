@@ -11,6 +11,10 @@
 
 namespace magmaan::spec {
 
+// `GroupEqual` (the lavaan `group.equal` family enum) lives in partable.hpp so
+// `LatentStructure` can carry the resolved set through to the categorical prep
+// step. `BuildOptions::group_equal` below is the build-time input.
+
 // Knobs that lavaan exposes via cfa() / sem() / lavaan() entry points.
 // We surface them on a single BuildOptions because we only have one
 // entry point. Defaults match lavaan's cfa()/sem() defaults (the choices
@@ -59,6 +63,12 @@ struct BuildOptions {
   std::int32_t             n_groups = 1;   // 1 = single-group; >1 replicates rows per group
   std::string              group_var;      // "" ⇒ "group" (if n_groups>1) or unnamed (if ==1)
   std::vector<std::string> group_labels;   // size must be 0 or n_groups
+  // Cross-group equality (≙ lavaan `group.equal` / `group.partial`). Empty in
+  // the common single-group / fully-free-across-groups case. `group_equal`
+  // names the families tied across groups; `group_partial` lists "lhs op rhs"
+  // tokens (lavaan's partial-invariance syntax) exempted from those ties.
+  std::vector<GroupEqual>  group_equal;
+  std::vector<std::string> group_partial;
 };
 
 // production: lavaanify (the P3 pipeline; see project plan for steps)

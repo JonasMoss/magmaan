@@ -56,6 +56,25 @@ struct NlConstraint {
 //   Latent    : LHS of `=~`                          (lv)
 enum class VarRole : std::uint8_t { Indicator, EndoOv, ExoOv, MiscOv, Latent };
 
+// Cross-group equality families, mirroring lavaan's `group.equal` string
+// vector. `build` ties the data-free families across groups (shared labels →
+// `eq_groups` merge). The categorical prep step (`prepare_ordinal_delta_partable`)
+// reads the resolved set off `LatentStructure::group_equal` and, when
+// `Thresholds` is present, applies the Wu-Estabrook (2016) release that lavaan
+// triggers for ordered-categorical delta models: free the group-2+ ordinal
+// response-scale variances (non-binary) and indicator intercepts.
+enum class GroupEqual : std::uint8_t {
+  Loadings,             // =~ rows
+  Thresholds,           // | rows (also triggers the categorical scale/intercept release)
+  Intercepts,           // ~1 on observed indicators
+  Means,                // ~1 on latent variables
+  Residuals,            // ~~ self-variances of observed indicators
+  ResidualCovariances,  // ~~ off-diagonals among observed indicators
+  LvVariances,          // ~~ self-variances of latent variables
+  LvCovariances,        // ~~ off-diagonals among latent variables
+  Regressions,          // ~ structural paths
+};
+
 // Composite implementation selected at lavaanify time. `None` means the caller
 // has not opened a `<~` door; any composite syntax must then fail at
 // `spec::build`. H-O is the historical desugaring path; FC-SEM is the native
@@ -164,6 +183,14 @@ struct LatentStructure {
   // (No multilevel yet: lavaan's `block` equals `group` here. When multilevel
   // lands, re-add a `block` column alongside.)
   std::vector<std::int32_t> group;
+
+  // Resolved `group.equal` families (≙ lavaan `group.equal`), stamped by
+  // `build` from `BuildOptions::group_equal`. `build` ties the data-free
+  // families across groups directly; the categorical prep step
+  // (`prepare_ordinal_delta_partable`) reads this to apply the Wu-Estabrook
+  // scale/intercept release when `Thresholds` is present. Empty in the common
+  // single-group / fully-free-across-groups case.
+  std::vector<GroupEqual>   group_equal;
 
   // Estimation contract
   std::vector<std::int32_t> free;        // 0=fixed (or constraint row); else 1-based θ index
