@@ -121,10 +121,14 @@ run_one_rep <- function(pop, sampler, rep_i, mechanism, rate, mask_seed) {
   nst  <- fmg_nested(cfg, met)
   if (is.null(g) || is.null(g_st) || is.null(mlr) || is.null(nst)) return(NULL)
 
+  yb_exact <- unname(g$p_fmg[["SB"]])
+  yb_exact_struct <- unname(g_st$p_fmg[["SB"]])
   gof_sat <- data.frame(
     outcome = "gof",
-    method = names(c(naive = g$p_naive, MLR = mlr$p, g$p_fmg)),
-    p_value = unname(c(naive = g$p_naive, MLR = mlr$p, g$p_fmg)),
+    method = names(c(naive = g$p_naive, MLR = mlr$p, YB_mplus = mlr$p,
+                     YB_exact = yb_exact, g$p_fmg)),
+    p_value = unname(c(naive = g$p_naive, MLR = mlr$p, YB_mplus = mlr$p,
+                       YB_exact = yb_exact, g$p_fmg)),
     base_stat = g$base_stat,
     df = g$df,
     trace = g$trace,
@@ -133,8 +137,10 @@ run_one_rep <- function(pop, sampler, rep_i, mechanism, rate, mask_seed) {
     stringsAsFactors = FALSE)
   gof_struct <- data.frame(
     outcome = "gof",
-    method = paste0(names(g_st$p_fmg), "_structured"),
-    p_value = unname(g_st$p_fmg),
+    method = names(c(YB_exact_structured = yb_exact_struct,
+                     setNames(g_st$p_fmg, paste0(names(g_st$p_fmg),
+                                                 "_structured")))),
+    p_value = unname(c(YB_exact_structured = yb_exact_struct, g_st$p_fmg)),
     base_stat = g_st$base_stat,
     df = g_st$df,
     trace = g_st$trace,

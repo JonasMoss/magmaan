@@ -36,6 +36,8 @@ mcar_hi <- {
 }
 sev <- mcar_hi[mcar_hi$dist == "vm2", ]
 mlr_sev <- sev$reject[sev$method == "MLR"]
+yb_exact_sev <- sev$reject[sev$method == "YB_exact"]
+yb_exact_struct_sev <- sev$reject[sev$method == "YB_exact_structured"]
 all_sev <- sev$reject[sev$method == "all"]
 all_struct_sev <- sev$reject[sev$method == "all_structured"]
 ss_sev  <- sev$reject[sev$method == "SS"]
@@ -45,28 +47,31 @@ ss_struct_sev  <- sev$reject[sev$method == "SS_structured"]
 ## Question
 
 The dominant default for incomplete continuous SEM is lavaan's
-`estimator = "MLR", missing = "ml"` — the Yuan-Bentler mean-scaled FIML test, a
-first-moment-only correction. Under non-normality the test statistic's reference
-law (a weighted sum of $\chi^2_1$) spreads its eigenvalues, so a mean-only
-scaling should miscalibrate. Does the Foldnes-Moss-Gronneberg eigenvalue family
-(scaled-shifted, EBA/pEBA, penalized-all, the full mixture) control the
-goodness-of-fit Type-I rate where MLR does not, and does that survive missing
-data?
+`estimator = "MLR", missing = "ml"` — the Mplus variant of the Yuan-Bentler
+mean-scaled FIML test. Under non-normality the test statistic's reference law
+(a weighted sum of $\chi^2_1$) spreads its eigenvalues, so two questions are
+separable: does MLR's finite-sample trace approximation match exact
+saturated-space mean scaling, and does the Foldnes-Moss-Gronneberg eigenvalue
+family (scaled-shifted, EBA/pEBA, penalized-all, the full mixture) control the
+goodness-of-fit Type-I rate where MLR does not?
 
 ## Short answer
 
 ```{r short, results="asis"}
-if (length(mlr_sev) && length(all_sev) && length(all_struct_sev) &&
-    length(ss_sev) && length(ss_struct_sev)) {
+if (length(mlr_sev) && length(yb_exact_sev) &&
+    length(yb_exact_struct_sev) && length(all_sev) &&
+    length(all_struct_sev) && length(ss_sev) && length(ss_struct_sev)) {
   cat(sprintf(
     paste0("Under **MCAR** (where normal-theory FIML stays consistent), yes. At ",
            "severe Vale-Maurelli non-normality the MLR default rejects a true ",
-           "model **%s** of the time at the .05 level, versus **%s** for the full ",
-           "FMG mixture (**%s** with structured H1 information) and **%s** for ",
-           "scaled-shifted (**%s** structured) — all essentially nominal. ",
+           "model **%s** of the time at the .05 level. Exact UΓ mean scaling ",
+           "(`YB_exact`, the same p-values as the FMG `SB` row) rejects **%s** ",
+           "(**%s** with structured H1 information). The full FMG mixture rejects ",
+           "**%s** (**%s** structured), and scaled-shifted rejects **%s** ",
+           "(**%s** structured). ",
            "The pattern holds across all non-normal families (%s reps).\n\n"),
-    fmt(mlr_sev), fmt(all_sev), fmt(all_struct_sev), fmt(ss_sev),
-    fmt(ss_struct_sev), reps))
+    fmt(mlr_sev), fmt(yb_exact_sev), fmt(yb_exact_struct_sev),
+    fmt(all_sev), fmt(all_struct_sev), fmt(ss_sev), fmt(ss_struct_sev), reps))
   cat(paste0("Under **MAR + non-normality the story is different and important**: ",
              "normal-theory FIML is itself biased there (it imputes missing values ",
              "with linear conditional means), so the statistic is non-central even ",
@@ -81,9 +86,9 @@ if (length(mlr_sev) && length(all_sev) && length(all_struct_sev) &&
 
 ```{r tab-mcar}
 if (nrow(mcar_hi)) {
-  ord <- c("naive","MLR","SB","SB_structured","SS","SS_structured","SF",
-           "EBA4","pEBA4","pEBA4_structured","pall","pOLS","all",
-           "all_structured")
+  ord <- c("naive","MLR","YB_mplus","YB_exact","YB_exact_structured",
+           "SB","SB_structured","SS","SS_structured","SF","EBA4","pEBA4",
+           "pEBA4_structured","pall","pOLS","all","all_structured")
   w <- reshape(mcar_hi[, c("dist","method","reject")], idvar = "dist",
                timevar = "method", direction = "wide")
   names(w) <- sub("^reject\\.", "", names(w))
@@ -154,9 +159,11 @@ refitting.
   the test's, as the diagnostic table shows.
 - **Power** (in the full CSV) is not size-adjusted; MLR's higher raw power is
   partly its over-rejection leaking through.
-- The MLR column is magmaan's `fiml_robust_mlr`, matched to lavaan's actual MLR
-  defaults (see oracle). lavaan offers no mean-and-variance test under FIML, so
-  `SS` is a magmaan-only construction.
+- The MLR column is magmaan's `fiml_robust_mlr`, matched to lavaan's
+  `yuan.bentler.mplus` defaults (see oracle). `YB_exact` is the exact
+  saturated-space trace scaling from the FIML UΓ spectrum; it duplicates `SB`
+  by construction. lavaan offers no mean-and-variance test under FIML, so `SS`
+  is a magmaan-only construction.
 
 ## Reproduce
 
