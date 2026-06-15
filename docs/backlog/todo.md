@@ -347,9 +347,21 @@ decisions in the simulation backlog.
   group.equal=...)` fixtures 0017 (3-cat thresholds+loadings), 0018 (binary
   scale-veto), 0019 (thresholds-only), df/chisq/theta_hat parity in the
   `ordinal invariance (group.equal) theta fits match lavaan` golden. Remaining:
-  the nested configural→metric satorra.2000 LRT golden (delta A-method default),
-  the R `model_spec(group.equal=)` surface + `fmg_nested_ordinal`, and the
-  `papers/ordinal-fmg/` nested-arm switch. Mixed-ordinal release not started.
+  - **Nested configural→metric satorra.2000 LRT (BLOCKED on the delta
+    restriction).** The lavaan oracle is recorded (the `nested` block on fixture
+    0017: `chisq_diff` 2.379, `df_diff` 3 from `lavTestLRT(method="satorra.2000")`)
+    but the gate is not wired: `lr_test_satorra2000_ordinal(.., Delta, Theta)` on
+    the configural/metric pair fails because `restriction_alpha_delta_from_
+    jacobians` returns null-space dimension **7** (= 3 true restrictions + 4
+    group-2-intercept moment directions configural cannot reach) instead of 3.
+    The Wu-Estabrook release makes configural↔metric genuinely non-nested, and
+    magmaan's moment-Jacobian column-space delta restriction is incompatible by
+    the freed-intercept rank — lavaan's A.method="delta" tolerates it. Needs a
+    closer look at the ordinal delta restriction for non-nested mean-structure
+    pairs before the nested arm can be gated. (Exact A-method correctly errors.)
+  - The R `model_spec(group.equal=)` / Rcpp `lavaan_lavaanify` surface +
+    `fmg_nested_ordinal`, and the `papers/ordinal-fmg/` nested-arm switch.
+  - Mixed-ordinal release not started.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into the
