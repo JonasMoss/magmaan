@@ -37,7 +37,9 @@ mcar_hi <- {
 sev <- mcar_hi[mcar_hi$dist == "vm2", ]
 mlr_sev <- sev$reject[sev$method == "MLR"]
 all_sev <- sev$reject[sev$method == "all"]
+all_struct_sev <- sev$reject[sev$method == "all_structured"]
 ss_sev  <- sev$reject[sev$method == "SS"]
+ss_struct_sev  <- sev$reject[sev$method == "SS_structured"]
 ```
 
 ## Question
@@ -54,14 +56,17 @@ data?
 ## Short answer
 
 ```{r short, results="asis"}
-if (length(mlr_sev) && length(all_sev)) {
+if (length(mlr_sev) && length(all_sev) && length(all_struct_sev) &&
+    length(ss_sev) && length(ss_struct_sev)) {
   cat(sprintf(
     paste0("Under **MCAR** (where normal-theory FIML stays consistent), yes. At ",
            "severe Vale-Maurelli non-normality the MLR default rejects a true ",
            "model **%s** of the time at the .05 level, versus **%s** for the full ",
-           "FMG mixture and **%s** for scaled-shifted — both essentially nominal. ",
+           "FMG mixture (**%s** with structured H1 information) and **%s** for ",
+           "scaled-shifted (**%s** structured) — all essentially nominal. ",
            "The pattern holds across all non-normal families (%s reps).\n\n"),
-    fmt(mlr_sev), fmt(all_sev), fmt(ss_sev), reps))
+    fmt(mlr_sev), fmt(all_sev), fmt(all_struct_sev), fmt(ss_sev),
+    fmt(ss_struct_sev), reps))
   cat(paste0("Under **MAR + non-normality the story is different and important**: ",
              "normal-theory FIML is itself biased there (it imputes missing values ",
              "with linear conditional means), so the statistic is non-central even ",
@@ -76,7 +81,9 @@ if (length(mlr_sev) && length(all_sev)) {
 
 ```{r tab-mcar}
 if (nrow(mcar_hi)) {
-  ord <- c("naive","MLR","SB","SS","SF","EBA4","pEBA4","pall","pOLS","all")
+  ord <- c("naive","MLR","SB","SB_structured","SS","SS_structured","SF",
+           "EBA4","pEBA4","pEBA4_structured","pall","pOLS","all",
+           "all_structured")
   w <- reshape(mcar_hi[, c("dist","method","reject")], idvar = "dist",
                timevar = "method", direction = "wide")
   names(w) <- sub("^reject\\.", "", names(w))

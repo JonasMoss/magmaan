@@ -65,8 +65,11 @@ fmg_gof_methods <- function() {
 # FMG goodness-of-fit p-values for one FIML fit, plus the base FIML LRT, df, the
 # UGamma spectrum (the sufficient statistic for every eigenvalue transform), and
 # its trace. NULL on failure.
-fmg_gof <- function(fit, methods = fmg_gof_methods()) {
-  tab <- tryCatch(magmaan::fmg_tests(fit, tests = names(methods)),
+fmg_gof <- function(fit, methods = fmg_gof_methods(),
+                    h1_information = c("saturated", "structured")) {
+  h1_information <- match.arg(h1_information)
+  tab <- tryCatch(magmaan::fmg_tests(fit, tests = names(methods),
+                                     h1_information = h1_information),
                   error = function(e) NULL)
   if (is.null(tab) || !nrow(tab)) return(NULL)
   base <- tab$base_statistic[1L]
@@ -80,7 +83,8 @@ fmg_gof <- function(fit, methods = fmg_gof_methods()) {
   spectrum <- tryCatch(as.numeric(tab$eigenvalues[[1L]]), error = function(e) NULL)
   list(p_naive = stats::pchisq(base, df, lower.tail = FALSE),
        p_fmg = p_fmg, df = df, base_stat = base,
-       spectrum = spectrum, trace = if (!is.null(spectrum)) sum(spectrum) else NA_real_)
+       spectrum = spectrum, trace = if (!is.null(spectrum)) sum(spectrum) else NA_real_,
+       h1_information = attr(tab, "h1_information") %||% h1_information)
 }
 
 # Satorra-2000 nested difference test for H1 (less restricted) over H0.
@@ -111,23 +115,43 @@ run_one_rep <- function(pop, sampler, rep_i, mechanism, rate, mask_seed) {
   met <- fit_fiml_level("metric", df)
   if (is.null(cfg) || is.null(met)) return(NULL)
 
-  g   <- fmg_gof(met)
-  mlr <- mlr_test(met)
-  nst <- fmg_nested(cfg, met)
-  if (is.null(g) || is.null(mlr) || is.null(nst)) return(NULL)
+  g    <- fmg_gof(met, h1_information = "saturated")
+  g_st <- fmg_gof(met, h1_information = "structured")
+  mlr  <- mlr_test(met)
+  nst  <- fmg_nested(cfg, met)
+  if (is.null(g) || is.null(g_st) || is.null(mlr) || is.null(nst)) return(NULL)
 
-  gof_p <- c(naive = g$p_naive, MLR = mlr$p, g$p_fmg)
-  gof <- data.frame(outcome = "gof", method = names(gof_p),
-                    p_value = unname(gof_p), base_stat = g$base_stat,
-                    df = g$df, trace = g$trace, realized_rate = mm$realized,
-                    stringsAsFactors = FALSE)
+  gof_sat <- data.frame(
+    outcome = "gof",
+    method = names(c(naive = g$p_naive, MLR = mlr$p, g$p_fmg)),
+    p_value = unname(c(naive = g$p_naive, MLR = mlr$p, g$p_fmg)),
+    base_stat = g$base_stat,
+    df = g$df,
+    trace = g$trace,
+    h1_information = "saturated",
+    realized_rate = mm$realized,
+    stringsAsFactors = FALSE)
+  gof_struct <- data.frame(
+    outcome = "gof",
+    method = paste0(names(g_st$p_fmg), "_structured"),
+    p_value = unname(g_st$p_fmg),
+    base_stat = g_st$base_stat,
+    df = g_st$df,
+    trace = g_st$trace,
+    h1_information = "structured",
+    realized_rate = mm$realized,
+    stringsAsFactors = FALSE)
+  gof <- rbind(gof_sat, gof_struct)
   nested <- data.frame(outcome = "nested", method = names(nst$p),
                        p_value = unname(nst$p), base_stat = nst$T_diff,
                        df = nst$df_diff, trace = if (!is.null(nst$spectrum))
                          sum(nst$spectrum) else NA_real_,
+                       h1_information = NA_character_,
                        realized_rate = mm$realized, stringsAsFactors = FALSE)
   list(gof = gof, nested = nested,
-       gof_spectrum = g$spectrum, nested_spectrum = nst$spectrum,
+       gof_spectrum = g$spectrum,
+       gof_structured_spectrum = g_st$spectrum,
+       nested_spectrum = nst$spectrum,
        mlr_scaled = mlr$chisq_scaled, mlr_factor = mlr$scaling_factor)
 }
 
