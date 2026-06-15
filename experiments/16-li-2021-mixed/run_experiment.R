@@ -318,18 +318,22 @@ sb_from_moments <- function(T, mom) {
   df <- as.integer(mom$df %||% NA_integer_)
   tr <- as.numeric(mom$trace %||% NA_real_)
   if (!is.finite(T) || !is.finite(tr) || !is.finite(df) || df <= 0) {
-    return(list(stat = NA_real_, df = NA_integer_))
+    return(list(stat = NA_real_, df = NA_integer_,
+                trace = tr, scale_c = NA_real_))
   }
   c_scale <- tr / df
-  list(stat = if (c_scale > 0) T / c_scale else NA_real_, df = df)
+  list(stat = if (c_scale > 0) T / c_scale else NA_real_, df = df,
+       trace = tr, scale_c = c_scale)
 }
 mv_from_moments <- function(T, mom) {
   tr <- as.numeric(mom$trace %||% NA_real_)
   tr2 <- as.numeric(mom$trace_sq %||% NA_real_)
   if (!is.finite(T) || !is.finite(tr) || !is.finite(tr2) || tr2 <= 0) {
-    return(list(stat = NA_real_, df = NA_real_))
+    return(list(stat = NA_real_, df = NA_real_, trace = tr,
+                scale_c = NA_real_))
   }
-  list(stat = T * tr / tr2, df = tr * tr / tr2)
+  list(stat = T * tr / tr2, df = tr * tr / tr2, trace = tr,
+       scale_c = NA_real_)
 }
 
 # ── Parameter extraction + sign orientation ──────────────────────────────────
@@ -450,6 +454,8 @@ fit_one_rep <- function(mod, taus, N, seed, keep_parity = FALSE) {
         statistic = c(rob$satorra_bentler$chi2_scaled,
                       rob$mean_var_adjusted$chi2_adj),
         df = c(rob$satorra_bentler$df, rob$mean_var_adjusted$df_adj),
+        trace = NA_real_,
+        scale_c = NA_real_,
         stringsAsFactors = FALSE)
     }
     if (keep_parity) parity$DWLS <- list(params = pr, chi2 = chi2_list[["DWLS"]])
@@ -477,6 +483,10 @@ fit_one_rep <- function(mod, taus, N, seed, keep_parity = FALSE) {
       core$robust_test_moments_both_breads_zc(ml, Zc, nrow(Xn),
                                               moments = "structured"),
       error = function(e) NULL)
+    tm_unstruct <- if (inherits(Zc, "error")) NULL else tryCatch(
+      core$robust_test_moments_both_breads_zc(ml, Zc, nrow(Xn),
+                                              moments = "unstructured"),
+      error = function(e) NULL)
     robust_vcov <- if (is.null(pair)) NULL else pair$expected$vcov
     sac <- tryCatch(core$measures_standardize_all(ml, robust_vcov %||% {
       infoE <- core$inference_information_expected(ml)
@@ -493,10 +503,20 @@ fit_one_rep <- function(mod, taus, N, seed, keep_parity = FALSE) {
       mv_from_moments(T_ML, tm$expected)
     T_SB <- if (is.null(tm)) list(stat = NA_real_, df = NA_integer_) else
       sb_from_moments(T_ML, tm$expected)
+    T_SB_unstruct <- if (is.null(tm_unstruct)) {
+      list(stat = NA_real_, df = NA_integer_, trace = NA_real_,
+           scale_c = NA_real_)
+    } else {
+      sb_from_moments(T_ML, tm_unstruct$expected)
+    }
     chi2_list[["MLR"]] <- data.frame(
-      estimator = "MLR", stat_name = c("naive", "SB", "MV"),
-      statistic = c(T_ML, T_SB$stat, T_MV$stat),
-      df = c(df_ML, T_SB$df, T_MV$df), stringsAsFactors = FALSE)
+      estimator = "MLR", stat_name = c("naive", "SB_struct", "SB", "MV"),
+      statistic = c(T_ML, T_SB$stat, T_SB_unstruct$stat, T_MV$stat),
+      df = c(df_ML, T_SB$df, T_SB_unstruct$df, T_MV$df),
+      trace = c(NA_real_, T_SB$trace, T_SB_unstruct$trace, T_MV$trace),
+      scale_c = c(NA_real_, T_SB$scale_c, T_SB_unstruct$scale_c,
+                  T_MV$scale_c),
+      stringsAsFactors = FALSE)
     if (keep_parity) parity$MLR <- list(params = pr, chi2 = chi2_list[["MLR"]])
   }
   conv_list[["MLR"]] <- data.frame(estimator = "MLR", converged = ml_ok,
@@ -673,6 +693,10 @@ summary_chi2 <- if (!is.null(chi2_long)) {
       estimator = g$estimator[[1L]], stat_name = g$stat_name[[1L]],
       n_reps = nrow(g), mean_chi2 = mean(g$statistic, na.rm = TRUE),
       mean_df = mean(g$df, na.rm = TRUE),
+      mean_trace = mean(g$trace, na.rm = TRUE),
+      sd_trace = stats::sd(g$trace, na.rm = TRUE),
+      mean_scale_c = mean(g$scale_c, na.rm = TRUE),
+      sd_scale_c = stats::sd(g$scale_c, na.rm = TRUE),
       reject_05 = mean(p_vals < 0.05, na.rm = TRUE), stringsAsFactors = FALSE)
   }))
 } else NULL
