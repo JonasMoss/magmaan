@@ -346,19 +346,17 @@ decisions in the simulation backlog.
   stays dormant. lavaan-gated by `cfa(..., parameterization="theta",
   group.equal=...)` fixtures 0017 (3-cat thresholds+loadings), 0018 (binary
   scale-veto), 0019 (thresholds-only), df/chisq/theta_hat parity in the
-  `ordinal invariance (group.equal) theta fits match lavaan` golden. Remaining:
-  - **Nested configural→metric satorra.2000 LRT (BLOCKED on the delta
-    restriction).** The lavaan oracle is recorded (the `nested` block on fixture
-    0017: `chisq_diff` 2.379, `df_diff` 3 from `lavTestLRT(method="satorra.2000")`)
-    but the gate is not wired: `lr_test_satorra2000_ordinal(.., Delta, Theta)` on
-    the configural/metric pair fails because `restriction_alpha_delta_from_
-    jacobians` returns null-space dimension **7** (= 3 true restrictions + 4
-    group-2-intercept moment directions configural cannot reach) instead of 3.
-    The Wu-Estabrook release makes configural↔metric genuinely non-nested, and
-    magmaan's moment-Jacobian column-space delta restriction is incompatible by
-    the freed-intercept rank — lavaan's A.method="delta" tolerates it. Needs a
-    closer look at the ordinal delta restriction for non-nested mean-structure
-    pairs before the nested arm can be gated. (Exact A-method correctly errors.)
+  `ordinal invariance (group.equal) theta fits match lavaan` golden. **The
+  configural→metric Satorra-2000 nested LRT also landed 2026-06-15** (delta
+  A-method, theta): `ordinal_moment_jacobian` now subtracts the released
+  intercept μ and threads `J_mu` in its theta branch (without it the freed
+  group-2 intercepts got zero moment-Jacobian columns, so the delta restriction
+  rank was 4 short — null-space dim 7 instead of 3, the genuine Wu-Estabrook
+  non-nesting). Gated by the `ordinal invariance nested LRT (satorra.2000 delta)
+  matches lavaan` golden on the 0017 configural/metric pair: scaled Δχ² 3.025,
+  Δdf 3, p 0.388, matching `lavTestLRT(method="satorra.2000")` on
+  `se="robust.sem"` fits (the oracle uses robust fits so the satorra scaling is
+  non-trivial; plain DWLS collapses to the unscaled diff). Remaining:
   - The R `model_spec(group.equal=)` / Rcpp `lavaan_lavaanify` surface +
     `fmg_nested_ordinal`, and the `papers/ordinal-fmg/` nested-arm switch.
   - Mixed-ordinal release not started.

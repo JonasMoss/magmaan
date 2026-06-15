@@ -1105,7 +1105,15 @@ stop rather than any usable non-error return.
   golden `ordinal invariance (group.equal) theta fits match lavaan` over fixtures
   0017 (3-cat thresholds+loadings), 0018 (binary scale-veto), 0019
   (thresholds-only), matching df/chisq/theta_hat (the released O(5) variances
-  carry the documented `(n_g−1)/n_g` weighting gap, bounded at 3e-4 for 0017). The ordinal golden chisq
+  carry the documented `(n_g−1)/n_g` weighting gap, bounded at 3e-4 for 0017).
+  The configural→metric **Satorra-2000 nested LRT** is gated too (`ordinal
+  invariance nested LRT (satorra.2000 delta) matches lavaan`): the theta branch
+  of `ordinal_moment_jacobian` now subtracts the released intercept μ and threads
+  `J_mu`, without which the freed group-2 intercepts had zero moment-Jacobian
+  columns and the delta restriction rank fell 4 short (null-space dim 7 vs the
+  Δdf 3 — the genuine Wu-Estabrook non-nesting). magmaan's scaled Δχ² (3.025),
+  Δdf (3), and p (0.388) match `lavTestLRT(method="satorra.2000")` on
+  `se="robust.sem"` fits. The ordinal golden chisq
   gates now apply the lavaan `Σ(n_g−1)F̂_g` convention rescale at 5e-3 (see
   numerical-conventions exception 4 and the test ledger). `experiments/_archive/13-ordinal-construction-boundary`
   now compares the legacy eager constructor with
