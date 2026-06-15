@@ -4,11 +4,12 @@
 #
 # Question: under non-normality + missing data, does the Foldnes-Moss-Gronneberg
 # eigenvalue family (SS / EBA / pEBA / pOLS / penalized-all) improve FIML test
-# calibration and power over the dominant applied default, MLR (the Yuan-Bentler
-# mean-scaled test, lavaan's `estimator="MLR", missing="ml"`)? MLR and the FMG
-# "SB" method are mean-only scalings, so under a spread-out UGamma spectrum
-# (skewed, non-elliptical data) they miscalibrate while the spectrum-matching
-# transforms hold level.
+# calibration and power over the dominant applied default, MLR (lavaan's
+# `estimator="MLR", missing="ml"`)? The output separates lavaan/Mplus
+# `YB_mplus` from FMG's `YB_exact`: both are df-preserving mean scalings, but
+# `YB_mplus` uses the finite-sample Mplus trace approximation, whereas
+# `YB_exact`/`SB` uses the exact UGamma trace from the same FIML fit.
+# Structured-H1 FMG variants are stored with a `_structured` suffix.
 #
 # Two regimes (see the report): under MCAR, normal-theory FIML is consistent for
 # any distribution, so this is a clean test of the reference-law correction.
