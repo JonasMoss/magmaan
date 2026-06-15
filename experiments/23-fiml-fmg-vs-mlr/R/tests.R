@@ -1,10 +1,31 @@
-# FIML fit plus the competing goodness-of-fit / nested test statistics, all over
+# FIML fit, the missingness mechanism, and the competing test battery, all over
 # magmaan's public surface. The headline competitor is MLR (the Yuan-Bentler
-# mean-scaled FIML test, lavaan's `estimator = "MLR", missing = "ml"` default);
-# the proposal is the FMG eigenvalue family (SS plus pEBA / penalized-all). The
-# naive FIML LRT is kept only as the un-robustified reference.
+# mean-scaled FIML test, lavaan's `estimator="MLR", missing="ml"` default); the
+# proposal is the FMG eigenvalue family; naive is the un-robustified reference.
+# The battery is deliberately wide ("all the crappy statistics too") so future
+# p-value work can pick from it; the per-replicate UGamma spectrum and base
+# statistic are persisted so any new transform is recomputable without refitting.
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
+
+# ── Missingness ──────────────────────────────────────────────────────────────
+# Canonical Savalei-Bentler 2005 mechanisms from experiments/_support (the same
+# generators exp 08/09 use); applied to the observed columns only, the grouping
+# column passed through. MCAR keeps x1,x2 intact; MAR makes missingness on
+# x3..x6 depend on the always-observed x1,x2 (so x1,x2 are the MAR cause).
+apply_missingness <- function(df, ov, mechanism, rate, seed = NULL) {
+  if (identical(mechanism, "complete") || rate <= 0) {
+    return(list(df = df, realized = 0.0, mechanism = "complete"))
+  }
+  X <- df[, ov, drop = FALSE]
+  res <- switch(mechanism,
+    MCAR = sb2005_mcar(X, rate = rate, intact = 1:2, seed = seed),
+    MAR  = sb2005_mar(X, rate = rate, predictors = 1:2, seed = seed,
+                      calibrate = TRUE),
+    stop("unknown missingness mechanism: ", mechanism, call. = FALSE))
+  df[, ov] <- res$data
+  list(df = df, realized = res$summary$overall_rate, mechanism = res$mechanism)
+}
 
 # Fit one invariance level under FIML. Returns the fit, or NULL on any failure.
 fit_fiml_level <- function(level, df, control = NULL) {
@@ -20,9 +41,7 @@ fit_fiml_level <- function(level, df, control = NULL) {
   }, error = function(e) NULL)
 }
 
-# MLR / Yuan-Bentler scaled FIML test — the dominant applied default. The C++
-# `fiml_robust_mlr` corner builds the Huber-White sandwich and returns the scaled
-# statistic; the p-value references it to chi-square(df). NULL on failure.
+# MLR / Yuan-Bentler scaled FIML test -- the dominant applied default.
 mlr_test <- function(fit) {
   m <- tryCatch(magmaan::magmaan_core$estimate_fiml_robust_mlr(fit),
                 error = function(e) NULL)
@@ -32,16 +51,20 @@ mlr_test <- function(fit) {
        p = stats::pchisq(m$chisq_scaled, m$df, lower.tail = FALSE))
 }
 
-# FMG goodness-of-fit methods requested from magmaan, mapped to short column
-# names. `fmg_tests()` returns FIML labels suffixed `_ml`; we strip that.
+# The full FIML-valid FMG battery, mapped short-name -> semTests-style test name.
+# Under FIML only the biased Gamma + ML base are defined, so no `_ug`/`_rls`.
+# Includes the deliberately-imperfect ones (SB/SF/EBA) alongside the better
+# spectrum matchers (SS/all) and the penalized family (pEBA/pall/pOLS).
 fmg_gof_methods <- function() {
-  c(SB = "sb", SS = "ss", pEBA2 = "peba2", pEBA4 = "peba4", pEBA6 = "peba6",
-    pall = "pall", all = "all")
+  c(SB = "sb", SS = "ss", SF = "sf",
+    EBA2 = "eba2", EBA4 = "eba4", EBA6 = "eba6",
+    pEBA2 = "peba2", pEBA4 = "peba4", pEBA6 = "peba6",
+    pall = "pall", pOLS = "pols2", all = "all")
 }
 
-# FMG goodness-of-fit p-values for one FIML fit. Returns the named FMG p-value
-# vector, the naive LRT p-value, the df, the base FIML LRT statistic, and the
-# biased UGamma spectrum. NULL on failure.
+# FMG goodness-of-fit p-values for one FIML fit, plus the base FIML LRT, df, the
+# UGamma spectrum (the sufficient statistic for every eigenvalue transform), and
+# its trace. NULL on failure.
 fmg_gof <- function(fit, methods = fmg_gof_methods()) {
   tab <- tryCatch(magmaan::fmg_tests(fit, tests = names(methods)),
                   error = function(e) NULL)
@@ -54,32 +77,36 @@ fmg_gof <- function(fit, methods = fmg_gof_methods()) {
     if (length(hit)) tab$p_value[hit[1L]] else NA_real_
   }, numeric(1))
   names(p_fmg) <- names(methods)
-  p_naive <- stats::pchisq(base, df, lower.tail = FALSE)
   spectrum <- tryCatch(as.numeric(tab$eigenvalues[[1L]]), error = function(e) NULL)
-  list(p_naive = p_naive, p_fmg = p_fmg, df = df, base_stat = base,
-       spectrum = spectrum,
-       trace_xcheck = attr(tab, "trace_xcheck") %||% NA_real_)
+  list(p_naive = stats::pchisq(base, df, lower.tail = FALSE),
+       p_fmg = p_fmg, df = df, base_stat = base,
+       spectrum = spectrum, trace = if (!is.null(spectrum)) sum(spectrum) else NA_real_)
 }
 
 # Satorra-2000 nested difference test for H1 (less restricted) over H0.
-# p-values: naive / SB-scaled / mean-var-adjusted / exact-mixture. NULL on fail.
+# p-values: naive / SB-scaled / mean-var-adjusted / exact-mixture, plus the
+# difference spectrum (stored for later nested-FMG work). NULL on fail.
 fmg_nested <- function(fit_h1, fit_h0) {
   nt <- tryCatch(magmaan::nestedTest(fit_h1, fit_h0, method = "satorra.2000",
                                      A.method = "exact"),
                  error = function(e) NULL)
   if (is.null(nt)) return(NULL)
+  spectrum <- tryCatch(as.numeric(nt$eigenvalues), error = function(e) NULL)
   list(p = c(naive = nt$p_unscaled, SB = nt$p_scaled,
              adjusted = nt$p_adjusted, mixture = nt$p_mixture),
-       T_diff = nt$T_diff, df_diff = nt$df_diff, scale_c = nt$scale_c)
+       T_diff = nt$T_diff, df_diff = nt$df_diff, scale_c = nt$scale_c,
+       spectrum = spectrum)
 }
 
-# Draw one replicate, inject MCAR, fit configural + metric under FIML, and
-# compute the goodness-of-fit (metric model: naive, MLR, FMG family) and the
-# configural-vs-metric nested test. Returns list(gof, nested) of long-form one-
-# row-per-method data frames, or NULL if any fit or test fails.
-run_one_rep <- function(pop, sampler, rep_i, miss, mcar_seed) {
-  df <- sampler$draw(rep_i)
-  if (miss > 0) { set.seed(mcar_seed); df <- inject_mcar(df, pop$ov, miss) }
+# Draw one replicate, apply the missingness mechanism, fit configural + metric
+# under FIML, and compute the GOF (metric model: naive, MLR, full FMG battery)
+# and configural-vs-metric nested tests. Returns a rich list including the
+# spectra and base statistics (sufficient statistics for offline p-value work),
+# or NULL if any fit or test fails.
+run_one_rep <- function(pop, sampler, rep_i, mechanism, rate, mask_seed) {
+  draw <- sampler$draw(rep_i)
+  mm <- apply_missingness(draw, pop$ov, mechanism, rate, seed = mask_seed)
+  df <- mm$df
   cfg <- fit_fiml_level("configural", df)
   met <- fit_fiml_level("metric", df)
   if (is.null(cfg) || is.null(met)) return(NULL)
@@ -91,12 +118,17 @@ run_one_rep <- function(pop, sampler, rep_i, miss, mcar_seed) {
 
   gof_p <- c(naive = g$p_naive, MLR = mlr$p, g$p_fmg)
   gof <- data.frame(outcome = "gof", method = names(gof_p),
-                    p_value = unname(gof_p), df = g$df, base_stat = g$base_stat,
+                    p_value = unname(gof_p), base_stat = g$base_stat,
+                    df = g$df, trace = g$trace, realized_rate = mm$realized,
                     stringsAsFactors = FALSE)
   nested <- data.frame(outcome = "nested", method = names(nst$p),
-                       p_value = unname(nst$p), df = nst$df_diff,
-                       base_stat = nst$T_diff, stringsAsFactors = FALSE)
-  list(gof = gof, nested = nested)
+                       p_value = unname(nst$p), base_stat = nst$T_diff,
+                       df = nst$df_diff, trace = if (!is.null(nst$spectrum))
+                         sum(nst$spectrum) else NA_real_,
+                       realized_rate = mm$realized, stringsAsFactors = FALSE)
+  list(gof = gof, nested = nested,
+       gof_spectrum = g$spectrum, nested_spectrum = nst$spectrum,
+       mlr_scaled = mlr$chisq_scaled, mlr_factor = mlr$scaling_factor)
 }
 
 # Rejection rate at level alpha over a numeric p-value vector (NA-dropping).
