@@ -1207,8 +1207,9 @@
         "configural_df": 4,
         "metric_chisq": 6.55721814390526,
         "metric_df": 7,
-        "chisq_diff": 2.3794644751,
-        "df_diff": 3
+        "chisq_diff": 3.0249578381,
+        "df_diff": 3,
+        "p_value": 0.387793152556481
       }
     }
   }

@@ -22,6 +22,7 @@
 #include "magmaan/measures/factor_scores.hpp"
 #include "magmaan/measures/standardized.hpp"
 #include "magmaan/model/matrix_rep.hpp"
+#include "magmaan/robust/lr_test_satorra.hpp"
 #include "magmaan/optim/ceres_optimizer.hpp"
 #include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/parser.hpp"
@@ -308,7 +309,8 @@ std::optional<MixedOrdinalHandles> mixed_handles_from_fixture(
 std::optional<OrdinalHandles> handles_from_fixture(
     const std::string& id,
     const nlohmann::json& exp,
-    std::vector<std::string>& failures) {
+    std::vector<std::string>& failures,
+    bool with_group_equal = true) {
   std::vector<Eigen::MatrixXd> blocks;
   for (const auto& b : exp["blocks"]) {
     blocks.push_back(matrix_from_json(b["matrix"]));
@@ -333,7 +335,7 @@ std::optional<OrdinalHandles> handles_from_fixture(
       opts.group_labels.push_back(b["label"].get<std::string>());
     }
   }
-  apply_group_equal(exp, opts);
+  if (with_group_equal) apply_group_equal(exp, opts);
   auto pt = magmaan::spec::build(*fp, opts);
   if (!pt.has_value()) {
     failures.push_back(id + ": lavaanify — " + pt.error().detail);
@@ -844,16 +846,79 @@ TEST_CASE("ordinal invariance (group.equal) theta fits match lavaan") {
   CHECK(passed == total);
 }
 
-// NOTE: the configural-vs-metric Satorra-2000 nested LRT gate for this pair is
-// NOT yet wired. The lavaan oracle is recorded (the `nested` block on fixture
-// 0017: chisq_diff 2.379, df_diff 3 from `lavTestLRT(method="satorra.2000")`),
-// but magmaan's delta A-method restriction (`restriction_alpha_delta_from_
-// jacobians`) returns null-space dimension 7 (= 3 true restrictions + 4
-// group-2-intercept moment directions configural cannot reach) instead of 3:
-// the Wu-Estabrook release makes configural↔metric genuinely non-nested, and
-// the moment-Jacobian column spaces are incompatible by the freed-intercept
-// rank. Resolving it (the standard ordinal-invariance scaled difference test)
-// is tracked in docs/backlog/todo.md.
+// Configural-vs-metric Satorra-2000 scaled difference test for the ordinal
+// threshold+loading invariance pair (the end-to-end gate for the paper's nested
+// arm). H1 = configural (no group.equal), H0 = metric (released). Wu-Estabrook
+// makes the pair non-nested (metric frees the group-2 scale/intercepts that
+// configural fixes), so — like lavaan — the test uses the delta A-method (the
+// moment-Jacobian column-space restriction; the released intercepts carry their
+// moment columns via J_mu, without which the restriction rank is wrong). The
+// scaled difference statistic + df match lavaan's
+// `lavTestLRT(method = "satorra.2000")`.
+TEST_CASE("ordinal invariance nested LRT (satorra.2000 delta) matches lavaan") {
+  const std::string dir = magmaan::test::fixtures_dir() + "/ordinal";
+  const std::string id = "0017_2group_thresh_load_invariance_3cat_cfa";
+  std::vector<std::string> failures;
+
+  const std::string path = dir + "/" + id + ".ordinal.json";
+  auto raw = magmaan::test::read_fixture(path);
+  REQUIRE(raw.has_value());
+  auto exp = nlohmann::json::parse(*raw, nullptr, false);
+  REQUIRE_FALSE(exp.is_discarded());
+  REQUIRE(exp["fits"].contains("DWLS"));
+  REQUIRE(exp["fits"]["DWLS"].contains("nested"));
+  const auto& nested = exp["fits"]["DWLS"]["nested"];
+
+  auto h1 = handles_from_fixture(id, exp, failures, /*with_group_equal=*/false);
+  auto h0 = handles_from_fixture(id, exp, failures, /*with_group_equal=*/true);
+  REQUIRE(h1.has_value());
+  REQUIRE(h0.has_value());
+
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+  const auto param = fixture_param(exp);  // theta
+  const auto kind = magmaan::estimate::OrdinalWeightKind::DWLS;
+
+  auto est1 = magmaan::test::fit_ordinal_bounded(
+      h1->pt, h1->rep, h1->stats, magmaan::estimate::Bounds{}, kind,
+      magmaan::estimate::Backend::NloptLbfgs, opt, param);
+  auto est0 = magmaan::test::fit_ordinal_bounded(
+      h0->pt, h0->rep, h0->stats, magmaan::estimate::Bounds{}, kind,
+      magmaan::estimate::Backend::NloptLbfgs, opt, param);
+  REQUIRE(est1.has_value());
+  REQUIRE(est0.has_value());
+
+  const std::int64_t n_total =
+      std::accumulate(h0->stats.n_obs.begin(), h0->stats.n_obs.end(),
+                      std::int64_t{0});
+  const double T_H1 = 2.0 * static_cast<double>(n_total) * est1->fmin;
+  const double T_H0 = 2.0 * static_cast<double>(n_total) * est0->fmin;
+
+  // pt_H1/pt_H0 are passed raw (the test re-preps internally); est_* come from
+  // the (internally-prepped) fits, matching the re-prepped free counts.
+  auto lr = magmaan::estimate::lr_test_satorra2000_ordinal(
+      h1->pt, h1->rep, h0->stats, *est1, h0->pt, h0->rep, *est0, kind,
+      /*T_H0=*/T_H0, /*T_H1=*/T_H1, /*df_H0=*/0, /*df_H1=*/0,
+      magmaan::robust::SatorraAMethod::Delta, param);
+  if (!lr.has_value()) MESSAGE("nested lr_test failed: " << lr.error().detail);
+  REQUIRE(lr.has_value());
+
+  // The oracle's chisq_diff is lavaan's *scaled* satorra.2000 statistic (the
+  // robust-test fits). magmaan's T_scaled is on the 2N·fmin scale; rescale by
+  // (N-G)/N to lavaan's convention before comparing.
+  const double scaled =
+      to_lavaan_ls_chisq(lr->T_scaled, n_total, h0->stats.R.size());
+  const double lav_diff = nested["chisq_diff"].get<double>();
+  const int lav_df = nested["df_diff"].get<int>();
+  const double lav_p = nested["p_value"].get<double>();
+
+  MESSAGE("nested 0017: scaled diff magmaan=" << scaled << " lavaan=" << lav_diff
+          << " | df=" << lr->df_diff << " (" << lav_df << ")"
+          << " | p magmaan=" << lr->p_scaled << " lavaan=" << lav_p);
+  CHECK(lr->df_diff == lav_df);
+  CHECK(std::abs(scaled - lav_diff) < 5e-3);
+  CHECK(std::abs(lr->p_scaled - lav_p) < 5e-3);
+}
 
 // The threshold-profiled SNLLS path against the same lavaan contract as the
 // bounded golden above. This is the lavaan anchor for the joint threshold

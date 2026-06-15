@@ -2288,10 +2288,13 @@ Eigen::MatrixXd ordinal_moment_jacobian(const data::OrdinalStats& stats,
                                         const model::ImpliedMoments& moments,
                                         const Eigen::MatrixXd& J_sigma,
                                         const Eigen::VectorXd& theta,
-                                        OrdinalParameterization param) {
+                                        OrdinalParameterization param,
+                                        const Eigen::MatrixXd& J_mu =
+                                            Eigen::MatrixXd()) {
   Eigen::MatrixXd out(ordinal_moment_rows(stats), J_sigma.cols());
   Eigen::Index out_off = 0;
   Eigen::Index sigma_off = 0;
+  Eigen::Index mu_off = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
     const Eigen::Index nth = stats.thresholds[b].size();
@@ -2300,15 +2303,25 @@ Eigen::MatrixXd ordinal_moment_jacobian(const data::OrdinalStats& stats,
     Eigen::MatrixXd Jb(nth + ncorr, J_sigma.cols());
     Jb.setZero();
     if (param == OrdinalParameterization::Theta) {
+      // ∂[(τ_θ − μᵢ)/√Σ*ᵢᵢ]/∂θ: selector on the free threshold, −∂μᵢ via J_mu
+      // (the freed group-2+ intercept under Wu-Estabrook invariance; 0
+      // otherwise — without it the released intercepts get zero moment-Jacobian
+      // columns, which breaks the nested delta restriction), and a structural
+      // term through Σ*ᵢᵢ. Reduces to τ_θ/√Σ*ᵢᵢ when μ ≡ 0.
       const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+      const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+      const bool have_jmu = J_mu.rows() > 0;
       for (Eigen::Index k = 0; k < nth; ++k) {
         const Eigen::Index ov =
             stats.threshold_ov[b][static_cast<std::size_t>(k)];
         const double sii = Sig(ov, ov);
         const double inv_sd = 1.0 / std::sqrt(sii);
+        const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+        const double a = it(k) - mu;
         const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
         if (fr > 0) Jb(k, fr - 1) += inv_sd;
-        Jb.row(k) += (-0.5 * it(k) * inv_sd / sii) *
+        if (have_jmu) Jb.row(k) -= inv_sd * J_mu.row(mu_off + ov);
+        Jb.row(k) += (-0.5 * a * inv_sd / sii) *
                      J_sigma.row(sigma_off + vech_index(p, ov, ov));
       }
       Jb.bottomRows(ncorr) = std_corr_jacobian(Sig, J_sigma, sigma_off);
@@ -2322,6 +2335,7 @@ Eigen::MatrixXd ordinal_moment_jacobian(const data::OrdinalStats& stats,
     out.block(out_off, 0, Jb.rows(), Jb.cols()) = Jb;
     out_off += Jb.rows();
     sigma_off += vech_len(p);
+    mu_off += p;
   }
   return out;
 }
@@ -4008,7 +4022,7 @@ lr_test_satorra2000_ordinal(
           std::string(who) + ": ModelEvaluator::build failed: " +
           ev_or.error().detail));
     }
-    auto eval = ev_or->evaluate(est.theta, true, false);
+    auto eval = ev_or->evaluate(est.theta, true, true);  // J_mu for released μ
     if (!eval.has_value()) {
       return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
           std::string(who) + ": fitted evaluation failed: " +
@@ -4016,7 +4030,8 @@ lr_test_satorra2000_ordinal(
     }
     const Eigen::MatrixXd Delta_full =
         ordinal_moment_jacobian(stats, *layout_or, eval->moments,
-                                eval->J_sigma, est.theta, parameterization);
+                                eval->J_sigma, est.theta, parameterization,
+                                eval->J_mu);
     if (con.Kmat.rows() != Delta_full.cols()) {
       return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
           std::string(who) + ": constraint reparameterization has "

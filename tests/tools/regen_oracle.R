@@ -1273,22 +1273,32 @@ for (oc in ordinal_cases) {
       }
       # Configural-vs-metric Satorra-2000 scaled difference test: refit the same
       # data WITHOUT the `group.equal` ties (configural, H1) and compare against
-      # the metric fit (H0). lavaan defaults `A.method = "delta"` here because the
-      # Wu-Estabrook release makes the pair non-nested (metric frees group-2 scale/
-      # intercepts that configural fixes). Direct anchor for the C++
-      # `lr_test_satorra2000_ordinal(.., Delta, Theta)` nested golden.
+      # the metric fit (H0). The Wu-Estabrook release makes the pair non-nested
+      # (metric frees group-2 scale/intercepts that configural fixes), so lavaan
+      # uses A.method = "delta". Both fits carry the robust polychoric-NACOV test
+      # (`se="robust.sem"`) so `chisq_diff` is the *scaled* statistic — with plain
+      # DWLS lavaan's default test is "standard" and the scaling collapses to 1.
+      # Direct anchor for the C++ `lr_test_satorra2000_ordinal(.., Delta, Theta)`
+      # nested golden, whose T_scaled this matches.
       if (isTRUE(oc$nested_configural) && nzchar(group_var)) {
+        nest_extra <- list(se = "robust.sem", test = "satorra.bentler")
         fit_cfg <- do.call(cfa, c(list(model = oc$model, data = df, ordered = ov,
                                        estimator = "DWLS",
-                                       parameterization = param), grp_args))
-        lr <- lavTestLRT(fit_cfg, fit_dwls, method = "satorra.2000")
+                                       parameterization = param),
+                                  grp_args, nest_extra))
+        fit_met <- do.call(cfa, c(list(model = oc$model, data = df, ordered = ov,
+                                       estimator = "DWLS",
+                                       parameterization = param),
+                                  grp_args, ge_args, nest_extra))
+        lr <- lavTestLRT(fit_cfg, fit_met, method = "satorra.2000")
         fits$DWLS$nested <- list(
           configural_chisq = unname(fitMeasures(fit_cfg, "chisq")),
           configural_df    = as.integer(fitMeasures(fit_cfg, "df")),
-          metric_chisq     = unname(fitMeasures(fit_dwls, "chisq")),
-          metric_df        = as.integer(fitMeasures(fit_dwls, "df")),
-          chisq_diff       = unname(lr[["Chisq diff"]][2]),
-          df_diff          = as.integer(lr[["Df diff"]][2]))
+          metric_chisq     = unname(fitMeasures(fit_met, "chisq")),
+          metric_df        = as.integer(fitMeasures(fit_met, "df")),
+          chisq_diff       = unname(lr[["Chisq diff"]][2]),  # scaled (satorra.2000)
+          df_diff          = as.integer(lr[["Df diff"]][2]),
+          p_value          = unname(lr[["Pr(>Chisq)"]][2]))
       }
     }
     if ("WLS" %in% estimators) {
