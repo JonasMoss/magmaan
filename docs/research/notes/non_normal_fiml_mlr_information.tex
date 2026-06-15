@@ -4,7 +4,7 @@
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{hyperref}
 
-\title{Structured versus Saturated Information in Non-normal FIML MLR}
+\title{Saturated FIML Information, MLR, and FMG under Non-normal MCAR Data}
 \author{}
 \date{\today}
 
@@ -21,355 +21,269 @@
 \begin{document}
 \maketitle
 
-\section*{Question}
+\section*{Purpose}
 
-FIML MLR uses an observed-data normal likelihood for rows with arbitrary
-missingness patterns. Lavaan exposes an H1-information choice usually described
-as structured versus unstructured. The practical question is whether the
-structured choice is mathematically correct for non-normal data, or only a
-default inherited from correctly specified normal-theory ML.
+The useful question is not whether FIML under non-normality has a ``Gamma
+matrix''. It does. The useful question is which curvature and which reference
+law are being used.
 
-This note separates three statements:
+For a FIML goodness-of-fit correction there are three separate objects:
 \begin{enumerate}
-  \item the trace shortcut is exact;
-  \item structured information is justified under correctly specified normal
-        FIML;
-  \item non-normal FIML needs extra equalities for structured information.
+  \item the saturated observed-data normal curvature \(V\);
+  \item the saturated sandwich covariance
+        \(\Gamma_{\mathrm{mis}} = H^{-1}JH^{-1}\);
+  \item the reference-law reduction of \(U\Gamma_{\mathrm{mis}}\), either a
+        scalar mean scaling or the full eigenvalue mixture.
 \end{enumerate}
+The MCAR simulations should be understood mainly through the third object.
+Under a correct null and MCAR, the saturated and structured definitions of
+\(V\) have the same asymptotic target. Non-normality changes
+\(\Gamma_{\mathrm{mis}}\) and spreads the eigenvalues of
+\(U\Gamma_{\mathrm{mis}}\); it does not by itself create a different
+saturated-versus-structured \(V\) target.
 
-\section*{Setup}
+\section*{Observed-data normal H1 model}
 
-Let row \(i\) have observed index set \(o_i\). The working FIML model is the
-observed-subvector normal log likelihood
+Let row \(i\) have observed index set \(o_i \subset \{1,\ldots,p\}\). The
+working FIML H1 model is a normal model for the observed subvector,
 \[
-  \ell_i(\theta)
-    = \log \phi_{|o_i|}
-      (x_{i,o_i}; \mu_{o_i}(\theta), \Sigma_{o_i o_i}(\theta)),
-\]
-with missingness treated as ignorable. The estimator solves the working-score
-equation
-\[
-  \sum_{i=1}^N s_i(\hat\theta)=0,
+  \ell_i(\eta)
+    =
+  \log \phi_{|o_i|}
+    \{x_{i,o_i}; \mu_{o_i}, \Sigma_{o_i o_i}\},
   \qquad
-  s_i(\theta)=\frac{\partial\ell_i(\theta)}{\partial\theta}.
-\]
-
-Under ordinary misspecified-likelihood regularity,
-\[
-  \sqrt N(\hat\theta-\theta^\star)
-    \Rightarrow
-    N(0, A_\theta^{-1} B_\theta A_\theta^{-1}),
-\]
-where
-\[
-  A_\theta = -\E\left[
-    \frac{\partial s_i(\theta^\star)}{\partial\theta'}
-  \right],
-  \qquad
-  B_\theta = \E[s_i(\theta^\star)s_i(\theta^\star)'].
-\]
-If the observed-data normal model is correctly specified, then information
-equality gives \(A_\theta=B_\theta\). Under non-normality, generally
-\(A_\theta\ne B_\theta\).
-
-\section*{Saturated H1 coordinates}
-
-For FIML goodness-of-fit, introduce a saturated normal working model with
-coordinates
-\[
   \eta = (\mu, \vech(\Sigma)).
 \]
-For each observed pattern, the row likelihood uses the matching observed
-subvector of \(\eta\). Let
-\[
-  h_i(\eta)=\frac{\partial\ell_i(\eta)}{\partial\eta}
-\]
-be the saturated score. The saturated quasi-MLE \(\hat\eta\) converges to
-\[
-  \eta^\star = \argmin_\eta
-    \E[-\ell_i(\eta)],
-\]
-not necessarily to a parameter of the true distribution, because a finite
-normal saturated mean/covariance model is not saturated for arbitrary
-non-normal observed data.
+The saturated H1 estimator \(\hat\eta\) maximizes
+\(\sum_i \ell_i(\eta)\). This is a normal quasi-likelihood when the data are
+non-normal; the general sandwich theory is the usual misspecified-likelihood
+theory of White \cite{white1982}.
 
-Its robust covariance is
+Define the saturated H1 score
 \[
-  \avar\{\sqrt N(\hat\eta-\eta^\star)\}
-    = H_\eta^{-1} J_\eta H_\eta^{-1},
+  h_i(\eta) = \frac{\partial \ell_i(\eta)}{\partial \eta}
 \]
-with
+and let \(\eta^\dagger\) denote the population maximizer of
+\(\E\{\ell_i(\eta)\}\). The population bread and meat are
 \[
-  H_\eta = -\E\left[
-    \frac{\partial h_i(\eta^\star)}{\partial\eta'}
+  H_\eta
+    =
+  -\E\left[
+    \frac{\partial h_i(\eta^\dagger)}{\partial\eta'}
   \right],
   \qquad
-  J_\eta = \E[h_i(\eta^\star)h_i(\eta^\star)'].
+  J_\eta
+    =
+  \E\{h_i(\eta^\dagger)h_i(\eta^\dagger)'\}.
+\]
+Then
+\[
+  \avar\{\sqrt N(\hat\eta-\eta^\dagger)\}
+    =
+  \Gamma_{\mathrm{mis}}
+    =
+  H_\eta^{-1}J_\eta H_\eta^{-1}.
 \]
 This is the missing-data analogue of the complete-data ADF covariance of
-sample moments. In magmaan this is the FIML saturated
-\(\Gamma_{\mathrm{mis}} = H_\eta^{-1}J_\eta H_\eta^{-1}\) path.
+sample moments \cite{browne1984}. If the observed-data normal model is
+correctly specified, information equality gives \(J_\eta = H_\eta\). Under
+non-normality, \(J_\eta\) generally contains the relevant third- and
+fourth-moment information and is not equal to \(H_\eta\).
 
-\section*{The exact trace identity}
+\section*{Definition of \(V\)}
 
-Let
+The matrix \(V\) is the local curvature used to approximate the H1 likelihood
+in saturated moment coordinates. In the saturated FIML FMG construction,
 \[
-  \Delta = \frac{\partial \eta(\theta)}{\partial\theta'}
+  V = H_\eta(\eta^\dagger)
 \]
-be the derivative of the restricted model's H1 coordinates with respect to the
-restricted parameters, evaluated at \(\theta^\star\) or \(\hat\theta\). Let
-\(V\) be the Hessian/weight used by the local quadratic test in \(\eta\)-space.
-The usual residual-space matrix is
+in population notation. In the finite-sample magmaan implementation,
 \[
-  U = V - V\Delta(\Delta'V\Delta)^{-1}\Delta'V.
+  V_N
+    =
+  -\sum_{i=1}^N
+    \frac{\partial^2 \ell_i(\hat\eta)}
+         {\partial\eta\,\partial\eta'}
 \]
-For any conforming covariance matrix \(\Gamma\),
+and
 \[
-  \tr(U\Gamma)
-  =
-  \tr(V\Gamma)
-  -
-  \tr\{(\Delta'V\Delta)^{-1}\Delta'V\Gamma V\Delta\}.
+  \hat\Gamma_{\mathrm{mis}}
+    =
+  V_N^{-1}
+  \left\{
+    \sum_{i=1}^N h_i(\hat\eta)h_i(\hat\eta)'
+  \right\}
+  V_N^{-1}.
 \]
-This is only cyclic invariance of the trace. It is an identity, not an
-approximation. Therefore a structured-versus-unstructured discrepancy cannot
-be blamed on avoiding explicit formation of \(U\).
+This finite-sample \(\hat\Gamma_{\mathrm{mis}}\) carries \(1/N\) units, while
+\(V_N\) carries \(N\) units; their product has the same limiting eigenvalues
+as the population convention above.
 
-\section*{Correct normal FIML}
+Let the restricted SEM imply saturated coordinates \(\eta(\theta)\), and let
+\[
+  \Delta
+    =
+  \frac{\partial \eta(\theta)}{\partial\theta'}
+\]
+at the null value or at \(\hat\theta\). With equality constraints, \(\Delta\)
+is first projected into the local free-parameter tangent space. The residual
+operator for a chosen curvature \(V\) is
+\[
+  U(V)
+    =
+  V - V\Delta(\Delta'V\Delta)^{-1}\Delta'V.
+\]
+The robust reference law for the FIML LRT is the weighted mixture
+\[
+  T
+    \Rightarrow
+  \sum_{j=1}^{\mathrm{df}} \lambda_j \chi^2_{1j},
+  \qquad
+  \lambda_j
+    =
+  \eig_j\{U(V)\Gamma_{\mathrm{mis}}\},
+\]
+the same Satorra--Bentler \(U\Gamma\) structure used for robust moment
+structure tests \cite{satorrabentler1994,satorra2000}. When the normal H1
+model is correct, \(\Gamma_{\mathrm{mis}}=V^{-1}\), so
+\(U(V)\Gamma_{\mathrm{mis}}\) is a rank-\(\mathrm{df}\) projector and the
+nonzero eigenvalues are all one.
 
-\begin{claim}
-If the observed-data normal FIML model is correctly specified and the
-restricted SEM is true, structured and saturated H1 information agree
-asymptotically.
-\end{claim}
+\section*{What MCAR buys}
 
-\noindent
-Under correct normality, information equality holds in the saturated H1 model:
+Under MCAR, the missingness pattern is independent of the data values. Suppose
+the full data have finite second moments \((\mu_0,\Sigma_0)\). For any
+observed pattern \(o\),
 \[
-  H_\eta = J_\eta.
+  \E(X_o-\mu_{0,o}) = 0,
+  \qquad
+  \E\{(X_o-\mu_{0,o})(X_o-\mu_{0,o})'\} = \Sigma_{0,oo}.
 \]
-The saturated covariance is therefore
+Therefore the expected saturated normal score for that pattern is zero at
+\(\eta_0=(\mu_0,\vech(\Sigma_0))\). Summing over the MCAR pattern
+distribution preserves this zero-score property. Under ordinary uniqueness
+conditions,
 \[
-  \Gamma_{\mathrm{mis}}
-    = H_\eta^{-1}J_\eta H_\eta^{-1}
-    = H_\eta^{-1}.
-\]
-The inverse saturated covariance is \(H_\eta\), the normal-theory observed-data
-information. If the restricted model is true, then the restricted
-model-implied covariance and the saturated covariance have the same limit.
-Consequently a structured evaluation of the normal-theory H1 information and
-an unstructured/saturated evaluation target the same limiting matrix:
-\[
-  V_{\mathrm{struct}}
-    \to H_\eta
-    \leftarrow
-  V_{\mathrm{sat}}.
-\]
-
-Thus structured information is mathematically justified in the classical
-case. This is the case in which the default is cleanest: it is both
-asymptotically correct and computationally convenient.
-
-\section*{Non-normal FIML}
-
-Under non-normality, the same observed-data normal likelihood defines a
-quasi-MLE. The limiting restricted parameter is a pseudo-true value
-\[
-  \theta^\star = \argmin_\theta
-    \E[-\ell_i\{\mu(\theta),\Sigma(\theta)\}],
-\]
-and the saturated normal pseudo-true value is
-\[
-  \eta^\star = \argmin_\eta \E[-\ell_i(\eta)].
-\]
-There is no general reason for
-\[
-  \eta(\theta^\star) = \eta^\star.
-\]
-Even if first and second observed moments are matched in some simple
-complete-data cases, missingness patterns make the saturated pseudo-target a
-pattern-weighted observed-data object, while the restricted target is forced
-through one common SEM covariance and mean structure.
-
-More importantly, information equality fails:
-\[
-  H_\eta \ne J_\eta.
-\]
-The covariance of the saturated normal estimator is the sandwich
-\[
-  H_\eta^{-1}J_\eta H_\eta^{-1},
-\]
-not \(H_\eta^{-1}\). A trace correction using \(V=H_\eta\) and
-\(\Gamma=H_\eta^{-1}J_\eta H_\eta^{-1}\) is a valid quasi-likelihood
-weighted-mixture construction. But a structured choice that replaces
-\(H_\eta\) by the model-implied normal information at \(\eta(\theta^\star)\)
-requires the additional equality
-\[
-  H_\eta\{\eta^\star\}
-  =
-  H_\eta\{\eta(\theta^\star)\},
-\]
-or at least equality after projection by \(U\). This is not guaranteed by
-robust M-estimation theory.
-
-\section*{What structured assumes}
-
-In non-normal FIML, the structured H1 convention effectively assumes that the
-local saturated curvature may be evaluated at the restricted model-implied
-normal covariance:
-\[
-  V_{\mathrm{struct}}
-    = H_\eta\{\eta(\hat\theta)\}.
-\]
-The saturated/unstructured convention evaluates the H1 curvature at the
-saturated pseudo-target:
-\[
-  V_{\mathrm{sat}}
-    = H_\eta(\hat\eta).
+  \eta^\dagger = \eta_0.
 \]
 
-The first is a model-based curvature. The second is a quasi-likelihood
-saturated curvature. Under correct normality they coincide asymptotically.
-Under non-normality, \(J_\eta\) generally differs from \(H_\eta\). The two
-curvatures differ asymptotically only when the restricted and saturated
-observed-data targets differ, for example through restricted-model
-misspecification or through a non-normal MAR quasi-likelihood target.
+If the restricted SEM is also correct, so that
+\[
+  \eta(\theta_0)=\eta_0,
+\]
+then the saturated curvature and the structured/model-implied curvature have
+the same asymptotic target:
+\[
+  H_\eta(\eta^\dagger)
+    =
+  H_\eta\{\eta(\theta_0)\}.
+\]
+This statement does not require normality; it only uses the fact that, under
+MCAR, the observed-pattern normal score is unbiased at the full-data first two
+moments.
 
 \begin{conclusion}
-Structured H1 information is not an unconditional consequence of robust
-non-normal FIML theory. It is justified when the pseudo-true saturated
-curvature and the model-implied structured curvature collapse to the same
-limit, as under the correctly specified complete-data or MCAR null. Robust
-FIML theory by itself supplies the sandwich \(H^{-1}JH^{-1}\), not the
-substitution \(H_\eta\{\eta(\theta^\star)\}\) for \(H_\eta(\eta^\star)\).
+For a correct model under MCAR, a persistent asymptotic gap between saturated
+FMG and lavaan-style MLR should not be explained by a different limiting
+definition of \(V\). If the simulations show MCAR improvement for FMG over MLR,
+the first explanation should be the reference-law reduction: full spectrum
+versus scalar mean scaling.
 \end{conclusion}
 
-\section*{Structured MLR analogue versus saturated FMG}
+\section*{Where non-normality enters under MCAR}
 
-The apples-to-apples comparison is an \(\eta\)-space comparison. Hold fixed
-the model derivative
-\[
-  \Delta = \frac{\partial \eta(\theta)}{\partial\theta'}
-\]
-and hold fixed the saturated sandwich covariance
+Under non-normality and MCAR, \(\eta^\dagger\) can still equal the full-data
+mean and covariance, but \(J_\eta\) is not the normal information matrix.
+Consequently
 \[
   \Gamma_{\mathrm{mis}}
     =
-  H_\eta(\hat\eta)^{-1}J_\eta(\hat\eta)H_\eta(\hat\eta)^{-1}.
+  H_\eta^{-1}J_\eta H_\eta^{-1}
+    \ne
+  H_\eta^{-1},
 \]
-Then the only difference between the structured H1 analogue and magmaan's
-saturated FMG construction is the curvature matrix \(V\) used to form the
-residual operator
+and the nonzero eigenvalues of \(U(V)\Gamma_{\mathrm{mis}}\) need not be
+equal. This is the direct missing-data analogue of the complete-data ADF
+story \cite{browne1984,yuanbentler2000}.
+
+The Yuan--Bentler / MLR mean-scaled statistic uses only
 \[
-  U(V) = V - V\Delta(\Delta'V\Delta)^{-1}\Delta'V.
+  c_{\mathrm{SB}}
+    =
+  \frac{1}{\mathrm{df}}
+  \tr\{U(V)\Gamma_{\mathrm{mis}}\}
+    =
+  \frac{1}{\mathrm{df}}\sum_{j=1}^{\mathrm{df}}\lambda_j,
+\]
+and compares \(T/c_{\mathrm{SB}}\) to \(\chi^2_{\mathrm{df}}\). That is exact
+only in special cases, for example when the nonzero \(\lambda_j\)'s are all
+equal. It can be a poor approximation when the spectrum is dispersed.
+
+The FMG family keeps the spectrum. The exact all-eigenvalue calculation uses
+the distribution of \(\sum_j\lambda_j\chi^2_{1j}\), which can be evaluated by
+standard quadratic-form methods such as Imhof's method \cite{imhof1961}. EBA
+and penalized FMG variants approximate or shrink the same eigenvalue spectrum
+\cite{foldnesgronneberg2018,foldnesmossgronneberg2025,foldnesgronnebergmoss2026}.
+Thus the MCAR headline comparison is not
+``different Gamma'' and not necessarily ``different \(V\)''. It is usually
+\[
+  \text{mean-only MLR scaling}
+  \quad\text{versus}\quad
+  \text{spectrum-aware FMG reference law}.
 \]
 
-The structured H1 analogue uses
+\section*{Structured versus saturated \(V\)}
+
+The structured H1 analogue evaluates the same normal H1 curvature at the
+restricted fitted moments,
 \[
-  V_{\mathrm{struct}} = H_\eta\{\eta(\hat\theta)\},
-  \qquad
-  \lambda_{\mathrm{struct}}
+  V_{\mathrm{struct}}
     =
-  \eig\{U(V_{\mathrm{struct}})\Gamma_{\mathrm{mis}}\}.
+  H_\eta\{\eta(\hat\theta)\},
 \]
-The saturated FMG construction uses
+whereas saturated FMG evaluates it at the saturated H1 fit,
 \[
-  V_{\mathrm{sat}} = H_\eta(\hat\eta),
-  \qquad
-  \lambda_{\mathrm{sat}}
+  V_{\mathrm{sat}}
     =
+  H_\eta(\hat\eta).
+\]
+If both constructions are forced into the same eta-space comparison with the
+same \(\Gamma_{\mathrm{mis}}\), then the only algebraic difference is
+\[
+  \eig\{U(V_{\mathrm{struct}})\Gamma_{\mathrm{mis}}\}
+  \quad\text{versus}\quad
   \eig\{U(V_{\mathrm{sat}})\Gamma_{\mathrm{mis}}\}.
 \]
 
-Thus, after both methods are put in the same saturated moment space with the
-same empirical sandwich \(\Gamma_{\mathrm{mis}}\), the substantive
-structured-versus-saturated distinction is exactly the evaluation point for
-\(V\). MLR reporting usually collapses this object to a trace or mean scaling,
-for example
-\[
-  c = \frac{1}{\mathrm{df}}\tr\{U(V)\Gamma_{\mathrm{mis}}\},
-\]
-whereas FMG keeps the full weighted-mixture spectrum
-\(\lambda_1,\ldots,\lambda_{\mathrm{df}}\). The scalar trace is therefore a
-summary of the same \(U\Gamma\) object, not a different algebra.
+Under the correct MCAR null these two \(V\)'s share the same probability
+limit, but their finite-sample traces can differ because one uses
+\(\hat\theta\)-implied moments and the other uses the saturated EM moments.
+The advisory trace-convergence check in this repository is exactly about that
+finite-sample distinction.
 
-\section*{Interpretation for the MLR problem}
+The \(V\)-evaluation distinction matters asymptotically in other regimes:
+\begin{enumerate}
+  \item under restricted-model misspecification, because
+        \(\eta(\theta^\star)\ne\eta^\dagger\);
+  \item under non-normal MAR working likelihoods, because the observed-data
+        normal quasi-likelihood target can differ from the full-data moment
+        target.
+\end{enumerate}
+The second case is not the clean MCAR calibration problem. Normal FIML has its
+usual likelihood justification under MAR when the observed-data normal model
+is correctly specified. Under non-normal MAR, Gaussian FIML is a working
+likelihood; it may be biased for the full-data moment model, and the LRT can
+be noncentral under the intended SEM null. No reference-law correction can
+fully fix that estimator-target problem
+\cite{yuanbentler2000,savalei2010}.
 
-This gives a precise version of the empirical hypothesis: MLR can fail because
-it robustifies the covariance but keeps the wrong H1 curvature.
-The meat \(J\) sees the non-normal observed-data scores. The structured H1
-weight still uses the restricted model-implied normal curvature. That is a
-hybrid: empirical score covariance paired with a curvature from the wrong
-observed-data geometry.
+\section*{Two-variable \(V\) witness}
 
-The unstructured/saturated route does not make the normal working likelihood
-true. It only removes one unnecessary model-implied substitution from the H1
-side of the trace. Therefore it can improve calibration without solving every
-problem caused by treating non-normal or discretized data as continuous.
+The following complete-data example is useful only as a witness for the
+\(V_{\mathrm{struct}}\) versus \(V_{\mathrm{sat}}\) distinction. It is not the
+MCAR null mechanism.
 
-\section*{Failure channels}
-
-There are two distinct ways for the structured and saturated curvatures to
-target different limits.
-
-The first is restricted-model misspecification:
-\[
-  \eta(\theta^\star) \ne \eta^\star.
-\]
-This channel does not require non-normal data. It can occur under a normal
-complete-data distribution if the restricted SEM is false. In that case the
-structured H1 curvature follows the restricted pseudo-true covariance, while
-the saturated H1 curvature follows the unrestricted covariance.
-
-The second is the missing-data quasi-likelihood channel. Under non-normal MAR
-FIML, the saturated observed-data normal quasi-MLE need not target the same
-full-population moment object as the restricted model, even when the SEM is a
-correct description of the full-data first two moments. The saturated H1
-target is determined by the observed-pattern normal likelihood, and the
-restricted target is forced through one common mean/covariance structure.
-
-To disprove universal correctness of structured H1 information, it is enough
-to exhibit a data-generating distribution and missingness mechanism for which
-\[
-  H_\eta\{\eta^\star\}
-  \ne
-  H_\eta\{\eta(\theta^\star)\}
-\]
-and the difference survives the residual projection \(U\). Complete-data
-misspecification examples establish the first channel. MAR non-normal examples
-are the sharper null-calibration channel, because they can make the saturated
-and restricted observed-data targets diverge without relying on the restricted
-SEM being false.
-
-Under a correct restricted model with complete data, or with MCAR missingness
-that leaves the saturated and restricted moment targets aligned, the
-structured and saturated H1 curvatures should agree asymptotically. In that
-regime, non-normality still matters through \(J_\eta\), but the
-structured-versus-saturated evaluation point is not the asymptotic source of a
-gap.
-
-To prove structured correctness for a particular simulation cell, one would
-need to show the stronger projected equality
-\begin{align*}
-  &\tr\!\left[
-    U\{H_\eta(\eta^\star)\}
-    H_\eta(\eta^\star)^{-1}J_\eta
-    H_\eta(\eta^\star)^{-1}
-  \right] \\
-  &\qquad =
-  \tr\!\left[
-    U\{H_\eta(\eta(\theta^\star))\}
-    H_\eta(\eta^\star)^{-1}J_\eta
-    H_\eta(\eta^\star)^{-1}
-  \right],
-\end{align*}
-or an equivalent equality for the full weighted-mixture spectrum. There is no
-general theorem giving this under non-normal FIML.
-
-\section*{A two-variable witness}
-
-A maximally small complete-data misspecification example shows the first
-failure channel. Let the saturated covariance of two observed variables be
+Let the saturated covariance of two observed variables be
 \[
   \Sigma_Y =
   \begin{bmatrix}
@@ -386,20 +300,9 @@ but fit the restricted independence model
     0 & \theta_2
   \end{bmatrix}.
 \]
-The pseudo-true restricted covariance is
-\[
-  \Sigma(\theta^\star) = I_2,
-\]
-whereas the saturated covariance is \(\Sigma_Y\). Hence the structured and
-unstructured H1 weights evaluate the normal-theory covariance-moment weight at
-different places.
-
-This witness does not rely on non-normality; it isolates the evaluation-point
-problem. The same gap arises for normal data if the restricted independence
-model is false. Its role is therefore to show that structured H1 information
-is not an algebraic consequence of the trace formula, not to prove that
-non-normality alone creates an H1-curvature gap under a correct complete-data
-or MCAR null.
+Then the restricted pseudo-true covariance is \(I_2\), while the saturated
+covariance is \(\Sigma_Y\). The gap is misspecification; it exists even under
+normal data.
 
 Use covariance moments ordered as
 \[
@@ -412,10 +315,9 @@ The restricted derivative is
     1 & 0 \\
     0 & 0 \\
     0 & 1
-  \end{bmatrix},
+  \end{bmatrix}.
 \]
-so the single degree of freedom is the covariance coordinate. At the structured
-point \(I_2\),
+At the structured point \(I_2\),
 \[
   \Gamma_{\mathrm{NT}}(I_2)
     =
@@ -425,9 +327,9 @@ point \(I_2\),
     0 & 0 & 2
   \end{bmatrix},
   \qquad
-  V_{\mathrm{struct}} = \Gamma_{\mathrm{NT}}(I_2)^{-1}.
+  V_{\mathrm{struct}} = \Gamma_{\mathrm{NT}}(I_2)^{-1},
 \]
-The corresponding residual-space matrix is simply
+and
 \[
   U_{\mathrm{struct}}
     =
@@ -437,9 +339,7 @@ The corresponding residual-space matrix is simply
     0 & 0 & 0
   \end{bmatrix}.
 \]
-
-If the trace meat is the normal covariance-moment matrix at the saturated
-covariance,
+At the saturated covariance,
 \[
   \Gamma_{\mathrm{NT}}(\Sigma_Y)
     =
@@ -447,9 +347,10 @@ covariance,
     2 & 2\rho & 2\rho^2 \\
     2\rho & 1+\rho^2 & 2\rho \\
     2\rho^2 & 2\rho & 2
-  \end{bmatrix},
+  \end{bmatrix}.
 \]
-then the structured one-df scale is
+If the trace uses \(U_{\mathrm{struct}}\) with the saturated covariance-moment
+matrix, then
 \[
   c_{\mathrm{struct}}
     =
@@ -457,54 +358,109 @@ then the structured one-df scale is
     =
   1+\rho^2.
 \]
+By contrast, the unstructured/saturated choice uses
+\[
+  V_{\mathrm{sat}}=\Gamma_{\mathrm{NT}}(\Sigma_Y)^{-1},
+\]
+and \(U(V_{\mathrm{sat}})\Gamma_{\mathrm{NT}}(\Sigma_Y)\) is a rank-one
+projector, so
+\[
+  c_{\mathrm{sat}} = 1.
+\]
+This proves that the evaluation point of \(V\) can matter. It does not prove
+that \(V\) is the explanation for non-normal MCAR null calibration failures.
 
-By contrast, the unstructured choice uses
-\[
-  V_{\mathrm{unstruct}}
-    = \Gamma_{\mathrm{NT}}(\Sigma_Y)^{-1}.
-\]
-For any positive definite \(\Gamma\), the matrix
-\[
-  U(V=\Gamma^{-1})\Gamma
-\]
-is the \(\Gamma^{-1}\)-orthogonal residual projector and has trace equal to its
-rank. Here the rank is the model df, one. Hence
-\[
-  c_{\mathrm{unstruct}} = 1.
-\]
+\section*{Diagnostics for experiment 23}
 
-Therefore, for every \(\rho\ne 0\),
-\[
-  c_{\mathrm{struct}} = 1+\rho^2
-  \qquad \text{but} \qquad
-  c_{\mathrm{unstruct}} = 1.
-\]
-The disagreement is not numerical and not a trace shortcut artifact. It is
-caused entirely by evaluating \(V\) at the restricted structured covariance
-\(I_2\) instead of at the saturated covariance \(\Sigma_Y\).
+For the MCAR cells, the clean diagnostic sequence is:
+\begin{enumerate}
+  \item Compare lavaan MLR with magmaan's FMG \(SB\) row. Both are mean-only
+        trace scalings. If they agree and both miscalibrate, the culprit is the
+        scalar reference-law approximation.
+  \item Inspect the eigenvalue dispersion of \(U\Gamma_{\mathrm{mis}}\). Large
+        spread predicts poor mean-scaling performance and gives FMG room to
+        improve.
+  \item Check that
+        \(\sum_j\lambda_j\) from saturated FMG approaches the FIML MLR trace as
+        \(N\) grows under MCAR. A persistent large gap points to a convention or
+        implementation mismatch in \(V\), \(\Delta\), or scaling.
+  \item Treat MAR cells separately. Mean base statistic exceeding mean trace is
+        an estimator-target/noncentrality warning, not a failure of the
+        eigenvalue reference law.
+\end{enumerate}
 
-This witness uses complete data only to keep the algebra visible. In the
-FIML saturated construction, missing data replaces
-\(\Gamma_{\mathrm{NT}}(\Sigma_Y)\) by the saturated observed-pattern sandwich
-\[
-  H_\eta^{-1}J_\eta H_\eta^{-1},
-\]
-but the same logical burden remains: structured correctness requires the
-restricted and saturated H1 curvatures to agree after projection.
+\begin{thebibliography}{9}
 
-\section*{Practical diagnostic}
+\bibitem{browne1984}
+Browne, M. W. (1984).
+Asymptotically distribution-free methods for the analysis of covariance
+structures.
+\emph{British Journal of Mathematical and Statistical Psychology}, 37(1),
+62--83.
+\href{https://doi.org/10.1111/j.2044-8317.1984.tb00789.x}{doi:10.1111/j.2044-8317.1984.tb00789.x}.
 
-The clean diagnostic is therefore not a new trace formula. It is a controlled
-change in the evaluation point for \(V\):
-\[
-  V_{\mathrm{struct}} = H_\eta\{\eta(\hat\theta)\},
-  \qquad
-  V_{\mathrm{sat}} = H_\eta(\hat\eta),
-\]
-with the same empirical score meat and the same trace identity. If
-structured follows the bad MLR rejection behavior while saturated/unstructured
-moves toward nominal, the structured H1 information convention is the culprit.
-If both fail similarly, the failure is deeper in the normal working likelihood
-or in the base FIML LRT, not only in the H1-information convention.
+\bibitem{foldnesgronneberg2018}
+Foldnes, N., \& Gronneberg, S. (2018).
+Approximating test statistics using eigenvalue block averaging.
+\emph{Structural Equation Modeling}, 25(1), 101--114.
+\href{https://doi.org/10.1080/10705511.2017.1373021}{doi:10.1080/10705511.2017.1373021}.
+
+\bibitem{foldnesmossgronneberg2025}
+Foldnes, N., Moss, J., \& Gronneberg, S. (2025).
+Improved goodness of fit procedures for structural equation models.
+\emph{Structural Equation Modeling}, 32(1), 1--13.
+\href{https://doi.org/10.1080/10705511.2024.2372028}{doi:10.1080/10705511.2024.2372028}.
+
+\bibitem{foldnesgronnebergmoss2026}
+Foldnes, N., Gronneberg, S., \& Moss, J. (2026).
+Penalized eigenvalue block averaging: Extension to nested model comparison and
+Monte Carlo evaluations.
+\emph{Behavior Research Methods}, 58(4), Article 107.
+\href{https://doi.org/10.3758/s13428-026-02968-4}{doi:10.3758/s13428-026-02968-4}.
+
+\bibitem{imhof1961}
+Imhof, J. P. (1961).
+Computing the distribution of quadratic forms in normal variables.
+\emph{Biometrika}, 48(3/4), 419--426.
+\href{https://doi.org/10.1093/biomet/48.3-4.419}{doi:10.1093/biomet/48.3-4.419}.
+
+\bibitem{satorra2000}
+Satorra, A. (2000).
+Scaled and adjusted restricted tests in multi-sample analysis of moment
+structures.
+In R. D. H. Heijmans, D. S. G. Pollock, \& A. Satorra (Eds.),
+\emph{Innovations in Multivariate Statistical Analysis} (pp. 233--247).
+Kluwer.
+\href{https://doi.org/10.1007/978-1-4615-4603-0_17}{doi:10.1007/978-1-4615-4603-0\_17}.
+
+\bibitem{satorrabentler1994}
+Satorra, A., \& Bentler, P. M. (1994).
+Corrections to test statistics and standard errors in covariance structure
+analysis.
+In A. von Eye \& C. C. Clogg (Eds.),
+\emph{Latent Variables Analysis: Applications for Developmental Research}
+(pp. 399--419). Sage.
+
+\bibitem{savalei2010}
+Savalei, V. (2010).
+Expected versus observed information in SEM with incomplete normal and
+nonnormal data.
+\emph{Psychological Methods}, 15(4), 352--367.
+\href{https://doi.org/10.1037/a0020143}{doi:10.1037/a0020143}.
+
+\bibitem{white1982}
+White, H. (1982).
+Maximum likelihood estimation of misspecified models.
+\emph{Econometrica}, 50(1), 1--25.
+\href{https://doi.org/10.2307/1912526}{doi:10.2307/1912526}.
+
+\bibitem{yuanbentler2000}
+Yuan, K.-H., \& Bentler, P. M. (2000).
+Three likelihood-based methods for mean and covariance structure analysis with
+nonnormal missing data.
+\emph{Sociological Methodology}, 30(1), 165--200.
+\href{https://doi.org/10.1111/0081-1750.00078}{doi:10.1111/0081-1750.00078}.
+
+\end{thebibliography}
 
 \end{document}
