@@ -323,7 +323,7 @@ Scope: the near-Heywood + `-march=native` L-BFGS sensitivity is an accepted
 optimizer-path limitation, documented here, not guarded by a test.
 
 **Geiser GLS/ULS implied-moment parity: fixed.x resolution, multi-start basin,
-and the manifest cross-lagged exception — three findings.**
+and the manifest cross-lagged observed-ordering fix — three findings.**
 Regression (real bug): the Geiser goldens rebuilt the implied-moment evaluator
 from the caller's `pt`, but `fit_*` takes `pt` by value and resolves fixed.x on
 its own copy, so the manifest fixed.x path models' exogenous observed-moment
@@ -343,26 +343,32 @@ objective cross-check was relaxed from an absolute `2e-4` to
 convention, which only bites the high-|fx| latent AR case (Σ/μ already match to
 1e-7); the looser ULS callers `max(5e-3, 5e-3·|fx|)` reproduce the prior
 `5e-3·max(1,|fx|)` gate exactly.
-Open magmaan limitation (not an oracle defect): the two *manifest* fixed.x
-cross-lagged path models (`manifest_ar_cross_lagged`, `…_extended`) converge to
-a stationary point whose GLS/ULS objective is strictly *higher* than lavaan's
-(GLS 0.131 vs 0.126; 0.051 vs 0.002), with implied means matching to ~1e-8 but
-implied covariance off by ~0.03-0.06. This reproduces from 30 independent random
-restarts and across PORT/NLopt/NL2SOL/variable-projection backends — magmaan's
-*global* optimum for the covariance map it builds — and the model carries the
-same free-parameter count and a correctly sample-resolved exogenous block
-(variances *and* the `d11~~c11` cross-covariance). It is therefore a magmaan-side
-difference in fixed.x exogenous covariance propagation for manifest cross-lagged
-path models, not an optimizer trap and not an oracle defect (magmaan fits
-*worse*). Tracked in [`docs/backlog/todo.md`](../backlog/todo.md).
+Regression (harness bug, since fixed): the two *manifest* fixed.x cross-lagged
+path models (`manifest_ar_cross_lagged`, `…_extended`) appeared to converge to a
+worse-than-lavaan optimum (GLS 0.131 vs 0.126; 0.051 vs 0.002, implied covariance
+off ~0.03-0.06) and were gated for self-consistency only. The earlier diagnosis —
+"magmaan-side fixed.x propagation difference" — was wrong. Root cause: an
+observed-order mismatch in the golden harness. magmaan orders observed variables
+`[ov.y, ov.x]` (classify), and `data::SampleStats` is name-free / positionally
+aligned to that `ov_order`; but the fixtures carry `sample_cov`/`sample_mean` and
+lavaan's Σ/μ in their own data column order. These two are the only Geiser cases
+where the exogenous variables (`d11`, `c11`) are not already last in the data, so
+`resolve_fixed_x_from_sample` read exogenous moments from the wrong sample
+positions (e.g. `d11~1` resolved to 2.088, the c12 mean, instead of 0.307) and
+the objective compared mis-ordered Σ vs S. Fix: the harness builds the matrix rep
+with `LatentNames` (so `rep.ov_names` carries the real order) and reconciles by
+variable name (`perm_to_magmaan`), permuting the sample and the lavaan moments
+into magmaan's `ov_order` before fit/compare (identity for the other Geiser
+cases). Both ids now gate Σ/μ against lavaan to ~1e-8 and `fmin` to within the
+existing `max(2e-4, 2.5e-3·|fx|)` GLS gate. Note (not fixed here, out of scope):
+the C++ `api::data_from_sample_stats` likewise assumes `ov_order`-aligned summary
+stats; a named-summary-stat reconciliation in the api/R layer would let callers
+pass `sample.cov` in any column order.
 Guard: `tests/golden/geiser_golden_test.cpp` (the two `Geiser {GLS,ULS} goldens`
-cases). `has_known_nonparity_fit` narrows the self-consistency exception to
-exactly those two manifest cross-lagged ids (finite-objective check); everything
-else, including the latent AR cross-lagged family and the manifest fixed.x
-regression/path models, gates against lavaan.
-Scope: the manifest cross-lagged covariance discrepancy is not yet root-caused;
-the latent family's residual objective-value gap is the documented GLS/ULS scale
-convention, with the implied moments as the authoritative parity.
+cases) — all Geiser ids now gate Σ/μ against lavaan; the self-consistency
+exception (`has_known_nonparity_fit`) is removed.
+Scope: the latent family's residual objective-value gap is the documented GLS/ULS
+scale convention, with the implied moments as the authoritative parity.
 
 ## Validation Areas
 
@@ -370,7 +376,7 @@ convention, with the implied moments as the authoritative parity.
 |---|---|---|---|---|
 | Parser and lexer | `docs/grammar/grammar.ebnf`, checked parser fixtures | Unit plus golden tests under `spec` | `tests/unit/lexer_test.cpp`, `tests/unit/parser_test.cpp`, `tests/golden/lexer_golden_test.cpp`, `tests/golden/parser_golden_test.cpp` | Grammar-coverage walk remains manual; grammar changes must edit EBNF first. |
 | Lavaanify, spec, and partable projection | lavaan `parTable()` fixtures and corpus exports | Unit, golden, and corpus parity under `spec` and `parity` | `tests/unit/lavaanify_test.cpp`, `tests/golden/lavaanify_golden_test.cpp`, `tests/golden/textbook_corpus_golden_test.cpp` | Little/Newsom and Mplus corpus promotion remains ongoing. |
-| Matrix representation and model evaluation | lavaan implied moments plus algebraic invariants | Unit plus golden tests under `spec` | `tests/unit/matrix_rep_test.cpp`, `tests/unit/model_evaluator_test.cpp`, `tests/golden/matrix_rep_golden_test.cpp`, `tests/golden/fit_implied_golden_test.cpp` | fixed.x exogenous moments are sample-resolved before comparison; the one remaining implied-moment exception is the manifest cross-lagged covariance difference recorded in the regression notes (`geiser_golden_test.cpp`). |
+| Matrix representation and model evaluation | lavaan implied moments plus algebraic invariants | Unit plus golden tests under `spec` | `tests/unit/matrix_rep_test.cpp`, `tests/unit/model_evaluator_test.cpp`, `tests/golden/matrix_rep_golden_test.cpp`, `tests/golden/fit_implied_golden_test.cpp` | fixed.x exogenous moments are sample-resolved before comparison; summary-stat goldens must reconcile their data column order with magmaan's `[ov.y, ov.x]` `ov_order` by name (see `geiser_golden_test.cpp`). All Geiser implied-moment cases now gate against lavaan. |
 | Complete-data ML and LS estimation | lavaan JSON fixtures and real-data parity fixtures | Unit, golden, and parity tests under `estimate` and `parity` | `tests/unit/ml_test.cpp`, `tests/unit/ls_path_test.cpp`, `tests/golden/ls_golden_test.cpp`, `tests/golden/lavaan_parity_golden_test.cpp` | Multiplier-tolerance audit covered continuous and ordinal LS; remaining soft gates are corpus/documented-nonparity cases. |
 | FIML and missing data | lavaan FIML fixtures, saturated EM invariants, FIML FMG diagnostics | Unit, golden, R examples, and advisory checks | `tests/unit/fiml_test.cpp`, `tests/golden/fiml_golden_test.cpp`, `r-package/examples/fiml.R`, `tests/checks/fiml_fmg_trace/` | High-level `magmaan(estimator = "FIML")` mean-structure defaults and multi-group starts need care. |
 | Ordinal and mixed moments | lavaan ordinal fixtures, robcat fixtures, internal moment invariants | Unit, golden, robcat, R examples, and experiments | `tests/unit/ordinal_test.cpp`, `tests/golden/ordinal_golden_test.cpp`, `tests/golden/robcat_parity_golden_test.cpp`, `r-package/examples/ordinal_dwls_wls.R` | Lazy mixed WLS construction, mixed theta SNLLS, and research robust-association paths remain open. |

@@ -19,6 +19,7 @@
 #include "magmaan/optim/problem.hpp"
 #include "magmaan/parse/parser.hpp"
 #include "magmaan/spec/build.hpp"
+#include <vector>
 
 namespace {
 
@@ -37,6 +38,7 @@ magmaan::data::SampleStats sample_stats_from_case(const nlohmann::json& c) {
 struct Handles {
   magmaan::spec::LatentStructure pt;
   magmaan::model::MatrixRep rep;
+  magmaan::spec::LatentNames names;
 };
 
 Handles handles_from_case(const nlohmann::json& c) {
@@ -45,11 +47,47 @@ Handles handles_from_case(const nlohmann::json& c) {
   magmaan::spec::BuildOptions opts;
   opts.meanstructure = c["meanstructure"].get<bool>();
   opts.fixed_x = c["fixed_x"].get<bool>();
-  auto pt = magmaan::spec::build(*fp, opts);
+  magmaan::spec::LatentNames names;
+  auto pt = magmaan::spec::build(*fp, opts, nullptr, &names);
   REQUIRE(pt.has_value());
-  auto rep = magmaan::model::build_matrix_rep(*pt);
+  // Pass `names` so `rep.ov_names` carries the real observed-variable order;
+  // the fixtures supply summary stats and lavaan moments in their own data
+  // column order, which we reconcile to magmaan's `ov_order` by name below.
+  auto rep = magmaan::model::build_matrix_rep(*pt, &names);
   REQUIRE(rep.has_value());
-  return Handles{std::move(*pt), std::move(*rep)};
+  return Handles{std::move(*pt), std::move(*rep), std::move(names)};
+}
+
+// magmaan orders observed variables as `[ov.y, ov.x]` (classify), which need
+// not match the fixture's data column order. `SampleStats` is name-free and
+// positionally aligned to `ov_order`, so summary stats (and the lavaan moments
+// we compare against) must be permuted into magmaan's observed order by name.
+// For models whose data order already equals magmaan's `ov_order` this is the
+// identity, so it leaves the previously-passing Geiser cases untouched.
+std::vector<int> perm_to_magmaan(const std::vector<std::string>& magmaan_order,
+                                 const std::vector<std::string>& fixture_order) {
+  std::vector<int> perm(magmaan_order.size(), -1);
+  for (std::size_t k = 0; k < magmaan_order.size(); ++k) {
+    for (std::size_t f = 0; f < fixture_order.size(); ++f) {
+      if (magmaan_order[k] == fixture_order[f]) { perm[k] = static_cast<int>(f); break; }
+    }
+  }
+  return perm;
+}
+
+Eigen::MatrixXd reorder_sym(const Eigen::MatrixXd& A, const std::vector<int>& perm) {
+  Eigen::MatrixXd B(A.rows(), A.cols());
+  for (Eigen::Index i = 0; i < A.rows(); ++i)
+    for (Eigen::Index j = 0; j < A.cols(); ++j)
+      B(i, j) = A(perm[static_cast<std::size_t>(i)], perm[static_cast<std::size_t>(j)]);
+  return B;
+}
+
+Eigen::VectorXd reorder_vec(const Eigen::VectorXd& v, const std::vector<int>& perm) {
+  Eigen::VectorXd w(v.size());
+  for (Eigen::Index i = 0; i < v.size(); ++i)
+    w(i) = v(perm[static_cast<std::size_t>(i)]);
+  return w;
 }
 
 magmaan::optim::OptimOptions geiser_opts() {
@@ -102,25 +140,9 @@ double max_abs_diff(const Eigen::VectorXd& a, const Eigen::VectorXd& b) {
   return (a - b).cwiseAbs().maxCoeff();
 }
 
-// The two manifest fixed.x cross-lagged path models (`manifest_ar_cross_lagged`
-// and `…_extended`) are the only remaining Geiser cases not gated against
-// lavaan's implied moments. magmaan converges to a stationary point whose GLS/
-// ULS objective is strictly *higher* than lavaan's (e.g. GLS 0.131 vs 0.126;
-// 0.051 vs 0.002), with the implied means matching lavaan to ~1e-8 but the
-// implied covariance differing by ~0.03-0.06. This is reproducible from 30
-// independent random restarts and across PORT / NLopt / NL2SOL / variable-
-// projection backends, so it is magmaan's global optimum for the covariance
-// map it builds, not an optimizer local minimum — i.e. a magmaan-side model
-// difference in fixed.x exogenous covariance propagation for manifest cross-
-// lagged path models, *not* an oracle defect (magmaan is the one that fits
-// worse). Tracked in docs/backlog/todo.md and the test ledger; gated for
-// self-consistency (finite objective) until root-caused. Everything else,
-// including the manifest fixed.x regression/path models and the *latent* AR
-// cross-lagged family, gates against lavaan directly.
-bool has_known_nonparity_fit(const std::string& id) {
-  return id.rfind("manifest_ar_cross_lagged", 0) == 0;
-}
-
+// `lavaan_sigma` / `lavaan_mu` arrive already permuted into magmaan's observed
+// order (see `perm_to_magmaan` at the call sites), so they line up positionally
+// with magmaan's implied moments.
 void check_implied_against_lavaan(const std::string& id,
                                   const magmaan::spec::LatentStructure& pt,
                                   const magmaan::model::MatrixRep& rep,
@@ -136,11 +158,6 @@ void check_implied_against_lavaan(const std::string& id,
   REQUIRE_MESSAGE(im.has_value(), id << ": implied moments failed");
   REQUIRE(im->sigma.size() == 1);
   REQUIRE(im->mu.size() == 1);
-
-  if (has_known_nonparity_fit(id)) {
-    CHECK_MESSAGE(std::isfinite(est.fmin), id << ": non-finite fmin");
-    return;
-  }
 
   // Cross-program objective check. The implied-moment checks below are the
   // authoritative parity gate; this scalar comparison is a secondary sanity
@@ -195,6 +212,14 @@ TEST_CASE("Geiser GLS goldens match lavaan implied moments") {
       REQUIRE(c["lavaan"]["converged"].get<bool>());
       auto handles = handles_from_case(c);
       auto samp = sample_stats_from_case(c);
+      // Reconcile the fixture's data column order with magmaan's `ov_order`
+      // (which groups endogenous before exogenous): `SampleStats` is name-free
+      // and positionally aligned to `ov_order`.
+      const auto perm = perm_to_magmaan(
+          handles.rep.ov_names[0],
+          c["ov_names"].get<std::vector<std::string>>());
+      samp.S[0] = reorder_sym(samp.S[0], perm);
+      samp.mean[0] = reorder_vec(samp.mean[0], perm);
       resolve_handles(handles, samp, id);
       auto x0 = magmaan::estimate::simple_start_values(
           handles.pt, handles.rep, samp, {});
@@ -203,8 +228,9 @@ TEST_CASE("Geiser GLS goldens match lavaan implied moments") {
 
       const double lavaan_fx = c["lavaan"]["fx"].get<double>();
       const Eigen::MatrixXd lavaan_sigma =
-          matrix_from_json(c["lavaan"]["sigma"]);
-      const Eigen::VectorXd lavaan_mu = vector_from_json(c["lavaan"]["mu"]);
+          reorder_sym(matrix_from_json(c["lavaan"]["sigma"]), perm);
+      const Eigen::VectorXd lavaan_mu =
+          reorder_vec(vector_from_json(c["lavaan"]["mu"]), perm);
 
       auto full = best_start(
           [&](const Eigen::VectorXd& s) {
@@ -252,6 +278,14 @@ TEST_CASE("Geiser ULS goldens match lavaan implied moments") {
       REQUIRE(c["lavaan"]["converged"].get<bool>());
       auto handles = handles_from_case(c);
       auto samp = sample_stats_from_case(c);
+      // Reconcile the fixture's data column order with magmaan's `ov_order`
+      // (which groups endogenous before exogenous): `SampleStats` is name-free
+      // and positionally aligned to `ov_order`.
+      const auto perm = perm_to_magmaan(
+          handles.rep.ov_names[0],
+          c["ov_names"].get<std::vector<std::string>>());
+      samp.S[0] = reorder_sym(samp.S[0], perm);
+      samp.mean[0] = reorder_vec(samp.mean[0], perm);
       resolve_handles(handles, samp, id);
       auto x0 = magmaan::estimate::simple_start_values(
           handles.pt, handles.rep, samp, {});
@@ -260,8 +294,9 @@ TEST_CASE("Geiser ULS goldens match lavaan implied moments") {
 
       const double lavaan_fx = c["lavaan"]["fx"].get<double>();
       const Eigen::MatrixXd lavaan_sigma =
-          matrix_from_json(c["lavaan"]["sigma"]);
-      const Eigen::VectorXd lavaan_mu = vector_from_json(c["lavaan"]["mu"]);
+          reorder_sym(matrix_from_json(c["lavaan"]["sigma"]), perm);
+      const Eigen::VectorXd lavaan_mu =
+          reorder_vec(vector_from_json(c["lavaan"]["mu"]), perm);
 
       // ULS is the moment quadratic with an empty (identity) weight; the GLS
       // mean-weight asymmetry does not arise here. fit_snlls is the profiled
