@@ -322,13 +322,55 @@ surface rather than a degenerate optimization geometry.
 Scope: the near-Heywood + `-march=native` L-BFGS sensitivity is an accepted
 optimizer-path limitation, documented here, not guarded by a test.
 
+**Geiser GLS/ULS implied-moment parity: fixed.x resolution, multi-start basin,
+and the manifest cross-lagged exception — three findings.**
+Regression (real bug): the Geiser goldens rebuilt the implied-moment evaluator
+from the caller's `pt`, but `fit_*` takes `pt` by value and resolves fixed.x on
+its own copy, so the manifest fixed.x path models' exogenous observed-moment
+block stayed NaN-filled and was excluded from the parity gate. Fix: call
+`estimate::resolve_fixed_x_from_sample` on the test's `pt` before the implied
+check (mirrors `fit_implied_golden_test`), so `manifest_regression`,
+`manifest_path`, and `manifest_path_non_saturated` now gate Σ/μ against lavaan.
+Recipe (not a bug): the *latent* AR cross-lagged family has a shallow
+moment-objective surface where `simple_start_values` settles in a higher,
+non-lavaan basin (e.g. GLS 0.326 vs 0.272). A plain ML fit lands in lavaan's
+basin; running each GLS/ULS arm from both the simple start and the ML warm start
+and keeping the lower-objective optimum (`best_start`) reaches lavaan's Σ/μ to
+~1e-7 for all three latent cases without disturbing the well-behaved models
+(where a warm-started full fit can otherwise stop short of the GLS optimum). The
+objective cross-check was relaxed from an absolute `2e-4` to
+`max(2e-4, 2.5e-3·|fx|)` to absorb the known ~1/N GLS mean-structure scale
+convention, which only bites the high-|fx| latent AR case (Σ/μ already match to
+1e-7); the looser ULS callers `max(5e-3, 5e-3·|fx|)` reproduce the prior
+`5e-3·max(1,|fx|)` gate exactly.
+Open magmaan limitation (not an oracle defect): the two *manifest* fixed.x
+cross-lagged path models (`manifest_ar_cross_lagged`, `…_extended`) converge to
+a stationary point whose GLS/ULS objective is strictly *higher* than lavaan's
+(GLS 0.131 vs 0.126; 0.051 vs 0.002), with implied means matching to ~1e-8 but
+implied covariance off by ~0.03-0.06. This reproduces from 30 independent random
+restarts and across PORT/NLopt/NL2SOL/variable-projection backends — magmaan's
+*global* optimum for the covariance map it builds — and the model carries the
+same free-parameter count and a correctly sample-resolved exogenous block
+(variances *and* the `d11~~c11` cross-covariance). It is therefore a magmaan-side
+difference in fixed.x exogenous covariance propagation for manifest cross-lagged
+path models, not an optimizer trap and not an oracle defect (magmaan fits
+*worse*). Tracked in [`docs/backlog/todo.md`](../backlog/todo.md).
+Guard: `tests/golden/geiser_golden_test.cpp` (the two `Geiser {GLS,ULS} goldens`
+cases). `has_known_nonparity_fit` narrows the self-consistency exception to
+exactly those two manifest cross-lagged ids (finite-objective check); everything
+else, including the latent AR cross-lagged family and the manifest fixed.x
+regression/path models, gates against lavaan.
+Scope: the manifest cross-lagged covariance discrepancy is not yet root-caused;
+the latent family's residual objective-value gap is the documented GLS/ULS scale
+convention, with the implied moments as the authoritative parity.
+
 ## Validation Areas
 
 | Area | Oracle | Protection | Important files/tests | Known gaps |
 |---|---|---|---|---|
 | Parser and lexer | `docs/grammar/grammar.ebnf`, checked parser fixtures | Unit plus golden tests under `spec` | `tests/unit/lexer_test.cpp`, `tests/unit/parser_test.cpp`, `tests/golden/lexer_golden_test.cpp`, `tests/golden/parser_golden_test.cpp` | Grammar-coverage walk remains manual; grammar changes must edit EBNF first. |
 | Lavaanify, spec, and partable projection | lavaan `parTable()` fixtures and corpus exports | Unit, golden, and corpus parity under `spec` and `parity` | `tests/unit/lavaanify_test.cpp`, `tests/golden/lavaanify_golden_test.cpp`, `tests/golden/textbook_corpus_golden_test.cpp` | Little/Newsom and Mplus corpus promotion remains ongoing. |
-| Matrix representation and model evaluation | lavaan implied moments plus algebraic invariants | Unit plus golden tests under `spec` | `tests/unit/matrix_rep_test.cpp`, `tests/unit/model_evaluator_test.cpp`, `tests/golden/matrix_rep_golden_test.cpp`, `tests/golden/fit_implied_golden_test.cpp` | Some observed fixed.x path-model implied-moment comparisons remain documented parity exceptions. |
+| Matrix representation and model evaluation | lavaan implied moments plus algebraic invariants | Unit plus golden tests under `spec` | `tests/unit/matrix_rep_test.cpp`, `tests/unit/model_evaluator_test.cpp`, `tests/golden/matrix_rep_golden_test.cpp`, `tests/golden/fit_implied_golden_test.cpp` | fixed.x exogenous moments are sample-resolved before comparison; the one remaining implied-moment exception is the manifest cross-lagged covariance difference recorded in the regression notes (`geiser_golden_test.cpp`). |
 | Complete-data ML and LS estimation | lavaan JSON fixtures and real-data parity fixtures | Unit, golden, and parity tests under `estimate` and `parity` | `tests/unit/ml_test.cpp`, `tests/unit/ls_path_test.cpp`, `tests/golden/ls_golden_test.cpp`, `tests/golden/lavaan_parity_golden_test.cpp` | Multiplier-tolerance audit covered continuous and ordinal LS; remaining soft gates are corpus/documented-nonparity cases. |
 | FIML and missing data | lavaan FIML fixtures, saturated EM invariants, FIML FMG diagnostics | Unit, golden, R examples, and advisory checks | `tests/unit/fiml_test.cpp`, `tests/golden/fiml_golden_test.cpp`, `r-package/examples/fiml.R`, `tests/checks/fiml_fmg_trace/` | High-level `magmaan(estimator = "FIML")` mean-structure defaults and multi-group starts need care. |
 | Ordinal and mixed moments | lavaan ordinal fixtures, robcat fixtures, internal moment invariants | Unit, golden, robcat, R examples, and experiments | `tests/unit/ordinal_test.cpp`, `tests/golden/ordinal_golden_test.cpp`, `tests/golden/robcat_parity_golden_test.cpp`, `r-package/examples/ordinal_dwls_wls.R` | Lazy mixed WLS construction, mixed theta SNLLS, and research robust-association paths remain open. |

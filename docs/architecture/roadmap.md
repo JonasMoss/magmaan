@@ -780,14 +780,19 @@ stop rather than any usable non-error return.
   fixed.x cases. Mean-structure LS fixtures also cross-check SNLLS against
   the full LS path, and Ceres against NLopt L-BFGS when the Ceres backend is
   enabled.
-- The Geiser textbook GLS corpus is checked in as a parity-tier golden
-  fixture generated from `corpus/textbook-corpus/raw/geiser` plus installed
-  lavaan. The test
-  exercises all curated Geiser GLS cases and compares full/PORT and
-  SNLLS/PORT-NLS implied moments against lavaan where the current model
-  surface has strict parity. Manifest fixed.x path cases and the known
-  alternate-basin `latent_ar_cross_lagged` case remain smoke-checked but not
-  used as strict implied-moment parity oracles.
+- The Geiser textbook GLS and ULS corpora are checked in as parity-tier golden
+  fixtures generated from `corpus/textbook-corpus/raw/geiser` plus installed
+  lavaan. The tests exercise all curated Geiser cases and compare full/PORT and
+  SNLLS/PORT-NLS implied moments against lavaan. Manifest fixed.x path models
+  resolve exogenous observed moments from the sample before the comparison and
+  gate strictly; the latent AR cross-lagged family is gated strictly via a
+  multi-start recipe (lower-objective of a simple-start and an ML-warm-started
+  fit). The only remaining smoke-checked (finite-objective, not strict-parity)
+  cases are the two manifest fixed.x cross-lagged path models
+  (`manifest_ar_cross_lagged`, `…_extended`), where magmaan's global optimum has
+  a strictly worse objective than lavaan and an implied covariance that differs
+  (a magmaan-side fixed.x exogenous-covariance limitation tracked in the backlog
+  and test ledger, not an oracle defect).
 - A local ignored Mplus SEM source corpus can be built from
   `corpus/textbook-corpus/raw/MPLUS/*.zip` into
   `corpus/textbook-corpus/raw/mplus_sem` with
