@@ -1107,36 +1107,45 @@ polyserial_pair_scores(const Eigen::Ref<const Eigen::VectorXi>& categories,
       .score_gamma = Eigen::MatrixXd::Zero(nth + 1, nth + 1),
       .mu_unit = Eigen::VectorXd::Zero(n),
       .var_unit = Eigen::VectorXd::Zero(n)};
-  const double sd = std::sqrt(std::max(1e-12, 1.0 - rho * rho));
-  const double h = 1e-5;
-  const double rp = std::min(0.999, rho + h);
-  const double rm = std::max(-0.999, rho - h);
+  const double s2 = std::max(1e-12, 1.0 - rho * rho);
+  const double sd = std::sqrt(s2);
+  // Each case touches only the two finite boundaries of its own category, so
+  // the score is an O(1)-per-case boundary evaluation, not an O(nth) sweep. The
+  // rho score is the analytic d log P(c | u)/drho built from those same boundary
+  // densities (top.d1 - bot.d1)/p with d1 = phi(z)/sd * (rho*t - u)/s2; the
+  // +/-inf boundary of an edge category contributes zero. This reuses the two
+  // pdf evaluations the threshold columns already need instead of the former
+  // three-point finite difference (two extra full probability evaluations per
+  // case). Threshold, mu, and var columns are unchanged bit-for-bit.
   for (Eigen::Index r = 0; r < n; ++r) {
     const int c = categories(r);
-    const double lik = polyserial_prob_unchecked(c, u(r), rho, thresholds);
-    const double pp = polyserial_prob_unchecked(c, u(r), rp, thresholds);
-    const double pm = polyserial_prob_unchecked(c, u(r), rm, thresholds);
-    out.rho(r) = (std::log(pp) - std::log(pm)) / (rp - rm);
+    const double ur = u(r);
+    const double lik = polyserial_prob_unchecked(c, ur, rho, thresholds);
     // d log P(c | u) / du = -rho * (z_hi - z_lo) / lik, which is -rho times
     // the row sum of the threshold score columns below.
     double dlogp_du = 0.0;
-    for (Eigen::Index a = 0; a < nth; ++a) {
-      const double z = normal_pdf((thresholds(a) - rho * u(r)) / sd) / sd;
-      if (c == a) {
-        out.thresholds(r, a) += z / lik;
-        dlogp_du -= rho * z / lik;
-      }
-      if (c == a + 1) {
-        out.thresholds(r, a) -= z / lik;
-        dlogp_du += rho * z / lik;
-      }
+    double drho_num = 0.0;  // (top.d1 - bot.d1) * s2 = phi*(rho*t - u) terms
+    if (c < nth) {  // finite upper boundary thresholds(c)
+      const double t = thresholds(c);
+      const double z = normal_pdf((t - rho * ur) / sd) / sd;
+      out.thresholds(r, c) += z / lik;
+      dlogp_du -= rho * z / lik;
+      drho_num += z * (rho * t - ur);
     }
+    if (c > 0) {  // finite lower boundary thresholds(c - 1)
+      const double t = thresholds(c - 1);
+      const double z = normal_pdf((t - rho * ur) / sd) / sd;
+      out.thresholds(r, c - 1) -= z / lik;
+      dlogp_du += rho * z / lik;
+      drho_num -= z * (rho * t - ur);
+    }
+    out.rho(r) = drho_num / (s2 * lik);
     // Raw-metric pair-likelihood scores at unit sigma. With
     // l = log phi(u) + log P(c | u), u = (y - mu)/sigma:
     //   sigma   * dl/dmu      = u - d log P/du
     //   sigma^2 * dl/dsigma^2 = ((u^2 - 1) - u * d log P/du) / 2
-    out.mu_unit(r) = u(r) - dlogp_du;
-    out.var_unit(r) = 0.5 * ((u(r) * u(r) - 1.0) - u(r) * dlogp_du);
+    out.mu_unit(r) = ur - dlogp_du;
+    out.var_unit(r) = 0.5 * ((ur * ur - 1.0) - ur * dlogp_du);
   }
   out.score_contributions.leftCols(nth) = out.thresholds;
   out.score_contributions.col(nth) = out.rho;
