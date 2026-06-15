@@ -111,6 +111,29 @@ if (!is.null(P) && nrow(P)) {
 }
 ```
 
+```{r tab-mlr-validate}
+V <- if (file.exists(file.path(res_dir, "mlr_validation.csv")))
+  read.csv(file.path(res_dir, "mlr_validation.csv"), stringsAsFactors = FALSE) else NULL
+if (!is.null(V) && nrow(V)) {
+  v <- data.frame(
+    dist = V$dist,
+    `MLR reject (magmaan)` = fmt(V$mlr_reject_magmaan),
+    `MLR reject (lavaan)`  = fmt(V$mlr_reject_lavaan),
+    `max |Δp|` = formatC(V$max_abs_p_diff, format = "e", digits = 1),
+    `variance inflation` = fmt(V$variance_inflation, 2),
+    check.names = FALSE)
+  knitr::kable(v, align = "l", caption = paste(
+    "MLR is not a magmaan artifact: fitting lavaan's own MLR on the same data",
+    "every replicate (not just rep 1) reproduces the rejection rate exactly. The",
+    "variance-inflation factor (>1) is why a mean-scaling must over-reject."))
+}
+```
+
+The MLR over-rejection is genuine, not a computation error: on the worst cells
+lavaan's *own* MLR gives the identical rejection rate, agreeing per-replicate to
+~1e-5, and the statistic carries ~1.7-2.3x the variance of its reference
+chi-square (so a first-moment scaling cannot calibrate it).
+
 Full per-cell rejection (all truths, mechanisms, rates, methods; goodness-of-fit
 and nested) is in `results/summary_rejection.csv`; per-replicate p-values, base
 statistics, and UGamma spectra are in `results/raw/` (the latter in
