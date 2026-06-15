@@ -163,12 +163,33 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     mixed construction is dominated by the polyserial/Pearson branches:
     p16/c5 lazy ULS is ~21 ms vs ~4 ms all-ordinal at the same design.
   Remaining headroom:
-  - **S.** The mixed polyserial pair fits recompute per-case quantities the
-    way the all-ordinal path did before cell caching; profile
-    `pairwise_mixed.cpp` (ML polyserial scores, casewise influence) for the
-    analogous case→cell collapse where the per-case loop is over a smooth
-    continuous coordinate (no exact cell structure; needs binning or a
-    different factorization, so verify accuracy first).
+  - **Done 2026-06-15 — closes this subsection.** The named target was the
+    mixed polyserial casewise-influence pass. `polyserial_pair_scores` built the
+    rho score column by a 3-point finite difference (three full conditional
+    probability evaluations per case ≈ 6 `erfc`) plus an O(K) threshold-density
+    sweep. It now uses the analytic boundary derivative
+    `d log P(c|u)/drho = (top.d1 − bot.d1)/p`, reusing the two boundary normal
+    densities the threshold columns already compute: one probability evaluation
+    (2 `erfc`) plus at most two `normal_pdf` per case, O(1) in the category
+    count. The rho score is now exact instead of a finite difference (the column
+    shifts by ~1e-10 toward lavaan's analytic value); the threshold, mu, and var
+    columns are bit-identical (`src/data/pairwise_mixed.cpp`). All 828 dev tests
+    pass, including the mixed-DWLS NACOV/score fixtures and the bfi
+    mixed-ordinal parity block. This roughly thirds the dominant `erfc` count of
+    the score pass; on the score-assembly construction paths (legacy mixed
+    stats, lazy DWLS/WLS workspace) wall time trends down ~15–30% at p≥12
+    designs, though the i7-1355U thermal noise floor (visible as ±20–35% swings
+    on the identical-code ULS control) is wide enough that the deterministic
+    operation-count reduction is the solid result. The fit-only ULS path (rho
+    ML search) is unchanged by design.
+
+    No exact cell collapse exists for polyserial. The all-ordinal win came from
+    both margins being discrete (a `(K_i+1)×(K_j+1)` count table where many
+    cases share one cell → one set of transcendentals); the polyserial
+    continuous margin `u_i` is distinct per case, so cases cannot collapse to
+    cells and the rho ML search is transcendental-bound and already minimal.
+    Binning `u` was considered and rejected: it would perturb the
+    polyserial/polychoric estimate and break lavaan parity.
 
 ## Robust score / modification-index tests (frontier)
 
@@ -376,9 +397,6 @@ integrator is now QUADPACK-backed (~3x faster, ~2e-16 parity; roadmap), which wa
 the dominant cost of every FMG/pEBA/pOLS p-value. Deferred unbiased-spectrum perf
 work lives in [`speculative.md`](speculative.md). Open work:
 
-- **S/M.** Consider replacing the f2c'd C under `third_party/quadpack/` with a
-  clean C++23 hand-port of `dqagie`/`dqk15i` for readability — QUADPACK is public
-  domain, so we can mirror it exactly.
 - **S.** Keep the build-loop timings table in
   [docs/architecture/roadmap.md](../architecture/roadmap.md) current after major
   workflow changes.
