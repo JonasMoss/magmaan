@@ -48,6 +48,9 @@ mlr_test <- function(fit) {
   if (is.null(m) || !is.finite(m$chisq_scaled) || m$df <= 0L) return(NULL)
   list(chisq_scaled = m$chisq_scaled, df = m$df,
        scaling_factor = m$scaling_factor,
+       trace = m$trace_ugamma,
+       trace_h1 = m$trace_ugamma_h1,
+       trace_h0 = m$trace_ugamma_h0,
        p = stats::pchisq(m$chisq_scaled, m$df, lower.tail = FALSE))
 }
 
@@ -123,27 +126,43 @@ run_one_rep <- function(pop, sampler, rep_i, mechanism, rate, mask_seed) {
 
   yb_exact <- unname(g$p_fmg[["SB"]])
   yb_exact_struct <- unname(g_st$p_fmg[["SB"]])
+  sat_p <- c(naive = g$p_naive, MLR = mlr$p, YB_mplus = mlr$p,
+             YB_exact = yb_exact, g$p_fmg)
+  sat_method <- names(sat_p)
+  sat_trace <- rep(g$trace, length(sat_p))
+  sat_trace[sat_method %in% c("MLR", "YB_mplus")] <- mlr$trace
+  sat_scale <- sat_trace / g$df
+  sat_trace_h1 <- rep(NA_real_, length(sat_p))
+  sat_trace_h0 <- rep(NA_real_, length(sat_p))
+  sat_trace_h1[sat_method %in% c("MLR", "YB_mplus")] <- mlr$trace_h1
+  sat_trace_h0[sat_method %in% c("MLR", "YB_mplus")] <- mlr$trace_h0
   gof_sat <- data.frame(
     outcome = "gof",
-    method = names(c(naive = g$p_naive, MLR = mlr$p, YB_mplus = mlr$p,
-                     YB_exact = yb_exact, g$p_fmg)),
-    p_value = unname(c(naive = g$p_naive, MLR = mlr$p, YB_mplus = mlr$p,
-                       YB_exact = yb_exact, g$p_fmg)),
+    method = sat_method,
+    p_value = unname(sat_p),
     base_stat = g$base_stat,
     df = g$df,
-    trace = g$trace,
+    trace = sat_trace,
+    scaling_factor = sat_scale,
+    trace_h1 = sat_trace_h1,
+    trace_h0 = sat_trace_h0,
     h1_information = "saturated",
     realized_rate = mm$realized,
     stringsAsFactors = FALSE)
+  struct_p <- c(YB_exact_structured = yb_exact_struct,
+                setNames(g_st$p_fmg, paste0(names(g_st$p_fmg),
+                                            "_structured")))
+  struct_method <- names(struct_p)
   gof_struct <- data.frame(
     outcome = "gof",
-    method = names(c(YB_exact_structured = yb_exact_struct,
-                     setNames(g_st$p_fmg, paste0(names(g_st$p_fmg),
-                                                 "_structured")))),
-    p_value = unname(c(YB_exact_structured = yb_exact_struct, g_st$p_fmg)),
+    method = struct_method,
+    p_value = unname(struct_p),
     base_stat = g_st$base_stat,
     df = g_st$df,
     trace = g_st$trace,
+    scaling_factor = g_st$trace / g_st$df,
+    trace_h1 = NA_real_,
+    trace_h0 = NA_real_,
     h1_information = "structured",
     realized_rate = mm$realized,
     stringsAsFactors = FALSE)
@@ -152,6 +171,9 @@ run_one_rep <- function(pop, sampler, rep_i, mechanism, rate, mask_seed) {
                        p_value = unname(nst$p), base_stat = nst$T_diff,
                        df = nst$df_diff, trace = if (!is.null(nst$spectrum))
                          sum(nst$spectrum) else NA_real_,
+                       scaling_factor = nst$scale_c,
+                       trace_h1 = NA_real_,
+                       trace_h0 = NA_real_,
                        h1_information = NA_character_,
                        realized_rate = mm$realized, stringsAsFactors = FALSE)
   list(gof = gof, nested = nested,
