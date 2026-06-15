@@ -1,0 +1,120 @@
+---
+title: "FIML goodness-of-fit under non-normality: FMG/pEBA vs the MLR default"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+res_dir <- "results"
+sum_path <- file.path(res_dir, "summary_rejection.csv")
+par_path <- file.path(res_dir, "parity.csv")
+meta_path <- file.path(res_dir, "metadata.csv")
+
+if (!file.exists(sum_path)) {
+  stop("No results yet. Run:\n",
+       "  Rscript run_experiment.R --smoke            # single hardest cell\n",
+       "  Rscript run_experiment.R --lavaan-parity    # full grid + oracle\n")
+}
+S <- read.csv(sum_path, stringsAsFactors = FALSE)
+P <- if (file.exists(par_path)) read.csv(par_path, stringsAsFactors = FALSE) else NULL
+meta <- if (file.exists(meta_path)) read.csv(meta_path, stringsAsFactors = FALSE) else NULL
+reps <- if (!is.null(meta)) meta$value[meta$key == "reps"] else "?"
+
+fmt <- function(x) formatC(x, format = "f", digits = 3)
+gof <- S[S$outcome == "gof", ]
+h0  <- gof[gof$truth == "h0", ]
+# Worst (most over-rejecting) Type-I for the mean-scaled default vs the best FMG.
+mlr_worst <- if (nrow(h0[h0$method == "MLR", ]))
+  h0[h0$method == "MLR", ][which.max(h0[h0$method == "MLR", "reject"]), ] else NULL
+```
+
+## Question
+
+Applied SEM users with incomplete continuous data overwhelmingly run lavaan's
+`estimator = "MLR", missing = "ml"` — the Yuan-Bentler mean-scaled FIML test. It
+corrects only the first moment of the test statistic. Under heavy, non-elliptical
+non-normality the reference law's eigenvalue spectrum spreads out, so a mean-only
+scaling should miscalibrate. Does the Foldnes-Moss-Gronneberg eigenvalue family
+(scaled-shifted, pEBA, penalized-all), which matches more of that spectrum,
+control the goodness-of-fit Type-I rate where MLR does not — without giving up
+power?
+
+## Short answer
+
+```{r short-answer, results="asis"}
+if (!is.null(mlr_worst) && nrow(mlr_worst)) {
+  peba <- h0[h0$dist == mlr_worst$dist & h0$miss == mlr_worst$miss &
+               h0$method == "pEBA4", ]
+  cat(sprintf(
+    paste0("At the hardest cell run so far (dist `%s`, MCAR %.2f, %s reps), the ",
+           "MLR default rejects a true model **%s** of the time at the .05 ",
+           "level%s. "),
+    mlr_worst$dist, mlr_worst$miss, reps, fmt(mlr_worst$reject),
+    if (nrow(peba)) sprintf(", versus **%s** for pEBA4", fmt(peba$reject)) else ""))
+  cat("Read this as a plumbing-stage signal until the full grid lands; the full ",
+      "design crosses {norm, vm, ig, pl} severities x missingness x truth.\n")
+} else {
+  cat("Run the goodness-of-fit grid (`--lavaan-parity`) to populate this section.\n")
+}
+```
+
+## Evidence
+
+```{r table}
+if (nrow(h0)) {
+  wide <- reshape(
+    h0[, c("dist", "miss", "method", "reject")],
+    idvar = c("dist", "miss"), timevar = "method", direction = "wide")
+  names(wide) <- sub("^reject\\.", "", names(wide))
+  ord <- c("dist", "miss", "naive", "MLR", "SB", "SS",
+           "pEBA2", "pEBA4", "pEBA6", "pall", "all")
+  wide <- wide[, intersect(ord, names(wide)), drop = FALSE]
+  num <- vapply(wide, is.numeric, logical(1))
+  wide[num] <- lapply(wide[num], fmt)
+  knitr::kable(wide, align = "l",
+               caption = "Goodness-of-fit Type-I rejection (truth = h0, nominal .05).")
+}
+```
+
+The full per-cell rejection grid (all truths, all methods, goodness-of-fit and
+nested) is in `results/summary_rejection.csv`.
+
+```{r parity}
+if (!is.null(P) && nrow(P)) {
+  agg <- aggregate(abs_diff ~ metric, P, function(x) max(x, na.rm = TRUE))
+  names(agg) <- c("Quantity", "Max |magmaan - lavaan|")
+  agg[[2]] <- formatC(agg[[2]], format = "e", digits = 2)
+  knitr::kable(agg, align = "l",
+               caption = "Oracle: magmaan vs lavaan MLR (estimator = MLR, missing = ml).")
+}
+```
+
+## Caveats
+
+- The MLR column is computed by magmaan's purpose-built `fiml_robust_mlr` path
+  and validated against lavaan's actual `estimator = "MLR"` `pvalue.scaled` (see
+  the oracle table). lavaan cannot produce the mean-and-variance tests
+  (scaled-shifted / mean.var.adjusted) under FIML, so the "SS" column is a
+  magmaan-only construction.
+- Rejection rates are point estimates from the per-cell replication count; read
+  them as approximate. Power cells (`gof_power`, `nested_power`) and the nested
+  test are in the full CSV, not this table.
+
+## Reproduce
+
+```sh
+# single hardest cell (plumbing + first read)
+Rscript run_experiment.R --smoke
+
+# full grid with the lavaan MLR oracle
+Rscript run_experiment.R --lavaan-parity
+
+# one challenging cell at full replication
+Rscript run_experiment.R --cells truth=h0,dist=pl2,miss=0.15 --reps 500 --lavaan-parity
+```

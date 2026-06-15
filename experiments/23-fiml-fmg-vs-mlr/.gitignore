@@ -1,0 +1,7 @@
+# Generated Quarto output
+.quarto/
+report.html
+report_files/
+
+# Local-only inputs / scratch
+resources/

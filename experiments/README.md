@@ -38,6 +38,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 20 | [deng-chan-2017-alpha-omega](20-deng-chan-2017-alpha-omega/report.qmd) | paper-sim | active | Is the Deng-Chan Wald test of coefficient α = ω valid? |
 | 21 | [fiml-measurement-invariance-fmg](21-fiml-measurement-invariance-fmg/report.qmd) | paper-sim | active | Is the FIML FMG robust-test family feature-complete for measurement invariance? |
 | 22 | [robust-score-modification-indices](22-robust-score-modification-indices/report.qmd) | probe | active | Do robust modification indices / score tests change the omitted-path call (ordinal DWLS, continuous GLS), and reduce to naive where theory says c=1? |
+| 23 | [fiml-fmg-vs-mlr](23-fiml-fmg-vs-mlr/report.qmd) | paper-sim | active | Under non-normality + MCAR, do the FMG/pEBA FIML goodness-of-fit and nested tests beat the dominant MLR (Yuan-Bentler) default? |
 
 ## Archived
 
