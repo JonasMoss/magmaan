@@ -190,7 +190,9 @@ for (ci in seq_len(nrow(grid))) {
     gk <- gk + 1L; gof_rows[[gk]]    <- cbind(tag, res$gof)
     nk <- nk + 1L; nested_rows[[nk]] <- cbind(tag, res$nested)
     key <- paste(cell$truth, cell$dist, cell$mech, cell$rate, rep, sep = "|")
-    spectra[[key]] <- list(gof = res$gof_spectrum, nested = res$nested_spectrum)
+    spectra[[key]] <- list(gof = res$gof_spectrum,
+                           gof_structured = res$gof_structured_spectrum,
+                           nested = res$nested_spectrum)
   }
   cat(sprintf("  %-12s %-4s %-8s rate=%.2f  %d/%d ok\n",
               cell$truth, cell$dist, cell$mech, cell$rate, n_ok, cfg$reps))
@@ -280,7 +282,9 @@ write_metadata(
                 rates = paste(cfg$rates, collapse = ","),
                 missingness = "Savalei-Bentler 2005 MCAR/MAR (experiments/_support)",
                 estimation = "FIML",
-                competitors = "naive,MLR,SB,SS,SF,EBA2/4/6,pEBA2/4/6,pall,pOLS,all",
+                competitors = paste(
+                  "naive,MLR,SB,SS,SF,EBA2/4/6,pEBA2/4/6,pall,pOLS,all",
+                  "plus structured-H1 FMG variants with _structured suffix"),
                 elapsed_sec = round(elapsed, 1)),
   packages = c("magmaan", "lavaan"))
 
