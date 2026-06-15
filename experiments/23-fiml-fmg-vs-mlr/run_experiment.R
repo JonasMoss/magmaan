@@ -283,8 +283,9 @@ write_metadata(
                 missingness = "Savalei-Bentler 2005 MCAR/MAR (experiments/_support)",
                 estimation = "FIML",
                 competitors = paste(
-                  "naive,MLR,SB,SS,SF,EBA2/4/6,pEBA2/4/6,pall,pOLS,all",
-                  "plus structured-H1 FMG variants with _structured suffix"),
+                  "naive,MLR/YB_mplus,YB_exact,SB,SS,SF,EBA2/4/6,",
+                  "pEBA2/4/6,pall,pOLS,all plus structured-H1 FMG variants",
+                  "with _structured suffix"),
                 elapsed_sec = round(elapsed, 1)),
   packages = c("magmaan", "lavaan"))
 
