@@ -356,10 +356,37 @@ decisions in the simulation backlog.
   matches lavaan` golden on the 0017 configural/metric pair: scaled Δχ² 3.025,
   Δdf 3, p 0.388, matching `lavTestLRT(method="satorra.2000")` on
   `se="robust.sem"` fits (the oracle uses robust fits so the satorra scaling is
-  non-trivial; plain DWLS collapses to the unscaled diff). Remaining:
-  - The R `model_spec(group.equal=)` / Rcpp `lavaan_lavaanify` surface +
-    `fmg_nested_ordinal`, and the `papers/ordinal-fmg/` nested-arm switch.
-  - Mixed-ordinal release not started.
+  non-trivial; plain DWLS collapses to the unscaled diff). The remaining R
+  surface + paper work is its own item below.
+- **M. Ordinal `group.equal` R surface + paper (the C++ core is done, gated).**
+  The keyword + Wu-Estabrook theta release + nested satorra.2000 LRT all landed
+  and match lavaan in C++ (commits 2aae694 / be27d01 / 00f2373; see the ordinal
+  SNLLS bullet above). What's left is all R-side and the paper:
+  - **R surface.** `model_spec()` (`r-package/R/model_data.R`) takes
+    `group.equal = NULL` / `group.partial = NULL`, mapping the lavaan family
+    strings to the `GroupEqual` enum-index vector; Rcpp `lavaan_lavaanify`
+    (`r-package/src/bindings.cpp`) accepts and forwards them; `magmaan(...)`
+    forwards too (estimation only). Regen `RcppExports`. Needs `just r-install`
+    (links the opt build) — heavier loop than the C++ goldens.
+  - **Nested-ordinal FMG wrapper.** Add an Rcpp export beside
+    `infer_ordinal_lr_test_satorra2000` returning the diff spectrum, and a thin R
+    `fmg_nested_ordinal(...)` paralleling `fmg_tests_ordinal`. Default
+    `A.method = "delta"` for ordinal configural→metric pairs in
+    `r-package/R/nested_test.R` (it already exposes `c("exact","delta")`, default
+    `"exact"`).
+  - **Paper** (`papers/ordinal-fmg/`, private leaf): switch
+    `harness-population.R::invariance_syntax` from loadings-only to
+    `group.equal = c("thresholds","loadings")` under theta; add a
+    `lavTestLRT(method="satorra.2000")` cross-check in `harness-oracle.R`; route
+    the nested arm through `fmg_nested_ordinal`.
+  - **Parameterization note (deliberate):** the gated path is **theta**, not
+    delta. lavaan's *delta* threshold+loading release is structurally degenerate
+    — the freed `~*~` scale stays pinned at 1 for any latent-scale difference,
+    the vcov is singular, and chisq cannot absorb the difference — so magmaan
+    does not gate delta invariance; the dormant delta released-block branches in
+    `ordinal_residuals` / `ordinal_jacobian` are kept but untested. The paper's
+    arm should use `parameterization = "theta"`.
+  - **Mixed-ordinal release not started** (all-ordinal only).
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into the
