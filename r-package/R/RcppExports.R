@@ -245,8 +245,8 @@ estimate_two_stage_em_ml_inference <- function(fit, raw_data, h_step = 1e-4) {
     .Call(`_magmaan_estimate_two_stage_em_ml_inference`, fit, raw_data, h_step)
 }
 
-infer_fiml_fmg_spectrum <- function(fit, h_step = 1e-4) {
-    .Call(`_magmaan_infer_fiml_fmg_spectrum`, fit, h_step)
+infer_fiml_fmg_spectrum <- function(fit, h_step = 1e-4, h1_information = "saturated") {
+    .Call(`_magmaan_infer_fiml_fmg_spectrum`, fit, h_step, h1_information)
 }
 
 measures_standardize_lv <- function(fit, vcov) {
@@ -624,4 +624,3 @@ sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 
 sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
     .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
 }
-

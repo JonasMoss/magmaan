@@ -302,8 +302,11 @@
 
 # FIML result rows: the spectrum comes from the first-principles missing-data
 # UGamma path (`infer_fiml_fmg_spectrum`); the base statistic is the FIML LRT.
-.fmg_result_rows_fiml <- function(fit, specs, h_step = 1e-4) {
-  sp <- infer_fiml_fmg_spectrum(fit, h_step)
+.fmg_result_rows_fiml <- function(fit, specs, h_step = 1e-4,
+                                  h1_information = c("saturated",
+                                                     "structured")) {
+  h1_information <- match.arg(h1_information)
+  sp <- infer_fiml_fmg_spectrum(fit, h_step, h1_information)
   df <- sp$df
   eigvals <- sp$biased
   rows <- lapply(specs, function(s) {
@@ -328,6 +331,7 @@
   })
   out <- .fmg_rows_to_df(rows)
   attr(out, "trace_xcheck") <- sp$trace_xcheck
+  attr(out, "h1_information") <- sp$h1_information
   out
 }
 
@@ -493,11 +497,11 @@ fmg_nested_ordinal <- function(fit_H1, fit_H0, ordinal_stats, tests = NULL,
 #'
 #' FIML fits (`fit_fiml()` / `magmaan(..., estimator = "FIML")`, single- or
 #' multi-group) are supported: the missing-data UGamma spectrum is computed
-#' first-principles from the saturated-model EM information and ACOV, with the
-#' FIML LRT as the base statistic. Under FIML only the biased Gamma-hat and the
-#' ML base are defined, so `_ug` and `_rls` are rejected (an unsuffixed base
-#' resolves to ML). This is a principled construction, not a port of semTests'
-#' (unsound) FIML handling.
+#' first-principles from the saturated-model EM ACOV and either saturated or
+#' model-implied H1 information, with the FIML LRT as the base statistic. Under
+#' FIML only the biased Gamma-hat and the ML base are defined, so `_ug` and
+#' `_rls` are rejected (an unsuffixed base resolves to ML). This is a principled
+#' construction, not a port of semTests' (unsound) FIML handling.
 #'
 #' @param fit A fitted magmaan ML (complete-data) or FIML model.
 #' @param tests Character vector of semTests-style test names, or `NULL` for the
@@ -506,11 +510,17 @@ fmg_nested_ordinal <- function(fit_H1, fit_H0, ordinal_stats, tests = NULL,
 #'   optionally suffixed `_ug` and `_ml` / `_rls` (complete-data only).
 #' @param data Optional complete raw data (complete-data fits only). Usually
 #'   unnecessary for new fits that retain `$raw_data`.
+#' @param h1_information For FIML fits, `"saturated"` (default) uses the
+#'   saturated normal-theory H1 information as the U projector metric; `"structured"`
+#'   evaluates the same H1 curvature at the model-implied moments. Ignored only
+#'   at its default for complete-data ML fits.
 #'
 #' @return A data frame with scalar diagnostics plus list-columns for the raw
 #'   UGamma spectrum and the method-specific lambda vectors.
 #' @export
-fmg_tests <- function(fit, tests = NULL, data = NULL) {
+fmg_tests <- function(fit, tests = NULL, data = NULL,
+                      h1_information = c("saturated", "structured")) {
+  h1_information <- match.arg(h1_information)
   tests <- .fmg_resolve_default_tests(fit, tests)
   specs <- lapply(tests, .fmg_parse_test)
   if (.fmg_is_fiml(fit)) {
@@ -519,7 +529,12 @@ fmg_tests <- function(fit, tests = NULL, data = NULL) {
            "the `data` argument is not supported for FIML fits.", call. = FALSE)
     }
     specs <- .fmg_adjust_specs_fiml(specs)
-    return(.fmg_result_rows_fiml(fit, specs))
+    return(.fmg_result_rows_fiml(fit, specs,
+                                 h1_information = h1_information))
+  }
+  if (!identical(h1_information, "saturated")) {
+    stop("fmg_tests(): h1_information = 'structured' is only supported for ",
+         "FIML fits.", call. = FALSE)
   }
   estimator <- .fmg_fit_estimator(fit)
   if (!identical(estimator, "ML")) {
@@ -544,12 +559,15 @@ fmg_tests <- function(fit, tests = NULL, data = NULL) {
 #'   `std`, `sb`, `ss`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, `pols<gamma>`, each
 #'   optionally suffixed `_ug` (unbiased Gamma-hat) and `_ml` / `_rls` (base
 #'   statistic; default `rls`).
+#' @param h1_information Passed to [fmg_tests()] for FIML fits.
 #'
 #' @return A named numeric vector of p-values; names are the canonical test
 #'   labels (e.g. `peba4_rls`, `sb_ug_rls`), matching `semTests::pvalues()`.
 #' @export
-fmg_pvalues <- function(fit, data = NULL, tests = NULL) {
-  tab <- fmg_tests(fit, tests = tests, data = data)
+fmg_pvalues <- function(fit, data = NULL, tests = NULL,
+                        h1_information = c("saturated", "structured")) {
+  tab <- fmg_tests(fit, tests = tests, data = data,
+                   h1_information = h1_information)
   out <- tab$p_value
   names(out) <- tab$label
   out

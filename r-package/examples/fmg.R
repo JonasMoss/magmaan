@@ -96,6 +96,11 @@ tab_f <- fmg_tests(fit_fiml)
 stopifnot(inherits(tab_f, "magmaan_fmg_tests"))
 stopifnot(all(tab_f$base == "ml"), all(!tab_f$ug))
 stopifnot(all(is.finite(tab_f$p_value)), all(tab_f$p_value >= 0), all(tab_f$p_value <= 1))
+stopifnot(identical(attr(tab_f, "h1_information"), "saturated"))
+tab_f_struct <- fmg_tests(fit_fiml, h1_information = "structured")
+stopifnot(inherits(tab_f_struct, "magmaan_fmg_tests"))
+stopifnot(identical(attr(tab_f_struct, "h1_information"), "structured"))
+stopifnot(all(is.finite(tab_f_struct$p_value)))
 # RLS and unbiased gamma are refused under FIML.
 stopifnot(grepl("RLS",
   tryCatch(fmg_tests(fit_fiml, tests = "peba4_rls"), error = conditionMessage)))
