@@ -54,6 +54,21 @@ inline std::string ordinal_parameterization_attr(SEXP x) {
   return Rcpp::as<std::string>(Rcpp::CharacterVector(attr)[0]);
 }
 
+// Recover the `group.equal` families (lavaan_lavaanify stamps them as enum
+// indices on the partable df) so the ordinal fit can re-apply the fit-time
+// Wu-Estabrook release that `from_lavaan_partable` cannot reconstruct. Empty
+// when absent — the common single-group / no-invariance case.
+inline std::vector<magmaan::spec::GroupEqual> group_equal_attr(SEXP x) {
+  SEXP attr = Rf_getAttrib(x, Rf_install("magmaan.group_equal"));
+  if (attr == R_NilValue || Rf_length(attr) < 1) return {};
+  Rcpp::IntegerVector idx(attr);
+  std::vector<magmaan::spec::GroupEqual> out;
+  out.reserve(static_cast<std::size_t>(idx.size()));
+  for (R_xlen_t i = 0; i < idx.size(); ++i)
+    out.push_back(static_cast<magmaan::spec::GroupEqual>(idx[i]));
+  return out;
+}
+
 // ---- robust InferenceSpec enums <-> strings (shared by fit.cpp / robust.cpp) -
 
 inline magmaan::robust::Information info_from_string(const std::string& s) {

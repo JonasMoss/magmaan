@@ -183,6 +183,26 @@ Rcpp::List describe_modifier(const magmaan::parse::Modifier& m) {
       m);
 }
 
+// Map a lavaan `group.equal` family string onto the magmaan `GroupEqual` enum.
+// The accepted vocabulary mirrors lavaan's: any other string is a hard error
+// rather than the C++ golden's silent skip, since this is the user-facing edge.
+magmaan::spec::GroupEqual group_equal_from_string(const std::string& s) {
+  using GE = magmaan::spec::GroupEqual;
+  if (s == "loadings")             return GE::Loadings;
+  if (s == "thresholds")           return GE::Thresholds;
+  if (s == "intercepts")           return GE::Intercepts;
+  if (s == "means")                return GE::Means;
+  if (s == "residuals")            return GE::Residuals;
+  if (s == "residual.covariances") return GE::ResidualCovariances;
+  if (s == "lv.variances")         return GE::LvVariances;
+  if (s == "lv.covariances")       return GE::LvCovariances;
+  if (s == "regressions")          return GE::Regressions;
+  Rcpp::stop("magmaan: unknown group.equal family '%s' (expected one of "
+             "loadings, thresholds, intercepts, means, residuals, "
+             "residual.covariances, lv.variances, lv.covariances, regressions)",
+             s);
+}
+
 }  // namespace
 
 // [[Rcpp::export]]
@@ -252,7 +272,9 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
                                 bool int_lv_free = false,
                                 int n_groups = 1,
                                 std::string group_var = "",
-                                Rcpp::Nullable<Rcpp::CharacterVector> group_labels = R_NilValue) {
+                                Rcpp::Nullable<Rcpp::CharacterVector> group_labels = R_NilValue,
+                                Rcpp::Nullable<Rcpp::CharacterVector> group_equal = R_NilValue,
+                                Rcpp::Nullable<Rcpp::CharacterVector> group_partial = R_NilValue) {
   auto p = magmaan::parse::Parser::parse(syntax);
   if (!p.has_value()) stop_parse(p.error());
 
@@ -274,6 +296,12 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   opts.group_var       = group_var;
   if (group_labels.isNotNull())
     opts.group_labels = Rcpp::as<std::vector<std::string>>(group_labels.get());
+  if (group_equal.isNotNull()) {
+    for (const auto& s : Rcpp::as<std::vector<std::string>>(group_equal.get()))
+      opts.group_equal.push_back(group_equal_from_string(s));
+  }
+  if (group_partial.isNotNull())
+    opts.group_partial = Rcpp::as<std::vector<std::string>>(group_partial.get());
 
   magmaan::spec::Starts starts;
   magmaan::spec::LatentNames names;
@@ -284,12 +312,27 @@ Rcpp::DataFrame lavaan_lavaanify(std::string syntax,
   }
   const magmaan::compat::lavaan::LavaanParTable pt =
       magmaan::compat::lavaan::to_lavaan_partable(*pt_or, names, starts);
+  // Stamp the resolved `group.equal` families as enum indices on the returned
+  // df. `from_lavaan_partable` cannot recover them (a lavaan partable has no
+  // such column), but the fit-time Wu-Estabrook ordinal release keys off
+  // `LatentStructure::group_equal`, so the ordinal fit binding reads this
+  // attribute back. Indices are produced and consumed within the same build,
+  // so the enum order is always consistent.
+  auto stamp_group_equal = [&](SEXP target) {
+    if (opts.group_equal.empty()) return;
+    Rcpp::IntegerVector ge(static_cast<R_xlen_t>(opts.group_equal.size()));
+    for (std::size_t i = 0; i < opts.group_equal.size(); ++i)
+      ge[static_cast<R_xlen_t>(i)] = static_cast<int>(opts.group_equal[i]);
+    Rf_setAttrib(target, Rf_install("magmaan.group_equal"), ge);
+  };
   Rcpp::DataFrame expanded = lavaan_partable_df(pt);
+  stamp_group_equal(expanded);
   if (names.composites.empty()) return expanded;
 
   const magmaan::compat::lavaan::LavaanParTable folded =
       magmaan::compat::lavaan::fold_composites(pt, names.composites);
   Rcpp::DataFrame df = lavaan_partable_df(folded);
+  stamp_group_equal(df);
   Rf_setAttrib(df, Rf_install("magmaan.expanded_partable"), expanded);
   return df;
 }
