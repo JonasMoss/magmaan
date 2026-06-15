@@ -240,11 +240,24 @@ Local-first safety tooling for an AI-assisted repo. Design note:
 ledger, risk map, regression-note convention, and JUnit/health recipes have
 landed; remaining open items:
 
-- **Partly calibrated.** Calibrate the local LLVM coverage lane (`coverage`
-  preset, `just coverage` / `just coverage-html`, surfaced by `just health`, all
-  under ignored `build/coverage/`) after more real runs. Still open: interpret
-  the `llvm-cov` "mismatched data" warning, decide whether any ignore/object-list
-  adjustments are needed, and add domain-level interpretation notes.
+- **Done 2026-06-15 — coverage lane calibrated.** A full `just coverage` run
+  (clang/llvm-cov 21, all nine `magmaan_test_*` binaries) was interpreted and
+  written up in
+  [docs/validation/local_hardening.md](../validation/local_hardening.md)
+  ("Interpreting a coverage run"). Findings: (1) the `171 functions have
+  mismatched data` warning is benign — header-defined inline/template functions
+  carry different structural hashes across test TUs; the count scales with the
+  number of combined binaries (0/19/171 for smoke/ordinal/all-nine) and is
+  emitted at load time, so it cannot be suppressed via `--ignore-filename-regex`
+  and must not be piped away; line/region coverage of out-of-line `src/*.cpp`
+  (one consistent hash from the single static lib) is accurate, only the function
+  denominator is mildly understated. (2) Object list (the nine targets) and
+  ignore list (`/_deps/|/third_party/|/tests/|/usr/`) reviewed and correct;
+  no changes. (3) Domain-level snapshot table added with dark-room reading —
+  `api`/`compat` read artificially low because they are R-boundary-validated
+  (lane is C++-test-only), while `robust`/`sim` low spots track known backlog
+  gaps. Refresh the snapshot after major test/source changes; the ordering, not
+  the absolute %, is the durable output.
 - **M, audit.** Audit test tolerances so the suite is not "faked" by loose gates
   that pass a known divergence instead of pinning the right answer. Template
   already fixed: continuous GLS/WLS chisq was gated at `max(5e-2, 2·N·fmin·2e-3)`
