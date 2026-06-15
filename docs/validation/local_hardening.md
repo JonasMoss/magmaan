@@ -39,14 +39,129 @@ magmaan library code. The initial local lane is wired through
 - `just coverage` builds/runs the coverage tree and prints a terminal summary;
 - `just coverage-html` writes `build/coverage/html/index.html`;
 - raw profiles and merged `.profdata` files stay under `build/coverage/`;
-- generated/dependency/test-harness paths such as `_deps/`,
-  `third_party/`, and `tests/` when the question is core source coverage.
+- generated, vendored, and test-harness paths are dropped from the report via
+  `--ignore-filename-regex='(/_deps/|/third_party/|/tests/|/usr/)'`: `_deps/`
+  (fetched doctest / nlohmann / NLopt), `third_party/` (vendored PORT), `tests/`
+  (the test sources themselves), and `/usr/` (system Eigen and libstdc++). What
+  remains is magmaan's own `include/magmaan/**` and `src/**`, header-defined
+  inline/template code included.
 
-The useful unit of interpretation is domain-level coverage:
+The useful unit of interpretation is domain-level coverage. The report lists one
+row per file; group those rows by their `include/magmaan/<domain>/` or
+`src/<domain>/` path segment:
 
 ```text
-parse/spec/model/estimate/inference/robust/measures/api
+parse spec model data estimate inference robust measures sim optim api compat
 ```
+
+plus a small `(top-level)` bucket for the shared `src/detail_*.{hpp,cpp}` numeric
+helpers and `src/util/`. (The earlier short list omitted `data`, `sim`, `optim`,
+and `compat`, which are real domains the report covers.)
+
+### Interpreting a coverage run
+
+Calibrated against a full `just coverage` run on 2026-06-15 (clang/llvm-cov 21,
+all nine `magmaan_test_*` binaries). Two things need interpretation before the
+numbers are trustworthy: the `mismatched data` warning and the domain map.
+
+#### The `mismatched data` warning is benign
+
+A clean run prints, just before the table:
+
+```text
+warning: 171 functions have mismatched data
+```
+
+This is expected and does not corrupt the report. Cause: header-defined inline
+and template functions (in `include/magmaan/**`, the `src/**/detail_*.hpp`
+headers, and Eigen) are compiled into several test translation units, and their
+structural coverage-mapping hashes differ across those TUs. `llvm-profdata merge`
+keeps one record per `(name, hash)`; when `llvm-cov` then matches a binary's
+function record against the single merged profile and finds the name under a
+different hash than the profile retained, it drops that function record and
+counts it as "mismatched".
+
+Three facts pin this down (all reproducible without rebuilding, by re-running
+`llvm-cov report` against `build/coverage/coverage.profdata`):
+
+- The count scales with how many binaries are combined: the trivial `smoke`
+  binary alone reports `0`, `magmaan_test_ordinal` alone against the merged
+  profile reports `19`, and all nine together report `171`. More binaries means
+  more independently-hashed copies of the same header code to reconcile.
+- It is emitted at **load time**, before `--ignore-filename-regex` runs. Adding
+  `/include/` and `\.hpp$` to the ignore regex still prints `171` (it only drops
+  ~109 header rows from the *summary*, 1757 → 1648 reported functions). So the
+  warning cannot be silenced by changing the ignore list, and it should not be
+  piped to `/dev/null` — that would also hide genuine load errors.
+- The out-of-line functions defined in `src/*.cpp` are compiled once into the
+  single static `libmagmaan.a` and linked identically into every test binary, so
+  they carry one consistent hash and are reported accurately. The dropped records
+  are header glue.
+
+Consequence: the **function** column's denominator is mildly understated (a
+fraction of header inline/template instantiations are omitted), but the
+**region** and **line** coverage of magmaan's compiled source — the part the map
+is for — is sound. Read the line/region columns, not the function count.
+
+#### Object list and ignore list need no changes
+
+Reviewed during the calibration run; both are correct as-is:
+
+- **Object list.** The recipe passes exactly the nine `magmaan_test_*` targets
+  (`smoke spec estimate inference ordinal api sim parity robcat`), which is the
+  complete set defined in `tests/CMakeLists.txt`. Nothing else is built into a
+  coverage-instrumented binary, so there is nothing to add. The R-package
+  examples and the benchmarks/experiments/papers leaves are *not* compiled into
+  these binaries and correctly never appear.
+- **Ignore list.** `(/_deps/|/third_party/|/tests/|/usr/)` drops vendored, system,
+  and test code while keeping `include/magmaan/**` and `src/**` (including the
+  `detail_*.hpp` headers, which are real magmaan code we want mapped). The report
+  file list contains only those two trees — no spurious entries leak in.
+
+#### Domain map (2026-06-15 snapshot)
+
+`just coverage` line/region coverage aggregated to domains. Treat this as a map
+of where the dark rooms are, not a grade:
+
+```text
+domain          lines  miss  lineCov  regions  regCov
+spec             1589    74    95.3%     1073    95.1%
+parse            1049    98    90.7%      759    92.6%
+data             6432   669    89.6%     3888    90.1%
+model            1205   198    83.6%      883    85.4%
+inference        2592   527    79.7%     1694    81.5%
+optim             841   176    79.1%      459    75.4%
+measures         2547   555    78.2%     1684    79.9%
+estimate        12292  2737    77.7%     8124    81.4%
+sim              6810  1934    71.6%     4506    79.8%
+robust           3700  1143    69.1%     2290    75.6%
+compat            282   100    64.5%      160    45.0%
+api              1556   654    58.0%      839    66.2%
+(top-level)       399    66    83.5%      239    84.1%
+TOTAL           41297  8931    78.4%    26599    82.0%
+```
+
+How to read the dark rooms:
+
+- **`api` (58%) and `compat` (64.5%, regions 45%) read artificially dark.** Both
+  are validated primarily through the R boundary — the staged `api::*` entry
+  points and the `from_lavaan_partable` reverse projection are exercised by
+  `r-package/examples/*.R` (`just r-check`), which this lane does not instrument.
+  Before treating either as untested, cross-reference the R-boundary row of
+  [`test_ledger.md`](test_ledger.md). This is a lane limitation, not a coverage
+  signal; the coverage lane is C++-test-only by design.
+- **`robust` (69%) and `sim` (72%)** track known backlog gaps, not blind spots:
+  `robust/weighted_chisq.cpp` (~40%) and the FMG/Satorra-2000 tails carry
+  deferred tiers (see the test ledger), and `sim/population.cpp` (~41%) and
+  `model_implied.cpp` (~57%) are the open model-implied-simulation and
+  population-metadata items in [`../backlog/simulation.md`](../backlog/simulation.md).
+- **`spec`, `parse`, `data` (≥90%)** are the well-mapped core: parser, lavaanify,
+  and the ordinal/pairwise moment builders. Coverage there is a real safety net,
+  consistent with their golden + property protection.
+
+Re-run and refresh this snapshot after major test or source changes; the absolute
+percentages drift, but the *ordering* (which domains are darkest, and why) is the
+durable output.
 
 ### Test reports
 
