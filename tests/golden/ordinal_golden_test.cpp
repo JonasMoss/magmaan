@@ -45,6 +45,7 @@ const std::vector<std::string> kOrdinalFixtures = {
     "0013_2group_threshold_invariance_3cat_cfa",
     "0014_threshold_linear_constraint_3cat_cfa",
     "0015_defined_param_3cat_cfa",
+    "0016_std_lv_3cat_cfa",
 };
 
 const std::vector<std::string> kMixedOrdinalFixtures = {
@@ -735,6 +736,20 @@ TEST_CASE("ordinal fixtures: profiled SNLLS fits match lavaan delta contract") {
           h->pt, h->rep, workspace->moments, &workspace->gamma_cache, plan,
           *x0, magmaan::estimate::Backend::NloptLbfgs, opt);
       if (!est_or.has_value()) {
+        // Under std.lv delta identification the latent variance is fixed to 1
+        // and the delta `~*~ 1` scaling fixes the response (Theta) variances,
+        // so every free structural parameter is a loading (the nonlinear β
+        // block). The Golub-Pereyra separation eliminates the conditionally-
+        // linear {Psi, Theta, ...} block, which is empty here, so SNLLS is
+        // structurally inapplicable. The bounded full-Newton fit (gated in the
+        // delta-contract golden above) carries the lavaan θ̂/threshold parity;
+        // pin the expected diagnostic rather than silently skipping the arm.
+        if (id == "0016_std_lv_3cat_cfa" &&
+            est_or.error().detail.find("no conditionally linear") !=
+                std::string::npos) {
+          ++passed;
+          continue;
+        }
         failures.push_back(id + " " + name + ": snlls — " +
                            est_or.error().detail);
         continue;

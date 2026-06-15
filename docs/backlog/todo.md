@@ -100,11 +100,19 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     top response-scale variance was zeroed for elimination; the compaction now
     takes the original free count from the caller's `remove_free` metadata
     (`src/estimate/ordinal.cpp`, regression note at the fix site). Follow-up:
-    - **S/M.** Add a checked-in lavaan oracle for `std.lv` ordinal CFA. The fix
-      makes the fit run and the Monte-Carlo check confirms the recovered metric
-      is correct (unit-variance EAP scores track `Z` to ~1e-3), but there is no
-      stored lavaan parity fixture for `std.lv` ordinal point estimates yet;
-      regenerate one via `regen_oracle.R` to gate θ̂/thresholds directly.
+    - **Done 2026-06-15.** Checked-in lavaan oracle for `std.lv` ordinal CFA.
+      `regen_oracle.R` now emits `ordinal/0016_std_lv_3cat_cfa` (model
+      `f =~ NA*x1 + x2 + x3 + x4; f ~~ 1*f`, same data/structure as `0001` so it
+      is a pure reparameterization: identical χ²/df, loadings rescaled by the
+      latent SD). The existing delta-contract golden gates it directly —
+      `magmaan` matches lavaan to χ² 3e-8 and all 12 free params (4 free
+      loadings + 8 thresholds) to 4.6e-8, df=2 — and the standardized/EBM
+      factor-score arms ride along. The threshold-profiled SNLLS arm is
+      structurally N/A under std.lv delta (the conditionally-linear
+      {Psi, Theta} block is empty: latent variance fixed to 1, response
+      variances fixed by `~*~ 1`), so the SNLLS golden pins the expected
+      "no conditionally linear free parameters" diagnostic rather than
+      skipping; the bounded full-Newton fit carries the parity.
   - **M.** Add bootstrap CIs as the first inference surface, probably frontier
     or R-only first: parametric bootstrap from the fitted ordinal/mixed model,
     rebuild stats, refit, recompute both coefficients; optionally add

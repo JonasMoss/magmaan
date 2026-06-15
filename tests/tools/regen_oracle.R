@@ -1072,6 +1072,23 @@ ordinal_cases <- list(
        ordered = paste0("x", 1:4),
        group = NULL,
        fit = TRUE,
+       fit_estimators = c("DWLS")),
+  # Unit-variance (std.lv) identification: free every loading and fix the
+  # latent variance to 1, written directly in the syntax so the C++ golden and
+  # lavaan read the same model (no std.lv build flag). Same data/structure as
+  # 0001, so this is a pure reparameterization -- chisq/df are identical and
+  # the four loadings rescale by the latent SD. Direct lavaan anchor for std.lv
+  # ordinal point estimates (theta_hat = loadings + thresholds), closing the
+  # gap left by the std.lv compaction fix (src/estimate/ordinal.cpp).
+  list(id = "0016_std_lv_3cat_cfa",
+       model = paste("f =~ NA*x1 + x2 + x3 + x4",
+                     "f ~~ 1*f", sep = "\n"),
+       data = make_ord_df(360, list(c(-0.70, 0.35), c(-0.55, 0.60),
+                                    c(-0.85, 0.20), c(-0.45, 0.75)),
+                          seed = 11L),
+       ordered = paste0("x", 1:4),
+       group = NULL,
+       fit = TRUE,
        fit_estimators = c("DWLS"))
 )
 
