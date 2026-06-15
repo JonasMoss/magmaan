@@ -1132,6 +1132,7 @@ ordinal_cases <- list(
        group_equal = c("thresholds", "loadings"),
        parameterization = "theta",
        robust = FALSE,
+       nested_configural = TRUE,  # emit the configural-vs-metric satorra.2000 LRT
        data = {
          d1 <- make_ord_df_scaled(420, list(c(-0.70, 0.35), c(-0.55, 0.60),
                                             c(-0.85, 0.20), c(-0.45, 0.75)),
@@ -1269,6 +1270,25 @@ for (oc in ordinal_cases) {
                                                         "scaled.shifted")),
                                           grp_args, ge_args))
         fits$DWLS$robust <- ordinal_robust_json(fit_dwls_robust)
+      }
+      # Configural-vs-metric Satorra-2000 scaled difference test: refit the same
+      # data WITHOUT the `group.equal` ties (configural, H1) and compare against
+      # the metric fit (H0). lavaan defaults `A.method = "delta"` here because the
+      # Wu-Estabrook release makes the pair non-nested (metric frees group-2 scale/
+      # intercepts that configural fixes). Direct anchor for the C++
+      # `lr_test_satorra2000_ordinal(.., Delta, Theta)` nested golden.
+      if (isTRUE(oc$nested_configural) && nzchar(group_var)) {
+        fit_cfg <- do.call(cfa, c(list(model = oc$model, data = df, ordered = ov,
+                                       estimator = "DWLS",
+                                       parameterization = param), grp_args))
+        lr <- lavTestLRT(fit_cfg, fit_dwls, method = "satorra.2000")
+        fits$DWLS$nested <- list(
+          configural_chisq = unname(fitMeasures(fit_cfg, "chisq")),
+          configural_df    = as.integer(fitMeasures(fit_cfg, "df")),
+          metric_chisq     = unname(fitMeasures(fit_dwls, "chisq")),
+          metric_df        = as.integer(fitMeasures(fit_dwls, "df")),
+          chisq_diff       = unname(lr[["Chisq diff"]][2]),
+          df_diff          = as.integer(lr[["Df diff"]][2]))
       }
     }
     if ("WLS" %in% estimators) {

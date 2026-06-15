@@ -844,6 +844,17 @@ TEST_CASE("ordinal invariance (group.equal) theta fits match lavaan") {
   CHECK(passed == total);
 }
 
+// NOTE: the configural-vs-metric Satorra-2000 nested LRT gate for this pair is
+// NOT yet wired. The lavaan oracle is recorded (the `nested` block on fixture
+// 0017: chisq_diff 2.379, df_diff 3 from `lavTestLRT(method="satorra.2000")`),
+// but magmaan's delta A-method restriction (`restriction_alpha_delta_from_
+// jacobians`) returns null-space dimension 7 (= 3 true restrictions + 4
+// group-2-intercept moment directions configural cannot reach) instead of 3:
+// the Wu-Estabrook release makes configural↔metric genuinely non-nested, and
+// the moment-Jacobian column spaces are incompatible by the freed-intercept
+// rank. Resolving it (the standard ordinal-invariance scaled difference test)
+// is tracked in docs/backlog/todo.md.
+
 // The threshold-profiled SNLLS path against the same lavaan contract as the
 // bounded golden above. This is the lavaan anchor for the joint threshold
 // design: free thresholds, cross-group threshold invariance (0013), and
