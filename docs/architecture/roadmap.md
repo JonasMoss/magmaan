@@ -320,19 +320,24 @@ golden `parTable()` fixtures.
   are also supported (`fmg_tests()` accepts a `fit_fiml()` /
   `magmaan(..., estimator = "FIML")` fit, single- or multi-group): the
   missing-data UGamma spectrum is built first-principles by
-  `estimate::fiml::fiml_ugamma_spectrum` from the saturated-model EM information
-  `V = H` and the saturated-moment ACOV `Gamma_mis = H^-1 J H^-1`
-  (`saturated_em_moments`, with analytic observed-row Hessians for saturated
-  H1 information and a C++-only finite-difference diagnostic comparator), via
+  `estimate::fiml::fiml_ugamma_spectrum` from the saturated-moment ACOV
+  `Gamma_mis = H^-1 J H^-1` (`saturated_em_moments`, with analytic observed-row
+  Hessians for saturated H1 information and a C++-only finite-difference
+  diagnostic comparator) plus an explicit H1 information choice for the
+  projector metric. The default `h1_information = "saturated"` uses the
+  saturated-model EM information `V = H`; `h1_information = "structured"`
+  evaluates the same observed-row H1 curvature at the model-implied moments
+  while leaving `Gamma_mis` unchanged. Both routes use
   `U = V - V Delta (Delta' V Delta)^-1 Delta' V` and the df eigenvalues of
   `U Gamma_mis`, with the FIML LRT as the base statistic. Equality constraints
   are honored by projecting `Delta` into the local free-coordinate space:
   affine linear constraints use their `K` reparameterization, while nonlinear
   equality constraints use the tangent-space null basis of `[A_eq ; dh/dtheta]`
   at `theta_hat`.
-  This is the `h1.information = "unstructured"` convention natural to FIML's EM
-  saturated model: on complete data it reproduces lavaan's unstructured UGamma
-  spectrum element-for-element (~1e-7), validated in `examples/fmg.R`. semTests'
+  The saturated default is the `h1.information = "unstructured"` convention
+  natural to FIML's EM saturated model: on complete data it reproduces lavaan's
+  unstructured UGamma spectrum element-for-element (~1e-7), validated in
+  `examples/fmg.R`. semTests'
   rescale-the-mis-normalized-lavInspect-UGamma FIML hack is unsound and is
   deliberately NOT matched. Under FIML only the biased Gamma-hat and the ML base
   are defined; `_ug` and `_rls` are rejected. Nested/model-pair FIML FMG is

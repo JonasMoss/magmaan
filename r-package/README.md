@@ -113,9 +113,12 @@ family:
 - Current support is complete-data ML for single- and multi-group fits,
   including mean structures, plus FIML/missing-data fits with retained
   `fit$raw_data`. Under FIML only the ML/LRT base and biased Gamma are defined;
-  explicit `_rls` and `_ug` labels are rejected. Listwise-deleted input is
-  supported only after it has become complete-data sample moments through
-  `df_to_data(..., missing = "listwise")`.
+  explicit `_rls` and `_ug` labels are rejected. FIML defaults to saturated H1
+  information for the U projector metric, and
+  `h1_information = "structured"` swaps only that metric to model-implied H1
+  curvature while keeping the same saturated-moment Gamma. Listwise-deleted
+  input is supported only after it has become complete-data sample moments
+  through `df_to_data(..., missing = "listwise")`.
 - Nested FIML model-pair tests are available through
   `nestedTest(..., method = "restriction_map")` / `robust_nested_lrt()` when
   both fits are FIML fits from the same raw-data shape and mask. Complete-data

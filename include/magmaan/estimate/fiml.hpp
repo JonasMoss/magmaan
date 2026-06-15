@@ -142,14 +142,20 @@ struct TwoStageEMMLInference {
 // difference and the q parameter-space eigenvalues of H⁻¹·meat), this returns
 // the df nonzero eigenvalues of U·Γ_mis in the *saturated-moment* space — the
 // reference law T → Σ λ_j χ²_1 that every FMG eigenvalue-tail transform consumes.
-// Built first-principles from the saturated information (V = H), the
-// saturated-moment ACOV (Γ_mis = H⁻¹JH⁻¹), and the model Jacobian
-// Δ = ∂η_model/∂θ: U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV. No lavaan-UGamma-rescaling hack.
+// Built first-principles from H1 information (V), the saturated-moment ACOV
+// (Γ_mis = H⁻¹JH⁻¹), and the model Jacobian Δ = ∂η_model/∂θ:
+// U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV. No lavaan-UGamma-rescaling hack.
+enum class FIMLH1Information {
+  Saturated,   // V is the saturated normal-theory observed H1 information.
+  Structured   // V is the same H1 curvature evaluated at η_model(θ̂).
+};
+
 struct FIMLUGammaSpectrum {
   Eigen::VectorXd eigvals;          // df nonzero eigenvalues of U·Γ_mis, ascending
   double          chi2_lrt = 0.0;   // FIML LRT (the FMG base statistic under FIML)
   int             df       = 0;
-  double          trace_xcheck = 0.0;  // Σ eigvals; == fiml_robust_mlr().trace_ugamma
+  double          trace_xcheck = 0.0;  // Σ eigvals
+  FIMLH1Information h1_information = FIMLH1Information::Saturated;
 };
 
 struct FIMLEtaJacobian {
@@ -380,8 +386,8 @@ fiml_eta_jacobian(spec::LatentStructure pt,
 // safe (H/J/acov are block-diagonal across groups; Δ stacks per group). `df` and
 // `chi2_lrt` are passed in (the caller already has them from `infer_df_stat` /
 // `fiml_extras`) to avoid recomputation, mirroring `fiml_robust_mlr`. Returns the
-// df nonzero eigenvalues of U·Γ_mis; `trace_xcheck = Σ eigvals` must equal
-// `fiml_robust_mlr(...).trace_ugamma` (validated in tests).
+// df nonzero eigenvalues of U·Γ_mis. With the default saturated V, `trace_xcheck
+// = Σ eigvals` matches `fiml_robust_mlr(...).trace_ugamma` (validated in tests).
 post_expected<FIMLUGammaSpectrum>
 fiml_ugamma_spectrum(spec::LatentStructure pt,
                      const model::MatrixRep& rep,
@@ -390,7 +396,9 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
                      int df,
                      double chi2_lrt,
                      FIML discrepancy = {},
-                     double h_step = 1e-4);
+                     double h_step = 1e-4,
+                     FIMLH1Information h1_information =
+                         FIMLH1Information::Saturated);
 
 post_expected<FIMLUGammaSpectrum>
 fiml_ugamma_spectrum(spec::LatentStructure pt,
@@ -400,7 +408,9 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
                      int df,
                      double chi2_lrt,
                      const FIMLPack& pack,
-                     const FIMLH1& h1);
+                     const FIMLH1& h1,
+                     FIMLH1Information h1_information =
+                         FIMLH1Information::Saturated);
 
 // FIML independence/baseline chi-square for raw continuous data with missing
 // values. Unlike complete-data `baseline_chi2(SampleStats)`, this evaluates the
