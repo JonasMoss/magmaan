@@ -14,11 +14,15 @@ model_spec <- function(syntax,
                        ordered = NULL,
                        parameterization = "delta",
                        group = NULL,
-                       group_labels = NULL) {
+                       group_labels = NULL,
+                       group_equal = NULL,
+                       group_partial = NULL) {
   dots <- list(...)
   if (length(dots)) {
     stop("model_spec(): unused arguments: ", paste(names(dots), collapse = ", "))
   }
+  if (!is.null(group_equal)) group_equal <- as.character(group_equal)
+  if (!is.null(group_partial)) group_partial <- as.character(group_partial)
   model_type <- match.arg(model_type)
   if (identical(model_type, "growth")) {
     meanstructure <- TRUE
@@ -47,7 +51,9 @@ model_spec <- function(syntax,
     meanstructure = meanstructure,
     model_type = model_type,
     ordered = ordered,
-    parameterization = parameterization
+    parameterization = parameterization,
+    group_equal = group_equal,
+    group_partial = group_partial
   )
   partable <- lavaan_lavaanify(
     syntax,
@@ -65,7 +71,9 @@ model_spec <- function(syntax,
     int_lv_free = int_lv_free,
     n_groups = n_groups,
     group_var = group_var,
-    group_labels = group_labels
+    group_labels = group_labels,
+    group_equal = group_equal,
+    group_partial = group_partial
   )
   attr(partable, "magmaan.ordered") <- ordered
   attr(partable, "magmaan.parameterization") <- parameterization
@@ -77,7 +85,9 @@ model_spec <- function(syntax,
     ordered = ordered,
     parameterization = parameterization,
     group_var = group_var,
-    group_labels = group_labels
+    group_labels = group_labels,
+    group_equal = group_equal,
+    group_partial = group_partial
   )
   class(out) <- c("magmaan_model_spec", "list")
   out
@@ -510,16 +520,30 @@ data_mixed_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = N
 }
 
 augment_ordinal_partable <- function(model, ordinal_stats) {
-  parameterization <- attr(partable_arg(model), "magmaan.parameterization",
-                           exact = TRUE) %||% "delta"
-  fix_delta_variances <- function(pt, ov_by_group) {
+  pt0 <- partable_arg(model)
+  parameterization <- attr(pt0, "magmaan.parameterization", exact = TRUE) %||% "delta"
+  # `group.equal` families lavaan_lavaanify stamped as enum indices (Loadings 0,
+  # Thresholds 1, ...). When thresholds are equated across groups, lavaan's
+  # Wu-Estabrook identification frees the group-2+ latent-response scale (the
+  # ordinal `~~` residual variance) and ties the thresholds; the C++ ordinal
+  # prep performs the release, but only if augment leaves the group-2+ scale
+  # free here instead of pinning it like the single-group convention.
+  ge <- attr(pt0, "magmaan.group_equal", exact = TRUE)
+  release_thresholds <- !is.null(ge) && (1L %in% as.integer(ge))
+  fix_delta_variances <- function(pt, ov_by_group, n_levels) {
     for (b in seq_along(ov_by_group)) {
-      idx <- pt$op == "~~" &
-        pt$lhs == pt$rhs &
-        pt$lhs %in% ov_by_group[[b]] &
-        pt$group == b
-      pt$free[idx] <- 0L
-      pt$ustart[idx] <- 1.0
+      ovs <- ov_by_group[[b]]
+      for (j in seq_along(ovs)) {
+        binary <- isTRUE(as.integer(n_levels[[b]][[j]]) == 2L)
+        # Released scale: leave the group-2+ non-binary ordinal variance free
+        # for the C++ release. Binary indicators have no separable scale, so
+        # lavaan vetoes the release and they stay fixed like group 1.
+        if (release_thresholds && b >= 2L && !binary) next
+        idx <- pt$op == "~~" & pt$lhs == pt$rhs & pt$lhs == ovs[[j]] &
+          pt$group == b
+        pt$free[idx] <- 0L
+        pt$ustart[idx] <- 1.0
+      }
     }
     free_old <- pt$free
     vals <- sort(unique(free_old[free_old > 0L]))
@@ -547,10 +571,10 @@ augment_ordinal_partable <- function(model, ordinal_stats) {
     pt
   }
 
-  pt <- partable_arg(model)
+  pt <- pt0
   ov_by_group <- ordinal_stats$ov_names
   if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
-  pt <- fix_delta_variances(pt, ov_by_group)
+  pt <- fix_delta_variances(pt, ov_by_group, ordinal_stats$n_levels)
   if (any(pt$op == "|")) return(reorder_delta_free(pt))
   required <- names(pt)
   n_new <- sum(vapply(ordinal_stats$n_levels, function(z) sum(as.integer(z) - 1L) + length(z), integer(1)))
@@ -577,7 +601,12 @@ augment_ordinal_partable <- function(model, ordinal_stats) {
         rows$free[rr] <- next_free
         rows$exo[rr] <- 0L
         rows$ustart[rr] <- th[[th_pos]]
-        rows$label[rr] <- ""
+        # Equated thresholds: a shared label across groups ties (var, level) the
+        # same way build ties loadings, so from_lavaan_partable emits the
+        # cross-group `==` constraints lavaan's group.equal = "thresholds" does.
+        rows$label[rr] <- if (release_thresholds) {
+          paste0(".theq.", ov[[j]], ".t", lev)
+        } else ""
         rows$plabel[rr] <- paste0(".p", n0 + rr, ".")
         th_pos <- th_pos + 1L
       }
@@ -602,6 +631,7 @@ augment_ordinal_partable <- function(model, ordinal_stats) {
   attr(out, "magmaan.group_labels") <- attr(pt, "magmaan.group_labels", exact = TRUE)
   attr(out, "magmaan.ordered") <- ordinal_stats$ordered
   attr(out, "magmaan.parameterization") <- parameterization
+  attr(out, "magmaan.group_equal") <- attr(pt, "magmaan.group_equal", exact = TRUE)
   out
 }
 

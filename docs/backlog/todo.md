@@ -361,19 +361,37 @@ decisions in the simulation backlog.
 - **M. Ordinal `group.equal` R surface + paper (the C++ core is done, gated).**
   The keyword + Wu-Estabrook theta release + nested satorra.2000 LRT all landed
   and match lavaan in C++ (commits 2aae694 / be27d01 / 00f2373; see the ordinal
-  SNLLS bullet above). What's left is all R-side and the paper:
-  - **R surface.** `model_spec()` (`r-package/R/model_data.R`) takes
-    `group.equal = NULL` / `group.partial = NULL`, mapping the lavaan family
-    strings to the `GroupEqual` enum-index vector; Rcpp `lavaan_lavaanify`
-    (`r-package/src/bindings.cpp`) accepts and forwards them; `magmaan(...)`
-    forwards too (estimation only). Regen `RcppExports`. Needs `just r-install`
-    (links the opt build) — heavier loop than the C++ goldens.
-  - **Nested-ordinal FMG wrapper.** Add an Rcpp export beside
+  SNLLS bullet above). What's left is the nested-ordinal R wrapper and the paper:
+  - **R surface — LANDED 2026-06-15, lavaan-gated.** `model_spec()` /
+    `magmaan(...)` take `group_equal` / `group_partial` (snake_case, lavaan
+    family strings); Rcpp `lavaan_lavaanify` maps strings → `GroupEqual` and ties
+    the families at build (`RcppExports` regenerated). The build round-trip drops
+    `LatentStructure::group_equal` (a lavaan partable has no such column), so
+    `lavaan_lavaanify` now stamps the resolved families as an integer-index
+    `magmaan.group_equal` attribute and the three ordinal fit impls
+    (`fit_{dwls,uls,wls}_ordinal_impl`) read it back (`group_equal_attr`) to
+    re-apply the fit-time Wu-Estabrook release. Because the ordinal threshold
+    rows are materialized in R `augment_ordinal_partable` (after the data-free
+    build, so build can't tie them), augment now (a) ties equated thresholds via
+    shared `.theq.` labels — the same shared-label path build uses for loadings,
+    so `from_lavaan_partable` emits the cross-group `==` rows — and (b) leaves the
+    group-2+ non-binary ordinal `~~` free (binary-vetoed) for the C++ release
+    instead of pinning it. Gated by `r-package/examples/group_equal_ordinal.R`
+    (0017/0019 analogues, theta): npar, LS χ², released-row count, and every free
+    estimate match `lavaan::cfa(group.equal=, parameterization="theta")` (est
+    diff ≤ 2e-4; `~*~` excluded — a fixed theta row lavaan reports as a derived
+    implied scale, magmaan keeps the nominal 1.0 and carries the scale on `~~`).
+  - **Nested-ordinal FMG wrapper (remaining).** Add an Rcpp export beside
     `infer_ordinal_lr_test_satorra2000` returning the diff spectrum, and a thin R
     `fmg_nested_ordinal(...)` paralleling `fmg_tests_ordinal`. Default
     `A.method = "delta"` for ordinal configural→metric pairs in
     `r-package/R/nested_test.R` (it already exposes `c("exact","delta")`, default
-    `"exact"`).
+    `"exact"`). **Note:** the nested R path rebuilds each fit's structure via
+    `ctx_from_fit` → `from_lavaan_partable`, which also drops `group_equal`; the
+    H0 (metric) fit needs the same `group_equal_attr` re-attach the single-fit
+    impls now do (stamp it on `fit$partable` in `ordinal_fit_result` and read it
+    in `ctx_from_fit`) before its moment Jacobian re-prep, or the released
+    H0 structure won't reproduce.
   - **Paper** (`papers/ordinal-fmg/`, private leaf): switch
     `harness-population.R::invariance_syntax` from loadings-only to
     `group.equal = c("thresholds","loadings")` under theta; add a
@@ -387,6 +405,16 @@ decisions in the simulation backlog.
     `ordinal_residuals` / `ordinal_jacobian` are kept but untested. The paper's
     arm should use `parameterization = "theta"`.
   - **Mixed-ordinal release not started** (all-ordinal only).
+  - **Adjacent finding (continuous `group.equal`).** The same keyword now reaches
+    continuous fits: `group.equal = "loadings"` ties at the npar level and the
+    free estimates match lavaan (only magmaan's synthetic `.eqg` labels vs
+    lavaan's `.pN.` differ cosmetically). But families that require a
+    *compensating* release are not wired: `c("loadings","intercepts")` gives
+    npar 60 vs lavaan's 63 — lavaan frees the group-2 latent means when
+    indicator intercepts are equated, and `build` does not. This is a separate
+    continuous strong-invariance feature (a `Means`/`Intercepts` build release,
+    analogous to Wu-Estabrook), not part of the gated ordinal scope; promote to
+    its own item if a continuous-invariance consumer appears.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into the

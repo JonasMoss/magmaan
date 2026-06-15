@@ -9,8 +9,8 @@ parse_parse <- function(syntax) {
     .Call(`_magmaan_parse_parse`, syntax)
 }
 
-lavaan_lavaanify <- function(syntax, auto_var = TRUE, auto_cov_lv_x = TRUE, auto_cov_y = FALSE, orthogonal = FALSE, auto_fix_first = TRUE, auto_fix_single = TRUE, std_lv = FALSE, effect_coding = FALSE, fixed_x = TRUE, meanstructure = FALSE, int_ov_free = TRUE, int_lv_free = FALSE, n_groups = 1L, group_var = "", group_labels = NULL) {
-    .Call(`_magmaan_lavaan_lavaanify`, syntax, auto_var, auto_cov_lv_x, auto_cov_y, orthogonal, auto_fix_first, auto_fix_single, std_lv, effect_coding, fixed_x, meanstructure, int_ov_free, int_lv_free, n_groups, group_var, group_labels)
+lavaan_lavaanify <- function(syntax, auto_var = TRUE, auto_cov_lv_x = TRUE, auto_cov_y = FALSE, orthogonal = FALSE, auto_fix_first = TRUE, auto_fix_single = TRUE, std_lv = FALSE, effect_coding = FALSE, fixed_x = TRUE, meanstructure = FALSE, int_ov_free = TRUE, int_lv_free = FALSE, n_groups = 1L, group_var = "", group_labels = NULL, group_equal = NULL, group_partial = NULL) {
+    .Call(`_magmaan_lavaan_lavaanify`, syntax, auto_var, auto_cov_lv_x, auto_cov_y, orthogonal, auto_fix_first, auto_fix_single, std_lv, effect_coding, fixed_x, meanstructure, int_ov_free, int_lv_free, n_groups, group_var, group_labels, group_equal, group_partial)
 }
 
 model_matrix_rep <- function(partable) {
@@ -624,3 +624,4 @@ sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 
 sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
     .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
 }
+

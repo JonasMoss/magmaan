@@ -2323,6 +2323,9 @@ Rcpp::List fit_dwls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx;
   ctx.pt = std::move(parsed.structure);
+  // Re-attach the group.equal families stamped by lavaan_lavaanify so the
+  // ordinal prep applies the fit-time Wu-Estabrook release (lost on round-trip).
+  ctx.pt.group_equal = group_equal_attr(partable);
   ctx.names = std::move(parsed.names);
   magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
   auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(ctx.pt, stats, &starts);
@@ -2357,6 +2360,9 @@ Rcpp::List fit_uls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx;
   ctx.pt = std::move(parsed.structure);
+  // Re-attach the group.equal families stamped by lavaan_lavaanify so the
+  // ordinal prep applies the fit-time Wu-Estabrook release (lost on round-trip).
+  ctx.pt.group_equal = group_equal_attr(partable);
   ctx.names = std::move(parsed.names);
   magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
   auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(ctx.pt, stats, &starts);
@@ -2391,6 +2397,9 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   magmaan::spec::Starts starts = std::move(parsed.starts);
   Ctx ctx;
   ctx.pt = std::move(parsed.structure);
+  // Re-attach the group.equal families stamped by lavaan_lavaanify so the
+  // ordinal prep applies the fit-time Wu-Estabrook release (lost on round-trip).
+  ctx.pt.group_equal = group_equal_attr(partable);
   ctx.names = std::move(parsed.names);
   magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
   auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(ctx.pt, stats, &starts);
