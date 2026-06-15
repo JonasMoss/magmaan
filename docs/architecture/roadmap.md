@@ -787,12 +787,14 @@ stop rather than any usable non-error return.
   resolve exogenous observed moments from the sample before the comparison and
   gate strictly; the latent AR cross-lagged family is gated strictly via a
   multi-start recipe (lower-objective of a simple-start and an ML-warm-started
-  fit). The only remaining smoke-checked (finite-objective, not strict-parity)
-  cases are the two manifest fixed.x cross-lagged path models
-  (`manifest_ar_cross_lagged`, `…_extended`), where magmaan's global optimum has
-  a strictly worse objective than lavaan and an implied covariance that differs
-  (a magmaan-side fixed.x exogenous-covariance limitation tracked in the backlog
-  and test ledger, not an oracle defect).
+  fit). All Geiser cases — including the two manifest fixed.x cross-lagged path
+  models (`manifest_ar_cross_lagged`, `…_extended`) — now gate Σ/μ strictly
+  against lavaan. The cross-lagged pair previously looked like a magmaan
+  fixed.x-propagation defect but was an observed-order mismatch in the golden
+  harness: `data::SampleStats` is name-free and positionally aligned to magmaan's
+  `[ov.y, ov.x]` `ov_order`, whereas the fixtures store moments in their data
+  column order, so the harness now reconciles by variable name before fit/compare
+  (see the test ledger).
 - A local ignored Mplus SEM source corpus can be built from
   `corpus/textbook-corpus/raw/MPLUS/*.zip` into
   `corpus/textbook-corpus/raw/mplus_sem` with
