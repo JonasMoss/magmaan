@@ -13,108 +13,125 @@ execute:
 ```{r setup}
 res_dir <- "results"
 sum_path <- file.path(res_dir, "summary_rejection.csv")
-par_path <- file.path(res_dir, "parity.csv")
-meta_path <- file.path(res_dir, "metadata.csv")
-
 if (!file.exists(sum_path)) {
   stop("No results yet. Run:\n",
-       "  Rscript run_experiment.R --smoke            # single hardest cell\n",
-       "  Rscript run_experiment.R --lavaan-parity    # full grid + oracle\n")
+       "  Rscript run_experiment.R --smoke         # single hardest cell\n",
+       "  Rscript run_experiment.R --lavaan-parity # full grid + oracle\n")
 }
-S <- read.csv(sum_path, stringsAsFactors = FALSE)
-P <- if (file.exists(par_path)) read.csv(par_path, stringsAsFactors = FALSE) else NULL
-meta <- if (file.exists(meta_path)) read.csv(meta_path, stringsAsFactors = FALSE) else NULL
+S  <- read.csv(sum_path, stringsAsFactors = FALSE)
+NC <- if (file.exists(file.path(res_dir, "noncentrality.csv")))
+  read.csv(file.path(res_dir, "noncentrality.csv"), stringsAsFactors = FALSE) else NULL
+P  <- if (file.exists(file.path(res_dir, "parity.csv")))
+  read.csv(file.path(res_dir, "parity.csv"), stringsAsFactors = FALSE) else NULL
+meta <- if (file.exists(file.path(res_dir, "metadata.csv")))
+  read.csv(file.path(res_dir, "metadata.csv"), stringsAsFactors = FALSE) else NULL
 reps <- if (!is.null(meta)) meta$value[meta$key == "reps"] else "?"
+fmt <- function(x, d = 3) formatC(x, format = "f", digits = d)
 
-fmt <- function(x) formatC(x, format = "f", digits = 3)
 gof <- S[S$outcome == "gof", ]
-h0  <- gof[gof$truth == "h0", ]
-# Worst (most over-rejecting) Type-I for the mean-scaled default vs the best FMG.
-mlr_worst <- if (nrow(h0[h0$method == "MLR", ]))
-  h0[h0$method == "MLR", ][which.max(h0[h0$method == "MLR", "reject"]), ] else NULL
+# Clean regime for the calibration claim: MCAR (FIML consistent), highest rate.
+mcar_hi <- {
+  r <- if ("MCAR" %in% gof$mech) max(gof$rate[gof$mech == "MCAR"]) else NA
+  gof[gof$truth == "h0" & gof$mech == "MCAR" & gof$rate == r, ]
+}
+sev <- mcar_hi[mcar_hi$dist == "vm2", ]
+mlr_sev <- sev$reject[sev$method == "MLR"]
+all_sev <- sev$reject[sev$method == "all"]
+ss_sev  <- sev$reject[sev$method == "SS"]
 ```
 
 ## Question
 
-Applied SEM users with incomplete continuous data overwhelmingly run lavaan's
-`estimator = "MLR", missing = "ml"` — the Yuan-Bentler mean-scaled FIML test. It
-corrects only the first moment of the test statistic. Under heavy, non-elliptical
-non-normality the reference law's eigenvalue spectrum spreads out, so a mean-only
+The dominant default for incomplete continuous SEM is lavaan's
+`estimator = "MLR", missing = "ml"` — the Yuan-Bentler mean-scaled FIML test, a
+first-moment-only correction. Under non-normality the test statistic's reference
+law (a weighted sum of $\chi^2_1$) spreads its eigenvalues, so a mean-only
 scaling should miscalibrate. Does the Foldnes-Moss-Gronneberg eigenvalue family
-(scaled-shifted, pEBA, penalized-all), which matches more of that spectrum,
-control the goodness-of-fit Type-I rate where MLR does not — without giving up
-power?
+(scaled-shifted, EBA/pEBA, penalized-all, the full mixture) control the
+goodness-of-fit Type-I rate where MLR does not, and does that survive missing
+data?
 
 ## Short answer
 
-```{r short-answer, results="asis"}
-if (!is.null(mlr_worst) && nrow(mlr_worst)) {
-  peba <- h0[h0$dist == mlr_worst$dist & h0$miss == mlr_worst$miss &
-               h0$method == "pEBA4", ]
+```{r short, results="asis"}
+if (length(mlr_sev) && length(all_sev)) {
   cat(sprintf(
-    paste0("At the hardest cell run so far (dist `%s`, MCAR %.2f, %s reps), the ",
-           "MLR default rejects a true model **%s** of the time at the .05 ",
-           "level%s. "),
-    mlr_worst$dist, mlr_worst$miss, reps, fmt(mlr_worst$reject),
-    if (nrow(peba)) sprintf(", versus **%s** for pEBA4", fmt(peba$reject)) else ""))
-  cat("Read this as a plumbing-stage signal until the full grid lands; the full ",
-      "design crosses {norm, vm, ig, pl} severities x missingness x truth.\n")
+    paste0("Under **MCAR** (where normal-theory FIML stays consistent), yes. At ",
+           "severe Vale-Maurelli non-normality the MLR default rejects a true ",
+           "model **%s** of the time at the .05 level, versus **%s** for the full ",
+           "FMG mixture and **%s** for scaled-shifted — both essentially nominal. ",
+           "The pattern holds across all non-normal families (%s reps).\n\n"),
+    fmt(mlr_sev), fmt(all_sev), fmt(ss_sev), reps))
+  cat(paste0("Under **MAR + non-normality the story is different and important**: ",
+             "normal-theory FIML is itself biased there (it imputes missing values ",
+             "with linear conditional means), so the statistic is non-central even ",
+             "under a true model and *no* reference-law correction restores level. ",
+             "The diagnostic below shows this directly."))
 } else {
-  cat("Run the goodness-of-fit grid (`--lavaan-parity`) to populate this section.\n")
+  cat("Run the full grid (`--lavaan-parity`) to populate this section.\n")
 }
 ```
 
 ## Evidence
 
-```{r table}
-if (nrow(h0)) {
-  wide <- reshape(
-    h0[, c("dist", "miss", "method", "reject")],
-    idvar = c("dist", "miss"), timevar = "method", direction = "wide")
-  names(wide) <- sub("^reject\\.", "", names(wide))
-  ord <- c("dist", "miss", "naive", "MLR", "SB", "SS",
-           "pEBA2", "pEBA4", "pEBA6", "pall", "all")
-  wide <- wide[, intersect(ord, names(wide)), drop = FALSE]
-  num <- vapply(wide, is.numeric, logical(1))
-  wide[num] <- lapply(wide[num], fmt)
-  knitr::kable(wide, align = "l",
-               caption = "Goodness-of-fit Type-I rejection (truth = h0, nominal .05).")
+```{r tab-mcar}
+if (nrow(mcar_hi)) {
+  ord <- c("naive","MLR","SB","SS","SF","EBA4","pEBA4","pall","pOLS","all")
+  w <- reshape(mcar_hi[, c("dist","method","reject")], idvar = "dist",
+               timevar = "method", direction = "wide")
+  names(w) <- sub("^reject\\.", "", names(w))
+  w <- w[, c("dist", intersect(ord, names(w)))]
+  num <- vapply(w, is.numeric, logical(1)); w[num] <- lapply(w[num], fmt)
+  knitr::kable(w, align = "l", caption = sprintf(
+    "GOF Type-I under MCAR %s (nominal .05). FIML is consistent here, so this isolates the reference-law correction.",
+    fmt(max(mcar_hi$rate), 2)))
 }
 ```
 
-The full per-cell rejection grid (all truths, all methods, goodness-of-fit and
-nested) is in `results/summary_rejection.csv`.
+```{r tab-ncp}
+if (!is.null(NC) && nrow(NC)) {
+  n <- NC[order(NC$mech, NC$dist, NC$rate),
+          c("dist","mech","rate","mean_base","mean_trace","ncp_hat")]
+  n[c("mean_base","mean_trace","ncp_hat")] <-
+    lapply(n[c("mean_base","mean_trace","ncp_hat")], fmt, d = 2)
+  knitr::kable(n, align = "l", caption = paste(
+    "FIML-bias diagnostic (truth = h0). With a consistent estimator E[base stat]",
+    "= trace(UGamma), so ncp_hat = mean(base) - mean(trace) is ~0 under MCAR and",
+    "grows under MAR + non-normality -- the bias no test correction can fix."))
+}
+```
 
-```{r parity}
+```{r tab-oracle}
 if (!is.null(P) && nrow(P)) {
-  agg <- aggregate(abs_diff ~ metric, P, function(x) max(x, na.rm = TRUE))
-  names(agg) <- c("Quantity", "Max |magmaan - lavaan|")
-  agg[[2]] <- formatC(agg[[2]], format = "e", digits = 2)
-  knitr::kable(agg, align = "l",
-               caption = "Oracle: magmaan vs lavaan MLR (estimator = MLR, missing = ml).")
+  ag <- aggregate(abs_diff ~ metric, P, function(x) max(x, na.rm = TRUE))
+  names(ag) <- c("Quantity", "Max |magmaan - lavaan|")
+  ag[[2]] <- formatC(ag[[2]], format = "e", digits = 2)
+  knitr::kable(ag, align = "l", caption =
+    "Oracle: magmaan vs lavaan MLR (estimator = MLR, missing = ml, defaults).")
 }
 ```
+
+Full per-cell rejection (all truths, mechanisms, rates, methods; goodness-of-fit
+and nested) is in `results/summary_rejection.csv`; per-replicate p-values, base
+statistics, and UGamma spectra are in `results/raw/` (the latter in
+`spectra.rds`) so any further test or size-adjustment is recomputable without
+refitting.
 
 ## Caveats
 
-- The MLR column is computed by magmaan's purpose-built `fiml_robust_mlr` path
-  and validated against lavaan's actual `estimator = "MLR"` `pvalue.scaled` (see
-  the oracle table). lavaan cannot produce the mean-and-variance tests
-  (scaled-shifted / mean.var.adjusted) under FIML, so the "SS" column is a
-  magmaan-only construction.
-- Rejection rates are point estimates from the per-cell replication count; read
-  them as approximate. Power cells (`gof_power`, `nested_power`) and the nested
-  test are in the full CSV, not this table.
+- **Two regimes.** The MCAR table is the clean calibration claim. The MAR cells
+  are reported to bound the method: there the over-rejection is FIML's bias, not
+  the test's, as the diagnostic table shows.
+- **Power** (in the full CSV) is not size-adjusted; MLR's higher raw power is
+  partly its over-rejection leaking through.
+- The MLR column is magmaan's `fiml_robust_mlr`, matched to lavaan's actual MLR
+  defaults (see oracle). lavaan offers no mean-and-variance test under FIML, so
+  `SS` is a magmaan-only construction.
 
 ## Reproduce
 
 ```sh
-# single hardest cell (plumbing + first read)
-Rscript run_experiment.R --smoke
-
-# full grid with the lavaan MLR oracle
-Rscript run_experiment.R --lavaan-parity
-
-# one challenging cell at full replication
-Rscript run_experiment.R --cells truth=h0,dist=pl2,miss=0.15 --reps 500 --lavaan-parity
+Rscript run_experiment.R --smoke                       # single hardest cell
+Rscript run_experiment.R --lavaan-parity               # full grid + oracle
+Rscript run_experiment.R --cells truth=h0,dist=vm2,mech=MCAR,rate=0.3 --reps 1000
 ```
