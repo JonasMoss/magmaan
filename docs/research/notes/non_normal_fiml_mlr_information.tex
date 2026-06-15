@@ -13,6 +13,7 @@
 \newcommand{\avar}{\operatorname{avar}}
 \newcommand{\vech}{\operatorname{vech}}
 \newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\eig}{\operatorname{eig}}
 
 \newtheorem*{claim}{Claim}
 \newtheorem*{conclusion}{Conclusion}
@@ -229,17 +230,68 @@ saturated pseudo-target:
 
 The first is a model-based curvature. The second is a quasi-likelihood
 saturated curvature. Under correct normality they coincide asymptotically.
-Under non-normality they are different estimators of different limiting
-objects.
+Under non-normality, \(J_\eta\) generally differs from \(H_\eta\). The two
+curvatures differ asymptotically only when the restricted and saturated
+observed-data targets differ, for example through restricted-model
+misspecification or through a non-normal MAR quasi-likelihood target.
 
 \begin{conclusion}
-Structured H1 information is not 100\% mathematically correct for non-normal
-FIML in the same way it is correct for normal FIML. It is correct only under
-conditions that collapse the pseudo-true saturated curvature and the
-model-implied structured curvature. Robust FIML theory by itself supplies the
-sandwich \(H^{-1}JH^{-1}\), not the substitution
-\(H_\eta\{\eta(\theta^\star)\}\) for \(H_\eta(\eta^\star)\).
+Structured H1 information is not an unconditional consequence of robust
+non-normal FIML theory. It is justified when the pseudo-true saturated
+curvature and the model-implied structured curvature collapse to the same
+limit, as under the correctly specified complete-data or MCAR null. Robust
+FIML theory by itself supplies the sandwich \(H^{-1}JH^{-1}\), not the
+substitution \(H_\eta\{\eta(\theta^\star)\}\) for \(H_\eta(\eta^\star)\).
 \end{conclusion}
+
+\section*{Structured MLR analogue versus saturated FMG}
+
+The apples-to-apples comparison is an \(\eta\)-space comparison. Hold fixed
+the model derivative
+\[
+  \Delta = \frac{\partial \eta(\theta)}{\partial\theta'}
+\]
+and hold fixed the saturated sandwich covariance
+\[
+  \Gamma_{\mathrm{mis}}
+    =
+  H_\eta(\hat\eta)^{-1}J_\eta(\hat\eta)H_\eta(\hat\eta)^{-1}.
+\]
+Then the only difference between the structured H1 analogue and magmaan's
+saturated FMG construction is the curvature matrix \(V\) used to form the
+residual operator
+\[
+  U(V) = V - V\Delta(\Delta'V\Delta)^{-1}\Delta'V.
+\]
+
+The structured H1 analogue uses
+\[
+  V_{\mathrm{struct}} = H_\eta\{\eta(\hat\theta)\},
+  \qquad
+  \lambda_{\mathrm{struct}}
+    =
+  \eig\{U(V_{\mathrm{struct}})\Gamma_{\mathrm{mis}}\}.
+\]
+The saturated FMG construction uses
+\[
+  V_{\mathrm{sat}} = H_\eta(\hat\eta),
+  \qquad
+  \lambda_{\mathrm{sat}}
+    =
+  \eig\{U(V_{\mathrm{sat}})\Gamma_{\mathrm{mis}}\}.
+\]
+
+Thus, after both methods are put in the same saturated moment space with the
+same empirical sandwich \(\Gamma_{\mathrm{mis}}\), the substantive
+structured-versus-saturated distinction is exactly the evaluation point for
+\(V\). MLR reporting usually collapses this object to a trace or mean scaling,
+for example
+\[
+  c = \frac{1}{\mathrm{df}}\tr\{U(V)\Gamma_{\mathrm{mis}}\},
+\]
+whereas FMG keeps the full weighted-mixture spectrum
+\(\lambda_1,\ldots,\lambda_{\mathrm{df}}\). The scalar trace is therefore a
+summary of the same \(U\Gamma\) object, not a different algebra.
 
 \section*{Interpretation for the MLR problem}
 
@@ -255,22 +307,46 @@ true. It only removes one unnecessary model-implied substitution from the H1
 side of the trace. Therefore it can improve calibration without solving every
 problem caused by treating non-normal or discretized data as continuous.
 
-\section*{Disproof strategy}
+\section*{Failure channels}
+
+There are two distinct ways for the structured and saturated curvatures to
+target different limits.
+
+The first is restricted-model misspecification:
+\[
+  \eta(\theta^\star) \ne \eta^\star.
+\]
+This channel does not require non-normal data. It can occur under a normal
+complete-data distribution if the restricted SEM is false. In that case the
+structured H1 curvature follows the restricted pseudo-true covariance, while
+the saturated H1 curvature follows the unrestricted covariance.
+
+The second is the missing-data quasi-likelihood channel. Under non-normal MAR
+FIML, the saturated observed-data normal quasi-MLE need not target the same
+full-population moment object as the restricted model, even when the SEM is a
+correct description of the full-data first two moments. The saturated H1
+target is determined by the observed-pattern normal likelihood, and the
+restricted target is forced through one common mean/covariance structure.
 
 To disprove universal correctness of structured H1 information, it is enough
-to exhibit a non-normal distribution with the same missingness mechanism for
-which
+to exhibit a data-generating distribution and missingness mechanism for which
 \[
   H_\eta\{\eta^\star\}
   \ne
   H_\eta\{\eta(\theta^\star)\}
 \]
 and the difference survives the residual projection \(U\). Complete-data
-ordinal-as-continuous examples already suggest this: \(S\) estimates the
-covariance of integer-coded variables, while \(\Sigma(\hat\theta)\) estimates
-the closest restricted SEM covariance. Unless the restricted model is
-saturated, these limits differ. Missingness adds pattern-specific curvature,
-so equality is even less automatic.
+misspecification examples establish the first channel. MAR non-normal examples
+are the sharper null-calibration channel, because they can make the saturated
+and restricted observed-data targets diverge without relying on the restricted
+SEM being false.
+
+Under a correct restricted model with complete data, or with MCAR missingness
+that leaves the saturated and restricted moment targets aligned, the
+structured and saturated H1 curvatures should agree asymptotically. In that
+regime, non-normality still matters through \(J_\eta\), but the
+structured-versus-saturated evaluation point is not the asymptotic source of a
+gap.
 
 To prove structured correctness for a particular simulation cell, one would
 need to show the stronger projected equality
@@ -292,8 +368,8 @@ general theorem giving this under non-normal FIML.
 
 \section*{A two-variable witness}
 
-A maximally small complete-data example already shows the issue. Let the
-saturated covariance of two observed variables be
+A maximally small complete-data misspecification example shows the first
+failure channel. Let the saturated covariance of two observed variables be
 \[
   \Sigma_Y =
   \begin{bmatrix}
@@ -317,6 +393,13 @@ The pseudo-true restricted covariance is
 whereas the saturated covariance is \(\Sigma_Y\). Hence the structured and
 unstructured H1 weights evaluate the normal-theory covariance-moment weight at
 different places.
+
+This witness does not rely on non-normality; it isolates the evaluation-point
+problem. The same gap arises for normal data if the restricted independence
+model is false. Its role is therefore to show that structured H1 information
+is not an algebraic consequence of the trace formula, not to prove that
+non-normality alone creates an H1-curvature gap under a correct complete-data
+or MCAR null.
 
 Use covariance moments ordered as
 \[
@@ -400,9 +483,9 @@ The disagreement is not numerical and not a trace shortcut artifact. It is
 caused entirely by evaluating \(V\) at the restricted structured covariance
 \(I_2\) instead of at the saturated covariance \(\Sigma_Y\).
 
-This witness uses complete data only to keep the algebra visible. Missing data
-replaces \(\Gamma_{\mathrm{NT}}(\Sigma_Y)\) by the saturated observed-pattern
-sandwich
+This witness uses complete data only to keep the algebra visible. In the
+FIML saturated construction, missing data replaces
+\(\Gamma_{\mathrm{NT}}(\Sigma_Y)\) by the saturated observed-pattern sandwich
 \[
   H_\eta^{-1}J_\eta H_\eta^{-1},
 \]
