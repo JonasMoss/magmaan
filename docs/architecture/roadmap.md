@@ -1084,7 +1084,28 @@ stop rather than any usable non-error return.
   by unit parity tests against the full-threshold and legacy bounded fits and
   by lavaan oracle fixtures (0013 cross-group threshold invariance via explicit
   shared labels, 0014 threshold-only linear constraint) driven through both the
-  legacy bounded and profiled SNLLS golden paths. The ordinal golden chisq
+  legacy bounded and profiled SNLLS golden paths. **Keyword `group.equal`
+  ordinal measurement invariance landed 2026-06-15 (theta).**
+  `BuildOptions::group_equal`/`group_partial` ties the requested families across
+  groups (synthetic shared labels feeding the same `compute_eq_groups` merge as
+  explicit labels; the fixed marker is left untied) and `build` forces a mean
+  structure when `Thresholds` is equated so the indicator-intercept rows exist;
+  `prepare_ordinal_*_partable` then applies the Wu-Estabrook (2016) release —
+  free group-2+ residual variances (the released latent-response scale,
+  binary-vetoed at `nth==1`) and indicator intercepts, marker/`f~1` left as is.
+  The released block is fit under **theta** (the standard ordinal-invariance
+  parameterization): the released scale is the free `~~` residual variance, which
+  lavaan-theta reports identically, so theta_hat compares with no `~*~`
+  projection. The theta moment path subtracts the freed intercept μ from the
+  standardized thresholds `(τ−μ)/√Σ*ᵢᵢ` and threads `J_mu` (the ordinal fit now
+  evaluates with `with_mu_jacobian`) so the released intercepts carry a gradient.
+  Under **delta** lavaan's released `~*~` scale is structurally unidentified (it
+  stays pinned at 1 with a singular vcov), so delta invariance is not gated and
+  its released-block moment branch stays dormant. lavaan-gated by the bounded
+  golden `ordinal invariance (group.equal) theta fits match lavaan` over fixtures
+  0017 (3-cat thresholds+loadings), 0018 (binary scale-veto), 0019
+  (thresholds-only), matching df/chisq/theta_hat (the released O(5) variances
+  carry the documented `(n_g−1)/n_g` weighting gap, bounded at 3e-4 for 0017). The ordinal golden chisq
   gates now apply the lavaan `Σ(n_g−1)F̂_g` convention rescale at 5e-3 (see
   numerical-conventions exception 4 and the test ledger). `experiments/_archive/13-ordinal-construction-boundary`
   now compares the legacy eager constructor with

@@ -1049,9 +1049,22 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
   // lavaan convention. Each group gets its own copy of formula + auto-*
   // rows; cross-group equality (when the user supplies shared labels) is
   // picked up by the post-replication auto-equality scan below.
+  // Wu-Estabrook categorical threshold+loading invariance needs the indicator
+  // intercept (`o~1`) rows present so the group-2 release can free them, and the
+  // latent mean (`f~1`) rows so they stay fixed at 0 — exactly lavaan, which
+  // always carries a mean structure for categorical data. `build` is data-free
+  // (it never sees which indicators are ordered), but `group.equal` containing
+  // `Thresholds` is the unambiguous signal. Force a mean structure for that case
+  // so the intercept rows exist; `prepare_ordinal_*_partable` then fixes the
+  // group-1 ordinal intercepts at 0 and releases the group-2+ ones.
+  BuildOptions tmpl_opts = opts;
+  if (std::find(opts.group_equal.begin(), opts.group_equal.end(),
+                GroupEqual::Thresholds) != opts.group_equal.end()) {
+    tmpl_opts.meanstructure = true;
+  }
   std::vector<PendingRow> rows;
   for (std::int32_t g = 1; g <= opts.n_groups; ++g) {
-    auto group_rows_or = build_group_template(eflat, opts, v,
+    auto group_rows_or = build_group_template(eflat, tmpl_opts, v,
                                               native_composites,
                                               /*group_idx=*/g - 1);
     if (!group_rows_or.has_value()) {
@@ -1062,6 +1075,76 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
       r.block = g;
       r.group = g;
       rows.push_back(std::move(r));
+    }
+  }
+
+  // Step 8b: `group.equal` / `group.partial`. Tie the requested families across
+  // groups by giving the corresponding rows a shared synthetic label, reusing
+  // the same `compute_eq_groups` merge the explicit-`equal(...)`/shared-label
+  // path uses (the fitted model equals lavaan's `.pX. == .pY.` constraints).
+  // Each group is the same `build_group_template` output, so the per-group row
+  // blocks are positionally aligned: offset `off` in group g is the same
+  // structural row as offset `off` in group 1. We only tie rows that will be
+  // free (skips the fixed marker / fixed.x rows lavaan leaves untied) and that
+  // `group.partial` does not exempt. The categorical Wu-Estabrook scale/
+  // intercept *release* is NOT here — it needs category counts and lives in
+  // `prepare_ordinal_*_partable`, keyed off `out.group_equal` (stamped below).
+  if (!opts.group_equal.empty() && opts.n_groups > 1 &&
+      rows.size() % static_cast<std::size_t>(opts.n_groups) == 0) {
+    const std::size_t n_per =
+        rows.size() / static_cast<std::size_t>(opts.n_groups);
+    auto has_family = [&](GroupEqual f) {
+      return std::find(opts.group_equal.begin(), opts.group_equal.end(), f) !=
+             opts.group_equal.end();
+    };
+    auto family_matches = [&](const PendingRow& r) -> bool {
+      switch (r.op) {
+        case parse::Op::Measurement: return has_family(GroupEqual::Loadings);
+        case parse::Op::Threshold:   return has_family(GroupEqual::Thresholds);
+        case parse::Op::Regression:  return has_family(GroupEqual::Regressions);
+        case parse::Op::Intercept:
+          return v.lv.contains(r.lhs) ? has_family(GroupEqual::Means)
+                                      : has_family(GroupEqual::Intercepts);
+        case parse::Op::Covariance: {
+          const bool diag = (r.lhs == r.rhs);
+          if (v.lv.contains(r.lhs))
+            return diag ? has_family(GroupEqual::LvVariances)
+                        : has_family(GroupEqual::LvCovariances);
+          return diag ? has_family(GroupEqual::Residuals)
+                      : has_family(GroupEqual::ResidualCovariances);
+        }
+        default: return false;
+      }
+    };
+    auto will_be_free = [](const PendingRow& r) {
+      const bool is_constraint =
+          (r.op == parse::Op::EqConstraint || r.op == parse::Op::LtConstraint ||
+           r.op == parse::Op::GtConstraint || r.op == parse::Op::DefineParam);
+      return !(is_constraint || r.user_fixed_value || r.exo == 1);
+    };
+    auto in_group_partial = [&](const PendingRow& r) {
+      if (opts.group_partial.empty()) return false;
+      const std::string name = strip_ws(row_canonical_name(r));
+      for (const auto& tok : opts.group_partial)
+        if (strip_ws(tok) == name) return true;
+      return false;
+    };
+    for (std::size_t off = 0; off < n_per; ++off) {
+      PendingRow& r1 = rows[off];
+      if (!family_matches(r1) || !will_be_free(r1) || in_group_partial(r1)) {
+        continue;
+      }
+      const std::string shared =
+          r1.label.empty() ? (".eqg" + std::to_string(off) + ".") : r1.label;
+      for (std::int32_t g = 1; g <= opts.n_groups; ++g) {
+        PendingRow& rg = rows[static_cast<std::size_t>(g - 1) * n_per + off];
+        // Same structural row in every group (positional alignment); only tie
+        // the ones that stay free in their group.
+        if (rg.op == r1.op && rg.lhs == r1.lhs && rg.rhs == r1.rhs &&
+            will_be_free(rg) && !in_group_partial(rg)) {
+          rg.label = shared;
+        }
+      }
     }
   }
 
@@ -1165,6 +1248,13 @@ partable_expected<LatentStructure> build(const parse::FlatPartable& flat,
     names.group_var    = opts.group_var;        // may be a user-named single group
     names.group_labels = opts.group_labels;     // 0 or 1 entries
   }
+
+  // Stamp the resolved `group.equal` set onto the structure so the categorical
+  // prep step can apply the Wu-Estabrook release. `build` ties the data-free
+  // families (loadings, …) across groups via shared labels separately; the
+  // categorical threshold-triggered release needs category counts and is
+  // deferred to `prepare_ordinal_delta_partable`.
+  out.group_equal = opts.group_equal;
 
   // Resolve the linear-equality reparameterization. `compute_eq_groups` folds
   // shared labels + bare `a == b` into `out.eq_groups` and flags `<`/`>` /

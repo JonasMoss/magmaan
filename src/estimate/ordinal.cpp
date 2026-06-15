@@ -621,6 +621,13 @@ struct ThresholdLayout {
   std::vector<std::vector<std::int32_t>> free;
   std::vector<std::vector<double>> fixed;
   std::vector<std::vector<char>> present;
+  // Per block, per observed index: 1 if that ordinal indicator's `~~`
+  // self-variance is a free parameter — i.e. its response scale is released
+  // (Wu-Estabrook multigroup invariance, or the theta parameterization). The
+  // moment code then standardizes that indicator's implied covariances and
+  // thresholds by √Σᵢᵢ instead of comparing the raw delta moment. Empty / all-0
+  // for the single-group delta convention (raw comparison).
+  std::vector<std::vector<char>> scale_free;
 };
 
 // Affine threshold model tau_b = c[b] + H[b] * gamma over all blocks, plus
@@ -727,6 +734,30 @@ make_threshold_layout(const spec::LatentStructure& pt,
             "missing ordinal threshold row for block " + std::to_string(b)));
       }
     }
+  }
+
+  // Response-scale-release mask: an ordinal indicator whose `~~` self-variance
+  // survived `prepare_*` as a free parameter (Wu-Estabrook invariance release,
+  // or theta parameterization) is compared in standardized form.
+  out.scale_free.resize(nb);
+  for (std::size_t b = 0; b < nb; ++b) {
+    out.scale_free[b].assign(
+        static_cast<std::size_t>(rep.dims[b].n_observed), 0);
+  }
+  for (std::size_t i = 0; i < pt.size(); ++i) {
+    if (pt.op[i] != parse::Op::Covariance || pt.group[i] <= 0 ||
+        pt.free[i] <= 0) {
+      continue;
+    }
+    if (pt.lhs_var[i] < 0 || pt.lhs_var[i] != pt.rhs_var[i]) continue;
+    const std::size_t b = static_cast<std::size_t>(pt.group[i] - 1);
+    if (b >= nb) continue;
+    const std::int32_t ov = pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])];
+    if (ov < 0 ||
+        static_cast<std::size_t>(ov) >= out.scale_free[b].size()) {
+      continue;
+    }
+    out.scale_free[b][static_cast<std::size_t>(ov)] = 1;
   }
   return out;
 }
@@ -1924,12 +1955,49 @@ ordinal_residuals(const data::OrdinalStats& stats,
     const Eigen::MatrixXd& Sig = moments.sigma[b];
     Eigen::VectorXd d(nth + ncorr);
     Eigen::VectorXd it = implied_thresholds(layout, theta, b);
-    if (theta_param) {
-      // Standardize: implied thresholds τ_θ/√Σ*ᵢᵢ, implied correlations.
+    const bool block_released =
+        b < layout.scale_free.size() &&
+        std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
+                    [](char c) { return c != 0; });
+    if (block_released && !theta_param) {
+      // Wu-Estabrook released block: per-indicator response scale δᵢ = Σ*ᵢᵢ^{-½}
+      // where the scale is free (δᵢ = 1 otherwise, e.g. binary-vetoed items and
+      // the reference group), with the implied indicator mean μᵢ subtracted
+      // from the thresholds. `mixed_assoc_moment(.., Theta)` keyed on the
+      // free-scale mask gives the per-pair implied polychoric δᵢδⱼΣ*ᵢⱼ.
+      std::vector<std::int32_t> sf(static_cast<std::size_t>(p), 0);
+      for (Eigen::Index i = 0; i < p; ++i)
+        if (static_cast<std::size_t>(i) < layout.scale_free[b].size())
+          sf[static_cast<std::size_t>(i)] =
+              layout.scale_free[b][static_cast<std::size_t>(i)];
+      const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
       for (Eigen::Index k = 0; k < nth; ++k) {
         const Eigen::Index ov =
             stats.threshold_ov[b][static_cast<std::size_t>(k)];
-        it(k) /= std::sqrt(Sig(ov, ov));
+        const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+        const double delta = sf[static_cast<std::size_t>(ov)]
+                                 ? 1.0 / std::sqrt(Sig(ov, ov))
+                                 : 1.0;
+        it(k) = (it(k) - mu) * delta;
+      }
+      d.head(nth) = it - stats.thresholds[b];
+      Eigen::Index r = 0;
+      for (Eigen::Index j = 0; j < p; ++j)
+        for (Eigen::Index i = j + 1; i < p; ++i)
+          d(nth + r++) = mixed_assoc_moment(Sig, sf, i, j,
+                                            OrdinalParameterization::Theta) -
+                         stats.R[b](i, j);
+    } else if (theta_param) {
+      // Standardize: implied thresholds (τ_θ − μᵢ)/√Σ*ᵢᵢ, implied correlations.
+      // μᵢ is the model-implied indicator mean: 0 in the reference group / when
+      // there is no mean structure, the freed group-2+ intercept under
+      // Wu-Estabrook (2016) threshold+loading invariance otherwise.
+      const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+      for (Eigen::Index k = 0; k < nth; ++k) {
+        const Eigen::Index ov =
+            stats.threshold_ov[b][static_cast<std::size_t>(k)];
+        const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+        it(k) = (it(k) - mu) / std::sqrt(Sig(ov, ov));
       }
       d.head(nth) = it - stats.thresholds[b];
       d.tail(ncorr) = std_corr_lower(Sig) - corr_lower(stats.R[b]);
@@ -1956,7 +2024,8 @@ ordinal_jacobian(const data::OrdinalStats& stats,
                  const Eigen::MatrixXd& J_sigma,
                  const std::vector<Eigen::MatrixXd>& factors,
                  const Eigen::VectorXd& theta,
-                 OrdinalParameterization param) {
+                 OrdinalParameterization param,
+                 const Eigen::MatrixXd& J_mu = Eigen::MatrixXd()) {
   auto N = total_n_obs(stats);
   if (!N.has_value()) return std::unexpected(N.error());
   const bool theta_param = param == OrdinalParameterization::Theta;
@@ -1968,6 +2037,7 @@ ordinal_jacobian(const data::OrdinalStats& stats,
   Eigen::MatrixXd out(n_total, J_sigma.cols());
   Eigen::Index out_off = 0;
   Eigen::Index sigma_off = 0;
+  Eigen::Index mu_off = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
     const Eigen::Index nth = stats.thresholds[b].size();
@@ -1975,18 +2045,62 @@ ordinal_jacobian(const data::OrdinalStats& stats,
     const Eigen::MatrixXd& Sig = moments.sigma[b];
     Eigen::MatrixXd Jb(nth + ncorr, J_sigma.cols());
     Jb.setZero();
-    if (theta_param) {
-      // Threshold rows: ∂(τ_θ/√Σ*ᵢᵢ)/∂θ — a selector term on the free
-      // threshold parameter plus a structural term through Σ*ᵢᵢ.
+    const bool block_released =
+        b < layout.scale_free.size() &&
+        std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
+                    [](char c) { return c != 0; });
+    if (block_released && !theta_param) {
+      // Released block: ∂[(τ_k − μ_ov)·δ_ov]/∂θ with δ_ov = Σ*_ov,ov^{-½} on
+      // free-scale indicators. Three terms: δ·(threshold selector), −δ·∂μ_ov
+      // (via J_mu), and (τ_k − μ_ov)·∂δ_ov = (τ−μ)·(−½ δ³)·∂Σ*_ov,ov. The
+      // off-diagonal rows reuse `mixed_assoc_jacobian_row` keyed on the mask.
+      std::vector<std::int32_t> sf(static_cast<std::size_t>(p), 0);
+      for (Eigen::Index i = 0; i < p; ++i)
+        if (static_cast<std::size_t>(i) < layout.scale_free[b].size())
+          sf[static_cast<std::size_t>(i)] =
+              layout.scale_free[b][static_cast<std::size_t>(i)];
+      const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+      const bool have_jmu = J_mu.rows() > 0;
       const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+      for (Eigen::Index k = 0; k < nth; ++k) {
+        const Eigen::Index ov =
+            stats.threshold_ov[b][static_cast<std::size_t>(k)];
+        const bool std_i = sf[static_cast<std::size_t>(ov)] != 0;
+        const double delta = std_i ? 1.0 / std::sqrt(Sig(ov, ov)) : 1.0;
+        const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+        const double a = it(k) - mu;
+        const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+        if (fr > 0) Jb(k, fr - 1) += delta;
+        if (have_jmu) Jb.row(k) -= delta * J_mu.row(mu_off + ov);
+        if (std_i)
+          Jb.row(k) += (-0.5 * a * delta * delta * delta) *
+                       J_sigma.row(sigma_off + vech_index(p, ov, ov));
+      }
+      Eigen::Index r = 0;
+      for (Eigen::Index j = 0; j < p; ++j)
+        for (Eigen::Index i = j + 1; i < p; ++i)
+          Jb.row(nth + r++) = mixed_assoc_jacobian_row(
+              Sig, J_sigma, sigma_off, sf, i, j,
+              OrdinalParameterization::Theta);
+    } else if (theta_param) {
+      // Threshold rows: ∂[(τ_θ − μᵢ)/√Σ*ᵢᵢ]/∂θ — a selector term on the free
+      // threshold parameter, −∂μᵢ via J_mu (the freed group-2+ intercept under
+      // Wu-Estabrook invariance; 0 otherwise), and a structural term through
+      // Σ*ᵢᵢ. Reduces to the raw τ_θ/√Σ*ᵢᵢ form when μ ≡ 0.
+      const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+      const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+      const bool have_jmu = J_mu.rows() > 0;
       for (Eigen::Index k = 0; k < nth; ++k) {
         const Eigen::Index ov =
             stats.threshold_ov[b][static_cast<std::size_t>(k)];
         const double sii = Sig(ov, ov);
         const double inv_sd = 1.0 / std::sqrt(sii);
+        const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+        const double a = it(k) - mu;
         const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
         if (fr > 0) Jb(k, fr - 1) += inv_sd;
-        Jb.row(k) += (-0.5 * it(k) * inv_sd / sii) *
+        if (have_jmu) Jb.row(k) -= inv_sd * J_mu.row(mu_off + ov);
+        Jb.row(k) += (-0.5 * a * inv_sd / sii) *
                      J_sigma.row(sigma_off + vech_index(p, ov, ov));
       }
       Jb.bottomRows(ncorr) = std_corr_jacobian(Sig, J_sigma, sigma_off);
@@ -2003,6 +2117,7 @@ ordinal_jacobian(const data::OrdinalStats& stats,
         sw * (factors[b].transpose() * Jb);
     out_off += Jb.rows();
     sigma_off += vech_len(p);
+    mu_off += p;
   }
   return out;
 }
@@ -2453,6 +2568,30 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
   if (!ordered_or.has_value()) return std::unexpected(ordered_or.error());
   const auto& ordered = *ordered_or;
 
+  // Wu-Estabrook (2016) multigroup categorical invariance: when `Thresholds`
+  // is equated across groups, lavaan releases the group-2+ ordinal response
+  // scale and indicator intercept that the single-group convention otherwise
+  // pins (residual variance 1, intercept 0). The standard parameterization for
+  // ordinal invariance is THETA: the released scale is the free residual
+  // variance `~~`, exactly how lavaan-theta reports it (the `~*~` row stays
+  // fixed at 1), so the moment path standardizes the released block by its
+  // implied √Σ*ᵢᵢ and no `~*~` partable projection is needed. (Under delta the
+  // released `~*~` scale is unidentified — it stays pinned at 1 with a singular
+  // vcov — so delta invariance is not gated; the dormant delta released-block
+  // branch in `ordinal_residuals`/`ordinal_jacobian` is kept but untested.)
+  // Binary items keep a fixed scale (one threshold leaves no room to identify
+  // a separate scale; lavaan does the same), so the release is vetoed there.
+  const bool release_invariant =
+      std::find(pt.group_equal.begin(), pt.group_equal.end(),
+                spec::GroupEqual::Thresholds) != pt.group_equal.end();
+  auto is_binary = [&](std::size_t b, std::int32_t ov) {
+    if (b >= stats.threshold_ov.size()) return false;
+    int n = 0;
+    for (std::int32_t t : stats.threshold_ov[b])
+      if (t == ov) ++n;
+    return n <= 1;
+  };
+
   const std::int32_t old_n = pt.n_free();
   std::vector<char> remove_free(static_cast<std::size_t>(old_n) + 1, 0);
   for (std::size_t i = 0; i < pt.size(); ++i) {
@@ -2472,6 +2611,12 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
     if (ov < 0 || static_cast<std::size_t>(ov) >= ordered[b].size() ||
         ordered[b][static_cast<std::size_t>(ov)] == 0) {
       continue;
+    }
+    // Release: keep this group-2+ ordinal scale/intercept free instead of
+    // pinning it. The scale is vetoed (re-fixed) for binary indicators.
+    if (release_invariant && pt.group[i] >= 2 && pt.free[i] > 0) {
+      const bool is_scale = pt.op[i] == parse::Op::Covariance;
+      if (!(is_scale && is_binary(b, ov))) continue;  // honor the free row
     }
     if (pt.free[i] > 0) remove_free[static_cast<std::size_t>(pt.free[i])] = 1;
     pt.free[i] = 0;
@@ -4507,13 +4652,13 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                              parameterization);
   };
   prob.J = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
-    auto eval = ev.evaluate(x, true, false);
+    auto eval = ev.evaluate(x, true, true);  // J_mu: released-intercept gradient
     if (!eval.has_value()) {
       return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
           "fit_ordinal_bounded: evaluate failed: " + eval.error().detail));
     }
     return ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
-                            factors, x, parameterization);
+                            factors, x, parameterization, eval->J_mu);
   };
 
   return solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
@@ -4606,13 +4751,13 @@ fit_ordinal_bounded(spec::LatentStructure pt,
                                parameterization);
     };
     prob.J = [&](const Eigen::VectorXd& x) -> fit_expected<Eigen::MatrixXd> {
-      auto eval = ev.evaluate(x, true, false);
+      auto eval = ev.evaluate(x, true, true);  // J_mu: released-intercept gradient
       if (!eval.has_value()) {
         return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
             "fit_ordinal_bounded: evaluate failed: " + eval.error().detail));
       }
       return ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
-                              factors, x, parameterization);
+                              factors, x, parameterization, eval->J_mu);
     };
 
     return solve_ordinal_ls(prob, x0, bounds, con, backend, opts,
@@ -4946,18 +5091,18 @@ fit_ordinal_snlls_full_thresholds(spec::LatentStructure pt,
                              parameterization);
   };
   base.J = [&](const Eigen::VectorXd& theta) -> fit_expected<Eigen::MatrixXd> {
-    auto eval = ev.evaluate(theta, true, false);
+    auto eval = ev.evaluate(theta, true, true);  // J_mu: released-intercept gradient
     if (!eval.has_value()) {
       return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
           "fit_ordinal_snlls_full_thresholds: evaluate failed: " +
               eval.error().detail));
     }
     return ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
-                            factors, theta, parameterization);
+                            factors, theta, parameterization, eval->J_mu);
   };
   base.eval = [&](const Eigen::VectorXd& theta)
       -> fit_expected<optim::LsEvaluation> {
-    auto eval = ev.evaluate(theta, true, false);
+    auto eval = ev.evaluate(theta, true, true);  // J_mu: released-intercept gradient
     if (!eval.has_value()) {
       return std::unexpected(make_err(FitError::Kind::NonPositiveDefiniteSigma,
           "fit_ordinal_snlls_full_thresholds: evaluate failed: " +
@@ -4967,7 +5112,7 @@ fit_ordinal_snlls_full_thresholds(spec::LatentStructure pt,
                                parameterization);
     if (!r.has_value()) return std::unexpected(r.error());
     auto J = ordinal_jacobian(stats, layout, eval->moments, eval->J_sigma,
-                              factors, theta, parameterization);
+                              factors, theta, parameterization, eval->J_mu);
     if (!J.has_value()) return std::unexpected(J.error());
     return optim::LsEvaluation{std::move(*r), std::move(*J)};
   };

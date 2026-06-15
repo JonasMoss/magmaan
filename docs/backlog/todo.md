@@ -332,11 +332,24 @@ decisions in the simulation backlog.
   workspace defers the O(m³) inverse to the cache ensure helpers) landed
   2026-06): only-when-needed R/API polish remains; reduced-Gamma
   robust-inference products moved to [speculative.md](speculative.md) with a
-  size-triggered build-if. `group.equal = "thresholds"` parity is
-  documented out of scope: lavaan's Wu-Estabrook identification frees group-2+
-  delta scales and intercepts, which the magmaan ordinal delta path does not
-  model (explicit shared threshold labels are the supported contract,
-  fixture 0013).
+  size-triggered build-if. **`group.equal` ordinal measurement invariance landed
+  2026-06-15 (theta).** The `BuildOptions::group_equal` / `group_partial` keyword
+  ties the requested families across groups (synthetic shared labels → the same
+  `compute_eq_groups` merge as explicit labels), and the Wu-Estabrook (2016)
+  identification frees the group-2+ ordinal residual variances (the released
+  latent-response *scale*, binary-vetoed) and indicator intercepts in
+  `prepare_ordinal_*_partable`, with `build` forcing a mean structure so the
+  intercept rows exist. The gated parameterization is **theta** (the standard for
+  ordinal invariance): under delta lavaan's released `~*~` scale is unidentified
+  (it stays pinned at 1 with a singular vcov), so delta invariance is *not* gated
+  — the delta released-block branch in `ordinal_residuals`/`ordinal_jacobian`
+  stays dormant. lavaan-gated by `cfa(..., parameterization="theta",
+  group.equal=...)` fixtures 0017 (3-cat thresholds+loadings), 0018 (binary
+  scale-veto), 0019 (thresholds-only), df/chisq/theta_hat parity in the
+  `ordinal invariance (group.equal) theta fits match lavaan` golden. Remaining:
+  the nested configural→metric satorra.2000 LRT golden (delta A-method default),
+  the R `model_spec(group.equal=)` surface + `fmg_nested_ordinal`, and the
+  `papers/ordinal-fmg/` nested-arm switch. Mixed-ordinal release not started.
 - **M/L.** Optional h-weighted polyserial path: a polyserial-only h-weighted
   moment builder — continuous-ordinal h objective, casewise threshold/rho
   estimating functions, bread/influence/Gamma construction, and splicing into the

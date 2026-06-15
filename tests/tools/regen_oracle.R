@@ -872,6 +872,32 @@ make_ord_df <- function(n, cuts_by_var, seed = 1L, two_factor = FALSE) {
   out
 }
 
+# Like make_ord_df, but scales (and shifts) the latent response vector before
+# thresholding: group g>=2 gets sd_scale != 1 / mean_shift != 0 so the
+# Wu-Estabrook released residual variance (theta) and intercept are strongly
+# identified (clearly != 1 / != 0). Scaling all of z by a constant preserves the
+# inter-indicator correlations, so loading invariance still holds; only the
+# latent-response scale and location differ across groups. Used by the
+# threshold+loading invariance fixtures (0017-0019).
+make_ord_df_scaled <- function(n, cuts_by_var, seed = 1L,
+                               sd_scale = 1, mean_shift = 0) {
+  set.seed(seed)
+  p <- length(cuts_by_var)
+  z <- matrix(rnorm(n * p), n, p)
+  z[, 2] <- 0.55 * z[, 1] + sqrt(1 - 0.55^2) * z[, 2]
+  z[, 3] <- 0.40 * z[, 1] + 0.25 * z[, 2] + sqrt(0.78) * z[, 3]
+  z[, 4] <- 0.30 * z[, 1] + 0.20 * z[, 2] + sqrt(0.87) * z[, 4]
+  z <- z * sd_scale + mean_shift
+  out <- data.frame(row.names = seq_len(n))
+  for (j in seq_len(p)) {
+    out[[paste0("x", j)]] <- ordered(cut(z[, j],
+                                         c(-Inf, cuts_by_var[[j]], Inf),
+                                         labels = FALSE),
+                                     levels = seq_len(length(cuts_by_var[[j]]) + 1L))
+  }
+  out
+}
+
 df_from_counts <- function(tab) {
   stopifnot(length(dim(tab)) == 2L)
   rows <- vector("list", sum(tab))
@@ -1089,6 +1115,83 @@ ordinal_cases <- list(
        ordered = paste0("x", 1:4),
        group = NULL,
        fit = TRUE,
+       fit_estimators = c("DWLS")),
+  # Wu-Estabrook (2016) two-group ordinal threshold+loading measurement
+  # invariance via `group.equal = c("thresholds","loadings")` under the THETA
+  # parameterization (the standard choice for ordinal invariance; delta leaves
+  # the released latent-response scale unidentified -- it stays pinned at 1 with
+  # a singular vcov). lavaan ties the free loadings + all thresholds across
+  # groups (shared `.pN.` labels) and frees, for group 2, the residual variances
+  # `~~` (the released scale) and indicator intercepts `~1`; the marker loading
+  # stays fixed at 1 and the latent mean `f~1` stays fixed at 0. Group 2 carries
+  # a real latent scale (sd 1.5) + location (0.45) shift so the released `~~`/
+  # `~1` are strongly identified. Direct anchor for the magmaan `group.equal`
+  # build macro + theta released-block moment path.
+  list(id = "0017_2group_thresh_load_invariance_3cat_cfa",
+       model = ordinal_model_4,
+       group_equal = c("thresholds", "loadings"),
+       parameterization = "theta",
+       robust = FALSE,
+       data = {
+         d1 <- make_ord_df_scaled(420, list(c(-0.70, 0.35), c(-0.55, 0.60),
+                                            c(-0.85, 0.20), c(-0.45, 0.75)),
+                                  seed = 211L, sd_scale = 1.0, mean_shift = 0.0)
+         d2 <- make_ord_df_scaled(360, list(c(-0.70, 0.35), c(-0.55, 0.60),
+                                            c(-0.85, 0.20), c(-0.45, 0.75)),
+                                  seed = 223L, sd_scale = 1.5, mean_shift = 0.45)
+         d1$school <- "Pasteur"; d2$school <- "Grant-White"
+         rbind(d1, d2)
+       },
+       ordered = paste0("x", 1:4),
+       group = "school",
+       fit = TRUE,
+       fit_estimators = c("DWLS")),
+  # Binary (K=2) analogue of 0017: the Wu-Estabrook confounded case. With a
+  # single threshold per item the released scale is not separately identifiable,
+  # so lavaan keeps the group-2 residual variance `~~` FIXED at 1 (no scale
+  # release) and frees only the indicator intercepts `~1`. Locks magmaan's
+  # binary-veto branch (free `~~` re-fixed for nth==1 in `prepare_ordinal_*`).
+  list(id = "0018_2group_thresh_load_invariance_binary_cfa",
+       model = ordinal_model_4,
+       group_equal = c("thresholds", "loadings"),
+       parameterization = "theta",
+       robust = FALSE,
+       data = {
+         d1 <- make_ord_df_scaled(500, list(c(-0.20), c(0.10),
+                                            c(-0.30), c(0.25)),
+                                  seed = 211L, sd_scale = 1.0, mean_shift = 0.0)
+         d2 <- make_ord_df_scaled(460, list(c(-0.20), c(0.10),
+                                            c(-0.30), c(0.25)),
+                                  seed = 223L, sd_scale = 1.4, mean_shift = 0.40)
+         d1$school <- "A"; d2$school <- "B"
+         rbind(d1, d2)
+       },
+       ordered = paste0("x", 1:4),
+       group = "school",
+       fit = TRUE,
+       fit_estimators = c("DWLS")),
+  # `group.equal = "thresholds"` alone (3-cat, theta): the scale/intercept
+  # release is triggered by thresholds being equated; loadings stay free and
+  # unlabeled per group. Confirms the release is keyed on the threshold tie, not
+  # the loading tie.
+  list(id = "0019_2group_thresh_invariance_3cat_cfa",
+       model = ordinal_model_4,
+       group_equal = c("thresholds"),
+       parameterization = "theta",
+       robust = FALSE,
+       data = {
+         d1 <- make_ord_df_scaled(420, list(c(-0.70, 0.35), c(-0.55, 0.60),
+                                            c(-0.85, 0.20), c(-0.45, 0.75)),
+                                  seed = 211L, sd_scale = 1.0, mean_shift = 0.0)
+         d2 <- make_ord_df_scaled(360, list(c(-0.70, 0.35), c(-0.55, 0.60),
+                                            c(-0.85, 0.20), c(-0.45, 0.75)),
+                                  seed = 223L, sd_scale = 1.5, mean_shift = 0.45)
+         d1$school <- "Pasteur"; d2$school <- "Grant-White"
+         rbind(d1, d2)
+       },
+       ordered = paste0("x", 1:4),
+       group = "school",
+       fit = TRUE,
        fit_estimators = c("DWLS"))
 )
 
@@ -1112,11 +1215,20 @@ for (oc in ordinal_cases) {
     blocks[[1]] <- list(block = 0L, label = "", matrix = unname(ordered_to_int_matrix(df, ov)))
   }
 
+  # Parameterization (delta default; theta for the Wu-Estabrook invariance
+  # fixtures) and the optional `group.equal` keyword, threaded into every cfa()
+  # call. `robust` defaults TRUE; the invariance fixtures set it FALSE (the
+  # released-scale vcov is the gate's noisiest piece -- the point/chisq/df
+  # contract is what magmaan must match).
+  param   <- if (!is.null(oc$parameterization)) oc$parameterization else "delta"
+  grp_args <- if (nzchar(group_var)) list(group = group_var) else list()
+  ge_args <- if (!is.null(oc$group_equal)) list(group.equal = oc$group_equal) else list()
+  want_robust <- !isFALSE(oc$robust)
+
   fit_for_stats <- if (isTRUE(oc$fit)) {
-    args <- list(model = oc$model, data = df, ordered = ov,
-                 estimator = "WLS", parameterization = "delta")
-    if (nzchar(group_var)) args$group <- group_var
-    do.call(cfa, args)
+    do.call(cfa, c(list(model = oc$model, data = df, ordered = ov,
+                        estimator = "WLS", parameterization = param),
+                   grp_args, ge_args))
   } else {
     # Saturated covariance model for sample-stat extraction only.
     sat <- paste("x1 ~~ x1", "x2 ~~ x2", "x1 ~~ x2", sep = "\n")
@@ -1132,8 +1244,8 @@ for (oc in ordinal_cases) {
     if ("DWLS" %in% estimators) {
       fit_dwls <- do.call(cfa, c(list(model = oc$model, data = df, ordered = ov,
                                       estimator = "DWLS",
-                                      parameterization = "delta"),
-                                 if (nzchar(group_var)) list(group = group_var) else list()))
+                                      parameterization = param),
+                                 grp_args, ge_args))
       fits$DWLS <- ordinal_fit_json(fit_dwls)
       # Post-hoc standardized rows + any `:=` defined params (value-parity gate
       # for measures::standardize_all / compute_defined on ordinal delta fits).
@@ -1146,16 +1258,18 @@ for (oc in ordinal_cases) {
       if (!nzchar(group_var)) {
         fits$DWLS$fscores <- ordinal_fscores_json(fit_dwls, methods = "EBM")
       }
-      fit_dwls_robust <- do.call(cfa, c(list(model = oc$model, data = df,
-                                             ordered = ov, estimator = "DWLS",
-                                             parameterization = "delta",
-                                             se = "robust.sem",
-                                             test = c("standard",
-                                                      "satorra.bentler",
-                                                      "mean.var.adjusted",
-                                                      "scaled.shifted")),
-                                        if (nzchar(group_var)) list(group = group_var) else list()))
-      fits$DWLS$robust <- ordinal_robust_json(fit_dwls_robust)
+      if (want_robust) {
+        fit_dwls_robust <- do.call(cfa, c(list(model = oc$model, data = df,
+                                               ordered = ov, estimator = "DWLS",
+                                               parameterization = param,
+                                               se = "robust.sem",
+                                               test = c("standard",
+                                                        "satorra.bentler",
+                                                        "mean.var.adjusted",
+                                                        "scaled.shifted")),
+                                          grp_args, ge_args))
+        fits$DWLS$robust <- ordinal_robust_json(fit_dwls_robust)
+      }
     }
     if ("WLS" %in% estimators) {
       fits$WLS <- ordinal_fit_json(fit_for_stats)
@@ -1175,6 +1289,10 @@ for (oc in ordinal_cases) {
     input_has_thresholds = isTRUE(oc$model_has_thresholds),
     ordered = ov,
     group_var = if (nzchar(group_var)) group_var else NULL,
+    # `group.equal` keyword (lavaan family strings) + parameterization, threaded
+    # into the C++ build so magmaan fits the same Wu-Estabrook invariance model.
+    group_equal = if (!is.null(oc$group_equal)) oc$group_equal else NULL,
+    parameterization = param,
     blocks = blocks,
     sample_stats = ordinal_samp_json(fit_for_stats),
     fits = fits
