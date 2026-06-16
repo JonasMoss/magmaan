@@ -1,0 +1,187 @@
+---
+title: "Goodness-of-fit chi-squares for FIML and two-stage ML under non-normal incomplete data"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+results <- "results"
+need <- function(f) {
+  p <- file.path(results, f)
+  if (!file.exists(p)) stop("missing ", p,
+    "\nRun: Rscript run_experiment.R --reps 1000 --lavaan-parity", call. = FALSE)
+  p
+}
+summ   <- read.csv(need("summary_rejection.csv"), stringsAsFactors = FALSE)
+ncp    <- read.csv(need("noncentrality.csv"), stringsAsFactors = FALSE)
+parity <- if (file.exists(file.path(results, "parity.csv")))
+  read.csv(file.path(results, "parity.csv"), stringsAsFactors = FALSE) else NULL
+meta   <- read.csv(need("metadata.csv"), stringsAsFactors = FALSE)
+getm <- function(k) { v <- meta$value[meta$key == k]; if (length(v)) v[1] else NA }
+
+# Order statistics by how much of the UGamma spectrum each one uses.
+tier <- c(std = "naive", sb = "mean only", ss = "mean + variance",
+          sf = "mean + variance", all = "full (exact)",
+          pall = "full (penalized)", peba2 = "full (penalized)",
+          peba4 = "full (penalized)", peba6 = "full (penalized)",
+          pols = "full (penalized)")
+label <- c(std = "naive chi-sq", sb = "mean-scaled (T_RML)",
+           ss = "scaled-shifted", sf = "scaled-F", all = "exact mixture (Imhof)",
+           pall = "penalized-all", peba2 = "pEBA2", peba4 = "pEBA4",
+           peba6 = "pEBA6", pols = "pOLS")
+ord <- names(label)
+
+pct   <- function(x) sprintf("%.1f%%", 100 * x)
+alpha <- as.numeric(getm("alpha")); if (is.na(alpha)) alpha <- 0.05
+severe <- intersect(c("vm2", "ig2", "pl2"), unique(summ$dist))
+Ns <- sort(unique(summ$n)); nmid <- Ns[ceiling(length(Ns) / 2)]; nmax <- max(Ns)
+
+rej <- function(dists, mech_, n_, method_, est_) {
+  d <- summ[summ$dist %in% dists & summ$mech == mech_ & summ$n == n_ &
+            summ$method == method_ & summ$estimator == est_, ]
+  mean(d$reject)
+}
+```
+
+## Question
+
+Under non-normal data with missing values the goodness-of-fit chi-square is no
+longer chi-square distributed: its reference law is a mixture
+`T → Σⱼ λⱼ χ²₁` with weights the eigenvalues of `UΓ`. Savalei & Rosseel (2022)
+catalogue the corrections used in practice, which match only the first one or two
+moments of that mixture; the Foldnes-Moss-Grønneberg (FMG) family instead
+approximates the whole spectrum (exact Imhof mixture, and the penalized
+eigenvalue tests pEBA/pOLS/penalized-all).
+
+For the two normal-theory missing-data estimators — **FIML** and **two-stage ML
+(ML2S)** — which goodness-of-fit statistic actually holds its nominal level?
+This is Type-I only: one correctly-specified one-factor CFA, so every rejection
+is an error. No power, no nested test.
+
+## Short answer
+
+```{r answer-numbers}
+sev <- severe
+ml2s_std_norm <- rej("norm", "MCAR", nmid, "std", "ML2S")
+fiml_std_norm <- rej("norm", "MCAR", nmid, "std", "FIML")
+ml2s_std_sev  <- mean(subset(summ, dist %in% sev & mech == "MCAR" & method == "std" & estimator == "ML2S")$reject)
+fiml_std_sev  <- mean(subset(summ, dist %in% sev & mech == "MCAR" & method == "std" & estimator == "FIML")$reject)
+infl <- { m <- subset(ncp, dist == "norm" & mech == "MCAR" & estimator == "ML2S"); mean(m$mean_base / m$df) }
+
+best_at <- function(est, NN) {
+  d <- subset(summ, dist %in% sev & mech == "MCAR" & n == NN & estimator == est)
+  a <- aggregate(reject ~ method, d, mean)
+  c(all = a$reject[a$method == "all"], sb = a$reject[a$method == "sb"],
+    ss = a$reject[a$method == "ss"], peba4 = a$reject[a$method == "peba4"])
+}
+b_fiml_max <- best_at("FIML", nmax); b_ml2s_max <- best_at("ML2S", nmax)
+b_fiml_min <- best_at("FIML", min(Ns))
+```
+
+1. **The naive chi-square is unusable, and worst for two-stage.** Under severe
+   non-normality it rejects a *true* model at `r pct(fiml_std_sev)` (FIML) and
+   `r pct(ml2s_std_sev)` (ML2S). Two-stage is hit twice: even on **normal** data
+   it already rejects at `r pct(ml2s_std_norm)` (vs `r pct(fiml_std_norm)` for
+   FIML), because Stage 2 completes the data to the full `N` and inflates the
+   statistic about `r sprintf("%.1f", infl)`× over its degrees of freedom. A
+   reference-law correction is mandatory.
+
+2. **Among corrections, using more of the spectrum helps — but penalizing it
+   does not.** The exact mixture (Imhof) and the variance-aware scalings
+   (scaled-shifted, scaled-F) calibrate best and reach the nominal level as `N`
+   grows; the pure mean-scaling `T_RML` (lavaan/Mplus's default) over-rejects
+   throughout; and the penalized FMG tests (pEBA/pOLS/penalized-all)
+   over-reject *more* than the plain exact mixture for these small-sample
+   missing-data spectra. At the largest `N` (`r nmax`), the exact mixture sits at
+   `r pct(b_fiml_max["all"])` (FIML) and `r pct(b_ml2s_max["all"])` (ML2S), while
+   `T_RML` is still `r pct(b_fiml_max["sb"])` / `r pct(b_ml2s_max["sb"])` and
+   pEBA4 `r pct(b_fiml_max["peba4"])` / `r pct(b_ml2s_max["peba4"])`. The
+   recommendation for missing-data goodness of fit is the exact mixture, not the
+   penalized tests.
+
+3. **Once corrected, two-stage ML is at least as well calibrated as FIML.**
+   Across the good statistics the ML2S column is consistently at or below FIML's
+   (slightly conservative). The two-stage estimator plus the exact-mixture test
+   is a sound combination, despite two-stage needing the larger raw correction.
+
+## Evidence
+
+### The horse race: severe non-normality, MCAR
+
+```{r horse-race}
+hr <- subset(summ, dist %in% severe & mech == "MCAR" & n == nmid)
+agg <- aggregate(reject ~ estimator + method, hr, mean)
+agg <- agg[order(match(agg$method, ord)), ]
+w <- reshape(agg, idvar = "method", timevar = "estimator", direction = "wide")
+names(w) <- sub("^reject\\.", "", names(w))
+out <- data.frame(Tier = tier[w$method], Statistic = label[w$method],
+                  check.names = FALSE)
+for (est in intersect(c("FIML", "ML2S"), names(w))) out[[est]] <- pct(w[[est]])
+knitr::kable(out, row.names = FALSE,
+  caption = sprintf("Type-I rejection at alpha = %s. Severe non-normal families (%s) pooled, N = %d, MCAR (rates pooled). Target is %s. Ordering by spectrum usage; the exact mixture and the mean+variance scalings are best, the penalized tests over-reject, mean-only (T_RML) worst among corrections, naive unusable.",
+                    pct(alpha), paste(severe, collapse = ", "), nmid, pct(alpha)))
+```
+
+The same ordering holds at every `N`; the corrected statistics tighten toward
+`r pct(alpha)` as `N` grows (e.g. the exact mixture under FIML:
+`r pct(b_fiml_min["all"])` at N=`r min(Ns)` → `r pct(b_fiml_max["all"])` at
+N=`r nmax`). The full grid (every distribution × `N` × mechanism × rate ×
+statistic) is in `results/summary_rejection.csv`.
+
+### lavaan anchor
+
+```{r parity}
+if (!is.null(parity) && nrow(parity)) {
+  ps <- aggregate(abs_diff ~ metric, data = parity, FUN = max)
+  pretty <- c(fiml_lrt_chisq = "FIML LRT base vs lavaan FIML chi-square",
+              fiml_sb_pvalue = "FIML mean-scaled p vs lavaan Yuan-Bentler (unstructured)",
+              ml2s_chisq = "ML2S base vs lavaan missing = 'two.stage' chi-square")
+  ps$Quantity <- ifelse(ps$metric %in% names(pretty), pretty[ps$metric], ps$metric)
+  ps <- ps[, c("Quantity", "abs_diff")]
+  ps$abs_diff <- sprintf("%.1e", ps$abs_diff)
+  names(ps)[2] <- "Max |magmaan - lavaan|"
+  knitr::kable(ps, row.names = FALSE,
+    caption = "Worst-case agreement with lavaan over h0 cells (rep 1).")
+} else cat("No parity rows (run without --lavaan-parity).")
+```
+
+magmaan's two-stage *reference law* is validated not against lavaan — whose
+`missing = "two.stage"` test scales by a different (observed-information-like)
+convention, so only the base matches — but from first principles: on normal data
+the base statistic equals the reference-law mean (`ncp_hat = mean(base) −
+mean(trace) ≈ 0`) for both estimators (`results/noncentrality.csv`).
+
+## Caveats
+
+- **Type-I only.** Nothing here is about power; that is a separate question.
+- **One correctly-specified one-factor model.** No claim about larger or
+  multi-factor models, or about misspecified fits.
+- **MAR adds no extra trouble here.** Under non-normality the base statistic sits
+  above the reference-law mean (`ncp_hat > 0`) at small `N`, but by roughly the
+  *same* amount under MCAR and under MAR (it is ≈ 0 only for normal data): a
+  finite-sample sandwich-trace effect of non-normality that shrinks with `N`, not
+  a missing-mechanism bias. This weak sign-based Savalei-Bentler 2005 MAR does
+  not move the corrected tests off level; a stronger MAR cause would.
+- **No Monte Carlo intervals are reported.** Read the rejection rates as point
+  estimates at the stated replicate count.
+
+## Reproduce
+
+```sh
+# Full default grid (norm + severe families, N in {150,300,600}, MCAR+MAR), 1000 reps:
+Rscript run_experiment.R --reps 1000 --lavaan-parity
+
+# Fast smoke (one cell, few reps):
+Rscript run_experiment.R --smoke
+
+# A single slice:
+Rscript run_experiment.R --dists pl2 --ns 150 --mechs MCAR --rates 0.30 --reps 500
+```
+
+Render with `quarto render report.qmd` after the run.

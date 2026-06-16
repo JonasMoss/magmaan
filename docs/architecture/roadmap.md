@@ -340,7 +340,22 @@ golden `parTable()` fixtures.
   `examples/fmg.R`. semTests'
   rescale-the-mis-normalized-lavInspect-UGamma FIML hack is unsound and is
   deliberately NOT matched. Under FIML only the biased Gamma-hat and the ML base
-  are defined; `_ug` and `_rls` are rejected. Nested/model-pair FIML FMG is
+  are defined; `_ug` and `_rls` are rejected.
+  Two-stage ML (`ML2S`) fits are supported the same way: `fmg_tests()` accepts a
+  `fit_ml2s()` / `magmaan(..., estimator = "ML2S")` fit and applies the
+  eigenvalue-tail transforms to the df-dimensional two-stage UGamma spectrum and
+  Stage-2 ML base chi-square already attached as `fit$ml2s` (`eigvals`, `chisq`,
+  `df`) by `two_stage_em_ml_inference`. The two-stage spectrum uses the same
+  saturated-moment EM ACOV as its meat but the complete-data normal-theory weight
+  as the U-metric; as under FIML, `_ug`/`_rls` are rejected and `h1_information`
+  is fixed at `"saturated"`. ML2S must be dispatched before FIML because a
+  two-stage fit also carries a `magmaan_fiml_data` raw object. The two-stage
+  reference law is validated from first principles by the consistency identity
+  `trace(UGamma) = E[T]` (normal-data `ncp_hat = mean(base) - mean(trace) ~ 0`),
+  not against lavaan's `missing = "two.stage"` test, which scales by a different
+  (observed-information-like) convention; only the two-stage *base* matches
+  lavaan to machine precision. Calibration evidence is in
+  `experiments/24-fiml-twostage-fmg-chisq`. Nested/model-pair FIML FMG is
   available through the existing `robust_nested_lrt()` / `nestedTest()`
   `method = "restriction_map"` route when both fits are FIML and carry
   compatible `raw_data`: it builds the H1-anchored saturated eta-space

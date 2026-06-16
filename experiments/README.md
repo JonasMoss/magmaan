@@ -39,6 +39,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 21 | [fiml-measurement-invariance-fmg](21-fiml-measurement-invariance-fmg/report.qmd) | paper-sim | active | Is the FIML FMG robust-test family feature-complete for measurement invariance? |
 | 22 | [robust-score-modification-indices](22-robust-score-modification-indices/report.qmd) | probe | active | Do robust modification indices / score tests change the omitted-path call (ordinal DWLS, continuous GLS), and reduce to naive where theory says c=1? |
 | 23 | [fiml-fmg-vs-mlr](23-fiml-fmg-vs-mlr/report.qmd) | paper-sim | active | Under non-normality + MCAR, do the FMG/pEBA FIML goodness-of-fit and nested tests beat the dominant MLR (Yuan-Bentler) default? |
+| 24 | [fiml-twostage-fmg-chisq](24-fiml-twostage-fmg-chisq/report.qmd) | paper-sim | active | Do the FMG full-spectrum goodness-of-fit chi-squares calibrate FIML and two-stage ML (ML2S) better than the Savalei low-moment corrections under non-normal incomplete data? |
 
 ## Archived
 
