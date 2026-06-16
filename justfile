@@ -194,3 +194,48 @@ check-layering:
 # Dependency layering + C++ tests + R smoke — everything. Layering runs first so
 # a cheap structural lint fails fast before the slow build.
 check: check-layering test r-check
+
+notes_dir := "docs/research/notes"
+
+# Build one research note (named, or the most recently edited) and open the PDF.
+note-build name="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="{{notes_dir}}"
+    if [ -n "{{name}}" ]; then
+        tex="$dir/$(basename "{{name}}" .tex).tex"
+    else
+        tex="$(ls -t "$dir"/*.tex 2>/dev/null | head -1 || true)"
+    fi
+    [ -n "${tex:-}" ] && [ -f "$tex" ] || { echo "no .tex note found in $dir"; exit 1; }
+    base="$(basename "$tex" .tex)"
+    cd "$dir"
+    pdflatex -interaction=nonstopmode -halt-on-error "$base.tex" >/dev/null
+    pdflatex -interaction=nonstopmode -halt-on-error "$base.tex" >/dev/null
+    rm -f "$base".{aux,log,out,toc}
+    if command -v xdg-open >/dev/null 2>&1; then opener=xdg-open; else opener=open; fi
+    if command -v setsid >/dev/null 2>&1; then
+        setsid "$opener" "$base.pdf" >/dev/null 2>&1 < /dev/null &
+    else
+        "$opener" "$base.pdf" >/dev/null 2>&1 &
+    fi
+    echo "built and opened $dir/$base.pdf"
+
+# Rebuild every research note (no viewer); report any that fail to compile.
+note-build-all:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    dir="{{notes_dir}}"
+    fail=0
+    shopt -s nullglob
+    for tex in "$dir"/*.tex; do
+        base="$(basename "$tex" .tex)"
+        if ( cd "$dir" && pdflatex -interaction=nonstopmode -halt-on-error "$base.tex" >/dev/null 2>&1 \
+                       && pdflatex -interaction=nonstopmode -halt-on-error "$base.tex" >/dev/null 2>&1 ); then
+            ( cd "$dir" && rm -f "$base".{aux,log,out,toc} )
+            echo "ok   $base"
+        else
+            echo "FAIL $base"; fail=1
+        fi
+    done
+    exit $fail

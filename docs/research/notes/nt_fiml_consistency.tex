@@ -119,36 +119,79 @@ the companion note.
 
 \section{MCAR: still distribution-free}
 
-With missing data the saturated MLE no longer has a closed form (it needs EM),
-so we switch from Lemma~\ref{lem:sat} to the estimating-equation view. Let unit
-$i$ have observed index set $o_i$ and contribute the Gaussian \emph{marginal}
-log-density $\log\phi(x_{i,o_i};\mu_{o_i},\Sigma_{o_io_i})$ with score
-$h_i(\eta)$.
+With missing data the saturated MLE loses the closed form of
+Lemma~\ref{lem:sat} (it needs EM), so we work directly with the FIML score and
+show it is an \emph{unbiased estimating equation} at the full-data moments. This
+makes the $h_i$ argument fully explicit.
+
+\paragraph{The FIML likelihood and its score.}
+Let unit $i$ have observed index set $o_i\subseteq\{1,\dots,p\}$ and observed
+subvector $x_{i,o_i}$. FIML contributes the Gaussian \emph{marginal} log-density
+of that subvector,
+\[
+  \ell_i(\eta)
+   = -\tfrac12\log\det\Sigma_{o_io_i}
+     -\tfrac12\,(x_{i,o_i}-\mu_{o_i})'\Sigma_{o_io_i}^{-1}(x_{i,o_i}-\mu_{o_i}),
+\]
+dropping the constant $-\tfrac12|o_i|\log2\pi$. Write the residual
+$r_i=x_{i,o_i}-\mu_{o_i}$ and the observed-block precision
+$W_i=\Sigma_{o_io_i}^{-1}$. Differentiating in the saturated coordinates
+$\eta=(\mu,\vech\Sigma)$ gives the casewise score
+$h_i(\eta)=\partial\ell_i/\partial\eta$, with a mean block and a covariance
+block,
+\[
+  \frac{\partial\ell_i}{\partial\mu_{o_i}} = W_i\,r_i,
+  \qquad
+  \frac{\partial\ell_i}{\partial\Sigma_{o_io_i}}
+    = \tfrac12\big(W_i\,r_i r_i'\,W_i - W_i\big),
+\]
+and \emph{zero} in every coordinate indexing an unobserved mean $\mu_j$
+($j\notin o_i$) or a covariance entry that touches an unobserved variable. (The
+covariance block is read in the symmetric matrix and mapped to $\vech$ by the
+duplication matrix, which has full column rank and so does not move the root.)
+Thus $h_i$ is a \emph{sparse} vector in $\eta$-space, supported exactly on the
+moments pattern $o_i$ observes; FIML is the stacked estimating equation
+$\sum_i h_i(\eta)=0$, in which each moment's row aggregates only the units that
+see it.
+
+\paragraph{Unbiasedness at the truth.}
+Read off the two blocks: the mean block has mean zero and the covariance block
+has mean zero exactly when
+\[
+  \E[r_i]=0
+  \qquad\text{and}\qquad
+  \E[r_i r_i'] = \Sigma_{0,o_io_i},
+\]
+i.e.\ when the observed subvector carries its \emph{population} first two
+moments. (For the covariance block, $\E[W_i r_i r_i' W_i - W_i]
+= W_i(\E[r_i r_i'] - \Sigma_{0,o_io_i})W_i = 0$ at $\eta_0$.) That is the only
+distributional fact the argument needs, and it is exactly what MCAR supplies.
 
 \begin{theorem}[MCAR consistency, distribution-free]\label{thm:mcar}
-Suppose missingness is MCAR, i.e.\ the response pattern $R$ is independent of
-$X$, with finite second moments, and every entry of $(\mu_0,\Sigma_0)$ is
-identified by some observed pattern. Then $\hat\eta\xrightarrow{p}\eta_0$; with a
-correctly specified structure, $\hat\theta\xrightarrow{p}\theta_0$.
+Suppose missingness is MCAR, the response pattern $R$ independent of $X$, with
+finite second moments, and every entry of $(\mu_0,\Sigma_0)$ identified by some
+observed pattern. Then $\hat\eta\xrightarrow{p}\eta_0$; with a correctly
+specified structure, $\hat\theta\xrightarrow{p}\theta_0$.
 \end{theorem}
 
 \begin{proof}
-Fix a pattern $o$. Under MCAR the units that realize $o$ are a random subsample,
-so $X_o$ carries the population marginal moments $(\mu_{0,o},\Sigma_{0,oo})$. The
-Gaussian marginal score is an unbiased estimating equation for those moments:
-its mean part has expectation
-$\E[\Sigma_{0,oo}^{-1}(X_o-\mu_{0,o})]=0$, and its covariance part is unbiased
-because $\E[(X_o-\mu_{0,o})(X_o-\mu_{0,o})']=\Sigma_{0,oo}$. Hence
-$\E\{h_o(\eta_0)\}=0$ for each $o$, and averaging over the MCAR pattern
-distribution preserves the zero. So $\eta_0$ is the population root of the
-stacked estimating equation $\sum_i h_i(\eta)=0$; $Z$-estimator consistency,
-under the stated identification, gives $\hat\eta\xrightarrow{p}\eta_0$, and the
-argmin step of Theorem~\ref{thm:complete} carries it to $\hat\theta$.
+Condition on the realized pattern. Under MCAR, $R\perp X$, so conditioning on
+$R_i=o$ does not change the law of $X_{i,o}$: it keeps the population marginal,
+whence $\E[r_i\mid R_i=o]=0$ and $\E[r_i r_i'\mid R_i=o]=\Sigma_{0,oo}$ at
+$\eta_0$. By the display above both score blocks then have conditional
+expectation zero, and the unobserved coordinates of $h_i$ are identically zero,
+so $\E\{h_i(\eta_0)\mid R_i=o\}=0$ for every pattern $o$. Averaging over the
+pattern distribution gives $\E\{h_i(\eta_0)\}=0$: the full-data $\eta_0$ is the
+population root of the FIML estimating equation. Under the stated identification
+(each moment seen by some pattern) the root is unique, so the $Z$-estimator
+$\hat\eta$ satisfies $\hat\eta\xrightarrow{p}\eta_0$; the argmin step of
+Theorem~\ref{thm:complete} carries it to $\hat\theta$.
 \end{proof}
 
-This is the consistency content behind the ``What MCAR buys'' section of the
-companion information note: under MCAR the observed-pattern normal score is
-unbiased at the full-data first two moments, no normality required.
+The single load-bearing step is $\E[r_i\mid R_i=o]=0$: under MCAR, selecting a
+pattern does not tilt the observed-block mean. That is exactly the step that
+breaks under MAR, where selection looks at the observed values and shifts their
+conditional mean; Section~\ref{sec:mar} is the accounting of that shift.
 
 \section{MAR: the real question}\label{sec:mar}
 
