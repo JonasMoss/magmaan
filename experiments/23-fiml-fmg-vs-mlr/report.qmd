@@ -188,12 +188,15 @@ if (nrow(mcar_hi)) {
   w <- w[match(ord, w$method), c("method", intersect(dist_ord, names(w)))]
   w <- w[!is.na(w$method), ]
   names(w)[1] <- "Method"
+  nn <- c("vm1", "vm2", "ig1", "ig2", "pl1", "pl2")
+  w[["Non-normal mean"]] <-
+    rowMeans(w[, intersect(nn, names(w)), drop = FALSE], na.rm = TRUE)
   num <- vapply(w, is.numeric, logical(1)); w[num] <- lapply(w[num], fmt)
   knitr::kable(w, align = "l", row.names = FALSE, caption = sprintf(
     paste("GOF Type-I under MCAR %s (nominal .05); rows are tests, columns the",
           "data families (norm; VM/IG/PL at moderate `1` and severe `2`",
-          "skew/kurtosis). FIML is consistent here, so this isolates the",
-          "reference-law correction."),
+          "skew/kurtosis). The final column averages the six non-normal families.",
+          "FIML is consistent here, so this isolates the reference-law correction."),
     fmt(max(mcar_hi$rate), 2)))
 }
 ```
