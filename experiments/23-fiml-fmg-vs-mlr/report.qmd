@@ -92,19 +92,24 @@ indicators $x_1,\dots,x_6$ in two groups ($n = 500$ and $350$). The population i
 **scalar-invariant** -- equal loadings and equal intercepts across groups -- with
 a group-2 factor-variance and latent-mean shift, so the fitted models are
 correctly specified under the null. Each replicate is fit at two nested
-invariance levels:
+invariance levels, **configural** (loadings free across groups) and **metric**
+(loadings tied). We report two likelihood-ratio tests, and the **metric model is
+the null $H_0$ in both**; only the alternative differs:
 
-- **configural** (loadings free across groups) -- the less restricted $H_1$;
-- **metric** (loadings tied across groups) -- $H_0$.
+- **goodness of fit** -- metric vs the *saturated* model ($\mathrm{df}=23$): does
+  the one-factor metric model fit the data at all? This is the ordinary test of
+  exact fit (the "model chi-square");
+- **nested invariance** -- *configural* vs metric ($\mathrm{df}=5$): the
+  chi-square-difference test of the five equal-loading constraints.
 
-The goodness-of-fit test is the metric model against the saturated observed-data
-model ($\mathrm{df}=23$); the nested test is configural vs metric. Power is
-created by two local misspecifications: a residual covariance between $x_5$ and
-$x_6$ (0.13) that the one-factor model omits (goodness-of-fit power), and a
-group-2 loading inflated $\times 1.35$ on one indicator (loading non-invariance;
-nested power). Non-normality (the VM/IG/PL families) and Savalei-Bentler
-MCAR/MAR missingness act on the generated indicators; the factor model is
-otherwise unchanged.
+Both are likelihood-ratio tests of one model nested in a larger one (metric in
+the saturated; metric in configural); the unqualified term "goodness of fit"
+means the first. Power is created by two local misspecifications, one per test:
+a residual covariance between $x_5$ and $x_6$ (0.13) that the one-factor model
+omits (powers the goodness-of-fit test), and a group-2 loading inflated
+$\times 1.35$ on one indicator (loading non-invariance; powers the nested test).
+Non-normality (the VM/IG/PL families) and Savalei-Bentler MCAR/MAR missingness
+act on the generated indicators; the factor model is otherwise unchanged.
 
 ## What is tested
 
@@ -124,10 +129,11 @@ normal model is correct, information equality gives $J = H$, so
 $\Gamma_{\mathrm{mis}} = H^{-1}$; under non-normality $J$ carries the third- and
 fourth-moment information and $\Gamma_{\mathrm{mis}} \ne H^{-1}$.
 
-The restricted SEM implies $\eta(\theta)$ with Jacobian
-$\Delta = \partial\eta(\theta)/\partial\theta'$. For a curvature $V$ the residual
-operator is $U(V) = V - V\Delta(\Delta'V\Delta)^{-1}\Delta'V$, and the FIML
-likelihood-ratio $T = 2(\hat\ell_1 - \hat\ell_0)$ has the limit
+Take the goodness-of-fit test first. The metric SEM implies $\eta(\theta)$ with
+Jacobian $\Delta = \partial\eta(\theta)/\partial\theta'$. For a curvature $V$ the
+residual operator is $U(V) = V - V\Delta(\Delta'V\Delta)^{-1}\Delta'V$, and the
+FIML likelihood-ratio against the *saturated* fit,
+$T = 2(\hat\ell_{\mathrm{sat}} - \hat\ell_{\mathrm{metric}})$, has the limit
 $$
   T \;\Rightarrow\; \sum_{j=1}^{\mathrm{df}} \lambda_j\, \chi^2_{1j},
   \qquad
@@ -148,6 +154,11 @@ reduce the spectrum $\{\lambda_j\}$:
 
 A mean-only $c$ is exact only when the $\lambda_j$ are equal; non-normality
 disperses them, so MLR must over-reject.
+
+The nested configural-vs-metric test ($\mathrm{df}=5$) is the same construction
+applied to the difference of the two models' residual operators (Satorra 2000);
+the spectrum reduction above carries over verbatim, and its results are in the
+`nested` rows of `results/summary_rejection.csv`.
 
 **Structured ($V_S$) vs unstructured ($V_{US}$).** $V$ is the curvature
 $U(V)$ is built from, and the two test variants differ only in where it is
