@@ -1,0 +1,322 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Information and score-covariance conventions for the FIML robust GOF
+test:\\ structured vs unstructured, hessian vs h1,\\ and why the meat stays
+saturated}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\eig}{\operatorname{eig}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\plim}{\operatorname*{plim}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+The robust reference law for the FIML likelihood-ratio statistic is the
+weighted mixture \(T \Rightarrow \sum_{j=1}^{\mathrm{df}}\lambda_j\chi^2_{1j}\)
+with \(\lambda_j=\eig_j\{U(V)\,\Omega\}\); see the companion note
+\emph{Saturated FIML Information, MLR, and FMG under Non-normality} for the
+construction of \(V\), \(\Omega\), the \(U\Gamma\) structure, and the Mplus
+two-trace bookkeeping. This note answers a narrower, recurring question: lavaan
+exposes \emph{three} computational switches that all sound like ``structured vs
+saturated,'' and they are routinely conflated. We
+
+\begin{enumerate}
+\item separate the three axes and state, in a clean \((J,K,\Delta)\) notation,
+what each one varies (Section~\ref{sec:axes});
+\item record that the \texttt{hessian}/\texttt{h1} axis has \emph{opposite}
+correct answers for standard errors and for the test (Section~\ref{sec:hessh1});
+\item give the whitening identity that localizes all non-normality in the meat,
+and correct an overclaim about \emph{why} the meat is held saturated: the case
+is finite-sample and numerical, not asymptotic size (Section~\ref{sec:meat});
+\item document a positive-definiteness hazard in the structured-\(V\) path and
+audit what magmaan does and does not guard (Section~\ref{sec:pd}).
+\end{enumerate}
+
+The headline conclusions: magmaan uses observed information, builds \(U\) in
+saturated (\(\eta\)) coordinates so it is implicitly on the \texttt{h1} side,
+and holds the meat \(\Omega\) at the saturated estimate. Only the \(U\)-side
+curvature is offered structured or saturated, and the structured option is the
+one with the failure modes.
+
+\section*{Setup and notation}
+
+Let \(\xi=(\mu,\vech\Sigma)\) be the saturated (\(\mathrm{H}_1\)) parameters,
+\(\ell(\xi;x)=\log\phi_{R}(x;\xi)\) the per-observation observed-data normal
+log-likelihood for missingness pattern \(R\), and
+\(u(\xi;x)=\partial\ell/\partial\xi\) the saturated score. Write
+\[
+  J = -\E\{D^2_\xi\ell(\xi^\star)\},
+  \qquad
+  K = \Cov\{u(\xi^\star)\},
+  \qquad
+  \Omega = J^{-1}KJ^{-1},
+\]
+all at the least-false \(\xi^\star\); \(\Omega\) is the sandwich asymptotic
+covariance of the saturated estimate \(\hat\xi\). Let \(\Xi:\theta\mapsto\xi\) be
+the restricted SEM map, \(\Delta=\partial\Xi/\partial\theta'\) (projected into
+the equality-constraint tangent space when present), and
+\[
+  U(V) = V - V\Delta(\Delta'V\Delta)^{-1}\Delta'V .
+\]
+Every one of \(J\), \(K\), \(V\) must be evaluated at some point; the candidates
+are the saturated MLE \(\tilde\xi\) and the restricted point \(\xi(\hat\theta)\).
+Finite-sample magmaan units (\(V_N\sim N\), \(\hat\Gamma_{\mathrm{mis}}\sim
+1/N\)) are as in the companion note and do not affect any eigenvalue here.
+
+\section*{Three computational axes}
+\label{sec:axes}
+
+The four-cell tables of Savalei and Rosseel \cite{savaleirosseel2022} cross
+three \emph{independent} binary choices. In our notation:
+
+\begin{description}
+\item[A. \texttt{information} = expected / observed.] How \(J\) (their
+\(A_\beta\)) is formed. \emph{Observed} is the genuine averaged second
+derivative \(-\tfrac1n\sum_i D^2_{\hat\xi}\ell_{x_i}\), which uses the
+\emph{sample} per-pattern moments \(\bar y_j,S_j\) (their Eq.~5 form, carrying
+\(h_j=\Sigma_j^{-1}(\bar y_j-\mu_j)\)). \emph{Expected} replaces the sample
+moments by the model's own, giving the clean block-diagonal Fisher form
+\(W(\hat\xi)\) (their Eq.~8). magmaan uses \emph{observed}: the analytic routine
+\verb|fiml_saturated_hessian_analytic_block| builds exactly the sample-moment
+Hessian (the \(\bar y_j-\mu_j\) and \(S_j\) terms are explicit), not the Fisher
+form.
+
+\item[B. \texttt{h1.information} = structured / unstructured.] The
+\emph{evaluation point} \(\hat\xi\). \emph{Unstructured} evaluates at the
+saturated MLE \(\tilde\xi\); \emph{structured} at the model-implied
+\(\xi(\hat\theta)\). This is the only axis magmaan exposes, as
+\verb|estimate::FIMLH1Information::{Saturated,Structured}|, and it acts on the
+\(U\)-side curvature \(V\) only.
+
+\item[C. \texttt{observed.information} = hessian / h1.] A \(\theta\)-space
+choice: whether the structural information includes the chain-rule curvature
+term. With \(d_\beta\) the saturated gradient and \(H=\partial\vec(\Delta')/
+\partial\theta'\),
+\[
+  \underbrace{A_\theta = \Delta'J\Delta - (d_\beta'\otimes I)H}_{\texttt{hessian}},
+  \qquad
+  \underbrace{A_{\theta,\mathrm{h1}} = \Delta'J\Delta}_{\texttt{h1}} .
+\]
+magmaan never forms the numeric \(\theta\)-Hessian; it builds \(U\) in
+\(\xi\)-space via \(\Delta'V\Delta\), so it is implicitly \texttt{h1}.
+\end{description}
+
+\begin{remark}[The names collide two axes]
+``h1'' in axis~C names the \emph{model whose information matrix is sandwiched}
+(\(\Delta'A_\beta\Delta\)), not an evaluation point; the evaluation point is
+axis~B. So \texttt{observed.information="h1"} and
+\texttt{h1.information="structured"} are orthogonal, despite both saying ``h1''.
+``hessian'' is equally unfortunate: both objects in axis~C are Hessians. The
+collision is the source of the recurring confusion.
+\end{remark}
+
+\section*{Hessian vs h1: opposite verdicts for SEs and the test}
+\label{sec:hessh1}
+
+\begin{lemma}\label{lem:vanish}
+The correction \((d_\beta'\otimes I)H\) is zero at \(\tilde\xi\) (saturated
+first-order condition \(d_\beta(\tilde\xi)=0\)) and is \(O_p(\text{misfit})\) at
+\(\xi(\hat\theta)\), vanishing under \(\mathrm{H}_0\). Hence \texttt{hessian}
+and \texttt{h1} coincide for unstructured evaluation, and differ for structured
+evaluation only off \(\mathrm{H}_0\).
+\end{lemma}
+
+\paragraph{Standard errors: \texttt{hessian} is the consistent bread.} Under
+misspecification the Huber--White bread must be the genuine Hessian
+\(A_\theta=-D^2_\theta\ell(\hat\theta)\) \cite{white1982}. That is the
+\texttt{hessian} object; the \texttt{h1} object drops a term nonzero off
+\(\mathrm{H}_0\). So \(\hat A_\theta\) is consistent for \(A_\theta^\star\)
+whatever the truth, while \(\Delta'\hat A_\beta\Delta\) is consistent only under
+\(\mathrm{H}_0\) \cite{savaleirosseel2022}. For SEs, \texttt{h1} is the
+approximation.
+
+\paragraph{The test: \texttt{h1} is the exact projector.} For the GOF test the
+\(\theta\)-space information enters only as the middle inverse of \(U\). Compare
+\[
+  U_{\mathrm{h1}} = V - V\Delta(\Delta'V\Delta)^{-1}\Delta'V,
+  \qquad
+  U_{\mathrm{hess}} = V - V\Delta\,A_\theta^{-1}\,\Delta'V .
+\]
+\(U_{\mathrm{h1}}\) is an exact residual operator of rank \(\mathrm{df}=
+\dim\xi-\rank\Delta\) by construction; \(U_{\mathrm{hess}}\) has that rank only
+asymptotically and only under \(\mathrm{H}_0\) \cite[Table~6]{savaleirosseel2022}.
+Off \(\mathrm{H}_0\) the hessian middle leaks spurious nonzero eigenvalues into
+the mixture. magmaan's \(\xi\)-space construction is \(U_{\mathrm{h1}}\); the
+post-hoc check that the largest projected-out eigenvalue is \(\approx 0\)
+(\verb|fiml_ugamma_spectrum_impl|) is meaningful precisely because the operator
+is the exact projector.
+
+\begin{remark}
+So \texttt{observed.information="hessian"} is not ``wrong''; it is the right
+bread for misspecification-robust SEs and the wrong shape for the GOF test
+(rank impurity for no gain). We do the test, we are implicitly \texttt{h1}, and
+that is the correct call.
+\end{remark}
+
+\section*{Why the meat \(\Omega\) stays saturated}
+\label{sec:meat}
+
+\begin{lemma}[Whitening]\label{lem:white}
+If the \(U\)-side curvature equals the meat bread, \(V=J\), then with
+\(J=J^{1/2}J^{1/2}\),
+\[
+  \eig\{U(J)\,\Omega\}
+    =
+  \eig\!\big\{(I-P)\,J^{-1/2}KJ^{-1/2}\big\},
+  \qquad
+  P = J^{1/2}\Delta(\Delta'J\Delta)^{-1}\Delta'J^{1/2},
+\]
+where \(P\) is the orthogonal projector onto \(\operatorname{range}(J^{1/2}
+\Delta)\) of rank \(\rank\Delta\).
+\end{lemma}
+\begin{proof}
+\(U(J)=J^{1/2}(I-P)J^{1/2}\), so \(U(J)\Omega=J^{1/2}(I-P)J^{-1/2}KJ^{-1}\);
+conjugating by \(J^{-1/2}\) preserves eigenvalues and yields
+\((I-P)J^{-1/2}KJ^{-1/2}\).
+\end{proof}
+
+Lemma~\ref{lem:white} says all non-normality lives in the \emph{whitened meat}
+\(J^{-1/2}KJ^{-1/2}\) projected onto the rank-\(\mathrm{df}\) residual space:
+under the information equality \(K=J\) it is the identity, every residual
+eigenvalue is one, and \(T\Rightarrow\chi^2_{\mathrm{df}}\); the spectrum
+spreads exactly as \(K\) departs from \(J\). The meat is the matrix one must not
+get wrong.
+
+\begin{remark}[Size is fine either way; the case is finite-sample]
+Under \(\mathrm{H}_0\) both the saturated meat \(\tilde K\) and a (centered)
+structured meat \(\hat K\) are consistent for the null \(K\), so both give
+asymptotically correct size; under a fixed alternative the test is consistent
+regardless of the meat. There is therefore \emph{no} asymptotic argument either
+way, and the earlier claim that the saturated meat is ``the only choice
+consistent under the alternative'' is too strong. The real case for the
+saturated meat is finite-sample and numerical:
+\begin{enumerate}
+\item \(\tilde\xi\to\xi^\star\) whether or not \(\mathrm{H}_0\) holds (the
+saturated model is never misspecified), and at \(\tilde\xi\) the saturated
+scores are mean-zero by the first-order condition, so
+\(\tilde K=\tfrac14\sum_i u(\tilde\xi)u(\tilde\xi)'\) is a clean variance;
+\item the uncentered structured meat at \(\xi(\hat\theta)\) adds
+\(\bar s\,\bar s'\), the squared misfit gradient, which is \(0\) only in the
+limit under \(\mathrm{H}_0\) and inflates the meat in finite samples and under
+misfit;
+\item the Satorra--Bentler convention holds \(\Omega\) saturated and varies only
+\(U(V)\) \cite{satorrabentler1994,satorra2000}, and the complete-data evidence
+mildly prefers saturated information \cite{xia2016,savaleirosseel2022}.
+\end{enumerate}
+\end{remark}
+
+\begin{remark}[magmaan's structured cell is a hybrid]
+Lemma~\ref{lem:white} needs \(V=J\). magmaan's \texttt{Structured} option uses
+\(V=V(\xi(\hat\theta))\) for \(U\) while keeping the meat bread at
+\(\tilde\xi\); the clean whitening then fails, which is exactly the
+Satorra--Bentler ``structured \(U^0\), unstructured \(\Omega^0\)'' cell rather
+than a fully structured construction.
+\end{remark}
+
+\section*{Positive-definiteness hazard of structured \(V\)}
+\label{sec:pd}
+
+\begin{lemma}\label{lem:pd}
+\(V(\tilde\xi)\) is positive definite (observed information at the saturated
+optimum, by second-order optimality). \(V(\xi(\hat\theta))\) is the saturated
+observed Hessian at a non-optimal point; off \(\mathrm{H}_0\) its data terms in
+\(\bar y_j-\mu_j(\hat\theta)\) need not be dominated and \(V\) can be indefinite.
+\end{lemma}
+
+When \(V\) is indefinite, \(U(V)\) loses its residual-projector meaning,
+\(\Delta'V\Delta\) may be indefinite, and a retained eigenvalue can turn
+negative even though the mixture \(\sum_j\lambda_j\chi^2_{1j}\) assumes
+\(\lambda_j\ge 0\). The default \texttt{Saturated} path is unaffected by
+Lemma~\ref{lem:pd}; the hazard is confined to the opt-in \texttt{Structured}
+path, and it bites precisely where the model is misspecified (the regime that a
+GOF simulation targets).
+
+\paragraph{What magmaan does and does not guard.} As of this writing the
+structured path crosses its fingers:
+\begin{itemize}
+\item No definiteness test on \(V\). \verb|fiml_structured_h1_information| only
+Cholesky-tests the model-implied \(\Sigma_{oo}\) (always PD), which says nothing
+about the assembled \(V\).
+\item \verb|invert_symmetric| tries \verb|LLT| and on failure \emph{silently}
+falls back to \verb|LDLT|, which succeeds for any non-singular symmetric matrix;
+an indefinite \(\Delta'V\Delta\) is inverted with no error or signal, only an
+outright singular one fails.
+\item The rank sanity check inspects a \emph{single} boundary eigenvalue and
+does not check the sign of the retained \(\mathrm{df}\) eigenvalues that feed the
+FMG/pEBA mixture.
+\end{itemize}
+
+\paragraph{Status.} Saturated is the default and the FMG-spectrum convention.
+Structured-h1 is not asymptotically advantageous, is PD-unsafe, and is the
+combination that reproduces lavaan-MLR's bread (so removing it would end exact
+MLR bread reproduction from magmaan, though an MLR baseline run via lavaan is
+unaffected). An evaluation is queued in the backlog: under the experiment-23
+misspecified conditions, measure how often structured \(V\)/\(\Delta'V\Delta\)
+goes indefinite and whether structured-h1 ever beats saturated on Type-I or
+power; if it never helps, drop the option and keep \texttt{Saturated} as the
+sole FIML-FMG path.
+
+\begin{thebibliography}{9}
+
+\bibitem{savaleirosseel2022} Savalei, V., \& Rosseel, Y. (2022). Computational
+options for standard errors and test statistics with incomplete normal and
+nonnormal data in SEM. \emph{Structural Equation Modeling}, 29(2), 163--181.
+\href{https://doi.org/10.1080/10705511.2021.1877548}{doi:10.1080/10705511.2021.1877548}.
+
+\bibitem{satorrabentler1994} Satorra, A., \& Bentler, P.~M. (1994). Corrections
+to test statistics and standard errors in covariance structure analysis. In
+\emph{Latent Variables Analysis} (pp.~399--419). Sage.
+
+\bibitem{satorra2000} Satorra, A. (2000). Scaled and adjusted restricted tests
+in multi-sample analysis of moment structures. In \emph{Innovations in
+Multivariate Statistical Analysis} (pp.~233--247). Kluwer.
+
+\bibitem{yuanbentler2000} Yuan, K.-H., \& Bentler, P.~M. (2000). Three
+likelihood-based methods for mean and covariance structure analysis with
+nonnormal missing data. \emph{Sociological Methodology}, 30, 165--200.
+\href{https://doi.org/10.1111/0081-1750.00078}{doi:10.1111/0081-1750.00078}.
+
+\bibitem{browne1984} Browne, M.~W. (1984). Asymptotically distribution-free
+methods for the analysis of covariance structures. \emph{British Journal of
+Mathematical and Statistical Psychology}, 37, 62--83.
+\href{https://doi.org/10.1111/j.2044-8317.1984.tb00789.x}{doi:10.1111/j.2044-8317.1984.tb00789.x}.
+
+\bibitem{white1982} White, H. (1982). Maximum likelihood estimation of
+misspecified models. \emph{Econometrica}, 50(1), 1--25.
+\href{https://doi.org/10.2307/1912526}{doi:10.2307/1912526}.
+
+\bibitem{xia2016} Xia, Y., Yung, Y.-F., \& Zhang, W. (2016). Evaluating the
+selection of normal-theory weight matrices in the Satorra--Bentler correction of
+chi-square and standard errors. \emph{Structural Equation Modeling}, 23,
+585--594.
+\href{https://doi.org/10.1080/10705511.2016.1141354}{doi:10.1080/10705511.2016.1141354}.
+
+\bibitem{imhof1961} Imhof, J.~P. (1961). Computing the distribution of quadratic
+forms in normal variables. \emph{Biometrika}, 48, 419--426.
+\href{https://doi.org/10.2307/2332763}{doi:10.2307/2332763}.
+
+\end{thebibliography}
+
+\end{document}
