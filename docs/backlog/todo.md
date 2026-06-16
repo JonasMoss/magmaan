@@ -437,6 +437,31 @@ decisions in the simulation backlog.
   UGamma spectrum and nested FIML restriction-map route landed 2026-06. The
   high-level `magmaan(estimator = "FIML")` path now auto-enables mean structure
   for syntax-backed models and rejects explicit `meanstructure = FALSE`.
+- **M, evaluation — structured-h1 FIML FMG: keep or ditch.** The FIML FMG U·Γ
+  spectrum exposes `estimate::FIMLH1Information::Structured`, which evaluates the
+  U-side information `V` (the saturated observed Hessian `J`) at the model-implied
+  moments `ξ(θ̂)` instead of the saturated `ξ̃` (`fiml_structured_h1_information`,
+  `src/estimate/fiml.cpp:2155`; consumed in `fiml_ugamma_spectrum_impl`, `:2245`).
+  Concern: at `ξ(θ̂)` the observed Hessian is not guaranteed positive definite
+  off-H₀ (the `ȳ_j − μ_j(θ̂)` terms, `:842-846`), and nothing guards it. The only
+  definiteness check is on the model-implied `Σ_oo` (always PD); `invert_symmetric`
+  silently LDLT-falls-back on an indefinite `Δ'VΔ` (`:500-517`); and the rank
+  sanity check (`:2374`) is necessary-not-sufficient (one boundary eigenvalue, no
+  sign check on the retained spectrum, which then feeds the FMG/pEBA mixture that
+  assumes `λᵢ ≥ 0`). The default `Saturated` evaluates `V` at the saturated
+  optimum `ξ̃`, PD by second-order optimality, so it is unaffected. Structured-h1
+  is *not* asymptotically advantageous (both consistent under H₀); the
+  Satorra-Bentler convention keeps the meat/`Ω` saturated and varies only `U⁰`,
+  and the complete-data evidence (Xia et al. 2016, via Savalei & Rosseel 2022)
+  mildly prefers the saturated/unstructured information. Evaluation: under the
+  exp-23 misspecified conditions, measure (a) how often structured `V` / `Δ'VΔ`
+  goes indefinite, and (b) whether structured-h1 ever beats saturated on Type-I /
+  power. If it never helps and risks indefiniteness, remove the `Structured`
+  option and keep `Saturated` as the sole FIML-FMG path (the FMG-spectrum
+  convention anyway). Caveat to weigh before removal: structured-h1 + observed-info
+  is the combination that gives lavaan-MLR bread parity, so dropping it ends exact
+  MLR reproduction from magmaan (the exp-23 MLR baseline runs via lavaan, so the
+  comparison itself is unaffected).
 - **Ordinal/polychoric FMG (`papers/ordinal-fmg/` Paper 2).** Core gate **landed
   2026-06-13** (commit b8c6dcb): `fmg_tests_ordinal()` / `fmg_tests_mixed_ordinal()`
   apply the FMG eigenvalue-tail transforms to the `robust_ordinal()` /
