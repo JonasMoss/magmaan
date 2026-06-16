@@ -211,6 +211,43 @@ if (nrow(mcar_hi)) {
 }
 ```
 
+```{=latex}
+\newpage
+```
+
+Under MAR the same table tells the same story: the weak sign-based mechanism
+leaves FIML nearly unbiased, so the calibrated tests stay near 5%.
+
+```{r tab-mar}
+mar_hi <- {
+  r <- if ("MAR" %in% gof$mech) max(gof$rate[gof$mech == "MAR"]) else NA
+  gof[gof$truth == "h0" & gof$mech == "MAR" & gof$rate == r, ]
+}
+if (nrow(mar_hi)) {
+  ord <- c("naive","MLR","YB_exact","YB_exact_structured","SS",
+           "SS_structured","SF","EBA4","pEBA4","pEBA4_structured","pall",
+           "pOLS","all","all_structured")
+  dist_ord <- c("norm","vm1","vm2","ig1","ig2","pl1","pl2")
+  w <- reshape(mar_hi[, c("dist","method","reject")], idvar = "method",
+               timevar = "dist", direction = "wide")
+  names(w) <- sub("^reject\\.", "", names(w))
+  w <- w[match(ord, w$method), c("method", intersect(dist_ord, names(w)))]
+  w <- w[!is.na(w$method), ]
+  names(w)[1] <- "Method"
+  w$Method <- sub("_structured$", " (str)", w$Method)
+  w$Method <- sub("^YB_exact", "YB", w$Method)
+  nn <- c("vm1", "vm2", "ig1", "ig2", "pl1", "pl2")
+  w[["NN mean"]] <-
+    rowMeans(w[, intersect(nn, names(w)), drop = FALSE], na.rm = TRUE)
+  pct <- function(x) formatC(100 * x, format = "f", digits = 1)
+  num <- vapply(w, is.numeric, logical(1)); w[num] <- lapply(w[num], pct)
+  knitr::kable(w, align = "l", row.names = FALSE, caption = sprintf(
+    paste("GOF Type-I error (%%), MAR %s%% (nominal 5%%). Last column: mean",
+          "over the six non-normal families. SB = YB; (str) = structured H1."),
+    formatC(100 * max(mar_hi$rate), format = "d")))
+}
+```
+
 ```{r tab-power}
 PW <- if (file.exists(file.path(res_dir, "power_adjusted.csv")))
   read.csv(file.path(res_dir, "power_adjusted.csv"), stringsAsFactors = FALSE) else NULL
