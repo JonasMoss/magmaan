@@ -158,6 +158,33 @@ stopifnot(inherits(tab_mg, "magmaan_fmg_tests"))
 stopifnot(all(tab_mg$base == "ml"), all(is.finite(tab_mg$p_value)))
 cat("FIML FMG (single + multi-group) workflow: ok\n")
 
+# ---- Two-stage ML (ML2S) FMG ------------------------------------------------
+# The two-stage spectrum and Stage-2 ML base chi-square are attached to the fit
+# as $ml2s; fmg_tests() applies the same eigenvalue-tail transforms to that
+# triple. Under ML2S, as under FIML, only the biased Gamma-hat and the ML base
+# are defined (_ug / _rls rejected) and h1_information is fixed at "saturated".
+fit_2s <- magmaan(model, df_na, estimator = "ML2S")
+stopifnot(identical(fit_2s$estimator, "ML2S"), !is.null(fit_2s$ml2s),
+          length(fit_2s$ml2s$eigvals) == fit_2s$ml2s$df)
+tab_2s <- fmg_tests(fit_2s, tests = c("std", "sb", "ss", "sf", "all", "pall",
+                                      "peba2", "peba4", "peba6", "pols"))
+stopifnot(inherits(tab_2s, "magmaan_fmg_tests"))
+stopifnot(all(tab_2s$base == "ml"), all(!tab_2s$ug))
+stopifnot(all(is.finite(tab_2s$p_value)),
+          all(tab_2s$p_value >= 0), all(tab_2s$p_value <= 1))
+stopifnot(all(tab_2s$df == fit_2s$ml2s$df), fit_2s$ml2s$df > 0L)
+# The SB transform must reproduce the two-stage mean-scaled p-value exactly.
+p_sb_2s <- tab_2s$p_value[tab_2s$method == "sb"]
+p_sb_ref <- pchisq(fit_2s$ml2s$chisq_scaled, fit_2s$ml2s$df, lower.tail = FALSE)
+stopifnot(abs(p_sb_2s - p_sb_ref) < 1e-8)
+# Default tests resolve; _ug and an explicit _rls base are refused.
+stopifnot(nrow(fmg_tests(fit_2s)) == 5L)
+stopifnot(grepl("unbiased",
+  tryCatch(fmg_tests(fit_2s, tests = "sb_ug"), error = conditionMessage)))
+stopifnot(grepl("RLS",
+  tryCatch(fmg_tests(fit_2s, tests = "peba4_rls"), error = conditionMessage)))
+cat("ML2S (two-stage) FMG workflow: ok\n")
+
 # Oracle parity: magmaan's FMG p-values must match semTests::pvalues() value-for-
 # value over the full test x gamma x base grid. semTests reads the UGamma spectra
 # and base statistics off a lavaan robust fit; magmaan computes them itself, so an

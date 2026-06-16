@@ -547,6 +547,12 @@ work lives in [`speculative.md`](speculative.md). Open work:
   the saturated EM moments and attach Savalei-Bentler-style corrected SEs plus
   scaled chi-square from the Stage-1 `(H, J, ACOV)` ingredients. The GLS branch
   remains an explicit research comparator, not a named high-level estimator.
+  `fmg_tests()` now accepts an ML2S fit: the eigenvalue-tail family (SS/all/pall/
+  pEBA/pOLS, plus the SB/SS/SF low-moment matches) is applied to the df-dim
+  two-stage UGamma spectrum + Stage-2 ML base on `fit$ml2s`. The two-stage
+  reference law is validated by `trace(UGamma) = E[T]` (normal-data ncp ~ 0), not
+  lavaan's divergent `missing="two.stage"` scaling; only the base matches lavaan.
+  Calibration study: `experiments/24-fiml-twostage-fmg-chisq`.
 - **Landed; remainder in speculative.** The Van-Praag pairwise covariance
   machinery (`data::pairwise_sample_stats`,
   `robust::pairwise_casewise_contributions`, `data::gamma_nt_pairwise`,

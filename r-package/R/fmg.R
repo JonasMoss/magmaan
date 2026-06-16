@@ -272,6 +272,7 @@
 
 .fmg_resolve_default_tests <- function(fit, tests) {
   if (!is.null(tests)) return(tests)
+  if (.fmg_is_ml2s(fit)) return(.fmg_default_tests_ml2s())
   if (.fmg_is_fiml(fit)) .fmg_default_tests_fiml() else .fmg_default_tests()
 }
 
@@ -332,6 +333,101 @@
   out <- .fmg_rows_to_df(rows)
   attr(out, "trace_xcheck") <- sp$trace_xcheck
   attr(out, "h1_information") <- sp$h1_information
+  out
+}
+
+# ── Two-stage ML (ML2S) ─────────────────────────────────────────────────────
+# A two-stage missing-data fit estimates the saturated EM moments (Stage 1) and
+# fits the structured model to them by complete-data ML (Stage 2). The reference
+# law T_ML2 -> sum_j lambda_j chi^2_1 uses the same saturated-moment EM ACOV as
+# the meat (Gamma_TS) but the complete-data normal-theory weight as the U-metric,
+# with the Stage-2 ML chi-square as the base statistic. Both the df-dimensional
+# UGamma spectrum and the base statistic are already attached to the fit as
+# `fit$ml2s` (eigvals, chisq, df) by `fit_ml2s()` /
+# `estimate_two_stage_em(kind = "ml")`, so an ML2S FMG test is just the
+# estimator-agnostic eigenvalue-tail transform applied to that
+# (chi-square, df, eigvals) triple --- exactly as on the ordinal and FIML paths.
+#
+# Like FIML, the EM ACOV is itself the asymptotic Gamma, so the Du-Bentler
+# unbiased Gamma (`_ug`) is undefined; and the base is the Stage-2 ML statistic,
+# so the complete-data RLS base (`_rls`) is rejected.
+
+.fmg_is_ml2s <- function(fit) {
+  identical(.fmg_fit_estimator(fit), "ML2S")
+}
+
+.fmg_default_tests_ml2s <- function() {
+  c("pEBA4", "pEBA2", "pEBA6", "SB", "SS")
+}
+
+.fmg_adjust_specs_ml2s <- function(specs) {
+  lapply(specs, function(s) {
+    if (isTRUE(s$ug)) {
+      stop("fmg_tests(): under ML2S only the biased Gamma-hat is supported; the ",
+           "unbiased Du-Bentler Gamma is undefined for missing-data EM moments ",
+           "(test '", s$input, "').", call. = FALSE)
+    }
+    if (identical(s$base, "rls")) {
+      if (isTRUE(s$base_explicit)) {
+        stop("fmg_tests(): under ML2S only the Stage-2 ML base statistic is ",
+             "supported; the RLS (browne.residual.nt.model) base requires the ",
+             "classical complete-data normal-theory ML case (test '", s$input,
+             "').", call. = FALSE)
+      }
+      s$base <- "ml"
+      s$canonical <- sub("_rls$", "_ml", s$canonical)
+    }
+    s
+  })
+}
+
+# Pull the two-stage spectrum/base/df triple. Every `fit_ml2s()` fit carries it
+# as `fit$ml2s`; recompute from the retained missing-data `$raw_data` only if it
+# is absent.
+.fmg_ml2s_spectrum <- function(fit, h_step = 1e-4) {
+  sp <- fit$ml2s
+  if (is.null(sp) || is.null(sp$eigvals) || is.null(sp$chisq) ||
+      is.null(sp$df)) {
+    raw <- fit$raw_data
+    if (is.null(raw)) {
+      stop("fmg_tests(): ML2S FMG requires the fit's two-stage inference ",
+           "($ml2s) or its missing-data $raw_data to recompute it.",
+           call. = FALSE)
+    }
+    sp <- estimate_two_stage_em_ml_inference(fit, raw, h_step)
+  }
+  sp
+}
+
+# ML2S result rows: the spectrum and the Stage-2 ML base chi-square come from the
+# two-stage inference already attached to the fit. Mirrors `.fmg_result_rows_fiml`
+# and `.fmg_result_rows_ordinal`.
+.fmg_result_rows_ml2s <- function(fit, specs, h_step = 1e-4) {
+  sp <- .fmg_ml2s_spectrum(fit, h_step)
+  df <- sp$df
+  eigvals <- sp$eigvals
+  rows <- lapply(specs, function(s) {
+    res <- infer_fmg_test(sp$chisq, df, eigvals,
+                          method = s$method,
+                          param = .fmg_param_for_cpp(s$param))
+    list(input = s$input,
+         label = s$canonical,
+         p_value = res$p_value,
+         df = res$df,
+         base = "ml",
+         base_statistic = res$chi2_source,
+         method = res$method,
+         param = if (is.na(s$param)) NA_real_ else res$param,
+         ug = FALSE,
+         chi2_equiv = res$chi2_equiv,
+         n_truncated = res$n_truncated,
+         eigenvalues = eigvals,
+         lambdas_raw = res$lambdas_raw,
+         lambdas = res$lambdas,
+         lambdas_reference = res$lambdas_reference)
+  })
+  out <- .fmg_rows_to_df(rows)
+  attr(out, "trace_xcheck") <- sp$trace_ugamma
   out
 }
 
@@ -503,7 +599,14 @@ fmg_nested_ordinal <- function(fit_H1, fit_H0, ordinal_stats, tests = NULL,
 #' `_rls` are rejected (an unsuffixed base resolves to ML). This is a principled
 #' construction, not a port of semTests' (unsound) FIML handling.
 #'
-#' @param fit A fitted magmaan ML (complete-data) or FIML model.
+#' Two-stage ML (ML2S) fits (`fit_ml2s()` / `magmaan(..., estimator = "ML2S")`)
+#' are supported the same way: the df-dimensional UGamma spectrum and the
+#' Stage-2 ML base chi-square are taken from the two-stage inference already
+#' attached to the fit (`fit$ml2s`), and the eigenvalue-tail transforms are
+#' applied to that triple. As under FIML, `_ug` and `_rls` are rejected and
+#' `h1_information` is fixed at its `"saturated"` default.
+#'
+#' @param fit A fitted magmaan ML (complete-data), FIML, or ML2S model.
 #' @param tests Character vector of semTests-style test names, or `NULL` for the
 #'   recommended defaults (complete-data or FIML-appropriate). Recognised types:
 #'   `std`, `sb`, `ss`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, `pols<gamma>`, each
@@ -523,6 +626,21 @@ fmg_tests <- function(fit, tests = NULL, data = NULL,
   h1_information <- match.arg(h1_information)
   tests <- .fmg_resolve_default_tests(fit, tests)
   specs <- lapply(tests, .fmg_parse_test)
+  # ML2S must be checked before FIML: a two-stage fit also carries a
+  # `magmaan_fiml_data` raw object, so `.fmg_is_fiml()` would otherwise claim it.
+  if (.fmg_is_ml2s(fit)) {
+    if (!is.null(data)) {
+      stop("fmg_tests(): ML2S FMG uses the fit's own two-stage spectrum; the ",
+           "`data` argument is not supported for ML2S fits.", call. = FALSE)
+    }
+    if (!identical(h1_information, "saturated")) {
+      stop("fmg_tests(): h1_information is fixed for ML2S fits (the two-stage ",
+           "convention uses the complete-data weight as the U-metric); only the ",
+           "default 'saturated' is accepted.", call. = FALSE)
+    }
+    specs <- .fmg_adjust_specs_ml2s(specs)
+    return(.fmg_result_rows_ml2s(fit, specs))
+  }
   if (.fmg_is_fiml(fit)) {
     if (!is.null(data)) {
       stop("fmg_tests(): FIML FMG uses the fit's own missing-data raw blocks; ",
