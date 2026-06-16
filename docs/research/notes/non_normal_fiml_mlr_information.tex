@@ -4,7 +4,8 @@
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{hyperref}
 
-\title{Saturated FIML Information, MLR, and FMG under Non-normal MCAR Data}
+\title{Saturated FIML Information, MLR, and FMG under Non-normal
+Incomplete Data}
 \author{}
 \date{\today}
 
@@ -89,6 +90,40 @@ sample moments \cite{browne1984}. If the observed-data normal model is
 correctly specified, information equality gives \(J_\eta = H_\eta\). Under
 non-normality, \(J_\eta\) generally contains the relevant third- and
 fourth-moment information and is not equal to \(H_\eta\).
+
+\section*{The FIML likelihood-ratio statistic}
+
+The restricted SEM is the null \(H_0:\eta=\eta(\theta)\) nested in the
+saturated H1 model. Let \(\hat\eta\) be the saturated FIML maximizer and
+\(\eta(\hat\theta)\) the restricted FIML maximizer of the same observed-data
+normal log-likelihood. The goodness-of-fit statistic is the ordinary
+likelihood-ratio,
+\[
+  T
+    =
+  2\left\{
+    \textstyle\sum_i \ell_i(\hat\eta)
+    -
+    \textstyle\sum_i \ell_i(\eta(\hat\theta))
+  \right\},
+  \qquad
+  \mathrm{df} = \dim(\eta) - \dim(\theta),
+\]
+i.e.\ lavaan's default \texttt{missing = "ml"} test (the same statistic the
+nested configural-versus-metric comparison forms as a difference of two such
+fits). Under a correctly specified normal model with ignorable missingness the
+information equality \(J_\eta = H_\eta\) holds, so
+\(U(V)\Gamma_{\mathrm{mis}}\) is a projector, all nonzero \(\lambda_j=1\), and
+\[
+  T \Rightarrow \chi^2_{\mathrm{df}}.
+\]
+This is the only regime in which the unscaled \(T\) is asymptotically pivotal.
+Under non-normality the working normal likelihood is misspecified, information
+equality fails, and \(T\) is no longer \(\chi^2_{\mathrm{df}}\); its limit is
+the weighted mixture derived below, with mean \(\sum_j\lambda_j=\tr\{U(V)
+\Gamma_{\mathrm{mis}}\}\) rather than \(\mathrm{df}\). Every robust correction
+(MLR, SB, the FMG family) is a different way of referencing \(T\) to that
+mixture instead of to \(\chi^2_{\mathrm{df}}\).
 
 \section*{Definition of \(V\)}
 
@@ -219,6 +254,18 @@ and compares \(T/c_{\mathrm{SB}}\) to \(\chi^2_{\mathrm{df}}\). That is exact
 only in special cases, for example when the nonzero \(\lambda_j\)'s are all
 equal. It can be a poor approximation when the spectrum is dispersed.
 
+This \(c_{\mathrm{SB}}\) is precisely lavaan's default \texttt{estimator =
+"MLR"} (Mplus \texttt{yuan.bentler.mplus}) scaling for incomplete data: the
+``MLR'' branding hides that it is a \emph{first-moment} correction, matching
+only the mean of the reference law. Its failure under a dispersed spectrum is
+therefore not a new phenomenon but the classical Satorra--Bentler mean-scaling
+limitation \cite{satorrabentler1994,yuanbentler2000} carried over to the FIML
+setting; the Mplus variant differs from the asymptotic trace only in
+finite-sample bookkeeping of \(\tr\{U(V)\Gamma_{\mathrm{mis}}\}\), not in being
+mean-only. A dispersed spectrum is exactly what non-normality produces, so a
+mean scaling must over-reject whenever \(\operatorname{var}_j(\lambda_j)\) is
+large relative to \(\bar\lambda^2\).
+
 The FMG family keeps the spectrum. The exact all-eigenvalue calculation uses
 the distribution of \(\sum_j\lambda_j\chi^2_{1j}\), which can be evaluated by
 standard quadratic-form methods such as Imhof's method \cite{imhof1961}. EBA
@@ -233,6 +280,14 @@ Thus the MCAR headline comparison is not
 \]
 
 \section*{Structured versus saturated \(V\)}
+
+In words: the \emph{saturated} (``unstructured'') choice reads the H1 curvature
+off the data alone, through the saturated EM moments \(\hat\eta\); the
+\emph{structured} choice reads it off the fitted SEM, through the
+model-implied moments \(\eta(\hat\theta)\). They share a probability limit
+under a correct MCAR null, so the experiment's two \texttt{\_structured}
+columns are a finite-sample / robustness check, not a different estimand. They
+separate only under misspecification or non-normal MAR, as below.
 
 The structured H1 analogue evaluates the same normal H1 curvature at the
 restricted fitted moments,
@@ -370,6 +425,57 @@ projector, so
 This proves that the evaluation point of \(V\) can matter. It does not prove
 that \(V\) is the explanation for non-normal MCAR null calibration failures.
 
+\section*{The MAR mechanism used (and why it is weak)}
+
+MAR is not one mechanism, and the strength of the estimator-target problem
+above depends entirely on which MAR is used. Experiment 23 uses the
+Savalei--Bentler 2005 MAR generator \cite{savalei2010}: two indicators
+\(x_1,x_2\) are always observed and act as the missingness cause, and the
+remaining indicators \(x_3,\ldots,x_6\) are deleted by coarse \emph{sign}
+rules on the always-observed pair (rows with \(x_1+x_2>0\), and rows with
+\(x_1<0\)), with the deletion probabilities calibrated to the target overall
+rate. This is a deliberately mild MAR for two reasons:
+\begin{enumerate}
+  \item the selection depends only on the \emph{sign} of always-observed
+        indicators, a binary threshold rather than a steep continuous
+        function, so the conditional missingness probability takes only a
+        few levels; and
+  \item because \(x_1,x_2\) enter the FIML likelihood, Gaussian FIML recovers
+        the conditional mean of the missing entries given the observed ones
+        \emph{exactly} whenever that conditional mean is linear, and the
+        Vale--Maurelli / inverse-Gaussian / power-law generators keep
+        conditional means close to linear. The non-normality lives in the
+        marginals, not in a curved regression surface.
+\end{enumerate}
+Consequently the estimator-target bias that the structured-versus-saturated
+section flags as the irreducible MAR limitation is \emph{small} in this design,
+and the MAR cells behave almost like MCAR for the well-calibrated tests. This
+is a property of \emph{this} MAR, not of MAR in general: a stronger mechanism
+(steep continuous selection on the observed scores, or a generator with a
+genuinely nonlinear missing-given-observed conditional mean) would make
+\(\eta^\dagger \ne \eta_0\) bite, push the base statistic non-central under the
+intended SEM null, and leave a residual no reference-law correction can remove.
+
+\section*{Size-adjusted power}
+
+Ordinary power rewards over-rejection: a test that rejects 27\% of \emph{true}
+models also rejects more false ones, but that detection is borrowed from a
+broken Type-I rate. Size-adjusted (empirical-size-corrected) power removes the
+loan. For a fixed cell and method, let \(F_0\) be the simulated distribution of
+the \(p\)-value under the true model, and set the critical threshold to its
+\(\alpha\)-quantile,
+\[
+  c \;=\; F_0^{-1}(\alpha),
+\]
+the cutoff that \emph{would} give exactly size \(\alpha\) in that cell. The
+size-adjusted power is then \(P(p<c)\) under the alternative. A well-calibrated
+test has \(c\approx\alpha\) and ordinary \(\approx\) size-adjusted power; a
+liberal test has \(c<\alpha\), which is exactly how its inflated raw power is
+clawed back. This is a diagnostic, not an operational procedure: \(c\) is read
+from the null simulation and is unavailable to a practitioner with one data
+set. Its purpose is to compare the \emph{intrinsic} discriminating ability of
+the statistics on equal honest footing.
+
 \section*{Diagnostics for experiment 23}
 
 For the MCAR cells, the clean diagnostic sequence is:
@@ -388,6 +494,28 @@ For the MCAR cells, the clean diagnostic sequence is:
         an estimator-target/noncentrality warning, not a failure of the
         eigenvalue reference law.
 \end{enumerate}
+
+The \texttt{noncentrality.csv} diagnostic reports, per \(h_0\) cell,
+\[
+  \widehat{\mathrm{ncp}}
+    =
+  \overline{T} - \overline{\tr\{U(V)\hat\Gamma_{\mathrm{mis}}\}}
+    =
+  \texttt{mean\_base} - \texttt{mean\_trace},
+\]
+the gap between the mean base LRT and the mean of its own reference law. With a
+consistent estimator under a correct null \(\E[T]\to\tr\{U(V)
+\Gamma_{\mathrm{mis}}\}\), so \(\widehat{\mathrm{ncp}}\to 0\); a positive value
+is the estimated non-centrality the base statistic carries \emph{beyond} what
+mean scaling can absorb. One caveat reading it: in finite samples the sandwich
+trace \(\tr\{U(V)\hat\Gamma_{\mathrm{mis}}\}\) is itself downward biased under
+heavy non-normality, so a moderate positive \(\widehat{\mathrm{ncp}}\) under
+\emph{MCAR} is largely a finite-sample sandwich-bias artifact and shrinks with
+\(N\); it does not contradict the calibration of the spectrum-aware tests,
+which match the same finite-sample spectrum. Only a positive
+\(\widehat{\mathrm{ncp}}\) that \emph{persists} as \(N\) grows -- the strong
+non-normal MAR case -- signals the estimator-target bias that no reference-law
+correction removes.
 
 \begin{thebibliography}{9}
 

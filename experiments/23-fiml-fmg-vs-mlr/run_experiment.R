@@ -215,10 +215,38 @@ aggregate_rejection <- function(d) {
 }
 summary_df <- rbind(aggregate_rejection(gof_df), aggregate_rejection(nested_df))
 
-# Under h0 with a consistent estimator, E[base_stat] = trace(UGamma). Excess of
-# the realized mean over the trace is the non-centrality induced by FIML bias
-# (expected ~0 under MCAR, >0 under MAR + non-normality). One row per rep, so
-# restrict to a single method to avoid counting the shared base stat repeatedly.
+# Size-adjusted (empirical-size-corrected) power: per cell, the critical p-value
+# c is the alpha-quantile of the h0 p-values (the cutoff giving exact size alpha
+# there), and power_adj = P(p < c) under the alternative. This strips the power
+# an over-rejecting test borrows from a broken Type-I rate. gof <- gof_power,
+# nested <- nested_power. See docs/research/notes/non_normal_fiml_mlr_information.
+aggregate_power_adjusted <- function(d, alpha) {
+  keys <- c("outcome", "method", "dist", "mech", "rate")
+  if (is.null(d) || !nrow(d)) return(data.frame())
+  th <- do.call(rbind, lapply(split(d[d$truth == "h0", ], d[d$truth == "h0", keys],
+                                    drop = TRUE),
+    function(g) cbind(g[1L, keys], c_thresh = as.numeric(
+      stats::quantile(g$p_value, alpha, names = FALSE, type = 8, na.rm = TRUE)))))
+  pw <- d[(d$outcome == "gof" & d$truth == "gof_power") |
+          (d$outcome == "nested" & d$truth == "nested_power"), ]
+  if (!nrow(pw) || is.null(th)) return(data.frame())
+  pwm <- merge(pw, th, by = keys, all.x = TRUE)
+  do.call(rbind, lapply(split(pwm, pwm[keys], drop = TRUE), function(g) data.frame(
+    g[1L, keys], n_rep = nrow(g),
+    power = mean(g$p_value < alpha, na.rm = TRUE),
+    power_adj = mean(g$p_value < g$c_thresh[1L], na.rm = TRUE),
+    c_thresh = g$c_thresh[1L], row.names = NULL, stringsAsFactors = FALSE)))
+}
+power_adjusted_df <- aggregate_power_adjusted(rbind(gof_df, nested_df), alpha)
+
+# Under h0 with a consistent estimator, E[base_stat] = trace(UGamma); the excess
+# ncp_hat = mean(base) - mean(trace) is the gap to the reference-law mean. It is
+# ~0 only under NORMAL data; under non-normality it is already positive at
+# complete data and grows with the missing RATE, but is essentially equal for
+# MCAR and MAR -- a finite-sample sandwich-trace bias under heavy non-normality,
+# not the MAR estimator-target bias (this weak sign-based MAR does not trigger
+# that; see docs/research/notes/non_normal_fiml_mlr_information). One row per rep,
+# so restrict to a single method to avoid recounting the shared base stat.
 noncentrality_df <- local({
   d <- gof_df[gof_df$truth == "h0" & gof_df$method == "naive", ]
   if (!nrow(d)) return(data.frame())
@@ -268,6 +296,9 @@ write_csv(gof_df, file.path(raw_dir, "gof_fits.csv"))
 write_csv(nested_df, file.path(raw_dir, "nested_fits.csv"))
 saveRDS(spectra, file.path(raw_dir, "spectra.rds"))
 write_csv(summary_df, file.path(results_dir(), "summary_rejection.csv"))
+if (nrow(power_adjusted_df)) {
+  write_csv(power_adjusted_df, file.path(results_dir(), "power_adjusted.csv"))
+}
 if (nrow(noncentrality_df)) {
   write_csv(noncentrality_df, file.path(results_dir(), "noncentrality.csv"))
 }

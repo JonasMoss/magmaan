@@ -72,15 +72,40 @@ if (length(mlr_sev) && length(yb_exact_sev) &&
            "The pattern holds across all non-normal families (%s reps).\n\n"),
     fmt(mlr_sev), fmt(yb_exact_sev), fmt(yb_exact_struct_sev),
     fmt(all_sev), fmt(all_struct_sev), fmt(ss_sev), fmt(ss_struct_sev), reps))
-  cat(paste0("Under **MAR + non-normality the story is different and important**: ",
-             "normal-theory FIML is itself biased there (it imputes missing values ",
-             "with linear conditional means), so the statistic is non-central even ",
-             "under a true model and *no* reference-law correction restores level. ",
-             "The diagnostic below shows this directly."))
+  cat(paste0("Under this study's **MAR** the same conclusion holds. The ",
+             "Savalei-Bentler mechanism here deletes indicators by coarse *sign* ",
+             "rules on two always-observed indicators, which is mild enough that ",
+             "FIML stays effectively unbiased: MAR rejection tracks MCAR for every ",
+             "method at a matched rate, and the well-calibrated tests stay at level ",
+             "under both. That is a property of *this weak* MAR, not of MAR in ",
+             "general. A stronger mechanism (steep continuous selection, or a ",
+             "genuinely nonlinear missing-given-observed mean) would bias FIML ",
+             "itself and leave a residual no reference-law correction can remove; ",
+             "this design does not probe that regime."))
 } else {
   cat("Run the full grid (`--lavaan-parity`) to populate this section.\n")
 }
 ```
+
+## What is tested
+
+The goodness-of-fit statistic is the ordinary FIML likelihood-ratio
+$T = 2(\hat\ell_1 - \hat\ell_0)$ comparing the metric model to the saturated
+observed-data normal model (lavaan's `missing = "ml"` test); the nested test is
+the same statistic formed as a configural-vs-metric difference. Under a correct
+normal model with ignorable missingness $T \Rightarrow \chi^2_{\mathrm{df}}$.
+Under non-normality the working normal likelihood is misspecified, so $T$ limits
+instead to a weighted mixture $\sum_j \lambda_j \chi^2_{1j}$ whose weights
+$\lambda_j$ spread apart as the non-normality grows. Every robust test
+references $T$ to that mixture rather than to $\chi^2_{\mathrm{df}}$: **MLR** and
+**SB** rescale by the mean weight $\bar\lambda$ only, **scaled-shifted (SS)**
+matches the mean and the variance, and the **FMG** family (EBA/pEBA, and the
+full mixture `all`) keeps the entire spectrum. A mean-only scaling like MLR must
+over-reject precisely when the weights are dispersed, which is what
+non-normality produces. (The saturated vs `_structured` columns evaluate the
+curvature at the saturated moments vs the fitted SEM; they share a limit under
+the MCAR null. Full derivations:
+`docs/research/notes/non_normal_fiml_mlr_information`.)
 
 ## Evidence
 
@@ -107,9 +132,11 @@ if (!is.null(NC) && nrow(NC)) {
   n[c("mean_base","mean_trace","ncp_hat")] <-
     lapply(n[c("mean_base","mean_trace","ncp_hat")], fmt, d = 2)
   knitr::kable(n, align = "l", caption = paste(
-    "FIML-bias diagnostic (truth = h0). With a consistent estimator E[base stat]",
-    "= trace(UGamma), so ncp_hat = mean(base) - mean(trace) is ~0 under MCAR and",
-    "grows under MAR + non-normality -- the bias no test correction can fix."))
+    "Non-centrality diagnostic (truth = h0): ncp_hat = mean(base) -",
+    "mean(trace(UGamma)). It is ~0 only under normal data; under non-normality it",
+    "is already positive at complete data and grows with the missing rate, but is",
+    "essentially equal for MCAR and MAR -- a finite-sample sandwich-trace bias,",
+    "not the MAR estimator-target bias this weak mechanism does not trigger."))
 }
 ```
 
@@ -146,6 +173,38 @@ lavaan's *own* MLR gives the identical rejection rate, agreeing per-replicate to
 ~1e-5, and the statistic carries ~1.7-2.3x the variance of its reference
 chi-square (so a first-moment scaling cannot calibrate it).
 
+```{r tab-power}
+PW <- if (file.exists(file.path(res_dir, "power_adjusted.csv")))
+  read.csv(file.path(res_dir, "power_adjusted.csv"), stringsAsFactors = FALSE) else NULL
+if (!is.null(PW)) {
+  nn <- c("vm1", "vm2", "ig1", "ig2", "pl1", "pl2")
+  ord <- c("naive", "MLR", "YB_exact", "SS", "SF", "EBA4", "pEBA4",
+           "pall", "pOLS", "all")
+  ti <- gof[gof$truth == "h0" & gof$mech == "MCAR" &
+            gof$rate == max(gof$rate[gof$mech == "MCAR"]) & gof$dist %in% nn, ]
+  pw <- PW[PW$outcome == "gof" & PW$mech == "MCAR" &
+           PW$rate == max(PW$rate[PW$mech == "MCAR"]) & PW$dist %in% nn, ]
+  am <- function(df, col) vapply(ord, function(m)
+    mean(df[[col]][df$method == m]), numeric(1))
+  tab <- data.frame(Method = ord,
+    `Type-I` = fmt(am(ti, "reject"), 3),
+    `Power` = fmt(am(pw, "power"), 3),
+    `Size-adjusted power` = fmt(am(pw, "power_adj"), 3),
+    check.names = FALSE)
+  knitr::kable(tab, align = "l", row.names = FALSE, caption = paste(
+    "GOF detection at the severe cell (MCAR 30%, mean over the 6 non-normal",
+    "families). Ordinary power tracks the Type-I inflation; size-adjusted power",
+    "(scored at each test's own empirical .05 cutoff) is essentially identical",
+    "for every valid test, so MLR's raw-power edge is purely over-rejection."))
+}
+```
+
+Size-adjusted power scores each test at the cutoff that *would* give a 5%
+rejection rate of a true model in that cell, so an over-rejecting test cannot
+borrow detection from a broken Type-I rate. On equal honest footing the valid
+tests have the same power; `naive` and `MLR` are no better (slightly worse),
+their apparent advantage being entirely the inflated size.
+
 Full per-cell rejection (all truths, mechanisms, rates, methods; goodness-of-fit
 and nested) is in `results/summary_rejection.csv`; per-replicate p-values, base
 statistics, and UGamma spectra are in `results/raw/` (the latter in
@@ -154,11 +213,13 @@ refitting.
 
 ## Caveats
 
-- **Two regimes.** The MCAR table is the clean calibration claim. The MAR cells
-  are reported to bound the method: there the over-rejection is FIML's bias, not
-  the test's, as the diagnostic table shows.
-- **Power** (in the full CSV) is not size-adjusted; MLR's higher raw power is
-  partly its over-rejection leaking through.
+- **One MAR, and a weak one.** The MAR cells use a mild sign-based
+  Savalei-Bentler mechanism on always-observed indicators, so they behave like
+  MCAR and do not probe the regime where MAR biases FIML itself. A stronger MAR
+  is the obvious next run; MAR is not one mechanism.
+- **Power is shown raw and size-adjusted.** The size-adjusted column is a
+  diagnostic (its cutoff is read from the null simulation, unavailable in
+  practice); it exists to compare the tests' intrinsic detection at equal size.
 - The MLR column is magmaan's `fiml_robust_mlr`, matched to lavaan's
   `yuan.bentler.mplus` defaults (see oracle). `YB_exact` is the exact
   saturated-space trace scaling from the FIML UΓ spectrum; it duplicates `SB`
@@ -171,4 +232,5 @@ refitting.
 Rscript run_experiment.R --smoke                       # single hardest cell
 Rscript run_experiment.R --lavaan-parity               # full grid + oracle
 Rscript run_experiment.R --cells truth=h0,dist=vm2,mech=MCAR,rate=0.3 --reps 1000
+Rscript scripts/size_adjusted_power.R   # size-adjusted power from existing raw/, no refit
 ```
