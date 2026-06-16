@@ -178,7 +178,7 @@ non-normal MAR. Full derivations:
 
 ```{r tab-mcar}
 if (nrow(mcar_hi)) {
-  ord <- c("naive","MLR","YB_exact","YB_exact_structured","SB","SS",
+  ord <- c("naive","MLR","YB_exact","YB_exact_structured","SS",
            "SS_structured","SF","EBA4","pEBA4","pEBA4_structured","pall",
            "pOLS","all","all_structured")
   dist_ord <- c("norm","vm1","vm2","ig1","ig2","pl1","pl2")
@@ -188,16 +188,19 @@ if (nrow(mcar_hi)) {
   w <- w[match(ord, w$method), c("method", intersect(dist_ord, names(w)))]
   w <- w[!is.na(w$method), ]
   names(w)[1] <- "Method"
+  w$Method[w$Method == "YB_exact"] <- "YB_exact (= SB)"
   nn <- c("vm1", "vm2", "ig1", "ig2", "pl1", "pl2")
   w[["Non-normal mean"]] <-
     rowMeans(w[, intersect(nn, names(w)), drop = FALSE], na.rm = TRUE)
-  num <- vapply(w, is.numeric, logical(1)); w[num] <- lapply(w[num], fmt)
+  pct <- function(x) formatC(100 * x, format = "f", digits = 1)
+  num <- vapply(w, is.numeric, logical(1)); w[num] <- lapply(w[num], pct)
   knitr::kable(w, align = "l", row.names = FALSE, caption = sprintf(
-    paste("GOF Type-I under MCAR %s (nominal .05); rows are tests, columns the",
-          "data families (norm; VM/IG/PL at moderate `1` and severe `2`",
-          "skew/kurtosis). The final column averages the six non-normal families.",
+    paste("GOF Type-I error (%%) under MCAR %s%%, nominal 5%%; rows are tests,",
+          "columns the data families (norm; VM/IG/PL at moderate `1` and severe",
+          "`2` skew/kurtosis). The final column averages the six non-normal",
+          "families. SB is identical to YB_exact by construction and omitted.",
           "FIML is consistent here, so this isolates the reference-law correction."),
-    fmt(max(mcar_hi$rate), 2)))
+    formatC(100 * max(mcar_hi$rate), format = "d")))
 }
 ```
 
@@ -214,15 +217,17 @@ if (!is.null(PW)) {
            PW$rate == max(PW$rate[PW$mech == "MCAR"]) & PW$dist %in% nn, ]
   am <- function(df, col) vapply(ord, function(m)
     mean(df[[col]][df$method == m]), numeric(1))
-  tab <- data.frame(Method = ord,
-    `Type-I` = fmt(am(ti, "reject"), 3),
-    `Power` = fmt(am(pw, "power"), 3),
-    `Size-adjusted power` = fmt(am(pw, "power_adj"), 3),
+  pct <- function(x) formatC(100 * x, format = "f", digits = 1)
+  labs <- ifelse(ord == "YB_exact", "YB_exact (= SB)", ord)
+  tab <- data.frame(Method = labs,
+    `Type-I` = pct(am(ti, "reject")),
+    `Power` = pct(am(pw, "power")),
+    `Size-adjusted power` = pct(am(pw, "power_adj")),
     check.names = FALSE)
   knitr::kable(tab, align = "l", row.names = FALSE, caption = paste(
-    "GOF detection at the severe cell (MCAR 30%, mean over the 6 non-normal",
+    "GOF detection (%) at the severe cell (MCAR 30%, mean over the 6 non-normal",
     "families). Ordinary power tracks the Type-I inflation; size-adjusted power",
-    "(scored at each test's own empirical .05 cutoff) is essentially identical",
+    "(scored at each test's own empirical 5% cutoff) is essentially identical",
     "for every valid test, so MLR's raw-power edge is purely over-rejection."))
 }
 ```
