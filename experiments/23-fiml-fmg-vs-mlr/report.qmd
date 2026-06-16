@@ -282,6 +282,63 @@ borrow detection from a broken Type-I rate. On equal honest footing the valid
 tests have the same power; `naive` and `MLR` are no better (slightly worse),
 their apparent advantage being entirely the inflated size.
 
+### Nested test: configural vs metric (df = 5)
+
+The same machinery applied to the measurement-invariance test (equal loadings)
+tells the same story. The competitors are the Satorra-2000 difference tests:
+`naive` (unscaled $\Delta\chi^2$), `SB` (scaled), `adjusted` (mean-and-variance),
+and `mixture` (exact). `naive` over-rejects badly, `SB` is mildly liberal, and
+`adjusted`/`mixture` hold near nominal.
+
+```{r tab-nested-mcar}
+nst <- S[S$outcome == "nested" & S$truth == "h0", ]
+nmeth <- c("naive", "SB", "adjusted", "mixture")
+dist_ord <- c("norm", "vm1", "vm2", "ig1", "ig2", "pl1", "pl2")
+nn <- c("vm1", "vm2", "ig1", "ig2", "pl1", "pl2")
+pct <- function(x) formatC(100 * x, format = "f", digits = 1)
+nested_fam <- function(mech) {
+  r <- max(nst$rate[nst$mech == mech])
+  d <- nst[nst$mech == mech & nst$rate == r, ]
+  w <- reshape(d[, c("dist", "method", "reject")], idvar = "method",
+               timevar = "dist", direction = "wide")
+  names(w) <- gsub("^reject\\.", "", names(w))
+  w <- w[match(nmeth, w$method), c("method", intersect(dist_ord, names(w)))]
+  w <- w[!is.na(w$method), ]
+  names(w)[1] <- "Method"
+  w[["NN mean"]] <-
+    rowMeans(w[, intersect(nn, names(w)), drop = FALSE], na.rm = TRUE)
+  num <- vapply(w, is.numeric, logical(1)); w[num] <- lapply(w[num], pct)
+  knitr::kable(w, align = "l", row.names = FALSE, caption = sprintf(
+    paste("Nested Type-I error (%%), %s %d%% (nominal 5%%). Last column: mean",
+          "over the six non-normal families."), mech, round(100 * r)))
+}
+nested_fam("MCAR")
+```
+
+```{r tab-nested-mar}
+nested_fam("MAR")
+```
+
+```{r tab-nested-power}
+if (!is.null(PW)) {
+  rr <- max(nst$rate[nst$mech == "MCAR"])
+  tin <- nst[nst$mech == "MCAR" & nst$rate == rr & nst$dist %in% nn, ]
+  pwn <- PW[PW$outcome == "nested" & PW$mech == "MCAR" & PW$rate == rr &
+            PW$dist %in% nn, ]
+  am <- function(df, col) vapply(nmeth, function(m)
+    mean(df[[col]][df$method == m]), numeric(1))
+  tab <- data.frame(Method = nmeth,
+    `Type-I` = pct(am(tin, "reject")),
+    `Power` = pct(am(pwn, "power")),
+    `Size-adjusted power` = pct(am(pwn, "power_adj")),
+    check.names = FALSE)
+  knitr::kable(tab, align = "l", row.names = FALSE, caption = paste(
+    "Nested detection (%) at MCAR 30% (mean over the six non-normal families).",
+    "As with goodness of fit, size-adjusted power is essentially equal across the",
+    "valid tests; naive's raw-power edge is its over-rejection."))
+}
+```
+
 Full per-cell rejection (all truths, mechanisms, rates, methods; goodness-of-fit
 and nested) is in `results/summary_rejection.csv`; per-replicate p-values, base
 statistics, and UGamma spectra are in `results/raw/` (the latter in
