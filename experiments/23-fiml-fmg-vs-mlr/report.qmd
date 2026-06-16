@@ -19,8 +19,6 @@ if (!file.exists(sum_path)) {
        "  Rscript run_experiment.R --lavaan-parity # full grid + oracle\n")
 }
 S  <- read.csv(sum_path, stringsAsFactors = FALSE)
-NC <- if (file.exists(file.path(res_dir, "noncentrality.csv")))
-  read.csv(file.path(res_dir, "noncentrality.csv"), stringsAsFactors = FALSE) else NULL
 P  <- if (file.exists(file.path(res_dir, "parity.csv")))
   read.csv(file.path(res_dir, "parity.csv"), stringsAsFactors = FALSE) else NULL
 meta <- if (file.exists(file.path(res_dir, "metadata.csv")))
@@ -87,91 +85,107 @@ if (length(mlr_sev) && length(yb_exact_sev) &&
 }
 ```
 
+## The model
+
+One structural model is run throughout: a single common factor with six
+indicators $x_1,\dots,x_6$ in two groups ($n = 500$ and $350$). The population is
+**scalar-invariant** -- equal loadings and equal intercepts across groups -- with
+a group-2 factor-variance and latent-mean shift, so the fitted models are
+correctly specified under the null. Each replicate is fit at two nested
+invariance levels:
+
+- **configural** (loadings free across groups) -- the less restricted $H_1$;
+- **metric** (loadings tied across groups) -- $H_0$.
+
+The goodness-of-fit test is the metric model against the saturated observed-data
+model ($\mathrm{df}=23$); the nested test is configural vs metric. Power is
+created by two local misspecifications: a residual covariance between $x_5$ and
+$x_6$ (0.13) that the one-factor model omits (goodness-of-fit power), and a
+group-2 loading inflated $\times 1.35$ on one indicator (loading non-invariance;
+nested power). Non-normality (the VM/IG/PL families) and Savalei-Bentler
+MCAR/MAR missingness act on the generated indicators; the factor model is
+otherwise unchanged.
+
 ## What is tested
 
-The goodness-of-fit statistic is the ordinary FIML likelihood-ratio
-$T = 2(\hat\ell_1 - \hat\ell_0)$ comparing the metric model to the saturated
-observed-data normal model (lavaan's `missing = "ml"` test); the nested test is
-the same statistic formed as a configural-vs-metric difference. Under a correct
-normal model with ignorable missingness $T \Rightarrow \chi^2_{\mathrm{df}}$.
-Under non-normality the working normal likelihood is misspecified, so $T$ limits
-instead to a weighted mixture $\sum_j \lambda_j \chi^2_{1j}$ whose weights
-$\lambda_j$ spread apart as the non-normality grows. Every robust test
-references $T$ to that mixture rather than to $\chi^2_{\mathrm{df}}$: **MLR** and
-**SB** rescale by the mean weight $\bar\lambda$ only, **scaled-shifted (SS)**
-matches the mean and the variance, and the **FMG** family (EBA/pEBA, and the
-full mixture `all`) keeps the entire spectrum. A mean-only scaling like MLR must
-over-reject precisely when the weights are dispersed, which is what
-non-normality produces. (The saturated vs `_structured` columns evaluate the
-curvature at the saturated moments vs the fitted SEM; they share a limit under
-the MCAR null. Full derivations:
-`docs/research/notes/non_normal_fiml_mlr_information`.)
+Each fit maximizes the observed-data normal (FIML) log-likelihood over the
+saturated moment vector $\eta = (\mu, \operatorname{vech}\Sigma)$ with score
+$h_i(\eta)$. The saturated estimator $\hat\eta$ has the **sandwich covariance**
+(the "$\Gamma$ matrix")
+$$
+  \Gamma_{\mathrm{mis}} = H^{-1} J H^{-1},
+  \qquad
+  H = -\mathbb{E}\!\left[\partial h_i/\partial\eta'\right],
+  \quad
+  J = \mathbb{E}\!\left[h_i h_i'\right],
+$$
+the missing-data analogue of Browne's ADF moment covariance. If the working
+normal model is correct, information equality gives $J = H$, so
+$\Gamma_{\mathrm{mis}} = H^{-1}$; under non-normality $J$ carries the third- and
+fourth-moment information and $\Gamma_{\mathrm{mis}} \ne H^{-1}$.
+
+The restricted SEM implies $\eta(\theta)$ with Jacobian
+$\Delta = \partial\eta(\theta)/\partial\theta'$. For a curvature $V$ the residual
+operator is $U(V) = V - V\Delta(\Delta'V\Delta)^{-1}\Delta'V$, and the FIML
+likelihood-ratio $T = 2(\hat\ell_1 - \hat\ell_0)$ has the limit
+$$
+  T \;\Rightarrow\; \sum_{j=1}^{\mathrm{df}} \lambda_j\, \chi^2_{1j},
+  \qquad
+  \lambda_j = \operatorname{eig}_j\!\left\{ U(V)\,\Gamma_{\mathrm{mis}} \right\}.
+$$
+When the normal model is correct $\Gamma_{\mathrm{mis}} = V^{-1}$,
+$U(V)\Gamma_{\mathrm{mis}}$ is a rank-$\mathrm{df}$ projector, every
+$\lambda_j = 1$, and $T \Rightarrow \chi^2_{\mathrm{df}}$ -- the only case in
+which the unscaled LRT is pivotal. The robust tests differ only in how they
+reduce the spectrum $\{\lambda_j\}$:
+
+- **MLR / SB** -- mean scaling, $c = \tfrac{1}{\mathrm{df}}\sum_j\lambda_j =
+  \tfrac{1}{\mathrm{df}}\operatorname{tr}\{U(V)\Gamma_{\mathrm{mis}}\}$, refer
+  $T/c$ to $\chi^2_{\mathrm{df}}$;
+- **SS** -- match the mean *and* the variance (scaled-and-shifted);
+- **FMG** (`EBA`/`pEBA`, `all`) -- keep the whole spectrum (Imhof / exact
+  mixture).
+
+A mean-only $c$ is exact only when the $\lambda_j$ are equal; non-normality
+disperses them, so MLR must over-reject.
+
+**Structured ($V_S$) vs unstructured ($V_{US}$).** $V$ is the curvature
+$U(V)$ is built from, and the two test variants differ only in where it is
+evaluated:
+$$
+  V_{US} = H(\hat\eta) \quad\text{(saturated fit)},
+  \qquad
+  V_{S} = H(\eta(\hat\theta)) \quad\text{(model-implied moments)}.
+$$
+The default columns use $V_{US}$; the `_structured` columns use $V_S$. They
+share a probability limit under the correct MCAR null -- so here they agree up to
+finite-sample terms -- and separate only under misspecification or strong
+non-normal MAR. Full derivations:
+`docs/research/notes/non_normal_fiml_mlr_information`.
 
 ## Evidence
 
 ```{r tab-mcar}
 if (nrow(mcar_hi)) {
-  ord <- c("naive","MLR","YB_mplus","YB_exact","YB_exact_structured",
-           "SB","SB_structured","SS","SS_structured","SF","EBA4","pEBA4",
-           "pEBA4_structured","pall","pOLS","all","all_structured")
-  w <- reshape(mcar_hi[, c("dist","method","reject")], idvar = "dist",
-               timevar = "method", direction = "wide")
+  ord <- c("naive","MLR","YB_exact","YB_exact_structured","SB","SS",
+           "SS_structured","SF","EBA4","pEBA4","pEBA4_structured","pall",
+           "pOLS","all","all_structured")
+  dist_ord <- c("norm","vm1","vm2","ig1","ig2","pl1","pl2")
+  w <- reshape(mcar_hi[, c("dist","method","reject")], idvar = "method",
+               timevar = "dist", direction = "wide")
   names(w) <- sub("^reject\\.", "", names(w))
-  w <- w[, c("dist", intersect(ord, names(w)))]
+  w <- w[match(ord, w$method), c("method", intersect(dist_ord, names(w)))]
+  w <- w[!is.na(w$method), ]
+  names(w)[1] <- "Method"
   num <- vapply(w, is.numeric, logical(1)); w[num] <- lapply(w[num], fmt)
-  knitr::kable(w, align = "l", caption = sprintf(
-    "GOF Type-I under MCAR %s (nominal .05). FIML is consistent here, so this isolates the reference-law correction.",
+  knitr::kable(w, align = "l", row.names = FALSE, caption = sprintf(
+    paste("GOF Type-I under MCAR %s (nominal .05); rows are tests, columns the",
+          "data families (norm; VM/IG/PL at moderate `1` and severe `2`",
+          "skew/kurtosis). FIML is consistent here, so this isolates the",
+          "reference-law correction."),
     fmt(max(mcar_hi$rate), 2)))
 }
 ```
-
-```{r tab-ncp}
-if (!is.null(NC) && nrow(NC)) {
-  n <- NC[order(NC$mech, NC$dist, NC$rate),
-          c("dist","mech","rate","mean_base","mean_trace","ncp_hat")]
-  n[c("mean_base","mean_trace","ncp_hat")] <-
-    lapply(n[c("mean_base","mean_trace","ncp_hat")], fmt, d = 2)
-  knitr::kable(n, align = "l", caption = paste(
-    "Non-centrality diagnostic (truth = h0): ncp_hat = mean(base) -",
-    "mean(trace(UGamma)). It is ~0 only under normal data; under non-normality it",
-    "is already positive at complete data and grows with the missing rate, but is",
-    "essentially equal for MCAR and MAR -- a finite-sample sandwich-trace bias,",
-    "not the MAR estimator-target bias this weak mechanism does not trigger."))
-}
-```
-
-```{r tab-oracle}
-if (!is.null(P) && nrow(P)) {
-  ag <- aggregate(abs_diff ~ metric, P, function(x) max(x, na.rm = TRUE))
-  names(ag) <- c("Quantity", "Max |magmaan - lavaan|")
-  ag[[2]] <- formatC(ag[[2]], format = "e", digits = 2)
-  knitr::kable(ag, align = "l", caption =
-    "Oracle: magmaan vs lavaan MLR (estimator = MLR, missing = ml, defaults).")
-}
-```
-
-```{r tab-mlr-validate}
-V <- if (file.exists(file.path(res_dir, "mlr_validation.csv")))
-  read.csv(file.path(res_dir, "mlr_validation.csv"), stringsAsFactors = FALSE) else NULL
-if (!is.null(V) && nrow(V)) {
-  v <- data.frame(
-    dist = V$dist,
-    `MLR reject (magmaan)` = fmt(V$mlr_reject_magmaan),
-    `MLR reject (lavaan)`  = fmt(V$mlr_reject_lavaan),
-    `max |Δp|` = formatC(V$max_abs_p_diff, format = "e", digits = 1),
-    `variance inflation` = fmt(V$variance_inflation, 2),
-    check.names = FALSE)
-  knitr::kable(v, align = "l", caption = paste(
-    "MLR is not a magmaan artifact: fitting lavaan's own MLR on the same data",
-    "every replicate (not just rep 1) reproduces the rejection rate exactly. The",
-    "variance-inflation factor (>1) is why a mean-scaling must over-reject."))
-}
-```
-
-The MLR over-rejection is genuine, not a computation error: on the worst cells
-lavaan's *own* MLR gives the identical rejection rate, agreeing per-replicate to
-~1e-5, and the statistic carries ~1.7-2.3x the variance of its reference
-chi-square (so a first-moment scaling cannot calibrate it).
 
 ```{r tab-power}
 PW <- if (file.exists(file.path(res_dir, "power_adjusted.csv")))
@@ -209,7 +223,9 @@ Full per-cell rejection (all truths, mechanisms, rates, methods; goodness-of-fit
 and nested) is in `results/summary_rejection.csv`; per-replicate p-values, base
 statistics, and UGamma spectra are in `results/raw/` (the latter in
 `spectra.rds`) so any further test or size-adjustment is recomputable without
-refitting.
+refitting. The FIML-bias non-centrality diagnostic is in
+`results/noncentrality.csv` (it is a finite-sample non-normality artifact, equal
+for MCAR and MAR, not a MAR signal; see the note for why).
 
 ## Caveats
 
@@ -233,4 +249,40 @@ Rscript run_experiment.R --smoke                       # single hardest cell
 Rscript run_experiment.R --lavaan-parity               # full grid + oracle
 Rscript run_experiment.R --cells truth=h0,dist=vm2,mech=MCAR,rate=0.3 --reps 1000
 Rscript scripts/size_adjusted_power.R   # size-adjusted power from existing raw/, no refit
+```
+
+## Appendix: comparison to lavaan
+
+The MLR over-rejection is genuine, not a magmaan computation error: on the worst
+cells lavaan's *own* MLR, fit on the same data every replicate, gives the
+identical rejection rate (agreeing per-replicate to ~1e-5), and the statistic
+carries ~1.7-2.3x the variance of its reference chi-square, so a first-moment
+scaling cannot calibrate it.
+
+```{r tab-oracle}
+if (!is.null(P) && nrow(P)) {
+  ag <- aggregate(abs_diff ~ metric, P, function(x) max(x, na.rm = TRUE))
+  names(ag) <- c("Quantity", "Max |magmaan - lavaan|")
+  ag[[2]] <- formatC(ag[[2]], format = "e", digits = 2)
+  knitr::kable(ag, align = "l", caption =
+    "Oracle: magmaan vs lavaan MLR (estimator = MLR, missing = ml, defaults).")
+}
+```
+
+```{r tab-mlr-validate}
+V <- if (file.exists(file.path(res_dir, "mlr_validation.csv")))
+  read.csv(file.path(res_dir, "mlr_validation.csv"), stringsAsFactors = FALSE) else NULL
+if (!is.null(V) && nrow(V)) {
+  v <- data.frame(
+    dist = V$dist,
+    `MLR reject (magmaan)` = fmt(V$mlr_reject_magmaan),
+    `MLR reject (lavaan)`  = fmt(V$mlr_reject_lavaan),
+    `max |Δp|` = formatC(V$max_abs_p_diff, format = "e", digits = 1),
+    `variance inflation` = fmt(V$variance_inflation, 2),
+    check.names = FALSE)
+  knitr::kable(v, align = "l", caption = paste(
+    "MLR is not a magmaan artifact: fitting lavaan's own MLR on the same data",
+    "every replicate (not just rep 1) reproduces the rejection rate exactly. The",
+    "variance-inflation factor (>1) is why a mean-scaling must over-reject."))
+}
 ```
