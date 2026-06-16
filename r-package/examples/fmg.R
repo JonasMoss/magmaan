@@ -10,7 +10,7 @@ model <- "visual  =~ x1 + x2 + x3
 fit <- magmaan(model, df, estimator = "ML", se = "none", test = "none")
 stopifnot(inherits(fit$raw_data, "magmaan_complete_data"))
 
-types <- c("std", "sb", "ss", "sf", "all", "pall",
+types <- c("std", "sb", "ss", "mv", "sf", "all", "pall",
            "eba2", "peba", "peba2", "peba4", "peba6", "pols")
 grid <- expand.grid(type = types, ug = c(FALSE, TRUE), base = c("ml", "rls"),
                     stringsAsFactors = FALSE)
@@ -166,8 +166,8 @@ cat("FIML FMG (single + multi-group) workflow: ok\n")
 fit_2s <- magmaan(model, df_na, estimator = "ML2S")
 stopifnot(identical(fit_2s$estimator, "ML2S"), !is.null(fit_2s$ml2s),
           length(fit_2s$ml2s$eigvals) == fit_2s$ml2s$df)
-tab_2s <- fmg_tests(fit_2s, tests = c("std", "sb", "ss", "sf", "all", "pall",
-                                      "peba2", "peba4", "peba6", "pols"))
+tab_2s <- fmg_tests(fit_2s, tests = c("std", "sb", "ss", "mv", "sf", "all",
+                                      "pall", "peba2", "peba4", "peba6", "pols"))
 stopifnot(inherits(tab_2s, "magmaan_fmg_tests"))
 stopifnot(all(tab_2s$base == "ml"), all(!tab_2s$ug))
 stopifnot(all(is.finite(tab_2s$p_value)),
@@ -212,6 +212,19 @@ if (requireNamespace("semTests", quietly = TRUE) &&
   stopifnot(max(abs(pv_m[common] - pv_s[common])) < 1e-6)
   cat(sprintf("FMG vs semTests parity: ok (%d cells, max|d| = %.1e)\n",
               length(common), max(abs(pv_m[common] - pv_s[common]))))
+}
+
+# The Satterthwaite mean.var.adjusted statistic is not in semTests' set, so anchor
+# magmaan's `mv` (with the ML base) directly to lavaan's mean.var.adjusted p-value.
+if (requireNamespace("lavaan", quietly = TRUE)) {
+  lav_mv <- lavaan::sem(model, df, estimator = "ML",
+                        test = c("satorra.bentler", "mean.var.adjusted"),
+                        meanstructure = FALSE)
+  tl <- lavaan::lavInspect(lav_mv, "test")
+  pv_mv <- fmg_pvalues(fit, tests = c("mv_ml", "sb_ml"))
+  stopifnot(abs(pv_mv[["mv_ml"]] - tl$mean.var.adjusted$pvalue) < 1e-6)
+  stopifnot(abs(pv_mv[["sb_ml"]] - tl$satorra.bentler$pvalue) < 1e-6)
+  cat("FMG mean.var.adjusted vs lavaan: ok\n")
 }
 
 cat("FMG fit-measure/inference workflow: ok\n")

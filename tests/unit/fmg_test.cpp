@@ -47,12 +47,30 @@ TEST_CASE("FMG exact and classical approximations collapse for equal lambdas") {
            magmaan::robust::frontier::FmgMethod::All,
            magmaan::robust::frontier::FmgMethod::SatorraBentler,
            magmaan::robust::frontier::FmgMethod::ScaledShifted,
+           magmaan::robust::frontier::FmgMethod::MeanVarAdjusted,
            magmaan::robust::frontier::FmgMethod::ScaledF}) {
     const auto r = magmaan::robust::frontier::fmg_test(
         chi2, 4, eig, magmaan::robust::frontier::FmgOptions{.method = method});
     CHECK(r.p_value == doctest::Approx(p).epsilon(2e-5));
     CHECK(r.chi2_equiv == doctest::Approx(chi2).epsilon(2e-5));
   }
+}
+
+TEST_CASE("FMG mean-variance-adjusted matches the Satterthwaite formula") {
+  // Distinct eigenvalues so df_adj != df. Satterthwaite refers
+  // T * (sum lambda) / (sum lambda^2) to a chi-square with fractional
+  // df = (sum lambda)^2 / (sum lambda^2). Cross-checked against R's
+  // pchisq(chi2_adj, df_adj, lower.tail = FALSE) = 0.161756.
+  Eigen::VectorXd eig(3);
+  eig << 3.0, 1.5, 0.5;             // s1 = 5.0, s2 = 11.5
+  const double chi2 = 9.0;
+
+  const auto r = magmaan::robust::frontier::fmg_test(
+      chi2, 3, eig,
+      magmaan::robust::frontier::FmgOptions{
+          .method = magmaan::robust::frontier::FmgMethod::MeanVarAdjusted});
+
+  CHECK(r.p_value == doctest::Approx(0.161756).epsilon(1e-4));
 }
 
 TEST_CASE("FMG PALL shrinks every eigenvalue halfway to the mean") {

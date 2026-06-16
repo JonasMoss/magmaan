@@ -560,14 +560,16 @@ magmaan::robust::frontier::FmgMethod fmg_method_from_string(const std::string& s
   if (s == "standard" || s == "ml" || s == "chisq")  return M::StandardChiSquare;
   if (s == "sb" || s == "satorra_bentler")           return M::SatorraBentler;
   if (s == "ss" || s == "scaled_shifted")            return M::ScaledShifted;
+  if (s == "mv" || s == "mean_var_adjusted")         return M::MeanVarAdjusted;
   if (s == "scaled_f" || s == "f")                   return M::ScaledF;
   if (s == "all" || s == "ebad")                     return M::All;
   if (s == "penalized_all" || s == "pall")           return M::PenalizedAll;
   if (s == "eba")                                    return M::Eba;
   if (s == "peba")                                   return M::Peba;
   if (s == "pols")                                   return M::Pols;
-  Rcpp::stop("magmaan: `method` must be one of 'standard','sb','ss','scaled_f',"
-             "'all','penalized_all','eba','peba','pols' (got '%s')", s.c_str());
+  Rcpp::stop("magmaan: `method` must be one of 'standard','sb','ss','mv',"
+             "'scaled_f','all','penalized_all','eba','peba','pols' (got '%s')",
+             s.c_str());
 }
 
 const char* fmg_method_to_string(magmaan::robust::frontier::FmgMethod m) {
@@ -576,6 +578,7 @@ const char* fmg_method_to_string(magmaan::robust::frontier::FmgMethod m) {
     case M::StandardChiSquare: return "standard";
     case M::SatorraBentler:    return "sb";
     case M::ScaledShifted:     return "ss";
+    case M::MeanVarAdjusted:   return "mv";
     case M::ScaledF:           return "scaled_f";
     case M::All:               return "all";
     case M::PenalizedAll:      return "penalized_all";

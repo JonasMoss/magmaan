@@ -27,12 +27,13 @@ getm <- function(k) { v <- meta$value[meta$key == k]; if (length(v)) v[1] else N
 
 # Order statistics by how much of the UGamma spectrum each one uses.
 tier <- c(std = "naive", sb = "mean only", ss = "mean + variance",
-          sf = "mean + variance", all = "full (exact)",
-          pall = "full (penalized)", peba2 = "full (penalized)",
-          peba4 = "full (penalized)", peba6 = "full (penalized)",
-          pols = "full (penalized)")
+          mv = "mean + variance", sf = "mean + variance",
+          all = "full (exact)", pall = "full (penalized)",
+          peba2 = "full (penalized)", peba4 = "full (penalized)",
+          peba6 = "full (penalized)", pols = "full (penalized)")
 label <- c(std = "naive chi-sq", sb = "mean-scaled (T_RML)",
-           ss = "scaled-shifted", sf = "scaled-F", all = "exact mixture (Imhof)",
+           ss = "scaled-shifted", mv = "mean.var.adjusted (Satterthwaite)",
+           sf = "scaled-F", all = "exact mixture (Imhof)",
            pall = "penalized-all", peba2 = "pEBA2", peba4 = "pEBA4",
            peba6 = "pEBA6", pols = "pOLS")
 ord <- names(label)
