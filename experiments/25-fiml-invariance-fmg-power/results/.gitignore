@@ -1,0 +1,3 @@
+# Keep results/ present but ignore generated data and caches.
+*
+!.gitignore

@@ -1,0 +1,350 @@
+---
+title: "Measurement-invariance difference tests under non-normal incomplete data: FMG/pEBA vs the MLR/SB default"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+res_dir <- "results"
+sum_path <- file.path(res_dir, "summary_rejection.csv")
+have_results <- file.exists(sum_path)
+S <- if (have_results) read.csv(sum_path, stringsAsFactors = FALSE) else NULL
+meta <- if (file.exists(file.path(res_dir, "metadata.csv")))
+  read.csv(file.path(res_dir, "metadata.csv"), stringsAsFactors = FALSE) else NULL
+reps <- if (!is.null(meta) && "reps" %in% meta$key) meta$value[meta$key == "reps"] else "?"
+fmt <- function(x, d = 3) formatC(x, format = "f", digits = d)
+```
+
+> **Status: DESIGN / pre-registration draft.** This document is the design we
+> are pinning down before lighting up the compute. No calibration run has been
+> committed yet; the Results section renders only once `run_experiment.R` has
+> written `results/summary_rejection.csv`. It is meant to be read and torn apart
+> (hi Njål) before we fix the grid.
+
+## Question
+
+Under **non-normality** and **missing data**, do the Foldnes-Moss-Gronneberg
+eigenvalue p-values (SS / EBA / pEBA / pall / pOLS) calibrate the
+**measurement-invariance difference test** better than the dominant applied
+defaults, and do they keep that edge under the two estimators practitioners
+actually use for incomplete data, **FIML** and **two-stage ML (ML2S)**?
+
+The applied default for a nested invariance step (e.g. configural vs metric) is
+the scaled chi-square difference test: lavaan's `estimator = "MLR"` plus the
+Satorra-Bentler difference correction. Brace & Savalei (2017) is the canonical
+simulation evaluation of that family on **complete non-normal** data; they
+crowned the strictly-positive correction $D_{SB10}$ (Satorra & Bentler 2010).
+The difference statistic is, like the omnibus statistic, asymptotically a
+weighted sum of $\chi^2_1$ variables whose eigenvalues spread under
+non-normality; the SB corrections match only the **mean** (or mean and
+variance) of that spectrum, whereas pEBA approximates the whole spectrum. Our
+own nested-pEBA result (experiment 18 / FMG 2026) showed the spectrum methods
+win on **complete** data. **The open cell is missing data.** This experiment is
+that cell.
+
+## Where this sits in the literature
+
+The robust-invariance-test literature splits cleanly, and our contribution is
+the one combination nobody has run:
+
+| | complete data | **incomplete (FIML / ML2S)** |
+|---|---|---|
+| scaled (SB / MLR) difference test | Brace & Savalei (2017) | ordinal-missing & FIML-vs-MI papers |
+| **eigenvalue-spectrum (pEBA / FMG) difference test** | FMG (2026), exp 18 | **this experiment** |
+
+The scaled-test missing-data work (e.g. Yang et al. on ordinal missing
+invariance; FIML-vs-multiple-imputation comparisons) never uses an
+eigenvalue-spectrum p-value; the nested-pEBA paper never touches missingness.
+The estimator axis is deliberately two-wide because Savalei & Falk (2014)
+showed **robust two-stage ML can beat robust FIML** under incomplete non-normal
+data, so ML2S is not an afterthought; it is a predictable referee question we
+answer head-on.
+
+This is one focused story in the FMG/FIML program, a sibling of:
+
+- **exp 21** -- FIML FMG feature-completeness audit for invariance (validation).
+- **exp 23** -- FIML FMG vs MLR goodness-of-fit + nested, non-normality + MCAR.
+- **exp 24** -- FIML and ML2S FMG goodness-of-fit under incomplete non-normal data.
+- **exp 18** -- FMG 2026 nested-pEBA replication (complete data).
+
+The scope fence (stated so reviewers do not ask): **continuous MG-CFA only**
+(ordinal invariance is the companion `ordinal-fmg` paper); **measurement-model
+invariance** (no structural-path invariance); single-occasion (no longitudinal
+/ alignment / MNLFA). Each of those is named future work, not a gap.
+
+## Models and the invariance ladder
+
+Multi-group CFA **with mean structure** is the canonical and durable testbed for
+measurement invariance (Meredith 1993; Vandenberg & Lance 2000; Millsap 2011).
+Mean structure is non-negotiable here for two reasons: (1) the scalar rung *is*
+about intercepts, and a loadings-only design earns an automatic "what about
+scalar?"; (2) MAR bias concentrates in the means/intercepts and FIML's whole
+selling point over listwise is unbiased means under MAR, so the mean structure
+is where the missing-data contrast actually bites.
+
+**Population.** Following the Brace & Savalei structural precedent: a two-group,
+two-factor CFA, factor correlation $\phi = 0.5$, with model size
+
+$$p \in \{8,\ 16,\ 30\}\quad(\text{2 factors} \times \{4, 8, 15\}\ \text{indicators}),$$
+
+where $p = 30$ is the high-dimensional cell that is **pEBA's home turf** (FMG
+2026 ran to 40 observed variables; the SB corrections degrade fastest exactly
+there). A one-factor six-indicator reduction (identical to exp 21/23) is the
+minimal smoke model.
+
+**Ladder and difference tests.** configural $\to$ metric (loadings) $\to$
+scalar (intercepts) $\to$ strict (residuals). Three difference tests:
+
+| step | constrains | "is invariant at the …" |
+|---|---|---|
+| configural vs metric | loadings | weak / metric level |
+| metric vs scalar | + intercepts | strong / scalar level |
+| scalar vs strict | + residual variances | strict level |
+
+**Type-I vs power, from one factor.** As in Brace & Savalei, the
+*noninvariance-location* factor is the power machinery and the fully-invariant
+population is the Type-I cell:
+
+- **null** (fully invariant population) $\Rightarrow$ Type-I rate of each step.
+- **targeted violation at a rung** $\Rightarrow$ power of that step (a planted
+  loading / intercept / residual difference in group 2).
+
+**What we add over Brace & Savalei.** They used a *single* effect size
+(one $\Delta\text{RMSEA}$ per rung) and reported difference-test power without
+size adjustment. We add:
+
+1. an **effect-size gradient** (several $\Delta\text{RMSEA}$ levels including 0)
+   so we get power *curves*, not points;
+2. **partial invariance** as a factor (number of noninvariant indicators: 1 vs
+   several), which both pre-empts the partial-invariance nag and is realistic;
+3. **size-adjusted power** throughout (empirical-$\alpha$ calibration against the
+   paired null cell), because tests with different Type-I are otherwise not
+   comparable, exactly the conclusion exp 23 reached.
+
+## Estimators and missingness
+
+**Estimators (expensive axis, refit per cell):**
+
+- **FIML** -- `magmaan::magmaan_core$fit_fiml` (lavaan `missing = "ml"` analogue).
+- **ML2S** -- `magmaan::magmaan_core$fit_ml2s`, two-stage ML (saturated EM stage
+  1, structured stage 2; lavaan `missing = "two.stage"`). Cheaper per ladder
+  than FIML (stage-1 saturated fit + its ACOV are shared across all four rungs)
+  and Savalei & Falk's winner under incomplete non-normal data.
+
+Both estimators feed the **same** test battery: `fmg_tests()` auto-detects ML2S
+and reads the two-stage spectrum, so each fit costs one battery call.
+
+**Missingness (expensive axis):** complete, MCAR, MAR, each at rate
+$\in \{.15, .30\}$, via the Savalei-Bentler (2005) generators in
+`experiments/_support` (`sb2005_mcar`, `sb2005_mar`). MAR is driven by the
+always-observed marker indicators (the MAR cause). Two regimes, made explicit:
+
+- **MCAR** -- normal-theory FIML/ML2S is consistent for any distribution, so
+  this is a **clean** test of the reference-law correction. The headline.
+- **MAR + non-normality** -- the Gaussian likelihood imputes with linear
+  conditional means, so the statistic is non-central even under a true model and
+  **no** reference-law correction can fully restore level. We store the base
+  statistic and the UGamma trace so the report can attribute MAR over-rejection
+  to **estimator bias**, not the test (the diagnostic exp 23 introduced). MAR is
+  the honest stress test, not the headline.
+
+## Non-normality
+
+Reuse the experiment-17 / FMG non-normal families rather than reinventing them:
+`norm`, `vm1/2` (Vale-Maurelli), `ig1/2` (independent generator), `pl1/2`
+(piecewise-linear, Foldnes & Gronneberg 2022), where `*1` is skew 2 / kurtosis 7
+and `*2` is skew 3 / kurtosis 21. VM is a Gaussian copula, which is fine here
+(continuous indicators); IG/PL bite harder than the copula when we want them to.
+
+## The cost asymmetry, and the grid that exploits it
+
+The key structural fact: **once the UGamma spectrum is formed, every p-value is
+nearly free.** So the design splits into a free axis and an expensive factorial.
+
+**Free axis (harvested per replication, NOT grid cells).** Every statistic is
+computed from the one eigen-spectrum of each fit, for both `h1_information =`
+`"saturated"` and `"structured"`:
+
+```
+GOF / per-rung:  naive, MLR (YB_mplus), YB_exact/SB, SS, SF,
+                 EBA2/4/6, pEBA2/4/6, pall, pOLS, all
+difference:      naive, SB, mean-var-adjusted, mixture, + pEBA-on-difference
+```
+
+"Lots of p-values" costs *columns*, not cells.
+
+**Expensive factorial (each level needs a refit + a new spectrum):**
+
+| axis | levels (starting point) | rationale |
+|---|---|---|
+| estimator | FIML, ML2S | Savalei-Falk; ML2S cheaper per ladder |
+| missingness | complete, MCAR-.15/.30, MAR-.15/.30 | the new contribution |
+| non-normality | norm, vm2, ig2, pl2 (+vm1 …) | reuse exp-17 families |
+| total $N$ | 100, 200, 500, 1000 | push small; SB dies there |
+| group ratio | 1:1, 1:3 | unevenness breaks SB-1 (B&S) |
+| model size $p$ | 8, 16, 30 | $p=30$ is pEBA's home turf |
+| invariance condition | null + {weak, strong, strict} $\times$ {small, med, large $\Delta\text{RMSEA}$} | Type-I (null) + power curves |
+
+Full crossing $\approx 2 \times 5 \times 4 \times 4 \times 2 \times 3 \times 10
+\approx 9{,}600$ cells. At the 5000-rep house standard (and **no Monte Carlo
+error reported**, per house convention) compute is *not* the binding constraint
+on a 100-CPU SLURM allocation; **presentability is**.
+
+## Output schema (decide before the run)
+
+One **long-format** row per `(cell, estimator, rung, outcome, method,
+h1_information)`; per-replicate spectra to an `.rds` so any later p-value
+transform is recomputable without refitting.
+
+`results/fits.csv` columns:
+
+```
+# design keys
+p, n_total, ratio, dist, mech, rate, realized_rate, invariance_cond,
+delta_rmsea, n_noninvariant, estimator, rung, outcome (gof|nested),
+# result
+method, h1_information, p_value, base_stat, df, trace, scaling_factor, truth (h0|power)
+```
+
+Plus `spectra.rds` (per-rep eigenvalues; sufficient statistic),
+`summary_rejection.csv` (rejection rate by design $\times$ method),
+`power_adjusted.csv` (size-adjusted power vs paired null), `cells.csv`,
+`metadata.csv`.
+
+## Reporting plan (run big, report curated)
+
+Run the superset once; present three stories, dump the rest to a supplement.
+
+1. **Headline -- Type-I of the difference test.** pEBA vs $D_{SB10}$ vs MLR,
+   sliced on non-normality $\times$ missingness, at $p=16$, MCAR (clean regime).
+2. **Power curves.** size-adjusted power vs $\Delta\text{RMSEA}$, at the cells
+   where Type-I is controlled.
+3. **The flex.** $p=30$ + small $N$ + MAR: the corner where SB collapses and the
+   spectrum methods earn their keep, with the trace-vs-mean(T) diagnostic
+   attributing residual MAR over-rejection to estimator bias.
+
+Everything else (full estimator $\times$ missingness crossing, all $j$-variants,
+structured-vs-saturated H1) goes to the supplement. Do **not** cross the
+effect-size gradient with every nuisance level: fix nuisances at a representative
+level for the power sweeps, fully cross only for the Type-I headline.
+
+## Open questions for Njål
+
+The design decisions I could not settle from the methods side alone:
+
+1. **Structural precedent.** Adopt the Brace & Savalei two-factor 4/8/15-indicator
+   models, or anchor on a named real scale (more "applied" but less comparable)?
+2. **Which rungs to feature.** Weak + strong (the applied core), or the full
+   ladder including strict? Strict is where residual-variance non-invariance
+   lives and SB overcorrects most -- a possible pEBA win, but rarely tested.
+3. **Effect-size metric.** $\Delta\text{RMSEA}$ gradient vs number-of-noninvariant-items
+   vs raw loading/intercept deltas, and how many levels.
+4. **Partial invariance.** Include the 1-item-noninvariant condition? (I think yes.)
+5. **Estimator framing.** FIML headline + ML2S secondary, or co-equal? (Savalei
+   & Falk argues co-equal; co-equal is cheap given the shared battery.)
+6. **Missingness.** Rates; add an MNAR robustness slice? MAR-cause design (marker
+   indicators vs an external fully-observed covariate)?
+7. **Non-normality set.** exp-17 families as above, or the exact FMG-2024 set?
+8. **$N$ range.** Push to $N=100$ total (50/group)? That is where everything
+   diverges and pEBA should shine, but convergence failures climb.
+9. **High-dim cell.** $p=30$, or go to 40 to match FMG 2026 head-to-head?
+10. **Reps.** 5000 (exp-23 house standard), or more for the Type-I headline?
+
+## What the smoke established (and two real wiring items)
+
+The scaffold runs end-to-end on the p=6 normal smoke model: both estimators
+(FIML, ML2S), the full GOF battery (naive, MLR, SB, SS, SF, EBA2/4/6,
+pEBA2/4/6, pall, pOLS, all) on each constrained model, and the Satorra-2000
+difference test on the ladder steps, all written to the long-format schema. Two
+findings fell out that turn into the paper's core wiring tasks:
+
+1. **The mean-structure ("strong") difference test needs work.** The
+   configural$\to$metric (loadings) and scalar$\to$strict (residuals) steps are
+   clean parameter restrictions and the robust difference test runs. The
+   **metric$\to$scalar step does not**: scalar ties intercepts *and* frees the
+   group-2 latent mean, so it is not a strict parameter-subset of metric
+   ($\text{npar}(\text{scalar}) = 37 > \text{npar}(\text{metric}) = 36$), and
+   magmaan's exact Satorra-2000 route (`restriction_alpha_from_K`) requires
+   $\text{npar}(H_0) < \text{npar}(H_1)$. lavaan sidesteps this via
+   saturated-referenced chi-squares. **This is the same mean-structure issue
+   reviewers of the pEBA-nested paper raise**: the scalar step is the one that
+   matters for comparing means, and the robust nested test for it is a genuine
+   methods/wiring task, not a smoke artifact. Decide with Njal: build a
+   mean-structure-aware nested path, or reference both models to the saturated
+   model the way lavaan does.
+
+2. **pEBA-on-the-difference is not exposed yet.** `nestedTest(method =
+   "satorra.2000", A.method = "exact")` returns the difference-spectrum
+   eigenvalues plus naive / SB / mean-var-adjusted / mixture p-values, but **not**
+   the named pEBA-family difference p-values, which are the methodological crux
+   of this paper. They must be applied to that difference spectrum (or wired into
+   the nested path the way `fmg_tests()` is wired for the omnibus). Small
+   core/r-package task, not an experiment-local hack.
+
+## Results
+
+```{r results, results="asis"}
+if (!have_results) {
+  cat("_No results yet._ Reproduce:\n\n",
+      "```sh\n",
+      "Rscript run_experiment.R --smoke           # one cell, normal data, pipeline check\n",
+      "Rscript run_experiment.R --reps 5000       # the calibration run (SLURM)\n",
+      "```\n", sep = "")
+} else {
+  cat("Rendered from ", reps, " replicates per cell. See tables below.\n", sep = "")
+}
+```
+
+```{r results-table}
+if (have_results) {
+  knitr::kable(head(S, 30))
+}
+```
+
+## References
+
+- Brace, J. C., & Savalei, V. (2017). Type I error rates and power of several
+  versions of scaled chi-square difference tests in investigations of
+  measurement invariance. *Psychological Methods, 22*(3), 467-485.
+- Foldnes, N., & Gronneberg, S. (2018). Approximating test statistics using
+  eigenvalue block averaging. *Structural Equation Modeling, 25*(1), 101-114.
+- Foldnes, N., Moss, J., & Gronneberg, S. (2026). Penalized eigenvalue block
+  averaging: Extension to nested model comparison and Monte Carlo evaluations.
+  *Behavior Research Methods.* (replicated in experiment 18)
+- Savalei, V., & Falk, C. F. (2014). Robust two-stage approach outperforms
+  robust FIML with incomplete non-normal data. *Structural Equation Modeling,
+  21*(2), 280-302.
+- Savalei, V., & Rosseel, Y. (2022). Computational options for standard errors
+  and test statistics with incomplete normal and non-normal data in SEM.
+  *Structural Equation Modeling, 29*(1), 163-181.
+- Yuan, K.-H., & Bentler, P. M. (2000). Three likelihood-based methods for mean
+  and covariance structure analysis with non-normal missing data. *Sociological
+  Methodology, 30*, 165-200.
+- Satorra, A. (2000). Scaled and adjusted restricted tests in multi-sample
+  analysis of moment structures. In *Innovations in Multivariate Statistical
+  Analysis* (pp. 233-247).
+- Satorra, A., & Bentler, P. M. (2001). A scaled difference chi-square test
+  statistic for moment structure analysis. *Psychometrika, 66*(4), 507-514.
+- Satorra, A., & Bentler, P. M. (2010). Ensuring positiveness of the scaled
+  difference chi-square test statistic. *Psychometrika, 75*(2), 243-248.
+- Asparouhov, T., & Muthen, B. (2013). Computing the strictly positive
+  Satorra-Bentler chi-square test in Mplus. *Mplus Web Notes 12.*
+- Meredith, W. (1993). Measurement invariance, factor analysis and factorial
+  invariance. *Psychometrika, 58*(4), 525-543.
+- Vandenberg, R. J., & Lance, C. E. (2000). A review and synthesis of the
+  measurement invariance literature. *Organizational Research Methods, 3*(1),
+  4-70.
+- Millsap, R. E. (2011). *Statistical Approaches to Measurement Invariance.*
+  Routledge.
+- Putnick, D. L., & Bornstein, M. H. (2016). Measurement invariance conventions
+  and reporting: The state of the art and future directions. *Developmental
+  Review, 41*, 71-90.
+- Foldnes, N., & Gronneberg, S. (2022). Non-normal data simulation using
+  piecewise linear transforms. *Structural Equation Modeling, 29*(5), 783-790.
+```
