@@ -11,7 +11,7 @@
 
 # Parse one semTests-style test name into its components.
 #   grammar: <type>[_ug][_ml|_rls]   (case-insensitive)
-#     type : std | sb | ss | sf | all | pall | eba<j> | peba<j> | pols<gamma>
+#     type : std | sb | ss | mv | sf | all | pall | eba<j> | peba<j> | pols<gamma>
 #     _ug  : unbiased Gamma-hat (Du-Bentler); absent => biased Gamma-hat
 #     _ml | _rls : base statistic (default rls, as in semTests::split_input)
 .fmg_parse_test <- function(name) {
@@ -57,9 +57,9 @@
   } else if (startsWith(type, "eba")) {
     method <- "eba"; param <- num(substring(type, 4L), 2)
     label  <- paste0("eba", param)
-  } else if (type %in% c("std", "sb", "ss", "sf", "all", "pall")) {
-    method <- c(std = "standard", sb = "sb", ss = "ss", sf = "scaled_f",
-                all = "all", pall = "penalized_all")[[type]]
+  } else if (type %in% c("std", "sb", "ss", "mv", "sf", "all", "pall")) {
+    method <- c(std = "standard", sb = "sb", ss = "ss", mv = "mean_var_adjusted",
+                sf = "scaled_f", all = "all", pall = "penalized_all")[[type]]
     param <- NA_real_; label <- type
   } else {
     stop("fmg_tests(): unrecognized FMG test name '", name, "'.", call. = FALSE)
@@ -609,7 +609,7 @@ fmg_nested_ordinal <- function(fit_H1, fit_H0, ordinal_stats, tests = NULL,
 #' @param fit A fitted magmaan ML (complete-data), FIML, or ML2S model.
 #' @param tests Character vector of semTests-style test names, or `NULL` for the
 #'   recommended defaults (complete-data or FIML-appropriate). Recognised types:
-#'   `std`, `sb`, `ss`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, `pols<gamma>`, each
+#'   `std`, `sb`, `ss`, `mv`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, `pols<gamma>`, each
 #'   optionally suffixed `_ug` and `_ml` / `_rls` (complete-data only).
 #' @param data Optional complete raw data (complete-data fits only). Usually
 #'   unnecessary for new fits that retain `$raw_data`.
@@ -674,7 +674,7 @@ fmg_tests <- function(fit, tests = NULL, data = NULL,
 #' @param fit A fitted magmaan model.
 #' @param data Optional complete raw data. If omitted, `fit$raw_data` is used.
 #' @param tests Character vector of semTests-style test names. Recognised types:
-#'   `std`, `sb`, `ss`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, `pols<gamma>`, each
+#'   `std`, `sb`, `ss`, `mv`, `sf`, `all`, `pall`, `eba<j>`, `peba<j>`, `pols<gamma>`, each
 #'   optionally suffixed `_ug` (unbiased Gamma-hat) and `_ml` / `_rls` (base
 #'   statistic; default `rls`).
 #' @param h1_information Passed to [fmg_tests()] for FIML fits.

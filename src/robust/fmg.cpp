@@ -24,6 +24,7 @@ PostError make_err(PostError::Kind k, std::string detail) {
 
 using detail::clamp01;
 using detail::f_upper_tail;
+using detail::gamma_q;
 using detail::nan;
 
 double chi2_equivalent(double p, int df) noexcept {
@@ -178,6 +179,16 @@ fmg_test(double chi2_source,
       out.lambdas_reference = out.lambdas;
       const auto ss = scaled_shifted(chi2_source, df, out.lambdas);
       out.p_value = inference::chi2_pvalue(ss.chi2_adj, ss.df);
+      break;
+    }
+    case FmgMethod::MeanVarAdjusted: {
+      // Satterthwaite: refer T·trace/trace_sq to a chi² with fractional df
+      // (trace²/trace_sq); the survival uses the regularized upper gamma.
+      out.lambdas_reference = out.lambdas;
+      const auto mv = mean_var_adjusted(chi2_source, df, out.lambdas);
+      out.p_value = (mv.df_adj > 0.0 && std::isfinite(mv.chi2_adj))
+                        ? clamp01(gamma_q(0.5 * mv.df_adj, 0.5 * mv.chi2_adj))
+                        : nan();
       break;
     }
     case FmgMethod::ScaledF:

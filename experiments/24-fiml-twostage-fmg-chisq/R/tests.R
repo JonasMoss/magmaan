@@ -6,14 +6,16 @@
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
-# The statistic battery, by camp:
-#   Savalei / low-moment matches : std (naive), sb (mean-scaled = T_RML),
-#                                  ss (scaled-shifted), sf (scaled-F)
-#   FMG full-spectrum            : all (exact Imhof mixture), pall (penalized),
-#                                  pEBA2/4/6 (penalized eigenvalue-block),
-#                                  pOLS (penalized OLS tail)
+# The statistic battery, ordered by how much of the UGamma spectrum each uses:
+#   naive           : std
+#   mean only       : sb (mean-scaled = Savalei T_RML)
+#   mean + variance : ss (scaled-shifted), mv (Satterthwaite mean.var.adjusted),
+#                     sf (scaled-F)
+#   full (exact)    : all (exact Imhof mixture)
+#   full (penalized): pall, pEBA2/4/6, pOLS (the FMG penalized constructions)
 fmg_battery_tests <- function() {
-  c("std", "sb", "ss", "sf", "all", "pall", "peba2", "peba4", "peba6", "pols")
+  c("std", "sb", "ss", "mv", "sf", "all", "pall", "peba2", "peba4", "peba6",
+    "pols")
 }
 
 # ── Missingness ──────────────────────────────────────────────────────────────

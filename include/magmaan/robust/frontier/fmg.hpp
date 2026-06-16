@@ -17,6 +17,7 @@ enum class FmgMethod {
   StandardChiSquare,
   SatorraBentler,
   ScaledShifted,
+  MeanVarAdjusted,   // Satterthwaite mean-and-variance adjusted (fractional df)
   ScaledF,
   All,
   PenalizedAll,

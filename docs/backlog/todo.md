@@ -548,8 +548,10 @@ work lives in [`speculative.md`](speculative.md). Open work:
   scaled chi-square from the Stage-1 `(H, J, ACOV)` ingredients. The GLS branch
   remains an explicit research comparator, not a named high-level estimator.
   `fmg_tests()` now accepts an ML2S fit: the eigenvalue-tail family (SS/all/pall/
-  pEBA/pOLS, plus the SB/SS/SF low-moment matches) is applied to the df-dim
-  two-stage UGamma spectrum + Stage-2 ML base on `fit$ml2s`. The two-stage
+  pEBA/pOLS, plus the SB/SS/SF/MV low-moment matches, where MV = `mv` =
+  Satterthwaite mean.var.adjusted, a new `FmgMethod` matching lavaan to ~1e-12)
+  is applied to the df-dim two-stage UGamma spectrum + Stage-2 ML base on
+  `fit$ml2s`. The two-stage
   reference law is validated by `trace(UGamma) = E[T]` (normal-data ncp ~ 0), not
   lavaan's divergent `missing="two.stage"` scaling; only the base matches lavaan.
   Calibration study: `experiments/24-fiml-twostage-fmg-chisq`.
