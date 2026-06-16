@@ -1,0 +1,386 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Consistency of Normal-Theory FIML under Non-normality and
+Missingness}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\avar}{\operatorname{avar}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\plim}{\operatorname*{plim}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{What is being proved}
+
+Two questions, kept separate because their answers differ.
+
+\begin{enumerate}
+  \item \textbf{Non-normality.} Is the normal-theory (Gaussian) FIML estimator
+        consistent for the mean and covariance when the data are non-normal?
+        \emph{Yes, unconditionally}, for complete data and under MCAR, assuming
+        only finite second moments and a correctly specified structure. The
+        argument is elementary and uses no distributional assumption at all.
+  \item \textbf{MAR.} Is it consistent under data missing at random?
+        \emph{Yes, but conditionally.} Consistency holds if and only if, for the
+        incomplete variables, the conditional means given the always-observed
+        causes are linear and the conditional covariances are homoscedastic.
+        Marginal non-normality is harmless; conditional non-linearity or
+        heteroscedasticity is not.
+\end{enumerate}
+
+The second answer reconciles the textbook statement ``FIML is consistent under
+MAR'' (Rubin's ignorability \cite{rubin1976}; Arminger and Sobel
+\cite{armingersobel1990}; Yuan and Bentler \cite{yuanbentler2000}) with the
+folklore that it is not, and with simulations in which the MAR bias looks like a
+small-sample effect that shrinks with $N$. Both camps are right about different
+regimes; the precise dividing line is Theorem~\ref{thm:mar} below.
+
+Throughout, $X_1,\ldots,X_N$ are i.i.d.\ $p$-vectors with finite second moments,
+true mean $\mu_0$ and covariance $\Sigma_0\succ0$. The saturated parameter is
+$\eta=(\mu,\vech\Sigma)$ with true value $\eta_0$. A structural model writes
+$\eta=\eta(\theta)$. ``Consistent'' means convergence in probability to the
+full-data target as $N\to\infty$.
+
+\section{The saturated Gaussian MLE is the sample moments}
+
+The whole non-normality question collapses once we notice that with complete
+data the saturated Gaussian likelihood has a closed-form maximizer that never
+saw a normal assumption.
+
+\begin{lemma}\label{lem:sat}
+With complete data, the maximizer of the Gaussian log-likelihood
+$\sum_i\big[-\tfrac12\log|\Sigma|-\tfrac12(x_i-\mu)'\Sigma^{-1}(x_i-\mu)\big]$
+over $(\mu,\Sigma\succ0)$ is
+\[
+  \hat\mu = \bar x = \tfrac1N\textstyle\sum_i x_i,
+  \qquad
+  \hat\Sigma = S = \tfrac1N\textstyle\sum_i (x_i-\bar x)(x_i-\bar x)'.
+\]
+\end{lemma}
+
+\begin{proof}
+The mean score $\sum_i\Sigma^{-1}(x_i-\mu)=0$ gives $\hat\mu=\bar x$ for any
+$\Sigma\succ0$. Substituting and maximizing over $\Sigma$ is the standard
+Gaussian profile problem whose solution is the empirical second-moment matrix
+$S$.
+\end{proof}
+
+So the saturated FIML point estimate \emph{is} the method-of-moments estimator
+of $(\mu,\Sigma)$. It is a Gaussian \emph{quasi}-likelihood when the data are
+non-normal (the general misspecified-likelihood theory of White
+\cite{white1982}), but its location is fixed by the first two empirical moments
+alone.
+
+\begin{theorem}[Complete-data consistency, distribution-free]\label{thm:complete}
+If $\E\lVert X\rVert^2<\infty$ then $\hat\eta\xrightarrow{p}\eta_0$. If in
+addition the structure is correctly specified, with $\eta(\theta_0)=\eta_0$ for a
+unique identified $\theta_0$, and the discrepancy
+$\theta\mapsto F\{\hat\eta;\eta(\theta)\}$ is continuous with a unique minimizer,
+then $\hat\theta\xrightarrow{p}\theta_0$.
+\end{theorem}
+
+\begin{proof}
+By the law of large numbers $\bar x\xrightarrow{p}\mu_0$ and
+$S\xrightarrow{p}\Sigma_0$, so $\hat\eta\xrightarrow{p}\eta_0$ by
+Lemma~\ref{lem:sat}. The fitting function $F$ is minimized at the truth and is
+continuous in its first argument, so the standard argmin (Wald) consistency
+theorem, together with the continuous mapping theorem, gives
+$\hat\theta\xrightarrow{p}\theta_0$. Normality is used nowhere.
+\end{proof}
+
+\begin{remark}
+This is consistency of the \emph{point estimate}. Validity of normal-theory
+standard errors and of the unscaled likelihood-ratio reference law is a strictly
+stronger property that does require either asymptotic-robustness conditions
+\cite{browne1984,andersonamemiya1988} or a sandwich correction
+\cite{white1982}. Theorem~\ref{thm:complete} is exactly why the point estimates
+survive non-normality while the test statistics need the FMG/MLR machinery of
+the companion note.
+\end{remark}
+
+\section{MCAR: still distribution-free}
+
+With missing data the saturated MLE no longer has a closed form (it needs EM),
+so we switch from Lemma~\ref{lem:sat} to the estimating-equation view. Let unit
+$i$ have observed index set $o_i$ and contribute the Gaussian \emph{marginal}
+log-density $\log\phi(x_{i,o_i};\mu_{o_i},\Sigma_{o_io_i})$ with score
+$h_i(\eta)$.
+
+\begin{theorem}[MCAR consistency, distribution-free]\label{thm:mcar}
+Suppose missingness is MCAR, i.e.\ the response pattern $R$ is independent of
+$X$, with finite second moments, and every entry of $(\mu_0,\Sigma_0)$ is
+identified by some observed pattern. Then $\hat\eta\xrightarrow{p}\eta_0$; with a
+correctly specified structure, $\hat\theta\xrightarrow{p}\theta_0$.
+\end{theorem}
+
+\begin{proof}
+Fix a pattern $o$. Under MCAR the units that realize $o$ are a random subsample,
+so $X_o$ carries the population marginal moments $(\mu_{0,o},\Sigma_{0,oo})$. The
+Gaussian marginal score is an unbiased estimating equation for those moments:
+its mean part has expectation
+$\E[\Sigma_{0,oo}^{-1}(X_o-\mu_{0,o})]=0$, and its covariance part is unbiased
+because $\E[(X_o-\mu_{0,o})(X_o-\mu_{0,o})']=\Sigma_{0,oo}$. Hence
+$\E\{h_o(\eta_0)\}=0$ for each $o$, and averaging over the MCAR pattern
+distribution preserves the zero. So $\eta_0$ is the population root of the
+stacked estimating equation $\sum_i h_i(\eta)=0$; $Z$-estimator consistency,
+under the stated identification, gives $\hat\eta\xrightarrow{p}\eta_0$, and the
+argmin step of Theorem~\ref{thm:complete} carries it to $\hat\theta$.
+\end{proof}
+
+This is the consistency content behind the ``What MCAR buys'' section of the
+companion information note: under MCAR the observed-pattern normal score is
+unbiased at the full-data first two moments, no normality required.
+
+\section{MAR: the real question}\label{sec:mar}
+
+Now let the missingness depend on the data. We use the structure of the
+experiment-23 (Savalei--Bentler) design, which is also the canonical MAR setup:
+a block $A$ of variables is \emph{always observed} and is the only thing the
+mechanism may look at,
+\[
+  P(R=r\mid X) = g_r(X_A),
+\]
+and the remaining variables $B$ are observed in various patterns selected by
+$g_r(X_A)$. Write the always-observed/conditional decomposition of the Gaussian
+model.
+
+\begin{lemma}[Variation-independent factorization]\label{lem:factor}
+The Gaussian density factors as
+\[
+  \phi(x;\mu,\Sigma)
+   = \phi(x_A;\mu_A,\Sigma_{AA})\,
+     \phi\!\big(x_B;\ \alpha+\Gamma x_A,\ \Sigma_{BB\cdot A}\big),
+\]
+with $\Gamma=\Sigma_{BA}\Sigma_{AA}^{-1}$,
+$\alpha=\mu_B-\Gamma\mu_A$, and
+$\Sigma_{BB\cdot A}=\Sigma_{BB}-\Sigma_{BA}\Sigma_{AA}^{-1}\Sigma_{AB}$. The map
+$(\mu,\Sigma)\leftrightarrow(\mu_A,\Sigma_{AA},\alpha,\Gamma,\Sigma_{BB\cdot A})$
+is a smooth bijection with the two coordinate blocks varying independently.
+Consequently the FIML log-likelihood splits exactly,
+\[
+  \underbrace{\sum_{i} \log\phi(x_{i,A};\mu_A,\Sigma_{AA})}_{\text{all units: }A\text{ always observed}}
+  \;+\;
+  \underbrace{\sum_{i:\,B\text{ obs.}} \log\phi\big(x_{i,B};\alpha+\Gamma x_{i,A},\Sigma_{BB\cdot A}\big)}_{\text{selected units: Gaussian regression of }B\text{ on }A},
+\]
+and the two halves are maximized separately.
+\end{lemma}
+
+The first half is a marginal model on the fully observed $A$, so by
+Lemma~\ref{lem:sat} it estimates $(\mu_{A,0},\Sigma_{AA,0})$ consistently,
+distribution-free. Everything hinges on the second half: a Gaussian
+linear-homoscedastic regression of $B$ on $A$, fit on the \emph{selected}
+complete cases.
+
+\begin{theorem}[MAR consistency condition]\label{thm:mar}
+Under MAR-on-$A$ with finite second moments and FIML identification, the
+Gaussian FIML estimator is consistent for $(\mu_0,\Sigma_0)$ if and only if the
+full-data conditional moments of the incomplete block satisfy
+\begin{itemize}
+  \item[(i)] $\E[X_B\mid X_A]=\alpha_0+\Gamma_0 X_A$ is \textbf{linear} in
+        $X_A$, and
+  \item[(ii)] $\Cov[X_B\mid X_A]=\Sigma_{BB\cdot A,0}$ does \textbf{not depend}
+        on $X_A$ (homoscedastic).
+\end{itemize}
+Under (i)--(ii) consistency holds for arbitrarily non-normal marginals. If
+either fails, $\hat\eta$ carries an asymptotic bias whose magnitude is set by the
+selection reweighting of $X_A$.
+\end{theorem}
+
+\begin{proof}
+The $A$-block is consistent by Lemma~\ref{lem:factor}. For the conditional
+block, the complete cases are selected with probability $g(X_A)$ depending
+\emph{only} on $X_A$. Hence the conditional law $X_B\mid X_A$ is unchanged by
+selection ($f_{\mathrm{sel}}(x_B\mid x_A)=f(x_B\mid x_A)$); only the marginal of
+$X_A$ is reweighted to $f_{\mathrm{sel}}(x_A)\propto g(x_A)f(x_A)$.
+
+\emph{Mean and slope.} The Gaussian conditional MLE solves the selected normal
+equations $\E_{\mathrm{sel}}\big[(1,X_A')'\,(X_B-\alpha-\Gamma X_A)'\big]=0$.
+Evaluate the left side at the true full-data coefficients $(\alpha_0,\Gamma_0)$
+and use the tower property over $X_B\mid X_A$ (selection-invariant):
+\[
+  \E_{\mathrm{sel}}\big[(1,X_A')'\,r(X_A)'\big],
+  \qquad
+  r(X_A) = \E[X_B\mid X_A]-\alpha_0-\Gamma_0 X_A .
+\]
+Under (i), $r\equiv 0$, so this vanishes \emph{for every} selection weight $g$;
+$(\alpha_0,\Gamma_0)$ is therefore the population root of the selected equation
+and is estimated consistently.
+
+\emph{Conditional covariance.} The residual MLE targets
+$\E_{\mathrm{sel}}\big[(X_B-\alpha_0-\Gamma_0X_A)(\cdot)'\big]
+ = \E_{\mathrm{sel}}\!\big[\Cov(X_B\mid X_A)\big] + \E_{\mathrm{sel}}[\,r\,r'\,]$.
+Under (i) the second term is zero, and under (ii) the first equals the constant
+$\Sigma_{BB\cdot A,0}$ regardless of the $g$-weighting. So
+$\Sigma_{BB\cdot A,0}$ is recovered.
+
+Mapping back through the continuous bijection of Lemma~\ref{lem:factor}
+($\mu_B=\alpha+\Gamma\mu_A$, $\Sigma_{BA}=\Gamma\Sigma_{AA}$,
+$\Sigma_{BB}=\Sigma_{BB\cdot A}+\Gamma\Sigma_{AA}\Gamma'$) yields consistency for
+$(\mu_0,\Sigma_0)$.
+
+\emph{Necessity.} If (i) fails, $r\not\equiv0$, and the selected normal equations
+are solved by the linear projection over $f_{\mathrm{sel}}(x_A)\propto
+g(x_A)f(x_A)$, which differs from the full-population projection whenever $g$ is
+non-constant: $\E_{\mathrm{sel}}[(1,X_A')'r]\ne0$ generically, so the probability
+limit of $(\hat\alpha,\hat\Gamma)$ is biased. If (ii) fails,
+$\E_{\mathrm{sel}}[\Cov(X_B\mid X_A)]$ is a $g$-weighted average of a
+non-constant conditional covariance and differs from the unweighted
+$\Sigma_{BB\cdot A,0}$. Either way $\plim\hat\eta\ne\eta_0$.
+\end{proof}
+
+\begin{corollary}[Why marginal shape is irrelevant]\label{cor:marginal}
+Skewness and kurtosis of the marginal law of $X$ enter only through the
+\emph{shape} of $f(x_B\mid x_A)$ and $f(x_A)$, never through conditions
+(i)--(ii), which constrain only the first two conditional moments. A heavily
+skewed or heavy-tailed marginal with linear, homoscedastic conditionals (the
+regime that Vale--Maurelli, NORTA, and most copula constructions approximate
+well) therefore gives a \textbf{consistent} FIML estimator under MAR.
+\end{corollary}
+
+\begin{remark}[The elliptical sharpening]
+Elliptical non-normal laws are the cleanest cautionary example. They have
+$\E[X_B\mid X_A]$ \emph{linear} (so (i) holds) but
+$\Cov[X_B\mid X_A]=w(X_A)\,\Sigma_{BB\cdot A}$ \emph{heteroscedastic} (so (ii)
+fails unless $w$ is constant). Under MAR on an elliptical population, FIML stays
+consistent for $\mu_0$ and for the slope/regression part
+$\Sigma_{BA}\Sigma_{AA}^{-1}$, but is biased for the residual covariance
+$\Sigma_{BB\cdot A}$, hence for $\Sigma_{BB}$. The mean structure is robust; the
+dependent-block variance is the fragile piece. ``FIML is consistent under MAR''
+must be qualified at least this far.
+\end{remark}
+
+\section{Reconciliation, and what the simulations show}
+
+\paragraph{The literature claim is correct under its hypotheses.}
+Rubin's ignorability \cite{rubin1976} delivers valid likelihood inference under
+MAR \emph{when the complete-data model is correctly specified}. For the Gaussian
+model, ``correctly specified'' does not mean full normality; it means the first
+two conditional moments are Gaussian-shaped, which is exactly (i)--(ii). That is
+why the claim survives marginal non-normality. Yuan and Bentler
+\cite{yuanbentler2000} and Arminger and Sobel \cite{armingersobel1990} prove
+consistency and asymptotic normality of the normal-theory estimator under MAR;
+their robustness is to \emph{marginal} non-normality, which enters only the
+sandwich meat $J_\eta$ (the third- and fourth-moment information) and so moves
+the standard errors and the test reference law, \emph{not} the location of the
+estimating-equation root. Conditional misspecification, by contrast, moves the
+root itself; that is the irreducible ``estimator-target'' bias the companion
+note flags as something no reference-law correction (MLR, SB, FMG) can repair
+\cite{savalei2010}.
+
+So the textbook statement and the folklore are not in conflict. Read ``correct
+model'' as ``correct first two conditional moments'' and both are true:
+consistent under (i)--(ii), inconsistent otherwise.
+
+\paragraph{Reading the simulations.}
+Two phenomena look alike at finite $N$ and must be separated:
+\begin{itemize}
+  \item[(a)] \emph{Genuine asymptotic bias} (conditions (i)--(ii) fail): the
+        bias converges to a nonzero constant as $N\to\infty$.
+  \item[(b)] \emph{Finite-sample bias of a consistent estimator} (conditions
+        hold): the bias is $O(N^{-1})$ or $O(N^{-1/2})$ and vanishes.
+\end{itemize}
+The experiment-23 MAR is mild on exactly the axis that matters here: selection
+is a coarse \emph{sign} rule on the always-observed $x_1,x_2$, and the
+Vale--Maurelli / inverse-Gaussian / power-law generators keep the
+missing-given-observed conditional means close to linear and the conditional
+covariances close to constant. The design therefore nearly satisfies
+(i)--(ii), its true asymptotic bias is $\approx0$, and what appears in the
+tables is case (b): a small-sample bias that shrinks with $N$. That is fully
+consistent with the estimator being consistent.
+
+\paragraph{How to settle it empirically.}
+To decide (a) vs (b) for any given cell, regress the absolute parameter bias on
+$1/N$ (or $1/\sqrt N$) across the sample-size ladder: a near-zero intercept
+certifies consistency (the slope is the benign finite-sample term); a clearly
+positive intercept certifies inconsistency. The test-statistic analogue is the
+note's $\widehat{\mathrm{ncp}}=\texttt{mean\_base}-\texttt{mean\_trace}$, which
+must shrink toward zero with $N$ under (b) and persist under (a). Predicted
+outcome for experiment 23: intercepts indistinguishable from zero, i.e.\ a
+finite-sample artifact, not inconsistency.
+
+\paragraph{Verdict.}
+\begin{itemize}
+  \item Non-normal complete data and MCAR: consistent, unconditionally
+        (Theorems~\ref{thm:complete} and \ref{thm:mcar}).
+  \item MAR: consistent if and only if the incomplete-on-observed conditional
+        means are linear and conditional covariances homoscedastic
+        (Theorem~\ref{thm:mar}); marginal non-normality alone does not break it
+        (Corollary~\ref{cor:marginal}). Your instinct is right for
+        \emph{general} non-normal MAR; the paper's claim is right under the
+        conditional-moment conditions, which the experiment-23 generators very
+        nearly meet, so the residual MAR bias you see is finite-sample and
+        should vanish with $N$.
+\end{itemize}
+
+\begin{thebibliography}{9}
+
+\bibitem{andersonamemiya1988}
+Anderson, T. W., \& Amemiya, Y. (1988).
+The asymptotic normal distribution of estimators in factor analysis under
+general conditions.
+\emph{The Annals of Statistics}, 16(2), 759--771.
+\href{https://doi.org/10.1214/aos/1176350834}{doi:10.1214/aos/1176350834}.
+
+\bibitem{armingersobel1990}
+Arminger, G., \& Sobel, M. E. (1990).
+Pseudo-maximum likelihood estimation of mean and covariance structures with
+missing data.
+\emph{Journal of the American Statistical Association}, 85(409), 195--203.
+\href{https://doi.org/10.1080/01621459.1990.10475324}{doi:10.1080/01621459.1990.10475324}.
+
+\bibitem{browne1984}
+Browne, M. W. (1984).
+Asymptotically distribution-free methods for the analysis of covariance
+structures.
+\emph{British Journal of Mathematical and Statistical Psychology}, 37(1),
+62--83.
+\href{https://doi.org/10.1111/j.2044-8317.1984.tb00789.x}{doi:10.1111/j.2044-8317.1984.tb00789.x}.
+
+\bibitem{rubin1976}
+Rubin, D. B. (1976).
+Inference and missing data.
+\emph{Biometrika}, 63(3), 581--592.
+\href{https://doi.org/10.1093/biomet/63.3.581}{doi:10.1093/biomet/63.3.581}.
+
+\bibitem{savalei2010}
+Savalei, V. (2010).
+Expected versus observed information in SEM with incomplete normal and
+nonnormal data.
+\emph{Psychological Methods}, 15(4), 352--367.
+\href{https://doi.org/10.1037/a0020143}{doi:10.1037/a0020143}.
+
+\bibitem{white1982}
+White, H. (1982).
+Maximum likelihood estimation of misspecified models.
+\emph{Econometrica}, 50(1), 1--25.
+\href{https://doi.org/10.2307/1912526}{doi:10.2307/1912526}.
+
+\bibitem{yuanbentler2000}
+Yuan, K.-H., \& Bentler, P. M. (2000).
+Three likelihood-based methods for mean and covariance structure analysis with
+nonnormal missing data.
+\emph{Sociological Methodology}, 30(1), 165--200.
+\href{https://doi.org/10.1111/0081-1750.00078}{doi:10.1111/0081-1750.00078}.
+
+\end{thebibliography}
+
+\end{document}
