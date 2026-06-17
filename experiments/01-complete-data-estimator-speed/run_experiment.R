@@ -331,6 +331,14 @@ load_corpus_case <- function(corpus_dir, row, include_observed = TRUE) {
 load_corpus_experiment_cases <- function(corpus_dir, case_regex = NULL,
                                          include_observed = TRUE) {
   manifest_path <- file.path(corpus_dir, "manifest.csv")
+  if (!file.exists(manifest_path)) {
+    stop("Missing corpus manifest: ", manifest_path,
+         "\n(The textbook-corpus real-data dependency is private and optional; ",
+         "it is not part of the public repository. Mount it at ",
+         "corpus/textbook-corpus/, or pass --corpus <dir>, to run this ",
+         "experiment. See corpus/README.md.)",
+         call. = FALSE)
+  }
   manifest <- utils::read.csv(manifest_path, stringsAsFactors = FALSE)
   keep <- vapply(seq_len(nrow(manifest)), function(i) {
     case_regex_match(manifest[i, , drop = FALSE], case_regex)

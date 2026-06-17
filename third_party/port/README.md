@@ -8,8 +8,7 @@ because the upstream sources are stable (no upstream changes in decades) and
 because vendoring keeps the build self-contained and reproducible.
 
 This vendoring strategy is documented as the magmaan "Phase 1" optimizer
-roadmap; see `docs/architecture/roadmap.md` and the design plan at
-`/home/jmoss/.claude/plans/thanks-i-would-prefer-validated-catmull.md`.
+roadmap; see `docs/architecture/roadmap.md`.
 
 ## Vendor manifest
 
