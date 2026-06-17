@@ -28,5 +28,11 @@ all: build
     mkdir -p results
     {{bin}} --reps=20 --sample-n=80000 | tee results/latest.txt
 
+# Cross-check magmaan PLSIM against the covsim reference (needs the R bindings
+# installed plus tmvtnorm/MASS/Matrix/lavaan; skips gracefully if absent).
+vs-covsim *ARGS:
+    mkdir -p results
+    Rscript plsim_vs_covsim.R {{ARGS}} | tee results/vs_covsim.txt
+
 clean:
     rm -rf {{build_dir}} results
