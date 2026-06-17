@@ -551,12 +551,27 @@ work lives in [`speculative.md`](speculative.md). Open work:
   pEBA/pOLS, plus the SB/SS/SF/MV low-moment matches, where MV = `mv` =
   Satterthwaite mean.var.adjusted, a new `FmgMethod` matching lavaan to ~1e-12)
   is applied to the df-dim two-stage UGamma spectrum + Stage-2 ML base on
-  `fit$ml2s`. The two-stage scaling follows lavaan's `missing="robust.two.stage"`
-  (sandwich ACOV) convention, matching its `pvalue.scaled` to ~1e-2, not the plain
-  `missing="two.stage"` (normal-theory ACOV) scaling, which collapses under
-  non-normality; the base matches both to machine precision. The precise anchor is
-  the first-principles identity `trace(UGamma) = E[T]` (normal-data ncp ~ 0).
-  Calibration study: `experiments/24-fiml-twostage-fmg-chisq`.
+  `fit$ml2s`. The two-stage scaling AND SEs match lavaan's
+  `missing="robust.two.stage"` (sandwich ACOV) convention to machine precision
+  (≲1e-4 across the exp-24 grid, typically ~1e-7; EM/optimizer-limited), not the
+  plain `missing="two.stage"`
+  (normal-theory ACOV) scaling, which collapses under non-normality; the base
+  matches both. `trace(UGamma) = E[T]` (normal-data ncp ~ 0) is an independent
+  first-principles check. Calibration study + lavaan parity oracle:
+  `experiments/24-fiml-twostage-fmg-chisq`; unit gate:
+  `two_stage_em_ml_inference` self-consistency in `tests/unit/fiml_test.cpp` and
+  the `ml2s_*` rows of `tests/golden/fiml_golden_test.cpp`.
+  - **Structured/unstructured weight axis carries to ML2S (resolved 2026-06-17).**
+    The Satorra-Bentler U-metric weight choice - `WeightMoments::Structured`
+    (model-implied Σ̂(θ̂)) vs `Unstructured` (sample/saturated h1, =
+    `h1.information="unstructured"`) - applies to the two-stage path just as it
+    does to FIML/robust.sem. ML2S now uses **Unstructured** for both the test
+    spectrum and the SEs (`two_stage_em_ml_inference` in `src/estimate/fiml.cpp`),
+    matching lavaan `robust.two.stage` (which hard-forces unstructured) and
+    magmaan's own FIML FMG convention. It was briefly `Structured`, which left a
+    1-3% trace/SE gap that grew with non-normality. Note: on complete data this is
+    `robust.two.stage`, NOT `robust.sem`/MLM - those differ on the same axis when
+    Σ̂ ≠ Σ(θ̂).
 - **Landed; remainder in speculative.** The Van-Praag pairwise covariance
   machinery (`data::pairwise_sample_stats`,
   `robust::pairwise_casewise_contributions`, `data::gamma_nt_pairwise`,

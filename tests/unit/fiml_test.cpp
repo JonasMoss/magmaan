@@ -1688,11 +1688,15 @@ TEST_CASE("two_stage_em_ml_inference: complete-data multi-group matches complete
       "two_stage_em_ml_inference failed: " <<
       (ml2s.has_value() ? "" : ml2s.error().detail));
 
+  // ML2S follows the robust.two.stage convention: Unstructured (sample/saturated
+  // h1) weight moments, not Structured (model-implied). On complete data this is
+  // robust.two.stage, NOT robust.sem/MLM (which is structured); the two genuinely
+  // differ when Σ̂ ≠ Σ(θ̂). The explicit reference path must use the same spec.
   auto rob = magmaan::robust::robust_se(
       *built.pt, *built.rep, samp, *est, raw,
       magmaan::robust::InferenceSpec{
           magmaan::robust::Information::Expected,
-          magmaan::robust::WeightMoments::Structured,
+          magmaan::robust::WeightMoments::Unstructured,
           magmaan::robust::ScoreCovariance::Empirical});
   REQUIRE(rob.has_value());
   CHECK((ml2s->vcov - rob->vcov).cwiseAbs().maxCoeff() < 1e-7);
@@ -1702,7 +1706,7 @@ TEST_CASE("two_stage_em_ml_inference: complete-data multi-group matches complete
       *built.pt, *built.rep, samp, *est,
       magmaan::robust::InferenceSpec{
           magmaan::robust::Information::Expected,
-          magmaan::robust::WeightMoments::Structured,
+          magmaan::robust::WeightMoments::Unstructured,
           magmaan::robust::ScoreCovariance::Empirical});
   REQUIRE(uf.has_value());
   auto Zc = magmaan::robust::casewise_contributions(raw, samp, /*include_means=*/true);

@@ -12,17 +12,27 @@
 #   ML2S mean-scaled <- lavaan missing="robust.two.stage" pvalue.scaled.
 #
 # The ML2S reference law follows the ROBUST.TWO.STAGE convention: a Huber-White
-# sandwich Stage-1 ACOV (Omega) with the empirical fourth moments. lavaan's plain
-# missing="two.stage" instead uses a normal-theory Omega, which cannot see excess
-# kurtosis; under heavy non-normality its scaling collapses toward the naive test
-# (e.g. on the pl2 MAR cell the implied UGamma trace is ~13 vs magmaan's ~51 and
-# robust.two.stage's ~49). So magmaan agrees with robust.two.stage, NOT plain
-# two.stage. The agreement is close but not exact: magmaan's UGamma trace runs a
-# few percent above lavaan robust.two.stage (a finite-sample sandwich-meat sub-
-# convention within the same family), so the scaled-p matches to ~1e-2, not to
-# machine precision. The precise self-consistency anchor is therefore the
-# first-principles identity trace(UGamma) = E[T]: on normal data ncp_hat =
-# mean(base) - mean(trace) ~ 0 for both estimators (see noncentrality.csv).
+# sandwich Stage-1 ACOV (Omega) with the empirical fourth moments, and the
+# Satorra-Bentler scaling uses the UNSTRUCTURED (sample/saturated h1) weight.
+# magmaan's ML2S mean-scaled statistic matches lavaan missing="robust.two.stage"
+# pvalue.scaled to MACHINE PRECISION (worst ~1e-4 across the grid, typically
+# ~1e-7; the residual is EM/optimizer convergence tolerance, the same reason the
+# base differs at that level - not a convention difference). lavaan's
+# plain missing="two.stage" instead uses a normal-theory Omega, which cannot see
+# excess kurtosis; under heavy non-normality its scaling collapses toward the
+# naive test (e.g. on the pl2 MAR cell the implied UGamma trace is ~13 vs both
+# magmaan's and robust.two.stage's ~49). So we anchor the scaled p to
+# robust.two.stage, NOT plain two.stage.
+#
+# (History: magmaan's ML2S U-metric weight was briefly built from the STRUCTURED
+# model-implied moments, which left a 1-3% trace gap to robust.two.stage that
+# grew with non-normality; switching to the unstructured weight - the convention
+# lavaan two.stage/robust.two.stage forces and magmaan's FIML FMG spectrum
+# already follows - closed it exactly. See docs/backlog/todo.md.)
+#
+# trace(UGamma) = E[T] remains an independent first-principles check: on normal
+# data ncp_hat = mean(base) - mean(trace) ~ 0 for both estimators
+# (noncentrality.csv).
 #
 # No magmaan-internal calls; the magmaan side is the public fmg_tests() battery.
 

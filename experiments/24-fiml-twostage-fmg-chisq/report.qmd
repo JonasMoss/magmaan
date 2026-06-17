@@ -153,17 +153,17 @@ if (!is.null(parity) && nrow(parity)) {
 } else cat("No parity rows (run without --lavaan-parity).")
 ```
 
-magmaan's two-stage *reference law* follows lavaan's `missing =
-"robust.two.stage"` (the sandwich Stage-1 ACOV that sees excess kurtosis): the
-mean-scaled p agrees to ~`1e-2`, and the base matches to machine precision. It is
-*not* lavaan's plain `missing = "two.stage"`, which uses a normal-theory ACOV
+magmaan's two-stage *reference law* matches lavaan's `missing =
+"robust.two.stage"` (the sandwich Stage-1 ACOV that sees excess kurtosis) to
+machine precision: across the grid the mean-scaled p agrees to ≲`1e-4` (typically
+~`1e-7`) and the base to EM/optimizer convergence tolerance, the residual being
+convergence noise rather than any convention difference. It is *not* lavaan's
+plain `missing = "two.stage"`, which uses a normal-theory ACOV
 that collapses toward the naive test under non-normality (on the pl2 MAR cell its
-implied reference-law mean is ≈ 13 against magmaan's ≈ 51 and robust.two.stage's
-≈ 49). The residual few-percent gap to robust.two.stage is a finite-sample
-sandwich-meat sub-convention; the precise anchor is first-principles
-self-consistency: on normal data the base statistic equals the reference-law mean
-(`ncp_hat = mean(base) − mean(trace) ≈ 0`) for both estimators
-(`results/noncentrality.csv`).
+implied reference-law mean is ≈ 13 against magmaan's and robust.two.stage's
+≈ 49). The independent first-principles check still holds: on normal data the
+base statistic equals the reference-law mean (`ncp_hat = mean(base) − mean(trace)
+≈ 0`) for both estimators (`results/noncentrality.csv`).
 
 ## Caveats
 
