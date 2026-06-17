@@ -43,6 +43,7 @@ parse_args <- function(args) {
               mechs = c("MCAR", "MAR"), rates = c(0.15, 0.30),
               dists = c("norm", "vm1", "vm2", "ig1", "ig2", "pl1", "pl2"),
               conds = c("null", "weak", "strong", "strict"),
+              ratios = c("1:1", "1:3"),
               cores = max(parallel::detectCores() - 2L, 1L), smoke = FALSE)
   i <- 1L; take <- function(i) args[[i + 1L]]
   while (i <= length(args)) {
@@ -65,6 +66,7 @@ parse_args <- function(args) {
     } else if (a == "--rates") { i <- i + 1L; out$rates <- parse_csv_numeric(take(i - 1L))
     } else if (a == "--dists") { i <- i + 1L; out$dists <- parse_csv_arg(take(i - 1L))
     } else if (a == "--conds") { i <- i + 1L; out$conds <- parse_csv_arg(take(i - 1L))
+    } else if (a == "--ratios") { i <- i + 1L; out$ratios <- parse_csv_arg(take(i - 1L))
     } else if (a == "--smoke") { out$smoke <- TRUE
     } else stop("unknown argument: ", a, call. = FALSE)
     i <- i + 1L
@@ -94,12 +96,13 @@ executable_cells <- function(cfg) {
   rows <- list()
   conds <- intersect(c("null", "weak", "strong", "strict"), cfg$conds)  # null first
   for (cd in conds)
-    for (d in cfg$dists)
-      for (j in seq_len(nrow(miss)))
-        rows[[length(rows) + 1L]] <- data.frame(
-          p = 6L, n_total = 400L, ratio = "1:1", dist = d,
-          mech = miss$mech[j], rate = miss$rate[j],
-          cond = cd, delta = 0.30, k = 1L, stringsAsFactors = FALSE)
+    for (rt in cfg$ratios)
+      for (d in cfg$dists)
+        for (j in seq_len(nrow(miss)))
+          rows[[length(rows) + 1L]] <- data.frame(
+            p = 6L, n_total = 400L, ratio = rt, dist = d,
+            mech = miss$mech[j], rate = miss$rate[j],
+            cond = cd, delta = 0.30, k = 1L, stringsAsFactors = FALSE)
   do.call(rbind, rows)
 }
 
@@ -138,8 +141,9 @@ run_cell <- function(cell, reps, seed_base, raw_dir) {
   }
   out <- if (length(acc)) do.call(rbind, c(acc, list(make.row.names = FALSE))) else NULL
   if (!is.null(out)) {
-    key <- sprintf("%s_%s_%02d_%s", cell$dist, cell$mech,
-                   as.integer(round(cell$rate * 100)), cell$cond)
+    key <- sprintf("%s_%s_%02d_%s_%s", cell$dist, cell$mech,
+                   as.integer(round(cell$rate * 100)), cell$cond,
+                   gsub(":", "", cell$ratio))
     write.csv(out, file.path(raw_dir, paste0("cell_", key, ".csv")), row.names = FALSE)
   }
   list(rows = out, converged = ok)
@@ -181,28 +185,37 @@ if (cfg$cores > 1L) {
   parallel::mclapply(idx, runner, mc.cores = cfg$cores, mc.preschedule = FALSE)
 } else lapply(idx, runner)
 
-# Concatenate from the per-cell checkpoints (authoritative + crash-safe).
+# Aggregate per-cell from the checkpoints (memory-safe: each cell is ~240k rows,
+# so never build one monolithic fits.csv). Each raw file is one design cell, so
+# its rejection summary is computed independently and the small summaries stack.
 raws <- list.files(raw_dir, pattern = "^cell_.*\\.csv$", full.names = TRUE)
 if (!length(raws)) stop("no cells completed", call. = FALSE)
-fits <- do.call(rbind, lapply(raws, read.csv, stringsAsFactors = FALSE))
-write.csv(fits, file.path("results", "fits.csv"), row.names = FALSE)
-
-summ <- aggregate(p_value ~ cond + mech + rate + dist + estimator + rung +
-                    outcome + method + h1_information + truth,
-                  data = fits, FUN = function(p) mean(p < 0.05, na.rm = TRUE),
-                  na.action = na.pass)
-names(summ)[names(summ) == "p_value"] <- "reject"
+agg_cell <- function(f) {
+  d <- read.csv(f, stringsAsFactors = FALSE)
+  a <- aggregate(p_value ~ cond + mech + rate + dist + ratio + estimator + rung +
+                   outcome + method + h1_information + truth,
+                 data = d, FUN = function(p) mean(p < 0.05, na.rm = TRUE),
+                 na.action = na.pass)
+  names(a)[names(a) == "p_value"] <- "reject"
+  n <- aggregate(p_value ~ cond + mech + rate + dist + ratio + estimator + rung +
+                   outcome + method + h1_information + truth,
+                 data = d, FUN = function(p) sum(!is.na(p)), na.action = na.pass)
+  a$n_reps <- n$p_value
+  a
+}
+summ <- do.call(rbind, lapply(raws, agg_cell))
 write.csv(summ, file.path("results", "summary_rejection.csv"), row.names = FALSE)
 
 meta <- data.frame(
   key = c("reps", "cores", "seed_base", "estimators", "model", "dists",
-          "cells_completed", "note", "elapsed_min"),
+          "conds", "ratios", "cells_completed", "note", "elapsed_min"),
   value = c(cfg$reps, cfg$cores, cfg$seed_base, "FIML,ML2S", "p6-1factor",
-            paste(cfg$dists, collapse = "+"), length(raws),
-            "p=6 base; B&S p8/16/30 = build-out; metric->scalar nested + pEBA-on-diff pending",
+            paste(cfg$dists, collapse = "+"), paste(cfg$conds, collapse = "+"),
+            paste(cfg$ratios, collapse = "+"), length(raws),
+            "p=6 base; B&S p8/16/30 = build-out; metric->scalar nested + pEBA-on-diff pending; power uses raw delta (not Delta-RMSEA-calibrated)",
             round(as.numeric(difftime(Sys.time(), t0, units = "mins")), 1)),
   stringsAsFactors = FALSE)
 write.csv(meta, file.path("results", "metadata.csv"), row.names = FALSE)
 
-message(sprintf("done. %d cells -> %d rows. results/{fits,summary_rejection,cells,metadata}.csv",
-                length(raws), nrow(fits)))
+message(sprintf("done. %d cells aggregated -> results/summary_rejection.csv (per-cell raw in results/raw/)",
+                length(raws)))

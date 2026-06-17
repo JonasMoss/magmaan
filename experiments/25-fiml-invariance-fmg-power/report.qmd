@@ -279,31 +279,102 @@ findings fell out that turn into the paper's core wiring tasks:
    mean-structure-aware nested path, or reference both models to the saturated
    model the way lavaan does.
 
-2. **pEBA-on-the-difference is not exposed yet.** `nestedTest(method =
-   "satorra.2000", A.method = "exact")` returns the difference-spectrum
-   eigenvalues plus naive / SB / mean-var-adjusted / mixture p-values, but **not**
-   the named pEBA-family difference p-values, which are the methodological crux
-   of this paper. They must be applied to that difference spectrum (or wired into
-   the nested path the way `fmg_tests()` is wired for the omnibus). Small
-   core/r-package task, not an experiment-local hack.
+2. **pEBA-on-the-difference is not exposed yet -- but the wire is thin.**
+   `nestedTest(method = "satorra.2000", A.method = "exact")` returns the
+   difference-spectrum eigenvalues plus naive / SB / mean-var-adjusted / mixture
+   p-values, but **not** the named pEBA-family difference p-values, which are the
+   methodological crux of this paper. Concrete path (scoped 2026-06-16): every
+   omnibus battery p-value is produced by one primitive,
+   `infer_fmg_test(statistic, df, eigenvalues, method, param)` (see
+   `.fmg_result_rows` in `r-package/R/fmg.R`). The same call applied to the
+   *difference* statistic and `nestedTest`'s difference spectrum --
+   `infer_fmg_test(T_diff, df_diff, nt$eigenvalues, method = "peba", param = 4)`
+   -- gives pEBA-on-the-difference directly. Validate under normal complete data
+   (difference eigenvalues ~1, so it should track the naive chi-square diff) then
+   confirm calibration gains under non-normality. A short wire, but a methods
+   decision (biased vs unbiased spectrum, param convention) for Njal to sign off.
 
-## Results
+## Results (Type-I run)
 
-```{r results, results="asis"}
+```{r results-guard, results="asis"}
 if (!have_results) {
-  cat("_No results yet._ Reproduce:\n\n",
-      "```sh\n",
-      "Rscript run_experiment.R --smoke           # one cell, normal data, pipeline check\n",
-      "Rscript run_experiment.R --reps 5000       # the calibration run (SLURM)\n",
+  cat("_No results yet._ Reproduce:\n\n```sh\n",
+      "Rscript run_experiment.R --smoke                              # pipeline check\n",
+      "Rscript run_experiment.R --conds null,weak,strict --reps 2500 # the Type-I run\n",
       "```\n", sep = "")
-} else {
-  cat("Rendered from ", reps, " replicates per cell. See tables below.\n", sep = "")
+}
+dist_order <- c("norm","vm1","vm2","ig1","ig2","pl1","pl2")
+# wide dist x method table for one slice of the summary
+slice_tab <- function(S, methods, oc, rng, est = "FIML", rat = "1:1",
+                      mechs = c("complete","MCAR","MAR"), rate_hi = 0.30) {
+  d <- S[S$outcome == oc & S$rung == rng & S$estimator == est & S$ratio == rat &
+           S$truth == "h0" & S$method %in% methods &
+           (S$mech == "complete" | S$rate == rate_hi) & S$mech %in% mechs, ]
+  if (!nrow(d)) return(NULL)
+  d$mech <- factor(d$mech, levels = c("complete","MCAR","MAR"))
+  w <- reshape(d[, c("dist","mech","method","reject")],
+               idvar = c("dist","mech"), timevar = "method", direction = "wide")
+  names(w) <- sub("reject.", "", names(w))
+  w <- w[order(w$mech, match(w$dist, dist_order)), c("dist","mech", methods)]
+  w
 }
 ```
 
-```{r results-table}
+```{r short-answer, results="asis"}
 if (have_results) {
-  knitr::kable(head(S, 30))
+  cat(sprintf(
+    paste0("**Short answer (Type-I, %s reps/cell, p=6 base model).** Three findings.\n\n",
+      "1. **Nested difference test.** The configural-vs-metric Type-I reproduces ",
+      "Brace-Savalei under non-normality and extends it to missing data: the naive ",
+      "difference is destroyed (up to ~.92), Satorra-Bentler over-rejects for severe ",
+      "skew/kurtosis, and **unequal groups (1:3) makes SB drift worse** (pl2 MAR.30: ",
+      "SB ~.30 at 1:3 vs ~.19 at 1:1). Mean-variance-adjusted/mixture help but still ",
+      "drift. The eigenvalue (pEBA) difference p-values are absent because ",
+      "**pEBA-on-the-difference is not wired yet** -- the gap these numbers motivate.\n\n",
+      "2. **Omnibus GOF.** The applied default **MLR fails hard under non-normality ",
+      "(rejection .25-.65)**; the moment/eigenvalue methods recover. But at p=6 the ",
+      "simple **mean-variance (SS) statistic already controls best (~.04-.16), and ",
+      "pEBA4 does not beat it** -- expected, since pEBA's advantage is a ",
+      "high-dimensional effect (FMG show it to p=40). This is the direct argument for ",
+      "the p in {16,30} build-out, not evidence against pEBA.\n\n",
+      "3. **Estimator.** Two-stage ML (ML2S) shows **better Type-I than FIML under ",
+      "severe non-normality** (e.g. vm2 pEBA4 ~.16 vs ~.23), the Savalei-Falk ",
+      "direction, though its naive statistic is wildly inflated (completes to N).\n\n"),
+    reps))
+}
+```
+
+```{r nested-table}
+if (have_results) {
+  nest <- slice_tab(S, c("naive","SB","adjusted","mixture"), "nested", "weak")
+  if (!is.null(nest))
+    knitr::kable(nest, digits = 3, row.names = FALSE,
+                 col.names = c("Family","Missing","Naive","SB","Adj(mv)","Mixture"),
+                 caption = "Nested weak-step (configural vs metric) Type-I, FIML, equal groups. complete / MCAR.30 / MAR.30. Nominal .05.")
+}
+```
+
+```{r gof-table}
+if (have_results) {
+  gof <- slice_tab(S, c("naive","MLR","SB","SS","pEBA4","pall"), "gof", "metric")
+  if (!is.null(gof))
+    knitr::kable(gof, digits = 3, row.names = FALSE,
+                 col.names = c("Family","Missing","Naive","MLR","SB","SS","pEBA4","pall"),
+                 caption = "Omnibus GOF (metric model) Type-I, FIML, equal groups. The eigenvalue methods (SS/pEBA4/pall) vs the MLR/SB defaults under non-normality + missingness. Nominal .05.")
+}
+```
+
+```{r caveats, results="asis"}
+if (have_results) {
+  cat(paste0(
+    "_Caveats._ p=6 one-factor base model (B&S multi-factor p in {8,16,30} is the ",
+    "build-out). FIML shown; ML2S and the unequal-groups (1:3) slice are in ",
+    "`results/summary_rejection.csv` (1:3 is where SB drifts hardest, per B&S). ",
+    "The weak (loadings) and strict (residuals) steps carry the difference test; ",
+    "the strong (scalar) step is omitted here because its robust nested test is ",
+    "not yet wired (mean-structure non-nesting). Power conditions were run at a ",
+    "raw effect size, not yet calibrated to Delta-RMSEA, so treat power as ",
+    "exploratory.\n"))
 }
 ```
 
