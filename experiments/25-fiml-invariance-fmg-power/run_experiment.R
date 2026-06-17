@@ -281,7 +281,7 @@ meta <- data.frame(
   value = c(cfg$reps, cfg$cores, cfg$seed_base, "FIML,ML2S", "p6-1factor",
             paste(cfg$dists, collapse = "+"), paste(cfg$conds, collapse = "+"),
             paste(cfg$ratios, collapse = "+"), length(raws),
-            "p=6 base; B&S p8/16/30 = build-out; metric->scalar nested + pEBA-on-diff pending; power uses raw delta (not Delta-RMSEA-calibrated)",
+            "p=6 base (B&S p8/16/30 = build-out, todo); nested = weak+strict only (metric->scalar non-nesting, todo); pEBA-on-difference harvested via fmg_nested for FIML+ML2S",
             round(as.numeric(difftime(Sys.time(), t0, units = "mins")), 1)),
   stringsAsFactors = FALSE)
 write.csv(meta, file.path(res_dir, "metadata.csv"), row.names = FALSE)
