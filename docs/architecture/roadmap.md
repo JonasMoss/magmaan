@@ -433,6 +433,20 @@ golden `parTable()` fixtures.
   cross-group equality constraint; it was masked by equal-group designs where the
   weight is a global scalar (regression note in
   [docs/validation/test_ledger.md](../validation/test_ledger.md)).
+  Saturated-moment reuse now covers the FIML nested path too: the
+  `lr_test_satorra2000/2001_fiml_from_data` core functions take an optional
+  precomputed `SaturatedMoments* sm_precomputed` (mirroring the ML2S overloads),
+  and the `infer_fiml_lr_test_satorra2000` glue reconstructs it from a fit's
+  `$stage1` (`saturated_from_stage1`) before falling back to a rebuild -- so a
+  caller that stamps `$stage1` onto a FIML fit (or an ML2S fit that already
+  carries it) skips the from-scratch saturated EM + observed-information build in
+  the difference-spectrum driver. `fit_ml2s(stage1 = ...)` likewise skips the
+  rung-independent Stage-1 EM when handed a precomputed object. Bit-identical to
+  the rebuild (the EM is deterministic; asserted in `fiml_test.cpp` and at the R
+  surface). One residual remains by design: each `fit_fiml` still computes its own
+  `fiml_h1_moments` (the cheap mu/Sigma-only EM, no H/J), so the structured H1 is
+  rebuilt per rung; injecting it would need a `fit_fiml` h1 argument plus a
+  FIMLH1-from-R reconstructor, deferred as the structured optimization dominates.
 - Ordinal and mixed-ordinal (polychoric/polyserial least-squares) fits are FMG
   supported via `fmg_tests_ordinal()` / `fmg_tests_mixed_ordinal()`. These reuse
   the UGamma spectrum, base LS chi-square `N*F_min`, and df that

@@ -1066,6 +1066,68 @@ TEST_CASE("nested FIML restriction map: NT gamma gives all-one eigenvalues") {
   CHECK(r->T_scaled == doctest::Approx(3.0).epsilon(1e-10));
 }
 
+TEST_CASE("nested FIML restriction map: precomputed SaturatedMoments is "
+          "bit-identical to the rebuild (2000 and 2001)") {
+  auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");
+  Eigen::VectorXd theta1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta1.setConstant(0.6);
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(h0.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto raw = model_missing_raw(h1, theta1, {160});
+
+  auto samp = magmaan::estimate::fiml::fiml_start_sample_stats(raw);
+  REQUIRE(samp.has_value());
+  auto df1 = magmaan::inference::df_stat(*h1.pt, *samp, theta1);
+  auto df0 = magmaan::inference::df_stat(*h0.pt, *samp, theta0);
+  REQUIRE(df1.has_value());
+  REQUIRE(df0.has_value());
+  auto K1 = magmaan::estimate::build_eq_constraints(*h1.pt);
+  auto K0 = magmaan::estimate::build_eq_constraints(*h0.pt);
+  REQUIRE(K1.has_value());
+  REQUIRE(K0.has_value());
+
+  // The saturated moments depend only on the data, so the caller can build
+  // them once and hand them in; the result must match the from-scratch rebuild
+  // to the bit (the EM is deterministic).
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
+  REQUIRE(sm.has_value());
+
+  // method 2000 (restriction map), empirical Gamma + exact A.
+  auto r_rebuild = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1, *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/5.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Exact, /*h_step=*/1e-4, nullptr);
+  auto r_reuse = magmaan::robust::lr_test_satorra2000_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *K1, *h0.pt, *h0.rep, theta0, *K0,
+      raw, /*T_H0=*/5.0, /*T_H1=*/2.0, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Exact, /*h_step=*/1e-4, &*sm);
+  REQUIRE_MESSAGE(r_rebuild.has_value(),
+      "2000 rebuild failed: " << (r_rebuild.has_value() ? "" : r_rebuild.error().detail));
+  REQUIRE_MESSAGE(r_reuse.has_value(),
+      "2000 reuse failed: " << (r_reuse.has_value() ? "" : r_reuse.error().detail));
+  CHECK(r_reuse->T_scaled == r_rebuild->T_scaled);
+  CHECK(r_reuse->scale_c == r_rebuild->scale_c);
+  CHECK(r_reuse->eigenvalues == r_rebuild->eigenvalues);
+
+  // method 2001 (difference spectrum).
+  auto d_rebuild = magmaan::robust::lr_test_satorra2001_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *h0.pt, *h0.rep, theta0,
+      raw, /*T_H0=*/5.0, /*T_H1=*/2.0, *df0, *df1, /*h_step=*/1e-4, nullptr);
+  auto d_reuse = magmaan::robust::lr_test_satorra2001_fiml_from_data(
+      *h1.pt, *h1.rep, theta1, *h0.pt, *h0.rep, theta0,
+      raw, /*T_H0=*/5.0, /*T_H1=*/2.0, *df0, *df1, /*h_step=*/1e-4, &*sm);
+  REQUIRE_MESSAGE(d_rebuild.has_value(),
+      "2001 rebuild failed: " << (d_rebuild.has_value() ? "" : d_rebuild.error().detail));
+  REQUIRE_MESSAGE(d_reuse.has_value(),
+      "2001 reuse failed: " << (d_reuse.has_value() ? "" : d_reuse.error().detail));
+  CHECK(d_reuse->T_scaled == d_rebuild->T_scaled);
+  CHECK(d_reuse->scale_c == d_rebuild->scale_c);
+  CHECK(d_reuse->eigenvalues == d_rebuild->eigenvalues);
+}
+
 TEST_CASE("nested FIML restriction map: reduced and dense eta-space eigensolves agree") {
   auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
   auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");

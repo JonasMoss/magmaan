@@ -149,24 +149,73 @@ run_cell <- function(cell, reps, seed_base, raw_dir) {
   list(rows = out, converged = ok)
 }
 
+# ---- smoke: per-stage timing for one replicate (shows the shared-EM reuse) ----
+# Builds one masked p=6 dataset, the single shared saturated EM, then times the
+# four fits / three GOF batteries / three nested tests per estimator. With the
+# EM threaded in, the FIML nested step is cheap (it reuses the EM instead of
+# rebuilding it); at p=6 every stage is fast, but the breakdown makes a future
+# regression visible.
+smoke_stage_timing <- function() {
+  pop <- build_population(6L)
+  sampler <- build_cell_sampler(pop, "norm", NULL, c(50L, 50L), reps = 2,
+                                seed_base = 1L, core = magmaan::magmaan_core,
+                                knobs = default_gen_knobs())
+  df <- sampler$draw(1L)
+  df <- apply_missingness(df, pop$ov, "MCAR", 0.30, seed = 7L)$df
+  tm <- function(e) { t <- proc.time()[["elapsed"]]; force(e)
+                      1000 * (proc.time()[["elapsed"]] - t) }
+  spec0 <- magmaan::model_spec(invariance_syntax("configural", pop$ov),
+                               group = "school", group_labels = c("A", "B"),
+                               meanstructure = TRUE)
+  em <- magmaan::magmaan_core$estimate_saturated_em_moments(
+    magmaan::df_to_fiml_data(df, spec0))
+  message("per-replicate stage timing (p=6, 50/group, one shared EM):")
+  for (est in c("FIML", "ML2S")) {
+    t_fit <- tm(fits <- lapply(c("configural", "metric", "scalar", "strict"),
+                               fit_level, df = df, pop = pop, estimator = est,
+                               em = em))
+    names(fits) <- c("configural", "metric", "scalar", "strict")
+    if (any(vapply(fits, is.null, logical(1)))) {
+      message(sprintf("  [%-4s] a fit failed (skipping timing)", est)); next
+    }
+    t_gof <- tm(for (lvl in c("metric", "scalar", "strict"))
+                  gof_rows(fits[[lvl]], est, lvl, add_mlr = (est == "FIML")))
+    t_nst <- tm(for (pr in ladder_pairs())
+                  nested_rows(fits[[pr$h1]], fits[[pr$h0]], est, pr$step))
+    message(sprintf("  [%-4s] 4 fits %5.0f ms | 3 GOF %5.0f ms | 3 nested %5.0f ms",
+                    est, t_fit, t_gof, t_nst))
+  }
+}
+
 # ---- main --------------------------------------------------------------------
 
 suppressMessages(library(magmaan))
 if (exists("set_single_threaded_math")) set_single_threaded_math()
 
-dir.create("results", showWarnings = FALSE)
-raw_dir <- file.path("results", "raw")
-dir.create(raw_dir, showWarnings = FALSE)
-write.csv(design_grid(), file.path("results", "cells.csv"), row.names = FALSE)
+# The smoke writes to an isolated throwaway dir so it neither rescans the (large)
+# overnight raw checkpoints in results/raw/ nor overwrites the real results/
+# summaries. The real run uses results/ as before.
+res_dir <- if (cfg$smoke) file.path(tempdir(), "exp25-smoke-results") else "results"
+raw_dir <- file.path(res_dir, "raw")
+dir.create(raw_dir, recursive = TRUE, showWarnings = FALSE)
+write.csv(design_grid(), file.path(res_dir, "cells.csv"), row.names = FALSE)
 
 cells <- executable_cells(cfg)
 if (cfg$smoke) {
-  cells <- cells[cells$cond == "null" & cells$dist == "norm" &
-                   cells$mech == "MCAR" & cells$rate == 0.30, ]
-  cfg$reps <- max(cfg$reps %/% 150L, 10L)
+  # Fast pipeline + schema + reuse check (seconds, not minutes): a null and a
+  # power cell, tiny n/reps, run synchronously, exercising both estimators, all
+  # rungs, every GOF battery, and the nested tests -- including the shared-EM
+  # reuse plumbing. First print the per-replicate stage breakdown.
+  smoke_stage_timing()
+  cells <- cells[cells$dist == "norm" & cells$mech == "MCAR" &
+                   cells$rate == 0.30 & cells$ratio == "1:1" &
+                   cells$cond %in% c("null", "weak"), ]
+  cells$n_total <- 100L
+  cfg$reps  <- 3L
+  cfg$cores <- 1L
 }
-message(sprintf("%d cells x %d reps on %d cores; null-first; checkpoints -> results/raw/",
-                nrow(cells), cfg$reps, cfg$cores))
+message(sprintf("%d cells x %d reps on %d cores; null-first; checkpoints -> %s",
+                nrow(cells), cfg$reps, cfg$cores, raw_dir))
 
 t0 <- Sys.time()
 runner <- function(i) {
@@ -204,7 +253,27 @@ agg_cell <- function(f) {
   a
 }
 summ <- do.call(rbind, lapply(raws, agg_cell))
-write.csv(summ, file.path("results", "summary_rejection.csv"), row.names = FALSE)
+write.csv(summ, file.path(res_dir, "summary_rejection.csv"), row.names = FALSE)
+
+if (cfg$smoke) {
+  raw_all <- do.call(rbind, lapply(raws, read.csv, stringsAsFactors = FALSE))
+  req  <- c("estimator", "rung", "outcome", "method", "p_value", "cond", "truth")
+  miss <- setdiff(req, names(raw_all))
+  key  <- raw_all$method %in% c("naive", "SB", "pEBA4")
+  checks <- c(
+    columns      = length(miss) == 0L,
+    estimators   = all(c("FIML", "ML2S") %in% raw_all$estimator),
+    outcomes     = all(c("gof", "nested") %in% raw_all$outcome),
+    both_conds   = all(c("h0", "power") %in% raw_all$truth),
+    pval_finite  = any(key) && all(is.finite(raw_all$p_value[key])))
+  for (nm in names(checks))
+    message(sprintf("  smoke check %-12s : %s", nm, checks[[nm]]))
+  if (!all(checks)) {
+    if (length(miss)) message("    missing columns: ", paste(miss, collapse = ", "))
+    stop("SMOKE FAILED", call. = FALSE)
+  }
+  message("SMOKE PASS")
+}
 
 meta <- data.frame(
   key = c("reps", "cores", "seed_base", "estimators", "model", "dists",
@@ -215,7 +284,7 @@ meta <- data.frame(
             "p=6 base; B&S p8/16/30 = build-out; metric->scalar nested + pEBA-on-diff pending; power uses raw delta (not Delta-RMSEA-calibrated)",
             round(as.numeric(difftime(Sys.time(), t0, units = "mins")), 1)),
   stringsAsFactors = FALSE)
-write.csv(meta, file.path("results", "metadata.csv"), row.names = FALSE)
+write.csv(meta, file.path(res_dir, "metadata.csv"), row.names = FALSE)
 
-message(sprintf("done. %d cells aggregated -> results/summary_rejection.csv (per-cell raw in results/raw/)",
-                length(raws)))
+message(sprintf("done. %d cells aggregated -> %s/summary_rejection.csv (per-cell raw in %s)",
+                length(raws), res_dir, raw_dir))

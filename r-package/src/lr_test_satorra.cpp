@@ -378,6 +378,18 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
       fiml_raw_from_fit_arg(ctx_H0.rep, fit_H0["raw_data"]);
   validate_same_fiml_raw(raw_H1, raw_H0, "infer_fiml_lr_test_satorra2000");
 
+  // One saturated build for the whole nested test: H0 and H1 share it (same
+  // data). Reuse a fit's $stage1 (e.g. stamped by the caller or carried by an
+  // ML2S fit) so neither the df/T path below nor the difference-spectrum driver
+  // rebuilds the EM + observed information again.
+  magmaan::estimate::fiml::SaturatedMoments sm;
+  if (!magmaanr::saturated_from_stage1(fit_H1, sm) &&
+      !magmaanr::saturated_from_stage1(fit_H0, sm)) {
+    auto sm_or = magmaan::estimate::fiml::saturated_em_moments(raw_H1, h_step);
+    if (!sm_or.has_value()) magmaanr::stop_post(sm_or.error());
+    sm = std::move(*sm_or);
+  }
+
   auto df_H1_or = magmaan::inference::df_stat(ctx_H1.pt, ctx_H1.samp, est_H1.theta);
   if (!df_H1_or.has_value()) magmaanr::stop_post(df_H1_or.error());
   auto df_H0_or = magmaan::inference::df_stat(ctx_H0.pt, ctx_H0.samp, est_H0.theta);
@@ -393,7 +405,8 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
     auto r_or = magmaan::robust::lr_test_satorra2001_fiml_from_data(
         ctx_H1.pt, ctx_H1.rep, est_H1.theta,
         ctx_H0.pt, ctx_H0.rep, est_H0.theta,
-        raw_H1, fx_H0_or->chi2, fx_H1_or->chi2, *df_H0_or, *df_H1_or, h_step);
+        raw_H1, fx_H0_or->chi2, fx_H1_or->chi2, *df_H0_or, *df_H1_or, h_step,
+        &sm);
     if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
     return satorra2000_to_list(*r_or);
   }
@@ -409,7 +422,7 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
       ctx_H1.pt, ctx_H1.rep, est_H1.theta, *K_H1_or,
       ctx_H0.pt, ctx_H0.rep, est_H0.theta, *K_H0_or,
       raw_H1, fx_H0_or->chi2, fx_H1_or->chi2, *df_H0_or, *df_H1_or,
-      parse_gamma(gamma), parse_a_method(a_method), h_step);
+      parse_gamma(gamma), parse_a_method(a_method), h_step, &sm);
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   return satorra2000_to_list(*r_or);
 }
