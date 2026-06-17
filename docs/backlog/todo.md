@@ -448,6 +448,21 @@ decisions in the simulation backlog.
   residual: `fit_fiml` still recomputes its cheap mu/Sigma-only `fiml_h1_moments`
   per rung; eliminating it needs a `fit_fiml` h1-injection arg + a FIMLH1-from-R
   reconstructor (the structured optimization dominates, so it is low priority).
+- **Measurement-invariance nested run (exp 25) gaps.** Two items block the full
+  Brace-Savalei-style invariance Type-I run; the overnight run uses the p=6
+  one-factor model with the weak + strict nested steps only.
+  (1) **metric->scalar ("strong") nested test is not nestable**: the scalar model
+  ties intercepts AND frees the group-2 latent mean, so `npar(scalar) = 37 >
+  npar(metric) = 36` and the exact Satorra-2000 route
+  (`restriction_alpha_from_K`) rejects `K_H1.npar != K_H0.npar`. Needs a
+  mean-structure-aware nested path (reference both models to the saturated model
+  the way lavaan does), the same item the pEBA-nested paper reviewers raise.
+  (2) **Brace-Savalei multi-factor populations** (two-factor, p in {8,16,30}) are
+  not implemented; `build_population()` errors for p != 6. The p=30 cell is
+  pEBA's home turf and the high-dimensional head-to-head; it is the build-out.
+  Note: pEBA-on-the-difference IS already exposed (`fmg_nested()`, FIML + ML2S),
+  so the spectrum nested battery is harvested now; only the two items above
+  remain.
 - **M, evaluation — structured-h1 FIML FMG: keep or ditch.** The FIML FMG U·Γ
   spectrum exposes `estimate::FIMLH1Information::Structured`, which evaluates the
   U-side information `V` (the saturated observed Hessian `J`) at the model-implied

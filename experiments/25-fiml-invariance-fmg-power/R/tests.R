@@ -104,19 +104,44 @@ gof_rows <- function(fit, estimator, rung, h1 = "saturated", add_mlr = FALSE) {
 # difference is the wiring crux (see report.qmd) -- `peba_diff_available()`
 # reports whether nestedTest already exposes it.
 nested_rows <- function(fit_h1, fit_h0, estimator, step) {
+  acc <- list(); spec <- NULL
+  # (1) SB-family difference test (naive / mean-scaled / mean-var / mixture).
   nt <- tryCatch(magmaan::nestedTest(fit_h1, fit_h0, method = "satorra.2000",
                                      A.method = "exact"),
                  error = function(e) NULL)
-  if (is.null(nt)) return(NULL)
-  p <- c(naive = nt$p_unscaled, SB = nt$p_scaled,
-         adjusted = nt$p_adjusted, mixture = nt$p_mixture)
-  rows <- data.frame(
-    estimator = estimator, rung = step, outcome = "nested",
-    h1_information = "saturated", method = names(p), p_value = unname(p),
-    base_stat = nt$T_diff %||% NA_real_, df = nt$df_diff %||% NA_real_,
-    stringsAsFactors = FALSE)
-  attr(rows, "spectrum") <- tryCatch(as.numeric(nt$eigenvalues),
-                                     error = function(e) NULL)
+  if (!is.null(nt)) {
+    p <- c(naive = nt$p_unscaled, SB = nt$p_scaled,
+           adjusted = nt$p_adjusted, mixture = nt$p_mixture)
+    acc[[length(acc) + 1L]] <- data.frame(
+      estimator = estimator, rung = step, outcome = "nested",
+      h1_information = "saturated", method = names(p), p_value = unname(p),
+      base_stat = nt$T_diff %||% NA_real_, df = nt$df_diff %||% NA_real_,
+      stringsAsFactors = FALSE)
+    spec <- tryCatch(as.numeric(nt$eigenvalues), error = function(e) NULL)
+  }
+  # (2) Eigenvalue-spectrum battery on the DIFFERENCE (pEBA / SS / SF / EBA /
+  # pall / pOLS), the methodological point of the paper, via fmg_nested (FIML
+  # and ML2S both supported). SB is already harvested above, so drop it here to
+  # keep method labels unique. Tolerant: a failure (e.g. the metric->scalar
+  # non-nesting step) just yields no spectrum rows for that step.
+  methods <- fmg_methods()[setdiff(names(fmg_methods()), "SB")]
+  ft <- tryCatch(magmaan::fmg_nested(fit_h1, fit_h0, tests = names(methods),
+                                     A.method = "exact"),
+                 error = function(e) NULL)
+  if (!is.null(ft) && nrow(ft)) {
+    key  <- if ("label" %in% names(ft)) sub("_ml$", "", ft$label) else ft$input
+    p_of <- function(code) { hit <- which(key == code); if (length(hit)) ft$p_value[hit[1L]] else NA_real_ }
+    acc[[length(acc) + 1L]] <- data.frame(
+      estimator = estimator, rung = step, outcome = "nested",
+      h1_information = "saturated", method = names(methods),
+      p_value = vapply(unname(methods), p_of, numeric(1)),
+      base_stat = ft$base_statistic[1L], df = ft$df[1L], stringsAsFactors = FALSE)
+    if (is.null(spec))
+      spec <- tryCatch(as.numeric(ft$eigenvalues[[1L]]), error = function(e) NULL)
+  }
+  if (!length(acc)) return(NULL)
+  rows <- do.call(rbind, acc)
+  attr(rows, "spectrum") <- spec
   rows
 }
 
