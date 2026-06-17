@@ -86,8 +86,10 @@ historical archaeology, not current guidance.
   the C++ core (plus `third_party/port` + `third_party/quadpack`) is **vendored**
   into `r-package/src/{core,magmaan,third_party}/` by `dev/vendor-cpp.sh`
   (`just vendor`) so `R CMD INSTALL` / `remotes::install_github` builds it with
-  no CMake and no prebuilt library, linking a system NLopt
-  (`SystemRequirements: NLopt`). The vendored copies carry an `@generated` banner
+  no CMake and no prebuilt library. NLopt is resolved from a system install
+  (pkg-config) or, failing that, from the `nloptr` CRAN package, which bundles
+  and self-builds NLopt (`LinkingTo`/`Imports: nloptr`) so no system NLopt module
+  is needed. The vendored copies carry an `@generated` banner
   and must never be hand-edited; edit canonical `src/`/`include/` and re-vendor
   (`just vendor-check` guards drift). The **fast dev loop is `just r-dev`**, which
   compiles only the Rcpp glue and links the prebuilt `opt` `libmagmaan.a` via a

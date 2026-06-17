@@ -1386,8 +1386,10 @@ stop rather than any usable non-error return.
   C++ core plus `third_party/{port,quadpack}` is vendored into
   `r-package/src/{core,magmaan,third_party}/` by `dev/vendor-cpp.sh`
   (`just vendor`), so `R CMD INSTALL` / `remotes::install_github` builds it with
-  no CMake and no prebuilt library, linking a system NLopt
-  (`SystemRequirements: NLopt`). The fast dev loop stays `just r-dev` (glue-only
+  no CMake and no prebuilt library. NLopt comes from a system install
+  (pkg-config) or the `nloptr` CRAN package (bundled/self-built; `LinkingTo`/
+  `Imports: nloptr`), so no system NLopt module is required (the Saga fix). The
+  fast dev loop stays `just r-dev` (glue-only
   compile + prebuilt `libmagmaan.a` link via the `build-rdev/` mirror with
   `dev/r-makevars-dev`); the portable build is `just r-install`; `just
   vendor-check` guards vendor drift in `just check`. Cluster install (Saga /

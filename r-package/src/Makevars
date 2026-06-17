@@ -15,14 +15,24 @@
 
 CXX_STD = CXX23
 
-# NLopt is a system dependency (SystemRequirements: NLopt). Resolve it via
-# pkg-config, overridable by NLOPT_CFLAGS / NLOPT_LIBS in the environment (an HPC
-# module, or a fetched copy for a machine without system NLopt); bare -lnlopt as
-# a last resort.
+# NLopt resolution, in order of preference:
+#   1. NLOPT_CFLAGS / NLOPT_LIBS from the environment (an HPC module or a custom
+#      build — wins because of ?=).
+#   2. A system NLopt via pkg-config.
+#   3. The nloptr CRAN package: it bundles and self-builds NLopt, so no system
+#      module is needed (ideal for HPC / Saga). nlopt.h comes from LinkingTo:
+#      nloptr; its nloptr.so exports the nlopt_* C API, linked by full path +
+#      rpath. nloptr is an Imports, so it is guaranteed installed.
+#   4. A bare -lnlopt.
 NLOPT_CFLAGS ?= $(shell pkg-config --cflags nlopt 2>/dev/null)
 NLOPT_LIBS   ?= $(shell pkg-config --libs nlopt 2>/dev/null)
 ifeq ($(strip $(NLOPT_LIBS)),)
-NLOPT_LIBS := -lnlopt
+  NLOPTR_SO := $(shell "$(R_HOME)/bin/Rscript" -e 'f <- list.files(system.file("libs", package="nloptr"), pattern="nloptr[.]so$$", full.names=TRUE); cat(f[1])' 2>/dev/null)
+  ifneq ($(strip $(NLOPTR_SO)),)
+    NLOPT_LIBS := $(NLOPTR_SO) -Wl,-rpath,$(dir $(NLOPTR_SO))
+  else
+    NLOPT_LIBS := -lnlopt
+  endif
 endif
 
 # -I.                          qualified public headers, #include "magmaan/..."
