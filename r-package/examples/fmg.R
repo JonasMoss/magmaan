@@ -185,6 +185,30 @@ stopifnot(grepl("RLS",
   tryCatch(fmg_tests(fit_2s, tests = "peba4_rls"), error = conditionMessage)))
 cat("ML2S (two-stage) FMG workflow: ok\n")
 
+# Nested differences use the same FMG tail transforms on the Satorra-2000
+# difference spectrum. FIML uses the saturated EM information convention; ML2S
+# uses the two-stage convention (complete-data NT weight + EM-ACOV meat).
+model_h0 <- "visual  =~ x1 + a*x2 + a*x3
+             textual =~ x4 + x5 + x6
+             speed   =~ x7 + x8 + x9"
+fit_nf_h1 <- magmaan(model, df_na, estimator = "FIML")
+fit_nf_h0 <- magmaan(model_h0, df_na, estimator = "FIML")
+nt_f <- nestedTest(fit_nf_h1, fit_nf_h0, method = "restriction_map")
+tab_nf <- fmg_nested(fit_nf_h1, fit_nf_h0)
+stopifnot(identical(nt_f$computation, "fiml_eta"))
+stopifnot(inherits(tab_nf, "magmaan_fmg_tests"))
+stopifnot(all(is.finite(tab_nf$p_value)))
+stopifnot(abs(tab_nf$p_value[tab_nf$method == "sb"] - nt_f$p_scaled) < 1e-8)
+
+fit_n2s_h0 <- magmaan(model_h0, df_na, estimator = "ML2S")
+nt_2s <- nestedTest(fit_2s, fit_n2s_h0, method = "restriction_map")
+tab_n2s <- fmg_nested(fit_2s, fit_n2s_h0)
+stopifnot(identical(nt_2s$computation, "ml2s_eta"))
+stopifnot(inherits(tab_n2s, "magmaan_fmg_tests"))
+stopifnot(all(is.finite(tab_n2s$p_value)))
+stopifnot(abs(tab_n2s$p_value[tab_n2s$method == "sb"] - nt_2s$p_scaled) < 1e-8)
+cat("Nested FIML/ML2S FMG workflow: ok\n")
+
 # Oracle parity: magmaan's FMG p-values must match semTests::pvalues() value-for-
 # value over the full test x gamma x base grid. semTests reads the UGamma spectra
 # and base statistics off a lavaan robust fit; magmaan computes them itself, so an

@@ -401,6 +401,62 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
   return satorra2000_to_list(*r_or);
 }
 
+// infer_ml2s_lr_test_satorra2000() — two-stage ML restriction-map nested LR
+// test. Uses the Stage-1 saturated EM moments as the Stage-2 sample moments:
+// T_diff is the complete-data ML chi-square difference on those moments, while
+// the difference spectrum uses complete-data NT weight + EM-ACOV meat.
+//
+// [[Rcpp::export]]
+Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List  fit_H1,
+                                          Rcpp::List  fit_H0,
+                                          std::string gamma = "empirical",
+                                          std::string a_method = "exact",
+                                          double      h_step = 1e-4) {
+  if (!fit_H1.containsElementNamed("raw_data") ||
+      !fit_H0.containsElementNamed("raw_data")) {
+    Rcpp::stop("infer_ml2s_lr_test_satorra2000: both ML2S fits must carry $raw_data");
+  }
+  magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
+  magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est_H0 = magmaanr::est_from_fit(fit_H0);
+
+  magmaan::data::RawData raw_H1 =
+      fiml_raw_from_fit_arg(ctx_H1.rep, fit_H1["raw_data"]);
+  magmaan::data::RawData raw_H0 =
+      fiml_raw_from_fit_arg(ctx_H0.rep, fit_H0["raw_data"]);
+  validate_same_fiml_raw(raw_H1, raw_H0, "infer_ml2s_lr_test_satorra2000");
+
+  auto sm_or = magmaan::estimate::fiml::saturated_em_moments(raw_H1, h_step);
+  if (!sm_or.has_value()) magmaanr::stop_post(sm_or.error());
+  magmaan::data::SampleStats samp;
+  samp.S = sm_or->cov;
+  samp.mean = sm_or->mean;
+  samp.n_obs = sm_or->n_obs;
+
+  auto df_H1_or = magmaan::inference::df_stat(ctx_H1.pt, samp, est_H1.theta);
+  if (!df_H1_or.has_value()) magmaanr::stop_post(df_H1_or.error());
+  auto df_H0_or = magmaan::inference::df_stat(ctx_H0.pt, samp, est_H0.theta);
+  if (!df_H0_or.has_value()) magmaanr::stop_post(df_H0_or.error());
+  const double T_H1 = magmaan::inference::chi2_stat(samp, est_H1);
+  const double T_H0 = magmaan::inference::chi2_stat(samp, est_H0);
+
+  auto K_H1_or = magmaan::estimate::build_eq_constraints(
+      ctx_H1.pt, /*allow_nonlinear=*/true);
+  if (!K_H1_or.has_value()) magmaanr::stop_post(K_H1_or.error());
+  auto K_H0_or = magmaan::estimate::build_eq_constraints(
+      ctx_H0.pt, /*allow_nonlinear=*/true);
+  if (!K_H0_or.has_value()) magmaanr::stop_post(K_H0_or.error());
+
+  auto r_or = magmaan::robust::lr_test_satorra2000_ml2s_from_data(
+      ctx_H1.pt, ctx_H1.rep, est_H1.theta, *K_H1_or,
+      ctx_H0.pt, ctx_H0.rep, est_H0.theta, *K_H0_or,
+      raw_H1, T_H0, T_H1, *df_H0_or, *df_H1_or,
+      parse_gamma(gamma), parse_a_method(a_method), h_step);
+  if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
+  return satorra2000_to_list(*r_or);
+}
+
 // infer_ordinal_lr_test_satorra2000() — polychoric ordinal LS restriction-map
 // nested test. The caller supplies the same OrdinalStats object used for the
 // two fits, matching robust_ordinal()/fmg_tests_ordinal().
