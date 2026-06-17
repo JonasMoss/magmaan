@@ -1966,6 +1966,43 @@ for (m in fiml_cases) {
     }
   }
 
+  # robust.two.stage (the magmaan ML2S convention): sandwich Stage-1 ACOV with an
+  # unstructured Satorra-Bentler weight. Anchors magmaan's two_stage_em_ml_inference
+  # scaled statistic + SEs. Only single-group continuous CFA/SEM converge cleanly;
+  # leave fields null otherwise (the golden skips null fields).
+  se_robust_two_stage <- NULL
+  ml2s_chisq <- NULL
+  ml2s_chisq_scaled <- NULL
+  ml2s_scaling_factor <- NULL
+  ml2s_trace_ugamma <- NULL
+  ml2s_pvalue_scaled <- NULL
+  if (is.null(expect_error)) {
+    rts_args <- fit_args
+    rts_args$missing <- "robust.two.stage"
+    rts_args$estimator <- "ML"
+    fit_rts <- tryCatch(suppressWarnings(do.call(fit_fun, rts_args)),
+                        error = function(e) e)
+    if (!inherits(fit_rts, "error") && lavInspect(fit_rts, "converged")) {
+      num_or_null <- function(x) {
+        y <- as.numeric(x)
+        if (!length(y) || any(!is.finite(y))) NULL else y
+      }
+      pt_rts <- parTable(fit_rts)
+      free_rts <- pt_rts[pt_rts$free > 0, ]
+      free_rts <- free_rts[order(free_rts$free), ]
+      se_robust_two_stage <- as.numeric(free_rts$se)
+      fm_rts <- fitMeasures(fit_rts)
+      ml2s_chisq <- num_or_null(fm_rts["chisq"])
+      ml2s_pvalue_scaled <- num_or_null(fm_rts["pvalue.scaled"])
+      test_rts <- lavInspect(fit_rts, "test")$satorra.bentler
+      if (!is.null(test_rts)) {
+        ml2s_chisq_scaled <- num_or_null(test_rts$stat)
+        ml2s_scaling_factor <- num_or_null(test_rts$scaling.factor)
+        ml2s_trace_ugamma <- num_or_null(test_rts$trace.UGamma)
+      }
+    }
+  }
+
   payload <- list(
     `_meta` = list(
       format_version = 1L,
@@ -2000,6 +2037,12 @@ for (m in fiml_cases) {
     mlr_trace_ugamma = mlr_trace_ugamma,
     mlr_trace_ugamma_h1 = mlr_trace_ugamma_h1,
     mlr_trace_ugamma_h0 = mlr_trace_ugamma_h0,
+    se_robust_two_stage = se_robust_two_stage,
+    ml2s_chisq = ml2s_chisq,
+    ml2s_chisq_scaled = ml2s_chisq_scaled,
+    ml2s_scaling_factor = ml2s_scaling_factor,
+    ml2s_trace_ugamma = ml2s_trace_ugamma,
+    ml2s_pvalue_scaled = ml2s_pvalue_scaled,
     cfi             = as.numeric(fm["cfi"]),
     tli             = as.numeric(fm["tli"]),
     rmsea           = as.numeric(fm["rmsea"]),

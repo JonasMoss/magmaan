@@ -351,6 +351,81 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
                         "mlr_trace_ugamma_h0", 5e-3) && ok;
       }
     }
+
+    // ML2S (two-stage ML) vs lavaan missing="robust.two.stage". Stage 1 is the
+    // saturated EM ACOV, Stage 2 is ML on the EM-completed moments (its own point
+    // estimate, warm-started from the FIML θ̂). The Satorra-Bentler scaling uses
+    // the UNSTRUCTURED (sample/saturated h1) weight; this gate anchors that
+    // convention to actual lavaan values (the 1e-7 self-consistency gate lives in
+    // tests/unit/fiml_test.cpp). Tolerances stay above EM/optimizer noise but well
+    // below the 1-3% shift a structured-weight regression would produce.
+    if (exp.contains("ml2s_scaling_factor") &&
+        finite_json(exp["ml2s_scaling_factor"]) && df > 0) {
+      auto ml2s_cmp = [&](const char* key, double got, double tol) {
+        if (!exp.contains(key) || !finite_json(exp[key])) return true;
+        const double want = exp[key].get<double>();
+        const double d = std::abs(got - want);
+        if (d <= tol * std::max(1.0, std::abs(want))) return true;
+        char buf[256];
+        std::snprintf(buf, sizeof(buf), "%s diff %.3e (got %.10g want %.10g)",
+                      key, d, got, want);
+        failures.push_back(id + ": " + buf);
+        return false;
+      };
+      auto sm_or = magmaan::estimate::fiml::saturated_em_moments(raw);
+      if (!sm_or.has_value()) {
+        failures.push_back(id + ": saturated_em_moments — " + sm_or.error().detail);
+        ok = false;
+      } else {
+        magmaan::data::SampleStats samp;
+        samp.S = sm_or->cov;
+        samp.mean = sm_or->mean;
+        samp.n_obs = sm_or->n_obs;
+        magmaan::optim::OptimOptions o2;
+        o2.max_iter = 4000;
+        auto est2 = magmaan::estimate::fit_ml(*pt, *mr, samp, est.theta, {},
+            magmaan::estimate::Backend::NloptLbfgs, o2);
+        if (!est2.has_value()) {
+          failures.push_back(id + ": ML2S stage-2 fit_ml — " + est2.error().detail);
+          ok = false;
+        } else {
+          auto ml2s_or = magmaan::estimate::fiml::two_stage_em_ml_inference(
+              *pt, *mr, raw, *est2);
+          if (!ml2s_or.has_value()) {
+            failures.push_back(id + ": two_stage_em_ml_inference — " +
+                               ml2s_or.error().detail);
+            ok = false;
+          } else {
+            const auto& m2 = *ml2s_or;
+            ok = ml2s_cmp("ml2s_scaling_factor", m2.scaling_factor, 1e-3) && ok;
+            ok = ml2s_cmp("ml2s_trace_ugamma", m2.trace_ugamma, 1e-3) && ok;
+            ok = ml2s_cmp("ml2s_chisq_scaled", m2.chisq_scaled, 1e-3) && ok;
+            ok = ml2s_cmp("ml2s_chisq", m2.chisq, 1e-3) && ok;
+            if (exp.contains("se_robust_two_stage") &&
+                !exp["se_robust_two_stage"].is_null()) {
+              const Eigen::VectorXd lav_se =
+                  vector_from_json(exp["se_robust_two_stage"]);
+              if (lav_se.size() != m2.se.size()) {
+                failures.push_back(id + ": ml2s SE length mismatch");
+                ok = false;
+              } else {
+                double d_se = 0.0;
+                for (Eigen::Index k = 0; k < lav_se.size(); ++k) {
+                  if (!std::isfinite(lav_se(k))) continue;
+                  d_se = std::max(d_se, std::abs(lav_se(k) - m2.se(k)) /
+                                            std::max(1e-3, std::abs(lav_se(k))));
+                }
+                if (d_se > 1e-3) {
+                  failures.push_back(id + ": ml2s SE max rel diff " +
+                                     std::to_string(d_se));
+                  ok = false;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
     if (ok) ++passed;
   }
 

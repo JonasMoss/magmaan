@@ -2700,12 +2700,18 @@ two_stage_em_ml_inference_impl(spec::LatentStructure pt,
   auto df_or = inference::df_stat(pt, samp, est.theta);
   if (!df_or.has_value()) return std::unexpected(df_or.error());
 
+  // The Satorra-Bentler weight uses Unstructured (sample/saturated h1) moments,
+  // not Structured (model-implied). lavaan's two.stage / robust.two.stage path
+  // hard-forces h1.information = "unstructured", and magmaan's FIML FMG spectrum
+  // follows the same convention; with Unstructured the SE and test-statistic
+  // scaling match lavaan robust.two.stage to machine precision. Structured here
+  // is a finite-sample inconsistency (off by a few percent under non-normality).
   auto gamma_se_or = two_stage_gamma_from_acov(sm, /*se_weighted=*/true);
   if (!gamma_se_or.has_value()) return std::unexpected(gamma_se_or.error());
   auto se_or = robust::robust_se(
       pt, rep, samp, est, *gamma_se_or,
       robust::InferenceSpec{robust::Information::Expected,
-                            robust::WeightMoments::Structured,
+                            robust::WeightMoments::Unstructured,
                             robust::ScoreCovariance::Empirical});
   if (!se_or.has_value()) return std::unexpected(se_or.error());
 
@@ -2724,7 +2730,7 @@ two_stage_em_ml_inference_impl(spec::LatentStructure pt,
   auto uf_or = robust::build_u_factor(
       std::move(pt), rep, samp, est,
       robust::InferenceSpec{robust::Information::Expected,
-                            robust::WeightMoments::Structured,
+                            robust::WeightMoments::Unstructured,
                             robust::ScoreCovariance::Empirical});
   if (!uf_or.has_value()) return std::unexpected(uf_or.error());
   if (static_cast<int>(uf_or->df) != out.df) {

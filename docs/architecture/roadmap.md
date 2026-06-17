@@ -345,22 +345,26 @@ golden `parTable()` fixtures.
   `fit_ml2s()` / `magmaan(..., estimator = "ML2S")` fit and applies the
   eigenvalue-tail transforms to the df-dimensional two-stage UGamma spectrum and
   Stage-2 ML base chi-square already attached as `fit$ml2s` (`eigvals`, `chisq`,
-  `df`) by `two_stage_em_ml_inference`. The two-stage spectrum uses the same
-  saturated-moment EM ACOV as its meat but the complete-data normal-theory weight
-  as the U-metric; as under FIML, `_ug`/`_rls` are rejected and `h1_information`
-  is fixed at `"saturated"`. ML2S must be dispatched before FIML because a
-  two-stage fit also carries a `magmaan_fiml_data` raw object. The two-stage
-  scaling follows lavaan's `missing = "robust.two.stage"` convention (a
-  Huber-White sandwich Stage-1 ACOV that captures excess kurtosis), matching its
-  `pvalue.scaled` to ~`1e-2`; it is *not* lavaan's plain `missing = "two.stage"`,
-  which uses a normal-theory ACOV that collapses toward the naive test under
-  non-normality (its implied reference-law mean diverges sharply from magmaan's
-  while robust.two.stage's tracks it). The two-stage *base* matches both lavaan
-  conventions to machine precision (identical point estimates). The residual
-  few-percent trace gap to robust.two.stage is a finite-sample sandwich-meat
-  sub-convention, so the precise anchor is the first-principles consistency
-  identity `trace(UGamma) = E[T]` (normal-data `ncp_hat = mean(base) -
-  mean(trace) ~ 0`). Calibration evidence is in
+  `df`) by `two_stage_em_ml_inference`. The two-stage spectrum uses the
+  saturated-moment EM sandwich ACOV as its meat and an expected normal-theory
+  Satorra-Bentler weight built from the *unstructured* (sample/saturated h1)
+  moments as the U-metric; as under FIML, `_ug`/`_rls` are rejected and
+  `h1_information` is fixed at `"saturated"`. ML2S must be dispatched before FIML
+  because a two-stage fit also carries a `magmaan_fiml_data` raw object. The
+  two-stage scaling and SEs match lavaan's `missing = "robust.two.stage"`
+  convention (Huber-White sandwich Stage-1 ACOV) to machine precision - base,
+  `pvalue.scaled`, and SEs agree to ≲`1e-4` across the exp-24 grid (typically
+  ~`1e-7`), the residual being EM/optimizer convergence tolerance, not a
+  convention difference. It is *not* lavaan's plain `missing = "two.stage"`, which uses a
+  normal-theory ACOV that collapses toward the naive test under non-normality (its
+  implied reference-law mean diverges sharply from magmaan's while
+  robust.two.stage's tracks it); the *base* matches both lavaan conventions
+  (identical point estimates). `trace(UGamma) = E[T]` (normal-data `ncp_hat =
+  mean(base) - mean(trace) ~ 0`) is an independent first-principles check.
+  (The U-metric weight was previously built from the *structured* model-implied
+  moments, leaving a 1-3% trace gap to robust.two.stage that grew with
+  non-normality; the unstructured weight - the convention lavaan two-stage forces
+  and FIML FMG already used - closed it exactly.) Calibration evidence is in
   `experiments/24-fiml-twostage-fmg-chisq`. Nested/model-pair FIML FMG is
   available through the existing `robust_nested_lrt()` / `nestedTest()`
   `method = "restriction_map"` route when both fits are FIML and carry
