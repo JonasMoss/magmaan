@@ -1636,6 +1636,19 @@ using lavaan as the timing denominator. When both fits are FIML,
 the retained FIML `raw_data` rather than a caller-supplied complete-data
 argument; mixed FIML/complete-data pairs and the lavaan SB2001/SB2010
 compatibility methods are rejected for this boundary.
+The complete-data ML restriction map handles mean structure: when either fit
+carries free intercepts / latent means the per-group moment vector is augmented
+to `[μ_g; vech(Σ_g)]` (mean rows on top), so `lr_test_satorra2000_from_data`
+stacks `dmu_dtheta` over `dsigma_dtheta` for both the per-group `Pi_alpha` and
+the delta restriction, and `compute_satorra2000` carries the augmented block
+through `SatorraGroup.mu_dim` (μ-block of `V` is `Σ⁻¹`, the casewise meat picks
+up the full μ×σ cross-block). This lifts the former covariance-only limitation
+(mean-structured pairs used to error with a rank-deficient pooled `P`); it
+matches lavaan's mean-structured `lavTestLRT(method = "satorra.2000")` and is
+validated by `tests/unit/satorra2000_test.cpp` (augmented streaming/materialized/
+dense agreement, an independent full-UΓ oracle, and the NT collapse) and by
+`r-package/examples/nested_test_satorra2000.R` (meanstructure configural/metric
+and a genuine intercept-invariance restriction vs lavaan).
 The older `nestedTest()` spelling and lavaan labels (`"satorra.2000"`,
 `"satorra.bentler.2001"`, `"satorra.bentler.2010"`) remain as compatibility
 aliases during exploration. Low-level `magmaan_core` exposes both

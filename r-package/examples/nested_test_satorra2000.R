@@ -95,4 +95,112 @@ stopifnot(identical(as.integer(res$df_diff), as.integer(lav_df)))
 stopifnot(isTRUE(all.equal(res$T_diff, lav_unscaled, tolerance = 1e-3)))
 stopifnot(isTRUE(all.equal(res$T_scaled, lav_scaled, tolerance = 1e-3)))
 
+## ===========================================================================
+## MEAN STRUCTURE — the same configural vs metric pair, fit with
+## `meanstructure = TRUE`.  The free intercepts populate the augmented
+## [μ; vech(Σ)] moment vector; before mean-structure support landed this raised
+## "pooled expected info P is rank-deficient".  The saturated means do not
+## change the covariance fit, so the scaled difference must still match lavaan's
+## mean-structured satorra.2000.  This exercises the augmented P / V / casewise
+## meat end-to-end through lavaanify → fit → robust_nested_lrt.
+## ===========================================================================
+
+pt_cfg_m <- magmaan_core$lavaan_lavaanify(m_cfg, n_groups = 2L,
+                                          group_var = "school",
+                                          meanstructure = TRUE)
+pt_met_m <- magmaan_core$lavaan_lavaanify(m_met, n_groups = 2L,
+                                          group_var = "school",
+                                          meanstructure = TRUE)
+fit_cfg_m <- magmaan_core$fit_fit(pt_cfg_m, ssg)     # H1
+fit_met_m <- magmaan_core$fit_fit(pt_met_m, ssg)     # H0
+
+res_m <- magmaan::robust_nested_lrt(fit_H1 = fit_cfg_m, fit_H0 = fit_met_m,
+                                    data = Xg, A.method = "exact")
+cat("\n=== meanstructure=TRUE: robust_nested_lrt(cfg, met, A.method='exact') ===\n")
+print(res_m)
+
+lav_cfg_m <- lavaan::cfa(m_cfg, data = df_hs, group = "school",
+                         estimator = "MLM", meanstructure = TRUE)
+lav_met_m <- lavaan::cfa(m_cfg, data = df_hs, group = "school",
+                         group.equal = "loadings", estimator = "MLM",
+                         meanstructure = TRUE)
+lav_lr_m  <- lavaan::lavTestLRT(lav_cfg_m, lav_met_m, method = "satorra.2000",
+                                A.method = "exact", scaled.shifted = FALSE)
+
+lav_df_m       <- as.numeric(lav_lr_m[2, "Df diff"])
+lav_unscaled_m <- as.numeric(fitMeasures(lav_met_m, "chisq") -
+                             fitMeasures(lav_cfg_m, "chisq"))
+lav_scaled_m   <- as.numeric(lav_lr_m[2, "Chisq diff"])
+
+cat("\n--- meanstructure: magmaan vs lavaan ----------------------------\n")
+cat(sprintf("  Δdf:              magmaan = %d        lavaan = %d         %s\n",
+            res_m$df_diff, as.integer(lav_df_m),
+            ok(identical(as.integer(res_m$df_diff), as.integer(lav_df_m)))))
+cat(sprintf("  Δχ² (unscaled):   magmaan = %.4f   lavaan = %.4f   %s\n",
+            res_m$T_diff, lav_unscaled_m,
+            ok(isTRUE(all.equal(res_m$T_diff, lav_unscaled_m, tolerance = 1e-3)))))
+cat(sprintf("  Δχ² (scaled):     magmaan = %.4f   lavaan = %.4f   %s\n",
+            res_m$T_scaled, lav_scaled_m,
+            ok(isTRUE(all.equal(res_m$T_scaled, lav_scaled_m, tolerance = 1e-3)))))
+
+stopifnot(identical(as.integer(res_m$df_diff), as.integer(lav_df_m)))
+stopifnot(isTRUE(all.equal(res_m$T_diff, lav_unscaled_m, tolerance = 1e-3)))
+stopifnot(isTRUE(all.equal(res_m$T_scaled, lav_scaled_m, tolerance = 1e-3)))
+
+## ===========================================================================
+## MEAN-PARAMETER RESTRICTION — intercept invariance.  Now the restriction
+## itself lands on the mean block: H1 frees the 9 indicator intercepts per
+## group; H0 ties them across groups (latent means fixed at 0 in both groups,
+## so the pair is a pure parameter-nesting the exact restriction map accepts).
+## A_α loads the μ-rows, so this exercises the augmented mean machinery in the
+## restriction, not just the moment space.  Matches lavaan's satorra.2000.
+## ===========================================================================
+
+lmean      <- "visual ~ c(0,0)*1\n  textual ~ c(0,0)*1\n  speed ~ c(0,0)*1"
+ints_free  <- paste(sprintf("x%d ~ 1", 1:9), collapse = "\n  ")
+ints_tied  <- paste(sprintf("x%d ~ c(t%d,t%d)*1", 1:9, 1:9, 1:9), collapse = "\n  ")
+m_int_free <- paste0(m_met, "\n  ", ints_free, "\n  ", lmean)   # H1
+m_int_tied <- paste0(m_met, "\n  ", ints_tied, "\n  ", lmean)   # H0
+
+pt_if  <- magmaan_core$lavaan_lavaanify(m_int_free, n_groups = 2L,
+                                        group_var = "school", meanstructure = TRUE)
+pt_it  <- magmaan_core$lavaan_lavaanify(m_int_tied, n_groups = 2L,
+                                        group_var = "school", meanstructure = TRUE)
+fit_if <- magmaan_core$fit_fit(pt_if, ssg)   # H1
+fit_it <- magmaan_core$fit_fit(pt_it, ssg)   # H0
+
+res_i <- magmaan::robust_nested_lrt(fit_H1 = fit_if, fit_H0 = fit_it,
+                                    data = Xg, A.method = "exact")
+cat("\n=== intercept invariance: robust_nested_lrt(free, tied, A.method='exact') ===\n")
+print(res_i)
+
+lm_obs <- "visual =~ x1 + x2 + x3\n  textual =~ x4 + x5 + x6\n  speed =~ x7 + x8 + x9"
+lav_if <- lavaan::cfa(lm_obs, data = df_hs, group = "school",
+                      group.equal = "loadings", estimator = "MLM",
+                      meanstructure = TRUE)
+lav_it <- lavaan::cfa(paste0(lm_obs, "\n  ", lmean), data = df_hs, group = "school",
+                      group.equal = c("loadings", "intercepts"),
+                      estimator = "MLM", meanstructure = TRUE)
+lav_lr_i <- lavaan::lavTestLRT(lav_if, lav_it, method = "satorra.2000",
+                               A.method = "exact", scaled.shifted = FALSE)
+
+lav_df_i       <- as.numeric(lav_lr_i[2, "Df diff"])
+lav_unscaled_i <- as.numeric(fitMeasures(lav_it, "chisq") - fitMeasures(lav_if, "chisq"))
+lav_scaled_i   <- as.numeric(lav_lr_i[2, "Chisq diff"])
+
+cat("\n--- intercept invariance: magmaan vs lavaan ---------------------\n")
+cat(sprintf("  Δdf:              magmaan = %d        lavaan = %d         %s\n",
+            res_i$df_diff, as.integer(lav_df_i),
+            ok(identical(as.integer(res_i$df_diff), as.integer(lav_df_i)))))
+cat(sprintf("  Δχ² (unscaled):   magmaan = %.4f  lavaan = %.4f  %s\n",
+            res_i$T_diff, lav_unscaled_i,
+            ok(isTRUE(all.equal(res_i$T_diff, lav_unscaled_i, tolerance = 1e-3)))))
+cat(sprintf("  Δχ² (scaled):     magmaan = %.4f  lavaan = %.4f  %s\n",
+            res_i$T_scaled, lav_scaled_i,
+            ok(isTRUE(all.equal(res_i$T_scaled, lav_scaled_i, tolerance = 1e-3)))))
+
+stopifnot(identical(as.integer(res_i$df_diff), as.integer(lav_df_i)))
+stopifnot(isTRUE(all.equal(res_i$T_diff, lav_unscaled_i, tolerance = 1e-3)))
+stopifnot(isTRUE(all.equal(res_i$T_scaled, lav_scaled_i, tolerance = 1e-3)))
+
 cat("\nrobust_nested_lrt() restriction-map workflow: ok\n")

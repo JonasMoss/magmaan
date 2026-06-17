@@ -57,6 +57,25 @@ Eigen::MatrixXd apply_V_columns(const Eigen::MatrixXd& inv_sigma,
   return out;
 }
 
+// Augmented variant of apply_V_columns for the mean-structured moment vector
+// [μ; vech(M)] (mean rows on top).  The μ-block of V = Γ_NT⁻¹ is Σ⁻¹ (the
+// covariance of the mean residuals; no factor of 2, no diagonal halving), so
+// the first `mu_dim` rows map μ-part ↦ Σ⁻¹ · μ-part, while the remaining p*
+// rows reuse the covariance closed form V · vech(M) = vech(W·M·W) diag-halved.
+//
+// `mu_dim` must be 0 (degenerates to apply_V_columns on the σ-rows only) or
+// equal to p = inv_sigma.rows().
+Eigen::MatrixXd apply_V_augmented_columns(
+    const Eigen::MatrixXd& inv_sigma, Eigen::Index mu_dim,
+    const Eigen::Ref<const Eigen::MatrixXd>& cols) {
+  if (mu_dim == 0) return apply_V_columns(inv_sigma, cols);
+  Eigen::MatrixXd out(cols.rows(), cols.cols());
+  out.topRows(mu_dim).noalias() = inv_sigma * cols.topRows(mu_dim);
+  out.bottomRows(cols.rows() - mu_dim) =
+      apply_V_columns(inv_sigma, cols.bottomRows(cols.rows() - mu_dim));
+  return out;
+}
+
 }  // namespace
 
 post_expected<SatorraDiffResult>
@@ -105,11 +124,17 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
     }
     const Eigen::Index p     = gr.Sigma.rows();
     const Eigen::Index pstar = detail::vech_len(p);
-    if (gr.Pi_alpha.rows() != pstar) {
+    if (gr.mu_dim != 0 && gr.mu_dim != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "compute_satorra2000: group " + std::to_string(g) + " mu_dim = " +
+          std::to_string(gr.mu_dim) + " must be 0 (cov-only) or p_g = " +
+          std::to_string(p) + " (augmented [μ; vech(Σ)])"));
+    }
+    if (gr.Pi_alpha.rows() != gr.mu_dim + pstar) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "compute_satorra2000: group " + std::to_string(g) +
           " Pi_alpha has " + std::to_string(gr.Pi_alpha.rows()) +
-          " rows, expected p*_g = " + std::to_string(pstar)));
+          " rows, expected mu_dim + p*_g = " + std::to_string(gr.mu_dim + pstar)));
     }
     Eigen::LLT<Eigen::MatrixXd> llt(gr.Sigma);
     if (llt.info() != Eigen::Success) {
@@ -135,7 +160,8 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
           " has non-finite weight (= n_g / N_total) — typically caused by "
           "an empty group in the caller's split."));
     }
-    const Eigen::MatrixXd V_Pi = apply_V_columns(inv_sigma[g], gr.Pi_alpha);
+    const Eigen::MatrixXd V_Pi =
+        apply_V_augmented_columns(inv_sigma[g], gr.mu_dim, gr.Pi_alpha);
     P.noalias() += gr.weight * (gr.Pi_alpha.transpose() * V_Pi);
   }
   P = 0.5 * (P + P.transpose()).eval();
@@ -213,9 +239,10 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
             " X has " + std::to_string(gr.X.cols()) +
             " columns, expected p_g = " + std::to_string(gr.Sigma.rows())));
       }
-      // D_g = V_g · (Π_α_g · Y)            (p*_g × m)
-      const Eigen::MatrixXd PiY     = gr.Pi_alpha * Y;       // p*_g × m
-      const Eigen::MatrixXd D_g     = apply_V_columns(inv_sigma[g], PiY);
+      // D_g = V_g · (Π_α_g · Y)            ((mu_dim+p*_g) × m)
+      const Eigen::MatrixXd PiY     = gr.Pi_alpha * Y;   // (mu_dim+p*_g) × m
+      const Eigen::MatrixXd D_g =
+          apply_V_augmented_columns(inv_sigma[g], gr.mu_dim, PiY);
       // s_g = vech(S_g_sample) — but the casewise residual d_gi − s_g cancels
       // the constant centring, so we instead use the per-group mean of d_gi
       // over i.  Numerically equivalent to subtracting vech(S_g) up to a
@@ -225,14 +252,20 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
       const Eigen::Index pstar = detail::vech_len(p);
       const Eigen::MatrixXd Xc = gr.X.rowwise() - gr.mean.transpose();
 
-      // Build D row-major: each row i of D is vech(x_i x_iᵀ).
-      Eigen::MatrixXd D_rows(gr.n_g, pstar);
+      // Build D row-major: each row i is the augmented casewise residual
+      // [ (x_i − x̄) ; vech((x_i − x̄)(x_i − x̄)ᵀ) ], with the mean block present
+      // only when mu_dim > 0.  The μ-columns equal Xc directly (already mean
+      // zero, so the dbar centring below is a no-op on them); the σ-columns are
+      // the vech outer products.
+      Eigen::MatrixXd D_rows(gr.n_g, gr.mu_dim + pstar);
+      if (gr.mu_dim > 0) D_rows.leftCols(gr.mu_dim) = Xc;
       for (Eigen::Index i = 0; i < gr.n_g; ++i) {
         const Eigen::VectorXd xi = Xc.row(i).transpose();
         const Eigen::MatrixXd outer = xi * xi.transpose();
-        D_rows.row(i) = detail::vech_lower(outer).transpose();
+        D_rows.row(i).tail(pstar) = detail::vech_lower(outer).transpose();
       }
-      // Centre by the empirical mean of D_rows (≡ vech(S_g_n-divisor)).
+      // Centre by the empirical mean of D_rows (σ-block ≡ vech(S_g_n-divisor);
+      // μ-block mean ≈ 0).
       const Eigen::VectorXd dbar = D_rows.colwise().mean();
       D_rows.rowwise() -= dbar.transpose();
 
@@ -254,7 +287,7 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
         dense_gamma.push_back(
             (D_rows.transpose() * D_rows) / static_cast<double>(gr.n_g));
         dense_dstack.push_back(std::sqrt(gr.weight) * D_g);
-        q_total += pstar;
+        q_total += gr.mu_dim + pstar;
       }
     }
   }
