@@ -73,3 +73,60 @@ assembled intermediate matrix is not positive definite. The negative-correlation
 tail case is the clearest Hermite-order stress: with order 6, Hermite can be
 several `1e-3` away from Rectangle; by order 12 this dropped below `5e-4`, and
 by the default order 30 it was around `5e-5` in the local quick run.
+
+## Cross-check against covsim (`plsim_vs_covsim.R`)
+
+`plsim_calibration_bench.cpp` is self-consistency only (magmaan's three
+integrators agree). `plsim_vs_covsim.R` is the external check: it compares the R
+bindings against covsim's `rPLSIM`, the authoritative Foldnes-Gronneberg
+implementation vendored at `external/r_source/covsim/R/`. Like
+`tests/checks/ig/pearson_draw_bench.R`, it sources covsim from `external/` and
+skips gracefully when covsim (or `tmvtnorm`/`MASS`/`Matrix`/`lavaan`) is absent.
+It is advisory, not in CTest.
+
+Run it after installing the R bindings (`just opt && just r-dev` from the repo
+root):
+
+```sh
+just vs-covsim                 # n=100000, num_segments=4, all five methods
+just vs-covsim --n=200000      # extra args pass through to the script
+```
+
+The **headline** is a covariance cross-check that avoids a subtle confound: the
+piecewise-linear marginal for a given (skewness, excess kurtosis) is *not
+unique*, so covsim and magmaan generally fit different slopes and therefore
+different intermediate correlations even when both are correct. Comparing the raw
+intermediate matrices is thus not apples-to-apples. Instead, for each method the
+check feeds magmaan's **own** fitted marginals and solved intermediate
+correlation into covsim's exact truncated-moment integrator `get_cov()` and
+reports `|get_cov - target|`. That isolates magmaan's covariance integral plus
+root-find and measures it against covsim's integrator, free of the marginal
+ambiguity. `rectangle` (the conditional-normal integrator closest to covsim's
+`tmvtnorm`-based `get_cov`) is the pass criterion; the other four methods are
+reported for context and are expected to show the documented Hermite-truncation
+gap (~`1e-3`).
+
+Per case the script also reports: realized marginal moments (covsim's
+`get_pl_moments` on magmaan's fit, vs target); magmaan's self-reported achieved
+correlation; the exact `gamma` breakpoints (both `qnorm((1:k)/k)[1:(k-1)]`); the
+raw `z.corr` difference (flagged informational, per the non-uniqueness above);
+and large-`N` sample moments for both engines. A final discrimination probe
+perturbs the solved intermediate correlation by `0.05` and confirms the headline
+residual jumps, proving the check has teeth rather than passing vacuously.
+
+Notes and constraints:
+
+- The grid uses moderate shapes (the workhorse case is covsim's own docstring
+  example, skew `1` / excess kurtosis `4`) on positive-definite correlation
+  targets, so covsim fits at `num_segments=4`; extreme or non-PD cases are out of
+  scope here (covsim repairs a non-PD intermediate via `nearPD`, magmaan via
+  Cholesky jitter, so those would not be comparable). The headline still works
+  even if covsim's `rPLSIM` fails to fit a shape, since it uses magmaan's own
+  marginals.
+- The magmaan R binding defaults to `num_segments=12`; the check pins
+  `num_segments=4` to match covsim's default. Pass `--num-segments=` to vary it.
+- RNG is not shared (R's Mersenne vs magmaan's `std::mt19937_64`), so sample
+  moments are paired by target, not by draw; use large `N`.
+- A future `sim_plsim_covariance(marg_i, marg_j, rho, method)` export would let
+  the covariance integral be isolated without routing through covsim's `get_cov`;
+  deferred for now.
