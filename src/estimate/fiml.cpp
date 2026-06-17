@@ -1560,10 +1560,16 @@ FIML::value_gradient(const RawData&,
     const auto& Sigma = moments.sigma[pat.block];
     const auto& Mu = moments.mu[pat.block];
     const Eigen::Index q = static_cast<Eigen::Index>(pat.observed.size());
-    const Eigen::MatrixXd Sigma_o = select_square(Sigma, pat.observed);
-    const Eigen::VectorXd Mu_o = select_vector(Mu, pat.observed);
-    const Eigen::VectorXd d = pat.mean - Mu_o;
-    const Eigen::MatrixXd A = pat.cov + d * d.transpose();
+    Eigen::MatrixXd Sigma_o(q, q);
+    Eigen::VectorXd d(q);
+    for (Eigen::Index j = 0; j < q; ++j) {
+      const Eigen::Index cj = pat.observed[static_cast<std::size_t>(j)];
+      d(j) = pat.mean(j) - Mu(cj);
+      for (Eigen::Index i = 0; i < q; ++i) {
+        Sigma_o(i, j) =
+            Sigma(pat.observed[static_cast<std::size_t>(i)], cj);
+      }
+    }
 
     Eigen::LLT<Eigen::MatrixXd> llt(Sigma_o);
     if (llt.info() != Eigen::Success) {
@@ -1578,15 +1584,21 @@ FIML::value_gradient(const RawData&,
     const double scale = static_cast<double>(pat.n_obs) /
                          static_cast<double>(cache.n_total);
     if (!want_gradient) {
+      const Eigen::MatrixXd A = pat.cov + d * d.transpose();
       f += scale * (log_det + llt.solve(A).trace());
     } else {
-      const Eigen::MatrixXd SigmaInv =
-          llt.solve(Eigen::MatrixXd::Identity(q, q));
-      // tr(Σ⁻¹A) = ⟨Σ⁻¹, A⟩ for symmetric A — avoids a second solve.
-      f += scale * (log_det + SigmaInv.cwiseProduct(A).sum());
-      Eigen::MatrixXd G = SigmaInv - SigmaInv * A * SigmaInv;
-      G = 0.5 * (G + G.transpose());
+      Eigen::MatrixXd SigmaInv = Eigen::MatrixXd::Identity(q, q);
+      llt.solveInPlace(SigmaInv);
       const Eigen::VectorXd z = SigmaInv * d;
+      const double quad = SigmaInv.cwiseProduct(pat.cov).sum() + d.dot(z);
+      f += scale * (log_det + quad);
+
+      Eigen::MatrixXd SigmaInvCov(q, q);
+      SigmaInvCov.noalias() = SigmaInv * pat.cov;
+      Eigen::MatrixXd G(q, q);
+      G.noalias() = SigmaInv - SigmaInvCov * SigmaInv;
+      G.noalias() -= z * z.transpose();
+      G = 0.5 * (G + G.transpose());
 
       const Eigen::Index sigma_off = cache.sigma_offsets[pat.block];
       const Eigen::Index mu_off = cache.mu_offsets[pat.block];
