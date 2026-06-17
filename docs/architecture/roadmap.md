@@ -376,6 +376,21 @@ golden `parTable()` fixtures.
   pairs. Nonlinear equality constraints are supported by local tangent bases for
   both models; when `"exact"` is requested for such a pair, the route warns and
   uses the local tangent restriction because no global affine exact map exists.
+  Two-stage ML (`ML2S`) pairs are routed the same way
+  (`robust_nested_lrt()` / `nestedTest()` dispatch ML2S before the FIML check,
+  since an ML2S fit's `raw_data` is a `magmaan_fiml_data`; `computation =
+  "ml2s_eta"`). The ML2S difference reduction uses the two-stage convention — the
+  complete-data normal-theory weight `V = Gamma_NT(Sigma)^-1`
+  (`ml2s_nt_weight_from_saturated`, *not* the saturated `V = H` of the FIML
+  route) with the EM-ACOV meat `two_stage_gamma_from_acov(sm)` and the Stage-2 ML
+  chi-square difference as the base — matching the single-model ML2S GOF spectrum;
+  a `GammaSource::NT` collapse (every difference eigenvalue exactly 1) gates the
+  weight convention. The eigenvalue-tail battery is applied to any of these
+  difference spectra (continuous ML / FIML / ML2S) through `fmg_nested(fit_H1,
+  fit_H0, ...)`, the model-pair analogue of `fmg_nested_ordinal()`: it harvests
+  `(T_diff, df_diff, eigenvalues)` from the restriction-map result and runs the
+  `pEBA`/`pOLS`/`all`/`penalized-all` transforms, returning a `magmaan_fmg_tests`
+  table.
   The helper computes biased and optional Browne/Du-Bentler unbiased U-Gamma
   spectra through C++, keeping the U-factor, tiled casewise-contribution
   projection, grouped reduced matrices, and eigensolves out of R list
