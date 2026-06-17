@@ -358,10 +358,14 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
                                           Rcpp::List  fit_H0,
                                           std::string gamma = "empirical",
                                           std::string a_method = "exact",
-                                          double      h_step = 1e-4) {
+                                          double      h_step = 1e-4,
+                                          std::string ud_method = "2000") {
   if (!fit_H1.containsElementNamed("raw_data") ||
       !fit_H0.containsElementNamed("raw_data")) {
     Rcpp::stop("infer_fiml_lr_test_satorra2000: both FIML fits must carry $raw_data");
+  }
+  if (ud_method != "2000" && ud_method != "2001") {
+    Rcpp::stop("infer_fiml_lr_test_satorra2000: ud_method must be '2000' or '2001'");
   }
   magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
   const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
@@ -384,6 +388,15 @@ Rcpp::List infer_fiml_lr_test_satorra2000(Rcpp::List  fit_H1,
   auto fx_H0_or = magmaan::estimate::fiml::fiml_extras(
       ctx_H0.pt, ctx_H0.rep, raw_H0, est_H0);
   if (!fx_H0_or.has_value()) magmaanr::stop_post(fx_H0_or.error());
+
+  if (ud_method == "2001") {
+    auto r_or = magmaan::robust::lr_test_satorra2001_fiml_from_data(
+        ctx_H1.pt, ctx_H1.rep, est_H1.theta,
+        ctx_H0.pt, ctx_H0.rep, est_H0.theta,
+        raw_H1, fx_H0_or->chi2, fx_H1_or->chi2, *df_H0_or, *df_H1_or, h_step);
+    if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
+    return satorra2000_to_list(*r_or);
+  }
 
   auto K_H1_or = magmaan::estimate::build_eq_constraints(
       ctx_H1.pt, /*allow_nonlinear=*/true);
@@ -411,10 +424,14 @@ Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List  fit_H1,
                                           Rcpp::List  fit_H0,
                                           std::string gamma = "empirical",
                                           std::string a_method = "exact",
-                                          double      h_step = 1e-4) {
+                                          double      h_step = 1e-4,
+                                          std::string ud_method = "2000") {
   if (!fit_H1.containsElementNamed("raw_data") ||
       !fit_H0.containsElementNamed("raw_data")) {
     Rcpp::stop("infer_ml2s_lr_test_satorra2000: both ML2S fits must carry $raw_data");
+  }
+  if (ud_method != "2000" && ud_method != "2001") {
+    Rcpp::stop("infer_ml2s_lr_test_satorra2000: ud_method must be '2000' or '2001'");
   }
   magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
   const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
@@ -440,6 +457,15 @@ Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List  fit_H1,
   if (!df_H0_or.has_value()) magmaanr::stop_post(df_H0_or.error());
   const double T_H1 = magmaan::inference::chi2_stat(samp, est_H1);
   const double T_H0 = magmaan::inference::chi2_stat(samp, est_H0);
+
+  if (ud_method == "2001") {
+    auto r_or = magmaan::robust::lr_test_satorra2001_ml2s_from_data(
+        ctx_H1.pt, ctx_H1.rep, est_H1.theta,
+        ctx_H0.pt, ctx_H0.rep, est_H0.theta,
+        raw_H1, T_H0, T_H1, *df_H0_or, *df_H1_or, h_step);
+    if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
+    return satorra2000_to_list(*r_or);
+  }
 
   auto K_H1_or = magmaan::estimate::build_eq_constraints(
       ctx_H1.pt, /*allow_nonlinear=*/true);
@@ -502,6 +528,120 @@ Rcpp::List infer_ordinal_lr_test_satorra2000(Rcpp::List  fit_H1,
       magmaanr::ordinal_parameterization_from_string(p1));
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   return satorra2000_to_list(*r_or);
+}
+
+// FIML/ML2S scalar SB2001 / SB2010 difference tests (baseline columns; not the
+// FMG-able spectrum). Reconstruct both missing-data fits, recover the FIML LRT
+// (FIML) or two-stage ML (ML2S) chi-squares and df, then call the core scalar
+// engines. SB2010 injects the H0 estimates into H1 for the M10 scale, so both
+// fits must share the parameter layout (same-`==`-constrained nesting).
+namespace {
+
+struct FimlTD { double T_H0; double T_H1; int df_H0; int df_H1; };
+
+FimlTD fiml_td(const magmaanr::Ctx& ctx_H1, const magmaan::estimate::Estimates& est_H1,
+               const magmaan::data::RawData& raw_H1,
+               const magmaanr::Ctx& ctx_H0, const magmaan::estimate::Estimates& est_H0,
+               const magmaan::data::RawData& raw_H0, const char* who) {
+  auto df_H1_or = magmaan::inference::df_stat(ctx_H1.pt, ctx_H1.samp, est_H1.theta);
+  if (!df_H1_or.has_value()) magmaanr::stop_post(df_H1_or.error());
+  auto df_H0_or = magmaan::inference::df_stat(ctx_H0.pt, ctx_H0.samp, est_H0.theta);
+  if (!df_H0_or.has_value()) magmaanr::stop_post(df_H0_or.error());
+  auto fx_H1_or = magmaan::estimate::fiml::fiml_extras(ctx_H1.pt, ctx_H1.rep, raw_H1, est_H1);
+  if (!fx_H1_or.has_value()) magmaanr::stop_post(fx_H1_or.error());
+  auto fx_H0_or = magmaan::estimate::fiml::fiml_extras(ctx_H0.pt, ctx_H0.rep, raw_H0, est_H0);
+  if (!fx_H0_or.has_value()) magmaanr::stop_post(fx_H0_or.error());
+  (void)who;
+  return FimlTD{fx_H0_or->chi2, fx_H1_or->chi2, *df_H0_or, *df_H1_or};
+}
+
+FimlTD ml2s_td(const magmaanr::Ctx& ctx_H1, const magmaan::estimate::Estimates& est_H1,
+               const magmaanr::Ctx& ctx_H0, const magmaan::estimate::Estimates& est_H0,
+               const magmaan::data::RawData& raw_H1, double h_step) {
+  auto sm_or = magmaan::estimate::fiml::saturated_em_moments(raw_H1, h_step);
+  if (!sm_or.has_value()) magmaanr::stop_post(sm_or.error());
+  magmaan::data::SampleStats samp;
+  samp.S = sm_or->cov; samp.mean = sm_or->mean; samp.n_obs = sm_or->n_obs;
+  auto df_H1_or = magmaan::inference::df_stat(ctx_H1.pt, samp, est_H1.theta);
+  if (!df_H1_or.has_value()) magmaanr::stop_post(df_H1_or.error());
+  auto df_H0_or = magmaan::inference::df_stat(ctx_H0.pt, samp, est_H0.theta);
+  if (!df_H0_or.has_value()) magmaanr::stop_post(df_H0_or.error());
+  return FimlTD{magmaan::inference::chi2_stat(samp, est_H0),
+                magmaan::inference::chi2_stat(samp, est_H1), *df_H0_or, *df_H1_or};
+}
+
+}  // namespace
+
+// [[Rcpp::export]]
+Rcpp::List infer_fiml_lr_test_satorra_bentler2001(Rcpp::List fit_H1, Rcpp::List fit_H0,
+                                                  double h_step = 1e-4) {
+  magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
+  magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est_H0 = magmaanr::est_from_fit(fit_H0);
+  magmaan::data::RawData raw_H1 = fiml_raw_from_fit_arg(ctx_H1.rep, fit_H1["raw_data"]);
+  magmaan::data::RawData raw_H0 = fiml_raw_from_fit_arg(ctx_H0.rep, fit_H0["raw_data"]);
+  validate_same_fiml_raw(raw_H1, raw_H0, "infer_fiml_lr_test_satorra_bentler2001");
+  FimlTD td = fiml_td(ctx_H1, est_H1, raw_H1, ctx_H0, est_H0, raw_H0, "fiml_sb2001");
+  auto r_or = magmaan::robust::lr_test_satorra_bentler2001_fiml_from_data(
+      ctx_H1.pt, ctx_H1.rep, est_H1.theta, ctx_H0.pt, ctx_H0.rep, est_H0.theta,
+      raw_H1, td.T_H0, td.T_H1, td.df_H0, td.df_H1, h_step);
+  if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
+  return sb_diff_to_list(*r_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List infer_fiml_lr_test_satorra_bentler2010(Rcpp::List fit_H1, Rcpp::List fit_H0,
+                                                  double h_step = 1e-4) {
+  magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
+  magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est_H0 = magmaanr::est_from_fit(fit_H0);
+  magmaan::data::RawData raw_H1 = fiml_raw_from_fit_arg(ctx_H1.rep, fit_H1["raw_data"]);
+  magmaan::data::RawData raw_H0 = fiml_raw_from_fit_arg(ctx_H0.rep, fit_H0["raw_data"]);
+  validate_same_fiml_raw(raw_H1, raw_H0, "infer_fiml_lr_test_satorra_bentler2010");
+  FimlTD td = fiml_td(ctx_H1, est_H1, raw_H1, ctx_H0, est_H0, raw_H0, "fiml_sb2010");
+  auto r_or = magmaan::robust::lr_test_satorra_bentler2010_fiml_from_data(
+      ctx_H1.pt, ctx_H1.rep, est_H0.theta, ctx_H0.pt, ctx_H0.rep, est_H0.theta,
+      raw_H1, td.T_H0, td.T_H1, td.df_H0, td.df_H1, h_step);
+  if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
+  return sb_diff_to_list(*r_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List infer_ml2s_lr_test_satorra_bentler2001(Rcpp::List fit_H1, Rcpp::List fit_H0,
+                                                  double h_step = 1e-4) {
+  magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
+  magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est_H0 = magmaanr::est_from_fit(fit_H0);
+  magmaan::data::RawData raw_H1 = fiml_raw_from_fit_arg(ctx_H1.rep, fit_H1["raw_data"]);
+  magmaan::data::RawData raw_H0 = fiml_raw_from_fit_arg(ctx_H0.rep, fit_H0["raw_data"]);
+  validate_same_fiml_raw(raw_H1, raw_H0, "infer_ml2s_lr_test_satorra_bentler2001");
+  FimlTD td = ml2s_td(ctx_H1, est_H1, ctx_H0, est_H0, raw_H1, h_step);
+  auto r_or = magmaan::robust::lr_test_satorra_bentler2001_ml2s_from_data(
+      ctx_H1.pt, ctx_H1.rep, est_H1.theta, ctx_H0.pt, ctx_H0.rep, est_H0.theta,
+      raw_H1, td.T_H0, td.T_H1, td.df_H0, td.df_H1, h_step);
+  if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
+  return sb_diff_to_list(*r_or);
+}
+
+// [[Rcpp::export]]
+Rcpp::List infer_ml2s_lr_test_satorra_bentler2010(Rcpp::List fit_H1, Rcpp::List fit_H0,
+                                                  double h_step = 1e-4) {
+  magmaanr::Ctx ctx_H1 = magmaanr::ctx_from_fit(fit_H1);
+  const magmaan::estimate::Estimates est_H1 = magmaanr::est_from_fit(fit_H1);
+  magmaanr::Ctx ctx_H0 = magmaanr::ctx_from_fit(fit_H0);
+  const magmaan::estimate::Estimates est_H0 = magmaanr::est_from_fit(fit_H0);
+  magmaan::data::RawData raw_H1 = fiml_raw_from_fit_arg(ctx_H1.rep, fit_H1["raw_data"]);
+  magmaan::data::RawData raw_H0 = fiml_raw_from_fit_arg(ctx_H0.rep, fit_H0["raw_data"]);
+  validate_same_fiml_raw(raw_H1, raw_H0, "infer_ml2s_lr_test_satorra_bentler2010");
+  FimlTD td = ml2s_td(ctx_H1, est_H1, ctx_H0, est_H0, raw_H1, h_step);
+  auto r_or = magmaan::robust::lr_test_satorra_bentler2010_ml2s_from_data(
+      ctx_H1.pt, ctx_H1.rep, est_H0.theta, ctx_H0.pt, ctx_H0.rep, est_H0.theta,
+      raw_H1, td.T_H0, td.T_H1, td.df_H0, td.df_H1, h_step);
+  if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
+  return sb_diff_to_list(*r_or);
 }
 
 // infer_lr_test_satorra_bentler2001() — lavaan-compatible SB2001 scaled

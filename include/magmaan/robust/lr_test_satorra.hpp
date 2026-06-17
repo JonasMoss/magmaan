@@ -84,6 +84,50 @@ lr_test_satorra_bentler2010_from_data(
     int                          df_H1,
     GammaSource                  gamma = GammaSource::Empirical);
 
+// ── Scalar SB2001 / SB2010 difference tests for missing data (FIML / ML2S) ──
+// These are the two-constant scalar statistics (NOT the FMG-able spectrum):
+// c_d = (df0·c0 − df1·c1)/m for 2001 (c0, c1 the single-model GOF scalings at
+// their own MLEs), and c_d = (df0·c0 − df1·c_M10)/m for 2010 (c_M10 = the H1
+// structure's GOF scaling evaluated at the H0 estimates, the positivity fix).
+// They mirror the complete-data `_from_data` engines and are intended as
+// baseline comparison columns (the lavaan SB2001 statistic and its positivity
+// fix). 2010 requires same-parameter nesting (theta_H0 injectable into H1).
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2001_fiml_from_data(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const Eigen::VectorXd& theta_H1_full,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0_full,
+    const data::RawData& raw,
+    double T_H0, double T_H1, int df_H0, int df_H1, double h_step = 1e-4);
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2001_ml2s_from_data(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const Eigen::VectorXd& theta_H1_full,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0_full,
+    const data::RawData& raw,
+    double T_H0, double T_H1, int df_H0, int df_H1, double h_step = 1e-4);
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2010_fiml_from_data(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const Eigen::VectorXd& theta_H0_full,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0_for_H0,
+    const data::RawData& raw,
+    double T_H0, double T_H1, int df_H0, int df_H1, double h_step = 1e-4);
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2010_ml2s_from_data(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const Eigen::VectorXd& theta_H0_full,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0_for_H0,
+    const data::RawData& raw,
+    double T_H0, double T_H1, int df_H0, int df_H1, double h_step = 1e-4);
+
 // ============================================================================
 // Satorra-2000 nested likelihood-ratio test for two SEM fits H1 ⊃ H0.
 //
@@ -229,6 +273,49 @@ lr_test_satorra2000_ml2s_from_data(
     int                              df_H1,
     GammaSource                      gamma = GammaSource::Empirical,
     SatorraAMethod                   a_method = SatorraAMethod::Exact,
+    double                           h_step = 1e-4);
+
+// ============================================================================
+// Satorra-Bentler "method 2001" difference-spectrum nested tests for missing
+// data: the U_D = U0 − U1 estimator (vs the restriction-map "method 2000"
+// above). Each model's residual projector is built in the shared saturated
+// η-metric (common weight V and common Γ), differenced, and the top
+// df_H0 − df_H1 eigenvalues of (U0 − U1)·Γ are read out through the same
+// LRSatorra2000Result family (SB / mean-var / scaled-shifted / mixture); the
+// eigenvalues also feed the FMG/pEBA tail transforms. No restriction matrix or
+// EqConstraints are needed — the spectrum comes from the two single-model fits.
+// (Satorra & Bentler 2001 p.510; semTests::ugamma_nested(m0, m1, "2001").)
+//
+// FIML: V = saturated observed information (sm.H), Γ = saturated ACOV (sm.acov).
+// ML2S: V = two-stage NT weight, Γ = two-stage moment ACOV.
+post_expected<LRSatorra2000Result>
+lr_test_satorra2001_fiml_from_data(
+    const spec::LatentStructure&     pt_H1,
+    const model::MatrixRep&          rep_H1,
+    const Eigen::VectorXd&           theta_H1_full,
+    const spec::LatentStructure&     pt_H0,
+    const model::MatrixRep&          rep_H0,
+    const Eigen::VectorXd&           theta_H0_full,
+    const data::RawData&             raw,
+    double                           T_H0,
+    double                           T_H1,
+    int                              df_H0,
+    int                              df_H1,
+    double                           h_step = 1e-4);
+
+post_expected<LRSatorra2000Result>
+lr_test_satorra2001_ml2s_from_data(
+    const spec::LatentStructure&     pt_H1,
+    const model::MatrixRep&          rep_H1,
+    const Eigen::VectorXd&           theta_H1_full,
+    const spec::LatentStructure&     pt_H0,
+    const model::MatrixRep&          rep_H0,
+    const Eigen::VectorXd&           theta_H0_full,
+    const data::RawData&             raw,
+    double                           T_H0,
+    double                           T_H1,
+    int                              df_H0,
+    int                              df_H1,
     double                           h_step = 1e-4);
 
 post_expected<LRSatorra2000Result>

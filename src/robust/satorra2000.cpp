@@ -387,4 +387,89 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
   return out;
 }
 
+post_expected<SatorraDiffResult>
+compute_diff_spectrum_2001(const Eigen::Ref<const Eigen::MatrixXd>& U0,
+                           const Eigen::Ref<const Eigen::MatrixXd>& U1,
+                           const Eigen::Ref<const Eigen::MatrixXd>& Gamma,
+                           int                                      df) {
+  const Eigen::Index q = U0.rows();
+  if (U0.cols() != q || U1.rows() != q || U1.cols() != q ||
+      Gamma.rows() != q || Gamma.cols() != q || q == 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_diff_spectrum_2001: U0, U1, Gamma must be square and the same "
+        "dimension"));
+  }
+  if (df <= 0) {
+    SatorraDiffResult deg;
+    deg.C = Eigen::MatrixXd::Zero(0, 0);
+    deg.S = Eigen::MatrixXd::Zero(0, 0);
+    deg.eigenvalues    = Eigen::VectorXd::Zero(0);
+    deg.trace_CinvS    = 0.0;
+    deg.trace_CinvS_sq = 0.0;
+    return deg;
+  }
+  if (static_cast<Eigen::Index>(df) > q) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_diff_spectrum_2001: df (" + std::to_string(df) +
+        ") exceeds moment dimension (" + std::to_string(q) + ")"));
+  }
+
+  // D = U0 − U1 (symmetric since each U_g is symmetric).
+  const Eigen::MatrixXd D = 0.5 * ((U0 - U1) + (U0 - U1).transpose());
+
+  // eig((U0−U1)·Γ) = eig(RᵀDR) with Γ = RRᵀ — the symmetric reduction used
+  // throughout the U·Γ machinery (mirrors fiml_ugamma_spectrum_impl).
+  Eigen::MatrixXd reduced;
+  {
+    const Eigen::MatrixXd Gs = 0.5 * (Gamma + Gamma.transpose());
+    Eigen::LLT<Eigen::MatrixXd> llt(Gs);
+    if (llt.info() == Eigen::Success) {
+      const Eigen::MatrixXd R = llt.matrixL();
+      reduced = R.transpose() * D * R;
+    } else {
+      Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es_g(Gs);
+      if (es_g.info() != Eigen::Success) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "compute_diff_spectrum_2001: common Gamma is not symmetric PSD"));
+      }
+      const Eigen::VectorXd d = es_g.eigenvalues().cwiseMax(0.0).cwiseSqrt();
+      const Eigen::MatrixXd sq =
+          es_g.eigenvectors() * d.asDiagonal() * es_g.eigenvectors().transpose();
+      reduced = sq * D * sq;
+    }
+    reduced = 0.5 * (reduced + reduced.transpose()).eval();
+  }
+
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(reduced,
+                                                    Eigen::EigenvaluesOnly);
+  if (es.info() != Eigen::Success) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "compute_diff_spectrum_2001: eigen-solve of the difference spectrum "
+        "failed"));
+  }
+  // The d test eigenvalues are the d largest (ascending) of the q-spectrum.
+  const Eigen::VectorXd all = es.eigenvalues();
+  Eigen::VectorXd eig = all.tail(df);
+
+  std::vector<std::string> warnings;
+  const double scale = std::max(1.0, eig.cwiseAbs().maxCoeff());
+  if (eig.minCoeff() < -1e-8 * scale) {
+    warnings.emplace_back(
+        "compute_diff_spectrum_2001: method-2001 negative eigenvalue " +
+        std::to_string(eig.minCoeff()) + " in the top-" + std::to_string(df) +
+        " difference spectrum (U0 − U1 is not PSD); the SB/mixture readouts can "
+        "go negative — fall back to method 2000 if a positive statistic is "
+        "required.");
+  }
+
+  SatorraDiffResult out;
+  out.C              = Eigen::MatrixXd::Zero(0, 0);
+  out.S              = Eigen::MatrixXd::Zero(0, 0);
+  out.eigenvalues    = std::move(eig);
+  out.trace_CinvS    = out.eigenvalues.sum();
+  out.trace_CinvS_sq = out.eigenvalues.squaredNorm();
+  out.warnings       = std::move(warnings);
+  return out;
+}
+
 }  // namespace magmaan::robust

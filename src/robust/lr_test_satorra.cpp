@@ -1154,4 +1154,239 @@ lr_test_satorra2000_ml2s_from_data(
   return out_or;
 }
 
+namespace {
+
+// Shared FIML / ML2S "method 2001" difference-spectrum driver. `two_stage`
+// selects the two-stage NT weight + two-stage Γ (ML2S) over the saturated
+// observed information + saturated ACOV (FIML). U0/U1 are the single-model
+// residual projectors against the common V; the spectrum is the top
+// df_H0 − df_H1 eigenvalues of (U0 − U1)·Γ.
+post_expected<LRSatorra2000Result>
+lr_test_satorra2001_missing_impl(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const Eigen::VectorXd& theta_H1_full,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0_full,
+    const data::RawData& raw,
+    double T_H0, double T_H1, int df_H0, int df_H1,
+    bool two_stage, double h_step) {
+  const int df_diff = df_H0 - df_H1;
+  const char* label = two_stage ? "lr_test_satorra2001_ml2s_from_data"
+                                : "lr_test_satorra2001_fiml_from_data";
+  if (df_diff < 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": df_H0 - df_H1 is negative; H1 must be the "
+        "less-restricted model"));
+  }
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": h_step must be > 0"));
+  }
+
+  auto sm_or = estimate::fiml::saturated_em_moments(raw, h_step);
+  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+  const estimate::fiml::SaturatedMoments& sm = *sm_or;
+
+  Eigen::MatrixXd V;
+  Eigen::MatrixXd Gamma;
+  if (two_stage) {
+    auto V_or = ml2s_nt_weight_from_saturated(sm);
+    if (!V_or.has_value()) return std::unexpected(V_or.error());
+    V = std::move(*V_or);
+    auto G_or = estimate::fiml::two_stage_gamma_from_acov(sm,
+                                                          /*se_weighted=*/false);
+    if (!G_or.has_value()) return std::unexpected(G_or.error());
+    Gamma = std::move(*G_or);
+  } else {
+    V = sm.H;
+    Gamma = sm.acov;
+  }
+
+  estimate::Estimates est_H1;
+  est_H1.theta = theta_H1_full;
+  estimate::Estimates est_H0;
+  est_H0.theta = theta_H0_full;
+
+  auto U1_or = estimate::fiml::fiml_residual_projector(pt_H1, rep_H1, raw,
+                                                       est_H1, V);
+  if (!U1_or.has_value()) return std::unexpected(U1_or.error());
+  auto U0_or = estimate::fiml::fiml_residual_projector(pt_H0, rep_H0, raw,
+                                                       est_H0, V);
+  if (!U0_or.has_value()) return std::unexpected(U0_or.error());
+
+  auto sd_or = compute_diff_spectrum_2001(*U0_or, *U1_or, Gamma, df_diff);
+  if (!sd_or.has_value()) return std::unexpected(sd_or.error());
+  return lr_test_satorra2000(T_H0 - T_H1, *sd_or);
+}
+
+}  // namespace
+
+post_expected<LRSatorra2000Result>
+lr_test_satorra2001_fiml_from_data(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const Eigen::VectorXd& theta_H1_full,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0_full,
+    const data::RawData& raw,
+    double T_H0, double T_H1, int df_H0, int df_H1, double h_step) {
+  return lr_test_satorra2001_missing_impl(
+      pt_H1, rep_H1, theta_H1_full, pt_H0, rep_H0, theta_H0_full, raw,
+      T_H0, T_H1, df_H0, df_H1, /*two_stage=*/false, h_step);
+}
+
+post_expected<LRSatorra2000Result>
+lr_test_satorra2001_ml2s_from_data(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const Eigen::VectorXd& theta_H1_full,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0_full,
+    const data::RawData& raw,
+    double T_H0, double T_H1, int df_H0, int df_H1, double h_step) {
+  return lr_test_satorra2001_missing_impl(
+      pt_H1, rep_H1, theta_H1_full, pt_H0, rep_H0, theta_H0_full, raw,
+      T_H0, T_H1, df_H0, df_H1, /*two_stage=*/true, h_step);
+}
+
+namespace {
+
+// Single-model FIML / ML2S goodness-of-fit scaling c = mean of the df nonzero
+// U·Γ eigenvalues at (pt, rep, theta). Reuses fiml_residual_projector for U and
+// compute_diff_spectrum_2001 (with U1 = 0) for the top-df eigenvalue reduction;
+// for FIML this reproduces fiml_ugamma_spectrum's scaling, for ML2S the
+// two-stage NT-weight / two-stage-Γ analogue.
+post_expected<double>
+single_model_missing_scale(const spec::LatentStructure& pt,
+                           const model::MatrixRep& rep,
+                           const Eigen::VectorXd& theta,
+                           const data::RawData& raw,
+                           int df, bool two_stage, double h_step) {
+  if (df <= 0) return 1.0;
+  auto sm_or = estimate::fiml::saturated_em_moments(raw, h_step);
+  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+  const estimate::fiml::SaturatedMoments& sm = *sm_or;
+
+  Eigen::MatrixXd V;
+  Eigen::MatrixXd Gamma;
+  if (two_stage) {
+    auto V_or = ml2s_nt_weight_from_saturated(sm);
+    if (!V_or.has_value()) return std::unexpected(V_or.error());
+    V = std::move(*V_or);
+    auto G_or = estimate::fiml::two_stage_gamma_from_acov(sm,
+                                                          /*se_weighted=*/false);
+    if (!G_or.has_value()) return std::unexpected(G_or.error());
+    Gamma = std::move(*G_or);
+  } else {
+    V = sm.H;
+    Gamma = sm.acov;
+  }
+
+  estimate::Estimates est;
+  est.theta = theta;
+  auto U_or = estimate::fiml::fiml_residual_projector(pt, rep, raw, est, V);
+  if (!U_or.has_value()) return std::unexpected(U_or.error());
+
+  const Eigen::MatrixXd Zero =
+      Eigen::MatrixXd::Zero(U_or->rows(), U_or->cols());
+  auto sd_or = compute_diff_spectrum_2001(*U_or, Zero, Gamma, df);
+  if (!sd_or.has_value()) return std::unexpected(sd_or.error());
+  return sd_or->trace_CinvS / static_cast<double>(df);
+}
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2001_missing_impl(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const Eigen::VectorXd& theta_H1_full,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0_full,
+    const data::RawData& raw,
+    double T_H0, double T_H1, int df_H0, int df_H1,
+    bool two_stage, double h_step) {
+  auto c1_or = single_model_missing_scale(pt_H1, rep_H1, theta_H1_full, raw,
+                                          df_H1, two_stage, h_step);
+  if (!c1_or.has_value()) return std::unexpected(c1_or.error());
+  auto c0_or = single_model_missing_scale(pt_H0, rep_H0, theta_H0_full, raw,
+                                          df_H0, two_stage, h_step);
+  if (!c0_or.has_value()) return std::unexpected(c0_or.error());
+  return lr_test_satorra_bentler2001(T_H0, T_H1, df_H0, df_H1, *c0_or, *c1_or);
+}
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2010_missing_impl(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const Eigen::VectorXd& theta_H0_full,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0_for_H0,
+    const data::RawData& raw,
+    double T_H0, double T_H1, int df_H0, int df_H1,
+    bool two_stage, double h_step) {
+  if (theta_H0_full.size() != theta_H0_for_H0.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra_bentler2010 (missing): H0 theta cannot be injected "
+        "into H1 because the full parameter vectors have different sizes "
+        "(SB2010 needs same-parameter nesting; use ud_method='2001' for the "
+        "non-nested difference spectrum)."));
+  }
+  auto c0_or = single_model_missing_scale(pt_H0, rep_H0, theta_H0_for_H0, raw,
+                                          df_H0, two_stage, h_step);
+  if (!c0_or.has_value()) return std::unexpected(c0_or.error());
+  auto c10_or = single_model_missing_scale(pt_H1, rep_H1, theta_H0_full, raw,
+                                           df_H1, two_stage, h_step);
+  if (!c10_or.has_value()) return std::unexpected(c10_or.error());
+  return lr_test_satorra_bentler2010(T_H0, T_H1, df_H0, df_H1, *c0_or, *c10_or);
+}
+
+}  // namespace
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2001_fiml_from_data(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const Eigen::VectorXd& theta_H1_full,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0_full,
+    const data::RawData& raw,
+    double T_H0, double T_H1, int df_H0, int df_H1, double h_step) {
+  return lr_test_satorra_bentler2001_missing_impl(
+      pt_H1, rep_H1, theta_H1_full, pt_H0, rep_H0, theta_H0_full, raw,
+      T_H0, T_H1, df_H0, df_H1, /*two_stage=*/false, h_step);
+}
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2001_ml2s_from_data(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const Eigen::VectorXd& theta_H1_full,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0_full,
+    const data::RawData& raw,
+    double T_H0, double T_H1, int df_H0, int df_H1, double h_step) {
+  return lr_test_satorra_bentler2001_missing_impl(
+      pt_H1, rep_H1, theta_H1_full, pt_H0, rep_H0, theta_H0_full, raw,
+      T_H0, T_H1, df_H0, df_H1, /*two_stage=*/true, h_step);
+}
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2010_fiml_from_data(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const Eigen::VectorXd& theta_H0_full,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0_for_H0,
+    const data::RawData& raw,
+    double T_H0, double T_H1, int df_H0, int df_H1, double h_step) {
+  return lr_test_satorra_bentler2010_missing_impl(
+      pt_H1, rep_H1, theta_H0_full, pt_H0, rep_H0, theta_H0_for_H0, raw,
+      T_H0, T_H1, df_H0, df_H1, /*two_stage=*/false, h_step);
+}
+
+post_expected<LRSatorraBentlerDiffResult>
+lr_test_satorra_bentler2010_ml2s_from_data(
+    const spec::LatentStructure& pt_H1, const model::MatrixRep& rep_H1,
+    const Eigen::VectorXd& theta_H0_full,
+    const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
+    const Eigen::VectorXd& theta_H0_for_H0,
+    const data::RawData& raw,
+    double T_H0, double T_H1, int df_H0, int df_H1, double h_step) {
+  return lr_test_satorra_bentler2010_missing_impl(
+      pt_H1, rep_H1, theta_H0_full, pt_H0, rep_H0, theta_H0_for_H0, raw,
+      T_H0, T_H1, df_H0, df_H1, /*two_stage=*/true, h_step);
+}
+
 }  // namespace magmaan::robust

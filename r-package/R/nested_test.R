@@ -29,6 +29,13 @@
 #'   q-by-q Gamma and U matrices and eigendecomposes the q-by-q product, as
 #'   standard SEM software does). The latter two are diagnostic/reference paths
 #'   for timing the algebraic reduction.
+#' @param ud_method Estimator of the U_D difference matrix whose `U_D * Gamma`
+#'   eigenvalues drive the scaled statistic: `"2000"` (default, Satorra 2000
+#'   restriction map from the H1 fit) or `"2001"` (Satorra-Bentler 2001
+#'   `U_D = U0 - U1`, the difference of the two single-model projectors;
+#'   `semTests::ugamma_nested(., "2001")`). `"2001"` is implemented for FIML and
+#'   ML2S fits only and, unlike `"2000"`, accepts non-`==`-constrained nesting
+#'   (different parameter counts); its spectrum can carry negative eigenvalues.
 #' @param weight Ordinal nested tests only: `"DWLS"`, `"WLS"`, or `"ULS"`.
 #'   Defaults to `fit_H1$estimator`.
 #'
@@ -42,11 +49,13 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
                               A.method = c("exact", "delta"),
                               computation = c("streaming", "materialized",
                                               "dense"),
+                              ud_method = c("2000", "2001"),
                               weight = NULL) {
   gamma <- match.arg(gamma)
   method <- match.arg(method)
   A.method <- match.arg(A.method)
   computation <- match.arg(computation)
+  ud_method <- match.arg(ud_method)
 
   fit_estimator <- function(fit) {
     toupper(as.character(fit$estimator %||% fit$options$estimator %||% ""))
@@ -79,44 +88,54 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
          "supported; fit both models with the same estimator.", call. = FALSE)
   }
   if (ml2s_H1) {
-    if (!identical(method, "restriction_map")) {
-      stop("robust_nested_lrt(): ML2S nested tests support ",
-           "method = 'restriction_map' only; complete-data compatibility ",
-           "methods are not defined for ML2S.", call. = FALSE)
-    }
     if (!is.null(data)) {
       stop("robust_nested_lrt(): ML2S nested tests use fit_H1$raw_data; ",
            "the `data` argument is not supported for ML2S fits.",
            call. = FALSE)
     }
-    res <- infer_ml2s_lr_test_satorra2000(
-      fit_H1, fit_H0, gamma = gamma, a_method = A.method)
+    res <- switch(method,
+      restriction_map = infer_ml2s_lr_test_satorra2000(
+        fit_H1, fit_H0, gamma = gamma, a_method = A.method, ud_method = ud_method),
+      lavaan_sb2001 = infer_ml2s_lr_test_satorra_bentler2001(fit_H1, fit_H0),
+      lavaan_sb2010 = infer_ml2s_lr_test_satorra_bentler2010(fit_H1, fit_H0),
+      stop("robust_nested_lrt(): unsupported method '", method, "' for ML2S.",
+           call. = FALSE))
     res$gamma <- gamma
     res$method <- method
     res$A.method <- A.method
-    res$computation <- "ml2s_eta"
+    res$ud_method <- ud_method
+    res$computation <- if (identical(method, "restriction_map") &&
+                           identical(ud_method, "2001")) "ml2s_eta_2001" else "ml2s_eta"
     class(res) <- c("magmaan_nested_test", "list")
     return(res)
   }
   if (fiml_H1) {
-    if (!identical(method, "restriction_map")) {
-      stop("robust_nested_lrt(): FIML nested tests support ",
-           "method = 'restriction_map' only; complete-data compatibility ",
-           "methods are not defined for FIML.", call. = FALSE)
-    }
     if (!is.null(data)) {
       stop("robust_nested_lrt(): FIML nested tests use fit_H1$raw_data; ",
            "the `data` argument is not supported for FIML fits.",
            call. = FALSE)
     }
-    res <- infer_fiml_lr_test_satorra2000(
-      fit_H1, fit_H0, gamma = gamma, a_method = A.method)
+    res <- switch(method,
+      restriction_map = infer_fiml_lr_test_satorra2000(
+        fit_H1, fit_H0, gamma = gamma, a_method = A.method, ud_method = ud_method),
+      lavaan_sb2001 = infer_fiml_lr_test_satorra_bentler2001(fit_H1, fit_H0),
+      lavaan_sb2010 = infer_fiml_lr_test_satorra_bentler2010(fit_H1, fit_H0),
+      stop("robust_nested_lrt(): unsupported method '", method, "' for FIML.",
+           call. = FALSE))
     res$gamma <- gamma
     res$method <- method
     res$A.method <- A.method
-    res$computation <- "fiml_eta"
+    res$ud_method <- ud_method
+    res$computation <- if (identical(method, "restriction_map") &&
+                           identical(ud_method, "2001")) "fiml_eta_2001" else "fiml_eta"
     class(res) <- c("magmaan_nested_test", "list")
     return(res)
+  }
+  if (identical(ud_method, "2001")) {
+    stop("robust_nested_lrt(): ud_method = '2001' (the U0-U1 difference ",
+         "spectrum) is currently implemented for FIML and ML2S fits only; ",
+         "complete-data and ordinal pairs use the Satorra-2000 restriction map.",
+         call. = FALSE)
   }
   if (mixed_ordinal_H1) {
     stop("robust_nested_lrt(): mixed-ordinal nested tests are not implemented; ",
@@ -234,9 +253,11 @@ nestedTest <- function(fit_H1, fit_H0, data = NULL, gamma = c("empirical", "NT")
                        A.method = c("exact", "delta"),
                        computation = c("streaming", "materialized",
                                        "dense"),
+                       ud_method = c("2000", "2001"),
                        weight = NULL) {
   method <- match.arg(method)
   computation <- match.arg(computation)
+  ud_method <- match.arg(ud_method)
   canonical <- switch(method,
     satorra.2000 = "restriction_map",
     satorra.bentler.2001 = "lavaan_sb2001",
@@ -244,7 +265,8 @@ nestedTest <- function(fit_H1, fit_H0, data = NULL, gamma = c("empirical", "NT")
     method)
   out <- robust_nested_lrt(fit_H1, fit_H0, data, gamma = gamma,
                            method = canonical, A.method = A.method,
-                           computation = computation, weight = weight)
+                           computation = computation, ud_method = ud_method,
+                           weight = weight)
   out$compat_method <- method
   out
 }
