@@ -350,11 +350,17 @@ golden `parTable()` fixtures.
   as the U-metric; as under FIML, `_ug`/`_rls` are rejected and `h1_information`
   is fixed at `"saturated"`. ML2S must be dispatched before FIML because a
   two-stage fit also carries a `magmaan_fiml_data` raw object. The two-stage
-  reference law is validated from first principles by the consistency identity
-  `trace(UGamma) = E[T]` (normal-data `ncp_hat = mean(base) - mean(trace) ~ 0`),
-  not against lavaan's `missing = "two.stage"` test, which scales by a different
-  (observed-information-like) convention; only the two-stage *base* matches
-  lavaan to machine precision. Calibration evidence is in
+  scaling follows lavaan's `missing = "robust.two.stage"` convention (a
+  Huber-White sandwich Stage-1 ACOV that captures excess kurtosis), matching its
+  `pvalue.scaled` to ~`1e-2`; it is *not* lavaan's plain `missing = "two.stage"`,
+  which uses a normal-theory ACOV that collapses toward the naive test under
+  non-normality (its implied reference-law mean diverges sharply from magmaan's
+  while robust.two.stage's tracks it). The two-stage *base* matches both lavaan
+  conventions to machine precision (identical point estimates). The residual
+  few-percent trace gap to robust.two.stage is a finite-sample sandwich-meat
+  sub-convention, so the precise anchor is the first-principles consistency
+  identity `trace(UGamma) = E[T]` (normal-data `ncp_hat = mean(base) -
+  mean(trace) ~ 0`). Calibration evidence is in
   `experiments/24-fiml-twostage-fmg-chisq`. Nested/model-pair FIML FMG is
   available through the existing `robust_nested_lrt()` / `nestedTest()`
   `method = "restriction_map"` route when both fits are FIML and carry
