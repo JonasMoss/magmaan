@@ -1048,7 +1048,8 @@ lr_test_satorra2000_ml2s_from_data(
     int                              df_H1,
     GammaSource                      gamma,
     SatorraAMethod                   a_method,
-    double                           h_step) {
+    double                           h_step,
+    const estimate::fiml::SaturatedMoments* sm_precomputed) {
   const int df_diff_from_T = df_H0 - df_H1;
   if (df_diff_from_T < 0) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -1069,9 +1070,16 @@ lr_test_satorra2000_ml2s_from_data(
         "restriction map at the fitted points");
   }
 
-  auto sm_or = estimate::fiml::saturated_em_moments(raw, h_step);
-  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
-  const estimate::fiml::SaturatedMoments& sm = *sm_or;
+  // H0 and H1 share the same saturated H1 moments (same data); the caller may
+  // pass in the Stage-1 SaturatedMoments it already holds to skip the rebuild.
+  estimate::fiml::SaturatedMoments sm_owned;
+  if (!sm_precomputed) {
+    auto sm_or = estimate::fiml::saturated_em_moments(raw, h_step);
+    if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+    sm_owned = std::move(*sm_or);
+  }
+  const estimate::fiml::SaturatedMoments& sm =
+      sm_precomputed ? *sm_precomputed : sm_owned;
 
   auto V_or = ml2s_nt_weight_from_saturated(sm);
   if (!V_or.has_value()) return std::unexpected(V_or.error());
@@ -1170,7 +1178,8 @@ lr_test_satorra2001_missing_impl(
     const Eigen::VectorXd& theta_H0_full,
     const data::RawData& raw,
     double T_H0, double T_H1, int df_H0, int df_H1,
-    bool two_stage, double h_step) {
+    bool two_stage, double h_step,
+    const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr) {
   const int df_diff = df_H0 - df_H1;
   const char* label = two_stage ? "lr_test_satorra2001_ml2s_from_data"
                                 : "lr_test_satorra2001_fiml_from_data";
@@ -1184,9 +1193,16 @@ lr_test_satorra2001_missing_impl(
         std::string(label) + ": h_step must be > 0"));
   }
 
-  auto sm_or = estimate::fiml::saturated_em_moments(raw, h_step);
-  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
-  const estimate::fiml::SaturatedMoments& sm = *sm_or;
+  // Both single-model projectors share one saturated build; reuse a Stage-1
+  // SaturatedMoments from the caller when available.
+  estimate::fiml::SaturatedMoments sm_owned;
+  if (!sm_precomputed) {
+    auto sm_or = estimate::fiml::saturated_em_moments(raw, h_step);
+    if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+    sm_owned = std::move(*sm_or);
+  }
+  const estimate::fiml::SaturatedMoments& sm =
+      sm_precomputed ? *sm_precomputed : sm_owned;
 
   Eigen::MatrixXd V;
   Eigen::MatrixXd Gamma;
@@ -1242,10 +1258,11 @@ lr_test_satorra2001_ml2s_from_data(
     const spec::LatentStructure& pt_H0, const model::MatrixRep& rep_H0,
     const Eigen::VectorXd& theta_H0_full,
     const data::RawData& raw,
-    double T_H0, double T_H1, int df_H0, int df_H1, double h_step) {
+    double T_H0, double T_H1, int df_H0, int df_H1, double h_step,
+    const estimate::fiml::SaturatedMoments* sm_precomputed) {
   return lr_test_satorra2001_missing_impl(
       pt_H1, rep_H1, theta_H1_full, pt_H0, rep_H0, theta_H0_full, raw,
-      T_H0, T_H1, df_H0, df_H1, /*two_stage=*/true, h_step);
+      T_H0, T_H1, df_H0, df_H1, /*two_stage=*/true, h_step, sm_precomputed);
 }
 
 namespace {

@@ -353,6 +353,15 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           const FIMLPack& pack,
                           const FIMLH1& h1);
 
+// Inference straight from a precomputed Stage-1 `SaturatedMoments`: no raw
+// data, no EM, no observed-information rebuild. Bit-identical to the raw-based
+// overloads (the EM is deterministic) but skips the duplicate Stage-1 work.
+post_expected<TwoStageEMMLInference>
+two_stage_em_ml_inference(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const Estimates& est,
+                          const SaturatedMoments& sm);
+
 namespace diagnostic {
 
 // Regression-only comparator for the old finite-difference saturated H1
@@ -416,6 +425,22 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
                      double chi2_lrt,
                      const FIMLPack& pack,
                      const FIMLH1& h1,
+                     FIMLH1Information h1_information =
+                         FIMLH1Information::Saturated);
+
+// As above, but reuses a precomputed Stage-1 `SaturatedMoments` (the EM moments
+// + H/J/acov = Γ_mis) instead of rebuilding it. `pack`/`h1` are still consumed
+// for the residual projector Δ and the optional structured-H1 information.
+post_expected<FIMLUGammaSpectrum>
+fiml_ugamma_spectrum(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const RawData& raw,
+                     const Estimates& est,
+                     int df,
+                     double chi2_lrt,
+                     const FIMLPack& pack,
+                     const FIMLH1& h1,
+                     const SaturatedMoments& sm,
                      FIMLH1Information h1_information =
                          FIMLH1Information::Saturated);
 

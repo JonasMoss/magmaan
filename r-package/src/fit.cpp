@@ -1337,6 +1337,24 @@ const FimlH1& fiml_h1_for_fit(Rcpp::List fit,
   return *owned;
 }
 
+using SaturatedMoments = magmaan::estimate::fiml::SaturatedMoments;
+
+// Shared Stage-1 saturated FIML moments (the EM moments + H/J/acov = Γ_mis):
+// reuse the fit$stage1 reconstruction when present (ML2S, via
+// magmaanr::saturated_from_stage1), otherwise compute once. Mirrors
+// fiml_pack_for_fit / fiml_h1_for_fit so FMG, two-stage SB, and the nested LRT
+// all consume one saturated build instead of three.
+const SaturatedMoments& fiml_saturated_for_fit(
+    Rcpp::List fit, const magmaan::data::RawData& raw, const FimlPack& pack,
+    const FimlH1& h1, std::unique_ptr<SaturatedMoments>& owned) {
+  owned = std::make_unique<SaturatedMoments>();
+  if (magmaanr::saturated_from_stage1(fit, *owned)) return *owned;
+  auto sm_or = magmaan::estimate::fiml::saturated_em_moments(raw, pack, h1);
+  if (!sm_or.has_value()) stop_post(sm_or.error());
+  *owned = std::move(*sm_or);
+  return *owned;
+}
+
 Rcpp::List fiml_fit_result(Ctx& ctx,
                            const magmaan::data::RawData& raw,
                            const magmaan::estimate::Estimates& est,
@@ -2956,8 +2974,19 @@ Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data,
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, raw_data);
+  // Reuse the Stage-1 saturated moments the fit already carries; only fall back
+  // to a from-scratch EM (and its pack) when no usable $stage1 is present.
+  SaturatedMoments sm;
+  std::unique_ptr<SaturatedMoments> owned_sm;
+  const SaturatedMoments* sm_ptr = &sm;
+  if (!magmaanr::saturated_from_stage1(fit, sm)) {
+    auto sm_or = magmaan::estimate::fiml::saturated_em_moments(raw, h_step);
+    if (!sm_or.has_value()) stop_post(sm_or.error());
+    owned_sm = std::make_unique<SaturatedMoments>(std::move(*sm_or));
+    sm_ptr = owned_sm.get();
+  }
   auto r_or = magmaan::estimate::fiml::two_stage_em_ml_inference(
-      ctx.pt, ctx.rep, raw, est, h_step);
+      ctx.pt, ctx.rep, est, *sm_ptr);
   if (!r_or.has_value()) stop_post(r_or.error());
   return Rcpp::List::create(
       Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
@@ -2997,13 +3026,15 @@ Rcpp::List infer_fiml_fmg_spectrum(Rcpp::List fit, double h_step = 1e-4,
   const FimlPack& pack = fiml_pack_for_fit(fit, raw, owned_pack);
   std::unique_ptr<FimlH1> owned_h1;
   const FimlH1& h1 = fiml_h1_for_fit(fit, raw, pack, owned_h1);
+  std::unique_ptr<SaturatedMoments> owned_sm;
+  const SaturatedMoments& sm = fiml_saturated_for_fit(fit, raw, pack, h1, owned_sm);
   auto df_or = magmaan::inference::df_stat(ctx.pt, ctx.samp, est.theta);
   if (!df_or.has_value()) stop_post(df_or.error());
   auto extras_or = magmaan::estimate::fiml::fiml_extras(
       ctx.pt, ctx.rep, raw, est, pack, h1);
   if (!extras_or.has_value()) stop_post(extras_or.error());
   auto sp_or = magmaan::estimate::fiml::fiml_ugamma_spectrum(
-      ctx.pt, ctx.rep, raw, est, *df_or, extras_or->chi2, pack, h1, h1_info);
+      ctx.pt, ctx.rep, raw, est, *df_or, extras_or->chi2, pack, h1, sm, h1_info);
   if (!sp_or.has_value()) stop_post(sp_or.error());
   return Rcpp::List::create(
       Rcpp::_["biased"] = Rcpp::wrap(sp_or->eigvals),

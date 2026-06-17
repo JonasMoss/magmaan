@@ -2326,7 +2326,8 @@ fiml_ugamma_spectrum_impl(spec::LatentStructure pt,
                           double chi2_lrt,
                           const FIMLPack& pack,
                           const FIMLH1& h1,
-                          FIMLH1Information h1_information) {
+                          FIMLH1Information h1_information,
+                          const SaturatedMoments* sm_precomputed) {
   if (df <= 0) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "fiml_ugamma_spectrum: requires df > 0"));
@@ -2334,10 +2335,15 @@ fiml_ugamma_spectrum_impl(spec::LatentStructure pt,
 
   // (1) Saturated-moment ingredients (block-diagonal η-space, multi-group safe):
   //     Γ_mis = acov = H⁻¹ J H⁻¹. V defaults to saturated observed H1
-  //     information and may be swapped for model-implied H1 curvature.
-  auto sm_or = saturated_em_moments(raw, pack, h1);
-  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
-  const SaturatedMoments& sm = *sm_or;
+  //     information and may be swapped for model-implied H1 curvature. A caller
+  //     holding the Stage-1 saturated moments passes them in to skip the rebuild.
+  SaturatedMoments sm_owned;
+  if (!sm_precomputed) {
+    auto sm_or = saturated_em_moments(raw, pack, h1);
+    if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+    sm_owned = std::move(*sm_or);
+  }
+  const SaturatedMoments& sm = sm_precomputed ? *sm_precomputed : sm_owned;
   Eigen::MatrixXd V_storage;
   const Eigen::MatrixXd* V_ptr = &sm.H;
   if (h1_information == FIMLH1Information::Structured) {
@@ -2433,7 +2439,7 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
     return std::unexpected(fit_to_post(h1_or.error(), "FIML H1 moments"));
   }
   return fiml_ugamma_spectrum_impl(std::move(pt), rep, raw, est, df, chi2_lrt,
-                                   *pack_or, *h1_or, h1_information);
+                                   *pack_or, *h1_or, h1_information, nullptr);
 }
 
 post_expected<FIMLUGammaSpectrum>
@@ -2447,7 +2453,22 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
                      const FIMLH1& h1,
                      FIMLH1Information h1_information) {
   return fiml_ugamma_spectrum_impl(std::move(pt), rep, raw, est, df, chi2_lrt,
-                                   pack, h1, h1_information);
+                                   pack, h1, h1_information, nullptr);
+}
+
+post_expected<FIMLUGammaSpectrum>
+fiml_ugamma_spectrum(spec::LatentStructure pt,
+                     const model::MatrixRep& rep,
+                     const RawData& raw,
+                     const Estimates& est,
+                     int df,
+                     double chi2_lrt,
+                     const FIMLPack& pack,
+                     const FIMLH1& h1,
+                     const SaturatedMoments& sm,
+                     FIMLH1Information h1_information) {
+  return fiml_ugamma_spectrum_impl(std::move(pt), rep, raw, est, df, chi2_lrt,
+                                   pack, h1, h1_information, &sm);
 }
 
 post_expected<Eigen::MatrixXd>
@@ -2727,16 +2748,16 @@ two_stage_gamma_from_acov(const SaturatedMoments& sm, bool se_weighted) {
 
 namespace {
 
+// Core two-stage ML inference from already-computed Stage-1 saturated moments.
+// `raw` is intentionally absent: the only thing the inference ever needs from
+// the data are the saturated moments and their ACOV, both carried by `sm`.
+// Callers that hold a Stage-1 `SaturatedMoments` should route here directly
+// rather than recomputing the EM + observed information + ACOV.
 post_expected<TwoStageEMMLInference>
-two_stage_em_ml_inference_impl(spec::LatentStructure pt,
-                               const model::MatrixRep& rep,
-                               const RawData& raw,
-                               const Estimates& est,
-                               const FIMLPack& pack,
-                               const FIMLH1& h1) {
-  auto sm_or = saturated_em_moments(raw, pack, h1);
-  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
-  const SaturatedMoments& sm = *sm_or;
+two_stage_em_ml_inference_from_sm(spec::LatentStructure pt,
+                                  const model::MatrixRep& rep,
+                                  const Estimates& est,
+                                  const SaturatedMoments& sm) {
   SampleStats samp = sample_stats_from_saturated(sm);
 
   auto df_or = inference::df_stat(pt, samp, est.theta);
@@ -2795,7 +2816,27 @@ two_stage_em_ml_inference_impl(spec::LatentStructure pt,
   return out;
 }
 
+post_expected<TwoStageEMMLInference>
+two_stage_em_ml_inference_impl(spec::LatentStructure pt,
+                               const model::MatrixRep& rep,
+                               const RawData& raw,
+                               const Estimates& est,
+                               const FIMLPack& pack,
+                               const FIMLH1& h1) {
+  auto sm_or = saturated_em_moments(raw, pack, h1);
+  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+  return two_stage_em_ml_inference_from_sm(std::move(pt), rep, est, *sm_or);
+}
+
 }  // namespace
+
+post_expected<TwoStageEMMLInference>
+two_stage_em_ml_inference(spec::LatentStructure pt,
+                          const model::MatrixRep& rep,
+                          const Estimates& est,
+                          const SaturatedMoments& sm) {
+  return two_stage_em_ml_inference_from_sm(std::move(pt), rep, est, sm);
+}
 
 post_expected<TwoStageEMMLInference>
 two_stage_em_ml_inference(spec::LatentStructure pt,
