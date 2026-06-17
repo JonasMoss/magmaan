@@ -255,6 +255,43 @@ opt-in with a bias study comparing the two — see
 [[feedback-shortcut-variants]] memo: pragmatic-only is research-tier
 work, not a free addition.
 
+### Overlap-corrected Γ for WLSMV / ordinal missing data (PD repair)
+
+The continuous `fit_gls_pairwise` path already repairs the saturated Γ for
+missingness via the pattern-overlap Hadamard rescaling
+(`σ_{jk}·π_{jk}/(π_j π_k)`, `pairwise_casewise_contributions`); the ordinal
+counterpart is unbuilt. Default WLSMV + pairwise deletion (Mplus
+`estimator = WLSMV` with missing data) estimates thresholds + polychorics from
+each available-case margin but forms the weight matrix and the
+mean-and-variance-adjusted Δχ² *as if the polychoric matrix came from complete
+data* — the non-uniform per-margin N and the missing-data uncertainty are never
+propagated. Chen, Wu, Garnier-Villarreal, Kite & Jia (2020, MBR 55:1; PDF in
+`papers/fiml-fmg/dev/refs/`) confirm the resulting Δχ² Type-I inflates to ~0.55
+(50% missing, N = 1000) and are explicit that the statistic is mis-constructed
+rather than this being an implementation defect. The fix is the ordinal sibling
+of Savalei & Bentler (2005) "statistically justified pairwise ML": restrict each
+ordinal influence-factor cross-product (`OrdinalGammaCacheBlock` IF,
+Γ = IF'IF/n) to its pairwise overlap set and rescale by the same π proportions,
+giving a calibrated WLSMV missing-data weight + scaled test. Folds into the FMG
+spectrum: an overlap-weighted ordinal Γ yields an ordinal-FMG / pEBA difference
+test under missingness, extending the Paper 2 ordinal-fmg track
+(`papers/fiml-fmg/`) into the incomplete-data cell.
+
+**Alternative already available.** Continuous FIML / ML2S + FMG covers the
+continuous missing-data inference case (the current fiml-fmg paper); the ordinal
+*complete-data* WLSMV / robust path is landed (roadmap); the continuous
+pairwise-overlap Γ correction (this section's other entries) is the template.
+Only the ordinal-margin routing is missing, and magmaan has no ordinal *missing*
+data path today, so this is an unbuilt capability, not a regression.
+
+**Build if.** A concrete ordinal-missing-data paper row appears, or the ordinal
+`fmg_test` path lands (the Paper 2 gate) and there is appetite to push it into
+the incomplete-data cell. Sequencing: the exact overlap-set ordinal Γ is the
+credible reference first; a pragmatic global-π shortcut is its own validation
+problem, not a free addition ([[feedback-shortcut-variants]]). Distinct from the
+complete-data "Robust polychoric threshold parameterization / PD-repair revisit"
+above — this is the missing-data *weight matrix*, not threshold parameterization.
+
 ## FMG / U-Gamma unbiased-spectrum performance
 
 Both items below were investigated and deferred: the biased and `_ug`
