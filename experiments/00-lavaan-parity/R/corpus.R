@@ -193,8 +193,10 @@ corpus_cases <- function(root = corpus_root(),
   manifest_path <- file.path(root, "manifest.csv")
   if (!file.exists(manifest_path)) {
     stop("Missing corpus manifest: ", manifest_path,
-         "\n(Have you initialised the textbook-corpus submodule? ",
-         "`git submodule update --init corpus/textbook-corpus`.)",
+         "\n(The textbook-corpus real-data dependency is private and optional; ",
+         "it is not part of the public repository. Mount it at ",
+         "corpus/textbook-corpus/ to run corpus-dependent experiments. ",
+         "See corpus/README.md.)",
          call. = FALSE)
   }
   manifest <- utils::read.csv(manifest_path, stringsAsFactors = FALSE,

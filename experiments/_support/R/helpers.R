@@ -39,11 +39,18 @@ support_path <- function(...) {
   file.path(repo_root(), "experiments", "_support", ...)
 }
 
-# Path to the textbook-corpus submodule. Pure path helper so experiments read
-# the corpus directly instead of borrowing another leaf's data (tests/fixtures
-# or a paper's bundle).
+# Path to the textbook-corpus real-data dependency. Pure path helper so
+# experiments read the corpus directly instead of borrowing another leaf's data
+# (tests/fixtures or a paper's bundle). The corpus is a private, optional mount
+# (see corpus/README.md); call corpus_available() before reading it.
 corpus_root <- function() {
   file.path(repo_root(), "corpus", "textbook-corpus")
+}
+
+# TRUE when the private textbook-corpus is mounted at corpus/textbook-corpus/.
+# Corpus-dependent experiments and regenerators should skip cleanly when FALSE.
+corpus_available <- function(root = corpus_root()) {
+  dir.exists(root) && file.exists(file.path(root, "manifest.csv"))
 }
 
 experiment_path <- function(..., script = script_path()) {

@@ -19,6 +19,16 @@ papers/*
 !papers/STYLE.md
 !papers/CLAUDE.md
 
+# The real-data textbook-corpus is a private, optional dependency: third-party
+# copyrighted datasets magmaan may not redistribute. Mount it at
+# corpus/textbook-corpus/ but never commit it. Only the README is tracked.
+# See corpus/README.md.
+corpus/*
+!corpus/README.md
+
+# Private working notes (not for publication).
+docs/research/human_notes/
+
 *.o
 *.obj
 *.a

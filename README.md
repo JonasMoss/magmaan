@@ -64,3 +64,17 @@ ctest --preset opt
 `fast` is the everyday Debug loop; `opt` is the optimized build; `dev` adds
 AddressSanitizer + UBSan. `just` wraps the usual loops: `just build`,
 `just test`, `just opt`, `just test-opt`, `just r-check`, and `just check`.
+
+
+## License
+
+magmaan is released under the [MIT License](LICENSE).
+
+Vendored third-party sources under `third_party/` keep their own licenses (see
+each subdirectory's `LICENSE-*` and `README.md`). A handful of test fixtures
+embed well-known public SEM teaching datasets (Holzinger-Swineford,
+PoliticalDemocracy, bfi, ...) reproduced from their original distributions;
+their provenance and terms are documented in
+[`tests/fixtures/DATASETS.md`](tests/fixtures/DATASETS.md). Real-data corpora
+curated from copyrighted textbooks are a private, optional dependency and are
+**not** part of this repository (see [`corpus/README.md`](corpus/README.md)).
