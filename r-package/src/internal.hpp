@@ -26,6 +26,7 @@
 #include "magmaan/data/sample_stats.hpp"
 #include "magmaan/data/ordinal.hpp"
 #include "magmaan/estimate/fit.hpp"              // Estimates
+#include "magmaan/estimate/fiml.hpp"             // SaturatedMoments
 #include "magmaan/estimate/backend_strings.hpp"  // backend_from_string
 #include "magmaan/estimate/ordinal.hpp"
 #include "magmaan/inference/inference.hpp"        // information_*, vcov, se, chi2_stat, df_stat
@@ -872,6 +873,48 @@ inline magmaan::data::MixedOrdinalStats mixed_ordinal_stats_from_arg(Rcpp::List 
     out.n_levels.push_back(Rcpp::as<std::vector<std::int32_t>>(Rcpp::IntegerVector(nlevl[b])));
   }
   return out;
+}
+
+// Rebuild a Stage-1 SaturatedMoments from the serializable `fit$stage1` list
+// (mean/cov/n_obs/H/J/acov) that fit_ml2s() stamps on every ML2S fit. Returns
+// false when the fit carries no usable stage1 (e.g. a plain FIML fit), so the
+// caller can fall back to computing it. Reusing this is bit-identical to a
+// recompute (the EM is deterministic) while skipping the EM + observed-
+// information rebuild. Shared by fit.cpp and lr_test_satorra.cpp so two-stage
+// SB, the FMG spectrum, and the nested LRT all consume one saturated build.
+inline bool saturated_from_stage1(Rcpp::List fit,
+                                  magmaan::estimate::fiml::SaturatedMoments& out) {
+  if (!fit.containsElementNamed("stage1")) return false;
+  SEXP s1 = fit["stage1"];
+  if (Rf_isNull(s1)) return false;
+  Rcpp::List st(s1);
+  if (!st.containsElementNamed("mean") || !st.containsElementNamed("cov") ||
+      !st.containsElementNamed("n_obs") || !st.containsElementNamed("acov") ||
+      Rf_isNull(st["mean"]) || Rf_isNull(st["cov"]) ||
+      Rf_isNull(st["n_obs"]) || Rf_isNull(st["acov"])) {
+    return false;
+  }
+  Rcpp::List mean_l(st["mean"]);
+  Rcpp::List cov_l(st["cov"]);
+  Rcpp::IntegerVector nobs(st["n_obs"]);
+  const R_xlen_t B = mean_l.size();
+  if (cov_l.size() != B || nobs.size() != B) return false;
+  out.mean.clear();
+  out.cov.clear();
+  out.n_obs.clear();
+  for (R_xlen_t b = 0; b < B; ++b) {
+    out.mean.push_back(
+        Rcpp::as<Eigen::VectorXd>(Rcpp::NumericVector(mean_l[b])));
+    out.cov.push_back(
+        Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(cov_l[b])));
+    out.n_obs.push_back(static_cast<std::int64_t>(nobs[b]));
+  }
+  out.acov = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(st["acov"]));
+  if (st.containsElementNamed("H") && !Rf_isNull(st["H"]))
+    out.H = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(st["H"]));
+  if (st.containsElementNamed("J") && !Rf_isNull(st["J"]))
+    out.J = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(st["J"]));
+  return true;
 }
 
 }  // namespace magmaanr

@@ -444,12 +444,21 @@ Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List  fit_H1,
       fiml_raw_from_fit_arg(ctx_H0.rep, fit_H0["raw_data"]);
   validate_same_fiml_raw(raw_H1, raw_H0, "infer_ml2s_lr_test_satorra2000");
 
-  auto sm_or = magmaan::estimate::fiml::saturated_em_moments(raw_H1, h_step);
-  if (!sm_or.has_value()) magmaanr::stop_post(sm_or.error());
+  // One saturated build for the whole nested test: H0 and H1 share it (same
+  // data), and each ML2S fit already carries it as $stage1. Reuse it for the
+  // df/T statistics here and pass it down so the difference-spectrum driver
+  // does not rebuild the EM + observed information again.
+  magmaan::estimate::fiml::SaturatedMoments sm;
+  if (!magmaanr::saturated_from_stage1(fit_H1, sm) &&
+      !magmaanr::saturated_from_stage1(fit_H0, sm)) {
+    auto sm_or = magmaan::estimate::fiml::saturated_em_moments(raw_H1, h_step);
+    if (!sm_or.has_value()) magmaanr::stop_post(sm_or.error());
+    sm = std::move(*sm_or);
+  }
   magmaan::data::SampleStats samp;
-  samp.S = sm_or->cov;
-  samp.mean = sm_or->mean;
-  samp.n_obs = sm_or->n_obs;
+  samp.S = sm.cov;
+  samp.mean = sm.mean;
+  samp.n_obs = sm.n_obs;
 
   auto df_H1_or = magmaan::inference::df_stat(ctx_H1.pt, samp, est_H1.theta);
   if (!df_H1_or.has_value()) magmaanr::stop_post(df_H1_or.error());
@@ -462,7 +471,7 @@ Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List  fit_H1,
     auto r_or = magmaan::robust::lr_test_satorra2001_ml2s_from_data(
         ctx_H1.pt, ctx_H1.rep, est_H1.theta,
         ctx_H0.pt, ctx_H0.rep, est_H0.theta,
-        raw_H1, T_H0, T_H1, *df_H0_or, *df_H1_or, h_step);
+        raw_H1, T_H0, T_H1, *df_H0_or, *df_H1_or, h_step, &sm);
     if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
     return satorra2000_to_list(*r_or);
   }
@@ -478,7 +487,7 @@ Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List  fit_H1,
       ctx_H1.pt, ctx_H1.rep, est_H1.theta, *K_H1_or,
       ctx_H0.pt, ctx_H0.rep, est_H0.theta, *K_H0_or,
       raw_H1, T_H0, T_H1, *df_H0_or, *df_H1_or,
-      parse_gamma(gamma), parse_a_method(a_method), h_step);
+      parse_gamma(gamma), parse_a_method(a_method), h_step, &sm);
   if (!r_or.has_value()) magmaanr::stop_post(r_or.error());
   return satorra2000_to_list(*r_or);
 }
