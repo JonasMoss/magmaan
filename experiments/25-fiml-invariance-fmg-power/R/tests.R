@@ -25,17 +25,28 @@ apply_missingness <- function(df, ov, mechanism, rate, seed = NULL) {
 fiml_control <- function() list(max_iter = 16000L, ftol = 1e-13, gtol = 1e-9)
 
 # Fit one invariance level under the requested estimator. NULL on any failure.
+# `em` is the shared saturated EM moments for this masked dataset (see
+# run_one_rep): the saturated H1 is identical across all four rungs and both
+# estimators, so it is built ONCE per replicate and threaded in here -- ML2S
+# skips its Stage-1 EM (`stage1 = em`) and the FIML fit is stamped (`fit$stage1`)
+# so its FMG battery + nested test reuse it instead of rebuilding. `em = NULL`
+# falls back to the per-fit rebuild (correct, just slower).
 fit_level <- function(level, df, pop, estimator = c("FIML", "ML2S"),
-                      control = NULL) {
+                      control = NULL, em = NULL) {
   estimator <- match.arg(estimator)
   control <- control %||% fiml_control()
   spec <- magmaan::model_spec(invariance_syntax(level, pop$ov),
                               group = "school", group_labels = c("A", "B"),
                               meanstructure = TRUE)
-  fitter <- if (estimator == "FIML") magmaan::magmaan_core$fit_fiml else
-                                     magmaan::magmaan_core$fit_ml2s
   tryCatch({
-    fit <- fitter(spec, magmaan::df_to_fiml_data(df, spec), control = control)
+    fd <- magmaan::df_to_fiml_data(df, spec)
+    if (estimator == "FIML") {
+      fit <- magmaan::magmaan_core$fit_fiml(spec, fd, control = control)
+      if (!is.null(em) && !is.null(fit)) fit$stage1 <- em
+    } else {
+      fit <- magmaan::magmaan_core$fit_ml2s(spec, fd, control = control,
+                                            stage1 = em)
+    }
     if (!isTRUE(fit$converged)) return(NULL)
     fit
   }, error = function(e) NULL)
@@ -132,12 +143,24 @@ run_one_rep <- function(pop, sampler, rep_i, mechanism, rate, mask_seed,
   df <- sampler$draw(rep_i)
   mm <- apply_missingness(df, pop$ov, mechanism, rate, seed = mask_seed)
   df <- mm$df
+  # The saturated EM moments depend only on the masked data -- identical across
+  # all four rungs AND both estimators -- so build them ONCE here and thread
+  # them through every fit/battery/nested test (see fit_level). All four specs
+  # share pop$ov order and the group structure, so one EM is valid for all; a
+  # build failure leaves em = NULL and each fit falls back to its own rebuild.
+  em <- tryCatch({
+    spec0 <- magmaan::model_spec(invariance_syntax("configural", pop$ov),
+                                 group = "school", group_labels = c("A", "B"),
+                                 meanstructure = TRUE)
+    magmaan::magmaan_core$estimate_saturated_em_moments(
+      magmaan::df_to_fiml_data(df, spec0))
+  }, error = function(e) NULL)
   pairs <- ladder_pairs()
   all_rows <- list()
   push <- function(x) if (!is.null(x)) all_rows[[length(all_rows) + 1L]] <<- x
   for (est in estimators) {
     fits <- lapply(c("configural", "metric", "scalar", "strict"),
-                   fit_level, df = df, pop = pop, estimator = est)
+                   fit_level, df = df, pop = pop, estimator = est, em = em)
     names(fits) <- c("configural", "metric", "scalar", "strict")
     if (any(vapply(fits, is.null, logical(1)))) next   # skip estimator, keep others
     for (lvl in c("metric", "scalar", "strict"))        # GOF of constrained models

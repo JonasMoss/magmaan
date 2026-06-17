@@ -1191,12 +1191,12 @@ fit_fiml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL) {
 }
 
 fit_ml2s <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
-                     bounds = NULL, h_step = 1e-4) {
+                     bounds = NULL, h_step = 1e-4, stage1 = NULL) {
   if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
   fit <- estimate_two_stage_em_impl(partable_arg(model), fiml_data_arg(data),
                                     kind = "ml", h_step = h_step,
                                     optimizer = optimizer, control = control,
-                                    bounds = bounds)
+                                    bounds = bounds, stage1 = stage1)
   if (inherits(data, "magmaan_fiml_data")) fit$raw_data <- data
   fit
 }

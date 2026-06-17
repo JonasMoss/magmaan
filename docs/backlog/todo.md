@@ -437,6 +437,17 @@ decisions in the simulation backlog.
   UGamma spectrum and nested FIML restriction-map route landed 2026-06. The
   high-level `magmaan(estimator = "FIML")` path now auto-enables mean structure
   for syntax-backed models and rejects explicit `meanstructure = FALSE`.
+  Saturated-EM reuse extended to the FIML nested path (2026-06):
+  `lr_test_satorra2000/2001_fiml_from_data` take an optional `sm_precomputed` and
+  `infer_fiml_lr_test_satorra2000` reuses a fit's `$stage1`, and
+  `fit_ml2s(stage1=)` skips the rung-independent Stage-1 EM; this is what
+  `experiments/25-fiml-invariance-fmg-power` uses to build one saturated EM per
+  masked dataset and thread it through both estimators, all four ladder rungs,
+  every FMG battery, and every nested test (kills the ~72s-at-p=30 FIML-nested
+  rebuild and the 4x ML2S Stage-1 redundancy; bit-identical, verified). Deferred
+  residual: `fit_fiml` still recomputes its cheap mu/Sigma-only `fiml_h1_moments`
+  per rung; eliminating it needs a `fit_fiml` h1-injection arg + a FIMLH1-from-R
+  reconstructor (the structured optimization dominates, so it is low priority).
 - **M, evaluation — structured-h1 FIML FMG: keep or ditch.** The FIML FMG U·Γ
   spectrum exposes `estimate::FIMLH1Information::Structured`, which evaluates the
   U-side information `V` (the saturated observed Hessian `J`) at the model-implied

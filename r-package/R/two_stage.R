@@ -19,10 +19,16 @@ estimate_two_stage_em_impl <- function(partable, raw_data,
                                        h_step = 1e-4,
                                        optimizer = NULL,
                                        control = NULL,
-                                       bounds = NULL) {
+                                       bounds = NULL,
+                                       stage1 = NULL) {
   kind <- match.arg(kind)
 
-  em <- saturated_em_moments_impl(raw_data, h_step = h_step)
+  # Stage 1 (saturated EM moments) depends only on the data, so a caller fitting
+  # several models to one dataset can build it once and pass it in via `stage1`
+  # (the object returned by `estimate_saturated_em_moments()` / a prior fit's
+  # `$stage1`), skipping the redundant rebuild.
+  em <- if (is.null(stage1)) saturated_em_moments_impl(raw_data, h_step = h_step)
+        else stage1
 
   n_blocks <- length(em$cov)
   if (n_blocks == 0L)
