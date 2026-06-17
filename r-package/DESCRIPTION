@@ -5,9 +5,10 @@ Authors@R:
     person("Jonas", "Moss", email = "jonas.moss@bi.no", role = c("aut", "cre"))
 License: MIT + file LICENSE
 Encoding: UTF-8
-LinkingTo: Rcpp, RcppEigen
-Imports: Rcpp
-SystemRequirements: C++23, NLopt
+LinkingTo: Rcpp, RcppEigen, nloptr
+Imports: Rcpp, nloptr
+SystemRequirements: C++23, NLopt (a system NLopt, or the bundled NLopt from the
+    nloptr package, which is used automatically when no system NLopt is found)
 Description: Thin Rcpp wrappers exposing magmaan's C++ functions for
     interactive use. Self-contained: the C++ core (plus the vendored PORT and
     QUADPACK routines) is compiled from sources vendored under src/ and linked
