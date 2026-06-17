@@ -7,6 +7,9 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 LinkingTo: Rcpp, RcppEigen
 Imports: Rcpp
-SystemRequirements: C++23, cmake (to (re)build libmagmaan.a)
+SystemRequirements: C++23, NLopt
 Description: Thin Rcpp wrappers exposing magmaan's C++ functions for
-    interactive use. Not CRAN-bound; consumes the prebuilt libmagmaan.a.
+    interactive use. Self-contained: the C++ core (plus the vendored PORT and
+    QUADPACK routines) is compiled from sources vendored under src/ and linked
+    against a system NLopt, so the package installs without CMake or a prebuilt
+    library. Not CRAN-bound.

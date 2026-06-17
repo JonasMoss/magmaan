@@ -1382,6 +1382,18 @@ stop rather than any usable non-error return.
 - Exploratory R bindings cover lavaanify, fitting, sample-stat bundles, robust
   inference, fit measures, model implied moments, LS estimators, SNLLS, Ceres
   paths when enabled, and data-frame-to-model sample statistics.
+- **Packaging is portable** (2026-06-17). `r-package/` is self-contained: the
+  C++ core plus `third_party/{port,quadpack}` is vendored into
+  `r-package/src/{core,magmaan,third_party}/` by `dev/vendor-cpp.sh`
+  (`just vendor`), so `R CMD INSTALL` / `remotes::install_github` builds it with
+  no CMake and no prebuilt library, linking a system NLopt
+  (`SystemRequirements: NLopt`). The fast dev loop stays `just r-dev` (glue-only
+  compile + prebuilt `libmagmaan.a` link via the `build-rdev/` mirror with
+  `dev/r-makevars-dev`); the portable build is `just r-install`; `just
+  vendor-check` guards vendor drift in `just check`. Cluster install (Saga /
+  Sigma2): `dev/saga/`. This required one GCC-portability fix (R compiles with
+  GCC, the canonical build uses clang): `ordinal.cpp` local lambdas renamed to
+  the file's `*_fn` convention; the vendored f2c C is pinned to `-std=gnu11`.
 - Composite (`<~`) model specifications are visible at the R boundary as
   folded `<~` partable rows while the hidden expanded Henseler-Ogasawara
   partable is retained as internal metadata for fitting and post-fit helpers.
@@ -1549,10 +1561,11 @@ stop rather than any usable non-error return.
   the aggregate `magmaan_tests` target. This keeps
   `cmake --build --preset <p> --target magmaan_tests` working while allowing
   narrower relinks and `ctest -L`.
-- R bindings are intentionally outside the default C++ loop. `just r-install`
-  links the optimized non-Ceres core, `just r-install-fast` is for interactive
-  wrapper work, and `just r-install-ceres` is the explicit Ceres-enabled R
-  path.
+- R bindings are intentionally outside the default C++ loop. The fast dev loop
+  is `just r-dev` (glue-only compile, prebuilt-core link); `just r-install` is
+  the portable self-contained build (vendored core, system NLopt);
+  `just r-install-ceres` / `just r-install-ipopt` are the explicit backend
+  dev paths (now aliases over `just r-dev`).
 
 #### Build-loop timings
 

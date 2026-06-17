@@ -143,25 +143,61 @@ test-quick-report: fast
 health: test-quick-report coverage
     @echo "Health reports: build/fast/test-quick-results.xml and build/coverage/"
 
-# (Re)install the exploratory R bindings against the optimized non-Ceres core.
-r-install:
-    cmake --build --preset opt --target magmaan
-    MAGMAAN_PRESET=opt MAGMAAN_WITH_CERES_R=0 R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+# === R bindings: fast dev loop vs portable ship ============================
+# `just r-dev` is the FAST daily loop; `just r-install` is the PORTABLE,
+# self-contained build (compiles the vendored C++ core, links a system NLopt)
+# that install_github / a tarball / an HPC scp would do. After any change under
+# src/ or include/, the vendored copies must be refreshed with `just vendor`.
 
-# Fast R install for interactive wrapper work; not a numeric-performance check.
-r-install-fast:
-    cmake --build --preset fast --target magmaan
-    MAGMAAN_PRESET=fast MAGMAAN_WITH_CERES_R=0 R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+# Vendor the C++ core + PORT + QUADPACK into the self-contained r-package/src/.
+vendor:
+    dev/vendor-cpp.sh
 
-# Optional optimizer R install: Ceres, with NLopt and PORT enabled by default.
-r-install-ceres:
-    cmake --build --preset ceres --target magmaan
-    MAGMAAN_PRESET=ceres MAGMAAN_WITH_CERES_R=1 R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+# Fail if the vendored copies drift from canonical (a src/ or include/ change
+# without re-vendoring, or a hand-edited vendored copy). For CI / pre-commit.
+vendor-check: vendor
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -n "$(git status --porcelain -- r-package/src)" ]; then
+        echo "r-package/src is out of sync — run 'just vendor' and commit:"
+        git status --porcelain -- r-package/src
+        exit 1
+    fi
 
-# Optional optimizer R install: IPOPT, with NLopt and PORT enabled by default.
-r-install-ipopt:
-    cmake --build --preset ipopt --target magmaan
-    MAGMAAN_PRESET=ipopt MAGMAAN_WITH_IPOPT_R=1 R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+# PORTABLE install: the self-contained vendored package (system NLopt), exactly
+# as install_github / a release builds it. Slower than r-dev; use it to validate
+# the shippable package or to install where there is no CMake build. NLopt comes
+# from pkg-config; override with NLOPT_CFLAGS / NLOPT_LIBS (or R_MAKEVARS_USER on
+# a cluster). See dev/saga/README.md.
+r-install: vendor
+    R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+
+# FAST dev install (the daily loop). Compiles only the Rcpp glue and links the
+# prebuilt opt libmagmaan.a, via a throwaway build-rdev/ mirror with the dev-only
+# dev/r-makevars-dev swapped in — so the committed self-contained
+# r-package/src/Makevars is never touched. Optional backends:
+# `just r-dev ceres 1 0` or `just r-dev ipopt 0 1`.
+r-dev preset="opt" ceres="0" ipopt="0":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cmake --preset {{preset}}
+    cmake --build --preset {{preset}} --target magmaan --parallel "$(nproc)"
+    root="$(pwd)"
+    rsync -a --delete \
+        --exclude='*.o' --exclude='*.so' \
+        --exclude='/src/core' --exclude='/src/magmaan' --exclude='/src/third_party' \
+        --exclude='/examples' --exclude='/.RData' --exclude='/.Rhistory' --exclude='/.Rproj.user' \
+        r-package/ build-rdev/
+    cp dev/r-makevars-dev build-rdev/src/Makevars
+    MAGMAAN_ROOT="$root" MAGMAAN_PRESET={{preset}} \
+        MAGMAAN_WITH_CERES_R={{ceres}} MAGMAAN_WITH_IPOPT_R={{ipopt}} \
+        MAKEFLAGS="-j$(nproc)" \
+        R CMD INSTALL --no-byte-compile --no-docs --no-help build-rdev
+
+# Back-compat aliases for the old fast/ceres/ipopt installs (now via r-dev).
+r-install-fast: (r-dev "fast")
+r-install-ceres: (r-dev "ceres" "1" "0")
+r-install-ipopt: (r-dev "ipopt" "0" "1")
 
 # Run every r-package/examples/*.R script (the R-side smoke tests vs lavaan).
 r-examples:
@@ -172,11 +208,12 @@ r-examples:
         Rscript "$f"
     done
 
-# Reinstall the R bindings and run the example smoke tests.
-r-check: r-install r-examples
+# Fast dev install + the example smoke tests.
+r-check: r-dev r-examples
 
-# Force-clean the in-tree R build artifacts (the Makevars dep makes this rarely needed).
+# Force-clean the in-tree R build artifacts + the dev mirror.
 r-clean:
+    rm -rf build-rdev
     rm -f r-package/src/*.o r-package/src/*.so r-package/src/.magmaan-build-config
 
 # Regenerate the lavaan oracle fixtures (needs R + the pinned lavaan version).
@@ -191,9 +228,10 @@ regen-robcat:
 check-layering:
     bash tests/tools/check_layering.sh
 
-# Dependency layering + C++ tests + R smoke — everything. Layering runs first so
-# a cheap structural lint fails fast before the slow build.
-check: check-layering test r-check
+# Dependency layering + vendor-drift + C++ tests + R smoke — everything. The
+# cheap structural lints (layering, vendor sync) run first so they fail fast
+# before the slow build.
+check: check-layering vendor-check test r-check
 
 notes_dir := "docs/research/notes"
 

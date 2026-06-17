@@ -82,8 +82,16 @@ historical archaeology, not current guidance.
   and any local patches. Currently: `third_party/port/` (PORT optimizer
   routines, AMPL/ASL + Fermi-LAT, BSD-3) — wired into the build via
   `cmake/PortVendor.cmake`.
-- `r-package/` - exploratory R bindings (Rcpp); consumes the prebuilt
-  `libmagmaan.a`, separate from and not part of the C++ build.
+- `r-package/` - exploratory R bindings (Rcpp). Self-contained and portable:
+  the C++ core (plus `third_party/port` + `third_party/quadpack`) is **vendored**
+  into `r-package/src/{core,magmaan,third_party}/` by `dev/vendor-cpp.sh`
+  (`just vendor`) so `R CMD INSTALL` / `remotes::install_github` builds it with
+  no CMake and no prebuilt library, linking a system NLopt
+  (`SystemRequirements: NLopt`). The vendored copies carry an `@generated` banner
+  and must never be hand-edited; edit canonical `src/`/`include/` and re-vendor
+  (`just vendor-check` guards drift). The **fast dev loop is `just r-dev`**, which
+  compiles only the Rcpp glue and links the prebuilt `opt` `libmagmaan.a` via a
+  throwaway `build-rdev/` mirror with `dev/r-makevars-dev` swapped in.
 
 ## Dependency layering
 
@@ -150,19 +158,24 @@ presets such as `release` and `ubsan` remain available for compatibility.
 
 There's a `justfile` at the repo root wrapping the common loops: `just build`,
 `just test` (aliases for the `dev` build plus ctest), `just opt`,
-`just test-opt`, `just r-install`, `just r-check` (reinstall the R bindings
-plus run `r-package/examples/*.R` vs lavaan), `just regen-oracle`, and
-`just check` (everything). `just` with no recipe lists them. For the iterative
+`just test-opt`, `just r-dev` (the fast R-bindings dev loop; links the prebuilt
+`libmagmaan.a`), `just vendor` (refresh the vendored C++ in `r-package/src/`),
+`just r-install` (the portable self-contained build, as `install_github`/Saga
+would do — slower), `just r-check` (reinstall via `r-dev` plus run
+`r-package/examples/*.R` vs lavaan), `just regen-oracle`, and `just check`
+(everything). `just` with no recipe lists them. For the iterative
 loop, `just test-area <area>` builds and runs a single test executable
 (`smoke`, `spec`, `estimate`, `inference`, `ordinal`, or `parity`) — with an
 optional test-name filter as a second arg — and `just test-quick` runs
 everything except the heavy real-data `parity` tests.
 
-The R bindings (`r-package/`) link the prebuilt non-sanitized `opt`
-`libmagmaan.a`; `src/Makevars` makes the package objects depend on it, so a
-C++ header change correctly forces the R glue to recompile against the new ABI.
-If you ever see an `undefined symbol` at R load time anyway, `just r-clean`
-(or `rm -f r-package/src/*.o`) and reinstall.
+The fast dev loop `just r-dev` links the prebuilt non-sanitized `opt`
+`libmagmaan.a` (via the `build-rdev/` mirror + `dev/r-makevars-dev`), so a C++
+header change forces the glue to recompile against the new ABI; a full rebuild of
+the vendored core only happens on the portable `just r-install`. After editing
+`src/`/`include/`, run `just vendor` to refresh the vendored copies. If you ever
+see an `undefined symbol` at R load time, `just r-clean` and reinstall. To
+install on a cluster, see [dev/saga/README.md](dev/saga/README.md).
 
 ## R Package Direction
 

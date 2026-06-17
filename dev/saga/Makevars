@@ -1,0 +1,16 @@
+# Tuned compile flags for Saga (Sigma2) compute nodes. Used via R_MAKEVARS_USER
+# so the committed r-package/src/Makevars stays portable (CRAN/install_github):
+#
+#   R_MAKEVARS_USER=$PWD/dev/saga/Makevars R CMD INSTALL r-package
+#
+# These OVERRIDE R's default base flags (the package only ever appends PKG_*),
+# so the whole vendored tree compiles at -O3 -march=native. The package's own
+# -std=gnu11 (for the f2c C) and -std=c++23 (CXX_STD) still win, appended last.
+#
+# CAUTION: -march=native bakes in the BUILD node's microarchitecture. Saga's
+# compute nodes are heterogeneous, so build inside a Slurm job on the SAME
+# partition you run on. To build once and run anywhere, swap -march=native for an
+# explicit baseline such as -march=x86-64-v3.
+CFLAGS   = -O3 -march=native -pipe -DNDEBUG
+CXXFLAGS = -O3 -march=native -pipe -DNDEBUG
+FFLAGS   = -O3 -march=native -pipe
