@@ -550,6 +550,56 @@ lr_test_satorra2000_from_data(
         " or theta size " + std::to_string(theta_H1_full.size())));
   }
 
+  // Mean structure: when the model carries free intercepts / latent means the
+  // moment vector is augmented to [μ_g; vech(Σ_g)] per group.  dmu_dtheta is a
+  // 0×0 sentinel for covariance-only models, in which case the path below is
+  // numerically identical to the pre-mean-structure behaviour.
+  auto dmu_or = ev.dmu_dtheta(theta_H1_full);
+  if (!dmu_or.has_value()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_from_data: dmu_dtheta(θ̂_H1) failed: " +
+        dmu_or.error().detail));
+  }
+  const Eigen::MatrixXd& Dmu_th = *dmu_or;     // (Σ p_g) × npar, or 0×0
+  const bool has_means = Dmu_th.size() > 0;
+
+  Eigen::Index mu_rows_total = 0;
+  for (std::size_t g = 0; g < G; ++g) mu_rows_total += im.sigma[g].rows();
+  if (has_means &&
+      (Dmu_th.rows() != mu_rows_total || Dmu_th.cols() != Pi_th.cols())) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_from_data: dmu_dtheta shape " +
+        std::to_string(Dmu_th.rows()) + "×" + std::to_string(Dmu_th.cols()) +
+        " disagrees with Σ p_g = " + std::to_string(mu_rows_total) +
+        " or npar = " + std::to_string(Pi_th.cols())));
+  }
+
+  // Interleave the two stacked Jacobians into the augmented moment layout:
+  // per group block [∂μ_g/∂θ (p_g rows); ∂vech(Σ_g)/∂θ (p*_g rows)].  Stacking
+  // commutes with the K-projection (a column operation), so we augment the raw
+  // Jacobians and project once.  Used for both the delta restriction and the
+  // per-group slicing below.
+  auto augment_stack = [&](const Eigen::MatrixXd& Dmu,
+                           const Eigen::MatrixXd& Dsig) -> Eigen::MatrixXd {
+    Eigen::Index total = 0;
+    for (std::size_t g = 0; g < G; ++g) {
+      const Eigen::Index p = im.sigma[g].rows();
+      total += p + detail::vech_len(p);
+    }
+    Eigen::MatrixXd out(total, Dsig.cols());
+    Eigen::Index mu_off = 0, sig_off = 0, out_off = 0;
+    for (std::size_t g = 0; g < G; ++g) {
+      const Eigen::Index p  = im.sigma[g].rows();
+      const Eigen::Index ps = detail::vech_len(p);
+      out.middleRows(out_off, p)      = Dmu.middleRows(mu_off, p);
+      out.middleRows(out_off + p, ps) = Dsig.middleRows(sig_off, ps);
+      mu_off += p; sig_off += ps; out_off += p + ps;
+    }
+    return out;
+  };
+  const Eigen::MatrixXd Pi_H1_aug_all =
+      has_means ? augment_stack(Dmu_th, Pi_th) * K_H1.Kmat : Eigen::MatrixXd();
+
   // ── 2. Derive A_α (the restriction in H1's α-space) ─────────────────────
   Eigen::MatrixXd A_alpha;
   if (options.a_method == SatorraAMethod::Exact) {
@@ -577,8 +627,30 @@ lr_test_satorra2000_from_data(
           "lr_test_satorra2000_from_data: H0 moment Jacobian shape disagrees "
           "with H1 or K_H0"));
     }
+    // The delta restriction searches the moment-Jacobian column space, so it
+    // must see the same augmented [μ; vech(Σ)] rows H1 carries.
+    Eigen::MatrixXd Pi_H1_for_delta, Pi_H0_for_delta;
+    if (has_means) {
+      auto dmu0_or = ev0_or->dmu_dtheta(theta_H0_full);
+      if (!dmu0_or.has_value()) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "lr_test_satorra2000_from_data: dmu_dtheta(θ̂_H0) failed: " +
+            dmu0_or.error().detail));
+      }
+      if (dmu0_or->rows() != mu_rows_total ||
+          dmu0_or->cols() != K_H0.Kmat.rows()) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "lr_test_satorra2000_from_data: H0 mean Jacobian shape disagrees "
+            "with H1 or K_H0"));
+      }
+      Pi_H1_for_delta = Pi_H1_aug_all;
+      Pi_H0_for_delta = augment_stack(*dmu0_or, *dsig0_or) * K_H0.Kmat;
+    } else {
+      Pi_H1_for_delta = Pi_H1_alpha_all;
+      Pi_H0_for_delta = (*dsig0_or) * K_H0.Kmat;
+    }
     auto A_or = restriction_alpha_delta_from_jacobians(
-        Pi_H1_alpha_all, (*dsig0_or) * K_H0.Kmat, df_diff_from_T);
+        Pi_H1_for_delta, Pi_H0_for_delta, df_diff_from_T);
     if (!A_or.has_value()) {
       return std::unexpected(A_or.error());
     }
@@ -597,20 +669,24 @@ lr_test_satorra2000_from_data(
   }
 
   // ── 3. Build per-group SatorraGroup ─────────────────────────────────────
+  const Eigen::MatrixXd& Pi_slice_src =
+      has_means ? Pi_H1_aug_all : Pi_H1_alpha_all;
   std::vector<SatorraGroup> groups;
   groups.reserve(G);
   Eigen::Index row_off = 0;
   for (std::size_t g = 0; g < G; ++g) {
     const Eigen::Index p     = im.sigma[g].rows();
     const Eigen::Index pstar = detail::vech_len(p);
-    if (row_off + pstar > Pi_th.rows()) {
+    const Eigen::Index mu_dim = has_means ? p : 0;
+    const Eigen::Index block_rows = mu_dim + pstar;
+    if (row_off + block_rows > Pi_slice_src.rows()) {
       return std::unexpected(make_err(PostError::Kind::NumericIssue,
           "lr_test_satorra2000_from_data: Π stacked layout overruns at group "
           + std::to_string(g)));
     }
-    // Π_g · K_H1  (p*_g × r1)
-    Eigen::MatrixXd Pi_alpha_g = Pi_H1_alpha_all.middleRows(row_off, pstar);
-    row_off += pstar;
+    // [∂μ_g/∂α; ∂vech(Σ_g)/∂α]  ((mu_dim+p*_g) × r1)
+    Eigen::MatrixXd Pi_alpha_g = Pi_slice_src.middleRows(row_off, block_rows);
+    row_off += block_rows;
 
     SatorraGroup sg;
     sg.Pi_alpha = std::move(Pi_alpha_g);
@@ -619,6 +695,7 @@ lr_test_satorra2000_from_data(
     sg.mean     = mean_per_group[g];
     sg.weight   = weight_per_group[g];
     sg.n_g      = n_per_group[g];
+    sg.mu_dim   = mu_dim;
     groups.push_back(std::move(sg));
   }
 

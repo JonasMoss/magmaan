@@ -129,6 +129,55 @@ Eigen::MatrixXd sample_mvn(std::mt19937& rng, Eigen::Index n,
   return X;
 }
 
+// Augmented dense V for the [μ; vech(Σ)] moment vector: block-diagonal with the
+// μ-block = Σ⁻¹ (no factor of 2, no halving) and the σ-block = dense_V(Σ).
+// Mirrors apply_V_augmented_columns; the production path never materializes it.
+Eigen::MatrixXd dense_V_aug(const Eigen::MatrixXd& Sigma) {
+  const Eigen::Index p     = Sigma.rows();
+  const Eigen::Index pstar = p * (p + 1) / 2;
+  Eigen::LLT<Eigen::MatrixXd> llt(Sigma);
+  REQUIRE(llt.info() == Eigen::Success);
+  const Eigen::MatrixXd Sinv = llt.solve(Eigen::MatrixXd::Identity(p, p));
+  Eigen::MatrixXd V = Eigen::MatrixXd::Zero(p + pstar, p + pstar);
+  V.topLeftCorner(p, p)             = Sinv;
+  V.bottomRightCorner(pstar, pstar) = dense_V(Sigma);
+  return V;
+}
+
+// Naïve full-UΓ eigenvalues for the mean-augmented single-group case — the
+// textbook computation the streaming kernel replaces.  Uses the independent
+// empirical_gamma_with_means as the Γ̂ source (a different code path than the
+// kernel's casewise D_rows), so agreement is a genuine cross-check.
+Eigen::VectorXd naive_satorra_eigvals_aug(
+    const magmaan::robust::SatorraGroup& gr,
+    const Eigen::MatrixXd&               A_alpha) {
+  const Eigen::Index r1 = A_alpha.cols();
+  const Eigen::Index m  = A_alpha.rows();
+  const Eigen::MatrixXd V = dense_V_aug(gr.Sigma);
+  const Eigen::MatrixXd P =
+      gr.weight * (gr.Pi_alpha.transpose() * V * gr.Pi_alpha);
+  const Eigen::MatrixXd P_inv =
+      P.ldlt().solve(Eigen::MatrixXd::Identity(r1, r1));
+  const Eigen::MatrixXd C    = A_alpha * P_inv * A_alpha.transpose();
+  const Eigen::MatrixXd Cinv = C.ldlt().solve(Eigen::MatrixXd::Identity(m, m));
+  const Eigen::MatrixXd U =
+      V * gr.Pi_alpha * P_inv * A_alpha.transpose() *
+      Cinv * A_alpha * P_inv * gr.Pi_alpha.transpose() * V;
+
+  auto Gamma_or = magmaan::data::empirical_gamma_with_means(gr.X);
+  REQUIRE(Gamma_or.has_value());
+  const Eigen::MatrixXd Gamma = *Gamma_or;
+
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es_g(Gamma);
+  const Eigen::VectorXd d_pos = es_g.eigenvalues().cwiseMax(0.0).cwiseSqrt();
+  const Eigen::MatrixXd sqrt_G = es_g.eigenvectors() * d_pos.asDiagonal() *
+                                 es_g.eigenvectors().transpose();
+  const Eigen::MatrixXd Msym = sqrt_G * U * sqrt_G;
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(
+      0.5 * (Msym + Msym.transpose()));
+  return es.eigenvalues().tail(m);
+}
+
 }  // namespace
 
 // ── End-to-end: streaming vs. naïve on a saturated 2-var model ─────────────
@@ -284,6 +333,126 @@ TEST_CASE("compute_satorra2000: NT-Γ sanity (all eigvals → 1)") {
     CHECK(r->eigenvalues(k) == doctest::Approx(1.0).epsilon(1e-12));
   }
   CHECK(r->trace_CinvS == doctest::Approx(2.0).epsilon(1e-12));
+}
+
+// ── Mean structure: augmented [μ; vech(Σ)] moment vector ───────────────────
+//
+// Saturated 3-variable mean+covariance model (Π_aug = I₉; r1 = 9 = p + p*).
+// Data carries a nonzero mean so the μ-block is load-bearing.  The restriction
+// touches BOTH a mean parameter (μ₁ = 0) and a covariance parameter
+// (σ₃₁ = 0), so the mean rows of A_α, P, and the casewise meat all matter.
+TEST_CASE("compute_satorra2000: mean-augmented self-consistency and oracle") {
+  std::mt19937 rng(0x0ce4U);
+  const Eigen::Index n = 400, p = 3, pstar = 6;
+  Eigen::MatrixXd Sigma_true(3, 3);
+  Sigma_true << 1.6, 0.4, 0.2,
+                0.4, 1.2, 0.3,
+                0.2, 0.3, 1.0;
+  Eigen::RowVector3d shift(0.7, -0.4, 1.1);
+  Eigen::MatrixXd X = sample_mvn(rng, n, Sigma_true).rowwise() + shift;
+  const Eigen::VectorXd mean = X.colwise().mean();
+  const Eigen::MatrixXd Xc   = X.rowwise() - mean.transpose();
+  const Eigen::MatrixXd S    = (Xc.transpose() * Xc) / static_cast<double>(n);
+
+  magmaan::robust::SatorraGroup gr;
+  gr.Pi_alpha = Eigen::MatrixXd::Identity(p + pstar, p + pstar);  // 9×9
+  gr.Sigma    = S;
+  gr.X        = X;
+  gr.mean     = mean;
+  gr.weight   = 1.0;
+  gr.n_g      = static_cast<std::int32_t>(n);
+  gr.mu_dim   = p;
+
+  // Augmented param order: [μ₁, μ₂, μ₃, σ₁₁, σ₂₁, σ₃₁, σ₂₂, σ₃₂, σ₃₃].
+  // Restrict μ₁ = 0 (index 0) and σ₃₁ = 0 (vech idx 2 → augmented idx p + 2).
+  Eigen::MatrixXd A_alpha = Eigen::MatrixXd::Zero(2, p + pstar);
+  A_alpha(0, 0)     = 1.0;
+  A_alpha(1, p + 2) = 1.0;
+
+  using magmaan::robust::compute_satorra2000;
+  using magmaan::robust::GammaSource;
+  using magmaan::robust::GammaComputation;
+  auto strm = compute_satorra2000({gr}, A_alpha, GammaSource::Empirical,
+                                  GammaComputation::Streaming);
+  auto matz = compute_satorra2000({gr}, A_alpha, GammaSource::Empirical,
+                                  GammaComputation::Materialized);
+  auto dens = compute_satorra2000({gr}, A_alpha, GammaSource::Empirical,
+                                  GammaComputation::Dense);
+  REQUIRE(strm.has_value());
+  REQUIRE(matz.has_value());
+  REQUIRE(dens.has_value());
+  REQUIRE(strm->eigenvalues.size() == 2);
+
+  // (1) the three computation paths must agree.
+  for (Eigen::Index k = 0; k < 2; ++k) {
+    CHECK(matz->eigenvalues(k)
+          == doctest::Approx(strm->eigenvalues(k)).epsilon(1e-9));
+    CHECK(dens->eigenvalues(k)
+          == doctest::Approx(strm->eigenvalues(k)).epsilon(1e-9));
+  }
+
+  // (2) and they must match the independent naïve full-UΓ oracle.
+  const Eigen::VectorXd oracle = naive_satorra_eigvals_aug(gr, A_alpha);
+  REQUIRE(oracle.size() == 2);
+  for (Eigen::Index k = 0; k < 2; ++k) {
+    CHECK(strm->eigenvalues(k) == doctest::Approx(oracle(k)).epsilon(1e-8));
+  }
+
+  // (3) NT short-circuit: Γ = Γ_NT ⇒ all eigenvalues collapse to 1.
+  auto nt = compute_satorra2000({gr}, A_alpha, GammaSource::NT);
+  REQUIRE(nt.has_value());
+  for (Eigen::Index k = 0; k < nt->eigenvalues.size(); ++k) {
+    CHECK(nt->eigenvalues(k) == doctest::Approx(1.0).epsilon(1e-10));
+  }
+}
+
+// A purely covariance restriction on the mean-augmented saturated model must
+// yield exactly the same spectrum as the covariance-only model: the augmented
+// V and P are block-diagonal, so a cov-only A never loads the mean block.  This
+// is an oracle-free invariance witness that the augmentation cannot corrupt the
+// established cov-only numerics.
+TEST_CASE("compute_satorra2000: cov-only restriction is invariant to mean "
+          "augmentation") {
+  std::mt19937 rng(0x7b21U);
+  const Eigen::Index n = 350, p = 3, pstar = 6;
+  Eigen::MatrixXd Sigma_true(3, 3);
+  Sigma_true << 1.3, 0.50, 0.20,
+                0.50, 1.4, 0.35,
+                0.20, 0.35, 1.1;
+  Eigen::RowVector3d shift(-0.5, 0.8, 0.3);
+  Eigen::MatrixXd X = sample_mvn(rng, n, Sigma_true).rowwise() + shift;
+  const Eigen::VectorXd mean = X.colwise().mean();
+  const Eigen::MatrixXd Xc   = X.rowwise() - mean.transpose();
+  const Eigen::MatrixXd S    = (Xc.transpose() * Xc) / static_cast<double>(n);
+
+  // Cov-only group (mu_dim = 0, Π = I₆, restriction in vech space).
+  magmaan::robust::SatorraGroup cov{
+      Eigen::MatrixXd::Identity(pstar, pstar), S, X, mean, 1.0,
+      static_cast<std::int32_t>(n)};
+  Eigen::MatrixXd A_cov = Eigen::MatrixXd::Zero(2, pstar);
+  A_cov(0, 1) = 1.0;  // σ₂₁
+  A_cov(1, 2) = 1.0;  // σ₃₁
+
+  // Mean-augmented group (mu_dim = 3, Π = I₉) with the SAME cov restriction
+  // shifted into the augmented param order (vech indices 1,2 → p+1, p+2).
+  magmaan::robust::SatorraGroup aug = cov;
+  aug.Pi_alpha = Eigen::MatrixXd::Identity(p + pstar, p + pstar);
+  aug.mu_dim   = p;
+  Eigen::MatrixXd A_aug = Eigen::MatrixXd::Zero(2, p + pstar);
+  A_aug(0, p + 1) = 1.0;
+  A_aug(1, p + 2) = 1.0;
+
+  using magmaan::robust::compute_satorra2000;
+  using magmaan::robust::GammaSource;
+  auto r_cov = compute_satorra2000({cov}, A_cov, GammaSource::Empirical);
+  auto r_aug = compute_satorra2000({aug}, A_aug, GammaSource::Empirical);
+  REQUIRE(r_cov.has_value());
+  REQUIRE(r_aug.has_value());
+  REQUIRE(r_cov->eigenvalues.size() == r_aug->eigenvalues.size());
+  for (Eigen::Index k = 0; k < r_cov->eigenvalues.size(); ++k) {
+    CHECK(r_aug->eigenvalues(k)
+          == doctest::Approx(r_cov->eigenvalues(k)).epsilon(1e-10));
+  }
 }
 
 TEST_CASE("restriction_alpha_delta_from_jacobians finds moment-column restrictions") {

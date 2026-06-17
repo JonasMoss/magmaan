@@ -160,3 +160,33 @@ For lavaan-facing examples and parity checks, compare against
 scaled.shifted = FALSE)`. It is still reasonable to mention lavaan's
 delta-method option in examples, but only as a documented alternative for
 covariance-nested comparisons, not as the default magmaan oracle.
+
+## Mean structure (2026-06-17)
+
+The complete-data ML restriction map now handles mean-structured models. The
+per-group moment vector becomes the augmented `[μ_g; vech(Σ_g)]` (mean rows on
+top): `lr_test_satorra2000_from_data` stacks `dmu_dtheta` over `dsigma_dtheta`
+for the per-group `Pi_alpha` and the delta restriction, and
+`compute_satorra2000` carries it through `SatorraGroup.mu_dim` (the μ-block of
+`V` is `Σ⁻¹`; the empirical meat picks up the full μ×σ cross-block). Previously
+any `meanstructure = TRUE` complete-data pair errored with a rank-deficient
+pooled `P`, because the moment Jacobian omitted the mean block and free
+intercepts/latent means produced zero columns.
+
+`r-package/examples/nested_test_satorra2000.R` gates this against lavaan with
+two `meanstructure = TRUE` Holzinger-Swineford pairs: configural vs metric
+(a covariance restriction in the augmented moment space) and intercept
+invariance (free vs cross-group-tied indicator intercepts, latent means fixed
+at 0 in both groups — a genuine restriction on the mean block). Both reproduce
+lavaan's `lavTestLRT(method = "satorra.2000", A.method = "exact",
+scaled.shifted = FALSE)` to 1e-3 (intercept invariance: `Δχ²_scaled = 80.5597`,
+`df = 9`).
+
+Caveat (separate, pre-existing): magmaan's convenience keyword
+`group_equal = "intercepts"` ties the indicator intercepts but does *not*
+auto-free the non-reference-group latent means the way lavaan does, so a full
+metric→scalar comparison built that way is over-restricted (df too high) and is
+not a pure parameter-nesting the exact map accepts. Specify the scalar step with
+explicit per-group intercept labels plus `factor ~ c(0, NA)*1` latent-mean rows
+when an exact metric→scalar test is needed; the fits then match lavaan exactly.
+This is a `spec::build` lavaanify gap, not a nested-test gap.

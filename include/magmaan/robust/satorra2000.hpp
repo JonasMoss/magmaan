@@ -66,13 +66,23 @@ using estimate::EqConstraints;
 // Per-group inputs at θ̂_H1.  Caller is responsible for ensuring Σ is the
 // model-implied moments at H1 (used to build V = Γ_NT(Σ)⁻¹), and `mean` is
 // the *sample* mean m̄_g (the casewise centring for the d_gi residuals).
+//
+// Mean structure: when `mu_dim == p_g` the per-group moment vector is the
+// augmented [μ_g; vech(Σ_g)] (mean rows on top), so `Pi_alpha` carries the
+// stacked [∂μ/∂α; ∂vech(Σ)/∂α] and has `mu_dim + p*_g` rows.  The μ-block of
+// V is Σ⁻¹ (no factor of 2, no diagonal halving); the σ-block is the usual
+// Γ_NT(Σ)⁻¹.  V stays block-diagonal (mean ⊥ cov under normality); the
+// empirical meat picks up the full augmented Γ̂ including the μ×σ cross-block
+// through the casewise outer products.  `mu_dim == 0` is the covariance-only
+// path and is numerically identical to the pre-mean-structure behaviour.
 struct SatorraGroup {
-  Eigen::MatrixXd Pi_alpha;   // p*_g × r1   (already projected through K_H1)
+  Eigen::MatrixXd Pi_alpha;   // (mu_dim + p*_g) × r1  (projected through K_H1)
   Eigen::MatrixXd Sigma;      // p_g × p_g   (model-implied Σ̂_g at θ̂_H1)
   Eigen::MatrixXd X;          // n_g × p_g   (raw data, uncentred)
   Eigen::VectorXd mean;       // p_g         (sample mean m̄_g)
   double          weight;     // n_g / N_total
   std::int32_t    n_g;        // sample size (for the 1/(n_g − 1) divisor)
+  Eigen::Index    mu_dim = 0; // 0 ⇒ cov-only; p_g ⇒ augmented [μ; vech(Σ)]
 };
 
 enum class GammaSource {
