@@ -55,6 +55,15 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
     isTRUE(fit$fiml) || identical(fit_estimator(fit), "FIML") ||
       inherits(fit$raw_data, "magmaan_fiml_data")
   }
+  is_ml2s <- function(fit) {
+    identical(fit_estimator(fit), "ML2S")
+  }
+  ml2s_H1 <- is_ml2s(fit_H1)
+  ml2s_H0 <- is_ml2s(fit_H0)
+  if (xor(ml2s_H1, ml2s_H0)) {
+    stop("robust_nested_lrt(): mixed ML2S/non-ML2S model pairs are not ",
+         "supported; fit both models with the same estimator.", call. = FALSE)
+  }
   fiml_H1 <- is_fiml(fit_H1)
   fiml_H0 <- is_fiml(fit_H0)
   if (xor(fiml_H1, fiml_H0)) {
@@ -68,6 +77,26 @@ robust_nested_lrt <- function(fit_H1, fit_H0, data = NULL,
   if (xor(ordinal_H1, ordinal_H0) || xor(mixed_ordinal_H1, mixed_ordinal_H0)) {
     stop("robust_nested_lrt(): mixed ordinal/non-ordinal model pairs are not ",
          "supported; fit both models with the same estimator.", call. = FALSE)
+  }
+  if (ml2s_H1) {
+    if (!identical(method, "restriction_map")) {
+      stop("robust_nested_lrt(): ML2S nested tests support ",
+           "method = 'restriction_map' only; complete-data compatibility ",
+           "methods are not defined for ML2S.", call. = FALSE)
+    }
+    if (!is.null(data)) {
+      stop("robust_nested_lrt(): ML2S nested tests use fit_H1$raw_data; ",
+           "the `data` argument is not supported for ML2S fits.",
+           call. = FALSE)
+    }
+    res <- infer_ml2s_lr_test_satorra2000(
+      fit_H1, fit_H0, gamma = gamma, a_method = A.method)
+    res$gamma <- gamma
+    res$method <- method
+    res$A.method <- A.method
+    res$computation <- "ml2s_eta"
+    class(res) <- c("magmaan_nested_test", "list")
+    return(res)
   }
   if (fiml_H1) {
     if (!identical(method, "restriction_map")) {

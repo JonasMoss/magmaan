@@ -327,6 +327,12 @@ saturated_em_moments(const RawData& raw,
                      const FIMLPack& pack,
                      const FIMLH1& h1);
 
+// Convert the saturated EM ACOV to the two-stage moment meat used by
+// robust.two.stage. `se_weighted = true` gives the parameter-vcov convention;
+// `false` gives the test-statistic UGamma convention.
+post_expected<Eigen::MatrixXd>
+two_stage_gamma_from_acov(const SaturatedMoments& sm, bool se_weighted);
+
 // Savalei-Bentler two-stage ML inference for a Stage-2 ML fit to the saturated
 // EM moments. The point estimate is supplied by the caller (`fit_ml` on
 // `SaturatedMoments::{cov, mean, n_obs}`); this helper consumes Stage-1

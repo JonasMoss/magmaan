@@ -1163,6 +1163,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// infer_ml2s_lr_test_satorra2000
+Rcpp::List infer_ml2s_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, std::string gamma, std::string a_method, double h_step);
+RcppExport SEXP _magmaan_infer_ml2s_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP gammaSEXP, SEXP a_methodSEXP, SEXP h_stepSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H1(fit_H1SEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit_H0(fit_H0SEXP);
+    Rcpp::traits::input_parameter< std::string >::type gamma(gammaSEXP);
+    Rcpp::traits::input_parameter< std::string >::type a_method(a_methodSEXP);
+    Rcpp::traits::input_parameter< double >::type h_step(h_stepSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_ml2s_lr_test_satorra2000(fit_H1, fit_H0, gamma, a_method, h_step));
+    return rcpp_result_gen;
+END_RCPP
+}
 // infer_ordinal_lr_test_satorra2000
 Rcpp::List infer_ordinal_lr_test_satorra2000(Rcpp::List fit_H1, Rcpp::List fit_H0, Rcpp::List ordinal_stats, double T_H1, int df_H1, double T_H0, int df_H0, std::string weight, std::string a_method);
 RcppExport SEXP _magmaan_infer_ordinal_lr_test_satorra2000(SEXP fit_H1SEXP, SEXP fit_H0SEXP, SEXP ordinal_statsSEXP, SEXP T_H1SEXP, SEXP df_H1SEXP, SEXP T_H0SEXP, SEXP df_H0SEXP, SEXP weightSEXP, SEXP a_methodSEXP) {
@@ -2377,6 +2392,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_frontier_backconvert_std_lv_to_marker_impl", (DL_FUNC) &_magmaan_frontier_backconvert_std_lv_to_marker_impl, 2},
     {"_magmaan_infer_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_lr_test_satorra2000, 10},
     {"_magmaan_infer_fiml_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_fiml_lr_test_satorra2000, 5},
+    {"_magmaan_infer_ml2s_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_ml2s_lr_test_satorra2000, 5},
     {"_magmaan_infer_ordinal_lr_test_satorra2000", (DL_FUNC) &_magmaan_infer_ordinal_lr_test_satorra2000, 9},
     {"_magmaan_infer_lr_test_satorra_bentler2001", (DL_FUNC) &_magmaan_infer_lr_test_satorra_bentler2001, 8},
     {"_magmaan_infer_lr_test_satorra_bentler2010", (DL_FUNC) &_magmaan_infer_lr_test_satorra_bentler2010, 8},

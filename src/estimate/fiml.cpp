@@ -2641,6 +2641,8 @@ sample_stats_from_saturated(const SaturatedMoments& sm) {
   return samp;
 }
 
+}  // namespace
+
 post_expected<Eigen::MatrixXd>
 two_stage_gamma_from_acov(const SaturatedMoments& sm, bool se_weighted) {
   double N = 0.0;
@@ -2684,6 +2686,8 @@ two_stage_gamma_from_acov(const SaturatedMoments& sm, bool se_weighted) {
   }
   return Eigen::MatrixXd(0.5 * (gamma + gamma.transpose()).eval());
 }
+
+namespace {
 
 post_expected<TwoStageEMMLInference>
 two_stage_em_ml_inference_impl(spec::LatentStructure pt,

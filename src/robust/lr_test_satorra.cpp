@@ -29,6 +29,7 @@ using inference::chi2_pvalue;
 using inference::noncentral_chisq_cdf;
 
 using estimate::EqConstraints;
+using data::gamma_nt;
 
 
 namespace {
@@ -39,6 +40,52 @@ PostError make_err(PostError::Kind k, std::string detail) {
 
 double quiet_nan() {
   return std::numeric_limits<double>::quiet_NaN();
+}
+
+post_expected<Eigen::MatrixXd>
+ml2s_nt_weight_from_saturated(const estimate::fiml::SaturatedMoments& sm) {
+  Eigen::Index Q = 0;
+  for (std::size_t b = 0; b < sm.cov.size(); ++b) {
+    const Eigen::Index p = sm.cov[b].rows();
+    if (sm.cov[b].cols() != p || sm.mean[b].size() != p) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "lr_test_satorra2000_ml2s_from_data: malformed saturated moments"));
+    }
+    Q += p + detail::vech_len(p);
+  }
+
+  Eigen::MatrixXd V = Eigen::MatrixXd::Zero(Q, Q);
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < sm.cov.size(); ++b) {
+    const Eigen::Index p = sm.cov[b].rows();
+    Eigen::LDLT<Eigen::MatrixXd> ldlt_mu(0.5 * (sm.cov[b] + sm.cov[b].transpose()));
+    if (ldlt_mu.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+          "lr_test_satorra2000_ml2s_from_data: saturated covariance block is "
+          "not invertible"));
+    }
+    V.block(off, off, p, p) =
+        ldlt_mu.solve(Eigen::MatrixXd::Identity(p, p));
+    off += p;
+
+    auto G_or = gamma_nt(sm.cov[b]);
+    if (!G_or.has_value()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "lr_test_satorra2000_ml2s_from_data: gamma_nt failed: " +
+          G_or.error().detail));
+    }
+    const Eigen::Index q = G_or->rows();
+    Eigen::LDLT<Eigen::MatrixXd> ldlt_cov(0.5 * (*G_or + G_or->transpose()));
+    if (ldlt_cov.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+          "lr_test_satorra2000_ml2s_from_data: covariance NT Gamma block is "
+          "not invertible"));
+    }
+    V.block(off, off, q, q) =
+        ldlt_cov.solve(Eigen::MatrixXd::Identity(q, q));
+    off += q;
+  }
+  return Eigen::MatrixXd(0.5 * (V + V.transpose()).eval());
 }
 
 post_expected<Eigen::MatrixXd>
@@ -904,6 +951,130 @@ lr_test_satorra2000_fiml_from_data(
       pt_H0, rep_H0, theta_H0_full, K_H0,
       raw, T_H0, T_H1, df_H0, df_H1,
       &pack, &h1, gamma, a_method, h_step);
+}
+
+post_expected<LRSatorra2000Result>
+lr_test_satorra2000_ml2s_from_data(
+    const spec::LatentStructure&     pt_H1,
+    const model::MatrixRep&          rep_H1,
+    const Eigen::VectorXd&           theta_H1_full,
+    const EqConstraints&             K_H1,
+    const spec::LatentStructure&     pt_H0,
+    const model::MatrixRep&          rep_H0,
+    const Eigen::VectorXd&           theta_H0_full,
+    const EqConstraints&             K_H0,
+    const data::RawData&             raw,
+    double                           T_H0,
+    double                           T_H1,
+    int                              df_H0,
+    int                              df_H1,
+    GammaSource                      gamma,
+    SatorraAMethod                   a_method,
+    double                           h_step) {
+  const int df_diff_from_T = df_H0 - df_H1;
+  if (df_diff_from_T < 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_ml2s_from_data: df_H0 - df_H1 is negative; "
+        "H1 must be the less-restricted model"));
+  }
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_ml2s_from_data: h_step must be > 0"));
+  }
+  const bool has_nonlinear =
+      !pt_H1.nl_constraints.empty() || !pt_H0.nl_constraints.empty();
+  std::vector<std::string> warnings;
+  if (has_nonlinear && a_method == SatorraAMethod::Exact) {
+    warnings.emplace_back(
+        "lr_test_satorra2000_ml2s_from_data: nonlinear equality constraints "
+        "have no global affine exact restriction map; using the local tangent "
+        "restriction map at the fitted points");
+  }
+
+  auto sm_or = estimate::fiml::saturated_em_moments(raw, h_step);
+  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+  const estimate::fiml::SaturatedMoments& sm = *sm_or;
+
+  auto V_or = ml2s_nt_weight_from_saturated(sm);
+  if (!V_or.has_value()) return std::unexpected(V_or.error());
+  const Eigen::MatrixXd& V = *V_or;
+
+  Eigen::MatrixXd Gamma;
+  if (gamma == GammaSource::NT) {
+    Eigen::LDLT<Eigen::MatrixXd> ldlt_V(0.5 * (V + V.transpose()));
+    if (ldlt_V.info() != Eigen::Success) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "lr_test_satorra2000_ml2s_from_data: NT weight V is not invertible"));
+    }
+    Gamma = ldlt_V.solve(Eigen::MatrixXd::Identity(V.rows(), V.cols()));
+    Gamma = 0.5 * (Gamma + Gamma.transpose()).eval();
+  } else {
+    auto Gamma_or = estimate::fiml::two_stage_gamma_from_acov(
+        sm, /*se_weighted=*/false);
+    if (!Gamma_or.has_value()) return std::unexpected(Gamma_or.error());
+    Gamma = std::move(*Gamma_or);
+  }
+
+  estimate::Estimates est_H1;
+  est_H1.theta = theta_H1_full;
+  auto D1_or = estimate::fiml::fiml_eta_jacobian(
+      pt_H1, rep_H1, raw, est_H1, estimate::fiml::FIML{});
+  if (!D1_or.has_value()) return std::unexpected(D1_or.error());
+  if (D1_or->Delta_theta.rows() != V.rows() ||
+      D1_or->Delta_theta.cols() != K_H1.Kmat.rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_ml2s_from_data: H1 eta Jacobian shape disagrees "
+        "with NT weight or K_H1"));
+  }
+  auto B1_or = local_constraint_basis(
+      pt_H1, K_H1, theta_H1_full,
+      "lr_test_satorra2000_ml2s_from_data: H1");
+  if (!B1_or.has_value()) return std::unexpected(B1_or.error());
+  const Eigen::MatrixXd Delta1_alpha = D1_or->Delta_theta * (*B1_or);
+
+  Eigen::MatrixXd A_alpha;
+  if (a_method == SatorraAMethod::Exact && !has_nonlinear) {
+    auto restr_or = restriction_alpha_from_K(K_H1, K_H0);
+    if (!restr_or.has_value()) return std::unexpected(restr_or.error());
+    A_alpha = std::move(restr_or->A);
+  } else {
+    estimate::Estimates est_H0;
+    est_H0.theta = theta_H0_full;
+    auto D0_or = estimate::fiml::fiml_eta_jacobian(
+        pt_H0, rep_H0, raw, est_H0, estimate::fiml::FIML{});
+    if (!D0_or.has_value()) return std::unexpected(D0_or.error());
+    if (D0_or->Delta_theta.rows() != V.rows() ||
+        D0_or->Delta_theta.cols() != K_H0.Kmat.rows()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "lr_test_satorra2000_ml2s_from_data: H0 eta Jacobian shape "
+          "disagrees with NT weight or K_H0"));
+    }
+    auto B0_or = local_constraint_basis(
+        pt_H0, K_H0, theta_H0_full,
+        "lr_test_satorra2000_ml2s_from_data: H0");
+    if (!B0_or.has_value()) return std::unexpected(B0_or.error());
+    const Eigen::MatrixXd Delta0_alpha = D0_or->Delta_theta * (*B0_or);
+    auto A_or = restriction_alpha_delta_from_jacobians(
+        Delta1_alpha, Delta0_alpha, df_diff_from_T);
+    if (!A_or.has_value()) return std::unexpected(A_or.error());
+    A_alpha = std::move(*A_or);
+  }
+
+  const int df_diff_from_A = static_cast<int>(A_alpha.rows());
+  if (df_diff_from_A != df_diff_from_T) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "lr_test_satorra2000_ml2s_from_data: df_diff mismatch -- derived A "
+        "has m = " + std::to_string(df_diff_from_A) +
+        " but df_H0 - df_H1 = " + std::to_string(df_diff_from_T)));
+  }
+
+  auto sd_or = compute_fiml_satorra2000(Delta1_alpha, V, Gamma, A_alpha);
+  if (!sd_or.has_value()) return std::unexpected(sd_or.error());
+  auto out_or = lr_test_satorra2000(T_H0 - T_H1, *sd_or);
+  if (!out_or.has_value()) return std::unexpected(out_or.error());
+  out_or->warnings.insert(out_or->warnings.end(),
+                          warnings.begin(), warnings.end());
+  return out_or;
 }
 
 }  // namespace magmaan::robust

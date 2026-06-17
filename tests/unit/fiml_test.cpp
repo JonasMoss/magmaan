@@ -1728,6 +1728,95 @@ TEST_CASE("two_stage_em_ml_inference: complete-data multi-group matches complete
   CHECK(ml2s->chisq == doctest::Approx(magmaan::inference::chi2_stat(samp, *est)));
 }
 
+TEST_CASE("nested ML2S restriction map: empirical spectrum and NT collapse") {
+  auto h1 = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  auto h0 = build_mean_model("f =~ x1 + a*x2 + a*x3 + x4");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(h1.ev.n_free()));
+  theta0.setConstant(0.6);
+  auto truth = h1.ev.sigma(theta0);
+  REQUIRE(truth.has_value());
+  REQUIRE(truth->sigma.size() == 1);
+
+  magmaan::data::RawData raw;
+  Eigen::LLT<Eigen::MatrixXd> llt(truth->sigma[0]);
+  REQUIRE(llt.info() == Eigen::Success);
+  raw.X.push_back((deterministic_z(220, truth->sigma[0].rows()) *
+                   llt.matrixL().transpose()).rowwise() +
+                  truth->mu[0].transpose());
+
+  auto sm = magmaan::estimate::fiml::saturated_em_moments(raw);
+  REQUIRE_MESSAGE(sm.has_value(),
+      "saturated_em_moments failed: " <<
+      (sm.has_value() ? "" : sm.error().detail));
+  magmaan::data::SampleStats samp;
+  samp.S = sm->cov;
+  samp.mean = sm->mean;
+  samp.n_obs = sm->n_obs;
+
+  Eigen::VectorXd start1(static_cast<Eigen::Index>(h1.ev.n_free()));
+  start1.setConstant(0.55);
+  Eigen::VectorXd start0(static_cast<Eigen::Index>(h0.ev.n_free()));
+  start0.setConstant(0.55);
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 900;
+  auto est1 = magmaan::estimate::fit_ml(
+      *h1.pt, *h1.rep, samp, start1, {}, magmaan::estimate::Backend::NloptLbfgs,
+      opts);
+  REQUIRE_MESSAGE(est1.has_value(),
+      "H1 stage-2 ML fit failed: " << (est1.has_value() ? "" : est1.error().detail));
+  auto est0 = magmaan::estimate::fit_ml(
+      *h0.pt, *h0.rep, samp, start0, {}, magmaan::estimate::Backend::NloptLbfgs,
+      opts);
+  REQUIRE_MESSAGE(est0.has_value(),
+      "H0 stage-2 ML fit failed: " << (est0.has_value() ? "" : est0.error().detail));
+
+  auto df1 = magmaan::inference::df_stat(*h1.pt, samp, est1->theta);
+  auto df0 = magmaan::inference::df_stat(*h0.pt, samp, est0->theta);
+  REQUIRE(df1.has_value());
+  REQUIRE(df0.has_value());
+  REQUIRE(*df0 - *df1 == 1);
+  const double T1 = magmaan::inference::chi2_stat(samp, *est1);
+  const double T0 = magmaan::inference::chi2_stat(samp, *est0);
+
+  auto K1 = magmaan::estimate::build_eq_constraints(*h1.pt);
+  auto K0 = magmaan::estimate::build_eq_constraints(*h0.pt);
+  REQUIRE(K1.has_value());
+  REQUIRE(K0.has_value());
+
+  auto ml2s = magmaan::robust::lr_test_satorra2000_ml2s_from_data(
+      *h1.pt, *h1.rep, est1->theta, *K1,
+      *h0.pt, *h0.rep, est0->theta, *K0,
+      raw, T0, T1, *df0, *df1,
+      magmaan::robust::GammaSource::Empirical,
+      magmaan::robust::SatorraAMethod::Exact);
+  REQUIRE_MESSAGE(ml2s.has_value(),
+      "nested ML2S complete-data failed: " <<
+      (ml2s.has_value() ? "" : ml2s.error().detail));
+  if (!ml2s.has_value()) return;
+
+  REQUIRE(ml2s->eigenvalues.size() == 1);
+  CHECK(ml2s->eigenvalues.allFinite());
+  CHECK(ml2s->eigenvalues.minCoeff() > 0.0);
+  CHECK(ml2s->T_diff == doctest::Approx(T0 - T1).epsilon(1e-10));
+  CHECK(ml2s->df_diff == *df0 - *df1);
+  CHECK(std::isfinite(ml2s->scale_c));
+  CHECK(ml2s->scale_c > 0.0);
+
+  auto nt = magmaan::robust::lr_test_satorra2000_ml2s_from_data(
+      *h1.pt, *h1.rep, est1->theta, *K1,
+      *h0.pt, *h0.rep, est0->theta, *K0,
+      raw, T0, T1, *df0, *df1,
+      magmaan::robust::GammaSource::NT,
+      magmaan::robust::SatorraAMethod::Exact);
+  REQUIRE_MESSAGE(nt.has_value(),
+      "nested ML2S NT failed: " << (nt.has_value() ? "" : nt.error().detail));
+  if (!nt.has_value()) return;
+  REQUIRE(nt->eigenvalues.size() == 1);
+  INFO("ML2S NT eigenvalues = ", nt->eigenvalues.transpose());
+  CHECK((nt->eigenvalues.array() - 1.0).abs().maxCoeff() < 1e-8);
+  CHECK(nt->scale_c == doctest::Approx(1.0).epsilon(1e-9));
+}
+
 TEST_CASE("two_stage_em_ml_inference: missing data returns finite corrected output") {
   auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
   Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));

@@ -345,6 +345,10 @@ infer_fiml_lr_test_satorra2000 <- function(fit_H1, fit_H0, gamma = "empirical", 
     .Call(`_magmaan_infer_fiml_lr_test_satorra2000`, fit_H1, fit_H0, gamma, a_method, h_step)
 }
 
+infer_ml2s_lr_test_satorra2000 <- function(fit_H1, fit_H0, gamma = "empirical", a_method = "exact", h_step = 1e-4) {
+    .Call(`_magmaan_infer_ml2s_lr_test_satorra2000`, fit_H1, fit_H0, gamma, a_method, h_step)
+}
+
 infer_ordinal_lr_test_satorra2000 <- function(fit_H1, fit_H0, ordinal_stats, T_H1, df_H1, T_H0, df_H0, weight = "", a_method = "exact") {
     .Call(`_magmaan_infer_ordinal_lr_test_satorra2000`, fit_H1, fit_H0, ordinal_stats, T_H1, df_H1, T_H0, df_H0, weight, a_method)
 }
