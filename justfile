@@ -158,9 +158,11 @@ vendor:
 vendor-check: vendor
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ -n "$(git status --porcelain -- r-package/src)" ]; then
-        echo "r-package/src is out of sync — run 'just vendor' and commit:"
-        git status --porcelain -- r-package/src
+    # Only the vendored trees, not the hand-written Makevars/glue at src/ top level.
+    paths="r-package/src/core r-package/src/magmaan r-package/src/third_party"
+    if [ -n "$(git status --porcelain -- $paths)" ]; then
+        echo "vendored r-package/src/{core,magmaan,third_party} out of sync — run 'just vendor' and commit:"
+        git status --porcelain -- $paths
         exit 1
     fi
 
