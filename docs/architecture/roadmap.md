@@ -372,8 +372,7 @@ golden `parTable()` fixtures.
   `Delta1/P/A/C/S` reduction from `V = H` and `Gamma_mis`, supports exact
   equality-constraint maps and delta tangent maps, reports the existing
   unscaled/scaled/mean-variance/scaled-shifted/exact-mixture nested result
-  shape, and rejects complete-data-only nested compatibility methods for FIML
-  pairs. Nonlinear equality constraints are supported by local tangent bases for
+  shape. Nonlinear equality constraints are supported by local tangent bases for
   both models; when `"exact"` is requested for such a pair, the route warns and
   uses the local tangent restriction because no global affine exact map exists.
   Two-stage ML (`ML2S`) pairs are routed the same way
@@ -391,6 +390,25 @@ golden `parTable()` fixtures.
   `(T_diff, df_diff, eigenvalues)` from the restriction-map result and runs the
   `pEBA`/`pOLS`/`all`/`penalized-all` transforms, returning a `magmaan_fmg_tests`
   table.
+- **Method-2001 difference spectrum (`U_D = U0 - U1`) for FIML/ML2S.** Alongside
+  the Satorra-2000 restriction map ("method 2000", `U_D` from the H1 fit),
+  `robust_nested_lrt()` / `nestedTest(ud_method = "2001")` builds the
+  Satorra-Bentler (2001) difference of the two single-model residual projectors
+  (`compute_diff_spectrum_2001`, the top `df0 - df1` eigenvalues of `(U0-U1)·Γ`
+  in a common saturated η-metric; `core::fiml_residual_projector` factors `U` out
+  of the GOF spectrum, shared by FIML `V = sm.H, Γ = sm.acov` and ML2S
+  `V = ml2s NT weight, Γ = two_stage_gamma`). It feeds the same scaled/mixture
+  readouts and the FMG/pEBA transforms, and unlike method 2000 accepts non-`==`
+  nesting (different parameter counts) but can carry negative eigenvalues (flagged
+  for fallback). This is the second `U_D` estimator the FMG-nested paper and
+  `semTests::ugamma_nested(., "2001")` cross against; validated to ~5e-5 vs
+  semTests on complete data (single + multi-group). The scalar two-constant
+  baselines also exist for FIML/ML2S: `nestedTest(method =
+  "satorra.bentler.2001"/"2010")` (the trace-based SB2001 and the M10 positivity
+  fix; 2010 needs same-parameter nesting). NOTE: under missing data,
+  `lavInspect("UGamma")` uses a non-official normalization; magmaan matches
+  lavaan's *official* scaling factor / `trace.UGamma` (1e-7), so validate the
+  spectrum against complete-data semTests, not the missing-data `lavInspect`.
   The helper computes biased and optional Browne/Du-Bentler unbiased U-Gamma
   spectra through C++, keeping the U-factor, tiled casewise-contribution
   projection, grouped reduced matrices, and eigensolves out of R list

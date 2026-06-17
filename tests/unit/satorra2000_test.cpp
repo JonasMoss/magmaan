@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <random>
 
@@ -662,6 +663,65 @@ TEST_CASE("lr_test_satorra_bentler2010: uses hybrid scale") {
   CHECK(r.T_scaled == doctest::Approx(13.0 / cd));
   CHECK(r.c_H1 == doctest::Approx(c10));
   CHECK(r.c_hybrid == doctest::Approx(c10));
+}
+
+// ── Method-2001 difference spectrum (U0 - U1)·Γ ───────────────────────────
+
+TEST_CASE("compute_diff_spectrum_2001: top-df eigenvalues match dense oracle") {
+  // Q = 4. U0 = M0 M0ᵀ (rank 3), U1 = M1 M1ᵀ (rank 2) ⇒ U0 − U1 indefinite.
+  Eigen::MatrixXd M0(4, 3);
+  M0 << 1.0,  0.2, -0.1,
+        0.3,  1.1,  0.4,
+       -0.2,  0.5,  0.9,
+        0.6, -0.3,  0.7;
+  Eigen::MatrixXd M1(4, 2);
+  M1 << 0.9,  0.1,
+        0.2,  0.8,
+        0.5, -0.4,
+       -0.3,  0.6;
+  const Eigen::MatrixXd U0 = M0 * M0.transpose();
+  const Eigen::MatrixXd U1 = M1 * M1.transpose();
+  Eigen::MatrixXd Lg(4, 4);
+  Lg << 1.2,  0.0, 0.0, 0.0,
+        0.3,  1.0, 0.0, 0.0,
+       -0.2,  0.4, 1.1, 0.0,
+        0.1, -0.3, 0.2, 0.9;
+  const Eigen::MatrixXd G = Lg * Lg.transpose();   // SPD
+
+  // Independent dense oracle: real eigenvalues of (U0 − U1)·G, top df ascending.
+  const Eigen::MatrixXd prod = (U0 - U1) * G;
+  Eigen::EigenSolver<Eigen::MatrixXd> es(prod, /*computeEigenvectors=*/false);
+  REQUIRE(es.info() == Eigen::Success);
+  CHECK(es.eigenvalues().imag().cwiseAbs().maxCoeff() < 1e-9);
+  Eigen::VectorXd rev = es.eigenvalues().real();
+  std::sort(rev.data(), rev.data() + rev.size());
+
+  const int df = 2;
+  const Eigen::VectorXd ref = rev.tail(df);
+  auto sd_or = magmaan::robust::compute_diff_spectrum_2001(U0, U1, G, df);
+  REQUIRE(sd_or.has_value());
+  const auto& sd = *sd_or;
+  REQUIRE(sd.eigenvalues.size() == df);
+  for (int i = 0; i < df; ++i) {
+    CHECK(sd.eigenvalues(i) == doctest::Approx(ref(i)).epsilon(1e-9));
+  }
+  CHECK(sd.trace_CinvS == doctest::Approx(ref.sum()));
+  CHECK(sd.trace_CinvS_sq == doctest::Approx(ref.squaredNorm()));
+  CHECK(sd.C.size() == 0);
+  CHECK(sd.S.size() == 0);
+  CHECK(sd.warnings.empty());   // top-2 are positive here
+
+  // Whole spectrum (df = Q): U0 − U1 indefinite ⇒ a negative eigenvalue is
+  // present and flagged.
+  auto full_or = magmaan::robust::compute_diff_spectrum_2001(U0, U1, G, 4);
+  REQUIRE(full_or.has_value());
+  CHECK(full_or->eigenvalues.minCoeff() < 0.0);
+  CHECK_FALSE(full_or->warnings.empty());
+
+  // df = 0 short-circuits to an empty spectrum.
+  auto deg_or = magmaan::robust::compute_diff_spectrum_2001(U0, U1, G, 0);
+  REQUIRE(deg_or.has_value());
+  CHECK(deg_or->eigenvalues.size() == 0);
 }
 
 // ── Error: P singular (over-parameterised Π) ──────────────────────────────

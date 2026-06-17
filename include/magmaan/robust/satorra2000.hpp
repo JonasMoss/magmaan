@@ -119,4 +119,33 @@ compute_satorra2000(const std::vector<SatorraGroup>& groups,
                     GammaSource                      gamma = GammaSource::Empirical,
                     GammaComputation                 computation = GammaComputation::Streaming);
 
+// ============================================================================
+// Satorra-Bentler (2001) "method 2001" difference spectrum — the alternative
+// estimator of the U_D·Γ spectrum that the FMG-nested paper and `semTests`
+// cross against the restriction map above.
+//
+// Instead of the M1-only restriction map, U_D is estimated as U_D = U0 − U1,
+// the difference of the two single-model residual-weight projectors
+//   U_g = V_g − V_gΔ_g(Δ_gᵀV_gΔ_g)⁻¹Δ_gᵀV_g ,
+// with U0 evaluated at the more-restricted model M0, U1 at M1, both in a common
+// moment space, and Γ the common fourth-moment ACOV (Satorra & Bentler 2001,
+// p. 510; `semTests::ugamma_nested(m0, m1, "2001")`). The d = df0 − df1 test
+// eigenvalues are the d largest eigenvalues of (U0 − U1)·Γ.
+//
+// Unlike the restriction map, U0 − U1 is NOT positive semidefinite in finite
+// samples, so the spectrum can carry negative entries. The largest-d are
+// returned in `eigenvalues` (ascending) with `trace_CinvS = Σλ`,
+// `trace_CinvS_sq = Σλ²`; `C`/`S` are left empty (no restriction-map artifacts).
+// A negative top-d eigenvalue is flagged in `warnings` with the substring
+// "method-2001 negative eigenvalue" so callers can fall back to method 2000 for
+// the SB / mixture readouts (pEBA truncates negatives itself).
+//
+// `U0`, `U1`, `Gamma` must be square and the same dimension; `df` must satisfy
+// 1 ≤ df ≤ dim.
+post_expected<SatorraDiffResult>
+compute_diff_spectrum_2001(const Eigen::Ref<const Eigen::MatrixXd>& U0,
+                           const Eigen::Ref<const Eigen::MatrixXd>& U1,
+                           const Eigen::Ref<const Eigen::MatrixXd>& Gamma,
+                           int                                      df);
+
 }  // namespace magmaan::robust

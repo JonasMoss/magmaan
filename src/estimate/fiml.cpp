@@ -2242,6 +2242,81 @@ fiml_eta_jacobian(spec::LatentStructure pt,
 
 namespace {
 
+// Single-model FIML residual projector U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV in the saturated
+// η-metric, with Δ the constraint-collapsed model Jacobian ∂[μ; vech Σ]/∂θ. The
+// weight V is supplied by the caller (sm.H saturated, or the structured H1
+// curvature) so a nested difference U0 − U1 can share a common V. Shared by the
+// GOF spectrum (fiml_ugamma_spectrum_impl) and the method-2001 nested spectrum.
+post_expected<Eigen::MatrixXd>
+fiml_residual_projector_impl(const spec::LatentStructure& pt,
+                             const model::MatrixRep& rep,
+                             const RawData& raw,
+                             const Estimates& est,
+                             const FIMLPack& pack,
+                             const Eigen::Ref<const Eigen::MatrixXd>& V) {
+  const Eigen::Index Q = V.rows();
+  if (V.cols() != Q || Q == 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_residual_projector: V must be square and non-empty"));
+  }
+
+  // Δ = ∂[μ(θ); vech Σ(θ)]/∂θ at θ̂.
+  auto jac_or = fiml_eta_jacobian_impl(pt, rep, raw, est, pack);
+  if (!jac_or.has_value()) return std::unexpected(jac_or.error());
+  Eigen::MatrixXd Delta = std::move(jac_or->Delta_theta);
+  if (Delta.rows() != Q) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_residual_projector: Δ rows (" + std::to_string(Delta.rows()) +
+            ") != saturated dim (" + std::to_string(Q) + ")"));
+  }
+
+  // Equality constraints: collapse Δ to local free coordinates. Linear
+  // constraints use their affine K; nonlinear use null([A_eq; ∂h/∂θ]) at θ̂.
+  auto con_or = build_eq_constraints(pt, /*allow_nonlinear=*/true);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  if (pt.nl_constraints.empty()) {
+    if (con_or->active()) Delta = (Delta * con_or->K()).eval();
+  } else {
+    if (est.theta.size() != Delta.cols()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fiml_residual_projector: theta size mismatch for nonlinear equality "
+          "constraint tangent"));
+    }
+    const NonlinearEqConstraints nl = build_nl_constraints(pt);
+    const Eigen::MatrixXd H = nl.jacobian(est.theta);
+    if (!H.allFinite()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fiml_residual_projector: nonlinear equality constraint Jacobian is "
+          "not finite at theta"));
+    }
+    const Eigen::Index npar = Delta.cols();
+    Eigen::MatrixXd C(con_or->A_eq.rows() + H.rows(), npar);
+    if (con_or->A_eq.rows() > 0) {
+      C.topRows(con_or->A_eq.rows()) = con_or->A_eq;
+    }
+    C.bottomRows(H.rows()) = H;
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd(C, Eigen::ComputeFullV);
+    svd.setThreshold(1e-9);
+    const Eigen::Index nz = npar - svd.rank();
+    if (nz <= 0) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "fiml_residual_projector: equality constraints leave no tangent "
+          "directions"));
+    }
+    Delta = (Delta * svd.matrixV().rightCols(nz)).eval();
+  }
+
+  // U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV (rank df).
+  const Eigen::MatrixXd VD = V * Delta;
+  Eigen::MatrixXd DtVD = Delta.transpose() * VD;
+  DtVD = (0.5 * (DtVD + DtVD.transpose())).eval();
+  auto DtVDinv_or = invert_symmetric(DtVD, "fiml_residual_projector: ΔᵀVΔ");
+  if (!DtVDinv_or.has_value()) return std::unexpected(DtVDinv_or.error());
+  Eigen::MatrixXd U = V - VD * (*DtVDinv_or) * VD.transpose();
+  U = (0.5 * (U + U.transpose())).eval();
+  return U;
+}
+
 post_expected<FIMLUGammaSpectrum>
 fiml_ugamma_spectrum_impl(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
@@ -2275,62 +2350,10 @@ fiml_ugamma_spectrum_impl(spec::LatentStructure pt,
   const Eigen::MatrixXd& G = sm.acov;
   const Eigen::Index Q = V.rows();
 
-  // (2) Model Jacobian Δ = ∂[μ(θ); vech Σ(θ)]/∂θ at θ̂.
-  auto jac_or = fiml_eta_jacobian_impl(pt, rep, raw, est, pack);
-  if (!jac_or.has_value()) return std::unexpected(jac_or.error());
-  Eigen::MatrixXd Delta = std::move(jac_or->Delta_theta);
-  if (Delta.rows() != Q) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "fiml_ugamma_spectrum: Δ rows (" + std::to_string(Delta.rows()) +
-            ") != saturated dim (" + std::to_string(Q) + ")"));
-  }
-
-  // (3) Equality constraints: collapse Δ to local free coordinates. Linear
-  // constraints use their affine K; nonlinear constraints use the tangent space
-  // null([A_eq ; ∂h/∂θ]) at θ̂.
-  auto con_or = build_eq_constraints(pt, /*allow_nonlinear=*/true);
-  if (!con_or.has_value()) return std::unexpected(con_or.error());
-  if (pt.nl_constraints.empty()) {
-    if (con_or->active()) Delta = (Delta * con_or->K()).eval();
-  } else {
-    if (est.theta.size() != Delta.cols()) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "fiml_ugamma_spectrum: theta size mismatch for nonlinear equality "
-          "constraint tangent"));
-    }
-    const NonlinearEqConstraints nl = build_nl_constraints(pt);
-    const Eigen::MatrixXd H = nl.jacobian(est.theta);
-    if (!H.allFinite()) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "fiml_ugamma_spectrum: nonlinear equality constraint Jacobian is "
-          "not finite at theta"));
-    }
-
-    const Eigen::Index npar = Delta.cols();
-    Eigen::MatrixXd C(con_or->A_eq.rows() + H.rows(), npar);
-    if (con_or->A_eq.rows() > 0) {
-      C.topRows(con_or->A_eq.rows()) = con_or->A_eq;
-    }
-    C.bottomRows(H.rows()) = H;
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd(C, Eigen::ComputeFullV);
-    svd.setThreshold(1e-9);
-    const Eigen::Index nz = npar - svd.rank();
-    if (nz <= 0) {
-      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-          "fiml_ugamma_spectrum: equality constraints leave no tangent "
-          "directions"));
-    }
-    Delta = (Delta * svd.matrixV().rightCols(nz)).eval();
-  }
-
-  // (4) Residual projector in the V-metric: U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV (rank df).
-  const Eigen::MatrixXd VD = V * Delta;
-  Eigen::MatrixXd DtVD = Delta.transpose() * VD;
-  DtVD = (0.5 * (DtVD + DtVD.transpose())).eval();
-  auto DtVDinv_or = invert_symmetric(DtVD, "fiml_ugamma_spectrum: ΔᵀVΔ");
-  if (!DtVDinv_or.has_value()) return std::unexpected(DtVDinv_or.error());
-  Eigen::MatrixXd U = V - VD * (*DtVDinv_or) * VD.transpose();
-  U = (0.5 * (U + U.transpose())).eval();
+  // (2-4) Residual projector U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV (constraint-collapsed Δ).
+  auto U_or = fiml_residual_projector_impl(pt, rep, raw, est, pack, V);
+  if (!U_or.has_value()) return std::unexpected(U_or.error());
+  const Eigen::MatrixXd U = std::move(*U_or);
 
   // (5) Eigenvalues of the non-symmetric U·Γ_mis via the symmetric reduction
   //     RᵀUR with Γ_mis = R Rᵀ (Γ_mis is symmetric PSD); eig(RᵀUR) = eig(U·Γ).
@@ -2425,6 +2448,21 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
                      FIMLH1Information h1_information) {
   return fiml_ugamma_spectrum_impl(std::move(pt), rep, raw, est, df, chi2_lrt,
                                    pack, h1, h1_information);
+}
+
+post_expected<Eigen::MatrixXd>
+fiml_residual_projector(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const RawData& raw,
+                        const Estimates& est,
+                        const Eigen::Ref<const Eigen::MatrixXd>& V,
+                        FIML discrepancy) {
+  (void)discrepancy;
+  auto pack_or = fiml_pack(raw);
+  if (!pack_or.has_value()) {
+    return std::unexpected(fit_to_post(pack_or.error(), "fiml_pack"));
+  }
+  return fiml_residual_projector_impl(pt, rep, raw, est, *pack_or, V);
 }
 
 namespace {

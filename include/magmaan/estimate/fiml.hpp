@@ -418,6 +418,20 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
                      FIMLH1Information h1_information =
                          FIMLH1Information::Saturated);
 
+// Single-model FIML residual projector U = V − VΔ(ΔᵀVΔ)⁻¹ΔᵀV in the saturated
+// η-metric, with Δ the constraint-collapsed model Jacobian ∂[μ; vech Σ]/∂θ. The
+// weight V is caller-supplied (typically `saturated_em_moments(raw).H`) so that
+// a nested method-2001 difference U0 − U1 shares one common V; pair it with the
+// same `saturated_em_moments(raw).acov` as the common Γ. This is the building
+// block for `robust::lr_test_satorra2001_fiml_from_data`.
+post_expected<Eigen::MatrixXd>
+fiml_residual_projector(spec::LatentStructure pt,
+                        const model::MatrixRep& rep,
+                        const RawData& raw,
+                        const Estimates& est,
+                        const Eigen::Ref<const Eigen::MatrixXd>& V,
+                        FIML discrepancy = {});
+
 // FIML independence/baseline chi-square for raw continuous data with missing
 // values. Unlike complete-data `baseline_chi2(SampleStats)`, this evaluates the
 // diagonal normal model directly over observed-value patterns and compares it
