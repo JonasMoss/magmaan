@@ -4345,7 +4345,7 @@ namespace {
 // blocks contract against. Returned as a struct of lambdas so the MI and
 // score-test wrappers share one definition per stats type.
 auto ordinal_robust_handles(OrdinalParameterization parameterization) {
-  auto residual = [parameterization](const data::OrdinalStats& s,
+  auto residual_fn = [parameterization](const data::OrdinalStats& s,
                                      const ThresholdLayout& layout,
                                      const model::ImpliedMoments& moments,
                                      const std::vector<Eigen::MatrixXd>& factors,
@@ -4353,7 +4353,7 @@ auto ordinal_robust_handles(OrdinalParameterization parameterization) {
     return ordinal_residuals(s, layout, moments, factors, theta,
                              parameterization);
   };
-  auto jacobian = [parameterization](const data::OrdinalStats& s,
+  auto jacobian_fn = [parameterization](const data::OrdinalStats& s,
                                      const ThresholdLayout& layout,
                                      const model::ImpliedMoments& moments,
                                      const Eigen::MatrixXd& J_sigma,
@@ -4363,7 +4363,7 @@ auto ordinal_robust_handles(OrdinalParameterization parameterization) {
     return ordinal_jacobian(s, layout, moments, J_sigma, factors, theta,
                             parameterization);
   };
-  auto moment_jacobian = [parameterization](const data::OrdinalStats& s,
+  auto moment_jacobian_fn = [parameterization](const data::OrdinalStats& s,
                                             const ThresholdLayout& layout,
                                             const model::ImpliedMoments& moments,
                                             const Eigen::MatrixXd& J_sigma,
@@ -4372,21 +4372,21 @@ auto ordinal_robust_handles(OrdinalParameterization parameterization) {
     return ordinal_moment_jacobian(s, layout, moments, J_sigma, theta,
                                    parameterization);
   };
-  auto prepare = [](spec::LatentStructure& p, const data::OrdinalStats& s) {
+  auto prepare_fn = [](spec::LatentStructure& p, const data::OrdinalStats& s) {
     return prepare_ordinal_delta_partable(p, s, nullptr);
   };
   struct Handles {
-    decltype(residual) residual;
-    decltype(jacobian) jacobian;
-    decltype(moment_jacobian) moment_jacobian;
-    decltype(prepare) prepare;
+    decltype(residual_fn) residual;
+    decltype(jacobian_fn) jacobian;
+    decltype(moment_jacobian_fn) moment_jacobian;
+    decltype(prepare_fn) prepare;
   };
-  return Handles{std::move(residual), std::move(jacobian),
-                 std::move(moment_jacobian), std::move(prepare)};
+  return Handles{std::move(residual_fn), std::move(jacobian_fn),
+                 std::move(moment_jacobian_fn), std::move(prepare_fn)};
 }
 
 auto mixed_ordinal_robust_handles(OrdinalParameterization parameterization) {
-  auto residual = [parameterization](const data::MixedOrdinalStats& s,
+  auto residual_fn = [parameterization](const data::MixedOrdinalStats& s,
                                      const ThresholdLayout& layout,
                                      const model::ImpliedMoments& moments,
                                      const std::vector<Eigen::MatrixXd>& factors,
@@ -4394,7 +4394,7 @@ auto mixed_ordinal_robust_handles(OrdinalParameterization parameterization) {
     return mixed_ordinal_residuals(s, layout, moments, factors, theta,
                                    parameterization);
   };
-  auto jacobian = [parameterization](const data::MixedOrdinalStats& s,
+  auto jacobian_fn = [parameterization](const data::MixedOrdinalStats& s,
                                      const ThresholdLayout& layout,
                                      const model::ImpliedMoments& moments,
                                      const Eigen::MatrixXd& J_sigma,
@@ -4404,7 +4404,7 @@ auto mixed_ordinal_robust_handles(OrdinalParameterization parameterization) {
     return mixed_ordinal_jacobian(s, layout, moments, J_sigma, J_mu, factors,
                                   theta, parameterization);
   };
-  auto moment_jacobian = [parameterization](const data::MixedOrdinalStats& s,
+  auto moment_jacobian_fn = [parameterization](const data::MixedOrdinalStats& s,
                                             const ThresholdLayout& layout,
                                             const model::ImpliedMoments& moments,
                                             const Eigen::MatrixXd& J_sigma,
@@ -4413,17 +4413,17 @@ auto mixed_ordinal_robust_handles(OrdinalParameterization parameterization) {
     return mixed_moment_jacobian(s, layout, moments, J_sigma, J_mu, theta,
                                  parameterization);
   };
-  auto prepare = [](spec::LatentStructure& p, const data::MixedOrdinalStats& s) {
+  auto prepare_fn = [](spec::LatentStructure& p, const data::MixedOrdinalStats& s) {
     return prepare_mixed_ordinal_delta_partable(p, s, nullptr);
   };
   struct Handles {
-    decltype(residual) residual;
-    decltype(jacobian) jacobian;
-    decltype(moment_jacobian) moment_jacobian;
-    decltype(prepare) prepare;
+    decltype(residual_fn) residual;
+    decltype(jacobian_fn) jacobian;
+    decltype(moment_jacobian_fn) moment_jacobian;
+    decltype(prepare_fn) prepare;
   };
-  return Handles{std::move(residual), std::move(jacobian),
-                 std::move(moment_jacobian), std::move(prepare)};
+  return Handles{std::move(residual_fn), std::move(jacobian_fn),
+                 std::move(moment_jacobian_fn), std::move(prepare_fn)};
 }
 
 }  // namespace
