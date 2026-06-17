@@ -44,3 +44,6 @@ docs/research/human_notes/
 .RData
 .Rhistory
 r-package/src/.magmaan-build-config
+
+# Private rslurm/Slurm scratch (R scripts, binary .RData/.RDS, job artifacts).
+dev/slurm/
