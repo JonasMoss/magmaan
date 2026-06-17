@@ -1,57 +1,48 @@
-# Repo root = two levels up from this Makevars. During an R build the cwd is
-# <repo>/r-package/src, so $(CURDIR)/../.. is the magmaan repo root.
-MAGMAAN_ROOT := $(abspath $(CURDIR)/../..)
-MAGMAAN_PRESET ?= opt
-MAGMAAN_BUILD ?= $(MAGMAAN_ROOT)/build/$(MAGMAAN_PRESET)
-MAGMAAN_LIB  := $(MAGMAAN_BUILD)/libmagmaan.a
-MAGMAAN_PORT_LIB := $(MAGMAAN_BUILD)/libport.a
-MAGMAAN_QUADPACK_LIB := $(MAGMAAN_BUILD)/libquadpack.a
-MAGMAAN_NLOPT_LIB := $(MAGMAAN_BUILD)/_deps/nlopt-build/libnlopt.a
-MAGMAAN_WITH_CERES_R ?= 0
-MAGMAAN_WITH_IPOPT_R ?= 0
-MAGMAAN_IPOPT_CPPFLAGS := $(shell pkg-config --cflags ipopt 2>/dev/null)
-MAGMAAN_IPOPT_LIBS := $(shell pkg-config --libs ipopt 2>/dev/null)
-MAGMAAN_CONFIG_STAMP := .magmaan-build-config
-R_GLUE_HEADERS := $(wildcard *.hpp)
+# Self-contained build: R compiles the vendored magmaan C++ core + PORT +
+# QUADPACK in this src/ and links a system NLopt. No CMake, no prebuilt
+# libmagmaan.a, no reach-up to ../../{src,include} — so the package installs on
+# its own (remotes::install_github, a tarball, an HPC scp).
+#
+# The core/, magmaan/, and third_party/ trees are VENDORED by dev/vendor-cpp.sh
+# (`just vendor`); every file there carries an @generated banner. Do NOT edit
+# them — edit the canonical sources under <repo>/src + <repo>/include and
+# re-vendor. The fast dev loop (`just r-dev`) uses dev/r-makevars-dev instead,
+# which compiles only the Rcpp glue and links a prebuilt libmagmaan.a.
+#
+# Optimization flags are deliberately NOT set here: the package stays portable
+# (R's default -O2). Crank them per-machine via R_MAKEVARS_USER, e.g. on Saga
+# `R_MAKEVARS_USER=dev/saga/Makevars R CMD INSTALL r-package` for -O3 -march=native.
 
-CXX_STD       = CXX23
-PKG_CPPFLAGS  = -I$(MAGMAAN_ROOT)/include -DEIGEN_MAX_ALIGN_BYTES=64
-override CXXFLAGS += -O3 -DNDEBUG -march=native
-# libmagmaan.a links PRIVATEly against libport.a and libnlopt.a in the C++
-# CMake build, so the static archive carries unresolved PORT/NLopt symbols.
-# The R shared object must pull them in explicitly or it fails to load with an
-# undefined symbol. Prefer the fetched NLopt archive and fall back to -lnlopt.
-PKG_LIBS      = $(MAGMAAN_LIB) $(MAGMAAN_PORT_LIB) $(MAGMAAN_QUADPACK_LIB) $(if $(wildcard $(MAGMAAN_NLOPT_LIB)),$(MAGMAAN_NLOPT_LIB),-lnlopt)
+CXX_STD = CXX23
 
-ifeq ($(MAGMAAN_WITH_CERES_R),1)
-PKG_CPPFLAGS += -DMAGMAAN_WITH_CERES
-PKG_LIBS     += -lceres -lglog -lgflags
+# NLopt is a system dependency (SystemRequirements: NLopt). Resolve it via
+# pkg-config, overridable by NLOPT_CFLAGS / NLOPT_LIBS in the environment (an HPC
+# module, or a fetched copy for a machine without system NLopt); bare -lnlopt as
+# a last resort.
+NLOPT_CFLAGS ?= $(shell pkg-config --cflags nlopt 2>/dev/null)
+NLOPT_LIBS   ?= $(shell pkg-config --libs nlopt 2>/dev/null)
+ifeq ($(strip $(NLOPT_LIBS)),)
+NLOPT_LIBS := -lnlopt
 endif
 
-ifeq ($(MAGMAAN_WITH_IPOPT_R),1)
-PKG_CPPFLAGS += -DMAGMAAN_WITH_IPOPT $(MAGMAAN_IPOPT_CPPFLAGS)
-PKG_LIBS     += $(MAGMAAN_IPOPT_LIBS)
-endif
+# -I.                          qualified public headers, #include "magmaan/..."
+# -Icore                       private impl headers, #include "detail_*.hpp"
+# -Ithird_party/port/cport     f2c.h for the vendored PORT translation units
+# -Ithird_party/quadpack       f2c.h for the vendored QUADPACK translation units
+# Eigen comes from RcppEigen (LinkingTo); the Eigen flags match the C++ library.
+PKG_CPPFLAGS = -I. -Icore -Ithird_party/port/cport -Ithird_party/quadpack \
+  -DMAGMAAN_WITH_PORT -DEIGEN_NO_EXCEPTIONS -DEIGEN_MAX_ALIGN_BYTES=64 \
+  $(NLOPT_CFLAGS)
 
-# Make sure libmagmaan.a is current before linking the
-# R glue. Incremental: a no-op (~1s) when nothing changed in the C++ tree.
-$(SHLIB): magmaan_lib
+# The vendored f2c-translated C is not warning-clean and predates C23's
+# "()-means-(void)" rule (reverse-communication callbacks declared K&R-style), so
+# pin it to gnu11 and silence its warnings — without muting the C++ warnings.
+PKG_CFLAGS = -w -std=gnu11
 
-.PHONY: magmaan_lib FORCE
-magmaan_lib:
-	@cmake --build "$(MAGMAAN_BUILD)" --target magmaan 2>/dev/null || \
-	  ( cd "$(MAGMAAN_ROOT)" && cmake --preset "$(MAGMAAN_PRESET)" && cmake --build --preset "$(MAGMAAN_PRESET)" --target magmaan )
+PKG_LIBS = $(NLOPT_LIBS)
 
-$(MAGMAAN_CONFIG_STAMP): FORCE
-	@tmp="$@.tmp"; \
-	printf '%s\n' "MAGMAAN_PRESET=$(MAGMAAN_PRESET)" "MAGMAAN_BUILD=$(MAGMAAN_BUILD)" "MAGMAAN_WITH_CERES_R=$(MAGMAAN_WITH_CERES_R)" "MAGMAAN_WITH_IPOPT_R=$(MAGMAAN_WITH_IPOPT_R)" > "$$tmp"; \
-	if test -r "$@" && cmp -s "$$tmp" "$@"; then rm "$$tmp"; else mv "$$tmp" "$@"; fi
-
-# R's auto-generated package Makefile only tracks .cpp -> .o; it has no idea
-# the R-glue objects also depend on the magmaan headers libmagmaan.a was built
-# from. So a header change in the C++ tree re-links libmagmaan.a (above) but
-# would otherwise leave a stale .o linked against the now-incompatible archive
-# (-> "undefined symbol" at load time, the exact footgun this guards). Make the
-# package objects depend on libmagmaan.a: when `magmaan_lib` re-links it, they
-# rebuild. Cheap (a handful of small TUs); a no-op when nothing changed.
-$(OBJECTS): $(MAGMAAN_LIB) $(MAGMAAN_CONFIG_STAMP) $(R_GLUE_HEADERS)
+# R only auto-compiles top-level src/*.{c,cpp}; the vendored core/ + third_party/
+# trees live in subdirectories, so enumerate the objects explicitly.
+SOURCES_CPP = $(wildcard *.cpp core/*.cpp core/*/*.cpp core/*/*/*.cpp core/*/*/*/*.cpp)
+SOURCES_C   = $(wildcard third_party/port/*.c third_party/port/cport/*.c third_party/quadpack/*.c)
+OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.c=.o)
