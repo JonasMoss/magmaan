@@ -1,22 +1,28 @@
 # lavaan correctness oracle (rep 1 of each h0 cell). Anchors both estimators'
 # base and scaled statistics to lavaan:
 #
-#   FIML LRT base   <- lavaan estimator="MLR", missing="ml" naive chisq.
+#   FIML LRT base    <- lavaan estimator="MLR", missing="ml" naive chisq.
 #   FIML mean-scaled <- lavaan yuan.bentler with h1.information="unstructured"
 #                       (the saturated-H1 convention magmaan's FIML FMG spectrum
 #                       follows; validated in experiment 21). magmaan's FIML "sb"
 #                       is NOT lavaan's MLR/Mplus default, which uses structured
 #                       H1 + observed information + the Mplus trace approximation.
-#   ML2S base        <- lavaan missing="two.stage" naive chisq (machine precision).
+#   ML2S base        <- lavaan missing="two.stage" naive chisq (machine precision;
+#                       identical under robust.two.stage, same point estimates).
+#   ML2S mean-scaled <- lavaan missing="robust.two.stage" pvalue.scaled.
 #
-# Only the ML2S BASE is anchored to lavaan. lavaan's two.stage "scaled" test uses
-# a different reference-law convention (its UGamma trace differs from magmaan's on
-# incomplete data: e.g. 22.1 vs 33.0 on one MAR cell), the two-stage analogue of
-# the FIML MLR structured/observed-info vs unstructured split. magmaan's two-stage
-# reference law is instead validated from first principles by the consistency
-# identity trace(UGamma) = E[T]: under normal data ncp_hat = mean(base) -
-# mean(trace) ~ 0 for both estimators (see noncentrality.csv). So we do not gate
-# magmaan against lavaan's two.stage scaling.
+# The ML2S reference law follows the ROBUST.TWO.STAGE convention: a Huber-White
+# sandwich Stage-1 ACOV (Omega) with the empirical fourth moments. lavaan's plain
+# missing="two.stage" instead uses a normal-theory Omega, which cannot see excess
+# kurtosis; under heavy non-normality its scaling collapses toward the naive test
+# (e.g. on the pl2 MAR cell the implied UGamma trace is ~13 vs magmaan's ~51 and
+# robust.two.stage's ~49). So magmaan agrees with robust.two.stage, NOT plain
+# two.stage. The agreement is close but not exact: magmaan's UGamma trace runs a
+# few percent above lavaan robust.two.stage (a finite-sample sandwich-meat sub-
+# convention within the same family), so the scaled-p matches to ~1e-2, not to
+# machine precision. The precise self-consistency anchor is therefore the
+# first-principles identity trace(UGamma) = E[T]: on normal data ncp_hat =
+# mean(base) - mean(trace) ~ 0 for both estimators (see noncentrality.csv).
 #
 # No magmaan-internal calls; the magmaan side is the public fmg_tests() battery.
 
@@ -33,6 +39,11 @@ lavaan_fiml_yb_unstructured_fit <- function(syntax, df) {
 
 lavaan_ml2s_fit <- function(syntax, df) {
   lavaan::sem(syntax, data = df, missing = "two.stage", estimator = "ML",
+              meanstructure = TRUE)
+}
+
+lavaan_ml2s_robust_fit <- function(syntax, df) {
+  lavaan::sem(syntax, data = df, missing = "robust.two.stage", estimator = "ML",
               meanstructure = TRUE)
 }
 
@@ -74,6 +85,11 @@ parity_rows_for_cell <- function(syntax, df, dist, mech, rate, mag) {
                  error = function(e) NULL)
   if (!is.null(ts)) {
     add(.parity_row(base, "ml2s_chisq", mag$ml2s_base, ts$chisq))
+  }
+  rts <- tryCatch(lav_measures(lavaan_ml2s_robust_fit(syntax, df)),
+                  error = function(e) NULL)
+  if (!is.null(rts)) {
+    add(.parity_row(base, "ml2s_scaled_pvalue", mag$ml2s_sb_p, rts$p_scaled))
   }
   rows
 }

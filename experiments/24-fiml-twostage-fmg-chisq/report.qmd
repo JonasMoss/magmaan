@@ -142,7 +142,8 @@ if (!is.null(parity) && nrow(parity)) {
   ps <- aggregate(abs_diff ~ metric, data = parity, FUN = max)
   pretty <- c(fiml_lrt_chisq = "FIML LRT base vs lavaan FIML chi-square",
               fiml_sb_pvalue = "FIML mean-scaled p vs lavaan Yuan-Bentler (unstructured)",
-              ml2s_chisq = "ML2S base vs lavaan missing = 'two.stage' chi-square")
+              ml2s_chisq = "ML2S base vs lavaan missing = 'two.stage' chi-square",
+              ml2s_scaled_pvalue = "ML2S mean-scaled p vs lavaan missing = 'robust.two.stage'")
   ps$Quantity <- ifelse(ps$metric %in% names(pretty), pretty[ps$metric], ps$metric)
   ps <- ps[, c("Quantity", "abs_diff")]
   ps$abs_diff <- sprintf("%.1e", ps$abs_diff)
@@ -152,11 +153,17 @@ if (!is.null(parity) && nrow(parity)) {
 } else cat("No parity rows (run without --lavaan-parity).")
 ```
 
-magmaan's two-stage *reference law* is validated not against lavaan — whose
-`missing = "two.stage"` test scales by a different (observed-information-like)
-convention, so only the base matches — but from first principles: on normal data
-the base statistic equals the reference-law mean (`ncp_hat = mean(base) −
-mean(trace) ≈ 0`) for both estimators (`results/noncentrality.csv`).
+magmaan's two-stage *reference law* follows lavaan's `missing =
+"robust.two.stage"` (the sandwich Stage-1 ACOV that sees excess kurtosis): the
+mean-scaled p agrees to ~`1e-2`, and the base matches to machine precision. It is
+*not* lavaan's plain `missing = "two.stage"`, which uses a normal-theory ACOV
+that collapses toward the naive test under non-normality (on the pl2 MAR cell its
+implied reference-law mean is ≈ 13 against magmaan's ≈ 51 and robust.two.stage's
+≈ 49). The residual few-percent gap to robust.two.stage is a finite-sample
+sandwich-meat sub-convention; the precise anchor is first-principles
+self-consistency: on normal data the base statistic equals the reference-law mean
+(`ncp_hat = mean(base) − mean(trace) ≈ 0`) for both estimators
+(`results/noncentrality.csv`).
 
 ## Caveats
 
