@@ -1,12 +1,15 @@
 #!/usr/bin/env Rscript
 # Ordinal pairwise-deletion Gamma probe.
 #
-# Compare the conventional nominal-N ordinal pairwise NACOV against the
-# overlap-corrected NACOV from docs/research/notes/ordinal_pd_gamma.tex.
+# Two-group, two-factor ordinal CFA with MCAR missingness. Compare the
+# conventional nominal-N pairwise NACOV against the overlap-corrected NACOV from
+# docs/research/notes/ordinal_pd_gamma.tex, using the same broad p-value battery
+# as the FIML FMG experiments: naive/SB/SS/SF/EBA/pEBA/pall/pOLS/all for GOF and
+# nested configural-vs-metric tests.
 #
 # Usage:
 #   Rscript run_experiment.R [--reps N] [--n N] [--missing-rate P]
-#                            [--seed-base S] [--smoke]
+#                            [--seed-base S] [--truths fake,real] [--smoke]
 
 .support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
@@ -23,32 +26,54 @@
 source(.support_helpers())
 rm(.support_helpers)
 
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+parse_csv_arg <- function(x) {
+  trimws(strsplit(x, ",", fixed = TRUE)[[1L]])
+}
+
+rbind_fill <- function(xs) {
+  cols <- unique(unlist(lapply(xs, names), use.names = FALSE))
+  xs <- lapply(xs, function(x) {
+    miss <- setdiff(cols, names(x))
+    for (nm in miss) x[[nm]] <- NA
+    x[, cols, drop = FALSE]
+  })
+  do.call(rbind, xs)
+}
+
 parse_args <- function(args) {
-  out <- list(reps = 50L, n = c(300L, 1000L), missing_rate = c(0, .30, .50),
-              seed_base = 20260618L, smoke = FALSE)
+  out <- list(reps = 50L, n = c(300L, 1000L), missing_rate = c(.20),
+              seed_base = 20260618L, truths = c("fake", "real"),
+              smoke = FALSE)
   i <- 1L
   while (i <= length(args)) {
     a <- args[[i]]
     if (a %in% c("-h", "--help")) {
       cat("Usage: Rscript run_experiment.R [--reps N] [--n N[,N]] ",
-          "[--missing-rate P[,P]] [--seed-base S] [--smoke]\n", sep = "")
+          "[--missing-rate P[,P]] [--seed-base S] ",
+          "[--truths fake,real] [--smoke]\n", sep = "")
       quit(save = "no", status = 0L)
     } else if (a == "--reps") {
       i <- i + 1L; out$reps <- as.integer(args[[i]])
     } else if (startsWith(a, "--reps=")) {
       out$reps <- as.integer(sub("^--reps=", "", a))
     } else if (a == "--n") {
-      i <- i + 1L; out$n <- as.integer(strsplit(args[[i]], ",")[[1L]])
+      i <- i + 1L; out$n <- as.integer(parse_csv_arg(args[[i]]))
     } else if (startsWith(a, "--n=")) {
-      out$n <- as.integer(strsplit(sub("^--n=", "", a), ",")[[1L]])
+      out$n <- as.integer(parse_csv_arg(sub("^--n=", "", a)))
     } else if (a == "--missing-rate") {
-      i <- i + 1L; out$missing_rate <- as.numeric(strsplit(args[[i]], ",")[[1L]])
+      i <- i + 1L; out$missing_rate <- as.numeric(parse_csv_arg(args[[i]]))
     } else if (startsWith(a, "--missing-rate=")) {
-      out$missing_rate <- as.numeric(strsplit(sub("^--missing-rate=", "", a), ",")[[1L]])
+      out$missing_rate <- as.numeric(parse_csv_arg(sub("^--missing-rate=", "", a)))
     } else if (a == "--seed-base") {
       i <- i + 1L; out$seed_base <- as.integer(args[[i]])
     } else if (startsWith(a, "--seed-base=")) {
       out$seed_base <- as.integer(sub("^--seed-base=", "", a))
+    } else if (a == "--truths") {
+      i <- i + 1L; out$truths <- parse_csv_arg(args[[i]])
+    } else if (startsWith(a, "--truths=")) {
+      out$truths <- parse_csv_arg(sub("^--truths=", "", a))
     } else if (a == "--smoke") {
       out$smoke <- TRUE
     } else {
@@ -58,15 +83,18 @@ parse_args <- function(args) {
   }
   if (out$smoke) {
     out$reps <- 3L
-    out$n <- 160L
-    out$missing_rate <- c(0, .50)
+    out$n <- 220L
+    out$missing_rate <- .20
+    out$truths <- c("fake", "real")
   }
   if (!is.finite(out$reps) || out$reps < 1L) stop("--reps must be positive")
-  if (any(!is.finite(out$n)) || any(out$n < 50L)) stop("--n must be >= 50")
+  if (any(!is.finite(out$n)) || any(out$n < 80L)) stop("--n must be >= 80")
   if (any(!is.finite(out$missing_rate)) ||
       any(out$missing_rate < 0 | out$missing_rate >= .95)) {
     stop("--missing-rate must be in [0, .95)")
   }
+  bad_truth <- setdiff(out$truths, c("fake", "real"))
+  if (length(bad_truth)) stop("unknown truth: ", paste(bad_truth, collapse = ", "))
   out
 }
 
@@ -75,67 +103,142 @@ set_single_threaded_math()
 suppressPackageStartupMessages(library(magmaan))
 
 res_dir <- ensure_results_dir()
-ov <- paste0("y", 1:6)
-model <- paste("f =~", paste(ov, collapse = " + "))
+ov <- paste0("y", 1:8)
+model <- paste(
+  "f1 =~ y1 + y2 + y3 + y4",
+  "f2 =~ y5 + y6 + y7 + y8",
+  "f1 ~~ f2",
+  sep = "\n")
 spec_h1 <- model_spec(model, ordered = ov, group = "group",
                       group_labels = c("A", "B"), parameterization = "delta")
 spec_h0 <- model_spec(model, ordered = ov, group = "group",
                       group_labels = c("A", "B"), parameterization = "delta",
                       group_equal = "loadings")
-thresholds <- c(-0.6, 0.2, 0.9)
-loadings <- c(.80, .75, .70, .70, .65, .60)
+thresholds <- c(-0.8, -0.15, 0.55, 1.15)
+lambda_a <- c(.82, .76, .70, .64, .80, .74, .68, .62)
+factor_cor <- .35
 
-draw_group <- function(n) {
-  eta <- rnorm(n)
-  z <- vapply(loadings, function(lam) {
-    lam * eta + rnorm(n, sd = sqrt(1 - lam^2))
-  }, numeric(n))
-  z <- matrix(z, nrow = n, dimnames = list(NULL, ov))
+gof_methods <- function() {
+  c(SB = "sb", SS = "ss", SF = "sf",
+    EBA2 = "eba2", EBA4 = "eba4", EBA6 = "eba6",
+    pEBA2 = "peba2", pEBA4 = "peba4", pEBA6 = "peba6",
+    pall = "pall", pOLS = "pols2", all = "all")
+}
+
+extract_fmg <- function(tab, methods) {
+  key <- sub("_(ml|rls|ls)$", "", tab$label)
+  p <- vapply(methods, function(m) {
+    hit <- which(key == m)
+    if (length(hit)) tab$p_value[hit[1L]] else NA_real_
+  }, numeric(1))
+  names(p) <- names(methods)
+  p
+}
+
+draw_group <- function(n, truth, group_label) {
+  z1 <- rnorm(n)
+  z2 <- factor_cor * z1 + sqrt(1 - factor_cor^2) * rnorm(n)
+  lambda <- lambda_a
+  if (truth == "real" && group_label == "B") {
+    lambda[4L] <- min(.92, lambda[4L] * 1.35)
+    lambda[8L] <- max(.35, lambda[8L] * .70)
+  }
+  z <- matrix(NA_real_, n, length(ov), dimnames = list(NULL, ov))
+  for (j in 1:4) {
+    z[, j] <- lambda[j] * z1 + rnorm(n, sd = sqrt(1 - lambda[j]^2))
+  }
+  for (j in 5:8) {
+    z[, j] <- lambda[j] * z2 + rnorm(n, sd = sqrt(1 - lambda[j]^2))
+  }
   out <- as.data.frame(lapply(seq_len(ncol(z)), function(j) {
     ordered(cut(z[, j], c(-Inf, thresholds, Inf), labels = FALSE))
   }))
   names(out) <- ov
+  out$group <- group_label
   out
 }
 
-draw_data <- function(n_per_group, missing_rate) {
-  a <- draw_group(n_per_group)
-  b <- draw_group(n_per_group)
-  a$group <- "A"
-  b$group <- "B"
+draw_data <- function(n_per_group, truth, missing_rate) {
+  dat <- rbind(draw_group(n_per_group, truth, "A"),
+               draw_group(n_per_group, truth, "B"))
   if (missing_rate > 0) {
-    for (nm in c("y5", "y6")) {
-      miss <- runif(n_per_group) < missing_rate
-      b[[nm]][miss] <- NA
+    for (nm in ov) {
+      miss <- runif(nrow(dat)) < missing_rate
+      dat[[nm]][miss] <- NA
     }
   }
-  rbind(a, b)
+  dat
 }
 
-fit_cell <- function(dat, pd_gamma) {
+fit_models <- function(dat, pd_gamma) {
   stats <- magmaan_core$data_ordinal_stats_from_df(
     dat, spec_h1, ordered = ov, group = "group",
     missing = "pairwise", pd_gamma = pd_gamma, full_wls_weight = FALSE)
   fit_h1 <- magmaan(spec_h1, stats, estimator = "DWLS")
   fit_h0 <- magmaan(spec_h0, stats, estimator = "DWLS")
-  nested <- robust_nested_lrt(
-    fit_h1, fit_h0, data = stats, method = "restriction_map",
-    A.method = "delta", weight = "DWLS")
-  p <- nested$p_scaled %||% nested$pvalue %||% nested$p
+  if (!isTRUE(fit_h1$converged) || !isTRUE(fit_h0$converged)) {
+    stop("DWLS fit did not converge", call. = FALSE)
+  }
+  list(stats = stats, h1 = fit_h1, h0 = fit_h0)
+}
+
+gof_battery <- function(fit, stats) {
+  methods <- gof_methods()
+  tab <- magmaan::fmg_tests_ordinal(fit, stats, tests = names(methods),
+                                    weight = "DWLS")
+  p_fmg <- extract_fmg(tab, methods)
+  base <- tab$base_statistic[1L]
+  df <- tab$df[1L]
+  spectrum <- tryCatch(as.numeric(tab$eigenvalues[[1L]]), error = function(e) NULL)
   data.frame(
-    pd_gamma = pd_gamma,
-    converged = isTRUE(fit_h1$converged) && isTRUE(fit_h0$converged),
-    T_diff = nested$T_diff %||% NA_real_,
-    T_scaled = nested$T_scaled %||% NA_real_,
-    df_diff = nested$df_diff %||% NA_integer_,
-    pvalue = as.numeric(p)[1L],
+    outcome = "gof",
+    method = c("naive", names(p_fmg)),
+    p_value = c(stats::pchisq(base, df, lower.tail = FALSE), unname(p_fmg)),
+    base_stat = base,
+    df = df,
+    trace = if (!is.null(spectrum)) sum(spectrum) else NA_real_,
+    scaling_factor = if (!is.null(spectrum)) sum(spectrum) / df else NA_real_,
     stringsAsFactors = FALSE)
 }
 
-safe_fit_cell <- function(dat, pd_gamma) {
-  tryCatch(fit_cell(dat, pd_gamma), error = function(e) {
-    data.frame(pd_gamma = pd_gamma, converged = FALSE, T_diff = NA_real_,
-               T_scaled = NA_real_, df_diff = NA_integer_, pvalue = NA_real_,
+nested_battery <- function(fit_h1, fit_h0, stats) {
+  nt <- robust_nested_lrt(
+    fit_h1, fit_h0, data = stats, method = "restriction_map",
+    A.method = "delta", weight = "DWLS")
+  base <- data.frame(
+    outcome = "nested",
+    method = c("naive", "SB", "adjusted", "mixture"),
+    p_value = c(nt$p_unscaled, nt$p_scaled, nt$p_adjusted, nt$p_mixture),
+    base_stat = nt$T_diff,
+    df = nt$df_diff,
+    trace = if (!is.null(nt$eigenvalues)) sum(as.numeric(nt$eigenvalues)) else NA_real_,
+    scaling_factor = nt$scale_c %||% NA_real_,
+    stringsAsFactors = FALSE)
+  methods <- gof_methods()
+  tab <- magmaan::fmg_nested_ordinal(
+    fit_h1, fit_h0, stats, tests = setdiff(names(methods), "SB"),
+    weight = "DWLS", A.method = "delta")
+  extra <- data.frame(
+    outcome = "nested",
+    method = setdiff(names(methods), "SB"),
+    p_value = extract_fmg(tab, methods[setdiff(names(methods), "SB")]),
+    base_stat = tab$base_statistic[1L],
+    df = tab$df[1L],
+    trace = if (length(tab$eigenvalues)) sum(as.numeric(tab$eigenvalues[[1L]])) else NA_real_,
+    scaling_factor = NA_real_,
+    stringsAsFactors = FALSE)
+  rbind(base, extra)
+}
+
+safe_rep <- function(dat, pd_gamma) {
+  tryCatch({
+    fits <- fit_models(dat, pd_gamma)
+    rbind(gof_battery(fits$h0, fits$stats),
+          nested_battery(fits$h1, fits$h0, fits$stats))
+  }, error = function(e) {
+    data.frame(outcome = c("gof", "nested"), method = "fit_failed",
+               p_value = NA_real_, base_stat = NA_real_, df = NA_integer_,
+               trace = NA_real_, scaling_factor = NA_real_,
                error = conditionMessage(e), stringsAsFactors = FALSE)
   })
 }
@@ -144,53 +247,66 @@ rows <- list()
 ix <- 0L
 for (n in cfg$n) {
   for (mr in cfg$missing_rate) {
-    for (rep in seq_len(cfg$reps)) {
-      set.seed(cfg$seed_base + as.integer(n * 1000 + round(mr * 1000) * 10 + rep))
-      dat <- draw_data(n, mr)
-      for (gamma in c("nominal", "overlap")) {
-        ix <- ix + 1L
-        got <- safe_fit_cell(dat, gamma)
-        got$n_per_group <- n
-        got$missing_rate <- mr
-        got$rep <- rep
-        got$reject_05 <- is.finite(got$pvalue) & got$pvalue < .05
-        rows[[ix]] <- got
+    for (truth in cfg$truths) {
+      for (rep in seq_len(cfg$reps)) {
+        set.seed(cfg$seed_base +
+                   as.integer(n * 1000 + round(mr * 1000) * 10 + rep) +
+                   if (truth == "real") 500000L else 0L)
+        dat <- draw_data(n, truth, mr)
+        realized_missing <- mean(is.na(dat[, ov]))
+        for (gamma in c("nominal", "overlap")) {
+          got <- safe_rep(dat, gamma)
+          got$n_per_group <- n
+          got$missing_rate <- mr
+          got$realized_missing <- realized_missing
+          got$truth <- truth
+          got$pd_gamma <- gamma
+          got$rep <- rep
+          got$reject_05 <- is.finite(got$p_value) & got$p_value < .05
+          ix <- ix + 1L
+          rows[[ix]] <- got
+        }
+        cat(sprintf("n=%d missing=%.2f truth=%s rep=%d/%d\n",
+                    n, mr, truth, rep, cfg$reps))
       }
-      cat(sprintf("n=%d missing=%.2f rep=%d/%d\n", n, mr, rep, cfg$reps))
     }
   }
 }
 
-rejections <- do.call(rbind, rows)
-rejections <- rejections[, c("n_per_group", "missing_rate", "rep", "pd_gamma",
-                             "converged", "T_diff", "T_scaled", "df_diff",
-                             "pvalue", "reject_05",
-                             setdiff(names(rejections),
-                                     c("n_per_group", "missing_rate", "rep",
-                                       "pd_gamma", "converged", "T_diff",
-                                       "T_scaled", "df_diff", "pvalue",
-                                       "reject_05")))]
+rejections <- rbind_fill(rows)
+front <- c("n_per_group", "missing_rate", "realized_missing", "truth", "rep",
+           "pd_gamma", "outcome", "method", "p_value", "reject_05",
+           "base_stat", "df", "trace", "scaling_factor")
+rejections <- rejections[, c(front, setdiff(names(rejections), front))]
 write_csv(rejections, file.path(res_dir, "rejections.csv"))
 
 split_key <- interaction(rejections$n_per_group, rejections$missing_rate,
-                         rejections$pd_gamma, drop = TRUE)
+                         rejections$truth, rejections$pd_gamma,
+                         rejections$outcome, rejections$method, drop = TRUE)
 summary_rows <- lapply(split(rejections, split_key), function(d) {
-  ok <- is.finite(d$pvalue)
+  ok <- is.finite(d$p_value)
   rate <- if (any(ok)) mean(d$reject_05[ok]) else NA_real_
   n_ok <- sum(ok)
   data.frame(
     n_per_group = d$n_per_group[1L],
     missing_rate = d$missing_rate[1L],
+    realized_missing = mean(d$realized_missing, na.rm = TRUE),
+    truth = d$truth[1L],
     pd_gamma = d$pd_gamma[1L],
+    outcome = d$outcome[1L],
+    method = d$method[1L],
     reps = nrow(d),
     usable = n_ok,
     failures = sum(!ok),
     rejection_rate = rate,
     mc_se = if (n_ok > 0) sqrt(rate * (1 - rate) / n_ok) else NA_real_,
+    mean_base = mean(d$base_stat, na.rm = TRUE),
+    mean_trace = mean(d$trace, na.rm = TRUE),
     stringsAsFactors = FALSE)
 })
 summary <- do.call(rbind, summary_rows)
 summary <- summary[order(summary$n_per_group, summary$missing_rate,
+                         summary$truth, summary$outcome, summary$method,
                          summary$pd_gamma), ]
 write_csv(summary, file.path(res_dir, "summary.csv"))
 
@@ -198,8 +314,11 @@ metadata <- data.frame(
   reps = cfg$reps,
   n = paste(cfg$n, collapse = ","),
   missing_rate = paste(cfg$missing_rate, collapse = ","),
+  truths = paste(cfg$truths, collapse = ","),
   seed_base = cfg$seed_base,
   smoke = cfg$smoke,
+  model = "two_factor_ordinal_metric_invariance",
+  battery = "naive,SB,SS,SF,EBA2/4/6,pEBA2/4/6,pall,pOLS,all; nested adjusted/mixture",
   magmaan_version = as.character(utils::packageVersion("magmaan")),
   stringsAsFactors = FALSE)
 write_csv(metadata, file.path(res_dir, "metadata.csv"))
