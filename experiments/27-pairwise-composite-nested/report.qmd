@@ -1,0 +1,90 @@
+---
+title: "Pairwise Composite Ordinal Nested LR Probe"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+rates_path <- file.path("results", "rejection_rates.csv")
+p_path <- file.path("results", "p_values.csv")
+if (!file.exists(rates_path) || !file.exists(p_path)) {
+  stop("Run `Rscript run_experiment.R --smoke` first.", call. = FALSE)
+}
+rates <- read.csv(rates_path)
+p_values <- read.csv(p_path)
+meta <- tryCatch(read.csv(file.path("results", "metadata.csv")),
+                 error = function(e) data.frame())
+
+tab_long <- rates[rates$usable > 0 & is.finite(rates$rejection_rate),
+                  c("truth", "method", "rejection_rate", "mc_se",
+                    "mean_base", "mean_trace",
+                    "mean_h1_condition_bread", "mean_h0_condition_bread")]
+tab_long$condition <- ifelse(tab_long$truth == "fake", "Null", "Loading Shift")
+tab_long$Rejection <- sprintf("%.3f", tab_long$rejection_rate)
+tab_long$`MC SE` <- sprintf("%.3f", tab_long$mc_se)
+tab_long$`Mean LR` <- sprintf("%.2f", tab_long$mean_base)
+tab_long$`Mean Trace` <- sprintf("%.2f", tab_long$mean_trace)
+tab_long$`H1 Bread Cond.` <- sprintf("%.1f", tab_long$mean_h1_condition_bread)
+tab_long$`H0 Bread Cond.` <- sprintf("%.1f", tab_long$mean_h0_condition_bread)
+tab <- tab_long[, c("condition", "method", "Rejection", "MC SE",
+                    "Mean LR", "Mean Trace", "H1 Bread Cond.",
+                    "H0 Bread Cond.")]
+names(tab)[1:2] <- c("Condition", "Method")
+tab <- tab[order(tab$Condition,
+                 match(tab$Method, c("naive", "scaled", "adjusted", "mixture"))), ]
+
+design <- if (nrow(meta)) meta[1L, ] else data.frame(
+  reps = length(unique(p_values$rep)),
+  n = paste(unique(p_values$n_per_group), collapse = ","),
+  missing_rate = paste(unique(p_values$missing_rate), collapse = ","),
+  truths = paste(unique(p_values$truth), collapse = ","))
+```
+
+## Simulated Model
+
+This is a first smoke-testable probe for the frontier pairwise/composite ordinal
+estimator's nested LR inference. It uses experiment 26's ordinal thresholds and
+MCAR missingness pattern, narrowed to a single-group one-factor CFA so the
+finite-difference Godambe calculation is cheap enough to run interactively:
+
+```text
+f =~ y1 + y2 + y3 + y4
+```
+
+The null constrains the `y2` and `y3` loadings equal. The `fake` condition is
+the null, with both loadings set to 0.70. The `real` condition lowers the `y3`
+loading to 0.45. MCAR missingness is applied independently to all four
+indicators.
+
+The test methods are:
+
+- `naive`: unscaled \(2(\ell_1 - \ell_0)\) on the reference \(\chi^2\).
+- `scaled`: mean-scaled Satorra-2000 statistic from the Godambe spectrum.
+- `adjusted`: Satterthwaite-style mean/variance adjusted statistic.
+- `mixture`: exact weighted-\(\chi^2\) mixture p-value.
+
+## Rejection Rates
+
+```{r}
+knitr::kable(tab, row.names = FALSE)
+```
+
+## Run Metadata
+
+```{r}
+knitr::kable(design, row.names = FALSE)
+```
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --reps 50 --n 300 --missing-rate .20
+quarto render report.qmd
+```

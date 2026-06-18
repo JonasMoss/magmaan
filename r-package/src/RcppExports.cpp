@@ -553,6 +553,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// frontier_pairwise_ordinal_composite_nested_impl
+Rcpp::List frontier_pairwise_ordinal_composite_nested_impl(SEXP partable_H1, SEXP partable_H0, SEXP X, Rcpp::List n_levels, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, double fd_step);
+RcppExport SEXP _magmaan_frontier_pairwise_ordinal_composite_nested_impl(SEXP partable_H1SEXP, SEXP partable_H0SEXP, SEXP XSEXP, SEXP n_levelsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP fd_stepSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable_H1(partable_H1SEXP);
+    Rcpp::traits::input_parameter< SEXP >::type partable_H0(partable_H0SEXP);
+    Rcpp::traits::input_parameter< SEXP >::type X(XSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type n_levels(n_levelsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< double >::type fd_step(fd_stepSEXP);
+    rcpp_result_gen = Rcpp::wrap(frontier_pairwise_ordinal_composite_nested_impl(partable_H1, partable_H0, X, n_levels, optimizer, control, fd_step));
+    return rcpp_result_gen;
+END_RCPP
+}
 // fit_dwls_mixed_ordinal_impl
 Rcpp::List fit_dwls_mixed_ordinal_impl(SEXP partable, Rcpp::List mixed_stats, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
 RcppExport SEXP _magmaan_fit_dwls_mixed_ordinal_impl(SEXP partableSEXP, SEXP mixed_statsSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
@@ -2427,6 +2444,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_dwls_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_ordinal_impl, 5},
     {"_magmaan_fit_uls_ordinal_impl", (DL_FUNC) &_magmaan_fit_uls_ordinal_impl, 5},
     {"_magmaan_fit_wls_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_ordinal_impl, 5},
+    {"_magmaan_frontier_pairwise_ordinal_composite_nested_impl", (DL_FUNC) &_magmaan_frontier_pairwise_ordinal_composite_nested_impl, 7},
     {"_magmaan_fit_dwls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_mixed_ordinal_impl, 5},
     {"_magmaan_fit_wls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_mixed_ordinal_impl, 5},
     {"_magmaan_fit_uls_snlls_impl", (DL_FUNC) &_magmaan_fit_uls_snlls_impl, 5},

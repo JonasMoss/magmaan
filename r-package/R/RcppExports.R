@@ -157,6 +157,10 @@ fit_wls_ordinal_impl <- function(partable, ordinal_stats, optimizer = NULL, cont
     .Call(`_magmaan_fit_wls_ordinal_impl`, partable, ordinal_stats, optimizer, control, bounds)
 }
 
+frontier_pairwise_ordinal_composite_nested_impl <- function(partable_H1, partable_H0, X, n_levels, optimizer = NULL, control = NULL, fd_step = 1e-5) {
+    .Call(`_magmaan_frontier_pairwise_ordinal_composite_nested_impl`, partable_H1, partable_H0, X, n_levels, optimizer, control, fd_step)
+}
+
 fit_dwls_mixed_ordinal_impl <- function(partable, mixed_stats, optimizer = NULL, control = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_dwls_mixed_ordinal_impl`, partable, mixed_stats, optimizer, control, bounds)
 }

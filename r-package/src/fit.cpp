@@ -32,6 +32,7 @@
 #include "magmaan/model/auto_identification.hpp"
 #include "magmaan/estimate/nt.hpp"
 #include "magmaan/estimate/fiml.hpp"
+#include "magmaan/estimate/frontier/pairwise.hpp"
 #include "magmaan/estimate/ml_continuation.hpp"
 #include "magmaan/estimate/gmm/moment_quadratic.hpp"
 #include "magmaan/estimate/gmm/structured_gamma_weight.hpp"
@@ -940,9 +941,15 @@ Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
     }
     threshold_ov[b] = ov;
     threshold_level[b] = lev;
-    NACOV[b] = Rcpp::wrap(s.NACOV[bi]);
-    W_dwls[b] = Rcpp::wrap(s.W_dwls[bi]);
-    W_wls[b] = Rcpp::wrap(s.W_wls[bi]);
+    NACOV[b] = bi < s.NACOV.size()
+        ? Rcpp::wrap(s.NACOV[bi])
+        : Rcpp::wrap(Eigen::MatrixXd(0, 0));
+    W_dwls[b] = bi < s.W_dwls.size()
+        ? Rcpp::wrap(s.W_dwls[bi])
+        : Rcpp::wrap(Eigen::MatrixXd(0, 0));
+    W_wls[b] = bi < s.W_wls.size()
+        ? Rcpp::wrap(s.W_wls[bi])
+        : Rcpp::wrap(Eigen::MatrixXd(0, 0));
     nobs[b] = static_cast<int>(s.n_obs[bi]);
     n_levels[b] = Rcpp::wrap(s.n_levels[bi]);
   }
@@ -1475,6 +1482,89 @@ Rcpp::List ordinal_fit_result(Ctx& ctx,
   out["thresholds"] = stats_r["thresholds"];
   out["polychoric"] = stats_r["R"];
   return out;
+}
+
+std::vector<std::vector<std::int32_t>>
+n_levels_from_arg(Rcpp::List n_levels) {
+  std::vector<std::vector<std::int32_t>> out;
+  out.reserve(static_cast<std::size_t>(n_levels.size()));
+  for (R_xlen_t b = 0; b < n_levels.size(); ++b) {
+    Rcpp::IntegerVector lev(n_levels[b]);
+    out.emplace_back(Rcpp::as<std::vector<std::int32_t>>(lev));
+  }
+  return out;
+}
+
+Ctx pairwise_ordinal_ctx_from_partable(SEXP partable,
+                                       const char* caller,
+                                       const magmaan::data::OrdinalStats& stats,
+                                       magmaan::spec::Starts& starts) {
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, caller);
+  starts = std::move(parsed.starts);
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.pt.group_equal = group_equal_attr(partable);
+  ctx.names = std::move(parsed.names);
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  ctx.samp.S = stats.R;
+  ctx.samp.n_obs = stats.n_obs;
+  ctx.ov_names = ctx.rep.ov_names.empty()
+      ? std::vector<std::string>{}
+      : ctx.rep.ov_names[0];
+  ctx.meanstructure = false;
+  return ctx;
+}
+
+Rcpp::List pairwise_objective_to_r(
+    const magmaan::estimate::frontier::PairwiseOrdinalCompositeResult& obj) {
+  int n_pairs = 0;
+  std::int64_t n_obs = 0;
+  for (const auto& block : obj.blocks) {
+    n_pairs += static_cast<int>(block.pairs.size());
+    n_obs += block.n_obs;
+  }
+  return Rcpp::List::create(
+      Rcpp::_["negloglik"] = obj.negloglik,
+      Rcpp::_["weighted_negloglik"] = obj.weighted_negloglik,
+      Rcpp::_["n_pairs"] = n_pairs,
+      Rcpp::_["nobs_total"] = static_cast<double>(n_obs),
+      Rcpp::_["df"] = obj.df);
+}
+
+Rcpp::List pairwise_godambe_to_r(
+    const magmaan::estimate::frontier::PairwiseOrdinalCompositeGodambe& g) {
+  return Rcpp::List::create(
+      Rcpp::_["bread"] = Rcpp::wrap(g.bread),
+      Rcpp::_["meat"] = Rcpp::wrap(g.meat),
+      Rcpp::_["vcov"] = Rcpp::wrap(g.vcov),
+      Rcpp::_["vcov_naive"] = Rcpp::wrap(g.vcov_naive),
+      Rcpp::_["se"] = Rcpp::wrap(g.se),
+      Rcpp::_["se_naive"] = Rcpp::wrap(g.se_naive),
+      Rcpp::_["casewise_scores"] = Rcpp::wrap(g.casewise_scores),
+      Rcpp::_["condition_bread"] = g.condition_bread);
+}
+
+Rcpp::List pairwise_lr_to_r(const magmaan::robust::LRSatorra2000Result& r) {
+  Rcpp::CharacterVector warns(static_cast<R_xlen_t>(r.warnings.size()));
+  for (R_xlen_t i = 0; i < warns.size(); ++i) {
+    warns[i] = r.warnings[static_cast<std::size_t>(i)];
+  }
+  return Rcpp::List::create(
+      Rcpp::_["T_diff"] = r.T_diff,
+      Rcpp::_["df_diff"] = r.df_diff,
+      Rcpp::_["p_unscaled"] = r.p_unscaled,
+      Rcpp::_["eigenvalues"] = Rcpp::wrap(r.eigenvalues),
+      Rcpp::_["scale_c"] = r.scale_c,
+      Rcpp::_["T_scaled"] = r.T_scaled,
+      Rcpp::_["p_scaled"] = r.p_scaled,
+      Rcpp::_["adjust_d0"] = r.adjust_d0,
+      Rcpp::_["T_adjusted"] = r.T_adjusted,
+      Rcpp::_["p_adjusted"] = r.p_adjusted,
+      Rcpp::_["p_mixture"] = r.p_mixture,
+      Rcpp::_["warnings"] = warns);
 }
 
 magmaan::data::frontier::CovarianceShrinkageKind
@@ -2520,6 +2610,75 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return ordinal_fit_result(ctx, stats, est, &starts, "WLS",
                             parameterization_name.c_str());
+}
+
+// [[Rcpp::export]]
+Rcpp::List frontier_pairwise_ordinal_composite_nested_impl(
+    SEXP partable_H1,
+    SEXP partable_H0,
+    SEXP X,
+    Rcpp::List n_levels,
+    Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+    Rcpp::Nullable<Rcpp::List> control = R_NilValue,
+    double fd_step = 1e-5) {
+  auto blocks = matrix_blocks_from_arg(X);
+  auto levels = n_levels_from_arg(n_levels);
+  auto data_or =
+      magmaan::estimate::frontier::pairwise_ordinal_observed_data(blocks,
+                                                                  levels);
+  if (!data_or.has_value()) stop_post(data_or.error());
+
+  magmaan::spec::Starts starts1;
+  magmaan::spec::Starts starts0;
+  Ctx ctx1 = pairwise_ordinal_ctx_from_partable(
+      partable_H1, "frontier_pairwise_ordinal_composite_nested",
+      data_or->stats, starts1);
+  Ctx ctx0 = pairwise_ordinal_ctx_from_partable(
+      partable_H0, "frontier_pairwise_ordinal_composite_nested",
+      data_or->stats, starts0);
+
+  const magmaan::estimate::Backend backend =
+      backend_from_optimizer_arg(optimizer);
+  const magmaan::optim::OptimOptions opts = optim_opts_from(control);
+
+  auto fit1_or = magmaan::estimate::frontier::fit_pairwise_ordinal_composite(
+      ctx1.pt, ctx1.rep, *data_or, {}, {}, backend, opts, starts1);
+  if (!fit1_or.has_value()) stop_fit(fit1_or.error());
+  auto fit0_or = magmaan::estimate::frontier::fit_pairwise_ordinal_composite(
+      ctx0.pt, ctx0.rep, *data_or, {}, {}, backend, opts, starts0);
+  if (!fit0_or.has_value()) stop_fit(fit0_or.error());
+
+  auto god1_or = magmaan::estimate::frontier::pairwise_ordinal_composite_godambe(
+      ctx1.pt, ctx1.rep, *data_or, fit1_or->estimates, fd_step);
+  if (!god1_or.has_value()) stop_post(god1_or.error());
+  auto god0_or = magmaan::estimate::frontier::pairwise_ordinal_composite_godambe(
+      ctx0.pt, ctx0.rep, *data_or, fit0_or->estimates, fd_step);
+  if (!god0_or.has_value()) stop_post(god0_or.error());
+  auto lr_or = magmaan::estimate::frontier::lr_test_pairwise_ordinal_composite(
+      ctx1.pt, ctx1.rep, *data_or, *fit1_or, ctx0.pt, ctx0.rep, *fit0_or,
+      magmaan::robust::SatorraAMethod::Exact, fd_step);
+  if (!lr_or.has_value()) stop_post(lr_or.error());
+
+  Rcpp::List h1 = ordinal_fit_result(ctx1, data_or->stats, fit1_or->estimates,
+                                     &starts1, "PAIRWISE-ORDINAL-COMPOSITE",
+                                     "delta");
+  h1["pairwise_composite"] = true;
+  h1["objective"] = pairwise_objective_to_r(fit1_or->objective);
+  h1["godambe"] = pairwise_godambe_to_r(*god1_or);
+
+  Rcpp::List h0 = ordinal_fit_result(ctx0, data_or->stats, fit0_or->estimates,
+                                     &starts0, "PAIRWISE-ORDINAL-COMPOSITE",
+                                     "delta");
+  h0["pairwise_composite"] = true;
+  h0["objective"] = pairwise_objective_to_r(fit0_or->objective);
+  h0["godambe"] = pairwise_godambe_to_r(*god0_or);
+
+  return Rcpp::List::create(
+      Rcpp::_["h1"] = h1,
+      Rcpp::_["h0"] = h0,
+      Rcpp::_["lr"] = pairwise_lr_to_r(*lr_or),
+      Rcpp::_["stats"] = ordinal_stats_to_r(data_or->stats),
+      Rcpp::_["saturated"] = pairwise_objective_to_r(data_or->saturated));
 }
 
 // [[Rcpp::export]]
