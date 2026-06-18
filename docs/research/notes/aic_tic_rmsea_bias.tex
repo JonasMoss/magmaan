@@ -1,0 +1,269 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{AIC, TIC, and RMSEA as Bias Corrections}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\KL}{\operatorname{KL}}
+\newcommand{\dto}{\xrightarrow{d}}
+\newcommand{\pto}{\xrightarrow{p}}
+
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+This note records the common shape behind AIC/TIC and RMSEA. Both start from a
+sample criterion that is too favorable because it is evaluated after fitting.
+Both subtract a first-order bias term. The bias terms are different because the
+targets are different:
+\[
+  \text{AIC/TIC: predictive risk of the fitted distribution,}
+\]
+\[
+  \text{RMSEA: population model misfit, or noncentrality per observation per df.}
+\]
+AIC and TIC do not require the exact-fit or local-alternative story that often
+motivates RMSEA. They use local Taylor expansions around the fitted parameter
+and its pseudo-true target, but the statistical target is fixed-misspecification
+predictive risk, not a Pitman drift from a correct model.
+
+\section{AIC: correcting in-sample optimism}
+
+Let $Y_1,\ldots,Y_n\sim g$ and let $f_\theta$ be a parametric working model.
+Write the log likelihood
+\[
+  \ell_n(\theta)=\sum_{i=1}^n \log f_\theta(Y_i),
+  \qquad
+  \hat\theta=\argmax_\theta \ell_n(\theta).
+\]
+The population target of maximum likelihood, even when the model is wrong, is
+the KL projection
+\[
+  \theta_0=\argmax_\theta M(\theta),
+  \qquad
+  M(\theta)=\E_g\{\log f_\theta(Y)\}.
+\]
+Equivalently, $\theta_0$ minimizes $\KL(g,f_\theta)$ over the model class.
+
+The quantity we would like to estimate is the expected log score of the fitted
+model on a fresh observation,
+\[
+  R_n = \E_{\hat\theta}\E_{Y^0}\{\log f_{\hat\theta}(Y^0)\},
+\]
+where $Y^0\sim g$ is independent of the training sample and the outer
+expectation averages over the training sample. The empirical maximized log
+likelihood $n^{-1}\ell_n(\hat\theta)$ estimates the same log score on the
+training observations, not on fresh observations. It is optimistic because
+$\hat\theta$ was chosen to fit those same observations.
+
+\begin{proposition}[Akaike's optimism correction]
+If the model is correctly specified, regular, and has $k$ free parameters, then
+\[
+  \E\{\ell_n(\hat\theta)\}
+  =
+  n\,\E\{\log f_{\hat\theta}(Y^0)\} + k + o(1).
+\]
+Therefore
+\[
+  \ell_n(\hat\theta)-k
+\]
+is an asymptotically unbiased estimator, up to constants independent of the
+candidate model, of the expected out-of-sample log likelihood. Multiplying by
+$-2$ gives
+\[
+  \mathrm{AIC}=-2\ell_n(\hat\theta)+2k .
+\]
+\end{proposition}
+
+\begin{proof}[Derivation sketch]
+Let
+\[
+  s_i(\theta)=\frac{\partial\log f_\theta(Y_i)}{\partial\theta},
+  \qquad
+  I=-\E\left\{
+    \frac{\partial^2\log f_{\theta_0}(Y)}
+         {\partial\theta\partial\theta^\top}
+  \right\}.
+\]
+Under correct specification,
+$\sqrt n(\hat\theta-\theta_0)\dto N(0,I^{-1})$ and
+$\E\{s_i(\theta_0)s_i(\theta_0)^\top\}=I$.
+
+For a fresh observation,
+\[
+  M(\hat\theta)
+  =
+  M(\theta_0)
+  -\frac12(\hat\theta-\theta_0)^\top I(\hat\theta-\theta_0)
+  +o_p(n^{-1}),
+\]
+so
+\[
+  n\,\E M(\hat\theta)=nM(\theta_0)-\frac12 k+o(1).
+\]
+For the training log likelihood, the score term does not average away because
+$\hat\theta$ is a function of the same data. A quadratic expansion of
+$\ell_n(\hat\theta)$ around $\theta_0$ gives
+\[
+  \E\ell_n(\hat\theta)=nM(\theta_0)+\frac12 k+o(1).
+\]
+The gap is $k+o(1)$ on the log-likelihood scale, or $2k+o(1)$ on the deviance
+scale. This is the AIC penalty.
+\end{proof}
+
+\begin{remark}
+AIC is often described as making the maximized log likelihood approximately
+unbiased for expected predictive log likelihood. More precisely, it removes
+the first-order \emph{optimism} of reusing the training data for both fitting
+and evaluation. It is not a small-sample unbiasedness claim, and it is not a
+test of exact fit.
+\end{remark}
+
+\section{TIC: the same correction under misspecification}
+
+When the model is misspecified, the Hessian and score variance no longer agree.
+Define
+\[
+  I = -\E_g\left\{\frac{\partial^2\log f_{\theta_0}(Y)}
+    {\partial\theta\partial\theta^\top}\right\},
+  \qquad
+  J = \E_g\{s(Y;\theta_0)s(Y;\theta_0)^\top\}.
+\]
+Then
+\[
+  \sqrt n(\hat\theta-\theta_0)\dto N(0,I^{-1}JI^{-1}).
+\]
+The same local expansion gives the optimism
+\[
+  \tr(I^{-1}J)
+\]
+on the log-likelihood scale. Takeuchi's information criterion is therefore
+\[
+  \mathrm{TIC}
+  =
+  -2\ell_n(\hat\theta)
+  +2\,\tr(\hat I^{-1}\hat J).
+\]
+Correct specification is the special case $I=J$, giving
+$\tr(I^{-1}J)=k$ and recovering AIC.
+
+\begin{remark}
+This is the sense in which AIC/TIC use local arguments indirectly. The target is
+fixed-population predictive risk, but the bias calculation is a second-order
+expansion around the KL projection. No local drift toward a true finite
+dimensional model is needed.
+\end{remark}
+
+\section{RMSEA: correcting chi-square noise}
+
+Now let $\hat\eta$ be a consistent estimator of a saturated population object
+$\eta$, such as $(\mu,\Sigma)$ or a limited-information ordinal moment vector.
+Let $\mathcal C\subset E$ be the model-implied class and let
+\[
+  F_{\mathcal C}(\eta)
+  =
+  \inf_{c\in\mathcal C} D(\eta,c)
+\]
+be a nonnegative discrepancy, with $F_{\mathcal C}(\eta)=0$ iff
+$\eta\in\mathcal C$. Continuity gives
+\[
+  F_{\mathcal C}(\hat\eta)\pto F_{\mathcal C}(\eta)
+\]
+even when $\hat\eta$ has finite-sample bias. The population RMSEA target is
+\[
+  \varepsilon_{\mathcal C}(\eta)
+  =
+  \sqrt{\frac{F_{\mathcal C}(\eta)}{df}}.
+\]
+
+The usual SEM test statistic has the form
+\[
+  T_n = n F_{\mathcal C}(\hat\eta)
+\]
+after fitting the projection onto $\mathcal C$; in magmaan's convention
+$T_n=2n\,\texttt{fmin}$. Under exact fit and the usual regularity conditions,
+\[
+  T_n \dto \chi^2_{df},
+\]
+so pure sampling noise contributes about $df$ to the statistic even when the
+population discrepancy is zero. Under fixed misspecification,
+\[
+  T_n = nF_{\mathcal C}(\eta)+O_p(\sqrt n),
+\]
+so the exact-fit test diverges, but the rescaled discrepancy remains meaningful.
+The RMSEA plug-in correction is
+\[
+  \widehat\varepsilon
+  =
+  \sqrt{
+    \frac{\max(T_n-df,0)}{n\,df}
+  }.
+\]
+
+\begin{remark}
+The subtraction of $df$ in RMSEA is analogous in spirit to the AIC subtraction
+of $k$: both remove a first-order fitting/noise contribution. But the targets
+are not the same. AIC/TIC correct an in-sample log score to estimate
+out-of-sample predictive risk. RMSEA corrects a chi-square-like lack-of-fit
+statistic to estimate excess noncentrality, hence population discrepancy per
+degree of freedom.
+\end{remark}
+
+\section{Where local alternatives enter}
+
+The population definition
+\[
+  \varepsilon_{\mathcal C}(\eta)=\sqrt{F_{\mathcal C}(\eta)/df}
+\]
+does not require local alternatives. It is a fixed-population estimand. Local
+alternatives enter when one wants the chi-square reference distribution,
+confidence intervals, close-fit tests, or power calculations to remain
+nondegenerate. A Pitman sequence writes
+\[
+  \eta_n=\eta_0+h/\sqrt n,\qquad \eta_0\in\mathcal C,
+\]
+so
+\[
+  nF_{\mathcal C}(\eta_n)\to\lambda
+  \quad\text{and}\quad
+  T_n\dto\chi^2_{df}(\lambda).
+\]
+Then RMSEA is the square root of $\lambda/(n\,df)$ on the sample scale, or of
+$F_{\mathcal C}(\eta_n)/df$ on the population-discrepancy scale. Without the
+local sequence, fixed positive misfit makes $T_n$ diverge, so there is no
+finite noncentral chi-square limit to invert; there is still a perfectly good
+population discrepancy.
+
+\section{Comparison}
+
+\begin{center}
+\begin{tabular}{p{0.14\linewidth}p{0.52\linewidth}p{0.24\linewidth}}
+criterion & target & bias/noise correction\\
+\hline
+AIC & predictive log likelihood, correct model & $k$ on log-likelihood scale\\
+TIC & predictive log likelihood, misspecified model & $\tr(I^{-1}J)$\\
+RMSEA & population discrepancy per df & $df$ chi-square noise
+\end{tabular}
+\end{center}
+
+Thus the closest one-line memory aid is:
+\begin{align*}
+  &\text{AIC/TIC estimate prediction risk after fitting;}\\
+  &\text{RMSEA estimates lack of fit after removing expected test noise.}
+\end{align*}
+
+\end{document}
