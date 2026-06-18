@@ -1,0 +1,338 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{The pairwise-deletion weight matrix for WLSMV with ordinal
+missing data}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\plim}{\operatorname*{plim}}
+\newcommand{\one}{\mathbf{1}}
+\newcommand{\pw}{\mathrm{pw}}
+\newcommand{\Ghat}{\widehat{\Gamma}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+WLSMV is limited information: its sample statistics are the univariate
+thresholds and bivariate polychoric correlations, so it can absorb missing
+data by computing each statistic from its available cases (pairwise deletion,
+PD). The point estimates are then standard; the open question is the weight
+matrix. What is the asymptotic covariance $\Gamma^{\pw}$ of the PD statistic
+vector, and how does it differ from the complete-data $\Gamma$ that the
+conventional ``WLSMV with PD'' plugs in?
+
+\textbf{Answer.} $\Gamma^{\pw}$ is the complete-data $\Gamma$ reweighted by
+observation-overlap proportions. Writing $\pi_a$ for the probability that a
+case observes every item needed for statistic $a$ and $\pi_{ab}$ for the
+probability it observes the items needed for both $a$ and $b$,
+\[
+  \Gamma^{\pw}_{ab}
+  \;=\;
+  \frac{1}{\pi_a \pi_b}\,
+  \E\!\left[\one\{S_a\cup S_b \subseteq R\}\,\psi^a\psi^b\right],
+  \qquad\text{(Theorem~\ref{thm:gpw})}
+\]
+which under MCAR collapses to the Hadamard form
+$\Gamma^{\pw}_{ab} = (\pi_{ab}/\pi_a\pi_b)\,\Gamma_{ab}$, with diagonal
+$\Gamma^{\pw}_{aa} = \Gamma_{aa}/\pi_a$. This is the ordinal sibling of the
+continuous covariance rule $\Gamma^{\mu,\pw}_{jk}=\sigma_{jk}\,\pi_{jk}/\pi_j\pi_k$
+already used on the pairwise-GLS path. The conventional implementation omits
+the reweighting (it uses one nominal $N$), so it understates the variance of
+statistics estimated from fewer cases; that is the documented source of the
+inflated $\Delta\chi^2$ \cite{chen2020}.
+
+\section*{Setup and notation}
+
+Let there be $p$ ordinal items, item $j$ with $C_j$ categories and thresholds
+$\tau_j\in\mathbb{R}^{C_j-1}$. The WLSMV statistic vector stacks all thresholds
+and all polychorics,
+\[
+  s = (\tau', \rho')',
+  \qquad
+  \rho = (\rho_{jk})_{j<k},
+  \qquad
+  p^\ast = \sum_j (C_j-1) + \binom{p}{2}.
+\]
+Index a generic component by $a\in\{1,\dots,p^\ast\}$ and let
+$S_a\subseteq\{1,\dots,p\}$ be its \emph{support}: $|S_a|=1$ for a threshold
+of item $j$ ($S_a=\{j\}$), $|S_a|=2$ for a polychoric ($S_a=\{j,k\}$).
+
+Complete data are i.i.d.\ $z_i=(y_{i1},\dots,y_{ip})$. The staged estimator
+(univariate thresholds, then bivariate polychorics with thresholds held fixed
+\cite{muthen1984,joreskog1994}) is an M-estimator solving
+$\sum_i g(z_i;\hat s)=0$, with bread $A=-\E[\partial g/\partial s']$ and casewise
+influence
+\[
+  \psi_i = A^{-1} g(z_i;s_0),
+  \qquad \E[\psi_i]=0,
+  \qquad \Gamma=\E[\psi_i\psi_i'] .
+\]
+magmaan stores the influence rows $IF_i=-\psi_i A^{-\top}$ and forms
+$\Ghat=\tfrac1N\sum_i IF_i IF_i'$ (cf.\ \path{robust_ordinal_gamma.tex}).
+
+Missingness is encoded by the response set $R_i=\{j:y_{ij}\text{ observed}\}$.
+Statistic $a$ is estimable on case $i$ iff $S_a\subseteq R_i$; write the
+availability indicator and its proportions
+\[
+  d^a_i=\one\{S_a\subseteq R_i\},
+  \quad
+  \pi_a=\E[d^a_i],
+  \quad
+  \pi_{ab}=\E[d^a_i d^b_i]=\Pr(S_a\cup S_b\subseteq R),
+  \quad
+  N_a=\sum_i d^a_i .
+\]
+PD solves each block on its available cases; stacking with the diagonal mask
+$D_i=\operatorname{diag}(d^a_i)$, the estimator solves
+$\sum_i D_i\, g(z_i;\hat s^{\pw})=0$.
+
+\section*{Influence sparsity}
+
+\begin{lemma}\label{lem:sparse}
+The influence $\psi^a_i$ depends on $z_i$ only through
+$\{y_{ij}:j\in S_a\}$. Hence $\psi^{\tau_j}_i$ is a function of $y_{ij}$ alone,
+and $\psi^{\rho_{jk}}_i$ a function of $(y_{ij},y_{ik})$ alone.
+\end{lemma}
+
+\begin{proof}
+The stacked score is block lower triangular: threshold scores depend on their
+own item; the $\rho_{jk}$ score depends on the pair $(j,k)$ and on
+$\tau_j,\tau_k$. Thus $A$ is block lower triangular and so is $A^{-1}$, giving
+\[
+  \psi^{\rho_{jk}}_i
+  = \frac{1}{\mathcal I_{\rho_{jk}}}
+    \Big[\, s_{\rho_{jk}}(y_{ij},y_{ik})
+      - \mathcal I_{\rho_{jk}\tau_j}\psi^{\tau_j}_i
+      - \mathcal I_{\rho_{jk}\tau_k}\psi^{\tau_k}_i \Big],
+\]
+a combination of objects supported on $\{j,k\}$; the threshold rows are
+supported on their single item.
+\end{proof}
+
+Lemma~\ref{lem:sparse} is what makes overlap proportions the right bookkeeping:
+the only cases that carry information about the pair $(a,b)$ are those that
+observe $S_a\cup S_b$.
+
+\section*{The pairwise weight matrix}
+
+\begin{theorem}\label{thm:gpw}
+Let $s_0=\plim \hat s^{\pw}$ and let $\psi^a$ be the influence about $s_0$.
+Then $\sqrt N(\hat s^{\pw}-s_0)\xrightarrow{d}N(0,\Gamma^{\pw})$ with
+\[
+  \Gamma^{\pw}_{ab}
+  = \frac{1}{\pi_a\pi_b}\,
+    \E\!\left[\one\{S_a\cup S_b\subseteq R\}\,\psi^a\psi^b\right].
+\]
+\end{theorem}
+
+\begin{proof}
+The available-case linearization of component $a$ is
+$\hat s^{\pw}_a-s_{a,0}=N_a^{-1}\sum_i d^a_i\psi^a_i+o_p(N^{-1/2})$; the mask is
+mean-zero against the influence at the pseudo-true value,
+$\E[d^a_i\psi^a_i]=A^{-1}\E[d^a_i g_a(z_i;s_0)]=0$, by definition of $s_0$.
+Independent cross terms vanish, and with $N_a=N\pi_a+o_p(N)$,
+\[
+  N\,\Cov(\hat s^{\pw}_a,\hat s^{\pw}_b)
+  = \frac{N}{N_aN_b}\sum_i d^a_i d^b_i \psi^a_i\psi^b_i + o_p(1)
+  \xrightarrow{p}
+  \frac{1}{\pi_a\pi_b}\,\E[d^a d^b\psi^a\psi^b],
+\]
+and $d^a_id^b_i=\one\{S_a\cup S_b\subseteq R_i\}$.
+\end{proof}
+
+\begin{corollary}[MCAR closed form]\label{cor:mcar}
+If $R\perp z$ then $s_0$ is the true value and the indicator factors out:
+\[
+  \Gamma^{\pw}_{ab}=\frac{\pi_{ab}}{\pi_a\pi_b}\,\Gamma_{ab},
+  \qquad\text{equivalently}\qquad
+  \Gamma^{\pw}=\Pi_{\!\div}\odot\Gamma,
+  \quad
+  (\Pi_{\!\div})_{ab}=\frac{\pi_{ab}}{\pi_a\pi_b},
+\]
+with diagonal $\Gamma^{\pw}_{aa}=\Gamma_{aa}/\pi_a$, i.e.\
+$\Var(\hat s^{\pw}_a)=\Gamma_{aa}/N_a$.
+\end{corollary}
+
+\begin{corollary}[item-independent missingness]\label{cor:indep}
+If items are observed independently with $\Pr(j\in R)=\pi_j$, then
+$\pi_a=\prod_{j\in S_a}\pi_j$ and the overlap factor is the product of the
+inverse observation probabilities of the \emph{shared} items,
+\[
+  \frac{\pi_{ab}}{\pi_a\pi_b}=\prod_{j\in S_a\cap S_b}\pi_j^{-1}.
+\]
+In particular the factor is $1$ for statistics with disjoint supports, and the
+correction touches only diagonals and entries sharing an item.
+\end{corollary}
+
+The diagonal in Corollary~\ref{cor:mcar} is the whole story for Type I error:
+a statistic seen by $N_a<N$ cases has variance $\Gamma_{aa}/N_a$, not
+$\Gamma_{aa}/N$. Replacing $N_a$ by $N$ understates that variance, overstates
+the corresponding precision in the weight, and inflates the quadratic-form
+statistic. This is exactly the WLSMV{\_}PD behaviour reported in
+\cite{chen2020} (Type I rate of $\Delta\chi^2$ up to $0.55$ at $50\%$ missing).
+
+\begin{remark}[the correction preserves positive semidefiniteness]
+$\Pi=[\pi_{ab}]$ is a Gram matrix ($\pi_{ab}=\E[d^a d^b]$), hence PSD; conjugating
+by $\operatorname{diag}(\pi_a^{-1})$ keeps it PSD, so $\Pi_{\!\div}$ is PSD, and by
+the Schur product theorem $\Gamma^{\pw}=\Pi_{\!\div}\odot\Gamma$ is PSD. The
+overlap reweighting cannot by itself create an indefinite weight; any
+non-PSD-ness is inherited from $\Gamma$ and handled by the existing repair
+policy (\path{robust_ordinal_gamma.tex}).
+\end{remark}
+
+\begin{remark}[exact staged sandwich vs.\ the Hadamard form]
+Theorem~\ref{thm:gpw} accounts each statistic at the level of its own influence,
+which assigns the entire polychoric influence the pair availability $\pi_{jk}$.
+The fully exact object is the masked sandwich
+\[
+  \Gamma^{\pw}=\bar A^{-1} M \bar A^{-\top},
+  \quad
+  \bar A=\E[D_i G_i],
+  \quad
+  M_{ab}=\E[\one\{S_a\cup S_b\subseteq R\}\,g_a g_b'],
+  \quad G_i=\tfrac{\partial g}{\partial s'},
+\]
+which assigns the threshold-propagation terms of $\psi^{\rho_{jk}}$ (Lemma~\ref{lem:sparse})
+the larger item availabilities $\pi_j,\pi_k\ge\pi_{jk}$. The Hadamard form is
+therefore exact on the threshold block and a mild upper bound on the polychoric
+block; the gap is of order
+$\mathcal I_{\rho\tau}\,(\pi_{jk}^{-1}-\pi_j^{-1})$ and vanishes when thresholds
+are well determined. Because it overstates the polychoric variances, the
+Hadamard estimator errs \emph{conservative} (it under-rejects), the safe
+direction for a Type I criterion, and it is the cheap option built directly on
+the existing $IF$ rows.
+\end{remark}
+
+\begin{remark}[scope: this calibrates inference, not PD's MAR bias]
+$\Gamma^{\pw}$ is the sampling covariance of the PD statistic about its own
+probability limit $s_0$. Available-case polychorics are consistent for the true
+$s$ under MCAR but not generally under MAR, where selection on an observed,
+latent-correlated item shifts $s_0$ off the target. The corrected weight then
+yields a correctly calibrated test of a slightly displaced pseudo-value; it does
+not restore MAR consistency, which needs full information (FIML / two-stage) or
+the composite-likelihood machinery with an MAR-valid sandwich
+\cite{katsikatsou2012}. Empirically the displacement was small in
+\cite{chen2020} (loading bias $|\mathrm{RB}|<0.1$), so the inference failure, not
+the point estimate, dominated; the corrected $\Gamma^{\pw}$ targets exactly that
+failure.
+\end{remark}
+
+\section*{What the conventional implementation omits}
+
+Plugging the PD point estimates into the complete-data $\Gamma$ formula at a
+single sample size is, in the language of Corollary~\ref{cor:mcar}, the choice
+$\pi_a\equiv\pi_b\equiv\pi_{ab}$, i.e.\ $\Pi_{\!\div}\equiv\one\one'$ and
+$\Gamma^{\pw}\equiv\Gamma$. The non-uniform $N_a$ across thresholds (item level)
+and polychorics (pair level), and the missing-data covariance between them, are
+discarded. Two consequences follow, both noted in \cite{chen2020}: the
+per-statistic variances are wrong (the diagonal effect above), and the
+correlations among statistics estimated on different overlapping subsamples are
+wrong (the off-diagonal effect). Neither the mean nor the mean-and-variance
+$\chi^2$ correction can compensate, because both read their scaling from this
+same matrix.
+
+\section*{Estimation}
+
+The leading-order estimator is the existing influence machinery with overlap
+masks. For statistics $a,b$ let $\widehat\psi^a_i$ be the centered PD influence
+rows; then
+\[
+  \Ghat^{\pw}_{ab}
+  = \frac{N}{N_a N_b}\sum_{i:\,S_a\cup S_b\subseteq R_i}
+      \widehat\psi^a_i\,\widehat\psi^b_i .
+\]
+This is $\Ghat=IF'IF/N$ with the sum restricted to the overlap set and the
+$1/N$ replaced by $N/N_aN_b$; under MCAR it converges to
+Corollary~\ref{cor:mcar}, under MAR to Theorem~\ref{thm:gpw}. Implementation is
+pattern-grouped, matching the continuous pairwise path: partition cases by
+distinct $R_i$, accumulate $\widehat\psi^a\widehat\psi^b$ over patterns whose set
+contains $S_a\cup S_b$, and divide once at the end. The two-level structure is
+automatic from the supports: $\{j\}$ for thresholds feeds the item proportions
+$\pi_j$, $\{j,k\}$ for polychorics feeds the pair proportions $\pi_{jk}$, and the
+mixed block uses $\pi_{\{j,k,l\}}$. The exact sandwich (remark above) replaces the
+own-influence rows by the masked score-and-bread accumulation
+$\bar A^{-1}M\bar A^{-\top}$ when the conservative bias is judged too large.
+
+\section*{Downstream: test statistic and FMG spectrum}
+
+Everything past the weight matrix is the single substitution
+$\Gamma\mapsto\Gamma^{\pw}$. Fit DWLS with weight $V=W_D^{-1}$,
+$W_D=\operatorname{diag}(\Gamma^{\pw})$; the residual
+$\hat e=\hat s-\sigma(\hat\theta)$ gives $T=N\,\hat e'V\hat e$, and
+\[
+  T \xrightarrow{d} \sum_{a=1}^{df}\lambda_a\,\chi^2_{1,a},
+  \qquad
+  \{\lambda_a\}=\operatorname{eig}(U\Gamma^{\pw}),
+  \qquad
+  U = V - V\Delta(\Delta'V\Delta)^{-1}\Delta'V,
+\]
+with $\Delta=\partial\sigma/\partial\theta$. The mean correction (WLSM) is
+$\hat c=\tr(U\Gamma^{\pw})/df$; the mean-and-variance correction (WLSMV) matches
+$\tr(U\Gamma^{\pw})$ and $\tr((U\Gamma^{\pw})^2)$ \cite{satorrabentler2001}; and
+the FMG / pEBA test uses the full penalized spectrum of $U\Gamma^{\pw}$ rather
+than its first two moments \cite{fmg2025}. The nested $\Delta\chi^2$ for
+measurement invariance inherits the same substitution. The default's error is
+precisely $U\Gamma$ in place of $U\Gamma^{\pw}$; with the corrected meat the
+WLSMV missing-data statistic is the analogue of Savalei and Bentler's
+statistically justified pairwise method for continuous nonnormal incomplete data
+\cite{savaleibentler2005}, and an overlap-weighted $\Gamma^{\pw}$ is exactly what
+an ordinal FMG difference test under missingness would consume.
+
+\begin{thebibliography}{9}
+
+\bibitem{muthen1984} Muth\'en, B. (1984). A general structural equation model
+with dichotomous, ordered categorical, and continuous latent variable
+indicators. \emph{Psychometrika}, 49(1), 115--132.
+\href{https://doi.org/10.1007/BF02294210}{doi:10.1007/BF02294210}.
+
+\bibitem{joreskog1994} J\"oreskog, K. G. (1994). On the estimation of polychoric
+correlations and their asymptotic covariance matrix. \emph{Psychometrika},
+59(3), 381--389. \href{https://doi.org/10.1007/BF02296131}{doi:10.1007/BF02296131}.
+
+\bibitem{satorrabentler2001} Satorra, A., \& Bentler, P. M. (2001). A scaled
+difference chi-square test statistic for moment structure analysis.
+\emph{Psychometrika}, 66(4), 507--514.
+\href{https://doi.org/10.1007/BF02296192}{doi:10.1007/BF02296192}.
+
+\bibitem{savaleibentler2005} Savalei, V., \& Bentler, P. M. (2005). A
+statistically justified pairwise ML method for incomplete nonnormal data: A
+comparison with direct ML and pairwise ADF. \emph{Structural Equation
+Modeling}, 12(2), 183--214.
+\href{https://doi.org/10.1207/s15328007sem1202_1}{doi:10.1207/s15328007sem1202\_1}.
+
+\bibitem{katsikatsou2012} Katsikatsou, M., Moustaki, I., Yang-Wallentin, F., \&
+J\"oreskog, K. G. (2012). Pairwise likelihood estimation for factor analysis
+models with ordinal data. \emph{Computational Statistics \& Data Analysis},
+56(12), 4243--4258.
+\href{https://doi.org/10.1016/j.csda.2012.04.010}{doi:10.1016/j.csda.2012.04.010}.
+
+\bibitem{chen2020} Chen, P.-Y., Wu, W., Garnier-Villarreal, M., Kite, B. A., \&
+Jia, F. (2020). Testing measurement invariance with ordinal missing data: A
+comparison of estimators and missing data techniques. \emph{Multivariate
+Behavioral Research}, 55(1), 87--101.
+\href{https://doi.org/10.1080/00273171.2019.1608799}{doi:10.1080/00273171.2019.1608799}.
+
+\bibitem{fmg2025} Foldnes, N., Moss, J., \& Gr\o nneberg, S. (2025). Improved
+goodness of fit procedures for structural equation models (penalized eigenvalue
+block averaging).
+
+\end{thebibliography}
+
+\end{document}
