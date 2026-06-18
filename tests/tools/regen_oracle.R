@@ -2103,22 +2103,53 @@ for (m in fiml_cases) {
   mlr_trace_ugamma <- NULL
   mlr_trace_ugamma_h1 <- NULL
   mlr_trace_ugamma_h0 <- NULL
+  mlr_cfi_scaled <- NULL
+  mlr_tli_scaled <- NULL
+  mlr_rmsea_scaled <- NULL
+  mlr_rmsea_ci_lower_scaled <- NULL
+  mlr_rmsea_ci_upper_scaled <- NULL
+  mlr_rmsea_pvalue_scaled <- NULL
+  mlr_rmsea_notclose_pvalue_scaled <- NULL
+  mlr_cfi_robust <- NULL
+  mlr_tli_robust <- NULL
+  mlr_rmsea_robust <- NULL
+  mlr_rmsea_ci_lower_robust <- NULL
+  mlr_rmsea_ci_upper_robust <- NULL
+  mlr_rmsea_pvalue_robust <- NULL
+  mlr_rmsea_notclose_pvalue_robust <- NULL
   if (is.null(expect_error)) {
     mlr_args <- c(fit_args, list(estimator = "MLR"))
     fit_mlr <- tryCatch(suppressWarnings(do.call(fit_fun, mlr_args)),
                         error = function(e) e)
     if (!inherits(fit_mlr, "error") &&
         lavInspect(fit_mlr, "converged")) {
+      num_or_null <- function(x) {
+        y <- as.numeric(x)
+        if (!length(y) || any(!is.finite(y))) NULL else y
+      }
       pt_mlr <- parTable(fit_mlr)
       free_mlr <- pt_mlr[pt_mlr$free > 0, ]
       free_mlr <- free_mlr[order(free_mlr$free), ]
       se_robust_huberwhite <- as.numeric(free_mlr$se)
+      fm_mlr <- fitMeasures(fit_mlr)
+      mlr_cfi_scaled <- num_or_null(fm_mlr["cfi.scaled"])
+      mlr_tli_scaled <- num_or_null(fm_mlr["tli.scaled"])
+      mlr_rmsea_scaled <- num_or_null(fm_mlr["rmsea.scaled"])
+      mlr_rmsea_ci_lower_scaled <- num_or_null(fm_mlr["rmsea.ci.lower.scaled"])
+      mlr_rmsea_ci_upper_scaled <- num_or_null(fm_mlr["rmsea.ci.upper.scaled"])
+      mlr_rmsea_pvalue_scaled <- num_or_null(fm_mlr["rmsea.pvalue.scaled"])
+      mlr_rmsea_notclose_pvalue_scaled <-
+        num_or_null(fm_mlr["rmsea.notclose.pvalue.scaled"])
+      mlr_cfi_robust <- num_or_null(fm_mlr["cfi.robust"])
+      mlr_tli_robust <- num_or_null(fm_mlr["tli.robust"])
+      mlr_rmsea_robust <- num_or_null(fm_mlr["rmsea.robust"])
+      mlr_rmsea_ci_lower_robust <- num_or_null(fm_mlr["rmsea.ci.lower.robust"])
+      mlr_rmsea_ci_upper_robust <- num_or_null(fm_mlr["rmsea.ci.upper.robust"])
+      mlr_rmsea_pvalue_robust <- num_or_null(fm_mlr["rmsea.pvalue.robust"])
+      mlr_rmsea_notclose_pvalue_robust <-
+        num_or_null(fm_mlr["rmsea.notclose.pvalue.robust"])
       test_mlr <- lavInspect(fit_mlr, "test")$yuan.bentler.mplus
       if (!is.null(test_mlr)) {
-        num_or_null <- function(x) {
-          y <- as.numeric(x)
-          if (!length(y) || any(!is.finite(y))) NULL else y
-        }
         mlr_chisq_scaled <- num_or_null(test_mlr$stat)
         mlr_scaling_factor <- num_or_null(test_mlr$scaling.factor)
         mlr_scaling_factor_h1 <- num_or_null(test_mlr$scaling.factor.h1)
@@ -2203,6 +2234,20 @@ for (m in fiml_cases) {
     mlr_trace_ugamma = mlr_trace_ugamma,
     mlr_trace_ugamma_h1 = mlr_trace_ugamma_h1,
     mlr_trace_ugamma_h0 = mlr_trace_ugamma_h0,
+    mlr_cfi_scaled = mlr_cfi_scaled,
+    mlr_tli_scaled = mlr_tli_scaled,
+    mlr_rmsea_scaled = mlr_rmsea_scaled,
+    mlr_rmsea_ci_lower_scaled = mlr_rmsea_ci_lower_scaled,
+    mlr_rmsea_ci_upper_scaled = mlr_rmsea_ci_upper_scaled,
+    mlr_rmsea_pvalue_scaled = mlr_rmsea_pvalue_scaled,
+    mlr_rmsea_notclose_pvalue_scaled = mlr_rmsea_notclose_pvalue_scaled,
+    mlr_cfi_robust = mlr_cfi_robust,
+    mlr_tli_robust = mlr_tli_robust,
+    mlr_rmsea_robust = mlr_rmsea_robust,
+    mlr_rmsea_ci_lower_robust = mlr_rmsea_ci_lower_robust,
+    mlr_rmsea_ci_upper_robust = mlr_rmsea_ci_upper_robust,
+    mlr_rmsea_pvalue_robust = mlr_rmsea_pvalue_robust,
+    mlr_rmsea_notclose_pvalue_robust = mlr_rmsea_notclose_pvalue_robust,
     se_robust_two_stage = se_robust_two_stage,
     ml2s_chisq = ml2s_chisq,
     ml2s_chisq_scaled = ml2s_chisq_scaled,

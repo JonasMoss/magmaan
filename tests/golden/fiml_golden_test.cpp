@@ -352,6 +352,56 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
       }
     }
 
+    if (exp.contains("mlr_rmsea_robust") &&
+        finite_scalar_json(exp["mlr_rmsea_robust"]) &&
+        df > 0) {
+      auto corr_or = magmaan::estimate::fiml::fiml_corrected_fit_measures(
+          *pt, *mr, raw, est, df);
+      if (!corr_or.has_value()) {
+        failures.push_back(id + ": fiml_corrected_fit_measures — " +
+                           corr_or.error().detail);
+        ok = false;
+      } else {
+        const auto& rfm = corr_or->indices;
+        ok = cmp_finite("mlr_cfi_scaled", rfm.cfi_scaled,
+                        "mlr_cfi_scaled", 3e-4) && ok;
+        ok = cmp_finite("mlr_tli_scaled", rfm.tli_scaled,
+                        "mlr_tli_scaled", 3e-4) && ok;
+        ok = cmp_finite("mlr_rmsea_scaled", rfm.rmsea_scaled,
+                        "mlr_rmsea_scaled", 3e-4) && ok;
+        ok = cmp_finite("mlr_rmsea_ci_lower_scaled",
+                        rfm.rmsea_ci_lower_scaled,
+                        "mlr_rmsea_ci_lower_scaled", 5e-4) && ok;
+        ok = cmp_finite("mlr_rmsea_ci_upper_scaled",
+                        rfm.rmsea_ci_upper_scaled,
+                        "mlr_rmsea_ci_upper_scaled", 5e-4) && ok;
+        ok = cmp_finite("mlr_rmsea_pvalue_scaled",
+                        rfm.rmsea_pvalue_scaled,
+                        "mlr_rmsea_pvalue_scaled", 5e-4) && ok;
+        ok = cmp_finite("mlr_rmsea_notclose_pvalue_scaled",
+                        rfm.rmsea_notclose_pvalue_scaled,
+                        "mlr_rmsea_notclose_pvalue_scaled", 5e-4) && ok;
+        ok = cmp_finite("mlr_cfi_robust", rfm.cfi_robust,
+                        "mlr_cfi_robust", 3e-4) && ok;
+        ok = cmp_finite("mlr_tli_robust", rfm.tli_robust,
+                        "mlr_tli_robust", 3e-4) && ok;
+        ok = cmp_finite("mlr_rmsea_robust", rfm.rmsea_robust,
+                        "mlr_rmsea_robust", 3e-4) && ok;
+        ok = cmp_finite("mlr_rmsea_ci_lower_robust",
+                        rfm.rmsea_ci_lower_robust,
+                        "mlr_rmsea_ci_lower_robust", 5e-4) && ok;
+        ok = cmp_finite("mlr_rmsea_ci_upper_robust",
+                        rfm.rmsea_ci_upper_robust,
+                        "mlr_rmsea_ci_upper_robust", 5e-4) && ok;
+        ok = cmp_finite("mlr_rmsea_pvalue_robust",
+                        rfm.rmsea_pvalue_robust,
+                        "mlr_rmsea_pvalue_robust", 5e-4) && ok;
+        ok = cmp_finite("mlr_rmsea_notclose_pvalue_robust",
+                        rfm.rmsea_notclose_pvalue_robust,
+                        "mlr_rmsea_notclose_pvalue_robust", 5e-4) && ok;
+      }
+    }
+
     // ML2S (two-stage ML) vs lavaan missing="robust.two.stage". Stage 1 is the
     // saturated EM ACOV, Stage 2 is ML on the EM-completed moments (its own point
     // estimate, warm-started from the FIML θ̂). The Satorra-Bentler scaling uses

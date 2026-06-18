@@ -125,6 +125,20 @@ struct FIMLRobustMLR {
   std::int64_t ntotal            = 0;
 };
 
+struct FIMLCorrectedFitMeasures {
+  double xx3 = std::numeric_limits<double>::quiet_NaN();
+  int    df3 = 0;
+  double c_hat3 = std::numeric_limits<double>::quiet_NaN();
+  double xx3_scaled = std::numeric_limits<double>::quiet_NaN();
+
+  double xx3_null = std::numeric_limits<double>::quiet_NaN();
+  int    df3_null = 0;
+  double c_hat3_null = std::numeric_limits<double>::quiet_NaN();
+  double xx3_null_scaled = std::numeric_limits<double>::quiet_NaN();
+
+  measures::RobustFitMeasures indices;
+};
+
 struct TwoStageEMMLInference {
   Eigen::MatrixXd vcov;
   Eigen::VectorXd se;
@@ -289,6 +303,23 @@ fiml_robust_mlr(spec::LatentStructure pt,
                 double chisq,
                 const FIMLPack& pack,
                 const FIMLH1& h1);
+
+post_expected<FIMLCorrectedFitMeasures>
+fiml_corrected_fit_measures(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const RawData& raw,
+                            const Estimates& est,
+                            int df,
+                            FIML discrepancy = {});
+
+post_expected<FIMLCorrectedFitMeasures>
+fiml_corrected_fit_measures(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const RawData& raw,
+                            const Estimates& est,
+                            int df,
+                            const FIMLPack& pack,
+                            const FIMLH1& h1);
 
 // Shared sandwich ingredients for the FIML MLR corner: the analytic
 // per-observation-averaged deviance Hessian `H` (the bare averaged Hessian, so

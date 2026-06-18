@@ -62,6 +62,52 @@ struct FitMeasures {
   double rmsea_notclose_h0     = 0.08;
 };
 
+struct RobustFitMeasureInputs {
+  double chi2 = 0.0;
+  int    df = 0;
+  double chi2_scaled = 0.0;
+  double scaling_factor = 1.0;
+
+  double baseline_chi2 = 0.0;
+  int    baseline_df = 0;
+  double baseline_chi2_scaled = 0.0;
+  double baseline_scaling_factor = 1.0;
+
+  std::int64_t n_total = 0;
+  std::size_t  n_groups = 1;
+  double rmsea_close_h0 = 0.05;
+  double rmsea_notclose_h0 = 0.08;
+};
+
+struct RobustFitMeasures {
+  double chisq_scaled = 0.0;
+  int    df_scaled = 0;
+  double pvalue_scaled = 0.0;
+  double chisq_scaling_factor = 1.0;
+
+  double baseline_chisq_scaled = 0.0;
+  int    baseline_df_scaled = 0;
+  double baseline_pvalue_scaled = 0.0;
+  double baseline_chisq_scaling_factor = 1.0;
+
+  double cfi_scaled = 0.0;
+  double tli_scaled = 0.0;
+  double cfi_robust = 0.0;
+  double tli_robust = 0.0;
+
+  double rmsea_scaled = 0.0;
+  double rmsea_ci_lower_scaled = 0.0;
+  double rmsea_ci_upper_scaled = 0.0;
+  double rmsea_pvalue_scaled = 0.0;
+  double rmsea_notclose_pvalue_scaled = 0.0;
+
+  double rmsea_robust = 0.0;
+  double rmsea_ci_lower_robust = 0.0;
+  double rmsea_ci_upper_robust = 0.0;
+  double rmsea_pvalue_robust = 0.0;
+  double rmsea_notclose_pvalue_robust = 0.0;
+};
+
 // `chi2_user` / `df_user` are the model fit statistic and df — typically
 // `chi2_stat(samp, est)` / `df_stat(pt, samp).value()` for the user model,
 // or the corresponding values from a separately-computed test (e.g. Browne).
@@ -75,6 +121,9 @@ FitMeasures fit_measures(double            chi2_user,
                          int               df_user,
                          const BaselineFit& baseline,
                          const SampleStats& samp) noexcept;
+
+RobustFitMeasures
+robust_fit_measures(const RobustFitMeasureInputs& in) noexcept;
 
 // Fit indices that need the implied moments Σ̂(θ̂) (and the sample
 // S / means / n) — the log-likelihood-based information criteria and SRMR.
