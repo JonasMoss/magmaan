@@ -1473,6 +1473,7 @@ for (oc in ordinal_pairwise_cases) {
   fits <- NULL
   if (isTRUE(oc$fit)) {
     fits <- list(DWLS = ordinal_fit_json(fit_wlsmv))
+    fits$DWLS$catml_dwls_rmsea <- ordinal_catml_dwls_rmsea_json(fit_wlsmv)
   }
 
   payload <- list(

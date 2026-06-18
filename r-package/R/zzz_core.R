@@ -207,6 +207,7 @@ sim_ordcorr_summary_calibrate <- sim_ordcorr_summary_calibrate_impl
 sim_ordcorr_mg_summary_calibrate <- sim_ordcorr_mg_summary_calibrate_impl
 
 measures_baseline <- infer_baseline
+measures_ordinal_catml_dwls_rmsea <- ordinal_catml_dwls_rmsea_impl
 measures_compute_defined <- compute_defined_impl
 frontier_fcsem_standard_errors <- fcsem_standard_errors_impl
 frontier_fcsem_fit_measures <- fcsem_fit_measures_impl
@@ -384,6 +385,7 @@ magmaan_core <- local({
     measures = c(
       "measures_baseline",
       "measures_fit",
+      "measures_ordinal_catml_dwls_rmsea",
       "measures_standardize_lv",
       "measures_standardize_all",
       "measures_composite_weights",
@@ -550,6 +552,7 @@ magmaan_core <- local({
       "infer_robust_se_raw",
       "infer_robust_se_raw_parts",
       "infer_baseline",
+      "ordinal_catml_dwls_rmsea_impl",
       "compute_defined_impl",
       "measures_composite_weights",
       "infer_vcov_fit",

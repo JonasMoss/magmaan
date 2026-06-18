@@ -45,6 +45,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 27 | [pairwise-composite-nested](27-pairwise-composite-nested/report.qmd) | probe | active | Does the frontier pairwise/composite ordinal estimator produce usable nested LR inference under a small ordinal MCAR loading-equality setup? |
 | 28 | [ordinal-stage2-pairwise](28-ordinal-stage2-pairwise/report.qmd) | benchmark | active | When pairwise ordinal Gamma is reused, how do ULS/DWLS/WLS/NT/DLS stage-two estimators compare on p-values, SE diagnostics, and runtime? |
 | 29 | [chen-2020-wlsmv-pd](29-chen-2020-wlsmv-pd/report.qmd) | replication | active | Can the Chen et al. (2020) WLSMV_PD Type-I inflation cell be reproduced with current lavaan WLSMV pairwise deletion? |
+| 30 | [rmsea-like-catml-dwls](30-rmsea-like-catml-dwls/report.qmd) | probe | active | Does lavaan's categorical robust RMSEA behave as a consistent CATML-at-DWLS criterion-at-estimator statistic under ordinal misspecification? |
 
 ## Archived
 

@@ -867,6 +867,18 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ordinal_catml_dwls_rmsea_impl
+Rcpp::List ordinal_catml_dwls_rmsea_impl(Rcpp::List fit, SEXP ordinal_stats);
+RcppExport SEXP _magmaan_ordinal_catml_dwls_rmsea_impl(SEXP fitSEXP, SEXP ordinal_statsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type ordinal_stats(ordinal_statsSEXP);
+    rcpp_result_gen = Rcpp::wrap(ordinal_catml_dwls_rmsea_impl(fit, ordinal_stats));
+    return rcpp_result_gen;
+END_RCPP
+}
 // estimate_fiml_robust_mlr
 Rcpp::List estimate_fiml_robust_mlr(Rcpp::List fit, double h_step);
 RcppExport SEXP _magmaan_estimate_fiml_robust_mlr(SEXP fitSEXP, SEXP h_stepSEXP) {
@@ -2498,6 +2510,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_df_stat", (DL_FUNC) &_magmaan_infer_df_stat, 2},
     {"_magmaan_infer_baseline", (DL_FUNC) &_magmaan_infer_baseline, 1},
     {"_magmaan_measures_fit", (DL_FUNC) &_magmaan_measures_fit, 4},
+    {"_magmaan_ordinal_catml_dwls_rmsea_impl", (DL_FUNC) &_magmaan_ordinal_catml_dwls_rmsea_impl, 2},
     {"_magmaan_estimate_fiml_robust_mlr", (DL_FUNC) &_magmaan_estimate_fiml_robust_mlr, 2},
     {"_magmaan_estimate_two_stage_em_ml_inference", (DL_FUNC) &_magmaan_estimate_two_stage_em_ml_inference, 5},
     {"_magmaan_two_stage_stage2_weight_blocks_impl", (DL_FUNC) &_magmaan_two_stage_stage2_weight_blocks_impl, 3},

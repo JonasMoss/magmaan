@@ -58,6 +58,14 @@ struct OrdinalFitMeasures {
   double srmr = 0.0;
 };
 
+struct OrdinalCatmlDwlsRmsea {
+  double xx3 = 0.0;
+  int df3 = 0;
+  double c_hat3 = 0.0;
+  double xx3_scaled = 0.0;
+  double rmsea_robust = 0.0;
+};
+
 fit_expected<void>
 prepare_ordinal_delta_partable(spec::LatentStructure& pt,
                                 const data::OrdinalStats& stats,
@@ -445,6 +453,14 @@ fit_measures_ordinal(spec::LatentStructure pt,
                      OrdinalWeightKind weights,
                      OrdinalParameterization parameterization =
                          OrdinalParameterization::Delta);
+
+post_expected<OrdinalCatmlDwlsRmsea>
+catml_dwls_rmsea_ordinal(spec::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const data::OrdinalStats& stats,
+                         const Estimates& est,
+                         OrdinalParameterization parameterization =
+                             OrdinalParameterization::Delta);
 
 post_expected<OrdinalFitMeasures>
 fit_measures_mixed_ordinal(spec::LatentStructure pt,
