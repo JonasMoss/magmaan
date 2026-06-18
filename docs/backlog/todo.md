@@ -17,6 +17,15 @@ Small open items surfaced while fixing the standardized-solution and Kline/Guo
 parity bugs (the fixes themselves are recorded in the test ledger; the ADF
 `spectral_truncate` follow-up moved to [speculative.md](speculative.md)).
 
+- **M — automatic robust fit-measure dispatch.** The lavaan-style robust/scaled
+  fit-measure formulas are available for the core global-index family
+  (`chisq.scaled`, scaled baseline, CFI/TLI, RMSEA CI/p-values) once the user
+  and baseline scaling factors are supplied. Remaining work is estimator-specific
+  plumbing: build the independence/baseline robust scaling for complete-data
+  MLM/MLR, the FIML corrected `XX3`/baseline reduction, and all-ordinal WLSMV
+  baseline CATML ingredients, then let `fit_measures(fit, robust = "MLM"/"MLR"/
+  "WLSMV")` compute those scalars automatically.
+
 - **Ordinal-SEM standardized solution / defined params / factor scores —
   mostly landed 2026-06.** Decided: `compute_defined` is valid for ordinal/mixed
   fits (a parameterization-agnostic delta-method transform) and its guard was

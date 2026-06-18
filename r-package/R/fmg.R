@@ -768,6 +768,131 @@ fmg_pvalues <- function(fit, data = NULL, tests = NULL,
   out
 }
 
+.fit_rmsea_family <- function(x2, df, n, g = 1L, c_hat = 1,
+                              close_h0 = 0.05, notclose_h0 = 0.08) {
+  out <- list(
+    rmsea = 0,
+    rmsea.ci.lower = 0,
+    rmsea.ci.upper = 0,
+    rmsea.pvalue = NA_real_,
+    rmsea.notclose.pvalue = NA_real_
+  )
+  if (!is.finite(x2) || !is.finite(df) || !is.finite(n) ||
+      !is.finite(c_hat) || df <= 0 || n <= 0 || c_hat <= 0) {
+    return(out)
+  }
+  g <- max(1L, as.integer(g))
+  out$rmsea <- sqrt(max((x2 / n) / df - c_hat / n, 0)) * sqrt(g)
+  lower_lambda <- function(lambda) pchisq(x2, df = df, ncp = lambda) - 0.95
+  upper_lambda <- function(lambda) pchisq(x2, df = df, ncp = lambda) - 0.05
+  if (df >= 1 && lower_lambda(0) >= 0) {
+    lambda_l <- try(uniroot(lower_lambda, lower = 0, upper = x2)$root,
+                    silent = TRUE)
+    if (!inherits(lambda_l, "try-error") && is.finite(lambda_l)) {
+      out$rmsea.ci.lower <- sqrt(c_hat * lambda_l / (n * df)) * sqrt(g)
+    }
+  }
+  n_rmsea <- max(n, x2 * 4)
+  if (df >= 1 && upper_lambda(n_rmsea) <= 0 && upper_lambda(0) >= 0) {
+    lambda_u <- try(uniroot(upper_lambda, lower = 0, upper = n_rmsea)$root,
+                    silent = TRUE)
+    if (!inherits(lambda_u, "try-error") && is.finite(lambda_u)) {
+      out$rmsea.ci.upper <- sqrt(c_hat * lambda_u / (n * df)) * sqrt(g)
+    }
+  }
+  ncp_close <- n * df * close_h0^2 / (g * c_hat)
+  ncp_notclose <- n * df * notclose_h0^2 / (g * c_hat)
+  out$rmsea.pvalue <- 1 - pchisq(x2, df = df, ncp = ncp_close)
+  out$rmsea.notclose.pvalue <- pchisq(x2, df = df, ncp = ncp_notclose)
+  out
+}
+
+.fit_cfi <- function(x2, df, x2_null, df_null, c_hat = 1,
+                     c_hat_null = 1, robust = FALSE) {
+  adj <- if (robust) c_hat else 1
+  adj_null <- if (robust) c_hat_null else 1
+  t1 <- max(x2 - adj * df, 0)
+  t2 <- max(x2 - adj * df, x2_null - adj_null * df_null, 0)
+  if (isTRUE(all.equal(t1, 0)) && isTRUE(all.equal(t2, 0))) 1 else 1 - t1 / t2
+}
+
+.fit_tli <- function(x2, df, x2_null, df_null, c_hat = 1,
+                     c_hat_null = 1, robust = FALSE) {
+  if (df <= 0) return(1)
+  adj <- if (robust) c_hat else 1
+  adj_null <- if (robust) c_hat_null else 1
+  t1 <- (x2 - adj * df) * df_null
+  t2 <- (x2_null - adj_null * df_null) * df
+  if (abs(t2) > 0) 1 - t1 / t2 else NA_real_
+}
+
+.robust_fit_measures_from_scalars <- function(x, n_total, n_groups = 1L,
+                                              close_h0 = 0.05,
+                                              notclose_h0 = 0.08) {
+  need <- c("chisq", "df", "chisq.scaled", "chisq.scaling.factor",
+            "baseline.chisq", "baseline.df", "baseline.chisq.scaled",
+            "baseline.chisq.scaling.factor")
+  miss <- setdiff(need, names(x))
+  if (length(miss)) {
+    stop("fit_measures(): robust scalar list is missing: ",
+         paste(miss, collapse = ", "), call. = FALSE)
+  }
+  df <- as.numeric(x$df)
+  c_hat <- as.numeric(x$chisq.scaling.factor)
+  df_scaled_rmsea <- df * c_hat
+  rmsea_scaled <- .fit_rmsea_family(as.numeric(x$chisq), df_scaled_rmsea,
+                                    n_total, n_groups, 1,
+                                    close_h0, notclose_h0)
+  rmsea_robust_value <- .fit_rmsea_family(as.numeric(x$chisq), df,
+                                          n_total, n_groups, c_hat,
+                                          close_h0, notclose_h0)
+  rmsea_robust_tail <- .fit_rmsea_family(as.numeric(x$chisq.scaled), df,
+                                         n_total, n_groups, c_hat,
+                                         close_h0, notclose_h0)
+  list(
+    chisq.scaled = as.numeric(x$chisq.scaled),
+    df.scaled = as.integer(x$df),
+    pvalue.scaled = pchisq(as.numeric(x$chisq.scaled), df = df,
+                           lower.tail = FALSE),
+    chisq.scaling.factor = c_hat,
+    baseline.chisq.scaled = as.numeric(x$baseline.chisq.scaled),
+    baseline.df.scaled = as.integer(x$baseline.df),
+    baseline.pvalue.scaled =
+      pchisq(as.numeric(x$baseline.chisq.scaled),
+             df = as.numeric(x$baseline.df), lower.tail = FALSE),
+    baseline.chisq.scaling.factor =
+      as.numeric(x$baseline.chisq.scaling.factor),
+    cfi.scaled = .fit_cfi(as.numeric(x$chisq.scaled), df,
+                          as.numeric(x$baseline.chisq.scaled),
+                          as.numeric(x$baseline.df)),
+    tli.scaled = .fit_tli(as.numeric(x$chisq.scaled), df,
+                          as.numeric(x$baseline.chisq.scaled),
+                          as.numeric(x$baseline.df)),
+    cfi.robust = .fit_cfi(as.numeric(x$chisq), df,
+                          as.numeric(x$baseline.chisq),
+                          as.numeric(x$baseline.df),
+                          c_hat,
+                          as.numeric(x$baseline.chisq.scaling.factor),
+                          robust = TRUE),
+    tli.robust = .fit_tli(as.numeric(x$chisq), df,
+                          as.numeric(x$baseline.chisq),
+                          as.numeric(x$baseline.df),
+                          c_hat,
+                          as.numeric(x$baseline.chisq.scaling.factor),
+                          robust = TRUE),
+    rmsea.scaled = rmsea_scaled$rmsea,
+    rmsea.ci.lower.scaled = rmsea_scaled$rmsea.ci.lower,
+    rmsea.ci.upper.scaled = rmsea_scaled$rmsea.ci.upper,
+    rmsea.pvalue.scaled = rmsea_scaled$rmsea.pvalue,
+    rmsea.notclose.pvalue.scaled = rmsea_scaled$rmsea.notclose.pvalue,
+    rmsea.robust = rmsea_robust_value$rmsea,
+    rmsea.ci.lower.robust = rmsea_robust_tail$rmsea.ci.lower,
+    rmsea.ci.upper.robust = rmsea_robust_tail$rmsea.ci.upper,
+    rmsea.pvalue.robust = rmsea_robust_tail$rmsea.pvalue,
+    rmsea.notclose.pvalue.robust = rmsea_robust_tail$rmsea.notclose.pvalue
+  )
+}
+
 #' Normal-theory fit measures, optionally with FMG robust p-values.
 #'
 #' Convenience wrapper over the existing fit-measure primitives. By default it
@@ -779,10 +904,13 @@ fmg_pvalues <- function(fit, data = NULL, tests = NULL,
 #' @param baseline Optional baseline result from `magmaan_core$measures_baseline()`.
 #' @param fmg `NULL`/`FALSE` for no FMG table, `TRUE` for default FMG tests, or
 #'   a character vector of FMG test names.
+#' @param robust Optional scalar list with lavaan-style scaled user and baseline
+#'   test fields. Automatic robust estimator dispatch is not yet wired.
 #' @param data Optional complete raw data used only when FMG is requested and
 #'   the fit does not carry `$raw_data`.
 #' @export
-fit_measures <- function(fit, baseline = NULL, fmg = NULL, data = NULL) {
+fit_measures <- function(fit, baseline = NULL, fmg = NULL, robust = NULL,
+                         data = NULL) {
   ss <- fit_sample_stats(fit)
   chi2 <- infer_chi2_stat(ss, fit$fmin)
   df <- infer_df_stat(fit$partable, ss)
@@ -795,6 +923,15 @@ fit_measures <- function(fit, baseline = NULL, fmg = NULL, data = NULL) {
     baseline.chisq = baseline$chi2,
     baseline.df = baseline$df
   ), fm)
+  if (!is.null(robust) && !identical(robust, FALSE)) {
+    if (!is.list(robust)) {
+      stop("fit_measures(): automatic robust = 'MLM'/'MLR' dispatch is not ",
+           "wired yet; pass a scalar robust list.", call. = FALSE)
+    }
+    n_total <- sum(as.numeric(ss$nobs))
+    n_groups <- length(ss$nobs)
+    out <- c(out, .robust_fit_measures_from_scalars(robust, n_total, n_groups))
+  }
   if (!is.null(fmg) && !identical(fmg, FALSE)) {
     tests <- if (isTRUE(fmg)) NULL else fmg
     out$fmg <- fmg_tests(fit, tests = tests, data = data)
