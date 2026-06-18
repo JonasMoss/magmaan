@@ -1402,6 +1402,106 @@ for (oc in ordinal_cases) {
 cat("regenerated", length(regenerated_ord), "ordinal fixtures under",
     ordinal_dir, "\n")
 
+# === ordinal pairwise-deletion layer =======================================
+# All-ordinal missing-data fixtures. These intentionally live outside the
+# complete/listwise ordinal fixture list because the C++ consumer must preserve
+# NA entries and use `ordinal_stats_from_observed_integer_data()`.
+
+ordinal_pairwise_dir <- file.path(fixtures, "ordinal_pairwise")
+dir.create(ordinal_pairwise_dir, showWarnings = FALSE, recursive = TRUE)
+
+make_chen_pairwise_ord_df <- function() {
+  set.seed(202L)
+  ov <- paste0("x", 1:4)
+  cuts <- c(-1.15, -0.35, 0.45, 1.25)
+  draw_group <- function(n, label, mean_shift = 0) {
+    eta <- rnorm(n)
+    out <- as.data.frame(lapply(seq_along(ov), function(j) {
+      lambda <- 0.55 + 0.06 * j
+      z <- lambda * eta + rnorm(n, sd = sqrt(1 - lambda^2)) + mean_shift
+      ordered(cut(z, c(-Inf, cuts, Inf), labels = FALSE), levels = 1:5)
+    }))
+    names(out) <- ov
+    out$school <- label
+    out
+  }
+  out <- rbind(draw_group(280L, "A"),
+               draw_group(260L, "B", mean_shift = 0.10))
+  set.seed(303L)
+  b <- which(out$school == "B")
+  out$x3[b[sample.int(length(b), 90L)]] <- NA
+  out$x4[b[sample.int(length(b), 110L)]] <- NA
+  out
+}
+
+ordinal_pairwise_cases <- list(
+  list(id = "0001_chen_style_2group_item_missing",
+       model = ordinal_model_4,
+       data = make_chen_pairwise_ord_df(),
+       ordered = paste0("x", 1:4),
+       group = "school",
+       fit = TRUE)
+)
+
+regenerated_ord_pairwise <- character(0)
+for (oc in ordinal_pairwise_cases) {
+  id <- oc$id
+  ov <- oc$ordered
+  df <- oc$data
+  group_var <- if (is.null(oc$group)) "" else oc$group
+
+  blocks <- list()
+  if (nzchar(group_var)) {
+    labels <- unique(as.character(df[[group_var]]))
+    for (b in seq_along(labels)) {
+      mat <- ordered_to_int_matrix(
+        df[as.character(df[[group_var]]) == labels[[b]], , drop = FALSE], ov)
+      blocks[[b]] <- list(block = as.integer(b - 1L),
+                          label = labels[[b]],
+                          matrix = unname(mat))
+    }
+  } else {
+    blocks[[1]] <- list(block = 0L, label = "",
+                        matrix = unname(ordered_to_int_matrix(df, ov)))
+  }
+
+  grp_args <- if (nzchar(group_var)) list(group = group_var) else list()
+  fit_wlsmv <- do.call(cfa, c(list(model = oc$model, data = df, ordered = ov,
+                                   estimator = "WLSMV",
+                                   missing = "pairwise"),
+                              grp_args))
+  fits <- NULL
+  if (isTRUE(oc$fit)) {
+    fits <- list(DWLS = ordinal_fit_json(fit_wlsmv))
+  }
+
+  payload <- list(
+    `_meta` = list(format_version = 1L,
+                   fixture_kind = "ordinal_pairwise",
+                   corpus_id = id,
+                   tool = paste("lavaan::cfa(ordered=..., estimator=WLSMV,",
+                                "missing='pairwise')"),
+                   lavaan_version = installed),
+    input = oc$model,
+    ordered = ov,
+    group_var = if (nzchar(group_var)) group_var else NULL,
+    missing = "pairwise",
+    pd_gamma = "overlap",
+    blocks = blocks,
+    sample_stats = ordinal_samp_json(fit_wlsmv),
+    fits = fits
+  )
+
+  out_path <- file.path(ordinal_pairwise_dir,
+                        paste0(id, ".ordinal_pairwise.json"))
+  write_json(payload, out_path, pretty = TRUE, auto_unbox = TRUE,
+             null = "null", na = "null", digits = NA)
+  regenerated_ord_pairwise <- c(regenerated_ord_pairwise, out_path)
+}
+
+cat("regenerated", length(regenerated_ord_pairwise),
+    "ordinal pairwise fixtures under", ordinal_pairwise_dir, "\n")
+
 # === mixed continuous/ordinal categorical fixtures ==========================
 
 mixed_ordinal_dir <- file.path(fixtures, "mixed_ordinal")
