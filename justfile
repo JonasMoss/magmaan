@@ -235,6 +235,11 @@ check-layering:
 # before the slow build.
 check: check-layering vendor-check test r-check
 
+# FIML-FMG paper endpoint sync. Dry-run unless the nested helper receives
+# `--apply`, e.g. `just fmg-sync export-overleaf --apply`.
+fmg-sync *ARGS:
+    cd papers/fiml-fmg && scripts/sync_external.sh {{ARGS}}
+
 notes_dir := "docs/research/notes"
 
 # Build one research note (named, or the most recently edited) and open the PDF.
