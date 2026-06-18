@@ -279,6 +279,99 @@ Thus the MCAR headline comparison is not
   \text{spectrum-aware FMG reference law}.
 \]
 
+\section*{What the Mplus variant actually computes}
+
+The previous section called \(c_{\mathrm{SB}}\) lavaan's
+\texttt{yuan.bentler.mplus} (the \texttt{estimator = "MLR"}) scaling and said the
+Mplus branding only hides a finite-sample bookkeeping of
+\(\tr\{U(V)\Gamma_{\mathrm{mis}}\}\). This section makes that bookkeeping
+explicit, because it is the one place the Mplus default departs from the exact
+saturated-space construction used by FMG.
+
+Write the saturated curvature and meat as \(V=H_\eta\) and \(J=J_\eta\), so that
+\(\Gamma_{\mathrm{mis}}=V^{-1}JV^{-1}\) and
+\(U(V)=V-V\Delta(\Delta'V\Delta)^{-1}\Delta'V\). A cyclic trace splits the
+reference-law mean into two pieces,
+\[
+  \tr\{U(V)\Gamma_{\mathrm{mis}}\}
+    =
+  \underbrace{\tr(V^{-1}J)}_{\text{h1: saturated}}
+  \;-\;
+  \underbrace{\tr\{(\Delta'V\Delta)^{-1}(\Delta'J\Delta)\}}_{\text{h0: restricted}} .
+\]
+Each term is an ``effective number of parameters'' \(\tr(A^{-1}B)\): the
+saturated H1 fit, minus the restricted SEM. Under information equality
+\(J=V\) both traces collapse to ordinary parameter counts and the difference is
+exactly \(\mathrm{df}\); non-normality is what makes each \(\tr(A^{-1}B)\) depart
+from its parameter count.
+
+The exact construction forms \(U(V)\) and \(\Gamma_{\mathrm{mis}}\) from \(V\),
+\(J\), and \(\Delta\) directly. The Mplus variant instead reads the two traces
+off the two \emph{separate} fits,
+\[
+  \tr\{U(V)\Gamma_{\mathrm{mis}}\}
+  \;\approx\;
+  \tr(V_N^{-1}J_N)
+  \;-\;
+  \tr(A_0^{-1}B_0),
+\]
+where \(V_N,J_N\) are the saturated bread and meat at the EM fit \(\hat\eta\)
+(with the H1 curvature forced \emph{unstructured}; it is never read at the
+model-implied moments), \(A_0\) is the restricted model's own information, and
+\(B_0=\sum_i s_i s_i'\) is the cross-product of the restricted model's casewise
+score vectors \(s_i=\partial\ell_i/\partial\theta\). The remaining steps are
+unchanged: \(c_{\mathrm{SB}}=\tr/\mathrm{df}\), referred to \(\chi^2_{\mathrm{df}}\).
+
+\paragraph{Where the slack is.} The restricted meat is \emph{exact}: by the
+score chain rule \(s_i=\Delta'h_i\), so
+\(B_0=\Delta'(\sum_i h_ih_i')\Delta=\Delta'J_N\Delta\) identically. The
+approximation lives entirely in \(A_0\). The expected information satisfies
+\(A_0=\Delta'V\Delta\) exactly, because the expected (Gauss--Newton) curvature
+drops the second-derivative term. The observed Hessian keeps it:
+\[
+  A_0^{\mathrm{obs}}
+    =
+  \Delta'V\Delta
+  \;+\;
+  \sum_k \frac{\partial^2\eta_k}{\partial\theta\,\partial\theta'}\, g_k,
+\]
+where \(g_k\) is the H1 moment gradient, proportional to the
+saturated-versus-model residual \(\hat\eta-\eta(\hat\theta)\). That extra term
+vanishes only at the population truth and as \(N\to\infty\). So under the MLR
+observed-information default, \(\tr(A_0^{-1}B_0)\) only approximates
+\(\tr\{(\Delta'V\Delta)^{-1}\Delta'J\Delta\}\), and the two-trace difference
+equals \(\tr\{U(V)\Gamma_{\mathrm{mis}}\}\) only up to that finite-sample
+curvature term \cite{yuanbentler2000,savalei2010}. This is the precise content
+of ``differs only in finite-sample bookkeeping, not in being mean-only.''
+
+\paragraph{Two structural consequences.} First, because the trace is read off
+two plug-in fits, the H1 curvature on this route is always the
+saturated/unstructured one; the structured \(V\) of the next section is not even
+an option for \texttt{yuan.bentler.mplus}. Second, the shortcut returns the
+trace but not \(\tr\{(U(V)\Gamma_{\mathrm{mis}})^2\}\). With only the first
+spectral moment in hand, the Mplus variant cannot assemble a
+mean-and-variance-adjusted or scaled--shifted statistic from these matrices; it
+is \emph{structurally} mean-only, however dispersed the \(\lambda_j\) actually
+are. The FMG family, which keeps \(J_N\), \(V_N\), and \(\Delta\) and rebuilds
+the whole spectrum, is exactly what is unavailable once the trace has been
+collapsed this way.
+
+\paragraph{Provenance.} The mean-scaled FIML statistic and its exact trace are
+Yuan and Bentler's \cite{yuanbentler2000}: their Eq.~(18) writes the scaling as
+\(\tr(\hat V_{\hat\beta}\hat V_1)\) with \(\hat V_1 = H_1 - H_1\hat\beta
+(\hat\beta'H_1\hat\beta)^{-1}\hat\beta'H_1\), i.e.\ the projector \(U(V)\)
+contracted with the sandwich covariance, generalizing Satorra--Bentler
+\cite{satorrabentler1994} to incomplete data. They document the \emph{target},
+not the shortcut. The two-trace realization above is the Mplus MLR
+implementation; the only thing that makes it Mplus rather than exact is the
+choice of \(A_0\): Mplus's MLM uses the expected information (for which
+\(A_0=\Delta'V\Delta\), and the shortcut is exact), while MLR uses the observed
+Hessian (for which it is only approximate). Mplus presents this as the robust
+correction, not as an approximation; the expected-versus-observed reading that
+exposes the slack is Savalei's \cite{savalei2010}. The underlying decomposition
+\(\tr(A_1^{-1}B_1)-\tr(A_0^{-1}B_0)\) is just the mean of a misspecified
+likelihood ratio \cite{white1982}, not specific to the FIML setting.
+
 \section*{Structured versus saturated \(V\)}
 
 In words: the \emph{saturated} (``unstructured'') choice reads the H1 curvature

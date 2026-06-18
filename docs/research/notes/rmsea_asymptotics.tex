@@ -1,0 +1,421 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{The Asymptotics of RMSEA and Its Robust Corrections}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\plim}{\operatorname*{plim}}
+\newcommand{\rmsea}{\widehat{\varepsilon}}
+\newcommand{\dto}{\xrightarrow{d}}
+\newcommand{\pto}{\xrightarrow{p}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+RMSEA is the sample root of a \emph{population} quantity: the noncentrality of
+the model's discrepancy per degree of freedom. Its entire asymptotic meaning is
+fixed by one device, a sequence of local alternatives (Pitman drift), which
+turns the divergent exact-fit chi-square into a convergent \emph{noncentral}
+chi-square whose noncentrality is what RMSEA estimates. The robust variants
+keep that target but replace the clean normal-theory limit by the general
+non-normal quadratic-form limit; the correction is exactly the removal of the
+mean inflation that non-normality injects into the noncentrality estimate.
+
+This note records the chain twice. Under normality:
+exact-fit limit $\to$ local drift $\to$ noncentral $\chi^2$ $\to$ RMSEA. Under
+non-normality: general quadratic-form limit $\to$ mean inflation
+$\tr(U\Gamma)\ne df$ $\to$ scaled and robust RMSEA. The single load-bearing
+identity is that for a quadratic form the misspecification noncentrality and the
+sampling-noise mean are \emph{additive and separable} (Theorem~\ref{thm:robust}),
+so the robust point estimate is exact to leading order while only the reference
+distribution needs an approximation.
+
+\section{Setup and the exact-fit limit}
+
+Let $\hat\sigma=\vech\hat\Sigma$ stack the $p^\ast=p(p{+}1)/2$ distinct sample
+covariances (append the means for a mean structure; the algebra is unchanged).
+The structural model is a smooth map $\theta\mapsto\sigma(\theta)$,
+$\theta\in\mathbb{R}^t$, with full-column-rank Jacobian
+$\dot\sigma=\partial\sigma/\partial\theta'$ ($p^\ast\times t$). The model has
+\[
+  df = p^\ast - t
+\]
+degrees of freedom. A discrepancy $F(\hat\sigma;\sigma(\theta))\ge0$, minimized
+at $\hat\theta$, defines the test statistic
+\[
+  T = n\,\hat F, \qquad \hat F = F\{\hat\sigma;\sigma(\hat\theta)\},
+\]
+where $n$ is the sample-size multiplier: $n=N-1$ in the classical
+Browne--Cudeck convention, $n=N$ in lavaan and in magmaan (where
+$\texttt{fmin}=\tfrac12 F$ and $\texttt{chi2\_stat}=2N\cdot\texttt{fmin}=N F$).
+For ML, $F_{\mathrm{ML}}=\tr(\hat\Sigma\,\Sigma(\theta)^{-1})-\log|\hat\Sigma\,\Sigma(\theta)^{-1}|-p$.
+
+The local geometry is governed by the discrepancy's Hessian in the moment
+argument at the truth, $\tfrac12\partial^2F/\partial\sigma\,\partial\sigma'=V$.
+For ML and GLS, $V=\tfrac12 D'(\Sigma^{-1}\otimes\Sigma^{-1})D$ with $D$ the
+duplication matrix, and $V=\Gamma_{\mathrm{NT}}^{-1}$, the inverse of the
+normal-theory covariance of $\sqrt n\,\hat\sigma$. Define the
+\emph{residual-weight projector}
+\begin{equation}\label{eq:U}
+  U = V - V\dot\sigma(\dot\sigma'V\dot\sigma)^{-1}\dot\sigma'V,
+  \qquad U\dot\sigma = 0,\quad \rank U = p^\ast-t = df.
+\end{equation}
+$U$ annihilates the model tangent space and keeps its $V$-orthogonal complement;
+it is the object every limit law below is a quadratic form in.
+
+\begin{theorem}[Exact-fit limit]\label{thm:exact}
+Suppose the model is correct, $\sigma_0=\sigma(\theta_0)$, the data are i.i.d.\
+multivariate normal, and $\theta_0$ is identified with $\dot\sigma$ of full rank.
+Then $T\dto\chi^2_{df}$.
+\end{theorem}
+
+\begin{proof}
+By the delta method $z:=\sqrt n(\hat\sigma-\sigma_0)\dto N(0,\Gamma)$ with
+$\Gamma=\Gamma_{\mathrm{NT}}=V^{-1}$ under normality. A second-order expansion of
+$\hat F$ about the truth, profiled over $\theta$, gives $T=z'Uz+o_p(1)$. With
+$\Gamma=V^{-1}$, the matrix $U\Gamma=UV^{-1}$ is idempotent: writing
+$P=\dot\sigma(\dot\sigma'V\dot\sigma)^{-1}\dot\sigma'V$ (so $P^2=P$),
+$UV^{-1}=I-VPV^{-1}$ and $(UV^{-1})^2=UV^{-1}$, of rank $p^\ast-t=df$. A quadratic
+form $z'Uz$ with $z\sim N(0,\Gamma)$ and $U\Gamma$ idempotent of rank $df$ is
+$\chi^2_{df}$.
+\end{proof}
+
+So a correct model still spends $\E[T]\approx df$ of chi-square on pure sampling
+noise. The defect of $T$ as a fit measure is the next line.
+
+\begin{corollary}[Why the exact-fit test is not a fit measure]\label{cor:diverge}
+If the model is incorrect, with population discrepancy
+$F_0=\min_\theta F\{\sigma_0;\sigma(\theta)\}>0$, then $T=n\hat F\pto\infty$ at
+rate $n$, so for any fixed nonzero misspecification the exact-fit test rejects
+with probability $\to1$. The reject/retain dichotomy carries no information
+about the \emph{size} of the misspecification at usable $N$.
+\end{corollary}
+
+$F_0$ is the right population target: $F_0=0$ iff the model holds, and $F_0$
+grades misspecification in the discrepancy metric. But $F_0>0$ fixed makes $T$
+diverge, so there is no limiting law to invert into a confidence statement. The
+resolution is to let the misspecification shrink with $N$.
+
+\section{Local asymptotics: the noncentral chi-square}
+
+The device, due to Steiger, Shapiro and Browne \cite{steigershapirobrowne1985}
+following the general theory of sequential chi-square statistics and noncentral
+limits (Shapiro \cite{shapiro1983}; Satorra \cite{satorra1989}), is a
+\emph{sequence of local alternatives}: let the population move toward the model
+along a fixed off-model direction at the $\sqrt n$ rate,
+\begin{equation}\label{eq:drift}
+  \Sigma_N = \Sigma(\theta^\ast) + \Delta/\sqrt n,
+  \qquad \tau := \vech\Delta \ \text{fixed},\ \ \tau\not\in\operatorname{col}(\dot\sigma).
+\end{equation}
+Under \eqref{eq:drift} the population misfit is $O(1/n)$, calibrated so that
+$nF_0\to\tau'U\tau<\infty$: misspecification and sampling noise become the same
+asymptotic order, which is the only regime in which the noncentrality stays
+finite in the limit.
+
+\begin{theorem}[Noncentral limit]\label{thm:ncp}
+Under the drift \eqref{eq:drift}, multivariate normality, and the regularity of
+Theorem~\ref{thm:exact},
+\[
+  T \dto \chi^2_{df}(\lambda),
+  \qquad
+  \lambda = \tau'U\tau = \lim_{N} nF_0 .
+\]
+\end{theorem}
+
+\begin{proof}
+Under \eqref{eq:drift}, $z=\sqrt n(\hat\sigma-\sigma(\theta^\ast))\dto
+N(\tau,\Gamma)$ with $\Gamma=V^{-1}$. As in Theorem~\ref{thm:exact},
+$T=z'Uz+o_p(1)$ with $U\Gamma$ idempotent of rank $df$. A quadratic form
+$z'Uz$ with $z\sim N(\tau,V^{-1})$ and $UV^{-1}$ idempotent of rank $df$ is
+noncentral $\chi^2_{df}(\lambda)$ with $\lambda=\tau'U\tau$ (the mean evaluated
+in the quadratic form). The same second-order expansion of the population
+discrepancy gives $nF_0\to\tau'U\tau$, the identical quadratic form, because
+$F_0$ is read in the $V$-metric that defines $U$.
+\end{proof}
+
+This is the asymptotic content of RMSEA. The limit $\E[T]\approx df+\lambda$ with
+$\lambda=nF_0$ separates the chi-square into a sampling part ($df$) and a
+misspecification part ($\lambda$). Estimate the latter by subtracting the former:
+\begin{equation}\label{eq:lamhat}
+  \hat\lambda = \max(T-df,\,0),
+\end{equation}
+the truncation enforcing $\lambda\ge0$ against negative sampling realizations.
+
+\begin{remark}[Definition of RMSEA]
+RMSEA is the root of the per-degree-of-freedom noncentrality on the discrepancy
+scale (Steiger--Lind \cite{steigerlind1980}; Steiger \cite{steiger1990};
+Browne--Cudeck \cite{brownecudeck1992}),
+\begin{equation}\label{eq:rmsea}
+  \varepsilon = \sqrt{\frac{F_0}{df}} = \sqrt{\frac{\lambda}{n\,df}},
+  \qquad
+  \rmsea = \sqrt{\frac{\max(T-df,0)}{n\,df}}
+         = \sqrt{\max\!\Big(\frac{\hat F}{df}-\frac1n,\,0\Big)} .
+\end{equation}
+Dividing by $df$ is the parsimony adjustment: among models with equal population
+misfit $F_0$, the one spending more degrees of freedom (the simpler model) earns
+the smaller $\varepsilon$. It is also what stabilizes the conventional cutoffs
+($\varepsilon\lesssim 0.05$ close, $0.05$--$0.08$ reasonable, $\gtrsim0.10$ poor;
+Browne--Cudeck \cite{brownecudeck1992}) across models of different complexity,
+though those cutoffs are conventions, not asymptotic objects.
+\end{remark}
+
+\begin{corollary}[Confidence interval and tests of close fit]\label{cor:ci}
+Because $T\dot\sim\chi^2_{df}(\lambda)$, a $(1-\alpha)$ interval for $\lambda$ is
+obtained by inverting the noncentral CDF: $\lambda_L,\lambda_U$ solve
+$P\{\chi^2_{df}(\lambda_U)\le T\}=\alpha/2$ and
+$P\{\chi^2_{df}(\lambda_L)\le T\}=1-\alpha/2$, then map through
+\eqref{eq:rmsea}. The test of close fit $H_0:\varepsilon\le\varepsilon^\ast$
+(MacCallum, Browne and Sugawara \cite{maccallumbrownesugawara1996}) and its
+power and sample-size planning are noncentral-$\chi^2$ tail computations at
+$\lambda^\ast=n\,df\,\varepsilon^{\ast2}$. The interval, not the point estimate,
+is the reportable object: $\hat\lambda$ in \eqref{eq:lamhat} is biased and the
+truncation makes point RMSEA pile up at $0$ for small true misfit.
+\end{corollary}
+
+\section{The non-normal limit and the mean inflation}
+
+Drop normality. The sample moments still satisfy
+$z=\sqrt n(\hat\sigma-\sigma_0)\dto N(0,\Gamma)$, but now $\Gamma$ is the general
+asymptotic covariance carrying fourth-order cumulants (Browne's ADF matrix
+\cite{browne1984}), $\Gamma\ne V^{-1}$. The expansion $T=z'Uz+o_p(1)$ is
+unchanged, but $U\Gamma$ is no longer idempotent.
+
+\begin{lemma}[General quadratic-form limit]\label{lem:mixture}
+Under the drift \eqref{eq:drift} with finite fourth moments,
+\[
+  T \dto \sum_{j=1}^{df} \alpha_j\,\chi^2_{1,j}(\delta_j),
+\]
+a weighted sum of independent (noncentral) $\chi^2_1$ variates, where
+$\alpha_1,\dots,\alpha_{df}$ are the nonzero eigenvalues of $U\Gamma$ and
+$\sum_j\alpha_j\delta_j=\tau'U\tau$. Under normality $\Gamma=V^{-1}$,
+all $\alpha_j=1$, and the mixture collapses to $\chi^2_{df}(\tau'U\tau)$ of
+Theorem~\ref{thm:ncp}.
+\end{lemma}
+
+The estimator \eqref{eq:lamhat} silently assumed all $\alpha_j=1$. The exact
+first moment shows what that costs.
+
+\begin{theorem}[Additive separation of the mean]\label{thm:robust}
+For any $z\sim(\mu,\Gamma)$ and symmetric $U$, $\E[z'Uz]=\tr(U\Gamma)+\mu'U\mu$
+\emph{exactly}. Hence under the drift \eqref{eq:drift},
+\begin{equation}\label{eq:meandecomp}
+  \E[T] \to \underbrace{\tr(U\Gamma)}_{\text{sampling, }=\,c\,df}
+            \;+\;\underbrace{\tau'U\tau}_{\text{misspecification, }=\,nF_0},
+  \qquad
+  c := \frac{\tr(U\Gamma)}{df}.
+\end{equation}
+The scaling factor $c$ is the Satorra--Bentler mean correction
+\cite{satorrabentler1994,satorra1989}; $c=1$ under normality and $c\ne1$
+(typically $c>1$ under leptokurtosis) otherwise. The misspecification term is
+the \emph{same} quadratic form $\tau'U\tau=nF_0$ as in the normal case: it is
+built from $U$, hence from the discrepancy metric $V$, and does not depend on
+$\Gamma$.
+\end{theorem}
+
+\begin{proof}
+The mean identity is the standard quadratic-form expectation. Apply it with
+$\mu=\tau$ and the general $\Gamma$; the two terms are \eqref{eq:meandecomp}. The
+misspecification term is metric-invariant because $F_0$ is the population
+discrepancy in the $V$-metric, established in Theorem~\ref{thm:ncp} independently
+of the sampling law $\Gamma$.
+\end{proof}
+
+The consequence for the naive estimator is immediate and is the failure that the
+robust variants exist to fix.
+
+\begin{corollary}[The naive RMSEA is biased under non-normality]\label{cor:bias}
+Under non-normality, \eqref{eq:lamhat} satisfies
+$\E[T-df]\to df(c-1)+nF_0$. The naive noncentrality estimate therefore carries a
+spurious term $df(c-1)$ of sampling origin: when $c>1$ it reports
+misspecification where there is none, and $\rmsea$ in \eqref{eq:rmsea} is
+inconsistent for $\varepsilon$.
+\end{corollary}
+
+\section{Robust RMSEA}
+
+Theorem~\ref{thm:robust} writes down its own correction: the sampling mean is
+$c\,df=\tr(U\Gamma)$, not $df$, so subtract \emph{that}. Estimate $\Gamma$ by the
+sample fourth-moment (sandwich) matrix $\hat\Gamma$, set
+$\hat c=\tr(U\hat\Gamma)/df$, and define the noncentrality estimate and robust
+RMSEA
+\begin{equation}\label{eq:robust}
+  \hat\lambda_{\mathrm{rob}} = \max(T-\hat c\,df,\,0),
+  \qquad
+  \rmsea_{\mathrm{rob}} = \sqrt{\frac{\max(T-\hat c\,df,\,0)}{n\,df}} .
+\end{equation}
+This is the Brosseau-Liard--Savalei correction
+\cite{brosseauliardsavalei2012,savalei2018}, what lavaan reports as
+\texttt{rmsea.robust}. Its motivation is exactly \eqref{eq:meandecomp}:
+subtracting the \emph{inflated} exact-fit mean $\hat c\,df$ removes the
+non-normality contamination and leaves an estimate of $nF_0$ alone.
+
+\begin{corollary}[Scaled vs.\ robust]\label{cor:scaledrobust}
+Let $T_{\mathrm{sc}}=T/\hat c$ be the Satorra--Bentler scaled statistic and
+$\rmsea_{\mathrm{sc}}=\sqrt{\max(T_{\mathrm{sc}}-df,0)/(n\,df)}$ the RMSEA naively
+recomputed from it (lavaan's \texttt{rmsea.scaled}). Since
+$T-\hat c\,df=\hat c\,(T_{\mathrm{sc}}-df)$,
+\[
+  \rmsea_{\mathrm{rob}} = \sqrt{\hat c}\;\rmsea_{\mathrm{sc}} .
+\]
+The two differ by $\sqrt{\hat c}$; with $\hat c>1$ the robust value exceeds the
+scaled one. The scaled version divides the noncentrality estimate by $\hat c$ a
+second time (once in $T_{\mathrm{sc}}$, never undone), which over-corrects;
+\eqref{eq:robust} is the version that targets $\varepsilon$ consistently
+\cite{savalei2018}.
+\end{corollary}
+
+\begin{remark}[Point estimate exact, interval approximate]
+The robust \emph{point} estimate rests only on the exact mean identity of
+Theorem~\ref{thm:robust}, so it is correct to leading order regardless of the
+mixture weights $\alpha_j$. The confidence interval is the soft spot: inverting
+a noncentral $\chi^2_{df}$ CDF (Corollary~\ref{cor:ci}) approximates the true
+limit, the weighted mixture of Lemma~\ref{lem:mixture}, by a single noncentral
+$\chi^2$. The mean-and-variance (Satterthwaite) refinement additionally matches
+the second moment, replacing $df$ by
+$df^\ast=\tr(U\Gamma)^2/\tr\{(U\Gamma)^2\}$ and rescaling, so the reference
+$\chi^2_{df^\ast}$ has the right mean and variance; the robust RMSEA interval is
+then built on $T$ rescaled to that reference. magmaan should expose the
+mean-scaled $\hat c$ for the point estimate and the $df^\ast$ refinement for the
+interval, matching lavaan's \texttt{rmsea.ci.*.robust}.
+\end{remark}
+
+\begin{remark}[Asymptotic robustness: when $c=1$ already]
+Non-normality does not always inflate. Under the asymptotic-robustness
+conditions (elliptical or independent-factor populations with the model class
+closed under the relevant transformations; Browne \cite{browne1984}, Satorra
+\cite{satorra1989}), $U\Gamma$ stays idempotent on the relevant subspace and
+$c\to1$, so the naive RMSEA of \eqref{eq:rmsea} is already consistent and the
+robust correction is a no-op to leading order. The correction earns its keep
+precisely outside that class, where the fourth-cumulant structure couples to the
+residual space $\operatorname{col}(U)$. This mirrors the FIML point-estimate
+story of the companion note: location robust, second-order objects (here the
+reference law, there the standard errors) fragile.
+\end{remark}
+
+\begin{remark}[Categorical and multigroup]
+For categorical data fit by DWLS/ULS, the same algebra runs with $\hat\sigma$
+the polychoric/threshold vector and $\Gamma$ its asymptotic covariance; the
+diagonal weight matrix makes $c\ne1$ generic, so the robust forms
+\eqref{eq:robust} (scaled, and scaled-and-shifted for the
+mean-and-variance reference) are the default, not an option. With $G$ groups,
+$F_0=\sum_g (N_g/N)F_{0,g}$ and RMSEA acquires the lavaan factor
+$\sqrt{G}$: $\rmsea=\sqrt{G}\,\sqrt{\max(T-df,0)/(n\,df)}$, because the
+per-group noncentralities add while $df$ counts the pooled residual dimension.
+The robust correction \eqref{eq:robust} composes with this multiplicatively
+through $\hat c$.
+\end{remark}
+
+\begin{remark}[What RMSEA is not]
+RMSEA is a consistent estimate of $\varepsilon$, a population functional of the
+\emph{discrepancy}, not of substantive misspecification directly; two models
+with the same $F_0$ but very different structural errors share an RMSEA (Yuan
+\cite{yuan2005}). The local-alternative scaffolding is what licenses the
+noncentral-$\chi^2$ machinery, but the reported $\varepsilon$ is then read as a
+fixed population number, not as a statement that the truth is $O(1/\sqrt n)$ from
+the model. The drift is a calculational device for a finite-misfit world, the
+same posture as power analysis under a fixed alternative.
+\end{remark}
+
+\begin{thebibliography}{9}
+
+\bibitem{brosseauliardsavalei2012}
+Brosseau-Liard, P. E., Savalei, V., \& Li, L. (2012).
+An investigation of the sample performance of two nonnormality corrections for
+RMSEA.
+\emph{Multivariate Behavioral Research}, 47(6), 904--930.
+\href{https://doi.org/10.1080/00273171.2012.715252}{doi:10.1080/00273171.2012.715252}.
+
+\bibitem{browne1984}
+Browne, M. W. (1984).
+Asymptotically distribution-free methods for the analysis of covariance
+structures.
+\emph{British Journal of Mathematical and Statistical Psychology}, 37(1),
+62--83.
+\href{https://doi.org/10.1111/j.2044-8317.1984.tb00789.x}{doi:10.1111/j.2044-8317.1984.tb00789.x}.
+
+\bibitem{brownecudeck1992}
+Browne, M. W., \& Cudeck, R. (1992).
+Alternative ways of assessing model fit.
+\emph{Sociological Methods \& Research}, 21(2), 230--258.
+\href{https://doi.org/10.1177/0049124192021002005}{doi:10.1177/0049124192021002005}.
+
+\bibitem{maccallumbrownesugawara1996}
+MacCallum, R. C., Browne, M. W., \& Sugawara, H. M. (1996).
+Power analysis and determination of sample size for covariance structure
+modeling.
+\emph{Psychological Methods}, 1(2), 130--149.
+\href{https://doi.org/10.1037/1082-989X.1.2.130}{doi:10.1037/1082-989X.1.2.130}.
+
+\bibitem{satorra1989}
+Satorra, A. (1989).
+Alternative test criteria in covariance structure analysis: A unified approach.
+\emph{Psychometrika}, 54(1), 131--151.
+\href{https://doi.org/10.1007/BF02294453}{doi:10.1007/BF02294453}.
+
+\bibitem{satorrabentler1994}
+Satorra, A., \& Bentler, P. M. (1994).
+Corrections to test statistics and standard errors in covariance structure
+analysis. In A. von Eye \& C. C. Clogg (Eds.), \emph{Latent Variables Analysis}
+(pp.\ 399--419). Sage.
+
+\bibitem{savalei2018}
+Savalei, V. (2018).
+On the computation of the RMSEA and CFI from the mean-and-variance corrected
+test statistic with nonnormal data in SEM.
+\emph{Multivariate Behavioral Research}, 53(3), 419--429.
+\href{https://doi.org/10.1080/00273171.2018.1455142}{doi:10.1080/00273171.2018.1455142}.
+
+\bibitem{shapiro1983}
+Shapiro, A. (1983).
+Asymptotic distribution theory in the analysis of covariance structures (a
+unified approach).
+\emph{South African Statistical Journal}, 17(1), 33--81.
+
+\bibitem{steiger1990}
+Steiger, J. H. (1990).
+Structural model evaluation and modification: An interval estimation approach.
+\emph{Multivariate Behavioral Research}, 25(2), 173--180.
+\href{https://doi.org/10.1207/s15327906mbr2502_4}{doi:10.1207/s15327906mbr2502\_4}.
+
+\bibitem{steigerlind1980}
+Steiger, J. H., \& Lind, J. C. (1980).
+Statistically based tests for the number of common factors.
+Paper presented at the annual meeting of the Psychometric Society, Iowa City,
+IA.
+
+\bibitem{steigershapirobrowne1985}
+Steiger, J. H., Shapiro, A., \& Browne, M. W. (1985).
+On the multivariate asymptotic distribution of sequential chi-square statistics.
+\emph{Psychometrika}, 50(3), 253--263.
+\href{https://doi.org/10.1007/BF02294104}{doi:10.1007/BF02294104}.
+
+\bibitem{yuan2005}
+Yuan, K.-H. (2005).
+Fit indices versus test statistics.
+\emph{Multivariate Behavioral Research}, 40(1), 115--148.
+\href{https://doi.org/10.1207/s15327906mbr4001_5}{doi:10.1207/s15327906mbr4001\_5}.
+
+\end{thebibliography}
+
+\end{document}

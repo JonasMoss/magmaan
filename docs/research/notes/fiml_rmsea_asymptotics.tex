@@ -1,0 +1,359 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{RMSEA under FIML: Local Asymptotics with Missing Data}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\plim}{\operatorname*{plim}}
+\newcommand{\Gmis}{\Gamma_{\mathrm{mis}}}
+\newcommand{\dto}{\xrightarrow{d}}
+\newcommand{\pto}{\xrightarrow{p}}
+\newcommand{\rmsea}{\widehat{\varepsilon}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+Reported FIML RMSEA reuses the complete-data formula verbatim:
+$\rmsea=\sqrt{\max(T-df,0)/(n\,df)}$, with $T$ the FIML likelihood-ratio
+statistic. Two things change underneath, and both matter.
+
+\begin{enumerate}
+  \item \textbf{The population target moves with the design.} RMSEA estimates
+        $\varepsilon=\sqrt{F_0/df}$, but under missing data $F_0$ is read in the
+        \emph{observed-information} metric, which averages over missingness
+        patterns and is dominated by the complete-data information. The same
+        structural misspecification therefore produces a \emph{smaller}
+        population RMSEA the more data are missing (Theorem~\ref{thm:atten}).
+        FIML RMSEA confounds misfit with information loss; it is not a pure model
+        property.
+  \item \textbf{The robust correction needs the FIML sandwich.} The
+        scaling/mixture that brings $T$ back to a $\chi^2$ reference is built
+        from $U\Gmis$ with $\Gmis=V^{-1}JV^{-1}$, where the observed-data
+        curvature $V$ and the meat $J$ both carry the pattern structure, and
+        where (unlike complete data) the observed-versus-expected information
+        choice is live even under normality.
+\end{enumerate}
+
+This is the missing-data companion to the complete-data RMSEA note: the
+local-alternative scaffolding is identical, with the substitution $V\to$ the
+pattern-averaged FIML curvature and $\Gamma\to\Gmis$. It also presupposes the
+point-estimate consistency of the FIML companion note (FIML targets $\eta_0$
+only under the MAR conditional-moment conditions); if those fail, $F_0$ is not
+even the right population number to root.
+
+\section{The FIML statistic and its information objects}
+
+Row $i$ has observed index set $o_i\subseteq\{1,\dots,p\}$. The saturated
+(H1) working model is Gaussian on the observed subvector,
+\[
+  \ell_i(\eta)
+    = \log\phi_{|o_i|}\{x_{i,o_i};\,\mu_{o_i},\Sigma_{o_io_i}\},
+  \qquad
+  \eta=(\mu,\vech\Sigma)\in\mathbb{R}^{p^\ast},\ \ p^\ast=\tfrac{p(p+3)}{2}.
+\]
+Missing data forces a mean structure, so $\eta$ \emph{always} carries the $p$
+means; $df=p^\ast-t$ counts them. Let $s_i=\partial\ell_i/\partial\eta$ be the
+casewise score (sparse in $\eta$: supported on the moments pattern $o_i$
+observes). Define the two saturated population objects
+\[
+  V = \plim\,\tfrac1N\textstyle\sum_i\big(-\partial^2\ell_i/\partial\eta\,\partial\eta'\big),
+  \qquad
+  J = \plim\,\tfrac1N\textstyle\sum_i \Cov(s_i),
+\]
+the observed-data normal \emph{curvature} (expected information per case,
+averaged over the pattern distribution) and the score \emph{meat}. The saturated
+FIML estimator obeys $\sqrt N(\hat\eta_{\mathrm{sat}}-\eta_0)\dto
+N(0,\Gmis)$ with the sandwich covariance $\Gmis=V^{-1}JV^{-1}$. The structural
+model is $\theta\mapsto\sigma(\theta)\equiv\eta(\theta)$ with full-rank Jacobian
+$\dot\sigma=\partial\eta/\partial\theta'$, and the residual-information projector
+is, exactly as in the complete-data note,
+\begin{equation}\label{eq:U}
+  U = V - V\dot\sigma(\dot\sigma'V\dot\sigma)^{-1}\dot\sigma'V,
+  \qquad U\dot\sigma=0,\ \ \rank U = df .
+\end{equation}
+The FIML LRT is $T=2\{\ell_{\mathrm{sat}}(\hat\eta_{\mathrm{sat}})
+-\ell_{\mathrm{model}}(\hat\theta)\}$; a second-order expansion gives, with
+$w=\sqrt N(\hat\eta_{\mathrm{sat}}-\eta(\theta^\ast))$,
+\begin{equation}\label{eq:Tquad}
+  T = w'Uw + o_p(1).
+\end{equation}
+Everything below is a statement about the quadratic form \eqref{eq:Tquad} with
+$w\dto N(\tau,\Gmis)$.
+
+\section{Local asymptotics: the noncentral chi-square}
+
+The drift is the same device as in the complete-data note: a fixed off-model
+direction shrinking at the $\sqrt N$ rate, $\Sigma_N=\Sigma(\theta^\ast)
++\Delta/\sqrt N$ (plus the matching mean drift), with limiting model error
+$\tau=\plim w$ fixed.
+
+\begin{theorem}[Noncentral limit under FIML]\label{thm:ncp}
+Under the drift, multivariate normality, MCAR, and identification (every
+$\eta$-coordinate seen by some pattern), the information identity $J=V$ holds, so
+$\Gmis=V^{-1}$ and $U\Gmis=UV^{-1}$ is idempotent of rank $df$. Hence
+\[
+  T \dto \chi^2_{df}(\lambda),
+  \qquad
+  \lambda = \tau'U\tau = \lim_N N F_0 .
+\]
+\end{theorem}
+
+\begin{proof}
+Under MCAR + normality the saturated FIML score is a correctly specified
+likelihood score, so $J=V$ (information identity) and $\Gmis=V^{-1}$. Then
+$UV^{-1}$ is idempotent of rank $df$ by the computation of the complete-data note
+(replace its $V$ by the present curvature). A quadratic form $w'Uw$ with
+$w\sim N(\tau,V^{-1})$ and $UV^{-1}$ idempotent of rank $df$ is
+$\chi^2_{df}(\lambda)$, $\lambda=\tau'U\tau$. The population discrepancy expands
+in the same $V$-metric, giving $NF_0\to\tau'U\tau$.
+\end{proof}
+
+So the noncentrality interpretation survives: $\rmsea=\sqrt{\max(T-df,0)/(n\,df)}$
+estimates $\varepsilon=\sqrt{F_0/df}$. The difference from complete data is
+entirely in \emph{which} $V$ enters $U$, and that is where the design leaks in.
+
+\section{The target moves with the design}
+
+Write $\lambda$ as a minimized quadratic form. From \eqref{eq:U},
+$\tau'U\tau=\tau'V\tau-\tau'V\dot\sigma(\dot\sigma'V\dot\sigma)^{-1}\dot\sigma'V\tau$,
+which is the $V$-orthogonal projection residual:
+\begin{equation}\label{eq:lammin}
+  \lambda = \min_{b\in\mathbb{R}^t}\,(\tau-\dot\sigma b)'\,V\,(\tau-\dot\sigma b).
+\end{equation}
+The structural error $\tau$ is a property of the population and the model, the
+same vector whatever is missing. Only $V$ carries the missingness. Compare it to
+the complete-data curvature $V_{\mathrm c}=\tfrac12 D'(\Sigma^{-1}\otimes\Sigma^{-1})D$
+(bordered by the mean block).
+
+\begin{lemma}[Information monotonicity]\label{lem:mono}
+Each pattern's per-case information is the Fisher information of a coarsening
+(marginalization) of the complete vector, so $\mathcal I_{o_i}\preceq V_{\mathrm c}$
+in the Loewner order; averaging preserves it, $V=\plim\tfrac1N\sum_i\mathcal
+I_{o_i}\preceq V_{\mathrm c}$. Under identification $V\succ0$.
+\end{lemma}
+
+\begin{theorem}[Missingness attenuates RMSEA]\label{thm:atten}
+Fix the structural misspecification $\tau$. The FIML noncentrality is dominated
+by its complete-data value,
+\[
+  \lambda_{\mathrm{FIML}} = \min_b(\tau-\dot\sigma b)'V(\tau-\dot\sigma b)
+  \;\le\;
+  \min_b(\tau-\dot\sigma b)'V_{\mathrm c}(\tau-\dot\sigma b)
+  = \lambda_{\mathrm{complete}},
+\]
+hence the population RMSEA satisfies
+$\varepsilon_{\mathrm{FIML}}\le\varepsilon_{\mathrm{complete}}$, with the gap
+widening as the missing fraction grows.
+\end{theorem}
+
+\begin{proof}
+By Lemma~\ref{lem:mono}, $(\tau-\dot\sigma b)'V(\tau-\dot\sigma b)\le
+(\tau-\dot\sigma b)'V_{\mathrm c}(\tau-\dot\sigma b)$ for every $b$; the minimum
+of a pointwise-smaller function is no larger. Divide by $n\,df$ and take roots.
+\end{proof}
+
+\begin{corollary}[FIML RMSEA is not design-invariant]\label{cor:noninvariant}
+Two studies with identical population $(\mu_0,\Sigma_0)$ and identical model, but
+different missingness, report different population RMSEAs; a misfit that reads
+$0.08$ complete will read smaller under attrition, not because the model fits
+better but because the missing data carry less information to expose the misfit.
+RMSEA cutoffs calibrated on complete data therefore drift conservative under
+missingness. A design-invariant rescaling would divide $\lambda$ by the
+information fraction $\tr(V)/\tr(V_{\mathrm c})$ (a fraction-of-missing-information
+correction), recovering $\varepsilon_{\mathrm{complete}}$; this is not what
+lavaan or magmaan report, and reporting it would require the complete-data
+curvature, which the incomplete sample does not deliver directly.
+\end{corollary}
+
+The attenuation is small under light, conditionally-benign missingness and grows
+with the missing fraction; the empirical companion is the missing-data fit-index
+literature (Davey \cite{davey2005}).
+
+\section{Robust FIML RMSEA}
+
+Drop normality, or admit MAR/observed-information effects: the identity $J=V$
+breaks and $\Gmis=V^{-1}JV^{-1}\ne V^{-1}$. The expansion \eqref{eq:Tquad}
+stands, but $U\Gmis$ is no longer idempotent.
+
+\begin{lemma}[General FIML limit]\label{lem:mixture}
+Under the drift with finite fourth moments,
+$T\dto\sum_{j=1}^{df}\alpha_j\chi^2_{1,j}(\delta_j)$, the $\alpha_j$ the nonzero
+eigenvalues of $U\Gmis$ and $\sum_j\alpha_j\delta_j=\tau'U\tau$. Under $J=V$ all
+$\alpha_j=1$ and the mixture collapses to Theorem~\ref{thm:ncp}.
+\end{lemma}
+
+The exact-mean identity $\E[w'Uw]=\tr(U\Gmis)+\tau'U\tau$ again separates
+sampling noise from misspecification additively:
+\begin{equation}\label{eq:meandecomp}
+  \E[T]\to \underbrace{\tr(U\Gmis)}_{=\,c\,df}+\underbrace{\tau'U\tau}_{=\,NF_0},
+  \qquad
+  c=\frac{\tr(U\Gmis)}{df}=\frac{\tr(UV^{-1}JV^{-1})}{df}.
+\end{equation}
+Here $c$ is the FIML Satorra--Bentler/Yuan--Bentler (MLR) scaling: $c=1$ under
+$J=V$, and $c\ne1$ under non-normal or MAR-distorted scores. The
+misspecification term $\tau'U\tau=NF_0$ is built from $U$ (hence $V$) alone and
+does not see $J$, so it is the \emph{same} quadratic form as in
+Theorem~\ref{thm:ncp}. The robust estimator follows by subtracting the inflated
+mean:
+\begin{equation}\label{eq:robust}
+  \rmsea_{\mathrm{rob}}
+    = \sqrt{\frac{\max(T-\hat c\,df,\,0)}{n\,df}}
+    = \sqrt{\hat c}\;\rmsea_{\mathrm{sc}},
+  \qquad
+  \hat c=\frac{\tr(U\widehat\Gmis)}{df},
+\end{equation}
+with $\widehat\Gmis=\hat V^{-1}\hat J\hat V^{-1}$ from the sample casewise scores
+and curvature (Yuan--Bentler \cite{yuanbentler2000}; the robust-RMSEA
+construction of Brosseau-Liard--Savalei \cite{brosseauliardsavalei2012} and
+Savalei \cite{savalei2018}). As in the complete-data note,
+$\rmsea_{\mathrm{rob}}=\sqrt{\hat c}\,\rmsea_{\mathrm{sc}}$, and the scaled
+version (which divides the noncentrality by $\hat c$ a second time) over-corrects;
+\eqref{eq:robust} is the one that targets $\varepsilon$.
+
+\begin{remark}[Observed vs.\ expected information: a FIML-only wrinkle]
+With complete data and a correct normal model, the curvature $V$ is unambiguous.
+Under missing data the \emph{observed} information (the realized casewise
+Hessians) and the \emph{expected} information (their model expectation) differ in
+finite samples even when $J=V$ asymptotically, and they diverge further under
+non-normality (Savalei \cite{savalei2010}). The choice enters $\hat V$ in
+\eqref{eq:robust}, hence $\hat c$, hence the robust RMSEA and its interval. lavaan
+matches its MLR/robust output only under the observed-information,
+structured-H1 default; the FMG spectrum convention reads the eigenvalues of
+$U\Gmis$ off the \emph{unstructured} saturated H1. The point estimate is
+robust to the choice through the mean identity \eqref{eq:meandecomp}; the
+interval is not, and should declare its convention.
+\end{remark}
+
+\begin{remark}[Spectrum vs.\ mean: where the interval comes from]
+The robust \emph{point} estimate rests only on \eqref{eq:meandecomp} and is
+correct to leading order regardless of the $\alpha_j$. The interval inverts a
+noncentral $\chi^2_{df}$ CDF, approximating the true mixture of
+Lemma~\ref{lem:mixture} by a single noncentral $\chi^2$; the
+mean-and-variance (Satterthwaite) refinement replaces $df$ by
+$df^\ast=\tr(U\Gmis)^2/\tr\{(U\Gmis)^2\}$. The FMG/pEBA route used in the
+companion experiments instead keeps the full eigenvalue spectrum of $U\Gmis$ and
+forms the exact mixture reference, which is the right object when a few
+$\alpha_j$ dominate and the single-$\chi^2$ approximation is poor. magmaan
+should expose $\hat c$ (point), $df^\ast$ (Satterthwaite interval), and the
+$U\Gmis$ spectrum (pEBA interval) from one FIML information pass.
+\end{remark}
+
+\begin{remark}[Truncation bites harder under FIML]
+Because $\lambda_{\mathrm{FIML}}\le\lambda_{\mathrm{complete}}$
+(Theorem~\ref{thm:atten}), the true noncentrality is smaller under missingness,
+so $T-df$ (or $T-\hat c\,df$) lands below zero more often and $\rmsea$ piles up at
+the $0$ floor. The negative-$\widehat{\mathrm{ncp}}$ events seen in the
+experiment-23/24 cells are this finite-sample truncation artifact, not evidence
+of inconsistency; they should shrink with $N$ and with the observed information,
+and the interval (Corollary above), not the truncated point estimate, is the
+honest summary.
+\end{remark}
+
+\begin{remark}[Two-stage and the completion trap]
+The two-stage (ML2S) statistic first fills the saturated $\hat\eta_{\mathrm{sat}}$
+then fits the structure to it as if complete, so its naive LRT uses the
+\emph{complete-data} curvature $V_{\mathrm c}$ in place of $V$, inflating $T$ by
+roughly the information ratio (a $\approx1.8\times$ over-rejection in the
+experiment-24 MCAR-normal cell). Feeding that naive $T$ into the RMSEA formula
+mislabels the inflation as misfit. The Satorra--Bentler correction with the
+\emph{correct} two-stage sandwich (the Unstructured-H1 weight) restores the
+$\chi^2_{df}$ mean and reproduces lavaan \texttt{robust.two.stage}; the robust
+RMSEA \eqref{eq:robust} then transfers unchanged, with $\hat V$ the two-stage
+curvature.
+\end{remark}
+
+\begin{remark}[Precondition: the target must exist]
+All of the above roots $F_0$ as the population FIML discrepancy. Under MAR this
+is the right target only when the incomplete-on-observed conditional means are
+linear and conditional covariances homoscedastic (the FIML consistency note); if
+those fail, $\hat\eta\not\pto\eta_0$, $F_0$ does not measure structural misfit,
+and a robust correction repairs the reference law of a statistic that is no
+longer centered on the model. No scaling fixes a moved target; that is an
+estimator-bias problem, upstream of RMSEA.
+\end{remark}
+
+\begin{thebibliography}{9}
+
+\bibitem{arminger1990}
+Arminger, G., \& Sobel, M. E. (1990).
+Pseudo-maximum likelihood estimation of mean and covariance structures with
+missing data.
+\emph{Journal of the American Statistical Association}, 85(409), 195--203.
+\href{https://doi.org/10.1080/01621459.1990.10475324}{doi:10.1080/01621459.1990.10475324}.
+
+\bibitem{brosseauliardsavalei2012}
+Brosseau-Liard, P. E., Savalei, V., \& Li, L. (2012).
+An investigation of the sample performance of two nonnormality corrections for
+RMSEA.
+\emph{Multivariate Behavioral Research}, 47(6), 904--930.
+\href{https://doi.org/10.1080/00273171.2012.715252}{doi:10.1080/00273171.2012.715252}.
+
+\bibitem{brownecudeck1992}
+Browne, M. W., \& Cudeck, R. (1992).
+Alternative ways of assessing model fit.
+\emph{Sociological Methods \& Research}, 21(2), 230--258.
+\href{https://doi.org/10.1177/0049124192021002005}{doi:10.1177/0049124192021002005}.
+
+\bibitem{davey2005}
+Davey, A. (2005).
+Issues in evaluating model fit with missing data.
+\emph{Structural Equation Modeling}, 12(4), 578--597.
+\href{https://doi.org/10.1207/s15328007sem1204_4}{doi:10.1207/s15328007sem1204\_4}.
+
+\bibitem{savalei2010}
+Savalei, V. (2010).
+Expected versus observed information in SEM with incomplete normal and nonnormal
+data.
+\emph{Psychological Methods}, 15(4), 352--367.
+\href{https://doi.org/10.1037/a0020143}{doi:10.1037/a0020143}.
+
+\bibitem{savalei2018}
+Savalei, V. (2018).
+On the computation of the RMSEA and CFI from the mean-and-variance corrected test
+statistic with nonnormal data in SEM.
+\emph{Multivariate Behavioral Research}, 53(3), 419--429.
+\href{https://doi.org/10.1080/00273171.2018.1455142}{doi:10.1080/00273171.2018.1455142}.
+
+\bibitem{savaleibentler2009}
+Savalei, V., \& Bentler, P. M. (2009).
+A two-stage approach to missing data: Theory and application to auxiliary
+variables.
+\emph{Structural Equation Modeling}, 16(3), 477--497.
+\href{https://doi.org/10.1080/10705510903008238}{doi:10.1080/10705510903008238}.
+
+\bibitem{steigershapirobrowne1985}
+Steiger, J. H., Shapiro, A., \& Browne, M. W. (1985).
+On the multivariate asymptotic distribution of sequential chi-square statistics.
+\emph{Psychometrika}, 50(3), 253--263.
+\href{https://doi.org/10.1007/BF02294104}{doi:10.1007/BF02294104}.
+
+\bibitem{yuanbentler2000}
+Yuan, K.-H., \& Bentler, P. M. (2000).
+Three likelihood-based methods for mean and covariance structure analysis with
+nonnormal missing data.
+\emph{Sociological Methodology}, 30(1), 165--200.
+\href{https://doi.org/10.1111/0081-1750.00078}{doi:10.1111/0081-1750.00078}.
+
+\end{thebibliography}
+
+\end{document}
