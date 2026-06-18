@@ -1,0 +1,228 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Normal-theory weighting in two-stage estimation:\\ a special case, not a default}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\plim}{\operatorname*{plim}}
+\newcommand{\Gnt}{\Gamma_{\mathrm{NT}}}
+\newcommand{\Gfiml}{\Gamma_{\mathrm{FIML}}}
+\newcommand{\Gpoly}{\Gamma_{\mathrm{poly}}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Question and answer}
+
+Two-stage estimation of a structural model under missing data (Savalei and
+Bentler's ML2S \cite{SavaleiBentler2009}) runs in two steps. Stage~1 fits the
+saturated model to incomplete data by FIML, returning
+$\hat\eta_S=(\hat\mu,\vech\hat\Sigma)$ and its asymptotic covariance $\Gfiml$.
+Stage~2 fits the structural model to $\hat\eta_S$ by \emph{normal-theory}
+maximum likelihood, then corrects the standard errors and the test statistic
+with $\Gfiml$. The Stage-2 \emph{weight} is therefore the normal-theory weight
+$\Gnt(\Sigma)^{-1}$, which is blind to the missingness pattern.
+
+The ordinal (polychoric) pipeline made the opposite choice: given the Stage-1
+polychoric correlations, Stage~2 weights by (the diagonal of) the estimated
+asymptotic covariance of those correlations (DWLS), never by a normal-theory
+weight. We argue the two conventions answer the \emph{same} question with
+different defaults. The Stage-2 weight should approximate $\Gamma_{\rm
+true}^{-1}$ (or its diagonal); normal-theory weighting is licensed only when
+$\Gamma_{\rm true}\approx\Gnt(\Sigma)$, which holds for complete near-normal data
+and fails, through an external nuisance, both for polychorics (thresholds and
+cell sparsity) and for FIML under non-trivial missingness (the missingness
+pattern). The difference between the two cases is only how far $\Gamma_{\rm
+true}$ departs from $\Gnt$, which sets how much an empirical weight can buy.
+
+\section{One estimator family, one knob}
+
+Write the Stage-2 residual $r(\theta)=\hat\eta_S-\eta(\theta)$ and the moment
+Jacobian $\Delta=\partial\eta/\partial\theta^\top$. Every member of the
+least-squares family minimizes a quadratic form in $r$,
+\begin{equation}\label{eq:obj}
+  F(\theta)=\tfrac12\, r(\theta)^\top W\, r(\theta),
+\end{equation}
+differing only in the weight $W$:
+\begin{center}
+\begin{tabular}{lll}
+ULS & $W=I$ & identity\\
+GLS / NT & $W=\Gnt(\Sigma)^{-1}$ & $\Gnt=\operatorname{blockdiag}\!\big(\Sigma,\;2D^{+}(\Sigma\otimes\Sigma)D^{+\top}\big)$\\
+WLS / ADF & $W=\hat\Gamma^{-1}$ & full empirical\\
+DWLS & $W=\operatorname{diag}(\hat\Gamma)^{-1}$ & empirical, marginals only\\
+DLS & $W=\big((1-a)\Gnt+a\hat\Gamma\big)^{-1}$ & Browne mix \cite{Browne1984}
+\end{tabular}
+\end{center}
+For a just-identified Stage~1 every such $W$ gives a consistent $\hat\theta$.
+The estimator's asymptotic law is the sandwich
+\begin{equation}\label{eq:sandwich}
+  \sqrt n(\hat\theta-\theta_0)\;\rightsquigarrow\;
+  \mathcal N\!\big(0,\;A^{-1}BA^{-1}\big),\qquad
+  A=\Delta^\top W\Delta,\quad B=\Delta^\top W\,\Gamma\,W\Delta,
+\end{equation}
+with $\Gamma$ the true asymptotic covariance of $\sqrt n\,\hat\eta_S$
+(here $\Gfiml$). The overall fit statistic is $T=2n\,F(\hat\theta)$, whose limit
+is $\sum_j\lambda_j\chi^2_{1}$ with $\lambda_j$ the nonzero eigenvalues of
+$U\Gamma$, $U=W-W\Delta(\Delta^\top W\Delta)^{-1}\Delta^\top W$; the
+Satorra--Bentler scaled statistic divides $T$ by $\bar c=\tr(U\Gamma)/\mathrm{df}$
+\cite{SatorraBentler2001}.
+
+\begin{remark}
+Validity of the corrected SE and test is restored by the sandwich and the
+$U\Gamma$ spectrum for \emph{any} consistent $W$. The weight is therefore an
+efficiency and stability knob, not a validity one. That ULS plus the robust
+correction is competitive with DWLS in ordinal models \cite{Forero2009,Li2016}
+is the same statement: once the test is corrected, the weight is second order
+for validity.
+\end{remark}
+
+\begin{proposition}\label{prop:opt}
+Within \eqref{eq:obj}, $W=\Gamma^{-1}$ is asymptotically efficient, and then
+\eqref{eq:sandwich} collapses to $A^{-1}=(\Delta^\top\Gamma^{-1}\Delta)^{-1}$
+and $U\Gamma$ is idempotent, so $\lambda_j\equiv 1$ and $\bar c=1$. The
+normal-theory weight $W=\Gnt(\Sigma)^{-1}$ equals $\Gamma^{-1}$, and is thus
+efficient, if and only if $\Gamma=\Gnt(\Sigma)$.
+\end{proposition}
+
+\section{When is $\Gamma\approx\Gnt$?}
+
+The normal-theory weight uses the closed form $\Gnt(\Sigma)$, a function of the
+model-implied second moments alone. It is the correct $\Gamma$ in exactly one
+regime.
+
+\begin{proposition}\label{prop:license}
+For complete data from a distribution with vanishing excess fourth cumulants,
+$\Gamma=\Gnt(\Sigma)$. Two departures break this through a nuisance that
+$\Gnt(\Sigma)$ cannot see:
+\begin{enumerate}
+\item[(i)] \emph{Missingness.} For the saturated FIML estimator under a missing
+pattern, the precision of each $\hat\sigma_{ij}$ depends on the cases that
+jointly observe $(i,j)$; $\Gfiml$ is governed by the pattern, not by $\Sigma$.
+At zero missingness $\Gfiml=\Gnt(\Sigma)$ exactly.
+\item[(ii)] \emph{Categorization.} For polychoric correlations the precision
+depends on thresholds and cell probabilities; $\Gpoly$ has no closed form in the
+model-implied correlation matrix, and $\Gnt(R)$ is never the right weight, at any
+$n$.
+\end{enumerate}
+\end{proposition}
+
+The asymmetry between (i) and (ii) is one of degree, and it is the practically
+important part.
+
+\begin{remark}[shape versus scale]
+Under (i) with data missing completely at random, $\Gfiml$ is $\Gnt(\Sigma)$
+with heterogeneous per-element effective-$n$ rescaling: the off-diagonal
+(fourth-moment) structure of $\Gfiml$ is still normal-theory shaped, only the
+per-element scales are wrong. The normal-theory weight then has the right
+\emph{shape} and the wrong \emph{scale}, and it degrades gracefully from an exact
+baseline as missingness grows. Under (ii) $\Gnt(R)$ has both the wrong shape and
+the wrong scale. Hence DWLS, which fixes the marginal scales but discards the
+off-diagonals, gains less over NT in the missing-data case than in the ordinal
+case, and is not a guaranteed improvement there; its advantage grows precisely
+where $\Gfiml$ stops being a smooth rescaling of $\Gnt$, namely heavy or
+strongly pattern-dependent missingness.
+\end{remark}
+
+\section{The transplanted argument}
+
+Proposition~\ref{prop:license} licenses, by the same reasoning that retired NT
+weighting for polychorics, the use of a missingness-aware Stage-2 weight in
+two-stage FIML:
+\[
+  \text{DWLS: } W=\operatorname{diag}(\Gfiml)^{-1},\qquad
+  \text{ADF: } W=\Gfiml^{-1},\qquad
+  \text{DLS: } W=\big((1-a)\Gnt+a\,\Gfiml\big)^{-1}.
+\]
+$\Gfiml$ is already computed for the robust correction \cite{SavaleiBentler2009},
+so the additional cost is negligible next to the Stage-1 EM: DWLS is a diagonal
+rescale, ADF one moment-space inverse, DLS one mix. The mixing scalar $a$ may be
+fixed or chosen empirically from the $\Gfiml$-versus-$\Gnt$ departure
+\cite{DuWu2024}; the empirical-Bayes choice under missingness needs casewise
+saturated-score moments and is left open. By Proposition~\ref{prop:opt} ADF
+yields $\bar c=1$ and DLS interpolates, $a=0$ recovering NT and $a=1$ recovering
+ADF.
+
+\begin{corollary}
+The Stage-2 weight changes the point estimate and its efficiency; it does not
+change the asymptotic validity of the corrected test, which the $U\Gamma$
+spectrum delivers for every consistent $W$. A simulation should therefore
+compare (a) finite-sample efficiency of $\hat\theta$ and (b) finite-sample
+calibration of the scaled and eigenvalue (FMG/pEBA) statistics, across
+$\{$NT, DWLS, ADF, DLS$\}$, with the contrast expected to be null under light
+MCAR and to favor the empirical weights only under heavy MAR with non-normal
+margins.
+\end{corollary}
+
+\begin{remark}[implementation]
+In \texttt{magmaan} the four weights are one builder
+(\texttt{two\_stage\_stage2\_weight}, \texttt{TwoStageWeight}$\in\{$\texttt{Nt},
+\texttt{Dwls}, \texttt{Adf}, \texttt{Dls}$\}$) over the
+$[\mu;\vech\Sigma]$ block layout, built from $\Gnt$ and $\Gfiml$. The robust
+surface is unchanged: the same Satorra--Bentler eigen-cores and FMG tail
+transforms consume the $U\Gamma$ spectrum produced by whichever $W$ is supplied,
+so a non-NT Stage-2 fit is a weight swap, not new test machinery. The NT member
+reproduces \texttt{lavaan}'s \texttt{robust.two.stage} bit-for-bit.
+\end{remark}
+
+\begin{thebibliography}{9}
+
+\bibitem{SavaleiBentler2009} Savalei, V. and Bentler, P.~M. (2009). A two-stage
+approach to missing data: theory and application to auxiliary variables.
+\emph{Structural Equation Modeling}, 16(3), 477--497.
+\href{https://doi.org/10.1080/10705510903008238}{doi:10.1080/10705510903008238}.
+
+\bibitem{SavaleiFalk2014} Savalei, V. and Falk, C.~F. (2014). Robust two-stage
+estimation in structural equation modeling with incomplete and nonnormal data.
+\emph{Structural Equation Modeling}, 21(3), 347--360.
+\href{https://doi.org/10.1080/10705511.2014.915372}{doi:10.1080/10705511.2014.915372}.
+
+\bibitem{Browne1984} Browne, M.~W. (1984). Asymptotically distribution-free
+methods for the analysis of covariance structures. \emph{British Journal of
+Mathematical and Statistical Psychology}, 37(1), 62--83.
+\href{https://doi.org/10.1111/j.2044-8317.1984.tb00789.x}{doi:10.1111/j.2044-8317.1984.tb00789.x}.
+
+\bibitem{Muthen1984} Muth\'en, B. (1984). A general structural equation model
+with dichotomous, ordered categorical, and continuous latent variable
+indicators. \emph{Psychometrika}, 49(1), 115--132.
+\href{https://doi.org/10.1007/BF02294210}{doi:10.1007/BF02294210}.
+
+\bibitem{SatorraBentler2001} Satorra, A. and Bentler, P.~M. (2001). A scaled
+difference chi-square test statistic for moment structure analysis.
+\emph{Psychometrika}, 66(4), 507--514.
+\href{https://doi.org/10.1007/BF02296192}{doi:10.1007/BF02296192}.
+
+\bibitem{Forero2009} Forero, C.~G., Maydeu-Olivares, A. and Gallardo-Pujol, D.
+(2009). Factor analysis with ordinal indicators: a Monte Carlo study comparing
+DWLS and ULS estimation. \emph{Structural Equation Modeling}, 16(4), 625--641.
+\href{https://doi.org/10.1080/10705510903203573}{doi:10.1080/10705510903203573}.
+
+\bibitem{Li2016} Li, C.-H. (2016). Confirmatory factor analysis with ordinal
+data: comparing robust maximum likelihood and diagonally weighted least squares.
+\emph{Behavior Research Methods}, 48(3), 936--949.
+\href{https://doi.org/10.3758/s13428-015-0619-7}{doi:10.3758/s13428-015-0619-7}.
+
+\bibitem{DuWu2024} Du, H. and Wu, H. (2024). Empirical-Bayes selection of the
+mixing weight for distributionally-weighted least squares.
+\emph{(working reference; mixing-scalar selection from the $\hat\Gamma$-vs-$\Gnt$
+departure).}
+
+\end{thebibliography}
+
+\end{document}

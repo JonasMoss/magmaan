@@ -2970,7 +2970,9 @@ Rcpp::List estimate_fiml_robust_mlr(Rcpp::List fit, double h_step = 1e-4) {
 //
 // [[Rcpp::export]]
 Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data,
-                                              double h_step = 1e-4) {
+                                              double h_step = 1e-4,
+                                              std::string stage2_weight = "nt",
+                                              double dls_a = 0.5) {
   Ctx ctx = ctx_from_fit(fit);
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::RawData raw = fiml_raw_from_arg(ctx.rep, raw_data);
@@ -2985,8 +2987,11 @@ Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data,
     owned_sm = std::make_unique<SaturatedMoments>(std::move(*sm_or));
     sm_ptr = owned_sm.get();
   }
+  const auto kind = magmaanr::two_stage_weight_from_arg(stage2_weight);
+  magmaan::estimate::fiml::TwoStageDlsOptions dls;
+  dls.a = dls_a;
   auto r_or = magmaan::estimate::fiml::two_stage_em_ml_inference(
-      ctx.pt, ctx.rep, est, *sm_ptr);
+      ctx.pt, ctx.rep, est, *sm_ptr, kind, dls);
   if (!r_or.has_value()) stop_post(r_or.error());
   return Rcpp::List::create(
       Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
@@ -2998,6 +3003,33 @@ Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data,
       Rcpp::_["trace_ugamma"] = r_or->trace_ugamma,
       Rcpp::_["df"] = r_or->df,
       Rcpp::_["ntotal"] = static_cast<double>(r_or->ntotal));
+}
+
+// two_stage_stage2_weight_blocks_impl() — mirrors
+// estimate::fiml::two_stage_stage2_weight_blocks(). Builds the per-block Stage-2
+// weight (Nt / Dwls / Adf / Dls) from a Stage-1 saturated-moments list, returned
+// as a list of per-block matrices suitable for `fit_wls(..., W = .)`.
+//
+// [[Rcpp::export]]
+Rcpp::List two_stage_stage2_weight_blocks_impl(Rcpp::List stage1,
+                                               std::string stage2_weight = "nt",
+                                               double dls_a = 0.5) {
+  SaturatedMoments sm;
+  if (!magmaanr::saturated_from_list(stage1, sm)) {
+    Rcpp::stop("magmaan: two_stage_stage2_weight_blocks needs a Stage-1 list "
+               "with mean/cov/n_obs/acov");
+  }
+  const auto kind = magmaanr::two_stage_weight_from_arg(stage2_weight);
+  magmaan::estimate::fiml::TwoStageDlsOptions dls;
+  dls.a = dls_a;
+  auto w_or = magmaan::estimate::fiml::two_stage_stage2_weight_blocks(
+      sm, kind, dls);
+  if (!w_or.has_value()) stop_post(w_or.error());
+  Rcpp::List out(static_cast<R_xlen_t>(w_or->size()));
+  for (std::size_t b = 0; b < w_or->size(); ++b) {
+    out[static_cast<R_xlen_t>(b)] = Rcpp::wrap((*w_or)[b]);
+  }
+  return out;
 }
 
 // infer_fiml_fmg_spectrum() — mirrors estimate::fiml::fiml_ugamma_spectrum().

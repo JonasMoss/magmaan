@@ -44,48 +44,11 @@ double quiet_nan() {
 
 post_expected<Eigen::MatrixXd>
 ml2s_nt_weight_from_saturated(const estimate::fiml::SaturatedMoments& sm) {
-  Eigen::Index Q = 0;
-  for (std::size_t b = 0; b < sm.cov.size(); ++b) {
-    const Eigen::Index p = sm.cov[b].rows();
-    if (sm.cov[b].cols() != p || sm.mean[b].size() != p) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "lr_test_satorra2000_ml2s_from_data: malformed saturated moments"));
-    }
-    Q += p + detail::vech_len(p);
-  }
-
-  Eigen::MatrixXd V = Eigen::MatrixXd::Zero(Q, Q);
-  Eigen::Index off = 0;
-  for (std::size_t b = 0; b < sm.cov.size(); ++b) {
-    const Eigen::Index p = sm.cov[b].rows();
-    Eigen::LDLT<Eigen::MatrixXd> ldlt_mu(0.5 * (sm.cov[b] + sm.cov[b].transpose()));
-    if (ldlt_mu.info() != Eigen::Success) {
-      return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
-          "lr_test_satorra2000_ml2s_from_data: saturated covariance block is "
-          "not invertible"));
-    }
-    V.block(off, off, p, p) =
-        ldlt_mu.solve(Eigen::MatrixXd::Identity(p, p));
-    off += p;
-
-    auto G_or = gamma_nt(sm.cov[b]);
-    if (!G_or.has_value()) {
-      return std::unexpected(make_err(PostError::Kind::NumericIssue,
-          "lr_test_satorra2000_ml2s_from_data: gamma_nt failed: " +
-          G_or.error().detail));
-    }
-    const Eigen::Index q = G_or->rows();
-    Eigen::LDLT<Eigen::MatrixXd> ldlt_cov(0.5 * (*G_or + G_or->transpose()));
-    if (ldlt_cov.info() != Eigen::Success) {
-      return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
-          "lr_test_satorra2000_ml2s_from_data: covariance NT Gamma block is "
-          "not invertible"));
-    }
-    V.block(off, off, q, q) =
-        ldlt_cov.solve(Eigen::MatrixXd::Identity(q, q));
-    off += q;
-  }
-  return Eigen::MatrixXd(0.5 * (V + V.transpose()).eval());
+  // Consolidated: the two-stage NT weight is the `Nt` member of the Stage-2
+  // weight family. Kept as a thin alias for the scalar SB2001/2010 baseline
+  // route, which is not parameterized by the Stage-2 weight.
+  return estimate::fiml::two_stage_stage2_weight(
+      sm, estimate::fiml::TwoStageWeight::Nt);
 }
 
 post_expected<Eigen::MatrixXd>
@@ -1057,7 +1020,9 @@ lr_test_satorra2000_ml2s_from_data(
     GammaSource                      gamma,
     SatorraAMethod                   a_method,
     double                           h_step,
-    const estimate::fiml::SaturatedMoments* sm_precomputed) {
+    const estimate::fiml::SaturatedMoments* sm_precomputed,
+    estimate::fiml::TwoStageWeight kind,
+    estimate::fiml::TwoStageDlsOptions dls) {
   const int df_diff_from_T = df_H0 - df_H1;
   if (df_diff_from_T < 0) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
@@ -1089,7 +1054,7 @@ lr_test_satorra2000_ml2s_from_data(
   const estimate::fiml::SaturatedMoments& sm =
       sm_precomputed ? *sm_precomputed : sm_owned;
 
-  auto V_or = ml2s_nt_weight_from_saturated(sm);
+  auto V_or = estimate::fiml::two_stage_stage2_weight(sm, kind, dls);
   if (!V_or.has_value()) return std::unexpected(V_or.error());
   const Eigen::MatrixXd& V = *V_or;
 
@@ -1187,7 +1152,9 @@ lr_test_satorra2001_missing_impl(
     const data::RawData& raw,
     double T_H0, double T_H1, int df_H0, int df_H1,
     bool two_stage, double h_step,
-    const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr) {
+    const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr,
+    estimate::fiml::TwoStageWeight kind = estimate::fiml::TwoStageWeight::Nt,
+    estimate::fiml::TwoStageDlsOptions dls = {}) {
   const int df_diff = df_H0 - df_H1;
   const char* label = two_stage ? "lr_test_satorra2001_ml2s_from_data"
                                 : "lr_test_satorra2001_fiml_from_data";
@@ -1215,7 +1182,7 @@ lr_test_satorra2001_missing_impl(
   Eigen::MatrixXd V;
   Eigen::MatrixXd Gamma;
   if (two_stage) {
-    auto V_or = ml2s_nt_weight_from_saturated(sm);
+    auto V_or = estimate::fiml::two_stage_stage2_weight(sm, kind, dls);
     if (!V_or.has_value()) return std::unexpected(V_or.error());
     V = std::move(*V_or);
     auto G_or = estimate::fiml::two_stage_gamma_from_acov(sm,
@@ -1268,10 +1235,13 @@ lr_test_satorra2001_ml2s_from_data(
     const Eigen::VectorXd& theta_H0_full,
     const data::RawData& raw,
     double T_H0, double T_H1, int df_H0, int df_H1, double h_step,
-    const estimate::fiml::SaturatedMoments* sm_precomputed) {
+    const estimate::fiml::SaturatedMoments* sm_precomputed,
+    estimate::fiml::TwoStageWeight kind,
+    estimate::fiml::TwoStageDlsOptions dls) {
   return lr_test_satorra2001_missing_impl(
       pt_H1, rep_H1, theta_H1_full, pt_H0, rep_H0, theta_H0_full, raw,
-      T_H0, T_H1, df_H0, df_H1, /*two_stage=*/true, h_step, sm_precomputed);
+      T_H0, T_H1, df_H0, df_H1, /*two_stage=*/true, h_step, sm_precomputed,
+      kind, dls);
 }
 
 namespace {

@@ -276,7 +276,9 @@ lr_test_satorra2000_ml2s_from_data(
     GammaSource                      gamma = GammaSource::Empirical,
     SatorraAMethod                   a_method = SatorraAMethod::Exact,
     double                           h_step = 1e-4,
-    const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr);
+    const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr,
+    estimate::fiml::TwoStageWeight    kind = estimate::fiml::TwoStageWeight::Nt,
+    estimate::fiml::TwoStageDlsOptions dls = {});
 
 // ============================================================================
 // Satorra-Bentler "method 2001" difference-spectrum nested tests for missing
@@ -321,7 +323,9 @@ lr_test_satorra2001_ml2s_from_data(
     int                              df_H0,
     int                              df_H1,
     double                           h_step = 1e-4,
-    const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr);
+    const estimate::fiml::SaturatedMoments* sm_precomputed = nullptr,
+    estimate::fiml::TwoStageWeight    kind = estimate::fiml::TwoStageWeight::Nt,
+    estimate::fiml::TwoStageDlsOptions dls = {});
 
 post_expected<LRSatorra2000Result>
 lr_test_satorra2000_fiml_from_data(

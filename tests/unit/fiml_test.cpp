@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include "../test_fit.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -21,6 +22,7 @@
 #include "magmaan/model/model_evaluator.hpp"
 #include "magmaan/measures/fit_measures.hpp"
 #include "magmaan/estimate/fiml.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 #include "magmaan/robust/lr_test_satorra.hpp"
 #include "magmaan/robust/restriction.hpp"
 #include "magmaan/robust/robust.hpp"
@@ -1920,6 +1922,89 @@ TEST_CASE("two_stage_em_ml_inference: missing data returns finite corrected outp
   CHECK(ml2s->scaling_factor > 0.0);
   CHECK(std::isfinite(ml2s->chisq));
   CHECK(std::isfinite(ml2s->chisq_scaled));
+}
+
+TEST_CASE("two-stage Stage-2 weights: NT robust_continuous_ls reproduces the NT "
+          "spectrum; ADF collapses to c=1; DLS endpoints match Nt/Adf") {
+  namespace mf = magmaan::estimate::fiml;
+
+  auto built = build_mean_model("f =~ x1 + x2 + x3 + x4");
+  Eigen::VectorXd theta0(static_cast<Eigen::Index>(built.ev.n_free()));
+  theta0.setConstant(0.55);
+  auto raw = model_missing_raw(built, theta0, {220});
+
+  auto sm = mf::saturated_em_moments(raw);
+  REQUIRE_MESSAGE(sm.has_value(),
+      "saturated_em_moments failed: " << (sm.has_value() ? "" : sm.error().detail));
+
+  magmaan::data::SampleStats samp;
+  samp.S = sm->cov;
+  samp.mean = sm->mean;
+  samp.n_obs = sm->n_obs;
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 700;
+  auto est = magmaan::estimate::fit_ml(
+      *built.pt, *built.rep, samp, theta0, {},
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE(est.has_value());
+
+  // Trusted normal-theory two-stage path (build_u_factor + reduced_gamma).
+  auto nt = mf::two_stage_em_ml_inference(*built.pt, *built.rep, raw, *est);
+  REQUIRE(nt.has_value());
+
+  // Per-block Γ_FIML (n-scaled test convention), sliced from the assembled meat.
+  auto gfull = mf::two_stage_gamma_from_acov(*sm, /*se_weighted=*/false);
+  REQUIRE(gfull.has_value());
+  std::vector<Eigen::MatrixXd> gamma;
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < sm->cov.size(); ++b) {
+    const Eigen::Index p = sm->cov[b].rows();
+    const Eigen::Index q = p + p * (p + 1) / 2;
+    gamma.push_back(gfull->block(off, off, q, q));
+    off += q;
+  }
+
+  // (1) The NT weight through the explicit-weight robust sandwich, at the SAME
+  //     estimate, reproduces the NT-path UΓ spectrum (identical U, Γ, Δ).
+  auto w_nt = mf::two_stage_stage2_weight_blocks(*sm, mf::TwoStageWeight::Nt);
+  REQUIRE(w_nt.has_value());
+  auto rr_nt = magmaan::estimate::robust_continuous_ls(
+      *built.pt, *built.rep, samp, *est, *w_nt, gamma);
+  REQUIRE_MESSAGE(rr_nt.has_value(),
+      "robust_continuous_ls (NT) failed: " <<
+      (rr_nt.has_value() ? "" : rr_nt.error().detail));
+  REQUIRE(rr_nt->eigvals.size() == nt->eigvals.size());
+  Eigen::VectorXd a = rr_nt->eigvals;
+  Eigen::VectorXd b = nt->eigvals;
+  std::sort(a.data(), a.data() + a.size());
+  std::sort(b.data(), b.data() + b.size());
+  CHECK((a - b).cwiseAbs().maxCoeff() < 1e-7);
+  CHECK(std::abs(rr_nt->satorra_bentler.scale_c - nt->scaling_factor) < 1e-7);
+
+  // (2) ADF (W = Γ_FIML⁻¹): UΓ is a projector, so every eigenvalue is 1 and the
+  //     robust scaling collapses to c = 1 — independent of the estimate.
+  auto w_adf = mf::two_stage_stage2_weight_blocks(*sm, mf::TwoStageWeight::Adf);
+  REQUIRE(w_adf.has_value());
+  auto rr_adf = magmaan::estimate::robust_continuous_ls(
+      *built.pt, *built.rep, samp, *est, *w_adf, gamma);
+  REQUIRE(rr_adf.has_value());
+  CHECK((rr_adf->eigvals.array() - 1.0).abs().maxCoeff() < 1e-6);
+  CHECK(std::abs(rr_adf->satorra_bentler.scale_c - 1.0) < 1e-6);
+
+  // (3) DLS endpoints: a = 0 recovers the NT weight, a = 1 recovers ADF.
+  auto w_dls0 = mf::two_stage_stage2_weight_blocks(
+      *sm, mf::TwoStageWeight::Dls, {0.0});
+  auto w_dls1 = mf::two_stage_stage2_weight_blocks(
+      *sm, mf::TwoStageWeight::Dls, {1.0});
+  REQUIRE(w_dls0.has_value());
+  REQUIRE(w_dls1.has_value());
+  REQUIRE(w_dls0->size() == w_nt->size());
+  REQUIRE(w_dls1->size() == w_adf->size());
+  for (std::size_t bb = 0; bb < w_nt->size(); ++bb) {
+    CHECK(((*w_dls0)[bb] - (*w_nt)[bb]).cwiseAbs().maxCoeff() < 1e-7);
+    CHECK(((*w_dls1)[bb] - (*w_adf)[bb]).cwiseAbs().maxCoeff() < 1e-9);
+  }
 }
 
 TEST_CASE("fiml_baseline_chi2: missing data produces finite baseline") {
