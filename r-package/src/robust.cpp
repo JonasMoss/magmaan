@@ -802,7 +802,8 @@ Rcpp::NumericMatrix infer_empirical_gamma_with_means(Rcpp::NumericMatrix X) {
 // infer_ordinal_robust() — post-fit categorical sandwich SEs and SB-family
 // scaled tests for the delta all-ordinal LS path. `ordinal_stats` is the
 // list returned by data_ordinal_stats_from_df()/data_ordinal_stats_from_raw_impl().
-// Empty `weight` means reuse fit$estimator ("DWLS" or "WLS").
+// Empty `weight` means reuse fit$ordinal_computational_weight when present,
+// otherwise fit$estimator ("ULS", "DWLS", or "WLS").
 //
 // [[Rcpp::export]]
 Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
@@ -811,9 +812,15 @@ Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats,
   const magmaan::estimate::Estimates est = est_from_fit(fit);
   magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
   if (weight.empty()) {
-    if (!fit.containsElementNamed("estimator"))
-      Rcpp::stop("magmaan: infer_ordinal_robust() needs `weight` when fit$estimator is absent");
-    weight = Rcpp::as<std::string>(fit["estimator"]);
+    if (fit.containsElementNamed("ordinal_computational_weight")) {
+      weight = Rcpp::as<std::string>(fit["ordinal_computational_weight"]);
+    } else {
+      if (!fit.containsElementNamed("estimator")) {
+        Rcpp::stop("magmaan: infer_ordinal_robust() needs `weight` when "
+                   "fit$estimator is absent");
+      }
+      weight = Rcpp::as<std::string>(fit["estimator"]);
+    }
   }
   const std::string parameterization_name = fit.containsElementNamed("parameterization")
       ? Rcpp::as<std::string>(fit["parameterization"])

@@ -213,6 +213,37 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
 // non-robust mixed sweep. Single group only (v1).
 namespace frontier {
 
+// Experimental all-ordinal second-stage weights over an already-built
+// threshold + polychoric `OrdinalStats` object. This is intended for research
+// comparisons: callers can build pairwise/listwise ordinal moments and Gamma
+// once, then refit the SEM with several stage-2 weights without re-estimating
+// thresholds, polychorics, or the observed Gamma.
+enum class OrdinalStage2Weight {
+  Uls,   // identity
+  Dwls,  // diag(Gamma_observed)^-1
+  Wls,   // Gamma_observed^-1 (ADF/full WLS)
+  Nt,    // normal-theory/GLS-like association block
+  Dls,   // ((1-a) Gamma_NT + a Gamma_observed)^-1
+};
+
+struct OrdinalStage2DlsOptions {
+  double a = 0.5;
+};
+
+post_expected<std::vector<Eigen::MatrixXd>>
+ordinal_stage2_weight_blocks(const data::OrdinalStats& stats,
+                             OrdinalStage2Weight kind,
+                             OrdinalStage2DlsOptions dls = {});
+
+// Return a copy whose `W_wls` slot is replaced by the selected full stage-2
+// weight. ULS/DWLS/WLS are copied through their existing materialized weights;
+// NT/DLS are experimental full-weight paths consumed by the ordinary WLS
+// fitting/sandwich machinery.
+post_expected<data::OrdinalStats>
+ordinal_stats_with_stage2_weight(const data::OrdinalStats& stats,
+                                 OrdinalStage2Weight kind,
+                                 OrdinalStage2DlsOptions dls = {});
+
 post_expected<inference::ScoreTestTable>
 modification_indices_ordinal_robust(spec::LatentStructure pt,
                                     const model::MatrixRep& rep,

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Eigen/Core>
+#include <Eigen/Cholesky>
 #include <Eigen/Eigenvalues>
 
 #include "magmaan/data/h_score.hpp"
@@ -2556,6 +2557,61 @@ TEST_CASE("Observed ordinal stats expose overlap counts and nominal gamma varian
   CHECK(Gp(0, 0) / Gn(0, 0) == doctest::Approx(10.0 / 8.0).epsilon(1e-10));
   CHECK(Gp(3, 3) / Gn(3, 3) == doctest::Approx(10.0 / 7.0).epsilon(1e-10));
   CHECK((Gp - Gn).cwiseAbs().maxCoeff() > 1e-3);
+}
+
+TEST_CASE("Ordinal stage-2 weights reuse observed Gamma and expose DLS endpoints") {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  Eigen::MatrixXd X(24, 2);
+  for (Eigen::Index r = 0; r < X.rows(); ++r) {
+    X(r, 0) = (r % 2) + 1;
+    X(r, 1) = ((r / 2) % 2) + 1;
+  }
+  X(3, 0) = nan;
+  X(7, 1) = nan;
+  X(11, 0) = nan;
+  X(19, 1) = nan;
+
+  auto stats_or = magmaan::data::ordinal_stats_from_observed_integer_data(
+      {X}, magmaan::data::OrdinalPairwiseGammaKind::Overlap,
+      /*full_wls_weight=*/true);
+  REQUIRE(stats_or.has_value());
+  const auto& stats = *stats_or;
+  REQUIRE(stats.W_wls.size() == 1);
+  REQUIRE(stats.W_wls[0].size() > 0);
+
+  namespace mf = magmaan::estimate::frontier;
+  auto uls = mf::ordinal_stage2_weight_blocks(stats, mf::OrdinalStage2Weight::Uls);
+  auto dwls = mf::ordinal_stage2_weight_blocks(stats, mf::OrdinalStage2Weight::Dwls);
+  auto wls = mf::ordinal_stage2_weight_blocks(stats, mf::OrdinalStage2Weight::Wls);
+  auto nt = mf::ordinal_stage2_weight_blocks(stats, mf::OrdinalStage2Weight::Nt);
+  auto dls0 = mf::ordinal_stage2_weight_blocks(
+      stats, mf::OrdinalStage2Weight::Dls, {0.0});
+  auto dls1 = mf::ordinal_stage2_weight_blocks(
+      stats, mf::OrdinalStage2Weight::Dls, {1.0});
+
+  REQUIRE(uls.has_value());
+  REQUIRE(dwls.has_value());
+  REQUIRE(wls.has_value());
+  REQUIRE(nt.has_value());
+  REQUIRE(dls0.has_value());
+  REQUIRE(dls1.has_value());
+
+  const Eigen::Index mdim = stats.NACOV[0].rows();
+  CHECK((*uls)[0].isApprox(Eigen::MatrixXd::Identity(mdim, mdim), 1e-12));
+  CHECK((*dwls)[0].isApprox(stats.W_dwls[0], 1e-12));
+  CHECK((*wls)[0].isApprox(stats.W_wls[0], 1e-9));
+  CHECK((*dls0)[0].isApprox((*nt)[0], 1e-9));
+  CHECK((*dls1)[0].isApprox((*wls)[0], 1e-9));
+
+  auto adapted = mf::ordinal_stats_with_stage2_weight(
+      stats, mf::OrdinalStage2Weight::Dls, {0.35});
+  REQUIRE(adapted.has_value());
+  REQUIRE(adapted->W_wls.size() == 1);
+  CHECK(adapted->NACOV[0].isApprox(stats.NACOV[0], 1e-12));
+  CHECK(adapted->W_dwls[0].isApprox(stats.W_dwls[0], 1e-12));
+  CHECK(adapted->W_wls[0].rows() == mdim);
+  Eigen::LLT<Eigen::MatrixXd> llt(adapted->W_wls[0]);
+  CHECK(llt.info() == Eigen::Success);
 }
 
 TEST_CASE("Observed ordinal stats count four-variable moment support overlaps") {
