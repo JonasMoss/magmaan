@@ -67,6 +67,10 @@ const std::vector<std::string> kOrdinalInvarianceFixtures = {
     "0020_2group_thresh_load_intercept_invariance_3cat_cfa",
 };
 
+const std::vector<std::string> kOrdinalPairwiseFixtures = {
+    "0001_chen_style_2group_item_missing",
+};
+
 using magmaan::test::matrix_from_json;
 
 using magmaan::test::vector_from_json;
@@ -90,6 +94,7 @@ std::string ordinal_syntax(const nlohmann::json& exp) {
       const auto& X = block["matrix"];
       for (const auto& row : X) {
         for (Eigen::Index j = 0; j < p; ++j) {
+          if (row[static_cast<std::size_t>(j)].is_null()) continue;
           max_level[static_cast<std::size_t>(j)] =
               std::max(max_level[static_cast<std::size_t>(j)],
                        row[static_cast<std::size_t>(j)].get<int>());
@@ -215,6 +220,22 @@ double max_abs_diff(const Eigen::VectorXd& a, const Eigen::VectorXd& b) {
 
 bool has_fit(const nlohmann::json& exp) {
   return exp.contains("fits") && !exp["fits"].is_null();
+}
+
+Eigen::MatrixXd matrix_from_json_null_nan(const nlohmann::json& j) {
+  const Eigen::Index nr = static_cast<Eigen::Index>(j.size());
+  const Eigen::Index nc = nr > 0 ? static_cast<Eigen::Index>(j[0].size()) : 0;
+  Eigen::MatrixXd out(nr, nc);
+  for (Eigen::Index r = 0; r < nr; ++r) {
+    for (Eigen::Index c = 0; c < nc; ++c) {
+      const auto& cell = j[static_cast<std::size_t>(r)]
+                           [static_cast<std::size_t>(c)];
+      out(r, c) = cell.is_null()
+          ? std::numeric_limits<double>::quiet_NaN()
+          : cell.get<double>();
+    }
+  }
+  return out;
 }
 
 Eigen::VectorXd ordinal_moments(const magmaan::data::OrdinalStats& stats,
@@ -358,6 +379,49 @@ std::optional<OrdinalHandles> handles_from_fixture(
     apply_group_equal_value(*group_equal_override, opts);
   } else if (with_group_equal) {
     apply_group_equal(exp, opts);
+  }
+  auto pt = magmaan::spec::build(*fp, opts);
+  if (!pt.has_value()) {
+    failures.push_back(id + ": lavaanify — " + pt.error().detail);
+    return std::nullopt;
+  }
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  if (!mr.has_value()) {
+    failures.push_back(id + ": matrix_rep — " + mr.error().detail);
+    return std::nullopt;
+  }
+  return OrdinalHandles{std::move(*pt), std::move(*mr), std::move(*stats_or)};
+}
+
+std::optional<OrdinalHandles> pairwise_handles_from_fixture(
+    const std::string& id,
+    const nlohmann::json& exp,
+    std::vector<std::string>& failures) {
+  std::vector<Eigen::MatrixXd> blocks;
+  for (const auto& b : exp["blocks"]) {
+    blocks.push_back(matrix_from_json_null_nan(b["matrix"]));
+  }
+  auto stats_or = magmaan::data::ordinal_stats_from_observed_integer_data(
+      blocks, magmaan::data::OrdinalPairwiseGammaKind::Overlap,
+      /*full_wls_weight=*/true);
+  if (!stats_or.has_value()) {
+    failures.push_back(id + ": ordinal_stats_from_observed_integer_data — " +
+                       stats_or.error().detail);
+    return std::nullopt;
+  }
+
+  auto fp = magmaan::parse::Parser::parse(ordinal_syntax(exp));
+  if (!fp.has_value()) {
+    failures.push_back(id + ": parse");
+    return std::nullopt;
+  }
+  magmaan::spec::BuildOptions opts;
+  opts.n_groups = static_cast<std::int32_t>(exp["blocks"].size());
+  if (opts.n_groups > 1) {
+    opts.group_var = exp["group_var"].get<std::string>();
+    for (const auto& b : exp["blocks"]) {
+      opts.group_labels.push_back(b["label"].get<std::string>());
+    }
   }
   auto pt = magmaan::spec::build(*fp, opts);
   if (!pt.has_value()) {
@@ -583,6 +647,130 @@ TEST_CASE("mixed ordinal goldens: thresholds, polyserials, NACOV, and WLS weight
           << kMixedOrdinalFixtures.size() << " pass");
   for (const auto& f : failures) MESSAGE("  FAIL " << f);
   CHECK(passed == static_cast<int>(kMixedOrdinalFixtures.size()));
+}
+
+TEST_CASE("ordinal pairwise-deletion goldens match lavaan WLSMV pairwise") {
+  const std::string dir = magmaan::test::fixtures_dir() + "/ordinal_pairwise";
+
+  int total_stats = 0;
+  int passed_stats = 0;
+  int total_fits = 0;
+  int passed_fits = 0;
+  std::vector<std::string> failures;
+
+  for (const auto& id : kOrdinalPairwiseFixtures) {
+    const std::string path = dir + "/" + id + ".ordinal_pairwise.json";
+    auto raw = magmaan::test::read_fixture(path);
+    if (!raw.has_value()) {
+      failures.push_back(id + ": missing fixture");
+      continue;
+    }
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    if (exp.is_discarded()) {
+      failures.push_back(id + ": invalid JSON");
+      continue;
+    }
+
+    auto h = pairwise_handles_from_fixture(id, exp, failures);
+    if (!h.has_value()) continue;
+    const auto& stats = h->stats;
+    if (stats.pairwise_gamma != "overlap") {
+      failures.push_back(id + ": pairwise gamma kind is " +
+                         stats.pairwise_gamma);
+      continue;
+    }
+    if (stats.R.size() != exp["sample_stats"].size()) {
+      failures.push_back(id + ": block count mismatch");
+      continue;
+    }
+
+    bool stats_ok = true;
+    for (std::size_t b = 0; b < stats.R.size(); ++b) {
+      ++total_stats;
+      const auto& eb = exp["sample_stats"][b];
+      const Eigen::VectorXd th = vector_from_json(eb["thresholds"]);
+      const Eigen::MatrixXd R = matrix_from_json(eb["polychoric"]);
+      const Eigen::MatrixXd NACOV = matrix_from_json(eb["NACOV"]);
+      const Eigen::MatrixXd WD = matrix_from_json(eb["WLS.V"]);
+      const Eigen::VectorXd moments = vector_from_json(eb["moments"]);
+
+      const double d_th = max_abs_diff(stats.thresholds[b], th);
+      const double d_R = max_abs_diff(stats.R[b], R);
+      const double d_N = max_abs_diff(stats.NACOV[b], NACOV);
+      const double d_WD = max_abs_diff(stats.W_dwls[b], WD);
+      const double d_mom = max_abs_diff(ordinal_moments(stats, b), moments);
+
+      if (d_th > 5e-8 || d_R > 5e-8 || d_N > 1e-6 ||
+          d_WD > 1e-6 || d_mom > 5e-8) {
+        failures.push_back(
+            id + " block " + std::to_string(b) +
+            ": max diffs thresholds=" + std::to_string(d_th) +
+            " R=" + std::to_string(d_R) +
+            " moments=" + std::to_string(d_mom) +
+            " NACOV=" + std::to_string(d_N) +
+            " lavaan WLS.V vs W_dwls=" + std::to_string(d_WD));
+        stats_ok = false;
+        continue;
+      }
+      ++passed_stats;
+    }
+    if (!stats_ok) continue;
+
+    if (!has_fit(exp) || !exp["fits"].contains("DWLS")) continue;
+    ++total_fits;
+    const magmaan::optim::OptimOptions opt{
+        .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+    auto est_or = magmaan::test::fit_ordinal_bounded(
+        h->pt, h->rep, h->stats, magmaan::estimate::Bounds{},
+        magmaan::estimate::OrdinalWeightKind::DWLS,
+        magmaan::estimate::Backend::NloptLbfgs, opt);
+    if (!est_or.has_value()) {
+      failures.push_back(id + " DWLS: fit — " + est_or.error().detail);
+      continue;
+    }
+    auto df_or = ordinal_df_from_handles(id + " DWLS", *h, failures);
+    if (!df_or.has_value()) continue;
+
+    const auto& fit = exp["fits"]["DWLS"];
+    const Eigen::VectorXd lavaan_theta = vector_from_json(fit["theta_hat"]);
+    const int lavaan_df = fit["df"].get<int>();
+    const double lavaan_chisq = fit["chisq"].get<double>();
+    const std::int64_t n_total =
+        std::accumulate(h->stats.n_obs.begin(), h->stats.n_obs.end(),
+                        std::int64_t{0});
+    const double chisq = to_lavaan_ls_chisq(
+        2.0 * static_cast<double>(n_total) * est_or->fmin, n_total,
+        h->stats.R.size());
+    const double d_chisq = std::abs(chisq - lavaan_chisq);
+    const double d_theta = max_abs_diff(est_or->theta, lavaan_theta);
+
+    if (est_or->theta.size() != lavaan_theta.size() || *df_or != lavaan_df ||
+        d_theta > 5e-6 || d_chisq > 5e-3) {
+      failures.push_back(id + " DWLS: npar=" +
+                         std::to_string(est_or->theta.size()) +
+                         " lavaan_npar=" +
+                         std::to_string(lavaan_theta.size()) +
+                         " df=" + std::to_string(*df_or) +
+                         " lavaan_df=" + std::to_string(lavaan_df) +
+                         " theta diff=" + std::to_string(d_theta) +
+                         " chisq diff=" + std::to_string(d_chisq));
+      continue;
+    }
+    MESSAGE(id << " DWLS pairwise: chisq=" << chisq
+               << " lavaan=" << lavaan_chisq
+               << " df=" << *df_or
+               << " theta diff=" << d_theta);
+    ++passed_fits;
+  }
+
+  MESSAGE("ordinal pairwise stats: " << passed_stats << " / " << total_stats
+          << " pass");
+  MESSAGE("ordinal pairwise fits: " << passed_fits << " / " << total_fits
+          << " pass");
+  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+  CHECK(failures.empty());
+  CHECK(passed_stats == total_stats);
+  CHECK(passed_fits == total_fits);
 }
 
 TEST_CASE("ordinal fixtures: DWLS/WLS bounded fits match lavaan delta contract") {
