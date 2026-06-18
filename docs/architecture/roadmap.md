@@ -124,7 +124,10 @@ golden `parTable()` fixtures.
   p-values and lavaan's saturated-user-model `TLI = 1` convention,
   lavaan-style robust/scaled fit-measure formula helpers for the core
   `chisq.scaled`/baseline/CFI/TLI/RMSEA family when supplied user and baseline
-  scaling factors,
+  scaling factors, plus the FIML corrected robust fit-measure reduction
+  (`estimate::fiml::fiml_corrected_fit_measures`) that builds lavaan's
+  missing-data `XX3`/`df3`/`c.hat3` and baseline counterparts in the EM
+  saturated-moment metric,
   structural-aware standardization, and C++ defined-parameter evaluation.
 - `inference::frontier` robust (generalized / Satorra-Bentler-scaled)
   modification indices and equality-release score tests: each candidate carries

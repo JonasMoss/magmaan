@@ -65,6 +65,104 @@ double bisect_zero(F&& f, double lo, double hi) noexcept {
   return 0.5 * (lo + hi);
 }
 
+double chisq_upper_tail(double x, double df) noexcept {
+  if (!(df > 0.0) || !std::isfinite(x)) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  const double cdf = noncentral_chisq_cdf(x, df, 0.0);
+  return std::isfinite(cdf) ? 1.0 - cdf
+                            : std::numeric_limits<double>::quiet_NaN();
+}
+
+double lavaan_cfi(double x2, double df, double x2_null, double df_null,
+                  double c_hat, double c_hat_null, bool robust) noexcept {
+  if (!std::isfinite(x2) || !std::isfinite(df) ||
+      !std::isfinite(x2_null) || !std::isfinite(df_null) ||
+      !std::isfinite(c_hat) || !std::isfinite(c_hat_null)) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  const double adj = robust ? c_hat : 1.0;
+  const double adj_null = robust ? c_hat_null : 1.0;
+  const double t1 = std::max(0.0, x2 - adj * df);
+  const double t2 = std::max({x2 - adj * df,
+                              x2_null - adj_null * df_null,
+                              0.0});
+  if (t1 == 0.0 && t2 == 0.0) return 1.0;
+  return (t2 > 0.0) ? 1.0 - t1 / t2
+                    : std::numeric_limits<double>::quiet_NaN();
+}
+
+double lavaan_tli(double x2, double df, double x2_null, double df_null,
+                  double c_hat, double c_hat_null, bool robust) noexcept {
+  if (!std::isfinite(x2) || !std::isfinite(df) ||
+      !std::isfinite(x2_null) || !std::isfinite(df_null) ||
+      !std::isfinite(c_hat) || !std::isfinite(c_hat_null)) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  if (df <= 0.0) return 1.0;
+  const double adj = robust ? c_hat : 1.0;
+  const double adj_null = robust ? c_hat_null : 1.0;
+  const double t1 = (x2 - adj * df) * df_null;
+  const double t2 = (x2_null - adj_null * df_null) * df;
+  return (std::abs(t2) > 0.0) ? 1.0 - t1 / t2
+                              : std::numeric_limits<double>::quiet_NaN();
+}
+
+FitMeasures lavaan_rmsea_family(double x2, double df, std::int64_t n_total,
+                                std::size_t n_groups, double c_hat,
+                                double close_h0, double notclose_h0) noexcept {
+  FitMeasures out;
+  out.rmsea_close_h0 = close_h0;
+  out.rmsea_notclose_h0 = notclose_h0;
+  const double G = static_cast<double>(std::max<std::size_t>(1, n_groups));
+  const double sqrtG = std::sqrt(G);
+  if (df > 0.0 && n_total > 0 && std::isfinite(x2) &&
+      std::isfinite(c_hat) && c_hat > 0.0) {
+    const double n = static_cast<double>(n_total);
+    out.rmsea = std::sqrt(std::max((x2 / n) / df - c_hat / n, 0.0)) * sqrtG;
+
+    out.rmsea_ci_lower = 0.0;
+    out.rmsea_ci_upper = 0.0;
+    if (df >= 1.0 && x2 >= 0.0) {
+      const double cdf0 = noncentral_chisq_cdf(x2, df, 0.0);
+      const double scale = c_hat / (n * df);
+      if (cdf0 >= 0.95) {
+        const double lam_l = bisect_zero(
+            [&](double lam) { return noncentral_chisq_cdf(x2, df, lam) - 0.95; },
+            0.0, x2);
+        if (std::isfinite(lam_l) && lam_l > 0.0)
+          out.rmsea_ci_lower = std::sqrt(lam_l * scale) * sqrtG;
+      }
+      const double n_rmsea = std::max(n, 4.0 * x2);
+      if (cdf0 >= 0.05 &&
+          noncentral_chisq_cdf(x2, df, n_rmsea) <= 0.05) {
+        const double lam_u = bisect_zero(
+            [&](double lam) { return noncentral_chisq_cdf(x2, df, lam) - 0.05; },
+            0.0, n_rmsea);
+        if (std::isfinite(lam_u) && lam_u > 0.0)
+          out.rmsea_ci_upper = std::sqrt(lam_u * scale) * sqrtG;
+      }
+    }
+
+    const double ncp_close = n * df * close_h0 * close_h0 / (G * c_hat);
+    const double cdf_close = noncentral_chisq_cdf(x2, df, ncp_close);
+    out.rmsea_pvalue = std::isfinite(cdf_close)
+                           ? 1.0 - cdf_close
+                           : std::numeric_limits<double>::quiet_NaN();
+    const double ncp_notclose = n * df * notclose_h0 * notclose_h0 /
+                                (G * c_hat);
+    out.rmsea_notclose_pvalue =
+        noncentral_chisq_cdf(x2, df, ncp_notclose);
+  } else {
+    out.rmsea = 0.0;
+    out.rmsea_ci_lower = 0.0;
+    out.rmsea_ci_upper = 0.0;
+    out.rmsea_pvalue = std::numeric_limits<double>::quiet_NaN();
+    out.rmsea_notclose_pvalue = std::numeric_limits<double>::quiet_NaN();
+  }
+  return out;
+}
+
 post_expected<FitExtras>
 fit_extras_from_implied(const spec::LatentStructure& pt,
                         const SampleStats& samp,
@@ -397,6 +495,64 @@ FitMeasures fit_measures(double             chi2_user,
   std::int64_t N_total = 0;
   for (auto n : samp.n_obs) N_total += n;
   return fit_measures(chi2_user, df_user, baseline, N_total, samp.S.size());
+}
+
+RobustFitMeasures
+robust_fit_measures(const RobustFitMeasureInputs& in) noexcept {
+  RobustFitMeasures out;
+  const double df = static_cast<double>(in.df);
+  const double df_b = static_cast<double>(in.baseline_df);
+  const double c = in.scaling_factor;
+  const double c_b = in.baseline_scaling_factor;
+
+  out.chisq_scaled = in.chi2_scaled;
+  out.df_scaled = in.df;
+  out.pvalue_scaled = chisq_upper_tail(in.chi2_scaled, df);
+  out.chisq_scaling_factor = c;
+
+  out.baseline_chisq_scaled = in.baseline_chi2_scaled;
+  out.baseline_df_scaled = in.baseline_df;
+  out.baseline_pvalue_scaled =
+      chisq_upper_tail(in.baseline_chi2_scaled, df_b);
+  out.baseline_chisq_scaling_factor = c_b;
+
+  out.cfi_scaled = lavaan_cfi(in.chi2_scaled, df,
+                              in.baseline_chi2_scaled, df_b,
+                              1.0, 1.0, false);
+  out.tli_scaled = lavaan_tli(in.chi2_scaled, df,
+                              in.baseline_chi2_scaled, df_b,
+                              1.0, 1.0, false);
+  out.cfi_robust = lavaan_cfi(in.chi2, df, in.baseline_chi2, df_b,
+                              c, c_b, true);
+  out.tli_robust = lavaan_tli(in.chi2, df, in.baseline_chi2, df_b,
+                              c, c_b, true);
+
+  const double scaled_df = (df > 0.0 && std::isfinite(c) && c > 0.0)
+                               ? df * c
+                               : std::numeric_limits<double>::quiet_NaN();
+  const FitMeasures rmsea_scaled =
+      lavaan_rmsea_family(in.chi2, scaled_df, in.n_total, in.n_groups,
+                          1.0, in.rmsea_close_h0, in.rmsea_notclose_h0);
+  out.rmsea_scaled = rmsea_scaled.rmsea;
+  out.rmsea_ci_lower_scaled = rmsea_scaled.rmsea_ci_lower;
+  out.rmsea_ci_upper_scaled = rmsea_scaled.rmsea_ci_upper;
+  out.rmsea_pvalue_scaled = rmsea_scaled.rmsea_pvalue;
+  out.rmsea_notclose_pvalue_scaled =
+      rmsea_scaled.rmsea_notclose_pvalue;
+
+  const FitMeasures rmsea_robust_value =
+      lavaan_rmsea_family(in.chi2, df, in.n_total, in.n_groups,
+                          c, in.rmsea_close_h0, in.rmsea_notclose_h0);
+  const FitMeasures rmsea_robust_tail =
+      lavaan_rmsea_family(in.chi2_scaled, df, in.n_total, in.n_groups,
+                          c, in.rmsea_close_h0, in.rmsea_notclose_h0);
+  out.rmsea_robust = rmsea_robust_value.rmsea;
+  out.rmsea_ci_lower_robust = rmsea_robust_tail.rmsea_ci_lower;
+  out.rmsea_ci_upper_robust = rmsea_robust_tail.rmsea_ci_upper;
+  out.rmsea_pvalue_robust = rmsea_robust_tail.rmsea_pvalue;
+  out.rmsea_notclose_pvalue_robust =
+      rmsea_robust_tail.rmsea_notclose_pvalue;
+  return out;
 }
 
 post_expected<FitExtras>

@@ -2485,6 +2485,286 @@ fiml_ugamma_spectrum(spec::LatentStructure pt,
                                    pack, h1, h1_information, &sm);
 }
 
+namespace {
+
+post_expected<double>
+normal_theory_chisq_from_moments(
+    const std::vector<Eigen::VectorXd>& mu_model,
+    const std::vector<Eigen::MatrixXd>& sigma_model,
+    const std::vector<Eigen::VectorXd>& mu_sat,
+    const std::vector<Eigen::MatrixXd>& sigma_sat,
+    const std::vector<std::int64_t>& n_obs,
+    std::string_view label) {
+  if (sigma_model.size() != sigma_sat.size() ||
+      mu_model.size() != mu_sat.size() ||
+      sigma_model.size() != n_obs.size()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": moment block count mismatch"));
+  }
+
+  double out = 0.0;
+  for (std::size_t b = 0; b < sigma_sat.size(); ++b) {
+    const Eigen::MatrixXd Sigma =
+        0.5 * (sigma_model[b] + sigma_model[b].transpose());
+    const Eigen::MatrixXd S = 0.5 * (sigma_sat[b] + sigma_sat[b].transpose());
+    if (Sigma.rows() != Sigma.cols() || S.rows() != S.cols() ||
+        Sigma.rows() != S.rows() || mu_model[b].size() != Sigma.rows() ||
+        mu_sat[b].size() != Sigma.rows()) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          std::string(label) + ": moment dimension mismatch"));
+    }
+    Eigen::LLT<Eigen::MatrixXd> llt_sigma(Sigma);
+    Eigen::LLT<Eigen::MatrixXd> llt_s(S);
+    if (llt_sigma.info() != Eigen::Success || llt_s.info() != Eigen::Success) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          std::string(label) + ": covariance is not positive definite"));
+    }
+    const Eigen::VectorXd d = mu_sat[b] - mu_model[b];
+    const double f = log_det_from_llt(llt_sigma) - log_det_from_llt(llt_s) +
+        llt_sigma.solve(S).trace() + d.dot(llt_sigma.solve(d)) -
+        static_cast<double>(S.rows());
+    if (!std::isfinite(f)) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          std::string(label) + ": non-finite discrepancy"));
+    }
+    out += static_cast<double>(n_obs[b]) * f;
+  }
+  if (out < 0.0 && out > -1e-8) out = 0.0;
+  return out;
+}
+
+std::vector<Eigen::MatrixXd>
+independence_covariances_from_saturated(
+    const std::vector<Eigen::MatrixXd>& sigma_sat,
+    const std::vector<Eigen::Index>& exo_idx) {
+  std::vector<Eigen::MatrixXd> out;
+  out.reserve(sigma_sat.size());
+  for (const Eigen::MatrixXd& S : sigma_sat) {
+    Eigen::MatrixXd Sigma = S.diagonal().asDiagonal();
+    for (Eigen::Index a = 0;
+         a < static_cast<Eigen::Index>(exo_idx.size()); ++a) {
+      const Eigen::Index ia = exo_idx[static_cast<std::size_t>(a)];
+      if (ia < 0 || ia >= S.rows()) continue;
+      for (Eigen::Index b = a + 1;
+           b < static_cast<Eigen::Index>(exo_idx.size()); ++b) {
+        const Eigen::Index ib = exo_idx[static_cast<std::size_t>(b)];
+        if (ib < 0 || ib >= S.rows()) continue;
+        Sigma(ia, ib) = S(ia, ib);
+        Sigma(ib, ia) = S(ib, ia);
+      }
+    }
+    out.push_back(std::move(Sigma));
+  }
+  return out;
+}
+
+int fiml_baseline_df_from_cache(const FIMLCache& cache,
+                                const std::vector<Eigen::Index>& exo_idx) {
+  int out = 0;
+  const int px = static_cast<int>(exo_idx.size());
+  for (Eigen::Index p : cache.block_p) {
+    out += static_cast<int>(p) * (static_cast<int>(p) - 1) / 2;
+    out -= px * (px - 1) / 2;
+  }
+  return out;
+}
+
+Eigen::MatrixXd baseline_eta_delta(const FIMLCache& cache,
+                                   const std::vector<Eigen::Index>& exo_idx) {
+  Eigen::Index n_rows = 0;
+  Eigen::Index n_cols = 0;
+  const Eigen::Index n_exo = static_cast<Eigen::Index>(exo_idx.size());
+  const Eigen::Index n_exo_cov = n_exo * (n_exo - 1) / 2;
+  for (Eigen::Index p : cache.block_p) {
+    n_rows += p + vech_len(p);
+    n_cols += p + p + n_exo_cov;
+  }
+
+  Eigen::MatrixXd Delta = Eigen::MatrixXd::Zero(n_rows, n_cols);
+  Eigen::Index row0 = 0;
+  Eigen::Index col0 = 0;
+  for (Eigen::Index p : cache.block_p) {
+    for (Eigen::Index j = 0; j < p; ++j) {
+      Delta(row0 + j, col0 + j) = 1.0;
+      Delta(row0 + p + vech_index(p, j, j), col0 + p + j) = 1.0;
+    }
+    Eigen::Index cov_col = col0 + 2 * p;
+    for (Eigen::Index a = 0; a < n_exo; ++a) {
+      const Eigen::Index ia = exo_idx[static_cast<std::size_t>(a)];
+      if (ia < 0 || ia >= p) continue;
+      for (Eigen::Index b = a + 1; b < n_exo; ++b) {
+        const Eigen::Index ib = exo_idx[static_cast<std::size_t>(b)];
+        if (ib >= 0 && ib < p) {
+          const Eigen::Index r = std::max(ia, ib);
+          const Eigen::Index c = std::min(ia, ib);
+          Delta(row0 + p + vech_index(p, r, c), cov_col) = 1.0;
+        }
+        ++cov_col;
+      }
+    }
+    row0 += p + vech_len(p);
+    col0 += 2 * p + n_exo_cov;
+  }
+  return Delta;
+}
+
+post_expected<double>
+residual_projector_trace(const Eigen::MatrixXd& V,
+                         const Eigen::MatrixXd& G,
+                         const Eigen::MatrixXd& Delta,
+                         std::string_view label) {
+  if (V.rows() != V.cols() || G.rows() != G.cols() ||
+      V.rows() != G.rows() || Delta.rows() != V.rows()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": eta-space dimension mismatch"));
+  }
+  const Eigen::MatrixXd VD = V * Delta;
+  Eigen::MatrixXd DtVD = Delta.transpose() * VD;
+  DtVD = 0.5 * (DtVD + DtVD.transpose()).eval();
+  auto DtVDinv_or = invert_symmetric(DtVD,
+                                     std::string(label) + ": DtVD");
+  if (!DtVDinv_or.has_value()) return std::unexpected(DtVDinv_or.error());
+  Eigen::MatrixXd U = V - VD * (*DtVDinv_or) * VD.transpose();
+  U = 0.5 * (U + U.transpose()).eval();
+  const double tr = (U * G).trace();
+  if (!std::isfinite(tr)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::string(label) + ": non-finite trace"));
+  }
+  return tr;
+}
+
+post_expected<FIMLCorrectedFitMeasures>
+fiml_corrected_fit_measures_impl(spec::LatentStructure pt,
+                                 const model::MatrixRep& rep,
+                                 const RawData& raw,
+                                 const Estimates& est,
+                                 int df,
+                                 const FIMLPack& pack,
+                                 const FIMLH1& h1) {
+  if (df <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_corrected_fit_measures: requires df > 0"));
+  }
+  if (auto e = validate_h1_blocks(pack.cache, h1); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(), "FIML H1 moments"));
+  }
+  if (auto e = validate_fiml_fixed_x_missing_policy(pt, raw); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(),
+        "validate_fiml_fixed_x_missing_policy"));
+  }
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, pack.start_stats);
+      !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error(),
+        "resolve_fixed_x_from_sample"));
+  }
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::build failed: " + ev_or.error().detail));
+  }
+  auto implied_or = ev_or->evaluate(est.theta, true, true);
+  if (!implied_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ModelEvaluator::evaluate failed: " + implied_or.error().detail));
+  }
+
+  auto sm_or = saturated_em_moments(raw, pack, h1);
+  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+  const SaturatedMoments& sm = *sm_or;
+
+  auto xx3_or = normal_theory_chisq_from_moments(
+      implied_or->moments.mu, implied_or->moments.sigma, h1.mu, h1.sigma, sm.n_obs,
+      "fiml_corrected_fit_measures: user XX3");
+  if (!xx3_or.has_value()) return std::unexpected(xx3_or.error());
+
+  auto spec_or = fiml_ugamma_spectrum_impl(
+      pt, rep, raw, est, df, *xx3_or, pack, h1,
+      FIMLH1Information::Saturated, &sm);
+  if (!spec_or.has_value()) return std::unexpected(spec_or.error());
+
+  const std::vector<Eigen::Index> exo_idx = observed_exogenous_indices(pt);
+  const std::vector<Eigen::MatrixXd> sigma_null =
+      independence_covariances_from_saturated(h1.sigma, exo_idx);
+  auto xx3_null_or = normal_theory_chisq_from_moments(
+      h1.mu, sigma_null, h1.mu, h1.sigma, sm.n_obs,
+      "fiml_corrected_fit_measures: baseline XX3");
+  if (!xx3_null_or.has_value()) return std::unexpected(xx3_null_or.error());
+
+  const int df_null = fiml_baseline_df_from_cache(pack.cache, exo_idx);
+  if (df_null <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "fiml_corrected_fit_measures: baseline df must be > 0"));
+  }
+  const Eigen::MatrixXd D_null = baseline_eta_delta(pack.cache, exo_idx);
+  auto tr_null_or = residual_projector_trace(
+      sm.H, sm.acov, D_null, "fiml_corrected_fit_measures: baseline");
+  if (!tr_null_or.has_value()) return std::unexpected(tr_null_or.error());
+
+  FIMLCorrectedFitMeasures out;
+  out.xx3 = *xx3_or;
+  out.df3 = df;
+  out.c_hat3 = spec_or->trace_xcheck / static_cast<double>(df);
+  out.xx3_scaled = (out.c_hat3 > 0.0)
+      ? out.xx3 / out.c_hat3
+      : std::numeric_limits<double>::quiet_NaN();
+  out.xx3_null = *xx3_null_or;
+  out.df3_null = df_null;
+  out.c_hat3_null = *tr_null_or / static_cast<double>(df_null);
+  out.xx3_null_scaled = (out.c_hat3_null > 0.0)
+      ? out.xx3_null / out.c_hat3_null
+      : std::numeric_limits<double>::quiet_NaN();
+
+  measures::RobustFitMeasureInputs inputs;
+  inputs.chi2 = out.xx3;
+  inputs.df = out.df3;
+  inputs.chi2_scaled = out.xx3_scaled;
+  inputs.scaling_factor = out.c_hat3;
+  inputs.baseline_chi2 = out.xx3_null;
+  inputs.baseline_df = out.df3_null;
+  inputs.baseline_chi2_scaled = out.xx3_null_scaled;
+  inputs.baseline_scaling_factor = out.c_hat3_null;
+  inputs.n_total = pack.cache.n_total;
+  inputs.n_groups = pack.cache.block_p.size();
+  out.indices = measures::robust_fit_measures(inputs);
+  return out;
+}
+
+}  // namespace
+
+post_expected<FIMLCorrectedFitMeasures>
+fiml_corrected_fit_measures(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const RawData& raw,
+                            const Estimates& est,
+                            int df,
+                            FIML discrepancy) {
+  (void)discrepancy;
+  auto pack_or = fiml_pack(raw);
+  if (!pack_or.has_value()) {
+    return std::unexpected(fit_to_post(pack_or.error(), "fiml_pack"));
+  }
+  auto h1_or = fiml_h1_moments(raw, *pack_or);
+  if (!h1_or.has_value()) {
+    return std::unexpected(fit_to_post(h1_or.error(), "FIML H1 moments"));
+  }
+  return fiml_corrected_fit_measures_impl(std::move(pt), rep, raw, est, df,
+                                          *pack_or, *h1_or);
+}
+
+post_expected<FIMLCorrectedFitMeasures>
+fiml_corrected_fit_measures(spec::LatentStructure pt,
+                            const model::MatrixRep& rep,
+                            const RawData& raw,
+                            const Estimates& est,
+                            int df,
+                            const FIMLPack& pack,
+                            const FIMLH1& h1) {
+  return fiml_corrected_fit_measures_impl(std::move(pt), rep, raw, est, df,
+                                          pack, h1);
+}
+
 post_expected<Eigen::MatrixXd>
 fiml_residual_projector(spec::LatentStructure pt,
                         const model::MatrixRep& rep,
