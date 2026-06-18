@@ -44,17 +44,39 @@ rsync -a --exclude='build' --exclude='build-*' --exclude='.git' \
 ## 4. Install with the tuned native flags
 
 Run this **inside a Slurm job on the partition you will run jobs on**, so
-`-march=native` matches the compute node (see the caveat in `dev/saga/Makevars`):
+`-march=native` matches the compute node (see the caveat in `dev/saga/Makevars`).
+Request several cores for the build (`--cpus-per-task=16`): the package is ~80
+Eigen-heavy C++ translation units and the compile is embarrassingly parallel, so
+`-j` is the difference between a serial multi-minute build and well under a minute.
 
 ```sh
 cd ~/magmaan
 R_MAKEVARS_USER=$PWD/dev/saga/Makevars \
-    MAKEFLAGS="-j$SLURM_CPUS_PER_TASK" \
+    MAKEFLAGS="-j${SLURM_CPUS_PER_TASK:-$(nproc)}" \
     R CMD INSTALL r-package
 ```
 
-Or, equivalently, copy `dev/saga/Makevars` to `~/.R/Makevars` and run a plain
-`R CMD INSTALL r-package` / `devtools::install_local("r-package")`.
+The `${SLURM_CPUS_PER_TASK:-$(nproc)}` guard matters: a **bare `-j`** (unset
+variable) tells make to spawn *unlimited* parallel compilers and can OOM the node,
+while a 1-core allocation silently falls back to a serial build.
+
+Or copy `dev/saga/Makevars` to `~/.R/Makevars` and run a plain
+`R CMD INSTALL r-package`. If you install from **R** instead, pass `Ncpus` so the
+compile still parallelizes — `install_github`/`install_local` are **serial by
+default**:
+
+```r
+remotes::install_local("~/magmaan/r-package", Ncpus = 16)   # or install_github(...)
+```
+
+### Install once, reuse across jobs
+
+`R CMD INSTALL` recompiles the whole core every time and installs into a single
+library path. Do it **once** in a setup step, then let array/sim jobs just
+`library(magmaan)`. Do **not** reinstall from every array task: concurrent
+installs into the same library race on the in-place `r-package/src/*.o` objects
+and fail with spurious `cannot find ….o` link errors. Rebuild only when the C++
+changes or you move to a different `-march` partition.
 
 ## Troubleshooting
 

@@ -172,7 +172,7 @@ vendor-check: vendor
 # from pkg-config; override with NLOPT_CFLAGS / NLOPT_LIBS (or R_MAKEVARS_USER on
 # a cluster). See dev/saga/README.md.
 r-install: vendor
-    R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
+    MAKEFLAGS="-j$(nproc)" R CMD INSTALL --no-byte-compile --no-docs --no-help r-package
 
 # FAST dev install (the daily loop). Compiles only the Rcpp glue and links the
 # prebuilt opt libmagmaan.a, via a throwaway build-rdev/ mirror with the dev-only
