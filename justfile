@@ -235,10 +235,10 @@ check-layering:
 # before the slow build.
 check: check-layering vendor-check test r-check
 
-# FIML-FMG paper endpoint sync. Dry-run unless the nested helper receives
-# `--apply`, e.g. `just fmg-sync export-overleaf --apply`.
+# FIML-FMG paper sync is being rebuilt with the new paper simulation layout.
 fmg-sync *ARGS:
-    cd papers/fiml-fmg && dev/sync/sync_external.sh {{ARGS}}
+    @echo "FIML-FMG sync helper pending; see papers/fiml-fmg/dev/todo.md" >&2
+    @exit 1
 
 notes_dir := "docs/research/notes"
 
