@@ -113,6 +113,10 @@ data_ordinal_stats_from_raw_impl <- function(X, full_wls_weight = TRUE) {
     .Call(`_magmaan_data_ordinal_stats_from_raw_impl`, X, full_wls_weight)
 }
 
+data_ordinal_stats_observed_from_raw_impl <- function(X, pd_gamma = "overlap", full_wls_weight = TRUE) {
+    .Call(`_magmaan_data_ordinal_stats_observed_from_raw_impl`, X, pd_gamma, full_wls_weight)
+}
+
 data_ordinal_stats_h_weighted_from_raw_impl <- function(X, h_kind = "wma_hard_cap", k = 1.5, a = 1.6, b = 2.2, lambda = 0.2) {
     .Call(`_magmaan_data_ordinal_stats_h_weighted_from_raw_impl`, X, h_kind, k, a, b, lambda)
 }
@@ -648,4 +652,3 @@ sim_vm_draw_impl <- function(calibration, n, reps, seed_base, cholesky_jitter = 
 sim_vm_batch_impl <- function(target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter = 80L, coefficient_tol = 1e-10, correlation_tol = 1e-10, rho_bound = 0.999, cholesky_jitter = 1e-10) {
     .Call(`_magmaan_sim_vm_batch_impl`, target_corr, target_skewness, target_excess_kurtosis, n, reps, seed_base, max_iter, coefficient_tol, correlation_tol, rho_bound, cholesky_jitter)
 }
-

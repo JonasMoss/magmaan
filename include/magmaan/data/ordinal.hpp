@@ -26,6 +26,16 @@ struct OrdinalStats {
   std::vector<std::int64_t> n_obs;
   std::vector<std::vector<std::int32_t>> n_levels;
   std::vector<std::vector<std::string>> ov_names;
+
+  // Optional pairwise-deletion diagnostics. Empty for ordinary complete/listwise
+  // stats. Supports are 0-based variable indices; singleton rows are thresholds,
+  // pair rows are polychorics.
+  std::vector<std::vector<std::int32_t>> moment_support_i;
+  std::vector<std::vector<std::int32_t>> moment_support_j;
+  std::vector<std::vector<std::int64_t>> moment_n_obs;
+  std::vector<Eigen::Matrix<std::int64_t, Eigen::Dynamic, Eigen::Dynamic>>
+      moment_overlap_n_obs;
+  std::string pairwise_gamma;
 };
 
 // Mixed continuous/ordinal categorical statistics. Moment order follows
@@ -109,6 +119,11 @@ enum class OrdinalGammaMaterialization {
   Diagonal,
   Full,
   Reduced,
+};
+
+enum class OrdinalPairwiseGammaKind {
+  Overlap,
+  Nominal,
 };
 
 struct OrdinalWeightPlan {
@@ -244,6 +259,12 @@ struct MixedOrdinalHuberResidualStats {
 post_expected<OrdinalStats>
 ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& X,
                                 bool full_wls_weight = true);
+
+post_expected<OrdinalStats>
+ordinal_stats_from_observed_integer_data(
+    const std::vector<Eigen::MatrixXd>& X,
+    OrdinalPairwiseGammaKind gamma_kind = OrdinalPairwiseGammaKind::Overlap,
+    bool full_wls_weight = true);
 
 // `full_wls_weight` controls whether the full-WLS weight (the dense NACOV
 // inverse) is materialized. DWLS needs only the diagonal `W_dwls` (an

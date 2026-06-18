@@ -41,6 +41,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 23 | [fiml-fmg-vs-mlr](23-fiml-fmg-vs-mlr/report.qmd) | paper-sim | active | Under non-normality + MCAR, do the FMG/pEBA FIML goodness-of-fit and nested tests beat the dominant MLR (Yuan-Bentler) default? |
 | 24 | [fiml-twostage-fmg-chisq](24-fiml-twostage-fmg-chisq/report.qmd) | paper-sim | active | Do the FMG full-spectrum goodness-of-fit chi-squares calibrate FIML and two-stage ML (ML2S) better than the Savalei low-moment corrections under non-normal incomplete data? |
 | 25 | [fiml-invariance-fmg-power](25-fiml-invariance-fmg-power/report.qmd) | paper-sim | active | Under non-normal incomplete data (FIML and ML2S), do the FMG/pEBA eigenvalue p-values calibrate the measurement-invariance difference test better than the MLR/Satorra-Bentler default, and with what power? (extends Brace & Savalei 2017) |
+| 26 | [ordinal-pd-gamma](26-ordinal-pd-gamma/report.qmd) | probe | active | Does overlap-weighting the ordinal pairwise-deletion Gamma fix the nominal-N WLSMV missing-data scaling problem? |
 
 ## Archived
 

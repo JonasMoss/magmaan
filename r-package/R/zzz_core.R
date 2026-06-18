@@ -31,6 +31,7 @@ data_ordinal_stats_from_raw <- function(X, robust = c("ml", "none", "h_weighted"
 data_ordinal_stats_h_weighted_from_raw <- data_ordinal_stats_h_weighted_from_raw_impl
 data_ordinal_stats_dpd_from_raw <- data_ordinal_stats_dpd_from_raw_impl
 data_ordinal_stats_huber_residual_from_raw <- data_ordinal_stats_huber_residual_from_raw_impl
+data_ordinal_stats_observed_from_raw <- data_ordinal_stats_observed_from_raw_impl
 data_mixed_ordinal_stats_from_raw <- function(X, ordered_mask,
                                               polyserial = c("ml", "dpd", "huber_residual"),
                                               alpha = 0.3,
@@ -229,6 +230,7 @@ magmaan_core <- local({
       "data_pairwise_sample_stats",
       "data_gamma_nt_pairwise",
       "data_ordinal_stats_from_raw",
+      "data_ordinal_stats_observed_from_raw",
       "data_mixed_ordinal_stats_from_raw",
       "data_shrink_mixed_ordinal_stats"
     ),
@@ -442,9 +444,11 @@ magmaan_core <- local({
       "data_ordinal_stats_h_weighted_from_raw",
       "data_ordinal_stats_dpd_from_raw",
       "data_ordinal_stats_huber_residual_from_raw",
+      "data_ordinal_stats_observed_from_raw",
       "data_mixed_ordinal_stats_polyserial_dpd_from_raw",
       "data_mixed_ordinal_stats_huber_residual_from_raw",
       "data_ordinal_stats_from_raw_impl",
+      "data_ordinal_stats_observed_from_raw_impl",
       "data_ordinal_stats_h_weighted_from_raw_impl",
       "data_ordinal_stats_dpd_from_raw_impl",
       "data_ordinal_stats_huber_residual_from_raw_impl",

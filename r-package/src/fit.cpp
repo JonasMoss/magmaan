@@ -957,6 +957,34 @@ Rcpp::List ordinal_stats_to_r(const magmaan::data::OrdinalStats& s) {
       Rcpp::_["W_wls"] = W_wls,
       Rcpp::_["nobs"] = nobs,
       Rcpp::_["n_levels"] = n_levels);
+  if (!s.pairwise_gamma.empty()) {
+    Rcpp::List support_i(static_cast<R_xlen_t>(s.moment_support_i.size()));
+    Rcpp::List support_j(static_cast<R_xlen_t>(s.moment_support_j.size()));
+    Rcpp::List moment_nobs(static_cast<R_xlen_t>(s.moment_n_obs.size()));
+    Rcpp::List overlap(static_cast<R_xlen_t>(s.moment_overlap_n_obs.size()));
+    for (R_xlen_t b = 0; b < support_i.size(); ++b) {
+      const auto bi = static_cast<std::size_t>(b);
+      Rcpp::IntegerVector si(static_cast<R_xlen_t>(s.moment_support_i[bi].size()));
+      Rcpp::IntegerVector sj(static_cast<R_xlen_t>(s.moment_support_j[bi].size()));
+      Rcpp::NumericVector mn(static_cast<R_xlen_t>(s.moment_n_obs[bi].size()));
+      for (R_xlen_t k = 0; k < si.size(); ++k) {
+        si[k] = s.moment_support_i[bi][static_cast<std::size_t>(k)] + 1;
+        sj[k] = s.moment_support_j[bi][static_cast<std::size_t>(k)] >= 0
+                    ? s.moment_support_j[bi][static_cast<std::size_t>(k)] + 1
+                    : NA_INTEGER;
+        mn[k] = static_cast<double>(s.moment_n_obs[bi][static_cast<std::size_t>(k)]);
+      }
+      support_i[b] = si;
+      support_j[b] = sj;
+      moment_nobs[b] = mn;
+      overlap[b] = Rcpp::wrap(s.moment_overlap_n_obs[bi].cast<double>());
+    }
+    out.attr("pd_gamma") = s.pairwise_gamma;
+    out.attr("moment_support_i") = support_i;
+    out.attr("moment_support_j") = support_j;
+    out.attr("moment_nobs") = moment_nobs;
+    out.attr("moment_overlap_nobs") = overlap;
+  }
   out.attr("class") = Rcpp::CharacterVector::create("magmaan_ordinal_data", "list");
   return out;
 }
@@ -2183,6 +2211,24 @@ Rcpp::List data_ordinal_stats_from_raw_impl(SEXP X, bool full_wls_weight = true)
   auto blocks = matrix_blocks_from_arg(X);
   auto out_or = magmaan::data::ordinal_stats_from_integer_data(blocks,
                                                                full_wls_weight);
+  if (!out_or.has_value()) stop_post(out_or.error());
+  return ordinal_stats_to_r(*out_or);
+}
+
+magmaan::data::OrdinalPairwiseGammaKind ordinal_pairwise_gamma_from_string(
+    const std::string& gamma) {
+  if (gamma == "overlap") return magmaan::data::OrdinalPairwiseGammaKind::Overlap;
+  if (gamma == "nominal") return magmaan::data::OrdinalPairwiseGammaKind::Nominal;
+  Rcpp::stop("magmaan: pd_gamma must be \"overlap\" or \"nominal\" (got \"%s\")",
+             gamma);
+}
+
+// [[Rcpp::export]]
+Rcpp::List data_ordinal_stats_observed_from_raw_impl(
+    SEXP X, std::string pd_gamma = "overlap", bool full_wls_weight = true) {
+  auto blocks = matrix_blocks_from_arg(X);
+  auto out_or = magmaan::data::ordinal_stats_from_observed_integer_data(
+      blocks, ordinal_pairwise_gamma_from_string(pd_gamma), full_wls_weight);
   if (!out_or.has_value()) stop_post(out_or.error());
   return ordinal_stats_to_r(*out_or);
 }

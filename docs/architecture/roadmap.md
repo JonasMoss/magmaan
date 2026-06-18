@@ -491,6 +491,18 @@ golden `parTable()` fixtures.
   A.method = "exact", scaled.shifted = FALSE)` row under lavaan's ordinal WLSMV
   convention, where the displayed difference statistic/`Df diff` are the
   spectrum-derived mean/variance-adjusted `T_adjusted`/`d0` for `m > 1`.
+- All-ordinal pairwise-deletion sample statistics are implemented for the
+  categorical LS path (`data::ordinal_stats_from_observed_integer_data`,
+  surfaced in R as `missing = "pairwise"` with `pd_gamma = "overlap" |
+  "nominal"`). Thresholds use itemwise observed cases and polychorics use
+  observed pairs; both variants feed the existing `OrdinalStats` / DWLS / WLSMV
+  machinery. The `overlap` Gamma is the default and applies the support-overlap
+  finite-sample scaling from `docs/research/notes/ordinal_pd_gamma.tex`; the
+  `nominal` variant keeps the same PD point estimates but suppresses the
+  overlap reweighting for replication of the conventional wrong implementation.
+  Mixed continuous/ordinal pairwise missingness remains unsupported. Regression
+  coverage lives in `tests/unit/ordinal_test.cpp`; the advisory calibration
+  probe is `experiments/26-ordinal-pd-gamma`.
 
 ### Staged C++ facade
 
