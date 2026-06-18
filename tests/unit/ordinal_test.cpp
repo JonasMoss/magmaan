@@ -2558,6 +2558,44 @@ TEST_CASE("Observed ordinal stats expose overlap counts and nominal gamma varian
   CHECK((Gp - Gn).cwiseAbs().maxCoeff() > 1e-3);
 }
 
+TEST_CASE("Observed ordinal stats count four-variable moment support overlaps") {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  Eigen::MatrixXd X(12, 4);
+  X << 1,   1,   1,   1,
+       1,   1,   2,   2,
+       1,   2,   1,   2,
+       1,   2,   2,   1,
+       2,   1,   1,   2,
+       2,   1,   2,   1,
+       2,   2,   1,   1,
+       2,   2,   2,   2,
+       nan, 1,   1,   1,
+       1,   nan, 1,   1,
+       1,   1,   nan, 1,
+       1,   1,   1,   nan;
+
+  auto overlap = magmaan::data::ordinal_stats_from_observed_integer_data(
+      {X}, magmaan::data::OrdinalPairwiseGammaKind::Overlap);
+  auto nominal = magmaan::data::ordinal_stats_from_observed_integer_data(
+      {X}, magmaan::data::OrdinalPairwiseGammaKind::Nominal);
+  REQUIRE(overlap.has_value());
+  REQUIRE(nominal.has_value());
+  REQUIRE(overlap->moment_n_obs.size() == 1);
+  REQUIRE(overlap->moment_overlap_n_obs.size() == 1);
+  const auto& nobs = overlap->moment_n_obs[0];
+  const auto& ovlp = overlap->moment_overlap_n_obs[0];
+  REQUIRE(nobs.size() == 10);
+  CHECK(nobs[4] == 10);   // y2,y1 polychoric
+  CHECK(nobs[9] == 10);   // y4,y3 polychoric
+  CHECK(ovlp(4, 4) == 10);
+  CHECK(ovlp(9, 9) == 10);
+  CHECK(ovlp(4, 9) == 8); // union support y1,y2,y3,y4
+
+  const Eigen::MatrixXd& Gp = overlap->NACOV[0];
+  const Eigen::MatrixXd& Gn = nominal->NACOV[0];
+  CHECK(Gp(4, 4) / Gn(4, 4) == doctest::Approx(12.0 / 10.0).epsilon(1e-10));
+}
+
 TEST_CASE("Ordinal pair joint ML estimates pair-local thresholds and rho") {
   Eigen::VectorXd thi(2);
   thi << -0.55, 0.85;
