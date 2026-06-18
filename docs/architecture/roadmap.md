@@ -288,6 +288,17 @@ golden `parTable()` fixtures.
   multi-group tests anchor the corrected SE/spectrum path against the ordinary
   complete-data robust.sem machinery; missing-data tests check finite corrected
   output under MAR patterns.
+  - *Frontier:* the Stage-2 weight is selectable
+    (`estimate::fiml::TwoStageWeight` ∈ {`Nt`, `Dwls`, `Adf`, `Dls`}, built by
+    `two_stage_stage2_weight`). `Nt` is the lavaan `robust.two.stage` default
+    and is unchanged; the non-NT members are missingness-aware weighted-LS
+    Stage-2 estimators (`Dwls` = `diag(Γ_FIML)⁻¹`, `Adf` = `Γ_FIML⁻¹`,
+    `Dls` = Browne `Γ_NT`/`Γ_FIML` mix) that route the single-model GOF/SE path
+    through `robust_continuous_ls` and the ML2S Satorra-2000/2001 difference
+    tests through the same eigen-cores (a `(V, Γ)` swap, no new test machinery).
+    R: `magmaan(estimator = "ML2S", stage2_weight =, dls_a =)`. Rationale and
+    the open heavy-MAR efficiency/calibration sim: `docs/research/notes/
+    two_stage_weighting.tex`.
 - Robust FIML MLR post-fit reporting computes observed-pattern casewise
   sandwich SEs and Yuan-Bentler Mplus scaled-test traces for fixture-backed
   non-saturated single- and multi-group cases. The observed FIML information
