@@ -2675,9 +2675,17 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
   // branch in `ordinal_residuals`/`ordinal_jacobian` is kept but untested.)
   // Binary items keep a fixed scale (one threshold leaves no room to identify
   // a separate scale; lavaan does the same), so the release is vetoed there.
+  // At the scalar ordinal rung (`intercepts` also equated), lavaan fixes those
+  // group-2+ indicator intercepts back to 0 and frees the group-2+ latent means.
   const bool release_invariant =
       std::find(pt.group_equal.begin(), pt.group_equal.end(),
                 spec::GroupEqual::Thresholds) != pt.group_equal.end();
+  const bool intercepts_equal =
+      std::find(pt.group_equal.begin(), pt.group_equal.end(),
+                spec::GroupEqual::Intercepts) != pt.group_equal.end();
+  const bool means_equal =
+      std::find(pt.group_equal.begin(), pt.group_equal.end(),
+                spec::GroupEqual::Means) != pt.group_equal.end();
   auto is_binary = [&](std::size_t b, std::int32_t ov) {
     if (b >= stats.threshold_ov.size()) return false;
     int n = 0;
@@ -2686,7 +2694,44 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
     return n <= 1;
   };
 
-  const std::int32_t old_n = pt.n_free();
+  const std::int32_t initial_n = pt.n_free();
+  std::int32_t old_n = initial_n;
+  if (release_invariant && intercepts_equal && !means_equal) {
+    for (std::size_t i = 0; i < pt.size(); ++i) {
+      if (pt.op[i] != parse::Op::Intercept || pt.group[i] < 2 ||
+          pt.free[i] > 0 || pt.lhs_var[i] < 0) {
+        continue;
+      }
+      const std::int32_t ov =
+          pt.ov_pos[static_cast<std::size_t>(pt.lhs_var[i])];
+      if (ov >= 0) continue;  // observed intercept; scalar fixes these
+      pt.free[i] = ++old_n;
+      pt.fixed_value[i] = std::numeric_limits<double>::quiet_NaN();
+      if (static_cast<std::int32_t>(pt.eq_groups.size()) == pt.free[i] - 1) {
+        pt.eq_groups.push_back(pt.free[i] - 1);
+      }
+    }
+    if (starts != nullptr &&
+        starts->hint.size() < static_cast<std::size_t>(old_n)) {
+      starts->hint.resize(static_cast<std::size_t>(old_n),
+                          std::numeric_limits<double>::quiet_NaN());
+    }
+    const std::size_t n_lin = pt.lin_constraint_d.size();
+    if (n_lin > 0 && old_n > initial_n &&
+        pt.lin_constraint_R.size() ==
+            n_lin * static_cast<std::size_t>(initial_n)) {
+      std::vector<double> R_new(n_lin * static_cast<std::size_t>(old_n), 0.0);
+      for (std::size_t r = 0; r < n_lin; ++r) {
+        for (std::int32_t c = 0; c < initial_n; ++c) {
+          R_new[r * static_cast<std::size_t>(old_n) +
+                static_cast<std::size_t>(c)] =
+              pt.lin_constraint_R[r * static_cast<std::size_t>(initial_n) +
+                                  static_cast<std::size_t>(c)];
+        }
+      }
+      pt.lin_constraint_R = std::move(R_new);
+    }
+  }
   std::vector<char> remove_free(static_cast<std::size_t>(old_n) + 1, 0);
   for (std::size_t i = 0; i < pt.size(); ++i) {
     if ((pt.op[i] != parse::Op::Covariance &&
@@ -2707,10 +2752,15 @@ prepare_ordinal_delta_partable(spec::LatentStructure& pt,
       continue;
     }
     // Release: keep this group-2+ ordinal scale/intercept free instead of
-    // pinning it. The scale is vetoed (re-fixed) for binary indicators.
+    // pinning it. The scale is vetoed (re-fixed) for binary indicators; the
+    // intercept release is suppressed when scalar intercept equality is active.
     if (release_invariant && pt.group[i] >= 2 && pt.free[i] > 0) {
       const bool is_scale = pt.op[i] == parse::Op::Covariance;
-      if (!(is_scale && is_binary(b, ov))) continue;  // honor the free row
+      if (is_scale) {
+        if (!is_binary(b, ov)) continue;  // honor the free scale row
+      } else if (!intercepts_equal) {
+        continue;  // honor the free indicator intercept row
+      }
     }
     if (pt.free[i] > 0) remove_free[static_cast<std::size_t>(pt.free[i])] = 1;
     pt.free[i] = 0;

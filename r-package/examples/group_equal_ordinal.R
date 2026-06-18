@@ -8,10 +8,13 @@
 ## keyword ties the requested families across groups (shared labels, the same
 ## merge as explicit `equal(...)` labels) and, for ordered-categorical THETA
 ## models with thresholds equated, frees the group-2 latent-response scale
-## (free residual variance `~~`, binary-vetoed) and indicator intercepts (`~1`)
-## exactly as lavaan's `cfa(group.equal=, parameterization = "theta")`. The C++
-## core + goldens 0017 (thresholds+loadings) and 0019 (thresholds only) already
-## gate the fit; here we confirm the R keyword reaches both `lavaan_lavaanify`
+## (free residual variance `~~`, binary-vetoed). The metric rung also frees
+## group-2 indicator intercepts (`~1`); the scalar/intercept rung fixes those
+## indicator intercepts back to zero and frees the group-2 latent mean, matching
+## lavaan's `cfa(group.equal=, parameterization = "theta")`. The C++ core +
+## goldens 0017 (thresholds+loadings), 0019 (thresholds only), and 0020
+## (thresholds+loadings+intercepts) already gate the fit; here we confirm the R
+## keyword reaches both `lavaan_lavaanify`
 ## (the cross-group ties) and the ordinal fit (the fit-time release, which the
 ## partable round-trip cannot carry on its own).
 ##
@@ -87,8 +90,10 @@ fit_and_check <- function(label, ge, est_tol = 5e-3, chisq_tol = 5e-2) {
   mg_chisq  <- 2 * fit$ntotal * fit$fmin
   lav_chisq <- as.numeric(lavaan::fitMeasures(lav, "chisq"))
 
-  ## Wu-Estabrook release: group-2 indicator residual `~~` and intercepts `~1`
-  ## freed, group-1 fixed. Count the freed group-2 rows in both.
+  ## Wu-Estabrook release: group-2 indicator residual `~~` rows are free
+  ## (binary-vetoed). Indicator intercepts `~1` are free for threshold/metric
+  ## but fixed again for scalar; count the free group-2 indicator `~~`/`~1`
+  ## rows in both implementations.
   released <- function(pt) {
     rel <- (pt$op %in% c("~~", "~1")) & pt$lhs %in% ordered &
       pt$group == 2L & pt$free > 0L
@@ -127,5 +132,9 @@ fit_and_check("thresholds + loadings", c("thresholds", "loadings"))
 ## 0019 analogue: thresholds only -- the scale/intercept release is keyed on the
 ## threshold tie, loadings stay free per group.
 fit_and_check("thresholds only", c("thresholds"))
+## 0020 analogue: scalar/intercept rung -- group-2 indicator intercepts are
+## pinned back to zero while the group-2 latent mean is freed.
+fit_and_check("thresholds + loadings + intercepts",
+              c("thresholds", "loadings", "intercepts"))
 
 cat("\nordinal group.equal (theta) R surface vs lavaan: ok\n")
