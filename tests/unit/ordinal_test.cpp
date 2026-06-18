@@ -2492,6 +2492,72 @@ TEST_CASE("Ordinal pair observed ML wrappers reuse observed-pair table counts") 
   CHECK(observed_joint->fit.negloglik == doctest::Approx(direct_joint->negloglik));
 }
 
+TEST_CASE("Observed ordinal stats degenerate to complete-data ordinal stats") {
+  Eigen::MatrixXd X(20, 2);
+  Eigen::Index r = 0;
+  for (int k = 0; k < 4; ++k) X.row(r++) << 1, 1;
+  for (int k = 0; k < 5; ++k) X.row(r++) << 1, 2;
+  for (int k = 0; k < 5; ++k) X.row(r++) << 2, 1;
+  for (int k = 0; k < 6; ++k) X.row(r++) << 2, 2;
+
+  auto complete = magmaan::data::ordinal_stats_from_integer_data({X});
+  auto observed = magmaan::data::ordinal_stats_from_observed_integer_data(
+      {X}, magmaan::data::OrdinalPairwiseGammaKind::Overlap);
+  REQUIRE(complete.has_value());
+  REQUIRE(observed.has_value());
+  REQUIRE(observed->R.size() == 1);
+  CHECK(observed->R[0].isApprox(complete->R[0], 1e-12));
+  CHECK(observed->thresholds[0].isApprox(complete->thresholds[0], 1e-12));
+  CHECK(observed->NACOV[0].isApprox(complete->NACOV[0], 1e-10));
+  CHECK(observed->W_dwls[0].isApprox(complete->W_dwls[0], 1e-10));
+  CHECK(observed->pairwise_gamma == "overlap");
+}
+
+TEST_CASE("Observed ordinal stats expose overlap counts and nominal gamma variant") {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  Eigen::MatrixXd X(10, 3);
+  X << 1,   1,   1,
+       2,   1,   nan,
+       1,   2,   1,
+       2,   2,   2,
+       1,   nan, 2,
+       2,   1,   1,
+       nan, 2,   2,
+       1,   1,   2,
+       2,   2,   1,
+       nan, nan, 2;
+
+  auto overlap = magmaan::data::ordinal_stats_from_observed_integer_data(
+      {X}, magmaan::data::OrdinalPairwiseGammaKind::Overlap);
+  auto nominal = magmaan::data::ordinal_stats_from_observed_integer_data(
+      {X}, magmaan::data::OrdinalPairwiseGammaKind::Nominal);
+  REQUIRE(overlap.has_value());
+  REQUIRE(nominal.has_value());
+  CHECK(overlap->R[0].isApprox(nominal->R[0], 1e-12));
+  CHECK(overlap->thresholds[0].isApprox(nominal->thresholds[0], 1e-12));
+  REQUIRE(overlap->moment_n_obs.size() == 1);
+  REQUIRE(overlap->moment_overlap_n_obs.size() == 1);
+  const auto& nobs = overlap->moment_n_obs[0];
+  const auto& ovlp = overlap->moment_overlap_n_obs[0];
+  REQUIRE(nobs.size() == 6);
+  CHECK(nobs[0] == 8);   // y1 threshold
+  CHECK(nobs[1] == 8);   // y2 threshold
+  CHECK(nobs[2] == 9);   // y3 threshold
+  CHECK(nobs[3] == 7);   // y2,y1 polychoric
+  CHECK(nobs[4] == 7);   // y3,y1 polychoric
+  CHECK(nobs[5] == 7);   // y3,y2 polychoric
+  CHECK(ovlp(0, 0) == 8);
+  CHECK(ovlp(0, 1) == 7);
+  CHECK(ovlp(3, 3) == 7);
+  CHECK(ovlp(3, 5) == 6);
+
+  const Eigen::MatrixXd& Gp = overlap->NACOV[0];
+  const Eigen::MatrixXd& Gn = nominal->NACOV[0];
+  CHECK(Gp(0, 0) / Gn(0, 0) == doctest::Approx(10.0 / 8.0).epsilon(1e-10));
+  CHECK(Gp(3, 3) / Gn(3, 3) == doctest::Approx(10.0 / 7.0).epsilon(1e-10));
+  CHECK((Gp - Gn).cwiseAbs().maxCoeff() > 1e-3);
+}
+
 TEST_CASE("Ordinal pair joint ML estimates pair-local thresholds and rho") {
   Eigen::VectorXd thi(2);
   thi << -0.55, 0.85;

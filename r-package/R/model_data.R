@@ -301,7 +301,8 @@ lavaan_compare_partable <- function(x, reference, est_tolerance = NULL,
 }
 
 data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
-                                       missing = c("listwise", "error"),
+                                       missing = c("listwise", "error", "pairwise"),
+                                       pd_gamma = c("overlap", "nominal"),
                                        robust = c("none", "ml", "h_weighted", "dpd", "huber_residual"),
                                        alpha = 0.3,
                                        h_kind = c("wma_hard_cap", "ml", "smooth_cap", "exp_cap"),
@@ -311,6 +312,7 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
                                                 "tukey_biweight", "none"),
                                        k = NULL, full_wls_weight = TRUE) {
   missing <- match.arg(missing)
+  pd_gamma <- match.arg(pd_gamma)
   robust <- match.arg(robust)
   h_kind <- match.arg(h_kind)
   clip <- match.arg(clip)
@@ -349,14 +351,14 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
     if (length(miss_cols)) stop("data_ordinal_stats_from_df(): data is missing observed variables: ", paste(miss_cols, collapse = ", "))
     block <- x[rows, ov, drop = FALSE]
     cc <- stats::complete.cases(block)
-    if (!all(cc)) {
+    if (!all(cc) && missing != "pairwise") {
       if (missing == "error") {
         suffix <- if (is.null(label)) "" else paste0(" in group '", label, "'")
         stop("data_ordinal_stats_from_df(): missing observed values", suffix)
       }
       block <- block[cc, , drop = FALSE]
     }
-    if (nrow(block) < 2L) stop("data_ordinal_stats_from_df(): fewer than 2 complete rows")
+    if (nrow(block) < 2L) stop("data_ordinal_stats_from_df(): fewer than 2 rows")
     mat <- matrix(NA_real_, nrow(block), length(ov), dimnames = list(NULL, ov))
     for (j in seq_along(ov)) {
       v <- block[[ov[[j]]]]
@@ -368,7 +370,7 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
         }
         mat[, j] <- as.integer(v)
       } else {
-        vals <- sort(unique(v))
+        vals <- sort(unique(v[!is.na(v)]))
         mat[, j] <- match(v, vals)
       }
     }
@@ -386,11 +388,19 @@ data_ordinal_stats_from_df <- function(x, model, ordered = NULL, group = NULL,
   } else {
     X <- list(make_block(rep(TRUE, nrow(x)), ov_by_group[[1L]]))
   }
-  out <- data_ordinal_stats_from_raw(
-    X, robust = robust, alpha = alpha, h_kind = h_kind, h_k = h_k,
-    h_a = h_a, h_b = h_b, h_lambda = h_lambda, clip = clip, k = k,
-    full_wls_weight = full_wls_weight
-  )
+  if (missing == "pairwise") {
+    if (!robust %in% c("none", "ml")) {
+      stop("data_ordinal_stats_from_df(): missing = \"pairwise\" currently supports only ML ordinal pair statistics")
+    }
+    out <- data_ordinal_stats_observed_from_raw(
+      X, pd_gamma = pd_gamma, full_wls_weight = full_wls_weight)
+  } else {
+    out <- data_ordinal_stats_from_raw(
+      X, robust = robust, alpha = alpha, h_kind = h_kind, h_k = h_k,
+      h_a = h_a, h_b = h_b, h_lambda = h_lambda, clip = clip, k = k,
+      full_wls_weight = full_wls_weight
+    )
+  }
   out$X <- X
   out$ov_names <- ov_by_group
   out$ordered <- ordered
@@ -1328,11 +1338,13 @@ fit_wls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
 
 magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
                     ordered = NULL, parameterization = "delta",
-                    missing = c("listwise", "error"),
+                    missing = c("listwise", "error", "pairwise"),
+                    pd_gamma = c("overlap", "nominal"),
                     se = "none", test = "none",
                     W = NULL, optimizer = "nlopt-lbfgs", control = NULL,
                     bounds = NULL, stage2_weight = "nt", dls_a = 0.5) {
   missing <- match.arg(missing)
+  pd_gamma <- match.arg(pd_gamma)
   require_none_arg(se, "se", "standard errors")
   require_none_arg(test, "test", "test statistics")
   estimator <- toupper(as.character(estimator)[1L])
@@ -1449,8 +1461,12 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
       if (!is.list(ov_by_group)) ov_by_group <- list(ov_by_group)
       all_ordinal <- all(vapply(ov_by_group, function(ov) setequal(spec$ordered, ov), logical(1)))
       data <- if (all_ordinal) {
-        data_ordinal_stats_from_df(data, spec, group = group_var, missing = missing)
+        data_ordinal_stats_from_df(data, spec, group = group_var,
+                                   missing = missing, pd_gamma = pd_gamma)
       } else {
+        if (missing == "pairwise") {
+          stop("magmaan(): missing = \"pairwise\" is currently implemented for all-ordinal data only")
+        }
         data_mixed_ordinal_stats_from_df(data, spec, group = group_var, missing = missing)
       }
     }

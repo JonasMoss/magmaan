@@ -2048,6 +2048,313 @@ ordinal_stats_from_integer_data(const std::vector<Eigen::MatrixXd>& Xs,
   return std::move(out->stats);
 }
 
+post_expected<OrdinalStats>
+ordinal_stats_from_observed_integer_data(
+    const std::vector<Eigen::MatrixXd>& Xs,
+    OrdinalPairwiseGammaKind gamma_kind,
+    bool full_wls_weight) {
+  if (Xs.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "ordinal_stats_from_observed_integer_data: no data blocks"));
+  }
+
+  OrdinalStats out;
+  out.pairwise_gamma =
+      gamma_kind == OrdinalPairwiseGammaKind::Overlap ? "overlap" : "nominal";
+  out.R.reserve(Xs.size());
+  out.thresholds.reserve(Xs.size());
+  out.threshold_ov.reserve(Xs.size());
+  out.threshold_level.reserve(Xs.size());
+  out.NACOV.reserve(Xs.size());
+  out.W_dwls.reserve(Xs.size());
+  out.W_wls.reserve(Xs.size());
+  out.n_obs.reserve(Xs.size());
+  out.n_levels.reserve(Xs.size());
+  out.moment_support_i.reserve(Xs.size());
+  out.moment_support_j.reserve(Xs.size());
+  out.moment_n_obs.reserve(Xs.size());
+  out.moment_overlap_n_obs.reserve(Xs.size());
+
+  for (std::size_t b = 0; b < Xs.size(); ++b) {
+    const auto& X = Xs[b];
+    const Eigen::Index n = X.rows();
+    const Eigen::Index p = X.cols();
+    if (n < 2 || p == 0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "ordinal_stats_from_observed_integer_data: block " +
+              std::to_string(b) + " must have at least 2 rows and 1 column"));
+    }
+
+    Eigen::MatrixXi Xcat = Eigen::MatrixXi::Constant(n, p, -1);
+    std::vector<std::int32_t> levels(static_cast<std::size_t>(p), 0);
+    std::vector<std::vector<int>> counts(static_cast<std::size_t>(p));
+    std::vector<std::int64_t> item_n(static_cast<std::size_t>(p), 0);
+    for (Eigen::Index j = 0; j < p; ++j) {
+      int max_level = 0;
+      for (Eigen::Index r = 0; r < n; ++r) {
+        const double v = X(r, j);
+        if (!std::isfinite(v)) continue;
+        if (std::floor(v) != v || v < 1.0) {
+          return std::unexpected(make_err(PostError::Kind::NumericIssue,
+              "ordinal_stats_from_observed_integer_data: block " +
+                  std::to_string(b) +
+                  " has non-integer/non-positive observed category values"));
+        }
+        max_level = std::max(max_level, static_cast<int>(v));
+        ++item_n[static_cast<std::size_t>(j)];
+      }
+      if (item_n[static_cast<std::size_t>(j)] < 2 || max_level < 2) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "ordinal_stats_from_observed_integer_data: block " +
+                std::to_string(b) + " variable " + std::to_string(j) +
+                " has fewer than 2 observed levels"));
+      }
+      counts[static_cast<std::size_t>(j)].assign(
+          static_cast<std::size_t>(max_level), 0);
+      for (Eigen::Index r = 0; r < n; ++r) {
+        const double v = X(r, j);
+        if (!std::isfinite(v)) continue;
+        const int lvl = static_cast<int>(v);
+        counts[static_cast<std::size_t>(j)][static_cast<std::size_t>(lvl - 1)] += 1;
+        Xcat(r, j) = lvl - 1;
+      }
+      for (int c = 0; c < max_level; ++c) {
+        if (counts[static_cast<std::size_t>(j)][static_cast<std::size_t>(c)] == 0) {
+          return std::unexpected(make_err(PostError::Kind::NumericIssue,
+              "ordinal_stats_from_observed_integer_data: block " +
+                  std::to_string(b) + " variable " + std::to_string(j) +
+                  " has an empty observed category"));
+        }
+      }
+      levels[static_cast<std::size_t>(j)] = max_level;
+    }
+
+    Eigen::Index nth = 0;
+    for (auto k : levels) nth += static_cast<Eigen::Index>(k - 1);
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    const Eigen::Index mdim = nth + ncorr;
+
+    Eigen::VectorXd th(nth);
+    std::vector<Eigen::Index> th_start(static_cast<std::size_t>(p), 0);
+    std::vector<std::int32_t> th_ov;
+    std::vector<std::int32_t> th_level;
+    th_ov.reserve(static_cast<std::size_t>(nth));
+    th_level.reserve(static_cast<std::size_t>(nth));
+    std::vector<Eigen::VectorXd> th_by_var(static_cast<std::size_t>(p));
+    std::vector<std::int32_t> support_i(static_cast<std::size_t>(mdim), -1);
+    std::vector<std::int32_t> support_j(static_cast<std::size_t>(mdim), -1);
+    std::vector<std::int64_t> moment_n(static_cast<std::size_t>(mdim), 0);
+
+    Eigen::Index off = 0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      th_start[static_cast<std::size_t>(j)] = off;
+      const int k = levels[static_cast<std::size_t>(j)];
+      th_by_var[static_cast<std::size_t>(j)].resize(k - 1);
+      int cum = 0;
+      const auto nj = item_n[static_cast<std::size_t>(j)];
+      for (int c = 0; c < k - 1; ++c) {
+        cum += counts[static_cast<std::size_t>(j)][static_cast<std::size_t>(c)];
+        if (cum <= 0 || cum >= nj) {
+          return std::unexpected(make_err(PostError::Kind::NumericIssue,
+              "ordinal_stats_from_observed_integer_data: block " +
+                  std::to_string(b) + " variable " + std::to_string(j) +
+                  " has an empty observed boundary category"));
+        }
+        const double prob = std::clamp(static_cast<double>(cum) /
+                                           static_cast<double>(nj),
+                                       1e-12, 1.0 - 1e-12);
+        const double z = normal_quantile(prob);
+        th(off) = z;
+        th_by_var[static_cast<std::size_t>(j)](c) = z;
+        th_ov.push_back(static_cast<std::int32_t>(j));
+        th_level.push_back(static_cast<std::int32_t>(c + 1));
+        support_i[static_cast<std::size_t>(off)] = static_cast<std::int32_t>(j);
+        moment_n[static_cast<std::size_t>(off)] = nj;
+        ++off;
+      }
+    }
+
+    Eigen::MatrixXd SC_TH = Eigen::MatrixXd::Zero(n, nth);
+    for (Eigen::Index r = 0; r < n; ++r) {
+      for (Eigen::Index j = 0; j < p; ++j) {
+        const int c = Xcat(r, j);
+        if (c < 0) continue;
+        const auto& thj = th_by_var[static_cast<std::size_t>(j)];
+        const double lo = (c == 0) ? -kInf : thj(c - 1);
+        const double hi = (c == thj.size()) ? kInf : thj(c);
+        const double pr = std::max(kProbFloor, normal_cdf(hi) - normal_cdf(lo));
+        const Eigen::Index base = th_start[static_cast<std::size_t>(j)];
+        if (c < thj.size()) SC_TH(r, base + c) += normal_pdf(thj(c)) / pr;
+        if (c > 0) SC_TH(r, base + c - 1) -= normal_pdf(thj(c - 1)) / pr;
+      }
+    }
+
+    Eigen::MatrixXd R = Eigen::MatrixXd::Identity(p, p);
+    Eigen::MatrixXd SC_COR = Eigen::MatrixXd::Zero(n, ncorr);
+    Eigen::MatrixXd A21 = Eigen::MatrixXd::Zero(ncorr, nth);
+    Eigen::Index corr_idx = 0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j + 1; i < p; ++i) {
+        auto tab_or = ordinal_pair_observed_table(
+            X.col(i), X.col(j), levels[static_cast<std::size_t>(i)],
+            levels[static_cast<std::size_t>(j)]);
+        if (!tab_or.has_value()) return std::unexpected(tab_or.error());
+        auto rho_or = fit_ordinal_pair_rho_ml(
+            tab_or->counts, th_by_var[static_cast<std::size_t>(i)],
+            th_by_var[static_cast<std::size_t>(j)]);
+        if (!rho_or.has_value()) return std::unexpected(rho_or.error());
+        const double rho = rho_or->rho;
+        R(i, j) = R(j, i) = rho;
+
+        Eigen::VectorXi xi(tab_or->n_obs);
+        Eigen::VectorXi xj(tab_or->n_obs);
+        Eigen::Index obs = 0;
+        for (Eigen::Index r = 0; r < n; ++r) {
+          if (Xcat(r, i) < 0 || Xcat(r, j) < 0) continue;
+          xi(obs) = Xcat(r, i);
+          xj(obs) = Xcat(r, j);
+          ++obs;
+        }
+        auto ps_or = ordinal_pair_scores(
+            xi, xj, rho, th_by_var[static_cast<std::size_t>(i)],
+            th_by_var[static_cast<std::size_t>(j)]);
+        if (!ps_or.has_value()) return std::unexpected(ps_or.error());
+        const auto& ps = *ps_or;
+        Eigen::Index obs_row = 0;
+        for (Eigen::Index r = 0; r < n; ++r) {
+          if (Xcat(r, i) < 0 || Xcat(r, j) < 0) continue;
+          SC_COR(r, corr_idx) = ps.rho(obs_row);
+          ++obs_row;
+        }
+        const Eigen::Index si = th_start[static_cast<std::size_t>(i)];
+        const Eigen::Index sj = th_start[static_cast<std::size_t>(j)];
+        A21.block(corr_idx, si, 1, ps.threshold_i.cols()) =
+            ps.rho.transpose() * ps.threshold_i;
+        A21.block(corr_idx, sj, 1, ps.threshold_j.cols()) =
+            ps.rho.transpose() * ps.threshold_j;
+
+        const Eigen::Index m = nth + corr_idx;
+        support_i[static_cast<std::size_t>(m)] = static_cast<std::int32_t>(i);
+        support_j[static_cast<std::size_t>(m)] = static_cast<std::int32_t>(j);
+        moment_n[static_cast<std::size_t>(m)] = tab_or->n_obs;
+        ++corr_idx;
+      }
+    }
+
+    auto r_diag_or = repair_correlation_if_requested(
+        R, {}, "ordinal_stats_from_observed_integer_data: block " +
+                   std::to_string(b) + " polychoric R");
+    if (!r_diag_or.has_value()) return std::unexpected(r_diag_or.error());
+
+    Eigen::MatrixXd SC(n, mdim);
+    SC.leftCols(nth) = SC_TH;
+    SC.rightCols(ncorr) = SC_COR;
+    const Eigen::MatrixXd INNER = SC.transpose() * SC;
+
+    Eigen::MatrixXd A11 = Eigen::MatrixXd::Zero(nth, nth);
+    const Eigen::MatrixXd INNER_TH = SC_TH.transpose() * SC_TH;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      const Eigen::Index start = th_start[static_cast<std::size_t>(j)];
+      const Eigen::Index len =
+          static_cast<Eigen::Index>(levels[static_cast<std::size_t>(j)] - 1);
+      A11.block(start, start, len, len) =
+          INNER_TH.block(start, start, len, len);
+    }
+    auto A11_inv_or = symmetric_inverse_pd(
+        A11, "ordinal observed threshold information matrix");
+    if (!A11_inv_or.has_value()) return std::unexpected(A11_inv_or.error());
+
+    Eigen::VectorXd A22_diag(ncorr);
+    for (Eigen::Index k = 0; k < ncorr; ++k) {
+      A22_diag(k) = SC_COR.col(k).squaredNorm();
+      if (A22_diag(k) <= 1e-12 || !std::isfinite(A22_diag(k))) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "ordinal_stats_from_observed_integer_data: block " +
+                std::to_string(b) + " has a singular polychoric score block"));
+      }
+    }
+    const Eigen::MatrixXd A22_inv = A22_diag.cwiseInverse().asDiagonal();
+
+    Eigen::MatrixXd B_inv = Eigen::MatrixXd::Zero(mdim, mdim);
+    B_inv.block(0, 0, nth, nth) = *A11_inv_or;
+    B_inv.block(nth, 0, ncorr, nth).noalias() =
+        -A22_inv * A21 * (*A11_inv_or);
+    B_inv.block(nth, nth, ncorr, ncorr) = A22_inv;
+
+    Eigen::MatrixXd IF = static_cast<double>(n) * SC * B_inv.transpose();
+    Eigen::MatrixXd NACOV =
+        (IF.transpose() * IF) / static_cast<double>(n);
+    NACOV = 0.5 * (NACOV + NACOV.transpose());
+
+    Eigen::Matrix<std::int64_t, Eigen::Dynamic, Eigen::Dynamic> overlap(mdim, mdim);
+    overlap.setZero();
+    for (Eigen::Index a = 0; a < mdim; ++a) {
+      for (Eigen::Index bb = a; bb < mdim; ++bb) {
+        const int ai = support_i[static_cast<std::size_t>(a)];
+        const int aj = support_j[static_cast<std::size_t>(a)];
+        const int bi = support_i[static_cast<std::size_t>(bb)];
+        const int bj = support_j[static_cast<std::size_t>(bb)];
+        std::int64_t nab = 0;
+        for (Eigen::Index r = 0; r < n; ++r) {
+          bool ok = ai >= 0 && Xcat(r, ai) >= 0 && bi >= 0 && Xcat(r, bi) >= 0;
+          if (ok && aj >= 0) ok = Xcat(r, aj) >= 0;
+          if (ok && bj >= 0) ok = Xcat(r, bj) >= 0;
+          if (ok) ++nab;
+        }
+        overlap(a, bb) = overlap(bb, a) = nab;
+      }
+    }
+
+    if (gamma_kind == OrdinalPairwiseGammaKind::Nominal) {
+      for (Eigen::Index a = 0; a < mdim; ++a) {
+        for (Eigen::Index bb = 0; bb < mdim; ++bb) {
+          const double na = static_cast<double>(moment_n[static_cast<std::size_t>(a)]);
+          const double nb = static_cast<double>(moment_n[static_cast<std::size_t>(bb)]);
+          const double nab = static_cast<double>(overlap(a, bb));
+          if (na > 0.0 && nb > 0.0 && nab > 0.0) {
+            NACOV(a, bb) /= (static_cast<double>(n) * nab) / (na * nb);
+          }
+        }
+      }
+      NACOV = 0.5 * (NACOV + NACOV.transpose());
+    }
+
+    Eigen::MatrixXd W_dwls = Eigen::MatrixXd::Zero(mdim, mdim);
+    for (Eigen::Index k = 0; k < mdim; ++k) {
+      const double v = NACOV(k, k);
+      if (!std::isfinite(v) || v <= 0.0) {
+        return std::unexpected(make_err(PostError::Kind::NumericIssue,
+            "ordinal_stats_from_observed_integer_data: block " +
+                std::to_string(b) + " has a non-positive NACOV diagonal"));
+      }
+      W_dwls(k, k) = 1.0 / v;
+    }
+    Eigen::MatrixXd W_wls;
+    if (full_wls_weight) {
+      if (auto W_wls_or = symmetric_inverse_pd(NACOV, "ordinal observed NACOV matrix");
+          W_wls_or.has_value()) {
+        W_wls = std::move(*W_wls_or);
+      }
+    }
+
+    out.R.push_back(std::move(R));
+    out.thresholds.push_back(std::move(th));
+    out.threshold_ov.push_back(std::move(th_ov));
+    out.threshold_level.push_back(std::move(th_level));
+    out.NACOV.push_back(std::move(NACOV));
+    out.W_dwls.push_back(std::move(W_dwls));
+    out.W_wls.push_back(std::move(W_wls));
+    out.n_obs.push_back(static_cast<std::int64_t>(n));
+    out.n_levels.push_back(std::move(levels));
+    out.moment_support_i.push_back(std::move(support_i));
+    out.moment_support_j.push_back(std::move(support_j));
+    out.moment_n_obs.push_back(std::move(moment_n));
+    out.moment_overlap_n_obs.push_back(std::move(overlap));
+  }
+
+  return out;
+}
+
 post_expected<PairwiseOrdinalStats>
 pairwise_ordinal_stats_shared_robust_from_integer_data(
     const std::vector<Eigen::MatrixXd>& Xs,

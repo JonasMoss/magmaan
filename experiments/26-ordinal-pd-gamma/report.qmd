@@ -1,0 +1,75 @@
+---
+title: "Ordinal Pairwise-Deletion Gamma"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+summary_path <- file.path("results", "summary.csv")
+rejections_path <- file.path("results", "rejections.csv")
+if (!file.exists(summary_path) || !file.exists(rejections_path)) {
+  stop("Run `Rscript run_experiment.R --smoke` first.", call. = FALSE)
+}
+summary <- read.csv(summary_path)
+rejections <- read.csv(rejections_path)
+fmt_rate <- function(x, se) {
+  ifelse(is.na(x), "NA", sprintf("%.3f (MCSE %.3f)", x, se))
+}
+wide <- reshape(
+  summary[, c("n_per_group", "missing_rate", "pd_gamma",
+              "rejection_rate", "mc_se", "usable", "failures")],
+  idvar = c("n_per_group", "missing_rate"),
+  timevar = "pd_gamma",
+  direction = "wide")
+wide$Nominal <- fmt_rate(wide$rejection_rate.nominal, wide$mc_se.nominal)
+wide$Overlap <- fmt_rate(wide$rejection_rate.overlap, wide$mc_se.overlap)
+tab <- wide[, c("n_per_group", "missing_rate", "Nominal", "Overlap",
+                "usable.nominal", "failures.nominal")]
+names(tab) <- c("N Per Group", "Missing Rate", "Nominal Gamma",
+                "Overlap Gamma", "Usable Reps", "Failures")
+```
+
+## Question
+
+Does the overlap-weighted ordinal pairwise-deletion NACOV behave differently from
+the conventional nominal-\(N\) matrix in a WLSMV loading-invariance test with
+ordinal MCAR missingness?
+
+## Short Answer
+
+In the smoke run, the two matrices are identical with complete data. With 50%
+missingness on two group-B indicators, the overlap correction lowers the nested
+test statistic in every usable replicate, which is the direction predicted by
+the pairwise-deletion Gamma note. The run is intentionally tiny; use it as a
+plumbing and direction check, not a stable Type I estimate.
+
+## Evidence
+
+```{r}
+knitr::kable(tab, row.names = FALSE)
+```
+
+The replicate-level outputs are in `results/rejections.csv`; the compact
+cell-level rates are in `results/summary.csv`.
+
+## Caveats
+
+The default run is a short probe, not a replication of Chen et al. The design
+uses MCAR missingness so the experiment isolates the Gamma scaling issue rather
+than MAR point-estimate bias. Some small ordinal cells can fail because the
+polychoric or dense NACOV problem is numerically singular; failures are counted
+instead of aborting the run.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --reps 200 --n 300,1000 --missing-rate 0,.30,.50
+quarto render report.qmd
+```
