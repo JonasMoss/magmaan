@@ -49,6 +49,14 @@ PKG_CPPFLAGS = -I. -Icore -Ithird_party/port/cport -Ithird_party/quadpack \
 # pin it to gnu11 and silence its warnings — without muting the C++ warnings.
 PKG_CFLAGS = -w -std=gnu11
 
+# RcppEigen injects Eigen via a plain -I (LinkingTo), not -isystem, so GCC emits
+# thousands of benign -Wignored-attributes warnings from Eigen's SIMD packet
+# types (__m128d/__m256d used as template arguments). The C++ CMake build never
+# sees these because it marks Eigen a SYSTEM include; silence the one category
+# here so genuine warnings from magmaan's own code stay visible. GCC and clang
+# both accept the flag.
+PKG_CXXFLAGS = -Wno-ignored-attributes
+
 PKG_LIBS = $(NLOPT_LIBS)
 
 # R only auto-compiles top-level src/*.{c,cpp}; the vendored core/ + third_party/
