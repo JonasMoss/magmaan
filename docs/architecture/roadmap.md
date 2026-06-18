@@ -1120,6 +1120,21 @@ stop rather than any usable non-error return.
   threshold/rho score contributions and score Gamma as the complete/listwise
   path. This is pairwise observed-data likelihood, not multivariate MAR
   ordinal FIML.
+- Frontier all-ordinal pairwise composite SEM fitting and inference (2026-06):
+  `estimate::frontier::pairwise_ordinal_observed_data()` builds one raw-data
+  observed-pair cache for complete or incomplete ordinal blocks;
+  `fit_pairwise_ordinal_composite()` fits the SEM-implied shared-threshold /
+  implied-correlation pairwise ML objective with the existing scalar optimizer
+  backends and linear-equality reparameterization; and
+  `pairwise_ordinal_composite_godambe()` returns Godambe sandwich SEs from
+  casewise observed-pair score rows. The meat is built from each subject's sum
+  over observed pairs, so cross-pair score covariance and pairwise missingness
+  enter automatically. Bread is finite-difference on the composite score and is
+  inverted in the equality-reduced alpha space before expanding the vcov back to
+  full theta. `lr_test_pairwise_ordinal_composite()` reports nested composite
+  LR tests through the existing Satorra-2000 result family. Global pairwise GOF,
+  robust h/DPD/Huber composite objectives, nonlinear constraints, and a
+  multivariate MAR ordinal FIML interpretation remain out of scope.
 - Checked-in pairwise diagnostic fixture coverage under
   `tests/fixtures/pairwise/`: complete all-ordinal polychoric diagnostics,
   mixed pair labels and primitive ML helpers, complete/listwise joint
@@ -1127,8 +1142,8 @@ stop rather than any usable non-error return.
   semantics.
 - The SEM-facing ordinal moment path remains the lavaan-compatible
   shared-threshold path. Pair-local joint threshold/rho ML is reserved for
-  diagnostics, robust pair experiments, and future composite likelihood rather
-  than for constructing the current `OrdinalStats` moment vector.
+  diagnostics, robust pair experiments, and the frontier composite-likelihood
+  surface rather than for constructing the current `OrdinalStats` moment vector.
 - Shared-threshold multivariate missing ordinal modeling remains out of scope:
   the implemented missing-data ordinal path is pairwise observed-data
   composite likelihood, not multivariate MAR ordinal FIML.
