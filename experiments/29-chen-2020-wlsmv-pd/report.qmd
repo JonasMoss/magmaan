@@ -1,0 +1,110 @@
+---
+title: "Chen 2020 WLSMV_PD Replication Probe"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+rates_path <- file.path("results", "rejection_rates.csv")
+p_path <- file.path("results", "p_values.csv")
+if (!file.exists(rates_path) || !file.exists(p_path)) {
+  stop("Run `Rscript run_experiment.R --smoke` first.", call. = FALSE)
+}
+rates <- read.csv(rates_path)
+p_values <- read.csv(p_path)
+
+fmt_rate <- function(x) ifelse(is.finite(x), sprintf("%.3f", x), "")
+main_method <- "lavaan_wlsmv_pairwise_satorra2000"
+focus <- rates[rates$method == main_method, , drop = FALSE]
+focus <- focus[order(focus$n_total, focus$thresholds, focus$missing_rate), ]
+if (!nrow(focus)) {
+  stop("No Satorra 2000 lavaan WLSMV results in results/rejection_rates.csv.",
+       call. = FALSE)
+}
+target <- focus[order(abs(focus$n_total - 1000L),
+                      focus$thresholds != "symmetric",
+                      abs(focus$missing_rate - .50)), ][1L, ]
+short_rate <- fmt_rate(target$rejection_rate)
+short_chen <- fmt_rate(target$chen_type1)
+short_df <- if (is.finite(target$df_diff_min) &&
+                target$df_diff_min == target$df_diff_max) {
+  sprintf("%.0f", target$df_diff_min)
+} else {
+  sprintf("%.0f-%.0f", target$df_diff_min, target$df_diff_max)
+}
+
+pretty_method <- function(x) {
+  out <- x
+  out[out == "lavaan_wlsmv_pairwise_satorra2000"] <- "lavaan WLSMV pairwise, Satorra 2000"
+  out[out == "lavaan_wlsmv_pairwise_naive_diff"] <- "lavaan WLSMV pairwise, naive diff"
+  out
+}
+
+tab <- rates[, c("thresholds", "n_total", "missing_rate", "method", "usable",
+                 "rejection_rate", "mc_se", "median_p", "mean_df_diff",
+                 "chen_type1")]
+tab <- tab[order(tab$n_total, tab$thresholds, tab$missing_rate, tab$method), ]
+tab$thresholds <- tools::toTitleCase(tab$thresholds)
+tab$method <- pretty_method(tab$method)
+tab$missing_rate <- sprintf("%.0f%%", 100 * tab$missing_rate)
+tab$rejection_rate <- fmt_rate(tab$rejection_rate)
+tab$mc_se <- fmt_rate(tab$mc_se)
+tab$median_p <- fmt_rate(tab$median_p)
+tab$mean_df_diff <- sprintf("%.1f", tab$mean_df_diff)
+tab$chen_type1 <- fmt_rate(tab$chen_type1)
+names(tab) <- c("Thresholds", "Total N", "Missing", "Method", "Usable",
+                "Type-I", "MC SE", "Median p", "Mean df diff",
+                "Chen Table 2")
+```
+
+## Question
+
+Can we cheaply reproduce the poor WLSMV_PD Type-I behavior reported by
+Chen et al. (2020) for the invariant one-factor ordinal model with missing data?
+The target cell is the symmetric-threshold, total N = 1000, 50% missing condition,
+where Table 2 reports a WLSMV_PD rejection rate of 0.550.
+
+## Short Answer
+
+This lavaan replication does not reproduce the published bad cell. In the closest
+current lavaan WLSMV pairwise run here, with the auxiliary variable included as a
+saturated observed covariate, the Type-I rate is `r short_rate` versus Chen's
+`r short_chen`, and the lavaan nested test uses `r short_df` df rather than the
+38 df reported for Mplus WLSMV_PD. The naive chi-square difference diagnostic is
+inflated, but that is not the robust WLSMV difference test used for the main
+comparison.
+
+## Evidence
+
+```{r}
+knitr::kable(tab, row.names = FALSE)
+```
+
+The simulated p-values are in `results/p_values.csv`; the table above is the
+condition-level summary in `results/rejection_rates.csv`.
+
+## Caveats
+
+This is a targeted probe, not a full reproduction of the paper. It uses current
+lavaan WLSMV with `missing = "pairwise"` and `lavTestLRT(..., method =
+"satorra.2000")`, not Mplus 8.0 DIFFTEST. The auxiliary variable is included as
+saturated observed covariances, which is a lavaan approximation to the paper's
+Mplus auxiliary-variable setup. The missingness generator is an exact weighted
+rank sample on group B items 8-10, matching the rank-MAR direction and target
+rate but not necessarily Mplus's exact random-until-target implementation. Small
+smoke runs are only syntax checks; use at least a few hundred replications before
+treating a rate as stable.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --reps 500 --n-total 1000 --missing-rate .50 --thresholds symmetric
+quarto render report.qmd
+```
