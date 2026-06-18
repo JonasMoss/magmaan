@@ -3596,6 +3596,159 @@ TEST_CASE("Pairwise ordinal observed joint composite objective rejects invalid o
   CHECK(empty.error().detail.find("marginal categories") != std::string::npos);
 }
 
+TEST_CASE("Pairwise ordinal composite fit and Godambe handle observed-pair missingness") {
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  std::mt19937 rng(20260618);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(90, 3);
+  const double loading[3] = {0.85, 0.75, 0.65};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.35) + (y > 0.55);
+    }
+  }
+  X(3, 0) = nan;
+  X(14, 1) = nan;
+  X(29, 2) = nan;
+  X(51, 0) = nan;
+
+  std::vector<std::vector<std::int32_t>> levels{{3, 3, 3}};
+  auto data = magmaan::estimate::frontier::pairwise_ordinal_observed_data(
+      {X}, levels);
+  REQUIRE(data.has_value());
+  REQUIRE(data->saturated.blocks.size() == 1);
+  REQUIRE(data->saturated.blocks[0].pairs.size() == 3);
+  bool saw_missing = false;
+  for (const auto& pair : data->saturated.blocks[0].pairs) {
+    saw_missing = saw_missing || pair.n_missing > 0;
+  }
+  CHECK(saw_missing);
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 80;
+  auto fit = magmaan::estimate::frontier::fit_pairwise_ordinal_composite(
+      *pt, *mr, *data, {}, {}, magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "pairwise composite fit failed: "
+          << (fit.has_value() ? "" : fit.error().detail));
+  CHECK(std::isfinite(fit->objective.negloglik));
+  CHECK(fit->objective.negloglik <= data->saturated.negloglik + 100.0);
+
+  auto god = magmaan::estimate::frontier::pairwise_ordinal_composite_godambe(
+      *pt, *mr, *data, fit->estimates, 2e-5);
+  REQUIRE_MESSAGE(god.has_value(),
+      "pairwise composite Godambe failed: "
+          << (god.has_value() ? "" : god.error().detail));
+  CHECK(god->vcov.rows() == fit->estimates.theta.size());
+  CHECK(god->vcov.cols() == fit->estimates.theta.size());
+  CHECK(god->se.size() == fit->estimates.theta.size());
+  CHECK(god->casewise_scores.rows() == X.rows());
+  CHECK(god->casewise_scores.cols() == fit->estimates.theta.size());
+  CHECK(god->vcov.allFinite());
+  CHECK(god->se.allFinite());
+}
+
+TEST_CASE("Pairwise ordinal composite nested LR reports Satorra spectrum") {
+  std::mt19937 rng(20260619);
+  std::normal_distribution<double> norm(0.0, 1.0);
+  Eigen::MatrixXd X(110, 3);
+  const double loading[3] = {0.82, 0.70, 0.70};
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const double eta = norm(rng);
+    for (Eigen::Index j = 0; j < X.cols(); ++j) {
+      const double eps = std::sqrt(1.0 - loading[j] * loading[j]) * norm(rng);
+      const double y = loading[j] * eta + eps;
+      X(i, j) = 1.0 + (y > -0.40) + (y > 0.50);
+    }
+  }
+
+  auto data = magmaan::estimate::frontier::pairwise_ordinal_observed_data(
+      {X}, {{3, 3, 3}});
+  REQUIRE(data.has_value());
+  const char* h1_syntax =
+      "f =~ x1 + x2 + x3\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n";
+  const char* h0_syntax =
+      "f =~ x1 + a*x2 + a*x3\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n";
+  auto fp1 = magmaan::parse::Parser::parse(h1_syntax);
+  auto fp0 = magmaan::parse::Parser::parse(h0_syntax);
+  REQUIRE(fp1.has_value());
+  REQUIRE(fp0.has_value());
+  auto pt1 = magmaan::spec::build(*fp1);
+  auto pt0 = magmaan::spec::build(*fp0);
+  REQUIRE(pt1.has_value());
+  REQUIRE(pt0.has_value());
+  auto mr1 = magmaan::model::build_matrix_rep(*pt1);
+  auto mr0 = magmaan::model::build_matrix_rep(*pt0);
+  REQUIRE(mr1.has_value());
+  REQUIRE(mr0.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 80;
+  auto fit1 = magmaan::estimate::frontier::fit_pairwise_ordinal_composite(
+      *pt1, *mr1, *data, {}, {}, magmaan::estimate::Backend::NloptLbfgs, opts);
+  auto fit0 = magmaan::estimate::frontier::fit_pairwise_ordinal_composite(
+      *pt0, *mr0, *data, {}, {}, magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(fit1.has_value(),
+      "H1 pairwise composite fit failed: "
+          << (fit1.has_value() ? "" : fit1.error().detail));
+  REQUIRE_MESSAGE(fit0.has_value(),
+      "H0 pairwise composite fit failed: "
+          << (fit0.has_value() ? "" : fit0.error().detail));
+
+  auto lr = magmaan::estimate::frontier::lr_test_pairwise_ordinal_composite(
+      *pt1, *mr1, *data, *fit1, *pt0, *mr0, *fit0,
+      magmaan::robust::SatorraAMethod::Exact, 2e-5);
+  REQUIRE_MESSAGE(lr.has_value(),
+      "pairwise composite LR failed: "
+          << (lr.has_value() ? "" : lr.error().detail));
+  CHECK(lr->df_diff == 1);
+  CHECK(lr->T_diff == doctest::Approx(
+      2.0 * (fit0->objective.negloglik - fit1->objective.negloglik)));
+  CHECK(lr->eigenvalues.size() == 1);
+  CHECK(std::isfinite(lr->p_scaled));
+  CHECK(std::isfinite(lr->p_adjusted));
+  CHECK(std::isfinite(lr->p_mixture));
+
+  auto god0 = magmaan::estimate::frontier::pairwise_ordinal_composite_godambe(
+      *pt0, *mr0, *data, fit0->estimates, 2e-5);
+  REQUIRE_MESSAGE(god0.has_value(),
+      "constrained pairwise composite Godambe failed: "
+          << (god0.has_value() ? "" : god0.error().detail));
+  CHECK(god0->vcov.rows() == fit0->estimates.theta.size());
+  CHECK(god0->vcov.cols() == fit0->estimates.theta.size());
+  CHECK(god0->se.allFinite());
+}
+
 TEST_CASE("Ordinal stats: thresholds, polychoric R, and weights have expected shapes") {
   Eigen::MatrixXd X(320, 3);
   Eigen::Index r = 0;
