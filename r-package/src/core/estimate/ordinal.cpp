@@ -21,6 +21,7 @@
 
 #include "magmaan/error.hpp"
 #include "magmaan/expected.hpp"
+#include "magmaan/data/raw_data.hpp"
 #include "magmaan/estimate/bounds.hpp"
 #include "magmaan/estimate/constraints.hpp"
 #include "magmaan/estimate/gmm/gp.hpp"
@@ -96,6 +97,85 @@ bool vector_all_finite(const Eigen::VectorXd& v) {
   for (Eigen::Index i = 0; i < v.size(); ++i)
     if (!std::isfinite(v(i))) return false;
   return true;
+}
+
+post_expected<Eigen::MatrixXd>
+sym_inverse_pd_post(const Eigen::MatrixXd& A, std::string what) {
+  if (A.rows() != A.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::move(what) + " is not square"));
+  }
+  const Eigen::MatrixXd S = 0.5 * (A + A.transpose());
+  Eigen::LLT<Eigen::MatrixXd> llt(S);
+  if (llt.info() != Eigen::Success) {
+    return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
+        std::move(what) + " is not positive definite"));
+  }
+  Eigen::MatrixXd inv =
+      llt.solve(Eigen::MatrixXd::Identity(S.rows(), S.cols()));
+  return Eigen::MatrixXd(0.5 * (inv + inv.transpose()).eval());
+}
+
+post_expected<Eigen::MatrixXd>
+ordinal_nt_gamma_block(const data::OrdinalStats& stats, std::size_t b) {
+  const Eigen::MatrixXd& R = stats.R[b];
+  const Eigen::Index p = R.rows();
+  if (R.cols() != p) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_stage2_weight: R block is not square"));
+  }
+  const Eigen::Index nth = stats.thresholds[b].size();
+  const Eigen::Index ncorr = p * (p - 1) / 2;
+  const Eigen::Index mdim = nth + ncorr;
+  if (stats.NACOV[b].rows() != mdim || stats.NACOV[b].cols() != mdim) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_stage2_weight: NACOV dimension mismatch in block " +
+            std::to_string(b)));
+  }
+
+  Eigen::MatrixXd G = Eigen::MatrixXd::Zero(mdim, mdim);
+  if (nth > 0) {
+    G.topLeftCorner(nth, nth) = stats.NACOV[b].topLeftCorner(nth, nth);
+  }
+  if (ncorr == 0) return Eigen::MatrixXd(0.5 * (G + G.transpose()).eval());
+
+  auto gamma_cov_or = data::gamma_nt(R);
+  if (!gamma_cov_or.has_value()) return std::unexpected(gamma_cov_or.error());
+
+  const Eigen::Index pstar = vech_len(p);
+  Eigen::MatrixXd D = Eigen::MatrixXd::Zero(ncorr, pstar);
+  Eigen::Index row = 0;
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = j + 1; i < p; ++i) {
+      const double rho = R(i, j);
+      D(row, vech_index(p, i, j)) = 1.0;
+      D(row, vech_index(p, i, i)) = -0.5 * rho;
+      D(row, vech_index(p, j, j)) = -0.5 * rho;
+      ++row;
+    }
+  }
+  Eigen::MatrixXd Gcorr = D * (*gamma_cov_or) * D.transpose();
+  G.bottomRightCorner(ncorr, ncorr) =
+      0.5 * (Gcorr + Gcorr.transpose()).eval();
+  return Eigen::MatrixXd(0.5 * (G + G.transpose()).eval());
+}
+
+post_expected<Eigen::MatrixXd>
+dwls_weight_from_gamma(const Eigen::MatrixXd& G, std::string what) {
+  if (G.rows() != G.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::move(what) + " is not square"));
+  }
+  Eigen::MatrixXd W = Eigen::MatrixXd::Zero(G.rows(), G.cols());
+  for (Eigen::Index k = 0; k < G.rows(); ++k) {
+    const double v = G(k, k);
+    if (!(v > 0.0) || !std::isfinite(v)) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          std::move(what) + " has a non-positive diagonal"));
+    }
+    W(k, k) = 1.0 / v;
+  }
+  return W;
 }
 
 fit_expected<std::int64_t> total_n_obs(const data::OrdinalStats& s) {
@@ -4337,6 +4417,104 @@ score_tests_mixed_ordinal(spec::LatentStructure pt,
 }
 
 namespace frontier {
+
+post_expected<std::vector<Eigen::MatrixXd>>
+ordinal_stage2_weight_blocks(const data::OrdinalStats& stats,
+                             OrdinalStage2Weight kind,
+                             OrdinalStage2DlsOptions dls) {
+  if (kind == OrdinalStage2Weight::Dls &&
+      !(dls.a >= 0.0 && dls.a <= 1.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_stage2_weight: DLS mixing scalar a must lie in [0, 1]"));
+  }
+  const std::size_t nb = stats.R.size();
+  if (stats.thresholds.size() != nb || stats.NACOV.size() != nb) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "ordinal_stage2_weight: incomplete OrdinalStats blocks"));
+  }
+
+  std::vector<Eigen::MatrixXd> out;
+  out.reserve(nb);
+  for (std::size_t b = 0; b < nb; ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index mdim = stats.thresholds[b].size() + p * (p - 1) / 2;
+    if (stats.R[b].cols() != p || stats.NACOV[b].rows() != mdim ||
+        stats.NACOV[b].cols() != mdim || !matrix_all_finite(stats.R[b]) ||
+        !matrix_all_finite(stats.NACOV[b])) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          "ordinal_stage2_weight: malformed block " + std::to_string(b)));
+    }
+
+    switch (kind) {
+      case OrdinalStage2Weight::Uls:
+        out.push_back(Eigen::MatrixXd::Identity(mdim, mdim));
+        break;
+      case OrdinalStage2Weight::Dwls: {
+        if (stats.W_dwls.size() == nb && stats.W_dwls[b].rows() == mdim &&
+            stats.W_dwls[b].cols() == mdim && matrix_all_finite(stats.W_dwls[b])) {
+          out.push_back(stats.W_dwls[b]);
+        } else {
+          auto W_or = dwls_weight_from_gamma(
+              stats.NACOV[b],
+              "ordinal_stage2_weight: observed Gamma block " +
+                  std::to_string(b));
+          if (!W_or.has_value()) return std::unexpected(W_or.error());
+          out.push_back(std::move(*W_or));
+        }
+        break;
+      }
+      case OrdinalStage2Weight::Wls: {
+        if (stats.W_wls.size() == nb && stats.W_wls[b].rows() == mdim &&
+            stats.W_wls[b].cols() == mdim && matrix_all_finite(stats.W_wls[b])) {
+          out.push_back(stats.W_wls[b]);
+        } else {
+          auto W_or = sym_inverse_pd_post(
+              stats.NACOV[b],
+              "ordinal_stage2_weight: observed Gamma block " +
+                  std::to_string(b));
+          if (!W_or.has_value()) return std::unexpected(W_or.error());
+          out.push_back(std::move(*W_or));
+        }
+        break;
+      }
+      case OrdinalStage2Weight::Nt: {
+        auto Gnt_or = ordinal_nt_gamma_block(stats, b);
+        if (!Gnt_or.has_value()) return std::unexpected(Gnt_or.error());
+        auto W_or = sym_inverse_pd_post(
+            *Gnt_or, "ordinal_stage2_weight: NT Gamma block " +
+                         std::to_string(b));
+        if (!W_or.has_value()) return std::unexpected(W_or.error());
+        out.push_back(std::move(*W_or));
+        break;
+      }
+      case OrdinalStage2Weight::Dls: {
+        auto Gnt_or = ordinal_nt_gamma_block(stats, b);
+        if (!Gnt_or.has_value()) return std::unexpected(Gnt_or.error());
+        Eigen::MatrixXd Gmix =
+            (1.0 - dls.a) * (*Gnt_or) + dls.a * stats.NACOV[b];
+        Gmix = 0.5 * (Gmix + Gmix.transpose()).eval();
+        auto W_or = sym_inverse_pd_post(
+            Gmix, "ordinal_stage2_weight: DLS Gamma block " +
+                      std::to_string(b));
+        if (!W_or.has_value()) return std::unexpected(W_or.error());
+        out.push_back(std::move(*W_or));
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+post_expected<data::OrdinalStats>
+ordinal_stats_with_stage2_weight(const data::OrdinalStats& stats,
+                                 OrdinalStage2Weight kind,
+                                 OrdinalStage2DlsOptions dls) {
+  auto W_or = ordinal_stage2_weight_blocks(stats, kind, dls);
+  if (!W_or.has_value()) return std::unexpected(W_or.error());
+  data::OrdinalStats out = stats;
+  out.W_wls = std::move(*W_or);
+  return out;
+}
 
 namespace {
 

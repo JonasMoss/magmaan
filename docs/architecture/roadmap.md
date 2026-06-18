@@ -500,6 +500,16 @@ golden `parTable()` fixtures.
   finite-sample scaling from `docs/research/notes/ordinal_pd_gamma.tex`; the
   `nominal` variant keeps the same PD point estimates but suppresses the
   overlap reweighting for replication of the conventional wrong implementation.
+  Experimental second-stage all-ordinal weights can now be built from the same
+  precomputed `OrdinalStats` without rerunning threshold/polychoric/Gamma
+  estimation: `estimate::frontier::ordinal_stage2_weight_blocks()` supports
+  ULS, DWLS, observed full WLS/ADF, a GLS-like NT association weight, and DLS
+  interpolation, with R helpers `ordinal_stage2_weight_blocks()` and
+  `fit_ordinal_stage2()`. The NT endpoint is intentionally a research
+  construction, not a lavaan oracle: threshold uncertainty remains the observed
+  ordinal Gamma while the association block uses the MVN normal-theory
+  correlation Gamma; robust reporting keeps the observed pairwise Gamma as the
+  meat.
   Mixed continuous/ordinal pairwise missingness remains unsupported. Regression
   coverage lives in `tests/unit/ordinal_test.cpp`; the advisory calibration
   probe is `experiments/26-ordinal-pd-gamma`.

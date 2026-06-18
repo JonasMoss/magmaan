@@ -9,6 +9,7 @@
 
 #include "internal.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <memory>
 
@@ -607,6 +608,61 @@ magmaan::estimate::OrdinalWeightKind ordinal_weight_from_estimator(
   if (estimator == "DWLS") return magmaan::estimate::OrdinalWeightKind::DWLS;
   if (estimator == "WLS") return magmaan::estimate::OrdinalWeightKind::WLS;
   Rcpp::stop("magmaan: %s requires an ordinal ULS/DWLS/WLS fit", call);
+}
+
+magmaan::estimate::frontier::OrdinalStage2Weight
+ordinal_stage2_weight_from_string(const std::string& s) {
+  std::string key = s;
+  std::transform(key.begin(), key.end(), key.begin(),
+                 [](unsigned char ch) { return std::tolower(ch); });
+  if (key == "uls") {
+    return magmaan::estimate::frontier::OrdinalStage2Weight::Uls;
+  }
+  if (key == "dwls") {
+    return magmaan::estimate::frontier::OrdinalStage2Weight::Dwls;
+  }
+  if (key == "wls" || key == "adf") {
+    return magmaan::estimate::frontier::OrdinalStage2Weight::Wls;
+  }
+  if (key == "nt" || key == "gls") {
+    return magmaan::estimate::frontier::OrdinalStage2Weight::Nt;
+  }
+  if (key == "dls") {
+    return magmaan::estimate::frontier::OrdinalStage2Weight::Dls;
+  }
+  Rcpp::stop("magmaan: ordinal stage2_weight must be one of "
+             "'uls', 'dwls', 'wls'/'adf', 'nt'/'gls', or 'dls' (got '%s')",
+             s);
+}
+
+std::string ordinal_stage2_label(const std::string& s) {
+  std::string key = s;
+  std::transform(key.begin(), key.end(), key.begin(),
+                 [](unsigned char ch) { return std::tolower(ch); });
+  if (key == "gls") return "GLS";
+  if (key == "adf") return "ADF";
+  auto kind = ordinal_stage2_weight_from_string(s);
+  switch (kind) {
+    case magmaan::estimate::frontier::OrdinalStage2Weight::Uls:
+      return "ULS";
+    case magmaan::estimate::frontier::OrdinalStage2Weight::Dwls:
+      return "DWLS";
+    case magmaan::estimate::frontier::OrdinalStage2Weight::Wls:
+      return "WLS";
+    case magmaan::estimate::frontier::OrdinalStage2Weight::Nt:
+      return "NT";
+    case magmaan::estimate::frontier::OrdinalStage2Weight::Dls:
+      return "DLS";
+  }
+  return "UNKNOWN";
+}
+
+std::string ordinal_weight_for_postfit(Rcpp::List fit,
+                                       const std::string& estimator) {
+  if (fit.containsElementNamed("ordinal_computational_weight")) {
+    return Rcpp::as<std::string>(fit["ordinal_computational_weight"]);
+  }
+  return estimator;
 }
 
 Rcpp::List stats_from_fit_or_arg(Rcpp::List fit, SEXP arg,
@@ -2324,6 +2380,25 @@ Rcpp::List data_ordinal_stats_observed_from_raw_impl(
 }
 
 // [[Rcpp::export]]
+Rcpp::List ordinal_stage2_weight_blocks_impl(Rcpp::List ordinal_stats,
+                                             std::string stage2_weight = "dwls",
+                                             double dls_a = 0.5) {
+  auto stats = ordinal_stats_from_arg(ordinal_stats);
+  magmaan::estimate::frontier::OrdinalStage2DlsOptions dls;
+  dls.a = dls_a;
+  auto W_or = magmaan::estimate::frontier::ordinal_stage2_weight_blocks(
+      stats, ordinal_stage2_weight_from_string(stage2_weight), dls);
+  if (!W_or.has_value()) stop_post(W_or.error());
+  Rcpp::List out(static_cast<R_xlen_t>(W_or->size()));
+  for (R_xlen_t b = 0; b < out.size(); ++b) {
+    out[b] = Rcpp::wrap((*W_or)[static_cast<std::size_t>(b)]);
+  }
+  out.attr("stage2_weight") = ordinal_stage2_label(stage2_weight);
+  out.attr("dls_a") = dls_a;
+  return out;
+}
+
+// [[Rcpp::export]]
 Rcpp::List data_ordinal_stats_h_weighted_from_raw_impl(
     SEXP X, std::string h_kind = "wma_hard_cap",
     double k = 1.5, double a = 1.6, double b = 2.2, double lambda = 0.2) {
@@ -2610,6 +2685,62 @@ Rcpp::List fit_wls_ordinal_impl(SEXP partable, Rcpp::List ordinal_stats,
   const magmaan::estimate::Estimates est = std::move(*e_or);
   return ordinal_fit_result(ctx, stats, est, &starts, "WLS",
                             parameterization_name.c_str());
+}
+
+// [[Rcpp::export]]
+Rcpp::List fit_ordinal_stage2_impl(SEXP partable, Rcpp::List ordinal_stats,
+                                   std::string stage2_weight = "dwls",
+                                   double dls_a = 0.5,
+                                   Rcpp::Nullable<Rcpp::String> optimizer = R_NilValue,
+                                   Rcpp::Nullable<Rcpp::List>   control   = R_NilValue,
+                                   Rcpp::Nullable<Rcpp::List>   bounds    = R_NilValue) {
+  const std::string parameterization_name = ordinal_parameterization_attr(partable);
+  const auto parameterization = ordinal_parameterization_from_string(parameterization_name);
+  magmaan::compat::lavaan::ParsedLavaanParTable parsed =
+      partable_from_arg(partable, "fit_ordinal_stage2");
+  magmaan::spec::Starts starts = std::move(parsed.starts);
+  Ctx ctx;
+  ctx.pt = std::move(parsed.structure);
+  ctx.pt.group_equal = group_equal_attr(partable);
+  ctx.names = std::move(parsed.names);
+
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(ordinal_stats);
+  magmaan::estimate::frontier::OrdinalStage2DlsOptions dls;
+  dls.a = dls_a;
+  auto weighted_or = magmaan::estimate::frontier::ordinal_stats_with_stage2_weight(
+      stats, ordinal_stage2_weight_from_string(stage2_weight), dls);
+  if (!weighted_or.has_value()) stop_post(weighted_or.error());
+  magmaan::data::OrdinalStats weighted = std::move(*weighted_or);
+
+  auto prep_or = magmaan::estimate::prepare_ordinal_delta_partable(
+      ctx.pt, weighted, &starts);
+  if (!prep_or.has_value()) stop_fit(prep_or.error());
+  auto rep_or = lvm::build_matrix_rep(ctx.pt, &ctx.names);
+  if (!rep_or.has_value()) stop_model(rep_or.error());
+  ctx.rep = std::move(*rep_or);
+  ctx.samp.S = weighted.R;
+  ctx.samp.n_obs = weighted.n_obs;
+  ctx.ov_names = ctx.rep.ov_names.empty() ? std::vector<std::string>{}
+                                          : ctx.rep.ov_names[0];
+  ctx.meanstructure = false;
+
+  const Eigen::VectorXd x0 = ordinal_starts_or_stop(ctx, weighted, starts);
+  auto e_or = magmaan::estimate::fit_ordinal_bounded(
+      ctx.pt, ctx.rep, weighted, bounds_from_nullable(bounds),
+      magmaan::estimate::OrdinalWeightKind::WLS, x0,
+      backend_from_optimizer_arg(optimizer), optim_opts_from(control),
+      parameterization);
+  if (!e_or.has_value()) stop_fit(e_or.error());
+  const magmaan::estimate::Estimates est = std::move(*e_or);
+
+  const std::string label = ordinal_stage2_label(stage2_weight);
+  Rcpp::List out = ordinal_fit_result(ctx, weighted, est, &starts,
+                                      label.c_str(),
+                                      parameterization_name.c_str());
+  out["stage2_weight"] = label;
+  out["stage2_dls_a"] = dls_a;
+  out["ordinal_computational_weight"] = "WLS";
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -3526,7 +3657,9 @@ Rcpp::DataFrame inference_modification_indices(
         fit, weight, "ordinal_stats", "ordinal modification indices"));
     out = magmaan::estimate::modification_indices_ordinal(
         ctx.pt, ctx.rep, stats, est,
-        ordinal_weight_from_estimator(estimator, "ordinal modification indices"),
+        ordinal_weight_from_estimator(
+            ordinal_weight_for_postfit(fit, estimator),
+            "ordinal modification indices"),
         opts, ordinal_parameterization_from_string(
                   fit.containsElementNamed("parameterization")
                       ? Rcpp::as<std::string>(fit["parameterization"])
@@ -3537,8 +3670,9 @@ Rcpp::DataFrame inference_modification_indices(
         "mixed ordinal modification indices"));
     out = magmaan::estimate::modification_indices_mixed_ordinal(
         ctx.pt, ctx.rep, stats, est,
-        ordinal_weight_from_estimator(estimator,
-                                      "mixed ordinal modification indices"),
+        ordinal_weight_from_estimator(
+            ordinal_weight_for_postfit(fit, estimator),
+            "mixed ordinal modification indices"),
         opts, ordinal_parameterization_from_string(
                   fit.containsElementNamed("parameterization")
                       ? Rcpp::as<std::string>(fit["parameterization"])
@@ -3604,7 +3738,9 @@ Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
         fit, weight, "ordinal_stats", "ordinal score tests"));
     out = magmaan::estimate::score_tests_ordinal(
         ctx.pt, ctx.rep, stats, est,
-        ordinal_weight_from_estimator(estimator, "ordinal score tests"),
+        ordinal_weight_from_estimator(
+            ordinal_weight_for_postfit(fit, estimator),
+            "ordinal score tests"),
         ordinal_parameterization_from_string(
             fit.containsElementNamed("parameterization")
                 ? Rcpp::as<std::string>(fit["parameterization"])
@@ -3614,7 +3750,9 @@ Rcpp::DataFrame inference_score_tests(Rcpp::List fit, SEXP weight = R_NilValue,
         fit, weight, "mixed_ordinal_stats", "mixed ordinal score tests"));
     out = magmaan::estimate::score_tests_mixed_ordinal(
         ctx.pt, ctx.rep, stats, est,
-        ordinal_weight_from_estimator(estimator, "mixed ordinal score tests"),
+        ordinal_weight_from_estimator(
+            ordinal_weight_for_postfit(fit, estimator),
+            "mixed ordinal score tests"),
         ordinal_parameterization_from_string(
             fit.containsElementNamed("parameterization")
                 ? Rcpp::as<std::string>(fit["parameterization"])
@@ -3725,8 +3863,9 @@ Rcpp::DataFrame inference_modification_indices_robust(
         "ordinal robust modification indices"));
     out = magmaan::estimate::frontier::modification_indices_ordinal_robust(
         ctx.pt, ctx.rep, stats, est,
-        ordinal_weight_from_estimator(estimator,
-                                      "ordinal robust modification indices"),
+        ordinal_weight_from_estimator(
+            ordinal_weight_for_postfit(fit, estimator),
+            "ordinal robust modification indices"),
         base,
         ordinal_parameterization_from_string(
             fit.containsElementNamed("parameterization")
@@ -3739,7 +3878,8 @@ Rcpp::DataFrame inference_modification_indices_robust(
     out = magmaan::estimate::frontier::modification_indices_mixed_ordinal_robust(
         ctx.pt, ctx.rep, stats, est,
         ordinal_weight_from_estimator(
-            estimator, "mixed ordinal robust modification indices"),
+            ordinal_weight_for_postfit(fit, estimator),
+            "mixed ordinal robust modification indices"),
         base,
         ordinal_parameterization_from_string(
             fit.containsElementNamed("parameterization")
@@ -3805,7 +3945,9 @@ Rcpp::DataFrame inference_score_tests_robust(
         fit, R_NilValue, "ordinal_stats", "ordinal robust score tests"));
     out = magmaan::estimate::frontier::score_tests_ordinal_robust(
         ctx.pt, ctx.rep, stats, est,
-        ordinal_weight_from_estimator(estimator, "ordinal robust score tests"),
+        ordinal_weight_from_estimator(
+            ordinal_weight_for_postfit(fit, estimator),
+            "ordinal robust score tests"),
         ordinal_parameterization_from_string(
             fit.containsElementNamed("parameterization")
                 ? Rcpp::as<std::string>(fit["parameterization"])
@@ -3816,8 +3958,9 @@ Rcpp::DataFrame inference_score_tests_robust(
         "mixed ordinal robust score tests"));
     out = magmaan::estimate::frontier::score_tests_mixed_ordinal_robust(
         ctx.pt, ctx.rep, stats, est,
-        ordinal_weight_from_estimator(estimator,
-                                      "mixed ordinal robust score tests"),
+        ordinal_weight_from_estimator(
+            ordinal_weight_for_postfit(fit, estimator),
+            "mixed ordinal robust score tests"),
         ordinal_parameterization_from_string(
             fit.containsElementNamed("parameterization")
                 ? Rcpp::as<std::string>(fit["parameterization"])

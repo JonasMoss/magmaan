@@ -413,6 +413,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ordinal_stage2_weight_blocks_impl
+Rcpp::List ordinal_stage2_weight_blocks_impl(Rcpp::List ordinal_stats, std::string stage2_weight, double dls_a);
+RcppExport SEXP _magmaan_ordinal_stage2_weight_blocks_impl(SEXP ordinal_statsSEXP, SEXP stage2_weightSEXP, SEXP dls_aSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type stage2_weight(stage2_weightSEXP);
+    Rcpp::traits::input_parameter< double >::type dls_a(dls_aSEXP);
+    rcpp_result_gen = Rcpp::wrap(ordinal_stage2_weight_blocks_impl(ordinal_stats, stage2_weight, dls_a));
+    return rcpp_result_gen;
+END_RCPP
+}
 // data_ordinal_stats_h_weighted_from_raw_impl
 Rcpp::List data_ordinal_stats_h_weighted_from_raw_impl(SEXP X, std::string h_kind, double k, double a, double b, double lambda);
 RcppExport SEXP _magmaan_data_ordinal_stats_h_weighted_from_raw_impl(SEXP XSEXP, SEXP h_kindSEXP, SEXP kSEXP, SEXP aSEXP, SEXP bSEXP, SEXP lambdaSEXP) {
@@ -550,6 +563,23 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
     Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
     rcpp_result_gen = Rcpp::wrap(fit_wls_ordinal_impl(partable, ordinal_stats, optimizer, control, bounds));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fit_ordinal_stage2_impl
+Rcpp::List fit_ordinal_stage2_impl(SEXP partable, Rcpp::List ordinal_stats, std::string stage2_weight, double dls_a, Rcpp::Nullable<Rcpp::String> optimizer, Rcpp::Nullable<Rcpp::List> control, Rcpp::Nullable<Rcpp::List> bounds);
+RcppExport SEXP _magmaan_fit_ordinal_stage2_impl(SEXP partableSEXP, SEXP ordinal_statsSEXP, SEXP stage2_weightSEXP, SEXP dls_aSEXP, SEXP optimizerSEXP, SEXP controlSEXP, SEXP boundsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type partable(partableSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type stage2_weight(stage2_weightSEXP);
+    Rcpp::traits::input_parameter< double >::type dls_a(dls_aSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::String> >::type optimizer(optimizerSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::List> >::type bounds(boundsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_ordinal_stage2_impl(partable, ordinal_stats, stage2_weight, dls_a, optimizer, control, bounds));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2434,6 +2464,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_evaluate_at_impl", (DL_FUNC) &_magmaan_evaluate_at_impl, 7},
     {"_magmaan_data_ordinal_stats_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_from_raw_impl, 2},
     {"_magmaan_data_ordinal_stats_observed_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_observed_from_raw_impl, 3},
+    {"_magmaan_ordinal_stage2_weight_blocks_impl", (DL_FUNC) &_magmaan_ordinal_stage2_weight_blocks_impl, 3},
     {"_magmaan_data_ordinal_stats_h_weighted_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_h_weighted_from_raw_impl, 6},
     {"_magmaan_data_ordinal_stats_dpd_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_dpd_from_raw_impl, 2},
     {"_magmaan_data_ordinal_stats_huber_residual_from_raw_impl", (DL_FUNC) &_magmaan_data_ordinal_stats_huber_residual_from_raw_impl, 3},
@@ -2444,6 +2475,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_fit_dwls_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_ordinal_impl, 5},
     {"_magmaan_fit_uls_ordinal_impl", (DL_FUNC) &_magmaan_fit_uls_ordinal_impl, 5},
     {"_magmaan_fit_wls_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_ordinal_impl, 5},
+    {"_magmaan_fit_ordinal_stage2_impl", (DL_FUNC) &_magmaan_fit_ordinal_stage2_impl, 7},
     {"_magmaan_frontier_pairwise_ordinal_composite_nested_impl", (DL_FUNC) &_magmaan_frontier_pairwise_ordinal_composite_nested_impl, 7},
     {"_magmaan_fit_dwls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_dwls_mixed_ordinal_impl, 5},
     {"_magmaan_fit_wls_mixed_ordinal_impl", (DL_FUNC) &_magmaan_fit_wls_mixed_ordinal_impl, 5},

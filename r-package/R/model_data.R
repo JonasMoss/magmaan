@@ -1320,6 +1320,32 @@ fit_uls_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                        control = control, bounds = b)
 }
 
+ordinal_stage2_weight_blocks <- function(data,
+                                         stage2_weight = c("dwls", "wls", "uls",
+                                                           "nt", "gls", "dls",
+                                                           "adf"),
+                                         dls_a = 0.5) {
+  stage2_weight <- match.arg(tolower(as.character(stage2_weight)[1L]),
+                             c("dwls", "wls", "uls", "nt", "gls", "dls", "adf"))
+  ordinal_stage2_weight_blocks_impl(data, stage2_weight = stage2_weight,
+                                    dls_a = dls_a)
+}
+
+fit_ordinal_stage2 <- function(model, data,
+                               stage2_weight = c("dwls", "wls", "uls",
+                                                 "nt", "gls", "dls", "adf"),
+                               dls_a = 0.5,
+                               optimizer = "nlopt-lbfgs",
+                               control = NULL, bounds = NULL) {
+  stage2_weight <- match.arg(tolower(as.character(stage2_weight)[1L]),
+                             c("dwls", "wls", "uls", "nt", "gls", "dls", "adf"))
+  pt <- augment_ordinal_partable(model, data)
+  b <- bounds_arg(bounds, pt, caller = "fit_ordinal_stage2")
+  fit_ordinal_stage2_impl(pt, data, stage2_weight = stage2_weight,
+                          dls_a = dls_a, optimizer = optimizer,
+                          control = control, bounds = b)
+}
+
 fit_dwls_mixed_ordinal <- function(model, data, optimizer = "nlopt-lbfgs",
                                    control = NULL, bounds = NULL) {
   pt <- augment_mixed_ordinal_partable(model, data)

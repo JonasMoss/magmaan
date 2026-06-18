@@ -561,7 +561,8 @@ work lives in [`speculative.md`](speculative.md). Open work:
   R/API wrapper polish justified by the paper results. (All-ordinal delta
   fit-only, fit-plus-inference cache reuse, threshold-constraint,
   construction-boundary, raw-to-SNLLS legacy/lazy, delta/theta, mixed-DWLS
-  lazy, two-group invariance, and naive corr-block-WLS rows have landed
+  lazy, two-group invariance, naive corr-block-WLS rows, and experimental
+  `OrdinalStats` stage-2 weight reuse helpers for ULS/DWLS/WLS/NT/DLS have landed
   across `experiments/_archive/06/10/11/12/13` and the benchmark itself; the
   literature-grade `q ≤ 12` grid now runs from `papers/ordinal-snlls/`.)
 - **Landed.** Two-stage EM / saturated-covariance missing-data path. Stage 1

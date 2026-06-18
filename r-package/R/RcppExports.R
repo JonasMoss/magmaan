@@ -117,6 +117,10 @@ data_ordinal_stats_observed_from_raw_impl <- function(X, pd_gamma = "overlap", f
     .Call(`_magmaan_data_ordinal_stats_observed_from_raw_impl`, X, pd_gamma, full_wls_weight)
 }
 
+ordinal_stage2_weight_blocks_impl <- function(ordinal_stats, stage2_weight = "dwls", dls_a = 0.5) {
+    .Call(`_magmaan_ordinal_stage2_weight_blocks_impl`, ordinal_stats, stage2_weight, dls_a)
+}
+
 data_ordinal_stats_h_weighted_from_raw_impl <- function(X, h_kind = "wma_hard_cap", k = 1.5, a = 1.6, b = 2.2, lambda = 0.2) {
     .Call(`_magmaan_data_ordinal_stats_h_weighted_from_raw_impl`, X, h_kind, k, a, b, lambda)
 }
@@ -155,6 +159,10 @@ fit_uls_ordinal_impl <- function(partable, ordinal_stats, optimizer = NULL, cont
 
 fit_wls_ordinal_impl <- function(partable, ordinal_stats, optimizer = NULL, control = NULL, bounds = NULL) {
     .Call(`_magmaan_fit_wls_ordinal_impl`, partable, ordinal_stats, optimizer, control, bounds)
+}
+
+fit_ordinal_stage2_impl <- function(partable, ordinal_stats, stage2_weight = "dwls", dls_a = 0.5, optimizer = NULL, control = NULL, bounds = NULL) {
+    .Call(`_magmaan_fit_ordinal_stage2_impl`, partable, ordinal_stats, stage2_weight, dls_a, optimizer, control, bounds)
 }
 
 frontier_pairwise_ordinal_composite_nested_impl <- function(partable_H1, partable_H0, X, n_levels, optimizer = NULL, control = NULL, fd_step = 1e-5) {
