@@ -1229,16 +1229,22 @@ stop rather than any usable non-error return.
   its released-block moment branch stays dormant. lavaan-gated by the bounded
   golden `ordinal invariance (group.equal) theta fits match lavaan` over fixtures
   0017 (3-cat thresholds+loadings), 0018 (binary scale-veto), 0019
-  (thresholds-only), matching df/chisq/theta_hat (the released O(5) variances
-  carry the documented `(n_g−1)/n_g` weighting gap, bounded at 3e-4 for 0017).
-  The configural→metric **Satorra-2000 nested LRT** is gated too (`ordinal
-  invariance nested LRT (satorra.2000 delta) matches lavaan`): the theta branch
-  of `ordinal_moment_jacobian` now subtracts the released intercept μ and threads
-  `J_mu`, without which the freed group-2 intercepts had zero moment-Jacobian
-  columns and the delta restriction rank fell 4 short (null-space dim 7 vs the
-  Δdf 3 — the genuine Wu-Estabrook non-nesting). magmaan's scaled Δχ² (3.025),
-  Δdf (3), and p (0.388) match `lavTestLRT(method="satorra.2000")` on
-  `se="robust.sem"` fits. The ordinal golden chisq
+  (thresholds-only), and 0020 (thresholds+loadings+intercepts / scalar),
+  matching df/chisq/theta_hat. At scalar, lavaan fixes the group-2+ indicator
+  intercepts back to 0 and frees the group-2+ latent means; magmaan mirrors that
+  in `prepare_ordinal_*_partable`. The released O(5) variances and scalar latent
+  mean carry the documented `(n_g−1)/n_g` weighting gap, bounded at 3e-4 for
+  0017/0020. The **Satorra-2000 nested LRT** ladder is gated too (`ordinal
+  invariance nested LRT (satorra.2000 delta) matches lavaan`): configural→metric
+  and thresholds→metric match scaled Δχ² 3.025 / Δdf 3 / p 0.388; metric→scalar
+  matches scaled Δχ² 3.765 / Δdf 3 / p 0.288 with a scalar-only 1.5e-2 tolerance
+  on the scaled statistic because the freed latent mean makes the Satorra scaling
+  more sensitive to the same LS-weight gap. Configural→thresholds is explicitly
+  recorded as a df=0 equivalence (same χ²/df; lavaan cannot form a positive-df
+  `lavTestLRT` there). The theta branch of `ordinal_moment_jacobian` subtracts
+  the released μ and threads `J_mu`, without which the freed group-2 intercepts
+  and scalar latent means would have zero moment-Jacobian columns and the delta
+  restriction rank would be wrong. The ordinal golden chisq
   gates now apply the lavaan `Σ(n_g−1)F̂_g` convention rescale at 5e-3 (see
   numerical-conventions exception 4 and the test ledger). `experiments/_archive/13-ordinal-construction-boundary`
   now compares the legacy eager constructor with

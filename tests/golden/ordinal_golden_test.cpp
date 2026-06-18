@@ -64,6 +64,7 @@ const std::vector<std::string> kOrdinalInvarianceFixtures = {
     "0017_2group_thresh_load_invariance_3cat_cfa",
     "0018_2group_thresh_load_invariance_binary_cfa",
     "0019_2group_thresh_invariance_3cat_cfa",
+    "0020_2group_thresh_load_intercept_invariance_3cat_cfa",
 };
 
 using magmaan::test::matrix_from_json;
@@ -142,9 +143,20 @@ double ordinal_theta_tol(const std::string& id) {
   // ~4e-5, chisq matched to 5e-4); 0019 ties thresholds only (loadings free →
   // less coupling) and 0018 is binary. The bound is the magnitude-scaled
   // analogue of 0013's 1.5e-4 on O(1) parameters.
-  if (id.rfind("0017_", 0) == 0) return 3e-4;
-  if (id.rfind("0018_", 0) == 0 || id.rfind("0019_", 0) == 0) return 1.5e-4;
+  if (id.rfind("0017_", 0) == 0 || id.rfind("0020_", 0) == 0) return 3e-4;
+  if (id.rfind("0018_", 0) == 0 || id.rfind("0019_", 0) == 0)
+    return 1.5e-4;
   return 1e-5;
+}
+
+double ordinal_nested_lrt_tol(const std::string& id) {
+  // The scalar rung adds the freed group-2 latent mean to the theta restriction
+  // map, making the Satorra-2000 scaling more sensitive to the documented
+  // lavaan (n_g - 1)/N vs magmaan n_g/N LS-weight gap. The underlying standard
+  // chi-square gate remains at 5e-3; the scaled difference needs the same
+  // magnitude-aware slack as the scalar theta_hat gate.
+  if (id.rfind("0020_", 0) == 0) return 1.5e-2;
+  return 5e-3;
 }
 
 // Ordinal estimation parameterization recorded in the fixture (delta default;
@@ -157,11 +169,10 @@ magmaan::estimate::OrdinalParameterization fixture_param(
   return magmaan::estimate::OrdinalParameterization::Delta;
 }
 
-// Map the fixture's `group_equal` field (a lavaan family string or array of
-// strings; absent/null for non-invariance fixtures) onto BuildOptions.
-void apply_group_equal(const nlohmann::json& exp,
-                       magmaan::spec::BuildOptions& opts) {
-  if (!exp.contains("group_equal") || exp["group_equal"].is_null()) return;
+// Map a lavaan family string or array of strings onto BuildOptions.
+void apply_group_equal_value(const nlohmann::json& ge,
+                             magmaan::spec::BuildOptions& opts) {
+  if (ge.is_null()) return;
   using GE = magmaan::spec::GroupEqual;
   auto add = [&](const std::string& s) {
     if (s == "loadings") opts.group_equal.push_back(GE::Loadings);
@@ -175,10 +186,17 @@ void apply_group_equal(const nlohmann::json& exp,
     else if (s == "lv.covariances") opts.group_equal.push_back(GE::LvCovariances);
     else if (s == "regressions") opts.group_equal.push_back(GE::Regressions);
   };
-  const auto& ge = exp["group_equal"];
   if (ge.is_string()) add(ge.get<std::string>());
   else if (ge.is_array())
     for (const auto& s : ge) add(s.get<std::string>());
+}
+
+// Map the fixture's `group_equal` field (absent/null for non-invariance
+// fixtures) onto BuildOptions.
+void apply_group_equal(const nlohmann::json& exp,
+                       magmaan::spec::BuildOptions& opts) {
+  if (!exp.contains("group_equal")) return;
+  apply_group_equal_value(exp["group_equal"], opts);
 }
 
 double max_abs_diff(const Eigen::MatrixXd& a, const Eigen::MatrixXd& b) {
@@ -310,7 +328,8 @@ std::optional<OrdinalHandles> handles_from_fixture(
     const std::string& id,
     const nlohmann::json& exp,
     std::vector<std::string>& failures,
-    bool with_group_equal = true) {
+    bool with_group_equal = true,
+    const nlohmann::json* group_equal_override = nullptr) {
   std::vector<Eigen::MatrixXd> blocks;
   for (const auto& b : exp["blocks"]) {
     blocks.push_back(matrix_from_json(b["matrix"]));
@@ -335,7 +354,11 @@ std::optional<OrdinalHandles> handles_from_fixture(
       opts.group_labels.push_back(b["label"].get<std::string>());
     }
   }
-  if (with_group_equal) apply_group_equal(exp, opts);
+  if (group_equal_override != nullptr) {
+    apply_group_equal_value(*group_equal_override, opts);
+  } else if (with_group_equal) {
+    apply_group_equal(exp, opts);
+  }
   auto pt = magmaan::spec::build(*fp, opts);
   if (!pt.has_value()) {
     failures.push_back(id + ": lavaanify — " + pt.error().detail);
@@ -347,6 +370,30 @@ std::optional<OrdinalHandles> handles_from_fixture(
     return std::nullopt;
   }
   return OrdinalHandles{std::move(*pt), std::move(*mr), std::move(*stats_or)};
+}
+
+std::optional<int> ordinal_df_from_handles(
+    const std::string& label,
+    const OrdinalHandles& h,
+    std::vector<std::string>& failures) {
+  Eigen::Index n_moments = 0;
+  for (std::size_t b = 0; b < h.stats.R.size(); ++b) {
+    const Eigen::Index p = h.stats.R[b].rows();
+    n_moments += h.stats.thresholds[b].size() + p * (p - 1) / 2;
+  }
+  auto pt_for_df = h.pt;
+  auto prep_for_df =
+      magmaan::estimate::prepare_ordinal_delta_partable(pt_for_df, h.stats);
+  if (!prep_for_df.has_value()) {
+    failures.push_back(label + ": df prep — " + prep_for_df.error().detail);
+    return std::nullopt;
+  }
+  auto con_or = magmaan::estimate::build_eq_constraints(pt_for_df);
+  if (!con_or.has_value()) {
+    failures.push_back(label + ": df constraints — " + con_or.error().detail);
+    return std::nullopt;
+  }
+  return static_cast<int>(n_moments - con_or->n_alpha);
 }
 
 // Build single-group handles from one data block of a multi-group ordinal
@@ -846,78 +893,152 @@ TEST_CASE("ordinal invariance (group.equal) theta fits match lavaan") {
   CHECK(passed == total);
 }
 
-// Configural-vs-metric Satorra-2000 scaled difference test for the ordinal
-// threshold+loading invariance pair (the end-to-end gate for the paper's nested
-// arm). H1 = configural (no group.equal), H0 = metric (released). Wu-Estabrook
-// makes the pair non-nested (metric frees the group-2 scale/intercepts that
-// configural fixes), so — like lavaan — the test uses the delta A-method (the
-// moment-Jacobian column-space restriction; the released intercepts carry their
-// moment columns via J_mu, without which the restriction rank is wrong). The
-// scaled difference statistic + df match lavaan's
-// `lavTestLRT(method = "satorra.2000")`.
+// Satorra-2000 scaled difference tests for the ordinal theta invariance ladder.
+// The fixture records H1/H0 `group.equal` sets explicitly, so the gate covers
+// both the original configural->metric comparison and adjacent threshold,
+// metric, and scalar/intercept rungs. Wu-Estabrook releases can make the pairs
+// non-nested in raw parameter space, so — like lavaan — this uses the delta
+// A-method (moment-Jacobian column-space restriction).
 TEST_CASE("ordinal invariance nested LRT (satorra.2000 delta) matches lavaan") {
   const std::string dir = magmaan::test::fixtures_dir() + "/ordinal";
-  const std::string id = "0017_2group_thresh_load_invariance_3cat_cfa";
+  int total = 0;
+  int passed = 0;
   std::vector<std::string> failures;
 
-  const std::string path = dir + "/" + id + ".ordinal.json";
-  auto raw = magmaan::test::read_fixture(path);
-  REQUIRE(raw.has_value());
-  auto exp = nlohmann::json::parse(*raw, nullptr, false);
-  REQUIRE_FALSE(exp.is_discarded());
-  REQUIRE(exp["fits"].contains("DWLS"));
-  REQUIRE(exp["fits"]["DWLS"].contains("nested"));
-  const auto& nested = exp["fits"]["DWLS"]["nested"];
+  for (const auto& id : kOrdinalInvarianceFixtures) {
+    const std::string path = dir + "/" + id + ".ordinal.json";
+    auto raw = magmaan::test::read_fixture(path);
+    REQUIRE(raw.has_value());
+    auto exp = nlohmann::json::parse(*raw, nullptr, false);
+    REQUIRE_FALSE(exp.is_discarded());
+    if (!exp["fits"].contains("DWLS")) continue;
 
-  auto h1 = handles_from_fixture(id, exp, failures, /*with_group_equal=*/false);
-  auto h0 = handles_from_fixture(id, exp, failures, /*with_group_equal=*/true);
-  REQUIRE(h1.has_value());
-  REQUIRE(h0.has_value());
+    std::vector<std::string> nested_keys;
+    if (exp["fits"]["DWLS"].contains("nested")) nested_keys.push_back("nested");
+    if (exp["fits"]["DWLS"].contains("nested_previous"))
+      nested_keys.push_back("nested_previous");
 
-  const magmaan::optim::OptimOptions opt{
-      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
-  const auto param = fixture_param(exp);  // theta
-  const auto kind = magmaan::estimate::OrdinalWeightKind::DWLS;
+    for (const auto& nested_key : nested_keys) {
+      ++total;
+      const auto& nested = exp["fits"]["DWLS"][nested_key];
+      nlohmann::json null_ge = nullptr;
+      const auto* h1_ge = nested.contains("h1_group_equal")
+                              ? &nested["h1_group_equal"]
+                              : &null_ge;
+      const auto* h0_ge = nested.contains("h0_group_equal")
+                              ? &nested["h0_group_equal"]
+                              : &exp["group_equal"];
 
-  auto est1 = magmaan::test::fit_ordinal_bounded(
-      h1->pt, h1->rep, h1->stats, magmaan::estimate::Bounds{}, kind,
-      magmaan::estimate::Backend::NloptLbfgs, opt, param);
-  auto est0 = magmaan::test::fit_ordinal_bounded(
-      h0->pt, h0->rep, h0->stats, magmaan::estimate::Bounds{}, kind,
-      magmaan::estimate::Backend::NloptLbfgs, opt, param);
-  REQUIRE(est1.has_value());
-  REQUIRE(est0.has_value());
+      auto h1 = handles_from_fixture(id, exp, failures, /*with_group_equal=*/false,
+                                     h1_ge);
+      auto h0 = handles_from_fixture(id, exp, failures, /*with_group_equal=*/false,
+                                     h0_ge);
+      if (!h1.has_value() || !h0.has_value()) continue;
 
-  const std::int64_t n_total =
-      std::accumulate(h0->stats.n_obs.begin(), h0->stats.n_obs.end(),
-                      std::int64_t{0});
-  const double T_H1 = 2.0 * static_cast<double>(n_total) * est1->fmin;
-  const double T_H0 = 2.0 * static_cast<double>(n_total) * est0->fmin;
+      const magmaan::optim::OptimOptions opt{
+          .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+      const auto param = fixture_param(exp);  // theta
+      const auto kind = magmaan::estimate::OrdinalWeightKind::DWLS;
 
-  // pt_H1/pt_H0 are passed raw (the test re-preps internally); est_* come from
-  // the (internally-prepped) fits, matching the re-prepped free counts.
-  auto lr = magmaan::estimate::lr_test_satorra2000_ordinal(
-      h1->pt, h1->rep, h0->stats, *est1, h0->pt, h0->rep, *est0, kind,
-      /*T_H0=*/T_H0, /*T_H1=*/T_H1, /*df_H0=*/0, /*df_H1=*/0,
-      magmaan::robust::SatorraAMethod::Delta, param);
-  if (!lr.has_value()) MESSAGE("nested lr_test failed: " << lr.error().detail);
-  REQUIRE(lr.has_value());
+      auto est1 = magmaan::test::fit_ordinal_bounded(
+          h1->pt, h1->rep, h1->stats, magmaan::estimate::Bounds{}, kind,
+          magmaan::estimate::Backend::NloptLbfgs, opt, param);
+      auto est0 = magmaan::test::fit_ordinal_bounded(
+          h0->pt, h0->rep, h0->stats, magmaan::estimate::Bounds{}, kind,
+          magmaan::estimate::Backend::NloptLbfgs, opt, param);
+      if (!est1.has_value()) {
+        failures.push_back(id + " " + nested_key + ": H1 fit — " +
+                           est1.error().detail);
+        continue;
+      }
+      if (!est0.has_value()) {
+        failures.push_back(id + " " + nested_key + ": H0 fit — " +
+                           est0.error().detail);
+        continue;
+      }
 
-  // The oracle's chisq_diff is lavaan's *scaled* satorra.2000 statistic (the
-  // robust-test fits). magmaan's T_scaled is on the 2N·fmin scale; rescale by
-  // (N-G)/N to lavaan's convention before comparing.
-  const double scaled =
-      to_lavaan_ls_chisq(lr->T_scaled, n_total, h0->stats.R.size());
-  const double lav_diff = nested["chisq_diff"].get<double>();
-  const int lav_df = nested["df_diff"].get<int>();
-  const double lav_p = nested["p_value"].get<double>();
+      const std::int64_t n_total =
+          std::accumulate(h0->stats.n_obs.begin(), h0->stats.n_obs.end(),
+                          std::int64_t{0});
+      const double T_H1 = 2.0 * static_cast<double>(n_total) * est1->fmin;
+      const double T_H0 = 2.0 * static_cast<double>(n_total) * est0->fmin;
+      const bool equivalent =
+          nested.contains("equivalent") && nested["equivalent"].get<bool>();
+      if (equivalent) {
+        const auto df1 = ordinal_df_from_handles(id + " " + nested_key + " H1",
+                                                 *h1, failures);
+        const auto df0 = ordinal_df_from_handles(id + " " + nested_key + " H0",
+                                                 *h0, failures);
+        if (!df1.has_value() || !df0.has_value()) continue;
+        const double chisq1 =
+            to_lavaan_ls_chisq(T_H1, n_total, h0->stats.R.size());
+        const double chisq0 =
+            to_lavaan_ls_chisq(T_H0, n_total, h0->stats.R.size());
+        const double diff = chisq0 - chisq1;
+        const int lav_df1 = nested["h1_df"].get<int>();
+        const int lav_df0 = nested["h0_df"].get<int>();
+        const double lav_diff = nested["chisq_diff"].get<double>();
+        if (*df1 != lav_df1 || *df0 != lav_df0 ||
+            std::abs(diff - lav_diff) >= 5e-3) {
+          failures.push_back(id + " " + nested_key +
+                             ": equivalent diff=" + std::to_string(diff) +
+                             " lavaan=" + std::to_string(lav_diff) +
+                             " df=(" + std::to_string(*df1) + "," +
+                             std::to_string(*df0) + ") lavaan_df=(" +
+                             std::to_string(lav_df1) + "," +
+                             std::to_string(lav_df0) + ")");
+          continue;
+        }
+        MESSAGE("nested " << id << " " << nested_key
+                << ": equivalent df=" << *df0 << " chisq diff=" << diff);
+        ++passed;
+        continue;
+      }
 
-  MESSAGE("nested 0017: scaled diff magmaan=" << scaled << " lavaan=" << lav_diff
-          << " | df=" << lr->df_diff << " (" << lav_df << ")"
-          << " | p magmaan=" << lr->p_scaled << " lavaan=" << lav_p);
-  CHECK(lr->df_diff == lav_df);
-  CHECK(std::abs(scaled - lav_diff) < 5e-3);
-  CHECK(std::abs(lr->p_scaled - lav_p) < 5e-3);
+      // pt_H1/pt_H0 are passed raw (the test re-preps internally); est_* come
+      // from the internally-prepped fits, matching the re-prepped free counts.
+      auto lr = magmaan::estimate::lr_test_satorra2000_ordinal(
+          h1->pt, h1->rep, h0->stats, *est1, h0->pt, h0->rep, *est0, kind,
+          /*T_H0=*/T_H0, /*T_H1=*/T_H1, /*df_H0=*/0, /*df_H1=*/0,
+          magmaan::robust::SatorraAMethod::Delta, param);
+      if (!lr.has_value()) {
+        failures.push_back(id + " " + nested_key + ": lr_test — " +
+                           lr.error().detail);
+        continue;
+      }
+
+      // The oracle's chisq_diff is lavaan's *scaled* satorra.2000 statistic.
+      // magmaan's T_scaled is on the 2N*fmin scale; rescale by (N-G)/N to
+      // lavaan's convention before comparing.
+      const double scaled =
+          to_lavaan_ls_chisq(lr->T_scaled, n_total, h0->stats.R.size());
+      const double lav_diff = nested["chisq_diff"].get<double>();
+      const int lav_df = nested["df_diff"].get<int>();
+      const double lav_p = nested["p_value"].get<double>();
+      const double scaled_tol = ordinal_nested_lrt_tol(id);
+      if (lr->df_diff != lav_df ||
+          std::abs(scaled - lav_diff) >= scaled_tol ||
+          std::abs(lr->p_scaled - lav_p) >= 5e-3) {
+        failures.push_back(id + " " + nested_key +
+                           ": scaled diff=" + std::to_string(scaled) +
+                           " lavaan=" + std::to_string(lav_diff) +
+                           " df=" + std::to_string(lr->df_diff) +
+                           " lavaan_df=" + std::to_string(lav_df) +
+                           " p=" + std::to_string(lr->p_scaled) +
+                           " lavaan_p=" + std::to_string(lav_p));
+        continue;
+      }
+      MESSAGE("nested " << id << " " << nested_key
+              << ": scaled diff=" << scaled << " (lavaan " << lav_diff
+              << ") df=" << lr->df_diff << " p=" << lr->p_scaled);
+      ++passed;
+    }
+  }
+
+  MESSAGE("ordinal invariance nested LRTs: " << passed << " / " << total
+          << " pass");
+  for (const auto& f : failures) MESSAGE("  FAIL " << f);
+  CHECK(passed == total);
 }
 
 // The threshold-profiled SNLLS path against the same lavaan contract as the

@@ -1133,6 +1133,8 @@ ordinal_cases <- list(
        parameterization = "theta",
        robust = FALSE,
        nested_configural = TRUE,  # emit the configural-vs-metric satorra.2000 LRT
+       nested_previous = TRUE,    # thresholds -> thresholds+loadings
+       nested_previous_group_equal = c("thresholds"),
        data = {
          d1 <- make_ord_df_scaled(420, list(c(-0.70, 0.35), c(-0.55, 0.60),
                                             c(-0.85, 0.20), c(-0.45, 0.75)),
@@ -1180,6 +1182,33 @@ ordinal_cases <- list(
        group_equal = c("thresholds"),
        parameterization = "theta",
        robust = FALSE,
+       nested_previous = TRUE,  # configural -> thresholds
+       data = {
+         d1 <- make_ord_df_scaled(420, list(c(-0.70, 0.35), c(-0.55, 0.60),
+                                            c(-0.85, 0.20), c(-0.45, 0.75)),
+                                  seed = 211L, sd_scale = 1.0, mean_shift = 0.0)
+         d2 <- make_ord_df_scaled(360, list(c(-0.70, 0.35), c(-0.55, 0.60),
+                                            c(-0.85, 0.20), c(-0.45, 0.75)),
+                                  seed = 223L, sd_scale = 1.5, mean_shift = 0.45)
+         d1$school <- "Pasteur"; d2$school <- "Grant-White"
+         rbind(d1, d2)
+       },
+       ordered = paste0("x", 1:4),
+       group = "school",
+       fit = TRUE,
+       fit_estimators = c("DWLS")),
+  # Scalar/intercept rung of the all-ordinal theta ladder. With thresholds and
+  # loadings already tied, `intercepts` fixes the group-2+ indicator intercepts
+  # back to zero and frees the group-2+ latent mean; lavaan adds three df here
+  # for the one-factor marker model. This is the explicit gate for "scalar" /
+  # intercept tests under polychoric DWLS.
+  list(id = "0020_2group_thresh_load_intercept_invariance_3cat_cfa",
+       model = ordinal_model_4,
+       group_equal = c("thresholds", "loadings", "intercepts"),
+       parameterization = "theta",
+       robust = FALSE,
+       nested_previous = TRUE,  # thresholds+loadings -> +intercepts
+       nested_previous_group_equal = c("thresholds", "loadings"),
        data = {
          d1 <- make_ord_df_scaled(420, list(c(-0.70, 0.35), c(-0.55, 0.60),
                                             c(-0.85, 0.20), c(-0.45, 0.75)),
@@ -1271,34 +1300,70 @@ for (oc in ordinal_cases) {
                                           grp_args, ge_args))
         fits$DWLS$robust <- ordinal_robust_json(fit_dwls_robust)
       }
-      # Configural-vs-metric Satorra-2000 scaled difference test: refit the same
-      # data WITHOUT the `group.equal` ties (configural, H1) and compare against
-      # the metric fit (H0). The Wu-Estabrook release makes the pair non-nested
-      # (metric frees group-2 scale/intercepts that configural fixes), so lavaan
-      # uses A.method = "delta". Both fits carry the robust polychoric-NACOV test
-      # (`se="robust.sem"`) so `chisq_diff` is the *scaled* statistic — with plain
-      # DWLS lavaan's default test is "standard" and the scaling collapses to 1.
-      # Direct anchor for the C++ `lr_test_satorra2000_ordinal(.., Delta, Theta)`
-      # nested golden, whose T_scaled this matches.
-      if (isTRUE(oc$nested_configural) && nzchar(group_var)) {
+      # Satorra-2000 scaled difference tests for ordinal invariance rungs. Refit
+      # the same data with explicit H1/H0 `group.equal` sets and compare via
+      # lavaan's delta A-method. The Wu-Estabrook release can make adjacent rungs
+      # non-nested in raw parameter space, so both fits carry robust polychoric
+      # NACOV (`se="robust.sem"`, `test="satorra.bentler"`).
+      ordinal_nested_lrt <- function(h1_group_equal, h0_group_equal) {
         nest_extra <- list(se = "robust.sem", test = "satorra.bentler")
-        fit_cfg <- do.call(cfa, c(list(model = oc$model, data = df, ordered = ov,
-                                       estimator = "DWLS",
-                                       parameterization = param),
-                                  grp_args, nest_extra))
-        fit_met <- do.call(cfa, c(list(model = oc$model, data = df, ordered = ov,
-                                       estimator = "DWLS",
-                                       parameterization = param),
-                                  grp_args, ge_args, nest_extra))
-        lr <- lavTestLRT(fit_cfg, fit_met, method = "satorra.2000")
-        fits$DWLS$nested <- list(
-          configural_chisq = unname(fitMeasures(fit_cfg, "chisq")),
-          configural_df    = as.integer(fitMeasures(fit_cfg, "df")),
-          metric_chisq     = unname(fitMeasures(fit_met, "chisq")),
-          metric_df        = as.integer(fitMeasures(fit_met, "df")),
+        h1_ge_args <- if (is.null(h1_group_equal)) list() else list(group.equal = h1_group_equal)
+        h0_ge_args <- if (is.null(h0_group_equal)) list() else list(group.equal = h0_group_equal)
+        fit_h1 <- do.call(cfa, c(list(model = oc$model, data = df, ordered = ov,
+                                      estimator = "DWLS",
+                                      parameterization = param),
+                                 grp_args, h1_ge_args, nest_extra))
+        fit_h0 <- do.call(cfa, c(list(model = oc$model, data = df, ordered = ov,
+                                      estimator = "DWLS",
+                                      parameterization = param),
+                                 grp_args, h0_ge_args, nest_extra))
+        h1_chisq <- unname(fitMeasures(fit_h1, "chisq"))
+        h1_df <- as.integer(fitMeasures(fit_h1, "df"))
+        h0_chisq <- unname(fitMeasures(fit_h0, "chisq"))
+        h0_df <- as.integer(fitMeasures(fit_h0, "df"))
+        if (h0_df == h1_df) {
+          out <- list(
+            h1_chisq  = h1_chisq,
+            h1_df     = h1_df,
+            h0_chisq  = h0_chisq,
+            h0_df     = h0_df,
+            equivalent = TRUE,
+            chisq_diff = h0_chisq - h1_chisq,
+            df_diff    = 0L,
+            p_value    = NA_real_)
+          out["h1_group_equal"] <- list(h1_group_equal)
+          out["h0_group_equal"] <- list(h0_group_equal)
+          return(out)
+        }
+        lr <- lavTestLRT(fit_h1, fit_h0, method = "satorra.2000")
+        out <- list(
+          h1_chisq        = h1_chisq,
+          h1_df           = h1_df,
+          h0_chisq        = h0_chisq,
+          h0_df           = h0_df,
+          equivalent      = FALSE,
           chisq_diff       = unname(lr[["Chisq diff"]][2]),  # scaled (satorra.2000)
           df_diff          = as.integer(lr[["Df diff"]][2]),
           p_value          = unname(lr[["Pr(>Chisq)"]][2]))
+        out["h1_group_equal"] <- list(h1_group_equal)
+        out["h0_group_equal"] <- list(h0_group_equal)
+        out
+      }
+      if (isTRUE(oc$nested_configural) && nzchar(group_var)) {
+        nested <- ordinal_nested_lrt(NULL, oc$group_equal)
+        nested$configural_chisq <- nested$h1_chisq
+        nested$configural_df <- nested$h1_df
+        nested$metric_chisq <- nested$h0_chisq
+        nested$metric_df <- nested$h0_df
+        fits$DWLS$nested <- nested
+      }
+      if (isTRUE(oc$nested_previous) && nzchar(group_var)) {
+        h1_ge <- if ("nested_previous_group_equal" %in% names(oc)) {
+          oc$nested_previous_group_equal
+        } else {
+          NULL
+        }
+        fits$DWLS$nested_previous <- ordinal_nested_lrt(h1_ge, oc$group_equal)
       }
     }
     if ("WLS" %in% estimators) {

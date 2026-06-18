@@ -345,19 +345,22 @@ decisions in the simulation backlog.
   — the delta released-block branch in `ordinal_residuals`/`ordinal_jacobian`
   stays dormant. lavaan-gated by `cfa(..., parameterization="theta",
   group.equal=...)` fixtures 0017 (3-cat thresholds+loadings), 0018 (binary
-  scale-veto), 0019 (thresholds-only), df/chisq/theta_hat parity in the
-  `ordinal invariance (group.equal) theta fits match lavaan` golden. **The
-  configural→metric Satorra-2000 nested LRT also landed 2026-06-15** (delta
-  A-method, theta): `ordinal_moment_jacobian` now subtracts the released
-  intercept μ and threads `J_mu` in its theta branch (without it the freed
-  group-2 intercepts got zero moment-Jacobian columns, so the delta restriction
-  rank was 4 short — null-space dim 7 instead of 3, the genuine Wu-Estabrook
-  non-nesting). Gated by the `ordinal invariance nested LRT (satorra.2000 delta)
-  matches lavaan` golden on the 0017 configural/metric pair: scaled Δχ² 3.025,
-  Δdf 3, p 0.388, matching `lavTestLRT(method="satorra.2000")` on
-  `se="robust.sem"` fits (the oracle uses robust fits so the satorra scaling is
-  non-trivial; plain DWLS collapses to the unscaled diff). The remaining R
-  surface + paper work is its own item below.
+  scale-veto), 0019 (thresholds-only), and 0020
+  (thresholds+loadings+intercepts / scalar), df/chisq/theta_hat parity in the
+  `ordinal invariance (group.equal) theta fits match lavaan` golden. At scalar,
+  lavaan fixes the group-2+ indicator intercepts back to 0 and frees group-2+
+  latent means; magmaan mirrors that in `prepare_ordinal_*_partable`. **The
+  Satorra-2000 nested LRT ladder also landed 2026-06-18** (delta A-method,
+  theta): `ordinal_moment_jacobian` subtracts the released μ and threads `J_mu`
+  in its theta branch so both freed indicator intercepts and scalar latent means
+  carry moment-Jacobian columns. Gated by the `ordinal invariance nested LRT
+  (satorra.2000 delta) matches lavaan` golden: configural→metric and
+  thresholds→metric scaled Δχ² 3.025 / Δdf 3 / p 0.388, metric→scalar scaled
+  Δχ² 3.765 / Δdf 3 / p 0.288 (scalar-only 1.5e-2 tolerance on the scaled
+  statistic for the documented `(n_g−1)/n_g` LS-weight gap), and
+  configural→thresholds recorded as a df=0 χ²-equivalence because lavaan cannot
+  form a positive-df `lavTestLRT` there. The remaining paper work is its own
+  item below.
 - **M. Ordinal `group.equal` R surface + paper (the C++ core is done, gated).**
   The keyword + Wu-Estabrook theta release + nested satorra.2000 LRT all landed
   and match lavaan in C++ (commits 2aae694 / be27d01 / 00f2373; see the ordinal
@@ -377,11 +380,14 @@ decisions in the simulation backlog.
     shared `.theq.` labels — the same shared-label path build uses for loadings,
     so `from_lavaan_partable` emits the cross-group `==` rows — and (b) leaves the
     group-2+ non-binary ordinal `~~` free (binary-vetoed) for the C++ release
-    instead of pinning it. Gated by `r-package/examples/group_equal_ordinal.R`
-    (0017/0019 analogues, theta): npar, LS χ², released-row count, and every free
-    estimate match `lavaan::cfa(group.equal=, parameterization="theta")` (est
-    diff ≤ 2e-4; `~*~` excluded — a fixed theta row lavaan reports as a derived
-    implied scale, magmaan keeps the nominal 1.0 and carries the scale on `~~`).
+    instead of pinning it. The scalar/intercept rung now suppresses the indicator
+    intercept release and frees the group-2+ latent mean, matching lavaan's
+    theta scalar convention. Gated by `r-package/examples/group_equal_ordinal.R`
+    (0017/0019/0020 analogues, theta): npar, LS χ², released-row count, and every
+    free estimate match `lavaan::cfa(group.equal=, parameterization="theta")`
+    (est diff ≤ 2.4e-4; `~*~` excluded — a fixed theta row lavaan reports as a
+    derived implied scale, magmaan keeps the nominal 1.0 and carries the scale on
+    `~~`).
   - **Nested-ordinal FMG wrapper — LANDED 2026-06-15, lavaan-gated.** No new
     Rcpp export was needed: `infer_ordinal_lr_test_satorra2000` already returns
     the difference triple (`T_diff`, `df_diff`, `eigenvalues`), so
@@ -396,11 +402,11 @@ decisions in the simulation backlog.
     re-prep inside `lr_test_satorra2000_ordinal` needs (it re-preps both
     structures), so `ordinal_fit_result` now stamps `magmaan.group_equal` on
     `fit$partable` (`stamp_group_equal_attr`) and `ctx_from_fit` re-attaches it.
-    Gated by `r-package/examples/group_equal_nested_ordinal.R`: the rescaled
-    satorra.2000 scaled Δχ² (3.0255), Δdf (3), and p (0.387) match
-    `lavTestLRT(method="satorra.2000")` on `se="robust.sem"` fits (≤ 5e-3,
-    reproducing the C++ nested golden), and the FMG `sb_ls` row reproduces
-    `nestedTest()`'s `T_scaled`.
+    Gated by `r-package/examples/group_equal_nested_ordinal.R`: configural→metric
+    and metric→scalar rescaled satorra.2000 Δχ²/Δdf/p match
+    `lavTestLRT(method="satorra.2000")` on `se="robust.sem"` fits (≤ 5e-3 for
+    metric, ≤ 1.5e-2 scalar scaled statistic, reproducing the C++ nested
+    golden), and the FMG `sb_ls` row reproduces `nestedTest()`'s `T_scaled`.
   - **Paper** (`papers/ordinal-fmg/`, private leaf): switch
     `harness-population.R::invariance_syntax` from loadings-only to
     `group.equal = c("thresholds","loadings")` under theta; add a
