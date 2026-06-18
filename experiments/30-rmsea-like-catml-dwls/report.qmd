@@ -1,0 +1,97 @@
+---
+title: "RMSEA-like CATML-at-DWLS Probe"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+summary_path <- file.path("results", "summary.csv")
+target_path <- file.path("results", "targets.csv")
+if (!file.exists(summary_path) || !file.exists(target_path)) {
+  stop("Run `Rscript run_experiment.R --smoke` first.", call. = FALSE)
+}
+summary <- read.csv(summary_path)
+targets <- read.csv(target_path)
+
+fmt <- function(x, digits = 5) ifelse(is.finite(x), formatC(x, digits = digits, format = "f"), "")
+tab <- summary
+tab$missing_rate <- sprintf("%.0f%%", 100 * tab$missing_rate)
+tab$target_F <- fmt(tab$target_F)
+tab$mean_F <- fmt(tab$mean_F)
+tab$bias_F <- fmt(tab$bias_F)
+tab$mae_F <- fmt(tab$mae_F)
+tab$target_rmsea <- fmt(tab$target_rmsea)
+tab$mean_rmsea <- fmt(tab$mean_rmsea)
+tab$bias_rmsea <- fmt(tab$bias_rmsea)
+tab$mae_rmsea <- fmt(tab$mae_rmsea)
+tab$mean_elapsed_ms <- fmt(tab$mean_elapsed_ms, digits = 1)
+names(tab) <- c("N", "Missing", "Usable", "Target F", "Mean F", "Bias F",
+                "MAE F", "Target RMSEA", "Mean RMSEA", "Bias RMSEA",
+                "MAE RMSEA", "Mean ms")
+target_short <- targets[1L, ]
+```
+
+## Question
+
+For ordinal DWLS/WLSMV, lavaan's robust categorical RMSEA is not the DWLS
+least-squares discrepancy. It is an RMSEA-like statistic built from a CATML
+normal-theory correlation criterion evaluated at the already-estimated DWLS
+solution, plus a robust scale correction. Under misspecification this is a
+criterion-at-estimator pair:
+
+`D_CATML(theta_DWLS)`, not `min_theta D_CATML(theta)`.
+
+This probe checks whether the statistic behaves consistently for that hybrid
+estimand in a deliberately misspecified setting: six ordinal indicators generated
+from two correlated Gaussian factors, fit by a one-factor ordinal DWLS model with
+pairwise MCAR missingness.
+
+## Short Answer
+
+In the smoke/current run, `XX3 / N` moves toward the large-`N` reference
+`D_CATML(theta_DWLS)` target. The RMSEA transform moves with the same target
+because, under fixed misspecification, the finite robust subtraction is
+asymptotically negligible. This supports the interpretation that lavaan's
+categorical robust RMSEA is a consistent RMSEA-like statistic for the hybrid
+CATML-at-DWLS estimand, not evidence that DWLS and CATML estimate the same
+pseudo-true parameters.
+
+The first target row used `N_ref = `r target_short$n`` and missing rate
+`r sprintf("%.0f%%", 100 * target_short$missing_rate)`, giving
+`F_CATML@DWLS = `r fmt(target_short$F_catml_at_dwls)`` and robust RMSEA
+`r fmt(target_short$rmsea_robust)``.
+
+## Evidence
+
+```{r}
+knitr::kable(tab, row.names = FALSE)
+```
+
+Raw replicate rows are in `results/replicates.csv`; large-`N` references are in
+`results/targets.csv`.
+
+## Interpretation
+
+This is the same conceptual shape as GIC-like diagnostics: the statistic is
+defined by both the criterion and the estimator whose pseudo-true point is being
+plugged into that criterion. If the model is misspecified, changing either side
+changes the population target.
+
+For lavaan's categorical robust RMSEA, the population object is naturally read as
+`RMSEA_CATML(theta_DWLS)`. A "DWLS RMSEA" based on the DWLS quadratic criterion
+would be a different statistic; a refitted CATML RMSEA would be another one.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --reps 50 --n 500,2000,8000 --missing-rate .30 --n-ref 200000
+quarto render report.qmd
+```
+

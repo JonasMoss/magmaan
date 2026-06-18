@@ -756,6 +756,41 @@ TEST_CASE("ordinal pairwise-deletion goldens match lavaan WLSMV pairwise") {
                          " chisq diff=" + std::to_string(d_chisq));
       continue;
     }
+    if (fit.contains("catml_dwls_rmsea") &&
+        !fit["catml_dwls_rmsea"].is_null()) {
+      auto cat_or = magmaan::estimate::catml_dwls_rmsea_ordinal(
+          h->pt, h->rep, h->stats, *est_or, fixture_param(exp));
+      if (!cat_or.has_value()) {
+        failures.push_back(id + " DWLS catML@DWLS RMSEA: " +
+                           cat_or.error().detail);
+        continue;
+      }
+      const auto& cat = fit["catml_dwls_rmsea"];
+      const double d_xx3 =
+          std::abs(cat_or->xx3 - cat["XX3"].get<double>());
+      const int d_df3 = std::abs(cat_or->df3 - cat["df3"].get<int>());
+      const double d_c_hat3 =
+          std::abs(cat_or->c_hat3 - cat["c_hat3"].get<double>());
+      const double d_xx3_scaled =
+          std::abs(cat_or->xx3_scaled - cat["XX3_scaled"].get<double>());
+      const double d_rmsea_robust =
+          std::abs(cat_or->rmsea_robust - cat["rmsea_robust"].get<double>());
+      if (d_df3 != 0 || d_xx3 > 5e-5 || d_c_hat3 > 5e-5 ||
+          d_xx3_scaled > 5e-5 || d_rmsea_robust > 5e-8) {
+        failures.push_back(
+            id + " DWLS catML@DWLS RMSEA: XX3 diff=" +
+            std::to_string(d_xx3) +
+            " df3 diff=" + std::to_string(d_df3) +
+            " c_hat3 diff=" + std::to_string(d_c_hat3) +
+            " XX3.scaled diff=" + std::to_string(d_xx3_scaled) +
+            " rmsea.robust diff=" + std::to_string(d_rmsea_robust));
+        continue;
+      }
+      MESSAGE(id << " DWLS pairwise catML@DWLS: XX3=" << cat_or->xx3
+                 << " c_hat3=" << cat_or->c_hat3
+                 << " XX3.scaled=" << cat_or->xx3_scaled
+                 << " rmsea.robust=" << cat_or->rmsea_robust);
+    }
     MESSAGE(id << " DWLS pairwise: chisq=" << chisq
                << " lavaan=" << lavaan_chisq
                << " df=" << *df_or

@@ -99,6 +99,24 @@ bool vector_all_finite(const Eigen::VectorXd& v) {
   return true;
 }
 
+post_expected<double> log_det_pd_post(const Eigen::MatrixXd& A,
+                                      std::string what) {
+  if (A.rows() != A.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::move(what) + " is not square"));
+  }
+  const Eigen::MatrixXd S = 0.5 * (A + A.transpose());
+  Eigen::LLT<Eigen::MatrixXd> llt(S);
+  if (llt.info() != Eigen::Success) {
+    return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
+        std::move(what) + " is not positive definite"));
+  }
+  double out = 0.0;
+  const auto L = llt.matrixL();
+  for (Eigen::Index i = 0; i < L.rows(); ++i) out += std::log(L(i, i));
+  return 2.0 * out;
+}
+
 post_expected<Eigen::MatrixXd>
 sym_inverse_pd_post(const Eigen::MatrixXd& A, std::string what) {
   if (A.rows() != A.cols()) {
@@ -176,6 +194,107 @@ dwls_weight_from_gamma(const Eigen::MatrixXd& G, std::string what) {
     W(k, k) = 1.0 / v;
   }
   return W;
+}
+
+post_expected<Eigen::MatrixXd>
+correlation_matrix(const Eigen::MatrixXd& Sigma, std::string what) {
+  if (Sigma.rows() != Sigma.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::move(what) + " is not square"));
+  }
+  const Eigen::Index p = Sigma.rows();
+  Eigen::VectorXd sd(p);
+  for (Eigen::Index i = 0; i < p; ++i) {
+    const double v = Sigma(i, i);
+    if (!(v > 0.0) || !std::isfinite(v)) {
+      return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+          std::move(what) + " has a non-positive diagonal"));
+    }
+    sd(i) = std::sqrt(v);
+  }
+  Eigen::MatrixXd R(p, p);
+  for (Eigen::Index j = 0; j < p; ++j) {
+    for (Eigen::Index i = 0; i < p; ++i) {
+      R(i, j) = Sigma(i, j) / (sd(i) * sd(j));
+    }
+  }
+  R.diagonal().setOnes();
+  return Eigen::MatrixXd(0.5 * (R + R.transpose()).eval());
+}
+
+post_expected<Eigen::MatrixXd>
+ordinal_catml_correlation_matrix(const Eigen::MatrixXd& Sigma,
+                                 OrdinalParameterization parameterization,
+                                 std::string what) {
+  if (parameterization == OrdinalParameterization::Theta) {
+    return correlation_matrix(Sigma, std::move(what));
+  }
+  if (Sigma.rows() != Sigma.cols()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        std::move(what) + " is not square"));
+  }
+  Eigen::MatrixXd R = 0.5 * (Sigma + Sigma.transpose()).eval();
+  R.diagonal().setOnes();
+  return R;
+}
+
+post_expected<Eigen::MatrixXd>
+catml_correlation_information(const Eigen::MatrixXd& R) {
+  auto Rinv_or = sym_inverse_pd_post(R, "catML implied correlation");
+  if (!Rinv_or.has_value()) return std::unexpected(Rinv_or.error());
+  const Eigen::MatrixXd& Rinv = *Rinv_or;
+  const Eigen::Index p = R.rows();
+  const Eigen::Index ncorr = p * (p - 1) / 2;
+  Eigen::MatrixXd V = Eigen::MatrixXd::Zero(ncorr, ncorr);
+  Eigen::Index a = 0;
+  for (Eigen::Index c1 = 0; c1 < p; ++c1) {
+    for (Eigen::Index r1 = c1 + 1; r1 < p; ++r1) {
+      Eigen::MatrixXd E1 = Eigen::MatrixXd::Zero(p, p);
+      E1(r1, c1) = 1.0;
+      E1(c1, r1) = 1.0;
+      const Eigen::MatrixXd A1 = Rinv * E1 * Rinv;
+      Eigen::Index b = 0;
+      for (Eigen::Index c2 = 0; c2 < p; ++c2) {
+        for (Eigen::Index r2 = c2 + 1; r2 < p; ++r2) {
+          Eigen::MatrixXd E2 = Eigen::MatrixXd::Zero(p, p);
+          E2(r2, c2) = 1.0;
+          E2(c2, r2) = 1.0;
+          V(a, b) = 0.5 * (A1 * E2).trace();
+          ++b;
+        }
+      }
+      ++a;
+    }
+  }
+  return Eigen::MatrixXd(0.5 * (V + V.transpose()).eval());
+}
+
+post_expected<double>
+catml_correlation_discrepancy(const Eigen::MatrixXd& sample_R,
+                              const Eigen::MatrixXd& implied_R) {
+  auto logS_or = log_det_pd_post(sample_R, "catML sample polychoric R");
+  if (!logS_or.has_value()) return std::unexpected(logS_or.error());
+  auto logM_or = log_det_pd_post(implied_R, "catML implied R");
+  if (!logM_or.has_value()) return std::unexpected(logM_or.error());
+  auto invM_or = sym_inverse_pd_post(implied_R, "catML implied R");
+  if (!invM_or.has_value()) return std::unexpected(invM_or.error());
+  const double tr = sample_R.cwiseProduct(*invM_or).sum();
+  return *logM_or + tr - *logS_or - static_cast<double>(sample_R.rows());
+}
+
+Eigen::Index numerical_rank(const Eigen::MatrixXd& A) {
+  if (A.size() == 0) return 0;
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  if (svd.singularValues().size() == 0) return 0;
+  const double s0 = svd.singularValues()(0);
+  const double tol = std::numeric_limits<double>::epsilon() *
+                     static_cast<double>(std::max(A.rows(), A.cols())) *
+                     std::max(1.0, s0);
+  Eigen::Index r = 0;
+  for (Eigen::Index i = 0; i < svd.singularValues().size(); ++i) {
+    if (svd.singularValues()(i) > tol) ++r;
+  }
+  return r;
 }
 
 fit_expected<std::int64_t> total_n_obs(const data::OrdinalStats& s) {
@@ -4254,6 +4373,172 @@ fit_measures_ordinal(spec::LatentStructure pt,
       measures::fit_measures(chi2, df, *baseline, *N_or, stats.R.size());
 
   return OrdinalFitMeasures{*baseline, indices, *sr};
+}
+
+post_expected<OrdinalCatmlDwlsRmsea>
+catml_dwls_rmsea_ordinal(spec::LatentStructure pt,
+                         const model::MatrixRep& rep,
+                         const data::OrdinalStats& stats,
+                         const Estimates& est,
+                         OrdinalParameterization parameterization) {
+  if (auto v = validate_stats(stats, rep, OrdinalWeightKind::DWLS);
+      !v.has_value()) {
+    return std::unexpected(fit_to_post(v.error()));
+  }
+  if (auto p = prepare_ordinal_delta_partable(pt, stats, nullptr);
+      !p.has_value()) {
+    return std::unexpected(fit_to_post(p.error()));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "catml_dwls_rmsea_ordinal: fitted theta length does not match "
+        "ordinal delta partable"));
+  }
+
+  auto layout_or = make_threshold_layout(pt, rep, stats);
+  if (!layout_or.has_value()) return std::unexpected(fit_to_post(layout_or.error()));
+  if (parameterization == OrdinalParameterization::Delta) {
+    for (const auto& block : layout_or->scale_free) {
+      if (std::any_of(block.begin(), block.end(), [](char c) { return c != 0; })) {
+        return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+            "catml_dwls_rmsea_ordinal: delta fits with released response "
+            "scales are not yet supported"));
+      }
+    }
+  }
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "catml_dwls_rmsea_ordinal: ModelEvaluator::build failed: " +
+            ev_or.error().detail));
+  }
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "catml_dwls_rmsea_ordinal: fitted evaluation failed: " +
+            eval.error().detail));
+  }
+
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != pt.n_free()) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "catml_dwls_rmsea_ordinal: constraint reparameterization has "
+        "incompatible shape"));
+  }
+
+  const Eigen::MatrixXd Delta_full =
+      ordinal_moment_jacobian(stats, *layout_or, eval->moments, eval->J_sigma,
+                              est.theta, parameterization, eval->J_mu);
+
+  Eigen::Index total_full = 0;
+  Eigen::Index total_assoc = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index nth = stats.thresholds[b].size();
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    total_full += nth + ncorr;
+    total_assoc += ncorr;
+  }
+  if (Delta_full.rows() != total_full) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "catml_dwls_rmsea_ordinal: moment Jacobian row count mismatch"));
+  }
+  if (total_assoc == 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "catml_dwls_rmsea_ordinal: no association moments"));
+  }
+
+  auto N_or = total_n_obs(stats);
+  if (!N_or.has_value()) return std::unexpected(fit_to_post(N_or.error()));
+  const double N_total = static_cast<double>(*N_or);
+
+  Eigen::MatrixXd Delta_assoc(total_assoc, Delta_full.cols());
+  Eigen::MatrixXd Wg = Eigen::MatrixXd::Zero(total_assoc, total_assoc);
+  Eigen::MatrixXd Vg = Eigen::MatrixXd::Zero(total_assoc, total_assoc);
+  Eigen::MatrixXd Gg = Eigen::MatrixXd::Zero(total_assoc, total_assoc);
+  Eigen::MatrixXd A_alpha =
+      Eigen::MatrixXd::Zero(K.cols(), K.cols());
+
+  double xx3 = 0.0;
+  Eigen::Index full_off = 0;
+  Eigen::Index assoc_off = 0;
+  for (std::size_t b = 0; b < stats.R.size(); ++b) {
+    const Eigen::Index p = stats.R[b].rows();
+    const Eigen::Index nth = stats.thresholds[b].size();
+    const Eigen::Index ncorr = p * (p - 1) / 2;
+    const Eigen::Index mdim = nth + ncorr;
+    const double fg = static_cast<double>(stats.n_obs[b]) / N_total;
+
+    auto implied_R_or = ordinal_catml_correlation_matrix(
+        eval->moments.sigma[b],
+        parameterization,
+        "catml_dwls_rmsea_ordinal: implied covariance block " +
+            std::to_string(b));
+    if (!implied_R_or.has_value()) {
+      return std::unexpected(implied_R_or.error());
+    }
+    auto Fb_or = catml_correlation_discrepancy(stats.R[b], *implied_R_or);
+    if (!Fb_or.has_value()) return std::unexpected(Fb_or.error());
+    xx3 += static_cast<double>(stats.n_obs[b]) * *Fb_or;
+
+    const Eigen::MatrixXd Dfull_b =
+        Delta_full.block(full_off, 0, mdim, Delta_full.cols());
+    A_alpha.noalias() +=
+        fg * (K.transpose() * Dfull_b.transpose() * stats.W_dwls[b] *
+              Dfull_b * K);
+
+    const Eigen::MatrixXd Dassoc_b =
+        Dfull_b.bottomRows(ncorr);
+    Delta_assoc.block(assoc_off, 0, ncorr, Delta_full.cols()) = Dassoc_b;
+    Wg.block(assoc_off, assoc_off, ncorr, ncorr) =
+        fg * stats.W_dwls[b].bottomRightCorner(ncorr, ncorr);
+    Gg.block(assoc_off, assoc_off, ncorr, ncorr) =
+        (1.0 / fg) * stats.NACOV[b].bottomRightCorner(ncorr, ncorr);
+
+    auto Vb_or = catml_correlation_information(*implied_R_or);
+    if (!Vb_or.has_value()) return std::unexpected(Vb_or.error());
+    Vg.block(assoc_off, assoc_off, ncorr, ncorr) = fg * *Vb_or;
+
+    full_off += mdim;
+    assoc_off += ncorr;
+  }
+  A_alpha = 0.5 * (A_alpha + A_alpha.transpose()).eval();
+  auto Ainv_or = sym_inverse_pd_post(
+      A_alpha, "catml_dwls_rmsea_ordinal categorical information");
+  if (!Ainv_or.has_value()) return std::unexpected(Ainv_or.error());
+  const Eigen::MatrixXd e_inv = K * (*Ainv_or) * K.transpose();
+
+  const Eigen::Index rank_assoc = numerical_rank(Delta_assoc * K);
+  const int df3 = static_cast<int>(total_assoc - rank_assoc);
+  if (df3 < 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "catml_dwls_rmsea_ordinal: negative CATML df"));
+  }
+
+  OrdinalCatmlDwlsRmsea out;
+  out.xx3 = std::max(0.0, xx3);
+  out.df3 = df3;
+  if (df3 > 0) {
+    Eigen::MatrixXd wi_u =
+        Eigen::MatrixXd::Identity(total_assoc, total_assoc) -
+        Delta_assoc * e_inv * Delta_assoc.transpose() * Wg;
+    const double ks =
+        (wi_u.transpose() * Vg * wi_u * Gg).trace();
+    out.c_hat3 = ks / static_cast<double>(df3);
+    out.xx3_scaled = out.xx3 / out.c_hat3;
+    const double num =
+        std::max(out.xx3 - static_cast<double>(df3) * out.c_hat3, 0.0);
+    out.rmsea_robust =
+        std::sqrt(num / (static_cast<double>(df3) * N_total)) *
+        std::sqrt(static_cast<double>(std::max<std::size_t>(1, stats.R.size())));
+  } else {
+    out.c_hat3 = std::numeric_limits<double>::quiet_NaN();
+    out.xx3_scaled = std::numeric_limits<double>::quiet_NaN();
+    out.rmsea_robust = 0.0;
+  }
+  return out;
 }
 
 post_expected<OrdinalFitMeasures>

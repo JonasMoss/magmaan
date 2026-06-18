@@ -199,6 +199,20 @@ ordinal_fit_json <- function(fit) {
        srmr = as.numeric(fm["srmr"]))
 }
 
+# lavaan's categorical robust RMSEA path evaluates a CATML/normal-theory
+# correlation criterion at the already-estimated DWLS/WLSMV parameters, then
+# applies a WLSMV-style scaling correction. Store the pieces, not just the
+# clipped RMSEA, so parity failures are diagnosable.
+ordinal_catml_dwls_rmsea_json <- function(fit) {
+  x <- lavaan:::lav_fit_catml_dwls(fit, check_pd = TRUE)
+  fm <- fitMeasures(fit, c("rmsea.robust"))
+  list(XX3 = as.numeric(x$XX3),
+       df3 = as.integer(x$df3),
+       c_hat3 = as.numeric(x$c.hat3),
+       XX3_scaled = as.numeric(x$XX3.scaled),
+       rmsea_robust = as.numeric(fm["rmsea.robust"]))
+}
+
 # Robust SEs and Satorra-Bentler-family statistics for an ordinal fit.
 ordinal_robust_json <- function(fit) {
   pt <- parTable(fit)

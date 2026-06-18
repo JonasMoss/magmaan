@@ -3259,6 +3259,36 @@ Rcpp::List measures_fit(Rcpp::List fit, double chi2, int df,
       Rcpp::_["ntotal"]            = have ? static_cast<double>(fx->ntotal) : NA_REAL);
 }
 
+// ordinal_catml_dwls_rmsea_impl() — lavaan-compatible categorical robust RMSEA
+// ingredients for an all-ordinal DWLS/WLSMV fit. This evaluates the CATML
+// normal-theory correlation discrepancy at the existing ordinal estimates; it
+// does not re-optimize.
+//
+// [[Rcpp::export]]
+Rcpp::List ordinal_catml_dwls_rmsea_impl(Rcpp::List fit,
+                                         SEXP ordinal_stats = R_NilValue) {
+  Ctx ctx = ctx_from_fit(fit);
+  const magmaan::estimate::Estimates est = est_from_fit(fit);
+  Rcpp::List stats_r = stats_from_fit_or_arg(
+      fit, ordinal_stats, "ordinal_stats", "ordinal_catml_dwls_rmsea_impl");
+  magmaan::data::OrdinalStats stats = ordinal_stats_from_arg(stats_r);
+  const std::string parameterization_name =
+      fit.containsElementNamed("parameterization")
+          ? Rcpp::as<std::string>(fit["parameterization"])
+          : "delta";
+  auto out_or = magmaan::estimate::catml_dwls_rmsea_ordinal(
+      ctx.pt, ctx.rep, stats, est,
+      ordinal_parameterization_from_string(parameterization_name));
+  if (!out_or.has_value()) stop_post(out_or.error());
+  const auto& out = *out_or;
+  return Rcpp::List::create(
+      Rcpp::_["XX3"] = out.xx3,
+      Rcpp::_["df3"] = out.df3,
+      Rcpp::_["c.hat3"] = out.c_hat3,
+      Rcpp::_["XX3.scaled"] = out.xx3_scaled,
+      Rcpp::_["rmsea.robust"] = out.rmsea_robust);
+}
+
 // estimate_fiml_robust_mlr() — mirrors estimate::fiml::fiml_robust_mlr().
 // Computes observed-pattern sandwich SEs plus Yuan-Bentler/Mplus scaled-test
 // traces for a FIML fit carrying $raw_data.
