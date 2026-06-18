@@ -59,6 +59,16 @@ stopifnot(is.finite(fit_ml2s$chisq))
 stopifnot(is.finite(fit_ml2s$chisq_scaled))
 stopifnot(is.finite(fit_ml2s$scaling_factor), fit_ml2s$scaling_factor > 0)
 stopifnot(identical(fit_ml2s$df, fit_ml2s$ml2s$df))
+fm_ml2s <- fit_measures(fit_ml2s, robust = fit_ml2s$ml2s)
+lav_ml2s <- cfa(model_ml2s, data = df, missing = "robust.two.stage",
+                meanstructure = TRUE)
+fm_keys_ml2s <- c("baseline.chisq.scaled",
+                  "baseline.chisq.scaling.factor",
+                  "cfi.scaled", "tli.scaled", "rmsea.scaled",
+                  "cfi.robust", "tli.robust", "rmsea.robust")
+fm_diff_ml2s <- unlist(fm_ml2s[fm_keys_ml2s]) -
+  as.numeric(fitMeasures(lav_ml2s)[fm_keys_ml2s])
+stopifnot(max(abs(fm_diff_ml2s), na.rm = TRUE) < 5e-4)
 
 model_eq <- "visual =~ x1 + a*x2 + a*x3"
 m_eq <- model_spec(model_eq, meanstructure = TRUE)
@@ -74,11 +84,10 @@ stopifnot(all(is.finite(nested_emp$eigenvalues)))
 nested_nt <- nestedTest(fit, fit_eq, method = "restriction_map", gamma = "NT")
 stopifnot(max(abs(nested_nt$eigenvalues - 1)) < 1e-6)
 
-err_complete_method <- tryCatch(
-  nestedTest(fit, fit_eq, method = "satorra.bentler.2001"),
-  error = function(e) conditionMessage(e)
-)
-stopifnot(grepl("restriction_map", err_complete_method, fixed = TRUE))
+nested_sb2001 <- nestedTest(fit, fit_eq, method = "satorra.bentler.2001")
+stopifnot(inherits(nested_sb2001, "magmaan_nested_test"))
+stopifnot(nested_sb2001$df_diff == 1L)
+stopifnot(is.finite(nested_sb2001$stat), is.finite(nested_sb2001$scale_c))
 err_data_arg <- tryCatch(
   nestedTest(fit, fit_eq, data = df, method = "restriction_map"),
   error = function(e) conditionMessage(e)

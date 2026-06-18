@@ -2173,6 +2173,22 @@ for (m in fiml_cases) {
   ml2s_scaling_factor <- NULL
   ml2s_trace_ugamma <- NULL
   ml2s_pvalue_scaled <- NULL
+  ml2s_baseline_chisq_scaled <- NULL
+  ml2s_baseline_scaling_factor <- NULL
+  ml2s_cfi_scaled <- NULL
+  ml2s_tli_scaled <- NULL
+  ml2s_rmsea_scaled <- NULL
+  ml2s_rmsea_ci_lower_scaled <- NULL
+  ml2s_rmsea_ci_upper_scaled <- NULL
+  ml2s_rmsea_pvalue_scaled <- NULL
+  ml2s_rmsea_notclose_pvalue_scaled <- NULL
+  ml2s_cfi_robust <- NULL
+  ml2s_tli_robust <- NULL
+  ml2s_rmsea_robust <- NULL
+  ml2s_rmsea_ci_lower_robust <- NULL
+  ml2s_rmsea_ci_upper_robust <- NULL
+  ml2s_rmsea_pvalue_robust <- NULL
+  ml2s_rmsea_notclose_pvalue_robust <- NULL
   if (is.null(expect_error)) {
     rts_args <- fit_args
     rts_args$missing <- "robust.two.stage"
@@ -2191,6 +2207,25 @@ for (m in fiml_cases) {
       fm_rts <- fitMeasures(fit_rts)
       ml2s_chisq <- num_or_null(fm_rts["chisq"])
       ml2s_pvalue_scaled <- num_or_null(fm_rts["pvalue.scaled"])
+      ml2s_baseline_chisq_scaled <- num_or_null(fm_rts["baseline.chisq.scaled"])
+      ml2s_baseline_scaling_factor <-
+        num_or_null(fm_rts["baseline.chisq.scaling.factor"])
+      ml2s_cfi_scaled <- num_or_null(fm_rts["cfi.scaled"])
+      ml2s_tli_scaled <- num_or_null(fm_rts["tli.scaled"])
+      ml2s_rmsea_scaled <- num_or_null(fm_rts["rmsea.scaled"])
+      ml2s_rmsea_ci_lower_scaled <- num_or_null(fm_rts["rmsea.ci.lower.scaled"])
+      ml2s_rmsea_ci_upper_scaled <- num_or_null(fm_rts["rmsea.ci.upper.scaled"])
+      ml2s_rmsea_pvalue_scaled <- num_or_null(fm_rts["rmsea.pvalue.scaled"])
+      ml2s_rmsea_notclose_pvalue_scaled <-
+        num_or_null(fm_rts["rmsea.notclose.pvalue.scaled"])
+      ml2s_cfi_robust <- num_or_null(fm_rts["cfi.robust"])
+      ml2s_tli_robust <- num_or_null(fm_rts["tli.robust"])
+      ml2s_rmsea_robust <- num_or_null(fm_rts["rmsea.robust"])
+      ml2s_rmsea_ci_lower_robust <- num_or_null(fm_rts["rmsea.ci.lower.robust"])
+      ml2s_rmsea_ci_upper_robust <- num_or_null(fm_rts["rmsea.ci.upper.robust"])
+      ml2s_rmsea_pvalue_robust <- num_or_null(fm_rts["rmsea.pvalue.robust"])
+      ml2s_rmsea_notclose_pvalue_robust <-
+        num_or_null(fm_rts["rmsea.notclose.pvalue.robust"])
       test_rts <- lavInspect(fit_rts, "test")$satorra.bentler
       if (!is.null(test_rts)) {
         ml2s_chisq_scaled <- num_or_null(test_rts$stat)
@@ -2254,6 +2289,22 @@ for (m in fiml_cases) {
     ml2s_scaling_factor = ml2s_scaling_factor,
     ml2s_trace_ugamma = ml2s_trace_ugamma,
     ml2s_pvalue_scaled = ml2s_pvalue_scaled,
+    ml2s_baseline_chisq_scaled = ml2s_baseline_chisq_scaled,
+    ml2s_baseline_scaling_factor = ml2s_baseline_scaling_factor,
+    ml2s_cfi_scaled = ml2s_cfi_scaled,
+    ml2s_tli_scaled = ml2s_tli_scaled,
+    ml2s_rmsea_scaled = ml2s_rmsea_scaled,
+    ml2s_rmsea_ci_lower_scaled = ml2s_rmsea_ci_lower_scaled,
+    ml2s_rmsea_ci_upper_scaled = ml2s_rmsea_ci_upper_scaled,
+    ml2s_rmsea_pvalue_scaled = ml2s_rmsea_pvalue_scaled,
+    ml2s_rmsea_notclose_pvalue_scaled = ml2s_rmsea_notclose_pvalue_scaled,
+    ml2s_cfi_robust = ml2s_cfi_robust,
+    ml2s_tli_robust = ml2s_tli_robust,
+    ml2s_rmsea_robust = ml2s_rmsea_robust,
+    ml2s_rmsea_ci_lower_robust = ml2s_rmsea_ci_lower_robust,
+    ml2s_rmsea_ci_upper_robust = ml2s_rmsea_ci_upper_robust,
+    ml2s_rmsea_pvalue_robust = ml2s_rmsea_pvalue_robust,
+    ml2s_rmsea_notclose_pvalue_robust = ml2s_rmsea_notclose_pvalue_robust,
     cfi             = as.numeric(fm["cfi"]),
     tli             = as.numeric(fm["tli"]),
     rmsea           = as.numeric(fm["rmsea"]),

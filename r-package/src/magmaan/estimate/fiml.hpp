@@ -152,6 +152,11 @@ struct TwoStageEMMLInference {
   std::int64_t ntotal            = 0;
 };
 
+struct TwoStageFitMeasures {
+  measures::BaselineFit baseline;
+  measures::RobustFitMeasures indices;
+};
+
 // The full missing-data UΓ spectrum for FMG goodness-of-fit tests under FIML.
 // Unlike `FIMLRobustMLR` (which carries only the first cumulant via a trace
 // difference and the q parameter-space eigenvalues of H⁻¹·meat), this returns
@@ -441,6 +446,33 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           const SaturatedMoments& sm,
                           TwoStageWeight kind = TwoStageWeight::Nt,
                           TwoStageDlsOptions dls = {});
+
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const RawData& raw,
+                       const Estimates& est,
+                       double h_step = 1e-4,
+                       TwoStageWeight kind = TwoStageWeight::Nt,
+                       TwoStageDlsOptions dls = {});
+
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const RawData& raw,
+                       const Estimates& est,
+                       const FIMLPack& pack,
+                       const FIMLH1& h1,
+                       TwoStageWeight kind = TwoStageWeight::Nt,
+                       TwoStageDlsOptions dls = {});
+
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const Estimates& est,
+                       const SaturatedMoments& sm,
+                       TwoStageWeight kind = TwoStageWeight::Nt,
+                       TwoStageDlsOptions dls = {});
 
 namespace diagnostic {
 

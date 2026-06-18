@@ -352,55 +352,10 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
       }
     }
 
-    if (exp.contains("mlr_rmsea_robust") &&
-        finite_scalar_json(exp["mlr_rmsea_robust"]) &&
-        df > 0) {
-      auto corr_or = magmaan::estimate::fiml::fiml_corrected_fit_measures(
-          *pt, *mr, raw, est, df);
-      if (!corr_or.has_value()) {
-        failures.push_back(id + ": fiml_corrected_fit_measures — " +
-                           corr_or.error().detail);
-        ok = false;
-      } else {
-        const auto& rfm = corr_or->indices;
-        ok = cmp_finite("mlr_cfi_scaled", rfm.cfi_scaled,
-                        "mlr_cfi_scaled", 3e-4) && ok;
-        ok = cmp_finite("mlr_tli_scaled", rfm.tli_scaled,
-                        "mlr_tli_scaled", 3e-4) && ok;
-        ok = cmp_finite("mlr_rmsea_scaled", rfm.rmsea_scaled,
-                        "mlr_rmsea_scaled", 3e-4) && ok;
-        ok = cmp_finite("mlr_rmsea_ci_lower_scaled",
-                        rfm.rmsea_ci_lower_scaled,
-                        "mlr_rmsea_ci_lower_scaled", 5e-4) && ok;
-        ok = cmp_finite("mlr_rmsea_ci_upper_scaled",
-                        rfm.rmsea_ci_upper_scaled,
-                        "mlr_rmsea_ci_upper_scaled", 5e-4) && ok;
-        ok = cmp_finite("mlr_rmsea_pvalue_scaled",
-                        rfm.rmsea_pvalue_scaled,
-                        "mlr_rmsea_pvalue_scaled", 5e-4) && ok;
-        ok = cmp_finite("mlr_rmsea_notclose_pvalue_scaled",
-                        rfm.rmsea_notclose_pvalue_scaled,
-                        "mlr_rmsea_notclose_pvalue_scaled", 5e-4) && ok;
-        ok = cmp_finite("mlr_cfi_robust", rfm.cfi_robust,
-                        "mlr_cfi_robust", 3e-4) && ok;
-        ok = cmp_finite("mlr_tli_robust", rfm.tli_robust,
-                        "mlr_tli_robust", 3e-4) && ok;
-        ok = cmp_finite("mlr_rmsea_robust", rfm.rmsea_robust,
-                        "mlr_rmsea_robust", 3e-4) && ok;
-        ok = cmp_finite("mlr_rmsea_ci_lower_robust",
-                        rfm.rmsea_ci_lower_robust,
-                        "mlr_rmsea_ci_lower_robust", 5e-4) && ok;
-        ok = cmp_finite("mlr_rmsea_ci_upper_robust",
-                        rfm.rmsea_ci_upper_robust,
-                        "mlr_rmsea_ci_upper_robust", 5e-4) && ok;
-        ok = cmp_finite("mlr_rmsea_pvalue_robust",
-                        rfm.rmsea_pvalue_robust,
-                        "mlr_rmsea_pvalue_robust", 5e-4) && ok;
-        ok = cmp_finite("mlr_rmsea_notclose_pvalue_robust",
-                        rfm.rmsea_notclose_pvalue_robust,
-                        "mlr_rmsea_notclose_pvalue_robust", 5e-4) && ok;
-      }
-    }
+    // lavaan's MLR fitMeasures fields are recorded in the fixture for reference,
+    // but they are not the oracle for the explicit FIML-C helper. The
+    // lavaan-gated missing-data robust global-index path here is ML2S /
+    // missing="robust.two.stage".
 
     // ML2S (two-stage ML) vs lavaan missing="robust.two.stage". Stage 1 is the
     // saturated EM ACOV, Stage 2 is ML on the EM-completed moments (its own point
@@ -451,6 +406,41 @@ TEST_CASE("FIML goldens — θ̂ matches lavaan missing='fiml'") {
             ok = ml2s_cmp("ml2s_trace_ugamma", m2.trace_ugamma, 1e-3) && ok;
             ok = ml2s_cmp("ml2s_chisq_scaled", m2.chisq_scaled, 1e-3) && ok;
             ok = ml2s_cmp("ml2s_chisq", m2.chisq, 1e-3) && ok;
+            auto fm2_or = magmaan::estimate::fiml::two_stage_fit_measures(
+                *pt, *mr, *est2, *sm_or);
+            if (!fm2_or.has_value()) {
+              failures.push_back(id + ": two_stage_fit_measures — " +
+                                 fm2_or.error().detail);
+              ok = false;
+            } else {
+              const auto& fm2 = fm2_or->indices;
+              ok = ml2s_cmp("ml2s_baseline_chisq_scaled",
+                            fm2.baseline_chisq_scaled, 1e-3) && ok;
+              ok = ml2s_cmp("ml2s_baseline_scaling_factor",
+                            fm2.baseline_chisq_scaling_factor, 1e-3) && ok;
+              ok = ml2s_cmp("ml2s_cfi_scaled", fm2.cfi_scaled, 3e-4) && ok;
+              ok = ml2s_cmp("ml2s_tli_scaled", fm2.tli_scaled, 3e-4) && ok;
+              ok = ml2s_cmp("ml2s_rmsea_scaled", fm2.rmsea_scaled, 3e-4) && ok;
+              ok = ml2s_cmp("ml2s_rmsea_ci_lower_scaled",
+                            fm2.rmsea_ci_lower_scaled, 5e-4) && ok;
+              ok = ml2s_cmp("ml2s_rmsea_ci_upper_scaled",
+                            fm2.rmsea_ci_upper_scaled, 5e-4) && ok;
+              ok = ml2s_cmp("ml2s_rmsea_pvalue_scaled",
+                            fm2.rmsea_pvalue_scaled, 5e-4) && ok;
+              ok = ml2s_cmp("ml2s_rmsea_notclose_pvalue_scaled",
+                            fm2.rmsea_notclose_pvalue_scaled, 5e-4) && ok;
+              ok = ml2s_cmp("ml2s_cfi_robust", fm2.cfi_robust, 3e-4) && ok;
+              ok = ml2s_cmp("ml2s_tli_robust", fm2.tli_robust, 3e-4) && ok;
+              ok = ml2s_cmp("ml2s_rmsea_robust", fm2.rmsea_robust, 3e-4) && ok;
+              ok = ml2s_cmp("ml2s_rmsea_ci_lower_robust",
+                            fm2.rmsea_ci_lower_robust, 5e-4) && ok;
+              ok = ml2s_cmp("ml2s_rmsea_ci_upper_robust",
+                            fm2.rmsea_ci_upper_robust, 5e-4) && ok;
+              ok = ml2s_cmp("ml2s_rmsea_pvalue_robust",
+                            fm2.rmsea_pvalue_robust, 5e-4) && ok;
+              ok = ml2s_cmp("ml2s_rmsea_notclose_pvalue_robust",
+                            fm2.rmsea_notclose_pvalue_robust, 5e-4) && ok;
+            }
             if (exp.contains("se_robust_two_stage") &&
                 !exp["se_robust_two_stage"].is_null()) {
               const Eigen::VectorXd lav_se =

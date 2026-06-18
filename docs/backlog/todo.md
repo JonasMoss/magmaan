@@ -25,7 +25,10 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   MLM/MLR and all-ordinal WLSMV baseline CATML ingredients, then let
   `fit_measures(fit, robust = "MLM"/"MLR"/"WLSMV")` compute those scalars
   automatically. The FIML corrected `XX3`/baseline reduction is implemented as
-  `estimate::fiml::fiml_corrected_fit_measures` and lavaan-gated in the FIML
+  `estimate::fiml::fiml_corrected_fit_measures`; lavaan's `MLR` fitMeasures
+  fields are fixture references rather than the oracle for that explicit helper.
+  The ML2S `robust.two.stage` robust/scaled CFI/TLI/RMSEA family is implemented
+  as `estimate::fiml::two_stage_fit_measures` and lavaan-gated in the FIML
   golden fixtures.
 
 - **Ordinal-SEM standardized solution / defined params / factor scores —
@@ -589,16 +592,20 @@ work lives in [`speculative.md`](speculative.md). Open work:
   `experiments/08-pairwise-gls-efficiency/`. The packaged ML2S path has also
   landed: `fit_ml2s()` / `magmaan(..., estimator = "ML2S")` run Stage-2 ML on
   the saturated EM moments and attach Savalei-Bentler-style corrected SEs plus
-  scaled chi-square from the Stage-1 `(H, J, ACOV)` ingredients. The GLS branch
-  remains an explicit research comparator, not a named high-level estimator.
+  scaled chi-square from the Stage-1 `(H, J, ACOV)` ingredients. The C++ post-fit
+  layer also exposes lavaan's `robust.two.stage` scaled/robust CFI/TLI/RMSEA
+  family, including baseline scaling and RMSEA interval/p-value variants. The
+  GLS branch remains an explicit research comparator, not a named high-level
+  estimator.
   `fmg_tests()` now accepts an ML2S fit: the eigenvalue-tail family (SS/all/pall/
   pEBA/pOLS, plus the SB/SS/SF/MV low-moment matches, where MV = `mv` =
   Satterthwaite mean.var.adjusted, a new `FmgMethod` matching lavaan to ~1e-12)
   is applied to the df-dim two-stage UGamma spectrum + Stage-2 ML base on
-  `fit$ml2s`. The two-stage scaling AND SEs match lavaan's
+  `fit$ml2s`. The two-stage scaling and SEs match lavaan's
   `missing="robust.two.stage"` (sandwich ACOV) convention to machine precision
-  (≲1e-4 across the exp-24 grid, typically ~1e-7; EM/optimizer-limited), not the
-  plain `missing="two.stage"`
+  (≲1e-4 across the exp-24 grid, typically ~1e-7; EM/optimizer-limited), and the
+  robust/scaled global indices are lavaan-gated to fixture tolerances. This is
+  not the plain `missing="two.stage"`
   (normal-theory ACOV) scaling, which collapses under non-normality; the base
   matches both. `trace(UGamma) = E[T]` (normal-data ncp ~ 0) is an independent
   first-principles check. Calibration study + lavaan parity oracle:

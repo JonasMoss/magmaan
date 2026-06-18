@@ -3359,7 +3359,7 @@ Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data,
   auto r_or = magmaan::estimate::fiml::two_stage_em_ml_inference(
       ctx.pt, ctx.rep, est, *sm_ptr, kind, dls);
   if (!r_or.has_value()) stop_post(r_or.error());
-  return Rcpp::List::create(
+  Rcpp::List out = Rcpp::List::create(
       Rcpp::_["vcov"] = Rcpp::wrap(r_or->vcov),
       Rcpp::_["se"] = Rcpp::wrap(r_or->se),
       Rcpp::_["eigvals"] = Rcpp::wrap(r_or->eigvals),
@@ -3369,6 +3369,55 @@ Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data,
       Rcpp::_["trace_ugamma"] = r_or->trace_ugamma,
       Rcpp::_["df"] = r_or->df,
       Rcpp::_["ntotal"] = static_cast<double>(r_or->ntotal));
+  out["chisq.scaled"] = r_or->chisq_scaled;
+  out["chisq.scaling.factor"] = r_or->scaling_factor;
+
+  if (r_or->df > 0) {
+    auto fm_or = magmaan::estimate::fiml::two_stage_fit_measures(
+        ctx.pt, ctx.rep, est, *sm_ptr, kind, dls);
+    if (!fm_or.has_value()) stop_post(fm_or.error());
+    const auto& bl = fm_or->baseline;
+    const auto& fm = fm_or->indices;
+    out["baseline_chisq"] = bl.chi2;
+    out["baseline.chisq"] = bl.chi2;
+    out["baseline_df"] = bl.df;
+    out["baseline.df"] = bl.df;
+    out["baseline_chisq_scaled"] = fm.baseline_chisq_scaled;
+    out["baseline.chisq.scaled"] = fm.baseline_chisq_scaled;
+    out["baseline_scaling_factor"] = fm.baseline_chisq_scaling_factor;
+    out["baseline.chisq.scaling.factor"] = fm.baseline_chisq_scaling_factor;
+    out["baseline_pvalue_scaled"] = fm.baseline_pvalue_scaled;
+    out["baseline.pvalue.scaled"] = fm.baseline_pvalue_scaled;
+    out["cfi_scaled"] = fm.cfi_scaled;
+    out["cfi.scaled"] = fm.cfi_scaled;
+    out["tli_scaled"] = fm.tli_scaled;
+    out["tli.scaled"] = fm.tli_scaled;
+    out["cfi_robust"] = fm.cfi_robust;
+    out["cfi.robust"] = fm.cfi_robust;
+    out["tli_robust"] = fm.tli_robust;
+    out["tli.robust"] = fm.tli_robust;
+    out["rmsea_scaled"] = fm.rmsea_scaled;
+    out["rmsea.scaled"] = fm.rmsea_scaled;
+    out["rmsea_ci_lower_scaled"] = fm.rmsea_ci_lower_scaled;
+    out["rmsea.ci.lower.scaled"] = fm.rmsea_ci_lower_scaled;
+    out["rmsea_ci_upper_scaled"] = fm.rmsea_ci_upper_scaled;
+    out["rmsea.ci.upper.scaled"] = fm.rmsea_ci_upper_scaled;
+    out["rmsea_pvalue_scaled"] = fm.rmsea_pvalue_scaled;
+    out["rmsea.pvalue.scaled"] = fm.rmsea_pvalue_scaled;
+    out["rmsea_notclose_pvalue_scaled"] = fm.rmsea_notclose_pvalue_scaled;
+    out["rmsea.notclose.pvalue.scaled"] = fm.rmsea_notclose_pvalue_scaled;
+    out["rmsea_robust"] = fm.rmsea_robust;
+    out["rmsea.robust"] = fm.rmsea_robust;
+    out["rmsea_ci_lower_robust"] = fm.rmsea_ci_lower_robust;
+    out["rmsea.ci.lower.robust"] = fm.rmsea_ci_lower_robust;
+    out["rmsea_ci_upper_robust"] = fm.rmsea_ci_upper_robust;
+    out["rmsea.ci.upper.robust"] = fm.rmsea_ci_upper_robust;
+    out["rmsea_pvalue_robust"] = fm.rmsea_pvalue_robust;
+    out["rmsea.pvalue.robust"] = fm.rmsea_pvalue_robust;
+    out["rmsea_notclose_pvalue_robust"] = fm.rmsea_notclose_pvalue_robust;
+    out["rmsea.notclose.pvalue.robust"] = fm.rmsea_notclose_pvalue_robust;
+  }
+  return out;
 }
 
 // two_stage_stage2_weight_blocks_impl() — mirrors
