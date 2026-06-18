@@ -241,8 +241,12 @@ estimate_fiml_robust_mlr <- function(fit, h_step = 1e-4) {
     .Call(`_magmaan_estimate_fiml_robust_mlr`, fit, h_step)
 }
 
-estimate_two_stage_em_ml_inference <- function(fit, raw_data, h_step = 1e-4) {
-    .Call(`_magmaan_estimate_two_stage_em_ml_inference`, fit, raw_data, h_step)
+estimate_two_stage_em_ml_inference <- function(fit, raw_data, h_step = 1e-4, stage2_weight = "nt", dls_a = 0.5) {
+    .Call(`_magmaan_estimate_two_stage_em_ml_inference`, fit, raw_data, h_step, stage2_weight, dls_a)
+}
+
+two_stage_stage2_weight_blocks_impl <- function(stage1, stage2_weight = "nt", dls_a = 0.5) {
+    .Call(`_magmaan_two_stage_stage2_weight_blocks_impl`, stage1, stage2_weight, dls_a)
 }
 
 infer_fiml_fmg_spectrum <- function(fit, h_step = 1e-4, h1_information = "saturated") {

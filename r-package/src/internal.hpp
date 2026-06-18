@@ -882,12 +882,10 @@ inline magmaan::data::MixedOrdinalStats mixed_ordinal_stats_from_arg(Rcpp::List 
 // recompute (the EM is deterministic) while skipping the EM + observed-
 // information rebuild. Shared by fit.cpp and lr_test_satorra.cpp so two-stage
 // SB, the FMG spectrum, and the nested LRT all consume one saturated build.
-inline bool saturated_from_stage1(Rcpp::List fit,
-                                  magmaan::estimate::fiml::SaturatedMoments& out) {
-  if (!fit.containsElementNamed("stage1")) return false;
-  SEXP s1 = fit["stage1"];
-  if (Rf_isNull(s1)) return false;
-  Rcpp::List st(s1);
+// Reconstruct SaturatedMoments from a Stage-1 list carrying mean/cov/n_obs/acov
+// (the shape returned by saturated_em_moments_impl); H/J are optional.
+inline bool saturated_from_list(Rcpp::List st,
+                                magmaan::estimate::fiml::SaturatedMoments& out) {
   if (!st.containsElementNamed("mean") || !st.containsElementNamed("cov") ||
       !st.containsElementNamed("n_obs") || !st.containsElementNamed("acov") ||
       Rf_isNull(st["mean"]) || Rf_isNull(st["cov"]) ||
@@ -915,6 +913,29 @@ inline bool saturated_from_stage1(Rcpp::List fit,
   if (st.containsElementNamed("J") && !Rf_isNull(st["J"]))
     out.J = Rcpp::as<Eigen::MatrixXd>(Rcpp::NumericMatrix(st["J"]));
   return true;
+}
+
+inline bool saturated_from_stage1(Rcpp::List fit,
+                                  magmaan::estimate::fiml::SaturatedMoments& out) {
+  if (!fit.containsElementNamed("stage1")) return false;
+  SEXP s1 = fit["stage1"];
+  if (Rf_isNull(s1)) return false;
+  return saturated_from_list(Rcpp::List(s1), out);
+}
+
+// Map an R stage2_weight string to the TwoStageWeight enum. "wls" is an alias
+// for the full ADF weight.
+inline magmaan::estimate::fiml::TwoStageWeight
+two_stage_weight_from_arg(const std::string& s) {
+  if (s == "nt" || s == "NT") return magmaan::estimate::fiml::TwoStageWeight::Nt;
+  if (s == "dwls" || s == "DWLS")
+    return magmaan::estimate::fiml::TwoStageWeight::Dwls;
+  if (s == "adf" || s == "ADF" || s == "wls" || s == "WLS")
+    return magmaan::estimate::fiml::TwoStageWeight::Adf;
+  if (s == "dls" || s == "DLS")
+    return magmaan::estimate::fiml::TwoStageWeight::Dls;
+  Rcpp::stop("magmaan: unknown stage2_weight '" + s +
+             "' (expected nt, dwls, adf, dls)");
 }
 
 }  // namespace magmaanr

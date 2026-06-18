@@ -26,6 +26,7 @@
 #include "magmaan/optim/optimizers.hpp"
 #include "magmaan/optim/problem.hpp"
 #include "magmaan/robust/robust.hpp"
+#include "magmaan/robust/weighted_inference.hpp"
 
 #include "detail_second_order.hpp"
 #include "detail_vech.hpp"
@@ -2761,16 +2762,183 @@ two_stage_gamma_from_acov(const SaturatedMoments& sm, bool se_weighted) {
 
 namespace {
 
+post_expected<Eigen::MatrixXd>
+sym_pd_inverse(const Eigen::MatrixXd& A, std::string what) {
+  const Eigen::MatrixXd S = 0.5 * (A + A.transpose());
+  Eigen::LDLT<Eigen::MatrixXd> ldlt(S);
+  if (ldlt.info() != Eigen::Success) {
+    return std::unexpected(make_post_err(PostError::Kind::InfoMatrixSingular,
+        "two_stage_stage2_weight: " + what + " is not invertible"));
+  }
+  const Eigen::MatrixXd inv =
+      ldlt.solve(Eigen::MatrixXd::Identity(S.rows(), S.cols()));
+  return Eigen::MatrixXd(0.5 * (inv + inv.transpose()).eval());
+}
+
+}  // namespace
+
+post_expected<std::vector<Eigen::MatrixXd>>
+two_stage_stage2_weight_blocks(const SaturatedMoments& sm, TwoStageWeight kind,
+                               TwoStageDlsOptions dls) {
+  if (kind == TwoStageWeight::Dls && !(dls.a >= 0.0 && dls.a <= 1.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_stage2_weight: DLS mixing scalar a must lie in [0, 1]"));
+  }
+
+  // Γ_FIML in the n-scaled per-unit (test-statistic) convention, block-diagonal
+  // over [mean ; vech(cov)]. The meat for ADF/DLS, and (its diagonal) for DWLS.
+  auto gamma_or = two_stage_gamma_from_acov(sm, /*se_weighted=*/false);
+  if (!gamma_or.has_value()) return std::unexpected(gamma_or.error());
+  const Eigen::MatrixXd& Gfiml = *gamma_or;
+
+  std::vector<Eigen::MatrixXd> blocks;
+  blocks.reserve(sm.cov.size());
+  Eigen::Index off = 0;
+  for (std::size_t b = 0; b < sm.cov.size(); ++b) {
+    const Eigen::Index p = sm.cov[b].rows();
+    const Eigen::Index ps = vech_len(p);
+    const Eigen::Index q = p + ps;
+    const Eigen::MatrixXd& Sigma = sm.cov[b];
+
+    // NT covariance-moment ACOV; the NT mean-moment ACOV is Σ itself.
+    auto gnt_or = data::gamma_nt(Sigma);
+    if (!gnt_or.has_value()) return std::unexpected(gnt_or.error());
+
+    const Eigen::MatrixXd Gf = Gfiml.block(off, off, q, q);
+
+    Eigen::MatrixXd W = Eigen::MatrixXd::Zero(q, q);
+    switch (kind) {
+      case TwoStageWeight::Nt: {
+        // V = blockdiag(Σ⁻¹, gamma_nt(Σ)⁻¹), the lavaan robust.two.stage weight.
+        auto sinv = sym_pd_inverse(Sigma, "saturated covariance block");
+        if (!sinv.has_value()) return std::unexpected(sinv.error());
+        auto cinv = sym_pd_inverse(*gnt_or, "covariance NT Gamma block");
+        if (!cinv.has_value()) return std::unexpected(cinv.error());
+        W.topLeftCorner(p, p) = *sinv;
+        W.bottomRightCorner(ps, ps) = *cinv;
+        break;
+      }
+      case TwoStageWeight::Adf: {
+        auto winv = sym_pd_inverse(Gf, "Gamma_FIML block");
+        if (!winv.has_value()) return std::unexpected(winv.error());
+        W = std::move(*winv);
+        break;
+      }
+      case TwoStageWeight::Dwls: {
+        const Eigen::VectorXd d = Gf.diagonal();
+        for (Eigen::Index i = 0; i < q; ++i) {
+          if (!(d(i) > 0.0)) {
+            return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+                "two_stage_stage2_weight: non-positive Gamma_FIML diagonal; "
+                "DWLS weight undefined"));
+          }
+          W(i, i) = 1.0 / d(i);
+        }
+        break;
+      }
+      case TwoStageWeight::Dls: {
+        // Browne mix of the two moment ACOVs over the full block, then invert:
+        // a = 0 recovers Nt (Γ_NT⁻¹), a = 1 recovers Adf (Γ_FIML⁻¹).
+        Eigen::MatrixXd Gnt = Eigen::MatrixXd::Zero(q, q);
+        Gnt.topLeftCorner(p, p) = Sigma;
+        Gnt.bottomRightCorner(ps, ps) = *gnt_or;
+        const Eigen::MatrixXd Gmix = (1.0 - dls.a) * Gnt + dls.a * Gf;
+        auto winv = sym_pd_inverse(Gmix, "DLS-mixed Gamma block");
+        if (!winv.has_value()) return std::unexpected(winv.error());
+        W = std::move(*winv);
+        break;
+      }
+    }
+    blocks.push_back(std::move(W));
+    off += q;
+  }
+  return blocks;
+}
+
+post_expected<Eigen::MatrixXd>
+two_stage_stage2_weight(const SaturatedMoments& sm, TwoStageWeight kind,
+                        TwoStageDlsOptions dls) {
+  auto blocks_or = two_stage_stage2_weight_blocks(sm, kind, dls);
+  if (!blocks_or.has_value()) return std::unexpected(blocks_or.error());
+  const auto& blocks = *blocks_or;
+  Eigen::Index Q = 0;
+  for (const auto& W : blocks) Q += W.rows();
+  Eigen::MatrixXd V = Eigen::MatrixXd::Zero(Q, Q);
+  Eigen::Index off = 0;
+  for (const auto& W : blocks) {
+    V.block(off, off, W.rows(), W.cols()) = W;
+    off += W.rows();
+  }
+  return Eigen::MatrixXd(0.5 * (V + V.transpose()).eval());
+}
+
+namespace {
+
+// Non-NT Stage-2 weighted two-stage inference. The DWLS / ADF / DLS weight is
+// not the normal-theory weight that build_u_factor bakes in, so the robust
+// sandwich runs through the explicit-weight moment-quadratic path. `est` must
+// minimize ½ rᵀ W r for the SAME weight (the caller fits Stage 2 with
+// `two_stage_stage2_weight_blocks(sm, kind, dls)`); the meat is the per-block
+// Γ_FIML in the n-scaled test-statistic convention.
+post_expected<TwoStageEMMLInference>
+two_stage_em_weighted_inference_from_sm(spec::LatentStructure pt,
+                                        const model::MatrixRep& rep,
+                                        const Estimates& est,
+                                        const SaturatedMoments& sm,
+                                        TwoStageWeight kind,
+                                        TwoStageDlsOptions dls) {
+  SampleStats samp = sample_stats_from_saturated(sm);
+
+  auto weight_or = two_stage_stage2_weight_blocks(sm, kind, dls);
+  if (!weight_or.has_value()) return std::unexpected(weight_or.error());
+
+  auto gamma_full_or = two_stage_gamma_from_acov(sm, /*se_weighted=*/false);
+  if (!gamma_full_or.has_value()) return std::unexpected(gamma_full_or.error());
+  std::vector<Eigen::MatrixXd> gamma;
+  gamma.reserve(sm.cov.size());
+  Eigen::Index goff = 0;
+  for (std::size_t b = 0; b < sm.cov.size(); ++b) {
+    const Eigen::Index q = sm.cov[b].rows() + vech_len(sm.cov[b].rows());
+    gamma.push_back(gamma_full_or->block(goff, goff, q, q));
+    goff += q;
+  }
+
+  auto rr_or = robust_continuous_ls(std::move(pt), rep, samp, est,
+                                    *weight_or, gamma);
+  if (!rr_or.has_value()) return std::unexpected(rr_or.error());
+
+  TwoStageEMMLInference out;
+  out.vcov = std::move(rr_or->vcov);
+  out.se = std::move(rr_or->se);
+  out.eigvals = std::move(rr_or->eigvals);
+  out.df = rr_or->df;
+  out.chisq = rr_or->chisq_standard;
+  out.scaling_factor = rr_or->satorra_bentler.scale_c;
+  out.chisq_scaled = rr_or->satorra_bentler.chi2_scaled;
+  out.trace_ugamma = (out.eigvals.size() > 0) ? out.eigvals.sum() : 0.0;
+  out.ntotal = 0;
+  for (auto n : samp.n_obs) out.ntotal += n;
+  return out;
+}
+
 // Core two-stage ML inference from already-computed Stage-1 saturated moments.
 // `raw` is intentionally absent: the only thing the inference ever needs from
 // the data are the saturated moments and their ACOV, both carried by `sm`.
 // Callers that hold a Stage-1 `SaturatedMoments` should route here directly
-// rather than recomputing the EM + observed information + ACOV.
+// rather than recomputing the EM + observed information + ACOV. `kind == Nt`
+// is the normal-theory path; non-NT weights dispatch to the explicit-weight
+// robust sandwich above.
 post_expected<TwoStageEMMLInference>
 two_stage_em_ml_inference_from_sm(spec::LatentStructure pt,
                                   const model::MatrixRep& rep,
                                   const Estimates& est,
-                                  const SaturatedMoments& sm) {
+                                  const SaturatedMoments& sm,
+                                  TwoStageWeight kind,
+                                  TwoStageDlsOptions dls) {
+  if (kind != TwoStageWeight::Nt) {
+    return two_stage_em_weighted_inference_from_sm(std::move(pt), rep, est, sm,
+                                                   kind, dls);
+  }
   SampleStats samp = sample_stats_from_saturated(sm);
 
   auto df_or = inference::df_stat(pt, samp, est.theta);
@@ -2835,10 +3003,13 @@ two_stage_em_ml_inference_impl(spec::LatentStructure pt,
                                const RawData& raw,
                                const Estimates& est,
                                const FIMLPack& pack,
-                               const FIMLH1& h1) {
+                               const FIMLH1& h1,
+                               TwoStageWeight kind,
+                               TwoStageDlsOptions dls) {
   auto sm_or = saturated_em_moments(raw, pack, h1);
   if (!sm_or.has_value()) return std::unexpected(sm_or.error());
-  return two_stage_em_ml_inference_from_sm(std::move(pt), rep, est, *sm_or);
+  return two_stage_em_ml_inference_from_sm(std::move(pt), rep, est, *sm_or,
+                                           kind, dls);
 }
 
 }  // namespace
@@ -2847,8 +3018,11 @@ post_expected<TwoStageEMMLInference>
 two_stage_em_ml_inference(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const Estimates& est,
-                          const SaturatedMoments& sm) {
-  return two_stage_em_ml_inference_from_sm(std::move(pt), rep, est, sm);
+                          const SaturatedMoments& sm,
+                          TwoStageWeight kind,
+                          TwoStageDlsOptions dls) {
+  return two_stage_em_ml_inference_from_sm(std::move(pt), rep, est, sm,
+                                           kind, dls);
 }
 
 post_expected<TwoStageEMMLInference>
@@ -2856,7 +3030,9 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const RawData& raw,
                           const Estimates& est,
-                          double h_step) {
+                          double h_step,
+                          TwoStageWeight kind,
+                          TwoStageDlsOptions dls) {
   if (!(h_step > 0.0)) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "two_stage_em_ml_inference: h_step must be > 0"));
@@ -2870,7 +3046,7 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
     return std::unexpected(fit_to_post(h1_or.error(), "FIML H1 moments"));
   }
   return two_stage_em_ml_inference_impl(std::move(pt), rep, raw, est,
-                                        *pack_or, *h1_or);
+                                        *pack_or, *h1_or, kind, dls);
 }
 
 post_expected<TwoStageEMMLInference>
@@ -2879,9 +3055,11 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           const RawData& raw,
                           const Estimates& est,
                           const FIMLPack& pack,
-                          const FIMLH1& h1) {
+                          const FIMLH1& h1,
+                          TwoStageWeight kind,
+                          TwoStageDlsOptions dls) {
   return two_stage_em_ml_inference_impl(std::move(pt), rep, raw, est,
-                                        pack, h1);
+                                        pack, h1, kind, dls);
 }
 
 namespace diagnostic {

@@ -820,15 +820,30 @@ BEGIN_RCPP
 END_RCPP
 }
 // estimate_two_stage_em_ml_inference
-Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data, double h_step);
-RcppExport SEXP _magmaan_estimate_two_stage_em_ml_inference(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP h_stepSEXP) {
+Rcpp::List estimate_two_stage_em_ml_inference(Rcpp::List fit, SEXP raw_data, double h_step, std::string stage2_weight, double dls_a);
+RcppExport SEXP _magmaan_estimate_two_stage_em_ml_inference(SEXP fitSEXP, SEXP raw_dataSEXP, SEXP h_stepSEXP, SEXP stage2_weightSEXP, SEXP dls_aSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< SEXP >::type raw_data(raw_dataSEXP);
     Rcpp::traits::input_parameter< double >::type h_step(h_stepSEXP);
-    rcpp_result_gen = Rcpp::wrap(estimate_two_stage_em_ml_inference(fit, raw_data, h_step));
+    Rcpp::traits::input_parameter< std::string >::type stage2_weight(stage2_weightSEXP);
+    Rcpp::traits::input_parameter< double >::type dls_a(dls_aSEXP);
+    rcpp_result_gen = Rcpp::wrap(estimate_two_stage_em_ml_inference(fit, raw_data, h_step, stage2_weight, dls_a));
+    return rcpp_result_gen;
+END_RCPP
+}
+// two_stage_stage2_weight_blocks_impl
+Rcpp::List two_stage_stage2_weight_blocks_impl(Rcpp::List stage1, std::string stage2_weight, double dls_a);
+RcppExport SEXP _magmaan_two_stage_stage2_weight_blocks_impl(SEXP stage1SEXP, SEXP stage2_weightSEXP, SEXP dls_aSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::List >::type stage1(stage1SEXP);
+    Rcpp::traits::input_parameter< std::string >::type stage2_weight(stage2_weightSEXP);
+    Rcpp::traits::input_parameter< double >::type dls_a(dls_aSEXP);
+    rcpp_result_gen = Rcpp::wrap(two_stage_stage2_weight_blocks_impl(stage1, stage2_weight, dls_a));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2420,7 +2435,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_baseline", (DL_FUNC) &_magmaan_infer_baseline, 1},
     {"_magmaan_measures_fit", (DL_FUNC) &_magmaan_measures_fit, 4},
     {"_magmaan_estimate_fiml_robust_mlr", (DL_FUNC) &_magmaan_estimate_fiml_robust_mlr, 2},
-    {"_magmaan_estimate_two_stage_em_ml_inference", (DL_FUNC) &_magmaan_estimate_two_stage_em_ml_inference, 3},
+    {"_magmaan_estimate_two_stage_em_ml_inference", (DL_FUNC) &_magmaan_estimate_two_stage_em_ml_inference, 5},
+    {"_magmaan_two_stage_stage2_weight_blocks_impl", (DL_FUNC) &_magmaan_two_stage_stage2_weight_blocks_impl, 3},
     {"_magmaan_infer_fiml_fmg_spectrum", (DL_FUNC) &_magmaan_infer_fiml_fmg_spectrum, 3},
     {"_magmaan_measures_standardize_lv", (DL_FUNC) &_magmaan_measures_standardize_lv, 2},
     {"_magmaan_measures_standardize_all", (DL_FUNC) &_magmaan_measures_standardize_all, 2},

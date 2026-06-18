@@ -1191,12 +1191,14 @@ fit_fiml <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL) {
 }
 
 fit_ml2s <- function(model, data, optimizer = "nlopt-lbfgs", control = NULL,
-                     bounds = NULL, h_step = 1e-4, stage1 = NULL) {
+                     bounds = NULL, h_step = 1e-4, stage1 = NULL,
+                     stage2_weight = "nt", dls_a = 0.5) {
   if (is.data.frame(data)) data <- df_to_fiml_data(data, model)
   fit <- estimate_two_stage_em_impl(partable_arg(model), fiml_data_arg(data),
                                     kind = "ml", h_step = h_step,
                                     optimizer = optimizer, control = control,
-                                    bounds = bounds, stage1 = stage1)
+                                    bounds = bounds, stage1 = stage1,
+                                    stage2_weight = stage2_weight, dls_a = dls_a)
   if (inherits(data, "magmaan_fiml_data")) fit$raw_data <- data
   fit
 }
@@ -1329,7 +1331,7 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
                     missing = c("listwise", "error"),
                     se = "none", test = "none",
                     W = NULL, optimizer = "nlopt-lbfgs", control = NULL,
-                    bounds = NULL) {
+                    bounds = NULL, stage2_weight = "nt", dls_a = 0.5) {
   missing <- match.arg(missing)
   require_none_arg(se, "se", "standard errors")
   require_none_arg(test, "test", "test statistics")
@@ -1437,7 +1439,7 @@ magmaan <- function(model, data, estimator = "ML", groups = NULL, ...,
     }
     if (is.data.frame(data)) data <- df_to_fiml_data(data, spec, group = group_var)
     fit <- fit_ml2s(spec, data, optimizer = optimizer, control = control,
-                    bounds = bounds)
+                    bounds = bounds, stage2_weight = stage2_weight, dls_a = dls_a)
     return(finalize_magmaan_fit(fit, spec, estimator, missing, se, test))
   }
 

@@ -334,16 +334,61 @@ saturated_em_moments(const RawData& raw,
 post_expected<Eigen::MatrixXd>
 two_stage_gamma_from_acov(const SaturatedMoments& sm, bool se_weighted);
 
-// Savalei-Bentler two-stage ML inference for a Stage-2 ML fit to the saturated
-// EM moments. The point estimate is supplied by the caller (`fit_ml` on
-// `SaturatedMoments::{cov, mean, n_obs}`); this helper consumes Stage-1
-// `(H, J, ACOV)` to build corrected sandwich SEs and the scaled chi-square.
+// Stage-2 weight family for two-stage (ML2S) estimation. The Stage-2 fit to the
+// saturated EM moments may weight its moment residuals by any of these; the
+// robust correction restores test validity for all of them, so the choice is an
+// efficiency/stability knob, not a validity one. Built per block over the
+// [mean ; vech(cov)] layout from the complete-data normal-theory moment ACOV
+// Γ_NT = blockdiag(Σ, gamma_nt(Σ)) and the missingness-aware Stage-1 ACOV
+// Γ_FIML = n·acov (the `se_weighted=false` convention of `two_stage_gamma_from_acov`):
+//   Nt   → V = Γ_NT⁻¹             (normal-theory; lavaan robust.two.stage default)
+//   Dwls → V = diag(Γ_FIML)⁻¹     (missingness-aware diagonal; the polychoric analog)
+//   Adf  → V = Γ_FIML⁻¹           (full optimal / asymptotically distribution-free)
+//   Dls  → V = ((1-a)Γ_NT + a Γ_FIML)⁻¹  (Browne mix over the full block; a=0≡Nt, a=1≡Adf)
+// NT weighting is blind to the missingness pattern that governs Γ_FIML; it is
+// only licensed when Γ_FIML ≈ Γ_NT (complete, near-normal data). The non-NT
+// members are frontier research surface; Nt is the lavaan-parity default.
+enum class TwoStageWeight { Nt, Dwls, Adf, Dls };
+
+struct TwoStageDlsOptions {
+  double a = 0.5;  // DLS mixing scalar in [0, 1]; ignored unless kind == Dls.
+  // (An empirical-Bayes choice of `a` from the Γ_FIML-vs-Γ_NT departure needs
+  // casewise saturated-score fourth moments not carried by `SaturatedMoments`;
+  // left as a future hook. Callers pass a fixed `a` for now.)
+};
+
+// Per-block Stage-2 weight, in the `gmm::Weight` layout: one q_b×q_b matrix per
+// block, q_b = p_b + vech_len(p_b), aligned to [mean ; vech(cov)]. `Nt`
+// reproduces the implicit normal-theory weight used by
+// `two_stage_em_ml_inference` / `ml2s_nt_weight_from_saturated`.
+post_expected<std::vector<Eigen::MatrixXd>>
+two_stage_stage2_weight_blocks(const SaturatedMoments& sm,
+                               TwoStageWeight kind,
+                               TwoStageDlsOptions dls = {});
+
+// The same weight assembled as one Q×Q block-diagonal matrix, for the
+// saturated-moment-space difference-test cores (`compute_fiml_satorra2000`).
+post_expected<Eigen::MatrixXd>
+two_stage_stage2_weight(const SaturatedMoments& sm,
+                        TwoStageWeight kind,
+                        TwoStageDlsOptions dls = {});
+
+// Savalei-Bentler two-stage inference for a Stage-2 fit to the saturated EM
+// moments. The point estimate is supplied by the caller; this helper consumes
+// Stage-1 `(H, J, ACOV)` to build corrected sandwich SEs and the scaled
+// chi-square. `kind` selects the Stage-2 weight: `Nt` (the lavaan
+// robust.two.stage default) reproduces the normal-theory path bit-for-bit; the
+// non-NT weights route through the explicit-weight moment-quadratic robust
+// sandwich and REQUIRE `est` to be the matching weighted fit (`fit_gmm` /
+// `fit_wls` with `two_stage_stage2_weight_blocks(sm, kind, dls)`), not the ML fit.
 post_expected<TwoStageEMMLInference>
 two_stage_em_ml_inference(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const RawData& raw,
                           const Estimates& est,
-                          double h_step = 1e-4);
+                          double h_step = 1e-4,
+                          TwoStageWeight kind = TwoStageWeight::Nt,
+                          TwoStageDlsOptions dls = {});
 
 post_expected<TwoStageEMMLInference>
 two_stage_em_ml_inference(spec::LatentStructure pt,
@@ -351,7 +396,9 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           const RawData& raw,
                           const Estimates& est,
                           const FIMLPack& pack,
-                          const FIMLH1& h1);
+                          const FIMLH1& h1,
+                          TwoStageWeight kind = TwoStageWeight::Nt,
+                          TwoStageDlsOptions dls = {});
 
 // Inference straight from a precomputed Stage-1 `SaturatedMoments`: no raw
 // data, no EM, no observed-information rebuild. Bit-identical to the raw-based
@@ -360,7 +407,9 @@ post_expected<TwoStageEMMLInference>
 two_stage_em_ml_inference(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const Estimates& est,
-                          const SaturatedMoments& sm);
+                          const SaturatedMoments& sm,
+                          TwoStageWeight kind = TwoStageWeight::Nt,
+                          TwoStageDlsOptions dls = {});
 
 namespace diagnostic {
 
