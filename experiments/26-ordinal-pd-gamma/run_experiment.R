@@ -1,11 +1,10 @@
 #!/usr/bin/env Rscript
 # Ordinal pairwise-deletion Gamma probe.
 #
-# Two-group, two-factor ordinal CFA with MCAR missingness. Compare the
-# conventional nominal-N pairwise NACOV against the overlap-corrected NACOV from
-# docs/research/notes/ordinal_pd_gamma.tex, using the same broad p-value battery
-# as the FIML FMG experiments: naive/SB/SS/SF/EBA/pEBA/pall/pOLS/all for GOF and
-# nested configural-vs-metric tests.
+# Two-group, two-factor ordinal CFA with MCAR missingness. Simulate p-values
+# under a fake null model and a real loading-noninvariance alternative, then
+# report rejection rates for the standard WLSMV/FMG test battery under the
+# nominal-N and overlap-corrected pairwise-deletion Gamma matrices.
 #
 # Usage:
 #   Rscript run_experiment.R [--reps N] [--n N] [--missing-rate P]
@@ -43,7 +42,7 @@ rbind_fill <- function(xs) {
 }
 
 parse_args <- function(args) {
-  out <- list(reps = 50L, n = c(300L, 1000L), missing_rate = c(.20),
+  out <- list(reps = 200L, n = c(1000L), missing_rate = c(.20),
               seed_base = 20260618L, truths = c("fake", "real"),
               smoke = FALSE)
   i <- 1L
@@ -82,8 +81,8 @@ parse_args <- function(args) {
     i <- i + 1L
   }
   if (out$smoke) {
-    out$reps <- 3L
-    out$n <- 220L
+    out$reps <- 20L
+    out$n <- 1000L
     out$missing_rate <- .20
     out$truths <- c("fake", "real")
   }
@@ -273,17 +272,18 @@ for (n in cfg$n) {
   }
 }
 
-rejections <- rbind_fill(rows)
+p_values <- rbind_fill(rows)
 front <- c("n_per_group", "missing_rate", "realized_missing", "truth", "rep",
            "pd_gamma", "outcome", "method", "p_value", "reject_05",
            "base_stat", "df", "trace", "scaling_factor")
-rejections <- rejections[, c(front, setdiff(names(rejections), front))]
-write_csv(rejections, file.path(res_dir, "rejections.csv"))
+p_values <- p_values[, c(front, setdiff(names(p_values), front))]
+write_csv(p_values, file.path(res_dir, "p_values.csv"))
+write_csv(p_values, file.path(res_dir, "rejections.csv"))
 
-split_key <- interaction(rejections$n_per_group, rejections$missing_rate,
-                         rejections$truth, rejections$pd_gamma,
-                         rejections$outcome, rejections$method, drop = TRUE)
-summary_rows <- lapply(split(rejections, split_key), function(d) {
+split_key <- interaction(p_values$n_per_group, p_values$missing_rate,
+                         p_values$truth, p_values$pd_gamma,
+                         p_values$outcome, p_values$method, drop = TRUE)
+summary_rows <- lapply(split(p_values, split_key), function(d) {
   ok <- is.finite(d$p_value)
   rate <- if (any(ok)) mean(d$reject_05[ok]) else NA_real_
   n_ok <- sum(ok)
@@ -304,11 +304,15 @@ summary_rows <- lapply(split(rejections, split_key), function(d) {
     mean_trace = mean(d$trace, na.rm = TRUE),
     stringsAsFactors = FALSE)
 })
-summary <- do.call(rbind, summary_rows)
-summary <- summary[order(summary$n_per_group, summary$missing_rate,
-                         summary$truth, summary$outcome, summary$method,
-                         summary$pd_gamma), ]
-write_csv(summary, file.path(res_dir, "summary.csv"))
+rejection_rates <- do.call(rbind, summary_rows)
+rejection_rates <- rejection_rates[order(rejection_rates$n_per_group,
+                                         rejection_rates$missing_rate,
+                                         rejection_rates$truth,
+                                         rejection_rates$outcome,
+                                         rejection_rates$method,
+                                         rejection_rates$pd_gamma), ]
+write_csv(rejection_rates, file.path(res_dir, "rejection_rates.csv"))
+write_csv(rejection_rates, file.path(res_dir, "summary.csv"))
 
 metadata <- data.frame(
   reps = cfg$reps,
@@ -324,6 +328,6 @@ metadata <- data.frame(
 write_csv(metadata, file.path(res_dir, "metadata.csv"))
 
 cat("wrote:\n")
-cat("  ", file.path(res_dir, "rejections.csv"), "\n", sep = "")
-cat("  ", file.path(res_dir, "summary.csv"), "\n", sep = "")
+cat("  ", file.path(res_dir, "p_values.csv"), "\n", sep = "")
+cat("  ", file.path(res_dir, "rejection_rates.csv"), "\n", sep = "")
 cat("  ", file.path(res_dir, "metadata.csv"), "\n", sep = "")
