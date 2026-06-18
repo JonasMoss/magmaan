@@ -2558,24 +2558,25 @@ independence_covariances_from_saturated(
   return out;
 }
 
-int fiml_baseline_df_from_cache(const FIMLCache& cache,
-                                const std::vector<Eigen::Index>& exo_idx) {
+int baseline_df_from_block_p(const std::vector<Eigen::Index>& block_p,
+                             const std::vector<Eigen::Index>& exo_idx) {
   int out = 0;
   const int px = static_cast<int>(exo_idx.size());
-  for (Eigen::Index p : cache.block_p) {
+  for (Eigen::Index p : block_p) {
     out += static_cast<int>(p) * (static_cast<int>(p) - 1) / 2;
     out -= px * (px - 1) / 2;
   }
   return out;
 }
 
-Eigen::MatrixXd baseline_eta_delta(const FIMLCache& cache,
-                                   const std::vector<Eigen::Index>& exo_idx) {
+Eigen::MatrixXd baseline_eta_delta_from_block_p(
+    const std::vector<Eigen::Index>& block_p,
+    const std::vector<Eigen::Index>& exo_idx) {
   Eigen::Index n_rows = 0;
   Eigen::Index n_cols = 0;
   const Eigen::Index n_exo = static_cast<Eigen::Index>(exo_idx.size());
   const Eigen::Index n_exo_cov = n_exo * (n_exo - 1) / 2;
-  for (Eigen::Index p : cache.block_p) {
+  for (Eigen::Index p : block_p) {
     n_rows += p + vech_len(p);
     n_cols += p + p + n_exo_cov;
   }
@@ -2583,7 +2584,7 @@ Eigen::MatrixXd baseline_eta_delta(const FIMLCache& cache,
   Eigen::MatrixXd Delta = Eigen::MatrixXd::Zero(n_rows, n_cols);
   Eigen::Index row0 = 0;
   Eigen::Index col0 = 0;
-  for (Eigen::Index p : cache.block_p) {
+  for (Eigen::Index p : block_p) {
     for (Eigen::Index j = 0; j < p; ++j) {
       Delta(row0 + j, col0 + j) = 1.0;
       Delta(row0 + p + vech_index(p, j, j), col0 + p + j) = 1.0;
@@ -2606,6 +2607,13 @@ Eigen::MatrixXd baseline_eta_delta(const FIMLCache& cache,
     col0 += 2 * p + n_exo_cov;
   }
   return Delta;
+}
+
+std::vector<Eigen::Index> block_p_from_saturated(const SaturatedMoments& sm) {
+  std::vector<Eigen::Index> out;
+  out.reserve(sm.cov.size());
+  for (const Eigen::MatrixXd& S : sm.cov) out.push_back(S.rows());
+  return out;
 }
 
 post_expected<double>
@@ -2692,12 +2700,13 @@ fiml_corrected_fit_measures_impl(spec::LatentStructure pt,
       "fiml_corrected_fit_measures: baseline XX3");
   if (!xx3_null_or.has_value()) return std::unexpected(xx3_null_or.error());
 
-  const int df_null = fiml_baseline_df_from_cache(pack.cache, exo_idx);
+  const int df_null = baseline_df_from_block_p(pack.cache.block_p, exo_idx);
   if (df_null <= 0) {
     return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
         "fiml_corrected_fit_measures: baseline df must be > 0"));
   }
-  const Eigen::MatrixXd D_null = baseline_eta_delta(pack.cache, exo_idx);
+  const Eigen::MatrixXd D_null =
+      baseline_eta_delta_from_block_p(pack.cache.block_p, exo_idx);
   auto tr_null_or = residual_projector_trace(
       sm.H, sm.acov, D_null, "fiml_corrected_fit_measures: baseline");
   if (!tr_null_or.has_value()) return std::unexpected(tr_null_or.error());
@@ -3305,6 +3314,79 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                                            kind, dls);
 }
 
+namespace {
+
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures_from_sm(spec::LatentStructure pt,
+                               const model::MatrixRep& rep,
+                               const Estimates& est,
+                               const SaturatedMoments& sm,
+                               TwoStageWeight kind,
+                               TwoStageDlsOptions dls) {
+  SampleStats samp = sample_stats_from_saturated(sm);
+  auto user_or = two_stage_em_ml_inference_from_sm(pt, rep, est, sm, kind, dls);
+  if (!user_or.has_value()) return std::unexpected(user_or.error());
+  const TwoStageEMMLInference& user = *user_or;
+  if (user.df <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_fit_measures: requires df > 0"));
+  }
+
+  const measures::BaselineFit baseline =
+      measures::baseline_chi2(pt, samp);
+  if (baseline.df <= 0) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_fit_measures: baseline df must be > 0"));
+  }
+
+  auto gamma_or = two_stage_gamma_from_acov(sm, /*se_weighted=*/false);
+  if (!gamma_or.has_value()) return std::unexpected(gamma_or.error());
+  auto weight_or = two_stage_stage2_weight(sm, kind, dls);
+  if (!weight_or.has_value()) return std::unexpected(weight_or.error());
+
+  const std::vector<Eigen::Index> exo_idx = observed_exogenous_indices(pt);
+  const std::vector<Eigen::Index> block_p = block_p_from_saturated(sm);
+  const Eigen::MatrixXd D_null =
+      baseline_eta_delta_from_block_p(block_p, exo_idx);
+  auto tr_null_or = residual_projector_trace(
+      *weight_or, *gamma_or, D_null, "two_stage_fit_measures: baseline");
+  if (!tr_null_or.has_value()) return std::unexpected(tr_null_or.error());
+  const double c_null = *tr_null_or / static_cast<double>(baseline.df);
+  const double baseline_scaled = (c_null > 0.0)
+      ? baseline.chi2 / c_null
+      : std::numeric_limits<double>::quiet_NaN();
+
+  measures::RobustFitMeasureInputs inputs;
+  inputs.chi2 = user.chisq;
+  inputs.df = user.df;
+  inputs.chi2_scaled = user.chisq_scaled;
+  inputs.scaling_factor = user.scaling_factor;
+  inputs.baseline_chi2 = baseline.chi2;
+  inputs.baseline_df = baseline.df;
+  inputs.baseline_chi2_scaled = baseline_scaled;
+  inputs.baseline_scaling_factor = c_null;
+  inputs.n_total = user.ntotal;
+  inputs.n_groups = samp.S.size();
+
+  TwoStageFitMeasures out;
+  out.baseline = baseline;
+  out.indices = measures::robust_fit_measures(inputs);
+  return out;
+}
+
+}  // namespace
+
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const Estimates& est,
+                       const SaturatedMoments& sm,
+                       TwoStageWeight kind,
+                       TwoStageDlsOptions dls) {
+  return two_stage_fit_measures_from_sm(std::move(pt), rep, est, sm,
+                                        kind, dls);
+}
+
 post_expected<TwoStageEMMLInference>
 two_stage_em_ml_inference(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
@@ -3340,6 +3422,45 @@ two_stage_em_ml_inference(spec::LatentStructure pt,
                           TwoStageDlsOptions dls) {
   return two_stage_em_ml_inference_impl(std::move(pt), rep, raw, est,
                                         pack, h1, kind, dls);
+}
+
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const RawData& raw,
+                       const Estimates& est,
+                       double h_step,
+                       TwoStageWeight kind,
+                       TwoStageDlsOptions dls) {
+  if (!(h_step > 0.0)) {
+    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
+        "two_stage_fit_measures: h_step must be > 0"));
+  }
+  auto pack_or = fiml_pack(raw);
+  if (!pack_or.has_value()) {
+    return std::unexpected(fit_to_post(pack_or.error(), "fiml_pack"));
+  }
+  auto h1_or = fiml_h1_moments(raw, *pack_or);
+  if (!h1_or.has_value()) {
+    return std::unexpected(fit_to_post(h1_or.error(), "FIML H1 moments"));
+  }
+  return two_stage_fit_measures(std::move(pt), rep, raw, est, *pack_or, *h1_or,
+                                kind, dls);
+}
+
+post_expected<TwoStageFitMeasures>
+two_stage_fit_measures(spec::LatentStructure pt,
+                       const model::MatrixRep& rep,
+                       const RawData& raw,
+                       const Estimates& est,
+                       const FIMLPack& pack,
+                       const FIMLH1& h1,
+                       TwoStageWeight kind,
+                       TwoStageDlsOptions dls) {
+  auto sm_or = saturated_em_moments(raw, pack, h1);
+  if (!sm_or.has_value()) return std::unexpected(sm_or.error());
+  return two_stage_fit_measures_from_sm(std::move(pt), rep, est, *sm_or,
+                                        kind, dls);
 }
 
 namespace diagnostic {

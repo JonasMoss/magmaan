@@ -123,11 +123,11 @@ golden `parTable()` fixtures.
   equality-release score tests, fit measures including RMSEA close-fit
   p-values and lavaan's saturated-user-model `TLI = 1` convention,
   lavaan-style robust/scaled fit-measure formula helpers for the core
-  `chisq.scaled`/baseline/CFI/TLI/RMSEA family when supplied user and baseline
-  scaling factors, plus the FIML corrected robust fit-measure reduction
-  (`estimate::fiml::fiml_corrected_fit_measures`) that builds lavaan's
-  missing-data `XX3`/`df3`/`c.hat3` and baseline counterparts in the EM
-  saturated-moment metric,
+  `chisq.scaled`/baseline/CFI/TLI/RMSEA family, the FIML corrected robust
+  fit-measure reduction (`estimate::fiml::fiml_corrected_fit_measures`) that
+  builds missing-data `XX3`/`df3`/`c.hat3` and baseline counterparts in the EM
+  saturated-moment metric, and ML2S `robust.two.stage` robust/scaled global
+  indices (`estimate::fiml::two_stage_fit_measures`),
   structural-aware standardization, and C++ defined-parameter evaluation.
 - `inference::frontier` robust (generalized / Satorra-Bentler-scaled)
   modification indices and equality-release score tests: each candidate carries
@@ -290,10 +290,13 @@ golden `parTable()` fixtures.
   `estimate::fiml::two_stage_em_ml_inference` converts the Stage-1 ACOV to the
   moment Gamma scales expected by the shared robust SE and U-Gamma reducers,
   returning Savalei-Bentler-style sandwich SEs, ML chi-square, df, the corrected
-  U-Gamma spectrum, scaling factor, and scaled chi-square. Complete-data
-  multi-group tests anchor the corrected SE/spectrum path against the ordinary
-  complete-data robust.sem machinery; missing-data tests check finite corrected
-  output under MAR patterns.
+  U-Gamma spectrum, scaling factor, and scaled chi-square.
+  `estimate::fiml::two_stage_fit_measures` adds the matching TS global-index
+  layer: baseline scaling (`cB`), scaled CFI/TLI/RMSEA, and robust CFI/TLI/RMSEA
+  with RMSEA confidence intervals and p-values. Complete-data multi-group tests
+  anchor the corrected SE/spectrum path against the ordinary complete-data
+  robust.sem machinery; missing-data golden tests gate the TS scaling and global
+  indices against lavaan `missing = "robust.two.stage"`.
   - *Frontier:* the Stage-2 weight is selectable
     (`estimate::fiml::TwoStageWeight` ∈ {`Nt`, `Dwls`, `Adf`, `Dls`}, built by
     `two_stage_stage2_weight`). `Nt` is the lavaan `robust.two.stage` default
@@ -322,7 +325,11 @@ golden `parTable()` fixtures.
   `estimate_two_stage_em(..., kind = "ml")`. ML2S attaches its corrected
   `vcov`, `se`, `chisq`, `df`, `chisq_scaled`, and `scaling_factor` fields
   directly because those corrections are part of the named two-stage estimator
-  rather than optional post-fit reporting.
+  rather than optional post-fit reporting; the C++ post-fit surface also exposes
+  the lavaan `robust.two.stage` scaled/robust CFI/TLI/RMSEA family. On the R
+  surface, `fit$ml2s` carries the same baseline/scaled scalar list so
+  `fit_measures(fit, robust = fit$ml2s)` reports the lavaan two-stage robust
+  global-index fields.
 - FMG single-model goodness-of-fit p-values are first-class complete-data ML
   post-fit diagnostics on the R surface. `fmg_tests()` returns the p-value,
   df, ML/RLS source statistic, method/parameter, UG flag, chi-square-equivalent
