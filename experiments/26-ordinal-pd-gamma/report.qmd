@@ -1,5 +1,5 @@
 ---
-title: "Ordinal Pairwise-Deletion Gamma"
+title: "Ordinal Pairwise-Deletion Gamma Rejection Rates"
 format:
   html:
     toc: true
@@ -11,100 +11,83 @@ execute:
 ---
 
 ```{r}
-summary_path <- file.path("results", "summary.csv")
-rejections_path <- file.path("results", "rejections.csv")
-if (!file.exists(summary_path) || !file.exists(rejections_path)) {
+rates_path <- file.path("results", "rejection_rates.csv")
+p_path <- file.path("results", "p_values.csv")
+if (!file.exists(rates_path) || !file.exists(p_path)) {
   stop("Run `Rscript run_experiment.R --smoke` first.", call. = FALSE)
 }
-summary <- read.csv(summary_path)
-rejections <- read.csv(rejections_path)
-
-fmt_rate <- function(x, se) {
-  ifelse(is.na(x), "NA", sprintf("%.3f (MCSE %.3f)", x, se))
-}
-headline_methods <- c("naive", "SB", "SS", "pEBA4", "pOLS", "all",
-                      "adjusted", "mixture")
-head <- summary[summary$method %in% headline_methods, ]
-wide <- reshape(
-  head[, c("truth", "outcome", "method", "pd_gamma",
-           "rejection_rate", "mc_se", "usable", "failures")],
-  idvar = c("truth", "outcome", "method"),
-  timevar = "pd_gamma",
-  direction = "wide")
-for (nm in c("rejection_rate.nominal", "mc_se.nominal",
-             "usable.nominal", "failures.nominal",
-             "rejection_rate.overlap", "mc_se.overlap",
-             "usable.overlap", "failures.overlap")) {
-  if (!nm %in% names(wide)) wide[[nm]] <- NA_real_
-}
-wide$Nominal <- fmt_rate(wide$rejection_rate.nominal, wide$mc_se.nominal)
-wide$Overlap <- fmt_rate(wide$rejection_rate.overlap, wide$mc_se.overlap)
-tab <- wide[, c("truth", "outcome", "method", "Nominal", "Overlap",
-                "usable.nominal", "failures.nominal")]
-names(tab) <- c("Truth", "Outcome", "Method", "Nominal Gamma",
-                "Overlap Gamma", "Usable Reps", "Failures")
-tab <- tab[order(tab$Truth, tab$Outcome, match(tab$Method, headline_methods)), ]
-failures <- summary[summary$method == "fit_failed",
-                    c("truth", "outcome", "pd_gamma", "reps", "failures")]
-
+rates <- read.csv(rates_path)
+p_values <- read.csv(p_path)
 meta <- tryCatch(read.csv(file.path("results", "metadata.csv")),
                  error = function(e) data.frame())
+
+focus_methods <- c("naive", "SB", "SS", "pEBA4", "pOLS", "all",
+                   "adjusted", "mixture")
+tab <- rates[
+  rates$method %in% focus_methods &
+    rates$usable > 0 &
+    is.finite(rates$rejection_rate),
+  c("truth", "outcome", "method", "pd_gamma", "rejection_rate", "mc_se")
+]
+tab$rate <- sprintf("%.3f", tab$rejection_rate)
+tab$mcse <- sprintf("%.3f", tab$mc_se)
+tab <- tab[, c("truth", "outcome", "method", "pd_gamma", "rate", "mcse")]
+names(tab) <- c("Truth", "Test", "Method", "Gamma", "Rejection Rate", "MCSE")
+tab <- tab[order(tab$Truth, tab$Test, match(tab$Method, focus_methods),
+                 tab$Gamma), ]
+
+design <- if (nrow(meta)) meta[1L, ] else data.frame(
+  reps = length(unique(p_values$rep)),
+  n = paste(unique(p_values$n_per_group), collapse = ","),
+  missing_rate = paste(unique(p_values$missing_rate), collapse = ","),
+  truths = paste(unique(p_values$truth), collapse = ","))
 ```
 
-## Question
+## Simulated Model
 
-Does overlap-weighting the ordinal pairwise-deletion NACOV change the calibration
-of the standard WLSMV/FMG test battery in a simple two-factor measurement
-invariance design with 20% MCAR missingness?
+This is a short rejection-rate study for the ordinal pairwise-deletion Gamma
+correction. Each replication draws two equal-size groups from a two-factor
+ordinal CFA:
 
-## Design
+```text
+f1 =~ y1 + y2 + y3 + y4
+f2 =~ y5 + y6 + y7 + y8
+f1 ~~ f2
+```
 
-The simulation uses a two-group, two-factor ordinal CFA with eight indicators
-and five response categories. The `fake` condition has equal loadings across
-groups, so the metric invariance test is a null test. The `real` condition
-changes one loading per factor in group B, so the same nested test should reject.
-Both conditions also record the goodness-of-fit battery for the fitted metric
-model.
+The latent correlation is 0.35. Group A loadings are
+`0.82, 0.76, 0.70, 0.64, 0.80, 0.74, 0.68, 0.62`; residual variances are chosen
+so each latent response has unit variance. Five ordinal categories are formed
+with thresholds `-0.80, -0.15, 0.55, 1.15`.
 
-The two Gamma variants share thresholds and polychorics; only the pairwise
-NACOV scaling changes:
+The `fake` condition is the null: group B uses the same loadings as group A. The
+`real` condition introduces loading non-invariance in group B by increasing the
+`y4` loading and decreasing the `y8` loading. MCAR missingness is then applied
+independently to all eight indicators.
 
-- `nominal`: conventional nominal-\(N\) pairwise-deletion Gamma.
-- `overlap`: support-overlap Gamma from `docs/research/notes/ordinal_pd_gamma.tex`.
+For each replication, the same simulated data are analyzed twice:
 
-## Evidence
+- `nominal`: the conventional nominal-\(N\) pairwise-deletion Gamma.
+- `overlap`: the support-overlap Gamma from `docs/research/notes/ordinal_pd_gamma.tex`.
+
+The per-replication simulated p-values are in `results/p_values.csv`.
+
+## Rejection Rates
 
 ```{r}
 knitr::kable(tab, row.names = FALSE)
 ```
 
-The full replicate-level table is in `results/rejections.csv`; the aggregated
-cell table is in `results/summary.csv`.
+## Run Metadata
 
 ```{r}
-if (nrow(failures)) {
-  names(failures) <- c("Truth", "Outcome", "Gamma", "Reps", "Failures")
-  knitr::kable(failures, row.names = FALSE)
-}
+knitr::kable(design, row.names = FALSE)
 ```
-
-## Caveats
-
-The smoke run is a plumbing and direction check. Use a larger run before reading
-Monte Carlo rates substantively. The point estimates are still ordinary
-pairwise ordinal estimates; this experiment isolates the robust-reference
-matrix used by WLSMV/FMG-style tests. If a Gamma variant produces a non-positive
-semidefinite robust matrix, the row is retained as `fit_failed` instead of being
-dropped.
 
 ## Reproduce
 
 ```sh
 Rscript run_experiment.R --smoke
-Rscript run_experiment.R --reps 200 --n 300,1000 --missing-rate .20
+Rscript run_experiment.R --reps 200 --n 500 --missing-rate .20
 quarto render report.qmd
-```
-
-```{r}
-if (nrow(meta)) knitr::kable(meta, row.names = FALSE)
 ```
