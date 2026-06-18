@@ -1,0 +1,179 @@
+---
+title: "Ordinal Pairwise Stage-Two Estimators"
+format:
+  html:
+    toc: true
+    number-sections: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+required <- file.path("results", c("summary.csv", "timing_summary.csv",
+                                   "se_summary.csv", "metadata.csv"))
+if (!all(file.exists(required))) {
+  stop("Run `Rscript run_experiment.R --smoke` first.", call. = FALSE)
+}
+summary <- read.csv(file.path("results", "summary.csv"))
+timing <- read.csv(file.path("results", "timing_summary.csv"))
+se_summary <- read.csv(file.path("results", "se_summary.csv"))
+metadata <- read.csv(file.path("results", "metadata.csv"))
+meta_value <- function(key, default = "") {
+  hit <- metadata$value[metadata$key == key]
+  if (length(hit)) hit[[1L]] else default
+}
+fmt_rate <- function(x) ifelse(is.finite(x), sprintf("%.3f", x), "")
+fmt_ms <- function(x) ifelse(is.finite(x), sprintf("%.1f", x), "")
+
+pd_focus <- if ("overlap" %in% summary$pd_gamma) "overlap" else summary$pd_gamma[[1L]]
+mr_focus <- max(summary$missing_rate, na.rm = TRUE)
+selected_methods <- c("SB", "pEBA4", "pOLS")
+selected <- summary[
+  summary$pd_gamma == pd_focus &
+    summary$missing_rate == mr_focus &
+    summary$outcome == "nested" &
+    summary$method %in% selected_methods,
+  , drop = FALSE]
+
+mk_col <- function(method, truth) {
+  d <- selected[selected$method == method & selected$truth == truth,
+                c("model", "estimator", "rejection_rate")]
+  names(d)[3L] <- paste(method, truth, sep = "_")
+  d
+}
+if (nrow(selected)) {
+  keys <- unique(selected[, c("model", "estimator")])
+  stat_tab <- Reduce(function(x, y) merge(x, y, by = c("model", "estimator"),
+                                          all.x = TRUE),
+                     c(list(keys),
+                       lapply(selected_methods, mk_col, truth = "fake"),
+                       lapply(selected_methods, mk_col, truth = "real")))
+  for (nm in setdiff(names(stat_tab), c("model", "estimator"))) {
+    stat_tab[[nm]] <- fmt_rate(stat_tab[[nm]])
+  }
+  names(stat_tab) <- c("Model", "Estimator",
+                       "SB Null", "pEBA4 Null", "pOLS Null",
+                       "SB Power", "pEBA4 Power", "pOLS Power")
+  stat_tab <- stat_tab[order(stat_tab$Model, stat_tab$Estimator), ]
+} else {
+  stat_tab <- data.frame()
+}
+
+timing_focus <- timing[
+  timing$pd_gamma == pd_focus &
+    timing$missing_rate == mr_focus &
+    timing$stage %in% c("stats", "total_estimator"),
+  , drop = FALSE]
+stats_time <- timing_focus[timing_focus$stage == "stats",
+                           c("model", "n_per_group", "missing_rate",
+                             "median_elapsed_ms")]
+names(stats_time)[4L] <- "Stats Median (ms)"
+fit_time <- timing_focus[timing_focus$stage == "total_estimator",
+                         c("model", "estimator", "median_elapsed_ms")]
+names(fit_time)[3L] <- "Estimator Median (ms)"
+if (nrow(fit_time)) {
+  timing_tab <- merge(fit_time, unique(stats_time), by = "model", all.x = TRUE)
+  timing_tab$`Stats Median (ms)` <- fmt_ms(timing_tab$`Stats Median (ms)`)
+  timing_tab$`Estimator Median (ms)` <- fmt_ms(timing_tab$`Estimator Median (ms)`)
+  names(timing_tab)[names(timing_tab) == "model"] <- "Model"
+  names(timing_tab)[names(timing_tab) == "estimator"] <- "Estimator"
+  names(timing_tab)[names(timing_tab) == "n_per_group"] <- "N per Group"
+  names(timing_tab)[names(timing_tab) == "missing_rate"] <- "Missing Rate"
+  timing_tab <- timing_tab[order(timing_tab$Model, timing_tab$Estimator), ]
+} else {
+  timing_tab <- data.frame()
+}
+
+se_focus <- se_summary[
+  se_summary$pd_gamma == pd_focus &
+    se_summary$missing_rate == mr_focus,
+  , drop = FALSE]
+if (nrow(se_focus)) {
+  split_se <- split(se_focus, list(se_focus$model, se_focus$estimator), drop = TRUE)
+  se_tab <- do.call(rbind, lapply(split_se, function(d) data.frame(
+    model = d$model[[1L]],
+    estimator = d$estimator[[1L]],
+    min_finite_se_rate = min(d$finite_rate, na.rm = TRUE),
+    median_selected_se = stats::median(d$median_se, na.rm = TRUE),
+    stringsAsFactors = FALSE
+  )))
+  se_tab$min_finite_se_rate <- fmt_rate(se_tab$min_finite_se_rate)
+  se_tab$median_selected_se <- sprintf("%.4f", se_tab$median_selected_se)
+  se_tab <- se_tab[order(se_tab$model, se_tab$estimator), ]
+  names(se_tab) <- c("Model", "Estimator", "Minimum Finite SE Rate",
+                     "Median Selected SE")
+} else {
+  se_tab <- data.frame()
+}
+
+reps <- as.integer(meta_value("reps", "0"))
+timing_best <- if (nrow(timing_tab)) {
+  raw <- timing_focus[timing_focus$stage == "total_estimator", ]
+  raw <- raw[is.finite(raw$median_elapsed_ms), ]
+  if (nrow(raw)) raw[which.min(raw$median_elapsed_ms), ] else NULL
+} else NULL
+short_sentence <- if (!is.null(timing_best)) {
+  sprintf("In this run, the fastest selected high-missingness estimator slice was %s on %s (median %.1f ms after the shared stats build); rejection behavior is reported below and should be read with Monte Carlo error from %d reps.",
+          timing_best$estimator[[1L]], timing_best$model[[1L]],
+          timing_best$median_elapsed_ms[[1L]], reps)
+} else {
+  sprintf("The run produced result files, but no timing slice was available for the configured focus; inspect results/*.csv directly (%d reps).", reps)
+}
+```
+
+## Question
+
+If we reuse the pairwise ordinal summaries and Gamma, how different are the
+second-stage ULS/DWLS/WLS/NT/DLS estimators in their nested-test p-values and
+runtime?
+
+## Short Answer
+
+`r short_sentence`
+
+The report focuses on `r pd_focus` Gamma at missing rate `r mr_focus`. Full
+per-replication p-values, timings, and SE diagnostics are in `results/`.
+
+## Evidence
+
+### Nested Test Rejection
+
+```{r}
+knitr::kable(stat_tab, row.names = FALSE)
+```
+
+### Runtime
+
+The stats column is the shared pairwise threshold/polychoric/Gamma build. The
+estimator column is the median cost after that shared build: one stage-two
+weight, H1 fit, H0 fit, GOF spectrum, and nested spectrum.
+
+```{r}
+knitr::kable(timing_tab, row.names = FALSE)
+```
+
+### SE Diagnostics
+
+These are availability diagnostics for selected loading SEs from the H0 GOF
+sandwich, not coverage results.
+
+```{r}
+knitr::kable(se_tab, row.names = FALSE)
+```
+
+## Caveats
+
+This is a methods probe, not a lavaan parity study. NT and DLS are experimental
+stage-two weights for ordinal moments. The default run is deliberately moderate;
+use the raw CSVs and Monte Carlo SEs in `summary.csv` before making strong
+claims about close rejection rates.
+
+## Reproduce
+
+```sh
+Rscript run_experiment.R --smoke
+Rscript run_experiment.R --reps 60 --n 800 --missing-rate .15,.30
+quarto render report.qmd
+```
