@@ -2,11 +2,13 @@
 #include "magmaan/data/ordinal.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -127,6 +129,102 @@ post_expected<Eigen::MatrixXd> symmetric_inverse_pd(const Eigen::MatrixXd& A,
   }
   return std::unexpected(make_err(PostError::Kind::NumericIssue,
       std::move(what) + " is not positive definite"));
+}
+
+Eigen::Matrix<std::int64_t, Eigen::Dynamic, Eigen::Dynamic>
+observed_moment_overlap_counts_slow(
+    const Eigen::MatrixXi& Xcat,
+    const std::vector<std::int32_t>& support_i,
+    const std::vector<std::int32_t>& support_j) {
+  const Eigen::Index n = Xcat.rows();
+  const Eigen::Index mdim = static_cast<Eigen::Index>(support_i.size());
+  Eigen::Matrix<std::int64_t, Eigen::Dynamic, Eigen::Dynamic> overlap(mdim, mdim);
+  overlap.setZero();
+  for (Eigen::Index a = 0; a < mdim; ++a) {
+    for (Eigen::Index bb = a; bb < mdim; ++bb) {
+      const int ai = support_i[static_cast<std::size_t>(a)];
+      const int aj = support_j[static_cast<std::size_t>(a)];
+      const int bi = support_i[static_cast<std::size_t>(bb)];
+      const int bj = support_j[static_cast<std::size_t>(bb)];
+      std::int64_t nab = 0;
+      for (Eigen::Index r = 0; r < n; ++r) {
+        bool ok = ai >= 0 && Xcat(r, ai) >= 0 && bi >= 0 && Xcat(r, bi) >= 0;
+        if (ok && aj >= 0) ok = Xcat(r, aj) >= 0;
+        if (ok && bj >= 0) ok = Xcat(r, bj) >= 0;
+        if (ok) ++nab;
+      }
+      overlap(a, bb) = overlap(bb, a) = nab;
+    }
+  }
+  return overlap;
+}
+
+Eigen::Matrix<std::int64_t, Eigen::Dynamic, Eigen::Dynamic>
+observed_moment_overlap_counts(
+    const Eigen::MatrixXi& Xcat,
+    const std::vector<std::int32_t>& support_i,
+    const std::vector<std::int32_t>& support_j) {
+  const Eigen::Index n = Xcat.rows();
+  const Eigen::Index p = Xcat.cols();
+  const Eigen::Index mdim = static_cast<Eigen::Index>(support_i.size());
+  if (p > 64 || support_j.size() != support_i.size()) {
+    return observed_moment_overlap_counts_slow(Xcat, support_i, support_j);
+  }
+
+  std::vector<std::uint64_t> support_masks(static_cast<std::size_t>(mdim), 0);
+  for (Eigen::Index m = 0; m < mdim; ++m) {
+    const int i = support_i[static_cast<std::size_t>(m)];
+    const int j = support_j[static_cast<std::size_t>(m)];
+    if (i < 0 || i >= p || j >= p) {
+      return observed_moment_overlap_counts_slow(Xcat, support_i, support_j);
+    }
+    support_masks[static_cast<std::size_t>(m)] |= (std::uint64_t{1} << i);
+    if (j >= 0) {
+      support_masks[static_cast<std::size_t>(m)] |= (std::uint64_t{1} << j);
+    }
+  }
+
+  std::unordered_map<std::uint64_t, std::int64_t> count_cache;
+  count_cache.reserve(static_cast<std::size_t>(std::max<Eigen::Index>(1, mdim)) *
+                      4U);
+  auto count_for_mask = [&](std::uint64_t mask) -> std::int64_t {
+    if (auto it = count_cache.find(mask); it != count_cache.end()) {
+      return it->second;
+    }
+    std::array<Eigen::Index, 64> cols{};
+    Eigen::Index n_cols = 0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      if ((mask & (std::uint64_t{1} << j)) != 0U) {
+        cols[static_cast<std::size_t>(n_cols)] = j;
+        ++n_cols;
+      }
+    }
+    std::int64_t total = 0;
+    for (Eigen::Index r = 0; r < n; ++r) {
+      bool ok = true;
+      for (Eigen::Index k = 0; k < n_cols; ++k) {
+        if (Xcat(r, cols[static_cast<std::size_t>(k)]) < 0) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) ++total;
+    }
+    count_cache.emplace(mask, total);
+    return total;
+  };
+
+  Eigen::Matrix<std::int64_t, Eigen::Dynamic, Eigen::Dynamic> overlap(mdim, mdim);
+  overlap.setZero();
+  for (Eigen::Index a = 0; a < mdim; ++a) {
+    for (Eigen::Index bb = a; bb < mdim; ++bb) {
+      const std::uint64_t mask = support_masks[static_cast<std::size_t>(a)] |
+                                 support_masks[static_cast<std::size_t>(bb)];
+      const std::int64_t nab = count_for_mask(mask);
+      overlap(a, bb) = overlap(bb, a) = nab;
+    }
+  }
+  return overlap;
 }
 
 struct CorrelationRepairResult {
@@ -2253,13 +2351,12 @@ ordinal_stats_from_observed_integer_data(
     const Eigen::MatrixXd INNER = SC.transpose() * SC;
 
     Eigen::MatrixXd A11 = Eigen::MatrixXd::Zero(nth, nth);
-    const Eigen::MatrixXd INNER_TH = SC_TH.transpose() * SC_TH;
     for (Eigen::Index j = 0; j < p; ++j) {
       const Eigen::Index start = th_start[static_cast<std::size_t>(j)];
       const Eigen::Index len =
           static_cast<Eigen::Index>(levels[static_cast<std::size_t>(j)] - 1);
       A11.block(start, start, len, len) =
-          INNER_TH.block(start, start, len, len);
+          INNER.block(start, start, len, len);
     }
     auto A11_inv_or = symmetric_inverse_pd(
         A11, "ordinal observed threshold information matrix");
@@ -2267,7 +2364,7 @@ ordinal_stats_from_observed_integer_data(
 
     Eigen::VectorXd A22_diag(ncorr);
     for (Eigen::Index k = 0; k < ncorr; ++k) {
-      A22_diag(k) = SC_COR.col(k).squaredNorm();
+      A22_diag(k) = INNER(nth + k, nth + k);
       if (A22_diag(k) <= 1e-12 || !std::isfinite(A22_diag(k))) {
         return std::unexpected(make_err(PostError::Kind::NumericIssue,
             "ordinal_stats_from_observed_integer_data: block " +
@@ -2282,38 +2379,22 @@ ordinal_stats_from_observed_integer_data(
         -A22_inv * A21 * (*A11_inv_or);
     B_inv.block(nth, nth, ncorr, ncorr) = A22_inv;
 
-    Eigen::MatrixXd IF = static_cast<double>(n) * SC * B_inv.transpose();
-    Eigen::MatrixXd NACOV =
-        (IF.transpose() * IF) / static_cast<double>(n);
+    Eigen::MatrixXd NACOV = B_inv * INNER * B_inv.transpose();
+    NACOV *= static_cast<double>(n);
     NACOV = 0.5 * (NACOV + NACOV.transpose());
 
-    Eigen::Matrix<std::int64_t, Eigen::Dynamic, Eigen::Dynamic> overlap(mdim, mdim);
-    overlap.setZero();
-    for (Eigen::Index a = 0; a < mdim; ++a) {
-      for (Eigen::Index bb = a; bb < mdim; ++bb) {
-        const int ai = support_i[static_cast<std::size_t>(a)];
-        const int aj = support_j[static_cast<std::size_t>(a)];
-        const int bi = support_i[static_cast<std::size_t>(bb)];
-        const int bj = support_j[static_cast<std::size_t>(bb)];
-        std::int64_t nab = 0;
-        for (Eigen::Index r = 0; r < n; ++r) {
-          bool ok = ai >= 0 && Xcat(r, ai) >= 0 && bi >= 0 && Xcat(r, bi) >= 0;
-          if (ok && aj >= 0) ok = Xcat(r, aj) >= 0;
-          if (ok && bj >= 0) ok = Xcat(r, bj) >= 0;
-          if (ok) ++nab;
-        }
-        overlap(a, bb) = overlap(bb, a) = nab;
-      }
-    }
+    Eigen::Matrix<std::int64_t, Eigen::Dynamic, Eigen::Dynamic> overlap =
+        observed_moment_overlap_counts(Xcat, support_i, support_j);
 
     if (gamma_kind == OrdinalPairwiseGammaKind::Nominal) {
       for (Eigen::Index a = 0; a < mdim; ++a) {
-        for (Eigen::Index bb = 0; bb < mdim; ++bb) {
+        for (Eigen::Index bb = a; bb < mdim; ++bb) {
           const double na = static_cast<double>(moment_n[static_cast<std::size_t>(a)]);
           const double nb = static_cast<double>(moment_n[static_cast<std::size_t>(bb)]);
           const double nab = static_cast<double>(overlap(a, bb));
           if (na > 0.0 && nb > 0.0 && nab > 0.0) {
             NACOV(a, bb) /= (static_cast<double>(n) * nab) / (na * nb);
+            if (bb != a) NACOV(bb, a) = NACOV(a, bb);
           }
         }
       }

@@ -42,6 +42,13 @@ target_link_libraries(magmaan_ordinal_construction_bench PRIVATE magmaan::magmaa
 
 target_compile_features(magmaan_ordinal_construction_bench PRIVATE cxx_std_23)
 
+add_executable(magmaan_ordinal_observed_construction_bench
+  ordinal_observed_construction_bench.cpp)
+
+target_link_libraries(magmaan_ordinal_observed_construction_bench PRIVATE magmaan::magmaan)
+
+target_compile_features(magmaan_ordinal_observed_construction_bench PRIVATE cxx_std_23)
+
 add_executable(magmaan_mixed_ordinal_construction_bench
   mixed_ordinal_construction_bench.cpp)
 
