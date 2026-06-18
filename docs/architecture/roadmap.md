@@ -122,6 +122,9 @@ golden `parTable()` fixtures.
   Browne residual NT/ADF, fixed-parameter modification indices,
   equality-release score tests, fit measures including RMSEA close-fit
   p-values and lavaan's saturated-user-model `TLI = 1` convention,
+  lavaan-style robust/scaled fit-measure formula helpers for the core
+  `chisq.scaled`/baseline/CFI/TLI/RMSEA family when supplied user and baseline
+  scaling factors,
   structural-aware standardization, and C++ defined-parameter evaluation.
 - `inference::frontier` robust (generalized / Satorra-Bentler-scaled)
   modification indices and equality-release score tests: each candidate carries

@@ -183,6 +183,48 @@ TEST_CASE("fit_measures: RMSEA CI edge cases (df<1, small χ², G>1 scaling)") {
   }
 }
 
+TEST_CASE("robust_fit_measures: lavaan MLM scaled and robust conventions") {
+  magmaan::measures::RobustFitMeasureInputs in;
+  in.chi2 = 85.30552177;
+  in.df = 24;
+  in.chi2_scaled = 80.87178349;
+  in.scaling_factor = 1.054824;
+  in.baseline_chi2 = 918.85158929;
+  in.baseline_df = 36;
+  in.baseline_chi2_scaled = 789.29750421;
+  in.baseline_scaling_factor = 1.164138;
+  in.n_total = 301;
+  in.n_groups = 1;
+
+  const auto fm = magmaan::measures::robust_fit_measures(in);
+
+  CHECK(fm.chisq_scaled == doctest::Approx(80.87178349));
+  CHECK(fm.df_scaled == 24);
+  CHECK(fm.baseline_chisq_scaled == doctest::Approx(789.29750421));
+  CHECK(fm.baseline_df_scaled == 36);
+  CHECK(fm.chisq_scaling_factor == doctest::Approx(1.054824));
+  CHECK(fm.baseline_chisq_scaling_factor == doctest::Approx(1.164138));
+
+  CHECK(fm.cfi_scaled == doctest::Approx(0.92450289).epsilon(1e-7));
+  CHECK(fm.tli_scaled == doctest::Approx(0.88675434).epsilon(1e-7));
+  CHECK(fm.cfi_robust == doctest::Approx(0.93159217).epsilon(1e-7));
+  CHECK(fm.tli_robust == doctest::Approx(0.89738826).epsilon(1e-7));
+
+  CHECK(fm.rmsea_scaled == doctest::Approx(0.08872777).epsilon(1e-7));
+  CHECK(fm.rmsea_ci_lower_scaled == doctest::Approx(0.06841236).epsilon(1e-7));
+  CHECK(fm.rmsea_ci_upper_scaled == doctest::Approx(0.10982939).epsilon(1e-7));
+  CHECK(fm.rmsea_pvalue_scaled == doctest::Approx(0.001277219).epsilon(1e-6));
+  CHECK(fm.rmsea_notclose_pvalue_scaled ==
+        doctest::Approx(0.771981712).epsilon(1e-6));
+
+  CHECK(fm.rmsea_robust == doctest::Approx(0.09112753).epsilon(1e-7));
+  CHECK(fm.rmsea_ci_lower_robust == doctest::Approx(0.06971130).epsilon(1e-7));
+  CHECK(fm.rmsea_ci_upper_robust == doctest::Approx(0.11339582).epsilon(1e-7));
+  CHECK(fm.rmsea_pvalue_robust == doctest::Approx(0.001211059).epsilon(1e-6));
+  CHECK(fm.rmsea_notclose_pvalue_robust ==
+        doctest::Approx(0.813162430).epsilon(1e-6));
+}
+
 TEST_CASE("fit_extras: saturated 1F model — SRMR ≈ 0, logl == unrestricted_logl") {
   // A just-identified one-factor model (3 indicators) — df = 0, Σ̂ = S, so
   // every residual vanishes: SRMR ≈ 0, F_ML ≈ 0, logl ≈ saturated logl.
