@@ -18,36 +18,59 @@ if (!file.exists(summary_path) || !file.exists(rejections_path)) {
 }
 summary <- read.csv(summary_path)
 rejections <- read.csv(rejections_path)
+
 fmt_rate <- function(x, se) {
   ifelse(is.na(x), "NA", sprintf("%.3f (MCSE %.3f)", x, se))
 }
+headline_methods <- c("naive", "SB", "SS", "pEBA4", "pOLS", "all",
+                      "adjusted", "mixture")
+head <- summary[summary$method %in% headline_methods, ]
 wide <- reshape(
-  summary[, c("n_per_group", "missing_rate", "pd_gamma",
-              "rejection_rate", "mc_se", "usable", "failures")],
-  idvar = c("n_per_group", "missing_rate"),
+  head[, c("truth", "outcome", "method", "pd_gamma",
+           "rejection_rate", "mc_se", "usable", "failures")],
+  idvar = c("truth", "outcome", "method"),
   timevar = "pd_gamma",
   direction = "wide")
+for (nm in c("rejection_rate.nominal", "mc_se.nominal",
+             "usable.nominal", "failures.nominal",
+             "rejection_rate.overlap", "mc_se.overlap",
+             "usable.overlap", "failures.overlap")) {
+  if (!nm %in% names(wide)) wide[[nm]] <- NA_real_
+}
 wide$Nominal <- fmt_rate(wide$rejection_rate.nominal, wide$mc_se.nominal)
 wide$Overlap <- fmt_rate(wide$rejection_rate.overlap, wide$mc_se.overlap)
-tab <- wide[, c("n_per_group", "missing_rate", "Nominal", "Overlap",
+tab <- wide[, c("truth", "outcome", "method", "Nominal", "Overlap",
                 "usable.nominal", "failures.nominal")]
-names(tab) <- c("N Per Group", "Missing Rate", "Nominal Gamma",
+names(tab) <- c("Truth", "Outcome", "Method", "Nominal Gamma",
                 "Overlap Gamma", "Usable Reps", "Failures")
+tab <- tab[order(tab$Truth, tab$Outcome, match(tab$Method, headline_methods)), ]
+failures <- summary[summary$method == "fit_failed",
+                    c("truth", "outcome", "pd_gamma", "reps", "failures")]
+
+meta <- tryCatch(read.csv(file.path("results", "metadata.csv")),
+                 error = function(e) data.frame())
 ```
 
 ## Question
 
-Does the overlap-weighted ordinal pairwise-deletion NACOV behave differently from
-the conventional nominal-\(N\) matrix in a WLSMV loading-invariance test with
-ordinal MCAR missingness?
+Does overlap-weighting the ordinal pairwise-deletion NACOV change the calibration
+of the standard WLSMV/FMG test battery in a simple two-factor measurement
+invariance design with 20% MCAR missingness?
 
-## Short Answer
+## Design
 
-In the smoke run, the two matrices are identical with complete data. With 50%
-missingness on two group-B indicators, the overlap correction lowers the nested
-test statistic in every usable replicate, which is the direction predicted by
-the pairwise-deletion Gamma note. The run is intentionally tiny; use it as a
-plumbing and direction check, not a stable Type I estimate.
+The simulation uses a two-group, two-factor ordinal CFA with eight indicators
+and five response categories. The `fake` condition has equal loadings across
+groups, so the metric invariance test is a null test. The `real` condition
+changes one loading per factor in group B, so the same nested test should reject.
+Both conditions also record the goodness-of-fit battery for the fitted metric
+model.
+
+The two Gamma variants share thresholds and polychorics; only the pairwise
+NACOV scaling changes:
+
+- `nominal`: conventional nominal-\(N\) pairwise-deletion Gamma.
+- `overlap`: support-overlap Gamma from `docs/research/notes/ordinal_pd_gamma.tex`.
 
 ## Evidence
 
@@ -55,21 +78,33 @@ plumbing and direction check, not a stable Type I estimate.
 knitr::kable(tab, row.names = FALSE)
 ```
 
-The replicate-level outputs are in `results/rejections.csv`; the compact
-cell-level rates are in `results/summary.csv`.
+The full replicate-level table is in `results/rejections.csv`; the aggregated
+cell table is in `results/summary.csv`.
+
+```{r}
+if (nrow(failures)) {
+  names(failures) <- c("Truth", "Outcome", "Gamma", "Reps", "Failures")
+  knitr::kable(failures, row.names = FALSE)
+}
+```
 
 ## Caveats
 
-The default run is a short probe, not a replication of Chen et al. The design
-uses MCAR missingness so the experiment isolates the Gamma scaling issue rather
-than MAR point-estimate bias. Some small ordinal cells can fail because the
-polychoric or dense NACOV problem is numerically singular; failures are counted
-instead of aborting the run.
+The smoke run is a plumbing and direction check. Use a larger run before reading
+Monte Carlo rates substantively. The point estimates are still ordinary
+pairwise ordinal estimates; this experiment isolates the robust-reference
+matrix used by WLSMV/FMG-style tests. If a Gamma variant produces a non-positive
+semidefinite robust matrix, the row is retained as `fit_failed` instead of being
+dropped.
 
 ## Reproduce
 
 ```sh
 Rscript run_experiment.R --smoke
-Rscript run_experiment.R --reps 200 --n 300,1000 --missing-rate 0,.30,.50
+Rscript run_experiment.R --reps 200 --n 300,1000 --missing-rate .20
 quarto render report.qmd
+```
+
+```{r}
+if (nrow(meta)) knitr::kable(meta, row.names = FALSE)
 ```
