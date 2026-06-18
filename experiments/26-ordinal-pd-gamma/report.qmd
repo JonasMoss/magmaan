@@ -23,18 +23,32 @@ meta <- tryCatch(read.csv(file.path("results", "metadata.csv")),
 
 focus_methods <- c("naive", "SB", "SS", "pEBA4", "pOLS", "all",
                    "adjusted", "mixture")
-tab <- rates[
+tab_long <- rates[
   rates$method %in% focus_methods &
     rates$usable > 0 &
     is.finite(rates$rejection_rate),
-  c("truth", "outcome", "method", "pd_gamma", "rejection_rate", "mc_se")
+  c("truth", "outcome", "method", "pd_gamma", "rejection_rate")
 ]
-tab$rate <- sprintf("%.3f", tab$rejection_rate)
-tab$mcse <- sprintf("%.3f", tab$mc_se)
-tab <- tab[, c("truth", "outcome", "method", "pd_gamma", "rate", "mcse")]
-names(tab) <- c("Truth", "Test", "Method", "Gamma", "Rejection Rate", "MCSE")
-tab <- tab[order(tab$Truth, tab$Test, match(tab$Method, focus_methods),
-                 tab$Gamma), ]
+tab_long$condition <- ifelse(tab_long$truth == "fake", "Null", "Loading Shift")
+tab_wide <- reshape(
+  tab_long[, c("condition", "outcome", "method", "pd_gamma", "rejection_rate")],
+  idvar = c("condition", "outcome", "method"),
+  timevar = "pd_gamma",
+  direction = "wide")
+for (nm in c("rejection_rate.nominal", "rejection_rate.overlap")) {
+  if (!nm %in% names(tab_wide)) tab_wide[[nm]] <- NA_real_
+}
+tab_wide$Nominal <- sprintf("%.3f", tab_wide$rejection_rate.nominal)
+tab_wide$Overlap <- sprintf("%.3f", tab_wide$rejection_rate.overlap)
+tab_wide <- tab_wide[, c("condition", "outcome", "method", "Nominal", "Overlap")]
+names(tab_wide) <- c("Condition", "Outcome", "Method",
+                     "Nominal Gamma", "Overlap Gamma")
+tab_wide <- tab_wide[order(tab_wide$Condition, tab_wide$Outcome,
+                           match(tab_wide$Method, focus_methods)), ]
+gof_tab <- tab_wide[tab_wide$Outcome == "gof",
+                    c("Condition", "Method", "Nominal Gamma", "Overlap Gamma")]
+nested_tab <- tab_wide[tab_wide$Outcome == "nested",
+                       c("Condition", "Method", "Nominal Gamma", "Overlap Gamma")]
 
 design <- if (nrow(meta)) meta[1L, ] else data.frame(
   reps = length(unique(p_values$rep)),
@@ -74,8 +88,16 @@ The per-replication simulated p-values are in `results/p_values.csv`.
 
 ## Rejection Rates
 
+### Goodness-of-Fit
+
 ```{r}
-knitr::kable(tab, row.names = FALSE)
+knitr::kable(gof_tab, row.names = FALSE)
+```
+
+### Nested Loading-Invariance Test
+
+```{r}
+knitr::kable(nested_tab, row.names = FALSE)
 ```
 
 ## Run Metadata
@@ -88,6 +110,6 @@ knitr::kable(design, row.names = FALSE)
 
 ```sh
 Rscript run_experiment.R --smoke
-Rscript run_experiment.R --reps 200 --n 500 --missing-rate .20
+Rscript run_experiment.R --reps 200 --n 1000 --missing-rate .20
 quarto render report.qmd
 ```
