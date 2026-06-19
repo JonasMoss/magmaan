@@ -314,6 +314,49 @@ TEST_CASE("robust_continuous_ls: raw and supplied Gamma agree for ULS") {
         doctest::Approx(2.0 * total_n(fx.samp) * est->fmin));
 }
 
+TEST_CASE("robust_continuous_ls_fixed_weight_ij reduces to observed-bread sandwich") {
+  auto fx = one_factor_fixture();
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 4000, .ftol = 1e-13, .gtol = 1e-8};
+
+  auto est_uls = magmaan::test::fit_gmm(
+      fx.pt, fx.rep, fx.samp, {}, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptLbfgs, opt);
+  REQUIRE(est_uls.has_value());
+  auto fixed_uls = magmaan::estimate::robust_continuous_ls(
+      fx.pt, fx.rep, fx.samp, *est_uls, magmaan::estimate::gmm::Weight{},
+      fx.raw, magmaan::robust::Information::Observed);
+  auto ij_uls = magmaan::estimate::robust_continuous_ls_fixed_weight_ij(
+      fx.pt, fx.rep, fx.samp, *est_uls, magmaan::estimate::gmm::Weight{},
+      fx.raw);
+  REQUIRE(fixed_uls.has_value());
+  REQUIRE(ij_uls.has_value());
+  CHECK(ij_uls->df == fixed_uls->df);
+  CHECK(ij_uls->chisq_standard == doctest::Approx(fixed_uls->chisq_standard));
+  CHECK(ij_uls->vcov.isApprox(fixed_uls->vcov, 1e-8));
+  CHECK(ij_uls->se.isApprox(fixed_uls->se, 1e-8));
+  CHECK(ij_uls->eigvals.size() == 0);
+
+  auto est_gls = magmaan::test::fit_gls(
+      fx.pt, fx.rep, fx.samp, magmaan::estimate::Bounds{},
+      magmaan::estimate::Backend::NloptLbfgs, opt);
+  REQUIRE(est_gls.has_value());
+  const magmaan::estimate::gmm::Weight w_gls =
+      gls_weight(fx.pt, fx.rep, fx.samp, est_gls->theta);
+  auto fixed_gls = magmaan::estimate::robust_continuous_ls(
+      fx.pt, fx.rep, fx.samp, *est_gls, w_gls, fx.raw,
+      magmaan::robust::Information::Observed);
+  auto ij_gls = magmaan::estimate::robust_continuous_ls_fixed_weight_ij(
+      fx.pt, fx.rep, fx.samp, *est_gls, w_gls, fx.raw);
+  REQUIRE(fixed_gls.has_value());
+  REQUIRE(ij_gls.has_value());
+  CHECK(ij_gls->df == fixed_gls->df);
+  CHECK(ij_gls->chisq_standard == doctest::Approx(fixed_gls->chisq_standard));
+  CHECK(ij_gls->vcov.isApprox(fixed_gls->vcov, 1e-8));
+  CHECK(ij_gls->se.isApprox(fixed_gls->se, 1e-8));
+  CHECK(ij_gls->eigvals.size() == 0);
+}
+
 TEST_CASE("robust_continuous_ls: GLS and WLS preserve continuous LS statistic scale") {
   auto fx = one_factor_fixture();
   const magmaan::optim::OptimOptions opt{

@@ -1326,7 +1326,10 @@ stop rather than any usable non-error return.
   module also exposes `robust_weighted_moment_ij` for observed-bread
   infinitesimal-jackknife covariance from casewise moment rows plus optional
   estimated-weight influence corrections; scaled-test corrections remain
-  estimator-specific.
+  estimator-specific. Complete continuous LS now has
+  `robust_continuous_ls_fixed_weight_ij`, the first non-ordinal adapter, which
+  treats the supplied second-stage weight as fixed and reduces to the
+  observed-bread sandwich for ULS and caller-fixed weights.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
   parameterization-agnostic transforms operate over the

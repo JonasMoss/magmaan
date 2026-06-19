@@ -241,9 +241,10 @@ weight_block(const gmm::Weight& weight,
 }
 
 post_expected<std::vector<Eigen::MatrixXd>>
-gamma_blocks_from_raw(const data::RawData& raw,
-                      const data::SampleStats& samp,
-                      const ContinuousLsLayout& layout) {
+continuous_ls_moment_influence_blocks_from_raw(
+    const data::RawData& raw,
+    const data::SampleStats& samp,
+    const ContinuousLsLayout& layout) {
   if (!raw.mask.empty()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "robust_continuous_ls: RawData masks are not supported for complete-data LS"));
@@ -252,8 +253,8 @@ gamma_blocks_from_raw(const data::RawData& raw,
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "robust_continuous_ls: RawData and SampleStats block counts differ"));
   }
-  std::vector<Eigen::MatrixXd> out;
-  out.reserve(raw.X.size());
+  std::vector<Eigen::MatrixXd> rows_out;
+  rows_out.reserve(raw.X.size());
   for (std::size_t b = 0; b < raw.X.size(); ++b) {
     const auto& X = raw.X[b];
     const Eigen::Index n = X.rows();
@@ -284,7 +285,22 @@ gamma_blocks_from_raw(const data::RawData& raw,
                                   s_vech;
       Z.block(i, off, 1, pstar) = d_i.transpose();
     }
-    Eigen::MatrixXd Gamma = (Z.transpose() * Z) / static_cast<double>(n);
+    rows_out.push_back(std::move(Z));
+  }
+  return rows_out;
+}
+
+post_expected<std::vector<Eigen::MatrixXd>>
+gamma_blocks_from_raw(const data::RawData& raw,
+                      const data::SampleStats& samp,
+                      const ContinuousLsLayout& layout) {
+  auto rows_or = continuous_ls_moment_influence_blocks_from_raw(raw, samp, layout);
+  if (!rows_or.has_value()) return std::unexpected(rows_or.error());
+  std::vector<Eigen::MatrixXd> out;
+  out.reserve(rows_or->size());
+  for (const auto& Z : *rows_or) {
+    const double inv_n = 1.0 / static_cast<double>(Z.rows());
+    Eigen::MatrixXd Gamma = Z.transpose() * Z * inv_n;
     Gamma = 0.5 * (Gamma + Gamma.transpose()).eval();
     out.push_back(std::move(Gamma));
   }
@@ -478,6 +494,70 @@ robust_continuous_ls_raw_impl(spec::LatentStructure pt,
   if (!gamma.has_value()) return std::unexpected(gamma.error());
   return robust_continuous_ls_impl(std::move(pt), rep, samp, est,
                                    weight, *gamma, bread);
+}
+
+post_expected<WeightedRobustResult>
+robust_continuous_ls_fixed_weight_ij_impl(spec::LatentStructure pt,
+                                          const model::MatrixRep& rep,
+                                          const data::SampleStats& samp,
+                                          const Estimates& est,
+                                          const gmm::Weight& weight,
+                                          const data::RawData& raw) {
+  if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
+    return std::unexpected(fit_to_post(e.error()));
+  }
+  auto con_or = build_eq_constraints(pt);
+  if (!con_or.has_value()) return std::unexpected(con_or.error());
+  const Eigen::MatrixXd& K = con_or->K();
+  if (K.rows() != pt.n_free()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_continuous_ls_fixed_weight_ij: constraint reparameterization "
+        "has incompatible shape"));
+  }
+  if (est.theta.size() != pt.n_free()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_continuous_ls_fixed_weight_ij: fitted theta length does not "
+        "match partable"));
+  }
+
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
+  auto eval = ev_or->evaluate(est.theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  if (auto v = validate_moment_shapes(samp, eval->moments); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  const auto layout = make_layout(samp, eval->moments);
+  auto rows_or = continuous_ls_moment_influence_blocks_from_raw(raw, samp, layout);
+  if (!rows_or.has_value()) return std::unexpected(rows_or.error());
+  if (rows_or->size() != samp.S.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_continuous_ls_fixed_weight_ij: influence block count mismatch"));
+  }
+
+  std::vector<WeightedMomentIJBlock> ij_blocks;
+  ij_blocks.reserve(samp.S.size());
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    auto Jb = continuous_moment_jacobian_block(
+        layout, eval->moments, eval->J_sigma, eval->J_mu, b);
+    if (!Jb.has_value()) return std::unexpected(Jb.error());
+    auto Wb = weight_block(weight, layout, b);
+    if (!Wb.has_value()) return std::unexpected(Wb.error());
+    ij_blocks.push_back(WeightedMomentIJBlock{
+        .jacobian = std::move(*Jb),
+        .weight = std::move(*Wb),
+        .moment_influence = (*rows_or)[b],
+        .weight_correction = {},
+        .n_obs = samp.n_obs[b]});
+  }
+
+  auto ob = continuous_ls_observed_bread(pt, rep, samp, est, weight, K);
+  if (!ob.has_value()) return std::unexpected(ob.error());
+  auto chisq = robust_ls_standard_chisq(samp, est);
+  if (!chisq.has_value()) return std::unexpected(chisq.error());
+  auto n = total_n(samp);
+  if (!n.has_value()) return std::unexpected(n.error());
+  return robust_weighted_moment_ij(ij_blocks, K, *chisq / *n, *ob);
 }
 
 }  // namespace
@@ -854,6 +934,17 @@ robust_continuous_ls(spec::LatentStructure pt,
                      robust::Information bread) {
   return robust_continuous_ls_raw_impl(std::move(pt), rep, samp, est,
                                        weight, raw, bread);
+}
+
+post_expected<WeightedRobustResult>
+robust_continuous_ls_fixed_weight_ij(spec::LatentStructure pt,
+                                     const model::MatrixRep& rep,
+                                     const data::SampleStats& samp,
+                                     const Estimates& est,
+                                     const gmm::Weight& weight,
+                                     const data::RawData& raw) {
+  return robust_continuous_ls_fixed_weight_ij_impl(
+      std::move(pt), rep, samp, est, weight, raw);
 }
 
 post_expected<robust::ParamSpaceSandwich>
