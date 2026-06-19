@@ -695,6 +695,103 @@ robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
   return out;
 }
 
+post_expected<WeightedRobustResult>
+robust_weighted_moment_ij(const std::vector<WeightedMomentIJBlock>& blocks,
+                          const Eigen::MatrixXd& K,
+                          double fmin,
+                          const Eigen::MatrixXd& observed_bread) {
+  if (blocks.empty()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_weighted_moment_ij: no moment blocks supplied"));
+  }
+  if (K.rows() == 0 || K.cols() == 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_weighted_moment_ij: empty constraint reparameterization"));
+  }
+  const Eigen::Index n_alpha = K.cols();
+  if (observed_bread.rows() != n_alpha || observed_bread.cols() != n_alpha) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_weighted_moment_ij: observed bread shape does not match the "
+        "reduced parameter count"));
+  }
+
+  double N_total = 0.0;
+  Eigen::Index total_rows = 0;
+  for (std::size_t b = 0; b < blocks.size(); ++b) {
+    const auto& blk = blocks[b];
+    if (blk.n_obs <= 0) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "robust_weighted_moment_ij: non-positive n_obs in block " +
+              std::to_string(b)));
+    }
+    if (blk.jacobian.cols() != K.rows()) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "robust_weighted_moment_ij: jacobian/K column mismatch in block " +
+              std::to_string(b)));
+    }
+    const Eigen::Index mb = blk.jacobian.rows();
+    if (blk.weight.rows() != mb || blk.weight.cols() != mb ||
+        blk.moment_influence.rows() != blk.n_obs ||
+        blk.moment_influence.cols() != mb) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "robust_weighted_moment_ij: moment matrix shape mismatch in block " +
+              std::to_string(b)));
+    }
+    if (blk.weight_correction.size() != 0 &&
+        (blk.weight_correction.rows() != blk.n_obs ||
+         blk.weight_correction.cols() != mb)) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "robust_weighted_moment_ij: correction shape mismatch in block " +
+              std::to_string(b)));
+    }
+    N_total += static_cast<double>(blk.n_obs);
+    total_rows += mb;
+  }
+  if (!(N_total > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "robust_weighted_moment_ij: non-positive total sample size"));
+  }
+
+  const int df = static_cast<int>(total_rows - n_alpha);
+  if (df < 0) {
+    return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+        "robust_weighted_moment_ij: model has more reduced parameters than "
+        "moments"));
+  }
+
+  Eigen::MatrixXd A = 0.5 * (observed_bread + observed_bread.transpose()).eval();
+  auto A_inv_or = inverse_sym_pd(A, "robust_weighted_moment_ij observed bread");
+  if (!A_inv_or.has_value()) return std::unexpected(A_inv_or.error());
+  const Eigen::MatrixXd& A_inv = *A_inv_or;
+
+  Eigen::MatrixXd meat = Eigen::MatrixXd::Zero(n_alpha, n_alpha);
+  for (const auto& blk : blocks) {
+    Eigen::MatrixXd V = blk.moment_influence * blk.weight;
+    if (blk.weight_correction.size() != 0) V += blk.weight_correction;
+    const Eigen::MatrixXd DbK = blk.jacobian * K;
+    meat.noalias() += DbK.transpose() * V.transpose() * V * DbK;
+  }
+  meat = 0.5 * (meat + meat.transpose()).eval();
+
+  WeightedRobustResult out;
+  Eigen::MatrixXd V_alpha = (A_inv * meat * A_inv) / (N_total * N_total);
+  V_alpha = 0.5 * (V_alpha + V_alpha.transpose()).eval();
+  out.vcov = K * V_alpha * K.transpose();
+  out.vcov = 0.5 * (out.vcov + out.vcov.transpose()).eval();
+  out.se.resize(out.vcov.rows());
+  const double diag_tol =
+      1e-12 * std::max<double>(1.0, out.vcov.cwiseAbs().maxCoeff());
+  for (Eigen::Index i = 0; i < out.se.size(); ++i) {
+    const double v = out.vcov(i, i);
+    out.se(i) = v >= -diag_tol ? std::sqrt(std::max(0.0, v))
+                               : std::numeric_limits<double>::quiet_NaN();
+  }
+  out.chisq_standard = N_total * fmin;
+  out.df = df;
+  out.eigvals.resize(0);
+  return out;
+}
+
 post_expected<Eigen::MatrixXd>
 ls_information(spec::LatentStructure pt,
                const model::MatrixRep& rep,

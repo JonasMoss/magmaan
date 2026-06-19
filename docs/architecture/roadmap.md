@@ -1322,7 +1322,11 @@ stop rather than any usable non-error return.
   Satorra-Bentler, mean/variance-adjusted, and scaled/shifted statistics from
   the threshold-plus-polychoric moment vector. The implementation now uses a
   shared weighted-moment sandwich/U-Gamma primitive that can be reused by other
-  LS moment stacks with arbitrary block weights and NACOV matrices.
+  LS moment stacks with arbitrary block weights and NACOV matrices. The same
+  module also exposes `robust_weighted_moment_ij` for observed-bread
+  infinitesimal-jackknife covariance from casewise moment rows plus optional
+  estimated-weight influence corrections; scaled-test corrections remain
+  estimator-specific.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
   parameterization-agnostic transforms operate over the
