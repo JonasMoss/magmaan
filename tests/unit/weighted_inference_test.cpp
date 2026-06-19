@@ -159,6 +159,72 @@ TEST_CASE("robust_weighted_moments respects per-block sample weighting and K") {
   CHECK(out->eigvals(0) >= 0.0);
 }
 
+TEST_CASE("robust_weighted_moment_ij fixed-weight path matches weighted sandwich") {
+  Eigen::MatrixXd G(4, 2);
+  G << 1.0, 0.0,
+      -1.0, 0.0,
+       0.0, 1.0,
+       0.0, -1.0;
+
+  magmaan::estimate::WeightedMomentBlock block;
+  block.jacobian.resize(2, 1);
+  block.jacobian << 1.0, 0.0;
+  block.weight = Eigen::MatrixXd::Identity(2, 2);
+  block.gamma = (G.transpose() * G) / 4.0;
+  block.n_obs = 4;
+
+  magmaan::estimate::WeightedMomentIJBlock ij_block;
+  ij_block.jacobian = block.jacobian;
+  ij_block.weight = block.weight;
+  ij_block.moment_influence = G;
+  ij_block.n_obs = block.n_obs;
+
+  Eigen::MatrixXd K = Eigen::MatrixXd::Identity(1, 1);
+  Eigen::MatrixXd bread(1, 1);
+  bread << 1.0;
+
+  auto fixed = magmaan::estimate::robust_weighted_moments({block}, K, 0.5, bread);
+  auto ij = magmaan::estimate::robust_weighted_moment_ij({ij_block}, K, 0.5, bread);
+  REQUIRE(fixed.has_value());
+  REQUIRE(ij.has_value());
+  CHECK(ij->vcov.isApprox(fixed->vcov, 1e-14));
+  CHECK(ij->se.isApprox(fixed->se, 1e-14));
+  CHECK(ij->chisq_standard == doctest::Approx(fixed->chisq_standard));
+  CHECK(ij->df == fixed->df);
+  CHECK(ij->eigvals.size() == 0);
+}
+
+TEST_CASE("robust_weighted_moment_ij includes casewise weight corrections") {
+  Eigen::MatrixXd G(4, 2);
+  G << 1.0, 0.0,
+      -1.0, 0.0,
+       0.0, 1.0,
+       0.0, -1.0;
+  Eigen::MatrixXd correction = Eigen::MatrixXd::Zero(4, 2);
+  correction(0, 0) = 1.0;
+  correction(1, 0) = -0.5;
+
+  magmaan::estimate::WeightedMomentIJBlock ij_block;
+  ij_block.jacobian.resize(2, 1);
+  ij_block.jacobian << 1.0, 0.0;
+  ij_block.weight = Eigen::MatrixXd::Identity(2, 2);
+  ij_block.moment_influence = G;
+  ij_block.weight_correction = correction;
+  ij_block.n_obs = 4;
+
+  Eigen::MatrixXd K = Eigen::MatrixXd::Identity(1, 1);
+  Eigen::MatrixXd bread(1, 1);
+  bread << 1.0;
+  auto ij = magmaan::estimate::robust_weighted_moment_ij({ij_block}, K, 0.5, bread);
+  REQUIRE(ij.has_value());
+
+  const Eigen::MatrixXd V = G + correction;
+  const Eigen::MatrixXd DbK = ij_block.jacobian * K;
+  const double expected =
+      (DbK.transpose() * V.transpose() * V * DbK)(0, 0) / (4.0 * 4.0);
+  CHECK(ij->vcov(0, 0) == doctest::Approx(expected));
+}
+
 TEST_CASE("evaluate_ls_objective matches fitted fmin for continuous LS") {
   auto fx = one_factor_fixture();
   const magmaan::optim::OptimOptions opt{

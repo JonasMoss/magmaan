@@ -43,6 +43,14 @@ struct WeightedRobustResult {
   robust::ScaledShiftedResult scaled_shifted;
 };
 
+struct WeightedMomentIJBlock {
+  Eigen::MatrixXd jacobian;          // model moments wrt full free theta
+  Eigen::MatrixXd weight;            // fixed estimator weight W_b
+  Eigen::MatrixXd moment_influence;  // n_b × m_b rows g_i
+  Eigen::MatrixXd weight_correction; // optional n_b × m_b rows from IF(W_hat)
+  std::int64_t n_obs = 0;
+};
+
 // Misspecification-robust ("observed-Hessian") bread for a moment-quadratic
 // fit, in the K-reduced parameter space. Central-differences the per-unit
 // moment-LS gradient
@@ -72,6 +80,19 @@ robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
                         double fmin,
                         const std::optional<Eigen::MatrixXd>& bread_override =
                             std::nullopt);
+
+// Infinitesimal-jackknife parameter covariance for a moment-quadratic fit with
+// observed-Hessian bread. Each block contributes casewise rows
+//   v_i = g_i W_b + correction_i,
+// where `correction_i` carries the leading influence of an estimated weight
+// (empty for fixed weights). The function returns vcov/se/chisq/df; scaled-test
+// eigenvalues are intentionally left empty because estimated-weight corrections
+// require estimator-specific test-statistic work.
+post_expected<WeightedRobustResult>
+robust_weighted_moment_ij(const std::vector<WeightedMomentIJBlock>& blocks,
+                          const Eigen::MatrixXd& K,
+                          double fmin,
+                          const Eigen::MatrixXd& observed_bread);
 
 // Parameter-space sandwich {A1, B1} in the moment metric, the LS counterpart
 // of `robust::param_space_sandwich`: per-unit bread A1 = Σ_b (n_b/N)·Δ_bᵀW_bΔ_b

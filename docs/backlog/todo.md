@@ -241,8 +241,12 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   Follow-up landed 2026-06-19: complete all-ordinal ULS/DWLS now has
   `robust_ordinal_ij`, an explicit infinitesimal-jackknife covariance that carries
   the estimated diagonal-weight term. The data-direct Γ-diagonal channel is
-  regression-tested against case-weight finite differences; full WLS, mixed
-  ordinal/polyserial, and pairwise-missing variants remain out of scope.
+  regression-tested against case-weight finite differences. The reusable
+  `robust_weighted_moment_ij` primitive is now the shared transport for
+  observed-bread weighted-moment IJ covariance: callers provide per-case moment
+  influence rows plus optional per-case estimated-weight corrections. Full WLS,
+  mixed ordinal/polyserial, MCAR/pairwise-missing variants, and ML2S adapters
+  remain out of scope.
   Open follow-ups:
   - **Analytic moment-Hessian** for the observed bread (closed-form `H` of Lai
     Eq 36 / its mixed analogue; FD becomes the validation gate). Also removes the

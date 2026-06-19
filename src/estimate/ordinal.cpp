@@ -3507,15 +3507,9 @@ robust_ordinal_ij(spec::LatentStructure pt,
   if (!ob.has_value()) return std::unexpected(ob.error());
   Eigen::MatrixXd A = 0.5 * (*ob + ob->transpose()).eval();
 
-  // IJ meat: Σ_b (Δ_b K)ᵀ S_b (Δ_b K), S_b = Σ_i v_i v_iᵀ = VᵀV.
-  //   row_i(V) = g_iᵀ W_b + corr_iᵀ,  corr_{i,k} = d_{b,k}·(g_{i,k}² − Γ̂_kk)/Γ̂_kk²
-  // The corr term is the influence of Ŵ = diag(Γ̂)⁻¹ (Γ̂ = NACOV, the empirical
-  // covariance of the per-case influence functions g_i). ULS ⇒ W = I, corr = 0.
-  // Channel-1 (V = G·W_b) reproduces the observed-bread sandwich exactly.
-  const Eigen::Index n_alpha = K.cols();
-  Eigen::MatrixXd meat = Eigen::MatrixXd::Zero(n_alpha, n_alpha);
+  std::vector<WeightedMomentIJBlock> ij_blocks;
+  ij_blocks.reserve(stats.R.size());
   Eigen::Index off = 0;
-  Eigen::Index total_rows = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
     const Eigen::Index mb = stats.thresholds[b].size() + p * (p - 1) / 2;
@@ -3527,7 +3521,7 @@ robust_ordinal_ij(spec::LatentStructure pt,
     }
     const Eigen::VectorXd d_b = ordinal_block_residual(
         stats, *layout_or, eval->moments, est.theta, parameterization, b);
-    Eigen::MatrixXd V = G * Ws[b];                           // n_b × mb
+    Eigen::MatrixXd correction;
     if (weights == OrdinalWeightKind::DWLS) {
       // The IF of the estimated weight Ŵ=diag(Γ̂)⁻¹ enters as corr_{i,k} =
       // d_k·IF_{i,k}(Γ̂)/Γ̂_kk², with IF(Γ̂) = [data-direct sandwich influence at
@@ -3543,46 +3537,26 @@ robust_ordinal_ij(spec::LatentStructure pt,
           stats.int_data[b], stats.n_levels[b], stats.thresholds[b], stats.R[b]);
       if (!D_or.has_value()) return std::unexpected(D_or.error());
       GD.noalias() = G * D_or->transpose();
+      correction = Eigen::MatrixXd::Zero(G.rows(), mb);
       for (Eigen::Index k = 0; k < mb; ++k) {
         const double gkk = stats.NACOV[b](k, k);
         if (!(gkk > 0.0)) continue;
         const Eigen::VectorXd if_k = (IFG.col(k) + GD.col(k)).eval();
-        V.col(k) += (d_b(k) / (gkk * gkk)) * if_k;
+        correction.col(k) = (d_b(k) / (gkk * gkk)) * if_k;
       }
     }
-    const Eigen::MatrixXd S = V.transpose() * V;             // mb × mb
-    const Eigen::MatrixXd DbK =
-        Delta_full.block(off, 0, mb, Delta_full.cols()) * K; // mb × n_alpha
-    meat.noalias() += DbK.transpose() * S * DbK;
+    ij_blocks.push_back(WeightedMomentIJBlock{
+        .jacobian = Delta_full.block(off, 0, mb, Delta_full.cols()),
+        .weight = Ws[b],
+        .moment_influence = G,
+        .weight_correction = std::move(correction),
+        .n_obs = stats.n_obs[b]});
     off += mb;
-    total_rows += mb;
   }
-  meat = 0.5 * (meat + meat.transpose()).eval();
 
-  Eigen::LLT<Eigen::MatrixXd> llt(A);
-  if (llt.info() != Eigen::Success) {
-    return std::unexpected(make_post_err(PostError::Kind::NumericIssue,
-        "robust_ordinal_ij: observed-Hessian bread is not positive definite"));
-  }
-  const Eigen::MatrixXd A_inv =
-      llt.solve(Eigen::MatrixXd::Identity(n_alpha, n_alpha));
-  Eigen::MatrixXd V_alpha = (A_inv * meat * A_inv) / (N_total * N_total);
-  V_alpha = 0.5 * (V_alpha + V_alpha.transpose()).eval();
-
-  OrdinalRobustResult out;
-  out.vcov = K * V_alpha * K.transpose();
-  out.vcov = 0.5 * (out.vcov + out.vcov.transpose()).eval();
-  out.se.resize(out.vcov.rows());
-  const double diag_tol =
-      1e-12 * std::max<double>(1.0, out.vcov.cwiseAbs().maxCoeff());
-  for (Eigen::Index i = 0; i < out.se.size(); ++i) {
-    const double v = out.vcov(i, i);
-    out.se(i) = v >= -diag_tol ? std::sqrt(std::max(0.0, v))
-                               : std::numeric_limits<double>::quiet_NaN();
-  }
-  out.chisq_standard = N_total * 2.0 * est.fmin;
-  out.df = static_cast<int>(total_rows - n_alpha);
-  return out;
+  auto out = robust_weighted_moment_ij(ij_blocks, K, 2.0 * est.fmin, A);
+  if (!out.has_value()) return std::unexpected(out.error());
+  return ordinal_result_from_weighted(*out);
 }
 
 post_expected<OrdinalRobustResult>
