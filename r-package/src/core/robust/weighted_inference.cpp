@@ -5,7 +5,9 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -344,13 +346,84 @@ build_continuous_ls_blocks(const spec::LatentStructure& pt,
   return blocks;
 }
 
+// Per-unit moment-LS gradient g(θ) = Σ_b (n_b/N)·Δ_b(θ)ᵀ W_b d_b(θ) for a
+// continuous moment-quadratic fit (d_b = model − sample, in the [μ; vech Σ]
+// metric). Finite-differenced by `continuous_ls_observed_bread` to form the
+// observed-Hessian bread; the weight W is sample-based and θ-independent.
+post_expected<Eigen::VectorXd>
+continuous_ls_gradient(const model::ModelEvaluator& ev,
+                       const data::SampleStats& samp,
+                       const gmm::Weight& weight,
+                       double N_total,
+                       const Eigen::VectorXd& theta) {
+  auto eval = ev.evaluate(theta, true, true);
+  if (!eval.has_value()) return std::unexpected(model_to_post(eval.error()));
+  if (auto v = validate_moment_shapes(samp, eval->moments); !v.has_value()) {
+    return std::unexpected(v.error());
+  }
+  const auto layout = make_layout(samp, eval->moments);
+  Eigen::VectorXd g = Eigen::VectorXd::Zero(theta.size());
+  for (std::size_t b = 0; b < samp.S.size(); ++b) {
+    auto Jb = continuous_moment_jacobian_block(layout, eval->moments,
+                                               eval->J_sigma, eval->J_mu, b);
+    if (!Jb.has_value()) return std::unexpected(Jb.error());
+    auto Wb = weight_block(weight, layout, b);
+    if (!Wb.has_value()) return std::unexpected(Wb.error());
+    const Eigen::Index p = eval->moments.sigma[b].rows();
+    const Eigen::Index pstar = vech_len(p);
+    Eigen::VectorXd d(layout.block_rows[b]);
+    Eigen::Index off = 0;
+    if (layout.has_means) {
+      const bool have_mu = b < eval->moments.mu.size() &&
+                           eval->moments.mu[b].size() == p;
+      const Eigen::VectorXd mu_model =
+          have_mu ? eval->moments.mu[b] : Eigen::VectorXd::Zero(p);
+      const Eigen::VectorXd mean_s =
+          (b < samp.mean.size() && samp.mean[b].size() == p)
+              ? samp.mean[b]
+              : Eigen::VectorXd::Zero(p);
+      d.head(p) = mu_model - mean_s;
+      off = p;
+    }
+    d.segment(off, pstar) = vech_lower(eval->moments.sigma[b] - samp.S[b]);
+    const double w_b = static_cast<double>(samp.n_obs[b]) / N_total;
+    g.noalias() += w_b * (Jb->transpose() * (*Wb) * d);
+  }
+  if (!g.allFinite()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "continuous_ls_gradient: non-finite gradient"));
+  }
+  return g;
+}
+
+post_expected<Eigen::MatrixXd>
+continuous_ls_observed_bread(const spec::LatentStructure& pt,
+                             const model::MatrixRep& rep,
+                             const data::SampleStats& samp,
+                             const Estimates& est,
+                             const gmm::Weight& weight,
+                             const Eigen::MatrixXd& K) {
+  auto ev_or = model::ModelEvaluator::build(pt, rep);
+  if (!ev_or.has_value()) return std::unexpected(model_to_post(ev_or.error()));
+  auto n = total_n(samp);
+  if (!n.has_value()) return std::unexpected(n.error());
+  const double N_total = *n;
+  const model::ModelEvaluator ev = std::move(*ev_or);
+  auto grad_at = [&](const Eigen::VectorXd& theta)
+      -> post_expected<Eigen::VectorXd> {
+    return continuous_ls_gradient(ev, samp, weight, N_total, theta);
+  };
+  return observed_moment_bread_fd(grad_at, est.theta, K);
+}
+
 post_expected<WeightedRobustResult>
 robust_continuous_ls_impl(spec::LatentStructure pt,
                           const model::MatrixRep& rep,
                           const data::SampleStats& samp,
                           const Estimates& est,
                           const gmm::Weight& weight,
-                          const std::vector<Eigen::MatrixXd>& gamma) {
+                          const std::vector<Eigen::MatrixXd>& gamma,
+                          robust::Information bread) {
   if (auto e = resolve_fixed_x_from_sample(pt, rep, samp); !e.has_value()) {
     return std::unexpected(fit_to_post(e.error()));
   }
@@ -368,7 +441,16 @@ robust_continuous_ls_impl(spec::LatentStructure pt,
   if (!chisq.has_value()) return std::unexpected(chisq.error());
   auto n = total_n(samp);
   if (!n.has_value()) return std::unexpected(n.error());
-  return robust_weighted_moments(*blocks, con_or->K(), *chisq / *n);
+
+  std::optional<Eigen::MatrixXd> bread_override;
+  if (bread == robust::Information::Observed) {
+    auto ob = continuous_ls_observed_bread(pt, rep, samp, est, weight,
+                                           con_or->K());
+    if (!ob.has_value()) return std::unexpected(ob.error());
+    bread_override = std::move(*ob);
+  }
+  return robust_weighted_moments(*blocks, con_or->K(), *chisq / *n,
+                                 bread_override);
 }
 
 post_expected<WeightedRobustResult>
@@ -377,7 +459,8 @@ robust_continuous_ls_raw_impl(spec::LatentStructure pt,
                               const data::SampleStats& samp,
                               const Estimates& est,
                               const gmm::Weight& weight,
-                              const data::RawData& raw) {
+                              const data::RawData& raw,
+                              robust::Information bread) {
   spec::LatentStructure pt_for_layout = pt;
   if (auto e = resolve_fixed_x_from_sample(pt_for_layout, rep, samp);
       !e.has_value()) {
@@ -394,7 +477,7 @@ robust_continuous_ls_raw_impl(spec::LatentStructure pt,
   auto gamma = gamma_blocks_from_raw(raw, samp, layout);
   if (!gamma.has_value()) return std::unexpected(gamma.error());
   return robust_continuous_ls_impl(std::move(pt), rep, samp, est,
-                                   weight, *gamma);
+                                   weight, *gamma, bread);
 }
 
 }  // namespace
@@ -447,10 +530,54 @@ continuous_ls_chisq(data::SampleStats samp,
   return 2.0 * *n * est.fmin;
 }
 
+post_expected<Eigen::MatrixXd>
+observed_moment_bread_fd(
+    const std::function<post_expected<Eigen::VectorXd>(const Eigen::VectorXd&)>&
+        grad_at,
+    const Eigen::VectorXd& theta_hat,
+    const Eigen::MatrixXd& K,
+    double h_rel) {
+  const Eigen::Index q = theta_hat.size();
+  if (q == 0) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "observed_moment_bread_fd: empty theta"));
+  }
+  if (K.rows() != q) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "observed_moment_bread_fd: K row count does not match theta length"));
+  }
+  if (!(h_rel > 0.0)) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "observed_moment_bread_fd: non-positive step"));
+  }
+  Eigen::MatrixXd H = Eigen::MatrixXd::Zero(q, q);
+  for (Eigen::Index k = 0; k < q; ++k) {
+    const double hk = h_rel * std::max(1.0, std::abs(theta_hat(k)));
+    Eigen::VectorXd tp = theta_hat;
+    Eigen::VectorXd tm = theta_hat;
+    tp(k) += hk;
+    tm(k) -= hk;
+    auto gp = grad_at(tp);
+    if (!gp.has_value()) return std::unexpected(gp.error());
+    auto gm = grad_at(tm);
+    if (!gm.has_value()) return std::unexpected(gm.error());
+    if (gp->size() != q || gm->size() != q) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "observed_moment_bread_fd: gradient length mismatch"));
+    }
+    H.col(k) = (*gp - *gm) / (2.0 * hk);
+  }
+  H = 0.5 * (H + H.transpose()).eval();
+  Eigen::MatrixXd Halpha = K.transpose() * H * K;
+  Halpha = 0.5 * (Halpha + Halpha.transpose()).eval();
+  return Halpha;
+}
+
 post_expected<WeightedRobustResult>
 robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
                         const Eigen::MatrixXd& K,
-                        double fmin) {
+                        double fmin,
+                        const std::optional<Eigen::MatrixXd>& bread_override) {
   if (blocks.empty()) {
     return std::unexpected(make_err(PostError::Kind::NumericIssue,
         "robust_weighted_moments: no moment blocks supplied"));
@@ -509,7 +636,17 @@ robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
     off += mb;
   }
 
-  Eigen::MatrixXd A = Dtilde.transpose() * W * Dtilde;
+  Eigen::MatrixXd A;
+  if (bread_override.has_value()) {
+    if (bread_override->rows() != n_alpha || bread_override->cols() != n_alpha) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          "robust_weighted_moments: bread_override shape does not match the "
+          "reduced parameter count"));
+    }
+    A = *bread_override;
+  } else {
+    A = Dtilde.transpose() * W * Dtilde;
+  }
   A = 0.5 * (A + A.transpose()).eval();
   auto A_inv_or = inverse_sym_pd(A, "robust_weighted_moments bread");
   if (!A_inv_or.has_value()) return std::unexpected(A_inv_or.error());
@@ -604,9 +741,10 @@ robust_continuous_ls(spec::LatentStructure pt,
                      const data::SampleStats& samp,
                      const Estimates& est,
                      const gmm::Weight& weight,
-                     const std::vector<Eigen::MatrixXd>& gamma) {
+                     const std::vector<Eigen::MatrixXd>& gamma,
+                     robust::Information bread) {
   return robust_continuous_ls_impl(std::move(pt), rep, samp, est,
-                                   weight, gamma);
+                                   weight, gamma, bread);
 }
 
 post_expected<WeightedRobustResult>
@@ -615,9 +753,10 @@ robust_continuous_ls(spec::LatentStructure pt,
                      const data::SampleStats& samp,
                      const Estimates& est,
                      const gmm::Weight& weight,
-                     const data::RawData& raw) {
+                     const data::RawData& raw,
+                     robust::Information bread) {
   return robust_continuous_ls_raw_impl(std::move(pt), rep, samp, est,
-                                       weight, raw);
+                                       weight, raw, bread);
 }
 
 post_expected<robust::ParamSpaceSandwich>

@@ -1692,28 +1692,30 @@ BEGIN_RCPP
 END_RCPP
 }
 // infer_ordinal_robust
-Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats, std::string weight);
-RcppExport SEXP _magmaan_infer_ordinal_robust(SEXP fitSEXP, SEXP ordinal_statsSEXP, SEXP weightSEXP) {
+Rcpp::List infer_ordinal_robust(Rcpp::List fit, Rcpp::List ordinal_stats, std::string weight, std::string bread);
+RcppExport SEXP _magmaan_infer_ordinal_robust(SEXP fitSEXP, SEXP ordinal_statsSEXP, SEXP weightSEXP, SEXP breadSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type ordinal_stats(ordinal_statsSEXP);
     Rcpp::traits::input_parameter< std::string >::type weight(weightSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_ordinal_robust(fit, ordinal_stats, weight));
+    Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_ordinal_robust(fit, ordinal_stats, weight, bread));
     return rcpp_result_gen;
 END_RCPP
 }
 // infer_mixed_ordinal_robust
-Rcpp::List infer_mixed_ordinal_robust(Rcpp::List fit, Rcpp::List mixed_stats, std::string weight);
-RcppExport SEXP _magmaan_infer_mixed_ordinal_robust(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP weightSEXP) {
+Rcpp::List infer_mixed_ordinal_robust(Rcpp::List fit, Rcpp::List mixed_stats, std::string weight, std::string bread);
+RcppExport SEXP _magmaan_infer_mixed_ordinal_robust(SEXP fitSEXP, SEXP mixed_statsSEXP, SEXP weightSEXP, SEXP breadSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< Rcpp::List >::type fit(fitSEXP);
     Rcpp::traits::input_parameter< Rcpp::List >::type mixed_stats(mixed_statsSEXP);
     Rcpp::traits::input_parameter< std::string >::type weight(weightSEXP);
-    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_robust(fit, mixed_stats, weight));
+    Rcpp::traits::input_parameter< std::string >::type bread(breadSEXP);
+    rcpp_result_gen = Rcpp::wrap(infer_mixed_ordinal_robust(fit, mixed_stats, weight, bread));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2572,8 +2574,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_magmaan_infer_empirical_gamma", (DL_FUNC) &_magmaan_infer_empirical_gamma, 1},
     {"_magmaan_infer_gamma_nt", (DL_FUNC) &_magmaan_infer_gamma_nt, 1},
     {"_magmaan_infer_empirical_gamma_with_means", (DL_FUNC) &_magmaan_infer_empirical_gamma_with_means, 1},
-    {"_magmaan_infer_ordinal_robust", (DL_FUNC) &_magmaan_infer_ordinal_robust, 3},
-    {"_magmaan_infer_mixed_ordinal_robust", (DL_FUNC) &_magmaan_infer_mixed_ordinal_robust, 3},
+    {"_magmaan_infer_ordinal_robust", (DL_FUNC) &_magmaan_infer_ordinal_robust, 4},
+    {"_magmaan_infer_mixed_ordinal_robust", (DL_FUNC) &_magmaan_infer_mixed_ordinal_robust, 4},
     {"_magmaan_infer_robust_se", (DL_FUNC) &_magmaan_infer_robust_se, 5},
     {"_magmaan_infer_robust_se_parts", (DL_FUNC) &_magmaan_infer_robust_se_parts, 7},
     {"_magmaan_infer_robust_se_raw", (DL_FUNC) &_magmaan_infer_robust_se_raw, 5},

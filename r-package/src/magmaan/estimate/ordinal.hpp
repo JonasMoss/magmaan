@@ -106,7 +106,8 @@ robust_ordinal(spec::LatentStructure pt,
                const Estimates& est,
                OrdinalWeightKind weights,
                OrdinalParameterization parameterization =
-                   OrdinalParameterization::Delta);
+                   OrdinalParameterization::Delta,
+               robust::Information bread = robust::Information::Expected);
 
 post_expected<OrdinalRobustResult>
 robust_ordinal(spec::LatentStructure pt,
@@ -123,7 +124,8 @@ robust_mixed_ordinal(spec::LatentStructure pt,
                      const Estimates& est,
                      OrdinalWeightKind weights,
                      OrdinalParameterization parameterization =
-                         OrdinalParameterization::Delta);
+                         OrdinalParameterization::Delta,
+                     robust::Information bread = robust::Information::Expected);
 
 post_expected<OrdinalRobustResult>
 robust_mixed_ordinal(spec::LatentStructure pt,

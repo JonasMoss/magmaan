@@ -205,6 +205,33 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     Binning `u` was considered and rejected: it would perturb the
     polyserial/polychoric estimate and break lavaan parity.
 
+## Misspecification-robust SE for the moment-quadratic family (frontier)
+
+- **Done 2026-06-19.** Observed-Hessian ("robust" regime) bread for the
+  moment-quadratic estimators (ordinal DWLS/WLSMV/ULSMV, mixed/polyserial,
+  continuous ULS/GLS/WLS), which previously had only the Gauss-Newton/expected
+  bread. Built as `observed_moment_bread_fd` (central-difference of the per-unit
+  moment-LS gradient, reduced via `K`) injected as an optional `bread_override`
+  into `robust_weighted_moments`; the meat (NACOV), df, and chi-square are
+  unchanged. Selector `bread = "expected" | "observed"` (reusing
+  `robust::Information`) threaded through `robust_ordinal` / `robust_mixed_ordinal`
+  / `robust_continuous_ls`, surfaced in R as `vcov(fit, regime = "model" |
+  "robust")`, which feeds `standardized(fit, vcov)`. Continuous ML/FIML already
+  had the observed bread (unchanged). Default stays `expected` (lavaan parity).
+  Validation: experiment 35 (`35-misspec-robust-se`) -- under the correct model
+  the two breads coincide and both match the empirical sampling SD; under an
+  omitted cross-loading the expected bread underestimates (~0.86 of truth) and
+  the observed bread recovers it (~0.96). Note:
+  `docs/research/notes/misspec_observed_bread.tex`. This is `frontier`, not core
+  parity: no mainstream library exposes an observed-Hessian bread for the
+  ordinal/WLS family, so the correct-model cell is the validation oracle.
+  Open follow-ups: an analytic moment-Hessian (FD-vs-analytic gate); a
+  continuous-LS R `bread` binding for `vcov(fit, regime=)` (currently routes
+  continuous through `robust_se_raw_fit`); the standardized-loading amplification
+  case (the focal in exp 35 is a covariance and barely amplifies); the single-
+  source-of-truth refactor of `ordinal_block_residual` (currently mirrors
+  `ordinal_residuals`).
+
 ## Robust score / modification-index tests (frontier)
 
 `inference::frontier::{modification_indices,score_tests}_robust` has landed for

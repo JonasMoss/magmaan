@@ -16,6 +16,40 @@ standardized <- function(fit, vcov, type = c("all", "lv")) {
   magmaan_core$measures_standardize_lv(fit, vcov)
 }
 
+# Parameter covariance under an explicit SE regime. `regime = "model"` uses the
+# expected / Gauss-Newton bread (efficient when the model is correct; the
+# robust.sem / WLSMV-style default); `regime = "robust"` uses the observed-Hessian
+# bread (misspecification-robust; the robust.huber.white / MLR analogue). Both
+# use the same empirical meat, so they differ ONLY in the bread and coincide as
+# the model approaches correct specification. Feed the result into
+# standardized(fit, vcov) to carry the regime choice into SE(beta).
+vcov.magmaan_fit <- function(object, regime = c("model", "robust"),
+                             data = NULL, ...) {
+  regime <- match.arg(regime)
+  bread <- if (identical(regime, "robust")) "observed" else "expected"
+  fit <- object
+  if (isTRUE(fit$ordinal)) {
+    stats <- fit$ordinal_stats
+    if (is.null(stats)) {
+      stop("vcov(): ordinal fit does not carry $ordinal_stats")
+    }
+    return(magmaan_core$robust_ordinal(fit, stats, "", bread)$vcov)
+  }
+  if (isTRUE(fit$mixed_ordinal)) {
+    stats <- fit$mixed_ordinal_stats
+    if (is.null(stats)) {
+      stop("vcov(): mixed fit does not carry $mixed_ordinal_stats")
+    }
+    return(magmaan_core$robust_mixed_ordinal(fit, stats, "", bread)$vcov)
+  }
+  if (is.null(data)) {
+    stop("vcov(): continuous fits need `data` (raw observations) for the ",
+         "empirical-meat sandwich")
+  }
+  magmaan_core$robust_se_raw_fit(fit, raw_data_arg(fit, data),
+                                 bread = bread)$vcov
+}
+
 composite_weights <- function(fit, vcov) {
   if (missing(vcov)) {
     stop("composite_weights(): `vcov` is required; compute it explicitly before calling")

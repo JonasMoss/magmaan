@@ -2,6 +2,8 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <optional>
 #include <vector>
 
 #include <Eigen/Core>
@@ -41,10 +43,35 @@ struct WeightedRobustResult {
   robust::ScaledShiftedResult scaled_shifted;
 };
 
+// Misspecification-robust ("observed-Hessian") bread for a moment-quadratic
+// fit, in the K-reduced parameter space. Central-differences the per-unit
+// moment-LS gradient
+//   g(θ) = Σ_b (n_b/N)·Δ_b(θ)ᵀ W_b d_b(θ),   d_b(θ) = σ_b(θ) − s_b
+// supplied by `grad_at` (full free-θ, length q = theta_hat.size()), forms the
+// θ-space Hessian by finite difference, then reduces it to H_α = Kᵀ·H_θ·K
+// (n_alpha × n_alpha) so it can be passed to `robust_weighted_moments` as
+// `bread_override`. It reduces to the Gauss-Newton bread Δ'WΔ as the residual
+// → 0 (correct specification). `h_rel` sets the relative central-difference
+// step h_k = h_rel·max(1, |θ_k|).
+post_expected<Eigen::MatrixXd>
+observed_moment_bread_fd(
+    const std::function<post_expected<Eigen::VectorXd>(const Eigen::VectorXd&)>&
+        grad_at,
+    const Eigen::VectorXd& theta_hat,
+    const Eigen::MatrixXd& K,
+    double h_rel = 1e-4);
+
+// `bread_override`, when set, replaces the Gauss-Newton bread A = D̃ᵀWD̃ with
+// the supplied n_alpha × n_alpha matrix (e.g. the observed-Hessian bread from
+// `observed_moment_bread_fd`) in both the sandwich vcov and the U-factor. The
+// meat (Γ/NACOV) is unchanged. Default (nullopt) ⇒ the existing expected /
+// Gauss-Newton path, byte-for-byte.
 post_expected<WeightedRobustResult>
 robust_weighted_moments(const std::vector<WeightedMomentBlock>& blocks,
                         const Eigen::MatrixXd& K,
-                        double fmin);
+                        double fmin,
+                        const std::optional<Eigen::MatrixXd>& bread_override =
+                            std::nullopt);
 
 // Parameter-space sandwich {A1, B1} in the moment metric, the LS counterpart
 // of `robust::param_space_sandwich`: per-unit bread A1 = Σ_b (n_b/N)·Δ_bᵀW_bΔ_b
@@ -133,7 +160,8 @@ robust_continuous_ls(spec::LatentStructure pt,
                      const data::SampleStats& samp,
                      const Estimates& est,
                      const gmm::Weight& weight,
-                     const std::vector<Eigen::MatrixXd>& gamma);
+                     const std::vector<Eigen::MatrixXd>& gamma,
+                     robust::Information bread = robust::Information::Expected);
 
 post_expected<WeightedRobustResult>
 robust_continuous_ls(spec::LatentStructure pt,
@@ -141,6 +169,7 @@ robust_continuous_ls(spec::LatentStructure pt,
                      const data::SampleStats& samp,
                      const Estimates& est,
                      const gmm::Weight& weight,
-                     const data::RawData& raw);
+                     const data::RawData& raw,
+                     robust::Information bread = robust::Information::Expected);
 
 }  // namespace magmaan::estimate
