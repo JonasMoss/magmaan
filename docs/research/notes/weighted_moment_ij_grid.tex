@@ -148,6 +148,35 @@ This is the full-WLS target. The new ingredient is the full matrix influence
 $\dot\Gamma_i$, not only its diagonal. A correct implementation must preserve
 symmetry and include all channels by which the stage-1 sandwich changes.
 
+For complete continuous WLS/ADF, write $x_i=y_i-\bar y$ and
+$c_i=\vech(x_ix_i\T)-\vech(S_N)$. The moment-influence row is
+$z_i=c_i$ without meanstructure and $z_i=(x_i\T,c_i\T)\T$ with
+meanstructure, so
+\[
+  \hat\Gamma = \frac1N\sum_{j=1}^N z_jz_j\T .
+\]
+Under an infinitesimal case-weight perturbation at case $i$, set $h=x_i$.
+The exact finite-sample derivative is
+\begin{equation}\label{eq:continuous-adf-gamma-if}
+  \dot\Gamma_i
+  =
+  z_i z_i\T - \hat\Gamma
+  + \frac1N\sum_{j=1}^N
+      \left\{\dot z_j(h) z_j\T + z_j\dot z_j(h)\T\right\}.
+\end{equation}
+If mean rows are present, $\dot z_{j,\mu}(h)=-h$. For the covariance
+component indexed by the lower-triangle pair $(a,b)$,
+\[
+  \dot z_{j,ab}(h)=-(h_a x_{jb}+x_{ja}h_b).
+\]
+The derivative of the subtracted covariance $S_N$ is constant across $j$ and
+therefore drops from \eqref{eq:continuous-adf-gamma-if} because
+$N^{-1}\sum_j z_j=0$. The implemented continuous WLS correction uses
+$d\T W\dot\Gamma_iW$ in row form and is regression-tested against central
+finite differences of the contaminated empirical weight
+$\hat W_\epsilon=\hat\Gamma_\epsilon^{-1}$, including the stacked
+mean--covariance cross-block.
+
 \subsection{DLS and mixed weights}
 
 For a Browne-style mixture
@@ -215,12 +244,14 @@ observed-bread sandwich using raw moment influence rows. This slice has landed
 as the fixed-weight continuous-LS IJ helper. The sample-built GLS
 normal-theory-weight slice has also landed: this is a moment-quadratic
 estimated-weight correction, not ordinary ML/FIML robust-score normal-theory
-inference. DWLS, WLS, and DLS remain estimated-weight targets if their weights
-are built from sample moments rather than held fixed by the caller. The raw
-mean/covariance $g_i$ is analytic; the remaining weight derivatives are
-empirical $\Gamma$ derivatives or mixtures with
-$\Gamma_{\mathrm{NT}}(\mu,\Sigma)$. This remains the cheapest place to verify
-the full-WLS matrix formula.
+inference. The complete-data WLS/ADF empirical-weight slice has also landed,
+using \eqref{eq:continuous-adf-gamma-if} for the full dense
+$\dot\Gamma_i$ and a finite-difference contamination gate for both
+covariance-only and meanstructure layouts. DWLS and DLS remain
+estimated-weight targets if their weights are built from sample moments rather
+than held fixed by the caller. The raw mean/covariance $g_i$ is analytic; the
+remaining weight derivatives are diagonal empirical $\Gamma$ derivatives or
+mixtures with $\Gamma_{\mathrm{NT}}(\mu,\Sigma)$.
 
 \paragraph{Two-stage FIML (ML2S).}
 Stage 1 supplies saturated EM moments and their ACOV. The required new object is

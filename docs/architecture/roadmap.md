@@ -1332,7 +1332,10 @@ stop rather than any usable non-error return.
   ULS and caller-fixed weights, plus `robust_continuous_ls_gls_ij`, which adds
   the Hall-Inoue correction for the sample-built normal-theory GLS weight
   (`gmm::normal_theory_weight`). This GLS item is separate from the ML/FIML
-  robust-score normal-theory path.
+  robust-score normal-theory path. Complete continuous WLS/ADF now has
+  `robust_continuous_ls_wls_ij`, which rebuilds the dense empirical-Gamma
+  weight from complete raw-data moment rows and carries the full
+  estimated-weight influence, including meanstructure third-moment cross-blocks.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
   parameterization-agnostic transforms operate over the
