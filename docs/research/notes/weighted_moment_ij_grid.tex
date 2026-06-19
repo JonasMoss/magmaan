@@ -32,7 +32,7 @@
 \section*{Purpose}
 
 This note fixes the algebra for extending \texttt{robust\_weighted\_moment\_ij}
-beyond complete all-ordinal ULS/DWLS. The target is the actual estimator whose
+beyond complete all-ordinal ULS/DWLS/WLS. The target is the actual estimator whose
 second-stage weight is built from the data. The companion note
 \path{misspec_observed_bread.tex} derives the observed-Hessian bread and the
 complete all-ordinal diagonal-weight case. Here the goal is the general formula,
@@ -148,7 +148,7 @@ Let $\hat W=\hat\Gamma^{-1}$. Matrix inverse differentiation gives
   \qquad
   v_i = Wg_i + W\dot\Gamma_i Wd .
 \]
-This is the full-WLS target. The new ingredient is the full matrix influence
+This is the full-WLS target. The required ingredient is the full matrix influence
 $\dot\Gamma_i$, not only its diagonal. A correct implementation must preserve
 symmetry and include all channels by which the stage-1 sandwich changes.
 
@@ -230,18 +230,22 @@ $\kappa$, add
   \dot\Gamma_i^{\kappa} =
   \left[\frac{\partial \Gamma}{\partial\kappa}\right] g_i .
 \]
-The all-ordinal diagonal path now computes the diagonal of
+The all-ordinal path now computes
 $\dot\Gamma_i^{\mathrm{direct}}$ from integer data and the diagonal of
-$\dot\Gamma_i^\kappa$ by finite differences. Full WLS needs the full matrices.
+$\dot\Gamma_i^\kappa$ by finite differences for DWLS. Full WLS uses the dense
+matrix $\dot\Gamma_i^{\mathrm{direct}}+\dot\Gamma_i^\kappa$ with the row
+correction $d\T W\dot\Gamma_i W$.
 
 \section{Implementation grid}
 
 \paragraph{Complete all-ordinal.}
-ULS and DWLS are implemented for complete integer data. ULS is covered by
-Corollary~\ref{cor:fixed}. DWLS uses the diagonal formula above. Full WLS needs
-the full $\dot\Gamma_i$ matrix and should be gated by three tests: full-WLS
-finite IJ against a resampling jackknife, diagonal extraction matching the DWLS
-path, and ULS/fixed-weight reduction.
+ULS, DWLS, and WLS are implemented for complete integer data. ULS is covered by
+Corollary~\ref{cor:fixed}. DWLS uses the diagonal formula above. Full WLS uses
+the full $\dot\Gamma_i$ matrix in the dense inverse-weight derivative. The dense
+data-direct channel is gated against case-weight finite differences of the full
+NACOV matrix; its diagonal extraction is also checked against the DWLS helper.
+A deterministic resampling-jackknife fixture and misspecification simulation
+remain useful higher-level checks.
 
 \paragraph{Complete mixed ordinal/polyserial.}
 The same equations apply, but $g_i$ and $\dot\Gamma_i$ must cover continuous

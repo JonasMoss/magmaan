@@ -284,6 +284,26 @@ Eigen::VectorXd finite_diff_gamma_diag_case_influence(
   return (Gamma_eps.diagonal() - Gamma.diagonal()) / eps;
 }
 
+Eigen::MatrixXd finite_diff_gamma_case_influence(
+    const GammaDiagInfluenceProbe& probe,
+    Eigen::Index row,
+    double eps = 1e-6) {
+  const Eigen::Index n = probe.SC.rows();
+  const Eigen::MatrixXd A = probe.B / static_cast<double>(n);
+  const Eigen::MatrixXd V =
+      (probe.SC.transpose() * probe.SC) / static_cast<double>(n);
+  const Eigen::MatrixXd A_inv = A.inverse();
+  const Eigen::MatrixXd Gamma = A_inv * V * A_inv.transpose();
+  const Eigen::VectorXd s_i = probe.SC.row(row).transpose();
+  const Eigen::MatrixXd A_eps =
+      A + eps * (probe.b_case[static_cast<std::size_t>(row)] - A);
+  const Eigen::MatrixXd V_eps = V + eps * (s_i * s_i.transpose() - V);
+  const Eigen::MatrixXd A_eps_inv = A_eps.inverse();
+  const Eigen::MatrixXd Gamma_eps =
+      A_eps_inv * V_eps * A_eps_inv.transpose();
+  return (Gamma_eps - Gamma) / eps;
+}
+
 double symmetric_condition_number(const Eigen::MatrixXd& x) {
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(0.5 * (x + x.transpose()));
   if (es.info() != Eigen::Success || !es.eigenvalues().allFinite()) {
@@ -2667,7 +2687,59 @@ TEST_CASE("ordinal_gamma_diag_data_influence matches case-weight finite differen
   CHECK(max_abs < 5e-5 * scale);
 }
 
-TEST_CASE("robust_ordinal_ij rejects DWLS stats without complete integer data") {
+TEST_CASE("ordinal_gamma_data_influence matches case-weight finite differences") {
+  Eigen::MatrixXd counts(3, 3);
+  counts << 11, 7, 5,
+             6, 14, 9,
+             4, 10, 12;
+  const Eigen::MatrixXd X = ordinal_data_from_pair_counts(counts);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X});
+  REQUIRE(stats.has_value());
+  Eigen::MatrixXi Xcat = (X.cast<int>().array() - 1).matrix();
+
+  auto IFG = magmaan::data::ordinal_gamma_data_influence(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  REQUIRE(IFG.has_value());
+  auto IFG_diag = magmaan::data::ordinal_gamma_diag_data_influence(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  REQUIRE(IFG_diag.has_value());
+  auto D = magmaan::data::ordinal_gamma_jacobian_fd(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  REQUIRE(D.has_value());
+  auto D_diag = magmaan::data::ordinal_gamma_diag_jacobian_fd(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  REQUIRE(D_diag.has_value());
+
+  const Eigen::Index m = stats->NACOV[0].rows();
+  REQUIRE(IFG->cols() == m * m);
+  REQUIRE(D->rows() == m * m);
+  auto probe = gamma_diag_influence_probe_2var(
+      Xcat, stats->n_levels[0], stats->thresholds[0], stats->R[0]);
+  CHECK((probe.Gamma - stats->NACOV[0]).cwiseAbs().maxCoeff() < 1e-8);
+
+  double max_abs = 0.0;
+  double max_diag = 0.0;
+  for (Eigen::Index i = 0; i < X.rows(); ++i) {
+    const Eigen::MatrixXd fd = finite_diff_gamma_case_influence(probe, i);
+    const Eigen::VectorXd got_vec = IFG->row(i).transpose();
+    const Eigen::Map<const Eigen::MatrixXd> got(got_vec.data(), m, m);
+    max_abs = std::max(max_abs, (got - fd).cwiseAbs().maxCoeff());
+    max_diag = std::max(
+        max_diag, (got.diagonal() - IFG_diag->row(i).transpose())
+                      .cwiseAbs().maxCoeff());
+  }
+  for (Eigen::Index l = 0; l < m; ++l) {
+    const Eigen::Map<const Eigen::MatrixXd> dG(D->col(l).data(), m, m);
+    max_diag = std::max(
+        max_diag, (dG.diagonal() - D_diag->col(l)).cwiseAbs().maxCoeff());
+  }
+
+  const double scale = 1.0 + IFG->cwiseAbs().maxCoeff();
+  CHECK(max_abs < 5e-5 * scale);
+  CHECK(max_diag < 1e-8 * scale);
+}
+
+TEST_CASE("robust_ordinal_ij rejects estimated-weight stats without complete integer data") {
   Eigen::MatrixXd counts(3, 3);
   counts << 11, 7, 5,
              6, 14, 9,
@@ -2685,10 +2757,12 @@ TEST_CASE("robust_ordinal_ij rejects DWLS stats without complete integer data") 
   REQUIRE(mr.has_value());
 
   magmaan::estimate::Estimates est;
-  auto r = magmaan::estimate::robust_ordinal_ij(
-      *pt, *mr, *stats, est, magmaan::estimate::OrdinalWeightKind::DWLS);
-  REQUIRE_FALSE(r.has_value());
-  CHECK(r.error().detail.find("int_data") != std::string::npos);
+  for (const auto weight : {magmaan::estimate::OrdinalWeightKind::DWLS,
+                            magmaan::estimate::OrdinalWeightKind::WLS}) {
+    auto r = magmaan::estimate::robust_ordinal_ij(*pt, *mr, *stats, est, weight);
+    REQUIRE_FALSE(r.has_value());
+    CHECK(r.error().detail.find("int_data") != std::string::npos);
+  }
 }
 
 TEST_CASE("robust_ordinal_ij ULS matches observed-bread fixed-weight sandwich") {
@@ -2741,6 +2815,62 @@ TEST_CASE("robust_ordinal_ij ULS matches observed-bread fixed-weight sandwich") 
   CHECK(ij->chisq_standard == doctest::Approx(fixed->chisq_standard));
   CHECK(ij->vcov.isApprox(fixed->vcov, 1e-8));
   CHECK(ij->se.isApprox(fixed->se, 1e-8));
+}
+
+TEST_CASE("robust_ordinal_ij WLS carries dense estimated-weight channel") {
+  const Eigen::MatrixXd X =
+      ordinal_test_block(20260620, 420, {0.82, 0.76, 0.70, 0.64}, -0.45, 0.55);
+  auto stats = magmaan::data::ordinal_stats_from_integer_data({X}, true);
+  REQUIRE(stats.has_value());
+  REQUIRE(stats->W_wls.size() == 1);
+  REQUIRE(stats->W_wls[0].size() > 0);
+
+  const char* syntax =
+      "f =~ x1 + x2 + x3 + x4\n"
+      "x1 | t1 + t2\n"
+      "x2 | t1 + t2\n"
+      "x3 | t1 + t2\n"
+      "x4 | t1 + t2\n"
+      "x1 ~*~ 1*x1\n"
+      "x2 ~*~ 1*x2\n"
+      "x3 ~*~ 1*x3\n"
+      "x4 ~*~ 1*x4\n";
+  auto fp = magmaan::parse::Parser::parse(syntax);
+  REQUIRE(fp.has_value());
+  auto pt = magmaan::spec::build(*fp);
+  REQUIRE(pt.has_value());
+  auto mr = magmaan::model::build_matrix_rep(*pt);
+  REQUIRE(mr.has_value());
+  auto x0 = magmaan::estimate::ordinal_start_values(*pt, *mr, *stats, {});
+  REQUIRE(x0.has_value());
+
+  magmaan::optim::OptimOptions opts;
+  opts.max_iter = 1500;
+  opts.ftol = 1e-12;
+  opts.gtol = 1e-8;
+  auto fit = magmaan::estimate::fit_ordinal_bounded(
+      *pt, *mr, *stats, {}, magmaan::estimate::OrdinalWeightKind::WLS, *x0,
+      magmaan::estimate::Backend::NloptLbfgs, opts);
+  REQUIRE_MESSAGE(fit.has_value(),
+      "WLS fit failed: " << (fit.has_value() ? "" : fit.error().detail));
+
+  auto fixed = magmaan::estimate::robust_ordinal(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::WLS,
+      magmaan::estimate::OrdinalParameterization::Delta,
+      magmaan::robust::Information::Observed);
+  auto ij = magmaan::estimate::robust_ordinal_ij(
+      *pt, *mr, *stats, *fit, magmaan::estimate::OrdinalWeightKind::WLS);
+  REQUIRE_MESSAGE(fixed.has_value(),
+      "fixed WLS robust failed: "
+          << (fixed.has_value() ? "" : fixed.error().detail));
+  REQUIRE_MESSAGE(ij.has_value(),
+      "WLS IJ robust failed: " << (ij.has_value() ? "" : ij.error().detail));
+  CHECK(ij->df == fixed->df);
+  CHECK(ij->chisq_standard == doctest::Approx(fixed->chisq_standard));
+  CHECK(ij->vcov.rows() == fixed->vcov.rows());
+  CHECK(ij->vcov.cols() == fixed->vcov.cols());
+  CHECK(ij->vcov.allFinite());
+  CHECK(ij->se.allFinite());
 }
 
 TEST_CASE("Observed ordinal stats expose overlap counts and nominal gamma variant") {
