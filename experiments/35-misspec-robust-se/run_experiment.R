@@ -1,15 +1,15 @@
 #!/usr/bin/env Rscript
-# Misspecification-robust standard errors for ordinal DWLS: does the
-# observed-Hessian bread ("robust" regime) track the empirical sampling SD when
-# the model is wrong, while the expected / Gauss-Newton bread ("model" regime)
-# underestimates it -- and do the two coincide when the model is correct?
-#
-# Both regimes use the SAME (empirical NACOV) meat, so they differ ONLY in the
-# bread. We report the raw focal parameter and its standardized counterpart.
+# Does the observed-Hessian bread ("robust" regime) recover the true sampling SD
+# of a focal loading when the structural model is wrong, while the expected /
+# Gauss-Newton bread ("model" regime) underestimates it -- and do the two
+# coincide when the model is correct? We look at the raw loading AND its
+# standardized counterpart, for continuous ML and ordinal DWLS on the same
+# latent design. Both regimes use the SAME (empirical) meat, so they differ ONLY
+# in the bread.
 #
 # Usage:
-#   Rscript run_experiment.R [--reps 300] [--n-total 1000]
-#                            [--cross 0.3] [--seed-base S] [--smoke]
+#   Rscript run_experiment.R [--reps 250] [--n-total 600]
+#                            [--cross 0.4] [--seed-base S] [--smoke]
 
 .support_helpers <- function() {
   args <- commandArgs(trailingOnly = FALSE)
@@ -27,7 +27,7 @@ source(.support_helpers())
 rm(.support_helpers)
 
 parse_args <- function(args) {
-  out <- list(reps = 300L, n_total = 1000L, cross = 0.3,
+  out <- list(reps = 250L, n_total = 600L, cross = 0.4,
               seed_base = 20260619L, smoke = FALSE)
   i <- 1L
   while (i <= length(args)) {
@@ -52,7 +52,7 @@ parse_args <- function(args) {
     } else { stop("unknown argument: ", a, call. = FALSE) }
     i <- i + 1L
   }
-  if (out$smoke) { out$reps <- 30L; out$n_total <- 500L }
+  if (out$smoke) { out$reps <- 30L; out$n_total <- 400L }
   if (!is.finite(out$reps) || out$reps < 2L) stop("--reps must be >= 2")
   if (!is.finite(out$n_total) || out$n_total < 120L) stop("--n-total >= 120")
   out
@@ -64,100 +64,113 @@ require_pkg("magmaan")
 suppressPackageStartupMessages(library(magmaan))
 res_dir <- ensure_results_dir()
 
-ov <- paste0("x", 1:6)
-thresholds <- c(-0.8, 0.0, 0.8)        # four-category items
+ov <- paste0("y", 1:6)
+thresholds <- c(-0.8, 0.0, 0.8)
 loading <- 0.7
-fcor <- 0.3                            # true f1<->f2 correlation
-model <- "f1 =~ x1 + x2 + x3\nf2 =~ x4 + x5 + x6"
+fcor <- 0.3
+model <- "f1 =~ y1 + y2 + y3\nf2 =~ y4 + y5 + y6"
+focal <- list(lhs = "f2", op = "=~", rhs = "y5")  # free loading on the distorted factor
 
-# Data-generating model: a clean two-factor thresholded-normal CFA, optionally
-# with a cross-loading of x4 on f1 (`cross`). The fitted model never includes
-# that cross-loading, so `cross > 0` is a (Stage-2) structural misspecification
-# while latent normality holds exactly.
-gen <- function(n, cross) {
+# Latent design: a clean two-factor model, optionally with a cross-loading of y4
+# on f1 (`cross`) that the fitted model omits. The fitted model never includes
+# the cross-loading, so `cross > 0` is a Stage-2 structural misspecification; the
+# latent-normal measurement model is correct throughout. `gen_z` returns the
+# continuous indicators; the ordinal arm thresholds them into four categories.
+gen_z <- function(n, cross) {
   f1 <- rnorm(n)
   f2 <- fcor * f1 + sqrt(1 - fcor^2) * rnorm(n)
-  resid_sd <- function(load) sqrt(max(1e-3, 1 - load^2))
-  x4_resid <- sqrt(max(1e-3, 1 - cross^2 - loading^2))
+  rsd <- sqrt(max(1e-3, 1 - loading^2))
+  y4sd <- sqrt(max(1e-3, 1 - cross^2 - loading^2))
   z <- cbind(
-    loading * f1 + rnorm(n, sd = resid_sd(loading)),
-    loading * f1 + rnorm(n, sd = resid_sd(loading)),
-    loading * f1 + rnorm(n, sd = resid_sd(loading)),
-    cross * f1 + loading * f2 + rnorm(n, sd = x4_resid),
-    loading * f2 + rnorm(n, sd = resid_sd(loading)),
-    loading * f2 + rnorm(n, sd = resid_sd(loading)))
+    loading * f1 + rnorm(n, sd = rsd), loading * f1 + rnorm(n, sd = rsd),
+    loading * f1 + rnorm(n, sd = rsd),
+    cross * f1 + loading * f2 + rnorm(n, sd = y4sd),
+    loading * f2 + rnorm(n, sd = rsd), loading * f2 + rnorm(n, sd = rsd))
+  colnames(z) <- ov
+  z
+}
+as_continuous <- function(z) as.data.frame(z)
+as_ordinal <- function(z) {
   d <- as.data.frame(lapply(seq_len(6), function(j)
     ordered(cut(z[, j], c(-Inf, thresholds, Inf), labels = FALSE))))
   names(d) <- ov
   d
 }
 
-focal_index <- function(fit) {
+focal_free <- function(fit) {
   pt <- fit$partable
-  row <- which(pt$op == "~~" & pt$lhs == "f1" & pt$rhs == "f2")
-  list(row = row, free = pt$free[row])
+  r <- which(pt$lhs == focal$lhs & pt$op == focal$op & pt$rhs == focal$rhs)
+  list(row = r, free = pt$free[r])
 }
 
-one_rep <- function(n, cross, seed) {
+one_rep <- function(estimator, n, cross, seed) {
   set.seed(seed)
-  d <- gen(n, cross)
-  fit <- tryCatch(magmaan::magmaan(model, d, estimator = "DWLS", ordered = ov),
-                  error = function(e) NULL)
+  z <- gen_z(n, cross)
+  if (estimator == "ML") {
+    d <- as_continuous(z)
+    fit <- tryCatch(magmaan::magmaan(model, d, estimator = "ML"),
+                    error = function(e) NULL)
+  } else {
+    d <- as_ordinal(z)
+    fit <- tryCatch(magmaan::magmaan(model, d, estimator = "DWLS", ordered = ov),
+                    error = function(e) NULL)
+  }
   if (is.null(fit) || !isTRUE(fit$converged)) return(NULL)
-  fx <- focal_index(fit)
+  fx <- focal_free(fit)
   if (!length(fx$row) || is.na(fx$free) || fx$free < 1) return(NULL)
-  Vm <- tryCatch(vcov(fit, regime = "model"), error = function(e) NULL)
-  Vr <- tryCatch(vcov(fit, regime = "robust"), error = function(e) NULL)
+  data_arg <- if (estimator == "ML") d else NULL
+  Vm <- tryCatch(vcov(fit, regime = "model", data = data_arg), error = function(e) NULL)
+  Vr <- tryCatch(vcov(fit, regime = "robust", data = data_arg), error = function(e) NULL)
   if (is.null(Vm) || is.null(Vr)) return(NULL)
-  fi <- fx$free
   sm <- tryCatch(magmaan::standardized(fit, Vm, type = "all"), error = function(e) NULL)
   sr <- tryCatch(magmaan::standardized(fit, Vr, type = "all"), error = function(e) NULL)
+  if (is.null(sm) || is.null(sr)) return(NULL)
+  fi <- fx$free
   out <- data.frame(
-    est_raw = fit$partable$est[fx$row],
-    se_model_raw = sqrt(Vm[fi, fi]),
-    se_robust_raw = sqrt(Vr[fi, fi]),
-    est_std = if (!is.null(sm)) sm$theta[fi] else NA_real_,
-    se_model_std = if (!is.null(sm)) sm$se[fi] else NA_real_,
-    se_robust_std = if (!is.null(sr)) sr$se[fi] else NA_real_)
+    raw_est = fit$partable$est[fx$row],
+    raw_model = sqrt(Vm[fi, fi]), raw_robust = sqrt(Vr[fi, fi]),
+    std_est = sm$theta[fi], std_model = sm$se[fi], std_robust = sr$se[fi])
   if (any(!is.finite(unlist(out)))) return(NULL)
   out
 }
 
-run_cell <- function(cell, cross, seed_off) {
-  rows <- vector("list", cfg$reps)
-  for (r in seq_len(cfg$reps)) {
-    rows[[r]] <- one_rep(cfg$n_total, cross, cfg$seed_base + seed_off + r)
-  }
-  rows <- Filter(Negate(is.null), rows)
-  D <- do.call(rbind, rows)
+run_cell <- function(estimator, cell, cross, seed_off) {
+  rows <- lapply(seq_len(cfg$reps), function(r)
+    one_rep(estimator, cfg$n_total, cross, cfg$seed_base + seed_off + r))
+  D <- do.call(rbind, Filter(Negate(is.null), rows))
   mk <- function(kind, est, sem, ser) data.frame(
-    cell = cell, param_kind = kind, n_total = cfg$n_total, cross = cross,
-    reps = nrow(D), emp_sd = sd(est),
-    se_model = mean(sem), se_robust = mean(ser),
+    estimator = estimator, cell = cell, param_kind = kind,
+    n_total = cfg$n_total, cross = cross, reps = nrow(D),
+    emp_sd = sd(est), se_model = mean(sem), se_robust = mean(ser),
     ratio_model = mean(sem) / sd(est), ratio_robust = mean(ser) / sd(est),
     mean_est = mean(est), stringsAsFactors = FALSE)
-  rbind(
-    mk("raw", D$est_raw, D$se_model_raw, D$se_robust_raw),
-    mk("std", D$est_std, D$se_model_std, D$se_robust_std))
+  rbind(mk("raw", D$raw_est, D$raw_model, D$raw_robust),
+        mk("std", D$std_est, D$std_model, D$std_robust))
 }
 
-summary <- rbind(
-  run_cell("null", 0.0, 0L),
-  run_cell("misspec", cfg$cross, 1000000L))
+grid <- expand.grid(estimator = c("ML", "DWLS"),
+                    cell = c("null", "misspec"), stringsAsFactors = FALSE)
+summary <- do.call(rbind, Map(function(est, cell) {
+  cross <- if (cell == "null") 0.0 else cfg$cross
+  off <- (if (cell == "null") 0L else 1000000L) +
+    (if (est == "DWLS") 500000L else 0L)
+  run_cell(est, cell, cross, off)
+}, grid$estimator, grid$cell))
 write_csv(summary, file.path(res_dir, "se_regime.csv"))
 
 write_metadata(
   file.path(res_dir, "metadata.csv"),
   values = list(
     reps = cfg$reps, n_total = cfg$n_total, cross = cfg$cross,
-    seed_base = cfg$seed_base, estimator = "DWLS_ordinal_delta",
-    model = "two_factor_six_indicator_ordinal",
-    focal = "f1~~f2 (raw) and its std.all counterpart",
-    regimes = "model=expected/Gauss-Newton bread; robust=observed-Hessian bread (same empirical NACOV meat)",
+    seed_base = cfg$seed_base,
+    estimators = "ML (continuous), DWLS (ordinal delta)",
+    model = "two_factor_six_indicator; y4 cross-loads on f1 in the DGP, omitted in the fit",
+    focal = "f2=~y5 loading (free; on the misspecification-distorted factor) and its std.all counterpart",
+    regimes = "model=expected/Gauss-Newton bread; robust=observed-Hessian bread (same empirical meat)",
     smoke = cfg$smoke),
   packages = "magmaan")
 
-print(summary[, c("cell", "param_kind", "reps", "emp_sd", "se_model",
-                  "se_robust", "ratio_model", "ratio_robust")],
+print(summary[, c("estimator", "cell", "param_kind", "reps", "emp_sd",
+                  "se_model", "se_robust", "ratio_model", "ratio_robust")],
       row.names = FALSE, digits = 4)
 cat("\nWrote results to ", res_dir, "\n", sep = "")

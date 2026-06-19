@@ -75,13 +75,17 @@ $\mathrm{SE}(\beta)$ for free.
 \section*{Evidence}
 
 Experiment 35 (\path{experiments/35-misspec-robust-se}). Two-factor
-six-indicator ordinal CFA, DWLS, $N=1000$, focal factor covariance. With the
-fitted model \emph{correct}, model and robust SE coincide and both match the
-empirical sampling SD (ratios $0.98$ vs $0.98$). With a true cross-loading
-\emph{omitted}, the model SE underestimates the sampling SD (ratio $0.86$) while
-the robust SE recovers it (ratio $0.96$). The two regimes share the same NACOV
-meat, so this is the bread alone. The robust SE is an asymptotic sandwich: at
-finite $N$ and strong misspecification it closes most, not all, of the gap.
+six-indicator model; item $y_4$ cross-loads on the wrong factor in the
+data-generating process and the fitted model omits it. Focal: a free loading on
+the distorted factor and its \texttt{std.all} counterpart, $N=600$. With the
+model \emph{correct}, model and robust SE coincide and both match the empirical
+sampling SD. With the cross-loading \emph{omitted}, the model SE underestimates
+the sampling SD by about a third---the same for the raw and the standardized
+loading---and the robust SE recovers it: essentially completely for continuous
+ML (standardized loading $0.69\to1.01$ of truth) and substantially for ordinal
+DWLS, the new bread ($0.78\to0.85$). The two regimes share the same empirical
+meat, so the difference is the bread alone; the ordinal sandwich is asymptotic
+and closes most, not all, of the gap at this $N$.
 
 \section*{Where this sits relative to other software}
 

@@ -1,5 +1,5 @@
 ---
-title: "Misspecification-Robust Standard Errors for Ordinal DWLS"
+title: "Misspecification-Robust Standard Errors: Model vs Robust Bread"
 format:
   html:
     toc: true
@@ -17,78 +17,85 @@ if (!file.exists(sp)) stop("Run `Rscript run_experiment.R` first.", call. = FALS
 S <- read.csv(sp)
 M <- read.csv(mp)
 meta <- function(k) M$value[match(k, M$key)]
-fmt <- function(x, d = 3) sprintf(paste0("%.", d, "f"), x)
-tab <- S[S$param_kind == "raw", ]
+f2 <- function(x) sprintf("%.2f", x)
+r <- function(est, cell, kind, col) {
+  S[[col]][S$estimator == est & S$cell == cell & S$param_kind == kind]
+}
+lab_est <- c(ML = "Continuous ML", DWLS = "Ordinal DWLS")
+rows <- expand.grid(estimator = c("ML", "DWLS"), param_kind = c("raw", "std"),
+                    stringsAsFactors = FALSE)
 tab <- data.frame(
-  Cell = ifelse(tab$cell == "null", "Correct model", "Misspecified"),
-  `Empirical SD` = fmt(tab$emp_sd, 4),
-  `Model SE` = fmt(tab$se_model, 4),
-  `Robust SE` = fmt(tab$se_robust, 4),
-  `Model / truth` = fmt(tab$ratio_model, 3),
-  `Robust / truth` = fmt(tab$ratio_robust, 3),
+  Estimator = lab_est[rows$estimator],
+  Parameter = ifelse(rows$param_kind == "raw", "loading", "std. loading"),
+  `Null: model` = mapply(function(e, k) f2(r(e, "null", k, "ratio_model")), rows$estimator, rows$param_kind),
+  `Null: robust` = mapply(function(e, k) f2(r(e, "null", k, "ratio_robust")), rows$estimator, rows$param_kind),
+  `Misspec: model` = mapply(function(e, k) f2(r(e, "misspec", k, "ratio_model")), rows$estimator, rows$param_kind),
+  `Misspec: robust` = mapply(function(e, k) f2(r(e, "misspec", k, "ratio_robust")), rows$estimator, rows$param_kind),
   check.names = FALSE)
 ```
 
 ## Question
 
-When an ordinal CFA is fit by DWLS (the WLSMV family) and the structural model
-is *wrong*, the conventional ("model") standard error is built from a bread term
-that is only exact when the model is correct. Does a misspecification-robust SE,
-which swaps in the observed-Hessian bread, recover the true sampling variability
-of the estimates -- and does it cost anything when the model is right?
+The conventional ("model") standard error in SEM is built from a bread term that
+is exact only when the structural model is correct. When you knowingly interpret
+a misfitting model's parameters -- a loading, or its standardized form -- does a
+misspecification-robust SE (the same sandwich but with the observed-Hessian
+bread) recover the true sampling variability, and does it cost anything when the
+model is right?
 
 ## Short Answer
 
-It does, and it costs nothing under the null. When the fitted model is correct,
-the conventional SE and the robust SE are indistinguishable and both match the
-empirical sampling SD (ratios `r fmt(S$ratio_model[S$cell=="null"&S$param_kind=="raw"],2)`
-vs `r fmt(S$ratio_robust[S$cell=="null"&S$param_kind=="raw"],2)`). When the model
-omits a true cross-loading, the conventional SE **underestimates** the sampling
-SD by about 14% (ratio `r fmt(S$ratio_model[S$cell=="misspec"&S$param_kind=="raw"],2)`),
-while the robust SE recovers it to within about 4%
-(ratio `r fmt(S$ratio_robust[S$cell=="misspec"&S$param_kind=="raw"],2)`). The two
-regimes use the *same* sampling-based meat and differ only in the bread, so this
-is purely the bread doing its job: it is the right thing under the alternative
-and reduces to the conventional bread under the null.
+No cost under the null, large repair under the alternative. With the model
+correct, the model and robust SE coincide and both match the empirical sampling
+SD. With a true cross-loading omitted, the model SE **underestimates** the
+sampling SD of the focal loading by roughly a third -- the same for the raw and
+the standardized loading -- and the robust SE recovers it. For continuous ML the
+recovery is essentially complete (standardized loading: model
+`r f2(r("ML","misspec","std","ratio_model"))` of truth, robust
+`r f2(r("ML","misspec","std","ratio_robust"))`). For ordinal DWLS, where the
+robust bread is new, it moves the same direction and closes most of the gap
+(`r f2(r("DWLS","misspec","std","ratio_model"))` to
+`r f2(r("DWLS","misspec","std","ratio_robust"))`).
 
-The practical reading mirrors the wider lesson about settings: under a believed-
-correct model the conventional SE is fine and efficient; once you are knowingly
-interpreting a misfitting model's parameters, you want the robust regime. The
-choice should be explicit, which is why it is one keyword.
+The numbers are ratios of mean SE to the empirical sampling SD: 1.0 is
+calibrated, below 1.0 underestimates. The two regimes share the same empirical
+meat, so the whole difference is the bread.
+
+The practical reading is the wider lesson about settings made concrete: under a
+believed-correct model the conventional SE is right and efficient; once you are
+standing on a model you know is imperfect -- which is most of applied SEM -- you
+want the robust regime, and the choice should be one explicit keyword.
 
 ## Evidence
 
-Focal parameter: the factor covariance, in a two-factor six-indicator ordinal
-CFA at `N = r meta("n_total")`, `r meta("reps")` replications. The "misspecified"
-cell generates a cross-loading the fitted model leaves out; the latent-normal
-measurement model is correct throughout, so this is purely structural misfit.
+A two-factor six-indicator model where item `y4` cross-loads on the wrong factor
+in the data-generating process and the fitted model leaves that out; the
+latent-normal measurement model is correct throughout, so the misfit is purely
+structural. Focal parameter: a free loading on the distorted factor, and its
+`std.all` counterpart. `N = r meta("n_total")`, `r meta("reps")` replications.
 
 ```{r}
 knitr::kable(tab, row.names = FALSE)
 ```
 
-The empirical SD is the truth (the sampling SD of the estimate across
-replications). A ratio of 1 means the SE is calibrated; below 1 means it
-underestimates.
-
 ## Caveats
 
-- One focal parameter, one design point. The standardized counterpart of this
-  parameter (a correlation) is barely affected by the regime here; the
-  underestimation and its repair are clearest on the unstandardized focal. The
-  standardized-loading amplification is a separate parameter to probe.
-- The robust SE is an asymptotic sandwich: at finite `N` and strong
-  misspecification it closes most, not all, of the gap. Larger `N` or milder
-  misspecification tightens it.
-- This is a magmaan-only study (no Mplus/lavaan oracle): no mainstream library
-  exposes an observed-Hessian bread for the ordinal/WLS family, so there is
-  nothing to gate against. The internal check is the correct-model cell, where
-  the robust bread must coincide with the conventional one.
+- One focal parameter, one design point, `N = r meta("n_total")`. The robust SE
+  is an asymptotic sandwich: continuous ML closes the gap fully here, while
+  ordinal DWLS at this `N` and a strong misspecification closes most of it.
+  Larger `N` or milder misspecification tightens the ordinal case.
+- The null-cell raw ratios carry Monte Carlo noise in the empirical SD at this
+  replication count; the model-equals-robust coincidence (not the absolute
+  level) is the point there.
+- magmaan-only study. For continuous ML the observed-Hessian sandwich is
+  standard everywhere (robust.huber.white / MLR); for the ordinal/WLS family it
+  is new surface, so the correct-model cell -- where the robust bread must
+  coincide with the conventional one -- is the validation oracle.
 
 ## Reproduce
 
 ```sh
 Rscript run_experiment.R --smoke
-Rscript run_experiment.R --reps 300 --n-total 1000 --cross 0.3
+Rscript run_experiment.R --reps 250 --n-total 600 --cross 0.4
 quarto render report.qmd
 ```
