@@ -9,6 +9,7 @@
 #                            [--missing-rate 0,0.5]
 #                            [--thresholds symmetric|asymmetric]
 #                            [--pd-gamma overlap[,nominal]]
+#                            [--missing-mechanism mar|mcar]
 #                            [--seed-base S] [--smoke]
 
 .support_helpers <- function() {
@@ -42,6 +43,7 @@ rbind_fill <- function(xs) {
 parse_args <- function(args) {
   out <- list(reps = 100L, n_total = 1000L, missing_rate = c(0, .50),
               thresholds = "symmetric", pd_gamma = "overlap",
+              missing_mechanism = "mar",
               seed_base = 20260620L, smoke = FALSE)
   i <- 1L
   while (i <= length(args)) {
@@ -49,7 +51,8 @@ parse_args <- function(args) {
     if (a %in% c("-h", "--help")) {
       cat("Usage: Rscript run_experiment.R [--reps N] [--n-total N[,N]] ",
           "[--missing-rate P[,P]] [--thresholds symmetric,asymmetric] ",
-          "[--pd-gamma overlap[,nominal]] [--seed-base S] [--smoke]\n",
+          "[--pd-gamma overlap[,nominal]] ",
+          "[--missing-mechanism mar[,mcar]] [--seed-base S] [--smoke]\n",
           sep = "")
       quit(save = "no", status = 0L)
     } else if (a == "--reps") {
@@ -72,6 +75,10 @@ parse_args <- function(args) {
       i <- i + 1L; out$pd_gamma <- parse_csv_arg(args[[i]])
     } else if (startsWith(a, "--pd-gamma=")) {
       out$pd_gamma <- parse_csv_arg(sub("^--pd-gamma=", "", a))
+    } else if (a == "--missing-mechanism") {
+      i <- i + 1L; out$missing_mechanism <- parse_csv_arg(args[[i]])
+    } else if (startsWith(a, "--missing-mechanism=")) {
+      out$missing_mechanism <- parse_csv_arg(sub("^--missing-mechanism=", "", a))
     } else if (a == "--seed-base") {
       i <- i + 1L; out$seed_base <- as.integer(args[[i]])
     } else if (startsWith(a, "--seed-base=")) {
@@ -89,6 +96,7 @@ parse_args <- function(args) {
     out$missing_rate <- c(0, .50)
     out$thresholds <- "symmetric"
     out$pd_gamma <- "overlap"
+    out$missing_mechanism <- c("mar", "mcar")
   }
   if (!is.finite(out$reps) || out$reps < 1L) {
     stop("--reps must be a positive integer", call. = FALSE)
@@ -109,6 +117,11 @@ parse_args <- function(args) {
   bad_gamma <- setdiff(out$pd_gamma, c("overlap", "nominal"))
   if (length(bad_gamma)) {
     stop("unknown pd-gamma: ", paste(bad_gamma, collapse = ", "),
+         call. = FALSE)
+  }
+  bad_mech <- setdiff(out$missing_mechanism, c("mar", "mcar"))
+  if (length(bad_mech)) {
+    stop("unknown missing-mechanism: ", paste(bad_mech, collapse = ", "),
          call. = FALSE)
   }
   out
@@ -158,7 +171,7 @@ draw_group <- function(n, group_label, thresholds) {
   out
 }
 
-apply_group_b_missing <- function(dat, missing_rate) {
+apply_group_b_missing <- function(dat, missing_rate, mechanism) {
   if (missing_rate <= 0) {
     dat$group <- factor(dat$group, levels = c("A", "B"))
     return(dat)
@@ -166,9 +179,16 @@ apply_group_b_missing <- function(dat, missing_rate) {
   b_rows <- which(dat$group == "B")
   nb <- length(b_rows)
   target <- as.integer(round(missing_rate * nb))
-  ranks <- rank(dat$aux[b_rows], ties.method = "random")
-  weights <- pmax(nb - ranks, 0)
-  if (!any(weights > 0)) weights <- rep(1, nb)
+  if (mechanism == "mar") {
+    # Missingness on items 8-10 in group B is driven by the rank of the
+    # auxiliary (which correlates r = .5 with the factor): MAR.
+    ranks <- rank(dat$aux[b_rows], ties.method = "random")
+    weights <- pmax(nb - ranks, 0)
+    if (!any(weights > 0)) weights <- rep(1, nb)
+  } else {
+    # MCAR: uniform within group B, independent of the auxiliary and items.
+    weights <- rep(1, nb)
+  }
   for (nm in ov[8:10]) {
     picked <- sample.int(nb, size = target, replace = FALSE, prob = weights)
     dat[[nm]][b_rows[picked]] <- NA
@@ -177,12 +197,12 @@ apply_group_b_missing <- function(dat, missing_rate) {
   dat
 }
 
-draw_data <- function(n_total, threshold_shape, missing_rate) {
+draw_data <- function(n_total, threshold_shape, missing_rate, mechanism) {
   n_group <- as.integer(n_total / 2L)
   th <- threshold_values(threshold_shape)
   dat <- rbind(draw_group(n_group, "A", th),
                draw_group(n_group, "B", th))
-  apply_group_b_missing(dat, missing_rate)
+  apply_group_b_missing(dat, missing_rate, mechanism)
 }
 
 realized_missing_b_items <- function(dat) {
@@ -283,29 +303,37 @@ ix <- 0L
 for (n_total in cfg$n_total) {
   for (threshold_shape in cfg$thresholds) {
     for (missing_rate in cfg$missing_rate) {
-      for (rep in seq_len(cfg$reps)) {
-        seed <- cfg$seed_base +
-          as.integer(n_total * 1000 + round(missing_rate * 1000) * 10 + rep) +
-          if (threshold_shape == "asymmetric") 500000L else 0L
-        set.seed(seed)
-        dat <- draw_data(n_total, threshold_shape, missing_rate)
-        realized_missing <- realized_missing_b_items(dat)
-        for (pd_gamma in cfg$pd_gamma) {
-          got <- fit_rep(dat, pd_gamma)
-          got$n_total <- n_total
-          got$n_per_group <- as.integer(n_total / 2L)
-          got$thresholds <- threshold_shape
-          got$missing_rate <- missing_rate
-          got$realized_missing <- realized_missing
-          got$pd_gamma <- pd_gamma
-          got$rep <- rep
-          got$seed <- seed
-          got$reject_05 <- is.finite(got$p_value) & got$p_value < .05
-          ix <- ix + 1L
-          rows[[ix]] <- got
+      for (mechanism in cfg$missing_mechanism) {
+        # Complete-data cells are identical across mechanisms; run the shared
+        # baseline once, under the primary mechanism only.
+        if (missing_rate <= 0 && mechanism != cfg$missing_mechanism[1L]) next
+        for (rep in seq_len(cfg$reps)) {
+          seed <- cfg$seed_base +
+            as.integer(n_total * 1000 + round(missing_rate * 1000) * 10 + rep) +
+            (if (threshold_shape == "asymmetric") 500000L else 0L) +
+            (if (mechanism == "mcar") 2000000L else 0L)
+          set.seed(seed)
+          dat <- draw_data(n_total, threshold_shape, missing_rate, mechanism)
+          realized_missing <- realized_missing_b_items(dat)
+          for (pd_gamma in cfg$pd_gamma) {
+            got <- fit_rep(dat, pd_gamma)
+            got$n_total <- n_total
+            got$n_per_group <- as.integer(n_total / 2L)
+            got$thresholds <- threshold_shape
+            got$missing_rate <- missing_rate
+            got$missing_mechanism <- mechanism
+            got$realized_missing <- realized_missing
+            got$pd_gamma <- pd_gamma
+            got$rep <- rep
+            got$seed <- seed
+            got$reject_05 <- is.finite(got$p_value) & got$p_value < .05
+            ix <- ix + 1L
+            rows[[ix]] <- got
+          }
+          cat(sprintf("n=%d thresholds=%s missing=%.2f mechanism=%s rep=%d/%d\n",
+                      n_total, threshold_shape, missing_rate, mechanism,
+                      rep, cfg$reps))
         }
-        cat(sprintf("n=%d thresholds=%s missing=%.2f rep=%d/%d\n",
-                    n_total, threshold_shape, missing_rate, rep, cfg$reps))
       }
     }
   }
@@ -313,16 +341,16 @@ for (n_total in cfg$n_total) {
 
 p_values <- rbind_fill(rows)
 front <- c("n_total", "n_per_group", "thresholds", "missing_rate",
-           "realized_missing", "pd_gamma", "rep", "seed", "method", "family",
-           "p_value", "reject_05", "statistic", "df", "T_diff", "df_diff",
-           "spectrum_trace", "spectrum_min", "spectrum_max", "scale_c",
-           "converged", "error")
+           "missing_mechanism", "realized_missing", "pd_gamma", "rep", "seed",
+           "method", "family", "p_value", "reject_05", "statistic", "df",
+           "T_diff", "df_diff", "spectrum_trace", "spectrum_min",
+           "spectrum_max", "scale_c", "converged", "error")
 p_values <- p_values[, c(front, setdiff(names(p_values), front))]
 write_csv(p_values, file.path(res_dir, "p_values.csv"))
 
 split_key <- interaction(p_values$n_total, p_values$thresholds,
-                         p_values$missing_rate, p_values$pd_gamma,
-                         p_values$method, drop = TRUE)
+                         p_values$missing_rate, p_values$missing_mechanism,
+                         p_values$pd_gamma, p_values$method, drop = TRUE)
 summary_rows <- lapply(split(p_values, split_key), function(d) {
   ok <- is.finite(d$p_value)
   rate <- if (any(ok)) mean(d$reject_05[ok]) else NA_real_
@@ -331,6 +359,7 @@ summary_rows <- lapply(split(p_values, split_key), function(d) {
     n_per_group = d$n_per_group[1L],
     thresholds = d$thresholds[1L],
     missing_rate = d$missing_rate[1L],
+    missing_mechanism = d$missing_mechanism[1L],
     realized_missing = mean(d$realized_missing, na.rm = TRUE),
     pd_gamma = d$pd_gamma[1L],
     method = d$method[1L],
@@ -350,7 +379,8 @@ summary_rows <- lapply(split(p_values, split_key), function(d) {
 })
 summary <- do.call(rbind, summary_rows)
 summary <- summary[order(summary$n_total, summary$thresholds,
-                         summary$missing_rate, summary$pd_gamma,
+                         summary$missing_rate, summary$missing_mechanism,
+                         summary$pd_gamma,
                          match(summary$method,
                                c("naive", "SB", "adjusted", "scaled_shifted",
                                  "SS", "SF", "EBA2", "EBA4", "EBA6",
@@ -365,6 +395,7 @@ write_metadata(
     reps = cfg$reps,
     n_total = paste(cfg$n_total, collapse = ","),
     missing_rate = paste(cfg$missing_rate, collapse = ","),
+    missing_mechanism = paste(cfg$missing_mechanism, collapse = ","),
     thresholds = paste(cfg$thresholds, collapse = ","),
     pd_gamma = paste(cfg$pd_gamma, collapse = ","),
     seed_base = cfg$seed_base,
@@ -375,7 +406,8 @@ write_metadata(
     smoke = cfg$smoke),
   packages = "magmaan")
 
-print(summary[, c("n_total", "thresholds", "missing_rate", "pd_gamma",
-                  "method", "rejection_rate", "mean_statistic", "mean_p")],
+print(summary[, c("n_total", "thresholds", "missing_rate", "missing_mechanism",
+                  "pd_gamma", "method", "rejection_rate", "mean_statistic",
+                  "mean_p")],
       row.names = FALSE)
 cat("\nWrote results to ", res_dir, "\n", sep = "")
