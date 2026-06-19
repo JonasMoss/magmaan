@@ -192,4 +192,16 @@ robust_continuous_ls(spec::LatentStructure pt,
                      const data::RawData& raw,
                      robust::Information bread = robust::Information::Expected);
 
+// Complete-data infinitesimal-jackknife covariance for continuous LS with a
+// fixed second-stage weight. Empty `weight` is ULS; non-empty weights are treated
+// as caller-fixed. Estimated-weight corrections for GLS/WLS/DLS are separate
+// Hall-Inoue adapters and are not included here.
+post_expected<WeightedRobustResult>
+robust_continuous_ls_fixed_weight_ij(spec::LatentStructure pt,
+                                     const model::MatrixRep& rep,
+                                     const data::SampleStats& samp,
+                                     const Estimates& est,
+                                     const gmm::Weight& weight,
+                                     const data::RawData& raw);
+
 }  // namespace magmaan::estimate
