@@ -560,6 +560,16 @@ decisions in the simulation backlog.
     Treat this as evidence that the Chen WLSMV_PD failure is not primarily a
     low-moment tail approximation problem; the missing-data moment/Gamma
     construction is upstream of the FMG transform.
+    **MCAR vs MAR decomposition (added 2026-06-19, `--missing-mechanism`).**
+    Re-running the same design under MCAR isolates the cause: every method holds
+    nominal Type-I even at 50% missing (scaled-shifted 5.5% / 3.5% at 30% / 50%
+    MCAR; whole battery .035-.050), while MAR inflates to ~.30-.35. The
+    difference-statistic center is flat across MCAR (37.3 -> 37.4) and climbs
+    across MAR (37.6 / 41.4 / 50.2) with the scale factor unchanged (~0.98), so
+    the inflation is a bias-driven non-centrality from pairwise deletion being
+    inconsistent under MAR, not a calibration/tail-approximation defect. Confirms
+    the failure is the missing-data technique (PD), not the WLSMV estimator or
+    the p-value family; the fix is full information or multiple imputation.
   - **Done 2026-06-13.** Direct ordinal UGamma-spectrum oracle: the paper
     parity pipeline now emits an explicit `ordinal_wlsmv_ugamma_spectrum_maxabs`
     row comparing magmaan's public DWLS + `robust_ordinal()` eigenvalues against

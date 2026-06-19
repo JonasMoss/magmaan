@@ -1,5 +1,5 @@
 ---
-title: "Chen-Style Ordinal Missingness: Full-Spectrum Nested P-Values"
+title: "Chen-Style Ordinal Missingness: Is It the Test or the Missing-Data Mechanism?"
 format:
   html:
     toc: true
@@ -26,99 +26,125 @@ fmt <- function(x, d = 3) ifelse(is.finite(x), sprintf(paste0("%.", d, "f"), x),
 method_order <- c("naive", "SB", "adjusted", "scaled_shifted", "SS", "SF",
                   "EBA2", "EBA4", "EBA6", "pEBA2", "pEBA4", "pEBA6",
                   "pall", "pOLS", "all", "mixture")
-focus_methods <- c("scaled_shifted", "pEBA2", "pEBA4", "pEBA6",
-                   "pall", "pOLS", "all", "mixture")
+focus_methods <- c("scaled_shifted", "pEBA4", "pOLS", "all", "mixture")
+mech_label <- c(mar = "MAR", mcar = "MCAR")
 
-mk_wide <- function(methods) {
-  x <- S[S$method %in% methods, ]
+cell_label <- function(rate, mech) {
+  ifelse(rate <= 0, "0% (complete)",
+         sprintf("%d%% %s", round(100 * rate), mech_label[mech]))
+}
+order_cells <- function(cells, rates, mechs) {
+  key <- rates * 10 + ifelse(mechs == "mar", 0, 1)
+  cells[order(key)]
+}
+
+S <- S[S$pd_gamma == "overlap", ]
+S$cell <- cell_label(S$missing_rate, S$missing_mechanism)
+
+mk_wide <- function(methods, frame) {
+  x <- frame[frame$method %in% methods, ]
   x$rate <- sprintf("%.3f", x$rejection_rate)
-  wide <- reshape(x[, c("missing_rate", "method", "rate")],
-                  idvar = "missing_rate", timevar = "method",
-                  direction = "wide")
+  wide <- reshape(x[, c("cell", "method", "rate")], idvar = "cell",
+                  timevar = "method", direction = "wide")
   names(wide) <- sub("^rate\\.", "", names(wide))
   for (m in methods) if (!m %in% names(wide)) wide[[m]] <- ""
-  wide <- wide[order(wide$missing_rate), c("missing_rate", methods)]
-  names(wide)[1L] <- "Missing rate"
+  key <- x[!duplicated(x$cell), c("cell", "missing_rate", "missing_mechanism")]
+  ord <- order_cells(key$cell, key$missing_rate, key$missing_mechanism)
+  wide <- wide[match(ord, wide$cell), c("cell", methods)]
+  names(wide)[1L] <- "Cell"
   wide
 }
 
-focus_tab <- mk_wide(focus_methods)
-full_tab <- mk_wide(method_order)
+decomp_tab <- mk_wide(focus_methods, S)
 
-stat_tab <- S[S$method == "scaled_shifted", c("missing_rate", "reps",
-                                              "mean_T_diff", "mean_trace",
-                                              "mean_scale_c")]
-stat_tab$mean_T_diff <- fmt(stat_tab$mean_T_diff)
-stat_tab$mean_trace <- fmt(stat_tab$mean_trace)
-stat_tab$mean_scale_c <- fmt(stat_tab$mean_scale_c)
-names(stat_tab) <- c("Missing rate", "Reps", "Mean Tdiff",
-                     "Mean trace", "Mean scale")
+battery <- S[S$missing_rate == 0.5 & S$method %in% method_order, ]
+battery$rate <- sprintf("%.3f", battery$rejection_rate)
+battery_tab <- reshape(battery[, c("method", "missing_mechanism", "rate")],
+                       idvar = "method", timevar = "missing_mechanism",
+                       direction = "wide")
+names(battery_tab) <- sub("^rate\\.", "", names(battery_tab))
+battery_tab <- battery_tab[match(method_order, battery_tab$method), ]
+battery_tab <- data.frame(Method = battery_tab$method,
+                          `MAR 50%` = battery_tab$mar,
+                          `MCAR 50%` = battery_tab$mcar,
+                          check.names = FALSE)
+
+stat <- S[S$method == "scaled_shifted", ]
+stat_tab <- data.frame(Cell = stat$cell,
+                       `Realized Missing` = fmt(stat$realized_missing, 2),
+                       `Mean Diff Statistic` = fmt(stat$mean_T_diff, 1),
+                       `Mean Scale` = fmt(stat$mean_scale_c, 3),
+                       check.names = FALSE)
+ord <- order_cells(stat$cell, stat$missing_rate, stat$missing_mechanism)
+stat_tab <- stat_tab[match(ord, stat_tab$Cell), ]
 
 failures <- P[!is.finite(P$p_value) | !P$converged, ]
 ```
 
 ## Question
 
-If we drop Mplus from the loop and apply the ordinal FMG/full-spectrum p-values
-directly to the Chen-style pairwise-missing scalar difference spectrum, do those
-p-values repair the WLSMV pairwise-deletion Type-I inflation?
+Experiment 33 showed WLSMV pairwise deletion inflates the ordinal scalar-invariance
+difference test under missing data. Is that inflation a property of the *test
+statistic* (which a better, full-spectrum p-value might repair), or of the
+*missing-data mechanism* (which no p-value can repair)? We separate the two by
+running the identical design under MAR and under MCAR.
 
 ## Short Answer
 
-No. In this run the full-spectrum methods inherit the missing-data problem in
-the pairwise ordinal summary statistics. The exact mixture / `all` p-value is
-slightly less liberal than scaled-shifted WLSMV at 50% missingness, but it still
-rejects about 30% of invariant replications at nominal 5%. The penalized
-pEBA/pOLS/pall family is more liberal here, around 35% at 50% missingness.
+It is the mechanism, not the test. Under **MCAR**, every p-value variant holds its
+nominal 5% even at 50% missing (.035 to .050). Under **MAR**, the same methods on
+the same design inflate together to roughly **.30 to .35**. Pairwise-deletion
+polychorics are consistent under MCAR but biased under MAR, so the damage is
+upstream of the p-value: neither the scaled-shifted correction nor any
+full-spectrum variant rescues it. The diagnostic confirms it: the difference
+statistic's center is flat across MCAR (37.3 then 37.4) but climbs across MAR
+(37.6, 41.4, 50.2) while the scale factor stays put near 0.98, so this is a
+shifted center (a bias-driven non-centrality), not a miscalibrated scale.
 
-This is separate from experiment 33's Mplus-parity files. It uses no Mplus
-calls and writes only under this experiment's `results/` directory.
+The bottom line for practice is the same as Chen et al.'s "estimators *and*
+missing-data techniques" split: under MAR the weak link is pairwise deletion, not
+WLSMV. Full information (FIML / categorical links) or multiple imputation is the
+fix.
 
-## Design
+This run uses no Mplus calls and writes only under this experiment's `results/`;
+experiment 33's Mplus-parity files are untouched.
 
-The population is the Chen et al.-style one-factor ordinal CFA with ten
-five-category indicators, equal groups, invariant loadings and thresholds, and
-loading `r meta("loading")`. Missingness is rank-dependent on an auxiliary
-variable and applied only to group-B `r meta("missing_items_group_b")`.
+## Evidence
 
-The fitted pair is configural versus Mplus-style scalar:
-
-```text
-H1: f =~ v1 + ... + v10
-H0: group.equal = c("loadings", "thresholds")
-    f ~ c(0, NA)*1
-    v1 + ... + v10 observed intercepts fixed to c(0, 0)
-```
-
-The run shown here used `N = r meta("n_total")`, symmetric thresholds, overlap
-pairwise Gamma, and `r meta("reps")` replications per missingness cell. The
-overlap Gamma is used because experiment 33 established it as the Mplus-equivalent
-pairwise convention for this DIFFTEST setting.
-
-## Focus Methods
+MAR drives missingness on group-B items `r meta("missing_items_group_b")` through
+an auxiliary that correlates with the factor; MCAR drops the same items uniformly
+at random. Complete data is the shared baseline.
 
 ```{r}
-knitr::kable(focus_tab, row.names = FALSE)
+knitr::kable(decomp_tab, row.names = FALSE,
+             caption = "Type-I rejection at nominal .05, by missingness cell.")
 ```
 
-`scaled_shifted` is the WLSMV-style low-moment correction. `all` is the exact
-weighted-mixture tail over the retained difference spectrum; `mixture` is the
-same value through `robust_nested_lrt()`. `pEBA*`, `pOLS`, and `pall` are the
-penalized full-spectrum approximations.
-
-## Spectrum Summary
+The split is not specific to one correction. At 50% missing, every method in the
+battery is calibrated under MCAR and inflated under MAR:
 
 ```{r}
-knitr::kable(stat_tab, row.names = FALSE)
+knitr::kable(battery_tab, row.names = FALSE,
+             caption = "Full method battery at 50% missing: MAR vs MCAR.")
 ```
 
-## Full Battery
+Why: the difference statistic acquires a non-centrality under MAR and none under
+MCAR. The scale is unchanged throughout, so a calibration story is ruled out.
 
 ```{r}
-knitr::kable(full_tab, row.names = FALSE)
+knitr::kable(stat_tab, row.names = FALSE,
+             caption = "Difference-statistic center by cell (reference df fixed).")
 ```
 
-## Failures
+## Caveats
+
+This is a Type-I study only (invariant population); it speaks to false-positive
+control, not power. One cell (`N = r meta("n_total")`, symmetric thresholds,
+overlap pairwise convention, `r meta("reps")` reps); Monte Carlo SE is about .015
+at nominal and about .03 near .30. The MCAR result here keeps missingness
+completely at random *within* the analyzed groups, which is the condition under
+which pairwise deletion is consistent; group membership itself is a design
+variable, not a missingness predictor.
 
 ```{r}
 cat(nrow(failures), "failed p-value rows\n")
@@ -129,6 +155,7 @@ cat(nrow(failures), "failed p-value rows\n")
 ```sh
 Rscript run_experiment.R --smoke
 Rscript run_experiment.R --reps 200 --n-total 1000 \
-  --missing-rate 0,0.3,0.5 --thresholds symmetric --pd-gamma overlap
+  --missing-rate 0,0.3,0.5 --thresholds symmetric --pd-gamma overlap \
+  --missing-mechanism mar,mcar
 quarto render report.qmd
 ```
