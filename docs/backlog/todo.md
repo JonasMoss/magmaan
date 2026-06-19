@@ -226,12 +226,49 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   observed bread recovers it -- essentially completely for continuous ML
   (std 1.01) and substantially for ordinal DWLS (std 0.85, the new bread). Note:
   `docs/research/notes/misspec_observed_bread.tex`. This is `frontier`, not core
-  parity: no mainstream library exposes an observed-Hessian bread for the
-  ordinal/WLS family, so the correct-model cell is the validation oracle.
-  Open follow-ups: an analytic moment-Hessian (FD-vs-analytic gate); a
-  continuous-LS R `bread` binding for `vcov(fit, regime=)` (currently routes
-  continuous through `robust_se_raw_fit`); the single-source-of-truth refactor of
-  `ordinal_block_residual` (currently mirrors `ordinal_residuals`).
+  parity: the correct-model cell is the validation oracle (no mainstream
+  *software* -- lavaan/Mplus -- exposes this for the ordinal/WLS family).
+  This observed-bread SE *is* Lai & Simoes (2023, SEM 30:5, "Reflecting on the
+  'Robust' Standard Errors..."): their new SE (Eq 34-36, `Pi_DWLS`, bread
+  `H = 2 D' Gd^-1 D - 2[I (x) eps' Gd^-1] Psi`); their "robust SE" (Eq 17, Muthen
+  1997 = lavaan default) is our expected bread. We compute `H` by FD; they have
+  the closed form. Their findings match exp 35 (robust SE biased 15-40% under
+  misspec, not improving with n; new SE consistent; ULS closes better than DWLS).
+  The DWLS finite-sample residual is the data-dependent weight `Wd = Gd^-1`: both
+  their new SE and ours treat the Stage-2 weight as fixed, so neither captures its
+  higher-order variability (ULS, W=I, has none -> closes cleanly); a
+  case-resampling bootstrap recovers that term.
+  Open follow-ups:
+  - **Analytic moment-Hessian** for the observed bread (closed-form `H` of Lai
+    Eq 36 / its mixed analogue; FD becomes the validation gate). Also removes the
+    per-resample-SE cost that makes the studentized bootstrap expensive.
+  - **Two-stage FIML (ML2S)**: also two-stage, so its robust SE likely uses the
+    Gauss-Newton/expected Stage-2 bread -- give it the observed-bread regime too.
+  - **FIML**: verify it really is misspecification-robust (its bread is the
+    observed Hessian by construction); add an expected-vs-observed comparison and
+    a `vcov(fit, regime=)` route so the regime keyword is uniform, plus a
+    misspecified-model FIML cell in exp 35.
+  - **ULS-vs-DWLS finite-sample probe**: confirm ordinal ULS observed-bread closes
+    the finite-N gap better than DWLS (Lai's fixed-vs-data-dependent-W mechanism).
+  - **Full two-stage influence incl. the estimated weight `Wd = Gd^-1`**: the most
+    targeted analytic fix for the DWLS finite-N gap. The new SE (Lai/ours) treats
+    the Stage-2 weight as fixed; add the influence-function term from `Wd(u)` being
+    data-dependent (`-H^-1 D'(dWd)·eps`, present only off the null since it
+    multiplies the misfit `eps`). Reuses `H`/`K`; would close the gap without a
+    bootstrap and explains the ULS-no-gap. Try this before the exotic stuff.
+  - **Infinitesimal jackknife** for BCa acceleration (and bootstrap-free variance):
+    `U_i = (-H^-1 K)·s_i` from the analytic `H`,`K` and the casewise Stage-1 scores
+    `s_i` -- zero refits. Pairs with the analytic-Hessian item; replaces the
+    grouped-jackknife stand-in in `scripts/bootstrap.R`.
+  - **(Research / "insanely cool") explicit second-order corrections**: Edgeworth /
+    Cornish-Fisher / saddlepoint / Nagar variance expansion for the two-stage
+    ordinal estimator. All need the same hard ingredient -- the third cumulants of
+    the Stage-1 polychorics/thresholds (Olsson's `Gamma` is only second-order) plus
+    `d^3 eta/d theta^3`. Big project; scope a 1-parameter or continuous-ML proof of
+    concept first. The iterated/double bootstrap reaches the same second-order
+    coverage *without* deriving cumulants (B^2 cost, but magmaan is fast enough).
+  - A continuous-LS R `bread` binding for `vcov(fit, regime=)`; the
+    single-source-of-truth refactor of `ordinal_block_residual`.
 
 ## Robust score / modification-index tests (frontier)
 

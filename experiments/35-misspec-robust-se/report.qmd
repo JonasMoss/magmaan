@@ -78,12 +78,45 @@ structural. Focal parameter: a free loading on the distorted factor, and its
 knitr::kable(tab, row.names = FALSE)
 ```
 
+## Bootstrap: is it worth it here?
+
+We also ran a case-resampling bootstrap (499 resamples per fit; BCa uses a
+grouped jackknife) on the ordinal DWLS focal loading, scoring CI coverage of the
+pseudo-true value (nominal 0.95). The plot twist: the analytic observed-bread
+interval already covers, and the bootstrap is, if anything, mildly conservative.
+
+```{r}
+bp <- file.path("results", "bootstrap_coverage.csv")
+if (file.exists(bp)) {
+  B <- read.csv(bp)
+  bf <- function(x) sprintf("%.2f", x)
+  bt <- data.frame(
+    Cell = ifelse(B$cell == "null", "Correct model", "Misspecified"),
+    `Expected normal` = bf(B$cov_norm_exp),
+    `Observed normal` = bf(B$cov_norm_obs),
+    Percentile = bf(B$cov_pct), BCa = bf(B$cov_bca),
+    Studentized = bf(B$cov_stud), check.names = FALSE)
+  knitr::kable(bt, row.names = FALSE)
+} else cat("Run `Rscript scripts/bootstrap.R` for the bootstrap coverage table.\n")
+```
+
+Under misspecification the expected-bread (conventional / lavaan-default) interval
+under-covers (~0.87), the **observed-bread interval recovers nominal coverage
+(~0.95)**, and the three bootstrap intervals slightly over-cover (~0.97). So the
+analytic observed bread -- the new SE -- is enough for calibrated intervals here;
+the bootstrap is a conservative safety net, not a necessity. Note the
+observed-bread *mean SE* still slightly underestimates the empirical SD, yet its
+*coverage* is on target: the SD is inflated by a few heavy-tailed replications,
+while central 95% coverage is not, so the residual SE gap is tail mass rather than
+a coverage failure.
+
 ## Caveats
 
 - One focal parameter, one design point, `N = r meta("n_total")`. The robust SE
-  is an asymptotic sandwich: continuous ML closes the gap fully here, while
-  ordinal DWLS at this `N` and a strong misspecification closes most of it.
-  Larger `N` or milder misspecification tightens the ordinal case.
+  is an asymptotic sandwich: continuous ML closes the SE gap fully here, while
+  ordinal DWLS closes most of the SE *ratio* at this `N` (the residual is tail
+  mass -- its CI *coverage* is already nominal; see Bootstrap). The SE ratio
+  tightens with `N` (DWLS std loading: 0.85 at N=600, 0.93 at N=2400).
 - The null-cell raw ratios carry Monte Carlo noise in the empirical SD at this
   replication count; the model-equals-robust coincidence (not the absolute
   level) is the point there.
