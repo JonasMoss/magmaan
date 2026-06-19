@@ -248,9 +248,9 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   to the moment-quadratic SEM stack. The reusable `robust_weighted_moment_ij`
   primitive is now the shared transport for observed-bread weighted-moment IJ
   covariance: callers provide per-case moment influence rows plus optional
-  per-case estimated-weight corrections. Mixed ordinal/polyserial
-  estimated-weight corrections, MCAR/pairwise-missing variants, and ML2S
-  adapters remain out of scope.
+  per-case estimated-weight corrections. Mixed ordinal/polyserial full-WLS
+  estimated-weight corrections, robust/experimental mixed stage-1 variants,
+  MCAR/pairwise-missing variants, and ML2S adapters remain out of scope.
   Derivation and implementation grid:
   `docs/research/notes/weighted_moment_ij_grid.tex`.
   Open follow-ups:
@@ -282,11 +282,15 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     `robust_mixed_ordinal_ij`, with `MixedOrdinalStats::moment_influence` rows
     reconstructed from the mixed moment builder and an exact reduction test
     against the observed-bread fixed-weight sandwich.
+    Complete mixed ordinal/polyserial DWLS diagonal estimated-weight correction
+    **landed 2026-06-19** in `robust_mixed_ordinal_ij`, using ordinary
+    complete-data ML/polyserial raw mixed blocks, mixed moment influence rows,
+    data-direct diagonal `IF(Gamma)`, and finite-difference
+    `d diag(Gamma) / d kappa` in the mixed moment order.
     Remaining
-    slices: complete mixed ordinal/polyserial diagonal estimated-weight DWLS
-    (diagonal `IF(Gamma)` for thresholds, continuous moments, polychorics,
-    polyserials, and Pearson rows); complete mixed ordinal/polyserial full WLS;
-    ML2S
+    slices: complete mixed ordinal/polyserial full WLS (dense mixed
+    `IF(Gamma)`); robust/experimental mixed stage-1 variants such as
+    polyserial DPD and Huber residual; ML2S
     (observed-bread regime first, then casewise saturated-EM influence for
     `TwoStageWeight::{Nt,Dwls,Adf,Dls}`, with complete-data reduction against
     continuous LS); MCAR/pairwise-missing

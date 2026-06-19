@@ -1351,8 +1351,12 @@ stop rather than any usable non-error return.
   Complete mixed ordinal/polyserial fixed-weight ULS now has
   `robust_mixed_ordinal_ij`, with mixed casewise moment influence rows stored on
   `MixedOrdinalStats`; it reduces exactly to the observed-bread fixed-weight
-  sandwich. Mixed DWLS/WLS estimated-weight corrections still require diagonal
-  and dense mixed `IF(Gamma)` channels.
+  sandwich. The same entry point now supports ordinary complete-data
+  mixed DWLS by carrying raw mixed blocks on `MixedOrdinalStats` and combining
+  mixed data-direct diagonal `IF(Gamma)` with finite-difference
+  `d diag(Gamma) / d kappa` in the mixed moment order. Mixed full WLS still
+  requires the dense mixed `IF(Gamma)` channel, and robust/experimental mixed
+  stage-1 variants need separate Gamma-influence derivations.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
   parameterization-agnostic transforms operate over the

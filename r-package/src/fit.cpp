@@ -1069,7 +1069,7 @@ Rcpp::List mixed_ordinal_stats_to_r(const magmaan::data::MixedOrdinalStats& s) {
   const R_xlen_t nb = static_cast<R_xlen_t>(s.R.size());
   Rcpp::List R(nb), mean(nb), ordered_mask(nb), thresholds(nb), threshold_ov(nb),
       threshold_level(nb), moments(nb), NACOV(nb), W_dwls(nb), W_wls(nb),
-      n_levels(nb);
+      moment_influence(nb), raw_data(nb), n_levels(nb);
   Rcpp::IntegerVector nobs(nb);
   for (R_xlen_t b = 0; b < nb; ++b) {
     const std::size_t bi = static_cast<std::size_t>(b);
@@ -1089,6 +1089,12 @@ Rcpp::List mixed_ordinal_stats_to_r(const magmaan::data::MixedOrdinalStats& s) {
     NACOV[b] = Rcpp::wrap(s.NACOV[bi]);
     W_dwls[b] = Rcpp::wrap(s.W_dwls[bi]);
     W_wls[b] = Rcpp::wrap(s.W_wls[bi]);
+    moment_influence[b] = bi < s.moment_influence.size()
+        ? Rcpp::wrap(s.moment_influence[bi])
+        : Rcpp::wrap(Eigen::MatrixXd(0, 0));
+    raw_data[b] = bi < s.raw_data.size()
+        ? Rcpp::wrap(s.raw_data[bi])
+        : Rcpp::wrap(Eigen::MatrixXd(0, 0));
     nobs[b] = static_cast<int>(s.n_obs[bi]);
     n_levels[b] = Rcpp::wrap(s.n_levels[bi]);
   }
@@ -1103,6 +1109,8 @@ Rcpp::List mixed_ordinal_stats_to_r(const magmaan::data::MixedOrdinalStats& s) {
       Rcpp::_["NACOV"] = NACOV,
       Rcpp::_["W_dwls"] = W_dwls,
       Rcpp::_["W_wls"] = W_wls,
+      Rcpp::_["moment_influence"] = moment_influence,
+      Rcpp::_["raw_data"] = raw_data,
       Rcpp::_["nobs"] = nobs,
       Rcpp::_["n_levels"] = n_levels);
   out.attr("class") = Rcpp::CharacterVector::create("magmaan_mixed_ordinal_data", "list");

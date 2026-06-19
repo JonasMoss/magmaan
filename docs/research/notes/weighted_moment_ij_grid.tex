@@ -251,9 +251,12 @@ remain useful higher-level checks.
 The same equations apply, but $g_i$ and $\dot\Gamma_i$ must cover continuous
 means, continuous covariances, ordinal thresholds, polychorics, and polyserials
 in the exact mixed moment order. Fixed-weight ULS is implemented: it only needs
-casewise $g_i$ and reduces to the observed-bread sandwich. DWLS then needs
-diagonal $\dot\Gamma_i$ for every mixed moment, including the polyserial rows.
-Full WLS waits for full $\dot\Gamma_i$.
+casewise $g_i$ and reduces to the observed-bread sandwich. DWLS is also
+implemented for ordinary complete-data ML/polyserial mixed stats: the diagonal
+$\dot\Gamma_i$ combines the data-direct sandwich channel at fixed mixed kappa
+with a finite-difference $\partial\diag(\hat\Gamma)/\partial\kappa$ channel for
+thresholds, negative means, variances, polychorics, polyserial covariances, and
+Pearson covariance rows. Full WLS waits for full $\dot\Gamma_i$.
 
 \paragraph{Complete continuous LS.}
 For ULS with a fixed identity weight, the IJ is only a wrapper around the
