@@ -47,6 +47,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 29 | [chen-2020-wlsmv-pd](29-chen-2020-wlsmv-pd/report.qmd) | replication | active | Can the Chen et al. (2020) WLSMV_PD Type-I inflation cell be reproduced with current lavaan WLSMV pairwise deletion? |
 | 30 | [rmsea-like-catml-dwls](30-rmsea-like-catml-dwls/report.qmd) | probe | active | Does lavaan's categorical robust RMSEA behave as a consistent CATML-at-DWLS criterion-at-estimator statistic under ordinal misspecification? |
 | 31 | [etzel-2024-kas](31-etzel-2024-kas/report.qmd) | probe | active | Which part of Etzel's OSF Mplus models is inside magmaan's SEM scope? |
+| 32 | [schlechter-2024-asci-cfa](32-schlechter-2024-asci-cfa/report.qmd) | parity | complete | Do Schlechter et al.'s final ASCI ordinal CFA models match lavaan on paper data? |
 
 ## Archived
 
