@@ -26,8 +26,8 @@ namespace magmaan::estimate::frontier {
 // `dls_weight` is an explicit builder: it returns a `gmm::Weight` that the
 // caller passes to `fit_gmm` / the LS modification-index and robust-sandwich
 // surfaces, exactly like a hand-built WLS weight. It does not change any
-// default. Following Browne, the mix applies to the covariance moments only;
-// the mean-structure block uses the normal-theory weight regardless of `a`.
+// default. With meanstructure, the mix applies to the full stacked
+// [mean; vech(cov)] Gamma.
 struct DlsWeightOptions {
   double a = 0.5;   // mixing scalar in [0, 1]
 };
@@ -63,8 +63,10 @@ struct EmpiricalBayesDlsMixingScalar {
 // Build the per-block DLS weight over the `[mean ; vech(cov)]` moment layout,
 // aligned with `gmm::residuals` / `gmm::normal_theory_weight`. `ev` + `theta0`
 // supply the moment layout (block dimensions, mean structure); `samp` supplies
-// the normal-theory Γ and `raw` the ADF Γ. `raw` must be complete (no
-// missingness) and dimensionally consistent with `samp`.
+// the normal-theory Γ and `raw` the ADF Γ. With meanstructure, the mix is the
+// full stacked [mean; vech(cov)] Gamma, including empirical third-moment
+// cross-blocks on the ADF side. `raw` must be complete (no missingness) and
+// dimensionally consistent with `samp`.
 fit_expected<gmm::Weight>
 dls_weight(const model::ModelEvaluator& ev, const data::SampleStats& samp,
            const data::RawData& raw, const Eigen::VectorXd& theta0,

@@ -285,6 +285,39 @@ magmaan::estimate::gmm::Weight dwls_weight_from_rows(
   return out;
 }
 
+Eigen::MatrixXd dls_gamma_nt_from_cov(const Eigen::MatrixXd& S,
+                                      const TestLsLayout& layout,
+                                      std::size_t b) {
+  auto g_nt = magmaan::data::gamma_nt(S);
+  REQUIRE(g_nt.has_value());
+  if (!layout.has_means) return *g_nt;
+
+  Eigen::MatrixXd out =
+      Eigen::MatrixXd::Zero(layout.block_rows[b], layout.block_rows[b]);
+  const Eigen::Index p = S.rows();
+  const Eigen::Index pstar = vech_len(p);
+  out.topLeftCorner(p, p) = S;
+  out.bottomRightCorner(pstar, pstar) = *g_nt;
+  return out;
+}
+
+Eigen::MatrixXd weighted_covariance(const Eigen::MatrixXd& X,
+                                    Eigen::Index focus,
+                                    double eps) {
+  const Eigen::Index n = X.rows();
+  Eigen::VectorXd w =
+      Eigen::VectorXd::Constant(n, (1.0 - eps) / static_cast<double>(n));
+  w(focus) += eps;
+  const Eigen::VectorXd mean = X.transpose() * w;
+  const Eigen::MatrixXd Xc = X.rowwise() - mean.transpose();
+  Eigen::MatrixXd S = Eigen::MatrixXd::Zero(X.cols(), X.cols());
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const Eigen::VectorXd xi = Xc.row(i).transpose();
+    S.noalias() += w(i) * (xi * xi.transpose());
+  }
+  return S;
+}
+
 Eigen::MatrixXd weighted_empirical_gamma(
     const Eigen::MatrixXd& X,
     const TestLsLayout& layout,
@@ -322,6 +355,20 @@ Eigen::MatrixXd weighted_empirical_gamma(
     Gamma.noalias() += w(i) * (z.transpose() * z);
   }
   return 0.5 * (Gamma + Gamma.transpose()).eval();
+}
+
+Eigen::MatrixXd weighted_dls_gamma(
+    const Eigen::MatrixXd& X,
+    const TestLsLayout& layout,
+    std::size_t b,
+    Eigen::Index focus,
+    double eps,
+    double a) {
+  const Eigen::MatrixXd S = weighted_covariance(X, focus, eps);
+  const Eigen::MatrixXd Gnt = dls_gamma_nt_from_cov(S, layout, b);
+  const Eigen::MatrixXd Gadf =
+      weighted_empirical_gamma(X, layout, b, focus, eps);
+  return (1.0 - a) * Gnt + a * Gadf;
 }
 
 Eigen::RowVectorXd weighted_empirical_gamma_diag(
@@ -415,6 +462,36 @@ Eigen::MatrixXd finite_dwls_weight_correction(
     }
     correction.row(i) = -residual.transpose() *
                         ((Wp - Wm) / (2.0 * eps));
+  }
+  return correction;
+}
+
+Eigen::MatrixXd finite_dls_weight_correction(
+    const magmaan::data::RawData& raw,
+    const TestLsLayout& layout,
+    const Eigen::VectorXd& residual,
+    const Eigen::MatrixXd& rows,
+    std::size_t b,
+    double a) {
+  Eigen::MatrixXd correction = Eigen::MatrixXd::Zero(rows.rows(), rows.cols());
+  const double eps = 1e-6;
+  for (Eigen::Index i = 0; i < rows.rows(); ++i) {
+    const Eigen::MatrixXd Gp =
+        weighted_dls_gamma(raw.X[b], layout, b, i, eps, a);
+    const Eigen::MatrixXd Gm =
+        weighted_dls_gamma(raw.X[b], layout, b, i, -eps, a);
+    Eigen::LDLT<Eigen::MatrixXd> lp(Gp);
+    Eigen::LDLT<Eigen::MatrixXd> lm(Gm);
+    REQUIRE(lp.info() == Eigen::Success);
+    REQUIRE(lm.info() == Eigen::Success);
+    REQUIRE(lp.isPositive());
+    REQUIRE(lm.isPositive());
+    const Eigen::MatrixXd Wp =
+        lp.solve(Eigen::MatrixXd::Identity(Gp.rows(), Gp.cols()));
+    const Eigen::MatrixXd Wm =
+        lm.solve(Eigen::MatrixXd::Identity(Gm.rows(), Gm.cols()));
+    correction.row(i) =
+        -residual.transpose() * ((Wp - Wm) / (2.0 * eps));
   }
   return correction;
 }
@@ -934,6 +1011,87 @@ TEST_CASE("robust_continuous_ls_dwls_ij matches finite-difference diagonal "
     CHECK(got->chisq_standard == doctest::Approx(expected->chisq_standard));
     CHECK(got->vcov.isApprox(expected->vcov, 5e-6));
     CHECK(got->se.isApprox(expected->se, 5e-6));
+    CHECK(got->eigvals.size() == 0);
+  }
+}
+
+TEST_CASE("robust_continuous_ls_dls_ij matches finite-difference mixed "
+          "Gamma weight influence") {
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8};
+  const magmaan::estimate::frontier::DlsWeightOptions dls_opts{.a = 0.35};
+
+  for (const bool meanstructure : {false, true}) {
+    CAPTURE(meanstructure);
+    auto fx = one_factor_fixture(meanstructure);
+
+    auto ev_or = magmaan::model::ModelEvaluator::build(fx.pt, fx.rep);
+    REQUIRE(ev_or.has_value());
+    auto x0 = magmaan::estimate::simple_start_values(
+        fx.pt, fx.rep, fx.samp, {});
+    REQUIRE(x0.has_value());
+    auto W_or = magmaan::estimate::frontier::dls_weight(
+        *ev_or, fx.samp, fx.raw, *x0, dls_opts);
+    REQUIRE(W_or.has_value());
+    const magmaan::estimate::gmm::Weight W = *W_or;
+
+    auto est = magmaan::test::fit_gmm(
+        fx.pt, fx.rep, fx.samp, W, magmaan::estimate::Bounds{},
+        magmaan::estimate::Backend::NloptLbfgs, opt);
+    REQUIRE(est.has_value());
+    auto got = magmaan::estimate::robust_continuous_ls_dls_ij(
+        fx.pt, fx.rep, fx.samp, *est, fx.raw, dls_opts);
+    REQUIRE(got.has_value());
+
+    auto eval = ev_or->evaluate(est->theta, true, true);
+    REQUIRE(eval.has_value());
+    const TestLsLayout layout = make_test_layout(fx.samp, eval->moments);
+    const auto rows = test_moment_influence_rows(fx.raw, fx.samp, layout);
+    auto W_fit_or = magmaan::estimate::frontier::dls_weight(
+        *ev_or, fx.samp, fx.raw, est->theta, dls_opts);
+    REQUIRE(W_fit_or.has_value());
+    const magmaan::estimate::gmm::Weight W_fit = *W_fit_or;
+    REQUIRE(W_fit.size() == W.size());
+    for (std::size_t b = 0; b < W.size(); ++b) {
+      CHECK(W_fit[b].isApprox(W[b], 1e-12));
+    }
+
+    auto con = magmaan::estimate::build_eq_constraints(fx.pt);
+    REQUIRE(con.has_value());
+    const Eigen::MatrixXd& K = con->K();
+    const double N_total = total_n(fx.samp);
+
+    auto grad_at = [&](const Eigen::VectorXd& theta)
+        -> magmaan::post_expected<Eigen::VectorXd> {
+      return test_ls_gradient(*ev_or, fx.samp, W_fit, N_total, theta);
+    };
+    auto bread = magmaan::estimate::observed_moment_bread_fd(
+        grad_at, est->theta, K);
+    REQUIRE(bread.has_value());
+
+    std::vector<magmaan::estimate::WeightedMomentIJBlock> blocks;
+    blocks.reserve(fx.samp.S.size());
+    for (std::size_t b = 0; b < fx.samp.S.size(); ++b) {
+      const Eigen::MatrixXd Jb = test_jacobian_block(
+          layout, eval->moments, eval->J_sigma, eval->J_mu, b);
+      const Eigen::VectorXd d_b =
+          test_residual_block(fx.samp, eval->moments, layout, b);
+      blocks.push_back(magmaan::estimate::WeightedMomentIJBlock{
+          .jacobian = Jb,
+          .weight = W_fit[b],
+          .moment_influence = rows[b],
+          .weight_correction = finite_dls_weight_correction(
+              fx.raw, layout, d_b, rows[b], b, dls_opts.a),
+          .n_obs = fx.samp.n_obs[b]});
+    }
+    auto expected = magmaan::estimate::robust_weighted_moment_ij(
+        blocks, K, 2.0 * est->fmin, *bread);
+    REQUIRE(expected.has_value());
+
+    CHECK(got->df == expected->df);
+    CHECK(got->chisq_standard == doctest::Approx(expected->chisq_standard));
+    CHECK(got->vcov.isApprox(expected->vcov, 1e-5));
+    CHECK(got->se.isApprox(expected->se, 1e-5));
     CHECK(got->eigvals.size() == 0);
   }
 }
