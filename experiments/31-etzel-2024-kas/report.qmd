@@ -1,0 +1,103 @@
+---
+title: "Etzel 2024 KAS reproduction slice"
+format:
+  html:
+    toc: true
+    number-sections: false
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+input_path <- tryCatch(normalizePath(knitr::current_input(), mustWork = FALSE),
+                       error = function(e) "")
+candidate_dirs <- unique(c(getwd(), dirname(input_path)))
+result_candidates <- unique(c(file.path(candidate_dirs, "results"),
+                              candidate_dirs))
+hits <- result_candidates[file.exists(file.path(result_candidates, "metadata.csv"))]
+results_dir <- if (length(hits)) hits[[1L]] else file.path(getwd(), "results")
+read_csv_safely <- function(name) {
+  p <- file.path(results_dir, name)
+  if (!file.exists(p)) return(NULL)
+  utils::read.csv(p, check.names = FALSE, stringsAsFactors = FALSE)
+}
+meta <- read_csv_safely("metadata.csv")
+data_summary <- read_csv_safely("data_summary.csv")
+fits <- read_csv_safely("model_fits.csv")
+lr <- read_csv_safely("lr_tests.csv")
+if (is.null(meta) || is.null(fits) || is.null(lr)) {
+  stop("Missing result CSVs. Run: Rscript run_experiment.R")
+}
+fmt <- function(x, digits = 3) ifelse(is.na(x), "", formatC(x, digits = digits, format = "f"))
+```
+
+## Question
+
+Can magmaan reproduce any model from the Etzel OSF archive? The full OSF inputs
+are Mplus known-class complex models with categorical PK items, logit links, MLR,
+and numerical integration, so the first target is the continuous KAS component:
+the saturated KAS covariance baseline (M1) versus the common KAS factor
+restriction (M2), by VET group, using the same KAS variables and missing-data
+pattern.
+
+## Short answer
+
+Yes, for that continuous KAS slice. magmaan reproduces lavaan's FIML estimates
+for chemistry, physics, and math with maximum free-parameter differences below
+`r fmt(max(fits$max_abs_free_param_diff), 6)`, and the nested likelihood-ratio
+statistics match to `r fmt(max(lr$abs_lr_diff), 6)`. The common-factor
+restriction is rejected in all three domains: chemistry `r fmt(lr$magmaan_lr[lr$domain == "chemistry"])`
+on 12 df, physics `r fmt(lr$magmaan_lr[lr$domain == "physics"])` on 11 df
+(with the authors' freed first physics KAS intercept), and math
+`r fmt(lr$magmaan_lr[lr$domain == "math"])` on 12 df.
+
+## Evidence
+
+```{r}
+lr_show <- lr[, c("domain", "n_total", "df", "magmaan_lr", "lavaan_lr",
+                 "abs_lr_diff", "p_value", "mplus_full_lr_context",
+                 "mplus_full_df_context")]
+names(lr_show) <- c("Domain", "N", "df", "magmaan LR", "lavaan LR",
+                    "|diff|", "p", "Full Mplus LR", "Full Mplus df")
+num_cols <- sapply(lr_show, is.numeric)
+lr_show[num_cols] <- lapply(lr_show[num_cols], function(x) round(x, 6))
+knitr::kable(lr_show, row.names = FALSE)
+```
+
+The final two columns are context from the authors' full Mplus outputs, not a
+target for this reduced run. Those models also include the PK item block,
+clustered MLR, known classes, and logit-link categorical integration.
+
+```{r}
+fit_show <- fits[, c("domain", "model", "magmaan_npar_effective",
+                    "lavaan_npar", "lavaan_df",
+                    "max_abs_free_param_diff", "magmaan_converged")]
+names(fit_show) <- c("Domain", "Model", "magmaan npar", "lavaan npar",
+                     "lavaan df", "Max |param diff|", "Converged")
+num_cols <- sapply(fit_show, is.numeric)
+fit_show[num_cols] <- lapply(fit_show[num_cols], function(x) round(x, 6))
+knitr::kable(fit_show, row.names = FALSE)
+```
+
+## Caveats
+
+This is not yet a full reproduction of the Etzel Mplus analyses. The full inputs
+combine binary PK indicators, fixed item parameters, logit-link latent-variable
+integration, known classes, clustered robust MLR, and KAS scores. magmaan does
+not currently have a like-for-like estimator for that complete Mplus setup. This
+run isolates the part of the model already inside magmaan's complete-data FIML
+surface and verifies it against lavaan.
+
+The KAS-only FIML data drop rows with no observed KAS score in the selected
+domain. lavaan drops those rows implicitly; magmaan refuses all-empty rows, so
+the runner filters them explicitly before fitting either engine.
+
+## Reproduce
+
+```sh
+Rscript experiments/31-etzel-2024-kas/run_experiment.R
+quarto render experiments/31-etzel-2024-kas/report.qmd
+```
