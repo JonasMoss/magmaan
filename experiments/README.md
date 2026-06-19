@@ -48,6 +48,7 @@ shared `_support` harness live in [AGENTS.md](AGENTS.md).
 | 30 | [rmsea-like-catml-dwls](30-rmsea-like-catml-dwls/report.qmd) | probe | active | Does lavaan's categorical robust RMSEA behave as a consistent CATML-at-DWLS criterion-at-estimator statistic under ordinal misspecification? |
 | 31 | [etzel-2024-kas](31-etzel-2024-kas/report.qmd) | probe | active | Which part of Etzel's OSF Mplus models is inside magmaan's SEM scope? |
 | 32 | [schlechter-2024-asci-cfa](32-schlechter-2024-asci-cfa/report.qmd) | parity | complete | Do Schlechter et al.'s final ASCI ordinal CFA models match lavaan on paper data? |
+| 33 | [mplus-demo-wlsmv-difftest](33-mplus-demo-wlsmv-difftest/report.qmd) | probe | active | Does Mplus Demo WLSMV DIFFTEST for a demo-sized ordinal pairwise-missing invariance model match lavaan/magmaan Satorra-2000 statistics? |
 
 ## Archived
 
