@@ -381,6 +381,39 @@ empirical_wls_weight_from_rows(const std::vector<Eigen::MatrixXd>& rows,
   return out;
 }
 
+post_expected<gmm::Weight>
+empirical_dwls_weight_from_rows(const std::vector<Eigen::MatrixXd>& rows,
+                                const std::vector<Eigen::Index>& block_rows,
+                                const char* who) {
+  if (rows.size() != block_rows.size()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        std::string(who) + ": empirical-row block count mismatch"));
+  }
+  gmm::Weight out;
+  out.reserve(rows.size());
+  for (std::size_t b = 0; b < rows.size(); ++b) {
+    const Eigen::MatrixXd& Z = rows[b];
+    if (Z.rows() <= 0 || Z.cols() != block_rows[b]) {
+      return std::unexpected(make_err(PostError::Kind::NumericIssue,
+          std::string(who) + ": empirical-row shape mismatch in block " +
+              std::to_string(b)));
+    }
+    const Eigen::RowVectorXd gamma =
+        Z.array().square().colwise().mean().matrix();
+    Eigen::MatrixXd W = Eigen::MatrixXd::Zero(Z.cols(), Z.cols());
+    for (Eigen::Index k = 0; k < gamma.size(); ++k) {
+      if (!(gamma(k) > 0.0) || !std::isfinite(gamma(k))) {
+        return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+            std::string(who) + ": empirical Gamma diagonal is not positive "
+            "in block " + std::to_string(b)));
+      }
+      W(k, k) = 1.0 / gamma(k);
+    }
+    out.push_back(std::move(W));
+  }
+  return out;
+}
+
 post_expected<Eigen::MatrixXd>
 empirical_weight_correction_block(const ContinuousLsLayout& layout,
                                   const data::SampleStats& samp,
@@ -448,6 +481,79 @@ empirical_weight_correction_block(const ContinuousLsLayout& layout,
       row.noalias() += Xc(i, r) * lhs_Lw[static_cast<std::size_t>(r)];
     }
     correction.row(i) = row;
+  }
+  return correction;
+}
+
+post_expected<Eigen::MatrixXd>
+empirical_diagonal_weight_correction_block(
+    const ContinuousLsLayout& layout,
+    const data::SampleStats& samp,
+    const data::RawData& raw,
+    const Eigen::VectorXd& residual,
+    const Eigen::MatrixXd& moment_influence,
+    const Eigen::MatrixXd& weight,
+    std::size_t b) {
+  const Eigen::Index mb = layout.block_rows[b];
+  if (residual.size() != mb || moment_influence.cols() != mb ||
+      weight.rows() != mb || weight.cols() != mb ||
+      raw.X.size() <= b || raw.X[b].rows() != moment_influence.rows() ||
+      raw.X[b].cols() != samp.S[b].rows()) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "empirical_diagonal_weight_correction_block: shape mismatch in block " +
+            std::to_string(b)));
+  }
+  const Eigen::MatrixXd Wdiag = weight.diagonal().asDiagonal();
+  const double offdiag = (weight - Wdiag).cwiseAbs().maxCoeff();
+  if (offdiag > 1e-12 * std::max<double>(1.0, weight.cwiseAbs().maxCoeff())) {
+    return std::unexpected(make_err(PostError::Kind::NumericIssue,
+        "empirical_diagonal_weight_correction_block: weight is not diagonal"));
+  }
+
+  const Eigen::MatrixXd& X = raw.X[b];
+  const Eigen::Index n = X.rows();
+  const Eigen::Index p = X.cols();
+  const Eigen::VectorXd mean_b =
+      (b < samp.mean.size() && samp.mean[b].size() == p)
+          ? samp.mean[b]
+          : X.colwise().mean().transpose().eval();
+  const Eigen::MatrixXd Xc = X.rowwise() - mean_b.transpose();
+  const Eigen::RowVectorXd gamma =
+      moment_influence.array().square().colwise().mean().matrix();
+  for (Eigen::Index k = 0; k < gamma.size(); ++k) {
+    if (!(gamma(k) > 0.0) || !std::isfinite(gamma(k))) {
+      return std::unexpected(make_err(PostError::Kind::InfoMatrixSingular,
+          "empirical_diagonal_weight_correction_block: empirical Gamma "
+          "diagonal is not positive in block " + std::to_string(b)));
+    }
+  }
+
+  Eigen::MatrixXd Ldiag = Eigen::MatrixXd::Zero(p, mb);
+  for (Eigen::Index r = 0; r < p; ++r) {
+    Eigen::VectorXd h = Eigen::VectorXd::Zero(p);
+    h(r) = 1.0;
+    for (Eigen::Index i = 0; i < n; ++i) {
+      const Eigen::VectorXd x = Xc.row(i).transpose();
+      const Eigen::VectorXd dz =
+          empirical_gamma_mean_derivative_row(h, x, layout.has_means);
+      for (Eigen::Index k = 0; k < mb; ++k) {
+        Ldiag(r, k) += 2.0 * dz(k) * moment_influence(i, k);
+      }
+    }
+    Ldiag.row(r) /= static_cast<double>(n);
+  }
+
+  const Eigen::RowVectorXd scale =
+      residual.transpose().array() / gamma.array().square();
+  Eigen::MatrixXd correction(n, mb);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    Eigen::RowVectorXd ifgamma =
+        moment_influence.row(i).array().square().matrix();
+    ifgamma -= gamma;
+    for (Eigen::Index r = 0; r < p; ++r) {
+      ifgamma.noalias() += Xc(i, r) * Ldiag.row(r);
+    }
+    correction.row(i) = ifgamma.array() * scale.array();
   }
   return correction;
 }
@@ -697,6 +803,7 @@ enum class ContinuousLsIJWeightMode {
   Fixed,
   SampleNormalTheory,
   SampleEmpiricalWls,
+  SampleEmpiricalDwls,
 };
 
 const char* continuous_ls_ij_name(ContinuousLsIJWeightMode mode) {
@@ -707,6 +814,8 @@ const char* continuous_ls_ij_name(ContinuousLsIJWeightMode mode) {
       return "robust_continuous_ls_gls_ij";
     case ContinuousLsIJWeightMode::SampleEmpiricalWls:
       return "robust_continuous_ls_wls_ij";
+    case ContinuousLsIJWeightMode::SampleEmpiricalDwls:
+      return "robust_continuous_ls_dwls_ij";
   }
   return "robust_continuous_ls_ij";
 }
@@ -764,6 +873,12 @@ robust_continuous_ls_ij_impl(spec::LatentStructure pt,
     if (!w_or.has_value()) return std::unexpected(w_or.error());
     estimated_weight = std::move(*w_or);
     active_weight = &estimated_weight;
+  } else if (mode == ContinuousLsIJWeightMode::SampleEmpiricalDwls) {
+    auto w_or = empirical_dwls_weight_from_rows(
+        *rows_or, layout.block_rows, who);
+    if (!w_or.has_value()) return std::unexpected(w_or.error());
+    estimated_weight = std::move(*w_or);
+    active_weight = &estimated_weight;
   }
 
   std::vector<WeightedMomentIJBlock> ij_blocks;
@@ -786,6 +901,13 @@ robust_continuous_ls_ij_impl(spec::LatentStructure pt,
       const Eigen::VectorXd d_b =
           continuous_block_residual(samp, eval->moments, layout, b);
       auto corr_or = empirical_weight_correction_block(
+          layout, samp, raw, d_b, (*rows_or)[b], *Wb, b);
+      if (!corr_or.has_value()) return std::unexpected(corr_or.error());
+      correction = std::move(*corr_or);
+    } else if (mode == ContinuousLsIJWeightMode::SampleEmpiricalDwls) {
+      const Eigen::VectorXd d_b =
+          continuous_block_residual(samp, eval->moments, layout, b);
+      auto corr_or = empirical_diagonal_weight_correction_block(
           layout, samp, raw, d_b, (*rows_or)[b], *Wb, b);
       if (!corr_or.has_value()) return std::unexpected(corr_or.error());
       correction = std::move(*corr_or);
@@ -1214,6 +1336,17 @@ robust_continuous_ls_wls_ij(spec::LatentStructure pt,
   return robust_continuous_ls_ij_impl(
       std::move(pt), rep, samp, est, gmm::Weight{}, raw,
       ContinuousLsIJWeightMode::SampleEmpiricalWls);
+}
+
+post_expected<WeightedRobustResult>
+robust_continuous_ls_dwls_ij(spec::LatentStructure pt,
+                             const model::MatrixRep& rep,
+                             const data::SampleStats& samp,
+                             const Estimates& est,
+                             const data::RawData& raw) {
+  return robust_continuous_ls_ij_impl(
+      std::move(pt), rep, samp, est, gmm::Weight{}, raw,
+      ContinuousLsIJWeightMode::SampleEmpiricalDwls);
 }
 
 post_expected<robust::ParamSpaceSandwich>

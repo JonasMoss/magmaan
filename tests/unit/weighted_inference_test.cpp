@@ -268,6 +268,23 @@ magmaan::estimate::gmm::Weight adf_weight_from_rows(
   return out;
 }
 
+magmaan::estimate::gmm::Weight dwls_weight_from_rows(
+    const std::vector<Eigen::MatrixXd>& rows) {
+  magmaan::estimate::gmm::Weight out;
+  out.reserve(rows.size());
+  for (const auto& Z : rows) {
+    const Eigen::RowVectorXd gamma =
+        Z.array().square().colwise().mean().matrix();
+    Eigen::MatrixXd W = Eigen::MatrixXd::Zero(Z.cols(), Z.cols());
+    for (Eigen::Index k = 0; k < gamma.size(); ++k) {
+      REQUIRE(gamma(k) > 0.0);
+      W(k, k) = 1.0 / gamma(k);
+    }
+    out.push_back(std::move(W));
+  }
+  return out;
+}
+
 Eigen::MatrixXd weighted_empirical_gamma(
     const Eigen::MatrixXd& X,
     const TestLsLayout& layout,
@@ -307,6 +324,45 @@ Eigen::MatrixXd weighted_empirical_gamma(
   return 0.5 * (Gamma + Gamma.transpose()).eval();
 }
 
+Eigen::RowVectorXd weighted_empirical_gamma_diag(
+    const Eigen::MatrixXd& X,
+    const TestLsLayout& layout,
+    std::size_t b,
+    Eigen::Index focus,
+    double eps) {
+  const Eigen::Index n = X.rows();
+  const Eigen::Index p = X.cols();
+  const Eigen::Index pstar = vech_len(p);
+  Eigen::VectorXd w =
+      Eigen::VectorXd::Constant(n, (1.0 - eps) / static_cast<double>(n));
+  w(focus) += eps;
+  const Eigen::VectorXd mean = X.transpose() * w;
+  const Eigen::MatrixXd Xc = X.rowwise() - mean.transpose();
+  Eigen::MatrixXd S = Eigen::MatrixXd::Zero(p, p);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const Eigen::VectorXd xi = Xc.row(i).transpose();
+    S.noalias() += w(i) * (xi * xi.transpose());
+  }
+  const Eigen::VectorXd s_vech = vech_lower(S);
+
+  Eigen::RowVectorXd gamma =
+      Eigen::RowVectorXd::Zero(layout.block_rows[b]);
+  for (Eigen::Index i = 0; i < n; ++i) {
+    const Eigen::VectorXd xi = Xc.row(i).transpose();
+    Eigen::RowVectorXd z = Eigen::RowVectorXd::Zero(layout.block_rows[b]);
+    Eigen::Index off = 0;
+    if (layout.has_means) {
+      z.head(p) = xi.transpose();
+      off = p;
+    }
+    z.segment(off, pstar) =
+        (vech_lower(Eigen::MatrixXd(xi * xi.transpose())) - s_vech)
+            .transpose();
+    gamma.array() += w(i) * z.array().square();
+  }
+  return gamma;
+}
+
 Eigen::MatrixXd finite_wls_weight_correction(
     const magmaan::data::RawData& raw,
     const TestLsLayout& layout,
@@ -330,6 +386,33 @@ Eigen::MatrixXd finite_wls_weight_correction(
         lp.solve(Eigen::MatrixXd::Identity(Gp.rows(), Gp.cols()));
     const Eigen::MatrixXd Wm =
         lm.solve(Eigen::MatrixXd::Identity(Gm.rows(), Gm.cols()));
+    correction.row(i) = -residual.transpose() *
+                        ((Wp - Wm) / (2.0 * eps));
+  }
+  return correction;
+}
+
+Eigen::MatrixXd finite_dwls_weight_correction(
+    const magmaan::data::RawData& raw,
+    const TestLsLayout& layout,
+    const Eigen::VectorXd& residual,
+    const Eigen::MatrixXd& rows,
+    std::size_t b) {
+  Eigen::MatrixXd correction = Eigen::MatrixXd::Zero(rows.rows(), rows.cols());
+  const double eps = 1e-6;
+  for (Eigen::Index i = 0; i < rows.rows(); ++i) {
+    const Eigen::RowVectorXd gp =
+        weighted_empirical_gamma_diag(raw.X[b], layout, b, i, eps);
+    const Eigen::RowVectorXd gm =
+        weighted_empirical_gamma_diag(raw.X[b], layout, b, i, -eps);
+    Eigen::MatrixXd Wp = Eigen::MatrixXd::Zero(gp.size(), gp.size());
+    Eigen::MatrixXd Wm = Eigen::MatrixXd::Zero(gm.size(), gm.size());
+    for (Eigen::Index k = 0; k < gp.size(); ++k) {
+      REQUIRE(gp(k) > 0.0);
+      REQUIRE(gm(k) > 0.0);
+      Wp(k, k) = 1.0 / gp(k);
+      Wm(k, k) = 1.0 / gm(k);
+    }
     correction.row(i) = -residual.transpose() *
                         ((Wp - Wm) / (2.0 * eps));
   }
@@ -773,6 +856,84 @@ TEST_CASE("robust_continuous_ls_wls_ij matches finite-difference empirical "
     CHECK(got->chisq_standard == doctest::Approx(expected->chisq_standard));
     CHECK(got->vcov.isApprox(expected->vcov, 1e-5));
     CHECK(got->se.isApprox(expected->se, 1e-5));
+    CHECK(got->eigvals.size() == 0);
+  }
+}
+
+TEST_CASE("robust_continuous_ls_dwls_ij matches finite-difference diagonal "
+          "empirical weight influence") {
+  const magmaan::optim::OptimOptions opt{
+      .max_iter = 5000, .ftol = 1e-13, .gtol = 1e-8};
+
+  for (const bool meanstructure : {false, true}) {
+    CAPTURE(meanstructure);
+    auto fx = one_factor_fixture(meanstructure);
+
+    auto ev_or = magmaan::model::ModelEvaluator::build(fx.pt, fx.rep);
+    REQUIRE(ev_or.has_value());
+    auto x0 = magmaan::estimate::simple_start_values(
+        fx.pt, fx.rep, fx.samp, {});
+    REQUIRE(x0.has_value());
+    auto eval0 = ev_or->evaluate(*x0, true, true);
+    REQUIRE(eval0.has_value());
+    const TestLsLayout layout0 = make_test_layout(fx.samp, eval0->moments);
+    const auto rows0 = test_moment_influence_rows(fx.raw, fx.samp, layout0);
+    const magmaan::estimate::gmm::Weight W = dwls_weight_from_rows(rows0);
+
+    auto est = magmaan::test::fit_gmm(
+        fx.pt, fx.rep, fx.samp, W, magmaan::estimate::Bounds{},
+        magmaan::estimate::Backend::NloptLbfgs, opt);
+    REQUIRE(est.has_value());
+    auto got = magmaan::estimate::robust_continuous_ls_dwls_ij(
+        fx.pt, fx.rep, fx.samp, *est, fx.raw);
+    REQUIRE(got.has_value());
+
+    auto eval = ev_or->evaluate(est->theta, true, true);
+    REQUIRE(eval.has_value());
+    const TestLsLayout layout = make_test_layout(fx.samp, eval->moments);
+    const auto rows = test_moment_influence_rows(fx.raw, fx.samp, layout);
+    const magmaan::estimate::gmm::Weight W_fit = dwls_weight_from_rows(rows);
+    REQUIRE(W_fit.size() == W.size());
+    for (std::size_t b = 0; b < W.size(); ++b) {
+      CHECK(W_fit[b].isApprox(W[b], 1e-12));
+    }
+
+    auto con = magmaan::estimate::build_eq_constraints(fx.pt);
+    REQUIRE(con.has_value());
+    const Eigen::MatrixXd& K = con->K();
+    const double N_total = total_n(fx.samp);
+
+    auto grad_at = [&](const Eigen::VectorXd& theta)
+        -> magmaan::post_expected<Eigen::VectorXd> {
+      return test_ls_gradient(*ev_or, fx.samp, W_fit, N_total, theta);
+    };
+    auto bread = magmaan::estimate::observed_moment_bread_fd(
+        grad_at, est->theta, K);
+    REQUIRE(bread.has_value());
+
+    std::vector<magmaan::estimate::WeightedMomentIJBlock> blocks;
+    blocks.reserve(fx.samp.S.size());
+    for (std::size_t b = 0; b < fx.samp.S.size(); ++b) {
+      const Eigen::MatrixXd Jb = test_jacobian_block(
+          layout, eval->moments, eval->J_sigma, eval->J_mu, b);
+      const Eigen::VectorXd d_b =
+          test_residual_block(fx.samp, eval->moments, layout, b);
+      blocks.push_back(magmaan::estimate::WeightedMomentIJBlock{
+          .jacobian = Jb,
+          .weight = W_fit[b],
+          .moment_influence = rows[b],
+          .weight_correction = finite_dwls_weight_correction(
+              fx.raw, layout, d_b, rows[b], b),
+          .n_obs = fx.samp.n_obs[b]});
+    }
+    auto expected = magmaan::estimate::robust_weighted_moment_ij(
+        blocks, K, 2.0 * est->fmin, *bread);
+    REQUIRE(expected.has_value());
+
+    CHECK(got->df == expected->df);
+    CHECK(got->chisq_standard == doctest::Approx(expected->chisq_standard));
+    CHECK(got->vcov.isApprox(expected->vcov, 5e-6));
+    CHECK(got->se.isApprox(expected->se, 5e-6));
     CHECK(got->eigvals.size() == 0);
   }
 }

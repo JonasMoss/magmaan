@@ -1336,6 +1336,9 @@ stop rather than any usable non-error return.
   `robust_continuous_ls_wls_ij`, which rebuilds the dense empirical-Gamma
   weight from complete raw-data moment rows and carries the full
   estimated-weight influence, including meanstructure third-moment cross-blocks.
+  Complete continuous DWLS now has `robust_continuous_ls_dwls_ij`, which uses
+  the empirical-Gamma diagonal weight and carries only the diagonal
+  estimated-weight influence.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
   parameterization-agnostic transforms operate over the
