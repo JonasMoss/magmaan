@@ -238,15 +238,17 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
   their new SE and ours treat the Stage-2 weight as fixed, so neither captures its
   higher-order variability (ULS, W=I, has none -> closes cleanly); a
   case-resampling bootstrap recovers that term.
-  Follow-up landed 2026-06-19: complete all-ordinal ULS/DWLS now has
+  Follow-up landed 2026-06-19: complete all-ordinal ULS/DWLS/WLS now has
   `robust_ordinal_ij`, an explicit infinitesimal-jackknife covariance that carries
-  the estimated diagonal-weight term. The data-direct Γ-diagonal channel is
-  regression-tested against case-weight finite differences. This is the
+  the estimated diagonal-weight and full dense-weight terms. The data-direct
+  Γ-diagonal and full-Γ channels are regression-tested against case-weight
+  finite differences, and the dense diagonal extraction is pinned against the
+  DWLS helper. This is the
   Hall-Inoue estimated-weight correction for misspecified moment-GMM, specialized
   to the moment-quadratic SEM stack. The reusable `robust_weighted_moment_ij`
   primitive is now the shared transport for observed-bread weighted-moment IJ
   covariance: callers provide per-case moment influence rows plus optional
-  per-case estimated-weight corrections. Full WLS, mixed ordinal/polyserial,
+  per-case estimated-weight corrections. Mixed ordinal/polyserial,
   MCAR/pairwise-missing variants, and ML2S adapters remain out of scope.
   Derivation and implementation grid:
   `docs/research/notes/weighted_moment_ij_grid.tex`.
@@ -271,10 +273,13 @@ parity bugs (the fixes themselves are recorded in the test ledger; the ADF
     covariance-only and meanstructure contamination gates on
     `((1-a) Gamma_NT + a Gamma_ADF)^{-1}`. EB-DLS scalar-selection uncertainty
     is a separate future scalar-IF term, not part of the fixed-`a` adapter.
+    Complete all-ordinal full WLS **landed 2026-06-19** in
+    `robust_ordinal_ij`, using dense `IF(Gamma)` from integer data plus the
+    finite-difference stage-1 kappa channel; tests gate the full case-weight
+    derivative and diagonal extraction against the DWLS path.
     Remaining
     slices: complete mixed ordinal/polyserial (mixed casewise moment influence,
-    ULS, diagonal polyserial weights, full WLS); complete all-ordinal full WLS
-    (full `IF(Gamma)`, diagonal extraction must reproduce DWLS); ML2S
+    ULS, diagonal polyserial weights, full WLS); ML2S
     (observed-bread regime first, then casewise saturated-EM influence for
     `TwoStageWeight::{Nt,Dwls,Adf,Dls}`, with complete-data reduction against
     continuous LS); MCAR/pairwise-missing

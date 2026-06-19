@@ -113,12 +113,13 @@ robust_ordinal(spec::LatentStructure pt,
 // for an all-ordinal moment-quadratic fit. Observed-Hessian bread with an IJ
 // meat Σ_i v_i v_iᵀ, v_i = W_b g_i + corr_i, that -- unlike the fixed-weight
 // observed-bread sandwich -- carries the influence of the ESTIMATED weight
-// Ŵ = diag(NACOV)⁻¹ (the cov(Γ̂) term). That term is leading-order under
+// Ŵ (the cov(Γ̂) term). DWLS carries the diagonal `diag(NACOV)^{-1}` channel;
+// WLS carries the dense `NACOV^{-1}` channel. That term is leading-order under
 // misspecification and identically zero under the null or for ULS (W = I,
 // fixed); the channel-1 piece (v_i = W_b g_i) reproduces the observed-bread
-// sandwich exactly. Requires `stats.moment_influence`; DWLS also requires
+// sandwich exactly. Requires `stats.moment_influence`; DWLS/WLS also require
 // complete `stats.int_data` so the estimated-weight influence is not silently
-// approximated. ULS and DWLS only.
+// approximated.
 post_expected<OrdinalRobustResult>
 robust_ordinal_ij(spec::LatentStructure pt,
                   const model::MatrixRep& rep,

@@ -1342,6 +1342,12 @@ stop rather than any usable non-error return.
   Complete continuous DLS now has `robust_continuous_ls_dls_ij`, which treats
   the mixing scalar as fixed and carries the mixed sample-built
   normal-theory/empirical-Gamma weight influence.
+  Complete all-ordinal ULS/DWLS/WLS now has `robust_ordinal_ij`: ULS reduces to
+  the observed-bread fixed-weight sandwich, DWLS carries the diagonal
+  estimated-Gamma influence, and WLS carries the dense `IF(Gamma)` through
+  `d' W IF(Gamma) W`. The dense ordinal Gamma influence is finite-difference
+  gated against case-weight perturbations and its diagonal extraction is pinned
+  to the DWLS helper.
 - `standardize_lv`/`standardize_all` and `compute_defined` accept
   ordinal/mixed-ordinal fits at both the C++ api and the Rcpp bindings. These
   parameterization-agnostic transforms operate over the

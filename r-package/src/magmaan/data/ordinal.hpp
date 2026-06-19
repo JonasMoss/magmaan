@@ -303,6 +303,18 @@ ordinal_gamma_diag_jacobian_fd(const Eigen::MatrixXi& Xcat,
                                const Eigen::MatrixXd& R,
                                double h_rel = 1e-4);
 
+// Finite-difference Jacobian D(vec,l) = ∂vec(NACOV)/∂κ_l of the full
+// polychoric NACOV matrix with respect to κ = [thresholds; polychorics], at
+// fixed integer data `Xcat`. The vectorization is Eigen's column-major
+// `MatrixXd::data()` order, so `Map<MatrixXd>(D.col(l).data(), m, m)` recovers
+// the l-th derivative matrix. Complete data only.
+post_expected<Eigen::MatrixXd>
+ordinal_gamma_jacobian_fd(const Eigen::MatrixXi& Xcat,
+                          const std::vector<std::int32_t>& levels,
+                          const Eigen::VectorXd& thresholds,
+                          const Eigen::MatrixXd& R,
+                          double h_rel = 1e-4);
+
 // Per-case DATA-DIRECT influence of the NACOV diagonal: row i, col k is
 // IF_i(NACOV_kk) holding κ fixed -- the full sandwich influence of
 // Γ̂ = Â⁻¹V̂Â⁻¹ at case i (V̂-direct + Â-direct, i.e. score-product AND
@@ -316,6 +328,16 @@ ordinal_gamma_diag_data_influence(const Eigen::MatrixXi& Xcat,
                                   const std::vector<std::int32_t>& levels,
                                   const Eigen::VectorXd& thresholds,
                                   const Eigen::MatrixXd& R);
+
+// Per-case DATA-DIRECT influence of the full NACOV matrix at fixed κ. Returns
+// n × (m*m); each row uses the same column-major matrix vectorization as
+// `ordinal_gamma_jacobian_fd`. Pair with `ordinal_gamma_jacobian_fd` and the
+// stage-1 moment influence rows for the complete IF of Γ̂. Complete data only.
+post_expected<Eigen::MatrixXd>
+ordinal_gamma_data_influence(const Eigen::MatrixXi& Xcat,
+                             const std::vector<std::int32_t>& levels,
+                             const Eigen::VectorXd& thresholds,
+                             const Eigen::MatrixXd& R);
 
 // `full_wls_weight` controls whether the full-WLS weight (the dense NACOV
 // inverse) is materialized. DWLS needs only the diagonal `W_dwls` (an
