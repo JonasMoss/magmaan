@@ -1,0 +1,263 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{hyperref}
+
+\title{Estimated-Weight Infinitesimal Jackknife for Moment-Quadratic Estimators}
+\author{}
+\date{\today}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\tr}{\operatorname{tr}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\vech}{\operatorname{vech}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\plim}{\operatorname*{plim}}
+\newcommand{\T}{^{\mathsf T}}
+\newcommand{\IF}{\operatorname{IF}}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\begin{document}
+\maketitle
+
+\section*{Purpose}
+
+This note fixes the algebra for extending \texttt{robust\_weighted\_moment\_ij}
+beyond complete all-ordinal ULS/DWLS. The target is the actual estimator whose
+second-stage weight is built from the data. The companion note
+\path{misspec_observed_bread.tex} derives the observed-Hessian bread and the
+complete all-ordinal diagonal-weight case. Here the goal is the general formula,
+the full-weight formula, and the implementation grid.
+
+\section{Moment estimator and scale}
+
+Let $\hat\kappa$ be a vector of stage-1 moments with casewise expansion
+\[
+  \hat\kappa = \kappa_0 + \frac1N\sum_{i=1}^N g_i + o_p(N^{-1/2}), \qquad
+  \frac1N\sum_i g_i = O_p(N^{-1/2}).
+\]
+For disjoint groups or blocks, stack the block moment vectors and set rows to
+zero outside the block. The model-implied moments are $\sigma(\theta)$,
+$d(\theta)=\sigma(\theta)-\hat\kappa$, and
+$\Delta=\partial\sigma/\partial\theta\T$ is $m\times q$. Equality constraints are
+represented by a full-rank map $K$ from reduced coordinates $\alpha$ to full
+$\theta$, and $D=\Delta K$.
+
+The fitted value minimizes
+\[
+  F_N(\theta)=\frac12 d(\theta)\T \hat W d(\theta),
+\]
+or the corresponding block sum. The reduced estimating equation is
+\[
+  U_N(\alpha)=D(\alpha)\T \hat W d(\alpha)=0.
+\]
+At the pseudo-true value, let
+\[
+  A = \left.\frac{\partial U(\alpha)}{\partial\alpha\T}\right|_{\alpha_*}
+\]
+be the observed-Hessian bread. This includes the residual-contracted curvature
+term from $d(\theta)$; it is not the Gauss-Newton bread except under correct
+specification.
+
+\section{General estimated-weight IJ}
+
+Assume the weight has the first-order expansion
+\[
+  \hat W = W + \frac1N\sum_{i=1}^N \dot W_i + o_p(N^{-1/2}),
+  \qquad \sum_i \dot W_i = O_p(N^{1/2}),
+\]
+where $\dot W_i=\IF_i(\hat W)$. Perturbing one case gives
+\[
+  \delta_i d = -g_i, \qquad
+  \delta_i U = D\T(\dot W_i d - Wg_i).
+\]
+Define the moment-space row contribution
+\begin{equation}\label{eq:v}
+  v_i = Wg_i - \dot W_i d.
+\end{equation}
+Then
+\begin{theorem}[estimated-weight IJ]\label{thm:ij}
+For the data-weighted moment-quadratic estimator,
+\[
+  \IF_i(\hat\alpha) = A^{-1}D\T v_i,
+\]
+up to an immaterial global sign convention for $g_i$. Hence
+\begin{equation}\label{eq:vcov}
+  \widehat{\Var}(\hat\theta)
+  =
+  K A^{-1}
+    \left\{ \frac1{N^2}\sum_{i=1}^N D\T v_i v_i\T D \right\}
+  A^{-1}K\T .
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Linearize $0=U_N(\hat\alpha)$ around $\alpha_*$. The data perturbation is
+$D\T(\dot W_i d-Wg_i)$ and the parameter perturbation is
+$A(\hat\alpha-\alpha_*)$. Solving for $\hat\alpha-\alpha_*$ yields
+$A^{-1}D\T(Wg_i-\dot W_i d)/N$ per case. Summing the outer products gives
+\eqref{eq:vcov}.
+\end{proof}
+
+\begin{corollary}[fixed-weight reduction]\label{cor:fixed}
+If $\dot W_i=0$, $v_i=Wg_i$. Since
+$\hat\Gamma=N^{-1}\sum_i g_i g_i\T$, the IJ covariance in \eqref{eq:vcov}
+reduces exactly to
+\[
+  K A^{-1}D\T W\hat\Gamma W D A^{-1}K\T / N.
+\]
+\end{corollary}
+
+This is the primary regression gate: ULS and any caller-declared fixed weight
+must be machine-identical to the existing observed-bread sandwich.
+
+\section{Weight derivatives}
+
+\subsection{Diagonal empirical weight}
+
+Let $\hat W=\diag(\hat\gamma)^{-1}$ where
+$\hat\gamma=\diag(\hat\Gamma)$. Then
+\[
+  \dot W_i = -\diag(\gamma^{-2}\odot \dot\gamma_i),
+  \qquad
+  v_i = Wg_i + \diag(d\oslash \gamma^2)\dot\gamma_i .
+\]
+In row form this is the implemented all-ordinal DWLS correction:
+\[
+  v_{ik}=g_{ik}/\gamma_k + d_k\,\dot\gamma_{ik}/\gamma_k^2 .
+\]
+
+\subsection{Full empirical weight}
+
+Let $\hat W=\hat\Gamma^{-1}$. Matrix inverse differentiation gives
+\[
+  \dot W_i=-W\dot\Gamma_i W,
+  \qquad
+  v_i = Wg_i + W\dot\Gamma_i Wd .
+\]
+This is the full-WLS target. The new ingredient is the full matrix influence
+$\dot\Gamma_i$, not only its diagonal. A correct implementation must preserve
+symmetry and include all channels by which the stage-1 sandwich changes.
+
+\subsection{DLS and mixed weights}
+
+For a Browne-style mixture
+\[
+  \hat W = \left((1-a)\hat\Gamma_0 + a\hat\Gamma_1\right)^{-1},
+\]
+write $M=(1-a)\Gamma_0+a\Gamma_1$. Then
+\[
+  \dot W_i = -W\{(1-a)\dot\Gamma_{0i}+a\dot\Gamma_{1i}\}W,
+  \qquad
+  v_i = Wg_i + W\{(1-a)\dot\Gamma_{0i}+a\dot\Gamma_{1i}\}Wd .
+\]
+If $\Gamma_0$ is model-implied and depends only on $\theta$, its derivative
+belongs in the bread. If $\Gamma_0$ is built from saturated sample moments, as
+in two-stage FIML's normal-theory Stage-2 weight, its casewise derivative is a
+weight-IJ term.
+
+\section{Stage-1 sandwich influence}
+
+Many magmaan moments are themselves M-estimators. A common form is
+\[
+  \hat\Gamma = \hat A^{-1}\hat V\hat A^{-\T},
+  \qquad
+  \hat V=N^{-1}\sum_i s_i s_i\T,\qquad
+  \hat A=N^{-1}\sum_i b_i .
+\]
+The data-direct influence at fixed stage-1 parameter is
+\begin{align*}
+  \dot\Gamma_i^{\mathrm{direct}}
+  &=
+  A^{-1}(s_is_i\T-V)A^{-\T}
+  - A^{-1}(b_i-A)\Gamma
+  - \Gamma(b_i-A)\T A^{-\T}.
+\end{align*}
+If $\Gamma$ also changes through the movement of the stage-1 parameter
+$\kappa$, add
+\[
+  \dot\Gamma_i^{\kappa} =
+  \left[\frac{\partial \Gamma}{\partial\kappa}\right] g_i .
+\]
+The all-ordinal diagonal path now computes the diagonal of
+$\dot\Gamma_i^{\mathrm{direct}}$ from integer data and the diagonal of
+$\dot\Gamma_i^\kappa$ by finite differences. Full WLS needs the full matrices.
+
+\section{Implementation grid}
+
+\paragraph{Complete all-ordinal.}
+ULS and DWLS are implemented for complete integer data. ULS is covered by
+Corollary~\ref{cor:fixed}. DWLS uses the diagonal formula above. Full WLS needs
+the full $\dot\Gamma_i$ matrix and should be gated by three tests: full-WLS
+finite IJ against a resampling jackknife, diagonal extraction matching the DWLS
+path, and ULS/fixed-weight reduction.
+
+\paragraph{Complete mixed ordinal/polyserial.}
+The same equations apply, but $g_i$ and $\dot\Gamma_i$ must cover continuous
+means, continuous covariances, ordinal thresholds, polychorics, and polyserials
+in the exact mixed moment order. The first shippable slice is fixed-weight ULS,
+which only needs casewise $g_i$ and must reduce to the observed-bread sandwich.
+DWLS then needs diagonal $\dot\Gamma_i$ for every mixed moment, including the
+polyserial rows. Full WLS waits for full $\dot\Gamma_i$.
+
+\paragraph{Complete continuous LS.}
+For ULS with a fixed identity weight, the IJ is only a wrapper around the
+observed-bread sandwich using raw moment influence rows. GLS/NT, DWLS, WLS, and
+DLS are estimated-weight targets if their weights are built from sample moments
+rather than held fixed by the caller. The raw mean/covariance $g_i$ is analytic;
+the weight derivatives are either normal-theory $\Gamma_{\mathrm{NT}}(\mu,\Sigma)$
+derivatives or empirical $\Gamma$ derivatives. This is the cheapest place to
+verify the full-WLS matrix formula.
+
+\paragraph{Two-stage FIML (ML2S).}
+Stage 1 supplies saturated EM moments and their ACOV. The required new object is
+casewise saturated-moment influence under the missingness pattern. For
+\texttt{TwoStageWeight::Nt}, the weight still depends on saturated $\hat\Sigma$
+through $\Gamma_{\mathrm{NT}}(\hat\Sigma)$, so the target estimator has a
+normal-theory weight derivative. For \texttt{Dwls}, \texttt{Adf}, and
+\texttt{Dls}, use the diagonal, full, and mixed formulas above with
+$\Gamma_{\mathrm{FIML}}$. The first gate is a complete-data reduction against
+continuous LS.
+
+\paragraph{MCAR and pairwise-missing ordinal/polyserial.}
+The current primitive assumes disjoint blocks: it sums $V_b\T V_b$ inside each
+block. Pairwise missingness has overlapping supports. The correct object is one
+case-aligned sparse row vector over the full moment stack, with zeros for
+unobserved moment components and the right $N/n_{jk}$ scaling for each
+pair-local estimator. This probably needs a second primitive. An extension of
+the current IJ block would need case ids and per-moment support scaling. The
+gates are complete-data reduction, MCAR simulation against a case-resampling
+jackknife, and equality of pairwise-overlap covariance to the existing NACOV.
+
+\section{Verification standard}
+
+Every adapter gets the same four checks before it is trusted:
+\begin{enumerate}
+\item fixed-weight reduction to \texttt{robust\_weighted\_moments};
+\item finite-difference or case-weight derivative check for each new
+  $\dot\Gamma_i$ channel;
+\item resampling-jackknife agreement on a small deterministic fixture;
+\item simulation calibration under the misspecified model that motivated the
+  method, with ULS/fixed-weight cells used as the negative control.
+\end{enumerate}
+
+\begin{thebibliography}{9}
+
+\bibitem{HallInoue2003}
+Hall, A. R., and Inoue, A. (2003). The large sample behaviour of the generalized
+method of moments estimator in misspecified models. \emph{Journal of
+Econometrics}, 114(2), 361--394.
+\href{https://doi.org/10.1016/S0304-4076(03)00075-0}{doi:10.1016/S0304-4076(03)00075-0}.
+
+\end{thebibliography}
+
+\end{document}
