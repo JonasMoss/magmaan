@@ -84,11 +84,10 @@ For the scalar-like Mplus default, lavaan can be made count-compatible with
 Mplus by freeing the group-B latent mean and fixing the observed intercepts.
 That count-compatible lavaan statistic is close but not identical to Mplus in
 this one replicate. magmaan can fit the same 38-parameter Mplus-style scalar
-model with the same explicit latent-mean/item-intercept syntax, and its raw
-least-squares objective then matches Mplus. The missing piece is the nested
-Satorra-2000 map: `robust_nested_lrt()` currently rejects this scalar comparison
-because the H0 adds a compensating latent-mean parameter while imposing loading
-and threshold equalities.
+model with the same explicit latent-mean/item-intercept syntax, and with the
+overlap pairwise Gamma its raw least-squares objective and scaled-shifted
+restriction-map statistic match Mplus to rounding: `22.365850` on 22 df versus
+Mplus DIFFTEST `22.366000` on 22 df.
 
 The auxiliary variable is only used to drive missingness. Mplus rejects
 `AUXILIARY = aux (m)` with categorical variables in this WLSMV setup, so this is

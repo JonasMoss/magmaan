@@ -355,26 +355,32 @@ decisions in the simulation backlog.
   `prepare_ordinal_*_partable`, with `build` forcing a mean structure so the
   intercept rows exist. The gated parameterization is **theta** (the standard for
   ordinal invariance): under delta lavaan's released `~*~` scale is unidentified
-  (it stays pinned at 1 with a singular vcov), so delta invariance is *not* gated
-  — the delta released-block branch in `ordinal_residuals`/`ordinal_jacobian`
-  stays dormant. lavaan-gated by `cfa(..., parameterization="theta",
+  (it stays pinned at 1 with a singular vcov), so lavaan-delta invariance is
+  *not* gated; the explicit Mplus-style delta probe below covers the released
+  branch. lavaan-gated by `cfa(..., parameterization="theta",
   group.equal=...)` fixtures 0017 (3-cat thresholds+loadings), 0018 (binary
   scale-veto), 0019 (thresholds-only), and 0020
   (thresholds+loadings+intercepts / scalar), df/chisq/theta_hat parity in the
-  `ordinal invariance (group.equal) theta fits match lavaan` golden. At scalar,
+  `ordinal invariance (group.equal) theta fits match lavaan` golden. The
+  released-scale moment Jacobian is now shared between the fit and robust nested
+  paths: theta subtracts the released μ and threads `J_mu`, while released delta
+  differentiates `(τ−μ)δ_i` plus the implied association rows so explicit
+  latent-mean and response-scale columns are not rank-dropped. At scalar,
   lavaan fixes the group-2+ indicator intercepts back to 0 and frees group-2+
   latent means; magmaan mirrors that in `prepare_ordinal_*_partable`. **The
   Satorra-2000 nested LRT ladder also landed 2026-06-18** (delta A-method,
-  theta): `ordinal_moment_jacobian` subtracts the released μ and threads `J_mu`
-  in its theta branch so both freed indicator intercepts and scalar latent means
-  carry moment-Jacobian columns. Gated by the `ordinal invariance nested LRT
+  theta), using the same shared moment-Jacobian block for freed intercept and
+  latent-mean columns. Gated by the `ordinal invariance nested LRT
   (satorra.2000 delta) matches lavaan` golden: configural→metric and
   thresholds→metric scaled Δχ² 3.025 / Δdf 3 / p 0.388, metric→scalar scaled
   Δχ² 3.765 / Δdf 3 / p 0.288 (scalar-only 1.5e-2 tolerance on the scaled
   statistic for the documented `(n_g−1)/n_g` LS-weight gap), and
   configural→thresholds recorded as a df=0 χ²-equivalence because lavaan cannot
-  form a positive-df `lavTestLRT` there. The remaining paper work is its own
-  item below.
+  form a positive-df `lavTestLRT` there. The explicit Mplus-style delta scalar
+  probe in `experiments/33-mplus-demo-wlsmv-difftest` also now passes: with
+  overlap pairwise Gamma, magmaan's scaled-shifted restriction-map statistic is
+  22.365850 on 22 df (p = 0.438242), matching Mplus Demo DIFFTEST 22.366000 on
+  22 df (p = 0.438200). The remaining paper work is its own item below.
 - **M. Ordinal `group.equal` R surface + paper (the C++ core is done, gated).**
   The keyword + Wu-Estabrook theta release + nested satorra.2000 LRT all landed
   and match lavaan in C++ (commits 2aae694 / be27d01 / 00f2373; see the ordinal
@@ -426,13 +432,14 @@ decisions in the simulation backlog.
     `group.equal = c("thresholds","loadings")` under theta; add a
     `lavTestLRT(method="satorra.2000")` cross-check in `harness-oracle.R`; route
     the nested arm through `fmg_nested_ordinal`.
-  - **Parameterization note (deliberate):** the gated path is **theta**, not
-    delta. lavaan's *delta* threshold+loading release is structurally degenerate
-    — the freed `~*~` scale stays pinned at 1 for any latent-scale difference,
-    the vcov is singular, and chisq cannot absorb the difference — so magmaan
-    does not gate delta invariance; the dormant delta released-block branches in
-    `ordinal_residuals` / `ordinal_jacobian` are kept but untested. The paper's
-    arm should use `parameterization = "theta"`.
+  - **Parameterization note (deliberate):** the lavaan-gated invariance path is
+    **theta**, not delta. lavaan's *delta* threshold+loading release is
+    structurally degenerate — the freed `~*~` scale stays pinned at 1 for any
+    latent-scale difference, the vcov is singular, and chisq cannot absorb the
+    difference — so magmaan does not gate lavaan-delta invariance. The released
+    delta moment branch is tested through the explicit Mplus-style scalar probe
+    above, not through lavaan's degenerate delta `group.equal` convention. The
+    paper's arm should use `parameterization = "theta"`.
   - **Mixed-ordinal release not started** (all-ordinal only).
   - **Adjacent finding (continuous `group.equal`).** The same keyword now reaches
     continuous fits: `group.equal = "loadings"` ties at the npar level and the

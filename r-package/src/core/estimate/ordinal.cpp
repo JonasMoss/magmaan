@@ -2217,6 +2217,93 @@ ordinal_residuals(const data::OrdinalStats& stats,
   return out;
 }
 
+Eigen::MatrixXd ordinal_moment_jacobian_block(
+    const data::OrdinalStats& stats,
+    const ThresholdLayout& layout,
+    const model::ImpliedMoments& moments,
+    const Eigen::MatrixXd& J_sigma,
+    const Eigen::VectorXd& theta,
+    OrdinalParameterization param,
+    const Eigen::MatrixXd& J_mu,
+    std::size_t b,
+    Eigen::Index sigma_off,
+    Eigen::Index mu_off) {
+  const bool theta_param = param == OrdinalParameterization::Theta;
+  const Eigen::Index p = stats.R[b].rows();
+  const Eigen::Index nth = stats.thresholds[b].size();
+  const Eigen::Index ncorr = p * (p - 1) / 2;
+  const Eigen::MatrixXd& Sig = moments.sigma[b];
+  Eigen::MatrixXd Jb(nth + ncorr, J_sigma.cols());
+  Jb.setZero();
+  const bool block_released =
+      b < layout.scale_free.size() &&
+      std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
+                  [](char c) { return c != 0; });
+  if (block_released && !theta_param) {
+    // Released delta block: thresholds are (tau - mu) * delta_i and association
+    // moments use the same scale mask as the fitting residuals.
+    std::vector<std::int32_t> sf(static_cast<std::size_t>(p), 0);
+    for (Eigen::Index i = 0; i < p; ++i) {
+      if (static_cast<std::size_t>(i) < layout.scale_free[b].size()) {
+        sf[static_cast<std::size_t>(i)] =
+            layout.scale_free[b][static_cast<std::size_t>(i)];
+      }
+    }
+    const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+    const bool have_jmu = J_mu.rows() > 0;
+    const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const Eigen::Index ov =
+          stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      const bool std_i = sf[static_cast<std::size_t>(ov)] != 0;
+      const double delta = std_i ? 1.0 / std::sqrt(Sig(ov, ov)) : 1.0;
+      const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+      const double a = it(k) - mu;
+      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+      if (fr > 0) Jb(k, fr - 1) += delta;
+      if (have_jmu) Jb.row(k) -= delta * J_mu.row(mu_off + ov);
+      if (std_i) {
+        Jb.row(k) += (-0.5 * a * delta * delta * delta) *
+                     J_sigma.row(sigma_off + vech_index(p, ov, ov));
+      }
+    }
+    Eigen::Index r = 0;
+    for (Eigen::Index j = 0; j < p; ++j) {
+      for (Eigen::Index i = j + 1; i < p; ++i) {
+        Jb.row(nth + r++) = mixed_assoc_jacobian_row(
+            Sig, J_sigma, sigma_off, sf, i, j,
+            OrdinalParameterization::Theta);
+      }
+    }
+  } else if (theta_param) {
+    // Threshold rows: d[(tau - mu_i) / sqrt(Sigma*_ii)] / d theta.
+    const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
+    const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
+    const bool have_jmu = J_mu.rows() > 0;
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const Eigen::Index ov =
+          stats.threshold_ov[b][static_cast<std::size_t>(k)];
+      const double sii = Sig(ov, ov);
+      const double inv_sd = 1.0 / std::sqrt(sii);
+      const double mu = have_mu ? moments.mu[b](ov) : 0.0;
+      const double a = it(k) - mu;
+      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+      if (fr > 0) Jb(k, fr - 1) += inv_sd;
+      if (have_jmu) Jb.row(k) -= inv_sd * J_mu.row(mu_off + ov);
+      Jb.row(k) += (-0.5 * a * inv_sd / sii) *
+                   J_sigma.row(sigma_off + vech_index(p, ov, ov));
+    }
+    Jb.bottomRows(ncorr) = std_corr_jacobian(Sig, J_sigma, sigma_off);
+  } else {
+    for (Eigen::Index k = 0; k < nth; ++k) {
+      const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
+      if (fr > 0) Jb(k, fr - 1) = 1.0;
+    }
+    Jb.bottomRows(ncorr) = corr_jacobian(Sig, J_sigma, sigma_off);
+  }
+  return Jb;
+}
+
 fit_expected<Eigen::MatrixXd>
 ordinal_jacobian(const data::OrdinalStats& stats,
                  const ThresholdLayout& layout,
@@ -2228,7 +2315,6 @@ ordinal_jacobian(const data::OrdinalStats& stats,
                  const Eigen::MatrixXd& J_mu = Eigen::MatrixXd()) {
   auto N = total_n_obs(stats);
   if (!N.has_value()) return std::unexpected(N.error());
-  const bool theta_param = param == OrdinalParameterization::Theta;
   Eigen::Index n_total = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
@@ -2240,77 +2326,9 @@ ordinal_jacobian(const data::OrdinalStats& stats,
   Eigen::Index mu_off = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
-    const Eigen::Index nth = stats.thresholds[b].size();
-    const Eigen::Index ncorr = p * (p - 1) / 2;
-    const Eigen::MatrixXd& Sig = moments.sigma[b];
-    Eigen::MatrixXd Jb(nth + ncorr, J_sigma.cols());
-    Jb.setZero();
-    const bool block_released =
-        b < layout.scale_free.size() &&
-        std::any_of(layout.scale_free[b].begin(), layout.scale_free[b].end(),
-                    [](char c) { return c != 0; });
-    if (block_released && !theta_param) {
-      // Released block: ∂[(τ_k − μ_ov)·δ_ov]/∂θ with δ_ov = Σ*_ov,ov^{-½} on
-      // free-scale indicators. Three terms: δ·(threshold selector), −δ·∂μ_ov
-      // (via J_mu), and (τ_k − μ_ov)·∂δ_ov = (τ−μ)·(−½ δ³)·∂Σ*_ov,ov. The
-      // off-diagonal rows reuse `mixed_assoc_jacobian_row` keyed on the mask.
-      std::vector<std::int32_t> sf(static_cast<std::size_t>(p), 0);
-      for (Eigen::Index i = 0; i < p; ++i)
-        if (static_cast<std::size_t>(i) < layout.scale_free[b].size())
-          sf[static_cast<std::size_t>(i)] =
-              layout.scale_free[b][static_cast<std::size_t>(i)];
-      const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
-      const bool have_jmu = J_mu.rows() > 0;
-      const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
-      for (Eigen::Index k = 0; k < nth; ++k) {
-        const Eigen::Index ov =
-            stats.threshold_ov[b][static_cast<std::size_t>(k)];
-        const bool std_i = sf[static_cast<std::size_t>(ov)] != 0;
-        const double delta = std_i ? 1.0 / std::sqrt(Sig(ov, ov)) : 1.0;
-        const double mu = have_mu ? moments.mu[b](ov) : 0.0;
-        const double a = it(k) - mu;
-        const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
-        if (fr > 0) Jb(k, fr - 1) += delta;
-        if (have_jmu) Jb.row(k) -= delta * J_mu.row(mu_off + ov);
-        if (std_i)
-          Jb.row(k) += (-0.5 * a * delta * delta * delta) *
-                       J_sigma.row(sigma_off + vech_index(p, ov, ov));
-      }
-      Eigen::Index r = 0;
-      for (Eigen::Index j = 0; j < p; ++j)
-        for (Eigen::Index i = j + 1; i < p; ++i)
-          Jb.row(nth + r++) = mixed_assoc_jacobian_row(
-              Sig, J_sigma, sigma_off, sf, i, j,
-              OrdinalParameterization::Theta);
-    } else if (theta_param) {
-      // Threshold rows: ∂[(τ_θ − μᵢ)/√Σ*ᵢᵢ]/∂θ — a selector term on the free
-      // threshold parameter, −∂μᵢ via J_mu (the freed group-2+ intercept under
-      // Wu-Estabrook invariance; 0 otherwise), and a structural term through
-      // Σ*ᵢᵢ. Reduces to the raw τ_θ/√Σ*ᵢᵢ form when μ ≡ 0.
-      const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
-      const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
-      const bool have_jmu = J_mu.rows() > 0;
-      for (Eigen::Index k = 0; k < nth; ++k) {
-        const Eigen::Index ov =
-            stats.threshold_ov[b][static_cast<std::size_t>(k)];
-        const double sii = Sig(ov, ov);
-        const double inv_sd = 1.0 / std::sqrt(sii);
-        const double mu = have_mu ? moments.mu[b](ov) : 0.0;
-        const double a = it(k) - mu;
-        const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
-        if (fr > 0) Jb(k, fr - 1) += inv_sd;
-        if (have_jmu) Jb.row(k) -= inv_sd * J_mu.row(mu_off + ov);
-        Jb.row(k) += (-0.5 * a * inv_sd / sii) *
-                     J_sigma.row(sigma_off + vech_index(p, ov, ov));
-      }
-      Jb.bottomRows(ncorr) = std_corr_jacobian(Sig, J_sigma, sigma_off);
-    } else {
-      for (Eigen::Index k = 0; k < nth; ++k) {
-        const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
-        if (fr > 0) Jb(k, fr - 1) = 1.0;
-      }
-      Jb.bottomRows(ncorr) = corr_jacobian(Sig, J_sigma, sigma_off);
-    }
+    const Eigen::MatrixXd Jb = ordinal_moment_jacobian_block(
+        stats, layout, moments, J_sigma, theta, param, J_mu, b, sigma_off,
+        mu_off);
     const double sw = std::sqrt(static_cast<double>(stats.n_obs[b]) /
                                 static_cast<double>(*N));
     out.block(out_off, 0, Jb.rows(), Jb.cols()) =
@@ -2497,41 +2515,9 @@ Eigen::MatrixXd ordinal_moment_jacobian(const data::OrdinalStats& stats,
   Eigen::Index mu_off = 0;
   for (std::size_t b = 0; b < stats.R.size(); ++b) {
     const Eigen::Index p = stats.R[b].rows();
-    const Eigen::Index nth = stats.thresholds[b].size();
-    const Eigen::Index ncorr = p * (p - 1) / 2;
-    const Eigen::MatrixXd& Sig = moments.sigma[b];
-    Eigen::MatrixXd Jb(nth + ncorr, J_sigma.cols());
-    Jb.setZero();
-    if (param == OrdinalParameterization::Theta) {
-      // ∂[(τ_θ − μᵢ)/√Σ*ᵢᵢ]/∂θ: selector on the free threshold, −∂μᵢ via J_mu
-      // (the freed group-2+ intercept under Wu-Estabrook invariance; 0
-      // otherwise — without it the released intercepts get zero moment-Jacobian
-      // columns, which breaks the nested delta restriction), and a structural
-      // term through Σ*ᵢᵢ. Reduces to τ_θ/√Σ*ᵢᵢ when μ ≡ 0.
-      const Eigen::VectorXd it = implied_thresholds(layout, theta, b);
-      const bool have_mu = b < moments.mu.size() && moments.mu[b].size() == p;
-      const bool have_jmu = J_mu.rows() > 0;
-      for (Eigen::Index k = 0; k < nth; ++k) {
-        const Eigen::Index ov =
-            stats.threshold_ov[b][static_cast<std::size_t>(k)];
-        const double sii = Sig(ov, ov);
-        const double inv_sd = 1.0 / std::sqrt(sii);
-        const double mu = have_mu ? moments.mu[b](ov) : 0.0;
-        const double a = it(k) - mu;
-        const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
-        if (fr > 0) Jb(k, fr - 1) += inv_sd;
-        if (have_jmu) Jb.row(k) -= inv_sd * J_mu.row(mu_off + ov);
-        Jb.row(k) += (-0.5 * a * inv_sd / sii) *
-                     J_sigma.row(sigma_off + vech_index(p, ov, ov));
-      }
-      Jb.bottomRows(ncorr) = std_corr_jacobian(Sig, J_sigma, sigma_off);
-    } else {
-      for (Eigen::Index k = 0; k < nth; ++k) {
-        const std::int32_t fr = layout.free[b][static_cast<std::size_t>(k)];
-        if (fr > 0) Jb(k, fr - 1) = 1.0;
-      }
-      Jb.bottomRows(ncorr) = corr_jacobian(Sig, J_sigma, sigma_off);
-    }
+    const Eigen::MatrixXd Jb = ordinal_moment_jacobian_block(
+        stats, layout, moments, J_sigma, theta, param, J_mu, b, sigma_off,
+        mu_off);
     out.block(out_off, 0, Jb.rows(), Jb.cols()) = Jb;
     out_off += Jb.rows();
     sigma_off += vech_len(p);
