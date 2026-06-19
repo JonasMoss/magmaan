@@ -550,6 +550,16 @@ decisions in the simulation backlog.
     do the FMG transforms beat the WLSMV mean-variance adjustment anywhere (only
     possible where the spectrum spreads: binary items, larger models), or is
     WLSMV hard to beat for ordinal?
+  - **Chen-style pairwise-missing scalar probe (experiment 34, 2026-06).**
+    Full-spectrum p-values do not repair the WLSMV_PD inflation once the
+    pairwise-missing ordinal summary statistics are already distorted. In a
+    Mplus-free 10-indicator invariant scalar test (`N=1000`, symmetric
+    thresholds, overlap Gamma, 200 reps), scaled-shifted rejects 2.5% / 11.0% /
+    31.0% at 0% / 30% / 50% missing; `all`/mixture is only slightly lower
+    (2.5% / 10.5% / 30.0%); pEBA4 is more liberal (4.0% / 12.5% / 35.0%).
+    Treat this as evidence that the Chen WLSMV_PD failure is not primarily a
+    low-moment tail approximation problem; the missing-data moment/Gamma
+    construction is upstream of the FMG transform.
   - **Done 2026-06-13.** Direct ordinal UGamma-spectrum oracle: the paper
     parity pipeline now emits an explicit `ordinal_wlsmv_ugamma_spectrum_maxabs`
     row comparing magmaan's public DWLS + `robust_ordinal()` eigenvalues against
